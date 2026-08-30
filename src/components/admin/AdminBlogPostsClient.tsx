@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { RolBlog } from "@/lib/admin-guard";
+import type { PaginaArticole } from "@/lib/actions/blog.actions";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -31,24 +32,49 @@ function dataScurta(iso: string | null): string {
 }
 
 /** Vezi nota din `AdminBlogAuthorsClient`: lista vine din props, nu din stare. */
-export function AdminBlogPostsClient({ articole, rol }: { articole: ArticolInLista[]; rol: RolBlog }) {
+export function AdminBlogPostsClient({
+  rezultat,
+  rol,
+  cautat,
+  stareaAleasa,
+}: {
+  rezultat: PaginaArticole;
+  rol: RolBlog;
+  cautat: string;
+  stareaAleasa: "toate" | StareArticol;
+}) {
+  const { articole, total, pagina, pagini } = rezultat;
   const router = useRouter();
 
-  /* ⚠ FILTRUL LUCREAZA PE CE E DEJA ADUS, nu cere din nou de la server. La
-     zeci de articole e cea mai buna purtare: raspunde instantaneu si nu incarca
-     baza. Daca vreodata lista trece de cateva sute, filtrarea se muta pe server
-     — dar atunci trebuie si paginare aici, si abia atunci merita. */
-  const [cauta, setCauta] = useState("");
-  const [doarStarea, setDoarStarea] = useState<"toate" | StareArticol>("toate");
+  /*
+    ⚠ FILTRAREA S-A MUTAT PE SERVER, ȘI NU DIN GUST.
 
-  const q = cauta.trim().toLowerCase();
-  const aratate = articole.filter((a) => {
-    if (doarStarea !== "toate" && a.status !== doarStarea) return false;
-    if (!q) return true;
-    return [a.title, a.slug, a.autor, a.categorie]
-      .filter(Boolean)
-      .some((t) => (t as string).toLowerCase().includes(q));
-  });
+    Nota de aici spunea: „la zeci de articole e cea mai bună purtare… dacă
+    vreodată lista trece de câteva sute, filtrarea se mută pe server". Numai că
+    lista nu s-ar fi oprit la câteva sute cu un avertisment: PostgREST taie tăcut
+    la 1000 de rânduri. Deci pragul n-ar fi fost observat de nimeni — articolele
+    vechi ar fi început pur și simplu să lipsească din admin, iar filtrul ar fi
+    căutat mai departe, liniștit, într-o listă ciuntită.
+
+    Acum căutarea și starea stau în adresă și se fac în bază. Ce se pierde:
+    răspunsul nu mai e instantaneu la fiecare tastă. De aceea caseta trimite la
+    Enter, nu la fiecare literă.
+  */
+  const [cauta, setCauta] = useState(cautat);
+  const aratate = articole;
+
+  function cere(schimbari: { q?: string; stare?: string; p?: string }) {
+    const u = new URLSearchParams();
+    const q = schimbari.q ?? cautat;
+    const st = schimbari.stare ?? stareaAleasa;
+    if (q.trim()) u.set("q", q.trim());
+    if (st && st !== "toate") u.set("stare", st);
+    /* Orice schimbare de filtru duce înapoi la prima pagină: pagina 7 dintr-o
+       căutare veche e aproape sigur goală în cea nouă. */
+    if (schimbari.p) u.set("p", schimbari.p);
+    const s = u.toString();
+    router.push(s ? `/admin/blog?${s}` : "/admin/blog");
+  }
 
   async function sterge(a: ArticolInLista) {
     const avertisment = seVede(a)
@@ -77,15 +103,19 @@ export function AdminBlogPostsClient({ articole, rol }: { articole: ArticolInLis
         </Link>
       </div>
 
-      {articole.length > 0 && (
+      {(total > 0 || cautat || stareaAleasa !== "toate") && (
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-            <input type="search" value={cauta} onChange={(e) => setCauta(e.target.value)}
-              placeholder="Caută după titlu, adresă, autor sau categorie"
+            {/* ⚠ Trimite la Enter, nu la fiecare literă: căutarea se face acum în
+                bază, iar o cerere pe tastă ar însemna zeci pe minut. */}
+            <input type="search" value={cauta}
+              onChange={(e) => setCauta(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") cere({ q: cauta }); }}
+              placeholder="Caută în titlu și în textul articolelor, apoi Enter"
               className="h-9 w-full rounded-lg border border-zinc-300 bg-white pl-9 pr-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none" />
           </div>
-          <select value={doarStarea} onChange={(e) => setDoarStarea(e.target.value as "toate" | StareArticol)}
+          <select value={stareaAleasa} onChange={(e) => cere({ stare: e.target.value })}
             className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 focus:border-zinc-900 focus:outline-none">
             <option value="toate">Toate stările</option>
             {(Object.keys(STARI) as StareArticol[]).map((s) => (
@@ -95,7 +125,15 @@ export function AdminBlogPostsClient({ articole, rol }: { articole: ArticolInLis
         </div>
       )}
 
-      {articole.length === 0 ? (
+      {total === 0 && (cautat || stareaAleasa !== "toate") ? (
+        <div className="text-center py-16 border border-dashed border-zinc-300 rounded-xl">
+          <p className="text-sm text-zinc-600">Niciun articol nu se potrivește.</p>
+          <button type="button" onClick={() => cere({ q: "", stare: "toate" })}
+            className="mt-2 text-xs font-medium text-zinc-900 underline underline-offset-4">
+            Arată-le pe toate
+          </button>
+        </div>
+      ) : articole.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-zinc-300 rounded-xl">
           <p className="text-sm text-zinc-600">Niciun articol încă.</p>
           <p className="mt-1 text-xs text-zinc-500 max-w-md mx-auto">
@@ -162,6 +200,27 @@ export function AdminBlogPostsClient({ articole, rol }: { articole: ArticolInLis
           })}
         </div>
         </>
+      )}
+      {pagini > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-2">
+          {Array.from({ length: pagini }, (_, k) => k + 1).map((n) => (
+            <button key={n} type="button" onClick={() => cere({ p: String(n) })}
+              className={`min-w-9 rounded-lg border px-3 py-1.5 text-center text-xs font-medium ${
+                n === pagina
+                  ? "border-zinc-900 bg-zinc-900 text-white"
+                  : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"
+              }`}>
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {total > 0 && (
+        <p className="mt-4 text-center text-xs text-zinc-500">
+          {total} {total === 1 ? "articol" : "articole"}
+          {cautat ? " pentru: " + cautat : ""}
+        </p>
       )}
     </div>
   );

@@ -52,6 +52,21 @@ async function db(): Promise<SupabaseClient> {
   return createPublicClient() as unknown as SupabaseClient;
 }
 
+/**
+ * Coloanele publice ale unui autor.
+ *
+ * ⚠ FARA `user_id`. Era `select("*")`, deci identificatorul contului Supabase
+ * al omului pleca in fiecare pagina publica de autor si in fiecare articol. Nu e
+ * o gaura prin care intra cineva — dar e un identificator intern de autentificare
+ * dat pe degeaba, iar el nu are ce cauta la un cititor.
+ *
+ * ⚠ SE TINE IN ACORD CU GRANTUL PE COLOANE din migrarea
+ * `blog_autorul_nu_isi_arata_contul`. Acolo lui `anon` i s-a scos SELECT pe
+ * `user_id`; daca cineva pune `*` inapoi aici, interogarea nu intoarce mai mult,
+ * CADE — si cade pagina de autor cu totul.
+ */
+const CAMPURI_AUTOR =
+  "id, slug, name, role_title, bio, avatar_url, sameas, created_at, updated_at";
 /** Articolul din listă: fără corpul HTML, care nu se citește acolo. */
 export type ArticolDeLista = Pick<
   ArticolBlog,
@@ -173,7 +188,10 @@ export type ArticolIntreg = ArticolBlog & {
 export const articolDupaSlug = cache(async function articolDupaSlug(slug: string): Promise<ArticolIntreg | null> {
   const { data } = await (await db())
     .from("blog_posts")
-    .select("*, blog_authors(*), blog_categories(*)")
+    /* ⚠ `blog_authors(*)` ar cere si `user_id`, pe care `anon` nu-l mai poate
+       citi (vezi `CAMPURI_AUTOR`). Cu `*` interogarea n-ar intoarce mai putin, ar
+       CADEA — si ar cadea pagina articolului cu totul. */
+    .select(`*, blog_authors(${CAMPURI_AUTOR}), blog_categories(*)`)
     .eq("slug", slug)
     .eq("status", "published")
     .not("published_at", "is", null)
@@ -271,7 +289,7 @@ export async function articoleInrudite(
 /** Un autor, după adresa lui. `null` dacă nu există. */
 export async function autorDupaSlug(slug: string): Promise<AutorBlog | null> {
   const { data } = await (await db())
-    .from("blog_authors").select("*").eq("slug", slug).maybeSingle();
+    .from("blog_authors").select(CAMPURI_AUTOR).eq("slug", slug).maybeSingle();
   return (data as AutorBlog) ?? null;
 }
 
@@ -322,7 +340,7 @@ export async function autoriCuArticole(): Promise<AutorBlog[]> {
   ];
   if (idUri.length === 0) return [];
   const { data } = await client
-    .from("blog_authors").select("*").in("id", idUri).order("name");
+    .from("blog_authors").select(CAMPURI_AUTOR).in("id", idUri).order("name");
   return (data ?? []) as unknown as AutorBlog[];
 }
 

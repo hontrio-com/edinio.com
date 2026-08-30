@@ -66,16 +66,51 @@ export async function faRedactor(emailBrut: string): Promise<Raspuns> {
   if (rolAcum === "admin") return { error: "Persoana e deja administrator, deci poate face tot." };
   if (rolAcum === "editor") return { error: "Persoana e deja redactor." };
 
-  const { error } = await client
+  /*
+    ⚠ DREPTUL DE A SCRIE PE BLOG STĂ ÎN ACEEAȘI COLOANĂ CU ROLUL PE PLATFORMĂ.
+
+    `users_profile.role` ține un singur lucru, iar el poate fi
+    `user | admin | moderator | editor`. Deci „îl fac redactor" înseamnă, la
+    propriu, „îi șterg rolul de acum". Pentru un `user` e inofensiv. Pentru un
+    MODERATOR nu: îl scoatem din moderare ca să-l punem pe blog, iar
+    `scoateRedactor` l-ar coborî apoi la `user` — deci rolul lui adevărat s-ar
+    pierde de tot, în două apăsări care par nevinovate.
+
+    Reparația curată e ca dreptul de blog să nu mai stea în coloana aceea (o
+    tabelă `blog_editors`, sau drepturi separate). Până atunci, ușa se închide
+    aici și se spune de ce — un refuz limpede e mai bun decât o pierdere tăcută.
+  */
+  if (rolAcum === "moderator") {
+    return {
+      error:
+        "Persoana e moderator, iar dreptul de redactor s-ar scrie peste rolul acela și l-ar șterge. " +
+        "Deocamdată un cont nu poate fi și moderator, și redactor.",
+    };
+  }
+
+  const { data: atinse, error } = await client
     .from("users_profile")
     .update({ role: "editor" })
     .eq("id", (om as { id: string }).id)
     /* ⚠ Filtrul se repetă în scriere, nu doar în citirea de mai sus: între cele
        două, cineva ar fi putut deveni admin. Fără el, cursa aceea l-ar fi
        coborât la redactor. */
-    .eq("role", rolAcum);
+    .eq("role", rolAcum)
+    .select("id");
 
   if (error) return { error: "Nu s-a putut schimba rolul." };
+
+  /*
+    ⚠ „Fără eroare" NU înseamnă „s-a schimbat ceva".
+
+    Dacă între citire și scriere rolul s-a schimbat (altcineva l-a făcut admin,
+    sau tot redactor), filtrul de mai sus nu potrivește niciun rând: PostgREST
+    răspunde cu succes și zero rânduri. Ecranul ar fi spus „Gata, e redactor"
+    despre cineva care nu e.
+  */
+  if (!Array.isArray(atinse) || atinse.length !== 1) {
+    return { error: "Rolul s-a schimbat între timp. Reîncarcă pagina și încearcă din nou." };
+  }
   revalidatePath("/admin/blog/redactori");
   return { success: true };
 }
@@ -89,13 +124,22 @@ export async function faRedactor(emailBrut: string): Promise<Raspuns> {
  */
 export async function scoateRedactor(id: string): Promise<Raspuns> {
   if (!(await requireAdminApi())) return { error: "Neautorizat" };
-  const { error } = await db()
+  /*
+    `.eq("role", "editor")` e și paza: nu coboară un admin din greșeală, dacă
+    ecranul e vechi. Iar de la reparația din `faRedactor` încoace, un redactor nu
+    mai poate fi un fost moderator — deci „înapoi la `user`" e acum adevărat.
+  */
+  const { data: atinse, error } = await db()
     .from("users_profile")
     .update({ role: "user" })
     .eq("id", id)
-    .eq("role", "editor");
+    .eq("role", "editor")
+    .select("id");
 
   if (error) return { error: "Nu s-a putut schimba rolul." };
+  if (!Array.isArray(atinse) || atinse.length !== 1) {
+    return { error: "Persoana nu mai e redactor. Reîncarcă pagina." };
+  }
   revalidatePath("/admin/blog/redactori");
   return { success: true };
 }

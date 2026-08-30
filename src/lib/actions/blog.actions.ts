@@ -10,8 +10,8 @@ import {
   adreseBune,
   canonicaBuna,
   minuteDeCitit,
-  seVede,
   slugDin,
+  pregatesteCautarea,
   SLUGURI_REZERVATE_BLOG,
   type ArticolBlog,
   type AutorBlog,
@@ -365,17 +365,27 @@ export async function eticheteleArticolului(idArticol: string): Promise<string[]
 /** Toate etichetele, cu numarul de articole pe fiecare. Pentru ecranul de admin. */
 export async function listeazaEtichete(): Promise<{ id: string; slug: string; name: string; cate: number }[]> {
   if (!(await requireAdminApi())) return [];
-  const db = blogDb();
-  const [{ data: etichete }, { data: legaturi }] = await Promise.all([
-    db.from("blog_tags").select("id, slug, name").order("name"),
-    db.from("blog_post_tags").select("tag_id"),
-  ]);
-  const numar = new Map<string, number>();
-  for (const l of (legaturi ?? []) as { tag_id: string }[]) {
-    numar.set(l.tag_id, (numar.get(l.tag_id) ?? 0) + 1);
-  }
-  return ((etichete ?? []) as { id: string; slug: string; name: string }[])
-    .map((e) => ({ ...e, cate: numar.get(e.id) ?? 0 }));
+
+  /*
+    ⚠ SE NUMĂRĂ ÎN BAZĂ, NU AICI.
+
+    Erau două cereri — toate etichetele și toate legăturile — și o numărătoare în
+    JavaScript. Ambele sunt tăiate tăcut de PostgREST la 1000 de rânduri: de la a
+    1001-a legătură numerele de lângă etichete devin pur și simplu greșite, iar de
+    la a 1001-a etichetă unele nici nu mai apar. Nimic nu dă eroare.
+
+    ⚠ ALTĂ FUNCȚIE DECÂT CEA PUBLICĂ. `blog_etichete_folosite` numără doar
+    articolele publicate și sare peste `noindex`. Adminul trebuie să vadă și
+    etichetele legate doar de ciorne — altfel ar șterge una crezând că nu e
+    folosită nicăieri.
+  */
+  const { data } = await blogDb().rpc("blog_etichete_admin");
+  return ((data ?? []) as { id: string; slug: string; name: string; cate: number }[]).map((e) => ({
+    id: e.id,
+    slug: e.slug,
+    name: e.name,
+    cate: Number(e.cate ?? 0),
+  }));
 }
 
 /**
@@ -424,35 +434,71 @@ export type ArticolInLista = Pick<
   views: number;
 };
 
-export async function listeazaArticole(): Promise<ArticolInLista[]> {
-  if (!(await requireBlogEditorApi())) return [];
-  const { data } = await blogDb()
-    .from("blog_posts")
-    .select("id, slug, title, status, published_at, is_featured, is_pinned, reading_minutes, updated_at, blog_authors(name), blog_categories(name), blog_post_stats(views)")
-    .order("updated_at", { ascending: false });
+export const ARTICOLE_PE_PAGINA = 25;
 
-  return ((data ?? []) as Record<string, unknown>[]).map((r) => {
-    /* Supabase întoarce relația fie ca obiect, fie ca listă cu un element,
-       după cum vede el cheia străină. Amândouă se citesc la fel de aici. */
-    const unul = (v: unknown) => {
-      const x = Array.isArray(v) ? v[0] : v;
-      return (x as { name?: string } | null)?.name ?? null;
-    };
-    /* Un articol necitit încă n-are rând în `blog_post_stats`: rândul se face la
-       prima vizită. Lipsa lui înseamnă zero, nu o eroare. */
-    const cateCitiri = (v: unknown): number => {
-      const x = Array.isArray(v) ? v[0] : v;
-      return (x as { views?: number } | null)?.views ?? 0;
-    };
-    return {
-      ...(r as unknown as ArticolInLista),
-      autor: unul(r.blog_authors),
-      categorie: unul(r.blog_categories),
-      views: cateCitiri(r.blog_post_stats),
-    };
+export type PaginaArticole = {
+  articole: ArticolInLista[];
+  total: number;
+  pagina: number;
+  pagini: number;
+};
+
+/**
+ * Articolele din admin, pe pagini, cu căutarea și filtrul făcute în bază.
+ *
+ * ⚠ CITEA PRACTIC LISTA ÎNTREAGĂ, iar ecranul filtra în browser.
+ *
+ * Comod cât timp sunt puține. Dar PostgREST taie tăcut la 1000 de rânduri: de la
+ * al 1001-lea articol, cele mai vechi pur și simplu nu mai apar în admin — și nu
+ * apare nici vreun semn că lipsesc. Un articol pe care nu-l mai găsești în admin
+ * e, practic, un articol pierdut: rămâne pe site, dar nimeni nu-l mai poate
+ * edita sau retrage.
+ *
+ * ⚠ CĂUTAREA E TRECUTĂ PRIN `pregatesteCautarea`, ca cea publică — deci pliază
+ * diacriticele ȘI scapă `%` și `_`, care au înțeles în `like`. Fără asta, o
+ * căutare după `%` ar întoarce toate articolele.
+ */
+export async function listeazaArticole(
+  pagina = 1,
+  cauta?: string,
+  stare?: StareArticol,
+): Promise<PaginaArticole> {
+  const gol: PaginaArticole = { articole: [], total: 0, pagina: 1, pagini: 1 };
+  if (!(await requireBlogEditorApi())) return gol;
+
+  const p = Number.isSafeInteger(pagina) && pagina >= 1 ? pagina : 1;
+  const termen = (cauta ?? "").trim();
+
+  const { data } = await blogDb().rpc("blog_articole_admin", {
+    p_de_la: (p - 1) * ARTICOLE_PE_PAGINA,
+    p_cate: ARTICOLE_PE_PAGINA,
+    p_cauta: termen ? pregatesteCautarea(termen) : null,
+    p_stare: stare ?? null,
   });
-}
 
+  const randuri = (data ?? []) as (ArticolInLista & { total: number })[];
+  const total = randuri.length > 0 ? Number(randuri[0].total ?? 0) : 0;
+
+  return {
+    articole: randuri.map((r) => ({
+      id: r.id,
+      slug: r.slug,
+      title: r.title,
+      status: r.status,
+      published_at: r.published_at,
+      is_featured: r.is_featured,
+      is_pinned: r.is_pinned,
+      reading_minutes: r.reading_minutes,
+      updated_at: r.updated_at,
+      autor: r.autor,
+      categorie: r.categorie,
+      views: Number(r.views ?? 0),
+    })),
+    total,
+    pagina: p,
+    pagini: Math.max(1, Math.ceil(total / ARTICOLE_PE_PAGINA)),
+  };
+}
 export async function iaArticol(id: string): Promise<ArticolBlog | null> {
   if (!(await requireBlogEditorApi())) return null;
   const { data } = await blogDb().from("blog_posts").select("*").eq("id", id).single();

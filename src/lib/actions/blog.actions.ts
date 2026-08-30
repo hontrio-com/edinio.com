@@ -159,15 +159,22 @@ export async function actualizeazaAutor(id: string, intrare: AutorInput): Promis
   const s = slugSauMotiv(intrare.slug, nume);
   if ("error" in s) return s;
 
-  /* Slugul de dinainte, ca să știm dacă s-a mutat. Citit ÎNAINTE de scriere:
-     după ea nu mai există nicăieri. */
-  const { data: inainte } = await blogDb()
-    .from("blog_authors").select("slug").eq("id", id).maybeSingle();
-  const vechiSlug = (inainte as { slug: string } | null)?.slug ?? null;
+  /*
+    ⚠ SLUGUL ȘI REDIRECTAREA, ÎN ACEEAȘI TRANZACȚIE.
 
-  const { error } = await blogDb()
-    .from("blog_authors")
-    .update({
+    Erau două cereri: întâi `update`, apoi redirectarea. Dacă a doua pica, adresa
+    nouă era deja pe site iar cea veche dădea 404 pe loc — și acțiunea întorcea
+    `success`, fiindcă prima izbutise. Un comentariu scris chiar aici spunea că
+    asta e purtarea bună: „o redenumire salvată cu redirectarea ratată e mai bună
+    decât una nesalvată".
+
+    Nu e, pentru o pagină indexată. Acolo redirectarea nu e un lucru în plus, e
+    jumătatea care păstrează ce a strâns pagina în ani. Ori amândouă, ori niciuna.
+  */
+  const { error } = await blogDb().rpc("blog_actualizeaza_taxonomia", {
+    p_fel: "autor",
+    p_id: id,
+    p_rand: {
       name: nume,
       slug: s.slug,
       role_title: intrare.role_title?.trim() || null,
@@ -175,35 +182,13 @@ export async function actualizeazaAutor(id: string, intrare: AutorInput): Promis
       avatar_url: intrare.avatar_url?.trim() || null,
       sameas: adreseBune(intrare.sameas),
       user_id: intrare.user_id || null,
-    })
-    .eq("id", id);
+    },
+  });
 
   if (error) return { error: traduEroare(error, "un autor") };
-
-  /*
-    ⚠ ȘI ADRESA ASTA E INDEXATĂ.
-
-    Redenumirea unui ARTICOL lăsa o redirectare în urmă; redenumirea unei rubrici
-    sau a unui autor nu lăsa nimic — deși paginile acelea sunt la fel de indexate
-    și, de obicei, mai vechi decât articolele din ele. Un redactor care schimbă
-    „Livrare" în „Livrare și curierat" mută, dintr-o singură apăsare, o pagină
-    care putea să fi strâns legături ani de zile.
-
-    Se scrie DUPĂ salvare și nu oprește nimic dacă pică: o redenumire salvată cu
-    redirectarea ratată e mai bună decât una nesalvată. Funcția din bază strânge
-    și lanțurile, și se ferește de bucla dus-întors.
-  */
-  if (vechiSlug && vechiSlug !== s.slug) {
-    const { error: eMutare } = await blogDb().rpc("blog_muta_taxonomia", {
-      p_fel: "autor", p_slug_vechi: vechiSlug, p_slug_nou: s.slug,
-    });
-    if (eMutare) console.error("[blog] redirectare de autor neputută", vechiSlug, "->", s.slug, eMutare);
-  }
-
   reimprospateaza();
   return { success: true };
 }
-
 /**
  * Sterge un autor.
  *
@@ -214,8 +199,22 @@ export async function actualizeazaAutor(id: string, intrare: AutorInput): Promis
  */
 export async function stergeAutor(id: string): Promise<Raspuns> {
   if (!(await requireAdminApi())) return { error: "Neautorizat" };
-  const { error } = await blogDb().from("blog_authors").delete().eq("id", id);
+  /*
+    ⚠ ȘI REDIRECTĂRILE PLEACĂ ODATĂ CU AUTORUL.
+
+    Fără asta rămâneau adrese care duc către o pagină care nu mai există:
+    `veche → nouă`, iar `nouă` tocmai a fost ștearsă. Un 404 după o săritură e
+    mai rău decât unul direct — al doilea măcar e cinstit de la prima cerere.
+
+    Funcția filtrează pe `fel`, deci un articol cu același slug istoric rămâne
+    neatins.
+  */
+  const { data: aSters, error } = await blogDb().rpc("blog_sterge_taxonomia", {
+    p_fel: "autor", p_id: id,
+  });
   if (error) return { error: "Nu s-a putut sterge. Incearca din nou." };
+  if (aSters !== true) return { error: "Nu mai există." };
+
   reimprospateaza();
   return { success: true };
 }
@@ -285,54 +284,53 @@ export async function actualizeazaCategorie(id: string, intrare: CategorieInput)
   const s = slugSauMotiv(intrare.slug, nume);
   if ("error" in s) return s;
 
-  /* Slugul de dinainte, ca să știm dacă s-a mutat. Citit ÎNAINTE de scriere:
-     după ea nu mai există nicăieri. */
-  const { data: inainte } = await blogDb()
-    .from("blog_categories").select("slug").eq("id", id).maybeSingle();
-  const vechiSlug = (inainte as { slug: string } | null)?.slug ?? null;
+  /*
+    ⚠ SLUGUL ȘI REDIRECTAREA, ÎN ACEEAȘI TRANZACȚIE.
 
-  const { error } = await blogDb()
-    .from("blog_categories")
-    .update({
+    Erau două cereri: întâi `update`, apoi redirectarea. Dacă a doua pica, adresa
+    nouă era deja pe site iar cea veche dădea 404 pe loc — și acțiunea întorcea
+    `success`, fiindcă prima izbutise. Un comentariu scris chiar aici spunea că
+    asta e purtarea bună: „o redenumire salvată cu redirectarea ratată e mai bună
+    decât una nesalvată".
+
+    Nu e, pentru o pagină indexată. Acolo redirectarea nu e un lucru în plus, e
+    jumătatea care păstrează ce a strâns pagina în ani. Ori amândouă, ori niciuna.
+  */
+  const { error } = await blogDb().rpc("blog_actualizeaza_taxonomia", {
+    p_fel: "categorie",
+    p_id: id,
+    p_rand: {
       name: nume,
       slug: s.slug,
       description: intrare.description?.trim() || null,
       seo_title: intrare.seo_title?.trim() || null,
       seo_description: intrare.seo_description?.trim() || null,
       sort_order: intrare.sort_order ?? 0,
-    })
-    .eq("id", id);
+    },
+  });
 
   if (error) return { error: traduEroare(error, "o categorie") };
-
-  /*
-    ⚠ ȘI ADRESA ASTA E INDEXATĂ.
-
-    Redenumirea unui ARTICOL lăsa o redirectare în urmă; redenumirea unei rubrici
-    sau a unui autor nu lăsa nimic — deși paginile acelea sunt la fel de indexate
-    și, de obicei, mai vechi decât articolele din ele. Un redactor care schimbă
-    „Livrare" în „Livrare și curierat" mută, dintr-o singură apăsare, o pagină
-    care putea să fi strâns legături ani de zile.
-
-    Se scrie DUPĂ salvare și nu oprește nimic dacă pică: o redenumire salvată cu
-    redirectarea ratată e mai bună decât una nesalvată. Funcția din bază strânge
-    și lanțurile, și se ferește de bucla dus-întors.
-  */
-  if (vechiSlug && vechiSlug !== s.slug) {
-    const { error: eMutare } = await blogDb().rpc("blog_muta_taxonomia", {
-      p_fel: "categorie", p_slug_vechi: vechiSlug, p_slug_nou: s.slug,
-    });
-    if (eMutare) console.error("[blog] redirectare de rubrica neputută", vechiSlug, "->", s.slug, eMutare);
-  }
-
   reimprospateaza();
   return { success: true };
 }
-
 export async function stergeCategorie(id: string): Promise<Raspuns> {
   if (!(await requireAdminApi())) return { error: "Neautorizat" };
-  const { error } = await blogDb().from("blog_categories").delete().eq("id", id);
+  /*
+    ⚠ ȘI REDIRECTĂRILE PLEACĂ ODATĂ CU RUBRICA.
+
+    Fără asta rămâneau adrese care duc către o pagină care nu mai există:
+    `veche → nouă`, iar `nouă` tocmai a fost ștearsă. Un 404 după o săritură e
+    mai rău decât unul direct — al doilea măcar e cinstit de la prima cerere.
+
+    Funcția filtrează pe `fel`, deci un articol cu același slug istoric rămâne
+    neatins.
+  */
+  const { data: aSters, error } = await blogDb().rpc("blog_sterge_taxonomia", {
+    p_fel: "categorie", p_id: id,
+  });
   if (error) return { error: "Nu s-a putut sterge. Incearca din nou." };
+  if (aSters !== true) return { error: "Nu mai există." };
+
   reimprospateaza();
   return { success: true };
 }
@@ -348,56 +346,6 @@ export async function articoleAleCategoriei(id: string): Promise<number> {
 }
 
 
-/**
- * Pune etichetele pe un articol, facandu-le pe cele care nu exista.
- *
- * ⚠ SE INLOCUIESC, NU SE ADAUGA. Editorul trimite lista INTREAGA de etichete a
- * articolului, deci una scoasa din caseta trebuie sa dispara si din legaturi.
- * Adaugarea in loc de inlocuire ar fi facut ca o eticheta scoasa sa ramana pe
- * veci, iar omul ar fi crezut ca a scos-o.
- *
- * ⚠ ETICHETELE INSELE NU SE STERG cand raman fara articole. Una scrisa gresit
- * si corectata ar lasa in urma o eticheta orfana, e adevarat — dar stergerea
- * automata ar fi sters si una folosita de un articol aflat in ciorna, iar aceea
- * chiar e in uz. Curatenia lor e treaba ecranului de etichete, cu mana omului.
- */
-async function puneEtichete(idArticol: string, nume: string[] | undefined): Promise<void> {
-  if (nume === undefined) return; // editorul n-a trimis nimic: nu se atinge nimic
-
-  const curate = [...new Set(
-    nume.map((n) => n.trim()).filter((n) => n.length > 0 && n.length <= 40),
-  )].slice(0, 12);
-
-  const db = blogDb();
-  await db.from("blog_post_tags").delete().eq("post_id", idArticol);
-  if (curate.length === 0) return;
-
-  /* Fiecare eticheta are un slug, iar slugul e cheia unica. Doua nume care dau
-     acelasi slug („eMAG" si „emag") sunt aceeasi eticheta, si asa si trebuie. */
-  const randuri = curate
-    .map((n) => ({ nume: n, slug: slugDin(n) }))
-    .filter((e) => e.slug.length > 0);
-  if (randuri.length === 0) return;
-
-  const { error: eUpsert } = await db
-    .from("blog_tags")
-    .upsert(randuri.map((e) => ({ slug: e.slug, name: e.nume })), { onConflict: "slug", ignoreDuplicates: true });
-  if (eUpsert) {
-    console.error("[blog] etichetele nu s-au putut face", eUpsert);
-    return;
-  }
-
-  const { data: gasite } = await db
-    .from("blog_tags").select("id, slug").in("slug", randuri.map((e) => e.slug));
-
-  const legaturi = ((gasite ?? []) as { id: string }[]).map((t) => ({
-    post_id: idArticol,
-    tag_id: t.id,
-  }));
-  if (legaturi.length > 0) {
-    await db.from("blog_post_tags").insert(legaturi);
-  }
-}
 
 /** Etichetele unui articol, pentru cand se deschide in editor. */
 export async function eticheteleArticolului(idArticol: string): Promise<string[]> {
@@ -567,6 +515,26 @@ export type ArticolInput = {
   noindex?: boolean;
   /** Numele etichetelor, asa cum le-a scris omul. Se fac singure daca nu exista. */
   etichete?: string[];
+  /**
+   * Versiunea de la care a plecat cel care editeaza.
+   *
+   * ⚠ FARA EA, ULTIMA SCRIERE CASTIGA IN TACERE. Doua file deschise pe acelasi
+   * articol, sau doi redactori: A salveaza, B salveaza peste, si nimeni nu afla
+   * nimic. Trimisa, baza refuza scrierea lui B cu `P0409` daca articolul s-a
+   * schimbat intre timp.
+   *
+   * `undefined` sare peste verificare — dinadins, pentru unelte si reparatii.
+   * Editorul o trimite mereu.
+   */
+  edit_version?: number | null;
+  /**
+   * Salvare automata: nu scrie versiune in istoric.
+   *
+   * Bate la 30 de secunde. Cu o revizie de fiecare data, cele 50 de sloturi se
+   * umplu in 25 de minute de scris, iar istoricul ajunge sa contina numai
+   * variante aproape identice din ultima jumatate de ora.
+   */
+  tacut?: boolean;
 };
 
 /**
@@ -679,9 +647,10 @@ function preaLung(intrare: ArticolInput): string | null {
     if ((i.a ?? "").length > LIMITE.raspuns) return `Un răspuns e mai lung de ${LIMITE.raspuns} de caractere.`;
   }
 
-  /* Etichetele se tăiau tăcut în `puneEtichete` (12 bucăți, 40 de caractere).
+  /* Etichetele se tăiau tăcut la 12 bucăți și 40 de caractere, fără să spună.
      Tăcerea aia era o problemă în sine: omul scria cincisprezece etichete,
-     apăsa salvează, și trei dispăreau fără ca nimic să spună de ce. */
+     apăsa salvează, și trei dispăreau fără ca nimic să spună de ce. Tăierea a
+     rămas (în `etichetePentruBaza`), dar acum se dă și un motiv. */
   const etichete = intrare.etichete ?? [];
   if (etichete.length > 12) return "Sunt prea multe etichete. Maximul e 12.";
   if (etichete.some((e) => (e ?? "").trim().length > LIMITE.eticheta)) {
@@ -689,6 +658,31 @@ function preaLung(intrare: ArticolInput): string | null {
   }
 
   return null;
+}
+
+/**
+ * Etichetele, pregătite pentru baza de date.
+ *
+ * ⚠ SLUGUL SE FACE AICI, NU ÎN SQL. `slugDin` e singura regulă de slugit din tot
+ * blogul. Rescrisă și în funcția din bază, cele două s-ar fi despărțit tăcut la
+ * prima diacritică tratată altfel: aceeași etichetă ar fi ajuns două rânduri, și
+ * nimic n-ar fi dat eroare.
+ *
+ * `undefined` înseamnă „editorul n-a trimis etichete" și iese `null`, pe care
+ * baza îl citește ca „nu atinge nimic". Un tablou gol înseamnă „le-a scos pe
+ * toate", și e altceva.
+ */
+function etichetePentruBaza(etichete: string[] | undefined) {
+  if (etichete === undefined) return null;
+  return [
+    ...new Map(
+      etichete
+        .map((n) => (n ?? "").trim())
+        .filter((n) => n.length > 0)
+        .map((n) => [slugDin(n), { slug: slugDin(n), name: n }] as const)
+        .filter(([slug]) => slug.length > 0),
+    ).values(),
+  ].slice(0, 12);
 }
 
 /** Câmpurile comune la creare și la actualizare. */
@@ -781,20 +775,34 @@ export async function creeazaArticol(intrare: ArticolInput): Promise<RaspunsCu<{
   const rand = randDinIntrare(intrare, s.slug);
   if (!rand.author_id) rand.author_id = await autorulMeu(cine.id);
 
-  const { data, error } = await blogDb()
-    .from("blog_posts")
-    .insert({ ...rand, published_at: dataLaPublicare(intrare) })
-    .select("id")
-    .single();
+  /*
+    ⚠ TOT ÎNTR-O TRANZACȚIE, ca și salvarea.
+
+    Erau două cereri: `insert blog_posts`, apoi un ajutor separat care scria
+    etichetele — și care nici măcar nu se uita la eroarea de la inserarea
+    legăturilor (l-am scos odată cu reparația).
+    Deci: articol creat, etichete nescrise, ecranul spune „Articol creat" — și
+    articolul nu apare în niciuna dintre rubricile pentru care omul le-a scris.
+    Nimic nu dădea vreo eroare, fiindcă prima cerere chiar izbutise.
+  */
+  const { data, error } = await blogDb().rpc("blog_creeaza_articol", {
+    p_rand: { ...rand, published_at: dataLaPublicare(intrare) },
+    p_etichete: etichetePentruBaza(intrare.etichete),
+  });
 
   if (error) return { error: traduEroare(error, "un articol") };
-  const idNou = (data as { id: string }).id;
-  await puneEtichete(idNou, intrare.etichete);
+  const primul = Array.isArray(data) ? data[0] : data;
+  const idNou = (primul as { id: string } | null)?.id;
+  if (!idNou) return { error: "Nu am putut crea articolul. Încearcă din nou." };
+
   reimprospateaza();
   return { success: true, date: { id: idNou } };
 }
 
-export async function actualizeazaArticol(id: string, intrare: ArticolInput): Promise<Raspuns> {
+export async function actualizeazaArticol(
+  id: string,
+  intrare: ArticolInput,
+): Promise<RaspunsCu<{ edit_version: number }>> {
   const admin = await requireBlogEditorApi();
   if (!admin) return { error: "Neautorizat" };
   if (!poateLasaInStarea(admin.rol, intrare.status ?? "draft")) {
@@ -849,44 +857,53 @@ export async function actualizeazaArticol(id: string, intrare: ArticolInput): Pr
     tăcut la prima diacritică tratată altfel — aceeași capcană ca la
     `pliaza` / `fara_diacritice`.
   */
-  const etichetePentruBaza =
-    intrare.etichete === undefined
-      ? null // editorul n-a trimis nimic: nu se atinge nimic
-      : [
-          ...new Map(
-            intrare.etichete
-              .map((n) => (n ?? "").trim())
-              .filter((n) => n.length > 0)
-              .map((n) => [slugDin(n), { slug: slugDin(n), name: n }] as const)
-              .filter(([slug]) => slug.length > 0),
-          ).values(),
-        ].slice(0, 12);
+  /*
+    ⚠ FUNCȚIA ÎȘI CITEȘTE SINGURĂ STAREA VECHE, SUB LACĂT.
 
-  const { error } = await blogDb().rpc("blog_salveaza_articol", {
+    Îi trimiteam `p_slug_vechi`, `p_titlu_vechi`, `p_html_vechi` și hotărârea
+    `p_lasa_redirect` — toate dintr-o citire făcută cu o clipă mai devreme, în
+    altă tranzacție. Între acea citire și scriere se putea schimba orice: revizia
+    ar fi păstrat un text care nu mai era cel de dinainte.
+
+    ⚠ ȘI VERSIUNEA. Două file deschise pe același articol: A salvează, B salvează
+    peste, și nimeni nu află nimic. Acum B primește `P0409` și i se spune ce s-a
+    întâmplat.
+  */
+  const { data: versiuneNoua, error } = await blogDb().rpc("blog_salveaza_articol", {
     p_id: id,
     p_rand: { ...randDinIntrare(intrare, s.slug), published_at: dataLaPublicare(intrare) },
-    p_etichete: etichetePentruBaza,
-    p_slug_vechi: vechi.slug,
-    /*
-      ⚠ Doar dacă articolul A FOST vizibil. Un slug schimbat pe o ciornă n-a fost
-      niciodată nicăieri: o redirectare de la el ar fi o adresă inventată, care
-      nu duce decât la umplut tabela.
-
-      Dar dacă articolul se vedea, adresa veche există deja în Google, în
-      legături și în istoricul cuiva. Mutată fără redirectare, tot ce a strâns se
-      pierde și rămâne un 404 pe care motoarele îl țin minte mult.
-    */
-    p_lasa_redirect: vechi.slug !== s.slug && seVede(vechi),
+    p_etichete: etichetePentruBaza(intrare.etichete),
     p_salvat_de: admin.id,
-    p_titlu_vechi: vechi.title,
-    p_html_vechi: vechi.content_html,
     p_versiuni: VERSIUNI_PASTRATE,
+    p_versiune_asteptata: intrare.edit_version ?? null,
+    /*
+      ⚠ Salvarea automată NU scrie versiune în istoric.
+
+      Bate la 30 de secunde; cu o revizie de fiecare dată, cele 50 de sloturi se
+      umplu în 25 de minute de scris, iar istoricul ajunge să conțină numai
+      variante aproape identice din ultima jumătate de oră — adică exact ce nu
+      caută nimeni când îl deschide.
+    */
+    p_creeaza_versiune: intrare.tacut !== true,
   });
 
+  /*
+    ⚠ Codul `P0409` e ridicat anume de funcție când versiunile nu se potrivesc.
+    Mesajul trebuie să spună ce s-a întâmplat ȘI ce are omul de făcut, altfel
+    „conflict" îl lasă să apese Salvează la nesfârșit.
+  */
+  if (error && (error as { code?: string }).code === "P0409") {
+    return {
+      error:
+        "Articolul a fost modificat între timp — în altă filă sau de alt redactor. " +
+        "Deschide-l din nou ca să vezi ce e acum acolo; ce ai scris aici nu s-a pierdut, " +
+        "e păstrat în ciorna locală din browser.",
+    };
+  }
   if (error) return { error: traduEroare(error, "un articol") };
 
   reimprospateaza();
-  return { success: true };
+  return { success: true, date: { edit_version: Number(versiuneNoua ?? 0) } };
 }
 
 export async function stergeArticol(id: string): Promise<Raspuns> {
@@ -904,20 +921,24 @@ export async function stergeArticol(id: string): Promise<Raspuns> {
     return { error: "Poți șterge doar ciorne. Cere unui administrator." };
   }
 
-  if (articol) {
-    /* ⚠ SI `fel`, nu doar slugul.
+  /*
+    ⚠ ȘI ȘTERGEREA E O SINGURĂ TRANZACȚIE.
 
-       De cand redirectarile au un fel, o rubrica si un articol pot pleca de la
-       acelasi slug — stau pe cai diferite, deci n-au de ce sa se incurce. Fara
-       randul cu `fel`, stergerea unui articol ar fi sters si redirectarea unei
-       rubrici cu acelasi nume, adica ar fi omorat o pagina care n-are nicio
-       legatura cu ce se sterge. */
-    await blogDb().from("blog_redirects").delete()
-      .eq("fel", "articol").eq("to_slug", articol.slug);
-  }
+    Erau două cereri, iar prima nici nu era verificată:
+      * redirectări șterse, articol neșters → articolul rămâne, dar istoricul lui
+        de adrese a fost distrus;
+      * redirectări neșterse, articol șters → adresele vechi trimit către un slug
+        care acum dă 404, adică o redirectare care duce într-un zid. Un 404 după o
+        săritură e mai rău decât unul direct: al doilea măcar e cinstit de la
+        prima cerere.
 
-  const { error } = await blogDb().from("blog_posts").delete().eq("id", id);
+    Funcția filtrează și pe `fel`, deci o rubrică cu același slug istoric rămâne
+    neatinsă.
+  */
+  const { data: aSters, error } = await blogDb().rpc("blog_sterge_articol", { p_id: id });
   if (error) return { error: "Nu s-a putut sterge. Incearca din nou." };
+  if (aSters !== true) return { error: "Articolul nu mai există." };
+
   reimprospateaza();
   return { success: true };
 }
@@ -935,6 +956,9 @@ export async function stergeArticol(id: string): Promise<Raspuns> {
  * Cincizeci acoperă cu mult o zi de scris intens, care e singurul moment în
  * care omul chiar vrea să se întoarcă.
  */
+/* ⚠ Taierea se face IN BAZA, in `blog_salveaza_articol`, nu aici. A fost o
+   vreme o functie separata chemata doar din `revinoLaVersiune` — adica exact
+   din locul in care nu se aduna nimic. */
 const VERSIUNI_PASTRATE = 50;
 
 export type VersiuneInLista = {
@@ -945,8 +969,24 @@ export type VersiuneInLista = {
   marime: number;
 };
 
+/*
+  ═══ CINE VEDE ISTORICUL SI CINE POATE REVENI ═══
+
+  Regula, scrisa o data si tinuta in trei locuri:
+
+    REDACTOR  vede istoricul oricarui articol, si poate reveni la o versiune
+              DOAR pe un articol in ciorna sau la verificare.
+    ADMIN     vede si revine oriunde.
+
+  ⚠ CELE TREI LOCURI TREBUIE SA SPUNA ACELASI LUCRU. Pana pe 30.08.2026 nu
+  spuneau: RLS-ul ii ingaduia redactorului sa CITEASCA reviziile, actiunile de
+  aici cereau admin, iar butonul „Istoric" din editor se arata tuturor. Deci
+  redactorul apasa, se deschidea panoul, si lista iesea GOALA — nu „n-ai voie",
+  ci „nu exista nimic". Doua minciuni intr-una: ii spunea ca articolul lui n-are
+  istoric, si ii ascundea ca de fapt usa e incuiata.
+*/
 export async function listeazaVersiuni(idArticol: string): Promise<VersiuneInLista[]> {
-  if (!(await requireAdminApi())) return [];
+  if (!(await requireBlogEditorApi())) return [];
   const { data } = await blogDb()
     .from("blog_post_revisions")
     .select("id, title, content_html, created_at")
@@ -965,7 +1005,7 @@ export async function listeazaVersiuni(idArticol: string): Promise<VersiuneInLis
 
 /** Textul unei versiuni, pentru previzualizare. */
 export async function iaVersiune(id: string): Promise<{ title: string | null; content_html: string | null } | null> {
-  if (!(await requireAdminApi())) return null;
+  if (!(await requireBlogEditorApi())) return null;
   const { data } = await blogDb()
     .from("blog_post_revisions").select("title, content_html").eq("id", id).maybeSingle();
   return (data as { title: string | null; content_html: string | null }) ?? null;
@@ -984,64 +1024,51 @@ export async function iaVersiune(id: string): Promise<{ title: string | null; co
  * în Google. Revenirea la un text nu trebuie să mute pagina.
  */
 export async function revinoLaVersiune(idArticol: string, idVersiune: string): Promise<Raspuns> {
-  const admin = await requireAdminApi();
-  if (!admin) return { error: "Neautorizat" };
+  const cine = await requireBlogEditorApi();
+  if (!cine) return { error: "Neautorizat" };
 
   const [vechea, acum] = await Promise.all([iaVersiune(idVersiune), iaArticol(idArticol)]);
   if (!vechea) return { error: "Versiunea nu mai există." };
   if (!acum) return { error: "Articolul nu mai există." };
 
-  const db = blogDb();
+  /* Aceeași margine ca la salvare: un redactor nu atinge un articol publicat.
+     Vezi `poateLasaInStarea` și nota de deasupra lui `listeazaVersiuni`. */
+  if (!poateLasaInStarea(cine.rol, acum.status)) {
+    return { error: "Articolul e publicat. Doar un administrator poate reveni la o versiune." };
+  }
 
-  /* Întâi se pune deoparte ce e acum, apoi se scrie ce era. În ordinea
-     inversă, o cădere între cele două ar fi lăsat articolul schimbat și fără
-     nicio urmă a stării dinainte. */
-  const { error: eIstoric } = await db.from("blog_post_revisions").insert({
-    post_id: idArticol,
-    title: acum.title,
-    content_html: acum.content_html,
-    saved_by: admin.id,
-  });
-  if (eIstoric) return { error: "Nu s-a putut păstra versiunea de acum. Nu am schimbat nimic." };
+  /*
+    ⚠ PRIN ACEEAȘI FUNCȚIE CA SALVAREA, nu cu două cereri.
 
+    Erau două: întâi se punea deoparte ce e acum, apoi se scria ce era. Ordinea
+    era gândită bine — o cădere între ele lăsa articolul neatins — dar tot rămânea
+    o fereastră: revizia scrisă, articolul nu. Iar istoricul se tăia abia după,
+    într-o a treia cerere.
+
+    Funcția face totul sub lacăt: pune deoparte starea de acum (`p_creeaza_versiune`),
+    scrie ce era, taie istoricul. Ori tot, ori nimic.
+  */
   const html = vechea.content_html ?? "";
-  const { error } = await db
-    .from("blog_posts")
-    .update({
+  const { error } = await blogDb().rpc("blog_salveaza_articol", {
+    p_id: idArticol,
+    p_rand: {
       title: vechea.title ?? acum.title,
       content_html: html,
       reading_minutes: minuteDeCitit(html),
-    })
-    .eq("id", idArticol);
+    },
+    /* `null`: revenirea nu atinge etichetele. Ele n-au fost niciodată păstrate
+       în istoric, deci n-avem la ce să le întoarcem. */
+    p_etichete: null,
+    p_salvat_de: cine.id,
+    p_versiuni: VERSIUNI_PASTRATE,
+    /* Fără verificare de versiune: omul tocmai a citit lista și a ales din ea. */
+    p_versiune_asteptata: null,
+    p_creeaza_versiune: true,
+  });
 
   if (error) return { error: "Nu s-a putut reveni. Încearcă din nou." };
 
-  await taieIstoriculVechi(idArticol);
   reimprospateaza();
   return { success: true };
 }
 
-/**
- * Taie versiunile de peste plafon.
- *
- * ⚠ SE ȘTERG CELE MAI VECHI, nu cele mai mici. Un articol scurtat mult are
- * versiuni mici recente și una mare veche; ștergerea după mărime ar fi păstrat
- * tocmai ce nu trebuie.
- */
-async function taieIstoriculVechi(idArticol: string): Promise<void> {
-  const db = blogDb();
-  const { data } = await db
-    .from("blog_post_revisions")
-    .select("id")
-    .eq("post_id", idArticol)
-    .order("created_at", { ascending: false })
-    .range(VERSIUNI_PASTRATE, VERSIUNI_PASTRATE + 200);
-
-  const deSters = ((data ?? []) as { id: string }[]).map((v) => v.id);
-  if (deSters.length === 0) return;
-  const { error } = await db.from("blog_post_revisions").delete().in("id", deSters);
-  if (error) {
-    /* Nu opreste salvarea: un istoric prea lung e o risipa, nu o stricaciune. */
-    console.error("[blog] istoricul vechi n-a putut fi taiat", idArticol, error);
-  }
-}

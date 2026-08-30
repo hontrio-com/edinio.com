@@ -79,8 +79,17 @@ function pentruInput(iso: string | null): string {
 }
 
 /** Ce se trimite la server, din starea formularului. */
-function intrareDin(f: Stare, status: StareArticol): ArticolInput {
+function intrareDin(
+  f: Stare,
+  status: StareArticol,
+  versiune: number | null,
+  tacut = false,
+): ArticolInput {
   return {
+    /* Vezi `versiuneaMea`: fără ea, cine salvează al doilea scrie peste primul
+       fără ca vreunul să afle. */
+    edit_version: versiune,
+    tacut,
     title: f.title,
     slug: f.slug,
     excerpt: f.excerpt,
@@ -207,6 +216,7 @@ export function AdminBlogPostEditor({
 
   const pune = <K extends keyof Stare>(k: K, v: Stare[K]) => {
     setF((s) => ({ ...s, [k]: v }));
+    generatie.current++;
     setNesalvat(true);
   };
 
@@ -240,8 +250,41 @@ export function AdminBlogPostEditor({
    */
   const scriereInCurs = useRef(false);
 
+  /**
+   * Versiunea articolului, așa cum o știe serverul.
+   *
+   * ⚠ ASTA E CE OPREȘTE „ULTIMA SCRIERE CÂȘTIGĂ".
+   *
+   * Două file deschise pe același articol, sau doi redactori. A salvează. B are
+   * încă versiunea veche pe ecran, salvează, și munca lui A dispare — fără nicio
+   * eroare, fără ca vreunul dintre ei să afle vreodată.
+   *
+   * Se trimite la fiecare scriere. Dacă baza are altă versiune decât asta,
+   * refuză scrierea și acțiunea întoarce un mesaj care spune ce s-a întâmplat.
+   * După fiecare salvare reușită se pune numărul nou primit de la server.
+   */
+  const versiuneaMea = useRef<number | null>(articol?.edit_version ?? null);
+
+  /**
+   * Câte schimbări a făcut omul, de la deschiderea formularului.
+   *
+   * ⚠ FĂRĂ ASTA, ECRANUL MINTE DUPĂ FIECARE SALVARE AUTOMATĂ.
+   *
+   * Salvarea pleacă cu starea de ACUM și așteaptă răspunsul o secundă. În
+   * secunda aceea omul mai scrie trei cuvinte. Când răspunsul vine, codul făcea
+   * `setNesalvat(false)` și ștergea copia locală — deși serverul are ce era
+   * ÎNAINTE de cele trei cuvinte, iar browserul are altceva. Ecranul spune
+   * „Salvat", omul închide fila, și cele trei cuvinte nu există nicăieri.
+   *
+   * Numărul crește la fiecare atingere. Dacă la întoarcerea răspunsului nu mai e
+   * cel de la plecare, înseamnă că s-a mai scris ceva între timp: rămâne
+   * „Nesalvat", copia locală rămâne, iar următorul ceas trimite starea nouă.
+   */
+  const generatie = useRef(0);
+
   function schimbaTitlul(title: string) {
     setF((s) => ({ ...s, title, slug: s.slugScrisDeMana ? s.slug : slugDin(title) }));
+    generatie.current++;
     setNesalvat(true);
   }
 
@@ -294,12 +337,26 @@ export function AdminBlogPostEditor({
     if (scriereInCurs.current) return;
 
     scriereInCurs.current = true;
+    /* Generația de la care pleacă scrierea asta. Vezi `generatie`. */
+    const gen = generatie.current;
     try {
-      const res = await actualizeazaArticol(articol.id, intrareDin(st, st.status));
+      /* `tacut`: salvarea automată NU scrie versiune în istoric. Bate la 30 de
+         secunde; cu o revizie de fiecare dată, cele 50 de sloturi se umplu în 25
+         de minute și istoricul rămâne numai cu variante aproape identice. */
+      const res = await actualizeazaArticol(
+        articol.id,
+        intrareDin(st, st.status, versiuneaMea.current, true),
+      );
       if (!("error" in res)) {
-        setNesalvat(false);
+        versiuneaMea.current = res.date.edit_version;
         setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
-        try { localStorage.removeItem(cheieLocala); } catch { /* fila privată */ }
+        /* ⚠ Doar dacă între timp n-a mai scris nimeni nimic. Altfel serverul are
+           o stare mai veche decât ecranul, iar „Salvat" ar fi o minciună care se
+           plătește la închiderea filei. */
+        if (generatie.current === gen) {
+          setNesalvat(false);
+          try { localStorage.removeItem(cheieLocala); } catch { /* fila privată */ }
+        }
       }
     } finally {
       scriereInCurs.current = false;
@@ -379,10 +436,15 @@ export function AdminBlogPostEditor({
   }
 
   /** Ce se face după orice scriere reușită: nu mai e nimic nesalvat. */
-  function dupaOSalvareReusita(stareNoua?: StareArticol) {
-    setNesalvat(false);
+  function dupaOSalvareReusita(stareNoua?: StareArticol, generatieLaPornire?: number) {
     setSalvatLa(new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
-    try { localStorage.removeItem(cheieLocala); } catch { /* filă privată */ }
+    /* ⚠ Aceeași grijă ca la salvarea automată: dacă omul a mai scris ceva cât
+       era cererea pe drum, serverul are o stare mai veche decât ecranul. Atunci
+       rămâne „Nesalvat" și copia locală rămâne pe loc. */
+    if (generatieLaPornire === undefined || generatie.current === generatieLaPornire) {
+      setNesalvat(false);
+      try { localStorage.removeItem(cheieLocala); } catch { /* filă privată */ }
+    }
     /* ⚠ `puneDeLaServer`, NU `pune`: starea vine de la server, deci n-are ce
        marca drept nesalvat. Vezi nota de la definiția lui. */
     if (stareNoua) puneDeLaServer("status", stareNoua);
@@ -398,7 +460,8 @@ export function AdminBlogPostEditor({
     const status = stareNoua ?? f.status;
     setSalveaza(true);
 
-    const intrare = intrareDin(f, status);
+    const gen = generatie.current;
+    const intrare = intrareDin(f, status, versiuneaMea.current);
 
     /* Ramurile sunt despărțite dinadins: cele două acțiuni întorc forme
        diferite, iar pe o singură variabilă de tip reunit `res.date` ajungea
@@ -407,9 +470,10 @@ export function AdminBlogPostEditor({
       const res = await actualizeazaArticol(articol.id, intrare);
       setSalveaza(false);
       scriereInCurs.current = false;
-      if ("error" in res) { toast.error(res.error); return; }
-      dupaOSalvareReusita(stareNoua);
-      toast.success("Salvat.");
+      if ("error" in res) { toast.error(res.error, { duration: 12_000 }); return; }
+      versiuneaMea.current = res.date.edit_version;
+      dupaOSalvareReusita(stareNoua, gen);
+      toast.success(generatie.current === gen ? "Salvat." : "Salvat — dar ai scris mai departe între timp.");
       router.refresh();
       return;
     }
@@ -418,7 +482,7 @@ export function AdminBlogPostEditor({
     setSalveaza(false);
     scriereInCurs.current = false;
     if ("error" in res) { toast.error(res.error); return; }
-    dupaOSalvareReusita(stareNoua);
+    dupaOSalvareReusita(stareNoua, gen);
     toast.success("Articol creat.");
     /* `replace`, nu `push`: „înapoi" trebuie să ducă la lista de articole, nu
        la formularul gol de dinainte, care ar crea un al doilea articol. */
@@ -503,7 +567,7 @@ export function AdminBlogPostEditor({
             {copieGasita.title ? ` a articolului „${copieGasita.title}”` : ""}.
           </p>
           <button type="button"
-            onClick={() => { setF(copieGasita); setCopieGasita(null); setNesalvat(true); }}
+            onClick={() => { setF(copieGasita); setCopieGasita(null); generatie.current++; setNesalvat(true); }}
             className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800">
             Adu-o înapoi
           </button>

@@ -131,6 +131,34 @@ export interface ArticolBlog {
 
   reading_minutes: number | null;
 
+  /**
+   * Numarul de ordine al ultimei salvari.
+   *
+   * ⚠ E CE OPRESTE „ULTIMA SCRIERE CASTIGA". Doua file deschise pe acelasi
+   * articol, sau doi redactori: A salveaza, B salveaza peste, si munca lui A
+   * dispare fara ca vreunul sa afle. Editorul il trimite inapoi la fiecare
+   * scriere; daca baza are alt numar, refuza si spune ce s-a intamplat.
+   */
+  edit_version: number;
+
+  /**
+   * Cand s-a schimbat ultima data CE CITESTE OMUL.
+   *
+   * ⚠ NU E `updated_at`, SI DEOSEBIREA CONTEAZA IN AFARA.
+   *
+   * `updated_at` se muta la orice atingere administrativa: ridici alt articol in
+   * vitrina si triggerul il coboara pe asta; fixezi, ascunzi de Google, arhivezi.
+   * Din el ieseau trei lucruri care AJUNG LA GOOGLE — eticheta „Actualizat",
+   * `dateModified` din datele structurate, si `lastModified` din sitemap — deci
+   * ii spuneam ca textul s-a schimbat cand cineva apasase o bifa.
+   *
+   * Se muta doar cand se schimba titlul, textul, rezumatul, raspunsul scurt,
+   * coperta, autorul, rubrica, indemnul, intrebarile sau SEO. Lista e enumerata
+   * pe nume in `blog_continut_atins()`, dinadins: o coloana noua nu misca data
+   * pana nu hotaraste cineva ca e continut.
+   */
+  content_updated_at: string;
+
   created_at: string;
   updated_at: string;
 }

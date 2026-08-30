@@ -113,6 +113,7 @@ export async function aboneazaLaBlog(emailBrut: string): Promise<RaspunsAbonare>
   if (!peAdresa.permis) return { ok: true, mesaj: MESAJ };
 
   const jeton = randomBytes(24).toString("base64url");
+  const amprentaJetonului = amprenta(jeton);
 
   /*
     ⚠ O SINGURĂ MIȘCARE, ȘI BAZA HOTĂRĂȘTE.
@@ -128,7 +129,7 @@ export async function aboneazaLaBlog(emailBrut: string): Promise<RaspunsAbonare>
   */
   const { data: aEmis, error } = await db().rpc("blog_cere_confirmare", {
     p_email: email,
-    p_token_hash: amprenta(jeton),
+    p_token_hash: amprentaJetonului,
     p_expira_la: new Date(Date.now() + ORE_DE_VIATA * 3600_000).toISOString(),
     p_sursa: "blog",
   });
@@ -159,7 +160,37 @@ export async function aboneazaLaBlog(emailBrut: string): Promise<RaspunsAbonare>
       message: err instanceof Error ? err.message : "eroare necunoscuta",
       severity: "error",
     });
-    return { ok: false, eroare: "Nu am putut trimite emailul de confirmare. Încearcă mai târziu." };
+
+    /*
+      ⚠ JETONUL SE STINGE LA LOC, ALTFEL OMUL RAMANE BLOCAT DOUA ZILE.
+
+      Baza emitea jetonul, apoi Resend cadea. Ii spuneam adevarul („n-am putut
+      trimite"), dar jetonul ramanea viu 48 de ore — iar `blog_cere_confirmare`
+      refuza sa emita altul cat timp exista unul viu, tocmai ca sa nu plece doua
+      emailuri. Deci a doua incercare primea raspunsul linistitor „ti-am trimis
+      un email" si NU trimitea nimic. Primul n-a plecat, al doilea nici atat.
+
+      ⚠ Se stinge NUMAI jetonul emis de noi acum. Fara conditia pe amprenta, o
+      cerere mai noua venita intre timp (alta fila, alt dispozitiv) ar fi ramas
+      fara jeton din pricina esecului uneia mai vechi.
+
+      ⚠ Daca si asta pica, nu mai avem ce face — dar macar se vede in jurnal.
+      Omul primeste tot un mesaj cinstit; ce se pierde e doar sansa de a reincerca
+      imediat.
+    */
+    const { error: eAnulare } = await db().rpc("blog_anuleaza_confirmare", {
+      p_email: email,
+      p_token_hash: amprentaJetonului,
+    });
+    if (eAnulare) {
+      await logError({
+        action: "aboneazaLaBlog.anulare",
+        message: eAnulare.message ?? "eroare necunoscuta",
+        severity: "error",
+      });
+    }
+
+    return { ok: false, eroare: "Nu am putut trimite emailul de confirmare. Încearcă din nou." };
   }
 
   return { ok: true, mesaj: MESAJ };

@@ -110,6 +110,20 @@ export function AdminBlogAuthorsClient({ autori, rol, conturi }: { autori: Autor
       bio: editare.bio,
       avatar_url: editare.avatar_url,
       sameas: editare.sameas.split("\n").map((s) => s.trim()).filter(Boolean),
+      /*
+        ⚠ LIPSEA DE AICI, SI CASETA PAREA CA MERGE.
+
+        Selectorul de cont se aseza, se alegea, se apasa Salveaza — si legatura
+        nu pleca nicaieri, fiindca sarcina asta n-o cuprindea. Adminul n-avea de
+        unde sa afle: nu dadea nicio eroare, iar la reincarcare caseta arata iar
+        „Fara cont", ceea ce pare o alegere neapasata, nu un camp pierdut.
+
+        Mai rau: actiunea de pe server scrie `user_id: intrare.user_id || null`.
+        Deci un autor legat mai devreme (din SQL, sau inaintea acestui defect)
+        isi pierdea legatura la PRIMA editare facuta prin ecran, orice ar fi
+        schimbat omul acolo.
+      */
+      user_id: editare.user_id || null,
     };
     const res = editare.id
       ? await actualizeazaAutor(editare.id, intrare)

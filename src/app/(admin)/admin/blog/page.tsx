@@ -1,12 +1,11 @@
-import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/admin-guard";
+import { listeazaArticole } from "@/lib/actions/blog.actions";
+import { AdminBlogPostsClient } from "@/components/admin/AdminBlogPostsClient";
 
-/**
- * Capul sectiunii de blog.
- *
- * Deocamdata trimite la autori, fiindca ecranul de articole nu exista inca.
- * Cand va exista, AICI se muta lista de articole, iar redirectarea dispare —
- * bara laterala arata deja spre /admin/blog, deci nu se schimba nimic in ea.
- */
-export default function AdminBlogPage() {
-  redirect("/admin/blog/autori");
+export const metadata = { title: "Blog" };
+
+export default async function AdminBlogPage() {
+  await requireAdmin();
+  const articole = await listeazaArticole();
+  return <AdminBlogPostsClient articole={articole} />;
 }

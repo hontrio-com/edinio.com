@@ -4,14 +4,12 @@ import { cn } from "@/lib/utils/cn";
 /**
  * Navigarea dintre ecranele blogului.
  *
- * Bara laterala are o singura intrare, „Blog"; de aici incolo se merge intre
- * articole, autori si categorii. Asa bara laterala nu se umfla cu trei randuri
+ * Bara laterală are o singură intrare, „Blog"; de aici încolo se merge între
+ * articole, autori și categorii. Așa bara laterală nu se umflă cu trei rânduri
  * pentru o parte a panoului, iar cele trei ecrane se simt ca un singur loc.
- *
- * „Articole" e prima si va fi ecranul principal. Pana exista, intrarea nu e
- * pusa aici: un buton care nu duce nicaieri e mai rau decat lipsa lui.
  */
 const FILE = [
+  { cheie: "articole", href: "/admin/blog", eticheta: "Articole" },
   { cheie: "autori", href: "/admin/blog/autori", eticheta: "Autori" },
   { cheie: "categorii", href: "/admin/blog/categorii", eticheta: "Categorii" },
 ] as const;

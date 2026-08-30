@@ -146,6 +146,30 @@ export default async function ArticolBlogPage({ params }: Props) {
               </div>
             )}
 
+            {/*
+              ⚠ CUPRINSUL, SI PE TELEFON. Coloana din dreapta e ascunsa sub `lg`,
+              deci pe telefon cuprinsul lipsea cu totul — exact unde e mai
+              nevoie de el, fiindca un articol lung derulat pe un ecran mic e
+              cel mai greu de strabatut. Aici e o lista stransa, deschisa de
+              cititor cand vrea, ca sa nu impinga textul in jos.
+            */}
+            {meritaCuprins(cuprins) && (
+              <details className="mb-8 rounded-xl border border-hairline bg-tint p-4 lg:hidden">
+                <summary className="cursor-pointer text-[13.5px] font-semibold text-ink">
+                  Cuprins
+                </summary>
+                <ul className="mt-3 space-y-2">
+                  {cuprins.map((t) => (
+                    <li key={t.id} className={t.nivel === 3 ? "pl-3" : ""}>
+                      <a href={`#${t.id}`} className="block text-[13.5px] leading-[1.5] text-ink-2">
+                        {t.text}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+
             <div className="policy-content blog-articol" dangerouslySetInnerHTML={{ __html: html }} />
 
             {/* Îndemnul potrivit CU TEXTUL, înaintea întrebărilor. Banda de

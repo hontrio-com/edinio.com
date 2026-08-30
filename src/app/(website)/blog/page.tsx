@@ -36,8 +36,8 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   return siteMetadata({
     title:
       pagina > 1
-        ? `Blog Edinio, pagina ${pagina}`
-        : "Blog Edinio: ghiduri si noutati despre vanzarea online",
+        ? `Blog, pagina ${pagina}`
+        : "Blog: ghiduri si noutati despre vanzarea online",
     description:
       "Ghiduri practice despre magazine online, curierat, facturare si vanzare in Romania, plus noutatile platformei Edinio.",
     path: pagina > 1 ? `/blog?p=${pagina}` : "/blog",

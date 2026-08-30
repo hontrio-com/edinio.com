@@ -101,21 +101,37 @@ export async function articolePublicate(limita = 50): Promise<ArticolDeLista[]> 
 }
 
 /** Articolele unei categorii. */
-export async function articoleleCategoriei(slugCategorie: string, limita = 50): Promise<ArticolDeLista[]> {
+export async function articoleleCategoriei(
+  slugCategorie: string,
+  pagina = 1,
+  pePagina = PE_PAGINA,
+): Promise<{ articole: ArticolDeLista[]; total: number; pagini: number }> {
+  const gol = { articole: [] as ArticolDeLista[], total: 0, pagini: 1 };
   const client = await db();
   const { data: cat } = await client
     .from("blog_categories").select("id").eq("slug", slugCategorie).maybeSingle();
-  if (!cat) return [];
-  const { data } = await client
+  if (!cat) return gol;
+
+  const de_la = Math.max(0, (pagina - 1) * pePagina);
+  const { data, count } = await client
     .from("blog_posts")
-    .select(CAMPURI_LISTA)
+    .select(CAMPURI_LISTA, { count: "exact" })
     .eq("category_id", (cat as { id: string }).id)
     .eq("status", "published")
     .not("published_at", "is", null)
     .lte("published_at", ACUM())
+    /* ⚠ FIXATELE INTAI si aici: o categorie e o lista de rasfoit, ca cea
+       principala, deci ghidul de pornire al categoriei trebuie sa stea sus. */
+    .order("is_pinned", { ascending: false })
     .order("published_at", { ascending: false })
-    .limit(limita);
-  return ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista);
+    .range(de_la, de_la + pePagina - 1);
+
+  const total = count ?? 0;
+  return {
+    articole: ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista),
+    total,
+    pagini: Math.max(1, Math.ceil(total / pePagina)),
+  };
 }
 
 export type ArticolIntreg = ArticolBlog & {
@@ -218,18 +234,35 @@ export async function autorDupaSlug(slug: string): Promise<AutorBlog | null> {
   return (data as AutorBlog) ?? null;
 }
 
-/** Articolele publicate ale unui autor. */
-export async function articoleleAutorului(idAutor: string, limita = 50): Promise<ArticolDeLista[]> {
-  const { data } = await (await db())
+/**
+ * Articolele publicate ale unui autor, pe pagini.
+ *
+ * ⚠ CU NUMARATOARE, nu cu `.limit()`. Un autor productiv trecea de plafonul
+ * fix si restul articolelor lui deveneau de negasit din pagina lui — acelasi
+ * defect mut pe care paginarea listei principale il repara.
+ */
+export async function articoleleAutorului(
+  idAutor: string,
+  pagina = 1,
+  pePagina = PE_PAGINA,
+): Promise<{ articole: ArticolDeLista[]; total: number; pagini: number }> {
+  const de_la = Math.max(0, (pagina - 1) * pePagina);
+  const { data, count } = await (await db())
     .from("blog_posts")
-    .select(CAMPURI_LISTA)
+    .select(CAMPURI_LISTA, { count: "exact" })
     .eq("author_id", idAutor)
     .eq("status", "published")
     .not("published_at", "is", null)
     .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
-    .limit(limita);
-  return ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista);
+    .range(de_la, de_la + pePagina - 1);
+
+  const total = count ?? 0;
+  return {
+    articole: ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista),
+    total,
+    pagini: Math.max(1, Math.ceil(total / pePagina)),
+  };
 }
 
 /**

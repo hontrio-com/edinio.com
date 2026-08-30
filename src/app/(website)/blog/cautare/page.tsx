@@ -29,7 +29,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   const { q } = await searchParams;
   const cautat = (q ?? "").trim();
   return {
-    title: cautat ? `Căutare: ${cautat} | Blog Edinio` : "Căutare | Blog Edinio",
+    title: cautat ? `Căutare: ${cautat}` : "Căutare pe blog",
     robots: { index: false, follow: true },
   };
 }

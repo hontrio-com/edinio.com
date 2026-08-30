@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const e = await eticheta(slug);
   if (!e) return { title: "Etichetă negăsită" };
   return siteMetadata({
-    title: `${e.name}: articole de pe blogul Edinio`,
+    title: `${e.name}: articole de blog`,
     description: `Toate articolele etichetate „${e.name}" de pe blogul Edinio.`,
     path: `/blog/eticheta/${e.slug}`,
   });

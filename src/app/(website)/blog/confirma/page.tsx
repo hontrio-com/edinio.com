@@ -22,7 +22,7 @@ import { ACASA } from "@/lib/website/breadcrumbs";
  * care oricum ceruse confirmarea.
  */
 export const metadata: Metadata = {
-  title: "Confirmarea abonării | Blog Edinio",
+  title: "Confirmarea abonării",
   robots: { index: false, follow: false },
 };
 

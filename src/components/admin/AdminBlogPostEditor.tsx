@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Loader2, Upload, Plus, Trash2, Clock, Sparkles, HelpCircle, X, Check, RotateCcw, History,
+  ArrowLeft, Loader2, Upload, Plus, Trash2, Clock, Sparkles, HelpCircle, X, Check, RotateCcw, History, Pin,
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
@@ -50,6 +50,7 @@ type Stare = {
   /** Formatul `datetime-local`, adică fără fus. Vezi nota de la salvare. */
   publicatLa: string;
   is_featured: boolean;
+  is_pinned: boolean;
   faq: IntrebareBlog[];
   seo_title: string;
   seo_description: string;
@@ -85,6 +86,7 @@ function intrareDin(f: Stare, status: StareArticol): ArticolInput {
        locală a browserului, care e chiar ce a vrut omul când a ales-o. */
     published_at: f.publicatLa ? new Date(f.publicatLa).toISOString() : null,
     is_featured: f.is_featured,
+    is_pinned: f.is_pinned,
     faq: f.faq,
     seo_title: f.seo_title,
     seo_description: f.seo_description,
@@ -111,6 +113,7 @@ function dinStareInitiala(a: ArticolBlog | null, etichete: string[]): Stare {
     status: a?.status ?? "draft",
     publicatLa: pentruInput(a?.published_at ?? null),
     is_featured: a?.is_featured ?? false,
+    is_pinned: a?.is_pinned ?? false,
     faq: Array.isArray(a?.faq) ? a.faq : [],
     seo_title: a?.seo_title ?? "",
     seo_description: a?.seo_description ?? "",
@@ -546,13 +549,25 @@ export function AdminBlogPostEditor({
             </div>
           </div>
 
-          <label className="mt-4 inline-flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={f.is_featured}
-              onChange={(e) => pune("is_featured", e.target.checked)} className="h-4 w-4 accent-zinc-900" />
-            <span className="text-sm text-zinc-700 inline-flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Scoate-l în față pe pagina de blog
-            </span>
-          </label>
+          <div className="mt-4 flex flex-col gap-2">
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={f.is_featured}
+                onChange={(e) => pune("is_featured", e.target.checked)} className="h-4 w-4 accent-zinc-900" />
+              <span className="text-sm text-zinc-700 inline-flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Scoate-l în față (vitrina din capul listei)
+              </span>
+            </label>
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={f.is_pinned}
+                onChange={(e) => pune("is_pinned", e.target.checked)} className="h-4 w-4 accent-zinc-900" />
+              <span className="text-sm text-zinc-700 inline-flex items-center gap-1.5">
+                <Pin className="h-3.5 w-3.5 text-zinc-500" /> Ține-l sus în listă, oricât de vechi ar fi
+              </span>
+            </label>
+            <p className="text-xs text-zinc-500">
+              Vitrina e una singură. Fixate pot fi mai multe: urcă în ordine, fără să ocupe vitrina.
+            </p>
+          </div>
 
           {/*
             ═══ ETICHETE ═══

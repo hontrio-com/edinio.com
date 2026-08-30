@@ -365,14 +365,14 @@ export async function stergeEticheta(id: string): Promise<Raspuns> {
 /** Rândul din lista de admin: articolul plus numele autorului și al categoriei. */
 export type ArticolInLista = Pick<
   ArticolBlog,
-  "id" | "slug" | "title" | "status" | "published_at" | "is_featured" | "reading_minutes" | "updated_at"
+  "id" | "slug" | "title" | "status" | "published_at" | "is_featured" | "is_pinned" | "views" | "reading_minutes" | "updated_at"
 > & { autor: string | null; categorie: string | null };
 
 export async function listeazaArticole(): Promise<ArticolInLista[]> {
   if (!(await requireAdminApi())) return [];
   const { data } = await blogDb()
     .from("blog_posts")
-    .select("id, slug, title, status, published_at, is_featured, reading_minutes, updated_at, blog_authors(name), blog_categories(name)")
+    .select("id, slug, title, status, published_at, is_featured, is_pinned, views, reading_minutes, updated_at, blog_authors(name), blog_categories(name)")
     .order("updated_at", { ascending: false });
 
   return ((data ?? []) as Record<string, unknown>[]).map((r) => {
@@ -410,6 +410,7 @@ export type ArticolInput = {
   status?: StareArticol;
   published_at?: string | null;
   is_featured?: boolean;
+  is_pinned?: boolean;
   faq?: IntrebareBlog[];
   seo_title?: string | null;
   seo_description?: string | null;
@@ -456,6 +457,7 @@ function randDinIntrare(intrare: ArticolInput, slug: string) {
     status: intrare.status ?? "draft",
     published_at: intrare.published_at || null,
     is_featured: intrare.is_featured ?? false,
+    is_pinned: intrare.is_pinned ?? false,
     faq: intrebariBune(intrare.faq),
     seo_title: intrare.seo_title?.trim() || null,
     seo_description: intrare.seo_description?.trim() || null,

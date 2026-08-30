@@ -48,14 +48,14 @@ async function db(): Promise<SupabaseClient> {
 /** Articolul din listă: fără corpul HTML, care nu se citește acolo. */
 export type ArticolDeLista = Pick<
   ArticolBlog,
-  "id" | "slug" | "title" | "excerpt" | "cover_url" | "cover_alt" | "published_at" | "reading_minutes" | "is_featured" | "noindex"
+  "id" | "slug" | "title" | "excerpt" | "cover_url" | "cover_alt" | "published_at" | "reading_minutes" | "is_featured" | "is_pinned" | "noindex"
 > & {
   autor: Pick<AutorBlog, "name" | "slug" | "avatar_url"> | null;
   categorie: Pick<CategorieBlog, "name" | "slug"> | null;
 };
 
 const CAMPURI_LISTA =
-  "id, slug, title, excerpt, cover_url, cover_alt, published_at, reading_minutes, is_featured, noindex," +
+  "id, slug, title, excerpt, cover_url, cover_alt, published_at, reading_minutes, is_featured, is_pinned, noindex," +
   " blog_authors(name, slug, avatar_url), blog_categories(name, slug)";
 
 /**
@@ -278,6 +278,10 @@ export async function paginaDeArticole(
     .eq("status", "published")
     .not("published_at", "is", null)
     .lte("published_at", ACUM())
+    /* ⚠ FIXATELE INTAI. Ordinea asta e a listei principale; cautarea si
+       articolele inrudite raman strict cronologice, fiindca acolo intrebarea
+       omului e alta si un articol fixat in capul rezultatelor ar fi zgomot. */
+    .order("is_pinned", { ascending: false })
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
 

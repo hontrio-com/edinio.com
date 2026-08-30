@@ -7,6 +7,7 @@ import { PageHero } from "@/components/website/PageHero";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
 import { AbonareBlog } from "@/components/website/blog/AbonareBlog";
+import { NumaraCitirea } from "@/components/website/blog/NumaraCitirea";
 import { articolDupaSlug, articoleInrudite, eticheteArticol, undeS_aMutat } from "@/lib/blog/citire";
 import { curataArticol } from "@/lib/blog/curata";
 import { cuprinsSiHtml, meritaCuprins } from "@/lib/blog/cuprins";
@@ -79,6 +80,7 @@ export default async function ArticolBlogPage({ params }: Props) {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(articolJsonLd(a)) }} />
+      <NumaraCitirea slug={a.slug} />
 
       <PageHero
         sir={[

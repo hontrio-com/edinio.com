@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Newspaper, Plus, Pencil, Trash2, Star, Clock, ExternalLink } from "lucide-react";
+import { Newspaper, Plus, Pencil, Trash2, Star, Clock, ExternalLink, Pin, Search } from "lucide-react";
 import { asteaptaCeasul, seVede, STARI, type StareArticol } from "@/lib/blog/types";
 import { stergeArticol, type ArticolInLista } from "@/lib/actions/blog.actions";
 import { BlogSubmeniu } from "./BlogSubmeniu";
@@ -32,6 +33,22 @@ function dataScurta(iso: string | null): string {
 export function AdminBlogPostsClient({ articole }: { articole: ArticolInLista[] }) {
   const router = useRouter();
 
+  /* ⚠ FILTRUL LUCREAZA PE CE E DEJA ADUS, nu cere din nou de la server. La
+     zeci de articole e cea mai buna purtare: raspunde instantaneu si nu incarca
+     baza. Daca vreodata lista trece de cateva sute, filtrarea se muta pe server
+     — dar atunci trebuie si paginare aici, si abia atunci merita. */
+  const [cauta, setCauta] = useState("");
+  const [doarStarea, setDoarStarea] = useState<"toate" | StareArticol>("toate");
+
+  const q = cauta.trim().toLowerCase();
+  const aratate = articole.filter((a) => {
+    if (doarStarea !== "toate" && a.status !== doarStarea) return false;
+    if (!q) return true;
+    return [a.title, a.slug, a.autor, a.categorie]
+      .filter(Boolean)
+      .some((t) => (t as string).toLowerCase().includes(q));
+  });
+
   async function sterge(a: ArticolInLista) {
     const avertisment = seVede(a)
       ? `„${a.title}" este publicat și se vede pe site. Ștergerea lasă un 404 la adresa /blog/${a.slug}. Continui?`
@@ -59,6 +76,24 @@ export function AdminBlogPostsClient({ articole }: { articole: ArticolInLista[] 
         </Link>
       </div>
 
+      {articole.length > 0 && (
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            <input type="search" value={cauta} onChange={(e) => setCauta(e.target.value)}
+              placeholder="Caută după titlu, adresă, autor sau categorie"
+              className="h-9 w-full rounded-lg border border-zinc-300 bg-white pl-9 pr-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-900 focus:outline-none" />
+          </div>
+          <select value={doarStarea} onChange={(e) => setDoarStarea(e.target.value as "toate" | StareArticol)}
+            className="h-9 rounded-lg border border-zinc-300 bg-white px-3 text-sm text-zinc-900 focus:border-zinc-900 focus:outline-none">
+            <option value="toate">Toate stările</option>
+            {(Object.keys(STARI) as StareArticol[]).map((s) => (
+              <option key={s} value={s}>{STARI[s]}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {articole.length === 0 ? (
         <div className="text-center py-16 border border-dashed border-zinc-300 rounded-xl">
           <p className="text-sm text-zinc-600">Niciun articol încă.</p>
@@ -68,14 +103,21 @@ export function AdminBlogPostsClient({ articole }: { articole: ArticolInLista[] 
           </p>
         </div>
       ) : (
+        <>
+        {aratate.length === 0 && (
+          <p className="rounded-xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500">
+            Niciun articol nu se potrivește filtrului.
+          </p>
+        )}
         <div className="space-y-2">
-          {articole.map((a) => {
+          {aratate.map((a) => {
             const programat = asteaptaCeasul(a);
             return (
               <div key={a.id} className="flex items-center gap-3 p-3 bg-white border border-zinc-200 rounded-xl">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    {a.is_featured && <Star className="h-3.5 w-3.5 shrink-0 text-amber-500 fill-amber-500" />}
+                    {a.is_featured && <Star className="h-3.5 w-3.5 shrink-0 text-amber-500 fill-amber-500" aria-label="scos în față" />}
+                    {a.is_pinned && <Pin className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-label="fixat sus" />}
                     <p className="text-sm font-semibold text-zinc-900 truncate">{a.title}</p>
                     <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium ${culoareaStarii(a)}`}>
                       {STARI[a.status as StareArticol]}
@@ -87,6 +129,9 @@ export function AdminBlogPostsClient({ articole }: { articole: ArticolInLista[] 
                       a.autor,
                       a.reading_minutes ? `${a.reading_minutes} min` : null,
                       a.published_at ? dataScurta(a.published_at) : null,
+                      /* Citirile se arată doar când sunt: un „0 citiri” lângă un
+                         articol publicat azi arată a eșec, când de fapt e devreme. */
+                      a.views > 0 ? `${a.views} ${a.views === 1 ? "citire" : "citiri"}` : null,
                     ].filter(Boolean).join(" · ") || "fără categorie, fără autor"}
                   </p>
                   {programat && (
@@ -115,6 +160,7 @@ export function AdminBlogPostsClient({ articole }: { articole: ArticolInLista[] 
             );
           })}
         </div>
+        </>
       )}
     </div>
   );

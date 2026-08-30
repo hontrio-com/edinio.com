@@ -101,6 +101,17 @@ export interface ArticolBlog {
   published_at: string | null;
 
   is_featured: boolean;
+  /**
+   * Ține articolul sus în listă, oricât de vechi ar fi.
+   *
+   * ⚠ NU E ACELAȘI LUCRU CU `is_featured`. Cel scos în față e unul singur și stă
+   * lat în capul listei, ca o vitrină. Fixate pot fi mai multe, și doar urcă în
+   * ordine. Un ghid de pornire scris acum un an trebuie să rămână primul, dar
+   * n-are de ce să ocupe vitrina.
+   */
+  is_pinned: boolean;
+  /** Câte ori s-a deschis. O măsură, nu o contabilitate: vezi `numaraCitirea`. */
+  views: number;
   faq: IntrebareBlog[];
 
   seo_title: string | null;

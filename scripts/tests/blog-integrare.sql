@@ -14,6 +14,19 @@
 --
 -- Avea dreptate. Fisierul asta face exact asta.
 --
+-- ═══ CE ACOPERA ═══
+--
+--   A  redirectari: lanturi, dus-intors, ciocnire intre feluri, ciorne
+--   B  concurenta: versiunea de editare, si ce se intampla cu una veche
+--   C  data continutului: citiri, vitrina, fixare, arhivare, text schimbat
+--   D  istoricul: salvare automata fata de salvare de mana, si plafonul
+--   E  creare si stergere de articol, intr-o tranzactie
+--   F  taxonomii: redenumire cu redirectare, stergere, un cont-un autor
+--   G  newsletter: jetoane, anulare, confirmare, dezabonare, reinscriere
+--   H  RLS: ce poate un redactor cu jetonul lui (in tranzactie proprie)
+--   I  listele din admin: paginare, filtre, cautare cu diacritice
+--   J  nimic n-a ramas in urma
+--
 -- ═══ CUM SE RULEAZA ═══
 --
 --   * din consola SQL a Supabase: se lipeste tot si se apasa Run;
@@ -399,7 +412,7 @@ begin
   delete from public.blog_subscribers where email like 'zz-proba-%';
 
   raise notice '';
-  raise notice '════════ A, B, C, D, E, F, G: toate au trecut ════════';
+  raise notice '════ A-G: redirectari, concurenta, date, istoric, creare, stergere, taxonomii, newsletter ════';
 end $$;
 
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -478,24 +491,102 @@ end $$;
 
 rollback;
 
+
 -- ═══════════════════════════════════════════════════════════════════════════
--- I. NIMIC NU A RAMAS IN URMA
+-- I. LISTELE DIN ADMIN
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Citeau tot, cu plafonul tacut de 1000 de randuri al PostgREST: de la al
+-- 1001-lea articol, cele vechi pur si simplu nu mai apareau in admin — si nu
+-- aparea nici vreun semn ca lipsesc. Un articol pe care nu-l mai gasesti in
+-- admin e, practic, pierdut: ramane pe site, dar nimeni nu-l mai poate edita.
+do $
+declare n int; total bigint; et uuid; publice int;
+begin
+  delete from public.blog_posts where slug like 'zz-adm-%';
+  delete from public.blog_tags  where slug like 'zz-adm-%';
+
+  -- 30 de articole, ca sa treaca de o pagina de 25. Fiecare al treilea, publicat.
+  -- ⚠ `published_at` se pune in ACEEASI inserare: `blog_posts_published_has_date`
+  -- e un `check`, iar un `check` picat opreste INTREGUL rand, nu doar campul.
+  for n in 1..30 loop
+    insert into public.blog_posts (slug, title, content_html, status, published_at)
+    values ('zz-adm-'||lpad(n::text,2,'0'), 'Articol '||n, '<p>despre livrări și plăți</p>',
+            case when n % 3 = 0 then 'published' else 'draft' end,
+            case when n % 3 = 0 then now() - interval '1 day' else null end);
+  end loop;
+
+  -- J1. Pagina 1 are exact cate s-au cerut, iar `total` spune cate sunt cu totul.
+  select count(*), max(x.total) into n, total
+  from public.blog_articole_admin(0, 25, null, null) x where x.slug like 'zz-adm-%';
+  if n <> 25 then raise exception 'I1: pagina 1 are % randuri, nu 25', n; end if;
+  if total < 30 then raise exception 'I1: total = %, sub 30', total; end if;
+  raise notice 'I1 pagina 1: 25 de randuri, totalul %', total;
+
+  -- J2. Pagina 2 aduce restul.
+  select count(*) into n from public.blog_articole_admin(25, 25, null, null) x where x.slug like 'zz-adm-%';
+  if n <> 5 then raise exception 'I2: pagina 2 are % randuri, nu 5', n; end if;
+  raise notice 'I2 pagina 2: restul de 5';
+
+  -- J3. Filtrul de stare.
+  select count(*) into n from public.blog_articole_admin(0, 100, null, 'published') x where x.slug like 'zz-adm-%';
+  if n <> 10 then raise exception 'I3: % publicate, nu 10', n; end if;
+  raise notice 'I3 filtrul de stare: 10 publicate din 30';
+
+  -- J4. Cautarea gaseste textul scris CU diacritice, cerut FARA.
+  --     Termenul vine pliat de sus, de `pregatesteCautarea`; coloana `cauta` e
+  --     pliata de `fara_diacritice`. Daca cele doua se despart, aici se vede.
+  select count(*) into n from public.blog_articole_admin(0, 100, 'livrari', null) x where x.slug like 'zz-adm-%';
+  if n <> 30 then raise exception 'I4: „livrari" a gasit %, nu 30', n; end if;
+  raise notice 'I4 cauta „livrari", gaseste „livrări"';
+
+  -- J5. `%` NU intoarce toata baza: are inteles in `like` si vine scapat de sus.
+  select count(*) into n from public.blog_articole_admin(0, 100, '\%', null) x;
+  if n <> 0 then raise exception 'I5: procentul scapat a intors % randuri', n; end if;
+  raise notice 'I5 procentul scapat nu mai intoarce toata baza';
+
+  -- J6. Un termen inexistent intoarce zero, nu tot.
+  select count(*) into n from public.blog_articole_admin(0, 100, 'zz-nu-exista-asa-ceva', null) x;
+  if n <> 0 then raise exception 'I6: un termen inexistent a intors % randuri', n; end if;
+  raise notice 'I6 termen inexistent: zero randuri';
+
+  -- J7. Adminul numara SI ciornele; publicul, doar publicatele.
+  --     Doua functii diferite dinadins: adminul care nu vede ciornele ar sterge o
+  --     eticheta crezand ca nu e folosita nicaieri.
+  insert into public.blog_tags (slug, name) values ('zz-adm-et','Zz Adm Et') returning id into et;
+  insert into public.blog_post_tags (post_id, tag_id)
+  select id, et from public.blog_posts where slug like 'zz-adm-0%';
+  select cate into total from public.blog_etichete_admin() where slug = 'zz-adm-et';
+  if total <> 9 then raise exception 'I7: adminul vede % legaturi, nu 9', total; end if;
+  select coalesce(sum(cate),0) into publice from public.blog_etichete_folosite() where slug = 'zz-adm-et';
+  if publice <> 3 then raise exception 'I7: publicul vede %, nu 3', publice; end if;
+  raise notice 'I7 eticheta: adminul 9 (cu ciorne), publicul 3 (doar publicate)';
+
+  delete from public.blog_posts where slug like 'zz-adm-%';
+  delete from public.blog_tags  where slug like 'zz-adm-%';
+  raise notice '════ I: toate au trecut ════';
+end $;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- J. NIMIC NU A RAMAS IN URMA
 -- ═══════════════════════════════════════════════════════════════════════════
 do $$
 declare n int := 0;
 begin
   select
-    (select count(*) from public.blog_posts       where slug like 'zz-proba-%')
+    (select count(*) from public.blog_posts       where slug like 'zz-adm-%')
+  + (select count(*) from public.blog_tags        where slug like 'zz-adm-%')
+  + (select count(*) from public.blog_posts       where slug like 'zz-proba-%')
   + (select count(*) from public.blog_categories  where slug like 'zz-proba-%')
   + (select count(*) from public.blog_authors     where slug like 'zz-proba-%')
   + (select count(*) from public.blog_tags        where slug like 'zz-proba-%')
   + (select count(*) from public.blog_redirects   where from_slug like 'zz-proba-%' or to_slug like 'zz-proba-%')
   + (select count(*) from public.blog_subscribers where email like 'zz-proba-%')
   into n;
-  if n <> 0 then raise exception 'I: au ramas % randuri de proba in baza', n; end if;
+  if n <> 0 then raise exception 'J: au ramas % randuri de proba in baza', n; end if;
 
   if exists (select 1 from public.users_profile where role = 'editor') then
-    raise notice 'I ATENTIE: exista conturi cu rolul `editor`. Daca nu le-ai facut tu, blocul H n-a dat rollback.';
+    raise notice 'J ATENTIE: exista conturi cu rolul `editor`. Daca nu le-ai facut tu, blocul H n-a dat rollback.';
   end if;
 
   raise notice '════════ I: baza e curata ════════';

@@ -19,6 +19,8 @@ import {
   type ArticolBlog, type AutorBlog, type CategorieBlog, type IntrebareBlog, type StareArticol,
 } from "@/lib/blog/types";
 import { creeazaArticol, actualizeazaArticol, type ArticolInput } from "@/lib/actions/blog.actions";
+import { NUMELE_TIPURILOR, type IndemnArticol, type TipIndemn } from "@/lib/blog/indemn";
+import type { SablonArticol } from "@/lib/blog/sabloane";
 import { AdminBlogVersiuni } from "./AdminBlogVersiuni";
 
 const inputCls =
@@ -51,6 +53,12 @@ type Stare = {
   publicatLa: string;
   is_featured: boolean;
   is_pinned: boolean;
+  /** Gol înseamnă „fără îndemn în articol”. */
+  indemnTip: TipIndemn | "";
+  indemnTitlu: string;
+  indemnText: string;
+  indemnEticheta: string;
+  indemnAdresa: string;
   faq: IntrebareBlog[];
   seo_title: string;
   seo_description: string;
@@ -87,6 +95,15 @@ function intrareDin(f: Stare, status: StareArticol): ArticolInput {
     published_at: f.publicatLa ? new Date(f.publicatLa).toISOString() : null,
     is_featured: f.is_featured,
     is_pinned: f.is_pinned,
+    cta: f.indemnTip
+      ? {
+          tip: f.indemnTip,
+          titlu: f.indemnTitlu.trim() || undefined,
+          text: f.indemnText.trim() || undefined,
+          eticheta: f.indemnEticheta.trim() || undefined,
+          adresa: f.indemnAdresa.trim() || undefined,
+        }
+      : null,
     faq: f.faq,
     seo_title: f.seo_title,
     seo_description: f.seo_description,
@@ -98,14 +115,22 @@ function intrareDin(f: Stare, status: StareArticol): ArticolInput {
   };
 }
 
-function dinStareInitiala(a: ArticolBlog | null, etichete: string[]): Stare {
+function dinStareInitiala(a: ArticolBlog | null, etichete: string[], sablon?: SablonArticol | null): Stare {
+  /* `cta` vine din baza ca `unknown`: e `jsonb`, deci poate fi orice. Se
+     citește apărat, iar ce nu se potrivește rămâne gol. */
+  const cta = (a?.cta && typeof a.cta === "object" && !Array.isArray(a.cta)
+    ? (a.cta as IndemnArticol)
+    : null);
   return {
     title: a?.title ?? "",
     slug: a?.slug ?? "",
     slugScrisDeMana: !!a,
     excerpt: a?.excerpt ?? "",
-    answer_summary: a?.answer_summary ?? "",
-    content_html: a?.content_html ?? "",
+    answer_summary: a?.answer_summary ?? (a ? "" : sablon?.raspunsScurt ?? ""),
+    /* ⚠ ȘABLONUL SE APLICĂ DOAR CÂND NU EXISTĂ ARTICOL. Pe unul salvat ar fi
+       scris peste textul omului — iar `a?.x ?? sablon` ar fi făcut exact asta
+       la orice câmp gol dintr-un articol adevărat. */
+    content_html: a?.content_html ?? (a ? "" : sablon?.html ?? ""),
     cover_url: a?.cover_url ?? "",
     cover_alt: a?.cover_alt ?? "",
     author_id: a?.author_id ?? "",
@@ -114,7 +139,12 @@ function dinStareInitiala(a: ArticolBlog | null, etichete: string[]): Stare {
     publicatLa: pentruInput(a?.published_at ?? null),
     is_featured: a?.is_featured ?? false,
     is_pinned: a?.is_pinned ?? false,
-    faq: Array.isArray(a?.faq) ? a.faq : [],
+    indemnTip: (cta?.tip as TipIndemn) ?? (a ? "" : sablon?.indemn ?? ""),
+    indemnTitlu: cta?.titlu ?? "",
+    indemnText: cta?.text ?? "",
+    indemnEticheta: cta?.eticheta ?? "",
+    indemnAdresa: cta?.adresa ?? "",
+    faq: Array.isArray(a?.faq) ? a.faq : (a ? [] : sablon?.intrebari ?? []),
     seo_title: a?.seo_title ?? "",
     seo_description: a?.seo_description ?? "",
     canonical_url: a?.canonical_url ?? "",
@@ -129,15 +159,18 @@ export function AdminBlogPostEditor({
   autori,
   categorii,
   etichete = [],
+  sablon = null,
 }: {
   articol: ArticolBlog | null;
   autori: AutorBlog[];
   categorii: CategorieBlog[];
   /** Etichetele pe care le are deja articolul. Gol la unul nou. */
   etichete?: string[];
+  /** Schela de pornire, doar la un articol NOU. Vezi `blog/sabloane.ts`. */
+  sablon?: SablonArticol | null;
 }) {
   const router = useRouter();
-  const [f, setF] = useState<Stare>(() => dinStareInitiala(articol, etichete));
+  const [f, setF] = useState<Stare>(() => dinStareInitiala(articol, etichete, sablon));
   const [salveaza, setSalveaza] = useState(false);
   const [incarca, setIncarca] = useState(false);
 
@@ -624,6 +657,46 @@ export function AdminBlogPostEditor({
             <label className="block text-sm font-medium text-zinc-700 mb-1.5">Rezumat pentru listă</label>
             <textarea value={f.excerpt} rows={2} onChange={(e) => pune("excerpt", e.target.value)}
               placeholder="Un rând, pentru cartonașul din lista de articole." className={inputCls + " resize-y"} />
+          </div>
+        </Sectiune>
+
+        <Sectiune
+          titlu="Îndemnul din articol"
+          lamurire="Se arată la finalul textului, înaintea întrebărilor. Banda de la subsolul site-ului rămâne oricum; asta e pasul următor potrivit CU articolul. Cine tocmai a citit despre curierat are alt pas decât cine a citit despre facturare."
+        >
+          <div className="space-y-3">
+            <select value={f.indemnTip}
+              onChange={(e) => pune("indemnTip", e.target.value as TipIndemn | "")}
+              className={inputCls}>
+              <option value="">Fără îndemn în articol</option>
+              {(Object.keys(NUMELE_TIPURILOR) as TipIndemn[]).map((t) => (
+                <option key={t} value={t}>{NUMELE_TIPURILOR[t]}</option>
+              ))}
+            </select>
+
+            {f.indemnTip && (
+              <div className="space-y-2 rounded-lg border border-zinc-200 p-3">
+                <p className="text-xs text-zinc-500">
+                  {f.indemnTip === "propriu"
+                    ? "Scrii tu tot. Fără adresă și fără text pe buton, îndemnul nu se arată deloc: un buton care nu duce nicăieri e mai rău decât lipsa lui."
+                    : "Lăsate goale, se folosesc textele presetate. Completează doar ce vrei să sune altfel."}
+                </p>
+                <input type="text" value={f.indemnTitlu}
+                  onChange={(e) => pune("indemnTitlu", e.target.value)}
+                  placeholder="Titlul îndemnului" className={inputCls} />
+                <textarea value={f.indemnText} rows={2}
+                  onChange={(e) => pune("indemnText", e.target.value)}
+                  placeholder="O frază sub titlu" className={inputCls + " resize-y"} />
+                <input type="text" value={f.indemnEticheta}
+                  onChange={(e) => pune("indemnEticheta", e.target.value)}
+                  placeholder="Textul de pe buton" className={inputCls} />
+                {f.indemnTip === "propriu" && (
+                  <input type="text" value={f.indemnAdresa}
+                    onChange={(e) => pune("indemnAdresa", e.target.value)}
+                    placeholder="/preturi sau https://..." className={inputCls} />
+                )}
+              </div>
+            )}
           </div>
         </Sectiune>
 

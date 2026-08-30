@@ -101,6 +101,8 @@ export interface ArticolBlog {
   published_at: string | null;
 
   is_featured: boolean;
+  /** Îndemnul din interiorul articolului. Vezi `blog/indemn.ts`. */
+  cta: unknown;
   /**
    * Ține articolul sus în listă, oricât de vechi ar fi.
    *

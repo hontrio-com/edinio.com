@@ -8,6 +8,7 @@ import { FinalCta } from "@/components/website/sections/FinalCta";
 import { CardArticol } from "@/components/website/blog/CardArticol";
 import { AbonareBlog } from "@/components/website/blog/AbonareBlog";
 import { NumaraCitirea } from "@/components/website/blog/NumaraCitirea";
+import { IndemnArticol } from "@/components/website/blog/IndemnArticol";
 import { articolDupaSlug, articoleInrudite, eticheteArticol, undeS_aMutat } from "@/lib/blog/citire";
 import { curataArticol } from "@/lib/blog/curata";
 import { cuprinsSiHtml, meritaCuprins } from "@/lib/blog/cuprins";
@@ -146,6 +147,10 @@ export default async function ArticolBlogPage({ params }: Props) {
             )}
 
             <div className="policy-content blog-articol" dangerouslySetInnerHTML={{ __html: html }} />
+
+            {/* Îndemnul potrivit CU TEXTUL, înaintea întrebărilor. Banda de
+                final a site-ului rămâne jos și spune altceva. */}
+            <IndemnArticol cta={a.cta} />
 
             {a.faq.length > 0 && (
               <section className="mt-14">

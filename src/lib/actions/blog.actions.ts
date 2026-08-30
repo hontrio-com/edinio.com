@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-guard";
+import { indemnDeAratat } from "@/lib/blog/indemn";
 import {
   adreseBune,
   canonicaBuna,
@@ -411,6 +412,7 @@ export type ArticolInput = {
   published_at?: string | null;
   is_featured?: boolean;
   is_pinned?: boolean;
+  cta?: unknown;
   faq?: IntrebareBlog[];
   seo_title?: string | null;
   seo_description?: string | null;
@@ -427,6 +429,19 @@ export type ArticolInput = {
  * un răspuns gol e o declarație falsă către Google: promite un răspuns care nu
  * există. Mai bine o întrebare în minus decât o structură care minte.
  */
+/**
+ * Curăță îndemnul înainte de scriere.
+ *
+ * ⚠ ACEEAȘI REGULĂ CA LA AFIȘARE, aplicată mai devreme. `indemnDeAratat` aruncă
+ * un „propriu" fără adresă sau fără etichetă; aici se aruncă înainte să intre în
+ * bază, ca să nu rămână acolo un rând care arată a îndemn și nu e. Altfel omul
+ * ar salva, ar reveni, ar vedea câmpurile pe jumătate completate și ar crede că
+ * îndemnul e pus — când în pagină nu apare nimic.
+ */
+function indemnDeSalvat(brut: unknown): unknown {
+  return indemnDeAratat(brut) ? brut : null;
+}
+
 function intrebariBune(intrari: IntrebareBlog[] | undefined): IntrebareBlog[] {
   return (intrari ?? [])
     .map((i) => ({ q: (i.q ?? "").trim(), a: (i.a ?? "").trim() }))
@@ -458,6 +473,9 @@ function randDinIntrare(intrare: ArticolInput, slug: string) {
     published_at: intrare.published_at || null,
     is_featured: intrare.is_featured ?? false,
     is_pinned: intrare.is_pinned ?? false,
+    /* Îndemnul se curăță la scriere: un „propriu” pe jumătate scris n-are ce
+       căuta în baza de date, fiindcă la afișare ar fi oricum aruncat. */
+    cta: indemnDeSalvat(intrare.cta),
     faq: intrebariBune(intrare.faq),
     seo_title: intrare.seo_title?.trim() || null,
     seo_description: intrare.seo_description?.trim() || null,

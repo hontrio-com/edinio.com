@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { pregatesteCautarea } from "./types";
 import type { ArticolBlog, AutorBlog, CategorieBlog } from "./types";
 
 /**
@@ -208,4 +209,69 @@ export async function autoriCuArticole(): Promise<AutorBlog[]> {
   const { data } = await client
     .from("blog_authors").select("*").in("id", idUri).order("name");
   return (data ?? []) as unknown as AutorBlog[];
+}
+
+/** Câte articole intră pe o pagină din listă. */
+export const PE_PAGINA = 12;
+
+/**
+ * O pagină din lista de articole, plus câte sunt în total.
+ *
+ * ⚠ ÎNLOCUIEȘTE O LIMITĂ CARE PIERDEA ÎN TĂCERE. Lista cerea primele 50 și
+ * atât: la al 51-lea articol, cel mai vechi ar fi ieșit din site fără să crape
+ * nimic și fără să observe cineva. Un articol care nu mai e legat de nicăieri
+ * rămâne în bază, rămâne în sitemap, dar nu mai are drum către el din pagină.
+ *
+ * `count: "exact"` costă o numărare la fiecare cerere. La zeci de mii de rânduri
+ * ar fi de înlocuit cu una estimată, dar până acolo e mai important să știm
+ * numărul adevărat de pagini decât să economisim o numărare.
+ */
+export async function paginaDeArticole(
+  pagina: number,
+  pePagina = PE_PAGINA,
+): Promise<{ articole: ArticolDeLista[]; total: number; pagini: number }> {
+  const de_la = Math.max(0, (pagina - 1) * pePagina);
+  const { data, count } = await (await db())
+    .from("blog_posts")
+    .select(CAMPURI_LISTA, { count: "exact" })
+    .order("published_at", { ascending: false })
+    .range(de_la, de_la + pePagina - 1);
+
+  const total = count ?? 0;
+  return {
+    articole: ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista),
+    total,
+    pagini: Math.max(1, Math.ceil(total / pePagina)),
+  };
+}
+
+/**
+ * Caută în articolele publicate.
+ *
+ * Caută în coloana derivată `cauta`, care ține titlul, rezumatul, răspunsul
+ * scurt și textul articolului fără etichete, pliat de diacritice. Deci „livrare"
+ * găsește și „livrări", iar „PLĂȚI" găsește „plati".
+ */
+export async function cautaArticole(
+  q: string,
+  pagina = 1,
+  pePagina = PE_PAGINA,
+): Promise<{ articole: ArticolDeLista[]; total: number; pagini: number }> {
+  const cautat = pregatesteCautarea(q);
+  if (cautat.length < 2) return { articole: [], total: 0, pagini: 1 };
+
+  const de_la = Math.max(0, (pagina - 1) * pePagina);
+  const { data, count } = await (await db())
+    .from("blog_posts")
+    .select(CAMPURI_LISTA, { count: "exact" })
+    .ilike("cauta", `%${cautat}%`)
+    .order("published_at", { ascending: false })
+    .range(de_la, de_la + pePagina - 1);
+
+  const total = count ?? 0;
+  return {
+    articole: ((data ?? []) as unknown as Record<string, unknown>[]).map(caLista),
+    total,
+    pagini: Math.max(1, Math.ceil(total / pePagina)),
+  };
 }

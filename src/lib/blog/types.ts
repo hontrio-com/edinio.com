@@ -193,3 +193,37 @@ export function adreseBune(intrari: string[] | null | undefined): string[] {
       }
     });
 }
+
+/**
+ * Pliază diacriticele și scrie cu litere mici, pentru căutare.
+ *
+ * ⚠ TREBUIE SĂ DEA EXACT CE DĂ `public.fara_diacritice` DIN BAZĂ.
+ *
+ * Coloana `blog_posts.cauta` e derivată cu funcția aceea. Dacă cele două se
+ * despart, căutarea nu crapă: pur și simplu nu mai găsește. Cineva scrie
+ * „livrare” cu diacritice, nu primește nimic, și crede că nu există articolul.
+ * Cel mai tăcut fel de defect. Proba din `types.test.ts` compară cele două
+ * liste de perechi, iar migrarea le enumeră pe ale ei.
+ */
+export function pliaza(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[ăâ]/gi, (c) => (c === c.toLowerCase() ? "a" : "A"))
+    .replace(/[îí]/gi, (c) => (c === c.toLowerCase() ? "i" : "I"))
+    .replace(/[șş]/gi, (c) => (c === c.toLowerCase() ? "s" : "S"))
+    .replace(/[țţ]/gi, (c) => (c === c.toLowerCase() ? "t" : "T"))
+    .toLowerCase();
+}
+
+/**
+ * Curăță ce a scris omul în caseta de căutare.
+ *
+ * ⚠ `%` ȘI `_` AU ÎNȚELES ÎN `ilike`. Netratate, o căutare după `%` ar întoarce
+ * toate articolele, iar una după `a_b` ar potrivi „acb". Nu e o gaură de
+ * securitate — clientul Supabase parametrizează valoarea — dar e un rezultat
+ * greșit pe care nimeni nu-l poate explica.
+ */
+export function pregatesteCautarea(q: string): string {
+  return pliaza(q.trim()).replace(/[%_\\]/g, "\\$&").slice(0, 100);
+}

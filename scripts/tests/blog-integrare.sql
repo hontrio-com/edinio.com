@@ -29,6 +29,8 @@
 --   L  usa directa prin REST e inchisa
 --   M  versiunea obligatorie, fixarea pastrata, etichetele si taxonomiile
 --   N  modificarile INDIRECTE cresc versiunea; redirectarile taxonomiilor
+--   T  data continutului pe rubrici si autori (ce vede cititorul, nu orice atingere)
+--   G  drepturile de prisos luate, declansatoarele neatinse
 --   J  nimic n-a ramas in urma
 --
 -- ═══ CUM SE RULEAZA ═══
@@ -1093,6 +1095,127 @@ begin
   raise notice '════ N4: toate au trecut ════';
 end $do$;
 
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- T. DATA CONTINUTULUI PE TAXONOMII (runda a sasea, 31.08.2026)
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Sitemapul lua data unei rubrici sau a unui autor NUMAI din articolele lor.
+-- Deci o descriere de rubrica sau o biografie schimbata nu ajungea la Google.
+--
+-- ⚠ REMEDIUL EVIDENT AR FI FOST GRESIT. Auditul cerea sa se foloseasca
+-- `updated_at`. Dar acela se muta la ORICE atingere administrativa, iar regula
+-- „`updated_at` nu ajunge la Google" e scrisa in patru locuri din depozit —
+-- pentru articole s-a platit o coloana noua tocmai ca sa se poata deosebi o
+-- editare de o bifa. Taxonomiile au primit acum acelasi lucru.
+do $do$
+declare cat uuid; aut uuid; d0 timestamptz; d1 timestamptz;
+begin
+  delete from public.blog_categories where slug like 'zz-t-%';
+  delete from public.blog_authors where slug like 'zz-t-%';
+  delete from public.blog_redirects where from_slug like 'zz-t-%' or to_slug like 'zz-t-%';
+
+  insert into public.blog_categories (slug,name,description) values ('zz-t-cat','Cat','veche') returning id into cat;
+  insert into public.blog_authors (slug,name,bio,role_title) values ('zz-t-aut','Aut','bio veche','rol') returning id into aut;
+
+  -- ── T1. Ce VEDE cititorul muta data ────────────────────────────────────
+  update public.blog_categories set content_updated_at = now() - interval '10 days' where id = cat;
+  select content_updated_at into d0 from public.blog_categories where id = cat;
+  perform public.blog_actualizeaza_taxonomia('categorie', cat,
+    jsonb_build_object('name','Cat','slug','zz-t-cat','description','ALTA descriere','sort_order',0));
+  select content_updated_at into d1 from public.blog_categories where id = cat;
+  if d1 <= d0 then raise exception 'T1: descrierea schimbata NU a mutat data'; end if;
+  raise notice 'T1 descrierea rubricii muta data';
+
+  -- ── T2. Ce NU vede, nu o muta ──────────────────────────────────────────
+  --
+  -- ⚠ SENSUL ASTA E MIEZUL. Fara el, o functie care ar muta data la fiecare
+  -- salvare ar trece T1 si ar reintroduce chiar minciuna pe care o reparam.
+  update public.blog_categories set content_updated_at = now() - interval '10 days' where id = cat;
+  select content_updated_at into d0 from public.blog_categories where id = cat;
+  perform public.blog_actualizeaza_taxonomia('categorie', cat,
+    jsonb_build_object('name','Cat','slug','zz-t-cat','description','ALTA descriere','sort_order',99));
+  select content_updated_at into d1 from public.blog_categories where id = cat;
+  if d1 <> d0 then raise exception 'T2: `sort_order` a mutat data, desi nu se vede pe pagina'; end if;
+  raise notice 'T2 reasezarea in lista nu misca data';
+
+  -- ── T3/T4. Acelasi lucru la autor ──────────────────────────────────────
+  update public.blog_authors set content_updated_at = now() - interval '10 days' where id = aut;
+  select content_updated_at into d0 from public.blog_authors where id = aut;
+  perform public.blog_actualizeaza_taxonomia('autor', aut,
+    jsonb_build_object('name','Aut','slug','zz-t-aut','role_title','rol','bio','BIO NOUA',
+                       'sameas', array[]::text[]));
+  select content_updated_at into d1 from public.blog_authors where id = aut;
+  if d1 <= d0 then raise exception 'T3: biografia schimbata NU a mutat data'; end if;
+  raise notice 'T3 biografia muta data';
+
+  update public.blog_authors set content_updated_at = now() - interval '10 days' where id = aut;
+  select content_updated_at into d0 from public.blog_authors where id = aut;
+  perform public.blog_actualizeaza_taxonomia('autor', aut,
+    jsonb_build_object('name','Aut','slug','zz-t-aut','role_title','rol','bio','BIO NOUA',
+                       'sameas', array[]::text[], 'user_id', (select id from auth.users limit 1)));
+  select content_updated_at into d1 from public.blog_authors where id = aut;
+  if d1 <> d0 then raise exception 'T4: legarea contului a mutat data, desi nu se vede'; end if;
+  raise notice 'T4 legarea contului nu misca data';
+
+  -- ── T5. Ce mergea inainte merge si dupa ────────────────────────────────
+  perform public.blog_actualizeaza_taxonomia('categorie', cat,
+    jsonb_build_object('name','Cat','slug','zz-t-cat-nou','description','ALTA descriere','sort_order',99));
+  if not exists (select 1 from public.blog_redirects
+                  where fel='categorie' and from_slug='zz-t-cat' and to_slug='zz-t-cat-nou') then
+    raise exception 'T5: redenumirea NU a lasat redirectare — am stricat ce mergea';
+  end if;
+  raise notice 'T5 redirectarea la redenumire merge mai departe';
+
+  delete from public.blog_categories where slug like 'zz-t-%';
+  delete from public.blog_authors where slug like 'zz-t-%';
+  delete from public.blog_redirects where from_slug like 'zz-t-%' or to_slug like 'zz-t-%';
+  raise notice '════ T: toate au trecut ════';
+end $do$;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- G. DREPTURILE DE PRISOS SUNT LUATE, IAR DECLANSATOARELE MERG MAI DEPARTE
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- ⚠ A DOUA JUMATATE E CEA CARE CONTEAZA. O revocare care merge dar opreste un
+-- declansator ar fi mai rea decat drepturile de prisos.
+do $do$
+declare a uuid; d0 timestamptz; d1 timestamptz; n int;
+begin
+  select count(*) into n
+  from pg_class c
+  join pg_namespace ns on ns.oid = c.relnamespace
+  cross join lateral aclexplode(c.relacl) g
+  where ns.nspname = 'public' and c.relname like 'blog\_%'
+    and pg_get_userbyid(g.grantee) in ('anon','authenticated')
+    and g.privilege_type in ('REFERENCES','TRIGGER','INSERT','UPDATE','DELETE','TRUNCATE');
+  if n <> 0 then
+    raise exception 'G0: `anon`/`authenticated` mai au % drepturi de scriere sau DDL pe tabelele blogului', n;
+  end if;
+  raise notice 'G0 niciun drept de prisos ramas';
+
+  delete from public.blog_posts where slug like 'zz-g-%';
+  insert into public.blog_posts (slug,title,content_html,status)
+    values ('zz-g-art','T','<p>x</p>','draft') returning id into a;
+
+  update public.blog_posts set content_updated_at = now() - interval '10 days' where id = a;
+  select content_updated_at into d0 from public.blog_posts where id = a;
+  update public.blog_posts set title = 'ALT TITLU' where id = a;
+  select content_updated_at into d1 from public.blog_posts where id = a;
+  if d1 <= d0 then raise exception 'G1: declansatorul de continut NU mai porneste dupa revocare'; end if;
+  raise notice 'G1 declansatorul de continut merge mai departe';
+
+  update public.blog_posts set status='published', published_at=now()-interval '1 day' where id = a;
+  update public.blog_posts set is_featured = true where id = a;
+  if not (select is_featured from public.blog_posts where id = a) then
+    raise exception 'G2: declansatorul de vitrina s-a stricat';
+  end if;
+  raise notice 'G2 declansatorul de vitrina merge mai departe';
+
+  delete from public.blog_posts where slug like 'zz-g-%';
+  raise notice '════ G: toate au trecut ════';
+end $do$;
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- J. NIMIC NU A RAMAS IN URMA
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -1100,6 +1223,9 @@ do $$
 declare n int := 0;
 begin
   select
+    (select count(*) from public.blog_categories  where slug like 'zz-t-%')
+  + (select count(*) from public.blog_authors     where slug like 'zz-t-%')
+  + (select count(*) from public.blog_posts       where slug like 'zz-g-%')
     (select count(*) from public.blog_posts       where slug like 'zz-n-%' or slug like 'zz-r-%')
   + (select count(*) from public.blog_tags        where slug like 'zz-n-%')
   + (select count(*) from public.blog_authors     where slug like 'zz-n-%' or slug like 'zz-r-%')

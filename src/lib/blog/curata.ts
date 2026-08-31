@@ -1,5 +1,7 @@
 import sanitizeHtmlLib from "sanitize-html";
 
+import { indreaptaInchiderile } from "@/lib/utils/inchideri-malformate";
+
 /*
   ⚠ FĂRĂ `import "server-only"` AICI, DINADINS.
 
@@ -137,7 +139,7 @@ export function esteInAfara(href: string): boolean {
 
 export function curataArticol(html: string | null | undefined): string {
   if (!html) return "";
-  return sanitizeHtmlLib(html, {
+  return sanitizeHtmlLib(indreaptaInchiderile(html), {
     allowedTags: [
       "p", "br", "span", "div",
       "strong", "b", "em", "i", "u", "s", "strike", "del", "mark", "sub", "sup",

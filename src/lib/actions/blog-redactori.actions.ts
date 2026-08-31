@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cereAdmin } from "@/lib/blog/admin-db";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-guard";
 
@@ -38,8 +39,11 @@ export type Redactor = {
  */
 export async function listeazaRedactori(): Promise<Redactor[]> {
   if (!(await requireAdminApi())) return [];
-  const { data } = await db().rpc("redactorii_blogului");
-  return (data ?? []) as unknown as Redactor[];
+  const { data, error } = await db().rpc("redactorii_blogului");
+  /* Citire de componenta de server: aruncarea cade in marginea de eroare Next.
+     O lista goala ar fi spus „n-ai niciun redactor" — masurat, sunt 168 de
+     conturi in baza, deci minciuna e vizibila. */
+  return (cereAdmin({ data, error }, "listeazaRedactori") ?? []) as unknown as Redactor[];
 }
 
 type Raspuns = { error: string } | { success: true };
@@ -57,9 +61,22 @@ export async function faRedactor(emailBrut: string): Promise<Raspuns> {
   if (!email) return { error: "Scrie o adresă de email." };
 
   const client = db();
-  const { data } = await client.rpc("cont_dupa_email", { p_email: email });
-  const om = Array.isArray(data) ? data[0] : null;
+  const { data, error: eCautare } = await client.rpc("cont_dupa_email", { p_email: email });
 
+  /*
+    ⚠ AICI NU SE ARUNCĂ, SE ÎNTOARCE UN MESAJ — și deosebirea e a locului, nu a
+    gustului. Acțiunea asta e chemată dintr-o componentă CLIENT, care face
+    `if ("error" in res) toast.error(res.error)`. O aruncare i-ar da omului
+    eroarea generică a unei acțiuni de server în loc de propoziția scrisă pentru el.
+
+    ⚠ ȘI DE CE CONTEAZĂ DELOC: fără rândul ăsta, o eroare a bazei ajungea la
+    `data = null`, deci la `om = null`, deci la „Nu există niciun cont cu adresa
+    aceasta" — despre colegul care ARE cont. Adminul îl caută, nu-l găsește, și
+    crede că omul nu s-a înscris niciodată.
+  */
+  if (eCautare) return { error: "Nu am putut verifica adresa acum. Încearcă din nou." };
+
+  const om = Array.isArray(data) ? data[0] : null;
   if (!om) return { error: "Nu există niciun cont cu adresa aceasta." };
   const rolAcum = (om as { rol: string }).rol;
   if (rolAcum === "admin") return { error: "Persoana e deja administrator, deci poate face tot." };

@@ -1,6 +1,8 @@
 "use server";
 
 import { createHash, randomBytes } from "node:crypto";
+import { fereastraPaginii } from "@/lib/paginare";
+import { cereAdmin } from "@/lib/blog/admin-db";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -348,15 +350,32 @@ export async function listeazaAbonati(pagina = 1): Promise<PaginaAbonati> {
   if (!(await requireAdminApi())) return PAGINA_GOALA;
 
   const p = Number.isSafeInteger(pagina) && pagina >= 1 ? pagina : 1;
-  const de_la = (p - 1) * PE_PAGINA;
 
-  const [lista, ceiConfirmati] = await Promise.all([
+  /*
+    ⚠ SE NUMĂRĂ ÎNTÂI, ȘI ABIA APOI SE CERE PAGINA. Înainte cele două plecau
+    deodată, iar pagina se cerea cu `range(de_la, …)` calculat dintr-un `?p=`
+    venit din adresă — fără să știm câte rânduri există.
+
+    Când `de_la` trece de numărul de rânduri, PostgREST răspunde 416 cu
+    `PGRST103`. Iar `postgrest-js` citește `count` DOAR când răspunsul e bun, deci
+    aruncă la gunoi chiar numărul pe care serverul tocmai i l-a trimis în
+    `Content-Range`. Rezultatul: `total = 0` și `data = []`, în timp ce a doua
+    interogare reușea și dădea `confirmati = N`.
+
+    ⚠ ASTA SE ÎNTÂMPLA CU BAZA PERFECT SĂNĂTOASĂ. Ecranul scria în același timp
+    „N abonați confirmați" și „Niciun abonat încă", scăderea dintre ele ieșea
+    NEGATIVĂ, iar paginația dispărea — deci omul rămânea blocat acolo. Se ajunge
+    tastând `?p=4` cu trei pagini, sau rămânând pe pagina 3 după ce ai șters
+    destui abonați cât să nu mai existe.
+
+    Numărând întâi, pagina cerută se poate STRÂNGE la ultima care există, iar
+    eroarea nu mai are cum să apară.
+  */
+  const [totalul, ceiConfirmati] = await Promise.all([
     db()
       .from("blog_subscribers")
-      .select("id, email, source, confirmed_at, created_at", { count: "exact" })
-      .is("unsubscribed_at", null)
-      .order("created_at", { ascending: false })
-      .range(de_la, de_la + PE_PAGINA - 1),
+      .select("id", { count: "exact", head: true })
+      .is("unsubscribed_at", null),
     /* ⚠ Numărat în bază, nu din pagina încărcată. Ecranul scria „N abonați
        confirmați" socotind din cele câteva rânduri pe care le avea în mână —
        adică spunea un număr mic cu deplină siguranță. */
@@ -367,13 +386,27 @@ export async function listeazaAbonati(pagina = 1): Promise<PaginaAbonati> {
       .not("confirmed_at", "is", null),
   ]);
 
-  const total = lista.count ?? 0;
+  cereAdmin({ data: totalul.data, error: totalul.error }, "listeazaAbonati/total");
+  cereAdmin({ data: ceiConfirmati.data, error: ceiConfirmati.error }, "listeazaAbonati/confirmati");
+
+  const total = totalul.count ?? 0;
+  const fereastra = fereastraPaginii(p, total, PE_PAGINA);
+
+  const lista = await db()
+    .from("blog_subscribers")
+    .select("id, email, source, confirmed_at, created_at")
+    .is("unsubscribed_at", null)
+    .order("created_at", { ascending: false })
+    .range(fereastra.deLa, fereastra.panaLa);
+
+  cereAdmin({ data: lista.data, error: lista.error }, "listeazaAbonati/lista");
+
   return {
     abonati: (lista.data ?? []) as unknown as Abonat[],
     total,
     confirmati: ceiConfirmati.count ?? 0,
-    pagina: p,
-    pagini: Math.max(1, Math.ceil(total / PE_PAGINA)),
+    pagina: fereastra.pagina,
+    pagini: fereastra.pagini,
   };
 }
 
@@ -423,8 +456,26 @@ export async function exportaAbonati(): Promise<{ csv: string; randuri: number }
 
 export async function stergeAbonat(id: string): Promise<{ error: string } | { success: true }> {
   if (!(await requireAdminApi())) return { error: "Neautorizat" };
-  const { error } = await db().from("blog_subscribers").delete().eq("id", id);
-  if (error) return { error: "Nu s-a putut sterge." };
+
+  /*
+    ⚠ `.select("id")`, ANUME. Fără el, PostgREST răspunde 204 fără corp, la fel
+    și când n-a atins niciun rând — deci „fără eroare" nu însemna „s-a șters
+    ceva", iar ecranul spunea „Abonat șters" pentru un id care nu mai există.
+
+    ⚠ REGULA E DEJA SCRISĂ ÎN DEPOZIT, în `blog-redactori.actions.ts`: „«Fără
+    eroare» NU înseamnă «s-a schimbat ceva»". Acolo scrierile au `.select("id")`
+    și numără rândurile atinse. Aici nu se făcea — aceeași regulă, aplicată pe
+    jumătate.
+  */
+  const { data, error } = await db()
+    .from("blog_subscribers")
+    .delete()
+    .eq("id", id)
+    .select("id");
+
+  if (error) return { error: "Nu s-a putut șterge. Încearcă din nou." };
+  if (!data || data.length === 0) return { error: "Abonatul nu mai există." };
+
   revalidatePath("/admin/blog/abonati");
   return { success: true };
 }

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { cereAdmin } from "@/lib/blog/admin-db";
 import type { Json } from "@/types/database.types";
 import { requireAdminApi, requireBlogEditorApi } from "@/lib/admin-guard";
 import { indemnDeAratat } from "@/lib/blog/indemn";
@@ -54,34 +55,6 @@ import {
  */
 function blogDb() {
   return createAdminClient();
-}
-
-/**
- * O citire de administrare care ARUNCĂ dacă baza a răspuns cu eroare.
- *
- * ⚠ FRATELE LUI `cere()` DIN `src/lib/blog/citire.ts`, ȘI E AICI DIN ACELAȘI
- * MOTIV. Acolo, în runda a patra, toate cele 23 de citiri publice luau doar
- * `data`: o bază căzută nu dădea o eroare, ci o listă goală — adică „articolul
- * nu există", adică 404, adică Google scoate pagina din index.
- *
- * Aici păgubitul e altul, dar paguba e de aceeași formă: 13 citiri de
- * administrare făceau `data ?? []`, `?? null` sau `?? 0`. Adminul se uita la un
- * ecran care spunea „nu ai niciun autor" în timp ce baza avea doisprezece — și
- * n-avea de unde să bănuiască, fiindcă un ecran gol arată exact ca un ecran
- * gol pe drept.
- *
- * ⚠ SE ARUNCĂ, NU SE ÎNTOARCE O EROARE. Astea sunt citiri din componente de
- * server: Next prinde aruncarea și arată marginea de eroare. „Nu am putut
- * încărca acum" e un adevăr; „nu există nimic" e o minciună.
- */
-function cereAdmin<T>(rezultat: { data: T; error: { message?: string } | null }, unde: string): T {
-  if (rezultat.error) {
-    throw new Error(
-      `[blog-admin] citirea „${unde}” a eșuat: ${rezultat.error.message ?? "eroare necunoscută"}. ` +
-        "Se aruncă dinadins: o listă goală ar fi arătat ca „nu există nimic”.",
-    );
-  }
-  return rezultat.data;
 }
 
 /**

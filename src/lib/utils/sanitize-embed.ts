@@ -1,5 +1,7 @@
 import sanitizeHtmlLib from "sanitize-html";
 
+import { indreaptaInchiderile } from "@/lib/utils/inchideri-malformate";
+
 /**
  * Permissive-but-safe sanitizer for the custom-code block in its CLIENT (no-JS)
  * mode, and for embed-like HTML. Compared to `sanitizeHtml` (rich text), this
@@ -43,7 +45,7 @@ const NETOPIA_IFRAME_DOMAINS = ["mny.ro", "netopia-payments.com", "netopia.ro", 
  */
 export function sanitizeNetopiaBadge(html: string | null | undefined): string {
   if (!html) return "";
-  return sanitizeHtmlLib(html, {
+  return sanitizeHtmlLib(indreaptaInchiderile(html), {
     allowedTags: ["iframe", "a", "div", "span", "img", "picture", "source"],
     allowedAttributes: {
       "*": ["style", "class", "title", "aria-label"],
@@ -66,7 +68,7 @@ export function sanitizeNetopiaBadge(html: string | null | undefined): string {
 
 export function sanitizeEmbedHtml(html: string | null | undefined): string {
   if (!html) return "";
-  return sanitizeHtmlLib(html, {
+  return sanitizeHtmlLib(indreaptaInchiderile(html), {
     allowedTags: [
       "p", "br", "span", "div", "section", "article", "header", "footer", "main", "aside", "nav",
       "strong", "b", "em", "i", "u", "s", "strike", "del", "mark", "sub", "sup", "small", "abbr",

@@ -128,6 +128,30 @@ function ceaMaiProaspata(
   );
 }
 
+/**
+ * Data unei pagini de rubrică sau de autor.
+ *
+ * ⚠ NU DOAR ARTICOLELE. Până pe 31.08.2026 se lua numai cel mai proaspăt articol
+ * al taxonomiei. Dar pagina rubricii își arată descrierea, iar pagina autorului
+ * își arată biografia, rolul și poza — schimbi biografia și pagina chiar s-a
+ * schimbat, în timp ce sitemapul rămânea la data ultimului articol.
+ *
+ * ⚠ ȘI NU `updated_at`. Acela se mută la orice atingere administrativă, deci
+ * i-ar spune Google că pagina s-a schimbat când cineva doar a reașezat o listă.
+ * Taxonomiile au primit `content_updated_at`, care se mișcă numai la un câmp pe
+ * care cititorul chiar îl vede — exact ce s-a făcut pentru articole în runda a
+ * doua, din același motiv.
+ */
+export function dataTaxonomiei(
+  alTaxonomiei: string | null | undefined,
+  articole: { content_updated_at?: string | null; published_at?: string | null }[],
+): Date {
+  const dinArticole = ceaMaiProaspata(articole);
+  if (!alTaxonomiei) return dinArticole;
+  const alEi = new Date(alTaxonomiei);
+  return Number.isNaN(alEi.getTime()) || alEi < dinArticole ? dinArticole : alEi;
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const host = (await headers()).get("host")?.split(":")[0].toLowerCase() ?? "";
   const supabase = await createClient();
@@ -364,11 +388,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "monthly" as const,
       priority: 0.6,
     })),
-    /* Pagina unei rubrici se schimbă când apare un articol în ea. Deci data ei e
-       a celui mai proaspăt articol al ei — nu ziua de azi. */
+    /* Pagina unei rubrici se schimbă când apare un articol în ea — SAU când i se
+       schimbă descrierea. Deci data ei e cea mai nouă dintre cele două, nu ziua
+       de azi. Vezi `dataTaxonomiei`. */
     ...categoriiCuArticole.map((slug) => ({
       url: `${PLATFORM_ORIGIN}/blog/categorie/${slug}`,
-      lastModified: ceaMaiProaspata(articoleBlog.filter((a) => a.categorie?.slug === slug)),
+      lastModified: dataTaxonomiei(
+        articoleBlog.find((a) => a.categorie?.slug === slug)?.categorie?.content_updated_at,
+        articoleBlog.filter((a) => a.categorie?.slug === slug),
+      ),
       changeFrequency: "weekly" as const,
       priority: 0.5,
     })),
@@ -377,7 +405,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
        crawlerul degeaba. */
     ...autoriDeAratat.map((slug) => ({
       url: `${PLATFORM_ORIGIN}/blog/autor/${slug}`,
-      lastModified: ceaMaiProaspata(articoleBlog.filter((a) => a.autor?.slug === slug)),
+      lastModified: dataTaxonomiei(
+        articoleBlog.find((a) => a.autor?.slug === slug)?.autor?.content_updated_at,
+        articoleBlog.filter((a) => a.autor?.slug === slug),
+      ),
       changeFrequency: "weekly" as const,
       priority: 0.4,
     })),

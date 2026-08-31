@@ -1,5 +1,7 @@
 import sanitizeHtmlLib from "sanitize-html";
 
+import { indreaptaInchiderile } from "@/lib/utils/inchideri-malformate";
+
 /**
  * Allowlist HTML sanitizer for rich-text content produced by the TipTap editor.
  *
@@ -11,7 +13,7 @@ import sanitizeHtmlLib from "sanitize-html";
  */
 export function sanitizeHtml(html: string | null | undefined): string {
   if (!html) return "";
-  return sanitizeHtmlLib(html, {
+  return sanitizeHtmlLib(indreaptaInchiderile(html), {
     allowedTags: [
       "p", "br", "span", "div",
       "strong", "b", "em", "i", "u", "s", "strike", "del", "mark", "sub", "sup",

@@ -81,8 +81,10 @@ export type ArticolDeLista = Pick<
   | "id" | "slug" | "title" | "excerpt" | "cover_url" | "cover_alt" | "published_at"
   | "content_updated_at" | "reading_minutes" | "is_featured" | "is_pinned" | "noindex"
 > & {
-  autor: Pick<AutorBlog, "name" | "slug" | "avatar_url"> | null;
-  categorie: Pick<CategorieBlog, "name" | "slug"> | null;
+  /* `content_updated_at` al taxonomiei: sitemapul are nevoie de el ca data
+     paginii de rubrică sau de autor. Vezi nota de la `CAMPURI_LISTA`. */
+  autor: Pick<AutorBlog, "name" | "slug" | "avatar_url" | "content_updated_at"> | null;
+  categorie: Pick<CategorieBlog, "name" | "slug" | "content_updated_at"> | null;
 };
 
 const CAMPURI_LISTA =
@@ -98,7 +100,18 @@ const CAMPURI_LISTA =
     azi" fiindcă altul fusese pus în vitrină. Vezi `blog_continut_atins()`.
   */
   "id, slug, title, excerpt, cover_url, cover_alt, published_at, content_updated_at, reading_minutes, is_featured, is_pinned, noindex," +
-  " blog_authors(name, slug, avatar_url), blog_categories(name, slug)";
+  /*
+    ⚠ SI `content_updated_at` AL TAXONOMIEI, de la 31.08.2026.
+
+    Sitemapul lua data unei rubrici sau a unui autor NUMAI din articolele lor.
+    Deci o descriere de rubrica sau o biografie schimbata nu ajungea niciodata la
+    Google: pagina se schimba, `lastModified` ramanea la ultimul articol.
+
+    Vine de aici, in aceeasi interogare, fiindca sitemapul citeste oricum
+    articolele cu taxonomia legata — deci nu costa nicio cerere in plus.
+  */
+  " blog_authors(name, slug, avatar_url, content_updated_at)," +
+  " blog_categories(name, slug, content_updated_at)";
 
 /**
  * Conditiile care fac un articol vizibil public, puse pe orice interogare.

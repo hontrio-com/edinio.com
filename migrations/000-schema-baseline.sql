@@ -1177,12 +1177,15 @@ AS $function$
 declare
   v_slug_vechi text;
   v_slug_nou   text;
+  v_vechi_cat  public.blog_categories%rowtype;
+  v_vechi_aut  public.blog_authors%rowtype;
 begin
   if p_fel = 'categorie' then
-    select slug into v_slug_vechi from public.blog_categories where id = p_id for update;
+    select * into v_vechi_cat from public.blog_categories where id = p_id for update;
     if not found then
       raise exception 'rubrica % nu exista', p_id using errcode = 'no_data_found';
     end if;
+    v_slug_vechi := v_vechi_cat.slug;
 
     update public.blog_categories c set
       name             = n.name,
@@ -1190,17 +1193,32 @@ begin
       description      = n.description,
       seo_title        = n.seo_title,
       seo_description  = n.seo_description,
-      sort_order       = n.sort_order
+      sort_order       = n.sort_order,
+      -- ⚠ SE MISCA DOAR PENTRU CE VEDE CITITORUL.
+      --
+      -- Pagina rubricii arata numele, `description` ca lead, si `seo_title` /
+      -- `seo_description` in metadate. `sort_order` NU se vede pe ea — e ordinea
+      -- din liste — deci o reasezare nu e o schimbare a paginii si n-are voie sa
+      -- spuna Google ca s-a schimbat.
+      content_updated_at = case
+        when (n.name, n.slug, n.description, n.seo_title, n.seo_description)
+             is distinct from
+             (v_vechi_cat.name, v_vechi_cat.slug, v_vechi_cat.description,
+              v_vechi_cat.seo_title, v_vechi_cat.seo_description)
+        then now()
+        else c.content_updated_at
+      end
     from jsonb_populate_record(
            (select q from public.blog_categories q where q.id = p_id), p_rand) n
     where c.id = p_id
     returning c.slug into v_slug_nou;
 
   elsif p_fel = 'autor' then
-    select slug into v_slug_vechi from public.blog_authors where id = p_id for update;
+    select * into v_vechi_aut from public.blog_authors where id = p_id for update;
     if not found then
       raise exception 'autorul % nu exista', p_id using errcode = 'no_data_found';
     end if;
+    v_slug_vechi := v_vechi_aut.slug;
 
     update public.blog_authors a set
       name        = n.name,
@@ -1209,7 +1227,19 @@ begin
       bio         = n.bio,
       avatar_url  = n.avatar_url,
       sameas      = n.sameas,
-      user_id     = n.user_id
+      user_id     = n.user_id,
+      -- ⚠ `user_id` LIPSESTE DINADINS DIN COMPARATIE. E legatura dintre autor si
+      -- contul de pe platforma, folosita ca sa stim cine poate scrie in numele
+      -- lui. Nu se vede nicaieri pe pagina publica, deci legarea sau dezlegarea
+      -- unui cont nu e o schimbare pentru cititor.
+      content_updated_at = case
+        when (n.name, n.slug, n.role_title, n.bio, n.avatar_url, n.sameas)
+             is distinct from
+             (v_vechi_aut.name, v_vechi_aut.slug, v_vechi_aut.role_title,
+              v_vechi_aut.bio, v_vechi_aut.avatar_url, v_vechi_aut.sameas)
+        then now()
+        else a.content_updated_at
+      end
     from jsonb_populate_record(
            (select q from public.blog_authors q where q.id = p_id), p_rand) n
     where a.id = p_id
@@ -6098,7 +6128,8 @@ create table if not exists public.blog_authors (
   avatar_url text,
   sameas text[] default '{}'::text[] not null,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  content_updated_at timestamp with time zone default now() not null);
 
 create table if not exists public.blog_categories (
   id uuid default gen_random_uuid() not null,
@@ -6109,7 +6140,8 @@ create table if not exists public.blog_categories (
   seo_description text,
   sort_order integer default 0 not null,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  content_updated_at timestamp with time zone default now() not null);
 
 create table if not exists public.blog_post_revisions (
   id uuid default gen_random_uuid() not null,
@@ -8880,10 +8912,6 @@ grant SELECT on table public.announcements to service_role;
 grant TRIGGER on table public.announcements to service_role;
 grant TRUNCATE on table public.announcements to service_role;
 grant UPDATE on table public.announcements to service_role;
-grant REFERENCES on table public.blog_authors to anon;
-grant TRIGGER on table public.blog_authors to anon;
-grant REFERENCES on table public.blog_authors to authenticated;
-grant TRIGGER on table public.blog_authors to authenticated;
 grant DELETE on table public.blog_authors to service_role;
 grant INSERT on table public.blog_authors to service_role;
 grant REFERENCES on table public.blog_authors to service_role;
@@ -8891,12 +8919,8 @@ grant SELECT on table public.blog_authors to service_role;
 grant TRIGGER on table public.blog_authors to service_role;
 grant TRUNCATE on table public.blog_authors to service_role;
 grant UPDATE on table public.blog_authors to service_role;
-grant REFERENCES on table public.blog_categories to anon;
 grant SELECT on table public.blog_categories to anon;
-grant TRIGGER on table public.blog_categories to anon;
-grant REFERENCES on table public.blog_categories to authenticated;
 grant SELECT on table public.blog_categories to authenticated;
-grant TRIGGER on table public.blog_categories to authenticated;
 grant DELETE on table public.blog_categories to service_role;
 grant INSERT on table public.blog_categories to service_role;
 grant REFERENCES on table public.blog_categories to service_role;
@@ -8904,10 +8928,6 @@ grant SELECT on table public.blog_categories to service_role;
 grant TRIGGER on table public.blog_categories to service_role;
 grant TRUNCATE on table public.blog_categories to service_role;
 grant UPDATE on table public.blog_categories to service_role;
-grant REFERENCES on table public.blog_post_revisions to anon;
-grant TRIGGER on table public.blog_post_revisions to anon;
-grant REFERENCES on table public.blog_post_revisions to authenticated;
-grant TRIGGER on table public.blog_post_revisions to authenticated;
 grant DELETE on table public.blog_post_revisions to service_role;
 grant INSERT on table public.blog_post_revisions to service_role;
 grant REFERENCES on table public.blog_post_revisions to service_role;
@@ -8915,10 +8935,6 @@ grant SELECT on table public.blog_post_revisions to service_role;
 grant TRIGGER on table public.blog_post_revisions to service_role;
 grant TRUNCATE on table public.blog_post_revisions to service_role;
 grant UPDATE on table public.blog_post_revisions to service_role;
-grant REFERENCES on table public.blog_post_stats to anon;
-grant TRIGGER on table public.blog_post_stats to anon;
-grant REFERENCES on table public.blog_post_stats to authenticated;
-grant TRIGGER on table public.blog_post_stats to authenticated;
 grant DELETE on table public.blog_post_stats to service_role;
 grant INSERT on table public.blog_post_stats to service_role;
 grant REFERENCES on table public.blog_post_stats to service_role;
@@ -8926,12 +8942,8 @@ grant SELECT on table public.blog_post_stats to service_role;
 grant TRIGGER on table public.blog_post_stats to service_role;
 grant TRUNCATE on table public.blog_post_stats to service_role;
 grant UPDATE on table public.blog_post_stats to service_role;
-grant REFERENCES on table public.blog_post_tags to anon;
 grant SELECT on table public.blog_post_tags to anon;
-grant TRIGGER on table public.blog_post_tags to anon;
-grant REFERENCES on table public.blog_post_tags to authenticated;
 grant SELECT on table public.blog_post_tags to authenticated;
-grant TRIGGER on table public.blog_post_tags to authenticated;
 grant DELETE on table public.blog_post_tags to service_role;
 grant INSERT on table public.blog_post_tags to service_role;
 grant REFERENCES on table public.blog_post_tags to service_role;
@@ -8939,12 +8951,8 @@ grant SELECT on table public.blog_post_tags to service_role;
 grant TRIGGER on table public.blog_post_tags to service_role;
 grant TRUNCATE on table public.blog_post_tags to service_role;
 grant UPDATE on table public.blog_post_tags to service_role;
-grant REFERENCES on table public.blog_posts to anon;
 grant SELECT on table public.blog_posts to anon;
-grant TRIGGER on table public.blog_posts to anon;
-grant REFERENCES on table public.blog_posts to authenticated;
 grant SELECT on table public.blog_posts to authenticated;
-grant TRIGGER on table public.blog_posts to authenticated;
 grant DELETE on table public.blog_posts to service_role;
 grant INSERT on table public.blog_posts to service_role;
 grant REFERENCES on table public.blog_posts to service_role;
@@ -8952,12 +8960,8 @@ grant SELECT on table public.blog_posts to service_role;
 grant TRIGGER on table public.blog_posts to service_role;
 grant TRUNCATE on table public.blog_posts to service_role;
 grant UPDATE on table public.blog_posts to service_role;
-grant REFERENCES on table public.blog_redirects to anon;
 grant SELECT on table public.blog_redirects to anon;
-grant TRIGGER on table public.blog_redirects to anon;
-grant REFERENCES on table public.blog_redirects to authenticated;
 grant SELECT on table public.blog_redirects to authenticated;
-grant TRIGGER on table public.blog_redirects to authenticated;
 grant DELETE on table public.blog_redirects to service_role;
 grant INSERT on table public.blog_redirects to service_role;
 grant REFERENCES on table public.blog_redirects to service_role;
@@ -8965,10 +8969,6 @@ grant SELECT on table public.blog_redirects to service_role;
 grant TRIGGER on table public.blog_redirects to service_role;
 grant TRUNCATE on table public.blog_redirects to service_role;
 grant UPDATE on table public.blog_redirects to service_role;
-grant REFERENCES on table public.blog_subscribers to anon;
-grant TRIGGER on table public.blog_subscribers to anon;
-grant REFERENCES on table public.blog_subscribers to authenticated;
-grant TRIGGER on table public.blog_subscribers to authenticated;
 grant DELETE on table public.blog_subscribers to service_role;
 grant INSERT on table public.blog_subscribers to service_role;
 grant REFERENCES on table public.blog_subscribers to service_role;
@@ -8976,12 +8976,8 @@ grant SELECT on table public.blog_subscribers to service_role;
 grant TRIGGER on table public.blog_subscribers to service_role;
 grant TRUNCATE on table public.blog_subscribers to service_role;
 grant UPDATE on table public.blog_subscribers to service_role;
-grant REFERENCES on table public.blog_tags to anon;
 grant SELECT on table public.blog_tags to anon;
-grant TRIGGER on table public.blog_tags to anon;
-grant REFERENCES on table public.blog_tags to authenticated;
 grant SELECT on table public.blog_tags to authenticated;
-grant TRIGGER on table public.blog_tags to authenticated;
 grant DELETE on table public.blog_tags to service_role;
 grant INSERT on table public.blog_tags to service_role;
 grant REFERENCES on table public.blog_tags to service_role;
@@ -10619,8 +10615,6 @@ grant execute on function public.blog_categorii_folosite() to authenticated;
 grant execute on function public.blog_categorii_folosite() to service_role;
 grant execute on function public.blog_cere_confirmare(p_email text, p_token_hash text, p_expira_la timestamp with time zone, p_sursa text) to service_role;
 grant execute on function public.blog_confirma(p_token_hash text, p_ip text) to service_role;
-grant execute on function public.blog_continut_atins() to anon;
-grant execute on function public.blog_continut_atins() to authenticated;
 grant execute on function public.blog_continut_atins() to service_role;
 grant execute on function public.blog_creeaza_articol(p_rand jsonb, p_etichete jsonb) to service_role;
 grant execute on function public.blog_creste_citirile(p_slug text) to service_role;
@@ -10793,8 +10787,8 @@ grant execute on function public.unaccent(regdictionary, text) to anon;
 grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(regdictionary, text) to authenticated;
-grant execute on function public.unaccent(regdictionary, text) to service_role;
 grant execute on function public.unaccent(text) to service_role;
+grant execute on function public.unaccent(regdictionary, text) to service_role;
 grant execute on function public.unaccent_init(internal) to anon;
 grant execute on function public.unaccent_init(internal) to authenticated;
 grant execute on function public.unaccent_init(internal) to service_role;
@@ -10843,6 +10837,7 @@ revoke execute on function public.blog_anuleaza_confirmare(p_email text, p_token
 revoke execute on function public.blog_articole_admin(p_de_la integer, p_cate integer, p_cauta text, p_stare text) from public;
 revoke execute on function public.blog_cere_confirmare(p_email text, p_token_hash text, p_expira_la timestamp with time zone, p_sursa text) from public;
 revoke execute on function public.blog_confirma(p_token_hash text, p_ip text) from public;
+revoke execute on function public.blog_continut_atins() from public;
 revoke execute on function public.blog_creeaza_articol(p_rand jsonb, p_etichete jsonb) from public;
 revoke execute on function public.blog_creste_citirile(p_slug text) from public;
 revoke execute on function public.blog_dezaboneaza(p_unsub_token text) from public;

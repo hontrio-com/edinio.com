@@ -33,3 +33,43 @@ export function numereDeAratat(pagina: number, pagini: number): (number | "…")
   iesire.push(pagini);
   return iesire;
 }
+
+/**
+ * Fereastra de rânduri a unei pagini, STRÂNSĂ la câte pagini există cu adevărat.
+ *
+ * ⚠ CERUTĂ DE UN DEFECT CARE SE APRINDEA CU BAZA SĂNĂTOASĂ (31.08.2026).
+ *
+ * `listeazaAbonati` lua `?p=` din adresă și cerea direct
+ * `range(de_la, de_la + 49)`, fără să știe câte rânduri există. Când `de_la`
+ * trece de numărul de rânduri, PostgREST răspunde **416** cu `PGRST103`, iar
+ * `postgrest-js` citește `count` DOAR când răspunsul e bun — deci aruncă exact
+ * numărul pe care serverul tocmai i-l trimisese în `Content-Range`.
+ *
+ * Probat pe producție, cu o citire: `Range: 50-99` pe o tabelă cu 0 rânduri →
+ * `HTTP/1.1 416`, `Content-Range: * / 0`, `{"code":"PGRST103"}`.
+ *
+ * Ce vedea omul: „N abonați confirmați" și „Niciun abonat încă" în același
+ * ecran, scăderea dintre ele negativă, paginația dispărută — deci fără drum
+ * înapoi. Se ajungea tastând `?p=4` cu trei pagini, sau rămânând pe pagina 3
+ * după ce ștergeai destui abonați.
+ *
+ * ⚠ STĂ AICI, NU ÎN ACȚIUNE, din chiar motivul scris la începutul fișierului:
+ * probele casei rulează pe `.ts`, iar acțiunile sunt `"use server"`. O strângere
+ * scrisă în linie, acolo, ar fi o regulă pe care n-o probează nimeni.
+ */
+export function fereastraPaginii(
+  pagina: number,
+  total: number,
+  pePagina: number,
+): { pagina: number; pagini: number; deLa: number; panaLa: number } {
+  const n = Math.max(0, Math.trunc(total));
+  const pe = Math.max(1, Math.trunc(pePagina));
+  const pagini = Math.max(1, Math.ceil(n / pe));
+
+  /* Un `?p=` scris de mână poate fi orice: text, negativ, fracție, uriaș. */
+  const cerut = Number.isSafeInteger(pagina) && pagina >= 1 ? pagina : 1;
+  const p = Math.min(cerut, pagini);
+
+  const deLa = (p - 1) * pe;
+  return { pagina: p, pagini, deLa, panaLa: deLa + pe - 1 };
+}

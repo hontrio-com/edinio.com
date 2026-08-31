@@ -44,6 +44,18 @@ export interface AutorBlog {
    * un sir de caractere nu are autoritate pe niciun subiect.
    */
   sameas: string[];
+  /**
+   * Când s-a schimbat ultima dată ceva ce VEDE CITITORUL pe pagina asta.
+   *
+   * ⚠ NU E `updated_at`, ȘI DEOSEBIREA E ACEEAȘI CA LA ARTICOLE. `updated_at` se
+   * mută la orice atingere administrativă — inclusiv la o reașezare în listă sau
+   * la legarea unui cont — iar din el ar ieși `lastModified` din sitemap, adică
+   * i-am spune Google că pagina s-a schimbat când nu s-a schimbat.
+   *
+   * Se mută numai când se schimbă un câmp care chiar apare pe pagină. Regula stă
+   * în `blog_actualizeaza_taxonomia`, care compară vechiul cu noul.
+   */
+  content_updated_at: string;
   created_at: string;
   updated_at: string;
 }
@@ -56,6 +68,18 @@ export interface CategorieBlog {
   seo_title: string | null;
   seo_description: string | null;
   sort_order: number;
+  /**
+   * Când s-a schimbat ultima dată ceva ce VEDE CITITORUL pe pagina asta.
+   *
+   * ⚠ NU E `updated_at`, ȘI DEOSEBIREA E ACEEAȘI CA LA ARTICOLE. `updated_at` se
+   * mută la orice atingere administrativă — inclusiv la o reașezare în listă sau
+   * la legarea unui cont — iar din el ar ieși `lastModified` din sitemap, adică
+   * i-am spune Google că pagina s-a schimbat când nu s-a schimbat.
+   *
+   * Se mută numai când se schimbă un câmp care chiar apare pe pagină. Regula stă
+   * în `blog_actualizeaza_taxonomia`, care compară vechiul cu noul.
+   */
+  content_updated_at: string;
   created_at: string;
   updated_at: string;
 }

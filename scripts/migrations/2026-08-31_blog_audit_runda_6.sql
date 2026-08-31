@@ -1,0 +1,173 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BLOG — RUNDA A SASEA DE AUDIT, 31.08.2026
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- ⚠ ADEVARUL REPRODUCTIBIL E `migrations/000-schema-baseline.sql`. Aici se scrie
+-- CE s-a schimbat si DE CE. Invariantele sunt probate de
+-- `scripts/tests/blog-integrare.sql`, sectiunile T si G.
+--
+-- ⚠ CUM S-A VERIFICAT AUDITUL. Cele noua constatari au mers fiecare la un
+-- verificator separat, cu drept DOAR de citire si cu dovada ceruta. Ce a iesit
+-- adevarat a mai primit trei incercari de daramare, fiecare cu alta lentila.
+-- Rezultatul: la PATRU din noua, faptul era adevarat si REPARATIA CERUTA era
+-- gresita. Sunt scrise mai jos, cu motivul, ca sa nu fie „reparate" la runda
+-- urmatoare.
+--
+--
+-- ═══ CE S-A GASIT IN AFARA AUDITULUI, SI E CEL MAI GRAV ═══
+--
+-- ⚠ XSS STOCAT IN PAGINILE PERSONALIZATE ALE MAGAZINELOR. Nu in blog.
+--
+--     <style>a{}</style/><img src=x onerror=alert(1)>
+--     → <style>a{}</style/><img src=x onerror=alert(1)></style>
+--
+-- `onerror` trecea NEATINS. La fel `<script>alert(1)</script>` intreg si
+-- `<iframe src="javascript:...">`. Cauza e in tokenizatorul lui `htmlparser2`:
+-- pentru elementele cu text brut (`style`, `textarea`, `xmp`) o inchidere cu
+-- bara nu e socotita inchidere, deci restul iese verbatim — dar BROWSERUL o
+-- socoteste inchidere valida. Cu `</style>` scris corect, sanitizerul curata cum
+-- trebuie; singura deosebire e bara.
+--
+-- Nu era aparat de nimic altceva: CSP-ul are `'unsafe-inline'`, iar `SandboxEmbed`
+-- (calea „cu js") e corect izolata — deci ocolirea asta era singura usa catre
+-- originea platformei.
+--
+-- ⚠ RAMURA E VIE: doua pagini PUBLICATE, pe un magazin publicat, trec prin
+-- `sanitizeEmbedHtml` -> `dangerouslySetInnerHTML` la fiecare cerere publica.
+-- Sarcina ostila nu e stocata (0 pagini cu `<style>`), dar usa era deschisa
+-- pentru oricare din cele 130 de magazine: blocul „Cod personalizat" nu e
+-- ingradit la admin.
+--
+-- ⚠ AM NUMARAT GRESIT LA PRIMA INCERCARE, si merita scris. Am cautat cu
+-- `blocks::text like '%"type":"html"%'` si am gasit ZERO. Dar `jsonb::text` scrie
+-- `"type": "html"`, CU SPATIU. Zeroul era un artefact al interogarii, nu o stare
+-- a productiei. Cine verifica din nou: numara pe `jsonb_array_elements`, nu pe text.
+--
+-- REPARAT FARA SA URCAM PACHETUL, prin `indreaptaInchiderile()` — vezi mai jos.
+--
+--
+-- ═══ DE CE NU S-A URCAT `sanitize-html` LA 2.17.7 ═══
+--
+-- Auditul spune ca 2.17.5 e in regula fiindca repara advisory-ul de pana la
+-- 2.17.4. Prima jumatate e adevarata; concluzia nu.
+--
+-- ⚠ DOUA ADVISORY-URI ATING 2.17.5, SI `npm audit` NU LE VA VEDEA NICIODATA:
+--   * GHSA-jxwj-j7wr-gfrw — reparat in 2.17.6, preconditia e `textarea` SAU `xmp`
+--   * GHSA-g8qq-57p8-ggw5 — reparat in 2.17.7, preconditia sunt elementele de
+--     ANIMATIE SVG (`animate`, `animateMotion`…), nu svg/math/textarea/xmp
+--
+-- Amandoua traiesc ca advisory-uri de DEPOZIT pe `apostrophecms/apostrophe`,
+-- nepublicate in baza globala. Verificat cu cereri: `/advisories/GHSA-jxwj-j7wr-gfrw`
+-- da 404, dar pagina din depozitul furnizorului da 200. OSV intoarce `{}` pentru
+-- 2.17.5. Deci „0 vulnerabilitati" masoara ce stie baza de date, nu ce e reparat
+-- in cod. Pentru pachetul asta, veghea automata e oarba din constructie.
+--
+-- ⚠ SI TOTUSI NU SE URCA ACUM, fiindca urcarea S-A FACUT si a doborat platforma
+-- pe 30.08: 56 de erori, 21 de oameni, build verde. Cauza, masurata:
+--
+--     htmlparser2 10.1.0 → `exports` are ramuri separate `import` SI `require`
+--     htmlparser2 12.0.0 → `exports` are doar `default`, iar `main` e ESM
+--
+-- `sanitize-html` e in `serverExternalPackages`, deci Next NU il impacheteaza si
+-- il cere pe drumul CommonJS la RULARE, prin `externalRequire`. Node-ul nu era
+-- conditia: proiectul cere deja `>=24`, si a cazut oricum.
+--
+-- Urcarea ramane de facut, dar cere INTAI scoaterea din `serverExternalPackages`
+-- ori trecerea pe `import()` dinamic — o schimbare de arhitectura pe toata
+-- platforma, cu desfasurare supravegheata. Nu o schimbare de o linie.
+--
+--
+-- ═══ 1. `content_updated_at` PE RUBRICI SI AUTORI ═══
+--
+-- Sitemapul lua data unei rubrici sau a unui autor NUMAI din articolele lor.
+-- Schimbi descrierea rubricii sau biografia autorului — pagina se schimba pentru
+-- cititor — iar `lastModified` ramanea la data ultimului articol.
+--
+-- ⚠ REMEDIUL CERUT DE AUDIT ERA GRESIT: sa se foloseasca `updated_at`. Regula
+-- „`updated_at` nu ajunge la Google" e scrisa in PATRU locuri din depozit, iar
+-- pentru articole s-a platit o coloana noua plus un declansator care enumera 15
+-- coloane, tocmai ca sa se deosebeasca o editare de o bifa. `set_updated_at()` e
+-- neconditionat, iar `blog_actualizeaza_taxonomia` scria 6 coloane fara niciun
+-- `is distinct from` — deci exact ce a luat auditul drept atu era raspunderea.
+--
+-- Taxonomiile au primit acum acelasi lucru: o data care se misca DOAR cand se
+-- schimba un camp pe care pagina chiar il arata. `sort_order` si `user_id` sunt
+-- lasate dinadins afara — nu se vad nicaieri public.
+--
+--
+-- ═══ 2. DREPTURI DE PRISOS ═══
+--
+-- `anon` si `authenticated` aveau REFERENCES si TRIGGER pe toate cele 9 tabele
+-- de blog, si EXECUTE pe `blog_continut_atins()`.
+--
+-- ⚠ NU E O GAURA: amandoua cer DDL, iar PostgREST nu emite DDL si `anon` n-are
+-- `CREATE` pe schema. S-a luat fiindca aplicatia publica nu le foloseste.
+--
+-- ⚠ REVOCAREA CERUTA DE AUDIT ERA UN NO-OP PE FUNCTIE. Ea zicea
+-- `revoke ... from anon, authenticated`, dar `blog_continut_atins` are grant si
+-- catre `PUBLIC` (`=X/postgres`), de unde `anon` mosteneste oricum. Verificat cu
+-- `aclexplode`. S-a revocat si de la `PUBLIC`.
+--
+-- ⚠ `set_updated_at` NU S-A ATINS, desi are aceeasi forma: e folosita de toata
+-- platforma, castigul e acelasi zero, raza de actiune e cu totul alta.
+--
+-- ⚠ SI S-A PROBAT CE CONTEAZA MAI MULT DECAT REVOCAREA: ca declansatoarele merg
+-- mai departe dupa ea (sectiunea G). O revocare care opreste un declansator ar
+-- fi mai rea decat drepturile de prisos.
+--
+--
+-- ═══ CE S-A SCHIMBAT IN COD, FARA SCHEMA ═══
+--
+-- ── Inchiderile stricate se indreapta inaintea curatarii ──
+-- `src/lib/utils/inchideri-malformate.ts`, chemat la toate cele 5 intrari de
+-- sanitizer. Ingust dinadins: cere BARA inaintea lui `>`, ca sa nu atinga
+-- `<style>a::before{content:"</div>"}</style>` — adica CSS-ul comerciantului.
+--
+-- ── Citirile din redactori si abonati ──
+-- `cereAdmin` s-a mutat in `src/lib/blog/admin-db.ts` (un fisier `"use server"`
+-- are voie sa exporte numai functii asincrone, de aceea nu putea fi impartit).
+-- Citirile din componente de server arunca; actiunile chemate din client intorc
+-- `{ error }` — altfel omul primeste eroarea generica a unei actiuni de server
+-- in loc de propozitia scrisa pentru el.
+--
+-- ⚠ SI UN DEFECT CARE SE APRINDEA CU BAZA SANATOASA, negasit de audit:
+-- `listeazaAbonati` cerea `range(de_la, …)` dintr-un `?p=` venit din adresa.
+-- Peste sfarsitul listei, PostgREST raspunde 416/`PGRST103`, iar `postgrest-js`
+-- citeste `count` doar cand raspunsul e bun — deci arunca si numarul primit in
+-- `Content-Range`. Ecranul scria in acelasi timp „N abonati confirmati" si
+-- „Niciun abonat inca", cu paginatia disparuta. Probat pe productie cu o citire.
+-- Reparat cu `fereastraPaginii()` din `src/lib/paginare.ts`, care numara intai.
+--
+-- ⚠ `stergeAbonat` verifica acum si CATE randuri a atins. Regula era deja scrisa
+-- in `blog-redactori.actions.ts` — „«Fara eroare» NU inseamna «s-a schimbat
+-- ceva»" — dar aplicata pe jumatate.
+--
+--
+-- ═══ CE S-A VERIFICAT SI NU S-A SCHIMBAT ═══
+--
+--   * ROTIREA JETONULUI DE DEZABONARE la reabonare. Hotararea e scrisa in
+--     `2026-08-30_blog_abonati_jetoane_si_dezabonare.sql`, cu riscul cantarit:
+--     jetonul sta in clar fiindca trebuie sa intre in fiecare email, iar cu el
+--     „scoti pe cineva de pe o lista pe care SE POATE REINSCRIE". Rotirea ar rupe
+--     legaturile din emailurile deja trimise. Tiparul platformei
+--     (`recovery-unsubscribe.ts`) e un HMAC determinist, permanent dinadins.
+--
+--   * PLAFON DURABIL PE DEZABONARE. Jetonul are 192 de biti, `anon` n-are EXECUTE
+--     pe functie, si exista deja un plafon local. Un plafon durabil ar putea opri
+--     un om care chiar vrea sa iasa — mai multi in spatele aceluiasi IP, o firma,
+--     un operator mobil. Cine nu poate iesi apasa „Raporteaza ca spam".
+--
+--   * COMENTARIILE DESPRE `server-only`. Auditul le cere schimbate a doua oara.
+--     Sunt adevarate a doua oara: propozitia „Pachetul nu e o dependinta instalata"
+--     se refera la `server-only`, care intr-adevar NU e in package.json — Next il
+--     rezolva printr-un alias de compilator. Nu are legatura cu `sanitize-html`.
+--
+--   * DEDUPLICAREA CITIRILOR DE RUBRICA SI AUTOR. Auditul spune „fiecare apel
+--     inseamna o interogare noua". Nu e adevarat: Next inlocuieste `fetch`-ul
+--     global cu un invelis de deduplicare per cerere, iar supabase-js trece prin
+--     el. Ramane adevarat ca pagina de rubrica citeste TOATE rubricile ca sa
+--     gaseasca una — dar o data pe cerere, nu de doua ori.
+--
+--   * TRIMITEREA NEWSLETTERULUI. Chiar nu exista, si nici nu trebuie inventata
+--     acum: e o hotarare de produs (furnizor propriu sau ESP), nu un defect.
+--     Ramane de facut inainte de prima campanie.

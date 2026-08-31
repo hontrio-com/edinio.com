@@ -1,5 +1,7 @@
 import sanitizeHtmlLib from "sanitize-html";
 
+import { indreaptaInchiderile } from "@/lib/utils/inchideri-malformate";
+
 /**
  * Descrierea produsului, pregatita pentru eMAG.
  *
@@ -43,7 +45,7 @@ const MAXIM = 16_777_215;
 export function descriereaPentruEmag(brut: string | null | undefined): string | undefined {
   if (!brut) return undefined;
 
-  const curat = sanitizeHtmlLib(brut, {
+  const curat = sanitizeHtmlLib(indreaptaInchiderile(brut), {
     allowedTags: INGADUITE,
     /* ⚠ NICIUN atribut. Nici `style`, nici `class`, nici `id`. Vezi antetul. */
     allowedAttributes: {},

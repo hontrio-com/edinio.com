@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { paginiDeSite, PUSE_SEPARAT } from "./sitemap";
+import { paginiDeSite, PUSE_SEPARAT, dataTaxonomiei } from "./sitemap";
 import {
   COMPETITORS,
   INDUSTRIES,
@@ -84,4 +84,45 @@ test("toate sunt cai, nu adrese intregi", () => {
     assert.ok(cale.startsWith("/"), `${cale} nu incepe cu /`);
     assert.ok(!cale.includes("://"), `${cale} e adresa intreaga, nu cale`);
   }
+});
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  DATA UNEI PAGINI DE RUBRICĂ SAU DE AUTOR (31.08.2026)
+  ═══════════════════════════════════════════════════════════════════════════
+
+  ⚠ PÂNĂ ACUM SE LUA NUMAI DIN ARTICOLE. Dar pagina rubricii își arată
+  descrierea, iar pagina autorului biografia, rolul și poza. Schimbi biografia —
+  pagina chiar s-a schimbat — iar sitemapul rămânea la data ultimului articol,
+  deci Google nu afla niciodată.
+
+  ⚠ ȘI NU SE IA `updated_at`, care se mută la orice atingere administrativă.
+  Taxonomiile au primit `content_updated_at`, mișcat doar de câmpuri pe care
+  cititorul le vede. Regula stă în `blog_actualizeaza_taxonomia` și e probată în
+  `scripts/tests/blog-integrare.sql`, secțiunea T.
+*/
+
+const ART = (content_updated_at: string, published_at: string) => ({ content_updated_at, published_at });
+
+test("data taxonomiei o bate pe a articolelor când e mai nouă", () => {
+  const d = dataTaxonomiei("2026-08-31T10:00:00.000Z", [ART("2026-08-01T00:00:00.000Z", "2026-08-01T00:00:00.000Z")]);
+  assert.equal(d.toISOString(), "2026-08-31T10:00:00.000Z");
+});
+
+test("articolul mai nou o bate pe a taxonomiei", () => {
+  const d = dataTaxonomiei("2026-08-01T00:00:00.000Z", [ART("2026-08-30T09:00:00.000Z", "2026-08-02T00:00:00.000Z")]);
+  assert.equal(d.toISOString(), "2026-08-30T09:00:00.000Z");
+});
+
+test("fără data taxonomiei se cade înapoi pe articole", () => {
+  const d = dataTaxonomiei(null, [ART("2026-08-30T09:00:00.000Z", "2026-08-02T00:00:00.000Z")]);
+  assert.equal(d.toISOString(), "2026-08-30T09:00:00.000Z");
+});
+
+test("o dată stricată nu produce `Invalid Date` în sitemap", () => {
+  /* ⚠ `lastModified` ajunge la `toISOString()` în XML. Un `Invalid Date` acolo
+     ar arunca, deci ar strica sitemapul ÎNTREG pentru o singură rubrică. */
+  const d = dataTaxonomiei("nu-e-o-data", [ART("2026-08-30T09:00:00.000Z", "2026-08-02T00:00:00.000Z")]);
+  assert.ok(!Number.isNaN(d.getTime()), "a ieșit Invalid Date");
+  assert.equal(d.toISOString(), "2026-08-30T09:00:00.000Z");
 });

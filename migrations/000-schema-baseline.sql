@@ -1866,6 +1866,39 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.blog_sterge_eticheta(p_id uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+AS $function$
+declare v_articole uuid[];
+begin
+  select coalesce(array_agg(distinct pt.post_id), array[]::uuid[])
+    into v_articole
+    from public.blog_post_tags pt
+   where pt.tag_id = p_id;
+
+  -- Blocaj in ordine dupa `id`, ca doua stergeri deodata sa nu se incaiere.
+  perform 1 from public.blog_posts p
+   where p.id = any(v_articole)
+   order by p.id
+     for update;
+
+  delete from public.blog_tags where id = p_id;
+  if not found then return false; end if;
+
+  -- ⚠ `content_updated_at` SE SCRIE AICI, ANUME. Declansatorul `blog_continut_atins`
+  -- se uita numai la campuri de pe randul articolului si nu stie de etichete, deci
+  -- n-ar porni. Iar eticheta chiar dispare de sub articol si de pe pagina ei.
+  update public.blog_posts
+     set edit_version       = edit_version + 1,
+         content_updated_at = now()
+   where id = any(v_articole);
+
+  return true;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.blog_sterge_taxonomia(p_fel text, p_id uuid)
  RETURNS boolean
  LANGUAGE plpgsql
@@ -1875,16 +1908,37 @@ begin
   if p_fel = 'categorie' then
     select slug into v_slug from public.blog_categories where id = p_id for update;
     if not found then return false; end if;
-    delete from public.blog_redirects where fel = 'categorie' and (to_slug = v_slug or from_slug = v_slug);
+
+    perform 1 from public.blog_posts p where p.category_id = p_id order by p.id for update;
+    update public.blog_posts
+       set category_id  = null,
+           edit_version = edit_version + 1
+     where category_id = p_id;
+
+    -- In amandoua sensurile: si redirectarile CATRE slugul care dispare, si cele
+    -- DE LA el. Altfel ar ramane una care duce intr-un zid.
+    delete from public.blog_redirects
+     where fel = 'categorie' and (to_slug = v_slug or from_slug = v_slug);
     delete from public.blog_categories where id = p_id;
+
   elsif p_fel = 'autor' then
     select slug into v_slug from public.blog_authors where id = p_id for update;
     if not found then return false; end if;
-    delete from public.blog_redirects where fel = 'autor' and (to_slug = v_slug or from_slug = v_slug);
+
+    perform 1 from public.blog_posts p where p.author_id = p_id order by p.id for update;
+    update public.blog_posts
+       set author_id    = null,
+           edit_version = edit_version + 1
+     where author_id = p_id;
+
+    delete from public.blog_redirects
+     where fel = 'autor' and (to_slug = v_slug or from_slug = v_slug);
     delete from public.blog_authors where id = p_id;
+
   else
     raise exception 'fel necunoscut: %', p_fel;
   end if;
+
   return true;
 end;
 $function$
@@ -8238,9 +8292,15 @@ create policy blog_post_tags_public_read on public.blog_post_tags as PERMISSIVE 
    FROM blog_posts p
   WHERE ((p.id = blog_post_tags.post_id) AND (p.status = 'published'::text) AND (p.published_at IS NOT NULL) AND (p.published_at <= now())))));
 create policy blog_posts_public_read on public.blog_posts as PERMISSIVE for SELECT to anon, authenticated using (((status = 'published'::text) AND (published_at IS NOT NULL) AND (published_at <= now())));
-create policy blog_redirects_public_read on public.blog_redirects as PERMISSIVE for SELECT to anon, authenticated using (((fel <> 'articol'::text) OR (EXISTS ( SELECT 1
+create policy blog_redirects_public_read on public.blog_redirects as PERMISSIVE for SELECT to anon, authenticated using ((((fel = 'articol'::text) AND (EXISTS ( SELECT 1
    FROM blog_posts p
-  WHERE ((p.slug = blog_redirects.to_slug) AND (p.status = 'published'::text) AND (p.published_at IS NOT NULL) AND (p.published_at <= now()))))));
+  WHERE ((p.slug = blog_redirects.to_slug) AND (p.status = 'published'::text) AND (p.published_at IS NOT NULL) AND (p.published_at <= now()))))) OR ((fel = 'categorie'::text) AND (EXISTS ( SELECT 1
+   FROM (blog_categories c
+     JOIN blog_posts p ON ((p.category_id = c.id)))
+  WHERE ((c.slug = blog_redirects.to_slug) AND (p.status = 'published'::text) AND (p.published_at IS NOT NULL) AND (p.published_at <= now()))))) OR ((fel = 'autor'::text) AND (EXISTS ( SELECT 1
+   FROM (blog_authors a
+     JOIN blog_posts p ON ((p.author_id = a.id)))
+  WHERE ((a.slug = blog_redirects.to_slug) AND (p.status = 'published'::text) AND (p.published_at IS NOT NULL) AND (p.published_at <= now())))))));
 create policy blog_tags_public_read on public.blog_tags as PERMISSIVE for SELECT to anon, authenticated using ((EXISTS ( SELECT 1
    FROM (blog_post_tags pt
      JOIN blog_posts p ON ((p.id = pt.post_id)))
@@ -10574,6 +10634,7 @@ grant execute on function public.blog_o_singura_vitrina() to service_role;
 grant execute on function public.blog_restaureaza_versiune(p_articol uuid, p_versiune uuid, p_versiune_asteptata bigint, p_salvat_de uuid, p_minute integer, p_versiuni integer) to service_role;
 grant execute on function public.blog_salveaza_articol(p_id uuid, p_rand jsonb, p_etichete jsonb, p_salvat_de uuid, p_versiuni integer, p_versiune_asteptata bigint, p_creeaza_versiune boolean) to service_role;
 grant execute on function public.blog_sterge_articol(p_id uuid) to service_role;
+grant execute on function public.blog_sterge_eticheta(p_id uuid) to service_role;
 grant execute on function public.blog_sterge_taxonomia(p_fel text, p_id uuid) to service_role;
 grant execute on function public.blog_subiectele_autorului(p_autor uuid) to anon;
 grant execute on function public.blog_subiectele_autorului(p_autor uuid) to authenticated;
@@ -10732,8 +10793,8 @@ grant execute on function public.unaccent(regdictionary, text) to anon;
 grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(regdictionary, text) to authenticated;
-grant execute on function public.unaccent(text) to service_role;
 grant execute on function public.unaccent(regdictionary, text) to service_role;
+grant execute on function public.unaccent(text) to service_role;
 grant execute on function public.unaccent_init(internal) to anon;
 grant execute on function public.unaccent_init(internal) to authenticated;
 grant execute on function public.unaccent_init(internal) to service_role;
@@ -10791,6 +10852,7 @@ revoke execute on function public.blog_o_singura_vitrina() from public;
 revoke execute on function public.blog_restaureaza_versiune(p_articol uuid, p_versiune uuid, p_versiune_asteptata bigint, p_salvat_de uuid, p_minute integer, p_versiuni integer) from public;
 revoke execute on function public.blog_salveaza_articol(p_id uuid, p_rand jsonb, p_etichete jsonb, p_salvat_de uuid, p_versiuni integer, p_versiune_asteptata bigint, p_creeaza_versiune boolean) from public;
 revoke execute on function public.blog_sterge_articol(p_id uuid) from public;
+revoke execute on function public.blog_sterge_eticheta(p_id uuid) from public;
 revoke execute on function public.blog_sterge_taxonomia(p_fel text, p_id uuid) from public;
 revoke execute on function public.catalog_aplica_proiectii(p_randuri jsonb) from public;
 revoke execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) from public;

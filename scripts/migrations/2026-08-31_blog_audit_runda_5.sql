@@ -1,0 +1,181 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BLOG — RUNDA A CINCEA DE AUDIT, 31.08.2026
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- ⚠ ADEVARUL REPRODUCTIBIL E `migrations/000-schema-baseline.sql`. Aici se scrie
+-- CE s-a schimbat si DE CE. Corpurile functiilor nu se copiaza in fisiere cu data.
+--
+-- Invariantele sunt probate de `scripts/tests/blog-integrare.sql`, sectiunea N,
+-- care intreaba BAZA — nu fisierul de fata.
+--
+-- ⚠ CUM AM VERIFICAT AUDITUL. Cele noua constatari au fost date fiecare unui
+-- verificator separat, cu acces DOAR de citire, si cu dovada ceruta: cale si
+-- linie pentru cod, interogarea rulata pentru baza. Ce a iesit adevarat a mai
+-- primit trei incercari de daramare, fiecare cu alta lentila. Dintre cele care
+-- au cazut la daramare, doua au schimbat ce am facut — sunt scrise la capat.
+--
+--
+-- ═══ INVARIANTUL, SCRIS O DATA ═══
+--
+--   Orice schimbare pe care o VEDE CITITORUL trebuie sa creasca `edit_version`.
+--
+-- Pana acum numarul crestea doar cand articolul era scris prin
+-- `blog_salveaza_articol`, `blog_creeaza_articol`, `blog_restaureaza_versiune`
+-- sau prin declansatorul de vitrina. Regula era deja scrisa in depozit, in
+-- comentariul lui `blog_o_singura_vitrina`: o schimbare laterala pe `blog_posts`
+-- trebuie sa creasca numarul, altfel o fila veche o rastoarna fara sa afle
+-- nimeni. Se aplica acum si celorlalte doua cai.
+--
+--
+-- ═══ 1. STERGEREA UNEI ETICHETE (cea mai grava) ═══
+--
+-- `stergeEticheta` facea DELETE direct pe `blog_tags` din actiunea de server.
+-- Cheia straina `blog_post_tags.tag_id` e `on delete cascade`, deci legatura
+-- articol-eticheta disparea — dar articolul nu primea nici versiune noua, nici
+-- data noua de continut.
+--
+-- Lantul, verificat veriga cu veriga pe baza de productie:
+--   a) actiunea sterge direct, fara sa atinga `blog_posts`;
+--   b) cheia straina e cascada (confirmat in `pg_constraint`, confdeltype='c');
+--   c) pe `blog_post_tags` si `blog_tags` NU exista niciun declansator scris de
+--      noi — cele 6 de acolo sunt toate interne, de integritate referentiala;
+--   d) `blog_salveaza_articol` face `insert into blog_tags ... on conflict (slug)
+--      do nothing`, deci RECREEAZA eticheta stearsa.
+--
+-- ⚠ MAI GRAV DECAT SPUNEA AUDITUL: nu e nevoie de nicio apasare. Editorul
+-- salveaza singur la 30 de secunde cand are ceva nesalvat, deci o fila lasata
+-- deschisa reinvie eticheta de la sine.
+--
+-- Acum totul sta intr-o singura tranzactie, in `blog_sterge_eticheta(p_id)`:
+-- lista articolelor atinse se ia INAINTE de stergere (dupa ea, cascada i-ar fi
+-- sters urma), randurile se blocheaza in ordine dupa `id`, iar la final primesc
+-- `edit_version + 1` si `content_updated_at = now()`.
+--
+-- ⚠ CE SPUNEA AUDITUL SI NU ERA ADEVARAT: ca `content_updated_at` ramanea vechi
+-- pentru totdeauna. Nu ramanea — `blog_salveaza_articol` compara SETURILE de
+-- etichete (vechi fata de nou) si muta data la prima salvare. Deci „Actualizat"
+-- se repara singur; ce nu se repara singur era versiunea.
+--
+--
+-- ═══ 2. STERGEREA UNUI AUTOR SAU A UNEI RUBRICI ═══
+--
+-- Cheile straine sunt `on delete set null`, iar declansatorul `blog_continut_atins`
+-- vede golirea (author_id si category_id sunt in lista lui de campuri) si muta
+-- `content_updated_at`. Jumatate din treaba se facea deci singura. Ce lipsea era
+-- `edit_version`.
+--
+-- `blog_sterge_taxonomia` goleste acum legatura ea insasi, cu `edit_version + 1`
+-- in acelasi UPDATE. Declansatorul se aprinde singur, deci data nu se scrie de
+-- doua ori. Cheia straina ramane ca plasa pentru orice alt drum.
+--
+--
+-- ═══ 3. REDIRECTARILE TAXONOMIILOR ═══
+--
+-- `blog_redirects_public_read` avea `fel <> 'articol' OR (articolul tinta e
+-- publicat)`. Pentru articole se cerea o tinta vizibila; pentru rubrici si autori
+-- nu se cerea nimic. Dupa ce runda a patra a ascuns taxonomiile fara continut
+-- public, asimetria expunea slugul unei rubrici nepublicate, iar adresa veche
+-- raspundea 308 catre o pagina care da 404.
+--
+-- Politica cere acum, pentru fiecare `fel`, ca tinta sa aiba continut public.
+--
+-- ⚠ ZERO EXPUNERE AZI: productia are 0 redirectari, 0 rubrici si 0 autori. S-a
+-- reparat fiindca e o nepotrivire intre doua reguli care spun acelasi lucru.
+-- ⚠ SI PROBA MERGE IN AMBELE SENSURI (N4b): fara ea, o politica `using (false)`
+-- ar fi trecut si ar fi stricat TOATE redirectarile.
+--
+--
+-- ═══ CE S-A SCHIMBAT IN COD, FARA SCHEMA ═══
+--
+-- ── Citirile de administrare inghiteau erorile bazei ──
+--
+-- Treisprezece citiri faceau `data ?? []`, `?? null` sau `?? 0` fara sa se uite
+-- la `error`. Adminul vedea „nu ai niciun autor" in timp ce baza avea doisprezece.
+-- Trec acum printr-un `cereAdmin()` care ARUNCA — fratele lui `cere()` din
+-- `citire.ts`, pus acolo in runda a patra din acelasi motiv.
+--
+-- ⚠ CEA MAI GRAVA DINTRE ELE, si e o schimbare de purtare, nu doar de mesaj:
+-- `articoleAleAutorului` si `articoleAleCategoriei` sunt chemate INAINTE de
+-- stergere, ca sa intrebe „raman 30 de articole fara autor, continui?". Cu
+-- `count ?? 0`, o cadere de o clipa arata exact ca „nu atarna nimic": ramura de
+-- avertisment se sarea si omul primea intrebarea blanda. Intorc acum
+-- `{ ok: false, motiv }`, iar ecranele REFUZA stergerea cand numarul nu se stie.
+--
+-- ── Newsletterul confunda jetonul invalid cu o cadere ──
+--
+-- Confirmarea si dezabonarea intorceau `boolean`, deci „jetonul nu e bun" si
+-- „baza n-a raspuns" ajungeau la acelasi text. La dezabonare asta e mai mult
+-- decat suparator: omul a cerut anume sa nu mai primeasca emailuri, i se spune
+-- ca legatura lui nu e buna, si urmatoarea apasare nu e „incearca din nou", e
+-- „Raporteaza ca spam". Acum sunt trei stari, iar la starea „temporar" butonul
+-- RAMANE pe ecran — acolo e toata deosebirea. Esecul de dezabonare se scrie in
+-- jurnal ca `critical`.
+--
+-- ⚠ TIPARUL EXISTA DEJA IN PLATFORMA, la `api/recovery/unsubscribe`. Blogul se
+-- aliniaza la el, nu inventeaza altul.
+--
+-- ⚠ SI PLAFOANELE INTRA LA „TEMPORAR". Cine a incercat prea des n-are un jeton
+-- stricat, are de asteptat — inainte i se spunea tot ca legatura a expirat.
+--
+-- ── Doua comentarii care minteau ──
+--
+--   * pe `ArticolInput.edit_version` scria „`undefined` sare peste verificare —
+--     dinadins, pentru unelte si reparatii". Descria chiar portita astupata in
+--     runda a patra. Campul ramane optional din alt motiv: `ArticolInput` e
+--     folosit si de `creeazaArticol`, unde nu exista versiune de la care sa pleci.
+--
+--   * in `reimprospateaza()` scria „paginile sunt prerandate". MASURAT: dintre
+--     toate rutele de blog, singura prerandata e `/blog/feed`. `/blog`,
+--     `/blog/cautare` si paginile de rubrica, autor si eticheta citesc
+--     `searchParams`; `/blog/[slug]` n-are nici `generateStaticParams`, nici
+--     `dynamic = "force-static"`. Randurile raman, dar pentru celalalt motiv:
+--     fluxul RSS are `revalidate = 3600`.
+--
+-- ── `sanitize-html` are acum versiune fixa ──
+--
+-- `"^2.17.5"` a devenit `"2.17.5"`. Nu e o masura de securitate: am rulat cele
+-- patru sarcini din 2026 prin toate cele trei curatatoare si toate ies curate,
+-- fiindca niciuna din configuratiile noastre nu permite `svg`, `math`, `textarea`
+-- sau `xmp` — preconditia ocolirilor reparate in 2.17.6.
+--
+-- E o masura de STABILITATE: 2.17.7 aduce `htmlparser2` ca ESM, iar pachetul e in
+-- `serverExternalPackages`, deci Next il cere cu `require()` la RULARE si nu la
+-- construire. Asa a cazut platforma pe 30.08: 56 de erori, 21 de oameni, build
+-- verde. Cu `^`, orice `npm update` ar fi readus tacut chiar versiunea aceea.
+--
+-- ⚠ E SINGURA EXCEPTIE DE LA `^` DIN DEPOZIT, si are temei scris: stim care
+-- versiune cade si de ce. Pinul e pazit de `src/lib/pachete-externe.test.ts`,
+-- care verifica si ca fiecare pachet extern chiar se poate CERE — plasa pe care
+-- n-o aveam pe 30 august.
+--
+-- ── Probele sanitizerului ──
+--
+-- Auditul cerea probe de regresie pentru curatatorul BLOGULUI. Cautandu-le, am
+-- gasit ceva mai supărator: `src/lib/utils/sanitize-html.ts` — cel prin care
+-- trece textul scris de COMERCIANTI — n-avea NICIUN fisier de proba. Ordinea era
+-- pe dos fata de risc: articolele le scriem noi, descrierile de produse le scriu
+-- sute de oameni pe care nu i-am vazut.
+--
+-- Amandoua au acum sarcinile din 2026, plus un martor care cere ca functia sa
+-- lase ceva in urma la text bun — fara el, probele ar fi verzi si pe o functie
+-- care intoarce mereu sirul gol.
+--
+--
+-- ═══ CE AM VERIFICAT SI N-AM SCHIMBAT ═══
+--
+--   * Vulnerabilitatile XSS din 2.17.6 NU ne ating: niciuna din cele patru
+--     configuratii de sanitizer nu permite `svg`, `math`, `textarea` sau `xmp`.
+--     Verificat prin RULARE, nu prin citirea listei albe.
+--
+--   * `next` chiar e 16.3.3, si in `package.json`, si in lockfile, si instalat.
+--
+--   * Despartirea lui `ArticolInput` in `ArticolNouInput` / `ArticolUpdateInput`,
+--     ceruta de audit, ar atinge 11 locuri si ar muta o verificare de rulare in
+--     tipuri. Verificarea de rulare ramane oricum obligatorie, fiindca actiunea
+--     de server e o adresa POST — deci castigul e ca greseala se scrie mai greu,
+--     nu ca devine imposibila. Nefacuta acum: e polish, si atinge mult.
+--
+--   * Cache-ul persistent pentru paginile publice, cerut ca imbunatatire de
+--     performanta. Nefacut: e o hotarare despre cat de repede apare un articol
+--     programat, nu un defect. Datele masurate sunt scrise mai sus, ca sa se
+--     poata lua hotararea fara sa fie masurate din nou.

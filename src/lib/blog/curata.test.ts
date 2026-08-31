@@ -160,3 +160,35 @@ test("un domeniu care se termina in edinio.com nu e edinio.com", () => {
   assert.equal(esteInAfara("https://notedinio.com/ceva"), true);
   assert.equal(esteInAfara("https://blog.edinio.com/ceva"), false);
 });
+
+/*
+  ── Sarcinile din 2026 ───────────────────────────────────────────────────
+
+  `sanitize-html` 2.17.6 a reparat doua ocoliri care cer ca `svg`/`math` ori
+  `textarea`/`xmp` sa fie PERMISE in configuratie. Configuratia articolului nu le
+  permite, deci nu suntem atinsi — dar asta e o ALEGERE, nu o lege, si nimic n-o
+  pazea. Cineva adauga `svg` pentru o iconita in editor si nimic nu-l opreste.
+
+  ⚠ SE VERIFICA CE IESE, nu ce scrie in lista. O proba care ar citi `allowedTags`
+  si ar spune „nu contine svg" ar confirma lista, nu ca sarcina chiar moare.
+
+  ⚠ FRATELE LOR STA IN `src/lib/utils/sanitize-html.test.ts`, si acolo conteaza
+  mai mult: prin curatatorul comun trece textul scris de COMERCIANTI.
+*/
+const SARCINI_2026: [string, string][] = [
+  ["svg + textarea", '<svg><textarea><img src=x onerror=alert(1)></textarea></svg>'],
+  ["textarea inchis gresit", '<textarea></textarea/><img src=x onerror=alert(1)>'],
+  ["math + mglyph", '<math><mglyph><style><img src=x onerror=alert(1)></style></mglyph></math>'],
+  ["xmp", '<xmp><img src=x onerror=alert(1)></xmp>'],
+];
+
+for (const [nume, sarcina] of SARCINI_2026) {
+  test(`sarcina 2026 „${nume}” nu lasa nimic executabil in articol`, () => {
+    const out = curataArticol(sarcina);
+    assert.ok(!/onerror/i.test(out), `a ramas un manuitor: ${out}`);
+    assert.ok(!/<svg/i.test(out), `a ramas svg: ${out}`);
+    assert.ok(!/<math/i.test(out), `a ramas math: ${out}`);
+    assert.ok(!/<textarea/i.test(out), `a ramas textarea: ${out}`);
+    assert.ok(!/<xmp/i.test(out), `a ramas xmp: ${out}`);
+  });
+}

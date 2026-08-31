@@ -28,6 +28,7 @@
 --   K  vitrina, revenirea si concurenta lor (runda a treia)
 --   L  usa directa prin REST e inchisa
 --   M  versiunea obligatorie, fixarea pastrata, etichetele si taxonomiile
+--   N  modificarile INDIRECTE cresc versiunea; redirectarile taxonomiilor
 --   J  nimic n-a ramas in urma
 --
 -- ═══ CUM SE RULEAZA ═══
@@ -933,6 +934,165 @@ begin
   raise notice '════ M: toate au trecut ════';
 end $;
 
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- N. MODIFICARILE INDIRECTE ALE ARTICOLULUI CRESC `edit_version`
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- ⚠ INVARIANTUL, SCRIS O DATA: orice schimbare pe care o VEDE CITITORUL trebuie
+-- sa creasca `edit_version`. Nu doar cele facute prin `blog_salveaza_articol`.
+--
+-- Pana pe 31.08.2026 numarul crestea numai la scrierea articolului. Dar articolul
+-- se schimba si altfel: stergi o eticheta si ea dispare de sub el; stergi un
+-- autor si semnatura se goleste. Fila deschisa a altcuiva nu afla nimic si scrie
+-- peste — iar la etichete e mai rau, fiindca salvarea REINVIE eticheta stearsa.
+do $do$
+declare aut uuid; cat uuid; et uuid; a uuid; v0 bigint; v1 bigint; d0 timestamptz; d1 timestamptz;
+begin
+  delete from public.blog_posts where slug like 'zz-n-%';
+  delete from public.blog_authors where slug like 'zz-n-%';
+  delete from public.blog_categories where slug like 'zz-n-%';
+  delete from public.blog_tags where slug like 'zz-n-%';
+  delete from public.blog_redirects where from_slug like 'zz-n-%' or to_slug like 'zz-n-%';
+
+  insert into public.blog_authors (slug,name) values ('zz-n-aut','Aut') returning id into aut;
+  insert into public.blog_categories (slug,name) values ('zz-n-cat','Cat') returning id into cat;
+  insert into public.blog_tags (slug,name) values ('zz-n-et','Et') returning id into et;
+  insert into public.blog_posts (slug,title,content_html,status,published_at,author_id,category_id)
+    values ('zz-n-art','Art','<p>x</p>','published', now()-interval '1 day', aut, cat) returning id into a;
+  insert into public.blog_post_tags (post_id,tag_id) values (a,et);
+
+  -- ── N1. Stergerea etichetei misca si versiunea, si data continutului ────
+  update public.blog_posts set content_updated_at = now()-interval '10 days' where id = a;
+  select edit_version, content_updated_at into v0, d0 from public.blog_posts where id = a;
+
+  if not public.blog_sterge_eticheta(et) then raise exception 'N1: functia a intors false'; end if;
+
+  select edit_version, content_updated_at into v1, d1 from public.blog_posts where id = a;
+  if v1 <> v0 + 1 then raise exception 'N1: versiunea NU a crescut (% -> %)', v0, v1; end if;
+  if d1 <= d0 then raise exception 'N1: content_updated_at NU s-a miscat'; end if;
+  if exists (select 1 from public.blog_post_tags where post_id = a) then
+    raise exception 'N1: legatura a ramas dupa stergere'; end if;
+  raise notice 'N1 stergerea etichetei: versiune % -> %, data mutata', v0, v1;
+
+  -- ── N1b. MIEZUL: fila veche e refuzata SI eticheta nu reinvie ───────────
+  --
+  -- Fara N1 inaintea ei, proba asta ar trece degeaba. Cu N1, e chiar lantul
+  -- care se rupea: eticheta stearsa reaparea la prima salvare a filei vechi.
+  begin
+    perform public.blog_salveaza_articol(a, '{}'::jsonb,
+      '[{"slug":"zz-n-et","name":"Et"}]'::jsonb, null, 50, v0, false);
+    raise exception 'N1b: fila veche A SCRIS, desi versiunea era depasita';
+  exception when sqlstate 'P0409' then null; end;
+
+  if exists (select 1 from public.blog_tags where slug = 'zz-n-et') then
+    raise exception 'N1b: eticheta a fost REINVIATA de fila veche';
+  end if;
+  raise notice 'N1b fila veche: P0409, iar eticheta ramane stearsa';
+
+  -- ── N2. Stergerea rubricii ──────────────────────────────────────────────
+  update public.blog_posts set content_updated_at = now()-interval '10 days' where id = a;
+  select edit_version, content_updated_at into v0, d0 from public.blog_posts where id = a;
+
+  if not public.blog_sterge_taxonomia('categorie', cat) then raise exception 'N2: a intors false'; end if;
+
+  select edit_version, content_updated_at, category_id into v1, d1, cat from public.blog_posts where id = a;
+  if v1 <> v0 + 1 then raise exception 'N2: versiunea NU a crescut (% -> %)', v0, v1; end if;
+  if d1 <= d0 then raise exception 'N2: content_updated_at NU s-a miscat'; end if;
+  if cat is not null then raise exception 'N2: category_id nu s-a golit'; end if;
+  raise notice 'N2 stergerea rubricii: % -> %', v0, v1;
+
+  begin
+    perform public.blog_salveaza_articol(a, jsonb_build_object('title','x'), null, null, 50, v0, false);
+    raise exception 'N2b: fila veche a scris dupa stergerea rubricii';
+  exception when sqlstate 'P0409' then raise notice 'N2b fila veche: P0409'; end;
+
+  -- ── N3. Stergerea autorului ─────────────────────────────────────────────
+  update public.blog_posts set content_updated_at = now()-interval '10 days' where id = a;
+  select edit_version, content_updated_at into v0, d0 from public.blog_posts where id = a;
+
+  if not public.blog_sterge_taxonomia('autor', aut) then raise exception 'N3: a intors false'; end if;
+
+  select edit_version, content_updated_at, author_id into v1, d1, aut from public.blog_posts where id = a;
+  if v1 <> v0 + 1 then raise exception 'N3: versiunea NU a crescut'; end if;
+  if d1 <= d0 then raise exception 'N3: data NU s-a miscat'; end if;
+  if aut is not null then raise exception 'N3: author_id nu s-a golit'; end if;
+  raise notice 'N3 stergerea autorului: % -> %', v0, v1;
+
+  delete from public.blog_posts where slug like 'zz-n-%';
+  delete from public.blog_authors where slug like 'zz-n-%';
+  delete from public.blog_categories where slug like 'zz-n-%';
+  delete from public.blog_tags where slug like 'zz-n-%';
+  delete from public.blog_redirects where from_slug like 'zz-n-%' or to_slug like 'zz-n-%';
+  raise notice '════ N1-N3: toate au trecut ════';
+end $do$;
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- N4. REDIRECTARILE TAXONOMIILOR SUNT LA FEL DE DISCRETE CA TAXONOMIILE
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Politica veche era `fel <> 'articol' OR (articolul tinta e publicat)`: pentru
+-- articole se cerea o tinta vizibila, pentru rubrici si autori NIMIC. Dupa ce am
+-- ascuns taxonomiile fara continut public (runda a patra), asimetria expunea
+-- slugul unei rubrici nepublicate si dadea 308 catre o pagina care raspunde 404.
+do $do$
+declare cat uuid; aut uuid; a uuid;
+begin
+  delete from public.blog_posts where slug like 'zz-r-%';
+  delete from public.blog_categories where slug like 'zz-r-%';
+  delete from public.blog_authors where slug like 'zz-r-%';
+  delete from public.blog_redirects where from_slug like 'zz-r-%' or to_slug like 'zz-r-%';
+
+  insert into public.blog_categories (slug,name) values ('zz-r-nou','Rubrica') returning id into cat;
+  insert into public.blog_authors (slug,name) values ('zz-r-anou','Autor') returning id into aut;
+  insert into public.blog_redirects (fel,from_slug,to_slug) values ('categorie','zz-r-vechi','zz-r-nou');
+  insert into public.blog_redirects (fel,from_slug,to_slug) values ('autor','zz-r-avechi','zz-r-anou');
+
+  set local role anon;
+  if exists (select 1 from public.blog_redirects where from_slug='zz-r-vechi') then
+    raise exception 'N4a: redirectarea unei RUBRICI fara articol public se vede'; end if;
+  if exists (select 1 from public.blog_redirects where from_slug='zz-r-avechi') then
+    raise exception 'N4a: redirectarea unui AUTOR fara articol public se vede'; end if;
+  reset role;
+  raise notice 'N4a fara continut public: redirectarile nu exista public';
+
+  insert into public.blog_posts (slug,title,content_html,status,published_at,category_id,author_id)
+    values ('zz-r-art','A','<p>x</p>','published', now()-interval '1 day', cat, aut) returning id into a;
+
+  -- ⚠ SENSUL AL DOILEA E OBLIGATORIU. Fara el, o politica `using (false)` ar
+  -- trece proba N4a si ar strica TOATE redirectarile, fara ca nimeni sa afle.
+  set local role anon;
+  if not exists (select 1 from public.blog_redirects where from_slug='zz-r-vechi') then
+    raise exception 'N4b: redirectarea rubricii NU se vede desi are articol public'; end if;
+  if not exists (select 1 from public.blog_redirects where from_slug='zz-r-avechi') then
+    raise exception 'N4b: redirectarea autorului NU se vede desi are articol public'; end if;
+  reset role;
+  raise notice 'N4b cu articol public: amandoua se vad';
+
+  update public.blog_posts set status='draft' where id = a;
+  set local role anon;
+  if exists (select 1 from public.blog_redirects where from_slug='zz-r-vechi') then
+    raise exception 'N4c: redirectarea a ramas vizibila dupa ce articolul a devenit ciorna'; end if;
+  reset role;
+  raise notice 'N4c articolul ascuns → redirectarea se ascunde';
+
+  -- ⚠ Ce mergea inainte trebuie sa mearga si dupa: politica a fost rescrisa
+  -- INTREAGA, deci ramura articolelor putea fi stricata fara sa observe nimeni.
+  update public.blog_posts set status='published' where id = a;
+  insert into public.blog_redirects (fel,from_slug,to_slug) values ('articol','zz-r-vart','zz-r-art');
+  set local role anon;
+  if not exists (select 1 from public.blog_redirects where from_slug='zz-r-vart') then
+    raise exception 'N4d: redirectarea de ARTICOL nu se mai vede — am stricat ce mergea'; end if;
+  reset role;
+  raise notice 'N4d redirectarea de articol merge mai departe';
+
+  delete from public.blog_posts where slug like 'zz-r-%';
+  delete from public.blog_categories where slug like 'zz-r-%';
+  delete from public.blog_authors where slug like 'zz-r-%';
+  delete from public.blog_redirects where from_slug like 'zz-r-%' or to_slug like 'zz-r-%';
+  raise notice '════ N4: toate au trecut ════';
+end $do$;
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- J. NIMIC NU A RAMAS IN URMA
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -940,6 +1100,11 @@ do $$
 declare n int := 0;
 begin
   select
+    (select count(*) from public.blog_posts       where slug like 'zz-n-%' or slug like 'zz-r-%')
+  + (select count(*) from public.blog_tags        where slug like 'zz-n-%')
+  + (select count(*) from public.blog_authors     where slug like 'zz-n-%' or slug like 'zz-r-%')
+  + (select count(*) from public.blog_categories  where slug like 'zz-n-%' or slug like 'zz-r-%')
+  + (select count(*) from public.blog_redirects   where from_slug like 'zz-n-%' or from_slug like 'zz-r-%')
     (select count(*) from public.blog_redirects   where from_slug like 'zz-m-%' or to_slug like 'zz-m-%')
   + (select count(*) from public.blog_posts       where slug like 'zz-m-%')
   + (select count(*) from public.blog_authors     where slug like 'zz-m-%')

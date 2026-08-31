@@ -5700,6 +5700,7 @@ export type Database = {
         Returns: number
       }
       blog_sterge_articol: { Args: { p_id: string }; Returns: boolean }
+      blog_sterge_eticheta: { Args: { p_id: string }; Returns: boolean }
       blog_sterge_taxonomia: { Args: { p_fel: string; p_id: string }; Returns: boolean }
       blog_subiectele_autorului: { Args: { p_autor: string }; Returns: { name: string }[] }
       /* Cele doua functii `security definer` de langa blog: `users_profile` NU tine

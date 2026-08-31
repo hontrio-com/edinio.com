@@ -52,6 +52,7 @@ export default async function DezabonarePage({ searchParams }: Props) {
             titluReusit="Gata, te-am scos"
             textReusit="Nu-ți mai trimitem noutățile blogului. Emailurile despre comenzile și contul tău nu au legătură cu lista aceasta și continuă să vină."
             textPicat="Legătura nu pare să fie a noastră sau e dintr-un email prea vechi. Dacă tot primești mesaje, scrie-ne și te scoatem noi."
+            textTemporar="Dezabonarea NU s-a înregistrat încă — n-am putut ajunge la baza noastră chiar acum. Mai apasă o dată; până reușește, se poate să mai primești un email."
           />
         ) : (
           <div className="text-center">

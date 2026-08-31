@@ -57,6 +57,48 @@ function blogDb() {
 }
 
 /**
+ * O citire de administrare care ARUNCĂ dacă baza a răspuns cu eroare.
+ *
+ * ⚠ FRATELE LUI `cere()` DIN `src/lib/blog/citire.ts`, ȘI E AICI DIN ACELAȘI
+ * MOTIV. Acolo, în runda a patra, toate cele 23 de citiri publice luau doar
+ * `data`: o bază căzută nu dădea o eroare, ci o listă goală — adică „articolul
+ * nu există", adică 404, adică Google scoate pagina din index.
+ *
+ * Aici păgubitul e altul, dar paguba e de aceeași formă: 13 citiri de
+ * administrare făceau `data ?? []`, `?? null` sau `?? 0`. Adminul se uita la un
+ * ecran care spunea „nu ai niciun autor" în timp ce baza avea doisprezece — și
+ * n-avea de unde să bănuiască, fiindcă un ecran gol arată exact ca un ecran
+ * gol pe drept.
+ *
+ * ⚠ SE ARUNCĂ, NU SE ÎNTOARCE O EROARE. Astea sunt citiri din componente de
+ * server: Next prinde aruncarea și arată marginea de eroare. „Nu am putut
+ * încărca acum" e un adevăr; „nu există nimic" e o minciună.
+ */
+function cereAdmin<T>(rezultat: { data: T; error: { message?: string } | null }, unde: string): T {
+  if (rezultat.error) {
+    throw new Error(
+      `[blog-admin] citirea „${unde}” a eșuat: ${rezultat.error.message ?? "eroare necunoscută"}. ` +
+        "Se aruncă dinadins: o listă goală ar fi arătat ca „nu există nimic”.",
+    );
+  }
+  return rezultat.data;
+}
+
+/**
+ * Câte articole atârnă de un autor sau de o rubrică — sau faptul că NU ȘTIM.
+ *
+ * ⚠ ZERO ȘI „NU ȘTIU" NU AU VOIE SĂ ARATE LA FEL, și ăsta e singurul loc din
+ * blog unde confuzia costa date.
+ *
+ * Ecranele de admin cheamă numărătoarea ÎNAINTE de ștergere, ca să întrebe
+ * „rămân 30 de articole fără autor, continui?". Când numărătoarea întorcea
+ * `count ?? 0`, o cădere de o clipă a bazei devenea `0`, ramura de avertisment
+ * se sărea, iar omul vedea întrebarea blândă „Ștergi autorul X?" — și confirma.
+ * Ștergerea de după putea foarte bine să reușească.
+ */
+export type Numaratoare = { ok: true; cate: number } | { ok: false; motiv: string };
+
+/**
  * Randul din baza, citit ca `ArticolBlog`.
  *
  * ⚠ CELE DOUA FORME CHIAR DIFERA, si e bine ca `tsc` o spune.
@@ -93,9 +135,22 @@ function reimprospateaza() {
   revalidatePath("/admin/blog/autori");
   revalidatePath("/admin/blog/categorii");
   /*
-    ⚠ ȘI PAGINILE PUBLICE. Fără rândurile astea, un articol publicat din admin
-    rămâne nevăzut pe site până la următoarea desfășurare: paginile sunt
-    prerandate, iar prerandarea nu află singură că s-a schimbat baza.
+    ⚠ ȘI PAGINILE PUBLICE.
+
+    ⚠ MOTIVUL SCRIS AICI ERA FALS, ȘI L-AM MĂSURAT PE 31.08.2026. Spunea
+    „paginile sunt prerandate, iar prerandarea nu află singură că s-a schimbat
+    baza". Dintre toate rutele de blog, SINGURA prerandată e `/blog/feed`:
+    `/blog`, `/blog/cautare` și paginile de rubrică, autor și etichetă citesc
+    `searchParams` (deci se randează la cerere), iar `/blog/[slug]` n-are nici
+    `generateStaticParams`, nici `dynamic = "force-static"`.
+
+    Rândurile rămân, și tot sunt necesare — dar pentru celălalt motiv: fluxul RSS
+    are `revalidate = 3600`, deci FĂRĂ ele un articol publicat acum ar apărea în
+    flux abia peste o oră. Iar dacă vreuna din rute devine cândva statică,
+    `revalidatePath` e deja la locul lui.
+
+    ⚠ DACĂ SCHIMBI CEVA AICI, măsoară, nu deduce: `npm run build` spune negru pe
+    alb ce e static (○), ce e prerandat (●) și ce se randează la cerere (ƒ).
   */
   revalidatePath("/blog");
   revalidatePath("/blog/[slug]", "page");
@@ -216,8 +271,8 @@ function preaMulteAdrese(adrese: string[] | undefined): string | null {
 
 export async function listeazaAutori(): Promise<AutorBlog[]> {
   if (!(await requireBlogEditorApi())) return [];
-  const { data } = await blogDb().from("blog_authors").select("*").order("name");
-  return (data ?? []) as AutorBlog[];
+  const { data, error } = await blogDb().from("blog_authors").select("*").order("name");
+  return (cereAdmin({ data, error }, "listeazaAutori") ?? []) as AutorBlog[];
 }
 
 export type AutorInput = {
@@ -388,25 +443,26 @@ export async function stergeAutor(id: string): Promise<Raspuns> {
 }
 
 /** Cate articole ar ramane fara autor. Se cere INAINTE de stergere, pentru avertisment. */
-export async function articoleAleAutorului(id: string): Promise<number> {
-  if (!(await requireAdminApi())) return 0;
-  const { count } = await blogDb()
+export async function articoleAleAutorului(id: string): Promise<Numaratoare> {
+  if (!(await requireAdminApi())) return { ok: false, motiv: "Neautorizat" };
+  const { count, error } = await blogDb()
     .from("blog_posts")
     .select("id", { count: "exact", head: true })
     .eq("author_id", id);
-  return count ?? 0;
+  if (error) return { ok: false, motiv: "Nu am putut număra articolele autorului." };
+  return { ok: true, cate: count ?? 0 };
 }
 
 // ── Categorii ────────────────────────────────────────────────────────────────
 
 export async function listeazaCategorii(): Promise<CategorieBlog[]> {
   if (!(await requireBlogEditorApi())) return [];
-  const { data } = await blogDb()
+  const { data, error } = await blogDb()
     .from("blog_categories")
     .select("*")
     .order("sort_order")
     .order("name");
-  return (data ?? []) as CategorieBlog[];
+  return (cereAdmin({ data, error }, "listeazaCategorii") ?? []) as CategorieBlog[];
 }
 
 export type CategorieInput = {
@@ -524,13 +580,14 @@ export async function stergeCategorie(id: string): Promise<Raspuns> {
 }
 
 /** Cate articole ar ramane fara categorie. */
-export async function articoleAleCategoriei(id: string): Promise<number> {
-  if (!(await requireAdminApi())) return 0;
-  const { count } = await blogDb()
+export async function articoleAleCategoriei(id: string): Promise<Numaratoare> {
+  if (!(await requireAdminApi())) return { ok: false, motiv: "Neautorizat" };
+  const { count, error } = await blogDb()
     .from("blog_posts")
     .select("id", { count: "exact", head: true })
     .eq("category_id", id);
-  return count ?? 0;
+  if (error) return { ok: false, motiv: "Nu am putut număra articolele rubricii." };
+  return { ok: true, cate: count ?? 0 };
 }
 
 
@@ -538,9 +595,9 @@ export async function articoleAleCategoriei(id: string): Promise<number> {
 /** Etichetele unui articol, pentru cand se deschide in editor. */
 export async function eticheteleArticolului(idArticol: string): Promise<string[]> {
   if (!(await requireBlogEditorApi())) return [];
-  const { data } = await blogDb()
+  const { data, error } = await blogDb()
     .from("blog_post_tags").select("blog_tags(name)").eq("post_id", idArticol);
-  return ((data ?? []) as Record<string, unknown>[])
+  return ((cereAdmin({ data, error }, "eticheteleArticolului") ?? []) as Record<string, unknown>[])
     .map((r) => {
       const t = Array.isArray(r.blog_tags) ? r.blog_tags[0] : r.blog_tags;
       return (t as { name?: string } | null)?.name ?? "";
@@ -582,13 +639,13 @@ export async function listeazaEtichete(
   const p = Number.isSafeInteger(pagina) && pagina >= 1 ? pagina : 1;
   const termen = (cauta ?? "").trim();
 
-  const { data } = await blogDb().rpc("blog_etichete_admin", {
+  const { data, error } = await blogDb().rpc("blog_etichete_admin", {
     p_de_la: (p - 1) * ETICHETE_PE_PAGINA,
     p_cate: ETICHETE_PE_PAGINA,
     p_cauta: termen ? pregatesteCautarea(termen) : null,
   });
 
-  const raspuns = (data ?? { randuri: [], total: 0 }) as {
+  const raspuns = (cereAdmin({ data, error }, "listeazaEtichete") ?? { randuri: [], total: 0 }) as {
     randuri: { id: string; slug: string; name: string; cate: number }[];
     total: number;
   };
@@ -608,15 +665,33 @@ export async function listeazaEtichete(
 }
 
 /**
- * Sterge o eticheta.
+ * Șterge o etichetă.
  *
- * Legaturile pica singure: cheia straina din `blog_post_tags` e
- * `on delete cascade`. Articolele raman neatinse.
+ * ⚠ NOTA DE AICI SPUNEA „ARTICOLELE RĂMÂN NEATINSE", ȘI ERA GREȘITĂ.
+ *
+ * Legăturile chiar cad singure — cheia străină e `on delete cascade` — dar exact
+ * asta ÎNSEAMNĂ că articolul s-a schimbat: eticheta dispare de sub el și de pe
+ * pagina ei. Ce rămânea neatins era `edit_version`, adică tocmai numărul care
+ * ar fi trebuit să spună că s-a schimbat ceva.
+ *
+ * Ce se întâmpla: un editor ține articolul deschis, cu eticheta încă în
+ * formular. Adminul o șterge. Versiunea nu se mișcă, deci salvarea editorului
+ * trece de blocajul optimist, iar `blog_salveaza_articol` o RECREEAZĂ prin
+ * `on conflict (slug) do nothing`. Ștergerea se anulează singură.
+ *
+ * Și nici măcar nu era nevoie de o apăsare: editorul salvează singur la 30 de
+ * secunde când are ceva nesalvat.
+ *
+ * Acum totul stă într-o singură tranzacție în baza de date: lista articolelor
+ * atinse se ia ÎNAINTE de ștergere (după ea, cascada le-ar fi șters urma),
+ * rândurile se blochează în ordine, iar la final primesc `edit_version + 1` și
+ * `content_updated_at = now()`. Fila veche primește atunci P0409, cum se cuvine.
  */
 export async function stergeEticheta(id: string): Promise<Raspuns> {
   if (!(await requireAdminApi())) return { error: "Neautorizat" };
-  const { error } = await blogDb().from("blog_tags").delete().eq("id", id);
-  if (error) return { error: "Nu s-a putut sterge. Incearca din nou." };
+  const { data: aSters, error } = await blogDb().rpc("blog_sterge_eticheta", { p_id: id });
+  if (error) return { error: "Nu s-a putut șterge. Încearcă din nou." };
+  if (aSters !== true) return { error: "Eticheta nu mai există." };
   reimprospateaza();
   return { success: true };
 }
@@ -697,12 +772,13 @@ export async function listeazaArticole(
   const p = Number.isSafeInteger(pagina) && pagina >= 1 ? pagina : 1;
   const termen = (cauta ?? "").trim();
 
-  const { data } = await blogDb().rpc("blog_articole_admin", {
+  const { data, error } = await blogDb().rpc("blog_articole_admin", {
     p_de_la: (p - 1) * ARTICOLE_PE_PAGINA,
     p_cate: ARTICOLE_PE_PAGINA,
     p_cauta: termen ? pregatesteCautarea(termen) : null,
     p_stare: stare ?? null,
   });
+  cereAdmin({ data, error }, "listeazaArticole");
 
   /*
     ⚠ TOTALUL VINE ALĂTURI DE RÂNDURI, NU PE ELE.
@@ -741,8 +817,11 @@ export async function listeazaArticole(
 }
 export async function iaArticol(id: string): Promise<ArticolBlog | null> {
   if (!(await requireBlogEditorApi())) return null;
-  const { data } = await blogDb().from("blog_posts").select("*").eq("id", id).single();
-  return data ? caArticol(data) : null;
+  const { data, error } = await blogDb().from("blog_posts").select("*").eq("id", id).maybeSingle();
+  /* ⚠ `maybeSingle()`, nu `single()`: acesta din urma pune EROARE cand nu gaseste
+     randul, deci „articolul nu exista" si „baza a cazut" ar fi sosit pe acelasi
+     drum — exact confuzia pe care `cereAdmin` o desface. */
+  return cereAdmin({ data, error }, "iaArticol") ? caArticol(data) : null;
 }
 
 /**
@@ -758,12 +837,12 @@ export async function iaArticol(id: string): Promise<ArticolBlog | null> {
  */
 export async function articolDePrevizualizat(id: string): Promise<ArticolPrevizualizat | null> {
   if (!(await requireBlogEditorApi())) return null;
-  const { data } = await blogDb()
+  const { data, error } = await blogDb()
     .from("blog_posts")
     .select("*, blog_authors(*), blog_categories(*)")
     .eq("id", id)
     .maybeSingle();
-  if (!data) return null;
+  if (!cereAdmin({ data, error }, "articolDePrevizualizat")) return null;
   const r = data as Record<string, unknown>;
   const unul = <T,>(v: unknown): T | null =>
     Array.isArray(v) ? ((v[0] as T) ?? null) : ((v as T) ?? null);
@@ -810,8 +889,16 @@ export type ArticolInput = {
    * nimic. Trimisa, baza refuza scrierea lui B cu `P0409` daca articolul s-a
    * schimbat intre timp.
    *
-   * `undefined` sare peste verificare — dinadins, pentru unelte si reparatii.
-   * Editorul o trimite mereu.
+   * ⚠ NOTA DE AICI SPUNEA „`undefined` sare peste verificare — dinadins, pentru
+   * unelte si reparatii". NU MAI E ADEVARAT, si nici nu era o idee buna: exact
+   * portita aceea a fost astupata pe 31.08.2026, fiindca actiunea trimitea
+   * `edit_version ?? null` si orice cerere careia ii lipsea campul stingea
+   * blocajul optimist. Acum `versiuneaCeruta` respinge `undefined`, iar baza
+   * ridica `P0400`.
+   *
+   * ⚠ CAMPUL RAMANE OPTIONAL DIN ALT MOTIV: `ArticolInput` e folosit si de
+   * `creeazaArticol`, care nu se uita deloc la el — un articol nou n-are de la ce
+   * versiune sa plece. La ACTUALIZARE e obligatoriu, si se cere la rulare.
    */
   edit_version?: number | null;
   /**
@@ -1142,9 +1229,9 @@ function dataLaPublicare(intrare: ArticolInput): string | null {
  * alege pe cine vrea.
  */
 async function autorulMeu(idCont: string): Promise<string | null> {
-  const { data } = await blogDb()
+  const { data, error } = await blogDb()
     .from("blog_authors").select("id").eq("user_id", idCont).maybeSingle();
-  return (data as { id: string } | null)?.id ?? null;
+  return (cereAdmin({ data, error }, "autorulMeu") as { id: string } | null)?.id ?? null;
 }
 
 export async function creeazaArticol(intrare: ArticolInput): Promise<RaspunsCu<{ id: string }>> {
@@ -1397,14 +1484,14 @@ export type VersiuneInLista = {
 */
 export async function listeazaVersiuni(idArticol: string): Promise<VersiuneInLista[]> {
   if (!(await requireBlogEditorApi())) return [];
-  const { data } = await blogDb()
+  const { data, error } = await blogDb()
     .from("blog_post_revisions")
     .select("id, title, content_html, created_at")
     .eq("post_id", idArticol)
     .order("created_at", { ascending: false })
     .limit(VERSIUNI_PASTRATE);
 
-  return ((data ?? []) as { id: string; title: string | null; content_html: string | null; created_at: string }[])
+  return ((cereAdmin({ data, error }, "listeazaVersiuni") ?? []) as { id: string; title: string | null; content_html: string | null; created_at: string }[])
     .map((v) => ({
       id: v.id,
       title: v.title,
@@ -1416,9 +1503,9 @@ export async function listeazaVersiuni(idArticol: string): Promise<VersiuneInLis
 /** Textul unei versiuni, pentru previzualizare. */
 export async function iaVersiune(id: string): Promise<{ title: string | null; content_html: string | null } | null> {
   if (!(await requireBlogEditorApi())) return null;
-  const { data } = await blogDb()
+  const { data, error } = await blogDb()
     .from("blog_post_revisions").select("title, content_html").eq("id", id).maybeSingle();
-  return (data as { title: string | null; content_html: string | null }) ?? null;
+  return (cereAdmin({ data, error }, "iaVersiune") as { title: string | null; content_html: string | null }) ?? null;
 }
 
 /**
@@ -1484,13 +1571,16 @@ export async function revinoLaVersiune(
   }
 
   /* ⚠ Și `post_id`, nu doar `id`. Vezi punctul 2 de mai sus. */
-  const { data: veche } = await blogDb()
+  const { data: veche, error: eVeche } = await blogDb()
     .from("blog_post_revisions")
     .select("content_html")
     .eq("id", idVersiune)
     .eq("post_id", idArticol)
     .maybeSingle();
 
+  /* ⚠ Eroarea de citire NU e „versiunea nu exista". Prima e a noastra si trece;
+     a doua e a omului si nu trece. Doua mesaje, fiindca sunt doua lucruri. */
+  if (eVeche) return { error: "Nu am putut citi versiunea acum. Încearcă din nou." };
   if (!veche) return { error: "Versiunea nu mai există sau nu e a acestui articol." };
 
   const html = (veche as { content_html: string | null }).content_html ?? "";

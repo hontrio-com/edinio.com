@@ -215,18 +215,52 @@ export async function aboneazaLaBlog(emailBrut: string): Promise<RaspunsAbonare>
  * fiindcă una uitată într-o cutie de email un an nu mai dovedește nimic despre
  * ce vrea omul azi.
  */
-export async function confirmaAbonarea(jeton: string): Promise<boolean> {
+/**
+ * Ce s-a întâmplat cu un jeton — în trei stări, nu în două.
+ *
+ * ⚠ „NU E BUN" ȘI „N-AM PUTUT ÎNTREBA" NU SUNT ACELAȘI LUCRU, și amândouă
+ * ajungeau la `false`, deci la același text: „Legătura nu mai lucrează".
+ *
+ * La confirmare asta e supărător. La DEZABONARE e mai mult: omul a cerut anume
+ * să nu mai primească emailuri, iar pagina îi spunea că legătura lui nu e bună.
+ * El pleacă și crede că a rămas abonat — iar următoarea apăsare nu e „încearcă
+ * din nou", e „Raportează ca spam", și de acolo suferă tot domeniul.
+ *
+ * ⚠ ACELAȘI TIPAR EXISTA DEJA IN PLATFORMA, la `api/recovery/unsubscribe`: ia
+ * eroarea, o scrie în jurnal ca `critical`, și răspunde 503 cu „Nu am putut
+ * înregistra dezabonarea". Blogul se aliniază la el, nu inventează altul.
+ *
+ * ⚠ ȘI PLAFOANELE INTRĂ LA „TEMPORAR". Un om care a încercat de prea multe ori
+ * n-are un jeton stricat — are de așteptat. Înainte i se spunea tot că legătura
+ * a expirat, ceea ce îl făcea să renunțe definitiv.
+ */
+export type RezultatJeton =
+  | { ok: true }
+  | { ok: false; motiv: "invalid" }
+  | { ok: false; motiv: "temporar" };
+
+export async function confirmaAbonarea(jeton: string): Promise<RezultatJeton> {
   const t = (jeton ?? "").trim();
-  if (t.length < 20 || t.length > 200) return false;
+  if (t.length < 20 || t.length > 200) return { ok: false, motiv: "invalid" };
 
   const ip = clientIpFromHeaders(await headers());
   /* Plafon și aici: fără el, jetoanele se pot încerca la nesfârșit. */
-  if (!rateLimit(`blogConfirm:${ip}`, 10, 60_000)) return false;
+  if (!rateLimit(`blogConfirm:${ip}`, 10, 60_000)) return { ok: false, motiv: "temporar" };
   const durabil = await consumaLimita(`blog-confirm:ip:${ip}`, 60, 3600, 3600);
-  if (!durabil.permis) return false;
+  if (!durabil.permis) return { ok: false, motiv: "temporar" };
 
-  const { data } = await db().rpc("blog_confirma", { p_token_hash: amprenta(t), p_ip: ip });
-  return typeof data === "string" && data.length > 0;
+  const { data, error } = await db().rpc("blog_confirma", { p_token_hash: amprenta(t), p_ip: ip });
+  if (error) {
+    await logError({
+      action: "blog.confirma",
+      message: `Confirmarea nu a putut fi scrisă: ${error.message}`,
+      severity: "error",
+    });
+    return { ok: false, motiv: "temporar" };
+  }
+  return typeof data === "string" && data.length > 0
+    ? { ok: true }
+    : { ok: false, motiv: "invalid" };
 }
 
 /**
@@ -241,15 +275,30 @@ export async function confirmaAbonarea(jeton: string): Promise<boolean> {
  * ⚠ IDEMPOTENTĂ. Cine apasă de două ori vede tot „gata", nu o eroare. O pagină
  * de dezabonare care dă eroare îl face pe om să creadă că n-a ieșit.
  */
-export async function dezaboneazaDinBlog(jeton: string): Promise<boolean> {
+export async function dezaboneazaDinBlog(jeton: string): Promise<RezultatJeton> {
   const t = (jeton ?? "").trim();
-  if (t.length < 20 || t.length > 200) return false;
+  if (t.length < 20 || t.length > 200) return { ok: false, motiv: "invalid" };
 
   const ip = clientIpFromHeaders(await headers());
-  if (!rateLimit(`blogUnsub:${ip}`, 10, 60_000)) return false;
+  if (!rateLimit(`blogUnsub:${ip}`, 10, 60_000)) return { ok: false, motiv: "temporar" };
 
-  const { data } = await db().rpc("blog_dezaboneaza", { p_unsub_token: t });
-  return data === true;
+  const { data, error } = await db().rpc("blog_dezaboneaza", { p_unsub_token: t });
+  /*
+    ⚠ AICI SE SCRIE `critical`, NU `error`, si nu e o exagerare.
+
+    O dezabonare care nu se inregistreaza inseamna ca omul va mai primi emailuri
+    dupa ce a cerut anume sa nu mai primeasca. Asta nu e o suparare a lui, e
+    riscul ca tot domeniul sa fie raportat ca spam.
+  */
+  if (error) {
+    await logError({
+      action: "blog.dezabonare",
+      message: `Dezabonarea NU s-a inregistrat: ${error.message}`,
+      severity: "critical",
+    });
+    return { ok: false, motiv: "temporar" };
+  }
+  return data === true ? { ok: true } : { ok: false, motiv: "invalid" };
 }
 
 // ── Partea de admin ──────────────────────────────────────────────────────────

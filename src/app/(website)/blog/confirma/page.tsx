@@ -52,6 +52,7 @@ export default async function ConfirmaAbonareaPage({ searchParams }: Props) {
             titluReusit="Gata, ești abonat"
             textReusit="Îți scriem doar când apare ceva care chiar ajută. În fiecare email ai jos o legătură de dezabonare."
             textPicat="Legătura nu mai lucrează. Un jeton de confirmare se folosește o singură dată și se stinge după 48 de ore. Dacă nu ești sigur că abonarea a mers, scrie adresa din nou pe pagina blogului."
+            textTemporar="Nu am putut înregistra confirmarea acum — e o problemă de partea noastră, nu a legăturii tale. Mai apasă o dată peste câteva momente."
           />
         ) : (
           <div className="text-center">

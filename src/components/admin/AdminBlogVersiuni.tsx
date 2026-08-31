@@ -74,7 +74,23 @@ export function AdminBlogVersiuni({
     let anulat = false;
     /* Se cere abia la deschidere: un articol cu cincizeci de versiuni n-are de
        ce să fie citit la fiecare intrare în editor. */
-    listeazaVersiuni(idArticol).then((v) => { if (!anulat) setVersiuni(v); });
+    /*
+      ⚠ SE PRINDE ARUNCAREA, ANUME.
+
+      De la 31.08.2026 `listeazaVersiuni` ARUNCĂ dacă baza a răspuns cu eroare, în
+      loc să întoarcă o listă goală — fiindcă o listă goală aici spunea „articolul
+      n-are nicio versiune", iar omul închidea panoul liniștit, convins că n-are la
+      ce să se întoarcă.
+
+      Fără `catch` aici, aruncarea ar deveni o respingere neprinsă: panoul ar
+      rămâne gol la fel, doar cu o eroare în consolă pe care n-o vede nimeni.
+    */
+    listeazaVersiuni(idArticol)
+      .then((v) => { if (!anulat) setVersiuni(v); })
+      .catch(() => {
+        if (anulat) return;
+        toast.error("Nu am putut încărca istoricul acum. Închide panoul și încearcă din nou.");
+      });
     return () => { anulat = true; };
   }, [deschis, idArticol]);
 

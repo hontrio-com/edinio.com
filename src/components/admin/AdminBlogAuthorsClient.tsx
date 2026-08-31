@@ -139,7 +139,21 @@ export function AdminBlogAuthorsClient({ autori, rol, conturi }: { autori: Autor
   }
 
   async function sterge(a: AutorBlog) {
-    const cate = await articoleAleAutorului(a.id);
+  /*
+    ⚠ DACĂ NU ȘTIM CÂTE ARTICOLE ATÂRNĂ, NU ÎNTREBĂM — OPRIM.
+
+    Numărătoarea întorcea `count ?? 0`, deci o cădere de o clipă a bazei arăta
+    exact ca „nu atârnă nimic": ramura de avertisment se sărea, iar omul primea
+    întrebarea blândă „Ștergi autorul?" în loc de „rămân 30 de articole fără
+    autorul". Confirma, iar ștergerea de după putea foarte bine să reușească.
+
+    O întrebare pusă pe un număr pe care nu-l avem e mai rea decât nicio
+    întrebare: dă impresia că omul a cântărit ceva.
+  */
+    const numar = await articoleAleAutorului(a.id);
+    if (!numar.ok) { toast.error(`${numar.motiv} Reîncarcă pagina și încearcă din nou.`); return; }
+
+    const cate = numar.cate;
     const avertisment = cate > 0
       ? `${a.name} are ${cate} ${cate === 1 ? "articol" : "articole"}. ${cate === 1 ? "Articolul rămâne" : "Articolele rămân"} publicat${cate === 1 ? "" : "e"}, dar fără autor. Continui?`
       : `Ștergi autorul ${a.name}?`;

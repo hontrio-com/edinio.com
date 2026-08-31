@@ -83,25 +83,25 @@ test("versiunea instalata e chiar cea ceruta", () => {
 });
 
 /*
-  ⚠ PROBA ASTA S-A NASCUT DINTR-O GRESEALA DE-A MEA, LA CATEVA MINUTE DUPA CE AM
-  SCRIS-O PE CEA DE DEASUPRA (31.08.2026).
+  Lockfile-ul tine DOUA lucruri deosebite: versiunea rezolvata (in
+  `packages["node_modules/x"].version`) SI cererea copiata din package.json, in
+  `packages[""].dependencies`. Editand package.json de mana, a doua ramane in urma.
 
-  Am schimbat `^2.17.5` in `2.17.5` in `package.json` si am crezut ca am terminat:
-  lockfile-ul avea deja 2.17.5 REZOLVAT, deci totul parea in regula, si toate
-  probele erau verzi.
+  ⚠ AM SCRIS INTAI AICI CA „`npm ci` CADE ATUNCI, DECI AR FI OPRIT DESFASURAREA".
+  AM VERIFICAT, SI E FALS. Cu `package.json` cerand `2.17.5` si lockfile-ul
+  pastrand `^2.17.5` in `packages[""].dependencies`, `npm ci` iese cu 0 si nu
+  spune nimic — fiindca versiunea rezolvata (2.17.5) SATISFACE cererea. `npm ci`
+  se supara abia cand cererea nu poate fi implinita deloc: `ETARGET` pentru o
+  versiune inexistenta, `E404` pentru un pachet care nu exista.
 
-  Dar lockfile-ul tine DOUA lucruri deosebite: versiunea rezolvata (in
-  `packages["node_modules/x"].version`) SI cererea din package.json, copiata in
-  `packages[""].dependencies`. A doua ramasese `^2.17.5`.
-
-  `npm ci` — care e ce ruleaza Vercel — cade cand cele doua nu se potrivesc. Deci
-  „reparatia" mea ar fi oprit desfasurarea, iar nimic din ce rulez local n-ar fi
-  spus-o: `npm test`, `tsc`, `eslint` si chiar `npm run build` trec toate, fiindca
-  niciunul nu se uita la potrivirea asta.
+  Deci proba asta NU e o paza a desfasurarii. E o paza a INTELESULUI: doua
+  fisiere care spun lucruri diferite despre aceeasi dependinta il pun pe
+  urmatorul cititor sa se intrebe care e adevarul, si fac ca `git diff` sa arate
+  zgomot la prima comanda npm care le sincronizeaza singura.
 
   Se repara cu `npm install --package-lock-only`.
 */
-test("lockfile-ul repeta aceeasi cerere ca package.json (altfel `npm ci` cade)", () => {
+test("lockfile-ul repeta aceeasi cerere ca package.json", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
   const lock = JSON.parse(readFileSync("package-lock.json", "utf8"));
   const cerute = { ...pkg.dependencies, ...pkg.devDependencies };

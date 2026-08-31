@@ -50,13 +50,12 @@ const BUGETE: Record<string, number> = {
   /* /mentenanta-gratuita. Cea mai grea imagine de pe tot site-ul. Sub fold, cu
      `<Image>` fără `priority`, deci nu intră în prima afișare. */
   "mentenanta/securitate.webp": 149_500,
-  /* /mentenanta-gratuita, fundalul conversației. ⚠ E fundal CSS, nu `<Image>`,
-     deci se cere de îndată ce elementul intră în arborele de randare — nu când
-     ajunge pe ecran. Sursa are 760×1396 și se desenează cu `cover` într-o casetă
-     mult mai joasă, deci aici mai e loc de tăiat. */
-  "mentenanta/fundal_whatsapp.webp": 82_000,
-  /* /optimizare, captura de produs din panoul de rezultate. */
-  "optimizare/produs.webp": 100_600,
+  /* /mentenanta-gratuita, fundalul conversației. Fâșia din centru: caseta are
+     438×170, deci din cei 1396 px pe verticală se vedeau 295. Măsurat 11.936. */
+  "mentenanta/fundal_whatsapp-card.webp": 12_700,
+  /* /optimizare, captura de produs. Se desenează la 68×84,4 px CSS — măsurat în
+     Chrome, nu dedus din clase. Fișierul are 280×347. Măsurat 14.296. */
+  "optimizare/produs-mic.webp": 15_200,
   /* Pagina de start, cea mai mare treaptă din `srcset`-ul primului card. */
   "features/magazin-1440.webp": 67_700,
 };
@@ -155,3 +154,64 @@ test("bara și subsolul folosesc sigla mică, nu pe cea de e-mail", () => {
     "componenta `Logo` cere sigla mare (21 kB) pentru un pătrat de 32 px",
   );
 });
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  ⚠ BUGETUL APĂRĂ MĂRIMEA FIȘIERULUI. ASTA APĂRĂ ALEGEREA LUI.
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Am aflat-o confruntând, pe 01.09.2026. Am pus înapoi `produs.webp` (94.890
+  octeți) în locul lui `produs-mic.webp` — și TOATE cele zece probe au trecut.
+  Fiindcă bugetul verifică fișierul `produs-mic.webp`, care e tot acolo și tot
+  mic. Nimeni nu se uita dacă mai e CERUT.
+
+  Aceeași gaură pe care o avea și sigla, și de aceea proba de deasupra există.
+  Aici e regula generalizată: pentru fiecare pereche mare/mic, codul de site
+  trebuie să ceară varianta mică.
+
+  ⚠ ORIGINALELE NU SUNT UN DEFECT. `logo.png` e sigla din datele structurate
+  (Google cere ≥112 px) și din antetul e-mailurilor; `produs.webp` și
+  `fundal_whatsapp.webp` rămân pentru dacă e nevoie vreodată de ele mari. Ce se
+  apără e ca ele să nu ajungă din nou pe o pagină publică.
+*/
+const PERECHI: Array<{ mare: string; mic: string; unde: string; deCe: string }> = [
+  {
+    mare: "/optimizare/produs.webp",
+    mic: "/optimizare/produs-mic.webp",
+    unde: "src/lib/website/optimizare.ts",
+    deCe: "se desenează la 68×84,4 px CSS (măsurat în Chrome), iar originalul are 806×1000",
+  },
+  {
+    mare: "/mentenanta/fundal_whatsapp.webp",
+    mic: "/mentenanta/fundal_whatsapp-card.webp",
+    unde: "src/components/website/sections/mentenanta/IlustratiiMentenanta.tsx",
+    deCe: "caseta are 438×170, iar din cei 1396 px pe verticală se văd 295",
+  },
+  {
+    mare: "/logo.png",
+    mic: "/logo-128.png",
+    unde: "src/components/website/sections/mentenanta/IlustratiiMentenanta.tsx",
+    deCe: "avatarul are 30 px, iar bara aceleiași pagini a cerut deja `logo-128.png`",
+  },
+  {
+    mare: "/logo.png",
+    mic: "/logo-128.png",
+    unde: "src/components/website/sections/migrare/IlustratieFascicule.tsx",
+    deCe: "sigla din cercul central, la 72% dintr-un cerc mic",
+  },
+];
+
+for (const { mare, mic, unde, deCe } of PERECHI) {
+  test(`\`${unde.split("/").pop()}\` cere ${mic}, nu ${mare}`, () => {
+    const sursa = readFileSync(join(process.cwd(), unde), "utf8")
+      .replace(/\r\n/g, "\n")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+
+    assert.ok(sursa.includes(mic), `${unde} nu mai cere \`${mic}\` — ${deCe}`);
+    assert.ok(
+      !sursa.includes(`"${mare}"`),
+      `${unde} cere din nou \`${mare}\`. Varianta mică există și e destulă: ${deCe}.`,
+    );
+  });
+}

@@ -406,8 +406,16 @@ function Remediere() {
             lor.
           */}
           <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-white">
+            {/*
+            ⚠ SIGLA MICĂ, nu cea de 21.588 de octeți. Se desenează la 72% dintr-un
+            cerc mic, iar `logo-128.png` are 128 px — de peste 3× cât trebuie.
+
+            Câștigul e mai mare decât diferența de mărime: bara aceleiași pagini
+            a cerut deja EXACT aceeași adresă, deci în cele mai multe cazuri
+            browserul o ia din cache și nu mai face nicio cerere.
+            */}
             <Image
-              src="/logo.png"
+              src="/logo-128.png"
               alt="Edinio"
               width={284}
               height={289}
@@ -478,7 +486,27 @@ function Remediere() {
               vederii pe o textură atât de stinsă (0,003% din pixeli se abat cu
               mai mult de cinci trepte). PNG-ul rămâne pe disc ca original.
             */
-            backgroundImage: "url(/mentenanta/fundal_whatsapp.webp)",
+            /*
+              ⚠ DECUPAJUL, nu poza întreagă. Măsurat în Chrome pe 01.09.2026:
+              caseta are 438 × 170 px, iar sursa avea 760 × 1396 — portret, într-o
+              casetă lată și joasă. Cu `cover`, scara iese 0,576, deci se vedeau
+              295 din cei 1396 de pixeli pe verticală. 79% din imagine se
+              descărca și nu ajungea niciodată pe ecran.
+
+              `-card.webp` e fâșia din CENTRU, 760 × 480 — de peste 1,6 ori mai
+              înaltă decât fâșia vizibilă, ca să acopere și casete mai înguste.
+              Lățimea a rămas 760, neatinsă: la 438 px CSS e deja sub 2×, iar o
+              mărire ar fi înrăutățit-o.
+
+              77.282 → 11.936 octeți, cu textura identică — e tapetul cu mâzgăleli
+              al WhatsApp, care se repetă, deci nu există „parte importantă" de
+              pierdut la decupare.
+
+              ⚠ RĂMÂNE FUNDAL CSS, dinadins. Trecerea la `<Image>` ar fi adus
+              lazy-loading, dar ar fi cerut și `position: relative` pe părinte și
+              un strat în plus — pentru o imagine care acum are 12 kB.
+            */
+            backgroundImage: "url(/mentenanta/fundal_whatsapp-card.webp)",
             backgroundSize: "cover",
             backgroundPosition: "center",
             minHeight: 170,

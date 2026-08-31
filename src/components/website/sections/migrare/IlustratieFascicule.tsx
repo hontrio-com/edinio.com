@@ -92,8 +92,16 @@ export function IlustratieFascicule() {
             Și mai mică decât cercul, cu aer în jur: o siglă lipită de margine arată
             tăiată. Aceeași măsură ca la sigla din ilustrațiile de pe „Mentenanță".
           */}
+          {/*
+          ⚠ SIGLA MICĂ, nu cea de 21.588 de octeți. Se desenează la 72% dintr-un
+          cerc mic, iar `logo-128.png` are 128 px — de peste 3× cât trebuie.
+
+          Câștigul e mai mare decât diferența de mărime: bara aceleiași pagini
+          a cerut deja EXACT aceeași adresă, deci în cele mai multe cazuri
+          browserul o ia din cache și nu mai face nicio cerere.
+          */}
           <Image
-            src="/logo.png"
+            src="/logo-128.png"
             alt=""
             width={284}
             height={289}

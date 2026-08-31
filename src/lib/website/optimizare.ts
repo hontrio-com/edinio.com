@@ -70,7 +70,22 @@ export const CARDURI_PERFORMANTA: CardPerformanta[] = [
  */
 export const IMAGINE_OPTIMIZATA = {
   /** Fișierul trimis către vizitator. Lipsă = se vede substituentul. */
-  src: "/optimizare/produs.webp",
+  /*
+    ⚠ VARIANTA MICĂ, nu originalul. Măsurat în Chrome pe 01.09.2026: imaginea se
+    desenează la 68 × 84,4 px CSS, într-o casetă de 118 × 147,5. Fișierul avea
+    806 × 1000 — de 11,9 ori mai lat decât se vede.
+
+    `produs-mic.webp` are 280 × 347, adică peste 4× față de afișare, deci rămâne
+    curat și pe ecrane dense. 94.890 → 14.296 octeți.
+
+    ⚠ Loaderul nu face asta singur: `supabase-image-loader` întoarce adresa
+    neatinsă pentru orice nu e cheie R2, iar `<Image width>` NU micșorează
+    fișiere locale. De aceea e un fișier separat, nu un atribut.
+
+    ⚠ Nume nou, nu rescriere pe loc: `public/` se servește cu `immutable` un an.
+    Originalul a rămas — dacă e nevoie vreodată de captura mare, e acolo.
+  */
+  src: "/optimizare/produs-mic.webp",
   alt: "",
   /**
    * Cele două greutăți, în OCTEȚI: de acolo pleacă și numărul scris, și animația

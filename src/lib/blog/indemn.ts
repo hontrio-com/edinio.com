@@ -8,9 +8,22 @@
  * jumătate din motivul comercial pentru care se ține un blog.
  *
  * ⚠ PRESETĂRILE SUNT ÎN COD, NU ÎN BAZĂ. Adresele și textele lor se schimbă
- * odată cu paginile către care duc, iar în bază s-ar fi învechit tăcut: o
- * presetare care trimite la o pagină ștearsă e un buton către 404. Aici,
- * ștergerea paginii sparge compilarea, sau măcar se vede la o căutare.
+ * odată cu paginile către care duc, iar în bază s-ar fi învechit tăcut.
+ *
+ * ⚠ NOTA DE AICI A MINȚIT, ȘI S-A VĂZUT PE 31.08.2026. Scria că „ștergerea
+ * paginii sparge compilarea, sau măcar se vede la o căutare". Nu sparge nimic:
+ * `adresa` e un `string` obișnuit, iar `tsc` și build-ul trec liniștite peste o
+ * adresă care nu mai duce nicăieri.
+ *
+ * S-a dovedit chiar aici. Când s-a șters `/start`, presetarea de mai jos a rămas
+ * cu `adresa: "/start"` — și e presetarea implicită a DOUĂ din patru șabloane de
+ * articol (`sabloane.ts`, „Ghid pas cu pas" și „Ce e nou"). Căutarea de care
+ * vorbea nota chiar s-a făcut, și a găsit zero: se căutase `href="/start"`, iar
+ * aici scrie `adresa: "/start"`.
+ *
+ * Acum există plasa adevărată: `adrese-declarate.test.ts` ia fiecare adresă
+ * scrisă în presetările astea, în `nav.ts` și în `footer.ts`, și cere ca ea să
+ * ducă la o pagină reală de pe disc sau la o redirectare din `next.config.ts`.
  */
 
 export type TipIndemn = "preturi" | "start" | "migrare" | "contact" | "propriu";
@@ -32,7 +45,12 @@ interface Presetare {
   adresa: string;
 }
 
-const PRESETARI: Record<Exclude<TipIndemn, "propriu">, Presetare> = {
+/*
+  ⚠ EXPORTAT ANUME PENTRU `adrese-declarate.test.ts`, care confrunta fiecare
+  `adresa` de aici cu discul. Nu se citeste din alta parte a aplicatiei —
+  `indemnDeAratat()` de mai jos e singura usa buna catre presetari.
+*/
+export const PRESETARI_INDEMN: Record<Exclude<TipIndemn, "propriu">, Presetare> = {
   preturi: {
     titlu: "Vezi cât costă",
     text: "Toate integrările sunt incluse în orice plan: curieri, plăți cu cardul și facturare.",
@@ -43,7 +61,19 @@ const PRESETARI: Record<Exclude<TipIndemn, "propriu">, Presetare> = {
     titlu: "Deschide-ți magazinul azi",
     text: "15 zile gratuit, fără card de credit. Anulezi oricând.",
     eticheta: "Începe gratuit",
-    adresa: "/start",
+    /*
+      ⚠ ERA `/start`, pagina de aterizare a site-ului vechi, ștearsă pe
+      31.08.2026. Redirectarea din `next.config.ts` ar fi prins butonul, deci
+      n-ar fi dat 404 — dar l-ar fi dus pe cititor la pagina de start în loc de
+      înscriere, adică îndemnul „Începe gratuit" ar fi cerut încă un clic.
+
+      `/register` e ținta adevărată a butonului ăstuia: același text duce acolo
+      și din heroul paginii principale (`sections/Hero.tsx:183`).
+
+      Cheia presetării a rămas `start` dinadins — ea e scrisă în `sabloane.ts` și
+      poate fi deja aleasă în articole; redenumirea ar rupe ce e ales.
+    */
+    adresa: "/register",
   },
   migrare: {
     titlu: "Ai deja un magazin în altă parte?",
@@ -120,7 +150,7 @@ export function indemnDeAratat(brut: unknown): Presetare | null {
     return { titlu, text: (i.text ?? "").trim(), eticheta, adresa };
   }
 
-  const p = PRESETARI[i.tip];
+  const p = PRESETARI_INDEMN[i.tip];
   if (!p) return null;
   return {
     titlu: (i.titlu ?? "").trim() || p.titlu,

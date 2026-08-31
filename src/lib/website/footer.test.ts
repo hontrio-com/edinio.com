@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { existaPaginaStatica } from "./rute-pe-disc";
 import { FOOTER_COLUMNS, SOCIAL_LINKS } from "./footer";
 import { INDUSTRIES } from "./nav";
 
@@ -46,38 +47,12 @@ const APP = join(AICI, "..", "..", "app");
  * Industriile, care CHIAR trec printr-un segment dinamic, sunt verificate
  * separat, pe lista de sluguri.
  */
-function existaPaginaStatica(href: string): boolean {
-  return cauta(APP, href.split("/").filter(Boolean));
-}
-
-function cauta(dir: string, segmente: string[]): boolean {
-  if (segmente.length === 0) {
-    if (existsSync(join(dir, "page.tsx")) || existsSync(join(dir, "page.ts"))) return true;
-    /*
-      ⚠ PAGINA DE START STĂ ÎNTR-UN GRUP DE RUTE (`app/(website)/page.tsx`), iar
-      grupurile nu apar în adresă. Fără coborârea asta, `existaPagina("/")`
-      răspundea „nu" — prins de controlul negativ, nu citind codul. Se vede doar
-      la adresa „/", fiindcă e singura fără niciun segment.
-    */
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
-      if (e.isDirectory() && e.name.startsWith("(") && e.name.endsWith(")")) {
-        if (cauta(join(dir, e.name), [])) return true;
-      }
-    }
-    return false;
-  }
-  const [cap, ...coada] = segmente;
-  for (const e of readdirSync(dir, { withFileTypes: true })) {
-    if (!e.isDirectory()) continue;
-    /* Grup de rute: nu consuma niciun segment, se coboara prin el. */
-    if (e.name.startsWith("(") && e.name.endsWith(")")) {
-      if (cauta(join(dir, e.name), segmente)) return true;
-    } else if (e.name === cap && cauta(join(dir, e.name), coada)) {
-      return true;
-    }
-  }
-  return false;
-}
+/*
+  ⚠ REZOLVATORUL DE RUTE NU MAI E AICI. Statea si in fisierul asta, si in
+  celalalt, cu aceleasi comentarii copiate — iar pe 31.08.2026 era pe cale sa
+  apara a treia copie. Acum e unul singur, in `rute-pe-disc.ts`, unde scrie si
+  de ce segmentele dinamice se potrivesc peste tot in afara de `(public)`.
+*/
 
 test("resolverul de rute chiar poate esua", () => {
   /* Fara controlul asta, un resolver care raspunde mereu `true` ar face restul

@@ -3,50 +3,18 @@ import { test } from "node:test";
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { existaPaginaStatica } from "./rute-pe-disc";
 import { FEATURE_CARDS } from "./features";
 
 const AICI = dirname(fileURLToPath(import.meta.url));
 const APP = join(AICI, "..", "..", "app");
 
-/**
- * Adevărat dacă App Router-ul are o pagină STATICĂ pentru adresa dată.
- *
- * Aceeași socoteală ca în `footer.test.ts`, și din același motiv: grupurile în
- * paranteze — `(website)`, `(landing)` — se traversează fără să consume niciun
- * segment, fiindcă nu apar în adresă. Segmentele dinamice NU se potrivesc: cu
- * ele, `app/(public)/[slug]` ar fi făcut orice adresă să „existe".
- */
-function existaPagina(href: string): boolean {
-  return cauta(APP, href.split("#")[0].split("/").filter(Boolean));
-}
-
-function cauta(dir: string, segmente: string[]): boolean {
-  if (segmente.length === 0) {
-    if (existsSync(join(dir, "page.tsx")) || existsSync(join(dir, "page.ts"))) return true;
-    /*
-      ⚠ PAGINA DE START STĂ ÎNTR-UN GRUP DE RUTE (`app/(website)/page.tsx`), iar
-      grupurile nu apar în adresă. Fără coborârea asta, `existaPagina("/")`
-      răspundea „nu" — prins de controlul negativ, nu citind codul. Se vede doar
-      la adresa „/", fiindcă e singura fără niciun segment.
-    */
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
-      if (e.isDirectory() && e.name.startsWith("(") && e.name.endsWith(")")) {
-        if (cauta(join(dir, e.name), [])) return true;
-      }
-    }
-    return false;
-  }
-  const [cap, ...coada] = segmente;
-  for (const e of readdirSync(dir, { withFileTypes: true })) {
-    if (!e.isDirectory()) continue;
-    if (e.name.startsWith("(") && e.name.endsWith(")")) {
-      if (cauta(join(dir, e.name), segmente)) return true;
-    } else if (e.name === cap && cauta(join(dir, e.name), coada)) {
-      return true;
-    }
-  }
-  return false;
-}
+/*
+  ⚠ REZOLVATORUL DE RUTE NU MAI E AICI. Statea si in fisierul asta, si in
+  celalalt, cu aceleasi comentarii copiate — iar pe 31.08.2026 era pe cale sa
+  apara a treia copie. Acum e unul singur, in `rute-pe-disc.ts`, unde scrie si
+  de ce segmentele dinamice se potrivesc peste tot in afara de `(public)`.
+*/
 
 /*
  * Probele de aici pazesc lucrurile care se strica tacut la cardurile de functii:
@@ -76,7 +44,7 @@ test("fiecare card trimite la o pagină care există", () => {
   */
   for (const card of FEATURE_CARDS) {
     assert.ok(
-      existaPagina(card.cta.href),
+      existaPaginaStatica(card.cta.href),
       `cardul „${card.id}" trimite la ${card.cta.href}, care nu are pagină`,
     );
   }
@@ -86,8 +54,8 @@ test("resolverul de rute chiar poate esua", () => {
   /* Control negativ. Fără el, o greșeală în `cauta()` ar face proba de mai sus
      să răspundă „da" la orice și n-ar mai păzi nimic — exact scăparea prinsă o
      dată în `footer.test.ts`. */
-  assert.equal(existaPagina("/pagina-care-nu-exista-nicaieri"), false);
-  assert.equal(existaPagina("/"), true, "pagina de start trebuie să existe");
+  assert.equal(existaPaginaStatica("/pagina-care-nu-exista-nicaieri"), false);
+  assert.equal(existaPaginaStatica("/"), true, "pagina de start trebuie să existe");
 });
 
 test("etichetele incap in latimea comuna a butonului", () => {

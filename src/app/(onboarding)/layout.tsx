@@ -1,3 +1,4 @@
+import "../globals.css";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";

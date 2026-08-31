@@ -1,3 +1,4 @@
+import "../globals.css";
 import { NotificariToast } from "@/components/ui/NotificariToast";
 
 /*

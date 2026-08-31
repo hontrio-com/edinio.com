@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
+// ⚠ FĂRĂ import de CSS AICI — vezi nota din `website.css`. Fiecare grup de rute
+// își importă foaia lui: prezentarea pe `website.css`, restul pe `globals.css`.
+// Un import aici ar aduce toate utilitarele înapoi peste tot.
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

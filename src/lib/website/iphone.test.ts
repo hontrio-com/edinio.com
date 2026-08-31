@@ -27,7 +27,17 @@ import {
  */
 
 const AICI = dirname(fileURLToPath(import.meta.url));
-const CSS = join(AICI, "..", "..", "app", "globals.css");
+/*
+  ⚠ `stil-comun.css`, NU `globals.css`. Pe 31.08.2026 foaia unica s-a despartit
+  in doua — `globals.css` pentru panou si magazine, `website.css` pentru site-ul
+  de prezentare — iar regulile scrise de mana, printre care si `.iphone`, s-au
+  mutat in fisierul pe care il importa amandoua. `globals.css` mai are acum doar
+  cele trei importuri.
+
+  Proba asta a cazut la mutare, si bine a facut: fara ea, `.iphone` ar fi putut
+  ramane in urma fara sa se vada.
+*/
+const CSS = join(AICI, "..", "..", "app", "stil-comun.css");
 
 test("rama plus ecranul plus rama fac exact corpul", () => {
   /* Pe orizontală, prin construcție. */

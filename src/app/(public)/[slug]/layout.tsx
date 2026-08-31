@@ -1,3 +1,4 @@
+import "../../globals.css";
 import { headers } from "next/headers";
 import { incarcaAntetMagazin, setarileDin } from "@/lib/storefront/antet-magazin";
 import { FacebookPixel } from "@/components/public/FacebookPixel";

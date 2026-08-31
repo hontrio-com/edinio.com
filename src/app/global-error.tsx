@@ -1,5 +1,16 @@
 "use client";
 
+import { STIL_PAGINA_SIMPLA as S } from "@/lib/stil-pagina-simpla";
+
+/*
+  ⚠ AICI STILURILE ÎN LINIE NU SUNT DOAR O ECONOMIE, SUNT SINGURA CALE.
+  `global-error` înlocuiește tot documentul, inclusiv `app/layout.tsx` — își
+  randează propriile `<html>` și `<body>`. Deci nici măcar nu moștenește foaia
+  aspectului rădăcină: fără stilurile astea, pagina ar fi text negru pe alb,
+  nearanjat, exact în clipa în care ceva s-a rupt urât.
+
+  Restul motivelor sunt în `lib/stil-pagina-simpla.ts`.
+*/
 export default function GlobalError({
   reset,
 }: {
@@ -8,16 +19,11 @@ export default function GlobalError({
 }) {
   return (
     <html lang="ro">
-      <body className="min-h-screen flex flex-col items-center justify-center px-4 bg-white text-zinc-900">
-        <h1 className="text-7xl font-black text-zinc-200">500</h1>
-        <p className="text-lg font-semibold mt-4">Eroare critica</p>
-        <p className="text-sm text-zinc-500 mt-1 text-center max-w-md">
-          A aparut o eroare neasteptata. Te rugam sa incerci din nou.
-        </p>
-        <button
-          onClick={reset}
-          className="mt-6 px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 transition-colors"
-        >
+      <body style={{ ...S.pagina, margin: 0 }}>
+        <h1 style={S.numar}>500</h1>
+        <p style={S.titlu}>Eroare critica</p>
+        <p style={S.explicatie}>A aparut o eroare neasteptata. Te rugam sa incerci din nou.</p>
+        <button onClick={reset} style={S.buton}>
           Incearca din nou
         </button>
       </body>

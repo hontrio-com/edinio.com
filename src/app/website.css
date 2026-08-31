@@ -1,0 +1,67 @@
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  FOAIA SITE-ULUI DE PREZENTARE ȘI A CENTRULUI DE AJUTOR
+  ═══════════════════════════════════════════════════════════════════════════
+
+  ⚠ DE CE EXISTĂ. Măsurat pe 31.08.2026, pe build-ul de producție: fiecare
+  pagină publică descărca 274.046 de octeți de CSS (43.564 gzip), din care
+  192.398 — 70% — nu erau atinși de NICIO pagină de prezentare.
+
+  Ce erau cei 70%: utilitare Tailwind generate din scanarea întregului proiect.
+  `input-group-control`, `data-[size=default]/switch`, `tabs-list`, `combobox`,
+  `rdp-button` (calendarul), zeci de `backdrop-blur-*`, și 190 de reguli de temă
+  întunecată. Toate reale și toate necesare — în panou și în magazine. Niciuna
+  pe cele 18 pagini de prezentare, care folosesc 1.110 clase distincte cu totul.
+
+  ⚠ CUM SE OBȚINE. `source(none)` oprește descoperirea automată a fișierelor, iar
+  `@source` de mai jos spune exact ce să scaneze. Ce nu e listat acolo nu produce
+  utilitare aici.
+
+  ⚠ REGULILE SCRISE DE MÂNĂ NU SUNT DUPLICATE. `stil-comun.css` e același fișier
+  pe care îl importă și `globals.css` — `.hero-mesh-blob`, `.arc-placa`,
+  `.iphone`, `.caseta-sigla`, `.rand-live`, `.imsg`, `.banda`, `.feature-card`
+  și restul sunt scrise o singură dată. Un vizitator încarcă o singură foaie, nu
+  două, fiindcă fiecare grup de rute importă exact una.
+
+  ⚠ CÂND ADAUGI UN DOSAR NOU DE COMPONENTE folosit de site-ul de prezentare,
+  adaugă-l la lista de `@source`. Altfel utilitarele lui nu se generează și
+  pagina apare nestilizată — nu parțial, ci exact clasele noi lipsesc.
+  `foi-de-stil.test.ts` verifică lista asta față de ce importă chiar paginile.
+*/
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+
+/*
+  ⚠ FĂRĂ `shadcn/tailwind.css` — verificat, nu presupus: din toată trusa,
+  paginile de prezentare folosesc `Logo` și `ripple`. Fișierul e oricum mic
+  (1.669 octeți), deci nu de el era vorba; se lasă afară fiindcă `@theme inline`
+  din el aduce cadre-cheie pentru acordeon și alte componente care nu apar aici.
+*/
+
+@custom-variant dark (&:is(.dark *));
+
+/* ─── Ce se scanează pentru utilitare ──────────────────────────────────────
+   Doar ce ajunge pe o pagină de prezentare sau de ajutor. Ordinea n-are
+   însemnătate; fiecare rând e un dosar sau un fișier real. */
+@source "../app/(website)";
+@source "../app/(ajutor)";
+@source "../app/(landing)";
+/* Aici intra si `components/website/ajutor`, unde stau chiar componentele
+   centrului de ajutor — nu exista `components/ajutor`. */
+@source "../components/website";
+@source "../lib/website";
+/* Sigla și cercul de sub butoane — singurele două din trusa comună. */
+@source "../components/ui/Logo.tsx";
+@source "../components/ui/ripple.tsx";
+/* `app/layout.tsx` randeaza `<html>` si `<body>` in acelasi document. */
+@source "../app/layout.tsx";
+/*
+  ⚠ `not-found.tsx`, `error.tsx` si `global-error.tsx` de la radacina NU sunt
+  aici, si nici nu importa vreo foaie de stil. Ele fac parte din arborele
+  FIECAREI rute, deci orice foaie legata de ele ajunge pe toate paginile
+  platformei — inclusiv pe magazine, care ar incarca atunci ambele foi.
+  Masurat: 274.046 + 107.918 octeti pe o pagina de magazin. Se stilizeaza in
+  linie, din `lib/stil-pagina-simpla.ts`.
+*/
+
+@import "./stil-comun.css";

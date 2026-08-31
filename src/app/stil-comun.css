@@ -1,0 +1,1948 @@
+
+/* ─── Design Tokens ──────────────────────────────────────────────────────── */
+
+/* ─── ⚠ CELE DOUA VERZI ALE SITE-ULUI, SI CARE PE CE ────────────────────────
+
+   Auditul de design din 23.08 a gasit PATRU verzi in folosinta, dintre care doi
+   faceau exact acelasi lucru:
+
+     --primary        #008236   4,95:1 pe alb
+     #12874A          scris de mana in sase fisiere, 4,57:1 pe alb
+     --color-brand    #1AB554   2,70:1 pe alb
+     oklch(0.572 …)   #0C9043   varianta de tema inchisa a lui --primary
+
+   #12874A aparuse fiindca `--color-brand` e prea deschis pentru text, si e o
+   observatie corecta: 2,70:1 e sub prag in ambele sensuri. Dar `--primary` era
+   deja acolo, si e chiar mai citibil. Doua verzi inchise la 0,4 diferenta de
+   contrast, pe aceeasi pagina, nu sunt o decizie — sunt doua persoane care au
+   rezolvat aceeasi problema in doua saptamani diferite.
+
+   Deci raman DOI verzi, cu roluri care nu se ating:
+
+     --primary  #008236  TOT CE SE CITESTE. Umplerea butoanelor, textul verde,
+                         bifele, cifrele scoase in evidenta, chenarele care
+                         inseamna ceva. Are 4,95:1 pe alb si suporta text alb pe
+                         el, deci merge in amandoua sensurile.
+
+     --color-brand #1AB554  NUMAI LUMINA. Halouri, fascicule, umpleri din
+                         ilustratii, fundaluri stinse. ⚠ NU poarta niciodata text
+                         alb pe el si nu e niciodata folosit CA text: 2,70:1
+                         inseamna ca la 10px, cat avea eticheta din panoul de
+                         rezultate Google, cuvintele aproape se pierd.
+
+   Cine adauga verde alege un rol, nu o nuanta. */
+
+:root {
+  /* Brand */
+  --color-brand: #1AB554;
+  --color-brand-light: #E8F9EE;
+  --color-brand-mid: #4fc87a;
+  --color-brand-dark: #158f43;
+
+  /* Backgrounds */
+  --color-background: #F9FAFB;
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #F3F4F6;
+
+  /* Borders */
+  --color-border: #E5E7EB;
+  --color-border-strong: #D1D5DB;
+
+  /* Text */
+  --color-text-primary: #111827;
+  --color-text-secondary: #6B7280;
+  --color-text-tertiary: #9CA3AF;
+
+  /* Semantic */
+  --color-destructive: #EF4444;
+  --color-destructive-light: #FEF2F2;
+  --color-warning: #F59E0B;
+  --color-warning-light: #FFFBEB;
+  --color-success: #1AB554;
+  --color-success-light: #E8F9EE;
+  --color-info: #3B82F6;
+  --color-info-light: #EFF6FF;
+
+  /* shadcn compat */
+  --background: oklch(0.984 0.003 247.858);
+  --foreground: oklch(0.141 0.005 285.823);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.141 0.005 285.823);
+  --primary: oklch(0.527 0.154 150.069);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.141 0.005 285.823);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.013 285.938);
+  --accent: oklch(0.945 0.025 150.069);
+  --accent-foreground: oklch(0.141 0.005 285.823);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.919 0.006 286.029);
+  --input: oklch(0.919 0.006 286.029);
+  --ring: oklch(0.527 0.154 150.069);
+  --chart-1: oklch(0.527 0.154 150.069);
+  --chart-2: oklch(0.648 0.140 150.069);
+  --chart-3: oklch(0.748 0.110 150.069);
+  --chart-4: oklch(0.848 0.070 150.069);
+  --chart-5: oklch(0.928 0.040 150.069);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.984 0.003 247.858);
+  --sidebar-foreground: oklch(0.141 0.005 285.823);
+  --sidebar-primary: oklch(0.527 0.154 150.069);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.945 0.025 150.069);
+  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
+  --sidebar-border: oklch(0.919 0.006 286.029);
+  --sidebar-ring: oklch(0.527 0.154 150.069);
+
+  /* Typography scale */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+  --text-5xl: 3rem;
+
+  /* Border radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+
+  /* Transitions */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 350ms;
+
+  /* Layout */
+  --sidebar-width: 240px;
+}
+
+/* ─── Hero: fundal mesh ──────────────────────────────────────────────────────
+   Sase pete de lumina verde care plutesc una peste alta. Ce se misca nu e
+   fiecare pata in parte, ci AMESTECUL dintre ele: cand doua se suprapun, acolo
+   se aprinde, cand se despart, se stinge. De aceea desenul nu se repeta niciodata
+   la vedere, desi fiecare pata isi reia drumul.
+
+   NUMAI TRANSLATIE, fara `scale` si fara `opacity`. Clientul a cerut explicit sa
+   nu pulseze: o pata care isi schimba marimea sau puterea se citeste ca puls,
+   chiar daca o face lent. Una care doar se muta se citeste ca lumina care se
+   plimba.
+
+   Patru drumuri diferite, nu unul. Sase pete pe acelasi drum s-ar misca in
+   formatie si s-ar vedea imediat ca e o singura animatie aplicata de sase ori.
+
+   Miscarea e foarte lenta dinadins, 30-50 de secunde tura: cat sa observi ca
+   traieste daca stai pe pagina, nu cat sa-ti ia ochii de pe titlu.
+
+   COSTUL. `filter: blur()` e scump de recalculat, dar aici nu se recalculeaza:
+   petele isi schimba doar `transform`, iar continutul desenat ramane acelasi,
+   deci stratul deja neclar se muta pe compozitor. `will-change` face promovarea
+   explicita. Cu `scale` sau `opacity` in animatie, blur-ul s-ar fi refacut la
+   fiecare cadru. */
+/* Cursa e in procente din PATA, nu din sectiune, iar petele au 380-640px. La
+   14% inseamna vreo 60-90px de drum pe fiecare cheie: destul cat suprapunerile
+   sa se refaca altfel, prea putin cat sa ramana goluri de alb intre ele. */
+@keyframes hero-mesh-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  33% {
+    transform: translate3d(16%, 11%, 0);
+  }
+  66% {
+    transform: translate3d(-12%, 18%, 0);
+  }
+}
+
+@keyframes hero-mesh-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  30% {
+    transform: translate3d(-18%, 13%, 0);
+  }
+  70% {
+    transform: translate3d(14%, -9%, 0);
+  }
+}
+
+@keyframes hero-mesh-c {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  40% {
+    transform: translate3d(12%, -14%, 0);
+  }
+  75% {
+    transform: translate3d(-16%, -7%, 0);
+  }
+}
+
+@keyframes hero-mesh-d {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  35% {
+    transform: translate3d(-13%, -12%, 0);
+  }
+  68% {
+    transform: translate3d(18%, 9%, 0);
+  }
+}
+
+.hero-mesh-blob {
+  animation: var(--mesh-path) var(--mesh-duration) ease-in-out var(--mesh-delay)
+    infinite;
+  will-change: transform;
+}
+
+/* Fara miscare, petele raman unde le prinde. Desenul e acelasi, doar ca sta pe
+   loc: nu se ascunde nimic si nu se rearanjeaza nimic. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-mesh-blob {
+    animation: none;
+    will-change: auto;
+  }
+}
+
+/* ─── Cardurile de functii: teanc la derulare ────────────────────────────────
+   Cardurile sunt `sticky`, deci fiecare se opreste sub bara si urmatorul urca
+   peste el. Partea de aici e doar ce nu poate face `sticky` singur: cel care
+   ramane dedesubt se micsoreaza si se stinge, ca sa se vada ca e in spate.
+
+   `animation-timeline: view()` leaga animatia de pozitia cardului in fereastra,
+   fara JavaScript si fara ascultator de scroll. Unde nu e sustinuta (Firefox,
+   Safari mai vechi), regula pica in intregime si raman doar cardurile in teanc,
+   care arata oricum intentionat. De asta e in `@supports`: nu vreau ca lipsa
+   suportului sa lase cardurile pe jumatate stinse. */
+/* `--covered` merge de la 0 la 1 pe masura ce cardul urmator il acopera. Il scrie
+   `FeatureStack`, o data pe cadru. Aici doar il traducem in marime si opacitate.
+
+   Doua incercari pur-CSS au picat inainte, si merita stiut de ce:
+   1. `animation-timeline: view()` pus pe card nu porneste niciodata. Cardul e
+      `sticky`, iar cat sta pinat pozitia lui in fereastra nu se schimba, deci
+      cronologia ramane inghetata.
+   2. Mutarea cronologiei pe un locas din jurul cardului rupe lipirea: un element
+      `sticky` se poate misca doar in cutia parintelui, iar locasul era exact cat
+      cardul, deci cursa devenea zero si cardurile pluteau pur si simplu in sus.
+   De aceea progresul se calculeaza acum in JavaScript, dar doar atat: scrierea
+   unei variabile. Desenul rimane tot al motorului CSS. */
+/* Adancimea. Perspectiva sta pe parintele direct al cardului, altfel `rotateX`
+   iese o turtire, nu o inclinare. */
+.feature-slot {
+  perspective: 1600px;
+  perspective-origin: 50% 0%;
+}
+
+.feature-card {
+  --covered: 0;
+  transform-origin: 50% 0%;
+  /* Se duce in spate si se inclina, in loc sa se micsoreze pe loc. Micsorarea
+     vine din perspectiva, deci e cea corecta optic, nu una aleasa de mana. */
+  transform: translateZ(calc(var(--covered) * -130px))
+    rotateX(calc(var(--covered) * 5deg));
+  /* Cardul acoperit DISPARE, nu se stinge pe jumatate.
+     Se stingea pana la 0,7 si i se vedea marginea de sus in teanc — arata bine pe
+     desktop, cu doua-trei carduri vizibile, dar pe telefon ieseau patru margini
+     una peste alta cu textul lor transparand prin cardul activ.
+     Inmultirea cu 2,4 tine opacitatea la 1 pana pe la 58% din acoperire, si abia
+     apoi o coboara: asa cardul de dedesubt nu apuca sa dispara inainte ca urmatorul
+     sa-l acopere, ceea ce ar fi lasat o clipa fundalul gol la vedere. */
+  opacity: clamp(0, calc((1 - var(--covered)) * 2.4), 1);
+}
+
+/* Umbra pe trei straturi: contactul apropiat, corpul, si patarea larga de
+   dedesubt. Una singura arata lipita pe fundal; trei dau volum.
+
+   ═══ AL TREILEA STRAT S-A STINS (19.08) ═══
+
+   Era `0 34px 64px -28px rgba(10,10,10,0.28)`. Pe TEANCUL de pe pagina de start,
+   pentru care a fost calibrat, nu se vedea niciodata intreg: cardurile se acopera
+   unul pe altul, deci pata cadea pe cardul de dedesubt si citea ca adancime.
+
+   Sub o caseta SINGURA, urmata de spatiu gol, aceeasi pata iese la vedere asa cum
+   e: la 34px sub caseta ramane o fasie de alb curat, si abia dupa ea incepe
+   umbra — iar pe o caseta lata de 1200px, unde umbra e practic o banda
+   orizontala, cele doua se citesc ca o LINIE DREAPTA desprinsa de obiect, nu ca o
+   umbra. Asa a si fost semnalata, pe `/migrare`, in rostul dintre ultima sectiune
+   si banda de final.
+
+   Verificat prin proba, nu din ochi: cu valorile de mai jos, teancul de pe pagina
+   de start arata IDENTIC (pata era oricum ascunsa de cardul care acopera), iar
+   banda de sub casetele singure dispare. Deci se schimba o data, aici, pentru
+   toate locurile care folosesc reteta.
+
+   ⚠ NU e o a patra reteta: aceleasi trei straturi, aceeasi directie (drept in
+   jos, lumina din stanga-sus). Doar pata s-a apropiat si s-a stins. Regula
+   „a treia reteta nu se scrie" e despre DIRECTIE, nu despre calibrare — vezi nota
+   din `SectiuneMigrare.tsx`.
+
+   ⚠ Al doilea strat NU s-a atins. Probat si el mai stins; nu schimba nimic la
+   banda, fiindca ea venea din al treilea. O valoare schimbata degeaba e o valoare
+   pe care n-o mai poate explica nimeni. */
+.feature-card-shadow {
+  box-shadow:
+    0 1px 1px rgba(10, 10, 10, 0.04),
+    0 8px 20px -8px rgba(10, 10, 10, 0.1),
+    0 24px 56px -32px rgba(10, 10, 10, 0.16);
+}
+
+/* ─── Pe telefon: rândul. Un singur card e „la rând", și se vede care ────────
+
+   Pe telefon nu există teanc: un card pinat mai înalt decât fereastra își pierde
+   permanent partea de jos, socoteala e la `STACK_TOP` în `Features.tsx`. Aici nu
+   se pinează nimic și nu se atinge niciodată poziția derulării.
+
+   ═══ DE CE S-A SCHIMBAT MECANISMUL, NU DOAR VALORILE ═══
+
+   Aici a fost înainte o cronologie de derulare (`animation-timeline: view()`) care
+   micșora și stingea cardul cât ieșea pe sus. Clientul: „nu prea se vede".
+   Avea dreptate din trei motive, și doar unul era de calibrare:
+
+   1. BROWSERUL, și ăsta e cel mare. `animation-timeline` cere Chrome 115+ sau
+      Safari 26+. Pe orice iPhone rămas în urmă cu actualizările nu se întâmpla
+      NIMIC. Nu era discret, era absent. Aici nu se mai folosește deloc pe telefon:
+      un prag citit în JavaScript plus o tranziție merg din Safari 12.1 și Chrome
+      51, adică practic tot traficul.
+   2. LOCUL. Rula pe cardul care PLEACĂ. Un card care se stinge cât iese pe sus e
+      de nedeosebit de derulare simplă — ochiul urmărește cardul care VINE, iar
+      acela n-avea nicio stare. Acum evenimentul cade în banda de mijloc.
+   3. CEASUL. O cronologie de derulare e trasă de deget: efectul merge cu viteza
+      derulării și n-are bătaie. O tranziție declanșată la prag are ÎNTOTDEAUNA
+      200ms. De acolo vine caracterul decis cerut de client, și el nu poate ieși
+      dintr-o cronologie de derulare.
+
+   ═══ CE SE VEDE, MĂSURAT ═══
+
+   Pe alb, singurul reper între două carduri e CUSĂTURA dintre ele. Distanța de
+   repaus e 32px (`mb-8`). Cu un singur card ridicat la un moment dat:
+     cardul de sus e la rând → 32 + 16 = 48px
+     cardul de jos e la rând → 32 − 16 = 16px
+   Deci golul se strânge la o treime, în 200ms, la mijlocul ecranului. Amândouă
+   cardurile se mișcă: unul coboară la loc, celălalt urcă. În aceeași bătaie se
+   aprinde și umbra adâncă a cardului nou — iar umbrele noastre au deplasare în
+   JOS, deci se văd tocmai la cusătură. Două semnale, în același loc, deodată.
+
+   ═══ CE NU SE ATINGE NICIODATĂ ═══
+
+   Numai ÎNVELIȘUL se schimbă: ridicarea și umbra. NU opacitatea conținutului, nu
+   scara. Motivul e măsurat, nu de principiu: `--color-ink-2` (#52525B) la o
+   opacitate de 0,34 dă 1,74:1 pe alb, iar pragul e 4,5:1. Orice variantă care
+   decolorează un card produce în același timp text ilizibil și un buton-fantomă
+   încă apăsabil. Categoria asta de defecte nu există aici prin construcție.
+
+   ═══ STAREA IMPLICITĂ E CEA BUNĂ ═══
+
+   Fără `data-rand` și fără `.rand-live` — adică fără JavaScript, înainte de
+   hidratare, sau dacă ceva crapă — toate cardurile au umbra deplină și niciunul
+   nu e ridicat. Exact cum arăta pagina înainte de regula asta. JavaScript-ul doar
+   SCADE accentul de pe cardurile care nu sunt la rând; nu poate ascunde nimic.
+
+   ═══ DE CE NU SCROLL-SNAP ═══
+
+   Evaluat și respins, ca decizie înregistrată, să nu se repropună: singurul
+   scroller e rădăcina paginii, deci `scroll-snap-type` ar prinde și hero, și
+   Problema, și Prețuri; iar meniul face derulare lină la ancore
+   (`SiteHeader.tsx:173`, `Navbar.tsx:65`), pe care snap-ul o smucește. Un
+   scroller propriu ar însemna derulare imbricată pe telefon. Aici nu se atinge
+   NICIODATĂ poziția derulării: deplasarea maximă e 16px și e `transform`, deci
+   nu mișcă aranjarea și niciun buton nu poate deveni de neatins.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+@media (max-width: 1023.98px) {
+  /* Fără teanc nu e nevoie de adâncime. Un `translateZ` într-o perspectivă ține
+     cardul pe un strat 3D, iar pe iOS textul de pe un strat 3D se rasterizează
+     mai moale — de cinci ori, degeaba. */
+  .feature-slot {
+    perspective: none;
+  }
+
+  .feature-card {
+    /* Ancoră pentru umbra de pe `::after`. */
+    position: relative;
+    /* Context de stivuire fără `transform`, ca `::after` cu `z-index: -1` să
+       rămână ÎN card în loc să coboare sub fundalul secțiunii. */
+    isolation: isolate;
+    /* Anulează `translateZ/rotateX` de pe desktop. `--covered` e oricum 0 aici,
+       dar un transform identitate tot promovează un strat. */
+    transform: none;
+    /* Plasă: dacă `--covered` ar supraviețui vreodată unei treceri
+       desktop → telefon, regula de bază de mai sus ar da carduri INVIZIBILE. */
+    opacity: 1;
+  }
+
+  /* Umbra pleacă de pe card pe un pseudo-element, ca să se poată stinge ieftin:
+     `opacity` merge pe compozitor, un `box-shadow` animat repictează la fiecare
+     cadru. Aceleași trei straturi ca pe desktop. */
+  .feature-card-shadow {
+    box-shadow: none;
+  }
+
+  .feature-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    box-shadow:
+      0 1px 1px rgba(10, 10, 10, 0.04),
+      0 8px 20px -8px rgba(10, 10, 10, 0.1),
+      0 34px 64px -28px rgba(10, 10, 10, 0.28);
+  }
+
+  /* `.rand-live` se pune abia după prima așezare, ca o reîncărcare în mijlocul
+     secțiunii să nu pornească o bătaie gratuită la încărcare. */
+  .rand-live .feature-card,
+  .rand-live .feature-card::after {
+    transition:
+      transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .rand-live .feature-card[data-rand="activ"] {
+    transform: translateY(-16px);
+  }
+
+  /* Nu zero: un card fără nicio umbră arată lipit pe pagină, nu „în spate". */
+  .rand-live .feature-card[data-rand="inert"]::after {
+    opacity: 0.2;
+  }
+}
+
+/* Blocul ăsta e ULTIMUL dinadins, și selectorii sunt scriși lung dinadins.
+   `.rand-live .feature-card[data-rand="inert"]::after` are specificitatea (0,3,1);
+   un simplu `.feature-card` (0,1,0) ar fi pierdut în fața lui și cardul ar fi
+   rămas stins pentru cine a cerut mai puțină mișcare. */
+@media (prefers-reduced-motion: reduce) {
+  .feature-card,
+  .rand-live .feature-card[data-rand="activ"] {
+    transform: none;
+    opacity: 1;
+    animation-name: none;
+    transition: none;
+  }
+
+  .feature-card::after,
+  .rand-live .feature-card[data-rand="inert"]::after {
+    opacity: 1;
+    transition: none;
+  }
+}
+
+/* ─── Benzile de sigle care curg (varianta 1 de integrari) ───────────────────
+
+   Doua randuri care aluneca in sensuri opuse. Trucul e ca fiecare rand isi
+   contine continutul de DOUA ori, iar animatia il muta cu exact -50%: cand ajunge
+   la capat, a doua copie e fix in locul in care era prima, deci saritura nu se
+   vede. De aceea `IntegrationsBenzi` randeaza lista de doua ori — nu e o
+   scapare, e conditia ca bucla sa fie continua.
+
+   Se misca `transform`, deci totul sta pe compozitor: nu se recalculeaza nici
+   aranjarea, nici pictura, la niciun cadru.
+
+   `prefers-reduced-motion` opreste banda. Nu o ascunde: continutul ramane acolo,
+   doar nemiscat, iar masca de la margini il taie curat. */
+@keyframes banda-stanga {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+@keyframes banda-dreapta {
+  from { transform: translate3d(-50%, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+.banda {
+  display: flex;
+  width: max-content;
+  animation-duration: var(--banda-durata, 70s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.banda-stanga { animation-name: banda-stanga; }
+.banda-dreapta { animation-name: banda-dreapta; }
+
+/* ─── Caseta unei sigle (sectiunea Integrari) ────────────────────────────────
+
+   Alba, ridicata de pe pagina. Si aici e toata dificultatea: pagina e tot alba,
+   deci caseta nu se poate deosebi prin CULOARE. Se deosebeste doar prin UMBRA.
+
+   S-au incercat inainte patru tratamente — granule, sticla cu refractie, crom si
+   relief — si clientul le-a respins pe toate (2026-08-07). A cerut alb curat cu
+   „o tenta 3D". Deci nimic in fond: nici textura, nici degrade, nici transparenta.
+
+   ═══ CE FACE UMBRA SA PARA VOLUM SI NU O PATA ═══
+
+   Patru straturi, fiecare cu rolul lui, si niciunul nu poate lipsi:
+
+   1. Un CONTUR de un pixel, foarte slab. Fara el, muchia casetei albe pe pagina
+      alba nu exista deloc acolo unde umbra e cea mai subtire — adica sus. Nu e o
+      linie care se vede, e o linie care se simte.
+   2. Umbra de CONTACT, scurta si aproape: spune ca obiectul atinge pagina.
+   3. Umbra de INALTIME, larga si difuza: spune cat de sus e ridicat.
+      Una singura, oricat de bine aleasa, arata lipita — contactul si inaltimea
+      sunt doua informatii diferite si ochiul le cere pe amandoua.
+   4. O muchie interioara jos, abia vizibila: da grosime placii. Fara ea, caseta
+      pare o foaie taiata, nu un obiect.
+
+   Toate umbrele trag IN JOS si putin la dreapta, adica lumina vine din stanga-sus.
+   Daca vreodata se schimba una, se schimba toate: incoerenta sursei de lumina e
+   exact ce face un obiect desenat sa para fals. */
+/* Valorile sunt MASURATE, nu alese din ochi, si merita spus cum. Prima incercare
+   parea rezonabila pe hartie si nu se vedea deloc: sub caseta, cel mai inchis
+   pixel iesea 247 din 255, adica opt trepte sub alb, pe doi pixeli. Pe un ecran
+   obisnuit, nimic.
+   Tinta e ~237, adica vreo 18 trepte, care se citeste ca ridicare fara sa para o
+   pata. Socoteala: o umbra de culoarea #101428 (luminanta 21) la opacitatea
+   efectiva `a` da peste alb 255 - 234a, deci pentru 237 trebuie a ≈ 0,08 chiar
+   sub muchie. De acolo ies valorile de mai jos. */
+/* Reteta sta intr-o variabila fiindca o folosesc DOUA lucruri: casetele de sigle
+   si placa tabelului de comparatie. Comentariul de mai sus cere explicit ca, daca
+   se schimba un strat, sa se schimbe toate — o sursa de lumina incoerenta intre
+   doua obiecte de pe aceeasi pagina e chiar ce le face sa para desenate, nu
+   asezate. Cu doua copii ale valorilor, regula aia ar fi tinut doar cat timp
+   cineva isi aminteste de a doua. */
+:root {
+  --umbra-placa:
+    0 0 0 1px rgba(16, 20, 40, 0.06),
+    0 2px 4px rgba(16, 20, 40, 0.08),
+    0 10px 22px -8px rgba(16, 20, 40, 0.3),
+    inset 0 -1px 0 rgba(16, 20, 40, 0.06);
+}
+
+.caseta-sigla {
+  background-color: #FFFFFF;
+  box-shadow: var(--umbra-placa);
+}
+
+/* ─── Haloul de sub CTA-ul principal ──────────────────────────────────────────
+
+   Butonul verde din hero-ul paginii de start si cel din banda de final stau pe
+   alb curat, fara nimic in jur. Fara halou, verdele plutea; cu el, butonul pare
+   asezat pe pagina. E singurul buton al site-ului care il primeste, si asta e
+   chiar rostul lui: spune care e actiunea principala inainte sa se citeasca ce
+   scrie pe el.
+
+   ⚠ CULOAREA VINE DIN `--primary`, NU E SCRISA DE MANA. Era scrisa: butonul se
+   umplea cu `--primary` (un verde inchis), iar haloul de sub el era
+   `rgba(26,181,84,.55)`, adica `--color-brand` — CELALALT verde al site-ului.
+   Doua verzi la 4px distanta, pe cel mai vazut buton al paginii. Nu se observa
+   ca greseala, se observa ca murdarie: umbra parea sa apartina altui obiect.
+
+   `color-mix` tine legatura: daca se schimba vreodata verdele butonului, se
+   schimba si haloul, in aceeasi clipa.
+
+   Directia e aceeasi ca la toate celelalte umbre — in jos, lumina din
+   stanga-sus. Vezi doctrina scrisa mai sus; un halou care bate in alta parte ar
+   fi facut butonul sa para lipit peste pagina. */
+/* ─── Ancorele de sectiune, sub bara lipicioasa ───────────────────────────────
+
+   Bara de sus e `sticky` si are 72px. Un salt catre `#preturi` duce titlul FIX
+   SUB ea: se vede continutul, dar nu se vede titlul, deci omul crede ca a nimerit
+   in mijlocul altei sectiuni. Se intampla la fiecare `href` cu diez de pe site.
+
+   ⚠ SAPTE SECTIUNI TINTITE NU AVEAU NIMIC: #preturi, #comparatie, #faq,
+   #biblioteca, #geo, #performanta, #seo. Doua care aveau foloseau valori
+   diferite — 88px la documentele juridice, 96 la formularul de migrare — adica
+   nimeni nu stabilise una.
+
+   88 = 72 (bara) + 16 (aer). Sub 16px titlul atinge bara si pare lipit de ea.
+
+   ⚠ SE SCRIE CA O CLASA, nu ca `scroll-mt-[88px]` la fiecare sectiune: daca se
+   schimba inaltimea barei, se schimba INTR-UN loc. Cu noua copii scrise de mana,
+   s-ar fi schimbat sase. */
+.sub-bara {
+  scroll-margin-top: 88px;
+}
+
+.halou-cta {
+  box-shadow: 0 8px 28px -8px color-mix(in oklab, var(--primary) 55%, transparent);
+}
+
+/* Placa tabelului de comparatie. Aceeasi ridicare ca la casetele de sigle, din
+   acelasi motiv: pagina e alba, placa e alba, deci nu se poate deosebi prin
+   culoare. Vezi mai sus ce face fiecare dintre cele patru straturi. */
+.placa {
+  background-color: #FFFFFF;
+  box-shadow: var(--umbra-placa);
+}
+
+/* ─── Insigna reCAPTCHA ───────────────────────────────────────────────────────
+
+   Google o pune singur, fixata in COLTUL DIN DREAPTA JOS, imediat ce se incarca
+   scriptul lui — adica la prima atingere a unui formular. Se ascunde, si nu e o
+   siretenie: conditiile de folosire ingaduie explicit ascunderea insignei, cu o
+   singura conditie — pagina sa spuna in text ca formularul e protejat de
+   reCAPTCHA, cu linkuri catre politica si termenii Google.
+
+   ⚠ RANDUL ACELA E CE TINE REGULA. Sta sub butonul fiecarui formular public
+   (`ContactForm`, `FormularMigrare`) si se arata exact cand reCAPTCHA e pornit.
+   Daca vreodata se sterge de acolo, regula de aici trebuie scoasa in aceeasi
+   corectura, altfel site-ul foloseste reCAPTCHA fara sa spuna nicaieri.
+
+   ⚠ Coltul din dreapta jos NU e liber pe site-ul asta: acolo stau butoanele
+   plutitoare de telefon si WhatsApp (`StickyContact`). Insigna cadea peste ele.
+   Mutata in stanga ar fi cazut peste bara de contact lipicioasa; ascunsa, nu
+   cade nicaieri, iar textul spune acelasi lucru mai clar decat un logo mic.
+
+   ⚠ `visibility`, nu `display: none`. Asa cere si documentatia Google: insigna
+   ramane in pagina si masurata, doar ca nu se vede. Cu `display: none`, unele
+   versiuni ale scriptului se poarta ca si cum n-ar fi fost pusa deloc. */
+.grecaptcha-badge {
+  visibility: hidden;
+}
+
+/* ─── Campul de sigle plutitoare (hero-ul paginii „Integrari") ────────────────
+
+   Saisprezece casete asezate ABSOLUT peste hero, fiecare plutind pe traseul ei.
+   Ferirea de cursor sta in `FerireDeCursor.tsx`; aici sunt asezarea si plutirea.
+
+   ═══ DE CE POZITIILE VIN DIN VARIABILE, NU DIN CLASE ═══
+
+   Pozitiile sunt DATE, in `lib/website/integrari-hero.ts`, fiindca sunt pazite
+   de o proba geometrica: saisprezece casete peste un text, la lãtimi de la 320
+   la 2560. Iar Tailwind nu poate genera clase din date — scanerul lui citeste
+   codul sursa, nu ce iese din el la randare. Deci fiecare caseta isi primeste
+   numerele ca variabile inline, si regulile de aici le folosesc.
+
+   Cele doua asezari (sub `lg` si de la `lg` in sus) sunt seturi DIFERITE de
+   numere, nu aceleasi micsorate: la 1024px titlul ocupa 900px si nu mai raman
+   margini laterale in care sa incapa o sigla. Motivul intreg e in fisierul de
+   date.
+
+   ═══ CENTRAREA E DIN MARGINI NEGATIVE, NU DIN `translate` ═══
+
+   E o alegere, nu un gust. `FerireDeCursor` are nevoie de centrul fiecarei
+   casete si il citeste din `offsetLeft`/`offsetTop`, adica din ASEZARE, nu din
+   `getBoundingClientRect()` — acela ar intoarce pozitia din timpul plutirii,
+   deci alta la fiecare cadru. Marginile negative intra in asezare; `translate`
+   nu intra. Pusa pe `translate`, centrarea ar fi trebuit desfacuta inapoi in
+   JavaScript, si altfel pentru casetele agatate de sus decat pentru cele agatate
+   de jos.
+
+   Ambele margini verticale se pun mereu: cea de sus n-are efect cand `top` e
+   `auto`, cea de jos n-are efect cand `bottom` e `auto`. Asa o singura regula
+   serveste amandoua ancorele. */
+.pluta {
+  /* ⚠ FLUIDA sub `lg`, si asta repara un defect masurat: cu 68px ficsi, patru
+     casete ocupa 272px dintr-un ecran de 320, deci raman 16px intre vecine — mai
+     putin decat cursa plutirii, si la un moment din tura chiar se ating. In `vw`
+     se micsoreaza in loc sa se inghesuie. Numerele sunt si in `integrari-hero.ts`
+     (`marimeaIngusta`), unde le foloseste proba de asezare. */
+  --marime: clamp(52px, 17vw, 68px);
+  /* Cat de tare pluteste, ca inmultitor al traseului. Vezi `CURSA`. */
+  --cursa: 0.7;
+  position: absolute;
+  width: var(--marime);
+  height: var(--marime);
+  margin-left: calc(var(--marime) / -2);
+  margin-top: calc(var(--marime) / -2);
+  margin-bottom: calc(var(--marime) / -2);
+  left: var(--x, 50%);
+  top: var(--sus, auto);
+  bottom: var(--jos, auto);
+}
+
+@media (min-width: 1024px) {
+  .pluta {
+    --marime: 84px;
+    --cursa: 1;
+    left: var(--x-lg, 50%);
+    top: var(--sus-lg, auto);
+    bottom: var(--jos-lg, auto);
+  }
+}
+
+/* Casetele de pe laturi se agata de MIJLOCUL inaltimii, nu de o muchie, si e
+   singurul loc unde asta e raspunsul corect: ele stau in dreptul textului, deci
+   trebuie sa ramana INTRE benzi. Masurate de sus, la un hero mai scurt ar fi
+   coborat peste banda de jos.
+
+   Regula vine dupa media query-ul de mai sus ca sa castige la aceeasi
+   specificitate; siglele astea oricum nu exista sub 1280. */
+@media (min-width: 1280px) {
+  .pluta-mijloc {
+    top: calc(50% + var(--mij, 0px));
+    bottom: auto;
+  }
+}
+
+/* Casetele care apar abia pe ecran lat. Ascunse cu `display`, nu cu `opacity` sau
+   `visibility`, si asta chiar conteaza: o imagine `loading="lazy"` dintr-un
+   element `display: none` nu ajunge niciodata in raza de incarcare, deci
+   telefonul nu descarca cele opt sigle pe care oricum nu le vede. */
+.pluta-de-la-lg { display: none; }
+@media (min-width: 1024px) { .pluta-de-la-lg { display: block; } }
+
+.pluta-de-la-xl { display: none; }
+@media (min-width: 1280px) { .pluta-de-la-xl { display: block; } }
+
+/* Plutirea. Cinci trasee, ca sa nu se vada ca e o singura animatie pusa de
+   saisprezece ori — acelasi motiv ca la petele de lumina din hero.
+
+   NUMAI `transform`: o translatie mica si o rotatie si mai mica. Fara `scale` si
+   fara `opacity`, din doua motive: o caseta care se umfla se citeste ca puls, iar
+   o umbra care se scaleaza cere repictare la fiecare cadru, pe cand una care se
+   muta ramane pe compozitor.
+
+   Cat de repede: cursa e de 7-9px pe un sfert de tura, turele au 11-17s, deci
+   vreo 3px/s in medie si vreo 5 in varf, cu `ease-in-out`. Destul cat sa se vada
+   ca traieste daca stai pe pagina, prea putin cat sa-ti ia ochii de pe titlu.
+
+   ⚠ TOTUL SE INMULTESTE CU `--cursa`, si nu e infrumusetare: pe ecran ingust
+   casetele sunt mai apropiate, iar cursa intreaga le-ar duce una peste alta.
+
+   ⚠ Nicio cheie n-are voie sa treaca de 9px sau de 3 grade. Sunt chiar
+   `CURSA_MAX` si `ROTATIE_MAX` din `lib/website/integrari-hero.ts`, adica exact
+   ce foloseste proba de asezare ca sa socoteasca unde POATE ajunge o caseta.
+   Marite aici si nu acolo, proba trece si siglele intra peste titlu. */
+@keyframes pluta-a {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  25% { transform: translate3d(calc(var(--cursa) * 5px), calc(var(--cursa) * -9px), 0) rotate(calc(var(--cursa) * 2.2deg)); }
+  50% { transform: translate3d(calc(var(--cursa) * -3px), calc(var(--cursa) * 3px), 0) rotate(calc(var(--cursa) * -1.2deg)); }
+  75% { transform: translate3d(calc(var(--cursa) * -6px), calc(var(--cursa) * 8px), 0) rotate(calc(var(--cursa) * -2.6deg)); }
+}
+
+@keyframes pluta-b {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  30% { transform: translate3d(calc(var(--cursa) * -7px), calc(var(--cursa) * 7px), 0) rotate(calc(var(--cursa) * -2.4deg)); }
+  60% { transform: translate3d(calc(var(--cursa) * 4px), calc(var(--cursa) * -6px), 0) rotate(calc(var(--cursa) * 1.8deg)); }
+  85% { transform: translate3d(calc(var(--cursa) * 6px), calc(var(--cursa) * 3px), 0) rotate(calc(var(--cursa) * 2.8deg)); }
+}
+
+@keyframes pluta-c {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  20% { transform: translate3d(calc(var(--cursa) * 6px), calc(var(--cursa) * 6px), 0) rotate(calc(var(--cursa) * 2.6deg)); }
+  45% { transform: translate3d(calc(var(--cursa) * -5px), calc(var(--cursa) * 9px), 0) rotate(calc(var(--cursa) * -1.6deg)); }
+  70% { transform: translate3d(calc(var(--cursa) * -4px), calc(var(--cursa) * -7px), 0) rotate(calc(var(--cursa) * -2.2deg)); }
+}
+
+@keyframes pluta-d {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  35% { transform: translate3d(calc(var(--cursa) * -6px), calc(var(--cursa) * -8px), 0) rotate(calc(var(--cursa) * -2.8deg)); }
+  65% { transform: translate3d(calc(var(--cursa) * 7px), calc(var(--cursa) * 4px), 0) rotate(calc(var(--cursa) * 2.1deg)); }
+  85% { transform: translate3d(calc(var(--cursa) * 2px), calc(var(--cursa) * 9px), 0) rotate(calc(var(--cursa) * 0.8deg)); }
+}
+
+@keyframes pluta-e {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  28% { transform: translate3d(calc(var(--cursa) * 8px), calc(var(--cursa) * -5px), 0) rotate(calc(var(--cursa) * 3deg)); }
+  52% { transform: translate3d(calc(var(--cursa) * -2px), calc(var(--cursa) * -9px), 0) rotate(calc(var(--cursa) * -0.9deg)); }
+  76% { transform: translate3d(calc(var(--cursa) * -7px), calc(var(--cursa) * 6px), 0) rotate(calc(var(--cursa) * -2.4deg)); }
+}
+
+/* Invelis separat pentru plutire: `transform`-ul lui `.pluta` e ocupat de ferirea
+   de cursor, iar doua animatii nu pot imparti aceeasi proprietate. */
+.pluta-leagan {
+  width: 100%;
+  height: 100%;
+  animation: var(--cale) var(--durata) ease-in-out var(--decalaj) infinite;
+  will-change: transform;
+}
+
+/* Fara miscare, casetele raman exact unde le prinde: nu se ascunde nimic si nu se
+   rearanjeaza nimic. Ferirea de cursor nici nu se cableaza — vezi componenta. */
+@media (prefers-reduced-motion: reduce) {
+  .pluta-leagan {
+    animation: none;
+    will-change: auto;
+  }
+}
+
+/* ─── Arcul de placi din hero-ul paginii „Migrare magazin" ───────────────────
+
+   Cele cinci placi nu apar, se ASEAZA: pornesc dintr-un rand drept si se lasa
+   fiecare pe locul ei de pe cerc. Miscarea DESENEAZA arcul, nu e o sosire pusa
+   peste el.
+
+   ═══ DE CE NU „APAR DE JOS, PE RAND, DE LA STANGA" ═══
+
+   Fiindca aia e miscarea pe care o are orice sectiune de pe orice site: acelasi
+   fade cu 20px de jos, aceeasi zecime de secunda intre elemente, mereu de la
+   stanga la dreapta. Se recunoaste din prima si nu spune nimic despre lucrul care
+   se misca — merge la fel de bine pe un rand de preturi sau pe trei bife.
+
+   Aici miscarea vine din desen, si de aceea n-ar putea fi mutata pe alta pagina:
+
+   - PORNESC DREPT. `rotate(0)` si aceeasi inaltime, adica exact cum ar arata
+     randul daca n-ar exista arcul. Se deschid ca un evantai, iar placa din capat
+     are cel mai mult de mers fiindca e cea mai departe de mijloc — nu fiindca
+     asa i-a venit randul.
+   - SE LASA IN JOS, nu urca. Ce coboara si se opreste are greutate; ce urca si se
+     opreste pluteste. Placile au umbra sub ele, deci trebuie sa cada pe ceva.
+   - INTARZIEREA PLEACA DIN MIJLOC. Mijlocul e cheia arcului: sta pe loc, iar
+     celelalte se desfac in jurul lui. Vine din ACELASI unghi care da si pozitia
+     (vezi `ArcMigrare.tsx`), deci cele doua nu se pot desincroniza.
+   - FARA saritura peste tinta si FARA `scale`. Un obiect care trece de locul lui
+     si se intoarce e jucaus; aici trebuie sa para asezat cu mana.
+
+   ═══ DOUA ANIMATII, NU UNA ═══
+
+   Aparitia tine 340ms, asezarea 760: transparenta se termina cand miscarea abia e
+   pe la jumatate. Cu una singura, placa ar fi fost inca palida in timp ce se
+   aseaza, si s-ar fi citit „intra ceva", nu „se aseaza ceva". Nu se bat pe aceeasi
+   proprietate — una tine `opacity`, cealalta `transform` — deci merg impreuna.
+
+   `cubic-bezier(0.16, 1, 0.3, 1)` e curba de sosire a site-ului, aceeasi ca la
+   „Rapid" din titlul paginii „Optimizare": porneste tare si se stinge lung. Din
+   cele 760ms, ochiul vede miscare vreo 250 — restul e oprirea.
+
+   ⚠ `animation-delay` STA DUPA scurtatura `animation`, nu inainte. Scurtatura pune
+   la loc tot ce nu scrie, inclusiv intarzierea; deasupra, ar fi fost stearsa si
+   toate cinci ar fi plecat deodata. */
+/* ═══ TOT ARCUL SE MASOARA IN LATURA PLACII ═══
+
+   `--latura` vine din componenta si are trei valori (78px pe telefon, 92 de la
+   `sm`, 112 de la `lg`). Restul — coborarea pe cerc, rotunjirea coltului, punctul
+   din care pleaca miscarea — sunt RAPOARTE inmultite cu ea, nu pixeli.
+
+   Nu e eleganta de dragul ei. Coborarea de pe cerc e `R × (1 − cos θ)`, iar cand
+   placile cresc, creste si departarea dintre ele, deci trebuie sa creasca si R ca
+   arcul sa arate la fel. Cu pixeli ficsi, aceeasi coborare de 22px insemna un arc
+   frumos la 76px si unul aproape drept la 112 — se turteste pe masura ce placile
+   se maresc, adica exact pe ecranul mare, unde se vede cel mai bine.
+
+   Rapoartele ies din `R / latura = 450 / 76 = 5,92`, numarul cu care a fost
+   desenat arcul prima data:
+
+       ±18°  →  5,92 × (1 − cos 18°) = 5,92 × 0,0489 = 0,2895
+       ±9°   →  5,92 × (1 − cos  9°) = 5,92 × 0,0123 = 0,0729
+         0°  →                                         0
+
+   Deci daca se schimba latura, nu se schimba nimic altceva. */
+.arc-placa {
+  width: var(--latura, 78px);
+  height: var(--latura, 78px);
+  /* 0,22 din latura. Pe „Integrari" raportul e 0,29, dar acolo placa tine o sigla
+     si e o pictograma; asta tine o bucata de interfata si e un card — un colt de
+     0,29 la 112px inseamna 32, adica o forma de aplicatie, nu de card. */
+  border-radius: calc(0.22 * var(--latura, 78px));
+  /* ⚠ Pozitia de repaus sta pe ELEMENT, iar `to` de mai jos doar o repeta. Asa,
+     cu animatia oprita (mai jos, la miscare redusa), placa e deja pe locul ei de
+     pe arc — nu la mila umplerii `both`. */
+  transform: translateY(calc(var(--coborare, 0) * var(--latura, 78px))) rotate(var(--rot, 0deg));
+  animation:
+    arc-apare 340ms cubic-bezier(0.16, 1, 0.3, 1) both,
+    arc-se-aseaza 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--intarziere, 0ms);
+}
+
+@keyframes arc-apare {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Cei 0,08 din latura in minus (6px la placa de 78) sunt pentru placa din MIJLOC,
+   care n-are nici coborare, nici rotire: fara ei ar fi ramas singura care doar se
+   aprinde, langa patru care se misca. Atat cat sa se vada ca se aseaza si ea, nu
+   cat sa para ca sare. Tot raport, din acelasi motiv ca restul. */
+@keyframes arc-se-aseaza {
+  from {
+    transform: translateY(calc(-0.08 * var(--latura, 78px))) rotate(0deg);
+  }
+  to {
+    transform: translateY(calc(var(--coborare, 0) * var(--latura, 78px))) rotate(var(--rot, 0deg));
+  }
+}
+
+/* Fara miscare, arcul e acolo de la inceput. Nu se ascunde nimic: ce se vede la
+   sfarsitul animatiei se vede si aici, din prima clipa. */
+@media (prefers-reduced-motion: reduce) {
+  .arc-placa {
+    animation: none;
+  }
+}
+
+/* ─── Titlul paginii „Optimizare" ───────────────────────────────────────────
+
+   Trei piese cerute de client: urma de viteza la „Rapid", semnul Google in locul
+   literei G, si restul cuvantului in culorile lor, aprinzandu-se pe rand.
+
+   ⚠ REGULA CARE A DAT FORMA TUTUROR: titlul trebuie sa ramana, ca TEXT, exact
+   propozitia clientului. Nicio litera in plus, niciuna in minus — e si ce
+   indexeaza un motor de cautare, ironic chiar pe pagina asta. De aceea urma e din
+   `text-shadow` (copii ale GLIFELOR, nu ale cuvantului), litera „G" chiar exista
+   dar e transparenta, iar fiecare litera colorata e chiar litera ei, imbracata
+   intr-un `span`. Povestea intreaga e in `sections/optimizare/TitluOptimizare.tsx`.
+
+   ═══ URMA ═══
+
+   Zece umbre de text, tot mai departate, tot mai neclare si tot mai stinse. Zece,
+   nu sase, si asta conteaza: cu putine straturi se vad copii DISTINCTE ale
+   cuvantului, adica arata a greseala de randare; cu multe si apropiate se vede o
+   singura mangaleala continua, adica miscare. Distantele cresc geometric, ca ce
+   lasa in urma un obiect care incetineste — dens langa el, rarit in coada.
+
+   Toate in `em`: titlul are 38px pe telefon si 66 pe desktop, iar o urma fixa ar
+   fi fost o coada discreta pe ecran mare si o mazgaleala pe telefon.
+
+   `--u` scurteaza coada pe ecran ingust. Nu e gust: coada are 0,88em, adica 58px
+   la corpul de pe desktop, si iese in stanga cuvantului. Pe telefon, unde randul
+   incepe la 20px de marginea ecranului, atata coada ar fi taiata de
+   `overflow-hidden`-ul sectiunii si s-ar vedea retezata drept. */
+.rapid {
+  --u: 0.62;
+  position: relative;
+  display: inline-block;
+  text-shadow:
+    calc(var(--u) * -0.03em) 0 calc(var(--u) * 0.010em) rgba(10, 10, 10, 0.26),
+    calc(var(--u) * -0.07em) 0 calc(var(--u) * 0.025em) rgba(10, 10, 10, 0.21),
+    calc(var(--u) * -0.12em) 0 calc(var(--u) * 0.042em) rgba(10, 10, 10, 0.17),
+    calc(var(--u) * -0.18em) 0 calc(var(--u) * 0.063em) rgba(10, 10, 10, 0.135),
+    calc(var(--u) * -0.26em) 0 calc(var(--u) * 0.091em) rgba(10, 10, 10, 0.105),
+    calc(var(--u) * -0.35em) 0 calc(var(--u) * 0.123em) rgba(10, 10, 10, 0.08),
+    calc(var(--u) * -0.46em) 0 calc(var(--u) * 0.161em) rgba(10, 10, 10, 0.058),
+    calc(var(--u) * -0.58em) 0 calc(var(--u) * 0.203em) rgba(10, 10, 10, 0.04),
+    calc(var(--u) * -0.72em) 0 calc(var(--u) * 0.252em) rgba(10, 10, 10, 0.026),
+    calc(var(--u) * -0.88em) 0 calc(var(--u) * 0.308em) rgba(10, 10, 10, 0.015);
+  animation: rapid-franeaza 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (min-width: 640px) {
+  .rapid { --u: 1; }
+}
+
+/* La incarcare cuvantul soseste din stanga si urma se strange in el — adica
+   franeaza. O SINGURA data (`both`, nu `infinite`): miscarea perpetua e decor.
+   Incetinirea vine din `cubic-bezier(0.16, 1, 0.3, 1)`, care porneste tare si se
+   opreste lin; cu o curba simetrica ar fi parut ca pluteste, nu ca franeaza.
+
+   Cele doua liste au ACELASI numar de straturi, altfel nu se pot interpola si
+   animatia ar sari dintr-una in alta. */
+@keyframes rapid-franeaza {
+  from {
+    transform: translate3d(calc(var(--u) * -0.3em), 0, 0);
+    text-shadow:
+      calc(var(--u) * -0.075em) 0 calc(var(--u) * 0.025em) rgba(10, 10, 10, 0.30),
+      calc(var(--u) * -0.175em) 0 calc(var(--u) * 0.063em) rgba(10, 10, 10, 0.25),
+      calc(var(--u) * -0.300em) 0 calc(var(--u) * 0.105em) rgba(10, 10, 10, 0.20),
+      calc(var(--u) * -0.450em) 0 calc(var(--u) * 0.158em) rgba(10, 10, 10, 0.16),
+      calc(var(--u) * -0.650em) 0 calc(var(--u) * 0.228em) rgba(10, 10, 10, 0.125),
+      calc(var(--u) * -0.875em) 0 calc(var(--u) * 0.306em) rgba(10, 10, 10, 0.095),
+      calc(var(--u) * -1.150em) 0 calc(var(--u) * 0.403em) rgba(10, 10, 10, 0.07),
+      calc(var(--u) * -1.450em) 0 calc(var(--u) * 0.508em) rgba(10, 10, 10, 0.048),
+      calc(var(--u) * -1.800em) 0 calc(var(--u) * 0.630em) rgba(10, 10, 10, 0.031),
+      calc(var(--u) * -2.200em) 0 calc(var(--u) * 0.770em) rgba(10, 10, 10, 0.018);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    text-shadow:
+      calc(var(--u) * -0.03em) 0 calc(var(--u) * 0.010em) rgba(10, 10, 10, 0.26),
+      calc(var(--u) * -0.07em) 0 calc(var(--u) * 0.025em) rgba(10, 10, 10, 0.21),
+      calc(var(--u) * -0.12em) 0 calc(var(--u) * 0.042em) rgba(10, 10, 10, 0.17),
+      calc(var(--u) * -0.18em) 0 calc(var(--u) * 0.063em) rgba(10, 10, 10, 0.135),
+      calc(var(--u) * -0.26em) 0 calc(var(--u) * 0.091em) rgba(10, 10, 10, 0.105),
+      calc(var(--u) * -0.35em) 0 calc(var(--u) * 0.123em) rgba(10, 10, 10, 0.08),
+      calc(var(--u) * -0.46em) 0 calc(var(--u) * 0.161em) rgba(10, 10, 10, 0.058),
+      calc(var(--u) * -0.58em) 0 calc(var(--u) * 0.203em) rgba(10, 10, 10, 0.04),
+      calc(var(--u) * -0.72em) 0 calc(var(--u) * 0.252em) rgba(10, 10, 10, 0.026),
+      calc(var(--u) * -0.88em) 0 calc(var(--u) * 0.308em) rgba(10, 10, 10, 0.015);
+  }
+}
+
+/* Fara miscare ramane doar urma, nemiscata — si singura duce ideea. Nu se
+   ascunde: ce se vede la sfarsitul animatiei se vede si aici, de la inceput. */
+@media (prefers-reduced-motion: reduce) {
+  .rapid {
+    animation: none;
+  }
+}
+
+/* ═══ SEMNUL GOOGLE, PESTE LITERA G ═══
+
+   Litera „G" ramane in text, dar transparenta; semnul sta exact peste locul ei.
+   Asa raman si textul intreg, si latimea randului — cea a cuvantului scris, la
+   orice corp de litera.
+
+   ⚠ ASEZAREA E LEGATA DE LINIA DE BAZA, NU DE CUTIA RANDULUI, si asta a costat o
+   masuratoare. Prima forma il punea absolut, cu `bottom` fata de `.google` — dar
+   marginea de jos a unei cutii de rand nu e linia de baza: sub ea mai sunt
+   coborarea fontului si jumatatea de interlinie. Masurat, 0,382em. Semnul iesea
+   cu 0,437em SUB linia de baza, adica atarnat pe sub cuvant.
+
+   Reteta de acum nu depinde de niciun numar al fontului:
+   `vertical-align: baseline` pe un inline-block cu `line-height: 0` face ca linia
+   lui de baza sa fie chiar marginea de jos a imaginii dinauntru.
+
+   ⚠ INALTIMEA SI DEPASIREA, dupa corectura ceruta de client („sa para ca face
+   parte din cuvant"). Prima forma avea 0,78em, cu susul FIX la inaltimea
+   majusculei si toata depasirea optica dedesubt — deci semnul parea si mai mare,
+   si cazut. Un semn rotund langa majuscule cere depasire in AMANDOUA partile,
+   egala: asa cade pe aceeasi banda optica cu literele. Majuscula fontului are
+   0,727em, masurat; semnul are 0,762 — cu 0,0175 peste ea sus si tot atat sub
+   linia de baza. */
+.google {
+  position: relative;
+  display: inline-block;
+}
+
+/* Transparenta, nu ascunsa: `display:none` ar fi scos-o din text, iar `width:0`
+   ar fi mutat restul cuvantului peste semn. Asa isi tine locul exact.
+
+   `padding-right` inapoiaza spatiul pe care semnul il fura de la litera
+   urmatoare, si numarul e MASURAT, nu ales: semnul e mai lat decat litera „G" si
+   o depaseste cu jumatate de diferenta de fiecare parte, asa ca ajungea la 0,007em
+   PESTE „o" de dupa. Golul natural dintre „G" si „o" in fontul paginii, masurat pe
+   cerneala, e 0,08em — deci trebuie adaugat exact atat cat sa se ajunga acolo.
+   Asa perechea semn+„o" respira la fel ca oricare alte doua litere din titlu. */
+.google-litera {
+  color: transparent;
+  padding-right: 0.112em;
+}
+
+.google-semn {
+  display: inline-block;
+  vertical-align: baseline;
+  line-height: 0;
+  height: 0.762em;
+  width: 0.757em;
+  /* Nu consuma avans: se suprapune peste litera „G" care urmeaza. */
+  margin-right: -0.757em;
+  position: relative;
+  /* Depasirea optica de jos. Cea de sus iese singura, din inaltime. */
+  top: 0.0175em;
+  /* (latimea semnului - latimea literei) / 2, ca sa cada centrat pe ea. */
+  left: -0.022em;
+}
+
+.google-semn svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+/* ═══ „oogle" IN CULORILE LOR ═══
+
+   Cerut de client. ⚠ De stiut ce s-a ales: cuvantul desenat cu fontul NOSTRU in
+   culorile lor e o redare a marcii intr-o litera care nu e a lor. Culorile si
+   ordinea sunt insa cele adevarate: o rosu, o galben, g albastru, l verde, e
+   rosu — adica exact pozitiile 2-6 din marca.
+
+   ⚠ Galbenul #FBBC05 pe alb da un contrast de 1,8:1. Sub orice prag, inclusiv cel
+   pentru text mare. Litera se citeste din context, si asa e si in marca lor, dar
+   merita stiut: e singurul loc de pe site care nu trece.
+
+   Se aprind PE RAND, o singura data, dupa ce urma lui „Rapid" s-a asezat.
+   Pornesc din negrul titlului, deci nu apar de nicaieri: cuvantul se coloreaza,
+   ca si cum ar fi recunoscut. */
+.google-lit {
+  color: var(--color-ink);
+  animation: google-se-aprinde 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(560ms + var(--i) * 90ms);
+}
+
+@keyframes google-se-aprinde {
+  from { color: var(--color-ink); }
+  to { color: var(--c); }
+}
+
+/* Fara miscare, literele sunt colorate de la inceput: culoarea e continut, nu
+   efect — ea spune ca e vorba de Google. Se pierde doar aprinderea pe rand. */
+@media (prefers-reduced-motion: reduce) {
+  .google-lit {
+    animation: none;
+    color: var(--c);
+  }
+}
+
+/* ─── Rama de iPhone (ilustrația cardului „Optimizat pentru mobil") ──────────
+
+   Clientul a cerut „mockup 1 la 1 cu realitatea". De aceea NIMIC de aici nu e
+   ales din ochi: toate mărimile ies dintr-un singur număr, `--l` — lățimea
+   corpului — prin fracțiile măsurate ale aparatului. Așa proporțiile nu se pot
+   desincroniza: se schimbă `--l` și tot restul îl urmează.
+
+   ⚠ DE UNDE VIN CIFRELE, ȘI CÂT DE SIGURE SUNT.
+
+   Sigure, fiindcă sunt ale ecranului:
+     ecran 1320 x 2868 px la 460 ppi  →  72,89 x 158,36 mm, raport 2,1727
+
+   Din fișa aparatului (iPhone 17 Pro Max), deci de confirmat:
+     corp 78,0 x 163,4 mm  →  raport 2,0949
+
+   Din ele ies toate celelalte, ca fracții din lățimea corpului:
+     ramă      = (78,0 − 72,89) / 2 / 78,0        = 3,276%
+     ecran     = 72,89 / 78,0                     = 93,45%
+     verificare: 3,276 + 93,45 + 3,276 = 100 ✓, iar pe verticală rama iese
+     (163,4 − 158,36) / 2 = 2,52 mm față de 2,555 pe orizontală — adică aceeași
+     ramă de jur împrejur, cum și e la aparatul adevărat.
+
+   Colțurile sunt CONCENTRICE, nu două valori alese: raza ecranului plus rama dă
+   raza corpului. Raza ecranului la 16/17 Pro Max e 62pt din 440 lățime, adică
+   14,09% din ecran → 13,17% din corp; plus rama, 16,44% pentru corp. Cu două
+   numere independente, colțul interior ar fi ieșit ori prea ascuțit, ori umflat.
+
+   ⚠ Rama de 3,276% e cea FIZICĂ, măsurată între marginea sticlei și marginea
+   metalului. La aparat, o parte din ea e ramă neagră și o parte e muchia
+   metalică; aici se desenează amândouă, cu un degrade pe muchie.
+
+   `padding` în procente e MEREU față de lățime, și de-aia e folosit pentru ramă:
+   `top: 3,276%` ar fi fost față de înălțime, adică o ramă de sus de două ori mai
+   groasă decât cea din laturi. */
+.iphone {
+  --rama: 0.03276;
+  --raza-corp: 0.1644;
+  --raza-ecran: 0.1317;
+
+  position: relative;
+  width: var(--l);
+  /* 163,4 / 78,0 */
+  aspect-ratio: 1000 / 2095;
+  padding: calc(var(--l) * var(--rama));
+  border-radius: calc(var(--l) * var(--raza-corp));
+
+  /* Muchia metalică: un degrade pe latura scurtă, ca la un corp din aluminiu —
+     mai deschis pe muchii, mai închis pe fețe. Fără el, rama arată a
+     dreptunghi negru, nu a aparat. */
+  background: linear-gradient(
+    100deg,
+    #6f7276 0%,
+    #b9bcc0 6%,
+    #85888c 18%,
+    #55585c 50%,
+    #85888c 82%,
+    #b9bcc0 94%,
+    #6f7276 100%
+  );
+  box-shadow:
+    0 1px 2px rgba(10, 20, 40, 0.10),
+    0 18px 34px -18px rgba(10, 20, 40, 0.42);
+}
+
+/* Sticla: ce se vede sub ramă. Rotunjirea e cea concentrică, nu una aleasă. */
+.iphone-ecran {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  border-radius: calc(var(--l) * var(--raza-ecran));
+  background: #ffffff;
+  /* Ca textul dinăuntru să se poată măsura în procente din LĂȚIMEA ECRANULUI:
+     așa pagina de produs arată la fel la orice mărime a aparatului. */
+  container-type: inline-size;
+}
+
+/* ─── Dynamic Island ─────────────────────────────────────────────────────────
+   125 x 36,7 pt într-un ecran de 440 lățime → 28,4% din ecran, iar înălțimea tot
+   față de LĂȚIME (36,7 / 440 = 8,34%), fiindcă e o formă, nu o proporție de
+   pagină. Distanța de sus, ~11pt = 2,5% din lățimea ecranului. */
+.iphone-insula {
+  position: absolute;
+  left: 50%;
+  top: 2.5cqw;
+  width: 28.4cqw;
+  height: 8.34cqw;
+  transform: translateX(-50%);
+  border-radius: 4.17cqw;
+  background: #000000;
+  z-index: 2;
+}
+
+/* ─── Butoanele laterale ─────────────────────────────────────────────────────
+   Poziții și lungimi ca fracții din ÎNĂLȚIMEA corpului, aproximative — se văd ca
+   niște nuanțe pe muchie, iar rolul lor e doar ca silueta să nu pară un
+   dreptunghi. Ies în afara ramei cu jumătate din grosime, ca la aparat. */
+.iphone-buton {
+  position: absolute;
+  width: calc(var(--l) * 0.012);
+  background: linear-gradient(90deg, #4a4d51, #9a9da1, #4a4d51);
+  border-radius: calc(var(--l) * 0.006);
+}
+
+.iphone-buton-stanga {
+  left: calc(var(--l) * -0.006);
+}
+
+.iphone-buton-dreapta {
+  right: calc(var(--l) * -0.006);
+}
+
+/* Spatierea hero-ului cand sub el pluteste un camp de sigle.
+
+   Numerele nu se scriu aici: vin din `BANDA`, prin `stiluriBanda()`, ca sa existe
+   o singura sursa pentru „cat spatiu tin siglele" si „cat spatiu lasa textul".
+   Cu doua seturi, primul care s-ar fi schimbat ar fi lasat siglele peste titlu —
+   si abia pe ecranul cuiva. */
+.hero-banda {
+  padding-top: var(--banda-sus);
+  padding-bottom: var(--banda-jos);
+}
+
+@media (min-width: 1024px) {
+  .hero-banda {
+    padding-top: var(--banda-sus-lg);
+    padding-bottom: var(--banda-jos-lg);
+  }
+}
+
+/* ─── Sectiunea Problema: numele retelelor, in culorile lor ──────────────────
+   Cerut de client: „Facebook" cu albastrul lor si „Instagram" cu culoarea lor.
+
+   Valorile sunt scoase DIN SIGLELE pe care le folosim, nu din memorie:
+   facebook.svg are gradientul #00B2FF → #006AFF (folosim capatul, #0866FF, care
+   e si albastrul de brand curent), iar instagram.svg are trei opriri,
+   #fa8f21 → #d82d7e → #8c3aaa. Daca se schimba siglele, se schimba si aici.
+
+   Instagram nu ARE o culoare plata — marca lor e un degrade. De aceea cuvantul e
+   colorat cu acelasi degrade, taiat pe litere.
+
+   `@supports` nu e de forma: `color: transparent` fara `background-clip: text`
+   inseamna cuvant INVIZIBIL. Culoarea plata de dinaintea blocului e rezerva care
+   se vede daca taierea pe litere nu merge. */
+.brand-facebook {
+  color: #0866ff;
+}
+
+.brand-instagram {
+  color: #d82d7e;
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .brand-instagram {
+    background-image: linear-gradient(95deg, #fa8f21 0%, #d82d7e 55%, #8c3aaa 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+/* ─── Sectiunea Problema: bulele iMessage din primul card ────────────────────
+   Valorile nu sunt aproximate: fundalul e #007AFF, adica exact `systemBlue` de la
+   Apple — albastrul bulelor din iMessage — textul alb, coltul de 18px.
+
+   DE STIUT: pe iPhone, albastrul inseamna mesaj TRIMIS si sta intotdeauna la
+   DREAPTA, cu codita in dreapta jos; cele primite sunt gri si stau la stanga.
+   Aici sunt albastre si la stanga fiindca asa s-a cerut (2026-08-05: „fundalul
+   mesajelor albastru exact ca pe iPhone", fara sa se ceara si mutarea lor). Daca
+   se vrea si asezarea autentica, se schimba `align-self` in `flex-end` si se
+   oglindesc cele doua pseudo-elemente in dreapta.
+
+   CODITA. Nu e un triunghi rotit sub bula — aia se vede imediat ca nu e iMessage.
+   Codita adevarata are marginea de afara convexa si pe cea dinauntru concava, si
+   se face din DOUA forme suprapuse:
+     ::before  o bula albastra care iese in stanga-jos din colt
+     ::after   o bula ALBA, mai la stanga, care musca din prima si ii da curbura
+   dinauntru. De aceea culoarea lui `::after` trebuie sa fie exact fundalul pe
+   care stau bulele; daca fundalul cardului se schimba, se schimba si aici, altfel
+   apare o pata alba langa fiecare codita.
+
+   Amandoua ies in AFARA bulei (pana la -18px), deci firul are nevoie de spatiu la
+   stanga. Cu mai putin de 20px, `overflow-hidden` taie muscatura si codita
+   ramane un bulgare.
+
+   Fara `z-index`: pseudo-elementele nu ating textul, care incepe abia dupa cei
+   14px de padding, deci n-au ce acoperi. Cu `z-index: -1` ar fi trebuit un
+   context de stivuire pe parinte, altfel cad in spatele cardului si dispar. */
+.imsg {
+  position: relative;
+  align-self: flex-start;
+  /* 88%, nu 84. Masurat pe un ecran de 390px: cel mai lung mesaj cere 269px si
+     are loc 282, dar plafonul de 84% il taia la 267 — se rupea in doua randuri
+     din cauza plafonului, nu din lipsa de spatiu, si ii lipseau DOI pixeli.
+     Pe ecran lat plafonul oricum nu se atinge, deci nu se schimba nimic acolo. */
+  max-width: 88%;
+  padding: 7px 14px 8px;
+  border-radius: 18px;
+  background: #007aff;
+  color: #ffffff;
+}
+
+.imsg::before,
+.imsg::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  height: 20px;
+}
+
+.imsg::before {
+  left: -7px;
+  width: 20px;
+  background: #007aff;
+  border-bottom-right-radius: 15px;
+}
+
+.imsg::after {
+  left: -18px;
+  width: 18px;
+  background: #ffffff;
+  border-bottom-right-radius: 10px;
+}
+
+/* ─── Sosirea mesajelor, una cate una ────────────────────────────────────────
+   Doua lucruri se intampla odata, ca pe iPhone:
+
+   1. RANDUL CRESTE de la inaltime zero, deci mesajele de deasupra sunt IMPINSE
+      in sus. Firul e ancorat jos, asa ca teancul creste in sus, exact ca intr-o
+      conversatie adevarata. Se face cu `grid-template-rows: 0fr -> 1fr`, singurul
+      mod de a anima o inaltime „auto" fara sa o masori cu JavaScript.
+   2. BULA SE UMFLA din coltul cu codita (`transform-origin: 0 100%`), nu din
+      centru. Aici se vede daca cineva a copiat efectul din ochi: pe iPhone bula
+      creste din codita, iar coltul ala ramane pe loc tot timpul.
+
+   ARCUL. Nu e un `ease-out` si nici un `cubic-bezier` de-a gata: iOS foloseste un
+   resort, iar un resort trece PUTIN peste tinta si se aseaza inapoi. Curba de mai
+   jos e un oscilator amortizat calculat punct cu punct — raspuns 0,35s, factor de
+   amortizare 0,72 — si iese cu o depasire de vreo 3,8%. Cu un `ease-out` obisnuit
+   bula se opreste sec si se simte imediat ca nu e iMessage.
+
+   Depasirea creste bula peste inaltimea randului. Nu se taie de `overflow`
+   fiindca deasupra bulei sta spatiul dintre mesaje, si acolo are unde iesi.
+
+   Firul porneste ASCUNS si e dezvaluit de `data-arrive="go"`, pus de
+   `MessagesThread` cand cardul ajunge in dreptul ochilor. Fara JavaScript, blocul
+   `<noscript>` din componenta arata totul dintr-o data. */
+.imsg-row {
+  display: grid;
+  grid-template-rows: 0fr;
+}
+
+.imsg-clip {
+  overflow: hidden;
+}
+
+.imsg {
+  opacity: 0;
+  transform: scale(0.34);
+  transform-origin: 0% 100%;
+}
+
+[data-arrive="go"] .imsg-row {
+  animation-name: imsg-open;
+  animation-duration: 320ms;
+  animation-delay: var(--imsg-delay);
+  animation-fill-mode: forwards;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-arrive="go"] .imsg {
+  animation-name: imsg-pop;
+  animation-duration: 500ms;
+  animation-delay: var(--imsg-delay);
+  animation-fill-mode: forwards;
+  animation-timing-function: linear(
+    0,
+    0.257 10%,
+    0.643 20%,
+    0.9 30%,
+    1.013 40%,
+    1.038 50%,
+    1.029 60%,
+    1.014 70%,
+    1.004 80%,
+    1 90%,
+    1
+  );
+}
+
+@keyframes imsg-open {
+  to {
+    grid-template-rows: 1fr;
+  }
+}
+
+@keyframes imsg-pop {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Fara miscare, mesajele sunt pur si simplu acolo. Nu se ascunde niciunul: sunt
+   continut, nu ornament. */
+@media (prefers-reduced-motion: reduce) {
+  .imsg-row {
+    grid-template-rows: 1fr;
+  }
+
+  .imsg {
+    opacity: 1;
+    transform: none;
+  }
+
+  [data-arrive="go"] .imsg-row,
+  [data-arrive="go"] .imsg {
+    animation: none;
+  }
+}
+
+/* ─── Se aseaza la intrarea in ecran (ilustratiile de pe /migrare) ────────────
+
+   Un lucru care se aseaza la locul lui cand ajunge in dreptul ochilor: pleaca
+   deviat si stins, si vine la starea de repaus. Il folosesc doua ilustratii de pe
+   /migrare — teancul de comenzi (cardul din fata, foile de dedesubt, randul cu
+   numarul) si cele trei carduri de produs, care intra pe rand.
+
+   E scrisa generic DINADINS. Prima forma se numea `.teanc-strat`, cu variabile
+   `--teanc-*`, si mergea perfect — pana in clipa in care a trebuit sa se aseze si
+   cardurile de produs. O clasa care se cheama „strat de teanc" pusa pe un card de
+   produs e o minciuna pe care o citeste urmatorul om, nu o scurtatura.
+
+   TREI VARIABILE, toate cu valoare de rezerva, deci se pune doar ce trebuie:
+     --aseaza-de-la       de unde vine, pe verticala. Negativ = coboara.
+     --aseaza-intarziere  cand porneste. Din ea se face cascada.
+     --aseaza-opacitate   opacitatea de REPAUS, nu neaparat 1.
+
+   ⚠ Opacitatea de repaus e o variabila, nu 1 in keyframe, fiindca foile din
+   spatele teancului stau stinse ca sa para mai departe. Valoarea sta pe element,
+   intr-un singur loc, si e aceeasi si cand animatia nu ruleaza deloc — fara
+   JavaScript, sau cu miscarea oprita din sistem.
+
+   ⚠ STAREA DE PORNIRE E `opacity` + `transform`, niciodata `display` sau
+   `visibility`. Un element `display:none` nu ruleaza animatii, iar o poza lenesa
+   dinauntrul lui iese din raza de preincarcare si pica peste card dupa ce s-a
+   asezat. Cu `opacity`, elementul e in layout tot timpul si poza soseste la vreme.
+
+   Ca la firul de mesaje: `IntersectionObserver` pune `data-arrive="go"` pe
+   invelis (`LaIntrareInEcran`), desenul il face foaia de stil, si se joaca O
+   SINGURA data. Acelasi atribut, dinadins — un al doilea nume pentru „a intrat in
+   ecran" ar fi fost doua feluri de a spune acelasi lucru. */
+.se-aseaza {
+  opacity: 0;
+  transform: translateY(var(--aseaza-de-la, 12px));
+}
+
+[data-arrive="go"] .se-aseaza {
+  animation-name: aseaza-la-intrare;
+  animation-duration: 520ms;
+  animation-delay: var(--aseaza-intarziere, 0s);
+  animation-fill-mode: forwards;
+  /* CURBA DE SOSIRE A SITE-ULUI, aceeasi ca la arcul de placi din hero-ul acestei
+     pagini: pleaca repede si se aseaza lung, FARA saritura peste tinta si fara
+     `scale`. Lucrurile trebuie sa para asezate cu mana, nu aruncate. */
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes aseaza-la-intrare {
+  to {
+    opacity: var(--aseaza-opacitate, 1);
+    transform: none;
+  }
+}
+
+/* Fara miscare, totul e pur si simplu acolo, la starea de repaus. Sunt
+   ilustratii, nu efecte: fara ele sectiunile ramin cu o jumatate goala. */
+@media (prefers-reduced-motion: reduce) {
+  .se-aseaza {
+    opacity: var(--aseaza-opacitate, 1);
+    transform: none;
+  }
+
+  [data-arrive="go"] .se-aseaza {
+    animation: none;
+  }
+}
+
+.dark {
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.2 0.005 285.823);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.2 0.005 285.823);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.572 0.154 150.069);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.269 0.005 285.823);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0.005 285.823);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0.005 285.823);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.572 0.154 150.069);
+  --sidebar: oklch(0.2 0.005 285.823);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.572 0.154 150.069);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.269 0.005 285.823);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.572 0.154 150.069);
+}
+
+/* ─── Tailwind theme bridge ──────────────────────────────────────────────── */
+
+@theme {
+  --animate-aurora: aurora 60s linear infinite;
+
+  /* Surfaces: registered here so Tailwind generates the utilities (bg-surface,
+     bg-surface-raised). The same values live in :root above for direct var()
+     use (e.g. gradients). Without this registration `bg-surface` produced no
+     background at all — every surface rendered transparent. */
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #F3F4F6;
+
+  /* Semantic state colors — registered so Tailwind generates the utilities
+     (bg-success, text-warning, border-info, …). Tones are chosen to read
+     >=4.5:1 on light surfaces, so the same token works for text, icon and
+     border. Soft fills use the /10 opacity idiom, e.g. `bg-success/10
+     text-success` — the same pattern shadcn already uses for `destructive`.
+     This replaces the hardcoded green/amber/blue palette spread across the
+     dashboard (bg-green-50, text-amber-700, bg-blue-100, …). */
+  --color-success: #0F8A43;
+  --color-success-foreground: #FFFFFF;
+  --color-warning: #B45309;
+  --color-warning-foreground: #FFFFFF;
+  --color-info: #1D4ED8;
+  --color-info-foreground: #FFFFFF;
+
+  /* Site de prezentare (edinio.com) — paleta monocroma.
+     Nume NOI, adaugate strict aditiv: nu ating tokenii shadcn (--primary,
+     --foreground, --border) folositi de dashboard si de magazine, deci
+     randarea lor rimane neatinsa. Verdele de brand rimane --color-brand si
+     se foloseste cu masura: badge-uri, iconite la hover, detalii.
+     Titlurile sunt --color-ink (mai inchis decat --foreground, care bate in
+     violet); textul curent --color-ink-2. */
+  --color-ink: #0A0A0A;
+  --color-ink-2: #52525B;
+  --color-ink-3: #8A8A94;
+  --color-hairline: #EAEAEE;
+  --color-tint: #FAFAFB;
+  --color-tint-2: #F5F5F7;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ─── Base styles ────────────────────────────────────────────────────────── */
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    box-sizing: border-box;
+  }
+
+  html {
+    @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+  }
+
+  /* Focus visible styles */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong, #D1D5DB);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-tertiary, #9CA3AF);
+  }
+}
+
+/* ─── Utility classes ────────────────────────────────────────────────────── */
+
+@layer utilities {
+  .text-brand { color: var(--color-brand); }
+  .bg-brand { background-color: var(--color-brand); }
+  .bg-brand-light { background-color: var(--color-brand-light); }
+  .border-brand { border-color: var(--color-brand); }
+
+  .shadow-card { box-shadow: var(--shadow-sm); }
+  .shadow-modal { box-shadow: var(--shadow-md); }
+  .shadow-float { box-shadow: var(--shadow-lg); }
+
+  /* Animate spin for loaders */
+  .animate-spin-slow {
+    animation: spin 1.5s linear infinite;
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--color-border) 25%,
+      var(--color-surface-raised) 50%,
+      var(--color-border) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes aurora {
+  from { background-position: 50% 50%, 50% 50%; }
+  to   { background-position: 350% 50%, 350% 50%; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0%); }
+  100% { transform: translateX(-50%); }
+}
+
+/* ─── Sertarul de cos: intrarea dinspre marginea din dreapta ─────────────────
+   Panoul exista de mult si sta unde trebuie, dar aparea DINTR-O DATA, ca o
+   fereastra, nu ca un sertar. Diferenta dintre „a aparut ceva peste pagina" si
+   „s-a deschis cosul din marginea aia" e chiar drumul de 260ms: ochiul vede de
+   unde vine si intelege singur ca se inchide tot acolo.
+
+   Numai INTRAREA e animata. Pentru iesire ar trebui tinut in pagina si dupa ce
+   s-a inchis, cu o mica masina de stari, iar castigul e mic: la deschidere te
+   uiti la el, la inchidere te uiti deja in alta parte.
+
+   Curba pleaca repede si se aseaza lin, cum se misca un sertar adevarat.
+   `ease-out` simplu pare ca frineaza prea devreme si iese lipicios. */
+@keyframes cart-drawer-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes cart-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.cart-drawer-enter {
+  animation: cart-drawer-in 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+.cart-backdrop-enter {
+  animation: cart-backdrop-in 220ms ease-out;
+}
+/* Fara miscare, sertarul apare pe loc — adica exact cum era pana acum. */
+@media (prefers-reduced-motion: reduce) {
+  .cart-drawer-enter,
+  .cart-backdrop-enter { animation: none; }
+}
+
+/* ─── Custom-page button effects (CSS-only so blocks stay server-rendered) ─── */
+@keyframes edinio-fx-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+@keyframes edinio-fx-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes edinio-fx-heartbeat { 0%, 60%, 100% { transform: scale(1); } 30% { transform: scale(1.07); } 45% { transform: scale(1.02); } }
+@keyframes edinio-fx-shake { 0%, 82%, 100% { transform: translateX(0); } 85% { transform: translateX(-4px); } 88% { transform: translateX(4px); } 91% { transform: translateX(-4px); } 94% { transform: translateX(4px); } }
+@keyframes edinio-fx-glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
+.fx-pulse { animation: edinio-fx-pulse 1.6s ease-in-out infinite; }
+.fx-bounce { animation: edinio-fx-bounce 1.4s ease-in-out infinite; }
+.fx-heartbeat { animation: edinio-fx-heartbeat 1.8s ease-in-out infinite; }
+.fx-shake { animation: edinio-fx-shake 3s ease-in-out infinite; }
+.fx-glow { animation: edinio-fx-glow 1.8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .fx-pulse, .fx-bounce, .fx-heartbeat, .fx-shake, .fx-glow { animation: none; }
+  /* Banda de anunt isi ia durata dintr-o setare, deci animatia sta inline si
+     doar o regula importanta o poate opri. Textul ramane vizibil, doar nu curge. */
+  .marquee-banda { animation: none !important; }
+}
+
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+/* ⚠ AICI A FOST `.glass-nav`, ștearsă pe 31.08.2026: cod mort livrat fiecărui
+   vizitator anonim. Zero folosiri în tot `src` — bara de sus își face efectul
+   de sticlă din clase Tailwind, nu de aici. 400 de octeți. */
+
+/* ─── TipTap / ProseMirror editor ──────────────────────────────────────── */
+
+.ProseMirror {
+  outline: none;
+  min-height: 200px;
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--foreground);
+}
+
+.ProseMirror > * + * { margin-top: 0.6em; }
+
+.ProseMirror h1 { font-size: 1.5rem; font-weight: 700; margin-top: 1em; }
+.ProseMirror h2 { font-size: 1.25rem; font-weight: 700; margin-top: 0.9em; }
+.ProseMirror h3 { font-size: 1.1rem;  font-weight: 600; margin-top: 0.8em; }
+
+.ProseMirror p { margin: 0; }
+.ProseMirror p + p { margin-top: 0.5em; }
+
+.ProseMirror strong { font-weight: 700; }
+.ProseMirror em     { font-style: italic; }
+.ProseMirror u      { text-decoration: underline; }
+.ProseMirror s      { text-decoration: line-through; }
+
+.ProseMirror code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8em;
+  background: var(--muted);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+.ProseMirror blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+  margin: 0.75em 0;
+}
+
+.ProseMirror ul, .ProseMirror ol {
+  padding-left: 1.5rem;
+  margin: 0.5em 0;
+}
+.ProseMirror ul { list-style-type: disc; }
+.ProseMirror ol { list-style-type: decimal; }
+.ProseMirror li + li { margin-top: 0.2em; }
+
+.ProseMirror a {
+  color: var(--primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+/* Policy HTML render (public page) */
+.policy-content h1 { font-size: 1.5rem; font-weight: 700; margin: 1.2em 0 0.4em; }
+.policy-content h2 { font-size: 1.2rem; font-weight: 700; margin: 1em 0 0.35em; }
+.policy-content h3 { font-size: 1.05rem; font-weight: 600; margin: 0.9em 0 0.3em; }
+.policy-content p  { margin: 0.5em 0; line-height: 1.7; }
+.policy-content strong { font-weight: 700; }
+.policy-content em     { font-style: italic; }
+.policy-content ul, .policy-content ol { padding-left: 1.5rem; margin: 0.5em 0; }
+.policy-content ul { list-style-type: disc; }
+.policy-content ol { list-style-type: decimal; }
+.policy-content li + li { margin-top: 0.2em; }
+.policy-content a  { color: var(--primary); text-decoration: underline; }
+.policy-content blockquote { border-left: 3px solid var(--border); padding-left: 1rem; color: var(--muted-foreground); margin: 0.75em 0; }
+.policy-content code { font-family: monospace; font-size: 0.85em; background: var(--muted); border-radius: 4px; padding: 0.1em 0.35em; }
+
+/* ─── Trecerea intre filele de la „Ce include" ────────────────────────────────
+   Folosita de `SectiuneCeInclude` (pagina „Mentenanta gratuita"). Blocul din
+   dreapta e inlocuit la fiecare schimbare de fila (are `key`), deci animatia de
+   intrare porneste de la capat singura.
+
+   Deplasare MICA, 6px: panoul nu se muta, doar se asaza. O intrare de 20-30px
+   pe un bloc mare arata a diapozitiv, nu a schimbare de fila.
+
+   `both` pastreaza starea de la sfarsit: fara el, blocul ar clipi inapoi la
+   opacitatea zero cand animatia se incheie.
+
+   Aceeasi curba si aceeasi durata ca marcajul care aluneca in lista din stanga
+   (320ms) — altfel cele doua s-ar citi ca doua miscari care se intrec, nu ca
+   una singura. */
+@keyframes apare-lin {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.apare-lin {
+  animation: apare-lin 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Continutul ramane INTREG, doar ca apare instant. */
+@media (prefers-reduced-motion: reduce) {
+  .apare-lin { animation: none; }
+}
+
+/* ─── Cuvântul făcut din cod binar ──────────────────────────────────────────
+
+   Pe pagina „Mentenanță gratuită", cuvântul „tehnică" e o literă plină din care
+   sunt SCOASE cifre de 0 și 1. Cerut de client (13.08).
+
+   ⚠ ORDINEA E INVERSĂ FAȚĂ DE CUM PARE FIRESC, și asta a costat două încercări.
+
+   Prima formă punea cifre negre pe gol: tăiate pe forma literei, rămâneau doar
+   ele, iar între ele era transparent. Litera ajungea acoperită cam pe o treime,
+   adică un nor de zgomot din care nu se mai citea nimic. Micșorarea cifrelor de
+   la 8px la 4 n-a rezolvat: problema nu era mărimea, era CÂTĂ CERNEALĂ rămâne.
+
+   Acum litera e plină, iar cifrele sunt albe, scoase din ea. Cuvântul se citește
+   de la prima privire, ca tot titlul; de aproape se vede că e perforat cu 0 și 1.
+
+   ⚠ Dala e de 38,4×22: patru rânduri de câte șaisprezece cifre la 5px. Cifrele
+   monospațiate au pasul de 0,6em, deci șaisprezece cifre fac exact 38,4px — cât
+   dala. La orice altă lățime, marginea ar tăia o cifră pe din două și cusătura
+   s-ar vedea ca o dungă verticală prin literă.
+
+   ⚠ `color: transparent` FĂRĂ tăiere înseamnă CUVÂNT INVIZIBIL. De aceea totul
+   stă sub `@supports`: unde tăierea pe text nu merge, cuvântul rămâne pur și
+   simplu negru, ca restul titlului. E singura scăpare care ar fi înghițit un
+   cuvânt din titlu fără ca nimic să se plângă.
+
+   ⚠ Cerneala e CERNEALĂ, nu verde. Regula site-ului e că în titluri nu se
+   colorează cuvinte; verdele stă doar pe parantezele din jur, care sunt semne.
+*/
+.cuvant-binar {
+  /* Plasa: dacă tăierea pe text nu e cunoscută, rămâne cerneală plină. */
+  color: var(--color-ink);
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .cuvant-binar {
+    /* Cifrele albe DEASUPRA, câmpul de cerneală DEDESUBT. */
+    background-image:
+      url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='38.4' height='22'><text x='0' y='5.2' font-family='monospace' font-size='5' fill='%23FFFFFF' fill-opacity='0.92'>0100111001101101</text><text x='0' y='10.7' font-family='monospace' font-size='5' fill='%23FFFFFF' fill-opacity='0.92'>1011010010010110</text><text x='0' y='16.2' font-family='monospace' font-size='5' fill='%23FFFFFF' fill-opacity='0.92'>0010110101101001</text><text x='0' y='21.7' font-family='monospace' font-size='5' fill='%23FFFFFF' fill-opacity='0.92'>1101001011010010</text></svg>"),
+      linear-gradient(var(--color-ink), var(--color-ink));
+    background-repeat: repeat, repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+/* Cadrele-cheie pentru `Ripple` (Magic UI), adusa la cererea clientului.
+   Cercurile nu se maresc: se STRANG putin si revin. Diferenta conteaza - crescute,
+   ar fi parut ca se propaga spre afara la nesfarsit, adica o unda; stranse si
+   revenite, respira pe loc, ceea ce e chiar ce arata efectul lor. */
+@keyframes ripple {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(0.9); }
+}
+
+/*
+ * `pre` e singura eticheta din lista sanitizatorului care nu se rupe singura.
+ * Implicit e `white-space: pre`, iar preflight-ul Tailwind ii da doar fontul, nu
+ * si ruperea; `img`, `table`, `iframe` si `video` sunt aruncate de
+ * `sanitize-html.ts`, deci nu ajung aici. Masurat: o singura linie de o suta de
+ * caractere lipita de comerciant in descriere ducea latimea documentului de la
+ * 384 la 898 pe un telefon — descrierea nu iesea doar ea din coloana, ci scotea
+ * toata pagina din ecran. `overflow-x` ramane ca plasa pentru arta ASCII, unde
+ * ruperea la spatii n-ar ajunge. Priveste toate cele patru locuri care poarta
+ * clasa: descrierile din ambele pagini de produs, paginile de politici, blocurile
+ * paginilor proprii si anunturile.
+ */
+.policy-content pre { white-space: pre-wrap; overflow-x: auto; }
+
+/* ─── Textul unui articol de blog ─────────────────────────────────────────────
+
+   Pornește de la `.policy-content`, care dă structura, și schimbă MĂSURA. O
+   pagină de politici se răsfoiește după o clauză; un articol se citește de la
+   cap la coadă, iar la lectură lungă mărimea și aerul dintre rânduri sunt tot
+   ce ține ochiul pe text.
+
+   ⚠ `scroll-margin-top` E OBLIGATORIU PE TITLURI, nu cosmetic.
+
+   Bara de sus e lipită (`sticky`) și acoperă 88px. Fără marginea asta, un salt
+   din cuprins aduce titlul EXACT sub bară: cititorul apasă, pagina se mișcă, și
+   ajunge la un paragraf din mijloc fără să vadă titlul la care voia să meargă.
+   Pare că legătura e stricată, deși a funcționat perfect. Auditul de design din
+   23.08 a găsit fix defectul ăsta în altă parte a site-ului. */
+.blog-articol { font-size: 17px; }
+.blog-articol p { margin: 1.1em 0; line-height: 1.75; }
+.blog-articol h2 {
+  font-size: 1.45rem;
+  font-weight: 650;
+  line-height: 1.3;
+  margin: 2em 0 0.6em;
+  scroll-margin-top: 88px;
+}
+.blog-articol h3 {
+  font-size: 1.15rem;
+  font-weight: 650;
+  line-height: 1.35;
+  margin: 1.6em 0 0.4em;
+  scroll-margin-top: 88px;
+}
+.blog-articol ul, .blog-articol ol { margin: 1.1em 0; }
+.blog-articol li + li { margin-top: 0.4em; }
+.blog-articol li { line-height: 1.7; }
+.blog-articol blockquote { margin: 1.5em 0; font-size: 1.05em; }
+/* Pozele din corpul articolului: lățime plină, colțuri ca ale celorlalte
+   cartonașe. `height: auto` ține raportul când lățimea e limitată de coloană. */
+.blog-articol img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  margin: 1.6em 0;
+}
+.blog-articol figure { margin: 1.6em 0; }
+.blog-articol figcaption {
+  margin-top: 0.6em;
+  font-size: 0.82em;
+  color: var(--muted-foreground);
+  text-align: center;
+}

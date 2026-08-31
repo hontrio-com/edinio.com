@@ -1,3 +1,4 @@
+import "../globals.css";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCachedUser } from "@/lib/supabase/cached-queries";

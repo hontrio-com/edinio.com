@@ -1,3 +1,4 @@
+import "../website.css";
 import { Inter } from "next/font/google";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";

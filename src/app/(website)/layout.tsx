@@ -1,3 +1,4 @@
+import "../website.css";
 import { Inter } from "next/font/google";
 import { SiteHeader } from "@/components/website/site-header/SiteHeader";
 import { Footer } from "@/components/website/Footer";

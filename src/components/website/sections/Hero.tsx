@@ -165,26 +165,19 @@ function HeroCadru({
 export function Hero() {
   return (
     <HeroCadru
-      eticheta={
-        /*
-          Eticheta sta pe UN rand si pe telefon. Textul lung se rupea in doua si
-          arata ingramadit, asa ca partea de detaliu apare abia de la `sm` in sus,
-          unde incape. Pe telefon rimane doar miezul.
-        */
-        <Link
-          href="/magazin-online"
-          className="inline-flex max-w-full items-center gap-2 rounded-full border border-hairline bg-white/70 py-1.5 pl-1.5 pr-3.5 text-[12px] font-medium text-ink-2 backdrop-blur-sm transition-colors duration-200 hover:border-ink-3/40 sm:pr-4 sm:text-[13px]"
-        >
-          <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-white sm:text-[11px]">
-            Nou
-          </span>
-          <span className="truncate">
-            Pagină de magazin
-            <span className="hidden sm:inline">, cu filtre pe brand și specificații</span>
-          </span>
-          <ArrowRight className="h-3.5 w-3.5 shrink-0 opacity-60" />
-        </Link>
-      }
+      /*
+        ⚠ FĂRĂ PASTILA „Nou" — scoasă la cererea clientului pe 31.08.2026, care a
+        spus că arată ca un tipar de șablon, nu ca ceva ales.
+
+        Avea și un cusur de fond: anunța „Pagină de magazin" ca noutate, dar pe
+        telefon jumătatea explicativă era ascunsă (`hidden sm:inline`), deci
+        rămânea doar „Nou · Pagină de magazin" — o promisiune fără conținut, exact
+        deasupra titlului care spune ce face platforma.
+
+        ⚠ DACĂ SE PUNE ALTA CÂNDVA: `eticheta` e prop pe `HeroCadru` și rămâne
+        acolo, folosită de paginile de comparație. Locul e liber, nu desființat.
+        Dar merită să anunțe ceva ce se vede întreg și pe telefon.
+      */
       title="Magazinul tău online, deschis în câteva minute"
       lead="Îți deschizi magazinul și începi să vinzi în aceeași zi. Toate integrările sunt incluse: curieri cu AWB automat, plăți cu cardul și facturare. Iar mentenanța și asistența rămân gratuite, permanent."
       principala={{ label: "Începe gratuit", href: "/register" }}

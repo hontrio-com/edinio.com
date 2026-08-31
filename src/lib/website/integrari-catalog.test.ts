@@ -163,11 +163,21 @@ test("cele care merg azi vin înaintea celor anunțate, fără să se amestece r
 
 test("numărătoarea de active și de anunțate e cea din panou", () => {
   assert.equal(NUMAR_ACTIVE + NUMAR_IN_CURAND, INTEGRARI.length);
-  /* La 2026-08-11 panoul avea 34 anuntate (comit `a4a015c` pe `main`). Daca se
-     livreaza una, numarul de aici trebuie sa scada odata cu ea — altfel site-ul
-     spune „In curand" despre ceva ce merge deja. */
-  assert.equal(NUMAR_IN_CURAND, 34);
-  assert.equal(NUMAR_ACTIVE, 31);
+  /*
+    ⚠ NUMERELE ASTEA AU FOST GRESITE DOUAZECI DE ZILE, si nota de aici spunea
+    chiar ce urma sa se intample: „daca se livreaza una, numarul de aici trebuie
+    sa scada odata cu ea — altfel site-ul spune «In curand» despre ceva ce merge
+    deja". S-au livrat NOUA: sapte curieri, Posta Romana si eMAG. Prin eMAG
+    intrau deja comenzi in timp ce pagina de prezentare il anunta.
+
+    ⚠ DE CE N-A PRINS-O NIMIC. Numerele se derivau din CATALOG, deci se schimbau
+    ODATA cu greseala — un numar care se muta singur nu pazeste nimic. Iar proba
+    de mai jos verifica doar PREZENTA („e in panou si lipseste de aici?"), nu
+    starea: eMAG era in amandoua listele, deci trecea. De aceea exista acum si
+    proba `starile din catalog sunt cele din panou`.
+  */
+  assert.equal(NUMAR_IN_CURAND, 25);
+  assert.equal(NUMAR_ACTIVE, 40);
 });
 
 test("siglele intră în locașul cardului fără să iasă mâzgălituri", () => {
@@ -219,6 +229,58 @@ test("catalogul nu rămâne în urma panoului", () => {
     lipsa,
     [],
     `panoul are integrări care lipsesc din catalogul site-ului: ${lipsa.join(", ")}`,
+  );
+});
+
+test("stările din catalog sunt cele din panou", () => {
+  /*
+    ⚠ PROBA DE DEASUPRA PAZESTE PREZENTA; ASTA PAZESTE STAREA.
+
+    Si de aceea aceea n-a prins nimic douazeci de zile: ea intreaba „e in panou
+    si lipseste de aici?". eMAG era in AMANDOUA listele, deci trecea — dar panoul
+    il activa, iar site-ul il anunta ca fiind „in curand". Prezenta se potrivea;
+    starea, nu.
+
+    In panou, `id:` inseamna „se poate activa azi"; lipsa lui inseamna anuntata.
+
+    ⚠ SE PAZESTE O SINGURA DIRECTIE, ANUME CEA CARE MINTE CLIENTUL: panoul
+    activeaza, catalogul inca spune „in curand". Invers — catalog „activa", panou
+    fara `id` — s-ar plange pe integrarile pe care ramura asta le are inainte, si
+    care nu sunt o greseala. Aceeasi alegere ca la proba de deasupra, si din
+    acelasi motiv scris acolo.
+
+    ⚠ SE CITESTE PE RANDURI, fiindca in panou fiecare integrare sta pe un rand:
+        { name: "FedEx", logo: "/integrations/fedex.svg", id: "fedex" },
+    Am incercat intai un regex peste toata acolada. Rulat de mana pe acelasi
+    fisier dadea 65 de potriviri; rulat aici, prin incarcatorul care dezbraca
+    tipurile, dadea ZERO. N-am aflat de ce si n-am ghicit: tiparul de mai jos e
+    chiar cel folosit cu succes de proba de deasupra.
+  */
+  const sursa = readFileSync(PANOU, "utf8");
+
+  const activabileInPanou = new Set<string>();
+  for (const rand of sursa.split("\n")) {
+    const sigla = /logo:\s*"\/integrations\/([^"]+)"/.exec(rand);
+    if (sigla && rand.includes("id:")) activabileInPanou.add(radacina(sigla[1]));
+  }
+
+  /* ⚠ Fara randul asta, o citire picata ar arata ca „nicio nepotrivire". */
+  assert.ok(
+    activabileInPanou.size > 0,
+    "n-am citit nicio integrare activabilă din panou — s-a mutat fișierul sau i s-a schimbat forma?",
+  );
+
+  const mint: string[] = [];
+  for (const i of INTEGRARI) {
+    if (i.stare !== "in-curand") continue;
+    const sigla = radacina(PROVIDER_LOGOS[i.cheie].src.split("/").pop() ?? "");
+    if (activabileInPanou.has(sigla)) mint.push(i.cheie);
+  }
+
+  assert.deepEqual(
+    mint,
+    [],
+    `site-ul spune „În curând" despre integrări pe care panoul le activează: ${mint.join(", ")}`,
   );
 });
 

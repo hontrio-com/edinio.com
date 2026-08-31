@@ -135,49 +135,49 @@ export const INTEGRARI: Integrare[] = [
   {
     cheie: "dhl",
     categorie: "curieri",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Livrări internaționale expres, cu urmărire până la destinație.",
   },
   {
     cheie: "fedex",
     categorie: "curieri",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Transport internațional expres, pentru comenzile care pleacă din țară.",
   },
   {
     cheie: "ups",
     categorie: "curieri",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Livrări expres în țară și internațional, cu urmărire pe tot drumul.",
   },
   {
     cheie: "postaRomana",
     categorie: "curieri",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Acoperire poștală în toată țara, inclusiv în localitățile mici.",
   },
   {
     cheie: "packeta",
     categorie: "curieri",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Rețea de puncte de ridicare din Europa Centrală și de Est.",
   },
   {
     cheie: "innoship",
     categorie: "curieri",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Alege singură curierul potrivit pentru fiecare comandă, după reguli pe care le pui tu.",
   },
   {
     cheie: "smartship",
     categorie: "curieri",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Administrarea expedierilor peste mai mulți curieri, dintr-un singur loc.",
   },
   {
     cheie: "shipo",
     categorie: "curieri",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Compară tarifele curierilor și emite AWB-ul pentru cel ales.",
   },
 
@@ -333,7 +333,7 @@ export const INTEGRARI: Integrare[] = [
   {
     cheie: "emag",
     categorie: "marketplace",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Cel mai mare marketplace din România, cu produsele și stocul din magazinul tău.",
   },
   {

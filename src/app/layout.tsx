@@ -15,15 +15,24 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
   display: "swap",
   /*
-    ⚠ NU SE PREÎNCARCĂ — 22,6 kB pe fiecare pagină, pentru zero caractere.
-    Măsurat: pagina de start descărca 23.108 octeți de Geist Mono și nu randa
-    niciun caracter cu el. `font-mono` apare doar în panou, admin, autentificare
-    și onboarding — niciodată pe site-ul de prezentare.
+    ⚠ NU SE PREÎNCARCĂ — 23.108 octeți pe fiecare pagină, pentru două pagini care
+    chiar îl folosesc.
+
+    ⚠ CORECTARE, 01.09.2026. Nota de aici a spus până acum că `font-mono` nu apare
+    „niciodată pe site-ul de prezentare". FALS, și verificat: apare pe
+    `/optimizare` (blocul de sitemap din `PanouSitemap.tsx:96`) și pe
+    `/mentenanta-gratuita` (titlul din `TitluMentenanta.tsx:79`, prin
+    `--font-mono`, care e legat de `--font-geist-mono` în `stil-comun.css:1527`).
+    În HTML-ul construit: 2 apariții pe prima, 4 pe a doua, 0 pe restul.
+
+    Hotărârea rămâne aceeași, dar din motivul adevărat: DOUĂ din optsprezece
+    pagini publice îl folosesc, și niciuna pentru conținutul principal — un bloc
+    de cod și un titlu decorativ. Preîncărcarea l-ar fi pus în calea critică a
+    tuturor celorlalte șaisprezece.
 
     `preload: false` nu-l scoate: acolo unde e chiar folosit, browserul îl cere
-    când dă peste regula CSS. Costul mutat e o clipă de text cu fontul de
-    rezervă, într-un `<pre>` sau într-un cod de verificare — nu în conținutul
-    principal al vreunei pagini.
+    când dă peste regula CSS. Costul mutat e o clipă cu fontul de rezervă, pe
+    exact acele două elemente.
   */
   preload: false,
 });

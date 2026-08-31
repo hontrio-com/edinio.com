@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
+import { NotificariToast } from "@/components/ui/NotificariToast";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
@@ -39,6 +40,7 @@ export default async function OnboardingLayout({
         </div>
       </header>
       <main>{children}</main>
+      <NotificariToast />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { requireBlogEditor } from "@/lib/admin-guard";
+import { NotificariToast } from "@/components/ui/NotificariToast";
 
 export default async function AdminRootLayout({ children }: { children: React.ReactNode }) {
   /*
@@ -14,5 +15,10 @@ export default async function AdminRootLayout({ children }: { children: React.Re
     asta. Largirea lui atunci le-ar fi deschis pe toate deodata.
   */
   await requireBlogEditor();
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <NotificariToast />
+    </>
+  );
 }

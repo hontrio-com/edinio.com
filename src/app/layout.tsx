@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Toaster } from "sonner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -133,17 +132,24 @@ export default function RootLayout({
         Iar `dns-prefetch` lângă `preconnect` era oricum de prisos: al doilea îl
         cuprinde pe primul.
       */}
+      {/*
+        ⚠ AICI ERA `<Toaster>`, mutat pe 31.08.2026 în aspectele care chiar au
+        nevoie de el: `(auth)`, `(dashboard)`, `(admin)`, `(onboarding)` și
+        `/reactivare`. Din rădăcină ajungea peste TOT — inclusiv pe site-ul de
+        prezentare, pe centrul de ajutor și pe magazinele comercianților, adică
+        9 kB gzip de JavaScript pentru un vizitator care n-are de unde să
+        declanșeze o notificare.
+
+        Măsurat prin urmărirea importurilor, nu din ochi: 0 din 28 de rute ale
+        site-ului de prezentare ajung la `sonner`, 0 din 15 ale magazinelor.
+
+        ⚠ CINE VREA SĂ-L PUNĂ LA LOC AICI: nu rezolvă nimic, ci strică din nou.
+        Ruta nouă care are nevoie de notificări își pune `<NotificariToast />`
+        în aspectul ei, iar `notificari-montate.test.ts` spune exact care rută a
+        rămas descoperită — fiindcă altfel greșeala e tăcută.
+      */}
       <body className="min-h-full bg-background text-foreground">
         {children}
-        <Toaster
-          position="bottom-right"
-          toastOptions={{
-            duration: 1800,
-            classNames: {
-              toast: "font-sans text-sm",
-            },
-          }}
-        />
       </body>
     </html>
   );

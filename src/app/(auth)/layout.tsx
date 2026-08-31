@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AuroraBackground } from "@/components/ui/aurora-background";
 import { Logo } from "@/components/ui/Logo";
+import { NotificariToast } from "@/components/ui/NotificariToast";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
 
@@ -25,6 +26,7 @@ export default function AuthLayout({
           {children}
         </div>
       </div>
+      <NotificariToast />
     </AuroraBackground>
   );
 }

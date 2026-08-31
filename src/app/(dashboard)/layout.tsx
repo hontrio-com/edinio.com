@@ -15,6 +15,7 @@ import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 import { ImpersonationBanner } from "@/components/dashboard/ImpersonationBanner";
+import { NotificariToast } from "@/components/ui/NotificariToast";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -158,6 +159,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <main className="min-h-screen pb-20 lg:pb-0">{children}</main>
       </div>
       <BottomNav isAdmin={esteAdminConfirmat(user, profile.role)} />
+      <NotificariToast />
     </div>
   );
 }

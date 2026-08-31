@@ -149,3 +149,43 @@
 -- `lastModified: new Date()` in sursa a picat pe COMENTARIUL care citeaza
 -- tiparul ca sa explice de ce l-am scos. Scoate comentariile intai — altfel e o
 -- plasa pe care al doilea om o dezactiveaza, si pe buna dreptate.
+--
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ADMINUL RAMANE FARA MFA OBLIGATORIU — HOTARARE ASUMATA, NU SCAPARE
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- ⚠ SE SCRIE AICI CA SA NU MAI FIE CERUTA. Auditul a ridicat-o ca singurul lucru
+-- care tine sistemul sub 10/10, si o va ridica din nou daca nu gaseste raspunsul.
+-- Raspunsul e: proprietarul a ales asa, de doua ori, dupa ce i s-au spus faptele.
+--
+-- ═══ FAPTELE, MASURATE INAINTE DE HOTARARE ═══
+--
+--   * exista UN SINGUR cont cu rol `admin`, si NU are `mfa_email_enabled`
+--   * `requireBlogEditor()` e chemata din `(admin)/layout.tsx`, deci pazeste
+--     TOT `/admin`, nu doar blogul — auditul nu vede asta, si de aceea
+--     subestimeaza consecinta: schimbarea n-ar inchide blogul, ci comenzile,
+--     produsele, utilizatorii, tot panoul
+--   * ar fi fost recuperabil: `/dashboard/settings` are alta paza, deci MFA se
+--     putea activa de acolo — dar cu o fereastra in care nu se intra nicaieri,
+--     pe o platforma cu 130 de magazine si comenzi care intra in timpul zilei
+--
+-- ═══ CE RAMANE ADEVARAT DESPRE SECURITATE ═══
+--
+-- Nu e „admin fara al doilea factor" in sensul ca mecanismul lipseste:
+--
+--   * adminul POATE activa MFA, si daca il activeaza, `sesiuneCurentaNeconfirmata`
+--     ii cere confirmarea sesiunii la fel ca oricui
+--   * claimul semnat `app_metadata.role` apara impotriva ridicarii de rol —
+--     dar e o alta paza, nu un al doilea factor, si auditul are dreptate sa
+--     spuna ca nu tine locul MFA
+--   * REDACTORUL, adica rolul dat unui om din afara, are MFA OBLIGATORIU
+--
+-- Deci riscul asumat e ingust si numit: contul proprietarului poate ramane
+-- doar-cu-parola. Auditul insusi spune ca, fata de o specificatie in care asta e
+-- ales explicit, sistemul e 10/10 — si asta e specificatia.
+--
+-- ⚠ DACA SE RAZGANDESTE CINEVA, se schimba O SINGURA LINIE in `lib/auth/mfa.ts`:
+--   `return rol === "editor";`  ->  `return rol === "editor" || rol === "admin";`
+-- Ambele porti o folosesc deja. ⚠ DAR INTAI SE ACTIVEAZA MFA PE CONTUL DE ADMIN,
+-- si abia apoi se schimba linia — altfel exista o fereastra fara acces la panou.

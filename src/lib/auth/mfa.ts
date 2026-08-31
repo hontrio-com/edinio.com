@@ -157,6 +157,16 @@ export function sesiuneNeconfirmata(
  * Redactorul e altceva: e rolul pe care îl dai unui OM DIN AFARĂ. Contul lui
  * scrie conținut public, iar acțiunile de acolo lucrează cu cheia de serviciu.
  *
+ * ⚠ ALEGEREA A FOST CONFIRMATĂ A DOUA OARĂ pe 31.08.2026, după ce i s-au pus
+ * proprietarului faptele pe masă: un singur cont de admin, fără MFA, iar
+ * `requireBlogEditor` păzește TOT `/admin` prin layout — deci schimbarea i-ar fi
+ * închis comenzile și produsele, nu doar blogul. E o asumare de risc scrisă, nu
+ * o scăpare; motivul întreg stă în `scripts/migrations/2026-08-31_blog_audit_runda_7.sql`.
+ *
+ * ⚠ CINE VREA S-O SCHIMBE: întâi activează MFA pe contul de admin, ABIA APOI
+ * adaugă `|| rol === "admin"` aici. În ordinea cealaltă rămâne o fereastră în
+ * care nu se intră nicăieri în panou.
+ *
  * ⚠ STĂ AICI, CA FUNCȚIE PURĂ, ca să poată fi probată. Regula scrisă în linie
  * într-o pază care are nevoie de Supabase e o regulă pe care n-o verifică
  * nimeni — și tocmai regulile de acces trebuie verificate.

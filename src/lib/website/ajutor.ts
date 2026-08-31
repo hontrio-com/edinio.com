@@ -155,12 +155,30 @@ export * from "./ajutor-tipuri";
  * deschide de două ori. Așa, clientul corectează o categorie fără să vadă
  * celelalte opt, iar două corecturi în paralel nu se ciocnesc.
  *
- * ═══ MUTAREA PE `ajutor.edinio.com` ═══
+ * ═══ MUTAREA PE `ajutor.edinio.com` — ANULATĂ (31.08.2026) ═══
  *
- * Clientul a spus (19.08) că paginile astea ajung pe un subdomeniu. Nu s-a
- * pregătit nimic acum, dinadins: rutarea n-are efect până nu e legat DNS-ul, iar
- * codul scris „pentru mai târziu” nu-l probează nimeni. Ce se atinge ATUNCI,
- * într-un singur loc fiecare:
+ * ⚠ NU SE MAI FACE. Clientul a hotărât să rămână la `www.edinio.com/ajutor`,
+ * după ce a întrebat unde anume scad căutările și a aflat răspunsul:
+ *
+ *   * ar fi scăzut CELE 406 GHIDURI, adresele care se mută și fac 301 — până
+ *     Google recitește și transferă semnalele; restul lui `www` nu se atingea;
+ *   * dar mai important, pentru SEO un SUBDOSAR consolidează de obicei mai bine
+ *     autoritatea decât un subdomeniu, pe care Google îl tratează ca entitate
+ *     mai separată. Centrul de ajutor e conținut care aduce căutări, nu o
+ *     aplicație separată — deci locul lui bun e chiar unde e.
+ *
+ * Subdomeniul RĂMÂNE legat în Vercel și servește site-ul de prezentare, cu
+ * `canonical` către `www.edinio.com` — deci nu produce conținut dublat. Dacă nu i
+ * se găsește o întrebuințare, cel mai curat e o redirecționare 301 către `www`.
+ *
+ * ⚠ LISTA DE MAI JOS SE PĂSTREAZĂ, dar ca hartă, nu ca sarcină. Dacă hotărârea
+ * se schimbă vreodată, astea sunt locurile — plus un al ȘASELEA pe care planul
+ * din 19.08 nu-l avea și care e de fapt miezul: o REscriere în `src/proxy.ts`
+ * pentru gazda `ajutor.edinio.com`, iar `RADACINA` trebuie să devină o valoare
+ * de CERERE, nu o constantă de modul. Tiparul există deja, viu, la vitrine:
+ * `basePath` e gol pe domeniu propriu și `/{slug}` pe platformă.
+ *
+ * Locurile din planul de atunci:
  *
  * 1. `lib/website/footer.ts` și `lib/website/nav.ts`, cele două linkuri.
  * 2. `lib/website/metadata.ts`, adresa canonică.

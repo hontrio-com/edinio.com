@@ -14,14 +14,28 @@
  * Ce trebuie știut, ca să nu surprindă:
  *
  * 1. **Aduce `framer-motion` în pachetul trimis către browser.** I s-a spus, a
- *    reconfirmat. Pe pagina „Optimizare" e singurul lucru care o cere, dar de la
- *    19.08 nu mai e singurul de pe site: și `FasciculAnimat`, pe „Migrare", o
- *    folosește. Sunt pagini diferite, deci pachete diferite — nu se împarte
- *    nimic între ele.
+ *    reconfirmat.
+ *
+ *    ⚠ ACTUALIZAT 01.09.2026. Rândul de aici spunea că „de la 19.08 nu mai e
+ *    singurul de pe site: și `FasciculAnimat`, pe «Migrare», o folosește".
+ *    Nu mai e adevărat: acela a trecut pe `<animate>` SMIL, iar /migrare are
+ *    zero chunkuri de framer. Fișierul ăsta e din nou SINGURUL de pe site-ul de
+ *    prezentare care cere biblioteca.
+ *
+ *    ⚠ ȘI TRAGE DOAR O FELIE DIN EA, nu tot pachetul: `useMotionValue` și
+ *    `useSpring` înseamnă 26.960 de octeți bruți. Chunkul MARE (102.557, cel cu
+ *    randorul `motion.*`) nu ajunge niciodată pe „Optimizare" — Turbopack îl
+ *    scutură. Verificat pe toate cele 150 de rute construite.
  * 2. **Animația pornește la 100ms de la montare, nu când intră în ecran.**
  *    `useNumberCounter` are un `setIsInView` pe cronometru, nu un
- *    `IntersectionObserver`. Deci pe un ecran mic, unde cadranele sunt sub linia
- *    de plutire, urcarea se termină înainte să ajungă cineva cu ochii pe ele.
+ *    `IntersectionObserver`.
+ *
+ *    ⚠ REPARAT ÎN AFARA FIȘIERULUI, tot pe 01.09.2026. Defectul era real: pe un
+ *    ecran mic urcarea se termina înainte să ajungă cineva cu ochii pe cadrane.
+ *    Fișierul ăsta n-a fost atins — învelișul `CadraneLaIntrare` îl montează abia
+ *    când secțiunea se apropie de ecran, deci cronometrul de 100 ms pornește
+ *    atunci. Acolo e și importul dinamic care ține biblioteca în afara
+ *    încărcării inițiale a rutei.
  * 3. **`react-hooks/set-state-in-effect` e oprit mai jos**, pentru tot fișierul:
  *    `useNumberCounter` scrie stare direct din trei efecte. E regula pe care o
  *    respectă restul proiectului; aici se lasă așa ca fișierul să rămână

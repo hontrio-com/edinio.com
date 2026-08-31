@@ -1,5 +1,5 @@
-import { Gauge } from "@/components/ui/gauge-1";
-import { SCORURI_PAGESPEED, culoareScor } from "@/lib/website/optimizare";
+import { SCORURI_PAGESPEED } from "@/lib/website/optimizare";
+import { CadraneLaIntrare } from "./CadraneLaIntrare";
 
 /**
  * Panoul cu rezultatele PageSpeed Insights, ca ilustrație a cardului „Încărcare
@@ -62,51 +62,17 @@ export function PanouPageSpeed() {
         {SCORURI_PAGESPEED.map((s) => `${s.eticheta} ${s.scor} din 100`).join(", ")}.
       </p>
 
-      <div className="mx-auto grid w-full max-w-[264px] grid-cols-2 gap-x-4 gap-y-3">
-        {SCORURI_PAGESPEED.map((scor, i) => (
-          <div key={scor.eticheta} className="flex flex-col items-center">
-            {/*
-              ⚠ Lățimea stă pe ÎNVELIȘUL cadranului, nu pe blocul întreg, și e o
-              corectură măsurată: cu ea pe bloc, eticheta era strânsă la lățimea
-              cercului, iar „Accesibilitate" se rupea pe două rânduri de îndată ce
-              cercul cobora sub ~78px. Rândul în plus înălța tot panoul și îl
-              scotea din ilustrație. Așa eticheta poate folosi toată coloana.
+      {/*
+        ⚠ CADRANELE SUNT ÎNTR-UN ÎNVELIȘ DE CLIENT, `CadraneLaIntrare`, și nu din
+        gust: `dynamic()` pus AICI n-ar despica nimic. Documentația lui Next spune
+        că un import dinamic dintr-o componentă de server nu se despică automat,
+        iar `ssr: false` e chiar interzis acolo. Ar fi trecut de build și n-ar fi
+        economisit niciun octet. Motivele întregi și cifrele sunt în fișierul acela.
 
-              `text-ink`: componenta desenează cifra cu `fill="currentColor"`.
-            */}
-            {/* `flex`: învelișul componentei e `inline-block`, iar un inline stă pe
-                linia de bază — măsurat, rămâneau 8px de gol sub cadran, cât
-                coborârea fontului. Ca element de flex, golul dispare. */}
-            <div className={`${MARIME_CADRAN} flex text-ink`}>
-              <Gauge
-                value={scor.scor}
-                size="100%"
-                strokeWidth={9}
-                gapPercent={4}
-                gradient
-                tickMarks
-                /* Culoarea vine din pragurile uneltei, nu din `primary="success"`:
-                   dacă un scor coboară vreodată sub 90, inelul trebuie să se
-                   schimbe odată cu el. Vezi `culoareScor`. */
-                primary={culoareScor(scor.scor)}
-                /* Decalaj mic între ele, ca panoul să se completeze, nu să
-                   pornească tot deodată. */
-                transition={{ delay: i * 120 }}
-              />
-            </div>
-
-            {/*
-              Eticheta stă SUB cadran, nu în el. Componenta o poate desena
-              înăuntru (`label`), dar acolo are 8 din 100 de unități — la un cadran
-              de 58-86px iese de 5-7px, iar „Accesibilitate" ar fi o dâră. Aici e
-              la 11px, unde se citește.
-            */}
-            <span className="mt-1.5 text-center text-[11px] leading-[1.25] text-ink-2 sm:text-[11.5px]">
-              {scor.eticheta}
-            </span>
-          </div>
-        ))}
-      </div>
+        Aici rămâne ce ține de server: rândul `sr-only` de mai sus, care poartă
+        cifrele adevărate, și așezarea.
+      */}
+      <CadraneLaIntrare />
     </div>
   );
 }

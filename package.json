@@ -14,7 +14,8 @@
     "bundle": "node scripts/tests/bundle-size.mjs",
     "capturi": "node --import ./scripts/tests/register.mjs scripts/leaga-capturi.mjs",
     "tipuri-db": "node scripts/verifica-tipuri-db.mjs",
-    "compare": "node scripts/tests/compare-storefront.mjs"
+    "compare": "node scripts/tests/compare-storefront.mjs",
+    "verifica:coloane-publice": "node scripts/tests/coloane-publice-citibile.mjs"
   },
   "engines": {
     "node": ">=24 <25"

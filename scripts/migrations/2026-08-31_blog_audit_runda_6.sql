@@ -171,3 +171,36 @@
 --   * TRIMITEREA NEWSLETTERULUI. Chiar nu exista, si nici nu trebuie inventata
 --     acum: e o hotarare de produs (furnizor propriu sau ESP), nu un defect.
 --     Ramane de facut inainte de prima campanie.
+--
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ADAOS DE DUPA DESFASURARE: `/blog` a raspuns 500 timp de cateva minute
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- ⚠ COLOANA NOUA PE O TABELA CU GRANTURI PE COLOANA CERE PROPRIUL GRANT.
+--
+-- `blog_authors` NU are `select` pe tabela pentru `anon` — are granturi pe
+-- COLOANA, pe noua coloane anume. E apararea scrisa a depozitului impotriva
+-- ridicarii de privilegii: RLS filtreaza RANDURI, granturile pe coloana
+-- filtreaza COLOANE. Iar granturile pe coloana NU se intind singure la coloanele
+-- adaugate dupa ele.
+--
+-- Am adaugat `content_updated_at` si am pus-o in `CAMPURI_LISTA`. PostgREST a
+-- raspuns `permission denied for table blog_authors`, deci `/blog` a dat 500.
+--
+-- ⚠ CE A TRECUT INAINTE, SI N-A VAZUT NIMIC: migratia, `npx tsc`, 5047 de probe,
+-- `npm run lint`, `npm run build`, si chiar `verifica:coloane` — care spusese
+-- „OK, toate cele 328 exista". Ultimul e cel instructiv: el ruleaza cu CHEIA DE
+-- SERVICIU, care trece peste granturile pe coloana. Raspundea la „exista
+-- coloana?", nu la „o poate citi cine o citeste".
+--
+-- ⚠ SI UN LUCRU BUN: s-a vazut in trei minute, fiindca `cere()` ARUNCA de la
+-- runda a patra. Inainte de ea, acelasi defect ar fi dat un blog GOL cu 200 —
+-- adica pagini scoase din index, tacut, saptamani la rand.
+--
+-- Plasa: `scripts/tests/coloane-publice-citibile.mjs` (`npm run verifica:coloane-publice`),
+-- care intreaba cu CHEIA PUBLICA, din locul cititorului. Confruntata cerand
+-- `blog_authors.user_id`, pe care `anon` chiar n-o poate citi: pica, cu numele
+-- coloanei si cu `grant`-ul de scris.
+--
+-- ⚠ DE RULAT INAINTE DE FIECARE PUSH care atinge stratul public de citire.

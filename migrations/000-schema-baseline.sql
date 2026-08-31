@@ -10471,6 +10471,8 @@ grant SELECT (avatar_url) on table public.blog_authors to anon;
 grant SELECT (avatar_url) on table public.blog_authors to authenticated;
 grant SELECT (bio) on table public.blog_authors to anon;
 grant SELECT (bio) on table public.blog_authors to authenticated;
+grant SELECT (content_updated_at) on table public.blog_authors to anon;
+grant SELECT (content_updated_at) on table public.blog_authors to authenticated;
 grant SELECT (created_at) on table public.blog_authors to anon;
 grant SELECT (created_at) on table public.blog_authors to authenticated;
 grant SELECT (id) on table public.blog_authors to anon;

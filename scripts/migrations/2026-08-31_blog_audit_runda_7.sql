@@ -127,3 +127,25 @@
 -- deschide din adresa; acum se poate (`?sectiune=securitate`), iar `?mfa=cerut`
 -- arata si de ce a fost adus omul acolo. Altfel ar fi aterizat intr-o pagina
 -- fara sa stie ce sa caute — greseala pe care am facut-o deja de doua ori.
+--
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ADAOS (runda 8): NICIUN `lastModified` INVENTAT, NICAIERI
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Auditul semnala UN singur loc ramas: eticheta, cu `e.ultima ? ... : new Date()`.
+-- Masurat, erau ZECE — aceeasi forma la magazine, la produse, la paginile
+-- personalizate si la etichete: „daca nu stiu data, spun ca e azi".
+--
+-- E forma mai mica a aceleiasi minciuni pentru care s-a scos `lastModified` de pe
+-- cele 23 de pagini scrise in cod. Se repara la fel: cand data lipseste, campul
+-- LIPSESTE. `dataDacaOStim()` intoarce chei de imprastiat, nu `undefined`.
+--
+-- ⚠ SI CELE DOUA AJUTOARE DE DATA intorc acum `null` in loc de `new Date()`:
+-- `candSaSchimbat` si `ceaMaiProaspata`. Erau ultimele locuri de unde putea iesi
+-- o data inventata fara ca cineva sa o scrie anume.
+--
+-- ⚠ PLASA S-A AGATAT DE PROPRIILE MELE VORBE. Proba care cauta
+-- `lastModified: new Date()` in sursa a picat pe COMENTARIUL care citeaza
+-- tiparul ca sa explice de ce l-am scos. Scoate comentariile intai — altfel e o
+-- plasa pe care al doilea om o dezactiveaza, si pe buna dreptate.

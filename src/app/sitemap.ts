@@ -110,22 +110,40 @@ export function paginiDeSite(): string[] {
  * Se ia cea mai MARE dintre cele două date: un articol programat în viitor și
  * încă neatins poate avea data conținutului mai veche decât cea de publicare.
  */
-function candSaSchimbat(actualizat?: string | null, publicat?: string | null): Date {
+/**
+ * `lastModified`, dar numai dacă avem o dată ADEVĂRATĂ.
+ *
+ * ⚠ ACEEAȘI REGULĂ CA LA PAGINILE SCRISE ÎN COD, dusă până la capăt. Acolo am
+ * scos `lastModified: new Date()`. Aici era forma mai mică a aceleiași minciuni:
+ * `x ? new Date(x) : new Date()` — adică „dacă nu știu data, spun că e azi".
+ *
+ * Se întorc chei de împrăștiat, ca `lastModified` să LIPSEASCĂ, nu să fie
+ * `undefined`: Next scrie oricum XML-ul, dar un câmp absent e mai cinstit decât
+ * unul gol, iar cine citește codul vede regula dintr-o privire.
+ */
+function dataDacaOStim(x: string | Date | null | undefined): { lastModified?: Date } {
+  if (!x) return {};
+  const d = x instanceof Date ? x : new Date(x);
+  return Number.isNaN(d.getTime()) ? {} : { lastModified: d };
+}
+
+function candSaSchimbat(actualizat?: string | null, publicat?: string | null): Date | null {
   const d = [actualizat, publicat]
     .filter((x): x is string => !!x)
     .map((x) => new Date(x).getTime())
     .filter((t) => Number.isFinite(t));
-  return d.length ? new Date(Math.max(...d)) : new Date();
+  return d.length ? new Date(Math.max(...d)) : null;
 }
 
 /** Cel mai proaspăt articol dintr-un teanc, pentru paginile de rubrică și autor. */
 function ceaMaiProaspata(
   articole: { content_updated_at?: string | null; published_at?: string | null }[],
-): Date {
-  if (articole.length === 0) return new Date();
-  return new Date(
-    Math.max(...articole.map((a) => candSaSchimbat(a.content_updated_at, a.published_at).getTime())),
-  );
+): Date | null {
+  const t = articole
+    .map((a) => candSaSchimbat(a.content_updated_at, a.published_at))
+    .filter((d): d is Date => d !== null)
+    .map((d) => d.getTime());
+  return t.length ? new Date(Math.max(...t)) : null;
 }
 
 /**
@@ -145,11 +163,13 @@ function ceaMaiProaspata(
 export function dataTaxonomiei(
   alTaxonomiei: string | null | undefined,
   articole: { content_updated_at?: string | null; published_at?: string | null }[],
-): Date {
+): Date | null {
   const dinArticole = ceaMaiProaspata(articole);
   if (!alTaxonomiei) return dinArticole;
   const alEi = new Date(alTaxonomiei);
-  return Number.isNaN(alEi.getTime()) || alEi < dinArticole ? dinArticole : alEi;
+  if (Number.isNaN(alEi.getTime())) return dinArticole;
+  if (!dinArticole) return alEi;
+  return alEi < dinArticole ? dinArticole : alEi;
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -171,7 +191,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // its products/pages can still be indexable, so they stay below.
     const entries: MetadataRoute.Sitemap = homepageNoindex(biz)
       ? []
-      : [{ url: base, lastModified: biz.updated_at ? new Date(biz.updated_at) : new Date(), changeFrequency: "weekly", priority: 1 }];
+      : [{ url: base, ...dataDacaOStim(biz.updated_at), changeFrequency: "weekly", priority: 1 }];
 
     // Pagina de catalog, cand magazinul si-a ales-o. Prima ruta-sectiune
     // indexabila: cosul si finalizarea sunt deliberat noindex, dar asta e chiar
@@ -179,7 +199,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (shopOnPage(designPublicat(biz.store_settings))) {
       entries.push({
         url: `${base}/${SEGMENT_MAGAZIN}`,
-        lastModified: biz.updated_at ? new Date(biz.updated_at) : new Date(),
+        ...dataDacaOStim(biz.updated_at),
         changeFrequency: "daily",
         priority: 0.9,
       });
@@ -196,7 +216,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         vazute.add(seg);
         entries.push({
           url: `${base}/${SEGMENT_MAGAZIN}/${seg}`,
-          lastModified: biz.updated_at ? new Date(biz.updated_at) : new Date(),
+          ...dataDacaOStim(biz.updated_at),
           changeFrequency: "daily",
           priority: 0.8,
         });
@@ -222,7 +242,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         if (!p.slug) continue;
         entries.push({
           url: `${base}/product/${p.slug}`,
-          lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
+          ...dataDacaOStim(p.updated_at),
           changeFrequency: "weekly",
           priority: 0.7,
         });
@@ -235,7 +255,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (const tip of politiciIndexabile(pcDinRand(biz), politiciDinRand(biz))) {
       entries.push({
         url: `${base}/politici/${tip}`,
-        lastModified: biz.updated_at ? new Date(biz.updated_at) : new Date(),
+        ...dataDacaOStim(biz.updated_at),
         changeFrequency: "yearly",
         priority: 0.3,
       });
@@ -254,7 +274,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       if ((pg.seo as { noindex?: boolean } | null)?.noindex) continue;
       entries.push({
         url: `${base}/${pg.slug}`,
-        lastModified: pg.updated_at ? new Date(pg.updated_at) : new Date(),
+        ...dataDacaOStim(pg.updated_at),
         changeFrequency: "monthly",
         priority: 0.5,
       });
@@ -426,7 +446,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     */
     ...articoleBlog.map((a) => ({
       url: `${PLATFORM_ORIGIN}/blog/${a.slug}`,
-      lastModified: candSaSchimbat(a.content_updated_at, a.published_at),
+      ...dataDacaOStim(candSaSchimbat(a.content_updated_at, a.published_at)),
       changeFrequency: "monthly" as const,
       priority: 0.6,
     })),
@@ -435,10 +455,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
        de azi. Vezi `dataTaxonomiei`. */
     ...categoriiCuArticole.map((slug) => ({
       url: `${PLATFORM_ORIGIN}/blog/categorie/${slug}`,
-      lastModified: dataTaxonomiei(
+      ...dataDacaOStim(dataTaxonomiei(
         articoleBlog.find((a) => a.categorie?.slug === slug)?.categorie?.content_updated_at,
         articoleBlog.filter((a) => a.categorie?.slug === slug),
-      ),
+      )),
       changeFrequency: "weekly" as const,
       priority: 0.5,
     })),
@@ -447,10 +467,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
        crawlerul degeaba. */
     ...autoriDeAratat.map((slug) => ({
       url: `${PLATFORM_ORIGIN}/blog/autor/${slug}`,
-      lastModified: dataTaxonomiei(
+      ...dataDacaOStim(dataTaxonomiei(
         articoleBlog.find((a) => a.autor?.slug === slug)?.autor?.content_updated_at,
         articoleBlog.filter((a) => a.autor?.slug === slug),
-      ),
+      )),
       changeFrequency: "weekly" as const,
       priority: 0.4,
     })),
@@ -466,7 +486,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
        1000 de rânduri al PostgREST. */
     ...eticheteBlog.map((e) => ({
       url: `${PLATFORM_ORIGIN}/blog/eticheta/${e.slug}`,
-      lastModified: e.ultima ? new Date(e.ultima) : new Date(),
+      ...dataDacaOStim(e.ultima),
       changeFrequency: "weekly" as const,
       priority: 0.4,
     })),
@@ -486,7 +506,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .filter((b) => !b.custom_domain && !homepageNoindex(b))
     .map((b) => ({
       url: `${PLATFORM_ORIGIN}/${b.slug}`,
-      lastModified: b.updated_at ? new Date(b.updated_at) : new Date(),
+      ...dataDacaOStim(b.updated_at),
       changeFrequency: "weekly" as const,
       priority: 0.8,
     }));
@@ -495,7 +515,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .filter((b) => !b.custom_domain && !homepageNoindex(b) && shopOnPage(designPublicat(b.store_settings)))
     .map((b) => ({
       url: `${PLATFORM_ORIGIN}/${b.slug}/${SEGMENT_MAGAZIN}`,
-      lastModified: b.updated_at ? new Date(b.updated_at) : new Date(),
+      ...dataDacaOStim(b.updated_at),
       changeFrequency: "daily" as const,
       priority: 0.9,
     }));
@@ -540,7 +560,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       const biz = p.businesses as unknown as { slug: string };
       return {
         url: `${PLATFORM_ORIGIN}/${biz.slug}/${p.slug}`,
-        lastModified: p.updated_at ? new Date(p.updated_at) : new Date(),
+        ...dataDacaOStim(p.updated_at),
         changeFrequency: "monthly" as const,
         priority: 0.5,
       };

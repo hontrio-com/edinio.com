@@ -107,25 +107,25 @@ const ART = (content_updated_at: string, published_at: string) => ({ content_upd
 
 test("data taxonomiei o bate pe a articolelor când e mai nouă", () => {
   const d = dataTaxonomiei("2026-08-31T10:00:00.000Z", [ART("2026-08-01T00:00:00.000Z", "2026-08-01T00:00:00.000Z")]);
-  assert.equal(d.toISOString(), "2026-08-31T10:00:00.000Z");
+  assert.equal(d?.toISOString(), "2026-08-31T10:00:00.000Z");
 });
 
 test("articolul mai nou o bate pe a taxonomiei", () => {
   const d = dataTaxonomiei("2026-08-01T00:00:00.000Z", [ART("2026-08-30T09:00:00.000Z", "2026-08-02T00:00:00.000Z")]);
-  assert.equal(d.toISOString(), "2026-08-30T09:00:00.000Z");
+  assert.equal(d?.toISOString(), "2026-08-30T09:00:00.000Z");
 });
 
 test("fără data taxonomiei se cade înapoi pe articole", () => {
   const d = dataTaxonomiei(null, [ART("2026-08-30T09:00:00.000Z", "2026-08-02T00:00:00.000Z")]);
-  assert.equal(d.toISOString(), "2026-08-30T09:00:00.000Z");
+  assert.equal(d?.toISOString(), "2026-08-30T09:00:00.000Z");
 });
 
 test("o dată stricată nu produce `Invalid Date` în sitemap", () => {
   /* ⚠ `lastModified` ajunge la `toISOString()` în XML. Un `Invalid Date` acolo
      ar arunca, deci ar strica sitemapul ÎNTREG pentru o singură rubrică. */
   const d = dataTaxonomiei("nu-e-o-data", [ART("2026-08-30T09:00:00.000Z", "2026-08-02T00:00:00.000Z")]);
-  assert.ok(!Number.isNaN(d.getTime()), "a ieșit Invalid Date");
-  assert.equal(d.toISOString(), "2026-08-30T09:00:00.000Z");
+  assert.ok(d && !Number.isNaN(d.getTime()), "a ieșit Invalid Date");
+  assert.equal(d?.toISOString(), "2026-08-30T09:00:00.000Z");
 });
 
 /*
@@ -145,11 +145,32 @@ test("o dată stricată nu produce `Invalid Date` în sitemap", () => {
   potrivire care nu tine cont de asta pica tacut.
 */
 test("sitemapul nu inventeaza `lastModified` cu `new Date()`", () => {
-  const sursa = readFileSync("src/app/sitemap.ts", "utf8").replace(/\r\n/g, "\n");
+  /*
+    ⚠ SE SCOT COMENTARIILE ÎNTÂI, și am aflat-o pe pielea mea: proba a picat pe
+    propriul meu comentariu — cel care CITEAZĂ tiparul ca să explice de ce l-am
+    scos. O plasă care se agață de vorbele despre defect, nu de defect, e o plasă
+    pe care al doilea om o dezactivează.
+
+    Același tipar ca în `src/lib/domains/alarma-repetata.test.ts`.
+  */
+  const sursa = readFileSync("src/app/sitemap.ts", "utf8")
+    .replace(/\r\n/g, "\n")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
   const inventate = [...sursa.matchAll(/lastModified:\s*new Date\(\s*\)/g)];
   assert.deepEqual(
     inventate.map((m) => m[0]),
     [],
     "s-a reintrodus o data inventata; foloseste un camp adevarat sau omite `lastModified`",
   );
+});
+
+test("când nu știm nimic, nu se inventează o dată", () => {
+  /*
+    ⚠ ÎNAINTE IEȘEA `new Date()` — adică „nu știu, deci spun că e azi". Era forma
+    mai mică a aceleiași minciuni pentru care am scos `lastModified` de pe cele 23
+    de pagini scrise în cod. Acum întoarce `null`, iar cine cheamă omite câmpul.
+  */
+  assert.equal(dataTaxonomiei(null, []), null);
+  assert.equal(dataTaxonomiei(undefined, []), null);
 });

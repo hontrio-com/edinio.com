@@ -2,7 +2,33 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { motion } from "framer-motion";
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  ⚠ FĂRĂ `framer-motion` — SCOS PE 31.08.2026, DUPĂ MĂSURĂTOARE
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Fișierul ăsta era singurul motiv pentru care `/start` încărca `framer-motion`:
+  42.617 de octeți gzip, în două fișiere, pentru UN `motion.div`. Pagina de
+  aterizare — adică exact pagina pe care cad vizitatorii din reclame plătite.
+
+  ⚠ ÎNLOCUIREA E LITERALĂ, NU „ECHIVALENTĂ". `animate={{x, scale, rotateY, z}}`
+  se serializează de `framer-motion` în ordinea din `transformPropOrder`
+  (motion-dom, rândul 1841): `x, y, z, translateX…, scale…, rotate, rotateX,
+  rotateY`. Deci `translateX() translateZ() scale() rotateY()` — exact ordinea
+  scrisă mai jos. Ordinea contează: transformările se compun ca matrice, iar
+  `scale` înainte de `translate` ar muta placa altundeva.
+
+  Aceeași durată (0,8 s) și aceeași curbă (`cubic-bezier(.25,.1,.25,1)`), scrise
+  în `.mockup-hero` din `stil-comun.css`.
+
+  ⚠ `zIndex` NU E ÎN TRANZIȚIE, dinadins. `framer-motion` îl interpola ca număr,
+  între 10 și 30, iar browserul rotunjea — adică sărea oricum. Aici sare direct.
+
+  ⚠ CE S-A CÂȘTIGAT PE DEASUPRA: acum se respectă `prefers-reduced-motion`.
+  `framer-motion` nu oprea singur animația, iar plăcile se roteau la nesfârșit
+  și pentru cine a cerut mai puțină mișcare din sistem. Vezi `stil-comun.css`.
+*/
 
 const MOCKUPS = [
   "/hero/mockups/m1.png",
@@ -54,22 +80,15 @@ export function HeroMockups({ className }: { className?: string }) {
           const zIndex = offset === 0 ? 30 : 10;
 
           return (
-            <motion.div
+            <div
               key={src}
-              className="absolute"
-              animate={{
-                x,
-                scale,
-                rotateY,
-                z,
+              className="mockup-hero absolute"
+              style={{
+                /* ⚠ Ordinea e cea din `transformPropOrder`. Vezi nota de sus. */
+                transform: `translateX(${x}px) translateZ(${z}px) scale(${scale}) rotateY(${rotateY}deg)`,
                 opacity,
                 zIndex,
               }}
-              transition={{
-                duration: 0.8,
-                ease: [0.25, 0.1, 0.25, 1],
-              }}
-              style={{ transformStyle: "preserve-3d" }}
             >
               <div
                 className={`rounded-[2rem] overflow-hidden ${
@@ -87,7 +106,7 @@ export function HeroMockups({ className }: { className?: string }) {
                   priority
                 />
               </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>

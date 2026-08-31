@@ -1946,3 +1946,36 @@
   color: var(--muted-foreground);
   text-align: center;
 }
+
+/* ─── Plăcile care se rotesc în heroul lui /start ────────────────────────────
+
+   ⚠ AICI E TOATĂ ANIMAȚIA CARE ÎNAINTE VENEA DIN `framer-motion`. Componenta
+   `HeroMockups` era singurul motiv pentru care `/start` încărca pachetul acela:
+   42.617 octeți gzip pentru UN `motion.div`, pe pagina de aterizare, adică fix
+   pagina pe care cad vizitatorii din reclame plătite.
+
+   Durata și curba sunt copiate întocmai din `transition` de acolo:
+   `duration: 0.8` și `ease: [0.25, 0.1, 0.25, 1]`.
+
+   ⚠ NUMAI `transform` ȘI `opacity` SUNT ÎN TRANZIȚIE. `z-index` sărea și
+   înainte — `framer-motion` îl interpola ca număr între 10 și 30, iar browserul
+   rotunjea la fiecare cadru. Iar orice ALTĂ proprietate pusă aici ar scoate
+   animația de pe placa video: astea două se compun fără să recalculeze aspectul
+   paginii, restul nu. */
+.mockup-hero {
+  transform-style: preserve-3d;
+  transition:
+    transform 0.8s cubic-bezier(0.25, 0.1, 0.25, 1),
+    opacity 0.8s cubic-bezier(0.25, 0.1, 0.25, 1);
+  will-change: transform, opacity;
+}
+
+/* ⚠ ASTA E NOU, N-A EXISTAT ÎNAINTE. `framer-motion` nu oprea singur animația
+   la `prefers-reduced-motion`, deci plăcile se roteau la nesfârșit și pentru
+   cine ceruse mai puțină mișcare din sistemul lui. Plăcile rămân la locul lor,
+   se schimbă doar fără alunecare — nu se ascunde nimic. */
+@media (prefers-reduced-motion: reduce) {
+  .mockup-hero {
+    transition: none;
+  }
+}

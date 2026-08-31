@@ -42,6 +42,31 @@ const jsonLd = paginaSiteJsonLd({
 });
 
 export default function CookiesPage() {
+  /*
+    ⚠ `{jsonLd ? … }` STĂTEA DEASUPRA LUI `return`, nu înăuntru. Reparat pe
+    31.08.2026, după ce s-a văzut în producție.
+
+    Ca instrucțiune de sine stătătoare, `{…}` e un bloc, iar JSX-ul dinăuntru e
+    o expresie care se evaluează și se aruncă. Compilează. Trece de `tsc`. Trece
+    de build. Și nu ajunge niciodată în pagină.
+
+    Dovada, luată de pe edinio.com înainte de reparație:
+
+        /cookies, /termeni, /gdpr, /confidentialitate → 2 blocuri ld+json
+        /preturi, /despre                             → 6 blocuri ld+json
+
+    Cele două de pe paginile legale erau Organization + WebSite, emise de
+    aspectul comun. `WebPage` și `BreadcrumbList` ale paginii lipseau cu totul.
+
+    ⚠ Toate patru paginile legale aveau exact aceeași formă, deci a fost o
+    singură mișcare greșită copiată de patru ori. `date-structurate.test.ts`
+    cere acum ca fiecare `jsonLd` construit într-o pagină să și ajungă în JSX-ul
+    întors.
+  */
+  return (
+    <>
       {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
-  return <PaginaLegal doc={COOKIES} />;
+      <PaginaLegal doc={COOKIES} />
+    </>
+  );
 }

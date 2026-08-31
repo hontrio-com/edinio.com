@@ -43,6 +43,12 @@ const jsonLd = paginaSiteJsonLd({
 });
 
 export default function GDPRPage() {
+  // ⚠ Stătea deasupra lui `return`, deci nu se randa. Vezi nota lungă din
+  // `cookies/page.tsx` — aceeași greșeală, în toate patru paginile legale.
+  return (
+    <>
       {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
-  return <PaginaLegal doc={GDPR} />;
+      <PaginaLegal doc={GDPR} />
+    </>
+  );
 }

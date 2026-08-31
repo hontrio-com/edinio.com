@@ -5669,6 +5669,7 @@ export type Database = {
         Args: { p_rand: Json; p_etichete: Json }
         Returns: { id: string; edit_version: number }[]
       }
+      blog_curata_abonari_neconfirmate: { Args: { p_zile?: number }; Returns: number }
       blog_creste_citirile: { Args: { p_slug: string }; Returns: undefined }
       blog_dezaboneaza: { Args: { p_unsub_token: string }; Returns: boolean }
       blog_etichete_admin: {

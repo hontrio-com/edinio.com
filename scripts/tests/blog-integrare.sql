@@ -31,6 +31,7 @@
 --   N  modificarile INDIRECTE cresc versiunea; redirectarile taxonomiilor
 --   T  data continutului pe rubrici si autori (ce vede cititorul, nu orice atingere)
 --   G  drepturile de prisos luate, declansatoarele neatinse
+--   R  retentia abonarilor neconfirmate (si CE NU se sterge)
 --   J  nimic n-a ramas in urma
 --
 -- ═══ CUM SE RULEAZA ═══
@@ -1216,6 +1217,71 @@ begin
   raise notice '════ G: toate au trecut ════';
 end $do$;
 
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- R. RETENTIA ABONARILOR NECONFIRMATE (runda a saptea, 31.08.2026)
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Dubla confirmare spune pe fata ca nu socotim pe nimeni abonat pana nu apasa.
+-- Dar randul ramanea in baza oricum, cu adresa cu tot, desi nu poate primi nimic
+-- si jetonul lui e demult stins. Si nu neaparat adresa celui care a scris-o:
+-- oricine poate tasta adresa altcuiva. Exact de aceea exista dubla confirmare.
+--
+-- ⚠ CELE PATRU AFIRMATII DE „RAMANE" SUNT MIEZUL, nu cea de „se sterge". O
+-- conditie prea larga aici goleste lista fara ca nimeni sa afle pana la prima
+-- campanie — si nu se mai poate lua inapoi.
+do $do$
+declare n integer;
+begin
+  delete from public.blog_subscribers where email like 'zz-ret-%';
+
+  -- rest adevarat: neconfirmat, vechi, jeton stins
+  insert into public.blog_subscribers (email, source, created_at, token_expires_at)
+    values ('zz-ret-vechi@x.ro','proba', now() - interval '90 days', now() - interval '88 days');
+  -- ⚠ vechi, DAR cu jeton proaspat: a reincercat ieri, e o confirmare IN CURS
+  insert into public.blog_subscribers (email, source, created_at, token_expires_at)
+    values ('zz-ret-reincercat@x.ro','proba', now() - interval '90 days', now() + interval '1 day');
+  -- recent
+  insert into public.blog_subscribers (email, source, created_at, token_expires_at)
+    values ('zz-ret-recent@x.ro','proba', now() - interval '2 days', now() - interval '1 day');
+  -- CONFIRMAT si vechi
+  insert into public.blog_subscribers (email, source, created_at, confirmed_at, token_expires_at)
+    values ('zz-ret-confirmat@x.ro','proba', now() - interval '90 days', now() - interval '89 days', now() - interval '88 days');
+  -- DEZABONAT: o hotarare a omului, nu o abonare esuata
+  insert into public.blog_subscribers (email, source, created_at, unsubscribed_at, token_expires_at)
+    values ('zz-ret-dezabonat@x.ro','proba', now() - interval '90 days', now() - interval '80 days', now() - interval '88 days');
+
+  n := public.blog_curata_abonari_neconfirmate(30);
+  if n <> 1 then raise exception 'R1: trebuia sters exact 1 rand, s-au sters %', n; end if;
+  if exists (select 1 from public.blog_subscribers where email='zz-ret-vechi@x.ro') then
+    raise exception 'R1: restul vechi n-a fost sters'; end if;
+  raise notice 'R1 restul vechi cu jeton stins: sters';
+
+  if not exists (select 1 from public.blog_subscribers where email='zz-ret-reincercat@x.ro') then
+    raise exception 'R2: o confirmare IN CURS a fost stearsa (jeton proaspat, created_at vechi)'; end if;
+  raise notice 'R2 confirmarea in curs: ramane';
+
+  if not exists (select 1 from public.blog_subscribers where email='zz-ret-recent@x.ro') then
+    raise exception 'R3: o abonare recenta a fost stearsa'; end if;
+  raise notice 'R3 abonarea recenta: ramane';
+
+  if not exists (select 1 from public.blog_subscribers where email='zz-ret-confirmat@x.ro') then
+    raise exception 'R4: un ABONAT CONFIRMAT a fost sters'; end if;
+  raise notice 'R4 abonatul confirmat: ramane';
+
+  if not exists (select 1 from public.blog_subscribers where email='zz-ret-dezabonat@x.ro') then
+    raise exception 'R5: un DEZABONAT a fost sters — s-ar putea reabona din greseala la primul import'; end if;
+  raise notice 'R5 dezabonatul: ramane';
+
+  begin
+    perform public.blog_curata_abonari_neconfirmate(0);
+    raise exception 'R6: a primit 0 zile, deci ar fi sters tot ce nu e confirmat';
+  exception when sqlstate 'P0400' then raise notice 'R6 zero zile: refuzat'; end;
+
+  delete from public.blog_subscribers where email like 'zz-ret-%';
+  raise notice '════ R: toate au trecut ════';
+end $do$;
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- J. NIMIC NU A RAMAS IN URMA
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -1223,15 +1289,16 @@ do $$
 declare n int := 0;
 begin
   select
-    (select count(*) from public.blog_categories  where slug like 'zz-t-%')
+    (select count(*) from public.blog_subscribers where email like 'zz-ret-%')
+  + (select count(*) from public.blog_categories  where slug like 'zz-t-%')
   + (select count(*) from public.blog_authors     where slug like 'zz-t-%')
   + (select count(*) from public.blog_posts       where slug like 'zz-g-%')
-    (select count(*) from public.blog_posts       where slug like 'zz-n-%' or slug like 'zz-r-%')
+  + (select count(*) from public.blog_posts       where slug like 'zz-n-%' or slug like 'zz-r-%')
   + (select count(*) from public.blog_tags        where slug like 'zz-n-%')
   + (select count(*) from public.blog_authors     where slug like 'zz-n-%' or slug like 'zz-r-%')
   + (select count(*) from public.blog_categories  where slug like 'zz-n-%' or slug like 'zz-r-%')
   + (select count(*) from public.blog_redirects   where from_slug like 'zz-n-%' or from_slug like 'zz-r-%')
-    (select count(*) from public.blog_redirects   where from_slug like 'zz-m-%' or to_slug like 'zz-m-%')
+  + (select count(*) from public.blog_redirects   where from_slug like 'zz-m-%' or to_slug like 'zz-m-%')
   + (select count(*) from public.blog_posts       where slug like 'zz-m-%')
   + (select count(*) from public.blog_authors     where slug like 'zz-m-%')
   + (select count(*) from public.blog_categories  where slug like 'zz-m-%')

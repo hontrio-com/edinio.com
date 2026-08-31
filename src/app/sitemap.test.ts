@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import { paginiDeSite, PUSE_SEPARAT, dataTaxonomiei } from "./sitemap";
 import {
   COMPETITORS,
@@ -125,4 +126,30 @@ test("o dată stricată nu produce `Invalid Date` în sitemap", () => {
   const d = dataTaxonomiei("nu-e-o-data", [ART("2026-08-30T09:00:00.000Z", "2026-08-02T00:00:00.000Z")]);
   assert.ok(!Number.isNaN(d.getTime()), "a ieșit Invalid Date");
   assert.equal(d.toISOString(), "2026-08-30T09:00:00.000Z");
+});
+
+/*
+  ⚠ NICIUN `lastModified` INVENTAT (31.08.2026).
+
+  Paginile scrise in cod aveau `lastModified: new Date()` — 23 de adrese care
+  spuneau, la fiecare generare, ca s-au schimbat azi. Paguba nu e locala: un
+  `lastmod` care se misca zilnic fara motiv il invata pe Google sa nu mai creada
+  campul pe domeniul asta, deci ieftineste chiar datele adevarate de pe articole,
+  rubrici si autori.
+
+  ⚠ PROBA CITESTE SURSA, si aici e forma potrivita: invariantul E despre sursa —
+  „nu se scrie o data inventata". Ce ARE data adevarata o ia dintr-un camp
+  (`content_updated_at`, `updated_at`, `ultima`), deci nu se potriveste cu tiparul.
+
+  Terminatiile de linie se normalizeaza: pe Windows fisierul are CRLF, iar o
+  potrivire care nu tine cont de asta pica tacut.
+*/
+test("sitemapul nu inventeaza `lastModified` cu `new Date()`", () => {
+  const sursa = readFileSync("src/app/sitemap.ts", "utf8").replace(/\r\n/g, "\n");
+  const inventate = [...sursa.matchAll(/lastModified:\s*new Date\(\s*\)/g)];
+  assert.deepEqual(
+    inventate.map((m) => m[0]),
+    [],
+    "s-a reintrodus o data inventata; foloseste un camp adevarat sau omite `lastModified`",
+  );
 });

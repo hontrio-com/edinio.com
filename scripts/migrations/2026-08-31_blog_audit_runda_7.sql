@@ -1,0 +1,98 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- BLOG — RUNDA A SAPTEA DE AUDIT, 31.08.2026
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- ⚠ ADEVARUL REPRODUCTIBIL E `migrations/000-schema-baseline.sql`. Invariantele
+-- sunt probate de `scripts/tests/blog-integrare.sql`, sectiunea R.
+--
+-- Auditul a retras de la sine doua constatari din runda trecuta — rotirea
+-- jetonului de dezabonare si plafonul durabil — dupa ce a citit motivele scrise
+-- in migratia rundei a sasea. Notele „ce s-a verificat si nu s-a schimbat" isi
+-- fac treaba: cine le citeste nu mai cere aceeasi schimbare a doua oara.
+--
+--
+-- ═══ 1. RETENTIA ABONARILOR NECONFIRMATE ═══
+--
+-- Dubla confirmare spune pe fata: nu socotim pe nimeni abonat pana nu apasa. Dar
+-- randul ramanea in baza oricum — cu adresa, cu sursa, cu amprenta jetonului —
+-- desi nu poate primi nimic si jetonul lui e demult stins.
+--
+-- ⚠ CE E DE FAPT: o adresa de email pastrata fara temei. Si nu neaparat a celui
+-- care a scris-o: oricine poate tasta adresa altcuiva in formular. Exact de aceea
+-- exista dubla confirmare — dar daca pastram randul oricum, jumatate din motivul
+-- ei se pierde.
+--
+-- `blog_curata_abonari_neconfirmate(p_zile default 30)`, chemata din cronul orar
+-- `discount-release`. ⚠ NU E UN CRON NOU: fisierul acela gazduieste deja
+-- `curata_limite`, cu motivul scris — „cronul orar cel mai usor". Se urmeaza
+-- tiparul casei, nu se inventeaza altul.
+--
+-- ⚠ CELE PATRU AFIRMATII DE „RAMANE" SUNT MIEZUL PROBEI, nu cea de „se sterge":
+--   * abonatul CONFIRMAT ramane (evident, dar o conditie prea larga ar goli lista
+--     fara ca nimeni sa afle pana la prima campanie, si nu se mai poate lua inapoi)
+--   * DEZABONATUL ramane — nu e o abonare esuata, e o hotarare a omului si
+--     singura dovada ca a cerut sa nu mai primeasca; sters, s-ar putea reabona
+--     din greseala la primul import
+--   * cel RECENT ramane
+--   * cel cu `created_at` vechi dar JETON PROASPAT ramane — a reincercat ieri,
+--     deci e o confirmare in curs, nu un rest
+--
+-- ⚠ CELE 30 DE ZILE SUNT O ALEGERE DE POLITICA, nu una tehnica. Trebuie sa se
+-- potriveasca cu ce scrie in politica de confidentialitate. Se schimba dintr-un
+-- singur loc: argumentul din `discount-release/route.ts`.
+--
+--
+-- ═══ 2. SITEMAPUL NU MAI INVENTEAZA `lastModified` ═══
+--
+-- Auditul semnala `/blog`. Masurat, erau DOUAZECI SI TREI de adrese: tot ce trece
+-- prin `paginiDeSite()`, plus pagina de start, preturile, termenii, si tot centrul
+-- de ajutor. Toate spuneau, la FIECARE generare a sitemapului, ca s-au schimbat azi.
+--
+-- ⚠ PAGUBA NU E LOCALA, SI ASTA E MOTIVUL ADEVARAT AL REPARATIEI. Un `lastmod`
+-- care se misca zilnic fara temei il invata pe Google sa nu mai creada campul pe
+-- domeniul asta — deci ieftineste chiar datele pe care le-am facut corecte cu
+-- greu: `content_updated_at` pe articole (runda a doua) si cel pus pe rubrici si
+-- autori (runda a sasea). O minciuna repetata pe 23 de adrese scade pretul
+-- adevarului de pe celelalte.
+--
+-- Google spune limpede ca daca nu poti afla data reala a unei pagini, e mai bine
+-- sa NU trimiti `lastmod` decat sa trimiti unul inventat. Paginile astea traiesc
+-- in cod si se schimba la desfasurare; n-avem de unde sti cand.
+--
+-- `changeFrequency` ramane: e o sugestie despre viitor, nu o afirmatie despre
+-- trecut. Ce ARE data adevarata si-o pastreaza.
+--
+-- Plasa: `src/app/sitemap.test.ts` cade daca revine vreun `lastModified: new Date()`.
+--
+--
+-- ═══ 3. UN DEFECT DE-AL MEU, DIN RUNDELE 5 SI 6 ═══
+--
+-- ⚠ SECTIUNEA J DIN `blog-integrare.sql` NU MAI ERA SQL VALID, si nu de azi.
+--
+-- Numaratoarea finala („nimic nu a ramas in urma") aduna subinterogari cu `+`.
+-- Adaugand randuri in runda 5 si iar in runda 6, am uitat de doua ori operatorul
+-- dintre ele. Deci blocul ar fi picat la parsare, nu la afirmatie.
+--
+-- ⚠ DE CE N-AM PRINS-O: am rulat de fiecare data sectiunile NOI (M, N, T, G) si
+-- niciodata J. Iar J e tocmai bucata care spune daca probele si-au facut
+-- curatenia — adica singura care apara productia de resturile lor.
+--
+-- Reparat, rulat, si CONFRUNTAT: cu un rand de proba ramas, J chiar pica.
+--
+--
+-- ═══ CE NU S-A FACUT, SI DE CE ═══
+--
+--   * MFA OBLIGATORIU pentru admin si redactor. E constatarea cea mai grea din
+--     audit si e o hotarare de POLITICA, nu o reparatie: schimba cine se poate
+--     autentifica. Prost pusa, isi poate incuia chiar proprietarul afara din
+--     panou. Ramane la latitudinea clientului; mecanismul MFA insusi e verificat
+--     si trece.
+--
+--   * IMAGINILE DIN CORPUL ARTICOLULUI fara `width`/`height`/`srcset`. E polish
+--     de performanta, atinge editorul si conducta de incarcare, si nu are niciun
+--     articol pe care sa se vada azi (blogul e gol). Se face cu primele articole
+--     adevarate, cand se poate si masura.
+--
+--   * URCAREA LUI `sanitize-html`. Motivul intreg e in migratia rundei a sasea:
+--     `htmlparser2` 12 e doar-ESM, iar pachetul e in `serverExternalPackages`.
+--     Auditul e acum de acord ca nu se face orbeste.

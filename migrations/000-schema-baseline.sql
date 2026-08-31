@@ -1495,6 +1495,32 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.blog_curata_abonari_neconfirmate(p_zile integer DEFAULT 30)
+ RETURNS integer
+ LANGUAGE plpgsql
+AS $function$
+declare v_sterse integer;
+begin
+  if p_zile is null or p_zile < 1 then
+    raise exception 'numarul de zile trebuie sa fie cel putin 1, am primit %', p_zile
+      using errcode = 'P0400';
+  end if;
+
+  with plecate as (
+    delete from public.blog_subscribers
+     where confirmed_at is null
+       and unsubscribed_at is null
+       and created_at < now() - make_interval(days => p_zile)
+       and (token_expires_at is null or token_expires_at < now())
+    returning 1
+  )
+  select count(*) into v_sterse from plecate;
+
+  return v_sterse;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.blog_dezaboneaza(p_unsub_token text)
  RETURNS boolean
  LANGUAGE sql
@@ -10620,6 +10646,7 @@ grant execute on function public.blog_confirma(p_token_hash text, p_ip text) to 
 grant execute on function public.blog_continut_atins() to service_role;
 grant execute on function public.blog_creeaza_articol(p_rand jsonb, p_etichete jsonb) to service_role;
 grant execute on function public.blog_creste_citirile(p_slug text) to service_role;
+grant execute on function public.blog_curata_abonari_neconfirmate(p_zile integer) to service_role;
 grant execute on function public.blog_dezaboneaza(p_unsub_token text) to service_role;
 grant execute on function public.blog_etichete_admin(p_de_la integer, p_cate integer, p_cauta text) to service_role;
 grant execute on function public.blog_etichete_folosite() to anon;
@@ -10842,6 +10869,7 @@ revoke execute on function public.blog_confirma(p_token_hash text, p_ip text) fr
 revoke execute on function public.blog_continut_atins() from public;
 revoke execute on function public.blog_creeaza_articol(p_rand jsonb, p_etichete jsonb) from public;
 revoke execute on function public.blog_creste_citirile(p_slug text) from public;
+revoke execute on function public.blog_curata_abonari_neconfirmate(p_zile integer) from public;
 revoke execute on function public.blog_dezaboneaza(p_unsub_token text) from public;
 revoke execute on function public.blog_etichete_admin(p_de_la integer, p_cate integer, p_cauta text) from public;
 revoke execute on function public.blog_muta_taxonomia(p_fel text, p_slug_vechi text, p_slug_nou text) from public;

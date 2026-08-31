@@ -92,6 +92,10 @@ const CHEMARI = [
   /* Nu scriu: id inexistent, deci ies fara sa atinga nimic. */
   { fn: "blog_sterge_articol", args: { p_id: "00000000-0000-0000-0000-000000000000" }, publica: false },
   { fn: "blog_sterge_eticheta", args: { p_id: "00000000-0000-0000-0000-000000000000" }, publica: false },
+  /* ⚠ `p_zile` urias DINADINS: functia sterge randuri mai vechi de atat, iar
+     cu 999999 de zile nu se potriveste niciunul. Proba verifica CHEMABILITATEA,
+     nu purtarea — iar garda de randuri de la capat o si dovedeste. */
+  { fn: "blog_curata_abonari_neconfirmate", args: { p_zile: 999999 }, publica: false },
   { fn: "blog_sterge_taxonomia", args: { p_fel: "categorie", p_id: "00000000-0000-0000-0000-000000000000" }, publica: false },
   {
     fn: "blog_actualizeaza_taxonomia",

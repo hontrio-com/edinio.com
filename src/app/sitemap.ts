@@ -296,14 +296,34 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   const staticPages: MetadataRoute.Sitemap = [
-    { url: PLATFORM_ORIGIN, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },
-    { url: `${PLATFORM_ORIGIN}/preturi`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.9 },
-    { url: `${PLATFORM_ORIGIN}/despre`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.7 },
-    { url: `${PLATFORM_ORIGIN}/contact`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.7 },
-    { url: `${PLATFORM_ORIGIN}/termeni`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
-    { url: `${PLATFORM_ORIGIN}/confidentialitate`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
-    { url: `${PLATFORM_ORIGIN}/cookies`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
-    { url: `${PLATFORM_ORIGIN}/gdpr`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.3 },
+  /*
+    ⚠ PAGINILE SCRISE IN COD NU AU `lastModified`, SI E O ALEGERE.
+
+    Aveau `new Date()`, adica spuneau la FIECARE generare ca s-au schimbat azi —
+    pagina de start, preturile, termenii, centrul de ajutor, toate.
+
+    ⚠ PAGUBA NU E LOCALA. Un `lastmod` care se misca zilnic fara motiv il invata
+    pe Google sa nu mai creada campul DELOC pe domeniul asta — deci ieftineste
+    exact datele pe care le-am facut corecte cu greu: `content_updated_at` pe
+    articole, si cel pus pe rubrici si autori in runda a sasea.
+
+    Google spune limpede ca daca nu poti afla data reala, e mai bine sa NU
+    trimiti `lastmod` decat sa trimiti unul inventat. Paginile astea traiesc in
+    cod si se schimba la desfasurare; n-avem de unde sti cand, fara sa cladim un
+    sistem doar pentru asta.
+
+    `changeFrequency` ramane: e o sugestie despre viitor, nu o afirmatie despre
+    trecut. Ce ARE data adevarata — articole, rubrici, autori, etichete — si-o
+    pastreaza, mai jos.
+  */
+    { url: PLATFORM_ORIGIN, changeFrequency: "weekly", priority: 1 },
+    { url: `${PLATFORM_ORIGIN}/preturi`, changeFrequency: "monthly", priority: 0.9 },
+    { url: `${PLATFORM_ORIGIN}/despre`, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${PLATFORM_ORIGIN}/contact`, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${PLATFORM_ORIGIN}/termeni`, changeFrequency: "yearly", priority: 0.3 },
+    { url: `${PLATFORM_ORIGIN}/confidentialitate`, changeFrequency: "yearly", priority: 0.3 },
+    { url: `${PLATFORM_ORIGIN}/cookies`, changeFrequency: "yearly", priority: 0.3 },
+    { url: `${PLATFORM_ORIGIN}/gdpr`, changeFrequency: "yearly", priority: 0.3 },
 
     /*
       Paginile de prezentare, luate din CHIAR datele meniului.
@@ -323,9 +343,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       de competitori si de industrii vin din listele din care isi fac paginile
       `generateStaticParams`, deci nu pot ramane in urma.
     */
+    /*
+      ⚠ FARA `lastModified`, SI ASTA E O ALEGERE, NU O SCAPARE.
+
+      Aici era `new Date()`. Adica toate cele 23 de adrese spuneau, la FIECARE
+      generare a sitemapului, ca s-au schimbat azi — inclusiv `/blog`, si
+      inclusiv pagini care n-au fost atinse de luni de zile.
+
+      ⚠ PAGUBA NU E LOCALA. Un `lastmod` care se muta zilnic fara motiv il invata
+      pe Google sa nu mai creada campul DELOC pe domeniul asta — deci strica
+      exact datele pe care le-am facut corecte cu greu: `content_updated_at` pe
+      articole, si cel pus pe rubrici si autori. O minciuna repetata pe 23 de
+      adrese ieftineste adevarul de pe celelalte.
+
+      Google spune limpede ca daca nu poti afla data reala a unei pagini, e mai
+      bine sa NU trimiti `lastmod` decat sa trimiti unul inventat. Paginile astea
+      sunt scrise in cod si se schimba la desfasurare — n-avem de unde sa stim
+      cand, fara sa inventam un sistem doar pentru asta.
+
+      `changeFrequency` ramane: el e o sugestie, nu o afirmatie despre trecut.
+    */
     ...paginiDeSite().map((cale) => ({
       url: `${PLATFORM_ORIGIN}${cale}`,
-      lastModified: new Date(),
       changeFrequency: "monthly" as const,
       priority: 0.7,
     })),
@@ -342,16 +381,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       poate cuprinde adrese de pe alt domeniu. E punctul 3 din lista de mutare,
       scrisa in capul lui `lib/website/ajutor.ts`.
     */
-    { url: `${PLATFORM_ORIGIN}/ajutor`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.7 },
+    { url: `${PLATFORM_ORIGIN}/ajutor`, changeFrequency: "monthly", priority: 0.7 },
     ...CATEGORII_AJUTOR.map((c) => ({
       url: `${PLATFORM_ORIGIN}${adresaCategorie(c.slug)}`,
-      lastModified: new Date(),
       changeFrequency: "monthly" as const,
       priority: 0.6,
     })),
     ...TOATE_GHIDURILE.map((g) => ({
       url: `${PLATFORM_ORIGIN}${adresaGhid(g.categorie.slug, g.slug)}`,
-      lastModified: new Date(),
       changeFrequency: "monthly" as const,
       priority: 0.5,
     })),
@@ -366,10 +403,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       un filtru scris de mână, iar un filtru uitat ar fi trimis Google către
       pagini care dau 404 — genul de greșeală care se plătește în încredere.
 
-      ⚠ `lastModified` E DATA ADEVĂRATĂ, nu `new Date()` ca la paginile de
-      deasupra. Acolo e o aproximare fără miză; aici e un semnal: un sitemap care
-      spune că TOATE paginile s-au schimbat azi nu mai spune nimic despre
-      niciuna, iar crawlerul învață să nu se mai uite la câmp.
+      ⚠ `lastModified` E DATA ADEVĂRATĂ.
+
+      Nota asta spunea „nu `new Date()` ca la paginile de deasupra. Acolo e o
+      aproximare fără miză". A DOUA PROPOZIȚIE ERA GREȘITĂ, și s-a reparat pe
+      31.08.2026: aproximarea AVEA miză. Un sitemap în care 23 de adrese spun
+      zilnic că s-au schimbat nu mai spune nimic despre niciuna — inclusiv despre
+      cele care chiar poartă o dată adevărată, ca rândurile de aici. Paginile
+      scrise în cod n-au acum niciun `lastModified`, ceea ce e mai cinstit decât
+      o dată inventată.
 
       ⚠ NOTA ASTA A FOST MULTĂ VREME O MINCIUNĂ PE JUMĂTATE. Stătea exact aici,
       deasupra unor blocuri care puneau `new Date()` la categorii, la autori și

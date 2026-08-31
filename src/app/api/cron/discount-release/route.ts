@@ -55,6 +55,38 @@ export async function GET(req: NextRequest) {
   }
 
   /*
+    Sterge abonarile la blog care n-au fost confirmate NICIODATA si al caror
+    jeton s-a stins demult. Sta aici din acelasi motiv ca `curata_limite`: e
+    cronul orar cel mai usor, si treaba e mica.
+
+    ⚠ DE CE SE STERG. Dubla confirmare spune pe fata ca nu socotim pe nimeni
+    abonat pana nu apasa. Dar randul ramanea oricum — cu adresa cu tot — desi nu
+    poate primi nimic. Si nu neaparat adresa celui care a scris-o: oricine poate
+    tasta adresa altcuiva in formular. Exact de aceea exista dubla confirmare;
+    daca pastram randul oricum, jumatate din motivul ei se pierde.
+
+    ⚠ CE NU ATINGE, si e scris si in functie: cei CONFIRMATI si cei DEZABONATI.
+    Al doilea nu e o abonare esuata, e o hotarare a omului si singura dovada ca a
+    cerut sa nu mai primeasca.
+
+    ⚠ CELE 30 DE ZILE SUNT O ALEGERE DE POLITICA, nu una tehnica. Se schimba
+    dintr-un singur loc — argumentul de mai jos — si trebuie sa se potriveasca cu
+    ce scrie in politica de confidentialitate.
+  */
+  {
+    const { data, error } = await admin.rpc("blog_curata_abonari_neconfirmate", { p_zile: 30 });
+    if (error) {
+      await logError({
+        action: "discount-release.blog_retentie",
+        message: error.message,
+        severity: "warning",
+      });
+    } else if (typeof data === "number" && data > 0) {
+      console.log(`[blog-retentie] ${data} abonari neconfirmate si expirate, sterse`);
+    }
+  }
+
+  /*
    * Alarma de drift a modelului de citire al catalogului.
    *
    * Sta aici din acelasi motiv ca `curata_limite`, si dintr-unul mai serios:

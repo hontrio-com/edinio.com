@@ -142,3 +142,39 @@ export function sesiuneNeconfirmata(
   if (!idSesiune) return true;
   return !listaSesiuni(profil.mfa_sesiuni_confirmate).some((x) => x.s === idSesiune);
 }
+
+/**
+ * Rolul ăsta are NEVOIE de al doilea factor ca să intre în Blog?
+ *
+ * ⚠ REDACTORUL DA, ADMINUL NU — și e o alegere a clientului, luată pe
+ * 31.08.2026, nu o scăpare.
+ *
+ * Până atunci MFA era doar SUPORTAT: `sesiuneNeconfirmata` întoarce FALS când
+ * `mfa_email_enabled` e stins, deci un cont fără al doilea factor trecea exact
+ * ca înainte. Pentru admin e bine așa: e proprietarul, și o poartă prost pusă
+ * l-ar încuia singur afară din panou.
+ *
+ * Redactorul e altceva: e rolul pe care îl dai unui OM DIN AFARĂ. Contul lui
+ * scrie conținut public, iar acțiunile de acolo lucrează cu cheia de serviciu.
+ *
+ * ⚠ STĂ AICI, CA FUNCȚIE PURĂ, ca să poată fi probată. Regula scrisă în linie
+ * într-o pază care are nevoie de Supabase e o regulă pe care n-o verifică
+ * nimeni — și tocmai regulile de acces trebuie verificate.
+ */
+export function trebuieSaAibaMfa(rol: string | null | undefined): boolean {
+  return rol === "editor";
+}
+
+/**
+ * Îl oprim pe cel care intră în Blog fiindcă nu are al doilea factor?
+ *
+ * ⚠ SE CITEȘTE „NU ARE VOIE", nu „nu e confirmat". Sunt două lucruri deosebite:
+ * ăsta spune că n-a ÎNROLAT MFA deloc; `sesiuneNeconfirmata` spune că l-a
+ * înrolat dar sesiunea de acum n-a trecut prin el.
+ */
+export function opritFiindcaNareMfa(
+  rol: string | null | undefined,
+  mfaActiv: boolean | null | undefined,
+): boolean {
+  return trebuieSaAibaMfa(rol) && !mfaActiv;
+}

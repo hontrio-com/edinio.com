@@ -8,6 +8,8 @@ import {
   MAX_SESIUNI_CONFIRMATE,
   sesiuneNeconfirmata,
   VIATA_CONFIRMARE_MS,
+  trebuieSaAibaMfa,
+  opritFiindcaNareMfa,
 } from "./mfa";
 
 import { desigileazaSesiune, sigileazaSesiune } from "./sesiune-asteptare";
@@ -145,4 +147,50 @@ test("sigiliul modificat e refuzat, nu acceptat partial", () => {
 test("sigiliul expirat nu mai deschide nimic", () => {
   const sigiliu = sigileazaSesiune({ u: "user-1", r: "r", e: Date.now() - 1 });
   assert.equal(desigileazaSesiune(sigiliu), null);
+});
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  AL DOILEA FACTOR E OBLIGATORIU PENTRU REDACTOR, NU PENTRU ADMIN (31.08.2026)
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Pana atunci MFA era doar SUPORTAT: cine nu-l inrola intra cu parola. Bun pentru
+  admin — e proprietarul, si o poarta prost pusa l-ar incuia singur afara.
+  Redactorul e altceva: e rolul dat unui om DIN AFARA, iar actiunile lui lucreaza
+  cu cheia de serviciu.
+
+  ⚠ ALEGEREA E A CLIENTULUI. Daca cineva vrea sa o schimbe, se schimba AICI,
+  intr-un singur loc, si probele de mai jos spun imediat ce s-a schimbat.
+*/
+
+test("redactorul are nevoie de al doilea factor", () => {
+  assert.equal(trebuieSaAibaMfa("editor"), true);
+});
+
+test("adminul NU e obligat — e alegerea clientului, nu o scapare", () => {
+  assert.equal(trebuieSaAibaMfa("admin"), false);
+});
+
+test("redactorul fara MFA e oprit", () => {
+  assert.equal(opritFiindcaNareMfa("editor", false), true);
+  assert.equal(opritFiindcaNareMfa("editor", null), true);
+  assert.equal(opritFiindcaNareMfa("editor", undefined), true);
+});
+
+test("redactorul cu MFA trece de poarta asta", () => {
+  /* ⚠ „Trece de POARTA ASTA", nu „intra": mai are de trecut
+     `sesiuneNeconfirmata`, care cere ca SESIUNEA de acum sa fi trecut prin al
+     doilea factor. Sunt doua lucruri deosebite, si amandoua se verifica. */
+  assert.equal(opritFiindcaNareMfa("editor", true), false);
+});
+
+test("adminul fara MFA nu e oprit de regula asta", () => {
+  assert.equal(opritFiindcaNareMfa("admin", false), false);
+});
+
+test("un rol necunoscut nu e oprit de AICI", () => {
+  /* ⚠ Nu fiindca ar avea voie: rolul e respins mai sus, in paza. Regula asta
+     raspunde la o singura intrebare, si e bine sa nu raspunda si la alta. */
+  assert.equal(opritFiindcaNareMfa("client", false), false);
+  assert.equal(opritFiindcaNareMfa(null, false), false);
 });

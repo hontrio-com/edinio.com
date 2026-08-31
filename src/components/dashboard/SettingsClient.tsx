@@ -344,6 +344,8 @@ interface Props {
   shippingCategories: string[];
   mfaEmailEnabled: boolean;
   planSuccess?: boolean;
+  /** Fila cerută din adresă, când cineva e trimis direct la ea. */
+  sectiuneCeruta?: string;
   domainSuccess?: boolean;
 }
 
@@ -359,8 +361,33 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess }: Props) {
-  const [activeSection, setActiveSection] = useState<SectionId>(planSuccess ? "plan" : domainSuccess ? "domeniu" : "general");
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta }: Props) {
+  /*
+    ⚠ `sectiuneCeruta` se verifică față de lista adevărată, nu se turnă orbește.
+    Un `?sectiune=orice` din bara de adrese ar fi pus o filă care nu există, iar
+    ecranul ar fi rămas gol fără nicio eroare.
+  */
+  const cerutaValida = NAV_SECTIONS.some((s) => s.id === sectiuneCeruta)
+    ? (sectiuneCeruta as SectionId)
+    : null;
+  const [activeSection, setActiveSection] = useState<SectionId>(
+    cerutaValida ?? (planSuccess ? "plan" : domainSuccess ? "domeniu" : "general"),
+  );
+
+  /*
+    ⚠ OMUL TREBUIE SA AFLE DE CE A FOST ADUS AICI. Paza blogului il trimite cu
+    `?mfa=cerut`; fara randurile astea ar ateriza pe fila Securitate fara sa stie
+    de ce, si ar crede ca a apasat gresit.
+  */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (new URLSearchParams(window.location.search).get("mfa") !== "cerut") return;
+    toast.error(
+      "Pentru a intra in Blog ai nevoie de verificare in doi pasi. Activeaz-o mai jos, " +
+        "apoi intra din nou la Blog.",
+      { duration: 12_000 },
+    );
+  }, []);
 
   useEffect(() => {
     if (planSuccess) {

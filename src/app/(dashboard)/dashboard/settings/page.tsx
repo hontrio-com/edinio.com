@@ -15,7 +15,7 @@ import { parseStoreMode } from "@/lib/storefront/store-mode";
 import type { Database } from "@/types/database.types";
 
 interface Props {
-  searchParams: Promise<{ plan_success?: string; domain_success?: string }>;
+  searchParams: Promise<{ plan_success?: string; domain_success?: string; sectiune?: string }>;
 }
 
 /** Exact campurile trimise mai departe — aceleasi cu selectul de mai jos. */
@@ -40,7 +40,7 @@ type ProfilSetari = Pick<
  * in schimb scheletul pleaca imediat, nu dupa produse.
  */
 export default async function SettingsPage({ searchParams }: Props) {
-  const { plan_success, domain_success } = await searchParams;
+  const { plan_success, domain_success, sectiune } = await searchParams;
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) redirect("/login");
@@ -74,6 +74,9 @@ export default async function SettingsPage({ searchParams }: Props) {
         email={user.email ?? ""}
         planSuccess={plan_success === "1"}
         domainSuccess={domain_success === "1"}
+        /* ⚠ Ca redirectarea din paza blogului sa AJUNGA unde spune. Fara asta,
+           omul era trimis in Setari si lasat sa caute fila „Securitate". */
+        sectiuneCeruta={sectiune}
       />
     </Suspense>
   );
@@ -115,12 +118,14 @@ async function ContinutSetari({
   email,
   planSuccess,
   domainSuccess,
+  sectiuneCeruta,
 }: {
   profile: ProfilSetari;
   userId: string;
   email: string;
   planSuccess: boolean;
   domainSuccess: boolean;
+  sectiuneCeruta?: string;
 }) {
   const supabase = await createClient();
 
@@ -376,6 +381,7 @@ async function ContinutSetari({
 
   return (
     <SettingsClient
+      sectiuneCeruta={sectiuneCeruta}
       profile={profile}
       email={email}
       businessId={business?.id ?? null}

@@ -82,11 +82,9 @@
 --
 -- ═══ CE NU S-A FACUT, SI DE CE ═══
 --
---   * MFA OBLIGATORIU pentru admin si redactor. E constatarea cea mai grea din
---     audit si e o hotarare de POLITICA, nu o reparatie: schimba cine se poate
---     autentifica. Prost pusa, isi poate incuia chiar proprietarul afara din
---     panou. Ramane la latitudinea clientului; mecanismul MFA insusi e verificat
---     si trece.
+--   * MFA OBLIGATORIU PENTRU ADMIN. Ramane optional dinadins: adminul e
+--     proprietarul, si o poarta prost pusa l-ar incuia singur afara din panou.
+--     Pentru REDACTOR s-a facut — vezi adaosul de la capatul fisierului.
 --
 --   * IMAGINILE DIN CORPUL ARTICOLULUI fara `width`/`height`/`srcset`. E polish
 --     de performanta, atinge editorul si conducta de incarcare, si nu are niciun
@@ -96,3 +94,36 @@
 --   * URCAREA LUI `sanitize-html`. Motivul intreg e in migratia rundei a sasea:
 --     `htmlparser2` 12 e doar-ESM, iar pachetul e in `serverExternalPackages`.
 --     Auditul e acum de acord ca nu se face orbeste.
+--
+--
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ADAOS: AL DOILEA FACTOR, OBLIGATORIU PENTRU REDACTOR
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- Clientul a ales varianta de mijloc, si e o alegere buna: obligatoriu pentru
+-- REDACTOR, neschimbat pentru ADMIN.
+--
+-- ⚠ DE CE ASA. Adminul e proprietarul; o poarta prost pusa l-ar incuia singur
+-- afara din panou, si atunci n-ar mai avea de unde sa o repare. Redactorul e
+-- rolul pe care il dai unui OM DIN AFARA — contul lui scrie continut public, iar
+-- actiunile de acolo lucreaza cu cheia de serviciu. Riscul de auto-blocare:
+-- zero, fiindca astazi exista un singur cont, si acela e admin.
+--
+-- Pusa la AMANDOUA portile: `requireBlogEditor` (ecran) si `requireBlogEditorApi`
+-- (actiuni). O poarta de actiune mai slaba decat cea de pagina e o usa lasata
+-- deschisa in spate: actiunile se pot chema direct, fara niciun ecran.
+--
+-- ⚠ USA DIN DOS SE INCHIDE SINGURA. Auditul cerea si interzicerea dezactivarii
+-- MFA pentru rolurile privilegiate. N-a fost nevoie: paza ruleaza la FIECARE
+-- cerere, deci un redactor care isi stinge MFA-ul din Setari pierde blogul la
+-- urmatoarea pagina. O a doua regula ar fi fost inca un loc care poate ramane in
+-- urma fata de prima.
+--
+-- ⚠ REGULA E O FUNCTIE PURA, `opritFiindcaNareMfa`, in `lib/auth/mfa.ts`. Scrisa
+-- in linie intr-o paza care are nevoie de Supabase, ar fi fost o regula de acces
+-- pe care n-o verifica nimeni. Are 6 probe, confruntate.
+--
+-- ⚠ SI REDIRECTAREA AJUNGE UNDE SPUNE. Fila „Securitate" din Setari nu se putea
+-- deschide din adresa; acum se poate (`?sectiune=securitate`), iar `?mfa=cerut`
+-- arata si de ce a fost adus omul acolo. Altfel ar fi aterizat intr-o pagina
+-- fara sa stie ce sa caute — greseala pe care am facut-o deja de doua ori.

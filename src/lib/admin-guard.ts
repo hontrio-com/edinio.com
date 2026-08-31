@@ -3,6 +3,7 @@ import type { User } from "@supabase/supabase-js";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { createClient } from "@/lib/supabase/server";
 import { sesiuneCurentaNeconfirmata } from "@/lib/auth/cere-mfa";
+import { opritFiindcaNareMfa } from "@/lib/auth/mfa";
 
 /**
  * Garda de administrator de platforma.
@@ -121,7 +122,7 @@ export async function requireBlogEditor() {
 
   const supabase = await createClient();
   const { data } = await supabase
-    .from("users_profile").select("role, full_name, avatar_url").eq("id", user.id).single();
+    .from("users_profile").select("role, full_name, avatar_url, mfa_email_enabled").eq("id", user.id).single();
 
   const rol = data?.role;
   if (rol !== "admin" && rol !== "editor") redirect("/dashboard");
@@ -141,12 +142,38 @@ export async function requireBlogEditor() {
   if (rol === "admin" && !areClaimDeAdmin(user)) redirect("/dashboard");
 
   /*
+    ⚠ REDACTORUL NU INTRĂ FĂRĂ AL DOILEA FACTOR. Adminul, da — și asta e o
+    alegere a clientului, luată pe 31.08.2026, nu o scăpare.
+
+    Până acum MFA era doar SUPORTAT: `sesiuneNeconfirmata` întoarce FALS când
+    `mfa_email_enabled` e stins, deci un cont fără al doilea factor trecea exact
+    ca înainte. Bun pentru admin, care e proprietarul și se poate încuia singur
+    afară dintr-o poartă prost pusă.
+
+    Redactorul e altceva: e rolul pe care îl dai unui OM DIN AFARĂ. Contul lui
+    scrie conținut public al Edinio, iar acțiunile de acolo lucrează cu cheia de
+    serviciu. Pentru el, „suportat" nu ajunge.
+
+    ⚠ UȘA DIN DOS SE ÎNCHIDE SINGURĂ: paza asta rulează la FIECARE cerere, deci
+    un redactor care își stinge MFA-ul din Setări pierde blogul la următoarea
+    pagină. N-a fost nevoie să interzic dezactivarea — ar fi fost o a doua regulă
+    care poate rămâne în urmă față de prima.
+  */
+  if (opritFiindcaNareMfa(rol, data?.mfa_email_enabled)) {
+    redirect("/dashboard/settings?sectiune=securitate&mfa=cerut");
+  }
+
+  /*
     ⚠ MFA SI PENTRU REDACTOR, nu doar pentru admin. Un redactor schimba continut
     public al Edinio; contul lui merita al doilea factor la fel de mult.
 
-    Nu blocheaza pe nimeni care nu l-a inrolat: `sesiuneNeconfirmata` intoarce
-    FALS cand `mfa_email_enabled` e stins (vezi `lib/auth/mfa.ts`). Conturile
-    fara al doilea factor merg exact ca inainte.
+    ⚠ RANDUL ASTA NU BLOCHEAZA PE NIMENI CARE N-A INROLAT MFA:
+    `sesiuneNeconfirmata` intoarce FALS cand `mfa_email_enabled` e stins (vezi
+    `lib/auth/mfa.ts`). El apara doar sesiunile celor care AU al doilea factor.
+
+    Cine il CERE e verificarea de mai sus, si numai pentru redactori. Nota asta
+    spunea „conturile fara al doilea factor merg exact ca inainte" — adevarat
+    pana pe 31.08.2026, si adevarat si acum pentru ADMIN. Pentru redactor, nu.
   */
   if (await sesiuneCurentaNeconfirmata(user.id)) redirect("/login/mfa");
 
@@ -167,7 +194,7 @@ export async function requireBlogEditorApi(): Promise<{ id: string; rol: RolBlog
 
   const supabase = await createClient();
   const { data } = await supabase
-    .from("users_profile").select("role").eq("id", user.id).single();
+    .from("users_profile").select("role, mfa_email_enabled").eq("id", user.id).single();
 
   const rol = data?.role;
   if (rol !== "admin" && rol !== "editor") return null;
@@ -176,6 +203,11 @@ export async function requireBlogEditorApi(): Promise<{ id: string; rol: RolBlog
      actiune mai slaba decat poarta de pagina e o usa lasata deschisa in spate:
      actiunile se pot chema direct, fara sa treaca prin niciun ecran. */
   if (rol === "admin" && !areClaimDeAdmin(user)) return null;
+
+  /* ⚠ ACEEAȘI REGULĂ CA LA ECRAN. O poartă de acțiune mai slabă decât poarta de
+     pagină e o ușă lăsată deschisă în spate: acțiunile se pot chema direct. */
+  if (opritFiindcaNareMfa(rol, data?.mfa_email_enabled)) return null;
+
   if (await sesiuneCurentaNeconfirmata(user.id)) return null;
 
   return { id: user.id, rol: rol as RolBlog };

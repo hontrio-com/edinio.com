@@ -45,7 +45,6 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
   {
     title: "Platformă",
     links: [
-      { label: "Creare magazin online", href: "/magazin-online" },
       { label: "Mentenanță gratuită", href: "/mentenanta-gratuita" },
       /*
         ⚠ `/migrare` EXISTĂ PE RAMURA ASTA, DAR A FOST ȘTEARSĂ PE `main` (2c138eb).

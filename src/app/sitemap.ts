@@ -77,7 +77,7 @@ function homepageNoindex(row: { store_settings?: unknown }): boolean {
  * stau in meniu, dar sunt vii si indexabile. `/` si `/ajutor` ies, fiindca sunt
  * puse separat mai sus, cu prioritatile lor.
  */
-export const PUSE_SEPARAT = ["/", "/ajutor", "/preturi", "/despre", "/contact"];
+export const PUSE_SEPARAT = ["/", "/ajutor", "/preturi", "/contact"];
 
 export function paginiDeSite(): string[] {
   const adrese = new Set<string>();
@@ -87,7 +87,17 @@ export function paginiDeSite(): string[] {
 
   adrese.add("/vs");
   adrese.add("/industrii");
-  adrese.add("/magazin-online");
+  /*
+    ⚠ `/magazin-online` SI `/despre` AU PLECAT DE AICI pe 01.09.2026, odata cu
+    paginile. Clientul le-a cerut sterse „momentan, poate pe viitor o sa le
+    adaugam". Amandoua au redirectare permanenta catre `/` in `next.config.ts` —
+    erau in sitemap si raspundeau 200, deci Google le stie.
+
+    ⚠ DACA REVIN: se pun la loc rândurile de aici SI se scot redirectarile din
+    `next.config.ts`, altfel pagina noua ar fi trimisa cu 308 catre acasa fara
+    niciun 404 care sa dea de banuit — exact ce era sa pateasca /migrare la
+    unirea ramurilor.
+  */
   /*
     ⚠ `/start` A PLECAT DE AICI pe 31.08.2026, odată cu pagina. Era pagina de
     aterizare a site-ului vechi. Adresa are acum o redirectare permanentă către
@@ -342,7 +352,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   */
     { url: PLATFORM_ORIGIN, changeFrequency: "weekly", priority: 1 },
     { url: `${PLATFORM_ORIGIN}/preturi`, changeFrequency: "monthly", priority: 0.9 },
-    { url: `${PLATFORM_ORIGIN}/despre`, changeFrequency: "monthly", priority: 0.7 },
     { url: `${PLATFORM_ORIGIN}/contact`, changeFrequency: "monthly", priority: 0.7 },
     { url: `${PLATFORM_ORIGIN}/termeni`, changeFrequency: "yearly", priority: 0.3 },
     { url: `${PLATFORM_ORIGIN}/confidentialitate`, changeFrequency: "yearly", priority: 0.3 },

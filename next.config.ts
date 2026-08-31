@@ -27,6 +27,20 @@ const nextConfig: NextConfig = {
         trecută când două ramuri au adăugat fiecare câte un `redirects()`.
       */
       { source: "/start", destination: "/", permanent: true },
+      /*
+        ⚠ `/despre` ȘI `/magazin-online`, șterse pe 01.09.2026. Clientul: „le
+        ștergem momentan, poate pe viitor o să le adăugăm."
+
+        Amândouă răspundeau 200 și erau în sitemap, deci Google le știe. Aveau
+        conținut adevărat — 78 kB și 70 kB de HTML — nu erau pagini goale.
+
+        ⚠ DACĂ SE ADAUGĂ LA LOC, ȘTERGE ȘI RÂNDURILE ASTEA. O pagină nouă la o
+        adresă care mai are redirectare e trimisă cu 308 către acasă, fără niciun
+        404 și fără nicio eroare care să dea de bănuit — exact ce era să pățească
+        `/migrare`, vezi nota de mai jos.
+      */
+      { source: "/despre", destination: "/", permanent: true },
+      { source: "/magazin-online", destination: "/", permanent: true },
     ];
   },
   /*

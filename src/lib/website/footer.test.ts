@@ -68,7 +68,17 @@ test("fiecare link intern din subsol duce la o pagina care exista", () => {
   const interne = FOOTER_COLUMNS.flatMap((c) => c.links).filter(
     (l) => !l.extern && !l.href.startsWith("/industrii/"),
   );
-  assert.ok(interne.length >= 10, `doar ${interne.length} linkuri interne — s-a taiat ceva?`);
+  /*
+    ⚠ PRAGUL A COBORAT DE LA 10 LA 9 pe 01.09.2026, si martorul a facut exact ce
+    trebuia: a simtit scaderea si a cerut sa fie privita, in loc s-o lase sa
+    treaca. Randul „Creare magazin online" a plecat odata cu pagina
+    `/magazin-online`, stearsa la cererea clientului.
+
+    Nu se scoate pragul, se coboara. El apara cazul in care o citire de
+    configuratie se rupe si lista iese goala — atunci bucla de mai jos n-ar
+    verifica nimic si proba ar fi verde pe zero.
+  */
+  assert.ok(interne.length >= 9, `doar ${interne.length} linkuri interne — s-a taiat ceva?`);
 
   for (const link of interne) {
     assert.ok(

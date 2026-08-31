@@ -91,7 +91,16 @@ export const FEATURE_CARDS: FeatureCard[] = [
       "Mobile Friendly",
       "Conform legislației în vigoare",
     ],
-    cta: { label: "Vezi mai multe detalii", href: "/magazin-online" },
+    /*
+      ⚠ DUCEA LA `/magazin-online`, ștearsă pe 01.09.2026. Lăsat așa, butonul ar
+      fi trimis cu 308 chiar la pagina pe care stă cardul — un buton care pare că
+      nu face nimic.
+
+      `/preturi` e cea mai apropiată destinație adevărată pentru „mai multe
+      detalii" despre magazin: acolo scrie ce include fiecare plan. Dacă pagina
+      se adaugă la loc, aici se pune adresa veche.
+    */
+    cta: { label: "Vezi ce include", href: "/preturi" },
     image: {
       base: "/features/magazin",
       alt: "Magazin online Edinio pe desktop și pe telefon",

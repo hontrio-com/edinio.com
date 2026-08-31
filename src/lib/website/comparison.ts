@@ -19,6 +19,8 @@
  * la sfârșitul fișierului ce scria și ce anume susținea.
  */
 
+import { VERDE_CITIBIL } from "./linii";
+
 export const COMPARISON_EYEBROW = "Comparație";
 
 export const COMPARISON_TITLE = [
@@ -201,3 +203,34 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
  * Fără ea, „X" trebuie să-și ducă singur înțelesul, deci nu se mai desenează ca
  * literă, ci ca semn de „neinclus" — vezi `Comparison.tsx`.
  */
+
+/**
+ * Culoarea fiecărei platforme, PENTRU CARDURILE DE PE TELEFON.
+ *
+ * ⚠ NUMAI PE TELEFON, ȘI ASTA E TOT ROSTUL. Pe desktop antetul coloanei are
+ * SIGLA, care spune marca mai bine decât orice culoare. Sub `lg` siglele nu apar
+ * (vezi nota de sus), iar numele rămâne singurul semn — un rând de text cenușiu
+ * pentru toate patru. Culoarea îi dă înapoi ce pierde sigla: se recunoaște din
+ * privire a cui e rândul, fără să fie citit.
+ *
+ * Nu e nevoie de niciun `lg:` care să o stingă: rândurile astea sunt `lg:hidden`.
+ *
+ * ⚠ NU SUNT HEXURILE DE MARCĂ, ȘI DINADINS. Aceeași regulă ca la verdele
+ * nostru, care nu e `#1AB554` fiindcă acela are 2,70:1 pe alb. Măsurat pentru
+ * fiecare, pe alb, la 13px (prag 4,5:1):
+ *
+ *   Shopify      #95BF47 → 2,14:1  ✗   se întunecă la #627E2F → 4,62:1
+ *   WooCommerce  #7F54B3 → 5,50:1  ✓   rămâne culoarea mărcii
+ *   OpenCart     #23A1D1 → 2,96:1  ✗   se întunecă la #1B7EA3 → 4,61:1
+ *   Wix          #0C6EFC → 4,51:1  ✓   rămâne, la limită
+ *
+ * Întunecarea păstrează nuanța, deci verdele Shopify rămâne verde și albastrul
+ * OpenCart rămâne albastru — se recunosc, doar că se și citesc.
+ */
+export const CULORI_MARCA: Record<string, string> = {
+  [COMPARISON_US]: VERDE_CITIBIL,
+  Shopify: "#627E2F",
+  WooCommerce: "#7F54B3",
+  OpenCart: "#1B7EA3",
+  Wix: "#0C6EFC",
+};

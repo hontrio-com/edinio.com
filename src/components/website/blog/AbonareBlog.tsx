@@ -63,7 +63,20 @@ export function AbonareBlog() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="adresa@exemplu.ro"
                 autoComplete="email"
-                className="h-11 flex-1 rounded-full border border-hairline bg-white px-4 text-[14.5px] text-ink placeholder:text-ink-3 focus:border-ink-3/40 focus:outline-none"
+                /*
+                  ⚠ `sm:flex-1`, NU `flex-1` — și ăsta era chiar defectul.
+
+                  Containerul e `flex-col` pe telefon și `sm:flex-row`. Cu
+                  `flex-1` necondiționat, pe telefon el se aplica pe axa
+                  principală, care acolo e ÎNĂLȚIMEA: `flex-basis: 0%` bate
+                  `h-11`, deci câmpul se strângea la înălțimea textului. Butonul,
+                  care n-are `flex-1`, rămânea la 44px — de unde perechea
+                  nepotrivită din captura clientului.
+
+                  De la `sm` în sus, unde chiar e rând, `flex-1` face ce trebuie:
+                  câmpul ia spațiul rămas lângă buton.
+                */
+                className="h-11 w-full rounded-full border border-hairline bg-white px-4 text-[14.5px] text-ink placeholder:text-ink-3 focus:border-ink-3/40 focus:outline-none sm:w-auto sm:flex-1"
               />
               <button
                 type="submit"

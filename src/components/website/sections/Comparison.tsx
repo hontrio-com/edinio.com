@@ -7,6 +7,7 @@ import {
   COMPARISON_ROWS,
   COMPARISON_TITLE,
   COMPARISON_US,
+  CULORI_MARCA,
   PLATFORM_LOGOS,
   inaltimeSigla,
   type ComparisonRival,
@@ -70,6 +71,7 @@ import { VERDE_CITIBIL } from "@/lib/website/linii";
    2,70:1, sub prag. Alegerea era buna, dar `--primary` era deja acolo si are
    4,95:1. Doctrina celor doi verzi ramasi e in capul lui `globals.css`. */
 const GREEN_TEXT = VERDE_CITIBIL;
+
 
 function Sigla({ nume }: { nume: ComparisonRival }) {
   const logo = PLATFORM_LOGOS[nume];
@@ -193,7 +195,11 @@ export function Comparison() {
                     site-ului pe fundal alb.
                   */}
                   <td className="flex items-center justify-between gap-4 bg-tint px-5 py-3 lg:table-cell lg:px-4 lg:py-5 lg:text-center lg:align-middle">
-                    <span className="text-[13px] font-semibold text-ink lg:hidden" aria-hidden="true">
+                    <span
+                      className="text-[13px] font-semibold lg:hidden"
+                      style={{ color: CULORI_MARCA[COMPARISON_US] }}
+                      aria-hidden="true"
+                    >
                       {COMPARISON_US}
                     </span>
                     <span
@@ -209,7 +215,11 @@ export function Comparison() {
                       key={COMPARISON_RIVALS[i]}
                       className="flex items-center justify-between gap-4 px-5 py-3 last:pb-5 lg:table-cell lg:px-4 lg:py-5 lg:text-center lg:align-middle lg:last:pb-5"
                     >
-                      <span className="text-[13px] font-medium text-ink-2 lg:hidden" aria-hidden="true">
+                      <span
+                        className="text-[13px] font-medium lg:hidden"
+                        style={{ color: CULORI_MARCA[COMPARISON_RIVALS[i]] }}
+                        aria-hidden="true"
+                      >
                         {COMPARISON_RIVALS[i]}
                       </span>
                       <Valoare valoare={valoare} />

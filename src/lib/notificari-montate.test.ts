@@ -134,7 +134,7 @@ test("site-ul de prezentare și magazinele NU cară `sonner` degeaba", () => {
       "niciodată `toast`. Pune-l în aspectul grupului care are nevoie.",
   );
 
-  for (const grup of ["(website)", "(ajutor)", "(landing)", "(public)"]) {
+  for (const grup of ["(website)", "(ajutor)", "(public)"]) {
     const dir = join(APP, grup);
     if (!existsSync(dir)) continue;
     const ating = toateFisierele(dir)

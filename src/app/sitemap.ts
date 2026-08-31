@@ -88,7 +88,11 @@ export function paginiDeSite(): string[] {
   adrese.add("/vs");
   adrese.add("/industrii");
   adrese.add("/magazin-online");
-  adrese.add("/start");
+  /*
+    ⚠ `/start` A PLECAT DE AICI pe 31.08.2026, odată cu pagina. Era pagina de
+    aterizare a site-ului vechi. Adresa are acum o redirectare permanentă către
+    `/`, pusă în `next.config.ts` — o adresă indexată nu se lasă să devină 404.
+  */
 
   for (const c of COMPETITORS) adrese.add(c.href);
   for (const i of INDUSTRIES) adrese.add(`/industrii/${i.slug}`);

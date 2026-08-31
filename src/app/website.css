@@ -45,7 +45,6 @@
    însemnătate; fiecare rând e un dosar sau un fișier real. */
 @source "../app/(website)";
 @source "../app/(ajutor)";
-@source "../app/(landing)";
 /* Aici intra si `components/website/ajutor`, unde stau chiar componentele
    centrului de ajutor — nu exista `components/ajutor`. */
 @source "../components/website";

@@ -13,7 +13,21 @@ const nextConfig: NextConfig = {
    * Google sa folosesti cand o adresa se muta definitiv.
    */
   async redirects() {
-    return [{ source: "/roadmap", destination: "/blog", permanent: true }];
+    return [
+      { source: "/roadmap", destination: "/blog", permanent: true },
+      /*
+        ⚠ `/start` A FOST ȘTEARSĂ PE 31.08.2026, la cererea clientului: pagina de
+        aterizare a site-ului vechi, care nu mai era folosită în reclame.
+
+        Redirectarea NU e de prisos. `/start` era în sitemap și răspundea 200 pe
+        edinio.com, deci Google o știe și cineva o poate avea în semne de carte.
+        Fără rândul ăsta, o adresă indexată devine 404 peste noapte.
+
+        Aici, și nu în altă parte: nota de mai jos explică ce s-a întâmplat data
+        trecută când două ramuri au adăugat fiecare câte un `redirects()`.
+      */
+      { source: "/start", destination: "/", permanent: true },
+    ];
   },
   /*
    * ⚠ AICI A FOST SI `/migrare` → `/`, ADUS DE `main`. E SCOS DINADINS.

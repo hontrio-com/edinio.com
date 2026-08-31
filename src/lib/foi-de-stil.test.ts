@@ -14,7 +14,7 @@ import { join, relative, sep } from "node:path";
   `switch`, `tabs-list`, `combobox`, calendarul, 190 de reguli de temă întunecată.
 
       globals.css   panou, admin, autentificare, onboarding, magazine, /reactivare
-      website.css   (website), (ajutor), (landing)
+      website.css   (website), (ajutor)
 
   Amândouă importă `stil-comun.css`, deci regulile scrise de mână sunt scrise o
   singură dată. Diferă doar ce scanează Tailwind.
@@ -36,7 +36,7 @@ function foaiaImportata(fisier: string): string | null {
   return m ? m[1].split("/").pop()! : null;
 }
 
-const PREZENTARE = ["(website)", "(ajutor)", "(landing)"];
+const PREZENTARE = ["(website)", "(ajutor)"];
 const APLICATIE = ["(auth)", "(dashboard)", "(admin)", "(onboarding)", "(public)/[slug]", "reactivare"];
 
 test("fiecare grup de rute importă foaia care i se cuvine", () => {
@@ -116,7 +116,6 @@ test("`website.css` scanează chiar dosarele din care se randează prezentarea",
   const cerute = [
     "../app/(website)",
     "../app/(ajutor)",
-    "../app/(landing)",
     "../components/website",
   ];
   const lipsa = cerute.filter((c) => !surse.includes(c));
@@ -165,7 +164,6 @@ test("nicio altă pagină din `app/` nu importă direct o foaie de stil", () => 
   const permise = new Set([
     "src/app/(website)/layout.tsx",
     "src/app/(ajutor)/layout.tsx",
-    "src/app/(landing)/layout.tsx",
     "src/app/(auth)/layout.tsx",
     "src/app/(dashboard)/layout.tsx",
     "src/app/(admin)/layout.tsx",

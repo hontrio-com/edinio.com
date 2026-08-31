@@ -48,7 +48,7 @@ function SidebarContent({ adminName, adminEmail, onClose, rol = "admin" }: { adm
       {/* Brand */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
         <div className="flex items-center gap-2.5">
-          <Logo size="sm" href="/admin" textClassName="text-white" />
+          <Logo size="sm" href="/admin" textClassName="text-white" eager />
         </div>
         {onClose && (
           <button onClick={onClose} className="text-zinc-400 hover:text-white transition-colors lg:hidden">

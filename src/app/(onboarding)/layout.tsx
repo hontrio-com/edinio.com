@@ -37,7 +37,7 @@ export default async function OnboardingLayout({
       <PlatformTikTokPixel />
       <header className="border-b border-border bg-surface">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center">
-          <Logo size="md" />
+          <Logo size="md" eager />
         </div>
       </header>
       <main>{children}</main>

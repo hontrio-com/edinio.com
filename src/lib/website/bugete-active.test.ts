@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { PROVIDER_LOGOS } from "./logos";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════
@@ -39,7 +40,43 @@ const BUGETE: Record<string, number> = {
   /* Fundalul din ultima secțiune a paginii de start. Lazy, deci nu intră în
      prima afișare — dar tot ajunge la cine derulează până jos. */
   "ro.svg": 80_000,
+
+  /*
+    ⚠ CELE PATRU DE MAI JOS AU FOST ADĂUGATE PE 01.09.2026, după ce un inventar
+    al lui `public/` a arătat că bugetele apărau trei fișiere și lăsau
+    nesupravegheate tocmai cele mai grele de pe rute. Marja e măsurat × 1,06 —
+    o recodare a aceleiași imagini trece, un export proaspăt nesocotit cade.
+  */
+  /* /mentenanta-gratuita. Cea mai grea imagine de pe tot site-ul. Sub fold, cu
+     `<Image>` fără `priority`, deci nu intră în prima afișare. */
+  "mentenanta/securitate.webp": 149_500,
+  /* /mentenanta-gratuita, fundalul conversației. ⚠ E fundal CSS, nu `<Image>`,
+     deci se cere de îndată ce elementul intră în arborele de randare — nu când
+     ajunge pe ecran. Sursa are 760×1396 și se desenează cu `cover` într-o casetă
+     mult mai joasă, deci aici mai e loc de tăiat. */
+  "mentenanta/fundal_whatsapp.webp": 82_000,
+  /* /optimizare, captura de produs din panoul de rezultate. */
+  "optimizare/produs.webp": 100_600,
+  /* Pagina de start, cea mai mare treaptă din `srcset`-ul primului card. */
+  "features/magazin-1440.webp": 67_700,
 };
+
+/*
+  ⚠ PLAFONUL PENTRU SIGLE — o regulă, nu o listă.
+
+  Pe 01.09.2026, douăsprezece sigle raster cântăreau 460.659 de octeți; cea mai
+  grasă, `ing.webp`, avea 3840×955 px pentru o casetă de cel mult 120. Recodate
+  la 400 px pe latura lungă: 107.974 octeți, minus 77%.
+
+  ⚠ DE CE O REGULĂ ȘI NU ÎNCĂ 64 DE RÂNDURI ÎN TABELUL DE SUS: siglele se adaugă
+  des, iar un tabel scris de mână ar rămâne mereu în urmă cu ultima. Regula
+  prinde și siglele care nu existau când s-a scris proba — exact cazul care a dus
+  la `ing.webp`.
+
+  ⚠ SVG-urile nu intră: ele se comprimă pe fir (mailchimp.svg are 28.513 pe disc
+  și 8.262 pe fir), deci mărimea de pe disc ar minți despre ce plătește omul.
+*/
+const PLAFON_SIGLA = 20_000;
 
 for (const [fisier, buget] of Object.entries(BUGETE)) {
   test(`\`${fisier}\` stă în bugetul lui`, () => {
@@ -55,6 +92,40 @@ for (const [fisier, buget] of Object.entries(BUGETE)) {
     );
   });
 }
+
+test("nicio siglă raster din catalog nu trece de plafon", () => {
+  /*
+    Se citește chiar `PROVIDER_LOGOS`, nu un dosar: contează ce CERE site-ul, nu
+    ce zace în `public/`. Fișierele pe care le folosește doar panoul (originalele
+    de la care s-au tăiat variantele `-mic`) rămân, pe bună dreptate, în afara
+    socotelii.
+  */
+  const grele: string[] = [];
+  let raster = 0;
+
+  for (const logo of Object.values(PROVIDER_LOGOS) as Array<{ src: string }>) {
+    if (/\.svg$/i.test(logo.src)) continue; // vezi nota despre SVG-uri
+    raster++;
+    const cale = join(RADACINA, logo.src.replace(/^\//, ""));
+    if (!existsSync(cale)) {
+      grele.push(`${logo.src} — nu există pe disc`);
+      continue;
+    }
+    const octeti = statSync(cale).size;
+    if (octeti > PLAFON_SIGLA) grele.push(`${logo.src} — ${octeti} octeți`);
+  }
+
+  assert.ok(raster >= 20, `doar ${raster} sigle raster verificate — s-a rupt citirea catalogului?`);
+  assert.deepEqual(
+    grele,
+    [],
+    `Sigle peste plafonul de ${PLAFON_SIGLA} octeți. Se desenează în cel mult 120 px ` +
+      "lățime (`BibliotecaIntegrari.tsx`), iar loaderul NU micșorează fișiere locale. " +
+      "Fă o variantă `-mic.webp` la 400 px pe latura lungă și schimbă `src` în " +
+      "`logos.ts` — NU rescrie fișierul pe loc, cache-ul e imutabil un an:\n  " +
+      grele.join("\n  "),
+  );
+});
 
 /*
   ⚠ MARTORUL. Fără el, probele de mai sus ar fi verzi și dacă cineva ar șterge

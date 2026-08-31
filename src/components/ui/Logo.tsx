@@ -12,6 +12,25 @@ const SIZES: Record<LogoSize, { icon: number; text: string }> = {
 
 interface LogoProps {
   size?: LogoSize;
+  /**
+   * Sigla e above-the-fold aici, deci se cere imediat.
+   *
+   * ⚠ IMPLICITUL LUI `next/image` E `loading="lazy"`, verificat in sursa
+   * versiunii instalate (`get-img-props.js:278`): fara `priority`, `preload` sau
+   * `loading`, iesirea e `lazy`. O imagine lenesa e sarita de scanerul de
+   * preincarcare si se cere abia dupa ce CSS-ul blocant a ajuns, s-a parsat si
+   * s-a facut asezarea — masurat pe productie, cam 100-150 ms mai tarziu.
+   *
+   * ⚠ NU SE ECONOMISESTE NICIUN OCTET. Cei 6.792 se cer oricum; se cer doar mai
+   * devreme. De asta e o imbunatatire mica, nu una de raportat.
+   *
+   * ⚠ NU `priority` SI NU `preload`: `priority` e DEPRECAT in Next 16 (vezi
+   * `docs/.../image.md:293`) si nici nu mai pune `fetchPriority="high"` in
+   * 16.3.3; `preload` ar baga un `<link rel=preload>` in `<head>` pentru un
+   * patrat de 32 px care nu poate fi element LCP. Documentatia recomanda chiar
+   * `loading="eager"` in locul lor.
+   */
+  eager?: boolean;
   iconSize?: number;
   href?: string;
   className?: string;
@@ -21,6 +40,7 @@ interface LogoProps {
 
 export function Logo({
   size = "md",
+  eager = false,
   iconSize,
   href = "/",
   className,
@@ -59,6 +79,9 @@ export function Logo({
         width={finalIcon}
         height={finalIcon}
         className="flex-shrink-0"
+        /* Aceeasi forma ca la siglele integrarilor,
+           `sections/integrations/Logo.tsx:74`. */
+        loading={eager ? "eager" : "lazy"}
       />
       {showText && (
         <span

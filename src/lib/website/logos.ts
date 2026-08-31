@@ -126,6 +126,39 @@ export function logoSize(
 
 const I = "/integrations";
 
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  ⚠ DE CE ATÂTEA `-mic.webp` — ȘI DE CE ORIGINALELE RĂMÂN PE DISC
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Măsurat pe 01.09.2026: douăsprezece sigle raster cântăreau împreună 460.659 de
+  octeți. Cea mai grasă, `ing.webp`, avea 3840×955 px. Se desenează într-o
+  casetă de cel mult 120 px lățime (`BibliotecaIntegrari.tsx`: ARIE_SIGLA 1200,
+  LATIME_SIGLA 120) — adică de treizeci și două de ori mai mică.
+
+  Recodate la 400 px pe latura lungă (de trei ori peste ce se afișează vreodată,
+  deci curate și pe ecrane dense): 460.659 → 107.974 octeți. Minus 352.685, adică
+  77%.
+
+  ⚠ LOADERUL NU FACE ASTA SINGUR. `supabase-image-loader` întoarce adresa
+  neatinsă pentru orice nu e cheie R2, iar `/api/img` respinge prefixul
+  `integrations/` prin `KEY_RE`. Pentru fișiere din `public/` nu există nicio
+  cale de redimensionare la cerere — singura soluție e un fișier pre-tăiat.
+  De asta există convenția `-mic`, și tot de asta a apărut înainte la Cargus,
+  Sameday, Oblio, notice.ro, SmartBill și iPay.
+
+  ⚠ NUME NOU, NU RESCRIERE PE LOC. Fișierele din `public/` se servesc cu
+  `Cache-Control: max-age=31536000, immutable`. O recodare sub același nume ar
+  fi rămas nevăzută un an de oricine avea deja fișierul vechi. Aceeași lecție ca
+  la `logo-128.png`.
+
+  ⚠ ORIGINALELE NU S-AU ȘTERS, și nu din neglijență: `(dashboard)/dashboard/
+  features/page.tsx` și `components/dashboard/IntegrationHeader.tsx` le cer în
+  continuare. Panoul ar câștiga aceiași 352 kB dacă ar trece și el pe variantele
+  mici — dar acolo siglele se desenează la alte mărimi, deci trebuie măsurat
+  separat înainte. Nu s-a atins nimic din panou aici.
+*/
+
 export const PROVIDER_LOGOS = {
   /* ── Curieri ───────────────────────────────────────────────────────────── */
   fanCourier: { name: "FAN Courier", src: `${I}/fan-courier.svg`, ratio: 1.64 },
@@ -215,9 +248,9 @@ export const PROVIDER_LOGOS = {
   fedex: { name: "FedEx", src: `${I}/fedex.svg`, ratio: 3.61 },
   ups: { name: "UPS", src: `${I}/ups.svg`, ratio: 0.84 },
   postaRomana: { name: "Poșta Română", src: `${I}/posta_romana.svg`, ratio: 2.01 },
-  packeta: { name: "Packeta", src: `${I}/packeta.png`, ratio: 0.96, ink: 0.86 },
+  packeta: { name: "Packeta", src: `${I}/packeta-mic.webp`, ratio: 0.96, ink: 0.86 },
   innoship: { name: "Innoship", src: `${I}/innoship.svg`, ratio: 2.6, ink: 0.67 },
-  smartship: { name: "SmartShip", src: `${I}/smartship.png`, ratio: 4.72, ink: 0.84 },
+  smartship: { name: "SmartShip", src: `${I}/smartship-mic.webp`, ratio: 4.72, ink: 0.84 },
   shipo: { name: "Shipo.ro", src: `${I}/shipo.ro.svg`, ratio: 1.81 },
 
   /* ── Facturare ─────────────────────────────────────────────────────────── */
@@ -232,36 +265,36 @@ export const PROVIDER_LOGOS = {
   theMarketer: { name: "TheMarketer", src: `${I}/themarketer.svg`, ratio: 5.89 },
 
   /* ── Plăți ─────────────────────────────────────────────────────────────── */
-  ingWebPay: { name: "ING WebPay", src: `${I}/ing.webp`, ratio: 4.02 },
+  ingWebPay: { name: "ING WebPay", src: `${I}/ing-mic.webp`, ratio: 4.02 },
   payu: { name: "PayU", src: `${I}/payu.png`, ratio: 1.99 },
   euplatesc: { name: "EuPlătesc", src: `${I}/euplatesc.svg`, ratio: 5.56 },
   tbi: { name: "TBI Bank", src: `${I}/tbi.svg`, ratio: 2.3 },
   unicredit: { name: "UniCredit", src: `${I}/unicredit.png`, ratio: 5.13 },
-  viva: { name: "Viva.com", src: `${I}/viva.png`, ratio: 3.19, ink: 0.93 },
-  libraPay: { name: "Libra Pay", src: `${I}/librapay.png`, ratio: 3.57 },
-  bcr: { name: "BCR", src: `${I}/bcr.webp`, ratio: 2.73 },
+  viva: { name: "Viva.com", src: `${I}/viva-mic.webp`, ratio: 3.19, ink: 0.93 },
+  libraPay: { name: "Libra Pay", src: `${I}/librapay-mic.webp`, ratio: 3.57 },
+  bcr: { name: "BCR", src: `${I}/bcr-mic.webp`, ratio: 2.73 },
   saltBank: { name: "Salt Bank", src: `${I}/saltbank.svg`, ratio: 2.15 },
 
   /* ── Marketplace ───────────────────────────────────────────────────────── */
-  emag: { name: "eMAG", src: `${I}/emag.webp`, ratio: 3.73, ink: 0.99 },
-  altex: { name: "Altex", src: `${I}/altex.webp`, ratio: 3.71 },
+  emag: { name: "eMAG", src: `${I}/emag-mic.webp`, ratio: 3.73, ink: 0.99 },
+  altex: { name: "Altex", src: `${I}/altex-mic.webp`, ratio: 3.71 },
   cel: { name: "Cel.ro", src: `${I}/cel.ro.webp`, ratio: 3.7, ink: 0.94 },
   okazii: { name: "Okazii.ro", src: `${I}/okazii.ro.svg`, ratio: 6.05 },
   pepita: { name: "Pepita.com", src: `${I}/pepita.svg`, ratio: 3.64, ink: 0.57 },
-  compari: { name: "Compari.ro", src: `${I}/compari.ro.png`, ratio: 4.44, ink: 0.4 },
-  baseLinker: { name: "BaseLinker", src: `${I}/baselinker.png`, ratio: 3.82, ink: 0.91 },
+  compari: { name: "Compari.ro", src: `${I}/compari.ro-mic.webp`, ratio: 4.44, ink: 0.4 },
+  baseLinker: { name: "BaseLinker", src: `${I}/baselinker-mic.webp`, ratio: 3.82, ink: 0.91 },
 
   /* ── Marketing ─────────────────────────────────────────────────────────── */
   /* Același fișier ca Facebook Pixel: e aceeași marcă, iar Meta n-are o siglă
      separată pentru catalog. Numele le deosebește. */
   facebookCatalog: { name: "Facebook Catalog", src: `${I}/facebook-pixel.svg`, ratio: 1 },
-  optinMonster: { name: "OptinMonster", src: `${I}/optinmonster.png`, ratio: 6.69 },
+  optinMonster: { name: "OptinMonster", src: `${I}/optinmonster-mic.webp`, ratio: 6.69 },
 
   /* ── Suport clienți ────────────────────────────────────────────────────── */
   tidio: { name: "Tidio", src: `${I}/tidio.png`, ratio: 2.2, ink: 0.43 },
   intercom: { name: "Intercom", src: `${I}/intercom.svg`, ratio: 3.89 },
   zendesk: { name: "Zendesk", src: `${I}/zendesk.svg`, ratio: 1.4 },
-  tawkto: { name: "Tawk.to", src: `${I}/tawkto.png`, ratio: 3, ink: 0.69 },
+  tawkto: { name: "Tawk.to", src: `${I}/tawkto-mic.webp`, ratio: 3, ink: 0.69 },
 } as const satisfies Record<string, ProviderLogo>;
 
 export type LogoKey = keyof typeof PROVIDER_LOGOS;

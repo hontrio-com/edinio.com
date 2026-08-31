@@ -463,7 +463,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
       )}>
         {/* Drawer header */}
         <div className="flex items-center justify-between px-4 py-4 border-b border-sidebar-border">
-          <Logo size="sm" href="/dashboard" />
+          <Logo size="sm" href="/dashboard" eager />
           <button type="button" onClick={() => setMobileOpen(false)}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-accent transition-colors">
             <X className="h-4.5 w-4.5 text-muted-foreground" />

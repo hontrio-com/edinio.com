@@ -7,7 +7,6 @@ import {
   useSyncExternalStore,
   type RefObject,
 } from "react";
-import { motion } from "framer-motion";
 import { cn } from "@/lib/utils/cn";
 
 /**
@@ -19,25 +18,47 @@ import { cn } from "@/lib/utils/cn";
  *
  * ═══ CE S-A SCHIMBAT FAȚĂ DE ORIGINAL, ȘI DE CE ═══
  *
- * 1. **`framer-motion`, nu `motion/react`.** Pachetul `motion` nu e instalat;
- *    `framer-motion@12` e, cu aceeași API. Un pachet nou pentru același lucru ar
- *    fi însemnat două biblioteci de animație în același depozit.
- * 2. **`cn` din `@/lib/utils/cn`**, calea proiectului.
- * 3. **Paza pentru mișcare redusă**, care lipsea cu totul din original. Vezi mai
+ * 1. **`cn` din `@/lib/utils/cn`**, calea proiectului.
+ * 2. **Paza pentru mișcare redusă**, care lipsea cu totul din original. Vezi mai
  *    jos — e singura schimbare de comportament.
+ * 3. **FĂRĂ `framer-motion`**, din 01.09.2026. Vezi mai jos.
  *
- * ⚠ ADUCE `framer-motion` PE PAGINA /migrare. Până acum pagina n-avea în corp
- * decât un `IntersectionObserver` de cincisprezece rânduri (`LaIntrareInEcran`).
- * E al doilea loc de pe site care încarcă biblioteca — primul e cadranul de pe
- * „Optimizare", tot o componentă venită din afară. Se plătește pentru un singur
- * lucru: animarea coordonatelor unui gradient SVG.
+ * ═══ ⚠ DE CE SMIL ȘI NU `framer-motion` ═══
+ *
+ * Originalul folosea `<motion.linearGradient animate={…}>`. Măsurat pe build:
+ * asta era SINGURUL lucru de pe tot site-ul care trăgea chunkul de 102.557 de
+ * octeți al lui `framer-motion`, plus nucleul de 26.960. Pe /migrare:
+ *
+ *     129.517 octeți bruti  /  42.632 gzip  /  44.847 brotli
+ *
+ * pentru animarea a două atribute ale unui gradient. Și nu o dată: se randează
+ * ȘASE instanțe (`IlustratieFascicule.tsx:122-128`).
+ *
+ * Cele două `<animate>` de mai jos fac exact același lucru, cu aceeași durată,
+ * aceeași întârziere și aceeași curbă — `keySplines="0.16 1 0.3 1"` e chiar
+ * `ease: [0.16, 1, 0.3, 1]` de dinainte. `y1`/`y2` nu se animează: în ambele
+ * ramuri mergeau de la „0%" la „0%".
+ *
+ * ⚠ PROBAT ÎN BROWSER, NU PRESUPUS. Chrome 151: motorul SMIL interpolează
+ * coordonatele gradientului corect pe toată durata (60 → 356 → 555 → 643 → 659
+ * → 660 pe o cursă de 3 s, adică chiar coada lungă a curbei alese).
+ *
+ * ⚠ ȘI DACĂ VREUN BROWSER N-AR DUCE SMIL, căderea e blândă: gradientul rămâne pe
+ * `x1="0%" x2="0%"` — exact starea pentru mișcare redusă de mai jos, pe care
+ * clientul a văzut-o și a acceptat-o. Un fascicul care stă pe loc, nu o pagină
+ * stricată.
+ *
+ * ⚠ SMIL SE OPREȘTE CÂND FILA E ASCUNSĂ (verificat: `getCurrentTime()` rămâne 0
+ * într-o filă de fundal). E purtarea dorită, aceeași pe care o avea și
+ * `framer-motion` prin `requestAnimationFrame`.
  *
  * ═══ MIȘCAREA REDUSĂ SE CITEȘTE DE MÂNĂ ═══
  *
- * ⚠ Paza automată din `framer-motion` NU acoperă cazul ăsta, verificat în sursa
- * pachetului instalat: filtrul se aplică doar unei liste închise de chei de
- * poziție (`x`, `y`, `scale`, …), iar `x1`/`x2`/`y1`/`y2` ale unui gradient nu
- * sunt printre ele. Nici `MotionConfig reducedMotion="user"` n-ar opri nimic.
+ * ⚠ Nici înainte nu venea de la sine: paza automată din `framer-motion` nu
+ * acoperea cazul, verificat atunci în sursa pachetului — filtrul se aplica doar
+ * unei liste închise de chei de poziție (`x`, `y`, `scale`, …), iar `x1`/`x2`
+ * ale unui gradient nu erau printre ele. Cu SMIL nu există nicio pază automată,
+ * deci cu atât mai mult se citește de mână.
  *
  * Deci se citește direct `matchMedia`, ca peste tot în proiect, iar când omul a
  * cerut mai puțină mișcare NU se randează deloc partea animată: rămân curba
@@ -147,33 +168,50 @@ export function FasciculAnimat({
       <path d={pathD} stroke={pathColor} strokeWidth={pathWidth} strokeOpacity={pathOpacity} strokeLinecap="round" />
       <path d={pathD} strokeWidth={pathWidth} stroke={`url(#${id})`} strokeOpacity="1" strokeLinecap="round" />
       <defs>
-        <motion.linearGradient
+        <linearGradient
           className="transform-gpu"
           id={id}
           gradientUnits="userSpaceOnUse"
-          initial={{ x1: "0%", x2: "0%", y1: "0%", y2: "0%" }}
-          /*
-            Fără `animate` când s-a cerut mai puțină mișcare: gradientul rămâne la
-            coordonatele de pornire, adică fasciculul stă nemișcat pe curbă. Nu se
-            ascunde nimic — curba, cercurile și siglele sunt toate acolo.
-          */
-          {...(faraMiscare
-            ? {}
-            : {
-                animate: capeteGradient,
-                transition: {
-                  delay,
-                  duration,
-                  ease: [0.16, 1, 0.3, 1] as const,
-                  repeat: Infinity,
-                },
-              })}
+          x1="0%"
+          x2="0%"
+          y1="0%"
+          y2="0%"
         >
+          {/*
+            Fără cele două `<animate>` când s-a cerut mai puțină mișcare:
+            gradientul rămâne la coordonatele de pornire de mai sus, adică
+            fasciculul stă nemișcat pe curbă. Nu se ascunde nimic — curba,
+            cercurile și siglele sunt toate acolo.
+          */}
+          {faraMiscare ? null : (
+            <>
+              <animate
+                attributeName="x1"
+                values={`${capeteGradient.x1[0]};${capeteGradient.x1[1]}`}
+                dur={`${duration}s`}
+                begin={`${delay}s`}
+                repeatCount="indefinite"
+                calcMode="spline"
+                keyTimes="0;1"
+                keySplines="0.16 1 0.3 1"
+              />
+              <animate
+                attributeName="x2"
+                values={`${capeteGradient.x2[0]};${capeteGradient.x2[1]}`}
+                dur={`${duration}s`}
+                begin={`${delay}s`}
+                repeatCount="indefinite"
+                calcMode="spline"
+                keyTimes="0;1"
+                keySplines="0.16 1 0.3 1"
+              />
+            </>
+          )}
           <stop stopColor={gradientStartColor} stopOpacity="0" />
           <stop stopColor={gradientStartColor} />
           <stop offset="32.5%" stopColor={gradientStopColor} />
           <stop offset="100%" stopColor={gradientStopColor} stopOpacity="0" />
-        </motion.linearGradient>
+        </linearGradient>
       </defs>
     </svg>
   );

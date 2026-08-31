@@ -21,7 +21,7 @@ export default function AuthLayout({
       <PlatformTikTokPixel />
       <div className="w-full max-w-md px-4 py-8">
         <div className="mb-6 sm:mb-8 flex justify-center">
-          <Logo size="lg" iconSize={64} showText={false} />
+          <Logo size="lg" iconSize={64} showText={false} eager />
         </div>
         <div className="bg-white rounded-xl border border-border p-6 sm:p-8 shadow-md">
           {children}

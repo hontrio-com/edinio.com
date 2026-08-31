@@ -206,7 +206,7 @@ export function SiteHeader() {
         }}
         className="mx-auto flex h-18 max-w-[1200px] items-center justify-between gap-6 px-5 sm:px-6 lg:px-8"
       >
-        <Logo size="lg" textClassName="text-ink" />
+        <Logo size="lg" textClassName="text-ink" eager />
 
         {/* ── Bara de mijloc, doar pe ecrane largi ── */}
         <nav aria-label="Meniu principal" className="hidden items-center gap-0.5 lg:flex">

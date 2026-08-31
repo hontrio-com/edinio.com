@@ -133,7 +133,7 @@ export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount
       style={{ width: "var(--sidebar-width)" }}>
       {/* Logo */}
       <div className="px-4 py-4 border-b border-sidebar-border">
-        <Logo size="sm" href="/dashboard" />
+        <Logo size="sm" href="/dashboard" eager />
       </div>
 
       {/* Business info */}

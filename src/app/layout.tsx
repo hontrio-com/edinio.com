@@ -13,6 +13,18 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
   display: "swap",
+  /*
+    ⚠ NU SE PREÎNCARCĂ — 22,6 kB pe fiecare pagină, pentru zero caractere.
+    Măsurat: pagina de start descărca 23.108 octeți de Geist Mono și nu randa
+    niciun caracter cu el. `font-mono` apare doar în panou, admin, autentificare
+    și onboarding — niciodată pe site-ul de prezentare.
+
+    `preload: false` nu-l scoate: acolo unde e chiar folosit, browserul îl cere
+    când dă peste regula CSS. Costul mutat e o clipă de text cu fontul de
+    rezervă, într-un `<pre>` sau într-un cod de verificare — nu în conținutul
+    principal al vreunei pagini.
+  */
+  preload: false,
 });
 
 const SITE_URL = "https://www.edinio.com";
@@ -106,10 +118,21 @@ export default function RootLayout({
       lang="ro"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <head>
-        <link rel="preconnect" href="https://rtefdpioqmowkdiybwrr.supabase.co" />
-        <link rel="dns-prefetch" href="https://rtefdpioqmowkdiybwrr.supabase.co" />
-      </head>
+      {/*
+        ⚠ AICI ERA UN `preconnect` + `dns-prefetch` CĂTRE SUPABASE, scos pe
+        31.08.2026. Costul lui în octeți era mic (110 gzip), dar ce cumpăra era
+        ZERO pe paginile publice: niciunul dintre cele 13 fișiere JS ale paginii
+        de start nu atinge Supabase, deci browserul deschidea DNS + TCP + TLS
+        către un server pe care vizitatorul putea să nu-l folosească niciodată.
+
+        Pe un telefon, în primele secunde, o conexiune deschisă degeaba
+        concurează cu fonturile și cu imaginile care chiar se văd.
+
+        ⚠ DACĂ SE PUNE LA LOC, se pune în layoutul care CHIAR are nevoie —
+        `(dashboard)`, `(auth)` — nu în rădăcină, care e părintele tuturor.
+        Iar `dns-prefetch` lângă `preconnect` era oricum de prisos: al doilea îl
+        cuprinde pe primul.
+      */}
       <body className="min-h-full bg-background text-foreground">
         {children}
         <Toaster

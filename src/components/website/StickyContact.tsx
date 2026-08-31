@@ -1,5 +1,15 @@
-"use client";
+/*
+  ⚠ FĂRĂ „use client" — scos pe 31.08.2026, după ce s-a măsurat.
 
+  Fișierul n-are stare, n-are efect, nu atinge `window` sau `document` și n-are
+  niciun mânuitor de eveniment: două ancore `<a href>` cu iconițe. Directiva era
+  acolo din obișnuință, nu din nevoie — dar ea singură trăgea componenta, cele
+  două iconițe și constantele de contact în pachetul de client al FIECĂREI
+  pagini publice.
+
+  Câștig măsurat pe fișierul de producție: 991 octeți gzip din chunkul partajat.
+  Puțin, dar gratuit — iar componenta randează exact la fel.
+*/
 import { Phone } from "lucide-react";
 import { WhatsAppIcon } from "./WhatsAppIcon";
 import { TELEFON, VERDE_WHATSAPP, WHATSAPP } from "@/lib/website/contact";

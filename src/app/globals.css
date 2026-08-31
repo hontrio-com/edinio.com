@@ -1724,14 +1724,9 @@
 }
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 
-/* ─── Liquid Glass Navbar ──────────────────────────────────────────────── */
-
-.glass-nav {
-  background: rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
-}
+/* ⚠ AICI A FOST `.glass-nav`, ștearsă pe 31.08.2026: cod mort livrat fiecărui
+   vizitator anonim. Zero folosiri în tot `src` — bara de sus își face efectul
+   de sticlă din clase Tailwind, nu de aici. 400 de octeți. */
 
 /* ─── TipTap / ProseMirror editor ──────────────────────────────────────── */
 

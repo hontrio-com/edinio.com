@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { FacebookPixelConfigClient } from "@/components/dashboard/FacebookPixelConfigClient";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
-import type { MarketingConfig } from "@/lib/marketing";
+import type { MarketingConfig } from "@/lib/marketing-config";
 
 export default async function FacebookPixelPage() {
   const user = await getCachedUser();

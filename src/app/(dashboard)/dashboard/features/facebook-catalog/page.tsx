@@ -6,7 +6,7 @@ import { FacebookCatalogClient } from "@/components/dashboard/FacebookCatalogCli
 import { FacebookFeeduriClient } from "@/components/dashboard/FacebookFeeduriClient";
 import { parseFeeduri } from "@/lib/facebook/feeduri";
 import { storeBaseUrl } from "@/lib/seo";
-import type { MarketingConfig } from "@/lib/marketing";
+import type { MarketingConfig } from "@/lib/marketing-config";
 
 export default async function FacebookCatalogPage() {
   const supabase = await createClient();

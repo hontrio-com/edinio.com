@@ -8,7 +8,7 @@ import { ConsentGate } from "@/components/public/ConsentGate";
 import { CookieConsent } from "@/components/public/CookieConsent";
 import { AttributionCapture } from "@/components/public/AttributionCapture";
 import { DoarInMagazinReal } from "@/components/public/DoarInMagazinReal";
-import type { MarketingConfig } from "@/lib/marketing";
+import type { MarketingConfig } from "@/lib/marketing-config";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-consent";
 import { deriveStoreDescription, deriveStoreTitle, parseStoreSeo } from "@/lib/seo";

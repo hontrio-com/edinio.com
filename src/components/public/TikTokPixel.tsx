@@ -1,7 +1,7 @@
 "use client";
 
 import Script from "next/script";
-import { parseTikTokPixelId } from "@/lib/marketing";
+import { parseTikTokPixelId } from "@/lib/marketing-config";
 
 export function TikTokPixel({ pixelId }: { pixelId: string }) {
   // Defense-in-depth: only a valid TikTok ID may reach the inline script.

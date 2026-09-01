@@ -1,4 +1,4 @@
-import type { MarketingConfig } from "@/lib/marketing";
+import type { MarketingConfig } from "@/lib/marketing-config";
 
 /**
  * Cookie consent system (GDPR / ePrivacy).

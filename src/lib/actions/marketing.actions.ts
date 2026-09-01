@@ -1,13 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import {
-  type MarketingConfig,
-  parseMetaPixelId,
-  parseTikTokPixelId,
-  parseGoogleTagId,
-  parseGoogleAdsLabel,
-} from "@/lib/marketing";
+import { type MarketingConfig, parseMetaPixelId, parseTikTokPixelId, parseGoogleTagId, parseGoogleAdsLabel } from "@/lib/marketing-config";
 
 /**
  * Validate + clean the marketing config before persisting. IDs are interpolated

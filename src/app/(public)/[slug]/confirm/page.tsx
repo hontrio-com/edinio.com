@@ -12,7 +12,7 @@ import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-v
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import { radacinaCatalog } from "@/lib/storefront/design/commerce";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
-import type { MarketingConfig } from "@/lib/marketing";
+import type { MarketingConfig } from "@/lib/marketing-config";
 import type { Metadata } from "next";
 
 // Order confirmation is personal + transient — keep it out of search.

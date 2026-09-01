@@ -1,7 +1,7 @@
 "use client";
 
 import Script from "next/script";
-import { parseMetaPixelId } from "@/lib/marketing";
+import { parseMetaPixelId } from "@/lib/marketing-config";
 
 export function FacebookPixel({ pixelId }: { pixelId: string }) {
   // Defense-in-depth: this value is interpolated into an inline script on the

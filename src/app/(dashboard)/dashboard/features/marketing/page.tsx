@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { MarketingConfigClient } from "@/components/dashboard/MarketingConfigClient";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
-import type { MarketingConfig } from "@/lib/marketing";
+import type { MarketingConfig } from "@/lib/marketing-config";
 
 export default async function MarketingPage() {
   const user = await getCachedUser();

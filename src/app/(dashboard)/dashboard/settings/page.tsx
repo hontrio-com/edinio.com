@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { processorReadiness, resolvePaymentMethods, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, detectConsentCategories } from "@/lib/cookie-consent";
 import { parseShippingClasses, parseShippingRules } from "@/lib/shipping/rules";
-import type { MarketingConfig } from "@/lib/marketing";
+import type { MarketingConfig } from "@/lib/marketing-config";
 import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl } from "@/lib/seo";
 import { parseEmailConfig } from "@/lib/email/config";
 import { parseStoreMode } from "@/lib/storefront/store-mode";

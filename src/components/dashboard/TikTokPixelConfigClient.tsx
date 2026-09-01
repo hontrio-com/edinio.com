@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2, ExternalLink, CheckCircle, Search } from "lucide-react";
 import { saveMarketingConfig } from "@/lib/actions/marketing.actions";
-import { type MarketingConfig, parseTikTokPixelId } from "@/lib/marketing";
+import { type MarketingConfig, parseTikTokPixelId } from "@/lib/marketing-config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";

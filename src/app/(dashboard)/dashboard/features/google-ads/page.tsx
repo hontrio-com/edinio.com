@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { GoogleAdsConfigClient } from "@/components/dashboard/GoogleAdsConfigClient";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
-import type { MarketingConfig } from "@/lib/marketing";
+import type { MarketingConfig } from "@/lib/marketing-config";
 
 export default async function GoogleAdsPage() {
   const user = await getCachedUser();

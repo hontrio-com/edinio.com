@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import {
-  fbTrack, ttqTrack, gtagEvent, gtagRaw,
-  fbAdvancedMatch, ttqIdentify, splitName, type PixelUser,
-} from "@/lib/marketing";
+import { splitName, type PixelUser } from "@/lib/marketing-config";
+import { fbTrack, ttqTrack, gtagEvent, gtagRaw, fbAdvancedMatch, ttqIdentify } from "@/lib/marketing";
 
 interface Props {
   orderId: string;

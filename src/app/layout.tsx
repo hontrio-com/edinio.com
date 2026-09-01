@@ -8,6 +8,10 @@ const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
   display: "swap",
+  /* Aceeasi socoteala ca la Inter, in `(website)/layout.tsx`: 29.288 de octeti
+     ies din coada de dinaintea foii de stil, iar `swap` plus rezerva cu metrici
+     potrivite fac ca nimic sa nu se vada. */
+  preload: false,
 });
 
 const geistMono = Geist_Mono({

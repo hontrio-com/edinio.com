@@ -11,6 +11,33 @@ import { identitateEdinioJsonLd } from "@/lib/website-jsonld";
 const inter = Inter({
   subsets: ["latin"],
   display: "swap",
+  /*
+    ⚠ NU SE PREINCARCA — masurat, si e invers decat pare.
+
+    Cei 1.220 ms pe care PSI ii pune pe seama „blocarii redarii" NU sunt CSS-ul.
+    Foile blocante sunt 20.779 octeti pe fir, adica 249 ms la incetinirea folosita
+    de Lighthouse pe mobil — 20% din ei. Restul vin din ce cere `<head>`-ul
+    INAINTEA lor, in ordinea documentului:
+
+        2 preincarcari de font      77.720 octeti
+        4 preincarcari de imagine   13.068
+        11 scripturi async         171.757
+
+    Foaia de stil nu e lenta, e LA COADA. Modelul „CSS plus preincarcarile din
+    fata" prezice raportul mobil/desktop 5,45 fata de 5,545 masurat de PSI —
+    eroare 1,7%. Ipoteza „doar CSS" da 4,46 si nu se potriveste.
+
+    ⚠ SI NU SE PIERDE NIMIC VIZUAL. `display: swap` plus rezerva cu metrici
+    potrivite pe care o genereaza `next/font` (`Inter Fallback`, `Geist Fallback`)
+    fac textul sa apara imediat, la marimea buna. Fontul soseste dupa si se
+    schimba fara salt. Masurat pe trei variante, acelasi build: FCP 1,2 s in
+    TOATE, iar LCP si TBT in zgomotul de masurare.
+
+    ⚠ CE SE CASTIGA: 77.720 de octeti ies din coada de dinaintea foii de stil.
+    ⚠ CE NU SE CASTIGA: nimic din ce am putut masura local. Cifra de sus e o
+    socoteala pe constantele lui Lighthouse, nu o masuratoare a mea.
+  */
+  preload: false,
 });
 
 export default function WebsiteLayout({

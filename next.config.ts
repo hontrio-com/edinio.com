@@ -30,8 +30,9 @@ import type { NextConfig } from "next";
     RESEND_API_KEY                  `email.ts` iese devreme; formularul pare ca a
                                     mers, dar nu pleaca niciun mesaj
 
-  ⚠ DAR NU TOATE TREI OPRESC DESFASURAREA. Vezi cele doua liste de mai jos: se
-  opreste doar pe ce am VAZUT ca exista in panou.
+  ⚠ TOATE TREI OPRESC DESFASURAREA, de pe 01.09.2026. Doua le-am vazut eu in
+  panou; a treia a fost confirmata de proprietar. Vezi nota de la lista de mai jos
+  pentru de ce o confirmare pe cuvant a fost destul TOCMAI AICI.
 */
 /*
   ⚠ DOUA LISTE, SI IMPARTIREA NU E ARBITRARA.
@@ -51,9 +52,25 @@ import type { NextConfig } from "next";
 const CHEI_OBLIGATORII = [
   "RECAPTCHA_SECRET_KEY",
   "NEXT_PUBLIC_RECAPTCHA_SITE_KEY",
+  /*
+    ⚠ MUTATA AICI PE 01.09.2026, dupa ce proprietarul platformei a confirmat ca
+    „in Production am toate cheile cum trebuie". Nu am vazut-o eu in panou, cum am
+    vazut celelalte doua — dar el s-a uitat, si el e sursa care conteaza.
+
+    ⚠ SI DACA TOTUSI LIPSESTE, urmarea nu e tacuta: desfasurarea se opreste cu
+    numele cheii scris in jurnalul de build, nu se strica nimic in productia care
+    ruleaza deja. Asta face greseala ieftina si reversibila — de aceea am acceptat
+    confirmarea pe cuvant aici, si nu as fi acceptat-o pentru ceva care doboara
+    ce merge.
+  */
+  "RESEND_API_KEY",
 ] as const;
 
-const CHEI_ASTEPTATE = ["RESEND_API_KEY"] as const;
+/*
+  Goala acum. Ramane ca loc pentru urmatoarea cheie a carei stare n-o cunoastem:
+  se striga in jurnal, nu se opreste desfasurarea, pana cand cineva se uita.
+*/
+const CHEI_ASTEPTATE: readonly string[] = [];
 
 function verificaCheileDeProductie(faza: string): void {
   /*

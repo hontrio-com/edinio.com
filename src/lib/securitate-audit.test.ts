@@ -457,26 +457,34 @@ test("paza de chei se aprinde DOAR pe build-ul de productie de la Vercel", () =>
     "configul nu mai e o functie, deci Next nu mai da `faza` si paza nu poate sti unde e");
 });
 
-test("se opreste doar pe cheile VAZUTE in panou; restul se striga", () => {
+test("toate trei cheile opresc desfasurarea, si niciuna n-a ajuns acolo pe ghicite", () => {
   /*
-    ⚠ IMPARTIREA NU E ARBITRARA. Cele doua chei reCAPTCHA le-am vazut in panoul
-    Vercel pe Production (01.09.2026). `RESEND_API_KEY` nu — si in `.env.local` e
-    goala. Sa opresc desfasurarea pe o cheie a carei stare n-o cunosc ar fi exact
-    paguba impotriva careia e scrisa paza, doar in celalalt sens.
+    ⚠ PROBA ASTA SI-A FACUT TREABA SI A FOST APOI MUTATA, dinadins.
 
-    ⚠ Daca cineva o muta in lista obligatorie fara sa fi confirmat-o in panou,
-    proba asta cade si il intreaba daca s-a uitat.
+    In prima ei forma cerea ca `RESEND_API_KEY` sa NU fie intre cele care opresc:
+    n-o vazusem in panou, iar in `.env.local` e goala. O oprire de desfasurare pe o
+    cheie a carei stare n-o cunosti e chiar paguba impotriva careia e scrisa paza.
+
+    Pe 01.09.2026 proprietarul a confirmat: „in Production am toate cheile cum
+    trebuie". Atunci s-a mutat cheia, si odata cu ea proba — nu s-a sters.
+
+    ⚠ DE CE O CONFIRMARE PE CUVANT A FOST DESTUL TOCMAI AICI: daca totusi lipseste,
+    desfasurarea se opreste cu numele cheii in jurnal, si nu se strica nimic din ce
+    ruleaza deja. Greseala e ieftina si reversibila. Pentru ceva care ar fi doborat
+    productia n-as fi acceptat-o.
   */
   const cod = faraComentarii(citeste("next.config.ts"));
   const obligatorii = cod.slice(cod.indexOf("CHEI_OBLIGATORII"), cod.indexOf("CHEI_ASTEPTATE"));
 
-  assert.match(obligatorii, /"RECAPTCHA_SECRET_KEY"/);
-  assert.match(obligatorii, /"NEXT_PUBLIC_RECAPTCHA_SITE_KEY"/);
-  assert.doesNotMatch(
-    obligatorii, /"RESEND_API_KEY"/,
-    "RESEND_API_KEY a ajuns intre cele care OPRESC desfasurarea. Daca ai confirmat-o " +
-    "in panoul Vercel pe Production, muta si proba asta. Daca nu, o desfasurare " +
-    "poate fi oprita de o cheie despre care nu stim nimic.",
-  );
-  assert.match(cod, /CHEI_ASTEPTATE = \["RESEND_API_KEY"\]/, "RESEND nu mai e nici macar strigata");
+  for (const c of ["RECAPTCHA_SECRET_KEY", "NEXT_PUBLIC_RECAPTCHA_SITE_KEY", "RESEND_API_KEY"]) {
+    assert.match(
+      obligatorii, new RegExp(`"${c}"`),
+      `${c} nu mai opreste desfasurarea. Daca a fost scoasa dinadins, scrie de ce ` +
+      "aici — altfel lipsa ei stinge in tacere o aparare sau o cale intreaga.",
+    );
+  }
+
+  /* Lista a doua ramane, goala, ca loc pentru urmatoarea cheie neconfirmata. */
+  assert.match(cod, /CHEI_ASTEPTATE/, "s-a pierdut lista pentru cheile inca neconfirmate");
 });
+

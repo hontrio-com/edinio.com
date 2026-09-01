@@ -54,6 +54,8 @@ export async function verificaRecaptcha(
     success?: boolean;
     score?: number;
     action?: string;
+    /* Domeniul pe care a fost emis tokenul. Vezi `GAZDE_CUNOSCUTE` mai jos. */
+    hostname?: string;
     "error-codes"?: string[];
   };
   try {
@@ -96,6 +98,33 @@ export async function verificaRecaptcha(
   if (!date.action) return { ok: false, motiv: "actiune lipsa din token" };
   if (date.action !== actiuneAsteptata) {
     return { ok: false, motiv: `actiune gresita: ${date.action}` };
+  }
+
+  /*
+    ═══ ⚠ GAZDA SE MASOARA, DEOCAMDATA NU SE REFUZA ═══
+
+    Google intoarce si domeniul pe care a fost emis tokenul. Auditul cere sa-l
+    verificam si sa respingem ce nu se potriveste. Are dreptate ca principiu — dar
+    o lista de gazde scrisa din birou, pusa direct pe calea prin care intra
+    clientii, e o cadere de serviciu care asteapta un domeniu nou.
+
+    ⚠ SI E POSIBIL SA FIE DEJA DE PRISOS: consola Google are bifa „Verify the
+    origin of reCAPTCHA solutions"; daca e pornita, tokenul nici nu se poate emite
+    de pe alt domeniu. N-am putut vedea consola, deci nu stiu.
+
+    Deci mai intai SE MASOARA: orice gazda neasteptata se scrie in jurnal, iar
+    cererea trece. Dupa o vreme se citeste ce a aparut acolo si abia atunci
+    `if` de mai jos devine `return { ok: false }`. Aceeasi purtare pe care auditul
+    o cere, pe bună dreptate, pentru CSP: Report-Only inainte de aplicare.
+
+    ⚠ CINE FACE PASUL: schimba `avertizeaza` in refuz SI muta proba din
+    `securitate-audit.test.ts` odata cu el.
+  */
+  const GAZDE_CUNOSCUTE = ["edinio.com", "www.edinio.com"];
+  const gazda = date.hostname;
+  if (gazda && !GAZDE_CUNOSCUTE.includes(gazda) && !gazda.endsWith(".edinio.com")) {
+    /* Nu se arunca si nu se opreste: e o masuratoare, nu o incuietoare. */
+    console.warn("[recaptcha] token emis de pe o gazda neasteptata", { gazda, actiune: actiuneAsteptata });
   }
 
   const scor = typeof date.score === "number" ? date.score : 0;

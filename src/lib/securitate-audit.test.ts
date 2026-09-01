@@ -301,3 +301,39 @@ test("consimtamantul e legat de magazine, nu de platforma — si asa scrie", () 
     );
   }
 });
+
+/* ═══ 9. Gazda reCAPTCHA: se masoara acum, se refuza cand stim ce apare ═══ */
+
+test("gazda din reCAPTCHA se citeste si se scrie in jurnal, dar NU respinge inca", () => {
+  /*
+    ⚠ PROBA ASTA PAZESTE O ETAPA, NU O STARE FINALA.
+
+    Auditul cere respingerea tokenurilor emise de pe alt domeniu. Are dreptate ca
+    principiu. Dar o lista de gazde scrisa din birou, pusa direct pe calea prin
+    care intra clientii, e o cadere de serviciu care asteapta un domeniu nou —
+    si n-am putut vedea consola Google ca sa stiu daca bifa „Verify the origin of
+    reCAPTCHA solutions" o face oricum de prisos.
+
+    Deci: se masoara intai. Aceeasi purtare pe care auditul o cere pentru CSP —
+    Report-Only inainte de aplicare.
+
+    ⚠ CAND SE FACE PASUL catre refuz, proba asta trebuie MUTATA, nu stearsa:
+    cerinta devine `return { ok: false }` in loc de `console.warn`.
+  */
+  const cod = faraComentarii(citeste("src/lib/recaptcha.ts"));
+
+  assert.match(cod, /hostname\?: string;/, "raspunsul Google nu mai poarta gazda, deci nu se poate masura nimic");
+  assert.match(cod, /GAZDE_CUNOSCUTE/, "s-a pierdut lista de gazde asteptate");
+  assert.match(
+    cod, /console\.warn\("\[recaptcha\] token emis de pe o gazda neasteptata"/,
+    "nu se mai scrie nimic cand apare o gazda straina — atunci masurarea nu produce nicio dovada",
+  );
+  /* ⚠ Si ca inca NU respinge: daca cineva face pasul, sa vina si sa mute proba. */
+  const iGazda = cod.indexOf("GAZDE_CUNOSCUTE");
+  const bucata = cod.slice(iGazda, iGazda + 700);
+  assert.doesNotMatch(
+    bucata, /ok: false, motiv: `?gazda/,
+    "s-a trecut la respingere pe gazda — bine, dar atunci proba asta trebuie rescrisa " +
+    "ca sa ceara refuzul, si trebuie stiut ce gazde au aparut in jurnal intre timp",
+  );
+});

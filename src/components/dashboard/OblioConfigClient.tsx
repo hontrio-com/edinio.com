@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Plug, PlugZap, RefreshCw, Info } from "lucide-react";
+import { Loader2, Plug, PlugZap, RefreshCw, Info, CheckCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { saveOblioConfig, disconnectOblio, loadOblioAccountData, loadOblioSeriesForCif } from "@/lib/actions/oblio.actions";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Panel } from "@/components/ui/panel";
+import { Callout } from "@/components/ui/callout";
 import { selectCls } from "@/lib/ui";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 
@@ -58,6 +59,29 @@ export default function OblioConfigClient({
   const proformaSeries = accountData?.series.filter(s => s.type === "Proforma") ?? [];
   /* Gol = contul n-are stocuri; atunci campul nu se arata deloc. */
   const gestiuni = accountData?.management ?? [];
+
+  /*
+    ═══ ⚠ CE VEDE OMUL DESPRE STAREA INTEGRARII ═══
+
+    Pana pe 01.09.2026 pagina asta nu spunea NIMIC despre starea ei. Un client
+    (VetDepo) a apasat „Testeaza si incarca date", a primit „Conexiune reusita!
+    1 firma gasita", a apasat „Salveaza", a primit „Configuratie Oblio salvata"
+    — doua mesaje verzi — si integrarea a ramas stinsa. La Integrari scria
+    neconectat, in Comenzi nu era butonul de factura, si nimic de pe pagina nu
+    lamurea de ce.
+
+    ⚠ SI NU E VINA LUI. Configuratia lui purta chiar semnatura butonului de test:
+    numele firmei, seria si cota se completeaza SINGURE, numai de acolo. A urmat
+    fluxul asa cum e desenat.
+
+    ⚠ DE CE NU FACEM CA LA fGO, unde salvarea inseamna activare (`{ ...form,
+    enabled: true }`) si nu exista comutator: aici comutatorul e o purtare
+    ceruta — opresti facturarea fara sa pierzi acreditarile. Se pastreaza, dar
+    starea lui devine vizibila, iar salvarea unei configuratii complete cu el
+    stins nu mai trece in tacere.
+  */
+  const complet = !!(clientId && cif && seriesInvoice);
+  const activ = complet && enabled;
 
   function handleLoad() {
     if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu email-ul si secretul contului Oblio"); return; }
@@ -132,6 +156,15 @@ export default function OblioConfigClient({
       Daca nomenclatorul a intors gestiuni, contul ARE stocuri si campul e
       obligatoriu. Daca a intors gol, conditia nici nu se aprinde.
     */
+    /*
+      ⚠ Nu OPRIM salvarea — poate omul chiar vrea sa pregateasca datele si sa
+      porneasca mai tarziu. Dar nu-l mai lasam sa plece crezand ca a terminat.
+    */
+    if (!enabled) {
+      toast.warning(
+        "Datele se salveaza, dar integrarea ramane OPRITA. Porneste comutatorul Activat ca sa poti emite facturi.",
+      );
+    }
     if (gestiuni.length > 0 && !management) {
       toast.error("Contul tau Oblio are gestiuni. Alege din care iese marfa, altfel facturile vor fi refuzate.");
       return;
@@ -180,6 +213,17 @@ export default function OblioConfigClient({
       <IntegrationHeader id="oblio" description="Genereaza automat facturi Oblio pentru comenzile din magazinul tau." />
 
       <div className="space-y-4">
+        {/* Starea, primul lucru de pe pagina. Vezi nota de la `activ`. */}
+        {activ ? (
+          <Callout variant="success" icon={CheckCircle} title="Oblio activ">
+            Facturile se pot emite din pagina Comenzi.
+          </Callout>
+        ) : complet ? (
+          <Callout variant="warning" icon={AlertTriangle} title="Oblio configurat, dar OPRIT">
+            Datele contului sunt salvate, dar comutatorul <strong>Activat</strong> de mai jos e stins — de aceea
+            integrarea apare neconectata la Integrari si nu apare butonul de factura in Comenzi.
+          </Callout>
+        ) : null}
         {/* Info */}
         <Panel className="p-4">
           <div className="flex items-start gap-3">

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import { urmareste } from "@/lib/edinio-marketing/magistrala";
+import { felEroare } from "@/lib/edinio-marketing/fel-eroare";
 import Link from "next/link";
 import { Check, Loader2 } from "lucide-react";
 import { submitContactMessage } from "@/lib/actions/contact.actions";
@@ -38,10 +40,24 @@ export function ContactForm() {
   const [eroare, setEroare] = useState<string | null>(null);
   const [seTrimite, startTransition] = useTransition();
 
+  /*
+    ⚠ „A INCEPUT SA COMPLETEZE" SE MASOARA O SINGURA DATA. Fara paza asta, fiecare
+    intrare intr-un camp ar trage un eveniment, iar rata de finalizare ar iesi de
+    cateva ori mai mica decat adevarul — un formular perfect ar parea stricat.
+  */
+  const inceput = useRef(false);
+  function laPrimaAtingere() {
+    if (inceput.current) return;
+    inceput.current = true;
+    urmareste({ name: "form_start", form_name: "contact" });
+  }
+
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setEroare(null);
     const f = new FormData(e.currentTarget);
+    /* Apasarea pe buton. NU e conversie — vezi mai jos. */
+    urmareste({ name: "form_submit", form_name: "contact" });
 
     startTransition(async () => {
       /* Tokenul se cere ACUM, nu la incarcarea paginii: expira in 2 minute, iar
@@ -56,8 +72,35 @@ export function ContactForm() {
         acord: f.get("acord") === "on",
         captchaToken,
       });
-      if (res.ok) setTrimis(true);
-      else setEroare(res.error);
+      if (res.ok) {
+        setTrimis(true);
+        /*
+          ⚠ AICI E CONVERSIA, si NUMAI aici. Nu la apasarea butonului: pana aici
+          au putut cadea validarea, captcha, plafoanele si trimiterea emailului.
+          Numarata la apasare, ar arata mai multe cereri decat au ajuns la noi.
+
+          ⚠ `event_id` VINE DE PE SERVER. Cand se adauga Meta CAPI, browserul si
+          serverul trebuie sa trimita ACELASI id ca sa se deduplice — nascut in
+          doua locuri, ar fi doua conversii pentru un singur om.
+        */
+        urmareste({
+          name: "generate_lead",
+          lead_type: "contact",
+          form_name: "contact",
+          event_id: res.eventId,
+        });
+      } else {
+        setEroare(res.error);
+        /*
+          ⚠ SE TRIMITE FELUL ERORII, NU TEXTUL EI. Mesajul poate purta ce a scris
+          omul; felul spune ce trebuie sa stim — unde se impiedica lumea.
+        */
+        urmareste({
+          name: "form_error",
+          form_name: "contact",
+          error_type: felEroare(res.error),
+        });
+      }
     });
   }
 
@@ -85,7 +128,7 @@ export function ContactForm() {
       /* Scriptul Google se aduce la PRIMA atingere a formularului, nu la
          deschiderea paginii: cine doar citeste programul si pleaca nu trimite
          nimic catre Google. Vezi `lib/website/recaptcha-client.ts`. */
-      onFocusCapture={() => { void incarcaRecaptcha(); }}
+      onFocusCapture={() => { void incarcaRecaptcha(); laPrimaAtingere(); }}
       className="placa rounded-[16px] p-6 sm:p-7"
       noValidate={false}
     >

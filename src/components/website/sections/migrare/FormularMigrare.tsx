@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import { urmareste } from "@/lib/edinio-marketing/magistrala";
+import { felEroare } from "@/lib/edinio-marketing/fel-eroare";
 import { Check, ChevronDown, Loader2 } from "lucide-react";
 import { submitMigrationLead } from "@/lib/actions/migration.actions";
 import {
@@ -49,10 +51,19 @@ export function FormularMigrare() {
   const [eroare, setEroare] = useState<string | null>(null);
   const [seTrimite, startTransition] = useTransition();
 
+  /* ⚠ O singura data. Vezi geamana din `ContactForm`. */
+  const inceput = useRef(false);
+  function laPrimaAtingere() {
+    if (inceput.current) return;
+    inceput.current = true;
+    urmareste({ name: "form_start", form_name: "migration" });
+  }
+
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setEroare(null);
     const f = new FormData(e.currentTarget);
+    urmareste({ name: "form_submit", form_name: "migration" });
 
     startTransition(async () => {
       /* Tokenul se cere ACUM, nu la încărcarea paginii: expiră în 2 minute, iar
@@ -69,8 +80,23 @@ export function FormularMigrare() {
         acord: f.get("acord") === "on",
         captchaToken,
       });
-      if (res.ok) setTrimis(true);
-      else setEroare(res.error);
+      if (res.ok) {
+        setTrimis(true);
+        /* ⚠ Conversia e AICI, cu id-ul venit de pe server. Vezi `ContactForm`. */
+        urmareste({
+          name: "generate_lead",
+          lead_type: "migration",
+          form_name: "migration",
+          event_id: res.eventId,
+        });
+      } else {
+        setEroare(res.error);
+        urmareste({
+          name: "form_error",
+          form_name: "migration",
+          error_type: felEroare(res.error),
+        });
+      }
     });
   }
 
@@ -106,6 +132,7 @@ export function FormularMigrare() {
          nimic către Google. Vezi `lib/website/recaptcha-client.ts`. */
       onFocusCapture={() => {
         void incarcaRecaptcha();
+        laPrimaAtingere();
       }}
       className="placa rounded-[16px] p-6 sm:p-7"
     >

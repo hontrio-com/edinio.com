@@ -30,6 +30,26 @@ const CHEI_OPRITE = [
   "ip", "ip_address",
 ] as const;
 
+/*
+  ⚠ NUME CARE PAR OPRITE, DAR NU SUNT.
+
+  Regula de mai sus opreste orice cheie care SE TERMINA in `_name` — si asta
+  prinde, pe langa `first_name`, si `form_name` sau `section_name`, care poarta
+  „contact" si „preturi", nu numele nimanui.
+
+  Fara lista asta, paza ar fi oprit in TACERE evenimente legitime in productie
+  (magistrala nu arunca acolo, lasa balta si scrie in jurnal) — adica raportul
+  de formulare ar fi fost gol si nimeni n-ar fi stiut de ce. Prinsa de o proba
+  inainte de desfasurare.
+
+  ⚠ CE INTRA AICI: numai parametri despre care se stie ca poarta valori dintr-o
+  MULTIME INCHISA, scrisa de noi. Niciodata unul care poate purta ce a tastat omul.
+*/
+const NUME_CUNOSCUTE_CURATE = [
+  "form_name",     // "contact" | "migration" | "newsletter"
+  "section_name",  // numele sectiunii, din marcajele noastre
+] as const;
+
 /**
  * Parametrii care AU VOIE sa poarte text scris de om.
  *
@@ -71,7 +91,8 @@ export function verificaFaraPii(nume: string, parametri: Record<string, unknown>
   for (const [cheie, valoare] of Object.entries(parametri)) {
     const c = cheie.toLowerCase();
 
-    if ((CHEI_OPRITE as readonly string[]).some(op => c === op || c.endsWith(`_${op}`))) {
+    const eCunoscutCurat = (NUME_CUNOSCUTE_CURATE as readonly string[]).includes(c);
+    if (!eCunoscutCurat && (CHEI_OPRITE as readonly string[]).some(op => c === op || c.endsWith(`_${op}`))) {
       throw new EroarePii(
         `Evenimentul "${nume}" are parametrul "${cheie}", care nu are voie in GA4. ` +
         "Daca ai nevoie de el pentru o conversie, trimite-l prin adaptorul serverului, nu prin Analytics.",

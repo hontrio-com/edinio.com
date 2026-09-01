@@ -1,6 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
+import { randomUUID } from "node:crypto";
 import { sendContactConfirmationToCustomer, sendContactMessageToAdmin } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
@@ -21,7 +22,19 @@ import { verificaRecaptcha } from "@/lib/recaptcha";
 /** Numele actiunii trimis catre Google. Se verifica si la intoarcere. */
 const ACTIUNE_CAPTCHA = "contact";
 
-export type ContactResult = { ok: true } | { ok: false; error: string };
+/*
+  ⚠ `event_id` PLEACA DE PE SERVER, si asta e o hotarare, nu un amanunt.
+
+  Conversia s-a intamplat cand SERVERUL a primit mesajul — nu cand omul a apasat
+  butonul. Daca id-ul s-ar naste in browser, ar exista si pentru incercarile care
+  au picat la validare, la captcha sau la trimiterea emailului: raportul ar arata
+  mai multe cereri decat au ajuns vreodata la noi.
+
+  ⚠ SI E ACELASI ID pentru toate destinatiile. Cand se adauga Meta CAPI si
+  echivalentele lor, browserul si serverul trebuie sa trimita ACELASI id ca sa se
+  poata deduplica. Nascut in doua locuri, ar fi doua conversii pentru un singur om.
+*/
+export type ContactResult = { ok: true; eventId: string } | { ok: false; error: string };
 
 export async function submitContactMessage(
   input: MesajDeContactBrut & { captchaToken?: string },
@@ -174,5 +187,5 @@ export async function submitContactMessage(
     });
   }
 
-  return { ok: true };
+  return { ok: true, eventId: randomUUID() };
 }

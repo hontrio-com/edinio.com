@@ -133,6 +133,9 @@ function HeroCadru({
         <div className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 sm:mt-10">
           <Link
             href={principala.href}
+            /* Vezi nota din `site-header/SiteHeader.tsx`: ruta de inscriere trage
+               clientul Supabase si validarea, ~124 kB, pe care 95% nu-i deschid. */
+            prefetch={false}
             className={cn("halou-cta", butonVerde("lat"))}
           >
             {principala.label}

@@ -127,6 +127,7 @@ export function MobileNav({ open, onClose }: Props) {
         <div className="mt-8 flex flex-col gap-2.5">
           <Link
             href="/register"
+            prefetch={false}
             onClick={onClose}
             className={cn("w-full", butonVerde())}
           >
@@ -134,6 +135,7 @@ export function MobileNav({ open, onClose }: Props) {
           </Link>
           <Link
             href="/login"
+            prefetch={false}
             onClick={onClose}
             className="flex h-12 items-center justify-center rounded-[8px] border border-hairline text-[15px] font-medium text-ink"
           >

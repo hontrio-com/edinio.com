@@ -271,14 +271,26 @@ export function SiteHeader() {
 
         {/* ── Acțiuni ── */}
         <div className="hidden items-center gap-1 lg:flex">
+{/*
+            ⚠ `prefetch={false}` — MĂSURAT, nu din obișnuință. Rutele de
+            autentificare trag clientul Supabase (57.942 octeți) și biblioteca de
+            validare cu toate limbile (67.555). App Router-ul le aducea la ~285 ms
+            după hidratare, pe FIECARE vizitator al paginii de start — iar
+            Lighthouse le socotea 106 din cei 259 KiB de JavaScript nefolosit.
+
+            Cine chiar apasă plătește acum acei octeți la clic, ca la orice
+            navigare. Cine nu apasă — adică aproape toți — nu-i mai plătește deloc.
+          */}
           <Link
             href="/login"
+            prefetch={false}
             className="rounded-full px-3.5 py-2 text-[14px] font-medium text-ink-2 transition-colors duration-150 hover:text-ink"
           >
             Conectează-te
           </Link>
           <Link
             href="/register"
+            prefetch={false}
             className={cn("ml-1", butonVerde("bara"))}
           >
             Începe gratuit

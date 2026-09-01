@@ -347,6 +347,7 @@ function CardPlan({ plan, interval }: { plan: PricingPlan; interval: BillingInte
 
       <Link
         href="/register"
+        prefetch={false}
         /* Perechea verde/alb, din aceeasi reteta: puse pe carduri alaturate,
            cele doua butoane trebuie sa stea pe aceeasi linie de sus si de jos. */
         className={cn("w-full", plan.popular ? butonVerde() : butonAlb())}

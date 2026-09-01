@@ -146,6 +146,7 @@ export function FinalCta() {
 
         <Link
           href="/register"
+          prefetch={false}
           className={cn("mt-10 halou-cta", butonVerde("lat"))}
         >
           Începe gratuit acum

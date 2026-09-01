@@ -90,6 +90,7 @@ export function PageShell({
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
                 href="/register"
+                prefetch={false}
                 className={butonVerde()}
               >
                 Începe gratuit

@@ -1,10 +1,20 @@
 "use client";
 
 import Script from "next/script";
+import { usePathname } from "next/navigation";
+import { faraUrmarire } from "@/lib/platform/fara-urmarire";
 
 const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID;
 
 export function PlatformMetaPixel() {
+  /*
+    ⚠ HOOK-UL INAINTEA ORICAREI IESIRI. Regulile hook-urilor cer sa fie chemat
+    neconditionat; mutat sub `if (!PIXEL_ID)` ar cadea la prima randare in care
+    id-ul lipseste. Vezi `fara-urmarire.ts` pentru de ce exista ocolirea.
+  */
+  const cale = usePathname();
+  if (faraUrmarire(cale)) return null;
+
   if (!PIXEL_ID) return null;
 
   return (

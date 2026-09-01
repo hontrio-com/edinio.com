@@ -337,3 +337,88 @@ test("gazda din reCAPTCHA se citeste si se scrie in jurnal, dar NU respinge inca
     "ca sa ceara refuzul, si trebuie stiut ce gazde au aparut in jurnal intre timp",
   );
 });
+
+/* ═══ 10. Reclamele nu intra pe ecranele autentificate cu continut nepublicat ═══ */
+
+test("previzualizarea de articol NU incarca pixeli de publicitate", async () => {
+  /*
+    ⚠ ARGUMENTUL NU E DE CONFIDENTIALITATE, E DE INCREDERE. Pagina de
+    previzualizare are o sesiune Supabase, iar cookie-ul ei nu e `httpOnly` —
+    nu din scaparea noastra, ci fiindca modelul Supabase pentru clienti de browser
+    cere ca tokenurile sa fie citibile din JavaScript.
+
+    Un script tert incarcat acolo ruleaza cu drepturile paginii. Daca lantul de
+    livrare al furnizorului e vreodata compromis, paguba nu mai e „s-a stricat o
+    pagina de marketing": e o sesiune de admin, cu un articol nepublicat pe ecran.
+
+    ⚠ SE INTOARCE `null` INAINTE DE RANDARE. Un `<Script>` care nu intra in arbore
+    nu se injecteaza niciodata; unul scos dupa montare a apucat deja sa se incarce
+    si sa trimita `PageView`. Proba cere ordinea, nu doar prezenta.
+  */
+  const { faraUrmarire } = await import("./platform/fara-urmarire");
+
+  assert.equal(faraUrmarire("/blog/previzualizare/abc-123"), true, "draftul nu mai e ferit");
+  assert.equal(faraUrmarire("/blog/previzualizare/"), true);
+
+  /* ⚠ Si NU peste tot: o regula prea lata ar stinge masuratoarea intregului site. */
+  assert.equal(faraUrmarire("/blog/un-articol-public"), false, "regula s-a intins peste blogul public");
+  assert.equal(faraUrmarire("/"), false, "regula s-a intins peste pagina principala");
+  assert.equal(faraUrmarire("/preturi"), false);
+
+  /*
+    ⚠ `null` DA FALS, dinadins. Pe drumul obisnuit calea e gata la prima randare;
+    un adevarat aici ar stinge pixelii pe tot site-ul, in tacere.
+  */
+  assert.equal(faraUrmarire(null), false, "o cale nestiuta stinge urmarirea peste tot");
+  assert.equal(faraUrmarire(undefined), false);
+});
+
+test("amandoi pixelii intreaba aceeasi regula, si o intreaba INAINTE de randare", () => {
+  /*
+    ⚠ IMPOTRIVA DERIVEI. Doua liste de cai, cate una in fiecare componenta, s-ar
+    despartii la prima cale adaugata — si cea uitata ar continua sa incarce
+    scriptul fara ca nimic sa cada.
+  */
+  for (const f of [
+    "src/components/platform/PlatformMetaPixel.tsx",
+    "src/components/platform/PlatformTikTokPixel.tsx",
+  ]) {
+    const cod = faraComentarii(citeste(f));
+    /*
+      ⚠ CERUTA CA UN INTREG, nu doar chemarea. Prima forma a randului asta era
+      `assert.match(cod, /faraUrmarire\(cale\)/)` — si a lasat sa treaca VERDE un
+      mutant care punea `void faraUrmarire(cale);`: regula se chema, raspunsul se
+      arunca, scriptul se incarca oricum. Textul exista, purtarea nu.
+
+      A treia oara azi cand fac aceeasi greseala in aceeasi zi in care o repar.
+    */
+    assert.match(
+      cod, /if \(faraUrmarire\(cale\)\) return null;/,
+      `${f} cheama regula dar nu se opreste din ea — scriptul se incarca oricum`,
+    );
+    assert.doesNotMatch(
+      cod, /previzualizare/,
+      `${f} si-a scris propria lista de cai pe langa cea comuna`,
+    );
+
+    /* Hook-ul inaintea oricarei iesiri — altfel cade la prima randare fara id. */
+    const iHook = cod.indexOf("usePathname()");
+    const iId = cod.indexOf("if (!PIXEL_ID)");
+    assert.ok(iHook > 0, `${f}: lipseste usePathname`);
+    assert.ok(iHook < iId, `${f}: hook-ul e chemat dupa o iesire timpurie — incalca regulile hook-urilor`);
+  }
+});
+
+test("`.env.example` numeste cheile reCAPTCHA, chiar daca le lasa goale", () => {
+  /*
+    ⚠ CE ERA GRESIT: lipseau. Iar CI face `cp .env.example .env.local`, deci ce
+    dovedea el era ca site-ul se CONSTRUIESTE fara CAPTCHA, nu ca o configuratie
+    de productie o contine. Nimic nu striga, fiindca verificarea e scrisa dinadins
+    sa treaca fara cheie.
+
+    ⚠ GOALE, NU COMPLETATE: goale se poarta ca lipsa, adica exact ce vrem la probe.
+  */
+  const ex = citeste(".env.example");
+  assert.match(ex, /^NEXT_PUBLIC_RECAPTCHA_SITE_KEY=/m, "cheia publica nu e numita in .env.example");
+  assert.match(ex, /^RECAPTCHA_SECRET_KEY=/m, "cheia secreta nu e numita in .env.example");
+});

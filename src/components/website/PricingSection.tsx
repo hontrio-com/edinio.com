@@ -82,7 +82,7 @@ export function PricingSection({ cuAntet = true }: { cuAntet?: boolean }) {
    * ramane intreaga — sub ea urmeaza alta sectiune, nu un cap de pagina.
    */
   return (
-    <section
+    <section data-analytics-section="preturi"
       id="preturi"
       className={cn("sub-bara bg-white pb-20 lg:pb-28", cuAntet ? "pt-20 lg:pt-28" : "pt-8 lg:pt-10")}
     >
@@ -348,6 +348,8 @@ function CardPlan({ plan, interval }: { plan: PricingPlan; interval: BillingInte
       <Link
         href="/register"
         prefetch={false}
+        data-analytics-cta="preturi_incepe"
+        data-analytics-location="pricing"
         /* Perechea verde/alb, din aceeasi reteta: puse pe carduri alaturate,
            cele doua butoane trebuie sa stea pe aceeasi linie de sus si de jos. */
         className={cn("w-full", plan.popular ? butonVerde() : butonAlb())}

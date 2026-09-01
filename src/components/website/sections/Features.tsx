@@ -61,7 +61,7 @@ const STACK_TOP = 96;
 
 export function Features() {
   return (
-    <section className="bg-white">
+    <section data-analytics-section="functionalitati" className="bg-white">
       <div className="mx-auto max-w-[1200px] px-5 pt-20 pb-24 sm:px-6 lg:px-8 lg:pt-28 lg:pb-36">
         <div className="mx-auto max-w-[720px] text-center">
           {/*

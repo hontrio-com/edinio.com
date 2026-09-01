@@ -96,6 +96,8 @@ export function PageShell({
               <Link
                 href="/register"
                 prefetch={false}
+                data-analytics-cta="pagina_incepe"
+                data-analytics-location="page_shell"
                 className={butonVerde()}
               >
                 Începe gratuit

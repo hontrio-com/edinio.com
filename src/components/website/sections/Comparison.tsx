@@ -102,7 +102,7 @@ function Sigla({ nume }: { nume: ComparisonRival }) {
 
 export function Comparison() {
   return (
-    <section id="comparatie" className="sub-bara bg-white">
+    <section data-analytics-section="comparatie" id="comparatie" className="sub-bara bg-white">
       <div className="mx-auto max-w-[1200px] px-5 py-20 sm:px-6 lg:px-8 lg:py-28">
         <div className="mx-auto max-w-[720px] text-center">
           <SectionEyebrow label={COMPARISON_EYEBROW} />

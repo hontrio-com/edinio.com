@@ -128,6 +128,8 @@ export function MobileNav({ open, onClose }: Props) {
           <Link
             href="/register"
             prefetch={false}
+            data-analytics-cta="meniu_mobil_incepe"
+            data-analytics-location="mobile_nav"
             onClick={onClose}
             className={cn("w-full", butonVerde())}
           >

@@ -72,7 +72,7 @@ export function FAQSection({
   lead?: string;
 } = {}) {
   return (
-    <section id="faq" className="sub-bara bg-white py-20 lg:py-28">
+    <section data-analytics-section="intrebari" id="faq" className="sub-bara bg-white py-20 lg:py-28">
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-[720px] text-center">
           <h2 className="text-[32px] font-bold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[44px]">

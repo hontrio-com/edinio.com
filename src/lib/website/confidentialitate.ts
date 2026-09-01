@@ -773,7 +773,7 @@ const SECTIUNI: Sectiune[] = [
     blocuri: [
       {
         tip: "paragraf",
-        text: "Edinio pregătește utilizarea Google Analytics 4, serviciu furnizat de Google, pentru a înțelege modul în care website-ul este utilizat și pentru a măsura performanța acestuia. La data ultimei actualizări a acestui document, serviciul NU este încă activ pe edinio.com; secțiunea descrie ce se va aplica atunci când va fi pornit.",
+        text: "Edinio utilizează Google Analytics 4, serviciu furnizat de Google, pentru a înțelege modul în care website-ul este utilizat și pentru a măsura performanța acestuia. Serviciul rulează pe edinio.com și pe paginile Platformei; nu rulează în magazinele create de comercianți, unde se aplică propriile lor configurări.",
       },
       {
         tip: "paragraf",

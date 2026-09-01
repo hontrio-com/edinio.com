@@ -64,27 +64,28 @@ const CHEI_OBLIGATORII = [
     ce merge.
   */
   "RESEND_API_KEY",
+  /*
+    ⚠ MUTATA AICI PE 01.09.2026, dupa ce proprietarul a confirmat ca a pus-o in
+    Vercel. De ea atarna si un TEXT LEGAL: cat timp cheia e obligatorie, nicio
+    desfasurare de productie nu poate porni fara GA4 — deci politicile au voie sa
+    spuna, la prezent, ca-l folosim. Legatura e verificata de proba din
+    `securitate-audit.test.ts`, in amandoua sensurile.
+
+    ⚠ SCOASA DE AICI, textele trebuie duse inapoi la forma cumpatata. Proba cade
+    si o cere; nu o sterge, muta-o.
+  */
+  "NEXT_PUBLIC_EDINIO_GA4_MEASUREMENT_ID",
 ] as const;
 
 /*
   Goala acum. Ramane ca loc pentru urmatoarea cheie a carei stare n-o cunoastem:
   se striga in jurnal, nu se opreste desfasurarea, pana cand cineva se uita.
 */
-const CHEI_ASTEPTATE: readonly string[] = [
-  /*
-    ⚠ MASURAREA NOASTRA. Codul e in depozit din 01.09.2026, dar variabila se pune
-    in panoul Vercel si n-am vazut-o eu acolo. Pana atunci se STRIGA, nu se
-    opreste — sa opresc desfasurarea pe o cheie a carei stare n-o cunosc e chiar
-    paguba impotriva careia e scrisa paza.
-
-    ⚠ SI DE EA ATARNA UN TEXT LEGAL: cat timp cheia nu e OBLIGATORIE, o
-    desfasurare poate porni fara GA4, deci politicile n-au voie sa spuna ca-l
-    folosim. Cand cheia se muta in lista de sus, proba din
-    `securitate-audit.test.ts` cade si cere textele la prezent. Legatura e
-    dinadins: asa nu se poate uita niciuna din cele doua.
-  */
-  "NEXT_PUBLIC_EDINIO_GA4_MEASUREMENT_ID",
-];
+/*
+  Goala acum. E locul pentru urmatoarea cheie a carei stare n-o cunoastem: se
+  striga in jurnalul de build, nu se opreste desfasurarea, pana se uita cineva.
+*/
+const CHEI_ASTEPTATE: readonly string[] = [];
 
 function verificaCheileDeProductie(faza: string): void {
   /*

@@ -41,7 +41,7 @@ import { cn } from "@/lib/utils/cn";
  */
 export function FinalCta() {
   return (
-    <section className="relative flex min-h-[540px] items-center overflow-hidden bg-white py-24 lg:min-h-[620px] lg:py-32">
+    <section data-analytics-section="final" className="relative flex min-h-[540px] items-center overflow-hidden bg-white py-24 lg:min-h-[620px] lg:py-32">
       {/*
         Harta, în spate. `aria-hidden`: nu spune nimic în plus față de titlu,
         care zice deja „în toată România".
@@ -147,6 +147,8 @@ export function FinalCta() {
         <Link
           href="/register"
           prefetch={false}
+          data-analytics-cta="final_incepe"
+          data-analytics-location="final_cta"
           className={cn("mt-10 halou-cta", butonVerde("lat"))}
         >
           Începe gratuit acum

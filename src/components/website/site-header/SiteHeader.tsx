@@ -291,6 +291,8 @@ export function SiteHeader() {
           <Link
             href="/register"
             prefetch={false}
+            data-analytics-cta="header_incepe"
+            data-analytics-location="header"
             className={cn("ml-1", butonVerde("bara"))}
           >
             Începe gratuit

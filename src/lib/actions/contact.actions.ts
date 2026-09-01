@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { sendContactConfirmationToCustomer, sendContactMessageToAdmin } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { PROGRAM } from "@/lib/website/contact";
 import { verificaMesajDeContact, type MesajDeContactBrut } from "@/lib/website/contact-form";
 import { verificaRecaptcha } from "@/lib/recaptcha";
@@ -33,10 +34,10 @@ export async function submitContactMessage(
    * mesaje in numele nostru catre oricine — adica ne poate folosi domeniul si
    * reputatia de expeditor ca sa spameze. Costul nu e in bani, e in livrabilitate.
    *
-   * ⚠ Limitatorul e IN MEMORIE, deci per instanta: limita reala e 3 x numarul de
+   * ⚠ Limitatorul din memorie e per instanta: limita reala e 3 x numarul de
    * instante calde si se reseteaza la fiecare livrare. Blocheaza rafalele de pe
-   * un singur IP, nu un atac impartit. Al doilea strat, in baza, ramane de facut
-   * — la fel ca pentru celelalte scrieri publice.
+   * un singur IP, nu un atac impartit. De aceea sub el sta acum si stratul din
+   * baza — vezi nota de dupa validare.
    */
   const hdrs = await headers();
   const ip = clientIpFromHeaders(hdrs);
@@ -44,6 +45,31 @@ export async function submitContactMessage(
     return { ok: false, error: "Ai trimis deja cateva mesaje. Te rugam sa astepti un minut." };
   }
 
+
+  /*
+    ═══ ⚠ AL DOILEA STRAT, IN BAZA — cel care tine peste instante ═══
+
+    Randul de deasupra opreste rafalele de pe un singur proces. Nu opreste un
+    atac impartit pe instante, si se sterge la fiecare desfasurare. Regula casei
+    (limita-durabila.ts) o spune limpede: orice actiune care COSTA BANI — email,
+    SMS, apel la furnizor — cere si stratul din baza. Abonarea la blog il avea de
+    la inceput; formularele astea doua, nu.
+
+    ⚠ CHEIA PE IP STA INAINTEA CAPTCHA-ULUI, dinadins: un apel la Google costa
+    ~200ms si nu vrem sa-l platim pentru o rafala. Cheia pe adresa vine DUPA,
+    cand stim ca in fata e un om.
+
+    ⚠ FARA BLOCARE PROGRESIVA pe IP (al patrulea argument lipseste). Un IP poate
+    fi un birou intreg sau o retea mobila cu mii de abonati; o blocare de o ora
+    ar taia oameni adevarati pentru fapta unuia singur.
+
+    ⚠ SI E O FRANA, NU O INCUIETOARE: `consumaLimita` cade DESCHIS daca baza nu
+    raspunde. De aceea stratul din memorie ramane deasupra, nu il inlocuieste.
+  */
+  const peIp = await consumaLimita(`contact:ip:${ip}`, 10, 3600);
+  if (!peIp.permis) {
+    return { ok: false, error: "Prea multe mesaje trimise de aici. Incearca mai tarziu." };
+  }
   const verificat = verificaMesajDeContact(input);
   if (!verificat.ok) return { ok: false, error: verificat.error };
   const mesaj = verificat.valoare;
@@ -72,6 +98,24 @@ export async function submitContactMessage(
       message: "RECAPTCHA_SECRET_KEY lipseste: formularul de contact merge FARA verificare anti-robot.",
       severity: "warning",
     });
+  }
+
+  /*
+    ⚠ CHEIA PE ADRESA, DUPA CAPTCHA. Opreste celalalt fel de abuz: multi care
+    trimit ACEEASI adresa, ca sa inunde cutia cuiva cu emailurile noastre de
+    confirmare. Cheia pe IP nu-l prinde — vin de peste tot.
+
+    ⚠ 8 PE ZI, NU 3. Auditul cerea 3, luat de la newsletter. Dar asta e un
+    formular de ASISTENTA: omul cu o problema urgenta scrie de mai multe ori, si
+    a patra oara ar fi taiat in tacere — chiar defectul impotriva caruia e scris
+    raspunsul de mai jos. 8 opreste inundarea si nu atinge pe nimeni real.
+
+    Adresa se normalizeaza (mic + fara spatii), altfel `Ion@X.ro` si `ion@x.ro`
+    ar fi doua contoare pentru aceeasi cutie.
+  */
+  const peAdresa = await consumaLimita(`contact:email:${mesaj.email.trim().toLowerCase()}`, 8, 86_400);
+  if (!peAdresa.permis) {
+    return { ok: false, error: "Am primit deja mai multe mesaje pentru adresa asta azi. Scrie-ne direct la contact@edinio.com." };
   }
 
   /*

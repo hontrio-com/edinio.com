@@ -102,7 +102,17 @@ const nextConfig: NextConfig = {
       "worker-src 'self' blob:",
       "object-src 'none'",
       "base-uri 'self'",
-      "form-action 'self' https:",
+      /*
+        ⚠ ERA `'self' https:`, iar comentariul de mai sus spunea „form-action
+        pinned to self". Codul si nota nu se potriveau. Verificat inainte de
+        schimbare: toate formularele cu `action` din proiect posteaza relativ, si
+        niciun magazin de client nu are formular catre alt domeniu.
+
+        ⚠ SI SA FIE LIMPEDE CE CUMPARA: aproape nimic, cat timp `script-src` are
+        `'unsafe-inline'` si `https:`. Se schimba fiindca o nota mincinoasa e mai
+        scumpa decat o directiva larga, nu fiindca inchide un atac.
+      */
+      "form-action 'self'",
       "frame-ancestors 'self'",
     ].join("; ");
     return [

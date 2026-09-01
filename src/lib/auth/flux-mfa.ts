@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { sendMfaOtpEmail } from "@/lib/email";
 import { consumaLimita, reseteazaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
+import { rateLimit } from "@/lib/utils/rate-limit";
 import { adaugaSesiune, type SesiuneConfirmata } from "./mfa";
 import { uitaStareaMfa } from "./stare-mfa";
 
@@ -111,6 +112,31 @@ export async function citesteCampuriMfa(userId: string): Promise<{
 }
 
 export async function limitaIncercariMfa(userId: string): Promise<{ error: string } | null> {
+  /*
+    ═══ ⚠ PLASA DE DEDESUBT, PENTRU CAND CONTORUL DIN BAZA NU RASPUNDE ═══
+
+    `consumaLimita` cade DESCHIS: la orice eroare de baza intoarce `permis: true`
+    (vezi `esecTacut` in limita-durabila.ts). E o alegere buna aproape peste tot —
+    o bază care clipeste n-are voie sa incuie oamenii afara din propriile conturi.
+
+    ⚠ DAR AICI NU MAI RAMANEA NIMIC DEDESUBT. Plafonul durabil era SINGURUL de pe
+    incercarile de MFA, adica pe un cod de sase cifre. Cat timp RPC-ul nu
+    raspunde, ghicirea codului devine nelimitata — un milion de variante, fara
+    nicio franare. In restul proiectului stratul din memorie sta sub cel durabil
+    tocmai pentru asta; aici lipsea.
+
+    ⚠ E O FRANA, NU O INCUIETOARE: memoria e pe instanta, deci limita adevarata e
+    „30 x numarul de instante calde". Impotriva ghicirii unui OTP de sase cifre,
+    diferenta dintre asta si nelimitat e toata diferenta.
+
+    Pragul e larg dinadins (30/minut fata de 5/15 minute la cel durabil): pe
+    drumul obisnuit nu se atinge NICIODATA, deci nu poate pedepsi un om care
+    greseste codul de doua ori. Se aprinde numai cand celalalt a disparut.
+  */
+  if (!rateLimit(`mfa-memorie:${userId}`, 30, 60_000)) {
+    return { error: "Prea multe incercari. Asteapta un minut si reia." };
+  }
+
   const lim = await consumaLimita(
     `mfa:${userId}`,
     LIMITA_INCERCARI.limita,
@@ -134,6 +160,12 @@ export async function trimiteCodMfa(
   userId: string,
   email: string,
 ): Promise<{ error: string } | { success: true }> {
+  /* Aceeasi plasa ca la incercari: fara ea, o baza muta ar lasa trimiterea de
+     coduri nelimitata — adica bombardarea casutei omului cu emailuri de la noi. */
+  if (!rateLimit(`mfa-trimite-memorie:${userId}`, 10, 60_000)) {
+    return { error: "Prea multe coduri cerute. Asteapta un minut." };
+  }
+
   const lim = await consumaLimita(
     `mfa-trimite:${userId}`,
     LIMITA_TRIMITERI.limita,

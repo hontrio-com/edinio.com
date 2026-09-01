@@ -7,6 +7,7 @@ import {
 } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { verificaCerereMigrare, type CerereMigrareBruta } from "@/lib/website/migrare-form";
 import { verificaRecaptcha } from "@/lib/recaptcha";
 
@@ -63,6 +64,18 @@ export async function submitMigrationLead(
     return { ok: false, error: "Ai trimis deja cateva cereri. Te rugam sa astepti un minut." };
   }
 
+  /*
+    ═══ ⚠ AL DOILEA STRAT, IN BAZA — geamana celui din `contact.actions.ts` ═══
+
+    Reparate in ACEEASI trecere, dinadins: cu una singura, spamul s-ar fi mutat
+    pur si simplu pe celalalt formular. Vezi nota lunga de acolo pentru de ce
+    cheia pe IP sta inaintea captcha-ului si de ce n-are blocare progresiva.
+  */
+  const peIp = await consumaLimita(`migrare:ip:${ip}`, 10, 3600);
+  if (!peIp.permis) {
+    return { ok: false, error: "Prea multe cereri trimise de aici. Incearca mai tarziu." };
+  }
+
   const verificat = verificaCerereMigrare(input);
   if (!verificat.ok) return { ok: false, error: verificat.error };
   const cerere = verificat.valoare;
@@ -89,6 +102,13 @@ export async function submitMigrationLead(
       message: "RECAPTCHA_SECRET_KEY lipseste: formularul de migrare merge FARA verificare anti-robot.",
       severity: "warning",
     });
+  }
+
+  /* Cheia pe adresa, dupa captcha. 8/zi ca la contact — cine chiar isi muta
+     magazinul poate scrie de mai multe ori pana se lamureste. */
+  const peAdresa = await consumaLimita(`migrare:email:${cerere.email.trim().toLowerCase()}`, 8, 86_400);
+  if (!peAdresa.permis) {
+    return { ok: false, error: "Am primit deja mai multe cereri pentru adresa asta azi. Scrie-ne direct la contact@edinio.com." };
   }
 
   /*

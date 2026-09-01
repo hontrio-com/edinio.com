@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { jsonLdSafe } from "@/lib/json-ld";
 import { FAQSection } from "@/components/website/FAQSection";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { HeroPagina } from "@/components/website/sections/Hero";
@@ -49,7 +50,7 @@ export default function MentenantaPage() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }}
       />
 
       <HeroPagina

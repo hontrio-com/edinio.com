@@ -83,7 +83,18 @@ export async function verificaRecaptcha(
     ingaduitor, sau unde e mai usor de obtinut) trece la fel de bine daca nu
     verifici pentru ce a fost cerut. E greseala clasica la v3.
   */
-  if (date.action && date.action !== actiuneAsteptata) {
+  /*
+    ⚠ SI FARA PAZA DE FALSY. Randul era `if (date.action && date.action !== ...)`,
+    deci un token care NU spune pentru ce a fost emis trecea mai departe. Nu e o
+    usa exploatabila — cine poate mintui un token fara actiune poate mintui la fel
+    de usor unul cu actiunea potrivita — dar comentariul de deasupra promitea ca
+    „actiunea se verifica", si pana acum asta nu era intru totul adevarat.
+
+    Motivele sunt deosebite dinadins: „actiune gresita: undefined" in jurnal ar
+    trimite pe cine il citeste sa caute o actiune scrisa gresit, nu una lipsa.
+  */
+  if (!date.action) return { ok: false, motiv: "actiune lipsa din token" };
+  if (date.action !== actiuneAsteptata) {
     return { ok: false, motiv: `actiune gresita: ${date.action}` };
   }
 

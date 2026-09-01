@@ -57,7 +57,7 @@
     "recharts": "^3.8.1",
     "resend": "^6.12.4",
     "sanitize-html": "2.17.5",
-    "sharp": "^0.35.2",
+    "sharp": "^0.35.4",
     "sonner": "^2.0.7",
     "stripe": "^22.1.1",
     "tailwind-merge": "^3.6.0",

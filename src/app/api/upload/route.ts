@@ -26,6 +26,23 @@ const ALL_ALLOWED_TYPES = [...IMAGE_TYPES, "application/pdf", "image/gif"];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 const VALID_BUCKETS = ["logos", "covers", "gallery", "products", "avatars"];
 
+/*
+  Extensia cheii din R2, hotarata de tipul DETECTAT pe octeti. Aceeasi purtare ca
+  in `upload-customization/route.ts`, care o facea deja corect.
+
+  ⚠ `heic` DINADINS, nu `avif`: octetii HEIF nu au voie sa capete o extensie pe
+  care `/api/img` o accepta. Vezi nota din corpul functiei.
+*/
+const EXT_DUPA_TIP: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/heic": "heic",
+  "image/heif": "heic",
+  "application/pdf": "pdf",
+};
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -76,16 +93,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Fisierul pare gol (0 octeti). Reincarca imaginea." }, { status: 400 });
   }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "webp";
-  // Nume imprevizibil, nu `Date.now()`-`Math.random()`: depozitul e public si
-  // numele tine loc de control de acces. `Math.random()` in V8 nu e criptografic,
-  // iar cine isi vede propriile sufixe poate deduce starea generatorului si numele
-  // incarcarilor facute in paralel de pe aceeasi instanta.
-  const filename = `${randomUUID()}.${ext}`;
-  const key = folder
-    ? `${bucket}/${user.id}/${folder}/${filename}`
-    : `${bucket}/${user.id}/${filename}`;
-
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
     if (buffer.length === 0) {
@@ -105,6 +112,41 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    /*
+      ═══ ⚠ EXTENSIA VINE DIN OCTETI, NU DIN NUMELE DAT DE CLIENT ═══
+
+      Randul de dinainte era `file.name.split(".").pop()`, iar cheia se construia
+      INAINTE de verificarea pe octeti. Asta lasa deschisa o usa care n-avea nimic
+      de-a face cu ce scrie in `file.type`:
+
+        - `detectImageMime` accepta marcile ISO-BMFF `heic|heix|heif|mif1|hevc|msf1`
+          si le eticheteaza `image/heic`, care e in lista permisa
+        - dar cheia primea extensia din NUME, deci aceiasi octeti HEIF puteau
+          ateriza ca `products/<uid>/<uuid>.avif`
+        - iar `/api/img` accepta `.avif` in KEY_RE si il da lui `sharp`, adica
+          lui libheif, pe calea de DECODARE
+
+      Deci un cont oarecare putea alege ce decodor al nostru atinge, doar
+      redenumind fisierul. Acum nu mai poate: extensia o hotaraste tipul detectat.
+
+      ⚠ ASTA TINE SI DUPA CE SE URCA `sharp`. Reparatia de versiune inchide
+      defectele de azi din libheif; asta inchide DRUMUL catre el. Urmatorul CVE
+      nu mai redeschide aceeasi usa.
+
+      ⚠ SI NU SE BIZUIE PE KEY_RE. Chiar daca `.avif` ar fi scos de acolo maine,
+      `sharp` adulmeca oricum octetii, nu extensia — inclusiv la `metadata()` de
+      mai jos. Locul potrivit pentru paza e aici, la intrare.
+    */
+    const ext = EXT_DUPA_TIP[tipReal] ?? "bin";
+    // Nume imprevizibil, nu `Date.now()`-`Math.random()`: depozitul e public si
+    // numele tine loc de control de acces. `Math.random()` in V8 nu e criptografic,
+    // iar cine isi vede propriile sufixe poate deduce starea generatorului si numele
+    // incarcarilor facute in paralel de pe aceeasi instanta.
+    const filename = `${randomUUID()}.${ext}`;
+    const key = folder
+      ? `${bucket}/${user.id}/${folder}/${filename}`
+      : `${bucket}/${user.id}/${filename}`;
 
     const url = await uploadToR2(buffer, key, tipReal);
 

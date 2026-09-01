@@ -422,3 +422,61 @@ test("`.env.example` numeste cheile reCAPTCHA, chiar daca le lasa goale", () => 
   assert.match(ex, /^NEXT_PUBLIC_RECAPTCHA_SITE_KEY=/m, "cheia publica nu e numita in .env.example");
   assert.match(ex, /^RECAPTCHA_SECRET_KEY=/m, "cheia secreta nu e numita in .env.example");
 });
+
+/* ═══ 11. Desfasurarea de productie se opreste daca lipsesc cheile ═══ */
+
+test("paza de chei se aprinde DOAR pe build-ul de productie de la Vercel", () => {
+  /*
+    ⚠ PRIMA VARIANTA A ACESTEI PAZE A STRICAT `npm run build` PE MASINA DE LUCRU,
+    si merita scris de ce, fiindca e o capcana care se intinde peste tot:
+
+    `vercel env pull` scrie in `.env.local` si `VERCEL_ENV="production"`. Deci
+    conditia „suntem in productie" era adevarata si local. Discriminatorul adevarat
+    e `CI`, pe care Vercel il pune la fiecare build si care NU e nici in
+    `.env.local`, nici in `.env.example` (verificate amandoua).
+
+    Probat in trei situatii, nu doua:
+      local, fara CI                          compileaza
+      CI + VERCEL_ENV + cheile puse           compileaza, striga pentru RESEND
+      CI + VERCEL_ENV + o cheie obligatorie   OPRESTE
+  */
+  const cod = faraComentarii(citeste("next.config.ts"));
+
+  /* Toate trei portile, ca UNITATI — nu doar cuvintele risipite prin fisier. */
+  assert.match(cod, /if \(!process\.env\.CI\) return;/, "s-a pierdut discriminatorul `CI` — paza s-ar aprinde si local");
+  assert.match(cod, /if \(process\.env\.VERCEL_ENV !== "production"\) return;/, "paza s-ar aprinde si pe preview");
+  assert.match(
+    cod, /if \(faza !== "phase-production-build"\) return;/,
+    "paza nu mai e legata de faza de BUILD — asa ar putea opri pornirea serverului, " +
+    "adica ar transforma o captcha stinsa intr-o platforma cazuta",
+  );
+
+  /* Si ca e chiar chemata din configul exportat, nu doar definita. */
+  assert.match(cod, /verificaCheileDeProductie\(faza\)/, "paza e definita, dar n-o cheama nimeni");
+  assert.match(cod, /export default function config\(faza: string\)/,
+    "configul nu mai e o functie, deci Next nu mai da `faza` si paza nu poate sti unde e");
+});
+
+test("se opreste doar pe cheile VAZUTE in panou; restul se striga", () => {
+  /*
+    ⚠ IMPARTIREA NU E ARBITRARA. Cele doua chei reCAPTCHA le-am vazut in panoul
+    Vercel pe Production (01.09.2026). `RESEND_API_KEY` nu — si in `.env.local` e
+    goala. Sa opresc desfasurarea pe o cheie a carei stare n-o cunosc ar fi exact
+    paguba impotriva careia e scrisa paza, doar in celalalt sens.
+
+    ⚠ Daca cineva o muta in lista obligatorie fara sa fi confirmat-o in panou,
+    proba asta cade si il intreaba daca s-a uitat.
+  */
+  const cod = faraComentarii(citeste("next.config.ts"));
+  const obligatorii = cod.slice(cod.indexOf("CHEI_OBLIGATORII"), cod.indexOf("CHEI_ASTEPTATE"));
+
+  assert.match(obligatorii, /"RECAPTCHA_SECRET_KEY"/);
+  assert.match(obligatorii, /"NEXT_PUBLIC_RECAPTCHA_SITE_KEY"/);
+  assert.doesNotMatch(
+    obligatorii, /"RESEND_API_KEY"/,
+    "RESEND_API_KEY a ajuns intre cele care OPRESC desfasurarea. Daca ai confirmat-o " +
+    "in panoul Vercel pe Production, muta si proba asta. Daca nu, o desfasurare " +
+    "poate fi oprita de o cheie despre care nu stim nimic.",
+  );
+  assert.match(cod, /CHEI_ASTEPTATE = \["RESEND_API_KEY"\]/, "RESEND nu mai e nici macar strigata");
+});

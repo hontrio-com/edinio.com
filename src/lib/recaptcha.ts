@@ -120,7 +120,25 @@ export async function verificaRecaptcha(
     ⚠ CINE FACE PASUL: schimba `avertizeaza` in refuz SI muta proba din
     `securitate-audit.test.ts` odata cu el.
   */
-  const GAZDE_CUNOSCUTE = ["edinio.com", "www.edinio.com"];
+  /*
+    ⚠ LISTA E COPIATA DIN CONSOLA GOOGLE, nu ghicita: acolo scriu exact
+    `edinio.com`, `www.edinio.com` si `localhost` (verificat in consola,
+    01.09.2026). `localhost` e AICI ca sa nu strige avertismentul la fiecare
+    incercare de pe masina de lucru — un avertisment care se aprinde zilnic pe
+    drumul obisnuit e un avertisment pe care nimeni nu-l mai citeste, si atunci
+    n-ar mai fi bun de nimic tocmai cand ar conta.
+
+    ⚠ SI DE CE RAMANE DOAR AVERTISMENT: in aceeasi consola, bifa „Verify the
+    origin of reCAPTCHA solutions" e PORNITA. Google spune, chiar sub ea, ca daca
+    e stinsa „you are required to perform domain verification yourself on your
+    server". Cat timp e pornita, tokenul nici nu se poate emite de pe alt domeniu,
+    deci un refuz aici n-ar prinde nimic ce nu e prins deja.
+
+    ⚠ DACA CINEVA O STINGE VREODATA, randul de mai jos trebuie sa devina refuz.
+    De aceea lista se tine potrivita cu consola: fara ea, trecerea la refuz ar
+    inchide pe cine trebuie sa intre.
+  */
+  const GAZDE_CUNOSCUTE = ["edinio.com", "www.edinio.com", "localhost"];
   const gazda = date.hostname;
   if (gazda && !GAZDE_CUNOSCUTE.includes(gazda) && !gazda.endsWith(".edinio.com")) {
     /* Nu se arunca si nu se opreste: e o masuratoare, nu o incuietoare. */

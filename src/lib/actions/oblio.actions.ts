@@ -28,6 +28,7 @@ import {
   getCompanies,
   getSeries,
   getVatRates,
+  getManagement,
   createOblioDoc,
   cancelOblioDoc,
   type OblioConfig,
@@ -176,6 +177,27 @@ async function buildProducts(
 
   const itemType = config.product_type?.trim() || "Marfa";
 
+  /*
+    ═══ ⚠ GESTIUNEA, PENTRU CONTURILE OBLIO CU STOCURI ═══
+
+    Un cont cu stocuri pornite refuza documentul intreg daca o linie stocabila
+    n-are `management`. Mesajul lor: „Produsul X nu are Gestiune (parametrul
+    `management`)".
+
+    ⚠ CE A COSTAT LIPSA EI: pe VetDepo, patru facturi intre 11.08 si 01.09.2026,
+    toate patru refuzate, zero emise. Si nu se vedea de nicaieri ca integrarea e
+    stricata — acreditarile treceau, compania se citea, seria se citea. Doar
+    documentul cadea, de fiecare data, cu acelasi motiv.
+
+    ⚠ DOAR PE MARFA. Pe „Serviciu" Oblio il ignora, iar transportul, extraoptiunile
+    si ajustarea de rotunjire chiar NU sunt marfa din gestiune. Trimis acolo, ar fi
+    o afirmatie falsa despre ce e linia — chiar daca n-ar strica nimic.
+
+    ⚠ GOL INSEAMNA „CONTUL N-ARE STOCURI". Atunci campul nu se trimite deloc, si
+    totul se poarta exact ca inainte — asa merg celelalte doua magazine cu Oblio.
+  */
+  const gestiune = config.management?.trim();
+
   const products: OblioProduct[] = items.map(item => {
     const { code, esteServiciu } = codSiNatura(item, skus);
     return {
@@ -186,6 +208,7 @@ async function buildProducts(
       quantity: item.quantity,
       // Extraoptiunea nu e marfa din catalog: pleaca drept serviciu, ca Transportul.
       productType: esteServiciu ? "Serviciu" : itemType,
+      ...(gestiune && !esteServiciu ? { management: gestiune } : {}),
       save: 0,
       ...vatFields,
     };
@@ -429,6 +452,8 @@ export async function loadOblioAccountData(
   companies: { cif: string; name: string }[];
   series: { type: string; name: string; default: boolean }[];
   vatRates: { name: string; percent: number; default: boolean }[];
+  /* Gol = contul n-are stocuri. Vezi nota de la `OblioConfig.management`. */
+  management: { name: string; tip: string }[];
   firstCif: string;
 } | { error: string }> {
   try {
@@ -439,15 +464,19 @@ export async function loadOblioAccountData(
     if (!companies.length) return { error: "Nicio firma gasita in contul Oblio" };
 
     const firstCif = companies[0].cif;
-    const [series, vatRates] = await Promise.all([
+    const [series, vatRates, management] = await Promise.all([
       getSeries(token, firstCif),
       getVatRates(token, firstCif),
+      /* Nu are voie sa pice tot pasul de conectare. Vezi geamana ei din
+         `loadOblioSeriesForCif`. */
+      getManagement(token, firstCif).catch(() => [] as Awaited<ReturnType<typeof getManagement>>),
     ]);
 
     return {
       companies: companies.map(c => ({ cif: c.cif, name: c.company })),
       series: series.map(s => ({ type: s.type, name: s.name, default: s.default })),
       vatRates: vatRates.map(v => ({ name: v.name, percent: v.percent, default: v.default })),
+      management: management.map(m => ({ name: m.management, tip: m.managementType })),
       firstCif,
     };
   } catch (e) {
@@ -463,18 +492,35 @@ export async function loadOblioSeriesForCif(
 ): Promise<{
   series: { type: string; name: string; default: boolean }[];
   vatRates: { name: string; percent: number; default: boolean }[];
+  /*
+    ⚠ GESTIUNILE VIN IN ACELASI APEL, dinadins. Formularul le cere in aceeasi
+    clipa in care afla seriile — cand omul alege firma — deci un al doilea drum
+    dus-intors n-ar cumpara nimic si ar mai adauga o cale care poate cadea singura.
+
+    ⚠ LISTA GOALA E UN RASPUNS, NU O EROARE: inseamna „contul n-are stocuri", iar
+    formularul nu arata deloc campul. Vezi nota de la `OblioConfig.management`.
+  */
+  management: { name: string; tip: string }[];
 } | { error: string }> {
   try {
     const secret = await secretDinConfig(businessId, "oblio_config", "client_secret", clientSecret);
     if (!secret) return { error: "Completeaza tokenul secret Oblio." };
     const token = await getOblioToken(clientId, secret);
-    const [series, vatRates] = await Promise.all([
+    const [series, vatRates, management] = await Promise.all([
       getSeries(token, cif),
       getVatRates(token, cif),
+      /*
+        ⚠ Nomenclatorul de gestiuni NU are voie sa pice tot pasul. Conturile fara
+        stocuri raspund gol, dar unele planuri il pot refuza cu totul — iar atunci
+        omul ar ramane fara serii si fara cote, adica fara sa poata configura
+        nimic, din cauza unui camp care poate sa nici nu i se aplice.
+      */
+      getManagement(token, cif).catch(() => [] as Awaited<ReturnType<typeof getManagement>>),
     ]);
     return {
       series: series.map(s => ({ type: s.type, name: s.name, default: s.default })),
       vatRates: vatRates.map(v => ({ name: v.name, percent: v.percent, default: v.default })),
+      management: management.map(m => ({ name: m.management, tip: m.managementType })),
     };
   } catch (e) {
     return { error: (e as Error).message };

@@ -23,6 +23,26 @@ export type OblioConfig = {
   due_days?: number;
   // Trimite automat factura in SPV (e-Factura) daca contul Oblio e configurat.
   send_to_spv?: boolean;
+  /*
+    ⚠ GESTIUNEA DIN CARE IES PRODUSELE. Obligatorie pentru conturile Oblio care au
+    STOCURI pornite, si numai pentru liniile stocabile (`product_type` „Marfa").
+
+    ⚠ FARA EA, FACTURA E REFUZATA — nu partial, ci in intregime. Masurat pe
+    VetDepo, 01.09.2026: patru incercari intre 11.08 si 01.09, toate patru cazute
+    cu acelasi mesaj, „Produsul X nu are Gestiune (parametrul `management`)".
+    ZERO facturi emise vreodata. Iar integrarea aparea „conectata": acreditarile
+    erau bune, compania se citea, seria se citea. Doar documentul nu putea pleca.
+
+    Documentatia lor (oblio.eu/api) spune ca parametrul „este valabil doar dupa
+    activarea stocurilor pentru produse stocabile (nu este valabil pentru
+    servicii)" si NU il marcheaza obligatoriu — ceea ce e adevarat pentru
+    conturile fara stocuri si inselator pentru cele cu.
+
+    ⚠ SE LASA GOALA PENTRU CONTURILE FARA STOCURI. Acolo nomenclatorul intoarce
+    lista goala, campul nu se arata in formular, si nu se trimite nimic — exact
+    purtarea de pana acum, care mergea pentru celelalte doua magazine.
+  */
+  management?: string;
 };
 
 export type OblioCompany = {
@@ -45,6 +65,19 @@ export type OblioVatRate = {
   default: boolean;
 };
 
+/**
+ * O gestiune din contul Oblio.
+ *
+ * Nomenclatorul intoarce LISTA GOALA pentru conturile fara stocuri — asa se
+ * deosebeste un cont care are nevoie de `management` de unul caruia campul nu i
+ * se aplica. Nu e o eroare, e raspunsul corect.
+ */
+export type OblioManagement = {
+  management: string;
+  workStation: string;
+  managementType: string;
+};
+
 export type OblioDocResult = {
   seriesName: string;
   number: string;
@@ -61,6 +94,12 @@ export type OblioProduct = {
   vatIncluded?: 0 | 1;
   quantity?: number;
   productType?: string;
+  /*
+    ⚠ Se pune DOAR pe liniile stocabile. Pe „Serviciu" (transport, ajustare de
+    rotunjire) Oblio il ignora oricum, iar trimiterea lui acolo n-ar strica
+    nimic — dar l-am lasa in cod ca pe o afirmatie falsa despre ce e linia aia.
+  */
+  management?: string;
   save?: 0 | 1;
   // Discount fields
   discount?: number;
@@ -210,6 +249,13 @@ export async function getSeries(token: string, cif: string): Promise<OblioSeries
 
 export async function getVatRates(token: string, cif: string): Promise<OblioVatRate[]> {
   return oblioReq<OblioVatRate[]>(token, "GET", "/api/nomenclature/vat_rates", undefined, { cif });
+}
+
+/**
+ * Gestiunile contului. Lista goala inseamna „contul n-are stocuri", nu o eroare.
+ */
+export async function getManagement(token: string, cif: string): Promise<OblioManagement[]> {
+  return oblioReq<OblioManagement[]>(token, "GET", "/api/nomenclature/management", undefined, { cif });
 }
 
 // ─── Documente ────────────────────────────────────────────────────────────────

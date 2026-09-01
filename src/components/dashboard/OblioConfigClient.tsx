@@ -18,6 +18,8 @@ type AccountData = {
   companies: { cif: string; name: string }[];
   series: { type: string; name: string; default: boolean }[];
   vatRates: { name: string; percent: number; default: boolean }[];
+  /* Gol = contul n-are stocuri. Atunci campul de gestiune nici nu se arata. */
+  management: { name: string; tip: string }[];
 };
 
 export default function OblioConfigClient({
@@ -34,6 +36,7 @@ export default function OblioConfigClient({
   const [companyName, setCompanyName] = useState(initialConfig?.company_name ?? "");
   const [seriesInvoice, setSeriesInvoice] = useState(initialConfig?.series_invoice ?? "");
   const [seriesProforma, setSeriesProforma] = useState(initialConfig?.series_proforma ?? "");
+  const [management, setManagement] = useState(initialConfig?.management ?? "");
   const [vatName, setVatName] = useState(initialConfig?.vat_name ?? "Normala");
   const [vatPercentage, setVatPercentage] = useState(initialConfig?.vat_percentage ?? 19);
   const [autoInvoice, setAutoInvoice] = useState(initialConfig?.auto_invoice ?? false);
@@ -53,6 +56,8 @@ export default function OblioConfigClient({
   const isConnected = !!(initialConfig?.client_id && initialConfig?.cif);
   const invoiceSeries = accountData?.series.filter(s => s.type === "Factura") ?? [];
   const proformaSeries = accountData?.series.filter(s => s.type === "Proforma") ?? [];
+  /* Gol = contul n-are stocuri; atunci campul nu se arata deloc. */
+  const gestiuni = accountData?.management ?? [];
 
   function handleLoad() {
     if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu email-ul si secretul contului Oblio"); return; }
@@ -81,6 +86,7 @@ export default function OblioConfigClient({
       // Auto-select default VAT rate
       const defVat = result.vatRates.find(v => v.default);
       if (defVat) { setVatName(defVat.name); setVatPercentage(defVat.percent); }
+      if (result.management.length === 1 && !management) setManagement(result.management[0].name);
       toast.success(`Conexiune reusita! ${result.companies.length} ${result.companies.length === 1 ? "firma" : "firme"} gasite.`);
     });
   }
@@ -94,7 +100,13 @@ export default function OblioConfigClient({
     startLoadCifTransition(async () => {
       const result = await loadOblioSeriesForCif(businessId, clientId, clientSecret, newCif);
       if ("error" in result) { toast.error(result.error); return; }
-      setAccountData(prev => prev ? { ...prev, series: result.series, vatRates: result.vatRates } : prev);
+      setAccountData(prev => prev ? { ...prev, series: result.series, vatRates: result.vatRates, management: result.management } : prev);
+      /*
+        O singura gestiune inseamna ca nu exista nimic de ales — se pune singura.
+        Cu mai multe, alege omul: nu ghicim din care gestiune isi scoate marfa.
+      */
+      if (result.management.length === 1) setManagement(result.management[0].name);
+      else if (!result.management.some(m => m.name === management)) setManagement("");
       const defInvoice = result.series.find(s => s.type === "Factura" && s.default);
       if (defInvoice) setSeriesInvoice(defInvoice.name);
       const defProforma = result.series.find(s => s.type === "Proforma" && s.default);
@@ -108,6 +120,22 @@ export default function OblioConfigClient({
     if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu credentialele Oblio"); return; }
     if (!cif) { toast.error("Selecteaza firma"); return; }
     if (!seriesInvoice) { toast.error("Selecteaza seria pentru factura"); return; }
+    /*
+      ⚠ PAZA CARE LIPSEA, SI CARE A COSTAT TREI SAPTAMANI. Un cont Oblio cu stocuri
+      refuza ORICE factura fara gestiune. Pana acum formularul se salva multumit,
+      integrarea aparea configurata, si abia la prima comanda pica documentul — in
+      lista de operatii, unde nu se uita nimeni.
+
+      Masurat pe VetDepo: patru facturi intre 11.08 si 01.09.2026, toate patru
+      refuzate cu acelasi mesaj, zero emise.
+
+      Daca nomenclatorul a intors gestiuni, contul ARE stocuri si campul e
+      obligatoriu. Daca a intors gol, conditia nici nu se aprinde.
+    */
+    if (gestiuni.length > 0 && !management) {
+      toast.error("Contul tau Oblio are gestiuni. Alege din care iese marfa, altfel facturile vor fi refuzate.");
+      return;
+    }
 
     const config: OblioConfig = {
       enabled,
@@ -119,6 +147,7 @@ export default function OblioConfigClient({
       series_proforma: seriesProforma,
       vat_name: vatName,
       vat_percentage: vatPercentage,
+      ...(management ? { management } : {}),
       auto_invoice: autoInvoice,
       auto_invoice_trigger: autoInvoiceTrigger,
       product_type: productType,
@@ -263,6 +292,35 @@ export default function OblioConfigClient({
                 <Input type="text" value={seriesInvoice} onChange={e => setSeriesInvoice(e.target.value)} placeholder="ex: FCT" />
               )}
             </div>
+
+            {/*
+              Gestiunea. ⚠ SE ARATA DOAR CAND CONTUL ARE STOCURI — nomenclatorul
+              intoarce lista goala altfel, si atunci campul n-ar avea niciun
+              inteles pentru om. Un camp gol pe care nu-l poate completa nimeni e
+              mai rau decat niciun camp.
+            */}
+            {gestiuni.length > 0 && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Gestiune *</label>
+                <select
+                  aria-label="Gestiune"
+                  value={management}
+                  onChange={e => setManagement(e.target.value)}
+                  className={selectCls}
+                >
+                  <option value="">-- Selecteaza --</option>
+                  {gestiuni.map(gest => (
+                    <option key={gest.name} value={gest.name}>
+                      {gest.name}{gest.tip ? ` (${gest.tip})` : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Contul tau Oblio are stocuri, deci fiecare factura trebuie sa spuna din ce
+                  gestiune iese marfa. Fara ea, Oblio refuza documentul.
+                </p>
+              </div>
+            )}
 
             {/* Proforma series */}
             <div>

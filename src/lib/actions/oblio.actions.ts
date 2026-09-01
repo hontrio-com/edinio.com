@@ -12,6 +12,7 @@ import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/regi
 import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
+import { pastreazaGestiunea } from "@/lib/oblio-stare";
 import { liniiOblio, mesajRefuz, pretDeDocument, reconciliazaComanda } from "@/lib/billing/reconcile";
 
 import { invoiceParty } from "@/lib/billing/invoice-party";
@@ -425,7 +426,27 @@ export async function saveOblioConfig(
   // Proprietatea magazinului e dovedita mai sus. Vezi src/lib/integrari/secrete.ts.
   const { data: vechi } = await createAdminClient()
     .from("store_settings").select("oblio_config").eq("business_id", businessId).maybeSingle();
-  const configFinal = pastreazaSecretele("oblio_config", config, vechi?.oblio_config);
+  const configSecrete = pastreazaSecretele("oblio_config", config, vechi?.oblio_config);
+
+  /*
+    ⚠ GESTIUNEA ABSENTA SE PASTREAZA, NU SE STERGE. Fara randul asta, o resalvare
+    obisnuita o rade — si asta chiar s-a intamplat, in productie, dupa ce campul
+    era deja desfasurat:
+
+      formularul arata campul doar daca a citit nomenclatorul, iar nomenclatorul
+      se citea doar la apasarea butonului „Testeaza si incarca date". Cine
+      deschidea pagina si apasa direct „Salveaza" trimitea un config FARA
+      `management`, si gestiunea salvata inainte disparea. Masurat pe VetDepo:
+      salvare la 10:19:40 UTC, dupa desfasurare, tot fara cheie.
+
+    Pagina cere acum nomenclatorul si singura, la deschidere (vezi `useEffect`-ul
+    din OblioConfigClient) — dar aia e o reparatie in browser, si browserul poate
+    esua. Asta e plasa de pe server, unde nu poate fi ocolita.
+
+    ⚠ NU BLOCHEAZA STERGEREA INTENTIONATA: `disconnectOblio` sterge tot configul,
+    nu trece pe aici. Iar un cont fara stocuri n-are gestiune de pierdut.
+  */
+  const configFinal = pastreazaGestiunea(configSecrete, vechi?.oblio_config as OblioConfig | null);
 
   const { error } = await supabase.from("store_settings").update({
     oblio_config: configFinal as unknown as import("@/types/database.types").Json,
@@ -461,8 +482,9 @@ export async function loadOblioAccountData(
   companies: { cif: string; name: string }[];
   series: { type: string; name: string; default: boolean }[];
   vatRates: { name: string; percent: number; default: boolean }[];
-  /* Gol = contul n-are stocuri. Vezi nota de la `OblioConfig.management`. */
-  management: { name: string; tip: string }[];
+  /* ⚠ TREI INTELESURI: `null` = n-am putut intreba, `[]` = contul n-are stocuri,
+     lista = are. Vezi `ListaGestiuni` in src/lib/oblio-stare.ts. */
+  management: { name: string; tip: string }[] | null;
   firstCif: string;
 } | { error: string }> {
   try {
@@ -478,14 +500,14 @@ export async function loadOblioAccountData(
       getVatRates(token, firstCif),
       /* Nu are voie sa pice tot pasul de conectare. Vezi geamana ei din
          `loadOblioSeriesForCif`. */
-      getManagement(token, firstCif).catch(() => [] as Awaited<ReturnType<typeof getManagement>>),
+      getManagement(token, firstCif).catch(() => null),
     ]);
 
     return {
       companies: companies.map(c => ({ cif: c.cif, name: c.company })),
       series: series.map(s => ({ type: s.type, name: s.name, default: s.default })),
       vatRates: vatRates.map(v => ({ name: v.name, percent: v.percent, default: v.default })),
-      management: management.map(m => ({ name: m.management, tip: m.managementType })),
+      management: management ? management.map(m => ({ name: m.management, tip: m.managementType })) : null,
       firstCif,
     };
   } catch (e) {
@@ -508,8 +530,13 @@ export async function loadOblioSeriesForCif(
 
     ⚠ LISTA GOALA E UN RASPUNS, NU O EROARE: inseamna „contul n-are stocuri", iar
     formularul nu arata deloc campul. Vezi nota de la `OblioConfig.management`.
+
+    ⚠ SI `null` E AL TREILEA INTELES: „n-am putut intreba". Pana acum un refuz al
+    nomenclatorului se intorcea ca lista goala, adica exact ca „n-are stocuri" —
+    si atunci formularul stergea tacut gestiunea aleasa si salva fara ea. Vezi
+    `ListaGestiuni` in src/lib/oblio-stare.ts.
   */
-  management: { name: string; tip: string }[];
+  management: { name: string; tip: string }[] | null;
 } | { error: string }> {
   try {
     const secret = await secretDinConfig(businessId, "oblio_config", "client_secret", clientSecret);
@@ -524,12 +551,12 @@ export async function loadOblioSeriesForCif(
         omul ar ramane fara serii si fara cote, adica fara sa poata configura
         nimic, din cauza unui camp care poate sa nici nu i se aplice.
       */
-      getManagement(token, cif).catch(() => [] as Awaited<ReturnType<typeof getManagement>>),
+      getManagement(token, cif).catch(() => null),
     ]);
     return {
       series: series.map(s => ({ type: s.type, name: s.name, default: s.default })),
       vatRates: vatRates.map(v => ({ name: v.name, percent: v.percent, default: v.default })),
-      management: management.map(m => ({ name: m.management, tip: m.managementType })),
+      management: management ? management.map(m => ({ name: m.management, tip: m.managementType })) : null,
     };
   } catch (e) {
     return { error: (e as Error).message };

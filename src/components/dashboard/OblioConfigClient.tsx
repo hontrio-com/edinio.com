@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Loader2, Plug, PlugZap, RefreshCw, Info, CheckCircle, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
@@ -14,13 +14,16 @@ import { Panel } from "@/components/ui/panel";
 import { Callout } from "@/components/ui/callout";
 import { selectCls } from "@/lib/ui";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
+import { alegeGestiunea, gestiuneaECeruta, stareOblio, type ListaGestiuni } from "@/lib/oblio-stare";
 
 type AccountData = {
   companies: { cif: string; name: string }[];
   series: { type: string; name: string; default: boolean }[];
   vatRates: { name: string; percent: number; default: boolean }[];
-  /* Gol = contul n-are stocuri. Atunci campul de gestiune nici nu se arata. */
-  management: { name: string; tip: string }[];
+  /* ⚠ `null` = n-am putut intreba, `[]` = contul n-are stocuri, lista = are.
+     Vezi `ListaGestiuni` in src/lib/oblio-stare.ts — deosebirea asta e chiar
+     defectul reparat pe 01.09.2026. */
+  management: ListaGestiuni;
 };
 
 export default function OblioConfigClient({
@@ -57,8 +60,10 @@ export default function OblioConfigClient({
   const isConnected = !!(initialConfig?.client_id && initialConfig?.cif);
   const invoiceSeries = accountData?.series.filter(s => s.type === "Factura") ?? [];
   const proformaSeries = accountData?.series.filter(s => s.type === "Proforma") ?? [];
-  /* Gol = contul n-are stocuri; atunci campul nu se arata deloc. */
-  const gestiuni = accountData?.management ?? [];
+  /* ⚠ `null` cat timp n-am intrebat inca sau intrebarea a picat. NU se
+     prefacere in `[]`: aia ar insemna „contul n-are stocuri", si tocmai
+     confuzia asta lasa integrarea sa se salveze fara gestiune. */
+  const gestiuni: ListaGestiuni = accountData ? accountData.management : null;
 
   /*
     ═══ ⚠ CE VEDE OMUL DESPRE STAREA INTEGRARII ═══
@@ -80,8 +85,49 @@ export default function OblioConfigClient({
     starea lui devine vizibila, iar salvarea unei configuratii complete cu el
     stins nu mai trece in tacere.
   */
-  const complet = !!(clientId && cif && seriesInvoice);
-  const activ = complet && enabled;
+  const { complet, activ, lipsesteGestiunea, poateSalva } = stareOblio({
+    clientId, cif, seriesInvoice, enabled, management, gestiuni,
+  });
+
+  /*
+    ═══ ⚠ NOMENCLATORUL SE CERE LA DESCHIDEREA PAGINII ═══
+
+    ⚠ FARA EFECTUL ASTA, TOATA REPARATIA DE GESTIUNE E MOARTA. `accountData`
+    pornea `null` si se umplea DOAR la apasarea butonului „Testeaza si incarca
+    date". Cine deschidea pagina unei integrari deja configurate si apasa direct
+    „Salveaza" nu vedea campul de gestiune (se arata doar cand lista e negoala),
+    nu declansa validarea, si trimitea un config fara `management`.
+
+    Masurat: campul a fost desfasurat, si VetDepo tot a salvat fara gestiune la
+    10:19:40 UTC. Codul era in productie si nu schimba nimic pe calea umblata.
+
+    ⚠ RULEAZA O SINGURA DATA, si numai cand exista deja acreditari salvate.
+    `pornit` opreste a doua rulare: fara el, `cif` se schimba din raspuns si
+    efectul s-ar rechema singur. Nu se cere nimic pentru o integrare noua — acolo
+    omul apasa oricum butonul de test.
+
+    ⚠ UN ESEC AICI NU STRICA NIMIC: `management` ramane `null` („n-am putut
+    intreba"), campul nu se arata, alegerea salvata nu se sterge, si pe server
+    gestiunea veche se pastreaza oricum. Vezi `saveOblioConfig`.
+  */
+  const pornit = useRef(false);
+  useEffect(() => {
+    if (pornit.current || !isConnected || !initialConfig?.cif) return;
+    pornit.current = true;
+    startLoadCifTransition(async () => {
+      const r = await loadOblioSeriesForCif(
+        businessId, initialConfig.client_id, PLACEHOLDER_SECRET_SALVAT, initialConfig.cif,
+      );
+      if ("error" in r) return; // tacut: pagina ramane exact cum era
+      setAccountData(prev => ({
+        companies: prev?.companies ?? [{ cif: initialConfig.cif, name: initialConfig.company_name ?? "" }],
+        series: r.series,
+        vatRates: r.vatRates,
+        management: r.management,
+      }));
+      setManagement(m => alegeGestiunea(r.management, m));
+    });
+  }, [businessId, isConnected, initialConfig]);
 
   function handleLoad() {
     if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu email-ul si secretul contului Oblio"); return; }
@@ -110,7 +156,7 @@ export default function OblioConfigClient({
       // Auto-select default VAT rate
       const defVat = result.vatRates.find(v => v.default);
       if (defVat) { setVatName(defVat.name); setVatPercentage(defVat.percent); }
-      if (result.management.length === 1 && !management) setManagement(result.management[0].name);
+      setManagement(m => alegeGestiunea(result.management, m));
       toast.success(`Conexiune reusita! ${result.companies.length} ${result.companies.length === 1 ? "firma" : "firme"} gasite.`);
     });
   }
@@ -129,8 +175,14 @@ export default function OblioConfigClient({
         O singura gestiune inseamna ca nu exista nimic de ales — se pune singura.
         Cu mai multe, alege omul: nu ghicim din care gestiune isi scoate marfa.
       */
-      if (result.management.length === 1) setManagement(result.management[0].name);
-      else if (!result.management.some(m => m.name === management)) setManagement("");
+      /*
+        ⚠ AICI SE STERGEA GESTIUNEA. Randul vechi era
+        `else if (!result.management.some(...)) setManagement("")` — deci o lista
+        goala, fie ea „contul n-are stocuri" fie un nomenclator cazut inghitit de
+        `catch`, golea alegerea salvata. `alegeGestiunea` nu sterge niciodata pe
+        gol; vezi src/lib/oblio-stare.ts.
+      */
+      setManagement(m => alegeGestiunea(result.management, m));
       const defInvoice = result.series.find(s => s.type === "Factura" && s.default);
       if (defInvoice) setSeriesInvoice(defInvoice.name);
       const defProforma = result.series.find(s => s.type === "Proforma" && s.default);
@@ -165,7 +217,7 @@ export default function OblioConfigClient({
         "Datele se salveaza, dar integrarea ramane OPRITA. Porneste comutatorul Activat ca sa poti emite facturi.",
       );
     }
-    if (gestiuni.length > 0 && !management) {
+    if (!poateSalva) {
       toast.error("Contul tau Oblio are gestiuni. Alege din care iese marfa, altfel facturile vor fi refuzate.");
       return;
     }
@@ -217,6 +269,18 @@ export default function OblioConfigClient({
         {activ ? (
           <Callout variant="success" icon={CheckCircle} title="Oblio activ">
             Facturile se pot emite din pagina Comenzi.
+          </Callout>
+        ) : lipsesteGestiunea ? (
+          /*
+            ⚠ CAZUL CARE MINTEA. `complet` nu numara gestiunea, asa ca pentru un
+            cont cu stocuri si fara gestiune aleasa se aprindea caseta VERDE
+            „Facturile se pot emite" — pentru un cont caruia Oblio ii refuza
+            fiecare factura. Masurat pe VetDepo: patru refuzuri, caseta verde.
+          */
+          <Callout variant="warning" icon={AlertTriangle} title="Mai lipseste gestiunea">
+            Contul tau Oblio are stocuri, deci fiecare factura trebuie sa spuna din ce gestiune iese
+            marfa. Alege <strong>Gestiune</strong> mai jos si salveaza — pana atunci Oblio refuza
+            documentele, chiar daca restul e configurat.
           </Callout>
         ) : complet ? (
           <Callout variant="warning" icon={AlertTriangle} title="Oblio configurat, dar OPRIT">
@@ -343,7 +407,7 @@ export default function OblioConfigClient({
               inteles pentru om. Un camp gol pe care nu-l poate completa nimeni e
               mai rau decat niciun camp.
             */}
-            {gestiuni.length > 0 && (
+            {gestiuneaECeruta(gestiuni) && (
               <div>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">Gestiune *</label>
                 <select

@@ -83,22 +83,53 @@ test("gestiunea ajunge pe liniile de MARFA, si numai pe ele", () => {
   assert.match(cod, /config\.management\?\.trim\(\)/, "gestiunea nu mai vine din configuratie");
 });
 
-test("formularul nu lasa un cont cu stocuri sa se salveze fara gestiune", () => {
+test("formularul FOLOSESTE hotararile probate, nu si le rescrie pe ale lui", () => {
   /*
-    ⚠ ASTA E PAZA CARE LIPSEA. Pana acum formularul se salva multumit, iar
-    refuzul aparea abia la prima comanda — intr-un loc pe care nu-l vede nimeni.
-    Acum omul afla in clipa in care apasa Salveaza.
+    ⚠ PROBA ASTA S-A SCHIMBAT DUPA CE A FOST PUSA LA INCERCARE, SI E BINE SA SE
+    STIE DE CE. In forma veche cerea sa existe textul `gestiuni.length > 0 &&
+    !management` in componenta. Confruntata cu defectul, a trecut VERDE pentru:
+
+        - `return;`-ul de dupa `toast.error` sters, deci salvarea continua
+        - conditia inconjurata cu `if (false && ...)`
+        - campul randat cu `hidden`
+        - lista luata din `accountData.vatRates` in loc de `.management`
+
+    Adica pazea forma, nu regula. Regula s-a mutat in `src/lib/oblio-stare.ts`, si
+    acolo e probata prin CHEMARE, in `oblio-stare.test.ts`: noua mutatii, noua
+    prinse. Aici a ramas doar ce nu se poate chema fara React — legatura.
+
+    ⚠ CE PAZESTE DECI RANDUL DE MAI JOS: ca legatura exista. Nu ca ea opreste ceva
+    — aia se dovedeste in cealalta plasa.
   */
   const cod = faraComentarii(FORMULAR);
+  assert.match(cod, /from "@\/lib\/oblio-stare"/, "componenta nu mai foloseste hotararile comune");
+  assert.match(cod, /stareOblio\(\{/, "starea nu mai vine din `stareOblio`");
+  /*
+    ⚠ CELE DOUA TREBUIE SA FIE ACELASI RAND, NU DOUA RANDURI CARE EXISTA AMANDOUA.
+    Prima forma a randului asta era `assert.match(cod, /return;/)` — care se
+    potriveste cu ORICE `return;` din tot fisierul, deci trecea verde si cu
+    oprirea stearsa. Exact greseala pe care proba asta o povesteste mai sus, si
+    am facut-o din nou, la trei randuri sub ea. Acum `return;`-ul se cere INAUNTRU.
+  */
   assert.match(
     cod,
-    /gestiuni\.length > 0 && !management/,
-    "s-a pierdut oprirea salvarii cand contul are gestiuni si nu s-a ales niciuna",
+    /if \(!poateSalva\) \{[\s\S]{0,300}?return;[\s\S]{0,40}?\}/,
+    "salvarea nu se mai opreste cand `poateSalva` e fals",
   );
-  assert.match(
+  assert.match(cod, /management \? \{ management \}/, "gestiunea nu mai ajunge in configuratia salvata");
+});
+
+test("componenta nu-si rescrie regula pe langa cea probata", () => {
+  /*
+    ⚠ IMPOTRIVA DERIVEI. Daca cineva pune la loc un `gestiuni.length > 0` in
+    componenta, ajung doua reguli care spun acelasi lucru — si care se pot
+    desparti fara ca nimic sa cada. Regula are voie sa existe intr-un singur loc.
+  */
+  const cod = faraComentarii(FORMULAR);
+  assert.doesNotMatch(
     cod,
-    /management \? \{ management \}/,
-    "gestiunea nu mai ajunge in configuratia salvata",
+    /gestiuni\.length\s*[><=]/,
+    "regula despre gestiuni s-a intors in componenta, pe langa `gestiuneaECeruta`",
   );
 });
 
@@ -107,9 +138,38 @@ test("campul se arata DOAR cand contul are stocuri", () => {
     Un camp obligatoriu, gol, pe care omul n-are cum sa-l completeze — fiindca
     firma lui n-are gestiuni — ar fi mai rau decat lipsa lui. Conturile fara
     stocuri trebuie sa vada exact formularul de dinainte.
+
+    ⚠ Cele trei intelesuri ale listei (nestiut / fara stocuri / cu stocuri) sunt
+    probate prin chemare in `oblio-stare.test.ts`. Aici doar ca randarea le
+    intreaba pe ele.
   */
   const cod = faraComentarii(FORMULAR);
-  assert.match(cod, /\{gestiuni\.length > 0 && \(/, "campul de gestiune nu mai e ascuns pentru conturile fara stocuri");
+  assert.match(cod, /\{gestiuneaECeruta\(gestiuni\) && \(/, "campul nu mai intreaba `gestiuneaECeruta`");
+});
+
+test("pagina cere nomenclatorul si singura, la deschidere", () => {
+  /*
+    ⚠ FARA ASTA TOATA REPARATIA E MOARTA, si chiar a fost: campul era desfasurat
+    in productie si VetDepo tot a salvat fara gestiune, fiindca `accountData` se
+    umplea DOAR la apasarea butonului „Testeaza si incarca date". Cine deschidea
+    pagina si apasa direct Salveaza nu vedea campul si nu declansa validarea.
+  */
+  const cod = faraComentarii(FORMULAR);
+  assert.match(cod, /useEffect\(/, "nu se mai cere nimic la deschiderea paginii");
+  assert.match(
+    cod,
+    /useEffect\([\s\S]{0,600}?loadOblioSeriesForCif\(/,
+    "efectul de la montare nu mai cere nomenclatorul",
+  );
+});
+
+test("serverul pastreaza gestiunea chiar daca browserul n-o trimite", () => {
+  /*
+    Plasa care nu poate fi ocolita din browser. Purtarea ei e probata prin chemare
+    in `oblio-stare.test.ts`; aici doar ca salvarea trece prin ea.
+  */
+  const cod = faraComentarii(ACTIUNI);
+  assert.match(cod, /pastreazaGestiunea\(configSecrete, /, "salvarea nu mai trece prin `pastreazaGestiunea`");
 });
 
 test("nomenclatorul de gestiuni nu are voie sa pice pasul de conectare", () => {

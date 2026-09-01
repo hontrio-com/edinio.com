@@ -22,10 +22,16 @@ import { faraUrmarire } from "@/lib/platform/fara-urmarire";
   ⚠ SI UN SINGUR OBSERVATOR pentru sectiuni, nu cate unul pe element.
 
   ⚠ NIMIC NU RULEAZA IN BUCLA. Fara ascultatori pe `scroll` la fiecare cadru, fara
-  `mousemove`, fara `MutationObserver`. Adancimea derularii se masoara tot cu
+  `mousemove`, fara sondaje. Adancimea derularii se masoara tot cu
   `IntersectionObserver`, pe patru repere invizibile — deci browserul face treaba,
   nu noi. Auditul de performanta al site-ului e incheiat si n-are voie sa se
   strice din cauza masuratorii.
+
+  ⚠ EXISTA UN SINGUR `MutationObserver`, si numai pe elementul `<title>`, numai
+  intre o navigare si clipa in care titlul se schimba. Randul asta a scris intai
+  „fara MutationObserver" — a devenit fals in aceeasi ora, cand am aflat ca titlul
+  vine cu 855 ms intarziere. Vezi nota de la `page_view`. Se opreste singur si nu
+  urmareste nimic altceva din document.
 */
 
 const PRAGURI: ReadonlyArray<25 | 50 | 75 | 90> = [25, 50, 75, 90];
@@ -58,13 +64,44 @@ export function RuntimeMarketing() {
       paginile pe sesiune devin false, tacut.
     */
     if (calePrecedenta.current === cale) return;
+    const eNavigare = calePrecedenta.current !== null;
     calePrecedenta.current = cale;
 
-    urmareste({
+    const trage = () => urmareste({
       name: "page_view",
       page_location: window.location.href,
       page_title: document.title,
     });
+
+    /*
+      ═══ ⚠ LA PRIMA INCARCARE TITLUL E DEJA ACOLO. LA NAVIGARE, NU. ═══
+
+      Masurat in productie pe 01.09.2026: dupa o navigare fara reincarcare de
+      document, `document.title` s-a schimbat abia dupa 855 ms. Next il pune prin
+      metadate, asincron, dupa randare.
+
+      Prima forma a randului asta trimitea `document.title` pe loc — deci in GA4
+      TOATE paginile in afara de prima ar fi avut titlul GOL. Raportul „Pages" ar
+      fi aratat un rand mare, fara nume, si nimic n-ar fi cazut.
+
+      ⚠ SI NU SE REPARA CU O INTARZIERE FIXA: 855 ms azi, pe o pagina, pe reteaua
+      mea. Un numar ales din burta ar fi mers uneori. Se asteapta EVENIMENTUL —
+      schimbarea chiar a elementului `<title>` — cu un plafon peste care se trage
+      oricum, ca sa nu pierdem vizualizarea daca titlul nu se mai schimba deloc
+      (doua rute cu acelasi titlu, de pilda).
+    */
+    if (!eNavigare) { trage(); return; }
+
+    const titlu = document.querySelector("title");
+    if (!titlu) { trage(); return; }
+
+    let tras = false;
+    const odata = () => { if (!tras) { tras = true; obs.disconnect(); clearTimeout(ceas); trage(); } };
+    const obs = new MutationObserver(odata);
+    obs.observe(titlu, { childList: true, characterData: true, subtree: true });
+    const ceas = setTimeout(odata, 2000);
+
+    return () => { obs.disconnect(); clearTimeout(ceas); };
   }, [cale]);
 
   /* ── Un singur ascultator de clic, delegat ───────────────────────────── */

@@ -787,7 +787,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         smartship_locker_net: courierSelection?.smartshipLockerNet,
         additional_items: allAdditional.length > 0 ? allAdditional : undefined,
         accepted_offer_ids: acceptedOfferIds.length > 0 ? acceptedOfferIds : undefined,
-        source: getAttribution() ?? undefined,
+        source: getAttribution(business.basePath) ?? undefined,
       };
       const payloadKey = JSON.stringify(payload);
       let orderId = placedRef.current?.payloadKey === payloadKey ? placedRef.current.orderId : null;

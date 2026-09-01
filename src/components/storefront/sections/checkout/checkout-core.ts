@@ -528,7 +528,7 @@ export function useCheckoutOrder({
         dhl_product_name: courierSelection?.dhlProductName,
         dhl_local_product_code: courierSelection?.dhlLocalProductCode,
         smartship_locker_net: courierSelection?.smartshipLockerNet,
-        source: getAttribution() ?? undefined,
+        source: getAttribution(basePath) ?? undefined,
       };
       // Cheia de reluare e payload-ul INTREG, metoda de plata inclusa.
       //

@@ -134,7 +134,7 @@ export default async function StoreLayout({ children, params }: Props) {
   return (
     <>
       <DoarInMagazinReal>
-        <AttributionCapture />
+        <AttributionCapture basePath={basePath} />
         {fbPixelId && (
           <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><FacebookPixel pixelId={fbPixelId} /></ConsentGate>
         )}

@@ -74,7 +74,7 @@ export default async function EticheteBlogPage({ params, searchParams }: Props) 
         }
       />
 
-      <section className="mx-auto max-w-[1140px] px-5 pb-20">
+      <section className="mx-auto max-w-[1200px] px-5 pt-10 pb-20 sm:px-6 lg:px-8 lg:pt-14">
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {articole.map((a, i) => (
             <CardArticol key={a.id} articol={a} prioritar={i === 0} />

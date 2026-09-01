@@ -74,7 +74,7 @@ export default async function CautareBlogPage({ searchParams }: Props) {
         }
       />
 
-      <section className="mx-auto max-w-[1140px] px-5 pb-20">
+      <section className="mx-auto max-w-[1200px] px-5 pt-10 pb-20 sm:px-6 lg:px-8 lg:pt-14">
         <div className="mb-8 flex justify-center">
           <CautareBlog initial={cautat} />
         </div>

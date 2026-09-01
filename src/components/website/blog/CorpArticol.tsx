@@ -73,7 +73,7 @@ export async function CorpArticol({ a }: { a: ArticolIntreg }) {
         lead={a.excerpt ?? undefined}
       />
 
-      <article className="mx-auto max-w-[1140px] px-5 pb-20">
+      <article className="mx-auto max-w-[1200px] px-5 pt-10 pb-20 sm:px-6 lg:px-8 lg:pt-14">
         {/* Rândul de sub titlu: cine a scris, când, cât durează. Semnale de
             încredere pentru cititor, și de prospețime pentru motoare. */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-hairline pb-6 text-[13.5px] text-ink-2">
@@ -104,11 +104,17 @@ export async function CorpArticol({ a }: { a: ArticolIntreg }) {
         {a.cover_url && (
           <div className="relative mt-8 aspect-[16/7] w-full overflow-hidden rounded-2xl bg-tint">
             <Image src={a.cover_url} alt={a.cover_alt ?? ""} fill priority
-              sizes="(max-width: 1140px) 100vw, 1100px" className="object-cover" />
+              sizes="(max-width: 1200px) 100vw, 1136px" className="object-cover" />
           </div>
         )}
 
-        <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_240px]">
+        {/*
+          ⚠ `lg:gap-x-16` NU e cosmetica: containerul s-a latit de la 1140 la 1200
+          ca sa se alinieze cu antetul si cu titlul, deci coloana de text ar fi
+          crescut singura de la 820px la 856px — o masura de citit si mai lunga
+          decat era. Golul mai mare fata de cuprins o tine la 832px.
+        */}
+        <div className="mt-10 grid gap-10 lg:grid-cols-[minmax(0,1fr)_240px] lg:gap-x-16">
           <div className="min-w-0">
             {/*
               ═══ RĂSPUNSUL SCURT, SUS ═══

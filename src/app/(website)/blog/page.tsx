@@ -106,7 +106,7 @@ export default async function BlogPage({ searchParams }: Props) {
         lead="Scriem despre ce ține un magazin online pe picioare în România: curierat, facturare, plăți și tot ce aflăm construind Edinio."
       />
 
-      <section className="mx-auto max-w-[1140px] px-5 pb-20">
+      <section className="mx-auto max-w-[1200px] px-5 pt-10 pb-20 sm:px-6 lg:px-8 lg:pt-14">
         {total === 0 ? (
           <p className="rounded-2xl border border-dashed border-hairline bg-tint p-8 text-center text-[15px] text-ink-2">
             Primele articole sunt în lucru. Până atunci, în{" "}

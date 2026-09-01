@@ -99,7 +99,7 @@ export default async function AutorBlogPage({ params, searchParams }: Props) {
         lead={autor.role_title ?? undefined}
       />
 
-      <section className="mx-auto max-w-[1140px] px-5 pb-20">
+      <section className="mx-auto max-w-[1200px] px-5 pt-10 pb-20 sm:px-6 lg:px-8 lg:pt-14">
         <div className="flex flex-col gap-5 rounded-2xl border border-hairline bg-tint p-6 sm:flex-row sm:items-start">
           {autor.avatar_url && (
             <Image src={autor.avatar_url} alt="" width={80} height={80}

@@ -43,7 +43,7 @@ export default async function DezabonarePage({ searchParams }: Props) {
         lead={jeton ? "O apăsare și nu mai primești nimic de la blogul Edinio." : undefined}
       />
 
-      <section className="mx-auto max-w-[640px] px-5 pb-24">
+      <section className="mx-auto max-w-[640px] px-5 pt-10 pb-24 lg:pt-14">
         {jeton ? (
           <ApasaCaSaConfirmi
             actiune={dezaboneazaDinBlog}

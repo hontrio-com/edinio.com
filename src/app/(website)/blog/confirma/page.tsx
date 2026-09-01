@@ -43,7 +43,7 @@ export default async function ConfirmaAbonareaPage({ searchParams }: Props) {
         lead={jeton ? "Confirmă că tu ai cerut noutățile de pe blog." : undefined}
       />
 
-      <section className="mx-auto max-w-[640px] px-5 pb-20">
+      <section className="mx-auto max-w-[640px] px-5 pt-10 pb-20 lg:pt-14">
         {jeton ? (
           <ApasaCaSaConfirmi
             actiune={confirmaAbonarea}

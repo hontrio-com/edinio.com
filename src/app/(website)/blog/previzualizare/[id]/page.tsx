@@ -55,7 +55,7 @@ export default async function PrevizualizarePage({ params }: Props) {
         se poate întoarce peste o oră crezând că se uită la site-ul adevărat.
       */}
       <div className="sticky top-0 z-50 border-b border-amber-200 bg-amber-50">
-        <div className="mx-auto flex max-w-[1140px] flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2.5 text-[13px]">
+        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2.5 text-[13px] sm:px-6 lg:px-8">
           <span className="inline-flex items-center gap-1.5 font-semibold text-amber-900">
             <Eye className="h-3.5 w-3.5" aria-hidden="true" />
             Previzualizare

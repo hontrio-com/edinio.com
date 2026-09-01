@@ -48,6 +48,7 @@ export default function OblioConfigClient({
   const [productType, setProductType] = useState(initialConfig?.product_type ?? "Marfa");
   const [dueDays, setDueDays] = useState(initialConfig?.due_days ?? 0);
   const [sendToSpv, setSendToSpv] = useState(initialConfig?.send_to_spv ?? false);
+  const [noStock, setNoStock] = useState(initialConfig?.no_stock ?? false);
 
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -238,6 +239,7 @@ export default function OblioConfigClient({
       product_type: productType,
       due_days: dueDays,
       send_to_spv: sendToSpv,
+      no_stock: noStock,
     };
 
     startSaveTransition(async () => {
@@ -510,6 +512,26 @@ export default function OblioConfigClient({
               </div>
               <Switch checked={sendToSpv} onCheckedChange={setSendToSpv} />
             </div>
+
+            {/*
+              ⚠ SE ARATA DOAR CONTURILOR CU STOCURI. Pentru celelalte, parametrul
+              n-are niciun inteles la Oblio, iar un comutator in plus intr-un ecran
+              deja lung inseamna doar o intrebare la care omul n-are cum sa raspunda.
+            */}
+            {gestiuneaECeruta(gestiuni) && (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Nu descarca stocul din Oblio</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Porneste-l doar daca <strong>NU</strong> tii stocul in Oblio. Facturile nu vor
+                    mai scadea cantitatile din gestiune. Poate rezolva refuzul{" "}
+                    <em>produsul nu are stoc suficient</em> — dar schimba felul in care Oblio
+                    iti tine stocul, deci nu-l porni daca il folosesti acolo.
+                  </p>
+                </div>
+                <Switch checked={noStock} onCheckedChange={setNoStock} />
+              </div>
+            )}
           </Panel>
         )}
 

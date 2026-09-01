@@ -543,7 +543,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   );
 
   /*
-   * PRODUSELE NU MAI SUNT AICI. Vezi `app/produse/sitemap.ts`.
+   * PRODUSELE NU MAI SUNT AICI. Fiecare magazin isi are propriul sitemap, la
+   * `app/(public)/[slug]/sitemap.xml/route.ts`.
+   *
+   * ⚠ Randul asta trimitea pana acum la `app/produse/sitemap.ts` — un fisier care
+   * nu exista si, dupa cate se vede din istoric, n-a existat niciodata sub numele
+   * ala. Cine il cauta nu-l gasea si ramanea cu impresia ca produsele au ramas
+   * pe undeva neindexate.
    *
    * Se citeau toate, ale tuturor magazinelor publicate, ca sa se pastreze primele
    * 50.000 — la cinci milioane de produse, cinci milioane de randuri aduse in

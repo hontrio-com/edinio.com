@@ -18,11 +18,16 @@ import { FinalCta } from "./sections/FinalCta";
  * ═══ ⚠ PAGINA SE TERMINĂ CU `FinalCta`, ȘI DE AICI ═══
  *
  * Auditul din 23.08 a găsit cinci pagini care se opreau brusc: `/magazin-online`,
- * `/industrii`, `/industrii/[industrie]`, `/vs` și `/blog`. Toate cinci trec pe
- * aici, iar celelalte unsprezece pagini ale site-ului se termină cu banda de
- * final. Una care se oprește la hero nu arată scurtă, arată neterminată — mai
- * ales `/magazin-online`, către care trimit deja pastila din hero-ul paginii de
- * start și butonul din secțiunea de funcționalități.
+ * `/industrii`, `/industrii/[industrie]`, `/vs` și `/blog`. Toate trec pe aici,
+ * iar celelalte pagini ale site-ului se termină cu banda de final. Una care se
+ * oprește la hero nu arată scurtă, arată neterminată.
+ *
+ * ⚠ DOUĂ DIN CELE CINCI NU MAI EXISTĂ, iar nota le numea la prezent: pe
+ * 31.08.2026 `/magazin-online` a fost ȘTEARSĂ (dă 308 către `/`), iar `/blog` nu
+ * trece pe `PageShell`. Rândul care spunea că spre `/magazin-online` „trimit deja
+ * pastila din hero și butonul din funcționalități" descria legături care nu mai
+ * sunt. Numărul de pagini de atunci (unsprezece) l-am scos: nu l-am renumărat,
+ * și un număr nerenumărat e tot o afirmație pe care n-o susține nimeni.
  *
  * Banda vine de AICI, nu din fiecare pagină: altfel a șasea pagină scrisă pe
  * `PageShell` ar fi uitat-o, exact cum au uitat-o astea cinci.

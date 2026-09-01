@@ -52,6 +52,17 @@
 /* Sigla și cercul de sub butoane — singurele două din trusa comună. */
 @source "../components/ui/Logo.tsx";
 @source "../components/ui/ripple.tsx";
+/*
+  ⚠ LIPSEA, si nu se vedea. `CadraneLaIntrare` (pagina /optimizare) il incarca
+  prin `dynamic()`, deci fisierul se randeaza pe prezentare fara sa fie sub
+  niciun `@source`. Masurat: `fill-muted-foreground` — singura lui clasa in afara
+  de una de asezare — apare de ZERO ori in foaia livrata pentru /optimizare.
+
+  Azi nu se vede fiindca `CadraneLaIntrare` nu-i trimite `label`, deci ramura care
+  foloseste clasa nu se randeaza. Un `label` adaugat maine ar fi scos un text
+  nestilizat, si nimic nu l-ar fi prins.
+*/
+@source "../components/ui/gauge-1.tsx";
 /* `app/layout.tsx` randeaza `<html>` si `<body>` in acelasi document. */
 @source "../app/layout.tsx";
 /*

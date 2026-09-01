@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/utils/format";
 import {
   deblocheazaOperatieAction,
   operatiiAtarnateAction,
+  refuzuriPeComandaAction,
 } from "@/lib/actions/operatii.actions";
-import type { OperatieAtarnata } from "@/lib/operatii/registru";
+import type { OperatieAtarnata, RefuzOperatie } from "@/lib/operatii/registru";
 
 /**
  * Operatiile externe ramase atarnate pe comanda asta.
@@ -43,6 +44,7 @@ export function OperatiiAtarnate({
   /** La fel pentru „se lucreaza": altfel apasarea pe o operatie dezactiva butoanele tuturor. */
   const [inLucru, setInLucru] = useState<string | null>(null);
   const [seIncarca, setSeIncarca] = useState(true);
+  const [refuzuri, setRefuzuri] = useState<RefuzOperatie[]>([]);
 
   /*
    * Reincarcarea la FOCUS nu e o rafinare, e chiar drumul comerciantului.
@@ -58,14 +60,23 @@ export function OperatiiAtarnate({
       operatiiAtarnateAction(businessId, orderId)
         .then((r) => { if (activ) setOperatii(r); })
         .finally(() => { if (activ) setSeIncarca(false); });
+      /*
+        ⚠ CERERE SEPARATA, DINADINS. Un refuz nu blocheaza nimic si nu are nevoie
+        de nicio hotarare — daca citirea lui pica, panoul de deblocare trebuie sa
+        apara oricum. Alaturate intr-un `Promise.all`, o eroare pe refuzuri ar fi
+        ascuns supapa care chiar conteaza.
+      */
+      refuzuriPeComandaAction(businessId, orderId)
+        .then((r) => { if (activ) setRefuzuri(r); })
+        .catch(() => {});
     };
     incarca();
     window.addEventListener("focus", incarca);
     return () => { activ = false; window.removeEventListener("focus", incarca); };
   }, [businessId, orderId]);
 
-  // Cazul normal: nimic atarnat, deci niciun chenar de alarma pe o comanda sanatoasa.
-  if (seIncarca || operatii.length === 0) return null;
+  // Cazul normal: nimic atarnat SI niciun refuz, deci niciun chenar pe o comanda sanatoasa.
+  if (seIncarca || (operatii.length === 0 && refuzuri.length === 0)) return null;
 
   async function deblocheaza(op: OperatieAtarnata) {
     setInLucru(op.id);
@@ -92,8 +103,10 @@ export function OperatiiAtarnate({
   }
 
   return (
-    // `mb-5` sta AICI, nu pe fratele de dedesubt: cand nu e nimic atarnat
-    // componenta intoarce `null` si nu ramane niciun spatiu gol in pagina.
+    <>
+    {/* `mb-5` sta pe fiecare chenar, nu pe invelis: cand unul lipseste, nu
+        ramane niciun spatiu gol in pagina. */}
+    {operatii.length > 0 ? (
     <div className="mb-5 rounded-lg border border-warning/40 bg-warning/5 p-4">
       <div className="flex items-start gap-2">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
@@ -161,27 +174,92 @@ export function OperatiiAtarnate({
         </div>
       </div>
     </div>
+    ) : null}
+
+    {/*
+      ═══ ⚠ REFUZURILE, CARE PANA ACUM NU SE VEDEAU NICAIERI ═══
+
+      Un rand `esuat` nu ajungea nici in panoul de mai sus (filtreaza
+      `in_curs`/`necunoscut`), nici in santinela, nici in vreo notificare. Pe calea
+      manuala traia intr-un toast de cateva secunde; pe cea automata, in nimic.
+
+      Masurat pe VetDepo: patru facturi refuzate intre 11.08 si 01.09.2026, zero
+      emise, si comerciantul a aflat abia cand a scris el ca „nu merge Oblio".
+
+      ⚠ ALT CHENAR, ALT INTELES. Aici nu e niciun buton: nu e nimic de deblocat si
+      nicio hotarare de luat. Furnizorul a spus limpede nu, si nu s-a intamplat
+      nimic la el. Singurul lucru care lipsea era sa se stie.
+    */}
+    {refuzuri.length > 0 ? (
+      <div className="mb-5 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+        <div className="flex items-start gap-2">
+          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground">
+              {refuzuri.length === 1
+                ? "O operatie a fost refuzata de furnizor"
+                : `${refuzuri.length} operatii au fost refuzate de furnizor`}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Nu s-a intamplat nimic la ei, deci se poate incerca din nou dupa ce
+              repari ce spune mesajul. Daca mesajul vorbeste despre setari, se
+              repara la Integrari.
+            </p>
+
+            <ul className="mt-3 space-y-3">
+              {refuzuri.map((r) => (
+                <li key={r.id} className="rounded-md border border-border bg-background p-3">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="text-sm font-medium text-foreground">
+                      {etichetaFel(r.fel)} la {r.furnizor}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDateTime(r.creatLa)}
+                      {r.incercari > 1 ? ` · ${r.incercari} incercari` : ""}
+                    </span>
+                  </div>
+                  {/* Mesajul furnizorului, NETRADUS si netaiat: el spune ce e de reparat. */}
+                  <p className="mt-1 whitespace-pre-line break-words text-xs text-muted-foreground">
+                    {r.mesaj}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }
 
+/**
+ * Numele felului de operatie, in romaneste.
+ *
+ * ⚠ Scos din `eticheta` ca sa-l foloseasca si chenarul de refuzuri. Doua liste
+ * paralele de `fel` s-ar fi despartit la primul fel nou adaugat, iar cea uitata
+ * ar fi scris „Operatia" fara ca nimic sa cada.
+ */
+function etichetaFel(fel: OperatieAtarnata["fel"]): string {
+  return fel === "awb" ? "Emiterea AWB"
+    : fel === "anulare_awb" ? "Anularea AWB"
+    : fel === "factura" ? "Emiterea facturii"
+    : fel === "proforma" ? "Emiterea proformei"
+    : fel === "storno" ? "Stornarea"
+    : fel === "anulare_document" ? "Anularea documentului"
+    : fel === "ridicare" ? "Comanda de ridicare"
+    : fel === "plata" ? "Plata"
+    : fel === "incasare" ? "Incasarea"
+    : fel === "rambursare" ? "Rambursarea"
+    : fel === "publicare" ? "Publicarea pe marketplace"
+    : fel === "retragere" ? "Retragerea de pe marketplace"
+    : fel === "expediere" ? "Confirmarea expedierii"
+    : "Operatia";
+}
+
 function eticheta(op: OperatieAtarnata): string {
-  const ce =
-    op.fel === "awb" ? "Emiterea AWB"
-      : op.fel === "anulare_awb" ? "Anularea AWB"
-      : op.fel === "factura" ? "Emiterea facturii"
-      : op.fel === "proforma" ? "Emiterea proformei"
-      : op.fel === "storno" ? "Stornarea"
-      : op.fel === "anulare_document" ? "Anularea documentului"
-      : op.fel === "ridicare" ? "Comanda de ridicare"
-      : op.fel === "plata" ? "Plata"
-      : op.fel === "incasare" ? "Incasarea"
-      : op.fel === "rambursare" ? "Rambursarea"
-      : op.fel === "publicare" ? "Publicarea pe marketplace"
-      : op.fel === "retragere" ? "Retragerea de pe marketplace"
-      : op.fel === "expediere" ? "Confirmarea expedierii"
-      : "Operatia";
   // `in_curs` si `necunoscut` nu inseamna acelasi lucru pentru cel care citeste:
   // primul e „a plecat si nu s-a mai auzit nimic", al doilea „a raspuns prost".
   const stare = op.stare === "in_curs" ? "a plecat si nu s-a mai auzit nimic" : "raspunsul nu a ajuns";
-  return `${ce} la ${op.furnizor} — ${stare}`;
+  return `${etichetaFel(op.fel)} la ${op.furnizor} — ${stare}`;
 }

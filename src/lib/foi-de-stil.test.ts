@@ -121,6 +121,61 @@ test("`website.css` scanează chiar dosarele din care se randează prezentarea",
   const lipsa = cerute.filter((c) => !surse.includes(c));
   assert.deepEqual(lipsa, [], "`@source` lipsă în `website.css`:\n  " + lipsa.join("\n  "));
 
+  /*
+    ⚠ PARTEA ASTA LIPSEA, ȘI COMENTARIUL DIN `website.css` O PROMITEA DEJA.
+    Lista de mai sus e scrisă de mână: verifică trei dosare pe care le știm
+    dinainte, nu ce importă CHIAR paginile. Așa a scăpat `components/ui/gauge-1`
+    — încărcat cu `dynamic()` din `/optimizare`, deci randat pe prezentare fără
+    să fie sub niciun `@source`. Clasa lui `fill-muted-foreground` apărea de zero
+    ori în foaia livrată.
+
+    De aici încolo lista se DERIVĂ din importuri, nu se mai ține minte.
+  */
+  const zonePrezentare = ["app/(website)", "app/(ajutor)", "components/website", "lib/website"];
+  const fisiere: string[] = [];
+  const adunaFisiere = (dir: string) => {
+    if (!existsSync(dir)) return;
+    for (const it of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, it.name);
+      if (it.isDirectory()) adunaFisiere(p);
+      else if (/\.(tsx?|jsx?)$/.test(it.name)) fisiere.push(p);
+    }
+  };
+  for (const z of zonePrezentare) adunaFisiere(join(RAD, "src", z));
+
+  // `@/components/ui/x` — și în `import … from`, și în `dynamic(() => import(…))`.
+  const importate = new Set<string>();
+  for (const f of fisiere) {
+    const txt = readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    for (const m of txt.matchAll(/["']@\/components\/ui\/([A-Za-z0-9_.-]+)["']/g)) importate.add(m[1]);
+  }
+
+  /* Un `@source` acoperă un fișier dacă e chiar el, sau un dosar care îl conține. */
+  const caiSursa = surse.map((s) => join(APP, s));
+  const acoperit = (fisier: string) =>
+    caiSursa.some((c) => fisier === c || fisier.startsWith(c + sep));
+
+  const neacoperite = [...importate]
+    .map((nume) => {
+      for (const ext of [".tsx", ".ts", ".jsx", ".js"]) {
+        const p = join(RAD, "src/components/ui", nume + ext);
+        if (existsSync(p)) return p;
+      }
+      // Poate fi dosar cu `index`, sau importul are deja extensia.
+      const brut = join(RAD, "src/components/ui", nume);
+      return existsSync(brut) ? brut : null;
+    })
+    .filter((p): p is string => !!p && !acoperit(p))
+    .map(curat);
+
+  assert.deepEqual(
+    neacoperite,
+    [],
+    "Fișiere din `components/ui` folosite de prezentare, dar sub niciun `@source`.\n" +
+      "Clasele lor NU se generează în `website.css`, iar pagina apare nestilizată\n" +
+      "exact pe ele — fără nicio eroare:\n  " + neacoperite.join("\n  "),
+  );
+
   /* Fiecare `@source` trebuie să existe pe disc — o cale greșită tace, nu cade. */
   const inexistente = surse
     .map((s) => ({ s, p: join(APP, s) }))

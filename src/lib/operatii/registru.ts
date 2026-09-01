@@ -503,6 +503,84 @@ export interface OperatieAtarnata {
 }
 
 /**
+ * Un REFUZ dovedit al furnizorului, pe comanda asta.
+ *
+ * ═══ ⚠ DE CE E ALT LUCRU DECAT `OperatieAtarnata` ═══
+ *
+ * O operatie ATARNATA (`in_curs`/`necunoscut`) poate sa fi REUSIT la furnizor —
+ * de aceea blocheaza butonul si cere un om care s-a uitat in contul lor. Un REFUZ
+ * (`esuat`) e opusul: se stie sigur ca nu s-a intamplat nimic. Nu blocheaza nimic
+ * si nu cere nicio hotarare — cere doar sa fie VAZUT.
+ *
+ * ⚠ SI PANA ACUM NU SE VEDEA NICAIERI. `operatiiAtarnate` filtreaza
+ * `in ("in_curs","necunoscut")`, deci un rand `esuat` nu ajungea in pagina
+ * comenzii; santinela filtreaza la fel; pe calea automata nu exista nici macar un
+ * toast. Masurat pe VetDepo: patru facturi refuzate intre 11.08 si 01.09.2026,
+ * zero emise, si singurul loc unde scria adevarul era panoul de administrare al
+ * platformei. Trei saptamani in care comerciantul n-avea de unde sa afle.
+ */
+export interface RefuzOperatie {
+  id: string;
+  fel: FelOperatie;
+  furnizor: FurnizorOperatie;
+  mesaj: string;
+  incercari: number;
+  creatLa: string;
+}
+
+/**
+ * Ultimul refuz pe fiecare fel de operatie, pentru care nu exista nicio reusita.
+ *
+ * ⚠ REUSITA STINGE REFUZUL, si asta nu e cosmetica: fara regula, o factura
+ * refuzata o data si emisa la a doua incercare ar tine o alarma rosie pe comanda
+ * la nesfarsit. Iar o alarma care ramane aprinsa dupa ce s-a reparat problema
+ * invata omul s-o ignore — adica strica exact lucrul pentru care a fost pusa.
+ */
+export async function refuzuriPeComanda(
+  admin: SupabaseClient<Database>,
+  businessId: string,
+  orderId: string,
+): Promise<RefuzOperatie[]> {
+  const { data, error } = await admin
+    .from("operatii_externe")
+    .select("id, fel, furnizor, stare, ultima_eroare, incercari, creat_la")
+    .eq("business_id", businessId)
+    .eq("order_id", orderId)
+    .in("stare", ["esuat", "reusit"])
+    .order("creat_la", { ascending: false });
+
+  if (error) {
+    console.error("[registru] nu am putut citi refuzurile:", error.message);
+    return [];
+  }
+
+  const randuri = data ?? [];
+  /* Un `fel` care a reusit vreodata pe comanda asta nu mai are ce arata. */
+  const reusite = new Set(
+    randuri.filter(r => r.stare === "reusit").map(r => String(r.fel)),
+  );
+
+  const vazute = new Set<string>();
+  const refuzuri: RefuzOperatie[] = [];
+  // Randurile vin de la nou la vechi, deci primul intalnit pe fiecare fel e ultimul.
+  for (const r of randuri) {
+    const fel = String(r.fel);
+    if (r.stare !== "esuat" || reusite.has(fel) || vazute.has(fel)) continue;
+    vazute.add(fel);
+    refuzuri.push({
+      id: String(r.id),
+      fel: r.fel as FelOperatie,
+      furnizor: r.furnizor as FurnizorOperatie,
+      // Fara mesaj n-am ce arata: un chenar rosu gol sperie fara sa lamureasca.
+      mesaj: (r.ultima_eroare as string | null)?.trim() || "",
+      incercari: Number(r.incercari ?? 0),
+      creatLa: String(r.creat_la),
+    });
+  }
+  return refuzuri.filter(r => r.mesaj.length > 0);
+}
+
+/**
  * ⚠ Cat asteptam inainte sa numim o operatie `in_curs` „atarnata".
  *
  * Fara pragul asta, panoul ar arata ca „ramasa neterminata" chiar operatia care

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { eScoasaDeLaVanzare } from "./trimite";
+import { deCeNimicDeTrimis, eScoasaDeLaVanzare, type RandOfertaLocal } from "./trimite";
 
 /* ══════════════════════════════════════════════════════════════════════════
    „END OF LIFE" NU E O STARE DE-A NOASTRA (25.08.2026)
@@ -107,4 +107,56 @@ test("⚠ NU se repune singura la vânzare", () => {
   const j = cod.indexOf("function identitatiUsoare(");
   const corpFiltru = cod.slice(j, cod.indexOf(String.fromCharCode(10) + "}", j));
   assert.ok(!/status:\s*1/.test(corpFiltru), "nici filtrul");
+});
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  VERDICTUL: „END OF LIFE" NU MAI ARDE CINCI INCERCARI
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  ⚠ PROBELE DE MAI SUS CITESC SURSA. Astea CHEAMA functia — fiindca ce s-a stricat
+  aici nu e un sir de caractere, e o hotarare: ce verdict poarta mesajul. Un
+  `assert.match` pe text ar fi trecut verde si cu `verdict: "refuz"` la loc.
+
+  Masurat pe VetDepo, 01.09.2026: un rand de stoc a stat 86 de minute in coada,
+  a facut cinci incercari cu acelasi raspuns, si a fost abandonat. eMAG nu-si
+  schimba parerea intre incercari — „End of Life" tine pana cand OMUL repune
+  oferta activa din panoul lor.
+*/
+
+const RAND = (o: Partial<RandOfertaLocal>): RandOfertaLocal => ({
+  id: "x", emag_id: 1, variant_title: null, nume_emag: null, status_la_ei: 1,
+  family_id: null, part_number_key: null, ean: null, auto_sync: true,
+  last_synced_at: "2026-08-01T00:00:00Z", creat_de_edinio: false,
+  ...o,
+} as RandOfertaLocal);
+
+test("⚠ „End of Life” iese din coada ACUM, nu dupa a cincea incercare", () => {
+  const r = deCeNimicDeTrimis([RAND({ status_la_ei: 2 })]);
+  assert.match(r.mesaj, /End of Life/);
+  assert.equal(
+    r.verdict, "sarit",
+    "un refuz definitiv arde iar cinci cereri din cele 3 pe secunda ale magazinului, " +
+    "si tine veghea sa strige degeaba",
+  );
+});
+
+test("„Publică-l întâi” RAMANE refuz, fiindca poate fi trecator", () => {
+  /*
+    ⚠ CEALALTA JUMATATE, si conteaza la fel. Lipsa randurilor din `emag_offers`
+    poate fi trecatoare: un produs sters si recreat, sau un import cazut la
+    jumatate, si le recapata. Acolo o reincercare chiar are ce sa gaseasca.
+    Daca proba asta cade, cineva a facut si cazul asta „sarit" — si atunci un
+    import intrerupt lasa produse nesincronizate pentru totdeauna.
+  */
+  const r = deCeNimicDeTrimis([RAND({ last_synced_at: null, creat_de_edinio: true })]);
+  assert.match(r.mesaj, /Publică-l întâi/);
+  assert.equal(r.verdict, "refuz");
+});
+
+test("cu o oferta buna langa una scoasa, nu e nici „sarit”, nici mesajul de EOL", () => {
+  // `every`, nu `some`: daca macar una se poate atinge, drumul obisnuit merge mai departe.
+  const r = deCeNimicDeTrimis([RAND({ status_la_ei: 2 }), RAND({ emag_id: 2, status_la_ei: 1 })]);
+  assert.equal(r.verdict, "refuz");
+  assert.doesNotMatch(r.mesaj, /End of Life/);
 });

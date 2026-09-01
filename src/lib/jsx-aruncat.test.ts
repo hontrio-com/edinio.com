@@ -10,7 +10,11 @@ import { join } from "node:path";
 
   ⚠ DE CE E O PROBĂ ȘI NU DOAR O REGULĂ DE LINT. Regula există — am pornit
   `@typescript-eslint/no-unused-expressions` în `eslint.config.mjs` în aceeași zi.
-  Dar `npm run lint` e ROȘU de mult: 81 de erori vechi, mai ales `no-explicit-any`.
+  Dar `npm run lint` e ROȘU de mult: 81 de erori vechi. (Măsurat cu
+  `eslint --format json` pe 01.09.2026: vârful e `react-hooks/set-state-in-effect`
+  cu 35, apoi `static-components` 15 și `no-unescaped-entities` 15;
+  `no-explicit-any` are DOUĂ. Rândul ăsta spunea „mai ales `no-explicit-any`" —
+  fals, și trimitea pe cine ar fi vrut să curețe lista exact unde nu e treabă.)
   Într-o listă deja roșie, a 82-a eroare nu se vede. Regula prinde defectul; ea
   singură nu-l OPREȘTE.
 

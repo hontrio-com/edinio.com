@@ -20,6 +20,19 @@
 
   ⚠ CINE ADAUGĂ O REGULĂ SCRISĂ DE MÂNĂ o pune în `stil-comun.css`, nu aici.
   Aici stau doar importurile și varianta întunecată — restul e împărțit.
+
+  ═══ ⚠ DACĂ AI AJUNS AICI CĂUTÂND O CLASĂ, NU E AICI ═══
+
+  Douăzeci și opt de fișiere din `src/components` trimit în comentarii la
+  „globals.css" pentru reguli scrise de mână. Fișierul are treizeci de rânduri
+  și ZERO reguli proprii — trimiterile sunt dinainte de despărțirea din
+  31.08.2026 și n-au fost actualizate.
+
+  Unde se caută de fapt:
+    `src/app/stil-comun.css`  — toate regulile scrise de mână, pentru amândouă
+                                foile (`.hero-mesh-blob`, `.iphone`, `.banda`, …)
+    `src/app/website.css`     — foaia site-ului de prezentare, cu lista `@source`
+    fișierul ăsta            — doar importurile aplicației și `dark`
 */
 @import "tailwindcss";
 @import "tw-animate-css";

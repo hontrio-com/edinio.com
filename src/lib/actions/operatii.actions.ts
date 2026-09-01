@@ -3,7 +3,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
-import { deblocheazaOperatie, operatiiAtarnate, type OperatieAtarnata } from "@/lib/operatii/registru";
+import {
+  deblocheazaOperatie, operatiiAtarnate, refuzuriPeComanda,
+  type OperatieAtarnata, type RefuzOperatie,
+} from "@/lib/operatii/registru";
 
 /*
  * ⚠ Fisier "use server": FIECARE export de aici e un endpoint HTTP apelabil cu
@@ -28,6 +31,25 @@ export async function operatiiAtarnateAction(
 ): Promise<OperatieAtarnata[]> {
   if (!(await detineMagazinul(businessId))) return [];
   return operatiiAtarnate(createAdminClient(), businessId, orderId);
+}
+
+/**
+ * Refuzurile dovedite ale furnizorilor pe comanda asta.
+ *
+ * ⚠ NU E ACELASI LUCRU CU `operatiiAtarnateAction`, si nu se cuvine unite. Aia
+ * arata operatii care POATE au reusit la furnizor si de aceea blocheaza butonul.
+ * Asta arata refuzuri despre care se stie sigur ca n-au facut nimic: nu blocheaza
+ * nimic, nu cer nicio hotarare, doar trebuie vazute.
+ *
+ * Fara ea, un refuz traia doar in toastul de la apasare — si pe calea automata
+ * nici atat. Vezi `refuzuriPeComanda`.
+ */
+export async function refuzuriPeComandaAction(
+  businessId: string,
+  orderId: string,
+): Promise<RefuzOperatie[]> {
+  if (!(await detineMagazinul(businessId))) return [];
+  return refuzuriPeComanda(createAdminClient(), businessId, orderId);
 }
 
 /**

@@ -50,7 +50,7 @@ import { enqueueEmagSyncMany } from "./queue";
 type Admin = ReturnType<typeof createAdminClient>;
 
 /** Un rand `emag_offers`, cat trebuie ca sa se poata trimite. */
-interface RandOfertaLocal {
+export interface RandOfertaLocal {
   id: string;
   emag_id: number;
   variant_title: string | null;
@@ -758,9 +758,9 @@ async function duOferta(
    * nimeni nu afla: chiar forma incidentului VetDepo.
    */
   if (usoare.length === 0) {
-    const m = deCeNimicDeTrimis(randuri);
-    await scrieEroare(admin, ctx.businessId, produs.id, m);
-    return { verdict: "refuz", mesaj: m };
+    const { mesaj, verdict } = deCeNimicDeTrimis(randuri);
+    await scrieEroare(admin, ctx.businessId, produs.id, mesaj);
+    return { verdict, mesaj };
   }
 
   return trimiteInLoturi(admin, ctx, produs.id, usoare, (lot) =>
@@ -793,9 +793,9 @@ async function duStocul(
      raporteaza succes fara sa plece nicaieri inseamna ca eMAG continua sa vanda
      marfa pe care magazinul n-o mai are. */
   if (stocuri.length === 0) {
-    const m = deCeNimicDeTrimis(randuri);
-    await scrieEroare(admin, ctx.businessId, produs.id, m);
-    return { verdict: "refuz", mesaj: m };
+    const { mesaj, verdict } = deCeNimicDeTrimis(randuri);
+    await scrieEroare(admin, ctx.businessId, produs.id, mesaj);
+    return { verdict, mesaj };
   }
 
   const depozit = ctx.config.warehouse_id ?? 1;
@@ -952,15 +952,49 @@ function identitatiUsoare(randuri: RandOfertaLocal[]): IdentitateUsoara[] {
  * iar spuse la fel, omul cauta unde nu e. Primul il trimite la butonul de publicare — pe
  * care il apasa degeaba, fiindca oferta EXISTA la ei.
  */
-function deCeNimicDeTrimis(randuri: RandOfertaLocal[]): string {
+export function deCeNimicDeTrimis(
+  randuri: RandOfertaLocal[],
+): { mesaj: string; verdict: "refuz" | "sarit" } {
   const laEi = randuri.filter(ofertaEsteLaEi);
-  if (laEi.length === 0) return "Produsul nu are nicio ofertă eMAG de actualizat. Publică-l întâi.";
+  const publicaIntai = {
+    mesaj: "Produsul nu are nicio ofertă eMAG de actualizat. Publică-l întâi.",
+    /*
+      ⚠ RAMANE „REFUZ", SI NU DIN LENE. Lipsa randurilor POATE fi trecatoare: un
+      produs sters si recreat, sau un import cazut la jumatate, isi recapata
+      randurile din `emag_offers` peste cateva minute. Aici o reincercare chiar
+      are ce sa gaseasca — spre deosebire de cazul de mai jos.
+    */
+    verdict: "refuz" as const,
+  };
+  if (laEi.length === 0) return publicaIntai;
 
   if (laEi.every(eScoasaDeLaVanzare)) {
-    return "eMAG a scos oferta din vânzare („End of Life”), și refuză orice schimbare de preț "
-      + "sau de stoc pe ea. Ca s-o vinzi din nou, repune-o activă din panoul lor.";
+    return {
+      mesaj: "eMAG a scos oferta din vânzare („End of Life”), și refuză orice schimbare de preț "
+        + "sau de stoc pe ea. Ca s-o vinzi din nou, repune-o activă din panoul lor.",
+      /*
+        ⚠ „SARIT", NU „REFUZ" — adica se scoate din coada acum, nu dupa a cincea
+        incercare. Acelasi rationament care e scris cu cateva zeci de randuri mai
+        sus pentru produsele fara dimensiuni: „reincercat, ar arde incercarile
+        degeaba".
+
+        „End of Life" nu e o pana trecatoare, e o stare definitiva pana cand OMUL
+        repune oferta activa din panoul eMAG. Nicio reincercare a noastra n-o poate
+        schimba, si fiecare arde o cerere din cele 3 pe secunda ale magazinului —
+        chiar cererile prin care trebuie sa plece stocul ofertelor care se vand.
+
+        ⚠ MASURAT, 01.09.2026: un singur rand de stoc pe VetDepo a stat 86 de
+        minute in coada si a facut cinci incercari, toate cu acelasi raspuns, apoi
+        a fost abandonat. Intre timp veghea a strigat de doua ori.
+
+        ⚠ NU SE PIERDE NIMIC: `scrieEroare` de la apelant scrie oricum motivul
+        pentru comerciant, iar cand el repune oferta activa, urmatoarea miscare de
+        stoc pune un rand NOU in coada. Nu are ce sa astepte randul asta.
+      */
+      verdict: "sarit" as const,
+    };
   }
-  return "Produsul nu are nicio ofertă eMAG de actualizat. Publică-l întâi.";
+  return publicaIntai;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

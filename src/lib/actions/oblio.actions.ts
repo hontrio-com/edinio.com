@@ -398,6 +398,9 @@ async function buildInvoiceData(
     mentions: mentiuneRefacturare(`Comanda ${order.order_number}`, slot),
     internalNote: mentiuneRefacturare(`Comanda ${order.order_number}`, slot),
     ...(config.send_to_spv ? { spvExtern: 1 as const } : {}),
+    /* ⚠ Se trimite DOAR cand comerciantul a cerut-o. Absenta lui inseamna
+       implicitul lor, adica exact ce se intampla azi. Vezi `OblioConfig.no_stock`. */
+    ...(config.no_stock ? { useStock: 0 as const } : {}),
     // Cheia primei emiteri ramane cea de dinainte; reemiterea o discrimineaza prin
     // numarul notei de credit. Fara asta, Oblio ar fi intors CHIAR factura stornata.
     idempotencyKey: cheieDocument(`${config.cif}-${seriesName}-${order.order_number}`, slot),
@@ -836,6 +839,9 @@ export async function stornoOblioInvoice(
       // Stornul urmeaza factura in SPV: daca originala a fost trimisa, si creditul
       // trebuie trimis (e-Factura).
       ...(config.send_to_spv ? { spvExtern: 1 as const } : {}),
+      /* Stornul urmeaza si aici factura: daca ea n-a descarcat stocul, nici
+         creditul ei n-are ce sa puna la loc. */
+      ...(config.no_stock ? { useStock: 0 as const } : {}),
     };
 
     const r = await cuRegistru(

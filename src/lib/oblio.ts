@@ -57,6 +57,25 @@ export type OblioConfig = {
     purtarea de pana acum, care mergea pentru celelalte doua magazine.
   */
   management?: string;
+  /*
+    ⚠ „Nu descarca stocul din Oblio". IMPLICIT ABSENT, adica purtarea de pana
+    acum ramane neschimbata pentru toata lumea.
+
+    Documentatia lor, pe document, cuvant cu cuvant:
+        „useStock | Descarcare pe gestiune (in cazul in care este activat stocul).
+         Poate fi 0 sau 1"
+
+    ⚠ CE NU STIM, SI NU PRETINDEM CA STIM: daca `0` ocoleste si VERIFICAREA de
+    stoc, sau doar opreste descarcarea. Doua din cele patru facturi refuzate ale
+    VetDepo au cazut pe „nu are stoc suficient", si campul asta E lucrul care ar
+    putea sa le repare — dar nu s-a incercat, fiindca proba adevarata cere contul
+    Oblio al unui client. De aceea e o alegere a comerciantului, cu textul care
+    spune ce face, nu o hotarare luata de noi in locul lui.
+
+    ⚠ SCHIMBA CONTABILITATEA LUI DE STOC. Cine tine stocul in Oblio NU trebuie
+    sa-l porneasca. Vezi si nota de la `OblioInvoiceData.useStock`.
+  */
+  no_stock?: boolean;
 };
 
 export type OblioCompany = {
@@ -161,22 +180,28 @@ export type OblioInvoiceData = {
   // Trimite factura in SPV (e-Factura) daca trimiterea automata e activa in Oblio.
   spvExtern?: 0 | 1;
   /*
-    ⚠ NU IL TRIMITEM, INTENTIONAT — si e scris aici ca sa nu fie descoperit din nou
-    de la zero. Documentatia lor (oblio.eu/api), pe document, cuvant cu cuvant:
+    ⚠ SE TRIMITE DOAR CAND COMERCIANTUL A CERUT-O, prin `OblioConfig.no_stock`.
+    Absent = implicitul lor, adica exact purtarea de pana acum pentru toata lumea.
+
+    (Nota de dinainte spunea „NU IL TRIMITEM, INTENTIONAT". A fost adevarat pana
+    cand campul a capatat un comutator in formular. Se corecteaza aici ca sa nu
+    ramana o afirmatie falsa pentru cine citeste mai tarziu.)
+
+    Documentatia lor (oblio.eu/api), pe document, cuvant cu cuvant:
 
         „useStock | Descarcare pe gestiune (in cazul in care este activat stocul).
          Poate fi 0 sau 1"
 
-    ⚠ CE NU SPUNE DOCUMENTATIA: daca `useStock: 0` ocoleste si VERIFICAREA de stoc,
-    sau doar opreste descarcarea. Refuzul „nu are stoc suficient" de pe VetDepo
-    (vezi nota de la `OblioConfig.management`) ar putea fi oprit de el — sau nu.
-    Nu s-a incercat: proba adevarata cere contul Oblio al unui client.
+    ⚠ CE NU SPUNE DOCUMENTATIA: daca `0` ocoleste si VERIFICAREA de stoc, sau doar
+    opreste descarcarea. Refuzul „nu are stoc suficient" de pe VetDepo (vezi nota
+    de la `OblioConfig.management`) ar putea fi oprit de el — sau nu. NU S-A
+    INCERCAT: proba adevarata cere contul Oblio al unui client. De aceea e o
+    alegere a lui, cu textul care spune ce face, nu o hotarare luata de noi.
 
     ⚠ SI IMPLICITUL LOR NU E SCRIS PENTRU FACTURI. Pentru avize documentatia spune
     „valoarea implicita 1"; pentru facturi tace. Purtarea masurata la noi — stocul
     E verificat cand nu trimitem nimic — se potriveste cu 1, dar asta e o deductie
-    din patru incercari, nu o afirmatie a lor. Trimiterea unui 0 aici SCHIMBA
-    contabilitatea de stoc a clientului, deci nu se pune fara ca el sa ceara.
+    din patru incercari, nu o afirmatie a lor.
   */
   useStock?: 0 | 1;
 };

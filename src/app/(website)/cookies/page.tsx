@@ -59,9 +59,13 @@ export default function CookiesPage() {
     aspectul comun. `WebPage` și `BreadcrumbList` ale paginii lipseau cu totul.
 
     ⚠ Toate patru paginile legale aveau exact aceeași formă, deci a fost o
-    singură mișcare greșită copiată de patru ori. `date-structurate.test.ts`
+    singură mișcare greșită copiată de patru ori. `src/lib/jsx-aruncat.test.ts`
     cere acum ca fiecare `jsonLd` construit într-o pagină să și ajungă în JSX-ul
     întors.
+
+    ⚠ Rândul ăsta numea `date-structurate.test.ts`. Greșit: acela e despre
+    construirea grafului, nu citește nicio pagină — zero potriviri pe `src/app`
+    sau `page.tsx`. Cine se bizuia pe el credea că are o plasă pe care n-o avea.
   */
   return (
     <>

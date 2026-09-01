@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { Firimitura } from "@/lib/website/breadcrumbs";
 
 /**
@@ -27,11 +28,24 @@ import type { Firimitura } from "@/lib/website/breadcrumbs";
 export function Breadcrumbs({ sir }: { sir: Firimitura[] }) {
   return (
     <nav aria-label="Unde te afli">
-      <ol role="list" className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+      {/*
+        `gap-y-1.5` (6px), nu `gap-y-1`: pe telefon șirul chiar se rupe pe două
+        rânduri, iar 4px între ele le lipeau unul de altul.
+      */}
+      <ol role="list" className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
         {sir.map((f, i) => {
           const ultima = i === sir.length - 1;
           return (
-            <li key={`${f.label}-${i}`} className="flex items-center gap-x-1.5">
+            <li
+              key={`${f.label}-${i}`}
+              /*
+                `min-w-0` doar pe ULTIMA: fără el, un titlu lung nu se poate
+                strânge sub lățimea lui naturală, iar `truncate` de pe span n-ar
+                avea de unde tăia. Celelalte firimituri sunt scurte și rămân
+                întregi.
+              */
+              className={cn("flex items-center gap-x-1.5", ultima && "min-w-0 max-w-full")}
+            >
               {i > 0 ? (
                 <ChevronRight
                   aria-hidden="true"
@@ -46,7 +60,25 @@ export function Breadcrumbs({ sir }: { sir: Firimitura[] }) {
                   spune „aici ești" cititoarelor de ecran — fără el, ultima
                   firimitură e doar încă un cuvânt.
                 */
-                <span aria-current="page" className="text-[13px] font-medium text-ink">
+                /*
+                  ⚠ TĂIATĂ LA UN RÂND PE TELEFON. Titlul articolului e ultima
+                  firimitură, iar pe un ecran de 390px el se rupea pe DOUĂ rânduri
+                  — deci șirul lua trei rânduri cu totul, cu săgeata rămasă
+                  singură la început de rând. Exact înghesuiala din captura de la
+                  01.09.2026.
+
+                  Se taie doar sub `sm`: de acolo în sus e loc, iar un titlu
+                  întreg e mai folositor decât unul cu trei puncte.
+
+                  ⚠ NU SE PIERDE NIMIC PENTRU MOTOARE: șirul plecă separat, ca
+                  JSON-LD, din `PageHero` — tăierea e doar desen. Iar `title` dă
+                  textul întreg la ținerea degetului pe el.
+                */
+                <span
+                  aria-current="page"
+                  title={f.label}
+                  className="truncate text-[13px] font-medium text-ink sm:overflow-visible sm:whitespace-normal"
+                >
                   {f.label}
                 </span>
               ) : (

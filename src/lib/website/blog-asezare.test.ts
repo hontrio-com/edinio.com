@@ -138,3 +138,43 @@ test("masura de citit nu s-a latit odata cu containerul", () => {
     "s-a pierdut `lg:gap-x-16`, deci coloana de text se latește la 856 px",
   );
 });
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  FIRIMITURILE NU IAU TREI RANDURI PE TELEFON
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  ⚠ COMPONENTA E A INTREGULUI SITE, dar defectul s-a vazut la blog fiindca acolo
+  ultima firimitura e TITLUL ARTICOLULUI — singurul sir lung din tot site-ul.
+  Pe un ecran de ~390px se rupea pe doua randuri, deci sirul lua trei cu totul,
+  cu sageata ramasa singura la inceput de rand. (Captura clientului, 01.09.2026.)
+
+  ⚠ CE S-A MASURAT SI CE NU. Pe 1920px, dupa schimbare: inaltimea sirului ramane
+  20.8px (un rand), iar stilul calculat al ultimei firimituri e
+  `normal / visible / ellipsis` — adica taierea NU se aplica pe ecran mare.
+  Latimile de telefon NU s-au masurat: redimensionarea ferestrei n-a prins in
+  sesiunea aceea (`innerWidth` a ramas 1920 la trei incercari). Pentru mobil
+  exista captura clientului si semantica claselor, nu o masuratoare de-a mea.
+*/
+
+test("ultima firimitura se taie la un rand DOAR pe telefon", () => {
+  const c = citeste("src/components/website/Breadcrumbs.tsx");
+
+  assert.match(c, /\btruncate\b/, "titlul lung poate iar sa rupa sirul pe doua randuri");
+  assert.match(
+    c, /sm:overflow-visible sm:whitespace-normal/,
+    "taierea nu mai e ridicata de la `sm` in sus — pe ecran mare e loc, iar un " +
+    "titlu intreg e mai folositor decat unul cu trei puncte",
+  );
+  assert.match(
+    c, /ultima && "min-w-0 max-w-full"/,
+    "fara `min-w-0` pe ultimul `<li>`, elementul nu se poate stramta sub latimea " +
+    "lui naturala si `truncate` n-are de unde taia — clasa ar fi acolo degeaba",
+  );
+  assert.match(c, /title=\{f\.label\}/, "s-a pierdut textul intreg la tinerea degetului pe firimitura");
+});
+
+test("sirul rupt pe doua randuri are aer intre ele", () => {
+  const c = citeste("src/components/website/Breadcrumbs.tsx");
+  assert.match(c, /gap-x-1\.5 gap-y-1\.5/, "cele doua randuri ale sirului s-au lipit la loc (gap-y-1 = 4px)");
+});

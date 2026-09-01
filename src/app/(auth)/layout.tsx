@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { AuroraBackground } from "@/components/ui/aurora-background";
 import { Logo } from "@/components/ui/Logo";
 import { NotificariToast } from "@/components/ui/NotificariToast";
+import { EtichetaGa4 } from "@/components/edinio-marketing/EtichetaGa4";
+import { RuntimeMarketing } from "@/components/edinio-marketing/RuntimeMarketing";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
 
@@ -17,6 +19,13 @@ export default function AuthLayout({
 }) {
   return (
     <AuroraBackground>
+      {/*
+        ⚠ MASURAREA NOASTRA, nu a comerciantilor. Vezi
+        `lib/edinio-marketing/` si granita probata in `lib/granita-tracking.test.ts`.
+        NU se pune in `(dashboard)`, `(admin)` sau in magazine.
+      */}
+      <EtichetaGa4 />
+      <RuntimeMarketing />
       <PlatformMetaPixel />
       <PlatformTikTokPixel />
       <div className="w-full max-w-md px-4 py-8">

@@ -1,0 +1,76 @@
+"use client";
+
+import Script from "next/script";
+import { usePathname } from "next/navigation";
+import { codGa4, GAZDE_PRODUCTIE } from "@/lib/edinio-marketing/mediu";
+import { faraUrmarire } from "@/lib/platform/fara-urmarire";
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  ETICHETA GOOGLE A EDINIO — nu a vreunui comerciant
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  ⚠ FARA TAG MANAGER, dinadins. Un container extern poate schimba ce se incarca pe
+  site fara sa treaca prin verificarea codului — adica exact lucrul impotriva
+  caruia e construit tot restul. Eticheta se pune direct, e versionata si se vede
+  in diff.
+
+  ⚠ NU E ETICHETA COMERCIANTILOR. Ei isi pun propriile coduri prin
+  `components/public/GoogleTag.tsx`, cu id-urile lor, in magazinele lor. Cele doua
+  n-au voie sa se intalneasca: vezi `lib/granita-tracking.test.ts`.
+
+  ⚠ SI NU SE INCARCA NICAIERI IN AFARA SUPRAFETELOR NOASTRE. Se randeaza numai din
+  layouturile prezentarii, ajutorului, autentificarii si onboardingului. NU din
+  `(dashboard)`, NU din `(admin)`, NU din magazine.
+
+  ═══ ⚠ DE CE GAZDA SE VERIFICA IN SCRIPT, SI NU LA RANDARE ═══
+
+  Prima forma a componentei randa eticheta oriunde exista codul — deci si pe
+  `localhost`, si pe desfasurarile de previzualizare. Datele de acolo ar fi ajuns
+  in ACEEASI proprietate ca traficul adevarat, si nu se mai pot scoate: GA4 n-are
+  „sterge sesiunile de la gazda cutare".
+
+  Verificarea nu se poate face la randare, fiindca `window` nu exista pe server si
+  o randare deosebita intre server si browser strica hidratarea. Deci markup-ul e
+  acelasi peste tot, iar scriptul HOTARASTE: pe alta gazda nu incarca nimic si nu
+  configureaza nimic. Zero cereri catre Google in afara productiei.
+*/
+
+export function EtichetaGa4() {
+  /* ⚠ Hook-ul inaintea oricarei iesiri — regulile hook-urilor. */
+  const cale = usePathname();
+
+  const cod = codGa4();
+  if (!cod) return null;
+
+  /*
+    ⚠ ACEEASI POARTA CA LA PIXELI. Previzualizarea unui articol nepublicat e un
+    ecran autentificat cu continut privat. Vezi `lib/platform/fara-urmarire.ts`.
+  */
+  if (faraUrmarire(cale)) return null;
+
+  const gazde = JSON.stringify(GAZDE_PRODUCTIE);
+
+  return (
+    <Script id="edinio-ga4" strategy="afterInteractive">{`
+      (function () {
+        if (${gazde}.indexOf(location.hostname) === -1) return;
+        if (window.__edinioGa4Pornit) return;
+        window.__edinioGa4Pornit = true;
+
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){ dataLayer.push(arguments); }
+        window.gtag = gtag;
+        gtag('js', new Date());
+        gtag('config', ${JSON.stringify(cod)}, { send_page_view: false });
+
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(${JSON.stringify(cod)});
+        document.head.appendChild(s);
+
+        if (window.__edinioMarketingGata) window.__edinioMarketingGata('ga4');
+      })();
+    `}</Script>
+  );
+}

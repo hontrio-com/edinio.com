@@ -3,6 +3,8 @@ import { Inter } from "next/font/google";
 import { SiteHeader } from "@/components/website/site-header/SiteHeader";
 import { Footer } from "@/components/website/Footer";
 import { StickyContact } from "@/components/website/StickyContact";
+import { EtichetaGa4 } from "@/components/edinio-marketing/EtichetaGa4";
+import { RuntimeMarketing } from "@/components/edinio-marketing/RuntimeMarketing";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
 import { jsonLdSafe } from "@/lib/json-ld";
@@ -64,6 +66,13 @@ export default function WebsiteLayout({
       {identitateEdinioJsonLd ? (
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(identitateEdinioJsonLd) }} />
       ) : null}
+      {/*
+        ⚠ MASURAREA NOASTRA, nu a comerciantilor. Vezi
+        `lib/edinio-marketing/` si granita probata in `lib/granita-tracking.test.ts`.
+        NU se pune in `(dashboard)`, `(admin)` sau in magazine.
+      */}
+      <EtichetaGa4 />
+      <RuntimeMarketing />
       <PlatformMetaPixel />
       <PlatformTikTokPixel />
       <SiteHeader />

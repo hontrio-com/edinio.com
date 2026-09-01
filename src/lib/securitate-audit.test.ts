@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /*
@@ -516,12 +516,25 @@ test("politicile NU sustin ca folosim GA4 sau Tag Manager cat timp nu le avem", 
   assert.match(conf, /Edinio NU utilizează Google Tag Manager/,
     "s-a intors afirmatia ca folosim Tag Manager — nu-l folosim si nu e in plan");
 
-  /* GA4: cat timp nu exista in cod, textele n-au voie sa spuna ca-l folosim. */
-  const areGa4InCod =
-    /NEXT_PUBLIC_EDINIO_GA4_MEASUREMENT_ID/.test(citeste(".env.example")) &&
-    fisiereDinTracking().some(f => /gtag\(|googletagmanager\.com/.test(citeste(f)));
+  /*
+    ⚠ SEMNALUL BUN NU E „EXISTA COD". Prima forma a probei se uita daca exista cod
+    GA4 in depozit — si a cazut in aceeasi zi in care l-am scris, cerandu-mi sa
+    spun in politici ca folosim GA4 cand el inca nu rula nicaieri. Codul poate
+    exista si variabila sa lipseasca din Vercel; atunci eticheta nu se randeaza
+    deloc, si textul ar fi minciuna.
 
-  if (!areGa4InCod) {
+    Semnalul adevarat e: POATE PORNI O DESFASURARE DE PRODUCTIE FARA GA4?
+      cheia in `CHEI_OBLIGATORII`  ->  nu poate. GA4 ruleaza sigur. Text la prezent.
+      cheia lipsa de acolo        ->  poate. Textul ramane cumpatat.
+
+    Asa, verificarea de la desfasurare (`next.config.ts`) face afirmatia din
+    politici adevarata prin CONSTRUCTIE, nu prin speranta.
+  */
+  const config = citeste("next.config.ts");
+  const obligatorii = config.slice(config.indexOf("CHEI_OBLIGATORII"), config.indexOf("CHEI_ASTEPTATE"));
+  const ga4ESigur = /NEXT_PUBLIC_EDINIO_GA4_MEASUREMENT_ID/.test(obligatorii);
+
+  if (!ga4ESigur) {
     for (const [nume, text] of [["confidentialitate", conf], ["cookies", ck]] as const) {
       assert.doesNotMatch(
         text, /Edinio utilizează Google Analytics 4/,
@@ -531,24 +544,18 @@ test("politicile NU sustin ca folosim GA4 sau Tag Manager cat timp nu le avem", 
         `${nume}: lipseste precizarea ca serviciul nu e pornit`);
     }
   } else {
-    assert.fail(
-      "GA4 corporate EXISTA acum in cod. Adu textele la loc: scoate „pregătește” si\n" +
-      "„NU este încă activ”, si pune la loc formularea la prezent. Apoi rescrie\n" +
-      "proba asta ca sa ceara noua forma — nu o sterge.",
-    );
+    /*
+      Cheia e obligatorie la desfasurare, deci nicio productie nu poate rula fara
+      GA4. Acum textele TREBUIE sa spuna ca-l folosim, la prezent.
+    */
+    for (const [nume, text] of [["confidentialitate", conf], ["cookies", ck]] as const) {
+      assert.match(
+        text, /Edinio utilizează Google Analytics 4/,
+        `${nume}: GA4 e obligatoriu la desfasurare, dar textul inca spune ca nu e activ. ` +
+        "Scoate formularea cu „pregătește” si precizarea ca nu e pornit.",
+      );
+      assert.doesNotMatch(text, /NU este încă activ/, `${nume}: a ramas precizarea veche`);
+    }
   }
 });
 
-/** Fisierele in care ar aparea o eticheta Google corporate, daca ar exista. */
-function fisiereDinTracking(): string[] {
-  const zone = ["src/components/platform", "src/lib/edinio-marketing"];
-  const out: string[] = [];
-  for (const z of zone) {
-    try {
-      for (const n of readdirSync(join(process.cwd(), z))) {
-        if (/\.tsx?$/.test(n)) out.push(join(z, n));
-      }
-    } catch { /* dosarul inca nu exista */ }
-  }
-  return out;
-}

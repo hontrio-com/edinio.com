@@ -70,7 +70,21 @@ const CHEI_OBLIGATORII = [
   Goala acum. Ramane ca loc pentru urmatoarea cheie a carei stare n-o cunoastem:
   se striga in jurnal, nu se opreste desfasurarea, pana cand cineva se uita.
 */
-const CHEI_ASTEPTATE: readonly string[] = [];
+const CHEI_ASTEPTATE: readonly string[] = [
+  /*
+    ⚠ MASURAREA NOASTRA. Codul e in depozit din 01.09.2026, dar variabila se pune
+    in panoul Vercel si n-am vazut-o eu acolo. Pana atunci se STRIGA, nu se
+    opreste — sa opresc desfasurarea pe o cheie a carei stare n-o cunosc e chiar
+    paguba impotriva careia e scrisa paza.
+
+    ⚠ SI DE EA ATARNA UN TEXT LEGAL: cat timp cheia nu e OBLIGATORIE, o
+    desfasurare poate porni fara GA4, deci politicile n-au voie sa spuna ca-l
+    folosim. Cand cheia se muta in lista de sus, proba din
+    `securitate-audit.test.ts` cade si cere textele la prezent. Legatura e
+    dinadins: asa nu se poate uita niciuna din cele doua.
+  */
+  "NEXT_PUBLIC_EDINIO_GA4_MEASUREMENT_ID",
+];
 
 function verificaCheileDeProductie(faza: string): void {
   /*

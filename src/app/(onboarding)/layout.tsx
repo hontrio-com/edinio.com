@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import { NotificariToast } from "@/components/ui/NotificariToast";
+import { EtichetaGa4 } from "@/components/edinio-marketing/EtichetaGa4";
+import { RuntimeMarketing } from "@/components/edinio-marketing/RuntimeMarketing";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
@@ -33,6 +35,13 @@ export default async function OnboardingLayout({
 
   return (
     <div className="min-h-screen bg-background">
+      {/*
+        ⚠ MASURAREA NOASTRA, nu a comerciantilor. Vezi
+        `lib/edinio-marketing/` si granita probata in `lib/granita-tracking.test.ts`.
+        NU se pune in `(dashboard)`, `(admin)` sau in magazine.
+      */}
+      <EtichetaGa4 />
+      <RuntimeMarketing />
       <PlatformMetaPixel />
       <PlatformTikTokPixel />
       <header className="border-b border-border bg-surface">

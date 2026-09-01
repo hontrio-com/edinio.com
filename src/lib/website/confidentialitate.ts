@@ -773,7 +773,7 @@ const SECTIUNI: Sectiune[] = [
     blocuri: [
       {
         tip: "paragraf",
-        text: "Edinio utilizează Google Analytics 4, serviciu furnizat de Google, pentru a înțelege modul în care website-ul este utilizat și pentru a măsura performanța acestuia.",
+        text: "Edinio pregătește utilizarea Google Analytics 4, serviciu furnizat de Google, pentru a înțelege modul în care website-ul este utilizat și pentru a măsura performanța acestuia. La data ultimei actualizări a acestui document, serviciul NU este încă activ pe edinio.com; secțiunea descrie ce se va aplica atunci când va fi pornit.",
       },
       {
         tip: "paragraf",
@@ -814,11 +814,11 @@ const SECTIUNI: Sectiune[] = [
     blocuri: [
       {
         tip: "paragraf",
-        text: "Edinio utilizează Google Tag Manager pentru administrarea controlată a anumitor scripturi și tehnologii instalate pe website.",
+        text: "Edinio NU utilizează Google Tag Manager. Scripturile și tehnologiile de măsurare sunt implementate direct în codul aplicației, versionate și trecute prin verificare înainte de publicare. Secțiunea este păstrată pentru că descrie o tehnologie frecvent întâlnită și pentru a fi limpede că nu este cazul nostru.",
       },
       {
         tip: "paragraf",
-        text: "Google Tag Manager poate fi folosit pentru gestionarea unor instrumente precum:",
+        text: "Acolo unde este folosit — nu la noi — Google Tag Manager gestionează instrumente precum:",
       },
       {
         tip: "lista",
@@ -831,11 +831,11 @@ const SECTIUNI: Sectiune[] = [
       },
       {
         tip: "paragraf",
-        text: "Tipurile de date prelucrate depind de tag-ul activat prin Google Tag Manager.",
+        text: "Într-o astfel de configurație, tipurile de date prelucrate depind de tag-ul activat prin manager.",
       },
       {
         tip: "paragraf",
-        text: "Utilizarea Tag Manager nu înlătură obligația noastră de a obține consimțământul atunci când tehnologia activată prin intermediul acestuia necesită acest lucru.",
+        text: "Un manager de tag-uri nu înlătură obligația de a obține consimțământ atunci când tehnologia activată prin intermediul lui îl necesită. La noi, obligația se aplică direct tehnologiilor implementate în cod.",
       },
       {
         tip: "paragraf",

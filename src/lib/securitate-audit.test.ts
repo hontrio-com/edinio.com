@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 /*
@@ -488,3 +488,67 @@ test("toate trei cheile opresc desfasurarea, si niciuna n-a ajuns acolo pe ghici
   assert.match(cod, /CHEI_ASTEPTATE/, "s-a pierdut lista pentru cheile inca neconfirmate");
 });
 
+
+/* ═══ 12. Textele legale nu revendica unelte pe care nu le avem ═══ */
+
+test("politicile NU sustin ca folosim GA4 sau Tag Manager cat timp nu le avem", () => {
+  /*
+    ⚠ CE ERA FALS PE 01.09.2026, in doua documente publice:
+      - `confidentialitate.ts:817` — „Edinio utilizeaza Google Tag Manager"
+      - `confidentialitate.ts:776` si `cookies.ts:490` — „Edinio utilizeaza GA4"
+    Masurat: zero cod, zero variabila de mediu, zero eticheta Google in HTML-ul
+    livrat de productie. Niciunul din cele doua nu exista.
+
+    ⚠ SI CEL MAI USOR DE RATAT: tabelele de cookie-uri ne atribuiau `_ga`,
+    `_ga_<id>` si `_gcl_*`. Alea chiar apar pe `www.edinio.com` — dar sunt ale
+    MAGAZINELOR gazduite pe aceeasi origine, nu ale noastre. Un cookie prezent pe
+    domeniu nu e neaparat pus de tine.
+
+    ⚠ PROBA ASTA E IN AMANDOUA SENSURILE, ca si cea despre consimtamant. Cand GA4
+    corporate va porni cu adevarat, ea CADE si cere ca textul sa fie adus la loc —
+    nu sa fie stearsa proba. Un document care spune „nu folosim" despre ceva
+    pornit e la fel de gresit ca unul care spune invers.
+  */
+  const conf = citeste("src/lib/website/confidentialitate.ts");
+  const ck = citeste("src/lib/website/cookies.ts");
+
+  /* Tag Manager: hotarat sa nu existe niciodata (implementare directa in cod). */
+  assert.match(conf, /Edinio NU utilizează Google Tag Manager/,
+    "s-a intors afirmatia ca folosim Tag Manager — nu-l folosim si nu e in plan");
+
+  /* GA4: cat timp nu exista in cod, textele n-au voie sa spuna ca-l folosim. */
+  const areGa4InCod =
+    /NEXT_PUBLIC_EDINIO_GA4_MEASUREMENT_ID/.test(citeste(".env.example")) &&
+    fisiereDinTracking().some(f => /gtag\(|googletagmanager\.com/.test(citeste(f)));
+
+  if (!areGa4InCod) {
+    for (const [nume, text] of [["confidentialitate", conf], ["cookies", ck]] as const) {
+      assert.doesNotMatch(
+        text, /Edinio utilizează Google Analytics 4/,
+        `${nume}: textul spune ca folosim GA4, dar nu exista in cod`,
+      );
+      assert.match(text, /NU este încă activ pe edinio\.com/,
+        `${nume}: lipseste precizarea ca serviciul nu e pornit`);
+    }
+  } else {
+    assert.fail(
+      "GA4 corporate EXISTA acum in cod. Adu textele la loc: scoate „pregătește” si\n" +
+      "„NU este încă activ”, si pune la loc formularea la prezent. Apoi rescrie\n" +
+      "proba asta ca sa ceara noua forma — nu o sterge.",
+    );
+  }
+});
+
+/** Fisierele in care ar aparea o eticheta Google corporate, daca ar exista. */
+function fisiereDinTracking(): string[] {
+  const zone = ["src/components/platform", "src/lib/edinio-marketing"];
+  const out: string[] = [];
+  for (const z of zone) {
+    try {
+      for (const n of readdirSync(join(process.cwd(), z))) {
+        if (/\.tsx?$/.test(n)) out.push(join(z, n));
+      }
+    } catch { /* dosarul inca nu exista */ }
+  }
+  return out;
+}

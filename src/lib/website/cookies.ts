@@ -487,7 +487,7 @@ const SECTIUNI: Sectiune[] = [
     blocuri: [
       {
         tip: "paragraf",
-        text: "Edinio utilizează Google Analytics 4 pentru a înțelege modul în care este utilizat website-ul și pentru a analiza performanța acestuia.",
+        text: "Edinio pregătește utilizarea Google Analytics 4 pentru a înțelege modul în care este utilizat website-ul și pentru a analiza performanța acestuia. La data ultimei actualizări a acestui document, serviciul NU este încă activ pe edinio.com.",
       },
       {
         tip: "paragraf",
@@ -520,7 +520,7 @@ const SECTIUNI: Sectiune[] = [
     blocuri: [
       {
         tip: "paragraf",
-        text: "În configurația standard Google Analytics 4 pot fi utilizate, printre altele:",
+        text: "Când serviciul va fi pornit, în configurația standard Google Analytics 4 pot fi utilizate, printre altele:",
       },
       {
         tip: "tabel",
@@ -776,7 +776,7 @@ const SECTIUNI: Sectiune[] = [
             "Atribuirea click-urilor Meta",
             "Persistent, conform configurației Meta",
           ],
-          ["_gcl_**", "Google", "Marketing", "Măsurarea conversiilor Google Ads", "90 zile"],
+          ["_gcl_**", "Google", "Marketing", "Măsurarea conversiilor Google Ads. La data ultimei actualizări, Edinio nu rulează Google Ads pe edinio.com; un astfel de cookie prezent pe domeniu provine din eticheta Google a unui magazin găzduit pe aceeași adresă.", "90 zile"],
           [
             "Cookie-uri Stripe*",
             "Stripe",

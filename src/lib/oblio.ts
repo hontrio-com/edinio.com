@@ -27,11 +27,25 @@ export type OblioConfig = {
     ⚠ GESTIUNEA DIN CARE IES PRODUSELE. Obligatorie pentru conturile Oblio care au
     STOCURI pornite, si numai pentru liniile stocabile (`product_type` „Marfa").
 
-    ⚠ FARA EA, FACTURA E REFUZATA — nu partial, ci in intregime. Masurat pe
-    VetDepo, 01.09.2026: patru incercari intre 11.08 si 01.09, toate patru cazute
-    cu acelasi mesaj, „Produsul X nu are Gestiune (parametrul `management`)".
-    ZERO facturi emise vreodata. Iar integrarea aparea „conectata": acreditarile
-    erau bune, compania se citea, seria se citea. Doar documentul nu putea pleca.
+    ⚠ FARA EA, FACTURA E REFUZATA — nu partial, ci in intregime. Registrul de
+    operatii externe, citit pe VetDepo (okxi) la 01.09.2026 — `ultima_eroare`,
+    copiata cuvant cu cuvant, toate incercarile de la conectare incoace:
+
+        11.08  ORD-MR1XQAAZ-VQV  „nu are stoc suficient. Actualizeaza stocul"
+        25.08  TY-4080251858     „nu are stoc suficient. Actualizeaza stocul"
+        01.09  TY-4103280908     „nu are Gestiune (parametrul `management`)"
+        01.09  TY-4103280908     „nu are Gestiune (parametrul `management`)"
+
+    ⚠ DOUA MESAJE DEOSEBITE, NU UNUL. Prima varianta a acestei note spunea „toate
+    patru cu acelasi mesaj" — FALS. Am rezumat din memorie in loc sa recitesc
+    `ultima_eroare`. Gestiunea rezolva doar jumatatea de jos.
+
+    Jumatatea de sus — refuzul pe stoc — NU e rezolvata de campul asta. Vezi nota
+    de la `OblioInvoiceData.useStock`, unde scrie ce stim si ce nu.
+
+    ZERO facturi emise vreodata, pe niciunul din cele trei magazine cu Oblio. Iar
+    integrarea aparea „conectata": acreditarile treceau, compania se citea, seria
+    se citea. Doar documentul nu putea pleca.
 
     Documentatia lor (oblio.eu/api) spune ca parametrul „este valabil doar dupa
     activarea stocurilor pentru produse stocabile (nu este valabil pentru
@@ -146,6 +160,25 @@ export type OblioInvoiceData = {
   idempotencyKey?: string;
   // Trimite factura in SPV (e-Factura) daca trimiterea automata e activa in Oblio.
   spvExtern?: 0 | 1;
+  /*
+    ⚠ NU IL TRIMITEM, INTENTIONAT — si e scris aici ca sa nu fie descoperit din nou
+    de la zero. Documentatia lor (oblio.eu/api), pe document, cuvant cu cuvant:
+
+        „useStock | Descarcare pe gestiune (in cazul in care este activat stocul).
+         Poate fi 0 sau 1"
+
+    ⚠ CE NU SPUNE DOCUMENTATIA: daca `useStock: 0` ocoleste si VERIFICAREA de stoc,
+    sau doar opreste descarcarea. Refuzul „nu are stoc suficient" de pe VetDepo
+    (vezi nota de la `OblioConfig.management`) ar putea fi oprit de el — sau nu.
+    Nu s-a incercat: proba adevarata cere contul Oblio al unui client.
+
+    ⚠ SI IMPLICITUL LOR NU E SCRIS PENTRU FACTURI. Pentru avize documentatia spune
+    „valoarea implicita 1"; pentru facturi tace. Purtarea masurata la noi — stocul
+    E verificat cand nu trimitem nimic — se potriveste cu 1, dar asta e o deductie
+    din patru incercari, nu o afirmatie a lor. Trimiterea unui 0 aici SCHIMBA
+    contabilitatea de stoc a clientului, deci nu se pune fara ca el sa ceara.
+  */
+  useStock?: 0 | 1;
 };
 
 // ─── Token cache ──────────────────────────────────────────────────────────────

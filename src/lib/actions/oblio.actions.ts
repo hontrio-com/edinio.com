@@ -187,14 +187,23 @@ async function buildProducts(
     ⚠ CE A COSTAT LIPSA EI: pe VetDepo, patru facturi intre 11.08 si 01.09.2026,
     toate patru refuzate, zero emise. Si nu se vedea de nicaieri ca integrarea e
     stricata — acreditarile treceau, compania se citea, seria se citea. Doar
-    documentul cadea, de fiecare data, cu acelasi motiv.
+    documentul cadea.
+
+    ⚠ DAR NU DE FIECARE DATA DIN ACELASI MOTIV, cum scria aici inainte: doua au
+    cazut pe gestiune, doua pe „nu are stoc suficient". Campul asta le repara pe
+    primele doua. Vezi tabelul cu mesajele brute la `OblioConfig.management`.
 
     ⚠ DOAR PE MARFA. Pe „Serviciu" Oblio il ignora, iar transportul, extraoptiunile
     si ajustarea de rotunjire chiar NU sunt marfa din gestiune. Trimis acolo, ar fi
     o afirmatie falsa despre ce e linia — chiar daca n-ar strica nimic.
 
-    ⚠ GOL INSEAMNA „CONTUL N-ARE STOCURI". Atunci campul nu se trimite deloc, si
-    totul se poarta exact ca inainte — asa merg celelalte doua magazine cu Oblio.
+    ⚠ GOL INSEAMNA „CONTUL N-ARE STOCURI". Atunci campul nu se trimite deloc si
+    totul se poarta exact ca inainte.
+
+    ⚠ SI NU SPUNE NIMENI CA „ASA MERG CELELALTE DOUA MAGAZINE" — asa scria aici,
+    si e o afirmatie pe care n-o sustine nimic. Celelalte doua conturi cu Oblio
+    (teoshop, ciprian-piese-auto-brasov) au ZERO facturi emise si ZERO randuri in
+    registrul de operatii: n-au incercat niciodata. Nu sunt dovada ca merge ceva.
   */
   const gestiune = config.management?.trim();
 

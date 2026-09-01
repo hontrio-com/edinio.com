@@ -13,15 +13,22 @@ import { join } from "node:path";
   `management`. Mesajul lor: „Produsul X nu are Gestiune (parametrul
   `management`)".
 
-  Masurat pe VetDepo (business 635bc524), 01.09.2026 — toate incercarile de la
-  conectare incoace:
+  Masurat pe VetDepo (business 635bc524, magazinul `okxi`), 01.09.2026 — coloana
+  `ultima_eroare` din `operatii_externe`, copiata cuvant cu cuvant, toate
+  incercarile de la conectare incoace:
 
-      11.08  ORD-MR1XQAAZ    refuzata — nu are Gestiune
-      25.08  TY-4080251858   refuzata — nu are Gestiune
-      01.09  TY-4103280908   refuzata — nu are Gestiune
-      01.09  TY-4103280908   refuzata — nu are Gestiune
+      11.08  ORD-MR1XQAAZ-VQV  „nu are stoc suficient. Actualizeaza stocul"
+      25.08  TY-4080251858     „nu are stoc suficient. Actualizeaza stocul"
+      01.09  TY-4103280908     „nu are Gestiune (parametrul `management`)"
+      01.09  TY-4103280908     „nu are Gestiune (parametrul `management`)"
 
-  PATRU DIN PATRU. Zero facturi emise vreodata.
+  ⚠ PRIMA VARIANTA A ACESTEI NOTE SPUNEA „PATRU DIN PATRU — nu are Gestiune".
+  Fals. Doua sunt gestiune, doua sunt stoc. Rezumasem din memorie in loc sa
+  recitesc coloana. Probele de mai jos pazesc gestiunea — adica DOUA din patru.
+  Refuzul pe stoc ramane deschis; vezi `OblioInvoiceData.useStock`.
+
+  Zero facturi emise vreodata — si nu doar aici: pe toate cele trei conturi cu
+  Oblio de pe platforma, zero.
 
   ⚠ SI DE CE N-A VAZUT NIMENI: integrarea aparea sanatoasa. Acreditarile treceau,
   nomenclatorul de firme se citea, seria se citea, formularul se salva cu bine.

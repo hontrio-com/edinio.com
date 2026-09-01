@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { UrmaArticol } from "@/components/edinio-marketing/UrmaArticol";
 import Image from "next/image";
 import { Clock } from "lucide-react";
 import { PageHero } from "@/components/website/PageHero";
@@ -62,6 +63,12 @@ export async function CorpArticol({ a }: { a: ArticolIntreg }) {
 
   return (
     <>
+      <UrmaArticol
+        articolId={a.id}
+        slug={a.slug}
+        categorie={a.categorie?.name}
+        autor={a.autor?.name}
+      />
       <PageHero
         sir={[
           ACASA,
@@ -155,7 +162,14 @@ export async function CorpArticol({ a }: { a: ArticolIntreg }) {
               </details>
             )}
 
-            <div className="policy-content blog-articol" dangerouslySetInnerHTML={{ __html: html }} />
+            {/*
+              ⚠ `data-articol-corp` NU E DE PODOABA: pe el se aseaza reperele de
+              progres. Masurat in CORPUL articolului, nu in toata pagina — pe o
+              pagina de blog, corpul e poate jumatate din inaltime, iar restul e
+              indemn, autor, articole inrudite, abonare, subsol. „A derulat 90%
+              din pagina" nu inseamna „a citit articolul". Vezi `UrmaArticol`.
+            */}
+            <div data-articol-corp className="policy-content blog-articol" dangerouslySetInnerHTML={{ __html: html }} />
 
             {/* Îndemnul potrivit CU TEXTUL, înaintea întrebărilor. Banda de
                 final a site-ului rămâne jos și spune altceva. */}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { urmareste } from "@/lib/edinio-marketing/magistrala";
 import type { RezultatJeton } from "@/lib/actions/blog-abonati.actions";
 import Link from "next/link";
 import { Check, X, Loader2 } from "lucide-react";
@@ -30,6 +31,7 @@ export function ApasaCaSaConfirmi({
   textReusit,
   textPicat,
   textTemporar,
+  masoaraConfirmarea,
 }: {
   /*
     ⚠ Referință de acțiune de server, nu o închidere legată cu `.bind`.
@@ -54,6 +56,12 @@ export function ApasaCaSaConfirmi({
    * jeton stricat n-are rost să mai apeși, la o cădere de o clipă are.
    */
   textTemporar: string;
+  /*
+    ⚠ UN SEMNAL, NU O FUNCTIE. Paginile care randeaza butonul sunt componente de
+    SERVER; o functie trecuta de acolo n-ar putea fi serializata catre client.
+    Prima mea forma a incercat exact asta.
+  */
+  masoaraConfirmarea?: boolean;
 }) {
   const [stare, setStare] = useState<"gata" | "reusit" | "picat" | "temporar">("gata");
   const [seLucreaza, incepe] = useTransition();
@@ -102,6 +110,13 @@ export function ApasaCaSaConfirmi({
         onClick={() => incepe(async () => {
           const r = await actiune(jeton);
           setStare(r.ok ? "reusit" : r.motiv === "temporar" ? "temporar" : "picat");
+          /*
+            ⚠ HOTARAREA VINE DE LA LOCUL CHEMARII, nu de aici. Componenta e
+            folosita si la confirmare, si la DEZABONARE — o masuratoare scrisa
+            neconditionat inauntru ar fi numarat dezabonarile drept abonari
+            confirmate, adica ar fi crescut cifra exact cand scadea realitatea.
+          */
+          if (r.ok && masoaraConfirmarea) urmareste({ name: "newsletter_subscribe_confirmed" });
         })}
         className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-8 py-3.5 text-[15px] font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
       >

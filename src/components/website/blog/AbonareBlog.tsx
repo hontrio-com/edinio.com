@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { urmareste } from "@/lib/edinio-marketing/magistrala";
 import { Loader2, Mail, Check } from "lucide-react";
 import { aboneazaLaBlog } from "@/lib/actions/blog-abonati.actions";
 
@@ -28,7 +29,20 @@ export function AbonareBlog() {
     setEroare(null);
     const res = await aboneazaLaBlog(email);
     setTrimite(false);
-    if (res.ok) { setGata(res.mesaj); setEmail(""); }
+    if (res.ok) {
+      setGata(res.mesaj); setEmail("");
+      /*
+        ⚠ CEREREA, NU ABONAREA. Aici omul doar a cerut; abonarea se face abia cand
+        apasa legatura din email. Confundate, raportul umfla numarul de abonati cu
+        toti cei care n-au confirmat niciodata — iar rata de confirmare, singura
+        cifra care spune daca emailurile chiar ajung, nu se mai poate calcula.
+
+        ⚠ Se trage si cand adresa era DEJA abonata: actiunea raspunde la fel
+        dinadins, ca formularul sa nu poata fi folosit ca sa afli cine e abonat.
+        Deci numarul asta e „cereri", nu „adrese noi" — si asa se si cheama.
+      */
+      urmareste({ name: "newsletter_subscribe_request" });
+    }
     else setEroare(res.eroare);
   }
 

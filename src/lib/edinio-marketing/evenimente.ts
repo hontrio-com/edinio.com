@@ -45,6 +45,28 @@ export type EvenimentEdinio =
   | { name: "navigation_click"; nav_item: string; nav_location: string; destination_path: string }
   | { name: "outbound_click"; outbound_host: string; outbound_kind: "phone" | "whatsapp" | "email" | "link" }
 
+  /*
+    ═══ ⚠ DE AICI IN JOS: DECLARATE, DAR INCA NETRASE DE NICAIERI ═══
+
+    Le las in taxonomie dinadins, si merita spus de ce — fiindca peste tot azi am
+    scos exact felul asta de promisiune.
+
+    Deosebirea: un COMENTARIU care promite o proba inexistenta insala pe cine il
+    citeste. O VARIANTA de tip nu insala pe nimeni — ea nu spune „asta se
+    intampla", ci „daca vei masura asta, asa se cheama si astea sunt campurile".
+    Iar rostul ei e sa nu apara peste o luna trei nume deosebite pentru acelasi
+    lucru, in trei componente scrise de trei oameni.
+
+    ⚠ CE AR FI TOTUSI GRESIT: sa se creeze dimensiuni personalizate in GA4 pentru
+    ele. Alea se fac numai pentru ce chiar pleaca. Lista de facut sta in
+    documentul de configurare, nu aici.
+
+    Trase azi: page_view, cta_click, navigation_click, outbound_click,
+    section_view, scroll_depth, form_start/submit/error, generate_lead,
+    article_view, article_read_progress, article_read_complete,
+    newsletter_subscribe_request, newsletter_subscribe_confirmed.
+  */
+
   /* ─── Preturi ──────────────────────────────────────────────────────────── */
   | { name: "billing_period_change"; billing_period: "monthly" | "annual" }
   | { name: "plan_select"; plan_id: string; billing_period: "monthly" | "annual" }
@@ -98,7 +120,9 @@ export type NumeEveniment = EvenimentEdinio["name"];
 /**
  * Evenimentele care sunt CONVERSII de afacere.
  *
- * ⚠ Se marcheaza „key event" in GA4 doar astea trei. Un clic pe un buton nu e o
+ * ⚠ Se marcheaza „key event" in GA4 doar astea DOUA (randul spunea „trei" — gresit,
+ * numarat inainte sa hotarasc ca abonarea confirmata nu e conversie de afacere).
+ * Un clic pe un buton nu e o
  * conversie; marcat asa, optimizarea campaniilor invata sa caute clicuri in loc
  * de clienti.
  */

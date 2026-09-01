@@ -71,6 +71,28 @@ export function Logo({
            inversarea da aceeasi marca in negru. Vezi nota din `logos.ts`. */
         ...(logo.invert ? { filter: "invert(1)" } : null),
       }}
+      /*
+        ⚠ `width` ȘI `height` CA ATRIBUTE, pe lângă `style`. Măsurat pe HTML-ul
+        de producție: pagina de start are 163 de `<img>`, iar 110 din ele — TOATE
+        randate de aici — n-aveau nici atribute, nici dimensiuni în CSS.
+        `unsized-images` din Lighthouse: 0,5 → 1.
+
+        ⚠ NU E O REPARAȚIE DE CLS, și nici nu strică CLS-ul. `style` rezervă deja
+        caseta din HTML. Am crezut o clipă că am introdus o regresie (0,014 →
+        0,017), dar am măsurat și varianta fără schimbare: tot 0,014–0,017. E
+        zgomotul rulării, nu un efect.
+
+        Ce lipsea era RAPORTUL intrinsec, pe care browserul îl folosește înainte
+        să aibă fișierul.
+
+        ⚠ VALORILE VIN DIN ACEEAȘI SOCOTEALĂ CA STILUL (`logoSize` plus
+        `logo.ratio`), deci nu pot devia una de alta. `ratio` e o aproximare
+        scrisă de mână în `logos.ts` — dacă vreodată se rotunjește prost pentru o
+        siglă anume, se vede ca o mișcare mică la încărcare, și atunci se
+        corectează `ratio`, nu rândurile astea.
+      */
+      width={Math.round(size.height * logo.ratio)}
+      height={Math.round(size.height)}
       loading={prioritara ? "eager" : "lazy"}
       decoding="async"
       className={cn("w-auto shrink-0 object-contain", className)}

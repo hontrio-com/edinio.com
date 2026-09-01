@@ -236,3 +236,68 @@ test("`form-action` din CSP spune ce spune si comentariul", () => {
   const cod = citeste("next.config.ts");
   assert.match(cod, /"form-action 'self'"/, "form-action nu mai e 'self'");
 });
+
+/* ═══ 8. Politica de cookies nu are voie sa se departeze de cod ═══ */
+
+test("politica NU mai promite o poarta de consimtamant pe edinio.com", () => {
+  /*
+    ⚠ CE ERA GRESIT. Sectiunea 20 se numea „Meta Pixel este activat numai după
+    consimțământ", iar pixelul se aprindea chiar pe pagina aceea. Masurat:
+    `curl https://www.edinio.com/cookies` -> o aparitie `facebook.com/tr`, zero
+    urme de banner.
+
+    ⚠ NU E UN DEFECT DE COD, e o declaratie inexacta catre utilizatori si catre
+    autoritate. Proprietarul a ales sa aduca TEXTUL la ce face codul — o poarta ar
+    fi scos conversiile din onboarding din raportarea Meta/TikTok.
+
+    ⚠ PROBA ASTA PAZESTE POTRIVIREA IN AMANDOUA SENSURILE. Daca maine se pune
+    poarta pe edinio.com, ea cade — si atunci textul trebuie dus inapoi, nu proba
+    stearsa. Un document care descrie o poarta inexistenta e la fel de gresit ca
+    unul care tace despre una existenta.
+  */
+  const cod = citeste("src/lib/website/cookies.ts");
+
+  assert.doesNotMatch(
+    cod,
+    /titlu: "Meta Pixel este activat numai după consimțământ"/,
+    "titlul care promitea poarta s-a intors, dar poarta nu exista pe edinio.com",
+  );
+  assert.match(
+    cod,
+    /Pe edinio\.com și în Platforma Edinio/,
+    "s-a pierdut sectiunea care spune limpede ce se intampla pe propriile noastre pagini",
+  );
+  assert.match(
+    cod,
+    /se încarcă odată cu pagina, fără un banner de consimțământ prealabil/,
+    "textul nu mai descrie purtarea adevarata a pixelilor pe edinio.com",
+  );
+
+  /* Afirmatiile de fapt despre banner trebuie sa spuna PE CE il arata. */
+  assert.match(
+    cod,
+    /Pe magazinele create prin Edinio, la prima accesare/,
+    "sectiunea 24 a revenit la formularea care spune ca mecanismul se arata oricui — fals pentru edinio.com",
+  );
+});
+
+test("consimtamantul e legat de magazine, nu de platforma — si asa scrie", () => {
+  /*
+    Martorul celeilalte jumatati: daca `ConsentGate` ajunge vreodata si pe
+    layouturile platformei, textul de mai sus devine el insusi mincinos, in
+    sens invers. Proba pica atunci si trimite pe cine o citeste inapoi la nota.
+  */
+  const cai = [
+    "src/app/(website)/layout.tsx",
+    "src/app/(ajutor)/layout.tsx",
+    "src/app/(dashboard)/layout.tsx",
+  ];
+  for (const c of cai) {
+    const cod = faraComentarii(citeste(c));
+    assert.doesNotMatch(
+      cod, /ConsentGate|CookieConsent/,
+      `${c} a capatat poarta de consimtamant — atunci politica de cookies trebuie dusa inapoi ` +
+      "la forma care o descrie (sectiunile 20, 24, 25, 28)",
+    );
+  }
+});

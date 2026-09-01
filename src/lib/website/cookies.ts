@@ -17,8 +17,35 @@
  * „Respinge opționale", „Personalizează"), categorii NEPRESELECTATE, un link
  * permanent „Setări Cookies" și blocarea tag-urilor înainte de consimțământ.
  * Sunt afirmații despre cum FUNCȚIONEAZĂ site-ul, nu doar despre intenții.
- * Dacă implementarea de pe edinio.com nu se potrivește cu ele, documentul devine
- * o declarație inexactă către utilizatori și autoritate.
+ *
+ * ⚠ SI PANA PE 01.09.2026 NU SE POTRIVEAU. Documentul spunea, la secțiunea 20,
+ * „Meta Pixel este activat numai după consimțământ" — iar pixelul se aprindea
+ * chiar pe pagina asta.
+ *
+ * Măsurat de mine: `curl https://www.edinio.com/cookies` întoarce o apariție
+ * `facebook.com/tr?id=…` și ZERO urme de banner de consimțământ. Pe TikTok NU
+ * am o măsurătoare din HTML — componenta lui folosește `afterInteractive`, deci
+ * scriptul e injectat după hidratare și nu se vede la `curl`; pentru el am doar
+ * codul, care îl randează la fel de necondiționat.
+ *
+ * Mecanismul de consimțământ (`ConsentGate`/`CookieConsent`) e legat DOAR de
+ * magazinele comercianților, în `app/(public)/[slug]/layout.tsx`. Pe edinio.com
+ * nu există niciun banner, iar cei doi pixeli se randează necondiționat din
+ * cinci layouturi: `(website)`, `(ajutor)`, `(auth)`, `(onboarding)`,
+ * `(dashboard)`. Singurul grup fără ei e `(admin)`.
+ *
+ * ⚠ CE S-A ALES, si de cine: proprietarul platformei a ales să aducă TEXTUL la
+ * ce face codul, nu invers — o poartă de consimțământ ar fi scos conversiile din
+ * onboarding din raportarea Meta/TikTok pentru cine refuză. Secțiunile 20, 24,
+ * 25 și 28 spun acum limpede care parte descrie magazinele clienților și care
+ * descrie edinio.com.
+ *
+ * ⚠ DACĂ SE PUNE VREODATĂ POARTA pe edinio.com, secțiunile astea patru se
+ * întorc la forma de dinainte — nu se lasă descrierea veche peste codul nou.
+ *
+ * ⚠ ȘI O CAPCANĂ, dacă cineva crede că stinge pixelii ștergând variabilele de
+ * mediu: `PlatformTikTokPixel.tsx` are id-ul scris în cod ca rezervă. Meta s-ar
+ * stinge, TikTok nu.
  *
  * ═══ CE SE EVIDENȚIAZĂ ═══
  *
@@ -632,22 +659,31 @@ const SECTIUNI: Sectiune[] = [
     ],
   },
   {
-    id: "meta-pixel-doar-dupa-consimtamant",
+    id: "meta-pixel-cand-se-activeaza",
     nr: 20,
-    titlu: "Meta Pixel este activat numai după consimțământ",
+    titlu: "Când se activează Meta Pixel și TikTok Pixel",
     blocuri: [
       {
         tip: "paragraf",
         text: "Pentru utilizatorii cărora li se aplică cerințele europene privind cookie-urile, Meta precizează că business-urile care utilizează Meta Business Tools trebuie să implementeze propriul mecanism de consimțământ și că cookie-urile neesențiale nu trebuie setate/citite fără acordul corespunzător.",
       },
-      { tip: "paragraf", text: "Prin urmare, pe Edinio:" },
+      { tip: "subtitlu", text: "Pe magazinele create prin Edinio" },
       {
         tip: "paragraf",
-        text: "Meta Pixel nu trebuie să fie executat înainte ca utilizatorul să accepte categoria „Marketing și publicitate”.",
+        text: "Tehnologiile de marketing configurate de comerciant sunt supuse mecanismului de consimțământ al magazinului: ele nu se execută înainte ca vizitatorul să accepte categoria „Marketing și publicitate”, iar refuzul nu împiedică folosirea magazinului.",
+      },
+      { tip: "subtitlu", text: "Pe edinio.com și în Platforma Edinio" },
+      {
+        tip: "paragraf",
+        text: "Pe site-ul nostru de prezentare și în interfața Platformei, Meta Pixel și TikTok Pixel se încarcă odată cu pagina, fără un banner de consimțământ prealabil. Nu prezentăm astăzi un mecanism de alegere pentru aceste tehnologii pe propriile noastre pagini.",
       },
       {
         tip: "paragraf",
-        text: "Refuzarea acestei categorii nu împiedică utilizarea funcționalităților esențiale Edinio.",
+        text: "Cine dorește să le refuze o poate face din setările browserului (blocarea cookie-urilor terțe), dintr-o extensie de blocare, sau din setările de publicitate ale conturilor Meta și TikTok.",
+      },
+      {
+        tip: "paragraf",
+        text: "Refuzul acestor tehnologii nu împiedică în niciun fel folosirea funcționalităților esențiale Edinio.",
       },
     ],
   },
@@ -790,7 +826,7 @@ const SECTIUNI: Sectiune[] = [
     blocuri: [
       {
         tip: "paragraf",
-        text: "La prima accesare, utilizatorului îi este prezentat un mecanism prin care poate alege modul în care dorește să fie utilizate cookie-urile opționale.",
+        text: "Pe magazinele create prin Edinio, la prima accesare vizitatorului îi este prezentat un mecanism prin care poate alege modul în care dorește să fie utilizate cookie-urile opționale. Regulile din această secțiune și din următoarea descriu acel mecanism.",
       },
       { tip: "paragraf", text: "Edinio nu consideră următoarele comportamente drept consimțământ:" },
       {
@@ -814,7 +850,7 @@ const SECTIUNI: Sectiune[] = [
     nr: 25,
     titlu: "Opțiunile disponibile în banner",
     blocuri: [
-      { tip: "paragraf", text: "Bannerul Edinio trebuie să permită utilizatorului cel puțin:" },
+      { tip: "paragraf", text: "Bannerul afișat pe magazinele create prin Edinio trebuie să permită vizitatorului cel puțin:" },
       { tip: "subtitlu", text: "Acceptă toate" },
       { tip: "paragraf", text: "Activează toate categoriile opționale." },
       { tip: "subtitlu", text: "Respinge opționale" },
@@ -881,10 +917,9 @@ const SECTIUNI: Sectiune[] = [
     nr: 28,
     titlu: "Retragerea consimțământului",
     blocuri: [
-      { tip: "paragraf", text: "Utilizatorul își poate modifica opțiunile în orice moment." },
       {
         tip: "paragraf",
-        text: "Edinio va pune la dispoziție un link sau buton permanent, de exemplu:",
+        text: "Pe magazinele create prin Edinio, vizitatorul își poate modifica opțiunile în orice moment printr-un link sau buton permanent, de exemplu:",
       },
       { tip: "subtitlu", text: "Setări Cookies" },
       { tip: "paragraf", text: "Prin acesta utilizatorul va putea:" },

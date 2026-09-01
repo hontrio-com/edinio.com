@@ -11,8 +11,7 @@ import { cn } from "@/lib/utils/cn";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 import { createBusiness } from "@/lib/actions/business.actions";
 import { trackOnboardingStep } from "@/lib/actions/auth.actions";
-import { platformFbq } from "@/components/platform/PlatformMetaPixel";
-import { platformTtq } from "@/components/platform/PlatformTikTokPixel";
+import { urmareste } from "@/lib/edinio-marketing/magistrala";
 import {
   type BillingInterval,
   PLAN_PRICES,
@@ -159,10 +158,15 @@ function PlanPageContent() {
     trackOnboardingStep("plan");
     window.scrollTo(0, 0);
     const id = requestAnimationFrame(() => window.scrollTo(0, 0));
-    // Start-of-funnel event (skip when returning from a successful Stripe payment).
+    /*
+      Start-of-funnel event (skip when returning from a successful Stripe payment).
+
+      ⚠ FARA `plan_id`: aici omul abia a intrat pe pagina si inca n-a ales nimic.
+      Momentul e pastrat asa cum era inainte, ca numarul de `InitiateCheckout` din
+      contul de reclame sa ramana comparabil cu al lunilor trecute.
+    */
     if (!isSuccess) {
-      platformFbq("InitiateCheckout");
-      platformTtq("InitiateCheckout");
+      urmareste({ name: "begin_checkout", billing_period: billingInterval });
     }
     return () => cancelAnimationFrame(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -178,7 +182,6 @@ function PlanPageContent() {
 
     setCreating(true);
     finalizeBusiness(storedPlan);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuccess]);
 
   // Show toast if payment was cancelled
@@ -222,13 +225,30 @@ function PlanPageContent() {
       sessionStorage.removeItem("onboarding_pending_plan");
       sessionStorage.removeItem("onboarding_pending_interval");
 
+      /*
+        ⚠ `event_id` E ID-UL MAGAZINULUI TOCMAI CREAT, nu un numar aleator.
+
+        Doua motive, si al doilea e cel important:
+        1. E unic prin constructie — un magazin se creeaza o singura data.
+        2. SERVERUL IL STIE. Cand se adauga trimiterea de pe server (Meta CAPI,
+           TikTok Events API), ea poate folosi EXACT acelasi id fara sa-l care
+           nimeni prin cookie-uri sau prin parametri de adresa. Fara asta, un
+           singur abonament ar aparea ca doua conversii.
+      */
+      const idConversie = result.businessId ?? "";
+
       if (plan === "free") {
-        platformFbq("StartTrial");
-        platformTtq("StartTrial");
+        urmareste({ name: "trial_start", plan_id: "free", event_id: idConversie });
       } else {
         const value = paidInterval === "annual" ? getAnnualPrice(plan) : (PLAN_PRICES[plan] ?? 0);
-        platformFbq("Subscribe", { value, currency: "RON", predicted_ltv: 0 });
-        platformTtq("Subscribe", { value, currency: "RON" });
+        urmareste({
+          name: "purchase",
+          plan_id: plan,
+          billing_period: paidInterval,
+          value,
+          currency: "RON",
+          event_id: idConversie,
+        });
       }
 
       toast.success("Magazinul tau a fost creat cu succes!");
@@ -269,8 +289,7 @@ function PlanPageContent() {
         return;
       }
 
-      platformFbq("AddPaymentInfo");
-      platformTtq("AddPaymentInfo");
+      urmareste({ name: "add_payment_info", plan_id: selectedPlan, billing_period: billingInterval });
       window.location.href = data.url;
     } catch {
       toast.error("Eroare la initializarea platii. Incearca din nou.");

@@ -37,6 +37,18 @@ export const TRASE_DE_GA4_SINGUR = ["session_start", "first_visit", "user_engage
 function numeGa4(ev: EvenimentEdinio): string | null {
   switch (ev.name) {
     /*
+      ⚠ SINGURUL EVENIMENT CARE NU INTRA IN ANALYTICS. `landing_view` exista
+      numai ca sa hraneasca audientele de retargetare din Meta si TikTok, care se
+      construiesc din `ViewContent`.
+
+      In GA4 pagina e deja numarata de `page_view`, cu `page_type` si
+      `page_group`. Trimis si aici, ar fi un al doilea nume pentru acelasi lucru
+      — iar cine ar face un raport pe el ar numara vizitele de doua ori.
+    */
+    case "landing_view":
+      return null;
+
+    /*
       ⚠ `form_start` / `form_submit` / `form_error` poarta `form_name` ca
       parametru, in loc sa fie evenimente deosebite pe formular. Trei formulare x
       trei momente ar fi noua nume; asa raman trei, si se pot compara intre ele.
@@ -59,8 +71,16 @@ export const adaptorGa4: Adaptor = {
     const nume = numeGa4(ev);
     if (!nume) return;
 
-    const { name: _nume, ...parametri } = ev;
+    const { name: _nume, ...restul } = ev;
     void _nume;
+    /*
+      Tipul larg e pentru compilator, nu pentru siguranta: `...restul` face deja
+      o copie, deci evenimentul primit nu se atinge — si nici nu are voie, el
+      pleaca si spre celelalte adaptoare dupa noi. Dar tipul lui e o REUNIUNE de
+      forme, iar mai jos se adauga o cheie care nu exista in niciuna
+      (`transaction_id`), asa ca aici se pierde dinadins ingustimea.
+    */
+    const parametri: Record<string, unknown> = { ...restul };
 
     /*
       ⚠ ADRESA SE CURATA AICI, nu la apelant. Un `page_view` trimis dintr-o
@@ -70,6 +90,20 @@ export const adaptorGa4: Adaptor = {
     */
     if ("page_location" in parametri && typeof parametri.page_location === "string") {
       parametri.page_location = curataAdresa(parametri.page_location);
+    }
+
+    /*
+      ⚠ LA `purchase`, GA4 CERE `transaction_id`. Fara el, doua abonamente cu
+      aceeasi valoare in aceeasi zi pot fi socotite acelasi eveniment, iar
+      raportul de venituri iese mai mic decat adevarul — in tacere, fiindca GA4
+      nu respinge evenimentul, doar il deduplica.
+
+      Noi avem deja un id unic pe eveniment, nascut pe server: `event_id`, acelasi
+      pe care Meta si TikTok il folosesc ca sa uneasca browserul cu serverul. Il
+      dam si aici, sub numele pe care il asteapta GA4.
+    */
+    if (ev.name === "purchase") {
+      parametri.transaction_id = ev.event_id;
     }
 
     g("event", nume, { ...parametri, ...context });

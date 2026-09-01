@@ -44,7 +44,7 @@
  * întorc la forma de dinainte — nu se lasă descrierea veche peste codul nou.
  *
  * ⚠ ȘI O CAPCANĂ, dacă cineva crede că stinge pixelii ștergând variabilele de
- * mediu: `PlatformTikTokPixel.tsx` are id-ul scris în cod ca rezervă. Meta s-ar
+ * mediu: `EdinioTikTokPixel.tsx` are id-ul scris în cod ca rezervă. Meta s-ar
  * stinge, TikTok nu.
  *
  * ═══ CE SE EVIDENȚIAZĂ ═══

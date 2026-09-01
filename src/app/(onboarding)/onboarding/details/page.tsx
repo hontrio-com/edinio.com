@@ -12,8 +12,7 @@ import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 import { slugify } from "@/lib/utils/slugify";
 import { checkSlugAvailability } from "@/lib/actions/business.actions";
 import { trackOnboardingStep } from "@/lib/actions/auth.actions";
-import { platformFbq } from "@/components/platform/PlatformMetaPixel";
-import { platformTtq } from "@/components/platform/PlatformTikTokPixel";
+import { urmareste } from "@/lib/edinio-marketing/magistrala";
 
 const schema = z.object({
   business_name: z.string().min(2, "Minim 2 caractere").max(100),
@@ -45,14 +44,29 @@ export default function OnboardingDetailsPage() {
   const businessName = watch("business_name") ?? "";
   const slug = watch("slug") ?? "";
 
-  // Track step + fire pixel + transfer plan from cookie (Google OAuth flow)
+  /*
+    Track step + transfer plan from cookie (Google OAuth flow).
+
+    ═══ ⚠ AICI ERA UN `CompleteRegistration` TRIMIS A DOUA OARA ═══
+
+    Randurile scoase pe 01.09.2026 citeau `sessionStorage.platform_registered` si
+    trimiteau `CompleteRegistration` catre Meta si TikTok.
+
+    Dar acelasi cont nou e deja numarat de `UrmaContNou` (randat in layoutul
+    onboardingului), dintr-un jeton scris de SERVER in chiar actiunea care creeaza
+    contul — si de acolo pleaca `sign_up`, pe care adaptoarele il traduc tot in
+    `CompleteRegistration`.
+
+    Deci fiecare inregistrare pe email ajungea de DOUA ORI in contul de reclame.
+    Nu cadea nimic; numarul de inregistrari era pur si simplu dublu, iar costul pe
+    inregistrare parea la jumatate.
+
+    Drumul serverului e cel care ramane: are un `event_id` (deci se poate uni cu
+    trimiterea de pe server), si prinde si inscrierile prin Google, pe care
+    `sessionStorage` nu le prindea — nu supravietuieste intoarcerii de la Google.
+  */
   useEffect(() => {
     trackOnboardingStep("details");
-    if (sessionStorage.getItem("platform_registered") === "1") {
-      sessionStorage.removeItem("platform_registered");
-      platformFbq("CompleteRegistration");
-      platformTtq("CompleteRegistration");
-    }
     // Google OAuth: plan comes via cookie since sessionStorage doesn't survive redirect
     const cookieMatch = document.cookie.match(/preselected_plan=(\w+)/);
     if (cookieMatch && ["basic", "premium", "ultra"].includes(cookieMatch[1])) {
@@ -93,8 +107,26 @@ export default function OnboardingDetailsPage() {
       slug: data.slug,
     }));
 
-    platformFbq("Lead");
-    platformTtq("SubmitForm");
+    /*
+      ═══ ⚠ NU MAI E `Lead`, SI ASTA SCHIMBA UN NUMAR DIN CONTUL DE RECLAME ═══
+
+      Randurile de aici trimiteau `Lead` (Meta) si `SubmitForm` (TikTok) — adica
+      EXACT numele sub care pleaca si o cerere de oferta din formularul de
+      contact sau de migrare.
+
+      Deci „Lead" insemna doua lucruri deosebite amestecate: cine ne-a scris, si
+      cine a completat al doilea pas din inscriere. Un raport pe leaduri nu putea
+      deosebi un client interesat de un cont pe jumatate creat.
+
+      Acum pasul se numeste ce este. Catre Meta si TikTok nu pleaca nimic de aici
+      — nu fiindca ar fi neinteresant, ci fiindca imediat dupa, la intrarea pe
+      pagina de planuri, pleaca `begin_checkout` (`InitiateCheckout`), care e la
+      o apasare distanta si e un semnal de optimizare mai bun.
+
+      ⚠ URMAREA: numarul de „Lead" din Meta va scadea. Nu s-a stricat nimic —
+      abia acum inseamna ce spune.
+    */
+    urmareste({ name: "onboarding_step_complete", onboarding_step: "details", onboarding_step_index: 1 });
     router.push("/onboarding/plan");
   }
 

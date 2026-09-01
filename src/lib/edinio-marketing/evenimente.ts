@@ -111,6 +111,52 @@ export type EvenimentEdinio =
   | { name: "registration_view" }
   | { name: "registration_start" }
   | { name: "sign_up"; signup_origin: string; event_id: string }
+
+  /* ─── Comercial: de la alegerea planului la abonament ──────────────────── */
+  /*
+    ⚠ NUMELE SUNT ALE GA4 unde GA4 are unul (`begin_checkout`,
+    `add_payment_info`, `purchase`). Numai `trial_start` si `landing_view` sunt
+    ale noastre: GA4 n-are un nume standard pentru ele.
+
+    ⚠ `event_id` NUMAI LA CELE DOUA CARE SE INCHEIE CU UN MAGAZIN CREAT.
+
+    Id-ul exista ca sa uneasca evenimentul din browser cu acelasi eveniment
+    trimis de pe server (CAPI) — fara el, un singur abonament ar aparea ca doua
+    conversii, si costul pe achizitie raportat s-ar injumatati. In favoarea
+    noastra, deci nimeni n-ar pune-o la indoiala.
+
+    Dar `begin_checkout` si `add_payment_info` NU pleaca niciodata de pe server:
+    se intampla in browser si nicaieri altundeva. Un `event_id` cerut si acolo ar
+    fi trebuit inventat la fata locului — un id pe care serverul nu-l poate
+    reproduce, adica o promisiune de deduplicare care nu deduplica nimic.
+
+    ⚠ SI `plan_id` E OPTIONAL LA `begin_checkout`: evenimentul se trage la
+    intrarea pe pagina de planuri, cand omul inca n-a ales niciunul.
+  */
+  | { name: "begin_checkout"; plan_id?: string; billing_period: "monthly" | "annual" }
+  | { name: "add_payment_info"; plan_id: string; billing_period: "monthly" | "annual" }
+  /*
+    ⚠ `event_id` E ID-UL MAGAZINULUI CREAT, nu un numar aleator. Serverul il
+    stie (`createBusiness` il intoarce), deci cand se adauga trimiterea de pe
+    server ea poate folosi EXACT acelasi id, fara sa-l care nimeni prin cookie-uri.
+    Si e unic prin constructie: un magazin se creeaza o singura data.
+  */
+  | { name: "trial_start"; plan_id: string; event_id: string }
+  | {
+      name: "purchase";
+      plan_id: string; billing_period: "monthly" | "annual";
+      value: number; currency: "RON"; event_id: string;
+    }
+  /*
+    ⚠ `landing_view` EXISTA NUMAI PENTRU RECLAME, si merita spus de ce, fiindca
+    pare o dublare a lui `page_view`.
+
+    Meta si TikTok construiesc audiente de retargetare din `ViewContent`. GA4 n-are
+    nevoie de el: acolo pagina e deja numarata de `page_view`, cu `page_type` si
+    `page_group`. Deci evenimentul asta pleaca la cei doi si NU la GA4 — vezi
+    `numeGa4`, care intoarce `null` pentru el.
+  */
+  | { name: "landing_view"; content_name: string; content_category: string }
   | { name: "onboarding_step_view"; onboarding_step: string; onboarding_step_index: number }
   | { name: "onboarding_step_complete"; onboarding_step: string; onboarding_step_index: number }
   | { name: "onboarding_complete" };
@@ -118,23 +164,72 @@ export type EvenimentEdinio =
 export type NumeEveniment = EvenimentEdinio["name"];
 
 /**
- * Evenimentele care sunt CONVERSII de afacere.
+ * Aceleasi nume, dar la RULARE.
  *
- * ⚠ Se marcheaza „key event" in GA4 doar astea DOUA (randul spunea „trei" — gresit,
- * numarat inainte sa hotarasc ca abonarea confirmata nu e conversie de afacere).
- * Un clic pe un buton nu e o
- * conversie; marcat asa, optimizarea campaniilor invata sa caute clicuri in loc
- * de clienti.
+ * ⚠ DE CE E NEVOIE DE ELE SI CA VALORI. Taxonomia de mai sus e un TIP: ea nu
+ * exista dupa compilare, deci nicio proba nu poate merge prin toate evenimentele.
+ * Iar cea mai buna plasa pe care o avem — maturarea intregii taxonomii prin paza
+ * anti-PII — are nevoie exact de asta.
+ *
+ * ⚠ SI NU SE POATE DESPARTI DE TIP, fiindca sub ea sta o verificare pe care o
+ * face COMPILATORUL: daca se adauga un eveniment in tip si se uita aici (sau
+ * invers), `tsc` cade. Nu e nevoie de disciplina, si nici de o proba.
  */
-export const CONVERSII: ReadonlyArray<NumeEveniment> = ["generate_lead", "sign_up"];
+/*
+  ⚠ DE CE E UN OBIECT SI NU O LISTA. `Record<NumeEveniment, true>` face
+  COMPILATORUL sa ceara exact taxonomia, in amandoua directiile, fara nicio
+  disciplina si fara nicio proba:
+
+    - un eveniment adaugat in tip si uitat aici  -> lipseste o cheie, `tsc` cade
+    - un nume ramas aici dupa ce a iesit din tip -> cheie in plus, `tsc` cade
+
+  O lista simpla n-ar fi facut nici una, nici alta: ea ar fi imbatranit tacut, si
+  proba care matura taxonomia ar fi maturat trecutul.
+*/
+const TOATE_EVENIMENTELE: Record<NumeEveniment, true> = {
+  page_view: true,
+  section_view: true, scroll_depth: true, cta_click: true,
+  navigation_click: true, outbound_click: true,
+  billing_period_change: true, plan_select: true, faq_open: true,
+  integration_filter: true, integration_view: true,
+  form_start: true, form_submit: true, form_error: true, generate_lead: true,
+  article_view: true, article_read_progress: true, article_read_complete: true,
+  article_cta_click: true, article_share: true, view_search_results: true,
+  newsletter_subscribe_request: true, newsletter_subscribe_confirmed: true,
+  registration_view: true, registration_start: true, sign_up: true,
+  onboarding_step_view: true, onboarding_step_complete: true, onboarding_complete: true,
+  begin_checkout: true, add_payment_info: true, trial_start: true, purchase: true,
+  landing_view: true,
+};
+
+export const NUME_TAXONOMIE = Object.keys(TOATE_EVENIMENTELE) as NumeEveniment[];
 
 /**
- * Evenimentele care merg si catre furnizorii de reclame, nu doar in Analytics.
+ * Evenimentele care sunt CONVERSII de afacere.
  *
- * ⚠ LISTA E SCURTA DINADINS. GA4 e pentru analiza; catre Meta/TikTok se trimit
- * numai lucrurile pe care le pot folosi la optimizare. Trimise toate, ele umplu
- * contul de reclame cu zgomot si incetinesc invatarea.
+ * ⚠ Astea PATRU se marcheaza „key event" in GA4, si numai astea. Un clic pe un
+ * buton nu e o conversie; marcat asa, optimizarea campaniilor invata sa caute
+ * clicuri in loc de clienti.
+ *
+ * ⚠ LISTA ASTA E CITITA, nu decorativa: `EDINIO_MARKETING_ANALYTICS_SETUP.md` o
+ * foloseste drept lista de bifat in interfata GA4. Iar tipul `NumeEveniment` o
+ * apara singur: un nume scos din taxonomie si ramas aici cade la compilare.
  */
-export const CATRE_RECLAME: ReadonlyArray<NumeEveniment> = [
-  "page_view", "generate_lead", "sign_up",
+export const CONVERSII: ReadonlyArray<NumeEveniment> = [
+  "generate_lead", "sign_up", "trial_start", "purchase",
 ];
+
+/*
+  ⚠ AICI A FOST `CATRE_RECLAME`, o lista cu evenimentele care au voie sa plece
+  spre Meta si TikTok. Am scos-o pe 01.09.2026, si merita spus de ce, fiindca
+  arata a paza:
+
+  1. NIMENI N-O CITEA. Era o promisiune, nu o poarta — acelasi lucru pe care
+     l-am scos azi din trei comentarii care pomeneau probe inexistente.
+  2. AR FI DEVENIT MINCINOASA. Cei doi furnizori nu numesc la fel aceleasi
+     lucruri: o cerere de oferta e `Lead` la Meta si `SubmitForm` la TikTok. O
+     lista comuna de NUME nu poate descrie doua vocabulare deosebite.
+
+  Poarta adevarata e acum harta din fiecare adaptor (`catreMeta`, `catreTikTok`):
+  ce nu are cartografiere nu pleaca, fiindca nu exista unde sa plece.
+*/

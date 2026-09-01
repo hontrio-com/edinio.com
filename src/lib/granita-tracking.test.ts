@@ -10,8 +10,8 @@ import { join, sep } from "node:path";
 
   Edinio are DOUA sisteme care nu au voie sa se amestece:
 
-    A. PLATFORMA  — cu ce ne masuram NOI site-ul de prezentare si palnia noastra.
-                    `src/components/platform/*`. Id-urile sunt ale Edinio.
+    A. EDINIO     — cu ce ne masuram NOI site-ul de prezentare si palnia noastra.
+                    `src/{components,lib}/edinio-marketing/*`. Id-urile sunt ale Edinio.
     B. COMERCIANT — pixelii si etichetele pe care si le pune fiecare client pe
                     magazinul lui. `src/lib/marketing.ts`, `components/public/*`.
                     Id-urile sunt ale LUI.
@@ -67,7 +67,39 @@ function importa(zone: string[], tipar: RegExp): string[] {
   return gasite;
 }
 
+/*
+  Masurarea NOASTRA, oriunde ar sta ea. Un singur tipar, folosit de amandoua
+  probele de despartire.
+
+  ⚠ SE NUMEA `@/components/platform/`, si dosarul acela nu mai exista din
+  01.09.2026. Cele doua probe ar fi trecut de atunci VERDE PE GOL: niciun fisier
+  nu poate importa dintr-un dosar care nu e nicaieri, deci lista de vinovati ar fi
+  fost mereu vida si granita ar fi parut pazita.
+
+  De aceea exista si martorul de mai jos, care cere ca tiparul sa CHIAR se
+  potriveasca undeva.
+*/
+const ZONA_EDINIO = /^@\/(components|lib)\/edinio-marketing\//;
+
 /* ═══ 1. Runtime-ul comerciantului nu intra in documentele noastre ═══ */
+
+test("martor: tiparul `edinio-marketing` chiar se potriveste pe ceva", () => {
+  /*
+    ⚠ FARA ASTA, cele doua probe de despartire sunt teatru. Ele dovedesc ca
+    NIMENI din magazine nu importa masurarea noastra — o afirmatie care e
+    adevarata si cand tiparul e scris gresit si nu se potriveste nicaieri.
+
+    Aici se cere opusul: in propriile noastre suprafete, importurile EXISTA. Daca
+    proba asta cade, tiparul e stricat, si tot ce se sprijina pe el nu mai
+    pazeste nimic.
+  */
+  const alenoastre = importa(["src/app/(website)", "src/app/(onboarding)"], ZONA_EDINIO);
+  assert.ok(
+    alenoastre.length >= 3,
+    "tiparul ZONA_EDINIO nu s-a potrivit nicaieri in suprafetele NOASTRE — " +
+    "e scris gresit, si probele de granita trec pe gol:\n  " + alenoastre.join("\n  "),
+  );
+});
 
 test("⚠ nimic din panou/admin/prezentare nu importa runtime-ul comerciantului", () => {
   /*
@@ -96,14 +128,14 @@ test("⚠ pixelii PLATFORMEI nu ajung in magazinele comerciantilor", () => {
   */
   const vinovati = importa(
     ["src/components/storefront", "src/components/ministore", "src/components/public", "src/lib/storefront"],
-    /^@\/components\/platform\//,
+    ZONA_EDINIO,
   );
-  assert.deepEqual(vinovati, [], "un pixel al platformei a ajuns in magazinul unui comerciant:\n  " + vinovati.join("\n  "));
+  assert.deepEqual(vinovati, [], "un pixel al Edinio a ajuns in magazinul unui comerciant:\n  " + vinovati.join("\n  "));
 });
 
 test("⚠ grupul de rute al magazinelor nu randeaza nimic al platformei", () => {
-  const vinovati = importa(["src/app/(public)"], /^@\/components\/platform\//);
-  assert.deepEqual(vinovati, [], "grupul (public) a capatat un tracker al platformei:\n  " + vinovati.join("\n  "));
+  const vinovati = importa(["src/app/(public)"], ZONA_EDINIO);
+  assert.deepEqual(vinovati, [], "grupul (public) a capatat un tracker al Edinio:\n  " + vinovati.join("\n  "));
 });
 
 /* ═══ 2. Efectul la incarcare — probat prin CHEMARE, nu prin citire ═══ */
@@ -154,18 +186,20 @@ test("martor: probele se uita la dosare care exista si nu sunt goale", () => {
   */
   /*
     ⚠ PRAGURI PE ZONA, nu unul singur. Prima forma cerea „peste 5 fisiere" peste
-    tot si a cazut pe `components/platform`, care are exact TREI: `PlatformEvent`,
-    `PlatformMetaPixel`, `PlatformTikTokPixel`. Nu era un defect, era pragul meu
-    ales din burta — dar martorul si-a facut treaba: a oprit o proba care se
+    tot si a cazut pe un dosar care avea exact trei. Nu era un defect, era pragul
+    meu ales din burta — dar martorul si-a facut treaba: a oprit o proba care se
     sprijinea pe o presupunere.
 
-    Trei e si o cifra care merita pazita: daca dosarul creste mult, tot ce e nou
-    acolo masoara platforma si trebuie sa treaca prin aceleasi granite.
+    ⚠ SI PRAGURILE SUNT SUB NUMARUL DE AZI, dinadins. Ele pazesc CALEA, nu
+    marimea: o cale scrisa gresit da zero si cade. Un prag pus fix pe numarul de
+    azi ar cadea la fiecare fisier sters — adica ar cere intretinere fara sa
+    prinda nimic.
   */
   const MINIM: Record<string, number> = {
     "src/components/dashboard": 20,
     "src/components/storefront": 20,
-    "src/components/platform": 3,
+    "src/components/edinio-marketing": 5,
+    "src/lib/edinio-marketing": 5,
     "src/app/(public)": 10,
   };
   for (const [z, minim] of Object.entries(MINIM)) {

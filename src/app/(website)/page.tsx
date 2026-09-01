@@ -8,7 +8,7 @@ import { PricingSection } from "@/components/website/PricingSection";
 import { FAQSection } from "@/components/website/FAQSection";
 import { FinalCta } from "@/components/website/sections/FinalCta";
 import { intrebariStructurate } from "@/lib/website/faq";
-import { PlatformEvent } from "@/components/platform/PlatformEvent";
+import { UrmaAterizare } from "@/components/edinio-marketing/UrmaAterizare";
 import { jsonLdSafe } from "@/lib/json-ld";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
 import { ID_ORGANIZATIE, ID_SITE } from "@/lib/website-jsonld";
@@ -115,7 +115,7 @@ export default function LandingPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }}
       />
-      <PlatformEvent event="ViewContent" data={{ content_name: "Homepage", content_category: "landing" }} />
+      <UrmaAterizare nume="Homepage" categorie="landing" />
       <Hero />
 
       <Problem />

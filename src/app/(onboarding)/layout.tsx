@@ -6,8 +6,8 @@ import { NotificariToast } from "@/components/ui/NotificariToast";
 import { EtichetaGa4 } from "@/components/edinio-marketing/EtichetaGa4";
 import { UrmaContNou } from "@/components/edinio-marketing/UrmaPalnie";
 import { RuntimeMarketing } from "@/components/edinio-marketing/RuntimeMarketing";
-import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
-import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
+import { EdinioMetaPixel } from "@/components/edinio-marketing/EdinioMetaPixel";
+import { EdinioTikTokPixel } from "@/components/edinio-marketing/EdinioTikTokPixel";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { sesiuneCurentaNeconfirmata } from "@/lib/auth/cere-mfa";
 
@@ -50,8 +50,8 @@ export default async function OnboardingLayout({
       */}
       <UrmaContNou origine="register" />
       <RuntimeMarketing />
-      <PlatformMetaPixel />
-      <PlatformTikTokPixel />
+      <EdinioMetaPixel />
+      <EdinioTikTokPixel />
       <header className="border-b border-border bg-surface">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center">
           <Logo size="md" eager />

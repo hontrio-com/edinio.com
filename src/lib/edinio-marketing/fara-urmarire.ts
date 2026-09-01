@@ -5,7 +5,7 @@
 
   ⚠ DE CE EXISTA. Previzualizarea unui articol nepublicat sta sub grupul
   `(website)`, dinadins: trebuie sa arate exact ca articolul public. Dar layout-ul
-  acela randeaza si `PlatformMetaPixel`, si `PlatformTikTokPixel`.
+  acela randeaza si `EdinioMetaPixel`, si `EdinioTikTokPixel`.
 
   Deci pana pe 01.09.2026 un redactor care deschidea un DRAFT incarca in aceeasi
   pagina cod adus de la `connect.facebook.net` si `analytics.tiktok.com`.

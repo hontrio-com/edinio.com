@@ -3,7 +3,7 @@
 import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { codGa4, GAZDE_PRODUCTIE } from "@/lib/edinio-marketing/mediu";
-import { faraUrmarire } from "@/lib/platform/fara-urmarire";
+import { faraUrmarire } from "@/lib/edinio-marketing/fara-urmarire";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -45,7 +45,7 @@ export function EtichetaGa4() {
 
   /*
     ⚠ ACEEASI POARTA CA LA PIXELI. Previzualizarea unui articol nepublicat e un
-    ecran autentificat cu continut privat. Vezi `lib/platform/fara-urmarire.ts`.
+    ecran autentificat cu continut privat. Vezi `lib/edinio-marketing/fara-urmarire.ts`.
   */
   if (faraUrmarire(cale)) return null;
 

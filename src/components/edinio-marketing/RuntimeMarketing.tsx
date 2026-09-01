@@ -4,7 +4,9 @@ import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { inregistreazaAdaptor, goleste, urmareste } from "@/lib/edinio-marketing/magistrala";
 import { adaptorGa4 } from "@/lib/edinio-marketing/adaptor-ga4";
-import { faraUrmarire } from "@/lib/platform/fara-urmarire";
+import { adaptorMeta } from "@/lib/edinio-marketing/adaptor-meta";
+import { adaptorTikTok } from "@/lib/edinio-marketing/adaptor-tiktok";
+import { faraUrmarire } from "@/lib/edinio-marketing/fara-urmarire";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -43,15 +45,24 @@ export function RuntimeMarketing() {
   /* ── Adaptoarele, o singura data ─────────────────────────────────────── */
   useEffect(() => {
     inregistreazaAdaptor(adaptorGa4);
+    inregistreazaAdaptor(adaptorMeta);
+    inregistreazaAdaptor(adaptorTikTok);
     /*
-      Eticheta cheama `window.__edinioMarketingGata('ga4')` din chiar scriptul ei
-      de pornire, sincron, imediat dupa ce defineste `gtag`. Asa coada se goleste
-      fara sa depinda de vreo potrivire de momente cu React.
+      Fiecare script de pornire cheama `window.__edinioMarketingGata('<nume>')`
+      din el insusi, sincron, imediat dupa ce furnizorul e definit. Asa coada se
+      goleste fara sa depinda de vreo potrivire de momente cu React.
     */
     const w = window as unknown as { __edinioMarketingGata?: (n: string) => void };
     w.__edinioMarketingGata = (n: string) => goleste(n);
-    /* Daca eticheta s-a incarcat deja inaintea noastra, golim acum. */
-    goleste("ga4");
+    /*
+      ⚠ SI GOLIM ODATA PENTRU FIECARE, aici. Scripturile sunt `afterInteractive`:
+      unul poate sa se fi incarcat INAINTEA efectului asta, si atunci strigatul
+      lui de mai sus a cazut in gol (`__edinioMarketingGata` inca nu exista).
+      Fara randurile astea, evenimentele lui ar astepta la coada pana la
+      urmatorul eveniment — adica `landing_view`-ul de pe pagina de intrare s-ar
+      pierde exact pe paginile de campanie.
+    */
+    for (const nume of ["ga4", "meta", "tiktok"]) goleste(nume);
   }, []);
 
   /* ── `page_view`, exact unul pe navigare ─────────────────────────────── */

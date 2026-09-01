@@ -5,8 +5,8 @@ import { Logo } from "@/components/ui/Logo";
 import { NotificariToast } from "@/components/ui/NotificariToast";
 import { EtichetaGa4 } from "@/components/edinio-marketing/EtichetaGa4";
 import { RuntimeMarketing } from "@/components/edinio-marketing/RuntimeMarketing";
-import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
-import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
+import { EdinioMetaPixel } from "@/components/edinio-marketing/EdinioMetaPixel";
+import { EdinioTikTokPixel } from "@/components/edinio-marketing/EdinioTikTokPixel";
 
 export const metadata: Metadata = {
   title: "Autentificare",
@@ -26,8 +26,8 @@ export default function AuthLayout({
       */}
       <EtichetaGa4 />
       <RuntimeMarketing />
-      <PlatformMetaPixel />
-      <PlatformTikTokPixel />
+      <EdinioMetaPixel />
+      <EdinioTikTokPixel />
       <div className="w-full max-w-md px-4 py-8">
         <div className="mb-6 sm:mb-8 flex justify-center">
           <Logo size="lg" iconSize={64} showText={false} eager />

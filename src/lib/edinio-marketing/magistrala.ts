@@ -50,14 +50,36 @@ type LaCoada = { ev: EvenimentEdinio; context: { page_type: FelPagina; page_grou
 const coada: LaCoada[] = [];
 const PLAFON_COADA = 50;
 
-/** Goleste coada pentru un adaptor care tocmai a devenit gata. */
+/**
+ * Goleste coada pentru un adaptor care tocmai a devenit gata.
+ *
+ * ═══ ⚠ IN ORDINEA IN CARE S-AU INTAMPLAT, si asta e miezul ═══
+ *
+ * Prima forma parcurgea coada de la coada spre cap (`for i = length-1; i--`),
+ * fiindca asa e simplu sa scoti elemente cu `splice` fara sa strici indicii.
+ * Efectul: evenimentele plecau EXACT PE DOS.
+ *
+ * Pe pagina de intrare asta insemna ca `section_view` si `landing_view` ajungeau
+ * in GA4 INAINTEA lui `page_view`-ul paginii lor. Nu cade nimic, nu lipseste
+ * nimic — dar in rapoartele de parcurs pagina apare vizitata dupa ce omul a
+ * derulat-o, iar secventele de evenimente devin de nefolosit.
+ *
+ * Deci: intai se scot toate ale adaptorului, in ordine, si abia apoi se trimit.
+ */
 export function goleste(numeAdaptor: string): void {
   const a = adaptoare.find(x => x.nume === numeAdaptor);
   if (!a || !a.gata()) return;
+
+  const ale = coada.filter(x => x.adaptor === numeAdaptor);
+  if (ale.length === 0) return;
+
+  /* Scoase din coada INAINTE de trimitere: daca un adaptor arunca, evenimentul
+     lui nu ramane sa fie incercat la nesfarsit la fiecare golire. */
   for (let i = coada.length - 1; i >= 0; i--) {
-    const item = coada[i];
-    if (item.adaptor !== numeAdaptor) continue;
-    coada.splice(i, 1);
+    if (coada[i].adaptor === numeAdaptor) coada.splice(i, 1);
+  }
+
+  for (const item of ale) {
     try { a.trimite(item.ev, item.context); } catch { /* vezi nota de sus */ }
   }
 }

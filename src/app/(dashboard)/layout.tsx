@@ -12,8 +12,8 @@ import { PaymentPastDueBanner } from "@/components/dashboard/PaymentPastDueBanne
 import { getInactiveReason } from "@/lib/subscription";
 import { esteAdminConfirmat } from "@/lib/admin-guard";
 import { sesiuneCurentaNeconfirmata } from "@/lib/auth/cere-mfa";
-import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
-import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
+import { EdinioMetaPixel } from "@/components/edinio-marketing/EdinioMetaPixel";
+import { EdinioTikTokPixel } from "@/components/edinio-marketing/EdinioTikTokPixel";
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 import { ImpersonationBanner } from "@/components/dashboard/ImpersonationBanner";
 import { NotificariToast } from "@/components/ui/NotificariToast";
@@ -128,8 +128,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="min-h-screen bg-background">
       <ScrollToTop />
       {esteImpersonare && <ImpersonationBanner />}
-      <PlatformMetaPixel />
-      <PlatformTikTokPixel />
+      <EdinioMetaPixel />
+      <EdinioTikTokPixel />
       <Sidebar
         currentBusiness={currentBusiness}
         plan={profile.plan}

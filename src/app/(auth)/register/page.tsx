@@ -62,7 +62,6 @@ function RegisterForm() {
 
   async function onSubmit(data: RegisterInput) {
     setLoading(true);
-    sessionStorage.setItem("platform_registered", "1");
     if (preselectedPlan && ["basic", "premium", "ultra"].includes(preselectedPlan)) {
       sessionStorage.setItem("preselected_plan", preselectedPlan);
     }
@@ -73,7 +72,6 @@ function RegisterForm() {
         password: data.password,
       });
       if (result?.error) {
-        sessionStorage.removeItem("platform_registered");
         toast.error(result.error);
         setLoading(false);
       }

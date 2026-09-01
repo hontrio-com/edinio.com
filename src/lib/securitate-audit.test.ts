@@ -355,7 +355,7 @@ test("previzualizarea de articol NU incarca pixeli de publicitate", async () => 
     nu se injecteaza niciodata; unul scos dupa montare a apucat deja sa se incarce
     si sa trimita `PageView`. Proba cere ordinea, nu doar prezenta.
   */
-  const { faraUrmarire } = await import("./platform/fara-urmarire");
+  const { faraUrmarire } = await import("./edinio-marketing/fara-urmarire");
 
   assert.equal(faraUrmarire("/blog/previzualizare/abc-123"), true, "draftul nu mai e ferit");
   assert.equal(faraUrmarire("/blog/previzualizare/"), true);
@@ -380,8 +380,8 @@ test("amandoi pixelii intreaba aceeasi regula, si o intreaba INAINTE de randare"
     scriptul fara ca nimic sa cada.
   */
   for (const f of [
-    "src/components/platform/PlatformMetaPixel.tsx",
-    "src/components/platform/PlatformTikTokPixel.tsx",
+    "src/components/edinio-marketing/EdinioMetaPixel.tsx",
+    "src/components/edinio-marketing/EdinioTikTokPixel.tsx",
   ]) {
     const cod = faraComentarii(citeste(f));
     /*
@@ -401,11 +401,44 @@ test("amandoi pixelii intreaba aceeasi regula, si o intreaba INAINTE de randare"
       `${f} si-a scris propria lista de cai pe langa cea comuna`,
     );
 
-    /* Hook-ul inaintea oricarei iesiri — altfel cade la prima randare fara id. */
+    /*
+      Hook-ul inaintea oricarei iesiri — altfel cade la prima randare fara id.
+
+      ⚠ SE UITA LA PRIMA IESIRE, ORICARE AR FI EA. Prima forma cauta un nume
+      anume (`if (!PIXEL_ID)`) si a cazut cand variabila s-a redenumit la
+      migrarea in `edinio-marketing` — `indexOf` a dat -1, iar mesajul spunea
+      „hook-ul e chemat dupa o iesire timpurie", ceea ce era FALS. Proba avea
+      dreptate sa cada, dar din alt motiv decat spunea.
+
+      Regula adevarata n-are nimic de-a face cu numele variabilei: niciun `return`
+      nu are voie inaintea hook-ului.
+    */
     const iHook = cod.indexOf("usePathname()");
-    const iId = cod.indexOf("if (!PIXEL_ID)");
+    const iPrimaIesire = cod.indexOf("return null;");
     assert.ok(iHook > 0, `${f}: lipseste usePathname`);
-    assert.ok(iHook < iId, `${f}: hook-ul e chemat dupa o iesire timpurie — incalca regulile hook-urilor`);
+    assert.ok(iPrimaIesire > 0, `${f}: nicio iesire timpurie — s-a pierdut paza?`);
+    assert.ok(iHook < iPrimaIesire, `${f}: hook-ul e chemat dupa o iesire timpurie — incalca regulile hook-urilor`);
+
+    /*
+      ═══ ⚠ SI GAZDA SE VERIFICA IN SCRIPT ═══
+
+      Defectul reparat pe 01.09.2026: niciunul din cei doi pixeli nu se uita la
+      gazda, deci porneau si pe `localhost`, si pe fiecare desfasurare de
+      previzualizare, trimitand evenimente in pixelul ADEVARAT. Datele acelea nu
+      se mai pot scoate dintr-un cont de reclame, iar audientele de retargetare
+      se construiesc din ele.
+
+      Verificarea trebuie sa fie IN SCRIPT, nu la randare: `window` nu exista pe
+      server, iar o randare deosebita ar strica hidratarea.
+    */
+    assert.match(
+      cod, /GAZDE_PRODUCTIE/,
+      `${f}: nu mai stie de gazdele de productie — pixelul porneste in previzualizari`,
+    );
+    assert.match(
+      cod, /indexOf\(location\.hostname\) === -1\) return;/,
+      `${f}: paza pe gazda nu mai OPRESTE scriptul; textul poate exista, purtarea nu`,
+    );
   }
 });
 

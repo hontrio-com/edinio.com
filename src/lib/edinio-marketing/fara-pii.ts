@@ -48,7 +48,35 @@ const CHEI_OPRITE = [
 const NUME_CUNOSCUTE_CURATE = [
   "form_name",     // "contact" | "migration" | "newsletter"
   "section_name",  // numele sectiunii, din marcajele noastre
+  "content_name",  // "Homepage" | "Preturi" — numele paginii de aterizare
+  "field_name",    // "email" | "phone" — CARE camp a picat, nu ce s-a scris in el
 ] as const;
+/*
+  ⚠ `content_name` A FOST ADAUGAT PE 01.09.2026, SI ERA DEJA UN DEFECT VIU.
+
+  `landing_view` (evenimentul care hraneste audientele de retargetare din Meta si
+  TikTok) poarta `content_name: "Homepage"`. Cheia se termina in `_name`, deci
+  paza o oprea — iar in PRODUCTIE magistrala nu arunca, lasa balta si scrie in
+  jurnal.
+
+  Urmarea ar fi fost: niciun `ViewContent` catre Meta si TikTok, deci audientele
+  de retargetare nu mai cresteau deloc. Nimic n-ar fi cazut, nimic n-ar fi
+  aratat rosu. A DOUA OARA acelasi tipar, dupa `form_name`.
+
+  ⚠ De aceea exista acum si proba care MATURA TOATA TAXONOMIA prin paza asta
+  (`reclame.test.ts`): un nume nou care se termina in `_name` cade acolo, nu in
+  productie peste trei saptamani.
+
+  ⚠ SI A MERITAT DIN PRIMA RULARE. Plasa a gasit imediat un al treilea caz, DEJA
+  VIU: `form_error` poarta `field_name`, deci fiecare eroare de formular era
+  oprita aici si nu ajungea niciodata in GA4. Raportul „la ce camp se impotmolesc
+  oamenii" — cel pentru care a fost scris evenimentul — era gol de cand exista.
+
+  Nu l-am gasit citind; l-a gasit proba, in aceeasi minuta in care a fost scrisa.
+  De trei ori acelasi tipar arata ca regula „orice cheie care se termina in
+  `_name`" e prea larga; ce o face totusi bine intretinuta e ca abaterile cad
+  ZGOMOTOS, la probe, nu tacut, in productie.
+*/
 
 /**
  * Parametrii care AU VOIE sa poarte text scris de om.

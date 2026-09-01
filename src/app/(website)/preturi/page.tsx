@@ -4,7 +4,7 @@ import { PricingSection } from "@/components/website/PricingSection";
 import { Comparison } from "@/components/website/sections/Comparison";
 import { BandaContact } from "@/components/website/BandaContact";
 import { FinalCta } from "@/components/website/sections/FinalCta";
-import { PlatformEvent } from "@/components/platform/PlatformEvent";
+import { UrmaAterizare } from "@/components/edinio-marketing/UrmaAterizare";
 import { ACASA } from "@/lib/website/breadcrumbs";
 import { PRICING_EYEBROW, PRICING_LEAD } from "@/lib/website/pricing";
 import { siteMetadata } from "@/lib/website/metadata";
@@ -42,7 +42,7 @@ export default function PreturiPage() {
   return (
     <>
       {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
-      <PlatformEvent event="ViewContent" data={{ content_name: "Preturi", content_category: "pricing" }} />
+      <UrmaAterizare nume="Preturi" categorie="pricing" />
 
       {/*
         Capul paginii, ca la `/intrebari-frecvente` si `/contact`: firimituri,

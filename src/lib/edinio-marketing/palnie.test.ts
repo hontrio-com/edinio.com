@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { verificaFaraPii } from "./fara-pii";
+import { idConversieCont } from "./cont-nou";
+import { desfaJeton } from "./jeton-cont-nou";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -58,9 +60,23 @@ test("jetonul e scurt si nu poarta nimic despre om", () => {
      si codul de dupa, si proba cadea pe cuvinte care n-aveau nicio legatura. */
   const i = auth.indexOf('cookieStore.set("edinio_signup"');
   const bucata = auth.slice(i, auth.indexOf("});", i) + 3);
-  assert.match(bucata, /randomUUID\(\)/, "jetonul nu mai e un uuid — verifica sa nu poarte email sau id de cont");
+  /*
+    ⚠ NU MAI E UN `randomUUID()`, si randul asta cerea unul. Din 01.09.2026
+    jetonul poarta o AMPRENTA calculata din id-ul contului — ca serverul sa poata
+    calcula acelasi id pentru CAPI, fara sa care nimeni nimic prin cookie-uri.
+    Vezi `cont-nou.ts`.
+  */
+  assert.match(bucata, /idConversieCont\(idCont\)/, "jetonul nu mai poarta amprenta stabila a contului");
   assert.match(bucata, /maxAge: 300/, "jetonul traieste mai mult decat trebuie");
-  assert.doesNotMatch(bucata, /formData\.|email|full_name/, "jetonul poarta date despre om");
+  assert.doesNotMatch(bucata, /formData\.|full_name/, "jetonul poarta date despre om");
+
+  /*
+    ⚠ SI SE PROBEAZA PRIN CHEMARE, nu doar prin citire: amprenta chiar nu lasa sa
+    se vada id-ul din baza. O citire de sursa n-ar fi observat daca `idConversieCont`
+    s-ar intoarce candva la a da id-ul neschimbat.
+  */
+  const idBaza = "9a1c2d3e-4444-4000-8000-000000000abc";
+  assert.ok(!idConversieCont(idBaza).includes(idBaza), "amprenta lasa sa se vada id-ul din baza");
 });
 
 test("⚠ contul nou se masoara O SINGURA data, si jetonul se sterge", () => {
@@ -73,10 +89,31 @@ test("⚠ contul nou se masoara O SINGURA data, si jetonul se sterge", () => {
   assert.ok(iSterge < iTrage, "jetonul se sterge dupa trimitere — o eroare acolo l-ar lasa sa se repete");
 });
 
-test("`event_id` e chiar jetonul de pe server", () => {
+test("`event_id` vine de pe server, iar originea calatoreste cu el", () => {
   const c = faraComentarii(citeste("src/components/edinio-marketing/UrmaPalnie.tsx"));
-  assert.match(c, /event_id: jeton/, "id-ul conversiei nu mai vine de pe server");
+  assert.match(c, /event_id: id/, "id-ul conversiei nu mai vine de pe server");
   assert.doesNotMatch(c, /crypto\.randomUUID/, "id-ul se naste in browser — deduplicarea cu serverul s-ar rupe");
+  assert.doesNotMatch(c, /origine\s*\}\s*:\s*\{\s*origine/, "originea a redevenit un prop dat de layout");
+
+  /*
+    ═══ ⚠ DESFACEREA JETONULUI, PROBATA PRIN CHEMARE ═══
+
+    Layoutul scria `origine="register"` pentru toata lumea. Corect cat timp
+    singura cale era emailul; mincinos din clipa in care se numara si Google — si
+    tocmai despartirea aia e ce am masurat (28 din 168 de conturi).
+  */
+  assert.deepEqual(desfaJeton("abc123.google"), { id: "abc123", origine: "google" });
+  assert.deepEqual(desfaJeton("abc123.email"), { id: "abc123", origine: "email" });
+
+  /* ⚠ Un furnizor pe care nu-l cunoastem nu-si strecoara textul in rapoarte. */
+  assert.deepEqual(desfaJeton("abc123.linkedin_oidc"), { id: "abc123", origine: "altul" });
+
+  /*
+    ⚠ FORMA VECHE, fara punct: intre desfasurare si expirarea celor cinci minute
+    exista browsere care inca poarta jetoane scrise de codul dinainte. Fara ramura
+    asta, inscrierile din fereastra aceea s-ar pierde in tacere.
+  */
+  assert.deepEqual(desfaJeton("b3d4e5f6-1111-2222"), { id: "b3d4e5f6-1111-2222", origine: "altul" });
 });
 
 test("pasii de onboarding se masoara, si fiecare o data", () => {

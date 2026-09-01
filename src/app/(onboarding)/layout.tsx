@@ -48,7 +48,7 @@ export default async function OnboardingLayout({
         client pe calea de succes. Semnalul vine printr-un jeton scris de server.
         Vezi `UrmaContNou`.
       */}
-      <UrmaContNou origine="register" />
+      <UrmaContNou />
       <RuntimeMarketing />
       <EdinioMetaPixel />
       <EdinioTikTokPixel />

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { randomUUID } from "node:crypto";
+import { idConversieCont } from "@/lib/edinio-marketing/cont-nou";
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
@@ -319,7 +319,7 @@ export async function register(formData: {
 
   const supabase = await createClient();
 
-  const { error } = await supabase.auth.signUp({
+  const { data: dateCont, error } = await supabase.auth.signUp({
     email: formData.email,
     password: formData.password,
     options: {
@@ -365,12 +365,26 @@ export async function register(formData: {
     cookie al platformei scris anume pentru masurare, si de aceea traieste cinci
     minute, nu mai mult.
   */
-  cookieStore.set("edinio_signup", randomUUID(), {
-    maxAge: 300,
-    path: "/",
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-  });
+  /*
+    ⚠ ID-UL E CALCULAT DIN CONT, nu aleator, si nu se scrie daca lipseste contul.
+
+    Un `randomUUID()` (cum era) e unic, dar nu se poate reproduce: serverul n-ar
+    putea trimite ACELASI id prin CAPI, si aceeasi inscriere venita pe doua
+    drumuri ar aparea ca doua conversii. Vezi `idConversieCont`.
+
+    ⚠ Daca `signUp` n-a intors un utilizator — nu s-a intamplat pana acum pe calea
+    de succes, dar tipul lui il ingaduie — nu se scrie niciun jeton. Mai bine o
+    inscriere nenumarata decat un id inventat care nu se leaga de nimic.
+  */
+  const idCont = dateCont?.user?.id;
+  if (idCont) {
+    cookieStore.set("edinio_signup", `${idConversieCont(idCont)}.email`, {
+      maxAge: 300,
+      path: "/",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+  }
 
   revalidatePath("/", "layout");
   redirect("/onboarding/details");

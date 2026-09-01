@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { idSesiuneCurenta } from "@/lib/auth/stare-mfa";
 import { confirmaSesiuneaMfa } from "@/lib/auth/flux-mfa";
+import { ePrimaAutentificare, idConversieCont } from "@/lib/edinio-marketing/cont-nou";
 
 /**
  * Aterizarea din linkurile trimise pe email: confirmarea contului, resetarea
@@ -63,6 +64,47 @@ export async function GET(request: NextRequest) {
         res.cookies.delete("onboarding_done");
         if (plan && ["basic", "premium", "ultra"].includes(plan)) {
           res.cookies.set("preselected_plan", plan, { httpOnly: false, path: "/", maxAge: 600, sameSite: "lax" });
+        }
+
+        /*
+          ═══ ⚠ CONTUL NOU FACUT PRIN GOOGLE SE NUMARA AICI, SI NICAIERI ALTUNDEVA ═══
+
+          Calea cu email si parola isi scrie jetonul in `register()`. Inscrierea
+          prin Google nu trece pe acolo deloc — ea ajunge fix aici.
+
+          MASURAT IN BAZA pe 01.09.2026: 28 din 168 de conturi sunt prin Google.
+          Deci aproape una din sase inscrieri lipsea din GA4, din Meta si din
+          TikTok, iar rata de conversie raportata era cu vreo 15% mai mica decat
+          adevarul. Nimic nu cadea si nimeni n-avea de unde sti.
+
+          ⚠ SI NU LA FIECARE TRECERE PE AICI. Ruta asta e si aterizarea pentru
+          confirmarea contului, pentru resetarea parolei si pentru linkul de
+          impersonare. Cine si-a facut cont acum trei saptamani si n-a terminat
+          onboardingul intra pe aceeasi ramura la FIECARE autentificare — numarat
+          asa, un singur om ar fi zeci de conturi noi.
+
+          `ePrimaAutentificare` cere ca intrarea sa fie chiar nasterea contului.
+          Vezi acolo de unde vine fereastra si ce se intampla daca e gresita.
+        */
+        if (ePrimaAutentificare(user)) {
+          /*
+            ⚠ ORIGINEA CALATORESTE IN JETON, nu ca prop in layout.
+
+            Layoutul scria `origine="register"` pentru toata lumea. Corect cat
+            timp singura cale era emailul; MINCINOS din clipa in care se numara si
+            Google — si tocmai despartirea aia e ce am masurat (28 din 168).
+
+            Serverul stie adevarul, deci el il spune. Lista e inchisa: ce nu
+            recunoastem devine `altul`, nu un text de la furnizor.
+          */
+          const furnizor = user.app_metadata?.provider;
+          const origine = furnizor === "google" ? "google" : furnizor === "email" ? "email" : "altul";
+          res.cookies.set("edinio_signup", `${idConversieCont(user.id)}.${origine}`, {
+            maxAge: 300,
+            path: "/",
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+          });
         }
         return res;
       }

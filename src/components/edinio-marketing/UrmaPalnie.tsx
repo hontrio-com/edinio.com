@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { urmareste } from "@/lib/edinio-marketing/magistrala";
+import { desfaJeton } from "@/lib/edinio-marketing/jeton-cont-nou";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -38,10 +39,16 @@ function stergeJeton(): void {
  * numarul de conturi noi ar fi de cateva ori mai mare decat adevarul. Fara sa
  * cada nimic, si crescand, deci nimeni nu l-ar pune la indoiala.
  *
- * Semnalul vine de la SERVER, dintr-un jeton scris chiar de actiunea care a creat
- * contul (`register` in auth.actions.ts). Se citeste o data si se sterge imediat.
+ * Semnalul vine de la SERVER, din doua locuri: `register()` pentru email si
+ * parola, si aterizarea OAuth pentru Google. Se citeste o data si se sterge.
+ *
+ * ⚠ COMPONENTA NU MAI PRIMESTE ORIGINEA CA PROP. Layoutul scria `"register"`
+ * pentru toata lumea — corect cat timp singura cale era emailul, mincinos din
+ * clipa in care se numara si Google. Iar despartirea aia e tocmai ce ne
+ * intereseaza: 28 din 168 de conturi vin prin Google. Serverul stie adevarul,
+ * deci el il spune, in chiar jetonul pe care il scrie.
  */
-export function UrmaContNou({ origine }: { origine: string }) {
+export function UrmaContNou() {
   const tras = useRef(false);
 
   useEffect(() => {
@@ -52,12 +59,14 @@ export function UrmaContNou({ origine }: { origine: string }) {
     stergeJeton();
 
     /*
-      ⚠ `event_id` E CHIAR JETONUL, nascut pe server odata cu contul. Cand se
-      adauga Meta CAPI, serverul va trimite ACELASI id — altfel un singur cont nou
-      ar aparea ca doua conversii.
+      ⚠ `event_id` E AMPRENTA CONTULUI, calculata pe server din id-ul lui. Cand se
+      adauga Meta CAPI, serverul o poate calcula din nou, identic, fara sa care
+      nimeni nimic prin cookie-uri — altfel un singur cont nou ar aparea ca doua
+      conversii. Vezi `lib/edinio-marketing/cont-nou.ts`.
     */
-    urmareste({ name: "sign_up", signup_origin: origine, event_id: jeton });
-  }, [origine]);
+    const { id, origine } = desfaJeton(jeton);
+    urmareste({ name: "sign_up", signup_origin: origine, event_id: id });
+  }, []);
 
   return null;
 }

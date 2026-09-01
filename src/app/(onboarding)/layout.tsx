@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import { NotificariToast } from "@/components/ui/NotificariToast";
 import { EtichetaGa4 } from "@/components/edinio-marketing/EtichetaGa4";
+import { UrmaContNou } from "@/components/edinio-marketing/UrmaPalnie";
 import { RuntimeMarketing } from "@/components/edinio-marketing/RuntimeMarketing";
 import { PlatformMetaPixel } from "@/components/platform/PlatformMetaPixel";
 import { PlatformTikTokPixel } from "@/components/platform/PlatformTikTokPixel";
@@ -41,6 +42,13 @@ export default async function OnboardingLayout({
         NU se pune in `(dashboard)`, `(admin)` sau in magazine.
       */}
       <EtichetaGa4 />
+      {/*
+        ⚠ Contul nou se masoara AICI, nu in pagina de inregistrare: actiunea
+        `register` se incheie cu `redirect`, deci nu se intoarce niciodata la
+        client pe calea de succes. Semnalul vine printr-un jeton scris de server.
+        Vezi `UrmaContNou`.
+      */}
+      <UrmaContNou origine="register" />
       <RuntimeMarketing />
       <PlatformMetaPixel />
       <PlatformTikTokPixel />

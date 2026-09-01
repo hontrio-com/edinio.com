@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
@@ -345,6 +346,31 @@ export async function register(formData: {
   // Clear stale onboarding cookie from previous session
   const cookieStore = await cookies();
   cookieStore.delete("onboarding_done");
+
+  /*
+    ═══ ⚠ SEMNALUL DE CONT NOU, DUS PRINTR-UN JETON DE O SINGURA FOLOSINTA ═══
+
+    Actiunea asta se incheie cu `redirect`, deci NU se intoarce niciodata la
+    client pe calea de succes. Masuratoarea `sign_up` nu se poate trage in
+    browser de aici — n-are unde.
+
+    ⚠ SI NU SE POATE TRAGE NICI LA SOSIREA PE ONBOARDING: acolo ajunge si cine
+    revine peste o saptamana la un cont vechi. Conversia s-ar numara de fiecare
+    data, si numarul de conturi noi ar fi de cateva ori mai mare decat adevarul.
+
+    Deci contul nou lasa o urma: un jeton scurt, citit O DATA de browser si sters
+    imediat. Poarta doar un uuid — niciun email, niciun nume.
+
+    ⚠ FARA `httpOnly`, dinadins: chiar browserul trebuie sa-l citeasca. E singurul
+    cookie al platformei scris anume pentru masurare, si de aceea traieste cinci
+    minute, nu mai mult.
+  */
+  cookieStore.set("edinio_signup", randomUUID(), {
+    maxAge: 300,
+    path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
 
   revalidatePath("/", "layout");
   redirect("/onboarding/details");

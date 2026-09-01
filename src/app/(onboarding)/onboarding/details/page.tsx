@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { UrmaPasOnboarding } from "@/components/edinio-marketing/UrmaPalnie";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -98,7 +99,9 @@ export default function OnboardingDetailsPage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-6 sm:py-10">
+    <>
+      <UrmaPasOnboarding pas="details" index={1} />
+      <div className="max-w-lg mx-auto px-4 py-6 sm:py-10">
       <OnboardingProgress currentStep={1} />
 
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
@@ -203,5 +206,6 @@ export default function OnboardingDetailsPage() {
         </form>
       </motion.div>
     </div>
+    </>
   );
 }

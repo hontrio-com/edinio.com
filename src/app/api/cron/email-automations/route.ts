@@ -168,9 +168,28 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // A2: +24 ore, blocat la detalii/personalizare
-      if (hoursOld >= 24 && (profile.onboarding_step === "details" || profile.onboarding_step === "customize")) {
-        const e = emailOnboardingStuck(name);
+      /*
+        A2: +24 ore, oprit inainte de a avea magazin.
+
+        ⚠ CONDITIA CEREA `"customize"`, o valoare care NU SE POATE SCRIE NICIODATA:
+        `trackOnboardingStep` (auth.actions.ts:550) primeste doar `"details" | "plan"`,
+        iar `stepOrder` de acolo n-are `customize`. Masurat in baza pe 01.09.2026:
+        zero randuri cu valoarea aia, vreodata.
+
+        ⚠ SI LIPSEA `"plan"`, care exista si e chiar pasul urmator. Masurat: 9
+        oameni opriti la alegerea planului fara magazin, toti mai vechi de 24 de
+        ore, niciunul n-a primit ghiontul asta — fata de 19 din 19 la `details`.
+        (Ceilalti 98 opriti la `plan` AU magazin, deci merg pe cealalta cale de
+        cod si nu-i priveste ramura asta.)
+
+        Ei primeau A3 la trei zile si A4 la sapte; pierdut era doar cel de la 24h,
+        adica exact cel de la care se intorc cei mai multi.
+      */
+      const pasOprit = profile.onboarding_step === "details" || profile.onboarding_step === "plan"
+        ? profile.onboarding_step
+        : null;
+      if (hoursOld >= 24 && pasOprit) {
+        const e = emailOnboardingStuck(name, pasOprit);
         if (!alreadySent(profile.id, e.key)) {
           if (await revendicaTrimiterea(profile.id, e.key) && await sendAutomationEmail(email, e)) sent++;
         }

@@ -91,7 +91,17 @@ export function emailOnboardingNotStarted(name: string): AutomationEmail {
 }
 
 // A2: Blocat la detalii/personalizare (+24h)
-export function emailOnboardingStuck(name: string): AutomationEmail {
+/*
+  ⚠ EMAILUL TREBUIE SA STIE LA CE PAS S-A OPRIT OMUL.
+
+  Pana pe 01.09.2026 butonul trimitea intotdeauna la `/onboarding/details`. Pentru
+  cine ramasese la ALEGEREA PLANULUI — adica trecuse deja de detalii — ala e un
+  buton care il duce INAPOI, la un pas pe care l-a terminat.
+
+  Acum calea urmeaza pasul. Cele doua sunt singurele cu putinta: `trackOnboardingStep`
+  primeste `"details" | "plan"`, si atat.
+*/
+export function emailOnboardingStuck(name: string, pas: "details" | "plan"): AutomationEmail {
   return {
     key: "onboarding_stuck_24h",
     subject: "Ai ramas la jumatate - magazinul tau te asteapta",
@@ -99,8 +109,8 @@ export function emailOnboardingStuck(name: string): AutomationEmail {
       <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Continua de unde ai ramas</h2>
       <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Salut${name ? `, ${name}` : ""}!</p>
       <p style="margin:0 0 16px 0;font-size:14px;color:#3f3f46;line-height:1.6;">Am observat ca ai inceput sa iti configurezi magazinul pe Edinio dar nu ai finalizat. Nu iti face griji, progresul tau e salvat si poti continua exact de unde ai ramas.</p>
-      <p style="margin:0 0 0 0;font-size:14px;color:#3f3f46;line-height:1.6;">Esti la un singur pas de a avea magazin online.</p>
-      ${btn("Continua configurarea", "/onboarding/details")}
+      <p style="margin:0 0 0 0;font-size:14px;color:#3f3f46;line-height:1.6;">${pas === "plan" ? "Ti-ai completat datele. Mai ramane doar sa alegi planul." : "Esti la un singur pas de a avea magazin online."}</p>
+      ${btn(pas === "plan" ? "Alege planul" : "Continua configurarea", `/onboarding/${pas}`)}
       ${CONTACT_BLOCK}
     `),
   };

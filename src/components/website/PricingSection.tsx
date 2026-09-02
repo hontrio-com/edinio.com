@@ -22,6 +22,7 @@ import {
 import { SectionEyebrow } from "./sections/SectionEyebrow";
 import { butonAlb, butonVerde } from "@/lib/website/buton";
 import { VERDE_CITIBIL } from "@/lib/website/linii";
+import { urmareste } from "@/lib/edinio-marketing/magistrala";
 
 /**
  * Secțiunea de prețuri, adusă în limbajul vizual al site-ului refăcut.
@@ -120,7 +121,7 @@ export function PricingSection({ cuAntet = true }: { cuAntet?: boolean }) {
           <div className="inline-flex items-center gap-1 rounded-[10px] border border-hairline bg-tint p-1">
             <button
               type="button"
-              onClick={() => setInterval("monthly")}
+              onClick={() => { setInterval("monthly"); urmareste({ name: "billing_period_change", billing_period: "monthly" }); }}
               aria-pressed={interval === "monthly"}
               className={cn(
                 "rounded-[6px] px-4 py-2 text-[13.5px] font-semibold transition-colors sm:px-5",
@@ -133,7 +134,7 @@ export function PricingSection({ cuAntet = true }: { cuAntet?: boolean }) {
             </button>
             <button
               type="button"
-              onClick={() => setInterval("annual")}
+              onClick={() => { setInterval("annual"); urmareste({ name: "billing_period_change", billing_period: "annual" }); }}
               aria-pressed={interval === "annual"}
               className={cn(
                 "flex items-center gap-2 rounded-[6px] px-4 py-2 text-[13.5px] font-semibold transition-colors sm:px-5",

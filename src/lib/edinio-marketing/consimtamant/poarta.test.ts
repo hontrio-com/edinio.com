@@ -144,6 +144,24 @@ test("⚠ hotararea se citeste din cookie, niciodata dintr-un layout", () => {
   assert.deepEqual(vinovate, [], "un layout citeste consimtamantul, deci paginile lui devin dinamice");
 });
 
+/*
+  ⚠ SINGURA SUPRAFATA CU PIXELI SI FARA BANNER, si de ce.
+
+  Aplicatia autentificata. Hotararea proprietarului, 02.09.2026: o intrebare
+  despre cookie-uri peste un ecran in care omul lucreaza e deranjanta, iar el a
+  vazut-o oricum pe site inainte sa-si faca cont.
+
+  ⚠ URMAREA, ACCEPTATA: fara banner nu se poate da acord DE ACOLO, iar pixelii
+  atarna de acord. Pentru cine n-a ales niciodata pe site — cine intra direct pe
+  un semn de carte catre `/dashboard` — ei raman stinsi. Fara acord, a nu masura
+  e raspunsul corect; dar retargetarea din aplicatie acopera numai pe cine a
+  acceptat pe site.
+
+  ⚠ LISTA ASTA E PAZITA DE PROBA DE MAI JOS. Altfel prima incercare de a face o
+  proba sa taca ar fi sa se adauge aici inca un layout.
+*/
+const FARA_BANNER_DINADINS = ["src/app/(dashboard)/layout.tsx"];
+
 test("⚠ bannerul e montat oriunde e montat un pixel", () => {
   /*
     ⚠ CE APARA. O suprafata cu poarta si fara intrebare nu e mai privata — e doar
@@ -156,6 +174,58 @@ test("⚠ bannerul e montat oriunde e montat un pixel", () => {
     .filter((f) => /Edinio(Meta|TikTok)Pixel|EtichetaGa4/.test(faraComentarii(citeste(f))));
 
   assert.ok(cuPixeli.length >= 5, `doar ${cuPixeli.length} layouturi cu pixeli — cautarea s-a stricat?`);
-  const faraBanner = cuPixeli.filter((f) => !faraComentarii(citeste(f)).includes("<BannerConsimtamant />"));
+  const faraBanner = cuPixeli
+    .filter((f) => !FARA_BANNER_DINADINS.includes(f))
+    .filter((f) => !faraComentarii(citeste(f)).includes("<BannerConsimtamant />"));
   assert.deepEqual(faraBanner, [], "layouturi cu pixeli dar fara banner: nimeni n-ar putea alege acolo");
+});
+
+test("exceptia de la banner nu se poate largi in tacere", () => {
+  /*
+    ⚠ CE APARA. `FARA_BANNER_DINADINS` e o portita. Daca maine cineva scoate
+    bannerul de pe pagina de inregistrare — unde ajung oamenii direct din reclame
+    — si adauga fisierul aici, proba de mai sus ar tacea, iar inscrierile din
+    reclame n-ar mai ajunge NICIODATA la Meta si TikTok.
+
+    Deci lista e marginita la ce e cu adevarat aplicatia autentificata, si fiecare
+    intrare trebuie sa fie un layout care chiar exista si chiar are pixeli.
+  */
+  assert.ok(FARA_BANNER_DINADINS.length <= 1, "exceptia s-a largit — a fost cantarit fiecare caz?");
+  for (const f of FARA_BANNER_DINADINS) {
+    assert.ok(f.includes("(dashboard)"), `${f}: singura suprafata fara banner e aplicatia autentificata`);
+    const cod = citeste(f);
+    assert.match(cod, /Edinio(Meta|TikTok)Pixel/, `${f}: trecut in exceptie dar n-are pixeli`);
+    assert.match(cod, /AICI NU SE PUNE BANNERUL/, `${f}: exceptia nu e explicata in fisierul insusi`);
+  }
+});
+
+test("⚠ niciun layout nu spune despre sine contrariul a ce face", () => {
+  /*
+    ⚠ CE APARA, SI DE CE E O PROBA SI NU O CONVENTIE.
+
+    Cele patru layouturi de prezentare purtau, pana pe 02.09.2026, randul „NU se
+    pune in `(dashboard)`" — despre pixeli care sunt in dashboard din 01.06.2026,
+    din alegerea proprietarului. Un audit din afara l-a citit si a raportat o
+    incalcare de scop; nu era, era un comentariu ramas in urma.
+
+    Cine citeste un comentariu peste sase luni ia hotarari pe el. Deci afirmatia
+    se probeaza ca oricare alta.
+
+    ⚠ SE CAUTA AFIRMATIA, NU SIRUL. Comentariul de acum CITEAZA forma veche, ca
+    sa se stie ce s-a schimbat — deci o cautare simpla ar cadea pe propria
+    reparatie. Se cere ca randul sa nu INCEAPA cu ea.
+  */
+  const layouturi = fisiereSursa("src/app").filter((f) => f.endsWith("layout.tsx"));
+  assert.ok(layouturi.length >= 5, `doar ${layouturi.length} layouturi — cautarea s-a stricat?`);
+
+  const mincinoase = layouturi.filter((f) => {
+    const cod = readFileSync(f, "utf8");
+    if (!/Edinio(Meta|TikTok)Pixel/.test(cod)) return false;
+    return cod.split(RAND).some((r) => r.trim().startsWith("NU se pune in `(dashboard)`"));
+  });
+
+  assert.deepEqual(
+    mincinoase, [],
+    "un layout sustine ca pixelii nu ajung in dashboard, dar ei sunt acolo: " + mincinoase.join(", "),
+  );
 });

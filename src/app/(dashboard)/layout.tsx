@@ -17,7 +17,6 @@ import { EdinioTikTokPixel } from "@/components/edinio-marketing/EdinioTikTokPix
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 import { ImpersonationBanner } from "@/components/dashboard/ImpersonationBanner";
 import { NotificariToast } from "@/components/ui/NotificariToast";
-import { BannerConsimtamant } from "@/components/edinio-marketing/BannerConsimtamant";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -131,7 +130,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {esteImpersonare && <ImpersonationBanner />}
       <EdinioMetaPixel />
       <EdinioTikTokPixel />
-      <BannerConsimtamant />
+      {/*
+        ⚠ AICI NU SE PUNE BANNERUL, si e o hotarare a proprietarului: o
+        intrebare despre cookie-uri peste o aplicatie in care omul lucreaza e
+        deranjanta, si el a vazut-o oricum pe site inainte sa-si faca cont.
+      
+        ⚠ URMAREA, SCRISA CA SA NU PARA O SCAPARE: fara banner nu se poate da
+        acord DE AICI, iar pixelii de mai sus atarna de acord. Deci pentru cine
+        n-a ales niciodata pe site — de pilda cine intra direct pe un semn de
+        carte catre `/dashboard` — ei raman stinsi pentru totdeauna.
+      
+        Nu e un defect: fara acord, a nu masura e raspunsul corect. Dar inseamna
+        ca retargetarea din aplicatie acopera numai pe cine a acceptat pe site.
+      */}
       <Sidebar
         currentBusiness={currentBusiness}
         plan={profile.plan}

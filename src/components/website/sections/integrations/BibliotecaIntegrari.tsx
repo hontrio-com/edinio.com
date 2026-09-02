@@ -15,6 +15,7 @@ import {
 } from "@/lib/website/integrari-catalog";
 import { Logo } from "./Logo";
 import { butonVerde } from "@/lib/website/buton";
+import { urmareste } from "@/lib/edinio-marketing/magistrala";
 
 /**
  * Biblioteca de integrări: căutare, rubrici, și un card pentru fiecare serviciu.
@@ -131,7 +132,16 @@ export function BibliotecaIntegrari() {
           <aside className="lg:sticky lg:top-[88px] lg:col-start-1 lg:row-span-2 lg:row-start-1">
             <NavigatieRubrici
               aleasa={rubrica}
-              alege={setRubrica}
+              /*
+                ⚠ MASURAT AICI, INTR-UN SINGUR LOC, nu la fiecare pastila.
+                `NavigatieRubrici` are un buton pentru fiecare rubrica plus unul
+                de „toate"; pusa acolo, masuratoarea ar fi trebuit repetata si ar
+                fi scapat la primul buton adaugat. Aici trece orice alegere.
+              */
+              alege={(id) => {
+                setRubrica(id);
+                urmareste({ name: "integration_filter", integration_category: id || "toate" });
+              }}
               numar={numarPeRubrica}
             />
             {/*

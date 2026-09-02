@@ -25,7 +25,21 @@
  *
  * ⚠ Doar cei care spun DE UNDE a venit omul. `fbclid` si `ttclid` sunt dinadins
  * absenti: sunt identificatori de clic ai unor terti, si n-au ce cauta intr-un
- * raport de analiza. Ei se pastreaza separat, pentru potrivirea conversiilor.
+ * raport de analiza.
+ *
+ * ⚠ CE SCRIA AICI PANA PE 02.09.2026, si era fals: „Ei se pastreaza separat,
+ * pentru potrivirea conversiilor." Nu se pastrau nicaieri. Un audit din afara a
+ * cautat sistemul acela si n-a gasit nimic — pe buna dreptate, fiindca nu exista.
+ *
+ * ⚠ CE E ADEVARAT ACUM. Nu-i pastram NOI, dar pixelii furnizorilor ii scriu
+ * singuri in cookie-urile lor (`_fbc` la Meta, `_ttp` la TikTok), si de acolo ii
+ * citim si ii trimitem inapoi cu conversia — vezi `MARTORI` din
+ * `consimtamant/cookie.ts`. Deci click id-ul Meta ajunge la potrivire, prin
+ * cookie-ul lor, nu printr-un depozit de-al nostru.
+ *
+ * ⚠ SI CE INCA NU FACEM: `ttclid` nu ajunge nicaieri (TikTok nu-l pune intr-un
+ * cookie pe care sa-l citim), si nu tinem minte prima atingere. Scris ca sa nu
+ * para altfel.
  */
 export const PARAMETRI_PASTRATI = [
   "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "utm_id",

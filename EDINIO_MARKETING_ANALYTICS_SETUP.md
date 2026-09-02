@@ -16,7 +16,7 @@ strică fără el** — ca să poți sări peste ce nu-ți trebuie, în cunoști
 |---|---|
 | Eticheta GA4 `G-SB92HFQ1EN` | vie pe `edinio.com`, **numai** acolo |
 | Pixel Meta + TikTok | vii, **numai** pe `edinio.com` |
-| Evenimente | **23** de nume, trase din cod |
+| Evenimente | **26** de nume, trase din cod |
 | Conversii | cerere de ofertă, cont nou, trial, abonament |
 | Deduplicare | fiecare conversie poartă un `event_id` reproductibil pe server |
 
@@ -24,19 +24,25 @@ Pixelii **nu** mai pornesc pe `localhost` și nici pe desfășurările de
 previzualizare. Până pe 01.09.2026 porneau, și trimiteau evenimente în conturile
 adevărate.
 
-Cele 23 care se trag azi:
+Cele 26 care se trag azi:
 
 `page_view`, `section_view`, `scroll_depth`, `cta_click`, `navigation_click`,
 `outbound_click`, `landing_view`, `form_start`, `form_submit`, `form_error`,
 `generate_lead`, `article_view`, `article_read_progress`, `article_read_complete`,
 `newsletter_subscribe_request`, `newsletter_subscribe_confirmed`, `sign_up`,
 `onboarding_step_view`, `onboarding_step_complete`, `begin_checkout`,
-`add_payment_info`, `trial_start`, `purchase`.
+`add_payment_info`, `trial_start`, `purchase`, `billing_period_change`,
+`faq_open`, `integration_filter`.
 
-> În cod mai există **11 nume declarate dar netrase de nicăieri** (`faq_open`,
-> `plan_select`, `integration_view`, `article_share` și altele). Ele stau acolo
-> ca să nu apară peste o lună trei nume diferite pentru același lucru.
-> **Nu le face dimensiuni în GA4**: locurile sunt 50 și n-ar aduna nimic.
+> Ultimele trei s-au adăugat pe 02.09.2026, după un audit din afară care a
+> numărat suprafețele vii nemăsurate: comutatorul lunar/anual de la prețuri,
+> întrebările frecvente, și filtrul din biblioteca de integrări.
+>
+> În cod mai există **8 nume declarate dar netrase de nicăieri** (`plan_select`,
+> `integration_view`, `article_share`, `article_cta_click`, `view_search_results`
+> și altele). Ele stau acolo ca să nu apară peste o lună trei nume diferite pentru
+> același lucru. **Nu le face dimensiuni în GA4**: locurile sunt 50 și n-ar aduna
+> nimic.
 
 ---
 
@@ -95,7 +101,7 @@ campaniilor învață să caute clicuri în loc de clienți — și plătești p
 
 ---
 
-## 3. GA4 — două setări care se uită
+## 3. GA4 — trei setări care se uită
 
 **Păstrarea datelor.** Admin → *Data retention* → **14 luni**. Implicit sunt 2, și
 asta înseamnă că peste trei luni nu mai poți compara cu anul trecut. Se schimbă
@@ -108,6 +114,34 @@ adevărată.
 
 > Veghea care ciocănește `www.edinio.com` la câteva minute **nu** umflă nimic: e o
 > cerere HTTP simplă, iar GA4 numără doar unde rulează JavaScript.
+
+**⚠ Interacțiunile cu formularele — pe OFF.** Admin → *Data streams* → alege fluxul
+web → *Enhanced measurement* (rotița din dreapta) → oprește **Form interactions**.
+
+De ce contează, și de ce e singura dintre cele trei care **strică date deja
+adunate**: Enhanced Measurement trage singur `form_start` și `form_submit` pe orice
+`<form>` adevărat din pagină. Formularele noastre de contact și de migrare *sunt*
+formulare adevărate, iar noi tragem manual evenimente cu **exact aceleași nume**,
+fiindcă alea sunt numele standard GA4.
+
+Deci fiecare completare se numără de două ori, iar cele două ajung pe același rând
+și nu se mai pot despărți după fapt. Rata de finalizare a formularelor e nesigură
+până apeși comutatorul ăsta.
+
+**Ce am ales, și de ce nu am reparat-o din cod:** aș fi putut redenumi evenimentele
+noastre în ceva care nu se ciocnește — dar atunci am fi pierdut tot ce știe GA4
+despre `form_start` și `form_submit` (rapoarte gata făcute, pâlnii, comparații cu
+alte site-uri). Numele standard sunt mai valoroase decât comoditatea de a nu
+apăsa un comutator.
+
+**Celelalte două opțiuni din Enhanced Measurement, verificate:**
+
+| Opțiune | Se ciocnește? |
+|---|---|
+| *Page changes based on browser history events* | **Da, oprește-o.** Noi măsurăm manual schimbarea de pagină, cu `send_page_view: false`. |
+| *Scrolls* | Nu. Ea trage `scroll`; noi tragem `scroll_depth` cu praguri 25/50/75/90. Nume diferite, rânduri diferite. |
+| *Outbound clicks* | Nu. Ea trage `click`; noi tragem `outbound_click`. |
+| *Site search*, *Video*, *File downloads* | Nu se ciocnesc cu nimic de-al nostru. |
 
 ---
 

@@ -63,7 +63,13 @@ test("⚠ documentul spune cate evenimente se trag, si numarul e adevarat", () =
  * „E scris undeva in document" nu e acelasi lucru cu „e scris unde trebuie".
  */
 function listaDinDocument(): Set<string> {
-  const i = DOC.indexOf("Cele 23 care se trag azi:");
+  /*
+    ⚠ ANCORA FARA NUMAR, dinadins. Scrisa „Cele 23 care se trag azi:", proba se
+    rupea la fiecare eveniment nou instrumentat — si nu fiindca ceva se stricase,
+    ci fiindca ea insasi imbatranise. Numarul e verificat oricum de proba
+    urmatoare, care il confrunta cu cate trage codul.
+  */
+  const i = DOC.indexOf("care se trag azi:");
   const j = DOC.indexOf("nume declarate dar netrase");
   assert.ok(i > 0 && j > i, "nu mai gasesc lista de evenimente trase din document");
   return new Set((DOC.slice(i, j).match(/`([a-z_]+)`/g) ?? []).map(x => x.replace(/`/g, "")));
@@ -117,4 +123,44 @@ test("⚠ conversiile din document sunt CHIAR cele din cod", () => {
       `documentul cere bifat "${n}" ca eveniment-cheie, dar codul nu-l socoteste conversie`,
     );
   }
+});
+
+test("⚠ documentul avertizeaza despre ciocnirea cu Enhanced Measurement", () => {
+  /*
+    ⚠ CE APARA. GA4 trage singur `form_start` si `form_submit` pe orice `<form>`
+    adevarat, daca „Form interactions" e pornit. Noi tragem manual evenimente cu
+    EXACT aceleasi nume — fiindca alea sunt numele standard.
+
+    Deci fiecare completare se numara de doua ori, si cele doua ajung pe acelasi
+    rand. Nu e un defect de cod: e o setare din GA4, pe care numai proprietarul o
+    poate apasa. Singurul lucru pe care il poate face codul e sa NU-L LASE SA
+    UITE.
+
+    ⚠ SI DE CE E O PROBA. Daca maine cineva redenumeste evenimentele noastre,
+    avertismentul din document devine fals si trimite omul sa opreasca degeaba o
+    masuratoare buna. Proba leaga cele doua: cat timp tragem numele alea, textul
+    trebuie sa avertizeze.
+  */
+  const numeleNoastre = ["form_start", "form_submit"];
+  const codSursa = [
+    "src/components/website/ContactForm.tsx",
+    "src/components/website/sections/migrare/FormularMigrare.tsx",
+  ].map((f) => readFileSync(join(RAD, f), "utf8")).join("\n");
+
+  const traseDeNoi = numeleNoastre.filter((n) => codSursa.includes(`name: "${n}"`));
+  const doc = DOC;
+
+  if (traseDeNoi.length === 0) {
+    /* Daca nu le mai tragem, avertismentul trebuie SCOS — altfel minte in celalalt sens. */
+    assert.ok(
+      !doc.includes("Form interactions"),
+      "documentul cere oprirea unei optiuni care nu se mai ciocneste cu nimic de-al nostru",
+    );
+    return;
+  }
+
+  assert.match(doc, /Form interactions/,
+    "tragem `form_start`/`form_submit` dar documentul nu spune sa se opreasca optiunea din GA4");
+  assert.match(doc, /Enhanced measurement/i, "documentul nu spune UNDE se apasa");
+  assert.match(doc, /Data streams/, "documentul nu spune drumul pana la setare");
 });

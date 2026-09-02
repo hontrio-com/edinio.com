@@ -70,7 +70,15 @@ export default function WebsiteLayout({
       {/*
         ⚠ MASURAREA NOASTRA, nu a comerciantilor. Vezi
         `lib/edinio-marketing/` si granita probata in `lib/granita-tracking.test.ts`.
-        NU se pune in `(dashboard)`, `(admin)` sau in magazine.
+        NU se pune NICIODATA in magazinele clientilor, si nici in `(admin)`.
+
+        ⚠ CE SCRIA AICI SI ERA FALS: „NU se pune in `(dashboard)`". Se pune, din
+        01.06.2026, si e o alegere a proprietarului — pixelii Meta si TikTok
+        ruleaza si in aplicatia autentificata, pentru retargetarea clientilor
+        activi. Vezi motivul scris in `fara-urmarire.ts`.
+
+        Un comentariu care descrie contrariul codului nu e o scapare de stil: cine
+        il citeste peste sase luni ia hotarari pe el.
       */}
       <EtichetaGa4 />
       <RuntimeMarketing />

@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { Plus } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { FAQS, FAQ_LEAD, FAQ_TITLE, type FaqItem } from "@/lib/website/faq";
+import { urmareste } from "@/lib/edinio-marketing/magistrala";
 
 /**
  * Întrebările frecvente, în limbajul vizual al site-ului refăcut.
@@ -106,15 +107,39 @@ export function FAQSection({
  * o placă centrată sub el pornea vizibil din alt loc decât titlul. Centrarea e
  * a paginii, nu a plăcii.
  */
+/**
+ * Id-ul unei intrebari, pentru rapoarte.
+ *
+ * ⚠ DIN TEXT, NU DIN INDICE. Un `faq_3` s-ar muta la prima reordonare a listei,
+ * si atunci rapoartele de luna trecuta ar vorbi despre alta intrebare fara ca
+ * nimic sa arate. Textul intrebarii e identitatea ei adevarata.
+ *
+ * ⚠ SI SE TAIE LA 60. GA4 respinge valorile prea lungi, iar o intrebare are
+ * uneori o suta de caractere. Primele 60 sunt de ajuns ca s-o recunosti.
+ */
+function idIntrebare(intrebare: string): string {
+  return intrebare
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+    .slice(0, 60);
+}
+
 export function FaqAccordion({
   nivelTitlu,
   className,
   intrebari = FAQS,
+  grup = "general",
 }: {
   nivelTitlu: NivelTitlu;
   className?: string;
   /** Vezi nota de la `FAQSection`. */
   intrebari?: FaqItem[];
+  /*
+    ⚠ CARE LISTA DE INTREBARI E, nu pe ce pagina sta. Aceeasi lista poate ajunge
+    pe mai multe pagini; ce vrem sa stim in rapoarte e ce set de intrebari a
+    deschis omul.
+  */
+  grup?: string;
 }) {
   const [deschis, setDeschis] = useState<number | null>(null);
 
@@ -130,7 +155,12 @@ export function FaqAccordion({
           deschisa={deschis === i}
           /* Una singură deschisă: cu zece răspunsuri lungi deschise deodată,
              rândul căutat ajunge la câteva ecrane distanță de titlu. */
-          onToggle={() => setDeschis(deschis === i ? null : i)}
+          onToggle={() => {
+            const seDeschide = deschis !== i;
+            setDeschis(seDeschide ? i : null);
+            /* ⚠ Numai la DESCHIDERE. Inchiderea nu e un interes, e sfarsitul lui. */
+            if (seDeschide) urmareste({ name: "faq_open", faq_id: idIntrebare(faq.question), faq_group: grup });
+          }}
         />
       ))}
     </div>

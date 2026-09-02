@@ -101,26 +101,43 @@ export async function POST(req: NextRequest) {
   deTrimis.push(`${NUME_COOKIE}=${encodeURIComponent(serializeaza(stare))}; ${atributeCookie(securizat)}`);
 
   /*
-    ⚠ SI SE STING SI COOKIE-URILE FURNIZORILOR DE AICI, nu doar din browser.
-    Unele sunt scrise pe `.edinio.com`, iar JavaScript-ul din pagina nu le poate
-    sterge intotdeauna pe amandoua variantele de domeniu. Sters doar pe una,
-    celalalt ramane si retragerea doar PARE facuta.
+    ═══ ⚠ SI SE STING SI COOKIE-URILE FURNIZORILOR DE AICI, nu doar din browser ═══
+
+    ⚠ SI PE AMANDOUA VARIANTELE DE DOMENIU. Nota de aici spunea, pana azi, ca
+    serverul face tocmai lucrul pe care nu-l facea: stergea cu un singur
+    `Set-Cookie` FARA `Domain`, iar acela atinge numai cookie-ul legat de gazda
+    exacta. Un `_ga` scris de Google pe `.edinio.com` ramanea neatins.
+
+    Browserul incearca de mult toate trei variantele. Serverul trimitea una. Deci
+    nota promitea o plasa care nu exista — si retragerea PAREA facuta.
   */
-  if (!marketing) {
-    /*
-      ⚠ SE STING SI PREFIXELE, nu doar numele intregi.
+  const gazda = req.nextUrl.hostname;
+  const apex = gazda.replace(/^www\./, "");
+  /*
+    ⚠ FARA `Domain` PRIMUL: cookie-ul legat de gazda exacta nu se sterge cu o
+    comanda care poarta `Domain`, si nici invers. Browserul le tine ca pe doua
+    lucruri deosebite, deci se trimit amandoua.
+  */
+  const domenii = ["", `; Domain=${gazda}`, `; Domain=.${apex}`];
+  /*
+    ⚠ SE STING SI PREFIXELE, nu doar numele intregi.
 
-      Prima forma parcurgea numai `COOKIE_FURNIZORI_EXACTE` — deci `_ga`, `_ga_<ID>`
-      si `_gcl_*` supravietuiau retragerii facute pe server. Iar `_gcl_*` e chiar
-      cookie-ul care poarta `gclid`, adica id-ul clicului pe reclama Google.
+    Prima forma parcurgea numai o lista de nume exacte — deci `_ga`, `_ga_<ID>`
+    si `_gcl_*` supravietuiau retragerii facute pe server. Iar `_gcl_*` e chiar
+    cookie-ul care poarta `gclid`, adica id-ul clicului pe reclama Google.
 
-      Nu se poate scrie o lista fixa: `_ga_<ID>` poarta id-ul proprietatii in
-      chiar numele lui. De aceea se parcurg cookie-urile CERERII si se filtreaza
-      prin aceeasi regula pe care o foloseste si browserul.
-    */
-    for (const c of req.cookies.getAll()) {
-      if (!eCookieDeMaturat(c.name)) continue;
-      deTrimis.push(`${c.name}=; Path=/; Max-Age=0${securizat ? "; Secure" : ""}`);
+    Nu se poate scrie o lista fixa: `_ga_<ID>` poarta id-ul proprietatii in
+    chiar numele lui. De aceea se parcurg cookie-urile CERERII si se filtreaza
+    prin aceeasi regula pe care o foloseste si browserul.
+
+    ⚠ SI SE INTRA MEREU AICI, nu doar cand cade marketingul. Conditia veche
+    (`if (!marketing)`) sarea peste cazul „a retras doar statisticile", iar `_ga`
+    ramanea scris pe server desi omul tocmai il oprise.
+  */
+  for (const c of req.cookies.getAll()) {
+    if (!eCookieDeMaturat(c.name, { statistici, marketing })) continue;
+    for (const d of domenii) {
+      deTrimis.push(`${c.name}=; Path=/; Max-Age=0${securizat ? "; Secure" : ""}${d}`);
     }
   }
 

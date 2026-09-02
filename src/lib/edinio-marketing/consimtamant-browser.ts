@@ -56,13 +56,13 @@ function nasteVid(): string {
  * sterge cu o comanda fara `Domain` — browserul le tine ca pe doua lucruri
  * deosebite. Sters doar pe unul, celalalt ramane, iar retragerea pare facuta.
  */
-function maturaCookieFurnizori(): void {
+function maturaCookieFurnizori(acordat: { statistici: boolean; marketing: boolean }): void {
   if (typeof document === "undefined") return;
   const gazda = location.hostname;
   const domenii = ["", `; Domain=${gazda}`, `; Domain=.${gazda.replace(/^www\./, "")}`];
   for (const bucata of document.cookie.split(";")) {
     const nume = bucata.split("=")[0]?.trim();
-    if (!nume || !eCookieDeMaturat(nume)) continue;
+    if (!nume || !eCookieDeMaturat(nume, acordat)) continue;
     for (const d of domenii) {
       document.cookie = `${nume}=; Path=/; Max-Age=0${d}`;
     }
@@ -109,7 +109,13 @@ export function scrieHotararea(alegere: { statistici: boolean; marketing: boolea
   document.cookie = `${NUME_COOKIE}=${encodeURIComponent(serializeaza(noua))}; ${atributeCookie(location.protocol === "https:")}`;
 
   spuneFurnizorilor(noua);
-  if (!noua.marketing || !noua.statistici) maturaCookieFurnizori();
+  /*
+    ⚠ SE MATURA MEREU, dar numai ce nu mai e ingaduit. Forma veche chema matura
+    doar cand lipsea o categorie, si atunci stergea TOT — deci „doar statistici"
+    ii lua omului chiar `_ga`-ul pe care tocmai il incuviintase. Acum hotararea se
+    duce inauntru, si fiecare cookie e cantarit dupa categoria lui.
+  */
+  maturaCookieFurnizori(noua);
 
   /* ⚠ Memoria pozei se goleste INAINTE de anunt, altfel ascultatorii citesc valoarea veche. */
   memoGol = true;

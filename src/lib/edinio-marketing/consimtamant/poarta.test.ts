@@ -221,7 +221,13 @@ test("⚠ bannerul e montat oriunde e montat un pixel", () => {
   */
   const cuPixeli = fisiereSursa("src/app")
     .filter((f) => f.endsWith("layout.tsx"))
-    .filter((f) => /Edinio(Meta|TikTok)Pixel|EtichetaGa4/.test(faraComentarii(citeste(f))));
+    /*
+      ⚠ SI `EtichetaGoogleAds`. Lipsea din cautare de cand a fost adaugata: un
+      layout care ar fi avut NUMAI eticheta de reclame — cea care scrie `_gcl_au`
+      si face remarketing — n-ar fi fost socotit „cu pixeli", deci proba n-ar fi
+      cerut banner acolo. Adica exact suprafata cea mai sensibila ar fi scapat.
+    */
+    .filter((f) => /Edinio(Meta|TikTok)Pixel|EtichetaGa4|EtichetaGoogleAds/.test(faraComentarii(citeste(f))));
 
   assert.ok(cuPixeli.length >= 5, `doar ${cuPixeli.length} layouturi cu pixeli — cautarea s-a stricat?`);
   const faraBanner = cuPixeli

@@ -26,21 +26,61 @@ export function atributeCookie(secure: boolean): string {
 }
 
 /**
- * Cookie-urile furnizorilor, de sters la retragere.
+ * Cookie-urile furnizorilor, impartite pe categoria care le indreptateste.
+ *
+ * ═══ ⚠ DE CE PE CATEGORII, SI CE STRICA O LISTA SINGURA ═══
+ *
+ * Forma veche avea o lista unica si o matura INTREAGA cand vreuna din categorii
+ * lipsea (`if (!marketing || !statistici)`). Deci omul care alegea „doar
+ * statistici" — alegerea cea mai des facuta cand cineva se uita atent la panou —
+ * ramanea fara `_ga`: exact masuratoarea pe care TOCMAI o incuviintase.
+ *
+ * Pe dos era la fel: cine retragea numai marketingul pierdea si analiza.
+ *
+ * ⚠ SI `_gac_` STATEA IN PARTEA GRESITA. Vechiul prefix `_ga` prinde si
+ * `_gac_<ID-CONT-ADS>`, care e scris de Google Ads si poarta legatura cu campania
+ * — un cookie de RECLAMA numarat drept analiza. Cu impartirea de aici, el cade
+ * unde ii e locul, si `_ga`/`_ga_<ID>` raman la statistici.
  *
  * ⚠ PREFIXE, NU DOAR NUME INTREGI. `_ga_<ID-UL-PROPRIETATII>` poarta id-ul in
  * chiar numele lui, si la fel `_gcl_*`. O lista de nume exacte ar fi lasat in
  * urma tocmai cookie-ul de masurare al Google, iar retragerea ar fi parut facuta.
  */
-export const COOKIE_FURNIZORI_EXACTE = [
-  "_gid", "_fbp", "_fbc", "_ttp", "_tt_enable_cookie", "_ttclid",
+export const COOKIE_STATISTICI_EXACTE = ["_gid"] as const;
+export const COOKIE_STATISTICI_PREFIXE = ["_ga"] as const;
+
+export const COOKIE_MARKETING_EXACTE = [
+  "_fbp", "_fbc", "_ttp", "_tt_enable_cookie", "_ttclid",
 ] as const;
+export const COOKIE_MARKETING_PREFIXE = ["_gcl_", "_gac_"] as const;
 
-export const COOKIE_FURNIZORI_PREFIXE = ["_ga", "_gcl_"] as const;
+/**
+ * Sub ce categorie sta un cookie, sau `null` daca nu e al niciunui furnizor.
+ *
+ * ⚠ MARKETINGUL SE INTREABA PRIMUL. `_gac_` incepe si cu `_ga`; intrebat invers,
+ * un cookie de reclama ar fi supravietuit retragerii marketingului.
+ */
+export function categoriaCookie(nume: string): "statistici" | "marketing" | null {
+  if ((COOKIE_MARKETING_EXACTE as readonly string[]).includes(nume)) return "marketing";
+  if ((COOKIE_MARKETING_PREFIXE as readonly string[]).some((p) => nume.startsWith(p))) return "marketing";
+  if ((COOKIE_STATISTICI_EXACTE as readonly string[]).includes(nume)) return "statistici";
+  if ((COOKIE_STATISTICI_PREFIXE as readonly string[]).some((p) => nume.startsWith(p))) return "statistici";
+  return null;
+}
 
-export function eCookieDeMaturat(nume: string): boolean {
-  if ((COOKIE_FURNIZORI_EXACTE as readonly string[]).includes(nume)) return true;
-  return (COOKIE_FURNIZORI_PREFIXE as readonly string[]).some((p) => nume.startsWith(p));
+/**
+ * Se sterge cookie-ul asta, data fiind hotararea?
+ *
+ * ⚠ UN SINGUR LOC IN CARE SE HOTARASTE, chemat si din browser si de pe server.
+ * Cele doua maturi trebuie sa stearga exact aceleasi lucruri: una scapa ce e pe
+ * `.edinio.com`, cealalta ce e scris din JavaScript.
+ */
+export function eCookieDeMaturat(
+  nume: string,
+  acordat: { statistici: boolean; marketing: boolean },
+): boolean {
+  const c = categoriaCookie(nume);
+  return c !== null && acordat[c] !== true;
 }
 
 /**

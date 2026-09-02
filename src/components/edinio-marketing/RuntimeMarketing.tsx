@@ -9,6 +9,7 @@ import { adaptorTikTok } from "@/lib/edinio-marketing/adaptor-tiktok";
 import { faraUrmarire, faraPageView } from "@/lib/edinio-marketing/fara-urmarire";
 import { adaptorGoogleAds } from "@/lib/edinio-marketing/adaptor-google-ads";
 import { reiaRetragerea } from "@/lib/edinio-marketing/consimtamant-browser";
+import { curataTitlu } from "@/lib/edinio-marketing/titlu-curat";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -124,7 +125,13 @@ export function RuntimeMarketing() {
       singur titlul pe care il vede, adica raspunsul corect cand noi nu-l stim.
     */
     const trage = () => {
-      const titluAcum = document.title.trim();
+      /*
+        ⚠ TITLUL SE CURATA. Pagina de cautare a blogului isi pune in titlu chiar ce
+        a tastat omul; trimis asa, textul lui ar fi ajuns in GA4 pe usa din dos —
+        si peste 100 de caractere ar fi omorat tot `page_view`-ul. Vezi
+        `titlu-curat.ts`.
+      */
+      const titluAcum = curataTitlu(document.title, window.location.search);
       urmareste({
         name: "page_view",
         page_location: window.location.href,

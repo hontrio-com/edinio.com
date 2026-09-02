@@ -5,6 +5,8 @@ import { TERMENI } from "./termeni";
 import { CONFIDENTIALITATE } from "./confidentialitate";
 import { COOKIES } from "./cookies";
 import { GDPR } from "./gdpr";
+import { readFileSync } from "node:fs";
+import { DURATA_ZILE } from "@/lib/edinio-marketing/consimtamant/stare";
 
 /*
  * Un document juridic se strica altfel decat codul: nu crapa, doar spune
@@ -269,4 +271,58 @@ test("adresa cu doua randuri iese pe doua randuri la extragere", () => {
   assert.ok(linii.includes("Sediu:"));
   assert.ok(linii.includes("Strada A"));
   assert.ok(linii.includes("Orasul B"));
+});
+
+/** Tot textul unui document, intr-un singur sir. */
+function textul(doc: DocumentLegal): string {
+  return liniiDocument(doc).join(String.fromCharCode(10));
+}
+
+test("⚠ durata din politica e CHIAR cea din cod", () => {
+  /*
+    ═══ ⚠ DE CE E O PROBA, SI NU O CITIRE ATENTA ═══
+
+    Politica avea o singura cifra despre pastrarea preferintei: „12 luni" — o
+    recomandare a juristului. Codul pastreaza 180 de zile. Nimic nu era fals pe
+    litera (una e o recomandare, alta o implementare), dar cine citea pleca cu
+    cifra gresita despre cat il tinem minte.
+
+    ⚠ SI SE STRICA IN CEALALTA DIRECTIE. Daca maine cineva ridica `DURATA_ZILE`
+    la un an fiindca „bannerul apare prea des", textul ramane sa spuna 180 si
+    devine el minciuna. De aceea cifra se citeste din cod, nu se scrie de mana.
+
+    Lectia e veche de trei zile si s-a repetat: textele mele devin mincinoase in
+    cateva ore de la o schimbare de cod.
+  */
+  const t = textul(COOKIES);
+  assert.match(
+    t, new RegExp(`${DURATA_ZILE} de zile`),
+    `politica nu spune nicaieri „${DURATA_ZILE} de zile", cat pastreaza chiar codul preferinta`,
+  );
+});
+
+test("⚠ reCAPTCHA e incarcat, deci e si declarat in politica", () => {
+  /*
+    ⚠ CE APARA. Formularele publice incarca un script Google care poate pune
+    cookie-uri si citeste semnale despre dispozitiv. El se incarca INAINTE de
+    orice alegere in banner — pe drept, fiindca e o masura de securitate — dar
+    tocmai de aceea trebuie SPUS. O incarcare nedeclarata e problema, nu
+    incarcarea in sine.
+
+    ⚠ SI CUTITUL TAIE IN AMANDOUA PARTILE: daca maine scoatem reCAPTCHA,
+    politica ramane sa vorbeasca despre un serviciu pe care nu-l mai folosim —
+    la fel de mincinoasa, doar in celalalt sens.
+  */
+  const seIncarca = ["src/components/website/ContactForm.tsx",
+                     "src/components/website/sections/migrare/FormularMigrare.tsx"]
+    .some((f) => readFileSync(f, "utf8").includes("incarcaRecaptcha"));
+
+  const t = textul(COOKIES);
+  if (seIncarca) {
+    assert.match(t, /reCAPTCHA/, "formularele incarca reCAPTCHA, dar politica nu-l pomeneste deloc");
+    assert.match(t, /nu se încarcă la deschiderea paginii/,
+      "politica nu spune CAND se incarca — adica exact ce face incarcarea ingaduita");
+  } else {
+    assert.doesNotMatch(t, /reCAPTCHA/, "politica vorbeste despre un serviciu pe care nu-l mai folosim");
+  }
 });

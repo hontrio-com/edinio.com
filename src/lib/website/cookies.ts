@@ -323,6 +323,20 @@ const SECTIUNI: Sectiune[] = [
         text: "Pentru implementarea Edinio recomand ca preferința să fie păstrată pentru 12 luni, după care utilizatorului să îi fie solicitată din nou opțiunea, dacă între timp nu intervine o modificare relevantă care justifică solicitarea mai devreme.",
         evidenta: ["12 luni"],
       },
+      /*
+        ⚠ CE FACEM CHIAR, nu doar ce s-a recomandat. Recomandarea de mai sus e de
+        12 luni; Edinio păstrează preferința 180 de zile — mai puțin, adică în
+        favoarea utilizatorului. Fără rândul ăsta, cine citea politica pleca cu
+        cifra greșită.
+
+        ⚠ CIFRA E LEGATĂ DE COD printr-o probă (`legal.test.ts`): dacă cineva
+        schimbă `DURATA_ZILE`, textul cade, nu îmbătrânește în tăcere.
+      */
+      {
+        tip: "paragraf",
+        text: "În implementarea actuală, Edinio păstrează preferința pentru 180 de zile de la momentul alegerii. După expirarea acestei perioade, utilizatorului îi este solicitată din nou opțiunea. Preferința este solicitată din nou și mai devreme dacă lista scopurilor sau a partenerilor se modifică.",
+        evidenta: ["180 de zile"],
+      },
     ],
   },
   {
@@ -412,6 +426,19 @@ const SECTIUNI: Sectiune[] = [
       {
         tip: "paragraf",
         text: "Nu toate cookie-urile de mai sus vor exista în orice moment pe dispozitivul fiecărui utilizator.",
+      },
+      { tip: "subtitlu", text: "Google reCAPTCHA" },
+      {
+        tip: "paragraf",
+        text: "Formularele publice ale Platformei (contact și cerere de migrare) sunt protejate împotriva trimiterilor automate prin Google reCAPTCHA v3. Acest mecanism este necesar pentru securitatea Platformei și pentru prevenirea abuzurilor, motiv pentru care nu este condiționat de acceptarea cookie-urilor opționale.",
+      },
+      {
+        tip: "paragraf",
+        text: "Scriptul reCAPTCHA nu se încarcă la deschiderea paginii. El este încărcat abia în momentul în care utilizatorul începe să completeze un formular, astfel încât vizitatorii care doar citesc paginile nu transmit date către Google prin acest mecanism.",
+      },
+      {
+        tip: "paragraf",
+        text: "reCAPTCHA poate seta cookie-uri proprii pe domeniile Google și poate colecta informații despre dispozitiv și despre interacțiunea cu pagina, conform politicii de confidențialitate Google. Sub fiecare formular protejat este afișată mențiunea corespunzătoare, împreună cu linkurile către politica de confidențialitate și termenii Google.",
       },
     ],
   },

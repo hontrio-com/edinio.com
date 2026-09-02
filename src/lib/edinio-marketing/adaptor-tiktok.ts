@@ -50,8 +50,36 @@ type Trimitere = {
 /** Harta e singura poarta: ce nu e aici nu pleaca spre TikTok. */
 export function catreTikTok(ev: EvenimentEdinio): Trimitere | null {
   switch (ev.name) {
+    /*
+      ═══ ⚠ `content_type` NU E TEXT LIBER LA TIKTOK ═══
+
+      Prima forma trimitea `content_type: ev.content_category`, adica „landing" si
+      „pricing". TikTok primeste evenimentul si se plange in consola:
+
+        [TikTok Pixel] - Invalid content type
+        Content type must be either "product", "product_group", "destination",
+        "hotel", "flight" or "vehicle".
+
+      E o multime INCHISA, nu o categorie a noastra. Gasit pe 02.09.2026 in
+      consola productiei, nu in cod — nimic nu cadea, doar plecau date invalide.
+
+      ⚠ SI NU SE INLOCUIESTE CU "product". Paginile noastre de aterizare nu sunt
+      produse; o minciuna acolo ar strica orice audienta construita pe ea. Campul
+      lipseste dinadins, iar categoria pleaca sub numele ei adevarat.
+
+      ⚠ `content_id` E CERUT de ei pentru audiente si pentru Video Shopping Ads —
+      lipsa lui era a doua plangere din aceeasi consola. Numele paginii e stabil,
+      scurt si fara nimic personal, deci e un id bun.
+    */
     case "landing_view":
-      return { nume: "ViewContent", date: { content_name: ev.content_name, content_type: ev.content_category } };
+      return {
+        nume: "ViewContent",
+        date: {
+          content_id: ev.content_name,
+          content_name: ev.content_name,
+          content_category: ev.content_category,
+        },
+      };
 
     /* ⚠ `SubmitForm`, nu `Lead`. TikTok n-are `Lead`. Vezi nota de sus. */
     case "generate_lead":

@@ -230,15 +230,30 @@ const nextConfig: NextConfig = {
       "base-uri 'self'",
       /*
         ⚠ ERA `'self' https:`, iar comentariul de mai sus spunea „form-action
-        pinned to self". Codul si nota nu se potriveau. Verificat inainte de
-        schimbare: toate formularele cu `action` din proiect posteaza relativ, si
-        niciun magazin de client nu are formular catre alt domeniu.
+        pinned to self". Codul si nota nu se potriveau. La stramtare am verificat
+        toate formularele cu `action` DIN PROIECT — si acolo a fost greseala: nu
+        formularele noastre conteaza, ci cele pe care le face un script tert in
+        pagina.
 
-        ⚠ SI SA FIE LIMPEDE CE CUMPARA: aproape nimic, cat timp `script-src` are
-        `'unsafe-inline'` si `https:`. Se schimba fiindca o nota mincinoasa e mai
-        scumpa decat o directiva larga, nu fiindca inchide un atac.
+        ═══ ⚠ CE A STRICAT `'self'` SINGUR, MASURAT IN PRODUCTIE PE 02.09.2026 ═══
+
+        In consola de pe www.edinio.com:
+
+          Sending form data to 'https://www.facebook.com/tr/' violates the
+          following Content Security Policy directive: "form-action 'self'".
+          The request has been blocked.
+
+        Pixelul Meta trimite prin GET cat timp incape in adresa, si trece pe POST
+        de formular cand nu mai incape. A doua cale era taiata — deci evenimentele
+        mai incarcate se pierdeau, tacut. Nimic nu cadea si nimic nu se vedea in
+        cod: se vedea numai in browser, pe productie.
+
+        ⚠ SE DESCHIDE EXACT CAT TREBUIE. Nu inapoi la `https:` (orice gazda), ci
+        numai gazda masurata ca fiind blocata. Iar nota de mai jos ramane
+        adevarata: cat timp `script-src` are `'unsafe-inline'`, directiva asta
+        cumpara putin — dar acum nu mai si costa.
       */
-      "form-action 'self'",
+      "form-action 'self' https://www.facebook.com",
       "frame-ancestors 'self'",
     ].join("; ");
     return [

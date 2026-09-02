@@ -449,3 +449,67 @@ test("⚠ jurnalul si `debug_mode` se aprind numai cu cheia pusa de mana — dar
   const cuCheie = laGtag[1][2] as Record<string, unknown>;
   assert.equal(cuCheie.debug_mode, true, "cu cheia pusa, DebugView tot nu vede nimic pe productie");
 });
+
+/* ═══ 8. Vocabularul inchis al TikTok ═══ */
+
+test("⚠ niciun eveniment nu trimite la TikTok un `content_type` inventat", () => {
+  /*
+    ═══ DEFECT GASIT IN CONSOLA PRODUCTIEI, 02.09.2026 ═══
+
+    `landing_view` trimitea `content_type: ev.content_category`, adica „landing" si
+    „pricing". TikTok raspundea in consola:
+
+      [TikTok Pixel] - Invalid content type
+      Content type must be either "product", "product_group", "destination",
+      "hotel", "flight" or "vehicle".
+
+    Nimic nu cadea. Evenimentul pleca, ei il primeau, si campul era gunoi — deci
+    orice audienta construita pe el ar fi fost construita pe nimic.
+
+    ⚠ PROBA CERE REGULA, NU CAZUL. N-are rost sa verific `landing_view`: peste o
+    luna cineva adauga alt eveniment si pune acolo alt text liber. Aici trece TOATA
+    taxonomia, si orice `content_type` din afara multimii inchise cade.
+  */
+  const INGADUITE = ["product", "product_group", "destination", "hotel", "flight", "vehicle"];
+
+  const toate: EvenimentEdinio[] = [
+    { name: "landing_view", content_name: "Homepage", content_category: "landing" },
+    { name: "generate_lead", lead_type: "contact", form_name: "contact", event_id: "e1" },
+    { name: "sign_up", signup_origin: "google", event_id: "e2" },
+    { name: "begin_checkout", plan_id: "premium", billing_period: "monthly" },
+    { name: "add_payment_info", plan_id: "premium", billing_period: "monthly" },
+    { name: "trial_start", plan_id: "free", event_id: "e3" },
+    { name: "purchase", plan_id: "ultra", billing_period: "annual", value: 999, currency: "RON", event_id: "e4" },
+  ];
+
+  let cuCartografiere = 0;
+  for (const ev of toate) {
+    const t = catreTikTok(ev);
+    if (!t) continue;
+    cuCartografiere++;
+    const tip = t.date.content_type;
+    if (tip !== undefined) {
+      assert.ok(
+        typeof tip === "string" && INGADUITE.includes(tip),
+        `"${ev.name}" trimite content_type="${String(tip)}" — TikTok primeste doar: ${INGADUITE.join(", ")}`,
+      );
+    }
+  }
+
+  /* Martorul: lista chiar a trecut prin cartografiere, altfel proba n-a verificat nimic. */
+  assert.ok(cuCartografiere >= 6, `doar ${cuCartografiere} evenimente au ajuns la TikTok — lista e gresita`);
+});
+
+test("`landing_view` duce spre TikTok un `content_id` stabil", () => {
+  /*
+    A doua plangere din aceeasi consola: „Missing 'content_id' parameter". Fara el,
+    TikTok n-are pe ce lega audientele de retargetare — adica evenimentul pleaca si
+    nu foloseste la nimic.
+
+    ⚠ ID-UL E NUMELE PAGINII, nu un numar aleator: trebuie sa fie ACELASI maine,
+    altfel audienta de azi nu se mai regaseste.
+  */
+  const t = catreTikTok({ name: "landing_view", content_name: "Homepage", content_category: "landing" });
+  assert.equal(t?.date.content_id, "Homepage");
+  assert.equal(t?.date.content_category, "landing", "categoria s-a pierdut cu totul");
+});

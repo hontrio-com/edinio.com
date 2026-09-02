@@ -230,11 +230,31 @@ test("nicio pagina nu mai pune JSON-LD brut in dangerouslySetInnerHTML", () => {
   assert.doesNotMatch(faraComentarii(cod), /__html:\s*JSON\.stringify/, "a ramas `JSON.stringify` brut");
 });
 
-test("`form-action` din CSP spune ce spune si comentariul", () => {
-  /* Nu cumpara aproape nimic cat timp `script-src` are `unsafe-inline` si `https:`.
-     S-a schimbat fiindca o nota mincinoasa e mai scumpa decat o directiva larga. */
+test("`form-action` lasa Meta sa posteze, si NIMIC mai mult", () => {
+  /*
+    ═══ ⚠ DE CE NU MAI E `'self'` GOL ═══
+
+    A fost, si a blocat pixelul Meta. Masurat in consola productiei pe 02.09.2026:
+    „Sending form data to 'https://www.facebook.com/tr/' violates … form-action
+    'self'. The request has been blocked."
+
+    Meta trimite prin GET cat timp incape in adresa si trece pe POST cand nu mai
+    incape. A doua cale era taiata, deci evenimentele mai incarcate se pierdeau
+    tacut. Stramtarea verificase formularele NOASTRE; formularul era al lor.
+
+    ⚠ PROBA CERE SI CE NU E ACOLO. Fara al doilea rand, un `form-action 'self'
+    https:` (adica orice gazda) ar trece verde — si atunci directiva n-ar mai
+    insemna nimic, exact starea de dinaintea stramtarii.
+  */
   const cod = citeste("next.config.ts");
-  assert.match(cod, /"form-action 'self'"/, "form-action nu mai e 'self'");
+  assert.match(
+    cod, /"form-action 'self' https:\/\/www\.facebook\.com"/,
+    "form-action nu mai lasa Meta sa posteze — evenimentele incarcate se pierd tacut",
+  );
+  assert.doesNotMatch(
+    cod, /"form-action[^"]*\shttps:\s*[";]/,
+    "form-action s-a largit inapoi la `https:` (orice gazda), nu doar la Meta",
+  );
 });
 
 /* ═══ 8. Politica de cookies nu are voie sa se departeze de cod ═══ */

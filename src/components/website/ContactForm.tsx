@@ -60,46 +60,68 @@ export function ContactForm() {
     urmareste({ name: "form_submit", form_name: "contact" });
 
     startTransition(async () => {
-      /* Tokenul se cere ACUM, nu la incarcarea paginii: expira in 2 minute, iar
-         unul luat inainte ca omul sa scrie mesajul e mort la trimitere. */
-      const captchaToken = await tokenRecaptcha("contact");
+      /*
+        ═══ ⚠ TOT BLOCUL E SUB `try`, SI ASTA E O REPARATIE DIN 02.09.2026 ═══
 
-      const res = await submitContactMessage({
-        nume: String(f.get("nume") ?? ""),
-        email: String(f.get("email") ?? ""),
-        telefon: String(f.get("telefon") ?? ""),
-        mesaj: String(f.get("mesaj") ?? ""),
-        acord: f.get("acord") === "on",
-        captchaToken,
-      });
-      if (res.ok) {
-        setTrimis(true);
-        /*
-          ⚠ AICI E CONVERSIA, si NUMAI aici. Nu la apasarea butonului: pana aici
-          au putut cadea validarea, captcha, plafoanele si trimiterea emailului.
-          Numarata la apasare, ar arata mai multe cereri decat au ajuns la noi.
+        Inainte nu era. Daca chemarea serverului PICA — retea cazuta, sau o pagina
+        veche care cheama o actiune ce nu mai exista dupa o desfasurare — functia
+        asincrona se rupea acolo si nu se mai intampla NIMIC:
 
-          ⚠ `event_id` VINE DE PE SERVER. Cand se adauga Meta CAPI, browserul si
-          serverul trebuie sa trimita ACELASI id ca sa se deduplice — nascut in
-          doua locuri, ar fi doua conversii pentru un singur om.
-        */
-        urmareste({
-          name: "generate_lead",
-          lead_type: "contact",
-          form_name: "contact",
-          event_id: res.eventId,
+          - `setEroare` nu se chema  -> omul nu vedea nicio eroare
+          - `setTrimis` nu se chema  -> formularul ramanea pur si simplu acolo
+          - niciun eveniment          -> nici noi nu aflam vreodata
+
+        Adica omul apasa, nu se intampla nimic, si dispare fara urma. Gasit din
+        masuratoare, nu din cod: GA4 arata doua `form_submit`, serverul primise o
+        singura cerere, si `form_error` era zero. Un om lipsea de pe amandoua
+        listele.
+      */
+      try {
+        /* Tokenul se cere ACUM, nu la incarcarea paginii: expira in 2 minute, iar
+           unul luat inainte ca omul sa scrie mesajul e mort la trimitere. */
+        const captchaToken = await tokenRecaptcha("contact");
+
+        const res = await submitContactMessage({
+          nume: String(f.get("nume") ?? ""),
+          email: String(f.get("email") ?? ""),
+          telefon: String(f.get("telefon") ?? ""),
+          mesaj: String(f.get("mesaj") ?? ""),
+          acord: f.get("acord") === "on",
+          captchaToken,
         });
-      } else {
-        setEroare(res.error);
-        /*
-          ⚠ SE TRIMITE FELUL ERORII, NU TEXTUL EI. Mesajul poate purta ce a scris
-          omul; felul spune ce trebuie sa stim — unde se impiedica lumea.
-        */
-        urmareste({
-          name: "form_error",
-          form_name: "contact",
-          error_type: felEroare(res.error),
-        });
+        if (res.ok) {
+          setTrimis(true);
+          /*
+            ⚠ AICI E CONVERSIA, si NUMAI aici. Nu la apasarea butonului: pana aici
+            au putut cadea validarea, captcha, plafoanele si trimiterea emailului.
+            Numarata la apasare, ar arata mai multe cereri decat au ajuns la noi.
+
+            ⚠ `event_id` VINE DE PE SERVER. Cand se adauga Meta CAPI, browserul si
+            serverul trebuie sa trimita ACELASI id ca sa se deduplice — nascut in
+            doua locuri, ar fi doua conversii pentru un singur om.
+          */
+          urmareste({
+            name: "generate_lead",
+            lead_type: "contact",
+            form_name: "contact",
+            event_id: res.eventId,
+          });
+        } else {
+          setEroare(res.error);
+          /*
+            ⚠ SE TRIMITE FELUL ERORII, NU TEXTUL EI. Mesajul poate purta ce a scris
+            omul; felul spune ce trebuie sa stim — unde se impiedica lumea.
+          */
+          urmareste({
+            name: "form_error",
+            form_name: "contact",
+            error_type: felEroare(res.error),
+          });
+        }
+      } catch {
+        /* ⚠ Omul TREBUIE sa vada ceva, si noi trebuie sa aflam. */
+        setEroare("Nu am putut trimite mesajul. Reincarca pagina si incearca din nou.");
+        urmareste({ name: "form_error", form_name: "contact", error_type: "retea" });
       }
     });
   }

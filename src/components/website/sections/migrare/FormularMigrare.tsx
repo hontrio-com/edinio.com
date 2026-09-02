@@ -66,36 +66,58 @@ export function FormularMigrare() {
     urmareste({ name: "form_submit", form_name: "migration" });
 
     startTransition(async () => {
-      /* Tokenul se cere ACUM, nu la încărcarea paginii: expiră în 2 minute, iar
-         unul luat înainte ca omul să completeze e mort la trimitere. */
-      const captchaToken = await tokenRecaptcha("migrare");
+      /*
+        ═══ ⚠ TOT BLOCUL E SUB `try`, SI ASTA E O REPARATIE DIN 02.09.2026 ═══
 
-      const res = await submitMigrationLead({
-        nume: String(f.get("nume") ?? ""),
-        telefon: String(f.get("telefon") ?? ""),
-        email: String(f.get("email") ?? ""),
-        platforma: String(f.get("platforma") ?? ""),
-        produse: String(f.get("produse") ?? ""),
-        mentiuni: String(f.get("mentiuni") ?? ""),
-        acord: f.get("acord") === "on",
-        captchaToken,
-      });
-      if (res.ok) {
-        setTrimis(true);
-        /* ⚠ Conversia e AICI, cu id-ul venit de pe server. Vezi `ContactForm`. */
-        urmareste({
-          name: "generate_lead",
-          lead_type: "migration",
-          form_name: "migration",
-          event_id: res.eventId,
+        Inainte nu era. Daca chemarea serverului PICA — retea cazuta, sau o pagina
+        veche care cheama o actiune ce nu mai exista dupa o desfasurare — functia
+        asincrona se rupea acolo si nu se mai intampla NIMIC:
+
+          - `setEroare` nu se chema  -> omul nu vedea nicio eroare
+          - `setTrimis` nu se chema  -> formularul ramanea pur si simplu acolo
+          - niciun eveniment          -> nici noi nu aflam vreodata
+
+        Adica omul apasa, nu se intampla nimic, si dispare fara urma. Gasit din
+        masuratoare, nu din cod: GA4 arata doua `form_submit`, serverul primise o
+        singura cerere, si `form_error` era zero. Un om lipsea de pe amandoua
+        listele.
+      */
+      try {
+        /* Tokenul se cere ACUM, nu la încărcarea paginii: expiră în 2 minute, iar
+           unul luat înainte ca omul să completeze e mort la trimitere. */
+        const captchaToken = await tokenRecaptcha("migrare");
+
+        const res = await submitMigrationLead({
+          nume: String(f.get("nume") ?? ""),
+          telefon: String(f.get("telefon") ?? ""),
+          email: String(f.get("email") ?? ""),
+          platforma: String(f.get("platforma") ?? ""),
+          produse: String(f.get("produse") ?? ""),
+          mentiuni: String(f.get("mentiuni") ?? ""),
+          acord: f.get("acord") === "on",
+          captchaToken,
         });
-      } else {
-        setEroare(res.error);
-        urmareste({
-          name: "form_error",
-          form_name: "migration",
-          error_type: felEroare(res.error),
-        });
+        if (res.ok) {
+          setTrimis(true);
+          /* ⚠ Conversia e AICI, cu id-ul venit de pe server. Vezi `ContactForm`. */
+          urmareste({
+            name: "generate_lead",
+            lead_type: "migration",
+            form_name: "migration",
+            event_id: res.eventId,
+          });
+        } else {
+          setEroare(res.error);
+          urmareste({
+            name: "form_error",
+            form_name: "migration",
+            error_type: felEroare(res.error),
+          });
+        }
+      } catch {
+        /* ⚠ Omul TREBUIE sa vada ceva, si noi trebuie sa aflam. */
+        setEroare("Nu am putut trimite cererea. Reincarca pagina si incearca din nou.");
+        urmareste({ name: "form_error", form_name: "migration", error_type: "retea" });
       }
     });
   }

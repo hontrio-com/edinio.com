@@ -25,6 +25,19 @@ export type FelEroareFormular =
   | "validare"
   | "limita"
   | "trimitere"
+  /*
+    ⚠ `retea` NU VINE DIN NICIUN MESAJ, si de aceea nu e in tiparele de mai jos.
+
+    Toate celelalte descriu ce a RASPUNS serverul. Asta descrie ca serverul n-a
+    raspuns deloc: chemarea insasi a picat — retea cazuta, sau o pagina veche care
+    cheama o actiune ce nu mai exista dupa o desfasurare.
+
+    Le desparte fiindca inseamna lucruri deosebite. `trimitere` inseamna ca noi am
+    primit cererea si n-am putut duce emailul mai departe. `retea` inseamna ca
+    cererea n-a ajuns niciodata la noi — omul e pierdut inainte de a intra pe usa,
+    si pana pe 02.09.2026 nu lasa nicio urma.
+  */
+  | "retea"
   | "altul";
 
 /*

@@ -179,3 +179,80 @@ test("si numele legitime raman permise", () => {
     );
   }
 });
+
+/* ═══ Apasarea care nu ajunge nicaieri ═══ */
+
+test("⚠ o chemare cazuta ARATA omului o eroare SI lasa urma", () => {
+  /*
+    ═══ DEFECTUL, GASIT DIN MASURATOARE PE 02.09.2026 ═══
+
+    GA4 arata `form_submit` de doua ori. Contorul durabil de pe server arata o
+    singura cerere primita. Iar `form_error` era ZERO.
+
+    Adica o apasare se pierduse intre browser si server, si nu figura nicaieri:
+    nici ca reusita, nici ca esec. Explicatia era ca blocul asincron n-avea
+    `try/catch`. Cand chemarea actiunii pica — retea, sau o pagina veche care
+    cheama o actiune disparuta dupa desfasurare — functia se rupea si:
+
+      `setEroare` nu se chema  -> omul nu vedea nimic si credea ca n-a apasat
+      niciun eveniment          -> noi nu aflam ca l-am pierdut
+
+    ⚠ PROBA CERE AMANDOUA, si de-asta nu e o potrivire simpla pe `catch`. Un
+    `catch` care doar arata eroarea repara omul si ne lasa pe noi orbi; unul care
+    doar masoara ne repara noua raportul si lasa omul in fata unui formular mut.
+  */
+  for (const [cale, nume] of [
+    ["src/components/website/ContactForm.tsx", "contact"],
+    ["src/components/website/sections/migrare/FormularMigrare.tsx", "migration"],
+  ] as const) {
+    const cod = faraComentarii(citeste(cale));
+
+    const iTransition = cod.indexOf("startTransition(async () => {");
+    const iTry = cod.indexOf("try {", iTransition);
+    const iCatch = cod.indexOf("} catch", iTry);
+
+    assert.ok(iTransition > 0, `${cale}: n-am gasit blocul asincron`);
+    assert.ok(iTry > iTransition, `${cale}: chemarea serverului nu mai e sub try`);
+    assert.ok(iCatch > iTry, `${cale}: s-a pierdut catch-ul — o chemare cazuta dispare fara urma`);
+
+    /*
+      ⚠ SI TRY-UL SA FIE INAINTEA CHEMARII, nu dupa. Un `try` pus dupa `await`
+      arata la fel intr-o cautare pe text si nu apara nimic.
+    */
+    const iChemare = cod.indexOf("await tokenRecaptcha", iTransition);
+    assert.ok(iChemare > iTry, `${cale}: chemarea captcha e INAINTEA lui try`);
+
+    const bloc = cod.slice(iCatch, cod.indexOf("});", iCatch));
+    assert.match(bloc, /setEroare\(/, `${cale}: catch-ul nu arata nimic omului`);
+    /*
+      ⚠ POTRIVIRE DE SIR SIMPLU, nu regex construit dintr-un sablon. Prima forma
+      era `new RegExp(\`…[\s\S]*…\`)`, si intr-un template literal `\s`
+      ajunge `s`: clasa devenea „s sau S", nu „orice caracter". Proba cadea pe un
+      cod care era corect. A doua oara acelasi tipar in proiectul asta.
+    */
+    assert.ok(bloc.includes('name: "form_error"'), `${cale}: catch-ul nu lasa urma`);
+    assert.ok(
+      bloc.includes(`form_name: "${nume}"`),
+      `${cale}: urma nu spune despre CARE formular e vorba`,
+    );
+    assert.match(bloc, /error_type: "retea"/, `${cale}: pierderea nu se deosebeste de un esec al serverului`);
+  }
+});
+
+test("`retea` nu poate veni dintr-un mesaj al serverului", () => {
+  /*
+    Toate celelalte feluri descriu ce a RASPUNS serverul. `retea` inseamna ca n-a
+    raspuns deloc. Daca vreun tipar l-ar putea intoarce, cele doua s-ar amesteca
+    si raportul n-ar mai putea deosebi „am refuzat" de „n-am ajuns".
+  */
+  for (const m of [
+    "Nu am putut trimite mesajul. Incearca din nou.",
+    "Prea multe mesaje trimise de aici.",
+    "Nu am putut confirma ca esti o persoana.",
+    "Completeaza toate campurile obligatorii.",
+    "ceva cu totul necunoscut",
+    "",
+  ]) {
+    assert.notEqual(felEroare(m), "retea", `mesajul "${m}" a fost clasificat drept cadere de retea`);
+  }
+});

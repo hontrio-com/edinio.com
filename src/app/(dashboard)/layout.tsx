@@ -17,6 +17,7 @@ import { EdinioTikTokPixel } from "@/components/edinio-marketing/EdinioTikTokPix
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 import { ImpersonationBanner } from "@/components/dashboard/ImpersonationBanner";
 import { NotificariToast } from "@/components/ui/NotificariToast";
+import { EtichetaGoogleAds } from "@/components/edinio-marketing/EtichetaGoogleAds";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -130,6 +131,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {esteImpersonare && <ImpersonationBanner />}
       <EdinioMetaPixel />
       <EdinioTikTokPixel />
+      <EtichetaGoogleAds />
       {/*
         ⚠ AICI NU SE PUNE BANNERUL, si e o hotarare a proprietarului: o
         intrebare despre cookie-uri peste o aplicatie in care omul lucreaza e

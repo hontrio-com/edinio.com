@@ -8,6 +8,7 @@ import { RuntimeMarketing } from "@/components/edinio-marketing/RuntimeMarketing
 import { EdinioMetaPixel } from "@/components/edinio-marketing/EdinioMetaPixel";
 import { EdinioTikTokPixel } from "@/components/edinio-marketing/EdinioTikTokPixel";
 import { BannerConsimtamant } from "@/components/edinio-marketing/BannerConsimtamant";
+import { EtichetaGoogleAds } from "@/components/edinio-marketing/EtichetaGoogleAds";
 
 export const metadata: Metadata = {
   title: "Autentificare",
@@ -37,6 +38,7 @@ export default function AuthLayout({
       <RuntimeMarketing />
       <EdinioMetaPixel />
       <EdinioTikTokPixel />
+      <EtichetaGoogleAds />
       <BannerConsimtamant />
       <div className="w-full max-w-md px-4 py-8">
         <div className="mb-6 sm:mb-8 flex justify-center">

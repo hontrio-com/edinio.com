@@ -10,6 +10,7 @@ import { EdinioTikTokPixel } from "@/components/edinio-marketing/EdinioTikTokPix
 import { jsonLdSafe } from "@/lib/json-ld";
 import { identitateEdinioJsonLd } from "@/lib/website-jsonld";
 import { BannerConsimtamant } from "@/components/edinio-marketing/BannerConsimtamant";
+import { EtichetaGoogleAds } from "@/components/edinio-marketing/EtichetaGoogleAds";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -84,6 +85,7 @@ export default function WebsiteLayout({
       <RuntimeMarketing />
       <EdinioMetaPixel />
       <EdinioTikTokPixel />
+      <EtichetaGoogleAds />
       <BannerConsimtamant />
       <SiteHeader />
       <main>{children}</main>

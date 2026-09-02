@@ -32,7 +32,7 @@ const DESCRIERI: Record<Categorie, { titlu: string; text: string; furnizori: str
     text:
       "Ne ajuta sa masuram ce reclama te-a adus aici si sa nu-ti mai aratam reclame pentru ceva ce ai facut deja. " +
       "Fara ele platim reclame la intamplare, dar site-ul merge la fel.",
-    furnizori: "Meta (Facebook, Instagram), TikTok",
+    furnizori: "Meta (Facebook, Instagram), TikTok, Google Ads",
   },
 };
 

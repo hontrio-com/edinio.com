@@ -7,6 +7,7 @@ import { adaptorGa4 } from "@/lib/edinio-marketing/adaptor-ga4";
 import { adaptorMeta } from "@/lib/edinio-marketing/adaptor-meta";
 import { adaptorTikTok } from "@/lib/edinio-marketing/adaptor-tiktok";
 import { faraUrmarire, faraPageView } from "@/lib/edinio-marketing/fara-urmarire";
+import { adaptorGoogleAds } from "@/lib/edinio-marketing/adaptor-google-ads";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -47,6 +48,13 @@ export function RuntimeMarketing() {
     inregistreazaAdaptor(adaptorGa4);
     inregistreazaAdaptor(adaptorMeta);
     inregistreazaAdaptor(adaptorTikTok);
+    /*
+      ⚠ GOOGLE ADS E ULTIMUL SI E ALTFEL. Ceilalti trei primesc orice eveniment
+      din taxonomie si hotarasc ei ce fac cu el. El primeste tot, dar trimite
+      NUMAI ce are eticheta de conversie in contul Google Ads — vezi
+      `pixel-google-ads.ts`. Un cont de reclame numara conversii, nu comportament.
+    */
+    inregistreazaAdaptor(adaptorGoogleAds);
     /*
       Fiecare script de pornire cheama `window.__edinioMarketingGata('<nume>')`
       din el insusi, sincron, imediat dupa ce furnizorul e definit. Asa coada se

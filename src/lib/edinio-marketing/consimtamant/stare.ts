@@ -40,7 +40,20 @@ export type Categorie = (typeof CATEGORII)[number];
  * invalideaza si bannerul se arata din nou. Fara asta, un furnizor nou s-ar
  * strecura sub un consimtamant dat pentru altceva.
  */
-export const FURNIZORI = ["google-analytics", "meta", "tiktok"] as const;
+export const FURNIZORI = ["google-analytics", "meta", "tiktok", "google-ads"] as const;
+
+/*
+  ⚠ ADAUGAREA LUI `google-ads` PE 02.09.2026 A INVALIDAT TOATE HOTARARILE DE PANA
+  ATUNCI, si asta nu e o scapare — e chiar rostul amprentei.
+
+  Cine a apasat „Accepta toate" dimineata n-a stiut de Google Ads: acordul lui
+  acoperea trei furnizori, nu patru. Amprenta se schimba odata cu lista, hotararile
+  vechi nu se mai potrivesc, si bannerul se arata din nou.
+
+  Costul e stiut si acceptat: o zi cu rata de acceptare mai mica, fiindca toata
+  lumea e intrebata iar. Alternativa ar fi fost sa strecuram un furnizor nou sub un
+  acord dat pentru altceva.
+*/
 
 /** Cat tine o hotarare. Sub un an, cum cer ghidurile autoritatilor. */
 export const DURATA_ZILE = 180;

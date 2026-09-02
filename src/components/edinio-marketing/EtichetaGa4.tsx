@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { codGa4, GAZDE_PRODUCTIE } from "@/lib/edinio-marketing/mediu";
 import { faraUrmarire } from "@/lib/edinio-marketing/fara-urmarire";
 import { useConsimtamant } from "@/lib/edinio-marketing/consimtamant-browser";
+import { corpBazaGtag } from "@/lib/edinio-marketing/corp-gtag";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -73,46 +74,27 @@ export function EtichetaGa4() {
   if (!c.mounted || !c.statistici) return null;
 
 
-  const gazde = JSON.stringify(GAZDE_PRODUCTIE);
-  const marketing = c.marketing ? "true" : "false";
+
+  const baza = corpBazaGtag({
+    gazde: GAZDE_PRODUCTIE,
+    statistici: c.statistici,
+    marketing: c.marketing,
+    idIncarcare: cod,
+  });
 
   return (
     <Script id="edinio-ga4" strategy="afterInteractive">{`
       (function () {
-        if (${gazde}.indexOf(location.hostname) === -1) return;
+${baza}
         if (window.__edinioGa4Pornit) return;
         window.__edinioGa4Pornit = true;
 
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){ dataLayer.push(arguments); }
-        window.gtag = gtag;
-
         /*
-          CONSENT MODE v2 — INAINTEA ORICAREI ALTE COMENZI gtag.
-
-          Ordinea nu e un moft: Google citeste starea implicita la prima comanda
-          care ar trimite ceva. Pusa dupa 'config', primul eveniment pleaca deja
-          sub starea gresita, si nimic nu arata ca s-a intamplat.
-
-          analytics_storage e 'granted' fiindca ajungem aici NUMAI cand omul a
-          acordat statistici — poarta e chiar randarea componentei. Semnalele de
-          reclama urmeaza categoria de marketing, care poate fi refuzata separat.
+          ⚠ send_page_view: false, dinadins. Aplicatia are o singura pagina care
+          se schimba sub picioare; numarate de ei, s-ar fi numarat gresit. Le
+          trimitem noi, din RuntimeMarketing.
         */
-        gtag('consent', 'default', {
-          analytics_storage: 'granted',
-          ad_storage: ${marketing} ? 'granted' : 'denied',
-          ad_user_data: ${marketing} ? 'granted' : 'denied',
-          ad_personalization: ${marketing} ? 'granted' : 'denied',
-          wait_for_update: 500
-        });
-
-        gtag('js', new Date());
         gtag('config', ${JSON.stringify(cod)}, { send_page_view: false });
-
-        var s = document.createElement('script');
-        s.async = true;
-        s.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(${JSON.stringify(cod)});
-        document.head.appendChild(s);
 
         if (window.__edinioMarketingGata) window.__edinioMarketingGata('ga4');
       })();

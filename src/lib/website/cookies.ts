@@ -691,19 +691,18 @@ const SECTIUNI: Sectiune[] = [
     blocuri: [
       {
         tip: "paragraf",
-        text: "La momentul activării unor servicii Google suplimentare, precum:",
+        text: "Edinio utilizează Google Ads pentru măsurarea conversiilor și pentru publicitate. Sunt active:",
       },
       {
         tip: "lista",
         items: [
-          "Google Ads Conversion Tracking;",
-          "Google Ads Remarketing;",
-          "alte funcționalități publicitare Google,",
+          "măsurarea conversiilor Google Ads (înscriere, început de perioadă de probă, plata abonamentului);",
+          "remarketing Google Ads,",
         ],
       },
       {
         tip: "paragraf",
-        text: "aceste tehnologii vor fi încadrate în categoria Marketing și publicitate și vor respecta opțiunea utilizatorului.",
+        text: "Aceste tehnologii fac parte din categoria „Marketing și publicitate”. Eticheta Google Ads nu se încarcă deloc înainte ca vizitatorul să accepte această categorie, iar la retragerea consimțământului cookie-urile pe care le-a scris sunt șterse.",
       },
       {
         tip: "paragraf",
@@ -773,7 +772,7 @@ const SECTIUNI: Sectiune[] = [
             "Atribuirea click-urilor Meta",
             "Persistent, conform configurației Meta",
           ],
-          ["_gcl_**", "Google", "Marketing", "Măsurarea conversiilor Google Ads. La data ultimei actualizări, Edinio nu rulează Google Ads pe edinio.com; un astfel de cookie prezent pe domeniu provine din eticheta Google a unui magazin găzduit pe aceeași adresă.", "90 zile"],
+          ["_gcl_**", "Google", "Marketing", "Măsurarea conversiilor Google Ads. Se scrie numai după acceptarea categoriei „Marketing și publicitate”.", "90 zile"],
           [
             "Cookie-uri Stripe*",
             "Stripe",

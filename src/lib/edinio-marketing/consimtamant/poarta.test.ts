@@ -80,19 +80,69 @@ test("⚠ Consent Mode v2 se declara INAINTEA oricarei alte comenzi gtag", () =>
     ⚠ ORDINEA NU E UN MOFT. Google citeste starea implicita la prima comanda care
     ar trimite ceva. Pusa dupa `config`, primul eveniment pleaca deja sub starea
     gresita, si nimic nu arata ca s-a intamplat.
-  */
-  const cod = citeste("src/components/edinio-marketing/EtichetaGa4.tsx");
-  const iDefault = cod.indexOf("gtag('consent', 'default'");
-  const iJs = cod.indexOf("gtag('js'");
-  const iConfig = cod.indexOf("gtag('config'");
 
+    ⚠ SI DE CE SE CITESTE `corp-gtag.ts`, nu componentele. Din 02.09.2026 sunt
+    DOUA etichete Google — GA4 (statistici) si Ads (marketing) — care pot porni
+    separat si n-au niciun contract de ordine intre ele. Declaratia s-a mutat
+    intr-un temei comun, pus o singura data de oricare ajunge primul.
+
+    Scrisa in fiecare componenta, ar fi fost chemata de doua ori — iar
+    `gtag('consent','default')` chemat a doua oara nu e o repetare nevinovata.
+  */
+  const baza = citeste("src/lib/edinio-marketing/corp-gtag.ts");
+
+  const iDefault = baza.indexOf("gtag('consent', 'default'");
+  const iJs = baza.indexOf("gtag('js'");
   assert.ok(iDefault > 0, "nu se mai declara starea implicita de consimtamant");
-  assert.ok(iJs > 0 && iConfig > 0, "comenzile gtag au disparut");
+  assert.ok(iJs > 0, "temeiul nu mai porneste ceasul gtag");
   assert.ok(iDefault < iJs, "`consent default` vine dupa `gtag('js')`");
-  assert.ok(iDefault < iConfig, "`consent default` vine dupa `gtag('config')`");
 
   for (const semnal of ["analytics_storage", "ad_storage", "ad_user_data", "ad_personalization"]) {
-    assert.ok(cod.includes(semnal), `semnalul "${semnal}" din Consent Mode v2 lipseste`);
+    assert.ok(baza.includes(semnal), `semnalul "${semnal}" din Consent Mode v2 lipseste`);
+  }
+
+  /*
+    ⚠ SI NICIUNA DIN CELE DOUA ETICHETE nu poate chema `config` inaintea
+    temeiului. Aici se vede ordinea adevarata din pagina: temeiul e interpolat ca
+    `${baza}` la inceputul corpului, si `config` vine dupa.
+  */
+  for (const f of [
+    "src/components/edinio-marketing/EtichetaGa4.tsx",
+    "src/components/edinio-marketing/EtichetaGoogleAds.tsx",
+  ]) {
+    const cod = citeste(f);
+    const iBaza = cod.indexOf("${baza}");
+    const iConfig = cod.indexOf("gtag('config'");
+    assert.ok(iBaza > 0, `${f}: nu mai include temeiul comun`);
+    assert.ok(iConfig > 0, `${f}: nu mai configureaza nimic`);
+    assert.ok(iBaza < iConfig, `${f}: cheama config INAINTEA temeiului`);
+
+    /* ⚠ Si ca nu si-a facut al doilea temei pe ascuns. */
+    assert.ok(
+      !cod.includes("gtag('consent'"),
+      `${f}: declara singur starea de consimtamant — a doua declaratie e ignorata de Google`,
+    );
+  }
+});
+
+test("⚠ amandoua etichetele Google atarna de categoria lor", () => {
+  /*
+    ⚠ CE APARA. GA4 masoara comportament (statistici); Google Ads numara conversii
+    si face remarketing (marketing). Cineva poate accepta una si refuza cealalta.
+
+    Pusa langa GA4, eticheta de reclame ar fi pornit odata cu ea — adica pentru
+    cineva care tocmai refuzase marketingul.
+  */
+  const perechi: Array<[string, string]> = [
+    ["src/components/edinio-marketing/EtichetaGa4.tsx", "statistici"],
+    ["src/components/edinio-marketing/EtichetaGoogleAds.tsx", "marketing"],
+  ];
+  for (const [f, categorie] of perechi) {
+    const linii = faraComentarii(citeste(f)).split(RAND).map((l) => l.trim());
+    assert.ok(
+      linii.includes(`if (!c.mounted || !c.${categorie}) return null;`),
+      `${f}: poarta pe "${categorie}" lipseste, sau nu mai e o instructiune de sine statatoare`,
+    );
   }
 });
 

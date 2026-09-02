@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
         : r.destinatie === "meta" ? await trimiteMeta(r.sarcina)
         : { fel: "refuzat" as const, motiv: `destinatia "${r.destinatie}" nu e cunoscuta` };
 
-      if (rez.fel === "trimis") { await marcheazaTrimis(r.id); trimise++; continue; }
+      if (rez.fel === "trimis") { await marcheazaTrimis(r.id, r.sarcina); trimise++; continue; }
 
       if (rez.fel === "refuzat") {
         /*

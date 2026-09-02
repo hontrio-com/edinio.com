@@ -249,9 +249,49 @@ export async function ceiCareAuRetras(vizitatori: readonly string[]): Promise<Se
   return new Set((data ?? []).map((r) => r.vizitator));
 }
 
-export async function marcheazaTrimis(id: string): Promise<void> {
+/**
+ * Randul a plecat. Se inchide, SI se goleste de ce nu mai foloseste nimanui.
+ *
+ * ═══ ⚠ DE CE SE STERG DATELE PERSONALE AICI, SI NU PESTE 30 DE ZILE ═══
+ *
+ * `sarcina` poarta ip-ul omului, browserul lui, si martorii lasati de pixeli
+ * (`_fbp`, `_fbc`, `_ttp`). Toate exista dintr-un singur motiv: sa se poata
+ * cladi mesajul catre furnizor.
+ *
+ * In clipa in care mesajul a plecat, motivul s-a stins. Ce ramane nu mai e o
+ * unealta, e doar un risc care se aduna: randurile astea n-aveau nicio stergere,
+ * deci ip-ul unui om ar fi stat acolo la nesfarsit.
+ *
+ * ⚠ SI NUMAI LA IZBANDA. La esec, sarcina trebuie sa supravietuiasca intacta —
+ * reincercarea o reconstruieste din ea. De aceea golirea sta AICI, nu in
+ * `marcheazaEsuat`.
+ *
+ * ⚠ CE SE PASTREAZA: numele evenimentului si clipa. Atat cat sa se poata
+ * raspunde peste o luna la „ce s-a trimis si cand", fara sa se poata raspunde la
+ * „cine era omul".
+ */
+/**
+ * Ce ramane dintr-o sarcina dupa ce a plecat.
+ *
+ * ⚠ E O FUNCTIE DE SINE STATATOARE ca sa se poata proba fara nicio baza. Scrisa
+ * inauntrul scrierii, singura ei proba ar fi fost una care cere Postgres — adica
+ * una pe care n-o ruleaza nimeni la fiecare `npm test`.
+ */
+export function sarcinaGolita(s: SarcinaPastrata): Record<string, unknown> {
+  return { ev: { name: s.ev.name }, cand: s.cand, golita: true };
+}
+
+export async function marcheazaTrimis(id: string, sarcina?: SarcinaPastrata): Promise<void> {
+  const golita = sarcina ? (sarcinaGolita(sarcina) as unknown as Json) : undefined;
+
   await createAdminClient().from(TABELA)
-    .update({ trimis_la: new Date().toISOString(), ultima_eroare: null })
+    .update({
+      trimis_la: new Date().toISOString(),
+      ultima_eroare: null,
+      ...(golita ? { sarcina: golita } : {}),
+      /* ⚠ Si legatura cu omul: fara ea, randul nu mai spune al cui a fost. */
+      ...(golita ? { vizitator: null } : {}),
+    })
     .eq("id", id);
 }
 

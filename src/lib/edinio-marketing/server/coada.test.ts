@@ -1,6 +1,10 @@
 import { strict as assert } from "node:assert";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { dupaEsec, candSeReincearca, PAUZE_MINUTE, MAX_INCERCARI } from "./ritm-reincercari";
+import { sarcinaGolita } from "./coada-conversii";
+
+const citeste = (p: string) => readFileSync(p, "utf8");
 import { sarcinaTikTok, eRefuz, externalId, type SarcinaTikTok } from "./sarcina-tiktok";
 import { catreTikTok } from "../adaptor-tiktok";
 import type { EvenimentEdinio } from "../evenimente";
@@ -243,4 +247,71 @@ test("o clipa lipsa sau stricata cade inapoi pe acum, nu pe NaN", () => {
     assert.ok(Number.isFinite(t), `event_time nefinit pentru ${JSON.stringify(rea)}`);
     assert.ok(Math.abs(t - Math.floor(Date.now() / 1000)) <= 5, `nu a cazut pe acum pentru ${JSON.stringify(rea)}`);
   }
+});
+
+/* ═══ Ce ramane dupa ce conversia a plecat ═══ */
+
+test("⚠ dupa trimitere nu mai ramane nimic despre OM", () => {
+  /*
+    ═══ ⚠ DE CE SE GOLESTE LA TRIMITERE, SI NU PESTE 30 DE ZILE ═══
+
+    `sarcina` poarta ip-ul omului, browserul lui, si martorii lasati de pixeli
+    (`_fbp`, `_fbc`, `_ttp`). Toate exista dintr-un singur motiv: sa se poata
+    cladi mesajul catre furnizor.
+
+    In clipa in care mesajul a plecat, motivul s-a stins. Ce ramane nu mai e o
+    unealta, e un risc care se aduna — randurile astea n-aveau nicio stergere,
+    deci ip-ul ar fi stat acolo la nesfarsit.
+
+    ⚠ Masurat inainte de reparatie: doua randuri in productie, amandoua cu ip.
+  */
+  const intreaga = {
+    ev: { name: "sign_up", signup_origin: "email", event_id: "e1" },
+    cand: "2026-09-02T21:00:00.000Z",
+    ctx: { ip: "81.196.9.9", userAgent: "Mozilla/5.0", referrer: "https://google.com/" },
+    amprentaOmului: "f".repeat(32),
+    martori: { fbp: "fb.1.1.1", fbc: "fb.1.1.CLICKID", ttp: "tt.1" },
+  } as never;
+
+  const ramas = JSON.stringify(sarcinaGolita(intreaga));
+
+  for (const urma of ["81.196.9.9", "Mozilla", "google.com", "CLICKID", "fb.1.1.1", "tt.1", "f".repeat(32)]) {
+    assert.ok(!ramas.includes(urma), `a ramas o urma despre om: "${urma}"`);
+  }
+
+  /* ⚠ Si ce TREBUIE sa ramana: destul cat sa se stie ce s-a trimis si cand. */
+  const obj = sarcinaGolita(intreaga) as { ev: { name: string }; cand?: string };
+  assert.equal(obj.ev.name, "sign_up", "s-a pierdut si numele evenimentului");
+  assert.equal(obj.cand, "2026-09-02T21:00:00.000Z", "s-a pierdut clipa");
+});
+
+test("⚠ la ESEC sarcina ramane intreaga — altfel reincercarea n-are din ce", () => {
+  /*
+    ⚠ CE APARA. Golirea sta in `marcheazaTrimis`, nu in `marcheazaEsuat`, si
+    deosebirea nu e de stil: un rand esuat se reincearca de sase ori, iar mesajul
+    se cladeste de fiecare data din sarcina. Golit la primul esec, randul ar fi
+    fost reincercat de cinci ori cu o sarcina fara nimic in ea — si ar fi esuat
+    de cinci ori, fara ca nimic sa spuna de ce.
+  */
+  const cod = citeste("src/lib/edinio-marketing/server/coada-conversii.ts");
+  const iEsuat = cod.indexOf("export async function marcheazaEsuat");
+  assert.ok(iEsuat > 0, "nu mai exista marcarea esecului");
+  assert.ok(
+    !cod.slice(iEsuat).includes("sarcinaGolita"),
+    "esecul goleste sarcina — reincercarea ar ramane fara ce sa trimita",
+  );
+
+  const iTrimis = cod.indexOf("export async function marcheazaTrimis");
+  assert.ok(cod.slice(iTrimis, iEsuat > iTrimis ? iEsuat : cod.length).includes("sarcinaGolita"),
+    "izbanda nu mai goleste sarcina");
+});
+
+test("⚠ cronul chiar ii DA sarcina, altfel golirea nu se intampla", () => {
+  /*
+    ⚠ `marcheazaTrimis(id)` fara al doilea argument lasa sarcina neatinsa — o
+    cadere inapoi blanda, care ar fi facut golirea sa para pusa si sa nu fie.
+  */
+  const cron = citeste("src/app/api/cron/conversii/route.ts");
+  assert.match(cron, /marcheazaTrimis\(r\.id, r\.sarcina\)/,
+    "cronul cheama marcheazaTrimis fara sarcina — nimic nu se goleste");
 });

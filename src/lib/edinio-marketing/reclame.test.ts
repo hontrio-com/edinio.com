@@ -170,7 +170,7 @@ test("⚠ MATURA: niciun eveniment din taxonomie nu e oprit de paza anti-PII", (
     { name: "article_read_complete", article_id: "a1" },
     { name: "article_cta_click", article_id: "a1", cta_id: "c1", cta_position: "middle" },
     { name: "article_share", article_id: "a1", share_method: "link" },
-    { name: "view_search_results", search_term: "magazin online", search_scope: "blog" },
+    { name: "view_search_results", search_term: "magazin online", search_scope: "blog", search_results: 7 },
     { name: "newsletter_subscribe_request" },
     { name: "newsletter_subscribe_confirmed" },
     { name: "registration_view" },

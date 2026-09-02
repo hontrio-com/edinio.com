@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ArrowUp, Loader2, Search } from "lucide-react";
 import { AJUTOR_CAUTARE } from "@/lib/website/ajutor-texte";
 import {
@@ -10,6 +10,7 @@ import {
   cautaInIndex,
   type IntrareIndex,
 } from "@/lib/website/ajutor-cautare";
+import { urmareste } from "@/lib/edinio-marketing/magistrala";
 
 /**
  * Bara de căutare din capul centrului de ajutor, cu rezultatele sub ea.
@@ -74,6 +75,42 @@ export function CautareGhiduri({ categorii }: { categorii: React.ReactNode }) {
     () => (index ? cautaInIndex(index, scris) : []),
     [index, scris],
   );
+
+  /*
+    ═══ ⚠ CE A CAUTAT OMUL, MASURAT DUPA CE S-A OPRIT DIN SCRIS ═══
+
+    Aici filtrarea e in timp real, deci un eveniment la fiecare tasta ar fi
+    insemnat sapte evenimente pentru „facturi" — si un raport in care termenii
+    cei mai cautati sunt „f", „fa", „fac". Nefolositor, si scump: fiecare tasta
+    ar fi plecat pe retea.
+
+    Se asteapta 800ms de liniste. Ce ramane pe ecran atunci e chiar ce a vrut
+    omul sa caute.
+
+    ⚠ SI SE TRIMITE SI CATE REZULTATE. Un termen cautat de cincizeci de ori cu
+    zero rezultate e un ghid care trebuie scris — dar numai daca stim ca a dat
+    zero. Fara numar, cele doua feluri de cautare ajung pe acelasi rand.
+
+    ⚠ Se asteapta si indexul: pana vine, `rezultate` e gol pentru ORICE termen,
+    si am fi raportat „zero rezultate" pentru cautari care de fapt gasesc.
+  */
+  const trimis = useRef("");
+  useEffect(() => {
+    const curatat = scris.trim();
+    if (curatat.length < 2 || !index) return;
+    if (trimis.current === curatat) return;
+
+    const ceas = setTimeout(() => {
+      trimis.current = curatat;
+      urmareste({
+        name: "view_search_results",
+        search_term: curatat.slice(0, 100),
+        search_scope: "help",
+        search_results: rezultate.length,
+      });
+    }, 800);
+    return () => clearTimeout(ceas);
+  }, [scris, index, rezultate.length]);
 
   function porneste() {
     if (index || eroare) return;

@@ -98,7 +98,14 @@ export type EvenimentEdinio =
   | { name: "article_read_complete"; article_id: string }
   | { name: "article_cta_click"; article_id: string; cta_id: IdCta; cta_position: "top" | "middle" | "bottom" | "sidebar" }
   | { name: "article_share"; article_id: string; share_method: string }
-  | { name: "view_search_results"; search_term: string; search_scope: "blog" | "help" }
+  /*
+    ⚠ `search_results` E PARTEA CARE CONTEAZA, si de aceea e obligatoriu.
+
+    „Ce cauta oamenii" e o intrebare frumoasa si aproape nefolositoare. „Ce cauta
+    si NU gasesc" e o lista de articole de scris. Fara numarul de rezultate, cele
+    doua ajung amestecate pe acelasi rand si nu se mai pot desparti.
+  */
+  | { name: "view_search_results"; search_term: string; search_scope: "blog" | "help"; search_results: number }
   /*
     ⚠ DOUA MOMENTE DEOSEBITE, si confundarea lor umfla raportul cu pana la
     jumatate. `request` = omul a cerut abonarea; `confirmed` = a apasat legatura

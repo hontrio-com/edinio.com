@@ -165,6 +165,33 @@ export function RuntimeMarketing() {
 
       const cta = tinta.closest<HTMLElement>("[data-analytics-cta]");
       if (cta) {
+        /*
+          ⚠ UN INDEMN DINTR-UN ARTICOL E ALT EVENIMENT, si de aceea se cauta
+          intai articolul din jur.
+
+          `cta_click` spune „cineva a apasat butonul verde din antet". Dar
+          indemnul dintr-un articol de blog raspunde la o intrebare mai buna: CARE
+          articol duce oameni mai departe? Amestecate sub acelasi nume, cele o
+          suta de articole ar aparea ca un singur `cta_id`, si n-am mai fi stiut
+          niciodata ce text merita scris din nou.
+
+          ⚠ SI DE CE AICI, in ascultatorul delegat, si nu in componenta.
+          `IndemnArticol` e componenta de SERVER. Ca sa traga singura evenimentul
+          ar fi trebuit sa devina componenta de client — adica sa duca React in
+          browser pentru fiecare articol, ca sa masor o apasare. Aici nu costa
+          nimic: ascultatorul exista deja, si citeste doar niste atribute.
+        */
+        const articol = cta.closest<HTMLElement>("[data-analytics-article]");
+        if (articol) {
+          urmareste({
+            name: "article_cta_click",
+            article_id: articol.dataset.analyticsArticle ?? "necunoscut",
+            cta_id: cta.dataset.analyticsCta ?? "necunoscut",
+            cta_position: (cta.dataset.analyticsPosition as "top" | "middle" | "bottom" | "sidebar") ?? "middle",
+          });
+          return;
+        }
+
         urmareste({
           name: "cta_click",
           cta_id: cta.dataset.analyticsCta ?? "necunoscut",

@@ -8,6 +8,7 @@ import { notFound } from "next/navigation";
 import { Paginare, paginaCeruta, paginaNuExista } from "@/components/website/blog/Paginare";
 import { cautaArticole } from "@/lib/blog/citire";
 import { ACASA } from "@/lib/website/breadcrumbs";
+import { UrmaCautare } from "@/components/edinio-marketing/UrmaCautare";
 
 type Props = { searchParams: Promise<{ q?: string; p?: string }> };
 
@@ -62,6 +63,17 @@ export default async function CautareBlogPage({ searchParams }: Props) {
 
   return (
     <>
+      {/*
+        ⚠ MASURAT AICI, pe pagina de rezultate, nu la apasarea butonului.
+        Cautarea din blog e un formular obisnuit care navigheaza; masurata la
+        trimitere, s-ar fi numarat si cautarile care n-au ajuns nicaieri. Numele
+        evenimentului spune chiar asta: `view_search_results`.
+
+        ⚠ Si se trimite si CATE. „Ce cauta oamenii" e o intrebare aproape
+        nefolositoare; „ce cauta si nu gasesc" e o lista de articole de scris.
+      */}
+      {!preaScurt && <UrmaCautare termen={cautat} domeniu="blog" rezultate={total} />}
+
       <PageHero
         sir={[ACASA, { label: "Blog", href: "/blog" }, { label: "Căutare" }]}
         title={cautat ? `Rezultate pentru „${cautat}”` : "Caută în articole"}

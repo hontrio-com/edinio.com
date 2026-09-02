@@ -16,7 +16,7 @@ strică fără el** — ca să poți sări peste ce nu-ți trebuie, în cunoști
 |---|---|
 | Eticheta GA4 `G-SB92HFQ1EN` | vie pe `edinio.com`, **numai** acolo |
 | Pixel Meta + TikTok | vii, **numai** pe `edinio.com` |
-| Evenimente | **26** de nume, trase din cod |
+| Evenimente | **29** de nume, trase din cod |
 | Conversii | cerere de ofertă, cont nou, trial, abonament |
 | Deduplicare | fiecare conversie poartă un `event_id` reproductibil pe server |
 
@@ -24,7 +24,7 @@ Pixelii **nu** mai pornesc pe `localhost` și nici pe desfășurările de
 previzualizare. Până pe 01.09.2026 porneau, și trimiteau evenimente în conturile
 adevărate.
 
-Cele 26 care se trag azi:
+Cele 29 care se trag azi:
 
 `page_view`, `section_view`, `scroll_depth`, `cta_click`, `navigation_click`,
 `outbound_click`, `landing_view`, `form_start`, `form_submit`, `form_error`,
@@ -32,15 +32,25 @@ Cele 26 care se trag azi:
 `newsletter_subscribe_request`, `newsletter_subscribe_confirmed`, `sign_up`,
 `onboarding_step_view`, `onboarding_step_complete`, `begin_checkout`,
 `add_payment_info`, `trial_start`, `purchase`, `billing_period_change`,
-`faq_open`, `integration_filter`.
+`faq_open`, `integration_filter`, `article_cta_click`, `view_search_results`, `article_share`.
 
-> Ultimele trei s-au adăugat pe 02.09.2026, după un audit din afară care a
+> Ultimele cinci s-au adăugat pe 02.09.2026, după un audit din afară care a
 > numărat suprafețele vii nemăsurate: comutatorul lunar/anual de la prețuri,
-> întrebările frecvente, și filtrul din biblioteca de integrări.
+> întrebările frecvente, filtrul din biblioteca de integrări, îndemnul din corpul
+> articolelor, și cele două căutări (blog și centrul de ajutor).
 >
-> În cod mai există **8 nume declarate dar netrase de nicăieri** (`plan_select`,
-> `integration_view`, `article_share`, `article_cta_click`, `view_search_results`
-> și altele). Ele stau acolo ca să nu apară peste o lună trei nume diferite pentru
+> Căutarea trimite și **câte rezultate a găsit**. „Ce caută oamenii" e o întrebare
+> aproape nefolositoare; „ce caută și **nu** găsesc" e o listă de articole de scris.
+>
+> `article_share` a venit odată cu butoanele de partajare din articole, adăugate
+> tot pe 02.09.2026 — până atunci evenimentul era declarat pentru o funcție care
+> nu exista. Butoanele sunt legături obișnuite, **fără niciun script de la
+> rețele**: SDK-urile oficiale de „share" urmăresc vizitatorul chiar dacă nu
+> apasă nimic, adică exact ce am pus sub consimțământ.
+>
+> În cod mai există **5 nume declarate dar netrase de nicăieri** (`plan_select`,
+> `integration_view`, `registration_view`, `registration_start`,
+> `onboarding_complete`). Ele stau acolo ca să nu apară peste o lună trei nume diferite pentru
 > același lucru. **Nu le face dimensiuni în GA4**: locurile sunt 50 și n-ar aduna
 > nimic.
 

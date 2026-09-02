@@ -24,6 +24,18 @@ export function IndemnArticol({ cta }: { cta: unknown }) {
       {i.text && <p className="mt-2 text-[14.5px] leading-[1.6] text-ink-2">{i.text}</p>}
       <Link
         href={i.adresa}
+        /*
+          ⚠ SE MASOARA PRIN ATRIBUTE, nu cu un `onClick`.
+
+          Fisierul asta e componenta de SERVER. Un manuitor de eveniment l-ar fi
+          facut componenta de client — adica React in browser pentru fiecare
+          articol, doar ca sa numar o apasare. Ascultatorul delegat din
+          `RuntimeMarketing` citeste atributele astea si trage `article_cta_click`
+          cand indemnul e inauntrul unui articol, sau `cta_click` altfel.
+        */
+        data-analytics-cta="indemn_articol"
+        data-analytics-location="articol"
+        data-analytics-position="bottom"
         className="group mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-[14.5px] font-semibold text-white transition-colors hover:bg-primary/90"
       >
         {i.eticheta}

@@ -12,6 +12,13 @@ import type { ArticolIntreg } from "@/lib/blog/citire";
 import { curataArticol } from "@/lib/blog/curata";
 import { cuprinsSiHtml, meritaCuprins } from "@/lib/blog/cuprins";
 import { ACASA } from "@/lib/website/breadcrumbs";
+import { PartajeazaArticol } from "@/components/website/blog/PartajeazaArticol";
+
+/*
+  ⚠ FARA BARA LA CAPAT, si fara `??` catre localhost: o adresa de partajare
+  gresita ajunge in mainile oamenilor si nu se mai poate lua inapoi.
+*/
+const ADRESA_SITE = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.edinio.com").replace(/\/+$/, "");
 
 /**
  * Articolul, așa cum îl vede cititorul.
@@ -173,7 +180,30 @@ export async function CorpArticol({ a }: { a: ArticolIntreg }) {
 
             {/* Îndemnul potrivit CU TEXTUL, înaintea întrebărilor. Banda de
                 final a site-ului rămâne jos și spune altceva. */}
-            <IndemnArticol cta={a.cta} />
+            {/*
+              ⚠ ADRESA VINE DE PE SERVER, nu din `location.href`.
+
+              Pe server stim adresa CANONICA. `location.href` ar fi purtat cu ea
+              tot ce s-a lipit de adresa: `?utm_source=facebook` de la vizita
+              omului, `#un-subtitlu` de la cuprins, `?p=2` de la paginare. Cine
+              primeste legatura ar fi deschis-o cu urmele campaniei altcuiva, iar
+              rapoartele i-ar fi socotit vizita drept trafic din reclame.
+            */}
+            <PartajeazaArticol
+              articolId={a.id}
+              titlu={a.title}
+              adresa={`${ADRESA_SITE}/blog/${a.slug}`}
+            />
+
+            {/*
+              ⚠ `data-analytics-article` E PE INVELIS, nu pe buton. Ascultatorul
+              delegat urca de la butonul apăsat până găsește articolul din jur;
+              așa, orice îndemn adăugat mai târziu oriunde în articol e măsurat
+              fără să-și mai amintească cineva să-i pună id-ul.
+            */}
+            <div data-analytics-article={a.id}>
+              <IndemnArticol cta={a.cta} />
+            </div>
 
             {a.faq.length > 0 && (
               <section className="mt-14">

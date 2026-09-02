@@ -273,17 +273,46 @@ export async function citesteAnalytics(
   };
 }
 
-/** Cati oameni sunt pe site chiar acum, si pe ce pagini. */
+/**
+ * Ce se intampla pe site CHIAR ACUM: cati oameni, pe ce pagini, si ce evenimente.
+ *
+ * ═══ ⚠ DE CE SI EVENIMENTELE, NU DOAR OAMENII ═══
+ *
+ * Prima forma intorcea numai numarul de vizitatori activi. Dar intrebarea pentru
+ * care se deschide pagina asta in ziua configurarii nu e „cati sunt pe site" —
+ * e „am apasat acum ceva, a ajuns?".
+ *
+ * Fara evenimente, singurul raspuns era „asteapta cateva ore si uita-te in lista
+ * din Administrator", care e exact felul de raspuns dupa care nimeni nu mai
+ * verifica nimic. Rapoartele obisnuite intarzie; timpul real nu.
+ *
+ * ⚠ CELE DOUA CERERI MERG IN PARALEL si oricare poate cadea singura. Un raport de
+ * timp real nu are voie sa doboare pagina — e cea mai putin importanta cifra din
+ * ea si cea mai fragila.
+ */
 export async function citesteTimpReal(
   token: string, propertyId: string,
-): Promise<{ activi: number; pagini: Linie[] } | { eroare: string }> {
-  const r: ApiResult<GaReport> = await runRealtimeReport(token, propertyId, {
-    dimensions: [{ name: "unifiedScreenName" }],
-    metrics: [{ name: "activeUsers" }],
-    limit: 10,
-  });
-  if ("error" in r) return { eroare: r.error };
+): Promise<{ activi: number; pagini: Linie[]; evenimente: Linie[] } | { eroare: string }> {
+  const [rPagini, rEvenimente] = await Promise.all([
+    runRealtimeReport(token, propertyId, {
+      dimensions: [{ name: "unifiedScreenName" }],
+      metrics: [{ name: "activeUsers" }],
+      limit: 10,
+    }) as Promise<ApiResult<GaReport>>,
+    runRealtimeReport(token, propertyId, {
+      dimensions: [{ name: "eventName" }],
+      metrics: [{ name: "eventCount" }],
+      limit: 25,
+    }) as Promise<ApiResult<GaReport>>,
+  ]);
 
-  const pagini = linii(r.data);
-  return { activi: pagini.reduce((s, l) => s + l.a, 0), pagini };
+  if ("error" in rPagini) return { eroare: rPagini.error };
+
+  const pagini = linii(rPagini.data);
+  return {
+    activi: pagini.reduce((s, l) => s + l.a, 0),
+    pagini,
+    /* ⚠ Daca doar evenimentele cad, restul paginii traieste mai departe. */
+    evenimente: "error" in rEvenimente ? [] : linii(rEvenimente.data),
+  };
 }

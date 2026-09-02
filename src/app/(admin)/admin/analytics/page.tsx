@@ -164,6 +164,7 @@ async function Continut({ perioada }: { perioada: NumePerioada }) {
       perioada={perioada}
       proprietate={{ nume: conexiune.property_name, masurare: conexiune.masurare_id, email: conexiune.email_conectat }}
       timpReal={"eroare" in real ? null : real.activi}
+      acum={"eroare" in real ? [] : real.evenimente}
     />
   );
 }

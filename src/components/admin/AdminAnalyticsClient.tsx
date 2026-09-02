@@ -4,7 +4,11 @@ import Link from "next/link";
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, ExternalLink } from "lucide-react";
 import type { DateAnalytics, Linie } from "@/lib/admin-analytics/rapoarte";
 import { PERIOADE, type NumePerioada } from "@/lib/admin-analytics/perioade";
+import { CONVERSII } from "@/lib/edinio-marketing/evenimente";
 import { ButonDeconectareGa4 } from "./ButonConectareGa4";
+
+/* Conversiile se aprind altfel in lista de mai jos: ele sunt ce cauti. */
+const CONVERSII_AFISATE: readonly string[] = CONVERSII as readonly string[];
 
 /*
   Rapoartele de trafic ale EDINIO. Ce vand comerciantii se vede in
@@ -103,12 +107,13 @@ function Tabel({
 }
 
 export function AdminAnalyticsClient({
-  date, perioada, proprietate, timpReal,
+  date, perioada, proprietate, timpReal, acum,
 }: {
   date: DateAnalytics;
   perioada: NumePerioada;
   proprietate: { nume?: string; masurare?: string; email?: string };
   timpReal: number | null;
+  acum: Linie[];
 }) {
   const { rezumat } = date;
 
@@ -145,6 +150,44 @@ export function AdminAnalyticsClient({
           ))}
         </div>
       </div>
+
+      {/*
+        ⚠ ASTA E PRIMUL LUCRU DE PE PAGINA IN ZIUA CONFIGURARII. Intrebarea
+        pentru care se deschide raportul atunci nu e „cati oameni am avut", ci
+        „am apasat acum ceva, a ajuns?". Rapoartele obisnuite intarzie ore;
+        timpul real nu.
+      */}
+      {acum.length > 0 && (
+        <div className="bg-surface border border-border rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-2.5">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+            </span>
+            <h3 className="text-sm font-semibold text-foreground">Chiar acum</h3>
+            <span className="text-xs text-muted-foreground">ultimele 30 de minute</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {acum.map((e) => {
+              const eConversie = CONVERSII_AFISATE.includes(e.cheie);
+              return (
+                <span
+                  key={e.cheie}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium ${
+                    eConversie
+                      ? "bg-primary/10 text-primary border border-primary/25"
+                      : "bg-muted/60 text-muted-foreground"
+                  }`}
+                  title={eConversie ? "conversie" : undefined}
+                >
+                  {e.cheie}
+                  <span className="tabular-nums opacity-70">{nr(e.a)}</span>
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Ce n-a mers ──────────────────────────────────────────────────── */}
       {date.probleme.length > 0 && (

@@ -235,6 +235,22 @@ function PlanPageContent() {
            nimeni prin cookie-uri sau prin parametri de adresa. Fara asta, un
            singur abonament ar aparea ca doua conversii.
       */
+      /*
+        ⚠ PENTRU ABONAMENT, ID-UL SESIUNII STRIPE; pentru trial, id-ul magazinului.
+
+        Nu e o inconsecventa, ci doua perechi deosebite. Trialul se raporteaza de
+        pe server din `createBusiness`, care stie id-ul magazinului. Abonamentul se
+        raporteaza din webhook-ul Stripe, care NU-l stie — la ora lui magazinul
+        inca nu exista — dar stie id-ul sesiunii. Fiecare drum poarta id-ul pe care
+        il are si perechea lui.
+
+        ⚠ CADEREA PE ID-UL MAGAZINULUI nu e o plasa, e o marturisire: daca `sid`
+        lipseste (o adresa veche, sau cineva care intra de-a dreptul pe `?success=1`),
+        browserul trimite un id pe care webhook-ul nu-l are, deci conversia s-ar
+        numara de doua ori. Se prefera asta in locul unei conversii pierdute, iar
+        cazul e rar prin constructie: Stripe pune sablonul intotdeauna.
+      */
+      const idSesiune = searchParams.get("sid") ?? "";
       const idConversie = result.businessId ?? "";
 
       if (plan === "free") {
@@ -247,7 +263,7 @@ function PlanPageContent() {
           billing_period: paidInterval,
           value,
           currency: "RON",
-          event_id: idConversie,
+          event_id: idSesiune || idConversie,
         });
       }
 

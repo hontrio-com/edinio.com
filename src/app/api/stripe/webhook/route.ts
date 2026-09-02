@@ -5,6 +5,9 @@ import { createClient as createAdminClient, type SupabaseClient } from "@supabas
 import { emiteFacturaPlatforma } from "@/lib/billing/factura-platforma";
 import type { Database } from "@/types/database.types";
 import type Stripe from "stripe";
+import { logError } from "@/lib/error-logger";
+import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
+import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
 
 function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -532,6 +535,55 @@ async function proceseazaEveniment(admin: SupabaseClient, event: Stripe.Event): 
     if (eSuspendareInitiala) {
       console.error("[webhook] checkout.session.completed — suspendarea nu s-a putut ridica:", eSuspendareInitiala);
       return NextResponse.json({ error: "Suspension clear failed" }, { status: 500 });
+    }
+
+    /*
+      ═══ ⚠ CONVERSIA CATRE META SI TIKTOK, DE UNDE SE STIE CA BANII AU INTRAT ═══
+
+      Browserul trage si el `purchase` cand omul se intoarce din Stripe, cu ACELASI
+      `event_id` — id-ul sesiunii, purtat inapoi prin `?sid=` — deci furnizorii unesc
+      cele doua drumuri si numara UN abonament. Drumul din browser se pierde la
+      blocantele de reclame; asta nu.
+
+      ⚠ SUMA E CEA INCASATA, nu cea din tabelul de preturi. `amount_total` include
+      ce s-a intamplat cu adevarat: reduceri, proratii, cupoane. Un pret citit din
+      cod ar fi o presupunere raportata ca venit.
+
+      ⚠ NU SE TRIMITE IP-UL SI NICI BROWSERUL. Aici ele ar fi ale lui Stripe, nu ale
+      omului — deci ar aseza conversia in tara serverelor lor si ar strica potrivirea
+      in loc s-o ajute. Ce nu stim lipseste; campurile goale se scot singure.
+
+      ⚠ SI NU POATE STRICA PLATA: `puneLaCoada` isi inghite singura greselile si le
+      scrie in jurnal. Abonamentul e deja scris in profil cand se ajunge aici.
+    */
+    /*
+      ⚠ MONEDA SE VERIFICA, NU SE TURNA. Taxonomia cunoaste doar `RON`, fiindca
+      atat facturam. Daca Stripe intoarce vreodata altceva, o conversie trimisa cu
+      eticheta `RON` ar raporta o suma in alta moneda ca lei — un venit fals, si
+      nimic care sa arate de ce. Mai bine netrimisa si strigata.
+    */
+    const monedaIncasata = (session.currency ?? "ron").toLowerCase();
+    if (session.amount_total && session.amount_total > 0 && monedaIncasata !== "ron") {
+      await logError({
+        action: "conversii.monedaNecunoscuta",
+        message: `abonament incasat in "${monedaIncasata}" — conversia nu s-a trimis`,
+        details: { sessionId: session.id, plan },
+        userId,
+        severity: "warning",
+      });
+    } else if (session.amount_total && session.amount_total > 0) {
+      await puneLaCoada(
+        {
+          name: "purchase",
+          plan_id: plan,
+          billing_period: normalizeInterval(interval) === "annual" ? "annual" : "monthly",
+          value: session.amount_total / 100,
+          currency: "RON",
+          event_id: session.id,
+        },
+        { ctx: {}, amprentaOmului: userId },
+        destinatiiActive(),
+      );
     }
 
     // Anuleaza orice ALT abonament al clientului (planul vechi la upgrade/reactivare).

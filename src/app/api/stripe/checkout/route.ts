@@ -19,8 +19,22 @@ export async function POST(req: NextRequest) {
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
+  /*
+    ⚠ `{CHECKOUT_SESSION_ID}` NU E O VARIABILA DE-A NOASTRA. E un sablon pe care il
+    inlocuieste Stripe la redirectionare, cu id-ul chiar al sesiunii platite.
+
+    De ce e nevoie de el: `purchase` pleaca pe doua drumuri — din browser cand omul
+    se intoarce, si din webhook cand banii chiar intra. Ca sa fie numarat O data,
+    amandoua trebuie sa poarte ACELASI `event_id`. Id-ul magazinului nu putea fi
+    acela: la ora webhook-ului magazinul inca nu exista. Id-ul sesiunii il stiu
+    amandoi.
+
+    ⚠ SE ADAUGA DOAR PE CALEA DE ONBOARDING, dinadins. Celelalte doua nu trag
+    `purchase` din browser, deci n-au ce deduplica — iar drumul platii se atinge
+    cat mai putin.
+  */
   const successUrl =
-    return_to === "onboarding" ? `${siteUrl}/onboarding/plan?success=1`
+    return_to === "onboarding" ? `${siteUrl}/onboarding/plan?success=1&sid={CHECKOUT_SESSION_ID}`
     : return_to === "reactivare" ? `${siteUrl}/reactivare?success=1`
     : `${siteUrl}/dashboard/settings?plan_success=1`;
   const cancelUrl =

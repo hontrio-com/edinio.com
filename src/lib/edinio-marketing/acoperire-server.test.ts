@@ -24,18 +24,21 @@ import { join } from "node:path";
 */
 
 /** Conversii implinite: trebuie sa plece si de pe server. */
-const DE_PE_SERVER = ["generate_lead", "sign_up", "trial_start"];
+const DE_PE_SERVER = ["generate_lead", "sign_up", "trial_start", "purchase"];
 
 /*
-  ⚠ GOL CUNOSCUT, SCRIS CA ATARE. `purchase` pleaca deocamdata numai din browser.
-  Suma adevarata o stie doar webhook-ul Stripe (cat s-a incasat), iar `event_id`-ul
-  pe care-l foloseste browserul e id-ul magazinului — pe care webhook-ul nu-l are,
-  fiindca la ora lui magazinul inca nu exista. Legarea cere o hotarare despre
-  drumul platii, nu doar cod.
+  ⚠ LISTA GOLURILOR E GOALA, SI ASA A AJUNS SA FIE.
 
-  Cand se leaga, se muta mai sus si se sterge de aici.
+  Pana pe 02.09.2026 scria aici `purchase`, cu motivul: suma adevarata o stie doar
+  webhook-ul Stripe, iar `event_id`-ul browserului era id-ul magazinului, pe care
+  webhook-ul nu-l are — la ora lui magazinul inca nu exista.
+
+  S-a legat mutand martorul: `success_url` poarta inapoi `{CHECKOUT_SESSION_ID}`,
+  deci amandoua drumurile numesc aceeasi sesiune. Proba de mai jos a CAZUT cand
+  s-a intamplat, exact cum a fost scrisa sa cada — ca nota sa fie mutata, nu
+  stearsa in tacere.
 */
-const NELEGAT_INCA = ["purchase"];
+const NELEGAT_INCA: string[] = [];
 
 function fisiereSursa(rad: string): string[] {
   const iesire: string[] = [];
@@ -133,4 +136,66 @@ test("⚠ trialul se raporteaza doar cand serverul chiar l-a acordat", () => {
     cod.slice(iGarda, iCoada).indexOf("}") < 0,
     "punerea la coada a iesit din ramura pazita — se raporteaza si cand trialul nu s-a acordat",
   );
+});
+
+/* ═══ Abonamentul: cele doua drumuri trebuie sa numeasca aceeasi sesiune ═══ */
+
+test("⚠ `success_url` de onboarding poarta inapoi id-ul sesiunii Stripe", () => {
+  /*
+    ⚠ AICI STA TOT. Fara sablonul asta, browserul n-are cu ce numi plata, si ar
+    cadea inapoi pe id-ul magazinului — pe care webhook-ul nu-l are. Atunci
+    acelasi abonament ar pleca sub doua nume si s-ar numara de DOUA ori.
+  */
+  const cod = readFileSync("src/app/api/stripe/checkout/route.ts", "utf8");
+  const iOnboarding = cod.indexOf('return_to === "onboarding" ?');
+  assert.ok(iOnboarding > 0, "ramura de onboarding a disparut din checkout");
+  assert.ok(
+    cod.slice(iOnboarding, iOnboarding + 200).includes("{CHECKOUT_SESSION_ID}"),
+    "success_url nu mai poarta id-ul sesiunii — abonamentul s-ar numara de doua ori",
+  );
+});
+
+test("⚠ browserul foloseste id-ul sesiunii pentru abonament, nu pe cel al magazinului", () => {
+  const cod = readFileSync("src/app/(onboarding)/onboarding/plan/page.tsx", "utf8");
+  assert.match(cod, /const idSesiune = searchParams\.get\("sid"\)/,
+    "pagina nu mai citeste id-ul sesiunii din adresa");
+
+  const iPurchase = cod.indexOf('name: "purchase"');
+  assert.ok(iPurchase > 0, "pagina nu mai trage purchase");
+  assert.match(
+    cod.slice(iPurchase, iPurchase + 260), /event_id: idSesiune \|\| idConversie/,
+    "purchase nu mai poarta id-ul sesiunii",
+  );
+
+  /* ⚠ Trialul RAMANE pe id-ul magazinului: perechea lui de server e `createBusiness`. */
+  const iTrial = cod.indexOf('name: "trial_start"');
+  assert.ok(iTrial > 0 && cod.slice(iTrial, iTrial + 160).includes("event_id: idConversie"),
+    "trialul nu mai poarta id-ul magazinului — s-ar despartii de perechea lui de server");
+});
+
+test("⚠ webhook-ul numeste ACEEASI sesiune, si raporteaza banii incasati", () => {
+  const cod = readFileSync("src/app/api/stripe/webhook/route.ts", "utf8");
+  const i = cod.indexOf('name: "purchase"');
+  assert.ok(i > 0, "webhook-ul nu mai pune abonamentul la coada");
+  const bucata = cod.slice(i, i + 400);
+
+  assert.match(bucata, /event_id: session\.id/,
+    "webhook-ul foloseste alt id decat browserul — abonamentul s-ar numara de doua ori");
+  assert.match(bucata, /value: session\.amount_total \/ 100/,
+    "suma nu mai vine din incasare — un pret citit din cod e o presupunere raportata ca venit");
+});
+
+test("⚠ webhook-ul NU trimite ip-ul si browserul — ar fi ale lui Stripe", () => {
+  /*
+    ⚠ CE APARA. Un webhook vine de la serverele Stripe. Trimise ca ale omului,
+    ip-ul l-ar aseza in tara lor, iar `user_agent` ar fi al unui robot — deci
+    potrivirea la Meta si TikTok ar fi stricata, nu ajutata. Ce nu stim lipseste.
+  */
+  const cod = readFileSync("src/app/api/stripe/webhook/route.ts", "utf8");
+  const i = cod.indexOf('name: "purchase"');
+  const bucata = cod.slice(i, i + 400);
+  assert.match(bucata, /ctx: \{\}/, "webhook-ul a inceput sa trimita un context");
+  for (const camp of ["x-forwarded-for", "user-agent", "userAgent"]) {
+    assert.ok(!bucata.includes(camp), `webhook-ul trimite "${camp}" — ar fi al lui Stripe, nu al omului`);
+  }
 });

@@ -59,14 +59,56 @@ function Card({ titlu, valoare, subsol }: { titlu: string; valoare: string; subs
   );
 }
 
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠ `(not set)` INSEAMNA DOUA LUCRURI DEOSEBITE, DUPA DIMENSIUNE
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  Pe o dimensiune PERSONALIZATA (`page_group`, `cta_id`) inseamna: randul a fost
+  colectat INAINTE ca dimensiunea sa fie inregistrata in GA4. Ramane asa pentru
+  totdeauna, si se imputineaza de la sine pe masura ce intra date noi.
+
+  Pe una STANDARD (sursa, tara, dispozitiv) inseamna cu totul altceva: GA4 n-a
+  putut stabili valoarea pentru sesiunile alea. Nu se repara cu timpul si n-are
+  nicio legatura cu vreo inregistrare.
+
+  ⚠ SI DE CE E UN COMENTARIU LUNG PENTRU UN SIR SCURT. Prima forma punea
+  explicatia cu inregistrarea in TOATE tabelele. In „Surse" a iesit o propozitie
+  mincinoasa — vorbea despre o inregistrare pe care nimeni n-o facuse, exact acolo
+  unde omul se uita dupa adevar. Un text de ajutor gresit e mai rau decat niciunul:
+  al doilea te lasa sa intrebi, primul te opreste din intrebat.
+*/
+type FelDimensiune = "personalizata" | "standard";
+
+function NumeLinie({ cheie, fel }: { cheie: string; fel: FelDimensiune }) {
+  /* ⚠ Sir gol: GA4 a intors o valoare, dar vida. O celula alba arata a defect. */
+  if (cheie === "") {
+    return <span className="text-muted-foreground italic">(valoare goala)</span>;
+  }
+  if (cheie !== "(not set)") return <>{cheie}</>;
+
+  return fel === "personalizata" ? (
+    <span className="text-muted-foreground" title="Randuri colectate inainte ca dimensiunea personalizata sa fie inregistrata in GA4. Se imputineaza de la sine.">
+      dinainte de inregistrarea dimensiunii
+      <span className="ml-1.5 text-xs opacity-70">(not set)</span>
+    </span>
+  ) : (
+    <span className="text-muted-foreground" title="GA4 n-a putut stabili valoarea pentru sesiunile astea. Nu e o setare lipsa.">
+      nedeterminat de GA4
+      <span className="ml-1.5 text-xs opacity-70">(not set)</span>
+    </span>
+  );
+}
+
 function Tabel({
-  titlu, linii, coloana, gol, formatCheie,
+  titlu, linii, coloana, gol, formatCheie, dimensiune = "standard",
 }: {
   titlu: string;
   linii: Linie[];
   coloana: string;
   gol: string;
   formatCheie?: (c: string) => string;
+  dimensiune?: FelDimensiune;
 }) {
   const total = linii.reduce((s, l) => s + l.a, 0);
   return (
@@ -90,24 +132,9 @@ function Tabel({
               {linii.map((l) => (
                 <tr key={l.cheie} className="border-t border-border/60">
                   <td className="px-5 py-2 text-foreground truncate max-w-[22rem]" title={l.cheie}>
-                    {/*
-                      ⚠ `(not set)` NU E O VALOARE, e absenta uneia — si arata a defect
-                      cand nu e. GA4 il pune pe tot ce a fost colectat INAINTE ca
-                      dimensiunea personalizata sa fie inregistrata, si acele randuri
-                      raman asa pentru totdeauna.
-
-                      Lasat asa cum vine, primul lucru pe care il vezi dupa ce ai
-                      configurat totul corect e un rand care pare gol. De aceea isi
-                      spune singur povestea.
-                    */}
-                    {l.cheie === "(not set)" ? (
-                      <span className="text-muted-foreground">
-                        dinainte de inregistrarea dimensiunii
-                        <span className="ml-1.5 text-xs opacity-70">(not set)</span>
-                      </span>
-                    ) : (
-                      formatCheie ? formatCheie(l.cheie) : l.cheie
-                    )}
+                    {formatCheie && l.cheie && l.cheie !== "(not set)"
+                      ? formatCheie(l.cheie)
+                      : <NumeLinie cheie={l.cheie} fel={dimensiune} />}
                   </td>
                   <td className="px-5 py-2 text-right tabular-nums text-foreground">{nr(l.a)}</td>
                   <td className="px-5 py-2 text-right tabular-nums text-muted-foreground">
@@ -254,7 +281,7 @@ export function AdminAnalyticsClient({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Tabel titlu="Cele mai vazute pagini" linii={date.pagini} coloana="Vizualizari" gol="Nimic inca." />
         {date.grupuriPagini
-          ? <Tabel titlu="Pe grupuri de pagini" linii={date.grupuriPagini} coloana="Vizualizari" gol="Nimic inca." />
+          ? <Tabel titlu="Pe grupuri de pagini" linii={date.grupuriPagini} coloana="Vizualizari" gol="Nimic inca." dimensiune="personalizata" />
           : (
             <div className="bg-surface border border-border border-dashed rounded-2xl p-5 flex flex-col justify-center">
               <h3 className="text-sm font-semibold text-foreground">Pe grupuri de pagini</h3>
@@ -275,7 +302,7 @@ export function AdminAnalyticsClient({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Tabel titlu="Butoane apasate" linii={date.cta} coloana="Apasari" gol="Niciun cta_id inca." />
+        <Tabel titlu="Butoane apasate" linii={date.cta} coloana="Apasari" gol="Niciun cta_id inca." dimensiune="personalizata" />
         <Tabel titlu="Formulare" linii={date.formulare} coloana="Numar" gol="Nimic inca." />
       </div>
 

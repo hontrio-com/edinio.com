@@ -100,3 +100,39 @@ test("⚠ ruta de setari CHIAR trece prin taiere", () => {
     "a revenit atribuirea directa, pe langa taiere",
   );
 });
+
+/* ═══ `(not set)` nu inseamna acelasi lucru peste tot ═══ */
+
+test("⚠ explicatia pentru `(not set)` se da dupa FELUL dimensiunii", () => {
+  /*
+    ═══ TEXT DE AJUTOR MINCINOS, GASIT LA DOUA ORE DUPA CE L-AM SCRIS ═══
+
+    Am pus explicatia „dinainte de inregistrarea dimensiunii" pe orice `(not set)`
+    din raport. E adevarata pentru `page_group` si `cta_id`, care CHIAR se
+    inregistreaza de mana in GA4.
+
+    In tabelul „Surse" a iesit o propozitie falsa: sursa e o dimensiune STANDARD,
+    pe care n-o inregistreaza nimeni. Acolo `(not set)` inseamna ca GA4 n-a putut
+    stabili valoarea — alta cauza, alt raspuns, si nu se repara cu timpul.
+
+    ⚠ UN TEXT DE AJUTOR GRESIT E MAI RAU DECAT NICIUNUL: al doilea te lasa sa
+    intrebi, primul te opreste din intrebat — exact acolo unde te uiti dupa adevar.
+
+    Proba cere ca numai cele DOUA tabele sprijinite pe dimensiuni personalizate sa
+    fie marcate asa, si niciunul in plus.
+  */
+  const cod = citeste("src/components/admin/AdminAnalyticsClient.tsx");
+
+  const marcate = [...cod.matchAll(/titlu="([^"]+)"[^\n]*dimensiune="personalizata"/g)].map(m => m[1]);
+  assert.deepEqual(
+    marcate.sort(), ["Butoane apasate", "Pe grupuri de pagini"],
+    "s-au marcat ca personalizate alte tabele decat cele doua care chiar sunt",
+  );
+
+  /* Si ca exista amandoua explicatiile, nu doar una folosita peste tot. */
+  assert.ok(cod.includes("dinainte de inregistrarea dimensiunii"), "lipseste explicatia pentru dimensiuni personalizate");
+  assert.ok(cod.includes("nedeterminat de GA4"), "lipseste explicatia pentru dimensiuni standard");
+
+  /* ⚠ Si un sir gol nu mai lasa o celula alba, care arata a defect. */
+  assert.ok(cod.includes('(valoare goala)'), "un rand cu valoare vida se afiseaza ca celula alba");
+});

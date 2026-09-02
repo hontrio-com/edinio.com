@@ -513,3 +513,57 @@ test("`landing_view` duce spre TikTok un `content_id` stabil", () => {
   assert.equal(t?.date.content_id, "Homepage");
   assert.equal(t?.date.content_category, "landing", "categoria s-a pierdut cu totul");
 });
+
+test("⚠ MATURA: fiecare eveniment care pleaca spre TikTok duce un `content_id`", () => {
+  /*
+    ═══ A DOUA OARA ACEEASI PLANGERE, IN ACEEASI ZI ═══
+
+    Dimineata am pus `content_id` numai la `landing_view`, fiindca acolo se
+    plangea consola. Cateva ore mai tarziu, la o inscriere adevarata, se plangea
+    din nou — la `begin_checkout`.
+
+    Reparasem CAZUL, nu regula. Proba asta cere regula: orice eveniment care are
+    cartografiere spre TikTok trebuie sa duca un id, altfel ei n-au pe ce lega
+    audienta si evenimentul pleaca degeaba.
+
+    ⚠ SI `begin_checkout` E CEL MAI USOR DE RATAT: `plan_id` lipseste acolo, caci
+    evenimentul se trage cand omul intra pe pagina de planuri, inainte sa aleaga.
+    Fara o valoare de rezerva, campul iesea `undefined`.
+  */
+  const toate: EvenimentEdinio[] = [
+    { name: "landing_view", content_name: "Homepage", content_category: "landing" },
+    { name: "generate_lead", lead_type: "contact", form_name: "contact", event_id: "e1" },
+    { name: "sign_up", signup_origin: "email", event_id: "e2" },
+    { name: "begin_checkout", billing_period: "monthly" },
+    { name: "begin_checkout", plan_id: "premium", billing_period: "monthly" },
+    { name: "add_payment_info", plan_id: "premium", billing_period: "monthly" },
+    { name: "trial_start", plan_id: "free", event_id: "e3" },
+    { name: "purchase", plan_id: "ultra", billing_period: "annual", value: 999, currency: "RON", event_id: "e4" },
+  ];
+
+  let verificate = 0;
+  for (const ev of toate) {
+    const t = catreTikTok(ev);
+    if (!t) continue;
+    verificate++;
+    const id = t.date.content_id;
+    assert.ok(
+      typeof id === "string" && id.length > 0,
+      `"${ev.name}" pleaca spre TikTok cu content_id=${JSON.stringify(id)} — n-au pe ce lega audienta`,
+    );
+  }
+  assert.equal(verificate, toate.length, "unele evenimente n-au ajuns la cartografiere");
+});
+
+test("⚠ `begin_checkout` fara plan nu GHICESTE un plan", () => {
+  /*
+    Tentatia e sa pui „basic" ca sa nu fie gol. Dar atunci audienta de
+    retargetare s-ar umple de oameni care n-au vrut niciodata basic, si nimic
+    n-ar arata ca e gresit.
+  */
+  const fara = catreTikTok({ name: "begin_checkout", billing_period: "monthly" });
+  assert.equal(fara?.date.content_id, "abonament");
+
+  const cu = catreTikTok({ name: "begin_checkout", plan_id: "premium", billing_period: "monthly" });
+  assert.equal(cu?.date.content_id, "premium", "planul ales nu mai ajunge la ei");
+});

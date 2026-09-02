@@ -83,25 +83,55 @@ export function catreTikTok(ev: EvenimentEdinio): Trimitere | null {
 
     /* ⚠ `SubmitForm`, nu `Lead`. TikTok n-are `Lead`. Vezi nota de sus. */
     case "generate_lead":
-      return { nume: "SubmitForm", date: { content_name: ev.form_name }, eventId: ev.event_id };
+      return {
+        nume: "SubmitForm",
+        date: { content_id: ev.form_name, content_name: ev.form_name },
+        eventId: ev.event_id,
+      };
 
     case "sign_up":
-      return { nume: "CompleteRegistration", date: {}, eventId: ev.event_id };
+      return { nume: "CompleteRegistration", date: { content_id: "cont" }, eventId: ev.event_id };
 
+    /*
+      ═══ ⚠ `content_id` PE TOATE, NU DOAR PE `landing_view` ═══
+
+      Reparatia din dimineata l-a pus numai la pagina de aterizare. Consola de la
+      o inscriere adevarata, cateva ore mai tarziu, se plangea din nou — de data
+      asta la `begin_checkout`.
+
+      Si acolo era mai rau: `plan_id` LIPSESTE la `begin_checkout`, fiindca
+      evenimentul se trage la intrarea pe pagina de planuri, cand omul inca n-a
+      ales niciunul. Deci pleca `{ content_name: undefined }` — un eveniment gol.
+
+      ⚠ CAND PLANUL NU E ALES INCA, id-ul spune ASTA, nu ghiceste un plan.
+      `abonament` e stabil si adevarat: e inceputul cumpararii unui abonament,
+      fara sa se stie care. Pus „basic" din comoditate, audienta de retargetare
+      s-ar umple de oameni care n-au vrut niciodata basic.
+    */
     case "begin_checkout":
-      return { nume: "InitiateCheckout", date: { content_name: ev.plan_id } };
+      return {
+        nume: "InitiateCheckout",
+        date: { content_id: ev.plan_id ?? "abonament", content_name: ev.plan_id ?? "abonament" },
+      };
 
     case "add_payment_info":
-      return { nume: "AddPaymentInfo", date: { content_name: ev.plan_id } };
+      return { nume: "AddPaymentInfo", date: { content_id: ev.plan_id, content_name: ev.plan_id } };
 
     /* ⚠ Personalizat, nu standard. Vezi nota de sus. */
     case "trial_start":
-      return { nume: "StartTrial", date: { content_name: ev.plan_id }, eventId: ev.event_id };
+      return {
+        nume: "StartTrial",
+        date: { content_id: ev.plan_id, content_name: ev.plan_id },
+        eventId: ev.event_id,
+      };
 
     case "purchase":
       return {
         nume: "Subscribe",
-        date: { value: ev.value, currency: ev.currency, content_name: ev.plan_id },
+        date: {
+          value: ev.value, currency: ev.currency,
+          content_id: ev.plan_id, content_name: ev.plan_id,
+        },
         eventId: ev.event_id,
       };
 

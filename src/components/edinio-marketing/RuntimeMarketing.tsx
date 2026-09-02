@@ -78,11 +78,21 @@ export function RuntimeMarketing() {
     const eNavigare = calePrecedenta.current !== null;
     calePrecedenta.current = cale;
 
-    const trage = () => urmareste({
-      name: "page_view",
-      page_location: window.location.href,
-      page_title: document.title,
-    });
+    /*
+      ⚠ TITLUL GOL NU SE TRIMITE DELOC, si asta e deosebit de a trimite `""`.
+
+      Un sir gol intra in GA4 ca o VALOARE: raportul „Pages" capata un rand fara
+      nume, care arata a pagina adevarata. Lipsa campului lasa GA4 sa-si puna
+      singur titlul pe care il vede, adica raspunsul corect cand noi nu-l stim.
+    */
+    const trage = () => {
+      const titluAcum = document.title.trim();
+      urmareste({
+        name: "page_view",
+        page_location: window.location.href,
+        ...(titluAcum ? { page_title: titluAcum } : {}),
+      });
+    };
 
     /*
       ═══ ⚠ LA PRIMA INCARCARE TITLUL E DEJA ACOLO. LA NAVIGARE, NU. ═══
@@ -108,7 +118,24 @@ export function RuntimeMarketing() {
 
     let tras = false;
     const odata = () => { if (!tras) { tras = true; obs.disconnect(); clearTimeout(ceas); trage(); } };
-    const obs = new MutationObserver(odata);
+
+    /*
+      ═══ ⚠ SE ASTEAPTA UN TITLU, NU O SCHIMBARE ═══
+
+      Reparatia de ieri astepta PRIMA schimbare a lui `<title>` si tragea atunci.
+      Masurat pe 02.09.2026, la o inscriere adevarata, pe `/onboarding/plan`:
+
+        page_view {page_location: '…/onboarding/plan', page_title: '', …}
+
+      Next GOLESTE titlul si abia apoi scrie noul titlu. Prima mutatie e golirea,
+      deci observatorul se aprindea pe ea si citea nimic. Pe alte rute nu s-a
+      vazut, fiindca acolo golirea si scrierea cadeau in aceeasi mutatie.
+
+      Deci nu ne intereseaza ca s-a schimbat ceva, ci ca A APARUT un titlu.
+      Golirea se ignora si se asteapta mai departe; daca nu vine niciunul pana la
+      plafon, se trage fara camp — vezi `trage`.
+    */
+    const obs = new MutationObserver(() => { if (document.title.trim()) odata(); });
     obs.observe(titlu, { childList: true, characterData: true, subtree: true });
     const ceas = setTimeout(odata, 2000);
 

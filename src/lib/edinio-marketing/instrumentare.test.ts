@@ -144,3 +144,45 @@ test("martor: probele chiar gasesc marcaje", () => {
   assert.ok(marcaje("data-analytics-cta").length >= 5, "n-am gasit niciun CTA marcat — calea e gresita?");
   assert.ok(marcaje("data-analytics-section").length >= 6, "n-am gasit sectiuni marcate");
 });
+
+/* ═══ Titlul paginii: gol nu inseamna necunoscut ═══ */
+
+test("⚠ un titlu GOL nu pleaca deloc, si golirea nu declanseaza masuratoarea", () => {
+  /*
+    ═══ ACELASI DEFECT, A DOUA OARA, IN DOUA ZILE ═══
+
+    Ieri: `page_title` pleca gol la fiecare navigare, fiindca Next il pune
+    asincron. Reparat asteptand PRIMA schimbare a lui `<title>`.
+
+    Azi, la o inscriere adevarata, masurat in consola productiei:
+
+      page_view {page_location: '…/onboarding/plan', page_title: '', …}
+
+    Reparasem pe jumatate. Next GOLESTE titlul si abia apoi scrie noul titlu;
+    prima mutatie e golirea, deci observatorul se aprindea pe ea si citea nimic.
+    Pe alte rute nu s-a vazut, fiindca acolo cele doua cadeau in aceeasi mutatie.
+
+    Doua reguli, si amandoua trebuie sa tina:
+
+    1. NU SE ASTEAPTA O SCHIMBARE, SE ASTEAPTA UN TITLU. Golirea se ignora.
+    2. UN SIR GOL NU SE TRIMITE CA VALOARE. In GA4 ar deveni un rand fara nume in
+       raportul „Pages", care arata a pagina adevarata. Lipsa campului lasa GA4
+       sa puna singur ce vede — raspunsul corect cand noi nu stim.
+  */
+  const cod = readFileSync(
+    join(process.cwd(), "src/components/edinio-marketing/RuntimeMarketing.tsx"), "utf8",
+  ).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+
+  assert.ok(
+    cod.includes("if (document.title.trim()) odata()"),
+    "observatorul se aprinde din nou pe orice mutatie — golirea titlului trage masuratoarea",
+  );
+  assert.ok(
+    cod.includes("...(titluAcum ? { page_title: titluAcum } : {})"),
+    "`page_title` se trimite neconditionat — un titlu gol intra in GA4 ca valoare",
+  );
+  assert.ok(
+    !cod.includes("page_title: document.title"),
+    "s-a intors trimiterea directa a lui document.title, fara paza pe gol",
+  );
+});

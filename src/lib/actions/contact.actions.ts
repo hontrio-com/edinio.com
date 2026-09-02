@@ -9,6 +9,7 @@ import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { PROGRAM } from "@/lib/website/contact";
 import { verificaMesajDeContact, type MesajDeContactBrut } from "@/lib/website/contact-form";
 import { verificaRecaptcha } from "@/lib/recaptcha";
+import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
 
 /**
  * Trimiterea formularului de pe `/contact`.
@@ -187,5 +188,19 @@ export async function submitContactMessage(
     });
   }
 
-  return { ok: true, eventId: randomUUID() };
+  /*
+    ⚠ ACELASI `event_id` CA IN BROWSER. Formularul trage `generate_lead` cu
+    `res.eventId` — care e chiar id-ul nascut mai jos. Furnizorii unesc cele doua
+    drumuri dupa el si numara O cerere, nu doua.
+
+    ⚠ SI SE PUNE LA COADA DUPA CE EMAILUL A PLECAT, nu inainte. O conversie
+    raportata pentru o cerere care nu ne-a ajuns e mai rea decat una pierduta.
+  */
+  const idConversie = randomUUID();
+  await puneLaCoada(
+    { name: "generate_lead", lead_type: "contact", form_name: "contact", event_id: idConversie },
+    { ctx: { ip }, amprentaOmului: idConversie },
+    ["tiktok"],
+  );
+  return { ok: true, eventId: idConversie };
 }

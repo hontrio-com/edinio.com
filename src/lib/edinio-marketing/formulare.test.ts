@@ -74,11 +74,61 @@ for (const f of FORMULARE) {
   test(`${f.nume}: serverul naste id-ul, si numai la succes`, () => {
     const cod = faraComentarii(citeste(f.actiune));
     assert.match(cod, /ok: true; eventId: string/, `${f.nume}: actiunea nu mai intoarce un id`);
-    assert.match(cod, /return \{ ok: true, eventId: randomUUID\(\) \}/,
-      `${f.nume}: id-ul nu mai e nascut pe calea de succes`);
-    /* ⚠ Si ca ramurile de eroare NU poarta id: un id acolo ar fi o conversie. */
-    const cateId = (cod.match(/eventId/g) ?? []).length;
-    assert.ok(cateId <= 3, `${f.nume}: eventId apare de ${cateId} ori — verifica sa nu fie si pe erori`);
+    /*
+      ⚠ SE CERE REGULA, NU FORMA. Proba de dinainte cerea chiar sirul
+      `return { ok: true, eventId: randomUUID() }`. Cand id-ul a ajuns sa fie pus
+      intai intr-o variabila — ca sa poata pleca si catre coada de conversii — a
+      cazut, desi nimic din ce apara ea nu se stricase.
+
+      Regula adevarata are doua jumatati: id-ul se naste pe server, si numai
+      drumul de succes il poarta.
+    */
+    const succes = cod.match(/return \{ ok: true, eventId: ([A-Za-z0-9_]+(?:\(\))?) \}/);
+    assert.ok(succes, `${f.nume}: nu mai exista o intoarcere de succes cu eventId`);
+    const sursa = succes![1];
+    if (sursa !== "randomUUID()") {
+      assert.match(
+        cod,
+        new RegExp(`(const|let) ${sursa} = randomUUID\(\)`),
+        `${f.nume}: \`${sursa}\` nu vine din randomUUID() — id-ul nu se mai naste pe server`,
+      );
+    }
+
+    /*
+      ⚠ SI CA RAMURILE DE EROARE NU POARTA ID. Un eventId pe o cale de esec ar
+      raporta o conversie pentru o cerere care nu ne-a ajuns.
+    */
+    for (const ram of cod.match(/return \{ ok: false[^}]*\}/g) ?? []) {
+      assert.doesNotMatch(ram, /eventId/, `${f.nume}: o ramura de eroare poarta eventId: ${ram}`);
+    }
+
+    /*
+      ⚠ SI CA ACELASI ID PLEACA SI CATRE FURNIZORI. Aici sta deduplicarea: daca
+      punerea la coada ar folosi alt id decat cel intors browserului, aceeasi
+      cerere ar fi numarata de doua ori de Meta si de TikTok.
+    */
+    /*
+      ⚠ CE POATE SI CE NU POATE PROBA ASTA. Ea citeste sursa, deci poate arata
+      ca apelul e SCRIS — nu ca el chiar se executa. Confruntata cu un mutant
+      `if (false) await puneLaCoada(...)`, prima ei forma a trecut verde: sirul
+      era acolo, ramura era moarta.
+
+      De aceea nu se mai cauta sirul oriunde, ci se cere ca apelul sa fie o
+      instructiune de sine statatoare — un rand care INCEPE cu `await
+      puneLaCoada(`. Orice paza pusa inaintea lui pe acelasi rand strica potrivirea.
+      Ramane o proba de sursa, cu marginile ei; ce chiar pleaca spre furnizori se
+      masoara in `coada.test.ts`, pe mesajul construit.
+    */
+    const linii = cod.split(/\r?\n/).map((l) => l.trim());
+    assert.ok(
+      linii.some((l) => l.startsWith("await puneLaCoada(")),
+      `${f.nume}: cererea nu se mai pune la coada catre furnizori, sau apelul e sub o paza`,
+    );
+    const iCoada = cod.indexOf("puneLaCoada(");
+    assert.ok(
+      cod.slice(iCoada, iCoada + 400).includes(`event_id: ${sursa}`),
+      `${f.nume}: coada nu foloseste chiar id-ul intors browserului (${sursa}) \u2014 aceeasi cerere ar fi numarata de doua ori`,
+    );
   });
 
   test(`${f.nume}: „a inceput sa completeze" se masoara o SINGURA data`, () => {

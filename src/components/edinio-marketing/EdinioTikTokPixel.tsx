@@ -4,6 +4,7 @@ import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { GAZDE_PRODUCTIE } from "@/lib/edinio-marketing/mediu";
 import { faraUrmarire } from "@/lib/edinio-marketing/fara-urmarire";
+import { ID_PIXEL_TIKTOK } from "@/lib/edinio-marketing/pixel-tiktok";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -25,7 +26,7 @@ import { faraUrmarire } from "@/lib/edinio-marketing/fara-urmarire";
   exista.
 */
 
-const ID_PIXEL = process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID ?? "D8N5ATBC77UA0GPRAUBG";
+const ID_PIXEL = ID_PIXEL_TIKTOK;
 
 export function EdinioTikTokPixel() {
   /* ⚠ Hook-ul inaintea oricarei iesiri — regulile hook-urilor. */

@@ -1977,6 +1977,48 @@ export type Database = {
           },
         ]
       }
+      edinio_conversion_outbox: {
+        Row: {
+          abandonat_la: string | null
+          creat_la: string
+          destinatie: string
+          event_id: string
+          id: string
+          incercari: number
+          next_retry_at: string
+          nume_eveniment: string
+          sarcina: Json
+          trimis_la: string | null
+          ultima_eroare: string | null
+        }
+        Insert: {
+          abandonat_la?: string | null
+          creat_la?: string
+          destinatie: string
+          event_id: string
+          id?: string
+          incercari?: number
+          next_retry_at?: string
+          nume_eveniment: string
+          sarcina: Json
+          trimis_la?: string | null
+          ultima_eroare?: string | null
+        }
+        Update: {
+          abandonat_la?: string | null
+          creat_la?: string
+          destinatie?: string
+          event_id?: string
+          id?: string
+          incercari?: number
+          next_retry_at?: string
+          nume_eveniment?: string
+          sarcina?: Json
+          trimis_la?: string | null
+          ultima_eroare?: string | null
+        }
+        Relationships: []
+      }
       emag_awb: {
         Row: {
           awb_number: string | null
@@ -5713,6 +5755,28 @@ export type Database = {
       /* Cele doua functii `security definer` de langa blog: `users_profile` NU tine
          adresa de email — ea sta in `auth.users`, la care PostgREST nu ajunge. */
       cont_dupa_email: { Args: { p_email: string }; Returns: { id: string; rol: string }[] }
+      edinio_revendica_conversii: {
+        Args: { limita: number }
+        Returns: {
+          abandonat_la: string | null
+          creat_la: string
+          destinatie: string
+          event_id: string
+          id: string
+          incercari: number
+          next_retry_at: string
+          nume_eveniment: string
+          sarcina: Json
+          trimis_la: string | null
+          ultima_eroare: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "edinio_conversion_outbox"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       redactorii_blogului: {
         Args: Record<string, never>
         Returns: { id: string; full_name: string | null; email: string | null; role: string }[]

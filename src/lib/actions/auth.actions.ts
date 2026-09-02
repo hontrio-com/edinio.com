@@ -27,6 +27,7 @@ import {
   optiuniCookieAsteptare,
   sigileazaSesiune,
 } from "@/lib/auth/sesiune-asteptare";
+import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
 
 /**
  * IP-ul apelantului. ATENTIE la ce se poate si ce nu se poate face cu el:
@@ -384,6 +385,29 @@ export async function register(formData: {
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
     });
+  }
+
+  /*
+    ═══ ⚠ SI PE SERVER, CATRE FURNIZORII DE RECLAME ═══
+
+    Acelasi cont nou pleaca si din browser (`UrmaContNou`), si de aici. Cele doua
+    poarta ACELASI `event_id` — amprenta calculata din contul asta — deci
+    furnizorii le unesc si numara O conversie, nu doua.
+
+    ⚠ DE CE E NEVOIE DE amandoua: browserul se pierde la blocante de reclame si
+    la cine inchide pagina prea repede; serverul nu vede niciodata ce n-a ajuns
+    la el. Impreuna acopera mai mult decat oricare singur.
+
+    ⚠ SE TRIMITE DOAR AMPRENTA, niciodata emailul. Trimiterea unui email cu hash
+    ar creste mult potrivirea, dar e o hotarare cu urmari legale, nu una tehnica
+    — si nu e a mea. Vezi nota din `sarcina-tiktok.ts`.
+  */
+  if (idCont) {
+    await puneLaCoada(
+      { name: "sign_up", signup_origin: "email", event_id: idConversieCont(idCont) },
+      { ctx: { ip, userAgent: (await headers()).get("user-agent") }, amprentaOmului: idCont },
+      ["tiktok"],
+    );
   }
 
   revalidatePath("/", "layout");

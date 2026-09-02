@@ -3,6 +3,7 @@ import { requireAdminApi } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAudit } from "@/lib/audit";
 import type { Json } from "@/types/database.types";
+import { setariPentruBrowser } from "@/lib/setari-platforma";
 
 interface PlatformSetting {
   key: string;
@@ -23,11 +24,14 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Transform rows into { [key]: value } format
-  const settings: Record<string, unknown> = {};
-  for (const row of (data ?? []) as PlatformSetting[]) {
-    settings[row.key] = row.value;
-  }
+  /*
+    ⚠ SECRETELE NU PLEACA DE AICI. Randul asta intorcea valorile intregi, ceea ce
+    a fost bine cat timp in tabela stateau numai comutatoare. Din 02.09.2026
+    acolo sta si legatura Google a platformei, cu un `refresh_token` care nu
+    expira. Vezi `lib/setari-platforma.ts` pentru regula si pentru de ce e pe
+    CAMP, nu pe cheia randului.
+  */
+  const settings = setariPentruBrowser((data ?? []) as PlatformSetting[]);
 
   return NextResponse.json(settings);
 }

@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyState, exchangeCode } from "@/lib/google-analytics/oauth";
 import { listAccountSummaries, listDataStreams } from "@/lib/google-analytics/client";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
+import { eStareDeAdmin } from "@/lib/admin-analytics/stare-oauth";
+import { aterizareAdminGa4 } from "@/lib/admin-analytics/aterizare-oauth";
 
 const FEATURE = "/dashboard/features/google-analytics";
 
@@ -17,6 +19,23 @@ export async function GET(req: NextRequest) {
   if (url.searchParams.get("error") || !url.searchParams.get("code") || !url.searchParams.get("state")) {
     return back(req, "ga=error");
   }
+
+  /*
+    ═══ ⚠ ACEEASI ATERIZARE PENTRU DOUA DRUMURI DEOSEBITE ═══
+
+    Ruta asta e si intoarcerea comerciantului care isi leaga GA4-ul lui de
+    magazin, si intoarcerea NOASTRA cand legam proprietatea Edinio pentru
+    rapoartele din admin.
+
+    E un singur `redirect_uri` dinadins: al doilea ar fi cerut inregistrare in
+    Google Cloud si o noua trecere prin ecranul de consimtamant. Despartirea se
+    face dupa starea semnata, INAINTE de orice atingere a tabelei `businesses` —
+    altfel cuvantul platformei ar fi cautat acolo ca id de magazin.
+  */
+  if (eStareDeAdmin(url.searchParams.get("state"))) {
+    return aterizareAdminGa4(url.origin, url.searchParams.get("code"));
+  }
+
   const businessId = verifyState(url.searchParams.get("state")!);
   if (!businessId) return back(req, "ga=error");
 

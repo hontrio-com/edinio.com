@@ -1,0 +1,106 @@
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getAccessToken } from "@/lib/google-analytics/oauth";
+import type { Json } from "@/types/database.types";
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  LEGATURA EDINIO -> GA4, PENTRU RAPOARTELE DIN ADMIN
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  ⚠ ASTA E CONTUL NOSTRU, nu al vreunui comerciant. Legatura fiecarui client sta
+  in `store_settings.google_analytics_config`, per magazin, si n-are nicio treaba
+  cu randurile de aici. Aceeasi granita ca la pixeli.
+
+  ⚠ SE REFOLOSESTE APLICATIA GOOGLE CARE EXISTA DEJA (`lib/google-analytics/
+  oauth.ts`), cu acelasi `redirect_uri` si acelasi scope `analytics.readonly`.
+  Deci nu trebuie inregistrat nimic nou in Google Cloud, si nu se reia nicio
+  verificare a ecranului de consimtamant.
+
+  ═══ ⚠ UNDE STA JETONUL, SI DE CE ACOLO ═══
+
+  In `platform_settings`, care are RLS pornit si ZERO politici — adica `anon` si
+  `authenticated` nu citesc din ea nimic, niciodata. Numai cheia de serviciu, care
+  ocoleste RLS, ajunge la rand. Verificat in baza pe 02.09.2026.
+
+  ⚠ SI TOTUSI NU E DE AJUNS. `/api/admin/settings` intoarce `select("*")` din
+  aceeasi tabela, transformat in `{cheie: valoare}` — deci fara o taiere anume,
+  jetonul de reimprospatare ar fi plecat catre browserul oricarui administrator.
+  Un `refresh_token` Google nu expira: cine il are are contul, pana la revocare.
+  Taierea se face acolo, si o proba o pazeste.
+*/
+
+/** Cheia randului din `platform_settings`. */
+export const CHEIE_CONEXIUNE = "edinio_ga4_admin";
+
+export type ConexiuneGa4Admin = {
+  /** ⚠ SECRET. Nu pleaca niciodata catre browser. Vezi `pentruBrowser`. */
+  refresh_token: string;
+  email_conectat?: string;
+  /** Id-ul NUMERIC al proprietatii GA4 (nu `G-…`). */
+  property_id?: string;
+  property_name?: string;
+  cont_google?: string;
+  /** Codul `G-…` al fluxului web, doar ca sa putem arata ca e chiar al nostru. */
+  masurare_id?: string;
+  conectat_la?: string;
+};
+
+/** Ce vede browserul: tot, mai putin jetonul. */
+export type ConexiuneVizibila = Omit<ConexiuneGa4Admin, "refresh_token"> & { conectat: true };
+
+/**
+ * ⚠ FUNCTIA ASTA E SINGURUL DRUM CATRE BROWSER.
+ *
+ * Nu se intoarce niciodata `ConexiuneGa4Admin` dintr-o ruta. Tipul de iesire nici
+ * nu are campul, deci o scapare cade la compilare, nu in productie.
+ */
+export function pentruBrowser(c: ConexiuneGa4Admin): ConexiuneVizibila {
+  const { refresh_token: _jeton, ...restul } = c;
+  void _jeton;
+  return { ...restul, conectat: true };
+}
+
+export async function citesteConexiune(): Promise<ConexiuneGa4Admin | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("platform_settings")
+    .select("value")
+    .eq("key", CHEIE_CONEXIUNE)
+    .maybeSingle();
+
+  const v = data?.value as ConexiuneGa4Admin | null | undefined;
+  return v && typeof v.refresh_token === "string" && v.refresh_token ? v : null;
+}
+
+export async function scrieConexiune(c: ConexiuneGa4Admin, idAdmin: string): Promise<void> {
+  const admin = createAdminClient();
+  await admin.from("platform_settings").upsert(
+    {
+      key: CHEIE_CONEXIUNE,
+      value: c as unknown as Json,
+      updated_at: new Date().toISOString(),
+      updated_by: idAdmin,
+    },
+    { onConflict: "key" },
+  );
+}
+
+export async function stergeConexiune(): Promise<void> {
+  const admin = createAdminClient();
+  await admin.from("platform_settings").delete().eq("key", CHEIE_CONEXIUNE);
+}
+
+/**
+ * Un jeton de acces proaspat, sau `null` daca legatura nu mai e buna.
+ *
+ * ⚠ `null` INSEAMNA „RECONECTEAZA", nu „incearca din nou". Un `refresh_token`
+ * Google se poate stinge singur: daca omul retrage accesul din contul lui, daca
+ * isi schimba parola, sau daca aplicatia sta in „Testing" si trec sapte zile.
+ * Paginile care il cer trebuie sa arate butonul de reconectare, nu o eroare
+ * tehnica pe care nimeni n-o poate repara.
+ */
+export async function tokenDeAcces(): Promise<string | null> {
+  const c = await citesteConexiune();
+  if (!c) return null;
+  return getAccessToken(c.refresh_token);
+}

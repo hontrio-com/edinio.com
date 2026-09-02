@@ -1,0 +1,289 @@
+import {
+  batchRunReports, runReport, runRealtimeReport,
+  type GaReport, type GaReportRequest, type ApiResult,
+} from "@/lib/google-analytics/client";
+import { CONVERSII } from "@/lib/edinio-marketing/evenimente";
+import { intervalul, intervalulDinainte, crestere, type NumePerioada } from "./perioade";
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  RAPOARTELE DIN ADMIN, CITITE DIN GA4
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  ⚠ TRAFICUL NOSTRU, nu al comerciantilor. Ce vand ei se vede in `/admin/statistici`,
+  din baza noastra. Aici e cine ne viziteaza pe noi, de unde vine si ce face.
+
+  ═══ ⚠ DE CE NU SE INTREABA `conversions` (SAU `keyEvents`) ═══
+
+  GA4 a redenumit „conversions" in „key events" in 2025, si numele metricii s-a
+  schimbat odata cu el. O interogare pe numele vechi cade cu o eroare care nu
+  spune nimic folositor, iar pe cel nou cade in proprietatile mai vechi.
+
+  Si mai important: metrica aia numara ce a BIFAT cineva in interfata GA4 ca fiind
+  eveniment-cheie. Daca bifa lipseste — si la o proprietate noua lipseste —
+  raportul arata zero, corect din punctul lui de vedere si fals din al nostru.
+
+  Aici se numara `eventCount` pe numele evenimentelor pe care le stim CONVERSII
+  din cod. Numarul nu depinde de nicio bifa si nu se poate desparti de taxonomie.
+*/
+
+const NUMERE_CONVERSII: readonly string[] = CONVERSII as readonly string[];
+
+/** O linie de raport, cu numele si numerele deja scoase din forma Google. */
+export type Linie = { cheie: string; a: number; b?: number };
+
+export type Rezumat = {
+  utilizatori: number;
+  utilizatoriNoi: number;
+  sesiuni: number;
+  vizualizari: number;
+  rataAngajare: number;
+  durataMedie: number;
+  /** Cresterea fata de perioada dinainte, in procente. `null` = nu se poate imparti. */
+  crestereUtilizatori: number | null;
+  crestereSesiuni: number | null;
+};
+
+export type DateAnalytics = {
+  rezumat: Rezumat;
+  achizitie: Linie[];
+  surse: Linie[];
+  pagini: Linie[];
+  conversii: Linie[];
+  cta: Linie[];
+  formulare: Linie[];
+  blog: Linie[];
+  dispozitive: Linie[];
+  tari: Linie[];
+  /** Grupuri de pagini — cere dimensiunea personalizata `page_group` in GA4. */
+  grupuriPagini: Linie[] | null;
+  /** Ce n-a mers, in cuvinte pentru om. Gol = totul a mers. */
+  probleme: string[];
+};
+
+function numar(x: string | undefined): number {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Scoate liniile dintr-un raport Google: prima dimensiune, primele doua metrici.
+ *
+ * ⚠ `b` LIPSESTE cand raportul are o singura metrica, si asta e deosebit de
+ * `b === 0`. Un zero scris acolo ar fi aratat in interfata ca „zero masurat" —
+ * adica o cifra inventata acolo unde noi n-am cerut nimic.
+ */
+export function linii(r: GaReport | undefined): Linie[] {
+  return (r?.rows ?? []).map(rand => {
+    const aDoua = rand.metricValues?.[1]?.value;
+    return {
+      cheie: rand.dimensionValues?.[0]?.value ?? "(fara)",
+      a: numar(rand.metricValues?.[0]?.value),
+      ...(aDoua === undefined ? {} : { b: numar(aDoua) }),
+    };
+  });
+}
+
+/**
+ * Ruleaza un teanc de cereri, in transe de cinci.
+ *
+ * ⚠ CINCI E PLAFONUL DATA API pentru `batchRunReports`. Trimise sase, cad TOATE
+ * — deci un raport adaugat fara sa se numere ar fi stins pagina intreaga, nu doar
+ * pe el. Impartirea se face aici, o data, nu la fiecare apelant.
+ */
+async function teanc(
+  token: string, propertyId: string, cereri: GaReportRequest[],
+): Promise<{ rapoarte: (GaReport | undefined)[]; problema?: string }> {
+  const iesire: (GaReport | undefined)[] = [];
+  for (let i = 0; i < cereri.length; i += 5) {
+    const transa = cereri.slice(i, i + 5);
+    const r = await batchRunReports(token, propertyId, transa);
+    if ("error" in r) {
+      for (let k = 0; k < transa.length; k++) iesire.push(undefined);
+      return { rapoarte: iesire, problema: r.error };
+    }
+    const primite = r.data.reports ?? [];
+    for (let k = 0; k < transa.length; k++) iesire.push(primite[k]);
+  }
+  return { rapoarte: iesire };
+}
+
+export async function citesteAnalytics(
+  token: string, propertyId: string, perioada: NumePerioada,
+): Promise<DateAnalytics | { eroare: string }> {
+  const acum = intervalul(perioada);
+  const inainte = intervalulDinainte(perioada);
+  const probleme: string[] = [];
+
+  const cereri: GaReportRequest[] = [
+    /* 0 — rezumatul, cu perioada dinainte in aceeasi cerere */
+    {
+      dateRanges: [acum, inainte],
+      metrics: [
+        { name: "activeUsers" }, { name: "newUsers" }, { name: "sessions" },
+        { name: "screenPageViews" }, { name: "engagementRate" }, { name: "averageSessionDuration" },
+      ],
+    },
+    /* 1 — canale */
+    {
+      dateRanges: [acum],
+      dimensions: [{ name: "sessionDefaultChannelGroup" }],
+      metrics: [{ name: "sessions" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+      limit: 12,
+    },
+    /* 2 — surse */
+    {
+      dateRanges: [acum],
+      dimensions: [{ name: "sessionSourceMedium" }],
+      metrics: [{ name: "sessions" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+      limit: 15,
+    },
+    /* 3 — pagini */
+    {
+      dateRanges: [acum],
+      dimensions: [{ name: "pagePath" }],
+      metrics: [{ name: "screenPageViews" }],
+      orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+      limit: 25,
+    },
+    /* 4 — conversiile, pe numele din taxonomia noastra */
+    {
+      dateRanges: [acum],
+      dimensions: [{ name: "eventName" }],
+      metrics: [{ name: "eventCount" }],
+      dimensionFilter: { filter: { fieldName: "eventName", inListFilter: { values: [...NUMERE_CONVERSII] } } },
+    },
+    /* 5 — butoanele */
+    {
+      dateRanges: [acum],
+      dimensions: [{ name: "customEvent:cta_id" }],
+      metrics: [{ name: "eventCount" }],
+      dimensionFilter: { filter: { fieldName: "eventName", stringFilter: { value: "cta_click" } } },
+      orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+      limit: 20,
+    },
+    /* 6 — formularele: inceput, trimis, cazut */
+    {
+      dateRanges: [acum],
+      dimensions: [{ name: "eventName" }],
+      metrics: [{ name: "eventCount" }],
+      dimensionFilter: {
+        filter: { fieldName: "eventName", inListFilter: { values: ["form_start", "form_submit", "form_error"] } },
+      },
+    },
+    /* 7 — blogul */
+    {
+      dateRanges: [acum],
+      dimensions: [{ name: "eventName" }],
+      metrics: [{ name: "eventCount" }],
+      dimensionFilter: {
+        filter: {
+          fieldName: "eventName",
+          inListFilter: { values: ["article_view", "article_read_complete", "newsletter_subscribe_request", "newsletter_subscribe_confirmed"] },
+        },
+      },
+    },
+    /* 8 — dispozitive */
+    {
+      dateRanges: [acum],
+      dimensions: [{ name: "deviceCategory" }],
+      metrics: [{ name: "sessions" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+    },
+    /* 9 — tari */
+    {
+      dateRanges: [acum],
+      dimensions: [{ name: "country" }],
+      metrics: [{ name: "sessions" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+      limit: 10,
+    },
+  ];
+
+  const { rapoarte, problema } = await teanc(token, propertyId, cereri);
+  if (problema) return { eroare: problema };
+
+  const r0 = rapoarte[0];
+  const acumRand = r0?.rows?.[0];
+  const inainteRand = r0?.rows?.[1];
+  const m = (rand: typeof acumRand, i: number) => numar(rand?.metricValues?.[i]?.value);
+
+  const rezumat: Rezumat = {
+    utilizatori: m(acumRand, 0),
+    utilizatoriNoi: m(acumRand, 1),
+    sesiuni: m(acumRand, 2),
+    vizualizari: m(acumRand, 3),
+    rataAngajare: m(acumRand, 4) * 100,
+    durataMedie: m(acumRand, 5),
+    crestereUtilizatori: crestere(m(acumRand, 0), m(inainteRand, 0)),
+    crestereSesiuni: crestere(m(acumRand, 2), m(inainteRand, 2)),
+  };
+
+  /*
+    ═══ ⚠ GRUPURILE DE PAGINI SE CER SEPARAT, SI AU VOIE SA CADA ═══
+
+    `page_group` e o dimensiune PERSONALIZATA: pana nu e inregistrata de mana in
+    interfata GA4, Data API raspunde cu eroare la orice cerere care o pomeneste.
+
+    Bagata in teancul de sus, ar fi doborat TOATA transa — adica pagina ar fi fost
+    goala, cu un mesaj despre o dimensiune, la cineva care voia sa vada cati
+    vizitatori a avut. Aici cade doar ea, si spune ce e de facut.
+  */
+  let grupuriPagini: Linie[] | null = null;
+  const rGrup = await runReport(token, propertyId, {
+    dateRanges: [acum],
+    dimensions: [{ name: "customEvent:page_group" }],
+    metrics: [{ name: "screenPageViews" }],
+    orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
+    limit: 12,
+  });
+  if ("error" in rGrup) {
+    probleme.push(
+      "Dimensiunea personalizata `page_group` nu e inregistrata in GA4. " +
+      "Admin -> Custom definitions -> Create custom dimension, scope Event, parametru `page_group`. " +
+      "Pana atunci, gruparea paginilor lipseste; restul raportului nu e atins.",
+    );
+  } else {
+    grupuriPagini = linii(rGrup.data);
+  }
+
+  const cta = linii(rapoarte[5]);
+  if (cta.length === 0) {
+    probleme.push(
+      "Niciun `cta_id`. Fie inca n-a apasat nimeni, fie dimensiunea personalizata " +
+      "`cta_id` nu e inregistrata in GA4 (parametru `cta_id`, scope Event).",
+    );
+  }
+
+  return {
+    rezumat,
+    achizitie: linii(rapoarte[1]),
+    surse: linii(rapoarte[2]),
+    pagini: linii(rapoarte[3]),
+    conversii: linii(rapoarte[4]),
+    cta,
+    formulare: linii(rapoarte[6]),
+    blog: linii(rapoarte[7]),
+    dispozitive: linii(rapoarte[8]),
+    tari: linii(rapoarte[9]),
+    grupuriPagini,
+    probleme,
+  };
+}
+
+/** Cati oameni sunt pe site chiar acum, si pe ce pagini. */
+export async function citesteTimpReal(
+  token: string, propertyId: string,
+): Promise<{ activi: number; pagini: Linie[] } | { eroare: string }> {
+  const r: ApiResult<GaReport> = await runRealtimeReport(token, propertyId, {
+    dimensions: [{ name: "unifiedScreenName" }],
+    metrics: [{ name: "activeUsers" }],
+    limit: 10,
+  });
+  if ("error" in r) return { eroare: r.error };
+
+  const pagini = linii(r.data);
+  return { activi: pagini.reduce((s, l) => s + l.a, 0), pagini };
+}

@@ -83,10 +83,22 @@ export function listDataStreams(accessToken: string, propertyId: string) {
 // ── Data API (reports) ─────────────────────────────────────────────────────────
 
 export interface GaDateRange { startDate: string; endDate: string }
+/**
+ * Filtru pe o dimensiune. Doar formele de care avem nevoie, nu toata gramatica
+ * Data API — un tip care descrie tot ar fi tot atat de nefolositor ca `unknown`.
+ */
+export type GaDimensionFilter =
+  | { filter: { fieldName: string; stringFilter: { value: string; matchType?: "EXACT" | "BEGINS_WITH" | "CONTAINS" } } }
+  | { filter: { fieldName: string; inListFilter: { values: string[] } } }
+  | { andGroup: { expressions: GaDimensionFilter[] } }
+  | { orGroup: { expressions: GaDimensionFilter[] } }
+  | { notExpression: GaDimensionFilter };
+
 export interface GaReportRequest {
   dateRanges: GaDateRange[];
   dimensions?: { name: string }[];
   metrics: { name: string }[];
+  dimensionFilter?: GaDimensionFilter;
   orderBys?: ({ dimension: { dimensionName: string }; desc?: boolean } | { metric: { metricName: string }; desc?: boolean })[];
   limit?: number;
 }

@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Store, Receipt,
   LifeBuoy, BarChart2, Shield, ChevronRight, LogOut, Menu, X,
-  History, Settings2, Globe, FileText, Megaphone, Newspaper, PlugZap,
+  History, Settings2, Globe, FileText, Megaphone, Newspaper, PlugZap, LineChart,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/ui/Logo";
@@ -26,6 +26,10 @@ const NAV = [
   // randuri pentru o singura parte a panoului.
   { href: "/admin/blog", icon: Newspaper, label: "Blog" },
   { href: "/admin/statistici", icon: BarChart2, label: "Statistici" },
+  // Doua pagini deosebite, dinadins: „Statistici" e AFACEREA (magazine,
+  // venituri, planuri, din baza noastra), „Trafic" e cine ne VIZITEAZA pe noi
+  // (din GA4-ul Edinio). Amestecate intr-una, niciuna n-ar mai fi de citit.
+  { href: "/admin/analytics", icon: LineChart, label: "Trafic site" },
   { href: "/admin/activitate", icon: History, label: "Activitate" },
   { href: "/admin/logs", icon: FileText, label: "Logs" },
   { href: "/admin/operatii", icon: PlugZap, label: "Operatii externe" },

@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, sep } from "node:path";
+import { faraPageView } from "./fara-urmarire";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -185,4 +186,57 @@ test("⚠ un titlu GOL nu pleaca deloc, si golirea nu declanseaza masuratoarea",
     !cod.includes("page_title: document.title"),
     "s-a intors trimiterea directa a lui document.title, fara paza pe gol",
   );
+});
+
+/* ═══ Panoul si adminul nu intra in rapoartele de marketing ═══ */
+
+test("⚠ `page_view` nu se numara pe panou si pe admin", () => {
+  /*
+    ═══ CUM S-A VAZUT, SI DE CE PAREA CU NEPUTINTA ═══
+
+    In raportul de admin, `/dashboard` aparea cu doua vizualizari. Layoutul
+    panoului nu randeaza nici eticheta GA4, nici runtime-ul — verificat, nu
+    presupus. Deci n-avea de unde.
+
+    Masurat in browser pe 02.09.2026: am schimbat istoricul catre o cale oarecare
+    si runtime-ul a trimis `page_view` pentru ea, cu `page_group: "other"`. El
+    asculta ROUTERUL, nu intrebarea „am voie sa masor pagina asta". La o navigare,
+    `usePathname` arata deja destinatia, iar efectul se aprinde inainte ca
+    layoutul vechi sa se desprinda.
+
+    ⚠ REGULA E DEOSEBITA DE `faraUrmarire`, si de aceea e o a doua functie. Aia
+    opreste SCRIPTURILE TERTE; asta opreste doar numaratoarea noastra, iar pixelii
+    raman pornti pe panou — asa a hotarat proprietarul.
+  */
+  assert.equal(faraPageView("/dashboard"), true);
+  assert.equal(faraPageView("/dashboard/produse"), true);
+  assert.equal(faraPageView("/admin"), true);
+  assert.equal(faraPageView("/admin/analytics"), true);
+
+  /* ⚠ Si NU peste tot: prefixul se cere la inceput, nu oriunde in cale. */
+  assert.equal(faraPageView("/"), false);
+  assert.equal(faraPageView("/preturi"), false);
+  assert.equal(faraPageView("/onboarding/plan"), false);
+  assert.equal(faraPageView("/blog/cum-faci-un-dashboard"), false, "un articol despre panou nu e panoul");
+  assert.equal(faraPageView("/dashboarding"), false, "potrivire pe bucata de cuvant, nu pe segment");
+
+  /* `null` nu stinge masuratoarea peste tot — aceeasi regula ca la cealalta paza. */
+  assert.equal(faraPageView(null), false);
+  assert.equal(faraPageView(undefined), false);
+});
+
+test("⚠ runtime-ul CHIAR se opreste, si dupa ce a tinut minte calea", () => {
+  /*
+    ⚠ ORDINEA CONTEAZA. Oprirea trebuie sa vina DUPA `calePrecedenta.current =
+    cale`. Pusa inainte, intoarcerea de pe panou pe o pagina masurata ar parea
+    „aceeasi cale ca data trecuta" si n-ar mai fi numarata niciodata.
+  */
+  const cod = readFileSync(
+    join(process.cwd(), "src/components/edinio-marketing/RuntimeMarketing.tsx"), "utf8",
+  ).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+
+  const iMemorie = cod.indexOf("calePrecedenta.current = cale;");
+  const iPaza = cod.indexOf("if (faraPageView(cale)) return;");
+  assert.ok(iPaza > 0, "runtime-ul numara din nou paginile de panou si de admin");
+  assert.ok(iMemorie > 0 && iPaza > iMemorie, "paza vine INAINTE de memorarea caii");
 });

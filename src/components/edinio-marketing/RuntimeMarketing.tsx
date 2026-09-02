@@ -6,7 +6,7 @@ import { inregistreazaAdaptor, goleste, urmareste } from "@/lib/edinio-marketing
 import { adaptorGa4 } from "@/lib/edinio-marketing/adaptor-ga4";
 import { adaptorMeta } from "@/lib/edinio-marketing/adaptor-meta";
 import { adaptorTikTok } from "@/lib/edinio-marketing/adaptor-tiktok";
-import { faraUrmarire } from "@/lib/edinio-marketing/fara-urmarire";
+import { faraUrmarire, faraPageView } from "@/lib/edinio-marketing/fara-urmarire";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -77,6 +77,19 @@ export function RuntimeMarketing() {
     if (calePrecedenta.current === cale) return;
     const eNavigare = calePrecedenta.current !== null;
     calePrecedenta.current = cale;
+
+    /*
+      ⚠ PANOUL SI ADMINUL NU SE NUMARA, desi ajungem aici pentru ele.
+
+      Layoutul lor nu randeaza runtime-ul — dar in clipa unei navigari
+      `usePathname` arata deja destinatia, iar efectul se aprinde inainte ca
+      layoutul vechi sa se desprinda. Asa a ajuns `/dashboard` in raportul de
+      pagini, cu doua vizualizari care pareau cu neputinta.
+
+      ⚠ SE PUNE DUPA `calePrecedenta.current = cale`, dinadins: altfel intoarcerea
+      pe o pagina masurata ar parea „aceeasi cale" si n-ar mai fi numarata deloc.
+    */
+    if (faraPageView(cale)) return;
 
     /*
       ⚠ TITLUL GOL NU SE TRIMITE DELOC, si asta e deosebit de a trimite `""`.

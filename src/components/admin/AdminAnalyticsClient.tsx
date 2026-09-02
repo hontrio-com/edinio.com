@@ -311,6 +311,16 @@ export function AdminAnalyticsClient({
         <div className="grid grid-cols-1 gap-6">
           <Tabel titlu="Dispozitive" linii={date.dispozitive} coloana="Sesiuni" gol="Nimic inca." />
           <Tabel titlu="Tari" linii={date.tari} coloana="Sesiuni" gol="Nimic inca." />
+          {/*
+            ⚠ „Pagini de aterizare" NU e acelasi lucru cu „Pagini" de mai sus.
+            Aceea numara vizualizari — pagina de preturi apare sus fiindca lumea
+            ajunge la ea DUPA ce a intrat pe alta. Asta numara pe CE au intrat,
+            adica ce aduce oameni. Titlul spune deosebirea, ca sa nu fie citite ca
+            doua liste ale aceluiasi lucru.
+          */}
+          <Tabel titlu="Pagini de aterizare (pe ce au intrat)" linii={date.aterizari} coloana="Sesiuni" gol="Nimic inca." />
+          <Tabel titlu="Orase" linii={date.orase} coloana="Sesiuni" gol="Nimic inca." />
+          <Tabel titlu="Browser si sistem" linii={date.browsere} coloana="Sesiuni" gol="Nimic inca." />
         </div>
       </div>
     </div>

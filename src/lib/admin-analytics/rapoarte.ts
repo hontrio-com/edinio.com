@@ -55,6 +55,11 @@ export type DateAnalytics = {
   blog: Linie[];
   dispozitive: Linie[];
   tari: Linie[];
+  /** Pe CE pagina au intrat — nu ce pagini au vazut. Vezi nota de la cererea 10. */
+  aterizari: Linie[];
+  orase: Linie[];
+  /** Browser si sistem impreuna: „Safari / iOS". */
+  browsere: Linie[];
   /** Grupuri de pagini — cere dimensiunea personalizata `page_group` in GA4. */
   grupuriPagini: Linie[] | null;
   /** Ce n-a mers, in cuvinte pentru om. Gol = totul a mers. */
@@ -76,8 +81,18 @@ function numar(x: string | undefined): number {
 export function linii(r: GaReport | undefined): Linie[] {
   return (r?.rows ?? []).map(rand => {
     const aDoua = rand.metricValues?.[1]?.value;
+    /*
+      ⚠ SE IMPLETESC TOATE DIMENSIUNILE, nu doar prima.
+
+      Cat timp fiecare cerere avea o singura dimensiune, `[0]` era de ajuns. La
+      prima cerere cu doua (browser + sistem), forma veche ar fi aruncat tacut a
+      doua: raportul ar fi aratat „Safari" de trei ori, cu cifre deosebite, si
+      nimic n-ar fi spus ca sunt trei sisteme.
+    */
+    const cheie = (rand.dimensionValues ?? [])
+      .map(d => d?.value).filter(Boolean).join(" / ");
     return {
-      cheie: rand.dimensionValues?.[0]?.value ?? "(fara)",
+      cheie: cheie || "(fara)",
       a: numar(rand.metricValues?.[0]?.value),
       ...(aDoua === undefined ? {} : { b: numar(aDoua) }),
     };
@@ -200,6 +215,44 @@ export async function citesteAnalytics(
       orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
       limit: 10,
     },
+    /*
+      ═══ 10 — PAGINILE DE ATERIZARE ═══
+
+      ⚠ NU E ACELASI LUCRU CU „paginile" de la 3. Aceea numara vizualizari: pagina
+      de preturi apare sus fiindca oamenii ajung la ea DUPA ce au intrat pe alta.
+      Asta numara pe CE au intrat — adica ce pagina aduce oameni, singura
+      intrebare care se poate pune unei reclame sau unui articol.
+    */
+    {
+      dateRanges: [acum],
+      dimensions: [{ name: "landingPage" }],
+      metrics: [{ name: "sessions" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+      limit: 12,
+    },
+    /* 11 — orase */
+    {
+      dateRanges: [acum],
+      dimensions: [{ name: "city" }],
+      metrics: [{ name: "sessions" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+      limit: 10,
+    },
+    /*
+      ═══ 12 — BROWSER SI SISTEM, INTR-O SINGURA CERERE ═══
+
+      ⚠ DOUA DIMENSIUNI, NU DOUA CERERI. Fiecare cerere in plus e latime de banda
+      si o sansa in plus ca teancul sa cada. Iar intrebarea adevarata e oricum
+      incrucisata: „Safari pe iPhone" spune ceva ce „Safari" si „iOS" separat nu
+      spun.
+    */
+    {
+      dateRanges: [acum],
+      dimensions: [{ name: "browser" }, { name: "operatingSystem" }],
+      metrics: [{ name: "sessions" }],
+      orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+      limit: 10,
+    },
   ];
 
   const { rapoarte, problema } = await teanc(token, propertyId, cereri);
@@ -281,6 +334,9 @@ export async function citesteAnalytics(
     blog: linii(rapoarte[7]),
     dispozitive: linii(rapoarte[8]),
     tari: linii(rapoarte[9]),
+    aterizari: linii(rapoarte[10]),
+    orase: linii(rapoarte[11]),
+    browsere: linii(rapoarte[12]),
     grupuriPagini,
     probleme,
   };

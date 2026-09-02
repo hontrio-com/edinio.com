@@ -51,7 +51,15 @@ function Comutator({ pornit, seteaza, id }: { pornit: boolean; seteaza: (v: bool
       <span className="sr-only">{pornit ? "Pornit" : "Oprit"}</span>
       <span
         aria-hidden
-        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
+        /*
+          ⚠ `left-0` NU E DE PRISOS. Fara el, butonul e `absolute` fara nicio
+          ancora orizontala, deci pleaca din pozitia lui STATICA — care, cu un
+          `<span class="sr-only">` inaintea lui, cade la capatul din dreapta al
+          pastilei. Masurat in browser: marginea butonului la 44px, pastila lata
+          de 44px — adica butonul iesise cu totul afara, si comutatorul arata ca
+          o pastila verde goala.
+        */
+        className={`absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
           pornit ? "translate-x-[22px]" : "translate-x-0.5"
         }`}
       />

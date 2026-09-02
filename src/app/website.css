@@ -49,6 +49,23 @@
    centrului de ajutor — nu exista `components/ajutor`. */
 @source "../components/website";
 @source "../lib/website";
+/*
+  ⚠ LIPSEA, SI S-A VAZUT CU OCHIUL LIBER — dar abia dupa ce ajunsese in productie.
+
+  Bannerul de consimtamant se randeaza din cele cinci layouturi, deci si de pe
+  paginile de prezentare. Fara randul asta, din clasele lui se generau numai cele
+  care existau DEJA in alta parte (`left-4`, `bg-white`, `bg-primary`), iar
+  restul, nu: `z-[60]`, `sm:left-6`, `bottom-[138px]`.
+
+  Masurat in browser: `zIndex: auto`, `left: 16px` in loc de 24, si niciun `bottom`
+  — deci cartela statea agatata sus, transparenta peste continut, acoperind
+  butoanele plutitoare. Aratau ca trei defecte de asezare deosebite; erau unul
+  singur, de aici.
+
+  ⚠ SI DE CE NU S-A VAZUT LA `npm test` SI LA `tsc`: niciunul nu compileaza CSS.
+  Singura proba pentru asta e sa deschizi pagina si sa te uiti.
+*/
+@source "../components/edinio-marketing";
 /* Sigla și cercul de sub butoane — singurele două din trusa comună. */
 @source "../components/ui/Logo.tsx";
 @source "../components/ui/ripple.tsx";

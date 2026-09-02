@@ -251,9 +251,22 @@ export async function citesteAnalytics(
 
   const cta = linii(rapoarte[5]);
   if (cta.length === 0) {
+    /*
+      ⚠ TREI CAUZE, NU DOUA, si a treia e cea mai probabila in prima zi.
+
+      O dimensiune personalizata din GA4 se aplica DOAR datelor colectate dupa ce
+      a fost inregistrata — ce e mai vechi ramane `(not set)` pentru totdeauna.
+      Deci imediat dupa configurare, tabelul e gol chiar daca totul merge.
+
+      Mesajul dinainte lasa impresia ca ori n-a apasat nimeni, ori a uitat cineva
+      sa inregistreze dimensiunea. Amandoua trimit omul sa caute un defect care nu
+      exista, in ziua in care tocmai a facut totul cum trebuie.
+    */
     probleme.push(
-      "Niciun `cta_id`. Fie inca n-a apasat nimeni, fie dimensiunea personalizata " +
-      "`cta_id` nu e inregistrata in GA4 (parametru `cta_id`, scope Event).",
+      "Niciun `cta_id` inca. Daca tocmai ai inregistrat dimensiunea in GA4, e normal: " +
+      "ea se aplica doar datelor de DUPA inregistrare, iar rapoartele obisnuite se aseaza " +
+      "in cateva ore. Verifica panoul `Chiar acum` de sus — daca `cta_click` apare acolo, " +
+      "totul merge si e doar chestiune de timp.",
     );
   }
 

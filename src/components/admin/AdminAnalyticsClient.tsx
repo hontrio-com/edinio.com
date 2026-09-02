@@ -90,7 +90,24 @@ function Tabel({
               {linii.map((l) => (
                 <tr key={l.cheie} className="border-t border-border/60">
                   <td className="px-5 py-2 text-foreground truncate max-w-[22rem]" title={l.cheie}>
-                    {formatCheie ? formatCheie(l.cheie) : l.cheie}
+                    {/*
+                      ⚠ `(not set)` NU E O VALOARE, e absenta uneia — si arata a defect
+                      cand nu e. GA4 il pune pe tot ce a fost colectat INAINTE ca
+                      dimensiunea personalizata sa fie inregistrata, si acele randuri
+                      raman asa pentru totdeauna.
+
+                      Lasat asa cum vine, primul lucru pe care il vezi dupa ce ai
+                      configurat totul corect e un rand care pare gol. De aceea isi
+                      spune singur povestea.
+                    */}
+                    {l.cheie === "(not set)" ? (
+                      <span className="text-muted-foreground">
+                        dinainte de inregistrarea dimensiunii
+                        <span className="ml-1.5 text-xs opacity-70">(not set)</span>
+                      </span>
+                    ) : (
+                      formatCheie ? formatCheie(l.cheie) : l.cheie
+                    )}
                   </td>
                   <td className="px-5 py-2 text-right tabular-nums text-foreground">{nr(l.a)}</td>
                   <td className="px-5 py-2 text-right tabular-nums text-muted-foreground">
@@ -226,7 +243,7 @@ export function AdminAnalyticsClient({
         titlu="Conversii"
         linii={date.conversii}
         coloana="Numar"
-        gol="Nicio conversie in perioada asta. Daca site-ul are trafic, verifica in GA4 ca evenimentele ajung (Admin -> DebugView)."
+        gol="Nicio conversie procesata inca. Tabelul asta citeste rapoartele obisnuite, care se aseaza in cateva ore; panoul `Chiar acum` de sus citeste timpul real. Daca o conversie apare acolo si nu aici, nu e stricat nimic — doar n-a ajuns inca prin conducta lenta."
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

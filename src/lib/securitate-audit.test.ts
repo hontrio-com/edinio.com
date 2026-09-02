@@ -259,46 +259,56 @@ test("`form-action` lasa Meta sa posteze, si NIMIC mai mult", () => {
 
 /* ═══ 8. Politica de cookies nu are voie sa se departeze de cod ═══ */
 
-test("politica NU mai promite o poarta de consimtamant pe edinio.com", () => {
+test("⚠ politica DESCRIE poarta de consimtamant, fiindca ea exista acum", () => {
   /*
-    ⚠ CE ERA GRESIT. Sectiunea 20 se numea „Meta Pixel este activat numai după
-    consimțământ", iar pixelul se aprindea chiar pe pagina aceea. Masurat:
-    `curl https://www.edinio.com/cookies` -> o aparitie `facebook.com/tr`, zero
-    urme de banner.
+    ═══ ⚠ PROBA ASTA S-A INTORS, SI ASA A FOST SCRISA SA SE INTOARCA ═══
 
-    ⚠ NU E UN DEFECT DE COD, e o declaratie inexacta catre utilizatori si catre
-    autoritate. Proprietarul a ales sa aduca TEXTUL la ce face codul — o poarta ar
-    fi scos conversiile din onboarding din raportarea Meta/TikTok.
+    Pana pe 02.09.2026 cerea CONTRARIUL: ca politica sa NU promita o poarta,
+    fiindca pe edinio.com nu exista niciuna, iar textul de dinainte promitea una.
+    Nota ei de atunci spunea, cuvant cu cuvant: „daca maine se pune poarta pe
+    edinio.com, ea cade — si atunci textul trebuie dus inapoi, nu proba stearsa."
 
-    ⚠ PROBA ASTA PAZESTE POTRIVIREA IN AMANDOUA SENSURILE. Daca maine se pune
-    poarta pe edinio.com, ea cade — si atunci textul trebuie dus inapoi, nu proba
-    stearsa. Un document care descrie o poarta inexistenta e la fel de gresit ca
-    unul care tace despre una existenta.
+    Poarta s-a pus. Proba a cazut. Textul s-a dus inapoi, si proba s-a intors —
+    nu s-a sters. Asta e felul in care un document si un cod raman lipite: nu
+    printr-o intentie buna, ci printr-o proba care cade in AMANDOUA sensurile.
+
+    ⚠ Si acum pazeste potrivirea in celalalt sens: daca cineva scoate poarta din
+    cod, proba de mai jos cade din nou, si atunci textul trebuie schimbat iar.
   */
-  const cod = citeste("src/lib/website/cookies.ts");
+  const politica = citeste("src/lib/website/cookies.ts");
 
+  assert.match(
+    politica,
+    /nu se execută înainte ca vizitatorul să accepte categoria/,
+    "politica nu mai descrie poarta — dar poarta exista in cod",
+  );
   assert.doesNotMatch(
-    cod,
-    /titlu: "Meta Pixel este activat numai după consimțământ"/,
-    "titlul care promitea poarta s-a intors, dar poarta nu exista pe edinio.com",
-  );
-  assert.match(
-    cod,
-    /Pe edinio\.com și în Platforma Edinio/,
-    "s-a pierdut sectiunea care spune limpede ce se intampla pe propriile noastre pagini",
-  );
-  assert.match(
-    cod,
+    politica,
     /se încarcă odată cu pagina, fără un banner de consimțământ prealabil/,
-    "textul nu mai descrie purtarea adevarata a pixelilor pe edinio.com",
+    "a revenit textul care spune ca pixelii pornesc necontrolat — fals de acum",
   );
 
-  /* Afirmatiile de fapt despre banner trebuie sa spuna PE CE il arata. */
-  assert.match(
-    cod,
+  /* Si ca mecanismul descris nu mai e limitat la magazine. */
+  assert.doesNotMatch(
+    politica,
     /Pe magazinele create prin Edinio, la prima accesare/,
-    "sectiunea 24 a revenit la formularea care spune ca mecanismul se arata oricui — fals pentru edinio.com",
+    "sectiunea 24 spune iar ca mecanismul e doar la magazine — el exista si pe edinio.com",
   );
+
+  /*
+    ⚠ SI CA POARTA CHIAR E IN COD, nu doar in text. Fara jumatatea asta, proba ar
+    apara o promisiune, nu o purtare — greseala pe care tocmai o repara.
+  */
+  for (const [f, categorie] of [
+    ["src/components/edinio-marketing/EtichetaGa4.tsx", "statistici"],
+    ["src/components/edinio-marketing/EdinioMetaPixel.tsx", "marketing"],
+    ["src/components/edinio-marketing/EdinioTikTokPixel.tsx", "marketing"],
+  ] as const) {
+    assert.ok(
+      citeste(f).includes(`if (!c.mounted || !c.${categorie}) return null;`),
+      `${f}: politica promite o poarta pe care codul n-o mai are`,
+    );
+  }
 });
 
 test("consimtamantul e legat de magazine, nu de platforma — si asa scrie", () => {

@@ -583,6 +583,22 @@ async function proceseazaEveniment(admin: SupabaseClient, event: Stripe.Event): 
         },
         { ctx: {}, amprentaOmului: userId },
         destinatiiActive(),
+        /*
+          ⚠ AICI NU EXISTA COOKIE. Webhook-ul vine de la serverele Stripe, nu de la
+          browserul omului — deci hotararea lui trebuie sa fi calatorit cu sesiunea,
+          in metadata, pusa acolo la deschiderea platii, cand omul chiar era de fata.
+
+          ⚠ SI LIPSA EI NU E UN ACORD. O sesiune deschisa inainte de poarta n-are
+          campul; atunci `marketing` e fals si conversia nu pleaca. Se pierde o
+          masuratoare pentru cateva plati aflate in zbor la desfasurare — pretul
+          corect fata de a trimite pentru cine n-a fost intrebat.
+        */
+        {
+          fel: "carat",
+          unde: "stripe.session.metadata",
+          marketing: session.metadata?.cs === "1",
+          ...(session.metadata?.vid ? { vid: session.metadata.vid } : {}),
+        },
       );
     }
 

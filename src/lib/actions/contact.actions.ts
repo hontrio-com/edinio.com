@@ -11,6 +11,7 @@ import { verificaMesajDeContact, type MesajDeContactBrut } from "@/lib/website/c
 import { verificaRecaptcha } from "@/lib/recaptcha";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
 import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
+import { consimtamantulCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 /**
  * Trimiterea formularului de pe `/contact`.
@@ -202,6 +203,7 @@ export async function submitContactMessage(
     { name: "generate_lead", lead_type: "contact", form_name: "contact", event_id: idConversie },
     { ctx: { ip }, amprentaOmului: idConversie },
     destinatiiActive(),
+    { fel: "cookie", stare: await consimtamantulCererii() },
   );
   return { ok: true, eventId: idConversie };
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
-import { revendica, marcheazaTrimis, marcheazaEsuat } from "@/lib/edinio-marketing/server/coada-conversii";
+import { revendica, marcheazaTrimis, marcheazaEsuat, ceiCareAuRetras } from "@/lib/edinio-marketing/server/coada-conversii";
 import { trimiteTikTok } from "@/lib/edinio-marketing/server/trimite-tiktok";
 import { trimiteMeta } from "@/lib/edinio-marketing/server/trimite-meta";
 
@@ -30,7 +30,16 @@ export async function GET(req: NextRequest) {
   const randuri = await revendica(PE_RULARE);
   if (randuri.length === 0) return NextResponse.json({ ok: true, luate: 0 });
 
-  let trimise = 0, esecuri = 0, refuzate = 0;
+  /*
+    ═══ ⚠ POARTA 3: ULTIMA VERIFICARE, PE LOTUL REVENDICAT ═══
+
+    Randurile astea au trecut de poarta de la punere — deci acordul exista atunci.
+    Dar `revendica` le tine o arenda de un minut, iar in fereastra aia omul poate
+    apasa „retrage". O singura interogare pentru tot lotul, nu una pe rand.
+  */
+  const retrasi = await ceiCareAuRetras(randuri.map((r) => r.vizitator ?? ""));
+
+  let trimise = 0, esecuri = 0, refuzate = 0, oprite = 0;
 
   for (const r of randuri) {
     /*
@@ -38,6 +47,18 @@ export async function GET(req: NextRequest) {
       lasa celelalte douazeci si doua revendicate si netrimise — s-ar elibera abia
       peste un minut, si tot asa la fiecare rulare.
     */
+    if (r.vizitator && retrasi.has(r.vizitator)) {
+      /*
+        ⚠ ABANDON, NU ESEC, si severitate `info` la raportare. O retragere e o
+        alegere a omului, nu o defectiune a noastra. Numarata ca eroare, fiecare
+        retragere ar aprinde jurnalul si l-ar face de necitit — greseala pe care
+        am reparat-o deja la domenii.
+      */
+      await marcheazaEsuat(r.id, 99, "consimtamant retras intre revendicare si trimitere");
+      oprite++;
+      continue;
+    }
+
     try {
       const rez =
         r.destinatie === "tiktok" ? await trimiteTikTok(r.sarcina)
@@ -76,6 +97,14 @@ export async function GET(req: NextRequest) {
     n-are ce raporta; una cu esecuri, da. Altfel jurnalul se umple din minut in
     minut si nu se mai citeste — greseala pe care am reparat-o azi la domenii.
   */
+  if (oprite > 0) {
+    await logError({
+      action: "conversii.opritePrinRetragere",
+      message: `${oprite} conversii nu s-au trimis: acordul s-a retras dupa revendicare`,
+      severity: "info",
+    });
+  }
+
   if (esecuri > 0 || refuzate > 0) {
     await logError({
       action: "conversii.rulare",
@@ -84,5 +113,5 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ ok: true, luate: randuri.length, trimise, esecuri, refuzate });
+  return NextResponse.json({ ok: true, luate: randuri.length, trimise, esecuri, refuzate, oprite });
 }

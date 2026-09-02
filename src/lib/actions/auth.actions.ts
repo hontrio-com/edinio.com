@@ -29,6 +29,7 @@ import {
 } from "@/lib/auth/sesiune-asteptare";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
 import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
+import { consimtamantulCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 /**
  * IP-ul apelantului. ATENTIE la ce se poate si ce nu se poate face cu el:
@@ -408,6 +409,7 @@ export async function register(formData: {
       { name: "sign_up", signup_origin: "email", event_id: idConversieCont(idCont) },
       { ctx: { ip, userAgent: (await headers()).get("user-agent") }, amprentaOmului: idCont },
       destinatiiActive(),
+      { fel: "cookie", stare: await consimtamantulCererii() },
     );
   }
 

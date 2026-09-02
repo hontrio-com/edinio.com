@@ -1977,6 +1977,24 @@ export type Database = {
           },
         ]
       }
+      edinio_consimtamant_retras: {
+        Row: {
+          retras_la: string
+          sursa: string
+          vizitator: string
+        }
+        Insert: {
+          retras_la?: string
+          sursa?: string
+          vizitator: string
+        }
+        Update: {
+          retras_la?: string
+          sursa?: string
+          vizitator?: string
+        }
+        Relationships: []
+      }
       edinio_conversion_outbox: {
         Row: {
           abandonat_la: string | null
@@ -1990,6 +2008,7 @@ export type Database = {
           sarcina: Json
           trimis_la: string | null
           ultima_eroare: string | null
+          vizitator: string | null
         }
         Insert: {
           abandonat_la?: string | null
@@ -2003,6 +2022,7 @@ export type Database = {
           sarcina: Json
           trimis_la?: string | null
           ultima_eroare?: string | null
+          vizitator?: string | null
         }
         Update: {
           abandonat_la?: string | null
@@ -2016,6 +2036,7 @@ export type Database = {
           sarcina?: Json
           trimis_la?: string | null
           ultima_eroare?: string | null
+          vizitator?: string | null
         }
         Relationships: []
       }

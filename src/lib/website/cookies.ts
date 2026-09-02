@@ -34,14 +34,18 @@
  * cinci layouturi: `(website)`, `(ajutor)`, `(auth)`, `(onboarding)`,
  * `(dashboard)`. Singurul grup fără ei e `(admin)`.
  *
- * ⚠ CE S-A ALES, si de cine: proprietarul platformei a ales să aducă TEXTUL la
- * ce face codul, nu invers — o poartă de consimțământ ar fi scos conversiile din
- * onboarding din raportarea Meta/TikTok pentru cine refuză. Secțiunile 20, 24,
- * 25 și 28 spun acum limpede care parte descrie magazinele clienților și care
- * descrie edinio.com.
+ * ⚠ CE S-A ALES, SI CAND S-A RASTURNAT. Pe 02.09.2026, dimineata, proprietarul
+ * alesese sa aduca TEXTUL la ce face codul: o poarta ar fi scos conversiile din
+ * onboarding din raportarea Meta/TikTok pentru cine refuza. Nota de atunci spunea
+ * ca, daca poarta se pune vreodata, sectiunile se intorc la forma dinainte.
  *
- * ⚠ DACĂ SE PUNE VREODATĂ POARTA pe edinio.com, secțiunile astea patru se
- * întorc la forma de dinainte — nu se lasă descrierea veche peste codul nou.
+ * ⚠ POARTA S-A PUS, in aceeasi zi, dupa un audit din afara. Cei trei pixeli nu se
+ * mai randeaza inainte de alegere — deci scriptul nu e injectat DELOC, nu doar
+ * oprit dinauntru. Sectiunile 20, 24 si 28 au fost duse inapoi, in ACELASI commit
+ * cu codul: despartite, unul dintre cele doua ar minti cateva ore.
+ *
+ * ⚠ Si costul s-a platit cu ochii deschisi: conversiile celor care refuza nu mai
+ * ajung la Meta si TikTok. Legal e singurul raspuns corect; masuratoarea plateste.
  *
  * ⚠ ȘI O CAPCANĂ, dacă cineva crede că stinge pixelii ștergând variabilele de
  * mediu: `EdinioTikTokPixel.tsx` are id-ul scris în cod ca rezervă. Meta s-ar
@@ -675,11 +679,11 @@ const SECTIUNI: Sectiune[] = [
       { tip: "subtitlu", text: "Pe edinio.com și în Platforma Edinio" },
       {
         tip: "paragraf",
-        text: "Pe site-ul nostru de prezentare și în interfața Platformei, Meta Pixel și TikTok Pixel se încarcă odată cu pagina, fără un banner de consimțământ prealabil. Nu prezentăm astăzi un mecanism de alegere pentru aceste tehnologii pe propriile noastre pagini.",
+        text: "Pe site-ul nostru de prezentare și în interfața Platformei, Meta Pixel și TikTok Pixel nu se execută înainte ca vizitatorul să accepte categoria „Marketing și publicitate”. Până la acea alegere, scriptul nu este încărcat deloc: nu se face nicio cerere către Meta sau TikTok și nu se scrie niciun cookie al acestora.",
       },
       {
         tip: "paragraf",
-        text: "Cine dorește să le refuze o poate face din setările browserului (blocarea cookie-urilor terțe), dintr-o extensie de blocare, sau din setările de publicitate ale conturilor Meta și TikTok.",
+        text: "Refuzul nu împiedică în niciun fel folosirea site-ului sau a Platformei. Alegerea poate fi schimbată sau retrasă oricând din „Setări Cookies”, în subsolul paginii. Suplimentar, cine dorește o poate face și din setările browserului, dintr-o extensie de blocare, sau din setările de publicitate ale conturilor Meta și TikTok.",
       },
       {
         tip: "paragraf",
@@ -826,7 +830,7 @@ const SECTIUNI: Sectiune[] = [
     blocuri: [
       {
         tip: "paragraf",
-        text: "Pe magazinele create prin Edinio, la prima accesare vizitatorului îi este prezentat un mecanism prin care poate alege modul în care dorește să fie utilizate cookie-urile opționale. Regulile din această secțiune și din următoarea descriu acel mecanism.",
+        text: "La prima accesare — atât pe edinio.com, cât și pe magazinele create prin Edinio — vizitatorului îi este prezentat un mecanism prin care poate alege modul în care dorește să fie utilizate cookie-urile opționale. Regulile din această secțiune și din următoarea descriu acel mecanism.",
       },
       { tip: "paragraf", text: "Edinio nu consideră următoarele comportamente drept consimțământ:" },
       {
@@ -919,7 +923,7 @@ const SECTIUNI: Sectiune[] = [
     blocuri: [
       {
         tip: "paragraf",
-        text: "Pe magazinele create prin Edinio, vizitatorul își poate modifica opțiunile în orice moment printr-un link sau buton permanent, de exemplu:",
+        text: "Vizitatorul își poate modifica sau retrage opțiunile în orice moment printr-un link permanent, aflat în subsolul fiecărei pagini:",
       },
       { tip: "subtitlu", text: "Setări Cookies" },
       { tip: "paragraf", text: "Prin acesta utilizatorul va putea:" },

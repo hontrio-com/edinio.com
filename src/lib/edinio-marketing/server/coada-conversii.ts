@@ -18,6 +18,37 @@ import type { Json } from "@/types/database.types";
 
 export type Destinatie = "meta" | "tiktok";
 
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠ DE UNDE STIM CA AVEM VOIE
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  O uniune, nu un `boolean`. Fiecare loc de apel trebuie sa spuna DE UNDE stie, si
+  `tsc` cade daca maine apare un al saptelea loc si cineva uita sa se intrebe.
+
+  Un `marketing: boolean` simplu ar fi lasat pe oricine sa scrie `true` fiindca
+  „aici sigur e in regula" — iar peste sase luni nimeni n-ar mai sti daca era.
+
+  ⚠ SI DE CE NU SE CITESTE COOKIE-UL AICI. `puneLaCoada` e chemata si din locuri
+  fara cerere HTTP — webhook-ul Stripe n-are cookie-urile omului, are doar ce a
+  purtat el insusi prin metadata. Verificarea ramane intr-un singur loc;
+  HOTARAREA se ia acolo unde exista omul.
+*/
+export type Temei =
+  /** Citit din cookie-ul cererii de fata. */
+  | { fel: "cookie"; stare: { marketing: boolean; vid?: string } | null }
+  /** Carat de altundeva, fiindca aici nu exista cerere. Spune de unde. */
+  | { fel: "carat"; marketing: boolean; vid?: string; unde: string };
+
+function dezleagaTemeiul(t: Temei): { marketing: boolean; vid?: string } {
+  return t.fel === "cookie"
+    ? { marketing: t.stare?.marketing === true, ...(t.stare?.vid ? { vid: t.stare.vid } : {}) }
+    : { marketing: t.marketing, ...(t.vid ? { vid: t.vid } : {}) };
+}
+
+/** Ca sa nu se scrie in jurnal la fiecare cerere a fiecarui om care a refuzat. */
+const refuzuriStrigate = new Set<string>();
+
 /** Ce se pastreaza langa eveniment, ca sa se poata construi mesajul mai tarziu. */
 export type SarcinaPastrata = {
   ev: EvenimentEdinio;
@@ -44,6 +75,8 @@ export type RandDeTrimis = {
   event_id: string;
   sarcina: SarcinaPastrata;
   incercari: number;
+  /** Cine a fost omul, ca sa se poata opri daca isi retrage acordul. */
+  vizitator: string | null;
 };
 
 const TABELA = "edinio_conversion_outbox";
@@ -60,10 +93,39 @@ export async function puneLaCoada(
   ev: EvenimentEdinio,
   sarcina: Omit<SarcinaPastrata, "ev">,
   destinatii: readonly Destinatie[],
+  temei: Temei,
 ): Promise<void> {
   const eventId = (ev as { event_id?: string }).event_id;
   if (!eventId) return;
   if (destinatii.length === 0) return;
+
+  /*
+    ═══ ⚠ POARTA 1: CINE N-A ACORDAT MARKETING NU LASA NICIUN RAND ═══
+
+    Nu se pune si se filtreaza mai tarziu — nu se pune deloc. Un rand care exista
+    e un rand care poate scapa: printr-un cron scris gresit maine, printr-o
+    reparatie de date, printr-un export. Ce nu s-a scris nu se poate scurge.
+
+    ⚠ SI REFUZUL NU E TACUT. O coada sanatoasa care pare goala e chiar felul de
+    zero care a pacalit deja de trei ori aici. Se scrie in jurnal o data per
+    proces si per eveniment — nu la fiecare vizitator care a apasat „respinge",
+    fiindca atunci jurnalul ar deveni zgomot si nimeni nu l-ar mai citi.
+  */
+  const { marketing, vid } = dezleagaTemeiul(temei);
+  if (!marketing) {
+    const cheie = `${ev.name}:${temei.fel}`;
+    if (!refuzuriStrigate.has(cheie)) {
+      refuzuriStrigate.add(cheie);
+      await logError({
+        action: "conversii.faraConsimtamant",
+        message: `"${ev.name}" nu s-a pus la coada: omul n-a acordat marketing (temei: ${
+          temei.fel === "carat" ? temei.unde : "cookie"
+        })`,
+        severity: "info",
+      });
+    }
+    return;
+  }
 
   const cand = new Date().toISOString();
   const randuri = destinatii.map(d => ({
@@ -71,6 +133,8 @@ export async function puneLaCoada(
     nume_eveniment: ev.name,
     event_id: eventId,
     sarcina: { ev, cand, ...sarcina } as unknown as Json,
+    /* Pe coloana, nu doar in `sarcina`: retragerea trebuie sa-l poata gasi. */
+    ...(vid ? { vizitator: vid } : {}),
   }));
 
   try {
@@ -135,6 +199,43 @@ export async function revendica(limita: number): Promise<RandDeTrimis[]> {
     return [];
   }
   return (data ?? []) as unknown as RandDeTrimis[];
+}
+
+/**
+ * Care dintre vizitatorii astia si-au retras acordul.
+ *
+ * ⚠ SE INTREABA PENTRU LOTUL INTREG, o data. `revendica` tine randurile o
+ * arenda de un minut; intre revendicare si trimitere se poate strecura o
+ * retragere. Fara verificarea asta, fereastra aia ar ramane deschisa — si
+ * tocmai acolo omul tocmai a apasat, deci e cel mai probabil sa se intample.
+ *
+ * ⚠ SE INTREABA DUPA CINE E IN LISTA, nu dupa cine lipseste. Un `not in` ar sari
+ * peste NULL si ar lasa sa treaca tocmai randurile despre care stim cel mai
+ * putin. Aici necunoscutul cade DESCHIS, dinadins: un rand exista numai fiindca
+ * acordul exista cand a fost pus.
+ */
+export async function ceiCareAuRetras(vizitatori: readonly string[]): Promise<Set<string>> {
+  const unici = [...new Set(vizitatori.filter((v): v is string => !!v))];
+  if (unici.length === 0) return new Set();
+
+  const { data, error } = await createAdminClient()
+    .from("edinio_consimtamant_retras")
+    .select("vizitator")
+    .in("vizitator", unici);
+
+  if (error) {
+    /*
+      ⚠ LA EROARE SE INTOARCE MULTIMEA GOALA, deci nu se opreste nimic.
+
+      Alegerea e cinstita si merita spusa: interogarea asta e o PLASA pentru o
+      fereastra de cel mult un minut, nu poarta principala. Poarta adevarata e la
+      punere, unde randul nici nu se scrie. O baza care clipeste n-are voie sa
+      opreasca toate conversiile tuturor.
+    */
+    await logError({ action: "conversii.ceiCareAuRetras", message: error.message, severity: "warning" });
+    return new Set();
+  }
+  return new Set((data ?? []).map((r) => r.vizitator));
 }
 
 export async function marcheazaTrimis(id: string): Promise<void> {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { stripe, getPriceId } from "@/lib/stripe";
+import { consimtamantulCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -18,6 +19,10 @@ export async function POST(req: NextRequest) {
   }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+  const consim = await consimtamantulCererii();
+  const cs = consim?.marketing ? "1" : "0";
+  const vid = consim?.marketing ? consim.vid : undefined;
 
   /*
     ⚠ `{CHECKOUT_SESSION_ID}` NU E O VARIABILA DE-A NOASTRA. E un sablon pe care il
@@ -64,8 +69,18 @@ export async function POST(req: NextRequest) {
     success_url: successUrl,
     cancel_url: cancelUrl,
     client_reference_id: user.id,
-    metadata: { user_id: user.id, plan, interval },
-    subscription_data: { metadata: { user_id: user.id, plan, interval } },
+    /*
+      ⚠ HOTARAREA CALATORESTE CU SESIUNEA. Webhook-ul care confirma plata vine de
+      la serverele Stripe, nu de la browserul omului: acolo nu exista cookie-uri,
+      deci nu are cum sa afle daca a acordat marketing. Singura clipa in care
+      stim sigur e ACUM, cand el chiar apasa.
+
+      `cs` = consimtamant. Se scrie „0" explicit, nu se omite: lipsa campului
+      inseamna „sesiune deschisa inainte de poarta", si aia trebuie sa se
+      deosebeasca de un refuz limpede.
+    */
+    metadata: { user_id: user.id, plan, interval, cs, ...(vid ? { vid } : {}) },
+    subscription_data: { metadata: { user_id: user.id, plan, interval, cs, ...(vid ? { vid } : {}) } },
   };
 
   // Reuse existing Stripe customer or pass email for new one

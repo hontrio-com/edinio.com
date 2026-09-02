@@ -13,6 +13,7 @@ import { verificaCerereMigrare, type CerereMigrareBruta } from "@/lib/website/mi
 import { verificaRecaptcha } from "@/lib/recaptcha";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
 import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
+import { consimtamantulCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 /**
  * Trimiterea formularului de cerere de migrare, de pe `/migrare`.
@@ -192,6 +193,7 @@ export async function submitMigrationLead(
     { name: "generate_lead", lead_type: "migration", form_name: "migration", event_id: idConversie },
     { ctx: { ip }, amprentaOmului: idConversie },
     destinatiiActive(),
+    { fel: "cookie", stare: await consimtamantulCererii() },
   );
   return { ok: true, eventId: idConversie };
 }

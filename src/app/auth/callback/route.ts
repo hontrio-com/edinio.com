@@ -5,6 +5,7 @@ import { confirmaSesiuneaMfa } from "@/lib/auth/flux-mfa";
 import { ePrimaAutentificare, idConversieCont } from "@/lib/edinio-marketing/cont-nou";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
 import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
+import { consimtamantulCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 /**
  * Aterizarea din linkurile trimise pe email: confirmarea contului, resetarea
@@ -131,6 +132,7 @@ export async function GET(request: NextRequest) {
               amprentaOmului: user.id,
             },
             destinatiiActive(),
+            { fel: "cookie", stare: await consimtamantulCererii() },
           );
         }
         return res;

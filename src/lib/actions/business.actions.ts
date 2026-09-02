@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWelcomeEmail } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
 import { NON_STORE_SEGMENTS } from "@/proxy";
+import { consimtamantulCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 /*
  * Adresa magazinului se valideaza AICI, pe server, nu doar in formular.
@@ -211,6 +212,7 @@ export async function createBusiness(data: {
         amprentaOmului: user.id,
       },
       destinatiiActive(),
+      { fel: "cookie", stare: await consimtamantulCererii() },
     );
   }
 

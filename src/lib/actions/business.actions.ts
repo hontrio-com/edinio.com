@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
+import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWelcomeEmail } from "@/lib/email";
@@ -179,6 +182,36 @@ export async function createBusiness(data: {
         slug: business.slug,
       }).catch(() => {});
     }).catch(() => {});
+  }
+
+  /*
+    ═══ ⚠ TRIALUL SE RAPORTEAZA DE UNDE SE ACORDA ═══
+
+    Browserul trage `trial_start` din `onboarding/plan/page.tsx`, cu `event_id`-ul
+    egal cu id-ul magazinului — si tot acela e folosit aici, deci furnizorii unesc
+    cele doua drumuri si numara UN trial, nu doua.
+
+    ⚠ SI DE CE E LEGAT DE `areDejaPlan`, nu de ce a ales omul in pagina. Pagina
+    hotaraste dupa `sessionStorage`; serverul hotaraste dupa ce scrie in baza. Cand
+    cele doua se despart — plata a intrat intre timp, sau n-a intrat — adevarul e
+    al serverului, fiindca dupa el se si factureaza.
+
+    ⚠ `purchase` NU se pune aici. Suma adevarata o stie doar webhook-ul Stripe, din
+    cat s-a incasat; citita din alta parte ar fi o presupunere raportata ca venit.
+  */
+  if (!areDejaPlan && !profileError) {
+    const anteturi = await headers();
+    await puneLaCoada(
+      { name: "trial_start", plan_id: "free", event_id: business.id },
+      {
+        ctx: {
+          ip: anteturi.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+          userAgent: anteturi.get("user-agent"),
+        },
+        amprentaOmului: user.id,
+      },
+      destinatiiActive(),
+    );
   }
 
   revalidatePath("/dashboard", "layout");

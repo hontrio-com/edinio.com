@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { idSesiuneCurenta } from "@/lib/auth/stare-mfa";
 import { confirmaSesiuneaMfa } from "@/lib/auth/flux-mfa";
 import { ePrimaAutentificare, idConversieCont } from "@/lib/edinio-marketing/cont-nou";
+import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
+import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
 
 /**
  * Aterizarea din linkurile trimise pe email: confirmarea contului, resetarea
@@ -99,12 +101,37 @@ export async function GET(request: NextRequest) {
           */
           const furnizor = user.app_metadata?.provider;
           const origine = furnizor === "google" ? "google" : furnizor === "email" ? "email" : "altul";
-          res.cookies.set("edinio_signup", `${idConversieCont(user.id)}.${origine}`, {
+          const idConversie = idConversieCont(user.id);
+          res.cookies.set("edinio_signup", `${idConversie}.${origine}`, {
             maxAge: 300,
             path: "/",
             sameSite: "lax",
             secure: process.env.NODE_ENV === "production",
           });
+
+          /*
+            ═══ ⚠ SI DE PE SERVER, CU ACELASI `event_id` ═══
+
+            Jetonul de mai sus il face pe BROWSER sa trage `sign_up`. Atat a fost
+            de ajuns cat timp masuram doar in GA4 — dar catre Meta si TikTok
+            browserul se pierde la fiecare blocant de reclame, iar inscrierile
+            prin Google sunt 28 din 168 (masurat pe 01.09.2026).
+
+            Calea cu email pune la coada in `register()`. Asta e perechea ei
+            pentru Google, si poarta ACELASI id — deci furnizorii unesc cele doua
+            drumuri si numara O inscriere, nu doua.
+          */
+          await puneLaCoada(
+            { name: "sign_up", signup_origin: origine, event_id: idConversie },
+            {
+              ctx: {
+                ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+                userAgent: request.headers.get("user-agent"),
+              },
+              amprentaOmului: user.id,
+            },
+            destinatiiActive(),
+          );
         }
         return res;
       }

@@ -39,6 +39,7 @@ import { after } from "next/server";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { jsonLdSafe } from "@/lib/json-ld";
+import { clasificaSursa, taraDinAnteturi, referrerScurt, primaValoare } from "@/lib/storefront/sursa-vizita";
 
 /*
  * `sort`, `pmin`, `pmax` si `stoc` sunt aici fiindca grila paginii principale are
@@ -52,6 +53,8 @@ interface Props {
   searchParams: Promise<{
     page?: string; preview?: string; editor?: string; q?: string; cat?: string; sale?: string;
     sort?: string; pmin?: string; pmax?: string; stoc?: string;
+    /* Semnalele de provenienta. Vezi `lib/storefront/sursa-vizita.ts`. */
+    utm_source?: string; gclid?: string; fbclid?: string; ttclid?: string;
   }>;
 }
 
@@ -517,6 +520,33 @@ export default async function SlugPage({ params, searchParams }: Props) {
     const ua = headersList.get("user-agent") ?? "";
     const device = /mobile/i.test(ua) ? "mobile" : /tablet/i.test(ua) ? "tablet" : "desktop";
     /*
+      ═══ ⚠ SURSA SE MASOARA, NU SE PRESUPUNE (02.09.2026) ═══
+
+      `source`, `referrer` si `metadata` nu se scriau NICIODATA: 0 randuri
+      completate din 15.306. Dar panoul comerciantului are o sectiune „Surse de
+      trafic", iar acolo lipsa devenea afirmatie (`e.source ?? "direct"`).
+
+      Deci fiecare comerciant vedea „Direct 100%" — o cifra pe care se taie
+      bugete de reclama. Nu lipsea o cifra; era una FALSA.
+
+      Iar `country` era scris in cod ca `"RO"`, pentru orice vizitator din lume.
+
+      ⚠ TOT CE SE CITESTE DIN ANTETURI SE CITESTE AICI, in randare. In `after`
+      nu se mai poate — vezi nota de mai jos.
+    */
+    const referrerBrut = headersList.get("referer");
+    const sursaVizitei = clasificaSursa({
+      utmSource: primaValoare(sp.utm_source),
+      gclid: primaValoare(sp.gclid),
+      fbclid: primaValoare(sp.fbclid),
+      ttclid: primaValoare(sp.ttclid),
+      referrer: referrerBrut,
+      gazdaProprie: host,
+    });
+    const taraVizitatorului = taraDinAnteturi(headersList);
+    const referrerVizitei = referrerScurt(referrerBrut);
+
+    /*
      * `after` in loc de promisiune lasata sa atarne.
      *
      * Un `.then(() => {})` nesupravegheat nu tine raspunsul, dar nici nu e
@@ -553,8 +583,26 @@ export default async function SlugPage({ params, searchParams }: Props) {
     after(async () => {
       const { permis } = await consumaLimita(`analytics:${ipVizitator}`, 120, 3600);
       if (!permis) return;
-      await createAdminClient().from("site_analytics")
-        .insert({ business_id: business.id, event_type: "visit", device, country: "RO" });
+      await createAdminClient().from("site_analytics").insert({
+        business_id: business.id,
+        event_type: "visit",
+        device,
+        source: sursaVizitei,
+        referrer: referrerVizitei,
+        /*
+          ⚠ TARA SE PUNE DOAR CAND E STIUTA, si cheia lipseste cu totul altfel.
+
+          Coloana e `NOT NULL DEFAULT 'RO'` — deci un `null` explicit n-ar strica
+          randul, l-ar face SA NU EXISTE: vizita s-ar pierde de tot. Verificat in
+          schema, nu presupus; iar `tsc` a prins-o inainte sa ajunga in productie.
+
+          ⚠ RAMANE O JUMATATE DE MINCIUNA, si o spun aici ca sa nu se uite: cand
+          antetul lipseste, baza scrie tot „RO". Pe Vercel antetul e practic mereu
+          acolo, deci cazul e rar — dar reparatia intreaga cere o migrare care
+          scoate `NOT NULL` si implicitul, si aia se face separat, cu voie.
+        */
+        ...(taraVizitatorului ? { country: taraVizitatorului } : {}),
+      });
     });
   }
 

@@ -146,15 +146,16 @@ deduplicarea e pregătită.
 
 Aceeași poveste. **Îmi trebuie:** un *Access Token* din TikTok Events Manager.
 
-### Search Console în `/admin/analytics`
+### Search Console în `/admin/analytics` — **abandonat**
 
-**Aici e o piedică reală, nu o lipsă de timp.** Search Console cere alt drept
-(`webmasters.readonly`), care se adaugă pe ecranul de consimțământ al aplicației
-Google. E un drept „sensibil": la o aplicație deja verificată, adăugarea lui poate
-declanșa o **re-verificare de câteva săptămâni** — în care integrarea Google a
-clienților ar putea fi afectată.
+Cerea alt drept (`webmasters.readonly`), care se adaugă pe ecranul de
+consimțământ al aplicației Google. E un drept „sensibil": la o aplicație deja
+verificată, adăugarea lui poate declanșa o re-verificare de câteva săptămâni — în
+care integrarea Google a **clienților** ar putea fi afectată.
 
-De aceea nu l-am adăugat de capul meu. Spune-mi dacă vrei să-l cerem, și când.
+Hotărât pe 02.09.2026: nu-l cerem. Riscul pentru integrarea clienților e mai mare
+decât ce ar aduce raportul. Datele din Search Console rămân în interfața Google,
+unde oricum sunt.
 
 ---
 

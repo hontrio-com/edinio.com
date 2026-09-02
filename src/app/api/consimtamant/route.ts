@@ -167,8 +167,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const admin = createAdminClient();
-
   /*
     ⚠ SE SPUNE BROWSERULUI DACA S-A STINS CHIAR. Raspunsul ramane 200 si cand baza
     pica — alegerea e deja in vigoare, un 500 ar face-o sa para nereusita. Dar
@@ -179,6 +177,15 @@ export async function POST(req: NextRequest) {
   let retras = false;
 
   try {
+    /*
+      ⚠ CLIENTUL SE FACE INAUNTRUL LUI `try`, si nu e o mutare de forma.
+      `createAdminClient()` ARUNCA daca lipseste variabila de mediu. Construit
+      afara, ar fi doborat toata ruta cu 500 — adica exact ce spune nota de mai
+      jos ca nu vrem, si tocmai pe calea de RETRAGERE: raspunsul n-ar mai fi
+      purtat nici cookie-ul reconfirmat, nici stergerile de la furnizori.
+    */
+    const admin = createAdminClient();
+
     if (!marketing && vidDeOprit) {
       /*
         ═══ ⚠ `.throwOnError()`, ALTFEL `retras: true` E O MINCIUNA ═══

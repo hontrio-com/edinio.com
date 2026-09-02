@@ -9,7 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWelcomeEmail } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
 import { NON_STORE_SEGMENTS } from "@/proxy";
-import { consimtamantulCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
+import { consimtamantulCererii, martoriiCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 /*
  * Adresa magazinului se valideaza AICI, pe server, nu doar in formular.
@@ -202,6 +202,8 @@ export async function createBusiness(data: {
   */
   if (!areDejaPlan && !profileError) {
     const anteturi = await headers();
+    /* ⚠ Hotararea se citeste O data: si amprenta, si poarta atarna de ea. */
+    const consim = await consimtamantulCererii();
     await puneLaCoada(
       { name: "trial_start", plan_id: "free", event_id: business.id },
       {
@@ -209,10 +211,12 @@ export async function createBusiness(data: {
           ip: anteturi.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
           userAgent: anteturi.get("user-agent"),
         },
-        amprentaOmului: user.id,
+        amprentaOmului: consim?.vid ?? user.id,
+        /* ⚠ Vezi nota din `auth.actions.ts`: `_fbc` leaga trialul de reclama platita. */
+        martori: await martoriiCererii(),
       },
       destinatiiActive(),
-      { fel: "cookie", stare: await consimtamantulCererii() },
+      { fel: "cookie", stare: consim },
     );
   }
 

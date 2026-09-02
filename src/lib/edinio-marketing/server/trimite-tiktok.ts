@@ -1,5 +1,6 @@
 import { sarcinaTikTok, eRefuz } from "./sarcina-tiktok";
 import type { SarcinaPastrata } from "./coada-conversii";
+import { VERSIUNE_TIKTOK } from "./versiuni-api";
 import { ID_PIXEL_TIKTOK } from "../pixel-tiktok";
 
 /*
@@ -12,7 +13,7 @@ import { ID_PIXEL_TIKTOK } from "../pixel-tiktok";
   Aici e doar drumul: adresa, antetul, si citirea raspunsului.
 */
 
-const ADRESA = "https://business-api.tiktok.com/open_api/v1.3/event/track/";
+const ADRESA = `https://business-api.tiktok.com/open_api/${VERSIUNE_TIKTOK}/event/track/`;
 
 export type Rezultat =
   | { fel: "trimis" }

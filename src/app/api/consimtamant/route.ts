@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { serializeaza, validVid, VERSIUNE, type Metoda, type Stare } from "@/lib/edinio-marketing/consimtamant/stare";
-import { NUME_COOKIE, atributeCookie, COOKIE_FURNIZORI_EXACTE } from "@/lib/edinio-marketing/consimtamant/cookie";
+import { NUME_COOKIE, atributeCookie, eCookieDeMaturat } from "@/lib/edinio-marketing/consimtamant/cookie";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -76,8 +76,20 @@ export async function POST(req: NextRequest) {
     celalalt ramane si retragerea doar PARE facuta.
   */
   if (!marketing) {
-    for (const nume of COOKIE_FURNIZORI_EXACTE) {
-      raspuns.headers.append("Set-Cookie", `${nume}=; Path=/; Max-Age=0${securizat ? "; Secure" : ""}`);
+    /*
+      ⚠ SE STING SI PREFIXELE, nu doar numele intregi.
+
+      Prima forma parcurgea numai `COOKIE_FURNIZORI_EXACTE` — deci `_ga`, `_ga_<ID>`
+      si `_gcl_*` supravietuiau retragerii facute pe server. Iar `_gcl_*` e chiar
+      cookie-ul care poarta `gclid`, adica id-ul clicului pe reclama Google.
+
+      Nu se poate scrie o lista fixa: `_ga_<ID>` poarta id-ul proprietatii in
+      chiar numele lui. De aceea se parcurg cookie-urile CERERII si se filtreaza
+      prin aceeasi regula pe care o foloseste si browserul.
+    */
+    for (const c of req.cookies.getAll()) {
+      if (!eCookieDeMaturat(c.name)) continue;
+      raspuns.headers.append("Set-Cookie", `${c.name}=; Path=/; Max-Age=0${securizat ? "; Secure" : ""}`);
     }
   }
 

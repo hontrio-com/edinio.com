@@ -229,3 +229,53 @@ test("⚠ niciun layout nu spune despre sine contrariul a ce face", () => {
     "un layout sustine ca pixelii nu ajung in dashboard, dar ei sunt acolo: " + mincinoase.join(", "),
   );
 });
+
+test("⚠ oriunde exista cookie-urile omului, martorii pleaca odata cu conversia", () => {
+  /*
+    ═══ ⚠ LIPSEAU TOCMAI DE LA CONVERSIILE SCUMPE ═══
+
+    Pana pe 02.09.2026, `martoriiCererii()` era chemat numai la contact si la
+    migrare. `sign_up` (amandoua caile) si `trial_start` plecau fara `_fbp` si
+    fara `_fbc` — desi cookie-urile erau chiar in cererea din care se punea la
+    coada, la un `await` distanta.
+
+    `_fbc` poarta id-ul clicului pe reclama: fara el, Meta stie ca cineva s-a
+    inscris, dar nu de la ce campanie. Adica exact intrebarea pentru care se
+    plateste reclama.
+
+    ⚠ REGULA E LEGATA DE TEMEI, nu de o lista de fisiere. Cine pune la coada pe
+    temei de COOKIE are, prin definitie, cererea omului in mana — deci si
+    cookie-urile lui. Cine pune pe temei CARAT (webhook-ul Stripe) n-are, si e
+    scutit. Asa, un al saptelea loc adaugat maine intra singur sub regula.
+  */
+  const vinovate: string[] = [];
+  for (const f of fisiereSursa("src")) {
+    const cod = faraComentarii(citeste(f));
+    let i = cod.indexOf("await puneLaCoada(");
+    while (i >= 0) {
+      const bucata = cod.slice(i, i + 900);
+      if (bucata.includes('fel: "cookie"') && !bucata.includes("martori:")) vinovate.push(f);
+      i = cod.indexOf("await puneLaCoada(", i + 1);
+    }
+  }
+  assert.deepEqual(
+    vinovate, [],
+    "pun la coada cu cookie-urile omului in mana, dar fara martori: " + vinovate.join(", "),
+  );
+});
+
+test("⚠ retragerea de pe server stinge si cookie-urile cu PREFIX", () => {
+  /*
+    ⚠ CE APARA. `_ga_<ID-UL-PROPRIETATII>` si `_gcl_*` poarta id-ul in chiar
+    numele lor, deci nicio lista fixa nu-i acopera. Prima forma a rutei parcurgea
+    doar numele intregi — si atunci `_gcl_au`, cookie-ul care poarta `gclid`,
+    supravietuia unei retrageri facute de pe server.
+  */
+  const cod = faraComentarii(citeste("src/app/api/consimtamant/route.ts"));
+  assert.match(cod, /eCookieDeMaturat\(/,
+    "ruta nu mai foloseste aceeasi regula ca browserul — prefixele scapa");
+  assert.match(cod, /req\.cookies\.getAll\(\)/,
+    "ruta nu mai parcurge cookie-urile cererii, deci nu poate sti ce prefixe exista");
+  assert.doesNotMatch(cod, /for \(const nume of COOKIE_FURNIZORI_EXACTE\)/,
+    "a revenit lista fixa de nume intregi");
+});

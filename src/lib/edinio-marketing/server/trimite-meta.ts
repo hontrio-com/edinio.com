@@ -2,6 +2,7 @@ import { sarcinaMeta, eRefuzMeta } from "./sarcina-meta";
 import { ID_PIXEL_META } from "../pixel-meta";
 import type { SarcinaPastrata } from "./coada-conversii";
 import type { Rezultat } from "./trimite-tiktok";
+import { VERSIUNE_META } from "./versiuni-api";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -12,7 +13,8 @@ import type { Rezultat } from "./trimite-tiktok";
   de acces ale oricui sta pe drum, si in ale lor.
 */
 
-const VERSIUNE = "v21.0";
+/* Vezi `versiuni-api.ts` pentru ce s-a masurat si cand se ridica. */
+const VERSIUNE = VERSIUNE_META;
 
 function adresa(pixel: string): string {
   return `https://graph.facebook.com/${VERSIUNE}/${pixel}/events`;

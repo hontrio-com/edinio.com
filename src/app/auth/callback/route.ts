@@ -5,7 +5,7 @@ import { confirmaSesiuneaMfa } from "@/lib/auth/flux-mfa";
 import { ePrimaAutentificare, idConversieCont } from "@/lib/edinio-marketing/cont-nou";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
 import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
-import { consimtamantulCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
+import { consimtamantulCererii, martoriiCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 /**
  * Aterizarea din linkurile trimise pe email: confirmarea contului, resetarea
@@ -139,7 +139,14 @@ export async function GET(request: NextRequest) {
                 ip: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
                 userAgent: request.headers.get("user-agent"),
               },
-              amprentaOmului: user.id,
+              amprentaOmului: consim?.vid ?? user.id,
+              /*
+                ⚠ MARTORII LASATI DE PIXELI. `_fbc` poarta id-ul clicului pe
+                reclama — legatura directa dintre inscriere si campania platita.
+                Nicio hotarare legala noua: exista numai daca pixelul a rulat,
+                adica numai dupa acord.
+              */
+              martori: await martoriiCererii(),
             },
             destinatiiActive(),
             { fel: "cookie", stare: consim },

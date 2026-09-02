@@ -198,3 +198,32 @@ test("⚠ transportul chiar duce martorii mai departe", () => {
     assert.match(linie, /s\.cand/, `${f}: clipa evenimentului se pierde la trimitere`);
   }
 });
+
+/* ═══ Versiunile API stau intr-un singur loc ═══ */
+
+test("⚠ nicio versiune de API nu mai e scrisa in fisierul de trimitere", () => {
+  /*
+    ⚠ CE APARA. Un numar de versiune scris in mijlocul unei functii nu se
+    revizuieste niciodata: nimeni nu deschide `trimite-meta.ts` ca sa se intrebe
+    daca `v21.0` mai e bun. Adunate in `versiuni-api.ts`, langa data la care s-au
+    verificat ultima oara, intrebarea se pune singura.
+  */
+  for (const f of [
+    "src/lib/edinio-marketing/server/trimite-meta.ts",
+    "src/lib/edinio-marketing/server/trimite-tiktok.ts",
+  ]) {
+    const cod = readFileSync(f, "utf8")
+      .split("/*").map((b, i) => (i === 0 ? b : b.slice(Math.max(0, b.indexOf("*/") + 2)))).join("");
+    assert.doesNotMatch(cod, /["'`]v\d+\.\d+["'`/]/,
+      `${f}: o versiune de API s-a intors in cod — locul ei e in versiuni-api.ts`);
+  }
+});
+
+test("versiunile declarate au forma pe care o asteapta furnizorii", () => {
+  /* ⚠ O versiune stricata n-ar cadea la trimitere: Meta raspunde 200 si pentru ce nu cunoaste. */
+  const cod = readFileSync("src/lib/edinio-marketing/server/versiuni-api.ts", "utf8");
+  assert.match(cod, /VERSIUNE_META = "v\d+\.\d+"/, "versiunea Meta nu mai are forma `vNN.N`");
+  assert.match(cod, /VERSIUNE_TIKTOK = "v\d+\.\d+"/, "versiunea TikTok nu mai are forma `vN.N`");
+  assert.match(cod, /Verificata ultima oara: \d{2}\.\d{2}\.\d{4}/,
+    "s-a pierdut data ultimei verificari — fara ea, numarul nu se mai revizuieste niciodata");
+});

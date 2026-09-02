@@ -29,7 +29,7 @@ import {
 } from "@/lib/auth/sesiune-asteptare";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
 import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
-import { consimtamantulCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
+import { consimtamantulCererii, martoriiCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 /**
  * IP-ul apelantului. ATENTIE la ce se poate si ce nu se poate face cu el:
@@ -431,7 +431,20 @@ export async function register(formData: {
   if (idCont) {
     await puneLaCoada(
       { name: "sign_up", signup_origin: "email", event_id: idConversieCont(idCont) },
-      { ctx: { ip, userAgent: (await headers()).get("user-agent") }, amprentaOmului: idCont },
+      {
+        ctx: { ip, userAgent: (await headers()).get("user-agent") },
+        amprentaOmului: consim?.vid ?? idCont,
+      /*
+        ⚠ SI MARTORII LASATI DE PIXELI. Lipseau tocmai de la conversiile scumpe:
+        `_fbc` poarta id-ul clicului pe reclama, adica legatura directa dintre
+        inscriere si campania platita. Existau in fiecare cerere si nu-i citea
+        nimeni aici.
+
+        ⚠ Nicio hotarare legala noua: exista numai daca pixelul a rulat, adica
+        numai dupa ce omul a acordat marketing.
+      */
+      martori: await martoriiCererii(),
+      },
       destinatiiActive(),
       { fel: "cookie", stare: consim },
     );

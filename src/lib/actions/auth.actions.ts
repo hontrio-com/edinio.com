@@ -380,13 +380,37 @@ export async function register(formData: {
     inscriere nenumarata decat un id inventat care nu se leaga de nimic.
   */
   const idCont = dateCont?.user?.id;
+
+  /*
+    ⚠ HOTARAREA SE CITESTE O SINGURA DATA, si de aceea sta aici, in afara
+    ambelor ramuri: si jetonul de masurare, si punerea la coada atarna de ea.
+    Doua citiri ar fi putut da, teoretic, doua raspunsuri — si atunci am fi
+    scris jetonul si n-am fi trimis conversia, sau pe dos.
+  */
+  const consim = await consimtamantulCererii();
+  const consimMarketing = consim?.marketing === true;
+
   if (idCont) {
-    cookieStore.set("edinio_signup", `${idConversieCont(idCont)}.email`, {
-      maxAge: 300,
-      path: "/",
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
+    if (consimMarketing) {
+/*
+      ═══ ⚠ SI JETONUL DE MASURARE ATARNA DE ACORD ═══
+
+      `edinio_signup` nu tine minte nimic de care are nevoie site-ul: e citit
+      EXCLUSIV de `UrmaPalnie`, ca sa traga evenimentul de inscriere. Deci nu e
+      „strict necesar" — e o urmarire, si intra sub aceeasi regula ca pixelii.
+
+      Lasat neconditionat, bannerul ar fi fost pe jumatate teatru: refuzam
+      pixelii si scriam oricum un identificator de conversie pe terminalul
+      omului. Urmarea, acceptata si scrisa aici: palnia de onboarding din browser
+      se stinge pentru cine refuza — la fel ca restul masuratorii.
+    */
+      cookieStore.set("edinio_signup", `${idConversieCont(idCont)}.email`, {
+        maxAge: 300,
+        path: "/",
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+    }
   }
 
   /*
@@ -409,7 +433,7 @@ export async function register(formData: {
       { name: "sign_up", signup_origin: "email", event_id: idConversieCont(idCont) },
       { ctx: { ip, userAgent: (await headers()).get("user-agent") }, amprentaOmului: idCont },
       destinatiiActive(),
-      { fel: "cookie", stare: await consimtamantulCererii() },
+      { fel: "cookie", stare: consim },
     );
   }
 

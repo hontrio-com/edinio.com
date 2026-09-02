@@ -18,6 +18,27 @@ import { ePrimaAutentificare, idConversieCont } from "./cont-nou";
 
 const citeste = (p: string) => readFileSync(p, "utf8");
 
+/**
+ * Codul fara comentarii.
+ *
+ * ⚠ E O FUNCTIE DE FISIER, nu o variabila dintr-o proba. Aceeasi taiere era
+ * scrisa inauntrul unei singure probe; a doua care a avut nevoie de ea a cazut cu
+ * „faraComentarii is not defined" — iar hamul de mutanti a raportat atunci doi
+ * mutanti „prinsi" care de fapt cadeau oricum, pe un fisier deja rosu.
+ */
+function faraComentarii(cod: string): string {
+  const RAND = String.fromCharCode(10);
+  const faraBlocuri = cod.split("/*").map((b, i) => {
+    if (i === 0) return b;
+    const k = b.indexOf("*/");
+    return k < 0 ? "" : b.slice(k + 2);
+  }).join("");
+  return faraBlocuri.split(RAND).map((r) => {
+    const k = r.indexOf("//");
+    return k < 0 ? r : r.slice(0, k);
+  }).join(RAND);
+}
+
 /* ═══ 1. Cand e contul cu adevarat nou ═══ */
 
 test("o inscriere adevarata prin Google se recunoaste", () => {
@@ -144,9 +165,24 @@ test("⚠ aterizarea OAuth scrie jetonul, si NUMAI sub paza", () => {
     alta ramura mai sus in fisier, iar proba ar trece verde pe o vecinatate
     inchipuita. Comentariile sunt deja scoase, deci ce ramane e cod.
   */
+  /*
+    ⚠ FEREASTRA S-A LARGIT PE 02.09.2026, si merita spus de ce — altfel arata ca o
+    slabire. Intre paza si scriere a intrat o A DOUA paza: consimtamantul.
+
+    `edinio_signup` e citit exclusiv de `UrmaPalnie`, deci e o masuratoare, nu
+    ceva de care are nevoie site-ul. Scris pentru cine a refuzat marketingul,
+    bannerul ar fi fost pe jumatate teatru. Proba cere acum AMANDOUA pazele —
+    deci e mai stransa decat inainte, nu mai larga.
+  */
   assert.ok(
-    iScriere - iPaza < 400,
+    iScriere - iPaza < 1200,
     "paza si scrierea nu mai sunt in acelasi bloc — verifica daca jetonul chiar e sub ea",
+  );
+
+  const intre = cod.slice(iPaza, iScriere);
+  assert.match(
+    intre, /if \(consimMarketing\)/,
+    "jetonul de masurare se scrie fara sa treaca prin consimtamant",
   );
   assert.equal(
     cod.split('res.cookies.set("edinio_signup"').length - 1, 1,
@@ -169,5 +205,29 @@ test("⚠ inscrierea cu email foloseste acelasi id stabil, nu unul aleator", () 
   assert.doesNotMatch(
     faraComentarii, /randomUUID/,
     "`randomUUID` a revenit in auth.actions.ts — verifica daca jetonul de inscriere e tot stabil",
+  );
+});
+
+test("⚠ si calea cu email scrie jetonul NUMAI sub consimtamant", () => {
+  /*
+    ⚠ DE CE E O PROBA SEPARATA. Cea de mai sus citeste aterizarea OAuth.
+    Confruntata cu mutantul „jetonul scapa de consimtamant pe calea cu email", a
+    trecut verde: nu se uita acolo.
+
+    Doua cai care fac acelasi lucru au nevoie de doua probe. O singura proba care
+    acopera „inscrierea" e o parere despre cod, nu o masura a lui.
+  */
+  const cod = faraComentarii(citeste("src/lib/actions/auth.actions.ts"));
+
+  const iPaza = cod.indexOf("if (consimMarketing) {");
+  const iScriere = cod.indexOf('cookieStore.set("edinio_signup"');
+  assert.ok(iPaza > 0, "paza de consimtamant a disparut de pe calea cu email");
+  assert.ok(iScriere > 0, "jetonul nu se mai scrie deloc pe calea cu email");
+  assert.ok(iPaza < iScriere, "jetonul se scrie INAINTEA pazei");
+  assert.ok(iScriere - iPaza < 900, "paza si scrierea nu mai sunt in acelasi bloc");
+
+  assert.equal(
+    cod.split('cookieStore.set("edinio_signup"').length - 1, 1,
+    "jetonul se scrie din mai multe locuri — unul din ele scapa de paza",
   );
 });

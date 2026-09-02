@@ -102,13 +102,23 @@ export async function GET(request: NextRequest) {
           */
           const furnizor = user.app_metadata?.provider;
           const origine = furnizor === "google" ? "google" : furnizor === "email" ? "email" : "altul";
+          const consim = await consimtamantulCererii();
+          const consimMarketing = consim?.marketing === true;
           const idConversie = idConversieCont(user.id);
-          res.cookies.set("edinio_signup", `${idConversie}.${origine}`, {
-            maxAge: 300,
-            path: "/",
-            sameSite: "lax",
-            secure: process.env.NODE_ENV === "production",
-          });
+          if (consimMarketing) {
+          /*
+            ⚠ SI JETONUL DE MASURARE ATARNA DE ACORD. `edinio_signup` e citit
+            EXCLUSIV de `UrmaPalnie`, ca sa traga evenimentul de inscriere — deci
+            nu e „strict necesar", e o urmarire, si intra sub aceeasi regula ca
+            pixelii. Scris neconditionat, bannerul ar fi fost pe jumatate teatru.
+          */
+            res.cookies.set("edinio_signup", `${idConversie}.${origine}`, {
+              maxAge: 300,
+              path: "/",
+              sameSite: "lax",
+              secure: process.env.NODE_ENV === "production",
+            });
+          }
 
           /*
             ═══ ⚠ SI DE PE SERVER, CU ACELASI `event_id` ═══
@@ -132,7 +142,7 @@ export async function GET(request: NextRequest) {
               amprentaOmului: user.id,
             },
             destinatiiActive(),
-            { fel: "cookie", stare: await consimtamantulCererii() },
+            { fel: "cookie", stare: consim },
           );
         }
         return res;

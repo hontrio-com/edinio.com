@@ -4,6 +4,7 @@ import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { codGa4, GAZDE_PRODUCTIE } from "@/lib/edinio-marketing/mediu";
 import { faraUrmarire } from "@/lib/edinio-marketing/fara-urmarire";
+import { useConsimtamant } from "@/lib/edinio-marketing/consimtamant-browser";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -39,6 +40,7 @@ import { faraUrmarire } from "@/lib/edinio-marketing/fara-urmarire";
 export function EtichetaGa4() {
   /* ⚠ Hook-ul inaintea oricarei iesiri — regulile hook-urilor. */
   const cale = usePathname();
+  const c = useConsimtamant();
 
   const cod = codGa4();
   if (!cod) return null;
@@ -49,7 +51,30 @@ export function EtichetaGa4() {
   */
   if (faraUrmarire(cale)) return null;
 
+  /*
+    ═══ ⚠ POARTA DE CONSIMTAMANT: NU SE RANDEAZA, DECI NU SE INCARCA ═══
+
+    Poarta e chiar ne-randarea, nu o conditie inauntrul scriptului. Un `<Script>`
+    care nu intra in arbore nu e injectat NICIODATA — deci zero cereri catre
+    furnizor, zero cookie-uri, nimic de sters mai tarziu. Asta e „Basic consent
+    mode" pe gratis, si e singura forma care chiar tine: un script incarcat si
+    „oprit" dinauntru a scris deja pe terminal.
+
+    ⚠ `!c.mounted` E JUMATATE DIN REGULA. Serverul nu stie ce scrie in cookie
+    (si n-are voie sa afle — ar face paginile dinamice, iar ele se servesc din
+    cache). Deci prima randare din browser trebuie sa iasa IDENTIC cu cea de pe
+    server: null. Hotararea se afla abia in efect. Fara asta, prima zi ar aduce
+    erori de hidratare pe fiecare pagina.
+
+    ⚠ SI POARTA CALATORESTE CU PIXELUL, nu cu layoutul. Layouturile sunt deja
+    neuniforme — `(dashboard)` randeaza Meta si TikTok dar nu si GA4 — deci o
+    poarta cheiata pe ele s-ar rupe la primul layout nou.
+  */
+  if (!c.mounted || !c.statistici) return null;
+
+
   const gazde = JSON.stringify(GAZDE_PRODUCTIE);
+  const marketing = c.marketing ? "true" : "false";
 
   return (
     <Script id="edinio-ga4" strategy="afterInteractive">{`
@@ -61,6 +86,26 @@ export function EtichetaGa4() {
         window.dataLayer = window.dataLayer || [];
         function gtag(){ dataLayer.push(arguments); }
         window.gtag = gtag;
+
+        /*
+          CONSENT MODE v2 — INAINTEA ORICAREI ALTE COMENZI gtag.
+
+          Ordinea nu e un moft: Google citeste starea implicita la prima comanda
+          care ar trimite ceva. Pusa dupa 'config', primul eveniment pleaca deja
+          sub starea gresita, si nimic nu arata ca s-a intamplat.
+
+          analytics_storage e 'granted' fiindca ajungem aici NUMAI cand omul a
+          acordat statistici — poarta e chiar randarea componentei. Semnalele de
+          reclama urmeaza categoria de marketing, care poate fi refuzata separat.
+        */
+        gtag('consent', 'default', {
+          analytics_storage: 'granted',
+          ad_storage: ${marketing} ? 'granted' : 'denied',
+          ad_user_data: ${marketing} ? 'granted' : 'denied',
+          ad_personalization: ${marketing} ? 'granted' : 'denied',
+          wait_for_update: 500
+        });
+
         gtag('js', new Date());
         gtag('config', ${JSON.stringify(cod)}, { send_page_view: false });
 

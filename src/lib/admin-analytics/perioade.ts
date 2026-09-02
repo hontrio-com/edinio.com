@@ -20,12 +20,35 @@ import type { GaDateRange } from "@/lib/google-analytics/client";
   ca vorbim.
 */
 
+/*
+  ⚠ `decalaj` E CATE ZILE INAPOI SE TERMINA perioada. Zero inseamna „pana azi";
+  unu inseamna „pana ieri".
+
+  A trebuit adaugat pentru „Ieri", care nu e o perioada de o zi terminata azi, ci
+  una terminata IERI. Fara el, formula veche (`zile - 1` pana la `today`) putea
+  scrie numai perioade lipite de ziua de azi — si „Ieri" ar fi iesit „Azi".
+*/
 export const PERIOADE = {
-  azi: { eticheta: "Azi", zile: 1 },
-  sapte: { eticheta: "7 zile", zile: 7 },
-  douazecisiopt: { eticheta: "28 zile", zile: 28 },
-  nouazeci: { eticheta: "90 zile", zile: 90 },
+  azi: { eticheta: "Azi", zile: 1, decalaj: 0 },
+  ieri: { eticheta: "Ieri", zile: 1, decalaj: 1 },
+  sapte: { eticheta: "7 zile", zile: 7, decalaj: 0 },
+  douazecisiopt: { eticheta: "28 zile", zile: 28, decalaj: 0 },
+  treizeci: { eticheta: "30 zile", zile: 30, decalaj: 0 },
+  nouazeci: { eticheta: "90 zile", zile: 90, decalaj: 0 },
 } as const;
+
+/**
+ * O zi, in limba lui GA4.
+ *
+ * ⚠ `today` SI `yesterday` NU SUNT ACELASI LUCRU cu `0daysAgo` si `1daysAgo` la
+ * toate uneltele lor, iar cele doua cuvinte sunt cele documentate. Se folosesc
+ * ele acolo unde se potrivesc, si forma numerica in rest.
+ */
+function ziua(inUrma: number): string {
+  if (inUrma <= 0) return "today";
+  if (inUrma === 1) return "yesterday";
+  return `${inUrma}daysAgo`;
+}
 
 export type NumePerioada = keyof typeof PERIOADE;
 
@@ -42,8 +65,8 @@ export function ePerioada(x: string | null | undefined): x is NumePerioada {
  * perioade intregi, nu pe „ultima zi fata de penultima".
  */
 export function intervalul(p: NumePerioada): GaDateRange {
-  const zile = PERIOADE[p].zile;
-  return { startDate: zile === 1 ? "today" : `${zile - 1}daysAgo`, endDate: "today" };
+  const { zile, decalaj } = PERIOADE[p];
+  return { startDate: ziua(decalaj + zile - 1), endDate: ziua(decalaj) };
 }
 
 /**
@@ -54,8 +77,8 @@ export function intervalul(p: NumePerioada): GaDateRange {
  * aici face fiecare procent de crestere sa fie fals, si nimeni n-ar observa.
  */
 export function intervalulDinainte(p: NumePerioada): GaDateRange {
-  const zile = PERIOADE[p].zile;
-  return { startDate: `${2 * zile - 1}daysAgo`, endDate: `${zile}daysAgo` };
+  const { zile, decalaj } = PERIOADE[p];
+  return { startDate: ziua(decalaj + 2 * zile - 1), endDate: ziua(decalaj + zile) };
 }
 
 /**

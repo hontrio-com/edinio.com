@@ -1,7 +1,7 @@
 "use server";
 
 import { requireAdminApi } from "@/lib/admin-guard";
-import { buildAuthUrl, googleAnalyticsConfigured } from "@/lib/google-analytics/oauth";
+import { buildAuthUrl, googleAnalyticsConfigured, credentialeCorporate } from "@/lib/google-analytics/oauth";
 import { semneazaStareAdmin } from "@/lib/admin-analytics/stare-oauth";
 import { stergeConexiune } from "@/lib/admin-analytics/conexiune";
 import { revalidatePath } from "next/cache";
@@ -26,7 +26,13 @@ export async function porneste(): Promise<{ url: string } | { error: string }> {
     return { error: "Aplicatia Google nu e configurata pe server (GOOGLE_MERCHANT_CLIENT_ID / _SECRET)." };
   }
 
-  return { url: buildAuthUrl(semneazaStareAdmin()) };
+  /*
+    ⚠ CREDITELE PLATFORMEI, nu ale comerciantilor. Fara variabilele corporate sunt
+    aceleasi — vezi `credentialeCorporate()`. Cu ele, plecarea si intoarcerea
+    trebuie sa foloseasca ACEEASI aplicatie: un cod cerut de o aplicatie nu poate
+    fi schimbat de alta.
+  */
+  return { url: buildAuthUrl(semneazaStareAdmin(), credentialeCorporate()) };
 }
 
 /**

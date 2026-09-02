@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getAccessToken } from "@/lib/google-analytics/oauth";
+import { getAccessToken, credentialeCorporate } from "@/lib/google-analytics/oauth";
 import type { Json } from "@/types/database.types";
 
 /*
@@ -102,5 +102,13 @@ export async function stergeConexiune(): Promise<void> {
 export async function tokenDeAcces(): Promise<string | null> {
   const c = await citesteConexiune();
   if (!c) return null;
-  return getAccessToken(c.refresh_token);
+  /*
+    ⚠ CU CREDITELE CARE AU CERUT JETONUL. Un `refresh_token` apartine aplicatiei
+    care l-a obtinut: cerut sub alta, Google raspunde `invalid_grant`.
+
+    ⚠ DECI IN ZIUA IN CARE SE ADAUGA VARIABILELE CORPORATE, legatura salvata nu
+    mai merge si ecranul cere reconectare. Nu e un defect — e felul in care
+    lucreaza Google — dar e scris aici ca sa nu para unul.
+  */
+  return getAccessToken(c.refresh_token, credentialeCorporate());
 }

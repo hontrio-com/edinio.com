@@ -19,6 +19,59 @@ function clientSecret(): string {
   return process.env.GOOGLE_ANALYTICS_CLIENT_SECRET ?? process.env.GOOGLE_MERCHANT_CLIENT_SECRET ?? "";
 }
 
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  DOUA APLICATII GOOGLE, SAU UNA — DUPA CE E PUS IN MEDIU
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  ⚠ DE CE SE DESPART. Pana acum, `/admin/analytics` (masuratoarea NOASTRA) si
+  integrarea Google a COMERCIANTILOR foloseau aceeasi aplicatie OAuth. Datele
+  raman separate — fiecare cu jetonul lui — dar infrastructura nu: orice
+  schimbare ceruta de una o atinge pe cealalta. Concret, adaugarea unui drept nou
+  pentru noi (de pilda Search Console) poate declansa o re-verificare Google a
+  aplicatiei prin care isi leaga clientii conturile lor.
+
+  ⚠ SI DE CE CU CADERE INAPOI, nu cu inlocuire. Fara variabilele corporate,
+  `credentialeCorporate()` intoarce EXACT ce se folosea si ieri — deci punerea
+  codului asta in productie nu schimba nimic si nu poate strica nimic. Separarea
+  se intampla in clipa in care se adauga variabilele, nu in clipa desfasurarii.
+
+  ⚠ CE TREBUIE STIUT INAINTE DE A LE ADAUGA: un `refresh_token` apartine
+  aplicatiei care l-a cerut. In clipa in care creditele corporate se schimba,
+  legatura salvata NU mai merge si `/admin/analytics` cere reconectare. Nu e un
+  defect, e felul in care lucreaza Google — dar trebuie stiut dinainte, nu
+  descoperit.
+
+  ⚠ SEMNATURA STARII RAMANE COMUNA, dinadins. `stateSecret()` foloseste mai
+  departe secretul comun: plecarea si intoarcerea trec prin ACEEASI aterizare
+  (`/api/google-analytics/oauth/callback`), iar daca una ar semna cu alt secret
+  decat verifica cealalta, fiecare conectare ar esua cu „stare nevalida".
+*/
+export type Credentiale = { id: string; secret: string };
+
+export function credentialeComune(): Credentiale {
+  return { id: clientId(), secret: clientSecret() };
+}
+
+/** Creditele platformei. Fara ele, aceleasi ca ale comerciantilor. */
+export function credentialeCorporate(): Credentiale {
+  const id = process.env.EDINIO_ANALYTICS_GOOGLE_CLIENT_ID?.trim();
+  const secret = process.env.EDINIO_ANALYTICS_GOOGLE_CLIENT_SECRET?.trim();
+  /*
+    ⚠ AMANDOUA SAU NICIUNA. Cu id-ul nou si secretul vechi, Google raspunde
+    `invalid_client` si nimic nu spune de ce — iar cine a pus doar una crede ca a
+    terminat. Jumatatea de configurare cade inapoi pe cea care merge.
+  */
+  if (!id || !secret) return credentialeComune();
+  return { id, secret };
+}
+
+/** Platforma are aplicatia ei, sau imparte cu comerciantii? */
+export function credentialeCorporateSeparate(): boolean {
+  return !!process.env.EDINIO_ANALYTICS_GOOGLE_CLIENT_ID?.trim()
+    && !!process.env.EDINIO_ANALYTICS_GOOGLE_CLIENT_SECRET?.trim();
+}
+
 export function redirectUri(): string {
   // Canonical www host (the proxy 301-redirects non-www -> www, and Google OAuth
   // redirect URIs must resolve without a redirect). Override only if needed.
@@ -30,9 +83,9 @@ export function googleAnalyticsConfigured(): boolean {
   return !!(clientId() && clientSecret());
 }
 
-export function buildAuthUrl(state: string): string {
+export function buildAuthUrl(state: string, cred: Credentiale = credentialeComune()): string {
   const params = new URLSearchParams({
-    client_id: clientId(),
+    client_id: cred.id,
     redirect_uri: redirectUri(),
     response_type: "code",
     scope: `openid email ${ANALYTICS_SCOPE}`,
@@ -55,6 +108,7 @@ interface TokenResponse {
 
 export async function exchangeCode(
   code: string,
+  cred: Credentiale = credentialeComune(),
 ): Promise<{ accessToken: string; refreshToken: string | null; email: string | null } | { error: string }> {
   try {
     const res = await fetch(TOKEN_URL, {
@@ -62,8 +116,8 @@ export async function exchangeCode(
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         code,
-        client_id: clientId(),
-        client_secret: clientSecret(),
+        client_id: cred.id,
+        client_secret: cred.secret,
         redirect_uri: redirectUri(),
         grant_type: "authorization_code",
       }),
@@ -85,8 +139,18 @@ export async function exchangeCode(
 // Short-lived in-process cache (best-effort across a warm lambda).
 const tokenCache = new Map<string, { token: string; exp: number }>();
 
-export async function getAccessToken(refreshToken: string): Promise<string | null> {
-  const cached = tokenCache.get(refreshToken);
+export async function getAccessToken(
+  refreshToken: string,
+  cred: Credentiale = credentialeComune(),
+): Promise<string | null> {
+  /*
+    ⚠ CHEIA CUPRINDE SI APLICATIA. Acelasi jeton de reimprospatare da alt raspuns
+    sub alt client — de fapt niciunul, fiindca nu-i apartine. Cheiata numai pe
+    jeton, memoria ar fi putut intoarce jetonul unei aplicatii pentru cererea
+    celeilalte.
+  */
+  const cheie = `${cred.id}:${refreshToken}`;
+  const cached = tokenCache.get(cheie);
   if (cached && cached.exp > Date.now() + 60_000) return cached.token;
   try {
     const res = await fetch(TOKEN_URL, {
@@ -94,14 +158,14 @@ export async function getAccessToken(refreshToken: string): Promise<string | nul
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         refresh_token: refreshToken,
-        client_id: clientId(),
-        client_secret: clientSecret(),
+        client_id: cred.id,
+        client_secret: cred.secret,
         grant_type: "refresh_token",
       }),
     });
     const data = (await res.json()) as TokenResponse;
     if (!res.ok || !data.access_token) return null;
-    tokenCache.set(refreshToken, { token: data.access_token, exp: Date.now() + (Number(data.expires_in) || 3600) * 1000 });
+    tokenCache.set(cheie, { token: data.access_token, exp: Date.now() + (Number(data.expires_in) || 3600) * 1000 });
     return data.access_token;
   } catch {
     return null;

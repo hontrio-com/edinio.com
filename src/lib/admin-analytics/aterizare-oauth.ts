@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-guard";
-import { exchangeCode } from "@/lib/google-analytics/oauth";
+import { exchangeCode, credentialeCorporate } from "@/lib/google-analytics/oauth";
 import { listAccountSummaries, listDataStreams } from "@/lib/google-analytics/client";
 import { scrieConexiune, type ConexiuneGa4Admin } from "./conexiune";
 
@@ -33,7 +33,8 @@ export async function aterizareAdminGa4(origine: string, cod: string | null): Pr
 
   if (!cod) return inapoi(origine, "anulat");
 
-  const tok = await exchangeCode(cod);
+  /* ⚠ Aceeasi aplicatie ca la plecare. Vezi nota din `admin-analytics.actions.ts`. */
+  const tok = await exchangeCode(cod, credentialeCorporate());
   if ("error" in tok) return inapoi(origine, "eroare");
 
   /*

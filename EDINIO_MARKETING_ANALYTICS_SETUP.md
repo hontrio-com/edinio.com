@@ -210,6 +210,39 @@ conversii. De aceea sunt scrise și în `.env.example`.
 Dovada de la livrare: răspuns brut `{"events_received":1,...}` de la Meta și
 `code 0` de la TikTok, iar cronul din producție a golit coada în 7 secunde.
 
+### Aplicație Google separată pentru platformă — **pregătit, opțional**
+
+Astăzi `/admin/analytics` folosește **aceeași aplicație Google OAuth** ca integrarea
+comercianților. Datele sunt separate — fiecare cu jetonul lui — dar infrastructura
+nu: o schimbare cerută de una o atinge pe cealaltă.
+
+Codul acceptă acum credențiale proprii. **Fără ele nu se schimbă nimic**, deci nu
+trebuie făcut nimic acum:
+
+| Variabilă | |
+|---|---|
+| `EDINIO_ANALYTICS_GOOGLE_CLIENT_ID` | din aplicația nouă |
+| `EDINIO_ANALYTICS_GOOGLE_CLIENT_SECRET` | din aceeași aplicație |
+
+**Dacă vrei să le separi, în ordinea asta:**
+
+1. În Google Cloud, aplicație OAuth nouă, cu **același** `redirect_uri`:
+   `https://www.edinio.com/api/google-analytics/oauth/callback`
+2. Drept: `https://www.googleapis.com/auth/analytics.readonly`
+3. Pui amândouă variabilele în Vercel și redeploy.
+4. **Reconectezi** `/admin/analytics`. Pasul ăsta e obligatoriu, nu opțional.
+
+> ⚠ **De ce cere reconectare.** Un `refresh_token` aparține aplicației care l-a
+> cerut. În clipa în care creditele se schimbă, cel salvat nu mai e valabil și
+> Google răspunde `invalid_grant`. Nu e un defect — e felul în care lucrează ei.
+> Cât timp nu reconectezi, rapoartele din admin arată „neconectat". **Integrarea
+> comercianților nu e atinsă deloc**, și o probă păzește asta în ambele sensuri.
+
+> ⚠ **Amândouă sau niciuna.** Cu una singură, codul cade înapoi pe aplicația comună.
+> Altfel Google ar răspunde `invalid_client` și nimic n-ar spune de ce.
+
+---
+
 ### Search Console în `/admin/analytics` — **abandonat**
 
 Cerea alt drept (`webmasters.readonly`), care se adaugă pe ecranul de

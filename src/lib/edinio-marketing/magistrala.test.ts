@@ -392,3 +392,24 @@ test("⚠ retragerea prinde din urma un eveniment care astepta deja la coada", (
   assert.equal(primite.length, 0, "s-a trimis ce astepta, desi acordul s-a stins intre timp");
   assert.equal(lungimeCoada(), 0, "a ramas la coada dupa retragere");
 });
+
+test("⚠ un camp de AUTOR nou e oprit; `article_author` trece, fiindca poarta slugul", () => {
+  /*
+    ⚠ DEFECTUL VIU, reparat pe 03.09.2026. `article_view` trimitea numele adevarat
+    al omului care a scris articolul — catre GA4, Meta SI TikTok. Publicat sub
+    articol nu inseamna ingaduit intr-un cont de reclame; politica Google
+    interzice datele care identifica o persoana in Analytics, iar sanctiunea lor
+    poate fi stergerea datelor proprietatii.
+
+    Acum pleaca slugul. Proba pazeste URMATORUL camp de acelasi fel.
+  */
+  assert.throws(
+    () => verificaFaraPii("comment_view", { comment_author: "Ion Popescu" }),
+    EroarePii,
+    "un camp de autor nou ar duce numele unui om in trei conturi de reclame",
+  );
+  assert.throws(() => verificaFaraPii("x", { autor: "Ion Popescu" }), EroarePii);
+
+  /* Si martorul: cel anuntat, care poarta slugul, trece. */
+  assert.doesNotThrow(() => verificaFaraPii("article_view", { article_author: "ion-popescu" }));
+});

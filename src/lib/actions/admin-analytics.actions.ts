@@ -1,7 +1,7 @@
 "use server";
 
 import { requireAdminApi } from "@/lib/admin-guard";
-import { buildAuthUrl, googleAnalyticsConfigured, credentialeCorporate } from "@/lib/google-analytics/oauth";
+import { buildAuthUrl, credentialeAdminGata, credentialeCorporate, VARIABILE_CREDITE } from "@/lib/google-analytics/oauth";
 import { semneazaStareAdmin } from "@/lib/admin-analytics/stare-oauth";
 import { stergeConexiune } from "@/lib/admin-analytics/conexiune";
 import { revalidatePath } from "next/cache";
@@ -22,8 +22,17 @@ export async function porneste(): Promise<{ url: string } | { error: string }> {
   const admin = await requireAdminApi();
   if (!admin) return { error: "Nu esti administrator." };
 
-  if (!googleAnalyticsConfigured()) {
-    return { error: "Aplicatia Google nu e configurata pe server (GOOGLE_MERCHANT_CLIENT_ID / _SECRET)." };
+  /*
+    ⚠ SE INTREABA DE CREDITELE PE CARE LE FOLOSESTE CHIAR RANDUL DE MAI JOS.
+    Forma veche chema `googleAnalyticsConfigured()`, care cantareste creditele
+    COMERCIANTILOR — deci cine pusese numai perechea corporate primea „nu e
+    configurat" desi era. Vezi `credentialeAdminGata`.
+  */
+  if (!credentialeAdminGata()) {
+    return {
+      error: "Aplicatia Google nu e configurata pe server. Pune una din perechile: " +
+        VARIABILE_CREDITE.join(", ") + ".",
+    };
   }
 
   /*

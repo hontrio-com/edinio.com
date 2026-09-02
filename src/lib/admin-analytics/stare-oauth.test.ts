@@ -116,3 +116,100 @@ test("⚠ o legatura fara `refresh_token` nu se salveaza", () => {
   assert.ok(iPaza > 0, "s-a pierdut paza pe jetonul de reimprospatare");
   assert.ok(iPaza < iScriere, "legatura se scrie inainte de a verifica jetonul");
 });
+
+/* ═══ Creditele fluxului de admin ═══ */
+
+test("⚠ poarta cantareste creditele pe care fluxul le FOLOSESTE, nu altele", async () => {
+  /*
+    ⚠ DEFECTUL VIU, gasit pe 03.09.2026. `porneste()` intreba
+    `googleAnalyticsConfigured()` — care cantareste creditele COMERCIANTILOR
+    (`GOOGLE_ANALYTICS_*`, cu `GOOGLE_MERCHANT_*` pe post de rezerva). Dar
+    plecarea se face cu `credentialeCorporate()`.
+
+    Deci cine punea NUMAI perechea corporate — exact ce cere despartirea celor
+    doua aplicatii Google, facuta chiar de noi — primea „Aplicatia Google nu e
+    configurata". Configurarea corecta era refuzata de poarta.
+  */
+  const inainte = { ...process.env };
+  try {
+    const { credentialeAdminGata, VARIABILE_CREDITE } = await import("@/lib/google-analytics/oauth");
+
+    for (const v of ["EDINIO_ANALYTICS_GOOGLE_CLIENT_ID", "EDINIO_ANALYTICS_GOOGLE_CLIENT_SECRET",
+                     "GOOGLE_ANALYTICS_CLIENT_ID", "GOOGLE_ANALYTICS_CLIENT_SECRET",
+                     "GOOGLE_MERCHANT_CLIENT_ID", "GOOGLE_MERCHANT_CLIENT_SECRET"]) {
+      delete process.env[v];
+    }
+    assert.equal(credentialeAdminGata(), false, "fara nimic pus, poarta se deschide");
+
+    process.env.EDINIO_ANALYTICS_GOOGLE_CLIENT_ID = "corp-id";
+    process.env.EDINIO_ANALYTICS_GOOGLE_CLIENT_SECRET = "corp-secret";
+    assert.equal(credentialeAdminGata(), true,
+      "numai perechea corporate pusa — chiar configurarea ceruta — si poarta refuza");
+
+    /* Si pe dos: numai cele comune, fara corporate. Se cade inapoi pe ele, deci merge. */
+    delete process.env.EDINIO_ANALYTICS_GOOGLE_CLIENT_ID;
+    delete process.env.EDINIO_ANALYTICS_GOOGLE_CLIENT_SECRET;
+    process.env.GOOGLE_MERCHANT_CLIENT_ID = "comun-id";
+    process.env.GOOGLE_MERCHANT_CLIENT_SECRET = "comun-secret";
+    assert.equal(credentialeAdminGata(), true, "creditele comune sunt rezerva, si ele merg");
+
+    /*
+      ⚠ JUMATATE DE CONFIGURARE NU E CONFIGURARE. Cu id nou si secret vechi Google
+      raspunde `invalid_client` fara sa spuna de ce, iar cine a pus doar una crede
+      ca a terminat.
+    */
+    process.env.EDINIO_ANALYTICS_GOOGLE_CLIENT_ID = "corp-id";
+    assert.equal(credentialeAdminGata(), true, "jumatatea de configurare n-a cazut pe rezerva");
+
+    assert.ok(VARIABILE_CREDITE.length >= 3, "lista de variabile din mesaj s-a scurtat");
+  } finally {
+    for (const k of Object.keys(process.env)) if (!(k in inainte)) delete process.env[k];
+    Object.assign(process.env, inainte);
+  }
+});
+
+test("⚠ mesajul de eroare numeste TOATE variabilele din care se pot lua creditele", async () => {
+  /*
+    ⚠ CE APARA, si e a treia oara in doua zile. Mesajul numea o singura pereche
+    (`GOOGLE_MERCHANT_CLIENT_ID / _SECRET`) desi codul incearca trei. Cine il
+    citea configura ce nu trebuie si nu afla niciodata de ce nu merge.
+
+    Proba leaga textul de cod in AMANDOUA directiile: fiecare variabila citita de
+    `oauth.ts` trebuie sa fie in lista, si fiecare din lista sa fie chiar citita.
+  */
+  const { VARIABILE_CREDITE } = await import("@/lib/google-analytics/oauth");
+  const sursaOauth = readFileSync("src/lib/google-analytics/oauth.ts", "utf8");
+  const sursaActiune = readFileSync("src/lib/actions/admin-analytics.actions.ts", "utf8");
+
+  const citite = new Set(
+    [...sursaOauth.matchAll(/process\.env\.([A-Z_]*CLIENT_(?:ID|SECRET))/g)].map((m) => m[1]),
+  );
+  assert.ok(citite.size >= 4, `s-au gasit doar ${citite.size} variabile — cautarea s-a stricat?`);
+
+  const numite = new Set(
+    VARIABILE_CREDITE.flatMap((v) => {
+      const radacina = v.replace(/_(ID|SECRET).*$/, "").replace(/_CLIENT$/, "");
+      return [`${radacina}_CLIENT_ID`, `${radacina}_CLIENT_SECRET`];
+    }),
+  );
+
+  for (const v of citite) {
+    assert.ok(numite.has(v), `\`oauth.ts\` citeste ${v}, dar mesajul nu-l pomeneste`);
+  }
+  for (const v of numite) {
+    assert.ok(citite.has(v), `mesajul trimite omul sa puna ${v}, pe care nimeni nu-l citeste`);
+  }
+
+  /*
+    ⚠ SI CA MESAJUL NU-SI SCRIE VARIABILELE DE MANA. Prima forma a randului asta
+    cerea doar ca `VARIABILE_CREDITE` sa apara undeva in fisier — si trecea verde
+    peste chiar mutantul pe care era scrisa: numele ramanea in randul de `import`,
+    iar mesajul era iar scris de mana. „E pomenit undeva in fisier" nu e acelasi
+    lucru cu „e folosit unde trebuie".
+  */
+  const numeInMesaj = [...sursaActiune.matchAll(/error:[^;]*?"([^"]*CLIENT_[^"]*)"/g)];
+  assert.deepEqual(
+    numeInMesaj.map((m) => m[1]), [],
+    "un mesaj isi scrie iar numele variabilelor de mana: " + numeInMesaj.map((m) => m[1]).join(", "),
+  );
+});

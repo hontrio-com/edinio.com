@@ -83,6 +83,42 @@ export function googleAnalyticsConfigured(): boolean {
   return !!(clientId() && clientSecret());
 }
 
+/**
+ * Sunt gata creditele pe care le foloseste CHIAR fluxul de admin?
+ *
+ * ═══ ⚠ DE CE NU E DE AJUNS `googleAnalyticsConfigured` ═══
+ *
+ * Aceea intreaba de creditele COMUNE (`GOOGLE_ANALYTICS_*`, cu `GOOGLE_MERCHANT_*`
+ * pe post de rezerva) — cele cu care se leaga comerciantii. Fluxul de la
+ * `/admin/analytics` pleaca insa cu `credentialeCorporate()`.
+ *
+ * ⚠ CE STRICA ASTA, gasit pe 03.09.2026: cine pune NUMAI perechea corporate —
+ * adica exact ce cere despartirea celor doua aplicatii — primeste „Aplicatia
+ * Google nu e configurata", desi e. Poarta cantarea alte credite decat cele pe
+ * care le-ar fi folosit un rand mai jos.
+ *
+ * ⚠ SI DE CE NU DOAR CELE CORPORATE: fara ele, `credentialeCorporate()` cade
+ * inapoi pe cele comune, si atunci fluxul chiar merge. Deci intrebarea corecta e
+ * despre ce se INTOARCE, nu despre ce variabile sunt puse.
+ */
+export function credentialeAdminGata(): boolean {
+  const c = credentialeCorporate();
+  return !!(c.id && c.secret);
+}
+
+/**
+ * Numele variabilelor din care se pot lua creditele, in ordinea incercarii.
+ *
+ * ⚠ EXISTA CA SA NU MINTA MESAJUL DE EROARE. El numea o singura pereche, iar cine
+ * il citea configura ce nu trebuie. Lista se citeste si dintr-o proba, ca sa nu se
+ * desparta de cod — vezi `stare-oauth.test.ts`.
+ */
+export const VARIABILE_CREDITE = [
+  "EDINIO_ANALYTICS_GOOGLE_CLIENT_ID / _SECRET",
+  "GOOGLE_ANALYTICS_CLIENT_ID / _SECRET",
+  "GOOGLE_MERCHANT_CLIENT_ID / _SECRET",
+] as const;
+
 export function buildAuthUrl(state: string, cred: Credentiale = credentialeComune()): string {
   const params = new URLSearchParams({
     client_id: cred.id,

@@ -26,6 +26,16 @@ const CHEI_OPRITE = [
   "address", "adresa", "strada", "oras_exact",
   "token", "jeton", "password", "parola", "secret", "api_key",
   "cui", "cnp", "iban", "card",
+  /*
+    ⚠ „autor" ADAUGAT PE 03.09.2026, DUPA UN DEFECT VIU. `article_view` trimitea
+    `article_author` cu numele adevarat al omului care a scris articolul — catre
+    GA4, Meta SI TikTok. Publicat sub articol nu inseamna ingaduit intr-un cont de
+    reclame.
+
+    Acum pleaca slugul. Regula de aici e pentru URMATORUL camp: un `post_author`
+    sau `comment_author` scris maine cade la probe, nu in productie.
+  */
+  "autor", "author",
   "user_id", "customer_id", "client_id",
   "ip", "ip_address",
 ] as const;
@@ -50,6 +60,7 @@ const NUME_CUNOSCUTE_CURATE = [
   "section_name",  // numele sectiunii, din marcajele noastre
   "content_name",  // "Homepage" | "Preturi" — numele paginii de aterizare
   "field_name",    // "email" | "phone" — CARE camp a picat, nu ce s-a scris in el
+  "article_author", // SLUGUL autorului ("ion-popescu"), nu numele lui — vezi `CorpArticol`
 ] as const;
 /*
   ⚠ `content_name` A FOST ADAUGAT PE 01.09.2026, SI ERA DEJA UN DEFECT VIU.

@@ -3,14 +3,7 @@ import { requireAdminApi } from "@/lib/admin-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAudit } from "@/lib/audit";
 import type { Json } from "@/types/database.types";
-import { setariPentruBrowser } from "@/lib/setari-platforma";
-
-interface PlatformSetting {
-  key: string;
-  value: unknown;
-  updated_at: string | null;
-  updated_by: string | null;
-}
+import { setariPentruBrowser, type PlatformSetting } from "@/lib/setari-platforma";
 
 export async function GET() {
   const admin = await requireAdminApi();

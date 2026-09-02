@@ -131,20 +131,40 @@ reconectare. E o stare obișnuită, nu o defecțiune.
 
 ---
 
-## 5. Ce **nu** e făcut încă, și ce cere fiecare
+## 5. Conversiile de pe server — **livrate pe 02.09.2026**
 
-### Meta Conversions API
+> ⚠ Secțiunea asta spunea, până la ora 18:00 pe 02.09.2026, „ce **nu** e făcut
+> încă", și cerea tokenuri care erau deja puse. Un audit extern a citit-o și a
+> raportat că Meta CAPI și TikTok Events API sunt „infrastructură, nu integrare
+> finalizată" — concluzie corectă față de document și falsă față de cod.
+>
+> Documentul a rămas în urmă cu câteva ore față de livrare, și a mințit pe cine
+> l-a crezut. De asta e scris aici: ca să nu pară că nu s-a întâmplat nimic.
 
-Trimiterea conversiilor **și** de pe server, ca să nu se piardă din cauza
-blocantelor de reclame. Codul din browser trimite deja `event_id`, deci
-deduplicarea e pregătită.
+Conversiile pleacă **și** de pe server, nu doar din browser, ca să nu se piardă
+la blocantele de reclame. Cele două drumuri poartă același `event_id`, deci
+furnizorii le unesc și numără o singură conversie.
 
-**Îmi trebuie de la tine:** un token din Events Manager → *Settings* →
-*Conversions API* → *Generate access token*.
+**Ce pleacă de pe server:** `sign_up` (email și Google), `generate_lead` (contact
+și migrare), `trial_start`, `purchase`.
 
-### TikTok Events API
+**Cum:** o coadă în baza de date (`edinio_conversion_outbox`), golită din minut în
+minut de `/api/cron/conversii`. O trimitere picată se reîncearcă de șase ori, cu
+pauze care cresc; una respinsă de furnizor se abandonează pe loc, cu motivul scris.
 
-Aceeași poveste. **Îmi trebuie:** un *Access Token* din TikTok Events Manager.
+**Ce trebuie să existe în Vercel** (sunt deja puse — verificat în producție):
+
+| Variabilă | Ce e |
+|---|---|
+| `META_CAPI_TOKEN` | token din Events Manager → *Settings* → *Conversions API* |
+| `TIKTOK_EVENTS_TOKEN` | *Access Token* din TikTok Events Manager |
+
+⚠ Dacă una lipsește, **nimic nu cade**: furnizorul ei e sărit tăcut, iar în jurnal
+apare o dată `conversii.destinatieNelegata`. Build verde, probe verzi, zero
+conversii. De aceea sunt scrise și în `.env.example`.
+
+Dovada de la livrare: răspuns brut `{"events_received":1,...}` de la Meta și
+`code 0` de la TikTok, iar cronul din producție a golit coada în 7 secunde.
 
 ### Search Console în `/admin/analytics` — **abandonat**
 

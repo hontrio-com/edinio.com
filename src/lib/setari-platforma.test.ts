@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { faraSecrete, setariPentruBrowser, CAMPURI_SECRETE } from "./setari-platforma";
 
 /*
@@ -18,6 +19,55 @@ import { faraSecrete, setariPentruBrowser, CAMPURI_SECRETE } from "./setari-plat
 */
 
 const citeste = (p: string) => readFileSync(p, "utf8");
+
+/*
+  ⚠ CINE ARE VOIE SA CITEASCA TABELA FARA SA TAIE.
+
+  Numai cod care nu preda NIMIC browserului. `conexiune.ts` chiar are nevoie de
+  `refresh_token`-ul intreg — el il schimba pe un token de acces, pe server.
+  Celelalte doua citesc o singura cheie de configurare, intr-un cron si intr-un
+  webhook, unde nu exista browser.
+
+  Portita asta e pazita de proba de mai jos: o pagina sau o componenta pusa aici
+  cade, oricat de convins ar fi cine o pune.
+*/
+const SERVER_ONLY = [
+  "src/app/api/cron/emag-sync/route.ts",
+  "src/app/api/emag/webhook/route.ts",
+  "src/lib/admin-analytics/conexiune.ts",
+];
+
+function faraComentarii(cod: string): string {
+  const RAND = String.fromCharCode(10);
+  const faraBlocuri = cod.split("/*").map((b, i) => {
+    if (i === 0) return b;
+    const k = b.indexOf("*/");
+    return k < 0 ? "" : b.slice(k + 2);
+  }).join("");
+  return faraBlocuri.split(RAND).map((r) => {
+    const k = r.indexOf("//");
+    return k < 0 ? r : r.slice(0, k);
+  }).join(RAND);
+}
+
+/** Fisierele care CHIAR interogheaza tabela (nu doar o pomenesc intr-un comentariu). */
+function fisiereCare(tabela: string): string[] {
+  const gasite: string[] = [];
+  const mers = (rad: string) => {
+    for (const n of readdirSync(rad)) {
+      const p = join(rad, n);
+      if (statSync(p).isDirectory()) { mers(p); continue; }
+      if (!/\.(ts|tsx)$/.test(n) || n.endsWith(".test.ts") || n === "database.types.ts") continue;
+      if (faraComentarii(readFileSync(p, "utf8")).includes(`from("${tabela}")`)) {
+        gasite.push(p.split("\\").join("/"));
+      }
+    }
+  };
+  mers("src");
+  return gasite.sort();
+}
+
+const taie = (cod: string) => faraComentarii(cod).includes("setariPentruBrowser(");
 
 test("⚠ jetonul de reimprospatare nu iese din setari", () => {
   const randuri = [
@@ -83,22 +133,55 @@ test("⚠ MATURA: fiecare nume din lista chiar e taiat, si ca sufix", () => {
   assert.equal(nevinovat.email_conectat, "a@b.ro", "paza taie si ce n-ar trebui");
 });
 
-test("⚠ ruta de setari CHIAR trece prin taiere", () => {
+test("⚠ ORICE citire a `platform_settings` ori taie, ori e server-only declarata", () => {
   /*
-    ⚠ Toata proba de mai sus e degeaba daca ruta nu cheama functia. Se cere
-    ATRIBUIREA, nu doar pomenirea numelui: un `setariPentruBrowser(...)` al carui
-    rezultat se arunca ar fi trecut verde la o simpla potrivire pe nume.
+    ═══ ⚠ CUM A SCAPAT UN `refresh_token` PE LANGA PROPRIA LUI PAZA ═══
+
+    Prima forma a probei astea citea UN fisier: `/api/admin/settings/route.ts`.
+    Ruta chema taierea, proba era verde, si totul parea aparat.
+
+    Dar `src/app/(admin)/admin/setari/page.tsx` facea acelasi lucru pe alt drum:
+    citea toata tabela si o dadea, netaiata, unei componente `"use client"` —
+    adica direct in raspunsul paginii. Printre randuri, `edinio_ga4_admin` cu
+    `refresh_token`-ul Google, care nu expira.
+
+    O paza pusa pe UN FISIER apara acel fisier. Regula se apara cautand TOATE
+    locurile care ating tabela — inclusiv pe cel scris maine de altcineva.
   */
-  const cod = citeste("src/app/api/admin/settings/route.ts")
-    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-  assert.match(
-    cod, /const settings = setariPentruBrowser\(/,
-    "ruta de setari nu mai taie secretele — jetonul Google pleaca la browser",
+  const usi = fisiereCare("platform_settings");
+  assert.ok(usi.length >= 2, "cautarea nu mai gaseste nimic — probabil s-a stricat ea, nu codul");
+
+  const vinovate = usi.filter((f) => !SERVER_ONLY.includes(f) && !taie(citeste(f)));
+  assert.deepEqual(
+    vinovate, [],
+    "citesc `platform_settings` fara sa taie secretele, si nu sunt declarate server-only: " + vinovate.join(", "),
   );
-  assert.doesNotMatch(
-    cod, /settings\[row\.key\] = row\.value/,
-    "a revenit atribuirea directa, pe langa taiere",
-  );
+});
+
+test("⚠ taierea e ATRIBUITA, nu doar pomenita", () => {
+  /*
+    ⚠ Un `setariPentruBrowser(...)` al carui rezultat se arunca ar trece de orice
+    potrivire pe nume. Se cere ca valoarea taiata sa fie chiar cea folosita.
+  */
+  for (const f of fisiereCare("platform_settings").filter((x) => !SERVER_ONLY.includes(x))) {
+    const cod = faraComentarii(citeste(f));
+    assert.match(cod, /(const|let) settings = setariPentruBrowser\(/, `${f}: taierea nu e atribuita`);
+    assert.doesNotMatch(cod, /settings\[row\.key\] = row\.value/, `${f}: a revenit atribuirea directa`);
+  }
+});
+
+test("lista server-only nu ascunde o usa catre browser", () => {
+  /*
+    ⚠ CE APARA. `SERVER_ONLY` e o portita: ce e trecut acolo scapa de taiere.
+    Daca cineva pune acolo o PAGINA sau o COMPONENTA, portita devine gaura.
+    Server-only inseamna cod care nu preda nimic browserului.
+  */
+  for (const f of SERVER_ONLY) {
+    assert.ok(fisiereCare("platform_settings").includes(f), `${f}: trecut server-only dar nu mai citeste tabela`);
+    assert.ok(!f.includes("/components/"), `${f}: o componenta nu poate fi server-only`);
+    assert.ok(!f.endsWith("page.tsx"), `${f}: o pagina preda proprietati browserului`);
+    assert.ok(!faraComentarii(citeste(f)).includes('"use client"'), `${f}: e cod de client`);
+  }
 });
 
 /* ═══ `(not set)` nu inseamna acelasi lucru peste tot ═══ */

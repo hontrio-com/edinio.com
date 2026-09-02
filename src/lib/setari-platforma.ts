@@ -53,6 +53,20 @@ export function faraSecrete(valoare: unknown): unknown {
   return valoare;
 }
 
+/**
+ * Un rand din `platform_settings`.
+ *
+ * ⚠ STA AICI, LANGA TAIERE, dinadins. Era declarat in fiecare loc care citea
+ * tabela — deci fiecare usa avea propria idee despre ce e un rand, si nimic nu
+ * lega forma de regula care o curata.
+ */
+export type PlatformSetting = {
+  key: string;
+  value: unknown;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+
 /** Randurile din `platform_settings`, gata de trimis catre browser. */
 export function setariPentruBrowser(
   randuri: ReadonlyArray<{ key: string; value: unknown }>,

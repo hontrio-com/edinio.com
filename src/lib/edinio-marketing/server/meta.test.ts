@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { sarcinaMeta, eRefuzMeta, type SarcinaMeta } from "./sarcina-meta";
 import { catreMeta } from "../adaptor-meta";
 import { externalId } from "./amprenta-om";
+import { readFileSync } from "node:fs";
 
 const CTX = { ip: "81.196.1.1", userAgent: "Mozilla/5.0", url: "https://www.edinio.com/", referrer: null };
 const PIXEL = "2070597336770282";
@@ -117,4 +118,83 @@ test("fara id de pixel nu se trimite nimic, si se spune de ce", () => {
   const m = sarcinaMeta({ name: "sign_up", signup_origin: "email", event_id: "e1" }, CTX, "", "om-1");
   assert.ok(eRefuzMeta(m));
   assert.match(m.motiv, /pixel/);
+});
+
+/* ═══ Potrivirea: cine e omul, si martorii lasati de pixel ═══ */
+
+test("⚠ martorii din browser ajung la Meta sub numele lor", () => {
+  /*
+    ⚠ DE CE CONTEAZA MAI MULT DECAT AMPRENTA NOASTRA. `_fbc` poarta chiar id-ul
+    clicului pe reclama — adica legatura directa intre conversie si campania
+    platita. Fara el, Meta stie ca cineva s-a inscris, dar nu de la ce reclama.
+
+    ⚠ Si nu adauga nicio hotarare legala noua: cookie-urile astea exista NUMAI
+    daca pixelul a rulat, adica numai dupa ce omul a acordat marketing.
+  */
+  const m = sarcinaMeta(
+    { name: "sign_up", signup_origin: "email", event_id: "e1" },
+    CTX, PIXEL, "om-1", undefined,
+    { fbp: "fb.1.123.456", fbc: "fb.1.123.AbCd" },
+  );
+  assert.ok(!eRefuzMeta(m));
+  const u = cap(m as SarcinaMeta).user_data as Record<string, unknown>;
+  assert.equal(u.fbp, "fb.1.123.456");
+  assert.equal(u.fbc, "fb.1.123.AbCd");
+});
+
+test("un martor lipsa lipseste, nu pleaca gol", () => {
+  const m = sarcinaMeta(
+    { name: "sign_up", signup_origin: "email", event_id: "e1" },
+    CTX, PIXEL, "om-1", undefined, { fbp: "fb.1.1.1" },
+  );
+  assert.ok(!eRefuzMeta(m));
+  const u = cap(m as SarcinaMeta).user_data as Record<string, unknown>;
+  assert.equal(u.fbp, "fb.1.1.1");
+  assert.ok(!("fbc" in u), "un camp gol a plecat ca afirmatie despre ce nu stim");
+});
+
+test("⚠ amprenta omului NU mai e id-ul evenimentului la formularele de lead", () => {
+  /*
+    ═══ ⚠ DOUA INTREBARI DEOSEBITE, UN SINGUR NUMAR ═══
+
+    Pana pe 02.09.2026, contactul si migrarea trimiteau `amprentaOmului:
+    idConversie` — adica FIX id-ul evenimentului. „Cine e omul" devenea un numar
+    nou la fiecare cerere, deci `generate_lead` nu se putea lega NICIODATA de
+    `sign_up`-ul aceluiasi om. Doua jumatati de palnie, doi oameni deosebiti.
+
+    Proba citeste sursa, deci arata doar ca legatura e SCRISA. Ce chiar pleaca se
+    masoara mai sus, pe mesajul construit.
+  */
+  for (const f of ["src/lib/actions/contact.actions.ts", "src/lib/actions/migration.actions.ts"]) {
+    const cod = readFileSync(f, "utf8");
+    const i = cod.indexOf("await puneLaCoada(");
+    assert.ok(i > 0, `${f}: nu se mai pune la coada`);
+    const bucata = cod.slice(i, i + 900);
+    assert.match(bucata, /amprentaOmului: consim\?\.vid \?\? idConversie/,
+      `${f}: amprenta omului a redevenit id-ul evenimentului`);
+    assert.match(bucata, /martori: await martoriiCererii\(\)/,
+      `${f}: martorii din browser nu mai pleaca`);
+  }
+});
+
+test("⚠ transportul chiar duce martorii mai departe", () => {
+  /*
+    ⚠ VERIGA PE CARE PROBELE DE MAI SUS N-O VAD. Ele cheama `sarcinaMeta` direct,
+    cu martorii dati de mana — deci ar fi ramas verzi si daca `trimiteMeta` uita
+    sa-i mai paseze. Confruntata cu chiar mutantul asta, prima forma a trecut.
+
+    Un lant se probeaza pe bucati SI pe imbinari; imbinarile sunt tocmai locul
+    unde nimeni nu se uita.
+  */
+  for (const [f, apel] of [
+    ["src/lib/edinio-marketing/server/trimite-meta.ts", "sarcinaMeta("],
+    ["src/lib/edinio-marketing/server/trimite-tiktok.ts", "sarcinaTikTok("],
+  ] as const) {
+    const cod = readFileSync(f, "utf8");
+    const i = cod.indexOf(apel);
+    assert.ok(i > 0, `${f}: nu mai construieste mesajul`);
+    const linie = cod.slice(i, cod.indexOf(";", i));
+    assert.match(linie, /s\.martori/, `${f}: martorii se pierd la trimitere`);
+    assert.match(linie, /s\.cand/, `${f}: clipa evenimentului se pierde la trimitere`);
+  }
 });

@@ -33,7 +33,7 @@ export async function trimiteTikTok(s: SarcinaPastrata): Promise<Rezultat> {
   const token = process.env.TIKTOK_EVENTS_TOKEN?.trim();
   if (!token) return { fel: "esec", motiv: "TIKTOK_EVENTS_TOKEN lipseste" };
 
-  const mesaj = sarcinaTikTok(s.ev, s.ctx, pixel(), s.amprentaOmului, s.cand);
+  const mesaj = sarcinaTikTok(s.ev, s.ctx, pixel(), s.amprentaOmului, s.cand, s.martori);
   if (eRefuz(mesaj)) return { fel: "refuzat", motiv: mesaj.motiv };
 
   let raspuns: Response;

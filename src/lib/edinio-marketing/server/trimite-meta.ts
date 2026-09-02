@@ -47,7 +47,7 @@ export async function trimiteMeta(s: SarcinaPastrata): Promise<Rezultat> {
   const token = process.env.META_CAPI_TOKEN?.trim();
   if (!token) return { fel: "esec", motiv: "META_CAPI_TOKEN lipseste" };
 
-  const mesaj = sarcinaMeta(s.ev, s.ctx, ID_PIXEL_META, s.amprentaOmului, s.cand);
+  const mesaj = sarcinaMeta(s.ev, s.ctx, ID_PIXEL_META, s.amprentaOmului, s.cand, s.martori);
   if (eRefuzMeta(mesaj)) return { fel: "refuzat", motiv: mesaj.motiv };
 
   let raspuns: Response;

@@ -11,7 +11,7 @@ import { verificaMesajDeContact, type MesajDeContactBrut } from "@/lib/website/c
 import { verificaRecaptcha } from "@/lib/recaptcha";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
 import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
-import { consimtamantulCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
+import { consimtamantulCererii, contextulCererii, martoriiCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 /**
  * Trimiterea formularului de pe `/contact`.
@@ -199,11 +199,40 @@ export async function submitContactMessage(
     raportata pentru o cerere care nu ne-a ajuns e mai rea decat una pierduta.
   */
   const idConversie = randomUUID();
+
+  /*
+    ═══ ⚠ CINE E OMUL, SI CARE E EVENIMENTUL — DOUA INTREBARI DEOSEBITE ═══
+
+    Pana pe 02.09.2026 aici scria `amprentaOmului: idConversie`, adica FIX id-ul
+    evenimentului. Din el iesea `external_id`-ul trimis la Meta si TikTok — deci
+    „cine e omul" era un numar nou la fiecare cerere, si furnizorii vedeau un om
+    nou de fiecare data.
+
+    Urmarea nu era o potrivire slaba, ci una imposibila: `generate_lead` nu se
+    putea lega NICIODATA de `sign_up`-ul aceluiasi om, care pleaca sub `user.id`.
+    Doua jumatati de palnie, doi oameni deosebiti.
+
+    Acum amprenta e id-ul de vizitator din cookie — acelasi de la aterizare pana
+    la abonament. El exista numai daca omul a acordat marketing; fara acord nu se
+    pune nimic la coada oricum, deci nu-l putem pierde pe drum.
+  */
+  const consim = await consimtamantulCererii();
+
   await puneLaCoada(
     { name: "generate_lead", lead_type: "contact", form_name: "contact", event_id: idConversie },
-    { ctx: { ip }, amprentaOmului: idConversie },
+    {
+      /*
+        ⚠ Caderea inapoi pe id-ul evenimentului nu e o plasa, e o marturisire: se
+        intampla doar daca cineva a umblat de mana in cookie (marketing acordat,
+        dar fara id). Atunci potrivirea coboara la nivelul de dinainte, in loc sa
+        se piarda conversia cu totul.
+      */
+      ctx: { ...(await contextulCererii()), ip },
+      amprentaOmului: consim?.vid ?? idConversie,
+      martori: await martoriiCererii(),
+    },
     destinatiiActive(),
-    { fel: "cookie", stare: await consimtamantulCererii() },
+    { fel: "cookie", stare: consim },
   );
   return { ok: true, eventId: idConversie };
 }

@@ -56,6 +56,17 @@ export type SarcinaPastrata = {
   /** Samanta din care iese `external_id`-ul furnizorului. Niciodata un email. */
   amprentaOmului: string;
   /*
+    ⚠ MARTORII LASATI DE PIXELII DIN BROWSER: `_fbp`, `_fbc`, `_ttp`.
+
+    Ei ridica potrivirea mai mult decat orice altceva avem — `_fbc` poarta chiar
+    id-ul clicului pe reclama, adica legatura directa cu campania platita.
+
+    ⚠ SI NU ADAUGA NICIO HOTARARE LEGALA NOUA: exista numai daca pixelul a rulat,
+    adica numai dupa ce omul a acordat marketing. Trimitem inapoi ceva ce a fost
+    scris cu acordul lui, nu ceva ce am strans pe furis.
+  */
+  martori?: { fbp?: string; fbc?: string; ttp?: string };
+  /*
     ⚠ CLIPA IN CARE S-A PETRECUT, nu cea in care se trimite.
 
     Calculata la trimitere, un rand care asteapta in coada si se reincearca ore in

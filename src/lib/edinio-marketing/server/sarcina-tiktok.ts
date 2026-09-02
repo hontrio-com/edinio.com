@@ -80,6 +80,7 @@ export function sarcinaTikTok(
   amprentaOmului: string,
   /** Cand s-a petrecut. Lipsa doar la randurile puse la coada inainte de 02.09.2026. */
   candSAvenit?: string,
+  martori?: { ttp?: string },
 ): SarcinaTikTok | Refuz {
   if (!pixel) return { motiv: "lipseste id-ul pixelului TikTok" };
 
@@ -102,6 +103,12 @@ export function sarcinaTikTok(
   /* Numai ce chiar avem. Un camp gol trimis e o afirmatie despre ce nu stim. */
   if (ctx.ip) user.ip = ctx.ip;
   if (ctx.userAgent) user.user_agent = ctx.userAgent;
+  /*
+    ⚠ DOAR `ttp`. Documentatia lor pomeneste si `ttclid`, dar noi nu-l pastram
+    nicaieri — iar un camp trimis gol sau ghicit e mai rau decat unul lipsa.
+    Cand se va pastra, se adauga aici; pana atunci nu se pretinde ca exista.
+  */
+  if (martori?.ttp) user.ttp = martori.ttp;
 
   const pagina: Record<string, unknown> = {};
   if (ctx.url) pagina.url = ctx.url;

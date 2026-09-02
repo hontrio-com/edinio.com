@@ -43,6 +43,7 @@ export function sarcinaMeta(
   pixel: string,
   amprentaOmului: string,
   candSAvenit?: string,
+  martori?: { fbp?: string; fbc?: string },
 ): SarcinaMeta | Refuz {
   if (!pixel) return { motiv: "lipseste id-ul pixelului Meta" };
 
@@ -63,6 +64,9 @@ export function sarcinaMeta(
   const user: Record<string, unknown> = { external_id: externalId(amprentaOmului) };
   if (ctx.ip) user.client_ip_address = ctx.ip;
   if (ctx.userAgent) user.client_user_agent = ctx.userAgent;
+  /* ⚠ Numele exacte pe care le asteapta ei: `fbp` si `fbc`, nu numele cookie-ului. */
+  if (martori?.fbp) user.fbp = martori.fbp;
+  if (martori?.fbc) user.fbc = martori.fbc;
 
   return {
     data: [{

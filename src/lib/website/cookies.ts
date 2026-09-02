@@ -576,31 +576,24 @@ const SECTIUNI: Sectiune[] = [
   {
     id: "google-tag-manager",
     nr: 17,
-    titlu: "Google Tag Manager",
+    titlu: "Etichetele Google (fără Tag Manager)",
     blocuri: [
       {
         tip: "paragraf",
-        text: "Edinio utilizează Google Tag Manager pentru administrarea centralizată a anumitor scripturi și tag-uri.",
-      },
-      { tip: "paragraf", text: "Google Tag Manager poate gestiona, de exemplu:" },
-      {
-        tip: "lista",
-        items: [
-          "Google Analytics;",
-          "Meta Pixel;",
-          "tag-uri de măsurare;",
-          "alte servicii integrate ulterior.",
-        ],
+        text: "Edinio NU utilizează Google Tag Manager pe edinio.com. Etichetele de măsurare sunt scrise direct în codul site-ului și trec prin aceleași verificări ca restul codului.",
       },
       {
         tip: "paragraf",
-        text: "Google Tag Manager trebuie privit în principal ca un mecanism de administrare a tag-urilor. Cookie-urile și datele rezultate depind de serviciile care sunt executate prin intermediul său.",
+        text: "Alegerea este intenționată: un container extern poate schimba ce se încarcă pe site fără ca schimbarea să treacă printr-o revizuire de cod. Ce rulează pe paginile noastre se vede în cod.",
       },
       {
         tip: "paragraf",
-        text: "Edinio va configura Google Tag Manager astfel încât tag-urile de analiză și marketing să respecte opțiunile utilizatorului.",
+        text: "Scripturile de măsurare nu sunt încărcate deloc înainte ca vizitatorul să își exprime opțiunea. Nu este vorba de un tag oprit din interior, ci de un script care nu ajunge în pagină.",
       },
-      { tip: "paragraf", text: "Google oferă în acest scop semnale distincte precum:" },
+      {
+        tip: "paragraf",
+        text: "Pentru Google, opțiunile vizitatorului sunt transmise prin semnalele Consent Mode, declarate înaintea oricărei comenzi de măsurare:",
+      },
       {
         tip: "lista",
         items: ["analytics_storage;", "ad_storage;", "ad_user_data;", "ad_personalization."],

@@ -622,3 +622,44 @@ test("politicile NU sustin ca folosim GA4 sau Tag Manager cat timp nu le avem", 
   }
 });
 
+
+test("⚠ politica nu mai sustine ca folosim Google Tag Manager", () => {
+  /*
+    ═══ ⚠ AL DOILEA TEXT CARE MINTEA IN ACEEASI ZI ═══
+
+    Sectiunea 17 spunea, cuvant cu cuvant: „Edinio utilizeaza Google Tag Manager
+    pentru administrarea centralizata a anumitor scripturi si tag-uri."
+
+    Codul spune contrariul in doua locuri: `EtichetaGa4.tsx` scrie „FARA TAG
+    MANAGER, dinadins", iar `google-analytics.actions.ts` RESPINGE id-urile care
+    incep cu `GTM-`. Deci textul descria o unealta pe care platforma o refuza pe
+    fata.
+
+    ⚠ SI DE CE CONTEAZA MAI MULT DECAT PARE. Un container extern poate schimba ce
+    se incarca pe site fara sa treaca prin revizuire de cod. Politica promitea
+    tocmai lucrul de care ne ferim — iar cine o citea putea crede ca exista o
+    suprafata pe care noi n-o controlam.
+
+    ⚠ PROBA TINE AMANDOUA SENSURILE: daca vreodata se instaleaza GTM, ea cade, si
+    atunci textul trebuie dus inapoi — nu proba stearsa.
+  */
+  const politica = citeste("src/lib/website/cookies.ts");
+  assert.doesNotMatch(
+    politica, /Edinio utilizează Google Tag Manager/,
+    "politica sustine iar ca folosim Tag Manager",
+  );
+  assert.match(
+    politica, /NU utilizează Google Tag Manager/,
+    "s-a pierdut lamurirea ca nu folosim Tag Manager",
+  );
+
+  /* Si ca refuzul e chiar in cod, nu doar in text. */
+  assert.match(
+    citeste("src/lib/actions/google-analytics.actions.ts"), /id\.startsWith\("GTM-"\)/,
+    "codul nu mai respinge containerele GTM, dar politica spune ca nu le folosim",
+  );
+  assert.match(
+    citeste("src/components/edinio-marketing/EtichetaGa4.tsx"), /FARA TAG MANAGER/,
+    "s-a pierdut nota care spune de ce nu folosim un container extern",
+  );
+});

@@ -4,6 +4,7 @@ import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { GAZDE_PRODUCTIE } from "@/lib/edinio-marketing/mediu";
 import { faraUrmarire } from "@/lib/edinio-marketing/fara-urmarire";
+import { ID_PIXEL_META } from "@/lib/edinio-marketing/pixel-meta";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -41,7 +42,7 @@ import { faraUrmarire } from "@/lib/edinio-marketing/fara-urmarire";
     inregistrarea. Nu pierdem o masuratoare, fiindca n-avea ce sa masoare.
 */
 
-const ID_PIXEL = process.env.NEXT_PUBLIC_META_PIXEL_ID;
+const ID_PIXEL = ID_PIXEL_META;
 
 export function EdinioMetaPixel() {
   /* ⚠ Hook-ul inaintea oricarei iesiri — regulile hook-urilor. */

@@ -3,6 +3,7 @@ import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
 import { revendica, marcheazaTrimis, marcheazaEsuat } from "@/lib/edinio-marketing/server/coada-conversii";
 import { trimiteTikTok } from "@/lib/edinio-marketing/server/trimite-tiktok";
+import { trimiteMeta } from "@/lib/edinio-marketing/server/trimite-meta";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -38,10 +39,10 @@ export async function GET(req: NextRequest) {
       peste un minut, si tot asa la fiecare rulare.
     */
     try {
-      const rez = r.destinatie === "tiktok"
-        ? await trimiteTikTok(r.sarcina)
-        /* Meta se adauga aici, in acelasi tipar, cand tokenul are `ads_management`. */
-        : { fel: "refuzat" as const, motiv: `destinatia "${r.destinatie}" nu e legata inca` };
+      const rez =
+        r.destinatie === "tiktok" ? await trimiteTikTok(r.sarcina)
+        : r.destinatie === "meta" ? await trimiteMeta(r.sarcina)
+        : { fel: "refuzat" as const, motiv: `destinatia "${r.destinatie}" nu e cunoscuta` };
 
       if (rez.fel === "trimis") { await marcheazaTrimis(r.id); trimise++; continue; }
 

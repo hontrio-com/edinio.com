@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { externalId } from "./amprenta-om";
 import type { EvenimentEdinio } from "../evenimente";
 import { catreTikTok } from "../adaptor-tiktok";
 
@@ -38,18 +38,12 @@ export type ContextTrimitere = {
   referrer?: string | null;
 };
 
-/**
- * `external_id` pentru TikTok: SHA-256 intreg, 64 de caractere.
- *
- * ⚠ NU SE REFOLOSESTE `event_id`-ul. Amprenta noastra de cont are 32 de caractere
- * (vezi `cont-nou.ts`), iar TikTok asteapta un hash intreg. Mai important, cele
- * doua raspund la intrebari deosebite: `event_id` spune „care eveniment", iar
- * `external_id` spune „care om". Folosite una in locul alteia, deduplicarea si
- * potrivirea audientei ar depinde una de alta fara motiv.
- */
-export function externalId(saminta: string): string {
-  return createHash("sha256").update(`edinio.user.v1:${saminta}`).digest("hex");
-}
+/*
+  ⚠ AMPRENTA VINE DIN `amprenta-om.ts`, nu de aici. Se reexporta ca sa nu se rupa
+  cine o importa de la locul vechi — dar locul ei e cel comun: Meta o foloseste
+  pe ACEEASI, si doi oameni deosebiti n-au voie sa iasa acelasi om.
+*/
+export { externalId };
 
 /**
  * Clipa evenimentului, in milisecunde.

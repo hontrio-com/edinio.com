@@ -28,6 +28,7 @@ import {
   sigileazaSesiune,
 } from "@/lib/auth/sesiune-asteptare";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
+import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
 
 /**
  * IP-ul apelantului. ATENTIE la ce se poate si ce nu se poate face cu el:
@@ -406,7 +407,7 @@ export async function register(formData: {
     await puneLaCoada(
       { name: "sign_up", signup_origin: "email", event_id: idConversieCont(idCont) },
       { ctx: { ip, userAgent: (await headers()).get("user-agent") }, amprentaOmului: idCont },
-      ["tiktok"],
+      destinatiiActive(),
     );
   }
 

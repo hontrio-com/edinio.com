@@ -10,6 +10,7 @@ import { PROGRAM } from "@/lib/website/contact";
 import { verificaMesajDeContact, type MesajDeContactBrut } from "@/lib/website/contact-form";
 import { verificaRecaptcha } from "@/lib/recaptcha";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
+import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
 
 /**
  * Trimiterea formularului de pe `/contact`.
@@ -200,7 +201,7 @@ export async function submitContactMessage(
   await puneLaCoada(
     { name: "generate_lead", lead_type: "contact", form_name: "contact", event_id: idConversie },
     { ctx: { ip }, amprentaOmului: idConversie },
-    ["tiktok"],
+    destinatiiActive(),
   );
   return { ok: true, eventId: idConversie };
 }

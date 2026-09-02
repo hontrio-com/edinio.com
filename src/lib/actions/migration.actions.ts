@@ -12,6 +12,7 @@ import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { verificaCerereMigrare, type CerereMigrareBruta } from "@/lib/website/migrare-form";
 import { verificaRecaptcha } from "@/lib/recaptcha";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
+import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
 
 /**
  * Trimiterea formularului de cerere de migrare, de pe `/migrare`.
@@ -190,7 +191,7 @@ export async function submitMigrationLead(
   await puneLaCoada(
     { name: "generate_lead", lead_type: "migration", form_name: "migration", event_id: idConversie },
     { ctx: { ip }, amprentaOmului: idConversie },
-    ["tiktok"],
+    destinatiiActive(),
   );
   return { ok: true, eventId: idConversie };
 }

@@ -17,6 +17,7 @@ import { EdinioTikTokPixel } from "@/components/edinio-marketing/EdinioTikTokPix
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 import { ImpersonationBanner } from "@/components/dashboard/ImpersonationBanner";
 import { NotificariToast } from "@/components/ui/NotificariToast";
+import { BannerConsimtamant } from "@/components/edinio-marketing/BannerConsimtamant";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -130,6 +131,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {esteImpersonare && <ImpersonationBanner />}
       <EdinioMetaPixel />
       <EdinioTikTokPixel />
+      <BannerConsimtamant />
       <Sidebar
         currentBusiness={currentBusiness}
         plan={profile.plan}

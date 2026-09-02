@@ -10,6 +10,7 @@ import { EdinioMetaPixel } from "@/components/edinio-marketing/EdinioMetaPixel";
 import { EdinioTikTokPixel } from "@/components/edinio-marketing/EdinioTikTokPixel";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { sesiuneCurentaNeconfirmata } from "@/lib/auth/cere-mfa";
+import { BannerConsimtamant } from "@/components/edinio-marketing/BannerConsimtamant";
 
 export const metadata: Metadata = {
   title: "Configurare initiala",
@@ -52,6 +53,7 @@ export default async function OnboardingLayout({
       <RuntimeMarketing />
       <EdinioMetaPixel />
       <EdinioTikTokPixel />
+      <BannerConsimtamant />
       <header className="border-b border-border bg-surface">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center">
           <Logo size="md" eager />

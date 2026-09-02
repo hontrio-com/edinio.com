@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import {
   parseaza, serializeaza, validVid, VERSIUNE,
   type Stare, type Metoda, type Categorie,
@@ -111,6 +111,8 @@ export function scrieHotararea(alegere: { statistici: boolean; marketing: boolea
   spuneFurnizorilor(noua);
   if (!noua.marketing || !noua.statistici) maturaCookieFurnizori();
 
+  /* ⚠ Memoria pozei se goleste INAINTE de anunt, altfel ascultatorii citesc valoarea veche. */
+  memoGol = true;
   window.dispatchEvent(new CustomEvent(EVENIMENT_SCHIMBAT, { detail: noua }));
 
   /*
@@ -152,23 +154,60 @@ export type Consimtamant = {
   marketing: boolean;
 };
 
-export function useConsimtamant(): Consimtamant {
-  const [stare, setStare] = useState<Stare | null>(null);
-  const [mounted, setMounted] = useState(false);
+/*
+  ⚠ `useSyncExternalStore`, NU `useEffect` + `useState`.
 
-  useEffect(() => {
-    setStare(citesteStarea());
-    setMounted(true);
-    const laSchimbare = () => setStare(citesteStarea());
-    window.addEventListener(EVENIMENT_SCHIMBAT, laSchimbare);
-    return () => window.removeEventListener(EVENIMENT_SCHIMBAT, laSchimbare);
-  }, []);
+  Cookie-ul e o sursa din afara React-ului, care se poate schimba oricand. Citit
+  intr-un efect, ar fi insemnat `setState` sincron la montare — adica o a doua
+  randare imediata pentru fiecare componenta pazita, la fiecare incarcare.
+
+  Mai important, hook-ul asta cere EXPLICIT o poza pentru server (`null`) si una
+  pentru browser. React stie atunci sa randeze cu cea de pe server si sa treaca la
+  cealalta dupa hidratare — exact ce ne trebuie ca sa nu se strice hidratarea.
+
+  ⚠ POZA E SIRUL BRUT, nu obiectul. `getSnapshot` trebuie sa intoarca ceva stabil
+  ca referinta; un obiect nou la fiecare apel ar pune React intr-o bucla fara
+  sfarsit. Dezlegarea se face abia in `useMemo`.
+*/
+function abonare(la: () => void): () => void {
+  window.addEventListener(EVENIMENT_SCHIMBAT, la);
+  return () => window.removeEventListener(EVENIMENT_SCHIMBAT, la);
+}
+
+/*
+  ⚠ POZA E MEMORATA DUPA SIRUL BRUT, si nu doar ca sa fie iute.
+
+  `getSnapshot` trebuie sa intoarca aceeasi REFERINTA cat timp sursa nu s-a
+  schimbat, altfel React randeaza la nesfarsit. Si dezlegarea trebuie sa se
+  intample aici, nu intr-un `useMemo`: ea cheama `Date.now()` (verificarea
+  vechimii), iar un ceas citit in timpul randarii face rezultatul imprevizibil de
+  la o randare la alta. Aici, in schimb, e chiar rostul carligului — o sursa
+  mutabila din afara React-ului, citita o data si tinuta minte.
+*/
+let memoBrut: string | null = null;
+let memoStare: Stare | null = null;
+let memoGol = true;
+
+function pozaBrowser(): Stare | null {
+  const brut = citesteCookie(NUME_COOKIE);
+  if (!memoGol && brut === memoBrut) return memoStare;
+  memoBrut = brut;
+  memoStare = parseaza(brut, Math.floor(Date.now() / 1000));
+  memoGol = false;
+  return memoStare;
+}
+
+const pozaServer = (): Stare | null => null;
+
+export function useConsimtamant(): Consimtamant {
+  const stare = useSyncExternalStore(abonare, pozaBrowser, pozaServer);
+  const montat = useSyncExternalStore(abonare, () => true, () => false);
 
   return {
-    mounted,
+    mounted: montat,
     stare,
-    statistici: mounted && stare?.statistici === true,
-    marketing: mounted && stare?.marketing === true,
+    statistici: montat && stare?.statistici === true,
+    marketing: montat && stare?.marketing === true,
   };
 }
 

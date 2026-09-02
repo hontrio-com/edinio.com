@@ -67,6 +67,9 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       { label: "Termeni și condiții", href: "/termeni" },
       { label: "Politica de confidențialitate", href: "/confidentialitate" },
       { label: "Politica Cookies", href: "/cookies" },
+      /* ⚠ Eticheta trebuie sa ramana literal „Setari Cookies": politica de cookie-uri o
+         numeste asa, si un text care trimite la un buton inexistent e mai rau decat lipsa lui. */
+      { label: "Setări Cookies", href: "/cookies/setari" },
       /* A luat locul Roadmap-ului; `/roadmap` redirecționează permanent aici. */
       { label: "Blog", href: "/blog" },
       { label: "Întrebări frecvente", href: "/intrebari-frecvente" },

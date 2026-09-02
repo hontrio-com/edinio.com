@@ -7,6 +7,7 @@ import { EtichetaGa4 } from "@/components/edinio-marketing/EtichetaGa4";
 import { RuntimeMarketing } from "@/components/edinio-marketing/RuntimeMarketing";
 import { EdinioMetaPixel } from "@/components/edinio-marketing/EdinioMetaPixel";
 import { EdinioTikTokPixel } from "@/components/edinio-marketing/EdinioTikTokPixel";
+import { BannerConsimtamant } from "@/components/edinio-marketing/BannerConsimtamant";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -88,6 +89,7 @@ export default function AjutorLayout({
       <EdinioMetaPixel />
       <EdinioTikTokPixel />
 
+      <BannerConsimtamant />
       <SiteHeader />
 
       <main>{children}</main>

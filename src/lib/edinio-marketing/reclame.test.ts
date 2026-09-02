@@ -3,6 +3,8 @@ import { test, beforeEach } from "node:test";
 import { urmareste, inregistreazaAdaptor, goleste, resetPentruProbe, type Adaptor } from "./magistrala";
 import { NUME_TAXONOMIE, type EvenimentEdinio } from "./evenimente";
 import { verificaFaraPii } from "./fara-pii";
+import { serializeaza, NIMIC } from "./consimtamant/stare";
+import { NUME_COOKIE } from "./consimtamant/cookie";
 import { catreMeta, adaptorMeta } from "./adaptor-meta";
 import { catreTikTok, adaptorTikTok } from "./adaptor-tiktok";
 import { adaptorGa4 } from "./adaptor-ga4";
@@ -30,7 +32,12 @@ function inBrowser({ meta = true, tiktok = true } = {}) {
   if (meta) w.fbq = (...a: unknown[]) => { laFbq.push(a); };
   if (tiktok) w.ttq = { track: (...a: unknown[]) => { laTtq.push(a); } };
   g.window = w;
-  g.document = { title: "Edinio" };
+  /*
+    ⚠ SI HOTARAREA OMULUI. Din 03.09.2026 magistrala nu mai trimite nimic fara ea
+    — probele de aici masoara cartografierea catre Meta si TikTok, deci pornesc
+    de la un om care a acceptat. Poarta insasi e probata separat, mai jos.
+  */
+  g.document = { title: "Edinio", cookie: `${NUME_COOKIE}=${serializeaza({ ...NIMIC, statistici: true, marketing: true, cand: Math.floor(Date.now() / 1000), metoda: "t" })}` };
 }
 
 beforeEach(() => {
@@ -98,6 +105,9 @@ test("⚠ si invers: `landing_view` NU intra in GA4", () => {
     defect pe care nimic nu-l apara nu e pazit fiindca e scris intr-un comentariu.
   */
   const laGtag: unknown[][] = [];
+  /* ⚠ SI STEAGUL: din 03.09.2026 „gata" inseamna „`gtag('config')` al MEU a rulat",
+     nu doar „exista `gtag`" — vezi nota din `adaptor-ga4.ts`. */
+  (globalThis as unknown as { window: Record<string, unknown> }).window.__edinioGa4Pornit = true;
   (globalThis as unknown as { window: Record<string, unknown> }).window.gtag =
     (...a: unknown[]) => { laGtag.push(a); };
   inregistreazaAdaptor(adaptorGa4);
@@ -355,6 +365,7 @@ test("⚠ coada se goleste IN ORDINEA in care s-au intamplat lucrurile", () => {
   const primite: string[] = [];
   let gata = false;
   const lent: Adaptor = {
+    categorie: "marketing",
     nume: "lent",
     gata: () => gata,
     trimite: (ev) => { primite.push(ev.name); },
@@ -384,6 +395,7 @@ test("un adaptor care arunca la golire nu-si tine evenimentele blocate in coada"
   let gata = false;
   let incercari = 0;
   inregistreazaAdaptor({
+    categorie: "marketing",
     nume: "stricat",
     gata: () => gata,
     trimite: () => { incercari++; throw new Error("cade"); },
@@ -434,6 +446,7 @@ test("⚠ jurnalul si `debug_mode` se aprind numai cu cheia pusa de mana — dar
   const laGtag: unknown[][] = [];
   const w = (globalThis as unknown as { window: Record<string, unknown> }).window;
   w.gtag = (...a: unknown[]) => { laGtag.push(a); };
+  w.__edinioGa4Pornit = true;
   inregistreazaAdaptor(adaptorGa4);
 
   /* Cheia stinsa: nimic in plus, pe gazda de productie. */

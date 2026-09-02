@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
-import { revendica, marcheazaTrimis, marcheazaEsuat, ceiCareAuRetras } from "@/lib/edinio-marketing/server/coada-conversii";
+import {
+  revendica, marcheazaTrimis, marcheazaEsuat, ceiCareAuRetras,
+  ARENDA_MS, MS_CERERE_FURNIZOR,
+} from "@/lib/edinio-marketing/server/coada-conversii";
 import { trimiteTikTok } from "@/lib/edinio-marketing/server/trimite-tiktok";
 import { trimiteMeta } from "@/lib/edinio-marketing/server/trimite-meta";
 
@@ -22,10 +25,41 @@ import { trimiteMeta } from "@/lib/edinio-marketing/server/trimite-meta";
 /** Cate se iau intr-o rulare. Cronul merge din minut in minut. */
 const PE_RULARE = 25;
 
+/*
+  ⚠ SINGURUL CRON FARA `maxDuration` — pana azi. Toate celelalte il au de mult; la
+  asta a lipsit de la scriere si nimeni n-a observat, fiindca lipsa lui nu se vede
+  ca eroare. Se vede ca o functie taiata la mijloc.
+*/
+export const maxDuration = 60;
+
+/**
+ * Cat are voie sa dureze bucla de trimitere.
+ *
+ * ═══ ⚠ DE CE E MAI MIC DECAT ARENDA, si nu decat `maxDuration` ═══
+ *
+ * Randurile sunt tinute o arenda de un minut (`ARENDA_MS`), iar cronul porneste
+ * din minut in minut. Daca o rulare depaseste arenda, urmatoarea REVENDICA
+ * ACELEASI randuri — si le trimite a doua oara, in timp ce prima inca le trimite.
+ *
+ * Bucla trimite cele 25 de randuri unul dupa altul. Cu termenul de acum, cel mai
+ * rau caz al unui singur rand e `MS_CERERE_FURNIZOR`; deci se verifica bugetul
+ * INAINTE de fiecare rand, si se lasa loc pentru cererea care tocmai porneste
+ * plus marcajul ei in baza.
+ *
+ * ⚠ CE SE INTAMPLA CU CE RAMANE. Nimic rau: randurile neatinse isi duc arenda
+ * pana la capat si sunt luate de rularea urmatoare. Coada nu pierde, doar asteapta
+ * un minut.
+ */
+const MARJA_MARCAJ_MS = 4_000;
+const BUGET_MS = ARENDA_MS - MS_CERERE_FURNIZOR - MARJA_MARCAJ_MS;
+
 export async function GET(req: NextRequest) {
   if (!verificaCron(req)) {
     return NextResponse.json({ error: "Neautorizat" }, { status: 401 });
   }
+
+  /* ⚠ Ceasul porneste INAINTE de revendicare: arenda incepe acolo, nu la prima trimitere. */
+  const inceput = Date.now();
 
   const randuri = await revendica(PE_RULARE);
   if (randuri.length === 0) return NextResponse.json({ ok: true, luate: 0 });
@@ -39,9 +73,15 @@ export async function GET(req: NextRequest) {
   */
   const retrasi = await ceiCareAuRetras(randuri.map((r) => r.vizitator ?? ""));
 
-  let trimise = 0, esecuri = 0, refuzate = 0, oprite = 0;
+  let trimise = 0, esecuri = 0, refuzate = 0, oprite = 0, amanate = 0;
 
   for (const r of randuri) {
+    /*
+      ⚠ SE OPRESTE INAINTE SA EXPIRE ARENDA, nu dupa. Vezi `BUGET_MS`. Randurile
+      ramase nu se pierd: se iau la rularea urmatoare.
+    */
+    if (Date.now() - inceput > BUGET_MS) { amanate++; continue; }
+
     /*
       ⚠ FIECARE RAND IN `try`-ul LUI. Fara asta, o exceptie la al treilea rand ar
       lasa celelalte douazeci si doua revendicate si netrimise — s-ar elibera abia
@@ -105,6 +145,19 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  /*
+    ⚠ AMANAREA SE STRIGA, nu se inghite. Daca o rulare nu apuca sa duca lotul pana
+    la capat, coada creste in tacere si nimeni n-ar afla decat dupa ce se aduna.
+    E singurul semn ca `PE_RULARE` a devenit prea mare pentru un minut.
+  */
+  if (amanate > 0) {
+    await logError({
+      action: "conversii.amanate",
+      message: `${amanate} conversii au ramas pentru rularea urmatoare: lotul nu incape in arenda de ${ARENDA_MS / 1000}s`,
+      severity: "warning",
+    });
+  }
+
   if (esecuri > 0 || refuzate > 0) {
     await logError({
       action: "conversii.rulare",
@@ -113,5 +166,5 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ ok: true, luate: randuri.length, trimise, esecuri, refuzate, oprite });
+  return NextResponse.json({ ok: true, luate: randuri.length, trimise, esecuri, refuzate, oprite, amanate });
 }

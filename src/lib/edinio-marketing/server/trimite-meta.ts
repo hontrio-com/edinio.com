@@ -3,6 +3,7 @@ import { ID_PIXEL_META } from "../pixel-meta";
 import type { SarcinaPastrata } from "./coada-conversii";
 import type { Rezultat } from "./trimite-tiktok";
 import { VERSIUNE_META } from "./versiuni-api";
+import { MS_CERERE_FURNIZOR } from "./coada-conversii";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -55,6 +56,8 @@ export async function trimiteMeta(s: SarcinaPastrata): Promise<Rezultat> {
   let raspuns: Response;
   try {
     raspuns = await fetch(adresa(ID_PIXEL_META), {
+      /* ⚠ `fetch` din Node n-are termen implicit — vezi `MS_CERERE_FURNIZOR`. */
+      signal: AbortSignal.timeout(MS_CERERE_FURNIZOR),
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...mesaj, access_token: token }),

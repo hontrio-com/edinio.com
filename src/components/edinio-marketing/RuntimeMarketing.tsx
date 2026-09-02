@@ -8,6 +8,7 @@ import { adaptorMeta } from "@/lib/edinio-marketing/adaptor-meta";
 import { adaptorTikTok } from "@/lib/edinio-marketing/adaptor-tiktok";
 import { faraUrmarire, faraPageView } from "@/lib/edinio-marketing/fara-urmarire";
 import { adaptorGoogleAds } from "@/lib/edinio-marketing/adaptor-google-ads";
+import { reiaRetragerea } from "@/lib/edinio-marketing/consimtamant-browser";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -69,8 +70,24 @@ export function RuntimeMarketing() {
       Fara randurile astea, evenimentele lui ar astepta la coada pana la
       urmatorul eveniment — adica `landing_view`-ul de pe pagina de intrare s-ar
       pierde exact pe paginile de campanie.
+
+      ⚠ SI TOATE PATRU, NU TREI. Lista a stat cu „ga4", „meta", „tiktok" de cand
+      erau atatia; „google-ads" s-a adaugat mai tarziu ca adaptor si a fost uitat
+      aici. Uitarea tacea: conversia lui ramanea la coada pana la urmatorul
+      eveniment de pe pagina — iar pe pagina de multumire dupa plata, adesea nu
+      mai e niciun eveniment urmator.
+
+      De aceea lista se ia acum din chiar adaptoarele inregistrate, nu se scrie de
+      mana: al cincilea furnizor nu mai poate fi uitat.
     */
-    for (const nume of ["ga4", "meta", "tiktok"]) goleste(nume);
+    for (const a of [adaptorGa4, adaptorMeta, adaptorTikTok, adaptorGoogleAds]) goleste(a.nume);
+
+    /*
+      ⚠ SI SE REIA O RETRAGERE RAMASA RESTANTA. Daca baza a picat exact in clipa
+      apasarii, retragerea a ramas numai in browserul omului — iar cronul care
+      trimite conversiile se uita in baza. Vezi `reiaRetragerea`.
+    */
+    reiaRetragerea();
   }, []);
 
   /* ── `page_view`, exact unul pe navigare ─────────────────────────────── */

@@ -116,18 +116,99 @@ export function scrieHotararea(alegere: { statistici: boolean; marketing: boolea
   window.dispatchEvent(new CustomEvent(EVENIMENT_SCHIMBAT, { detail: noua }));
 
   /*
+    ═══ ⚠ ID-UL VECHI PLEACA IN CORP, SI DE CE E SINGURA CALE ═══
+
+    Serverul lua id-ul din cookie-ul CERERII, ca sa nu poata cineva anula
+    conversiile altuia postand un id ghicit. Rationamentul e bun; asezarea era
+    gresita.
+
+    ⚠ MASURAT PRIN CITIRE pe 03.09.2026: cookie-ul NOU se scrie cu cateva randuri
+    mai sus, SINCRON, iar la retragere el nu mai poarta id. Cererea pleaca dupa
+    aceea — deci cu cookie-ul nou. Serverul citea deci mereu gol, si ramura de
+    retragere nu se deschidea NICIODATA: fara piatra de mormant, fara abandonarea
+    conversiilor din coada, fara insemnare in jurnal.
+
+    Scenariul: omul plateste, pleaca de pe pagina, apoi retrage. Conversia sta la
+    coada cateva minute. Cronul o gaseste cu `vizitator` viu si o trimite catre
+    Meta si TikTok — dupa retragere. Exact fapta pentru care se dau amenzi.
+
+    ⚠ CE PASTREAZA PAZA SI CE PIERDE. Serverul primeste id-ul vechi din corp NUMAI
+    cand `marketing` e fals — adica numai pe calea care STINGE ceva. Cine ar ghici
+    un id de 128 de biti n-ar putea decat sa opreasca trimiterea conversiilor
+    acelui om: fapta cade in partea sigura, nu in cea periculoasa. Invers — sa
+    PORNESTI ceva pe id-ul altuia — ramane imposibil, fiindca la acordare id-ul e
+    tot ce se naste in browserul cui apasa.
+  */
+  const vidDeStins = !noua.marketing && validVid(veche?.vid) ? veche!.vid! : null;
+
+  /*
     ⚠ `keepalive`: hotararea poate fi ultima apasare inainte de a inchide fila.
     Fara el, cererea moare odata cu pagina si dovada nu se scrie niciodata.
-    ⚠ Si `catch` gol: o retea picata nu are voie sa strice alegerea deja in vigoare.
+    ⚠ Si `catch`: o retea picata nu are voie sa strice alegerea deja in vigoare.
   */
   void fetch("/api/consimtamant", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ v: VERSIUNE, statistici: noua.statistici, marketing: noua.marketing, metoda, vid: noua.vid ?? null }),
+    body: JSON.stringify({
+      v: VERSIUNE, statistici: noua.statistici, marketing: noua.marketing, metoda,
+      vid: noua.vid ?? null,
+      vidDeStins,
+    }),
     keepalive: true,
-  }).catch(() => {});
+  })
+    .then(async (r) => {
+      /*
+        ⚠ SI SE VERIFICA CA PIATRA DE MORMANT S-A SCRIS CHIAR. Serverul raspunde
+        200 si cand baza a picat — dinadins, ca alegerea deja in vigoare sa nu
+        para nereusita. Dar atunci retragerea ar ramane numai in browser, iar
+        cronul ar trimite mai departe. Deci: daca aveam ceva de stins si serverul
+        n-a stins, se noteaza si se reia la urmatoarea incarcare de pagina.
+      */
+      if (!vidDeStins) return;
+      const raspuns = (await r.json().catch(() => null)) as { retras?: boolean } | null;
+      if (raspuns?.retras === true) { uitaRestanta(); return; }
+      noteazaRestanta(vidDeStins);
+    })
+    .catch(() => { if (vidDeStins) noteazaRestanta(vidDeStins); });
 
   return noua;
+}
+
+/* ── Retragerea ramasa restanta ────────────────────────────────────────────
+   ⚠ In `localStorage`, nu intr-un cookie: e o insemnare a NOASTRA despre o treaba
+   neterminata, nu o urma despre om, si n-are ce cauta pe fiecare cerere. */
+const CHEIE_RESTANTA = "edinio_retragere_restanta";
+
+function noteazaRestanta(vid: string): void {
+  try { window.localStorage.setItem(CHEIE_RESTANTA, vid); } catch { /* mod privat */ }
+}
+function uitaRestanta(): void {
+  try { window.localStorage.removeItem(CHEIE_RESTANTA); } catch { /* mod privat */ }
+}
+
+/**
+ * Reia o retragere care n-a apucat sa ajunga la server.
+ *
+ * ⚠ SE CHEAMA LA INCARCAREA PAGINII, din `RuntimeMarketing`. Fara ea, o baza
+ * picata in chiar clipa apasarii inseamna ca retragerea ramane pentru totdeauna
+ * numai in browserul omului — iar cronul, care se uita in baza, trimite inainte.
+ */
+export function reiaRetragerea(): void {
+  if (typeof window === "undefined") return;
+  let vid: string | null = null;
+  try { vid = window.localStorage.getItem(CHEIE_RESTANTA); } catch { return; }
+  if (!validVid(vid)) { if (vid !== null) uitaRestanta(); return; }
+
+  void fetch("/api/consimtamant", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ v: VERSIUNE, statistici: false, marketing: false, metoda: "w", vid: null, vidDeStins: vid }),
+  })
+    .then(async (r) => {
+      const raspuns = (await r.json().catch(() => null)) as { retras?: boolean } | null;
+      if (raspuns?.retras === true) uitaRestanta();
+    })
+    .catch(() => { /* se incearca iar la urmatoarea pagina */ });
 }
 
 /** Retragerea: aceeasi cale, cu totul stins si fara id. */

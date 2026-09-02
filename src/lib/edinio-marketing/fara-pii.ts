@@ -87,6 +87,30 @@ const NUME_CUNOSCUTE_CURATE = [
  */
 const TEXT_LIBER_PERMIS = ["search_term"] as const;
 
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠ ADRESE, SCUTITE DE REGULA LUNGIMII — SI DE CE E SIGUR
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  Regula „mai lung de 100 de caractere = aproape sigur text scris de om" e buna
+  pentru id-uri si nume de sectiuni. Pentru o adresa e falsa: o adresa de reclama
+  e lunga TOCMAI din pricina parametrilor pe care ii pastram dinadins
+  (`utm_campaign`, `utm_content`, `gclid`). Nu e text liber, e o multime cunoscuta.
+
+  ⚠ MASURAT IN PRODUCTIE pe 03.09.2026: cu o adresa de 177 de caractere,
+  `page_view`-ul nostru nu ajungea la niciun furnizor. Se pierdea intreg, fiindca
+  paza opreste evenimentul pentru TOTI adaptorii. Lovea exact traficul platit.
+
+  ⚠ SI DE CE SCUTIREA NU DESCHIDE O USA. Adresele astea trec prin `curataAdresa`
+  INAINTE de paza (in `magistrala.ts`), iar acolo parametrii sunt filtrati printr-o
+  lista ALBA — deci ce ramane nu poate fi text scris de om. Scutirea se sprijina pe
+  ordinea aceea, si ordinea e probata separat: vezi `magistrala.test.ts`.
+
+  ⚠ CELELALTE REGULI RAMAN. Tiparele personale (email, telefon, CNP, IBAN, card)
+  se verifica mai departe si pe adrese — scutirea e numai de la lungime.
+*/
+const ADRESE_CURATATE = ["page_location", "page_referrer"] as const;
+
 /* Tipare care tradeaza o persoana, chiar si intr-un camp permis. */
 const TIPARE_PERSONALE: ReadonlyArray<readonly [RegExp, string]> = [
   [/[^\s@]+@[^\s@]+\.[^\s@]+/, "arata ca o adresa de email"],
@@ -142,7 +166,10 @@ export function verificaFaraPii(nume: string, parametri: Record<string, unknown>
       ⚠ Text lung acolo unde nu e anuntat = aproape sigur ceva scris de om.
       Pragul e larg: id-urile si numele de sectiuni sunt scurte.
     */
-    if (valoare.length > 100 && !(TEXT_LIBER_PERMIS as readonly string[]).includes(c)) {
+    const scutitDeLungime =
+      (TEXT_LIBER_PERMIS as readonly string[]).includes(c) ||
+      (ADRESE_CURATATE as readonly string[]).includes(c);
+    if (valoare.length > 100 && !scutitDeLungime) {
       throw new EroarePii(
         `Evenimentul "${nume}", parametrul "${cheie}": ${valoare.length} de caractere. ` +
         "Parametrii care nu sunt anuntati ca text liber trebuie sa poarte valori dintr-o multime cunoscuta.",

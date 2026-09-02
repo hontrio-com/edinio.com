@@ -142,6 +142,7 @@ export function catreTikTok(ev: EvenimentEdinio): Trimitere | null {
 
 export const adaptorTikTok: Adaptor = {
   nume: "tiktok",
+  categorie: "marketing",
 
   gata: () => ttq() !== null,
 

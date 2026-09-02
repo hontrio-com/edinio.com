@@ -5,6 +5,8 @@ import type { EvenimentEdinio } from "./evenimente";
 import { clasificaPagina, grupPagina } from "./pagini";
 import { curataAdresa, doarCalea } from "./adresa-curata";
 import { verificaFaraPii, EroarePii } from "./fara-pii";
+import { serializeaza, NIMIC, type Stare } from "./consimtamant/stare";
+import { NUME_COOKIE } from "./consimtamant/cookie";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -24,6 +26,7 @@ let gataAcum = true;
 
 const adaptorDeProba: Adaptor = {
   nume: "proba",
+  categorie: "statistici",
   gata: () => gataAcum,
   trimite: (ev, context) => { primite.push({ ev, context: context as unknown as Record<string, unknown> }); },
 };
@@ -34,7 +37,25 @@ function inBrowser(cale = "/preturi") {
     location: { pathname: cale, hostname: "www.edinio.com", href: `https://www.edinio.com${cale}` },
     localStorage: { getItem: () => null },
   };
-  g.document = { title: "Edinio" };
+  g.document = { title: "Edinio", cookie: "" };
+}
+
+/**
+ * Pune in browserul de proba hotararea omului.
+ *
+ * ⚠ SE SCRIE PRIN `serializeaza`, nu de mana. Un sir scris de mana ar imbatrani
+ * la prima schimbare de format sau de amprenta a scopurilor, si probele ar cadea
+ * toate deodata pe ceva ce n-are legatura cu ele.
+ */
+function hotaraste(statistici: boolean, marketing: boolean, metoda: Stare["metoda"] = "t") {
+  const s: Stare = { ...NIMIC, statistici, marketing, cand: Math.floor(Date.now() / 1000), metoda };
+  (globalThis as unknown as { document: { cookie: string } }).document.cookie =
+    `${NUME_COOKIE}=${serializeaza(s)}`;
+}
+
+/** Sterge hotararea: omul n-a ales inca. */
+function fataAlegere() {
+  (globalThis as unknown as { document: { cookie: string } }).document.cookie = "";
 }
 
 beforeEach(() => {
@@ -42,6 +63,8 @@ beforeEach(() => {
   primite = [];
   gataAcum = true;
   inBrowser();
+  /* Probele de mai jos masoara ALTCEVA decat poarta; omul a acceptat. */
+  hotaraste(true, true);
   inregistreazaAdaptor(adaptorDeProba);
 });
 
@@ -68,6 +91,7 @@ test("un adaptor cazut nu-i opreste pe ceilalti si nu doboara pagina", () => {
     dintr-un furnizor ajunge in randarea site-ului.
   */
   inregistreazaAdaptor({
+    categorie: "statistici",
     nume: "stricat",
     gata: () => true,
     trimite: () => { throw new Error("furnizorul a cazut"); },
@@ -206,4 +230,165 @@ test("o cale necunoscuta e `other`, nu o aruncare", () => {
   assert.equal(clasificaPagina("/ceva-ce-nu-exista"), "other");
   assert.equal(clasificaPagina(null), "other");
   assert.equal(grupPagina("other"), "other");
+});
+
+/* ═══ Adresa de reclama ═══ */
+
+test("⚠ o adresa de RECLAMA nu omoara evenimentul", () => {
+  /*
+    ═══ ⚠ DEFECTUL PE CARE PROBELE VECHI NU-L PUTEAU VEDEA ═══
+
+    Paza PII arunca orice valoare mai lunga de 100 de caractere, iar cand arunca
+    se pierde evenimentul pentru TOTI adaptorii — `return`, nu `continue`.
+
+    Curatarea adresei exista, dar traia in adaptorul GA4, adica STRUCTURAL dupa
+    paza. Deci `page_view`-ul de pe orice adresa cu `utm_*` si `gclid` — adica de
+    pe orice clic platit — se pierdea intreg.
+
+    ⚠ MASURAT IN PRODUCTIE pe 03.09.2026, nu dedus: cu o adresa de 177 de
+    caractere, niciun `page_view` ajuns la GA4 nu purta `page_type`/`page_group`,
+    parametrii pe care numai ai nostri ii au. Rapoartele pareau intregi fiindca
+    GA4 trage singur un `page_view` la schimbarea de istoric.
+
+    ⚠ Si tocmai de aceea proba se uita la ce PRIMESTE adaptorul, nu la ce s-a
+    chemat: „s-a chemat urmareste" era deja adevarat si inainte de reparatie.
+  */
+  const adresaDeReclama =
+    "https://www.edinio.com/preturi?utm_source=google&utm_medium=cpc" +
+    "&utm_campaign=magazin-online-romania-2026&utm_content=anunt-text-varianta-1" +
+    "&utm_term=creare+magazin+online&gclid=Cj0KCQiA1234567890abcdefghijklmnop" +
+    "&fbclid=IwAR1234567890abcdefghijklmnopqrstuv";
+
+  assert.ok(adresaDeReclama.length > 100, "adresa de proba nu e destul de lunga ca sa declanseze paza");
+
+  urmareste({ name: "page_view", page_location: adresaDeReclama });
+
+  assert.equal(primite.length, 1, "evenimentul s-a pierdut — exact defectul de pe traficul platit");
+
+  const trimis = primite[0].ev as { page_location?: string };
+  assert.ok(trimis.page_location, "adresa a disparut cu totul");
+  /* ⚠ NU se scurteaza sub 100: o adresa de reclama e lunga din pricina
+     parametrilor pastrati dinadins. Ce conteaza e ca a AJUNS, si curatata. */
+  assert.ok(trimis.page_location.length > 100, "adresa de proba n-a ramas lunga");
+
+  /* ⚠ Si ca s-a pastrat ce trebuie: parametrii de achizitie, fara id-ul de clic. */
+  assert.match(trimis.page_location, /utm_source=google/, "s-a pierdut sursa campaniei");
+  assert.match(trimis.page_location, /gclid=/, "s-a pierdut id-ul de clic Google, care e pastrat dinadins");
+  /* ⚠ `fbclid` e dinadins in AFARA listei albe — un id de clic al unui tert n-are
+     ce cauta intr-un raport de analiza. `utm_term` si `gclid` sunt pe lista. */
+  assert.ok(!trimis.page_location.includes("fbclid"), "a ramas `fbclid`, care nu e pe lista alba");
+  assert.match(trimis.page_location, /utm_term=/, "s-a pierdut un parametru care E pe lista alba");
+});
+
+test("⚠ adresa curatata ajunge la TOTI adaptorii, nu doar la GA4", () => {
+  /*
+    ⚠ Pana la reparatie, fiecare adaptor se curata singur — si numai GA4 o facea.
+    Deci adresa intreaga, cu `gclid`, ajungea la Meta si la TikTok.
+  */
+  const cuGclid = "https://www.edinio.com/?gclid=Cj0KCQiA" + "x".repeat(80) + "&utm_source=google";
+  urmareste({ name: "page_view", page_location: cuGclid });
+
+  assert.equal(primite.length, 1);
+  const trimis = primite[0].ev as { page_location: string };
+  assert.notEqual(trimis.page_location, cuGclid, "adaptorul a primit adresa BRUTA");
+  assert.equal(trimis.page_location, curataAdresa(cuGclid), "adaptorul n-a primit chiar versiunea curatata");
+});
+
+/* ═══ 7. Poarta consimtamantului ═══ */
+
+test("⚠ inainte de alegere nu se trimite nimic — SI NICI NU SE ASTEAPTA", () => {
+  /*
+    ⚠ CE APARA, si de ce a doua jumatate conteaza mai mult decat prima.
+
+    Ca nu se trimite fara acord se vedea si inainte: niciun furnizor nu era
+    incarcat, deci `gata()` era fals. Numai ca atunci evenimentul intra LA COADA.
+    Iar coada se golea la „Accepta" — deci furnizorii primeau, cu intarziere, tot
+    ce facuse omul cat timp inca se gandea.
+
+    Acordul se da inainte. Nu se cumpara retroactiv.
+  */
+  fataAlegere();
+  gataAcum = false;
+  urmareste({ name: "cta_click", cta_id: "hero_incepe", cta_location: "hero" });
+
+  assert.equal(primite.length, 0, "s-a trimis fara acord");
+  assert.equal(lungimeCoada(), 0, "evenimentul asteapta ca sa fie trimis dupa „Accepta”");
+
+  /* Si acum omul accepta. Ce a fost inainte ramane inainte. */
+  hotaraste(true, true);
+  gataAcum = true;
+  goleste("proba");
+  assert.equal(primite.length, 0, "acceptarea a trimis retroactiv ce s-a intamplat inaintea ei");
+});
+
+test("⚠ dupa retragere, un furnizor DEJA INCARCAT nu mai primeste", () => {
+  /*
+    ⚠ CE APARA. `window.gtag` nu se descarca. Odata pusa in pagina, functia ramane
+    acolo — deci `gata()` ramane adevarat si dupa ce omul a retras. Pe o aplicatie
+    de o singura pagina, asta tine pana la urmatoarea reincarcare, adica oricat.
+
+    Aici `gataAcum` ramane dinadins `true`: exact lumea de dupa retragere.
+  */
+  urmareste({ name: "cta_click", cta_id: "unu", cta_location: "hero" });
+  assert.equal(primite.length, 1, "martorul: cu acord se trimite");
+
+  hotaraste(false, false, "r");
+  urmareste({ name: "cta_click", cta_id: "doi", cta_location: "hero" });
+
+  assert.equal(primite.length, 1, "s-a trimis dupa retragere, catre un furnizor ramas incarcat");
+  assert.equal(lungimeCoada(), 0, "evenimentul de dupa retragere asteapta o razgandire");
+});
+
+test("⚠ acordul pentru statistici nu deschide si marketingul", () => {
+  /*
+    ⚠ CE APARA. Toti furnizorii Google impart acelasi `window.gtag`. Cu forma
+    veche — `gata: () => gtag() !== null` la amandoua — eticheta GA4 incarcata pe
+    temei de statistici facea si adaptorul Google Ads sa se creada gata. O
+    conversie publicitara pleca atunci pentru un om care bifase DOAR statistici.
+  */
+  const laMarketing: EvenimentEdinio[] = [];
+  inregistreazaAdaptor({
+    categorie: "marketing",
+    nume: "reclame-proba",
+    gata: () => true,
+    trimite: (ev) => { laMarketing.push(ev); },
+  });
+
+  hotaraste(true, false, "p");
+  urmareste({ name: "cta_click", cta_id: "hero_incepe", cta_location: "hero" });
+
+  assert.equal(primite.length, 1, "statisticile erau acordate — martorul n-a primit");
+  assert.equal(laMarketing.length, 0, "o conversie publicitara a plecat cu acord doar de statistici");
+});
+
+test("⚠ un cookie stricat inseamna NU, nu «probabil da»", () => {
+  /*
+    Toate caile de esec ale citirii — versiune veche, amprenta schimbata, sir
+    ciuntit — dau `null`. Niciuna n-are voie sa cada spre „a acceptat".
+  */
+  (globalThis as unknown as { document: { cookie: string } }).document.cookie =
+    "edinio_consimtamant=asta-nu-e-o-hotarare";
+  urmareste({ name: "cta_click", cta_id: "x", cta_location: "hero" });
+  assert.equal(primite.length, 0, "un cookie de neinteles a fost luat drept acord");
+});
+
+test("⚠ retragerea prinde din urma un eveniment care astepta deja la coada", () => {
+  /*
+    ⚠ FEREASTRA. Omul accepta, evenimentul se trage inainte ca eticheta sa se fi
+    incarcat — deci intra la coada, pe drept. Pana sa se incarce eticheta, omul se
+    razgandeste din „Setari Cookies". Apoi eticheta se incarca si cheama `goleste`.
+
+    Fara reverificare la golire, evenimentul pleaca — pe un acord care nu mai
+    exista in clipa trimiterii. Coada nu e o promisiune, e o asteptare.
+  */
+  gataAcum = false;
+  urmareste({ name: "cta_click", cta_id: "hero_incepe", cta_location: "hero" });
+  assert.equal(lungimeCoada(), 1, "martorul: cu acord si fara eticheta, se asteapta");
+
+  hotaraste(false, false, "r");
+  gataAcum = true;
+  goleste("proba");
+
+  assert.equal(primite.length, 0, "s-a trimis ce astepta, desi acordul s-a stins intre timp");
+  assert.equal(lungimeCoada(), 0, "a ramas la coada dupa retragere");
 });

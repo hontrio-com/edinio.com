@@ -95,6 +95,7 @@ export function catreMeta(ev: EvenimentEdinio): Trimitere | null {
 
 export const adaptorMeta: Adaptor = {
   nume: "meta",
+  categorie: "marketing",
 
   gata: () => fbq() !== null,
 

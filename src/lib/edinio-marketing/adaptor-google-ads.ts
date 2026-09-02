@@ -65,8 +65,24 @@ export function catreGoogleAds(ev: EvenimentEdinio): Record<string, unknown> | n
 
 export const adaptorGoogleAds: Adaptor = {
   nume: "google-ads",
+  categorie: "marketing",
 
-  gata: () => gtag() !== null,
+  /*
+    ═══ ⚠ STEAGUL PROPRIU, NU `window.gtag` ═══
+
+    Toti furnizorii Google impart aceeasi functie `gtag`. Forma veche intreba
+    `gtag() !== null` si aici, si in adaptorul GA4 — deci indata ce UNUL
+    din ei se incarca, amandoi se credeau gata.
+
+    ⚠ CE STRICA ASTA, si nu e o teorie: `gtag` exista din clipa in care corpul de
+    baza a rulat, dar o conversie ajunge la contul de reclame abia dupa `gtag('config', AW-…)`.
+    Intre cele doua clipe, un eveniment trimis pleaca fara cont — se pierde tacut,
+    fiindca nimic nu cade si nimeni nu raspunde cu eroare.
+
+    Steagul se ridica in chiar scriptul care face `config`, in aceeasi bucata.
+    Deci „gata" inseamna aici „contul MEU e configurat", nu „exista un gtag".
+  */
+  gata: () => gtag() !== null && (window as unknown as Record<string, unknown>).__edinioAdsPornit === true,
 
   trimite(ev) {
     const g = gtag();

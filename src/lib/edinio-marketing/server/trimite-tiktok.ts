@@ -2,6 +2,7 @@ import { sarcinaTikTok, eRefuz } from "./sarcina-tiktok";
 import type { SarcinaPastrata } from "./coada-conversii";
 import { VERSIUNE_TIKTOK } from "./versiuni-api";
 import { ID_PIXEL_TIKTOK } from "../pixel-tiktok";
+import { MS_CERERE_FURNIZOR } from "./coada-conversii";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -40,6 +41,8 @@ export async function trimiteTikTok(s: SarcinaPastrata): Promise<Rezultat> {
   let raspuns: Response;
   try {
     raspuns = await fetch(ADRESA, {
+      /* ⚠ `fetch` din Node n-are termen implicit — vezi `MS_CERERE_FURNIZOR`. */
+      signal: AbortSignal.timeout(MS_CERERE_FURNIZOR),
       method: "POST",
       headers: { "Content-Type": "application/json", "Access-Token": token },
       body: JSON.stringify(mesaj),

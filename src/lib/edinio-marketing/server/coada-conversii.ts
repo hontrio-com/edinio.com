@@ -192,6 +192,32 @@ export async function puneLaCoada(
  * moare la jumatate, randul se elibereaza singur peste un minut. O incuietoare
  * ar fi trebuit desfacuta de cineva, iar cine moare nu desface nimic.
  */
+/**
+ * Cat tine arenda pusa de `edinio_revendica_conversii`, in milisecunde.
+ *
+ * ⚠ CITITA DIN FUNCTIA DIN BAZA pe 03.09.2026: `next_retry_at = now() + interval
+ * '1 minute'`. Scrisa aici ca sa poata cronul sa se opreasca INAINTE de ea. Daca
+ * se schimba acolo, se schimba si aici — de aceea sta langa `revendica`, nu in
+ * ruta.
+ */
+export const ARENDA_MS = 60_000;
+
+/**
+ * Cat asteptam un furnizor pentru o singura conversie.
+ *
+ * ⚠ DE CE EXISTA. `fetch` din Node NU ARE TERMEN implicit. O cerere catre Meta
+ * sau TikTok putea atarna oricat, iar bucla cronului trimite cele 25 de randuri
+ * UNUL DUPA ALTUL. Un singur furnizor lent tinea deci rularea peste cele 60 de
+ * secunde ale arendei — si cronul urmator, care porneste din minut in minut,
+ * revendica aceleasi randuri si le trimitea a doua oara.
+ *
+ * ⚠ CAT DE RAU ERA, ONEST. Meta si TikTok deduplica dupa `event_id`, deci a doua
+ * trimitere n-ar fi umflat cifrele. Dar randul se marca de doua ori, si o
+ * trimitere in zbor pe o arenda expirata inseamna ca poarta de consimtamant
+ * verificata la revendicare nu mai are nicio valoare.
+ */
+export const MS_CERERE_FURNIZOR = 8_000;
+
 export async function revendica(limita: number): Promise<RandDeTrimis[]> {
   /*
     ⚠ NUMELE ARGUMENTULUI (`limita`) TREBUIE SA FIE EXACT. PostgREST alege functia

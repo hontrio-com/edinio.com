@@ -19,7 +19,12 @@ import { NUME_COOKIE, atributeCookie, eCookieDeMaturat } from "@/lib/edinio-mark
   RETRAGERE. Un drept care se poate bloca de o alta poarta nu e un drept.
 */
 
-type Corp = { v?: number; statistici?: boolean; marketing?: boolean; metoda?: string; vid?: string | null };
+type Corp = {
+  v?: number; statistici?: boolean; marketing?: boolean; metoda?: string;
+  vid?: string | null;
+  /** Id-ul de STINS, trimis numai la retragere. Vezi nota de mai jos. */
+  vidDeStins?: string | null;
+};
 
 const METODE: Metoda[] = ["t", "r", "p", "w"];
 
@@ -39,21 +44,40 @@ export async function POST(req: NextRequest) {
   const marketing = corp.marketing === true;
 
   /*
-    ⚠ ID-UL SE IA DIN COOKIE-UL CERERII, NU DIN CORP — cu o singura exceptie.
+    ═══ ⚠ DE UNDE SE IA ID-UL DE VIZITATOR, SI DE CE ALTFEL LA FIECARE CAPAT ═══
 
-    La ACORDARE, id-ul abia s-a nascut in browser si inca nu e in cookie-ul care
-    a plecat cu cererea asta, deci trebuie primit din corp; acolo nu e nimic de
-    aparat, omul isi da un id nou lui insusi.
+    La ACORDARE id-ul abia s-a nascut in browser si inca nu e in cookie-ul care a
+    plecat cu cererea, deci se primeste din corp. Nu e nimic de aparat: omul isi
+    da un id nou lui insusi.
 
-    La RETRAGERE e pe dos, si acolo sta pericolul: daca am lua id-ul din corp,
-    oricine ar putea POSTa un id ghicit si ar anula conversiile ALTCUIVA. Deci se
-    citeste numai din cookie-ul care a venit cu cererea.
+    La RETRAGERE forma veche il citea DOAR din cookie-ul cererii, ca nimeni sa nu
+    poata anula conversiile altuia postand un id ghicit.
+
+    ⚠ NUMAI CA NU MERGEA — masurat prin citire pe 03.09.2026. Browserul scrie
+    cookie-ul nou SINCRON, inainte de `fetch`; la retragere cookie-ul nou nu mai
+    poarta id. Deci `dinCookie` era mereu gol pe calea de retragere si ramura de
+    mai jos nu se deschidea niciodata: fara piatra de mormant, fara abandonarea
+    conversiilor din coada, fara insemnare in jurnal. Cronul le trimitea inainte.
+
+    ⚠ CE S-A ALES, si ce se pierde. Id-ul de stins vine acum din corp — dar NUMAI
+    pe calea cu `marketing` fals, adica numai ca sa OPRESTI ceva. Paza care
+    conteaza ramane intreaga: nimeni nu poate PORNI trimiteri pe id-ul altuia.
+    Iar cine ar ghici un id de 128 de biti n-ar putea decat sa opreasca
+    trimiterea conversiilor acelui om — fapta cade in partea sigura.
+
+    ⚠ SI COOKIE-UL RAMANE PRIMUL MARTOR: daca el poarta inca un id (cerere venita
+    inaintea scrierii, sau alt browser), acela e cel bun si corpul nu-l poate
+    schimba. Corpul completeaza doar cand cookie-ul tace.
   */
   const dinCookie = req.cookies.get(NUME_COOKIE)?.value?.split(".")[5];
   const vid = marketing
     ? (validVid(corp.vid) ? corp.vid : (validVid(dinCookie) ? dinCookie : undefined))
     : undefined;
-  const vidDeOprit = validVid(dinCookie) ? dinCookie : undefined;
+  const vidDeOprit = marketing
+    ? undefined
+    : validVid(dinCookie) ? dinCookie
+    : validVid(corp.vidDeStins) ? corp.vidDeStins
+    : undefined;
 
   const stare: Stare = {
     statistici, marketing,
@@ -62,12 +86,19 @@ export async function POST(req: NextRequest) {
     ...(vid ? { vid } : {}),
   };
 
-  const raspuns = NextResponse.json({ ok: true });
+  /*
+    ⚠ COOKIE-URILE SE ADUNA INTR-O LISTA, si raspunsul se face abia la sfarsit.
+
+    Forma dinainte construia raspunsul aici si apoi ii adauga anteturi. De cand
+    corpul raspunsului spune si daca s-a stins ceva (`retras`), el nu mai e
+    cunoscut in clipa asta. Iar mutarea anteturilor de pe un raspuns pe altul e
+    tocmai locul in care mai multe `Set-Cookie` se pot contopi intr-unul singur,
+    despartite prin virgula — adica exact stergerile de mai jos s-ar pierde, si
+    retragerea ar parea facuta.
+  */
+  const deTrimis: string[] = [];
   const securizat = req.nextUrl.protocol === "https:";
-  raspuns.headers.append(
-    "Set-Cookie",
-    `${NUME_COOKIE}=${encodeURIComponent(serializeaza(stare))}; ${atributeCookie(securizat)}`,
-  );
+  deTrimis.push(`${NUME_COOKIE}=${encodeURIComponent(serializeaza(stare))}; ${atributeCookie(securizat)}`);
 
   /*
     ⚠ SI SE STING SI COOKIE-URILE FURNIZORILOR DE AICI, nu doar din browser.
@@ -89,11 +120,20 @@ export async function POST(req: NextRequest) {
     */
     for (const c of req.cookies.getAll()) {
       if (!eCookieDeMaturat(c.name)) continue;
-      raspuns.headers.append("Set-Cookie", `${c.name}=; Path=/; Max-Age=0${securizat ? "; Secure" : ""}`);
+      deTrimis.push(`${c.name}=; Path=/; Max-Age=0${securizat ? "; Secure" : ""}`);
     }
   }
 
   const admin = createAdminClient();
+
+  /*
+    ⚠ SE SPUNE BROWSERULUI DACA S-A STINS CHIAR. Raspunsul ramane 200 si cand baza
+    pica — alegerea e deja in vigoare, un 500 ar face-o sa para nereusita. Dar
+    atunci retragerea ar trai numai in browser, iar cronul se uita in baza. Deci
+    browserul primeste `retras: false`, isi noteaza restanta si reia la urmatoarea
+    incarcare de pagina.
+  */
+  let retras = false;
 
   try {
     if (!marketing && vidDeOprit) {
@@ -113,6 +153,8 @@ export async function POST(req: NextRequest) {
         .is("trimis_la", null)
         .is("abandonat_la", null);
 
+      retras = true;
+
       if (count && count > 0) {
         await logError({
           action: "consimtamant.retras",
@@ -123,16 +165,23 @@ export async function POST(req: NextRequest) {
     }
   } catch (e) {
     /*
-      ⚠ O BAZA PICATA N-ARE VOIE SA STRICE RETRAGEREA. Cookie-ul e deja scris in
-      raspuns si in browser, deci alegerea e in vigoare oricum. Se scrie in jurnal
+      ⚠ O BAZA PICATA N-ARE VOIE SA STRICE RETRAGEREA. Cookie-ul e deja pregatit
+      pentru raspuns si scris in browser, deci alegerea e in vigoare oricum. Se scrie in jurnal
       si se merge mai departe — un 500 aici ar face pagina sa para ca n-a mers.
     */
     await logError({
       action: "consimtamant.scriere",
       message: e instanceof Error ? e.message : "nu s-a putut scrie hotararea",
-      severity: "warning",
+      /*
+        ⚠ „error" cand era ceva de STINS, „warning" altfel. O acordare nescrisa e
+        o dovada pierduta; o RETRAGERE nescrisa inseamna ca mai plecau conversii.
+        Cele doua n-au voie sa se uite la fel in jurnal.
+      */
+      severity: vidDeOprit ? "error" : "warning",
     });
   }
 
+  const raspuns = NextResponse.json({ ok: true, retras });
+  for (const c of deTrimis) raspuns.headers.append("Set-Cookie", c);
   return raspuns;
 }

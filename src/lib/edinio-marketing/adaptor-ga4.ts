@@ -61,8 +61,24 @@ function numeGa4(ev: EvenimentEdinio): string | null {
 /** Adaptorul, gata de inregistrat in magistrala. */
 export const adaptorGa4: Adaptor = {
   nume: "ga4",
+  categorie: "statistici",
 
-  gata: () => gtag() !== null,
+  /*
+    ═══ ⚠ STEAGUL PROPRIU, NU `window.gtag` ═══
+
+    Toti furnizorii Google impart aceeasi functie `gtag`. Forma veche intreba
+    `gtag() !== null` si aici, si in adaptorul Google Ads — deci indata ce UNUL
+    din ei se incarca, amandoi se credeau gata.
+
+    ⚠ CE STRICA ASTA, si nu e o teorie: `gtag` exista din clipa in care corpul de
+    baza a rulat, dar o masuratoare ajunge la proprietatea GA4 abia dupa `gtag('config', G-…)`.
+    Intre cele doua clipe, un eveniment trimis pleaca fara cont — se pierde tacut,
+    fiindca nimic nu cade si nimeni nu raspunde cu eroare.
+
+    Steagul se ridica in chiar scriptul care face `config`, in aceeasi bucata.
+    Deci „gata" inseamna aici „contul MEU e configurat", nu „exista un gtag".
+  */
+  gata: () => gtag() !== null && (window as unknown as Record<string, unknown>).__edinioGa4Pornit === true,
 
   trimite(ev, context) {
     const g = gtag();

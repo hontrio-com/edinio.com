@@ -1,7 +1,8 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { catreGoogleAds } from "./adaptor-google-ads";
+import { catreGoogleAds, adaptorGoogleAds } from "./adaptor-google-ads";
+import { adaptorGa4 } from "./adaptor-ga4";
 import { ID_GOOGLE_ADS, ETICHETE_CONVERSIE, trimiteCatre } from "./pixel-google-ads";
 
 /*
@@ -125,4 +126,31 @@ test("⚠ adaptorul e inregistrat pe magistrala", () => {
   const runtime = citeste("src/components/edinio-marketing/RuntimeMarketing.tsx");
   assert.match(runtime, /inregistreazaAdaptor\(adaptorGoogleAds\)/,
     "adaptorul exista dar nu e inregistrat — n-ar primi niciun eveniment");
+});
+
+test("⚠ `gata` NU se ia dupa `window.gtag`, care e al tuturor Google-urilor", () => {
+  /*
+    ⚠ CE APARA, si de ce nu se vede cu ochiul liber.
+
+    GA4 si Google Ads folosesc aceeasi functie `gtag`. Amandoi raspundeau
+    `gata: () => gtag() !== null` — deci indata ce eticheta GA4 punea `gtag` in
+    pagina, adaptorul de RECLAME se credea si el gata. Numai ca `gtag('config',
+    'AW-…')` nu rulase inca: conversia pleca fara cont in spate, si se pierdea
+    tacut. Nimic nu cade, nimeni nu raspunde cu eroare.
+
+    Aici se pune exact lumea aceea: `gtag` exista, steagul GA4 e ridicat, al
+    reclamelor nu.
+  */
+  const g = globalThis as unknown as Record<string, unknown>;
+  const inainte = g.window;
+  try {
+    g.window = { gtag: () => {}, __edinioGa4Pornit: true };
+    assert.equal(adaptorGa4.gata(), true, "martorul: GA4 e chiar gata");
+    assert.equal(adaptorGoogleAds.gata(), false, "reclamele se cred gata pe steagul altuia");
+
+    (g.window as Record<string, unknown>).__edinioAdsPornit = true;
+    assert.equal(adaptorGoogleAds.gata(), true, "cu `config` facut, tot nu se considera gata");
+  } finally {
+    if (inainte === undefined) delete g.window; else g.window = inainte;
+  }
 });

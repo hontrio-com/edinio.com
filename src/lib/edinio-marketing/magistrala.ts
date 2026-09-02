@@ -21,10 +21,26 @@
 import type { EvenimentEdinio } from "./evenimente";
 import { clasificaPagina, grupPagina, type FelPagina, type GrupPagina } from "./pagini";
 import { verificaFaraPii, EroarePii } from "./fara-pii";
+import { curataAdresa } from "./adresa-curata";
 import { eDepanare, eProductieMarketing } from "./mediu";
+import { citesteStarea } from "./consimtamant-browser";
+import type { Categorie } from "./consimtamant/stare";
 
 export type Adaptor = {
   nume: string;
+  /*
+    ⚠ SUB CE CATEGORIE STA FURNIZORUL — si de ce e camp, nu o lista undeva.
+
+    Un camp obligatoriu pe tip inseamna ca un adaptor NOU nu se poate scrie fara
+    sa raspunda la intrebarea „pe ce temei trimiti?". O lista tinuta deoparte in
+    magistrala s-ar fi uitat exact la al cincilea furnizor, iar uitarea ar fi
+    tacut: adaptorul ar fi mers, doar ca fara poarta.
+
+    ⚠ SI NU E DERIVATA DIN NUME. „google-ads" pare marketing si „ga4" pare
+    statistici, dar potrivirea dupa nume e o ghicitoare care se strica la prima
+    redenumire — si s-ar strica in directia periculoasa: catre „trimite".
+  */
+  categorie: Categorie;
   /** Furnizorul e gata sa primeasca? Daca nu, evenimentul intra la coada. */
   gata: () => boolean;
   trimite: (ev: EvenimentEdinio, context: { page_type: FelPagina; page_group: GrupPagina }) => void;
@@ -66,18 +82,61 @@ const PLAFON_COADA = 50;
  *
  * Deci: intai se scot toate ale adaptorului, in ordine, si abia apoi se trimit.
  */
-export function goleste(numeAdaptor: string): void {
-  const a = adaptoare.find(x => x.nume === numeAdaptor);
-  if (!a || !a.gata()) return;
+/**
+ * Are omul voie sa fie masurat de adaptorul asta, ACUM?
+ *
+ * ═══ ⚠ SE INTREABA LA FIECARE EVENIMENT, nu o data la incarcare ═══
+ *
+ * ⚠ CE APARA, MASURAT PE 03.09.2026. Magistrala nu stia nimic despre hotarare.
+ * Poarta era numai la incarcarea etichetelor, si asta lasa DOUA gauri:
+ *
+ *   1. INAINTE de alegere, `gata()` era fals (niciun furnizor incarcat), deci
+ *      evenimentele se puneau LA COADA. Cand omul apasa apoi „Accepta", coada se
+ *      golea — si furnizorii primeau ce s-a intamplat CAT TIMP omul nu alesese
+ *      inca. Consimtamantul se da inainte, nu se cumpara retroactiv.
+ *
+ *   2. DUPA retragere, `window.gtag` ramane in pagina — o functie incarcata nu se
+ *      descarca. Deci `gata()` ramanea ADEVARAT, si evenimentele plecau mai
+ *      departe catre un om care tocmai spusese nu. Asta pana la reincarcarea
+ *      paginii, adica nedefinit de mult pe o aplicatie de o singura pagina.
+ *
+ * Amandoua se inchid punand intrebarea aici, la fiecare eveniment: singurul loc
+ * prin care trec toate.
+ *
+ * ⚠ SI TACEREA INSEAMNA NU. `citesteStarea()` da `null` si cand nu s-a ales, si
+ * cand cookie-ul e stricat, si cand s-a schimbat lista de scopuri. Toate trei duc
+ * in aceeasi ramura: nu se trimite. Starea de plecare e „fara".
+ */
+function areVoie(a: Adaptor): boolean {
+  return citesteStarea()?.[a.categorie] === true;
+}
 
+/** Scoate din coada tot ce astepta pentru un adaptor. */
+function scoateDinCoada(numeAdaptor: string): LaCoada[] {
   const ale = coada.filter(x => x.adaptor === numeAdaptor);
-  if (ale.length === 0) return;
-
-  /* Scoase din coada INAINTE de trimitere: daca un adaptor arunca, evenimentul
-     lui nu ramane sa fie incercat la nesfarsit la fiecare golire. */
   for (let i = coada.length - 1; i >= 0; i--) {
     if (coada[i].adaptor === numeAdaptor) coada.splice(i, 1);
   }
+  return ale;
+}
+
+export function goleste(numeAdaptor: string): void {
+  const a = adaptoare.find(x => x.nume === numeAdaptor);
+  if (!a) return;
+
+  /*
+    ⚠ POARTA SE REVERIFICA LA GOLIRE. Intre clipa in care un eveniment a intrat la
+    coada si clipa asta, omul poate sa-si fi schimbat hotararea. Coada nu e o
+    promisiune de trimitere, e o asteptare — iar asteptarea nu supravietuieste
+    unui „nu".
+  */
+  if (!areVoie(a)) { scoateDinCoada(numeAdaptor); return; }
+  if (!a.gata()) return;
+
+  /* Scoase din coada INAINTE de trimitere: daca un adaptor arunca, evenimentul
+     lui nu ramane sa fie incercat la nesfarsit la fiecare golire. */
+  const ale = scoateDinCoada(numeAdaptor);
+  if (ale.length === 0) return;
 
   for (const item of ale) {
     try { a.trimite(item.ev, item.context); } catch { /* vezi nota de sus */ }
@@ -102,6 +161,32 @@ export function urmareste(ev: EvenimentEdinio): void {
   if (typeof window === "undefined") return;
 
   const { name, ...parametri } = ev;
+
+  /*
+    ═══ ⚠ ADRESA SE CURATA INAINTE DE PAZA, NU DUPA ═══
+
+    Paza PII arunca orice valoare mai lunga de 100 de caractere, iar cand arunca
+    se pierde evenimentul pentru TOTI adaptorii (`return`, nu `continue`).
+
+    ⚠ MASURAT IN PRODUCTIE pe 03.09.2026: cu o adresa de reclama de 177 de
+    caractere (`utm_*` + `gclid`), `page_view`-ul NOSTRU nu ajungea la GA4.
+    Recunoscut dupa parametrii pe care numai el ii poarta — `page_type` si
+    `page_group`: niciun `page_view` cu adresa peste 100 de caractere nu-i avea.
+
+    ⚠ SI DE CE N-A VAZUT NIMENI. GA4 trage SINGUR un `page_view` la schimbarea de
+    istoric, daca „Enhanced measurement" e pornit. Rapoartele aratau deci
+    `page_view`-uri — doar ca nu ale noastre, si fara adresa curatata. Defectul
+    lovea exact traficul platit, adica tocmai ce se masoara cel mai atent.
+
+    Curatarea exista de mult, dar traia in adaptorul GA4 — adica STRUCTURAL dupa
+    paza. Aici e inaintea ei, si foloseste toti adaptorii.
+  */
+  const camp = parametri as Record<string, unknown>;
+  for (const cheieAdresa of ["page_location", "page_referrer"]) {
+    const v = camp[cheieAdresa];
+    if (typeof v === "string") camp[cheieAdresa] = curataAdresa(v);
+  }
+
   try {
     verificaFaraPii(name, parametri as Record<string, unknown>);
   } catch (e) {
@@ -115,11 +200,24 @@ export function urmareste(ev: EvenimentEdinio): void {
   const context = contextul();
   if (eDepanare()) console.info("[edinio-marketing]", name, { ...parametri, ...context });
 
+  /*
+    ⚠ SI ADAPTOARELE PRIMESC VERSIUNEA CURATATA. Pana acum primeau `ev` brut, iar
+    fiecare se curata singur — GA4 o facea, Meta si TikTok nu. Deci adresa cu
+    `gclid` ajungea intreaga la doi din patru furnizori.
+  */
+  const evCurat = { name, ...parametri } as EvenimentEdinio;
+
   for (const a of adaptoare) {
     try {
-      if (a.gata()) { a.trimite(ev, context); continue; }
+      /*
+        ⚠ FARA VOIE NU SE TRIMITE SI NICI NU SE ASTEAPTA. A doua parte e miezul:
+        daca s-ar pune la coada „pentru mai tarziu", atunci un „Accepta" de peste
+        zece secunde ar trimite tot ce s-a intamplat inainte de el.
+      */
+      if (!areVoie(a)) { scoateDinCoada(a.nume); continue; }
+      if (a.gata()) { a.trimite(evCurat, context); continue; }
       if (coada.length >= PLAFON_COADA) coada.shift();
-      coada.push({ ev, context, adaptor: a.nume });
+      coada.push({ ev: evCurat, context, adaptor: a.nume });
     } catch (e) {
       /* ⚠ Un adaptor cazut nu-i opreste pe ceilalti, si nu opreste pagina. */
       console.error(`[edinio-marketing] adaptorul ${a.nume} a cazut:`, e);

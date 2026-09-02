@@ -165,5 +165,18 @@ test("⚠ niciun scriitor nu mai scrie `country: \"RO\"` in cod", () => {
       cod.includes("taraDinAnteturi("),
       `${cale}: tara nu se mai citeste din antet`,
     );
+    /*
+      ⚠ SE SCRIE DIRECT, nu sub o conditie. Cat timp coloana era
+      `NOT NULL DEFAULT 'RO'`, cheia trebuia sarita cand tara lipsea — altfel
+      randul n-ar fi existat deloc. Migrarea din 02.09.2026 a scos si implicitul,
+      si `NOT NULL`, deci acum `null` are voie sa insemne „nu stiu".
+
+      Daca cineva pune la loc scrierea conditionata, baza n-ar mai capata `null`
+      si necunoscuta ar disparea din nou — tacut, si fara sa cada nimic.
+    */
+    assert.ok(
+      cod.includes("country: taraVizitatorului,"),
+      `${cale}: tara nu se mai scrie direct — necunoscuta se pierde iar`,
+    );
   }
 });

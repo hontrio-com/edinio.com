@@ -590,18 +590,18 @@ export default async function SlugPage({ params, searchParams }: Props) {
         source: sursaVizitei,
         referrer: referrerVizitei,
         /*
-          ⚠ TARA SE PUNE DOAR CAND E STIUTA, si cheia lipseste cu totul altfel.
+          ⚠ `null` CAND TARA NU SE STIE, si asta a cerut o migrare.
 
-          Coloana e `NOT NULL DEFAULT 'RO'` — deci un `null` explicit n-ar strica
-          randul, l-ar face SA NU EXISTE: vizita s-ar pierde de tot. Verificat in
-          schema, nu presupus; iar `tsc` a prins-o inainte sa ajunga in productie.
+          Coloana era `NOT NULL DEFAULT 'RO'`: schema INSASI afirma ca fiecare
+          vizitator din lume e din Romania. Chiar scos din cod, implicitul ar fi
+          pus aceeasi valoare — deci reparatia in cod singura ar fi fost teatru.
 
-          ⚠ RAMANE O JUMATATE DE MINCIUNA, si o spun aici ca sa nu se uite: cand
-          antetul lipseste, baza scrie tot „RO". Pe Vercel antetul e practic mereu
-          acolo, deci cazul e rar — dar reparatia intreaga cere o migrare care
-          scoate `NOT NULL` si implicitul, si aia se face separat, cu voie.
+          Migrarea `site_analytics_country_fara_implicit_ro` (02.09.2026) a scos
+          si `NOT NULL`, si implicitul. Randurile vechi raman 'RO' si nu se ating:
+          ele chiar n-au fost masurate, iar rescrierea lor ar inlocui o minciuna
+          veche cu una noua.
         */
-        ...(taraVizitatorului ? { country: taraVizitatorului } : {}),
+        country: taraVizitatorului,
       });
     });
   }

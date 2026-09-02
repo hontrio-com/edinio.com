@@ -4450,7 +4450,7 @@ export type Database = {
       site_analytics: {
         Row: {
           business_id: string
-          country: string
+          country: string | null
           created_at: string
           device: string | null
           event_type: string
@@ -4461,7 +4461,7 @@ export type Database = {
         }
         Insert: {
           business_id: string
-          country?: string
+          country?: string | null
           created_at?: string
           device?: string | null
           event_type: string
@@ -4472,7 +4472,7 @@ export type Database = {
         }
         Update: {
           business_id?: string
-          country?: string
+          country?: string | null
           created_at?: string
           device?: string | null
           event_type?: string

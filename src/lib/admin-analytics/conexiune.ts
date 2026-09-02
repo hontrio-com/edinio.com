@@ -72,6 +72,15 @@ export async function citesteConexiune(): Promise<ConexiuneGa4Admin | null> {
   return v && typeof v.refresh_token === "string" && v.refresh_token ? v : null;
 }
 
+/*
+  ⚠ AMANDOUA SCRIU CU `.throwOnError()`, si nu e de forma.
+
+  ⚠ MASURAT pe 03.09.2026 cu supabase-js 2.106.1: o scriere respinsa NU arunca —
+  se rezolva cu `{ data: null, error: {...} }`. Fara randul asta, salvarea putea
+  cadea in tacere, iar intoarcerea din OAuth ducea omul la `?ga=gata` desi
+  jetonul nu se scrisese nicaieri. Al doilea „Conecteaza" ar fi dat acelasi
+  rezultat, si nimeni n-ar fi stiut de ce.
+*/
 export async function scrieConexiune(c: ConexiuneGa4Admin, idAdmin: string): Promise<void> {
   const admin = createAdminClient();
   await admin.from("platform_settings").upsert(
@@ -82,12 +91,12 @@ export async function scrieConexiune(c: ConexiuneGa4Admin, idAdmin: string): Pro
       updated_by: idAdmin,
     },
     { onConflict: "key" },
-  );
+  ).throwOnError();
 }
 
 export async function stergeConexiune(): Promise<void> {
   const admin = createAdminClient();
-  await admin.from("platform_settings").delete().eq("key", CHEIE_CONEXIUNE);
+  await admin.from("platform_settings").delete().eq("key", CHEIE_CONEXIUNE).throwOnError();
 }
 
 /**

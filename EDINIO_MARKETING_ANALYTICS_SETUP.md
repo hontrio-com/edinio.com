@@ -82,7 +82,7 @@ La fiecare: **Scope = Event**, iar *Event parameter* = exact numele din tabel.
 
 ### Nu le înregistra
 
-`page_location`, `page_title`, `value`, `currency`, `search_term`,
+`page_location`, `page_title`, `value`, `currency`,
 `transaction_id` — GA4 le are deja ca parametri standard. Înregistrate din nou,
 consumă din cele 50 de locuri degeaba.
 

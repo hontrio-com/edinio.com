@@ -61,10 +61,14 @@ export type EvenimentEdinio =
     ele. Alea se fac numai pentru ce chiar pleaca. Lista de facut sta in
     documentul de configurare, nu aici.
 
-    Trase azi: page_view, cta_click, navigation_click, outbound_click,
-    section_view, scroll_depth, form_start/submit/error, generate_lead,
-    article_view, article_read_progress, article_read_complete,
-    newsletter_subscribe_request, newsletter_subscribe_confirmed.
+    ⚠ AICI A STAT O LISTA SCRISA DE MANA cu „trase azi". Numara paisprezece nume;
+    cand am numarat-o pe 03.09.2026 se trageau douazeci si noua. Imbatranise
+    tacut, ca orice lista de felul asta — si tocmai in fisierul in care scrie de
+    ce nu tinem promisiuni pe care nimeni nu le verifica.
+
+    Lista adevarata se numara din cod, nu se scrie: `document-configurare.test.ts`
+    o calculeaza si cade daca documentul nu se potriveste. Numele fara niciun
+    apelant sunt cerute separat, mai jos, de `taxonomie-fara-apelant.test.ts`.
   */
 
   /* ─── Preturi ──────────────────────────────────────────────────────────── */
@@ -105,7 +109,26 @@ export type EvenimentEdinio =
     si NU gasesc" e o lista de articole de scris. Fara numarul de rezultate, cele
     doua ajung amestecate pe acelasi rand si nu se mai pot desparti.
   */
-  | { name: "view_search_results"; search_term: string; search_scope: "blog" | "help"; search_results: number }
+  /*
+    ═══ ⚠ FARA `search_term`, SI DE CE A FOST SCOS PE 03.09.2026 ═══
+
+    Trimiteam textul brut al cautarii. Paza anti-PII il trecea prin tiparele
+    personale — email, telefon, CNP, IBAN, card — si atat prindea.
+
+    ⚠ CE NU PRINDEA NICIUN TIPAR: „Ion Popescu". „Strada Victoriei 123". Un nume
+    de utilizator. Un telefon strain. Google avertizeaza chiar despre casetele de
+    cautare ca fiind una din caile pe care datele personale ajung din greseala in
+    Analytics — si o data ajunse acolo, nu se mai pot scoate.
+
+    ⚠ CE RAMANE, si de ce e destul pentru intrebarea care conta. `search_results`
+    spune cate raspunsuri a primit omul; `zero_results` spune ca n-a gasit nimic.
+    Cate cautari raman fara raspuns pe blog fata de ajutor se poate afla in
+    continuare — numai CE anume s-a cautat nu mai pleaca spre un furnizor.
+
+    ⚠ SI DACA VREM CANDVA CHIAR TEXTUL, locul lui e un jurnal al NOSTRU, cu
+    pastrarea si stergerea lui, nu un cont de analiza al altcuiva.
+  */
+  | { name: "view_search_results"; search_scope: "blog" | "help"; search_results: number; zero_results: boolean }
   /*
     ⚠ DOUA MOMENTE DEOSEBITE, si confundarea lor umfla raportul cu pana la
     jumatate. `request` = omul a cerut abonarea; `confirmed` = a apasat legatura

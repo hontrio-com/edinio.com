@@ -96,7 +96,17 @@ const NUME_CUNOSCUTE_CURATE = [
  * ajunge in rapoarte fara sa vrea nimeni. Ce nu e aici trebuie sa fie o valoare
  * dintr-o multime cunoscuta (un id de buton, un fel de pagina), nu ce a tastat omul.
  */
-const TEXT_LIBER_PERMIS = ["search_term"] as const;
+const TEXT_LIBER_PERMIS = [] as const;
+/*
+  ⚠ LISTA E GOALA DIN 03.09.2026, si asta e o intarire, nu o scapare.
+
+  Singurul ei membru a fost `search_term`. L-am scos de tot din evenimente: un om
+  poate tasta orice in caseta de cautare, iar tiparele personale prind emailul si
+  telefonul, dar nu „Ion Popescu" si nu o adresa de strada.
+
+  Cat timp lista sta goala, NICIUN parametru n-are voie sa poarte text scris de
+  om. Cine vrea sa adauge unul trebuie sa treaca pe aici si sa scrie de ce.
+*/
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════

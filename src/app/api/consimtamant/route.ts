@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { serializeaza, validVid, VERSIUNE, type Metoda, type Stare } from "@/lib/edinio-marketing/consimtamant/stare";
 import { NUME_COOKIE, atributeCookie, eCookieDeMaturat } from "@/lib/edinio-marketing/consimtamant/cookie";
+import { scrubLaAbandon } from "@/lib/edinio-marketing/server/coada-conversii";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -28,7 +30,31 @@ type Corp = {
 
 const METODE: Metoda[] = ["t", "r", "p", "w"];
 
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠ UN PLAFON PE RUTA, SI DE CE E LARG DINADINS
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  Ruta scrie in baza pe calea de retragere. Un id de vizitator are 128 de biti,
+  deci nimeni nu poate ghici id-ul cuiva anume — dar pentru ABUZ nu e nevoie sa
+  ghicesti: se pot trimite id-uri intamplatoare la nesfarsit si se umple tabela.
+
+  ⚠ SI DE CE 30 PE ORA, nu 5. Plafonul asta sta pe calea prin care omul isi
+  RETRAGE acordul. Un drept care se poate lovi de un plafon nu mai e un drept.
+  Treizeci de raspunsuri la banner intr-o ora nu le da nici cel mai nehotarat om;
+  pentru un robot, in schimb, e deja o margine.
+
+  ⚠ CE NU E: o margine globala. `rateLimit` tine socoteala in memoria instantei,
+  deci pe serverless plafonul adevarat creste cu numarul de instante calde. E o
+  franare, nu un zid — si e scris aici ca sa nu creada nimeni altceva.
+*/
+const PE_ORA = 30;
+
 export async function POST(req: NextRequest) {
+  if (!rateLimit(`consimtamant:${clientIp(req)}`, PE_ORA, 3_600_000)) {
+    return NextResponse.json({ error: "prea multe cereri" }, { status: 429 });
+  }
+
   let corp: Corp;
   try {
     corp = (await req.json()) as Corp;
@@ -154,23 +180,51 @@ export async function POST(req: NextRequest) {
 
   try {
     if (!marketing && vidDeOprit) {
+      /*
+        ═══ ⚠ `.throwOnError()`, ALTFEL `retras: true` E O MINCIUNA ═══
+
+        ⚠ MASURAT pe 03.09.2026 cu supabase-js 2.106.1: o scriere respinsa NU
+        arunca — se rezolva cu `{ data: null, error: {...} }`. Deci `catch`-ul de
+        mai jos nu se deschidea, si `retras` ajungea `true` peste o scriere care
+        n-a avut loc.
+
+        Iar browserul, primind `true`, isi STERGEA restanta. Adica tocmai plasa
+        pusa azi impotriva unei baze picate se anula singura: retragerea ramanea
+        numai in browser, iar cronul, care se uita in baza, trimitea mai departe.
+      */
       await admin.from("edinio_consimtamant_retras").upsert(
         { vizitator: vidDeOprit, sursa: "browser" },
         { onConflict: "vizitator", ignoreDuplicates: true },
-      );
+      ).throwOnError();
+
+      /*
+        ⚠ AICI, NU LA CAPATUL BLOCULUI. Piatra de mormant e ce opreste cronul —
+        odata scrisa, poarta a treia il apara pe om chiar daca abandonarea de mai
+        jos cade. Deci confirmarea catre browser se da acum, nu dupa.
+      */
+      retras = true;
 
       /*
         ⚠ SE ABANDONEAZA CE N-A PLECAT INCA. Ce a plecat deja nu se recheama —
         Meta are o cale de stergere a datelor, TikTok n-am verificat-o. Nu se face
         azi si nu se promite; politica spune deja exact atat.
       */
+      /*
+        ⚠ SI SE STERGE CONTEXTUL OMULUI DE PE RANDURILE ABANDONATE. Pana azi
+        ramanea intreg — IP, `user-agent`, `_fbp`/`_fbc`/`_ttp`, adresa de venire —
+        si ramanea tocmai pe randurile celor care si-au RETRAS acordul. Cine
+        spunea „nu mai vreau" pastra cel mai bogat context, la nesfarsit.
+      */
       const { count } = await admin.from("edinio_conversion_outbox")
-        .update({ abandonat_la: new Date().toISOString(), ultima_eroare: "consimtamant retras" }, { count: "exact" })
+        .update({
+          abandonat_la: new Date().toISOString(),
+          ultima_eroare: "consimtamant retras",
+          ...scrubLaAbandon(),
+        }, { count: "exact" })
         .eq("vizitator", vidDeOprit)
         .is("trimis_la", null)
-        .is("abandonat_la", null);
-
-      retras = true;
+        .is("abandonat_la", null)
+        .throwOnError();
 
       if (count && count > 0) {
         await logError({

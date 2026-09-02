@@ -46,7 +46,7 @@ export function UrmaCautare({
 
     urmareste({
       name: "view_search_results",
-      search_term: curatat.slice(0, 100),
+      zero_results: rezultate === 0,
       search_scope: domeniu,
       search_results: rezultate,
     });

@@ -92,6 +92,23 @@ export type RandDeTrimis = {
 
 const TABELA = "edinio_conversion_outbox";
 
+/**
+ * Clientul de baza, dat din afara NUMAI in probe.
+ *
+ * ═══ ⚠ DE CE EXISTA CUSATURA ASTA ═══
+ *
+ * Cele trei functii de mai jos si-au schimbat azi purtarea tocmai pe drumul de
+ * ESEC: una cade acum inchis in loc de deschis, alta reincearca si striga. Un
+ * drum de esec pe care nu-l poti pipai e o promisiune, nu o plasa — si tocmai
+ * felul de promisiune pe care l-am scos azi din trei comentarii.
+ *
+ * Probele au nevoie de o baza care RASPUNDE CU EROARE. Nu se poate cere asta unei
+ * baze adevarate fara s-o strici, si nu se poate mima modulul fara un steag
+ * experimental pe toata suita. Deci: parametru cu valoare implicita. In productie
+ * nimeni nu-l da, si nimic nu se schimba.
+ */
+type Baza = ReturnType<typeof createAdminClient>;
+
 /*
   ⚠ SE PASTREAZA EVENIMENTUL, NU MESAJUL GATA FACUT.
 
@@ -155,10 +172,22 @@ export async function puneLaCoada(
       creeaza un al doilea rand. Deci nici o actiune reluata, nici o pagina
       reincarcata nu produc doua conversii.
     */
+    /*
+      ═══ ⚠ `.throwOnError()`, SI DE CE FARA EL `try` DE MAI SUS ERA DECORATIV ═══
+
+      ⚠ MASURAT pe 03.09.2026 cu supabase-js 2.106.1: o scriere respinsa de
+      PostgREST NU arunca. Se rezolva linistit cu `{ data: null, error: {...} }`,
+      iar la `update` si `count` iese `null`.
+
+      Deci `catch`-ul de mai jos nu se deschidea niciodata. O eroare de drepturi,
+      o restrictie incalcata, un PostgREST cazut — toate treceau drept reusita, si
+      conversia se pierdea fara ca nimeni sa afle. Tacerea era chiar felul de zero
+      care a mai pacalit aici.
+    */
     await createAdminClient().from(TABELA).upsert(randuri, {
       onConflict: "destinatie,nume_eveniment,event_id",
       ignoreDuplicates: true,
-    });
+    }).throwOnError();
   } catch (e) {
     /*
       ⚠ O COADA CARE NU PRIMESTE N-ARE VOIE SA STRICE INSCRIEREA. Masuratoarea e
@@ -251,28 +280,81 @@ export async function revendica(limita: number): Promise<RandDeTrimis[]> {
  * putin. Aici necunoscutul cade DESCHIS, dinadins: un rand exista numai fiindca
  * acordul exista cand a fost pus.
  */
-export async function ceiCareAuRetras(vizitatori: readonly string[]): Promise<Set<string>> {
+export async function ceiCareAuRetras(
+  vizitatori: readonly string[],
+  baza: Baza = createAdminClient(),
+): Promise<Set<string> | null> {
   const unici = [...new Set(vizitatori.filter((v): v is string => !!v))];
   if (unici.length === 0) return new Set();
 
-  const { data, error } = await createAdminClient()
+  const { data, error } = await baza
     .from("edinio_consimtamant_retras")
     .select("vizitator")
     .in("vizitator", unici);
 
   if (error) {
     /*
-      ⚠ LA EROARE SE INTOARCE MULTIMEA GOALA, deci nu se opreste nimic.
+      ═══ ⚠ LA EROARE SE INTOARCE `null`, SI ASTA INSEAMNA „NU TRIMITE" ═══
 
-      Alegerea e cinstita si merita spusa: interogarea asta e o PLASA pentru o
-      fereastra de cel mult un minut, nu poarta principala. Poarta adevarata e la
-      punere, unde randul nici nu se scrie. O baza care clipeste n-are voie sa
-      opreasca toate conversiile tuturor.
+      ⚠ AM SUSTINUT PANA AZI CONTRARIUL, si m-am inselat. Argumentul meu era ca
+      interogarea asta e doar o plasa pentru o fereastra de un minut, iar poarta
+      adevarata sta la punere — deci o baza care clipeste n-are voie sa opreasca
+      toate conversiile tuturor.
+
+      Ce n-am cantarit e ASIMETRIA COSTURILOR. Ce apara plasa e exact ce nu poate
+      apara poarta de la punere: retragerea de DUPA. Cand interogarea cade, plasa
+      nu mai apara nimic — tocmai in clipa in care e singura care ar putea. Iar
+      cele doua urmari nu se compara: a nu trimite inseamna o intarziere de un
+      minut pentru o masuratoare, si nimic din ce face afacerea nu depinde de ea;
+      a trimite inseamna o conversie plecata pentru un om care a spus nu.
+
+      O intarziere se recupereaza. O trimitere nu se ia inapoi.
     */
-    await logError({ action: "conversii.ceiCareAuRetras", message: error.message, severity: "warning" });
-    return new Set();
+    await logError({
+      action: "conversii.ceiCareAuRetras",
+      message: `nu s-a putut afla cine a retras, deci nu se trimite nimic in rularea asta: ${error.message}`,
+      severity: "warning",
+    });
+    return null;
   }
   return new Set((data ?? []).map((r) => r.vizitator));
+}
+
+/**
+ * A retras omul asta, ACUM?
+ *
+ * ═══ ⚠ DE CE INCA O INTREBARE, DUPA CEA PE LOT ═══
+ *
+ * Interogarea pe lot se face o data, la inceput. Dar lotul se trimite rand cu
+ * rand, si intre primul si al douazeci si cincilea pot trece zeci de secunde.
+ *
+ *     12:00:00  se intreaba pentru tot lotul — ABC n-a retras
+ *     12:00:02  ABC apasa „retrage"
+ *     12:00:07  se ajunge la randul lui ABC, si pleaca
+ *
+ * Nimic nu poate opri o cerere deja plecata pe fir. Dar fereastra se poate
+ * stramta pana aproape de zero, si asta se face aici: ultima intrebare, imediat
+ * inaintea cererii catre furnizor.
+ *
+ * ⚠ `null` INSEAMNA „NU STIU", si se citeste ca „nu trimite" — vezi nota de mai
+ * sus despre asimetria costurilor.
+ */
+export async function aRetras(vizitator: string, baza: Baza = createAdminClient()): Promise<boolean | null> {
+  const { data, error } = await baza
+    .from("edinio_consimtamant_retras")
+    .select("vizitator")
+    .eq("vizitator", vizitator)
+    .maybeSingle();
+
+  if (error) {
+    await logError({
+      action: "conversii.aRetras",
+      message: `verificarea finala a acordului a cazut, deci randul nu pleaca: ${error.message}`,
+      severity: "warning",
+    });
+    return null;
+  }
+  return data !== null;
 }
 
 /**
@@ -307,18 +389,54 @@ export function sarcinaGolita(s: SarcinaPastrata): Record<string, unknown> {
   return { ev: { name: s.ev.name }, cand: s.cand, golita: true };
 }
 
-export async function marcheazaTrimis(id: string, sarcina?: SarcinaPastrata): Promise<void> {
+/**
+ * Randul a plecat: se insemneaza, si se goleste sarcina.
+ *
+ * ═══ ⚠ AICI ESECUL SE STRIGA, DAR NU SE ARUNCA ═══
+ *
+ * ⚠ CE SE INTAMPLA DACA SCRIEREA CADE. Conversia a ajuns DEJA la furnizor — asta
+ * nu se mai poate lua inapoi. Daca insemnarea nu se scrie, arenda expira si
+ * rularea urmatoare revendica acelasi rand si il trimite din nou.
+ *
+ * ⚠ SI DE CE NU ARUNCA. In cron, chemarea asta sta in acelasi `try` cu
+ * trimiterea. Aruncand, ar cadea in `catch`-ul care cheama `marcheazaEsuat` — iar
+ * acela ar programa o REINCERCARE pentru ceva ce a plecat cu bine. Adica leacul
+ * ar face chiar raul de care ne temem, si l-ar face sigur, nu doar posibil.
+ *
+ * Deci: se incearca o data, se reincearca o data, si daca tot nu merge se scrie
+ * in jurnal cu severitate `error` — e singurul caz din fisierul asta in care
+ * datele din baza si lumea de afara chiar s-au despartit.
+ */
+export async function marcheazaTrimis(
+  id: string,
+  sarcina?: SarcinaPastrata,
+  baza: Baza = createAdminClient(),
+): Promise<void> {
   const golita = sarcina ? (sarcinaGolita(sarcina) as unknown as Json) : undefined;
+  const campuri = {
+    trimis_la: new Date().toISOString(),
+    ultima_eroare: null,
+    ...(golita ? { sarcina: golita } : {}),
+    /* ⚠ Si legatura cu omul: fara ea, randul nu mai spune al cui a fost. */
+    ...(golita ? { vizitator: null } : {}),
+  };
 
-  await createAdminClient().from(TABELA)
-    .update({
-      trimis_la: new Date().toISOString(),
-      ultima_eroare: null,
-      ...(golita ? { sarcina: golita } : {}),
-      /* ⚠ Si legatura cu omul: fara ea, randul nu mai spune al cui a fost. */
-      ...(golita ? { vizitator: null } : {}),
-    })
-    .eq("id", id);
+  for (const incercare of [1, 2]) {
+    try {
+      await baza.from(TABELA).update(campuri).eq("id", id).throwOnError();
+      return;
+    } catch (e) {
+      if (incercare === 1) continue;
+      await logError({
+        action: "conversii.marcajPierdut",
+        message: `conversia a plecat, dar randul nu s-a putut insemna ca trimis: ${
+          e instanceof Error ? e.message : "eroare necunoscuta"
+        }. Se va retrimite dupa expirarea arendei.`,
+        details: { rand: id },
+        severity: "error",
+      });
+    }
+  }
 }
 
 /**
@@ -332,9 +450,47 @@ export async function marcheazaEsuat(id: string, incercariDeAcum: number, eroare
   const h = dupaEsec(incercariDeAcum);
   const comun = { incercari: incercariDeAcum, ultima_eroare: eroare.slice(0, 500) };
 
-  await createAdminClient().from(TABELA).update(
-    h.fel === "abandoneaza"
-      ? { ...comun, abandonat_la: new Date().toISOString() }
-      : { ...comun, next_retry_at: candSeReincearca(new Date(), h.pesteMinute) },
-  ).eq("id", id);
+  /*
+    ⚠ SI AICI ESECUL SE STRIGA. Fara `.throwOnError()`, o scriere respinsa trecea
+    drept reusita — iar `incercari` nu crestea. Randul s-ar fi reincercat la
+    nesfarsit, mereu cu acelasi numar, fara sa ajunga niciodata la abandon.
+  */
+  try {
+    await createAdminClient().from(TABELA).update(
+      h.fel === "abandoneaza"
+        ? { ...comun, abandonat_la: new Date().toISOString(), ...scrubLaAbandon() }
+        : { ...comun, next_retry_at: candSeReincearca(new Date(), h.pesteMinute) },
+    ).eq("id", id).throwOnError();
+  } catch (e) {
+    await logError({
+      action: "conversii.marcajEsecPierdut",
+      message: `nu s-a putut insemna esecul randului: ${e instanceof Error ? e.message : "eroare necunoscuta"}`,
+      details: { rand: id, fel: h.fel },
+      severity: "error",
+    });
+  }
+}
+
+/**
+ * Ce se sterge de pe un rand ABANDONAT.
+ *
+ * ═══ ⚠ DE CE SI LA ABANDON, NU DOAR LA REUSITA ═══
+ *
+ * La reusita sarcina se golea deja. La abandon ramanea INTREAGA — cu IP, cu
+ * `user-agent`, cu `_fbp`/`_fbc`/`_ttp`, cu adresa de venire.
+ *
+ * ⚠ SI CINE AJUNGE ACOLO. Chiar oamenii care si-au RETRAS acordul: randurile lor
+ * se abandoneaza pe calea asta. Deci tocmai cui a spus „nu mai vreau" ii ramanea
+ * contextul cel mai bogat, pastrat la nesfarsit.
+ *
+ * ⚠ NU SE PIERDE NIMIC DIN CE TREBUIE PENTRU DEPANARE. Numele evenimentului,
+ * `event_id`-ul, destinatia, numarul de incercari, motivul si clipele stau in
+ * COLOANE separate, nu in `sarcina` — deci raman intacte. Se sterge numai ce
+ * descrie OMUL, si numai dupa ce s-a hotarat ca randul nu mai pleaca nicaieri.
+ *
+ * ⚠ SI NUMAI LA ABANDON. Pe calea de reincercare sarcina trebuie sa ramana
+ * intreaga: din ea se cladeste mesajul la incercarea urmatoare.
+ */
+export function scrubLaAbandon(): { sarcina: Json; vizitator: null } {
+  return { sarcina: { golita: true, abandonata: true } as unknown as Json, vizitator: null };
 }

@@ -104,7 +104,7 @@ export function CautareGhiduri({ categorii }: { categorii: React.ReactNode }) {
       trimis.current = curatat;
       urmareste({
         name: "view_search_results",
-        search_term: curatat.slice(0, 100),
+        zero_results: rezultate.length === 0,
         search_scope: "help",
         search_results: rezultate.length,
       });

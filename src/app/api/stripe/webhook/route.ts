@@ -8,6 +8,7 @@ import type Stripe from "stripe";
 import { logError } from "@/lib/error-logger";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
 import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
+import { validVid } from "@/lib/edinio-marketing/consimtamant/stare";
 
 function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -581,7 +582,26 @@ async function proceseazaEveniment(admin: SupabaseClient, event: Stripe.Event): 
           currency: "RON",
           event_id: session.id,
         },
-        { ctx: {}, amprentaOmului: userId },
+        /*
+          ═══ ⚠ ACEEASI SAMANTA CA LA INSCRIERE, SI DE CE CONTEAZA ═══
+
+          `sign_up` foloseste `consim?.vid ?? idCont`. Aici statea doar `userId` —
+          deci acelasi om ajungea la Meta si TikTok cu DOUA identitati pseudonime:
+          una la inscriere, alta la plata. Cele doua nu se leaga intre ele, si
+          tocmai legatura aia e ce foloseste unei conversii.
+
+          ⚠ NU E ATRIBUIRE la prima sau la ultima atingere — aia am respins-o si
+          nu se intoarce pe usa din dos. E doar continuitatea aceleiasi persoane
+          intre doua evenimente ale ei.
+
+          ⚠ SI SE VERIFICA FORMA. `vid`-ul vine din metadata unei sesiuni Stripe,
+          adica dintr-un camp pe care l-am scris noi dar care trece prin ei. Ce nu
+          arata a id valid se ignora, si se cade pe `userId`.
+        */
+        {
+          ctx: {},
+          amprentaOmului: validVid(session.metadata?.vid) ? session.metadata.vid : userId,
+        },
         destinatiiActive(),
         /*
           ⚠ AICI NU EXISTA COOKIE. Webhook-ul vine de la serverele Stripe, nu de la

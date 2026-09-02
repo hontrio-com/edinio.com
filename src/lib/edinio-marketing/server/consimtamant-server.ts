@@ -1,6 +1,7 @@
 import { headers, cookies } from "next/headers";
 import { parseaza, type Stare } from "../consimtamant/stare";
 import { NUME_COOKIE, MARTORI } from "../consimtamant/cookie";
+import { curataAdresa } from "../adresa-curata";
 import type { Destinatie } from "./coada-conversii";
 import type { ContextTrimitere } from "./sarcina-tiktok";
 
@@ -46,10 +47,25 @@ export async function martoriiCererii(): Promise<{ fbp?: string; fbc?: string; t
 export async function contextulCererii(): Promise<ContextTrimitere> {
   const h = await headers();
   const brut = h.get("x-forwarded-for")?.split(",")[0]?.trim();
+  const venitDe = h.get("referer");
   return {
     ip: brut && brut !== "unknown" ? brut : null,
     userAgent: h.get("user-agent"),
-    referrer: h.get("referer"),
+    /*
+      ═══ ⚠ SI ADRESA DE VENIRE SE CURATA, LA FEL CA IN BROWSER ═══
+
+      In browser, `page_location` trece prin `curataAdresa` de mult. Antetul
+      `Referer` de aici nu trecea prin nimic — pleca BRUT catre TikTok (in
+      `page.referrer`) si se pastra brut in coada.
+
+      ⚠ CE POATE PURTA. Un `Referer` de pe propriul nostru site duce cu el
+      intregul sir de interogare al paginii de dinainte. Adica un jeton de
+      dezabonare, un cod dintr-un email, orice punem vreodata intr-o adresa —
+      ajungea la un furnizor de reclame si ramanea scris in baza.
+
+      Aceeasi lista alba, acelasi loc: ce nu e `utm_*` sau un id de clic nu iese.
+    */
+    referrer: venitDe ? curataAdresa(venitDe) : null,
   };
 }
 

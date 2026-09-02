@@ -3,7 +3,7 @@ import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
 import {
   revendica, marcheazaTrimis, marcheazaEsuat, ceiCareAuRetras,
-  ARENDA_MS, MS_CERERE_FURNIZOR,
+  ARENDA_MS, MS_CERERE_FURNIZOR, aRetras,
 } from "@/lib/edinio-marketing/server/coada-conversii";
 import { trimiteTikTok } from "@/lib/edinio-marketing/server/trimite-tiktok";
 import { trimiteMeta } from "@/lib/edinio-marketing/server/trimite-meta";
@@ -73,7 +73,22 @@ export async function GET(req: NextRequest) {
   */
   const retrasi = await ceiCareAuRetras(randuri.map((r) => r.vizitator ?? ""));
 
-  let trimise = 0, esecuri = 0, refuzate = 0, oprite = 0, amanate = 0;
+  /*
+    ⚠ DACA NU SE POATE AFLA CINE A RETRAS, NU PLEACA NIMIC. Randurile raman
+    revendicate; arenda expira intr-un minut si le ia rularea urmatoare. Costul e
+    o intarziere de un minut pentru o masuratoare; celalalt cost ar fi o conversie
+    plecata pentru un om care a spus nu. Vezi nota din `ceiCareAuRetras`.
+  */
+  if (retrasi === null) {
+    await logError({
+      action: "conversii.amanatFaraVerificare",
+      message: `${randuri.length} conversii amanate: nu s-a putut afla cine si-a retras acordul`,
+      severity: "warning",
+    });
+    return NextResponse.json({ ok: true, luate: randuri.length, amanate: randuri.length, motiv: "verificare-acord-indisponibila" });
+  }
+
+  let trimise = 0, esecuri = 0, refuzate = 0, oprite = 0, amanate = 0, nesigure = 0;
 
   for (const r of randuri) {
     /*
@@ -97,6 +112,27 @@ export async function GET(req: NextRequest) {
       await marcheazaEsuat(r.id, 99, "consimtamant retras intre revendicare si trimitere");
       oprite++;
       continue;
+    }
+
+    /*
+      ═══ ⚠ ULTIMA INTREBARE, IMEDIAT INAINTEA CERERII CATRE FURNIZOR ═══
+
+      Verificarea pe lot de mai sus s-a facut o data, la inceput. Intre ea si
+      randul asta pot trece zeci de secunde, si in ele omul poate apasa „retrage".
+      Nimic nu opreste o cerere deja plecata pe fir — dar fereastra se stramteaza
+      pana aproape de zero intreband din nou aici.
+
+      ⚠ SI NU INLOCUIESTE INTREBAREA PE LOT: aceea ramane, fiindca opreste
+      randurile stiute retrase FARA sa mai deschida vreo cerere.
+    */
+    if (r.vizitator) {
+      const acumRetras = await aRetras(r.vizitator);
+      if (acumRetras === null) { nesigure++; continue; }
+      if (acumRetras) {
+        await marcheazaEsuat(r.id, 99, "consimtamant retras intre revendicare si trimitere");
+        oprite++;
+        continue;
+      }
     }
 
     try {
@@ -150,6 +186,19 @@ export async function GET(req: NextRequest) {
     la capat, coada creste in tacere si nimeni n-ar afla decat dupa ce se aduna.
     E singurul semn ca `PE_RULARE` a devenit prea mare pentru un minut.
   */
+  /*
+    ⚠ SI CELE PENTRU CARE N-AM PUTUT INTREBA. Se strigă separat de `amanate`: alea
+    n-au incaput in arenda, astea n-au putut fi verificate. Doua pricini deosebite
+    n-au voie sa arate la fel in jurnal.
+  */
+  if (nesigure > 0) {
+    await logError({
+      action: "conversii.nesigure",
+      message: `${nesigure} conversii n-au plecat: verificarea finala a acordului n-a raspuns`,
+      severity: "warning",
+    });
+  }
+
   if (amanate > 0) {
     await logError({
       action: "conversii.amanate",
@@ -166,5 +215,5 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ ok: true, luate: randuri.length, trimise, esecuri, refuzate, oprite, amanate });
+  return NextResponse.json({ ok: true, luate: randuri.length, trimise, esecuri, refuzate, oprite, amanate, nesigure });
 }

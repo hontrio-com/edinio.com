@@ -173,11 +173,33 @@ test("⚠ browserul foloseste id-ul sesiunii pentru abonament, nu pe cel al maga
     "trialul nu mai poarta id-ul magazinului — s-ar despartii de perechea lui de server");
 });
 
+/**
+ * Chemarea `puneLaCoada(...)` care duce `name: "purchase"`, INTREAGA.
+ *
+ * ⚠ AICI STATEA `cod.slice(i, i + 400)`. Pe 03.09.2026 a cazut fara ca purtarea
+ * sa se fi schimbat: am adaugat un comentariu inauntrul chemarii, si `ctx: {}` a
+ * iesit din fereastra. Adica proba masura lungimea comentariilor, nu codul.
+ *
+ * O fereastra de marime fixa peste sursa e o proba care imbatraneste singura. Se
+ * taie chemarea dupa PARANTEZE, cat tine ea.
+ */
+function chemareaDeCoada(cod: string): string {
+  const nume = cod.indexOf('name: "purchase"');
+  assert.ok(nume > 0, "webhook-ul nu mai pune abonamentul la coada");
+  const start = cod.lastIndexOf("puneLaCoada(", nume);
+  assert.ok(start > 0, "nu mai gasesc chemarea care duce abonamentul la coada");
+
+  let adanc = 0;
+  for (let i = start; i < cod.length; i++) {
+    if (cod[i] === "(") adanc++;
+    else if (cod[i] === ")") { adanc--; if (adanc === 0) return cod.slice(start, i + 1); }
+  }
+  assert.fail("chemarea `puneLaCoada` nu se inchide");
+}
+
 test("⚠ webhook-ul numeste ACEEASI sesiune, si raporteaza banii incasati", () => {
   const cod = readFileSync("src/app/api/stripe/webhook/route.ts", "utf8");
-  const i = cod.indexOf('name: "purchase"');
-  assert.ok(i > 0, "webhook-ul nu mai pune abonamentul la coada");
-  const bucata = cod.slice(i, i + 400);
+  const bucata = chemareaDeCoada(cod);
 
   assert.match(bucata, /event_id: session\.id/,
     "webhook-ul foloseste alt id decat browserul — abonamentul s-ar numara de doua ori");
@@ -191,9 +213,7 @@ test("⚠ webhook-ul NU trimite ip-ul si browserul — ar fi ale lui Stripe", ()
     ip-ul l-ar aseza in tara lor, iar `user_agent` ar fi al unui robot — deci
     potrivirea la Meta si TikTok ar fi stricata, nu ajutata. Ce nu stim lipseste.
   */
-  const cod = readFileSync("src/app/api/stripe/webhook/route.ts", "utf8");
-  const i = cod.indexOf('name: "purchase"');
-  const bucata = cod.slice(i, i + 400);
+  const bucata = chemareaDeCoada(readFileSync("src/app/api/stripe/webhook/route.ts", "utf8"));
   assert.match(bucata, /ctx: \{\}/, "webhook-ul a inceput sa trimita un context");
   for (const camp of ["x-forwarded-for", "user-agent", "userAgent"]) {
     assert.ok(!bucata.includes(camp), `webhook-ul trimite "${camp}" — ar fi al lui Stripe, nu al omului`);

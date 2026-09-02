@@ -11,7 +11,7 @@
 
 import type { Adaptor } from "./magistrala";
 import type { EvenimentEdinio } from "./evenimente";
-import { codGa4 } from "./mediu";
+import { codGa4, eDepanare } from "./mediu";
 import { curataAdresa } from "./adresa-curata";
 
 type Gtag = (...a: unknown[]) => void;
@@ -105,6 +105,23 @@ export const adaptorGa4: Adaptor = {
     if (ev.name === "purchase") {
       parametri.transaction_id = ev.event_id;
     }
+
+    /*
+      ═══ ⚠ `debug_mode` FACE EVENIMENTUL VIZIBIL IN DEBUGVIEW ═══
+
+      Fara el, DebugView-ul din GA4 nu arata NIMIC — si asta e singurul loc unde
+      poti vedea, eveniment cu eveniment, ce a ajuns chiar la Google si cu ce
+      parametri. Documentul de configurare trimitea omul acolo; pana pe
+      02.09.2026 il trimitea degeaba.
+
+      ⚠ SE APRINDE ODATA CU JURNALUL DIN CONSOLA, adica numai la cine si-a pus
+      cheia in `localStorage`. Un vizitator obisnuit nu trimite niciodata
+      `debug_mode`.
+
+      ⚠ SI NU MURDARESTE RAPOARTELE: GA4 tine evenimentele cu `debug_mode` in
+      afara rapoartelor obisnuite, tocmai ca sa se poata proba pe viu.
+    */
+    if (eDepanare()) parametri.debug_mode = true;
 
     g("event", nume, { ...parametri, ...context });
   },

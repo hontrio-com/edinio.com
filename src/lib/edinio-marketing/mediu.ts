@@ -37,13 +37,26 @@ export function eProductieMarketing(): boolean {
 /**
  * Scriem in consola ce s-ar fi trimis?
  *
- * ⚠ NUMAI IN AFARA PRODUCTIEI. Un jurnal de evenimente pornit pe productie ar
- * scrie in consola fiecarui vizitator ce urmarim despre el — nu e o scurgere de
- * date, dar e o purtare pe care n-o vrea nimeni.
+ * ═══ ⚠ MERGE SI PE PRODUCTIE, SI ASTA E O SCHIMBARE DIN 02.09.2026 ═══
+ *
+ * Randul de dinainte era `if (eProductieMarketing()) return false;`, cu motivul
+ * scris alaturi: „un jurnal pornit pe productie ar scrie in consola FIECARUI
+ * vizitator ce urmarim despre el".
+ *
+ * Motivul era gresit, si l-am prins abia scriind documentul de configurare. Nu
+ * scrie in consola fiecarui vizitator: scrie numai la cine si-a pus el insusi
+ * cheia in `localStorage`. Un om care face asta isi vede propriile evenimente,
+ * despre el — nici urma de scurgere.
+ *
+ * Iar pretul opririi era mare: tocmai PE PRODUCTIE ai nevoie sa vezi ce pleaca.
+ * Documentul spunea „aprinde cheia pe edinio.com si te uiti in consola", si era
+ * o instructiune care nu functiona.
+ *
+ * ⚠ CE RAMANE ADEVARAT: nu se aprinde singur nicaieri. Fara cheia pusa de mana,
+ * consola tace peste tot.
  */
 export function eDepanare(): boolean {
   if (typeof window === "undefined") return false;
-  if (eProductieMarketing()) return false;
   try {
     return window.localStorage.getItem("edinio_marketing_debug") === "1";
   } catch {

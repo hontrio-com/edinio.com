@@ -413,3 +413,39 @@ test("fara `fbq` pe pagina, evenimentul asteapta si nu strica nimic", () => {
   assert.equal(laFbq.length, 0);
   assert.equal(laTtq.length, 1, "TikTok trebuia sa primeasca; nu depinde de Meta");
 });
+
+/* ═══ 7. Depanarea, care trebuie sa mearga TOCMAI pe productie ═══ */
+
+test("⚠ jurnalul si `debug_mode` se aprind numai cu cheia pusa de mana — dar si pe productie", () => {
+  /*
+    ═══ CE ERA STRICAT, SI CUM L-AM GASIT ═══
+
+    `eDepanare()` avea un `if (eProductieMarketing()) return false;`. Motivul
+    scris alaturi era ca altfel s-ar scrie in consola FIECARUI vizitator — ceea ce
+    era fals: se scrie numai la cine si-a pus el insusi cheia in `localStorage`.
+
+    Pretul era ca tocmai pe productie nu puteai vedea ce pleaca. Iar documentul de
+    configurare spunea „aprinde cheia pe edinio.com si uita-te" — o instructiune
+    care nu functiona. L-am prins scriind documentul, nu citind codul.
+
+    ⚠ `debug_mode` E JUMATATEA CEALALTA. Fara el, DebugView-ul din GA4 nu arata
+    nimic, oricat de aprins ar fi jurnalul din consola.
+  */
+  const laGtag: unknown[][] = [];
+  const w = (globalThis as unknown as { window: Record<string, unknown> }).window;
+  w.gtag = (...a: unknown[]) => { laGtag.push(a); };
+  inregistreazaAdaptor(adaptorGa4);
+
+  /* Cheia stinsa: nimic in plus, pe gazda de productie. */
+  (w.location as { hostname: string }).hostname = "www.edinio.com";
+  w.localStorage = { getItem: () => null };
+  urmareste({ name: "page_view", page_location: "https://www.edinio.com/" });
+  const faraCheie = laGtag[0][2] as Record<string, unknown>;
+  assert.equal(faraCheie.debug_mode, undefined, "`debug_mode` pleaca la orice vizitator");
+
+  /* Cheia aprinsa, ACEEASI gazda de productie: acum se vede. */
+  w.localStorage = { getItem: (k: string) => (k === "edinio_marketing_debug" ? "1" : null) };
+  urmareste({ name: "page_view", page_location: "https://www.edinio.com/" });
+  const cuCheie = laGtag[1][2] as Record<string, unknown>;
+  assert.equal(cuCheie.debug_mode, true, "cu cheia pusa, DebugView tot nu vede nimic pe productie");
+});

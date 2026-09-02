@@ -45,9 +45,13 @@ import { logError } from "@/lib/error-logger";
 // A doua schimbare: o CITIRE PICATA nu mai are voie sa treaca drept „asteptam
 // clientul". Verdictele din `DomainStatus` sunt acum `true | false | null`, iar
 // `null` inseamna „nu stiu", niciodata „e rau" si niciodata „e bine". Ce nu s-a
-// putut citi ajunge intr-o categorie separata, `neverificate`, care se vede si in
-// `/admin/logs` si in emailul catre suport. Starea „n-am putut afla nimic si nu
-// spune nimeni nimic" nu mai exista.
+// putut citi ajunge intr-o categorie separata, `neverificate`. Starea „n-am putut
+// afla nimic si nu spune nimeni nimic" nu mai exista.
+//
+// ⚠ DIN 02.09.2026, `neverificate` NU mai pleaca intreaga pe email. Regula
+// proprietarului: se striga numai cand clientul si-a mutat nameserverele la noi si
+// tot nu merge — singura stare in care avem noi ceva de facut. Restul se scrie ca
+// `info` in `/admin/logs`, deci se vede cand cauti, dar nu suna. Vezi `deStrigat`.
 //
 // A treia: alerta pleaca acum SI catre proprietarul magazinului, nu doar catre
 // suport. Vezi `sendBrokenDomainToOwner`.
@@ -355,7 +359,19 @@ export async function GET(req: NextRequest) {
   const repaired: string[] = [];
   const stricate: DomeniuStricat[] = [];
   const asteptam: string[] = [];
-  const neverificate: DomeniuNeverificat[] = [];
+  /*
+    ═══ ⚠ REGULA PROPRIETARULUI, 02.09.2026 ═══
+
+    „Daca nu e la noi, nu are rost sa-mi mai trimiti nimic. Imi trimiti doar daca
+    a schimbat nameserverele cu ale noastre si tot nu functioneaza."
+
+    E o regula mai buna decat clasificarile pe care le propusesem, fiindca nu
+    intreaba „ce fel de necunoscuta e asta", ci „are cineva ce face cu ea".
+
+    Se tine minte DELEGAREA pe fiecare rand, ca sa se poata alege mai jos cine
+    ajunge in email si cine ramane doar in jurnal.
+  */
+  const neverificate: (DomeniuNeverificat & { delegat: boolean | null })[] = [];
   /** Apexul merge, dar geamanul `www.` nu s-a putut atasa. Degradare, nu cadere. */
   const wwwLipsa: string[] = [];
   let healthy = 0;
@@ -463,7 +479,7 @@ export async function GET(req: NextRequest) {
 
       if (verdict.fel === "sanatos") { healthy++; return; }
       if (verdict.fel === "asteptam") { asteptam.push(domain); return; }
-      if (verdict.fel === "neverificat") { neverificate.push({ domain, motiv: verdict.motiv }); return; }
+      if (verdict.fel === "neverificat") { neverificate.push({ domain, motiv: verdict.motiv, delegat: status.delegated }); return; }
 
       const ownerEmail = await adresaProprietarului(admin, store);
       stricate.push({
@@ -486,6 +502,8 @@ export async function GET(req: NextRequest) {
       neverificate.push({
         domain,
         motiv: `Verificarea a aruncat: ${err instanceof Error ? err.message : String(err)}`,
+        /* Sonda a cazut: nu stim nici macar daca domeniul e la noi. */
+        delegat: null,
       });
     }
   }));
@@ -545,7 +563,41 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  if (neverificate.length > 0 || wwwLipsa.length > 0) {
+  /*
+    ═══ ⚠ CINE MERITA SA FIE STRIGAT, SI CINE DOAR SA FIE VAZUT ═══
+
+    Regula proprietarului: se striga NUMAI cand clientul si-a mutat nameserverele
+    la noi si tot nu merge. Aia e singura stare in care exista ceva de facut de
+    partea noastra.
+
+    ⚠ CE TACE ACUM, si de ce e corect:
+      `delegat === false` — domeniul nici nu arata catre noi. `okai.ro` sta la
+        ird.ro si `alexshop.ro` la cyberfolks; magazinele de sub ele au ZERO
+        produse si ZERO comenzi si n-au fost atinse din 10 august. Randul asta a
+        scris acelasi mesaj de peste 150 de ori.
+      `delegat === null` — sonda a cazut pentru domeniul ala. Nu stim nimic, deci
+        n-avem ce cere nimanui. O cadere GENERALA de citire ramane strigata
+        separat, ca `critical`, mai sus — nu se pierde.
+
+    ⚠ SI NU DISPAR, SE MUTA. Ce nu se striga se scrie mai jos ca `info`, deci se
+    vede in `/admin/logs` cand cauti. Deosebirea dintre „nu te sun" si „nu-ti
+    spun" e tot ce conteaza aici.
+  */
+  const deStrigat = neverificate.filter((x) => x.delegat === true);
+  const doarInJurnal = neverificate.filter((x) => x.delegat !== true);
+
+  if (doarInJurnal.length > 0) {
+    await logError({
+      action: "domains-reconcile.netrimise",
+      message:
+        `${doarInJurnal.length} domenii neverificate NEtrimise pe email: nu sunt delegate catre noi. ` +
+        "Clientul nu si-a mutat nameserverele, deci nu avem ce repara.",
+      details: { domenii: doarInJurnal.map((x) => ({ domain: x.domain, delegat: x.delegat })) },
+      severity: "info",
+    });
+  }
+
+  if (deStrigat.length > 0 || wwwLipsa.length > 0) {
     /*
      * ═══ ⚠ O ALARMA CARE SUNA MEREU E O ALARMA OPRITA (26.08.2026) ═══
      *
@@ -565,7 +617,7 @@ export async function GET(req: NextRequest) {
      * atatea ori la rand acelasi, deci uita-te la sonda, nu la domeniu".
      */
     const amprenta = JSON.stringify({
-      n: neverificate.map((x) => `${x.domain}|${x.motiv}`).sort(),
+      n: deStrigat.map((x) => `${x.domain}|${x.motiv}`).sort(),
       w: [...wwwLipsa].sort(),
     });
 
@@ -602,16 +654,16 @@ export async function GET(req: NextRequest) {
       await logError({
         action: "domains-reconcile.neverificate",
         message:
-          `${neverificate.length} domenii neverificate` +
+          `${deStrigat.length} domenii neverificate` +
           (wwwLipsa.length ? `, ${wwwLipsa.length} fara geamanul www` : "") +
           repetat,
-        details: { neverificate, wwwLipsa, amprenta, laRand },
+        details: { neverificate: deStrigat, wwwLipsa, amprenta, laRand },
         severity: "warning",
       });
     }
   }
 
-  if (stricate.length > 0 || neverificate.length > 0) {
+  if (stricate.length > 0 || deStrigat.length > 0) {
     /*
      * ═══ EMAILUL SE FRANEAZA, ACUM PER DESTINATAR. ═══
      *
@@ -726,13 +778,13 @@ export async function GET(req: NextRequest) {
      */
     const cheiSuport = [
       ...(stricate.length ? [`suport:stricate:${amprenta(stricate.map((b) => b.domain))}`] : []),
-      ...(neverificate.length ? ["suport:neverificate"] : []),
+      ...(deStrigat.length ? ["suport:neverificate"] : []),
     ];
     await trimite(
       cheiSuport,
       "suport",
-      [...stricate.map((b) => b.domain), ...neverificate.map((n) => n.domain)],
-      () => sendBrokenDomainsToAdmin(stricate, neverificate),
+      [...stricate.map((b) => b.domain), ...deStrigat.map((n) => n.domain)],
+      () => sendBrokenDomainsToAdmin(stricate, deStrigat),
     );
 
     /*

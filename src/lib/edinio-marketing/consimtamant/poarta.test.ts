@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { faraUrmarire } from "../fara-urmarire";
+import { faraComentarii } from "../fara-comentarii";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -17,18 +18,6 @@ import { faraUrmarire } from "../fara-urmarire";
 
 const RAND = String.fromCharCode(10);
 const citeste = (p: string) => readFileSync(p, "utf8");
-
-function faraComentarii(cod: string): string {
-  const faraBlocuri = cod.split("/*").map((b, i) => {
-    if (i === 0) return b;
-    const k = b.indexOf("*/");
-    return k < 0 ? "" : b.slice(k + 2);
-  }).join("");
-  return faraBlocuri.split(RAND).map((r) => {
-    const k = r.indexOf("//");
-    return k < 0 ? r : r.slice(0, k);
-  }).join(RAND);
-}
 
 function fisiereSursa(rad: string): string[] {
   const out: string[] = [];
@@ -323,7 +312,8 @@ test("⚠ aplicatia autentificata nu incarca NICIUN script de reclama", () => {
 
   /* ⚠ Si plasa de rulare, pentru cazul in care ajung acolo pe alta usa. */
   const reguli = citeste("src/lib/edinio-marketing/fara-urmarire.ts");
-  for (const cale of ["/dashboard", "/admin"]) {
+  for (const cale of ["/dashboard", "/admin", "/login/mfa", "/reset-password",
+                      "/blog/confirma", "/blog/dezabonare"]) {
     assert.ok(
       new RegExp(`"${cale}"`).test(reguli),
       `${cale} nu mai e in CAI_FARA_URMARIRE — un pixel pus la loc s-ar incarca`,
@@ -340,37 +330,79 @@ test("⚠ aplicatia autentificata nu incarca NICIUN script de reclama", () => {
     ar fi tacut fara ca nimic sa cada.
   */
   assert.equal(faraUrmarire("/dashboard-public"), false, "potrivirea de cale inghite si cai vecine");
+
+  /*
+    ⚠ SI ECRANELE CU SESIUNE VIE DIN `(auth)`. Grupul isi pastreaza pixelii pe
+    `/login`, `/register` si `/forgot-password` — acolo ajung oamenii din reclame,
+    si tocmai pixelul aseaza `_fbc`/`_fbp`, fara care `sign_up`-ul de mai tarziu
+    n-ar mai sti de la ce campanie a venit omul.
+
+    Dar `/login/mfa` se atinge numai dupa ce parola a fost primita, iar
+    `/reset-password` se deschide dintr-un link de email CU sesiune de recuperare —
+    si acolo omul tasteaza o parola noua. Acelasi argument ca la panou.
+  */
+  assert.equal(faraUrmarire("/login/mfa"), true, "ecranul de al doilea factor incarca iar scripturi terte");
+  assert.equal(faraUrmarire("/reset-password"), true, "ecranul de parola noua incarca iar scripturi terte");
+  assert.equal(faraUrmarire("/login"), false, "s-a stins pixelul si pe autentificarea obisnuita — se pierde atribuirea din reclame");
+  assert.equal(faraUrmarire("/register"), false, "s-a stins pixelul pe inregistrare — `sign_up` ar pierde id-ul clicului pe reclama");
+
+  /*
+    ⚠ SI PAGINILE CU JETON IN ADRESA. `/blog/confirma?t=` si `/blog/dezabonare?t=`
+    poarta CHEIA de confirmare, respectiv de dezabonare, nu un parametru de
+    urmarire. `curataAdresa` taie sirul de interogare pentru ce trece prin
+    magistrala NOASTRA — dar `fbevents.js`, `events.js` si eticheta Google isi
+    trimit singure vizualizarea de pagina, cu `location.href` intreg, si pe langa
+    magistrala noastra nu trece nimic din ce fac ele. Jetonul pleca in clar la trei
+    furnizori.
+  */
+  assert.equal(faraUrmarire("/blog/confirma"), true, "jetonul de confirmare pleaca iar la furnizori");
+  assert.equal(faraUrmarire("/blog/dezabonare"), true, "jetonul de dezabonare pleaca iar la furnizori");
+  assert.equal(faraUrmarire("/blog"), false, "s-a stins urmarirea pe tot blogul, nu doar pe cele doua pagini cu jeton");
+  assert.equal(faraUrmarire("/blog/un-articol"), false, "s-a stins urmarirea pe articole");
   assert.equal(faraUrmarire("/blog/previzualizare/abc"), true, "regula veche s-a pierdut la rescrierea potrivirii");
 });
 
 test("⚠ niciun layout nu spune despre sine contrariul a ce face", () => {
   /*
-    ⚠ CE APARA, SI DE CE E O PROBA SI NU O CONVENTIE.
+    ⚠ CE APARA, SI DE CE A TREBUIT REFACUTA.
 
     Cele patru layouturi de prezentare purtau, pana pe 02.09.2026, randul „NU se
-    pune in `(dashboard)`" — despre pixeli care sunt in dashboard din 01.06.2026,
-    din alegerea proprietarului. Un audit din afara l-a citit si a raportat o
-    incalcare de scop; nu era, era un comentariu ramas in urma.
+    pune in `(dashboard)`" — despre pixeli care ERAU in dashboard. Un audit din
+    afara l-a citit si a raportat o incalcare de scop; nu era, era un comentariu
+    ramas in urma. Atunci s-a scris adevarul de atunci si s-a pus o proba care
+    interzicea formularea veche.
 
-    Cine citeste un comentariu peste sase luni ia hotarari pe el. Deci afirmatia
-    se probeaza ca oricare alta.
+    ⚠ PE 03.09.2026 CODUL S-A INTORS. Pixelii au fost scosi din panou, deci
+    afirmatia „rulează si in aplicatia autentificata" a devenit falsa — iar proba,
+    care interzicea numai formularea CEALALTA, apara acum minciuna. O gasise tot o
+    maturare din afara.
 
-    ⚠ SE CAUTA AFIRMATIA, NU SIRUL. Comentariul de acum CITEAZA forma veche, ca
-    sa se stie ce s-a schimbat — deci o cautare simpla ar cadea pe propria
-    reparatie. Se cere ca randul sa nu INCEAPA cu ea.
+    ⚠ DE ASTA NU MAI E O INTERDICTIE, CI O CONFRUNTARE. Proba citeste layoutul
+    panoului si afla din COD daca pixelii sunt acolo; apoi cere ca notele celorlalte
+    layouturi sa nu spuna contrariul. Se intoarce codul iar? Se intoarce si ce se
+    cere. O regula legata de o formulare imbatraneste; una legata de cod, nu.
   */
+  const panou = faraComentarii(citeste("src/app/(dashboard)/layout.tsx"));
+  const panouArePixeli = /Edinio(Meta|TikTok)Pixel|EtichetaGoogleAds|EtichetaGa4/.test(panou);
+
   const layouturi = fisiereSursa("src/app").filter((f) => f.endsWith("layout.tsx"));
   assert.ok(layouturi.length >= 5, `doar ${layouturi.length} layouturi — cautarea s-a stricat?`);
 
-  const mincinoase = layouturi.filter((f) => {
-    const cod = readFileSync(f, "utf8");
-    if (!/Edinio(Meta|TikTok)Pixel/.test(cod)) return false;
-    return cod.split(RAND).some((r) => r.trim().startsWith("NU se pune in `(dashboard)`"));
-  });
+  const mincinoase: string[] = [];
+  for (const f of layouturi) {
+    const cod = citeste(f);
+    if (!/Edinio(Meta|TikTok)Pixel/.test(faraComentarii(cod))) continue;
+
+    const spuneCaRuleazaInPanou = /ruleaz[a\u0103] si in aplicatia autentificata/.test(cod);
+    const spuneCaNuRuleaza = cod.split(RAND).some((r) => r.trim().startsWith("NU se pune in `(dashboard)`"));
+
+    if (panouArePixeli && spuneCaNuRuleaza) mincinoase.push(`${f} (spune ca NU, dar sunt acolo)`);
+    if (!panouArePixeli && spuneCaRuleazaInPanou) mincinoase.push(`${f} (spune ca RULEAZA, dar au fost scosi)`);
+  }
 
   assert.deepEqual(
     mincinoase, [],
-    "un layout sustine ca pixelii nu ajung in dashboard, dar ei sunt acolo: " + mincinoase.join(", "),
+    "layouturi a caror nota contrazice codul panoului: " + mincinoase.join(", "),
   );
 });
 
@@ -422,4 +454,78 @@ test("⚠ retragerea de pe server stinge si cookie-urile cu PREFIX", () => {
     "ruta nu mai parcurge cookie-urile cererii, deci nu poate sti ce prefixe exista");
   assert.doesNotMatch(cod, /for \(const nume of COOKIE_FURNIZORI_EXACTE\)/,
     "a revenit lista fixa de nume intregi");
+});
+
+
+test("⚠ TOATE componentele care injecteaza script cer poarta de cale", () => {
+  /*
+    ⚠ DEFECTUL PE CARE IL INCHIDE. Nota din `fara-urmarire.ts` promite: „daca ii
+    pune cineva la loc, nu se mai incarca". Promisiunea tine numai daca FIECARE
+    componenta care aduce un script tert intreaba regula.
+
+    O maturare a aratat ca proba dinainte cerea purtarea de la doua din patru. GA4
+    si Google Ads puteau chema `faraUrmarire` si sa-i ignore raspunsul — sau sa
+    n-o cheme deloc — fara ca nimic sa cada. Iar eticheta Google Ads e chiar cea
+    care scrie `_gcl_au` si face remarketing.
+
+    ⚠ SE CERE SI CHEMAREA, SI INTOARCEREA DEVREME. O componenta care cheama regula
+    si tot randeaza scriptul e mai rea decat una care n-o cheama: pare aparata.
+  */
+  const componente = [
+    "src/components/edinio-marketing/EdinioMetaPixel.tsx",
+    "src/components/edinio-marketing/EdinioTikTokPixel.tsx",
+    "src/components/edinio-marketing/EtichetaGa4.tsx",
+    "src/components/edinio-marketing/EtichetaGoogleAds.tsx",
+  ];
+
+  for (const f of componente) {
+    const cod = faraComentarii(citeste(f));
+    assert.match(cod, /faraUrmarire\(/, `${f}: nu mai intreaba poarta de cale — un script tert intra oriunde`);
+    assert.match(
+      cod, /if \([^)]*faraUrmarire\([^)]*\)[^)]*\)\s*return null;/,
+      `${f}: cheama poarta dar nu se opreste din randare — scriptul se incarca oricum`,
+    );
+  }
+});
+
+test("⚠ si runtime-ul de marketing isi pastreaza cele trei porti", () => {
+  /*
+    ⚠ CE APARA. `RuntimeMarketing` nu injecteaza scripturi, dar MASOARA: `page_view`,
+    clicurile si sectiunile. Poarta lui e ce tine ecranele autentificate in afara
+    rapoartelor noastre — si tot ea a fost gasita, la o maturare, ca putandu-se
+    sterge cu totul fara ca nimic sa cada.
+
+    ⚠ SI NU SE NUMARA APARITIILE, CI PORTILE CARE CHIAR OPRESC.
+
+    Prima forma cauta cate `faraUrmarire(` sunt in fisier si cerea trei. Mutantul
+    care le lasa pe toate trei acolo dar le stingea — `if (false && faraUrmarire(...))`
+    — a trecut VERDE: numarul era neatins, iar poarta nu mai oprea nimic.
+
+    A treia oara intr-o zi cand cer FORMA in loc de REGULA. Aici forma e chiar
+    intoarcerea devreme: `if (… faraUrmarire(cale)) return;`.
+  */
+  const cod = faraComentarii(citeste("src/components/edinio-marketing/RuntimeMarketing.tsx"));
+
+  /*
+    ⚠ SI DE CE SE CERE FORMA EXACTA, nu „un `if` care o cheama". Am incercat intai
+    tiparul larg `if (…faraUrmarire(cale)…) return;`. Mutantul
+    `if (false && faraUrmarire(cale)) return;` a trecut si prin el: `false &&` incape
+    in „orice". O cautare pe text nu poate hotari daca o conditie mai e vie.
+
+    Deci se cer chiar cele doua forme scrise azi. E rigid dinadins: cine are nevoie
+    de o a treia forma o adauga aici, cu mana, dupa ce a cantarit-o. Miza e ca pe
+    ecrane autentificate sa nu ajunga masuratoare — nu merita un tipar comod.
+  */
+  const POARTA = /if \((?:!cale \|\| )?faraUrmarire\(cale\)\) return;/g;
+  const porti = (cod.match(POARTA) ?? []).length;
+  assert.ok(
+    porti >= 3,
+    `runtime-ul mai are ${porti} porti care CHIAR opresc, in loc de 3 — o suprafata autentificata a redevenit masurabila`,
+  );
+
+  /* ⚠ Si ca niciuna nu e stinsa din conditie. */
+  assert.ok(
+    !/faraUrmarire\(cale\)/.test(cod.replace(POARTA, "")),
+    "o chemare a regulii a ramas in afara unei porti care opreste — se cheama si se ignora",
+  );
 });

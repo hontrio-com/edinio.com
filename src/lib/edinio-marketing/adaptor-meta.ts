@@ -74,7 +74,14 @@ export function catreMeta(ev: EvenimentEdinio): Trimitere | null {
     case "begin_checkout":
       return {
         nume: "InitiateCheckout",
-        date: { content_name: ev.plan_id, value: ev.value, currency: ev.currency },
+        /*
+          ⚠ SI AICI REZERVA, ca la TikTok si la GA4. Pana pe 03.09.2026 randul
+          scria `content_name: ev.plan_id` gol — iar nota din `evenimente.ts`
+          sustinea deja ca „ADAPTOARELE isi pastreaza rezerva". Din trei, doua o
+          aveau. Fisierul numit chiar in motivul notei („fara el, `content_name`
+          pleaca `undefined` catre Meta") era singurul fara ea.
+        */
+        date: { content_name: ev.plan_id ?? "abonament", value: ev.value, currency: ev.currency },
       };
 
     case "trial_start":

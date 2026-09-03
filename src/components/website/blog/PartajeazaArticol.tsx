@@ -71,10 +71,22 @@ export function PartajeazaArticol({
   }
 
   async function copiaza() {
-    masoara("link");
+    /*
+      ⚠ SE MASOARA DUPA CE A REUSIT, nu inainte de incercare.
+
+      Pana pe 03.09.2026 `masoara("link")` statea pe randul dinaintea scrierii in
+      clipboard — deci evenimentul pleca SI cand scrierea era refuzata. Si nu e o
+      margine inchipuita: chiar fisierul asta prinde refuzul cu `setEsuat(true)`
+      cateva randuri mai jos, fiindca clipboard-ul cere context sigur si, la unele
+      browsere, un drept pe care omul nu l-a dat.
+
+      Acelasi tipar ca `add_payment_info` si `begin_checkout` in inrolare: un
+      eveniment care afirma o fapta pe care nu am vazut-o intamplandu-se.
+    */
     try {
       await navigator.clipboard.writeText(adresa);
       setCopiat(true);
+      masoara("link");
     } catch {
       /*
         ⚠ CLIPBOARD-UL POATE REFUZA, si nu din vina omului: cere context sigur, si
@@ -91,11 +103,20 @@ export function PartajeazaArticol({
   }
 
   async function partajeazaNativ() {
-    masoara("nativ");
     try {
       await navigator.share({ title: titlu, url: adresa });
+      /*
+        ⚠ SI AICI DUPA, nu inainte. `navigator.share` respinge cand omul INCHIDE
+        foaia de partajare — adica exact cand n-a partajat. Masurat inainte, fiecare
+        deschidere-si-renuntare se numara ca partajare.
+
+        ⚠ CE NU STIM, si e cinstit spus: foaia nativa nu ne spune UNDE a partajat
+        omul, si nici macar sigur ca a dus-o la capat pe toate browserele. Ce stim e
+        ca n-a anulat. Atat masuram.
+      */
+      masoara("nativ");
     } catch {
-      /* Omul a închis foaia de partajare. Nu e o eroare. */
+      /* Omul a închis foaia de partajare. Nu e o eroare, si nu e o partajare. */
     }
   }
 

@@ -188,10 +188,16 @@ export type EvenimentEdinio =
     de aici a spus „obligatoriu" iar tipul de dedesubt a scris `plan_id?`. Cine
     citea nota credea ca e aparat; nu era.
 
-    ⚠ SI TOTUSI ADAPTOARELE ISI PASTREAZA REZERVA `?? "abonament"`. Nu e cod
-    mort: tipul nu supravietuieste unui `as never` si nici unui eveniment
-    reconstruit din JSON, iar codul asta foloseste amandoua. Tipul opreste
+    ⚠ SI TOATE TREI ADAPTOARELE ISI PASTREAZA REZERVA `?? "abonament"`. Randurile
+    astea au sustinut o zi acelasi lucru cand era adevarat doar pentru doua din
+    trei: Meta scria `content_name: ev.plan_id` gol. Nu e cod mort — tipul nu
+    supravietuieste unui `as never`, iar codul asta il foloseste. Tipul opreste
     greseala la scriere, rezerva o opreste la rulare.
+
+    ⚠ CE NU E ADEVARAT, si a fost scris tot aici: „nici unui eveniment reconstruit
+    din JSON". Pentru `begin_checkout` calea aia nu exista — coada de server duce
+    numai `purchase`, `sign_up`, `trial_start` si `generate_lead`, iar el n-are
+    `event_id`, deci constructorii de server il refuza oricum.
 
     ⚠ Si asta e chiar mutarea. Pana pe 03.09.2026
     evenimentul se tragea la INTRAREA pe pagina de planuri, cand omul inca nu

@@ -109,6 +109,33 @@ async function emitSubscriptionInvoice(
   }
   const planPrice = amountPaid / 100;
 
+  /*
+    ⚠ SI MONEDA SE INTREABA, NU SE AFIRMA. Randul care insereaza factura scria
+    `currency: "RON"` literal, langa o suma luata din `invoice.amount_paid` — adica
+    din subunitatile monedei in care a incasat CHIAR Stripe. Daca cele doua se
+    despart, randul din baza spune „RON" peste bani care nu sunt lei, iar de pe el
+    se emite si factura FISCALA.
+
+    ⚠ ACEEASI REGULA CA LA CONVERSIE, si tocmai de aia e aici: pe 03.09.2026 s-a
+    scos turnarea `session.currency ?? "ron"` din conversia de mai jos, si a ramas
+    aceeasi afirmatie cu doua sute de randuri mai sus — pe bani care ajung pe hartie.
+    „Nota buna nu trece singura la urmatoarea integrare", a patra oara.
+
+    ⚠ CE SE INTAMPLA CAND NU E LEU: nu se emite nimic si se striga. O factura
+    fiscala gresita nu se poate lua inapoi.
+  */
+  const monedaFacturii = monedaDeIncredere(invoice.currency);
+  if (!monedaFacturii) {
+    await logError({
+      action: "factura.monedaNecunoscuta",
+      message: `factura Stripe incasata in "${invoice.currency ?? "(fara moneda)"}" — nu se emite`,
+      details: { stripeInvoiceId },
+      userId,
+      severity: "critical",
+    });
+    return;
+  }
+
   let sbSeries: string | null = null;
   let sbNumber: string | null = null;
   let sbError: string | null = null;
@@ -155,7 +182,7 @@ async function emitSubscriptionInvoice(
       user_id: userId,
       plan,
       amount: planPrice,
-      currency: "RON",
+      currency: monedaFacturii,
       smartbill_series: sbSeries,
       smartbill_number: sbNumber,
       smartbill_error: sbError,
@@ -579,8 +606,26 @@ async function proceseazaEveniment(admin: SupabaseClient, event: Stripe.Event): 
 
       ⚠ „NU STIU" SE POARTA CA „ALTCEVA": amandoua opresc trimiterea si striga.
     */
+    /*
+      ⚠ SI BANII SA FI INTRAT CHIAR. `checkout.session.completed` se aprinde cand
+      FORMULARUL s-a incheiat, nu cand plata s-a incasat: pentru metodele cu
+      decontare intarziata (transfer bancar, SEPA), sesiunea vine „completed" cu
+      `payment_status: "unpaid"`, iar banii sosesc mai tarziu, la
+      `checkout.session.async_payment_succeeded`.
+
+      ⚠ PANA PE 03.09.2026 FISIERUL ASTA NU SE UITA DELOC LA `payment_status`
+      (cautare nefiltrata: zero potriviri). Deci browserul ajunsese mai STRICT decat
+      serverul — `verdictulPlatii` cere de mult `payment_status === "paid"`, iar
+      aici trecea orice. Pe cardurile de azi nu se poate intampla; la prima metoda
+      cu decontare intarziata s-ar fi raportat un venit neincasat.
+
+      ⚠ SE TAIE NUMAI CONVERSIA, nu si planul. Ce se scrie in profil e o hotarare
+      de produs, deosebita de ce se raporteaza la Meta si TikTok; n-o schimb dintr-o
+      reparatie de masuratoare.
+    */
+    const baniiAuIntrat = session.payment_status === "paid";
     const monedaIncasata = monedaDeIncredere(session.currency);
-    if (session.amount_total && session.amount_total > 0 && !monedaIncasata) {
+    if (session.amount_total && session.amount_total > 0 && baniiAuIntrat && !monedaIncasata) {
       await logError({
         action: "conversii.monedaNecunoscuta",
         message: `abonament incasat in "${session.currency ?? "(fara moneda)"}" — conversia nu s-a trimis`,
@@ -588,7 +633,7 @@ async function proceseazaEveniment(admin: SupabaseClient, event: Stripe.Event): 
         userId,
         severity: "warning",
       });
-    } else if (session.amount_total && session.amount_total > 0) {
+    } else if (session.amount_total && session.amount_total > 0 && baniiAuIntrat) {
       await puneLaCoada(
         {
           name: "purchase",

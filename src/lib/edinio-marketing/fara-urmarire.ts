@@ -52,6 +52,50 @@ export const CAI_FARA_URMARIRE = [
   "/blog/previzualizare",
   "/dashboard",
   "/admin",
+  /*
+    ⚠ SI DOUA ECRANE DIN `(auth)`, care par palnie de achizitie si nu sunt.
+
+    Grupul `(auth)` isi pastreaza pixelii pe `/login`, `/register` si
+    `/forgot-password`: acolo ajung oamenii din reclame, si tocmai pixelul aseaza
+    `_fbc`/`_fbp` — fara ele, `sign_up`-ul de mai tarziu n-ar mai sti de la ce
+    campanie a venit omul.
+
+    Celelalte doua sunt insa ecrane cu SESIUNE VIE:
+      - `/login/mfa` — se ajunge acolo numai dupa ce parola a fost primita;
+      - `/reset-password` — linkul din email deschide o sesiune de recuperare,
+        chiar de aceea middleware-ul ii face exceptie, si acolo omul TASTEAZA O
+        PAROLA NOUA.
+
+    Acelasi argument ca pentru previzualizarea de articol si pentru panou: cookie-ul
+    Supabase nu e `httpOnly`, deci un script tert incarcat in pagina ruleaza cu
+    drepturile ei. Iar in tot grupul `(auth)` nu se trage niciun eveniment din
+    browser — deci nu se pierde nicio masuratoare, doar remarketingul.
+
+    ⚠ CAT APARA, SPUS CINSTIT: se opreste INJECTAREA scriptului. Cine ajunge aici
+    printr-o navigare de document — linkul din email, sau redirectarea serverului
+    catre `/login/mfa` — e acoperit. Cine ar ajunge printr-o navigare de client
+    dintr-o pagina unde scriptul s-a incarcat deja nu e: scriptul incarcat nu se
+    descarca. Aceeasi margine ca peste tot in fisierul asta.
+  */
+  "/login/mfa",
+  "/reset-password",
+  /*
+    ⚠ SI CELE DOUA PAGINI CARE POARTA UN JETON IN ADRESA.
+
+    `/blog/confirma?t=…` si `/blog/dezabonare?t=…` sunt „pentru un singur om": `t`
+    NU e un parametru de urmarire, e CHEIA de confirmare, respectiv de dezabonare.
+
+    ⚠ SI DE CE NU E DE AJUNS `curataAdresa`. Ea taie sirul de interogare pentru
+    tot ce trece prin magistrala NOASTRA — deci `page_view`-ul nostru e curat. Dar
+    `fbevents.js`, `events.js` si eticheta Google isi trimit SINGURE vizualizarea
+    de pagina, cu `location.href` intreg, si pe langa magistrala noastra nu trece
+    nimic din ce fac ele. Jetonul pleca deci la trei furnizori, in clar.
+
+    ⚠ CE SE PIERDE: nimic care sa se poata numara. Sunt pagini de un singur
+    click, la capatul unui email — nu suprafata de achizitie.
+  */
+  "/blog/confirma",
+  "/blog/dezabonare",
 ] as const;
 
 /**

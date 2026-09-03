@@ -4,35 +4,13 @@ import { readFileSync } from "node:fs";
 import { monedaDeIncredere } from "./moneda-incasata";
 import { verdictulPlatii, type SesiuneStripe } from "./verdict-plata";
 import { adaptorGa4 } from "./adaptor-ga4";
+import { faraComentarii } from "./fara-comentarii";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
   DOUA LUCRURI CARE SE ATING DE BANI: CE MONEDA SPUNEM, SI CE AM VANDUT
   ═══════════════════════════════════════════════════════════════════════════════
 */
-
-/**
- * Codul fara comentarii, ca o cautare pe sursa sa nu se poticneasca de vorbele
- * despre cod. Merge caracter cu caracter fiindca sirurile si sabloanele pot
- * contine `//` — un `https://` taiat cu regexul ar fi ascuns tocmai randurile
- * pe care le cautam.
- */
-function faraComentarii(cod: string): string {
-  let out = "";
-  let i = 0;
-  while (i < cod.length) {
-    const c = cod[i], d = cod[i + 1];
-    if (c === "/" && d === "/") { while (i < cod.length && cod[i] !== "\n") i++; continue; }
-    if (c === "/" && d === "*") { i += 2; while (i < cod.length && !(cod[i] === "*" && cod[i + 1] === "/")) i++; i += 2; continue; }
-    if (c === '"' || c === "\'" || c === "`") {
-      const q = c; out += c; i++;
-      while (i < cod.length && cod[i] !== q) { if (cod[i] === "\\") { out += cod[i]; i++; } out += cod[i]; i++; }
-      out += q; i++; continue;
-    }
-    out += c; i++;
-  }
-  return out;
-}
 
 /* ─────────────────────── 1. Moneda ─────────────────────── */
 

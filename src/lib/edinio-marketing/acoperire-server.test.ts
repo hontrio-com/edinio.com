@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { faraComentarii } from "./fara-comentarii";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -466,26 +467,46 @@ test("⚠ `begin_checkout` pleaca DUPA ce Stripe confirma sesiunea, pe amandoua 
   */
   const cod = readFileSync("src/app/(onboarding)/onboarding/plan/page.tsx", "utf8");
 
-  const iRamura = cod.indexOf("if (data.url) {");
-  assert.ok(iRamura > 0, "drumul de campanie nu mai verifica `data.url` inainte sa plece");
+  /*
+    ═══════════════════════════════════════════════════════════════════════════
+    ⚠ PROBA ASTA A APARAT O ZI JUMATATE DIN CE ISI REVENDICA NUMELE
+    ═══════════════════════════════════════════════════════════════════════════
 
-  /* Ramura, taiata pe acolade — nu o fereastra de N caractere. */
-  const ramura = (() => {
-    let adanc = 0;
-    for (let i = cod.indexOf("{", iRamura); i < cod.length; i++) {
-      if (cod[i] === "{") adanc++;
-      else if (cod[i] === "}") { adanc--; if (adanc === 0) return cod.slice(iRamura, i + 1); }
-    }
-    return "";
-  })();
+    Prima forma taia numai ramura `if (data.url)` a drumului de CAMPANIE si cerea
+    evenimentul acolo. Numele ei spunea insa „pe amandoua drumurile".
 
-  assert.match(ramura, /name: "begin_checkout"/,
-    "`begin_checkout` de campanie nu mai sta sub confirmarea sesiunii — pleaca si cand Stripe n-a creat nimic");
+    Confruntata cu mutanti pe celalalt drum (`handleCreate`), a trecut VERDE la
+    toti trei: evenimentul mutat INAINTE de `fetch`, poarta `if (!res.ok ||
+    !data.url)` stearsa, si o copie a evenimentului pusa pe `.catch` — adica tras
+    tocmai cand Stripe a cazut. Mutantul cu mutarea chiar trimite evenimentul la un
+    raspuns 400, cu proba verde.
 
-  /* ⚠ Si ca nu ramane si o copie inaintea cererii. */
-  const inainteDeFetch = cod.slice(0, cod.indexOf('fetch("/api/stripe/checkout"'));
-  assert.ok(!/name: "begin_checkout"/.test(inainteDeFetch),
-    "a ramas un `begin_checkout` tras inaintea cererii catre Stripe");
+    ⚠ DE CE N-A MERS FORMA SIMPLA. „Cauta cel mai apropiat `fetch` de dinaintea
+    evenimentului" nu ajuta: mutat sus in `handleCreate`, evenimentul ramane dupa
+    `fetch`-ul DE CAMPANIE, care e mai devreme in fisier. O cautare inapoi nu stie
+    in ce functie e.
+
+    ⚠ CE SE CERE ACUM: ordinea jaloanelor, pe amandoua drumurile, si numarul lor.
+    Sunt exact doua `begin_checkout` in fisier, si fiecare vine DUPA poarta lui.
+  */
+  const evenimente = [...cod.matchAll(/name: "begin_checkout"/g)].map((m) => m.index!);
+  assert.equal(evenimente.length, 2,
+    `pagina trage ${evenimente.length} \`begin_checkout\`, nu doua — s-a adaugat unul (poate pe \`.catch\`) sau s-a pierdut un drum`);
+
+  /* Drumul de campanie: evenimentul sta sub `if (data.url)`. */
+  const iGardaCampanie = cod.indexOf("if (data.url) {");
+  assert.ok(iGardaCampanie > 0, "drumul de campanie nu mai verifica `data.url`");
+  assert.ok(evenimente[0] > iGardaCampanie,
+    "`begin_checkout` de campanie a iesit de sub confirmarea sesiunii — pleaca si cand Stripe n-a creat nimic");
+
+  /* Drumul cu apasare: cerere, apoi poarta, apoi evenimentul. */
+  const iCerere = cod.lastIndexOf('fetch("/api/stripe/checkout"');
+  const iGardaApasare = cod.indexOf("if (!res.ok || !data.url) {");
+  assert.ok(iGardaApasare > 0, "drumul cu apasare nu mai are poarta pe raspunsul rutei");
+  assert.ok(iCerere > 0 && iGardaApasare > iCerere,
+    "poarta drumului cu apasare nu mai vine dupa cerere");
+  assert.ok(evenimente[1] > iGardaApasare,
+    "`begin_checkout` de la apasare a iesit de sub poarta — pleaca si cand ruta de checkout cade");
 });
 
 test("⚠ `plan_id` e obligatoriu IN TIP la `begin_checkout`, nu doar in comentariu", () => {
@@ -516,9 +537,55 @@ test("⚠ `plan_id` e obligatoriu IN TIP la `begin_checkout`, nu doar in comenta
   assert.match(forma, /currency: "RON"/, "`currency` nu mai e cerut");
 
   /* ⚠ Si ca rezerva de rulare n-a fost stearsa ca „acum inutila". */
-  for (const a of ["adaptor-tiktok.ts", "adaptor-ga4.ts"]) {
+  /*
+    ⚠ SI META, CARE LIPSEA TOCMAI DIN LISTA ASTA. Motivul scris deasupra spune
+    „fara el, `content_name` pleaca `undefined` catre Meta" — iar bucla verifica
+    doua adaptoare si tocmai pe cel numit in motiv il sarea. Chiar tiparul
+    „reparatia pe lista lasa ce n-a fost numit", intr-o proba care il descria.
+  */
+  for (const a of ["adaptor-tiktok.ts", "adaptor-ga4.ts", "adaptor-meta.ts"]) {
     const cod2 = readFileSync(`src/lib/edinio-marketing/${a}`, "utf8");
     assert.match(cod2, /plan_id \?\? "abonament"/,
       `${a}: rezerva de rulare a fost stearsa — un \`as never\` trece acum pe langa tip si campul iese gol`);
   }
+});
+
+
+test("⚠ webhook-ul nu raporteaza un venit pana n-au intrat banii", () => {
+  /*
+    ⚠ CE APARA. `checkout.session.completed` se aprinde cand FORMULARUL s-a
+    incheiat, nu cand plata s-a incasat. Pentru metodele cu decontare intarziata
+    (transfer bancar, SEPA), sesiunea vine „completed" cu
+    `payment_status: "unpaid"`, iar banii sosesc mai tarziu, la
+    `checkout.session.async_payment_succeeded`.
+
+    ⚠ PANA PE 03.09.2026 FISIERUL NU SE UITA DELOC LA `payment_status` — cautare
+    nefiltrata, zero potriviri. Deci browserul ajunsese mai STRICT decat serverul:
+    `verdictulPlatii` cere de mult `payment_status === "paid"`, iar aici trecea
+    orice. Pe cardurile de azi nu se poate intampla; la prima metoda cu decontare
+    intarziata s-ar fi raportat un venit neincasat.
+
+    ⚠ SE CERE SA PAZEASCA CHIAR TRIMITEREA, nu doar sa existe undeva in fisier.
+  */
+  /*
+    ⚠ SE CAUTA IN COD, NU IN COMENTARII, si randurile astea au invatat-o pe
+    pielea lor. Prima forma cauta in fisierul intreg — iar mutantul care inlocuia
+    conditia cu `true` a TRECUT VERDE, fiindca sirul `payment_status === "paid"`
+    aparea in comentariul de deasupra ei, unde e explicat de ce exista.
+
+    Un fals NEGATIV, adica plasa care apara chiar defectul pentru care a fost
+    scrisa. Aceeasi zi in care alta plasa cazuse pe propriul meu comentariu — de
+    aia unealta sta acum intr-un singur loc, in `fara-comentarii.ts`.
+  */
+  const cod = faraComentarii(readFileSync("src/app/api/stripe/webhook/route.ts", "utf8"));
+
+  assert.match(cod, /payment_status === "paid"/,
+    "webhook-ul nu se mai uita daca banii au intrat — raporteaza venit pe o sesiune cu decontare intarziata");
+
+  const iCoada = cod.indexOf('name: "purchase"');
+  assert.ok(iCoada > 0, "webhook-ul nu mai trimite purchase");
+  const iRamura = cod.lastIndexOf("} else if (", iCoada);
+  assert.ok(iRamura > 0 && iRamura < iCoada, "nu mai gasesc ramura care trimite conversia");
+  assert.match(cod.slice(iRamura, iCoada), /baniiAuIntrat/,
+    "conditia banilor nu mai pazeste chiar trimiterea conversiei");
 });

@@ -188,9 +188,19 @@ function PlanPageContent() {
       in ultimele 60 de zile. Nu exista o serie istorica pe care sa merite s-o
       aperi cu un eveniment neadevarat.
 
-      ⚠ CE PLEACA ACUM: pasul de palnie, pe numele lui. `onboarding_step_view` e
-      deja in taxonomie si nu merge la Meta sau TikTok — deci nu mai afirma nimanui
-      ca omul a inceput sa cumpere.
+      ⚠ CE PLEACA ACUM: nimic de aici. Pasul de palnie se trimitea DEJA, din
+      `<UrmaPasOnboarding pas="plan" index={2} />` de mai jos — la fel ca la pasul
+      „details", care are numai componenta.
+
+      ⚠ SI O ZI AU PLECAT DOUA. Cand am scos `begin_checkout` de aici, am pus in
+      locul lui un `onboarding_step_view` scris de mana, fara sa ma uit ca acelasi
+      eveniment vine deja din componenta. Paza `vazut.current` din ea e per
+      instanta, deci nu putea opri apelul meu, iar magistrala nu deduplica: la GA4
+      ajungeau amandoua. Pasul 2 al palniei se numara dublu fata de pasul 1 — si
+      inca o data la fiecare intoarcere cu `?cancelled=1`.
+
+      ⚠ CUM S-A GASIT: o maturare adversariala pe propria mea reparatie, nu o
+      proba. De aia se matura si dupa ce „s-a rezolvat".
 
       ⚠ SI CE SE PIERDE, ca sa fie spus: pasul „details" nu trimite nimic catre
       Meta si TikTok tocmai fiindca `begin_checkout` se tragea imediat dupa (nota
@@ -198,11 +208,13 @@ function PlanPageContent() {
       trecerea details → plan, ci doar pe cei care chiar pornesc plata. Semnalul e
       mai rar si adevarat, in loc de des si fals.
     */
-    if (!isSuccess) {
-      urmareste({ name: "onboarding_step_view", onboarding_step: "plan", onboarding_step_index: 2 });
-    }
+
     return () => cancelAnimationFrame(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    /*
+      ⚠ NU MAI E NEVOIE DE `eslint-disable` AICI. Statea pentru `billingInterval`,
+      citit de `begin_checkout` la montare; odata cu evenimentul a plecat si
+      dependenta, iar directiva ramasa era ea insasi un avertisment.
+    */
   }, []);
 
   // Handle return from Stripe success
@@ -256,9 +268,6 @@ function PlanPageContent() {
         setLoading(false);
         return;
       }
-
-      const paidInterval: BillingInterval =
-        sessionStorage.getItem("onboarding_pending_interval") === "annual" ? "annual" : "monthly";
 
       sessionStorage.removeItem("onboarding_details");
       sessionStorage.removeItem("onboarding_pending_plan");
@@ -363,6 +372,8 @@ function PlanPageContent() {
 
           Pana pe 03.09.2026 randurile de mai jos cadeau pe `plan` si pe
           `paidInterval` — amandoua din `sessionStorage`, adica din ce alesese omul.
+          Variabila a mai stat o zi acolo dupa reparatie, nemaifolosita de nimeni:
+          nu mai turna nimic, dar era chiar mecanismul scos. A fost stearsa.
           Nota de atunci spunea „Stripe are ultimul cuvant", dar codul ii dadea
           ultimul cuvant browserului ori de cate ori Stripe tacea.
 

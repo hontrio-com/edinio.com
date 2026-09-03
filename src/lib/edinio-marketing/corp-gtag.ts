@@ -56,23 +56,42 @@ export function corpBazaGtag(s: StareEtichete): string {
           window.__edinioGtagBaza = true;
 
           /*
-            CONSENT MODE v2 — INAINTEA ORICAREI ALTE COMENZI gtag.
+            ═══ CONSENT MODE v2: 'default' TOT REFUZAT, APOI 'update' CU ADEVARUL ═══
 
-            Ordinea nu e un moft: Google citeste starea implicita la prima comanda
-            care ar trimite ceva. Pusa dupa 'config', primul eveniment pleaca deja
-            sub starea gresita, si nimic nu arata ca s-a intamplat.
+            ⚠ ORDINEA E INAINTEA ORICAREI ALTE COMENZI gtag. Google citeste starea
+            implicita la prima comanda care ar trimite ceva. Pusa dupa 'config',
+            primul eveniment pleaca deja sub starea gresita, si nimic nu arata.
 
-            Aici se declara AMANDOUA categoriile, cu ce a ales chiar omul — nu se
-            presupune 'granted' fiindca am ajuns pana aici. Eticheta de reclame
-            poate rula fara cea de statistici, si atunci analytics_storage trebuie
-            sa fie 'denied'.
+            ⚠ DE CE 'default' REFUZAT, cand aici stim deja ce a ales omul. Pana pe
+            03.09.2026 se declara direct starea adevarata si nu se trimitea niciun
+            'update'. Rezultatul era corect in date — semnalul ajungea la Google
+            (masurat: gcs=G111) — dar gresit in doua feluri mai mici:
+
+              1. wait_for_update: 500 astepta un 'update' care nu venea NICIODATA,
+                 deci primul hit se retinea o jumatate de secunda degeaba, la
+                 fiecare incarcare de pagina a fiecarui om care acordase.
+              2. Uneltele de diagnostic ale Google (Tag Assistant) au un capitol
+                 anume pentru „consimtamantul nu se actualizeaza". Cine deschidea
+                 unealta vedea o abatere si nu avea cum sa stie daca e o scapare.
+
+            Acum secventa e cea documentata: se pleaca de la refuz, se corecteaza
+            pe loc cu ce a ales omul, si abia apoi 'js' si biblioteca. Nu se
+            trimite nimic in plus si nimic mai devreme — eticheta asta se randeaza
+            oricum numai DUPA ce omul a ales (model „basic").
           */
           gtag('consent', 'default', {
+            analytics_storage: 'denied',
+            ad_storage: 'denied',
+            ad_user_data: 'denied',
+            ad_personalization: 'denied',
+            wait_for_update: 500
+          });
+
+          gtag('consent', 'update', {
             analytics_storage: '${s.statistici ? "granted" : "denied"}',
             ad_storage: '${acordReclame}',
             ad_user_data: '${acordReclame}',
-            ad_personalization: '${acordReclame}',
-            wait_for_update: 500
+            ad_personalization: '${acordReclame}'
           });
 
           gtag('js', new Date());

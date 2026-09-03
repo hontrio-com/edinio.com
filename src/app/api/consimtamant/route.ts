@@ -220,6 +220,36 @@ export async function POST(req: NextRequest) {
  * browserul lui; un 500 ar face-o sa para nereusita. Se scrie in jurnal si se
  * raspunde cinstit cu `retras: false`.
  */
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠ PIETRELE DE MORMANT NU SE STERG, SI DE CE E O HOTARARE, NU O SCAPARE
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  Un audit a cerut o retenta pentru `edinio_consimtamant_retras`, pe argumentul ca
+  piatra foloseste numai cat mai pot exista surse asincrone vechi. Argumentul e
+  bun; concluzia, nu — si merita scrisa aici, ca sa nu fie redeschisa la fiecare
+  citire.
+
+  ⚠ CAT AR TREBUI SA TINA, daca am sterge-o. Se calculeaza, nu se ghiceste:
+    - un rand din coada traieste cel mult suma pauzelor de reincercare,
+      `PAUZE_MINUTE` = [1, 5, 20, 60, 240, 720] → 1046 minute ≈ 17,4 ore;
+    - plus fereastra in care se mai poate NASTE un rand pentru acelasi om: o
+      sesiune Stripe deschisa inaintea retragerii si platita dupa (nu-i punem
+      `expires_at`, deci tine implicitul lor);
+    - plus inca 17,4 ore pentru randul acela.
+  Ar iesi undeva la doua zile, si un prag cinstit ar fi vreo sapte.
+
+  ⚠ DE CE TOTUSI NU. Costurile nu sunt simetrice. O piatra pastrata degeaba costa
+  un rand de 40 de octeti — masurat pe 03.09.2026: TREI randuri, 32 kB cu tot cu
+  indici — si nu spune nimic despre om (un id intamplator, o clipa, o sursa). O
+  piatra stearsa prea devreme lasa sa treaca exact ce a fost pusa sa opreasca.
+
+  ⚠ SI ID-UL NU SE INTOARCE NICIODATA. La retragere browserul pierde `vid`-ul, iar
+  un acord nou naste altul. Deci o piatra veche nu poate opri din greseala pe
+  altcineva: cheia ei e moarta pentru totdeauna.
+
+  Daca vreodata tabela creste cat sa conteze, pragul de mai sus e deja calculat.
+*/
 async function stingeVizitatorul(vizitator: string): Promise<boolean> {
   try {
     /*

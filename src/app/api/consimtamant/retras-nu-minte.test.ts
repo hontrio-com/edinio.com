@@ -157,14 +157,32 @@ test("⚠ si browserul CHIAR cere doar piatra la reluare", () => {
     ⚠ CUTITUL TAIE IN AMANDOUA PARTILE. Ramura de mai sus e degeaba daca browserul
     trimite mai departe preferinte. Se citeste corpul chemat de `reiaRetragerea`.
   */
+  /*
+    ⚠ SE CERE REGULA, NU LOCUL. Prima forma taia corpul din chiar `reiaRetragerea`
+    — si a cazut cand am mutat cererea intr-o functie ajutatoare, desi purtarea
+    ramasese corecta. O proba legata de locul unde sta codul imbatraneste la prima
+    rearanjare; una legata de regula, nu.
+
+    Regula: ORICE corp trimis catre ruta care poarta `doarPiatra` n-are voie sa
+    poarte si preferinte.
+  */
   const sursa = readFileSync("src/lib/edinio-marketing/consimtamant-browser.ts", "utf8");
+  const corpuri = [...sursa.matchAll(/JSON\.stringify\(\{[\s\S]*?\}\)/g)].map((m) => m[0]);
+  const cuPiatra = corpuri.filter((c) => c.includes("doarPiatra"));
+
+  assert.equal(cuPiatra.length, 1, `s-au gasit ${cuPiatra.length} cereri care duc doar piatra; astept exact una`);
+  for (const c of cuPiatra) {
+    assert.ok(!c.includes("statistici"), "cererea de reluare trimite iar preferinte: " + c);
+    assert.ok(!c.includes("marketing"), "cererea de reluare trimite iar preferinte: " + c);
+  }
+
+  /*
+    ⚠ SI CA RELUAREA CHIAR TRECE PE ACOLO. Fara randul asta, cineva ar putea scrie
+    o a doua cerere, cu preferinte, si proba de mai sus ar ramane verde cat timp
+    cea „curata" exista undeva in fisier.
+  */
   const i = sursa.indexOf("export function reiaRetragerea");
   assert.ok(i > 0, "nu mai gasesc reluarea");
-  const corpFunctiei = sursa.slice(i);
-  const j = corpFunctiei.indexOf("JSON.stringify({");
-  const trimis = corpFunctiei.slice(j, corpFunctiei.indexOf("}", j) + 1);
-
-  assert.match(trimis, /doarPiatra: true/, "reluarea nu mai cere doar piatra");
-  assert.ok(!trimis.includes("statistici"), "reluarea trimite iar preferinte: " + trimis);
-  assert.ok(!trimis.includes("marketing"), "reluarea trimite iar preferinte: " + trimis);
+  const corpFunctiei = sursa.slice(i, sursa.indexOf(String.fromCharCode(10) + "}", i));
+  assert.match(corpFunctiei, /ceruPiatra\(/, "reluarea nu mai trece prin cererea care duce doar piatra");
 });

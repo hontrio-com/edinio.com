@@ -14,7 +14,6 @@ import { NUME_COOKIE, atributeCookie, eCookieDeMaturat } from "./consimtamant/co
 */
 
 export const EVENIMENT_SCHIMBAT = "edinio-consimtamant-schimbat";
-export const EVENIMENT_DESCHIDE_SETARI = "edinio-deschide-setari-cookie";
 
 function acum(): number {
   return Math.floor(Date.now() / 1000);
@@ -173,9 +172,9 @@ export function scrieHotararea(alegere: { statistici: boolean; marketing: boolea
       if (!vidDeStins) return;
       const raspuns = (await r.json().catch(() => null)) as { retras?: boolean } | null;
       if (raspuns?.retras === true) { uitaRestanta(); return; }
-      noteazaRestanta(vidDeStins);
+      programeazaReluarea(vidDeStins, 0);
     })
-    .catch(() => { if (vidDeStins) noteazaRestanta(vidDeStins); });
+    .catch(() => { if (vidDeStins) programeazaReluarea(vidDeStins, 0); });
 
   return noua;
 }
@@ -189,7 +188,72 @@ function noteazaRestanta(vid: string): void {
   try { window.localStorage.setItem(CHEIE_RESTANTA, vid); } catch { /* mod privat */ }
 }
 function uitaRestanta(): void {
+  ceasReluare.forEach((c) => window.clearTimeout(c));
+  ceasReluare.length = 0;
   try { window.localStorage.removeItem(CHEIE_RESTANTA); } catch { /* mod privat */ }
+}
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠ RELUAREA INCEPE PE LOC, NU LA URMATOAREA PAGINA
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  ⚠ FEREASTRA PE CARE O INCHIDE. Pana azi, o scriere cazuta se nota in
+  `localStorage` si se relua abia la urmatoarea INCARCARE de pagina. Dar omul
+  care tocmai a apasat „retrage" de obicei nu navigheaza nicaieri — sta si
+  citeste. Iar cronul de conversii merge din minut in minut si se uita in BAZA,
+  nu in browserul lui:
+
+      12:00:00  omul retrage; baza are o pana de doua secunde; piatra nu se scrie
+      12:00:02  baza revine — dar nimeni n-o mai intreaba
+      12:00:05  cronul porneste, nu gaseste piatra, si trimite un rand vechi
+
+  Urmarirea din browser s-a oprit pe loc; dovada de pe server intarzie. Cateva
+  secunde de reluare inchid tocmai fereastra aia.
+
+  ⚠ PLAFONAT, DINADINS. Patru incercari, apoi se lasa pe restanta din
+  `localStorage`. O reluare la nesfarsit ar bate intr-o baza deja cazuta si ar
+  tine fila ocupata degeaba.
+
+  ⚠ SI MERGE SI FARA `localStorage`. Ceasurile traiesc in memoria filei, deci in
+  modul privat sau cu stocarea oprita reluarea se face oricum — acolo restanta e
+  singura care se pierde, nu si incercarile.
+*/
+const PAUZE_RELUARE_MS: readonly number[] = [1_000, 3_000, 10_000, 30_000];
+const ceasReluare: number[] = [];
+
+function programeazaReluarea(vid: string, pas: number): void {
+  noteazaRestanta(vid);
+  if (pas >= PAUZE_RELUARE_MS.length) return;
+  ceasReluare.push(window.setTimeout(() => ceruPiatra(vid, pas + 1), PAUZE_RELUARE_MS[pas]));
+}
+
+/** Cere serverului DOAR piatra de mormant. Vezi nota din ruta. */
+function ceruPiatra(vid: string, pas: number): void {
+  void fetch("/api/consimtamant", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ v: VERSIUNE, doarPiatra: true, vidDeStins: vid }),
+  })
+    .then(async (r) => {
+      /*
+        ⚠ UN REFUZ NU SE REINCEARCA, si asta lipsea din prima forma de azi.
+
+        Un 4xx inseamna ca cererea insasi e gresita — un id de forma nevalida, o
+        versiune necunoscuta. Nu se repara asteptand: la a suta incercare
+        raspunsul e acelasi. Reincercat orbeste, ar fi ramas o restanta VESNICA in
+        `localStorage`, reluata la fiecare incarcare de pagina, pentru totdeauna.
+
+        Se reincearca numai ce POATE reusi mai tarziu: o retea cazuta, un 5xx, sau
+        un `retras: false` (baza a clipit).
+      */
+      if (r.status >= 400 && r.status < 500) { uitaRestanta(); return; }
+
+      const raspuns = (await r.json().catch(() => null)) as { retras?: boolean } | null;
+      if (raspuns?.retras === true) { uitaRestanta(); return; }
+      programeazaReluarea(vid, pas);
+    })
+    .catch(() => programeazaReluarea(vid, pas));
 }
 
 /**
@@ -205,30 +269,9 @@ export function reiaRetragerea(): void {
   try { vid = window.localStorage.getItem(CHEIE_RESTANTA); } catch { return; }
   if (!validVid(vid)) { if (vid !== null) uitaRestanta(); return; }
 
-  /*
-    ═══ ⚠ RELUAREA CERE DOAR PIATRA DE MORMANT, NIMIC DESPRE PREFERINTE ═══
-
-    ⚠ CE STRICA FORMA VECHE. Ea trimitea `statistici: false, marketing: false`,
-    orice ar fi ales omul. Scenariul: cineva pastreaza STATISTICILE si retrage
-    numai marketingul. Serverul cade, se noteaza restanta. La urmatoarea pagina,
-    reluarea spunea „retrage tot" — iar `Set-Cookie`-ul serverului suprascria
-    cookie-ul corect din browser. Omul pierdea statisticile pe care le voia.
-
-    ⚠ SI DE CE NU E DE AJUNS SA PASTREZ STAREA IN RESTANTA. Ar merge, dar lasa
-    deschisa alta usa: intre cadere si reluare omul se poate razgandi din nou, iar
-    reluarea ar scrie o stare invechita. Aici se taie de la radacina — o reluare
-    TEHNICA nu poate atinge preferintele, fiindca nici nu le trimite.
-  */
-  void fetch("/api/consimtamant", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ v: VERSIUNE, doarPiatra: true, vidDeStins: vid }),
-  })
-    .then(async (r) => {
-      const raspuns = (await r.json().catch(() => null)) as { retras?: boolean } | null;
-      if (raspuns?.retras === true) uitaRestanta();
-    })
-    .catch(() => { /* se incearca iar la urmatoarea pagina */ });
+  /* ⚠ Aceeasi cale ca reluarea de pe loc: o incercare acum, si pauzele de mai sus
+     daca nici acum nu merge. */
+  ceruPiatra(vid, 0);
 }
 
 /** Retragerea: aceeasi cale, cu totul stins si fara id. */
@@ -236,9 +279,6 @@ export function retrage(): Stare {
   return scrieHotararea({ statistici: false, marketing: false }, "w");
 }
 
-export function deschideSetari(): void {
-  window.dispatchEvent(new Event(EVENIMENT_DESCHIDE_SETARI));
-}
 
 export type Consimtamant = {
   /**

@@ -92,13 +92,45 @@ test("⚠ Consent Mode v2 se declara INAINTEA oricarei alte comenzi gtag", () =>
   const baza = citeste("src/lib/edinio-marketing/corp-gtag.ts");
 
   const iDefault = baza.indexOf("gtag('consent', 'default'");
+  const iUpdate = baza.indexOf("gtag('consent', 'update'");
   const iJs = baza.indexOf("gtag('js'");
   assert.ok(iDefault > 0, "nu se mai declara starea implicita de consimtamant");
   assert.ok(iJs > 0, "temeiul nu mai porneste ceasul gtag");
   assert.ok(iDefault < iJs, "`consent default` vine dupa `gtag('js')`");
 
+  /*
+    ═══ ⚠ SI SECVENTA INTREAGA: default -> update -> js ═══
+
+    ⚠ CE APARA, si de ce n-a fost destul „default inaintea lui js". Pana pe
+    03.09.2026 `default` purta direct starea adevarata si nu exista niciun
+    `update`. Proba trecea verde — ordinea ceruta era respectata — dar doua
+    lucruri erau gresite dedesubt:
+
+      1. `wait_for_update: 500` astepta un `update` care nu venea NICIODATA, deci
+         primul hit se retinea o jumatate de secunda la fiecare incarcare.
+      2. Uneltele Google de diagnostic raportau „consimtamantul nu se
+         actualizeaza", si nimeni n-avea cum sa stie daca e o scapare.
+
+    O proba care cere doar „A inaintea lui B" nu vede ca C lipseste cu totul.
+  */
+  assert.ok(iUpdate > 0, "temeiul nu mai trimite `consent update` — `wait_for_update` asteapta degeaba");
+  assert.ok(iDefault < iUpdate, "`update` vine INAINTEA lui `default`");
+  assert.ok(iUpdate < iJs, "`update` vine dupa `gtag('js')`, deci prea tarziu");
+
+  /*
+    ⚠ SI CA `default` CHIAR PLEACA DE LA REFUZ. Scris cu starea adevarata, secventa
+    ar arata la fel din afara si n-ar mai insemna nimic: „default" ar fi deja
+    raspunsul, iar `update` o repetare.
+  */
+  const blocDefault = baza.slice(iDefault, iUpdate);
+  assert.ok(!blocDefault.includes("granted"),
+    "`consent default` porneste de la ceva acordat; secventa isi pierde intelesul");
+
   for (const semnal of ["analytics_storage", "ad_storage", "ad_user_data", "ad_personalization"]) {
     assert.ok(baza.includes(semnal), `semnalul "${semnal}" din Consent Mode v2 lipseste`);
+    /* ⚠ Fiecare semnal trebuie sa fie si in `update`, altfel ramane pe refuz. */
+    assert.ok(baza.slice(iUpdate, iJs).includes(semnal),
+      `semnalul "${semnal}" lipseste din \`consent update\`, deci ramane refuzat`);
   }
 
   /*

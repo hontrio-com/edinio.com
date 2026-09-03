@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import {
-  scrieHotararea, useConsimtamant, EVENIMENT_DESCHIDE_SETARI,
-} from "@/lib/edinio-marketing/consimtamant-browser";
+import { scrieHotararea, useConsimtamant } from "@/lib/edinio-marketing/consimtamant-browser";
 import { PanouConsimtamant, ALEGERE_GOALA, type Alegere } from "./PanouConsimtamant";
 
 /*
@@ -29,20 +27,29 @@ const CLASE_BUTON_PRINCIPAL =
 
 export function BannerConsimtamant() {
   const c = useConsimtamant();
-  const [deschisDeOm, setDeschisDeOm] = useState(false);
   const [detaliat, setDetaliat] = useState(false);
 
   /*
+    ═══ ⚠ AICI A STAT UN MECANISM DE REDESCHIDERE, SCOS PE 03.09.2026 ═══
+
+    Bannerul asculta un eveniment (`edinio-deschide-setari-cookie`) prin care
+    putea fi readus in pagina dupa ce omul alesese o data. Numai ca nimeni nu-l
+    striga: `deschideSetari()` n-avea niciun apelant in tot repo-ul — numai
+    definitia si ascultatorul asta.
+
+    ⚠ DE CE E MAI RAU DECAT „ceva nefolosit". Eu insumi m-am pacalit cu el: am
+    reprodus un defect dispecerizand evenimentul din consola si am scris in
+    comentarii ca defectul se vede „pe `/preturi`". Un om nu putea ajunge acolo.
+    Codul mort nu doar ca ocupa loc — el minte despre ce se poate intampla.
+
+    ⚠ CUM SE SCHIMBA HOTARAREA ACUM: din subsol, „Setari Cookies" duce la
+    `/cookies/setari`, unde panoul e permanent. O navigare, nu o fereastra peste
+    pagina — si nimic care sa se strice in tacere.
+
     ⚠ HOTARAREA SE CITESTE PRIN `useConsimtamant`, nu cu un efect care pune stare.
     Un `setState` sincron la montare inseamna o a doua randare la fiecare
     incarcare de pagina, pentru toata lumea, inclusiv pentru cine a ales demult.
   */
-  useEffect(() => {
-    /* Numai ascultatorul sta in efect; starea se schimba abia cand omul apasa. */
-    const deschide = () => { setDetaliat(true); setDeschisDeOm(true); };
-    window.addEventListener(EVENIMENT_DESCHIDE_SETARI, deschide);
-    return () => window.removeEventListener(EVENIMENT_DESCHIDE_SETARI, deschide);
-  }, []);
 
   const initiala: Alegere = c.stare
     ? { statistici: c.stare.statistici, marketing: c.stare.marketing }
@@ -51,13 +58,12 @@ export function BannerConsimtamant() {
   /*
     ⚠ SE ARATA DOAR DUPA HIDRATARE. `c.mounted` e fals si pe server, si la prima
     trecere din browser — deci cele doua randari ies identice si hidratarea tine.
-    Cine n-a ales inca vede bannerul; cine a ales, doar daca il cere el.
+    Bannerul e pentru cine n-a ales inca; cine a ales isi schimba alegerea din
+    `/cookies/setari`.
   */
-  const arata = c.mounted && (!c.stare || deschisDeOm);
+  if (!c.mounted || c.stare) return null;
 
-  if (!arata) return null;
-
-  const inchide = () => { setDeschisDeOm(false); setDetaliat(false); };
+  const inchide = () => setDetaliat(false);
 
   return (
     <div

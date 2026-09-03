@@ -49,6 +49,22 @@ beforeEach(() => {
 
 /* ═══ 1. Ce NU pleaca, si de ce e cel mai important lucru de aici ═══ */
 
+/*
+  {W} UN EVENIMENT PE CARE TIPUL NU-L MAI PRIMESTE, SI DE CE TREBUIE PROBAT.
+
+  De pe 03.09.2026 `plan_id` e obligatoriu la `begin_checkout`, deci forma de mai
+  jos nu se mai poate scrie in cod de productie. Rezerva `?? "abonament"` din
+  adaptoare nu e insa cod mort: un `as never` pe drum sau un eveniment reconstruit
+  din JSON trece pe langa tip, si atunci campul chiar iese gol.
+
+  Tipul opreste greseala la SCRIERE; rezerva o opreste la RULARE. Probele de aici
+  o exercita pe a doua, deci trebuie sa poata construi forma pe care tipul o
+  refuza — de aia ocolirea, si de aia scrisa intr-un singur loc, cu motivul langa.
+*/
+function faraPlanAles(o: Omit<Extract<EvenimentEdinio, { name: "begin_checkout" }>, "plan_id">): EvenimentEdinio {
+  return o as EvenimentEdinio;
+}
+
 test("⚠ `page_view` NU pleaca spre Meta si nici spre TikTok", () => {
   /*
     ═══ MASURAT IN PRODUCTIE PE 01.09.2026, NU PRESUPUS ═══
@@ -559,7 +575,7 @@ test("⚠ MATURA: fiecare eveniment care pleaca spre TikTok duce un `content_id`
     { name: "landing_view", content_name: "Homepage", content_category: "landing" },
     { name: "generate_lead", lead_type: "contact", form_name: "contact", event_id: "e1" },
     { name: "sign_up", signup_origin: "email", event_id: "e2" },
-    { name: "begin_checkout", billing_period: "monthly", value: 249, currency: "RON" },
+    faraPlanAles({ name: "begin_checkout", billing_period: "monthly", value: 249, currency: "RON" }),
     { name: "begin_checkout", plan_id: "premium", billing_period: "monthly", value: 249, currency: "RON" },
     { name: "trial_start", plan_id: "free", event_id: "e3" },
     { name: "purchase", plan_id: "ultra", billing_period: "annual", value: 999, currency: "RON", event_id: "e4" },
@@ -585,7 +601,7 @@ test("⚠ `begin_checkout` fara plan nu GHICESTE un plan", () => {
     retargetare s-ar umple de oameni care n-au vrut niciodata basic, si nimic
     n-ar arata ca e gresit.
   */
-  const fara = catreTikTok({ name: "begin_checkout", billing_period: "monthly", value: 249, currency: "RON" });
+  const fara = catreTikTok(faraPlanAles({ name: "begin_checkout", billing_period: "monthly", value: 249, currency: "RON" }));
   assert.equal(fara?.date.content_id, "abonament");
 
   const cu = catreTikTok({ name: "begin_checkout", plan_id: "premium", billing_period: "monthly", value: 249, currency: "RON" });

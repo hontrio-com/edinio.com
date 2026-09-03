@@ -12,12 +12,9 @@ import { PaymentPastDueBanner } from "@/components/dashboard/PaymentPastDueBanne
 import { getInactiveReason } from "@/lib/subscription";
 import { esteAdminConfirmat } from "@/lib/admin-guard";
 import { sesiuneCurentaNeconfirmata } from "@/lib/auth/cere-mfa";
-import { EdinioMetaPixel } from "@/components/edinio-marketing/EdinioMetaPixel";
-import { EdinioTikTokPixel } from "@/components/edinio-marketing/EdinioTikTokPixel";
 import { ScrollToTop } from "@/components/dashboard/ScrollToTop";
 import { ImpersonationBanner } from "@/components/dashboard/ImpersonationBanner";
 import { NotificariToast } from "@/components/ui/NotificariToast";
-import { EtichetaGoogleAds } from "@/components/edinio-marketing/EtichetaGoogleAds";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -129,9 +126,38 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <div className="min-h-screen bg-background">
       <ScrollToTop />
       {esteImpersonare && <ImpersonationBanner />}
-      <EdinioMetaPixel />
-      <EdinioTikTokPixel />
-      <EtichetaGoogleAds />
+      {/*
+        ⚠ AICI NU MAI STAU PIXELII, si e reparatia zilei de 03.09.2026.
+
+        Pana azi panoul randa `EdinioMetaPixel`, `EdinioTikTokPixel` si
+        `EtichetaGoogleAds`. Hotararea fusese luata ca sa se pastreze retargetarea
+        clientilor activi, si nu era o scapare — dar are doua urmari pe care nimeni
+        nu le voise.
+
+        ⚠ PRIMA: PANOUL NU MASOARA NIMIC AICI. Nu se randeaza eticheta GA4, nici
+        runtime-ul, nici bannerul, si niciun ecran din panou nu trage vreun
+        eveniment. Deci singurul lucru pe care il faceau cei trei era sa incarce
+        cod de la `connect.facebook.net`, `analytics.tiktok.com` si `googletagmanager.com`
+        intr-o aplicatie autentificata.
+
+        ⚠ A DOUA, SI E CEA GREA: `fbevents.js` isi pune propriul carlig pe
+        schimbarea istoricului — masurat pe 01.09.2026, si de asta noi nu trimitem
+        `PageView`. Adica FIECARE navigare prin panou pleca la Meta, oricat de
+        tacuti eram noi. `CAI_FARA_PAGE_VIEW` oprea `page_view`-ul NOSTRU si atat;
+        pixelul lor nu-l atingea. Deci comenzile, clientii si facturile
+        comerciantului produceau adrese de ecran in contul de reclame — si nici
+        macar in rapoartele noastre, fiindca GA4 nu e aici.
+
+        ⚠ SI ARGUMENTUL SCRIS DEJA IN `fara-urmarire.ts`: pe un ecran autentificat,
+        cookie-ul de sesiune Supabase NU e `httpOnly` (modelul lor pentru clienti de
+        browser cere sa fie citibil din JS). Un script tert incarcat aici ruleaza cu
+        drepturile paginii. Motivul pentru care s-a curatat previzualizarea de
+        articol e IDENTIC, si acolo miza era mai mica.
+
+        ⚠ CE SE PIERDE, spus limpede: nu se mai pot face audiente de retargetare
+        din comerciantii activi. Palnia de achizitie e neatinsa — site-ul, ajutorul,
+        autentificarea si inrolarea isi pastreaza pixelii, fiindca acolo se cumpara.
+      */}
       {/*
         ⚠ AICI NU SE PUNE BANNERUL, si e o hotarare a proprietarului: o
         intrebare despre cookie-uri peste o aplicatie in care omul lucreaza e

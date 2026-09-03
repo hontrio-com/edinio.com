@@ -217,6 +217,8 @@ test("⚠ cand planul LIPSESTE totusi, articolul nu ghiceste unul", () => {
     Pus „basic" din comoditate, raportul ar arata cumparari incepute pentru un plan
     pe care nu l-a vrut nimeni.
   */
+  /* ⚠ Tipul interzice forma asta de pe 03.09.2026 — proba exercita anume rezerva
+     de RULARE, care prinde un `as never` sau un eveniment reconstruit din JSON. */
   const b = ceAPlecatLaGa4({ name: "begin_checkout", billing_period: "monthly", value: 99, currency: "RON" });
   const ib = (b!.items as Array<Record<string, unknown>>)[0];
   assert.equal(ib.item_id, "abonament", "articolul fara plan ghiceste sau iese gol");

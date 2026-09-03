@@ -234,17 +234,45 @@ test("⚠ browserul foloseste id-ul sesiunii pentru abonament, nu pe cel al maga
 
   const iPurchase = cod.indexOf('name: "purchase"');
   assert.ok(iPurchase > 0, "pagina nu mai trage purchase");
-  const bucata = cod.slice(iPurchase, iPurchase + 400);
-  assert.match(bucata, /event_id: plata\.sesiune/,
+
+  /*
+    {W} A TREIA OARA CAND O FELIE DE LUNGIME FIXA SE RUPE DE LA O REARANJARE.
+
+    Randurile astea taiau `cod.slice(iPurchase, iPurchase + 400)` si cereau acolo
+    `event_id: plata.sesiune` si `value: plata.suma`. Au cazut pe 03.09.2026 fiindca
+    regula a fost SCOASA din pagina intr-o functie pura (`conversiaDinPlata`) — deci
+    campurile nu mai sunt scrise aici, ci intr-un loc care se poate chema din proba.
+
+    Purtarea nu s-a slabit, s-a intarit. Dar felia masura distanta in caractere.
+
+    {W} CE SE CERE ACUM: legatura (pagina imprastie chiar raspunsul regulii) si
+    campurile, cerute acolo unde sunt scrise. Regula insasi e probata prin CHEMARE
+    in `verdict-plata.test.ts`.
+  */
+  const iSpread = cod.indexOf("...conversia", iPurchase);
+  assert.ok(iSpread > iPurchase && iSpread - iPurchase < 80,
+    "purchase nu mai e construit din raspunsul lui `conversiaDinPlata` — pagina isi scrie iar campurile");
+
+  const regula = readFileSync("src/lib/edinio-marketing/verdict-plata.ts", "utf8");
+  assert.match(regula, /event_id: p\.sesiune/,
     "purchase nu mai poarta id-ul sesiunii confirmate de Stripe");
 
   /*
-    ⚠ SI CA SUMA VINE DE LA STRIPE, nu din tabelul de preturi. Webhook-ul o ia din
+    {W} SI CA SUMA VINE DE LA STRIPE, nu din tabelul de preturi. Webhook-ul o ia din
     `amount_total`; daca browserul si-o calculeaza singur, acelasi abonament pleaca
     cu doua sume la prima reducere sau la primul pret schimbat in Stripe.
   */
-  assert.match(bucata, /value: plata\.suma/, "suma conversiei nu mai vine de la Stripe");
-  assert.ok(!bucata.includes("PLAN_PRICES"), "suma se calculeaza iar din tabelul de preturi");
+  assert.match(regula, /value: p\.suma/, "suma conversiei nu mai vine de la Stripe");
+  assert.ok(!regula.includes("PLAN_PRICES"), "suma se calculeaza iar din tabelul de preturi");
+
+  /*
+    {W} SI CA PRETURILE DIN PAGINA NU AJUNG LA `purchase`. Ele sunt folosite chiar
+    in fisierul asta, dar numai pentru `begin_checkout` — unde numarul e pretul
+    DORIT, nu unul incasat. Se cere ca intre cele doua sa nu se amestece.
+  */
+  const bucataPurchase = cod.slice(iPurchase, cod.indexOf("}", iSpread) + 1);
+  assert.ok(!bucataPurchase.includes("PLAN_PRICES") && !bucataPurchase.includes("getAnnualPrice"),
+    "pretul din tabel a ajuns in `purchase` — venitul raportat nu mai e cel incasat");
 
   /* ⚠ Trialul RAMANE pe id-ul magazinului: perechea lui de server e `createBusiness`. */
   const iTrial = cod.indexOf('name: "trial_start"');
@@ -414,4 +442,83 @@ test("⚠ `add_payment_info` nu mai exista pe magistrala noastra", () => {
   const pagina = readFileSync("src/app/(onboarding)/onboarding/plan/page.tsx", "utf8");
   assert.ok(!/name: "add_payment_info"/.test(pagina),
     "pagina de planuri il trage din nou la predarea catre Stripe");
+});
+
+
+test("⚠ `begin_checkout` pleaca DUPA ce Stripe confirma sesiunea, pe amandoua drumurile", () => {
+  /*
+    ⚠ CE APARA. Sunt doua drumuri catre plata, si pana pe 03.09.2026 nu aveau
+    aceeasi regula:
+
+      - apasarea pe „continua": se verifica `res.ok` si `data.url`, ABIA APOI
+        pleca evenimentul. Corect.
+      - campania (`?plan=basic`, redirectare neasistata): evenimentul pleca
+        INAINTE de `fetch`. Deci daca ruta de checkout cadea — cheie Stripe
+        expirata, plan necunoscut, pana de retea — GA4, Meta si TikTok primeau
+        „a inceput cumpararea" pentru o sesiune care nu s-a nascut niciodata.
+
+    ⚠ SI DE CE TOCMAI PE DRUMUL ALA CONTEAZA. Acolo ajung oamenii din reclame
+    platite. O palnie umflata exact la intrarea din campanie face costul pe
+    rezultat sa para mai mic decat este — greseala care se citeste ca succes.
+
+    ⚠ SE CERE REGULA, NU ORDINEA RANDURILOR: evenimentul trebuie sa stea INAUNTRUL
+    ramurii care a vazut `data.url`.
+  */
+  const cod = readFileSync("src/app/(onboarding)/onboarding/plan/page.tsx", "utf8");
+
+  const iRamura = cod.indexOf("if (data.url) {");
+  assert.ok(iRamura > 0, "drumul de campanie nu mai verifica `data.url` inainte sa plece");
+
+  /* Ramura, taiata pe acolade — nu o fereastra de N caractere. */
+  const ramura = (() => {
+    let adanc = 0;
+    for (let i = cod.indexOf("{", iRamura); i < cod.length; i++) {
+      if (cod[i] === "{") adanc++;
+      else if (cod[i] === "}") { adanc--; if (adanc === 0) return cod.slice(iRamura, i + 1); }
+    }
+    return "";
+  })();
+
+  assert.match(ramura, /name: "begin_checkout"/,
+    "`begin_checkout` de campanie nu mai sta sub confirmarea sesiunii — pleaca si cand Stripe n-a creat nimic");
+
+  /* ⚠ Si ca nu ramane si o copie inaintea cererii. */
+  const inainteDeFetch = cod.slice(0, cod.indexOf('fetch("/api/stripe/checkout"'));
+  assert.ok(!/name: "begin_checkout"/.test(inainteDeFetch),
+    "a ramas un `begin_checkout` tras inaintea cererii catre Stripe");
+});
+
+test("⚠ `plan_id` e obligatoriu IN TIP la `begin_checkout`, nu doar in comentariu", () => {
+  /*
+    ⚠ CE APARA. O zi comentariul de deasupra tipului a spus „`plan_id` E ACUM
+    OBLIGATORIU" iar tipul de dedesubt a scris `plan_id?: string`. Cine citea nota
+    credea ca invariantul e aparat de compilator; nu era.
+
+    ⚠ SI DE CE NU E DE AJUNS CA APELANTII SUNT CORECTI AZI. Un apelant nou scris
+    peste sase luni e chiar cazul pentru care exista tipul. Fara el, `content_name`
+    pleaca `undefined` catre Meta si articolul GA4 iese fara nume — exact defectul
+    de care s-a plans pixelul TikTok in productie.
+
+    ⚠ SI TOTUSI REZERVA `?? "abonament"` RAMANE in adaptoare, si nu e cod mort:
+    tipul nu supravietuieste unui `as never` si nici unui eveniment reconstruit din
+    JSON. Tipul opreste greseala la scriere, rezerva o opreste la rulare.
+  */
+  const cod = readFileSync("src/lib/edinio-marketing/evenimente.ts", "utf8");
+
+  const i = cod.indexOf('| { name: "begin_checkout"');
+  assert.ok(i > 0, "nu mai gasesc forma lui `begin_checkout` in taxonomie");
+  const forma = cod.slice(i, cod.indexOf("}", i) + 1);
+
+  assert.ok(!/plan_id\?/.test(forma),
+    "`plan_id` a redevenit optional la `begin_checkout` — tipul nu mai apara ce promite comentariul");
+  assert.match(forma, /plan_id: string/, "`plan_id` nu mai e cerut");
+  assert.match(forma, /value: number/, "`value` nu mai e cerut — evenimentul poate pleca fara suma");
+  assert.match(forma, /currency: "RON"/, "`currency` nu mai e cerut");
+
+  /* ⚠ Si ca rezerva de rulare n-a fost stearsa ca „acum inutila". */
+  for (const a of ["adaptor-tiktok.ts", "adaptor-ga4.ts"]) {
+    const cod2 = readFileSync(`src/lib/edinio-marketing/${a}`, "utf8");
+    assert.match(cod2, /plan_id \?\? "abonament"/,
+      `${a}: rezerva de rulare a fost stearsa — un \`as never\` trece acum pe langa tip si campul iese gol`);
+  }
 });

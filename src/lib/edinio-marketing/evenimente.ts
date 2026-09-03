@@ -184,7 +184,16 @@ export type EvenimentEdinio =
     fata locului — un id pe care serverul nu-l poate reproduce, adica o promisiune
     de deduplicare care nu deduplica nimic.
 
-    ⚠ `plan_id` E ACUM OBLIGATORIU, si asta e chiar mutarea. Pana pe 03.09.2026
+    ⚠ `plan_id` E ACUM OBLIGATORIU SI IN TIP, nu doar in vorbe. O zi comentariul
+    de aici a spus „obligatoriu" iar tipul de dedesubt a scris `plan_id?`. Cine
+    citea nota credea ca e aparat; nu era.
+
+    ⚠ SI TOTUSI ADAPTOARELE ISI PASTREAZA REZERVA `?? "abonament"`. Nu e cod
+    mort: tipul nu supravietuieste unui `as never` si nici unui eveniment
+    reconstruit din JSON, iar codul asta foloseste amandoua. Tipul opreste
+    greseala la scriere, rezerva o opreste la rulare.
+
+    ⚠ Si asta e chiar mutarea. Pana pe 03.09.2026
     evenimentul se tragea la INTRAREA pe pagina de planuri, cand omul inca nu
     alesese nimic — deci `plan_id` lipsea, `value` si `currency` nici nu existau,
     iar „a inceput cumpararea" insemna de fapt „a deschis pagina". Acum se trage
@@ -196,7 +205,7 @@ export type EvenimentEdinio =
     numarul spune „atat costa ce vrea omul sa cumpere", si asta chiar se stie din
     planul apasat. Regula „suma vine din incasare" ramane a lui `purchase`.
   */
-  | { name: "begin_checkout"; plan_id?: string; billing_period: "monthly" | "annual";
+  | { name: "begin_checkout"; plan_id: string; billing_period: "monthly" | "annual";
       value: number; currency: "RON" }
   /*
     ⚠ `event_id` E ID-UL MAGAZINULUI CREAT, nu un numar aleator. Serverul il

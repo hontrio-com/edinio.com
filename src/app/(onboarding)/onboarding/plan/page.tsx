@@ -14,6 +14,7 @@ import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 import { urmareste } from "@/lib/edinio-marketing/magistrala";
 import { verificaPlataOnboarding } from "@/lib/actions/plata-onboarding.actions";
 import { type BillingInterval, getAnnualPrice, getAnnualMonthlyEquivalent, ANNUAL_FREE_MONTHS, PLAN_PRICES } from "@/lib/plans";
+import { conversiaDinPlata } from "@/lib/edinio-marketing/verdict-plata";
 
 const PLANS = [
   {
@@ -131,19 +132,6 @@ function PlanPageContent() {
       setLoading(true);
       sessionStorage.setItem("onboarding_pending_plan", preselected);
       sessionStorage.setItem("onboarding_pending_interval", "monthly");
-      /*
-        ⚠ SI DRUMUL DE CAMPANIE PORNESTE O CUMPARARE. Omul n-a apasat nimic aici
-        — a venit cu `?plan=...` si e dus direct la Stripe — dar fapta e aceeasi:
-        incepe plata unui plan stiut, la un pret stiut. Lipsa lui de aici ar fi
-        facut palnia sa arate ca oamenii din campanii cumpara fara sa fi inceput.
-      */
-      urmareste({
-        name: "begin_checkout",
-        plan_id: preselected,
-        billing_period: "monthly",
-        value: PLAN_PRICES[preselected] ?? 0,
-        currency: "RON",
-      });
       fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -151,7 +139,29 @@ function PlanPageContent() {
       })
         .then(r => r.json())
         .then((data: { url?: string; error?: string }) => {
-          if (data.url) { window.location.href = data.url; }
+          if (data.url) {
+            /*
+              ⚠ DUPA CONFIRMARE, NU INAINTE — si asta e deosebirea fata de forma
+              de ieri. Evenimentul statea inaintea lui `fetch`, deci daca ruta de
+              checkout cadea, GA4, Meta si TikTok primeau „a inceput cumpararea"
+              pentru o sesiune Stripe care nu s-a nascut niciodata.
+
+              ⚠ SI DRUMUL DE CAMPANIE PORNESTE O CUMPARARE. Omul n-a apasat nimic
+              — a venit cu `?plan=...` si e dus direct la Stripe — dar fapta e
+              aceeasi: incepe plata unui plan stiut, la un pret stiut.
+
+              ⚠ ACUM AMANDOUA DRUMURILE AU ACEEASI REGULA: intai se stie ca
+              sesiunea exista, abia apoi se spune ca a inceput cumpararea.
+            */
+            urmareste({
+              name: "begin_checkout",
+              plan_id: preselected,
+              billing_period: "monthly",
+              value: PLAN_PRICES[preselected] ?? 0,
+              currency: "RON",
+            });
+            window.location.href = data.url;
+          }
           else { toast.error(data.error ?? "Eroare la plata"); setLoading(false); }
         })
         .catch(() => { toast.error("Eroare la plata"); setLoading(false); });
@@ -348,17 +358,30 @@ function PlanPageContent() {
           moneda trimisa cu eticheta „RON" ar raporta un venit fals, si nimic n-ar
           arata de ce. Mai bine netrimisa.
         */
-        if (plata.ok && plata.moneda === "RON") {
-          urmareste({
-            name: "purchase",
-            plan_id: plata.plan || plan,
-            /* ⚠ Stripe are ultimul cuvant; daca metadata tace, cade pe ce a ales omul. */
-            billing_period: plata.interval ?? paidInterval,
-            value: plata.suma,
-            currency: "RON",
-            /* ⚠ Chiar id-ul folosit de webhook: asa cele doua se recunosc si se contopesc. */
-            event_id: plata.sesiune,
-          });
+        /*
+          ═══ ⚠ DACA STRIPE NU STIE, BROWSERUL NU INVENTEAZA ═══
+
+          Pana pe 03.09.2026 randurile de mai jos cadeau pe `plan` si pe
+          `paidInterval` — amandoua din `sessionStorage`, adica din ce alesese omul.
+          Nota de atunci spunea „Stripe are ultimul cuvant", dar codul ii dadea
+          ultimul cuvant browserului ori de cate ori Stripe tacea.
+
+          ⚠ CE STRICA. `plan_id` si `billing_period` sunt dimensiunile dupa care
+          se citeste ce se vinde. Umplute din browser, un raport pe planuri arata
+          ce si-au DORIT oamenii, amestecat cu ce au CUMPARAT — si nimic nu le
+          deosebeste. Suma si moneda veneau deja numai de la Stripe; acum vin toate.
+
+          ⚠ SI DACA METADATA CHIAR LIPSESTE? Nu pleaca `purchase` din browser.
+          Conversia nu se pierde: webhook-ul o trimite oricum catre Meta si TikTok,
+          cu acelasi `event_id`. Se pierde doar perechea de browser pentru GA4 si
+          Google Ads — si numai in cazul in care noi insine am scris gresit
+          metadata la crearea sesiunii, adica un defect care trebuie sa se vada.
+        */
+        /* ⚠ Regula sta in `conversiaDinPlata`, ca sa se poata CHEMA dintr-o proba.
+           `event_id` e chiar id-ul folosit de webhook: asa cele doua se contopesc. */
+        const conversia = conversiaDinPlata(plata);
+        if (conversia) {
+          urmareste({ name: "purchase", ...conversia });
         }
       }
 

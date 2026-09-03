@@ -31,9 +31,27 @@
   a apucat deja sa se incarce si sa trimita `PageView`.
 */
 
-/** Caile pe care NU se incarca nimic de urmarire. Prefixe, nu potriviri exacte. */
+/*
+  ⚠ SI PANOUL, DE PE 03.09.2026. Argumentul de mai sus e scris pentru
+  previzualizarea de articol, dar se potriveste cuvant cu cuvant si mai apasat
+  pentru `/dashboard` si `/admin`: acolo stau comenzile, clientii si facturile
+  comerciantilor, tot sub o sesiune Supabase citibila din JavaScript.
+
+  ⚠ SI NU E DOAR CONFIDENTIALITATE. `fbevents.js` isi pune singur carligul pe
+  schimbarea istoricului, deci fiecare navigare prin aplicatie pleca la Meta —
+  chiar daca `CAI_FARA_PAGE_VIEW` oprea `page_view`-ul NOSTRU. Cele doua liste
+  seamana, dar opresc lucruri deosebite: una scripturile lor, cealalta masuratoarea
+  noastra. Vezi nota de mai jos.
+
+  ⚠ PIXELII AU FOST SCOSI SI DIN LAYOUT-UL PANOULUI. Randurile astea sunt plasa:
+  daca ii pune cineva la loc, nu se mai incarca. O regula tinuta intr-un singur loc
+  nu se poate desparti de ea insasi.
+*/
+/** Caile pe care NU se incarca nimic de urmarire. Prefix sau potrivire exacta. */
 export const CAI_FARA_URMARIRE = [
-  "/blog/previzualizare/",
+  "/blog/previzualizare",
+  "/dashboard",
+  "/admin",
 ] as const;
 
 /**
@@ -46,7 +64,13 @@ export const CAI_FARA_URMARIRE = [
  */
 export function faraUrmarire(cale: string | null | undefined): boolean {
   if (!cale) return false;
-  return CAI_FARA_URMARIRE.some((prefix) => cale.startsWith(prefix));
+  /*
+    ⚠ POTRIVIRE EXACTA SAU PE SEGMENT INTREG, nu `startsWith` gol. Cu prefixul
+    scris fara bara la capat, un `startsWith` simplu ar fi stins urmarirea si pe
+    `/dashboard-public` sau `/adminstratie` — cai care azi nu exista, dar care ar
+    fi tacut daca ar aparea. Aceeasi forma ca la `faraPageView`, dinadins.
+  */
+  return CAI_FARA_URMARIRE.some((p) => cale === p || cale.startsWith(`${p}/`));
 }
 
 /*

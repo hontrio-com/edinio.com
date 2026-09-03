@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { faraUrmarire } from "../fara-urmarire";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -242,14 +243,25 @@ test("⚠ hotararea se citeste din cookie, niciodata dintr-un layout", () => {
   ⚠ LISTA ASTA E PAZITA DE PROBA DE MAI JOS. Altfel prima incercare de a face o
   proba sa taca ar fi sa se adauge aici inca un layout.
 */
-const FARA_BANNER_DINADINS = ["src/app/(dashboard)/layout.tsx"];
+/*
+  ⚠ LISTA ASTA E GOALA DE PE 03.09.2026, si golirea ei e o veste buna.
+
+  Singura intrare era layoutul panoului: avea pixeli si n-avea banner. Pixelii au
+  fost scosi de acolo cu totul, deci nu mai exista nicio suprafata cu poarta si
+  fara intrebare. Ce era o portita cantarita a devenit o regula fara exceptii.
+
+  ⚠ SE PASTREAZA GOALA, nu se sterge. Mecanismul si proba care il margineste sunt
+  ce impiedica pe cineva sa faca maine o proba sa taca adaugand un layout aici.
+*/
+const FARA_BANNER_DINADINS: string[] = [];
 
 test("⚠ bannerul e montat oriunde e montat un pixel", () => {
   /*
     ⚠ CE APARA. O suprafata cu poarta si fara intrebare nu e mai privata — e doar
     mai oarba: acolo masuratoarea moare fara ca nimeni sa poata alege altfel.
-    Cele cinci layouturi sunt deja neuniforme (dashboard-ul are pixeli dar n-are
-    GA4), deci potrivirea se cauta, nu se presupune.
+    Layouturile sunt neuniforme intre ele, deci potrivirea se cauta, nu se
+    presupune. Pana pe 03.09.2026 panoul era chiar exceptia: avea pixeli si n-avea
+    nici GA4, nici banner.
   */
   const cuPixeli = fisiereSursa("src/app")
     .filter((f) => f.endsWith("layout.tsx"))
@@ -261,30 +273,74 @@ test("⚠ bannerul e montat oriunde e montat un pixel", () => {
     */
     .filter((f) => /Edinio(Meta|TikTok)Pixel|EtichetaGa4|EtichetaGoogleAds/.test(faraComentarii(citeste(f))));
 
-  assert.ok(cuPixeli.length >= 5, `doar ${cuPixeli.length} layouturi cu pixeli — cautarea s-a stricat?`);
+  assert.ok(cuPixeli.length >= 4, `doar ${cuPixeli.length} layouturi cu pixeli — cautarea s-a stricat?`);
   const faraBanner = cuPixeli
     .filter((f) => !FARA_BANNER_DINADINS.includes(f))
     .filter((f) => !faraComentarii(citeste(f)).includes("<BannerConsimtamant />"));
   assert.deepEqual(faraBanner, [], "layouturi cu pixeli dar fara banner: nimeni n-ar putea alege acolo");
 });
 
-test("exceptia de la banner nu se poate largi in tacere", () => {
+test("⚠ aplicatia autentificata nu incarca NICIUN script de reclama", () => {
   /*
-    ⚠ CE APARA. `FARA_BANNER_DINADINS` e o portita. Daca maine cineva scoate
-    bannerul de pe pagina de inregistrare — unde ajung oamenii direct din reclame
-    — si adauga fisierul aici, proba de mai sus ar tacea, iar inscrierile din
-    reclame n-ar mai ajunge NICIODATA la Meta si TikTok.
+    ═══════════════════════════════════════════════════════════════════════════
+    ⚠ CE S-A INTAMPLAT PANA PE 03.09.2026, SI DE CE E MAI MULT DECAT SCOP
+    ═══════════════════════════════════════════════════════════════════════════
 
-    Deci lista e marginita la ce e cu adevarat aplicatia autentificata, si fiecare
-    intrare trebuie sa fie un layout care chiar exista si chiar are pixeli.
+    Layoutul panoului randa `EdinioMetaPixel`, `EdinioTikTokPixel` si
+    `EtichetaGoogleAds`. Hotararea era a proprietarului si avea un motiv:
+    retargetarea comerciantilor activi.
+
+    ⚠ DAR PANOUL NU MASOARA NIMIC. N-are eticheta GA4, n-are runtime, n-are
+    banner, si niciun ecran din el nu trage vreun eveniment. Deci cei trei nu
+    aduceau nicio masuratoare — doar incarcau cod tert.
+
+    ⚠ SI `fbevents.js` ISI PUNE SINGUR CARLIGUL pe schimbarea istoricului
+    (masurat pe 01.09.2026 — de asta noi nu trimitem `PageView`). Adica FIECARE
+    navigare prin panou pleca la Meta, desi `CAI_FARA_PAGE_VIEW` oprea `page_view`-ul
+    NOSTRU. Adresele ecranelor de comenzi, clienti si facturi ajungeau in contul de
+    reclame, si nici macar in rapoartele noastre.
+
+    ⚠ SI ARGUMENTUL DE INCREDERE, scris deja in `fara-urmarire.ts` pentru
+    previzualizarea de articol: cookie-ul de sesiune Supabase nu e `httpOnly`, deci
+    un script tert incarcat aici ruleaza cu drepturile paginii. Miza e mai mare in
+    panou decat pe un draft de articol.
+
+    ⚠ PROBA CERE AMANDOUA PARTILE: sa nu fie randati, SI sa nu se poata incarca
+    daca ii pune cineva la loc.
   */
-  assert.ok(FARA_BANNER_DINADINS.length <= 1, "exceptia s-a largit — a fost cantarit fiecare caz?");
-  for (const f of FARA_BANNER_DINADINS) {
-    assert.ok(f.includes("(dashboard)"), `${f}: singura suprafata fara banner e aplicatia autentificata`);
-    const cod = citeste(f);
-    assert.match(cod, /Edinio(Meta|TikTok)Pixel/, `${f}: trecut in exceptie dar n-are pixeli`);
-    assert.match(cod, /AICI NU SE PUNE BANNERUL/, `${f}: exceptia nu e explicata in fisierul insusi`);
+  const autentificate = fisiereSursa("src/app")
+    .filter((f) => f.endsWith("layout.tsx"))
+    .filter((f) => f.includes("(dashboard)") || f.includes("(admin)"));
+  assert.ok(autentificate.length >= 1, "nu mai gasesc layoutul aplicatiei autentificate");
+
+  for (const f of autentificate) {
+    const cod = faraComentarii(citeste(f));
+    assert.ok(
+      !/Edinio(Meta|TikTok)Pixel|EtichetaGoogleAds|EtichetaGa4/.test(cod),
+      `${f}: aplicatia autentificata a primit inapoi un script de reclama`,
+    );
   }
+
+  /* ⚠ Si plasa de rulare, pentru cazul in care ajung acolo pe alta usa. */
+  const reguli = citeste("src/lib/edinio-marketing/fara-urmarire.ts");
+  for (const cale of ["/dashboard", "/admin"]) {
+    assert.ok(
+      new RegExp(`"${cale}"`).test(reguli),
+      `${cale} nu mai e in CAI_FARA_URMARIRE — un pixel pus la loc s-ar incarca`,
+    );
+  }
+
+  /* ⚠ Si ca lista e chiar cea folosita de componente, nu una decorativa. */
+  assert.equal(faraUrmarire("/dashboard/comenzi"), true, "regula nu se aplica pe ecranele panoului");
+  assert.equal(faraUrmarire("/admin"), true, "regula nu se aplica pe admin");
+  assert.equal(faraUrmarire("/preturi"), false, "regula s-a largit peste site — s-ar stinge masuratoarea vie");
+  /*
+    ⚠ SI POTRIVIREA E PE SEGMENT INTREG. Cu `startsWith` gol, `/dashboard` ar fi
+    stins urmarirea si pe `/dashboard-public` — o cale care azi nu exista, dar care
+    ar fi tacut fara ca nimic sa cada.
+  */
+  assert.equal(faraUrmarire("/dashboard-public"), false, "potrivirea de cale inghite si cai vecine");
+  assert.equal(faraUrmarire("/blog/previzualizare/abc"), true, "regula veche s-a pierdut la rescrierea potrivirii");
 });
 
 test("⚠ niciun layout nu spune despre sine contrariul a ce face", () => {

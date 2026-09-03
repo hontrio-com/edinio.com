@@ -95,3 +95,50 @@ export function verdictulPlatii(s: SesiuneStripe, idOmului: string): PlataVerifi
     moneda,
   };
 }
+
+
+/*
+  ═════════════════════════════════════════════════════════════════════════════════════════════════
+  CE PLEACA DIN BROWSER LA O CUMPARARE, SI CAND NU PLEACA NIMIC
+  ═════════════════════════════════════════════════════════════════════════════════════════════════
+
+  ⚠ DE CE E O FUNCTIE, SI NU UN `if` IN PAGINA. Regula statea intr-o conditie
+  lunga dintr-o componenta React, deci nu se putea chema din nicio proba. Ce
+  ramanea era o scanare a sursei — iar aceea cerea ca sirurile „monthly" si
+  „annual" sa APARA in conditie, nu ca ele sa puna poarta. Un mutant care adauga
+  `|| true` la capat a trecut verde: sirurile erau tot acolo.
+
+  ⚠ O PROBA CARE CITESTE TEXTUL CODULUI POATE CERE CEL MULT FORMA. Regula se
+  cere chemand.
+
+  ⚠ SI CE HOTARASTE: daca Stripe nu stie planul sau intervalul, browserul NU
+  inventeaza. Pana pe 03.09.2026 cadea pe `sessionStorage`, adica pe ce ALESESE
+  omul — deci un raport pe planuri amesteca ce si-au dorit oamenii cu ce au
+  cumparat, si nimic nu le deosebeste.
+
+  ⚠ CE SE PIERDE CAND SE INTOARCE `null`: perechea de browser pentru GA4 si
+  Google Ads. Conversia nu se pierde — webhook-ul o trimite oricum catre Meta si
+  TikTok, cu acelasi `event_id`. Iar cazul cere ca noi insine sa fi scris gresit
+  metadata la crearea sesiunii, adica un defect care trebuie sa se vada.
+*/
+
+/** Campurile evenimentului `purchase`, sau `null` daca Stripe nu stie destul. */
+export function conversiaDinPlata(p: PlataVerificata): {
+  plan_id: string;
+  billing_period: "monthly" | "annual";
+  value: number;
+  currency: "RON";
+  event_id: string;
+} | null {
+  if (!p.ok) return null;
+  if (p.moneda !== "RON") return null;
+  if (!p.plan) return null;
+  if (p.interval !== "monthly" && p.interval !== "annual") return null;
+  return {
+    plan_id: p.plan,
+    billing_period: p.interval,
+    value: p.suma,
+    currency: "RON",
+    event_id: p.sesiune,
+  };
+}

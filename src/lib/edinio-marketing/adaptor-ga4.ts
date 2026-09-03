@@ -11,7 +11,7 @@
 
 import type { Adaptor } from "./magistrala";
 import type { EvenimentEdinio } from "./evenimente";
-import { codGa4, eDepanare } from "./mediu";
+import { eDepanare } from "./mediu";
 import { curataAdresa } from "./adresa-curata";
 
 type Gtag = (...a: unknown[]) => void;
@@ -143,30 +143,3 @@ export const adaptorGa4: Adaptor = {
   },
 };
 
-/**
- * Configurarea etichetei, pentru scriptul de pornire.
- *
- * ⚠ `send_page_view: false` E MIEZUL. Eticheta trage singura un `page_view` la
- * incarcare. Dar aplicatia e App Router: navigarea dintre pagini nu reincarca
- * documentul, deci evenimentul acela ar veni O SINGURA DATA pe toata sesiunea,
- * oricate pagini ar vedea omul. Iar daca il tragem si noi, prima pagina ar fi
- * numarata de doua ori.
- *
- * Deci: eticheta tace, iar `page_view` il trimitem noi — o data la incarcare si
- * o data la fiecare schimbare de cale. Vezi `RuntimeMarketing`.
- */
-export function configurareGa4(): { cod: string; optiuni: Record<string, unknown> } | null {
-  const cod = codGa4();
-  if (!cod) return null;
-  return {
-    cod,
-    optiuni: {
-      send_page_view: false,
-      /*
-        ⚠ Fara `user_id`, dinadins, si fara nimic care leaga sesiunea de un cont.
-        Masuram anonim; daca vom avea vreodata nevoie de altceva, e o hotarare
-        separata, cu textele legale schimbate odata cu ea.
-      */
-    },
-  };
-}

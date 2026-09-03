@@ -46,29 +46,24 @@ export type EvenimentEdinio =
   | { name: "outbound_click"; outbound_host: string; outbound_kind: "phone" | "whatsapp" | "email" | "link" }
 
   /*
-    ═══ ⚠ DE AICI IN JOS: DECLARATE, DAR INCA NETRASE DE NICAIERI ═══
+    ═══════════════════════════════════════════════════════════════════════════
+    ⚠ AICI A STAT „DE AICI IN JOS: DECLARATE, DAR INCA NETRASE DE NICAIERI"
+    ═══════════════════════════════════════════════════════════════════════════
 
-    Le las in taxonomie dinadins, si merita spus de ce — fiindca peste tot azi am
-    scos exact felul asta de promisiune.
+    Era adevarat cand a fost scris. Nu mai era pe 03.09.2026: sub el ajunsesera
+    `form_start`, `form_submit`, `form_error`, `generate_lead`,
+    `billing_period_change` si `faq_open` — toate trase, toate vizibile in GA4.
+    Cine il citea pleca crezand ca `generate_lead` nu se trimite.
 
-    Deosebirea: un COMENTARIU care promite o proba inexistenta insala pe cine il
-    citeste. O VARIANTA de tip nu insala pe nimeni — ea nu spune „asta se
-    intampla", ci „daca vei masura asta, asa se cheama si astea sunt campurile".
-    Iar rostul ei e sa nu apara peste o luna trei nume deosebite pentru acelasi
-    lucru, in trei componente scrise de trei oameni.
+    ⚠ DE CE L-AM SCOS IN LOC SA-L MUT. Orice granita desenata cu degetul intr-o
+    lista care creste se muta singura, in tacere, la primul nume adaugat in locul
+    gresit. Aceeasi lectie ca la lista „trase azi" din acelasi fisier.
 
-    ⚠ CE AR FI TOTUSI GRESIT: sa se creeze dimensiuni personalizate in GA4 pentru
-    ele. Alea se fac numai pentru ce chiar pleaca. Lista de facut sta in
-    documentul de configurare, nu aici.
-
-    ⚠ AICI A STAT O LISTA SCRISA DE MANA cu „trase azi". Numara paisprezece nume;
-    cand am numarat-o pe 03.09.2026 se trageau douazeci si noua. Imbatranise
-    tacut, ca orice lista de felul asta — si tocmai in fisierul in care scrie de
-    ce nu tinem promisiuni pe care nimeni nu le verifica.
-
-    Lista adevarata se numara din cod, nu se scrie: `document-configurare.test.ts`
-    o calculeaza si cade daca documentul nu se potriveste. Numele fara niciun
-    apelant sunt cerute separat, mai jos, de `taxonomie-fara-apelant.test.ts`.
+    Care nume au si care n-au apelant se NUMARA, nu se marcheaza:
+    `taxonomie-fara-apelant.test.ts` o face si cade cand lista rezervata nu se mai
+    potriveste. Ce ramane adevarat si merita spus: NU se fac dimensiuni
+    personalizate in GA4 pentru nume fara apelant — alea se fac numai pentru ce
+    chiar pleaca, iar lista de bifat sta in documentul de configurare.
   */
 
   /* ─── Preturi ──────────────────────────────────────────────────────────── */

@@ -42,9 +42,15 @@ export function UrmaArticol({
 
   useEffect(() => {
     /*
-      ⚠ O SINGURA VIZUALIZARE PE ARTICOL. Efectul se poate rula din nou la
-      remontare; fara paza, un articol ar fi numarat de doua ori si media de
-      angajament ar iesi injumatatita.
+      ⚠ O SINGURA VIZUALIZARE CAT TRAIESTE COMPONENTA. Efectul se poate aprinde de
+      doua ori pentru ACEEASI instanta — modul strict din dezvoltare il ruleaza
+      dinadins de doua ori, si o schimbare de dependinte l-ar relua. Fara paza,
+      articolul s-ar numara dublu si media de angajament ar iesi injumatatita.
+
+      ⚠ SI NU APARA DE O REMONTARE ADEVARATA, cum a scris aici o vreme: `useRef` e
+      stare a INSTANTEI, deci o instanta noua porneste cu paza deschisa. Acolo ne
+      apara altceva — o remontare inseamna alta pagina, deci alta vizualizare, care
+      CHIAR trebuie numarata.
     */
     if (vazut.current) return;
     vazut.current = true;

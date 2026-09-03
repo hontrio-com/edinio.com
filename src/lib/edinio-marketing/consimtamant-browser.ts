@@ -167,7 +167,8 @@ export function scrieHotararea(alegere: { statistici: boolean; marketing: boolea
         200 si cand baza a picat — dinadins, ca alegerea deja in vigoare sa nu
         para nereusita. Dar atunci retragerea ar ramane numai in browser, iar
         cronul ar trimite mai departe. Deci: daca aveam ceva de stins si serverul
-        n-a stins, se noteaza si se reia la urmatoarea incarcare de pagina.
+        n-a stins, se reia PE LOC (1s, 3s, 10s, 30s), iar daca nici atunci nu
+        merge ramane o restanta pentru urmatoarea incarcare de pagina.
       */
       if (!vidDeStins) return;
       const raspuns = (await r.json().catch(() => null)) as { retras?: boolean } | null;
@@ -237,17 +238,23 @@ function ceruPiatra(vid: string, pas: number): void {
   })
     .then(async (r) => {
       /*
-        ⚠ UN REFUZ NU SE REINCEARCA, si asta lipsea din prima forma de azi.
+        ═══ ⚠ UN REFUZ NU SE REINCEARCA — DAR UN PLAFON NU E UN REFUZ ═══
 
-        Un 4xx inseamna ca cererea insasi e gresita — un id de forma nevalida, o
-        versiune necunoscuta. Nu se repara asteptand: la a suta incercare
-        raspunsul e acelasi. Reincercat orbeste, ar fi ramas o restanta VESNICA in
-        `localStorage`, reluata la fiecare incarcare de pagina, pentru totdeauna.
+        Un 4xx inseamna de obicei ca cererea insasi e gresita: un id de forma
+        nevalida, o versiune necunoscuta. Nu se repara asteptand — la a suta
+        incercare raspunsul e acelasi — iar reincercat orbeste ar fi ramas o
+        restanta VESNICA in `localStorage`, reluata la fiecare pagina.
 
-        Se reincearca numai ce POATE reusi mai tarziu: o retea cazuta, un 5xx, sau
-        un `retras: false` (baza a clipit).
+        ⚠ 429 E EXCEPTIA, si prima forma a randului asta o rata. Ruta are un
+        plafon (30 pe ora pe IP) care raspunde tot cu 4xx, dar ala e TRECATOR: se
+        stinge singur peste cateva minute. Renuntand la el, o retragere lovita de
+        plafon s-ar fi pierdut pentru totdeauna — si tocmai pe calea pe care omul
+        isi exercita un drept.
+
+        Se reincearca deci: retea cazuta, 5xx, 429, si `retras: false` (baza a
+        clipit). Se renunta numai la un 4xx care spune „cererea ta n-are sens".
       */
-      if (r.status >= 400 && r.status < 500) { uitaRestanta(); return; }
+      if (r.status >= 400 && r.status < 500 && r.status !== 429) { uitaRestanta(); return; }
 
       const raspuns = (await r.json().catch(() => null)) as { retras?: boolean } | null;
       if (raspuns?.retras === true) { uitaRestanta(); return; }
@@ -306,9 +313,14 @@ export type Consimtamant = {
   pentru browser. React stie atunci sa randeze cu cea de pe server si sa treaca la
   cealalta dupa hidratare — exact ce ne trebuie ca sa nu se strice hidratarea.
 
-  ⚠ POZA E SIRUL BRUT, nu obiectul. `getSnapshot` trebuie sa intoarca ceva stabil
-  ca referinta; un obiect nou la fiecare apel ar pune React intr-o bucla fara
-  sfarsit. Dezlegarea se face abia in `useMemo`.
+  ⚠ POZA TREBUIE SA FIE STABILA CA REFERINTA. `getSnapshot` se cheama la fiecare
+  randare; un obiect NOU la fiecare apel ar pune React intr-o bucla fara sfarsit.
+
+  ⚠ CUM SE TINE, si nu e cum a scris aici o vreme. Randul asta spunea „poza e
+  sirul brut, iar dezlegarea se face in `useMemo`" — fals de doua ori: poza intoarce
+  chiar obiectul `Stare`, si nu exista niciun `useMemo` in tot marketingul. Ce
+  tine stabilitatea e memoria de mai jos: sirul din cookie se dezleaga O SINGURA
+  DATA, iar acelasi obiect se intoarce pana cand cookie-ul se schimba chiar.
 */
 function abonare(la: () => void): () => void {
   window.addEventListener(EVENIMENT_SCHIMBAT, la);

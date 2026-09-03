@@ -13,9 +13,16 @@
     2. paza anti-PII ar trebui repetata la fiecare chemare, si s-ar uita
     3. o componenta care stie de `gtag` nu se poate proba fara un browser
 
-  ⚠ SI NU DOBOARA NIMIC. Orice cade aici — un adaptor, o verificare, o eroare de
-  retea — se opreste aici. O masuratoare stricata n-are voie sa strice pagina
-  omului. Asta e regula pe care o incalca cel mai des sistemele de tracking.
+  ⚠ SI NU DOBOARA PAGINA — CU O EXCEPTIE DECLARATA. Un adaptor cazut, o eroare de
+  retea, un furnizor care arunca: toate se opresc aici. O masuratoare stricata
+  n-are voie sa strice pagina omului, si asta e regula pe care o incalca cel mai
+  des sistemele de tracking.
+
+  ⚠ EXCEPTIA: paza anti-PII ARUNCA in afara productiei, dinadins — ca greseala sa
+  fie vazuta de cine o scrie, la probe si pe desfasurarile de previzualizare. Pe
+  gazdele de productie se lasa balta si se scrie in consola. Randul asta a spus o
+  vreme „nu doboara NIMIC", fara exceptie, si asta ar fi invatat pe cineva sa nu
+  puna paza la apelant.
 */
 
 import type { EvenimentEdinio } from "./evenimente";
@@ -52,6 +59,21 @@ export function inregistreazaAdaptor(a: Adaptor): void {
   if (!adaptoare.some(x => x.nume === a.nume)) adaptoare.push(a);
 }
 
+/**
+ * Numele adaptoarelor inregistrate, in ordinea inregistrarii.
+ *
+ * ⚠ EXISTA CA SA NU SE MAI SCRIE O LISTA DE MANA. `RuntimeMarketing` golea coada
+ * pentru „ga4", „meta", „tiktok" — trei nume scrise cu degetul, pe vremea cand
+ * atatia erau. „google-ads" s-a adaugat mai tarziu si a fost uitat acolo; uitarea
+ * tacea, iar conversia lui astepta pana la urmatorul eveniment de pe pagina.
+ *
+ * Comentariul de acolo promitea deja ca „lista se ia din chiar adaptoarele
+ * inregistrate". Nu se lua. Acum se ia.
+ */
+export function numeleAdaptoarelor(): string[] {
+  return adaptoare.map(a => a.nume);
+}
+
 /* ── Coada ─────────────────────────────────────────────────────────────────
 
   ⚠ DE CE E NEVOIE DE EA. Eticheta Google se incarca `afterInteractive`. Un
@@ -66,22 +88,6 @@ type LaCoada = { ev: EvenimentEdinio; context: { page_type: FelPagina; page_grou
 const coada: LaCoada[] = [];
 const PLAFON_COADA = 50;
 
-/**
- * Goleste coada pentru un adaptor care tocmai a devenit gata.
- *
- * ═══ ⚠ IN ORDINEA IN CARE S-AU INTAMPLAT, si asta e miezul ═══
- *
- * Prima forma parcurgea coada de la coada spre cap (`for i = length-1; i--`),
- * fiindca asa e simplu sa scoti elemente cu `splice` fara sa strici indicii.
- * Efectul: evenimentele plecau EXACT PE DOS.
- *
- * Pe pagina de intrare asta insemna ca `section_view` si `landing_view` ajungeau
- * in GA4 INAINTEA lui `page_view`-ul paginii lor. Nu cade nimic, nu lipseste
- * nimic — dar in rapoartele de parcurs pagina apare vizitata dupa ce omul a
- * derulat-o, iar secventele de evenimente devin de nefolosit.
- *
- * Deci: intai se scot toate ale adaptorului, in ordine, si abia apoi se trimit.
- */
 /**
  * Are omul voie sa fie masurat de adaptorul asta, ACUM?
  *
@@ -197,7 +203,22 @@ export function redeschide(): void {
   }
 }
 
-/** Scoate din coada tot ce astepta pentru un adaptor. */
+/**
+ * Scoate din coada tot ce astepta pentru un adaptor, IN ORDINE.
+ *
+ * ⚠ ORDINEA E MIEZUL, si de aceea scoaterea e despartita de trimitere. O forma
+ * care parcurge de la coada spre cap si trimite pe loc — ca sa nu strice indicii
+ * la `splice` — trimite evenimentele EXACT PE DOS.
+ *
+ * Pe pagina de intrare asta insemna ca `section_view` si `landing_view` ajungeau
+ * in GA4 INAINTEA lui `page_view`-ul paginii lor. Nu cade nimic si nu lipseste
+ * nimic — dar in rapoartele de parcurs pagina apare vizitata dupa ce omul a
+ * derulat-o, si secventele devin de nefolosit.
+ *
+ * ⚠ BLOCUL ASTA A STAT O VREME ORFAN, deasupra lui `areVoie`: l-am despartit de
+ * functia lui inserand cod intre ele. Un antet care descrie alta functie decat cea
+ * de sub el e mai rau decat lipsa lui.
+ */
 function scoateDinCoada(numeAdaptor: string): LaCoada[] {
   const ale = coada.filter(x => x.adaptor === numeAdaptor);
   for (let i = coada.length - 1; i >= 0; i--) {

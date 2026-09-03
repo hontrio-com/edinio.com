@@ -5,7 +5,7 @@ import { urmareste } from "@/lib/edinio-marketing/magistrala";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
-  CE A CAUTAT OMUL, SI DACA A GASIT
+  CE NU GASESC OAMENII (fara sa aflam CE au cautat)
   ═══════════════════════════════════════════════════════════════════════════════
 
   ⚠ SE TRAGE PE PAGINA DE REZULTATE, nu la apasarea butonului de cautare.
@@ -16,9 +16,15 @@ import { urmareste } from "@/lib/edinio-marketing/magistrala";
   numele evenimentului spune limpede ce inseamna: `view_search_results`, adica
   omul a VAZUT rezultatele.
 
-  ⚠ SI SE TRIMITE SI CATE, fiindca intrebarea care merita pusa nu e „ce cauta
-  oamenii" ci „ce cauta si NU gasesc". Un termen cu zero rezultate, cautat de
-  cincizeci de ori, e un articol care trebuie scris.
+  ⚠ SE TRIMITE CATE REZULTATE, NU CE S-A CAUTAT. Textul brut a fost scos pe
+  03.09.2026: tiparele anti-PII prind emailul si telefonul, dar nu „Ion Popescu"
+  si nu o adresa de strada, iar Google avertizeaza chiar despre casetele de
+  cautare ca fiind o cale pe care datele personale ajung din greseala in Analytics.
+
+  ⚠ CE SE MAI POATE AFLA, si ce nu. Cate cautari raman fara raspuns, si pe ce
+  domeniu — blog fata de ajutor — se vede in continuare, din `zero_results` si
+  `search_results`. CARE anume au fost, nu: pentru asta ar trebui un jurnal al
+  NOSTRU, cu pastrarea si stergerea lui, nu un cont de analiza al altcuiva.
 */
 export function UrmaCautare({
   termen,

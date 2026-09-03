@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { inregistreazaAdaptor, goleste, urmareste, redeschide } from "@/lib/edinio-marketing/magistrala";
+import { inregistreazaAdaptor, goleste, urmareste, redeschide, numeleAdaptoarelor } from "@/lib/edinio-marketing/magistrala";
 import { adaptorGa4 } from "@/lib/edinio-marketing/adaptor-ga4";
 import { adaptorMeta } from "@/lib/edinio-marketing/adaptor-meta";
 import { adaptorTikTok } from "@/lib/edinio-marketing/adaptor-tiktok";
@@ -78,10 +78,14 @@ export function RuntimeMarketing() {
       eveniment de pe pagina — iar pe pagina de multumire dupa plata, adesea nu
       mai e niciun eveniment urmator.
 
-      De aceea lista se ia acum din chiar adaptoarele inregistrate, nu se scrie de
-      mana: al cincilea furnizor nu mai poate fi uitat.
+      De aceea lista se ia din chiar adaptoarele inregistrate, nu se scrie de mana:
+      al cincilea furnizor nu mai poate fi uitat.
+
+      ⚠ SI PANA ADINEAURI ERA TOT SCRISA DE MANA, doar ca hotarul trecuse de la
+      trei nume la patru. Comentariul asta promitea insusirea; codul o avea numai
+      pe jumatate. Acum o are chiar — vezi `numeleAdaptoarelor`.
     */
-    for (const a of [adaptorGa4, adaptorMeta, adaptorTikTok, adaptorGoogleAds]) goleste(a.nume);
+    for (const nume of numeleAdaptoarelor()) goleste(nume);
 
     /*
       ⚠ SI SE REIA O RETRAGERE RAMASA RESTANTA. Daca baza a picat exact in clipa
@@ -202,8 +206,9 @@ export function RuntimeMarketing() {
       Apoi omul acorda si statisticile pe aceeasi pagina: setul spunea deja „facut",
       deci GA4 se incarca si nu primea NICIUN `page_view`.
 
-      ⚠ Pe `/preturi` am reprodus-o DE MANA, din consola: bannerul nu se redeschide
-      (`deschideSetari()` n-are apelanti). Ecranul pe care se intampla chiar e
+      ⚠ Pe `/preturi` am reprodus-o DE MANA, din consola, pe vremea cand bannerul
+      putea fi readus in pagina printr-un eveniment. Mecanismul acela era cod mort
+      si a fost scos in aceeasi zi. Ecranul pe care se intampla chiar e
       `/cookies/setari` — si, mai des, `article_view`/`landing_view`, unde e destul
       sa accepti stand pe pagina pe care ai aterizat.
 

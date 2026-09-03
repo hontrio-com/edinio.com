@@ -64,8 +64,15 @@ const CAI_FARA_PARAMETRI = [
 /**
  * Adresa curata, pentru `page_location`.
  *
- * Intoarce mereu o adresa absoluta. La o intrare nevalida intoarce doar originea
- * si calea, fara sa arunce: o adresa ciudata n-are voie sa opreasca masuratoarea.
+ * ⚠ INTOARCE SIRUL GOL LA O INTRARE CARE NU E O ADRESA, si asta e o purtare
+ * dinadins, probata (`magistrala.test.ts`). Antetul de aici a spus multa vreme
+ * „intoarce MEREU o adresa absoluta" — fals, si periculos pentru cine se bizuie
+ * pe el: `new URL(curataAdresa(x))` arunca pe sirul gol.
+ *
+ * Pe o adresa VALIDA dar cu cale sensibila, se intorc originea si calea, fara
+ * niciun parametru. Aia e ramura pe care o descria antetul vechi.
+ *
+ * ⚠ SI NU ARUNCA NICIODATA: o adresa ciudata n-are voie sa opreasca masuratoarea.
  */
 export function curataAdresa(brut: string): string {
   let u: URL;

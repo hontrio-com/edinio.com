@@ -6,10 +6,15 @@
   ⚠ FISIERUL ASTA NU STIE NIMIC DESPRE LUME. Fara `window`, fara `next/headers`,
   fara `node:crypto`. Doar sirul si intelesul lui.
 
-  De ce conteaza: aceeasi hotarare e citita din TREI feluri de cod — corpul inline
-  al pixelilor (sincron, inaintea hidratarii), React, si serverul. Daca fiecare ar
-  avea propria dezlegare, s-ar despartii la prima schimbare, iar cele doua maluri
-  ar crede lucruri deosebite despre acelasi om. Un singur codec, trei cititori.
+  De ce conteaza: aceeasi hotarare e dezlegata de DOUA feluri de cod — browserul
+  (`consimtamant-browser.ts`) si serverul (`server/consimtamant-server.ts`). Daca
+  fiecare ar avea propria dezlegare, s-ar despartii la prima schimbare, iar cele
+  doua maluri ar crede lucruri deosebite despre acelasi om. Un singur codec.
+
+  ⚠ AICI A SCRIS „TREI CITITORI", al treilea fiind corpul inline al pixelilor. Nu
+  e adevarat si nu trebuie sa devina: scripturile alea nu dezleaga niciun cookie —
+  primesc starea deja hotarata, interpolata la randare. Un al treilea dezlegator,
+  scris in JavaScript inline, ar fi tocmai copia care se desparte prima.
 
   ⚠ SI DE CE UN COOKIE, NU `localStorage`. Mecanismul magazinelor tine starea in
   `localStorage` (`src/lib/cookie-consent.ts:82`). Acolo e destul: poarta e in

@@ -199,8 +199,8 @@ export async function POST(req: NextRequest) {
     ⚠ SE SPUNE BROWSERULUI DACA S-A STINS CHIAR. Raspunsul ramane 200 si cand baza
     pica — alegerea e deja in vigoare, un 500 ar face-o sa para nereusita. Dar
     atunci retragerea ar trai numai in browser, iar cronul se uita in baza. Deci
-    browserul primeste `retras: false`, isi noteaza restanta si reia la urmatoarea
-    incarcare de pagina.
+    browserul primeste `retras: false` si reia PE LOC, cu pauze scurte; abia daca
+    nici asa nu merge ramane o restanta pentru urmatoarea incarcare de pagina.
   */
   const retras = !marketing && vidDeOprit ? await stingeVizitatorul(vidDeOprit) : false;
 
@@ -212,9 +212,11 @@ export async function POST(req: NextRequest) {
 /**
  * Insemneaza ca omul a retras, si opreste ce n-a plecat inca.
  *
- * ⚠ INTOARCE DACA S-A SCRIS CHIAR. Browserul isi sterge restanta numai pe `true`;
- * un `false` inseamna „reia la urmatoarea pagina". De aceea nimic de aici n-are
- * voie sa raporteze izbanda pe o scriere care n-a avut loc.
+ * ⚠ INTOARCE DACA S-A SCRIS CHIAR. Un `false` il pune pe browser sa reia. De aceea
+ * nimic de aici n-are voie sa raporteze izbanda pe o scriere care n-a avut loc.
+ *
+ * ⚠ Browserul mai renunta si pe un 4xx definitiv (nu si pe 429): acolo cererea
+ * insasi e gresita si n-are ce reusi mai tarziu. Vezi `ceruPiatra`.
  *
  * ⚠ SI DE CE NU ARUNCA MAI DEPARTE. Alegerea omului e deja in vigoare in
  * browserul lui; un 500 ar face-o sa para nereusita. Se scrie in jurnal si se

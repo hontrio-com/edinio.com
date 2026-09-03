@@ -65,7 +65,14 @@ export async function contextulCererii(): Promise<ContextTrimitere> {
 
       Aceeasi lista alba, acelasi loc: ce nu e `utm_*` sau un id de clic nu iese.
     */
-    referrer: venitDe ? curataAdresa(venitDe) : null,
+    /*
+      ⚠ SI SIRUL GOL E TOT „NU STIM". `curataAdresa` intoarce `""` cand ce a venit
+      nu e o adresa deloc. Trimis asa, ar fi incalcat chiar regula scrisa mai sus
+      pentru `ip`: ce nu stim trebuie sa LIPSEASCA, nu sa fie un cuvant. Un
+      `page.referrer` gol catre TikTok e o afirmatie („a venit de nicaieri"), nu o
+      tacere.
+    */
+    referrer: (venitDe && curataAdresa(venitDe)) || null,
   };
 }
 

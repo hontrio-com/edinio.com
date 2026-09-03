@@ -65,3 +65,20 @@ test("⚠ si contextul de pe server CHIAR o cheama", () => {
   assert.match(randul, /curataAdresa\(/,
     "`referrer` pleaca brut de pe server, desi in browser adresa se curata de mult");
 });
+
+test("⚠ o adresa de venire de neinteles LIPSESTE, nu vine goala", () => {
+  /*
+    ⚠ CE APARA, si e chiar regula scrisa in acelasi fisier pentru `ip`: ce nu
+    stim trebuie sa LIPSEASCA, nu sa fie un cuvant. `curataAdresa` intoarce sirul
+    gol cand ce a venit nu e o adresa deloc — iar un `page.referrer` gol trimis
+    catre TikTok e o afirmatie („a venit de nicaieri"), nu o tacere.
+  */
+  assert.equal(curataAdresa("nu e o adresa"), "", "martorul: curatarea chiar intoarce sirul gol");
+
+  const sursa = readFileSync("src/lib/edinio-marketing/server/consimtamant-server.ts", "utf8");
+  const i = sursa.indexOf("referrer:");
+  assert.ok(i > 0, "nu mai gasesc campul `referrer`");
+  const randul = sursa.slice(i, sursa.indexOf(",", i) + 1);
+  assert.match(randul, /\|\|\s*null/,
+    "un `Referer` de neinteles pleaca drept sir gol, nu drept lipsa: " + randul.trim());
+});

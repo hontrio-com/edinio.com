@@ -186,3 +186,30 @@ test("⚠ si browserul CHIAR cere doar piatra la reluare", () => {
   const corpFunctiei = sursa.slice(i, sursa.indexOf(String.fromCharCode(10) + "}", i));
   assert.match(corpFunctiei, /ceruPiatra\(/, "reluarea nu mai trece prin cererea care duce doar piatra");
 });
+
+test("⚠ un PLAFON nu e un refuz: 429 ramane de reincercat", () => {
+  /*
+    ═══ ⚠ DEFECT PRINS PE 03.09.2026, LA O ORA DUPA CE L-AM SCRIS ═══
+
+    Am pus „un 4xx nu se reincearca" — bun pentru un id stricat sau o versiune
+    necunoscuta. Dar ruta are si un plafon (30/ora/IP) care raspunde tot cu 4xx,
+    si ala e TRECATOR. Renuntand la el, o retragere lovita de plafon s-ar fi
+    pierdut pentru totdeauna, tocmai pe calea pe care omul isi exercita un drept.
+
+    Proba citeste conditia din browser, fiindca purtarea ei nu se poate executa
+    fara un `window` cu ceasuri. Ce se cere e ca 429 sa fie scos DINADINS din
+    multimea celor la care se renunta.
+  */
+  const sursa = readFileSync("src/lib/edinio-marketing/consimtamant-browser.ts", "utf8");
+  const i = sursa.indexOf("r.status >= 400");
+  assert.ok(i > 0, "nu mai gasesc conditia de renuntare");
+  const conditia = sursa.slice(i, sursa.indexOf(")", i) + 1);
+  assert.match(conditia, /!==\s*429/, `un plafon ar fi luat drept refuz definitiv: ${conditia}`);
+
+  /*
+    ⚠ SI CA RUTA CHIAR RASPUNDE 429, altfel exceptia de mai sus apara un cod care
+    nu se mai intoarce, iar cine citeste crede ca plafonul e tratat.
+  */
+  const ruta = readFileSync("src/app/api/consimtamant/route.ts", "utf8");
+  assert.match(ruta, /status: 429/, "ruta nu mai raspunde cu plafon, deci exceptia din browser e o nota moarta");
+});

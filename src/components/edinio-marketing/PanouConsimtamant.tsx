@@ -8,8 +8,13 @@ import { CATEGORII, type Categorie } from "@/lib/edinio-marketing/consimtamant/s
   ALEGEREA PE CATEGORII
   ═══════════════════════════════════════════════════════════════════════════════
 
-  ⚠ NICIUN COMUTATOR NU E PORNIT LA DESCHIDERE. Un consimtamant „prebifat" nu e
-  consimtamant — e chiar exemplul dat de autoritati pentru ce nu are valoare.
+  ⚠ NICIUN COMUTATOR NU E PORNIT LA PRIMA INTREBARE. Un consimtamant „prebifat" nu
+  e consimtamant — e chiar exemplul dat de autoritati pentru ce nu are valoare.
+
+  ⚠ PE `/cookies/setari` E ALTCEVA, si e in regula: acolo comutatoarele arata
+  alegerea DE ACUM a omului (`initiala`), fiindca el a venit sa si-o schimbe, nu
+  sa fie intrebat prima oara. Deosebirea sta in `initiala`: bannerul o da goala,
+  ecranul de setari o da pe cea citita din cookie.
 
   ⚠ SI NU EXISTA UN COMUTATOR „strict necesare" GRI SI PORNIT. Un comutator care
   nu comanda nimic da impresia unei alegeri care nu exista. Se scrie ca eticheta.

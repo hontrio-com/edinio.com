@@ -98,9 +98,15 @@ export async function GET(req: NextRequest) {
     if (Date.now() - inceput > BUGET_MS) { amanate++; continue; }
 
     /*
-      ⚠ FIECARE RAND IN `try`-ul LUI. Fara asta, o exceptie la al treilea rand ar
-      lasa celelalte douazeci si doua revendicate si netrimise — s-ar elibera abia
-      peste un minut, si tot asa la fiecare rulare.
+      ⚠ TRIMITEREA FIECARUI RAND STA IN `try`-ul LUI. Fara asta, o exceptie la al
+      treilea rand ar lasa celelalte douazeci si doua revendicate si netrimise —
+      s-ar elibera abia peste un minut, si tot asa la fiecare rulare.
+
+      ⚠ CE E IN AFARA LUI: verificarile de acord de mai jos (`aRetras`,
+      `marcheazaEsuat`). Ele nu arunca — fiecare isi inghite singura eroarea si
+      intoarce `null` sau scrie in jurnal — deci bucla nu se poate rupe acolo.
+      Randul asta a spus o vreme „FIECARE RAND in try-ul lui", fara nuanta, si
+      cine se bizuia pe el ar fi putut adauga deasupra o chemare care arunca.
     */
     /*
       ═══ ⚠ UN RAND FARA VIZITATOR NU PLEACA, SI DE CE ═══

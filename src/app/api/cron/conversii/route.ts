@@ -102,7 +102,26 @@ export async function GET(req: NextRequest) {
       lasa celelalte douazeci si doua revendicate si netrimise — s-ar elibera abia
       peste un minut, si tot asa la fiecare rulare.
     */
-    if (r.vizitator && retrasi.has(r.vizitator)) {
+    /*
+      ═══ ⚠ UN RAND FARA VIZITATOR NU PLEACA, SI DE CE ═══
+
+      Amandoua portile de aici erau `if (r.vizitator)` — deci un rand cu NULL
+      trecea prin ele fara sa fie verificat. Iar un rand fara vizitator e chiar
+      felul de rand pe care retragerea nu-l poate atinge: `ceiCareAuRetras`
+      filtreaza NULL-urile afara, iar abandonarea cauta cu `.eq("vizitator", …)`,
+      care nu potriveste niciodata NULL.
+
+      Cu poarta 1b din `puneLaCoada`, randuri de felul asta nu se mai pot scrie.
+      Randul de aici e pentru ce ar fi ramas de dinainte, si pentru orice cale
+      viitoare care ar ocoli poarta: ce nu se poate opri, nu se trimite.
+    */
+    if (!r.vizitator) {
+      await marcheazaEsuat(r.id, 99, "rand fara vizitator: retragerea nu l-ar putea opri");
+      oprite++;
+      continue;
+    }
+
+    if (retrasi.has(r.vizitator)) {
       /*
         ⚠ ABANDON, NU ESEC, si severitate `info` la raportare. O retragere e o
         alegere a omului, nu o defectiune a noastra. Numarata ca eroare, fiecare
@@ -125,14 +144,12 @@ export async function GET(req: NextRequest) {
       ⚠ SI NU INLOCUIESTE INTREBAREA PE LOT: aceea ramane, fiindca opreste
       randurile stiute retrase FARA sa mai deschida vreo cerere.
     */
-    if (r.vizitator) {
-      const acumRetras = await aRetras(r.vizitator);
-      if (acumRetras === null) { nesigure++; continue; }
-      if (acumRetras) {
-        await marcheazaEsuat(r.id, 99, "consimtamant retras intre revendicare si trimitere");
-        oprite++;
-        continue;
-      }
+    const acumRetras = await aRetras(r.vizitator);
+    if (acumRetras === null) { nesigure++; continue; }
+    if (acumRetras) {
+      await marcheazaEsuat(r.id, 99, "consimtamant retras intre revendicare si trimitere");
+      oprite++;
+      continue;
     }
 
     try {

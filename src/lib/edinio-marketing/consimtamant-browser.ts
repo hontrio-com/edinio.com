@@ -205,10 +205,24 @@ export function reiaRetragerea(): void {
   try { vid = window.localStorage.getItem(CHEIE_RESTANTA); } catch { return; }
   if (!validVid(vid)) { if (vid !== null) uitaRestanta(); return; }
 
+  /*
+    ═══ ⚠ RELUAREA CERE DOAR PIATRA DE MORMANT, NIMIC DESPRE PREFERINTE ═══
+
+    ⚠ CE STRICA FORMA VECHE. Ea trimitea `statistici: false, marketing: false`,
+    orice ar fi ales omul. Scenariul: cineva pastreaza STATISTICILE si retrage
+    numai marketingul. Serverul cade, se noteaza restanta. La urmatoarea pagina,
+    reluarea spunea „retrage tot" — iar `Set-Cookie`-ul serverului suprascria
+    cookie-ul corect din browser. Omul pierdea statisticile pe care le voia.
+
+    ⚠ SI DE CE NU E DE AJUNS SA PASTREZ STAREA IN RESTANTA. Ar merge, dar lasa
+    deschisa alta usa: intre cadere si reluare omul se poate razgandi din nou, iar
+    reluarea ar scrie o stare invechita. Aici se taie de la radacina — o reluare
+    TEHNICA nu poate atinge preferintele, fiindca nici nu le trimite.
+  */
   void fetch("/api/consimtamant", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ v: VERSIUNE, statistici: false, marketing: false, metoda: "w", vid: null, vidDeStins: vid }),
+    body: JSON.stringify({ v: VERSIUNE, doarPiatra: true, vidDeStins: vid }),
   })
     .then(async (r) => {
       const raspuns = (await r.json().catch(() => null)) as { retras?: boolean } | null;

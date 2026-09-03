@@ -4,6 +4,7 @@ import type { EvenimentEdinio } from "../evenimente";
 import type { ContextTrimitere } from "./sarcina-tiktok";
 import { dupaEsec, candSeReincearca } from "./ritm-reincercari";
 import type { Json } from "@/types/database.types";
+import { validVid } from "../consimtamant/stare";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -155,14 +156,43 @@ export async function puneLaCoada(
     return;
   }
 
+  /*
+    ═══ ⚠ POARTA 1b: ACORD FARA ID NU E UN TEMEI INTREG ═══
+
+    `parseaza` respinge de azi hotararile cu marketing acordat si fara id valid,
+    deci calea cookie-ului nu mai poate ajunge aici in starea asta. Dar temeiul
+    CARAT — cel din metadata unei sesiuni Stripe, unde nu exista cookie — poate.
+
+    ⚠ DE CE NU SE POATE SCRIE UN ASTFEL DE RAND. Fara `vizitator`, randul e in
+    afara oricarei retrageri: ambele porti din cron sunt `if (r.vizitator)` si cad
+    DESCHIS pe NULL, `ceiCareAuRetras` filtreaza NULL-urile afara, iar abandonarea
+    cauta cu `.eq("vizitator", …)`, care nu potriveste niciodata NULL. Adica ar fi
+    singurul fel de rand pe care omul nu-l mai poate opri niciodata.
+
+    Se pierde o masuratoare; se castiga faptul ca tot ce se scrie se poate si
+    stinge. Schimbul e limpede si cade in partea sigura.
+  */
+  if (!validVid(vid)) {
+    await logError({
+      action: "conversii.faraIdDeVizitator",
+      message: `"${ev.name}" nu s-a pus la coada: acord de marketing fara id de vizitator (temei: ${
+        temei.fel === "carat" ? temei.unde : "cookie"
+      }). Un rand fara vizitator n-ar mai putea fi oprit la retragere.`,
+      details: { eveniment: ev.name, destinatii: [...destinatii] },
+      severity: "warning",
+    });
+    return;
+  }
+
   const cand = new Date().toISOString();
   const randuri = destinatii.map(d => ({
     destinatie: d,
     nume_eveniment: ev.name,
     event_id: eventId,
     sarcina: { ev, cand, ...sarcina } as unknown as Json,
-    /* Pe coloana, nu doar in `sarcina`: retragerea trebuie sa-l poata gasi. */
-    ...(vid ? { vizitator: vid } : {}),
+    /* Pe coloana, nu doar in `sarcina`: retragerea trebuie sa-l poata gasi.
+       Nu mai e optional — vezi poarta 1b de mai sus. */
+    vizitator: vid,
   }));
 
   try {

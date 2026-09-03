@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { NextRequest } from "next/server";
+import { readFileSync } from "node:fs";
 import { POST } from "./route";
 import { serializeaza, NIMIC, VERSIUNE } from "@/lib/edinio-marketing/consimtamant/stare";
 import { NUME_COOKIE } from "@/lib/edinio-marketing/consimtamant/cookie";
@@ -96,4 +97,74 @@ test("cererile stricate sunt respinse inainte de orice atingere a bazei", async 
   assert.equal(versiuneGresita.status, 400);
   const metodaGresita = await POST(cerere({ v: VERSIUNE, statistici: false, marketing: false, metoda: "zzz" }, true));
   assert.equal(metodaGresita.status, 400);
+});
+
+test("⚠ retragerea PARTIALA pastreaza statisticile in cookie-ul intors", () => {
+  /*
+    ⚠ CE APARA. Omul pastreaza statisticile si retrage numai marketingul. Serverul
+    reconfirma cookie-ul; daca ar scrie `00`, i-ar stinge si ce voia sa pastreze.
+  */
+  return faraBaza(async () => {
+    const r = await POST(cerere(
+      { v: VERSIUNE, statistici: true, marketing: false, metoda: "p", vid: null, vidDeStins: VID }, false,
+    ));
+    const hotarare = r.headers.getSetCookie().find((c) => c.startsWith(`${NUME_COOKIE}=`)) ?? "";
+    const steaguri = decodeURIComponent(hotarare.split(";")[0].split("=")[1] ?? "").split(".")[2];
+    assert.equal(steaguri, "10", `serverul a intors steagurile "${steaguri}" in loc de "10"`);
+  });
+});
+
+test("⚠ RELUAREA tehnica nu atinge NICIUN cookie", () => {
+  /*
+    ═══ ⚠ CEA MAI IMPORTANTA PROBA A ZILEI ═══
+
+    Reluarea porneste dintr-o restanta din `localStorage`, cand o scriere a cazut.
+    Forma dinainte trimitea `statistici: false, marketing: false` — orice ar fi
+    ales omul. Scenariul viu: cineva pastreaza STATISTICILE si retrage numai
+    marketingul; serverul cade; la urmatoarea pagina reluarea spunea „retrage
+    tot", iar `Set-Cookie`-ul ii stingea si statisticile.
+
+    Acum ramura de reluare iese INAINTE de orice atingere a cookie-urilor. Proba
+    nu cere ca ele sa fie „corecte" — cere sa nu EXISTE. O reluare tehnica n-are
+    ce cauta in preferintele omului.
+  */
+  return faraBaza(async () => {
+    const r = await POST(cerere({ v: VERSIUNE, doarPiatra: true, vidDeStins: VID }, true));
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.headers.getSetCookie(), [], "reluarea a scris cookie-uri");
+
+    const corp = (await r.json()) as { retras?: boolean };
+    assert.equal(corp.retras, false, "a raportat izbanda peste o baza picata");
+  });
+});
+
+test("⚠ reluarea fara un id valid e respinsa, nu inghitita", () => {
+  /*
+    Fara paza asta, o restanta stricata ar trimite o cerere care nu poate face
+    nimic, si ar primi 200 — deci browserul si-ar sterge restanta si retragerea
+    s-ar pierde definitiv.
+  */
+  return faraBaza(async () => {
+    for (const rau of [null, "", "NUEHEXA", "a".repeat(31)]) {
+      const r = await POST(cerere({ v: VERSIUNE, doarPiatra: true, vidDeStins: rau }, true));
+      assert.equal(r.status, 400, `id-ul "${String(rau)}" a trecut ca valid`);
+    }
+  });
+});
+
+test("⚠ si browserul CHIAR cere doar piatra la reluare", () => {
+  /*
+    ⚠ CUTITUL TAIE IN AMANDOUA PARTILE. Ramura de mai sus e degeaba daca browserul
+    trimite mai departe preferinte. Se citeste corpul chemat de `reiaRetragerea`.
+  */
+  const sursa = readFileSync("src/lib/edinio-marketing/consimtamant-browser.ts", "utf8");
+  const i = sursa.indexOf("export function reiaRetragerea");
+  assert.ok(i > 0, "nu mai gasesc reluarea");
+  const corpFunctiei = sursa.slice(i);
+  const j = corpFunctiei.indexOf("JSON.stringify({");
+  const trimis = corpFunctiei.slice(j, corpFunctiei.indexOf("}", j) + 1);
+
+  assert.match(trimis, /doarPiatra: true/, "reluarea nu mai cere doar piatra");
+  assert.ok(!trimis.includes("statistici"), "reluarea trimite iar preferinte: " + trimis);
+  assert.ok(!trimis.includes("marketing"), "reluarea trimite iar preferinte: " + trimis);
 });

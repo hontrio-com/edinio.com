@@ -2,13 +2,13 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { inregistreazaAdaptor, goleste, urmareste } from "@/lib/edinio-marketing/magistrala";
+import { inregistreazaAdaptor, goleste, urmareste, redeschide } from "@/lib/edinio-marketing/magistrala";
 import { adaptorGa4 } from "@/lib/edinio-marketing/adaptor-ga4";
 import { adaptorMeta } from "@/lib/edinio-marketing/adaptor-meta";
 import { adaptorTikTok } from "@/lib/edinio-marketing/adaptor-tiktok";
 import { faraUrmarire, faraPageView } from "@/lib/edinio-marketing/fara-urmarire";
 import { adaptorGoogleAds } from "@/lib/edinio-marketing/adaptor-google-ads";
-import { reiaRetragerea, citesteStarea, EVENIMENT_SCHIMBAT } from "@/lib/edinio-marketing/consimtamant-browser";
+import { reiaRetragerea, EVENIMENT_SCHIMBAT } from "@/lib/edinio-marketing/consimtamant-browser";
 import { curataTitlu } from "@/lib/edinio-marketing/titlu-curat";
 
 /*
@@ -44,10 +44,6 @@ const PRAGURI: ReadonlyArray<25 | 50 | 75 | 90> = [25, 50, 75, 90];
 export function RuntimeMarketing() {
   const cale = usePathname();
   const calePrecedenta = useRef<string | null>(null);
-  /* Ce era acordat inainte de ultima schimbare — ca sa se vada DESCHIDEREA, nu starea. */
-  const acordPrecedent = useRef({ statistici: false, marketing: false });
-  /* Paginile pentru care s-a tras deja un `page_view` la acordare. */
-  const traseLaAcord = useRef(new Set<string>());
 
   /* ── Adaptoarele, o singura data ─────────────────────────────────────── */
   useEffect(() => {
@@ -191,70 +187,37 @@ export function RuntimeMarketing() {
     return () => { obs.disconnect(); clearTimeout(ceas); };
   }, [cale]);
 
-  /* ── `page_view` proaspat in clipa acordului ─────────────────────────── */
+  /* ── Reafirmarea starilor, in clipa acordului ────────────────────────── */
   useEffect(() => {
     /*
       ═══════════════════════════════════════════════════════════════════════════
-      ⚠ O REGRESIE ADUSA CHIAR DE REPARATIA DE AZI, SI DE CE NU E RELUARE
+      ⚠ AICI A STAT UN MECANISM AL MEU, CU UN DEFECT DOVEDIT IN PRODUCTIE
       ═══════════════════════════════════════════════════════════════════════════
 
-      De cand magistrala nu mai pune la coada fara acord, `page_view`-ul paginii
-      pe care omul a ATERIZAT se pierde: el se trage la montare, cand inca nu s-a
-      ales nimic, si e aruncat pe drept.
+      Forma dinainte tragea ea insasi un `page_view` proaspat si tinea minte, intr-un
+      set cheiat pe cale, ca pagina „a fost masurata la acordare".
 
-      Apoi omul apasa „Accepta". `cale` nu s-a schimbat, deci efectul de mai sus
-      nu se mai aprinde — si prima pagina din GA4 devine abia URMATOAREA. Pe o
-      pagina de campanie, aia e chiar pagina care conteaza.
+      ⚠ CE STRICA, masurat pe 03.09.2026: omul acorda intai DOAR marketing. Setul
+      primea calea — dar magistrala arunca evenimentul, fiindca GA4 e „statistici".
+      Apoi omul acorda si statisticile pe aceeasi pagina: setul spunea deja „facut",
+      deci GA4 se incarca si nu primea NICIUN `page_view`.
 
-      ⚠ SI DE CE ASTA NU E RELUAREA PE CARE TOCMAI AM SCOS-O. Coada trimitea ce s-a
-      intamplat INAINTE de acord: derulari, sectiuni vazute, apasari — fapte
-      dintr-un timp in care omul nu daduse voie. Aici nu se retrimite nimic vechi.
-      Se constata un lucru adevarat ACUM: „din clipa asta am voie sa masor, si
-      omul se afla pe pagina asta".
+      ⚠ Pe `/preturi` am reprodus-o DE MANA, din consola: bannerul nu se redeschide
+      (`deschideSetari()` n-are apelanti). Ecranul pe care se intampla chiar e
+      `/cookies/setari` — si, mai des, `article_view`/`landing_view`, unde e destul
+      sa accepti stand pe pagina pe care ai aterizat.
 
-      Diferenta nu e de nuanta: una e o inregistrare retroactiva, cealalta e o
-      masuratoare noua, cu ceasul de acum.
+      ⚠ SI MAI ERA CEVA: acopereau doar `page_view`. `article_view` si `landing_view`
+      se pierdeau la fel, si ar fi trebuit reparate inca de doua ori, in alte doua
+      componente — iar a patra, scrisa peste sase luni, ar fi fost uitata.
+
+      Acum magistrala retine ea starile aruncate, PE ADAPTOR, si le reafirma pe cele
+      carora tocmai li s-a deschis poarta. Vezi `EVENIMENTE_DE_STARE` acolo.
     */
-    const laSchimbare = () => {
-      const s = citesteStarea();
-      const acum = { statistici: s?.statistici === true, marketing: s?.marketing === true };
-      const inainte = acordPrecedent.current;
-      acordPrecedent.current = acum;
-
-      const seDeschide =
-        (acum.statistici && !inainte.statistici) || (acum.marketing && !inainte.marketing);
-      if (!seDeschide) return;
-
-      /*
-        ⚠ CEL MULT UNA PE PAGINA. Fara paza asta, cine acorda intai statisticile si
-        apoi marketingul ar produce doua `page_view`-uri pentru aceeasi pagina.
-      */
-      if (!cale || faraUrmarire(cale) || faraPageView(cale)) return;
-      if (traseLaAcord.current.has(cale)) return;
-      traseLaAcord.current.add(cale);
-
-      const titluAcum = curataTitlu(document.title, window.location.search);
-      urmareste({
-        name: "page_view",
-        page_location: window.location.href,
-        ...(titluAcum ? { page_title: titluAcum } : {}),
-      });
-    };
-
-    /*
-      ⚠ SE PORNESTE DE LA STAREA ADEVARATA, nu de la „nimic acordat".
-
-      Lasat pe `{false, false}`, cine avea DEJA acord si venea sa schimbe altceva
-      — sa retraga marketingul, sa pastreze statisticile — ar fi aratat ca o
-      deschidere care nu s-a intamplat, si ar fi primit un `page_view` in plus.
-      Se compara deschideri, nu stari.
-    */
-    const s0 = citesteStarea();
-    acordPrecedent.current = { statistici: s0?.statistici === true, marketing: s0?.marketing === true };
-
+    const laSchimbare = () => redeschide();
     window.addEventListener(EVENIMENT_SCHIMBAT, laSchimbare);
     return () => window.removeEventListener(EVENIMENT_SCHIMBAT, laSchimbare);
-  }, [cale]);
+  }, []);
 
   /* ── Un singur ascultator de clic, delegat ───────────────────────────── */
   useEffect(() => {

@@ -141,9 +141,43 @@ export function parseaza(brut: string | null | undefined, acumSecunde: number): 
   if (!Number.isFinite(clipa) || clipa <= 0) return null;
   if (acumSecunde - clipa > DURATA_ZILE * 86_400) return null;
 
+  const marketing = flaguri[1] === "1";
+
+  /*
+    ═══ ⚠ MARKETING ACORDAT FARA UN ID VALID NU E O HOTARARE INTREAGA ═══
+
+    Pana azi, un `vid` stricat se pierdea singur si restul hotararii trecea mai
+    departe. Parea bland; nu era.
+
+    ⚠ DE CE. `vid` a incetat de mult sa fie „doar un id publicitar". El e CHEIA
+    care leaga un rand din `edinio_conversion_outbox` de piatra de mormant a
+    retragerii. Fara el:
+      - `puneLaCoada` scrie randul cu `vizitator` gol;
+      - la retragere n-ai ce pune in piatra, si `.eq("vizitator", …)` nu
+        potriveste nimic;
+      - conversia pleaca mai departe, pentru un om care a spus nu.
+    Adica o hotarare cu marketing PORNIT si fara id e chiar starea din care
+    retragerea nu mai poate opri nimic. Fail-open, in singurul loc unde nu avem
+    voie sa cadem deschis.
+
+    ⚠ CAT DE DES SE INTAMPLA, cinstit: pe calea obisnuita, niciodata.
+    `scrieHotararea` naste un id de fiecare data cand acorda marketing, iar
+    formatul n-a avut vreodata o versiune fara `vid` (a venit in acelasi commit cu
+    tot restul). Ramane stricarea adevarata: un cookie ciuntit de un intermediar,
+    un octet schimbat. Rar — dar consecinta lui e tocmai cea pe care n-o vrem.
+
+    ⚠ SI CE COSTA. Omul e intrebat din nou, si la urmatorul „da" primeste un id
+    bun. Un banner in plus, o singura data, fata de conversii care nu se mai pot
+    opri. Costul cade in partea sigura.
+
+    ⚠ NUMAI PENTRU MARKETING. Statisticile n-au nevoie de id: GA4 nu trece prin
+    coada de pe server. Cine a ales doar statistici nu e atins de regula asta.
+  */
+  if (marketing && !validVid(vid)) return null;
+
   return {
     statistici: flaguri[0] === "1",
-    marketing: flaguri[1] === "1",
+    marketing,
     cand: clipa,
     metoda: metoda as Metoda,
     ...(validVid(vid) ? { vid } : {}),

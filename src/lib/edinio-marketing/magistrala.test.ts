@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test, beforeEach } from "node:test";
-import { urmareste, inregistreazaAdaptor, goleste, resetPentruProbe, lungimeCoada, type Adaptor } from "./magistrala";
+import { urmareste, inregistreazaAdaptor, goleste, redeschide, resetPentruProbe, lungimeCoada, lungimeRetinute, type Adaptor } from "./magistrala";
 import type { EvenimentEdinio } from "./evenimente";
 import { clasificaPagina, grupPagina } from "./pagini";
 import { curataAdresa, doarCalea } from "./adresa-curata";
@@ -48,7 +48,17 @@ function inBrowser(cale = "/preturi") {
  * toate deodata pe ceva ce n-are legatura cu ele.
  */
 function hotaraste(statistici: boolean, marketing: boolean, metoda: Stare["metoda"] = "t") {
-  const s: Stare = { ...NIMIC, statistici, marketing, cand: Math.floor(Date.now() / 1000), metoda };
+  /*
+    ⚠ CU ID CAND E MARKETING, si nu e o podoaba a probei. Din 03.09.2026 `parseaza`
+    respinge o hotarare cu marketing acordat si fara id valid: fara el, conversiile
+    se scriu cu `vizitator` gol si retragerea nu le mai poate opri. Harnessul asta
+    scria pana azi exact starea aceea — deci probele porneau dintr-o lume care nu
+    mai are voie sa existe.
+  */
+  const s: Stare = {
+    ...NIMIC, statistici, marketing, cand: Math.floor(Date.now() / 1000), metoda,
+    ...(marketing ? { vid: "a".repeat(32) } : {}),
+  };
   (globalThis as unknown as { document: { cookie: string } }).document.cookie =
     `${NUME_COOKIE}=${serializeaza(s)}`;
 }
@@ -412,4 +422,100 @@ test("⚠ un camp de AUTOR nou e oprit; `article_author` trece, fiindca poarta s
 
   /* Si martorul: cel anuntat, care poarta slugul, trece. */
   assert.doesNotThrow(() => verificaFaraPii("article_view", { article_author: "ion-popescu" }));
+});
+
+/* ═══ 8. Starile se reafirma la acord; faptele nu ═══ */
+
+test("⚠ MARKETING intai, STATISTICI dupa: GA4 tot primeste `page_view`", () => {
+  /*
+    ═══ ⚠ DEFECTUL DOVEDIT IN PRODUCTIE PE 03.09.2026 ═══
+
+    Masurat pe 03.09.2026: cu marketing acordat intai si statistici dupa, pe
+    aceeasi pagina, `__edinioGa4Pornit` era adevarat — eticheta GA4 se incarcase —
+    si ZERO `page_view` in `dataLayer`.
+
+    ⚠ MASURATOAREA A FOST FACUTA DE MANA pe `/preturi` (am dispecerizat din consola
+    evenimentul care deschide panoul); un om n-ar putea, fiindca bannerul nu se
+    redeschide. Calea pe care o umbla cineva chiar e `/cookies/setari` — si mai
+    ales `article_view`/`landing_view`, unde nu trebuie niciun panou: e destul sa
+    accepti stand pe articolul sau pe pagina de campanie pe care ai aterizat.
+
+    Cauza era un set cheiat pe cale, in `RuntimeMarketing`: acordul de marketing il
+    marca drept „facut", desi evenimentul fusese aruncat fiindca GA4 e „statistici".
+    Acordul urmator gasea calea deja insemnata si nu mai trimitea nimic.
+  */
+  const laStatistici: EvenimentEdinio[] = [];
+  const laMarketing: EvenimentEdinio[] = [];
+  resetPentruProbe();
+  primite = [];
+  inBrowser();
+  fataAlegere();
+  inregistreazaAdaptor({ categorie: "statistici", nume: "s", gata: () => true, trimite: (ev) => { laStatistici.push(ev); } });
+  inregistreazaAdaptor({ categorie: "marketing", nume: "m", gata: () => true, trimite: (ev) => { laMarketing.push(ev); } });
+
+  /* Pagina se incarca inainte de orice alegere: evenimentul e aruncat, pe drept. */
+  urmareste({ name: "page_view", page_location: "https://www.edinio.com/preturi" });
+  assert.equal(laStatistici.length, 0);
+  assert.equal(laMarketing.length, 0);
+
+  /* Pasul 1: DOAR marketing. */
+  hotaraste(false, true, "p");
+  redeschide();
+  assert.equal(laMarketing.length, 1, "marketingul n-a primit starea la deschiderea portii lui");
+  assert.equal(laStatistici.length, 0, "statisticile au primit desi nu erau acordate");
+
+  /* Pasul 2: se adauga si statisticile, pe ACEEASI pagina. */
+  hotaraste(true, true, "p");
+  redeschide();
+  assert.equal(laStatistici.length, 1, "GA4 n-a primit `page_view` — exact defectul masurat in productie");
+  assert.equal(laMarketing.length, 1, "marketingul a primit starea de doua ori");
+});
+
+test("⚠ o FAPTA nu invie la acord, oricat ar astepta", () => {
+  /*
+    ⚠ CE APARA, si e jumatatea care tine reparatia cinstita. Daca reafirmarea ar
+    prinde si apasarile sau derularile, am fi pus la loc chiar reluarea scoasa
+    ieri: fapte petrecute cat timp omul nu daduse voie, trimise dupa ce a dat.
+  */
+  fataAlegere();
+  urmareste({ name: "cta_click", cta_id: "hero_incepe", cta_location: "hero" });
+  urmareste({ name: "scroll_depth", percent: 75 });
+  assert.equal(lungimeRetinute(), 0, "o fapta a fost retinuta pentru reafirmare");
+
+  hotaraste(true, true);
+  redeschide();
+  assert.equal(primite.length, 0, "o fapta de dinaintea acordului a fost trimisa dupa el");
+});
+
+test("⚠ starea nu se reafirma daca omul a plecat de pe pagina", () => {
+  /*
+    ⚠ CE APARA. Cineva deschide un articol fara acord, pleaca la pagina de preturi
+    si accepta acolo. Fara paza de cale, i-am trimite un `article_view` pentru un
+    articol pe care nu-l mai citeste — adica tot o reluare, doar cu alt nume.
+  */
+  fataAlegere();
+  inBrowser("/blog/ghid");
+  urmareste({ name: "article_view", article_id: "a1", article_slug: "ghid" });
+  assert.equal(lungimeRetinute(), 1, "starea nu s-a retinut");
+
+  inBrowser("/preturi");
+  hotaraste(true, true);
+  redeschide();
+  assert.equal(primite.length, 0, "s-a reafirmat o stare de pe alta pagina");
+  assert.equal(lungimeRetinute(), 0, "starea invechita a ramas agatata");
+});
+
+test("se pastreaza numai CEA MAI NOUA stare de fiecare fel", () => {
+  /* Altfel, cine deruleaza prin zece pagini fara sa aleaga ar aduna zece `page_view`. */
+  fataAlegere();
+  for (const cale of ["/a", "/b", "/c"]) {
+    inBrowser(cale);
+    urmareste({ name: "page_view", page_location: `https://www.edinio.com${cale}` });
+  }
+  assert.equal(lungimeRetinute(), 1, "s-au strans mai multe stari de acelasi fel");
+
+  hotaraste(true, true);
+  redeschide();
+  assert.equal(primite.length, 1);
+  assert.match((primite[0].ev as { page_location: string }).page_location, /\/c$/, "s-a reafirmat o pagina veche");
 });

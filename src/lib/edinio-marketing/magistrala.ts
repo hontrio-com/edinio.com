@@ -111,6 +111,92 @@ function areVoie(a: Adaptor): boolean {
   return citesteStarea()?.[a.categorie] === true;
 }
 
+/* ── Evenimentele de STARE, retinute peste clipa acordului ─────────────────
+
+  ═══ ⚠ DE CE EXISTA, SI CUM SE DEOSEBESTE DE RELUAREA PE CARE AM SCOS-O ═══
+
+  Reparatia de ieri a inchis reluarea: ce s-a intamplat INAINTE de acord nu mai
+  pleaca dupa el. Corect — dar a deschis o gaura pe cealalta parte.
+
+  ⚠ MASURAT IN PRODUCTIE pe 03.09.2026: cu marketing acordat intai si statistici
+  dupa, pe aceeasi pagina, GA4 se incarca (`__edinioGa4Pornit` adevarat) si nu
+  primeste NICIUN `page_view` — singurul lui `page_view` fusese aruncat mai
+  devreme, iar componentele nu se remonteaza.
+
+  ⚠ SI CAT DE UMBLATA E CALEA, cinstit. Masuratoarea aia am facut-o pe `/preturi`
+  DE MANA, dispecerizand din consola evenimentul care deschide panoul. Un om nu
+  poate face asta: `deschideSetari()` n-are niciun apelant in tot repo-ul (numai
+  definitia si un ascultator in banner), iar bannerul nu se mai arata dupa prima
+  alegere. Singurul ecran pe care cineva poate acorda de doua ori FARA sa
+  navigheze e `/cookies/setari`.
+
+  ⚠ CE FACE REPARATIA SA MERITE TOTUSI. Pe `article_view` si `landing_view` calea
+  e cea obisnuita, nu una de mana: omul deschide un articol sau o pagina de
+  campanie, citeste bannerul acolo si accepta STAND in ea. Componentele sunt
+  one-shot si nu se remonteaza, deci evenimentul se pierde definitiv — la fiecare
+  vizitator nou care accepta pe pagina pe care a aterizat.
+
+  ⚠ DEOSEBIREA CARE FACE TOTUL. Un eveniment de STARE spune „omul se afla ACUM
+  aici" — e adevarat si in clipa acordului, deci se poate reafirma. O FAPTA
+  („a apasat", „a derulat pana la 75%") s-a petrecut intr-un timp in care omul
+  nu daduse voie, si nu are voie sa invie. De aceea lista de mai jos e SCURTA si
+  inchisa: numai stari.
+
+  ⚠ SI DE CE STA AICI, nu in cele trei componente. Ar fi fost trei reparatii
+  aproape la fel, iar a patra componenta de stare, scrisa peste sase luni, ar fi
+  fost uitata. Aici trece totul printr-un singur loc.
+*/
+const EVENIMENTE_DE_STARE: readonly string[] = ["page_view", "article_view", "landing_view"];
+
+type Retinut = {
+  ev: EvenimentEdinio;
+  context: { page_type: FelPagina; page_group: GrupPagina };
+  adaptor: string;
+  /** Pe ce cale s-a petrecut. Vezi nota din `redeschide`. */
+  cale: string;
+};
+
+/** Cheia e `adaptor:nume`, deci se pastreaza numai CEA MAI NOUA stare de fiecare fel. */
+const retinute = new Map<string, Retinut>();
+
+function caleaAcum(): string {
+  return typeof window === "undefined" ? "" : window.location.pathname;
+}
+
+/**
+ * Omul tocmai a acordat ceva: se reafirma starile care fusesera aruncate.
+ *
+ * ⚠ SE CHEAMA LA ORICE SCHIMBARE de hotarare, nu doar la acordare. Pe retragere
+ * nu se scurge nimic — niciun adaptor n-are voie, deci bucla nu trimite nimic.
+ *
+ * ⚠ SI NUMAI PE PAGINA UNDE S-A PETRECUT. Fara paza asta, cine deschide un
+ * articol fara acord, pleaca la pagina de preturi si accepta acolo ar trimite un
+ * `article_view` pentru un articol pe care nu-l mai citeste. Starea trebuie sa
+ * fie adevarata in clipa in care o afirmi, altfel e tot o reluare.
+ */
+export function redeschide(): void {
+  const cale = caleaAcum();
+
+  for (const [cheie, r] of [...retinute]) {
+    const a = adaptoare.find(x => x.nume === r.adaptor);
+    if (!a) { retinute.delete(cheie); continue; }
+
+    /* Inca fara voie: se pastreaza pentru cand si daca omul se razgandeste. */
+    if (!areVoie(a)) continue;
+
+    retinute.delete(cheie);
+    if (r.cale !== cale) continue;
+
+    try {
+      if (a.gata()) { a.trimite(r.ev, r.context); continue; }
+      if (coada.length >= PLAFON_COADA) coada.shift();
+      coada.push({ ev: r.ev, context: r.context, adaptor: a.nume });
+    } catch (e) {
+      console.error(`[edinio-marketing] adaptorul ${a.nume} a cazut la reafirmare:`, e);
+    }
+  }
+}
+
 /** Scoate din coada tot ce astepta pentru un adaptor. */
 function scoateDinCoada(numeAdaptor: string): LaCoada[] {
   const ale = coada.filter(x => x.adaptor === numeAdaptor);
@@ -214,7 +300,18 @@ export function urmareste(ev: EvenimentEdinio): void {
         daca s-ar pune la coada „pentru mai tarziu", atunci un „Accepta" de peste
         zece secunde ar trimite tot ce s-a intamplat inainte de el.
       */
-      if (!areVoie(a)) { scoateDinCoada(a.nume); continue; }
+      if (!areVoie(a)) {
+        scoateDinCoada(a.nume);
+        /*
+          ⚠ STARILE SE RETIN, FAPTELE NU. Vezi nota de la `EVENIMENTE_DE_STARE`:
+          „omul e pe pagina asta" ramane adevarat si daca acorda peste zece
+          secunde; „omul a apasat butonul" nu are voie sa invie.
+        */
+        if (EVENIMENTE_DE_STARE.includes(name)) {
+          retinute.set(`${a.nume}:${name}`, { ev: evCurat, context, adaptor: a.nume, cale: caleaAcum() });
+        }
+        continue;
+      }
       if (a.gata()) { a.trimite(evCurat, context); continue; }
       if (coada.length >= PLAFON_COADA) coada.shift();
       coada.push({ ev: evCurat, context, adaptor: a.nume });
@@ -229,6 +326,12 @@ export function urmareste(ev: EvenimentEdinio): void {
 export function resetPentruProbe(): void {
   adaptoare.length = 0;
   coada.length = 0;
+  retinute.clear();
+}
+
+/** Numai pentru probe: cate stari asteapta reafirmarea. */
+export function lungimeRetinute(): number {
+  return retinute.size;
 }
 
 /** Numai pentru probe: cate evenimente asteapta. */

@@ -37,7 +37,7 @@ function inBrowser({ meta = true, tiktok = true } = {}) {
     — probele de aici masoara cartografierea catre Meta si TikTok, deci pornesc
     de la un om care a acceptat. Poarta insasi e probata separat, mai jos.
   */
-  g.document = { title: "Edinio", cookie: `${NUME_COOKIE}=${serializeaza({ ...NIMIC, statistici: true, marketing: true, cand: Math.floor(Date.now() / 1000), metoda: "t" })}` };
+  g.document = { title: "Edinio", cookie: `${NUME_COOKIE}=${serializeaza({ ...NIMIC, statistici: true, marketing: true, cand: Math.floor(Date.now() / 1000), metoda: "t", vid: "a".repeat(32) })}` };
 }
 
 beforeEach(() => {

@@ -26,6 +26,8 @@ type Corp = {
   vid?: string | null;
   /** Id-ul de STINS, trimis numai la retragere. Vezi nota de mai jos. */
   vidDeStins?: string | null;
+  /** Reluare tehnica: scrie DOAR piatra de mormant, nu atinge preferintele. */
+  doarPiatra?: boolean;
 };
 
 const METODE: Metoda[] = ["t", "r", "p", "w"];
@@ -63,6 +65,32 @@ export async function POST(req: NextRequest) {
   }
 
   if (corp.v !== VERSIUNE) return NextResponse.json({ error: "versiune necunoscuta" }, { status: 400 });
+
+  /*
+    ═══════════════════════════════════════════════════════════════════════════
+    ⚠ RELUAREA TEHNICA: SCRIE PIATRA, NU ATINGE PREFERINTELE
+    ═══════════════════════════════════════════════════════════════════════════
+
+    ⚠ CE APARA. Reluarea porneste dintr-o restanta din `localStorage`, cand o
+    scriere a cazut. Daca ar trimite si preferinte, ea ar putea SUPRASCRIE
+    alegerea de acum a omului cu una veche. Scenariul viu: cineva pastreaza
+    statisticile si retrage numai marketingul; reluarea de mai tarziu i-ar fi
+    stins si statisticile, prin `Set-Cookie`.
+
+    Ramura asta iese INAINTE de orice atingere a cookie-urilor. Nu scrie niciun
+    `Set-Cookie` — nici pe cel de hotarare, nici stergerile de la furnizori. Aici
+    se face un singur lucru: se insemneaza ca omul a retras.
+
+    ⚠ SI PAZA RAMANE ACEEASI: se stinge, nu se porneste. Cine ar ghici un id de
+    128 de biti n-ar putea decat sa OPREASCA trimiterile acelui om.
+  */
+  if (corp.doarPiatra === true) {
+    if (!validVid(corp.vidDeStins)) {
+      return NextResponse.json({ error: "id de vizitator nevalid" }, { status: 400 });
+    }
+    const stins = await stingeVizitatorul(corp.vidDeStins);
+    return NextResponse.json({ ok: true, retras: stins });
+  }
   const metoda = METODE.includes(corp.metoda as Metoda) ? (corp.metoda as Metoda) : null;
   if (!metoda) return NextResponse.json({ error: "metoda necunoscuta" }, { status: 400 });
 
@@ -174,92 +202,91 @@ export async function POST(req: NextRequest) {
     browserul primeste `retras: false`, isi noteaza restanta si reia la urmatoarea
     incarcare de pagina.
   */
-  let retras = false;
-
-  try {
-    /*
-      ⚠ CLIENTUL SE FACE INAUNTRUL LUI `try`, si nu e o mutare de forma.
-      `createAdminClient()` ARUNCA daca lipseste variabila de mediu. Construit
-      afara, ar fi doborat toata ruta cu 500 — adica exact ce spune nota de mai
-      jos ca nu vrem, si tocmai pe calea de RETRAGERE: raspunsul n-ar mai fi
-      purtat nici cookie-ul reconfirmat, nici stergerile de la furnizori.
-    */
-    const admin = createAdminClient();
-
-    if (!marketing && vidDeOprit) {
-      /*
-        ═══ ⚠ `.throwOnError()`, ALTFEL `retras: true` E O MINCIUNA ═══
-
-        ⚠ MASURAT pe 03.09.2026 cu supabase-js 2.106.1: o scriere respinsa NU
-        arunca — se rezolva cu `{ data: null, error: {...} }`. Deci `catch`-ul de
-        mai jos nu se deschidea, si `retras` ajungea `true` peste o scriere care
-        n-a avut loc.
-
-        Iar browserul, primind `true`, isi STERGEA restanta. Adica tocmai plasa
-        pusa azi impotriva unei baze picate se anula singura: retragerea ramanea
-        numai in browser, iar cronul, care se uita in baza, trimitea mai departe.
-      */
-      await admin.from("edinio_consimtamant_retras").upsert(
-        { vizitator: vidDeOprit, sursa: "browser" },
-        { onConflict: "vizitator", ignoreDuplicates: true },
-      ).throwOnError();
-
-      /*
-        ⚠ AICI, NU LA CAPATUL BLOCULUI. Piatra de mormant e ce opreste cronul —
-        odata scrisa, poarta a treia il apara pe om chiar daca abandonarea de mai
-        jos cade. Deci confirmarea catre browser se da acum, nu dupa.
-      */
-      retras = true;
-
-      /*
-        ⚠ SE ABANDONEAZA CE N-A PLECAT INCA. Ce a plecat deja nu se recheama —
-        Meta are o cale de stergere a datelor, TikTok n-am verificat-o. Nu se face
-        azi si nu se promite; politica spune deja exact atat.
-      */
-      /*
-        ⚠ SI SE STERGE CONTEXTUL OMULUI DE PE RANDURILE ABANDONATE. Pana azi
-        ramanea intreg — IP, `user-agent`, `_fbp`/`_fbc`/`_ttp`, adresa de venire —
-        si ramanea tocmai pe randurile celor care si-au RETRAS acordul. Cine
-        spunea „nu mai vreau" pastra cel mai bogat context, la nesfarsit.
-      */
-      const { count } = await admin.from("edinio_conversion_outbox")
-        .update({
-          abandonat_la: new Date().toISOString(),
-          ultima_eroare: "consimtamant retras",
-          ...scrubLaAbandon(),
-        }, { count: "exact" })
-        .eq("vizitator", vidDeOprit)
-        .is("trimis_la", null)
-        .is("abandonat_la", null)
-        .throwOnError();
-
-      if (count && count > 0) {
-        await logError({
-          action: "consimtamant.retras",
-          message: `${count} conversii nu mai pleaca: omul si-a retras acordul`,
-          severity: "info",
-        });
-      }
-    }
-  } catch (e) {
-    /*
-      ⚠ O BAZA PICATA N-ARE VOIE SA STRICE RETRAGEREA. Cookie-ul e deja pregatit
-      pentru raspuns si scris in browser, deci alegerea e in vigoare oricum. Se scrie in jurnal
-      si se merge mai departe — un 500 aici ar face pagina sa para ca n-a mers.
-    */
-    await logError({
-      action: "consimtamant.scriere",
-      message: e instanceof Error ? e.message : "nu s-a putut scrie hotararea",
-      /*
-        ⚠ „error" cand era ceva de STINS, „warning" altfel. O acordare nescrisa e
-        o dovada pierduta; o RETRAGERE nescrisa inseamna ca mai plecau conversii.
-        Cele doua n-au voie sa se uite la fel in jurnal.
-      */
-      severity: vidDeOprit ? "error" : "warning",
-    });
-  }
+  const retras = !marketing && vidDeOprit ? await stingeVizitatorul(vidDeOprit) : false;
 
   const raspuns = NextResponse.json({ ok: true, retras });
   for (const c of deTrimis) raspuns.headers.append("Set-Cookie", c);
   return raspuns;
+}
+
+/**
+ * Insemneaza ca omul a retras, si opreste ce n-a plecat inca.
+ *
+ * ⚠ INTOARCE DACA S-A SCRIS CHIAR. Browserul isi sterge restanta numai pe `true`;
+ * un `false` inseamna „reia la urmatoarea pagina". De aceea nimic de aici n-are
+ * voie sa raporteze izbanda pe o scriere care n-a avut loc.
+ *
+ * ⚠ SI DE CE NU ARUNCA MAI DEPARTE. Alegerea omului e deja in vigoare in
+ * browserul lui; un 500 ar face-o sa para nereusita. Se scrie in jurnal si se
+ * raspunde cinstit cu `retras: false`.
+ */
+async function stingeVizitatorul(vizitator: string): Promise<boolean> {
+  try {
+    /*
+      ⚠ CLIENTUL SE FACE INAUNTRUL LUI `try`. `createAdminClient()` ARUNCA daca
+      lipseste variabila de mediu; construit afara, ar fi doborat toata ruta cu
+      500 — tocmai pe calea de RETRAGERE, unde raspunsul mai poarta si cookie-ul
+      reconfirmat si stergerile de la furnizori.
+    */
+    const admin = createAdminClient();
+
+    /*
+      ═══ ⚠ `.throwOnError()`, ALTFEL `retras: true` E O MINCIUNA ═══
+
+      ⚠ MASURAT pe 03.09.2026 cu supabase-js 2.106.1: o scriere respinsa NU
+      arunca — se rezolva cu `{ data: null, error: {...} }`. Deci `catch`-ul de mai
+      jos nu se deschidea, si se raporta izbanda peste o scriere care n-a avut loc.
+
+      Iar browserul, primind `true`, isi STERGEA restanta. Adica tocmai plasa pusa
+      impotriva unei baze picate se anula singura: retragerea ramanea numai in
+      browser, iar cronul, care se uita in baza, trimitea mai departe.
+    */
+    await admin.from("edinio_consimtamant_retras").upsert(
+      { vizitator, sursa: "browser" },
+      { onConflict: "vizitator", ignoreDuplicates: true },
+    ).throwOnError();
+
+    /*
+      ⚠ SE ABANDONEAZA CE N-A PLECAT INCA. Ce a plecat deja nu se recheama — Meta
+      are o cale de stergere a datelor, TikTok n-am verificat-o. Nu se face azi si
+      nu se promite; politica spune deja exact atat.
+
+      ⚠ SI SE STERGE CONTEXTUL OMULUI de pe randurile abandonate. Ramanea intreg —
+      IP, `user-agent`, `_fbp`/`_fbc`/`_ttp`, adresa de venire — si ramanea tocmai
+      pe randurile celor care si-au RETRAS acordul.
+    */
+    const { count } = await admin.from("edinio_conversion_outbox")
+      .update({
+        abandonat_la: new Date().toISOString(),
+        ultima_eroare: "consimtamant retras",
+        ...scrubLaAbandon(),
+      }, { count: "exact" })
+      .eq("vizitator", vizitator)
+      .is("trimis_la", null)
+      .is("abandonat_la", null)
+      .throwOnError();
+
+    if (count && count > 0) {
+      await logError({
+        action: "consimtamant.retras",
+        message: `${count} conversii nu mai pleaca: omul si-a retras acordul`,
+        severity: "info",
+      });
+    }
+    return true;
+  } catch (e) {
+    /*
+      ⚠ O BAZA PICATA N-ARE VOIE SA STRICE RETRAGEREA. Alegerea e deja in vigoare
+      in browserul omului, iar raspunsul poarta oricum cookie-urile. Se scrie in
+      jurnal cu severitate `error` — o retragere nescrisa inseamna ca mai plecau
+      conversii — si se raspunde cinstit cu `false`, ca browserul sa reia.
+    */
+    await logError({
+      action: "consimtamant.scriere",
+      message: e instanceof Error ? e.message : "nu s-a putut stinge vizitatorul",
+      details: { vizitator },
+      severity: "error",
+    });
+    return false;
+  }
 }

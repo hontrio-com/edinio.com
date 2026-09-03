@@ -80,11 +80,39 @@ test("id-ul de vizitator: 32 hexa, orice altceva se ignora", () => {
   for (const rau of ["", "scurt", "G".repeat(32), "a".repeat(31), "a".repeat(33), 42, null, undefined]) {
     assert.ok(!validVid(rau), `"${String(rau)}" a trecut ca vid`);
   }
-  /* Un vid stricat nu strica hotararea — se pierde doar el. */
+  /*
+    ═══ ⚠ PROBA ASTA CEREA PANA AZI EXACT PE DOS, SI APARA O PURTARE NESIGURA ═══
+
+    Scria: „un vid stricat nu strica hotararea — se pierde doar el". Suna bland,
+    si era gresit: `vid` a incetat de mult sa fie doar un id publicitar. El e
+    CHEIA care leaga un rand din coada de conversii de piatra de mormant a
+    retragerii.
+
+    Cu marketing PORNIT si fara id, randurile se scriu cu `vizitator` gol, iar
+    retragerea nu mai are ce potrivi — conversiile pleaca pentru cineva care a
+    spus nu. Adica proba verde apara chiar singura stare din care retragerea nu
+    mai poate opri nimic.
+
+    Acum se cere fail-closed: hotararea se socoteste neintreaga, si omul e
+    intrebat din nou. Vezi nota din `parseaza`.
+  */
   const cuVidRau = `${VERSIUNE}.${ACUM}.11.t.${AMPRENTA_SCOPURI}.NUEHEXA`;
-  const s = parseaza(cuVidRau, ACUM);
-  assert.ok(s, "un vid stricat a aruncat toata hotararea");
-  assert.equal(s.vid, undefined);
+  assert.equal(parseaza(cuVidRau, ACUM), null, "marketing acordat fara id valid a fost luat drept hotarare intreaga");
+
+  const faraVidDeloc = `${VERSIUNE}.${ACUM}.11.t.${AMPRENTA_SCOPURI}.`;
+  assert.equal(parseaza(faraVidDeloc, ACUM), null, "marketing acordat FARA id a trecut");
+
+  /*
+    ⚠ SI MARTORUL, jumatatea care tine regula ingusta. Statisticile nu trec prin
+    coada de pe server, deci n-au nevoie de id. Cine a ales doar statistici nu are
+    voie sa fie intrebat din nou pentru un camp care nu-l priveste.
+  */
+  const doarStatisticiCuVidRau = `${VERSIUNE}.${ACUM}.10.p.${AMPRENTA_SCOPURI}.NUEHEXA`;
+  const t = parseaza(doarStatisticiCuVidRau, ACUM);
+  assert.ok(t, "cine a ales doar statistici a fost intrebat din nou degeaba");
+  assert.equal(t.statistici, true);
+  assert.equal(t.marketing, false);
+  assert.equal(t.vid, undefined, "un id stricat a fost pastrat");
 });
 
 test("⚠ retragerea nu poate lasa id-ul in urma", () => {

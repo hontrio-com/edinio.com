@@ -183,6 +183,29 @@ Ce anume au tastat nu ne trebuie într-un cont de analiză.
 
 ---
 
+## 3b. Meta — o setare de care depinde numărătoarea paginilor
+
+**Events Manager → pixelul Edinio → Settings → „Track Events Automatically" = ON.**
+
+De ce contează, și de ce n-o poți afla din cod: pixelul nostru trimite `PageView`
+**o singură dată**, la încărcarea documentului (`EdinioMetaPixel.tsx`). Pe navigările
+dinăuntrul site-ului — care sunt majoritatea, fiindcă aplicația nu reîncarcă pagina —
+`page_view`-ul nostru **nu** se traduce în `PageView` la Meta: cartografierea lui
+întoarce `null` dinadins, ca să nu se numere de două ori peste ce face Meta singur.
+
+Deci dacă opreşti comutatorul ăla, Meta vede o singură pagină pe vizită în loc de
+toate. Nu cade nimic și nu apare nicio eroare — audiențele de retargetare pur și
+simplu se subţiază.
+
+> Dacă vrei să-l ţii OPRIT dinadins, atunci trebuie trimis `PageView` explicit la
+> fiecare navigare, din adaptorul Meta. E o schimbare de cod, nu o setare.
+
+**TikTok nu are nevoie de nimic aici:** documentaţia lor spune că măsurarea
+paginilor pe aplicaţii de o singură pagină e pornită implicit şi urmăreşte
+schimbările de adresă fără configurare.
+
+---
+
 ## 4. `/admin/analytics` — conectarea
 
 1. Panou admin → **Trafic site**

@@ -254,3 +254,32 @@ test("⚠ si codul NOSTRU chiar nu mai trimite textul cautat", () => {
   assert.ok(!sursa.includes("search_term"),
     "un component a inceput iar sa trimita textul cautat catre furnizori");
 });
+
+test("⚠ documentul spune de ce depinde numaratoarea paginilor la Meta", () => {
+  /*
+    ⚠ CE APARA. Pixelul trimite `PageView` o SINGURA data, la incarcarea
+    documentului. Pe navigarile dinauntrul site-ului, `page_view`-ul nostru nu se
+    traduce in `PageView` — `catreMeta` intoarce `null` dinadins, ca sa nu se
+    numere de doua ori peste ce face Meta singur.
+
+    Deci numaratoarea paginilor la Meta ATARNA de o setare din Events Manager pe
+    care n-o vede nimeni din cod. Oprita, audientele se subtiaza tacut: nimic nu
+    cade si nicio eroare nu apare.
+
+    ⚠ SI TAIE IN AMANDOUA PARTILE: daca maine adaptorul incepe sa trimita `PageView`
+    la fiecare navigare, dependenta dispare — si atunci avertismentul trebuie scos,
+    altfel trimite omul sa pastreze pornita o setare care ar dubla numaratoarea.
+  */
+  const adaptor = readFileSync(join(RAD, "src/lib/edinio-marketing/adaptor-meta.ts"), "utf8");
+  const seBizuiePeMeta = !/name === "page_view"|case "page_view"/.test(adaptor);
+
+  if (!seBizuiePeMeta) {
+    assert.ok(!DOC.includes("Track Events Automatically"),
+      "adaptorul trimite acum `PageView` singur, dar documentul cere inca setarea din Meta");
+    return;
+  }
+
+  assert.match(DOC, /Track Events Automatically/,
+    "numaratoarea paginilor la Meta atarna de o setare externa, iar documentul n-o pomeneste");
+  assert.match(DOC, /Events Manager/, "documentul nu spune UNDE se apasa");
+});

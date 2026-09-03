@@ -117,3 +117,52 @@ export function doarCalea(brut: string): string {
     return "";
   }
 }
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  UNDE DUCE O LEGATURA — FARA SA DUCA SI CE E IN EA
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  ⚠ DE CE EXISTA. `cta_destination` si `destination_path` luau `href`-ul BRUT din
+  marcaj. Azi toate legaturile marcate sunt nevinovate (`/register`, `/preturi`),
+  deci n-am gasit nicio scurgere vie. Dar infrastructura ingaduia una: e destul ca
+  maine cineva sa scrie
+
+      <a href="/ceva?token=abc" data-analytics-cta="...">
+
+  si jetonul pleaca in GA4 — daca nu seamana cu vreun tipar personal, paza nu-l
+  vede. Aceeasi clasa de defect ca la `page_location`, unde am invatat-o deja: nu
+  te bizui pe fiecare om ca tine minte regula, muta regula in cod.
+
+  ⚠ SI `mailto:` E CAZUL CEL MAI URAT. Un buton de contact scris
+  `mailto:cineva@edinio.com` ar fi dus o adresa de email intr-un cont de analiza —
+  chiar lucrul pe care toata paza anti-PII il opreste in alta parte. De aceea din
+  schemele care nu sunt web se pastreaza NUMAI schema.
+*/
+export function curataDestinatia(brut: string | null | undefined): string | undefined {
+  const h = (brut ?? "").trim();
+  if (!h) return undefined;
+
+  /* O ancora pe aceeasi pagina: nu poate purta nimic despre om. */
+  if (h.startsWith("#")) return h.slice(0, 60);
+
+  /* `mailto:`, `tel:`, `sms:`, `whatsapp:` — ramane doar felul, niciodata cine. */
+  const schema = /^([a-z][a-z0-9+.-]*):/i.exec(h)?.[1]?.toLowerCase();
+  if (schema && schema !== "http" && schema !== "https") return `${schema}:`;
+
+  let u: URL;
+  try {
+    /* Baza conteaza numai pentru legaturile relative; pentru cele absolute e ignorata. */
+    u = new URL(h, typeof window === "undefined" ? "https://www.edinio.com" : window.location.href);
+  } catch {
+    return undefined;
+  }
+
+  const acasa = typeof window === "undefined" ? "www.edinio.com" : window.location.hostname;
+  /*
+    ⚠ NICIODATA SIRUL DE INTEROGARE, nici pe al nostru, nici pe al altora. Ce ne
+    trebuie e „unde duce", nu „cu ce". Iar pe cele din afara se pastreaza si gazda,
+    fiindca acolo intrebarea chiar e „catre cine ii trimitem".
+  */
+  return u.hostname === acasa ? u.pathname : `${u.hostname}${u.pathname}`;
+}

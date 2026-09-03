@@ -170,16 +170,7 @@ export async function citesteAnalytics(
       metrics: [{ name: "eventCount" }],
       dimensionFilter: { filter: { fieldName: "eventName", inListFilter: { values: [...NUMERE_CONVERSII] } } },
     },
-    /* 5 — butoanele */
-    {
-      dateRanges: [acum],
-      dimensions: [{ name: "customEvent:cta_id" }],
-      metrics: [{ name: "eventCount" }],
-      dimensionFilter: { filter: { fieldName: "eventName", stringFilter: { value: "cta_click" } } },
-      orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
-      limit: 20,
-    },
-    /* 6 — formularele: inceput, trimis, cazut */
+    /* 5 — formularele: inceput, trimis, cazut */
     {
       dateRanges: [acum],
       dimensions: [{ name: "eventName" }],
@@ -188,7 +179,7 @@ export async function citesteAnalytics(
         filter: { fieldName: "eventName", inListFilter: { values: ["form_start", "form_submit", "form_error"] } },
       },
     },
-    /* 7 — blogul */
+    /* 6 — blogul */
     {
       dateRanges: [acum],
       dimensions: [{ name: "eventName" }],
@@ -200,14 +191,14 @@ export async function citesteAnalytics(
         },
       },
     },
-    /* 8 — dispozitive */
+    /* 7 — dispozitive */
     {
       dateRanges: [acum],
       dimensions: [{ name: "deviceCategory" }],
       metrics: [{ name: "sessions" }],
       orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
     },
-    /* 9 — tari */
+    /* 8 — tari */
     {
       dateRanges: [acum],
       dimensions: [{ name: "country" }],
@@ -216,7 +207,7 @@ export async function citesteAnalytics(
       limit: 10,
     },
     /*
-      ═══ 10 — PAGINILE DE ATERIZARE ═══
+      ═══ 9 — PAGINILE DE ATERIZARE ═══
 
       ⚠ NU E ACELASI LUCRU CU „paginile" de la 3. Aceea numara vizualizari: pagina
       de preturi apare sus fiindca oamenii ajung la ea DUPA ce au intrat pe alta.
@@ -230,7 +221,7 @@ export async function citesteAnalytics(
       orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
       limit: 12,
     },
-    /* 11 — orase */
+    /* 10 — orase */
     {
       dateRanges: [acum],
       dimensions: [{ name: "city" }],
@@ -239,7 +230,7 @@ export async function citesteAnalytics(
       limit: 10,
     },
     /*
-      ═══ 12 — BROWSER SI SISTEM, INTR-O SINGURA CERERE ═══
+      ═══ 11 — BROWSER SI SISTEM, INTR-O SINGURA CERERE ═══
 
       ⚠ DOUA DIMENSIUNI, NU DOUA CERERI. Fiecare cerere in plus e latime de banda
       si o sansa in plus ca teancul sa cada. Iar intrebarea adevarata e oricum
@@ -302,7 +293,35 @@ export async function citesteAnalytics(
     grupuriPagini = linii(rGrup.data);
   }
 
-  const cta = linii(rapoarte[5]);
+  /*
+    ═══ ⚠ SI BUTOANELE SE CER SEPARAT, DIN ACELASI MOTIV CA GRUPURILE ═══
+
+    `cta_id` e tot o dimensiune PERSONALIZATA. Pana azi statea in teancul de sus,
+    iar `teanc()` intoarce la prima eroare — deci daca dimensiunea nu era
+    inregistrata, era arhivata, sau Data API o refuza o clipa, cadea TOT
+    `/admin/analytics`: utilizatori, sesiuni, pagini, tot.
+
+    Aia e o pagubă fara nicio legatura cu ce s-a stricat. Un raport care depinde
+    de o setare din alta interfata n-are voie sa tina restul ostatic — lectia era
+    deja invatata la `page_group`, doar ca nu fusese dusa si aici.
+  */
+  let cta: Linie[] = [];
+  const rCta = await runReport(token, propertyId, {
+    dateRanges: [acum],
+    dimensions: [{ name: "customEvent:cta_id" }],
+    metrics: [{ name: "eventCount" }],
+    orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+    limit: 15,
+  });
+  if ("error" in rCta) {
+    probleme.push(
+      "Dimensiunea personalizata `cta_id` nu e inregistrata in GA4. " +
+      "Admin -> Custom definitions -> Create custom dimension, scope Event, parametru `cta_id`. " +
+      "Pana atunci lipseste doar tabelul butoanelor; restul raportului nu e atins.",
+    );
+  } else {
+    cta = linii(rCta.data);
+  }
   if (cta.length === 0) {
     /*
       ⚠ TREI CAUZE, NU DOUA, si a treia e cea mai probabila in prima zi.
@@ -330,13 +349,13 @@ export async function citesteAnalytics(
     pagini: linii(rapoarte[3]),
     conversii: linii(rapoarte[4]),
     cta,
-    formulare: linii(rapoarte[6]),
-    blog: linii(rapoarte[7]),
-    dispozitive: linii(rapoarte[8]),
-    tari: linii(rapoarte[9]),
-    aterizari: linii(rapoarte[10]),
-    orase: linii(rapoarte[11]),
-    browsere: linii(rapoarte[12]),
+    formulare: linii(rapoarte[5]),
+    blog: linii(rapoarte[6]),
+    dispozitive: linii(rapoarte[7]),
+    tari: linii(rapoarte[8]),
+    aterizari: linii(rapoarte[9]),
+    orase: linii(rapoarte[10]),
+    browsere: linii(rapoarte[11]),
     grupuriPagini,
     probleme,
   };

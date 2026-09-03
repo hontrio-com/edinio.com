@@ -760,7 +760,7 @@ const SECTIUNI: Sectiune[] = [
             "Edinio",
             "Strict necesar",
             "Memorarea opțiunilor privind cookie-urile",
-            "aprox. 12 luni",
+            "180 de zile (aprox. 6 luni)",
           ],
           [
             "Token/sesiune autentificare",

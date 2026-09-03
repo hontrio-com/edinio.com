@@ -96,3 +96,46 @@ test("⚠ nimic nu se aduce de la Google fara sa fie si aratat", () => {
   const nearatate = campuri.filter((c) => !client.includes(c));
   assert.deepEqual(nearatate, [], "se aduc de la Google si nu se arata nicaieri: " + nearatate.join(", "));
 });
+
+test("⚠ nicio dimensiune PERSONALIZATA in teancul principal", () => {
+  /*
+    ═══════════════════════════════════════════════════════════════════════════════
+    ⚠ CE APARA, si de ce paguba era fara nicio legatura cu ce se strica
+    ═══════════════════════════════════════════════════════════════════════════════
+
+    O dimensiune personalizata (`customEvent:…`) exista numai daca a fost
+    inregistrata de mana in interfata GA4. Pana atunci — sau daca e arhivata, sau
+    daca Data API o refuza o clipa — orice cerere care o pomeneste raspunde cu
+    eroare.
+
+    Iar `teanc()` se opreste la PRIMA eroare si intoarce `{ problema }`, care mai
+    sus devine `{ eroare }` pentru toata pagina. Deci o dimensiune neinregistrata
+    doborа `/admin/analytics` cu totul: utilizatori, sesiuni, pagini, tot.
+
+    `page_group` fusese scos din teanc tocmai de aceea. `cta_id` ramasese inauntru,
+    si nimeni n-ar fi aflat pana in ziua in care cineva arhiveaza o dimensiune.
+
+    Proba cere insusirea, nu cele doua nume: ORICE dimensiune personalizata trebuie
+    ceruta separat, ca sa cada singura.
+  */
+  const sursa = readFileSync("src/lib/admin-analytics/rapoarte.ts", "utf8");
+
+  const iTeanc = sursa.indexOf("const cereri");
+  assert.ok(iTeanc > 0, "nu mai gasesc teancul de cereri");
+  const iSfarsit = sursa.indexOf("await teanc(", iTeanc);
+  assert.ok(iSfarsit > iTeanc, "nu mai gasesc chemarea teancului");
+
+  const inTeanc = sursa.slice(iTeanc, iSfarsit);
+  const gasite = [...inTeanc.matchAll(/customEvent:([a-z_]+)/g)].map((m) => m[1]);
+  assert.deepEqual(
+    gasite, [],
+    "dimensiuni personalizate in teancul principal: " + gasite.join(", ") +
+    " — una neinregistrata in GA4 doboara TOATA pagina, nu doar tabelul ei",
+  );
+
+  /* ⚠ Si martorul: cele scoase chiar se cer, separat. Altfel „zero in teanc" s-ar */
+  /*    putea obtine si stergandu-le cu totul. */
+  for (const dim of ["page_group", "cta_id"]) {
+    assert.ok(sursa.includes(`customEvent:${dim}`), `raportul pentru \`${dim}\` a disparut cu totul`);
+  }
+});

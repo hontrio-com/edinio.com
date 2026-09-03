@@ -10,6 +10,8 @@ import { faraUrmarire, faraPageView } from "@/lib/edinio-marketing/fara-urmarire
 import { adaptorGoogleAds } from "@/lib/edinio-marketing/adaptor-google-ads";
 import { reiaRetragerea, EVENIMENT_SCHIMBAT } from "@/lib/edinio-marketing/consimtamant-browser";
 import { curataTitlu } from "@/lib/edinio-marketing/titlu-curat";
+import { curataDestinatia } from "@/lib/edinio-marketing/adresa-curata";
+import { destulDinSectiune } from "@/lib/edinio-marketing/sectiune-vazuta";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -265,7 +267,8 @@ export function RuntimeMarketing() {
           name: "cta_click",
           cta_id: cta.dataset.analyticsCta ?? "necunoscut",
           cta_location: cta.dataset.analyticsLocation ?? "necunoscut",
-          cta_destination: cta.getAttribute("href") ?? undefined,
+          /* ⚠ Fara sirul de interogare si fara adrese din `mailto:`. Vezi `curataDestinatia`. */
+          cta_destination: curataDestinatia(cta.getAttribute("href")),
         });
         return;
       }
@@ -276,7 +279,7 @@ export function RuntimeMarketing() {
           name: "navigation_click",
           nav_item: nav.dataset.analyticsNav ?? "necunoscut",
           nav_location: nav.dataset.analyticsLocation ?? "necunoscut",
-          destination_path: nav.getAttribute("href") ?? "",
+          destination_path: curataDestinatia(nav.getAttribute("href")) ?? "",
         });
         return;
       }
@@ -318,6 +321,14 @@ export function RuntimeMarketing() {
     const vazute = new Set<string>();
     const praguriTrase = new Set<number>();
 
+    /* ⚠ Regula sta in `sectiune-vazuta.ts`, ca sa se poata proba fara browser. */
+    const destulVazut = (intrare: IntersectionObserverEntry) =>
+      destulDinSectiune({
+        vizibil: intrare.intersectionRect.height,
+        sectiune: intrare.boundingClientRect.height,
+        ecran: intrare.rootBounds?.height ?? window.innerHeight,
+      });
+
     const obs = new IntersectionObserver(
       (intrari) => {
         for (const intrare of intrari) {
@@ -336,16 +347,31 @@ export function RuntimeMarketing() {
           }
 
           const nume = el.dataset.analyticsSection;
-          if (nume && !vazute.has(nume)) {
+          if (nume && !vazute.has(nume) && destulVazut(intrare)) {
             vazute.add(nume);
             urmareste({ name: "section_view", section_name: nume });
             obs.unobserve(el);
           }
         }
       },
-      /* Jumatate de sectiune vazuta, nu un pixel: o derulare foarte rapida nu e
-         angajament. */
-      { threshold: 0.5 },
+      /*
+        ═══ ⚠ MAI MULTE PRAGURI, IAR HOTARAREA SE IA IN `destulDinSectiune` ═══
+
+        Forma veche avea un singur prag, `0.5`, si asta cerea ca JUMATATE DIN
+        SECTIUNE sa fie vizibila deodata. Pentru o sectiune mai inalta decat doua
+        ecrane, asta e cu neputinta din aritmetica: cel mult `viewport / inaltime`
+        din ea incape pe ecran. La 2400px pe un telefon de 800px, maximul e 33%.
+
+        ⚠ CE INSEAMNA. `section_view` nu se trage NICIODATA pentru sectiunile
+        lungi — si tocmai alea sunt cele care conteaza: preturi, comparatie, FAQ.
+        Masurat pe `/preturi`: `comparatie` are 1152px la 1920px latime; pe telefon,
+        unde tabelul se stivuieste, trece lesne de doua ecrane. N-am putut forta un
+        viewport de telefon ca s-o arat, dar aritmetica nu are nevoie de proba.
+
+        Pragurile de aici sunt doar clipele in care browserul ne trezeste; regula
+        adevarata e mai jos si nu se mai uita la raport.
+      */
+      { threshold: [0, 0.25, 0.5, 0.75] },
     );
 
     for (const el of document.querySelectorAll<HTMLElement>("[data-analytics-section]")) obs.observe(el);
@@ -356,7 +382,7 @@ export function RuntimeMarketing() {
       ascultator de `scroll`, si masuratoarea costa cat costa un observator.
     */
     const repere: HTMLElement[] = [];
-    const inaltime = document.documentElement.scrollHeight;
+    let inaltime = document.documentElement.scrollHeight;
     if (inaltime > window.innerHeight * 1.5) {
       for (const p of PRAGURI) {
         const r = document.createElement("div");
@@ -372,8 +398,52 @@ export function RuntimeMarketing() {
       }
     }
 
+    /*
+      ═══════════════════════════════════════════════════════════════════════════
+      ⚠ REPERELE SE MUTA CAND PAGINA CRESTE, ALTFEL „90%" DEVINE MINCIUNA
+      ═══════════════════════════════════════════════════════════════════════════
+
+      Inaltimea se masura O SINGURA DATA, la montare, si reperele ramaneau in
+      pixeli absoluti. Numai ca pagina isi schimba inaltimea dupa aceea: se
+      deschide un acordeon de intrebari, se incarca tarziu o imagine, se aseaza
+      alt font.
+
+      Exemplu, cu cifre: pagina de 6000px pune reperul de 90% la 5400px. Omul
+      deschide FAQ-ul, pagina ajunge la 7500px — iar 5400px inseamna acum 72%.
+      GA4 primeste `scroll_depth: 90` pentru cineva care e la 72%. Nu cade nimic
+      si nu se vede nimic; raportul minte, si atat.
+
+      ⚠ SI DE CE `ResizeObserver`, nu un ascultator de derulare. El se aprinde
+      numai cand inaltimea CHIAR se schimba — de cateva ori pe viata unei pagini —
+      pe cand un ascultator de `scroll` se aprinde de sute de ori si costa tocmai
+      pe telefoanele slabe. Toata masuratoarea asta a fost facuta dinadins fara
+      ascultatori de derulare.
+
+      ⚠ MARGINEA DE 2% opreste bucla: mutarea unui reper nu schimba inaltimea
+      documentului (sunt absolute si stau cel mult la 90%), dar o schimbare mica
+      si repetata din alta parte n-are de ce sa ne puna la treaba.
+    */
+    const aseazaReperele = () => {
+      const acum = document.documentElement.scrollHeight;
+      if (acum <= 0 || Math.abs(acum - inaltime) < inaltime * 0.02) return;
+      inaltime = acum;
+      for (const r of repere) {
+        /* Cele trase deja au fost scoase din observator; mutarea lor n-ar mai conta. */
+        const p = Number(r.dataset.analyticsScroll);
+        if (praguriTrase.has(p)) continue;
+        r.style.top = `${Math.round((acum * p) / 100)}px`;
+      }
+    };
+
+    const masuraInaltimii =
+      repere.length > 0 && typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(aseazaReperele)
+        : null;
+    masuraInaltimii?.observe(document.body);
+
     return () => {
       obs.disconnect();
+      masuraInaltimii?.disconnect();
       for (const r of repere) r.remove();
     };
   }, [cale]);

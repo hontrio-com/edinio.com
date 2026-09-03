@@ -299,6 +299,25 @@ test("⚠ durata din politica e CHIAR cea din cod", () => {
     t, new RegExp(`${DURATA_ZILE} de zile`),
     `politica nu spune nicaieri „${DURATA_ZILE} de zile", cat pastreaza chiar codul preferinta`,
   );
+
+  /*
+    ═══ ⚠ SI TABELUL NU ARE VOIE SA SPUNA ALTA CIFRA ═══
+
+    Prima forma cerea doar ca „180 de zile" sa apara UNDEVA in document — si a
+    trecut verde luni de zile peste un tabel rezumat care spunea, pe randul
+    preferintelor, „aprox. 12 luni". Documentul se contrazicea singur, iar cine
+    citea tabelul — adica cine cauta repede — pleca cu cifra dubla.
+
+    „E scris undeva" nu e acelasi lucru cu „nu scrie nicaieri pe dos". Aici se
+    cauta ORICE alta durata pe randul acela.
+  */
+  const randPreferinte = t.split(String.fromCharCode(10))
+    .find((r) => r.includes("Preferințe cookies") || r.includes("Memorarea opțiunilor"));
+  assert.ok(randPreferinte, "randul preferintelor a disparut din tabelul rezumat");
+  assert.match(randPreferinte, new RegExp(`${DURATA_ZILE} de zile`),
+    `tabelul rezumat spune altceva decat codul: "${randPreferinte.trim()}"`);
+  assert.ok(!/12 luni|un an|365/.test(randPreferinte),
+    `tabelul rezumat mai poarta o durata care contrazice codul: "${randPreferinte.trim()}"`);
 });
 
 test("⚠ reCAPTCHA e incarcat, deci e si declarat in politica", () => {

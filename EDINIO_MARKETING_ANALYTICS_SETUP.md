@@ -151,7 +151,35 @@ apăsa un comutator.
 | *Page changes based on browser history events* | **Da, oprește-o.** Noi măsurăm manual schimbarea de pagină, cu `send_page_view: false`. |
 | *Scrolls* | Nu. Ea trage `scroll`; noi tragem `scroll_depth` cu praguri 25/50/75/90. Nume diferite, rânduri diferite. |
 | *Outbound clicks* | Nu. Ea trage `click`; noi tragem `outbound_click`. |
-| *Site search*, *Video*, *File downloads* | Nu se ciocnesc cu nimic de-al nostru. |
+| *Site search* | **Da, oprește-o.** Trage chiar `view_search_results` și duce textul brut. Vezi secțiunea de mai jos. |
+| *Video*, *File downloads* | Nu se ciocnesc cu nimic de-al nostru. |
+
+**⚠ Căutarea pe site — pe OFF.** Admin → *Data streams* → fluxul web →
+*Enhanced measurement* → oprește **Site search**.
+
+Rândul din tabel a spus multă vreme că nu se ciocnește. **Măsurat în producție pe
+03.09.2026, e fals în două feluri deodată:**
+
+1. **Se ciocnește pe nume.** Enhanced Measurement trage `view_search_results` —
+   exact numele pe care îl tragem și noi. Fiecare căutare se numără de două ori.
+2. **Și duce textul brut.** Hitul lui poartă `ep.search_term=<ce a tastat omul>`,
+   plus `dl` și `dt` **necurățate** — adică adresa cu tot cu `?q=…` și titlul
+   întreg. Măsurat cu `?q=Ion Popescu strada Victoriei`: toate trei au plecat.
+
+Partea a doua contează mai mult. Noi am scos dinadins `search_term` din
+evenimentele noastre, fiindcă tiparele anti-PII prind emailul și telefonul, dar nu
+un nume de om și nu o adresă de stradă. Cât timp comutatorul ăsta e pornit,
+**scoaterea aia nu apără nimic**: Google adună textul oricum, pe lângă codul
+nostru, și odată ajuns în proprietate nu se mai poate scoate.
+
+> ⚠ Și nu se poate repara din cod. Enhanced Measurement citește direct din adresă
+> (`q`, `s`, `search`, `query`, `keyword`) și **ocolește orice curățare a noastră**
+> — `curataAdresa` și `curataTitlu` se aplică numai la ce trimitem NOI. Singurul
+> loc unde se oprește e comutatorul din GA4.
+
+Ce rămâne după oprire: `view_search_results` cu `search_scope`, `search_results` și
+`zero_results` — adică „ce nu găsesc oamenii", care e lista de articole de scris.
+Ce anume au tastat nu ne trebuie într-un cont de analiză.
 
 ---
 

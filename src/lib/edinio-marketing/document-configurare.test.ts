@@ -164,3 +164,93 @@ test("⚠ documentul avertizeaza despre ciocnirea cu Enhanced Measurement", () =
   assert.match(doc, /Enhanced measurement/i, "documentul nu spune UNDE se apasa");
   assert.match(doc, /Data streams/, "documentul nu spune drumul pana la setare");
 });
+
+test("⚠ documentul avertizeaza si despre ciocnirea cu «Site search»", () => {
+  /*
+    ═══ ⚠ MASURAT IN PRODUCTIE PE 03.09.2026, DUPA CE DOCUMENTUL A MINTIT ═══
+
+    Tabelul din capitolul 3 spunea, pe un rand, ca *Site search* „nu se ciocneste
+    cu nimic de-al nostru". E fals in doua feluri:
+
+      1. Enhanced Measurement trage `view_search_results` — chiar numele pe care
+         il tragem si noi. Fiecare cautare se numara de doua ori.
+      2. Hitul lui poarta `ep.search_term` cu textul brut, plus `dl` si `dt`
+         NECURATATE. Adica ocoleste `curataAdresa` si `curataTitlu`, care se
+         aplica numai la ce trimitem NOI.
+
+    ⚠ SI DE CE E CEA MAI IMPORTANTA DINTRE AVERTIZARI. Am scos dinadins
+    `search_term` din evenimentele noastre. Cat timp comutatorul e pornit,
+    scoaterea aia nu apara nimic: Google aduna textul oricum, pe langa codul
+    nostru. O reparatie care pare facuta si nu apara nimic e mai rea decat una
+    lipsa, fiindca nimeni nu se mai uita la ea.
+  */
+  const doc = DOC;
+  const tragemCautarea = evenimenteTrase().has("view_search_results");
+
+  if (!tragemCautarea) {
+    assert.ok(!doc.includes("Site search"),
+      "documentul cere oprirea unei optiuni care nu se mai ciocneste cu nimic de-al nostru");
+    return;
+  }
+
+  assert.match(doc, /Site search/, "tragem `view_search_results` dar documentul nu cere oprirea optiunii GA4");
+
+  /*
+    ═══ ⚠ SE TAIE CHIAR SECTIUNEA, nu se cauta in tot documentul ═══
+
+    Prima forma cerea `/Enhanced measurement/i` pe intreg textul — si trecea verde
+    peste mutantul pe care era scrisa: am scos drumul pana la setare din sectiunea
+    asta, iar potrivirea a cazut pe sectiunea despre *Form interactions*, aflata
+    mai sus.
+
+    E aceeasi lectie pe care fisierul asta o are deja scrisa la `listaDinDocument`:
+    „e scris undeva in document" nu e acelasi lucru cu „e scris unde trebuie".
+  */
+  const iSectiune = doc.indexOf("Căutarea pe site");
+  assert.ok(iSectiune > 0, "sectiunea despre cautarea pe site a disparut din document");
+  const urmatoare = doc.indexOf(String.fromCharCode(10) + "---", iSectiune);
+  const sectiune = doc.slice(iSectiune, urmatoare > 0 ? urmatoare : doc.length);
+
+  assert.match(sectiune, /oprește|pe OFF/i, "sectiunea pomeneste optiunea dar nu spune ce sa faca cu ea");
+  assert.match(sectiune, /Enhanced measurement/i, "sectiunea nu spune UNDE se apasa");
+  assert.match(sectiune, /Data streams/, "sectiunea nu spune drumul pana la setare");
+
+  /*
+    ⚠ SI CA MOTIVUL E SCRIS, cu numele campului. Un comutator cerut fara motiv se
+    reporneste peste sase luni de cine „face curat prin setari".
+
+    ⚠ PRIMA FORMA CEREA `/ep\.search_term|search_term/` — si trecea verde peste
+    chiar mutantul pe care era scrisa: am scos numele campului din motiv, iar
+    alternativa `search_term` s-a potrivit pe alt rand al aceluiasi document.
+    O alternativa larga intr-un regex e un fel de a nu cere nimic.
+  */
+  assert.ok(doc.includes("ep.search_term"),
+    "documentul nu spune CE camp aduna Google pe langa noi, deci sfatul pare o toana");
+
+  /*
+    ═══ ⚠ SI TABELUL NU ARE VOIE SA SPUNA PE DOS ═══
+
+    Avertizarea de mai sus a fost scrisa TOCMAI fiindca un rand din tabel spunea
+    „nu se ciocneste cu nimic de-al nostru". Daca randul se intoarce, documentul
+    se contrazice singur — iar cine citeste tabelul si nu ajunge la sectiune
+    pleaca exact cu sfatul gresit.
+  */
+  const iTabel = doc.indexOf("| *Site search*");
+  assert.ok(iTabel > 0, "randul din tabel a disparut cu totul");
+  const randul = doc.slice(iTabel, doc.indexOf(String.fromCharCode(10), iTabel));
+  assert.ok(!/[Nn]u se ciocne/.test(randul),
+    "tabelul spune ca *Site search* nu se ciocneste, desi trage chiar numele nostru cu textul brut");
+});
+
+test("⚠ si codul NOSTRU chiar nu mai trimite textul cautat", () => {
+  /*
+    ⚠ CUTITUL TAIE IN AMANDOUA PARTILE. Daca maine cineva pune la loc
+    `search_term` in evenimentul nostru, avertizarea de mai sus devine
+    incompleta — si probele n-ar spune nimic.
+  */
+  const sursa = ["src/components/edinio-marketing/UrmaCautare.tsx",
+                 "src/components/website/ajutor/CautareGhiduri.tsx"]
+    .map((f) => readFileSync(join(RAD, f), "utf8")).join(String.fromCharCode(10));
+  assert.ok(!sursa.includes("search_term"),
+    "un component a inceput iar sa trimita textul cautat catre furnizori");
+});

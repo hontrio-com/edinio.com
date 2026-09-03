@@ -23,8 +23,21 @@ const DESCRIERI: Record<Categorie, { titlu: string; text: string; furnizori: str
   statistici: {
     titlu: "Statistici",
     text:
+      /*
+        ⚠ „NU TE IDENTIFICA PERSONAL" A FOST SCOS PE 03.09.2026, si merita spus de ce.
+
+        Era o afirmatie prea tare. E adevarat ca nu trimitem catre Google numele,
+        emailul, telefonul sau ce scrie omul in formulare — asta se si probeaza, la
+        fiecare eveniment, prin paza anti-PII. Dar GA4 pastreaza un identificator
+        intr-un cookie ca sa deosebeasca browserele intre ele; e pseudonim, nu
+        anonim, iar legea il socoteste tot data cu caracter personal.
+
+        Un text care spune mai mult decat poate tine e o promisiune pe care omul o
+        crede. Aici se spune exact ce NU pleaca — verificabil — in loc de o
+        categorie juridica pe care n-o putem garanta.
+      */
       "Ne arata cate persoane ne viziteaza si ce pagini citesc, ca sa stim ce e de imbunatatit. " +
-      "Nu te identifica personal si nu se foloseste pentru reclame.",
+      "Nu trimitem numele, emailul, telefonul sau ce scrii in formulare, si nu se foloseste pentru reclame.",
     furnizori: "Google Analytics",
   },
   marketing: {

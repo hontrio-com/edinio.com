@@ -518,7 +518,7 @@ const SECTIUNI: Sectiune[] = [
     blocuri: [
       {
         tip: "paragraf",
-        text: "Edinio utilizează Google Analytics 4 pentru a înțelege modul în care este utilizat website-ul și pentru a analiza performanța acestuia. Măsurarea este anonimă: nu transmitem către Google adrese de email, numere de telefon, nume sau conținutul formularelor, și nu legăm sesiunile de un cont de utilizator.",
+        text: "Edinio utilizează Google Analytics 4 pentru a înțelege modul în care este utilizat website-ul și pentru a analiza performanța acestuia. Măsurarea este pseudonimă, nu anonimă: nu transmitem către Google adrese de email, numere de telefon, nume sau conținutul formularelor și nu legăm sesiunile de un cont de utilizator, însă Google Analytics păstrează un identificator propriu în cookie-uri pentru a distinge browserele între ele.",
       },
       {
         tip: "paragraf",

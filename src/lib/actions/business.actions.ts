@@ -188,6 +188,34 @@ export async function createBusiness(data: {
     ? await aduSiVerificaPlata(data.sesiuneStripe, user.id)
     : ({ ok: false, motiv: "fara-sesiune" } as const);
 
+  /*
+    ═══════════════════════════════════════════════════════════════════════════
+    ⚠ „NU STIU" NU E „N-A PLATIT" — SI PANA AZI ERAU ACELASI LUCRU
+    ═══════════════════════════════════════════════════════════════════════════
+
+    `aduSiVerificaPlata` intoarce `ok: false` pentru trei lucruri deosebite:
+      - `fara-sesiune`  — n-a fost nicio plata, ori Stripe zice ca sesiunea nu
+                          exista. STIM ca n-a platit.
+      - `neplatita` / `alt-om` — Stripe a raspuns limpede. STIM.
+      - `indisponibil`  — Stripe n-a raspuns. NU STIM NIMIC.
+
+    Ramura de mai jos le trata la fel. Deci: omul chiar plateste, se intoarce cu
+    un `cs_...` bun, si exact atunci Stripe are o pana. Noi citim „ok: false",
+    acordam trialul si RAPORTAM `trial_start`. Webhook-ul aseaza pe urma planul
+    platit, deci omul primeste ce a cumparat — dar la Meta si TikTok raman doua
+    fapte pentru una: „a inceput un trial" si „s-a abonat".
+
+    ⚠ SI DE CE TOTUSI SE ACORDA RANDUL. Ar fi fost mai simplu sa taiem de tot cand
+    nu stim. Numai ca webhook-ul scrie planul NECONDITIONAT (`webhook/route.ts`),
+    deci un trial asezat acum nu poate rapi un abonament — il suprascrie el cand
+    ajunge. In schimb, netaiat, cineva care N-A platit si a nimerit pana ar ramane
+    fara niciun plan. Deci se taie RAPORTAREA, nu dreptul.
+
+    ⚠ ACEEASI FILOZOFIE CA LA CONSIMTAMANT: cand nu stim, nu trimitem. Acolo se
+    numeste fail-closed si e scrisa in `coada-conversii.ts`; aici e acelasi lucru.
+  */
+  const stiuCaNuAPlatit = !plata.ok && plata.motiv !== "indisponibil";
+
   let trialAcordat = false;
   if (!plata.ok) {
     /*
@@ -221,6 +249,14 @@ export async function createBusiness(data: {
     }
     trialAcordat = (randuri?.length ?? 0) > 0;
   }
+
+  /*
+    ⚠ DOUA CONDITII, SI AMANDOUA TREBUIE. Randul s-a schimbat CHIAR (deci noi
+    l-am acordat, nu altcineva), SI stim ca n-a fost nicio plata. A doua fara
+    prima raporteaza un trial pe care baza l-a refuzat; prima fara a doua
+    raporteaza un trial pentru cineva care tocmai a cumparat.
+  */
+  const trialRaportat = trialAcordat && stiuCaNuAPlatit;
 
   // Send welcome email + notify admin (non-blocking)
   if (user.email) {
@@ -264,7 +300,7 @@ export async function createBusiness(data: {
     ⚠ `purchase` NU se pune aici. Suma adevarata o stie doar webhook-ul Stripe, din
     cat s-a incasat; citita din alta parte ar fi o presupunere raportata ca venit.
   */
-  if (trialAcordat) {
+  if (trialRaportat) {
     const anteturi = await headers();
     /* ⚠ Hotararea se citeste O data: si amprenta, si poarta atarna de ea. */
     const consim = await consimtamantulCererii();
@@ -285,7 +321,19 @@ export async function createBusiness(data: {
   }
 
   revalidatePath("/dashboard", "layout");
-  return { success: true, businessId: business.id, slug: business.slug };
+  /*
+    ⚠ `trialRaportat` PLEACA SI CATRE BROWSER, si nu ca sa fie frumos.
+
+    Browserul isi tragea `trial_start` cand `sessionStorage` spunea „free" — adica
+    dupa ce ALESESE omul, nu dupa ce s-a intamplat. Cele doua se despart usor:
+    planul ales e „free" si totusi trialul nu s-a acordat (avea deja unul), sau
+    plata tocmai a intrat. Atunci pleca o conversie din browser fara perechea ei
+    de pe server — si Meta o numara singura, fiindca n-are cu ce s-o uneasca.
+
+    Adevarul e unul singur, si e al bazei. Amandoua capetele il citesc de aici, cu
+    acelasi `event_id` (id-ul magazinului), deci raman o singura conversie.
+  */
+  return { success: true, businessId: business.id, slug: business.slug, trialRaportat };
 }
 
 export async function updateBusiness(

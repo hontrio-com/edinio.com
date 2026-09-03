@@ -66,11 +66,16 @@ export function catreMeta(ev: EvenimentEdinio): Trimitere | null {
     case "sign_up":
       return { nume: "CompleteRegistration", date: {}, eventID: ev.event_id };
 
+    /*
+      ⚠ `AddPaymentInfo` A FOST SCOS DE AICI pe 03.09.2026. Pleca in clipa in
+      care omul era predat lui Stripe, nu cand atingea un card — deci afirma catre
+      Meta o fapta care nu se intamplase. Vezi nota din `evenimente.ts`.
+    */
     case "begin_checkout":
-      return { nume: "InitiateCheckout", date: { content_name: ev.plan_id } };
-
-    case "add_payment_info":
-      return { nume: "AddPaymentInfo", date: { content_name: ev.plan_id } };
+      return {
+        nume: "InitiateCheckout",
+        date: { content_name: ev.plan_id, value: ev.value, currency: ev.currency },
+      };
 
     case "trial_start":
       return { nume: "StartTrial", date: { content_name: ev.plan_id, currency: "RON", value: 0 }, eventID: ev.event_id };

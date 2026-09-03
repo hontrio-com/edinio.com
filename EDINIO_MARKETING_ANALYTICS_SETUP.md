@@ -16,7 +16,7 @@ strică fără el** — ca să poți sări peste ce nu-ți trebuie, în cunoști
 |---|---|
 | Eticheta GA4 `G-SB92HFQ1EN` | vie pe `edinio.com`, **numai** acolo |
 | Pixel Meta + TikTok | vii, **numai** pe `edinio.com` |
-| Evenimente | **29** de nume, trase din cod |
+| Evenimente | **28** de nume, trase din cod |
 | Conversii | cerere de ofertă, cont nou, trial, abonament |
 | Deduplicare | fiecare conversie poartă un `event_id` reproductibil pe server |
 
@@ -24,14 +24,33 @@ Pixelii **nu** mai pornesc pe `localhost` și nici pe desfășurările de
 previzualizare. Până pe 01.09.2026 porneau, și trimiteau evenimente în conturile
 adevărate.
 
-Cele 29 care se trag azi:
+> **03.09.2026 — `add_payment_info` a fost scos, iar `begin_checkout` s-a mutat.**
+>
+> `add_payment_info` pleca în clipa în care omul era **predat** lui Stripe, nu când
+> atingea un card. Google și TikTok îl definesc amândoi ca „și-a trimis datele de
+> plată". În Stripe-hosted Checkout formularul e pe domeniul lor, deci clipa aceea
+> nu se poate observa de la noi — orice eveniment tras acolo afirmă o faptă
+> neverificată. Un eveniment lipsă e mai bun decât un eveniment standard fals.
+>
+> `begin_checkout` se trăgea la **intrarea** pe pagina de planuri, adică „a deschis
+> pagina", nu „a început cumpărarea": fără plan ales, fără sumă, fără monedă. Acum
+> pleacă la apăsarea către plată, cu `plan_id`, `value`, `currency` și `items` —
+> deci pâlnia de comerț din GA4 se închide: `begin_checkout` → `purchase`, cu
+> același `item_id`. La intrarea pe pagină rămâne `onboarding_step_view`, care
+> spune ce este și nu merge la Meta sau TikTok.
+>
+> **Urmarea în conturile de reclame:** `AddPaymentInfo` dispare, iar
+> `InitiateCheckout` scade — de acum numără doar pe cei care chiar pornesc plata.
+> Nu s-a stricat nimic; abia acum înseamnă ce spune.
+
+Cele 28 care se trag azi:
 
 `page_view`, `section_view`, `scroll_depth`, `cta_click`, `navigation_click`,
 `outbound_click`, `landing_view`, `form_start`, `form_submit`, `form_error`,
 `generate_lead`, `article_view`, `article_read_progress`, `article_read_complete`,
 `newsletter_subscribe_request`, `newsletter_subscribe_confirmed`, `sign_up`,
 `onboarding_step_view`, `onboarding_step_complete`, `begin_checkout`,
-`add_payment_info`, `trial_start`, `purchase`, `billing_period_change`,
+`trial_start`, `purchase`, `billing_period_change`,
 `faq_open`, `integration_filter`, `article_cta_click`, `view_search_results`, `article_share`.
 
 > Ultimele cinci s-au adăugat pe 02.09.2026, după un audit din afară care a

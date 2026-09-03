@@ -58,6 +58,24 @@ function numeGa4(ev: EvenimentEdinio): string | null {
   }
 }
 
+/**
+ * Articolul de comert al unui abonament: unul singur, cantitate 1.
+ *
+ * ⚠ INTR-UN SINGUR LOC fiindca il cer doua evenimente (`begin_checkout` si
+ * `purchase`), iar GA4 le leaga in aceeasi palnie DUPA `item_id`. Scris de doua
+ * ori, ar fi de ajuns ca unul sa spuna „premium" si celalalt „Premium" ca palnia
+ * sa arate doua produse deosebite si zero treceri de la unul la altul.
+ */
+function articol(planId: string | undefined, perioada: string, valoare: number) {
+  return [{
+    item_id: planId,
+    item_name: planId,
+    item_category: perioada,
+    price: valoare,
+    quantity: 1,
+  }];
+}
+
 /** Adaptorul, gata de inregistrat in magistrala. */
 export const adaptorGa4: Adaptor = {
   nume: "ga4",
@@ -126,21 +144,27 @@ export const adaptorGa4: Adaptor = {
         Venitul se vede oricum — GA4 il ia din `value`, nu din suma articolelor —
         dar „ce plan s-a vandut" nu se putea citi de nicaieri.
 
-        ⚠ NUMAI LA `purchase`, si asta e hotararea, nu o scapare. La
-        `begin_checkout` omul inca n-a ales un plan, iar evenimentul n-are nici
-        `value`, nici `currency`: un articol fara pret si fara nume adevarat ar
-        adauga un rand gol in raport, nu o cifra. Mai bine lipsa decat umplutura.
-
         ⚠ PRETUL E CEL INCASAT. `ev.value` vine din `amount_total` de la Stripe
         (vezi `verdict-plata.ts`), deci reducerile si proratiile sunt deja in el.
       */
-      parametri.items = [{
-        item_id: ev.plan_id,
-        item_name: ev.plan_id,
-        item_category: ev.billing_period,
-        price: ev.value,
-        quantity: 1,
-      }];
+      parametri.items = articol(ev.plan_id, ev.billing_period, ev.value);
+    }
+
+    /*
+      ⚠ SI LA `begin_checkout`, DE PE 03.09.2026. Randurile de aici au sustinut o
+      zi ca articolul e „numai la `purchase`, si asta e hotararea, nu o scapare" —
+      fiindca atunci evenimentul se tragea la intrarea pe pagina de planuri, unde
+      chiar nu exista nici plan, nici pret. Acum se trage la apasarea catre plata,
+      unde toate trei se stiu, si palnia de comert din GA4 se inchide:
+      `begin_checkout` -> `purchase`, cu acelasi articol.
+
+      ⚠ PRETUL DE AICI E CEL DORIT, NU UNUL INCASAT. La `purchase` suma vine de la
+      Stripe fiindca acolo e VENIT. Aici nu s-a incasat inca nimic: numarul spune
+      „atat costa ce vrea omul sa cumpere". Cele doua pot sa si difere — o reducere
+      aplicata in Stripe — si atunci deosebirea e chiar informatia.
+    */
+    if (ev.name === "begin_checkout") {
+      parametri.items = articol(ev.plan_id ?? "abonament", ev.billing_period, ev.value);
     }
 
     /*

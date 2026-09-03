@@ -119,9 +119,19 @@ export default function OnboardingDetailsPage() {
       deosebi un client interesat de un cont pe jumatate creat.
 
       Acum pasul se numeste ce este. Catre Meta si TikTok nu pleaca nimic de aici
-      — nu fiindca ar fi neinteresant, ci fiindca imediat dupa, la intrarea pe
-      pagina de planuri, pleaca `begin_checkout` (`InitiateCheckout`), care e la
-      o apasare distanta si e un semnal de optimizare mai bun.
+      — nu fiindca ar fi neinteresant, ci fiindca urmeaza `begin_checkout`
+      (`InitiateCheckout`), care e un semnal de optimizare mai bun.
+
+      ⚠ RANDURILE DE MAI SUS AU FOST ADEVARATE PANA PE 03.09.2026, si le las
+      scrise ca sa nu para o scapare: `begin_checkout` se tragea la INTRAREA pe
+      pagina de planuri, deci „la o apasare distanta" era exact. Acum se trage la
+      apasarea catre plata — deci Meta nu mai vede trecerea details -> plan, ci
+      numai pe cei care chiar pornesc plata.
+
+      ⚠ DE CE E BINE ASA. Vechiul moment insemna „a deschis pagina de planuri" si
+      spunea catre Meta „a inceput cumpararea". Semnalul era des si neadevarat;
+      acum e rar si adevarat. Cine vrea inapoi un semnal aici sa puna unul care
+      spune ce este, nu `begin_checkout`.
 
       ⚠ URMAREA: numarul de „Lead" din Meta va scadea. Nu s-a stricat nimic —
       abia acum inseamna ce spune.

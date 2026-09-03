@@ -99,23 +99,32 @@ export function catreTikTok(ev: EvenimentEdinio): Trimitere | null {
       o inscriere adevarata, cateva ore mai tarziu, se plangea din nou — de data
       asta la `begin_checkout`.
 
-      Si acolo era mai rau: `plan_id` LIPSESTE la `begin_checkout`, fiindca
-      evenimentul se trage la intrarea pe pagina de planuri, cand omul inca n-a
+      Si acolo era mai rau: `plan_id` LIPSEA la `begin_checkout`, fiindca
+      evenimentul se tragea la intrarea pe pagina de planuri, cand omul inca n-a
       ales niciunul. Deci pleca `{ content_name: undefined }` — un eveniment gol.
 
-      ⚠ CAND PLANUL NU E ALES INCA, id-ul spune ASTA, nu ghiceste un plan.
-      `abonament` e stabil si adevarat: e inceputul cumpararii unui abonament,
-      fara sa se stie care. Pus „basic" din comoditate, audienta de retargetare
-      s-ar umple de oameni care n-au vrut niciodata basic.
+      ⚠ DE PE 03.09.2026 PLANUL SE STIE: evenimentul s-a mutat pe apasarea catre
+      plata. Rezerva „abonament" ramane totusi, si nu din lene — tipul singur nu e
+      o paza in codul asta. Un `as never` pe drum, sau un eveniment reconstruit din
+      JSON, trece pe langa el; rezerva prinde exact cazul acela.
+
+      ⚠ SI CAND NU SE STIE, id-ul spune ASTA, nu ghiceste un plan. `abonament` e
+      stabil si adevarat: e inceputul cumpararii unui abonament, fara sa se stie
+      care. Pus „basic" din comoditate, audienta de retargetare s-ar umple de
+      oameni care n-au vrut niciodata basic.
+
+      ⚠ `AddPaymentInfo` A FOST SCOS pe 03.09.2026 — afirma catre TikTok ca omul
+      si-a trimis datele de plata, cand el fusese doar predat lui Stripe.
     */
     case "begin_checkout":
       return {
         nume: "InitiateCheckout",
-        date: { content_id: ev.plan_id ?? "abonament", content_name: ev.plan_id ?? "abonament" },
+        date: {
+          content_id: ev.plan_id ?? "abonament",
+          content_name: ev.plan_id ?? "abonament",
+          value: ev.value, currency: ev.currency,
+        },
       };
-
-    case "add_payment_info":
-      return { nume: "AddPaymentInfo", date: { content_id: ev.plan_id, content_name: ev.plan_id } };
 
     /* ⚠ Personalizat, nu standard. Vezi nota de sus. */
     case "trial_start":

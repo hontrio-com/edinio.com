@@ -13,12 +13,7 @@ import { createBusiness } from "@/lib/actions/business.actions";
 import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 import { urmareste } from "@/lib/edinio-marketing/magistrala";
 import { verificaPlataOnboarding } from "@/lib/actions/plata-onboarding.actions";
-import {
-  type BillingInterval,
-  getAnnualPrice,
-  getAnnualMonthlyEquivalent,
-  ANNUAL_FREE_MONTHS,
-} from "@/lib/plans";
+import { type BillingInterval, getAnnualPrice, getAnnualMonthlyEquivalent, ANNUAL_FREE_MONTHS, PLAN_PRICES } from "@/lib/plans";
 
 const PLANS = [
   {
@@ -136,6 +131,19 @@ function PlanPageContent() {
       setLoading(true);
       sessionStorage.setItem("onboarding_pending_plan", preselected);
       sessionStorage.setItem("onboarding_pending_interval", "monthly");
+      /*
+        ⚠ SI DRUMUL DE CAMPANIE PORNESTE O CUMPARARE. Omul n-a apasat nimic aici
+        — a venit cu `?plan=...` si e dus direct la Stripe — dar fapta e aceeasi:
+        incepe plata unui plan stiut, la un pret stiut. Lipsa lui de aici ar fi
+        facut palnia sa arate ca oamenii din campanii cumpara fara sa fi inceput.
+      */
+      urmareste({
+        name: "begin_checkout",
+        plan_id: preselected,
+        billing_period: "monthly",
+        value: PLAN_PRICES[preselected] ?? 0,
+        currency: "RON",
+      });
       fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,19 +169,27 @@ function PlanPageContent() {
     /*
       Start-of-funnel event (skip when returning from a successful Stripe payment).
 
-      ⚠ FARA `plan_id`: aici omul abia a intrat pe pagina si inca n-a ales nimic.
-      Momentul e pastrat asa cum era inainte, ca numarul de `InitiateCheckout` din
-      contul de reclame sa ramana comparabil cu al lunilor trecute.
+      ⚠ AICI NU MAI PLEACA `begin_checkout`, si asta e mutarea zilei de
+      03.09.2026. Se tragea la INTRAREA pe pagina — deci „a inceput cumpararea"
+      insemna de fapt „a deschis pagina de planuri". Fara plan ales, fara suma,
+      fara moneda: un eveniment de comert care n-avea nimic de comert in el.
 
-      ⚠ SI MAI TINE CEVA, ce nu se vede din fisierul asta: pasul dinainte
-      („details") nu mai trimite NIMIC catre Meta si TikTok tocmai fiindca
-      `begin_checkout` se trage aici, la o apasare distanta — motivul e scris pe
-      larg in `onboarding/details/page.tsx`. Mutat pe clicul de plan, s-ar sterge
-      in tacere singurul semnal pentru trecerea details → plan. Cine vrea sa-l
-      mute trebuie sa se uite intai acolo.
+      ⚠ SE PASTRA PENTRU COMPARABILITATE cu lunile trecute. Numarat: 5 platitori
+      in ultimele 60 de zile. Nu exista o serie istorica pe care sa merite s-o
+      aperi cu un eveniment neadevarat.
+
+      ⚠ CE PLEACA ACUM: pasul de palnie, pe numele lui. `onboarding_step_view` e
+      deja in taxonomie si nu merge la Meta sau TikTok — deci nu mai afirma nimanui
+      ca omul a inceput sa cumpere.
+
+      ⚠ SI CE SE PIERDE, ca sa fie spus: pasul „details" nu trimite nimic catre
+      Meta si TikTok tocmai fiindca `begin_checkout` se tragea imediat dupa (nota
+      din `onboarding/details/page.tsx`). Mutat pe apasare, Meta nu mai vede
+      trecerea details → plan, ci doar pe cei care chiar pornesc plata. Semnalul e
+      mai rar si adevarat, in loc de des si fals.
     */
     if (!isSuccess) {
-      urmareste({ name: "begin_checkout", billing_period: billingInterval });
+      urmareste({ name: "onboarding_step_view", onboarding_step: "plan", onboarding_step_index: 2 });
     }
     return () => cancelAnimationFrame(id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -265,9 +281,23 @@ function PlanPageContent() {
       */
       const idConversie = result.businessId ?? "";
 
-      if (plan === "free") {
+      /*
+        ═══ ⚠ CINE SPUNE CA S-A ACORDAT UN TRIAL ═══
+
+        Pana pe 03.09.2026, randul asta intreba `plan === "free"` — adica ce scria
+        in `sessionStorage`, adica ce ALESESE omul. Serverul, in schimb, stie cate
+        randuri a schimbat in baza.
+
+        Cele doua se despart mai des decat pare: omul isi face al doilea magazin si
+        are deja un trial (baza refuza, browserul raporteaza oricum), sau plata a
+        intrat intre timp. In amandoua, pleca o conversie din browser fara perechea
+        ei de pe server — deci Meta o numara singura, n-avand cu ce s-o uneasca.
+
+        Acum amandoua capetele citesc ACELASI adevar si poarta acelasi `event_id`.
+      */
+      if (result.trialRaportat) {
         urmareste({ name: "trial_start", plan_id: "free", event_id: idConversie });
-      } else {
+      } else if (plan !== "free") {
         /*
           ═══ ⚠ ABONAMENTUL SE RAPORTEAZA NUMAI DUPA CE STRIPE CONFIRMA ═══
 
@@ -392,7 +422,15 @@ function PlanPageContent() {
         `currency`, nu e conversie in GA4 si nu e actiune de conversie in Google
         Ads. Nu se umfla niciun venit, doar un pas de palnie.
       */
-      urmareste({ name: "add_payment_info", plan_id: selectedPlan, billing_period: billingInterval });
+      urmareste({
+        name: "begin_checkout",
+        plan_id: selectedPlan,
+        billing_period: billingInterval,
+        value: billingInterval === "annual"
+          ? getAnnualPrice(selectedPlan)
+          : (PLAN_PRICES[selectedPlan] ?? 0),
+        currency: "RON",
+      });
       window.location.href = data.url;
     } catch {
       toast.error("Eroare la initializarea platii. Incearca din nou.");

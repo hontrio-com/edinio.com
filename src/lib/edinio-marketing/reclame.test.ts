@@ -201,8 +201,7 @@ test("⚠ MATURA: niciun eveniment din taxonomie nu e oprit de paza anti-PII", (
     { name: "onboarding_step_view", onboarding_step: "details", onboarding_step_index: 1 },
     { name: "onboarding_step_complete", onboarding_step: "details", onboarding_step_index: 1 },
     { name: "onboarding_complete" },
-    { name: "begin_checkout", plan_id: "premium", billing_period: "monthly" },
-    { name: "add_payment_info", plan_id: "premium", billing_period: "monthly" },
+    { name: "begin_checkout", plan_id: "premium", billing_period: "monthly", value: 249, currency: "RON" },
     { name: "trial_start", plan_id: "free", event_id: "e3" },
     { name: "purchase", plan_id: "ultra", billing_period: "annual", value: 999, currency: "RON", event_id: "e4" },
     { name: "landing_view", content_name: "Homepage", content_category: "landing" },
@@ -501,8 +500,7 @@ test("⚠ niciun eveniment nu trimite la TikTok un `content_type` inventat", () 
     { name: "landing_view", content_name: "Homepage", content_category: "landing" },
     { name: "generate_lead", lead_type: "contact", form_name: "contact", event_id: "e1" },
     { name: "sign_up", signup_origin: "google", event_id: "e2" },
-    { name: "begin_checkout", plan_id: "premium", billing_period: "monthly" },
-    { name: "add_payment_info", plan_id: "premium", billing_period: "monthly" },
+    { name: "begin_checkout", plan_id: "premium", billing_period: "monthly", value: 249, currency: "RON" },
     { name: "trial_start", plan_id: "free", event_id: "e3" },
     { name: "purchase", plan_id: "ultra", billing_period: "annual", value: 999, currency: "RON", event_id: "e4" },
   ];
@@ -551,17 +549,18 @@ test("⚠ MATURA: fiecare eveniment care pleaca spre TikTok duce un `content_id`
     cartografiere spre TikTok trebuie sa duca un id, altfel ei n-au pe ce lega
     audienta si evenimentul pleaca degeaba.
 
-    ⚠ SI `begin_checkout` E CEL MAI USOR DE RATAT: `plan_id` lipseste acolo, caci
-    evenimentul se trage cand omul intra pe pagina de planuri, inainte sa aleaga.
-    Fara o valoare de rezerva, campul iesea `undefined`.
+    ⚠ SI `begin_checkout` A FOST CEL MAI USOR DE RATAT: pana pe 03.09.2026
+    evenimentul se tragea cand omul INTRA pe pagina de planuri, inainte sa aleaga,
+    deci `plan_id` lipsea si campul iesea `undefined`. Acum se trage la apasarea
+    catre plata si planul se stie — dar rezerva ramane probata mai jos, fiindca
+    tipul singur nu apara nimic aici (un `as never` pe drum trece pe langa el).
   */
   const toate: EvenimentEdinio[] = [
     { name: "landing_view", content_name: "Homepage", content_category: "landing" },
     { name: "generate_lead", lead_type: "contact", form_name: "contact", event_id: "e1" },
     { name: "sign_up", signup_origin: "email", event_id: "e2" },
-    { name: "begin_checkout", billing_period: "monthly" },
-    { name: "begin_checkout", plan_id: "premium", billing_period: "monthly" },
-    { name: "add_payment_info", plan_id: "premium", billing_period: "monthly" },
+    { name: "begin_checkout", billing_period: "monthly", value: 249, currency: "RON" },
+    { name: "begin_checkout", plan_id: "premium", billing_period: "monthly", value: 249, currency: "RON" },
     { name: "trial_start", plan_id: "free", event_id: "e3" },
     { name: "purchase", plan_id: "ultra", billing_period: "annual", value: 999, currency: "RON", event_id: "e4" },
   ];
@@ -586,9 +585,9 @@ test("⚠ `begin_checkout` fara plan nu GHICESTE un plan", () => {
     retargetare s-ar umple de oameni care n-au vrut niciodata basic, si nimic
     n-ar arata ca e gresit.
   */
-  const fara = catreTikTok({ name: "begin_checkout", billing_period: "monthly" });
+  const fara = catreTikTok({ name: "begin_checkout", billing_period: "monthly", value: 249, currency: "RON" });
   assert.equal(fara?.date.content_id, "abonament");
 
-  const cu = catreTikTok({ name: "begin_checkout", plan_id: "premium", billing_period: "monthly" });
+  const cu = catreTikTok({ name: "begin_checkout", plan_id: "premium", billing_period: "monthly", value: 249, currency: "RON" });
   assert.equal(cu?.date.content_id, "premium", "planul ales nu mai ajunge la ei");
 });

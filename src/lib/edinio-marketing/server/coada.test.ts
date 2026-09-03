@@ -105,7 +105,7 @@ test("⚠ un eveniment fara `event_id` nu pleaca — n-ar avea ce deduplica", ()
     server, si sa fie unit. Fara id, ar fi doua conversii pentru un singur om — si
     costul pe achizitie raportat s-ar injumatati, in favoarea noastra.
   */
-  const r = sarcinaTikTok({ name: "begin_checkout", billing_period: "monthly" }, CTX, PIXEL, "cont-1");
+  const r = sarcinaTikTok({ name: "begin_checkout", billing_period: "monthly", value: 249, currency: "RON" }, CTX, PIXEL, "cont-1");
   assert.ok(eRefuz(r));
   assert.match(r.motiv, /event_id/);
 });

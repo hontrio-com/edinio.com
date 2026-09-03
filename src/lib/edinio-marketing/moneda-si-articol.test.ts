@@ -138,6 +138,11 @@ const PURCHASE = {
   value: 249, currency: "RON", event_id: "cs_test_abc",
 };
 
+const BEGIN = {
+  name: "begin_checkout", plan_id: "pro", billing_period: "annual",
+  value: 2241, currency: "RON",
+};
+
 test("⚠ `purchase` isi duce articolul, altfel rapoartele de comert din GA4 raman goale", () => {
   /*
     ⚠ CE LIPSEA. Venitul se vedea — GA4 il ia din `value`, nu din suma articolelor
@@ -164,19 +169,55 @@ test("⚠ `purchase` isi duce articolul, altfel rapoartele de comert din GA4 ram
   assert.equal(p.currency, "RON");
 });
 
-test("⚠ `begin_checkout` NU primeste un articol, si asta e hotararea", () => {
+test("⚠ `begin_checkout` isi duce si el articolul, cu ACELASI `item_id` ca `purchase`", () => {
   /*
-    ⚠ DE CE NU. Acolo omul abia a intrat pe pagina de planuri si n-a ales nimic:
-    evenimentul n-are nici `plan_id`, nici `value`, nici `currency`. Un articol
-    construit acolo ar fi un rand gol in raport — un „ceva" fara pret si fara nume
-    adevarat, care arata a date si nu e.
+    ═══════════════════════════════════════════════════════════════════════════
+    ⚠ RANDURILE ASTEA CEREAU IERI EXACT PE DOS
+    ═══════════════════════════════════════════════════════════════════════════
 
-    ⚠ SI DE CE E O PROBA, nu doar o omisiune. Cine citeste ca `purchase` are
-    `items` va vrea sa „repare" si aici, din simetrie. Randurile astea spun ca
-    lipsa e aleasa.
+    Proba se numea „`begin_checkout` NU primeste un articol, si asta e hotararea",
+    si avea dreptate atunci: evenimentul se tragea la INTRAREA pe pagina de
+    planuri, unde nu exista nici plan ales, nici pret. Un articol acolo ar fi fost
+    un rand gol.
+
+    Pe 03.09.2026 s-a mutat clipa — evenimentul pleaca la apasarea catre plata —
+    deci temeiul hotararii a disparut, si odata cu el hotararea. O las scrisa ca sa
+    nu para ca cineva a „reparat" din simetrie ceva ce fusese ales.
+
+    ⚠ CE APARA ACUM, si e altceva decat simpla prezenta: ACELASI `item_id` la
+    amandoua. GA4 leaga palnia de comert dupa id-ul articolului. Daca
+    `begin_checkout` spune „pro" si `purchase` spune „Pro", raportul arata doua
+    produse deosebite si ZERO treceri intre ele — o palnie care pare rupta fara ca
+    nimic sa fi cazut.
   */
-  const p = ceAPlecatLaGa4({ name: "begin_checkout", billing_period: "monthly" });
-  assert.ok(p, "martorul: `begin_checkout` chiar pleaca spre GA4");
-  assert.equal(p.items, undefined, "`begin_checkout` a primit un articol gol");
-  assert.equal(p.billing_period, "monthly", "martorul: evenimentul isi duce parametrii");
+  const b = ceAPlecatLaGa4(BEGIN);
+  assert.ok(b, "martorul: `begin_checkout` chiar pleaca spre GA4");
+
+  const ib = b.items as Array<Record<string, unknown>> | undefined;
+  assert.ok(Array.isArray(ib) && ib.length === 1, "`begin_checkout` pleaca fara `items`");
+  assert.equal(ib[0].price, 2241, "pretul dorit nu ajunge in articol");
+  assert.equal(ib[0].quantity, 1);
+
+  /* ⚠ Legatura dintre cele doua capete ale palniei. */
+  const ip = (ceAPlecatLaGa4(PURCHASE)!.items as Array<Record<string, unknown>>)[0];
+  assert.equal(ib[0].item_id, ip.item_id,
+    "`begin_checkout` si `purchase` trimit id-uri de articol deosebite — palnia de comert din GA4 se rupe in doua");
+
+  /* ⚠ SI NU E CONVERSIE: fara `transaction_id`, ca sa nu para o vanzare. */
+  assert.equal(b.transaction_id, undefined, "`begin_checkout` a primit un id de tranzactie");
+});
+
+test("⚠ cand planul LIPSESTE totusi, articolul nu ghiceste unul", () => {
+  /*
+    ⚠ DE CE MAI E CAZUL ASTA. Tipul cere acum `plan_id`... ba nu: il lasa optional
+    dinadins, fiindca `as never` si evenimentele reconstruite din JSON trec pe
+    langa tip — vezi lectia scrisa despre asta. Rezerva „abonament" e aceeasi ca la
+    TikTok: spune ca nu se stie planul, in loc sa inventeze unul.
+
+    Pus „basic" din comoditate, raportul ar arata cumparari incepute pentru un plan
+    pe care nu l-a vrut nimeni.
+  */
+  const b = ceAPlecatLaGa4({ name: "begin_checkout", billing_period: "monthly", value: 99, currency: "RON" });
+  const ib = (b!.items as Array<Record<string, unknown>>)[0];
+  assert.equal(ib.item_id, "abonament", "articolul fara plan ghiceste sau iese gol");
 });

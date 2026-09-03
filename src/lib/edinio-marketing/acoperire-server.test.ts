@@ -15,7 +15,7 @@ import { join } from "node:path";
   numai socoteala intregului lipsea.
 
   Un eveniment care pleaca DOAR din browser se pierde la fiecare blocant de
-  reclame. Pentru evenimentele de intentie (`begin_checkout`, `add_payment_info`)
+  reclame. Pentru evenimentele de intentie (`begin_checkout`)
   asta e primit: sunt semnale, nu conversii. Pentru o conversie implinita, nu.
 
   ⚠ LISTA DE MAI JOS E O DECLARATIE, NU O OGLINDA. Daca o cale de server dispare,
@@ -174,7 +174,7 @@ test("⚠ trialul se acorda ATOMIC, si se raporteaza doar daca s-a schimbat un r
   /* 2 — raportarea atarna de randurile schimbate. */
   assert.match(cod, /trialAcordat = \(randuri\?\.length \?\? 0\) > 0/,
     "acordarea nu se mai citeste din randurile schimbate");
-  const iGarda = cod.indexOf("if (trialAcordat) {");
+  const iGarda = cod.indexOf("if (trialRaportat) {");
   assert.ok(iGarda > 0, "raportarea nu mai atarna de acordarea reala");
 
   const iCoada = cod.indexOf("await puneLaCoada(", iGarda);
@@ -297,4 +297,121 @@ test("⚠ webhook-ul NU trimite ip-ul si browserul — ar fi ale lui Stripe", ()
   for (const camp of ["x-forwarded-for", "user-agent", "userAgent"]) {
     assert.ok(!bucata.includes(camp), `webhook-ul trimite "${camp}" — ar fi al lui Stripe, nu al omului`);
   }
+});
+
+
+test("⚠ cand Stripe TACE, trialul nu se raporteaza: necunoscutul nu e o plata lipsa", () => {
+  /*
+    ═══════════════════════════════════════════════════════════════════════════
+    ⚠ DEFECTUL, SI ERA AL MEU, DE O ZI
+    ═══════════════════════════════════════════════════════════════════════════
+
+    `aduSiVerificaPlata` intoarce `ok: false` pentru trei lucruri deosebite:
+
+        fara-sesiune / neplatita / alt-om  ->  Stripe a raspuns. STIM ca n-a platit.
+        indisponibil                       ->  Stripe n-a raspuns. NU STIM NIMIC.
+
+    Ramura care acorda trialul le trata la fel: `if (!plata.ok)`.
+
+    ⚠ CE SE INTAMPLA ATUNCI. Omul chiar plateste, se intoarce cu un `cs_...` bun,
+    si exact in clipa aia Stripe are o pana. Noi citim „ok: false", acordam trialul
+    si RAPORTAM `trial_start`. Webhook-ul aseaza pe urma planul platit — deci omul
+    primeste ce a cumparat — dar la Meta si TikTok raman DOUA fapte pentru una:
+    „a inceput un trial" si „s-a abonat". Optimizarea invata pe conversia ieftina
+    in locul celei scumpe, si nimic nu cade.
+
+    ⚠ SI DE CE NU SE TAIE SI DREPTUL, ci doar raportarea. Webhook-ul scrie planul
+    neconditionat, deci un trial asezat acum nu poate rapi un abonament. In schimb,
+    taiat de tot, cineva care N-A platit si a nimerit pana ar ramane fara niciun
+    plan. Se taie ce minte, nu ce ajuta.
+  */
+  const cod = readFileSync("src/lib/actions/business.actions.ts", "utf8");
+
+  assert.match(cod, /motiv !== "indisponibil"/,
+    "serverul nu mai deosebeste o pana la Stripe de o plata inexistenta — raporteaza un trial pentru cine tocmai a cumparat");
+
+  /* ⚠ SI CA DEOSEBIREA CHIAR PAZESTE RAPORTAREA, nu doar exista undeva. */
+  assert.match(cod, /const trialRaportat = trialAcordat && stiuCaNuAPlatit/,
+    "raportarea nu mai cere AMANDOUA: si randul schimbat, si certitudinea ca n-a fost plata");
+
+  /*
+    ⚠ SI CA DREPTUL A RAMAS NECONDITIONAT DE ASTA: scrierea trialului sta sub
+    `!plata.ok`, nu sub `stiuCaNuAPlatit`. Altfel o pana la Stripe ar lasa un om
+    fara plan.
+  */
+  const iScriere = cod.indexOf('plan_expires_at: new Date(Date.now() + 15');
+  const iRamura = cod.lastIndexOf("if (!plata.ok) {", iScriere);
+  assert.ok(iRamura > 0, "acordarea trialului nu mai sta sub verdictul platii");
+  assert.ok(
+    cod.lastIndexOf("if (stiuCaNuAPlatit", iScriere) < iRamura,
+    "acordarea trialului a ajuns si ea sub certitudine — o pana la Stripe lasa omul fara niciun plan",
+  );
+});
+
+test("⚠ browserul raporteaza trialul dupa BAZA, nu dupa ce scrie in sessionStorage", () => {
+  /*
+    ⚠ CE APARA. Pagina intreba `plan === "free"` — adica ce ALESESE omul, citit
+    din `sessionStorage`. Serverul stie altceva: cate randuri a schimbat chiar.
+
+    Cele doua se despart mai des decat pare. Omul isi face al DOILEA magazin si are
+    deja un trial: baza refuza (conditia `plan_expires_at is null`), serverul nu
+    raporteaza nimic — dar browserul vedea tot „free" si trimitea `trial_start`.
+    O conversie fara perechea ei de server, deci una pe care Meta o numara singura,
+    n-avand cu ce s-o uneasca.
+
+    ⚠ SI DE CE NU E DE AJUNS SA FIE CORECT SERVERUL. Perechea browser+server e
+    tot rostul lui `event_id`. Cand una din jumatati pleaca si cealalta nu, nu se
+    dubleaza nimic — dar numaratoarea creste cu un om care n-a facut fapta.
+  */
+  const cod = readFileSync("src/app/(onboarding)/onboarding/plan/page.tsx", "utf8");
+
+  const iTrial = cod.indexOf('name: "trial_start"');
+  assert.ok(iTrial > 0, "pagina nu mai trage trial_start");
+
+  const iGarda = cod.lastIndexOf("if (", iTrial);
+  const garda = cod.slice(iGarda, iTrial);
+  assert.match(garda, /result\.trialRaportat/,
+    "`trial_start` din browser nu mai atarna de ce a scris serverul in baza");
+  assert.ok(!/plan === "free"/.test(garda),
+    "`trial_start` atarna iar de planul ales in browser, nu de trialul acordat");
+
+  /* ⚠ Si serverul chiar il trimite incoace. */
+  const server = readFileSync("src/lib/actions/business.actions.ts", "utf8");
+  assert.match(server, /return \{ success: true, businessId: business\.id, slug: business\.slug, trialRaportat \}/,
+    "serverul nu mai intoarce catre browser daca a acordat trialul");
+});
+
+test("⚠ `add_payment_info` nu mai exista pe magistrala noastra", () => {
+  /*
+    ⚠ DE CE E O PROBA, si nu doar o stergere. Numele e standard la GA4, Meta si
+    TikTok, deci tentatia de a-l pune inapoi e mare — arata a lucru corect. Numai
+    ca in Stripe-hosted Checkout NU AVEM CUM sa vedem clipa in care omul isi trimite
+    datele de plata: formularul e pe domeniul lor. Orice `add_payment_info` tras de
+    aici afirma o fapta pe care n-am observat-o.
+
+    ⚠ SI ARGUMENTUL CU CARE L-AM APARAT O ZI ERA FALS. Am scris ca numele
+    imprumutat se plateste ca sa ramana optimizarea Meta pe un eveniment standard.
+    Numarat pe 03.09.2026: 169 de conturi, 20 platitoare, 5 in ultimele 60 de zile.
+    Meta cere zeci de conversii pe SAPTAMANA ca sa invete ceva. Nu era nicio
+    optimizare de pastrat.
+
+    ⚠ CE E IN LOCUL LUI: `begin_checkout`, mutat pe aceeasi apasare. Un singur
+    eveniment in clipa aia, si acela adevarat.
+
+    ⚠ CE NU ATINGE PROBA ASTA: `add_payment_info` din magazinul comerciantului
+    (`checkout/checkout-core.ts`). Acolo formularul e al nostru, metoda de plata se
+    alege sub ochii nostri, si evenimentul spune exact ce s-a intamplat.
+  */
+  const cod = readFileSync("src/lib/edinio-marketing/evenimente.ts", "utf8");
+  assert.ok(!/\|\s*\{ name: "add_payment_info"/.test(cod),
+    "`add_payment_info` s-a intors in taxonomie — afirma o fapta pe care Stripe-hosted Checkout n-o arata");
+
+  for (const adaptor of ["adaptor-meta.ts", "adaptor-tiktok.ts", "adaptor-ga4.ts"]) {
+    const a = readFileSync(`src/lib/edinio-marketing/${adaptor}`, "utf8");
+    assert.ok(!/case "add_payment_info"/.test(a), `${adaptor} il cartografiaza din nou`);
+  }
+
+  const pagina = readFileSync("src/app/(onboarding)/onboarding/plan/page.tsx", "utf8");
+  assert.ok(!/name: "add_payment_info"/.test(pagina),
+    "pagina de planuri il trage din nou la predarea catre Stripe");
 });

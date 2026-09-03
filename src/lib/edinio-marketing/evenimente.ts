@@ -153,9 +153,24 @@ export type EvenimentEdinio =
 
   /* ─── Comercial: de la alegerea planului la abonament ──────────────────── */
   /*
-    ⚠ NUMELE SUNT ALE GA4 unde GA4 are unul (`begin_checkout`,
-    `add_payment_info`, `purchase`). Numai `trial_start` si `landing_view` sunt
-    ale noastre: GA4 n-are un nume standard pentru ele.
+    ⚠ NUMELE SUNT ALE GA4 unde GA4 are unul (`begin_checkout`, `purchase`).
+    Numai `trial_start` si `landing_view` sunt ale noastre: GA4 n-are un nume
+    standard pentru ele.
+
+    ⚠ SI UNDE NUMELE NU SE POTRIVESTE, NU SE IMPRUMUTA. `add_payment_info` a
+    stat aici pana pe 03.09.2026 si pleca in clipa in care omul era PREDAT lui
+    Stripe — nu cand atingea un card. Google si TikTok il definesc amandoi ca
+    „si-a trimis datele de plata". Deci GA4 primea `add_payment_info`, Meta
+    `AddPaymentInfo` si TikTok `AddPaymentInfo` pentru o fapta care nu se
+    intamplase.
+
+    ⚠ SI DE CE L-AM APARAT O ZI, GRESIT. Am scris ca numele imprumutat se
+    plateste ca sa ramana optimizarea Meta pe un eveniment standard. Numarat:
+    169 de conturi, 20 platitoare, 5 in ultimele 60 de zile. Meta are nevoie de
+    zeci de conversii pe SAPTAMANA ca sa invete ceva dintr-un eveniment. Nu
+    exista nicio optimizare de pastrat — argumentul meu se sprijinea pe o
+    presupunere pe care n-o masurasem. Un eveniment lipsa e mai bun decat un
+    eveniment standard fals.
 
     ⚠ `event_id` NUMAI LA CELE DOUA CARE SE INCHEIE CU UN MAGAZIN CREAT.
 
@@ -164,16 +179,25 @@ export type EvenimentEdinio =
     conversii, si costul pe achizitie raportat s-ar injumatati. In favoarea
     noastra, deci nimeni n-ar pune-o la indoiala.
 
-    Dar `begin_checkout` si `add_payment_info` NU pleaca niciodata de pe server:
-    se intampla in browser si nicaieri altundeva. Un `event_id` cerut si acolo ar
-    fi trebuit inventat la fata locului — un id pe care serverul nu-l poate
-    reproduce, adica o promisiune de deduplicare care nu deduplica nimic.
+    Dar `begin_checkout` NU pleaca niciodata de pe server: se intampla in browser
+    si nicaieri altundeva. Un `event_id` cerut si acolo ar fi trebuit inventat la
+    fata locului — un id pe care serverul nu-l poate reproduce, adica o promisiune
+    de deduplicare care nu deduplica nimic.
 
-    ⚠ SI `plan_id` E OPTIONAL LA `begin_checkout`: evenimentul se trage la
-    intrarea pe pagina de planuri, cand omul inca n-a ales niciunul.
+    ⚠ `plan_id` E ACUM OBLIGATORIU, si asta e chiar mutarea. Pana pe 03.09.2026
+    evenimentul se tragea la INTRAREA pe pagina de planuri, cand omul inca nu
+    alesese nimic — deci `plan_id` lipsea, `value` si `currency` nici nu existau,
+    iar „a inceput cumpararea" insemna de fapt „a deschis pagina". Acum se trage
+    la apasarea pe „continua catre plata", unde toate trei se stiu.
+
+    ⚠ `value` E PRETUL DORIT, NU UNUL INCASAT — si deosebirea e toata. La
+    `purchase` suma vine din `amount_total` de la Stripe, fiindca acolo e VENIT si
+    o presupunere raportata ca venit e o minciuna. Aici nu s-a incasat inca nimic:
+    numarul spune „atat costa ce vrea omul sa cumpere", si asta chiar se stie din
+    planul apasat. Regula „suma vine din incasare" ramane a lui `purchase`.
   */
-  | { name: "begin_checkout"; plan_id?: string; billing_period: "monthly" | "annual" }
-  | { name: "add_payment_info"; plan_id: string; billing_period: "monthly" | "annual" }
+  | { name: "begin_checkout"; plan_id?: string; billing_period: "monthly" | "annual";
+      value: number; currency: "RON" }
   /*
     ⚠ `event_id` E ID-UL MAGAZINULUI CREAT, nu un numar aleator. Serverul il
     stie (`createBusiness` il intoarce), deci cand se adauga trimiterea de pe
@@ -237,7 +261,7 @@ const TOATE_EVENIMENTELE: Record<NumeEveniment, true> = {
   newsletter_subscribe_request: true, newsletter_subscribe_confirmed: true,
   registration_view: true, registration_start: true, sign_up: true,
   onboarding_step_view: true, onboarding_step_complete: true, onboarding_complete: true,
-  begin_checkout: true, add_payment_info: true, trial_start: true, purchase: true,
+  begin_checkout: true, trial_start: true, purchase: true,
   landing_view: true,
 };
 

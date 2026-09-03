@@ -46,6 +46,42 @@ export const PARAMETRI_PASTRATI = [
   "gclid", "gbraid", "wbraid", "dclid",
 ] as const;
 
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  ⚠ IDENTIFICATORII DE CLIC RAMAN, ORICARE AR FI CATEGORIA ACORDATA
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  `gclid`, `gbraid`, `wbraid` si `dclid` sunt pe lista de mai sus FARA sa se uite
+  cineva la consimtamant. Un audit a cerut sa fie legati de categoria „marketing";
+  hotararea, luata pe 03.09.2026, e sa NU fie. Scrisa aici ca sa nu fie redeschisa
+  la fiecare citire, si ca sa se vada ce ar schimba-o.
+
+  ⚠ CE E UN `gclid`. Il pune Google in adresa cand cineva apasa o reclama. E
+  identificatorul CLICULUI, nu al omului: nu se leaga de un cont, nu e un email,
+  si a fost scris in browserul lui inainte sa ajunga la noi.
+
+  ⚠ PRIMUL MOTIV, si cel mai greu: scoaterea lui nu pierde o informatie, ci
+  FALSIFICA raportul. Pentru cine acorda statisticile si refuza marketingul,
+  `gclid` e SINGURUL semn ca vizita vine dintr-o reclama platita — cookie-ul
+  `_gcl_aw` nici nu se scrie, e sub marketing. Fara el, GA4 vede o vizita venita de
+  pe google.com fara niciun marcaj de campanie si o aseaza la „google / organic".
+  Adica platesti clicul, iar raportul spune ca a venit gratis. Un raport incomplet
+  supara; unul care minte in favoarea unei concluzii gresite e mai rau.
+
+  ⚠ AL DOILEA: partea care conteaza juridic o fac deja semnalele. Pentru omul ala
+  trimitem `ad_storage`, `ad_user_data` si `ad_personalization` pe „denied" — adica
+  ii spunem lui Google, prin mecanismul facut chiar pentru cazul asta, ca n-are voie
+  sa foloseasca datele pentru reclame.
+
+  ⚠ SI CE AR SCHIMBA HOTARAREA. Politica de cookie-uri promite azi ca `_gcl_*` —
+  COOKIE-URILE — se scriu numai dupa acordul de marketing, si asta chiar se
+  respecta (vezi `categoriaCookie`). Despre parametrul din adresa nu promitem
+  nimic. Daca vreodata textul incepe sa promita ca niciun identificator de reclama
+  nu pleaca fara acordul de marketing, atunci CODUL trebuie sa se potriveasca cu
+  textul — si atunci lista de mai sus se imparte in doua. Proba din
+  `adresa-curata.test.ts` pazeste tocmai potrivirea asta.
+*/
+
 /**
  * Caile pe care NU se pastreaza NICIUN parametru.
  *

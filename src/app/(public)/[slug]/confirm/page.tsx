@@ -14,6 +14,7 @@ import { radacinaCatalog } from "@/lib/storefront/design/commerce";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import type { MarketingConfig } from "@/lib/marketing-config";
 import type { Metadata } from "next";
+import { vanzareaEConfirmata } from "@/lib/orders/vanzare-confirmata";
 
 // Order confirmation is personal + transient — keep it out of search.
 // `openGraph`/`twitter` se sting explicit: nedeclarate, pagina ar fi mostenit
@@ -61,17 +62,34 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   let customerEmail: string | null = null;
   let customerPhone: string | null = null;
   let totalComanda: number | null = null;
+  /*
+    ⚠ PORNESTE DE LA `false`, dinadins. Fara `orderId`, sau daca randul nu se
+    gaseste, nu stim nimic despre plata — si atunci nu se raporteaza. Pornita de la
+    `true`, orice cale pe care citirea cade ar fi trimis o conversie pe nestiute.
+  */
+  let vanzareConfirmata = false;
 
   if (orderId) {
     const adminClient = createAdminClient();
     const { data: order } = await adminClient
       .from("orders")
-      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_amount, vat_rate, subtotal, total, customer_name, customer_email, customer_phone")
+      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_amount, vat_rate, subtotal, total, customer_name, customer_email, customer_phone, payment_method, payment_status")
       .eq("id", orderId)
       .eq("business_id", business.id)
       .single();
 
     if (order) {
+      /*
+        ⚠ DE AICI SE HOTARASTE DACA PLEACA CONVERSIA, si nu din adresa.
+
+        Regula e in `lib/orders/vanzare-confirmata.ts`, unde e scris pe larg si de
+        ce exista. Pe scurt: la ramburs comanda ESTE vanzarea; la plata online,
+        vanzarea e incasarea.
+      */
+      vanzareConfirmata = vanzareaEConfirmata(
+        order.payment_method as string | null,
+        order.payment_status as string | null,
+      );
       orderItems = (order.items as { product_id?: string; name: string; price: number; quantity: number }[]) ?? [];
       shippingCost = order.shipping_cost ?? 0;
       discountAmount = order.discount_amount ?? 0;
@@ -184,7 +202,32 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       <StorePageShell chrome={chrome} design={resolved.design} className="min-h-screen flex flex-col">
         <main className="flex-1 w-full flex flex-col items-center justify-center px-4 py-12">
           <ConfettiEffect color={color} />
-          {orderId && (
+          {/*
+            ═══════════════════════════════════════════════════════════════════
+            ⚠ CONVERSIA PLEACA DOAR CAND VANZAREA E ADEVARATA
+            ═══════════════════════════════════════════════════════════════════
+
+            Pana pe 03.09.2026 conditia era doar `orderId &&`. Netopia e singurul
+            procesator fara ruta de intoarcere — ceilalti patru trimit
+            `?status=esuat` la esec, el trimite direct aici, la orice deznodamant.
+            Deci o plata REFUZATA ajungea pe ecranul de izbanda si trimitea in
+            contul de reclame al COMERCIANTULUI Meta `Purchase`, TikTok
+            `PlaceAnOrder` + `CompletePayment`, GA4 `purchase` si conversia Google
+            Ads, cu valoarea intreaga. Masurat: 15 din 32 de comenzi Netopia sunt
+            neplatite.
+
+            ⚠ SI RAMBURSUL RAMANE NEATINS: acolo comanda ESTE vanzarea, banii vin
+            curierului mai tarziu. 165 din 343 de comenzi sunt asa. O regula „doar
+            platit" ar fi taiat conversia celei mai umblate cai din magazine — de
+            aia regula are doua brate, nu unul.
+
+            ⚠ CE SE PIERDE, spus cinstit: daca notificarea procesatorului intarzie
+            peste clipa in care omul ajunge aici, conversia din browser nu pleaca.
+            Nu e pierduta de tot — cea de pe server pleaca la confirmarea platii,
+            cu acelasi `transaction_id`. Iar directia in care greseste e cea care se
+            poate repara: o conversie lipsa se vede, una falsa intra in licitatie.
+          */}
+          {orderId && vanzareConfirmata && (
             <FbPurchaseEvent
               orderId={orderId}
               total={displayTotal}

@@ -8,6 +8,7 @@ import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
 import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import { logError } from "@/lib/error-logger";
+import { raporteazaCumparareaDupaIncasare } from "./ga4-comanda";
 
 /**
  * „Comanda asta e platita" — un singur loc, pentru toate procesatoarele.
@@ -135,5 +136,21 @@ function dupaPlata(comanda: ComandaDePlatit, status: string): RezultatPlata {
   void maybeMarkMailchimpOrderPaid(comanda.id);
   void maybeMarkBrevoOrderPaid(comanda.id);
   factureazaDupaPlata(comanda.businessId, comanda.id, status, "paid");
+  /*
+    ⚠ SI CONVERSIA DE SERVER A COMERCIANTULUI, pentru platile ONLINE.
+
+    Pana pe 03.09.2026 ea pleca la CREAREA comenzii — deci inainte ca omul sa fi
+    ajuns la procesator — si raporta venit si pentru platile refuzate. Aici e
+    singurul loc prin care trec toti cinci (Netopia, Stripe, Revolut, Klarna, iPay),
+    si se aprinde exact o data: pe drumul `platita-acum`, unde randul chiar s-a
+    schimbat.
+
+    ⚠ LA RAMBURS NU FACE NIMIC: acolo conversia a plecat deja la creare, fiindca
+    acolo comanda ESTE vanzarea. Regula sta in `vanzare-confirmata.ts`.
+
+    ⚠ SI NU POATE STRICA PLATA: functia isi inghite singura greselile si nu se
+    asteapta nimeni dupa ea.
+  */
+  void raporteazaCumparareaDupaIncasare(comanda.id);
   return { fel: "platita-acum" };
 }

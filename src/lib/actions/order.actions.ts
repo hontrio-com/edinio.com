@@ -48,8 +48,6 @@ import { eroareVarianta, pretulLiniei } from "@/lib/orders/variant-guard";
 import { inchideSesiuneaStripeVeche } from "@/lib/stripe-sesiune";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
 import { enqueueGmcSyncMany } from "@/lib/google-merchant/queue";
-import { sendGa4Purchase, sendGa4Refund } from "@/lib/google-analytics/mp";
-import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { enqueueOlxSyncMany } from "@/lib/olx/queue";
 import { enqueueAboutYouStockMany } from "@/lib/aboutyou/queue";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
@@ -66,6 +64,8 @@ import { maybeSyncBrevoSubscriber, maybeSyncBrevoOrder, maybeMarkBrevoOrderPaid 
 import { maybeSyncKlaviyoSubscriber, maybeTrackKlaviyoOrder } from "@/lib/klaviyo-sync";
 import { formatPrice, formatDate } from "@/lib/utils/format";
 import type { Json } from "@/types/database.types";
+import { raporteazaComandaGa4 } from "@/lib/orders/ga4-comanda";
+import { asteaptaIncasareOnline } from "@/lib/orders/vanzare-confirmata";
 
 // Base URL for building public store links used in notice.ro SMS templates ({store_url}/{url}).
 const STORE_BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
@@ -404,28 +404,16 @@ function buildOrderSource(source: OrderSource | undefined, userAgent: string | u
   return { ...(source ?? {}), ...(userAgent ? { user_agent: userAgent } : {}) };
 }
 
-// Fire a server-side GA4 event (Measurement Protocol) for an order — purchase at
-// checkout, refund on cancel/refund. Fire-and-forget: loads the store's GA config
-// and never throws into the caller.
-async function ga4OrderEvent(
-  businessId: string,
-  kind: "purchase" | "refund",
-  o: { transactionId: string; value: number; clientId?: string; items: { product_id?: string; name: string; price: number; quantity: number }[] },
-): Promise<void> {
-  try {
-    const admin = createAdminClient();
-    const { data } = await admin.from("store_settings").select("google_analytics_config").eq("business_id", businessId).single();
-    const cfg = (data?.google_analytics_config as GoogleAnalyticsConfig | null) ?? null;
-    if (!cfg?.measurement_id || !cfg?.api_secret) return;
-    const mp = { measurementId: cfg.measurement_id, apiSecret: cfg.api_secret };
-    const items = o.items.map((i) => ({ item_id: i.product_id, item_name: i.name, price: i.price, quantity: i.quantity }));
-    const payload = { transactionId: o.transactionId, value: o.value, clientId: o.clientId, items };
-    if (kind === "purchase") await sendGa4Purchase(mp, payload);
-    else await sendGa4Refund(mp, payload);
-  } catch {
-    // best-effort
-  }
-}
+/*
+  ⚠ AJUTORUL A IESIT IN `lib/orders/ga4-comanda.ts` pe 03.09.2026.
+
+  Nu din curatenie: trebuie chemat SI din finalizarea platii, iar fisierul asta are
+  `"use server"` — deci orice export al lui ar deveni un capat HTTP public.
+
+  ⚠ SI ODATA CU MUTAREA S-A SCHIMBAT SI CLIPA. Vezi nota din modulul acela: pentru
+  platile online conversia nu mai pleaca la crearea comenzii, ci la confirmarea
+  incasarii.
+*/
 
 /**
  * Prima linie care cere mai mult decat stocul declarat al variantei ei, spusa
@@ -1565,9 +1553,21 @@ export async function placeOrder(data: {
   dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
   dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
 
-  // Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
-  // by transaction_id; captures the conversion even when the browser tag is blocked.
-  void ga4OrderEvent(data.business_id, "purchase", { transactionId: order.id, value: total, clientId: data.source?.ga_client_id, items: allItems });
+  /*
+    Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
+    by transaction_id; captures the conversion even when the browser tag is blocked.
+
+    ⚠ DAR NUMAI CAND COMANDA E DEJA O VANZARE. La ramburs, da: banii vin
+    curierului, insa vanzarea s-a facut. La plata ONLINE, nu — aici omul inca n-a
+    ajuns la procesator. Pana pe 03.09.2026 pleca oricum, deci GA4 primea venit
+    pentru comenzi care nu se plateau niciodata (15 din 32, la Netopia).
+
+    Pentru platile online conversia pleaca la confirmarea incasarii, din
+    `finalizeazaPlataComenzii` — unde converg toti cei cinci procesatori.
+  */
+  if (!asteaptaIncasareOnline(metodaPlata)) {
+    void raporteazaComandaGa4(data.business_id, "purchase", { transactionId: order.id, value: total, clientId: data.source?.ga_client_id, items: allItems });
+  }
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
   // and counts as recovered when a recovery message had been sent.
@@ -1983,11 +1983,26 @@ export async function updateOrder(orderId: string, data: { status: string; payme
    * baza e cel adevarat — si atunci evenimentul ar fi plecat pentru o intoarcere
    * care nu s-a produs, sau ar fi lipsit pentru una care s-a produs.
    */
+  /*
+    ⚠ SI CUMPARAREA, cand plata unei comenzi ONLINE e marcata de mana din panou.
+
+    Cele cinci cai automate trec prin `finalizeazaPlataComenzii`, care raporteaza
+    singura. Marcarea manuala NU trece pe acolo — deci fara randurile astea, un
+    comerciant care bifeaza „platit" pe o comanda cu cardul ar ramane fara conversie,
+    tacut. Aceeasi forma ca rambursarea de mai jos: se cere TRANZITIA, citita din
+    starea veche intoarsa de baza.
+  */
+  if (paymentChanged && data.payment_status === "paid" && asteaptaIncasareOnline(order.payment_method as string | null)) {
+    const articole = Array.isArray(order.items) ? (order.items as { product_id?: string; name: string; price: number; quantity: number }[]) : [];
+    const idGa = (order.order_source as { ga_client_id?: string } | null)?.ga_client_id;
+    void raporteazaComandaGa4(order.business_id, "purchase", { transactionId: orderId, value: order.total ?? 0, clientId: idGa, items: articole });
+  }
+
   const GA4_REVERSAL = new Set(["refunded", "cancelled"]);
   if (statusChanged && GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(statusVechi)) {
     const refundItems = Array.isArray(order.items) ? (order.items as { product_id?: string; name: string; price: number; quantity: number }[]) : [];
     const gaClientId = (order.order_source as { ga_client_id?: string } | null)?.ga_client_id;
-    void ga4OrderEvent(order.business_id, "refund", { transactionId: orderId, value: order.total ?? 0, clientId: gaClientId, items: refundItems });
+    void raporteazaComandaGa4(order.business_id, "refund", { transactionId: orderId, value: order.total ?? 0, clientId: gaClientId, items: refundItems });
   }
 
   /*
@@ -3883,9 +3898,21 @@ export async function placeCartOrder(data: {
   // salveaza, dar emailurile si SMS-ul nu mai pleaca. Vezi `pesteRafalaMagazinului`.
   const pesteRafala = await pesteRafalaMagazinului(admin, data.business_id, "placeCartOrder");
 
-  // Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
-  // by transaction_id; captures the conversion even when the browser tag is blocked.
-  void ga4OrderEvent(data.business_id, "purchase", { transactionId: order.id, value: total, clientId: data.source?.ga_client_id, items: allItems });
+  /*
+    Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
+    by transaction_id; captures the conversion even when the browser tag is blocked.
+
+    ⚠ DAR NUMAI CAND COMANDA E DEJA O VANZARE. La ramburs, da: banii vin
+    curierului, insa vanzarea s-a facut. La plata ONLINE, nu — aici omul inca n-a
+    ajuns la procesator. Pana pe 03.09.2026 pleca oricum, deci GA4 primea venit
+    pentru comenzi care nu se plateau niciodata (15 din 32, la Netopia).
+
+    Pentru platile online conversia pleaca la confirmarea incasarii, din
+    `finalizeazaPlataComenzii` — unde converg toti cei cinci procesatori.
+  */
+  if (!asteaptaIncasareOnline(metodaPlata)) {
+    void raporteazaComandaGa4(data.business_id, "purchase", { transactionId: order.id, value: total, clientId: data.source?.ga_client_id, items: allItems });
+  }
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
   // and counts as recovered when a recovery message had been sent.

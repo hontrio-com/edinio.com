@@ -119,16 +119,63 @@ test("inscrierea prin Google are propria cale de server, nu doar cea cu email", 
   );
 });
 
-test("⚠ trialul se raporteaza doar cand serverul chiar l-a acordat", () => {
+test("⚠ trialul se acorda ATOMIC, si se raporteaza doar daca s-a schimbat un rand", () => {
   /*
-    ⚠ CE APARA. Pagina hotaraste dupa `sessionStorage`; serverul, dupa ce scrie in
-    baza. Scoasa paza, `trial_start` ar pleca si pentru cine avea deja plan platit
-    — deci un abonament incasat ar aparea la Meta si TikTok ca trial gratuit, si
-    optimizarea ar invata pe conversia ieftina in locul celei scumpe.
+    ═══════════════════════════════════════════════════════════════════════════
+    ⚠ PROBA ASTA CEREA PANA AZI O PAZA CARE NU PAZEA
+    ═══════════════════════════════════════════════════════════════════════════
+
+    Cerea sa existe `if (!areDejaPlan && !profileError)`. Numai ca `areDejaPlan`
+    venea dintr-un SELECT facut INAINTE de scriere — deci proba dovedea ca
+    raportarea atarna de o CITIRE, nu de ce s-a intamplat chiar.
+
+    ⚠ CE INCAPEA INTRE ELE. Webhook-ul Stripe, care se aprinde exact atunci:
+
+        T0  citim: plan=free, expira=null  ->  hotaram sa dam trial
+        T1  webhook-ul scrie: plan=premium, expira=peste un an
+        T2  scriem noi ce hotarasem la T0: plan=free, expira=peste 15 zile
+
+    Abonamentul platit al omului, suprascris cu un trial. Iar comentariul de
+    deasupra codului sustinea ca operatia e aparata de o conditie pe
+    `plan_expires_at is null` — conditie care nu exista in scriere.
+
+    Acum se cer trei lucruri, si toate trei sunt insusiri ale codului, nu forme:
+      1. conditia sta CHIAR IN SCRIERE, nu intr-o citire de mai devreme;
+      2. raportarea atarna de cate randuri s-au schimbat;
+      3. cand omul a platit, trialul nici nu se incearca.
   */
   const cod = readFileSync("src/lib/actions/business.actions.ts", "utf8");
-  const iGarda = cod.indexOf("if (!areDejaPlan && !profileError) {");
-  assert.ok(iGarda > 0, "paza care leaga raportarea de acordarea reala a trialului a disparut");
+
+  /* 1 — conditia in scriere, nu intr-un `if` de deasupra. */
+  const iTrial = cod.lastIndexOf("const { data: randuri", cod.indexOf('plan_expires_at: new Date(Date.now() + 15'));
+  assert.ok(iTrial > 0, "nu mai gasesc acordarea trialului");
+
+  /*
+    ⚠ SE TAIE CHIAR INSTRUCTIUNEA, nu o fereastra. Prima forma taia „de la trial
+    pana la primul `.select(`" — iar cand am scos `.select(`-ul ca mutant, cautarea
+    a gasit unul de mai jos si felia a crescut peste el. Proba a trecut verde peste
+    exact mutantul pentru care fusese scrisa.
+  */
+  const scrierea = (() => {
+    let adanc = 0;
+    for (let i = iTrial; i < cod.length; i++) {
+      const c = cod[i];
+      if (c === "(" || c === "[" || c === "{") adanc++;
+      else if (c === ")" || c === "]" || c === "}") adanc--;
+      else if (c === ";" && adanc <= 0) return cod.slice(iTrial, i + 1);
+    }
+    return cod.slice(iTrial);
+  })();
+  assert.match(scrierea, /\.is\("plan_expires_at", null\)/,
+    "acordarea trialului nu mai e conditionata in scriere — un webhook care ajunge intre citire si scriere ii suprascrie abonamentul platit");
+  assert.match(scrierea, /\.select\(/,
+    "scrierea nu mai spune cate randuri a schimbat, deci nu se poate sti daca trialul s-a acordat chiar");
+
+  /* 2 — raportarea atarna de randurile schimbate. */
+  assert.match(cod, /trialAcordat = \(randuri\?\.length \?\? 0\) > 0/,
+    "acordarea nu se mai citeste din randurile schimbate");
+  const iGarda = cod.indexOf("if (trialAcordat) {");
+  assert.ok(iGarda > 0, "raportarea nu mai atarna de acordarea reala");
 
   const iCoada = cod.indexOf("await puneLaCoada(", iGarda);
   assert.ok(iCoada > iGarda, "punerea la coada nu mai vine dupa paza");
@@ -136,6 +183,13 @@ test("⚠ trialul se raporteaza doar cand serverul chiar l-a acordat", () => {
     cod.slice(iGarda, iCoada).indexOf("}") < 0,
     "punerea la coada a iesit din ramura pazita — se raporteaza si cand trialul nu s-a acordat",
   );
+
+  /* 3 — cand s-a platit, trialul nici nu se incearca. */
+  assert.match(cod, /aduSiVerificaPlata\(data\.sesiuneStripe, user\.id\)/,
+    "serverul nu mai intreaba Stripe daca omul a platit");
+  const iPlata = cod.indexOf("if (!plata.ok) {");
+  assert.ok(iPlata > 0 && iPlata < iTrial,
+    "acordarea trialului nu mai sta sub verdictul platii — cine tocmai a cumparat ar primi si un trial, si un `trial_start`");
 });
 
 /* ═══ Abonamentul: cele doua drumuri trebuie sa numeasca aceeasi sesiune ═══ */

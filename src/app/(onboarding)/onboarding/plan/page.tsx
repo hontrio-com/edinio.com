@@ -209,6 +209,12 @@ function PlanPageContent() {
         phone: String(details.phone ?? ""),
         slug: String(details.slug ?? ""),
         primary_color: "#1AB554",
+        /*
+          ⚠ ID-UL SESIUNII, ca serverul sa nu acorde un trial cuiva care a platit.
+          Nu e un „am platit" pe cuvantul nostru: acolo se duce la Stripe si
+          intreaba. Un id inventat da „n-a platit", deci se cade pe drumul gratuit.
+        */
+        sesiuneStripe: searchParams.get("sid") ?? undefined,
       });
 
       if (result.error) {

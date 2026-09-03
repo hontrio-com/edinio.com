@@ -1,10 +1,9 @@
 "use server";
 
-import { getStripe } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
-import { logError } from "@/lib/error-logger";
 import { rateLimit } from "@/lib/utils/rate-limit";
-import { verdictulPlatii, type PlataVerificata } from "@/lib/edinio-marketing/verdict-plata";
+import { type PlataVerificata } from "@/lib/edinio-marketing/verdict-plata";
+import { aduSiVerificaPlata } from "@/lib/edinio-marketing/server/plata-stripe";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -50,9 +49,6 @@ import { verdictulPlatii, type PlataVerificata } from "@/lib/edinio-marketing/ve
  * ce trimite el e un id de sesiune, iar restul se citeste de la Stripe.
  */
 export async function verificaPlataOnboarding(idSesiune: string): Promise<PlataVerificata> {
-  const sid = (idSesiune ?? "").trim();
-  if (!sid || !sid.startsWith("cs_")) return { ok: false, motiv: "fara-sesiune" };
-
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, motiv: "neautentificat" };
@@ -66,25 +62,5 @@ export async function verificaPlataOnboarding(idSesiune: string): Promise<PlataV
   */
   if (!rateLimit(`plata:${user.id}`, 30, 3_600_000)) return { ok: false, motiv: "indisponibil" };
 
-  let sesiune;
-  try {
-    sesiune = await getStripe().checkout.sessions.retrieve(sid);
-  } catch (e) {
-    /*
-      ⚠ „Nu stiu" NU e „n-a platit". Un id inventat da tot pe aici, dar si o pana
-      de retea. Amandoua duc la „nu trimite `purchase`", ceea ce e purtarea sigura
-      — dar in jurnal se scriu deosebit, ca sa nu para o pana ceea ce e o incercare.
-    */
-    const mesaj = e instanceof Error ? e.message : "eroare necunoscuta";
-    const eIdNecunoscut = /No such checkout\.session|resource_missing/i.test(mesaj);
-    await logError({
-      action: eIdNecunoscut ? "plata.sesiuneInexistenta" : "plata.stripeIndisponibil",
-      message: mesaj,
-      userId: user.id,
-      severity: eIdNecunoscut ? "warning" : "error",
-    });
-    return { ok: false, motiv: eIdNecunoscut ? "fara-sesiune" : "indisponibil" };
-  }
-
-  return verdictulPlatii(sesiune, user.id);
+  return aduSiVerificaPlata(idSesiune, user.id);
 }

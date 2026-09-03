@@ -118,7 +118,8 @@ export default function OnboardingDetailsPage() {
       cine a completat al doilea pas din inscriere. Un raport pe leaduri nu putea
       deosebi un client interesat de un cont pe jumatate creat.
 
-      Acum pasul se numeste ce este. Catre Meta si TikTok nu pleaca nimic de aici
+      Acum pasul se numeste ce este: `onboarding_step_complete`, adica anume
+      terminarea pasului cu datele magazinului. Catre Meta si TikTok nu pleaca nimic de aici
       — nu fiindca ar fi neinteresant, ci fiindca urmeaza `begin_checkout`
       (`InitiateCheckout`), care e un semnal de optimizare mai bun.
 

@@ -424,26 +424,41 @@ function PlanPageContent() {
       }
 
       /*
-        ⚠ CLIPA E „L-AM PREDAT LUI STRIPE", nu „a introdus cardul" — si numele
-        imprumutat de la GA4 spune al doilea. Randul asta n-a avut niciodata o
-        nota, deci momentul parea mostenit; e ales.
+        ════════════════════════════════════════════════════════════════════
+        {W} RANDURILE ASTEA AU DESCRIS O ZI UN EVENIMENT CARE NU MAI E AICI
+        ════════════════════════════════════════════════════════════════════
 
-        ⚠ DE CE NU SE MUTA. Formularul de card e al lui Stripe, pe domeniul lor:
-        n-avem cum sa vedem cand il atinge omul. Singurele clipe observabile de
-        aici incolo sunt „a platit" — care e deja `purchase` — si „a esuat". Un
-        eveniment tras numai la esec ar fi mai rau decat niciunul.
+        Pana pe 03.09.2026 aici pleca `add_payment_info`, iar nota explica de ce i
+        se pastreaza numele imprumutat. Evenimentul a fost scos in aceeasi zi —
+        nota nu. Deci a ramas un comentariu care sustinea, deasupra unui
+        `begin_checkout`, ca linia asta trimite `AddPaymentInfo`, si care mai
+        spunea si ca evenimentul „nu duce nici `value`, nici `currency`" — la doua
+        randuri de un apel care duce amandoua.
 
-        ⚠ DE CE NU-I SCHIMBAM NUMELE, desi nu se potriveste. `AddPaymentInfo` e
-        eveniment standard la Meta, deci se poate optimiza pe el; un nume propriu
-        ar fi mai cinstit si complet nefolositor. Se plateste exactitatea numelui
-        ca sa ramana folosul.
+        A treia oara intr-o saptamana cand textul ramane in urma codului. Nota o
+        las scrisa fiindca cine gaseste `AddPaymentInfo` in istoricul acestui
+        fisier trebuie sa afle ce s-a intamplat cu el, nu doar ca a disparut.
 
-        ⚠ CE UMFLA, si de ce e primit. Cine e trimis la Stripe si se razgandeste
-        acolo a trimis deja evenimentul, iar `?cancelled=1` il aduce inapoi si il
-        invita la a doua apasare — deci acelasi om poate numara de mai multe ori.
-        E semnal de INTENTIE, unde repetitia e primita: nu duce nici `value`, nici
-        `currency`, nu e conversie in GA4 si nu e actiune de conversie in Google
-        Ads. Nu se umfla niciun venit, doar un pas de palnie.
+        ═══ {W} CE SE INTAMPLA CHIAR AICI ═══
+
+        Omul a ales un plan si a apasat „continua catre plata", iar sesiunea Stripe
+        e deja creata (`res.ok` si `data.url` de mai sus). Aia e clipa in care
+        incepe cumpararea, si de aia evenimentul pleaca ABIA acum: inainte de
+        verificare, o ruta cazuta ar fi produs „a inceput cumpararea" pentru o
+        sesiune care nu s-a nascut.
+
+        {W} SUMA E CEA CARE URMEAZA SA SE CEARA, nu una incasata. La `purchase`
+        suma vine din `amount_total` de la Stripe, fiindca acolo e VENIT. Aici nu
+        s-a incasat nimic: numarul spune „atat costa ce vrea omul sa cumpere", si
+        se calculeaza la fel ca pretul aratat pe card — anual inseamna noua luni
+        platite, nu douasprezece.
+
+        {W} CE UMFLA, si de ce e primit. Cine ajunge la Stripe si se razgandeste a
+        trimis deja evenimentul, iar `?cancelled=1` il aduce inapoi si il invita la
+        a doua apasare — deci acelasi om poate numara de mai multe ori. E semnal de
+        INTENTIE, unde repetitia e primita: nu e conversie in GA4 si nu e actiune de
+        conversie in Google Ads, deci nu invata nicio licitatie. Ce ar fi fost grav
+        e sa numere pe cine n-a ajuns niciodata la Stripe — si aia s-a inchis.
       */
       urmareste({
         name: "begin_checkout",

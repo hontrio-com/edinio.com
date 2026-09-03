@@ -183,6 +183,26 @@ Ce anume au tastat nu ne trebuie într-un cont de analiză.
 
 ---
 
+### ⚠ Traficul de dezvoltare — un filtru, altfel depanarea intră în rapoarte
+
+**Admin → Data collection and modification → Data filters → Create filter → Developer traffic → Exclude.**
+
+Pune-l întâi pe **Testing**, uită-te o zi că prinde ce trebuie, apoi treci-l pe **Active**.
+
+De ce: documentul ăsta îți spune mai jos să verifici producția punând
+`edinio_marketing_debug` în `localStorage`. Aia trimite evenimentele cu
+`debug_mode`, ca să le vezi în DebugView — dar **GA4 nu le ține singur în afara
+rapoartelor obișnuite**. Fără filtrul de mai sus, fiecare verificare pe care o
+faci tu intră și în cifrele pe care le citești tot tu.
+
+Filtrul de *Internal traffic*, pe care îl ai deja, nu acoperă asta: acela merge
+după IP, iar depanarea o poți face de oriunde.
+
+> ⚠ Un filtru **Active** e permanent pentru datele pe care le înlătură — de aia se
+> ține întâi pe *Testing*.
+
+---
+
 ## 3b. Meta — o setare de care depinde numărătoarea paginilor
 
 **Events Manager → pixelul Edinio → Settings → „Track Events Automatically" = ON.**

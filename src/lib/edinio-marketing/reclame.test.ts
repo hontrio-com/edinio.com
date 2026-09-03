@@ -175,7 +175,7 @@ test("⚠ MATURA: niciun eveniment din taxonomie nu e oprit de paza anti-PII", (
     { name: "form_submit", form_name: "contact" },
     { name: "form_error", form_name: "contact", error_type: "validare", field_name: "email" },
     { name: "generate_lead", lead_type: "contact", form_name: "contact", event_id: "e1" },
-    { name: "article_view", article_id: "a1", article_slug: "s1", article_category: "ghid", article_author: "Edinio" },
+    { name: "article_view", article_id: "a1", article_slug: "s1", article_category: "ghid" },
     { name: "article_read_progress", article_id: "a1", read_depth: 50 },
     { name: "article_read_complete", article_id: "a1" },
     { name: "article_cta_click", article_id: "a1", cta_id: "c1", cta_position: "middle" },

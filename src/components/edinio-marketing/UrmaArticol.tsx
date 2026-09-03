@@ -31,12 +31,10 @@ export function UrmaArticol({
   articolId,
   slug,
   categorie,
-  autor,
 }: {
   articolId: string;
   slug: string;
   categorie?: string;
-  autor?: string;
 }) {
   const vazut = useRef(false);
 
@@ -60,9 +58,8 @@ export function UrmaArticol({
       article_id: articolId,
       article_slug: slug,
       article_category: categorie,
-      article_author: autor,
     });
-  }, [articolId, slug, categorie, autor]);
+  }, [articolId, slug, categorie]);
 
   useEffect(() => {
     if (typeof IntersectionObserver === "undefined") return;
@@ -77,7 +74,6 @@ export function UrmaArticol({
       niciun rand. Se trage doar vizualizarea, si atat.
     */
     let inaltime = corp.offsetHeight;
-    if (inaltime < window.innerHeight * 1.2) return;
 
     const trase = new Set<number>();
     const obs = new IntersectionObserver((intrari) => {
@@ -104,18 +100,38 @@ export function UrmaArticol({
     if (!pozitieVeche) corp.style.position = "relative";
 
     const repere: HTMLElement[] = [];
-    for (const p of PRAGURI) {
-      const r = document.createElement("div");
-      r.dataset.articolPrag = String(p);
-      r.setAttribute("aria-hidden", "true");
-      Object.assign(r.style, {
-        position: "absolute", left: "0", width: "1px", height: "1px",
-        pointerEvents: "none", top: `${Math.round((inaltime * p) / 100)}px`,
-      });
-      corp.appendChild(r);
-      repere.push(r);
-      obs.observe(r);
-    }
+
+    /**
+     * Pune reperele, daca articolul e destul de lung ca sa aiba sens.
+     *
+     * ═══ ⚠ SE POATE CHEMA SI MAI TARZIU, si de aceea nu mai iesim devreme ═══
+     *
+     * Forma dinainte facea `return` cand articolul parea scurt la montare — deci
+     * inainte sa apuce sa puna vreo masura pe el. Numai ca articolele CRESC:
+     * curatatorul de HTML pune `loading="lazy"` pe imagini, iar dimensiunile nu
+     * sunt obligatorii.
+     *
+     * Un articol de 700px la montare, pe un ecran de 800px, iesea pe usa aia — si
+     * ramanea nemasurat pentru totdeauna, chiar daca imaginile il duceau la 2500px.
+     * Adica tocmai articolele cu multe poze, care sunt si cele mai citite.
+     */
+    const puneReperele = () => {
+      if (repere.length > 0) return;
+      if (inaltime < window.innerHeight * 1.2) return;
+      for (const p of PRAGURI) {
+        const r = document.createElement("div");
+        r.dataset.articolPrag = String(p);
+        r.setAttribute("aria-hidden", "true");
+        Object.assign(r.style, {
+          position: "absolute", left: "0", width: "1px", height: "1px",
+          pointerEvents: "none", top: `${Math.round((inaltime * p) / 100)}px`,
+        });
+        corp.appendChild(r);
+        repere.push(r);
+        obs.observe(r);
+      }
+    };
+    puneReperele();
 
     /*
       ═══════════════════════════════════════════════════════════════════════════
@@ -139,8 +155,12 @@ export function UrmaArticol({
     */
     const aseazaReperele = () => {
       const acum = corp.offsetHeight;
-      if (acum <= 0 || Math.abs(acum - inaltime) < inaltime * 0.02) return;
+      if (acum <= 0 || Math.abs(acum - inaltime) < Math.max(inaltime * 0.02, 1)) return;
       inaltime = acum;
+
+      /* ⚠ Poate fi prima oara cand articolul devine destul de lung — vezi `puneReperele`. */
+      puneReperele();
+
       for (const r of repere) {
         const p = Number(r.dataset.articolPrag);
         /* Cele trase au fost scoase din observator; mutarea lor n-ar mai conta. */

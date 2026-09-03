@@ -420,8 +420,24 @@ test("⚠ un camp de AUTOR nou e oprit; `article_author` trece, fiindca poarta s
   );
   assert.throws(() => verificaFaraPii("x", { autor: "Ion Popescu" }), EroarePii);
 
-  /* Si martorul: cel anuntat, care poarta slugul, trece. */
-  assert.doesNotThrow(() => verificaFaraPii("article_view", { article_author: "ion-popescu" }));
+  /*
+    ═══ ⚠ RANDUL ASTA CEREA PANA AZI EXACT PE DOS, SI APARA UN DEFECT ═══
+
+    Scria: „cel anuntat, care poarta slugul, trece" — si probam ca `ion-popescu`
+    e o valoare ingaduita. Rationamentul era ca slugul nu e numele.
+
+    E fals: slugul se NASTE din nume (`slugSauMotiv` in `blog.actions.ts`), deci
+    „Ion Popescu" devine `ion-popescu`, care identifica omul la fel de bine ca
+    numele. Proba verde apara chiar scurgerea pe care paza trebuia s-o opreasca.
+
+    `article_author` a fost scos cu totul din taxonomie; aici se cere ca paza sa-l
+    opreasca daca vreodata se intoarce.
+  */
+  assert.throws(
+    () => verificaFaraPii("article_view", { article_author: "ion-popescu" }),
+    EroarePii,
+    "un slug de autor a trecut ca valoare curata — dar el se naste din nume",
+  );
 });
 
 /* ═══ 8. Starile se reafirma la acord; faptele nu ═══ */

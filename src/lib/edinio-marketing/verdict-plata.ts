@@ -44,22 +44,39 @@ export type SesiuneStripe = {
 /**
  * A cui e sesiunea, si s-a platit chiar?
  *
- * ⚠ SE CER AMANDOUA SEMNELE DE PROPRIETATE. `client_reference_id` e cel oficial,
- * `metadata.user_id` e cel pe care il citeste si webhook-ul. Se pun amandoua la
- * crearea sesiunii; daca vreodata se despart, vreau sa se vada aici.
+ * ⚠ SE CER AMANDOUA SEMNELE DE PROPRIETATE, si acum chiar se cer. `client_reference_id`
+ * e cel oficial, `metadata.user_id` e cel pe care il citeste si webhook-ul. Ruta de
+ * checkout le pune pe amandoua, cu aceeasi valoare.
+ *
+ * ⚠ AICI A SCRIS „se cer amandoua" DEASUPRA UNUI `||`. Comentariul spunea SI, codul
+ * facea SAU — deci o sesiune cu cele doua campuri DEOSEBITE ar fi fost socotita „a
+ * mea" de amandoi oamenii, si conversia s-ar fi numarat de doua ori. Nu exista azi
+ * o cale prin care sa se desparta, dar tocmai de aceea despartirea trebuie sa cada
+ * zgomotos, nu sa treaca.
+ *
+ * ⚠ SI LIPSA UNUIA E TOT UN NU. Costul e o conversie pierduta in browser (perechea
+ * de server pleaca oricum din webhook); castigul e ca nu putem numara de doua ori.
  *
  * ⚠ SI AMANDOUA SEMNELE DE PLATA. `status: "complete"` spune ca formularul s-a
  * incheiat; `payment_status: "paid"` spune ca banii au plecat. O sesiune se poate
  * incheia si cu plata amanata — atunci nu e o conversie.
  */
 export function verdictulPlatii(s: SesiuneStripe, idOmului: string): PlataVerificata {
-  const alOmului = s.client_reference_id === idOmului || s.metadata?.user_id === idOmului;
+  const alOmului = s.client_reference_id === idOmului && s.metadata?.user_id === idOmului;
   if (!alOmului) return { ok: false, motiv: "alt-om" };
 
   if (s.status !== "complete" || s.payment_status !== "paid") return { ok: false, motiv: "neplatita" };
 
   const suma = s.amount_total;
   if (typeof suma !== "number" || suma <= 0) return { ok: false, motiv: "neplatita" };
+
+  /*
+    ⚠ FARA MONEDA NU SE RAPORTEAZA NIMIC. Randul de mai jos turna „ron" cand Stripe
+    tace — iar apelantul verifica apoi `moneda === "RON"` si trecea. Adica paza lui
+    se sprijinea pe o presupunere a noastra. O sesiune platita are intotdeauna
+    moneda; daca lipseste, ceva e in neregula si taerea e raspunsul cinstit.
+  */
+  if (!s.currency) return { ok: false, motiv: "neplatita" };
 
   const brut = s.metadata?.interval;
   return {
@@ -69,6 +86,6 @@ export function verdictulPlatii(s: SesiuneStripe, idOmului: string): PlataVerifi
     interval: brut === "annual" || brut === "monthly" ? brut : null,
     /* ⚠ Stripe tine banii in subunitati; raportarea se face in unitati intregi. */
     suma: suma / 100,
-    moneda: (s.currency ?? "ron").toUpperCase(),
+    moneda: s.currency.toUpperCase(),
   };
 }

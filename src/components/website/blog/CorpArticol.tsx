@@ -74,17 +74,6 @@ export async function CorpArticol({ a }: { a: ArticolIntreg }) {
         articolId={a.id}
         slug={a.slug}
         categorie={a.categorie?.name}
-        /*
-          ⚠ SLUGUL, NU NUMELE. `article_author` pleaca spre GA4, Meta si TikTok.
-          Numele adevarat al unui om, chiar publicat sub articol, n-are ce cauta
-          in trei conturi de reclame — iar politica Google interzice datele care
-          identifica o persoana in Analytics, cu sanctiunea stergerii datelor
-          proprietatii.
-
-          Slugul raspunde la aceeasi intrebare — „ale carui autor se citesc" —
-          fara sa duca numele acolo.
-        */
-        autor={a.autor?.slug}
       />
       <PageHero
         sir={[

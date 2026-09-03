@@ -134,8 +134,14 @@ export const adaptorGa4: Adaptor = {
       cheia in `localStorage`. Un vizitator obisnuit nu trimite niciodata
       `debug_mode`.
 
-      ⚠ SI NU MURDARESTE RAPOARTELE: GA4 tine evenimentele cu `debug_mode` in
-      afara rapoartelor obisnuite, tocmai ca sa se poata proba pe viu.
+      ⚠ SI EXCLUDEREA DIN RAPOARTE CERE UN FILTRU. Nota de aici a sustinut o vreme ca GA4
+      face asta de la sine. Nu face: excluderea cere un filtru de date „Developer
+      traffic", pus de mana in proprietate (Admin → Data filters). Pana atunci,
+      fiecare verificare pe care o faci tu intra in cifrele pe care le citesti tot
+      tu. Vezi capitolul 3 din documentul de configurare.
+
+      Ce face `debug_mode` cu adevarat: aduce evenimentul in DebugView, ca sa se
+      poata proba pe viu — atat, si atat ne trebuie de la el.
     */
     if (eDepanare()) parametri.debug_mode = true;
 

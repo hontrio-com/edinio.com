@@ -60,7 +60,6 @@ const NUME_CUNOSCUTE_CURATE = [
   "section_name",  // numele sectiunii, din marcajele noastre
   "content_name",  // "Homepage" | "Preturi" — numele paginii de aterizare
   "field_name",    // "email" | "phone" — CARE camp a picat, nu ce s-a scris in el
-  "article_author", // SLUGUL autorului ("ion-popescu"), nu numele lui — vezi `CorpArticol`
 ] as const;
 /*
   ⚠ `content_name` A FOST ADAUGAT PE 01.09.2026, SI ERA DEJA UN DEFECT VIU.

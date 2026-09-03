@@ -167,8 +167,16 @@ test("⚠ browserul foloseste id-ul sesiunii pentru abonament, nu pe cel al maga
     Stripe a recunoscut-o. Insusirea aparata ramane aceeasi — abonamentul poarta
     id-ul SESIUNII, nu al magazinului — dar drumul e altul.
   */
-  assert.match(cod, /verificaPlataOnboarding\(searchParams\.get\("sid"\)/,
-    "pagina nu mai duce id-ul sesiunii la verificare");
+  /*
+    ⚠ SE CERE REGULA, NU FORMA APELULUI. Prima varianta cerea chiar
+    `verificaPlataOnboarding(searchParams.get("sid"))` si a cazut cand am scos
+    `sid` intr-o variabila, ca sa-l pot reincerca — desi purtarea ramasese aceeasi.
+    A doua oara in aceeasi zi cand o proba se rupe de la o rearanjare.
+
+    Ce conteaza: id-ul din adresa ajunge la verificare, si verificarea e chemata.
+  */
+  assert.match(cod, /searchParams\.get\("sid"\)/, "pagina nu mai citeste id-ul sesiunii din adresa");
+  assert.match(cod, /verificaPlataOnboarding\(/, "pagina nu mai confirma plata la server");
 
   const iPurchase = cod.indexOf('name: "purchase"');
   assert.ok(iPurchase > 0, "pagina nu mai trage purchase");

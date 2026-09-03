@@ -382,8 +382,11 @@ export function RuntimeMarketing() {
       calculeaza pentru fiecare sectiune, ca sa cada chiar pe clipa in care regula
       devine adevarata — deci observatorii sunt cati sectiuni, nu unul.
     */
-    const observatoriSectiuni: IntersectionObserver[] = [];
-    for (const el of document.querySelectorAll<HTMLElement>("[data-analytics-section]")) {
+    const observatoriSectiuni = new Map<HTMLElement, IntersectionObserver>();
+
+    /** Pune (sau reface) observatorul unei sectiuni, cu pragul potrivit inaltimii ei de ACUM. */
+    const observaSectiunea = (el: HTMLElement) => {
+      observatoriSectiuni.get(el)?.disconnect();
       const o = new IntersectionObserver(
         (intrari) => {
           for (const intrare of intrari) {
@@ -398,7 +401,45 @@ export function RuntimeMarketing() {
         { threshold: [0, pragulSectiunii(el.getBoundingClientRect().height, window.innerHeight)] },
       );
       o.observe(el);
-      observatoriSectiuni.push(o);
+      observatoriSectiuni.set(el, o);
+    };
+
+    /*
+      ═══ ⚠ SI PRAGUL SE REFACE DACA SECTIUNEA CRESTE INAINTE SA FIE VAZUTA ═══
+
+      Pragul se calculeaza din inaltimea de la montare. Dar o sectiune creste dupa
+      aceea: se deschide un acordeon, se incarca o imagine tarzie, se aseaza alt
+      font.
+
+      Cu cifre: sectiune de 800px pe un ecran de 800px → prag 0,5. Creste la 3000px,
+      iar maximul posibil devine 800/3000 = 0,27. Pragul de 0,5 nu se mai poate
+      atinge NICIODATA — adica exact defectul pe care tocmai l-am reparat, intors pe
+      alta usa.
+
+      Se reface numai pentru sectiunile NEVAZUTE inca; pentru celelalte nu mai
+      conteaza, evenimentul lor a plecat.
+    */
+    const inaltimiSectiuni = new WeakMap<HTMLElement, number>();
+    const masuraSectiuni =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver((intrari) => {
+            for (const i of intrari) {
+              const el = i.target as HTMLElement;
+              const nume = el.dataset.analyticsSection;
+              if (!nume || vazute.has(nume)) continue;
+              const acum = el.getBoundingClientRect().height;
+              const inainte = inaltimiSectiuni.get(el) ?? 0;
+              if (acum <= 0 || Math.abs(acum - inainte) < inainte * 0.1) continue;
+              inaltimiSectiuni.set(el, acum);
+              observaSectiunea(el);
+            }
+          })
+        : null;
+
+    for (const el of document.querySelectorAll<HTMLElement>("[data-analytics-section]")) {
+      inaltimiSectiuni.set(el, el.getBoundingClientRect().height);
+      observaSectiunea(el);
+      masuraSectiuni?.observe(el);
     }
 
     /*
@@ -468,7 +509,8 @@ export function RuntimeMarketing() {
 
     return () => {
       obs.disconnect();
-      for (const o of observatoriSectiuni) o.disconnect();
+      for (const o of observatoriSectiuni.values()) o.disconnect();
+      masuraSectiuni?.disconnect();
       masuraInaltimii?.disconnect();
       for (const r of repere) r.remove();
     };

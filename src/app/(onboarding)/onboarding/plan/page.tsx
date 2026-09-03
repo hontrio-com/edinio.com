@@ -276,7 +276,29 @@ function PlanPageContent() {
           vede si se poate recupera, pe cand una falsa intra in invatarea licitatiei
           si nu mai iese.
         */
-        const plata = await verificaPlataOnboarding(searchParams.get("sid") ?? "");
+        /*
+          ═══ ⚠ SE REINCEARCA NUMAI CAND MOTIVUL E „NU STIU" ═══
+
+          Daca Stripe nu raspunde, `purchase` nu pleaca — si asta e purtarea buna.
+          Dar fara nicio reluare, o pana de doua secunde inseamna o conversie
+          pierduta DEFINITIV pentru GA4 si Google Ads: pagina duce omul la panou
+          dupa o secunda si opt zecimi, si nimeni nu mai intreaba niciodata.
+
+          ⚠ SI SE REIA NUMAI PE `indisponibil`. Un „n-a platit" sau „nu e sesiunea
+          lui" sunt raspunsuri LIMPEZI — reincercate, ar da acelasi lucru si ar
+          intarzia degeaba omul care tocmai a terminat.
+
+          ⚠ SCURT SI MARGINIT: doua reluari, la 600ms si 1800ms, adica sub timpul
+          in care oricum sta pagina cu confetti. Ce nu se lamureste in atat ramane
+          nelamurit — nu inventam o conversie ca sa nu ne lipseasca.
+        */
+        const sid = searchParams.get("sid") ?? "";
+        let plata = await verificaPlataOnboarding(sid);
+        for (const pauza of [600, 1800]) {
+          if (plata.ok || plata.motiv !== "indisponibil") break;
+          await new Promise((r) => setTimeout(r, pauza));
+          plata = await verificaPlataOnboarding(sid);
+        }
         /*
           ⚠ SI MONEDA SE VERIFICA, nu se toarna — aceeasi regula ca in webhook.
           Taxonomia cunoaste doar `RON`, fiindca atat facturam. O suma in alta

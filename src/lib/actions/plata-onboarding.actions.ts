@@ -3,6 +3,7 @@
 import { getStripe } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/error-logger";
+import { rateLimit } from "@/lib/utils/rate-limit";
 import { verdictulPlatii, type PlataVerificata } from "@/lib/edinio-marketing/verdict-plata";
 
 /*
@@ -55,6 +56,15 @@ export async function verificaPlataOnboarding(idSesiune: string): Promise<PlataV
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { ok: false, motiv: "neautentificat" };
+
+  /*
+    ⚠ UN PLAFON MODEST, PE OM. Fiecare chemare inseamna o cerere catre Stripe si un
+    rand in jurnal. Id-urile de sesiune au entropie mare, deci nimeni nu le ghiceste
+    — dar un om autentificat poate cere de o mie de ori, iar noi platim de o mie de
+    ori. Treizeci pe ora acopera cu mult reluarile noastre (trei pe plata) si orice
+    om care se razgandeste; pentru un robot e deja o margine.
+  */
+  if (!rateLimit(`plata:${user.id}`, 30, 3_600_000)) return { ok: false, motiv: "indisponibil" };
 
   let sesiune;
   try {

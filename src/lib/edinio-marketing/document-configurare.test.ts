@@ -283,3 +283,56 @@ test("⚠ documentul spune de ce depinde numaratoarea paginilor la Meta", () => 
     "numaratoarea paginilor la Meta atarna de o setare externa, iar documentul n-o pomeneste");
   assert.match(DOC, /Events Manager/, "documentul nu spune UNDE se apasa");
 });
+
+test("⚠ cat timp trimitem `debug_mode`, documentul cere filtrul care il tine deoparte", () => {
+  /*
+    ⚠ CE APARA. Adaptorul GA4 trimite `debug_mode` pentru cine si-a pus cheia in
+    `localStorage` — si documentul chiar te invata sa faci asta ca sa verifici
+    productia. Numai ca GA4 NU tine singur evenimentele alea in afara rapoartelor
+    obisnuite: e nevoie de un filtru „Developer traffic", pus de mana.
+
+    Fara el, fiecare verificare pe care o faci tu intra in cifrele pe care le
+    citesti tot tu — iar comentariul din cod a sustinut o vreme contrariul.
+
+    ⚠ SI TAIE IN AMANDOUA PARTILE: daca nu mai trimitem `debug_mode`, cerinta
+    dispare odata cu el, si documentul n-are voie s-o mai ceara.
+  */
+  const adaptor = readFileSync(join(RAD, "src/lib/edinio-marketing/adaptor-ga4.ts"), "utf8");
+  const trimiteDebug = adaptor.includes("debug_mode");
+
+  if (!trimiteDebug) {
+    assert.ok(!DOC.includes("Developer traffic"),
+      "documentul cere un filtru pentru ceva ce nu se mai trimite");
+    return;
+  }
+
+  assert.match(DOC, /Developer traffic/i, "trimitem `debug_mode` dar documentul nu cere filtrul care il exclude");
+  assert.match(DOC, /Data filters/i, "documentul nu spune UNDE se apasa");
+
+  /*
+    ⚠ SI CA NU RAMANE UN COMENTARIU CARE SPUNE PE DOS. Randul din adaptor a sustinut
+    ca GA4 tine singur evenimentele deoparte — un dezvoltator care il citea nu mai
+    punea filtrul.
+  */
+  const iDebug = adaptor.indexOf("debug_mode");
+  const inJur = adaptor.slice(Math.max(0, iDebug - 200), iDebug + 1400);
+  assert.ok(
+    /Developer traffic|filtru de date/i.test(inJur),
+    "nota din adaptor nu spune ca excluderea cere un filtru pus de mana",
+  );
+  /*
+    ⚠ SI CA NU SPUNE PE DOS IN ACELASI TIMP. Prima forma cerea doar sa APARA
+    cuvantul „filtru" — si trecea verde peste mutantul care punea alaturi „GA4 le
+    tine deoparte de la sine". Un text care spune amandoua e mai rau decat unul
+    care tace: cine il citeste alege ce ii convine.
+  */
+  const afirmatiiFalse = [
+    /GA4 tine evenimentele cu .debug_mode. in\s+afara rapoartelor/i,
+    /le tine deoparte de la sine(?!\.\s*Nu)/i,
+    /se exclud singure/i,
+  ];
+  for (const tipar of afirmatiiFalse) {
+    assert.ok(!tipar.test(inJur),
+      `nota din adaptor sustine iar ca GA4 exclude singur evenimentele de depanare: ${tipar}`);
+  }
+});

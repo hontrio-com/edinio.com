@@ -58,9 +58,38 @@ test("⚠ sesiunea altcuiva nu e conversia mea", () => {
   assert.equal(v.ok, false);
   if (!v.ok) assert.equal(v.motiv, "alt-om");
 
-  /* ⚠ Si se cer AMANDOUA semnele: daca unul lipseste, celalalt tine. */
-  assert.equal(verdictulPlatii({ ...buna, client_reference_id: null }, OM).ok, true);
-  assert.equal(verdictulPlatii({ ...buna, metadata: { plan: "pro" } }, OM).ok, true);
+  /*
+    ═══ ⚠ RANDURILE ASTEA CEREAU PANA AZI EXACT PE DOS ═══
+
+    Scriau ca „daca unul lipseste, celalalt tine" — adica probau un `||`, sub un
+    comentariu de productie care spunea „se cer AMANDOUA". Comentariul avea
+    dreptate, codul nu, iar proba apara codul.
+
+    ⚠ CE STRICA `SAU`. O sesiune cu `client_reference_id` si `metadata.user_id`
+    DEOSEBITE ar fi fost socotita „a mea" de amandoi oamenii — deci aceeasi plata
+    numarata de doua ori. Nu exista azi o cale prin care sa se desparta, si tocmai
+    de aceea despartirea trebuie sa cada zgomotos.
+  */
+  assert.equal(verdictulPlatii({ ...buna, client_reference_id: null }, OM).ok, false,
+    "lipsa unui semn de proprietate a trecut");
+  assert.equal(verdictulPlatii({ ...buna, metadata: { plan: "pro" } }, OM).ok, false,
+    "lipsa celuilalt semn a trecut");
+
+  /* ⚠ Si cazul care conteaza: cele doua semne arata catre oameni DEOSEBITI. */
+  const despartita = { ...buna, client_reference_id: "user-A", metadata: { user_id: "user-B" } };
+  assert.equal(verdictulPlatii(despartita, "user-A").ok, false, "o sesiune despartita a trecut pentru A");
+  assert.equal(verdictulPlatii(despartita, "user-B").ok, false, "o sesiune despartita a trecut pentru B");
+});
+
+test("⚠ fara moneda nu se raporteaza nimic", () => {
+  /*
+    ⚠ CE APARA. `moneda` se turna „ron" cand Stripe tacea, iar apelantul verifica
+    apoi `moneda === "RON"` si trecea — deci paza lui se sprijinea pe o presupunere
+    a NOASTRA, nu pe un raspuns al lui Stripe. O sesiune platita are intotdeauna
+    moneda; lipsa ei inseamna ca ceva e in neregula.
+  */
+  const v = verdictulPlatii({ ...buna, currency: null }, OM);
+  assert.equal(v.ok, false, "o sesiune fara moneda a produs o conversie");
 });
 
 test("⚠ suma vine din INCASARE, nu din tabelul de preturi", () => {

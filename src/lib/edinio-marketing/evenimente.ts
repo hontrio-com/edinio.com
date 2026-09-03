@@ -91,7 +91,21 @@ export type EvenimentEdinio =
   | {
       name: "article_view";
       article_id: string; article_slug: string;
-      article_category?: string; article_author?: string;
+      /*
+        ⚠ AICI A FOST `article_author`, SCOS PE 03.09.2026.
+
+        Trimiteam intai numele autorului, apoi — dupa un audit — slugul lui, crezand
+        ca aia e o anonimizare. Nu era: slugul se NASTE din nume (`slugSauMotiv` in
+        `blog.actions.ts`), deci „Ion Popescu" devine `ion-popescu`, care identifica
+        omul exact la fel de bine.
+
+        ⚠ SI NU PIERDEM NIMIC. Masurat pe 03.09.2026: exista UN singur autor,
+        „Edinio.com". Dimensiunea nu deosebea nimic — purta doar riscul, pentru
+        clipa in care ar fi scris un om adevarat. Intrebarea „ale carui autor se
+        citesc" se raspunde oricand dintr-o legatura in baza NOASTRA, pe
+        `article_id`, unde numele n-a plecat nicaieri.
+      */
+      article_category?: string;
     }
   | { name: "article_read_progress"; article_id: string; read_depth: 25 | 50 | 75 | 90 }
   | { name: "article_read_complete"; article_id: string }

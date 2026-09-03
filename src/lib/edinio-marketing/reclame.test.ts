@@ -56,10 +56,22 @@ test("⚠ `page_view` NU pleaca spre Meta si nici spre TikTok", () => {
     Pe `www.edinio.com`, cu doua navigari FARA reincarcare de document
     (`/` catre `/preturi` catre `/integrari`), pixelul Meta a trimis singur cate
     un `PageView` la fiecare. `fbevents.js` isi pune propriul carlig pe schimbarea
-    istoricului; la fel face si TikTok.
+    istoricului.
 
     Deci un `PageView` trimis SI de noi ar dubla fiecare vizualizare din contul de
     reclame — si nimic n-ar cadea. Costul pe rezultat ar parea la jumatate.
+
+    ⚠ PENTRU TIKTOK N-AM MASURAT, si randurile astea au sustinut o vreme ca da
+    („la fel face si TikTok"), sub un titlu care spune anume „NU PRESUPUS". Adica
+    plasa care apara hotararea imprumuta increderea unei masuratori facute pentru
+    ALTCINEVA — si cine o citea mai tarziu lua presupunerea drept fapt.
+
+    ⚠ SI DE CE NU TRIMITEM TOTUSI NICI CATRE TIKTOK. Fiindca cele doua greseli nu
+    costa la fel. Daca `events.js` isi pune singur carligul, un `PageView` al
+    nostru DUBLEAZA — si o dublare nu se vede, se citeste ca succes. Daca nu si-l
+    pune, pierdem vizualizarile de dupa prima dintr-o sesiune — o subnumarare
+    care nu atinge nicio conversie, fiindca alea pleaca pe numele lor si de doua
+    ori, si din browser, si de pe server.
 
     ⚠ Proba asta e singura care apara masuratoarea aceea. Daca vreodata cineva
     adauga `case "page_view"` intr-un adaptor, cade aici.

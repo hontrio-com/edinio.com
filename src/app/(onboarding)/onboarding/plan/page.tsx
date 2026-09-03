@@ -164,6 +164,13 @@ function PlanPageContent() {
       ⚠ FARA `plan_id`: aici omul abia a intrat pe pagina si inca n-a ales nimic.
       Momentul e pastrat asa cum era inainte, ca numarul de `InitiateCheckout` din
       contul de reclame sa ramana comparabil cu al lunilor trecute.
+
+      ⚠ SI MAI TINE CEVA, ce nu se vede din fisierul asta: pasul dinainte
+      („details") nu mai trimite NIMIC catre Meta si TikTok tocmai fiindca
+      `begin_checkout` se trage aici, la o apasare distanta — motivul e scris pe
+      larg in `onboarding/details/page.tsx`. Mutat pe clicul de plan, s-ar sterge
+      in tacere singurul semnal pentru trecerea details → plan. Cine vrea sa-l
+      mute trebuie sa se uite intai acolo.
     */
     if (!isSuccess) {
       urmareste({ name: "begin_checkout", billing_period: billingInterval });
@@ -363,6 +370,28 @@ function PlanPageContent() {
         return;
       }
 
+      /*
+        ⚠ CLIPA E „L-AM PREDAT LUI STRIPE", nu „a introdus cardul" — si numele
+        imprumutat de la GA4 spune al doilea. Randul asta n-a avut niciodata o
+        nota, deci momentul parea mostenit; e ales.
+
+        ⚠ DE CE NU SE MUTA. Formularul de card e al lui Stripe, pe domeniul lor:
+        n-avem cum sa vedem cand il atinge omul. Singurele clipe observabile de
+        aici incolo sunt „a platit" — care e deja `purchase` — si „a esuat". Un
+        eveniment tras numai la esec ar fi mai rau decat niciunul.
+
+        ⚠ DE CE NU-I SCHIMBAM NUMELE, desi nu se potriveste. `AddPaymentInfo` e
+        eveniment standard la Meta, deci se poate optimiza pe el; un nume propriu
+        ar fi mai cinstit si complet nefolositor. Se plateste exactitatea numelui
+        ca sa ramana folosul.
+
+        ⚠ CE UMFLA, si de ce e primit. Cine e trimis la Stripe si se razgandeste
+        acolo a trimis deja evenimentul, iar `?cancelled=1` il aduce inapoi si il
+        invita la a doua apasare — deci acelasi om poate numara de mai multe ori.
+        E semnal de INTENTIE, unde repetitia e primita: nu duce nici `value`, nici
+        `currency`, nu e conversie in GA4 si nu e actiune de conversie in Google
+        Ads. Nu se umfla niciun venit, doar un pas de palnie.
+      */
       urmareste({ name: "add_payment_info", plan_id: selectedPlan, billing_period: billingInterval });
       window.location.href = data.url;
     } catch {

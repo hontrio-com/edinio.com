@@ -120,6 +120,27 @@ export const adaptorGa4: Adaptor = {
     */
     if (ev.name === "purchase") {
       parametri.transaction_id = ev.event_id;
+
+      /*
+        ⚠ SI ARTICOLUL, fiindca fara el rapoartele de comert din GA4 raman goale.
+        Venitul se vede oricum — GA4 il ia din `value`, nu din suma articolelor —
+        dar „ce plan s-a vandut" nu se putea citi de nicaieri.
+
+        ⚠ NUMAI LA `purchase`, si asta e hotararea, nu o scapare. La
+        `begin_checkout` omul inca n-a ales un plan, iar evenimentul n-are nici
+        `value`, nici `currency`: un articol fara pret si fara nume adevarat ar
+        adauga un rand gol in raport, nu o cifra. Mai bine lipsa decat umplutura.
+
+        ⚠ PRETUL E CEL INCASAT. `ev.value` vine din `amount_total` de la Stripe
+        (vezi `verdict-plata.ts`), deci reducerile si proratiile sunt deja in el.
+      */
+      parametri.items = [{
+        item_id: ev.plan_id,
+        item_name: ev.plan_id,
+        item_category: ev.billing_period,
+        price: ev.value,
+        quantity: 1,
+      }];
     }
 
     /*

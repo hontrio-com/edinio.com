@@ -9,6 +9,7 @@ import { logError } from "@/lib/error-logger";
 import { puneLaCoada } from "@/lib/edinio-marketing/server/coada-conversii";
 import { destinatiiActive } from "@/lib/edinio-marketing/server/destinatii-active";
 import { validVid } from "@/lib/edinio-marketing/consimtamant/stare";
+import { monedaDeIncredere } from "@/lib/edinio-marketing/moneda-incasata";
 
 function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -563,11 +564,26 @@ async function proceseazaEveniment(admin: SupabaseClient, event: Stripe.Event): 
       eticheta `RON` ar raporta o suma in alta moneda ca lei — un venit fals, si
       nimic care sa arate de ce. Mai bine netrimisa si strigata.
     */
-    const monedaIncasata = (session.currency ?? "ron").toLowerCase();
-    if (session.amount_total && session.amount_total > 0 && monedaIncasata !== "ron") {
+    /*
+      ⚠ SI AICI NU SE MAI TOARNA, dupa ce titlul de deasupra a promis-o o vreme
+      degeaba. Randul de sub el scria `session.currency ?? "ron"` — adica exact
+      turnarea pe care o interzicea. O sesiune cu `currency` gol trecea drept
+      „ron" si conversia pleca etichetata `RON`.
+
+      ⚠ SI DE CE E O CAPCANA, NU O PAGUBA DE AZI. Ca sa se deschida, ar trebui
+      `currency` gol IMPREUNA cu `amount_total > 0` — iar un abonament cu linii de
+      plata are intotdeauna moneda. Ce se poate intampla azi (Adaptive Pricing,
+      unde Stripe incaseaza in „eur") era deja prins. Se repara fiindca geamana
+      din browser a fost reparata SI probata, iar asta a ramas — chiar tiparul
+      „nota buna nu trece la urmatoarea integrare".
+
+      ⚠ „NU STIU" SE POARTA CA „ALTCEVA": amandoua opresc trimiterea si striga.
+    */
+    const monedaIncasata = monedaDeIncredere(session.currency);
+    if (session.amount_total && session.amount_total > 0 && !monedaIncasata) {
       await logError({
         action: "conversii.monedaNecunoscuta",
-        message: `abonament incasat in "${monedaIncasata}" — conversia nu s-a trimis`,
+        message: `abonament incasat in "${session.currency ?? "(fara moneda)"}" — conversia nu s-a trimis`,
         details: { sessionId: session.id, plan },
         userId,
         severity: "warning",

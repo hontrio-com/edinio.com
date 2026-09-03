@@ -1,3 +1,5 @@
+import { monedaDeIncredere } from "./moneda-incasata";
+
 /*
   ═══════════════════════════════════════════════════════════════════════════════
   CE FACE DINTR-O SESIUNE STRIPE O CONVERSIE RAPORTABILA
@@ -75,8 +77,12 @@ export function verdictulPlatii(s: SesiuneStripe, idOmului: string): PlataVerifi
     tace — iar apelantul verifica apoi `moneda === "RON"` si trecea. Adica paza lui
     se sprijinea pe o presupunere a noastra. O sesiune platita are intotdeauna
     moneda; daca lipseste, ceva e in neregula si taerea e raspunsul cinstit.
+
+    ⚠ REGULA NU MAI E SCRISA AICI, ci in `moneda-incasata.ts` — fiindca aceeasi
+    regula traia in doua locuri, si reparatia facuta aici n-a trecut in webhook.
   */
-  if (!s.currency) return { ok: false, motiv: "neplatita" };
+  const moneda = monedaDeIncredere(s.currency);
+  if (!moneda) return { ok: false, motiv: "neplatita" };
 
   const brut = s.metadata?.interval;
   return {
@@ -86,6 +92,6 @@ export function verdictulPlatii(s: SesiuneStripe, idOmului: string): PlataVerifi
     interval: brut === "annual" || brut === "monthly" ? brut : null,
     /* ⚠ Stripe tine banii in subunitati; raportarea se face in unitati intregi. */
     suma: suma / 100,
-    moneda: s.currency.toUpperCase(),
+    moneda,
   };
 }

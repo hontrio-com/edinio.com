@@ -17,11 +17,13 @@
 -- tot ca `anon`:
 --   user_id         -> `isOwner`, deci previzualizarea proprietarului pe magazinul
 --                      nepublicat, si citirea profilului lui
---                      ((public)/[slug]/page.tsx:165,203; checkout:48,84; cos:59,101)
+--                      ((public)/[slug]/page.tsx, checkout, cos)
 --   suspended_until -> decizia „magazinul e suspendat"
---                      ((public)/[slug]/page.tsx:193; [pageSlug]:96; checkout:79;
---                       cos:96; catalog/pagina-magazin.tsx:226)
---   updated_at      -> `lastmod` in sitemap ((public)/[slug]/sitemap.xml/route.ts:38)
+--                      ((public)/[slug]/page.tsx, [pageSlug], checkout, cos,
+--                       catalog/pagina-magazin.tsx — `grep -n suspended_until`;
+--                       numerele de linie s-au mutat de mult, de aceea lipsesc)
+--   updated_at      -> `lastmod` in sitemapul magazinului (app/sitemap.ts, ramura domeniului
+--                      propriu; ruta (public)/[slug]/sitemap.xml a fost retrasa pe 03.09.2026)
 -- O revocare ar fi rupt exact aplicarea suspendarii pe vitrine. Cele trei sunt
 -- scoase in schimb la GRANITA CU BROWSERUL, in `pentruBrowser`
 -- (src/lib/storefront/business-public.ts), deci nu mai ajung in HTML.

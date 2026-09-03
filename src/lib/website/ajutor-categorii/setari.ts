@@ -186,6 +186,7 @@ export const SETARI: CategorieAjutor = {
             { titlu: "Ce spune secțiunea", text: "\"Ai deja un domeniu cumpărat de la alt registrar? Introdu-l mai jos, apoi conectează-l fie prin înregistrări DNS, fie modificând direct nameserverele la registrarul tău.\"" },
             { titlu: "Cum se scrie domeniul", text: "Un prefix www. tastat este scos automat, deci se păstrează forma fără www." },
             { titlu: "Un singur domeniu conectat", text: "Magazinul reține un singur domeniu propriu. Dacă mai conectezi unul, cel vechi este scos." },
+            { titlu: "Singura cale spre Google", text: "Pe adresa www.edinio.com vitrinele nu se indexează: poartă semnalul noindex și nu au sitemap, fiindcă adresa e a site-ului Edinio. Domeniul propriu este singurul loc unde magazinul apare în Google, cu sitemap-ul, adresa canonică, verificarea Search Console și setările SEO ale tale." },
             { titlu: "Mesajele pe care le vezi", text: "La reușită: \"Domeniu conectat cu succes. Configurează DNS-ul conform instrucțiunilor.\" Dacă nu merge: \"Nu am putut conecta domeniul.\" sau \"Eroare de rețea. Încearcă din nou.\" Verifică forma domeniului și reia salvarea." },
           ],
           nota: "Domeniul trebuie să fie deja cumpărat la registrarul tău. Edinio îl conectează la magazin, dar contul de la registrar rămâne al tău. Fără un magazin activ, câmpul și butonul sunt blocate.",
@@ -224,7 +225,7 @@ export const SETARI: CategorieAjutor = {
             { titlu: "Celălalt buton din banner", text: "Lângă X se află un buton care deschide magazinul pe domeniul respectiv, într-o filă nouă." },
             { titlu: "Mesajele pe care le vezi", text: "La reușită apare \"Domeniu deconectat.\". Dacă nu merge, apare \"Nu am putut deconecta domeniul.\" sau \"Eroare de rețea.\". Dacă nu există niciun domeniu conectat, serverul răspunde \"Niciun domeniu de deconectat\"." },
           ],
-          nota: "Deconectarea scoate domeniul din magazin. Domeniul rămâne la registrarul tău, iar înregistrările DNS setate acolo rămân până le schimbi tu.",
+          nota: "Deconectarea scoate domeniul din magazin. Domeniul rămâne la registrarul tău, iar înregistrările DNS setate acolo rămân până le schimbi tu. După deconectare magazinul rămâne accesibil pe www.edinio.com/numele-magazinului, dar acolo nu mai apare în Google și nu mai are sitemap: adresa e a site-ului Edinio.",
           termeni: ["scoate domeniu", "anulează conectarea", "banner domeniu conectat"],
         },
         {
@@ -275,7 +276,8 @@ export const SETARI: CategorieAjutor = {
             "Apasă \"Salvează SEO\".",
           ],
           detalii: [
-            { titlu: "Când se folosește", text: "În interfață scrie: \"Opțiune avansată. Activează doar dacă NU vrei ca pagina principală să apară în motoarele de căutare. Lasă dezactivat pentru SEO normal.\" Implicit, caseta este nebifată." },
+            { titlu: "Când se folosește", text: "În interfață scrie: \"Opțiune avansată. Activează doar dacă NU vrei ca pagina principală să apară în motoarele de căutare. Lasă dezactivat pentru SEO normal. Se aplică pe domeniul tău propriu: pe adresa edinio.com magazinul nu apare oricum în Google.\" Implicit, caseta este nebifată." },
+            { titlu: "Fără domeniu propriu", text: "Pe adresa www.edinio.com vitrinele nu apar în Google indiferent de această casetă: adresa e a site-ului Edinio, iar magazinul poartă acolo semnalul noindex. Caseta contează pe domeniul tău propriu, unde magazinul se indexează normal. Deasupra cardurilor SEO, fără domeniu conectat, apare mesajul: \"Magazinul e pe adresa edinio.com, unde vitrinele nu apar în Google: adresa www.edinio.com e rezervată site-ului Edinio. Setările de mai jos se păstrează și se aplică pe domeniul tău propriu, pe care îl conectezi din Setări, secțiunea Domeniu.\"" },
             { titlu: "Acoperă și paginile de politici", text: "Cât timp această casetă e bifată, politicile nu apar în Google oricât ar fi bifate în cardul \"Paginile de politici în Google\". În interfață scrie: \"Cât timp magazinul e ascuns din Google (mai sus), politicile nu apar nici ele, oricât ar fi bifate aici.\"" },
             { titlu: "Cum revii", text: "Debifezi caseta și apeși din nou \"Salvează SEO\"." },
           ],
@@ -293,7 +295,8 @@ export const SETARI: CategorieAjutor = {
           ],
           detalii: [
             { titlu: "Ce pagini poți bifa", text: "Termeni și condiții, Politica de livrare, Politica de retur, Politica de confidențialitate, GDPR, Politica de anulare a comenzii. Toate sunt bifate implicit." },
-            { titlu: "Ce înseamnă debifarea", text: "Pagina iese din Google și din sitemap. Recomandarea din interfață: \"Bifate, apar în Google și în sitemap. Google Merchant Center cere politica de retur și termenii indexabili ca să valideze contul, deci lasă-le bifate dacă faci reclamă la produse.\"" },
+            { titlu: "Ce înseamnă debifarea", text: "Pagina iese din Google și din sitemap. Recomandarea din interfață: \"Bifate, apar în Google și în sitemap. Google Merchant Center cere politica de retur și termenii indexabili ca să valideze contul, deci lasă-le bifate dacă faci reclamă la produse. Ca tot ce ține de Google, se aplică pe domeniul tău propriu.\"" },
+            { titlu: "Pe adresa edinio.com nu contează", text: "Bifele se aplică pe domeniul tău propriu. Pe www.edinio.com/numele-magazinului vitrina nu apare în Google și nu are sitemap, oricum ar fi bifate politicile." },
             { titlu: "Bifa nu ajunge dacă politica e oprită", text: "În interfață scrie: \"O politică stinsă din Editează magazinul nu apare în Google chiar dacă e bifată: pagina ei nu are ce arăta.\" Comutatorul care oprește o politică este în Setări > Politici. Fiecare politică are acolo comutatorul ei, iar când e oprit apare eticheta \"Dezactivată\" și editorul dispare. În capul acelei secțiuni scrie că politicile dezactivate nu vor fi vizibile clienților." },
             { titlu: "Opțiunea care le anulează pe toate", text: "Dacă este bifat \"Ascunde magazinul din Google (noindex)\", bifele de aici nu mai contează." },
           ],
@@ -303,8 +306,9 @@ export const SETARI: CategorieAjutor = {
         {
           slug: "cum-conectezi-magazinul-la-google-search-console",
           titlu: "Cum conectezi magazinul la Google Search Console",
-          rezumat: "Din Setări > SEO copiezi adresa magazinului, lipești codul de verificare de la Google și trimiți sitemap-ul.",
+          rezumat: "Pe domeniul tău propriu: din Setări > SEO copiezi adresa magazinului, lipești codul de verificare de la Google și trimiți sitemap-ul. Pe adresa edinio.com magazinul nu se indexează, deci pașii apar după ce conectezi domeniul.",
           pasi: [
+            "Conectează întâi domeniul tău propriu, din Setări > Domeniu. Pe adresa www.edinio.com vitrinele nu se indexează în Google, deci Search Console nu are ce verifica acolo.",
             "Intră în Setări > SEO și coboară la \"Google Search Console\".",
             "Copiază adresa magazinului cu butonul \"Copiază\" de lângă primul câmp, apoi adaugă în Search Console o proprietate de tip Prefix URL cu ea.",
             "La verificare alege metoda Etichetă HTML, copiază codul de la Google și lipește-l în câmpul de verificare.",
@@ -312,14 +316,15 @@ export const SETARI: CategorieAjutor = {
             "După verificare, copiază adresa sitemap-ului cu al doilea buton \"Copiază\" și adaug-o la secțiunea Sitemaps din Search Console.",
           ],
           detalii: [
+            { titlu: "De ce doar pe domeniul propriu", text: "Adresa www.edinio.com este a site-ului Edinio. Magazinele deschise prin www.edinio.com/numele-magazinului rămân accesibile oricui, dar poartă semnalul noindex, deci nu apar în Google și nu au sitemap. Pe domeniul tău propriu magazinul se indexează normal, cu sitemap-ul, adresa canonică și setările SEO ale tale." },
+            { titlu: "Ce vezi fără domeniu propriu", text: "În Setări > SEO, cardul Google Search Console arată mesajul: \"Magazinul e pe adresa edinio.com, unde vitrinele nu se indexează în Google: adresa www.edinio.com e rezervată site-ului Edinio. Verificarea Search Console și sitemap-ul devin disponibile pe domeniul tău propriu, pe care îl conectezi din Setări, secțiunea Domeniu. Poți lipi codul de verificare de pe acum: se adaugă singur în pagina magazinului în clipa în care răspunde pe domeniul tău.\" Câmpul de verificare rămâne disponibil; adresa magazinului și adresa sitemap-ului apar după conectarea domeniului." },
             { titlu: "Ce e în fiecare câmp", text: "Primul câmp arată adresa magazinului și este doar de citit. Al doilea este cel în care lipești codul de verificare, iar exemplul afișat este eticheta completă. Al treilea arată adresa sitemap-ului, adică adresa magazinului urmată de /sitemap.xml, și este tot doar de citit." },
             { titlu: "Ce accepți la lipire", text: "Câmpul acceptă atât eticheta meta întreagă, cât și doar codul. La salvare se păstrează doar codul: se scot caracterele care nu sunt litere, cifre, liniuță sau underline, iar textul se taie la 200 de caractere." },
-            { titlu: "Metoda de verificare", text: "Din acest ecran se poate folosi metoda Etichetă HTML. Celelalte metode de verificare ale Google nu sunt susținute de aici. După salvare, codul se adaugă automat în pagina magazinului, apoi apeși Verifică în Search Console." },
-            { titlu: "Ce adresă se folosește", text: "Dacă ai domeniu propriu, verificarea și sitemap-ul folosesc acea adresă. Dacă magazinul este încă pe adresa edinio.com, în interfață scrie: \"Magazinul e pe adresa edinio.com. Dacă vrei domeniul tău propriu în Google, conectează-l din Setări, secțiunea Domeniu, apoi reia pașii cu noua adresă.\"" },
+            { titlu: "Metoda de verificare", text: "Din acest ecran se poate folosi metoda Etichetă HTML. Celelalte metode de verificare ale Google nu sunt susținute de aici. După salvare, codul se adaugă automat în pagina magazinului, numai pe domeniul tău propriu, apoi apeși Verifică în Search Console." },
             { titlu: "Butoanele de copiere", text: "Aici butoanele au text, \"Copiază\", iar după apăsare apare mesajul \"Copiat.\"" },
           ],
-          nota: "Search Console este serviciul Google. Edinio pune codul în pagina magazinului și îți dă adresa sitemap-ului, dar contul Google și proprietatea din Search Console sunt ale tale.",
-          termeni: ["GSC", "verificare site", "meta google-site-verification", "sitemap.xml", "indexare"],
+          nota: "Search Console este serviciul Google. Edinio pune codul în pagina magazinului de pe domeniul tău și îți dă adresa sitemap-ului, dar contul Google și proprietatea din Search Console sunt ale tale.",
+          termeni: ["GSC", "verificare site", "meta google-site-verification", "sitemap.xml", "indexare", "noindex", "domeniu propriu"],
         },
         {
           slug: "cum-schimbi-parola-contului",

@@ -3,6 +3,7 @@ import { incarcaMagazinul, metadataMagazinNepublicat } from "@/lib/storefront/an
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import { after } from "next/server";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
@@ -245,7 +246,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: 
     .single();
 
   const host = (await headers()).get("host")?.split(":")[0] ?? "";
-  const isCustomDomain = business.custom_domain && host === business.custom_domain;
+  const isCustomDomain = esteDomeniulPropriu(host, business.custom_domain);
   const basePath = isCustomDomain ? "" : `/${slug}`;
 
   // Ciorna se randeaza DOAR in editorul de design, exact ca pe pagina

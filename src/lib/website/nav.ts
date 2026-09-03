@@ -17,8 +17,10 @@ import {
  * paginilor noi. Cand adaugi o intrare aici:
  *   1. adauga si pagina in `src/app/(website)/`
  *   2. daca e un segment NOU de nivel intai (ex. `/integrari`), adauga-l in
- *      `NON_STORE_SEGMENTS` din `src/proxy.ts` — altfel proxy-ul il trateaza ca
- *      slug de magazin si face o interogare Supabase la fiecare cerere.
+ *      `NON_STORE_SEGMENTS` din `src/lib/segmente-rezervate.ts` — altfel
+ *      proxy-ul il trateaza ca slug de magazin si face o interogare Supabase la
+ *      fiecare cerere, iar proba sitemapului platformei (`sitemap.test.ts`)
+ *      cade, fiindca sitemapul ar anunta o adresa nedovedita a platformei.
  *
  * Textele sunt cu diacritice: e text de fatada, iar lipsa lor se vede.
  */

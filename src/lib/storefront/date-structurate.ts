@@ -11,12 +11,13 @@ import { adresaPostalaJsonLd, contactJsonLd, sameAsJsonLd, type IdentitateBusine
  * catalogul, fiecare pagina de categorie, fiecare pagina proprie a
  * comerciantului (deci si blogul si articolele lui), fiecare pagina de politici
  * — raspundeau 200 cu ZERO date structurate, desi toate au titlu propriu,
- * canonical propriu si intrare in sitemap. Adica sunt trimise anume la indexat,
- * fara nicio descriere pentru cine le indexeaza.
+ * canonical propriu si intrare in sitemap (pe domeniul propriu al magazinului;
+ * pe www.edinio.com vitrinele sunt `noindex` din 03.09.2026). Adica sunt
+ * trimise anume la indexat, fara nicio descriere pentru cine le indexeaza.
  *
  * Reclamat de un comerciant, verificat pe cod: paginile de categorie sunt, dupa
  * produse, cele mai valoroase adrese ale unui magazin (comentariul din
- * `sitemap.xml/route.ts` o spune de mult), iar articolele lui de blog erau
+ * sitemapul magazinului, `app/sitemap.ts`, o spune de mult), iar articolele lui de blog erau
  * indexate ca pagini oarecare.
  *
  * Scris o singura data, aici, din acelasi motiv pentru care exista

@@ -5,6 +5,7 @@ import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
@@ -140,8 +141,7 @@ export default async function ProductDetailPage({ params }: Props) {
   // slug-ul magazinului in ele, deci un redirect catre `/{slug}/product/...`
   // ducea in 404 pe chiar magazinele cu domeniul lor.
   if (UUID_RE.test(productSlug) && product.slug) {
-    const gazda = (await headers()).get("host")?.split(":")[0] ?? "";
-    const peDomeniuPropriu = !!business.custom_domain && gazda === business.custom_domain;
+    const peDomeniuPropriu = esteDomeniulPropriu((await headers()).get("host"), business.custom_domain);
     redirect(peDomeniuPropriu ? `/product/${product.slug}` : `/${slug}/product/${product.slug}`);
   }
 
@@ -158,8 +158,7 @@ export default async function ProductDetailPage({ params }: Props) {
 
   // Detect custom domain access (also the One Product Store homepage target).
   const headersList = await headers();
-  const host = (headersList.get("host") ?? "").split(":")[0];
-  const isCustomDomain = business.custom_domain && host === business.custom_domain;
+  const isCustomDomain = esteDomeniulPropriu(headersList.get("host"), business.custom_domain);
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
   // One Product Store: the homepage already renders this exact product as the

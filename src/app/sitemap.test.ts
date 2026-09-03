@@ -1,7 +1,15 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { paginiDeSite, PUSE_SEPARAT, dataTaxonomiei } from "./sitemap";
+import {
+  paginiDeSite,
+  PUSE_SEPARAT,
+  dataTaxonomiei,
+  intrariPlatforma,
+  intrariMagazin,
+  type ArticolPentruSitemap,
+  type DateMagazinPentruSitemap,
+} from "./sitemap";
 import {
   COMPETITORS,
   INDUSTRIES,
@@ -9,6 +17,8 @@ import {
   SOLUTION_COLUMNS,
   TOP_NAV,
 } from "@/lib/website/nav";
+import { NON_STORE_SEGMENTS } from "@/lib/segmente-rezervate";
+import { PLATFORM_ORIGIN } from "@/lib/seo";
 
 /*
   ═══ DE CE EXISTA PROBELE ASTEA ═══
@@ -173,4 +183,200 @@ test("când nu știm nimic, nu se inventează o dată", () => {
   */
   assert.equal(dataTaxonomiei(null, []), null);
   assert.equal(dataTaxonomiei(undefined, []), null);
+});
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  INVARIANTA SEO (03.09.2026)
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Edinio.com indexeaza numai continutul platformei. Storefront-urile merchant
+  sunt noindex pe host-ul platformei si devin indexabile doar pe custom domain.
+
+  Pentru sitemap asta inseamna doua lucruri, probate separat:
+    - sitemapul PLATFORMEI (www.edinio.com) contine NUMAI adresele platformei:
+      niciun /{slug}, nicio pagina de magazin, niciun produs;
+    - sitemapul de pe DOMENIUL PROPRIU contine NUMAI adresele acelui magazin,
+      toate pe domeniul lui — si e cel care se pastreaza intreg.
+*/
+
+const ARTICOLE: ArticolPentruSitemap[] = [
+  {
+    slug: "primul-articol",
+    content_updated_at: "2026-08-30T09:00:00.000Z",
+    published_at: "2026-08-02T00:00:00.000Z",
+    categorie: { slug: "ghiduri", content_updated_at: "2026-08-01T00:00:00.000Z" },
+    autor: { slug: "ana", content_updated_at: null },
+  },
+  {
+    slug: "articol-ascuns",
+    noindex: true,
+    published_at: "2026-08-02T00:00:00.000Z",
+    categorie: { slug: "doar-ascunse" },
+    autor: { slug: "autor-doar-ascuns" },
+  },
+];
+const ETICHETE = [{ slug: "seo", ultima: "2026-08-30T09:00:00.000Z" }];
+
+const PLATFORMA = intrariPlatforma(ARTICOLE, ETICHETE);
+const primulSegmentAl = (url: string) => new URL(url).pathname.split("/")[1] ?? "";
+
+test("sitemapul platformei: fiecare adresa e pe www.edinio.com", () => {
+  for (const e of PLATFORMA) {
+    assert.ok(e.url === PLATFORM_ORIGIN || e.url.startsWith(`${PLATFORM_ORIGIN}/`), `${e.url} nu e pe platforma`);
+  }
+});
+
+test("sitemapul platformei: fiecare adresa incepe cu un segment REZERVAT platformei", () => {
+  /*
+    Asta e chiar invarianta „niciun magazin": un slug de magazin nu poate fi
+    niciodata unul din `NON_STORE_SEGMENTS` (createBusiness le refuza), deci o
+    adresa al carei prim segment e acolo nu poate fi o vitrina. Radacina n-are
+    segment si e a platformei prin definitie.
+  */
+  for (const e of PLATFORMA) {
+    const seg = primulSegmentAl(e.url);
+    assert.ok(seg === "" || NON_STORE_SEGMENTS.has(seg), `${e.url} incepe cu „${seg}", care nu e rezervat platformei: ar putea fi un magazin`);
+  }
+});
+
+test("sitemapul platformei nu contine nicio forma de pagina de magazin", () => {
+  for (const e of PLATFORMA) {
+    const cale = new URL(e.url).pathname;
+    assert.ok(!/\/product\//.test(cale), `${e.url} e o pagina de produs`);
+    assert.ok(!/\/magazin(\/|$)/.test(cale), `${e.url} e un catalog de magazin`);
+    assert.ok(!/\/politici\//.test(cale), `${e.url} e o politica de magazin`);
+  }
+});
+
+test("sitemapul platformei e SINCRON, deci nu poate intreba baza de magazine", () => {
+  /*
+    ⚠ Garda structurala. O functie fara `await` nu poate face nicio interogare,
+    deci nimeni nu poate strecura inapoi un `businesses` sau un `custom_pages`
+    „doar pentru vitrine" fara sa o faca asincrona — si atunci cade randul asta.
+  */
+  assert.equal(intrariPlatforma.constructor.name, "Function", "intrariPlatforma a devenit asincrona: poate citi baza");
+  assert.ok(Array.isArray(PLATFORMA), "rezultatul nu e o lista, ci probabil o promisiune");
+});
+
+test("sitemapul platformei pastreaza tot ce e al platformei", () => {
+  const urluri = new Set(PLATFORMA.map((e) => e.url));
+  for (const cale of ["", "/preturi", "/contact", "/termeni", "/confidentialitate", "/cookies", "/gdpr", "/ajutor", "/vs", "/industrii", "/blog", "/integrari"]) {
+    assert.ok(urluri.has(`${PLATFORM_ORIGIN}${cale}`), `lipseste ${cale || "/"}`);
+  }
+  assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/primul-articol`), "lipseste articolul");
+  assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/categorie/ghiduri`), "lipseste rubrica");
+  assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/autor/ana`), "lipseste autorul");
+  assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/eticheta/seo`), "lipseste eticheta");
+  for (const c of COMPETITORS) assert.ok(urluri.has(`${PLATFORM_ORIGIN}${c.href}`), `lipseste ${c.href}`);
+  for (const i of INDUSTRIES) assert.ok(urluri.has(`${PLATFORM_ORIGIN}/industrii/${i.slug}`), `lipseste industria ${i.slug}`);
+});
+
+test("un articol noindex nu intra, si nu trage dupa el rubrica sau autorul", () => {
+  const urluri = new Set(PLATFORMA.map((e) => e.url));
+  assert.ok(!urluri.has(`${PLATFORM_ORIGIN}/blog/articol-ascuns`));
+  assert.ok(!urluri.has(`${PLATFORM_ORIGIN}/blog/categorie/doar-ascunse`));
+  assert.ok(!urluri.has(`${PLATFORM_ORIGIN}/blog/autor/autor-doar-ascuns`));
+});
+
+/* ─── Domeniul propriu ─────────────────────────────────────────────────── */
+
+const BAZA = "https://magazin-client.ro";
+/*
+  Design publicat cu pagina de catalog: varianta `toolbar` are `surface: "page"`.
+  ⚠ `version`, `chrome` si `home` sunt obligatorii: fara ele `parseStoreDesign`
+  vede un design GOL si cade pe cel clasic, unde pagina de catalog e `none` —
+  si atunci proba ar fi verificat altceva decat crede.
+*/
+const DESIGN_CU_CATALOG = { version: 1, chrome: {}, home: [], shop: { page: { id: "shop_page", kind: "shop_page", variant: "toolbar", settings: {} } } };
+const DESIGN_FARA_CATALOG = { version: 1, chrome: {}, home: [], shop: { page: { id: "shop_page", kind: "shop_page", variant: "none", settings: {} } } };
+
+function magazin(pageContent: Record<string, unknown> = {}, design: unknown = DESIGN_CU_CATALOG) {
+  return {
+    updated_at: "2026-09-01T10:00:00.000Z",
+    store_settings: { page_content: pageContent, storefront_design: design, store_policies: { return: { enabled: false } } },
+  };
+}
+
+const DATE: DateMagazinPentruSitemap = {
+  categorii: [
+    { id: "c1", name: "Flori", parent_id: null, is_active: true },
+    { id: "c2", name: "Stinsa", parent_id: null, is_active: false },
+    { id: "c3", name: "Flori", parent_id: null, is_active: true }, // acelasi segment ca „Flori"
+  ],
+  produse: [
+    { slug: "trandafiri", updated_at: "2026-08-20T00:00:00.000Z" },
+    { slug: null, updated_at: null },
+  ],
+  pagini: [
+    { slug: "despre-noi", updated_at: "2026-08-10T00:00:00.000Z", seo: {} },
+    { slug: "ascunsa", updated_at: null, seo: { noindex: true } },
+  ],
+};
+
+test("sitemapul domeniului propriu: fiecare adresa e pe acel domeniu, si numai pe el", () => {
+  const intrari = intrariMagazin(BAZA, magazin(), DATE);
+  assert.ok(intrari.length > 0);
+  for (const e of intrari) {
+    assert.ok(e.url === BAZA || e.url.startsWith(`${BAZA}/`), `${e.url} nu e pe domeniul magazinului`);
+    assert.ok(!e.url.includes("edinio.com"), `${e.url} trimite la platforma`);
+  }
+});
+
+test("sitemapul domeniului propriu are: start, catalog, categorii vizibile, produse, politici indexabile, pagini proprii", () => {
+  const urluri = intrariMagazin(BAZA, magazin(), DATE).map((e) => e.url);
+  assert.deepEqual(urluri, [
+    BAZA,
+    `${BAZA}/magazin`,
+    `${BAZA}/magazin/flori`,
+    `${BAZA}/product/trandafiri`,
+    `${BAZA}/politici/termeni`,
+    `${BAZA}/politici/livrare`,
+    `${BAZA}/politici/confidentialitate`,
+    `${BAZA}/politici/gdpr`,
+    `${BAZA}/politici/anulare`,
+    `${BAZA}/despre-noi`,
+  ]);
+});
+
+test("pagina principala e indexabila implicit, si iese doar la noindex de comerciant", () => {
+  assert.equal(intrariMagazin(BAZA, magazin(), DATE)[0]?.url, BAZA);
+  const cuNoindex = intrariMagazin(BAZA, magazin({ seo: { noindex: true } }), DATE).map((e) => e.url);
+  assert.ok(!cuNoindex.includes(BAZA), "pagina principala noindex a ramas in sitemap");
+  /* Produsele si paginile proprii raman: pagina lor nu asculta de `noindex`-ul
+     de magazin. Catalogul, categoriile si politicile ies: `pagina-magazin.tsx`
+     si `politici/[type]` le pun `noindex` in acelasi caz, iar un sitemap care
+     le-ar anunta ar fi contradictia pe care Search Console o raporteaza. */
+  assert.ok(cuNoindex.includes(`${BAZA}/product/trandafiri`));
+  assert.ok(cuNoindex.includes(`${BAZA}/despre-noi`));
+  assert.ok(!cuNoindex.some((u) => /\/magazin(\/|$)/.test(u)), "catalogul sau o categorie au ramas desi magazinul e noindex");
+  assert.ok(!cuNoindex.some((u) => u.includes("/politici/")), "politicile au ramas desi magazinul e noindex");
+});
+
+test("politicile scoase anume de comerciant nu intra", () => {
+  const urluri = intrariMagazin(BAZA, magazin({ seo: { politiciNoindex: ["termeni"] } }), DATE).map((e) => e.url);
+  assert.ok(!urluri.includes(`${BAZA}/politici/termeni`));
+  assert.ok(urluri.includes(`${BAZA}/politici/livrare`));
+});
+
+test("fara pagina de catalog nu intra nici catalogul, nici categoriile", () => {
+  const urluri = intrariMagazin(BAZA, magazin({}, DESIGN_FARA_CATALOG), DATE).map((e) => e.url);
+  assert.ok(!urluri.some((u) => /\/magazin(\/|$)/.test(u)));
+  assert.ok(urluri.includes(`${BAZA}/product/trandafiri`));
+});
+
+test("magazinul cu un singur produs nu-si anunta paginile de produs", () => {
+  const urluri = intrariMagazin(BAZA, magazin({ store_mode: "one_product", one_product_id: "p1" }), DATE).map((e) => e.url);
+  assert.ok(!urluri.some((u) => u.includes("/product/")));
+  assert.ok(urluri.includes(`${BAZA}/despre-noi`), "paginile proprii raman");
+});
+
+test("datele sunt cele adevarate, nu inventate", () => {
+  const intrari = intrariMagazin(BAZA, magazin(), DATE);
+  const produs = intrari.find((e) => e.url.endsWith("/product/trandafiri"));
+  assert.ok(produs?.lastModified instanceof Date, "data produsului lipseste sau nu e Date");
+  assert.equal(produs.lastModified.toISOString(), "2026-08-20T00:00:00.000Z");
+  const paginaFaraData = intrariMagazin(BAZA, magazin(), { ...DATE, pagini: [{ slug: "x", updated_at: null, seo: {} }] })
+    .find((e) => e.url.endsWith("/x"));
+  assert.ok(paginaFaraData && !("lastModified" in paginaFaraData), "o pagina fara data a primit una inventata");
 });

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -71,8 +72,8 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
     tagline: business.tagline,
   });
 
-  const host = (await headers()).get("host")?.split(":")[0] ?? "";
-  const isCustomDomain = business.custom_domain && host === business.custom_domain;
+  const host = (await headers()).get("host");
+  const isCustomDomain = esteDomeniulPropriu(host, business.custom_domain);
   const basePath = isCustomDomain ? "" : `/${slug}`;
 
   if (!checkoutOnPage(resolved.design)) redirect(cuSemnePastrate(radacinaMagazin(basePath), sirDinSp(sp)));

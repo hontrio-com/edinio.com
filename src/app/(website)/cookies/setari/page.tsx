@@ -14,7 +14,8 @@ import { SetariCookieClient } from "@/components/edinio-marketing/SetariCookieCl
   sa puna butonul.
 
   ⚠ SI DE CE SUB `/cookies/`, nu la radacina. `cookies` e deja in
-  `NON_STORE_SEGMENTS` (`src/proxy.ts`), deci ruta nu cere nicio schimbare acolo.
+  `NON_STORE_SEGMENTS` (`src/lib/segmente-rezervate.ts`), deci ruta nu cere
+  nicio schimbare acolo.
   Un segment nou de radacina ar fi cerut una — altfel fiecare cerere ar fi facut o
   interogare degeaba, iar un magazin cu acel slug si domeniu propriu ar fi furat
   pagina cu un 307.

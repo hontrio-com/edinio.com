@@ -1,11 +1,12 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existaPaginaStatica } from "./rute-pe-disc";
 import { FOOTER_COLUMNS, SOCIAL_LINKS } from "./footer";
 import { INDUSTRIES } from "./nav";
+import { NON_STORE_SEGMENTS } from "@/lib/segmente-rezervate";
 
 /*
  * Subsolul e locul in care se ascund cel mai bine linkurile moarte.
@@ -125,22 +126,18 @@ test("niciun link din subsol nu e confundat cu un magazin", () => {
    * Proxy-ul trateaza orice prim segment necunoscut ca pe un slug de magazin.
    * Pentru o pagina de site asta inseamna o interogare Supabase degeaba la
    * fiecare cerere — si, daca vreun magazin are intamplator acelasi slug si
-   * domeniu propriu, vizitatorul e trimis (307) pe domeniul ALTCUIVA.
+   * domeniu propriu, vizitatorul e trimis (307) pe domeniul ALTCUIVA. Iar de pe
+   * 03.09.2026 mai inseamna ceva: proba sitemapului platformei cere ca fiecare
+   * adresa anuntata sa inceapa cu un segment din lista, deci o pagina care
+   * lipseste de aici pica proba sitemapului (sitemapul insusi nu filtreaza).
    *
-   * Lista se citeste din sursa proxy-ului, nu se copiaza aici: o copie ar fi
-   * exact felul de dublura care ramane in urma. Comentariile se scot inainte de
-   * citirea sirurilor, ca sa nu intre text de acolo in lista.
+   * Lista se IMPORTA, nu se copiaza aici: o copie ar fi exact felul de dublura
+   * care ramane in urma. (Pana pe 03.09.2026 se citea cu un regex din sursa lui
+   * `proxy.ts`; acum sta intr-un modul fara dependinte si se importa ca atare.)
    */
-  const sursa = readFileSync(join(AICI, "..", "..", "proxy.ts"), "utf8");
-  const bloc = sursa.match(/NON_STORE_SEGMENTS = new Set\(\[([\s\S]*?)\]\)/);
-  assert.ok(bloc, "NON_STORE_SEGMENTS nu mai arata ca inainte in `proxy.ts`");
-
-  const faraComentarii = bloc[1].replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-  const segmente = new Set(
-    [...faraComentarii.matchAll(/"([^"]+)"/g)].map((m) => m[1]),
-  );
-  assert.ok(segmente.size >= 20, `s-au citit doar ${segmente.size} segmente — regexul a ratat`);
-  assert.ok(segmente.has("dashboard"), "citirea din `proxy.ts` a scos altceva decat lista");
+  const segmente = NON_STORE_SEGMENTS;
+  assert.ok(segmente.size >= 20, `lista are doar ${segmente.size} segmente — s-a golit`);
+  assert.ok(segmente.has("dashboard"), "lista nu mai contine rutele aplicatiei");
 
   for (const link of FOOTER_COLUMNS.flatMap((c) => c.links)) {
     if (link.extern) continue;

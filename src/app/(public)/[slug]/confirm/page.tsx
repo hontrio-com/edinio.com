@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
+import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import { CheckCircle, Package, Phone, ArrowLeft, XCircle } from "lucide-react";
 import { formatPrice, unitarSeInchide } from "@/lib/utils/format";
 import { ConfettiEffect } from "@/components/ministore/ConfettiEffect";
@@ -42,8 +43,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
 
   // Detect custom domain access
   const headersList = await headers();
-  const host = (headersList.get("host") ?? "").split(":")[0];
-  const isCustomDomain = business.custom_domain && host === business.custom_domain;
+  const isCustomDomain = esteDomeniulPropriu(headersList.get("host"), business.custom_domain);
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
   // Fetch order details via admin client (orders RLS restricts anonymous SELECT)

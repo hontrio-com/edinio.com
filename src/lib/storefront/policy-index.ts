@@ -16,8 +16,10 @@ import { parseStoreSeo } from "@/lib/seo";
  *    magazinul din Google nu se astepta sa-i ramana politicile indexate;
  *  - comerciantul poate scoate oricare dintre ele, una cate una, din Setari > SEO.
  *
- * Modulul e pur: il citesc si paginile (pentru `robots`) si cele doua sitemapuri,
- * iar raspunsul trebuie sa fie acelasi in toate trei. Scris de doua ori, s-ar fi
+ * Modulul e pur: il citesc si paginile (pentru `robots`) si sitemapul de pe
+ * domeniul propriu al magazinului (`app/sitemap.ts`; pe platforma vitrinele nu
+ * mai au sitemap din 03.09.2026), iar raspunsul trebuie sa fie acelasi in
+ * amandoua. Scris de doua ori, s-ar fi
  * ajuns la o pagina `noindex` listata in sitemap — exact semnalul contradictoriu
  * pe care Search Console il raporteaza ca eroare.
  */

@@ -30,11 +30,54 @@ export function bareHost(hostname: string): string {
   return hostname.split(":")[0].trim().toLowerCase();
 }
 
-/** True daca gazda e a platformei (panou/site de prezentare), nu a unui magazin. */
-export function isPlatformHost(hostname: string): boolean {
-  const bare = bareHost(hostname);
+/**
+ * True daca gazda e a platformei (panou/site de prezentare), nu a unui magazin.
+ *
+ * ⚠ SURSA UNICA. Pana pe 03.09.2026 mai exista o copie in `src/lib/seo.ts`, cu
+ * propria lista de gazde, folosita de sitemap si de robots. Doua liste care
+ * raspund la aceeasi intrebare se despart la prima gazda adaugata intr-una
+ * singura — si atunci proxy-ul ar fi rutat o gazda ca platforma in timp ce
+ * sitemapul ar fi servit-o ca magazin. `seo.ts` o re-exporta acum pe asta.
+ *
+ * O gazda GOALA (`null`, `undefined`, `""`) se considera a platformei. E
+ * implicitul sigur mostenit de la copia din `seo.ts`: o cerere fara antet
+ * `Host` nu poate fi a unui magazin, iar tratata ca platforma primeste
+ * sitemapul si robots-ul platformei, nu un sitemap gol pentru „domeniul" `""`.
+ */
+export function isPlatformHost(hostname: string | null | undefined): boolean {
+  const bare = bareHost(hostname ?? "");
+  if (!bare) return true;
   if (PLATFORM_HOSTS.has(bare)) return true;
   return SUFIXE_REZERVATE.some((s) => bare.endsWith(s));
+}
+
+/**
+ * Gazda de DESFASURARE: o copie a site-ului la `*.vercel.app` (previzualizari
+ * de ramura, adresa de proiect). E gazda a platformei pentru rutare, dar nu e
+ * o adresa pe care o vrem indexata — nici site-ul, nici vreo vitrina. Proxy-ul
+ * pune `X-Robots-Tag: noindex` pe tot ce se serveste de aici.
+ */
+export function esteGazdaDeDesfasurare(hostname: string | null | undefined): boolean {
+  return bareHost(hostname ?? "").endsWith(".vercel.app");
+}
+
+/**
+ * Cererea e servita chiar pe domeniul PROPRIU al magazinului?
+ *
+ * Singurul loc unde se raspunde la intrebarea asta. O citesc layout-ul
+ * magazinului (ca sa injecteze verificarea Search Console NUMAI acolo, si ca
+ * sa puna `noindex` in HTML oriunde altundeva) si toate paginile vitrinei
+ * pentru `basePath` — pana pe 04.09.2026 fiecare avea copia ei,
+ * `host === business.custom_domain`, fara nicio normalizare.
+ *
+ * Domeniul e stocat in baza canonic, ca apex si cu minuscule; gazda vine din
+ * antetul `Host`, deci se normalizeaza. Varianta `www.` nu ajunge aici: proxy-ul
+ * o trimite cu 308 catre apex inainte de randare.
+ */
+export function esteDomeniulPropriu(hostname: string | null | undefined, customDomain: string | null | undefined): boolean {
+  const domeniu = (customDomain ?? "").trim().toLowerCase();
+  if (!domeniu) return false;
+  return bareHost(hostname ?? "") === domeniu;
 }
 
 /**

@@ -2257,6 +2257,22 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 <Callout variant="warning">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</Callout>
               )}
 
+              {/*
+                ═══ INVARIANTA SEO (03.09.2026) ═══ Vitrinele de pe www.edinio.com sunt
+                noindex; magazinul apare in Google numai pe domeniul lui propriu. Fara
+                domeniu, cardurile de mai jos (titlu, previzualizare, noindex, politici)
+                ar promite o prezenta in Google care nu exista — de aceea se spune o
+                data, aici, si se repeta scurt in cardurile care vorbesc despre Google.
+                ⚠ Textele sunt citate in ghidurile din centrul de ajutor
+                (`ajutor-categorii/setari.ts`). Se schimba impreuna.
+              */}
+              {businessId && !businessData?.custom_domain && (
+                <Callout variant="warning">
+                  Magazinul e pe adresa edinio.com, unde vitrinele nu apar in Google: adresa www.edinio.com e rezervata site-ului Edinio.
+                  Setarile de mai jos se pastreaza si se aplica pe domeniul tau propriu, pe care il conectezi din Setari, sectiunea Domeniu.
+                </Callout>
+              )}
+
               <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
                 {/* Titlu meta */}
                 <div>
@@ -2299,6 +2315,11 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     description={seo.description?.trim() || seoDefaults.description}
                     url={seoPreviewUrl}
                   />
+                  {businessId && !businessData?.custom_domain && (
+                    <p className="text-[11px] text-muted-foreground mt-2">
+                      Titlul si descrierea de mai sus se vor vedea asa pe domeniul tau propriu, cu adresa lui sub titlu. Pe adresa edinio.com magazinul nu apare in Google.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -2317,7 +2338,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   <input type="checkbox" checked={!!seo.noindex} disabled={!businessId} onChange={(e) => setSeo(s => ({ ...s, noindex: e.target.checked }))} className="w-4 h-4 mt-0.5 rounded accent-green-600" />
                   <span>
                     <span className="block text-sm font-medium text-foreground">Ascunde magazinul din Google (noindex)</span>
-                    <span className="block text-xs text-muted-foreground mt-0.5">Optiune avansata. Activeaza doar daca NU vrei ca pagina principala sa apara in motoarele de cautare. Lasa dezactivat pentru SEO normal.</span>
+                    <span className="block text-xs text-muted-foreground mt-0.5">Optiune avansata. Activeaza doar daca NU vrei ca pagina principala sa apara in motoarele de cautare. Lasa dezactivat pentru SEO normal. Se aplica pe domeniul tau propriu: pe adresa edinio.com magazinul nu apare oricum in Google.</span>
                   </span>
                 </label>
               </div>
@@ -2329,6 +2350,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Bifate, apar in Google si in sitemap. Google Merchant Center cere politica de retur si termenii
                     indexabili ca sa valideze contul, deci lasa-le bifate daca faci reclama la produse.
+                    Ca tot ce tine de Google, se aplica pe domeniul tau propriu.
                   </p>
                 </div>
                 <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2">
@@ -2361,22 +2383,58 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Google Search Console */}
+              {/*
+                ═══ INVARIANTA SEO (03.09.2026) ═══
+
+                Edinio.com indexeaza numai continutul platformei. Storefront-urile
+                merchant sunt noindex pe host-ul platformei si devin indexabile doar
+                pe custom domain.
+
+                Deci fara domeniu propriu NU exista adresa de verificat si NU exista
+                sitemap: `www.edinio.com/{slug}/sitemap.xml` raspunde 410, iar codul
+                de verificare se injecteaza in pagina numai pe domeniul propriu
+                (`verificareGooglePentru`). Pasii 1 si 3 ar fi trimis omul sa lipeasca
+                in Search Console adrese care nu-i folosesc la nimic — de aceea apar
+                doar cu domeniu conectat. Campul de cod ramane: se salveaza acum si
+                devine activ singur cand domeniul raspunde.
+
+                ⚠ Textul de mai jos e citat in ghidul din centrul de ajutor
+                (`ajutor-categorii/setari.ts`, „cum-conectezi-magazinul-la-google-search-console").
+                Se schimba impreuna.
+              */}
               <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Google Search Console</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Vezi cum apare magazinul in Google: cautari, clicuri, pozitii si probleme de indexare. Configurezi in 3 pasi.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {businessData?.custom_domain
+                      ? "Vezi cum apare magazinul in Google: cautari, clicuri, pozitii si probleme de indexare. Configurezi in 3 pasi."
+                      : "Vezi cum apare magazinul in Google: cautari, clicuri, pozitii si probleme de indexare. Se configureaza pe domeniul tau propriu."}
+                  </p>
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">1.</span> Intra in <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer" className="text-primary underline">Search Console</a>, adauga o proprietate de tip Prefix URL si lipeste adresa magazinului:</p>
-                  <div className="flex items-center gap-2">
-                    <input readOnly value={seoPreviewUrl} onFocus={(e) => e.target.select()} className={`${inputCls} font-mono text-xs`} />
-                    <Button type="button" variant="outline" size="sm" onClick={() => { navigator.clipboard?.writeText(seoPreviewUrl); toast.success("Copiat."); }}>Copiaza</Button>
+                {!businessData?.custom_domain && (
+                  <p className="text-xs text-muted-foreground border border-border rounded-lg p-3">
+                    Magazinul e pe adresa edinio.com, unde vitrinele nu se indexeaza in Google: adresa www.edinio.com e rezervata site-ului Edinio.
+                    Verificarea Search Console si sitemap-ul devin disponibile pe domeniul tau propriu, pe care il conectezi din Setari, sectiunea Domeniu.
+                    Poti lipi codul de verificare de pe acum: se adauga singur in pagina magazinului in clipa in care raspunde pe domeniul tau.
+                  </p>
+                )}
+
+                {businessData?.custom_domain && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">1.</span> Intra in <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer" className="text-primary underline">Search Console</a>, adauga o proprietate de tip Prefix URL si lipeste adresa magazinului:</p>
+                    <div className="flex items-center gap-2">
+                      <input readOnly value={seoPreviewUrl} onFocus={(e) => e.target.select()} className={`${inputCls} font-mono text-xs`} />
+                      <Button type="button" variant="outline" size="sm" onClick={() => { navigator.clipboard?.writeText(seoPreviewUrl); toast.success("Copiat."); }}>Copiaza</Button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">2.</span> La verificare alege metoda Eticheta HTML, copiaza codul de la Google si lipeste-l aici:</p>
+                  <p className="text-xs text-muted-foreground">
+                    {businessData?.custom_domain && <span className="font-semibold text-foreground">2. </span>}
+                    La verificare alege metoda Eticheta HTML, copiaza codul de la Google si lipeste-l aici:
+                  </p>
                   <input
                     value={seo.googleVerification ?? ""}
                     onChange={(e) => setSeo(s => ({ ...s, googleVerification: e.target.value }))}
@@ -2384,21 +2442,25 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     className={`${inputCls} font-mono text-xs`}
                     disabled={!businessId}
                   />
-                  <p className="text-[11px] text-muted-foreground">Salveaza cu butonul de jos, apoi apasa Verifica in Search Console. Codul se adauga automat in pagina magazinului.</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {businessData?.custom_domain
+                      ? "Salveaza cu butonul de jos, apoi apasa Verifica in Search Console. Codul se adauga automat in pagina magazinului, pe domeniul tau."
+                      : "Salveaza cu butonul de jos. Codul se adauga automat in pagina magazinului dupa ce conectezi domeniul tau."}
+                  </p>
                 </div>
 
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">3.</span> Dupa verificare, la sectiunea Sitemaps din Search Console lipeste adresa sitemap-ului:</p>
-                  <div className="flex items-center gap-2">
-                    <input readOnly value={`${seoPreviewUrl}/sitemap.xml`} onFocus={(e) => e.target.select()} className={`${inputCls} font-mono text-xs`} />
-                    <Button type="button" variant="outline" size="sm" onClick={() => { navigator.clipboard?.writeText(`${seoPreviewUrl}/sitemap.xml`); toast.success("Copiat."); }}>Copiaza</Button>
+                {businessData?.custom_domain && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">3.</span> Dupa verificare, la sectiunea Sitemaps din Search Console lipeste adresa sitemap-ului:</p>
+                    <div className="flex items-center gap-2">
+                      <input readOnly value={`${seoPreviewUrl}/sitemap.xml`} onFocus={(e) => e.target.select()} className={`${inputCls} font-mono text-xs`} />
+                      <Button type="button" variant="outline" size="sm" onClick={() => { navigator.clipboard?.writeText(`${seoPreviewUrl}/sitemap.xml`); toast.success("Copiat."); }}>Copiaza</Button>
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {businessData?.custom_domain ? (
+                {businessData?.custom_domain && (
                   <p className="text-[11px] text-muted-foreground">Magazinul are domeniu propriu, deci verificarea si sitemap-ul folosesc adresa {seoPreviewUrl}.</p>
-                ) : (
-                  <p className="text-[11px] text-muted-foreground">Magazinul e pe adresa edinio.com. Daca vrei domeniul tau propriu in Google, conecteaza-l din Setari, sectiunea Domeniu, apoi reia pasii cu noua adresa.</p>
                 )}
               </div>
 

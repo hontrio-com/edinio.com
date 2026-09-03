@@ -3,6 +3,7 @@ import { cache, Suspense } from "react";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { createClient } from "@/lib/supabase/server";
@@ -58,7 +59,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description: seo.description ?? undefined,
     keywords: seo.keywords?.trim() || undefined,
     alternates: { canonical: url },
-    robots: seo.noindex ? { index: false, follow: false } : undefined,
+    // Cheia lipseste cand pagina e indexabila, ca sa mosteneasca layout-ul
+    // magazinului (`noindex` pe platforma, `index` pe domeniul propriu).
+    // `robots: undefined` ar fi STERS mostenirea, nu ar fi pastrat-o.
+    ...(seo.noindex ? { robots: { index: false, follow: false } } : {}),
     // `locale` si `siteName` se scriu explicit: obiectul asta inlocuieste in
     // intregime openGraph-ul radacinii, deci ce nu e aici nu se emite deloc, iar
     // og:site_name mostenit ar fi spus „Edinio" pe pagina magazinului.
@@ -105,7 +109,7 @@ async function dateStructuratePagina(
   const seo = (page.seo ?? {}) as PageSeo;
   /*
    * Pagina scoasa din Google n-are ce descrie. Sitemapul o sare deja
-   * (`sitemap.xml/route.ts`), deci regula exista — aici doar se oglindeste, ca
+   * (`app/sitemap.ts`, ramura domeniului propriu), deci regula exista — aici doar se oglindeste, ca
    * `<head>` si `<script>` sa nu spuna lucruri diferite despre aceeasi adresa.
    */
   if (seo.noindex) return null;
@@ -281,8 +285,7 @@ export default async function CustomPage({ params }: Props) {
 
   // Custom domain detection (links honour basePath).
   const headersList = await headers();
-  const host = (headersList.get("host") ?? "").split(":")[0];
-  const isCustomDomain = business.custom_domain && host === business.custom_domain;
+  const isCustomDomain = esteDomeniulPropriu(headersList.get("host"), business.custom_domain);
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
   const blocks = prepareBlocksForPublic((page.blocks as unknown as Block[]) ?? []);

@@ -11,7 +11,8 @@ import { DoarInMagazinReal } from "@/components/public/DoarInMagazinReal";
 import type { MarketingConfig } from "@/lib/marketing-config";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { detectConsentCategories, parseCookieBannerConfig } from "@/lib/cookie-consent";
-import { deriveStoreDescription, deriveStoreTitle, parseStoreSeo } from "@/lib/seo";
+import { deriveStoreDescription, deriveStoreTitle, parseStoreSeo, robotsVitrinaPeGazda, verificareGooglePentru } from "@/lib/seo";
+import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import type { Metadata } from "next";
 
 interface Props {
@@ -71,7 +72,28 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     twitter: { card: imagini.length ? "summary_large_image" : "summary", title: titlu, description: descriere, ...(imagini.length ? { images: imagini } : {}) },
   };
   if (favicon) meta.icons = { icon: favicon };
-  if (seo.googleVerification) meta.verification = { google: seo.googleVerification };
+  /*
+   * Verificarea Search Console se injecteaza NUMAI cand cererea vine de pe
+   * domeniul propriu al comerciantului (03.09.2026).
+   *
+   * Pe `www.edinio.com/{slug}` vitrina e `noindex` (invarianta din
+   * `indexare-pe-platforma.ts`), deci n-are ce cauta in Search Console, iar
+   * eticheta ar fi lasat un comerciant sa revendice o bucata din site-ul
+   * platformei. Codul ramane salvat si se activeaza singur pe domeniul propriu.
+   * Regula e in `verificareGooglePentru`, cu proba ei in `src/lib/seo.test.ts`.
+   */
+  const gazda = (await headers()).get("host");
+  const codVerificare = verificareGooglePentru(gazda, data, seo.googleVerification);
+  if (codVerificare) meta.verification = { google: codVerificare };
+  /*
+   * Al doilea strat al invariantei: pe orice gazda care nu e domeniul propriu
+   * (platforma, `*.vercel.app`, localhost) vitrina spune si in HTML `noindex`,
+   * nu doar in antet. Paginile care isi declara singure `robots` (cos, checkout,
+   * politici ascunse, noindex de comerciant) il pastreaza pe al lor: segmentul
+   * mai adanc castiga. Vezi `robotsVitrinaPeGazda`.
+   */
+  const robots = robotsVitrinaPeGazda(gazda, data);
+  if (robots) meta.robots = robots;
   return meta;
 }
 
@@ -113,9 +135,11 @@ export default async function StoreLayout({ children, params }: Props) {
   const storeName = (business?.store_name as string | null) ?? (business?.business_name as string | null) ?? "magazin";
 
   // Policy link must honour custom domains (proxy rewrites customdomain.ro/x → /slug/x).
-  const host = (await headers()).get("host")?.split(":")[0] ?? "";
+  // Aceeasi intrebare ca la verificarea Search Console de mai sus, cu acelasi
+  // raspuns: `esteDomeniulPropriu` e singurul loc care o judeca.
+  const host = (await headers()).get("host");
   const customDomain = (business?.custom_domain as string | null) ?? null;
-  const basePath = customDomain && host === customDomain ? "" : `/${slug}`;
+  const basePath = esteDomeniulPropriu(host, customDomain) ? "" : `/${slug}`;
 
   // Trackers inject AFTER the visitor consents to the matching category
   // (GDPR opt-in). marketing = FB/TikTok pixels, analytics = Google Tag.

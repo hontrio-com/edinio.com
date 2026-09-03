@@ -35,6 +35,7 @@ import { buildProductJsonLd } from "@/lib/storefront/product-jsonld";
 import { parseTimpDeLivrare } from "@/lib/shipping/delivery-time";
 import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
+import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import { after } from "next/server";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
@@ -509,7 +510,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
   // Detect custom domain access
   const headersList = await headers();
   const host = (headersList.get("host") ?? "").split(":")[0];
-  const isCustomDomain = business.custom_domain && host === business.custom_domain;
+  const isCustomDomain = esteDomeniulPropriu(host, business.custom_domain);
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
   // Analitica, DUPA ce raspunsul a plecat (skip pentru proprietar). Sarita si pe

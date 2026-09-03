@@ -2,7 +2,8 @@ import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { PLATFORM_ORIGIN, isPlatformHost, parseStoreSeo } from "@/lib/seo";
+import { PLATFORM_ORIGIN, parseStoreSeo } from "@/lib/seo";
+import { isPlatformHost, bareHost } from "@/lib/platform-hosts";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 import { SEGMENT_MAGAZIN, shopOnPage } from "@/lib/storefront/design/commerce";
 import { politiciIndexabile } from "@/lib/storefront/policy-index";
@@ -21,13 +22,41 @@ import {
   TOP_NAV,
 } from "@/lib/website/nav";
 
+/*
+ * ═══ INVARIANTA SEO (03.09.2026) ═══
+ *
+ * Edinio.com indexeaza numai continutul platformei. Storefront-urile merchant
+ * sunt noindex pe host-ul platformei si devin indexabile doar pe custom domain.
+ *
+ * Fisierul asta serveste `/sitemap.xml` DUPA GAZDA (`headers()` il face dinamic,
+ * per cerere), si cele doua ramuri nu se ating:
+ *
+ *   - pe www.edinio.com: NUMAI adresele platformei — pagina de start, preturi,
+ *     contact, paginile juridice, paginile de prezentare, /vs, /industrii,
+ *     integrarile, centrul de ajutor cu ghidurile lui, blogul cu articole,
+ *     rubrici, autori si etichete. NICIUN magazin, nicio pagina de magazin.
+ *     `intrariPlatforma` e o functie SINCRONA, deci nu poate intreba baza de
+ *     magazine nici daca ar vrea cineva — proba din `sitemap.test.ts` o tine asa.
+ *
+ *   - pe domeniul unui comerciant (magazin-client.ro): NUMAI paginile ACELUI
+ *     magazin, pe domeniul lui: pagina de start, catalogul, categoriile,
+ *     produsele, politicile indexabile, paginile proprii. `intrariMagazin` e la
+ *     fel de pura; citirile stau in `sitemapPeDomeniulPropriu`.
+ *
+ * Pana pe 03.09.2026 ramura platformei anunta si vitrinele magazinelor fara
+ * domeniu propriu (pagina lor de start, pagina de catalog si paginile proprii),
+ * iar `/sitemap-magazine.xml` indexa sitemapurile lor de produse. Toate au
+ * plecat: vitrinele de pe platforma poarta `X-Robots-Tag: noindex` (pus de
+ * `src/proxy.ts`), iar un sitemap care anunta adrese `noindex` e o contradictie
+ * pe care Google o numara la sanatatea site-ului.
+ */
+
 // Un fisier de sitemap accepta maxim 50.000 de URL-uri (limita Google) —
-// peste, fisierul intreg e respins. Pastram ordinea de prioritate
-// static → magazine → produse → pagini si taiem la limita.
+// peste, fisierul intreg e respins. Pe domeniul unui magazin ordinea de
+// prioritate e start → catalog → categorii → produse → politici → pagini, si
+// se taie la limita.
 const SITEMAP_URL_LIMIT = 50000;
 
-/** Whether a store's homepage opted out of indexing (Settings > SEO > noindex).
- *  Reads the nested store_settings(page_content) selected on a businesses row. */
 /**
  * Designul PUBLICAT al magazinului, din randul deja adus.
  *
@@ -53,18 +82,10 @@ function politiciDinRand(row: { store_settings?: unknown }): unknown {
   return (Array.isArray(ss) ? ss[0] : ss)?.store_policies ?? null;
 }
 
+/** Whether a store's homepage opted out of indexing (Settings > SEO > noindex). */
 function homepageNoindex(row: { store_settings?: unknown }): boolean {
-  const ss = row.store_settings as { page_content?: unknown } | { page_content?: unknown }[] | null | undefined;
-  if (!ss) return false;
-  const pc = (Array.isArray(ss) ? ss[0] : ss)?.page_content ?? null;
-  return parseStoreSeo(pc).noindex === true;
+  return parseStoreSeo(pcDinRand(row)).noindex === true;
 }
-
-// Host-aware. Using headers() makes this dynamic (per request), so:
-//  - a merchant custom domain gets a sitemap of ONLY that store's pages, on its
-//    own domain;
-//  - the platform sitemap (www.edinio.com) lists marketing pages + stores that
-//    do NOT have a custom domain (those live on, and index under, their domain).
 
 /**
  * Adresele paginilor de prezentare, scoase din datele meniului.
@@ -114,17 +135,6 @@ export function paginiDeSite(): string[] {
 }
 
 /**
- * Când s-a schimbat ultima oară CONȚINUTUL articolului.
- *
- * ⚠ VINE DIN `content_updated_at`, NU DIN `updated_at`. Al doilea se mută la
- * orice atingere administrativă — pui alt articol în vitrină și triggerul îl
- * coboară pe ăsta, îl fixezi, îl arhivezi. Un sitemap construit pe el spunea lui
- * Google că articolul s-a schimbat, când de fapt cineva apăsase o bifă.
- *
- * Se ia cea mai MARE dintre cele două date: un articol programat în viitor și
- * încă neatins poate avea data conținutului mai veche decât cea de publicare.
- */
-/**
  * `lastModified`, dar numai dacă avem o dată ADEVĂRATĂ.
  *
  * ⚠ ACEEAȘI REGULĂ CA LA PAGINILE SCRISE ÎN COD, dusă până la capăt. Acolo am
@@ -141,6 +151,17 @@ function dataDacaOStim(x: string | Date | null | undefined): { lastModified?: Da
   return Number.isNaN(d.getTime()) ? {} : { lastModified: d };
 }
 
+/**
+ * Când s-a schimbat ultima oară CONȚINUTUL articolului.
+ *
+ * ⚠ VINE DIN `content_updated_at`, NU DIN `updated_at`. Al doilea se mută la
+ * orice atingere administrativă — pui alt articol în vitrină și triggerul îl
+ * coboară pe ăsta, îl fixezi, îl arhivezi. Un sitemap construit pe el spunea lui
+ * Google că articolul s-a schimbat, când de fapt cineva apăsase o bifă.
+ *
+ * Se ia cea mai MARE dintre cele două date: un articol programat în viitor și
+ * încă neatins poate avea data conținutului mai veche decât cea de publicare.
+ */
 function candSaSchimbat(actualizat?: string | null, publicat?: string | null): Date | null {
   const d = [actualizat, publicat]
     .filter((x): x is string => !!x)
@@ -186,124 +207,37 @@ export function dataTaxonomiei(
   return alEi < dinArticole ? dinArticole : alEi;
 }
 
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const host = (await headers()).get("host")?.split(":")[0].toLowerCase() ?? "";
-  const supabase = await createClient();
+/* ═══════════════════════════════════════════════════════════════════════════
+ * PLATFORMA (www.edinio.com): numai adresele platformei
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
-  // ── Custom domain: only this store's pages, on its own domain ──────────────
-  if (!isPlatformHost(host)) {
-    const { data: biz } = await createAdminClient()
-      .from("businesses")
-      .select("id, updated_at, store_settings(page_content, storefront_design, store_policies)")
-      .eq("custom_domain", host)
-      .eq("is_published", true)
-      .single();
-    if (!biz) return [];
+/** Ce are nevoie sitemapul platformei dintr-un articol de blog publicat. */
+export type ArticolPentruSitemap = {
+  slug: string;
+  noindex?: boolean | null;
+  content_updated_at?: string | null;
+  published_at?: string | null;
+  categorie?: { slug: string; content_updated_at?: string | null } | null;
+  autor?: { slug: string; content_updated_at?: string | null } | null;
+};
 
-    const base = `https://${host}`;
-    // Skip the homepage entry when the merchant set it to noindex (Settings > SEO);
-    // its products/pages can still be indexable, so they stay below.
-    const entries: MetadataRoute.Sitemap = homepageNoindex(biz)
-      ? []
-      : [{ url: base, ...dataDacaOStim(biz.updated_at), changeFrequency: "weekly", priority: 1 }];
+/** O eticheta de blog folosita de macar un articol publicat, cu data ultimului. */
+export type EtichetaPentruSitemap = { slug: string; ultima?: string | Date | null };
 
-    // Pagina de catalog, cand magazinul si-a ales-o. Prima ruta-sectiune
-    // indexabila: cosul si finalizarea sunt deliberat noindex, dar asta e chiar
-    // catalogul magazinului.
-    if (shopOnPage(designPublicat(biz.store_settings))) {
-      entries.push({
-        url: `${base}/${SEGMENT_MAGAZIN}`,
-        ...dataDacaOStim(biz.updated_at),
-        changeFrequency: "daily",
-        priority: 0.9,
-      });
-      // Si paginile de categorie: de cand exista, ele sunt adresele care
-      // raspund cautarilor de tip „bocanci de protectie". Cele stinse din panou
-      // ies — pagina lor raspunde 404.
-      const categorii = categoriiVizibile(await fetchAllRowsStrict("sitemap.store.categories", (from, to) =>
-        supabase.from("categories").select("id, name, parent_id, is_active").eq("business_id", biz.id).order("id").range(from, to)
-      ));
-      const vazute = new Set<string>();
-      for (const c of categorii) {
-        const seg = slugCategorie(c.name ?? "");
-        if (!seg || vazute.has(seg)) continue;
-        vazute.add(seg);
-        entries.push({
-          url: `${base}/${SEGMENT_MAGAZIN}/${seg}`,
-          ...dataDacaOStim(biz.updated_at),
-          changeFrequency: "daily",
-          priority: 0.8,
-        });
-      }
-    }
-
-    // One Product Store: the homepage already represents the single product, so
-    // skip the individual /product/* URLs (the main one 301s to the homepage; the
-    // rest are noindex). Custom pages below still get listed.
-    if (parseStoreModeFromSettings(biz.store_settings).mode !== "one_product") {
-      const products = await fetchAllRowsStrict("sitemap.store.products", (from, to) =>
-        supabase
-          .from("products")
-          .select("slug, updated_at")
-          .eq("business_id", biz.id)
-          .eq("is_active", true)
-          .not("slug", "is", null)
-          .order("id")
-          .range(from, to)
-      );
-
-      for (const p of products) {
-        if (!p.slug) continue;
-        entries.push({
-          url: `${base}/product/${p.slug}`,
-          ...dataDacaOStim(p.updated_at),
-          changeFrequency: "weekly",
-          priority: 0.7,
-        });
-      }
-    }
-
-    // Paginile de politici indexabile. Vezi `politiciIndexabile`: aceeasi functie
-    // decide si eticheta `robots` a paginii, ca sitemapul si pagina sa nu spuna
-    // lucruri diferite.
-    for (const tip of politiciIndexabile(pcDinRand(biz), politiciDinRand(biz))) {
-      entries.push({
-        url: `${base}/politici/${tip}`,
-        ...dataDacaOStim(biz.updated_at),
-        changeFrequency: "yearly",
-        priority: 0.3,
-      });
-    }
-
-    const pages = await fetchAllRowsStrict("sitemap.store.pages", (from, to) =>
-      supabase
-        .from("custom_pages")
-        .select("slug, updated_at, seo")
-        .eq("business_id", biz.id)
-        .eq("is_published", true)
-        .order("id")
-        .range(from, to)
-    );
-    for (const pg of pages) {
-      if ((pg.seo as { noindex?: boolean } | null)?.noindex) continue;
-      entries.push({
-        url: `${base}/${pg.slug}`,
-        ...dataDacaOStim(pg.updated_at),
-        changeFrequency: "monthly",
-        priority: 0.5,
-      });
-    }
-    return entries.slice(0, SITEMAP_URL_LIMIT);
-  }
-
-  // ── Platform (www.edinio.com): marketing + stores WITHOUT a custom domain ──
-
-  /* ⚠ SE IAU IN FELII, nu cu un `.limit()` mare.
-     Aici scria „plafonul e generos dinadins: la 2000 de articole sitemapul tot
-     incape sub limita Google". Era o presupunere gresita: PostgREST taie TACUT
-     la propriul lui plafon de randuri, deci `.limit(2000)` ar fi adus o mie si
-     ne-ar fi lasat sa credem ca le are pe toate. Vezi nota din
-     `toateArticolelePublicate`. */
+/**
+ * Intrarile sitemapului platformei, din date deja citite.
+ *
+ * ⚠ SINCRONA, DINADINS. O functie fara `await` nu poate intreba baza, deci nu
+ * poate — nici printr-o „mica adaugare" de maine — sa puna aici un magazin, o
+ * pagina de magazin sau un produs. Tot ce intra e fie scris in cod (paginile
+ * site-ului, ajutorul), fie vine din blogul platformei. Proba din
+ * `sitemap.test.ts` verifica amandoua: ca e sincrona, si ca fiecare adresa
+ * incepe cu un segment rezervat platformei (`NON_STORE_SEGMENTS`).
+ */
+export function intrariPlatforma(
+  toateArticolele: ArticolPentruSitemap[],
+  eticheteBlog: EtichetaPentruSitemap[],
+): MetadataRoute.Sitemap {
   /*
     ⚠ ARTICOLELE CU `noindex` NU INTRĂ ÎN SITEMAP.
 
@@ -315,10 +249,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     Găsit chiar la proba de punere în funcțiune (30.08.2026): articolul de test
     era `noindex` și apărea totuși în sitemap.
   */
-  const [toateArticolele, eticheteBlog] = await Promise.all([
-    toateArticolelePublicate(),
-    eticheteFolosite(),
-  ]);
   const articoleBlog = toateArticolele.filter((a) => !a.noindex);
   const categoriiCuArticole = [
     ...new Set(articoleBlog.map((a) => a.categorie?.slug).filter((s): s is string => !!s)),
@@ -329,7 +259,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...new Set(articoleBlog.map((a) => a.autor?.slug).filter((s): s is string => !!s)),
   ];
 
-  const staticPages: MetadataRoute.Sitemap = [
+  return [
   /*
     ⚠ PAGINILE SCRISE IN COD NU AU `lastModified`, SI E O ALEGERE.
 
@@ -375,26 +305,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       scoasa iese. Aceeasi disciplina ca la centrul de ajutor, mai jos. Slug-urile
       de competitori si de industrii vin din listele din care isi fac paginile
       `generateStaticParams`, deci nu pot ramane in urma.
-    */
-    /*
-      ⚠ FARA `lastModified`, SI ASTA E O ALEGERE, NU O SCAPARE.
 
-      Aici era `new Date()`. Adica toate cele 23 de adrese spuneau, la FIECARE
-      generare a sitemapului, ca s-au schimbat azi — inclusiv `/blog`, si
-      inclusiv pagini care n-au fost atinse de luni de zile.
-
-      ⚠ PAGUBA NU E LOCALA. Un `lastmod` care se muta zilnic fara motiv il invata
-      pe Google sa nu mai creada campul DELOC pe domeniul asta — deci strica
-      exact datele pe care le-am facut corecte cu greu: `content_updated_at` pe
-      articole, si cel pus pe rubrici si autori. O minciuna repetata pe 23 de
-      adrese ieftineste adevarul de pe celelalte.
-
-      Google spune limpede ca daca nu poti afla data reala a unei pagini, e mai
-      bine sa NU trimiti `lastmod` decat sa trimiti unul inventat. Paginile astea
-      sunt scrise in cod si se schimba la desfasurare — n-avem de unde sa stim
-      cand, fara sa inventam un sistem doar pentru asta.
-
-      `changeFrequency` ramane: el e o sugestie, nu o afirmatie despre trecut.
+      ⚠ FARA `lastModified`, SI ASTA E O ALEGERE, NU O SCAPARE — vezi nota de
+      deasupra: o data inventata pe 23 de adrese ieftineste adevarul de pe
+      celelalte.
     */
     ...paginiDeSite().map((cale) => ({
       url: `${PLATFORM_ORIGIN}${cale}`,
@@ -429,33 +343,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     /*
       Blogul: fiecare articol publicat, și categoriile care au articole.
 
-      ⚠ SE CITESC PRIN `articolePublicate`, care merge pe clientul obișnuit, NU
-      pe cel de serviciu folosit mai jos pentru magazine. Regula din baza de date
-      lasă să treacă doar `published` cu data trecută, deci o ciornă sau un
-      articol programat nu POT ajunge aici. Cu cheia de serviciu ar fi ajuns la
-      un filtru scris de mână, iar un filtru uitat ar fi trimis Google către
-      pagini care dau 404 — genul de greșeală care se plătește în încredere.
+      ⚠ SE CITESC PRIN `toateArticolelePublicate`, care merge pe clientul
+      obișnuit, NU pe cel de serviciu. Regula din baza de date lasă să treacă
+      doar `published` cu data trecută, deci o ciornă sau un articol programat
+      nu POT ajunge aici. Cu cheia de serviciu ar fi ajuns la un filtru scris de
+      mână, iar un filtru uitat ar fi trimis Google către pagini care dau 404 —
+      genul de greșeală care se plătește în încredere.
 
-      ⚠ `lastModified` E DATA ADEVĂRATĂ.
-
-      Nota asta spunea „nu `new Date()` ca la paginile de deasupra. Acolo e o
-      aproximare fără miză". A DOUA PROPOZIȚIE ERA GREȘITĂ, și s-a reparat pe
-      31.08.2026: aproximarea AVEA miză. Un sitemap în care 23 de adrese spun
-      zilnic că s-au schimbat nu mai spune nimic despre niciuna — inclusiv despre
-      cele care chiar poartă o dată adevărată, ca rândurile de aici. Paginile
-      scrise în cod n-au acum niciun `lastModified`, ceea ce e mai cinstit decât
-      o dată inventată.
-
-      ⚠ NOTA ASTA A FOST MULTĂ VREME O MINCIUNĂ PE JUMĂTATE. Stătea exact aici,
-      deasupra unor blocuri care puneau `new Date()` la categorii, la autori și
-      la etichete. Numai articolele o respectau.
-
-      ⚠ ARTICOLUL FOLOSEȘTE `updated_at`, NU DOAR `published_at`. Cu
-      `published_at`, un articol corectat peste șase luni părea neatins din ziua
-      publicării, deci Google n-avea niciun motiv să se întoarcă la el. Am putut
-      trece pe `updated_at` abia după ce citirile au plecat de pe rândul
-      articolului: cât timp fiecare vizită îl muta, ar fi însemnat „articolele
-      citite se schimbă zilnic".
+      ⚠ `lastModified` E DATA ADEVĂRATĂ, din `content_updated_at`, nu din
+      `updated_at`: acela se mută la orice atingere administrativă, iar cu
+      `published_at` singur un articol corectat peste șase luni părea neatins
+      din ziua publicării, deci Google n-avea niciun motiv să se întoarcă la el.
     */
     ...articoleBlog.map((a) => ({
       url: `${PLATFORM_ORIGIN}/blog/${a.slug}`,
@@ -504,86 +402,192 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.4,
     })),
   ];
+}
 
-  const admin = createAdminClient();
-  const businesses = await fetchAllRowsStrict("sitemap.platform.businesses", (from, to) =>
-    admin
-      .from("businesses")
-      .select("slug, updated_at, custom_domain, store_settings(page_content, storefront_design)")
-      .eq("is_published", true)
-      .order("id")
-      .range(from, to)
-  );
+async function sitemapPlatforma(): Promise<MetadataRoute.Sitemap> {
+  /* ⚠ SE IAU IN FELII, nu cu un `.limit()` mare: PostgREST taie TACUT la
+     propriul lui plafon de randuri, deci `.limit(2000)` ar fi adus o mie si
+     ne-ar fi lasat sa credem ca le are pe toate. Vezi nota din
+     `toateArticolelePublicate`. */
+  const [toateArticolele, eticheteBlog] = await Promise.all([
+    toateArticolelePublicate(),
+    eticheteFolosite(),
+  ]);
+  return intrariPlatforma(toateArticolele, eticheteBlog).slice(0, SITEMAP_URL_LIMIT);
+}
 
-  const businessPages: MetadataRoute.Sitemap = businesses
-    .filter((b) => !b.custom_domain && !homepageNoindex(b))
-    .map((b) => ({
-      url: `${PLATFORM_ORIGIN}/${b.slug}`,
-      ...dataDacaOStim(b.updated_at),
-      changeFrequency: "weekly" as const,
-      priority: 0.8,
-    }));
+/* ═══════════════════════════════════════════════════════════════════════════
+ * DOMENIUL PROPRIU (magazin-client.ro): numai paginile acelui magazin
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
-  const paginiDeCatalog: MetadataRoute.Sitemap = businesses
-    .filter((b) => !b.custom_domain && !homepageNoindex(b) && shopOnPage(designPublicat(b.store_settings)))
-    .map((b) => ({
-      url: `${PLATFORM_ORIGIN}/${b.slug}/${SEGMENT_MAGAZIN}`,
-      ...dataDacaOStim(b.updated_at),
-      changeFrequency: "daily" as const,
+/** Randul magazinului de care are nevoie sitemapul lui. */
+export type MagazinPentruSitemap = {
+  updated_at: string | null;
+  store_settings?: unknown;
+};
+
+/** Ce se citeste din baza pentru sitemapul unui magazin. */
+export type DateMagazinPentruSitemap = {
+  categorii: Parameters<typeof categoriiVizibile>[0];
+  produse: { slug: string | null; updated_at: string | null }[];
+  pagini: { slug: string | null; updated_at: string | null; seo: unknown }[];
+};
+
+/**
+ * Intrarile sitemapului unui magazin, pe domeniul lui, din date deja citite.
+ *
+ * `base` e `https://magazin-client.ro` — si NUMAI el: fiecare adresa de aici
+ * incepe cu el, deci sitemapul unui domeniu nu poate contine nici adrese de pe
+ * platforma, nici de pe domeniul altui magazin. Proba din `sitemap.test.ts` o
+ * verifica pe fiecare adresa.
+ */
+export function intrariMagazin(
+  base: string,
+  biz: MagazinPentruSitemap,
+  date: DateMagazinPentruSitemap,
+): MetadataRoute.Sitemap {
+  // Skip the homepage entry when the merchant set it to noindex (Settings > SEO);
+  // its products/pages can still be indexable, so they stay below.
+  const entries: MetadataRoute.Sitemap = homepageNoindex(biz)
+    ? []
+    : [{ url: base, ...dataDacaOStim(biz.updated_at), changeFrequency: "weekly", priority: 1 }];
+
+  // Pagina de catalog, cand magazinul si-a ales-o. Prima ruta-sectiune
+  // indexabila: cosul si finalizarea sunt deliberat noindex, dar asta e chiar
+  // catalogul magazinului.
+  //
+  // ⚠ NU si cand comerciantul a ascuns magazinul din Google (04.09.2026):
+  // `pagina-magazin.tsx` pune atunci `noindex` pe catalog si pe fiecare
+  // categorie, iar un sitemap care le anunta ar fi contradictia pe care Search
+  // Console o raporteaza ca eroare. Produsele raman: pagina lor nu asculta de
+  // `noindex`-ul de magazin.
+  if (!homepageNoindex(biz) && shopOnPage(designPublicat(biz.store_settings))) {
+    entries.push({
+      url: `${base}/${SEGMENT_MAGAZIN}`,
+      ...dataDacaOStim(biz.updated_at),
+      changeFrequency: "daily",
       priority: 0.9,
-    }));
+    });
+    // Si paginile de categorie: de cand exista, ele sunt adresele care
+    // raspund cautarilor de tip „bocanci de protectie". Cele stinse din panou
+    // ies — pagina lor raspunde 404. Doua categorii pot da acelasi segment
+    // (diferenta e doar la diacritice): intra o singura data, e o singura pagina.
+    const vazute = new Set<string>();
+    for (const c of categoriiVizibile(date.categorii)) {
+      const seg = slugCategorie(c.name ?? "");
+      if (!seg || vazute.has(seg)) continue;
+      vazute.add(seg);
+      entries.push({
+        url: `${base}/${SEGMENT_MAGAZIN}/${seg}`,
+        ...dataDacaOStim(biz.updated_at),
+        changeFrequency: "daily",
+        priority: 0.8,
+      });
+    }
+  }
 
-  // One Product Store homepages represent their single product, so their
-  // /product/* URLs are excluded below (the main one 301s to the homepage; the
-  // rest are noindex).
-  const opsSlugs = new Set(
-    businesses
-      .filter((b) => parseStoreModeFromSettings(b.store_settings).mode === "one_product")
-      .map((b) => b.slug),
-  );
+  // One Product Store: the homepage already represents the single product, so
+  // skip the individual /product/* URLs (the main one 301s to the homepage; the
+  // rest are noindex). Custom pages below still get listed.
+  if (parseStoreModeFromSettings(biz.store_settings).mode !== "one_product") {
+    for (const p of date.produse) {
+      if (!p.slug) continue;
+      entries.push({
+        url: `${base}/product/${p.slug}`,
+        ...dataDacaOStim(p.updated_at),
+        changeFrequency: "weekly",
+        priority: 0.7,
+      });
+    }
+  }
+
+  // Paginile de politici indexabile. Vezi `politiciIndexabile`: aceeasi functie
+  // decide si eticheta `robots` a paginii, ca sitemapul si pagina sa nu spuna
+  // lucruri diferite.
+  for (const tip of politiciIndexabile(pcDinRand(biz), politiciDinRand(biz))) {
+    entries.push({
+      url: `${base}/politici/${tip}`,
+      ...dataDacaOStim(biz.updated_at),
+      changeFrequency: "yearly",
+      priority: 0.3,
+    });
+  }
+
+  for (const pg of date.pagini) {
+    if (!pg.slug || (pg.seo as { noindex?: boolean } | null)?.noindex) continue;
+    entries.push({
+      url: `${base}/${pg.slug}`,
+      ...dataDacaOStim(pg.updated_at),
+      changeFrequency: "monthly",
+      priority: 0.5,
+    });
+  }
+  return entries.slice(0, SITEMAP_URL_LIMIT);
+}
+
+/**
+ * Sitemapul unui magazin pe domeniul lui propriu.
+ *
+ * `host` vine din antetul cererii, deja normalizat la apex: `proxy.ts` trimite
+ * `www.magazin.ro/sitemap.xml` cu 308 catre apex INAINTE sa ajunga aici, fiindca
+ * in baza domeniul e stocat canonic si pe `www.` interogarea nu gasea nimic —
+ * si iesea un sitemap GOL, cu 200, adica exact forma pe care motoarele o accepta
+ * tacut si o tin minte.
+ */
+async function sitemapPeDomeniulPropriu(host: string): Promise<MetadataRoute.Sitemap> {
+  const supabase = await createClient();
+  const { data: biz } = await createAdminClient()
+    .from("businesses")
+    .select("id, updated_at, store_settings(page_content, storefront_design, store_policies)")
+    .eq("custom_domain", host)
+    .eq("is_published", true)
+    .single();
+  if (!biz) return [];
 
   /*
-   * PRODUSELE NU MAI SUNT AICI. Fiecare magazin isi are propriul sitemap, la
-   * `app/(public)/[slug]/sitemap.xml/route.ts`.
-   *
-   * ⚠ Randul asta trimitea pana acum la `app/produse/sitemap.ts` — un fisier care
-   * nu exista si, dupa cate se vede din istoric, n-a existat niciodata sub numele
-   * ala. Cine il cauta nu-l gasea si ramanea cu impresia ca produsele au ramas
-   * pe undeva neindexate.
-   *
-   * Se citeau toate, ale tuturor magazinelor publicate, ca sa se pastreze primele
-   * 50.000 — la cinci milioane de produse, cinci milioane de randuri aduse in
-   * memoria functiei ca sa se arunce 99%. Si e o ruta PUBLICA, deci oricine o
-   * putea declansa.
-   *
-   * Acum sunt taiate in felii de 45.000 cu `generateSitemaps`, fiecare citindu-si
-   * exact fereastra ei. Feliile se anunta din `robots.txt`.
+   * Se citeste doar ce poate intra: categoriile numai daca exista pagina de
+   * catalog (si nu e ascunsa de `noindex`), produsele numai daca magazinul nu e
+   * cu un singur produs. `intrariMagazin` ia oricum hotararea finala; aici doar
+   * nu se cara zeci de mii de randuri de produse pentru un sitemap care nu le
+   * va anunta.
    */
-  const pages = await fetchAllRowsStrict("sitemap.platform.pages", (from, to) =>
-    supabase
-      .from("custom_pages")
-      // Relatia numita explicit, ca la sitemap-ul de produse: aici nu e (inca)
-      // ambigua, dar o tabela noua cu chei straine catre `custom_pages` si
-      // `businesses` ar face-o, iar simptomul ar fi tot un sitemap gol cu 200.
-      .select("slug, updated_at, seo, businesses!custom_pages_business_id_fkey!inner(slug, is_published, custom_domain)")
-      .eq("is_published", true)
-      .eq("businesses.is_published", true)
-      .order("id")
-      .range(from, to)
-  );
+  const areCatalog = !homepageNoindex(biz) && shopOnPage(designPublicat(biz.store_settings));
+  const unSingurProdus = parseStoreModeFromSettings(biz.store_settings).mode === "one_product";
+  const [categorii, produse, pagini] = await Promise.all([
+    areCatalog
+      ? fetchAllRowsStrict("sitemap.store.categories", (from, to) =>
+        supabase.from("categories").select("id, name, parent_id, is_active").eq("business_id", biz.id).order("id").range(from, to),
+      )
+      : Promise.resolve([]),
+    unSingurProdus
+      ? Promise.resolve([])
+      : fetchAllRowsStrict("sitemap.store.products", (from, to) =>
+        supabase
+          .from("products")
+          .select("slug, updated_at")
+          .eq("business_id", biz.id)
+          .eq("is_active", true)
+          .not("slug", "is", null)
+          .order("id")
+          .range(from, to),
+      ),
+    fetchAllRowsStrict("sitemap.store.pages", (from, to) =>
+      supabase
+        .from("custom_pages")
+        .select("slug, updated_at, seo")
+        .eq("business_id", biz.id)
+        .eq("is_published", true)
+        .order("id")
+        .range(from, to),
+    ),
+  ]);
 
-  const customPagePages: MetadataRoute.Sitemap = pages
-    .filter((p) => !(p.businesses as unknown as { custom_domain: string | null }).custom_domain)
-    .filter((p) => !(p.seo as { noindex?: boolean } | null)?.noindex)
-    .map((p) => {
-      const biz = p.businesses as unknown as { slug: string };
-      return {
-        url: `${PLATFORM_ORIGIN}/${biz.slug}/${p.slug}`,
-        ...dataDacaOStim(p.updated_at),
-        changeFrequency: "monthly" as const,
-        priority: 0.5,
-      };
-    });
+  return intrariMagazin(`https://${host}`, biz, { categorii, produse, pagini });
+}
 
-  return [...staticPages, ...businessPages, ...paginiDeCatalog, ...customPagePages].slice(0, SITEMAP_URL_LIMIT);
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const host = bareHost((await headers()).get("host") ?? "");
+  // `isPlatformHost` e sursa unica de adevar pentru „a cui e gazda"
+  // (src/lib/platform-hosts.ts); o gazda goala e a platformei.
+  return isPlatformHost(host) ? sitemapPlatforma() : sitemapPeDomeniulPropriu(host);
 }

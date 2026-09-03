@@ -9,7 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendWelcomeEmail } from "@/lib/email";
 import { logError } from "@/lib/error-logger";
 import { aduSiVerificaPlata } from "@/lib/edinio-marketing/server/plata-stripe";
-import { NON_STORE_SEGMENTS } from "@/proxy";
+import { NON_STORE_SEGMENTS } from "@/lib/segmente-rezervate";
 import { consimtamantulCererii, martoriiCererii } from "@/lib/edinio-marketing/server/consimtamant-server";
 
 /*
@@ -30,7 +30,8 @@ import { consimtamantulCererii, martoriiCererii } from "@/lib/edinio-marketing/s
  *
  * Regula e mai stricta decat cea din formular (care accepta si „---"): minim 3,
  * maxim 50, fara liniuta la capete. Lista de segmente rezervate NU se copiaza
- * aici — vine din proxy, unde traiesc oricum rutele de aplicatie.
+ * aici — vine din `src/lib/segmente-rezervate.ts`, aceeasi lista pe care o
+ * citeste si proxy-ul (si pe care o verifica o proba impotriva rutelor de pe disc).
  *
  * Liniutele de la capete se TAIE, nu se refuza. `slugify` le taie deja, dar
  * formularul scurteaza rezultatul la 50 de caractere DUPA aceea, si taietura

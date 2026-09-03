@@ -5,6 +5,10 @@ import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { PLATFORM_ORIGIN, storeBaseUrl } from "@/lib/seo";
 import { isSubscriptionInactive } from "@/lib/subscription";
+import { NON_STORE_SEGMENTS, primulSegment } from "@/lib/segmente-rezervate";
+import { ANTET_ROBOTS } from "@/lib/storefront/indexare-pe-platforma";
+import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
+import { caiInterziseStraine } from "@/app/robots";
 
 /**
  * SANTINELA: cere paginile importante si verifica CE CONTIN, nu doar ca raspund.
@@ -175,6 +179,30 @@ async function iaSiNumara(url: string, sir: string): Promise<{ cod: number; cate
 }
 
 /**
+ * Codul si UN antet al raspunsului, fara sa citeasca corpul.
+ *
+ * Pentru probele care judeca ANTETUL, nu continutul — `X-Robots-Tag`, pus de
+ * proxy pe vitrinele servite pe platforma, si `cache-control`.
+ *
+ * ⚠ `redirect: "manual"`, spre deosebire de `ia()`: un 307 catre domeniul
+ * propriu e un raspuns in sine, iar aici trebuie sa vedem codul CHIAR al
+ * adresei cerute, nu pe al paginii la care ar fi dus.
+ */
+async function iaAntet(url: string, antet: string): Promise<{ cod: number; valoare: string | null }> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), TIMP_MAX_MS);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, headers: ANTET, cache: "no-store", redirect: "manual" });
+    await r.body?.cancel().catch(() => {});
+    return { cod: r.status, valoare: r.headers.get(antet) };
+  } catch {
+    return { cod: 0, valoare: null };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/**
  * Toate nodurile de date structurate dintr-o pagina, cu `@graph` desfacut.
  *
  * ⚠ `@graph` NU e un amanunt de forma. O pagina poate purta mai multe noduri
@@ -227,8 +255,36 @@ const primulNegol = (...v: (string | null | undefined)[]) =>
 interface MagazinViu {
   id: string;
   slug: string;
-  /** Adresa canonica: domeniul propriu cand exista, altfel calea de pe platforma. */
+  /** Adresa publica: domeniul propriu cand exista, altfel calea de pe platforma. */
   baza: string;
+  /**
+   * Domeniul propriu, cand exista. De pe 03.09.2026 e si linia de despartire
+   * SEO: numai magazinele cu domeniu au sitemap si se indexeaza; pe platforma,
+   * vitrina poarta `X-Robots-Tag: noindex`. Probele care cer un sitemap sau
+   * judeca antetul aleg dupa el.
+   */
+  domeniuPropriu: string | null;
+  /** Sanatatea domeniului, cum a masurat-o cronul: `null` = inca neverificat. */
+  domeniuSanatos: boolean | null;
+  /**
+   * Magazin cu un singur produs (One Product Store): sitemapul lui NU anunta
+   * `/product/*` dinadins, deci nu poate fi tinta probei „sitemapul are produse".
+   */
+  unSingurProdus: boolean;
+}
+
+/**
+ * Un magazin PUBLICAT, indiferent de abonament.
+ *
+ * Antetul `X-Robots-Tag` de pe platforma si 410-ul lui `/{slug}/sitemap.xml`
+ * depind numai de `is_published` (proxy-ul nu se uita la abonament, iar pagina
+ * suspendata raspunde 200), deci probele care le masoara isi pot lua tinta si
+ * dintr-un magazin cu abonamentul stins — si e bine s-o faca: magazinele vii
+ * fara domeniu sunt putine si volatile (cinci din 55 pe 04.09.2026, trei deja
+ * in dunning), iar fara tinta proba invariantei ar fi trecut in tacere.
+ */
+interface MagazinPublicat {
+  slug: string;
 }
 
 /**
@@ -264,20 +320,40 @@ interface MagazinViu {
  * neprobat), NICIODATA o alarma falsa, care e greseala pe care fisierul asta o
  * plateste acum. Ziua in care cele patru copii se unifica, randul asta ramane bun.
  */
-async function magazineVii(admin: Admin): Promise<{ vii: MagazinViu[]; eroare: string | null }> {
+async function magazineVii(admin: Admin): Promise<{
+  vii: MagazinViu[];
+  /** Publicate si fara domeniu propriu, cu sau fara abonament. Ordonate dupa slug, ca tinta sa fie stabila. */
+  publicateFaraDomeniu: MagazinPublicat[];
+  /**
+   * Cate magazine publicate AU domeniu propriu, indiferent de abonament sau de
+   * sanatatea domeniului. Cand e mai mare ca zero si totusi niciun magazin viu cu
+   * domeniu nu ramane in `vii`, probele de sitemap nu trebuie sa taca: fie toate
+   * au abonamentul stins, fie cronul de domenii le-a marcat pe toate cazute dupa
+   * o pana — si atunci chiar niciun sitemap de magazin nu se mai serveste.
+   */
+  publicateCuDomeniu: number;
+  eroare: string | null;
+}> {
   const { data: mag, error } = await admin
     .from("businesses")
-    .select("id, slug, user_id, suspended_until, custom_domain, custom_domain_healthy")
+    // `page_content` doar pentru modul magazinului (un singur produs sau catalog).
+    .select("id, slug, user_id, suspended_until, custom_domain, custom_domain_healthy, store_settings(page_content)")
     .eq("is_published", true)
     .not("slug", "is", null);
-  if (error) return { vii: [], eroare: `citirea magazinelor a esuat: ${error.message}` };
+  if (error) return { vii: [], publicateFaraDomeniu: [], publicateCuDomeniu: 0, eroare: `citirea magazinelor a esuat: ${error.message}` };
+
+  const publicateFaraDomeniu: MagazinPublicat[] = (mag ?? [])
+    .filter((b) => !(b.custom_domain ?? "").trim())
+    .map((b) => ({ slug: b.slug }))
+    .sort((a, b) => a.slug.localeCompare(b.slug));
+  const publicateCuDomeniu = (mag ?? []).length - publicateFaraDomeniu.length;
 
   const idUtilizatori = [...new Set((mag ?? []).map((b) => b.user_id))];
   const { data: profiluri, error: eProfil } = await admin
     .from("users_profile")
     .select("id, plan, plan_expires_at")
     .in("id", idUtilizatori.length ? idUtilizatori : [NICIUN_ID]);
-  if (eProfil) return { vii: [], eroare: `citirea planurilor a esuat: ${eProfil.message}` };
+  if (eProfil) return { vii: [], publicateFaraDomeniu, publicateCuDomeniu, eroare: `citirea planurilor a esuat: ${eProfil.message}` };
   const planDupaUtilizator = new Map((profiluri ?? []).map((p) => [p.id, p]));
 
   const vii: MagazinViu[] = [];
@@ -305,9 +381,12 @@ async function magazineVii(admin: Admin): Promise<{ vii: MagazinViu[]; eroare: s
       id: b.id,
       slug: b.slug,
       baza: storeBaseUrl({ slug: b.slug, custom_domain: domeniu || null }),
+      domeniuPropriu: domeniu || null,
+      domeniuSanatos: domeniu ? b.custom_domain_healthy : null,
+      unSingurProdus: parseStoreModeFromSettings(b.store_settings).mode === "one_product",
     });
   }
-  return { vii, eroare: null };
+  return { vii, publicateFaraDomeniu, publicateCuDomeniu, eroare: null };
 }
 
 /** Magazinul de proba, impreuna cu ce s-a aflat cerandu-i pagina de catalog. */
@@ -340,7 +419,7 @@ export async function GET(req: NextRequest) {
     { auth: { persistSession: false } },
   );
 
-  const { vii, eroare: eroareMagazine } = await magazineVii(admin);
+  const { vii, publicateFaraDomeniu, publicateCuDomeniu, eroare: eroareMagazine } = await magazineVii(admin);
   const viuDupaId = new Map(vii.map((m) => [m.id, m]));
 
   /*
@@ -426,6 +505,59 @@ export async function GET(req: NextRequest) {
   const magazinProba: MagazinProba | null = magazin ?? rezerva;
 
   /*
+   * ═══ MAGAZINUL CU SITEMAP ═══
+   *
+   * De pe 03.09.2026 sitemap au NUMAI magazinele cu domeniu propriu, servit la
+   * radacina domeniului lor; pe platforma, `/{slug}/sitemap.xml` raspunde 410 si
+   * vitrina poarta `noindex`. Deci probele care citesc un sitemap de magazin nu
+   * pot folosi `magazinProba` la intamplare: daca el e pe platforma, ar cere o
+   * adresa retrasa si ar suna la fiecare doua ore pentru un 410 corect.
+   *
+   * Se prefera chiar magazinul de proba, cand are domeniu (ca probele sa
+   * vorbeasca despre acelasi magazin); altfel cel mai mare magazin viu cu
+   * domeniu si produse. Fara niciunul, probele de sitemap n-au ce masura si tac
+   * — nu e un defect, e o platforma fara magazine pe domeniu propriu.
+   *
+   * ⚠ NU un magazin cu un singur produs: sitemapul lui nu anunta `/product/*`
+   * dinadins, si proba „are produse" l-ar fi acuzat la fiecare doua ore. Si de
+   * preferat un domeniu DOVEDIT sanatos: unul neverificat inca poate sa nu
+   * raspunda deloc, iar „cod 0" nu e un defect al sitemapului.
+   */
+  const poateAveaSitemap = (m: MagazinViu) => !!m.domeniuPropriu && !m.unSingurProdus;
+  const magazinCuSitemap: (MagazinViu & { total: number }) | null =
+    magazinProba && poateAveaSitemap(magazinProba)
+      ? magazinProba
+      : (clasament.find((c) => poateAveaSitemap(c) && c.domeniuSanatos === true)
+        ?? clasament.find(poateAveaSitemap)
+        ?? null);
+  /**
+   * De ce n-avem niciun magazin cu sitemap — cand exista totusi magazine cu
+   * domeniu. Probele de sitemap SPUN asta in loc sa treaca verde: dupa o pana
+   * Vercel/DNS, cronul de domenii le poate marca pe toate cazute, `magazineVii`
+   * le scoate, si tocmai atunci niciun sitemap de magazin nu se mai serveste.
+   * Doar cand nu exista deloc magazine publicate cu domeniu e o liniste adevarata.
+   */
+  const motivFaraSitemap: string | null = magazinCuSitemap
+    ? null
+    : publicateCuDomeniu === 0
+      ? null
+      : `niciun magazin viu cu domeniu propriu si catalog: ${publicateCuDomeniu} publicate cu domeniu, dar toate suspendate,`
+        + ` cu domeniul marcat cazut, fara produse sau cu un singur produs — sitemapul de magazin n-a putut fi masurat`;
+
+  /**
+   * O vitrina servita CHIAR pe platforma, pentru probele de `noindex` si 410.
+   *
+   * ⚠ Din TOATE magazinele publicate fara domeniu, nu doar din cele vii: antetul
+   * si 410-ul nu depind de abonament (vezi `MagazinPublicat`). Se prefera totusi
+   * un magazin viu cu produse, ca proba sa masoare o vitrina intreaga.
+   */
+  const vitrinaPePlatforma: MagazinPublicat | null =
+    clasament.find((c) => !c.domeniuPropriu)
+    ?? vii.find((m) => !m.domeniuPropriu)
+    ?? publicateFaraDomeniu[0]
+    ?? null;
+
+  /*
    * ⚠ `error` verificat si aici, nu doar `data`. Fara asta, o citire picata dadea
    * lista goala, `slug` devenea `null`, si sase probe raportau „niciun magazin de
    * proba" — mesaj din care nu se reconstituie daca lipsea magazinul sau lipsea baza
@@ -452,23 +584,167 @@ export async function GET(req: NextRequest) {
     : "grila de pe pagina principala (magazinul n-are pagina de catalog separata)";
 
   const probe: Proba[] = [
+    /*
+     * ═══ INVARIANTA SEO (03.09.2026), MASURATA PE PRODUCTIE ═══
+     *
+     * Edinio.com indexeaza numai continutul platformei. Storefront-urile merchant
+     * sunt noindex pe host-ul platformei si devin indexabile doar pe custom domain.
+     *
+     * Probele de cod (`proxy.test.ts`, `sitemap.test.ts`, `robots.test.ts`) o
+     * verifica pe cod. Cele trei de mai jos o verifica pe CE SERVESTE CHIAR
+     * productia: un antet care se pierde pe drum (CDN, o schimbare in Next, un
+     * `headers()` din next.config care il suprascrie) nu s-ar vedea in nicio
+     * proba de cod, si nici in vreun jurnal — Google ar indexa in liniste vitrine
+     * pe www.edinio.com, sau ar scoate din index site-ul platformei.
+     *
+     * Fiecare poate esua si fiecare poate trece: se cer adrese care exista, si
+     * se judeca un antet care ori e, ori nu e.
+     */
     {
-      nume: "sitemap-index are magazine",
+      nume: "vitrinele de pe platforma sunt noindex, site-ul platformei nu",
       ruleaza: async () => {
-        const { cod, cate } = await iaSiNumara(`${PLATFORM_ORIGIN}/sitemap-magazine.xml`, "<sitemap>");
-        if (cod !== 200) return `cod ${cod}`;
-        // Zero inseamna ori interogare picata, ori filtru prea strans. Ambele au
-        // acelasi efect: niciun produs al platformei nu mai ajunge la indexare.
-        return cate === 0 ? "index gol: niciun magazin" : null;
+        if (eroareMagazine) return eroareMagazine;
+        const cazute: string[] = [];
+
+        // 1) Site-ul platformei: FARA antet. Un `noindex` ratacit aici e cel mai
+        //    scump defect posibil: scoate din Google chiar paginile care aduc clienti.
+        for (const cale of ["/", "/blog", "/preturi"]) {
+          const r = await iaAntet(`${PLATFORM_ORIGIN}${cale}`, ANTET_ROBOTS);
+          if (r.cod !== 200) { cazute.push(`${cale} raspunde cu ${r.cod}`); continue; }
+          if (r.valoare && /noindex/i.test(r.valoare)) {
+            cazute.push(`pagina platformei ${cale} poarta X-Robots-Tag: ${r.valoare} — ar iesi din Google`);
+          }
+        }
+
+        // 2) O vitrina servita CHIAR pe platforma: CU antet. Fara nicio tinta, proba
+        //    SPUNE ca n-a putut masura, nu trece in tacere: e chiar proba care apara
+        //    invarianta noua, iar un verde fara masuratoare e purtarea pe care
+        //    fisierul si-o interzice.
+        if (!vitrinaPePlatforma) {
+          cazute.push("niciun magazin publicat fara domeniu propriu: antetul noindex de pe platforma n-a putut fi masurat pe nicio vitrina");
+        } else {
+          const r = await iaAntet(`${PLATFORM_ORIGIN}/${vitrinaPePlatforma.slug}`, ANTET_ROBOTS);
+          if (r.cod !== 200) cazute.push(`vitrina ${vitrinaPePlatforma.slug} raspunde cu ${r.cod} pe platforma`);
+          else if (!r.valoare || !/noindex/i.test(r.valoare)) {
+            cazute.push(`vitrina ${vitrinaPePlatforma.slug} e servita pe www.edinio.com FARA X-Robots-Tag: noindex`
+              + ` (are: ${r.valoare ?? "nimic"}) — Google ar indexa un magazin pe domeniul platformei`);
+          }
+        }
+
+        // 3) O vitrina pe domeniu propriu: FARA antet pus de platforma. Un cod
+        //    diferit de 200 nu e treaba probei asteia: sanatatea domeniilor are
+        //    cronul si proprietarul ei.
+        const peDomeniu = clasament.find((c) => c.domeniuPropriu) ?? vii.find((m) => m.domeniuPropriu) ?? null;
+        if (peDomeniu) {
+          const r = await iaAntet(peDomeniu.baza, ANTET_ROBOTS);
+          if (r.cod === 200 && r.valoare && /noindex/i.test(r.valoare)) {
+            cazute.push(`${peDomeniu.baza} poarta X-Robots-Tag: ${r.valoare} pe domeniul propriu — magazinul ar iesi din Google`);
+          }
+        } else if (publicateCuDomeniu > 0) {
+          cazute.push(`niciun magazin viu cu domeniu propriu (${publicateCuDomeniu} publicate cu domeniu, toate suspendate sau cu domeniul marcat cazut):`
+            + " partea de domeniu propriu n-a putut fi masurata");
+        }
+        return cazute.length ? cazute.join(" | ") : null;
       },
     },
     {
-      nume: "sitemap de magazin are produse",
+      nume: "sitemapul platformei anunta doar paginile platformei",
       ruleaza: async () => {
-        if (!magazinProba) return motivFaraMagazin;
-        const { cod, cate } = await iaSiNumara(`${magazinProba.baza}/sitemap.xml`, "/product/");
+        /*
+         * Sitemapul platformei e mic (pagini scrise in cod plus blogul), deci se
+         * citeste intreg. Fiecare adresa trebuie sa inceapa cu un segment REZERVAT
+         * platformei (`NON_STORE_SEGMENTS`) — un slug de magazin nu poate fi
+         * niciodata unul dintre ele, deci orice adresa care nu incepe asa e o
+         * vitrina sau o pagina de magazin strecurata inapoi.
+         */
+        const { cod, text } = await ia(`${PLATFORM_ORIGIN}/sitemap.xml`);
         if (cod !== 200) return `cod ${cod}`;
-        return cate === 0 ? `sitemapul magazinului ${magazinProba.slug} n-are niciun produs` : null;
+        const locuri = [...text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+        if (locuri.length === 0) return "sitemapul platformei e GOL";
+
+        const straine = locuri.filter((u) => u !== PLATFORM_ORIGIN && !u.startsWith(`${PLATFORM_ORIGIN}/`));
+        const vitrine = locuri.filter((u) => {
+          if (!u.startsWith(`${PLATFORM_ORIGIN}/`)) return false;
+          const seg = primulSegment(u.slice(PLATFORM_ORIGIN.length));
+          return !!seg && !NON_STORE_SEGMENTS.has(seg);
+        });
+        const parti: string[] = [];
+        if (straine.length) parti.push(`${straine.length} adrese de pe alte gazde (ex. ${straine[0]})`);
+        if (vitrine.length) {
+          parti.push(`${vitrine.length} adrese care nu incep cu un segment al platformei, adica vitrine sau pagini de`
+            + ` magazin (ex. ${vitrine.slice(0, 3).join(", ")})`);
+        }
+        return parti.length ? `sitemapul platformei anunta ${parti.join(" si ")}` : null;
+      },
+    },
+    {
+      nume: "sitemapurile de magazin de pe platforma raman retrase (410)",
+      ruleaza: async () => {
+        /*
+         * `sitemap-magazine.xml` (indexul) si `/{slug}/sitemap.xml` raspund 410 si
+         * NU se reintroduc. Un 200 aici inseamna ca cineva a pus la loc un sitemap
+         * de magazin pe www.edinio.com — adica a contrazis invarianta si trimite
+         * Google catre adrese `noindex`.
+         */
+        const cazute: string[] = [];
+        const index = await iaAntet(`${PLATFORM_ORIGIN}/sitemap-magazine.xml`, "cache-control");
+        if (index.cod !== 410) {
+          cazute.push(`sitemap-magazine.xml raspunde cu ${index.cod}, nu 410`
+            + (index.cod === 200 ? " — cineva a reintrodus indexul de magazine pe www.edinio.com" : ""));
+        }
+        if (!vitrinaPePlatforma) {
+          cazute.push("niciun magazin publicat fara domeniu propriu: 410-ul lui /{slug}/sitemap.xml n-a putut fi masurat");
+        } else {
+          const r = await iaAntet(`${PLATFORM_ORIGIN}/${vitrinaPePlatforma.slug}/sitemap.xml`, "cache-control");
+          if (r.cod !== 410) {
+            cazute.push(`${vitrinaPePlatforma.slug}/sitemap.xml raspunde cu ${r.cod} pe platforma, nu 410`
+              + (r.cod === 200 ? " — un magazin fara domeniu are din nou sitemap pe www.edinio.com" : ""));
+          }
+        }
+
+        /*
+         * Si robots.txt, care e locul de unde afla crawlerul ce sitemapuri exista:
+         * pe platforma trebuie sa anunte sitemapul platformei si NUMAI pe el (nu
+         * si indexul retras), iar pe domeniul propriu — sitemapul acelui domeniu.
+         * Pana la livrarea din 04.09.2026, productia anunta inca
+         * `sitemap-magazine.xml`, adica o adresa care raspunde 410.
+         */
+        const robots = await ia(`${PLATFORM_ORIGIN}/robots.txt`);
+        if (robots.cod !== 200) cazute.push(`robots.txt al platformei raspunde cu ${robots.cod}`);
+        else {
+          if (/sitemap-magazine/i.test(robots.text)) cazute.push("robots.txt al platformei anunta inca sitemap-magazine.xml, adresa retrasa");
+          if (!robots.text.includes(`${PLATFORM_ORIGIN}/sitemap.xml`)) cazute.push("robots.txt al platformei nu anunta sitemap.xml");
+          /*
+           * Fiecare `Disallow` se judeca impotriva ACELEIASI liste care scrie
+           * fisierul (`CAI_INTERZISE`), nu a unei copii in regex: prima forma a
+           * probei acuza chiar `/login` si `/register`, la fiecare rulare.
+           */
+          const straine = caiInterziseStraine(robots.text);
+          if (straine.length) {
+            cazute.push(`robots.txt al platformei interzice cai care nu sunt ale aplicatiei (${straine.join(", ")})`
+              + " — un Disallow pe o vitrina ar ascunde noindex-ul de Googlebot");
+          }
+        }
+        if (magazinCuSitemap) {
+          const al = await ia(`${magazinCuSitemap.baza}/robots.txt`);
+          if (al.cod === 200 && !al.text.includes(`${magazinCuSitemap.baza}/sitemap.xml`)) {
+            cazute.push(`robots.txt de pe ${magazinCuSitemap.baza} nu anunta sitemapul propriu`);
+          }
+        }
+        return cazute.length ? cazute.join(" | ") : null;
+      },
+    },
+    {
+      nume: "sitemapul magazinului pe domeniu propriu are produse",
+      ruleaza: async () => {
+        if (eroareMagazine) return eroareMagazine;
+        /* Fara niciun magazin publicat cu domeniu nu exista sitemap de masurat si
+           e liniste adevarata; cu magazine cu domeniu, dar niciunul folosibil,
+           proba SPUNE de ce — vezi `motivFaraSitemap`. */
+        if (!magazinCuSitemap) return motivFaraSitemap;
+        const { cod, cate } = await iaSiNumara(`${magazinCuSitemap.baza}/sitemap.xml`, "/product/");
+        if (cod !== 200) return `sitemapul ${magazinCuSitemap.baza}/sitemap.xml raspunde cu ${cod}`;
+        return cate === 0 ? `sitemapul magazinului ${magazinCuSitemap.slug} n-are niciun produs` : null;
       },
     },
     {
@@ -1259,13 +1535,23 @@ export async function GET(req: NextRequest) {
          * `/magazin`, nici vreo categorie, si cele doua verificari nu se executau
          * niciodata. Fix pe felurile de pagina din care s-a nascut proba. Alegerea
          * de mai sus prefera acum un magazin care CHIAR are pagina de catalog.
+         *
+         * ⚠ De pe 03.09.2026 sitemapul se cere de la `magazinCuSitemap`: doar
+         * magazinele cu domeniu propriu mai au unul (pe platforma raspunde 410).
+         * Fara niciun asemenea magazin, adresele din sitemap lipsesc, dar pagina
+         * proprie de mai jos se verifica in continuare.
          */
         if (!magazinProba) return motivFaraMagazin;
-        const { cod, text } = await ia(`${magazinProba.baza}/sitemap.xml`);
-        if (cod !== 200) return `sitemapul magazinului raspunde cu ${cod}`;
-        const locuri = [...text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+        let locuri: string[] = [];
+        let bazaSitemap = "";
+        if (magazinCuSitemap) {
+          const { cod, text } = await ia(`${magazinCuSitemap.baza}/sitemap.xml`);
+          if (cod !== 200) return `sitemapul magazinului ${magazinCuSitemap.slug} (${magazinCuSitemap.baza}/sitemap.xml) raspunde cu ${cod}`;
+          locuri = [...text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+          bazaSitemap = magazinCuSitemap.baza;
+        }
 
-        const cale = (u: string) => u.slice(magazinProba.baza.length);
+        const cale = (u: string) => u.slice(bazaSitemap.length);
         const categorie = locuri.find((u) => /^\/magazin\/[^/]+$/.test(cale(u)));
         const catalog = locuri.find((u) => cale(u) === "/magazin");
         const politica = locuri.find((u) => cale(u).startsWith("/politici/"));
@@ -1311,7 +1597,10 @@ export async function GET(req: NextRequest) {
             cuFirimituri: true,
           });
         }
-        if (deVerificat.length === 0) return "sitemapul n-a dat nicio adresa de verificat";
+        /* Cu un sitemap citit si totusi nicio adresa: e un defect al sitemapului.
+           Fara niciun magazin cu sitemap si fara pagini proprii: se spune de ce
+           (`motivFaraSitemap`), sau e liniste adevarata. */
+        if (deVerificat.length === 0) return magazinCuSitemap ? "sitemapul n-a dat nicio adresa de verificat" : motivFaraSitemap;
 
         const cazute: string[] = [];
         for (const v of deVerificat) {

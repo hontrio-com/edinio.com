@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
@@ -60,7 +61,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     // `absolute` strips the root layout's "%s | Edinio" template.
     title: { absolute: titlu },
-    robots: indexabila ? { index: true, follow: true } : { index: false, follow: true },
+    // Cheia LIPSESTE cand e indexabila, nu `index: true` si nici `undefined`:
+    // asa mosteneste ce spune layout-ul magazinului — `index` pe domeniul
+    // propriu, `noindex` pe platforma — in loc sa contrazica antetul
+    // `X-Robots-Tag` de pe edinio.com. ⚠ `robots: undefined` NU mosteneste:
+    // Next trateaza cheia prezenta ca „sterge ce a pus parintele" si nu mai
+    // emite nicio eticheta (verificat pe build, 04.09.2026).
+    ...(indexabila ? {} : { robots: { index: false, follow: true } }),
     alternates: { canonical: url },
     openGraph: {
       type: "website",
@@ -170,8 +177,7 @@ export default async function PolicyPage({ params }: Props) {
 
   // Detect custom domain access
   const headersList = await headers();
-  const host = (headersList.get("host") ?? "").split(":")[0];
-  const isCustomDomain = business.custom_domain && host === business.custom_domain;
+  const isCustomDomain = esteDomeniulPropriu(headersList.get("host"), business.custom_domain);
   const basePath = isCustomDomain ? "" : `/${slug}`;
 
   // Header-ul si footerul magazinului, ca pe orice alta pagina publica. Pana

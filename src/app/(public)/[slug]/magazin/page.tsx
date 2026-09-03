@@ -9,9 +9,11 @@ import { metadataMagazin, RandeazaMagazin } from "@/lib/storefront/catalog/pagin
  * cauta nimeni. Alegerea e a designului, deci se citeste din aceeasi
  * configuratie ca header-ul si footerul.
  *
- * Spre deosebire de cos si de finalizare, pagina asta e INDEXABILA: e chiar
- * catalogul magazinului. De aceea are canonical, OpenGraph si intrare in
- * sitemap, si de aceea ii pasa ce filtre sunt in adresa.
+ * Spre deosebire de cos si de finalizare, pagina asta e INDEXABILA pe domeniul
+ * propriu al magazinului: e chiar catalogul lui. De aceea are canonical,
+ * OpenGraph si intrare in sitemapul domeniului, si de aceea ii pasa ce filtre
+ * sunt in adresa. (Pe www.edinio.com/{slug} e `noindex`, ca toata vitrina —
+ * invarianta din `indexare-pe-platforma.ts`, 03.09.2026.)
  *
  * Tot ce face traieste in `lib/storefront/catalog/pagina-magazin`, impreuna cu
  * paginile de categorie: sunt aceeasi pagina, cu sau fara o categorie fixata.

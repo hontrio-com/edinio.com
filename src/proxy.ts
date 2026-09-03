@@ -6,9 +6,21 @@ import type { Database } from "@/types/database.types";
 // Gazdele platformei traiesc intr-un modul comun, ca sa fie ACEEASI lista si
 // aici (rutare) si in /api/domains/connect (refuzul revendicarii). Vezi
 // src/lib/platform-hosts.ts.
-import { isPlatformHost, bareHost as gazdaFaraPort } from "@/lib/platform-hosts";
+import { isPlatformHost, esteGazdaDeDesfasurare, bareHost as gazdaFaraPort } from "@/lib/platform-hosts";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { poartaMfaApi, poartaMfaActiuneServer } from "@/lib/auth/poarta-mfa";
+import { EXTENSII_STATICE, NON_STORE_SEGMENTS, primulSegment } from "@/lib/segmente-rezervate";
+import {
+  ANTET_ROBOTS,
+  NOINDEX_DESFASURARE,
+  NOINDEX_VITRINA,
+  TTL_REZOLVARE,
+  hotarasteVitrinaPePlatforma,
+  rezolvaSlugPlatforma,
+  type HotarareVitrina,
+  type RandMagazinPentruProxy,
+  type RezolvareSlugPlatforma,
+} from "@/lib/storefront/indexare-pe-platforma";
 
 /*
  * Proxy-ul ruleaza la FIECARE cerere, iar cele doua cautari de mai jos intrebau
@@ -21,17 +33,22 @@ import { poartaMfaApi, poartaMfaActiuneServer } from "@/lib/auth/poarta-mfa";
  * NEGATIVE se tin doar 15 secunde: altfel un domeniu tocmai conectat ar da 404
  * un minut intreg, exact in clipa in care omul se uita daca a mers.
  */
-const TTL_GASIT = 60_000;
-const TTL_NEGASIT = 15_000;
+// Aceleasi doua numere pentru ambele cache-uri; sursa lor e in
+// `indexare-pe-platforma.ts`, langa regula care le foloseste si proba ei.
+// ⚠ Se citesc de acolo DIRECT, nu prin nume locale: doua constante locale s-ar
+// putea inversa fara ca vreo proba sa vada (nicio proba nu masoara timpul).
 type RandDomeniu = { slug: string; custom_domain: string | null; is_published: boolean };
-const cacheDomenii = new CacheScurt<RandDomeniu[]>(TTL_GASIT);
+const cacheDomenii = new CacheScurt<RandDomeniu[]>(TTL_REZOLVARE.gasit);
 /**
- * Domeniul propriu al unui slug, IMPREUNA cu sanatatea lui. `sanatos: null`
- * inseamna „inca neverificat" si se trateaza ca sanatos — doar un `false`
- * dovedit opreste redirectul.
+ * Ce stim despre primul segment al unei cai de pe gazda platformei: e magazin
+ * publicat? are domeniu propriu, si e sanatos?
+ *
+ * ⚠ Pana pe 03.09.2026 aici statea doar `TintaProprie | null`, iar `null`
+ * insemna deopotriva „magazin fara domeniu" si „nu e magazin". Pentru
+ * `X-Robots-Tag: noindex` cele doua trebuie deosebite SI la un raspuns din
+ * cache — vezi `RezolvareSlugPlatforma` in `indexare-pe-platforma.ts`.
  */
-type TintaProprie = { domeniu: string; sanatos: boolean | null };
-const cacheSlugCatreDomeniu = new CacheScurt<TintaProprie | null>(TTL_GASIT);
+const cacheRezolvariSlug = new CacheScurt<RezolvareSlugPlatforma>(TTL_REZOLVARE.gasit);
 
 function clientAnonim() {
   return createServerClient<Database>(
@@ -41,44 +58,91 @@ function clientAnonim() {
   );
 }
 
-// First path segments on the platform host that are app/website routes (not
-// storefront slugs). The custom-domain redirect below skips these.
-//
-// EXPORTAT dinadins: aceeasi lista e si lista de adrese REZERVATE la crearea
-// magazinului (createBusiness, src/lib/actions/business.actions.ts). O copie a
-// ei acolo s-ar fi despartit de asta la prima ruta noua de aplicatie, iar un
-// magazin cu slug egal cu o ruta a platformei e un magazin la care nu se poate
-// ajunge niciodata: ruta aplicatiei castiga.
-//
-// „migrare" a fost scos pe 05.08.2026 odata cu pagina /migrare, si s-a intors pe
-// 30.08.2026, cand pagina a fost refacuta ca pagina de prezentare. Randul de mai
-// jos e adevarul; nota asta e doar ca sa nu para o scapare.
-export const NON_STORE_SEGMENTS = new Set([
-  "dashboard", "login", "register", "forgot-password", "reset-password",
-  "onboarding", "admin",
-  "despre", "preturi", "contact", "termeni", "cookies", "gdpr",
-  "confidentialitate", "start", "migrare", "demo",
-  // Site de prezentare — paginile din mega menu. Fara ele, fiecare cerere spre
-  // /integrari sau /vs/shopify ar face o interogare Supabase degeaba, iar un
-  // magazin care ar avea intamplator slug-ul "curieri" plus domeniu propriu ar
-  // fura pagina: vizitatorul ar fi trimis (307) pe domeniul lui.
-  // Tinut in acord cu `src/lib/website/nav.ts`.
-  "magazin-online", "integrari", "optimizare",
-  "mentenanta-gratuita", "industrii", "vs", "ajutor", "blog",
-  "intrebari-frecvente",
-]);
+/*
+ * Primele segmente care sunt rute ale aplicatiei sau ale site-ului, nu sluguri
+ * de magazin (`NON_STORE_SEGMENTS`), au stat aici pana pe 03.09.2026. S-au
+ * mutat in `src/lib/segmente-rezervate.ts`, ca sitemapul si probele sa le
+ * poata importa fara sa traga dupa ele tot proxy-ul. Aceeasi lista ramane si
+ * lista de adrese REZERVATE la crearea magazinului.
+ */
 
 /**
- * Extensiile de fisier care, pe o cerere OBISNUITA, inseamna „nu e o pagina".
- *
- * Erau in `config.matcher`. Au fost mutate aici fiindca matcher-ul nu vede
- * METODA, iar diferenta conteaza: `GET /logo.svg` e un fisier din `public/`, dar
- * `POST /logo.svg` e o cerere pe care Next o poate trata ca actiune de server
- * (id-ul actiunii vine din antet sau din corp, nu din cale). Filtrul se aplica
- * deci numai la cererile care NU sunt POST — pentru ele, comportamentul ramane
- * exact cel de dinainte.
+ * Citirea din baza pentru un slug de pe gazda platformei. Doar magazinele
+ * PUBLICATE: un slug nepublicat e, pentru vizitator si pentru Google, tot „nu e
+ * magazin" (pagina lui e deja `noindex` din metadata, vezi `[slug]/page.tsx`).
  */
-const EXTENSII_STATICE = /\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|woff|woff2|css|js)$/i;
+async function cautaMagazinDupaSlug(slug: string): Promise<{ data: RandMagazinPentruProxy; error: unknown }> {
+  const { data, error } = await clientAnonim()
+    .from("businesses")
+    .select("custom_domain, custom_domain_healthy")
+    .eq("slug", slug)
+    .eq("is_published", true)
+    .maybeSingle();
+  return { data: data ?? null, error };
+}
+
+/**
+ * Ce se intampla cu o cerere de pe gazda platformei, dupa primul ei segment.
+ *
+ * ═══ INVARIANTA SEO (03.09.2026) ═══
+ *
+ * Edinio.com indexeaza numai continutul platformei. Storefront-urile merchant
+ * sunt noindex pe host-ul platformei si devin indexabile doar pe custom domain.
+ *
+ * De aici ies trei hotarari (vezi `hotarasteVitrinaPePlatforma`):
+ *   - „nimic": nu e magazin — pagina platformei sau 404;
+ *   - „redirect": magazin cu domeniu propriu sanatos — 307 acolo, ca inainte;
+ *   - „noindex": magazin servit CHIAR pe platforma (fara domeniu, cu domeniul
+ *     dovedit stricat, sau in previzualizare) — raspunsul primeste
+ *     `X-Robots-Tag: noindex, follow`.
+ *
+ * ⚠ SE INTREABA BAZA, NU DOAR `NON_STORE_SEGMENTS`. „Nu e in lista de rute" nu
+ * inseamna „e magazin": o adresa gresita e 404, iar un 404 al platformei nu
+ * poarta antetul. Antetul se pune numai cand slug-ul e al unui magazin PUBLICAT
+ * — iar asta se stie si la a doua cerere, din cache, fiindca cache-ul tine acum
+ * `esteMagazin` separat de domeniu.
+ *
+ * `localhost` si gazdele de desfasurare (`*.vercel.app`) nu cauta magazine: pe
+ * ele nu se redirecteaza nimic catre domeniile clientilor, iar pe `*.vercel.app`
+ * TOT raspunsul primeste oricum `noindex` (mai jos, in `proxy`).
+ */
+async function hotararePentruGazdaPlatformei(
+  bare: string,
+  firstSeg: string,
+  previzualizare: boolean,
+): Promise<HotarareVitrina> {
+  if (bare === "localhost" || esteGazdaDeDesfasurare(bare)) return { fel: "nimic" };
+  if (!firstSeg || NON_STORE_SEGMENTS.has(firstSeg)) return { fel: "nimic" };
+  // Esecul citirii nu se tine minte si nu se preface in raspuns: `null` → 503.
+  const rezolvare = await rezolvaSlugPlatforma(firstSeg, cacheRezolvariSlug, cautaMagazinDupaSlug, TTL_REZOLVARE);
+  return hotarasteVitrinaPePlatforma(rezolvare, previzualizare);
+}
+
+/**
+ * Raspunsul cand baza nu poate fi citita: 503, „reveniti", fara cache.
+ *
+ * Acelasi raspuns pe ambele ramuri (domeniu propriu si `/{slug}` pe platforma),
+ * din acelasi motiv: o pana de o clipa NU inseamna „magazinul nu exista" (care
+ * ar fi un 404 indexabil) si nici „nu e magazin" (care ar fi o vitrina servita
+ * fara `noindex`). 503 nu se indexeaza si nu se tine in niciun cache.
+ */
+function serviciuIndisponibil(): NextResponse {
+  return new NextResponse("Serviciu indisponibil temporar", {
+    status: 503,
+    headers: { "Retry-After": "30", "Cache-Control": "no-store" },
+  });
+}
+
+/*
+ * `EXTENSII_STATICE` — extensiile care inseamna „nu e o pagina" — erau in
+ * `config.matcher`, apoi aici. Au fost mutate in `src/lib/segmente-rezervate.ts`
+ * (04.09.2026), ca proba listei rezervate sa le poata citi fara `next/server`.
+ * Motivul pentru care nu mai stau in matcher ramane: matcher-ul nu vede
+ * METODA, iar `GET /logo.svg` e un fisier din `public/`, pe cand `POST /logo.svg`
+ * e o cerere pe care Next o poate trata ca actiune de server (id-ul actiunii
+ * vine din antet sau din corp, nu din cale). Filtrul se aplica deci numai la
+ * cererile care NU sunt POST.
+ */
 
 export async function proxy(request: NextRequest) {
   // Fisierele statice din `public/` nu au nevoie de nimic din proxy. Un POST
@@ -163,14 +227,20 @@ export async function proxy(request: NextRequest) {
      * un sitemap GOL, cu 200 — adica exact forma pe care motoarele de cautare o
      * accepta tacut si o tin minte. Iesirea de aici era plasata inaintea
      * blocului de normalizare, deci le sarea pe amandoua.
+     *
+     * ⚠ SI NUMAI DUPA CE STIM CA DOMENIUL E AL UNUI MAGAZIN PUBLICAT (04.09.2026).
+     * Pana atunci `/sitemap.xml` iesea de aici INAINTE de cautarea domeniului,
+     * deci pe un domeniu strain indreptat catre noi, sau pe unul legat de un
+     * magazin nepublicat, `sitemap.ts` raspundea cu un `<urlset>` GOL si 200 —
+     * chiar forma de mai sus — iar `robots.txt` il anunta. Acum cele doua adrese
+     * trec prin aceeasi cautare ca orice pagina: domeniu necunoscut → 404, baza
+     * picata → 503, si abia un magazin publicat le primeste servite.
      */
-    if (pathname === "/sitemap.xml" || pathname === "/robots.txt") {
-      if (isWww) {
-        const target = new URL(`https://${apexHost}${pathname}`);
-        target.search = request.nextUrl.search;
-        return NextResponse.redirect(target, 308);
-      }
-      return NextResponse.next();
+    const eRutaDeMetadate = pathname === "/sitemap.xml" || pathname === "/robots.txt";
+    if (eRutaDeMetadate && isWww) {
+      const target = new URL(`https://${apexHost}${pathname}`);
+      target.search = request.nextUrl.search;
+      return NextResponse.redirect(target, 308);
     }
 
     // `error` se trateaza SEPARAT de „nu s-a gasit". Daca am cacha si esecul,
@@ -211,10 +281,17 @@ export async function proxy(request: NextRequest) {
        * 503 spune adevarul („reveniti"), nu se indexeaza si nu se cacheaza.
        */
       if (error) {
-        return new NextResponse("Serviciu indisponibil temporar", {
-          status: 503,
-          headers: { "Retry-After": "30", "Cache-Control": "no-store" },
-        });
+        /*
+         * ⚠ `robots.txt` se serveste si fara baza. `robots.ts` e pur (decide doar
+         * dupa gazda), iar un robots.txt cu 5xx il face pe Google sa trateze TOT
+         * hostul ca interzis la crawlare pana la un raspuns bun — pe domeniul
+         * unui comerciant, exact paguba pe care lista rezervata o evita pe
+         * platforma. Pe un domeniu strain, in timpul penei, un robots.txt care
+         * anunta un sitemap ce da oricum 503 e inofensiv. Sitemapul, care chiar
+         * are nevoie de baza, ramane pe 503.
+         */
+        if (pathname === "/robots.txt") return NextResponse.next();
+        return serviciuIndisponibil();
       }
       rows = data ?? [];
       /*
@@ -226,7 +303,7 @@ export async function proxy(request: NextRequest) {
        * care se schimba chiar acum.
        */
       const seServeste = rows.some((r) => r.is_published === true);
-      cacheDomenii.set(cheieDomeniu, rows, seServeste ? undefined : TTL_NEGASIT);
+      cacheDomenii.set(cheieDomeniu, rows, seServeste ? undefined : TTL_REZOLVARE.negasit);
     }
 
     /* ⚠ Numai magazinele PUBLICATE se servesc. Steagul se citeste aici, nu in
@@ -244,6 +321,9 @@ export async function proxy(request: NextRequest) {
 
     const biz = exact ?? apexMatch;
     if (biz?.slug) {
+      // Sitemapul si robots-ul domeniului se servesc de handlerele de radacina,
+      // nu de vitrina: fara rescriere, pe hostul deja normalizat la apex.
+      if (eRutaDeMetadate) return NextResponse.next();
       // Rewrite: custom-domain.ro/ → /slug, custom-domain.ro/produse → /slug/produse
       const rewritePath = pathname === "/" ? `/${biz.slug}` : `/${biz.slug}${pathname}`;
       const url = request.nextUrl.clone();
@@ -281,49 +361,70 @@ export async function proxy(request: NextRequest) {
     );
   }
 
-  // Platform host: if /{slug} is a published store with an active custom domain,
-  // redirect visitors to that domain instead (its canonical home), keeping the path.
-  if (bare !== "localhost" && !bare.endsWith(".vercel.app") && !isPreview) {
-    const { pathname } = request.nextUrl;
-    const firstSeg = pathname.split("/")[1] ?? "";
-    if (firstSeg && !NON_STORE_SEGMENTS.has(firstSeg)) {
-      // Acelasi rationament ca mai sus: esecul nu se cacheaza.
-      let tinta = cacheSlugCatreDomeniu.get(firstSeg);
-      if (tinta === undefined) {
-        const { data, error } = await clientAnonim()
-          .from("businesses")
-          .select("custom_domain, custom_domain_healthy")
-          .eq("slug", firstSeg)
-          .eq("is_published", true)
-          .maybeSingle();
-        tinta = data?.custom_domain
-          ? { domeniu: data.custom_domain, sanatos: data.custom_domain_healthy }
-          : null;
-        if (!error) cacheSlugCatreDomeniu.set(firstSeg, tinta, tinta === null ? TTL_NEGASIT : undefined);
-      }
-      /*
-       * ═══ REDIRECTUL NU SE FACE CATRE UN DOMENIU DOVEDIT MORT. ═══
-       *
-       * Pana acum singura conditie era „coloana e nenula". Masurat pe 10.08.2026:
-       * `okai.ro` era cazut (ECONNREFUSED), iar magazinul `okxishop` — publicat si
-       * platit — devenea COMPLET inaccesibil, fiindca proxy-ul trimitea activ
-       * vizitatorii catre domeniul mort si le lua si ultima cale de acces, adresa
-       * de platforma. Pe `alexshop.ro` era si mai rau: domeniul servea un site
-       * WordPress strain, deci clientii plecau de la magazinul Edinio la altceva.
-       *
-       * `null` (neverificat inca) ramane redirect: un domeniu tocmai conectat nu
-       * asteapta cronul. Doar `false`, adica masurat si cazut, opreste.
-       */
-      if (tinta && tinta.sanatos !== false) {
-        const target = new URL(`https://${tinta.domeniu}${pathname.slice(firstSeg.length + 1) || "/"}`);
-        target.search = request.nextUrl.search;
-        return NextResponse.redirect(target, 307);
-      }
-    }
+  /*
+   * ═══ GAZDA PLATFORMEI: /{slug} ═══
+   *
+   * Magazin cu domeniu propriu sanatos → 307 catre domeniul lui (adresa lui
+   * canonica), pastrand calea. Magazin servit aici → `X-Robots-Tag: noindex`.
+   * Vezi `hotararePentruGazdaPlatformei` si `indexare-pe-platforma.ts`.
+   *
+   * ═══ REDIRECTUL NU SE FACE CATRE UN DOMENIU DOVEDIT MORT. ═══
+   *
+   * Pana pe 10.08.2026 singura conditie era „coloana e nenula". Masurat atunci:
+   * `okai.ro` era cazut (ECONNREFUSED), iar magazinul `okxishop` — publicat si
+   * platit — devenea COMPLET inaccesibil, fiindca proxy-ul trimitea activ
+   * vizitatorii catre domeniul mort si le lua si ultima cale de acces, adresa
+   * de platforma. Pe `alexshop.ro` era si mai rau: domeniul servea un site
+   * WordPress strain, deci clientii plecau de la magazinul Edinio la altceva.
+   *
+   * `null` (neverificat inca) ramane redirect: un domeniu tocmai conectat nu
+   * asteapta cronul. Doar `false`, adica masurat si cazut, opreste — si atunci
+   * vitrina servita pe platforma primeste `noindex`, ca oricare alta.
+   *
+   * Previzualizarea (`?preview=1`) nu se redirecteaza — editorul o incarca
+   * intr-un cadru de pe aceeasi origine — dar e tot o vitrina pe platforma,
+   * deci primeste si ea `noindex`.
+   */
+  const { pathname } = request.nextUrl;
+  const firstSeg = primulSegment(pathname);
+  const hotarare = await hotararePentruGazdaPlatformei(bare, firstSeg, isPreview);
+  if (hotarare.fel === "indisponibil") return serviciuIndisponibil();
+  if (hotarare.fel === "redirect") {
+    /*
+     * Restul caii se taie dupa segmentul BRUT, nu dupa cel decodificat:
+     * `firstSeg` e „cu-domeniu" si pentru `/cu%2Ddomeniu/product/x`, iar taiat
+     * dupa lungimea lui ar fi ramas „iu/product/x". Prins de proba.
+     */
+    const segmentBrut = pathname.split("/")[1] ?? "";
+    const target = new URL(`https://${hotarare.tinta.domeniu}${pathname.slice(segmentBrut.length + 1) || "/"}`);
+    target.search = request.nextUrl.search;
+    return NextResponse.redirect(target, 307);
   }
 
   // Platform host — normal auth middleware
-  return await updateSession(request);
+  const raspuns = await updateSession(request);
+
+  /*
+   * Antetul se pune pe RASPUNSUL proxy-ului, iar Next il duce mai departe pe
+   * raspunsul paginii — asa ajunge pe orice ruta de sub `/{slug}`, inclusiv pe
+   * cele scrise maine. `follow` ramane pornit: linkurile spre domeniul propriu
+   * si spre restul vitrinei merita urmate, doar indexarea e oprita.
+   *
+   * ⚠ NU se pune pe paginile platformei (`hotarare.fel === "nimic"`): `/`,
+   * `/preturi`, `/blog`, `/ajutor`, `/vs`, `/industrii` sunt chiar ce vrem in
+   * Google. Proba din `src/proxy.test.ts` cade daca vreuna il primeste.
+   */
+  if (hotarare.fel === "noindex") raspuns.headers.set(ANTET_ROBOTS, NOINDEX_VITRINA);
+
+  /*
+   * Gazdele de desfasurare (`*.vercel.app`) sunt copii ale site-ului la adrese
+   * pe care nu le vrem indexate deloc — nici site-ul, nici vreo vitrina. Nu
+   * atinge `www.edinio.com` si nici domeniile clientilor: acelea nu se termina
+   * in `.vercel.app`.
+   */
+  if (esteGazdaDeDesfasurare(bare)) raspuns.headers.set(ANTET_ROBOTS, NOINDEX_DESFASURARE);
+
+  return raspuns;
 }
 
 /*

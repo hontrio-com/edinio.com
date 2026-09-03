@@ -39,3 +39,32 @@ export function destulDinSectiune(m: {
   if (m.sectiune <= 0 || m.ecran <= 0) return false;
   return m.vizibil >= Math.min(m.sectiune, m.ecran) * 0.5;
 }
+
+/**
+ * Pragul cu care trebuie observata CHIAR sectiunea asta.
+ *
+ * ═══ ⚠ DE CE NU AJUNGE REGULA SINGURA ═══
+ *
+ * `destulDinSectiune` da raspunsul bun — dar el se cheama numai cand
+ * `IntersectionObserver` ne trezeste, iar el ne trezeste doar la TRAVERSAREA unui
+ * prag din lista data.
+ *
+ * ⚠ CE STRICA ASTA, si e scaparea din prima mea reparatie: cu o lista fixa
+ * `[0, 0.25, 0.5, 0.75]`, o sectiune de 5000px pe un ecran de 800px ajunge cel
+ * mult la raportul 800/5000 = 0,16. Traverseaza `0` la primul pixel — cand inca
+ * nu s-a vazut destul — si apoi NICIUN alt prag. Deci callback-ul nu mai vine, iar
+ * regula, oricat de dreapta, nu se mai executa niciodata.
+ *
+ * Reparasem aritmetica si lasasem declansatorul stricat.
+ *
+ * ⚠ LEACUL: pragul se CALCULEAZA pentru fiecare sectiune, ca sa fie chiar clipa in
+ * care regula devine adevarata. Pentru 5000px pe 800px iese 400/5000 = 0,08 —
+ * atins, deci trezirea vine. Pentru o sectiune scurta iese 0,5, adica exact ce
+ * cerea forma dinainte.
+ */
+export function pragulSectiunii(sectiune: number, ecran: number): number {
+  if (sectiune <= 0 || ecran <= 0) return 0;
+  const cerut = Math.min(sectiune, ecran) * 0.5;
+  /* ⚠ Marginit in (0, 1]: un prag de 0 ne-ar trezi la primul pixel, unul peste 1 niciodata. */
+  return Math.min(1, Math.max(0.001, cerut / sectiune));
+}

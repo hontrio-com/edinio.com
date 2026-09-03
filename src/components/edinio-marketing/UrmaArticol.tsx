@@ -76,7 +76,7 @@ export function UrmaArticol({
       aprinde deodata si ar spune ca „a citit 90%" cineva care poate n-a citit
       niciun rand. Se trage doar vizualizarea, si atat.
     */
-    const inaltime = corp.offsetHeight;
+    let inaltime = corp.offsetHeight;
     if (inaltime < window.innerHeight * 1.2) return;
 
     const trase = new Set<number>();
@@ -117,8 +117,43 @@ export function UrmaArticol({
       obs.observe(r);
     }
 
+    /*
+      ═══════════════════════════════════════════════════════════════════════════
+      ⚠ REPERELE SE MUTA CAND ARTICOLUL CRESTE, ALTFEL „90%" DEVINE MINCIUNA
+      ═══════════════════════════════════════════════════════════════════════════
+
+      Inaltimea se masoara la montare, iar reperele stau in pixeli. Numai ca
+      articolele CRESC dupa aceea: curatatorul de HTML pune pe fiecare imagine
+      `loading="lazy"`, iar `width` si `height` sunt ingaduite, nu obligatorii.
+      Deci o imagine care se incarca tarziu, intr-un articol care n-a declarat
+      dimensiunile, impinge tot ce e sub ea.
+
+      Cu cifre: corp de 4500px pune reperul de 90% la 4050px. Se incarca imaginile,
+      corpul ajunge la 5300px — iar 4050px inseamna acum 76%. GA4 primeste
+      `article_read_progress: 90` pentru cineva aflat la trei sferturi, si
+      `article_read_complete` pentru cineva care n-a terminat.
+
+      Aceeasi reparatie ca la derularea intregii pagini, si acelasi motiv pentru
+      `ResizeObserver` in locul unui ascultator de derulare: se aprinde numai cand
+      inaltimea chiar se schimba.
+    */
+    const aseazaReperele = () => {
+      const acum = corp.offsetHeight;
+      if (acum <= 0 || Math.abs(acum - inaltime) < inaltime * 0.02) return;
+      inaltime = acum;
+      for (const r of repere) {
+        const p = Number(r.dataset.articolPrag);
+        /* Cele trase au fost scoase din observator; mutarea lor n-ar mai conta. */
+        if (trase.has(p)) continue;
+        r.style.top = `${Math.round((acum * p) / 100)}px`;
+      }
+    };
+    const masura = typeof ResizeObserver !== "undefined" ? new ResizeObserver(aseazaReperele) : null;
+    masura?.observe(corp);
+
     return () => {
       obs.disconnect();
+      masura?.disconnect();
       for (const r of repere) r.remove();
       if (!pozitieVeche) corp.style.position = "";
     };

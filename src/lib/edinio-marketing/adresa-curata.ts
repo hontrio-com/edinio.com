@@ -200,5 +200,17 @@ export function curataDestinatia(brut: string | null | undefined): string | unde
     trebuie e „unde duce", nu „cu ce". Iar pe cele din afara se pastreaza si gazda,
     fiindca acolo intrebarea chiar e „catre cine ii trimitem".
   */
-  return u.hostname === acasa ? u.pathname : `${u.hostname}${u.pathname}`;
+  if (u.hostname === acasa) return u.pathname;
+
+  /*
+    ⚠ `wa.me/40712345678` POARTA UN TELEFON IN CALE. Paza anti-PII l-ar prinde ca
+    numar romanesc si ar opri evenimentul — dar atunci pierdem si masuratoarea, si
+    ne bizuim pe un al doilea strat pentru ceva ce se poate taia aici, o data.
+
+    N-am gasit azi nicio legatura de felul asta marcata pentru masurare; randul e
+    pus inainte sa apara. Ce ne trebuie e „a plecat catre WhatsApp", nu catre cine.
+  */
+  if (/(^|\.)wa\.me$/i.test(u.hostname)) return u.hostname;
+
+  return `${u.hostname}${u.pathname}`;
 }

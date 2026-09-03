@@ -157,15 +157,32 @@ test("⚠ `success_url` de onboarding poarta inapoi id-ul sesiunii Stripe", () =
 
 test("⚠ browserul foloseste id-ul sesiunii pentru abonament, nu pe cel al magazinului", () => {
   const cod = readFileSync("src/app/(onboarding)/onboarding/plan/page.tsx", "utf8");
-  assert.match(cod, /const idSesiune = searchParams\.get\("sid"\)/,
-    "pagina nu mai citeste id-ul sesiunii din adresa");
+
+  /*
+    ⚠ CE SE CERE ACUM, si de ce s-a schimbat. Pana pe 03.09.2026 pagina citea `sid`
+    intr-o variabila si il trimitea direct. Proba asta cerea chiar forma aia.
+
+    De cand plata se confirma la Stripe, `sid`-ul nu mai e crezut pe cuvant: se
+    duce la server, iar `event_id` vine INAPOI de acolo, ca id al sesiunii pe care
+    Stripe a recunoscut-o. Insusirea aparata ramane aceeasi — abonamentul poarta
+    id-ul SESIUNII, nu al magazinului — dar drumul e altul.
+  */
+  assert.match(cod, /verificaPlataOnboarding\(searchParams\.get\("sid"\)/,
+    "pagina nu mai duce id-ul sesiunii la verificare");
 
   const iPurchase = cod.indexOf('name: "purchase"');
   assert.ok(iPurchase > 0, "pagina nu mai trage purchase");
-  assert.match(
-    cod.slice(iPurchase, iPurchase + 260), /event_id: idSesiune \|\| idConversie/,
-    "purchase nu mai poarta id-ul sesiunii",
-  );
+  const bucata = cod.slice(iPurchase, iPurchase + 400);
+  assert.match(bucata, /event_id: plata\.sesiune/,
+    "purchase nu mai poarta id-ul sesiunii confirmate de Stripe");
+
+  /*
+    ⚠ SI CA SUMA VINE DE LA STRIPE, nu din tabelul de preturi. Webhook-ul o ia din
+    `amount_total`; daca browserul si-o calculeaza singur, acelasi abonament pleaca
+    cu doua sume la prima reducere sau la primul pret schimbat in Stripe.
+  */
+  assert.match(bucata, /value: plata\.suma/, "suma conversiei nu mai vine de la Stripe");
+  assert.ok(!bucata.includes("PLAN_PRICES"), "suma se calculeaza iar din tabelul de preturi");
 
   /* ⚠ Trialul RAMANE pe id-ul magazinului: perechea lui de server e `createBusiness`. */
   const iTrial = cod.indexOf('name: "trial_start"');

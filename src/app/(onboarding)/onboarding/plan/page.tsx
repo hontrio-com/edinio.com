@@ -12,9 +12,9 @@ import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 import { createBusiness } from "@/lib/actions/business.actions";
 import { trackOnboardingStep } from "@/lib/actions/auth.actions";
 import { urmareste } from "@/lib/edinio-marketing/magistrala";
+import { verificaPlataOnboarding } from "@/lib/actions/plata-onboarding.actions";
 import {
   type BillingInterval,
-  PLAN_PRICES,
   getAnnualPrice,
   getAnnualMonthlyEquivalent,
   ANNUAL_FREE_MONTHS,
@@ -250,21 +250,51 @@ function PlanPageContent() {
         numara de doua ori. Se prefera asta in locul unei conversii pierdute, iar
         cazul e rar prin constructie: Stripe pune sablonul intotdeauna.
       */
-      const idSesiune = searchParams.get("sid") ?? "";
       const idConversie = result.businessId ?? "";
 
       if (plan === "free") {
         urmareste({ name: "trial_start", plan_id: "free", event_id: idConversie });
       } else {
-        const value = paidInterval === "annual" ? getAnnualPrice(plan) : (PLAN_PRICES[plan] ?? 0);
-        urmareste({
-          name: "purchase",
-          plan_id: plan,
-          billing_period: paidInterval,
-          value,
-          currency: "RON",
-          event_id: idSesiune || idConversie,
-        });
+        /*
+          ═══ ⚠ ABONAMENTUL SE RAPORTEAZA NUMAI DUPA CE STRIPE CONFIRMA ═══
+
+          Pana azi, browserul socotea plata reusita din `?success=1` si din
+          `sessionStorage` — doua lucruri pe care le stapaneste chiar omul din fata
+          ecranului. Cine pornea o plata si o abandona avea deja amandoua, iar o
+          intoarcere pe adresa aia trimitea un `purchase` catre GA4, Google Ads,
+          Meta si TikTok pentru bani neincasati.
+
+          ⚠ SI SUMA VINE DE LA STRIPE, nu din tabelul nostru de preturi. Webhook-ul
+          o ia din `amount_total` si comentariul lui spune apasat ca asa trebuie;
+          browserul facea exact pe dos. Cele doua cai ar fi raportat acelasi
+          abonament cu doua sume la prima reducere sau la primul pret schimbat in
+          Stripe si uitat in cod.
+
+          ⚠ DACA STRIPE NU RASPUNDE, nu se trimite nimic din browser. Perechea de
+          pe server pleaca oricum, din webhook, catre Meta si TikTok. Se pierde doar
+          jumatatea de browser, pentru GA4 si Google Ads — iar o conversie lipsa se
+          vede si se poate recupera, pe cand una falsa intra in invatarea licitatiei
+          si nu mai iese.
+        */
+        const plata = await verificaPlataOnboarding(searchParams.get("sid") ?? "");
+        /*
+          ⚠ SI MONEDA SE VERIFICA, nu se toarna — aceeasi regula ca in webhook.
+          Taxonomia cunoaste doar `RON`, fiindca atat facturam. O suma in alta
+          moneda trimisa cu eticheta „RON" ar raporta un venit fals, si nimic n-ar
+          arata de ce. Mai bine netrimisa.
+        */
+        if (plata.ok && plata.moneda === "RON") {
+          urmareste({
+            name: "purchase",
+            plan_id: plata.plan || plan,
+            /* ⚠ Stripe are ultimul cuvant; daca metadata tace, cade pe ce a ales omul. */
+            billing_period: plata.interval ?? paidInterval,
+            value: plata.suma,
+            currency: "RON",
+            /* ⚠ Chiar id-ul folosit de webhook: asa cele doua se recunosc si se contopesc. */
+            event_id: plata.sesiune,
+          });
+        }
       }
 
       toast.success("Magazinul tau a fost creat cu succes!");

@@ -26,7 +26,9 @@ test("⚠ dintr-un `mailto:` nu iese adresa", () => {
   */
   assert.equal(curataDestinatia("mailto:cineva@edinio.com"), "mailto:");
   assert.equal(curataDestinatia("tel:+40712345678"), "tel:");
-  assert.equal(curataDestinatia("https://wa.me/40712345678?text=Buna"), "wa.me/40712345678");
+  /* ⚠ Si numarul din cale: `wa.me/<telefon>` se taie la gazda. Ce ne trebuie e
+     „a plecat catre WhatsApp", nu catre cine. */
+  assert.equal(curataDestinatia("https://wa.me/40712345678?text=Buna"), "wa.me");
 
   for (const rau of ["mailto:cineva@edinio.com", "tel:+40712345678"]) {
     const iesit = curataDestinatia(rau) ?? "";

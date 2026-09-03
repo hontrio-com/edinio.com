@@ -11,7 +11,7 @@ import { adaptorGoogleAds } from "@/lib/edinio-marketing/adaptor-google-ads";
 import { reiaRetragerea, EVENIMENT_SCHIMBAT } from "@/lib/edinio-marketing/consimtamant-browser";
 import { curataTitlu } from "@/lib/edinio-marketing/titlu-curat";
 import { curataDestinatia } from "@/lib/edinio-marketing/adresa-curata";
-import { destulDinSectiune } from "@/lib/edinio-marketing/sectiune-vazuta";
+import { destulDinSectiune, pragulSectiunii } from "@/lib/edinio-marketing/sectiune-vazuta";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -346,12 +346,7 @@ export function RuntimeMarketing() {
             continue;
           }
 
-          const nume = el.dataset.analyticsSection;
-          if (nume && !vazute.has(nume) && destulVazut(intrare)) {
-            vazute.add(nume);
-            urmareste({ name: "section_view", section_name: nume });
-            obs.unobserve(el);
-          }
+          /* Sectiunile au observatorii lor, cu pragul potrivit fiecareia — vezi mai jos. */
         }
       },
       /*
@@ -374,7 +369,37 @@ export function RuntimeMarketing() {
       { threshold: [0, 0.25, 0.5, 0.75] },
     );
 
-    for (const el of document.querySelectorAll<HTMLElement>("[data-analytics-section]")) obs.observe(el);
+    /*
+      ═══ ⚠ FIECARE SECTIUNE CU PRAGUL EI, si de ce nu una singura pentru toate ═══
+
+      Un `IntersectionObserver` are o singura lista de praguri, iar ea trezeste doar
+      la TRAVERSARE. Cu o lista fixa, o sectiune de 5000px pe un ecran de 800px
+      ajunge cel mult la raportul 0,16: traverseaza `0` la primul pixel — cand inca
+      nu s-a vazut destul — si apoi niciun alt prag. Callback-ul nu mai vine deloc,
+      iar regula, oricat de dreapta, nu se mai executa.
+
+      Reparasem aritmetica si lasasem declansatorul stricat. Acum pragul se
+      calculeaza pentru fiecare sectiune, ca sa cada chiar pe clipa in care regula
+      devine adevarata — deci observatorii sunt cati sectiuni, nu unul.
+    */
+    const observatoriSectiuni: IntersectionObserver[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>("[data-analytics-section]")) {
+      const o = new IntersectionObserver(
+        (intrari) => {
+          for (const intrare of intrari) {
+            if (!intrare.isIntersecting) continue;
+            const nume = (intrare.target as HTMLElement).dataset.analyticsSection;
+            if (!nume || vazute.has(nume) || !destulVazut(intrare)) continue;
+            vazute.add(nume);
+            urmareste({ name: "section_view", section_name: nume });
+            o.unobserve(intrare.target);
+          }
+        },
+        { threshold: [0, pragulSectiunii(el.getBoundingClientRect().height, window.innerHeight)] },
+      );
+      o.observe(el);
+      observatoriSectiuni.push(o);
+    }
 
     /*
       ⚠ REPERELE DE DERULARE se pun de noi, nu se cer paginilor. Patru elemente
@@ -443,6 +468,7 @@ export function RuntimeMarketing() {
 
     return () => {
       obs.disconnect();
+      for (const o of observatoriSectiuni) o.disconnect();
       masuraInaltimii?.disconnect();
       for (const r of repere) r.remove();
     };

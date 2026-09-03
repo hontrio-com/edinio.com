@@ -307,8 +307,17 @@ export async function revendica(limita: number): Promise<RandDeTrimis[]> {
  *
  * ⚠ SE INTREABA DUPA CINE E IN LISTA, nu dupa cine lipseste. Un `not in` ar sari
  * peste NULL si ar lasa sa treaca tocmai randurile despre care stim cel mai
- * putin. Aici necunoscutul cade DESCHIS, dinadins: un rand exista numai fiindca
- * acordul exista cand a fost pus.
+ * putin.
+ *
+ * ⚠ AICI A SCRIS „necunoscutul cade DESCHIS, dinadins", si nu mai e adevarat.
+ * Randurile fara `vizitator` nu intra deloc in interogarea asta — dar cronul le
+ * opreste el, inainte de orice trimitere, tocmai fiindca un rand pe care
+ * retragerea nu-l poate atinge n-are voie sa plece. Iar cand interogarea CADE,
+ * raspunsul e `null`, si `null` inseamna „nu trimite" (vezi mai jos).
+ *
+ * Cuvantul a ramas de pe vremea cand purtarea era alta, la cincisprezece randuri
+ * deasupra unei note care spune exact pe dos. Intr-un fisier despre consimtamant,
+ * asta e felul de comentariu care il face pe cineva sa „repare" codul bun.
  */
 export async function ceiCareAuRetras(
   vizitatori: readonly string[],

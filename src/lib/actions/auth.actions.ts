@@ -74,6 +74,42 @@ const LIMITE = {
  */
 
 
+/*
+  ═════════════════════════════════════════════════════════════════════════════════════════════
+  ⚠ DE CE `login` INTOARCE O DESTINATIE IN LOC SA REDIRECTEZE
+  ═════════════════════════════════════════════════════════════════════════════════════════════
+
+  Pana pe 03.09.2026 aici erau trei `redirect(...)`. Documentatia Next spune insa
+  limpede: „In a Server Action, `redirect` performs a client-side navigation when
+  JavaScript is available" (`next/dist/docs/.../redirect.md`). Adica o navigare
+  MOALE: documentul nu se schimba.
+
+  ⚠ CE STRICA ASTA, si e ceva ce eu insumi am sustinut gresit intr-o nota din
+  `fara-urmarire.ts` — scrisesem ca redirectarea serverului catre `/login/mfa` e o
+  navigare de document, deci acoperita de poarta de cale. Nu e.
+
+  `/login` incarca dinadins Meta, TikTok si Google Ads: acolo ajung oamenii din
+  reclame, si tocmai pixelul aseaza `_fbc`. Dar un script INCARCAT nu se descarca
+  atunci cand componenta lui se demonteaza. Deci dupa o navigare moale:
+
+    - pe `/login/mfa` — ecranul unde se tasteaza codul — scripturile terte sunt
+      inca in pagina, desi poarta de cale spune ca n-au voie acolo;
+    - pe `/dashboard` — de unde i-am scos chiar in ziua aceea — la fel, si
+      `fbevents.js` isi trage singur `PageView` la fiecare schimbare de istoric
+      (masurat pe 01.09.2026). Adica exact ce am reparat dimineata se intorcea pe
+      calea cea mai umblata: intrarea obisnuita in aplicatie.
+
+  ⚠ DECI IESIREA DIN `/login` E INTOTDEAUNA UN DOCUMENT NOU. Clientul primeste
+  destinatia si o deschide cu `window.location.assign`, care distruge documentul
+  vechi cu tot ce s-a incarcat in el.
+
+  ⚠ CE NU SE SCHIMBA: cookie-urile. Sunt asezate mai sus, in aceeasi cerere, iar
+  raspunsul actiunii le duce la browser inainte de navigare. Documentul nou pleaca
+  deja autentificat.
+
+  ⚠ SI CE COSTA: o incarcare intreaga de pagina la fiecare autentificare, in loc
+  de una moale. O data pe sesiune, pe drumul pe care omul oricum asteapta.
+*/
 export async function login(formData: { email: string; password: string }) {
   const ip = await ipApelant();
   const email = formData.email.trim().toLowerCase();
@@ -212,7 +248,7 @@ export async function login(formData: { email: string; password: string }) {
     await trimiteCodMfa(user.id, user.email!);
 
     cookieStore.set("mfa_pending", "1", { httpOnly: true, sameSite: "lax", path: "/", maxAge: DURATA_ASTEPTARE_SEC, secure: process.env.NODE_ENV === "production" });
-    redirect("/login/mfa");
+    return { mergiLa: "/login/mfa" };
   }
 
   // Fara al doilea factor: sesiunea se scrie chiar aici, ca pana acum.
@@ -220,13 +256,13 @@ export async function login(formData: { email: string; password: string }) {
 
   if (!profile?.onboarding_completed) {
     cookieStore.delete("onboarding_done");
-    redirect("/onboarding/details");
+    return { mergiLa: "/onboarding/details" };
   }
 
   // Set cookie so proxy middleware skips onboarding DB check on redirect
   cookieStore.set("onboarding_done", "1", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30, secure: process.env.NODE_ENV === "production" });
 
-  redirect("/dashboard");
+  return { mergiLa: "/dashboard" };
 }
 
 /*

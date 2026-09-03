@@ -26,6 +26,23 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const result = await login(data);
+
+      /*
+        ⚠ NAVIGARE DE DOCUMENT, nu `router.push`. Motivul e scris pe larg deasupra
+        lui `login` in `auth.actions.ts`: pagina asta incarca dinadins Meta, TikTok
+        si Google Ads, iar un script incarcat nu se descarca atunci cand componenta
+        lui se demonteaza. O navigare moale l-ar duce mai departe — pe ecranul de
+        cod, si in panou.
+
+        ⚠ `setLoading(false)` NU se cheama aici: butonul ramane oprit pana pleaca
+        documentul, altfel omul ar putea apasa a doua oara in fereastra dintre
+        raspuns si navigare.
+      */
+      if (result && "mergiLa" in result && result.mergiLa) {
+        window.location.assign(result.mergiLa);
+        return;
+      }
+
       if (result?.error) {
         toast.error(result.error);
         setLoading(false);

@@ -72,10 +72,19 @@ export const CAI_FARA_URMARIRE = [
     browser — deci nu se pierde nicio masuratoare, doar remarketingul.
 
     ⚠ CAT APARA, SPUS CINSTIT: se opreste INJECTAREA scriptului. Cine ajunge aici
-    printr-o navigare de document — linkul din email, sau redirectarea serverului
-    catre `/login/mfa` — e acoperit. Cine ar ajunge printr-o navigare de client
-    dintr-o pagina unde scriptul s-a incarcat deja nu e: scriptul incarcat nu se
-    descarca. Aceeasi margine ca peste tot in fisierul asta.
+    printr-o navigare de DOCUMENT e acoperit; cine ar ajunge printr-o navigare de
+    client dintr-o pagina unde scriptul s-a incarcat deja nu e, fiindca un script
+    incarcat nu se descarca.
+
+    ⚠ SI RANDURILE ASTEA AU DAT O ZI UN EXEMPLU FALS. Scriau ca „redirectarea
+    serverului catre `/login/mfa`" e o navigare de document. Nu e: documentatia Next
+    spune ca `redirect` dintr-o actiune de server face o navigare de CLIENT cand
+    exista JavaScript. Deci tocmai calea obisnuita ocolea poarta — si nu numai
+    catre `/login/mfa`, ci si catre `/dashboard`.
+
+    S-a reparat la sursa: `login()` nu mai redirecteaza, ci intoarce destinatia, iar
+    clientul o deschide cu `window.location.assign`. Vezi nota de deasupra lui
+    `login` in `auth.actions.ts`.
   */
   "/login/mfa",
   "/reset-password",

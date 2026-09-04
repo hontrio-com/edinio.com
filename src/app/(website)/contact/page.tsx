@@ -26,8 +26,23 @@ import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 export const metadata: Metadata = siteMetadata({
   titluComplet: true,
   title: "Contact Edinio | Suport și asistență",
+  /*
+    ⚠ PROGRAMUL SE CITEȘTE DIN `PROGRAM`, NU SE SCRIE AICI. Fraza dinaintea lui e
+    cea aprobată, cuvânt cu cuvânt; programul vine după ea.
+
+    Ordinea nu e întâmplătoare: Google taie descrierile pe la ~160 de semne, iar
+    asta are 169. Ce se pierde la tăiere e coada — deci fraza aprobată rămâne
+    întreagă și vizibilă, iar programul e adaosul care poate lipsi. Invers, ar fi
+    fost tăiat chiar mesajul.
+
+    ⚠ ȘI NU SE SCRIE „zilnic”. E adevărat azi (Luni - Duminică), dar ar deveni o
+    minciună tăcută în ziua în care programul se strânge la Luni - Vineri —
+    nimic n-ar cădea, iar descrierea ar promite o zi în care nu răspunde nimeni.
+    Valorile vin din singurul loc unde sunt scrise.
+  */
   description:
-    "Ai nevoie de ajutor? Contactează echipa Edinio pentru suport, configurare, integrări sau întrebări despre magazinul tău online.",
+    "Ai nevoie de ajutor? Contactează echipa Edinio pentru suport, configurare, integrări sau " +
+    `întrebări despre magazinul tău online. Asistență ${PROGRAM.zile}, ${PROGRAM.ore}.`,
   path: "/contact",
 });
 

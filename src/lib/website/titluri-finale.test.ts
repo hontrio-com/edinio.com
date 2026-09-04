@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { siteMetadata } from "./metadata";
 import { COMPETITORS } from "./nav";
+import { PROGRAM } from "./contact";
 
 /*
   ═══ TITLURILE ȘI DESCRIERILE FINALE, CUVÂNT CU CUVÂNT ═══
@@ -45,6 +46,11 @@ interface Asteptat {
   titlu: string;
   /** `<meta name="description">`. */
   descriere: string;
+  /**
+   * Descrierea se compune la rulare din alte constante, deci NU stă ca literal
+   * întreg în sursă — se caută atunci capetele ei și sursa părții variabile.
+   */
+  compusa?: boolean;
 }
 
 /**
@@ -111,8 +117,17 @@ const PAGINI: Record<string, Asteptat> = {
   "/contact": {
     fisier: "(website)/contact/page.tsx",
     titlu: "Contact Edinio | Suport și asistență",
+    /*
+      ⚠ SINGURA DESCRIERE COMPUSĂ, NU SCRISĂ. Fraza e cea aprobată, dar programul
+      de asistență se citește din `PROGRAM` — deci proba îl compune din ACEEAȘI
+      sursă ca pagina. Scris de mână aici, ar fi fost o a doua copie a orelor,
+      care s-ar fi despărțit tăcut de cea adevărată la prima schimbare de program.
+    */
     descriere:
-      "Ai nevoie de ajutor? Contactează echipa Edinio pentru suport, configurare, integrări sau întrebări despre magazinul tău online.",
+      "Ai nevoie de ajutor? Contactează echipa Edinio pentru suport, configurare, integrări sau " +
+      `întrebări despre magazinul tău online. Asistență ${PROGRAM.zile}, ${PROGRAM.ore}.`,
+    /* Se compune la rulare, deci nu stă ca literal întreg în sursă. */
+    compusa: true,
   },
   "/vs": {
     fisier: "(website)/vs/page.tsx",
@@ -186,6 +201,38 @@ describe("titlurile finale, așa cum ajung în HTML", () => {
         s.includes(JSON.stringify(bucata)),
         `${ruta}: nu găsesc titlul în ${a.fisier}.\n  aștept: ${JSON.stringify(bucata)}`,
       );
+
+      if (a.compusa) {
+        /*
+          Compusă la rulare: nu stă ca literal întreg în sursă. Se cer cele două
+          jumătăți — fraza aprobată, scrisă acolo, și forma care aduce partea
+          variabilă din CHIAR constanta ei. A doua e cea care contează: fără ea,
+          orele ar fi o a doua copie, care se desparte tăcut de cea adevărată.
+        */
+        /* ⚠ Fără ghilimeaua de închidere: literalul din pagină CONTINUĂ după
+           bucata căutată, deci un `JSON.stringify` întreg n-ar fi găsit-o
+           niciodată — proba ar fi fost roșie pe un cod corect. */
+        const inceput = JSON.stringify(a.descriere.slice(0, 60)).slice(0, -1);
+        assert.ok(
+          s.includes(inceput),
+          `${ruta}: începutul descrierii nu mai e în ${a.fisier}\n  aștept: ${inceput}`,
+        );
+        /*
+          ⚠ SE CERE CHIAR COADA DESCRIERII, NU „PROGRAM undeva în fișier".
+
+          Prima scriere era `assert.match(s, /PROGRAM\.zile/)` — și o mutație a
+          arătat că nu poate cădea: am înlocuit orele din descriere cu textul
+          fix „Asistență zilnic, 08:00 - 20:00." și proba a rămas VERDE, fiindcă
+          `PROGRAM.zile` mai apare o dată în aceeași pagină, la tabelul de
+          contact. Adică regula măsura alt rând decât cel pe care îl apăra.
+        */
+        const coada = "Asistență ${PROGRAM.zile}, ${PROGRAM.ore}.";
+        assert.ok(
+          s.includes(coada),
+          `${ruta}: descrierea nu mai citește programul din PROGRAM.\n  aștept la coadă: ${coada}`,
+        );
+        return;
+      }
 
       assert.ok(
         s.includes(JSON.stringify(a.descriere)),

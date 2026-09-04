@@ -98,33 +98,10 @@ export function Paginare({
   );
 }
 
-/**
- * Numărul de pagină dintr-un `?p=`, curățat de ce nu e număr.
- *
- * ⚠ STRICT, NU ÎNGĂDUITOR. `Number.parseInt("2abc")` întoarce `2`, deci
- * `/blog?p=2abc` răspundea 200 cu conținutul paginii 2 — aceeași listă la două
- * adrese, adică exact ce nu vrem să vadă un motor de căutare. Acum orice altceva
- * decât cifre curate înseamnă pagina 1.
- */
-export function paginaCeruta(v: string | string[] | undefined): number {
-  const brut = Array.isArray(v) ? v[0] : v;
-  if (brut === undefined || brut === null || brut === "") return 1;
-  if (!/^\d+$/.test(brut.trim())) return 1;
-  const n = Number.parseInt(brut, 10);
-  return Number.isSafeInteger(n) && n >= 1 ? n : 1;
-}
-
-/**
- * A cerut cineva o pagină care nu există?
- *
- * ⚠ `?p=999999` RĂSPUNDEA 200, cu o listă goală. Pentru un cititor e derutant;
- * pentru un motor de căutare e o pagină subțire cu adresă proprie și canonică
- * proprie, iar cine vrea poate produce o mie ca ea dintr-o buclă.
- *
- * Pagina 1 rămâne mereu bună, chiar și fără articole: acolo e capul listei, cu
- * explicația pentru un blog gol.
- */
-export function paginaNuExista(pagina: number, total: number, pagini: number): boolean {
-  if (pagina <= 1) return false;
-  return total === 0 || pagina > pagini;
-}
+/*
+  ⚠ RE-EXPORTATE, NU MUTATE PE JUMĂTATE. Regulile pure trăiesc în
+  `@/lib/blog/paginare`, unde pot fi CHEMATE de o probă (`.tsx` nu se poate
+  încărca în harness). Rândul ăsta ține neschimbate cele cinci pagini de blog
+  care le importau de aici.
+*/
+export { paginaCeruta, paginaNuExista } from "@/lib/blog/paginare";

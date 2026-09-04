@@ -99,7 +99,16 @@ const CAMPURI_LISTA =
     Deci un articol pe care nimeni nu-l atinsese începea să spună „Actualizat
     azi" fiindcă altul fusese pus în vitrină. Vezi `blog_continut_atins()`.
   */
-  "id, slug, title, excerpt, cover_url, cover_alt, published_at, content_updated_at, reading_minutes, is_featured, is_pinned, noindex," +
+  /*
+    ⚠ `canonical_url` E AICI PENTRU SITEMAP SI llms.txt (04.09.2026).
+
+    Un articol republicat de pe alt site isi muta canonicalul acolo
+    (`blog/[slug]/page.tsx`). Fara campul asta in lista, sitemapul si llms.txt
+    l-ar fi anuntat ca adresa a noastra, in timp ce pagina spune „originalul e
+    in alta parte" — chiar contradictia pe care Search Console o raporteaza.
+    Azi niciun articol nu-l are completat, deci defectul e armat, nu pornit.
+  */
+  "id, slug, title, excerpt, cover_url, cover_alt, published_at, content_updated_at, reading_minutes, is_featured, is_pinned, noindex, canonical_url," +
   /*
     ⚠ SI `content_updated_at` AL TAXONOMIEI, de la 31.08.2026.
 
@@ -148,6 +157,58 @@ const ACUM = () => new Date().toISOString();
  * 500 — adică adevărul. O pagină care nu se poate desena trebuie să spună asta,
  * nu să pretindă că nu există.
  */
+/**
+ * ═══ ⚠ „PESTE ULTIMA PAGINĂ" NU E O EROARE (04.09.2026) ═══
+ *
+ * Cerută cu `count: "exact"`, o felie care începe după ultimul rând nu întoarce
+ * o listă goală: PostgREST răspunde **416** cu `PGRST103` — „An offset of 12 was
+ * requested, but there are only 1 rows." Măsurat pe bază, nu presupus.
+ *
+ * `cere()` aruncă dinadins pe ORICE eroare, deci fiecare listă a blogului
+ * răspundea **500** la orice `?p=` dincolo de ultima pagină: `/blog?p=2`,
+ * `/blog?p=999`, rubrică, autor, etichetă, căutare — verificat în producție,
+ * inclusiv pentru Googlebot. Garda `paginaNuExista`, scrisă tocmai ca să dea
+ * 404, stătea DUPĂ citirea care arunca și nu apuca să ruleze niciodată. Iar
+ * comentariile din `Paginare.tsx` susțineau că `?p=999999` dă 404.
+ *
+ * Diferența costă: pe 404 Google închide discuția, pe 500 revine și numără
+ * eroarea la sănătatea site-ului.
+ *
+ * ⚠ NUMAI codul ăsta se iartă, și numai el. Orice altă eroare urcă mai departe:
+ * o pană a bazei tot 500 trebuie să dea, nu o listă goală care arată ca „nu
+ * sunt articole" (vezi nota lui `cere`).
+ */
+const DUPA_ULTIMA_PAGINA = "PGRST103";
+
+export function dupaUltimaPagina(error: { code?: string } | null | undefined): boolean {
+  return error?.code === DUPA_ULTIMA_PAGINA;
+}
+
+/**
+ * Ce întorc listele când pagina cerută e dincolo de ultima.
+ *
+ * `total: 0` nu se vede niciodată: fiecare pagină cheamă `paginaNuExista`, care
+ * pentru orice pagină ≥ 2 cu total 0 dă `notFound()`. Iar pagina 1 NU poate
+ * ajunge aici — offsetul 0 întoarce 200 cu listă goală chiar și pe o mulțime
+ * goală (măsurat pe bază).
+ */
+/*
+  ⚠ E O FUNCTIE, NU O CONSTANTA, si asta nu e o preferinta de stil.
+
+  Scrisa ca obiect de modul, aceeasi referinta — si acelasi ARRAY gol — se
+  intorcea din toate cele cinci citiri, la fiecare cerere din acelasi proces
+  Node. Un singur apelant care ar sorta lista pe loc (`.sort()`, `.reverse()`,
+  `.push()`) ar fi stricat-o pentru toate cererile urmatoare ale tuturor
+  vizitatorilor, iar defectul ar fi aparut la ore dupa cauza si numai pe
+  serverele care apucasera sa treaca prin acea ruta.
+
+  Azi niciun apelant nu muta lista. Pretul unui obiect nou e nimic; pretul
+  descoperirii, cand cineva ar adauga o sortare, ar fi o zi.
+*/
+function paginaInexistenta(): { articole: ArticolDeLista[]; total: number; pagini: number } {
+  return { articole: [], total: 0, pagini: 1 };
+}
+
 function cere<T>(rezultat: { data: T; error: { message?: string } | null }, unde: string): T {
   if (rezultat.error) {
     throw new Error(
@@ -220,6 +281,9 @@ export async function articoleleCategoriei(
     .order("is_pinned", { ascending: false })
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
+  /* Pagina cerută e dincolo de ultima: 404, nu 500. Vezi `dupaUltimaPagina`. */
+  if (dupaUltimaPagina(e3)) return paginaInexistenta();
+
   cere({ data: null, error: e3 }, "articoleleCategoriei");
 
   const total = count ?? 0;
@@ -383,6 +447,9 @@ export async function articoleleAutorului(
     .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
+  /* Pagina cerută e dincolo de ultima: 404, nu 500. Vezi `dupaUltimaPagina`. */
+  if (dupaUltimaPagina(e10)) return paginaInexistenta();
+
   cere({ data: null, error: e10 }, "articoleleAutorului");
 
   const total = count ?? 0;
@@ -506,6 +573,9 @@ export async function paginaDeArticole(
     .order("is_pinned", { ascending: false })
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
+  /* Pagina cerută e dincolo de ultima: 404, nu 500. Vezi `dupaUltimaPagina`. */
+  if (dupaUltimaPagina(e15)) return paginaInexistenta();
+
   cere({ data: null, error: e15 }, "paginaDeArticole");
 
   const total = count ?? 0;
@@ -553,6 +623,9 @@ export async function cautaArticole(
     .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
+  /* Pagina cerută e dincolo de ultima: 404, nu 500. Vezi `dupaUltimaPagina`. */
+  if (dupaUltimaPagina(e16)) return paginaInexistenta();
+
   cere({ data: null, error: e16 }, "cautaArticole");
 
   const total = count ?? 0;
@@ -636,6 +709,9 @@ export async function articoleleEtichetei(
     .lte("published_at", ACUM())
     .order("published_at", { ascending: false })
     .range(de_la, de_la + pePagina - 1);
+  /* Pagina cerută e dincolo de ultima: 404, nu 500. Vezi `dupaUltimaPagina`. */
+  if (dupaUltimaPagina(e19)) return paginaInexistenta();
+
   cere({ data: null, error: e19 }, "articoleleEtichetei");
 
   const total = count ?? 0;

@@ -95,9 +95,24 @@ export function RichTextEditor({
       ...(cuImagini ? [Image.configure({ HTMLAttributes: { class: "rounded-lg" } })] : []),
       Underline,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
+      /*
+        ⚠ `rel` SI `target` SE STING AICI, EXPLICIT (04.09.2026).
+
+        @tiptap/extension-link vine cu `target: "_blank"` si
+        `rel: "noopener noreferrer nofollow"` IMPLICITE, iar `configure()` face
+        merge adanc — deci setand doar `class` le pastram pe amandoua. Rezultatul:
+        fiecare legatura scrisa din editor pleca stampilata cu `nofollow` si fila
+        noua, INCLUSIV cele catre paginile noastre. Curatatorul le lasa sa treaca
+        (nu atingea legaturile interne), deci regula „legatura interna ramane
+        curata" era anulata inainte sa ajunga la el.
+
+        `null` inseamna „nu emite atributul". Ce se pune pe legaturile din afara
+        hotaraste `curataArticol` (`relPentruExtern`), la salvare — un singur loc,
+        nu doua.
+      */
       Link.configure({
         openOnClick: false,
-        HTMLAttributes: { class: "text-primary underline" },
+        HTMLAttributes: { class: "text-primary underline", rel: null, target: null },
       }),
     ],
     content,

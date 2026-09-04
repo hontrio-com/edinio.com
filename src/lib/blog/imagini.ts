@@ -1,3 +1,5 @@
+import { adresaAbsoluta, eCaleInterna } from "./adresa-scrisa";
+
 /**
  * Ce adrese de imagine primim de la editor.
  *
@@ -51,19 +53,23 @@ export function adresaDeImagine(brut: string | null | undefined, camp: string): 
   const v = (brut ?? "").trim();
   if (!v) return { ok: true, adresa: null };
 
-  /* `//gazda/poza.png` începe cu `/` dar duce în altă parte: e o adresă cu
-     protocol moștenit. Aceeași capcană ca la curățător, deci același răspuns. */
-  if (v.startsWith("//")) return { ok: false, motiv: `${camp} nu e o adresă de la noi.` };
+  /*
+    ⚠ AICI ERA TOT „numără barele", până pe 04.09.2026: `//gazdă` respins,
+    orice altceva care începe cu `/` primit ca al nostru. `/\gazdă/pixel.gif`
+    începe cu `/` fără să fie `//`, deci era primit — pentru copertă, pentru
+    imaginea de partajare și pentru avatarul autorului. Next face din copertă un
+    `og:image` ABSOLUT, deci gazda străină ajungea în previzualizarea socială și
+    era cerută de fiecare cititor.
 
-  /* O cale din `public/`, deci a noastră. */
-  if (v.startsWith("/")) return { ok: true, adresa: v };
+    Regula stă acum într-un singur loc, `adresa-scrisa.ts`, împreună cu cea a
+    curățătorului și cea a îndemnului. Aici, ca și acolo, o cale trebuie să
+    înceapă cu `/` și să cadă pe gazda noastră, iar o adresă întreagă trebuie
+    să-și declare singură schema.
+  */
+  if (eCaleInterna(v)) return { ok: true, adresa: v };
 
-  let u: URL;
-  try {
-    u = new URL(v);
-  } catch {
-    return { ok: false, motiv: `${camp} nu e o adresă validă.` };
-  }
+  const u = adresaAbsoluta(v);
+  if (!u) return { ok: false, motiv: `${camp} nu e o adresă de la noi.` };
 
   if (u.protocol !== "https:") {
     return { ok: false, motiv: `${camp} trebuie să fie o adresă https.` };

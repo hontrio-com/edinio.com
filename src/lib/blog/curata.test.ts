@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { curataArticol, esteInAfara } from "./curata";
+import { curataArticol, esteInAfara, relPentruExtern } from "./curata";
 
 /*
   Gazda noastră de imagini vine din mediu, iar `curata` o citește la fiecare
@@ -12,17 +12,21 @@ import { curataArticol, esteInAfara } from "./curata";
 process.env.R2_PUBLIC_URL = "https://pub-alnostru.r2.dev";
 
 /*
-  Curățătorul blogului se deosebește de cel comun prin DOUĂ alegeri, și amândouă
-  se pot pierde tăcut la o modificare viitoare:
+  Curățătorul blogului se deosebește de cel comun prin TREI alegeri, și fiecare
+  se poate pierde tăcut la o modificare viitoare:
 
-  1. Legăturile INTERNE nu primesc `nofollow`. Dacă cineva le-o pune înapoi
-     „ca la celelalte", blogul nu se strică vizibil — doar încetează să mai
-     ajute paginile către care trimite, adică jumătate din motivul lui.
+  1. Legăturile INTERNE nu primesc `nofollow` — și nici `target`. Dacă cineva le
+     pune înapoi „ca la celelalte", blogul nu se strică vizibil, doar încetează
+     să mai ajute paginile către care trimite, adică jumătate din motivul lui.
 
-  2. Imaginile se acceptă, dar numai de la gazdele noastre. Slăbită, regula
+  2. Legăturile din AFARĂ nu mai primesc `nofollow` automat (04.09.2026). O
+     trimitere editorială către o sursă contează; `sponsored`, `ugc` și
+     `nofollow` se pun doar când le cere redactorul.
+
+  3. Imaginile se acceptă, dar numai de la gazdele noastre. Slăbită, regula
      lasă orice pixel de urmărire într-un articol.
 
-  Probele astea sunt paza acelor două alegeri.
+  Probele astea sunt paza acelor trei alegeri.
 */
 
 test("legatura interna ramane curata, fara nofollow", () => {
@@ -32,17 +36,56 @@ test("legatura interna ramane curata, fara nofollow", () => {
   assert.ok(!iesit.includes("_blank"), "legatura interna se deschide in fila noua");
 });
 
+test("legatura interna scrisa de editor cu nofollow si _blank e CURATATA", () => {
+  /*
+    ⚠ CHIAR DEFECTUL GASIT PE 04.09.2026. @tiptap/extension-link stampileaza
+    implicit `target="_blank" rel="noopener noreferrer nofollow"` pe ORICE
+    legatura, inclusiv pe cele interne, iar curatatorul le lasa sa treaca
+    neatinse: regula de mai sus era anulata inainte sa ajunga la el.
+  */
+  const iesit = curataArticol(
+    '<p><a target="_blank" rel="noopener noreferrer nofollow" href="/preturi">x</a></p>',
+  );
+  assert.ok(!iesit.includes("nofollow"), "nofollow-ul editorului a trecut pe o legatura interna");
+  assert.ok(!iesit.includes("_blank"), "_blank-ul editorului a trecut pe o legatura interna");
+  assert.ok(iesit.includes('href="/preturi"'));
+});
+
 test("legatura catre edinio.com scrisa intreg e tot interna", () => {
   const iesit = curataArticol('<p><a href="https://www.edinio.com/preturi">x</a></p>');
   assert.ok(!iesit.includes("nofollow"));
 });
 
-test("legatura in afara primeste nofollow si se deschide separat", () => {
+test("legatura editoriala in afara: noopener noreferrer, FARA nofollow", () => {
   const iesit = curataArticol('<p><a href="https://example.com">x</a></p>');
-  assert.ok(iesit.includes("nofollow"), "lipseste nofollow pe o legatura straina");
   assert.ok(iesit.includes('target="_blank"'));
   // `noopener` nu e cosmetic: fara el, pagina tinta poate rescrie fila noastra.
-  assert.ok(iesit.includes("noopener"));
+  assert.ok(iesit.includes("noopener"), "lipseste noopener pe o legatura straina");
+  assert.ok(iesit.includes("noreferrer"));
+  assert.ok(!iesit.includes("nofollow"), "nofollow s-a intors pe toate legaturile din afara");
+});
+
+test("redactorul poate cere sponsored, ugc sau nofollow, si i se pastreaza", () => {
+  for (const semnal of ["sponsored", "ugc", "nofollow"]) {
+    const iesit = curataArticol(`<p><a rel="${semnal}" href="https://partener.ro/x">x</a></p>`);
+    assert.ok(iesit.includes(semnal), `„${semnal}" a fost sters de curatator`);
+    assert.ok(iesit.includes("noopener") && iesit.includes("noreferrer"), "baza a disparut");
+  }
+});
+
+test("un `rel` inventat nu trece; `noopener noreferrer` raman oricum", () => {
+  const iesit = curataArticol('<p><a rel="me dofollow orice" href="https://example.com">x</a></p>');
+  assert.ok(!iesit.includes("dofollow") && !iesit.includes('rel="me'), "un rel scris la intamplare a trecut");
+  assert.match(iesit, /rel="noopener noreferrer"/);
+});
+
+test("relPentruExtern: baza mereu, semnalele doar cand sunt cerute, ordine stabila", () => {
+  assert.equal(relPentruExtern(undefined), "noopener noreferrer");
+  assert.equal(relPentruExtern(""), "noopener noreferrer");
+  assert.equal(relPentruExtern("SPONSORED"), "noopener noreferrer sponsored");
+  assert.equal(relPentruExtern("nofollow  ugc"), "noopener noreferrer ugc nofollow");
+  assert.equal(relPentruExtern("ugc nofollow"), relPentruExtern("nofollow ugc"), "ordinea de scriere schimba iesirea");
+  assert.equal(relPentruExtern("noopener noopener"), "noopener noreferrer", "baza s-a dublat");
 });
 
 test("mailto si tel nu sunt „in afara”", () => {
@@ -113,16 +156,63 @@ test("o adresa cu protocol mostenit nu e „a noastra”", () => {
 test("o legatura cu protocol mostenit e socotita in afara", () => {
   assert.equal(esteInAfara("//google.com/ceva"), true);
   const iesit = curataArticol('<a href="//google.com">x</a>');
-  assert.ok(iesit.includes("nofollow"), "a plecat fara nofollow catre alt domeniu");
+  /* Semnul ca a fost socotita „in afara" nu mai e `nofollow` (nu se mai pune
+     automat), ci fila noua plus `noopener`. */
+  assert.ok(iesit.includes('target="_blank"'), "a plecat ca legatura interna catre alt domeniu");
+  assert.ok(iesit.includes("noopener"));
 });
+
+/*
+  ═══ BARA INVERSA E O BARA, PENTRU BROWSER ═══
+
+  Parserul WHATWG trateaza `\` exact ca `/` pentru schemele obisnuite, deci
+  `/\gazda`, `\\gazda` si `\/gazda` ajung TOATE la `https://gazda/`. Verificarea
+  dinainte numara barele de la inceput, iar `/\gazda` nu incepe cu `//`: trecea
+  drept adresa locala.
+
+  ⚠ BARA SE CONSTRUIESTE DIN COD, NU SE SCRIE IN SURSA. O bara inversa scrisa
+  aici poate fi inghitita de orice unealta care atinge fisierul (o conducta de
+  shell, un heredoc, un codemod) — si atunci proba ramane verde masurand alt
+  sir decat cel care conteaza. `String.fromCharCode(92)` nu poate fi confundat.
+*/
+const BARA = String.fromCharCode(92);
+
+const FORME_CU_BARA: [string, string][] = [
+  ["/" + BARA, "/" + BARA + "urmaritor.example/pixel.gif"],
+  [BARA + BARA, BARA + BARA + "urmaritor.example/pixel.gif"],
+  [BARA + "/", BARA + "/urmaritor.example/pixel.gif"],
+];
+
+for (const [nume, adresa] of FORME_CU_BARA) {
+  test(`o adresa care incepe cu „${nume}” duce in alta parte, deci nu e a noastra`, () => {
+    /* Intai se dovedeste PREMISA: browserul chiar o duce la gazda straina.
+       Fara randul asta, proba ar apara o regula pe care n-o cere nimeni. */
+    assert.equal(
+      new URL(adresa, "https://www.edinio.com/blog/un-articol").hostname,
+      "urmaritor.example",
+      "premisa a cazut: adresa nu mai duce in afara",
+    );
+
+    const iesit = curataArticol(`<p><img src="${adresa}" width="1" height="1"></p>`);
+    assert.ok(!iesit.includes("urmaritor.example"), `a trecut un pixel de urmarire: ${iesit}`);
+    assert.ok(!iesit.includes("<img"), `a ramas un cadru gol: ${iesit}`);
+
+    assert.equal(esteInAfara(adresa), true, "legatura a fost socotita interna");
+    const legatura = curataArticol(`<a href="${adresa}">x</a>`);
+    assert.ok(
+      legatura.includes("noopener") && legatura.includes("noreferrer"),
+      `legatura catre alta gazda a plecat fara noopener/noreferrer: ${legatura}`,
+    );
+  });
+}
 
 test("un domeniu care se TERMINA cu edinio.com nu e al nostru", () => {
   // `notedinio.com`.endsWith("edinio.com") e adevarat. Verificarea dinainte il
-  // socotea intern: legatura pleca dofollow, si o imagine de acolo ramanea.
+  // socotea intern: legatura pleca fara `noopener`, si o imagine de acolo ramanea.
   assert.equal(esteInAfara("https://notedinio.com/x"), true);
   assert.equal(esteInAfara("https://edinio.com.atacator.ro/x"), true);
   const iesit = curataArticol('<a href="https://notedinio.com">x</a>');
-  assert.ok(iesit.includes("nofollow"), "notedinio.com a fost socotit intern");
+  assert.ok(iesit.includes('target="_blank"') && iesit.includes("noopener"), "notedinio.com a fost socotit intern");
 });
 
 test("domeniul nostru si subdomeniile lui raman interne", () => {

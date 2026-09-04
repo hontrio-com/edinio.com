@@ -1,6 +1,7 @@
 import sanitizeHtmlLib from "sanitize-html";
 
 import { indreaptaInchiderile } from "@/lib/utils/inchideri-malformate";
+import { adresaAbsoluta, adresaRezolvata, eCaleInterna, esteEdinio } from "./adresa-scrisa";
 
 /*
   ⚠ FĂRĂ `import "server-only"` AICI, DINADINS.
@@ -87,54 +88,79 @@ function gazdeleNoastre(): ReadonlySet<string> {
   );
 }
 
-/** R2 direct, sau CDN-ul din fața lui. */
+/**
+ * R2 direct, CDN-ul din fața lui, sau chiar `public/`-ul nostru.
+ *
+ * ⚠ REGULA STĂ ÎN `adresa-scrisa.ts`, ÎNTR-UN SINGUR LOC. Aceeași întrebare era
+ * răspunsă în trei porți ale blogului (curățător, imagini de copertă, îndemn) cu
+ * trei copii ale ei, și toate trei numărau barele de la început. Acolo scrie de
+ * ce nu se mai numără și ce ieșea din asta.
+ *
+ * ⚠ AICI SE CERE MAI MULT DECÂT LA O LEGĂTURĂ, și deosebirea e voită. La o
+ * legătură întrebarea e „unde duce"; la o imagine pe care o SERVIM întrebarea e
+ * „e a noastră, fără îndoială". De aceea calea trebuie să înceapă cu `/`, iar o
+ * adresă întreagă trebuie să-și declare singură schema — altfel `poza.png`, sau
+ * chiar șirul GOL, ar cădea pe gazda noastră la rezolvare și ar lăsa în articol
+ * un cadru gol, exact ce ramura de mai jos aruncă dinadins.
+ */
 function gazdaNoastra(src: string): boolean {
-  /*
-    ⚠ `//gazda.straina/pixel.png` INCEPE CU "/" DAR NU E AL NOSTRU.
-    E o adresa cu protocol mostenit: browserul o cere de la gazda scrisa dupa
-    cele doua bare, pe acelasi protocol ca pagina. Verificarea dinainte se uita
-    doar la primul caracter, deci un pixel de urmarire scris asa trecea drept
-    imagine locala. Se respinge inainte de orice altceva.
-  */
-  if (src.startsWith("//")) return false;
-  if (src.startsWith("/")) return true; // din `public/`, deci al nostru
-  try {
-    const u = new URL(src);
-    if (u.protocol !== "https:") return false;
-    return gazdeleNoastre().has(u.hostname.toLowerCase()) || esteEdinio(u.hostname);
-  } catch {
-    return false;
-  }
+  if (eCaleInterna(src)) return true;
+  const u = adresaAbsoluta(src);
+  /* `data:`, `blob:`, `http:` — niciuna nu e o imagine servită de noi. */
+  if (!u || u.protocol !== "https:") return false;
+  return esteEdinio(u.hostname) || gazdeleNoastre().has(u.hostname.toLowerCase());
 }
 
 /**
- * Gazda e a noastră?
+ * Legătura duce în afara site-ului nostru?
  *
- * ⚠ `hostname.endsWith("edinio.com")` E GRESIT, si a fost scris asa pana pe
- * 30.08.2026. `notedinio.com` se termina cu "edinio.com", deci trecea drept
- * gazda noastra: o legatura catre un domeniu strain ar fi plecat fara
- * `nofollow` si fara `noopener`, iar o imagine de acolo ar fi ramas in articol.
- *
- * Un domeniu e al nostru daca E chiar el, sau daca e un subdomeniu — adica are
- * PUNCT inaintea lui.
+ * ⚠ AICI SE REZOLVĂ, NU SE CERE BARĂ LA ÎNCEPUT. Întrebarea e „unde ajunge
+ * cititorul dacă apasă", iar răspunsul e chiar cel al browserului: `/\gazdă` și
+ * `//gazdă` ajung în altă parte, `poza.png` și `#ancoră` rămân la noi.
  */
-function esteEdinio(gazda: string): boolean {
-  const g = gazda.toLowerCase();
-  return g === "edinio.com" || g.endsWith(".edinio.com");
+export function esteInAfara(href: string): boolean {
+  const u = adresaRezolvata(href);
+  /* Nu e adresă deloc: n-are unde duce, deci nu duce în afară. */
+  if (!u) return false;
+  /* Scrisă către o persoană, nu către un site: nu e „în afară" în sensul SEO. */
+  if (u.protocol === "mailto:" || u.protocol === "tel:") return false;
+  return !esteEdinio(u.hostname);
 }
 
-/** Legătura duce în afara site-ului nostru? */
-export function esteInAfara(href: string): boolean {
-  /* Si aici: o adresa cu protocol mostenit incepe cu "/" dar duce in alta parte. */
-  if (href.startsWith("//")) return true;
-  if (href.startsWith("/") || href.startsWith("#")) return false;
-  try {
-    const u = new URL(href);
-    if (u.protocol === "mailto:" || u.protocol === "tel:") return false;
-    return !esteEdinio(u.hostname);
-  } catch {
-    return false;
-  }
+/**
+ * Semnalele pe care redactorul le poate cere pe o legătură din afară.
+ *
+ * ═══ ⚠ DE CE NU MAI E `nofollow` PE TOT (04.09.2026) ═══
+ *
+ * Curățătorul punea `rel="noopener noreferrer nofollow"` pe ORICE legătură din
+ * afară și ștergea ce scrisese redactorul — inclusiv un `rel="sponsored"` pus
+ * anume. Nota de atunci spunea „nu răspundem de unde duce", raționament de
+ * conținut generat de utilizatori. Blogul ăsta nu e așa: se scrie doar din
+ * panou, de noi.
+ *
+ * `nofollow` pe tot înseamnă că o trimitere editorială către o sursă (un ghid
+ * oficial, documentația unui partener) nu spune nimic, iar Google nu mai are de
+ * unde ști ce citate stau la baza textului. Semnalele lui au înțelesuri
+ * diferite, iar noi le putem spune corect:
+ *
+ *   - editorial (implicit) — `noopener noreferrer`, legătura contează;
+ *   - `sponsored` — reclamă, parteneriat plătit;
+ *   - `ugc` — conținut scris de altcineva (comentarii, citate);
+ *   - `nofollow` — „nu garantez pentru asta", când e chiar așa.
+ *
+ * `noopener` rămâne NEGOCIABIL: fără el, pagina-țintă poate rescrie fila
+ * noastră. `noreferrer` rămâne și el, ca alegere de intimitate.
+ */
+const REL_INGADUITE = new Set(["sponsored", "ugc", "nofollow"]);
+
+/** `rel`-ul final al unei legături din afară: baza plus ce a cerut redactorul. */
+export function relPentruExtern(relScris: string | undefined): string {
+  const cerute = (relScris ?? "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => REL_INGADUITE.has(t));
+  /* Ordine stabilă și fără dubluri, ca ieșirea să nu depindă de cum a scris omul. */
+  return ["noopener", "noreferrer", ...[...REL_INGADUITE].filter((t) => cerute.includes(t))].join(" ");
 }
 
 export function curataArticol(html: string | null | undefined): string {
@@ -175,18 +201,18 @@ export function curataArticol(html: string | null | undefined): string {
       h1: (_numeEticheta, atribute) => ({ tagName: "h2", attribs: atribute }),
       a: (numeEticheta, atribute) => {
         const href = atribute.href ?? "";
-        const inAfara = esteInAfara(href);
+        /* `target` si `rel` se recompun mai jos; ce a scris editorul nu trece. */
+        const restul = { ...atribute };
+        delete restul.target;
+        delete restul.rel;
         return {
           tagName: numeEticheta,
-          attribs: {
-            ...atribute,
-            /* În afară: se deschide în filă nouă, cu `noopener` (altfel pagina
-               țintă poate rescrie fila noastră) și cu `nofollow`. Înăuntru:
-               nimic, ca legătura să conteze. */
-            ...(inAfara
-              ? { target: "_blank", rel: "noopener noreferrer nofollow" }
-              : {}),
-          },
+          attribs: esteInAfara(href)
+            /* În afară: filă nouă, `noopener noreferrer` și, dacă redactorul a
+               marcat legătura, `sponsored`/`ugc`/`nofollow`. */
+            ? { ...restul, target: "_blank", rel: relPentruExtern(atribute.rel) }
+            /* Înăuntru: `target` și `rel` se ȘTERG, ca legătura să conteze. */
+            : restul,
         };
       },
       img: (numeEticheta, atribute) => {

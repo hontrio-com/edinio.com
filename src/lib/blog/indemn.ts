@@ -1,3 +1,5 @@
+import { adresaAbsoluta, eCaleInterna } from "./adresa-scrisa";
+
 /**
  * Îndemnul din articol.
  *
@@ -119,15 +121,26 @@ export function adresaDeIndemn(brut: string | null | undefined): string | null {
   const s = (brut ?? "").trim();
   if (!s || s.length > LUNGIME_MAXIMA_ADRESA) return null;
 
-  if (s.startsWith("//")) return null;
-  if (s.startsWith("/")) return s;
+  /*
+    ⚠ AICI ERA `if (s.startsWith("//")) return null; if (s.startsWith("/")) return s;`
+    până pe 04.09.2026, adică regula care numără barele. `/\gazdă-străină/promo`
+    începe cu `/` fără să fie `//`, deci trecea drept cale internă și devenea
+    `href`-ul butonului.
 
-  try {
-    const u = new URL(s);
-    return u.protocol === "https:" ? u.toString() : null;
-  } catch {
-    return null;
-  }
+    Ce ieșea, urmărit prin `node_modules/next` 16.3.3: `<Link>` nu atinge șirul
+    (`formatStringOrUrl` îl întoarce neschimbat, `addBasePath` iese pe basePath
+    gol), `is-local-url` îl socotește local fiindcă n-are schemă, iar la apăsare
+    `app-router-instance` face `new URL(href, location.href)`, vede altă origine
+    și cheamă `location.assign`. Navigare dură pe gazda străină — și cu
+    JavaScript, și fără el, fiindcă `<a href>` iese cuvânt cu cuvânt în HTML.
+
+    Regula e acum una singură pentru toate cele trei porți ale blogului; vezi
+    `adresa-scrisa.ts`.
+  */
+  if (eCaleInterna(s)) return s;
+
+  const u = adresaAbsoluta(s);
+  return u && u.protocol === "https:" ? u.toString() : null;
 }
 
 /**

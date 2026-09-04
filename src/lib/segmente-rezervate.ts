@@ -49,6 +49,21 @@ export const NON_STORE_SEGMENTS: ReadonlySet<string> = new Set([
   "mentenanta-gratuita", "industrii", "vs", "ajutor", "blog",
   "intrebari-frecvente",
   /*
+   * ⚠ ADRESE CARE NU MAI AU PAGINA, DAR AU REDIRECTARE (04.09.2026).
+   *
+   * `redirects()` din `next.config.ts` ruleaza INAINTEA proxy-ului. Un magazin
+   * cu slugul `index` sau `roadmap` ar fi trimis cu 308 catre pagina de start
+   * Edinio, respectiv catre blog, inainte ca proxy-ul sa apuce sa-l recunoasca:
+   * vitrina ar fi de negasit la adresa ei, si nici macar n-ar primi antetul
+   * `noindex`. Verificat inainte de rezervare: niciunul din cele 131 de
+   * magazine din baza nu are vreunul din slugurile astea.
+   *
+   * `despre`, `magazin-online` si `start` sunt mai sus, tot cu redirectare.
+   * Regula, aparata de proba: ORICE `source` din `redirects()` are primul
+   * segment rezervat aici.
+   */
+  "index", "roadmap",
+  /*
    * Fisierele platformei servite de la radacina. Niciunul nu poate fi slug de
    * magazin (slugul nu accepta puncte), dar fara ele aici proxy-ul intreba baza
    * la fiecare cerere de robots.txt sau sitemap.xml — si, de pe 04.09.2026, o

@@ -116,6 +116,46 @@ describe("eticheta <meta name=robots> a vitrinei, dupa gazda", () => {
     assert.match(sursa, /meta\.robots\s*=/, "layout-ul nu mai pune rezultatul in meta.robots");
   });
 
+  test("layout-ul magazinului inchide TOATE cheile care se scurg de la radacina", () => {
+    /*
+      ⚠ NEXT CONTOPESTE PE CHEI DE NIVEL INTAI: o cheie pe care layout-ul
+      magazinului n-o numeste pastreaza valoarea radacinii. Masurat in productie
+      pe 04.09.2026, pe bricosmart.ro, INAINTE de reparatie:
+
+          <link rel="manifest" href="/site.webmanifest">   -> 404 pe domeniul lor
+          <meta name="author" content="Edinio">            + creator, publisher
+          <link rel="author" href="https://www.edinio.com">
+
+      Iar pe `www.edinio.com/{slug}` manifestul raspundea 200 cu al PLATFORMEI,
+      deci vitrina comerciantului se instala pe telefon sub numele „Edinio".
+
+      ⚠ `icons` A FOST SCAPAT LA PRIMA REPARATIE, si l-a gasit o revizie: era
+      pus doar `if (favicon)`, deci un magazin fara favicon si fara logo mostenea
+      setul de pictograme Edinio pe PROPRIUL domeniu. De aceea proba cere fiecare
+      cheie pe nume, nu „reparatia in general".
+
+      Ce se cere de la fiecare: sa fie NUMITA. `manifest`/`icons` pe `undefined`
+      sting mostenirea fara sa emita nimic; `authors`/`creator`/`publisher` sunt
+      puse pe numele magazinului, fiindca acolo asta e adevarul.
+    */
+    const sursa = sursaFaraComentarii(join(VITRINA, "layout.tsx"));
+    for (const cheie of ["manifest", "authors", "creator", "publisher", "icons"]) {
+      assert.match(
+        sursa,
+        new RegExp("\\b" + cheie + "\\s*[:=]"),
+        `layout-ul magazinului nu mai numeste \`${cheie}\`, deci valoarea radacinii (Edinio) ` +
+          "se scurge pe domeniul comerciantului",
+      );
+    }
+    /* `icons` numit doar sub un `if` e chiar defectul gasit: se cere atribuire
+       neconditionata, cu `undefined` cand magazinul n-are pictograma. */
+    assert.doesNotMatch(
+      sursa,
+      /if \(favicon\) meta\.icons/,
+      "`icons` e pus doar cand magazinul are pictograma; fara `else`, se mosteneste setul Edinio",
+    );
+  });
+
   test("nicio pagina a vitrinei nu forteaza `index: true` si nu foloseste `robots: undefined`", () => {
     const fisiere = fisiereSub(VITRINA);
     assert.ok(fisiere.length >= 10, `doar ${fisiere.length} fisiere sub ${VITRINA}`);

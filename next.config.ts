@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { RE_GAZDA_PLATFORMA } from "./src/lib/platform-hosts";
+
 /*
   ═══════════════════════════════════════════════════════════════════════════════
   CHEILE CARE TREBUIE SA EXISTE INAINTE SA PLECE O DESFASURARE DE PRODUCTIE
@@ -139,8 +141,27 @@ const nextConfig: NextConfig = {
    * Google sa folosesti cand o adresa se muta definitiv.
    */
   async redirects() {
+    /*
+      ═══ ⚠ FIECARE REDIRECTARE E LEGATA DE GAZDA PLATFORMEI (04.09.2026) ═══
+
+      `redirects()` ruleaza INAINTEA proxy-ului (Next, „Execution order": headers,
+      redirects, proxy) si, fara `has`, se aplica pe ORICE gazda — inclusiv pe
+      domeniul propriu al unui comerciant, unde niciuna din adresele astea nu e a
+      noastra.
+
+      Nu e o teama, era deja viu: masurat in productie pe 04.09.2026,
+      `https://bricosmart.ro/despre` si `https://esafe.ro/despre` raspundeau 308
+      catre pagina lor de start, desi `/despre` e o pagina a PLATFORMEI, stearsa
+      de noi. Un comerciant care isi face o pagina proprie cu adresa `/despre`,
+      `/index` sau `/start` — toate permise de `validatePageSlug` — n-ar fi
+      ajuns niciodata la ea: 308 inainte de orice, fara 404, fara nimic in jurnal.
+
+      Expresia vine din `platform-hosts.ts`, ca sa nu existe o a doua lista de
+      gazde ale platformei.
+    */
+    const doarPePlatforma = [{ type: "host" as const, value: RE_GAZDA_PLATFORMA }];
     return [
-      { source: "/roadmap", destination: "/blog", permanent: true },
+      { source: "/roadmap", destination: "/blog", permanent: true, has: doarPePlatforma },
       /*
         ⚠ `/start` A FOST ȘTEARSĂ PE 31.08.2026, la cererea clientului: pagina de
         aterizare a site-ului vechi, care nu mai era folosită în reclame.
@@ -152,7 +173,7 @@ const nextConfig: NextConfig = {
         Aici, și nu în altă parte: nota de mai jos explică ce s-a întâmplat data
         trecută când două ramuri au adăugat fiecare câte un `redirects()`.
       */
-      { source: "/start", destination: "/", permanent: true },
+      { source: "/start", destination: "/", permanent: true, has: doarPePlatforma },
       /*
         ⚠ `/despre` ȘI `/magazin-online`, șterse pe 01.09.2026. Clientul: „le
         ștergem momentan, poate pe viitor o să le adăugăm."
@@ -165,8 +186,21 @@ const nextConfig: NextConfig = {
         404 și fără nicio eroare care să dea de bănuit — exact ce era să pățească
         `/migrare`, vezi nota de mai jos.
       */
-      { source: "/despre", destination: "/", permanent: true },
-      { source: "/magazin-online", destination: "/", permanent: true },
+      { source: "/despre", destination: "/", permanent: true, has: doarPePlatforma },
+      { source: "/magazin-online", destination: "/", permanent: true, has: doarPePlatforma },
+      /*
+        ⚠ `/index` NU E O PAGINA DE-A NOASTRA, DAR RASPUNDEA 200.
+
+        Masurat in productie pe 04.09.2026: `https://www.edinio.com/index`
+        intorcea pagina de start intreaga, cu `x-matched-path: /` — Vercel
+        serveste fisierul prerandat `index.html` si pentru calea `/index`. Deci
+        aveam doua adrese cu acelasi continut, tinute laolalta doar de canonical.
+        Nimic nu trimitea acolo, dar adresa e ghicita de crawlere si de scanere
+        vechi de site.
+
+        308, nu 404: pagina EXISTA la `/`, doar se cheama altfel.
+      */
+      { source: "/index", destination: "/", permanent: true, has: doarPePlatforma },
     ];
   },
   /*

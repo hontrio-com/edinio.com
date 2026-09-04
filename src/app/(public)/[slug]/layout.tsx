@@ -70,8 +70,56 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     description: descriere,
     openGraph: { type: "website", locale: "ro_RO", siteName: numeAfisat, title: titlu, description: descriere, images: imagini },
     twitter: { card: imagini.length ? "summary_large_image" : "summary", title: titlu, description: descriere, ...(imagini.length ? { images: imagini } : {}) },
+    /*
+     * ═══ ⚠ CE MAI CURGEA DE LA RADACINA PE DOMENIUL COMERCIANTULUI (04.09.2026) ═══
+     *
+     * `keywords` a plecat din radacina, dar familia lui a ramas. Next contopeste
+     * metadatele pe CHEI DE NIVEL INTAI: o cheie pe care un layout mai adanc n-o
+     * numeste pastreaza valoarea de deasupra (`resolve-metadata.js`, `mergeMetadata`
+     * itereaza `for (const key in metadata)`). Deci, pana azi, pe bricosmart.ro iesea:
+     *
+     *   <link rel="manifest" href="/site.webmanifest">   -> 404 pe domeniul propriu,
+     *       fiindca `.webmanifest` nu e in `EXTENSII_STATICE`, deci proxy-ul rescrie
+     *       calea in `/{slug}/site.webmanifest`. Iar pe `www.edinio.com/{slug}` da 200
+     *       cu manifestul PLATFORMEI: vitrina se instala pe telefon sub numele „Edinio",
+     *       cu verdele Edinio.
+     *   <meta name="author" content="Edinio">, `creator`, `publisher`, plus
+     *       <link rel="author" href="https://www.edinio.com">.
+     *
+     * ⚠ CHEIA PREZENTA CU `undefined` NU MOSTENESTE, SI NU EMITE NIMIC. Aia e chiar
+     * purtarea de care avem nevoie pentru manifest: `for...in` intra si pe cheile puse
+     * anume pe `undefined`, iar ramura lui face `?? null`. Un magazin nu are (inca)
+     * manifest propriu, si mai bine niciunul decat al altcuiva.
+     *
+     * Celelalte trei se pot spune ADEVARAT, deci se spun: pe vitrina, autorul,
+     * creatorul si editorul sunt comerciantul. Fara adresa: domeniul lui poate fi
+     * nelegat inca, iar o legatura `rel="author"` catre o adresa moarta e mai rea
+     * decat lipsa ei.
+     */
+    manifest: undefined,
+    authors: [{ name: numeAfisat }],
+    creator: numeAfisat,
+    publisher: numeAfisat,
   };
-  if (favicon) meta.icons = { icon: favicon };
+  /*
+   * ⚠ SE DECLARA SI CAND MAGAZINUL N-ARE PICTOGRAMA (04.09.2026).
+   *
+   * Randul era `if (favicon) meta.icons = …`, deci un magazin fara `favicon_url`
+   * si fara `logo_url` nu numea cheia deloc — iar o cheie nenumita pastreaza
+   * valoarea radacinii. Urmarea, pe DOMENIUL LUI PROPRIU: HTML-ul lui anunta
+   * setul de pictograme Edinio (`/favicon.ico`, cele doua PNG-uri si
+   * `apple-touch-icon`). Aceeasi familie cu `manifest` si `authors` de mai sus,
+   * si scapata din aceeasi reparatie.
+   *
+   * `undefined` stinge cheia fara sa emita nimic — vezi nota de mai sus despre
+   * cum contopeste Next cheile de nivel intai.
+   *
+   * ⚠ CE RAMANE NEACOPERIT, si o spun ca sa nu para inchis: browserul cere
+   * `/favicon.ico` din oficiu cand pagina nu declara nicio pictograma, iar `ico`
+   * e in `EXTENSII_STATICE`, deci proxy-ul nu rescrie calea si se serveste
+   * fisierul din `public/` — al nostru. Aia se repara in proxy, nu aici.
+   */
+  meta.icons = favicon ? { icon: favicon } : undefined;
   /*
    * Verificarea Search Console se injecteaza NUMAI cand cererea vine de pe
    * domeniul propriu al comerciantului (03.09.2026).

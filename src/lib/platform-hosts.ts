@@ -25,6 +25,34 @@ export const PLATFORM_HOSTS = new Set([
 /** Sufixe rezervate: orice subdomeniu al lor apartine platformei. */
 const SUFIXE_REZERVATE = [".edinio.com", ".vercel.app"];
 
+/** Caracterele cu inteles in expresii regulate, scapate. */
+function escapaPentruExpresie(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * ACELEASI gazde, scrise ca expresie regulata.
+ *
+ * ⚠ EXISTA FIINDCA `next.config.ts` NU POATE CHEMA O FUNCTIE. Redirectarile de
+ * acolo se filtreaza cu `has: [{ type: "host", value }]`, iar Next construieste
+ * din `value` un `new RegExp("^" + value + "$")` pe care il potriveste cu gazda
+ * fara port, cu minuscule (`prepare-destination.js`, `matchHas`). Deci acolo se
+ * cere un SIR, nu un predicat.
+ *
+ * Se compune din CHIAR constantele de mai sus, ca sa nu poata exista o a doua
+ * listă care se desparte de prima — vezi nota lui `isPlatformHost`. Probele din
+ * `redirectari-config.test.ts` confrunta expresia cu functia pe un tabel de gazde.
+ *
+ * ⚠ O DEOSEBIRE ASUMATA fata de `isPlatformHost`: acolo o gazda GOALA trece
+ * drept a platformei; aici nu se poate potrivi nimic, fiindca `matchHas` nici
+ * nu ajunge la expresie cand antetul `Host` lipseste. Diferenta cade in partea
+ * sigura: o cerere fara gazda nu e redirectata, nu e redirectata gresit.
+ */
+export const RE_GAZDA_PLATFORMA = `(${[
+  ...[...PLATFORM_HOSTS].map(escapaPentruExpresie),
+  ...SUFIXE_REZERVATE.map((s) => `.+${escapaPentruExpresie(s)}`),
+].join("|")})`;
+
 /** Scoate portul si normalizeaza (`Edinio.COM:3000` → `edinio.com`). */
 export function bareHost(hostname: string): string {
   return hostname.split(":")[0].trim().toLowerCase();

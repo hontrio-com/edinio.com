@@ -395,7 +395,26 @@ describe("gazdele platformei care nu primesc antetul", () => {
 
   test("apexul edinio.com e trimis la www inainte de orice", async () => {
     const r = await proxy(cerere("https://edinio.com/floraria-mea"));
-    assert.equal(r.status, 301);
+    assert.equal(r.status, 308);
     assert.equal(r.headers.get("location"), "https://www.edinio.com/floraria-mea");
+  });
+
+  test("ajutor.edinio.com e trimis la www, pastrand calea si interogarea", async () => {
+    /*
+      ⚠ Subdomeniul a ramas legat de proiect cand mutarea centrului de ajutor
+      s-a anulat, si servea TOT site-ul cu 200 — acelasi continut la a treia
+      gazda, tinut laolalta doar de canonical. Aici ramura chiar ruleaza:
+      Vercel n-are redirectare pe subdomeniu.
+    */
+    const r = await proxy(cerere("https://ajutor.edinio.com/ajutor/primii-pasi?x=1"));
+    assert.equal(r.status, 308);
+    assert.equal(r.headers.get("location"), "https://www.edinio.com/ajutor/primii-pasi?x=1");
+  });
+
+  test("previzualizarea din editor NU se muta de pe gazda ei", async () => {
+    /* Cadrul din panou e pe aceeasi origine; un salt cross-origin l-ar bloca
+       X-Frame-Options. Aceeasi scutire ca inainte, acum si pentru subdomeniu. */
+    const r = await proxy(cerere("https://edinio.com/floraria-mea?preview=1"));
+    assert.notEqual(r.status, 308);
   });
 });

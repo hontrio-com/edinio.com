@@ -197,11 +197,37 @@ export async function proxy(request: NextRequest) {
   // the preview on the current origin so it can be framed by the dashboard.
   const isPreview = request.nextUrl.searchParams.get("preview") === "1";
 
-  // SEO: redirect non-www to www (permanent 301)
-  if (bare === "edinio.com" && !isPreview) {
+  /*
+   * ═══ O SINGURA GAZDA PENTRU SITE: www.edinio.com ═══
+   *
+   * `edinio.com` (varful) si `ajutor.edinio.com` servesc AMANDOUA acelasi site.
+   * Fara randurile de mai jos, aceeasi pagina traieste la trei adrese, iar
+   * consolidarea depinde numai de canonical — care e un indiciu, nu o hotarare.
+   *
+   * ⚠ VARFUL: ramura asta e o PLASA, nu calea reala. Masurat pe 04.09.2026,
+   * `https://edinio.com/...` primeste `307` de la stratul de domeniu al lui
+   * Vercel, INAINTE sa ajunga aici (raspunsul n-are antetele noastre de
+   * securitate). Codul de 308 de mai jos ar lucra doar daca redirectarea din
+   * panou ar fi scoasa. Permanentul adevarat se alege in Vercel → Domains →
+   * edinio.com → Redirect to www.edinio.com, 308.
+   *
+   * ⚠ `ajutor.edinio.com`: aici ramura CHIAR ruleaza — Vercel n-are nicio
+   * redirectare pe subdomeniu, iar `isPlatformHost` il accepta prin sufixul
+   * `.edinio.com`, deci pana azi servea tot site-ul cu 200 (verificat: `/`,
+   * `/preturi`, `/ajutor`, cu robots.txt si sitemap.xml identice cu ale www).
+   * Subdomeniul a fost pastrat cand mutarea centrului de ajutor s-a anulat
+   * (vezi `lib/website/ajutor.ts`), iar nota de acolo cerea de mult exact asta.
+   *
+   * 308, nu 301: pastreaza metoda si corpul, si e permanentul pe care il
+   * foloseste tot restul aplicatiei (`next.config.ts`, www→apex pe domenii).
+   */
+  if ((bare === "edinio.com" || bare === "ajutor.edinio.com") && !isPreview) {
     const url = request.nextUrl.clone();
     url.host = "www.edinio.com";
-    return NextResponse.redirect(url, 301);
+    /* Portul mostenit de la gazda de dezvoltare n-are ce cauta pe adresa reala. */
+    url.port = "";
+    url.protocol = "https:";
+    return NextResponse.redirect(url, 308);
   }
 
   // Custom domain routing: rewrite to /{slug} for public site

@@ -6,6 +6,8 @@ import { BibliotecaIntegrari } from "@/components/website/sections/integrations/
 import { CampSigle } from "@/components/website/sections/integrations/CampSigle";
 import { stiluriBanda } from "@/lib/website/integrari-hero";
 import { siteMetadata } from "@/lib/website/metadata";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 export const metadata: Metadata = siteMetadata({
   title: "Integrari: curieri, plati, facturare si marketing",
@@ -40,9 +42,23 @@ export const metadata: Metadata = siteMetadata({
  * titlului (vezi nota din `Hero.tsx`), iar titlul spune oricum cuvântul.
  * De confirmat cu clientul.
  */
+/*
+   E chiar o pagina care aduna alte lucruri: biblioteca de integrari.
+   ⚠ FARA `mainEntity`, si e masurat, nu uitat: `Integrare` din
+   `integrari-catalog.ts` n-are adresa proprie (cardurile nu sunt legaturi), deci
+   o `ItemList` ar fi iesit GOALA — un nod care arata a lista fara sa fie una.
+*/
+const jsonLd = paginaSiteJsonLd({
+  cale: "integrari",
+  nume: "Integrari",
+  tip: "CollectionPage",
+  descriere: metadata.description as string,
+});
+
 export default function IntegrariPage() {
   return (
     <>
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
       <HeroPagina
         title="Toate integrările de care ai nevoie, pregătite din prima zi"
         lead="Facturare, curierat, plăți, e-mail marketing, Google și marketplace-uri. Le conectezi direct din Edinio, folosind propriile tale conturi."

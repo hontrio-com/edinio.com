@@ -186,9 +186,30 @@ export function TabelVersus({ cheie }: { cheie: VersusKey }) {
           */}
           <p className="mt-1">
             Afirmațiile despre {marca.nume} sunt din {dataRo(tabel.verificatLa)}. Le poți verifica pe{" "}
+            {/*
+              ⚠ FĂRĂ `nofollow`, ȘI E ACEEAȘI HOTĂRÂRE CA LA BLOG (04.09.2026).
+
+              Legătura asta e o CITARE: rândul de deasupra ei îi spune omului
+              „le poți verifica pe site-ul lor oficial". Cu `nofollow`, aceeași
+              bucată de pagină spunea cititorului „verifică aici" și motorului
+              „nu garantez pentru asta" — două mesaje contrare din același
+              element. Cele patru înțelesuri sunt enumerate pe nume în
+              `lib/blog/curata.ts`, la nota de deasupra lui `REL_INGADUITE`:
+              editorial (implicit) e `noopener noreferrer`; `sponsored`, `ugc` și
+              `nofollow` se pun doar când chiar așa stau lucrurile.
+
+              ⚠ `noopener` RĂMÂNE SCRIS, nu lăsat pe seama implicației lui
+              `target="_blank"`. Aceeași cerere e scrisă în `Footer.tsx` și în
+              `PartajeazaArticol.tsx`. `noreferrer` rămâne și el: n-are nicio
+              legătură cu `follow`, iar `Referrer-Policy` din `next.config.ts` ar
+              tăia oricum calea — deci nu se pierde nimic ținându-l.
+
+              ⚠ Sunt ȘASE legături de felul ăsta pe tot site-ul, câte una per
+              concurent, și nu mai există alta către domeniile lor nicăieri.
+            */}
             <a
               href={tabel.siteOficial}
-              rel="nofollow noopener noreferrer"
+              rel="noopener noreferrer"
               target="_blank"
               className="underline underline-offset-2 hover:text-ink"
             >

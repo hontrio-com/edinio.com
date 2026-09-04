@@ -31,8 +31,16 @@ import { adresaAbsoluta, adresaRezolvata, eCaleInterna, esteEdinio } from "./adr
  * Un blog aduce vizitatori pe articole și îi trimite mai departe către paginile
  * care vând — prețuri, comparații, integrări. Legăturile alea sunt jumătate din
  * folos, iar `nofollow` le spune motoarelor să nu le urmeze. Aici, o legătură
- * internă rămâne curată; una către alt site primește `nofollow`, fiindcă nu
- * răspundem de unde duce.
+ * internă rămâne curată.
+ *
+ * ⚠ IAR UNA CĂTRE ALT SITE NU MAI PRIMEȘTE `nofollow` (04.09.2026). Rândul ăsta
+ * a spus până azi opusul — „primește `nofollow`, fiindcă nu răspundem de unde
+ * duce" — și rămăsese aici după ce regula s-a schimbat cu 100 de rânduri mai
+ * jos. Deci fișierul se contrazicea singur: antetul, care e prima bucată citită
+ * de cine îl deschide, cerea exact ce `relPentruExtern` refuză să facă.
+ * Motivul întreg e la nota de deasupra lui `REL_INGADUITE`; pe scurt: o
+ * trimitere editorială către o sursă contează, iar `sponsored`, `ugc` și
+ * `nofollow` se pun doar când le cere redactorul.
  *
  * ⚠ 2. FĂRĂ `img`, UN ARTICOL N-ARE POZE.
  *

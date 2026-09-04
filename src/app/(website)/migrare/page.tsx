@@ -13,6 +13,8 @@ import {
   SECTIUNE_PRODUSE,
 } from "@/lib/website/migrare";
 import { siteMetadata } from "@/lib/website/metadata";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 /*
   Descrierea e CHIAR propoziția din hero, dată de client. Nu o rescriu ca să
@@ -126,9 +128,19 @@ function HeroMigrare() {
   );
 }
 
+/*
+   O pagina care explica un serviciu, nu una care aduna altele.
+*/
+const jsonLd = paginaSiteJsonLd({
+  cale: "migrare",
+  nume: "Migrare",
+  descriere: metadata.description as string,
+});
+
 export default function MigrarePage() {
   return (
     <>
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
       <HeroMigrare />
 
       {/*

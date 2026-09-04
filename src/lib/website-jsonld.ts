@@ -130,6 +130,18 @@ export function paginaSiteJsonLd(a: {
    * desparti de el.
    */
   faraFirimituri?: boolean;
+  /**
+   * Treapta din mijloc, pentru paginile care CHIAR stau sub alta.
+   *
+   * ⚠ EXISTA FIINDCA SITE-UL NU MAI E PLAT. Nota de deasupra spune „firimiturile
+   * au mereu doua trepte — Acasa si pagina — fiindca site-ul e plat", si a fost
+   * adevarat cat toate paginile stateau la radacina. `/vs/{concurent}` sta sub
+   * `/vs`; fara treapta asta, ierarhia declarata ar fi sarit peste chiar pagina
+   * din care se ajunge la ea, adica ar fi mintit despre structura.
+   *
+   * Se pune DOAR unde e adevarat. Lipsa, firimiturile raman cele doua trepte.
+   */
+  parinte?: { nume: string; cale: string };
 }) {
   const url = `${PLATFORM_ORIGIN}/${a.cale}`;
   return graf(
@@ -148,6 +160,9 @@ export function paginaSiteJsonLd(a: {
       ? null
       : firimituriJsonLd([
         { nume: "Acasa", url: PLATFORM_ORIGIN },
+        ...(a.parinte
+          ? [{ nume: a.parinte.nume, url: `${PLATFORM_ORIGIN}/${a.parinte.cale}` }]
+          : []),
         { nume: a.nume, url },
       ]),
     ...(a.inPlus ?? []),

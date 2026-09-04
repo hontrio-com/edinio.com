@@ -21,13 +21,26 @@
 -- O adresa fara `lastmod` (paginile scrise in cod n-au data adevarata — vezi
 -- nota din `sitemap.ts`) se anunta O SINGURA DATA si nu se mai atinge.
 --
--- ⚠ CE NU FACE, DINADINS: nu tine minte STERGERILE. O adresa care iese din
--- sitemap ramane aici marcata ca anuntata si nu se mai trimite. Documentatia
--- IndexNow spune ca se pot anunta si adresele sterse, ca motoarele sa le scoata
--- mai repede — dar aceea e o purtare separata, cu propriile ei capcane (ce
--- inseamna „stearsa" pentru o adresa care lipseste temporar dintr-un sitemap
--- construit din baza?), si n-a fost ceruta. Motoarele o vor afla la urmatoarea
--- trecere, din 404 sau 410.
+-- ⚠ STERGERILE: intrebarea de mai jos A PRIMIT RASPUNS, tot pe 04.09.2026.
+--
+-- Randurile astea spuneau ca tabela „nu tine minte STERGERILE" si lasau deschisa
+-- intrebarea „ce inseamna «stearsa» pentru o adresa care lipseste temporar
+-- dintr-un sitemap construit din baza?". Raspunsul e acum in `lib/indexnow.ts`
+-- (`adreseDisparute` + `verdictSonda`) si nu e o deducere: absenta din sitemap e
+-- doar BANUIALA, iar adevarul se cere de la chiar adresa, cu un `HEAD`.
+-- `404`/`410` = disparuta si se anunta; `2xx`/`3xx` = vie; `5xx` sau retea
+-- cazuta = „nu stiu", si atunci randul ramane pe loc.
+--
+-- ⚠ CE S-A SCHIMBAT PENTRU TABELA: randurile SE STERG acum. Pana azi niciunul nu
+-- se stergea vreodata, deci tabela crestea la nesfarsit. Un rand iese cand
+-- adresa lui a primit un raspuns limpede — dupa ce s-a anuntat, daca era
+-- disparuta; fara sa se anunte nimic, daca era vie. Asta e si ce face
+-- mecanismul sa se TERMINE: un candidat care ar ramane candidat ar consuma la
+-- nesfarsit din sondele fiecarei rulari si, in ordine alfabetica, ar bloca pe
+-- veci o stergere adevarata aflata mai la coada.
+--
+-- ⚠ Iar stergerea randului are un al doilea inteles, voit: daca adresa invie,
+-- `adreseDeAnuntat` n-o mai gaseste in „stiute" si o trateaza ca NOUA.
 
 create table if not exists public.indexnow_trimise (
   -- Adresa absoluta, exact cum a fost trimisa.

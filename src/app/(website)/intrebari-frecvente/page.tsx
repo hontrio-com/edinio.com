@@ -6,6 +6,8 @@ import { FinalCta } from "@/components/website/sections/FinalCta";
 import { ACASA } from "@/lib/website/breadcrumbs";
 import { FAQ_LEAD, FAQ_TITLE } from "@/lib/website/faq";
 import { siteMetadata } from "@/lib/website/metadata";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 /*
   ⚠ Descrierea de mai jos vorbea despre „cat costa" si „ce se intampla cu
@@ -32,9 +34,24 @@ export const metadata: Metadata = siteMetadata({
 */
 const FIRIMITURI = [ACASA, { label: FAQ_TITLE }];
 
+/*
+   ⚠ NU `FAQPage`, si e o hotarare. Rezultatele imbogatite FAQ au disparut
+   complet din Google pe 7 mai 2026, deci nodul n-ar aduce niciun castig de
+   pozitie; iar pagina de start emite deja un `FAQPage`, si doua adrese care
+   declara amandoua acelasi set de intrebari s-ar bate pe acelasi lucru.
+   ⚠ `faraFirimituri`, fiindca `PageHero` de mai jos le emite din sirul desenat.
+*/
+const jsonLd = paginaSiteJsonLd({
+  faraFirimituri: true,
+  cale: "intrebari-frecvente",
+  nume: "Intrebari frecvente",
+  descriere: metadata.description as string,
+});
+
 export default function IntrebariFrecventePage() {
   return (
     <>
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
       {/*
         Capul SCURT (`PageHero`), nu `PageShell`: omul a venit cu o intrebare,
         iar doua butoane intre el si raspuns sunt in drum. Explicatia intreaga e

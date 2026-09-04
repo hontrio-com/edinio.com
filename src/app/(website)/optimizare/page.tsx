@@ -6,6 +6,8 @@ import { SectiuneGeo } from "@/components/website/sections/optimizare/SectiuneGe
 import { SectiuneSeo } from "@/components/website/sections/optimizare/SectiuneSeo";
 import { TitluOptimizare } from "@/components/website/sections/optimizare/TitluOptimizare";
 import { siteMetadata } from "@/lib/website/metadata";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 export const metadata: Metadata = siteMetadata({
   title: "Optimizare: viteza, performanta si SEO",
@@ -36,9 +38,19 @@ export const metadata: Metadata = siteMetadata({
  *
  * Cele trei secțiuni cerute de client sunt toate aici: Performanță, SEO, GEO.
  */
+/*
+   Idem: explica, nu aduna.
+*/
+const jsonLd = paginaSiteJsonLd({
+  cale: "optimizare",
+  nume: "Optimizare",
+  descriere: metadata.description as string,
+});
+
 export default function OptimizarePage() {
   return (
     <>
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
       <HeroPagina
         title={<TitluOptimizare />}
         lead="Edinio optimizează magazinele pentru viteză, performanță și SEO, astfel încât să se încarce rapid și să aibă o bază bună pentru motoarele de căutare."

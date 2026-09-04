@@ -204,6 +204,57 @@ test("`sursa` e o dovada pentru INTRETINATOR, si nu se scurge pe pagina", () => 
   );
 });
 
+test("legatura catre site-ul lor oficial e o CITARE: fara `nofollow`", () => {
+  /*
+    ⚠ HOTARARE, NU SCAPARE (04.09.2026). Legatura statea cu
+    `rel="nofollow noopener noreferrer"`, desi randul de deasupra ei ii spune
+    cititorului „le poti verifica pe site-ul lor oficial". Cele doua se bat cap
+    in cap: omului „verifica aici", motorului „nu garantez pentru asta".
+
+    Aceeasi hotarare e luata deja pentru blog, in `lib/blog/curata.ts`
+    (`relPentruExtern`): baza e `noopener noreferrer`, iar `sponsored`, `ugc` si
+    `nofollow` se pun doar cand le cere redactorul. Pana azi, TabelVersus era
+    SINGURUL loc din tot `src` care scria `nofollow` de mana pe o legatura.
+
+    ⚠ SE MASOARA `rel`-ul, NU CUVANTUL „nofollow" UNDEVA IN FISIER, si e o
+    deosebire pe care o revizie a cerut-o. O cautare dupa cuvant s-ar aprinde pe
+    un comentariu de coada de rand (`// ... nofollow ...`), pe care scoaterea de
+    comentarii de mai jos nu-l ia — deci ar fi o alarma falsa asupra unei note.
+    Asa, se citesc chiar valorile `rel` si nimic altceva.
+  */
+  const TABEL = join(AICI, "..", "..", "components", "website", "sections", "TabelVersus.tsx");
+  const sursa = readFileSync(TABEL, "utf8")
+    .replace(/\r\n/g, "\n")
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+
+  /*
+    ⚠ PREMISA E CHIAR LEGATURA, NU UN RAND OARECARE DIN FISIER. Prima scriere
+    cerea doar `rand.criteriu` — iar o revizie a masurat ca `rand.criteriu`
+    supravietuieste stergerii INTREGII legaturi (mai apare de doua ori, in
+    corpul tabelului). Deci proba ar fi trecut verde pe o pagina care si-a
+    pierdut cu totul trimiterea catre sursa. Se cere `href`-ul insusi.
+  */
+  assert.match(
+    sursa,
+    /href=\{tabel\.siteOficial\}/,
+    "TabelVersus nu mai are legatura catre site-ul oficial — proba de mai jos ar fi vida",
+  );
+
+  const reluri = [...sursa.matchAll(/\srel="([^"]*)"/g)].map((m) => m[1]);
+  assert.ok(reluri.length > 0, "nicio legatura cu `rel` in TabelVersus");
+  for (const rel of reluri) {
+    assert.ok(
+      !/\bnofollow\b/.test(rel),
+      `„${rel}" — legatura pe care CHIAR o dam ca sursa de verificare nu poate purta nofollow. ` +
+        "Vezi nota de deasupra ei si `relPentruExtern` din lib/blog/curata.ts.",
+    );
+    /* `noopener` scris, nu lasat pe seama implicatiei lui `target="_blank"` —
+       aceeasi cerere ca in Footer.tsx si PartajeazaArticol.tsx. */
+    assert.ok(rel.includes("noopener"), `„${rel}" a pierdut noopener`);
+  }
+});
+
 test("regula de sursa chiar poate cadea", () => {
   /* Aserttiunea de mai sus e VIDA azi: niciun rand n-are `sursa`, deci bucla nu
      se executa niciodata. Fara randurile astea, ar fi verde din lene si ar

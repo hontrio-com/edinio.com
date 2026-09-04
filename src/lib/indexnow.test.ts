@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
 import { NON_STORE_SEGMENTS } from "@/lib/segmente-rezervate";
 import {
-  adreseDeAnuntat, CALE_CHEIE, cheia, corpCerere, esteReusita, explicaCod, MAXIM_PE_CERERE,
+  adreseDeAnuntat, adreseDisparute, CALE_CHEIE, cheia, corpCerere, esteReusita, explicaCod,
+  MAXIM_PE_CERERE, verdictSonda,
 } from "./indexnow";
 
 /*
@@ -154,6 +155,86 @@ describe("poarta: ce NU poate ieși niciodată", () => {
     const sursa = readFileSync(ruta, "utf8");
     assert.match(sursa, /export\s+async\s+function\s+GET/, "ruta cheii nu mai răspunde la GET");
     assert.match(sursa, /\bcheia\s*\(/, "ruta de la calea cheii nu mai servește cheia");
+  });
+});
+
+describe("adresele care au DISPĂRUT din sitemap", () => {
+  const A = `${PLATFORM_ORIGIN}/industrii`;
+  const B = `${PLATFORM_ORIGIN}/preturi`;
+
+  test("candidat e ce e în tabelă și nu mai e în sitemap", () => {
+    assert.deepEqual(adreseDisparute([{ url: B }], [{ url: A, lastmod: null }, { url: B, lastmod: null }]), [A]);
+  });
+
+  test("nimic în tabelă, niciun candidat — și asta e starea de AZI", () => {
+    /* Măsurat pe 04.09.2026: sitemapul are 439 de adrese, tabela aceleași 439.
+       Proba ține starea aia scrisă, ca cine măsoară mâine și nu găsește nimic
+       să nu creadă că s-a stricat mecanismul. */
+    assert.deepEqual(adreseDisparute([{ url: A }, { url: B }], [{ url: A, lastmod: null }, { url: B, lastmod: null }]), []);
+  });
+
+  test("o adresă din sitemap NEanunțată încă nu e candidat la ștergere", () => {
+    /* Altfel, fiecare adresă nouă ar fi sondată înainte să apuce să fie
+       anunțată — iar prima rulare ar fi sondat tot site-ul. */
+    assert.deepEqual(adreseDisparute([{ url: A }, { url: B }], [{ url: A, lastmod: null }]), []);
+  });
+
+  test("ordinea e stabilă, ca două rulări să vadă aceeași fereastră", () => {
+    const t = [{ url: `${PLATFORM_ORIGIN}/c`, lastmod: null }, { url: `${PLATFORM_ORIGIN}/a`, lastmod: null }];
+    assert.deepEqual(adreseDisparute([], t), [`${PLATFORM_ORIGIN}/a`, `${PLATFORM_ORIGIN}/c`]);
+  });
+
+  test("verdictul: 404 și 410 înseamnă dispărută, restul NU", () => {
+    /*
+      ⚠ `404` STĂ LÂNGĂ `410` DINADINS. `410` e singurul pe care îl scriem noi
+      înșine (`app/industrii/route.ts`); ștergerea obișnuită — un articol
+      depublicat, o rubrică rămasă fără articole publicate — dă `404`. Fără el,
+      mecanismul ar fi acoperit cazul rar și l-ar fi ratat pe cel des.
+    */
+    assert.equal(verdictSonda(410), "disparuta");
+    assert.equal(verdictSonda(404), "disparuta");
+  });
+
+  test("`2xx` și `3xx` sunt VII: o adresă mutată nu e una ștearsă", () => {
+    for (const cod of [200, 204, 301, 308]) {
+      assert.equal(verdictSonda(cod), "vie", `${cod} n-ar trebui socotit dispărut`);
+    }
+  });
+
+  test("`5xx` și rețeaua căzută înseamnă NU ȘTIU, nu un răspuns", () => {
+    /*
+      ⚠ ASTA E LINIA CARE APĂRĂ DE O ANUNȚARE ÎN MASĂ GREȘITĂ. Dacă „nu știu" ar
+      cădea în oricare din celelalte două, o pană de câteva minute ar fi
+      însemnat fie anunțarea unor pagini vii ca șterse, fie uitarea lor din
+      tabelă — amândouă tăcute. Așa, rândul rămâne pe loc și se reîncearcă.
+    */
+    for (const cod of [0, 500, 502, 503, 504]) {
+      assert.equal(verdictSonda(cod), "necunoscut", `${cod} n-are voie să fie un verdict`);
+    }
+  });
+
+  test("`403` și `429` NU sunt o ștergere", () => {
+    /* Un răspuns de refuz spune ceva despre cerere, nu despre existența
+       paginii. Socotit „dispărută", ar fi scos din index o pagină vie. */
+    for (const cod of [401, 403, 429]) assert.equal(verdictSonda(cod), "vie");
+  });
+
+  test("cronul chiar cheamă mecanismul, cu HEAD și fără să urmeze redirectările", () => {
+    /*
+      Funcțiile de mai sus pot fi corecte și nechemate. Se citește sursa cronului
+      — fără comentarii, fiindcă chiar notele de acolo pomenesc numele căutate.
+    */
+    const sursa = faraComentarii(join(AICI, "..", "app", "api", "cron", "indexnow", "route.ts"));
+    assert.match(sursa, /adreseDisparute\(/, "cronul nu mai caută adresele dispărute");
+    assert.match(sursa, /verdictSonda\(/, "cronul nu mai traduce codul sondei");
+    assert.match(sursa, /method:\s*"HEAD"/, "sonda nu mai e un HEAD");
+    assert.match(sursa, /redirect:\s*"manual"/, "sonda urmează redirectările, deci o mutare ar arăta ca ținta ei");
+    /*
+      ⚠ ȘI CEA MAI IMPORTANTĂ: adresele anunțate ca dispărute se ȘTERG din
+      tabelă. Fără rândul ăsta, ele ar rămâne, ar lipsi și mâine din sitemap,
+      deci ar fi sondate și anunțate din nou — în fiecare oră, la nesfârșit.
+    */
+    assert.match(sursa, /\.delete\(\)/, "nimic nu se mai șterge din tabelă — mecanismul nu se termină");
   });
 });
 

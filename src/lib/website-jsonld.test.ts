@@ -61,18 +61,71 @@ describe("`faraFirimituri` chiar face ce spune", () => {
   });
 });
 
+describe("treapta din mijloc, pentru paginile care chiar stau sub alta", () => {
+  /** Numele din firimituri, în ordine. */
+  const trepte = (x: unknown) => {
+    const noduri = (x as { "@graph"?: Record<string, unknown>[] })["@graph"] ?? [x];
+    const f = (noduri as Record<string, unknown>[]).find((n) => n["@type"] === "BreadcrumbList");
+    assert.ok(f, "n-a ieșit niciun BreadcrumbList");
+    return ((f.itemListElement as { name?: string }[]) ?? []).map((e) => e.name);
+  };
+
+  test("fără `parinte`, ierarhia rămâne de DOUĂ trepte", () => {
+    assert.deepEqual(trepte(paginaSiteJsonLd({ cale: "vs", nume: "Comparatii" })), ["Acasa", "Comparatii"]);
+  });
+
+  test("cu `parinte`, treapta din mijloc intră ÎNTRE Acasă și pagină", () => {
+    /*
+      ⚠ ORDINEA E TOT ÎNȚELESUL. Pusă la coadă, treapta ar fi spus că /vs stă
+      sub pagina de comparație, adică ierarhia pe dos — și nimic n-ar fi căzut.
+    */
+    assert.deepEqual(
+      trepte(paginaSiteJsonLd({
+        cale: "vs/shopify",
+        nume: "O alternativa romaneasca la Shopify",
+        parinte: { nume: "Comparatii", cale: "vs" },
+      })),
+      ["Acasa", "Comparatii", "O alternativa romaneasca la Shopify"],
+    );
+  });
+
+  test("adresele treptelor sunt absolute și chiar ale paginilor lor", () => {
+    const noduri = (paginaSiteJsonLd({
+      cale: "vs/shopify", nume: "X", parinte: { nume: "Comparatii", cale: "vs" },
+    }) as { "@graph": Record<string, unknown>[] })["@graph"];
+    const f = noduri.find((n) => n["@type"] === "BreadcrumbList")!;
+    assert.deepEqual(
+      ((f.itemListElement as { item?: string }[]) ?? []).map((e) => e.item),
+      ["https://www.edinio.com", "https://www.edinio.com/vs", "https://www.edinio.com/vs/shopify"],
+    );
+  });
+});
+
 describe("cine desenează firimituri nu le mai construiește", () => {
-  /** Paginile de sub `(website)` care cheamă `paginaSiteJsonLd`. */
-  const pagini = readdirSync(WEBSITE, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => join(WEBSITE, d.name, "page.tsx"))
-    .filter((cale) => {
+  /**
+   * Paginile de sub `(website)` care cheamă `paginaSiteJsonLd`.
+   *
+   * ⚠ CĂUTAREA E RECURSIVĂ, ȘI N-A FOST MEREU. Prima scriere se uita doar la
+   * dosarele de pe primul nivel, fiindcă atunci toate paginile stăteau acolo.
+   * `/vs/{concurent}` stă pe al doilea — adică exact pagina cu ierarhia cea mai
+   * adâncă, singura cu `parinte`, scăpa neverificată. Regula de mai jos e cu
+   * atât mai importantă acolo: o pagină de adâncime 2 care ar emite două
+   * `BreadcrumbList` ar fi și cea mai încurcată de citit pentru un motor.
+   */
+  function paginile(dir: string, out: string[] = []): string[] {
+    for (const d of readdirSync(dir, { withFileTypes: true })) {
+      if (!d.isDirectory()) continue;
+      paginile(join(dir, d.name), out);
+      const cale = join(dir, d.name, "page.tsx");
       try {
-        return faraComentarii(cale).includes("paginaSiteJsonLd(");
+        if (faraComentarii(cale).includes("paginaSiteJsonLd(")) out.push(cale);
       } catch {
-        return false;
+        /* dosar fără `page.tsx` — nimic de măsurat */
       }
-    });
+    }
+    return out;
+  }
+  const pagini = paginile(WEBSITE);
 
   test("proba nu e goală: s-au găsit paginile", () => {
     assert.ok(pagini.length >= 6, `doar ${pagini.length} pagini cheamă paginaSiteJsonLd`);
@@ -82,7 +135,20 @@ describe("cine desenează firimituri nu le mai construiește", () => {
     const nume = cale.split(/[\\/]/).at(-2);
     test(`${nume}`, () => {
       const sursa = faraComentarii(cale);
-      const deseneaza = /<PageHero|<PageShell/.test(sursa);
+      /*
+        ⚠ NU E DE AJUNS SĂ RANDEZE `PageHero`/`PageShell` — trebuie să le și DEA
+        un șir. Amândouă emit `BreadcrumbList` doar sub `{sir ? … : null}`
+        (`PageShell.tsx:66`, `PageHero.tsx`), deci o pagină care le folosește
+        fără `sir` NU desenează nicio ierarhie.
+
+        ⚠ MĂSURAT, ȘI TOCMAI DE ASTA S-A SCHIMBAT RÂNDUL: /vs randează
+        `<PageShell>` fără `sir`, iar în producție documentul ei chiar n-are
+        niciun `BreadcrumbList`. Cu heuristica veche, /vs ar fi fost socotită
+        „desenează", i s-ar fi cerut `faraFirimituri: true`, și ar fi rămas fără
+        NICIO ierarhie — tăcut, cu proba verde. Regula era dormindă doar fiindcă
+        nicio pagină fără `sir` nu chema încă `paginaSiteJsonLd`.
+      */
+      const deseneaza = /<PageHero|<PageShell/.test(sursa) && /\bsir=/.test(sursa);
       const construieste = !/faraFirimituri:\s*true/.test(sursa);
       assert.equal(
         deseneaza && construieste,

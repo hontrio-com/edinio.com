@@ -5,8 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { intrariPlatforma } from "@/app/sitemap";
 import { toateArticolelePublicate } from "@/lib/blog/citire";
 import {
-  adreseDeAnuntat, cheia, corpCerere, ENDPOINT, esteReusita, explicaCod, MAXIM_PE_CERERE,
-  type Anuntata,
+  adreseDeAnuntat, adreseDisparute, cheia, corpCerere, ENDPOINT, esteReusita, explicaCod,
+  MAXIM_PE_CERERE, MAXIM_SONDE, verdictSonda, type Anuntata,
 } from "@/lib/indexnow";
 
 /*
@@ -25,9 +25,21 @@ import {
   `canonical_url` catre alt site nu sunt acolo — deci nu pot fi anuntate, si nu
   fiindca cineva si-a adus aminte sa le filtreze.
 
-  ⚠ CE FACE SI CE NU FACE. Adauga si actualizeaza. NU anunta stergerile: o
-  adresa iesita din sitemap ramane marcata ca anuntata si nu se mai trimite.
-  Motoarele o afla din 404 sau 410 la urmatoarea trecere. Vezi nota din migratie.
+  ⚠ CE FACE. Adauga, actualizeaza, si de pe 04.09.2026 anunta si STERGERILE.
+  Randul asta a spus pana azi „NU anunta stergerile", iar migratia lasa
+  intrebarea deschisa: „ce inseamna «stearsa» pentru o adresa care lipseste
+  temporar dintr-un sitemap construit din baza?". Raspunsul e acum in cod, si nu
+  e o deducere, ci o masuratoare: absenta din sitemap e doar BANUIALA, iar
+  adevarul se cere de la chiar adresa, cu un `HEAD`. Vezi nota de deasupra lui
+  `adreseDisparute` din `lib/indexnow.ts` — acolo sta si de ce paza evidenta
+  (un prag pe marimea sitemapului) ar fi fost cod mort.
+
+  ⚠ CAT DE MULT ARE DE FACUT AZI: NIMIC. Masurat pe 04.09.2026, inainte de a
+  scrie mecanismul: sitemapul are 439 de adrese, tabela are aceleasi 439, deci
+  ZERO candidati. Nici macar cele noua `/industrii` retrase in aceeasi zi nu
+  sunt acolo — tabela s-a umplut DUPA retragerea lor, deci n-au fost anuntate
+  niciodata. Se scrie pentru urmatoarea retragere, nu pentru una de acum; iar
+  cine masoara si nu gaseste nimic sa nu creada ca s-a stricat ceva.
 */
 
 export const maxDuration = 60;
@@ -113,7 +125,77 @@ export async function GET(req: NextRequest) {
   }
 
   const deTrimis = adreseDeAnuntat(dinSitemap, deja);
-  if (deTrimis.length === 0) return NextResponse.json({ trimise: 0 });
+
+  /*
+    ═══ ADRESELE CARE AU DISPARUT DIN SITEMAP ═══
+
+    Bănuiala e absența; adevărul se cere de la chiar adresa. Motivul întreg —
+    inclusiv de ce un prag pe marimea sitemapului ar fi INERT aici — e in nota
+    de deasupra lui `adreseDisparute` din `lib/indexnow.ts`.
+
+    ⚠ `HEAD`, SI E MASURAT, NU PRESUPUS. Documentatia lui Next spune doar ca o
+    metoda nesuportata primeste `405`; nu promite nicaieri ca `HEAD` se deduce
+    din `GET`. Masurat in productie pe 04.09.2026, inainte de a scrie randul:
+    `HEAD /industrii` -> 410 (ruta exporta doar `GET`), `HEAD /preturi` -> 200,
+    `HEAD /o-adresa-inexistenta` -> 404. Deci merge, si costa cat un antet.
+
+    ⚠ `redirect: "manual"`, ca o adresa mutata sa se vada ca `3xx` si sa fie
+    socotita VIE. Urmarite, redirectarile ar fi ascuns mutarea sub codul tintei.
+  */
+  const disparute = adreseDisparute(dinSitemap, deja);
+  const sterse: string[] = [];
+  const deUitat: string[] = [];
+  for (const url of disparute.slice(0, MAXIM_SONDE)) {
+    let codSonda = 0;
+    try {
+      const r = await fetch(url, {
+        method: "HEAD",
+        redirect: "manual",
+        signal: AbortSignal.timeout(MS_CERERE),
+      });
+      codSonda = r.status;
+    } catch {
+      /* Retea cazuta sau timp expirat: „nu stiu". Randul ramane, se reincearca. */
+      codSonda = 0;
+    }
+    const v = verdictSonda(codSonda);
+    if (v === "disparuta") sterse.push(url);
+    else if (v === "vie") deUitat.push(url);
+  }
+
+  /*
+    ⚠ UITAREA SE FACE CHIAR DACA TRIMITEREA PICA, si e intentionat: adresele
+    astea nu se anunta, deci n-au nimic de asteptat de la Bing. Lasate, ar fi
+    resondate la fiecare ora, la nesfarsit — chiar coada blocata pe care nota
+    din `lib/indexnow.ts` o descrie.
+  */
+  if (deUitat.length > 0) {
+    const { error: eUitare } = await supabase
+      .from("indexnow_trimise")
+      .delete()
+      .in("url", deUitat);
+    if (eUitare) {
+      await logError({
+        action: "indexnow.uitare",
+        message: `Nu pot uita ${deUitat.length} adrese vii iesite din sitemap: ${eUitare.message}`,
+        details: { prima: deUitat[0] },
+        severity: "warning",
+      });
+    }
+  }
+
+  if (disparute.length > MAXIM_SONDE) {
+    /* Nu e o eroare — e ritmul. Se spune ca sa nu para ca s-a terminat. */
+    await logError({
+      action: "indexnow.sonde",
+      message: `${disparute.length} adrese lipsesc din sitemap; am sondat ${MAXIM_SONDE} in rularea asta.`,
+      severity: "info",
+    });
+  }
+
+  if (deTrimis.length === 0 && sterse.length === 0) {
+    return NextResponse.json({ trimise: 0, uitate: deUitat.length });
+  }
 
   /*
     Un singur lot pe rulare: `MAXIM_PE_CERERE` = 100 adrese, desi protocolul
@@ -127,7 +209,14 @@ export async function GET(req: NextRequest) {
     minute. E indeajuns pentru un site care creste cu cateva pagini pe zi, si de
     stiut daca vreodata se publica un val mare deodata.
   */
-  const lot = deTrimis.slice(0, MAXIM_PE_CERERE);
+  /*
+    ⚠ STERGERILE INTRA PRIMELE IN LOT, si e o alegere. Sunt cel mult zece (cate
+    sonde), pe cand adaugarile pot fi sute; puse la coada, o coada lunga de
+    adaugari le-ar fi amanat ore intregi. Protocolul nu deosebeste oricum
+    intre ele — o adresa trimisa inseamna „uita-te din nou aici".
+  */
+  const lot = [...sterse, ...deTrimis].slice(0, MAXIM_PE_CERERE);
+  const trimiseAcum = new Set(lot);
 
   let cod = 0;
   let eroare: string | null = null;
@@ -161,7 +250,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ trimise: 0, cod, eroare }, { status: 200 });
   }
 
-  /* Reusit: se scrie ce s-a trimis, cu data cu care a fost trimis. */
+  /*
+    Reusit. Dar cele doua feluri de adrese din lot se insemneaza PE DOS unul
+    fata de celalalt:
+
+      - o ADAUGARE se scrie in tabela, ca sa nu se mai trimita;
+      - o STERGERE se STERGE din tabela, fiindca tocmai am terminat cu ea.
+
+    ⚠ SI E DEOSEBIREA CARE FACE MECANISMUL SA SE TERMINE. Scrise la fel, cele
+    anuntate ca disparute ar fi ramas in tabela, ar fi lipsit si maine din
+    sitemap, deci ar fi fost sondate si anuntate din nou — in fiecare ora, la
+    nesfarsit. Chiar retrimiterea impotriva careia exista tabela.
+
+    ⚠ Iar stergerea randului are si un al doilea inteles, bun: daca adresa
+    invie candva, `adreseDeAnuntat` n-o mai gaseste in `stiute` si o trateaza ca
+    NOUA. Pastrat, randul ar fi facut invierea invizibila — `lastmod` neschimbat
+    inseamna „nimic de anuntat".
+  */
   const acum = new Date().toISOString();
   const dateDupaUrl = new Map(
     dinSitemap.map((i) => [
@@ -169,8 +274,35 @@ export async function GET(req: NextRequest) {
       i.lastModified ? new Date(i.lastModified).toISOString() : null,
     ]),
   );
+  const eSteargere = new Set(sterse);
+  const adaugari = lot.filter((url) => !eSteargere.has(url));
+
+  const anuntateCaDisparute = sterse.filter((url) => trimiseAcum.has(url));
+  if (anuntateCaDisparute.length > 0) {
+    const { error: eSters } = await supabase
+      .from("indexnow_trimise")
+      .delete()
+      .in("url", anuntateCaDisparute);
+    if (eSters) {
+      /* Anuntata, dar nestearsa: rularea urmatoare o va anunta din nou. O data
+         nu strica; repetat, e chiar drumul catre 429 — deci se striga. */
+      await logError({
+        action: "indexnow.stergere",
+        message: `Am anuntat ${anuntateCaDisparute.length} adrese disparute, dar nu le-am putut scoate din tabela: ${eSters.message}`,
+        details: { prima: anuntateCaDisparute[0] },
+        severity: "error",
+      });
+    }
+  }
+
+  if (adaugari.length === 0) {
+    return NextResponse.json({
+      trimise: lot.length, disparute: anuntateCaDisparute.length, uitate: deUitat.length, cod,
+    });
+  }
+
   const { error: eScriere } = await supabase.from("indexnow_trimise").upsert(
-    lot.map((url) => ({
+    adaugari.map((url) => ({
       url,
       lastmod: dateDupaUrl.get(url) ?? null,
       trimis_la: acum,
@@ -192,5 +324,12 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ trimise: lot.length, ramase: deTrimis.length - lot.length, cod });
+  return NextResponse.json({
+    trimise: lot.length,
+    adaugate: adaugari.length,
+    disparute: anuntateCaDisparute.length,
+    uitate: deUitat.length,
+    ramase: Math.max(0, deTrimis.length - adaugari.length),
+    cod,
+  });
 }

@@ -7,6 +7,8 @@ import { TabelVersus } from "@/components/website/sections/TabelVersus";
 import { siteMetadata } from "@/lib/website/metadata";
 import { COMPETITORS } from "@/lib/website/nav";
 import type { VersusKey } from "@/lib/website/versus-culori";
+import { jsonLdSafe } from "@/lib/json-ld";
+import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 /**
  * Paginile de comparatie, din aceeasi lista care alimenteaza meniul.
@@ -55,6 +57,25 @@ export default async function ComparatiePage({ params }: Props) {
   const found = COMPETITORS.find((item) => slugOf(item.href) === competitor);
   if (!found) notFound();
 
+  /*
+    ⚠ SINGURA PAGINA DE PREZENTARE CARE CHIAR STA SUB ALTA, si de aceea singura
+    cu `parinte`. Firimiturile obisnuite au doua trepte, fiindca site-ul a fost
+    plat; aici ierarhia adevarata e Acasa -> Comparatii -> pagina asta. Fara
+    treapta din mijloc am fi declarat ca pagina atarna direct de radacina, adica
+    am fi sarit peste chiar pagina din care se ajunge la ea.
+
+    ⚠ CONSTRUIESTE firimiturile: `HeroPagina` nu primeste `sir`, deci nu emite
+    niciunul. (Cadrul e cerut de client, vezi nota de mai jos.)
+
+    ⚠ Numele e chiar titlul clientului, nu unul inventat aici.
+  */
+  const jsonLd = paginaSiteJsonLd({
+    cale: `vs/${competitor}`,
+    nume: found.titlu,
+    descriere: found.lead,
+    parinte: { nume: "Comparatii", cale: "vs" },
+  });
+
   return (
     /*
       ⚠ ACELAȘI CADRU CA LA CELELALTE PAGINI (`HeroPagina`), nu `PageShell`.
@@ -74,6 +95,7 @@ export default async function ComparatiePage({ params }: Props) {
       în loc să lase un gol în pagină — vezi tipul `VersusKey`.
     */
     <>
+      {jsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(jsonLd) }} /> : null}
       <HeroPagina
         eticheta={<EticheraVersus cheie={competitor as VersusKey} />}
         title={found.titlu}

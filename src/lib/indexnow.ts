@@ -135,6 +135,83 @@ export function adreseDeAnuntat(
   return deTrimis;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   ADRESELE CARE AU DISPĂRUT
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Migrația tabelei punea o întrebare și o lăsa deschisă:
+
+     „ce înseamnă «ștearsă» pentru o adresă care lipsește temporar dintr-un
+      sitemap construit din bază?"
+
+   ⚠ RĂSPUNSUL NU E O DEDUCȚIE, E O MĂSURĂTOARE. Absența din sitemap e doar
+   BĂNUIALA; adevărul se află cerând chiar adresa. O revizie a arătat de ce
+   contează: paza gândită întâi — „nu anunța ștergeri dacă sitemapul s-a
+   scurtat mult" — e INERTĂ aici, măsurat. O pană totală a blogului mută
+   sitemapul de la 439 la 436 de adrese, adică 0,68%; niciun prag omenesc nu se
+   aprinde. O pază care nu se poate aprinde e mai rea decât niciuna.
+
+   ⚠ ȘI E O SUGESTIE DE RECITIRE, NU O PORUNCĂ DE ȘTERGERE. Ce trimitem la
+   IndexNow înseamnă „uită-te din nou aici", nu „scoate asta din index" —
+   motorul hotărăște singur, după ce vede. De aceea o bănuială greșită costă o
+   recitire, nu o pagină pierdută; și de aceea sonda poate fi simplă.
+
+   ⚠ CUM SE TERMINĂ, fiindcă asta a fost cea mai tăcută capcană găsită de
+   revizie. Un candidat care rămâne candidat consumă la nesfârșit din sondele
+   fiecărei rulări, iar în ordine alfabetică primii zece ar bloca pe veci al
+   unsprezecelea — adică o ștergere adevărată n-ar fi sondată NICIODATĂ. Aici,
+   ORICE răspuns limpede scoate rândul din tabelă: „dispărută" după ce se
+   anunță, „vie" fără să se anunțe nimic. Doar necunoscutul (rețea căzută, 5xx)
+   lasă rândul pe loc, ca să se reîncerce. Deci mulțimea scade la fiecare
+   rulare, nu se împotmolește.
+
+   Efectul lăturalnic e binevenit: tabela nu mai crește la nesfârșit. Până azi
+   niciun rând nu se ștergea vreodată.
+*/
+
+/** Cel mult atâtea sonde pe rulare. Zece cereri către noi înșine, o dată pe oră. */
+export const MAXIM_SONDE = 10;
+
+/**
+ * Ce am anunțat cândva și nu mai e în sitemap. Doar BĂNUIALA — se sondează.
+ *
+ * Sortată, ca două rulări să vadă aceeași ordine; fereastra înaintează fiindcă
+ * fiecare verdict limpede scoate adresa din mulțime, nu fiindcă s-ar roti.
+ */
+export function adreseDisparute(
+  dinSitemap: readonly IntrareSitemap[],
+  anuntateInainte: readonly Anuntata[],
+): string[] {
+  const inSitemap = new Set(dinSitemap.map((i) => i.url));
+  return anuntateInainte
+    .map((a) => a.url)
+    .filter((u) => !inSitemap.has(u))
+    .sort();
+}
+
+/** Ce spune codul primit de la propria noastră adresă. */
+export type VerdictSonda = "disparuta" | "vie" | "necunoscut";
+
+/**
+ * Traducerea codului în verdict.
+ *
+ * ⚠ `404` INTRĂ LÂNGĂ `410`, și nu din neglijență. `410` e singurul pe care îl
+ * scriem noi înșine, dinadins (`app/industrii/route.ts`), dar ștergerea
+ * obișnuită — un articol depublicat, o rubrică rămasă fără articole publicate
+ * (`if (total === 0) notFound()`) — dă `404`. Fără el, mecanismul ar acoperi
+ * exact cazul rar și l-ar rata pe cel des.
+ *
+ * ⚠ `5xx` ȘI REȚEAUA CĂZUTĂ (`cod === 0`) NU SUNT UN RĂSPUNS. Sunt „nu știu",
+ * iar „nu știu" nu are voie să șteargă un rând: adresa rămâne și se reîncearcă.
+ *
+ * ⚠ `3xx` E „VIE", nu dispărută. O adresă mutată nu s-a șters, iar ținta ei e
+ * în sitemap și se anunță pe drumul obișnuit.
+ */
+export function verdictSonda(cod: number): VerdictSonda {
+  if (cod === 0 || cod >= 500) return "necunoscut";
+  return cod === 404 || cod === 410 ? "disparuta" : "vie";
+}
+
 /** Corpul cererii, în forma cerută de protocol. */
 export function corpCerere(urluri: readonly string[], cheie: string): Record<string, unknown> {
   const gazda = new URL(PLATFORM_ORIGIN).host;

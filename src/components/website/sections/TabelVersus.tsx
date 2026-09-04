@@ -10,6 +10,27 @@ import { CULORI_MARCI, type VersusKey } from "@/lib/website/versus-culori";
 import { SectionEyebrow } from "./SectionEyebrow";
 
 /**
+ * `AAAA-LL-ZZ` scris pe romaneste, fara sa treaca prin `Date`.
+ *
+ * ⚠ FARA `new Date(...)`, si e o alegere. `new Date("2026-08-14")` se citeste
+ * ca UTC la miezul noptii, iar afisat intr-un fus la vest de Greenwich ar da
+ * ziua DINAINTE — data de pe pagina ar fi cu o zi mai devreme pentru unii
+ * cititori, si niciodata pentru cine o scrie. Sirul se taie in bucati.
+ */
+const LUNI_RO = [
+  "ianuarie", "februarie", "martie", "aprilie", "mai", "iunie",
+  "iulie", "august", "septembrie", "octombrie", "noiembrie", "decembrie",
+];
+
+function dataRo(iso: string): string {
+  const [an, luna, zi] = iso.split("-");
+  const nume = LUNI_RO[Number(luna) - 1];
+  /* Forma nerecunoscuta se arata ca atare: mai bine o data ciudata decat una
+     inventata sau un `NaN` pe pagina. */
+  return nume ? `${Number(zi)} ${nume} ${an}` : iso;
+}
+
+/**
  * Tabelul de comparație de pe paginile „Edinio vs …".
  *
  * ═══ DOUĂ COLOANE, NU CINCI ═══
@@ -139,6 +160,31 @@ export function TabelVersus({ cheie }: { cheie: VersusKey }) {
             părea o afirmație permanentă.
           */}
           <p className="mt-1">{AVERTISMENT_VS}</p>
+          {/*
+            ⚠ CÂND A FOST VERIFICAT, ȘI DE UNDE.
+
+            Avertismentul de deasupra spune că lucrurile se schimbă; rândul ăsta
+            spune CÂND ne-am uitat ultima oară și UNDE, ca cititorul să poată
+            verifica singur. O publicitate comparativă care nu-și arată sursa cere
+            să fie crezută pe cuvânt.
+
+            ⚠ Spațiul dinaintea legăturii e scris ca `{" "}`, nu lăsat la capăt de
+            rând: JSX înghite spațiul de dinaintea unei expresii puse pe rândul
+            următor, iar textul ar fi ieșit lipit de link — tăcut, fiindcă nimic
+            nu cade.
+          */}
+          <p className="mt-1">
+            Verificat la {dataRo(tabel.verificatLa)}, pe{" "}
+            <a
+              href={tabel.siteOficial}
+              rel="nofollow noopener noreferrer"
+              target="_blank"
+              className="underline underline-offset-2 hover:text-ink"
+            >
+              site-ul oficial {marca.nume}
+            </a>
+            .
+          </p>
         </div>
       </div>
     </section>

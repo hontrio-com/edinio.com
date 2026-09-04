@@ -97,3 +97,87 @@ test("legenda si avertismentul exista si spun ce trebuie", () => {
      iar ce ofera ele se schimba fara sa ne anunte. */
   assert.match(AVERTISMENT_VS, /se pot modifica/);
 });
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STRATUL DE DOVEZI (04.09.2026)
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Publicitatea comparativa cere ca fiecare afirmatie sa fie verificabila. Pana
+   azi tabelele n-aveau nici data, nici sursa: cine voia sa verifice nu stia nici
+   CAND ne-am uitat, nici UNDE.
+
+   ⚠ PROSPETIMEA NU SE PROBEAZA AICI. O proba care cade dupa 183 de zile ar
+   deveni rosie intr-o zi in care nimeni n-a atins codul, iar suita ruleaza
+   inaintea fiecarui push — ar fi blocat un push urgent pentru un tabel de
+   marketing. Sta in `npm run verifica:surse-vs`, care se cheama cand vrei.
+   Aici se probeaza doar ce e ADEVARAT MEREU: forma datei si a adreselor.
+*/
+
+test("fiecare tabel spune CAND a fost verificat, in forma AAAA-LL-ZZ", () => {
+  for (const [cheie, tabel] of Object.entries(TABELE_VS)) {
+    assert.match(
+      tabel.verificatLa,
+      /^\d{4}-\d{2}-\d{2}$/,
+      `${cheie}: data de verificare nu e in forma AAAA-LL-ZZ`,
+    );
+    /* O data din viitor inseamna ca cineva a scris altceva decat s-a intamplat. */
+    assert.ok(
+      new Date(`${tabel.verificatLa}T12:00:00Z`) <= new Date(),
+      `${cheie}: data de verificare e in VIITOR`,
+    );
+  }
+});
+
+test("fiecare tabel spune UNDE, si adresa e https si absoluta", () => {
+  for (const [cheie, tabel] of Object.entries(TABELE_VS)) {
+    const u = new URL(tabel.siteOficial);
+    assert.equal(u.protocol, "https:", `${cheie}: site-ul oficial nu e https`);
+    assert.ok(u.hostname.includes("."), `${cheie}: gazda nu arata a domeniu`);
+    /* ⚠ Nu e site-ul NOSTRU. O adresa catre noi insine ar arata a sursa fara sa
+       fie una — exact felul de dovada care nu dovedeste nimic. */
+    assert.ok(
+      !/(^|\.)edinio\.com$/.test(u.hostname),
+      `${cheie}: „site-ul oficial" al concurentului arata catre noi`,
+    );
+  }
+});
+
+test("o `sursa` de rand sta pe CHIAR domeniul oficial al platformei", () => {
+  /*
+    ⚠ ASTA E REGULA CARE FACE DOVADA SA INSEMNE CEVA. O legatura catre un blog
+    de altcineva, sau catre un domeniu parcat, arata a sursa fara sa fie una:
+    `cartum.ro` e parcat, ei traiesc pe `cartum.io` — cine ar fi pus prima
+    adresa ar fi trimis cititorul in gol.
+
+    Azi niciun rand n-are `sursa` (auditul a cerut STRATUL, nu rescrierea
+    afirmatiilor). Regula exista pentru primul care va pune una.
+  */
+  for (const [cheie, tabel] of Object.entries(TABELE_VS)) {
+    const gazdaOficiala = new URL(tabel.siteOficial).hostname.replace(/^www\./, "");
+    for (const rand of tabel.randuri) {
+      if (!rand.sursa) continue;
+      const gazdaSursei = new URL(rand.sursa).hostname.replace(/^www\./, "");
+      assert.ok(
+        gazdaSursei === gazdaOficiala || gazdaSursei.endsWith(`.${gazdaOficiala}`),
+        `${cheie} / „${rand.criteriu}": sursa e pe ${gazdaSursei}, nu pe ${gazdaOficiala}`,
+      );
+    }
+  }
+});
+
+test("regula de sursa chiar poate cadea", () => {
+  /* Aserttiunea de mai sus e VIDA azi: niciun rand n-are `sursa`, deci bucla nu
+     se executa niciodata. Fara randurile astea, ar fi verde din lene si ar
+     ramane asa pana cand cineva ar pune o sursa gresita. */
+  const potrivit = (oficial: string, sursa: string) => {
+    const o = new URL(oficial).hostname.replace(/^www\./, "");
+    const s = new URL(sursa).hostname.replace(/^www\./, "");
+    return s === o || s.endsWith(`.${o}`);
+  };
+  assert.equal(potrivit("https://cartum.io", "https://cartum.io/ro/integration/"), true);
+  assert.equal(potrivit("https://cartum.io", "https://help.cartum.io/x"), true, "subdomeniul lor e tot al lor");
+  assert.equal(potrivit("https://cartum.io", "https://cartum.ro/x"), false, "domeniul PARCAT nu e sursa");
+  assert.equal(potrivit("https://cartum.io", "https://help.horoshop.ua/x"), false, "alt domeniu, chiar daca e al aceleiasi firme");
+  assert.equal(potrivit("https://www.shopify.com", "https://shopify.com/pricing"), true, "www nu conteaza");
+  assert.equal(potrivit("https://www.shopify.com", "https://notshopify.com/x"), false);
+});

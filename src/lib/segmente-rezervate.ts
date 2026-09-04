@@ -86,6 +86,11 @@ export const NON_STORE_SEGMENTS: ReadonlySet<string> = new Set([
    * opreasca crawlarea intregului site pana la 30 de zile.
    */
   "sitemap.xml", "robots.txt", "llms.txt", "sitemap-magazine.xml",
+  /* Fisierul prin care Bing dovedeste ca domeniul e al nostru (IndexNow).
+     Cale FIXA dinadins: `/{cheie}.txt` la radacina, cum ingaduie protocolul, ar
+     fi un segment cu nume imprevizibil, deci o interogare in baza la fiecare
+     verificare. Vezi `src/lib/indexnow.ts`. */
+  "indexnow-key.txt",
   "site.webmanifest", "indice-ajutor.json",
 ]);
 

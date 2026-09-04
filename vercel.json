@@ -8,6 +8,10 @@
       "schedule": "17 */2 * * *"
     },
     {
+      "path": "/api/cron/indexnow",
+      "schedule": "23 */1 * * *"
+    },
+    {
       "path": "/api/cron/email-automations",
       "schedule": "0 */1 * * *"
     },

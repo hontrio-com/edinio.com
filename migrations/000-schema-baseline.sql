@@ -6696,6 +6696,13 @@ create table if not exists public.gmc_sync_queue (
   prioritate smallint default 5 not null,
   generation bigint default 1 not null);
 
+create table if not exists public.indexnow_trimise (
+  url text not null,
+  lastmod timestamp with time zone,
+  trimis_la timestamp with time zone default now() not null,
+  cod integer,
+  ultima_eroare text);
+
 create table if not exists public.intentii_publicare (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -7553,6 +7560,7 @@ alter table public.fedex_etichete add constraint fedex_etichete_pkey PRIMARY KEY
 alter table public.forms add constraint forms_pkey PRIMARY KEY (id);
 alter table public.gmc_products add constraint gmc_products_pkey PRIMARY KEY (id);
 alter table public.gmc_sync_queue add constraint gmc_sync_queue_pkey PRIMARY KEY (id);
+alter table public.indexnow_trimise add constraint indexnow_trimise_pkey PRIMARY KEY (url);
 alter table public.intentii_publicare add constraint intentii_publicare_pkey PRIMARY KEY (id);
 alter table public.invoices add constraint invoices_pkey PRIMARY KEY (id);
 alter table public.mailchimp_suppressions add constraint mailchimp_suppressions_pkey PRIMARY KEY (id);
@@ -8039,6 +8047,7 @@ CREATE INDEX idx_trendyol_queue_revendicat ON public.trendyol_sync_queue USING b
 CREATE INDEX idx_trendyol_variants_business_barcode ON public.trendyol_variants USING btree (business_id, barcode);
 CREATE INDEX idx_trendyol_variants_listing ON public.trendyol_variants USING btree (listing_id);
 CREATE INDEX idx_trendyol_variants_product ON public.trendyol_variants USING btree (product_id);
+CREATE INDEX indexnow_trimise_lastmod_idx ON public.indexnow_trimise USING btree (lastmod);
 CREATE INDEX intentii_publicare_nerezolvate_idx ON public.intentii_publicare USING btree (marketplace, business_id, cerut_la) WHERE (rezolvat_la IS NULL);
 CREATE INDEX intentii_publicare_product_id_idx ON public.intentii_publicare USING btree (product_id);
 CREATE INDEX mailchimp_suppressions_business_email_idx ON public.mailchimp_suppressions USING btree (business_id, email);
@@ -8291,6 +8300,7 @@ alter table public.fedex_etichete enable row level security;
 alter table public.forms enable row level security;
 alter table public.gmc_products enable row level security;
 alter table public.gmc_sync_queue enable row level security;
+alter table public.indexnow_trimise enable row level security;
 alter table public.intentii_publicare enable row level security;
 alter table public.invoices enable row level security;
 alter table public.mailchimp_suppressions enable row level security;
@@ -9655,6 +9665,13 @@ grant SELECT on table public.gmc_sync_queue to service_role;
 grant TRIGGER on table public.gmc_sync_queue to service_role;
 grant TRUNCATE on table public.gmc_sync_queue to service_role;
 grant UPDATE on table public.gmc_sync_queue to service_role;
+grant DELETE on table public.indexnow_trimise to service_role;
+grant INSERT on table public.indexnow_trimise to service_role;
+grant REFERENCES on table public.indexnow_trimise to service_role;
+grant SELECT on table public.indexnow_trimise to service_role;
+grant TRIGGER on table public.indexnow_trimise to service_role;
+grant TRUNCATE on table public.indexnow_trimise to service_role;
+grant UPDATE on table public.indexnow_trimise to service_role;
 grant DELETE on table public.intentii_publicare to anon;
 grant INSERT on table public.intentii_publicare to anon;
 grant REFERENCES on table public.intentii_publicare to anon;

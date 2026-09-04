@@ -2040,6 +2040,41 @@ export type Database = {
         }
         Relationships: []
       }
+      /*
+        ⚠ ADAUGATA DE MANA (04.09.2026), nu prin regenerare.
+
+        Regenerarea completa a fisierului rupe ~40 de locuri: `store_settings` e
+        o VEDERE, iar tipurile generate ii fac toate coloanele nullable. Se adauga
+        deci doar ce lipseste, citit din chiar tabela creata in baza.
+
+        Coloanele, exact ca in `migrations/2026-09-04-indexnow-ce-s-a-anuntat.sql`:
+        `url` e cheia primara, `trimis_la` are `default now()`, restul sunt
+        nullable — de aceea apar cu `?` in `Insert` si `Update`.
+      */
+      indexnow_trimise: {
+        Row: {
+          cod: number | null
+          lastmod: string | null
+          trimis_la: string
+          ultima_eroare: string | null
+          url: string
+        }
+        Insert: {
+          cod?: number | null
+          lastmod?: string | null
+          trimis_la?: string
+          ultima_eroare?: string | null
+          url: string
+        }
+        Update: {
+          cod?: number | null
+          lastmod?: string | null
+          trimis_la?: string
+          ultima_eroare?: string | null
+          url?: string
+        }
+        Relationships: []
+      }
       emag_awb: {
         Row: {
           awb_number: string | null

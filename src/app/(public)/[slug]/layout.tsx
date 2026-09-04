@@ -28,8 +28,14 @@ interface Props {
  * si le pun singure, dar 404-ul NU poate. `not-found.tsx` nu accepta
  * `generateMetadata` — antetul lui vine de la cel mai apropiat layout — asa ca
  * orice adresa gresita de pe domeniul unui comerciant servea titlul, descrierea
- * si og:title ale platformei: „Creare magazin online rapid | Edinio", pe
+ * si og:title ale PLATFORMEI pe domeniul comerciantului — masurat pe
  * caian-textile.ro.
+ *
+ * ⚠ Randul de mai sus citea pana azi titlul de atunci al radacinii, cuvant cu
+ * cuvant. Pe 04.09.2026 textele platformei s-au schimbat, iar citatul ar fi
+ * ramas sa arate spre ceva ce nu mai exista — deci s-a scos exemplul si a ramas
+ * defectul, care e partea care conteaza. Titlul curent al radacinii se citeste
+ * din `app/layout.tsx`; el nu mai ajunge aici, fiindca golul e umplut mai jos.
  *
  * Sunt IMPLICITE, nu impuse: orice pagina care isi declara titlul sau OpenGraph
  * il pastreaza, fiindca segmentul mai adanc castiga. Umplu doar golul.

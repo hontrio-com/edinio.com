@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -16,6 +16,14 @@ import {
 
 const AICI = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(AICI, "..", "..", "..", "public");
+
+/** Sursa fara comentarii si cu CRLF normalizat, ca proba sa se agate de cod, nu de vorbele despre cod. */
+function sursaFaraComentarii(cale: string): string {
+  return readFileSync(cale, "utf8")
+    .replace(/\r\n/g, "\n")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
+}
 
 test("fiecare rezultat are chiar fișierul lui pe disc", () => {
   /*
@@ -217,39 +225,91 @@ test("cele trei rezultate sunt deosebite între ele", () => {
 
 /* ─── Cardul 3: sitemap ───────────────────────────────────────────────────── */
 
-test("sitemapul din ilustrație are chiar valorile generatorului", () => {
+test("ilustrația nu arată câmpuri pe care generatorul nu le mai emite", () => {
   /*
-    ⚠ ASTA E O LISTĂ DE VERIFICAT FAȚĂ DE `app/sitemap.ts`, nu o probă de desen.
+    ⚠ PROBA ASTA SE COMPARA CU GENERATORUL, NU CU EA INSASI.
 
-    Tabelul de mai jos e CITIT dintr-un sitemap viu scos de Edinio
-    (`bricosmart.ro` prin `edinio.com`, 1169 de adrese, 13.08.2026). Clientul a
-    cerut ilustrația „identică 1 la 1 cu realitatea", iar singurul fel în care
-    asta rămâne adevărat peste șase luni e ca proba să cadă când generatorul se
-    schimbă și ilustrația nu.
+    Pana pe 04.09.2026, aici statea un tabel scris IN PROBA
+    (`acasa: {changefreq:"weekly", priority:"1"}` …) confruntat cu
+    `SITEMAP_EXEMPLU`. Adica ilustratia era confruntata cu o copie a ilustratiei:
+    cand `app/sitemap.ts` a incetat sa mai emita `changefreq` si `priority`,
+    proba a ramas verde (66/66) si pagina publica `/optimizare` a continuat sa
+    arate clientilor o iesire de produs care nu mai exista.
 
-    Dacă proba pică după o modificare la sitemap: deschide sitemapul unui magazin
-    adevărat, citește ce scrie acum și potrivește AICI, apoi în `SITEMAP_EXEMPLU`.
+    Acum legatura e in AMANDOUA sensurile, si de aceea nu poate ramane verde
+    dintr-o singura parte:
+      - generatorul nu emite campurile  ->  nici ilustratia nu le are;
+      - daca cineva le pune la loc in generator, proba cade si cere ilustratia.
+
+    Sursa se citeste FARA COMENTARII: chiar nota de mai sus pomeneste numele
+    campurilor, si o scanare naiva s-ar fi agatat de propriile mele cuvinte.
   */
-  const ASTEPTAT: Record<string, { changefreq: string; priority: string }> = {
-    acasa: { changefreq: "weekly", priority: "1" },
-    catalog: { changefreq: "daily", priority: "0.9" },
-    categorie: { changefreq: "daily", priority: "0.8" },
-    produs: { changefreq: "weekly", priority: "0.7" },
-    politica: { changefreq: "yearly", priority: "0.3" },
-  };
+  const generator = sursaFaraComentarii(join(AICI, "..", "..", "app", "sitemap.ts"));
 
-  for (const intrare of SITEMAP_EXEMPLU) {
-    const astept = ASTEPTAT[intrare.fel];
-    assert.ok(astept, `fel necunoscut: ${intrare.fel}`);
-    assert.equal(
-      intrare.changefreq,
-      astept.changefreq,
-      `${intrare.fel}: changefreq ar trebui ${astept.changefreq}`,
+  /*
+    ⚠ CELE DOUA NUME NU SE DEDUC UNUL DIN CELALALT, si aici era o proba moarta.
+
+    Generatorul lui Next scrie `changeFrequency` (camelCase, cum cere
+    `MetadataRoute.Sitemap`), sitemapul XML scrie `<changefreq>`, iar ilustratia
+    din `SITEMAP_EXEMPLU` foloseste numele din XML. Prima scriere a probei ducea
+    numele generatorului prin `toLowerCase()` si cauta `changefrequency` in
+    ilustratie — cheie care n-a existat niciodata. Deci jumatatea pentru
+    `changeFrequency` era verde ORICE s-ar fi intamplat, si numai `priority`
+    (acelasi nume in amandoua) chiar masura ceva.
+
+    Perechea se scrie pe fata, o data.
+  */
+  const PERECHI: [string, string][] = [
+    ["changeFrequency", "changefreq"],
+    ["priority", "priority"],
+  ];
+
+  for (const [inGeneratorNume, inIlustratieNume] of PERECHI) {
+    /* ⚠ Sablonul cu accente grave NU e locul pentru `\b`: acolo devine un
+       caracter backspace, iar `\s` devine litera „s". Regula se scrie ca sir
+       obisnuit, cu barele dublate, ca sa ajunga intreaga la `RegExp`. */
+    const inGenerator = new RegExp("\\b" + inGeneratorNume + "\\s*:").test(generator);
+    const inIlustratie = SITEMAP_EXEMPLU.some(
+      (i) => inIlustratieNume in (i as unknown as Record<string, unknown>),
     );
     assert.equal(
-      intrare.priority,
-      astept.priority,
-      `${intrare.fel}: priority ar trebui ${astept.priority}`,
+      inIlustratie,
+      inGenerator,
+      inGenerator
+        ? `generatorul emite din nou \`${inGeneratorNume}\`, dar ilustratia de pe /optimizare nu arata \`${inIlustratieNume}\``
+        : `generatorul nu mai emite \`${inGeneratorNume}\`, dar ilustratia de pe /optimizare inca arata \`${inIlustratieNume}\``,
+    );
+  }
+
+  /* Si ce EMITE chiar trebuie sa se vada: fara randurile astea, proba de mai sus
+     ar trece si pe o ilustratie golita cu totul. */
+  const randate = sursaFaraComentarii(
+    join(AICI, "..", "..", "components", "website", "sections", "optimizare", "PanouSitemap.tsx"),
+  );
+  for (const camp of ["loc", "lastmod"]) {
+    assert.ok(
+      randate.includes(`nume="${camp}"`),
+      `ilustratia nu mai arata \`${camp}\`, desi generatorul il scrie pe fiecare adresa`,
+    );
+  }
+
+  /*
+    ⚠ SI RANDAREA URMEAZA GENERATORUL, NU O INTERZICERE FIXA.
+
+    Prima scriere spunea, neconditionat, „PanouSitemap nu are voie sa randeze
+    changefreq/priority" — desi comentariul de deasupra promitea o legatura „in
+    AMANDOUA sensurile". Daca maine generatorul ar emite iar campurile si cineva
+    ar actualiza corect ilustratia, proba ar fi cazut pentru o stare CORECTA, cu
+    un mesaj care cere exact ce s-a facut deja. Un fund de sac.
+  */
+  for (const [inGeneratorNume, inIlustratieNume] of PERECHI) {
+    const inGenerator = new RegExp("\\b" + inGeneratorNume + "\\s*:").test(generator);
+    assert.equal(
+      randate.includes(`nume="${inIlustratieNume}"`),
+      inGenerator,
+      inGenerator
+        ? `generatorul emite \`${inGeneratorNume}\`, deci PanouSitemap trebuie sa randeze \`${inIlustratieNume}\``
+        : `PanouSitemap inca randeaza \`${inIlustratieNume}\`, desi generatorul nu-l mai emite`,
     );
   }
 });

@@ -228,8 +228,6 @@ export interface IntrareSitemap {
   /** Calea, fără gazdă. Goală pentru pagina de start. */
   cale: string;
   lastmod: string;
-  changefreq: string;
-  priority: string;
   /** La ce folosește: pentru probe și pentru textul citit cu voce. */
   fel: "acasa" | "catalog" | "categorie" | "produs" | "politica";
 }
@@ -239,16 +237,14 @@ export interface IntrareSitemap {
  *
  * ═══ NU E INVENTAT ═══
  *
- * ⚠ Câmpurile, ordinea lor, `changefreq` și `priority` sunt CITITE DINTR-UN
- * SITEMAP VIU, nu scrise din cap: `bricosmart.ro`, prin `edinio.com`, 1169 de
- * adrese, la 13.08.2026. De acolo vine tabelul:
+ * ⚠ Câmpurile și ordinea lor sunt CITITE DINTR-UN SITEMAP VIU, nu scrise din
+ * cap: `bricosmart.ro`, prin `edinio.com`, 1169 de adrese, la 13.08.2026.
  *
- *   pagina de start        weekly   1
- *   pagina de catalog      daily    0.9
- *   pagină de categorie    daily    0.8
- *   pagină de produs       weekly   0.7
- *   pagină proprie         monthly  0.5
- *   pagină de politici     yearly   0.3
+ * ⚠ `changefreq` ȘI `priority` AU PLECAT DE AICI PE 04.09.2026, fiindcă au
+ * plecat din generator: Google spune de ani de zile că le ignoră pe amândouă,
+ * iar sitemapul platformei a scăzut de la 72 la 46 kB fără ele. Ilustrația le
+ * arăta mai departe — adică pagina noastră de vânzare arăta o ieșire de produs
+ * care nu mai există. Proba de mai jos leagă acum cele două, în ambele sensuri.
  *
  * Dacă cineva schimbă vreodată ce scrie generatorul, ilustrația de aici rămâne
  * în urmă fără să se plângă nimeni — de asta tabelul e scris și în `seo.test.ts`,
@@ -273,22 +269,16 @@ export const SITEMAP_EXEMPLU: IntrareSitemap[] = [
     fel: "acasa",
     cale: "",
     lastmod: "2026-08-13T09:41:07.512Z",
-    changefreq: "weekly",
-    priority: "1",
   },
   {
     fel: "categorie",
     cale: "/magazin/camere-supraveghere",
     lastmod: "2026-08-13T09:41:07.512Z",
-    changefreq: "daily",
-    priority: "0.8",
   },
   {
     fel: "produs",
     cale: "/product/camera-dome-wifi-2k",
     lastmod: "2026-08-11T16:08:22.194Z",
-    changefreq: "weekly",
-    priority: "0.7",
   },
 ];
 

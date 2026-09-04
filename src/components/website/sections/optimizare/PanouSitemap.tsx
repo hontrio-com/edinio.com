@@ -18,8 +18,9 @@ import { SITEMAP_EXEMPLU, SITEMAP_GAZDA, type IntrareSitemap } from "@/lib/websi
  *
  * ═══ CE SCRIE ÎN EL E LUAT DINTR-UNUL VIU ═══
  *
- * Câmpurile, ordinea, `changefreq` și `priority` sunt citite dintr-un sitemap
- * adevărat scos de Edinio (vezi `SITEMAP_EXEMPLU`), nu scrise din cap.
+ * Câmpurile și ordinea sunt citite dintr-un sitemap adevărat scos de Edinio
+ * (vezi `SITEMAP_EXEMPLU`), nu scrise din cap. `changefreq` și `priority` nu mai
+ * apar aici fiindcă generatorul nu le mai emite (04.09.2026).
  *
  * ⚠ INDENTAREA E A FIȘIERULUI, NU A LUI CHROME, și e o alegere, nu o scăpare.
  * Generatorul nostru nu indentează: `<url>` și copiii lui stau toți la margine,
@@ -217,8 +218,6 @@ function Url({ intrare }: { intrare: IntrareSitemap }) {
       {"\n"}
       <Rand nume="loc" valoare={`${SITEMAP_GAZDA}${intrare.cale}`} />
       <Rand nume="lastmod" valoare={intrare.lastmod} />
-      <Rand nume="changefreq" valoare={intrare.changefreq} />
-      <Rand nume="priority" valoare={intrare.priority} />
       <Eticheta nume="url" inchisa />
       {"\n"}
     </>

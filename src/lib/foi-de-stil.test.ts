@@ -214,6 +214,15 @@ test("nicio altă pagină din `app/` nu importă direct o foaie de stil", () => 
   /*
     Foile se leagă din aspecte, nu din pagini. O pagină care își importă foaia
     ei o adaugă PESTE cea a grupului, deci vizitatorul descarcă două.
+
+    ⚠ LISTA E DE HOTARE, NU DE GRUPURI. `(public)/[slug]/layout.tsx` nu e un
+    aspect de grup, și e aici de la început: e locul unde începe zona
+    magazinelor. Regula cere ca fiecare intrare să fie primul aspect de pe lanțul
+    ei care aduce o foaie — nu ca numele să fie între paranteze.
+
+    Cele două probe se completează, și abia împreună spun „exact una":
+    asta oprește ZERO-ul dublat, iar `foaia-de-stil-ajunge-la-pagini.test.ts`
+    oprește pagina rămasă cu NICIUNA.
   */
   const gasite: string[] = [];
   const permise = new Set([
@@ -224,6 +233,21 @@ test("nicio altă pagină din `app/` nu importă direct o foaie de stil", () => 
     "src/app/(admin)/layout.tsx",
     "src/app/(onboarding)/layout.tsx",
     "src/app/(public)/[slug]/layout.tsx",
+    /*
+      ⚠ Miniaturile din galeria de design-uri. Stau DELIBERAT în afara lui
+      `[slug]` — layout-ul magazinului injectează pixelii de marketing și
+      bannerul de cookies, iar cardurile ar fi trimis câte un pageview în
+      conturile comerciantului la fiecare încărcare.
+
+      Dar tot de acolo venea și foaia: ruta îi e SORĂ lui `[slug]`, nu fiică, iar
+      rădăcina nu importă nimic dinadins. Măsurat în producție pe 04.09.2026,
+      pagina încărca 65 de reguli CSS și nu avea nici măcar `.flex` — headerul
+      ieșea `display: block`, iar un cap de magazin de 64px raporta 1356px.
+
+      Nu e cazul pe care regula de mai sus îl apără: aici nu se adaugă o a doua
+      foaie peste alta, se aduce SINGURA. Vezi nota din chiar layout-ul acela.
+    */
+    "src/app/(public)/preview-sectiune/layout.tsx",
     "src/app/reactivare/layout.tsx",
   ]);
 

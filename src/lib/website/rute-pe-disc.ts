@@ -32,6 +32,8 @@ const RADACINA = join(AICI, "..", "..", "..");
  * la `app/(website)/vs/[competitor]/page.tsx`, prerandată din
  * `generateStaticParams`. Prima rulare a lui `adrese-declarate.test.ts` a raportat
  * cinci concurenți și șapte industrii ca fiind adrese rupte. Nu erau.
+ * (Industriile au fost sterse cu totul pe 04.09.2026; randul de mai sus
+ * ramane fiindca povesteste de ce exista fisierul asta, nu ce mai e viu.)
  *
  * Deosebirea adevărată nu e „dinamic sau nu", ci CINE deține segmentul:
  *   - `(public)/[slug]` e numele ales de un comerciant. Nu e o rută de site.
@@ -79,7 +81,7 @@ function cauta(dir: string, segmente: string[]): boolean {
       return true;
     } else if (e.name.startsWith("[") && e.name.endsWith("]") && cauta(join(dir, e.name), coada)) {
       /*
-        Segment dinamic al nostru: `/vs/[competitor]`, `/industrii/[industrie]`,
+        Segment dinamic al nostru: `/vs/[competitor]`,
         `/ajutor/[categorie]/[ghid]`. Consumă un segment, ca unul obișnuit.
       */
       return true;

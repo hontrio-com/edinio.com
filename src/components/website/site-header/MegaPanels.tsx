@@ -21,7 +21,8 @@ import {
  * Toate PORNESC din acelasi invelis de 1140px, care cade exact peste containerul
  * barei de sus: marginea din stanga se aliniaza cu sigla, cea din dreapta cu
  * butonul. „De ce noi" si „Resurse" il umplu; „Solutie eCommerce" e strans la
- * 880px din 30.08, dupa ce industriile au iesit din el.
+ * 880px din 30.08, dupa ce industriile au iesit din el. (Paginile lor au fost
+ * sterse cu totul pe 04.09.2026; latimea a ramas cea masurata atunci.)
  *
  * ⚠ Un carton mai ingust NU pluteste in mijlocul ecranului, cum patea prima
  * incercare de latimi pe masura fiecarui panou. Cauza de atunci era `mx-auto`,

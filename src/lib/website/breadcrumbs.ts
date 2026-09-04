@@ -26,7 +26,7 @@ import { SITE_URL } from "./metadata";
 export interface Firimitura {
   label: string;
   /**
-   * Calea, cu slash la început (ex. `/industrii`). Se omite DOAR la ultima
+   * Calea, cu slash la început (ex. `/ajutor`). Se omite DOAR la ultima
    * firimitură, care e pagina curentă.
    *
    * ⚠ O firimitură din mijloc fără `href` strică blocul `BreadcrumbList`:

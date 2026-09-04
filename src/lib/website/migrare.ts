@@ -87,10 +87,14 @@ export interface ProdusMigrare {
  * mult și secțiunea se îngreuna. Trei lasă cardurile să respire — de la `lg` în
  * sus ies 152px în loc de 133 — și îngăduie jumătățile egale, ca în schiță.
  *
- * ⚠ Categoriile nu sunt luate la întâmplare: sunt industrii pe care site-ul le
- * numește el însuși în subsol. Așa grila arată a magazin adevărat, cu marfă din
- * raioane diferite, și nu inventează o nișă pe care platforma n-o pomenește
- * nicăieri.
+ * ⚠ Categoriile nu sunt luate la întâmplare: erau, la alegerea lor, chiar
+ * industriile pe care site-ul le numea el însuși în subsol. Așa grila arată a
+ * magazin adevărat, cu marfă din raioane diferite, și nu inventează o nișă.
+ *
+ * ⚠ SPRIJINUL ACELA A DISPĂRUT pe 04.09.2026, când coloana „Industrii" din
+ * subsol a plecat odată cu paginile. Categoriile rămân bune — alese pentru cât
+ * de depărtate sunt între ele, vezi mai jos — dar nu se mai pot apăra cu
+ * „așa scrie și în altă parte pe site". Cine le schimbă alege singur.
  *
  * Dintre cele patru industrii a căzut „Piese auto", și nu la întâmplare: rămân
  * trei feluri de marfă cât mai depărtate între ele — ceva moale, ceva cu

@@ -1,14 +1,4 @@
-import type { LucideIcon } from "lucide-react";
 import type { LogoKey } from "./logos";
-import {
-  Car,
-  Cpu,
-  PawPrint,
-  Pill,
-  Shirt,
-  Sofa,
-  Sparkles,
-} from "lucide-react";
 
 /**
  * Meniul site-ului de prezentare, intr-un singur loc.
@@ -148,101 +138,22 @@ export const SOLUTION_COLUMNS: NavColumn[] = [
   },
 ];
 
-/**
- * Paginile de industrie.
- *
- * `h1` e scris de mână, nu construit din `label`: genitivul romanesc nu se
- * deduce dintr-un substantiv (spui "de piese auto" dar "pentru animale de
- * companie"), iar o pagina de SEO cu titlul stropsit face mai mult rau decat
- * bine.
- */
-export interface Industry {
-  label: string;
-  slug: string;
-  icon: LucideIcon;
-  /** Cum apare in titlul din Google, dupa "Creare magazin online ...". */
-  seoTitle: string;
-  h1: string;
-  lead: string;
-}
-
-export const INDUSTRIES: Industry[] = [
-  {
-    label: "Piese auto",
-    slug: "piese-auto",
-    icon: Car,
-    seoTitle: "piese auto",
-    h1: "Creare magazin online de piese auto",
-    lead: "Cataloage mari, coduri de piesă și compatibilități. Import din fișier, căutare care iartă greșelile de tastare și filtre pe specificații.",
-  },
-  {
-    label: "Haine și modă",
-    slug: "haine",
-    icon: Shirt,
-    seoTitle: "haine",
-    h1: "Creare magazin online de haine",
-    lead: "Mărimi și culori ca variante, stoc separat pe fiecare, retururi simple. Exact ce cere un magazin de haine, fără module în plus.",
-  },
-  {
-    label: "Cosmetice",
-    slug: "cosmetice",
-    icon: Sparkles,
-    seoTitle: "cosmetice",
-    h1: "Creare magazin online de cosmetice",
-    lead: "Ingrediente, gramaje și seturi la pachet. Recenzii și recomandări, ca să crească valoarea coșului.",
-  },
-  {
-    label: "Mobilier și decor",
-    slug: "mobila",
-    icon: Sofa,
-    seoTitle: "mobilier",
-    h1: "Creare magazin online de mobilier",
-    lead: "Produse voluminoase, tarife de livrare pe clase de transport și termene diferite pe categorii.",
-  },
-  {
-    label: "Electronice",
-    slug: "electronice",
-    icon: Cpu,
-    seoTitle: "electronice",
-    h1: "Creare magazin online de electronice",
-    lead: "Specificații tehnice, garanții și coduri EAN. Filtre pe caracteristici și comparație între produse.",
-  },
-  {
-    label: "Animale de companie",
-    slug: "petshop",
-    icon: PawPrint,
-    seoTitle: "petshop",
-    h1: "Creare magazin online pentru animale de companie",
-    lead: "Comenzi care se repetă, gramaje diferite și livrare rapidă. Pachete și reduceri la cantitate.",
-  },
-  {
-    label: "Suplimente",
-    slug: "suplimente",
-    icon: Pill,
-    seoTitle: "suplimente",
-    h1: "Creare magazin online de suplimente",
-    lead: "Gramaje, termene de valabilitate și pachete pe cure. Etichete clare, așa cum cer regulile de prezentare.",
-  },
-];
-
-export const INDUSTRY_LINKS: NavLink[] = INDUSTRIES.map((i) => ({
-  label: i.label,
-  href: `/industrii/${i.slug}`,
-}));
-
 /*
- * ⚠ INDUSTRIILE AU IESIT DIN MEGA MENU pe 30.08, cerut de client.
+ * ═══ ⚠ INDUSTRIILE AU PLECAT DE TOT, PE 04.09.2026 ═══
  *
- * Aici era `MENU_INDUSTRY_LINKS`, lista scurta care umplea a treia coloana a
- * panoului. A plecat odata cu coloana, din `MegaPanels` si din `MobileNav`.
+ * Aici stăteau `Industry`, `INDUSTRIES` (șapte industrii, fiecare cu iconița
+ * ei din lucide) și `INDUSTRY_LINKS`. Le foloseau paginile `/industrii` și
+ * `/industrii/[industrie]`, plus subsolul.
  *
- * ⚠ PAGINILE RAMAN, SI RAMAN LEGATE. Subsolul are o rubrica „Industrii" cu
- * patru intrari, iar subsolul e pe fiecare pagina a site-ului. Deci scoaterea
- * din meniu nu le face orfane si nu le scoate din indexul Google. Verificat
- * inainte de taiere, tocmai fiindca asta ar fi fost urmarea nevazuta.
+ * Istoria, fiindcă s-a schimbat de două ori: pe 30.08 clientul a cerut
+ * scoaterea lor din mega menu, dar PĂSTRAREA paginilor și a legăturilor din
+ * subsol; pe 04.09, după un audit SEO, a cerut ștergerea completă. Adresele
+ * răspund acum 410 din `src/app/industrii/route.ts`, unde e scris de ce.
  *
- * `INDUSTRIES` si `INDUSTRY_LINKS` raman: le folosesc paginile `/industrii`,
- * `/industrii/[industrie]` si subsolul.
+ * ⚠ Odată cu ele au plecat din pachetul de CLIENT cele șapte iconițe lucide,
+ * care ajungeau pe fiecare pagină a site-ului: `INDUSTRY_LINKS` era un `.map()`
+ * la nivel de modul, deci ținea literalul viu în bundle chiar și acolo unde
+ * nimeni nu-l citea.
  */
 
 export const SOLUTION_FEATURED: NavFeatured = {

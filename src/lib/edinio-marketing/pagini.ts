@@ -55,6 +55,20 @@ const REGULI: ReadonlyArray<readonly [RegExp, FelPagina]> = [
   [/^\/migrare(\/|$)/, "migration"],
   [/^\/contact(\/|$)/, "contact"],
   [/^\/vs(\/|$)/, "compare"],
+  /*
+   * ⚠ RÂNDUL ĂSTA RĂMÂNE, DEȘI PAGINILE AU PLECAT (04.09.2026), și rămâne DINADINS.
+   *
+   * `/industrii` răspunde acum 410. Un răspuns de rută nu randează niciun layout,
+   * deci pixelii din `(website)/layout.tsx` nu pleacă de acolo: regula e inertă,
+   * nu greșită.
+   *
+   * Ce se strică dacă e ștearsă: fișierul ăsta e TAXONOMIA DE TRACKING, iar
+   * evenimentele vechi din conturile de reclame poartă deja eticheta „industries".
+   * Ștearsă, o comparație pe istoric ar arăta o categorie care se evaporă, fără
+   * ca cineva să știe dacă a dispărut traficul sau doar numele lui.
+   *
+   * Deci: nu se atinge. E cea mai ieftină formă de a nu strica un raport.
+   */
   [/^\/industrii(\/|$)/, "industries"],
 
   [/^\/blog\/categorie(\/|$)/, "blog_category"],

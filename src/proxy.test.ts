@@ -140,8 +140,24 @@ describe("vitrina servita pe www.edinio.com: fiecare ruta de sub /{slug} e noind
 });
 
 describe("paginile platformei NU primesc noindex si nu intreaba baza", () => {
+  /*
+    ⚠ `/industrii/moda` A IESIT DIN LISTA pe 04.09.2026, si NU fiindca proba ar
+    fi cazut — tocmai de asta merita spus.
+
+    Proba judeca PROXY-UL, nu aplicatia: intreaba daca o cale a platformei trece
+    fara `X-Robots-Tag` si fara sa interogheze baza de magazine. Dupa stergerea
+    industriilor, `/industrii/moda` face exact asta — trece prin proxy — dar
+    aplicatia din spate raspunde 410 cu `x-robots-tag: noindex`. Randul ar fi
+    ramas VERDE afirmand, prin numele testului, ca adresa „ramane indexabila".
+
+    Exact tiparul „proba care confirma ca SCRIE ceva, nu ca FACE ceva". Aici
+    scapa mai usor: proba nu masoara statusul final, deci nu putea cadea.
+    Se scoate, nu se repara: n-are ce cauta o adresa moarta intr-o lista de
+    pagini vii. Ce se intampla CU ADEVARAT pe /industrii se probeaza in
+    `src/app/industrii/route.test.ts`.
+  */
   const CAI = ["/", "/preturi", "/contact", "/blog", "/blog/un-articol", "/blog/categorie/x", "/ajutor/setari/un-ghid",
-    "/integrari", "/integrari/fan-courier", "/vs/shopify", "/industrii/moda", "/termeni", "/cookies/setari", "/intrebari-frecvente"];
+    "/integrari", "/integrari/fan-courier", "/vs/shopify", "/termeni", "/cookies/setari", "/intrebari-frecvente"];
   for (const cale of CAI) {
     test(`${cale} ramane indexabila`, async () => {
       const inainte = interogariMagazine();

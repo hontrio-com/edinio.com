@@ -29,8 +29,10 @@ export function generateStaticParams() {
   return COMPETITORS.map((competitor) => ({ competitor: slugOf(competitor.href) }));
 }
 
-/* Doar slug-urile din lista. Pentru ce se intampla cu un slug greșit, vezi nota
-   din `industrii/[industrie]/page.tsx`. */
+/* Doar slug-urile din lista: `generateStaticParams` le prerandeaza pe cele sase,
+   iar `dynamicParams = false` face ca orice altceva sa dea 404 fara sa atinga
+   serverul. (Randul asta trimitea la o nota din `industrii/[industrie]/page.tsx`,
+   fisier sters pe 04.09.2026 — deci explicatia a fost mutata aici.) */
 export const dynamicParams = false;
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -57,7 +59,7 @@ export default async function ComparatiePage({ params }: Props) {
     /*
       ⚠ ACELAȘI CADRU CA LA CELELALTE PAGINI (`HeroPagina`), nu `PageShell`.
       Cerut de client (13.08). `PageShell` e capul scurt al paginilor în care
-      ajungi căutând ceva anume — ajutor, termeni, industrii; astea sunt pagini
+      ajungi căutând ceva anume — ajutor, termeni; astea sunt pagini
       care CONVING, deci primul ecran trebuie să fie afirmația, cu butoanele ei.
 
       ⚠ ETICHETA spune cu cine se compară, fiindcă titlul nu mai spune. Titlurile

@@ -80,8 +80,8 @@ export default function MentenantaPage() {
         cta={{ label: "Testează gratuit 15 zile", href: "/register" }}
         /*
           ⚠ AL DOILEA BUTON LIPSEA DE PE PAGINA ASTA, si numai de pe ea.
-          `HeroPagina` il primea de la toate celelalte (`/optimizare`, `/vs/*`,
-          `/industrii/*`), deci hero-ul de aici arata altfel fara niciun motiv —
+          `HeroPagina` il primea de la toate celelalte (`/optimizare`, `/vs/*`),
+          deci hero-ul de aici arata altfel fara niciun motiv —
           o scapare, nu o alegere.
 
           Si e chiar pagina unde intrebarea „cat costa?" vine cea mai firesc:

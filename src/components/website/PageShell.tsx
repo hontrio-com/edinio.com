@@ -22,8 +22,9 @@ import { FinalCta } from "./sections/FinalCta";
  * iar celelalte pagini ale site-ului se termină cu banda de final. Una care se
  * oprește la hero nu arată scurtă, arată neterminată.
  *
- * ⚠ DOUĂ DIN CELE CINCI NU MAI EXISTĂ, iar nota le numea la prezent: pe
- * 31.08.2026 `/magazin-online` a fost ȘTEARSĂ (dă 308 către `/`), iar `/blog` nu
+ * ⚠ PATRU DIN CELE CINCI NU MAI EXISTĂ, iar nota le numea la prezent: pe
+ * 31.08.2026 `/magazin-online` a fost ȘTEARSĂ (dă 308 către `/`), pe 04.09.2026
+ * `/industrii` și `/industrii/[industrie]` au fost șterse (dau 410), iar `/blog` nu
  * trece pe `PageShell`. Rândul care spunea că spre `/magazin-online` „trimit deja
  * pastila din hero și butonul din funcționalități" descria legături care nu mai
  * sunt. Numărul de pagini de atunci (unsprezece) l-am scos: nu l-am renumărat,
@@ -37,7 +38,7 @@ import { FinalCta } from "./sections/FinalCta";
  *
  * ═══ FIRIMITURILE SUNT OPȚIONALE ═══
  *
- * Paginile de la al doilea nivel în jos (`/industrii/haine`) le primesc; cele de
+ * Paginile de la al doilea nivel în jos (`/ajutor/setari/un-ghid`) le primesc; cele de
  * la primul nivel, nu — un singur „Acasă >" deasupra titlului nu spune nimic ce
  * nu spune deja sigla din bară. Ca la `PageHero`, șirul desenat și blocul
  * `BreadcrumbList` ies din ACEEAȘI listă, deci nu se pot despărți.
@@ -132,7 +133,13 @@ export function PageShell({
   );
 }
 
-/** Grilă de legături, folosită de paginile-index (industrii, comparații). */
+/*
+  Grilă de legături, folosită de paginile-index.
+
+  ⚠ AVEA DOI FOLOSITORI, A RĂMAS UNUL: `/vs`. Hub-ul `/industrii` a fost șters
+  pe 04.09.2026. Nu se topește în singurul apelant — o pagină-index nouă ar
+  rescrie altfel aceeași grilă, iar asta e chiar ce a adus componenta aici.
+*/
 export function LinkGrid({
   heading,
   links,

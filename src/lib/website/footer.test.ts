@@ -5,7 +5,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existaPaginaStatica } from "./rute-pe-disc";
 import { FOOTER_COLUMNS, SOCIAL_LINKS } from "./footer";
-import { INDUSTRIES } from "./nav";
 import { NON_STORE_SEGMENTS } from "@/lib/segmente-rezervate";
 
 /*
@@ -22,7 +21,6 @@ import { NON_STORE_SEGMENTS } from "@/lib/segmente-rezervate";
  */
 
 const AICI = dirname(fileURLToPath(import.meta.url));
-const APP = join(AICI, "..", "..", "app");
 
 /**
  * Adevarat daca App Router-ul are o pagina STATICA pentru adresa data.
@@ -67,7 +65,7 @@ test("resolverul de rute chiar poate esua", () => {
 
 test("fiecare link intern din subsol duce la o pagina care exista", () => {
   const interne = FOOTER_COLUMNS.flatMap((c) => c.links).filter(
-    (l) => !l.extern && !l.href.startsWith("/industrii/"),
+    (l) => !l.extern,
   );
   /*
     ⚠ PRAGUL A COBORAT DE LA 10 LA 9 pe 01.09.2026, si martorul a facut exact ce
@@ -93,33 +91,6 @@ test("fiecare link intern din subsol duce la o pagina care exista", () => {
   }
 });
 
-test("industriile din subsol au sluguri reale si o pagina care le serveste", () => {
-  /* `[industrie]` prinde ORICE valoare, deci proba de mai sus n-ar fi observat
-     un slug inventat: ruta ar fi raspuns, dar cu 404 din `notFound()`. Aici se
-     verifica amandoua: ca exista pagina dinamica si ca slugul e cunoscut. */
-  assert.ok(
-    existsSync(join(APP, "(website)", "industrii", "[industrie]", "page.tsx")),
-    "pagina dinamica de industrie s-a mutat sau a fost redenumita",
-  );
-
-  const cunoscute = new Set(INDUSTRIES.map((i) => i.slug));
-  const linkuri = FOOTER_COLUMNS.flatMap((c) => c.links).filter((l) =>
-    l.href.startsWith("/industrii/"),
-  );
-  /* ⚠ PATRU, nu cinci. Coloana fusese ceruta cu cinci, dar „Magazin online
-     Bijuterii" a plecat odata cu industria, la cererea clientului (13.08).
-     Numarul ramane fixat: o coloana care creste sau scade tacut e chiar lucrul
-     pe care proba il pazeste. */
-  assert.equal(linkuri.length, 4, "coloana Industrii a ramas cu 4 intrari dupa 13.08");
-
-  for (const link of linkuri) {
-    const slug = link.href.replace("/industrii/", "");
-    assert.ok(
-      cunoscute.has(slug),
-      `„${link.label}" foloseste slugul „${slug}", care nu e in INDUSTRIES`,
-    );
-  }
-});
 
 test("niciun link din subsol nu e confundat cu un magazin", () => {
   /*

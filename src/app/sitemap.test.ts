@@ -12,7 +12,6 @@ import {
 } from "./sitemap";
 import {
   COMPETITORS,
-  INDUSTRIES,
   RESOURCES,
   SOLUTION_COLUMNS,
   TOP_NAV,
@@ -25,12 +24,14 @@ import { PLATFORM_ORIGIN } from "@/lib/seo";
 
   Pe 30.08.2026 s-a descoperit ca ZECE pagini vii lipseau cu totul din sitemap:
   /blog, /integrari, /magazin-online, /optimizare, /mentenanta-gratuita, /vs,
-  /industrii, /intrebari-frecvente, /migrare si /start. Toate raspundeau 200.
+  /intrebari-frecvente si /migrare. (Enumerarea e de la 30.08.2026; intre timp
+  /start, /despre, /magazin-online au primit redirectare, iar /industrii
+  raspunde 410. Ce a ramas se probeaza mai jos, pe nume.)
 
   Nu le observase nimeni luni de zile, si e usor de inteles de ce: o pagina
   lipsa dintr-un sitemap nu strica nimic, nu da nicio eroare si nu apare in
   niciun jurnal. Doar nu e gasita. E cel mai tacut fel de defect — si lovise
-  tocmai paginile de comparatie si cele pe industrii, adica pe cele care aduc
+  tocmai paginile de comparatie, adica pe cele care aduc
   cautari cu intentie de cumparare.
 
   Probele de aici nu verifica forma listei, ci REGULA: tot ce se poate deschide
@@ -64,13 +65,6 @@ test("fiecare pagina de comparatie e anuntata", () => {
   assert.ok(ANUNTATE.has("/vs"), "lipseste indexul /vs");
   for (const c of COMPETITORS) {
     assert.ok(ANUNTATE.has(c.href), `${c.href} lipseste din sitemap`);
-  }
-});
-
-test("fiecare pagina de industrie e anuntata", () => {
-  assert.ok(ANUNTATE.has("/industrii"), "lipseste indexul /industrii");
-  for (const i of INDUSTRIES) {
-    assert.ok(ANUNTATE.has(`/industrii/${i.slug}`), `/industrii/${i.slug} lipseste din sitemap`);
   }
 });
 
@@ -261,7 +255,7 @@ test("sitemapul platformei e SINCRON, deci nu poate intreba baza de magazine", (
 
 test("sitemapul platformei pastreaza tot ce e al platformei", () => {
   const urluri = new Set(PLATFORMA.map((e) => e.url));
-  for (const cale of ["", "/preturi", "/contact", "/termeni", "/confidentialitate", "/cookies", "/gdpr", "/ajutor", "/vs", "/industrii", "/blog", "/integrari"]) {
+  for (const cale of ["", "/preturi", "/contact", "/termeni", "/confidentialitate", "/cookies", "/gdpr", "/ajutor", "/vs", "/blog", "/integrari"]) {
     assert.ok(urluri.has(`${PLATFORM_ORIGIN}${cale}`), `lipseste ${cale || "/"}`);
   }
   assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/primul-articol`), "lipseste articolul");
@@ -269,7 +263,6 @@ test("sitemapul platformei pastreaza tot ce e al platformei", () => {
   assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/autor/ana`), "lipseste autorul");
   assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/eticheta/seo`), "lipseste eticheta");
   for (const c of COMPETITORS) assert.ok(urluri.has(`${PLATFORM_ORIGIN}${c.href}`), `lipseste ${c.href}`);
-  for (const i of INDUSTRIES) assert.ok(urluri.has(`${PLATFORM_ORIGIN}/industrii/${i.slug}`), `lipseste industria ${i.slug}`);
 });
 
 test("un articol noindex nu intra, si nu trage dupa el rubrica sau autorul", () => {

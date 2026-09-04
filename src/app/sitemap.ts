@@ -16,7 +16,6 @@ import { CATEGORII_AJUTOR, TOATE_GHIDURILE } from "@/lib/website/ajutor";
 import { adresaCategorie, adresaGhid } from "@/lib/website/ajutor-cautare";
 import {
   COMPETITORS,
-  INDUSTRIES,
   RESOURCES,
   SOLUTION_COLUMNS,
   TOP_NAV,
@@ -32,7 +31,7 @@ import {
  * per cerere), si cele doua ramuri nu se ating:
  *
  *   - pe www.edinio.com: NUMAI adresele platformei — pagina de start, preturi,
- *     contact, paginile juridice, paginile de prezentare, /vs, /industrii,
+ *     contact, paginile juridice, paginile de prezentare, /vs,
  *     integrarile, centrul de ajutor cu ghidurile lui, blogul cu articole,
  *     rubrici, autori si etichete. NICIUN magazin, nicio pagina de magazin.
  *     `intrariPlatforma` e o functie SINCRONA, deci nu poate intreba baza de
@@ -108,7 +107,18 @@ export function paginiDeSite(): string[] {
   for (const t of TOP_NAV) if ("href" in t) adrese.add(t.href);
 
   adrese.add("/vs");
-  adrese.add("/industrii");
+  /*
+    ⚠ `/industrii` A PLECAT DE AICI pe 04.09.2026, odată cu cele nouă pagini.
+
+    ⚠ ȘI E ALTFEL DECÂT CELELALTE DE MAI JOS. `/magazin-online`, `/despre` și
+    `/start` au redirectare 308 către `/`; industriile răspund **410**, fiindcă
+    o pagină „Creare magazin online de piese auto" n-are echivalent la pagina de
+    start, iar o redirectare către ceva nepotrivit e tratată de Google tot ca un
+    404, doar mai încet. Motivul întreg e în `src/app/industrii/route.ts`.
+
+    ⚠ DACĂ REVIN: se pun la loc rândurile de aici ȘI se șterge `src/app/industrii/`,
+    altfel paginile noi ar răspunde 410 fără ca nimic să dea de bănuit.
+  */
   /*
     ⚠ `/magazin-online` SI `/despre` AU PLECAT DE AICI pe 01.09.2026, odata cu
     paginile. Clientul le-a cerut sterse „momentan, poate pe viitor o sa le
@@ -127,7 +137,6 @@ export function paginiDeSite(): string[] {
   */
 
   for (const c of COMPETITORS) adrese.add(c.href);
-  for (const i of INDUSTRIES) adrese.add(`/industrii/${i.slug}`);
 
   // Puse separat mai sus. Aici ar fi iesit de doua ori.
   for (const deja of PUSE_SEPARAT) adrese.delete(deja);
@@ -321,19 +330,24 @@ export function intrariPlatforma(
       Paginile de prezentare, luate din CHIAR datele meniului.
 
       ⚠ NU SE SCRIU DE MANA. Pana pe 30.08.2026, lista de deasupra se oprise la
-      paginile vechi, iar zece pagini vii lipseau cu totul din sitemap: /blog,
+      paginile vechi, iar ZECE pagini vii lipseau cu totul din sitemap: /blog,
       /integrari, /magazin-online, /optimizare, /mentenanta-gratuita, /vs,
       /industrii, /intrebari-frecvente, /migrare si /start. Toate raspundeau 200.
 
+      ⚠ TREI DIN CELE ZECE NU MAI SUNT, si numarul de mai sus ramane zece fiindca
+      povesteste ce era ATUNCI: /magazin-online si /start au fost sterse (308 catre
+      `/`), iar /industrii a fost stearsa pe 04.09.2026 si raspunde 410. Renumarate,
+      ar fi sapte — dar atunci frazei i-ar lipsi tocmai defectul pe care il descrie.
+
       Nu le-a observat nimeni fiindca o pagina lipsa dintr-un sitemap nu strica
       nimic si nu da nicio eroare — doar nu e gasita. E cel mai tacut fel de
-      defect: paginile de comparatie si cele pe industrii sunt tocmai cele care
-      aduc cautari cu intentie de cumparare, si tocmai ele nu erau anuntate.
+      defect: paginile de comparatie sunt tocmai cele care aduc cautari cu intentie
+      de cumparare, si tocmai ele nu erau anuntate.
 
       Luate din `nav.ts`, o pagina adaugata in meniu intra singura aici, si una
       scoasa iese. Aceeasi disciplina ca la centrul de ajutor, mai jos. Slug-urile
-      de competitori si de industrii vin din listele din care isi fac paginile
-      `generateStaticParams`, deci nu pot ramane in urma.
+      de competitori vin din lista din care isi face pagina `generateStaticParams`,
+      deci nu pot ramane in urma.
 
       ⚠ FARA `lastModified`, SI ASTA E O ALEGERE, NU O SCAPARE — vezi nota de
       deasupra: o data inventata pe 23 de adrese ieftineste adevarul de pe

@@ -6,7 +6,6 @@ import {
   SOLUTION_COLUMNS,
   RESOURCES,
   COMPETITORS,
-  INDUSTRY_LINKS,
   SOLUTION_FEATURED,
   COMPARE_FEATURED,
   RESOURCES_FEATURED,
@@ -71,7 +70,6 @@ function toateAdresele() {
   for (const col of SOLUTION_COLUMNS) out.push(...adreseleDin("nav.ts / SOLUTION_COLUMNS", col.items));
   out.push(...adreseleDin("nav.ts / RESOURCES", RESOURCES));
   out.push(...adreseleDin("nav.ts / COMPETITORS", COMPETITORS));
-  out.push(...adreseleDin("nav.ts / INDUSTRY_LINKS", INDUSTRY_LINKS));
   out.push(...adreseleDin("nav.ts / FEATURED", [SOLUTION_FEATURED, COMPARE_FEATURED, RESOURCES_FEATURED]));
   /* ⚠ Subsolul își cheamă lista `links`, nu `items`. */
   for (const col of FOOTER_COLUMNS) out.push(...adreseleDin("footer.ts / FOOTER_COLUMNS", col.links));

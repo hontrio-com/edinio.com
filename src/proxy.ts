@@ -437,7 +437,7 @@ export async function proxy(request: NextRequest) {
    * si spre restul vitrinei merita urmate, doar indexarea e oprita.
    *
    * ⚠ NU se pune pe paginile platformei (`hotarare.fel === "nimic"`): `/`,
-   * `/preturi`, `/blog`, `/ajutor`, `/vs`, `/industrii` sunt chiar ce vrem in
+   * `/preturi`, `/blog`, `/ajutor`, `/vs` sunt chiar ce vrem in
    * Google. Proba din `src/proxy.test.ts` cade daca vreuna il primeste.
    */
   if (hotarare.fel === "noindex") raspuns.headers.set(ANTET_ROBOTS, NOINDEX_VITRINA);

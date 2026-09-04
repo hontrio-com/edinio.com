@@ -29,7 +29,7 @@ import { adresaAbsoluta, adresaRezolvata, eCaleInterna, esteEdinio } from "./adr
  * ⚠ 1. `nofollow` PE LEGĂTURILE INTERNE ANULEAZĂ MOTIVUL BLOGULUI.
  *
  * Un blog aduce vizitatori pe articole și îi trimite mai departe către paginile
- * care vând — prețuri, comparații, industrii. Legăturile alea sunt jumătate din
+ * care vând — prețuri, comparații, integrări. Legăturile alea sunt jumătate din
  * folos, iar `nofollow` le spune motoarelor să nu le urmeze. Aici, o legătură
  * internă rămâne curată; una către alt site primește `nofollow`, fiindcă nu
  * răspundem de unde duce.

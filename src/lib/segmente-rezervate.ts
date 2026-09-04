@@ -46,8 +46,21 @@ export const NON_STORE_SEGMENTS: ReadonlySet<string> = new Set([
   "confidentialitate", "start", "migrare", "demo",
   // Site de prezentare — paginile din mega menu.
   "magazin-online", "integrari", "optimizare",
-  "mentenanta-gratuita", "industrii", "vs", "ajutor", "blog",
+  "mentenanta-gratuita", "vs", "ajutor", "blog",
   "intrebari-frecvente",
+  /*
+   * ⚠ `industrii` NU MAI ARE PAGINĂ, ȘI TOCMAI DE ACEEA STĂ AICI (04.09.2026).
+   *
+   * Cele nouă pagini au fost șterse; adresa răspunde 410 din
+   * `src/app/industrii/route.ts`. Rezervarea NU e o urmă rămasă în urmă — e
+   * singurul lucru care oprește un magazin să ia slugul.
+   *
+   * Ruta de 410 nu ține locul: `rute-pe-disc.ts` caută `page.tsx`/`page.ts`, nu
+   * `route.ts`, iar proxy-ul hotărăște oricum înaintea rutei. Fără rândul ăsta,
+   * un magazin cu slugul `industrii` ar fi recunoscut ca vitrină, iar adresa ar
+   * răspunde când 410, când magazinul, după cum se nimerește.
+   */
+  "industrii",
   /*
    * ⚠ ADRESE CARE NU MAI AU PAGINA, DAR AU REDIRECTARE (04.09.2026).
    *

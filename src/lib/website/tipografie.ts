@@ -62,8 +62,11 @@ export const H1_HERO =
   "text-[38px] font-bold leading-[1.04] tracking-[-0.035em] text-balance text-ink sm:text-[56px] lg:text-[66px]";
 
 /**
- * Titlul paginilor scurte de prezentare: `/magazin-online`, `/industrii/*`,
- * `/vs`, `/blog`.
+ * Titlul paginilor scurte de prezentare: `/vs` și `/blog`.
+ *
+ * (Enumerarea avea și `/magazin-online`, ștearsă pe 01.09.2026, și `/industrii/*`,
+ * ștearsă pe 04.09.2026 — amândouă la cererea clientului. Treapta a rămas
+ * neschimbată: paginile care o folosesc sunt mai puține, nu altfel.)
  *
  * Sub el urmează o pagină construită în jurul lui, deci are voie să cântărească
  * mai mult decât treapta mică — dar nu cât un hero de campanie.

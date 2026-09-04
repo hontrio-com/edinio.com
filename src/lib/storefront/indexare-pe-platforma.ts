@@ -5,7 +5,7 @@
  * sunt noindex pe host-ul platformei si devin indexabile doar pe custom domain.
  *
  * Adica:
- *   - www.edinio.com/, /preturi, /blog/..., /ajutor/..., /vs/..., /industrii/...
+ *   - www.edinio.com/, /preturi, /blog/..., /ajutor/..., /vs/...
  *     se indexeaza: sunt ale platformei;
  *   - www.edinio.com/{slug} si TOT ce e sub el (/product/..., /magazin/...,
  *     /politici/..., paginile proprii, cautarea, previzualizarea) NU se

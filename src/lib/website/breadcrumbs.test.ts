@@ -24,8 +24,8 @@ import { SITE_URL } from "./metadata";
 
 const SIR: Firimitura[] = [
   ACASA,
-  { label: "Industrii", href: "/industrii" },
-  { label: "Piese auto" },
+  { label: "Centru de ajutor", href: "/ajutor" },
+  { label: "Primii pasi" },
 ];
 
 test("prima firimitura duce la radacina, fara slash la coada", () => {
@@ -39,12 +39,12 @@ test("ULTIMA firimitura ramane fara `item`: e pagina pe care esti deja", () => {
   const bloc = firimituriStructurate(SIR);
   const ultima = bloc.itemListElement[bloc.itemListElement.length - 1];
   assert.equal("item" in ultima, false);
-  assert.equal(ultima.name, "Piese auto");
+  assert.equal(ultima.name, "Primii pasi");
 });
 
 test("toate celelalte au adresa ABSOLUTA, nu calea relativa", () => {
   const bloc = firimituriStructurate(SIR);
-  assert.equal(bloc.itemListElement[1].item, `${SITE_URL}/industrii`);
+  assert.equal(bloc.itemListElement[1].item, `${SITE_URL}/ajutor`);
 });
 
 test("pozitiile pornesc de la 1 si merg din unu in unu", () => {

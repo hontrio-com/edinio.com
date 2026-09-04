@@ -34,25 +34,29 @@ export function Footer() {
     <footer className="border-t border-hairline bg-white">
       <div className="mx-auto max-w-[1200px] px-5 py-14 sm:px-6 lg:px-8 lg:py-16">
         {/*
-          Coloana de marcă e mai lată decât celelalte patru: ține o frază, nu o
-          listă. Pe telefon toate stau una sub alta; de la `sm` în sus, cele
-          patru liste se așază două câte două, ca să nu iasă rânduri de un cuvânt.
-        */}
-        {/*
           ⚠ Coloanele NU sunt egale, și nu din estetică.
 
-          Etichetele au lungimi foarte diferite: „Magazin online Mobilier și
-          decor" are 32 de caractere, „Integrare curieri" are 17. Cu cinci
-          coloane egale, Industrii s-ar rupe pe două rânduri la fiecare intrare,
-          iar Platformă ar sta pe jumătate goală. Fracțiile sunt calculate din
-          lățimea reală a celui mai lung text din fiecare coloană, MĂSURATĂ în
-          browser — prima încercare dăduse coloanei Contact 147px, iar
-          „Email: contact@edinio.com" (158px) se rupea pe două rânduri.
+          Etichetele au lungimi foarte diferite: „Integrare curieri" are 17
+          caractere, „Email: contact@edinio.com" are 25. Cu coloane egale, cele
+          lungi s-ar rupe pe două rânduri la fiecare intrare, iar Platformă ar sta
+          pe jumătate goală. Fracțiile sunt calculate din lățimea reală a celui
+          mai lung text din fiecare coloană, MĂSURATĂ în browser — prima încercare
+          dăduse coloanei Contact 147px, iar „Email: contact@edinio.com" (158px)
+          se rupea pe două rânduri.
 
-          Pe telefon toate stau una sub alta; de la `sm` în sus, cele patru liste
-          se așază două câte două, ca să nu iasă coloane de un cuvânt.
+          ⚠ ERAU CINCI FRACȚII PÂNĂ PE 04.09.2026: `1.25fr_0.95fr_1.1fr_1.2fr_0.95fr`.
+          A patra, `1.2fr`, era a coloanei „Industrii", plecată odată cu paginile.
+          S-a scos DOAR ea; celelalte n-au fost rebalansate, fiindcă fiecare e
+          măsurată din propriul ei text, nu din raportul cu vecinele.
+
+          Coloana de marcă rămâne cea mai lată: ține o frază, nu o listă. Pe
+          telefon toate stau una sub alta; de la `sm` în sus, marca ocupă două
+          celule și rămân TREI liste într-o grilă de două coloane, deci ultima
+          („Contact") stă singură pe rândul ei. Am cântărit alternativa — trei
+          coloane la `sm` — și e mai rea: rupe „Politica de confidențialitate"
+          pe două rânduri.
         */}
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.25fr_0.95fr_1.1fr_1.2fr_0.95fr] lg:gap-8">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.25fr_0.95fr_1.1fr_0.95fr] lg:gap-8">
           <div className="sm:col-span-2 lg:col-span-1">
             <Logo size="lg" />
             <p className="mt-4 max-w-[320px] text-[13.5px] leading-[1.6] text-ink-2">

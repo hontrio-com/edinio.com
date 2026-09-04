@@ -2,7 +2,7 @@ import { PLATFORM_ORIGIN } from "@/lib/seo";
 import { articolePublicate, categoriiBlog } from "@/lib/blog/citire";
 import { CATEGORII_AJUTOR } from "@/lib/website/ajutor";
 import { adresaCategorie } from "@/lib/website/ajutor-cautare";
-import { COMPETITORS, INDUSTRIES } from "@/lib/website/nav";
+import { COMPETITORS } from "@/lib/website/nav";
 import { anuntabil } from "@/app/sitemap";
 
 /**
@@ -65,10 +65,6 @@ export async function GET() {
     ...COMPETITORS.map((c) =>
       rand(`Edinio vs ${c.name}`, c.href, c.description),
     ),
-    "",
-    "## Pe industrii",
-    "",
-    ...INDUSTRIES.map((i) => rand(i.label, `/industrii/${i.slug}`, i.lead)),
     "",
     "## Centrul de ajutor",
     "",

@@ -3,8 +3,11 @@
  *
  * ═══ COLOANELE SUNT ALE CLIENTULUI ═══
  *
- * Cele patru coloane, ordinea lor și fiecare etichetă au fost date cuvânt cu
- * cuvânt (2026-08-09). Nu se rescriu și nu se reordonează fără să întrebi.
+ * Coloanele, ordinea lor și fiecare etichetă au fost date cuvânt cu cuvânt
+ * (2026-08-09). Nu se rescriu și nu se reordonează fără să întrebi.
+ *
+ * ⚠ ERAU PATRU, SUNT TREI din 04.09.2026: „Industrii" a plecat odată cu
+ * paginile ei, tot la cererea clientului. Vezi nota din dreptul locului gol.
  *
  * ═══ DATELE FIRMEI AU FOST SCOASE ═══
  *
@@ -75,24 +78,20 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       { label: "Întrebări frecvente", href: "/intrebari-frecvente" },
     ],
   },
-  {
-    /*
-      Adresele vin din `INDUSTRIES` (`nav.ts`), unde sunt și slug-urile folosite
-      de mega menu. Etichetele de aici sunt însă ALE CLIENTULUI, mai lungi decât
-      cele din meniu („Magazin online Haine și Modă", nu „Haine și modă"): în
-      subsol ele sunt și text de căutare, nu doar etichete de listă.
-    */
-    title: "Industrii",
-    /* ⚠ PATRU, nu cinci: „Magazin online Bijuterii" a fost scos odata cu
-       industria, la cererea clientului (13.08). Vezi nota de la
-       `MENU_INDUSTRY_SLUGS` in `nav.ts`. */
-    links: [
-      { label: "Magazin online Haine și Modă", href: "/industrii/haine" },
-      { label: "Magazin online Electronice", href: "/industrii/electronice" },
-      { label: "Magazin online Piese auto", href: "/industrii/piese-auto" },
-      { label: "Magazin online Mobilier și decor", href: "/industrii/mobila" },
-    ],
-  },
+  /*
+    ⚠ AICI ERA COLOANA „INDUSTRII", cu patru legături scrise de client:
+    „Magazin online Haine și Modă", „…Electronice", „…Piese auto" și
+    „…Mobilier și decor". A plecat pe 04.09.2026, odată cu paginile.
+
+    Adresele răspund acum 410 (`src/app/industrii/route.ts`), iar subsolul e pe
+    FIECARE pagină a site-ului: lăsată, coloana ar fi trimis patru legături
+    moarte de peste tot. Nu e o curățenie tehnică — clientul a cerut ștergerea,
+    după ce pe 30.08 ceruse tocmai păstrarea lor.
+
+    Clientul a ales ca locul să rămână gol, nu să fie umplut cu altceva. Textele
+    nu s-au rescris și nu s-au mutat: n-ar fi avut unde duce. Grila din
+    `Footer.tsx` a trecut de la cinci coloane la patru.
+  */
   {
     title: "Contact",
     links: [

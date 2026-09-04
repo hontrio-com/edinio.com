@@ -1,5 +1,7 @@
 import { PLATFORM_ORIGIN } from "@/lib/seo";
 import { firimituriJsonLd, graf, LIMBA, paginaWebJsonLd, type TipPagina } from "@/lib/storefront/date-structurate";
+import { CONTACT_FIRMA, DATE_FIRMA } from "@/lib/website/firma";
+import { SOCIAL_LINKS } from "@/lib/website/footer";
 
 /**
  * Datele structurate ale site-ului de prezentare edinio.com.
@@ -45,26 +47,43 @@ const IDENTITATE = {
   "@type": "Organization",
   "@id": ID_ORGANIZATIE,
   name: "Edinio",
-  legalName: "SC VOID SFT GAMES SRL",
-  taxID: "43474393",
+  /*
+   * ⚠ EXACT CUM SCRIE PE /termeni si in subsol. Pana pe 04.09.2026 aici era
+   * „SC VOID SFT GAMES SRL", cu un prefix „SC" care nu apare nicaieri in actele
+   * afisate pe acelasi site (`lib/website/termeni.ts`, „1. Identificarea
+   * prestatorului"), iar adresa era trunchiata si fara diacritice. Datele
+   * structurate descriu ce se vede; daca se despart de pagina, ele mint.
+   */
+  legalName: DATE_FIRMA.denumire,
+  taxID: DATE_FIRMA.cui,
   url: PLATFORM_ORIGIN,
   logo: { "@type": "ImageObject", url: `${PLATFORM_ORIGIN}/logo.png` },
   address: {
     "@type": "PostalAddress",
-    streetAddress: "Str. Progresului, Nr. 2",
-    addressLocality: "Matasari",
-    addressRegion: "Gorj",
+    streetAddress: DATE_FIRMA.strada,
+    addressLocality: DATE_FIRMA.localitate,
+    addressRegion: DATE_FIRMA.judet,
     addressCountry: "RO",
   },
-  email: "contact@edinio.com",
-  telephone: "+40750456809",
+  email: CONTACT_FIRMA.email,
+  telephone: CONTACT_FIRMA.telefon,
   contactPoint: {
     "@type": "ContactPoint",
-    email: "contact@edinio.com",
-    telephone: "+40750456809",
+    email: CONTACT_FIRMA.email,
+    telephone: CONTACT_FIRMA.telefon,
     contactType: "customer service",
     availableLanguage: "Romanian",
   },
+  /*
+   * ⚠ NUMAI PROFILE REALE, si dintr-o singura sursa cu subsolul.
+   *
+   * `sameAs` e semnalul prin care Google leaga marca de conturile ei; inventat,
+   * ar trimite catre pagini care nu ne apartin. Se ia din `SOCIAL_LINKS`, chiar
+   * lista desenata in subsol, deci un profil scos de acolo dispare si de aici.
+   * Verificate pe retele la 04.09.2026: facebook.com/edinio.ecommerce,
+   * instagram.com/edinio.romania, tiktok.com/@edinio.com.
+   */
+  sameAs: SOCIAL_LINKS.map((s) => s.href),
 };
 
 const SITE = {

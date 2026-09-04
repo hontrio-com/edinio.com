@@ -51,22 +51,18 @@ export const metadata: Metadata = {
   },
   description:
     "Creeaza un magazin online profesional fara cunostinte tehnice. Plati online, curierat, facturi si AWB-uri automate. Incepe gratuit cu Edinio.",
-  keywords: [
-    "creare magazin online",
-    "realizare magazin online",
-    "creare site magazin online",
-    "magazin online creare",
-    "creare magazin online pret",
-    "creare magazin online la cheie",
-    "creare magazin online profesional",
-    "dezvoltare magazin online",
-    "pret site magazin online",
-    "creare site online",
-    "creare site de vanzari",
-    "creeaza magazin online",
-    "platforma ecommerce romania",
-    "magazin online romania",
-  ],
+  /*
+    ⚠ `keywords` A FOST SCOS pe 04.09.2026, si NU se pune la loc.
+
+    Cele 14 expresii nu faceau nimic pentru Google (le ignora din 2009) si erau
+    un semnal de spam pentru Bing. Dar motivul principal e altul: metadata
+    radacinii se mosteneste de TOT ce randeaza aplicatia, deci expresiile de
+    marketing ale platformei ajungeau si pe domeniile proprii ale
+    comerciantilor — masurat pe bricosmart.ro, unde pagina magazinului purta
+    „creare magazin online, realizare magazin online, …".
+    ((public)/[slug]/[pageSlug]/page.tsx isi pune propriile `keywords`, ale
+    comerciantului, si nu e atins de asta.)
+  */
   authors: [{ name: "Edinio", url: SITE_URL }],
   creator: "Edinio",
   publisher: "Edinio",

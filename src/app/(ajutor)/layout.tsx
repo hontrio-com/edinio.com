@@ -9,6 +9,8 @@ import { EdinioMetaPixel } from "@/components/edinio-marketing/EdinioMetaPixel";
 import { EdinioTikTokPixel } from "@/components/edinio-marketing/EdinioTikTokPixel";
 import { BannerConsimtamant } from "@/components/edinio-marketing/BannerConsimtamant";
 import { EtichetaGoogleAds } from "@/components/edinio-marketing/EtichetaGoogleAds";
+import { identitateEdinioJsonLd } from "@/lib/website-jsonld";
+import { jsonLdSafe } from "@/lib/json-ld";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -80,6 +82,22 @@ export default function AjutorLayout({
 }) {
   return (
     <div className={`${inter.className} bg-white`}>
+      {/*
+        ⚠ IDENTITATEA, ADAUGATA PE 04.09.2026 — si merita spus ce lipsea.
+
+        Mutarea centrului de ajutor in grupul de rute `(ajutor)` (30.08.2026) l-a
+        scos de sub `(website)/layout.tsx`, singurul loc care emite nodurile
+        `Organization` si `WebSite`. Rezultatul: 416 din cele 454 de adrese ale
+        sitemapului — hub-ul, cele 9 categorii si toate cele 406 ghiduri — nu
+        spuneau NICAIERI cine le publica, iar orice `publisher: {"@id": …}` de pe
+        ele ar fi atarnat in gol. Nu cade nimic, nu se logheaza nimic: Google
+        citeste fiecare adresa separat si pur si simplu nu gaseste marca.
+
+        ⚠ NU se muta in `src/app/layout.tsx`: radacina inveleste si vitrinele
+        comerciantilor, deci Edinio ar aparea ca organizatie in datele
+        structurate ale magazinului altcuiva (nota din `website-jsonld.ts`).
+      */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(identitateEdinioJsonLd) }} />
       {/*
         ⚠ MASURAREA NOASTRA, nu a comerciantilor. Vezi
         `lib/edinio-marketing/` si granita probata in `lib/granita-tracking.test.ts`.

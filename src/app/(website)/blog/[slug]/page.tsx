@@ -14,10 +14,28 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const a = await articolDupaSlug(slug);
   if (!a) return { title: "Articol negăsit" };
 
+  /*
+    ⚠ COPERTA MERGE SI PE `twitter`, NU DOAR PE `openGraph` (04.09.2026).
+    Pana acum se scria doar `openGraph.images`, iar `twitter.images` ramanea
+    bannerul generic mostenit din radacina: masurat in productie, un articol
+    partajat pe X arata poza platformei, nu coperta lui. X citeste intai
+    `twitter:*` si cade pe `og:image` doar cand acesta LIPSESTE — prezent si
+    gresit, castiga el. Helperul le pune acum pe amandoua din acelasi camp.
+
+    Tot de aici vin si `og:type=article`, `article:published_time`,
+    `article:modified_time` si `article:section`, care lipseau cu totul.
+  */
   const meta = siteMetadata({
     title: a.seo_title?.trim() || a.title,
     description: a.seo_description?.trim() || a.excerpt || "",
     path: `/blog/${a.slug}`,
+    imagine: a.og_image_url || a.cover_url,
+    articol: {
+      publicatLa: a.published_at,
+      /* Aceeasi data ca in JSON-LD: continutul, nu atingerile administrative. */
+      modificatLa: a.content_updated_at || a.published_at,
+      rubrica: a.categorie?.name,
+    },
   });
 
   /* Adresa canonică scrisă de mână bate calea. Se folosește doar când același
@@ -27,9 +45,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   /* ⚠ `noindex` NU e o părere, e o instrucțiune. Pus, scoate pagina din Google
      complet; de aceea stă într-o bifă separată în editor, nu lângă restul. */
   if (a.noindex) meta.robots = { index: false, follow: true };
-
-  const poza = a.og_image_url || a.cover_url;
-  if (poza) meta.openGraph = { ...meta.openGraph, images: [{ url: poza }] };
 
   return meta;
 }

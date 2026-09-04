@@ -30,11 +30,19 @@ import type { GhidCuCategorie } from "./ajutor";
  *      acceptate: `Article`, `NewsArticle`, `BlogPosting`. `TechArticle` e
  *      schema.org valid, dar în afara listei.
  *   2. Forma `"@type": ["Article", "TechArticle"]` ar fi fost validă și ar fi
- *      spus amândouă — dar `areTip` din santinelă (`api/cron/santinela/route.ts`)
- *      citește `typeof n["@type"] === "string"`. Cu un array, sonda de producție
- *      ar fi devenit OARBĂ pe toate cele 406 ghiduri, fără să cadă: ar fi
- *      raportat „n-are niciun nod Article" sau, mai rău, ar fi trecut mai
- *      departe. Un tip secundar nu merită o sondă oarbă.
+ *      spus amândouă — dar `areTip` (`api/cron/santinela/route.ts:237`) citește
+ *      `typeof n["@type"] === "string"`, deci un array îi trece pe lângă ochi
+ *      fără să cadă: ar raporta „n-are niciun nod de tipul cerut" pentru un
+ *      document care îl are. Un tip secundar nu merită o unealtă oarbă.
+ *
+ *      ⚠ ȘI E O GRIJĂ PENTRU MÂINE, NU O PAGUBĂ DE AZI — o revizie a măsurat și
+ *      m-a corectat. Santinela NU cere azi nicio adresă `/ajutor`: sondele ei de
+ *      date structurate merg pe vitrine (catalog, categorie, politică, pagină
+ *      proprie), vezi `deVerificat` de pe la 1584. Ghidurile n-ar fi devenit
+ *      „oarbe", fiindcă nimeni nu se uită încă la ele. Rândul dinainte spunea
+ *      altceva. Motivul rămâne totuși bun: dacă cineva adaugă mâine ghidurile la
+ *      sondă — și e lucrul firesc de făcut — un array ar face-o oarbă din prima
+ *      zi, iar `ajutor-jsonld.test.ts` cere de aceea explicit `@type` ȘIR.
  *
  * ═══ ⚠ CE NU SE EMITE, ȘI NU DIN LENE ═══
  *

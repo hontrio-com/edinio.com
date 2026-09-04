@@ -1,5 +1,8 @@
 import { strict as assert } from "node:assert";
 import { test, describe } from "node:test";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import config from "../../next.config";
 import { bareHost, isPlatformHost, RE_GAZDA_PLATFORMA } from "./platform-hosts";
@@ -23,6 +26,8 @@ import { NON_STORE_SEGMENTS, primulSegment } from "./segmente-rezervate";
   din `next.config.ts`, nu pe o copie a ei. O redirectare noua adaugata fara
   `has`, sau catre un segment nerezervat, le face rosii.
 */
+
+const AICI = dirname(fileURLToPath(import.meta.url));
 
 /** Redirectarile chiar asa cum le da configurarea. */
 async function redirectarile() {
@@ -56,6 +61,48 @@ describe("redirectarile din next.config.ts", () => {
         gazde[0].value,
         RE_GAZDA_PLATFORMA,
         `${x.source} filtreaza dupa alta expresie de gazda decat cea din platform-hosts.ts`,
+      );
+    }
+  });
+
+  test("nicio redirectare nu fura o adresa care raspunde 410", async () => {
+    /*
+      ⚠ GOLUL ASTA A FOST GASIT DE O REVIZIE, si e cel mai usor de cazut in el.
+
+      `/industrii` a fost STEARSA pe 04.09.2026 si raspunde 410 dintr-un
+      `route.ts`. Dar `redirects()` ruleaza INAINTEA rutarii (documentat in
+      `node_modules/next/dist/docs/.../proxy.md`: „2. redirects" vine inaintea lui
+      „5. Filesystem routes"). Deci cineva care „uniformizeaza" adresa ca la
+      celelalte cinci — adaugand un rand chiar langa `/roadmap`, `/start`,
+      `/despre`, `/magazin-online`, `/index` — ar face `/industrii` sa raspunda
+      308 catre pagina de start, adica o redirectare inselatoare pe care Google o
+      trateaza tot ca pe un 404, doar mai incet.
+
+      ⚠ IAR TOATA SUITA AR FI RAMAS VERDE. `route.test.ts` cheama `GET()` direct,
+      deci tot vede 410; scanarea lui se uita in patru fisiere, iar
+      `next.config.ts` nu e printre ele; proba de mai jos cere doar ca segmentul
+      sa fie rezervat, si `industrii` CHIAR e rezervat.
+
+      Aici se inchide: o adresa care are ruta ei de 410 nu poate primi si
+      redirectare. Lista se citeste de pe disc, nu se scrie de mana — o a doua
+      adresa retrasa maine intra singura.
+    */
+    const APP = join(AICI, "..", "app");
+    const retrase = new Set<string>();
+    for (const d of readdirSync(APP, { withFileTypes: true })) {
+      if (!d.isDirectory() || d.name.startsWith("(") || d.name.startsWith("[")) continue;
+      const ruta = join(APP, d.name, "route.ts");
+      if (!existsSync(ruta)) continue;
+      if (/status:\s*410/.test(readFileSync(ruta, "utf8"))) retrase.add(d.name);
+    }
+    assert.ok(retrase.size > 0, "nu s-a gasit nicio ruta de 410 — proba ar fi vida");
+
+    for (const x of await redirectarile()) {
+      const segment = primulSegment(x.source);
+      assert.ok(
+        !retrase.has(segment),
+        `„${segment}" raspunde 410 dintr-o ruta, dar ${x.source} ii pune si o redirectare. ` +
+          "`redirects()` ruleaza INAINTEA rutarii, deci redirectarea castiga si adresa nu mai da 410.",
       );
     }
   });

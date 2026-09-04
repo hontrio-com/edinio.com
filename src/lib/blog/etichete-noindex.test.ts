@@ -58,6 +58,33 @@ describe("jumătatea de PAGINĂ: eticheta se declară noindex", () => {
     );
   });
 
+  test("atribuirea e NECONDIȚIONATĂ: se execută pe ORICE pagină a etichetei", () => {
+    /*
+      ⚠ SCANAREA DE SURSĂ CONFIRMĂ CĂ LINIA E SCRISĂ, NU CĂ SE EXECUTĂ, și aici
+      deosebirea costă. O revizie adversarială a arătat scenariul: cineva
+      hotărăște că doar paginile de la a doua încolo sunt subțiri și scrie
+      `if (pagina > 1) meta.robots = …`. Toate probele rămâneau verzi, iar cele 7
+      etichete vii — toate pe pagina 1 — se întorceau în index, moștenind
+      `index, follow` din rădăcină. Sitemapul ar fi tăcut, fiindcă jumătatea lui
+      e corectă.
+
+      Se cere deci ca atribuirea să stea singură pe rândul ei, la începutul
+      instrucțiunii: nici `if (…) meta.robots`, nici `cond && (meta.robots = …)`,
+      nici ternar.
+    */
+    const randuri = sursa.split("\n").map((r) => r.trim()).filter((r) => r.includes("meta.robots"));
+    assert.ok(randuri.length > 0, "nu mai există nicio atribuire a lui `meta.robots`");
+    for (const r of randuri) {
+      assert.ok(
+        r.startsWith("meta.robots"),
+        `atribuirea lui robots e condiționată — pagina 1 ar rămâne indexabilă: „${r}"`,
+      );
+    }
+    /* Și nicio altă cale de a o face condiționată. */
+    assert.doesNotMatch(sursa, /&&\s*\(?\s*meta\.robots/, "robots pus printr-un `&&`");
+    assert.doesNotMatch(sursa, /\?\s*\{\s*index:\s*false/, "robots pus printr-un ternar");
+  });
+
   test("nu se bizuie pe moștenire și nu o șterge", () => {
     /* ⚠ În Next, cheia prezentă cu `undefined` ȘTERGE moștenirea și nu emite
        nimic — deci pagina n-ar spune nici „indexează", nici „nu indexa". */

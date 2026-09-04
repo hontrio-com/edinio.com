@@ -1,7 +1,13 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { AVERTISMENT_VS, LEGENDA_VS, TABELE_VS } from "./comparatii-vs";
 import { CULORI_MARCI } from "./versus-culori";
+
+const AICI = dirname(fileURLToPath(import.meta.url));
 
 test("fiecare platforma comparata are tabelul ei", () => {
   /* Cheia tabelului e chiar slug-ul din adresa. Una lipsa n-ar da nicio eroare
@@ -163,6 +169,39 @@ test("o `sursa` de rand sta pe CHIAR domeniul oficial al platformei", () => {
       );
     }
   }
+});
+
+test("`sursa` e o dovada pentru INTRETINATOR, si nu se scurge pe pagina", () => {
+  /*
+    ⚠ O REVIZIE A INTREBAT DE CE EXISTA UN CAMP PE CARE NIMENI NU-L CITESTE, si
+    intrebarea era buna: un camp declarat, tipat si probat, dar nerandat, arata
+    exact ca o cablare uitata. Nu e — e hotararea proprietarului din 04.09,
+    scrisa in `comparatii-vs.ts` la `cartum`: dovezile stau IN COD, fiindca doua
+    dintre ele CONTRAZIC chiar randul de langa care ar fi aparut.
+
+    Fara randul asta, hotararea traieste doar intr-un comentariu. Cu el, cine o
+    schimba e trimis inapoi la nota, sa schimbe si nota. Ce nu se poate intampla
+    e sa se schimbe TACUT.
+
+    ⚠ Se citeste cu comentariile scoase: chiar nota de mai sus scrie „sursa".
+  */
+  const TABEL = join(AICI, "..", "..", "components", "website", "sections", "TabelVersus.tsx");
+  const sursa = readFileSync(TABEL, "utf8")
+    .replace(/\r\n/g, "\n")
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
+
+  /* Proba nu e vida: fisierul chiar e cel care deseneaza tabelul. */
+  assert.match(sursa, /rand\.criteriu/, "nu mai e componenta care randeaza randurile");
+
+  assert.doesNotMatch(
+    sursa,
+    /\.sursa\b/,
+    "TabelVersus a inceput sa afiseze `sursa`. Daca e o hotarare, schimb-o si in nota " +
+      "de la `RandVs.sursa` din comparatii-vs.ts si in nota de la `cartum` — acolo scrie " +
+      "de ce doua dintre dovezile de azi contrazic chiar randul de langa care ar aparea.",
+  );
 });
 
 test("regula de sursa chiar poate cadea", () => {

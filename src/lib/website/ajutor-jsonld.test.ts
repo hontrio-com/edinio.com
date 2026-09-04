@@ -100,6 +100,21 @@ describe("categoriile", () => {
 });
 
 describe("ghidurile", () => {
+  test("graful unui ghid are EXACT un nod, si acela e Article", () => {
+    /*
+      ⚠ RESTUL PROBELOR DIN BLOCUL ASTA IAU `noduri(...)[0]` SI IGNORA CE URMEAZA.
+      O revizie adversariala a masurat urmarea: un `ghidJsonLd` care ar adauga un
+      `BreadcrumbList` in graf trece toate cele cinci — adica fiecare din cele 406
+      pagini de ghid ar ajunge cu DOUA noduri de firimituri in acelasi document,
+      cuvant cu cuvant defectul pe care chiar acest commit il repara pe /preturi si
+      /contact. Hub-ul si categoriile erau aparate cu egalitate de lista intreaga;
+      ghidurile nu.
+    */
+    for (const g of TOATE_GHIDURILE.slice(0, 50)) {
+      assert.deepEqual(tipurile(ghidJsonLd(g)), ["Article"], `${g.slug}: alt graf decat un singur Article`);
+    }
+  });
+
   test("toate cele 406 sunt `Article`, cu `@type` ȘIR", () => {
     /*
       ⚠ ȘIR, NU ARRAY, și e o alegere măsurată: `areTip` din santinelă citește

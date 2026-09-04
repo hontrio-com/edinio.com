@@ -32,9 +32,14 @@ import {
  * Fiecare panou are aceeasi impartire: continut la stanga, un panou de
  * promovare la dreapta.
  *
- * ⚠ INDUSTRIILE AU IESIT DIN MENIU, si de pe desktop, si de pe telefon. Paginile
- * raman si raman legate din subsol, care e pe fiecare pagina, deci n-au ramas
- * orfane pentru Google.
+ * ⚠ INDUSTRIILE AU IESIT DE TOT. Pe 30.08 au iesit din meniu — si de pe desktop,
+ * si de pe telefon — dar paginile traiau mai departe, legate din subsol. Pe
+ * 04.09.2026 au fost STERSE: adresele lor raspund acum `410 Gone` din
+ * `src/app/industrii/`, nu mai sunt in sitemap si nici in subsol.
+ *
+ * ⚠ Randul de mai sus a spus pana azi ca „paginile raman si raman legate din
+ * subsol". Ramasese adevarat cinci zile. Un comentariu care minte e mai rau
+ * decat unul care lipseste: cine il citeste construieste pe el.
  */
 
 /** Impartirea comuna: continut la stanga, promovare la dreapta. */

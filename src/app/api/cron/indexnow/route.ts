@@ -61,36 +61,72 @@ export async function GET(req: NextRequest) {
   const articole = await toateArticolelePublicate();
   const dinSitemap = intrariPlatforma(articole);
 
-  /* Ce am anuntat pana acum. Tabela e mica (cate un rand pe adresa), deci se
-     citeste intreaga; daca vreodata creste peste plafonul tacut al lui PostgREST,
-     verificarea de mai jos o spune in loc s-o ascunda. */
-  const { data: dejaBrut, error } = await supabase
-    .from("indexnow_trimise")
-    .select("url, lastmod")
-    .limit(5000);
-  if (error) {
-    await logError({
-      action: "indexnow.citire",
-      message: `Nu pot citi ce s-a anuntat deja: ${error.message}`,
-      severity: "error",
-    });
-    return NextResponse.json({ error: "citire" }, { status: 500 });
-  }
-  const deja = (dejaBrut ?? []) as Anuntata[];
-  if (deja.length >= 5000) {
-    await logError({
-      action: "indexnow.plafon",
-      message: "Tabela `indexnow_trimise` a atins plafonul de citire (5000). " +
-        "Se citeste in felii sau se curata, altfel adrese vechi par neanuntate si se retrimit.",
-      severity: "warning",
-    });
+  /*
+    Ce am anuntat pana acum.
+
+    ⚠ SE CITESTE IN FELII, SI NU E O PRECAUTIE — e reparatia unui defect care ar
+    fi lovit sigur. Aici statea `.select(...).limit(5000)`, iar PostgREST taie
+    TACIT la propriul lui plafon de 1000 de randuri: de la al 1001-lea, restul
+    adreselor ar fi lipsit din `stiute`, `adreseDeAnuntat` le-ar fi socotit NOI
+    si le-ar fi retrimis la fiecare rulare, la nesfarsit — chiar drumul catre
+    429 impotriva caruia exista tabela. Randurile nu se sterg niciodata, deci
+    pragul nu era ipotetic, doar amanat: azi sunt 439.
+
+    ⚠ Iar alarma gandita pentru exact acest caz (`deja.length >= 5000`) era COD
+    MORT: lungimea nu putea trece de 1000. O paza care nu se poate aprinde e mai
+    rea decat niciuna, fiindca linisteste.
+
+    ⚠ CU `order`, nu fara. Fara o ordonare stabila, feliile se pot suprapune sau
+    sari randuri intre ele — aceeasi capcana ca la orice paginare pe o multime
+    care se schimba. `url` e cheia primara, deci ordinea e totala si stabila.
+  */
+  const PE_FELIE = 1000;
+  const deja: Anuntata[] = [];
+  for (let de_la = 0; ; de_la += PE_FELIE) {
+    const { data, error } = await supabase
+      .from("indexnow_trimise")
+      .select("url, lastmod")
+      .order("url", { ascending: true })
+      .range(de_la, de_la + PE_FELIE - 1);
+    if (error) {
+      await logError({
+        action: "indexnow.citire",
+        message: `Nu pot citi ce s-a anuntat deja: ${error.message}`,
+        details: { de_la },
+        severity: "error",
+      });
+      return NextResponse.json({ error: "citire" }, { status: 500 });
+    }
+    const felie = (data ?? []) as Anuntata[];
+    deja.push(...felie);
+    if (felie.length < PE_FELIE) break;
+    /* Plasa impotriva unei bucle fara sfarsit, daca vreodata `range` inceteaza
+       sa mai avanseze. 200 de felii = 200.000 de adrese, mult peste orice. */
+    if (deja.length > 200 * PE_FELIE) {
+      await logError({
+        action: "indexnow.felii",
+        message: `Citirea a trecut de ${deja.length} de randuri fara sa se termine — ma opresc.`,
+        severity: "error",
+      });
+      break;
+    }
   }
 
   const deTrimis = adreseDeAnuntat(dinSitemap, deja);
   if (deTrimis.length === 0) return NextResponse.json({ trimise: 0 });
 
-  /* Un singur lot pe rulare. Cronul se intoarce peste cateva minute; graba ar
-     insemna mai multe cereri intr-o secunda, adica drumul catre 429. */
+  /*
+    Un singur lot pe rulare: `MAXIM_PE_CERERE` = 100 adrese, desi protocolul
+    ingaduie 10.000. Graba ar insemna mai multe cereri intr-o secunda, adica
+    drumul catre 429.
+
+    ⚠ CRONUL SE INTOARCE PESTE O ORA, nu „peste cateva minute" cum scria pana
+    azi — `vercel.json` il programeaza din ora in ora, la minutul 23. O revizie
+    a prins randul. Deosebirea conteaza fiindca ea da viteza de golire: la
+    100 pe ora, o coada de 1.000 de adrese se scurge in ~10 ore, nu in ~10
+    minute. E indeajuns pentru un site care creste cu cateva pagini pe zi, si de
+    stiut daca vreodata se publica un val mare deodata.
+  */
   const lot = deTrimis.slice(0, MAXIM_PE_CERERE);
 
   let cod = 0;

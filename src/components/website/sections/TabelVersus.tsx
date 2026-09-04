@@ -161,12 +161,23 @@ export function TabelVersus({ cheie }: { cheie: VersusKey }) {
           */}
           <p className="mt-1">{AVERTISMENT_VS}</p>
           {/*
-            ⚠ CÂND A FOST VERIFICAT, ȘI DE UNDE.
+            ⚠ „DIN", NU „VERIFICAT LA" — ȘI ASTA E O CORECTURĂ, NU O NUANȚĂ.
 
-            Avertismentul de deasupra spune că lucrurile se schimbă; rândul ăsta
-            spune CÂND ne-am uitat ultima oară și UNDE, ca cititorul să poată
-            verifica singur. O publicitate comparativă care nu-și arată sursa cere
-            să fie crezută pe cuvânt.
+            Prima scriere spunea „Verificat la 14 august 2026, pe site-ul oficial
+            Cartum." O revizie adversarială a arătat ce iese din asta: pe
+            /vs/cartum, fraza stă la câțiva pixeli sub două rânduri pe care CHIAR
+            fișierul de date le notează ca fiind contrazise de site-ul lor
+            (`comparatii-vs.ts`, nota din dreptul lui `cartum`) — deci pagina
+            afirma o verificare tocmai acolo unde nu s-a făcut una.
+
+            Iar antetul aceluiași fișier o spune limpede: data e a PDF-ului
+            clientului, nu a unei reverificări făcute de noi. O pagină nu are voie
+            să afirme mai mult decât știe fișierul din care se hrănește.
+
+            Acum spune exact ce e adevărat pentru toate șase: DE CÂND sunt
+            afirmațiile, și unde se poate uita cititorul singur. Când cineva chiar
+            reverifică o platformă și mută data ei, fraza rămâne adevărată — doar
+            devine mai proaspătă.
 
             ⚠ Spațiul dinaintea legăturii e scris ca `{" "}`, nu lăsat la capăt de
             rând: JSX înghite spațiul de dinaintea unei expresii puse pe rândul
@@ -174,14 +185,14 @@ export function TabelVersus({ cheie }: { cheie: VersusKey }) {
             nu cade.
           */}
           <p className="mt-1">
-            Verificat la {dataRo(tabel.verificatLa)}, pe{" "}
+            Afirmațiile despre {marca.nume} sunt din {dataRo(tabel.verificatLa)}. Le poți verifica pe{" "}
             <a
               href={tabel.siteOficial}
               rel="nofollow noopener noreferrer"
               target="_blank"
               className="underline underline-offset-2 hover:text-ink"
             >
-              site-ul oficial {marca.nume}
+              site-ul lor oficial
             </a>
             .
           </p>

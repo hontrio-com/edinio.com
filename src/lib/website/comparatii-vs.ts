@@ -69,6 +69,17 @@ export interface RandVs {
   /**
    * Adresa de pe site-ul LOR care susține valoarea din coloana din dreapta.
    *
+   * ⚠ NU AJUNGE PE PAGINĂ, ȘI E O HOTĂRÂRE, nu o cablare uitată. Câmpul e o
+   * dovadă pentru OMUL CARE ÎNTREȚINE tabelul, nu pentru cititor: cine mută un
+   * rând peste șase luni vede de unde venea cel vechi. Vezi nota de la `cartum`
+   * pentru de ce nu se arată — o sursă care contrazice chiar rândul de lângă ea
+   * i-ar arăta cititorului contradicția în loc s-o închidă.
+   *
+   * O probă din `comparatii-vs.test.ts` ține hotărârea asta legată de cod: dacă
+   * cineva o schimbă și chiar afișează sursa, proba cade și îl trimite aici,
+   * să schimbe și nota. Ce nu se poate întâmpla e să se schimbe TĂCUT — nici
+   * într-o parte, nici în cealaltă.
+   *
    * ⚠ OPȚIONALĂ, ȘI RARĂ DINADINS. Un model care cere o sursă pe fiecare din
    * cele 65 de rânduri n-ar fi întreținut de nimeni — iar un câmp obligatoriu
    * neîntreținut se umple cu adrese de complezență, care sunt mai rele decât

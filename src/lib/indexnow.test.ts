@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test, describe } from "node:test";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,6 +28,14 @@ import {
 */
 
 const AICI = dirname(fileURLToPath(import.meta.url));
+
+/** Sursa fara comentarii, ca proba sa se agate de cod, nu de vorbele despre cod. */
+function faraComentarii(cale: string): string {
+  return readFileSync(cale, "utf8")
+    .replace(/\r\n/g, "\n")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
+}
 
 describe("poarta: ce NU poate ieși niciodată", () => {
   test("o adresă de pe alt domeniu e refuzată, chiar dacă i se dă la intrare", () => {
@@ -59,13 +67,52 @@ describe("poarta: ce NU poate ieși niciodată", () => {
       Rândul de mai jos ține cele două legate: dacă cineva ar începe să
       construiască adresele de mână, ar trebui să treacă pe aici.
     */
-    const sursa = readFileSync(join(AICI, "..", "app", "api", "cron", "indexnow", "route.ts"), "utf8");
+    /*
+      ⚠ SURSA SE CITEȘTE FĂRĂ COMENTARII, ȘI AM AJUNS AICI PRINS ÎN FLAGRANT.
+
+      Prima scriere făcea `assert.match(sursa, /intrariPlatforma\(/)` pe sursa
+      BRUTĂ — iar blocul de comentariu din capul cronului conține chiar fraza
+      „Adresele vin din `intrariPlatforma()`". Deci potrivirea venea din
+      COMENTARIU. Cineva care ar fi înlocuit apelul cu
+      `articole.map((a) => ({ url: PLATFORM_ORIGIN + "/" + a.slug }))` — mișcarea
+      ieftină și evidentă — ar fi trecut verde, iar cronul ar fi POSTat la Bing
+      adrese construite de mână, adică exact clasa `www.edinio.com/{slug}` care
+      poartă `noindex`.
+
+      Chiar tiparul pe care proba asta îl apără în altă parte, în propria mea
+      probă. De aceea ultimul test din fișier verifică unealta.
+    */
+    const sursa = faraComentarii(join(AICI, "..", "app", "api", "cron", "indexnow", "route.ts"));
     assert.match(sursa, /intrariPlatforma\(/, "cronul nu mai ia adresele din sitemapul platformei");
-    assert.doesNotMatch(
-      sursa.replace(/\/\*[\s\S]*?\*\//g, ""),
-      /PLATFORM_ORIGIN\s*\}?\s*[`"']?\s*\/\$\{/,
-      "cronul construiește adrese de mână în loc să le ia din sitemap",
-    );
+    /*
+      ⚠ ȘI NU CONSTRUIEȘTE ADRESE DE MÂNĂ. Tiparul acoperă cele trei forme prin
+      care s-ar face: șablon cu accente grave, concatenare cu `+`, și `new URL`.
+      Îngust pe una singură, ar fi lăsat celelalte două să treacă.
+    */
+    for (const [nume, tipar] of [
+      ["șablon", /PLATFORM_ORIGIN\s*\}\s*\//],
+      ["concatenare", /PLATFORM_ORIGIN\s*\+/],
+      ["new URL", /new URL\([^)]*PLATFORM_ORIGIN/],
+    ] as [string, RegExp][]) {
+      assert.doesNotMatch(sursa, tipar, `cronul construiește adrese de mână (${nume}) în loc să le ia din sitemap`);
+    }
+  });
+
+  test("uneltele testului de mai sus chiar pot cădea", () => {
+    /* Fără rândurile astea, scanarea ar fi putut deveni tăcută — sau se agăța
+       iar de un comentariu, cum a făcut prima oară. */
+    const scoate = (t: string) =>
+      t.replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
+    assert.doesNotMatch(scoate("/* Adresele vin din `intrariPlatforma()` */"), /intrariPlatforma\(/, "se agață de comentariu");
+    assert.match(scoate("const x = intrariPlatforma(articole);"), /intrariPlatforma\(/, "nu prinde apelul adevărat");
+    for (const forma of [
+      "url: `${PLATFORM_ORIGIN}/blog/${a.slug}`",
+      'url: PLATFORM_ORIGIN + "/" + a.slug',
+      "url: new URL(a.slug, PLATFORM_ORIGIN).href",
+    ]) {
+      const prins = [/PLATFORM_ORIGIN\s*\}\s*\//, /PLATFORM_ORIGIN\s*\+/, /new URL\([^)]*PLATFORM_ORIGIN/].some((t) => t.test(forma));
+      assert.ok(prins, `forma de construire de mână nu e prinsă: ${forma}`);
+    }
   });
 
   test("fișierul-cheie e pe o cale REZERVATĂ, nu pe un segment oarecare", () => {
@@ -80,6 +127,33 @@ describe("poarta: ce NU poate ieși niciodată", () => {
       NON_STORE_SEGMENTS.has(segment),
       `„${segment}" nu e rezervat: proxy-ul îl va căuta în baza de magazine la fiecare cerere`,
     );
+  });
+
+  test("la calea aia CHIAR stă o rută, și ea chiar servește cheia", () => {
+    /*
+      ⚠ GOLUL ĂSTA A FOST GĂSIT DE O REVIZIE, și e cel mai tăcut din tot fișierul.
+      `CALE_CHEIE` era legată de `NON_STORE_SEGMENTS` și de `keyLocation`, dar de
+      NICIUN FIȘIER. Adică cele două jumătăți se puteau despărți fără ca nimic să
+      cadă: cine redenumește dosarul rutei (sau îl mută sub un grup) lasă
+      `keyLocation` arătând către o adresă care dă 404.
+
+      ⚠ IAR EȘECUL E INVIZIBIL DIN AFARĂ. Bing nu ne spune nimic: cronul trimite,
+      primește `403 key validation failed`, îl notează în jurnal, iar site-ul
+      merge mai departe fără să anunțe nimic zile la rând. Nici măcar nu s-ar
+      vedea ca o pagină stricată — adresa aia n-are legături către ea.
+
+      Se cere deci fișierul pe disc, chiar la calea din constantă, și se cere să
+      fie ruta cheii, nu un `route.ts` oarecare nimerit acolo.
+    */
+    const dosar = join(AICI, "..", "app", CALE_CHEIE.replace(/^\//, ""));
+    const ruta = join(dosar, "route.ts");
+    assert.ok(
+      existsSync(ruta),
+      `nu există ${ruta}: \`keyLocation\` arată către o adresă fără rută, deci Bing va da 403 la fiecare trimitere`,
+    );
+    const sursa = readFileSync(ruta, "utf8");
+    assert.match(sursa, /export\s+async\s+function\s+GET/, "ruta cheii nu mai răspunde la GET");
+    assert.match(sursa, /\bcheia\s*\(/, "ruta de la calea cheii nu mai servește cheia");
   });
 });
 

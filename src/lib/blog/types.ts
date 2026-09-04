@@ -109,6 +109,10 @@ export interface ArticolBlog {
    * citeaza pasaje scoase din pagina; un paragraf care spune „dupa cum am
    * aratat mai sus" nu poate fi citat singur, deci nu e citat deloc. Regula
    * practica: daca il citesti fara restul articolului si nu intelegi, nu e bun.
+   *
+   * ⚠ Formularea de mai sus spune ce NU poate fi citat, si atat: nimeni nu
+   * garanteaza ca un anume format CHIAR e citat. O nota care ar promite asta
+   * s-ar transforma in asteptare, iar asteptarea in reprosuri.
    */
   answer_summary: string | null;
 

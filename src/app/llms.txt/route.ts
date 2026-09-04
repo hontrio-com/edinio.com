@@ -17,6 +17,11 @@ import { anuntabil } from "@/app/sitemap";
  * Convenția e llmstxt.org: markdown simplu, un titlu, o frază care spune ce e
  * site-ul, apoi secțiuni cu legături adnotate.
  *
+ * ⚠ NU AJUTĂ LA GOOGLE, și e bine spus limpede: în 2026 Google a clarificat că
+ * `llms.txt` nu e folosit de Search și nu aduce nici avantaj, nici dezavantaj de
+ * clasare. Fișierul rămâne pentru celelalte sisteme care aleg să-l consume. Cine
+ * îl măsoară în poziții Google nu va găsi nimic — și nu fiindcă e scris prost.
+ *
  * ⚠ NU ÎNLOCUIEȘTE CONȚINUTUL DIN PAGINI. Un model care ajunge direct pe un
  * articol nu trece pe aici niciodată. Fișierul ajută la alegerea drumului, nu
  * la citit — de asta munca adevărată tot în pagini stă: text randat la server,

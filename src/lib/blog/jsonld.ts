@@ -121,6 +121,13 @@ export function articolJsonLd(a: ArticolIntreg): object {
   /*
     ⚠ `FAQPage` NUMAI CÂND ÎNTREBĂRILE SUNT ȘI ÎN PAGINĂ.
 
+    ⚠ ȘI NU MAI ADUCE NIMIC ÎN GOOGLE (din 7 mai 2026 rezultatele îmbogățite de
+    tip FAQ au fost scoase complet; din august 2023 erau deja restrânse la
+    site-uri de stat și de sănătate). Nodul rămâne fiindcă e adevărat semantic și
+    fiindcă markup-ul nefolosit nu face rău — nu fiindcă ar aduce ceva în SERP.
+    Cine îl scoate vreodată nu strică nimic; cine îl păstrează așteptând un
+    câștig în Google va aștepta degeaba.
+
     Regula lui Google e limpede: datele structurate descriu ce vede omul. Un
     FAQPage cu întrebări care nu apar în text e conținut ascuns, și se poate
     solda cu o sancțiune manuală pe tot domeniul. Aici nu se poate întâmpla:

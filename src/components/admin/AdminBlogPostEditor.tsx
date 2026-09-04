@@ -725,10 +725,15 @@ export function AdminBlogPostEditor({
           picioarele lui: motoarele generative citează pasaje scoase din pagină,
           iar unul care spune „după cum vom vedea" nu poate fi citat singur.
           Regula practică e scrisă chiar sub câmp, ca să n-o caute nimeni.
+
+          ⚠ ATÂT SE POATE SPUNE, ȘI NU MAI MULT. Nu există nicio garanție că un
+          anume format e citat de cineva; ce se știe e ce NU poate fi citat — un
+          paragraf care atârnă de restul textului. Câmpul ăsta apără împotriva
+          acelui lucru, nu promite celălalt.
         */}
         <Sectiune
           titlu="Răspunsul scurt"
-          lamurire="Două-trei propoziții care răspund la întrebarea articolului și se înțeleg SINGURE, fără restul textului. Se arată în capul articolului, și e bucata pe care o citează ChatGPT, Perplexity sau răspunsurile din Google. Dacă îl citești rupt de articol și nu se înțelege, nu e bun încă."
+          lamurire="Două-trei propoziții care răspund la întrebarea articolului și se înțeleg SINGURE, fără restul textului. Se arată în capul articolului. Motoarele care răspund cu text citează pasaje care se țin pe picioarele lor, iar ăsta e făcut să fie unul — nu fiindcă ne-ar promite cineva o citare. Dacă îl citești rupt de articol și nu se înțelege, nu e bun încă."
         >
           <textarea value={f.answer_summary} rows={3}
             onChange={(e) => pune("answer_summary", e.target.value)}
@@ -760,12 +765,18 @@ export function AdminBlogPostEditor({
             își scria întrebările pentru un loc în Google care nu mai există,
             și apoi se întreba de ce nu apar.
 
-            Rostul lor e acum altul, și nu mai mic: sunt bucata pe care motoarele
-            care răspund cu text — ChatGPT, Perplexity, AI Overviews — o pot
-            cita întreagă, fiindcă o întrebare cu răspunsul ei se ține pe
-            picioarele ei fără restul articolului.
+            ⚠ IAR DIN 7 MAI 2026 AU DISPĂRUT COMPLET, inclusiv pentru cele două
+            categorii rămase. Nota de aici spunea încă „aproape toată lumea", ceea
+            ce era adevărat când a fost scrisă și nu mai e. Markup-ul nefolosit nu
+            face rău — Google spune limpede asta — dar nu mai aduce nimic în SERP.
+
+            ⚠ ȘI PARTEA DESPRE AI ERA PREA TARE. Scria că sunt „bucata pe care o
+            citează" motoarele generative. Nu există nicio garanție oficială că un
+            anume format e citat: ele citează pasaje care se țin pe picioarele
+            lor, iar o întrebare cu răspunsul ei ESTE un astfel de pasaj — atât se
+            poate spune, și atât se spune acum.
           */
-          lamurire="Se arată la finalul articolului ȘI pleacă în datele structurate ca FAQPage. Nu mai aduc rezultate îmbogățite în Google (au fost scoase în 2023), dar sunt exact bucata pe care ChatGPT, Perplexity sau AI Overviews o pot cita întreagă. O întrebare fără răspuns nu se salvează: o structură care promite un răspuns inexistent e mai rea decât lipsa ei."
+          lamurire="Se arată la finalul articolului ȘI pleacă în datele structurate ca FAQPage. În Google nu mai aduc nimic în plus: din august 2023 au fost restrânse la site-uri de stat și de sănătate, iar din 7 mai 2026 au dispărut complet. Rămân utile fiindcă răspund pe scurt la o întrebare adevărată — nu fiindcă ne-ar promite cineva o citare. O întrebare fără răspuns nu se salvează: o structură care promite un răspuns inexistent e mai rea decât lipsa ei."
         >
           <div className="space-y-3">
             {f.faq.map((intrebare, i) => (

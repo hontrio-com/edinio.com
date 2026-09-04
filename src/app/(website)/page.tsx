@@ -18,9 +18,9 @@ import { PLAN_LABELS, PLAN_PRICES } from "@/lib/plans";
 const PLANURI_PUBLICE = ["basic", "premium", "ultra"] as const;
 
 export const metadata: Metadata = {
-  title: "Creare magazin online rapid",
+  title: "Platformă eCommerce pentru crearea unui magazin online",
   description:
-    "Creeaza un magazin online profesional fara cunostinte tehnice. Plati online, curierat, facturi si AWB-uri automate. Incepe gratuit cu Edinio.",
+    "Creează și administrează magazinul tău online cu Edinio, platforma eCommerce românească cu integrări, automatizări și mentenanță gratuită permanentă.",
   alternates: {
     canonical: "https://www.edinio.com",
   },

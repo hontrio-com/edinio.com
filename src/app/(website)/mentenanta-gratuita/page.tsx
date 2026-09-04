@@ -10,8 +10,8 @@ import { MENTENANTA_FAQ, MENTENANTA_FAQ_LEAD } from "@/lib/website/mentenanta";
 import { siteMetadata } from "@/lib/website/metadata";
 
 export const metadata: Metadata = siteMetadata({
-  title: "Mentenanta gratuita pe viata, la orice abonament",
-  description: "Actualizari, securitate, copii de siguranta si disponibilitate, incluse in orice abonament Edinio. Suport 7 zile din 7, fara costuri separate.",
+  title: "Mentenanță gratuită permanentă pentru magazin online",
+  description: "Nu plătești separat pentru mentenanță. Edinio se ocupă permanent de actualizări, securitate, remedieri și optimizarea magazinului tău online.",
   path: "/mentenanta-gratuita",
 });
 

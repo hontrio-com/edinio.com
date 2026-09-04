@@ -41,13 +41,25 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { competitor } = await params;
   const found = COMPETITORS.find((item) => slugOf(item.href) === competitor);
   if (!found) return {};
+  /*
+    ⚠ ȘABLON COMUN PENTRU METADATE, CONȚINUT INDIVIDUALIZAT. Cele două fraze de
+    mai jos sunt aceleași pe toate șase paginile, cu numele schimbat — asta e
+    cerut dinadins: intenția de căutare e identică („Edinio sau X?"), deci și
+    promisiunea din rezultate trebuie să fie. Ce rămâne DIFERIT pe fiecare
+    pagină e tot ce contează: titlul vizibil (`found.titlu`), fraza de sub el
+    (`found.lead`), tabelul din `comparatii-vs.ts` cu rândurile lui, sursele și
+    data verificării. Nimic din alea nu se uniformizează.
+
+    ⚠ `found.lead` NU MAI E DESCRIEREA. Era fraza lungă de sub titlu, aleasă
+    fiindcă e cea mai aproape de ce citește omul pe pagină; acum descrierea e
+    cerută cuvânt cu cuvânt. `lead` rămâne folosit — e chiar textul de pe pagină
+    și tot el intră în firimiturile structurate.
+  */
   return siteMetadata({
-    title: `Edinio vs ${found.name}`,
-    /* ⚠ Fraza LUNGĂ, nu rândul scurt din meniu. Cel din meniu are vreo șaizeci
-       de semne — ca descriere în rezultatele Google e subțire, iar ei o taie
-       oricum pe la 155. Asta e chiar textul de sub titlu, deci și cel mai
-       aproape de ce găsește omul pe pagină. */
-    description: found.lead,
+    title: `Edinio vs ${found.name}: care platformă eCommerce ți se potrivește?`,
+    description:
+      `Edinio sau ${found.name}? Compară costurile, integrările, mentenanța și modul de ` +
+      "administrare înainte să alegi platforma pentru magazinul tău online.",
     path: found.href,
   });
 }

@@ -10,9 +10,10 @@ import { cn } from "@/lib/utils/cn";
 import { H1_MIC } from "@/lib/website/tipografie";
 
 export const metadata: Metadata = siteMetadata({
-  title: "Centru de ajutor Edinio",
+  titluComplet: true,
+  title: "Centru de ajutor Edinio: ghiduri și tutoriale",
   description:
-    "Ghiduri pas cu pas pentru magazinul tau online: produse, comenzi, livrare, plati, facturare si design. Cauta raspunsul sau scrie-ne.",
+    "Centrul de ajutor Edinio îți oferă ghiduri pas cu pas pentru configurarea magazinului, administrarea produselor, comenzilor și integrărilor.",
   path: "/ajutor",
 });
 

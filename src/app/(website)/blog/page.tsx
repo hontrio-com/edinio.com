@@ -38,9 +38,9 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
     title:
       pagina > 1
         ? `Blog, pagina ${pagina}`
-        : "Blog: ghiduri si noutati despre vanzarea online",
+        : "Blog eCommerce: sfaturi, noutăți și tendințe",
     description:
-      "Ghiduri practice despre magazine online, curierat, facturare si vanzare in Romania, plus noutatile platformei Edinio.",
+      "Citește sfaturi practice, noutăți și tendințe despre eCommerce, magazine online, marketing, vânzare online și evoluția comerțului digital.",
     path: pagina > 1 ? `/blog?p=${pagina}` : "/blog",
   });
 

@@ -21,7 +21,7 @@ import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 export const metadata: Metadata = siteMetadata({
   title: "Drepturile GDPR",
   description:
-    "Drepturile tale privind protectia datelor personale: acces, rectificare, stergere, restrictionare, portabilitate, opozitie. Cum le exerciti si in cat timp raspundem.",
+    "Află care sunt drepturile tale privind protecția datelor personale și cum le poți exercita în relația cu Edinio, conform legislației aplicabile.",
   path: "/gdpr",
 });
 

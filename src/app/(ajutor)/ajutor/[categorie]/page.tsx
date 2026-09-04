@@ -33,7 +33,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { categorie } = await params;
   const c = CATEGORII_AJUTOR.find((x) => x.slug === categorie);
   if (!c) return {};
+  /*
+    ⚠ `titluComplet`, FIINDCA TITLUL SE TERMINA IN „Edinio". Sablonul radacinii
+    (`template: "%s | Edinio"`) i-ar fi lipit inca unul, si asa a si fost pana
+    azi: masurat pe iesirea build-ului, toate cele 415 pagini de ajutor rendau
+    „… - Centru de ajutor Edinio | Edinio". Textul NU s-a schimbat cu nimic; s-a
+    scos doar sufixul pe care sablonul il adauga peste un nume care il avea deja.
+  */
   return siteMetadata({
+    titluComplet: true,
     title: `${c.titlu} - Centru de ajutor Edinio`,
     description: c.descriere,
     path: adresaCategorie(c.slug),

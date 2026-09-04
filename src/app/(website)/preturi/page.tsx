@@ -17,9 +17,9 @@ import { paginaSiteJsonLd } from "@/lib/website-jsonld";
   restul paginilor. Textele lor raman neatinse — sunt scrise pentru cautare.
 */
 export const metadata: Metadata = siteMetadata({
-  title: "Preturi creare magazin online - de la 99 lei/luna",
+  title: "Preț creare magazin online cu platforma Edinio",
   description:
-    "Pret creare magazin online de la 99 lei/luna. Plan gratuit 15 zile, fara card. Mentenanta gratuita pe viata, integrari curierat, plati online si facturare.",
+    "Creează-ți magazinul online cu Edinio de la 99 lei/lună. Ai 15 zile gratuite, integrări incluse și mentenanță gratuită permanentă.",
   path: "/preturi",
 });
 

@@ -21,12 +21,13 @@ import { paginaSiteJsonLd } from "@/lib/website-jsonld";
   sune „de metadate": e deja lista lucrurilor care se transferă, adică exact ce
   caută cineva care scrie „migrare magazin online" în Google.
 
-  Fără diacritice, ca restul metadatelor din depozit. Textul din PAGINĂ le are.
+  ⚠ CU diacritice, de pe 04.09.2026: metadatele finale stabilite cu proprietarul
+  le au, iar sirul de aici e chiar ce se vede in rezultatele Google.
 */
 export const metadata: Metadata = siteMetadata({
-  title: "Migrare magazin online din orice platforma",
+  title: "Migrare magazin online din orice platformă",
   description:
-    "Produse, categorii, clienti, comenzi si alte date importante pot fi transferate in Edinio pentru o trecere cat mai simpla.",
+    "Treci pe Edinio fără să pornești de la zero. Transferăm produsele, categoriile, clienții și comenzile magazinului tău online.",
   path: "/migrare",
 });
 

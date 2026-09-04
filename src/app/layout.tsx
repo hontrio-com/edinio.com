@@ -46,11 +46,11 @@ const SITE_URL = "https://www.edinio.com";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Creare magazin online rapid | Edinio",
+    default: "Platformă eCommerce pentru crearea unui magazin online | Edinio",
     template: "%s | Edinio",
   },
   description:
-    "Creeaza un magazin online profesional fara cunostinte tehnice. Plati online, curierat, facturi si AWB-uri automate. Incepe gratuit cu Edinio.",
+    "Creează și administrează magazinul tău online cu Edinio, platforma eCommerce românească cu integrări, automatizări și mentenanță gratuită permanentă.",
   /*
     ⚠ `keywords` A FOST SCOS pe 04.09.2026, si NU se pune la loc.
 
@@ -82,9 +82,9 @@ export const metadata: Metadata = {
     locale: "ro_RO",
     url: SITE_URL,
     siteName: "Edinio",
-    title: "Creare magazin online rapid | Edinio",
+    title: "Platformă eCommerce pentru crearea unui magazin online | Edinio",
     description:
-      "Creeaza un magazin online profesional fara cunostinte tehnice. Plati online, curierat, facturi si AWB-uri automate. Incepe gratuit cu Edinio.",
+      "Creează și administrează magazinul tău online cu Edinio, platforma eCommerce românească cu integrări, automatizări și mentenanță gratuită permanentă.",
     images: [
       {
         url: "/og-image.png",
@@ -96,9 +96,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Creare magazin online rapid | Edinio",
+    title: "Platformă eCommerce pentru crearea unui magazin online | Edinio",
     description:
-      "Creeaza un magazin online profesional fara cunostinte tehnice. Plati online, curierat, facturi si AWB-uri automate. Incepe gratuit cu Edinio.",
+      "Creează și administrează magazinul tău online cu Edinio, platforma eCommerce românească cu integrări, automatizări și mentenanță gratuită permanentă.",
     images: ["/og-image.png"],
   },
   // Fara `alternates` implicit aici. Metadata radacinii se mosteneste intreaga

@@ -18,9 +18,9 @@ import { paginaSiteJsonLd } from "@/lib/website-jsonld";
  */
 
 export const metadata: Metadata = siteMetadata({
-  title: "Politica de cookies",
+  title: "Politica privind cookie-urile",
   description:
-    "Ce cookie-uri foloseste Edinio, de ce, cat timp si cum iti poti schimba oricand optiunile: strict necesare, functionale, analiza si marketing.",
+    "Află ce tipuri de cookie-uri folosește Edinio, în ce scop sunt utilizate și cum îți poți gestiona preferințele privind cookie-urile.",
   path: "/cookies",
 });
 

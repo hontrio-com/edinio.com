@@ -21,9 +21,9 @@ import { paginaSiteJsonLd } from "@/lib/website-jsonld";
  */
 
 export const metadata: Metadata = siteMetadata({
-  title: "Termeni si conditii",
+  title: "Termeni și condiții",
   description:
-    "Termenii si conditiile de utilizare a platformei Edinio: abonamente, plati, raspunderea comerciantului, integrari, date si incetarea contractului.",
+    "Consultă termenii și condițiile de utilizare a platformei Edinio, inclusiv regulile privind contul, abonamentul, plățile și utilizarea serviciilor.",
   path: "/termeni",
 });
 

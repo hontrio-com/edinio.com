@@ -61,6 +61,7 @@ export function siteMetadata({
   path,
   imagine,
   articol,
+  titluComplet,
 }: {
   title: string;
   description: string;
@@ -73,11 +74,28 @@ export function siteMetadata({
   imagine?: string | null;
   /** Prezent, pagina se declară `og:type=article` cu datele lui. */
   articol?: ArticolOpenGraph;
+  /**
+   * `title` e titlul ÎNTREG, nu bucata dinaintea sufixului.
+   *
+   * ⚠ EXISTĂ FIINDCĂ RĂDĂCINA PUNE UN ȘABLON. `app/layout.tsx` declară
+   * `template: "%s | Edinio"`, deci tot ce trece pe aici primește sufixul.
+   * Aproape toate titlurile îl vor — dar trei nu se termină în „| Edinio" și,
+   * lăsate pe șablon, ar fi ieșit dublate sau caraghioase:
+   *
+   *   „Contact Edinio | Suport și asistență"      -> „… | Suport și asistență | Edinio"
+   *   „Întrebări frecvente despre Edinio"          -> „… despre Edinio | Edinio"
+   *   „Centru de ajutor Edinio: ghiduri și tutoriale" -> „… tutoriale | Edinio"
+   *
+   * Cu steagul, `<title>` se declară `absolute` (Next sare peste șablon) ȘI
+   * titlul social rămâne același text — altfel `og:title` ar fi purtat sufixul
+   * pe care `<title>` tocmai l-a refuzat, adică două nume pentru aceeași pagină.
+   */
+  titluComplet?: boolean;
 }): Metadata {
   const url = `${SITE_URL}${path}`;
-  /* Același sufix ca înainte pe titlul social; titlul din `<title>` rămâne cel
-     trimis de pagină, cu șablonul rădăcinii peste el. */
-  const titluSocial = `${title} | Edinio`;
+  /* Titlul social poartă sufixul mărcii, ca `<title>`-ul de după șablon — afară
+     de titlurile care se dau întregi, unde ar fi fost un al doilea „Edinio". */
+  const titluSocial = titluComplet ? title : `${title} | Edinio`;
   const poza = imagine?.trim() || null;
   const imagini = poza ? [{ url: poza }] : [{ ...OG_IMAGINE }];
   const comun = {
@@ -90,7 +108,8 @@ export function siteMetadata({
   };
 
   return {
-    title,
+    /* `absolute` face Next sa sara peste sablonul radacinii. Vezi `titluComplet`. */
+    title: titluComplet ? { absolute: title } : title,
     description,
     alternates: { canonical: url },
     /* Cele două ramuri există fiindcă `type` e discriminantul uniunii din

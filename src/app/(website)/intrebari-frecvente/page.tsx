@@ -15,14 +15,18 @@ import { paginaSiteJsonLd } from "@/lib/website-jsonld";
   fost inlocuit integral cu cel de zece (2026-08-09), iar descrierea a ramas de
   la cel vechi. Acum enumera intrebari care chiar exista.
 
-  Fara diacritice, ca restul metadatelor din depozit. Textul din PAGINA are
+  ⚠ CU DIACRITICE, si e o schimbare de conventie (04.09.2026). Metadatele erau
+  scrise fara ele; textele finale, stabilite cu proprietarul, le au. Ce apare in
+  rezultatele Google e chiar sirul de aici, deci scris gresit s-ar fi vazut. Cine
+  adauga o pagina noua sa le puna si el. Textul din PAGINA are
   diacritice; cel care pleaca in datele structurate la fel — vezi nota din
   `faq.ts`, acolo diferenta chiar conteaza pentru Google.
 */
 export const metadata: Metadata = siteMetadata({
-  title: "Intrebari frecvente despre Edinio",
+  titluComplet: true,
+  title: "Întrebări frecvente despre Edinio",
   description:
-    "Ce este Edinio, in cat timp iti lansezi magazinul, ce integrari poti conecta, ce include mentenanta gratuita si cum anulezi abonamentul.",
+    "Află cum funcționează Edinio și găsește răspunsuri despre integrări, mentenanță, plăți, domeniu propriu și administrarea magazinului online.",
   path: "/intrebari-frecvente",
 });
 

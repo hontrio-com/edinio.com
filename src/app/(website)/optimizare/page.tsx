@@ -10,9 +10,9 @@ import { jsonLdSafe } from "@/lib/json-ld";
 import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 export const metadata: Metadata = siteMetadata({
-  title: "Optimizare: viteza, performanta si SEO",
+  title: "Magazin online rapid și optimizat SEO",
   description:
-    "Edinio optimizeaza magazinele pentru viteza, performanta si SEO, ca sa se incarce rapid si sa aiba o baza buna pentru motoarele de cautare.",
+    "Creează cu Edinio un magazin online rapid, optimizat pentru SEO, mobil și performanță, pregătit tehnic pentru Google și alte motoare de căutare.",
   path: "/optimizare",
 });
 

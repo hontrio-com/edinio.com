@@ -20,9 +20,9 @@ import { paginaSiteJsonLd } from "@/lib/website-jsonld";
  */
 
 export const metadata: Metadata = siteMetadata({
-  title: "Politica de confidentialitate",
+  title: "Politica de confidențialitate",
   description:
-    "Cum colecteaza, foloseste si protejeaza Edinio datele cu caracter personal: roluri GDPR, furnizori, temeiuri juridice, perioade de pastrare si drepturile tale.",
+    "Află cum Edinio colectează, utilizează și protejează datele cu caracter personal și ce drepturi ai privind prelucrarea datelor.",
   path: "/confidentialitate",
 });
 

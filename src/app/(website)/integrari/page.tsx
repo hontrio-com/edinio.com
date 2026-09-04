@@ -10,9 +10,9 @@ import { jsonLdSafe } from "@/lib/json-ld";
 import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 export const metadata: Metadata = siteMetadata({
-  title: "Integrari: curieri, plati, facturare si marketing",
+  title: "Integrări magazin online pentru curieri, plăți și facturare",
   description:
-    "Peste 25 de integrari pregatite: curierat, plati online, facturare SmartBill si Oblio, e-mail marketing, Google si marketplace-uri.",
+    "Edinio îți permite să conectezi rapid curieri, plăți, facturare, marketplace-uri și servicii de marketing pentru magazinul tău online.",
   path: "/integrari",
 });
 

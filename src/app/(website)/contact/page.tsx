@@ -24,8 +24,10 @@ import { paginaSiteJsonLd } from "@/lib/website-jsonld";
   din aceeasi sursa ca pagina.
 */
 export const metadata: Metadata = siteMetadata({
-  title: "Contact - suport creare magazin online",
-  description: `Scrie-ne sau suna-ne. Asistenta ${PROGRAM.zile.toLowerCase()}, intre ${PROGRAM.ore}. Raspundem la orice intrebare despre magazinul tau online.`,
+  titluComplet: true,
+  title: "Contact Edinio | Suport și asistență",
+  description:
+    "Ai nevoie de ajutor? Contactează echipa Edinio pentru suport, configurare, integrări sau întrebări despre magazinul tău online.",
   path: "/contact",
 });
 

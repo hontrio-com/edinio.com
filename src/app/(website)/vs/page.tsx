@@ -6,9 +6,9 @@ import { jsonLdSafe } from "@/lib/json-ld";
 import { paginaSiteJsonLd } from "@/lib/website-jsonld";
 
 export const metadata: Metadata = siteMetadata({
-  title: "Compara Edinio cu alte platforme de eCommerce",
+  title: "Compară Edinio cu alte platforme eCommerce",
   description:
-    "Edinio fata de Shopify, Cartum, Wix, WooCommerce, OpenCart si Magento: costuri, integrari romanesti, editor si intretinere.",
+    "Compară Edinio cu alte platforme eCommerce după costuri, funcționalități, integrări și mentenanță, ca să alegi soluția potrivită magazinului tău.",
   path: "/vs",
 });
 

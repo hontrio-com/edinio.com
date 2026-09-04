@@ -3,6 +3,7 @@ import { articolePublicate, categoriiBlog } from "@/lib/blog/citire";
 import { CATEGORII_AJUTOR } from "@/lib/website/ajutor";
 import { adresaCategorie } from "@/lib/website/ajutor-cautare";
 import { COMPETITORS, INDUSTRIES } from "@/lib/website/nav";
+import { anuntabil } from "@/app/sitemap";
 
 /**
  * `/llms.txt` — cartea de vizită a site-ului pentru motoarele care răspund cu text.
@@ -33,10 +34,11 @@ export async function GET() {
     categoriiBlog(),
   ]);
 
-  /* Ca la sitemap: un articol pe care l-am scos dinadins din Google n-are ce
-     căuta nici în lista pe care o dăm motoarelor care răspund cu text. Ar fi
-     aceeași contradicție, spusă altui public. */
-  const articole = toate.filter((a) => !a.noindex);
+  /* Ca la sitemap, si CHIAR cu regula lui (`anuntabil`): un articol pe care
+     l-am scos dinadins din Google, sau al carui original e publicat pe alt
+     site, n-are ce căuta nici în lista pe care o dăm motoarelor care răspund cu
+     text. Ar fi aceeași contradicție, spusă altui public. */
+  const articole = toate.filter(anuntabil);
 
   const bucati: string[] = [
     "# Edinio",

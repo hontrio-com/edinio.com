@@ -96,7 +96,8 @@ function homepageNoindex(row: { store_settings?: unknown }): boolean {
  *
  * Cele patru adaugate cu mana la sfarsit sunt paginile-index si cele care nu
  * stau in meniu, dar sunt vii si indexabile. `/` si `/ajutor` ies, fiindca sunt
- * puse separat mai sus, cu prioritatile lor.
+ * puse separat mai sus (pana pe 04.09.2026 aveau si prioritati proprii; azi
+ * doar ordinea difera, si nici ea nu conteaza pentru Google).
  */
 export const PUSE_SEPARAT = ["/", "/ajutor", "/preturi", "/contact"];
 
@@ -128,7 +129,7 @@ export function paginiDeSite(): string[] {
   for (const c of COMPETITORS) adrese.add(c.href);
   for (const i of INDUSTRIES) adrese.add(`/industrii/${i.slug}`);
 
-  // Puse separat mai sus, cu alta prioritate. Aici ar fi iesit de doua ori.
+  // Puse separat mai sus. Aici ar fi iesit de doua ori.
   for (const deja of PUSE_SEPARAT) adrese.delete(deja);
 
   return [...adrese].sort();
@@ -215,11 +216,29 @@ export function dataTaxonomiei(
 export type ArticolPentruSitemap = {
   slug: string;
   noindex?: boolean | null;
+  /** Scris de mana cand textul e republicat de pe alt site. Vezi `anuntabil`. */
+  canonical_url?: string | null;
   content_updated_at?: string | null;
   published_at?: string | null;
   categorie?: { slug: string; content_updated_at?: string | null } | null;
   autor?: { slug: string; content_updated_at?: string | null } | null;
 };
+
+/**
+ * Articolul poate fi ANUNTAT ca adresa a noastra?
+ *
+ * Doua feluri de „nu", si amandoua inseamna acelasi lucru pentru un sitemap:
+ *   - `noindex` — pagina cere sa nu fie indexata; un sitemap care o anunta
+ *     trimite doua instructiuni care se bat cap in cap;
+ *   - `canonical_url` — pagina spune ca originalul e in ALTA PARTE. Anuntata
+ *     aici, i-am cere lui Google sa indexeze o adresa care il trimite imediat
+ *     altundeva.
+ *
+ * ⚠ Aceeasi regula o citeste si `llms.txt`, ca sa nu se desparta.
+ */
+export function anuntabil(a: { noindex?: boolean | null; canonical_url?: string | null }): boolean {
+  return !a.noindex && !a.canonical_url?.trim();
+}
 
 /** O eticheta de blog folosita de macar un articol publicat, cu data ultimului. */
 export type EtichetaPentruSitemap = { slug: string; ultima?: string | Date | null };
@@ -249,7 +268,7 @@ export function intrariPlatforma(
     Găsit chiar la proba de punere în funcțiune (30.08.2026): articolul de test
     era `noindex` și apărea totuși în sitemap.
   */
-  const articoleBlog = toateArticolele.filter((a) => !a.noindex);
+  const articoleBlog = toateArticolele.filter(anuntabil);
   const categoriiCuArticole = [
     ...new Set(articoleBlog.map((a) => a.categorie?.slug).filter((s): s is string => !!s)),
   ];
@@ -276,17 +295,27 @@ export function intrariPlatforma(
     cod si se schimba la desfasurare; n-avem de unde sti cand, fara sa cladim un
     sistem doar pentru asta.
 
-    `changeFrequency` ramane: e o sugestie despre viitor, nu o afirmatie despre
-    trecut. Ce ARE data adevarata — articole, rubrici, autori, etichete — si-o
-    pastreaza, mai jos.
+    ⚠ SI NICI `changeFrequency`, NICI `priority` — SCOASE PE 04.09.2026.
+
+    Randul de deasupra spunea „`changeFrequency` ramane: e o sugestie despre
+    viitor". Sugestia n-are cui sa-i foloseasca: Google a spus limpede ca
+    ignora amandoua campurile, iar Bing ignora `priority` si trateaza
+    `changefreq` cel mult ca indiciu. Erau pe toate cele 454 de adrese ale
+    platformei si pe toate cele cateva mii ale fiecarui magazin, adica vreo 40%
+    din fisier, si erau scrise din ochi: nimeni n-a masurat vreodata ca /preturi
+    se schimba „lunar" sau ca merita 0.9 fata de 0.7.
+
+    Ce ARE data adevarata — articole, rubrici, autori, etichete — isi pastreaza
+    `lastModified`, mai jos. Aia e singura informatie pe care Google chiar o
+    citeste dintr-un sitemap.
   */
-    { url: PLATFORM_ORIGIN, changeFrequency: "weekly", priority: 1 },
-    { url: `${PLATFORM_ORIGIN}/preturi`, changeFrequency: "monthly", priority: 0.9 },
-    { url: `${PLATFORM_ORIGIN}/contact`, changeFrequency: "monthly", priority: 0.7 },
-    { url: `${PLATFORM_ORIGIN}/termeni`, changeFrequency: "yearly", priority: 0.3 },
-    { url: `${PLATFORM_ORIGIN}/confidentialitate`, changeFrequency: "yearly", priority: 0.3 },
-    { url: `${PLATFORM_ORIGIN}/cookies`, changeFrequency: "yearly", priority: 0.3 },
-    { url: `${PLATFORM_ORIGIN}/gdpr`, changeFrequency: "yearly", priority: 0.3 },
+    { url: PLATFORM_ORIGIN },
+    { url: `${PLATFORM_ORIGIN}/preturi` },
+    { url: `${PLATFORM_ORIGIN}/contact` },
+    { url: `${PLATFORM_ORIGIN}/termeni` },
+    { url: `${PLATFORM_ORIGIN}/confidentialitate` },
+    { url: `${PLATFORM_ORIGIN}/cookies` },
+    { url: `${PLATFORM_ORIGIN}/gdpr` },
 
     /*
       Paginile de prezentare, luate din CHIAR datele meniului.
@@ -312,8 +341,6 @@ export function intrariPlatforma(
     */
     ...paginiDeSite().map((cale) => ({
       url: `${PLATFORM_ORIGIN}${cale}`,
-      changeFrequency: "monthly" as const,
-      priority: 0.7,
     })),
     /*
       Centrul de ajutor: pagina lui de start, categoriile si fiecare ghid.
@@ -328,16 +355,12 @@ export function intrariPlatforma(
       poate cuprinde adrese de pe alt domeniu. E punctul 3 din lista de mutare,
       scrisa in capul lui `lib/website/ajutor.ts`.
     */
-    { url: `${PLATFORM_ORIGIN}/ajutor`, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${PLATFORM_ORIGIN}/ajutor` },
     ...CATEGORII_AJUTOR.map((c) => ({
       url: `${PLATFORM_ORIGIN}${adresaCategorie(c.slug)}`,
-      changeFrequency: "monthly" as const,
-      priority: 0.6,
     })),
     ...TOATE_GHIDURILE.map((g) => ({
       url: `${PLATFORM_ORIGIN}${adresaGhid(g.categorie.slug, g.slug)}`,
-      changeFrequency: "monthly" as const,
-      priority: 0.5,
     })),
 
     /*
@@ -358,8 +381,6 @@ export function intrariPlatforma(
     ...articoleBlog.map((a) => ({
       url: `${PLATFORM_ORIGIN}/blog/${a.slug}`,
       ...dataDacaOStim(candSaSchimbat(a.content_updated_at, a.published_at)),
-      changeFrequency: "monthly" as const,
-      priority: 0.6,
     })),
     /* Pagina unei rubrici se schimbă când apare un articol în ea — SAU când i se
        schimbă descrierea. Deci data ei e cea mai nouă dintre cele două, nu ziua
@@ -370,8 +391,6 @@ export function intrariPlatforma(
         articoleBlog.find((a) => a.categorie?.slug === slug)?.categorie?.content_updated_at,
         articoleBlog.filter((a) => a.categorie?.slug === slug),
       )),
-      changeFrequency: "weekly" as const,
-      priority: 0.5,
     })),
     /* Doar autorii cu articole. Ceilalți dau 404 dinadins — o pagină cu un nume
        și nimic altceva e o pagină subțire, iar un sitemap care o anunță trimite
@@ -382,8 +401,6 @@ export function intrariPlatforma(
         articoleBlog.find((a) => a.autor?.slug === slug)?.autor?.content_updated_at,
         articoleBlog.filter((a) => a.autor?.slug === slug),
       )),
-      changeFrequency: "weekly" as const,
-      priority: 0.4,
     })),
     /* Etichetele folosite de măcar un articol publicat. Cele legate doar de
        ciorne dau 404 dinadins, deci n-au ce căuta aici.
@@ -398,8 +415,6 @@ export function intrariPlatforma(
     ...eticheteBlog.map((e) => ({
       url: `${PLATFORM_ORIGIN}/blog/eticheta/${e.slug}`,
       ...dataDacaOStim(e.ultima),
-      changeFrequency: "weekly" as const,
-      priority: 0.4,
     })),
   ];
 }
@@ -450,7 +465,7 @@ export function intrariMagazin(
   // its products/pages can still be indexable, so they stay below.
   const entries: MetadataRoute.Sitemap = homepageNoindex(biz)
     ? []
-    : [{ url: base, ...dataDacaOStim(biz.updated_at), changeFrequency: "weekly", priority: 1 }];
+    : [{ url: base, ...dataDacaOStim(biz.updated_at) }];
 
   // Pagina de catalog, cand magazinul si-a ales-o. Prima ruta-sectiune
   // indexabila: cosul si finalizarea sunt deliberat noindex, dar asta e chiar
@@ -465,8 +480,6 @@ export function intrariMagazin(
     entries.push({
       url: `${base}/${SEGMENT_MAGAZIN}`,
       ...dataDacaOStim(biz.updated_at),
-      changeFrequency: "daily",
-      priority: 0.9,
     });
     // Si paginile de categorie: de cand exista, ele sunt adresele care
     // raspund cautarilor de tip „bocanci de protectie". Cele stinse din panou
@@ -480,8 +493,6 @@ export function intrariMagazin(
       entries.push({
         url: `${base}/${SEGMENT_MAGAZIN}/${seg}`,
         ...dataDacaOStim(biz.updated_at),
-        changeFrequency: "daily",
-        priority: 0.8,
       });
     }
   }
@@ -495,8 +506,6 @@ export function intrariMagazin(
       entries.push({
         url: `${base}/product/${p.slug}`,
         ...dataDacaOStim(p.updated_at),
-        changeFrequency: "weekly",
-        priority: 0.7,
       });
     }
   }
@@ -508,8 +517,6 @@ export function intrariMagazin(
     entries.push({
       url: `${base}/politici/${tip}`,
       ...dataDacaOStim(biz.updated_at),
-      changeFrequency: "yearly",
-      priority: 0.3,
     });
   }
 
@@ -518,8 +525,6 @@ export function intrariMagazin(
     entries.push({
       url: `${base}/${pg.slug}`,
       ...dataDacaOStim(pg.updated_at),
-      changeFrequency: "monthly",
-      priority: 0.5,
     });
   }
   return entries.slice(0, SITEMAP_URL_LIMIT);

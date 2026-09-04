@@ -1329,7 +1329,9 @@ AS $function$
     and p.published_at is not null
     and p.published_at <= now()
     and p.noindex is not true
-  -- ⚠ FARA `is_pinned`. Vezi nota de sus.
+    -- Originalul e in alta parte: nu-l sindicalizam cu permalinkul nostru.
+    and (p.canonical_url is null or btrim(p.canonical_url, E' \t\n\r\f' || chr(11) || chr(160) || chr(65279)) = '')
+  -- FARA is_pinned. Vezi nota de sus.
   order by p.published_at desc
   limit greatest(p_cate, 1);
 $function$
@@ -1577,6 +1579,8 @@ AS $function$
     and p.published_at is not null
     and p.published_at <= now()
     and p.noindex is not true
+    -- De aici isi ia sitemapul paginile de eticheta.
+    and (p.canonical_url is null or btrim(p.canonical_url, E' \t\n\r\f' || chr(11) || chr(160) || chr(65279)) = '')
   group by t.slug, t.name
   order by t.name;
 $function$
@@ -3049,6 +3053,27 @@ begin
     where p.id = v_pid;
   end loop;
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.edinio_revendica_conversii(limita integer)
+ RETURNS SETOF edinio_conversion_outbox
+ LANGUAGE sql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  update public.edinio_conversion_outbox o
+     set next_retry_at = now() + interval '1 minute'
+   where o.id in (
+     select c.id
+       from public.edinio_conversion_outbox c
+      where c.trimis_la is null
+        and c.abandonat_la is null
+        and c.next_retry_at <= now()
+      order by c.next_retry_at asc
+      limit greatest(1, least(limita, 500))
+      for update skip locked
+   )
+  returning o.*;
 $function$
 ;
 
@@ -6451,6 +6476,25 @@ create table if not exists public.domains (
   source text default 'purchased'::text not null,
   created_at timestamp with time zone default now() not null);
 
+create table if not exists public.edinio_consimtamant_retras (
+  vizitator text not null,
+  retras_la timestamp with time zone default now() not null,
+  sursa text default 'browser'::text not null);
+
+create table if not exists public.edinio_conversion_outbox (
+  id uuid default gen_random_uuid() not null,
+  destinatie text not null,
+  nume_eveniment text not null,
+  event_id text not null,
+  sarcina jsonb not null,
+  incercari integer default 0 not null,
+  next_retry_at timestamp with time zone default now() not null,
+  trimis_la timestamp with time zone,
+  ultima_eroare text,
+  abandonat_la timestamp with time zone,
+  creat_la timestamp with time zone default now() not null,
+  vizitator text);
+
 create table if not exists public.emag_awb (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -7140,7 +7184,7 @@ create table if not exists public.site_analytics (
   device text,
   source text,
   referrer text,
-  country text default 'RO'::text not null,
+  country text,
   metadata jsonb default '{}'::jsonb not null,
   created_at timestamp with time zone default now() not null);
 
@@ -7494,6 +7538,8 @@ alter table public.dhl_etichete add constraint dhl_etichete_pkey PRIMARY KEY (or
 alter table public.discounts add constraint discounts_pkey PRIMARY KEY (id);
 alter table public.domain_orders add constraint domain_orders_pkey PRIMARY KEY (id);
 alter table public.domains add constraint domains_pkey PRIMARY KEY (id);
+alter table public.edinio_consimtamant_retras add constraint edinio_consimtamant_retras_pkey PRIMARY KEY (vizitator);
+alter table public.edinio_conversion_outbox add constraint edinio_conversion_outbox_pkey PRIMARY KEY (id);
 alter table public.emag_awb add constraint emag_awb_pkey PRIMARY KEY (id);
 alter table public.emag_nomenclatoare add constraint emag_nomenclatoare_pkey PRIMARY KEY (business_id, tara, fel, cheie);
 alter table public.emag_offers add constraint emag_offers_pkey PRIMARY KEY (id);
@@ -7606,6 +7652,7 @@ alter table public.businesses add constraint businesses_slug_format CHECK ((slug
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
 alter table public.discounts add constraint discounts_type_check CHECK ((type = ANY (ARRAY['percent'::text, 'fixed'::text, 'free_shipping'::text])));
 alter table public.domain_orders add constraint domain_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'cancelled'::text, 'refunded'::text])));
+alter table public.edinio_conversion_outbox add constraint edinio_conversion_outbox_destinatie_check CHECK ((destinatie = ANY (ARRAY['meta'::text, 'tiktok'::text])));
 alter table public.emag_sync_queue add constraint emag_sync_queue_op_check CHECK ((op = ANY (ARRAY['oferta'::text, 'pret'::text, 'stoc'::text, 'retragere'::text, 'masuratori'::text])));
 alter table public.error_logs add constraint error_logs_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text])));
 alter table public.intentii_publicare add constraint intentii_publicare_marketplace_check CHECK ((marketplace = ANY (ARRAY['trendyol'::text, 'emag'::text, 'aboutyou'::text])));
@@ -7870,6 +7917,9 @@ CREATE INDEX catalog_index_cuvant_product_id_idx ON public.catalog_index_cuvant 
 CREATE INDEX categories_business_id_idx ON public.categories USING btree (business_id);
 CREATE INDEX categories_parent_id_idx ON public.categories USING btree (parent_id);
 CREATE INDEX cm_biz ON public.catalog_murdar USING btree (business_id, marcat_la);
+CREATE INDEX coada_conversii_de_trimis ON public.edinio_conversion_outbox USING btree (next_retry_at) WHERE ((trimis_la IS NULL) AND (abandonat_la IS NULL));
+CREATE INDEX coada_conversii_dupa_vizitator ON public.edinio_conversion_outbox USING btree (vizitator) WHERE ((vizitator IS NOT NULL) AND (trimis_la IS NULL) AND (abandonat_la IS NULL));
+CREATE UNIQUE INDEX coada_conversii_unic ON public.edinio_conversion_outbox USING btree (destinatie, nume_eveniment, event_id);
 CREATE INDEX cp_cat ON public.catalog_produs USING btree (business_id, category);
 CREATE INDEX cp_creat ON public.catalog_produs USING btree (business_id, creat DESC, product_id);
 CREATE INDEX cp_fat ON public.catalog_produs USING gin (fatete);
@@ -8226,6 +8276,8 @@ alter table public.dhl_etichete enable row level security;
 alter table public.discounts enable row level security;
 alter table public.domain_orders enable row level security;
 alter table public.domains enable row level security;
+alter table public.edinio_consimtamant_retras enable row level security;
+alter table public.edinio_conversion_outbox enable row level security;
 alter table public.emag_awb enable row level security;
 alter table public.emag_nomenclatoare enable row level security;
 alter table public.emag_offers enable row level security;
@@ -9347,6 +9399,20 @@ grant SELECT on table public.domains to service_role;
 grant TRIGGER on table public.domains to service_role;
 grant TRUNCATE on table public.domains to service_role;
 grant UPDATE on table public.domains to service_role;
+grant DELETE on table public.edinio_consimtamant_retras to service_role;
+grant INSERT on table public.edinio_consimtamant_retras to service_role;
+grant REFERENCES on table public.edinio_consimtamant_retras to service_role;
+grant SELECT on table public.edinio_consimtamant_retras to service_role;
+grant TRIGGER on table public.edinio_consimtamant_retras to service_role;
+grant TRUNCATE on table public.edinio_consimtamant_retras to service_role;
+grant UPDATE on table public.edinio_consimtamant_retras to service_role;
+grant DELETE on table public.edinio_conversion_outbox to service_role;
+grant INSERT on table public.edinio_conversion_outbox to service_role;
+grant REFERENCES on table public.edinio_conversion_outbox to service_role;
+grant SELECT on table public.edinio_conversion_outbox to service_role;
+grant TRIGGER on table public.edinio_conversion_outbox to service_role;
+grant TRUNCATE on table public.edinio_conversion_outbox to service_role;
+grant UPDATE on table public.edinio_conversion_outbox to service_role;
 grant DELETE on table public.emag_awb to anon;
 grant INSERT on table public.emag_awb to anon;
 grant REFERENCES on table public.emag_awb to anon;
@@ -9863,19 +9929,6 @@ grant SELECT on table public.page_form_submissions to service_role;
 grant TRIGGER on table public.page_form_submissions to service_role;
 grant TRUNCATE on table public.page_form_submissions to service_role;
 grant UPDATE on table public.page_form_submissions to service_role;
-grant DELETE on table public.platform_settings to anon;
-grant INSERT on table public.platform_settings to anon;
-grant REFERENCES on table public.platform_settings to anon;
-grant TRIGGER on table public.platform_settings to anon;
-grant TRUNCATE on table public.platform_settings to anon;
-grant UPDATE on table public.platform_settings to anon;
-grant DELETE on table public.platform_settings to authenticated;
-grant INSERT on table public.platform_settings to authenticated;
-grant REFERENCES on table public.platform_settings to authenticated;
-grant SELECT on table public.platform_settings to authenticated;
-grant TRIGGER on table public.platform_settings to authenticated;
-grant TRUNCATE on table public.platform_settings to authenticated;
-grant UPDATE on table public.platform_settings to authenticated;
 grant DELETE on table public.platform_settings to service_role;
 grant INSERT on table public.platform_settings to service_role;
 grant REFERENCES on table public.platform_settings to service_role;
@@ -10699,6 +10752,7 @@ grant execute on function public.customers_summary(bid uuid) to service_role;
 grant execute on function public.decrement_stock(p_product_id uuid, p_quantity integer) to service_role;
 grant execute on function public.decrement_stock_batch(p_items jsonb) to service_role;
 grant execute on function public.decrement_variant_stock_batch(p_items jsonb) to service_role;
+grant execute on function public.edinio_revendica_conversii(limita integer) to service_role;
 grant execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb, p_status_asteptat text, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) to service_role;
 grant execute on function public.elibereaza_stoc_batch(p_items jsonb) to service_role;
 grant execute on function public.elibereaza_stoc_comanda(p_order_id uuid) to service_role;
@@ -10812,8 +10866,8 @@ grant execute on function public.trg_catalog_rezumat_murdar() to service_role;
 grant execute on function public.trg_categorii_rezumat_murdar() to service_role;
 grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
-grant execute on function public.unaccent(regdictionary, text) to anon;
 grant execute on function public.unaccent(text) to anon;
+grant execute on function public.unaccent(regdictionary, text) to anon;
 grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(regdictionary, text) to authenticated;
 grant execute on function public.unaccent(text) to service_role;
@@ -10901,6 +10955,7 @@ revoke execute on function public.curata_ritm_extern() from public;
 revoke execute on function public.decrement_stock(p_product_id uuid, p_quantity integer) from public;
 revoke execute on function public.decrement_stock_batch(p_items jsonb) from public;
 revoke execute on function public.decrement_variant_stock_batch(p_items jsonb) from public;
+revoke execute on function public.edinio_revendica_conversii(limita integer) from public;
 revoke execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb, p_status_asteptat text, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) from public;
 revoke execute on function public.elibereaza_stoc_batch(p_items jsonb) from public;
 revoke execute on function public.elibereaza_stoc_comanda(p_order_id uuid) from public;

@@ -116,6 +116,20 @@ export function paginaSiteJsonLd(a: {
   despreFirma?: boolean;
   /** Noduri in plus, proprii paginii (oferte, intrebari frecvente). */
   inPlus?: Record<string, unknown>[];
+  /**
+   * Pagina isi deseneaza firimiturile cu `PageHero` sau `PageShell`, care le
+   * emit deja structurat din CHIAR sirul desenat.
+   *
+   * ⚠ EXISTA FIINDCA ERAU EMISE DE DOUA ORI. Pe /preturi si /contact ieseau
+   * doua noduri `BreadcrumbList` in acelasi document — unul de aici, unul din
+   * `PageHero` — adica doua afirmatii despre aceeasi ierarhie. Nu strica nimic
+   * vizibil si nu cade nicio proba, dar e chiar felul de zgomot pe care un
+   * validator il raporteaza si pe care nimeni nu-l cauta.
+   *
+   * Cele desenate CASTIGA: vin din sirul pe care il vede omul, deci nu se pot
+   * desparti de el.
+   */
+  faraFirimituri?: boolean;
 }) {
   const url = `${PLATFORM_ORIGIN}/${a.cale}`;
   return graf(
@@ -130,10 +144,12 @@ export function paginaSiteJsonLd(a: {
       // organizatia". Se pune doar unde e adevarat, nu pe toate.
       ...(a.despreFirma ? { despre: { "@id": ID_ORGANIZATIE } } : {}),
     }),
-    firimituriJsonLd([
-      { nume: "Acasa", url: PLATFORM_ORIGIN },
-      { nume: a.nume, url },
-    ]),
+    a.faraFirimituri
+      ? null
+      : firimituriJsonLd([
+        { nume: "Acasa", url: PLATFORM_ORIGIN },
+        { nume: a.nume, url },
+      ]),
     ...(a.inPlus ?? []),
   );
 }

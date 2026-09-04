@@ -18,6 +18,8 @@ import {
 } from "@/lib/website/ajutor-cautare";
 import { ACASA } from "@/lib/website/breadcrumbs";
 import { siteMetadata } from "@/lib/website/metadata";
+import { ghidJsonLd } from "@/lib/website/ajutor-jsonld";
+import { jsonLdSafe } from "@/lib/json-ld";
 
 interface Props {
   params: Promise<{ categorie: string; ghid: string }>;
@@ -83,6 +85,10 @@ export default async function GhidPage({ params }: Props) {
 
   return (
     <>
+      {/* Nodul ARTICOLULUI. Firimiturile vin din `PageHero`, imediat dedesubt —
+          aici NU se emit a doua oara. Vezi `ajutor-jsonld.ts`. */}
+      <script type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdSafe(ghidJsonLd({ ...g, categorie: { slug: c.slug, titlu: c.titlu }, grup: gr.titlu })) }} />
       <PageHero
         sir={[
           ACASA,

@@ -57,6 +57,9 @@ const REPERE = [
  * juridice; aici pagina doar arata catre el.
  */
 const jsonLd = paginaSiteJsonLd({
+  /* `PageHero` de mai jos emite deja `BreadcrumbList` din sirul desenat.
+     Pana pe 04.09.2026 ieseau DOUA in acelasi document. */
+  faraFirimituri: true,
   cale: "contact",
   nume: "Contact",
   descriere: metadata.description as string,

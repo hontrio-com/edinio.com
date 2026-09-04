@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { BandaAjutor } from "@/components/website/ajutor/BandaAjutor";
 import { CarduriCategorii } from "@/components/website/ajutor/CarduriCategorii";
 import { CautareGhiduri } from "@/components/website/ajutor/CautareGhiduri";
-import { AJUTOR_CATEGORII_TITLU, AJUTOR_TITLU } from "@/lib/website/ajutor";
+import { AJUTOR_CATEGORII_TITLU, AJUTOR_TITLU, CATEGORII_AJUTOR } from "@/lib/website/ajutor";
+import { hubAjutorJsonLd } from "@/lib/website/ajutor-jsonld";
+import { jsonLdSafe } from "@/lib/json-ld";
 import { siteMetadata } from "@/lib/website/metadata";
 import { cn } from "@/lib/utils/cn";
 import { H1_MIC } from "@/lib/website/tipografie";
@@ -47,6 +49,10 @@ export const metadata: Metadata = siteMetadata({
 export default function AjutorPage() {
   return (
     <>
+      {/* Nodul PAGINII. Identitatea (`Organization`, `WebSite`) vine din layout,
+          firimituri n-are: e treapta de sus. Vezi `ajutor-jsonld.ts`. */}
+      <script type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdSafe(hubAjutorJsonLd(CATEGORII_AJUTOR)) }} />
       <section className="bg-white">
         <div className="mx-auto max-w-[1200px] px-5 pt-14 pb-16 sm:px-6 lg:px-8 lg:pt-20 lg:pb-20">
           {/*

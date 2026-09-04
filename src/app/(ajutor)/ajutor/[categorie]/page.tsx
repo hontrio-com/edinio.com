@@ -12,6 +12,8 @@ import {
 } from "@/lib/website/ajutor-cautare";
 import { ACASA } from "@/lib/website/breadcrumbs";
 import { siteMetadata } from "@/lib/website/metadata";
+import { categorieAjutorJsonLd } from "@/lib/website/ajutor-jsonld";
+import { jsonLdSafe } from "@/lib/json-ld";
 
 interface Props {
   params: Promise<{ categorie: string }>;
@@ -56,6 +58,10 @@ export default async function CategorieAjutorPage({ params }: Props) {
 
   return (
     <>
+      {/* Nodul PAGINII, cu ghidurile ei ca `ItemList`. Firimiturile vin din
+          `PageHero`, de mai jos — aici NU se emit a doua oara. */}
+      <script type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdSafe(categorieAjutorJsonLd(c)) }} />
       <PageHero
         sir={[
           ACASA,

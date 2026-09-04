@@ -64,7 +64,18 @@ function corpFunctie(nume: string): string {
 /** Citiri MAȘINĂ-facing: regula e obligatorie. */
 const CU_REGULA = [
   ["blog_articole_pentru_feed", "fluxul RSS de la /blog/feed, cu guid isPermaLink pe adresa noastră"],
-  ["blog_etichete_folosite", "paginile de etichetă din sitemap — nimeni altcineva n-o cheamă"],
+  /*
+    ⚠ NU MAI ARE NICIUN APELANT din 04.09.2026: etichetele au primit `noindex,
+    follow` și au ieșit din sitemap, iar `eticheteFolosite()` — singurul loc care
+    o chema — a fost ștearsă odată cu ele.
+
+    Rămâne aici, cu regula pe ea, dinadins. Funcția SQL trăiește mai departe în
+    bază (ștergerea unui RPC e o migrație cu riscurile ei, și n-a fost cerută),
+    iar cine reia etichetele o găsește gata — cu regula `canonical_url` deja
+    pusă, nu cu una de reinventat. Un rând care apără o funcție adormită costă
+    nimic; unul care lipsește costă exact defectul pe care l-am reparat azi.
+  */
+  ["blog_etichete_folosite", "paginile de etichetă din sitemap — ADORMITĂ: n-o mai cheamă nimeni"],
 ] as const;
 
 /**

@@ -43,11 +43,37 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     urmă. Acum toate trei spun același lucru.
   */
   const titlu = `${e.name}: articole de blog`;
-  return siteMetadata({
+  const meta = siteMetadata({
     title: pagina > 1 ? `${titlu}, pagina ${pagina}` : titlu,
     description: `Toate articolele etichetate „${e.name}" de pe blogul Edinio.`,
     path: pagina > 1 ? `/blog/eticheta/${e.slug}?p=${pagina}` : `/blog/eticheta/${e.slug}`,
   });
+
+  /*
+    ═══ ⚠ ETICHETELE NU INTRĂ ÎN GOOGLE (04.09.2026) ═══
+
+    `noindex, follow`, cerut de client după un audit SEO. Motivul: o taxonomie
+    scrisă liber în editor produce pagini subțiri — azi sunt 7 etichete, toate pe
+    ACELAȘI singur articol publicat, deci șapte adrese cu exact același conținut.
+    Rubricile rămân indexabile: ele sunt o listă închisă, aleasă de noi.
+
+    ⚠ `follow`, NU `noindex, nofollow`. Pagina rămâne vie și legată: un cititor
+    ajunge la ea din articol, iar motoarele urmează mai departe legăturile către
+    articole. Ce se retrage e doar dreptul paginii ÎNSEȘI de a fi în index.
+
+    ⚠ HOTĂRÂREA ARE DOUĂ JUMĂTĂȚI, și despărțite se contrazic. A doua e în
+    `src/app/sitemap.ts`: adresele de etichetă nu se mai anunță. Un sitemap care
+    ar anunța o adresă `noindex` e chiar contradicția pentru care s-a retras
+    `sitemap-magazine.xml` pe 03.09. Amândouă sunt ținute împreună de
+    `src/lib/blog/etichete-noindex.test.ts`.
+
+    ⚠ SE PUNE PE OBIECTUL ÎNTORS, nu se cere helperului. `siteMetadata` nu
+    declară `robots`, deci se moștenește al rădăcinii; cheia scrisă aici îl
+    înlocuiește — și trebuie scrisă ÎNTREAGĂ, fiindcă Next înlocuiește obiectele
+    imbricate, nu le contopește.
+  */
+  meta.robots = { index: false, follow: true };
+  return meta;
 }
 
 export default async function EticheteBlogPage({ params, searchParams }: Props) {

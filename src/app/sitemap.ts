@@ -11,7 +11,7 @@ import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { categoriiVizibile } from "@/lib/categories/vizibilitate";
-import { eticheteFolosite, toateArticolelePublicate } from "@/lib/blog/citire";
+import { toateArticolelePublicate } from "@/lib/blog/citire";
 import { CATEGORII_AJUTOR, TOATE_GHIDURILE } from "@/lib/website/ajutor";
 import { adresaCategorie, adresaGhid } from "@/lib/website/ajutor-cautare";
 import {
@@ -33,7 +33,9 @@ import {
  *   - pe www.edinio.com: NUMAI adresele platformei — pagina de start, preturi,
  *     contact, paginile juridice, paginile de prezentare, /vs,
  *     integrarile, centrul de ajutor cu ghidurile lui, blogul cu articole,
- *     rubrici, autori si etichete. NICIUN magazin, nicio pagina de magazin.
+ *     rubrici si autori. NICIUN magazin, nicio pagina de magazin.
+ *     (Etichetele au iesit pe 04.09.2026: sunt `noindex`. Vezi nota din
+ *     `intrariPlatforma`.)
  *     `intrariPlatforma` e o functie SINCRONA, deci nu poate intreba baza de
  *     magazine nici daca ar vrea cineva — proba din `sitemap.test.ts` o tine asa.
  *
@@ -250,6 +252,11 @@ export function anuntabil(a: { noindex?: boolean | null; canonical_url?: string 
 }
 
 /** O eticheta de blog folosita de macar un articol publicat, cu data ultimului. */
+/*
+  ⚠ RAMANE EXPORTAT desi `intrariPlatforma` nu-l mai primeste (04.09.2026):
+  descrie forma pe care o intoarce `blog_etichete_folosite` din baza, functie
+  care exista mai departe. Sters, ar trebui reinventat de cine reia etichetele.
+*/
 export type EtichetaPentruSitemap = { slug: string; ultima?: string | Date | null };
 
 /**
@@ -264,7 +271,6 @@ export type EtichetaPentruSitemap = { slug: string; ultima?: string | Date | nul
  */
 export function intrariPlatforma(
   toateArticolele: ArticolPentruSitemap[],
-  eticheteBlog: EtichetaPentruSitemap[],
 ): MetadataRoute.Sitemap {
   /*
     ⚠ ARTICOLELE CU `noindex` NU INTRĂ ÎN SITEMAP.
@@ -416,20 +422,28 @@ export function intrariPlatforma(
         articoleBlog.filter((a) => a.autor?.slug === slug),
       )),
     })),
-    /* Etichetele folosite de măcar un articol publicat. Cele legate doar de
-       ciorne dau 404 dinadins, deci n-au ce căuta aici.
+    /*
+      ⚠ ETICHETELE AU IEȘIT DIN SITEMAP pe 04.09.2026, și NU fiindcă ar fi
+      dispărut paginile: ele răspund mai departe 200 și rămân legate din
+      articole. Au primit `noindex, follow` (vezi
+      `(website)/blog/eticheta/[slug]/page.tsx`), cerut de client după un audit
+      SEO — o taxonomie scrisă liber produce pagini subțiri, iar azi cele 7
+      etichete stau toate pe același singur articol publicat.
 
-       ⚠ Bucata asta a lipsit o vreme, deși `eticheteFolosite()` era deja
-       chemată: o înlocuire automată nu potrivise, iar variabila rămăsese
-       nefolosită. Am prins-o citind sitemapul adevărat, nu codul — pagina de
-       etichetă răspundea 200 și tot nu era anunțată nicăieri. */
-    /* Data vine din `blog_etichete_folosite`: legăturile eticheta-articol nu se
-       pot număra aici fără să le cerem pe toate, iar acolo e plafonul tăcut de
-       1000 de rânduri al PostgREST. */
-    ...eticheteBlog.map((e) => ({
-      url: `${PLATFORM_ORIGIN}/blog/eticheta/${e.slug}`,
-      ...dataDacaOStim(e.ultima),
-    })),
+      Aici e a doua jumătate a aceleiași hotărâri: un sitemap care anunță o
+      adresă `noindex` e chiar contradicția pentru care s-a retras
+      `sitemap-magazine.xml` pe 03.09. Despărțite, cele două jumătăți se ceartă.
+
+      ⚠ RUBRICILE ȘI AUTORII RĂMÂN — sunt liste închise, alese de noi, nu de
+      cine scrie articolul. Vezi cele două blocuri de deasupra.
+
+      ⚠ Odată cu ele a plecat și parametrul `eticheteBlog` al funcției, și
+      `eticheteFolosite()` din `blog/citire.ts`, care nu mai avea niciun
+      apelant. Funcția SQL `blog_etichete_folosite` RĂMÂNE în bază, cu regula
+      `canonical_url` pe ea — nefolosită, dar corectă; ștergerea unui RPC e o
+      migrație cu riscuri proprii, iar cererea a fost despre index, nu despre
+      schemă.
+    */
   ];
 }
 
@@ -438,11 +452,8 @@ async function sitemapPlatforma(): Promise<MetadataRoute.Sitemap> {
      propriul lui plafon de randuri, deci `.limit(2000)` ar fi adus o mie si
      ne-ar fi lasat sa credem ca le are pe toate. Vezi nota din
      `toateArticolelePublicate`. */
-  const [toateArticolele, eticheteBlog] = await Promise.all([
-    toateArticolelePublicate(),
-    eticheteFolosite(),
-  ]);
-  return intrariPlatforma(toateArticolele, eticheteBlog).slice(0, SITEMAP_URL_LIMIT);
+  const toateArticolele = await toateArticolelePublicate();
+  return intrariPlatforma(toateArticolele).slice(0, SITEMAP_URL_LIMIT);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

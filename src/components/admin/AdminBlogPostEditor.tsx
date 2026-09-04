@@ -951,7 +951,9 @@ export function AdminBlogPostEditor({
               className={inputCls} />
             <p className="mt-1.5 text-xs text-zinc-500">
               Cel mult 12. Fiecare primește pagina ei, la /blog/eticheta/…, unde se strâng
-              toate articolele cu eticheta aceea.
+              toate articolele cu eticheta aceea — utilă cititorului. Nu intră în Google
+              (noindex), fiindcă o pagină cu un singur articol nu aduce nimic acolo, dar
+              legăturile din ea sunt urmate.
             </p>
           </div>
 

@@ -210,9 +210,8 @@ const ARTICOLE: ArticolPentruSitemap[] = [
     autor: { slug: "autor-doar-ascuns" },
   },
 ];
-const ETICHETE = [{ slug: "seo", ultima: "2026-08-30T09:00:00.000Z" }];
 
-const PLATFORMA = intrariPlatforma(ARTICOLE, ETICHETE);
+const PLATFORMA = intrariPlatforma(ARTICOLE);
 const primulSegmentAl = (url: string) => new URL(url).pathname.split("/")[1] ?? "";
 
 test("sitemapul platformei: fiecare adresa e pe www.edinio.com", () => {
@@ -261,7 +260,9 @@ test("sitemapul platformei pastreaza tot ce e al platformei", () => {
   assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/primul-articol`), "lipseste articolul");
   assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/categorie/ghiduri`), "lipseste rubrica");
   assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/autor/ana`), "lipseste autorul");
-  assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/eticheta/seo`), "lipseste eticheta");
+  /* ⚠ ETICHETELE NU MAI SUNT ANUNTATE (04.09.2026): au `noindex, follow`.
+     Randul care le cerea aici a plecat odata cu ele; ca NU se intorc e probat
+     in `src/lib/blog/etichete-noindex.test.ts`, pe amandoua jumatatile. */
   for (const c of COMPETITORS) assert.ok(urluri.has(`${PLATFORM_ORIGIN}${c.href}`), `lipseste ${c.href}`);
 });
 

@@ -722,48 +722,22 @@ export async function articoleleEtichetei(
   };
 }
 
-/**
- * Etichetele care au măcar un articol publicat, pentru sitemap și pentru lista
- * de sub articole.
- *
- * ⚠ SE PORNEȘTE DE LA ARTICOLE, NU DE LA ETICHETE. O etichetă poate exista
- * legată doar de ciorne; pagina ei ar fi goală, iar un sitemap care o anunță
- * trimite crawlerul degeaba.
- */
-export async function eticheteFolosite(): Promise<EticheteBlogPublic[]> {
-  /*
-    ⚠ SE NUMĂRĂ ÎN BAZĂ, NU AICI.
+/*
+  ⚠ AICI ERA `eticheteFolosite()`, ȘTEARSĂ PE 04.09.2026.
 
-    Înainte: cere id-urile TUTUROR articolelor publicate, apoi legăturile lor.
-    Ambele cereri erau tăiate tăcut de PostgREST la 1000 de rânduri, deci de la
-    al 1001-lea articol lista de etichete devenea pur și simplu greșită — fără
-    nicio eroare. Aceeași capcană ca în cronuri: o tăietură pusă înaintea
-    adunării.
+  Întorcea etichetele cu măcar un articol publicat, și o chema un singur loc:
+  sitemapul. De când etichetele au primit `noindex, follow` și au ieșit din
+  sitemap, funcția n-a mai avut niciun apelant. Lista de sub un articol vine din
+  `eticheteArticol(idArticol)`, altă citire — nota ei veche spunea „și pentru
+  lista de sub articole", și era deja neadevărată.
 
-    ⚠ ȘI SE SAR ARTICOLELE `noindex`. Nu se săreau: o etichetă ale cărei
-    articole erau toate `noindex` ajungea în sitemap și în lista de sub articole.
-    Îi spuneam lui Google „uite o pagină", iar când venea găsea pe ea numai
-    lucruri despre care îi ceruserăm să nu le indexeze — o pagină subțire cerută
-    de noi înșine.
-  */
-  const { data, error: e20 } = await (await db()).rpc("blog_etichete_folosite");
-  cere({ data: null, error: e20 }, "eticheteFolosite");
-  return ((data ?? []) as { slug: string; name: string; ultima: string | null }[]).map((e) => ({
-    slug: e.slug,
-    name: e.name,
-    ultima: e.ultima ?? null,
-  }));
-}
+  ⚠ FUNCȚIA SQL `blog_etichete_folosite` RĂMÂNE ÎN BAZĂ, cu regula
+  `canonical_url` pe ea. Nefolosită, dar corectă: ștergerea unui RPC e o
+  migrație cu riscurile ei, iar cererea a fost despre index, nu despre schemă.
+  Cine reia etichetele în sitemap are funcția gata, cu tot cu numărarea făcută
+  în bază — motivul pentru care exista, vezi istoricul din git.
+*/
 
-/**
- * Rubricile care au măcar un articol publicat, cu câte are fiecare.
- *
- * ⚠ PE TOATE ARTICOLELE, NU PE PAGINA CURENTĂ. Pagina `/blog` își făcea lista
- * de rubrici din cele 12 articole pe care le avea în mână, deși comentariul de
- * lângă spunea „pe TOATE articolele". Deci navigația se schimba sub picioarele
- * omului de la o pagină la alta, iar o rubrică ale cărei articole erau abia în
- * pagina 3 nu se vedea de nicăieri.
- */
 export async function categoriiFolosite(): Promise<{ slug: string; name: string; cate: number }[]> {
   const { data, error: e21 } = await (await db()).rpc("blog_categorii_folosite");
   cere({ data: null, error: e21 }, "categoriiFolosite");

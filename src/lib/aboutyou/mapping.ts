@@ -8,7 +8,7 @@
 // are emitted per ship country. Per-variant RON pricing is a later refinement.
 
 import {
-  comboCompareAtPrice, comboStock, comboUnitPrice, parseVariants,
+  cerePersonalizare, comboCompareAtPrice, comboStock, comboUnitPrice, parseVariants,
   type VariantCombo,
 } from "@/lib/storefront/variants";
 /*
@@ -542,6 +542,23 @@ export function validateListing(ctx: BuildContext, material?: CerintaMaterialLis
   const { config, product, listing } = ctx;
   const issues: string[] = [];
   const warnings: string[] = [];
+  /*
+   * ⚠ PERSONALIZAREA NU SE POATE ONORA PRIN ABOUT YOU.
+   *
+   * Aceeasi hotarare ca la eMAG (`emag/pregatire.ts`, `ceLipseste`) si ca la Trendyol
+   * (`trendyol/sync.ts`): comanda lor n-are unde sa poarte raspunsurile cumparatorului.
+   * Listat, produsul se vinde, iar comerciantul primeste o comanda pe care n-are cum s-o
+   * onoreze.
+   *
+   * ⚠ Se opreste ORICE personalizare pornita, nu doar cea cu campuri obligatorii: si un
+   * camp „optional" inseamna ca vitrina promite ceva ce canalul nu poate transmite.
+   */
+  if (cerePersonalizare(product.page_sections)) {
+    issues.push(
+      "Produsul cere date de la cumpărător (personalizare), iar comanda About You nu are "
+      + "cum să le transmită. Stinge personalizarea sau scoate produsul de pe About You.",
+    );
+  }
   const brand = listing.brand_id ?? config.brand_id;
   if (!brand) issues.push("Lipsește brandul About You.");
   if (!effectiveCategoryId(config, product, listing)) issues.push("Categoria nu este mapată la About You.");

@@ -20,6 +20,7 @@ import {
 import type { TrendyolCategoryAttribute, TrendyolConfig, TrendyolProductAttribute, TrendyolProductItem } from "./types";
 import { getCategoryAttributesCached } from "./taxonomy";
 import { atributeLipsaPeVariante, mesajAtributeLipsa } from "./atribute-obligatorii";
+import { cerePersonalizare } from "@/lib/storefront/variants";
 import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
 import { EroareCitireBaza, randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { logError } from "@/lib/error-logger";
@@ -401,6 +402,27 @@ export async function syncProductNow(
    * „merge cand public unul, esueaza cand public tot", adica exact felul de
    * diferenta pe care nimeni n-o cauta.
    */
+  /*
+   * ⚠ PERSONALIZAREA NU SE POATE ONORA PRIN TRENDYOL.
+   *
+   * Aceeasi hotarare ca la eMAG (`emag/pregatire.ts`, `ceLipseste`), si din acelasi motiv:
+   * comanda lor n-are unde sa poarte „numele care trebuie gravat". Listat, produsul se
+   * vinde, iar comerciantul primeste o comanda pe care n-are cum s-o onoreze — alege intre
+   * a o anula (o plateste in bani si in punctaj) si a trimite ceva la intamplare.
+   *
+   * ⚠ Se opreste ORICE personalizare pornita, nu doar cea cu campuri obligatorii: un camp
+   * „optional" tot inseamna ca vitrina promite ceva ce Trendyol nu poate transmite.
+   *
+   * Masurat pe productie la 06.09.2026: zero produse personalizabile erau listate aici,
+   * deci garda e preventiva si nu scoate nimic din vanzare azi.
+   */
+  if (cerePersonalizare((product as { page_sections?: unknown }).page_sections)) {
+    const mesaj = "Produsul cere date de la cumparator (personalizare), iar comanda Trendyol "
+      + "nu are cum sa le transmita. Stinge personalizarea sau scoate produsul de pe Trendyol.";
+    await setListingStatus(admin, listing.id, "error", { error: mesaj });
+    return { ok: false, error: mesaj };
+  }
+
   const catId = built.items[0]?.categoryId;
   if (typeof catId === "number") {
     const aleCategoriei = await getCategoryAttributesCached(ctx.auth, catId);

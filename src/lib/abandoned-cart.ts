@@ -5,7 +5,7 @@
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import { hasVariants } from "@/lib/storefront/variants";
+import { hasVariants, cerePersonalizare } from "@/lib/storefront/variants";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 
 export interface AbandonedCartItem {
@@ -99,13 +99,14 @@ export interface ProdusCosSalvat {
  * promite un pret pe care magazinul nu-l mai onoreaza e mai rau decat niciun
  * email.
  *
- * O linie DISPARE cand produsul nu mai e in catalog, e dezactivat, sau are
- * variante. Nu e o alegere de afisare, ci consecinta: exact astea sunt liniile pe
- * care linkul de recuperare nu le mai poate pune inapoi in cos (produsul cu
- * variante n-are marimea salvata nicaieri — 0 din cele 129 de linii din productie
- * poarta vreuna). Daca emailul le-ar lista, clientul ar da clic si ar ajunge pe
- * un cos care nu contine ce i s-a promis. In productie asta goleste 6 cosuri din
- * 96, adica exact cele care oricum nu se pot recupera.
+ * O linie DISPARE cand produsul nu mai e in catalog, e dezactivat, are variante,
+ * sau cere personalizare. Nu e o alegere de afisare, ci consecinta: exact astea
+ * sunt liniile pe care linkul de recuperare nu le mai poate pune inapoi in cos
+ * (produsul cu variante n-are marimea salvata nicaieri — 0 din cele 129 de linii
+ * din productie poarta vreuna; produsul personalizat n-are unde sa-si tina textul,
+ * fiindca `CartItem` n-are camp pentru el). Daca emailul le-ar lista, clientul ar
+ * da clic si ar ajunge pe un cos care nu contine ce i s-a promis. In productie
+ * asta goleste 6 cosuri din 96, adica exact cele care oricum nu se pot recupera.
  */
 /** Pretul unitar cu treptele aplicate, in unitatea in care emailul inmulteste. */
 function pretEfectiv(p: ProdusCosSalvat, cantitate: number): number {
@@ -122,7 +123,10 @@ export function liniiRecuperabile(
   for (const it of salvate ?? []) {
     const p = it && catalog.get(it.product_id);
     if (!p || !p.is_active) continue;
-    if (hasVariants(p.page_sections)) continue;
+    // Si personalizarea, din acelasi motiv ca variantele: `restoreCart` scrie cosul
+    // INTREG, iar o linie pe care clientul n-o poate completa ar ramane acolo
+    // necomandabila si nestearsa. Vezi `cerePersonalizare`.
+    if (hasVariants(p.page_sections) || cerePersonalizare(p.page_sections)) continue;
     out.push({
       product_id: p.id,
       // Si numele, si poza vin din catalog: daca produsul a fost redenumit intre

@@ -77,8 +77,8 @@ export function CartRecommendations({ businessId, color, basePath, cartProductId
                   <span className="text-[10px] text-muted-foreground line-through">{formatPrice(p.compareAtPrice)}</span>
                 )}
               </span>
-              {p.hasVariants ? (
-                /* Variable product — send the shopper to its page to choose options. */
+              {p.needsChoice ? (
+                /* Are variante sau cere personalizare — trimite cumparatorul pe pagina lui. */
                 <a href={p.slug ? `${basePath}/product/${p.slug}` : basePath || "/"} aria-label={`Alege optiunile pentru ${p.name}`}
                   className="w-6 h-6 rounded-md flex items-center justify-center text-white shrink-0 transition-transform active:scale-90"
                   style={{ backgroundColor: color }}>

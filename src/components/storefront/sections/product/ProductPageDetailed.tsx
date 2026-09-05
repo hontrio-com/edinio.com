@@ -14,7 +14,7 @@ import { getProductPriceRange } from "@/lib/utils/product-price";
 import { vatLabel } from "@/lib/utils/vat";
 import {
   parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
-  comboEpuizat, comboStock, toateCombinatiileEpuizate, pozePeValoare, VARIANT_TITLE_SEP,
+  comboEpuizat, comboStock, toateCombinatiileEpuizate, pozePeValoare, cerePersonalizare, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
@@ -475,7 +475,12 @@ export function ProductPageDetailed({
   // sertar, fara pagina. Un buton „Adauga in cos" ar confirma o actiune care nu
   // duce nicaieri. In miniatura din catalog nu exista chrome, dar butonul
   // trebuie sa se vada — el e jumatate din designul ales.
-  const arataButonCos = setari.showAddToCart !== false && (demo || chrome?.cartMode !== "hidden");
+  // Aceeasi regula ca in modelul clasic, si din acelasi motiv: cosul n-are unde sa duca
+  // valorile personalizarii, deci butonul ar promite o comanda din care lipsesc. Vezi
+  // `cerePersonalizare`.
+  const cerePersonalizarea = cerePersonalizare(product.page_sections);
+  const arataButonCos =
+    setari.showAddToCart !== false && (demo || (!cerePersonalizarea && chrome?.cartMode !== "hidden"));
   const miniaturiInStanga = setari.galleryThumbs !== "bottom";
   const arataDetalii = setari.showDetails !== false;
   const arataRezumatSpec = setari.showSpecsSummary !== false;

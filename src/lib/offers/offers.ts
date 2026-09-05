@@ -10,7 +10,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { esteUuid } from "@/lib/supabase/ids";
-import { hasVariants } from "@/lib/storefront/variants";
+import { hasVariants, cerePersonalizare } from "@/lib/storefront/variants";
 import { type BumpItem } from "@/lib/offers/bump-pricing";
 import { pretulSetului } from "@/lib/offers/fbt-pricing";
 import {
@@ -105,7 +105,7 @@ function toOfferProduct(p: {
     compareAtPrice: p.compare_at_price != null ? Number(p.compare_at_price) : null,
     imageUrl: firstImage(p.images),
     outOfStock: p.track_inventory && p.stock_quantity !== null && p.stock_quantity <= 0,
-    hasVariants: hasVariants(p.page_sections),
+    needsChoice: hasVariants(p.page_sections) || cerePersonalizare(p.page_sections),
   };
 }
 
@@ -215,7 +215,7 @@ export async function resolveProductOffers(
     // n-are unde sa intrebe ce marime, iar fara alegere ar intra in comanda la
     // pretul de baza si serverul ar respinge-o.
     if (o.type === "frequently_bought") {
-      const buyable = products.filter((p) => !p.outOfStock && !p.hasVariants);
+      const buyable = products.filter((p) => !p.outOfStock && !p.needsChoice);
       if (buyable.length === 0) continue;
       base.products = buyable;
       base.pricing = computeSetPricing([anchor.price, ...buyable.map((p) => p.price)], o.config);
@@ -286,7 +286,7 @@ export async function resolveCartOffers(
     // baza. Bump-ul n-are cum sa intrebe nimic — de aceea alege doar ce e gata
     // de adaugat.
     if (o.type === "order_bump") {
-      const p = products.find((x) => !x.outOfStock && !x.hasVariants);
+      const p = products.find((x) => !x.outOfStock && !x.needsChoice);
       if (!p) continue;
       base.products = [p];
       base.pricing = computeSetPricing([p.price], o.config);

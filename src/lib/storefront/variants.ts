@@ -106,6 +106,30 @@ export function hasVariants(pageSections: unknown): boolean {
 }
 
 /**
+ * Produsul cere date de la cumparator inainte sa poata fi comandat?
+ *
+ * ⚠ PERSONALIZAREA NU ARE CUM SA TREACA PRIN COS.
+ *
+ * `CartItem` (`storefront/cart/normalize.ts`) n-are niciun camp pentru ea, iar
+ * `placeCartOrder` nu o declara in `items` — deci o linie adaugata in cos ajunge in
+ * comanda FARA textul de gravat sau poza incarcata, si fara nicio eroare nicaieri.
+ * Singurul drum care o poarta e comanda directa, prin `OrderModal`.
+ *
+ * Masurat pe productie la 06.09.2026: 29 de produse cu campuri de personalizare, pe 4
+ * magazine, cu 20 de campuri marcate OBLIGATORII — si zero comenzi, din 374, care sa fi
+ * purtat vreodata datele. Deci pana acum comerciantul putea primi „Cana personalizata"
+ * fara sa afle ce nume trebuia scris pe ea.
+ *
+ * Se foloseste ca `hasVariants`: acolo unde produsul nu se poate adauga rapid, fiindca
+ * mai intai trebuie sa aleaga cineva ceva.
+ */
+export function cerePersonalizare(pageSections: unknown): boolean {
+  const ps = (pageSections ?? {}) as { customization?: { enabled?: boolean; fields?: unknown } };
+  const c = ps.customization;
+  return !!c?.enabled && Array.isArray(c.fields) && c.fields.length > 0;
+}
+
+/**
  * The combination title for a full selection, or null when the customer has not
  * picked a value for every option yet.
  */

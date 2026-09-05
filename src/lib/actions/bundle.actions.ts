@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { proiecteazaImediat } from "@/lib/storefront/catalog/proiector";
-import { hasVariants } from "@/lib/storefront/variants";
+import { hasVariants, cerePersonalizare } from "@/lib/storefront/variants";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { getProductLimit, numaraProduseleContului } from "@/lib/plan-limits";
@@ -140,7 +140,11 @@ export async function getBundleEligibleProducts(businessId: string, includeIds: 
   // adica pana cand le pierde. Filtrul se aplica doar la ce se poate ADAUGA.
   const pastrate = new Set(includeIds);
   return (data ?? [])
-    .filter((p) => pastrate.has(p.id) || (p.is_active && !hasVariants(p.page_sections)))
+    // Si personalizarea, alaturi de variante: `expandBundleStock` scade componenta ca
+    // pe un produs simplu, iar fluxul de pachet n-are cum sa ceara clientului textul de
+    // gravat. Un pachet care contine asa ceva ar pleca in comanda fara datele lui.
+    .filter((p) => pastrate.has(p.id)
+      || (p.is_active && !hasVariants(p.page_sections) && !cerePersonalizare(p.page_sections)))
     .map((p) => ({
       id: p.id, name: p.name, price: Number(p.price) || 0, image_url: firstImage(p.images),
       track_inventory: p.track_inventory, stock_quantity: p.stock_quantity, is_active: p.is_active,

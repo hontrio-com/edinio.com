@@ -24,7 +24,7 @@ import type { BumpItem } from "./bump-pricing";
 function produs(id: string, price: number, extra: Partial<OfferProduct> = {}): OfferProduct {
   return {
     id, name: id, slug: id, price, compareAtPrice: null, imageUrl: null,
-    outOfStock: false, hasVariants: false, ...extra,
+    outOfStock: false, needsChoice: false, ...extra,
   };
 }
 
@@ -211,7 +211,7 @@ test("bump: produsele epuizate sau cu variante nu se pot revendica", () => {
   assert.deepEqual(rez.rejected, [{ id: "bump", motiv: "set_gol" }]);
 
   const o2 = oferta("bump", "order_bump", { scope: "all" }, { productIds: ["cuVariante"], fixedPrice: 1, discountMode: "fixed_price" });
-  const rez2 = ruleaza([o2], [linie("cuVariante", 30)], [produs("cuVariante", 30, { hasVariants: true })]);
+  const rez2 = ruleaza([o2], [linie("cuVariante", 30)], [produs("cuVariante", 30, { needsChoice: true })]);
   assert.deepEqual(rez2.rejected, [{ id: "bump", motiv: "set_gol" }]);
 });
 
@@ -237,7 +237,7 @@ test("bump: dincolo de maxProducts chiar nu se mai arata nimic", () => {
   // produse nevandabile, pe care nu le-a cumparat nimeni, ocupa locuri in lista
   // afisata, deci al treilea nu mai incape: fara plafon, ar fi fost revendicabil.
   const o = oferta("bump", "order_bump", { scope: "all" }, { productIds: ["x", "y", "z"], maxProducts: 2, fixedPrice: 1, discountMode: "fixed_price" });
-  const candidati = [produs("x", 10, { outOfStock: true }), produs("y", 20, { hasVariants: true }), produs("z", 500)];
+  const candidati = [produs("x", 10, { outOfStock: true }), produs("y", 20, { needsChoice: true }), produs("z", 500)];
   assert.deepEqual(setulOfertei(o, candidati, null, new Set(["z"])), { motiv: "set_gol" });
 
   // Cu plafonul implicit (4), acelasi z e legitim.
@@ -273,7 +273,7 @@ test("FBT: un produs nevandabil purtat din cos NU blocheaza comanda", () => {
   // produsul ala sta in cos, iar cosul supravietuieste reincarcarii.
   const o = oferta("fbt", "frequently_bought", { scope: "all" }, { productIds: ["c1", "c2"], discountMode: "percent", discountPercent: 10 });
   const linii = [linie("c1", 50), linie("c2", 30)];
-  const rez = ruleaza([o], linii, [produs("c1", 50), produs("c2", 30, { hasVariants: true })],
+  const rez = ruleaza([o], linii, [produs("c1", 50), produs("c2", 30, { needsChoice: true })],
     { id: "ancora", unitPrice: 100 }, ["c2"]);
 
   assert.deepEqual(rez.applied, ["fbt"]);
@@ -289,7 +289,7 @@ test("FBT: acelasi produs, dar FARA varianta aleasa, inseamna set schimbat", () 
   // in tacere, desi pe buton scria pretul setului vechi.
   const o = oferta("fbt", "frequently_bought", { scope: "all" }, { productIds: ["c1", "c2"], discountMode: "percent", discountPercent: 10 });
   const linii = [linie("c1", 50), linie("c2", 30)];
-  const rez = ruleaza([o], linii, [produs("c1", 50), produs("c2", 30, { hasVariants: true })]);
+  const rez = ruleaza([o], linii, [produs("c1", 50), produs("c2", 30, { needsChoice: true })]);
 
   assert.deepEqual(rez.rejected, [{ id: "fbt", motiv: "set_incomplet" }]);
   assert.equal(rez.opreste, true);

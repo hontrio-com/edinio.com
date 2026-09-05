@@ -216,9 +216,10 @@ export function refuzaOferta(o: OfertaCuReguli, ctx: ContextComanda, nowMs: numb
   return null;
 }
 
-/** Produsul poate fi luat dintr-o apasare: are stoc si n-are variante de ales. */
+/** Produsul poate fi luat dintr-o apasare: are stoc si nu cere nicio alegere
+ *  (nici varianta, nici personalizare). Vezi `needsChoice`. */
 function vandabil(p: OfferProduct): boolean {
-  return !p.outOfStock && !p.hasVariants;
+  return !p.outOfStock && !p.needsChoice;
 }
 
 /**

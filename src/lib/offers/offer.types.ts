@@ -193,8 +193,15 @@ export interface OfferProduct {
   compareAtPrice: number | null;
   imageUrl: string | null;
   outOfStock: boolean;
-  /** Variable product — must be configured on its own page, not quick-added. */
-  hasVariants?: boolean;
+  /**
+   * Cere o alegere inainte de a putea fi cumparat: are variante SAU cere
+   * personalizare. In ambele cazuri cumparatorul e trimis pe pagina produsului,
+   * fiindca adaugarea rapida n-are unde sa tina marimea sau textul de gravat.
+   *
+   * Se numea `hasVariants`, si numele mintea de cand personalizarea a intrat in
+   * aceeasi categorie: un produs fara nicio varianta putea avea steagul ridicat.
+   */
+  needsChoice?: boolean;
 }
 
 // One offer, resolved with real product data + computed pricing, ready to render.

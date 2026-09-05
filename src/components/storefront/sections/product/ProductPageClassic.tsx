@@ -15,7 +15,7 @@ import { getProductPriceRange } from "@/lib/utils/product-price";
 import { vatLabel } from "@/lib/utils/vat";
 import {
   parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
-  comboEpuizat, comboStock, toateCombinatiileEpuizate, VARIANT_TITLE_SEP,
+  comboEpuizat, comboStock, toateCombinatiileEpuizate, cerePersonalizare, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
@@ -448,7 +448,20 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // In magazinul cu un singur produs cosul nu are nicio interfata — nici in
   // header, nici sertar, nici pagina — deci butonul ar confirma o actiune care
   // nu duce nicaieri. In miniatura nu exista chrome, dar butonul trebuie vazut.
-  const arataButonCos = setari.showAddToCart !== false && (demo || chrome?.cartMode !== "hidden");
+  /*
+   * ⚠ Produsul personalizat NU primeste buton de cos.
+   *
+   * Cosul n-are unde sa duca valorile (vezi `cerePersonalizare`), deci butonul ar fi
+   * promis o comanda din care textul de gravat sau poza lipsesc — inclusiv la campurile
+   * marcate obligatorii, care nici macar nu erau verificate pe drumul asta. Ramane
+   * „Comanda acum", singurul care chiar poarta datele pana in comanda.
+   *
+   * In miniatura din catalogul de design-uri (`demo`) butonul ramane vizibil: acolo se
+   * alege un ASPECT, iar continutul e demonstrativ.
+   */
+  const cerePersonalizarea = cerePersonalizare(product.page_sections);
+  const arataButonCos =
+    setari.showAddToCart !== false && (demo || (!cerePersonalizarea && chrome?.cartMode !== "hidden"));
   const [adaugatInCos, setAdaugatInCos] = useState(false);
 
   function adaugaInCos() {

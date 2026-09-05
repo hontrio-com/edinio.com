@@ -661,8 +661,20 @@ async function cuImaginiPrimiteDeEmag(
   const aleProdusului = (Array.isArray(produs.images) ? produs.images : [])
     .map((x) => String(x ?? "").trim()).filter(Boolean);
 
-  const ps = (produs.page_sections ?? {}) as { variants?: unknown };
-  const aleCombinatiilor = combinatiiActiveUnice(parseVariants(ps.variants))
+  /*
+   * ⚠ `parseVariants` primeste `page_sections` INTREG, nu nodul `variants`.
+   *
+   * Citeste el insusi `.variants` inauntru (vezi `storefront/variants.ts`), deci dat nodul
+   * interior cauta `page_sections.variants.variants` si intoarce MEREU `null`. Capcana e
+   * scrisa in `mapping.ts`, dar lectia nu ajunsese si aici.
+   *
+   * ⚠ Ce costa: nu doar ca pozele combinatiilor nu se converteau. Lista iesind goala, ele
+   * nu intrau nici in `toate`, deci nici in harta `noi` — iar bucla de mai jos, care
+   * SCOATE ce n-a putut fi convertit, le punea pe toate pe `null`. Adica exact paguba pe
+   * care comentariul de la inceputul functiei o descrie ca fiind evitata: marimea „Rosu”
+   * pleca fara poza, si eMAG nu se plange.
+   */
+  const aleCombinatiilor = combinatiiActiveUnice(parseVariants(produs.page_sections))
     .map((c) => (c.image ?? "").trim()).filter(Boolean);
 
   const toate = [...new Set([...aleProdusului, ...aleCombinatiilor])];

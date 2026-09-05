@@ -109,9 +109,9 @@ function textNormalizat(v: unknown): string | null {
    * ramas — octetii de control adevarati, care n-au ce cauta pe o cana.
    *
    * ⚠ Escapate, nu scrise literal: octetii de control pusi direct in fisier il fac binar, iar
-   * orice unealta care il citeste ca text (grep, o proba care scaneaza sursa) il sare.
+   * orice unealta care il citeste ca text (grep, o proba care scaneaza sursa) il sare. Scrise
+   * asa, `no-control-regex` nici nu se aprinde, deci nu e nevoie de nicio suprimare.
    */
-  // eslint-disable-next-line no-control-regex
   const curat = v.replace(/\s+/g, " ")
     .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
     .trim();

@@ -51,11 +51,26 @@ export async function GET(req: NextRequest) {
   const width = latimeCeruta ? (TREPTE_LATIME.find((t) => t >= latimeCeruta) ?? 2048) : 0;
   const quality = TREPTE_CALITATE.find((t) => t >= calitateCeruta) ?? 95;
 
-  const originalUrl = key && R2_PUBLIC_URL ? `${R2_PUBLIC_URL}/${key}` : null;
+  /*
+   * ⚠ CHEIA SE VALIDEAZA INAINTE de a se compune adresa de rezerva.
+   *
+   * Pana acum `originalUrl` se construia din cheia BRUTA, iar `KEY_RE` se verifica dupa —
+   * pe ramura de esec se chema chiar `fallback()`, adica redirectarea. Deci ruta asta
+   * redirectiona 302 catre ORICE cheie din depozit, nu doar catre prefixele ei:
+   * `/api/img?p=facturi-emag/<magazin>/<comanda>-<numar>.pdf` intorcea factura unui
+   * cumparator, de pe originea edinio.com, fara sesiune. Depozitul e public oricum, deci
+   * nu era o escaladare de drepturi — dar era o redirectare arbitrara servita de noi,
+   * dintr-o ruta scutita dinadins de poarta MFA.
+   *
+   * Ce NU se schimba: o cheie valida fara latime cade in continuare pe imaginea intreaga.
+   * Aia e purtarea pe care se bizuie apelantii care vor originalul.
+   */
+  const cheieValida = !!key && !key.includes("..") && KEY_RE.test(key);
+  const originalUrl = cheieValida && R2_PUBLIC_URL ? `${R2_PUBLIC_URL}/${key}` : null;
   const fallback = () =>
     originalUrl ? NextResponse.redirect(originalUrl, 302) : new NextResponse("Not found", { status: 404 });
 
-  if (!key || key.includes("..") || !width || !KEY_RE.test(key)) return fallback();
+  if (!cheieValida || !width) return fallback();
 
   try {
     const variantKey = `_optim/w${width}q${quality}/${key}.webp`;

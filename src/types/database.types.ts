@@ -1678,6 +1678,202 @@ export type Database = {
           },
         ]
       }
+      configuratoare: {
+        Row: {
+          business_id: string
+          ciorna: Json
+          created_at: string
+          id: string
+          nume: string
+          revizie: number
+          stare: string
+          updated_at: string
+          versiune_activa_id: string | null
+        }
+        Insert: {
+          business_id: string
+          ciorna?: Json
+          created_at?: string
+          id?: string
+          nume: string
+          revizie?: number
+          stare?: string
+          updated_at?: string
+          versiune_activa_id?: string | null
+        }
+        Update: {
+          business_id?: string
+          ciorna?: Json
+          created_at?: string
+          id?: string
+          nume?: string
+          revizie?: number
+          stare?: string
+          updated_at?: string
+          versiune_activa_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "configuratoare_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "configuratoare_versiune_activa_fkey"
+            columns: ["versiune_activa_id"]
+            isOneToOne: false
+            referencedRelation: "configurator_versiuni"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      configurator_categorii: {
+        Row: {
+          business_id: string
+          categorie: string
+          configurator_id: string
+          created_at: string
+          id: string
+          si_viitoarele: boolean
+        }
+        Insert: {
+          business_id: string
+          categorie: string
+          configurator_id: string
+          created_at?: string
+          id?: string
+          si_viitoarele?: boolean
+        }
+        Update: {
+          business_id?: string
+          categorie?: string
+          configurator_id?: string
+          created_at?: string
+          id?: string
+          si_viitoarele?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "configurator_categorii_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "configurator_categorii_configurator_id_fkey"
+            columns: ["configurator_id"]
+            isOneToOne: false
+            referencedRelation: "configuratoare"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      configurator_produse: {
+        Row: {
+          business_id: string
+          configurator_id: string
+          created_at: string
+          fel: string
+          id: string
+          product_id: string
+        }
+        Insert: {
+          business_id: string
+          configurator_id: string
+          created_at?: string
+          fel?: string
+          id?: string
+          product_id: string
+        }
+        Update: {
+          business_id?: string
+          configurator_id?: string
+          created_at?: string
+          fel?: string
+          id?: string
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "configurator_produse_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "configurator_produse_configurator_id_fkey"
+            columns: ["configurator_id"]
+            isOneToOne: false
+            referencedRelation: "configuratoare"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "configurator_produse_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      configurator_versiuni: {
+        Row: {
+          business_id: string
+          compilat: Json | null
+          configurator_id: string
+          definitie: Json
+          id: string
+          numar: number
+          pretuire: Json
+          publicat_de: string | null
+          publicat_la: string
+          reguli: Json
+        }
+        Insert: {
+          business_id: string
+          compilat?: Json | null
+          configurator_id: string
+          definitie: Json
+          id?: string
+          numar: number
+          pretuire?: Json
+          publicat_de?: string | null
+          publicat_la?: string
+          reguli?: Json
+        }
+        Update: {
+          business_id?: string
+          compilat?: Json | null
+          configurator_id?: string
+          definitie?: Json
+          id?: string
+          numar?: number
+          pretuire?: Json
+          publicat_de?: string | null
+          publicat_la?: string
+          reguli?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "configurator_versiuni_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "configurator_versiuni_configurator_id_fkey"
+            columns: ["configurator_id"]
+            isOneToOne: false
+            referencedRelation: "configuratoare"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       custom_pages: {
         Row: {
           blocks: Json

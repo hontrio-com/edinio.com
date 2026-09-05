@@ -90,12 +90,43 @@ test("⚠ FIECARE coloana din lista exista chiar pe `orders`", () => {
   }
 });
 
+/*
+ * ⚠ Secret DE PROBA, pus aici dinadins.
+ *
+ * `semnaturaCheii` arunca fara secret, iar testele nu incarca `.env.local` — si nici nu
+ * trebuie: o cheie de productie ajunsa in probe e chiar capcana pe care proiectul o are
+ * scrisa. Valoarea de aici e fixa, deci semnaturile sunt reproductibile.
+ */
+process.env.SHIPPING_QUOTE_SECRET = "secret-de-proba-awb";
+
 test("cheia din R2 nu poarta semne din numarul de AWB", () => {
   /* ⚠ Numarul ajunge intr-o cale de fisier; un `/` acolo ar fi facut alt dosar. */
-  assert.equal(
-    cheiaPdfAwb("biz", "ord", "AB/12 34"),
-    "awb-emag/biz/ord-AB1234.pdf",
-  );
+  const cheie = cheiaPdfAwb("biz", "ord", "AB/12 34");
+  assert.match(cheie, /^awb-emag\/biz\/ord-AB1234-[0-9a-f]{24}\.pdf$/);
+  assert.ok(!cheie.includes("AB/12"), "numarul nu are voie sa taie o cale noua");
+});
+
+test("cheia e SEMNATA, deci nu se poate reconstitui din datele comenzii", () => {
+  /*
+   * Documentul poarta numele si adresa cumparatorului, iar depozitul e servit public:
+   * adresa lui e singura paza. Cine stie magazinul, comanda si numarul de AWB — adica
+   * cine a vazut o data comanda — nu trebuie sa poata compune adresa.
+   *
+   * ⚠ Proba a fost confruntata cu defectul: cu forma veche
+   * (`awb-emag/${businessId}/${orderId}-${curat}.pdf`) prima asertiune cade.
+   */
+  const cheie = cheiaPdfAwb("biz", "ord", "AB1234");
+  assert.notEqual(cheie, "awb-emag/biz/ord-AB1234.pdf", "cheia nu are voie sa fie ghicibila");
+
+  // Determinista: o reincercare dupa o cadere de retea trebuie sa scrie in ACELASI loc,
+  // altfel fiecare reluare ar lasa in urma inca o copie a documentului.
+  assert.equal(cheie, cheiaPdfAwb("biz", "ord", "AB1234"));
+
+  // Si legata de fiecare parte: alta comanda, alt magazin sau alt AWB dau alta semnatura.
+  const semnatura = (c: string) => c.slice(-28, -4);
+  assert.notEqual(semnatura(cheie), semnatura(cheiaPdfAwb("biz", "alta", "AB1234")));
+  assert.notEqual(semnatura(cheie), semnatura(cheiaPdfAwb("alt", "ord", "AB1234")));
+  assert.notEqual(semnatura(cheie), semnatura(cheiaPdfAwb("biz", "ord", "AB9999")));
 });
 
 /* ── Pagina care pleaca la ei ─────────────────────────────────────────────── */

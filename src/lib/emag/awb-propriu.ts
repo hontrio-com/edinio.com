@@ -36,6 +36,7 @@ import { cuRegistru } from "@/lib/operatii/registru";
 import { uploadToR2 } from "@/lib/r2";
 import { salveazaAtasamente, isEmagError } from "./client";
 import { pdfDintrunSingurFolio } from "./pdf-simplu";
+import { semnaturaCheii } from "@/lib/utils/cheie-neghicibila";
 import { LIMITE_EMAG, taiat } from "./limite";
 import type { ContextEmag } from "./sync";
 
@@ -128,10 +129,21 @@ export function awbPropriuAlComenzii(
   return null;
 }
 
-/** Cheia in R2. ⚠ Curatata: numarul de AWB ajunge intr-o cale de fisier. */
+/**
+ * Cheia in R2. ⚠ Curatata: numarul de AWB ajunge intr-o cale de fisier.
+ *
+ * ⚠ SI SEMNATA, din 06.09.2026. Documentul poarta numele si adresa cumparatorului, iar
+ * depozitul e servit public: adresa e singura lui paza. Fara semnatura, cine avea id-ul
+ * comenzii si numarul de AWB — adica cine a vazut o data comanda — o putea reconstrui.
+ * Acelasi motiv si aceeasi forma ca la facturi (`billing/factura-comenzii.ts`).
+ *
+ * Fisierele urcate inainte raman la cheia lor veche: adresa e deja la eMAG, si nu se
+ * recompune niciodata ca sa le citim noi.
+ */
 export function cheiaPdfAwb(businessId: string, orderId: string, awb: string): string {
   const curat = awb.replace(/[^A-Za-z0-9._-]/g, "");
-  return `awb-emag/${businessId}/${orderId}-${curat}.pdf`;
+  const semnatura = semnaturaCheii(`awb-emag:${businessId}:${orderId}:${curat}`);
+  return `awb-emag/${businessId}/${orderId}-${curat}-${semnatura}.pdf`;
 }
 
 /** Pagina care pleaca la ei. Exportata ca sa poata fi probata fara retea. */

@@ -7,9 +7,14 @@
  * fGO, iar noi trebuie sa stim CARE factura e a comenzii si de unde se ia. Importata din
  * `emag/facturi.ts`, ar fi tras clientul eMAG cu tot cu dependintele lui in pachetul Trendyol.
  *
- * ⚠ MODUL FARA NICIO LEGATURA: nu stie de baza, de retea si de niciun furnizor. Asa poate fi
+ * ⚠ MODUL FARA LEGATURI GRELE: nu stie de baza, de retea si de niciun furnizor. Asa poate fi
  * probat fara nimic in jur, si folosit din amandoua integrarile.
+ *
+ * Singura legatura e `semnaturaCheii` (`node:crypto` + o variabila de mediu), ceruta de
+ * `cheiaPdfFactura`. Restul functiilor raman pure. ⚠ O proba care cheama `cheiaPdfFactura`
+ * trebuie sa-si puna un secret de proba — vezi `emag/awb-propriu.test.ts`.
  */
+import { semnaturaCheii } from "@/lib/utils/cheie-neghicibila";
 
 export interface Factura {
   furnizor: "smartbill" | "oblio" | "fgo";
@@ -64,10 +69,23 @@ export function facturaComenzii(o: {
  *
  * `orderId` e un UUID, deci are deja 122 de biti de nedeterminare. Numarul facturii intra si el:
  * dupa un storno si o reemitere, documentul e ALTUL si trebuie sa aiba alta adresa.
+ *
+ * ⚠ SI O SEMNATURA, din 06.09.2026.
+ *
+ * Argumentul de mai sus tine impotriva CAUTARII oarbe — nimeni nu ghiceste un UUID. Nu tinea
+ * insa impotriva cuiva care ARE deja datele comenzii: comerciantul le are pe ale lui, si un
+ * fost angajat la fel, iar numarul facturii e de obicei consecutiv. Cu ele, adresa se putea
+ * RECONSTRUI, iar documentul se lua fara nicio autentificare. Etichetele GLS rezolvasera deja
+ * exact asta (`lib/gls/eticheta.ts`); facturile ramasesera in urma.
+ *
+ * ⚠ Fisierele urcate INAINTE raman unde sunt, si asa trebuie: adresa lor e deja la
+ * marketplace, iar cheia nu se recompune niciodata ca sa le citim noi — se compune o
+ * singura data, la urcare, si pleaca odata cu atasamentul.
  */
 export function cheiaPdfFactura(
   folder: string, businessId: string, orderId: string, numarFactura: string,
 ): string {
   const curat = numarFactura.replace(/[^A-Za-z0-9._-]/g, "");
-  return `${folder}/${businessId}/${orderId}-${curat}.pdf`;
+  const semnatura = semnaturaCheii(`factura:${folder}:${businessId}:${orderId}:${curat}`);
+  return `${folder}/${businessId}/${orderId}-${curat}-${semnatura}.pdf`;
 }

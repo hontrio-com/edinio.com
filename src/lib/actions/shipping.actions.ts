@@ -507,11 +507,11 @@ export async function getShippingOptions(
   let cos = contextulCosului([], []);
   // Ridicat in afara blocului: pretul din catalog e nevoie si mai jos, ca sa
   // plafoneze subtotalul declarat de client in regulile de transport.
-  let produseCotate: { id: string; shipping_class: string | null; category: string | null; weight_grams: number | null; price: number | null }[] = [];
+  let produseCotate: { id: string; shipping_class: string | null; category: string | null; weight_grams: number | null; price: number | null; page_sections: unknown }[] = [];
   if (destination.cart && destination.cart.length > 0) {
     const { data: cartProducts, error: eroareCos } = await supabase
       .from("products")
-      .select("id, shipping_class, category, weight_grams, price")
+      .select("id, shipping_class, category, weight_grams, price, page_sections")
       .eq("business_id", businessId)
       .in("id", [...new Set(destination.cart.map((c) => c.productId))]);
     // O interogare cazuta inseamna greutate zero, adica tariful unui kilogram

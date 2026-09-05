@@ -122,3 +122,46 @@ test("cantitatea absurda e normalizata, ca peste tot", () => {
   const r = subtotalMaximDinCatalog([{ productId: "p1", quantity: 99999 }], CATALOG);
   assert.ok(r <= 50 * 999, "cantitatea trece prin normalizeazaCantitate");
 });
+
+/*
+ * O combinatie mai SCUMPA decat baza intra intreaga in plafon.
+ *
+ * Pana la 06.09.2026 plafonul se calcula doar din `products.price`. Un tricou de
+ * 50 lei la baza, cu XXL la 80, era plafonat la 50 — deci un cos care chiar facea
+ * 80 de lei nu atingea pragul de livrare gratuita de 60, iar valoarea declarata la
+ * DHL pleca cu 30 de lei sub marfa.
+ *
+ * ⚠ Proba a fost confruntata cu defectul: cu vechiul corp (`total += baza * qty`)
+ * a doua asertiune cade cu 50 in loc de 80.
+ */
+const CU_COMBINATII: ProdusCotat[] = [{
+  id: "tricou",
+  price: 50,
+  page_sections: {
+    variants: {
+      enabled: true,
+      options: [{ id: "o1", name: "Marime", values: ["S", "XXL"] }],
+      combinations: [
+        { id: "c1", title: "S", price: "50", enabled: true },
+        { id: "c2", title: "XXL", price: "80", enabled: true },
+        // Dezactivata: nu are voie sa ridice plafonul, altfel o combinatie scoasa
+        // din vanzare ar largi apararea impotriva umflarii.
+        { id: "c3", title: "AURIT", price: "5000", enabled: false },
+      ],
+    },
+  },
+}];
+
+test("plafonul cuprinde combinatia cea mai scumpa, nu doar pretul de baza", () => {
+  assert.equal(subtotalMaximDinCatalog([{ productId: "tricou", quantity: 1 }], CU_COMBINATII), 80);
+  assert.equal(subtotalMaximDinCatalog([{ productId: "tricou", quantity: 3 }], CU_COMBINATII), 240);
+});
+
+test("o combinatie DEZACTIVATA nu ridica plafonul", () => {
+  // 5000 lei sta pe o combinatie stinsa; plafonul ramane la cea mai scumpa activa.
+  assert.equal(subtotalMaximDinCatalog([{ productId: "tricou", quantity: 1 }], CU_COMBINATII), 80);
+});
+
+test("fara combinatii, plafonul ramane exact cel de dinainte", () => {
+  assert.equal(subtotalMaximDinCatalog([{ productId: "p1", quantity: 2 }], CATALOG), 100);
+});

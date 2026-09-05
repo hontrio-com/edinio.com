@@ -1,3 +1,4 @@
+import { enabledComboPriceMap } from "@/lib/storefront/variants";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 
 /**
@@ -27,6 +28,9 @@ export interface ProdusCotat {
   /** Pretul din catalog. Serveste la PLAFONAREA subtotalului declarat de client
    *  in regulile de transport — vezi `subtotalMaximDinCatalog`. */
   price?: number | null;
+  /** Combinatiile, pentru pretul lor propriu. Tot pentru plafon: o marime mai
+   *  scumpa decat baza costa CHIAR mai mult, iar plafonul trebuie sa o cuprinda. */
+  page_sections?: unknown;
 }
 
 export interface ContextCos {
@@ -91,6 +95,20 @@ export function contextulCosului(linii: LinieCotata[] | undefined, produse: Prod
  * Plafonul taie exact atacul (umflarea) si lasa neatins cazul legitim
  * (reducerea, care doar coboara suma). Produsele negasite in catalog nu adauga
  * nimic: plafonul e ce putem SUSTINE, nu ce sustine clientul.
+ *
+ * ⚠ PRETUL DE BAZA NU E MAXIMUL LEGITIM (reparat 06.09.2026).
+ *
+ * Plafonul se calcula doar din `products.price`, dar o combinatie isi poate avea
+ * pretul ei, si de obicei mai MARE (XXL costa mai mult decat S). Deci un cos cu
+ * marimea scumpa era plafonat sub cat facea el cu adevarat, iar consecinta nu era
+ * teoretica: pragul de livrare gratuita nu se atingea cand ar fi trebuit, iar
+ * valoarea declarata la DHL pleca mai mica decat marfa — la asigurare, diferenta
+ * o plateste comerciantul.
+ *
+ * Se ia acum cel mai mare pret legitim al produsului (baza sau oricare combinatie
+ * activa). Linia nu spune ce combinatie s-a ales — `LinieCotata` n-o poarta — dar
+ * pentru un PLAFON asta e alegerea corecta: apara mai departe impotriva umflarii,
+ * si nu mai poate taia in carne vie o suma adevarata.
  */
 export function subtotalMaximDinCatalog(
   linii: LinieCotata[] | undefined,
@@ -101,9 +119,13 @@ export function subtotalMaximDinCatalog(
   for (const linie of linii ?? []) {
     const p = byId.get(linie.productId);
     if (!p) continue;
-    const pret = Number(p.price);
-    if (!Number.isFinite(pret) || pret <= 0) continue;
-    total += pret * normalizeazaCantitate(linie.quantity);
+    const baza = Number(p.price);
+    if (!Number.isFinite(baza) || baza <= 0) continue;
+    let maxim = baza;
+    for (const pret of enabledComboPriceMap(p.page_sections, baza).values()) {
+      if (Number.isFinite(pret) && pret > maxim) maxim = pret;
+    }
+    total += maxim * normalizeazaCantitate(linie.quantity);
   }
   return Math.round(total * 100) / 100;
 }

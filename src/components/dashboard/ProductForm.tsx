@@ -295,7 +295,12 @@ function productToForm(p: Product): FormState {
     images: Array.isArray(p.images) ? p.images.map(String) : [],
     track_inventory: p.track_inventory,
     stock_quantity: p.stock_quantity !== null ? String(p.stock_quantity) : "",
-    low_stock_threshold: ps.low_stock_threshold !== undefined ? String(ps.low_stock_threshold) : "",
+    // `!= null`, nu `!== undefined`: salvarea scrie chiar `null` cand urmarirea
+    // stocului e stinsa sau campul e gol (vezi `handleSubmit`), iar `String(null)`
+    // da sirul „null", care ajunge intr-un `<input type="number">`. Campul aparea
+    // completat cu un text pe care browserul nu-l poate interpreta, deci pragul
+    // se pierdea la prima redeschidere a produsului.
+    low_stock_threshold: ps.low_stock_threshold != null ? String(ps.low_stock_threshold) : "",
     stock_status: (ps.stock_status as FormState["stock_status"]) ?? "in_stock",
     is_featured: p.is_featured,
     is_active: p.is_active,

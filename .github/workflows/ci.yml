@@ -302,12 +302,20 @@ jobs:
           mkdir -p /tmp/sect
           awk '/^-- ── /{n++} {print > sprintf("/tmp/sect/%02d.sql", n+0)}' /tmp/baseline-portabil.sql
           ls -1 /tmp/sect | wc -l
-          # ⚠ Pasii de mai jos enumera fisierele 00..14 CABLAT. Daca generatorul
+          # ⚠ Pasii de mai jos enumera fisierele 00..16 CABLAT. Daca generatorul
           # adauga vreodata o sectiune, ea n-ar fi mentionata de niciun pas si ar
           # disparea in tacere — jobul ar ramane verde peste o schema incompleta,
           # fiindca `set -euo pipefail` nu are cum sa observe un fisier de care nu
           # vorbeste nimeni. Deci se NUMARA.
-          asteptate=15
+          #
+          # ⚠ NUMARUL A FOST GRESIT DIN 06.09.2026 INAPOI, si tocmai de aia poarta
+          # asta nu mai aparase nimic. Sectiunea „CAMPURI CRIPTATE" a intrat in
+          # baseline si a decalat totul cu unu: numarul ramasese 15 pentru 17
+          # fisiere, deci pasul cadea INAINTE de orice psql. Iar cat timp cadea,
+          # nimeni n-a observat ca ultimele doua sectiuni — GRANTURI PE FUNCTII si
+          # REVOCARI DE LA PUBLIC — nu erau enumerate de niciun pas. Adica exact
+          # cele doua care hotarasc ce poate chema `anon`.
+          asteptate=17
           gasite=$(ls -1 /tmp/sect | wc -l)
           if [ "$gasite" -ne "$asteptate" ]; then
             echo "PICAT: baseline-ul are $gasite sectiuni, pasii acopera $asteptate."
@@ -331,25 +339,42 @@ jobs:
         env: { PGPASSWORD: proba }
         run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/06.sql
 
-      - name: 5 indexuri
+      - name: 5 campuri criptate
         env: { PGPASSWORD: proba }
         run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/07.sql
 
-      - name: 6 vederi
+      - name: 6 indexuri
         env: { PGPASSWORD: proba }
         run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/08.sql
 
-      - name: 7 declansatoare
+      - name: 7 vederi
         env: { PGPASSWORD: proba }
         run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/09.sql
 
-      - name: 8 RLS si politici
+      - name: 8 declansatoare
         env: { PGPASSWORD: proba }
         run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/10.sql
 
-      - name: 9 granturi
+      - name: 9 RLS si politici
         env: { PGPASSWORD: proba }
-        run: for f in /tmp/sect/11.sql /tmp/sect/12.sql /tmp/sect/13.sql /tmp/sect/14.sql; do [ -f "$f" ] && psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f "$f"; done
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/11.sql
+
+      - name: 10 acces la scheme si granturi pe tabele
+        env: { PGPASSWORD: proba }
+        run: for f in /tmp/sect/12.sql /tmp/sect/13.sql /tmp/sect/14.sql; do [ -f "$f" ] && psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f "$f"; done
+
+      # ⚠ CELE DOUA DE MAI JOS N-AU FOST APLICATE NICIODATA la restaurare.
+      # Ele sunt chiar partea de securitate a schemei: cine are voie sa cheme
+      # fiecare functie, si ce se ia inapoi de la PUBLIC. O restaurare fara ele
+      # dadea o baza in care orice `anon` putea chema orice functie — si tocmai
+      # asta e proba pe care jobul pretindea ca o face.
+      - name: 11 granturi pe functii
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/15.sql
+
+      - name: 12 revocari de la public
+        env: { PGPASSWORD: proba }
+        run: psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'set check_function_bodies=off' -f /tmp/sect/16.sql
 
       # O aplicare fara eroare nu inseamna ca a construit ceva: `create table if
       # not exists` peste un fisier gol „reuseste" la fel de linistit. Se NUMARA.

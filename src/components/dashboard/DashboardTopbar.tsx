@@ -67,6 +67,7 @@ const NAV_ITEMS: MobileNavItem[] = [
       { href: "/dashboard/products", label: "Toate produsele" },
       { href: "/dashboard/products/categories", label: "Categorii" },
       { href: "/dashboard/products/bundles", label: "Pachete" },
+      { href: "/dashboard/products/configurators", label: "Configuratoare" },
     ],
   },
   { href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi" },

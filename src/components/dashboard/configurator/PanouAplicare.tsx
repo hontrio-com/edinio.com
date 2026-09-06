@@ -4,20 +4,20 @@ import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Loader2, Plus, Search, TriangleAlert, X } from "lucide-react";
 import {
-  aplicaLaCategorii, aplicaLaProduse, cautaProduseDeLegat, citesteAplicarea,
-  scoateCategorii, scoateProduse,
+  aplicaLaCategorii, aplicaLaProduse, aplicaLaProduseleDinCategorie, cautaProduseDeLegat,
+  citesteAplicarea, scoateCategorii, scoateProduse,
   type Aplicare, type ProdusGasit, type ProdusScurt,
 } from "@/lib/actions/configurator.actions";
 
 /**
  * Pe ce produse se pune configuratorul.
  *
- * ═══ ⚠ SE SCRIE LA FIECARE GEST, NU LA UN BUTON „SALVEAZA" ═══
+ * ═══ ⚠ SE SCRIE LA FIECARE GEST, NU LA UN BUTON „SALVEAZA” ═══
  *
  * Structura configuratorului e o ciorna care se publica; aplicarea NU e. Ea intra in vigoare pe
- * loc, fiindca raspunde la o intrebare de alta natura — „care produse", nu „cum arata". Un buton
+ * loc, fiindca raspunde la o intrebare de alta natura — „care produse”, nu „cum arata”. Un buton
  * de salvare aici ar fi facut ca doua lucruri care se schimba din acelasi ecran sa aiba doua
- * intelesuri diferite pentru „gata".
+ * intelesuri diferite pentru „gata”.
  *
  * De aceea fiecare gest isi asteapta raspunsul si abia apoi schimba lista de pe ecran. O lista
  * mutata inainte de raspuns ar fi aratat o legatura care nu s-a scris.
@@ -26,7 +26,7 @@ import {
  *
  * Un produs are cel mult UN configurator legat direct — o are chiar indexul din baza. Deci
  * cautarea arata din capul locului cine l-a luat deja, iar cand refuzul vine totusi la scriere,
- * se spune pe NUME care produse n-au intrat. Un „n-a mers" fara nume l-ar fi pus pe comerciant
+ * se spune pe NUME care produse n-au intrat. Un „n-a mers” fara nume l-ar fi pus pe comerciant
  * sa ghiceasca dintre douazeci de bifate.
  */
 
@@ -121,6 +121,21 @@ export function PanouAplicare({ configuratorId }: { configuratorId: string }) {
             const r = await aplicaLaCategorii(configuratorId, [c]);
             if ("error" in r) return r.error;
             if (r.necunoscute.length) return `Categoria „${r.necunoscute[0]}” nu mai exista in magazin.`;
+            return null;
+          })}
+          onDoarAcum={(c) => fa(async () => {
+            const r = await aplicaLaProduseleDinCategorie(configuratorId, c);
+            if ("error" in r) return r.error;
+            /*
+             * ⚠ Se SPUNE cate au intrat si care n-au. Un „gata” tacut peste o categorie din care
+             * jumatate din produse erau luate de alt configurator l-ar fi lasat pe comerciant sa
+             * creada ca a legat tot.
+             */
+            if (r.refuzate.length) {
+              toast.warning(`${r.legate} legate. ${r.refuzate.length} erau deja legate de alt configurator.`);
+            } else {
+              toast.success(`${r.legate} produse legate.`);
+            }
             return null;
           })}
         />
@@ -264,8 +279,19 @@ function Miniatura({ produs }: { produs: ProdusScurt }) {
   );
 }
 
-function AlegeCategorie({ disponibile, dezactivat, onAlege }: {
-  disponibile: string[]; dezactivat: boolean; onAlege: (c: string) => void;
+/**
+ * Alegerea unei categorii, cu cele DOUA intelesuri ale ei scrise pe fata.
+ *
+ * ⚠ „Toate produsele” e o REGULA, „doar cele de acum” e o LISTA. Se rezolva altfel si se poarta
+ * altfel: prima prinde si ce se adauga maine, a doua nu. Ascunse sub acelasi buton, comerciantul
+ * ar fi aflat diferenta abia cand un produs adaugat luna viitoare s-ar fi vandut neconfigurat —
+ * sau, invers, cand unul adaugat din greseala ar fi capatat singur un configurator.
+ */
+function AlegeCategorie({ disponibile, dezactivat, onAlege, onDoarAcum }: {
+  disponibile: string[];
+  dezactivat: boolean;
+  onAlege: (c: string) => void;
+  onDoarAcum: (c: string) => void;
 }) {
   const [aleasa, setAleasa] = useState("");
 
@@ -274,24 +300,38 @@ function AlegeCategorie({ disponibile, dezactivat, onAlege }: {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label htmlFor="apl-alege-categorie" className="sr-only">Alege o categorie</label>
-      <select
-        id="apl-alege-categorie" value={aleasa} onChange={(e) => setAleasa(e.target.value)}
-        disabled={dezactivat}
-        className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-primary disabled:opacity-50"
-      >
-        <option value="">Alege o categorie…</option>
-        {disponibile.map((c) => <option key={c} value={c}>{c}</option>)}
-      </select>
-      <button
-        type="button"
-        onClick={() => { if (aleasa) { onAlege(aleasa); setAleasa(""); } }}
-        disabled={dezactivat || !aleasa}
-        className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40"
-      >
-        <Plus className="h-4 w-4" aria-hidden /> Adauga
-      </button>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="apl-alege-categorie" className="sr-only">Alege o categorie</label>
+        <select
+          id="apl-alege-categorie" value={aleasa} onChange={(e) => setAleasa(e.target.value)}
+          disabled={dezactivat}
+          className="h-10 min-w-0 flex-1 rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-primary disabled:opacity-50"
+        >
+          <option value="">Alege o categorie…</option>
+          {disponibile.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <button
+          type="button"
+          onClick={() => { if (aleasa) { onAlege(aleasa); setAleasa(""); } }}
+          disabled={dezactivat || !aleasa}
+          className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40"
+        >
+          <Plus className="h-4 w-4" aria-hidden /> Toate produsele
+        </button>
+        <button
+          type="button"
+          onClick={() => { if (aleasa) { onDoarAcum(aleasa); setAleasa(""); } }}
+          disabled={dezactivat || !aleasa}
+          className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40"
+        >
+          <Plus className="h-4 w-4" aria-hidden /> Doar cele de acum
+        </button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        „Toate produsele” leaga si produsele adaugate mai tarziu in categorie. „Doar cele de acum”
+        leaga fiecare produs in parte, deci cele viitoare raman neatinse.
+      </p>
     </div>
   );
 }

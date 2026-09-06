@@ -19,6 +19,7 @@
 
 import { revalidatePath } from "next/cache";
 import { esteAlMagazinului, magazinulMeu } from "@/lib/auth/magazinul-meu";
+import { extindeCategoriile } from "@/lib/offers/offer-pricing";
 import { logError } from "@/lib/error-logger";
 import { citesteContinut } from "@/lib/configurators/citeste";
 import { compileaza } from "@/lib/configurators/compileaza";
@@ -732,7 +733,20 @@ export async function aplicaLaCategorii(
   const { error } = await a.supabase
     .from("configurator_categorii")
     .upsert(
-      deScris.map((categorie) => ({ business_id: a.magazin.id, configurator_id: id, categorie })),
+      /*
+       * ⚠ `si_viitoarele: true` se scrie PE FATA, desi e si valoarea din oficiu.
+       *
+       * Coloana spune ce face chiar legatura de categorie: se rezolva prin NUMELE categoriei,
+       * la fiecare citire, deci prinde si produsele adaugate maine. Cine vrea numai produsele
+       * de ACUM foloseste `aplicaLaProduseleDinCategorie`, care scrie legaturi directe si nu
+       * lasa in urma nimic care sa se intinda singur.
+       *
+       * Nescrisa, coloana ar fi ramas o valoare din oficiu pe care n-o alege nimeni si n-o
+       * citeste nimic — adica o promisiune in schema, fara nimic care s-o tina.
+       */
+      deScris.map((categorie) => ({
+        business_id: a.magazin.id, configurator_id: id, categorie, si_viitoarele: true,
+      })),
       { onConflict: "business_id,configurator_id,categorie", ignoreDuplicates: true },
     );
 
@@ -743,6 +757,61 @@ export async function aplicaLaCategorii(
 
   revalidatePath(CALEA);
   return { success: true, legate: deScris.length, necunoscute };
+}
+
+/**
+ * Leaga configuratorul de produsele care sunt ACUM in categorie, si atat.
+ *
+ * ⚠ NU scrie nicio legatura de categorie. Tocmai asta e diferenta fata de
+ * `aplicaLaCategorii`: acolo legatura se rezolva prin nume la fiecare citire, deci prinde si
+ * ce se adauga maine; aici se scriu legaturi directe pe produsele de azi, si atat raman.
+ *
+ * Comerciantul care isi umple categoria cu produse noi in fiecare saptamana are nevoie de
+ * amandoua purtarile, si nu sunt acelasi lucru: una e o REGULA, cealalta o LISTA.
+ *
+ * ⚠ Coboara in subarbore, ca si rezolvarea: comerciantul isi alege declansatorul dintr-un
+ * arbore si se asteapta ca „Imbracaminte” sa insemne si rochiile de sub ea.
+ */
+export async function aplicaLaProduseleDinCategorie(
+  id: string,
+  categorie: unknown,
+): Promise<{ error: string } | { success: true; legate: number; refuzate: ProdusScurt[] }> {
+  const a = await magazinulMeu();
+  if (!a.ok) return { error: a.error };
+  if (!(await esteAlMagazinului(a.supabase, "configuratoare", id, a.magazin.id))) {
+    return { error: "Configuratorul nu exista." };
+  }
+
+  const nume = typeof categorie === "string" ? categorie.trim() : "";
+  if (!nume) return { error: "Alege o categorie." };
+
+  const { data: arbore, error: eA } = await a.supabase
+    .from("categories").select("id, name, parent_id").eq("business_id", a.magazin.id);
+  if (eA) return { error: "Nu am putut citi categoriile. Incearca din nou." };
+  if (!(arbore ?? []).some((c) => c.name === nume)) {
+    return { error: "Categoria nu exista in magazinul tau." };
+  }
+  const numele = [...extindeCategoriile(arbore ?? [], [nume])];
+
+  /*
+   * ⚠ Se cer id-urile, si se SPUNE cate au intrat.
+   *
+   * Lista se taie la `MAXIM_PE_LOT`, fiindca `.in()` pleaca in adresa si fiindca scrierea e
+   * un singur lot. Taiata in tacere, comerciantul ar fi crezut ca a legat toata categoria, si
+   * ar fi aflat de la primul client care cumpara un produs neconfigurabil din ea.
+   */
+  const { data: produse, error: eP } = await a.supabase
+    .from("products").select("id")
+    .eq("business_id", a.magazin.id)
+    .in("category", numele.slice(0, MAXIM_PE_LOT))
+    .limit(MAXIM_PE_LOT);
+  if (eP) return { error: "Nu am putut citi produsele categoriei. Incearca din nou." };
+  const ids = (produse ?? []).map((p) => p.id);
+  if (ids.length === 0) return { error: "Categoria nu are niciun produs acum." };
+
+  // Mai departe e exact drumul de la legarea manuala: aceleasi verificari, si acelasi refuz
+  // pe nume pentru produsele luate deja de alt configurator.
+  return aplicaLaProduse(id, ids, "direct");
 }
 
 /** Scoate categoriile de sub configurator. */

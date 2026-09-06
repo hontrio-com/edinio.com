@@ -577,6 +577,15 @@ const PRODUS_FARA_STOC = {
   id: PID, name: "Pantof", slug: "pantof", description: "", price: 100, compare_at_price: null,
   images: [], category: "Pantofi", is_active: true, track_inventory: true, stock_quantity: 0,
   page_sections: null,
+  /*
+   * ⚠ Steagul se da MEREU, si tocmai lipsa lui e ce opreste trimiterea.
+   *
+   * `upsertRemote` refuza o forma in care intrebarea „are configurator?" n-a fost pusa deloc:
+   * `undefined` citit ca „n-are" ar posta pe OLX un produs configurabil la pretul de baza — pretul
+   * unui obiect care nu exista — si comerciantul ar primi o comanda pe care n-are cum s-o onoreze.
+   * Deci si fixtura de aici raspunde la ea, ca orice apelant adevarat.
+   */
+  areConfigurator: false,
 };
 
 test("⚠ stoc zero fara rand local: anuntul viu de la ei se leaga si se stinge", async () => {

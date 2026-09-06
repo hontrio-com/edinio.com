@@ -21,6 +21,7 @@ import type { TrendyolCategoryAttribute, TrendyolConfig, TrendyolProductAttribut
 import { getCategoryAttributesCached } from "./taxonomy";
 import { atributeLipsaPeVariante, mesajAtributeLipsa } from "./atribute-obligatorii";
 import { cerePersonalizare } from "@/lib/storefront/variants";
+import { configurabileDeExport, motivulConfiguratorului } from "@/lib/configurators/nu-se-exporta";
 import { TRENDYOL_DEFAULT_STOREFRONT } from "./types";
 import { EroareCitireBaza, randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { logError } from "@/lib/error-logger";
@@ -419,6 +420,28 @@ export async function syncProductNow(
   if (cerePersonalizare((product as { page_sections?: unknown }).page_sections)) {
     const mesaj = "Produsul cere date de la cumparator (personalizare), iar comanda Trendyol "
       + "nu are cum sa le transmita. Stinge personalizarea sau scoate produsul de pe Trendyol.";
+    await setListingStatus(admin, listing.id, "error", { error: mesaj });
+    return { ok: false, error: mesaj };
+  }
+
+  /*
+   * ⚠ SI CONFIGURATORUL, IN ACELASI LOC SI CU O PAGUBA MAI MARE.
+   *
+   * Personalizarea pierde un TEXT — comanda vine, dar fara numele de gravat. Configuratorul
+   * pierde si PRETUL: el se naste din ce alege cumparatorul, iar la Trendyol produsul ar sta
+   * la pretul de baza, adica la pretul unui obiect care nu exista.
+   *
+   * ⚠ „N-AM PUTUT AFLA” NU E „N-ARE”: listarea nu se marcheaza cu eroare (n-are ce repara
+   * comerciantul) si se intoarce esec, deci lucrarea se reia.
+   */
+  const configurabile = await configurabileDeExport(ctx.businessId, [
+    { id: productId, category: (product as { category?: string | null }).category ?? null },
+  ]);
+  if (!configurabile.ok) {
+    return { ok: false, error: "Nu s-a putut afla daca produsul are configurator. Se reia singur." };
+  }
+  if (configurabile.ids.has(productId)) {
+    const mesaj = motivulConfiguratorului("Trendyol");
     await setListingStatus(admin, listing.id, "error", { error: mesaj });
     return { ok: false, error: mesaj };
   }
@@ -832,6 +855,34 @@ export async function syncProductsBulk(
     .from("products").select(PRODUCT_FIELDS).eq("business_id", ctx.businessId).in("id", ids) as never
   ) as unknown as MappableProduct[];
 
+  /*
+   * ═══ ⚠ CONFIGURATOARELE, O SINGURA CITIRE PENTRU TOT LOTUL ═══
+   *
+   * Calea asta trimite sute de produse dintr-o apasare. Intrebate pe rand, ar fi fost patru
+   * dus-intorsuri PE PRODUS — iar prima intrebare („are magazinul vreun configurator activ?”)
+   * s-ar fi pus de sute de ori pentru acelasi raspuns. Se citeste o data, aici.
+   *
+   * ⚠ SI DACA NU S-A PUTUT AFLA, NU PLEACA NIMIC. Citit ca „niciunul n-are”, tot lotul ar fi
+   * ajuns la Trendyol la pretul de baza — si de acolo nu se mai intoarce cu o reincercare:
+   * produsele sunt listate, se vand, si comenzile vin.
+   */
+  const configurabile = await configurabileDeExport(
+    ctx.businessId,
+    lista.map((p) => ({ id: p.id, category: p.category ?? null })),
+  );
+  if (!configurabile.ok) {
+    /* ⚠ Un rand PE PRODUS, ca toate celelalte esecuri de aici: ecranul scrie „{produs}: {motiv}",
+       iar jurnalul grupeaza dupa motiv si pastreaza un produs de pilda. Un singur rand fara nume
+       ar fi iesit in ecran ca „: Nu s-a putut…" si ar fi lasat exemplul gol in jurnal. */
+    const mesaj = "Nu s-a putut afla daca produsul are configurator, deci nu s-a trimis nimic "
+      + "spre Trendyol. Incearca din nou.";
+    for (const p of lista) {
+      out.failed++;
+      out.errors.push({ product: p.name, message: mesaj });
+    }
+    return out;
+  }
+
   // Fiecare produs isi pregateste listarea; erorile sunt per produs, ca sa nu
   // pice toata selectia din cauza unuia fara categorie mapata.
   const pregatite: { product: MappableProduct; listingId: string }[] = [];
@@ -839,6 +890,13 @@ export async function syncProductsBulk(
     if ((p as { is_active?: boolean }).is_active === false) {
       out.failed++;
       out.errors.push({ product: p.name, message: "Produs inactiv." });
+      continue;
+    }
+    /* ⚠ Inaintea lui `ensureListingFromMapping`: acela CREEAZA listarea, iar un produs care
+       n-are voie sa plece n-are de ce sa capete una. */
+    if (configurabile.ids.has(p.id)) {
+      out.failed++;
+      out.errors.push({ product: p.name, message: motivulConfiguratorului("Trendyol") });
       continue;
     }
     const gata = await ensureListingFromMapping(admin, ctx, p);

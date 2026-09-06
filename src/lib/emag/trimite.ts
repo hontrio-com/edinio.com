@@ -40,6 +40,7 @@ import { rutaDeTrimitere } from "./rute";
 import { combinatiiActiveUnice, parseVariants } from "@/lib/storefront/variants";
 import { EAN_PE_CERERE, eanuriDeCautat, imparteRaspunsurilePeRanduri, verdictEan, type RaspunsEan } from "./ean";
 import { ceLipseste, type ProdusDeVerificat } from "./pregatire";
+import { configurabileDeExport } from "@/lib/configurators/nu-se-exporta";
 import { EroareCitireBaza, randCitit, randuriCitite } from "./citire";
 import { ePrimitaDeEmag, imaginiPentruEmag } from "./imagini";
 import type { ContextEmag } from "./sync";
@@ -340,6 +341,32 @@ async function duTotul(
   }
 
   /*
+   * ═══ ⚠ CONFIGURATORUL SE INTREABA PE RUTA GREA, NU PE FIECARE ELEMENT DIN COADA ═══
+   *
+   * Coada eMAG se umple la fiecare editare de pret si la fiecare vanzare, iar rutele usoare
+   * (`duStocul`, `duOferta`) ating oferte care EXISTA deja acolo. Pentru ele intrebarea n-ar
+   * schimba nimic si ar fi o citire in plus la fiecare miscare de stoc. Ruta asta e singura care
+   * CREEAZA, deci singura care are ce apara.
+   *
+   * ⚠ Un element de coada poarta UN produs, deci lotul e de unul singur — iar citirea intreaba
+   * intai daca magazinul are vreun configurator activ si se opreste acolo. La magazinele fara,
+   * adica aproape toate, garda costa o singura citire pe index.
+   *
+   * ⚠ „N-AM PUTUT AFLA” NU E „N-ARE”. Verdictul necunoscut face lucrarea trecatoare: ramane in
+   * coada si se reia, fara sa arda o incercare. Citit ca „n-are”, produsul ar fi plecat pe eMAG
+   * la pretul de baza — chiar paguba pe care garda o opreste.
+   */
+  const configurabile = await configurabileDeExport(ctx.businessId, [
+    { id: produs.id, category: produs.category },
+  ]);
+  if (!configurabile.ok) {
+    return {
+      verdict: "trecatoare",
+      mesaj: "Nu s-a putut afla daca produsul are configurator. Se reia singur.",
+    };
+  }
+
+  /*
    * ═══ ⚠ SE VERIFICA LOCAL INAINTE DE A CHEMA EMAG ═══
    *
    * Un produs incomplet trimis costa de patru ori: arde o cerere din cele 3 pe secunda
@@ -353,7 +380,7 @@ async function duTotul(
    * si de aceea ce trece de ea pleaca mai departe ca pana acum.
    */
   const lipsuri = ceLipseste(
-    produsDeVerificat(produs),
+    produsDeVerificat(produs, configurabile.ids.has(produs.id)),
     {
       category_id: categorie.category_id,
       eanObligatoriu: categorie.ean_obligatoriu === true,
@@ -716,7 +743,7 @@ async function cuImaginiPrimiteDeEmag(
  * stau in colturi diferite. Se scot AICI, o data, ca `pregatire.ts` sa ramana pur si
  * sa poata fi chemat si din ecran.
  */
-function produsDeVerificat(p: ProdusDeCartografiat): ProdusDeVerificat {
+function produsDeVerificat(p: ProdusDeCartografiat, areConfigurator: boolean): ProdusDeVerificat {
   const ps = (p.page_sections ?? {}) as {
     google?: { gtin?: string; brand?: string };
     dimensions?: { length?: number; width?: number; height?: number };
@@ -736,6 +763,9 @@ function produsDeVerificat(p: ProdusDeCartografiat): ProdusDeVerificat {
     /* ⚠ Doua garzi noi, vezi `ceLipseste`: personalizarea nu se poate onora prin comanda
        lor, iar pachetul are stoc derivat pe care integrarea nu-l scade. */
     personalizare: ps.customization ?? null,
+    /* ⚠ Se da MEREU, nu se lasa pe seama unui implicit: `undefined` s-ar citi in `ceLipseste`
+       drept „n-are configurator”, iar garda ar disparea fara ca ceva sa dea eroare. */
+    areConfigurator,
     estePachet: p.is_bundle === true,
   };
 }

@@ -7,6 +7,7 @@ const BUN = {
   versiuneId: "v1",
   numarVersiune: 3,
   amprenta: "0f3asj30xcbam60dg0nhd0fcl9j4",
+  grame: 750,
   valori: { g: { f: "text", v: "Robert" } },
   rezumat: [{ id: "g", eticheta: "Gravura", valoare: "Robert", scurt: true }],
 };
@@ -16,8 +17,39 @@ test("un instantaneu intreg se citeste intreg", () => {
   assert.ok(r);
   assert.equal(r.configuratorId, "c1");
   assert.equal(r.numarVersiune, 3);
+  assert.equal(r.grame, 750);
   assert.deepEqual(r.rezumat.map((x) => x.valoare), ["Robert"]);
   assert.deepEqual(r.valori, { g: { f: "text", v: "Robert" } });
+});
+
+test("gramele lipsa se citesc ZERO, nu ca lipsa", () => {
+  /*
+   * ⚠ Comenzile scrise inainte de campul asta n-au grame — si sunt tocmai cele in care greseala ar
+   * fi trecut neobservata. Cel care cantareste coletul ADUNA: o valoare care poate lipsi l-ar fi
+   * pus sa aleaga el ce face cu lipsa, in fiecare din cele doua locuri unde se aduna greutate.
+   */
+  const r = citesteInstantaneul({ rezumat: BUN.rezumat });
+  assert.ok(r);
+  assert.equal(r.grame, 0);
+});
+
+test("gramele stricate nu ajung la curier", () => {
+  /*
+   * ⚠ `orders.items` e jsonb si se poate edita de mana. Un `"750"` trecut printr-un `Number()`
+   * binevoitor ar fi mers, dar „greu" ar fi iesit `NaN` si ar fi otravit toata adunarea coletului:
+   * o singura linie stricata ar fi trimis intreaga comanda la curier cu greutate nefinita. Un numar
+   * negativ ar fi SCAZUT din colet.
+   */
+  for (const grame of ["750", "greu", -500, Number.NaN, Number.POSITIVE_INFINITY, null, {}, [750]]) {
+    const r = citesteInstantaneul({ ...BUN, grame });
+    assert.ok(r);
+    assert.equal(r.grame, 0, `${JSON.stringify(grame)} a ajuns greutate`);
+  }
+});
+
+test("o greutate buna trece prin `instantaneulLiniei`", () => {
+  // Drumul adevarat: linia din `orders.items`, nu instantaneul gol.
+  assert.equal(instantaneulLiniei({ product_id: "p1", configuratie: BUN })?.grame, 750);
 });
 
 test("FARA REZUMAT nu se intoarce nimic", () => {

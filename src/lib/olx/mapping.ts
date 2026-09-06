@@ -36,6 +36,15 @@ export interface MappableProduct {
    * fara campul asta. `gpsrDinProdus` citeste `unknown` fara sa presupuna nimic despre forma.
    */
   page_sections?: unknown;
+  /**
+   * Produsul are un configurator servit acum?
+   *
+   * ⚠ NU se poate citi din randul produsului: legaturile stau in `configurator_produse` si in
+   * `configurator_categorii`. Se calculeaza de apelant, o data pe lot, ca `pachetDisponibil` la
+   * celelalte feeduri — iar `upsertRemote` REFUZA sa trimita ceva cand campul lipseste, fiindca
+   * `undefined` citit ca „n-are” ar posta pe OLX un produs configurabil la pretul de baza.
+   */
+  areConfigurator?: boolean;
 }
 
 export function isProductSellable(p: Pick<MappableProduct, "is_active" | "track_inventory" | "stock_quantity">): boolean {

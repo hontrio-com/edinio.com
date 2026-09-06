@@ -35,6 +35,15 @@ export interface InstantaneuCitit {
   versiuneId: string | null;
   numarVersiune: number | null;
   amprenta: string | null;
+  /**
+   * Cat cantareste configuratia, in grame, PER BUCATA. Zero cand comanda n-o poarta.
+   *
+   * ⚠ Zero, nu `null`: cel care cantareste coletul ADUNA. O valoare care poate lipsi l-ar fi
+   * obligat sa aleaga el ce face cu lipsa, in fiecare din cele doua locuri unde se aduna
+   * greutate — si comenzile scrise inainte de campul asta sunt tocmai cele in care greseala
+   * ar fi trecut neobservata.
+   */
+  grame: number;
   /** Ce citeste omul. Cel putin un rand, altfel instantaneul nu se intoarce deloc. */
   rezumat: RandRezumat[];
   /** Valorile brute, pentru urmarire. Poate fi gol. */
@@ -54,6 +63,7 @@ export function citesteInstantaneul(brut: unknown): InstantaneuCitit | null {
     numarVersiune: typeof o.numarVersiune === "number" && Number.isFinite(o.numarVersiune)
       ? o.numarVersiune : null,
     amprenta: sir(o.amprenta),
+    grame: grameBune(o.grame),
     rezumat,
     // ⚠ Trece prin normalizare, nu se ia asa cum vine: forma poate fi de acum trei luni.
     valori: normalizeazaValori(o.valori),
@@ -68,6 +78,20 @@ export function instantaneulLiniei(linie: unknown): InstantaneuCitit | null {
 
 function sir(v: unknown): string | null {
   return typeof v === "string" && v.trim() ? v.slice(0, MAX_TEXT) : null;
+}
+
+/**
+ * Gramele, curatate.
+ *
+ * ⚠ Se refuza tot ce nu e un numar finit si pozitiv, si nu se incearca nicio conversie din text.
+ * `"250"` scris de o editare de mana ar fi trecut printr-un `Number()` binevoitor, dar `"greu"` ar
+ * fi iesit `NaN` si ar fi otravit toata adunarea coletului: un singur rand stricat ar fi facut ca
+ * intreaga comanda sa plece la curier cu o greutate nefinita. Un numar negativ ar fi SCAZUT din
+ * colet. In amandoua cazurile raspunsul corect e zero — greutatea produsului din catalog ramane,
+ * si numai sporul necunoscut lipseste.
+ */
+function grameBune(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0;
 }
 
 /**

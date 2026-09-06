@@ -1153,6 +1153,7 @@ export async function placeOrder(data: {
                 versiuneId: cfg.versiuneId,
                 numarVersiune: cfg.numarVersiune,
                 amprenta: cfg.amprenta,
+                grame: cfg.grame,
                 valori: cfg.valori,
                 rezumat: cfg.rezumat,
               },
@@ -1412,6 +1413,14 @@ export async function placeOrder(data: {
           versiuneId: cfgPrincipal.versiuneId,
           numarVersiune: cfgPrincipal.numarVersiune,
           amprenta: cfgPrincipal.amprenta,
+          /*
+           * ⚠ Greutatea intra si ea in comanda, nu se recalculeaza la emitere.
+           *
+           * Fara ea in `orders.items`, AWB-ul ar fi declarat greutatea produsului gol din catalog:
+           * curierul cantareste la depozit si refactureaza banda adevarata, iar diferenta o
+           * plateste comerciantul, tacut.
+           */
+          grame: cfgPrincipal.grame,
           valori: cfgPrincipal.valori,
           rezumat: cfgPrincipal.rezumat,
         },
@@ -3679,6 +3688,7 @@ export async function placeCartOrder(data: {
           versiuneId: cfg.versiuneId,
           numarVersiune: cfg.numarVersiune,
           amprenta: cfg.amprenta,
+          grame: cfg.grame,
           valori: cfg.valori,
           rezumat: cfg.rezumat,
         },

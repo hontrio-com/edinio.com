@@ -277,7 +277,14 @@ export function CheckoutForm({
               // trimitea deja; pagina de checkout nu, deci acelasi cos dadea
               // doua preturi de transport, dupa drumul ales de client.
               cart={[
-                ...items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+                /*
+                 * ⚠ Configuratia pleaca la cotare, ca sa se coteze coletul ADEVARAT.
+                 *
+                 * Se trimit VALORILE, nu greutatea: serverul le trece prin definitia publicata si
+                 * socoteste el gramele. Fara ele, o cana cu cutie de lemn se coteaza ca o cana
+                 * goala, iar diferenta o plateste comerciantul la recantarirea din depozit.
+                 */
+                ...items.map((i) => ({ productId: i.productId, quantity: i.quantity, configuratie: i.configuratie })),
                 ...acceptedBumpOffers.map((o) => ({ productId: o.products[0]!.id, quantity: 1 })),
               ]}
               subtotal={Math.max(0, goodsTotal - discountAmount)}

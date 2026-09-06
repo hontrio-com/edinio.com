@@ -4,6 +4,7 @@ import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { buildCatalogItems, serializeCatalogFeed, type CatalogBusiness, type CatalogProduct } from "@/lib/facebook/catalog-feed";
 import { numeCuDescendenti, parseFeeduri, produseDinFeed, type RegulaFeed } from "@/lib/facebook/feeduri";
 import type { StoreCategoryNode } from "@/lib/storefront/store-content.types";
+import { configurabileDeExport } from "@/lib/configurators/nu-se-exporta";
 import { logError } from "@/lib/error-logger";
 
 export const dynamic = "force-dynamic";
@@ -139,7 +140,40 @@ async function construieste(req: Request, { params }: { params: Promise<{ slug: 
       )
     : products.map((p) => ({ ...p, pachetDisponibil: disponibil(p) }));
 
-  const items = alese.flatMap((p) => buildCatalogItems(business, p as unknown as CatalogProduct));
+  /*
+   * ═══ ⚠ PRODUSELE CONFIGURABILE NU INTRA IN CATALOGUL META ═══
+   *
+   * Pretul lor se naste din ce alege cumparatorul. In feed, produsul si-ar lua pretul de baza —
+   * pretul unui obiect care nu exista — iar reclama dinamica ar plati clicuri pentru el. Clientul
+   * ajunge pe pagina, vede alt pret, si tocmai divergenta asta intre feed si vitrina umple
+   * cataloagele Meta de avertismente.
+   *
+   * ⚠ Se filtreaza DUPA `dupaId` si dupa regula de feed, nu inainte: componentele unui pachet pot
+   * fi in alta categorie decat el, iar taiate mai devreme orice pachet ar iesi indisponibil —
+   * chiar capcana scrisa la `disponibil` de mai sus.
+   *
+   * ⚠ O citire pentru TOT lotul, nu pe produs: intrebarea incepe cu „are magazinul vreun
+   * configurator activ?" si se opreste acolo. La magazinele fara — aproape toate — feedul costa
+   * exact cat costa si azi.
+   *
+   * ⚠ SI DACA N-AM PUTUT AFLA, FEEDUL DA 503, nu un raspuns valid din care lipseste garda. E
+   * aceeasi hotarare ca la citirea produselor: raspunsul bun cu continut gresit e mai scump decat
+   * lipsa lui, fiindca Meta il ia de bun si il tine ore intregi.
+   */
+  const configurabile = await configurabileDeExport(
+    biz.id,
+    alese.map((p) => ({ id: p.id, category: p.category })),
+  );
+  if (!configurabile.ok) {
+    return await indisponibil(
+      "fbCatalog.configuratoare",
+      new Error("nu s-a putut afla care produse au configurator"),
+    );
+  }
+
+  const items = alese
+    .filter((p) => !configurabile.ids.has(p.id))
+    .flatMap((p) => buildCatalogItems(business, p as unknown as CatalogProduct));
   const xml = serializeCatalogFeed(business, items);
 
   return new Response(xml, {

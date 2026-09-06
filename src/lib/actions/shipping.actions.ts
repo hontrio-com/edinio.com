@@ -82,7 +82,45 @@ import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
 import { semneazaOptiuni } from "@/lib/shipping/quote-token";
 import { contextulCosului , subtotalMaximDinCatalog } from "@/lib/shipping/cart-weight";
+import { configuratoarePentruProduse } from "@/lib/configurators/vitrina";
+import { grameleConfiguratiei } from "@/lib/configurators/greutate";
+import { verificaRaspunsul } from "@/lib/configurators/raspuns";
 import { GREUTATE_REZERVA_KG } from "@/lib/shipping/awb-weight";
+
+/**
+ * Liniile de cotare, cu gramele configuratiei socotite pe SERVER.
+ *
+ * ⚠ Se cheama numai cand exista macar o linie configurata. Aproape niciun cos n-are, iar o
+ * citire in plus pe fiecare cotatie din platforma ar fi fost pretul platit degeaba.
+ *
+ * ⚠ O configuratie care nu trece verificarea da ZERO spor, nu o eroare: cotarea nu e locul
+ * unde se refuza o comanda. Refuzul vine la plasare, cu motivul scris — iar pana atunci
+ * cumparatorul vede preturi de transport, nu un ecran gol.
+ */
+async function gramelePeLinie(
+  businessId: string,
+  cart: { productId: string; quantity: number; configuratie?: unknown }[],
+  produse: { id: string; category: string | null; price: number | null }[],
+): Promise<{ productId: string; quantity: number; grameConfiguratie?: number }[]> {
+  const configuratoare = await configuratoarePentruProduse(
+    businessId,
+    produse.map((x) => ({ id: x.id, category: x.category })),
+  );
+  if (configuratoare.size === 0) return cart;
+
+  return cart.map((linie) => {
+    const c = linie.configuratie ? configuratoare.get(linie.productId) : undefined;
+    if (!c) return linie;
+    /*
+     * ⚠ Pretul dat aici nu schimba gramele, dar `verificaRaspunsul` il cere ca sa poata da
+     * un verdict intreg. Se da cel din catalog: greutatea nu depinde de el.
+     */
+    const pret = Number(produse.find((x) => x.id === linie.productId)?.price) || 0;
+    const v = verificaRaspunsul(c.compilat, linie.configuratie, pret);
+    if (!v.ok) return linie;
+    return { ...linie, grameConfiguratie: grameleConfiguratiei(c.compilat, v.valori) };
+  });
+}
 
 /**
  * Diacritics-insensitive locality match ("București"/"Sector 3" find
@@ -368,7 +406,20 @@ export async function getShippingOptions(
      * adica exact +18 pana la +45 de lei peste 0,00 pe „Ridicare personala", la 5
      * magazine publicate.
      */
-    cart?: { productId: string; quantity: number }[];
+    cart?: {
+      productId: string;
+      quantity: number;
+      /**
+       * Ce a ales cumparatorul in configurator: VALORI, nu greutate.
+       *
+       * ⚠ Aceeasi regula ca la `weightKg`, scos de aici tocmai fiindca era un numar de la
+       * browser din care iesea un pret SEMNAT. Valorile nu sunt un numar: serverul le
+       * normalizeaza el, le trece prin definitia PUBLICATA si socoteste gramele singur. Cine
+       * trimite alegeri stricate nu primeste o cotatie mai mica — primeste zero grame de spor,
+       * iar comanda cu aceleasi alegeri va fi oricum refuzata la plasare.
+       */
+      configuratie?: unknown;
+    }[];
     /** Valoarea marfii dupa promotii, de la client. Vezi avertismentul de la `ctx.subtotal`. */
     subtotal?: number;
   },
@@ -519,7 +570,27 @@ export async function getShippingOptions(
     // jurnalizeaza; asta se jurnaliza pana acum nicaieri.
     if (eroareCos) console.error("[shipping] cart weight lookup failed:", eroareCos.message);
     produseCotate = cartProducts ?? [];
-    cos = contextulCosului(destination.cart, produseCotate);
+    /*
+     * ⚠ GREUTATEA CONFIGURATIEI SE SOCOTESTE AICI, PE SERVER, DIN VALORI.
+     *
+     * Browserul trimite ce a ales cumparatorul, nu cate grame cantareste — iar deosebirea e
+     * chiar cea scrisa la `weightKg` mai sus, scos din semnatura fiindca era un numar de la
+     * client din care iesea un pret SEMNAT. Valorile trec prin definitia PUBLICATA, si gramele
+     * ies din ea; alegeri stricate dau zero spor, nu o cotatie mai ieftina.
+     *
+     * ⚠ FARA PASUL ASTA, COTAREA SI EMITEREA SPUN DOUA LUCRURI DIFERITE. `awb-weight.ts`
+     * aduna deja gramele optiunilor din instantaneul comenzii. Cotat fara ele, coletul pleaca
+     * mai greu decat s-a platit: curierul il cantareste la depozit, refactureaza banda
+     * adevarata, si diferenta o plateste comerciantul — fara sa apara nicaieri in panou. La o
+     * cutie de lemn pusa pe o optiune, diferenta e de kilograme, nu de grame.
+     *
+     * Costul: o citire pe index pentru magazinele fara configuratoare, adica aproape toate.
+     */
+    const areConfiguratii = destination.cart.some((c) => c.configuratie);
+    const cuGrame = areConfiguratii
+      ? await gramelePeLinie(businessId, destination.cart, produseCotate)
+      : destination.cart;
+    cos = contextulCosului(cuGrame, produseCotate);
   }
   const cartWeightKg = cos.weightKg;
 

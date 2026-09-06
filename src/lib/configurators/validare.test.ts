@@ -14,8 +14,10 @@ function def(noduri: Nod[], calcule?: Record<string, Expresie>, pasi2?: Nod[]): 
   return { versiuneSchema: 1, mod: "auto", pasi: p, ...(calcule ? { calcule } : {}) };
 }
 
-const alegere = (id: string, optiuni: { id: string; eticheta: string; pret?: number; activa?: boolean }[]): Nod =>
-  ({ fel: "alegere", control: "lista", id, eticheta: id, optiuni } as Nod);
+const alegere = (
+  id: string,
+  optiuni: { id: string; eticheta: string; pret?: number; grame?: number; activa?: boolean }[],
+): Nod => ({ fel: "alegere", control: "lista", id, eticheta: id, optiuni } as Nod);
 
 const numar = (id: string, extra: Record<string, unknown> = {}): Nod =>
   ({ fel: "numar", control: "camp", id, eticheta: id, ...extra } as Nod);
@@ -77,6 +79,54 @@ test("o alegere fara nicio optiune ACTIVA nu se publica", () => {
 test("o optiune fara nume nu se publica", () => {
   const r = val({ definitie: def([alegere("mat", [{ id: "a", eticheta: "  " }])]) });
   assert.ok(critice(r).includes("optiune_fara_eticheta"));
+});
+
+test("un pret care nu e numar nu se publica", () => {
+  const r = val({
+    definitie: def([alegere("mat", [{ id: "a", eticheta: "A", pret: "40" as unknown as number }])]),
+  });
+  assert.ok(critice(r).includes("pret_optiune_nevalid"));
+});
+
+/* ── Greutatea optiunii ──────────────────────────────────────────────────── */
+
+test("o GREUTATE care nu e numar nu se publica", () => {
+  /*
+   * ⚠ Gramele optiunii se aduna in greutatea coletului si pleaca la curier. Un `"750"` scris ca
+   * text ar fi iesit `NaN` din adunare, iar coletul ar fi plecat pe rezerva de un kilogram — sau,
+   * mai rau, cu o greutate nefinita in cererea catre API.
+   */
+  for (const grame of ["750" as unknown as number, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const r = val({ definitie: def([alegere("mat", [{ id: "a", eticheta: "A", grame }])]) });
+    assert.ok(critice(r).includes("grame_optiune_nevalid"), `a trecut ${String(grame)}`);
+    assert.equal(r.sePoatePublica, false);
+  }
+});
+
+test("o greutate NEGATIVA nu se publica, desi un pret negativ se poate", () => {
+  /*
+   * ⚠ Aici cele doua campuri se despart. Un pret negativ e o hotarare comerciala („minus 10 lei
+   * daca renunti la ambalaj"); o greutate negativa ar fi SCAZUT din colet, si „fara ambalaj" ar fi
+   * facut comanda mai usoara decat produsul gol. Diferenta de banda o plateste comerciantul la
+   * recantarirea din depozit.
+   */
+  const negativa = val({ definitie: def([alegere("mat", [{ id: "a", eticheta: "A", grame: -500 }])]) });
+  assert.ok(critice(negativa).includes("grame_optiune_nevalid"));
+
+  const pretNegativ = val({ definitie: def([alegere("mat", [{ id: "a", eticheta: "A", pret: -10 }])]) });
+  assert.equal(pretNegativ.sePoatePublica, true, "reducerea pe optiune ramane ingaduita");
+});
+
+test("greutatea buna, ZERO si cea lipsa se publica", () => {
+  for (const optiune of [
+    { id: "a", eticheta: "A", grame: 750 },
+    { id: "a", eticheta: "A", grame: 0 },
+    { id: "a", eticheta: "A" },
+  ]) {
+    const r = val({ definitie: def([alegere("mat", [optiune])]) });
+    assert.equal(r.sePoatePublica, true, `constatari: ${coduri(r).join(", ")}`);
+    assert.ok(!coduri(r).includes("grame_optiune_nevalid"));
+  }
 });
 
 test("minimul mai mare decat maximul, pe un numar", () => {

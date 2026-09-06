@@ -1331,8 +1331,15 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   postCode={isIntl ? form.postCode : undefined}
                   cod={paymentMethod === "cash_on_delivery" ? subtotal : 0}
                   cart={[
-                    { productId: product.id, quantity },
-                    ...cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+                    /*
+                     * ⚠ Configuratia pleaca la cotare, ca sa se coteze coletul ADEVARAT.
+                     *
+                     * Se trimit VALORILE, nu greutatea: serverul le trece prin definitia publicata si
+                     * socoteste el gramele. Fara ele, o cana cu cutie de lemn se coteaza ca o cana
+                     * goala, iar diferenta o plateste comerciantul la recantarirea din depozit.
+                     */
+                    { productId: product.id, quantity, configuratie: product.configuratie },
+                    ...cart.map((i) => ({ productId: i.productId, quantity: i.quantity, configuratie: i.configuratie })),
                     // Aceleasi linii ca in `allAdditional`: companionul din cos e
                     // numarat o data, cu toate bucatile lui. Pana acum coletul se
                     // cota pe 1 bucata acolo unde clientul comanda 3.

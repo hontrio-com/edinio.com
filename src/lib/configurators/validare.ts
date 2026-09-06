@@ -160,6 +160,26 @@ export function valideaza(intrare: IntrareValidare): RezultatValidare {
           adauga("critic", "pret_optiune_nevalid",
             `Optiunea „${o.eticheta}" din „${nod.eticheta}" are un pret care nu e un numar.`, nod.id);
         }
+        /*
+         * ⚠ O greutate stricata pleaca la CURIER, nu pe ecran.
+         *
+         * Gramele optiunii se aduna in greutatea coletului si de ele atarna pretul cerut celor
+         * saisprezece curieri. Un numar NEGATIV ar fi SCAZUT din colet: cine alege „fara ambalaj"
+         * ar fi facut comanda mai usoara decat produsul gol, iar diferenta de banda o plateste
+         * comerciantul la recantarirea din depozit. Pretul are voie sa fie negativ (o reducere e o
+         * hotarare comerciala); greutatea nu — si asta e chiar deosebirea dintre randul de mai sus
+         * si asta.
+         *
+         * ⚠ Negativul e SINGURUL care ajunge aici pe drumul publicarii: `citeste.ts` arunca deja
+         * ce nu e numar finit, dar il arunca in TACERE, deci greutatea scrisa de comerciant dispare
+         * fara ca el sa afle. Verificarea de fel ramane pentru celalalt apelant — previzualizarea
+         * din panou ruleaza `valideaza` pe ciorna din memorie, care n-a trecut pe acolo — si ca sa
+         * nu depinda constatarea de ordinea a doua module.
+         */
+        if (o.grame !== undefined && (!eNumarBun(o.grame) || o.grame < 0)) {
+          adauga("critic", "grame_optiune_nevalid",
+            `Optiunea „${o.eticheta}" din „${nod.eticheta}" are o greutate care nu e un numar pozitiv.`, nod.id);
+        }
       }
     }
     if (nod.fel === "numar" && eNumarBun(nod.min) && eNumarBun(nod.max) && nod.min > nod.max) {

@@ -23,6 +23,7 @@
  */
 
 import type { Compilat } from "./compileaza";
+import { grameleConfiguratiei } from "./greutate";
 import { verificaRaspunsul } from "./raspuns";
 import { rezumatConfiguratiei, type RandRezumat } from "./rezumat";
 import type { Valori } from "./valori";
@@ -46,6 +47,15 @@ export type PretConfigurat =
       fel: "ok";
       /** Pretul unitar, NEROTUNJIT — ca `pret x cantitate` sa dea exact subtotalul liniei. */
       unitar: number;
+      /**
+       * Cat cantareste configuratia, in grame, PER BUCATA.
+       *
+       * ⚠ Iese pe verdict, langa pret, fiindca amandoua se hotarasc din aceleasi alegeri si in
+       * aceeasi clipa. Lasata pe seama unui al doilea drum, greutatea s-ar fi calculat pe alta
+       * stare decat pretul — si coletul ar fi plecat cantarind cat o configuratie pe care n-a
+       * cumparat-o nimeni.
+       */
+      grame: number;
       valori: Valori;
       amprenta: string;
       configuratorId: string;
@@ -83,6 +93,7 @@ export function verdictulLiniei(
   return {
     fel: "ok",
     unitar: v.unitar,
+    grame: grameleConfiguratiei(compilat, v.valori),
     valori: v.valori,
     amprenta: v.amprenta,
     rezumat: rezumatConfiguratiei(compilat, v.valori),
@@ -137,6 +148,15 @@ export interface InstantaneuConfiguratie {
   versiuneId: string;
   numarVersiune: number;
   amprenta: string;
+  /**
+   * Greutatea configuratiei, in grame, PER BUCATA.
+   *
+   * ⚠ SE SCRIE IN COMANDA, nu se recalculeaza la emiterea AWB-ului. Recalculata, ar fi iesit din
+   * versiunea de AZI a configuratorului: comerciantul care schimba ambalajul saptamana viitoare ar
+   * fi cantarit cu numarul cel nou un colet vandut, cotat si platit dupa cel vechi. Aceeasi
+   * hotarare ca la `rezumat`, si din acelasi motiv — versiunea se poate schimba, comanda nu.
+   */
+  grame: number;
   /** Valorile brute, pentru orice recalculare de mai tarziu. */
   valori: Valori;
   /** Cum se citeste: eticheta campului si ce a ales omul, in cuvinte. */

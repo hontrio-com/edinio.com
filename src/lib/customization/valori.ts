@@ -151,6 +151,12 @@ function citesteCamp(
       return { fel: "text", text: t };
     }
 
+    /*
+     * ⚠ `fisier` se curata IDENTIC cu `image`: amandoua sunt tablouri de adrese produse de
+     * aceeasi ruta. Ce le deosebeste — ce fel de continut a ajuns acolo — se hotaraste pe SERVER,
+     * in `verificaPersonalizarea`, unde se stie si tipul campului, si depozitul.
+     */
+    case "fisier":
     case "image": {
       /*
        * ⚠ Se verifica FORMA, nu proprietatea. Ca adresa chiar arata catre un fisier al nostru se

@@ -159,6 +159,22 @@ function StatusStepper({ status }: { status: string }) {
  * inmultit cu cantitatea. La cantitate mai mare de una se scrie pe ecran, altfel randurile n-ar da
  * numarul de deasupra lor si comerciantul ar cauta o diferenta care nu exista.
  */
+/**
+ * Numele fisierului, din adresa lui.
+ *
+ * ⚠ Adresa e produsa de NOI (ruta de incarcare pune un UUID si terminatia luata din octeti),
+ * deci numele afisat nu e un sir venit de la client. Cade pe „Fisierul N" cand adresa nu se poate
+ * citi: un rand de comanda vechi sau editat de mana n-are voie sa arunce panoul.
+ */
+function numeleFisierului(url: string, i: number): string {
+  try {
+    const p = new URL(url).pathname;
+    return decodeURIComponent(p.slice(p.lastIndexOf("/") + 1)) || `Fisierul ${i + 1}`;
+  } catch {
+    return `Fisierul ${i + 1}`;
+  }
+}
+
 function DefalcareaPersonalizarii({ d, cantitate }: { d: DefalcareCitita; cantitate: number }) {
   const suprafata = suprafataDeAratat(d);
   return (
@@ -1100,7 +1116,28 @@ export function OrderDetailClient({
                         {campuri.map((field, fi) => (
                           <div key={fi}>
                             <p className="text-[11px] font-semibold text-purple-600 uppercase tracking-wide">{field.label}</p>
-                            {field.type === "image" && Array.isArray(field.value) ? (
+                            {field.type === "fisier" && Array.isArray(field.value) ? (
+                              /*
+                               * ⚠ UN DOCUMENT N-ARE MINIATURA. Randat cu `<Image>`, un PDF da o
+                               * poza rupta in dreptul fisierului de tipar — adica exact semnul
+                               * „nu s-a incarcat", pe hartia dupa care se produce marfa.
+                               *
+                               * ⚠ Se hotaraste dupa `type`, ca la `image` de mai jos, dar
+                               * ADEVARUL despre ce e in fisier vine din alta parte: ruta de
+                               * incarcare alege terminatia din OCTETI, iar comanda o verifica fata
+                               * de tipul campului (`TERMINATII` din `customization/comanda.ts`).
+                               */
+                              <ul className="mt-1 space-y-0.5">
+                                {(field.value as string[]).map((url, fiI) => (
+                                  <li key={fiI}>
+                                    <a href={url} target="_blank" rel="noopener noreferrer"
+                                      className="text-sm text-primary hover:underline break-all">
+                                      {numeleFisierului(url, fiI)}
+                                    </a>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : field.type === "image" && Array.isArray(field.value) ? (
                               <div className="flex flex-wrap gap-1.5 mt-1">
                                 {(field.value as string[]).map((url, imgI) => (
                                   <a key={imgI} href={url} target="_blank" rel="noopener noreferrer"

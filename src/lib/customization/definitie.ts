@@ -51,9 +51,20 @@ export const MAX_ETICHETA = 200;
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /** Cele cinci vechi, plus cele patru noi. Ordinea e cea din meniul panoului. */
+/*
+ * ⚠ `fisier` E UN TIP NOU, NU UN `image` LARGIT, si asta e hotararea care conteaza aici.
+ *
+ * Cele 29 de produse personalizabile din productie au deja campuri `image`, cu `accept`-ul lor
+ * si cu miniaturi randate in vitrina, in panoul de comenzi si in emailuri. Largit `image` ca sa
+ * primeasca si PDF, toate trei ar fi inceput sa incerce sa deseneze o miniatura pentru un document
+ * — adica o poza rupta pe fiecare — si asta pe produse pe care nimeni nu le-a atins.
+ *
+ * Cu un tip separat, un camp de imagine ramane un camp de imagine, iar cine vrea fisier de tipar
+ * il cere pe fata.
+ */
 export const TIPURI = [
   "text", "textarea", "image", "select", "color",
-  "numar", "dimensiuni", "butoane", "comutator",
+  "numar", "dimensiuni", "butoane", "comutator", "fisier",
 ] as const;
 
 export type TipCamp = (typeof TIPURI)[number];
@@ -306,7 +317,7 @@ function citesteCamp(raw: unknown): CampPersonalizare | null {
     const ml = numar(raw.max_length);
     if (ml !== undefined && ml > 0) camp.max_length = Math.min(Math.floor(ml), MAX_LUNGIME_TEXT);
   }
-  if (type === "image") {
+  if (type === "image" || type === "fisier") {
     const mf = numar(raw.max_files);
     if (mf !== undefined && mf > 0) camp.max_files = Math.floor(mf);
     const ms = numar(raw.max_file_size_mb);

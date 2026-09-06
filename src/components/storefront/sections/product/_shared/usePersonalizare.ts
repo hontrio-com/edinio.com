@@ -163,7 +163,14 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
       try {
         const acum = Array.isArray(valori[camp.id]) ? (valori[camp.id] as string[]) : [];
         const maxim = camp.max_files ?? 5;
-        const octetiMax = (camp.max_file_size_mb ?? 10) * 1024 * 1024;
+        /*
+         * ⚠ Campul de FISIER are alt implicit decat cel de imagine: un PDF de tipar la un metru
+         * patrat trece lejer de 10 MB, iar cu plafonul imaginilor tipul asta ar fi refuzat chiar
+         * fisierele pentru care exista. Plafonul serverului e 40 MB (vezi ruta de incarcare); ce
+         * scrie comerciantul se respecta oricum, daca a scris ceva.
+         */
+        const documente = camp.type === "fisier";
+        const octetiMax = (camp.max_file_size_mb ?? (documente ? 40 : 10)) * 1024 * 1024;
         const adrese: string[] = [];
         let refuzat = false;
 
@@ -177,6 +184,12 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
           const fd = new FormData();
           fd.append("file", f);
           fd.append("business_id", businessId);
+          /*
+           * ⚠ NU E O POARTA, e o cerere: ruta accepta PDF numai cand i se cere, si tot ea
+           * verifica OCTETII. Potrivirea adevarata dintre tipul campului si ce s-a incarcat se
+           * face la COMANDA, in `verificaPersonalizarea`, unde se stie definitia produsului.
+           */
+          if (documente) fd.append("documente", "1");
           try {
             const res = await fetch("/api/upload-customization", { method: "POST", body: fd });
             const date = (await res.json()) as { url?: string; error?: string };

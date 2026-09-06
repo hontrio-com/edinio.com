@@ -53,6 +53,7 @@ const NUME_TIP: Record<string, string> = {
   text: "Text scurt",
   textarea: "Text lung",
   image: "Imagine (upload)",
+  fisier: "Fisier (PDF sau imagine)",
   select: "Selectie (lista)",
   color: "Culoare",
   numar: "Numar",
@@ -259,6 +260,7 @@ function Reglaje({ camp, idx, schimba }: RegProps) {
       );
 
     case "image":
+    case "fisier":
       return (
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -269,10 +271,18 @@ function Reglaje({ camp, idx, schimba }: RegProps) {
           </div>
           <div>
             <label className={ETICHETA}>MB pe fisier</label>
+            {/* ⚠ Implicitul difera: un PDF de tipar la un metru patrat trece lejer de 10 MB. */}
             <input type="number" value={camp.max_file_size_mb ?? ""}
               onChange={(e) => schimba(idx, { max_file_size_mb: nr(e.target.value) })}
-              placeholder="10" className={INPUT} />
+              placeholder={camp.type === "fisier" ? "40" : "10"} className={INPUT} />
           </div>
+          {camp.type === "fisier" && (
+            <p className="col-span-2 text-[11px] text-muted-foreground">
+              {/* ⚠ Comerciantul trebuie sa afle DE CE exista doua tipuri, altfel alege gresit. */}
+              Clientul poate incarca PDF sau imagini. Alege „Imagine (upload)" cand vrei doar poze —
+              acolo se vede miniatura, aici doar numele fisierului.
+            </p>
+          )}
           <div className="col-span-2"><PretCamp camp={camp} idx={idx} schimba={schimba} cand="cand e incarcat" /></div>
         </div>
       );

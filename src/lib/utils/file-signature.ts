@@ -34,6 +34,21 @@ export function detectImageMime(buffer: Buffer): string | null {
   return null;
 }
 
+/**
+ * Tipul unui DOCUMENT, dupa octetii lui. Azi doar PDF.
+ *
+ * ⚠ FUNCTIE SEPARATA, si nu o ramura in `detectImageMime`. Ajutorul acela e chemat din sase
+ * locuri care inteleg toate acelasi lucru prin „da": ca fisierul e o IMAGINE si ca se poate
+ * randa, redimensiona sau trimite mai departe ca atare. Largit acolo, un PDF ar fi inceput sa
+ * treaca drept imagine in toate sase, tacut — inclusiv in conducta de optimizare si in feeduri.
+ */
+export function detectDocMime(buffer: Buffer): string | null {
+  if (buffer.length < 5) return null;
+  /* „%PDF-" — semnatura ceruta de standard chiar la inceputul fisierului. */
+  if (buffer.toString("ascii", 0, 5) === "%PDF-") return "application/pdf";
+  return null;
+}
+
 export function isAllowedImage(buffer: Buffer, allowed: readonly string[]): boolean {
   const detected = detectImageMime(buffer);
   if (!detected) return false;

@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Palette, Upload, X } from "lucide-react";
+import { FileText, Loader2, Palette, Upload, X } from "lucide-react";
 import type { CampPersonalizare } from "@/lib/customization/definitie";
 import type { StarePersonalizare } from "./usePersonalizare";
 
@@ -311,18 +311,59 @@ function Control(p: ControlProps) {
     }
 
     case "image":
+    case "fisier":
       return <Fisiere {...p} />;
   }
 }
 
 function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, incarcaFisiere, scoateFisier }: ControlProps) {
   const adrese = Array.isArray(valoare) ? (valoare as string[]) : [];
+  /*
+   * ⚠ UN DOCUMENT N-ARE MINIATURA, si nu se preface ca are.
+   *
+   * Randat cu `<img>`, un PDF da o poza rupta in locul in care clientul tocmai a incarcat
+   * fisierul de tipar — adica exact semnul „nu s-a incarcat". De-aia campul de tip `fisier` arata
+   * pictograma si numele, nu o imagine.
+   */
+  const documente = camp.type === "fisier";
   const maxim = camp.max_files ?? 5;
   const seIncarca = !!incarca[camp.id];
+  const numeleFisierului = (url: string, i: number) => {
+    try {
+      const cale = new URL(url).pathname;
+      return decodeURIComponent(cale.slice(cale.lastIndexOf("/") + 1)) || `Fisierul ${i + 1}`;
+    } catch {
+      return `Fisierul ${i + 1}`;
+    }
+  };
 
   return (
     <div className="space-y-2">
-      {adrese.length > 0 && (
+      {adrese.length > 0 && documente && (
+        <ul className="space-y-1">
+          {adrese.map((url, i) => (
+            <li key={`${url}-${i}`} className="flex items-center gap-2 text-sm">
+              <FileText size={15} className="shrink-0" style={{ color }} />
+              <a
+                href={url} target="_blank" rel="noopener noreferrer"
+                className="truncate hover:underline text-foreground"
+              >
+                {numeleFisierului(url, i)}
+              </a>
+              <button
+                type="button"
+                onClick={() => scoateFisier(camp.id, i)}
+                aria-label={`Scoate fisierul ${i + 1}`}
+                className="ml-auto shrink-0 w-5 h-5 rounded-full bg-surface border border-border flex items-center justify-center hover:bg-red-50"
+              >
+                <X size={10} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {adrese.length > 0 && !documente && (
         <div className="flex flex-wrap gap-2">
           {adrese.map((url, i) => (
             <div key={`${url}-${i}`} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border bg-surface group">
@@ -348,7 +389,7 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, incarcaFisie
         >
           {seIncarca ? <Loader2 size={15} className="animate-spin" style={{ color }} /> : <Upload size={15} style={{ color }} />}
           <span className="text-sm text-muted-foreground">
-            {seIncarca ? "Se incarca..." : "Incarca imagine"}
+            {seIncarca ? "Se incarca..." : documente ? "Incarca fisier" : "Incarca imagine"}
           </span>
           <input
             type="file"
@@ -362,7 +403,9 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, incarcaFisie
              * OCTETII fisierului, nu antetul trimis (`detectImageMime`), deci ocolit de aici
              * nu trece nimic.
              */
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
+            accept={documente
+              ? "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,application/pdf,.pdf"
+              : "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"}
             multiple
             className="hidden"
             aria-invalid={eroare || undefined}
@@ -378,15 +421,19 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, incarcaFisie
       <p className="text-[11px] text-muted-foreground">
         {/* ⚠ Formatele se SCRIU. Fara ele, cine trage un PDF primea mesajul de mai jos si nu
             afla niciodata ca formatul era problema, nu marimea. */}
-        JPG, PNG, WEBP sau HEIC. Cel mult {maxim} {maxim === 1 ? "imagine" : "imagini"},{" "}
-        {camp.max_file_size_mb ?? 10} MB fiecare.
+        {documente ? "PDF, JPG, PNG, WEBP sau HEIC" : "JPG, PNG, WEBP sau HEIC"}. Cel mult {maxim}{" "}
+        {documente
+          ? (maxim === 1 ? "fisier" : "fisiere")
+          : (maxim === 1 ? "imagine" : "imagini")},{" "}
+        {camp.max_file_size_mb ?? (documente ? 40 : 10)} MB fiecare.
       </p>
       {incarca[`${camp.id}:eroare`] && (
         /* ⚠ Pana acum un fisier prea mare sau o incarcare picata erau sarite in TACERE: clientul
            alegea patru poze si vedea trei, fara niciun mesaj. */
         <p role="alert" className="text-xs text-red-500">
-          Unele imagini n-au putut fi incarcate. Accepta JPG, PNG, WEBP si HEIC, pana in{" "}
-          {camp.max_file_size_mb ?? 10} MB.
+          {documente ? "Unele fisiere" : "Unele imagini"} n-au putut fi incarcate. Accepta{" "}
+          {documente ? "PDF, JPG, PNG, WEBP si HEIC" : "JPG, PNG, WEBP si HEIC"}, pana in{" "}
+          {camp.max_file_size_mb ?? (documente ? 40 : 10)} MB.
         </p>
       )}
     </div>

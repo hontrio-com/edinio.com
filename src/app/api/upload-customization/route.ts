@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { uploadToR2 } from "@/lib/r2";
-import { detectImageMime, isAllowedImage } from "@/lib/utils/file-signature";
+import { detectDocMime, detectImageMime, isAllowedImage } from "@/lib/utils/file-signature";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
 const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+/*
+ * ⚠ DOCUMENTELE AU PLAFONUL LOR, si nu din generozitate: un PDF de tipar la un metru patrat, cu
+ * imagini incorporate, trece lejer de 10 MB. Cu plafonul imaginilor, campul de fisier ar fi fost o
+ * capabilitate care se vede in meniu si refuza chiar fisierele pentru care exista.
+ *
+ * ⚠ Si ramane un plafon: capatul e PUBLIC si neautentificat, iar depozitul se plateste. 40 MB e
+ * cat un PDF de tipar cinstit, si nu cat o arhiva.
+ */
+const MAX_SIZE_DOC = 40 * 1024 * 1024; // 40MB
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EXT_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic",
+  "application/pdf": "pdf",
 };
 
 /**
@@ -26,6 +36,20 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
   const businessId = formData.get("business_id") as string | null;
+  /*
+   * ⚠ CE FEL DE CONTINUT SE ASTEAPTA, spus de campul care cere incarcarea.
+   *
+   * `documente` inseamna „campul e de tip `fisier`, deci accepta si PDF". Lipsa inseamna
+   * IMAGINE, exact ca pana acum — deci paginile ramase deschise in browserele oamenilor si orice
+   * alt apelant se poarta identic.
+   *
+   * ⚠ NU E O POARTA DE AUTORIZARE, si nu se preface ca ar fi: vine de la client, deci oricine
+   * poate cere „documente" si urca un PDF si dintr-un camp de imagine. Ce apara asta e MARIMEA si
+   * mesajul de eroare. Adevarata potrivire intre TIPUL campului si CE s-a incarcat se face la
+   * COMANDA, in `verificaPersonalizarea`, unde se stie si definitia produsului — acolo un PDF
+   * pus intr-un camp de imagine se refuza.
+   */
+  const cereDocumente = formData.get("documente") === "1";
 
   if (!file) {
     return NextResponse.json({ error: "Fisier obligatoriu." }, { status: 400 });
@@ -65,14 +89,32 @@ export async function POST(request: NextRequest) {
     /* fail open — vezi comentariul de mai sus */
   }
 
-  if (file.size > MAX_SIZE) {
-    return NextResponse.json({ error: "Fisierul depaseste limita de 10MB." }, { status: 400 });
+  const plafon = cereDocumente ? MAX_SIZE_DOC : MAX_SIZE;
+  if (file.size > plafon) {
+    return NextResponse.json(
+      { error: `Fisierul depaseste limita de ${Math.round(plafon / 1024 / 1024)}MB.` },
+      { status: 400 },
+    );
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const detected = detectImageMime(buffer);
-  if (!detected || !isAllowedImage(buffer, ALLOWED_TYPES)) {
-    return NextResponse.json({ error: "Fisierul nu este o imagine valida." }, { status: 400 });
+  /*
+   * ⚠ OCTETII HOTARASC, nu antetul trimis de browser — la fel ca pana acum. Documentele se
+   * recunosc printr-un ajutor SEPARAT (`detectDocMime`): `isAllowedImage` e chemat din alte
+   * sase locuri care inteleg toate prin „da" ca fisierul se poate randa ca imagine.
+   */
+  const imagine = detectImageMime(buffer);
+  const document = cereDocumente ? detectDocMime(buffer) : null;
+  const detected = imagine && isAllowedImage(buffer, ALLOWED_TYPES) ? imagine : document;
+  if (!detected) {
+    return NextResponse.json(
+      {
+        error: cereDocumente
+          ? "Fisierul nu e nici imagine, nici PDF."
+          : "Fisierul nu este o imagine valida.",
+      },
+      { status: 400 },
+    );
   }
 
   const ext = EXT_BY_MIME[detected] ?? "jpg";

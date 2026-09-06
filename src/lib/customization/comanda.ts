@@ -35,6 +35,38 @@ const PREFIX_INCARCARI = "products/customizations/";
 /** Cate fisiere se accepta in total pe o linie, oricum ar fi configurate campurile. */
 const MAX_FISIERE_PE_LINIE = 40;
 
+/**
+ * Ce terminatii poate purta un camp, dupa tipul lui.
+ *
+ * ⚠ SE POATE VERIFICA fiindca terminatia e pusa de NOI, nu de client: ruta de incarcare o alege
+ * din octetii fisierului (`EXT_BY_MIME`), nu din numele trimis. Deci intrebarea „ce e in
+ * fisierul asta?" are deja raspuns la momentul asta, si el e scris chiar in cheie.
+ *
+ * ⚠ CE APARA: capatul de incarcare e public, iar felul continutului i-l spune tot clientul
+ * (`documente=1`). Fara randurile de aici, oricine putea urca un PDF si il putea trimite intr-un
+ * camp de IMAGINE — iar vitrina, panoul de comenzi si emailul incearca toate sa randeze o
+ * miniatura pentru ce sta acolo. Poarta aia se inchide unde se stie definitia produsului.
+ */
+const TERMINATII: Record<string, readonly string[]> = {
+  image: ["jpg", "jpeg", "png", "webp", "heic", "heif"],
+  fisier: ["jpg", "jpeg", "png", "webp", "heic", "heif", "pdf"],
+};
+
+function terminatiaSePotriveste(adresa: string, tip: string): boolean {
+  const permise = TERMINATII[tip];
+  /* Un tip fara lista nu are fisiere; verificarea de mai jos nu se aplica. */
+  if (!permise) return true;
+  let cale: string;
+  try {
+    cale = new URL(adresa).pathname;
+  } catch {
+    return false;
+  }
+  const punct = cale.lastIndexOf(".");
+  if (punct === -1) return false;
+  return permise.includes(cale.slice(punct + 1).toLowerCase());
+}
+
 /** O intrare din instantaneul scris in comanda. Forma e cea pe care o citeste deja panoul. */
 export interface IntrareInstantaneu {
   type: string;
@@ -225,6 +257,15 @@ export function verificaPersonalizarea(
     for (const adresa of v.adrese) {
       if (!esteFisierulNostru(adresa, businessId)) {
         return { fel: "eroare", mesaj: `${camp.label}: fisierul nu e valid. Incarca-l din nou.` };
+      }
+      /* ⚠ Vezi `TERMINATII`: un PDF trimis intr-un camp de imagine se refuza aici. */
+      if (!terminatiaSePotriveste(adresa, camp.type)) {
+        return {
+          fel: "eroare",
+          mesaj: camp.type === "image"
+            ? `${camp.label}: se accepta doar imagini.`
+            : `${camp.label}: formatul fisierului nu se accepta.`,
+        };
       }
     }
     fisiere += v.adrese.length;

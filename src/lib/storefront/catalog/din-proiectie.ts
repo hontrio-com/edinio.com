@@ -101,6 +101,16 @@ export function dinProiectie(r: RandProiectie): StorefrontProduct {
       max: nr(r.price_max),
       hasRange: r.has_range,
       faraOferta: r.fara_oferta,
+      /*
+       * ⚠ Steagul NU are coloana proprie, si nici nu-i trebuie: sta in `optiuni`, jsonb-ul
+       * slimuit pe care proiectorul il scrie oricum. Deci zero migratii — dar randurile
+       * proiectate INAINTE de reparatie nu-l au, si de-aia produsele cu personalizare se repun
+       * in `catalog_murdar` la livrare.
+       */
+      ...((r.optiuni as { customization?: { dePornire?: unknown } } | null)
+        ?.customization?.dePornire === true
+        ? { dePornire: true }
+        : {}),
     },
     fara_stoc: r.fara_stoc,
   };

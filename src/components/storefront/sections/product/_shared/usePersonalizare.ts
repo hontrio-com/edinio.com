@@ -6,7 +6,8 @@ import {
   type CampPersonalizare,
   type DefinitiePersonalizare,
 } from "@/lib/customization/definitie";
-import { pretUnitar, pretulPersonalizarii, type RezultatPret } from "@/lib/customization/pret";
+import { podeaPersonalizarii, pretUnitar, pretulPersonalizarii, type RezultatPret } from "@/lib/customization/pret";
+import { formatPrice } from "@/lib/utils/format";
 import { normalizeazaValorile } from "@/lib/customization/valori";
 
 /**
@@ -44,8 +45,26 @@ export interface StarePersonalizare {
   gata: boolean;
   /** Suplimentul pe bucata, socotit din valorile de acum. */
   supliment: number;
-  /** Pretul unitar de afisat, din pretul de catalog si personalizare. */
-  pretDeAfisat: (bazaPeBucata: number) => number;
+  /**
+   * Pretul de afisat, GATA SCRIS.
+   *
+   * ⚠ INTOARCE TEXT, NU NUMAR, si asta e chiar reparatia.
+   *
+   * Cat timp campurile nu sunt completate, in modul „suprafata" cu baza stinsa nu exista nici
+   * suprafata, nici supliment — deci `pretUnitar` dadea 0, iar pagina scria „0 lei" langa titlu
+   * si in bara lipita jos pe telefon. Fara niciun mesaj alaturi: constatarile tac pana la prima
+   * apasare pe „Comanda". Clientul nu putea deosebi intre „produsul e gratis", „pagina e stricata"
+   * si „trebuie sa scriu eu dimensiunile" — iar dupa ce completa, cifra sarea de la zero la 778,75,
+   * ceea ce se citeste ca pret ascuns.
+   *
+   * ⚠ Si nu e o configuratie exotica: panoul insusi stinge `includePretulProdusului` cand
+   * alegi „Calculat din suprafata", iar campurile „implicit" ale laturilor sunt goale din start.
+   * Comerciantul care urmeaza EXACT indicatia panoului obtinea pagina cu „0 lei".
+   *
+   * Un `number` intors de aici s-ar fi putut da oricand lui `formatPrice` de un model nou de
+   * pagina, si defectul ar fi reaparut tacut. Textul nu se poate gresi asa.
+   */
+  pretDeAfisat: (bazaPeBucata: number) => string;
   detalii: RezultatPret;
   /**
    * Verifica tot si aprinde constatarile. `true` cand se poate merge mai departe.
@@ -192,8 +211,24 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
   );
 
   const pretDeAfisat = useCallback(
-    (bazaPeBucata: number) => pretUnitar(detalii, bazaPeBucata),
-    [detalii],
+    (bazaPeBucata: number): string => {
+      const exact = pretUnitar(detalii, bazaPeBucata);
+      if (!definitie) return formatPrice(exact);
+      /*
+       * ⚠ NEDETERMINAT, nu ZERO. Doua feluri in care pretul inca nu se poate sti:
+       *  - modul „suprafata" fara suprafata facturabila (laturile necompletate);
+       *  - orice caz in care ar iesi 0 pe un produs care nu e gratis (sursa de tarif nealeasa).
+       * In amandoua se arata PODEAUA — cel mai mic pret posibil — cu „de la" in fata. Acelasi
+       * numar il vede omul si pe cardul din grila, deci cele doua ecrane nu se mai contrazic.
+       */
+      const nedeterminat =
+        exact <= 0
+        || (definitie.pret?.fel === "suprafata" && detalii.ariaFacturata === undefined);
+      if (!nedeterminat) return formatPrice(exact);
+      const podea = podeaPersonalizarii(definitie, bazaPeBucata);
+      return podea === null ? formatPrice(exact) : `de la ${formatPrice(podea)}`;
+    },
+    [definitie, detalii],
   );
 
   return {

@@ -1,4 +1,5 @@
-import { cerePersonalizarea } from "@/lib/customization/definitie";
+import { cerePersonalizarea, normalizeazaDefinitia } from "@/lib/customization/definitie";
+import { pretulDepindeDeAlegeri } from "@/lib/customization/pret";
 import { getProductPriceRange, type PriceRange } from "@/lib/utils/product-price";
 
 /**
@@ -59,7 +60,17 @@ interface CatalogRowShape {
  * `price_range`, iar selectorul se randeaza din axe. Se cheama si din payload-ul
  * editorului de pagini, unde blob-ul brut insemna 183 KB.
  */
-export function slimPageSections(pageSections: unknown): Record<string, unknown> | null {
+export function slimPageSections(
+  pageSections: unknown,
+  /**
+   * ⚠ Pretul de catalog, cand apelantul il are.
+   *
+   * Fara el nu se poate spune daca pretul afisat e o PODEA: raspunsul se da comparand podeaua
+   * personalizarii cu pretul de baza. Optional dinadins — editorul de pagini cheama functia doar
+   * ca sa taie combinatiile, iar acolo steagul n-ar avea cine sa-l citeasca.
+   */
+  pretDeBaza?: number,
+): Record<string, unknown> | null {
   const ps = (pageSections ?? null) as {
     variants?: { enabled?: boolean; options?: unknown } | null;
     bundle?: unknown;
@@ -91,7 +102,26 @@ export function slimPageSections(pageSections: unknown): Record<string, unknown>
    * prin `cerePersonalizare`. Le-am verificat una cate una inainte sa adaug ceva.
    */
   if (cerePersonalizarea({ customization: ps?.customization })) {
-    slim = { ...(slim ?? {}), customization: { cere: true } };
+    /*
+     * ⚠ AL DOILEA STEAG, din acelasi motiv ca primul: cardul nu poate socoti singur.
+     *
+     * `dePornire` spune ca numarul din `price_range` e cel mai MIC pret posibil, nu pretul.
+     * Fara el, cardul unui fototapet ar fi scris „48,30 lei" ca si cum ar fi pretul — corect ca
+     * cifra, mincinos ca promisiune.
+     *
+     * ⚠ Se scrie DOAR cand chiar difera de pretul de catalog: cele 29 de produse din productie
+     * n-au niciun pret pe personalizare, deci pentru ele steagul lipseste si cardul arata exact
+     * ce arata azi.
+     */
+    const definitie = normalizeazaDefinitia((ps as { customization?: unknown } | null)?.customization);
+    const dePornire =
+      definitie !== null
+      && pretDeBaza !== undefined
+      && pretulDepindeDeAlegeri(definitie, pretDeBaza);
+    slim = {
+      ...(slim ?? {}),
+      customization: { cere: true, ...(dePornire ? { dePornire: true } : {}) },
+    };
   }
   return slim;
 }
@@ -99,7 +129,7 @@ export function slimPageSections(pageSections: unknown): Record<string, unknown>
 export function slimCatalogProduct<T extends CatalogRowShape>(p: T): T & { price_range: PriceRange } {
   // Intervalul de pret se calculeaza INAINTE de a arunca combinatiile.
   const price_range = getProductPriceRange(Number(p.price), p.page_sections);
-  const slim = slimPageSections(p.page_sections);
+  const slim = slimPageSections(p.page_sections, Number(p.price));
 
   const images = Array.isArray(p.images) ? (p.images as unknown[]).slice(0, 1) : p.images;
 

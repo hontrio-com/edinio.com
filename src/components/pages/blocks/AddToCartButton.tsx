@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShoppingCart, Check } from "lucide-react";
+import { ShoppingCart, Check, Settings2 } from "lucide-react";
 import { cerePersonalizarea } from "@/lib/customization/definitie";
 import { parseVariants } from "@/lib/storefront/variants";
 import { VariantQuickAdd, type QuickAddLine } from "@/components/ministore/VariantQuickAdd";
@@ -44,6 +44,13 @@ export function AddToCartButton({ product, storeSlug, color }: {
   const [added, setAdded] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const variants = parseVariants(product.pageSections);
+  /*
+   * ⚠ AICI DEFECTUL E VIU DIN PRIMA CERERE, spre deosebire de cardul din grila.
+   *
+   * `resolve-products.ts` citeste `page_sections` INTREG, direct din `products` — nu prin
+   * proiectie si nu slimuit — deci raspunsul e corect fara sa astepte nicio reproiectare.
+   */
+  const cerePersonalizare = cerePersonalizarea(product.pageSections);
   const cos = useCartOptional();
 
   function writeLine(line: Omit<CartItem, "quantity">) {
@@ -93,9 +100,16 @@ export function AddToCartButton({ product, storeSlug, color }: {
           in coltul din dreapta. Chiar si comutatorul din editor promitea
           „Adauga in cos".
         */}
+        {/*
+          ⚠ Eticheta raspunde la aceeasi intrebare ca `handleClick`: un produs personalizabil
+          nu se adauga in cos, se deschide pagina lui. Promis altfel, clientul crede ca butonul e
+          stricat — pagina se reincarca, derularea sare in cap, si cosul din colt ramane pe 0.
+        */}
         {added
           ? <><Check className="h-3.5 w-3.5" strokeWidth={3} /> Adaugat in cos</>
-          : <><ShoppingCart className="h-3.5 w-3.5" /> {variants ? "Alege optiunile" : "Adauga in cos"}</>}
+          : cerePersonalizare && !variants
+            ? <><Settings2 className="h-3.5 w-3.5" /> Personalizeaza</>
+            : <><ShoppingCart className="h-3.5 w-3.5" /> {variants ? "Alege optiunile" : "Adauga in cos"}</>}
       </button>
       {variants && (
         <VariantQuickAdd

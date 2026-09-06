@@ -615,7 +615,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           <span className="tracking-tight font-bold text-foreground text-3xl lg:text-4xl">
             {showPriceRange
               ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
-              : formatPrice(pretAfisat)}
+              : pretAfisat}
           </span>
           {hasDiscount && (
             <>
@@ -1073,7 +1073,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
                 <span className="text-lg font-bold text-foreground">
                   {showPriceRange
                     ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
-                    : formatPrice(pretAfisat)}
+                    : pretAfisat}
                 </span>
                 {hasDiscount && (
                   <span className="text-xs text-muted-foreground line-through">{formatPrice(displayComparePrice!)}</span>

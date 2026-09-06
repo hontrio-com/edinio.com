@@ -110,7 +110,26 @@ test("⚠ FIECARE model arata pretul CU supliment, dar trimite pretul de CATALOG
       s, /const pretAfisat = pers\.pretDeAfisat\(displayPrice\);/,
       `${model} nu socoteste pretul de afisat`,
     );
-    assert.match(s, /formatPrice\(pretAfisat\)/, `${model} nu afiseaza pretul personalizat`);
+    /*
+     * ⚠ TEXTUL SE AFISEAZA DIRECT, si asta e chiar reparatia.
+     *
+     * Proba cerea pana acum `formatPrice(pretAfisat)` — adica un NUMAR dat pe mana paginii. Cat
+     * timp campurile nu erau completate, numarul era 0, si pagina scria „0 lei" langa titlu si in
+     * bara lipita jos pe telefon, fara niciun mesaj alaturi.
+     *
+     * `pretDeAfisat` intoarce acum text gata scris („de la 48,30 lei" cat timp nu se poate sti,
+     * pretul exact dupa aceea). Un model nou care ar da textul lui `formatPrice` nici n-ar
+     * compila — dar proba cere si aici, ca sa se vada de ce.
+     */
+    assert.ok(
+      (s.match(/\bpretAfisat\b/g) ?? []).length >= 3,
+      `${model} nu afiseaza pretul personalizat (declaratia plus cele doua locuri de pe ecran)`,
+    );
+    assert.equal(
+      /formatPrice\(pretAfisat\)/.test(s), false,
+      `${model} trece iar pretul prin formatPrice — inseamna ca a redevenit numar, si un produs`
+      + " necompletat va scrie iar „0 lei\"",
+    );
     assert.match(
       s, /price: displayPrice,/,
       `${model} nu mai trimite pretul de CATALOG catre fereastra de comanda`,
@@ -184,4 +203,45 @@ test("⚠ componenta comuna e SINGURA care deseneaza campurile", () => {
       `${f} isi deseneaza propriile controale de personalizare`,
     );
   }
+});
+
+test("⚠ pretul NEDETERMINAT se arata ca podea, nu ca ZERO", () => {
+  /*
+   * ⚠ CE SE VEDEA PE ECRAN, masurat prin rulare inainte de reparatie:
+   *
+   *     mod: {"fel":"suprafata","campDimensiuni":"dim","tarif":89,"includePretulProdusului":false}
+   *     valori de pornire: {"dim":{"latime":"","inaltime":""}}
+   *     ok: false | constatari: [ 'Completeaza Latimea.', 'Completeaza Inaltimea.' ]
+   *     >>> pretAfisat: 0 -> ecran: "0 lei"
+   *
+   * Si nu era o configuratie exotica: panoul stinge singur „include pretul produsului" cand alegi
+   * „Calculat din suprafata", iar campurile „implicit" ale laturilor sunt goale din start.
+   * Comerciantul care urmeaza EXACT indicatia panoului obtinea pagina cu „0 lei" — fara niciun
+   * mesaj, fiindca constatarile tac pana la prima apasare pe „Comanda".
+   *
+   * ⚠ Proba e pe SURSA carligului, fiindca proiectul n-are jsdom. Purtarea numerica e probata
+   * separat, in `pret.test.ts` (podeaua).
+   */
+  const carlig = readFileSync(
+    path.resolve(process.cwd(), "src/components/storefront/sections/product/_shared/usePersonalizare.ts"),
+    "utf8",
+  ).replace(/\r\n/g, "\n");
+
+  assert.match(carlig, /pretDeAfisat: \(bazaPeBucata: number\) => string;/,
+    "carligul intoarce iar un numar, deci pagina il poate da lui formatPrice si scrie „0 lei\"");
+  /*
+   * ⚠ SE CERE RAMURA, NU VARIABILA — si asta a prins-o un mutant, nu o citire atenta.
+   *
+   * Prima forma cerea doar ca `const nedeterminat =` sa existe. Mutantul care scotea `if
+   * (!nedeterminat) return ...` lasa variabila la locul ei, nefolosita, si proba ramanea VERDE
+   * peste un carlig care scrie iar „0 lei". O variabila socotita si nefolosita nu apara nimic.
+   */
+  assert.match(carlig, /const nedeterminat =/, "carligul nu mai deosebeste „nu se stie” de „zero”");
+  assert.match(
+    carlig, /if \(!nedeterminat\) return formatPrice\(exact\);/,
+    "carligul socoteste „nedeterminat” dar nu-l mai foloseste — deci scrie iar „0 lei”",
+  );
+  assert.match(carlig, /podeaPersonalizarii\(definitie, bazaPeBucata\)/,
+    "cand pretul nu se poate sti, nu se mai arata podeaua");
+  assert.match(carlig, /de la \$\{formatPrice\(podea\)\}/);
 });

@@ -700,7 +700,7 @@ export function ProductPageDetailed({
                 </span>
               ) : (
                 <>
-                  <span className="text-[32px] font-semibold text-foreground tabular-nums leading-none">{formatPrice(pretAfisat)}</span>
+                  <span className="text-[32px] font-semibold text-foreground tabular-nums leading-none">{pretAfisat}</span>
                   {hasDiscount && (
                     <span className="text-lg text-muted-foreground line-through mb-0.5">{formatPrice(displayComparePrice!)}</span>
                   )}
@@ -1098,7 +1098,7 @@ export function ProductPageDetailed({
               <p className="text-base font-bold text-foreground">
                 {showPriceRange
                   ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
-                  : formatPrice(pretAfisat)}
+                  : pretAfisat}
               </p>
             </div>
             {arataButonCos && (

@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Check, Layers, Package, ShoppingCart } from "lucide-react";
+import { Check, Layers, Package, Settings2, ShoppingCart } from "lucide-react";
 import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { parseVariants } from "@/lib/storefront/variants";
+import { cerePersonalizarea } from "@/lib/customization/definitie";
 import { gtagEvent } from "@/lib/marketing";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
 
@@ -95,6 +96,20 @@ export function ProductCard({
   const isOutOfStock = outOfStock ?? product.fara_stoc;
   // Produs variabil: cardul deschide selectorul de optiuni in loc sa adauge direct.
   const isVariable = parseVariants(product.page_sections) !== null;
+  /*
+   * ⚠ Produs PERSONALIZABIL: apasarea duce la pagina produsului (vezi `MiniStoreRenderer`),
+   * deci butonul n-are voie sa promita cosul. Steagul vine din payload-ul slim, care pe
+   * suprafetele de catalog e tot ce are cardul.
+   */
+  const cerePersonalizare = cerePersonalizarea(product.page_sections);
+  /*
+   * ⚠ „De la X" cand pretul e o PODEA, nu pretul.
+   *
+   * Un fototapet cu `includePretulProdusului` stins nu se vinde niciodata la pretul de catalog:
+   * cel mai ieftin posibil e 0,7 m² x 69 = 48,30 lei, iar cel scump trece de 900. Scris fara „de
+   * la", numarul e corect ca cifra si mincinos ca promisiune.
+   */
+  const dePornire = priceRange.dePornire === true && !showPriceRange;
 
   const fireSelect = () => gtagEvent("select_item", { items: [{ item_id: product.id, item_name: product.name, price: priceRange.min, quantity: 1 }] });
   // Slug-ul poate lipsi (coloana e nullable, iar importurile o lasa goala). Ruta
@@ -175,7 +190,9 @@ export function ProductCard({
             <span className="font-bold text-lg" style={{ color }}>
               {showPriceRange
                 ? formatPriceRange(priceRange.min, priceRange.max)
-                : formatPrice(priceRange.min)}
+                : dePornire
+                  ? `de la ${formatPrice(priceRange.min)}`
+                  : formatPrice(priceRange.min)}
             </span>
             {hasDiscount && (
               <span className="text-sm text-muted-foreground line-through">{formatPrice(Number(product.compare_at_price))}</span>
@@ -192,6 +209,17 @@ export function ProductCard({
             boxShadow: isAdded ? `0 0 0 3px ${color}33` : `0 2px 8px ${color}40`,
           }}
         >
+        {/*
+          ⚠ BUTONUL SPUNE CE FACE, si asta a fost gasit de auditul proprietarului.
+          Un produs personalizabil nu e „variabil", deci cadea pe ramura din urma si promitea
+          „Adauga in cos" — dar apasarea duce la pagina produsului. Clientul citeste „butonul e
+          stricat" sau „am dat gresit click", nu „produsul asta trebuie configurat intai" — mai
+          ales ca in cosul aceluiasi magazin `CartRecommendations` arata corect o sageata.
+
+          ⚠ Eticheta se socoteste din ACELASI predicat ca hotararea din handler, dar hotararea
+          ramane in handler: doua porti pe acelasi drum pot diverge, si atunci butonul ar minti in
+          sens invers.
+        */}
           {isAdded ? (
             <>
               <Check className="h-4 w-4" strokeWidth={3} />
@@ -201,6 +229,11 @@ export function ProductCard({
             <>
               <ShoppingCart className="h-4 w-4" />
               Alege optiunile
+            </>
+          ) : cerePersonalizare ? (
+            <>
+              <Settings2 className="h-4 w-4" />
+              Personalizeaza
             </>
           ) : (
             <>

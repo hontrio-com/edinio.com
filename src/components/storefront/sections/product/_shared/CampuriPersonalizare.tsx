@@ -211,7 +211,7 @@ function Control(p: ControlProps) {
       const latura = (
         cheie: "latime" | "inaltime",
         eticheta: string,
-        marg: { min: number; max: number } | undefined,
+        marg: { min: number; max: number; pas?: number } | undefined,
       ) => (
         <div className="flex-1 min-w-[130px]">
           <label
@@ -219,7 +219,7 @@ function Control(p: ControlProps) {
             className="block text-[11px] text-muted-foreground mb-1"
           >
             {eticheta}
-            {marg && ` (${marg.min}–${marg.max} ${u})`}
+            {marg && ` (${marg.min}–${marg.max} ${u}${marg.pas ? `, din ${marg.pas} in ${marg.pas}` : ""})`}
           </label>
           <div className="flex items-center gap-1.5">
             <input
@@ -232,6 +232,8 @@ function Control(p: ControlProps) {
               onChange={(e) => pune(camp.id, { ...d, [cheie]: e.target.value })}
               min={marg?.min}
               max={marg?.max}
+              /* ⚠ Doar o comoditate: pasul adevarat se verifica pe SERVER, in `valori.ts`. */
+              step={marg?.pas}
               className={eroare ? `${CAMP} border-red-400` : CAMP}
             />
             <span className="text-sm text-muted-foreground shrink-0">{u}</span>
@@ -346,11 +348,21 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, incarcaFisie
         >
           {seIncarca ? <Loader2 size={15} className="animate-spin" style={{ color }} /> : <Upload size={15} style={{ color }} />}
           <span className="text-sm text-muted-foreground">
-            {seIncarca ? "Se incarca..." : "Incarca fisier"}
+            {seIncarca ? "Se incarca..." : "Incarca imagine"}
           </span>
           <input
             type="file"
-            accept="image/jpeg,image/png,image/webp"
+            /*
+             * ⚠ ACEEASI LISTA CA PE SERVER (ruta `upload-customization`), si de-aia sunt si
+             * HEIC/HEIF aici: serverul le primeste de la un an, dar campul nu le declara, deci
+             * fereastra de alegere a fisierelor le arata GRI pe iPhone — formatul implicit al
+             * pozelor de acolo. Clientul vedea ca „nu se poate incarca poza mea".
+             *
+             * ⚠ Nu e o poarta: filtrul din browser doar ajuta la alegere. Serverul verifica
+             * OCTETII fisierului, nu antetul trimis (`detectImageMime`), deci ocolit de aici
+             * nu trece nimic.
+             */
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
             multiple
             className="hidden"
             aria-invalid={eroare || undefined}
@@ -364,13 +376,17 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, incarcaFisie
       )}
 
       <p className="text-[11px] text-muted-foreground">
-        Cel mult {maxim} {maxim === 1 ? "fisier" : "fisiere"}, {camp.max_file_size_mb ?? 10} MB fiecare.
+        {/* ⚠ Formatele se SCRIU. Fara ele, cine trage un PDF primea mesajul de mai jos si nu
+            afla niciodata ca formatul era problema, nu marimea. */}
+        JPG, PNG, WEBP sau HEIC. Cel mult {maxim} {maxim === 1 ? "imagine" : "imagini"},{" "}
+        {camp.max_file_size_mb ?? 10} MB fiecare.
       </p>
       {incarca[`${camp.id}:eroare`] && (
         /* ⚠ Pana acum un fisier prea mare sau o incarcare picata erau sarite in TACERE: clientul
            alegea patru poze si vedea trei, fara niciun mesaj. */
         <p role="alert" className="text-xs text-red-500">
-          Unele fisiere n-au putut fi incarcate. Verifica marimea si formatul.
+          Unele imagini n-au putut fi incarcate. Accepta JPG, PNG, WEBP si HEIC, pana in{" "}
+          {camp.max_file_size_mb ?? 10} MB.
         </p>
       )}
     </div>

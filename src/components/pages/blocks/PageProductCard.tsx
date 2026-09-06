@@ -27,7 +27,12 @@ export function PageProductCard({ p, color, basePath, storeSlug, addToCart, clas
           <h3 className="font-semibold text-gray-900 text-sm leading-snug mb-1.5 line-clamp-2">{p.name}</h3>
         </a>
         <div className="flex items-baseline gap-2 mt-auto">
-          <span className="font-black text-lg" style={{ color }}>{formatPriceRange(p.price_range.min, p.price_range.max)}</span>
+          <span className="font-black text-lg" style={{ color }}>
+            {/* ⚠ „de la" cand numarul e o PODEA — vezi `getProductPriceRange`. */}
+            {p.price_range.dePornire && !p.price_range.hasRange
+              ? `de la ${formatPrice(p.price_range.min)}`
+              : formatPriceRange(p.price_range.min, p.price_range.max)}
+          </span>
           {hasDiscount && <span className="text-sm text-gray-400 line-through">{formatPrice(p.compare_at_price!)}</span>}
         </div>
         {addToCart && storeSlug && (

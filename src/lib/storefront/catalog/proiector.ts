@@ -83,7 +83,7 @@ export function proiecteazaRand(p: RandSursa, acum: string): ProiectieCalculata 
     price_max: interval.max,
     has_range: interval.hasRange,
     fara_oferta: interval.faraOferta,
-    optiuni: slimPageSections(p.page_sections),
+    optiuni: slimPageSections(p.page_sections, Number(p.price)),
     descriere_scurta: descriere,
     cauta_norm,
     // `Set` fiindca acelasi (cheie, valoare) poate veni si din `google.brand`, si

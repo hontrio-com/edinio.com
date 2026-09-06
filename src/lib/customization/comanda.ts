@@ -82,9 +82,45 @@ export type RezultatPersonalizare =
  *    unei poze de produs a altui magazin, sau orice alt obiect din galeata, si el ar fi aparut in
  *    comanda ca „fisierul incarcat de client".
  */
+function gazdeleNoastre(): Set<string> {
+  const out = new Set<string>();
+  for (const v of [process.env.R2_PUBLIC_URL, process.env.NEXT_PUBLIC_CDN_URL]) {
+    if (!v) continue;
+    try { out.add(new URL(v).host.toLowerCase()); } catch { /* configurare stricata: se ignora */ }
+  }
+  return out;
+}
+
 function esteFisierulNostru(adresa: string, businessId: string): boolean {
-  const cheie = r2KeyFromUrl(adresa);
-  if (!cheie) return false;
+  /*
+   * ⚠ GAZDA SE VERIFICA EXACT, nu prin `r2KeyFromUrl`.
+   *
+   * Ajutorul comun accepta ORICE `*.r2.dev`, si o face dinadins: adresele salvate pot folosi
+   * inca domeniul brut al galetii dupa ce `R2_PUBLIC_URL` a fost mutat pe CDN, iar sase alte
+   * locuri din proiect se bazeaza pe purtarea aia. Nu il string aici — l-as fi stricat pentru ele.
+   *
+   * Dar pentru poarta ASTA e prea larg: oricine isi poate face o galeata R2, deci
+   * `https://galeata-straina.r2.dev/products/customizations/<id-ul-victimei>/x.jpg` trecea de
+   * verificarea de prefix. Fisierul ar fi aparut in comanda ca „incarcat de client", cu continut
+   * ales de altcineva, si s-ar fi deschis din panoul comerciantului.
+   *
+   * ⚠ Si se parseaza ca ADRESA, nu se cauta un subsir: `.r2.dev/` poate aparea oriunde intr-un
+   * sir — inclusiv intr-o cale sau intr-un parametru al unui domeniu strain.
+   */
+  let gazda: string;
+  let cale: string;
+  try {
+    const u = new URL(adresa);
+    if (u.protocol !== "https:") return false;
+    gazda = u.host.toLowerCase();
+    cale = u.pathname.replace(/^\/+/, "");
+  } catch {
+    return false;
+  }
+  if (!gazdeleNoastre().has(gazda)) return false;
+
+  /* Cheia se ia tot prin ajutorul comun, ca sa se scoata prefixul de redimensionare al CDN-ului. */
+  const cheie = r2KeyFromUrl(adresa) ?? cale;
   return cheie.startsWith(`${PREFIX_INCARCARI}${businessId}/`);
 }
 

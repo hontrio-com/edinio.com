@@ -18,8 +18,24 @@ import { verificaPersonalizarea } from "./comanda";
 const BIZ = "11111111-1111-4111-8111-111111111111";
 const ALT_BIZ = "22222222-2222-4222-8222-222222222222";
 
-/** ⚠ `.r2.dev/` se recunoaste fara variabile de mediu — vezi `r2-url.ts`. */
-const NOSTRU = `https://x.r2.dev/products/customizations/${BIZ}/poza.jpg`;
+/*
+ * ⚠ GAZDELE NOASTRE SE DECLARA, si proba trebuie sa le declare la fel ca productia.
+ *
+ * `esteFisierulNostru` cere ca gazda adresei sa fie EXACT una dintre cele configurate. Intr-un
+ * mediu fara `R2_PUBLIC_URL` multimea e GOALA si se refuza tot — purtare corecta (fara depozit
+ * configurat nu exista incarcari), dar proba trebuie sa puna variabila, altfel ar fi trecut din
+ * motivul gresit: ar fi vazut „refuzat" peste tot, inclusiv peste adresa buna.
+ *
+ * ⚠ Chiar asa a picat prima data, si de-aia scrie aici: fara linia de mai jos, randul care
+ * cere `ok` pe `NOSTRU` a dat `eroare`. Perechea „una trece, restul cad" e ce face proba sa
+ * insemne ceva; una singura din ele, oricare, se poate satisface si cu o poarta stricata.
+ *
+ * Variabila se citeste la FIECARE apel (vezi `gazdeleNoastre`), deci o atribuire aici, dupa
+ * importuri, ajunge.
+ */
+process.env.R2_PUBLIC_URL = "https://pub-alnostru.r2.dev";
+
+const NOSTRU = `https://pub-alnostru.r2.dev/products/customizations/${BIZ}/poza.jpg`;
 
 const FOTOTAPET = {
   customization: {
@@ -142,8 +158,25 @@ test("⚠ FISIERUL trebuie sa fie al NOSTRU, si al MAGAZINULUI ASTA", () => {
     "javascript:alert(document.cookie)",
     "https://evil.example.com/poza.jpg",
     "data:text/html;base64,PHNjcmlwdD4=",
-    `https://x.r2.dev/products/customizations/${ALT_BIZ}/poza.jpg`,
-    "https://x.r2.dev/products/alt-produs/poza.jpg",
+    `https://pub-alnostru.r2.dev/products/customizations/${ALT_BIZ}/poza.jpg`,
+    "https://pub-alnostru.r2.dev/products/alt-produs/poza.jpg",
+    /*
+     * ⚠ GALEATA STRAINA, CU PREFIXUL SI ID-UL NOASTRE. Asta a fost defectul, si el n-avea
+     * nimic de-a face cu prefixul: `r2KeyFromUrl` accepta ORICE `*.r2.dev` — dinadins, fiindca
+     * sase alte locuri din proiect se bazeaza pe asta — deci oricine isi facea o galeata R2 in
+     * cinci minute, urca ce voia in ea si trimitea adresa. Cheia incepea cu
+     * `products/customizations/<id-ul-magazinului>/`, poarta zicea „e a noastra", si fisierul
+     * se deschidea din panoul comerciantului ca „incarcat de client".
+     */
+    `https://galeata-straina.r2.dev/products/customizations/${BIZ}/poza.jpg`,
+    /*
+     * ⚠ Si gazda se PARSEAZA, nu se cauta ca subsir: `.r2.dev/` poate sta oriunde intr-un sir,
+     * inclusiv in calea unui domeniu strain. O poarta scrisa cu `includes(".r2.dev/")` ar fi
+     * lasat adresa asta sa treaca.
+     */
+    `https://evil.example.com/.r2.dev/products/customizations/${BIZ}/poza.jpg`,
+    /* ⚠ Gazda buna, dar `http`: legatura se poate schimba pe drum, deci nu e a noastra. */
+    `http://pub-alnostru.r2.dev/products/customizations/${BIZ}/poza.jpg`,
   ]) {
     const r = verificaPersonalizarea(cuPoza, { p: [rea] }, BIZ);
     assert.equal(r.fel, "eroare", `a trecut adresa: ${rea}`);

@@ -15,6 +15,15 @@
  *
  * Nu se exporta niciun ajutor de aici. Un `export function` „privat prin conventie" ar fi tot un
  * capat public.
+ *
+ * ═══ ⚠ ORICE SCRIERE DE AICI TREBUIE SA MURDAREASCA PROIECTIA DE CATALOG ═══
+ *
+ * Cardul din grila citeste `catalog_produs.cere_configurare` si `pret_pornire`, iar modelul ala
+ * se reimprospateaza dintr-un singur loc: declansatorul de pe `products`. Niciuna dintre
+ * actiunile de mai jos nu atinge `products`, deci declansatorul NU se aprinde pentru ele — si
+ * fara marcare cardul n-ar minti pana la urmatorul cron, ci PANA CAND CINEVA SALVEAZA PRODUSUL
+ * DE MANA. Vezi `configurators/murdareste.ts`, si proba de contract
+ * `configurator-actiuni-murdaresc.test.ts`, care cade daca o actiune noua uita.
  */
 
 import { revalidatePath } from "next/cache";
@@ -24,6 +33,9 @@ import { logError } from "@/lib/error-logger";
 import { citesteContinut } from "@/lib/configurators/citeste";
 import { compileaza } from "@/lib/configurators/compileaza";
 import { valideaza, type Constatare } from "@/lib/configurators/validare";
+import {
+  murdaresteCategoriile, murdaresteConfiguratorul, murdaresteSiProiecteaza,
+} from "@/lib/configurators/murdareste";
 import type { Json } from "@/types/database.types";
 
 const CALEA = "/dashboard/products/configurators";
@@ -328,6 +340,15 @@ export async function publicaConfigurator(id: string): Promise<{ error: string; 
       return { error: "Versiunea s-a scris, dar nu am putut-o face activa. Incearca din nou." };
     }
 
+    /*
+     * ⚠ Publicarea schimba raspunsul pentru TOATE produsele configuratorului deodata — si e
+     * chiar clipa in care un configurator inca nepublicat devine vizibil pe carduri, fiindca
+     * pointerul de mai sus il face si `activ`. Fara marcare, primul cumparator ar fi vazut un
+     * card „Adauga in cos" pe un produs care de acum cere configurare.
+     *
+     * Fara `proiecteazaImediat`: numarul de produse atinse e nemarginit.
+     */
+    await murdaresteConfiguratorul(a.supabase, a.magazin.id, id);
     revalidatePath(CALEA);
     return {
       success: true,
@@ -364,6 +385,13 @@ export async function schimbaStareaConfiguratorului(id: string, stare: string): 
     .eq("id", id).eq("business_id", a.magazin.id).select("id").maybeSingle();
   if (error) return { error: "Nu am putut schimba starea. Incearca din nou." };
   if (!data) return { error: "Configuratorul nu exista." };
+  /*
+   * ⚠ Oprirea e cazul care doare mai tare decat pornirea. Un configurator dezactivat sau arhivat
+   * nu se mai serveste pe pagina de produs, dar cardurile ar fi ramas cu „Alege optiunile" si cu
+   * un pret de pornire care nu mai exista — adica un buton care duce intr-o pagina obisnuita, si
+   * un pret pe care magazinul nu-l mai practica.
+   */
+  await murdaresteConfiguratorul(a.supabase, a.magazin.id, id);
   revalidatePath(CALEA);
   return { success: true };
 }
@@ -672,6 +700,11 @@ export async function aplicaLaProduse(
     };
   }
 
+  /*
+   * ⚠ Lista e marginita (cel mult `MAXIM_PE_LOT`) si e chiar cea bifata de om, deci se si
+   * proiecteaza acum: comerciantul tocmai a apasat si se duce sa se uite in magazin.
+   */
+  await murdaresteSiProiecteaza(a.magazin.id, deScris);
   revalidatePath(CALEA);
   return { success: true, legate: deScris.length, refuzate };
 }
@@ -690,13 +723,20 @@ export async function scoateProduse(
   const cerute = idsCurate(produse);
   if (!cerute.length) return { success: true, scoase: 0 };
 
+  /*
+   * ⚠ Se cere si `product_id`, nu doar `id`: se marcheaza produsele care CHIAR au pierdut
+   * legatura, nu tot ce a trimis browserul. Un id inventat n-ar sterge nimic, dar ar fi intrat in
+   * coada de proiectie — si `catalog_murdar` are cheie straina catre `products`, deci scrierea
+   * intregului lot ar fi picat cu 23503, adica exact produsele bune ar fi ramas nemarcate.
+   */
   const { data, error } = await a.supabase
     .from("configurator_produse").delete()
     .eq("business_id", a.magazin.id).eq("configurator_id", id)
     .in("product_id", cerute)
-    .select("id");
+    .select("id, product_id");
 
   if (error) return { error: "Nu am putut scoate produsele. Incearca din nou." };
+  await murdaresteSiProiecteaza(a.magazin.id, (data ?? []).map((r) => r.product_id));
   revalidatePath(CALEA);
   return { success: true, scoase: (data ?? []).length };
 }
@@ -755,6 +795,19 @@ export async function aplicaLaCategorii(
     return { error: "Nu am putut lega categoriile. Incearca din nou." };
   }
 
+  /*
+   * ⚠ NUMAI MARCARE, fara `proiecteazaImediat`, si nu din lene.
+   *
+   * O legatura de categorie prinde tot subarborele si toate produsele lui — pe un magazin cu
+   * douazeci de mii de produse, „Imbracaminte" poate insemna cateva mii. Proiectate chiar in
+   * cererea asta, actiunea de panou s-ar fi intins zeci de secunde si ar fi cazut pe timeout, cu
+   * marcajele deja scrise: comerciantul ar fi vazut o eroare pentru o legatura care de fapt s-a
+   * facut. Cronul de la minut le ia pe rand.
+   *
+   * ⚠ Si se marcheaza si ce MOSTENESTE, nu doar produsele care au chiar numele ales: legatura se
+   * rezolva pe subarbore, deci si raspunsul cardului se schimba pe subarbore.
+   */
+  await murdaresteCategoriile(a.supabase, a.magazin.id, deScris);
   revalidatePath(CALEA);
   return { success: true, legate: deScris.length, necunoscute };
 }
@@ -810,7 +863,9 @@ export async function aplicaLaProduseleDinCategorie(
   if (ids.length === 0) return { error: "Categoria nu are niciun produs acum." };
 
   // Mai departe e exact drumul de la legarea manuala: aceleasi verificari, si acelasi refuz
-  // pe nume pentru produsele luate deja de alt configurator.
+  // pe nume pentru produsele luate deja de alt configurator. ⚠ Tot de acolo vine si marcarea in
+  // `catalog_murdar`: scrisa si aici, produsele ar fi intrat de doua ori in aceeasi coada.
+  // Lista e marginita la `MAXIM_PE_LOT`, deci proiectia imediata de acolo ramane potrivita.
   return aplicaLaProduse(id, ids, "direct");
 }
 
@@ -828,13 +883,18 @@ export async function scoateCategorii(
   const cerute = idsCurate(categorii);
   if (!cerute.length) return { success: true, scoase: 0 };
 
+  // Se cere si numele, nu doar `id`: se marcheaza categoriile care CHIAR au fost scoase.
   const { data, error } = await a.supabase
     .from("configurator_categorii").delete()
     .eq("business_id", a.magazin.id).eq("configurator_id", id)
     .in("categorie", cerute)
-    .select("id");
+    .select("id, categorie");
 
   if (error) return { error: "Nu am putut scoate categoriile. Incearca din nou." };
+  // ⚠ Scoaterea e la fel de importanta ca legarea: fara marcare, cardurile ar fi trimis in
+  // continuare cumparatorii intr-o pagina de configurare care nu mai exista. Tot fara
+  // `proiecteazaImediat`, din acelasi motiv ca la legare.
+  await murdaresteCategoriile(a.supabase, a.magazin.id, (data ?? []).map((r) => r.categorie));
   revalidatePath(CALEA);
   return { success: true, scoase: (data ?? []).length };
 }

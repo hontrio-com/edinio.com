@@ -48,6 +48,8 @@ function rand(nume: string, extra: Partial<RandProiectie> = {}): RandProiectie {
     optiuni: null,
     descriere_scurta: "",
     fatete: null,
+    cere_configurare: false,
+    pret_pornire: null,
     ...extra,
   };
 }

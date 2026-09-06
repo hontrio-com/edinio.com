@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { mutaMapareaCategoriei } from "@/lib/marketplace/mapare-categorii";
 import { legaturileUrmeazaCategoria, legaturileUitaCategoriile } from "@/lib/configurators/redenumire";
+import { murdaresteCategoriile } from "@/lib/configurators/murdareste";
 import { createClient } from "@/lib/supabase/server";
 import { collectSubtreeIds } from "@/lib/categories/tree";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
@@ -307,6 +308,36 @@ export async function moveCategory(
     if (error.code === "23505") return { error: "Acolo exista deja o categorie cu acest nume." };
     return { error: "Eroare la mutare." };
   }
+
+  /*
+   * ⚠ MUTAREA SCHIMBA CINE MOSTENESTE, DESI NU SCHIMBA NICIUN NUME.
+   *
+   * Comentariul de mai sus spune, pe buna dreptate, ca produsele nu se ating: ele isi tin
+   * categoria dupa NUME, iar mutarea nu redenumeste nimic. Era adevarat pentru oferte.
+   *
+   * Pentru configuratoare nu mai e. Mostenirea coboara in SUBARBORE cu `extindeCategoriile`, care
+   * merge pe `parent_id`: mutata sub „Imbracaminte”, categoria „Rochii” incepe sa mosteneasca
+   * configuratorul legat de parintele nou, si inceteaza sa-l mosteneasca pe cel vechi. Raspunsul
+   * de pe pagina de produs se schimba pe loc, fiindca acolo se rezolva la fiecare citire — dar
+   * cardul din grila citeste o proiectie, iar nimic n-o mai pune la coada. Ar fi ramas mincinos
+   * pana cand cineva salva produsele de mana.
+   *
+   * Se marcheaza AMANDOUA ramurile: cea de unde a plecat si cea unde a ajuns. `murdaresteCategoriile`
+   * desface singura subarborele, pe arborele de ACUM — deci ramura noua e cuprinsa; pentru cea
+   * veche se da chiar numele parintelui de dinainte.
+   */
+  // ⚠ Numele parintelui DE DINAINTE se cere aparte: ce s-a citit mai sus are doar id si
+  // parinte, si numai cand mutarea are o tinta. Fara el, ramura parasita ar fi ramas nemarcata.
+  let numeVechiulParinte: string | null = null;
+  if (cat.parent_id) {
+    const { data: vechiul } = await supabase
+      .from("categories").select("name").eq("id", cat.parent_id).eq("business_id", businessId).maybeSingle();
+    numeVechiulParinte = vechiul?.name ?? null;
+  }
+  await murdaresteCategoriile(
+    supabase, businessId,
+    [cat.name, ...(numeVechiulParinte ? [numeVechiulParinte] : [])],
+  );
 
   revalidatePath("/dashboard/products/categories");
   revalidatePath("/dashboard/products");

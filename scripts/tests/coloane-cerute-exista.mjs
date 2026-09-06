@@ -54,6 +54,19 @@ const TABELE = [
   */
   "blog_posts", "blog_authors", "blog_categories", "blog_tags", "blog_post_tags",
   "blog_post_revisions", "blog_redirects", "blog_subscribers", "blog_post_stats",
+  /*
+    ⚠ PROIECTIA DE CATALOG, din acelasi motiv ca blogul, dar cu o pedeapsa mai mare.
+
+    `din-proiectie.ts` cere coloanele pe FATA, intr-un sir (`COLOANE_PROIECTIE`), pe calea de
+    rezerva a paginii de magazin si a cautarii. PostgREST nu ignora o coloana necunoscuta: pica
+    INTREAGA interogare. Deci cod pusat inaintea migratiei nu inseamna „lipseste un camp”,
+    inseamna GRILA GOALA pe toate magazinele platformei — chiar paguba scrisa in memoria
+    „o coloana lipsa rupe TOATA interogarea”.
+
+    Iar `catalog_produs` intra si in tipurile generate, deci proba de tipuri o vede — dar
+    tipurile pot fi vechi, PostgREST-ul nu.
+  */
+  "catalog_produs", "catalog_murdar",
 ];
 
 /* ── 1. Ce coloane cere codul ─────────────────────────────────────────────── */
@@ -74,11 +87,43 @@ function fisiere(radacina) {
  *   .from("orders").select("a, b, c")
  *   .select("id, store_settings(x, y)")      ← embed
  *
- * ⚠ Se sare peste `select("*")` si peste selecturile compuse din variabile: acolo
- * nu avem ce compara, iar o proba care se preface ca a verificat e mai rea decat
- * una care spune ca n-a putut.
+ * ⚠ Se sare peste `select("*")`. Selecturile compuse din variabile se rezolva insa, cand
+ * variabila e o CONSTANTA de sir din acelasi fisier — vezi `constantele()`.
+ *
+ * ⚠ DE CE MERITA. `din-proiectie.ts` cere coloanele proiectiei de catalog printr-o astfel de
+ * constanta, pe calea de rezerva a paginii de magazin si a cautarii. PostgREST nu ignora o
+ * coloana necunoscuta: pica INTREAGA interogare. Deci cod pusat inaintea migratiei nu inseamna
+ * „lipseste un camp”, inseamna GRILA GOALA pe toate magazinele platformei. Cat timp unealta era
+ * oarba acolo, tocmai locul cu pedeapsa cea mai mare nu era aparat de nimic.
+ *
+ * Ce ramane nerezolvat — siruri compuse la rulare, importate din alt fisier — se sare mai
+ * departe: o proba care se preface ca a verificat e mai rea decat una care spune ca n-a putut.
  */
-function cereriDinFisier(text) {
+/**
+ * Constantele de sir din fisier: `const NUME = "a, b";`, si formele scrise pe mai multe
+ * randuri cu `+`.
+ *
+ * ⚠ Numai literalii. O constanta compusa din alta variabila nu se urmareste: ar fi insemnat
+ * sa interpretez fisierul, si prima interpretare gresita ar fi dat o alarma falsa — iar o
+ * unealta care da alarme false nu se mai citeste tocmai cand are dreptate.
+ */
+function constantele(text) {
+  const out = new Map();
+  const re = /(?:^|\n)\s*(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*((?:[\s\S]{0,1200}?));/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const [, nume, corp] = m;
+    const bucati = [...corp.matchAll(/["'`]([^"'`]*)["'`]/g)].map((x) => x[1]);
+    // Corpul trebuie sa fie DOAR siruri lipite cu `+`; orice altceva inseamna ca nu stim.
+    if (bucati.length === 0) continue;
+    const doarSiruri = corp.replace(/["'`][^"'`]*["'`]/g, "").replace(/[\s+]/g, "") === "";
+    if (!doarSiruri) continue;
+    out.set(nume, bucati.join(""));
+  }
+  return out;
+}
+
+function cereriDinFisier(text, consts) {
   const cereri = [];
 
   /*
@@ -101,6 +146,21 @@ function cereriDinFisier(text) {
       if (TABELE.includes(e[1])) cereri.push({ tabel: e[1], lista: e[2] });
     }
   }
+
+  /*
+   * A doua trecere: `.select(NUME_DE_CONSTANTA)`.
+   *
+   * ⚠ Fara ea, tocmai selectul cu pedeapsa cea mai mare ramanea neverificat. Vezi antetul.
+   */
+  const reVar = /\.from\(\s*["'`](\w+)["'`]\s*\)((?:(?!\.from\()[\s\S]){0,400}?)\.select\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
+  let v;
+  while ((v = reVar.exec(text))) {
+    const [, tabel, , nume] = v;
+    const lista = consts.get(nume);
+    if (!lista || !TABELE.includes(tabel) || lista.includes("*")) continue;
+    cereri.push({ tabel, lista });
+  }
+
   return cereri;
 }
 
@@ -212,9 +272,35 @@ if (!url || !cheie) {
 
 /* Se aduna reuniunea coloanelor cerute, pe tabel, cu locul de unde vin. */
 const cerute = new Map(TABELE.map((t) => [t, new Map()]));
-for (const cale of fisiere("src")) {
+
+/*
+ * ⚠ CONSTANTELE SE STRANG DIN TOT `src`, NU DIN FISIERUL CURENT.
+ *
+ * `COLOANE_PROIECTIE` se declara in `din-proiectie.ts` si se FOLOSESTE in `pagina-magazin.tsx`
+ * si in cautare — exact tiparul obisnuit pentru o lista de coloane. Cautata doar in fisierul
+ * care o cheama, n-ar fi fost gasita niciodata, si tocmai selectul cu pedeapsa cea mai mare ar
+ * fi ramas neverificat: PostgREST pica INTREAGA interogare la o coloana necunoscuta, deci acolo
+ * greseala nu inseamna un camp lipsa, ci grila goala pe toata platforma.
+ *
+ * ⚠ Un nume declarat de DOUA ori, cu valori diferite, se ARUNCA: nu se poate sti care se
+ * foloseste unde, iar o ghicire gresita ar da o alarma falsa — si o unealta care da alarme
+ * false nu se mai citeste tocmai cand are dreptate.
+ */
+const toateFisierele = fisiere("src");
+const constanteGlobale = new Map();
+const ambigue = new Set();
+for (const cale of toateFisierele) {
   const text = readFileSync(cale, "utf8").replace(/\r\n/g, "\n");
-  for (const { tabel, lista } of cereriDinFisier(text)) {
+  for (const [nume, val] of constantele(text)) {
+    if (constanteGlobale.has(nume) && constanteGlobale.get(nume) !== val) ambigue.add(nume);
+    else constanteGlobale.set(nume, val);
+  }
+}
+for (const nume of ambigue) constanteGlobale.delete(nume);
+
+for (const cale of toateFisierele) {
+  const text = readFileSync(cale, "utf8").replace(/\r\n/g, "\n");
+  for (const { tabel, lista } of cereriDinFisier(text, constanteGlobale)) {
     for (const col of coloaneDin(lista)) {
       const m = cerute.get(tabel);
       if (!m.has(col)) m.set(col, cale);

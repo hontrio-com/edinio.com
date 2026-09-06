@@ -55,6 +55,18 @@ export function formatPriceRange(min: number, max: number, lowestOnly = false): 
   return `De la ${formatPriceValue(min)} – ${formatPrice(max)}`;
 }
 
+/**
+ * „De la X lei”, FARA capat de sus.
+ *
+ * ⚠ NU e `formatPriceRange` cu un `max` lipsa, si de aia e o functie separata: acolo `max <= min`
+ * cade pe pretul EXACT — adica taman pe dos. Un produs configurabil chiar n-are capat de sus
+ * (inca o extraoptiune, inca zece caractere de gravura), deci intervalul nu se poate scrie; ce se
+ * poate spune cinstit e doar de unde porneste.
+ */
+export function formatPriceFrom(min: number): string {
+  return `De la ${formatPrice(min)}`;
+}
+
 export function formatPhoneDisplay(phone: string): string {
   const cleaned = phone.replace(/\D/g, "");
   if (cleaned.startsWith("40") && cleaned.length === 11) {

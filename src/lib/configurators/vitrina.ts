@@ -39,6 +39,28 @@ export interface ConfiguratorDeVitrina {
   compilat: Compilat;
 }
 
+/**
+ * Acelasi raspuns, dar cu verdictul citirii langa el.
+ *
+ * ═══ ⚠ DE CE E NEVOIE DE `ok`, CAND HARTA GOALA PAREA DE AJUNS ═══
+ *
+ * Harta goala inseamna DOUA lucruri care nu se pot deosebi: „niciun produs n-are configurator”
+ * si „citirea a picat”. Pentru vitrina ele chiar sunt acelasi lucru — produsul se vinde simplu,
+ * si asta e degradarea corecta pe o pagina.
+ *
+ * Pe PROIECTIE nu mai sunt. Acolo raspunsul se SCRIE si ramane scris: o pana de o clipa ar fi
+ * pus „n-are configurator” peste un produs care are, iar cardul ar fi mintit pana cand cineva
+ * atingea produsul — poate luni, fiindca nimic nu-l mai repune la coada. De aceea proiectorul
+ * cere verdictul si, cand e `false`, nu scrie nimic.
+ *
+ * ⚠ `harta` e buna de folosit si cand `ok` e `false`: ce e in ea s-a citit cu adevarat. `ok`
+ * spune doar ca poate LIPSI ceva din ea, deci nu se poate trage concluzia „n-are”.
+ */
+export interface RaspunsConfiguratoare {
+  ok: boolean;
+  harta: Map<string, ConfiguratorDeVitrina>;
+}
+
 /** Cat cere PostgREST intr-un `.in()`. Filtrul pleaca in ADRESA: peste ~700 cade cererea. */
 const MAXIM_PE_LOT = 200;
 
@@ -62,9 +84,35 @@ export async function configuratoarePentruProduse(
   businessId: string,
   produse: { id: string; category: string | null }[],
 ): Promise<Map<string, ConfiguratorDeVitrina>> {
+  return (await configuratoareleCuVerdict(businessId, produse)).harta;
+}
+
+/**
+ * Acelasi drum, dar spune si daca a aflat cu adevarat. Vezi `RaspunsConfiguratoare`.
+ *
+ * ⚠ NU e o a doua citire scrisa separat, si nici nu are voie sa devina: `configuratoarePentruProduse`
+ * o cheama chiar pe asta. Doua drumuri ar fi ajuns sa raspunda altfel, iar cardul din grila si
+ * pagina de produs ar fi aratat configuratoare diferite pentru acelasi produs.
+ */
+export async function configuratoareleCuVerdict(
+  businessId: string,
+  produse: { id: string; category: string | null }[],
+): Promise<RaspunsConfiguratoare> {
   const gol = new Map<string, ConfiguratorDeVitrina>();
   const idProduse = [...new Set((produse ?? []).map((p) => p.id).filter(Boolean))];
-  if (!businessId || idProduse.length === 0) return gol;
+  // Nimic de intrebat nu e o pana: raspunsul „niciunul” e adevarat si complet.
+  if (idProduse.length === 0) return { ok: true, harta: gol };
+  // Fara magazin nu se poate afla nimic, deci nici nu se poate incheia ca produsul n-are.
+  if (!businessId) return { ok: false, harta: gol };
+
+  /*
+   * ⚠ Se stinge la PRIMA citire care nu raspunde limpede, si nu se mai reaprinde.
+   *
+   * Citirea arborelui de categorii de mai jos e singura care nu opreste totul: fara el, doar
+   * mostenirea din categorie se pierde, iar legaturile DIRECTE raman bune si trebuie servite.
+   * Dar concluzia „produsul asta n-are configurator” nu se mai poate trage, si atat spune `ok`.
+   */
+  let sigur = true;
 
   try {
     const admin = createAdminClient();
@@ -80,10 +128,12 @@ export async function configuratoarePentruProduse(
         action: "configurator.vitrina.active", message: active.error.message,
         businessId, severity: "error",
       });
-      return gol;
+      return { ok: false, harta: gol };
     }
     // Cazul obisnuit al platformei: magazinul n-are niciun configurator, si se opreste aici.
-    if (!active.data || active.data.length === 0) return gol;
+    // ⚠ `ok: true`: raspunsul „niciunul” e citit, nu presupus — si tocmai el da steagul `false`
+    // pe tot catalogul magazinului, deci trebuie sa poata fi SCRIS.
+    if (!active.data || active.data.length === 0) return { ok: true, harta: gol };
     const idActive = new Set(active.data.map((c) => c.id));
 
     /* ── Legaturile ──────────────────────────────────────────────────────── */
@@ -108,7 +158,7 @@ export async function configuratoarePentruProduse(
           action: "configurator.vitrina.citire", message: error.message,
           businessId, severity: "error",
         });
-        return gol;
+        return { ok: false, harta: gol };
       }
       legaturi.push(...((data ?? []) as LegaturaProdus[]));
     }
@@ -122,7 +172,7 @@ export async function configuratoarePentruProduse(
         action: "configurator.vitrina.citire", message: eCat.message,
         businessId, severity: "error",
       });
-      return gol;
+      return { ok: false, harta: gol };
     }
 
     // ⚠ Filtrul de activitate se pune INAINTE de rezolvare. Dupa, conflictul era deja pronuntat.
@@ -133,8 +183,24 @@ export async function configuratoarePentruProduse(
     // n-au niciuna, si atunci citirea lui ar fi fost pretul platit degeaba pe fiecare pagina.
     let arbore: RandCategorie[] = [];
     if (aleCategoriilor.length > 0) {
-      const { data } = await admin
+      const { data, error: eArb } = await admin
         .from("categories").select("id, name, parent_id").eq("business_id", businessId);
+      /*
+       * ⚠ Singura citire care NU opreste totul, si singura al carei esec era pana acum invizibil.
+       *
+       * Fara arbore se pierde numai MOSTENIREA din categorie; legaturile directe raman bune si
+       * merita servite, deci pagina merge inainte cu ele. Dar „produsul asta n-are configurator”
+       * nu se mai poate spune, iar proiectia n-are voie sa scrie asa ceva: un magazin care isi
+       * leaga configuratorul de o categorie ar fi ramas cu steagul stins pe toate produsele ei,
+       * pana cand cineva le atingea pe rand.
+       */
+      if (eArb) {
+        sigur = false;
+        logError({
+          action: "configurator.vitrina.arbore", message: eArb.message,
+          businessId, severity: "error",
+        });
+      }
       arbore = (data ?? []) as RandCategorie[];
     }
 
@@ -161,7 +227,7 @@ export async function configuratoarePentruProduse(
       const id = configuratorulAplicat(r);
       if (id) alProdusului.set(p.id, id);
     }
-    if (alProdusului.size === 0) return gol;
+    if (alProdusului.size === 0) return { ok: sigur, harta: gol };
 
     /* ── Versiunile ──────────────────────────────────────────────────────── */
 
@@ -184,7 +250,7 @@ export async function configuratoarePentruProduse(
           action: "configurator.vitrina.versiune", message: error.message,
           businessId, severity: "error",
         });
-        return gol;
+        return { ok: false, harta: gol };
       }
 
       for (const cfg of data ?? []) {
@@ -217,7 +283,7 @@ export async function configuratoarePentruProduse(
       const v = versiuni.get(configuratorId);
       if (v) out.set(productId, v);
     }
-    return out;
+    return { ok: sigur, harta: out };
   } catch (e) {
     /*
      * ⚠ Nimic din configurator nu are voie sa doboare pagina de produs. Un produs vandut simplu
@@ -227,7 +293,7 @@ export async function configuratoarePentruProduse(
       action: "configurator.vitrina", message: e instanceof Error ? e.message : String(e),
       businessId, severity: "error",
     });
-    return gol;
+    return { ok: false, harta: gol };
   }
 }
 

@@ -3,6 +3,9 @@ import { getProductPriceRange } from "@/lib/utils/product-price";
 import { descriereDeCautare, slimPageSections } from "@/lib/storefront/catalog-slim";
 import { normalizeSearchText } from "@/lib/storefront/product-search";
 import { jeton, perechileProdusului } from "@/lib/storefront/catalog/facets";
+import { pretulDePornire } from "@/lib/configurators/pornire";
+import { configuratoareleCuVerdict, type RaspunsConfiguratoare } from "@/lib/configurators/vitrina";
+import type { Compilat } from "@/lib/configurators/compileaza";
 
 /**
  * Umple campurile CALCULATE din `catalog_produs`, apeland regulile existente.
@@ -55,6 +58,33 @@ export interface ProiectieCalculata {
   cauta_norm: string;
   fatete: string[];
   proiectat_la: string;
+  /**
+   * Produsul cere configurare, si de la ce pret porneste.
+   *
+   * ⚠ AMANDOUA LIPSESC CAND NU S-A AFLAT, si tocmai asta e rostul lor optional.
+   *
+   * `catalog_aplica_proiectii` se uita daca exista cheia `cere_configurare`: cand lipseste,
+   * pastreaza ce era in coloane. Trimise mereu, un lot venit de la un proiector caruia i-a picat
+   * citirea configuratoarelor ar fi stins steagul pe toate produsele magazinului — si nimic nu
+   * l-ar mai fi reaprins pana cand cineva atingea produsele pe rand.
+   *
+   * `pret_pornire: null` NU inseamna zero, ci „nu se poate socoti”. Vezi `configuratori/pornire.ts`.
+   */
+  cere_configurare?: boolean;
+  pret_pornire?: number | null;
+}
+
+/**
+ * Ce s-a aflat despre configuratorul UNUI produs.
+ *
+ * ⚠ Lipsa obiectului nu inseamna „n-are configurator”, ci „n-am putut afla”. Cele doua se scriu
+ * altfel: prima e un raspuns si se salveaza, a doua e o pana si nu se salveaza nimic. Un simplu
+ * `Compilat | null` le-ar fi confundat, iar confuzia s-ar fi vazut ca un card care spune „Adauga
+ * in cos” pe un produs pe care nu-l poti cumpara fara sa alegi intai ceva.
+ */
+export interface StireConfigurator {
+  /** `null` = magazinul a raspuns limpede ca produsul asta n-are configurator activ. */
+  compilat: Compilat | null;
 }
 
 /**
@@ -62,7 +92,12 @@ export interface ProiectieCalculata {
  * testul de paritate ruleaza chiar functia asta peste randuri reale si compara cu
  * `getProductPriceRange`.
  */
-export function proiecteazaRand(p: RandSursa, acum: string): ProiectieCalculata {
+export function proiecteazaRand(
+  p: RandSursa,
+  acum: string,
+  /** Ce s-a aflat despre configuratorul produsului. Lipsa = nu s-a aflat; vezi `StireConfigurator`. */
+  stire?: StireConfigurator,
+): ProiectieCalculata {
   const interval = getProductPriceRange(Number(p.price), p.page_sections);
 
   // Textul pe care il vede cautarea, in aceeasi ordine de importanta ca indexul
@@ -94,7 +129,118 @@ export function proiecteazaRand(p: RandSursa, acum: string): ProiectieCalculata 
     // gresit fara nicio eroare.
     fatete: Array.from(new Set(perechi.map((x) => jeton(x.cheie, x.valoare)))),
     proiectat_la: acum,
+    /*
+     * Cheile se pun NUMAI cand s-a aflat. Raspandirea conditionata nu e cochetarie: absenta lor
+     * e semnalul pe care il citeste `catalog_aplica_proiectii` ca sa lase coloanele neatinse.
+     *
+     * ⚠ SE PORNESTE DE LA `interval.min`, NU DE LA `p.price`.
+     *
+     * `price` e pretul de BAZA al randului, nu unul la care se poate cumpara. Pe un produs cu
+     * variante, cardul arata dintotdeauna minimul VANDABIL — chiar de aia exista
+     * `getProductPriceRange`, si chiar de aia scriau blocurile eSAFE 92,80 lei pentru o geaca
+     * ale carei marimi costa toate 116. Socotit din `price`, „De la” ar fi mintit in amandoua
+     * directiile: sub pretul adevarat cand toate marimile costa mai mult decat baza, si peste
+     * cel mai ieftin drum cand o marime e mai ieftina decat ea.
+     *
+     * Configuratorul cu baza „produs” adauga peste pretul variantei ALESE, deci cel mai ieftin
+     * inceput e cea mai ieftina varianta plus configuratia implicita.
+     */
+    ...(stire
+      ? {
+          cere_configurare: stire.compilat !== null,
+          pret_pornire: stire.compilat ? pretulDePornire(stire.compilat, interval.min) : null,
+        }
+      : {}),
   };
+}
+
+/**
+ * Configuratoarele intregului lot, cerute o data pe magazin.
+ *
+ * ═══ ⚠ UN LOT AMESTECA MAGAZINE ═══
+ *
+ * `proiecteazaCoada` citeste coada INTREGII platforme, ordonata dupa vechimea marcajului, si o
+ * taie in bucati de 500. Deci intr-o bucata incap produse de la zeci de comercianti. Intrebate
+ * cu un singur `businessId` — al primului rand, sa zicem — raspunsul ar fi fost, pentru toti
+ * ceilalti, „n-are configurator”: filtrul pe magazin din `configuratoareleCuVerdict` nu
+ * potriveste nimic, si iese o harta goala care arata exact ca un raspuns bun.
+ *
+ * ⚠ De aceea se grupeaza pe `business_id` INAINTE, si se intreaba o data pentru fiecare grup.
+ * Costul e mic: pentru magazinele fara niciun configurator — aproape toate — intrebarea se
+ * inchide dupa o singura citire pe index.
+ */
+export async function configuratoareleLotului(
+  randuri: RandSursa[],
+  /*
+   * ⚠ CITITORUL SE POATE INLOCUI, si numai de dragul probelor.
+   *
+   * Toata grija fazei sta in ce se intampla cand citirea configuratoarelor NU raspunde limpede:
+   * atunci nu se scrie nimic si produsele raman in coada. Cu cititorul legat de-a dreptul,
+   * singurul fel de a proba asta ar fi fost o baza de date la indemana — adica, in practica,
+   * deloc. Trei mutatii diferite ar fi trecut verzi: pana tratata ca „n-are configurator”,
+   * gruparea pe magazin desfiintata, si produsele ratate scoase totusi din coada.
+   *
+   * Valoarea din oficiu e chiar drumul adevarat, deci productia nu vede nicio deosebire.
+   */
+  citeste: (
+    businessId: string,
+    produse: { id: string; category: string | null }[],
+  ) => Promise<RaspunsConfiguratoare> = configuratoareleCuVerdict,
+): Promise<{ stiri: Map<string, StireConfigurator>; ratate: Set<string> }> {
+  const out = new Map<string, StireConfigurator>();
+  /*
+   * Produsele pentru care NU s-a putut afla. Ele isi pastreaza coloanele vechi — si tocmai de
+   * aceea NU au voie sa iasa din coada: altfel „nu s-a putut afla” ar fi devenit permanent, iar
+   * un configurator publicat chiar in clipa penei n-ar mai fi ajuns niciodata pe carduri.
+   */
+  const ratate = new Set<string>();
+
+  const peMagazin = new Map<string, { id: string; category: string | null }[]>();
+  for (const r of randuri) {
+    if (!r.business_id) continue;
+    const ale = peMagazin.get(r.business_id);
+    if (ale) ale.push({ id: r.id, category: r.category });
+    else peMagazin.set(r.business_id, [{ id: r.id, category: r.category }]);
+  }
+
+  for (const [businessId, produse] of peMagazin) {
+    let raspuns: RaspunsConfiguratoare;
+    try {
+      raspuns = await citeste(businessId, produse);
+    } catch (e) {
+      /*
+       * ⚠ Cronul nu are voie sa cada aici. `proiecteazaCoada` e chemata din ruta de cron fara
+       * niciun `catch` deasupra, deci o exceptie de aici ar fi oprit proiectia INTREGII
+       * platforme — pentru un singur magazin cu ceva stricat.
+       */
+      console.error("[proiector] citirea configuratoarelor a esuat:", e instanceof Error ? e.message : e);
+      for (const p of produse) ratate.add(p.id);
+      continue;
+    }
+    /*
+     * ⚠ AICI E TOATA GRIJA FAZEI.
+     *
+     * `configuratoareleCuVerdict` intoarce harta GOALA si la izbanda, si la orice pana de citire —
+     * dinadins, fiindca pe pagina de produs degradarea corecta e „produsul se vinde simplu”. Pe
+     * proiectie insa harta goala luata drept raspuns ar SCRIE „n-are configurator” peste produse
+     * care au, si ar ramane asa: proiectia nu se reia singura, produsul iese din coada, iar cardul
+     * ar minti pana la urmatoarea salvare a produsului. Cu `ok: false` nu se scrie nimic, si
+     * randurile raman in coada pentru cronul urmator.
+     */
+    if (!raspuns.ok) {
+      console.error(
+        `[proiector] configuratoarele magazinului ${businessId} n-au putut fi citite; `
+        + `cele doua coloane raman cum erau pentru ${produse.length} produse`,
+      );
+      for (const p of produse) ratate.add(p.id);
+      continue;
+    }
+    for (const p of produse) {
+      out.set(p.id, { compilat: raspuns.harta.get(p.id)?.compilat ?? null });
+    }
+  }
+
+  return { stiri: out, ratate };
 }
 
 /**
@@ -148,7 +294,9 @@ export async function proiecteaza(
       continue;
     }
 
-    const proiectii = randuri.map((r) => proiecteazaRand(r, acum));
+    // O singura data pe lot, grupat pe magazin. Vezi `configuratoareleLotului`.
+    const { stiri, ratate } = await configuratoareleLotului(randuri);
+    const proiectii = randuri.map((r) => proiecteazaRand(r, acum, stiri.get(r.id)));
 
     /*
      * Un singur dus-intors pe lot, nu unul pe produs.
@@ -179,9 +327,42 @@ export async function proiecteaza(
     // Se sterge doar ce nu s-a remarcat intre timp: un produs salvat din nou intre
     // citirea cozii si scrierea de mai sus are `marcat_la` mai nou si RAMANE, ca
     // sa fie reluat. Vezi `pragCoada`.
+    /*
+     * ⚠ SI RAMAN SI PRODUSELE DESPRE ALE CAROR CONFIGURATOARE N-AM AFLAT.
+     *
+     * Proiectia lor s-a scris — pret, nume, fatete — dar cele doua coloane de configurator au
+     * ramas cele vechi. Sterse totusi din coada, „n-am aflat” ar fi devenit „asa ramane”: un
+     * configurator publicat chiar in clipa penei nu s-ar mai fi vazut niciodata pe carduri,
+     * fiindca nimic nu repune produsul la coada.
+     *
+     * Aceeasi purtare ca la esecul scrierii lotului, cateva randuri mai sus: randul ramane si il
+     * ia cronul urmator. Riscul stiut e ca un magazin care pica DE FIECARE DATA isi tine
+     * randurile in fata cozii; e vechi de cand modelul asta de citire, si se vede in jurnal,
+     * unde fiecare rulare striga acelasi magazin.
+     */
+    const deSters = ratate.size ? bucata.filter((id) => !ratate.has(id)) : bucata;
+
+    /*
+     * ⚠ CE N-A REUSIT SE MUTA LA COADA, nu ramane in fata ei.
+     *
+     * `proiecteazaCoada` ia cele mai VECHI 1000 de randuri. Lasate cu `marcat_la` neschimbat,
+     * produsele unui singur magazin care pica de fiecare data raman permanent cele mai vechi — si
+     * ocupa toata coada, la fiecare minut, pentru toata platforma. Un magazin stricat ar fi oprit
+     * proiectia tuturor.
+     *
+     * Remarcate cu ora de acum, ele se reiau tot, dar dupa ceilalti. Marcajul nou inseamna exact
+     * ce spune: „mai trebuie proiectat” — acelasi lucru pe care il scrie si declansatorul cand
+     * comerciantul salveaza produsul.
+     */
+    if (ratate.size) {
+      const { error: eRem } = await admin
+        .from("catalog_murdar").update({ marcat_la: acum }).in("product_id", [...ratate]);
+      if (eRem) console.error("[proiector] remarcarea celor ratate a esuat:", eRem.message);
+    }
+    if (deSters.length === 0) continue;
     const { error: eDel } = await (pragCoada
-      ? admin.from("catalog_murdar").delete().in("product_id", bucata).lte("marcat_la", pragCoada)
-      : admin.from("catalog_murdar").delete().in("product_id", bucata));
+      ? admin.from("catalog_murdar").delete().in("product_id", deSters).lte("marcat_la", pragCoada)
+      : admin.from("catalog_murdar").delete().in("product_id", deSters));
     if (eDel) console.error("[proiector] golirea cozii a esuat:", eDel.message);
   }
 

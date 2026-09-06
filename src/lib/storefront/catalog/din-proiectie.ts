@@ -43,6 +43,15 @@ export interface RandProiectie {
   optiuni: unknown;
   descriere_scurta: string;
   fatete: string[] | null;
+  /** Produsul are un configurator ACTIV aplicat. Coloana e `not null default false`. */
+  cere_configurare: boolean;
+  /**
+   * Pretul configuratiei IMPLICITE.
+   *
+   * ⚠ `null` inseamna „nu se poate socoti”, NU zero si NU pretul de baza. Vine ca `numeric`, deci
+   * PostgREST il poate da si ca sir — la fel ca `price`.
+   */
+  pret_pornire: number | string | null;
 }
 
 /**
@@ -53,7 +62,7 @@ export interface RandProiectie {
 export const COLOANE_PROIECTIE =
   "product_id, name, slug, category, prima_imagine, price, compare_at_price, is_featured, is_bundle, " +
   "track_inventory, stock_quantity, sort_order, creat, fara_stoc, price_min, price_max, has_range, " +
-  "fara_oferta, optiuni, descriere_scurta, fatete";
+  "fara_oferta, optiuni, descriere_scurta, fatete, cere_configurare, pret_pornire";
 
 /**
  * Client fara tipuri pentru `catalog_produs`, ca la `announcements`.
@@ -103,5 +112,19 @@ export function dinProiectie(r: RandProiectie): StorefrontProduct {
       faraOferta: r.fara_oferta,
     },
     fara_stoc: r.fara_stoc,
+    cere_configurare: r.cere_configurare === true,
+    /*
+     * ⚠ Un `numeric` care nu se citeste ca numar cade pe `null`, nu pe `NaN`.
+     *
+     * `NaN` ar fi trecut mai departe pana in `formatPrice`, si cardul ar fi scris „De la NaN lei”.
+     * `null` are deja un inteles al lui — „nu se poate socoti” — si cardul stie ce sa faca cu el.
+     */
+    pret_pornire: numarSauNull(r.pret_pornire),
   };
+}
+
+function numarSauNull(v: number | string | null | undefined): number | null {
+  if (v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }

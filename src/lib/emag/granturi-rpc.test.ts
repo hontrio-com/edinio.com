@@ -173,11 +173,21 @@ test("ajustarea stocului cere `business_id` si verifica proprietarul produselor"
    * replace` reface granturile implicite, iar peste un an cineva poate muta un `grant`
    * fara sa stie de ce era acolo.
    */
+  /*
+   * ⚠ SE CAUTA MIGRATIA CARE DEFINESTE FUNCTIA, NU ULTIMA CARE O POMENESTE.
+   *
+   * Filtrul era `t.includes("ajusteaza_stoc_comanda_marketplace")`, deci orice migratie
+   * ulterioara care scria numele functiei intr-un COMENTARIU devenea „ultima” si era citita in
+   * locul ei. Proba de securitate de mai jos cadea atunci pe un fisier care n-are nicio treaba
+   * cu functia — iar cine ar fi citit esecul ar fi cautat gaura in migratia gresita. Si mai
+   * rau in celalalt sens: o migratie noua care CHIAR reface functia prost, dar o pomeneste si
+   * altundeva mai tarziu, ar fi fost sarita.
+   */
   const migratie = readdirSync("migrations")
     .filter((f) => f.endsWith(".sql") && /^\d{4}-/.test(f))
     .sort()
     .map((f) => readFileSync(`migrations/${f}`, "utf8"))
-    .filter((t) => t.includes("ajusteaza_stoc_comanda_marketplace"))
+    .filter((t) => /create\s+or\s+replace\s+function\s+public\.ajusteaza_stoc_comanda_marketplace/i.test(t))
     .pop();
   assert.ok(migratie, "n-am gasit migratia functiei de ajustare");
 

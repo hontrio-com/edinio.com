@@ -89,7 +89,9 @@ for (const f of FORMULARE) {
     if (sursa !== "randomUUID()") {
       assert.match(
         cod,
-        new RegExp(`(const|let) ${sursa} = randomUUID\(\)`),
+        // ⚠ `\(` intr-un template literal devine `(`, adica un GRUP: regexul cerea doar
+        // `= randomUUID`, fara apel. Se scrie dublu, ca sa ajunga `\(` in expresie.
+        new RegExp(`(const|let) ${sursa} = randomUUID\\(\\)`),
         `${f.nume}: \`${sursa}\` nu vine din randomUUID() — id-ul nu se mai naste pe server`,
       );
     }

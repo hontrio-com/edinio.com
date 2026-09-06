@@ -47,6 +47,7 @@ import { cheiEticheta } from "@/lib/gls/eticheta";
 import { deleteFromR2 } from "@/lib/r2";
 import { interpreteazaRevendicarea, type Revendicare } from "@/lib/orders/verdict-stoc";
 import type { PieseleConfiguratiei } from "@/lib/orders/refuz-stoc";
+import { legaFisiereleDeComanda } from "@/lib/configurators/legare-fisiere";
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
 import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
 import { esteIdExtra } from "@/lib/orders/extras";
@@ -1713,6 +1714,19 @@ export async function placeOrder(data: {
     await logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
+
+  /*
+   * ⚠ FISIERELE INCARCATE PRIMESC ACUM UN MOTIV SA EXISTE.
+   *
+   * Pana aici randul lor e ORFAN: cine le-a incarcat n-are cont, deci nu exista niciun om in
+   * spatele lor, si ce nu ajunge pe o comanda se matura peste o saptamana. `comanda_id` e
+   * capatul care le tine in viata.
+   *
+   * ⚠ Se cheama DUPA insert si nu opreste nimic daca pica — comanda e deja inserata si, pe
+   * calea cu cardul, deja platita. Dar se jurnalizeaza `critical`: o legare picata inseamna ca
+   * peste o saptamana atelierul deschide o comanda PLATITA si gaseste o trimitere catre nimic.
+   */
+  await legaFisiereleDeComanda(admin, data.business_id, order.id, allItems);
 
   /*
    * Acceptarile de oferta intra in contor ABIA ACUM, cand comanda chiar exista.
@@ -4217,6 +4231,19 @@ export async function placeCartOrder(data: {
     await logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
+
+  /*
+   * ⚠ FISIERELE INCARCATE PRIMESC ACUM UN MOTIV SA EXISTE.
+   *
+   * Pana aici randul lor e ORFAN: cine le-a incarcat n-are cont, deci nu exista niciun om in
+   * spatele lor, si ce nu ajunge pe o comanda se matura peste o saptamana. `comanda_id` e
+   * capatul care le tine in viata.
+   *
+   * ⚠ Se cheama DUPA insert si nu opreste nimic daca pica — comanda e deja inserata si, pe
+   * calea cu cardul, deja platita. Dar se jurnalizeaza `critical`: o legare picata inseamna ca
+   * peste o saptamana atelierul deschide o comanda PLATITA si gaseste o trimitere catre nimic.
+   */
+  await legaFisiereleDeComanda(admin, data.business_id, order.id, validatedItems);
 
   // Acelasi motiv ca pe calea directa: contorul se misca abia dupa ce comanda a
   // intrat cu adevarat.

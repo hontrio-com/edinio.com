@@ -244,7 +244,10 @@ export function citesteNod(brut: unknown): Nod | null {
     }
     case "fisiere": {
       const n = { ...comun, fel: "fisiere", control } as Nod & { fel: "fisiere" };
-      for (const k of ["maxFisiere", "maxMb", "minLatimePx", "minInaltimePx", "dpiRecomandat", "dpiMinim"] as const) {
+      // ⚠ `dpiRecomandat`/`dpiMinim` au fost scoase din model: vezi nota din `definitie.ts`.
+      // O ciorna veche care le poarta le pierde aici, tacut — si asta e purtarea buna, fiindca
+      // nimic nu le citea oricum.
+      for (const k of ["maxFisiere", "maxMb", "minLatimePx", "minInaltimePx"] as const) {
         const v = numar(o[k]); if (v !== null) n[k] = v;
       }
       const t = listaDeSiruri(o.tipuri, 20); if (t.length) n.tipuri = t;

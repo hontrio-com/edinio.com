@@ -1585,6 +1585,40 @@ function ConfiguratiaLiniei({ linie }: { linie: OrderItem }) {
         <div key={`${r.id}-${i}`}>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-600">{r.eticheta}</p>
           <p className="text-sm text-foreground">{r.valoare}</p>
+          {/*
+            ⚠ FISIERELE SE DESCHID DE AICI, si asta e tot rostul lor.
+
+            Rezumatul spune „1 fisier” — atat se poate scrie intr-un rand de cos sau de email.
+            Dar comanda asta e ecranul dupa care se PRODUCE: fara legatura, comerciantul stie ca
+            exista o poza si n-are cum s-o vada, iar gravura pleaca dupa ce si-a inchipuit el.
+
+            ⚠ Se deschid prin ruta, niciodata de pe CDN. Fisierul e al unui strain: cheia din
+            depozit e semnata si nu se poate compune, iar ruta pune `private, no-store`.
+          */}
+          {r.fisiere && r.fisiere.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {r.fisiere.map((id) => (
+                <a
+                  key={id}
+                  href={`/api/configurator/fisier/${id}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="block h-14 w-14 overflow-hidden rounded-lg border border-border transition-colors hover:border-primary"
+                >
+                  {/*
+                    ⚠ `<img>`, nu `next/image`. Optimizatorul cere o cale pe care i-o poate cere
+                    inapoi el insusi, iar ruta noastra raspunde doar cu `private, no-store` — deci
+                    ar fi trebuit fie sa deschidem fisierul, fie sa nu se vada nimic.
+                  */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/configurator/fisier/${id}`}
+                    alt="Fisierul incarcat de client"
+                    className="h-full w-full object-cover"
+                  />
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>

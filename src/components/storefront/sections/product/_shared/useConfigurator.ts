@@ -56,11 +56,23 @@ export interface StareConfigurator {
    * diferite ar fi aratat identic.
    */
   rezumat: RandRezumat[] | null;
+  /**
+   * Cui apartine pagina, pentru incarcarea de fisiere.
+   *
+   * ⚠ Ruta de incarcare CERE un produs adevarat, cu configurator adevarat, cu campul ala de
+   * fisiere — altfel ar fi fost un depozit gratuit deschis oricui, iar limitele n-ar fi avut
+   * de unde sa vina. Deci slotul trebuie sa stie pe ce pagina sta.
+   *
+   * `null` in previzualizarea din panou: acolo nu exista inca nici versiune publicata, nici
+   * produs, deci campul se deseneaza dar nu incarca. Vezi `Previzualizare.tsx`.
+   */
+  unde: { businessId: string; productId: string } | null;
 }
 
 export function useConfigurator(
   configurator: ConfiguratorDeVitrina | null,
   pretProdus: number,
+  unde: { businessId: string; productId: string } | null = null,
 ): StareConfigurator {
   /*
    * ⚠ PAGINA SE DESCHIDE CU IMPLICITELE COMERCIANTULUI, nu goala.
@@ -105,6 +117,7 @@ export function useConfigurator(
     configurator,
     brute,
     pune,
+    unde,
     verdict,
     rezumat,
     gata: !configurator || (verdict?.ok ?? false),

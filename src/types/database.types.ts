@@ -1822,6 +1822,60 @@ export type Database = {
           },
         ]
       }
+      configurator_fisiere: {
+        Row: {
+          business_id: string
+          cheie: string
+          comanda_id: string | null
+          creat_la: string
+          id: string
+          inaltime: number | null
+          latime: number | null
+          mime: string
+          nume: string | null
+          octeti: number
+        }
+        Insert: {
+          business_id: string
+          cheie: string
+          comanda_id?: string | null
+          creat_la?: string
+          id?: string
+          inaltime?: number | null
+          latime?: number | null
+          mime: string
+          nume?: string | null
+          octeti: number
+        }
+        Update: {
+          business_id?: string
+          cheie?: string
+          comanda_id?: string | null
+          creat_la?: string
+          id?: string
+          inaltime?: number | null
+          latime?: number | null
+          mime?: string
+          nume?: string | null
+          octeti?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "configurator_fisiere_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "configurator_fisiere_comanda_id_fkey"
+            columns: ["comanda_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       configurator_produse: {
         Row: {
           business_id: string

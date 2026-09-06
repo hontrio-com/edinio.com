@@ -38,6 +38,7 @@ import { aplicaRegulile, esteCerut, optiuniDeAles, type Stare } from "./reguli";
 import { calculeazaPretul, type Descompunere } from "./pret";
 import { consumulPeStare, costulComponentelor } from "./componente";
 import { normalizeazaValori, type Valori } from "./valori";
+import { cateFisiere, motivulRefuzului, type FisierMasurat } from "./fisiere";
 import { amprentaConfiguratiei } from "./amprenta";
 import { eNumarBun } from "./unitati";
 
@@ -66,6 +67,22 @@ export type Verdict =
     };
 
 /**
+ * Ce stie SERVERUL despre fisierele incarcate, dupa id.
+ *
+ * ⚠ BROWSERUL N-O ARE, SI ASTA E SINGURUL LOC UNDE CELE DOUA PARTI NU JUDECA LA FEL.
+ *
+ * Antetul fisierului promite ca browserul si serverul dau acelasi verdict din acelasi
+ * instantaneu. Pentru fisiere n-au cum: octetii, tipul adevarat si dimensiunile in pixeli sunt
+ * lucruri masurate pe server, iar randul din baza poate sa fi disparut intre timp. Cine cheama
+ * ruta de mana poate trimite orice id.
+ *
+ * Deosebirea e deci INTENTIONATA si e mereu in aceeasi directie: serverul poate refuza ce
+ * browserul a primit, niciodata invers. Si nu atinge PRETUL — fisierele nu costa nimic, deci
+ * cele doua parti raman pe acelasi numar, care e promisiunea care chiar conteaza.
+ */
+export type FisiereleStiute = ReadonlyMap<string, FisierMasurat>;
+
+/**
  * Verdictul intreg, pentru o bucata.
  *
  * `pretProdus` e pretul din CATALOG al produsului sau al variantei alese. Serverul il aduce el;
@@ -75,6 +92,8 @@ export function verificaRaspunsul(
   compilat: Compilat,
   brut: unknown,
   pretProdus: number,
+  /** Numai pe server. Vezi `FisiereleStiute`. */
+  fisiere?: FisiereleStiute,
 ): Verdict {
   const { definitie, reguli, pretuire } = compilat;
 
@@ -112,7 +131,7 @@ export function verificaRaspunsul(
    */
   for (const nod of nodurile(definitie)) {
     if (!producesValoare(nod)) continue;
-    verificaNodul(definitie, nod, stare, motive);
+    verificaNodul(definitie, nod, stare, motive, fisiere);
   }
 
   // Opririle puse chiar de comerciant, prin reguli. Sunt scrise de el, deci se arata ca atare.
@@ -199,7 +218,9 @@ function doarCampurileCunoscute(d: Definitie, valori: Valori): Valori {
    VERIFICAREA UNUI NOD
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function verificaNodul(d: Definitie, nod: Nod, stare: Stare, motive: Motiv[]): void {
+function verificaNodul(
+  d: Definitie, nod: Nod, stare: Stare, motive: Motiv[], fisiere?: FisiereleStiute,
+): void {
   const v = stare.valori[nod.id];
 
   /*
@@ -291,8 +312,36 @@ function verificaNodul(d: Definitie, nod: Nod, stare: Stare, motive: Motiv[]): v
 
     case "fisiere": {
       if (v.f !== "fisiere") return;
-      if (nod.maxFisiere !== undefined && v.v.length > nod.maxFisiere) {
-        motive.push({ idNod: nod.id, text: `La „${nod.eticheta}” poti incarca cel mult ${nod.maxFisiere} fisiere.` });
+      /*
+       * ⚠ `cateFisiere(nod)`, nu `nod.maxFisiere`. Numarul din nod poate fi orice a scris
+       * comerciantul; plafonul platformei e cel care se aplica la incarcare. Comparat aici cu
+       * numarul lui brut, un `maxFisiere: 900` ar fi lasat sa treaca noua sute de id-uri intr-o
+       * singura linie de comanda — iar fiecare inseamna o citire si un obiect in depozit.
+       */
+      const cate = cateFisiere(nod);
+      if (v.v.length > cate) {
+        motive.push({ idNod: nod.id, text: `La „${nod.eticheta}” poti incarca cel mult ${cate} ${cate === 1 ? "fisier" : "fisiere"}.` });
+        return;
+      }
+
+      /*
+       * ⚠ SI CA FISIERELE CHIAR EXISTA, cand serverul le stie. Vezi `FisiereleStiute`.
+       *
+       * Fara asta, un id inventat trecea intreg pana in comanda: atelierul primea o specificatie
+       * care trimite la o poza inexistenta, si afla cand deschidea comanda ca sa produca.
+       */
+      if (!fisiere) return;
+      for (const ales of v.v) {
+        const masurat = fisiere.get(ales.id);
+        if (!masurat) {
+          motive.push({
+            idNod: nod.id,
+            text: `Fisierul incarcat la „${nod.eticheta}” nu mai e disponibil. Incarca-l din nou.`,
+          });
+          continue;
+        }
+        const rau = motivulRefuzului(nod, masurat);
+        if (rau) motive.push({ idNod: nod.id, text: `La „${nod.eticheta}”: ${rau}` });
       }
       return;
     }

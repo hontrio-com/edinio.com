@@ -32,6 +32,17 @@ export interface RandRezumat {
   valoare: string;
   /** Se arata si in rezumatul SCURT (cosul, cardul), nu doar in cel intreg. */
   scurt: boolean;
+  /**
+   * Id-urile fisierelor incarcate, cand randul e un camp de incarcare.
+   *
+   * ⚠ SE PASTREAZA IN INSTANTANEU, si de aceea sunt aici si nu se cauta la nevoie in `valori`.
+   * Rezumatul e ce ajunge la OM: pe comanda din panou, ecranul dupa care se produce, `valoare`
+   * scrie doar „1 fisier”. Fara id, comerciantul stie ca exista o poza si n-are cum s-o vada,
+   * iar gravura pleaca dupa ce si-a inchipuit el.
+   *
+   * Lipseste pe orice alt fel de camp, ca sa nu ingrase instantaneul fiecarei comenzi.
+   */
+  fisiere?: string[];
 }
 
 /**
@@ -50,7 +61,13 @@ export function rezumatConfiguratiei(compilat: Compilat, valori: Valori): RandRe
         if (v === undefined) continue;
         const valoare = scrieValoarea(nod, valori);
         if (!valoare) continue;
-        out.push({ id: nod.id, eticheta: nod.eticheta, valoare, scurt: nod.inRezumat === true });
+        const fisiere = nod.fel === "fisiere" && v.f === "fisiere"
+          ? v.v.map((f) => f.id).filter(Boolean)
+          : undefined;
+        out.push({
+          id: nod.id, eticheta: nod.eticheta, valoare, scurt: nod.inRezumat === true,
+          ...(fisiere?.length ? { fisiere } : {}),
+        });
       }
     }
   }

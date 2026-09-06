@@ -25,9 +25,11 @@
 import type { Compilat } from "./compileaza";
 import { consumulPeStare, type BucataConsumata } from "./componente";
 import { grameleConfiguratiei } from "./greutate";
-import { verificaRaspunsul } from "./raspuns";
+import { verificaRaspunsul, type FisiereleStiute } from "./raspuns";
+import { fisiereleCerute, type FisierMasurat } from "./fisiere";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { rezumatConfiguratiei, type RandRezumat } from "./rezumat";
-import type { Valori } from "./valori";
+import { normalizeazaValori, type Valori } from "./valori";
 import { configuratoarePentruProduse } from "./vitrina";
 
 /** O linie de comanda, asa cum o vede repretuirea. */
@@ -89,6 +91,8 @@ export function verdictulLiniei(
   configuratie: unknown,
   pretCatalog: number,
   identitate?: { configuratorId: string; versiuneId: string; numarVersiune: number },
+  /** Numai pe server, si numai cand s-a putut afla. Vezi `FisiereleStiute`. */
+  fisiere?: FisiereleStiute,
 ): PretConfigurat {
   /*
    * ⚠ Fara configurator, valorile trimise se IGNORA, nu se pastreaza.
@@ -99,7 +103,7 @@ export function verdictulLiniei(
    */
   if (!compilat || !identitate) return { fel: "fara" };
 
-  const v = verificaRaspunsul(compilat, configuratie, pretCatalog);
+  const v = verificaRaspunsul(compilat, configuratie, pretCatalog, fisiere);
   if (!v.ok) return { fel: "refuz", motive: v.motive.map((m) => m.text) };
 
   return {
@@ -140,14 +144,74 @@ export async function repretuiesteLinii(
     linii.map((l) => ({ id: l.productId, category: l.category })),
   );
 
+  const fisiere = await fisiereleLiniilor(businessId, linii, configuratoare);
+
   return linii.map((l) => {
     const c = configuratoare.get(l.productId);
     return verdictulLiniei(c?.compilat, l.configuratie, l.pretCatalog, c && {
       configuratorId: c.configuratorId,
       versiuneId: c.versiuneId,
       numarVersiune: c.numarVersiune,
-    });
+    }, fisiere);
   });
+}
+
+/**
+ * Ce stie baza despre fisierele la care trimit liniile astea.
+ *
+ * ⚠ O SINGURA CITIRE PENTRU TOT COSUL, si numai cand exista de ce. Aproape niciun configurator
+ * n-are camp de incarcare, iar o citire pe linie ar fi insemnat cateva zeci de dus-intorsuri intr-o
+ * singura plasare de comanda — pe drumul cel mai scump din platforma.
+ *
+ * ⚠ SE CERE SI `business_id`, nu doar id-ul. Fara el, un id de fisier incarcat in ALT magazin
+ * ar fi trecut: cumparatorul isi urca poza pe un magazin oarecare, ia id-ul, si il lipeste in
+ * comanda de la altul. Nimic nu s-ar fi vazut, si atelierul ar fi produs dupa el.
+ *
+ * ⚠ Cand citirea PICA se intoarce `undefined`, nu o harta goala. Harta goala ar fi insemnat
+ * „niciun fisier nu exista", deci REFUZ pentru fiecare comanda cu poza, la fiecare pana de o clipa
+ * a bazei. `undefined` inseamna „nu se stie", iar `verificaRaspunsul` sare atunci peste verificarea
+ * asta — exact ca browserul, care oricum n-o poate face. Restul verificarilor raman intregi.
+ */
+async function fisiereleLiniilor(
+  businessId: string,
+  linii: LinieCeruta[],
+  configuratoare: Map<string, { compilat: Compilat }>,
+): Promise<FisiereleStiute | undefined> {
+  const ceruteToate = new Set<string>();
+  for (const l of linii) {
+    const c = configuratoare.get(l.productId);
+    if (!c) continue;
+    const valori = normalizeazaValori(l.configuratie);
+    for (const f of fisiereleCerute(c.compilat.definitie, valori)) ceruteToate.add(f.fisierId);
+  }
+  if (ceruteToate.size === 0) return new Map();
+
+  /*
+   * ⚠ Plafonul e al PLATFORMEI. `.in()` pleaca in ADRESA la PostgREST, iar peste ~700 de valori
+   * cererea cade cu totul; peste 1000 de randuri, raspunsul se taie TACUT. Cosul are cel mult 50 de
+   * linii si un camp cel mult 10 fisiere, deci 500 e peste orice cos adevarat — dar limita se
+   * scrie, fiindca lista vine din ce a trimis clientul.
+   */
+  const ids = [...ceruteToate].slice(0, 500);
+
+  const { data, error } = await createAdminClient()
+    .from("configurator_fisiere")
+    .select("id, mime, octeti, latime, inaltime")
+    .eq("business_id", businessId)
+    .in("id", ids);
+
+  if (error) return undefined;
+
+  const out = new Map<string, FisierMasurat>();
+  for (const r of data ?? []) {
+    out.set(r.id, {
+      mime: String(r.mime ?? ""),
+      octeti: Number(r.octeti) || 0,
+      latime: r.latime ?? null,
+      inaltime: r.inaltime ?? null,
+    });
+  }
+  return out;
 }
 
 /**

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import type { Nod, Optiune } from "@/lib/configurators/definitie";
 import {
@@ -8,6 +10,7 @@ import {
 } from "@/lib/configurators/editare";
 import { esteCuloare } from "@/lib/configurators/validare";
 import { Bifa, Camp, INTRARE, IntrareNumar, Probleme } from "./bucati";
+import { pixeliCeruti, MAX_FISIERE_PE_NOD, MAX_OCTETI } from "@/lib/configurators/fisiere";
 
 /**
  * Setarile optiunii alese.
@@ -66,6 +69,7 @@ export function InspectorNod({ nod, onSchimba }: { nod: Nod; onSchimba: (n: Nod)
 
       {nod.fel === "numar" && <SetariNumar nod={nod} onSchimba={onSchimba} />}
       {nod.fel === "text" && <SetariText nod={nod} onSchimba={onSchimba} />}
+      {nod.fel === "fisiere" && <SetariFisiere nod={nod} onSchimba={onSchimba} />}
       {nod.fel === "comutator" && (
         <>
           <Camp eticheta="Cat adauga la pret cand e pornit" ajutor="In lei. Lasa gol daca nu schimba pretul.">
@@ -151,6 +155,91 @@ function SetariNumar({ nod, onSchimba }: { nod: Nod & { fel: "numar" }; onSchimb
           unitate={nod.unitate}
         />
       </Camp>
+    </>
+  );
+}
+
+/**
+ * Ce se cere de la fisierul incarcat de cumparator.
+ *
+ * ⚠ NU EXISTA CAMP DE DPI, si lipsa lui e o hotarare. „DPI"-ul unui fisier e un numar pe care
+ * fisierul il declara DESPRE SINE, si aproape toti mint: o poza de 4000 px facuta cu telefonul se
+ * scrie 72 si e excelenta la tipar, iar una de 200×200 marita in Paint se poate scrie 300 si nu e
+ * buna de nimic. Un refuz pe numarul ala ar fi respins tocmai fisierele bune.
+ *
+ * Ce voia sa spuna comerciantul prin „300 DPI" se scrie tot aici, dar in pixeli: ajutorul de mai
+ * jos ii cere cei doi termeni pe care ii stie — de la cati centimetri se tipareste si la ce
+ * densitate — si scrie el numarul in camp. Ce ramane in model e o cerinta care se poate si
+ * masura, si onora.
+ */
+function SetariFisiere({ nod, onSchimba }: { nod: Nod & { fel: "fisiere" }; onSchimba: (n: Nod) => void }) {
+  const [cm, setCm] = useState<number | undefined>(undefined);
+  const [dpi, setDpi] = useState<number | undefined>(300);
+  const sugerat = pixeliCeruti(cm ?? 0, dpi ?? 0);
+  const eImagine = nod.control !== "document";
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-2">
+        <Camp eticheta="Cate fisiere" ajutor={`Cel mult ${MAX_FISIERE_PE_NOD}.`}>
+          <IntrareNumar
+            valoare={nod.maxFisiere}
+            onSchimba={(n) => onSchimba({ ...nod, maxFisiere: n })}
+          />
+        </Camp>
+        <Camp eticheta="Cat poate avea unul (MB)" ajutor={`Cel mult ${Math.floor(MAX_OCTETI / (1024 * 1024))}.`}>
+          <IntrareNumar
+            valoare={nod.maxMb}
+            onSchimba={(n) => onSchimba({ ...nod, maxMb: n })}
+          />
+        </Camp>
+      </div>
+
+      {eImagine && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            <Camp eticheta="Latime minima (px)">
+              <IntrareNumar
+                valoare={nod.minLatimePx}
+                onSchimba={(n) => onSchimba({ ...nod, minLatimePx: n })}
+              />
+            </Camp>
+            <Camp eticheta="Inaltime minima (px)">
+              <IntrareNumar
+                valoare={nod.minInaltimePx}
+                onSchimba={(n) => onSchimba({ ...nod, minInaltimePx: n })}
+              />
+            </Camp>
+          </div>
+
+          <fieldset className="space-y-2 rounded-lg border border-border/70 p-3">
+            <legend className="px-1 text-xs font-medium text-muted-foreground">
+              Cati pixeli imi trebuie?
+            </legend>
+            <p className="text-[11px] text-muted-foreground">
+              Spune de la cati centimetri tiparesti si la ce densitate, si iti scriu numarul in camp.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Camp eticheta="Latimea tiparita (cm)">
+                <IntrareNumar valoare={cm} onSchimba={setCm} />
+              </Camp>
+              <Camp eticheta="Densitatea (DPI)">
+                <IntrareNumar valoare={dpi} onSchimba={setDpi} />
+              </Camp>
+            </div>
+            <button
+              type="button"
+              disabled={sugerat === null}
+              onClick={() => sugerat !== null && onSchimba({ ...nod, minLatimePx: sugerat })}
+              className="w-full rounded-lg border border-border px-3 py-2 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-40"
+            >
+              {sugerat === null
+                ? "Completeaza amandoua"
+                : `Pune ${sugerat} px ca latime minima`}
+            </button>
+          </fieldset>
+        </>
+      )}
     </>
   );
 }

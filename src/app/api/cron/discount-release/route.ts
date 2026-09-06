@@ -3,6 +3,7 @@ import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { cuponulSePoateElibera, ORE_PANA_LA_ELIBERARE, type ComandaDeMaturat } from "./reguli";
 import { logError } from "@/lib/error-logger";
+import { maturaFisiereleOrfane } from "./fisiere-orfane";
 
 /**
  * Da inapoi utilizarile de cupon ramase agatate de plati online care nu s-au
@@ -52,6 +53,19 @@ export async function GET(req: NextRequest) {
     // cupoanelor — dar acum se VEDE cand nu si-a facut treaba.
     const { error } = await admin.rpc("curata_limite");
     if (error) await logError({ action: "discount-release.curata_limite", message: error.message, severity: "warning" });
+  }
+
+  /*
+   * Matura fisierele incarcate de cumparatori care n-au ajuns pe nicio comanda.
+   *
+   * ⚠ Sta aici din acelasi motiv ca `curata_limite`: cronul orar cel mai usor, treaba mica.
+   * Dar motivul pentru care EXISTA e altul si e mai serios — incarcarea din configurator e
+   * singura din platforma care nu cere cont, deci fara maturare oricine ne umple depozitul
+   * incarcand si inchizand fila. Vezi `fisiere-orfane.ts`.
+   */
+  {
+    const { sterse } = await maturaFisiereleOrfane(admin);
+    if (sterse > 0) console.log(`[fisiere-orfane] ${sterse} fisiere neordonate, sterse`);
   }
 
   /*

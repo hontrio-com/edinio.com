@@ -30,6 +30,7 @@ import { aplicaRegulile, nodurileCerute, optiunileCerute, type Regula } from "./
 import { calculeazaPretul, type Pretuire } from "./pret";
 import { normalizeazaValoare, type Valoare, type Valori } from "./valori";
 import { componentaEStricata, trimiterileLaComponente } from "./componente";
+import { MAX_FISIERE_PE_NOD, MAX_OCTETI } from "./fisiere";
 import { eNumarBun } from "./unitati";
 
 export type Treapta = "critic" | "atentie";
@@ -223,21 +224,40 @@ export function valideaza(intrare: IntrareValidare): RezultatValidare {
       }
     }
     /*
-     * ⚠ INCARCAREA DE FISIERE NU SE PUBLICA INCA, si asta e o garda, nu o lipsa.
+     * ⚠ CAMPUL DE FISIERE SE PUBLICA, dar cu limitele lui verificate.
      *
-     * `ConfiguratorSlot` intoarce `null` pentru nodurile de fisiere: depozitul privat, verificarea
-     * octetilor si legarea fisierului de comanda vin in faza lor. Publicat asa, nodul ar fi
-     * INVIZIBIL pe vitrina — iar daca era si obligatoriu, `esteCerut` l-ar fi cerut la fiecare
-     * incercare de comanda si produsul n-ar mai fi putut fi cumparat DELOC, fara ca nimeni sa vada
-     * de ce.
+     * Pana la F4 aici statea un refuz: slotul nu desena nodul, deci publicat ar fi fost INVIZIBIL
+     * pe vitrina, iar daca era si obligatoriu produsul n-ar mai fi putut fi cumparat DELOC. Acum
+     * se deseneaza, se incarca si se leaga de comanda.
      *
-     * Se refuza la publicare, nu se ascunde din editor pe tacute: comerciantul trebuie sa afle ca
-     * ce a construit nu se poate servi inca.
+     * Ce se verifica acum e altceva, si e ce poate strica un camp bun:
      */
     if (nod.fel === "fisiere") {
-      adauga("critic", "fisiere_indisponibil",
-        `„${nod.eticheta}": incarcarea de fisiere nu se poate publica inca. Scoate campul si publica restul.`,
-        nod.id);
+      /*
+       * ⚠ O CERINTA DE PIXELI PE UN CAMP DE DOCUMENTE nu se poate implini niciodata: un PDF n-are
+       * latime in pixeli. Nu opreste nimic la incarcare (`motivulRefuzului` cere dimensiuni doar
+       * cand s-au putut masura), dar ramane un numar scris care nu inseamna nimic — si
+       * comerciantul crede ca a pus o conditie.
+       */
+      if (nod.control === "document" && (nod.minLatimePx || nod.minInaltimePx)) {
+        adauga("atentie", "fisiere_pixeli_pe_document",
+          `„${nod.eticheta}” cere o marime in pixeli, dar primeste documente. Un PDF n-are pixeli, deci conditia nu se aplica.`,
+          nod.id);
+      }
+      /*
+       * ⚠ Un `maxMb` peste plafonul platformei nu e o eroare, dar comerciantul trebuie sa afle:
+       * el a scris 100 si primeste 25, iar altfel ar fi aflat de la primul cumparator refuzat.
+       */
+      if (Number(nod.maxMb) * 1024 * 1024 > MAX_OCTETI) {
+        adauga("atentie", "fisiere_prea_mari",
+          `La „${nod.eticheta}” se primesc cel mult ${Math.floor(MAX_OCTETI / (1024 * 1024))} MB, oricat ai scrie.`,
+          nod.id);
+      }
+      if (Number(nod.maxFisiere) > MAX_FISIERE_PE_NOD) {
+        adauga("atentie", "fisiere_prea_multe",
+          `La „${nod.eticheta}” se pot incarca cel mult ${MAX_FISIERE_PE_NOD} fisiere, oricat ai scrie.`,
+          nod.id);
+      }
     }
     /*
      * ⚠ Culoarea CHIAR se valideaza aici, fiindca modelul promite ca se valideaza.

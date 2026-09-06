@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Nod, NodNumar } from "@/lib/configurators/definitie";
+import type { Nod, NodFisiere, NodNumar } from "@/lib/configurators/definitie";
+import { cateFisiere, catePotOcupa, tipurilePermise } from "@/lib/configurators/fisiere";
 import { esteAscuns, esteCerut, optiuniDeAles } from "@/lib/configurators/reguli";
 import { pretDeAfisat } from "@/lib/configurators/pret";
 import type { Verdict } from "@/lib/configurators/raspuns";
-import type { Valori } from "@/lib/configurators/valori";
+import type { FisierAles, Valori } from "@/lib/configurators/valori";
 import type { StareConfigurator } from "./useConfigurator";
 import {
   afisat, conversia, descrieIntervalul, dinText, eStricat, textulDeAratat,
@@ -75,6 +76,7 @@ export function ConfiguratorSlot({ cfg }: { cfg: StareConfigurator }) {
                         key={nod.id}
                         nod={nod}
                         valori={valori}
+                        unde={cfg.unde}
                         cerut={esteCerut(definitie, nod, stare)}
                         dezactivat={stare.dezactivate.has(nod.id)}
                         optiuni={optiuniDeAles(nod, stare)}
@@ -163,10 +165,12 @@ function Pret({ verdict }: { verdict: Verdict }) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function Camp({
-  nod, valori, cerut, dezactivat, optiuni, limite, onSchimba,
+  nod, valori, cerut, dezactivat, optiuni, limite, onSchimba, unde,
 }: {
   nod: Nod;
   valori: Valori;
+  /** Pe ce pagina stam. Trebuie doar incarcarii de fisiere; `null` in previzualizare. */
+  unde: { businessId: string; productId: string } | null;
   cerut: boolean;
   dezactivat: boolean;
   optiuni: string[];
@@ -316,12 +320,15 @@ function Camp({
       if (nod.control === "titlu") return <h4 className="text-sm font-semibold text-foreground">{nod.eticheta}</h4>;
       return nod.continut ? <p className="text-sm text-muted-foreground">{nod.continut}</p> : null;
 
-    /*
-     * ⚠ Incarcarea de fisiere vine cu depozitul privat, in faza ei. Pana atunci NU se deseneaza
-     * un camp care pare ca merge: un camp de incarcare care nu incarca nimic e mai rau decat
-     * lipsa lui, fiindca cumparatorul crede ca a trimis poza.
-     */
     case "fisiere":
+      return (
+        <CampFisiere
+          nod={nod} idCamp={idCamp} eticheta={eticheta} ajutor={ajutor} descrisDe={descrisDe}
+          alese={valori[nod.id]?.f === "fisiere" ? (valori[nod.id].v as FisierAles[]) : []}
+          dezactivat={dezactivat} unde={unde} onSchimba={onSchimba}
+        />
+      );
+
     case "calcul":
     default:
       return null;
@@ -409,5 +416,191 @@ function CampNumar({
       )}
       {ajutor}
     </label>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CAMPUL DE FISIERE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Ce incarca CUMPARATORUL: poza de gravat, macheta de tiparit, actul de atasat.
+ *
+ * ⚠ NU SE TINE FISIERUL IN STARE, CI ID-UL LUI. Octetii pleaca imediat catre server, care ii
+ * verifica dupa continut, ii masoara si intoarce un id. In configuratie intra doar id-ul, si de
+ * acolo in cos si in comanda. Tinuti in browser pana la finalizare, un cos cu trei poze de cate
+ * zece megaocteti ar fi trebuit purtat prin `localStorage` — care se opreste la cateva megaocteti
+ * si arunca fara sa spuna nimic, golind cosul intreg.
+ *
+ * ⚠ CE E DEZACTIVAT NU E ASCUNS. Un camp dezactivat de o regula isi arata mai departe fisierele
+ * deja incarcate: altfel omul ar fi crezut ca le-a pierdut cand bifa alta optiune.
+ *
+ * ⚠ DECUPAREA (`FisierAles.t`) NU SE SCRIE INCA, si e o hotarare. O decupare inseamna asezarea
+ * imaginii INTR-O zona de personalizare, iar zona aia se deseneaza de nodul de previzualizare, care
+ * nu exista inca. Scrise oricum, in comanda ar fi ajuns patru numere pe care atelierul nu le poate
+ * urma — o specificatie mai rea decat una fara ele, fiindca pare ca spune ceva.
+ */
+function CampFisiere({
+  nod, idCamp, eticheta, ajutor, descrisDe, alese, dezactivat, unde, onSchimba,
+}: {
+  nod: NodFisiere;
+  idCamp: string;
+  eticheta: React.ReactNode;
+  ajutor: React.ReactNode;
+  descrisDe?: string;
+  alese: readonly FisierAles[];
+  dezactivat: boolean;
+  unde: { businessId: string; productId: string } | null;
+  onSchimba: (v: unknown) => void;
+}) {
+  const [urca, setUrca] = useState(false);
+  const [problema, setProblema] = useState<string | null>(null);
+
+  const cate = cateFisiere(nod);
+  const permise = tipurilePermise(nod);
+  const mai = cate - alese.length;
+
+  async function primeste(lista: FileList | null) {
+    if (!lista?.length || !unde) return;
+    setProblema(null);
+    setUrca(true);
+    /*
+     * ⚠ UNUL CATE UNUL, si nu toate deodata. Ruta are prag pe IP in doua straturi, iar zece
+     * cereri pornite in aceeasi clipa l-ar fi lovit chiar ele — cumparatorul ar fi vazut
+     * „prea multe incarcari" pentru propria lui prima incercare.
+     */
+    const noi: FisierAles[] = [];
+    for (const f of Array.from(lista).slice(0, Math.max(0, mai))) {
+      const corp = new FormData();
+      corp.set("businessId", unde.businessId);
+      corp.set("productId", unde.productId);
+      corp.set("nodId", nod.id);
+      corp.set("fisier", f);
+      try {
+        const r = await fetch("/api/configurator/fisier", { method: "POST", body: corp });
+        const j = (await r.json()) as { id?: string; error?: string };
+        if (!r.ok || !j.id) {
+          /*
+           * ⚠ Se arata MOTIVUL de la server, nu unul scris aici. Serverul stie ce anume n-a
+           * mers — „e prea mare", „are 800 px si trebuie 2000" — iar un „incarcarea a esuat"
+           * scris local l-ar fi lasat pe om sa incerce acelasi fisier la nesfarsit.
+           */
+          setProblema(j.error ?? "Incarcarea a esuat. Incearca din nou.");
+          break;
+        }
+        noi.push({ id: j.id });
+      } catch {
+        setProblema("Incarcarea a esuat. Verifica legatura si incearca din nou.");
+        break;
+      }
+    }
+    setUrca(false);
+    /*
+     * ⚠ Ce a apucat sa urce SE PASTREAZA, chiar daca al doilea fisier a picat. Aruncate toate,
+     * omul ar fi pierdut si incarcarea care mersese — si ar fi trebuit s-o refaca degeaba.
+     */
+    if (noi.length) {
+      const toate = [...alese, ...noi];
+      onSchimba({ f: "fisiere", v: toate });
+    }
+  }
+
+  function scoate(id: string) {
+    /*
+     * ⚠ Se scoate din CONFIGURATIE, si nu se sterge din depozit. Randul ramane orfan si pleaca
+     * la maturare peste o saptamana. Sters pe loc, un cumparator care se razgandeste inapoi —
+     * sau care are doua file deschise pe acelasi cos — si-ar fi rupt singur cealalta comanda.
+     */
+    const ramase = alese.filter((f) => f.id !== id);
+    onSchimba(ramase.length ? { f: "fisiere", v: ramase } : undefined);
+  }
+
+  return (
+    <div>
+      {eticheta}
+
+      {alese.length > 0 && (
+        <ul className="mb-2 flex flex-wrap gap-2">
+          {alese.map((f) => (
+            <li key={f.id} className="relative">
+              {nod.control === "document" ? (
+                <a
+                  href={`/api/configurator/fisier/${f.id}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex h-20 w-20 items-center justify-center rounded-lg border border-border bg-muted text-[11px] text-muted-foreground"
+                >
+                  Document
+                </a>
+              ) : (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={`/api/configurator/fisier/${f.id}`}
+                  alt="Fisierul incarcat de tine"
+                  className="h-20 w-20 rounded-lg border border-border object-cover"
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => scoate(f.id)}
+                aria-label="Scoate fisierul"
+                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-xs leading-none text-muted-foreground shadow-sm hover:text-destructive"
+              >
+                &times;
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {mai > 0 && !dezactivat && unde && (
+        <input
+          id={idCamp}
+          type="file"
+          accept={permise.join(",")}
+          multiple={cate > 1}
+          disabled={urca}
+          aria-describedby={descrisDe}
+          onChange={(e) => {
+            void primeste(e.target.files);
+            /* Se goleste, ca sa se poata alege DIN NOU acelasi fisier dupa ce a fost scos. */
+            e.target.value = "";
+          }}
+          className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-muted file:px-3 file:py-2 file:text-sm file:text-foreground hover:file:bg-muted/70 disabled:opacity-50"
+        />
+      )}
+
+      {/*
+        ⚠ In previzualizarea din panou nu exista produs, deci nici incarcare. Se spune pe fata:
+        un camp de incarcare care tace ar fi facut comerciantul sa creada ca e stricat.
+      */}
+      {!unde && (
+        <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+          Aici cumparatorul isi incarca fisierul. In previzualizare nu se poate incarca.
+        </p>
+      )}
+
+      {urca && <p className="mt-1 text-xs text-muted-foreground" role="status">Se incarca...</p>}
+
+      {problema && (
+        <p className="mt-1 text-xs text-destructive" role="alert">{problema}</p>
+      )}
+
+      {/*
+        ⚠ CE SE CERE SE SPUNE INAINTE, nu dupa refuz. Cumparatorul care afla abia din eroare ca
+        poza trebuie sa aiba 2000 px o incearca de trei ori pana intelege.
+      */}
+      <p className="mt-1 text-xs text-muted-foreground">
+        {mai > 0
+          ? `Poti incarca ${mai === 1 ? "un fisier" : `inca ${mai} fisiere`}`
+          : "Ai incarcat tot ce se poate"}
+        {`, cel mult ${Math.floor(catePotOcupa(nod) / (1024 * 1024))} MB`}
+        {nod.minLatimePx || nod.minInaltimePx
+          ? `, cel putin ${nod.minLatimePx ?? 0}x${nod.minInaltimePx ?? 0} px`
+          : ""}
+        .
+      </p>
+
+      {ajutor}
+    </div>
   );
 }

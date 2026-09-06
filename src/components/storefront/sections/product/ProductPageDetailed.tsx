@@ -370,7 +370,9 @@ export function ProductPageDetailed({
    * ⚠ Se da `displayPrice`, adica pretul VARIANTEI alese, nu cel de baza: la un produs cu
    * variante, configuratorul socoteste peste ce se vinde cu adevarat.
    */
-  const cfg = useConfigurator(configurator, displayPrice);
+  const cfg = useConfigurator(configurator, displayPrice, {
+    businessId: business.id, productId: product.id,
+  });
   const displayComparePrice = comboCompareAtPrice(
     selectedCombo,
     product.compare_at_price ? Number(product.compare_at_price) : null,

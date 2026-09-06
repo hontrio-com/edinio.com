@@ -44,13 +44,12 @@ const FELURI: { fel: Nod["fel"]; control: string; eticheta: string }[] = [
   { fel: "alegeri", control: "bifare", eticheta: "Alegeri multiple" },
   { fel: "comutator", control: "comutator", eticheta: "Da / Nu" },
   /*
-   * ⚠ „Incarcare imagine" lipseste DINADINS, pana cand vitrina o poate desena.
-   *
-   * Oferita aici, comerciantul o adauga, o marcheaza obligatorie, publica — si produsul nu
-   * se mai poate cumpara deloc, fiindca slotul nu randeaza nodul iar `esteCerut` il cere la
-   * fiecare incercare. Publicarea o si refuza acum, dar un buton care duce sigur intr-un
-   * refuz nu e o interfata, e o capcana.
+   * ⚠ Cele doua de mai jos au lipsit din lista pana la F4, fiindca vitrina nu le putea desena:
+   * un buton care duce sigur intr-un refuz de publicare nu e o interfata, e o capcana. Acum
+   * slotul le deseneaza, ruta le primeste si comanda le poarta.
    */
+  { fel: "fisiere", control: "imagine", eticheta: "Incarcare imagine" },
+  { fel: "fisiere", control: "document", eticheta: "Incarcare document" },
 ];
 
 function nodNou(fel: Nod["fel"], control: string, eticheta: string): Nod {

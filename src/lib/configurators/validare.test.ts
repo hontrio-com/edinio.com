@@ -332,19 +332,53 @@ test("`atentie` singura NU opreste publicarea", () => {
   assert.equal(r.sePoatePublica, true);
 });
 
-/* -- Ce nu se poate servi inca ---------------------------------------------- */
+/* ── Campul de incarcare ─────────────────────────────────────────────────── */
 
-test("un camp de INCARCARE FISIERE opreste publicarea", () => {
+const fisiere = (extra: Record<string, unknown> = {}): Nod =>
+  ({ fel: "fisiere", control: "imagine", id: "poza", eticheta: "Poza ta", ...extra } as Nod);
+
+test("⚠ un camp de INCARCARE FISIERE se publica", () => {
   /*
-   * ⚠ `ConfiguratorSlot` intoarce `null` pentru nodurile de fisiere: depozitul privat si legarea
-   * de comanda vin in faza lor. Publicat asa, campul ar fi INVIZIBIL pe vitrina — iar daca era si
-   * obligatoriu, produsul n-ar mai fi putut fi cumparat DELOC, fiindca `esteCerut` l-ar fi cerut
-   * la fiecare incercare si nimeni n-ar fi avut unde sa-l completeze.
+   * ⚠ AICI STATEA UN REFUZ, si scoaterea lui e chiar livrarea lui F4.
+   *
+   * `ConfiguratorSlot` intorcea `null` pentru nodurile de fisiere, deci publicat campul ar fi fost
+   * INVIZIBIL pe vitrina — iar daca era si obligatoriu, produsul n-ar mai fi putut fi cumparat
+   * DELOC, fiindca `esteCerut` il cerea la fiecare incercare si nimeni n-avea unde sa-l completeze.
+   *
+   * Acum slotul il deseneaza, ruta il primeste, comanda il poarta si panoul il deschide. Proba
+   * ramane aici, intoarsa pe fata cealalta: daca refuzul se intoarce vreodata, se vede.
    */
-  const fisiere = { fel: "fisiere", control: "imagine", id: "poza", eticheta: "Poza ta" } as Nod;
-  const r = val({ definitie: def([alegere("mat", [{ id: "a", eticheta: "A" }]), fisiere]) });
-  assert.equal(r.sePoatePublica, false);
-  assert.ok(critice(r).includes("fisiere_indisponibil"));
+  const r = val({ definitie: def([alegere("mat", [{ id: "a", eticheta: "A" }]), fisiere()]) });
+  assert.equal(r.sePoatePublica, true, critice(r).join(", "));
+  assert.ok(!coduri(r).includes("fisiere_indisponibil"));
+});
+
+test("o cerinta de PIXELI pe un camp de DOCUMENTE se spune pe fata", () => {
+  /*
+   * ⚠ Un PDF n-are latime in pixeli, deci conditia nu se aplica niciodata. Nu strica nimic la
+   * incarcare, dar ramane un numar scris care nu inseamna nimic — iar comerciantul crede ca a pus
+   * o conditie. Se spune, si atat: `atentie`, fiindca nu e o vanzare gresita, e o asteptare gresita.
+   */
+  const d = def([fisiere({ control: "document", minLatimePx: 2000 })]);
+  const r = val({ definitie: d });
+  assert.ok(coduri(r).includes("fisiere_pixeli_pe_document"));
+  assert.equal(r.sePoatePublica, true);
+});
+
+test("⚠ comerciantul afla ca plafonul e al platformei INAINTE de primul refuz", () => {
+  /*
+   * ⚠ El scrie 100 MB si primeste 25. Fara alarma asta ar fi aflat de la primul cumparator
+   * caruia i s-a refuzat fisierul — adica de la o vanzare pierduta, si fara sa inteleaga de ce.
+   */
+  const r = val({ definitie: def([fisiere({ maxMb: 100, maxFisiere: 50 })]) });
+  assert.ok(coduri(r).includes("fisiere_prea_mari"));
+  assert.ok(coduri(r).includes("fisiere_prea_multe"));
+  assert.equal(r.sePoatePublica, true, "un plafon depasit nu e o greseala, e o asteptare gresita");
+});
+
+test("un camp de incarcare obisnuit nu produce nicio alarma", () => {
+  const r = val({ definitie: def([fisiere({ maxMb: 5, maxFisiere: 2, minLatimePx: 1200 })]) });
+  assert.ok(!coduri(r).some((c) => c.startsWith("fisiere_")), coduri(r).join(", "));
 });
 
 test("CULOAREA se valideaza, fiindca modelul promite ca se valideaza", () => {

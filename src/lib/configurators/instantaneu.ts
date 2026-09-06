@@ -101,6 +101,11 @@ function grameBune(v: unknown): number {
  * pe continutul unui AWB; un sir de zece mii de caractere ajuns acolo dintr-o comanda veche sau
  * dintr-o editare de mana ar fi rupt asezarea in toate trei.
  */
+/** Cate id-uri de fisier se primesc pe un rand. Plafonul campului e 10; aici e plasa. */
+const MAX_FISIERE = 10;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function citesteRezumatul(brut: unknown): RandRezumat[] {
   if (!Array.isArray(brut)) return [];
   const out: RandRezumat[] = [];
@@ -109,11 +114,23 @@ function citesteRezumatul(brut: unknown): RandRezumat[] {
     const r = x as Record<string, unknown>;
     if (typeof r.eticheta !== "string" || typeof r.valoare !== "string") continue;
     if (!r.eticheta.trim() || !r.valoare.trim()) continue;
+    /*
+     * ⚠ Id-urile de fisier se citesc, dar cu aceeasi neincredere ca restul: ele ajung intr-o
+     * ADRESA (`/api/configurator/fisier/<id>`), iar instantaneul poate fi scris de o versiune
+     * veche de cod sau atins dintr-o consola. Se primeste doar forma de uuid — orice altceva
+     * ar fi insemnat sa lasam continutul comenzii sa compuna calea.
+     */
+    const fisiere = Array.isArray(r.fisiere)
+      ? r.fisiere
+        .filter((f): f is string => typeof f === "string" && UUID.test(f))
+        .slice(0, MAX_FISIERE)
+      : [];
     out.push({
       id: typeof r.id === "string" ? r.id.slice(0, MAX_TEXT) : "",
       eticheta: r.eticheta.slice(0, MAX_TEXT),
       valoare: r.valoare.slice(0, MAX_TEXT),
       scurt: r.scurt === true,
+      ...(fisiere.length ? { fisiere } : {}),
     });
   }
   return out;

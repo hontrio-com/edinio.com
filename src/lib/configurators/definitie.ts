@@ -164,11 +164,21 @@ export interface NodFisiere extends NodComun {
   maxMb?: number;
   /** Tipuri primite. Serverul le verifica dupa octetii reali, nu dupa antet. */
   tipuri?: string[];
+  /**
+   * Cati pixeli trebuie sa aiba imaginea. Se masoara pe fisierul adevarat, cu `sharp`.
+   *
+   * ⚠ AICI ERAU SI `dpiMinim` / `dpiRecomandat`, si au fost scoase fiindca nu se pot onora
+   * cinstit. „DPI”-ul unui fisier e un numar pe care fisierul il declara DESPRE SINE: o poza de
+   * 4000 px facuta cu telefonul se scrie 72 si e excelenta la tipar, iar o imagine de 200x200
+   * marita in Paint se poate scrie 300 si nu e buna de nimic. Un refuz pe numarul ala ar fi
+   * respins tocmai fisierele bune si ar fi primit tocmai gunoiul.
+   *
+   * Ce voia sa spuna comerciantul prin „300 DPI” se scrie tot aici, prin `pixeliCeruti` din
+   * `fisiere.ts`: de la cati centimetri se tipareste si la ce densitate, cati pixeli ies.
+   * Panoul i-o socoteste si scrie numarul in campurile de mai jos.
+   */
   minLatimePx?: number;
   minInaltimePx?: number;
-  /** Sub pragul asta se ARATA un avertisment; sub `dpiMinim` se REFUZA. */
-  dpiRecomandat?: number;
-  dpiMinim?: number;
 }
 
 /** Un calcul intermediar. Nu se vede si nu se completeaza; alte formule trimit la el. */

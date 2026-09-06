@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { amprentaConfiguratiei, amprentaDinBrut, serializeazaCanonic, cheieLinie } from "./amprenta";
 import { normalizeazaValori, type Valori } from "./valori";
 import { lineKey } from "@/lib/storefront/cart/normalize";
@@ -208,4 +210,55 @@ test("normalizarea chiar preface minus zero in zero", () => {
   const x = v.x as { f: "numar"; v: number };
   assert.equal(Object.is(x.v, -0), false, "minus zero nu are voie sa supravietuiasca");
   assert.equal(Object.is(x.v, 0), true);
+});
+
+/* -- Formatul e BATUT IN CUIE ---------------------------------------------- */
+
+test("AMPRENTA E O VALOARE DE AUR: numerele astea nu au voie sa se schimbe", () => {
+  /*
+   * Proba „stabila intre rulari" de mai sus compara amprenta cu ea insasi, in aceeasi rulare:
+   * trece si daca formatul se schimba de la o zi la alta. Aici stau numerele reale.
+   *
+   * ⚠ CE COSTA daca se schimba. Amprenta ajunge in cheia liniei de cos si in instantaneul
+   * comenzii. Alt despartitor, alta ordine, alt numar prim — si aceleasi alegeri dau alt sir:
+   * cosurile deschise acum se desfac in linii noi, iar o comanda veche nu se mai potriveste cu
+   * configuratia din care a fost facuta. Nimic nu arunca; totul doar nu se mai regaseste.
+   *
+   * Deci proba asta NU se „actualizeaza" cand cade. Daca a cazut, s-a schimbat formatul, si
+   * intrebarea e ce se face cu ce s-a scris deja.
+   */
+  const v = normalizeazaValori({
+    latime: { f: "numar", v: 3500 },
+    material: { f: "alegere", v: "premium" },
+    gravura: { f: "text", v: "Robert" },
+    optiuni: { f: "alegeri", v: ["a", "b"] },
+    ambalaj: { f: "comutator", v: true },
+  });
+  assert.equal(amprentaConfiguratiei(v), "0f3asj30xcbam60dg0nhd0fcl9j4");
+  assert.equal(amprentaConfiguratiei(normalizeazaValori({})), "0duprwd03b1q1g0yy1vm70oedtra");
+  assert.equal(
+    cheieLinie("p1", "Rosu / M", "0f3asj30xcbam60dg0nhd0fcl9j4"),
+    "2:p1::8:Rosu / M::28:0f3asj30xcbam60dg0nhd0fcl9j4",
+  );
+});
+
+test("sursa NU poarta octeti de control scrisi de-a dreptul", () => {
+  /*
+   * ⚠ Cei doi despartitori sunt octeti de control. Scrisi literal in fisier, acesta devine
+   * „binar" pentru unelte — `grep` refuza sa-l citeasca — iar un editor, o normalizare de
+   * terminatii sau o simpla trecere prin clipboard ii poate schimba TACUT. Si atunci se schimba
+   * si valorile de aur de mai sus, adica identitatea fiecarei linii de cos scrise pana acum.
+   *
+   * Proiectul are lectia asta scrisa: aceiasi octeti, scrisi literal, au facut `valori.ts` un
+   * fisier binar in aceeasi zi.
+   */
+  const sursa = readFileSync(path.resolve(process.cwd(), "src/lib/configurators/amprenta.ts"), "latin1");
+  const rele = [...sursa].filter((c) => {
+    const n = c.charCodeAt(0);
+    return n < 9 || (n > 10 && n < 32) || n === 127;
+  });
+  assert.equal(rele.length, 0, `am gasit ${rele.length} octeti de control in sursa; scrie-i cu \\u`);
+  // ⚠ Si chiar sunt scrisi cu escapare, nu doar lipsesc din fisier.
+  assert.ok(sursa.includes('const SEPARATOR = "\\u001F"'), "despartitorul de bucati s-a schimbat");
+  assert.ok(sursa.includes('const DESPARTITOR_BANDA = "\\u0000"'), "despartitorul de banda s-a schimbat");
 });

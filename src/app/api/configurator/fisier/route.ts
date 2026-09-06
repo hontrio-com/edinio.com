@@ -82,13 +82,38 @@ export async function POST(req: NextRequest) {
   }
 
   /*
-   * ⚠ CAMPUL TREBUIE SA EXISTE IN VERSIUNEA PUBLICATA, si limitele lui sunt cele care se aplica.
+   * ⚠ SE CITESTE CATEGORIA ADEVARATA A PRODUSULUI, si asta nu e o formalitate.
    *
-   * `configuratorulProdusului` citeste doar versiunea ACTIVA a unui configurator ACTIV, legat de
-   * produsul asta — deci nici o ciorna, nici un configurator oprit, nici unul al altui magazin.
-   * Ea nu arunca niciodata: la orice necaz da `null`, iar aici asta inseamna refuz.
+   * Aici statea `category: null`, si rupea TACUT jumatate din modelul de aplicare: un
+   * configurator legat de o CATEGORIE (`aplicaLaCategorii`) nu lasa niciun rand in
+   * `configurator_produse`, deci rezolvitorul il gaseste numai prin numele categoriei. Cu
+   * `null`, `rezolvitorul` intoarce „niciunul” din prima linie, iar cumparatorul primea 404 la
+   * fiecare incercare de incarcare — pe un produs care ARATA campul, fiindca pagina il deseneaza
+   * din aceeasi versiune publicata. Comerciantul ar fi cautat greseala in builder.
+   *
+   * ⚠ Citirea cere SI `business_id`. Ea e si dovada ca produsul e al magazinului numit in
+   * cerere: pe calea prin categorie nu mai exista randul din `configurator_produse` care sa lege
+   * cele doua, deci fara filtrul asta oricine putea numi orice pereche magazin-produs.
    */
-  const cfg = await configuratorulProdusului(businessId, { id: productId, category: null });
+  const admin = createAdminClient();
+  const { data: produs } = await admin
+    .from("products")
+    .select("id, category")
+    .eq("id", productId)
+    .eq("business_id", businessId)
+    .maybeSingle();
+  if (!produs) {
+    return NextResponse.json({ error: "Produsul nu mai exista." }, { status: 404 });
+  }
+
+  /*
+   * `configuratorulProdusului` citeste doar versiunea ACTIVA a unui configurator ACTIV care se
+   * aplica produsului — direct sau prin categorie. Nu arunca niciodata: la orice necaz da
+   * `null`, iar aici asta inseamna refuz.
+   */
+  const cfg = await configuratorulProdusului(businessId, {
+    id: productId, category: produs.category ?? null,
+  });
   const nod = cfg ? nodurileDeFisiere(cfg.compilat.definitie).get(nodId) : undefined;
   if (!nod) {
     return NextResponse.json({ error: "Campul nu mai exista." }, { status: 404 });
@@ -144,9 +169,16 @@ export async function POST(req: NextRequest) {
 
   try {
     /*
-     * ⚠ `private, no-store`, nu implicitul. Implicitul e `public, max-age=31536000, immutable`, si
-     * e bun pentru o poza de produs. Aici obiectul e al unui strain si nu se serveste niciodata de
-     * pe CDN — antetul e a doua incuietoare, pentru cazul in care cheia ar scapa vreodata.
+     * ⚠ `private, no-store`, nu implicitul (`public, max-age=31536000, immutable`).
+     *
+     * ⚠ SI NU E O A DOUA INCUIETOARE, cum scria aici inainte. `Cache-Control` nu e control de
+     * acces: e o directiva pentru cine PASTREAZA o copie. Depozitul R2 e public-read (vezi
+     * `/api/img/route.ts`: „Depozitul e public oricum”), deci cine afla cheia ia obiectul
+     * CDN indiferent ce antet am pus noi la urcare.
+     *
+     * Singurul lucru care apara fisierul e faptul ca CHEIA NU SE POATE COMPUNE: semnatura HMAC
+     * din `cheiaFisierului`. Antetul face un lucru mai mic, dar adevarat: opreste un intermediar
+     * sau CDN-ul sa tina o copie a fisierului unui strain un an de zile.
      */
     await uploadToR2(octeti, cheie, tipReal, "private, no-store");
   } catch (e) {
@@ -157,7 +189,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Incarcarea a esuat. Incearca din nou." }, { status: 502 });
   }
 
-  const admin = createAdminClient();
   const { error } = await admin.from("configurator_fisiere").insert({
     id,
     business_id: businessId,

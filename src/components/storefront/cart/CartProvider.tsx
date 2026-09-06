@@ -165,14 +165,32 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
    */
   function addItem(item: Omit<CartItem, "quantity">, cantitate = 1) {
     const n = normalizeazaCantitate(cantitate);
+    /*
+     * ⚠ LINIA NOUA SE NORMALIZEAZA INAINTE SA I SE CAUTE CHEIA.
+     *
+     * Aici se lua cheia de pe obiectul BRUT venit din pagina, iar pagina nu trimite `amprenta`
+     * — ea se calculeaza in `normalizeazaCos`, care pana acum rula doar la hidratare si la
+     * evenimentul `storage`. Deci `lineKey` cadea pe forma VECHE a cheii (fara amprenta), si
+     * doua configuratii diferite ale aceluiasi produs primeau ACEEASI cheie.
+     *
+     * Ce se intampla: pui in cos cana cu „Ana” (100 lei), apoi aceeasi cana cu gravura aurita
+     * (160 lei). Cosul arata O SINGURA linie, 2 bucati, 200 lei, cu gravura „Ana” de doua ori.
+     * A doua configuratie e SUPRASCRISA in localStorage si nu se mai poate recupera, iar
+     * atelierul graveaza „Ana” de doua ori. Comerciantul pierde 60 de lei de marfa.
+     *
+     * Normalizarea recalculeaza amprenta din configuratie (si n-o crede niciodata pe cuvant),
+     * deci trecerea prin ea inchide toata clasa, nu doar campul asta.
+     */
+    const [curatat] = normalizeazaCos([{ ...item, quantity: n }]);
+    if (!curatat) return;
     save((prev) => {
-      const key = lineKey(item);
+      const key = lineKey(curatat);
       const exists = prev.find((i) => lineKey(i) === key);
       return exists
         // Se clemeaza SUMA, nu incrementul: altfel o mie de apasari pe „+" duc
         // linia peste plafon, iar serverul refuza acum toata comanda.
         ? prev.map((i) => (lineKey(i) === key ? { ...i, quantity: normalizeazaCantitate(i.quantity + n) } : i))
-        : [...prev, { ...item, quantity: n }];
+        : [...prev, curatat];
     });
   }
 

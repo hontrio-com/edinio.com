@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { randConfiguratie } from "./email/rand-configuratie";
 
 /**
  * Configuratia ajunge la OMUL care are de lucrat dupa ea?
@@ -33,7 +34,7 @@ test("PANOUL arata configuratia pe linia de comanda", () => {
   assert.ok(s.includes("instantaneulLiniei(linie)"), "si n-o mai citeste aparat");
 });
 
-test("TOATE cele trei emailuri cu linii de comanda o poarta", () => {
+test("TOATE cele trei emailuri cu linii de comanda il cheama", () => {
   /*
    * ⚠ Trei constructori de randuri scrisi separat: confirmarea catre client, instiintarea catre
    * comerciant, si al treilea. Unul singur lasat pe dinafara inseamna ca jumatate din oameni afla
@@ -44,17 +45,78 @@ test("TOATE cele trei emailuri cu linii de comanda o poarta", () => {
   assert.equal(cate, 3, `configuratia apare in ${cate} randuri de email, nu in 3`);
 });
 
-test("textul clientului se ESCAPEAZA inainte sa intre in email", () => {
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ SI CA FUNCTIA CHIAR SCRIE CEVA
+   ══════════════════════════════════════════════════════════════════════════
+
+   Proba de deasupra numara aparitiile unui SIR in sursa. Ea a trecut verde luni de zile peste o
+   functie MOARTA: `order.actions.ts` compunea liniile de email cu un `.map` care enumera patru
+   campuri si il pierdea pe `configuratie`, iar `randConfiguratie` primeste `unknown` si intoarce
+   sirul gol pentru orice. Deci cele trei apeluri existau, si toate trei scriau nimic. `tsc` n-avea
+   ce spune, si nici proba.
+
+   De aceea functia s-a mutat in `lib/email/rand-configuratie.ts`: ca sa poata fi CHEMATA de aici,
+   cu o linie adevarata, si sa se vada ce iese.
+*/
+
+const LINIE_CONFIGURATA = {
+  product_id: "p1",
+  name: "Cana personalizata",
+  quantity: 1,
+  price: 89,
+  configuratie: {
+    configuratorId: "c1",
+    versiuneId: "v1",
+    numarVersiune: 3,
+    amprenta: "abc",
+    grame: 400,
+    valori: { grav: { f: "text", v: "Pentru Ana, 2026" } },
+    rezumat: [{ id: "grav", eticheta: "Gravura", valoare: "Pentru Ana, 2026", scurt: true }],
+  },
+};
+
+test("⚠ randul CHIAR scrie gravura, chemat cu o linie adevarata", () => {
+  const h = randConfiguratie(LINIE_CONFIGURATA);
+  assert.ok(h.includes("Pentru Ana, 2026"), `randul a iesit: ${JSON.stringify(h)}`);
+  assert.ok(h.includes("Gravura"), h);
+});
+
+test("o linie FARA configuratie nu adauga nimic", () => {
+  assert.equal(randConfiguratie({ product_id: "p1", name: "Cana", quantity: 1, price: 89 }), "");
+});
+
+test("⚠ textul clientului se ESCAPEAZA, si asta se vede pe iesire", () => {
   /*
    * ⚠ NU e o formalitate. Gravura e un sir ales de un strain, lipit intr-un HTML care ajunge in
-   * casuta comerciantului. `esc` e singurul lucru care sta intre cele doua.
+   * casuta comerciantului. Proba de dinainte cauta `${esc(text)}` in sursa; asta se uita la ce IESE,
+   * deci nu se poate pacali nici mutand functia, nici escapand alta variabila.
    */
-  const s = sursa("lib/email.ts");
-  assert.match(
-    s,
-    /function randConfiguratie[\s\S]{0,600}\$\{esc\(text\)\}/,
-    "randul de configuratie nu mai trece prin `esc`",
-  );
+  const rau = { ...LINIE_CONFIGURATA, configuratie: { ...LINIE_CONFIGURATA.configuratie,
+    rezumat: [{ id: "grav", eticheta: "Gravura", valoare: "<script>alert(1)</script>", scurt: true }] } };
+  const h = randConfiguratie(rau);
+  assert.ok(!h.includes("<script>"), `HTML neescapat in email: ${h}`);
+  assert.ok(h.includes("&lt;script&gt;"), h);
+});
+
+test("nu arunca pe nimic din ce poate sta intr-o comanda veche", () => {
+  // ⚠ Un email care arunca nu se trimite deloc, si comanda ramane nestiuta.
+  for (const rau of [null, undefined, 7, "x", {}, { configuratie: "aiurea" }, { configuratie: {} }]) {
+    assert.doesNotThrow(() => randConfiguratie(rau));
+  }
+});
+
+test("⚠ comanda CHIAR trimite `configuratie` catre emailuri, pe amandoua caile", () => {
+  /*
+   * ⚠ ASTA E LEGATURA CARE A FOST RUPTA, si singura care nu se poate proba chemand ceva:
+   * `randConfiguratie` merge perfect si cu ea rupta. Se cere deci ca `.map`-ul care compune
+   * liniile de email sa duca mai departe campul.
+   *
+   * Se numara amandoua caile: `placeOrder` si `placeCartOrder` isi scriu fiecare propriul `.map`,
+   * si una singura reparata inseamna ca jumatate din comenzi raman fara.
+   */
+  const s = sursa("lib/actions/order.actions.ts");
+  const duc = s.match(/\.\.\.\(i\.configuratie \? \{ configuratie: i\.configuratie \} : \{\}\),/g) ?? [];
+  assert.equal(duc.length, 2, `configuratia pleaca spre emailuri pe ${duc.length} cai, nu pe 2`);
 });
 
 test("PANOUL DE EDITARE refuza sa adauge un produs configurabil", () => {

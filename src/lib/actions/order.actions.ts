@@ -602,6 +602,25 @@ async function pesteRafalaMagazinului(
  * `nerevendicat` (functia din baza inca nu exista) — chemata si dupa o revendicare
  * reusita, ar scadea a doua oara.
  */
+/**
+ * O linie asa cum se scrie in `orders.items` si cum pleaca la emailuri.
+ *
+ * ⚠ `configuratie` E IN TIP, si asta nu e o formalitate. Fara ea, TypeScript deducea forma
+ * array-ului din elementele care N-o au (liniile din cos, extraoptiunile) si o taia tacut din
+ * primul element — apoi `.map` catre emailuri o pierdea fara ca `tsc` sa spuna nimic, fiindca
+ * `randConfiguratie` primeste `unknown`. Toate cele trei randuri de configuratie din emailuri
+ * au fost moarte din ziua in care au fost scrise.
+ */
+interface LinieScrisa {
+  product_id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  variant_title?: string | null;
+  customization?: unknown;
+  configuratie?: unknown;
+}
+
 async function revendicaStocul(
   admin: SupabaseClient<Database>,
   decrements: { product_id: string; quantity: number }[],
@@ -1453,7 +1472,7 @@ export async function placeOrder(data: {
   // la trimitere, iar garda din `reconcile.ts` modeleaza exact acea rotunjire si
   // absoarbe diferenta cu o linie de ajustare.
   const unitPrice = mainSubtotal / cantitate;
-  const allItems = [
+  const allItems: LinieScrisa[] = [
     {
       product_id: data.product_id,
       // Numele din CATALOG, cu marimea coapta de noi. Venea de la client, iar
@@ -1664,7 +1683,10 @@ export async function placeOrder(data: {
         ...(data.dhl_local_product_code ? { dhl_local_product_code: data.dhl_local_product_code } : {}),
       }),
     },
-    items: allItems,
+    // ⚠ `as never` ca la celelalte coloane jsonb: `LinieScrisa` n-are semnatura de index,
+    // deci nu se potriveste structural cu `Json`. Tipul e scris pentru CE PLEACA MAI DEPARTE
+    // (emailuri, legarea fisierelor), nu pentru coloana — coloana primeste oricum jsonb.
+    items: allItems as never,
     subtotal,
     shipping_cost: shipping,
     discount_code: validDiscountId ? data.discount_code : null,
@@ -1818,7 +1840,18 @@ export async function placeOrder(data: {
         // Liniile pleaca CU `product_id`: dupa prefixul `extra_` isi recunoaste
         // emailul extraoptiunile, iar fara ele „Subtotal" din emailul
         // comerciantului nu se aduna cu lista de deasupra lui. Vezi `BaniComanda`.
-        items: allItems.map(i => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price })),
+        /*
+         * ⚠ SI CU `configuratie`. Lipsea, si asta facea MOARTE toate cele trei randuri de
+         * configuratie din emailuri: `randConfiguratie` primeste `unknown`, deci `tsc` n-avea ce
+         * spune, iar functia intorcea sirul gol pentru fiecare linie. Comerciantul primea
+         * „Cana personalizata x1” si atat — iar cu doua cani gravate diferit, doua randuri
+         * identice in ambele emailuri. Marfa pleaca gresit, si emailul e primul loc unde omul
+         * se uita.
+         */
+        items: allItems.map((i) => ({
+          product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price,
+          ...(i.configuratie ? { configuratie: i.configuratie } : {}),
+        })),
         shipping_cost: shipping,
         /*
          * Reducerea si codul sunt ALE SERVERULUI: exact ce s-a scris in `orders`
@@ -4006,7 +4039,7 @@ export async function placeCartOrder(data: {
     return { error: "Nu am putut genera numarul comenzii. Reincearca peste cateva momente." };
   }
 
-  const allItems = [
+  const allItems: LinieScrisa[] = [
     ...validatedItems,
     ...validatedExtras.map((e) => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
   ];
@@ -4181,7 +4214,10 @@ export async function placeCartOrder(data: {
         ...(data.dhl_local_product_code ? { dhl_local_product_code: data.dhl_local_product_code } : {}),
       }),
     },
-    items: allItems,
+    // ⚠ `as never` ca la celelalte coloane jsonb: `LinieScrisa` n-are semnatura de index,
+    // deci nu se potriveste structural cu `Json`. Tipul e scris pentru CE PLEACA MAI DEPARTE
+    // (emailuri, legarea fisierelor), nu pentru coloana — coloana primeste oricum jsonb.
+    items: allItems as never,
     subtotal,
     shipping_cost: shipping,
     discount_code: validDiscountId ? data.discount_code : null,
@@ -4323,7 +4359,18 @@ export async function placeCartOrder(data: {
         // Liniile pleaca CU `product_id`: dupa prefixul `extra_` isi recunoaste
         // emailul extraoptiunile, iar fara ele „Subtotal" din emailul
         // comerciantului nu se aduna cu lista de deasupra lui. Vezi `BaniComanda`.
-        items: allItems.map(i => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price })),
+        /*
+         * ⚠ SI CU `configuratie`. Lipsea, si asta facea MOARTE toate cele trei randuri de
+         * configuratie din emailuri: `randConfiguratie` primeste `unknown`, deci `tsc` n-avea ce
+         * spune, iar functia intorcea sirul gol pentru fiecare linie. Comerciantul primea
+         * „Cana personalizata x1” si atat — iar cu doua cani gravate diferit, doua randuri
+         * identice in ambele emailuri. Marfa pleaca gresit, si emailul e primul loc unde omul
+         * se uita.
+         */
+        items: allItems.map((i) => ({
+          product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price,
+          ...(i.configuratie ? { configuratie: i.configuratie } : {}),
+        })),
         shipping_cost: shipping,
         /*
          * Reducerea si codul sunt ALE SERVERULUI: exact ce s-a scris in `orders`

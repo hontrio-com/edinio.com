@@ -21,6 +21,16 @@ function sursa(relativ: string): string {
   return readFileSync(path.join(SRC, relativ), "utf8").replace(/\r\n/g, "\n");
 }
 
+/**
+ * Sursa fara comentarii.
+ *
+ * ⚠ Fara ea, `includes("category: null")` gaseste chiar NOTA care explica de ce nu mai e asa,
+ * si proba cade pe cod bun. Mi s-a intamplat scriind proba de dedesubt.
+ */
+function faraComentarii(s: string): string {
+  return s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
+
 const INCARCARE = "app/api/configurator/fisier/route.ts";
 const SERVIRE = "app/api/configurator/fisier/[id]/route.ts";
 
@@ -44,7 +54,7 @@ test("⚠ incarcarea cere un CAMP ADEVARAT dintr-o versiune PUBLICATA", () => {
    * produsul cerut: deci nu o ciorna, nu unul oprit, si nu unul al altui magazin.
    */
   const s = sursa(INCARCARE);
-  assert.match(s, /await configuratorulProdusului\(businessId, \{ id: productId/);
+  assert.match(s, /await configuratorulProdusului\(businessId, \{\s+id: productId/);
   assert.match(s, /nodurileDeFisiere\([\s\S]{0,60}\)\.get\(nodId\)/);
   assert.match(s, /if \(!nod\) \{[\s\S]{0,120}status: 404/);
 });
@@ -259,4 +269,39 @@ test("⚠ id-urile citite din comanda se verifica pe forma", () => {
    * dintr-o consola. Fara verificare, continutul comenzii ar fi putut compune calea.
    */
   assert.match(sursa("lib/configurators/instantaneu.ts"), /UUID\.test\(f\)/);
+});
+
+test("⚠ incarcarea citeste CATEGORIA adevarata a produsului", () => {
+  /*
+   * ⚠ AICI STATEA `category: null`, si rupea TACUT jumatate din modelul de aplicare.
+   *
+   * Un configurator legat de o CATEGORIE (`aplicaLaCategorii`) nu lasa niciun rand in
+   * `configurator_produse` — rezolvitorul il gaseste numai prin numele categoriei. Cu `null`,
+   * `rezolvitorul` intoarce „niciunul” din prima linie (`if (!categorie) return`), deci
+   * cumparatorul primea 404 la FIECARE incercare de incarcare — pe un produs care ARATA campul,
+   * fiindca pagina il deseneaza din aceeasi versiune publicata. Comerciantul ar fi cautat
+   * greseala in builder, unde nu era.
+   *
+   * ⚠ Citirea cere SI `business_id`: pe calea prin categorie nu mai exista randul din
+   * `configurator_produse` care sa lege magazinul de produs, deci fara filtrul asta oricine putea
+   * numi orice pereche magazin-produs.
+   */
+  const s = faraComentarii(sursa(INCARCARE));
+  assert.equal(s.includes("category: null"), false, "categoria pleaca inca goala catre rezolvitor");
+  assert.match(s, /\.from\("products"\)[\s\S]{0,200}\.eq\("business_id", businessId\)/);
+  assert.match(s, /category: produs\.category \?\? null/);
+});
+
+test("⚠ antetul de cache NU se mai numeste a doua incuietoare", () => {
+  /*
+   * ⚠ `Cache-Control` nu e control de acces. Depozitul R2 e public-read (`/api/img/route.ts` o
+   * scrie pe fata), deci cine afla cheia ia obiectul de pe CDN indiferent ce antet am pus la
+   * urcare. Singurul lucru care apara fisierul e ca CHEIA NU SE POATE COMPUNE — semnatura HMAC.
+   *
+   * Proba pazeste o NOTA, si asta e dinadins: o nota care promite mai multa aparare decat exista
+   * e mai rea decat lipsa ei, fiindca il opreste pe urmatorul din a se mai uita.
+   */
+  const s = sursa(INCARCARE);
+  assert.equal(s.includes("a doua incuietoare"), false, "nota falsa s-a intors");
+  assert.ok(s.includes("CHEIA NU SE POATE COMPUNE"), "nota nu mai spune unde sta apararea adevarata");
 });

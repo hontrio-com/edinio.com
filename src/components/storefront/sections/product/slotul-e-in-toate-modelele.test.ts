@@ -189,3 +189,65 @@ test("FIECARE ruta care randeaza pagina de produs ii da si configuratorul", () =
     );
   }
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ CALEA „COMANDA ACUM”, care n-avea nicio paza
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Cele doua modele de pagina de produs. `MODELE` (mai sus) e directorul lor. */
+const CELE_DOUA = ["ProductPageClassic.tsx", "ProductPageDetailed.tsx"];
+
+test("⚠ fereastra de comanda primeste pretul CONFIGURAT, nu pe cel din catalog", () => {
+  /*
+   * ⚠ CE COSTA. Din pretul dat ferestrei ies TOATE sumele ei: treapta, subtotalul, pragul de
+   * transport gratuit, comanda minima, reducerea de card, TVA-ul, suma declarata la ramburs si
+   * numarul mare de langa poza. Serverul insa NU citeste `product_price` pe o linie configurata:
+   * calculeaza `unitar * cantitate` din valori.
+   *
+   * Deci cu `displayPrice` acolo, omul configura cana la 149 lei, formularul ii scria 89, si
+   * comanda intra la 149. Curierul cerea 149. Nicio garda nu se aprindea, fiindca
+   * `authoritativeSubtotal` (toleranta 0,50 lei) e ocolit cu totul pe ramura configurata.
+   *
+   * ⚠ Proba de mai jos verifica CALEA COSULUI si trecea verde cat timp asta era rupta: cele
+   * doua drumuri de cumparare au fiecare pretul lui, si numai unul era pazit.
+   */
+  for (const model of CELE_DOUA) {
+    const s = sursa(path.join(MODELE, model));
+    assert.match(
+      s,
+      /price: cfg\.gata \? cfg\.pretUnitar : displayPrice,/,
+      `${model}: fereastra de comanda primeste alt pret decat cel pe care il incaseaza serverul`,
+    );
+  }
+});
+
+test("⚠ treptele de cantitate NU se ofera pe un produs configurat", () => {
+  /*
+   * ⚠ Serverul le sare dinadins (o treapta e un pret scris pentru produsul din catalog; aplicata
+   * peste o configuratie ar fi vandut-o cu toata configurarea pe gratis). Dar pagina le ARATA, iar
+   * fiecare rand din tabel duce in fereastra cu cantitatea lui.
+   *
+   * Pe o cana de 100 lei configurati, „3 bucati — 150 lei” insemna: afisat 150, incasat 300.
+   */
+  for (const model of CELE_DOUA) {
+    const s = sursa(path.join(MODELE, model));
+    assert.match(
+      s,
+      /const quantityTiers: QuantityTier\[\] \| undefined = configurator\s+\? undefined\s+: construiesteTrepte\(/,
+      `${model}: treptele se construiesc si pe produsele configurate`,
+    );
+  }
+});
+
+test("⚠ linia noua se NORMALIZEAZA inainte sa i se caute cheia in cos", () => {
+  /*
+   * ⚠ Pagina nu trimite `amprenta` — ea se calculeaza in `normalizeazaCos`. Cheia luata de pe
+   * obiectul brut cadea deci pe forma VECHE (fara amprenta), si doua configuratii diferite ale
+   * aceluiasi produs primeau ACEEASI cheie: cosul le contopea intr-o linie, a doua configuratie
+   * era suprascrisa in `localStorage` si atelierul grava de doua ori prima gravura.
+   */
+  const s = sursa(path.resolve(process.cwd(), "src/components/storefront/cart/CartProvider.tsx"));
+  assert.match(s, /const \[curatat\] = normalizeazaCos\(\[\{ \.\.\.item, quantity: n \}\]\);/);
+  assert.match(s, /const key = lineKey\(curatat\);/, "cheia se ia inca de pe obiectul brut");
+  assert.match(s, /: \[\.\.\.prev, curatat\];/, "in cos intra tot obiectul brut");
+});

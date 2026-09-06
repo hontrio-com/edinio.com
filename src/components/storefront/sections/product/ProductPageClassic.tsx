@@ -455,7 +455,20 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // de trei ori — aici, in cealalta pagina de produs si in `construiesteTrepte` —
   // desi docstring-ul motorului sustinea deja ca exista un singur loc. Copiile
   // se pot desincroniza tacit de motorul care chiar incaseaza.
-  const quantityTiers: QuantityTier[] | undefined = construiesteTrepte(tierConfig, displayPrice);
+  /*
+   * ⚠ TREPTELE NU SE OFERA PE O LINIE CONFIGURATA, fiindca serverul le sare.
+   *
+   * `order.actions.ts` pretuieste linia configurata din valori si NU trece prin trepte —
+   * dinadins: o treapta e un pret scris pentru produsul din catalog, iar aplicata peste o
+   * configuratie ar fi vandut-o la pretul pachetului simplu, cu toata configurarea pe gratis.
+   *
+   * Dar pagina le ARATA mai departe. „3 bucati — 150 lei” ducea in fereastra de comanda cu
+   * cantitatea 3, subtotal 150, iar serverul cerea 3 x pretul configurat. Pe o cana de 100 lei
+   * configurati: afisat 150, incasat 300.
+   */
+  const quantityTiers: QuantityTier[] | undefined = configurator
+    ? undefined
+    : construiesteTrepte(tierConfig, displayPrice);
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
@@ -1135,7 +1148,24 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         product={{
           id: product.id,
           name: selectedCombo ? `${product.name} (${selectedCombo.title})` : product.name,
-          price: displayPrice,
+          /*
+           * ⚠ PRETUL CONFIGURAT, nu cel din catalog.
+           *
+           * Aici statea `displayPrice`, si din el iesea TOT ce se aduna in fereastra de comanda:
+           * treapta de cantitate, subtotalul, pragul de transport gratuit, comanda minima,
+           * reducerea de card, TVA-ul, suma declarata la ramburs si numarul mare de langa poza.
+           * Serverul insa nu citeste `product_price` pe o linie configurata — el calculeaza
+           * `unitar * cantitate` din valori.
+           *
+           * Deci omul configura cana la 149 lei, apasa „Comanda acum”, si formularul ii scria
+           * 89. Completa adresa, trimitea, si comanda intra la 149. La usa, curierul cerea 149.
+           * Exact clasa „afisat 170, incasat 179,98” pe care auditul de preturi al proiectului a
+           * inchis-o de patruzeci de ori — si nicio garda nu se aprindea, fiindca
+           * `authoritativeSubtotal` (cu toleranta lui de 0,50 lei) e ocolit pe ramura configurata.
+           *
+           * Calea cosului facea deja bine (`addItem` primeste `cfg.pretUnitar`); doar asta nu.
+           */
+          price: cfg.gata ? cfg.pretUnitar : displayPrice,
           compare_at_price: displayComparePrice,
           images: slides,
           variantTitle: selectedComboTitle ?? undefined,

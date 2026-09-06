@@ -10,6 +10,7 @@ import type { BillingCompany } from "@/lib/billing/company";
 // Randurile de bani ale unei comenzi (Subtotal, extraoptiuni, reduceri, TVA) se
 // construiesc INTR-UN SINGUR LOC, pentru amandoua emailurile. Vezi acolo de ce.
 import { randuriDeBani, type BaniComanda } from "@/lib/email/order-totals";
+import { randConfiguratie } from "@/lib/email/rand-configuratie";
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -1800,23 +1801,3 @@ export async function sendBlogSubscribeConfirmation(email: string, adresaConfirm
   });
 }
 
-/**
- * Ce a configurat clientul, sub numele produsului, in orice email care insira linii.
- *
- * ⚠ FARA EL, EMAILUL MINTE PRIN OMISIUNE. Comerciantul primeste „Cana personalizata x1 — 89
- * lei” si atat: nu afla ce gravura, iar cu doua cani gravate diferit vede doua randuri
- * identice. Emailul e adesea singurul lucru pe care il citeste inainte sa se apuce de lucru.
- *
- * ⚠ SE ESCAPEAZA, SI ASTA NU E O FORMALITATE. Textul vine din campul de gravura completat
- * de cumparator — adica un sir ales de un strain, lipit intr-un HTML care ajunge in casuta
- * comerciantului. `esc` e singurul lucru care sta intre cele doua.
- *
- * ⚠ Se citeste APARARE: `orders.items` e jsonb vechi de luni, editabil din panou. Un email
- * care arunca nu se trimite deloc, si comanda ramane nestiuta.
- */
-function randConfiguratie(linie: unknown): string {
-  const cfg = instantaneulLiniei(linie);
-  if (!cfg) return "";
-  const text = cfg.rezumat.map((r) => `${r.eticheta}: ${r.valoare}`).join(" · ");
-  return `<br><span style="font-size:12px;color:#71717a;">${esc(text)}</span>`;
-}

@@ -17,6 +17,8 @@ import {
   parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
   comboEpuizat, comboStock, toateCombinatiileEpuizate, cerePersonalizare, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
+import { CampuriPersonalizare } from "./_shared/CampuriPersonalizare";
+import { usePersonalizare } from "./_shared/usePersonalizare";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
 import { construiesteTrepte } from "@/lib/storefront/quantity-tiers";
@@ -332,6 +334,23 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // clientul platea altceva decat i s-a aratat.
   const basePrice = Number(product.price);
   const displayPrice = comboUnitPrice(selectedCombo, basePrice);
+
+  /*
+   * ⚠ PERSONALIZAREA SE COMPLETEAZA AICI, pe pagina, nu in fereastra de comanda.
+   *
+   * Pana acum campurile traiau EXCLUSIV in `OrderModal`, iar pagina arata doar o pastila
+   * „Personalizabil" — si aia numai in modelul clasic. Clientul afla ce are de completat abia dupa
+   * ce apasa „Comanda", si nu vedea niciodata cum ii creste pretul cu alegerile lui.
+   *
+   * ⚠ `displayPrice` RAMANE pretul de CATALOG si nu se atinge. El pleaca mai departe catre
+   * treptele de cantitate, catre ancora ofertelor si, cel mai important, catre `OrderModal` ca
+   * `product_price` — iar acolo `authoritativeSubtotal` il compara cu preturile legitime din
+   * catalog. Trimis cu suplimentul inclus, comanda ar fi fost REFUZATA la fiecare fototapet.
+   *
+   * Suplimentul calatoreste separat, ca VALORI, si serverul il socoteste el.
+   */
+  const pers = usePersonalizare(product.page_sections, business.id);
+  const pretAfisat = pers.pretDeAfisat(displayPrice);
   const displayComparePrice = comboCompareAtPrice(
     selectedCombo,
     product.compare_at_price ? Number(product.compare_at_price) : null,
@@ -596,7 +615,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           <span className="tracking-tight font-bold text-foreground text-3xl lg:text-4xl">
             {showPriceRange
               ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
-              : formatPrice(displayPrice)}
+              : formatPrice(pretAfisat)}
           </span>
           {hasDiscount && (
             <>
@@ -723,8 +742,13 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           </motion.div>
         )}
 
+        {/* ⚠ Formularul e ACELASI in amandoua modelele: o componenta, nu doua copii. */}
+        {pers.definitie && (
+          <CampuriPersonalizare stare={pers} color={color} titlu="Personalizeaza produsul" />
+        )}
+
         {/* CTA */}
-        <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => { setFbtOffer(undefined); setModalOpen(true); }} />
+        <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => { if (!pers.verifica()) return; setFbtOffer(undefined); setModalOpen(true); }} />
 
         {/* Comanda directa ramane actiunea principala; cosul e pentru cine mai
             vrea sa se uite prin magazin inainte sa cumpere. */}
@@ -1049,14 +1073,14 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
                 <span className="text-lg font-bold text-foreground">
                   {showPriceRange
                     ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
-                    : formatPrice(displayPrice)}
+                    : formatPrice(pretAfisat)}
                 </span>
                 {hasDiscount && (
                   <span className="text-xs text-muted-foreground line-through">{formatPrice(displayComparePrice!)}</span>
                 )}
               </div>
             </div>
-            <button type="button" onClick={() => { setFbtOffer(undefined); setModalOpen(true); }} disabled={isOutOfStock || needsVariant}
+            <button type="button" onClick={() => { if (!pers.verifica()) return; setFbtOffer(undefined); setModalOpen(true); }} disabled={isOutOfStock || needsVariant}
               className="flex items-center gap-2 px-5 py-3 text-sm font-bold text-white rounded-xl flex-shrink-0 disabled:opacity-40 hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
               style={{ backgroundColor: color }}>
               <ShoppingBag size={16} />
@@ -1083,7 +1107,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         freeShippingThreshold={freeShippingThreshold}
         minOrderAmount={minOrderAmount}
         tiers={quantityTiers}
-        customizationFields={pageSections.customization?.enabled ? pageSections.customization.fields : undefined}
+        personalizare={pers}
         cartItems={cartItems}
         onCartConsumed={(liniiComandate) => {
           // Doar liniile care au intrat efectiv in comanda. Stergerea intregului

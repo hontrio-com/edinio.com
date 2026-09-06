@@ -88,6 +88,34 @@ function esteFisierulNostru(adresa: string, businessId: string): boolean {
   return cheie.startsWith(`${PREFIX_INCARCARI}${businessId}/`);
 }
 
+/**
+ * Valorile trimise de browser, aduse la forma pe care o citeste `normalizeazaValorile`.
+ *
+ * ═══ ⚠ FEREASTRA DE DESFASURARE ═══
+ *
+ * Pagina de pana acum trimite `{ [id]: { type, label, value } }` — un obiect per camp, cu eticheta
+ * scrisa de client. Pagina noua trimite valoarea BRUTA: un sir, un numar, `{ latime, inaltime }`.
+ *
+ * Intre desfasurare si ultima pagina veche ramasa deschisa in browserul cuiva trec minute bune.
+ * Fara despachetarea de aici, fiecare dintre acele pagini ar fi primit „Camp obligatoriu" pe un
+ * camp completat — clientul l-ar fi vazut plin pe ecran si refuzat de server, fara nicio explicatie
+ * pe care s-o poata urma.
+ *
+ * ⚠ Se ia DOAR `value`; `type` si `label` din vechiul obiect se arunca. Ele veneau de la client, si
+ * tocmai asta repara poarta.
+ */
+function despacheteaza(brut: unknown): unknown {
+  if (!brut || typeof brut !== "object" || Array.isArray(brut)) return brut;
+  const out: Record<string, unknown> = {};
+  for (const [cheie, v] of Object.entries(brut as Record<string, unknown>)) {
+    out[cheie] =
+      v && typeof v === "object" && !Array.isArray(v) && "value" in (v as Record<string, unknown>)
+        ? (v as Record<string, unknown>).value
+        : v;
+  }
+  return out;
+}
+
 /** Dimensiunile, scrise asa cum le citeste omul: „350 x 250 cm". */
 function caText(v: ValoareCamp, camp: CampPersonalizare): string | string[] {
   switch (v.fel) {
@@ -142,7 +170,7 @@ export function verificaPersonalizarea(
     return { fel: "fara" };
   }
 
-  const curate = normalizeazaValorile(definitie, brut);
+  const curate = normalizeazaValorile(definitie, despacheteaza(brut));
   if (!curate.ok) {
     /*
      * ⚠ Se spune PRIMA constatare, cu eticheta campului. Un „date invalide" sec l-ar fi lasat pe

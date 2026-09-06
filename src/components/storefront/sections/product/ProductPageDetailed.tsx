@@ -16,6 +16,8 @@ import {
   parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
   comboEpuizat, comboStock, toateCombinatiileEpuizate, pozePeValoare, cerePersonalizare, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
+import { CampuriPersonalizare } from "./_shared/CampuriPersonalizare";
+import { usePersonalizare } from "./_shared/usePersonalizare";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
 import { construiesteTrepte } from "@/lib/storefront/quantity-tiers";
@@ -345,6 +347,23 @@ export function ProductPageDetailed({
 
   const basePrice = Number(product.price);
   const displayPrice = comboUnitPrice(selectedCombo, basePrice);
+
+  /*
+   * ⚠ PERSONALIZAREA SE COMPLETEAZA AICI, pe pagina, nu in fereastra de comanda.
+   *
+   * Pana acum campurile traiau EXCLUSIV in `OrderModal`, iar pagina arata doar o pastila
+   * „Personalizabil" — si aia numai in modelul clasic. Clientul afla ce are de completat abia dupa
+   * ce apasa „Comanda", si nu vedea niciodata cum ii creste pretul cu alegerile lui.
+   *
+   * ⚠ `displayPrice` RAMANE pretul de CATALOG si nu se atinge. El pleaca mai departe catre
+   * treptele de cantitate, catre ancora ofertelor si, cel mai important, catre `OrderModal` ca
+   * `product_price` — iar acolo `authoritativeSubtotal` il compara cu preturile legitime din
+   * catalog. Trimis cu suplimentul inclus, comanda ar fi fost REFUZATA la fiecare fototapet.
+   *
+   * Suplimentul calatoreste separat, ca VALORI, si serverul il socoteste el.
+   */
+  const pers = usePersonalizare(product.page_sections, business.id);
+  const pretAfisat = pers.pretDeAfisat(displayPrice);
   const displayComparePrice = comboCompareAtPrice(
     selectedCombo,
     product.compare_at_price ? Number(product.compare_at_price) : null,
@@ -681,7 +700,7 @@ export function ProductPageDetailed({
                 </span>
               ) : (
                 <>
-                  <span className="text-[32px] font-semibold text-foreground tabular-nums leading-none">{formatPrice(displayPrice)}</span>
+                  <span className="text-[32px] font-semibold text-foreground tabular-nums leading-none">{formatPrice(pretAfisat)}</span>
                   {hasDiscount && (
                     <span className="text-lg text-muted-foreground line-through mb-0.5">{formatPrice(displayComparePrice!)}</span>
                   )}
@@ -774,6 +793,11 @@ export function ProductPageDetailed({
               </p>
             )}
 
+            {/* ⚠ Formularul e ACELASI in amandoua modelele: o componenta, nu doua copii. */}
+            {pers.definitie && (
+              <CampuriPersonalizare stare={pers} color={color} titlu="Personalizeaza produsul" />
+            )}
+
             {/* Cantitate + cele doua actiuni */}
             <div className="flex flex-col gap-2.5 pt-1">
               <div className="flex items-stretch gap-2.5">
@@ -795,7 +819,7 @@ export function ProductPageDetailed({
                   comerciant, doar forma difera. */}
               <CTAButton color={NEGRU} isOutOfStock={isOutOfStock} isPreorder={isPreorder}
                 needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect}
-                onClick={() => { setFbtOffer(undefined); setModalOpen(true); }}
+                onClick={() => { if (!pers.verifica()) return; setFbtOffer(undefined); setModalOpen(true); }}
                 clase="w-full h-12 text-sm font-semibold text-white rounded-md hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                 eticheta={
                   <>
@@ -1074,7 +1098,7 @@ export function ProductPageDetailed({
               <p className="text-base font-bold text-foreground">
                 {showPriceRange
                   ? formatPriceRange(priceRange.min, priceRange.max, priceLowestOnly)
-                  : formatPrice(displayPrice)}
+                  : formatPrice(pretAfisat)}
               </p>
             </div>
             {arataButonCos && (
@@ -1086,7 +1110,7 @@ export function ProductPageDetailed({
                 {adaugat ? <Check size={18} /> : <ShoppingCart size={18} />}
               </button>
             )}
-            <button type="button" onClick={() => { setFbtOffer(undefined); setModalOpen(true); }}
+            <button type="button" onClick={() => { if (!pers.verifica()) return; setFbtOffer(undefined); setModalOpen(true); }}
               disabled={isOutOfStock || needsVariant}
               className="shrink-0 px-5 h-12 rounded-md text-sm font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
               style={{ backgroundColor: NEGRU }}>
@@ -1111,7 +1135,7 @@ export function ProductPageDetailed({
             minOrderAmount={minOrderAmount}
             tiers={quantityTiers}
             initialQuantity={cantitate}
-            customizationFields={pageSections.customization?.enabled ? pageSections.customization.fields : undefined}
+            personalizare={pers}
             cartItems={cartItems}
             onCartConsumed={(liniiComandate) => {
               // Doar liniile purtate in comanda ies din cos. Produsul curent nu

@@ -17,6 +17,7 @@ import { EU_COUNTRIES } from "@/lib/eu-countries";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
 import { getAttribution } from "@/lib/storefront/attribution";
+import type { StarePersonalizare } from "@/components/storefront/sections/product/_shared/usePersonalizare";
 import { pretPeTrepte, type QuantityTier } from "@/lib/storefront/quantity-tiers";
 import { lineKey, useCartOptional, type CartItem } from "@/components/storefront/cart/CartProvider";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
@@ -90,7 +91,14 @@ interface Props {
    * exact acest numar de bucati, daca exista.
    */
   initialQuantity?: number;
-  customizationFields?: CustomizationFieldDef[];
+  /**
+   * Personalizarea, colectata DEJA pe pagina de produs.
+   *
+   * ⚠ Fereastra nu mai tine ea starea si nu mai cere aceleasi campuri a doua oara: le arata ca
+   * rezumat si duce valorile mai departe. Pretul afisat aici include suplimentul; `product_price`
+   * ramane pretul de CATALOG, fiindca acolo se uita `authoritativeSubtotal`.
+   */
+  personalizare?: StarePersonalizare;
   /** Items already in the storefront cart, carried into this order. */
   /*
    * ⚠ Chiar forma din cos, nu o copie ingustata.
@@ -139,7 +147,7 @@ function IconInput({ icon: Icon, error, children }: {
   );
 }
 
-export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, initialQuantity, customizationFields, cartItems, onCartConsumed, onCartLineChange, fbtOffer }: Props) {
+export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, initialQuantity, personalizare, cartItems, onCartConsumed, onCartLineChange, fbtOffer }: Props) {
   const color = business.primary_color;
   // Cosul magazinului, cand exista: de acolo vin preturile autoritare ale liniilor
   // purtate. Lipseste in miniatura din catalogul de design-uri, care randeaza
@@ -149,7 +157,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // se vinde exact cum apare pe card (ancora la pret de baza, 1 buc + companion cu
   // discount FBT), fara ca discountul de cantitate sa se cumuleze peste cel de set.
   const hasTiers = !!tiers && tiers.length > 0 && !fbtOffer;
-  const hasCustomization = customizationFields && customizationFields.length > 0;
+  const hasCustomization = !!personalizare?.definitie;
   const [liveCheckoutConfig, setLiveCheckoutConfig] = useState<CheckoutConfig | undefined>(undefined);
   const [newsletterOffer, setNewsletterOffer] = useState(false);
   const [newsletterOptIn, setNewsletterOptIn] = useState(false);
@@ -264,8 +272,8 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   }, [isIntl, faraRamburs]);
 
   // Customization state
-  const [custValues, setCustValues] = useState<Record<string, string | string[]>>({});
-  const [custUploading, setCustUploading] = useState<Record<string, boolean>>({});
+
+
   // Editable copy of the carried-over cart (change quantity / remove inside the form).
   const [cartLines, setCartLines] = useState<CartItem[]>(cartItems ?? []);
 
@@ -282,7 +290,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // acelasi calcul, ca sa nu mai poata spune lucruri diferite (vezi
   // `pretPeTrepte`). Bifa de pe butonul de treapta citeste tot de acolo.
   const treapta = pretPeTrepte(hasTiers ? tiers : undefined, quantity, product.price);
-  const productSubtotal = treapta.subtotal;
+  /*
+   * ⚠ SUPLIMENTUL PERSONALIZARII INTRA IN SUBTOTALUL AFISAT, ca omul sa vada aici acelasi numar
+   * ca pe pagina si ca pe factura. Serverul il socoteste din nou, din valori — vezi
+   * `verificaPersonalizarea`. Ce pleaca de aici nu e niciodata un pret.
+   */
+  const productSubtotal = treapta.subtotal + (personalizare?.supliment ?? 0) * quantity;
   // Cart carried over from the storefront. `subtotal` is the COMBINED goods value
   // (this product + cart) so discount, min-order, free-shipping and total all
   // account for it; `productSubtotal` stays for this product's own lines.
@@ -464,16 +477,6 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     // cu una. Acum linia ramane si primeste pretul de set pe o bucata (`fbtInCos`),
     // exact ca la server.
     setCartLines(cartItems ?? []);
-    setCustValues(() => {
-      const defaults: Record<string, string | string[]> = {};
-      for (const f of customizationFields ?? []) {
-        if (f.type === "color") defaults[f.id] = f.default_color ?? "#000000";
-        else if (f.type === "image") defaults[f.id] = [];
-        else defaults[f.id] = "";
-      }
-      return defaults;
-    });
-    setCustUploading({});
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") inchide.current(); };
     document.addEventListener("keydown", handler);
     document.body.style.overflow = "hidden";
@@ -672,19 +675,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         }
       }
     }
-    // Customization field validation
-    for (const field of customizationFields ?? []) {
-      if (field.required) {
-        const val = custValues[field.id];
-        if (field.type === "image") {
-          if (!val || (Array.isArray(val) && val.length === 0)) e[`cust_${field.id}`] = "Incarca cel putin o imagine";
-        } else if (!val || (typeof val === "string" && !val.trim())) {
-          e[`cust_${field.id}`] = "Camp obligatoriu";
-        }
-      }
-    }
+    /*
+     * ⚠ Personalizarea se verifica prin CARLIG, cu acelasi modul ca serverul.
+     *
+     * Regula scrisa a doua oara aici ar fi divergit de cea de pe server, si divergenta s-ar fi
+     * vazut ca un camp completat pe ecran si refuzat la comanda. Erorile se aprind langa campuri,
+     * pe pagina — acolo unde sunt si campurile.
+     */
+    const persOk = personalizare ? personalizare.verifica() : true;
     setErrors(e);
-    return Object.keys(e).length === 0;
+    return Object.keys(e).length === 0 && persOk;
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -692,15 +692,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (!validate()) return;
     const unitPrice = treapta.unitPrice;
     startTransition(async () => {
-      // Build customization payload
-      const customizationPayload = hasCustomization
-        ? Object.fromEntries(
-            (customizationFields ?? []).map(f => [
-              f.id,
-              { type: f.type, label: f.label, value: custValues[f.id] ?? (f.type === "image" ? [] : "") },
-            ])
-          )
-        : undefined;
+      /*
+       * ⚠ SE TRIMIT VALORILE BRUTE, nu `{ type, label, value }`.
+       *
+       * Etichetele veneau de la client si ajungeau nemodificate in comanda — adica in hartia dupa
+       * care se produce marfa. Acum serverul le pune pe ale lui, din definitia produsului.
+       */
+      const customizationPayload = hasCustomization ? personalizare?.valori : undefined;
 
       const allAdditional = [
         ...cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity, variant_title: i.variantTitle })),
@@ -1034,139 +1032,42 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </div>
               )}
 
-              {/* Customization fields */}
-              {hasCustomization && (
-                <div className="space-y-3 border border-border rounded-xl p-3.5 bg-muted/30">
+              {/*
+                ⚠ REZUMAT, nu al doilea formular.
+
+                Campurile s-au completat pe pagina de produs, unde clientul vede si cum ii creste
+                pretul. Cerute din nou aici, ar fi fost acelasi formular de doua ori — iar cele
+                doua copii ar fi putut spune lucruri diferite.
+              */}
+              {hasCustomization && personalizare && (
+                <div className="space-y-1.5 border border-border rounded-xl p-3.5 bg-muted/30">
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
                     <Palette size={13} />
-                    Personalizeaza produsul
+                    Personalizarea ta
                   </p>
-                  {customizationFields!.map(field => (
-                    <div key={field.id}>
-                      <label className="block text-sm font-semibold text-foreground mb-1">
-                        {field.label || "Camp"} {field.required && <span className="text-red-500">*</span>}
-                      </label>
-
-                      {field.type === "text" && (
-                        <input
-                          value={(custValues[field.id] as string) ?? ""}
-                          onChange={e => setCustValues(v => ({ ...v, [field.id]: e.target.value }))}
-                          placeholder={field.placeholder ?? ""}
-                          maxLength={field.max_length}
-                          className="w-full px-3 py-2.5 text-sm text-foreground bg-surface border border-border rounded-lg focus:outline-none focus:border-foreground/40"
-                        />
-                      )}
-
-                      {field.type === "textarea" && (
-                        <div>
-                          <textarea
-                            value={(custValues[field.id] as string) ?? ""}
-                            onChange={e => setCustValues(v => ({ ...v, [field.id]: e.target.value }))}
-                            placeholder={field.placeholder ?? ""}
-                            maxLength={field.max_length}
-                            rows={3}
-                            className="w-full px-3 py-2.5 text-sm text-foreground bg-surface border border-border rounded-lg focus:outline-none focus:border-foreground/40 resize-none"
-                          />
-                          {field.max_length && (
-                            <p className="text-[11px] text-muted-foreground mt-0.5 text-right">
-                              {((custValues[field.id] as string) ?? "").length}/{field.max_length}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {field.type === "image" && (
-                        <div className="space-y-2">
-                          {/* Uploaded thumbnails */}
-                          {Array.isArray(custValues[field.id]) && (custValues[field.id] as string[]).length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                              {(custValues[field.id] as string[]).map((url, imgIdx) => (
-                                <div key={imgIdx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border bg-surface group">
-                                  <img src={url} alt={`Upload ${imgIdx + 1}`} className="w-full h-full object-cover" />
-                                  <button type="button" onClick={() => {
-                                    const current = (custValues[field.id] as string[]).filter((_, i) => i !== imgIdx);
-                                    setCustValues(v => ({ ...v, [field.id]: current }));
-                                  }} className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <X size={10} />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {/* Upload button */}
-                          {(!Array.isArray(custValues[field.id]) || (custValues[field.id] as string[]).length < (field.max_files ?? 5)) && (
-                            <label className="flex items-center gap-2 px-3 py-2.5 bg-surface border border-dashed border-border rounded-lg cursor-pointer hover:border-foreground/40 transition-colors">
-                              {custUploading[field.id]
-                                ? <Loader2 size={16} className="text-muted-foreground animate-spin" />
-                                : <Upload size={16} className="text-muted-foreground" />}
-                              <span className="text-sm text-muted-foreground">
-                                {custUploading[field.id] ? "Se incarca..." : "Incarca imagine"}
-                              </span>
-                              <input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => {
-                                const files = e.target.files;
-                                if (!files?.length) return;
-                                setCustUploading(u => ({ ...u, [field.id]: true }));
-                                const maxSize = (field.max_file_size_mb ?? 10) * 1024 * 1024;
-                                const maxFiles = field.max_files ?? 5;
-                                const current = (custValues[field.id] as string[]) ?? [];
-                                const remaining = maxFiles - current.length;
-                                const toUpload = Array.from(files).slice(0, remaining);
-                                const urls: string[] = [];
-                                for (const f of toUpload) {
-                                  if (f.size > maxSize) continue;
-                                  const fd = new FormData();
-                                  fd.append("file", f);
-                                  fd.append("business_id", business.id);
-                                  const res = await fetch("/api/upload-customization", { method: "POST", body: fd });
-                                  const data = await res.json() as { url?: string; error?: string };
-                                  if (data.url) urls.push(data.url);
-                                }
-                                setCustValues(v => ({ ...v, [field.id]: [...(v[field.id] as string[] ?? []), ...urls] }));
-                                setCustUploading(u => ({ ...u, [field.id]: false }));
-                                e.target.value = "";
-                              }} />
-                            </label>
-                          )}
-                          <p className="text-[11px] text-muted-foreground">
-                            Max {field.max_files ?? 5} imagini, {field.max_file_size_mb ?? 10}MB/fisier
-                          </p>
-                        </div>
-                      )}
-
-                      {field.type === "select" && (
-                        <select
-                          aria-label={field.label}
-                          value={(custValues[field.id] as string) ?? ""}
-                          onChange={e => setCustValues(v => ({ ...v, [field.id]: e.target.value }))}
-                          className="w-full px-3 py-2.5 text-sm text-foreground bg-surface border border-border rounded-lg focus:outline-none focus:border-foreground/40"
-                        >
-                          <option value="">Selecteaza...</option>
-                          {(field.options ?? []).map(opt => (
-                            <option key={opt} value={opt}>{opt}</option>
-                          ))}
-                        </select>
-                      )}
-
-                      {field.type === "color" && (
-                        <div className="flex items-center gap-3">
-                          <input
-                            type="color"
-                            value={(custValues[field.id] as string) ?? field.default_color ?? "#000000"}
-                            onChange={e => setCustValues(v => ({ ...v, [field.id]: e.target.value }))}
-                            className="w-10 h-10 rounded-lg border border-border cursor-pointer"
-                          />
-                          <span className="text-sm text-muted-foreground font-mono">
-                            {(custValues[field.id] as string) ?? field.default_color ?? "#000000"}
-                          </span>
-                        </div>
-                      )}
-
-                      {field.helper_text && (
-                        <p className="text-[11px] text-muted-foreground mt-0.5">{field.helper_text}</p>
-                      )}
-                      {errors[`cust_${field.id}`] && (
-                        <p className="text-xs text-red-500 mt-0.5">{errors[`cust_${field.id}`]}</p>
-                      )}
+                  {(personalizare.definitie?.fields ?? []).map((camp) => {
+                    const v = personalizare.valori[camp.id];
+                    const scris = Array.isArray(v)
+                      ? `${v.length} ${v.length === 1 ? "fisier" : "fisiere"}`
+                      : camp.type === "comutator"
+                        ? (v === true ? "Da" : "Nu")
+                        : camp.type === "butoane"
+                          ? ((camp.optiuni ?? []).find((o) => o.id === v)?.eticheta ?? "")
+                          : camp.type === "dimensiuni" && v && typeof v === "object"
+                            ? `${(v as Record<string, unknown>).latime} x ${(v as Record<string, unknown>).inaltime} ${camp.unitate ?? "cm"}`
+                            : String(v ?? "");
+                    if (!scris) return null;
+                    return (
+                      <div key={camp.id} className="flex justify-between gap-3 text-sm">
+                        <span className="text-muted-foreground shrink-0">{camp.label}</span>
+                        <span className="text-foreground font-medium text-right break-words">{scris}</span>
+                      </div>
+                    );
+                  })}
+                  {personalizare.detalii.defalcare.map((d, i) => (
+                    <div key={i} className="flex justify-between gap-3 text-xs text-muted-foreground pt-0.5">
+                      <span>{d.detaliu ?? d.eticheta}</span>
+                      <span className="tabular-nums">{formatPrice(d.suma)}</span>
                     </div>
                   ))}
                 </div>

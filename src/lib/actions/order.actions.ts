@@ -777,7 +777,15 @@ export async function placeOrder(data: {
   vat_rate?: number;
   extras?: { id: string; label: string; price: number }[];
   custom_fields?: Record<string, string>;
-  customization?: Record<string, { type: string; label: string; value: string | string[] }>;
+  /**
+   * Ce a ales clientul, cheiat pe id-ul campului. NICIODATA un pret.
+   *
+   * ⚠ `unknown` dinadins: forma se hotaraste de `verificaPersonalizarea`, care citeste definitia
+   * AUTORITARA a produsului. Un tip strict aici ar fi fost o promisiune pe care browserul o poate
+   * incalca oricum — si ar fi refuzat, la tsc, chiar forma VECHE pe care o mai trimit paginile
+   * ramase deschise dupa desfasurare (`{ type, label, value }`), pe care serverul o despacheteaza.
+   */
+  customization?: Record<string, unknown>;
   /** Items carried over from the storefront cart (priced server-side; variant lines
    *  are re-priced from the product's enabled combination, base otherwise). */
   additional_items?: { product_id: string; name: string; quantity: number; variant_title?: string }[];

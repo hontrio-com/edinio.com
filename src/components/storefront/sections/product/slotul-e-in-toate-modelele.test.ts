@@ -114,6 +114,30 @@ test("FIECARE model de pagina de produs randeaza slotul de configurator", () => 
       /configurator\?:\s*ConfiguratorDeVitrina\s*\|\s*null/,
       `modelul „${cheie}” nu primeste deloc configuratorul`,
     );
+    /*
+     * ⚠ SI CARLIGUL COMUN, nu o stare scrisa de mana.
+     *
+     * `useConfigurator` tine intr-un singur loc regula „cand se poate comanda". Un model care si-o
+     * scrie singur ar fi ajuns sa raspunda altfel — de pilda sa lase butonul apasabil cu o gravura
+     * obligatorie necompletata — si nimic n-ar fi cazut.
+     */
+    assert.ok(
+      s.includes("useConfigurator(configurator"),
+      `modelul „${cheie}” nu foloseste carligul comun`,
+    );
+    assert.match(
+      s,
+      /const maiEDeAles = .*\|\| !cfg\.gata;/,
+      `modelul „${cheie}” nu leaga butonul de starea configuratorului`,
+    );
+    assert.ok(
+      s.includes("configuratie: cfg.valori ?? undefined"),
+      `modelul „${cheie}” nu duce configuratia in cos`,
+    );
+    assert.ok(
+      s.includes("price: cfg.pretUnitar"),
+      `modelul „${cheie}” pune in cos alt pret decat cel configurat`,
+    );
   }
 });
 

@@ -19,6 +19,7 @@ import {
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { ConfiguratorDeVitrina } from "@/lib/configurators/vitrina";
 import { ConfiguratorSlot } from "./_shared/ConfiguratorSlot";
+import { useConfigurator } from "./_shared/useConfigurator";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
 import { construiesteTrepte } from "@/lib/storefront/quantity-tiers";
 import { ProductOffers } from "@/components/ministore/ProductOffers";
@@ -356,6 +357,20 @@ export function ProductPageDetailed({
 
   const basePrice = Number(product.price);
   const displayPrice = comboUnitPrice(selectedCombo, basePrice);
+
+  /*
+   * ⚠ Starea configuratorului sta AICI, nu in slot.
+   *
+   * Pagina are nevoie de raspunsul lui in trei locuri deodata: pretul, daca butonul se poate
+   * apasa, si ce se pune in cos la apasare. Tinuta in slot, ar fi trebuit sa iasa inapoi
+   * printr-un `onSchimbare` — adica un efect al copilului care scrie in parinte la fiecare
+   * tasta. Carligul e acelasi in amandoua modelele, deci regula „cand se poate comanda” e
+   * scrisa o singura data.
+   *
+   * ⚠ Se da `displayPrice`, adica pretul VARIANTEI alese, nu cel de baza: la un produs cu
+   * variante, configuratorul socoteste peste ce se vinde cu adevarat.
+   */
+  const cfg = useConfigurator(configurator, displayPrice);
   const displayComparePrice = comboCompareAtPrice(
     selectedCombo,
     product.compare_at_price ? Number(product.compare_at_price) : null,
@@ -404,7 +419,18 @@ export function ProductPageDetailed({
   const isPreorder = !isOutOfStock && stockStatus === "preorder";
   // Nu doar „titlul e complet", ci si „combinatia exista si e activa": altfel
   // linia intra in cos cu pretul de baza, iar serverul o respinge la comanda.
-  const needsVariant = !!variantsData && !selectedCombo;
+  /*
+   * ⚠ „Mai e ceva de ales inainte de a putea comanda?” — si varianta, SI configuratorul.
+   *
+   * Se numea `needsVariant` si insemna numai varianta. Legat doar de varianta, butonul s-ar
+   * fi putut apasa cu o gravura obligatorie necompletata: comanda ar fi plecat in atelier
+   * fara sa se stie ce scrie pe obiect, si abia acolo s-ar fi aflat.
+   *
+   * Numele s-a schimbat odata cu intelesul. Lasat cel vechi peste un inteles nou, urmatorul
+   * care il citeste ar fi crezut ca stie ce face — chiar felul de scapare pe care proiectul
+   * il are scris despre un prop inghitit de `{...props}`.
+   */
+  const maiEDeAles = (!!variantsData && !selectedCombo) || !cfg.gata;
   const combinatieIndisponibila = !!variantsData && !!selectedComboTitle && !selectedCombo;
   /*
    * Cate bucati mai sunt: din varianta aleasa daca ea isi tine socoteala,
@@ -514,7 +540,7 @@ export function ProductPageDetailed({
   }, [slides.length]);
 
   function adaugaInCos() {
-    if (demo || !cos || isOutOfStock || needsVariant) return;
+    if (demo || !cos || isOutOfStock || maiEDeAles) return;
     const imagine = selectedCombo?.image || slides[0] || null;
     cos.addItem({
       productId: product.id,
@@ -523,12 +549,24 @@ export function ProductPageDetailed({
       // linie iese identica cu cea din grila si acelasi produs creste in
       // cantitate in loc sa se dubleze.
       name: product.name,
-      price: displayPrice,
+      /*
+       * ⚠ Pretul si configuratia vin din carlig, nu din pagina.
+       *
+       * `displayPrice` e pretul produsului sau al variantei; pe un produs configurat el nu mai
+       * e pretul liniei. Pus asa, cosul ar fi aratat pretul de baza pentru o cana gravata, iar
+       * la finalizare serverul ar fi cerut altul — exact deosebirea pe care auditul de preturi
+       * al proiectului a inchis-o de patruzeci de ori.
+       *
+       * ⚠ `configuratie` NU e o promisiune de pret: serverul primeste valorile si le
+       * recalculeaza el insusi la plasarea comenzii.
+       */
+      price: cfg.pretUnitar,
       imageUrl: imagine,
       variantTitle: selectedComboTitle ?? undefined,
       variantSku: selectedCombo?.sku || undefined,
+      configuratie: cfg.valori ?? undefined,
     }, cantitate);
-    trackAddToCart({ productId: product.id, name: product.name, price: displayPrice, cantitate });
+    trackAddToCart({ productId: product.id, name: product.name, price: cfg.pretUnitar, cantitate });
     setAdaugat(true);
     setTimeout(() => setAdaugat(false), 1800);
   }
@@ -791,7 +829,7 @@ export function ProductPageDetailed({
               varianta de mai sus. Pus intre cele doua butoane, ar fi despartit o pereche care in
               modelul asta se citeste impreuna.
             */}
-            {configurator && <ConfiguratorSlot configurator={configurator} pretProdus={displayPrice} />}
+            {configurator && <ConfiguratorSlot cfg={cfg} />}
 
             {/* Cantitate + cele doua actiuni */}
             <div className="flex flex-col gap-2.5 pt-1">
@@ -800,7 +838,7 @@ export function ProductPageDetailed({
                   maxim={stocRamas !== null && stocRamas > 0 ? stocRamas : null} />
                 {arataButonCos && (
                   <button type="button" onClick={adaugaInCos}
-                    disabled={isOutOfStock || needsVariant || (!demo && !cos)}
+                    disabled={isOutOfStock || maiEDeAles || (!demo && !cos)}
                     className="flex-1 min-w-0 h-12 px-4 rounded-md font-semibold text-sm text-white flex items-center justify-center gap-2 transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                     style={{ backgroundColor: color }}>
                     {adaugat ? <Check size={17} /> : <ShoppingCart size={17} />}
@@ -813,14 +851,14 @@ export function ProductPageDetailed({
                   directa e neagra. Butonul comun ii da si efectele alese de
                   comerciant, doar forma difera. */}
               <CTAButton color={NEGRU} isOutOfStock={isOutOfStock} isPreorder={isPreorder}
-                needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect}
+                needsVariant={maiEDeAles} hasCardPayment={hasCardPayment} effect={buttonEffect}
                 onClick={() => { setFbtOffer(undefined); setModalOpen(true); }}
                 clase="w-full h-12 text-sm font-semibold text-white rounded-md hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                 eticheta={
                   <>
                     <CreditCard size={18} />
                     {isOutOfStock ? "Stoc epuizat"
-                      : needsVariant ? "Selecteaza optiunile"
+                      : maiEDeAles ? "Selecteaza optiunile"
                       : isPreorder ? "Precomanda acum"
                       : "Comanda acum"}
                   </>
@@ -841,7 +879,7 @@ export function ProductPageDetailed({
                 <ul>
                   {quantityTiers.slice(1).map((treapta) => (
                     <li key={treapta.qty} className="border-b border-border last:border-0">
-                      <button type="button" disabled={isOutOfStock || needsVariant}
+                      <button type="button" disabled={isOutOfStock || maiEDeAles}
                         onClick={() => { setCantitate(treapta.qty); setFbtOffer(undefined); setModalOpen(true); }}
                         className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-muted/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                         <span className="text-sm text-foreground">
@@ -1045,7 +1083,7 @@ export function ProductPageDetailed({
             <div ref={refOferte}>
               <ProductOffers offers={productOffers} basePath={basePath} color={color}
                 anchor={{ name: product.name, price: displayPrice, imageUrl: slides[0] ?? null }}
-                ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null}
+                ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : maiEDeAles ? { motiv: "Selecteaza optiunile" } : null}
                 onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
             </div>
           )}
@@ -1098,7 +1136,7 @@ export function ProductPageDetailed({
             </div>
             {arataButonCos && (
               <button type="button" onClick={adaugaInCos}
-                disabled={isOutOfStock || needsVariant || (!demo && !cos)}
+                disabled={isOutOfStock || maiEDeAles || (!demo && !cos)}
                 aria-label={adaugat ? "Adaugat in cos" : "Adauga in cos"}
                 className="w-12 h-12 shrink-0 rounded-md flex items-center justify-center text-white disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
                 style={{ backgroundColor: color }}>
@@ -1106,7 +1144,7 @@ export function ProductPageDetailed({
               </button>
             )}
             <button type="button" onClick={() => { setFbtOffer(undefined); setModalOpen(true); }}
-              disabled={isOutOfStock || needsVariant}
+              disabled={isOutOfStock || maiEDeAles}
               className="shrink-0 px-5 h-12 rounded-md text-sm font-bold text-white disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-90"
               style={{ backgroundColor: NEGRU }}>
               {isOutOfStock ? "Epuizat" : isPreorder ? "Precomanda" : "Comanda"}

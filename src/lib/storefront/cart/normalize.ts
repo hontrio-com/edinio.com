@@ -1,4 +1,6 @@
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
+import { amprentaConfiguratiei, cheieLinie } from "@/lib/configurators/amprenta";
+import { normalizeazaValori, type Valori } from "@/lib/configurators/valori";
 
 /** O linie de cos, asa cum sta in `localStorage.cart_<slug>`. */
 export interface CartItem {
@@ -11,6 +13,22 @@ export interface CartItem {
   /** Combinatia de varianta aleasa („S / Rosu") — lipseste la produsele simple. */
   variantTitle?: string;
   variantSku?: string;
+  /**
+   * Ce a ales cumparatorul in configurator, deja normalizat.
+   *
+   * ⚠ NU e o promisiune de pret. Serverul primeste chiar valorile astea, le normalizeaza el
+   * insusi si recalculeaza pretul din ele la plasarea comenzii. Aici stau ca sa se poata arata
+   * cosul, si ca sa se stie ce se trimite mai departe.
+   */
+  configuratie?: Valori;
+  /**
+   * Amprenta configuratiei — ce face din doua cani cu gravuri diferite doua linii, nu una.
+   *
+   * ⚠ Se RECALCULEAZA la normalizare, nu se crede pe cuvant. Ce sta in localStorage e text pe
+   * care il poate scrie oricine, iar o amprenta scrisa de mana ar fi contopit doua configuratii
+   * diferite intr-o singura linie — si a doua ar fi disparut inainte ca cineva s-o vada.
+   */
+  amprenta?: string;
 }
 
 /**
@@ -23,8 +41,14 @@ export interface CartItem {
  * `AddToCartButton` — desi de ea atarna si stergerea unei linii, si numararea
  * bucatilor.
  */
-export function lineKey(item: Pick<CartItem, "productId" | "variantTitle">): string {
-  return item.variantTitle ? `${item.productId}::${item.variantTitle}` : item.productId;
+export function lineKey(item: Pick<CartItem, "productId" | "variantTitle" | "amprenta">): string {
+  /*
+   * ⚠ Cand nu exista configuratie, cheia ramane LITERA CU LITERA cea de pana acum.
+   *
+   * Altfel toate cosurile aflate acum in localStorage-ul cumparatorilor s-ar fi desfacut in linii
+   * noi la prima incarcare a paginii. `cheieLinie` chiar asta garanteaza, si are proba.
+   */
+  return cheieLinie(item.productId, item.variantTitle, item.amprenta);
 }
 
 /**
@@ -74,6 +98,25 @@ export function normalizeazaCos(raw: unknown): CartItem[] {
     // Campurile optionale se SCOT cand au alt tip, nu se pun pe `undefined`:
     // identitatea unei linii se face din `variantTitle` (vezi `lineKey`), iar o
     // cheie prezenta cu valoare nedefinita nu e acelasi lucru cu una absenta.
+    /*
+     * ⚠ CONFIGURATIA SE RENORMALIZEAZA, si amprenta se RECALCULEAZA din ea.
+     *
+     * Ce sta in `cart_<slug>` e text pe care il poate scrie oricine. O amprenta primita pe cuvant
+     * ar fi hotarat identitatea liniei: doua configuratii diferite cu aceeasi amprenta scrisa de
+     * mana s-ar fi contopit, iar a doua ar fi disparut inainte ca cineva s-o vada.
+     *
+     * ⚠ Si se SCOT amandoua cand nu ramane nimic dupa normalizare. Configuratia GOALA are si ea
+     * o amprenta, iar pusa pe o linie fara configurator i-ar fi schimbat cheia — adica exact
+     * desfacerea cosurilor vechi de care ne ferim mai sus.
+     */
+    const valori = normalizeazaValori(curata.configuratie);
+    if (Object.keys(valori).length > 0) {
+      curata.configuratie = valori;
+      curata.amprenta = amprentaConfiguratiei(valori);
+    } else {
+      delete curata.configuratie;
+      delete curata.amprenta;
+    }
     if (typeof curata.variantTitle !== "string") delete curata.variantTitle;
     if (typeof curata.variantSku !== "string") delete curata.variantSku;
     if (typeof curata.slug !== "string") delete curata.slug;

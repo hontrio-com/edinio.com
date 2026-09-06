@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ConfiguratorDeVitrina } from "@/lib/configurators/vitrina";
 import type { Nod, NodNumar } from "@/lib/configurators/definitie";
-import { esteAscuns, esteCerut, optiuniDeAles, aplicaRegulile } from "@/lib/configurators/reguli";
-import { calculeazaPretul, pretDeAfisat } from "@/lib/configurators/pret";
-import { normalizeazaValori, type Valori } from "@/lib/configurators/valori";
+import { esteAscuns, esteCerut, optiuniDeAles } from "@/lib/configurators/reguli";
+import { pretDeAfisat } from "@/lib/configurators/pret";
+import type { Verdict } from "@/lib/configurators/raspuns";
+import type { Valori } from "@/lib/configurators/valori";
+import type { StareConfigurator } from "./useConfigurator";
 import {
   afisat, conversia, descrieIntervalul, dinText, eStricat, textulDeAratat,
 } from "@/lib/configurators/camp-numar";
@@ -35,27 +36,13 @@ import { formatPrice } from "@/lib/utils/format";
  * serverului: browserul socoteste ca sa se vada, nu ca sa se incaseze.
  */
 
-export function ConfiguratorSlot({
-  configurator,
-  pretProdus,
-}: {
-  configurator: ConfiguratorDeVitrina;
-  /** Pretul produsului sau al variantei alese, in lei. */
-  pretProdus: number;
-}) {
-  const { definitie, reguli, pretuire } = configurator.compilat;
-  const [brute, setBrute] = useState<Record<string, unknown>>({});
+export function ConfiguratorSlot({ cfg }: { cfg: StareConfigurator }) {
+  const { configurator, verdict, pune } = cfg;
+  if (!configurator || !verdict) return null;
 
-  const valori: Valori = useMemo(() => normalizeazaValori(brute), [brute]);
-  const stare = useMemo(() => aplicaRegulile(definitie, reguli, valori), [definitie, reguli, valori]);
-  const pret = useMemo(
-    () => calculeazaPretul({ definitie, pretuire, stare, pretProdus }),
-    [definitie, pretuire, stare, pretProdus],
-  );
-
-  function pune(id: string, valoare: unknown) {
-    setBrute((x) => (valoare === undefined ? fara(x, id) : { ...x, [id]: valoare }));
-  }
+  const { definitie } = configurator.compilat;
+  const stare = verdict.stare;
+  const valori = stare.valori;
 
   return (
     <section className="space-y-5" aria-label="Configureaza produsul">
@@ -118,35 +105,38 @@ export function ConfiguratorSlot({
         </p>
       ))}
 
-      {stare.opriri.map((text, i) => (
-        <p key={`${text}-${i}`} role="alert" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {text}
-        </p>
-      ))}
+      {/*
+        ⚠ MOTIVELE se arata TOATE, nu doar primul.
+        Aratat unul singur, cumparatorul repara, apasa, si primeste al doilea — de trei ori la
+        rand, fara sa afle vreodata cate mai sunt. Opririle scrise de comerciant vin tot de aici.
+      */}
+      {!verdict.ok && verdict.motive.length > 0 && (
+        <ul className="space-y-1" role="alert">
+          {verdict.motive.map((m, i) => (
+            <li key={`${m.text}-${i}`} className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {m.text}
+            </li>
+          ))}
+        </ul>
+      )}
 
-      <Pret rezultat={pret} />
+      <Pret verdict={verdict} />
     </section>
   );
-}
-
-function fara(o: Record<string, unknown>, id: string): Record<string, unknown> {
-  const copie = { ...o };
-  delete copie[id];
-  return copie;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    PRETUL
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function Pret({ rezultat }: { rezultat: ReturnType<typeof calculeazaPretul> }) {
+function Pret({ verdict }: { verdict: Verdict }) {
   /*
    * ⚠ CAND PRETUL NU SE POATE CALCULA, NU SE ARATA UN NUMAR.
    *
    * `round2` preface orice gunoi in zero, iar „0,00 lei" pe un fototapet arata ca o oferta. Se
    * spune pe fata ca inca nu se poate socoti, si abia dupa ce omul completeaza apare un pret.
    */
-  if (!rezultat.ok) {
+  if (!verdict.ok) {
     return (
       <p className="rounded-lg bg-muted px-3 py-2.5 text-sm text-muted-foreground" role="status">
         Completeaza optiunile ca sa vezi pretul.
@@ -162,7 +152,7 @@ function Pret({ rezultat }: { rezultat: ReturnType<typeof calculeazaPretul> }) {
           e SINGURUL loc din proiect care stie in ce se exprima — asa ramane un singur loc de
           schimbat daca magazinele vor vinde vreodata in alta moneda.
         */}
-        {formatPrice(pretDeAfisat(rezultat.d))}
+        {formatPrice(pretDeAfisat(verdict.descompunere))}
       </p>
     </div>
   );

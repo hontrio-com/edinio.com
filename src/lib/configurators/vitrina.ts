@@ -7,7 +7,7 @@ import {
 } from "./rezolvare";
 
 /**
- * Ce primeste pagina de produs.
+ * Ce primeste vitrina.
  *
  * ═══ ⚠ CU CHEIA DE SERVICIU, SI DE CE E CORECT AICI ═══
  *
@@ -24,9 +24,12 @@ import {
  *
  * ═══ ⚠ CE SE INTAMPLA CAND CEVA NU E IN REGULA ═══
  *
- * Se intoarce `null`, si produsul se vinde ca inainte — fara configurator. Niciodata o eroare
- * care sa doboare pagina, si niciodata o forma pe jumatate inteleasa. Un produs care se vinde
- * simplu e o paguba mica; o pagina de produs cazuta e una mare.
+ * Se intoarce `null` (sau o harta goala), si produsul se vinde ca inainte — fara configurator.
+ * Niciodata o eroare care sa doboare pagina, si niciodata o forma pe jumatate inteleasa. Un produs
+ * care se vinde simplu e o paguba mica; o pagina de produs cazuta e una mare.
+ *
+ * ⚠ Iar la PLASAREA COMENZII asta nu mai e adevarat: acolo o linie despre care nu stim sigur ce
+ * costa se REFUZA, nu se vinde la pretul de baza. Vezi `repretuire.ts`.
  */
 
 export interface ConfiguratorDeVitrina {
@@ -36,24 +39,33 @@ export interface ConfiguratorDeVitrina {
   compilat: Compilat;
 }
 
+/** Cat cere PostgREST intr-un `.in()`. Filtrul pleaca in ADRESA: peste ~700 cade cererea. */
+const MAXIM_PE_LOT = 200;
+
 /**
- * Configuratorul unui singur produs, gata de randat.
+ * Configuratoarele mai multor produse deodata.
  *
- * ═══ ⚠ O SINGURA CITIRE PENTRU MAGAZINELE CARE N-AU CONFIGURATOARE ═══
+ * ═══ ⚠ IN MASA, NU PE RAND ═══
  *
- * Functia asta se cheama pe FIECARE pagina de produs din platforma, iar aproape niciun magazin
- * n-are vreun configurator. Deci prima intrebare e cea mai ieftina cu putinta — „are magazinul
- * asta vreun configurator ACTIV?" — si raspunsul „nu" opreste totul acolo, dupa o citire pe
- * index. Restul citirilor se fac doar pentru magazinele care chiar folosesc functia.
+ * Un cos are pana la cateva zeci de linii, iar comanda le repretuieste pe toate. Intrebate pe
+ * rand, fiecare ar fi costat patru citiri — la douazeci de linii, optzeci de dus-intorsuri intr-o
+ * singura plasare de comanda. Aici legaturile, arborele si versiunile se citesc O DATA.
  *
- * ⚠ Si tot de aici vine LISTA celor active, care se foloseste ca filtru mai jos. Fara ea, un
- * configurator OPRIT ramanea in socoteala si putea tine produsul intr-un conflict pe care
- * comerciantul tocmai il rezolvase oprindu-l.
+ * ═══ ⚠ SI PRIMA INTREBARE E CEA MAI IEFTINA ═══
+ *
+ * „Are magazinul asta vreun configurator ACTIV?" Aproape niciunul n-are, iar raspunsul „nu"
+ * opreste totul dupa o citire pe index. Tot de acolo vine si lista celor active, care se
+ * foloseste ca filtru: fara ea, un configurator OPRIT ramanea in socoteala si putea tine produsul
+ * intr-un conflict pe care comerciantul tocmai il rezolvase oprindu-l.
  */
-export async function configuratorulProdusului(
+export async function configuratoarePentruProduse(
   businessId: string,
-  produs: { id: string; category: string | null },
-): Promise<ConfiguratorDeVitrina | null> {
+  produse: { id: string; category: string | null }[],
+): Promise<Map<string, ConfiguratorDeVitrina>> {
+  const gol = new Map<string, ConfiguratorDeVitrina>();
+  const idProduse = [...new Set((produse ?? []).map((p) => p.id).filter(Boolean))];
+  if (!businessId || idProduse.length === 0) return gol;
+
   try {
     const admin = createAdminClient();
 
@@ -68,42 +80,54 @@ export async function configuratorulProdusului(
         action: "configurator.vitrina.active", message: active.error.message,
         businessId, severity: "error",
       });
-      return null;
+      return gol;
     }
     // Cazul obisnuit al platformei: magazinul n-are niciun configurator, si se opreste aici.
-    if (!active.data || active.data.length === 0) return null;
+    if (!active.data || active.data.length === 0) return gol;
     const idActive = new Set(active.data.map((c) => c.id));
 
-    const [legaturi, categorii] = await Promise.all([
-      admin.from("configurator_produse")
+    /* ── Legaturile ──────────────────────────────────────────────────────── */
+
+    const legaturi: LegaturaProdus[] = [];
+    for (let i = 0; i < idProduse.length; i += MAXIM_PE_LOT) {
+      const { data, error } = await admin
+        .from("configurator_produse")
         .select("configurator_id, product_id, fel")
         .eq("business_id", businessId)
-        .eq("product_id", produs.id),
-      admin.from("configurator_categorii")
-        .select("configurator_id, categorie")
-        .eq("business_id", businessId),
-    ]);
+        .in("product_id", idProduse.slice(i, i + MAXIM_PE_LOT));
+      /*
+       * ⚠ O eroare de citire NU inseamna „n-are configurator".
+       *
+       * PostgREST nu arunca la refuz: intoarce `{ data: null, error }`. Tratate la fel, o pana de
+       * o clipa ar fi scos configuratorul de pe produs si l-ar fi vandut la pretul de baza — adica
+       * exact paguba pe care intreaga faza incearca s-o evite. Se jurnalizeaza, si se intoarce
+       * gol: produsul se vinde simplu, dar STIM ca s-a intamplat.
+       */
+      if (error) {
+        logError({
+          action: "configurator.vitrina.citire", message: error.message,
+          businessId, severity: "error",
+        });
+        return gol;
+      }
+      legaturi.push(...((data ?? []) as LegaturaProdus[]));
+    }
 
-    /*
-     * ⚠ O eroare de citire NU inseamna „n-are configurator".
-     *
-     * PostgREST nu arunca la refuz: intoarce `{ data: null, error }`. Tratate la fel, o pana de o
-     * clipa ar fi scos configuratorul de pe produs si l-ar fi vandut la pretul de baza — adica
-     * exact paguba pe care intreaga faza incearca s-o evite. Se jurnalizeaza, si se intoarce
-     * `null` pe fata: produsul se vinde simplu, dar STIM ca s-a intamplat.
-     */
-    if (legaturi.error || categorii.error) {
+    const { data: aleCategoriei, error: eCat } = await admin
+      .from("configurator_categorii")
+      .select("configurator_id, categorie")
+      .eq("business_id", businessId);
+    if (eCat) {
       logError({
-        action: "configurator.vitrina.citire",
-        message: legaturi.error?.message ?? categorii.error?.message ?? "necunoscuta",
+        action: "configurator.vitrina.citire", message: eCat.message,
         businessId, severity: "error",
       });
-      return null;
+      return gol;
     }
 
     // ⚠ Filtrul de activitate se pune INAINTE de rezolvare. Dupa, conflictul era deja pronuntat.
-    const aleCategoriilor = doarActive((categorii.data ?? []) as LegaturaCategorie[], idActive);
-    const aleProdusului = doarActive((legaturi.data ?? []) as LegaturaProdus[], idActive);
+    const aleCategoriilor = doarActive((aleCategoriei ?? []) as LegaturaCategorie[], idActive);
+    const aleProduselor = doarActive(legaturi, idActive);
 
     // Arborele se cere DOAR daca exista macar o legatura de categorie. Cele mai multe magazine
     // n-au niciuna, si atunci citirea lui ar fi fost pretul platit degeaba pe fiecare pagina.
@@ -114,68 +138,86 @@ export async function configuratorulProdusului(
       arbore = (data ?? []) as RandCategorie[];
     }
 
-    const rezolvare = rezolvitorul(aleProdusului, aleCategoriilor, arbore)(produs);
-    const configuratorId = configuratorulAplicat(rezolvare);
+    /* ── Rezolvarea ──────────────────────────────────────────────────────── */
 
-    if (rezolvare.fel === "conflict") {
+    const rezolva = rezolvitorul(aleProduselor, aleCategoriilor, arbore);
+    const alProdusului = new Map<string, string>();
+    for (const p of produse) {
+      const r = rezolva(p);
+      if (r.fel === "conflict") {
+        /*
+         * ⚠ Conflictul se JURNALIZEAZA, nu se rezolva pe tacute. Produsul se vinde simplu, iar
+         * comerciantul are de unde afla — altfel ar fi ramas cu un produs care „nu mai are
+         * configurator" fara niciun motiv vizibil.
+         */
+        logError({
+          action: "configurator.vitrina.conflict",
+          message: `Produsul are ${r.configuratoare.length} configuratoare mostenite`,
+          businessId, severity: "warning",
+          details: { productId: p.id, configuratoare: r.configuratoare },
+        });
+        continue;
+      }
+      const id = configuratorulAplicat(r);
+      if (id) alProdusului.set(p.id, id);
+    }
+    if (alProdusului.size === 0) return gol;
+
+    /* ── Versiunile ──────────────────────────────────────────────────────── */
+
+    const idCerute = [...new Set(alProdusului.values())];
+    const versiuni = new Map<string, ConfiguratorDeVitrina>();
+    for (let i = 0; i < idCerute.length; i += MAXIM_PE_LOT) {
       /*
-       * ⚠ Conflictul se JURNALIZEAZA, nu se rezolva pe tacute. Produsul se vinde simplu, iar
-       * comerciantul are de unde afla — altfel ar fi ramas cu un produs care „nu mai are
-       * configurator" fara niciun motiv vizibil.
+       * ⚠ Starea se cere si aici, desi lista de sus era deja filtrata: intre cele doua citiri
+       * incape o oprire facuta chiar atunci din panou. Costa un filtru si inchide fereastra.
        */
-      logError({
-        action: "configurator.vitrina.conflict",
-        message: `Produsul are ${rezolvare.configuratoare.length} configuratoare mostenite`,
-        businessId, severity: "warning",
-        details: { productId: produs.id, configuratoare: rezolvare.configuratoare },
-      });
-      return null;
-    }
-    if (!configuratorId) return null;
+      const { data, error } = await admin
+        .from("configuratoare")
+        .select("id, stare, versiune_activa_id, configurator_versiuni!configuratoare_versiune_activa_fkey(id, numar, compilat)")
+        .eq("business_id", businessId)
+        .eq("stare", "activ")
+        .in("id", idCerute.slice(i, i + MAXIM_PE_LOT));
 
-    /*
-     * ⚠ Se cere versiunea ACTIVA, intr-o singura citire legata.
-     *
-     * Starea se verifica si aici, desi lista de mai sus era deja filtrata: intre cele doua citiri
-     * incape o oprire facuta chiar atunci din panou. Costa o comparatie si inchide fereastra.
-     */
-    const { data: cfg, error } = await admin
-      .from("configuratoare")
-      .select("id, stare, versiune_activa_id, configurator_versiuni!configuratoare_versiune_activa_fkey(id, numar, compilat)")
-      .eq("id", configuratorId)
-      .eq("business_id", businessId)
-      .maybeSingle();
+      if (error) {
+        logError({
+          action: "configurator.vitrina.versiune", message: error.message,
+          businessId, severity: "error",
+        });
+        return gol;
+      }
 
-    if (error) {
-      logError({
-        action: "configurator.vitrina.versiune", message: error.message,
-        businessId, severity: "error", details: { configuratorId },
-      });
-      return null;
-    }
-    if (!cfg || cfg.stare !== "activ" || !cfg.versiune_activa_id) return null;
-
-    const versiune = unaSingura(cfg.configurator_versiuni);
-    if (!versiune) return null;
-
-    const compilat = citesteCompilat(versiune.compilat);
-    /*
-     * ⚠ O forma compilata pe care n-o intelegem NU se serveste pe jumatate. Se poate intampla
-     * doar la o desfasurare inapoi — cod vechi peste o versiune scrisa de unul nou. Produsul se
-     * vinde simplu, si se vede in jurnal.
-     */
-    if (!compilat) {
-      logError({
-        action: "configurator.vitrina.compilatNecunoscut",
-        message: "Versiunea publicata are o forma pe care codul de acum n-o intelege",
-        businessId, severity: "error", details: { configuratorId, versiuneId: versiune.id },
-      });
-      return null;
+      for (const cfg of data ?? []) {
+        if (!cfg.versiune_activa_id) continue;
+        const versiune = unaSingura(cfg.configurator_versiuni);
+        if (!versiune) continue;
+        const compilat = citesteCompilat(versiune.compilat);
+        /*
+         * ⚠ O forma compilata pe care n-o intelegem NU se serveste pe jumatate. Se poate intampla
+         * doar la o desfasurare inapoi — cod vechi peste o versiune scrisa de unul nou. Produsul
+         * se vinde simplu, si se vede in jurnal.
+         */
+        if (!compilat) {
+          logError({
+            action: "configurator.vitrina.compilatNecunoscut",
+            message: "Versiunea publicata are o forma pe care codul de acum n-o intelege",
+            businessId, severity: "error",
+            details: { configuratorId: cfg.id, versiuneId: versiune.id },
+          });
+          continue;
+        }
+        versiuni.set(cfg.id, {
+          configuratorId: cfg.id, versiuneId: versiune.id, numarVersiune: versiune.numar, compilat,
+        });
+      }
     }
 
-    return {
-      configuratorId, versiuneId: versiune.id, numarVersiune: versiune.numar, compilat,
-    };
+    const out = new Map<string, ConfiguratorDeVitrina>();
+    for (const [productId, configuratorId] of alProdusului) {
+      const v = versiuni.get(configuratorId);
+      if (v) out.set(productId, v);
+    }
+    return out;
   } catch (e) {
     /*
      * ⚠ Nimic din configurator nu are voie sa doboare pagina de produs. Un produs vandut simplu
@@ -185,8 +227,23 @@ export async function configuratorulProdusului(
       action: "configurator.vitrina", message: e instanceof Error ? e.message : String(e),
       businessId, severity: "error",
     });
-    return null;
+    return gol;
   }
+}
+
+/**
+ * Configuratorul unui singur produs, gata de randat.
+ *
+ * ⚠ Acelasi drum ca cel in masa, nu o a doua citire scrisa separat: doua drumuri ar fi ajuns sa
+ * raspunda altfel, iar pagina de produs si comanda ar fi vazut configuratoare diferite pentru
+ * acelasi produs.
+ */
+export async function configuratorulProdusului(
+  businessId: string,
+  produs: { id: string; category: string | null },
+): Promise<ConfiguratorDeVitrina | null> {
+  const harta = await configuratoarePentruProduse(businessId, [produs]);
+  return harta.get(produs.id) ?? null;
 }
 
 /** Legatura pe cheie straina vine ca obiect sau ca vector de unul, dupa cum o vede PostgREST. */
@@ -199,12 +256,10 @@ function unaSingura(v: unknown): { id: string; numar: number; compilat: unknown 
 /*
  * ⚠ CARDURILE DE PRODUS AU NEVOIE DE ALT DRUM.
  *
- * O grila are sute de produse; intrebate pe rand, fiecare card ar costa patru citiri. Si oricum
- * n-ar ajuta: `slimPageSections` taie `page_sections` pentru carduri, iar proiectia
- * `catalog_produs` nu stie nimic despre configuratoare.
+ * O grila are sute de produse. Chiar si cu citirea in masa de mai sus, cardul n-ar avea ce face
+ * cu forma compilata intreaga: `slimPageSections` taie `page_sections` pentru carduri, iar
+ * proiectia `catalog_produs` nu stie nimic despre configuratoare.
  *
  * Cardul are nevoie de foarte putin — daca produsul CERE configurare, si de la ce pret porneste.
- * Amandoua se pun in proiectia de catalog, cu backfill prin `catalog_murdar`. E lucrarea urmatoare
- * din F2, si se face acolo, nu aici: `rezolvitorul` de mai sus e deja pregatit sa raspunda ieftin
- * pentru multe produse deodata.
+ * Amandoua se pun in proiectia de catalog, cu backfill prin `catalog_murdar`.
  */

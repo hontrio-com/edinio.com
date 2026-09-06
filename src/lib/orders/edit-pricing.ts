@@ -211,10 +211,16 @@ export function cheieLinie(productId: string, variantTitle?: string | null): str
  * Cheile pe care le stie o linie obisnuita de marfa.
  *
  * `placeOrder` mai poate pune si `customization` (personalizarea ceruta de
- * client), iar comenzile de marketplace pun `sku` sau `barcode`. Toate spun ceva
- * despre ACELE bucati, nu despre produs, deci o linie care le poarta nu se
- * contopeste: cele doua bucati adaugate de comerciant ar fi mostenit tacit
- * gravura comandata de client.
+ * client) sau `configuratie` (instantaneul configuratorului), iar comenzile de
+ * marketplace pun `sku` sau `barcode`. Toate spun ceva despre ACELE bucati, nu
+ * despre produs, deci o linie care le poarta nu se contopeste: cele doua bucati
+ * adaugate de comerciant ar fi mostenit tacit gravura comandata de client.
+ *
+ * ⚠ Si nu se REPRETUIESTE. Pretul unei configuratii poate fi din intamplare chiar
+ * pretul din catalog — o configuratie care nu adauga nimic — iar atunci linia ar fi
+ * parut „autoritara” si ar fi trecut prin treptele de cantitate, pe care calea de
+ * vanzare le sare dinadins. Lista alba de mai jos e singurul lucru care apara asta;
+ * probele o tin pe loc.
  */
 const CHEI_DE_LINIE_SIMPLA = new Set(["product_id", "name", "price", "quantity"]);
 

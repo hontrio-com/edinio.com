@@ -920,3 +920,64 @@ test("editarea: trecerea pragului scoate si TVA-ul transportului", () => {
   assert.equal(peste.shipping, 0);
   assert.equal(peste.vatAmount, 210, "1000 x 21%, fara transport");
 });
+
+/* -- Liniile CONFIGURATE, la editarea din panou ---------------------------- */
+
+/**
+ * O linie configurata poarta cheia `configuratie` — instantaneul a ce a cerut clientul.
+ *
+ * ⚠ Purtarea corecta iese din lista alba `CHEI_DE_LINIE_SIMPLA`, nu dintr-o regula scrisa anume
+ * pentru configuratoare. Probele astea o TIN pe loc: cine adauga vreodata `configuratie` in lista
+ * alba face, dintr-o singura linie, trei pagube deodata — linia se contopeste cu una simpla, se
+ * repretuieste la pretul din catalog, si trece prin treptele de cantitate.
+ */
+const CONFIGURATA = {
+  configuratorId: "c1", versiuneId: "v1", numarVersiune: 1, amprenta: "abc",
+  valori: { g: { f: "text", v: "Robert" } },
+  rezumat: [{ id: "g", eticheta: "Gravura", valoare: "Robert", scurt: true }],
+};
+
+test("o linie CONFIGURATA nu e o linie simpla: nu creste si nu se repretuieste", () => {
+  /*
+   * Pretul ei e 100 — chiar pretul din catalog — deci fara paza ar fi parut „pret autoritar" si
+   * s-ar fi repretuit prin trepte. Configuratia spune insa ceva despre ACELE bucati.
+   */
+  const prev = [linie({ price: 100 }), { ...linie({ price: 100 }), configuratie: CONFIGURATA }];
+  const caps = capacitatiLinii(prev, catalogCu([["p1", simplu()]]));
+
+  assert.equal(caps[0].poateCreste, true, "linia simpla creste ca pana acum");
+  assert.equal(caps[1].poateCreste, false, "cea configurata nu");
+  assert.ok(caps[1].motivCrestere, "si i se spune comerciantului de ce");
+  assert.equal(caps[1].repretuire, false, "si mai ales NU se repretuieste din catalog");
+});
+
+test("scaderea unei linii configurate ii pastreaza pretul configurat", () => {
+  // ⚠ Repretuita, o cana gravata de 180 lei ar fi cazut la 100 — pretul canii simple.
+  const prev = [{ ...linie({ price: 180, quantity: 3 }), configuratie: CONFIGURATA }];
+  const r = editare(prev, [{ index: 0, quantity: 2 }]);
+  const dupa = r.items[0] as { price: number; quantity: number };
+  assert.equal(dupa.price, 180);
+  assert.equal(dupa.quantity, 2);
+});
+
+test("INSTANTANEUL supravietuieste schimbarii de cantitate", () => {
+  /*
+   * ⚠ Pierdut aici, comanda ar fi ramas cu pretul configuratiei si fara specificatie: atelierul
+   * ar fi vazut o cana simpla la pretul uneia gravate, si nimeni n-ar fi stiut ce sa graveze.
+   */
+  const prev = [{ ...linie({ price: 180, quantity: 3 }), configuratie: CONFIGURATA }];
+  const r = editare(prev, [{ index: 0, quantity: 1 }]);
+  assert.deepEqual((r.items[0] as { configuratie: unknown }).configuratie, CONFIGURATA);
+});
+
+test("o linie configurata NU se contopeste cu una adaugata din panou", () => {
+  /*
+   * ⚠ Contopita, bucata adaugata de comerciant ar fi mostenit tacit gravura comandata de client —
+   * si ar fi plecat in atelier cu textul altcuiva pe ea.
+   */
+  const prev = [{ ...linie({ price: 180 }), configuratie: CONFIGURATA }];
+  assert.equal(poateContopi(prev, "p1", simplu()), false);
+
+  const r = plan(prev, [{ product_id: "p1", quantity: 1 }], catalogCu([["p1", simplu()]]));
+  assert.equal(r.items.length, 2, "raman doua linii: una gravata, una simpla");
+});

@@ -46,7 +46,40 @@ import { logError } from "@/lib/error-logger";
 /** Cat citim din cerere inainte sa ne oprim. Peste plafon nu mai are rost sa se descarce. */
 const MAX_CORP = MAX_OCTETI + 4096;
 
+/**
+ * Cererea vine de pe o pagina a NOASTRA?
+ *
+ * ⚠ UN `POST multipart/form-data` E O CERERE „SIMPLA” PENTRU CORS, deci browserul o TRIMITE —
+ * politica de origine ascunde doar raspunsul. Iar `businessId`, `productId` si `nodId` se citesc
+ * din sursa paginii de produs a victimei, care e publica.
+ *
+ * Deci un site cu trafic putea pune un `fetch` ascuns si face fiecare vizitator al lui sa urce
+ * un fisier in magazinul altcuiva. Asta ocolea si pragul pe IP, fiindca IP-urile sunt ale
+ * vizitatorilor — fara botnet, fara nimic de platit.
+ *
+ * `Sec-Fetch-Site` e pus de BROWSER si nu poate fi scris din JavaScript (e un antet interzis).
+ * `same-origin` si `same-site` sunt ale noastre; `none` inseamna o navigare scrisa de mana in
+ * bara de adrese, care nu poate purta un formular multipart catre ruta asta.
+ *
+ * ⚠ CAND ANTETUL LIPSESTE, SE PRIMESTE. Browserele vechi nu-l trimit, iar un refuz ar fi
+ * insemnat ca incarcarea nu merge pe ele si nimeni n-ar fi aflat de ce. Apararea adevarata
+ * impotriva abuzului ramane pragul si plafonul de marime; asta taie doar drumul ieftin.
+ */
+function deLaNoi(req: NextRequest): boolean {
+  const loc = req.headers.get("sec-fetch-site");
+  if (!loc) return true;
+  return loc === "same-origin" || loc === "same-site" || loc === "none";
+}
+
 export async function POST(req: NextRequest) {
+  /*
+   * ⚠ Se raspunde 403 INAINTE de orice altceva, inclusiv inainte de praguri: o cerere de pe alt
+   * sit nu trebuie nici macar sa consume din galeata IP-ului vizitatorului nevinovat.
+   */
+  if (!deLaNoi(req)) {
+    return NextResponse.json({ error: "Cerere venita din alta parte." }, { status: 403 });
+  }
+
   const ip = clientIpFromHeaders(req.headers);
 
   /*

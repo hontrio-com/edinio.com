@@ -314,8 +314,28 @@ export function nodDupaId(d: Definitie, id: string): Nod | undefined {
   return toateNodurile(d).find((n) => n.id === id);
 }
 
+/**
+ * ⚠ Harta se TINE MINTE pe definitie, si asta nu e o optimizare de dragul ei.
+ *
+ * `esteAscuns` o cere la fiecare apel, iar el se cheama de cateva ori pe fiecare nod, la
+ * fiecare trecere a motorului de reguli, si inca o data pe fiecare camp la randare. Numarat pe
+ * un configurator obisnuit (20 de noduri, 30 de reguli): ~95 de reconstructii pe FIECARE TASTA
+ * apasata, adica ~1.900 de inserari intr-un `Map`. Costul creste PATRATIC cu numarul de noduri:
+ * la plafonul platformei (300) ar fi 450.000 de inserari pe tasta, si campul de gravura ar
+ * incepe sa se blocheze sub degete.
+ *
+ * `WeakMap` fiindca definitia e un obiect care traieste cat pagina: cand ea pleaca, pleaca si
+ * harta, fara sa tina nimic in viata. Iar cheia e IDENTITATEA obiectului — o definitie noua
+ * (alta versiune publicata, alta ciorna) e alt obiect, deci primeste alta harta. Definitiile
+ * nu se modifica pe loc nicaieri: fiecare editare din panou creeaza un obiect nou.
+ */
+const HARTI = new WeakMap<Definitie, Map<string, { pas: Pas; grup: Grup; nod: Nod }>>();
+
 /** Unde sta fiecare nod. Ii trebuie regulilor, ca sa poata ascunde un grup sau un pas intreg. */
 export function harta(d: Definitie): Map<string, { pas: Pas; grup: Grup; nod: Nod }> {
+  const stiuta = HARTI.get(d);
+  if (stiuta) return stiuta;
+
   const m = new Map<string, { pas: Pas; grup: Grup; nod: Nod }>();
   for (const pas of d.pasi ?? []) {
     for (const grup of pas.grupuri ?? []) {
@@ -326,6 +346,7 @@ export function harta(d: Definitie): Map<string, { pas: Pas; grup: Grup; nod: No
       }
     }
   }
+  HARTI.set(d, m);
   return m;
 }
 

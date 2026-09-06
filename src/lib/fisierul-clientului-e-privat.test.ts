@@ -311,3 +311,34 @@ test("⚠ antetul de cache NU se mai numeste a doua incuietoare", () => {
   assert.equal(s.includes("a doua incuietoare"), false, "nota falsa s-a intors");
   assert.ok(s.includes("CHEIA NU SE POATE COMPUNE"), "nota nu mai spune unde sta apararea adevarata");
 });
+
+test("⚠ o incarcare venita de pe ALT SIT se refuza, inaintea pragurilor", () => {
+  /*
+   * ⚠ Un `POST multipart/form-data` e o cerere „simpla” pentru CORS: browserul o TRIMITE, si doar
+   * raspunsul e ascuns. Iar `businessId`, `productId` si `nodId` se citesc din sursa paginii de
+   * produs a victimei, care e publica.
+   *
+   * Deci un sit cu trafic putea pune un `fetch` ascuns si face fiecare vizitator al lui sa urce un
+   * fisier in magazinul altcuiva — ocolind si pragul pe IP, fiindca IP-urile sunt ale
+   * vizitatorilor. Fara botnet si fara nimic de platit.
+   *
+   * ⚠ Refuzul vine INAINTEA pragurilor: o cerere de pe alt sit n-are voie sa consume nici macar
+   * din galeata IP-ului vizitatorului nevinovat.
+   */
+  const s = faraComentarii(sursa(INCARCARE));
+  assert.match(s, /sec-fetch-site/, "nu se mai uita de unde vine cererea");
+  const iOrigine = s.indexOf("if (!deLaNoi(req))");
+  const iPrag = s.indexOf("rateLimit(");
+  assert.ok(iOrigine > 0 && iPrag > 0, "lipseste una dintre cele doua");
+  assert.ok(iOrigine < iPrag, "originea se verifica dupa ce s-a consumat din prag");
+});
+
+test("⚠ un antet LIPSA se primeste, ca sa nu se rupa browserele vechi", () => {
+  /*
+   * ⚠ Perechea obligatorie. `Sec-Fetch-Site` nu e trimis de browserele vechi; un refuz pe lipsa
+   * ar fi insemnat ca incarcarea pur si simplu nu merge pe ele, si nimeni n-ar fi aflat de ce.
+   * Apararea adevarata impotriva abuzului ramane pragul si plafonul de marime.
+   */
+  const s = faraComentarii(sursa(INCARCARE));
+  assert.match(s, /if \(!loc\) return true;/, "o cerere fara antet se refuza acum");
+});

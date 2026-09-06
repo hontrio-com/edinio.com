@@ -34,9 +34,32 @@ export async function legaFisiereleDeComanda(
   comandaId: string,
   items: unknown,
 ): Promise<void> {
-  const ids = fisiereleDinInstantanee(items);
-  if (ids.length === 0) return;
+  const toate = fisiereleDinInstantanee(items);
+  if (toate.length === 0) return;
 
+  /*
+   * ⚠ IN LOTURI, ca peste tot in proiect. `.in()` pleaca in ADRESA la PostgREST: peste ~700 de
+   * valori cererea CADE cu totul.
+   *
+   * Aici lista nu e marginita de nimic: un cos de 30 de linii, fiecare cu trei campuri de
+   * incarcare a cate zece poze, da 900 de id-uri. Iar caderea are chiar urmarea de care se
+   * fereste antetul: comanda se plaseaza, fisierele raman `comanda_id is null`, si maturarea
+   * sterge pozele unei comenzi PLATITE dupa sapte zile.
+   */
+  for (let i = 0; i < toate.length; i += MAX_PE_LOT) {
+    await legaLotul(admin, businessId, comandaId, toate.slice(i, i + MAX_PE_LOT));
+  }
+}
+
+/** Cat incape intr-un `.in()`. Acelasi numar ca peste tot in proiect. */
+const MAX_PE_LOT = 200;
+
+async function legaLotul(
+  admin: SupabaseClient<Database>,
+  businessId: string,
+  comandaId: string,
+  ids: string[],
+): Promise<void> {
   for (let incercare = 1; incercare <= 2; incercare++) {
     const { error } = await admin
       .from("configurator_fisiere")

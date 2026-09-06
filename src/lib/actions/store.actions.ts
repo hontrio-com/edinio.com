@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
+import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { createClient } from "@/lib/supabase/server";
@@ -745,8 +748,31 @@ export async function getCartConfiguredPricing(
   businessId: string,
   linii: { cheie: string; productId: string; variantTitle?: string; configuratie: unknown }[],
 ): Promise<Record<string, { pret: number | null; motiv?: string }>> {
-  const cerute = (linii ?? []).filter((l) => l && typeof l.cheie === "string" && typeof l.productId === "string").slice(0, 100);
+  const cerute = (linii ?? [])
+    .filter((l) => l && typeof l.cheie === "string" && typeof l.productId === "string")
+    // ⚠ Un cos adevarat n-are cincizeci de linii CONFIGURATE. Plafonul e mic dinadins.
+    .slice(0, 50);
   if (!businessId || cerute.length === 0) return {};
+
+  /*
+   * ⚠ CAPAT PUBLIC CARE RULEAZA MOTORUL PE VALORI VENITE DE LA CLIENT.
+   *
+   * Spre deosebire de `getCartPricing`, care doar citeste preturi, aici se evalueaza reguli si
+   * formule pe ce a trimis cel care cheama. Fiecare evaluare e marginita din constructie
+   * (`MAX_TRECERI`, `MAX_NODURI`, `MAX_ADANCIME`), deci nu se poate cere o socoteala fara
+   * capat — dar cincizeci de linii inmultite cu oricate cereri pe secunda tot inseamna munca.
+   *
+   * Doua straturi, ca la cautarea din vitrina: unul in memoria instantei, care taie rafalele,
+   * si unul durabil in Postgres, fiindca instantele sunt multe si cea din memorie nu limiteaza
+   * cu adevarat nimic (vezi `limita-durabila.ts`).
+   *
+   * ⚠ La depasire se intoarce GOL, nu o eroare: cosul cade atunci pe preturile salvate si
+   * ramane citibil. Serverul repretuieste oricum la plasarea comenzii, deci nimic nu se pierde
+   * in afara de prospetimea afisata.
+   */
+  const ip = clientIpFromHeaders(await headers());
+  if (!rateLimit(`cfgPret:${ip}`, 30, 60_000)) return {};
+  if (!(await consumaLimita(`cfgPret:${ip}`, 300, 3600)).permis) return {};
 
   const { repretuiesteLinii } = await import("@/lib/configurators/repretuire");
   const { pretulLiniei } = await import("@/lib/orders/variant-guard");

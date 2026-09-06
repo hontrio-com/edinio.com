@@ -100,3 +100,26 @@ test("regulile si pretuirea lipsa cad pe gol, nu pe undefined", () => {
   assert.deepEqual(c.reguli, []);
   assert.deepEqual(c.pretuire, {});
 });
+
+test("⚠ previzualizarea AJUNGE la vitrina", () => {
+  /*
+   * ⚠ `nodPentruVitrina` atinge doar nodurile cu optiuni si le lasa pe celelalte intregi, deci
+   * previzualizarea trece azi din intamplare fericita, nu fiindca a cerut-o cineva. Cine adauga
+   * vreodata o lista alba de campuri acolo — ca sa slabeasca versiunea publicata, ceea ce e un
+   * lucru bun de facut — ar taia zonele fara ca nimic sa cada: pe magazin s-ar fi vazut poza
+   * produsului fara nicio gravura, iar comerciantul ar fi cautat greseala in builder.
+   */
+  const d: Definitie = {
+    versiuneSchema: 1, mod: "auto",
+    pasi: [{ id: "p1", eticheta: "P", grupuri: [{ id: "g1", noduri: [
+      { fel: "text", control: "scurt", id: "grav", eticheta: "Gravura" },
+      { fel: "afisaj", control: "previzualizare", id: "prv", eticheta: "Cum arata",
+        previzualizare: { imagine: "/cana.jpg", zone: [{ nod: "grav", x: 0.2, y: 0.3, l: 0.5, i: 0.2 }] } },
+    ] }] }],
+  };
+  const c = compileaza(d, [], { baza: "produs" });
+  const prv = c.definitie.pasi[0].grupuri[0].noduri[1] as Nod & { fel: "afisaj" };
+  assert.equal(prv.previzualizare?.imagine, "/cana.jpg");
+  assert.equal(prv.previzualizare?.zone.length, 1);
+  assert.equal(prv.previzualizare?.zone[0].nod, "grav");
+});

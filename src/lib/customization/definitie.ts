@@ -97,6 +97,15 @@ export interface Latura {
   min: number;
   max: number;
   implicit?: number;
+  /**
+   * Din cat in cat creste latura. Lipsa inseamna „orice numar din interval".
+   *
+   * ⚠ PE FIECARE LATURA, nu pe camp. Materialele vin pe role: latimea sare din 10 in 10 cm
+   * fiindca aia e rola, iar inaltimea se taie oricat. Un singur pas pe tot campul l-ar fi impus
+   * si acolo unde nu exista, iar comerciantul ar fi ales intre a minti pe o latura si a nu-l pune
+   * deloc.
+   */
+  pas?: number;
 }
 
 export interface CampPersonalizare {
@@ -240,9 +249,12 @@ function citesteLatura(raw: unknown): Latura | undefined {
    */
   if (!(min > 0) || !(max >= min)) return undefined;
   const implicit = numar(raw.implicit);
+  /* Un pas care nu e pozitiv n-ar putea fi respectat de nicio valoare: se arunca, nu se pastreaza. */
+  const pas = numar(raw.pas);
   return {
     min, max,
     ...(implicit !== undefined && implicit >= min && implicit <= max ? { implicit } : {}),
+    ...(pas !== undefined && pas > 0 ? { pas } : {}),
   };
 }
 
@@ -383,9 +395,49 @@ function citestePret(raw: unknown, campuri: CampPersonalizare[]): ModPret | unde
     : tarif > 0;
   if (!totTarifulEBun) return { fel: "adaugat" };
 
-  dim.required = true;
+  /*
+   * ⚠ A PATRA CONDITIE: o optiune de tarif cu pret FIX nu se incaseaza deloc.
+   *
+   * `pretulPersonalizarii` sare campul-sursa din bucla de suplimente (el e socotit sus, ca tarif),
+   * iar acolo citeste doar `pe_m2`. Deci o optiune careia comerciantul i-a pus „+15 lei" fix nu
+   * aduce nici cei 15 lei, nici nu schimba tariful: se incaseaza tariful de baza, tacut. Nu e zero,
+   * dar e alt numar decat cel din ecranul comerciantului — iar pe „adaugat" suma aia CHIAR se
+   * incaseaza, deci caderea repara si greseala.
+   */
+  const sursaAreFix = sursa ? (sursa.optiuni ?? []).some((o) => o.impact?.fel === "fix") : false;
+  if (sursaAreFix) return { fel: "adaugat" };
 
+  /*
+   * ⚠ A CINCEA: laturi NEMARGINITE fara suprafata minima facturabila.
+   *
+   * `citesteLatura` intoarce marginile doar in pereche, deci o latura ori are `min` si `max`, ori
+   * lipseste cu totul — iar lipsa inseamna „orice pana la `MAX_LATURA_M`". Cu baza stinsa, un
+   * fototapet comandat 1x1 cm face 0,0001 m² x 89 = 0,01 lei. Comanda pleaca, e „valida", si
+   * atelierul primeste o cerere de un centimetru patrat platita cu un ban.
+   *
+   * Ori se stiu marginile, ori exista o suprafata minima facturabila care ridica orice comanda la
+   * ea. Fara niciuna, nu exista pret de jos, deci nu exista mod „suprafata".
+   */
   const minim = suma(raw.minimM2);
+  const areMargini = !!(dim.latime && dim.inaltime);
+  if (!areMargini && !(minim !== undefined && minim > 0)) return { fel: "adaugat" };
+
+  dim.required = true;
+  /*
+   * ⚠ SI CAMPUL-SURSA DEVINE OBLIGATORIU, din acelasi motiv ca dimensiunile.
+   *
+   * Asta e drumul pe care l-a gasit auditul, si e chiar cel pe care il recomanda panoul:
+   * comerciantul pune tarifele PE OPTIUNI (Standard 69 / Premium 89) si lasa caseta „Tarif lei/m²"
+   * pe 0, fiindca n-are ce scrie acolo. Campul „Material" ramane optional, fiindca panoul creeaza
+   * campurile optionale. Clientul scrie 350x250 cm, NU apasa niciun buton de material — nu e
+   * obligat, si nimic nu e preselectat — iar `impactulAles` intoarce `undefined`, deci
+   * `tarifM2` cade pe tariful de baza: ZERO. Cu baza stinsa, comanda pleaca la 0 lei, cu
+   * `ok: true` si fara nicio constatare.
+   *
+   * Fara alegere nu exista tarif, exact cum fara dimensiuni nu exista suprafata.
+   */
+  if (sursa) sursa.required = true;
+
   const rot = numar(raw.rotunjire);
 
   return {

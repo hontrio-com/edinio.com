@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeazaDefinitia, type DefinitiePersonalizare } from "./definitie";
 import { normalizeazaValorile } from "./valori";
-import { pretUnitar, pretulPersonalizarii } from "./pret";
+import { podeaPersonalizarii, pretUnitar, pretulDepindeDeAlegeri, pretulPersonalizarii } from "./pret";
 
 /**
  * Pretul unei personalizari.
@@ -358,4 +358,207 @@ test("⚠ campul de dimensiuni devine OBLIGATORIU cand pretul atarna de el", () 
   const { v, p } = socoteste(d, {});
   assert.equal(v.ok, false, "un camp gol a trecut, si pretul ar fi iesit zero");
   assert.equal(pretUnitar(p, 89), 0, "confirmarea ca fara poarta chiar ieseau 0 lei");
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ INCA DOUA DRUMURI CATRE ZERO, gasite de auditul proprietarului
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ campul-SURSA DE TARIF devine si el obligatoriu", () => {
+  /*
+   * ⚠ ASTA E CHIAR DRUMUL PE CARE IL RECOMANDA PANOUL, si de-aia costa mai mult decat pare.
+   *
+   * Comerciantul pune tarifele PE OPTIUNI (Standard 69 / Premium 89) si lasa caseta „Tarif lei/m²"
+   * pe 0 — n-are ce scrie acolo. Campul „Material" ramane optional, fiindca panoul creeaza
+   * campurile optionale si nu spune nicaieri ca sursa de tarif ar trebui sa fie obligatorie.
+   *
+   * Clientul scrie 350x250 cm, NU apasa niciun buton de material (nu e obligat, si nimic nu e
+   * preselectat), si vede 0 lei. Sonda dinainte de reparatie, pe exact definitia de mai jos:
+   *
+   *     dim.required: true | mat.required: false
+   *     fara material -> ok: TRUE | constatari: []
+   *     pret: 0
+   *
+   * Reparatia de la runda trecuta forta doar campul de dimensiuni. Fara alegere nu exista tarif,
+   * exact cum fara dimensiuni nu exista suprafata — aceeasi regula, acelasi loc.
+   */
+  const d = normalizeazaDefinitia({
+    enabled: true,
+    fields: [
+      { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: false, unitate: "cm",
+        latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+      { id: "mat", type: "butoane", label: "Material", required: false,
+        optiuni: [
+          { id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } },
+          { id: "prm", eticheta: "Premium", impact: { fel: "pe_m2", suma: 89 } },
+        ] },
+    ],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 0, campTarif: "mat",
+      includePretulProdusului: false },
+  })!;
+  assert.equal(d.pret?.fel, "suprafata");
+  assert.equal(d.fields[1].required, true, "campul-sursa a ramas optional");
+
+  const { v, p } = socoteste(d, { dim: { latime: 350, inaltime: 250 } });
+  assert.equal(v.ok, false, "s-a putut comanda fara sa se aleaga materialul");
+  assert.equal(pretUnitar(p, 89), 0, "confirmarea ca fara poarta chiar ieseau 0 lei");
+  /* Martor: completat, se incaseaza 778,75 (8,75 m² x 89). Deci proba poate si sa TREACA. */
+  const martor = socoteste(d, { dim: { latime: 350, inaltime: 250 }, mat: "prm" });
+  assert.equal(martor.v.ok, true);
+  assert.equal(pretUnitar(martor.p, 89), 778.75);
+});
+
+test("⚠ o optiune de tarif cu pret FIX strica modul, fiindca nu s-ar incasa deloc", () => {
+  /*
+   * `pretulPersonalizarii` sare campul-sursa din bucla de suplimente (e socotit sus, ca tarif) si
+   * acolo citeste doar `pe_m2`. Deci „+15 lei" fix pus pe o optiune de material nu aduce nici cei
+   * 15 lei, nici nu schimba tariful: se incaseaza tariful de baza, tacut, si comerciantul vede in
+   * ecran un pret pe care casa nu-l cunoaste.
+   *
+   * Pe „adaugat" suma aia CHIAR se incaseaza, deci caderea nu e doar o oprire — e si reparatia.
+   */
+  const d = normalizeazaDefinitia({
+    enabled: true,
+    fields: [
+      { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+        latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+      { id: "mat", type: "butoane", label: "Material", required: true,
+        optiuni: [
+          { id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } },
+          { id: "gres", eticheta: "Cu pret fix", impact: { fel: "fix", suma: 15 } },
+        ] },
+    ],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 69, campTarif: "mat",
+      includePretulProdusului: false },
+  })!;
+  assert.equal(d.pret?.fel, "adaugat");
+});
+
+test("⚠ laturi NEMARGINITE fara suprafata minima: un fototapet de 1 cm² pe un ban", () => {
+  /*
+   * `citesteLatura` intoarce marginile doar in pereche, deci o latura ori are `min` si `max`,
+   * ori lipseste cu totul — iar lipsa inseamna „orice pana la MAX_LATURA_M". Cu baza stinsa, o
+   * comanda de 1x1 cm face 0,0001 m² x 89 = 0,01 lei, si pleaca: e „valida".
+   *
+   * Ori se stiu marginile, ori exista un minim facturabil care ridica orice comanda la el.
+   */
+  const fara = normalizeazaDefinitia({
+    enabled: true,
+    fields: [{ id: "dim", type: "dimensiuni", label: "Dimensiuni", required: false, unitate: "cm" }],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 89, includePretulProdusului: false },
+  })!;
+  assert.equal(fara.pret?.fel, "adaugat");
+
+  /* Perechea: cu minim facturabil modul TINE, si cea mai mica comanda costa 2 m² x 89. */
+  const cu = normalizeazaDefinitia({
+    enabled: true,
+    fields: [{ id: "dim", type: "dimensiuni", label: "Dimensiuni", required: false, unitate: "cm" }],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 89, minimM2: 2,
+      includePretulProdusului: false },
+  })!;
+  assert.equal(cu.pret?.fel, "suprafata");
+  assert.equal(podeaPersonalizarii(cu, 89), 178);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ PODEAUA: numarul pe care il are voie sa-l spuna cardul
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ podeaua e cea mai ieftina alegere posibila, socotita cu ACELASI motor", () => {
+  /*
+   * ⚠ CE COSTA CAND NU EXISTA: `products.price` a incetat sa fie pretul produsului in ziua in
+   * care personalizarea a capatat pret. La fototapetul de mai jos catalogul zice 89 de lei, dar
+   * cei 89 nu se incaseaza NICIODATA (`includePretulProdusului` stins) — nu e nici pret de
+   * vanzare, nici pret de pornire, nu e nimic. Si tocmai el pleaca pe card, in sortare, in filtrul
+   * de pret, in insigna de reducere, in JSON-LD, la Google si la Meta.
+   *
+   * Podeaua: laturile MINIME (100x70 cm = 0,7 m²) x cel mai ieftin material (Standard, 69) =
+   * 48,30 lei. Protectia e comutator, deci stinsa e gratis si nu intra.
+   */
+  const d = normalizeazaDefinitia({
+    enabled: true,
+    fields: [
+      { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+        latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+      { id: "mat", type: "butoane", label: "Material", required: true,
+        optiuni: [
+          { id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } },
+          { id: "prm", eticheta: "Premium", impact: { fel: "pe_m2", suma: 89 } },
+        ] },
+      { id: "prot", type: "comutator", label: "Protectie", required: false,
+        impact: { fel: "pe_m2", suma: 15 } },
+    ],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 69, campTarif: "mat",
+      includePretulProdusului: false },
+  })!;
+  assert.equal(podeaPersonalizarii(d, 89), 48.3);
+  assert.equal(pretulDepindeDeAlegeri(d, 89), true, "89 de lei e o minciuna, si trebuie sa se stie");
+
+  /* ⚠ Si podeaua nu e o a doua formula: aceleasi valori, prin motorul de incasare, dau acelasi numar. */
+  const prinMotor = pretUnitar(
+    socoteste(d, { dim: { latime: 100, inaltime: 70 }, mat: "std" }).p, 89,
+  );
+  assert.equal(prinMotor, 48.3, "podeaua si casa au dat numere diferite");
+});
+
+test("⚠ podeaua alege optiunea cea mai ieftina CU ADEVARAT, nu nominal", () => {
+  /*
+   * „1 leu/m²" pare mai ieftin decat „5 lei fix", si e — pana la 5 m². Pe 8,75 m² costa 8,75.
+   * O alegere pe cifra scrisa ar fi urcat podeaua peste un pret pe care cineva chiar il poate
+   * plati, iar cardul ar fi promis mai mult decat cere casa.
+   */
+  const d = normalizeazaDefinitia({
+    enabled: true,
+    fields: [
+      { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+        latime: { min: 300, max: 500 }, inaltime: { min: 300, max: 350 } },
+      { id: "fin", type: "butoane", label: "Finisaj", required: true,
+        optiuni: [
+          { id: "pem2", eticheta: "Pe metru", impact: { fel: "pe_m2", suma: 1 } },
+          { id: "fix", eticheta: "Fix", impact: { fel: "fix", suma: 5 } },
+        ] },
+    ],
+  })!;
+  /* 3x3 m = 9 m². „Pe metru" costa 9, „Fix" costa 5 -> podeaua ia FIX: 89 + 5 = 94. */
+  assert.equal(podeaPersonalizarii(d, 89), 94);
+});
+
+test("⚠ produsele VECHI n-au podea peste catalog, deci nimic nu se schimba pentru ele", () => {
+  /*
+   * Cele din productie: `text`, `textarea`, `image`, fara niciun pret. Podeaua trebuie sa fie
+   * chiar pretul de catalog, si `pretulDepindeDeAlegeri` sa spuna „nu minte" — altfel poarta de
+   * pe feeduri ar fi retras de pe Google si Meta 29 de produse care se vand corect azi.
+   */
+  const d = normalizeazaDefinitia({
+    enabled: true,
+    fields: [
+      { id: "f1", type: "text", label: "Nume gravat", required: true, max_length: 20 },
+      { id: "f2", type: "image", label: "Poza", required: false },
+    ],
+  })!;
+  assert.equal(podeaPersonalizarii(d, 89), 89);
+  assert.equal(pretulDepindeDeAlegeri(d, 89), false);
+});
+
+test("⚠ un supliment OBLIGATORIU urca podeaua; unul optional, nu", () => {
+  /*
+   * Distinctia asta hotaraste daca feedul minte. Cu gravura obligatorie la +20, nimeni nu poate
+   * cumpara la 89 — deci 89 e o minciuna. Cu cutia cadou optionala la +30, 89 e chiar pretul de
+   * pornire, si feedul e onest.
+   */
+  const obligatoriu = normalizeazaDefinitia({
+    enabled: true,
+    fields: [{ id: "g", type: "text", label: "Gravura", required: true,
+      impact: { fel: "fix", suma: 20 } }],
+  })!;
+  assert.equal(podeaPersonalizarii(obligatoriu, 89), 109);
+  assert.equal(pretulDepindeDeAlegeri(obligatoriu, 89), true);
+
+  const optional = normalizeazaDefinitia({
+    enabled: true,
+    fields: [{ id: "c", type: "comutator", label: "Cutie cadou", required: false,
+      impact: { fel: "fix", suma: 30 } }],
+  })!;
+  assert.equal(podeaPersonalizarii(optional, 89), 89);
+  assert.equal(pretulDepindeDeAlegeri(optional, 89), false);
 });

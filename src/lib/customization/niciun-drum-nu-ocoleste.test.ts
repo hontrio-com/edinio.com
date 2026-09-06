@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { cerePersonalizarea } from "./definitie";
+import { cerePersonalizare } from "@/lib/storefront/variants";
 import { slimPageSections } from "@/lib/storefront/catalog-slim";
+import { getProductPriceRange } from "@/lib/utils/product-price";
 
 /**
  * Niciun drum nu duce un produs personalizabil in cos fara personalizare.
@@ -127,12 +129,23 @@ test("⚠ importul CSV nu mai STERGE personalizarea la reimport", () => {
    * produsul se intorcea la pretul de catalog. Fara nicio eroare, si fara niciun rand in raportul
    * importului: pentru import, nimic nu esuase.
    */
+  /*
+   * ⚠ PROBA ASTA A INGHETAT O IMPLEMENTARE, si a picat cand implementarea s-a facut mai buna.
+   *
+   * Cerea textual `Map<string, unknown>` si `customization: persVeche` — adica forma care tinea
+   * DOAR cheia `customization`. Cand reimportul a inceput sa pastreze `page_sections` INTREG
+   * (fiindca stergea si `gpsr`, de pe 116 produse vii), proba s-a facut rosie pe o schimbare care
+   * repara mai mult decat apara ea.
+   *
+   * Acum cere REZULTATUL: harta poarta randul intreg, si se citeste intr-o singura interogare.
+   * Cheile anume se probeaza in `page-sections-nu-se-pierde.test.ts`.
+   */
   const s = sursa("src/lib/import/committer.ts");
-  assert.match(s, /const personalizareaVeche = new Map<string, unknown>\(\);/);
+  assert.match(s, /const personalizareaVeche = new Map<string, Record<string, unknown>>\(\);/);
   /* ⚠ Se citeste in ACEEASI interogare — la 4000 de randuri, una pe produs ar fi 4000 de drumuri. */
   assert.match(s, /\.select\("id, external_id, page_sections"\)/);
-  assert.match(s, /personalizareaVeche\.set\(e\.id as string, c\)/);
-  assert.match(s, /customization: persVeche,/);
+  assert.match(s, /personalizareaVeche\.set\(e\.id as string, veche as Record<string, unknown>\)/);
+  assert.match(s, /\.\.\.psVeche,/);
   /* Si ca harta chiar ajunge la scriitor, pe amandoua chemarile. */
   const chemari = (s.match(/scrieProdusele\(admin, businessId, \w+, \w+, personalizareaVeche\)/g) ?? []).length;
   assert.equal(chemari, 2, `harta ajunge la ${chemari} chemari din 2`);
@@ -175,5 +188,108 @@ test("⚠ SERVERUL refuza liniile personalizabile pe caile care n-au unde sa le 
    */
   for (const m of s.matchAll(/const (eroarePers|eroarePersCos) = linieCarePerePersonalizare[\s\S]{0,400}?\n(\s*)\}/g)) {
     assert.match(m[0], /return \{ error: eroarePers(Cos)? \};/, "poarta logheaza, dar nu opreste comanda");
+  }
+});
+
+test("⚠ exista UN SINGUR raspuns la „cere personalizare?", () => {
+  /*
+   * ⚠ ERAU DOUA, cu doua raspunsuri diferite, si diferentele nu erau teoretice:
+   *
+   *  1. Pe suprafetele de CATALOG, `page_sections` ajunge taiat de `slimPageSections`, care lasa
+   *     doar steagul `{ cere: true }` — fara `fields`. Cea din `variants.ts` raspundea „nu" pe
+   *     TOATE cardurile, adica exact acolo unde se pune poarta de quick-add.
+   *  2. Un camp pe care cititorul il arunca (fara `id`, cu `type` necunoscut) o facea sa spuna
+   *     „da" pentru un formular care iese GOL.
+   *
+   * Noua locuri o importa de langa `hasVariants`, deci numele ramane unde e; doar raspunsul e
+   * acum unul singur.
+   */
+  const s = sursa("src/lib/storefront/variants.ts");
+  assert.match(s, /import \{ cerePersonalizarea \} from "@\/lib\/customization\/definitie";/);
+  assert.match(s, /return cerePersonalizarea\(pageSections\);/);
+  assert.equal(
+    /Array\.isArray\(c\.fields\) && c\.fields\.length > 0/.test(s), false,
+    "`variants.ts` isi raspunde iar singura, si va diverge de motorul de personalizare",
+  );
+
+  /* Si purtarea, nu doar forma: steagul slim trebuie sa fie recunoscut de amandoua numele. */
+  assert.equal(cerePersonalizare({ customization: { cere: true } }), true);
+  assert.equal(cerePersonalizarea({ customization: { cere: true } }), true);
+  assert.equal(cerePersonalizare({ customization: { enabled: true, fields: [{ nimic: 1 }] } }), false,
+    "un camp pe care cititorul il arunca face produsul „personalizabil\" degeaba");
+});
+
+test("⚠ pretul de pe CARD cunoaste podeaua personalizarii", () => {
+  /*
+   * ⚠ CE SE VEDEA, masurat: card „89,00 lei", pagina „603,75 lei". De 6,8 ori mai mult, intre
+   * doua ecrane, fara ca omul sa fi atins nimic. Iar fara implicite pe laturi pagina scria chiar
+   * „0,00 lei" — deci cei 89 nu erau pret de pornire in NICIO configuratie.
+   *
+   * ⚠ SI NU E DOAR CARDUL. Acelasi numar merge in sortare (`sortare.ts` compara `price_min`),
+   * in filtrul de pret si in cel de reduceri (SQL, pe `catalog_produs.price_min`), in insigna de
+   * discount, si in datele structurate. De-aia reparatia sta in `getProductPriceRange`, prin care
+   * trec toate sase — nu in card.
+   */
+  const fototapet = {
+    customization: {
+      enabled: true,
+      fields: [
+        { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+          latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+        { id: "mat", type: "butoane", label: "Material", required: true,
+          optiuni: [
+            { id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } },
+            { id: "prm", eticheta: "Premium", impact: { fel: "pe_m2", suma: 89 } },
+          ] },
+      ],
+      pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 69, campTarif: "mat",
+        includePretulProdusului: false },
+    },
+  };
+
+  /* 100x70 cm = 0,7 m² x 69 = 48,30. Pretul de catalog (89) nu se incaseaza niciodata. */
+  const interval = getProductPriceRange(89, fototapet);
+  assert.equal(interval.min, 48.3);
+  assert.equal(interval.dePornire, true, "cardul n-ar sti ca numarul e o podea");
+
+  /* ⚠ Perechea: produsele VECHI raman exact cum sunt. Sunt 29 in productie. */
+  const vechi = { customization: { enabled: true, fields: [
+    { id: "f1", type: "text", label: "Nume gravat", required: true, max_length: 20 },
+  ] } };
+  const alVechiului = getProductPriceRange(89, vechi);
+  assert.equal(alVechiului.min, 89);
+  assert.equal(alVechiului.dePornire, undefined, "un produs vechi a capatat „de la\" degeaba");
+
+  /*
+   * ⚠ SI PE DATELE SLIMUITE, unde campurile nu mai exista dinadins. Fara ramura asta, cardul
+   * din grila — singurul care primeste slimul — ar fi ramas exact ecranul care nu stie nimic.
+   */
+  const slim = slimPageSections(fototapet, 89);
+  assert.deepEqual(slim?.customization, { cere: true, dePornire: true });
+  assert.equal(getProductPriceRange(48.3, slim).dePornire, true);
+  assert.deepEqual(
+    slimPageSections(vechi, 89)?.customization, { cere: true },
+    "un produs vechi a capatat steagul de podea",
+  );
+});
+
+test("⚠ butonul cardului SPUNE ce face, nu ce ar vrea clientul sa faca", () => {
+  /*
+   * Un produs personalizabil nu e „variabil", deci cardul cadea pe ultima ramura si promitea
+   * „Adauga in cos" — dar apasarea duce la pagina produsului. Clientul citeste „butonul e stricat"
+   * sau „am dat gresit click pe poza", nu „produsul asta trebuie configurat intai" — mai ales ca
+   * in cosul aceluiasi magazin `CartRecommendations` arata corect o sageata in loc de buton.
+   *
+   * ⚠ Doua controale, aceeasi intrebare, doua raspunsuri vizuale opuse — asta e ce se repara.
+   * Hotararea RAMANE in handler (doua porti pe acelasi drum pot diverge); aici se cere doar ca
+   * eticheta sa se socoteasca din acelasi predicat.
+   */
+  for (const [fisier, semn] of [
+    ["src/components/storefront/product/ProductCard.tsx", "cerePersonalizarea(product.page_sections)"],
+    ["src/components/pages/blocks/AddToCartButton.tsx", "cerePersonalizarea(product.pageSections)"],
+  ] as const) {
+    const s = sursa(fisier);
+    assert.ok(s.includes(`const cerePersonalizare = ${semn};`), `${fisier} nu intreaba deloc`);
+    assert.match(s, /Personalizeaza/, `${fisier} promite inca altceva decat face`);
   }
 });

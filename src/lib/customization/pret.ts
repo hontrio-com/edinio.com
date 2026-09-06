@@ -219,3 +219,135 @@ export function pretulPersonalizarii(
     defalcare,
   };
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PODEAUA: cat costa produsul asta cand clientul alege TOT ce e mai ieftin
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Valorile CELE MAI IEFTINE pe care le poate alege un client, sau `null` cand nu se pot afla.
+ *
+ * ⚠ NU E O A DOUA FORMULA DE PRET. Aici se ALEG doar valorile; pretul iese tot din
+ * `pretulPersonalizarii`, acelasi motor care incaseaza. Doua formule s-ar fi departat, si atunci
+ * cardul ar fi promis un numar pe care casa nu-l recunoaste.
+ *
+ * Regulile, si de ce fiecare:
+ *  - `dimensiuni`: laturile MINIME. Ele exista mereu in modul „suprafata" (vezi `citestePret`:
+ *    fara margini si fara suprafata minima facturabila modul cade pe „adaugat"), iar cand lipsesc
+ *    dar exista `minimM2`, orice latura mica da chiar minimul.
+ *  - `comutator`: STINS. O bifa neatinsa nu costa nimic, si nimeni nu e obligat s-o apese.
+ *  - `butoane` OPTIONAL: nealese. Cea mai ieftina alegere e „niciuna".
+ *  - `butoane` OBLIGATORIU (si campul-sursa de tarif, care e obligatoriu de la `citestePret`):
+ *    optiunea care costa cel mai putin CU ADEVARAT, nu nominal — `pe_m2` se inmulteste intai cu
+ *    suprafata de podea, altfel „1 leu/m²" ar fi parut mai ieftin decat „5 lei fix" pe 8,75 m².
+ *  - restul campurilor OBLIGATORII cu impact: se pun completate, fiindca clientul nu le poate sari.
+ *    Valoarea in sine nu conteaza — `impactulAles` se uita doar daca EXISTA una.
+ */
+function valoriDePodea(definitie: DefinitiePersonalizare): Map<string, ValoareCamp> | null {
+  const mod = definitie.pret ?? { fel: "adaugat" as const };
+  const valori = new Map<string, ValoareCamp>();
+  const campDim = campulDeSuprafata(definitie);
+  const campTarifId = mod.fel === "suprafata" ? mod.campTarif : undefined;
+
+  let m2 = 0;
+  if (campDim) {
+    const lat = campDim.latime?.min ?? 1;
+    const inalt = campDim.inaltime?.min ?? 1;
+    const a = suprafataM2(lat, inalt, campDim.unitate ?? "cm");
+    /* In modul „suprafata" fara suprafata nu exista pret de jos — nu se ghiceste unul. */
+    if (a === null) { if (mod.fel === "suprafata") return null; }
+    else {
+      m2 = suprafataFacturata(
+        a,
+        mod.fel === "suprafata" ? mod.minimM2 : undefined,
+        mod.fel === "suprafata" ? mod.rotunjire : undefined,
+      );
+      valori.set(campDim.id, { fel: "dimensiuni", latime: lat, inaltime: inalt });
+    }
+  } else if (mod.fel === "suprafata") {
+    return null;
+  }
+
+  /** Cat costa cu adevarat un impact, la suprafata de podea. */
+  const cost = (imp: Impact | undefined): number => {
+    if (!imp || imp.fel === "fara" || imp.suma <= 0) return 0;
+    return imp.fel === "pe_m2" ? imp.suma * m2 : imp.suma;
+  };
+
+  for (const camp of definitie.fields) {
+    if (campDim && camp.id === campDim.id) continue;
+    if (camp.type === "comutator") continue;
+
+    if (camp.type === "butoane") {
+      const optiuni = camp.optiuni ?? [];
+      if (!optiuni.length) continue;
+      const eSursa = camp.id === campTarifId;
+      if (!camp.required && !eSursa) continue;
+      /*
+       * ⚠ La campul-sursa, o optiune FARA `pe_m2` inseamna „tariful de baza", nu „gratis" — deci
+       * costul ei e `tarif x m2`, nu zero. Socotita gratis, podeaua ar fi iesit sub orice pret
+       * pe care il poate plati cineva.
+       */
+      const costulOptiunii = (o: { impact?: Impact }): number =>
+        eSursa && mod.fel === "suprafata" && o.impact?.fel !== "pe_m2"
+          ? mod.tarif * m2
+          : cost(o.impact);
+      let cea = optiuni[0];
+      for (const o of optiuni) if (costulOptiunii(o) < costulOptiunii(cea)) cea = o;
+      valori.set(camp.id, { fel: "optiune", id: cea.id });
+      continue;
+    }
+
+    if (!camp.required) continue;
+    valori.set(camp.id, { fel: "text", text: "" });
+  }
+
+  return valori;
+}
+
+/**
+ * Cel mai mic pret pe bucata pe care il poate plati cineva, sau `null` cand nu se poate afla.
+ *
+ * ═══ ⚠ DE CE E NEVOIE DE EL ═══
+ *
+ * `products.price` a incetat sa mai fie pretul produsului in ziua in care personalizarea a
+ * capatat pret. La un fototapet cu `includePretulProdusului` STINS — configurarea pe care chiar
+ * panoul o recomanda — pretul de catalog nu se incaseaza deloc: nu e nici pret de vanzare, nici
+ * pret de pornire, nu e nimic. Si tocmai el pleaca azi pe cardul din grila, in sortare, in filtrul
+ * de pret, in insigna de reducere, in JSON-LD, in Google Merchant si in catalogul Meta.
+ *
+ * Masurat pe exemplul din proiect: card „89,00 lei", pagina „603,75 lei". De 6,8 ori mai mult,
+ * intre doua ecrane, fara ca omul sa fi atins nimic.
+ *
+ * ⚠ `null` inseamna „nu stiu", si atunci apelantul nu schimba nimic — nu inseamna „nu costa".
+ */
+export function podeaPersonalizarii(
+  definitie: DefinitiePersonalizare,
+  bazaPeBucata: number,
+): number | null {
+  const valori = valoriDePodea(definitie);
+  if (!valori) return null;
+  return pretUnitar(pretulPersonalizarii(definitie, valori), bazaPeBucata);
+}
+
+/**
+ * Minte `products.price` despre produsul asta?
+ *
+ * ⚠ Se raspunde DIN PODEA, nu dintr-o a doua judecata. Un al doilea criteriu („are mod
+ * suprafata SAU vreun impact obligatoriu") ar fi trebuit tinut in acord cu socoteala la fiecare
+ * schimbare, si primul dezacord ar fi fost tacut.
+ *
+ * Se foloseste ca poarta pe suprafetele PUBLICE unde nu se poate afisa decat un singur numar si
+ * unde numarul gresit costa bani: OLX, Google Merchant, catalogul Meta. Acolo o oferta de 89 de
+ * lei pentru o marfa de 603 aduce clicuri platite care pleaca, si — la Google — suspendare pentru
+ * nepotrivire intre pretul din feed si cel de pe pagina.
+ */
+export function pretulDepindeDeAlegeri(
+  definitie: DefinitiePersonalizare,
+  bazaPeBucata: number,
+): boolean {
+  const podea = podeaPersonalizarii(definitie, bazaPeBucata);
+  /* Nu se poate socoti o podea = nu se poate sustine nici pretul de catalog. */
+  if (podea === null) return true;
+  return round2(podea) !== round2(Number(bazaPeBucata) || 0);
+}

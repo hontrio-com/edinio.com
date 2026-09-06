@@ -94,6 +94,23 @@ function citesteLatura(
     return null;
   }
   /*
+   * ⚠ PASUL LATURII, verificat pe SERVER ca oricare alta margine.
+   *
+   * Atributul `step` din browser opreste sagetile, dar nu si o valoare scrisa de mana si nici o
+   * cerere trimisa direct. Un fototapet pe rola de 10 cm comandat la 137 cm inseamna o rola taiata
+   * degeaba: pierderea o plateste atelierul, iar clientul primeste alta masura decat a cerut.
+   *
+   * Se masoara de la `min`, nu de la zero: „intre 100 si 500, din 10 in 10" inseamna 100, 110,
+   * 120 — nu 100, 110 doar din intamplare fiindca 100 se imparte la 10.
+   */
+  if (marg?.pas !== undefined && !multipluDe(n - marg.min, marg.pas)) {
+    constatari.push({
+      campId: camp.id, eticheta: camp.label,
+      mesaj: `${numeLatura} creste din ${caText(marg.pas)} in ${caText(marg.pas)} ${u}.`,
+    });
+    return null;
+  }
+  /*
    * ⚠ Plafonul absolut se verifica SI cand comerciantul n-a pus margini. Fara el, un camp de
    * dimensiuni lasat nemarginit ar fi primit din browser o latime de un milion, iar suprafata ar
    * fi iesit un numar pe care nicio alta socoteala din platforma nu-l mai poate purta.

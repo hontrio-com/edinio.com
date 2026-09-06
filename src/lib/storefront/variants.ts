@@ -13,6 +13,8 @@
  * server actions as well as client components.
  */
 
+import { cerePersonalizarea } from "@/lib/customization/definitie";
+
 export interface VariantOption {
   id: string;
   name: string;
@@ -123,10 +125,24 @@ export function hasVariants(pageSections: unknown): boolean {
  * Se foloseste ca `hasVariants`: acolo unde produsul nu se poate adauga rapid, fiindca
  * mai intai trebuie sa aleaga cineva ceva.
  */
+/*
+ * ⚠ NU-SI MAI RASPUNDE SINGURA. Trece prin `cerePersonalizarea` din modulul pur.
+ *
+ * Erau doua functii cu acelasi nume si doua raspunsuri diferite, si diferentele nu erau teoretice:
+ *
+ *  1. Pe suprafetele de CATALOG (acasa, magazin, cautare, categorii) `page_sections` ajunge taiat
+ *     de `slimPageSections`, care lasa in loc doar steagul `customization: { cere: true }` —
+ *     fara `fields`. Varianta de aici raspundea „nu" pe TOATE cardurile, adica exact acolo unde
+ *     se pune poarta de quick-add.
+ *  2. Un camp pe care cititorul il arunca (fara `id`, cu `type` necunoscut) o facea sa spuna „da"
+ *     pentru un formular care iese GOL: butonul de cos ascuns, feedurile oprite, si nimic de
+ *     completat pe pagina.
+ *
+ * Se pastreaza ca export din fisierul asta fiindca 9 locuri o importa de langa `hasVariants`, si
+ * cele doua se citesc mereu impreuna („produsul cere o alegere inainte de a fi adaugat rapid").
+ */
 export function cerePersonalizare(pageSections: unknown): boolean {
-  const ps = (pageSections ?? {}) as { customization?: { enabled?: boolean; fields?: unknown } };
-  const c = ps.customization;
-  return !!c?.enabled && Array.isArray(c.fields) && c.fields.length > 0;
+  return cerePersonalizarea(pageSections);
 }
 
 /**

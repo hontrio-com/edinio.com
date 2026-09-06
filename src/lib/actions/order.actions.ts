@@ -20,6 +20,7 @@ import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
 import type { OrderSource } from "@/lib/storefront/attribution";
 import { comboStockMap, enabledComboPriceMap, parseVariants } from "@/lib/storefront/variants";
+import { repretuiesteLinii, type PretConfigurat } from "@/lib/configurators/repretuire";
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import {
   amprentaLinii,
@@ -712,6 +713,14 @@ export async function placeOrder(data: {
   product_price: number;
   /** Combinatia de varianta aleasa, cand produsul are variante. */
   variant_title?: string;
+  /**
+   * Ce a ales cumparatorul in configurator: VALORI, nu un pret.
+   *
+   * ⚠ Cand exista, `product_price` NU se mai citeste deloc. Pretul unei configuratii nu e
+   * unul dintre preturile legitime din catalog, deci nu se poate verifica prin potrivire: se
+   * calculeaza de la zero, aici, din valorile astea si din definitia publicata acum.
+   */
+  configuratie?: unknown;
   quantity: number;
   shipping_cost: number;
   /** Semnatura cotatiei de transport (vezi `quote-token.ts`). */
@@ -751,7 +760,10 @@ export async function placeOrder(data: {
   customization?: Record<string, { type: string; label: string; value: string | string[] }>;
   /** Items carried over from the storefront cart (priced server-side; variant lines
    *  are re-priced from the product's enabled combination, base otherwise). */
-  additional_items?: { product_id: string; name: string; quantity: number; variant_title?: string }[];
+  additional_items?: {
+    product_id: string; name: string; quantity: number;
+    variant_title?: string; configuratie?: unknown;
+  }[];
   /** Ids of order-bump offers the customer accepted — re-priced server-side (never trusted). */
   accepted_offer_ids?: string[];
   payment_method?: string;
@@ -871,7 +883,9 @@ export async function placeOrder(data: {
   // Reload product + store config and recompute every price server-side.
   const [{ data: product, error: eroareProdus }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
     admin.from("products")
-      .select("id, name, price, is_active, business_id, page_sections")
+      // ⚠ `category` se cere pentru configuratoare: unul legat de o categorie se mosteneste
+      // prin NUMELE ei. Fara coloana, produsul ar fi parut ca n-are configurator.
+      .select("id, name, price, is_active, business_id, page_sections, category")
       .eq("id", data.product_id)
       .eq("business_id", data.business_id)
       .single(),
@@ -952,7 +966,45 @@ export async function placeOrder(data: {
     return { error: linieP.error };
   }
 
-  const mainSubtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, cantitate, data.variant_title);
+  /*
+   * ⚠ CAND PRODUSUL E CONFIGURAT, PRETUL NU SE POTRIVESTE — SE CALCULEAZA.
+   *
+   * `authoritativeSubtotal` accepta pretul cerut de client doar daca se potriveste cu unul
+   * dintre preturile legitime ale produsului (baza, combinatie, pachet). Pretul unei
+   * configuratii nu e niciunul dintre ele, deci calea aceea l-ar fi refuzat pe toate: nicio
+   * comanda configurata n-ar fi putut fi plasata din formularul de produs.
+   *
+   * Aici se face invers si mai strans: `product_price` nu se mai citeste deloc, iar pretul se
+   * socoteste din valori si din definitia publicata ACUM.
+   *
+   * ⚠ Un REFUZ opreste comanda. Cazuta pe pretul de baza, ar fi dat gratis tot ce a
+   * configurat cumparatorul, iar atelierul ar fi primit o comanda fara specificatie.
+   */
+  const verdicteleMele = await repretuiesteLinii(data.business_id, [{
+    productId: data.product_id,
+    category: (product as { category?: string | null }).category ?? null,
+    configuratie: data.configuratie,
+    pretCatalog: linieP.unitPrice,
+  }]);
+  const cfgPrincipal = verdicteleMele[0];
+  if (cfgPrincipal.fel === "refuz") {
+    logError({
+      action: "placeOrder.configuratieRespinsa",
+      message: cfgPrincipal.motive.join(" | ").slice(0, 300),
+      details: { businessId: data.business_id, productId: data.product_id },
+      severity: "warning",
+    });
+    return { error: `${linieP.nume}: ${cfgPrincipal.motive[0]}` };
+  }
+
+  /*
+   * ⚠ Configurata, linia NU trece prin trepte sau pachete: alea sunt preturi scrise pentru
+   * produsul din catalog, iar aplicate peste o configuratie ar fi vandut-o la pretul
+   * pachetului simplu, cu toata configurarea pe gratis. Vezi aceeasi nota la calea cosului.
+   */
+  const mainSubtotal = cfgPrincipal.fel === "ok"
+    ? round2(cfgPrincipal.unitar * cantitate)
+    : authoritativeSubtotal(product as OrderProduct, data.product_price, cantitate, data.variant_title);
   if (mainSubtotal === null) {
     logError({ action: "placeOrder.priceRejected", message: "Client price did not match any legitimate configuration", details: { businessId: data.business_id, productId: data.product_id, claimedUnit: data.product_price, quantity: data.quantity, cantitate }, severity: "warning" });
     return { error: "Pretul comenzii nu este valid. Reincarca pagina si incearca din nou." };
@@ -974,7 +1026,7 @@ export async function placeOrder(data: {
   if (data.additional_items?.length) {
     const ids = [...new Set(data.additional_items.map((i) => i.product_id))].filter((id) => id !== data.product_id);
     if (ids.length > 0) {
-      const { data: extraProducts, error: eroareExtra } = await admin.from("products").select("id, name, price, is_active, page_sections").in("id", ids).eq("business_id", data.business_id);
+      const { data: extraProducts, error: eroareExtra } = await admin.from("products").select("id, name, price, is_active, page_sections, category").in("id", ids).eq("business_id", data.business_id);
       // O interogare cazuta arunca TOT cosul purtat, in tacere: clientul ar primi
       // o comanda doar cu produsul din formular, la un total pe care nu l-a vazut.
       if (eroareExtra) {
@@ -1035,8 +1087,43 @@ export async function placeOrder(data: {
       }
       const liniiDinCos = cerute.map((c) => ({ ...c.linie, quantity: (c.ceruta as { cantitate: number }).cantitate }));
       liniiCuVarianta.push(...liniiDinCos);
+
+      /*
+       * ⚠ Si liniile PURTATE DIN COS se repretuiesc, nu doar produsul din formular.
+       *
+       * Un cos deschis odata cu pagina de produs poate contine oricate produse configurate.
+       * Lasate pe pretul de catalog, ar fi plecat in comanda cu specificatia pierduta si cu
+       * configurarea neplatita — exact paguba de care se fereste linia principala de mai sus.
+       */
+      const categoriiExtra = new Map((extraProducts ?? []).map((p) => [p.id, p.category ?? null]));
+      const verdicteCos = await repretuiesteLinii(
+        data.business_id,
+        liniiDinCos.map((i) => {
+          const meta = extraMap.get(i.product_id)!;
+          const r = pretulLiniei({ name: meta.name, price: meta.price, page_sections: meta.pageSections }, i.variant_title);
+          return {
+            productId: i.product_id,
+            category: categoriiExtra.get(i.product_id) ?? null,
+            configuratie: i.configuratie,
+            pretCatalog: r.fel === "ok" ? r.unitPrice : meta.price,
+          };
+        }),
+      );
+      const respinsaCos = verdicteCos.findIndex((v) => v.fel === "refuz");
+      if (respinsaCos >= 0) {
+        const v = verdicteCos[respinsaCos] as Extract<PretConfigurat, { fel: "refuz" }>;
+        const linie = liniiDinCos[respinsaCos];
+        logError({
+          action: "placeOrder.configuratieRespinsaInCos",
+          message: v.motive.join(" | ").slice(0, 300),
+          details: { businessId: data.business_id, productId: linie.product_id },
+          severity: "warning",
+        });
+        return { error: `${extraMap.get(linie.product_id)?.name ?? "Un produs din cos"}: ${v.motive[0]}` };
+      }
+
       cartItems = liniiDinCos
-        .map((i) => {
+        .map((i, idx) => {
           const meta = extraMap.get(i.product_id)!;
           // Pretul si numele vin din ACEEASI functie care a dat verdictul mai sus.
           // Aici era portita: o varianta dezactivata intre timp cadea pe pretul de
@@ -1049,12 +1136,26 @@ export async function placeOrder(data: {
           // Treptele se aplica si liniilor purtate din cos in comanda directa,
           // cu acelasi motor. Altfel cosul arata pretul de pachet, iar comanda
           // plecata din formularul de produs il pierde pe drum.
-          const linie = pretPeTrepte(construiesteTrepte(meta.tiers, unitPrice), i.quantity, unitPrice);
+          const cfg = verdicteCos[idx];
+          // ⚠ Configurata, linia sare peste trepte — aceeasi regula ca pe calea cosului.
+          const linie = cfg.fel === "ok"
+            ? { unitPrice: cfg.unitar }
+            : pretPeTrepte(construiesteTrepte(meta.tiers, unitPrice), i.quantity, unitPrice);
           return {
             product_id: i.product_id,
             name: rezolvata.fel === "ok" ? rezolvata.nume : meta.name,
             price: linie.unitPrice,
             quantity: i.quantity,
+            ...(cfg.fel === "ok" && {
+              configuratie: {
+                configuratorId: cfg.configuratorId,
+                versiuneId: cfg.versiuneId,
+                numarVersiune: cfg.numarVersiune,
+                amprenta: cfg.amprenta,
+                valori: cfg.valori,
+                rezumat: cfg.rezumat,
+              },
+            }),
           };
         });
     }
@@ -1300,6 +1401,20 @@ export async function placeOrder(data: {
       price: unitPrice,
       quantity: cantitate,
       ...(data.customization && { customization: data.customization }),
+      /*
+       * ⚠ Instantaneul configuratiei intra in comanda, ca sa se poata citi si peste un an,
+       * chiar daca intre timp comerciantul a publicat o versiune in care a redenumit optiuni.
+       */
+      ...(cfgPrincipal.fel === "ok" && {
+        configuratie: {
+          configuratorId: cfgPrincipal.configuratorId,
+          versiuneId: cfgPrincipal.versiuneId,
+          numarVersiune: cfgPrincipal.numarVersiune,
+          amprenta: cfgPrincipal.amprenta,
+          valori: cfgPrincipal.valori,
+          rezumat: cfgPrincipal.rezumat,
+        },
+      }),
     },
     ...cartItems,
     ...validatedExtras.map(e => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
@@ -3216,7 +3331,14 @@ export async function sendCustomerSms(orderId: string, message: string) {
 export async function placeCartOrder(data: {
   business_id: string;
   cart_session_id?: string;
-  items: { product_id: string; name: string; price: number; quantity: number; variant_title?: string }[];
+  /**
+   * ⚠ `price` NU se citeste. Fiecare linie se repretuieste din catalog, iar `configuratie`
+   * e o multime de VALORI, nu un pret: serverul o normalizeaza el insusi si socoteste din ea.
+   */
+  items: {
+    product_id: string; name: string; price: number; quantity: number;
+    variant_title?: string; configuratie?: unknown;
+  }[];
   shipping_cost: number;
   /** Semnatura cotatiei de transport (vezi `quote-token.ts`). */
   shipping_token?: string;
@@ -3354,7 +3476,10 @@ export async function placeCartOrder(data: {
   const [{ data: dbProducts, error: eroareProduse }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
     admin.from("products")
       // `name` se cere ca linia sa poarte numele din CATALOG, nu sirul din browser.
-      .select("id, name, price, is_active, page_sections")
+      // ⚠ `category` se cere pentru configuratoare: unul legat de o categorie se mosteneste
+      // prin NUMELE ei, iar fara coloana asta produsul ar fi parut ca n-are configurator si
+      // s-ar fi vandut la pretul de baza cu tot ce a configurat clientul.
+      .select("id, name, price, is_active, page_sections, category")
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
@@ -3451,12 +3576,51 @@ export async function placeCartOrder(data: {
     activeProducts.map((p) => [p.id, (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers]),
   );
 
-  let validatedItems = liniiCerute.map((i) => {
+  /*
+   * ⚠ REPRETUIREA CONFIGURATIILOR, inaintea treptelor si a ofertelor.
+   *
+   * Serverul primeste VALORILE, nu pretul: le normalizeaza el insusi, verifica ce a ales
+   * clientul fata de definitia publicata ACUM, si calculeaza. Un pret venit de la browser nu
+   * e o informatie, e o cerere — aceeasi regula ca la cupoane, la oferte si la variante.
+   *
+   * ⚠ O linie REFUZATA opreste comanda, nu se vinde la pretul de baza. Trecuta mai departe,
+   * ar fi dat gratis tot ce a configurat cumparatorul, iar comanda ar fi ajuns in atelier fara
+   * specificatie. Un refuz e o comanda pierduta; o vanzare gresita e marfa lucrata degeaba.
+   */
+  const categoriiProduse = new Map(activeProducts.map((p) => [p.id, p.category ?? null]));
+  const verdicteCfg = await repretuiesteLinii(
+    data.business_id,
+    liniiCerute.map((i) => {
+      const r = pretulLiniei(catalogLinii.get(i.product_id)!, i.variant_title);
+      return {
+        productId: i.product_id,
+        category: categoriiProduse.get(i.product_id) ?? null,
+        configuratie: i.configuratie,
+        pretCatalog: r.fel === "ok" ? r.unitPrice : priceMap.get(i.product_id)!,
+      };
+    }),
+  );
+  const respinsaCfg = verdicteCfg.findIndex((v) => v.fel === "refuz");
+  if (respinsaCfg >= 0) {
+    const v = verdicteCfg[respinsaCfg] as Extract<PretConfigurat, { fel: "refuz" }>;
+    const linie = liniiCerute[respinsaCfg];
+    logError({
+      action: "placeCartOrder.configuratieRespinsa",
+      message: v.motive.join(" | ").slice(0, 300),
+      details: { businessId: data.business_id, productId: linie.product_id },
+      severity: "warning",
+    });
+    // ⚠ Cu numele din CATALOG si cu motivul, ca omul sa stie CE si DE CE, nu doar ca nu merge.
+    return { error: `${catalogLinii.get(linie.product_id)?.name ?? "Un produs"}: ${v.motive[0]}` };
+  }
+
+  let validatedItems = liniiCerute.map((i, idx) => {
     // Acelasi ajutor care a dat verdictul mai sus da si pretul: verificat si
     // pretuit de doua functii diferite, cele doua ajungeau sa nu mai spuna
     // acelasi lucru — chiar asta era defectul.
     const rezolvata = pretulLiniei(catalogLinii.get(i.product_id)!, i.variant_title);
     const unitPrice = rezolvata.fel === "ok" ? rezolvata.unitPrice : priceMap.get(i.product_id)!;
+    const cfg = verdicteCfg[idx];
     // Treptele de cantitate se aplica si pe calea cosului, cu ACELASI motor pe
     // care il foloseste pagina de produs. Pana acum le onora doar comanda
     // directa: pagina promitea „3 bucati 250 lei", iar clientul care punea 3 in
@@ -3466,7 +3630,19 @@ export async function placeCartOrder(data: {
     // sa dea exact totalul pachetului. Rotunjit la ban, linia ar iesi 249,99 si
     // clientul ar plati alt total decat cel din cos. E acelasi lucru pe care il
     // trimite deja calea comenzii directe.
-    const linie = pretPeTrepte(construiesteTrepte(trepteMap.get(i.product_id), unitPrice), i.quantity, unitPrice);
+    /*
+     * ⚠ O LINIE CONFIGURATA NU TRECE PRIN TREPTELE DE CANTITATE.
+     *
+     * Treptele sunt preturi de PACHET, scrise pentru produsul asa cum e in catalog: „3 bucati
+     * 250 lei". Aplicate peste o configuratie de 300 de lei bucata, trei bucati configurate
+     * s-ar fi vandut cu 250 — adica pretul pachetului simplu, cu toata configurarea pe gratis.
+     *
+     * Sunt doua modele de pret diferite, si nu se amesteca tacut. Comerciantul care vrea
+     * reduceri de volum pe un produs configurabil le scrie in configurator.
+     */
+    const linie = cfg.fel === "ok"
+      ? { unitPrice: cfg.unitar }
+      : pretPeTrepte(construiesteTrepte(trepteMap.get(i.product_id), unitPrice), i.quantity, unitPrice);
     return {
       product_id: i.product_id,
       // Numele din CATALOG, nu cel din browser: pana acum `orders.items[].name`
@@ -3475,6 +3651,23 @@ export async function placeCartOrder(data: {
       name: rezolvata.fel === "ok" ? rezolvata.nume : String(i.name ?? "").slice(0, 200),
       price: linie.unitPrice,
       quantity: i.quantity,
+      /*
+       * ⚠ Instantaneul se scrie IN COMANDA, nu se lasa ca o trimitere catre versiune.
+       *
+       * Atelierul citeste comanda, nu configuratorul. Iar cand comerciantul publica o versiune
+       * noua in care redenumeste o optiune, comanda veche trebuie sa ramana citibila exact cum
+       * a fost cumparata.
+       */
+      ...(cfg.fel === "ok" && {
+        configuratie: {
+          configuratorId: cfg.configuratorId,
+          versiuneId: cfg.versiuneId,
+          numarVersiune: cfg.numarVersiune,
+          amprenta: cfg.amprenta,
+          valori: cfg.valori,
+          rezumat: cfg.rezumat,
+        },
+      }),
     };
   });
   // Aceeasi re-evaluare ca la comanda directa, fara ancora: „cumparate frecvent

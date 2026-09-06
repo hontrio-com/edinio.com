@@ -1161,6 +1161,9 @@ export function ProductPageDetailed({
               compare_at_price: displayComparePrice,
               images: slides,
               variantTitle: selectedComboTitle ?? undefined,
+              // ⚠ Configuratia pleaca odata cu produsul. Serverul o recalculeaza; ce se trimite
+              // de aici nu e niciodata un pret.
+              configuratie: cfg.valori ?? undefined,
             }}
             business={{ id: business.id, slug: business.slug, basePath, primary_color: color }}
             shippingCost={shippingCost}

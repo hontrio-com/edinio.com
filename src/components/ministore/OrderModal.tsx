@@ -70,6 +70,14 @@ interface Props {
      * pentru orice varianta.
      */
     variantTitle?: string | null;
+    /**
+     * Ce a ales cumparatorul in configurator: VALORI, nu un pret.
+     *
+     * ⚠ Serverul le normalizeaza el insusi si recalculeaza pretul din ele. Fara campul asta,
+     * comanda plecata din formular ar fi pierdut configurarea pe drum — clientul ar fi platit
+     * pretul configurat pe pagina, iar atelierul ar fi primit un produs simplu.
+     */
+    configuratie?: unknown;
   };
   business: {
     id: string;
@@ -92,7 +100,7 @@ interface Props {
   initialQuantity?: number;
   customizationFields?: CustomizationFieldDef[];
   /** Items already in the storefront cart, carried into this order. */
-  cartItems?: { productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string }[];
+  cartItems?: { productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string; configuratie?: unknown }[];
   /** Called after the order is placed so the caller can clear the cart. */
   /**
    * Comanda a plecat cu liniile astea de cos in ea.
@@ -260,7 +268,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [custValues, setCustValues] = useState<Record<string, string | string[]>>({});
   const [custUploading, setCustUploading] = useState<Record<string, boolean>>({});
   // Editable copy of the carried-over cart (change quantity / remove inside the form).
-  const [cartLines, setCartLines] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string }[]>(cartItems ?? []);
+  const [cartLines, setCartLines] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string; configuratie?: unknown }[]>(cartItems ?? []);
 
   // Discount state
   const [discountInput, setDiscountInput] = useState("");
@@ -689,7 +697,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         : undefined;
 
       const allAdditional = [
-        ...cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity, variant_title: i.variantTitle })),
+        // ⚠ `configuratie` merge cu linia. Pierduta aici, comanda ar fi plecat cu produsul
+        // simplu la pretul lui simplu, iar clientul ar fi asteptat o gravura care nu se face.
+        ...cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity, variant_title: i.variantTitle, configuratie: i.configuratie })),
         ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, quantity: 1 })),
         // Doar companionii FARA linie in cos: ceilalti au plecat deja mai sus, cu
         // cantitatea lor reala. Trimisi si aici, serverul ar fi vazut DOUA linii
@@ -704,6 +714,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         product_id: product.id,
         product_name: product.name,
         variant_title: product.variantTitle ?? undefined,
+        configuratie: product.configuratie,
+        /*
+         * ⚠ Cand exista `configuratie`, serverul NU citeste `product_price`: pretul unei
+         * configuratii nu e unul dintre preturile legitime din catalog, deci nu se poate
+         * verifica prin potrivire — se calculeaza de la zero, acolo.
+         */
         product_price: unitPrice,
         quantity,
         shipping_cost: shipping,

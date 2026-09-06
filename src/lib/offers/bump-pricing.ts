@@ -1,4 +1,23 @@
-export interface BumpItem { product_id: string; name: string; price: number; quantity: number }
+import type { InstantaneuConfiguratie } from "@/lib/configurators/repretuire";
+
+export interface BumpItem {
+  product_id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  /**
+   * Ce s-a configurat pe linie. Ofertele nu se uita niciodata la el.
+   *
+   * ⚠ Declarat AICI, desi nu-l foloseste nimic din fisierul asta. Re-evaluarea ofertelor
+   * copiaza liniile cu `{ ...i }`, deci campul supravietuieste la rulare — dar nu si in TIP.
+   * Nedeclarat, ar fi trecut prin oferte doar din intamplare, iar prima rescriere care
+   * construieste liniile camp cu camp l-ar fi pierdut TACUT: comanda ar fi ajuns fara
+   * specificatie, dar cu pretul configuratiei incasat.
+   *
+   * Proiectul are lectia asta scrisa despre un prop inghitit de `{...props}`.
+   */
+  configuratie?: InstantaneuConfiguratie;
+}
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;

@@ -140,5 +140,5 @@ export interface InstantaneuConfiguratie {
   /** Valorile brute, pentru orice recalculare de mai tarziu. */
   valori: Valori;
   /** Cum se citeste: eticheta campului si ce a ales omul, in cuvinte. */
-  rezumat: { eticheta: string; valoare: string }[];
+  rezumat: RandRezumat[];
 }

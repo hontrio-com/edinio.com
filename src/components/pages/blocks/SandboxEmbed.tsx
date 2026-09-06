@@ -25,6 +25,16 @@ export function SandboxEmbed({
   const nonce = useId();
   const [height, setHeight] = useState(minHeight);
 
+  /*
+   * ⚠ `<\/script>` de mai jos e DELIBERAT, si de aceea regula e stinsa aici.
+   *
+   * `no-useless-escape` are dreptate ca VALOAREA sirului nu se schimba: `"<\/script>"` si
+   * `"</script>"` sunt acelasi text. Dar escaparea nu e pentru valoare, e pentru SURSA: daca
+   * pachetul iesit de aici ajunge vreodata inline intr-o eticheta `<script>`, un `</script>`
+   * literal in mijlocul unui sir o inchide chiar acolo, iar restul documentului devine HTML.
+   * Idiomul e cunoscut si corect; regula nu are cum sa-l deosebeasca de o scapare.
+   */
+  /* eslint-disable no-useless-escape */
   const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <style>html,body{margin:0;padding:0;}body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}${css ?? ""}</style>
@@ -37,6 +47,7 @@ setTimeout(post,60);setTimeout(post,300);setTimeout(post,1200);
 })();<\/script>
 ${js ? `<script>try{${js}}catch(e){if(window.console)console.error(e);}<\/script>` : ""}
 </body></html>`;
+  /* eslint-enable no-useless-escape */
 
   useEffect(() => {
     function onMsg(e: MessageEvent) {

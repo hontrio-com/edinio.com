@@ -76,7 +76,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
    * ⚠ Numele din antet se curata: el vine de la cel care a incarcat, iar ghilimelele si randurile
    * noi dintr-un `Content-Disposition` sunt chiar felul in care se sparge un antet in doua.
    */
-  const numeCurat = String(data.nume ?? "fisier").replace(/[^\w.\-]+/g, "_").slice(0, 80);
+  const numeCurat = String(data.nume ?? "fisier").replace(/[^\w.-]+/g, "_").slice(0, 80);
   const inline = data.mime !== "application/pdf";
 
   return new NextResponse(new Uint8Array(octeti), {

@@ -77,7 +77,7 @@ function removeContacts(text: string): string {
     // bare domains like magazin.ro / shop.com (no scheme)
     .replace(/\b[a-z0-9-]+\.(?:ro|com|net|org|eu|shop|store|online|site)(?:\/\S*)?\b/gi, " ");
   // phone-like sequences: strip only when the run contains 9+ digits
-  out = out.replace(/\+?\d[\d\s().\/-]{6,}\d/g, (m) => ((m.match(/\d/g)?.length ?? 0) >= 9 ? " " : m));
+  out = out.replace(/\+?\d[\d\s()./-]{6,}\d/g, (m) => ((m.match(/\d/g)?.length ?? 0) >= 9 ? " " : m));
   return out.replace(/[ \t]{2,}/g, " ").trim();
 }
 

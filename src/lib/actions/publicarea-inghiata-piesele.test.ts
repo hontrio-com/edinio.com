@@ -147,7 +147,14 @@ test("⚠ INGHETAREA ia CHIAR randul piesei, nu valori scrise de mana", () => {
     "numele piesei nu mai vine din rand: comanda n-ar mai spune ce s-a consumat",
   );
   // ⚠ Si niciun camp inghetat nu are voie sa fie un literal.
-  const bloc = corp.slice(corp.indexOf("componente.set("), corp.indexOf("componente.set(") + 400);
+  /*
+   * ⚠ GARDA PE MARCAJ. Fara ea, `indexOf` intoarce -1, `slice(-1, 399)` da SIR GOL, iar
+   * verificarea negativa de mai jos trece pe gol — un zero fals care arata ca unul adevarat.
+   * Celelalte cinci probe ale fisierului au garda; asta o pierduse.
+   */
+  const iMarcaj = corp.indexOf("componente.set(");
+  assert.ok(iMarcaj > 0, "nu gasesc unde se compune harta pieselor; proba s-a rupt");
+  const bloc = corp.slice(iMarcaj, iMarcaj + 400);
   assert.ok(
     !/:\s*(0|null|""|'')\s*,/.test(bloc.replace(/\?\?\s*null/g, "")),
     `un camp inghetat e scris de mana: ${bloc.slice(0, 200)}`,

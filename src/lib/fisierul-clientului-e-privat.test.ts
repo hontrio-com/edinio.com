@@ -78,8 +78,14 @@ test("⚠ pragul se consuma INAINTE de citirea octetilor", () => {
    * cel din memorie taie rafalele, cel din Postgres limiteaza cu adevarat, fiindca instantele sunt
    * multe si fiecare are contorul ei.
    */
-  const s = sursa(INCARCARE);
-  const iRata = s.indexOf("consumaLimita");
+  /*
+   * ⚠ CU PARANTEZA, si pe sursa fara comentarii. `indexOf("consumaLimita")` gasea LINIA DE
+   * IMPORT (randul 8), care e mereu inaintea oricarui cod — deci ordinea era satisfacuta orice
+   * s-ar fi scris mai jos, si garda nu pazea nimic. Precedentul bun e in acelasi depozit:
+   * `securitate-audit.test.ts` scrie `cod.indexOf("consumaLimita(")`.
+   */
+  const s = faraComentarii(sursa(INCARCARE));
+  const iRata = s.indexOf("consumaLimita(");
   const iCorp = s.indexOf("req.formData()");
   assert.ok(iRata > 0 && iCorp > 0, "lipseste unul dintre cele doua");
   assert.ok(iRata < iCorp, "pragul se consuma dupa ce s-a citit corpul cererii");
@@ -138,7 +144,7 @@ test("⚠ numele din antet se curata inainte sa intre in el", () => {
    * ⚠ Numele vine de la cel care a incarcat. Ghilimelele si randurile noi dintr-un
    * `Content-Disposition` sunt chiar felul in care se sparge un antet in doua.
    */
-  assert.match(sursa(SERVIRE), /replace\(\/\[\^\\w\.\\-\]\+\/g, "_"\)/);
+  assert.match(sursa(SERVIRE), /replace\(\/\[\^\\w\.-\]\+\/g, "_"\)/);
 });
 
 test("⚠ forma id-ului se verifica INAINTE de interogare", () => {

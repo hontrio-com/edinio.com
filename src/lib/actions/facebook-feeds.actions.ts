@@ -177,7 +177,7 @@ export async function cautaProduseFeed(
    * dupa „50%" ar fi intors tot catalogul in loc de nimic.
    */
   if (termen) {
-    const sigur = termen.replace(/[\%_]/g, (c) => `\${c}`);
+    const sigur = termen.replace(/[%_]/g, (c) => `\${c}`);
     cerere = cerere.ilike("name", `%${sigur}%`);
   }
 

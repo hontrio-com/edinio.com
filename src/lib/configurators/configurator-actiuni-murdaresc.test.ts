@@ -63,8 +63,21 @@ function schimbaRaspunsulCardului(corp: string): boolean {
      * cateva zeci de randuri mai jos. Deci predicatul raspundea `false` tocmai pentru actiunea
      * cea mai importanta din fisier: proba trecea verde si nu paza nimic acolo unde conta.
      */
-    for (const m of corp.matchAll(new RegExp(`\.from\("${tabela}"\)`, "g"))) {
-      if (scrie.test(corp.slice(m.index ?? 0, (m.index ?? 0) + 400))) return true;
+    /*
+     * ⚠ FARA EXPRESIE REGULATA, si asta e a doua reparatie a aceluiasi rand.
+     *
+     * Aici statea `new RegExp(`\\.from\\("${tabela}"\\)`, "g")`. Intr-un TEMPLATE LITERAL,
+     * `\\.` devine `.` si `\\(` devine `(` — adica un grup, nu o paranteza. Regexul iesit cerea
+     * `from` urmat DIRECT de ghilimea, ceea ce nu se scrie niciodata. Masurat: zero potriviri
+     * pe un text care contine sirul de doua ori. Bucla nu s-a executat NICIODATA, iar din
+     * predicat ramanea viu doar `.update(...)`.
+     *
+     * A treia oara cand escaparile se pierd pe drum in proiectul asta. Se cauta deci pe SIR,
+     * cu `indexOf`, unde nu exista escapari de pierdut.
+     */
+    const ancora = `.from("${tabela}")`;
+    for (let i = corp.indexOf(ancora); i >= 0; i = corp.indexOf(ancora, i + 1)) {
+      if (scrie.test(corp.slice(i, i + 400))) return true;
     }
   }
   // Pointerul de versiune si starea sunt chiar ce hotaraste daca un configurator se SERVESTE.

@@ -54,6 +54,32 @@ const TABELE = [
   */
   "blog_posts", "blog_authors", "blog_categories", "blog_tags", "blog_post_tags",
   "blog_post_revisions", "blog_redirects", "blog_subscribers", "blog_post_stats",
+  /*
+    ⚠ PROIECTIA DE CATALOG, din acelasi motiv ca blogul, dar cu o pedeapsa mai mare.
+
+    `din-proiectie.ts` cere coloanele pe FATA, intr-un sir (`COLOANE_PROIECTIE`), pe calea de
+    rezerva a paginii de magazin si a cautarii. PostgREST nu ignora o coloana necunoscuta: pica
+    INTREAGA interogare. Deci cod pusat inaintea migratiei nu inseamna „lipseste un camp”,
+    inseamna GRILA GOALA pe toate magazinele platformei — chiar paguba scrisa in memoria
+    „o coloana lipsa rupe TOATA interogarea”.
+
+    Iar `catalog_produs` intra si in tipurile generate, deci proba de tipuri o vede — dar
+    tipurile pot fi vechi, PostgREST-ul nu.
+  */
+  "catalog_produs", "catalog_murdar",
+  /*
+    ⚠ LISTA E INCHISA, si asta e limita ei cea mai mare.
+
+    Unealta verifica DOAR tabelele scrise aici. Un tabel nou, cu coloane cerute pe fata din cod,
+    trece nevazut oricat de gresit ar fi — si nimic nu semnaleaza omisiunea, fiindca „nimic de
+    verificat" arata la fel ca „totul in regula".
+
+    Masurat o data, cu pret: o familie intreaga de sase tabele noi a trait aici neacoperita, desi
+    doua migratii scriau pe fata „se ruleaza `npm run verifica:coloane` inainte de push".
+    Promisiunea era in antet; acoperirea, nicaieri.
+
+    Deci: cine adauga un tabel pe care CODUL il interogheaza pe coloane numite, il adauga si aici.
+  */
 ];
 
 /* ── 1. Ce coloane cere codul ─────────────────────────────────────────────── */
@@ -74,11 +100,43 @@ function fisiere(radacina) {
  *   .from("orders").select("a, b, c")
  *   .select("id, store_settings(x, y)")      ← embed
  *
- * ⚠ Se sare peste `select("*")` si peste selecturile compuse din variabile: acolo
- * nu avem ce compara, iar o proba care se preface ca a verificat e mai rea decat
- * una care spune ca n-a putut.
+ * ⚠ Se sare peste `select("*")`. Selecturile compuse din variabile se rezolva insa, cand
+ * variabila e o CONSTANTA de sir din acelasi fisier — vezi `constantele()`.
+ *
+ * ⚠ DE CE MERITA. `din-proiectie.ts` cere coloanele proiectiei de catalog printr-o astfel de
+ * constanta, pe calea de rezerva a paginii de magazin si a cautarii. PostgREST nu ignora o
+ * coloana necunoscuta: pica INTREAGA interogare. Deci cod pusat inaintea migratiei nu inseamna
+ * „lipseste un camp”, inseamna GRILA GOALA pe toate magazinele platformei. Cat timp unealta era
+ * oarba acolo, tocmai locul cu pedeapsa cea mai mare nu era aparat de nimic.
+ *
+ * Ce ramane nerezolvat — siruri compuse la rulare, importate din alt fisier — se sare mai
+ * departe: o proba care se preface ca a verificat e mai rea decat una care spune ca n-a putut.
  */
-function cereriDinFisier(text) {
+/**
+ * Constantele de sir din fisier: `const NUME = "a, b";`, si formele scrise pe mai multe
+ * randuri cu `+`.
+ *
+ * ⚠ Numai literalii. O constanta compusa din alta variabila nu se urmareste: ar fi insemnat
+ * sa interpretez fisierul, si prima interpretare gresita ar fi dat o alarma falsa — iar o
+ * unealta care da alarme false nu se mai citeste tocmai cand are dreptate.
+ */
+function constantele(text) {
+  const out = new Map();
+  const re = /(?:^|\n)\s*(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=\s*((?:[\s\S]{0,1200}?));/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const [, nume, corp] = m;
+    const bucati = [...corp.matchAll(/["'`]([^"'`]*)["'`]/g)].map((x) => x[1]);
+    // Corpul trebuie sa fie DOAR siruri lipite cu `+`; orice altceva inseamna ca nu stim.
+    if (bucati.length === 0) continue;
+    const doarSiruri = corp.replace(/["'`][^"'`]*["'`]/g, "").replace(/[\s+]/g, "") === "";
+    if (!doarSiruri) continue;
+    out.set(nume, bucati.join(""));
+  }
+  return out;
+}
+
+function cereriDinFisier(text, consts) {
   const cereri = [];
 
   /*
@@ -101,6 +159,21 @@ function cereriDinFisier(text) {
       if (TABELE.includes(e[1])) cereri.push({ tabel: e[1], lista: e[2] });
     }
   }
+
+  /*
+   * A doua trecere: `.select(NUME_DE_CONSTANTA)`.
+   *
+   * ⚠ Fara ea, tocmai selectul cu pedeapsa cea mai mare ramanea neverificat. Vezi antetul.
+   */
+  const reVar = /\.from\(\s*["'`](\w+)["'`]\s*\)((?:(?!\.from\()[\s\S]){0,400}?)\.select\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
+  let v;
+  while ((v = reVar.exec(text))) {
+    const [, tabel, , nume] = v;
+    const lista = consts.get(nume);
+    if (!lista || !TABELE.includes(tabel) || lista.includes("*")) continue;
+    cereri.push({ tabel, lista });
+  }
+
   return cereri;
 }
 
@@ -122,7 +195,7 @@ function cereriDinFisier(text) {
  */
 function scrieriDinFisier(text) {
   const cereri = [];
-  const re = /\.from\(\s*["'\`](\w+)["'\`]\s*\)((?:(?!\.from\()[\s\S]){0,200}?)\.(insert|update|upsert)\(\s*\{/g;
+  const re = /\.from\(\s*["'`](\w+)["'`]\s*\)((?:(?!\.from\()[\s\S]){0,200}?)\.(insert|update|upsert)\(\s*\{/g;
   let m;
   while ((m = re.exec(text))) {
     const tabel = m[1];
@@ -144,7 +217,8 @@ function scrieriDinFisier(text) {
       const curat = linie.trim();
       if (nivel === 0) {
         const k = /^([a-z_][a-z0-9_]*)\s*:/i.exec(curat);
-        if (k) chei.push(k[1]);
+        // ⚠ Vezi `OPTIUNI_NU_COLOANE`: `{ count }` nu e o coloana scrisa.
+        if (k && !OPTIUNI_NU_COLOANE.has(k[1])) chei.push(k[1]);
       }
       nivel += (linie.match(/[{[]/g) ?? []).length - (linie.match(/[}\]]/g) ?? []).length;
       if (nivel < 0) nivel = 0;
@@ -154,6 +228,20 @@ function scrieriDinFisier(text) {
   return cereri;
 }
 
+/*
+ * ⚠ OPTIUNILE LUI POSTGREST NU SUNT COLOANE.
+ *
+ * `.select("id", { count: "exact", head: true })` are al doilea argument un obiect de OPTIUNI.
+ * Extractorul de chei de mai sus il citea la fel ca pe unul de valori scrise, deci aduna `count`
+ * si `head` in lista de coloane cerute. Cerute apoi lui PostgREST, ele fac raspunsul sa cada cu
+ * `42803` — iar unealta scrie `NEVERIFICAT` si merge mai departe.
+ *
+ * Adica tabelele care foloseau `{ count }` erau raportate ca nepazite, si nimeni nu se uita la
+ * randul ala: un `NEVERIFICAT` arata ca un mesaj de mediu, nu ca o gaura. Masurat pe o familie
+ * de tabele noi: doua din sase au iesit asa chiar din prima rulare.
+ */
+const OPTIUNI_NU_COLOANE = new Set(["count", "head", "ascending", "nullsFirst", "referencedTable", "foreignTable"]);
+
 /** Numele de coloane dintr-o lista de `select`, fara embeduri si fara alias-uri. */
 function coloaneDin(lista) {
   return lista
@@ -161,7 +249,8 @@ function coloaneDin(lista) {
     .replace(/(\w+)\s*\([^()]*\)/g, "")
     .split(",")
     .map((c) => c.trim().split(":").pop().trim())
-    .filter((c) => /^[a-z_][a-z0-9_]*$/i.test(c));
+    .filter((c) => /^[a-z_][a-z0-9_]*$/i.test(c))
+    .filter((c) => !OPTIUNI_NU_COLOANE.has(c));
 }
 
 /* ── 2. Ce coloane are baza ───────────────────────────────────────────────── */
@@ -196,6 +285,17 @@ async function verificaColoane(url, cheie, tabel, coloane) {
     const m = /column\s+\S*?["']?([a-z0-9_]+)["']?\s+does not exist/i.exec(corp.message ?? "");
     return { fel: "lipsa", coloana: m?.[1] ?? corp.message ?? "necunoscuta" };
   }
+  /*
+   * ⚠ PGRST205 = TABELUL NU EXISTA, si asta NU e „neverificabil" — e chiar paguba pe care
+   * unealta o pazeste, in forma ei cea mai mare.
+   *
+   * Pana acum cadea pe ramura de mai jos, adica un AVERTISMENT care nu schimba codul de iesire.
+   * Deci daca singura problema era ca tot tabelul lipseste — exact ce se intampla cand codul
+   * pleaca inaintea migratiei — unealta iesea cu 0 si lasa push-ul sa treaca. O coloana lipsa
+   * bloca; un TABEL lipsa, nu.
+   */
+  if (corp?.code === "PGRST205") return { fel: "tabel_lipsa" };
+
   /* 42501 = „permission denied": tabelul e inchis pentru cheia asta. */
   return { fel: "neverificabil", motiv: `${r.status} ${corp?.code ?? ""} ${corp?.message ?? ""}`.trim() };
 }
@@ -212,9 +312,35 @@ if (!url || !cheie) {
 
 /* Se aduna reuniunea coloanelor cerute, pe tabel, cu locul de unde vin. */
 const cerute = new Map(TABELE.map((t) => [t, new Map()]));
-for (const cale of fisiere("src")) {
+
+/*
+ * ⚠ CONSTANTELE SE STRANG DIN TOT `src`, NU DIN FISIERUL CURENT.
+ *
+ * `COLOANE_PROIECTIE` se declara in `din-proiectie.ts` si se FOLOSESTE in `pagina-magazin.tsx`
+ * si in cautare — exact tiparul obisnuit pentru o lista de coloane. Cautata doar in fisierul
+ * care o cheama, n-ar fi fost gasita niciodata, si tocmai selectul cu pedeapsa cea mai mare ar
+ * fi ramas neverificat: PostgREST pica INTREAGA interogare la o coloana necunoscuta, deci acolo
+ * greseala nu inseamna un camp lipsa, ci grila goala pe toata platforma.
+ *
+ * ⚠ Un nume declarat de DOUA ori, cu valori diferite, se ARUNCA: nu se poate sti care se
+ * foloseste unde, iar o ghicire gresita ar da o alarma falsa — si o unealta care da alarme
+ * false nu se mai citeste tocmai cand are dreptate.
+ */
+const toateFisierele = fisiere("src");
+const constanteGlobale = new Map();
+const ambigue = new Set();
+for (const cale of toateFisierele) {
   const text = readFileSync(cale, "utf8").replace(/\r\n/g, "\n");
-  for (const { tabel, lista } of cereriDinFisier(text)) {
+  for (const [nume, val] of constantele(text)) {
+    if (constanteGlobale.has(nume) && constanteGlobale.get(nume) !== val) ambigue.add(nume);
+    else constanteGlobale.set(nume, val);
+  }
+}
+for (const nume of ambigue) constanteGlobale.delete(nume);
+
+for (const cale of toateFisierele) {
+  const text = readFileSync(cale, "utf8").replace(/\r\n/g, "\n");
+  for (const { tabel, lista } of cereriDinFisier(text, constanteGlobale)) {
     for (const col of coloaneDin(lista)) {
       const m = cerute.get(tabel);
       if (!m.has(col)) m.set(col, cale);
@@ -240,6 +366,11 @@ for (const [tabel, coloane] of cerute) {
   const r = await verificaColoane(url, cheie, tabel, coloane.keys());
   if (r.fel === "ok") {
     console.log(`OK        ${tabel}: ${coloane.size} coloane`);
+    continue;
+  }
+  if (r.fel === "tabel_lipsa") {
+    lipsuri += coloane.size;
+    console.error(`LIPSA     ${tabel}: TABELUL nu exista in PostgREST (${coloane.size} coloane cerute de cod)`);
     continue;
   }
   if (r.fel === "neverificabil") {

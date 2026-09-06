@@ -30,7 +30,7 @@ import { fisiereleCerute, type FisierMasurat } from "./fisiere";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rezumatConfiguratiei, type RandRezumat } from "./rezumat";
 import { normalizeazaValori, type Valori } from "./valori";
-import { configuratoarePentruProduse } from "./vitrina";
+import { configuratoareleCuVerdict } from "./vitrina";
 
 /** O linie de comanda, asa cum o vede repretuirea. */
 export interface LinieCeruta {
@@ -139,15 +139,47 @@ export async function repretuiesteLinii(
 ): Promise<PretConfigurat[]> {
   if (!linii || linii.length === 0) return [];
 
-  const configuratoare = await configuratoarePentruProduse(
+  /*
+   * ⚠ SE CERE VERDICTUL, nu doar harta — si asta e chiar promisiunea din antetul fisierului.
+   *
+   * `configuratoarePentruProduse` e invelisul care ARUNCA steagul `ok`. La orice pana de citire
+   * el intoarce o harta GOALA, iar `verdictulLiniei` raspunde atunci `{ fel: "fara" }` — adica
+   * „produsul n-are configurator”. Pe vitrina aia e degradarea buna; aici e exact pe dos.
+   *
+   * Ce se intampla fara verdict: un fototapet cu `baza: "fara"` are `products.price` 1 leu (asa
+   * si scrie `pornire.ts`). La o pana de o clipa a bazei, linia se pretuieste din catalog — cu
+   * trepte cu tot — si intra in comanda cu 1,00 leu in loc de 340. Iar instantaneul nu se scrie,
+   * deci atelierul primeste o comanda fara nicio specificatie si nimeni nu mai poate afla ce
+   * ceruse omul.
+   *
+   * Cele doua drumuri care foloseau deja verdictul corect — feedurile si proiectia de catalog —
+   * nu sunt pe bani. Tocmai calea banilor il ocolea.
+   */
+  const raspuns = await configuratoareleCuVerdict(
     businessId,
     linii.map((l) => ({ id: l.productId, category: l.category })),
   );
+  const configuratoare = raspuns.harta;
 
   const fisiere = await fisiereleLiniilor(businessId, linii, configuratoare);
 
   return linii.map((l) => {
     const c = configuratoare.get(l.productId);
+    /*
+     * ⚠ NU SE STIE ≠ N-ARE. Cand citirea a picat, o linie negasita in harta poate fi una care
+     * ARE configurator — si atunci `{ fel: "fara" }` ar vinde-o la pretul de catalog, fara nicio
+     * specificatie. Se refuza, ca peste tot pe drumul asta: o comanda pierduta e mai ieftina
+     * decat una lucrata gresit.
+     *
+     * ⚠ Numai cand LIPSESTE din harta. Ce s-a citit cu adevarat ramane bun de folosit, chiar
+     * daca alta bucata a citirii a picat — vezi nota de pe `RaspunsConfiguratoare`.
+     */
+    if (!c && !raspuns.ok) {
+      return {
+        fel: "refuz" as const,
+        motive: ["Nu putem verifica acum optiunile produsului. Reincearca peste cateva momente."],
+      };
+    }
     return verdictulLiniei(c?.compilat, l.configuratie, l.pretCatalog, c && {
       configuratorId: c.configuratorId,
       versiuneId: c.versiuneId,

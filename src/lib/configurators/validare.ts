@@ -489,6 +489,38 @@ export function valideaza(intrare: IntrareValidare): RezultatValidare {
   if (eNumarBun(pretuire.minim) && eNumarBun(pretuire.maxim) && pretuire.minim > pretuire.maxim) {
     adauga("critic", "limite_pret_pe_dos", "Pretul minim este mai mare decat cel maxim.");
   }
+
+  /*
+   * ⚠ UN PLAFON DE ZERO FACE TOT CATALOGUL GRATIS, si zeroul se scrie din reflex.
+   *
+   * `pret.ts` refuza pretul NEGATIV, si scrie de ce: „nimic nu cade pe zero, fiindca zero la
+   * pret inseamna marfa data pe gratis”. Dar zeroul insusi trecea: `Math.min(x, 0)` e 0, iar
+   * `unitar === 0` nu e negativ, deci nicio garda din motor nu se aprinde. Comanda intra cu
+   * 0,00 lei si nimic nu spune nimanui nimic.
+   *
+   * ⚠ Iar zeroul in campul „Pret maxim (lei)” NU e o greseala ciudata: e felul obisnuit in
+   * care omul scrie „fara limita”. Gol inseamna fara limita; zero inseamna gratis. Deosebirea
+   * dintre ele nu se vede din camp, deci se spune la publicare.
+   *
+   * `atentie` n-ar fi ajuns: aici nu e o asteptare gresita, e marfa vanduta pe gratis.
+   */
+  if (eNumarBun(pretuire.maxim) && pretuire.maxim <= 0) {
+    adauga("critic", "plafon_pret_zero",
+      "Pretul maxim e 0 lei, deci orice configuratie ar costa 0. Lasa campul GOL ca sa nu existe limita.");
+  }
+
+  /*
+   * ⚠ SI UN FACTOR DE INMULTIRE ZERO, din acelasi motiv si cu acelasi efect.
+   *
+   * `fel: "inmultire"` cu `valoare: 0` inmulteste tot subtotalul cu zero. Se scrie la fel de
+   * usor din reflex ca plafonul, si nu se vede nicaieri altundeva decat in pretul final.
+   */
+  for (const m of pretuire.modificatori ?? []) {
+    if (m.fel === "inmultire" && !m.formula && eNumarBun(m.valoare) && m.valoare <= 0) {
+      adauga("critic", "inmultire_cu_zero",
+        `„${m.eticheta || m.id}” inmulteste pretul cu ${m.valoare}, deci il face zero.`, m.id);
+    }
+  }
   if (pretuire.rotunjire && (!eNumarBun(pretuire.rotunjire.pas) || pretuire.rotunjire.pas < 0)) {
     adauga("critic", "rotunjire_nevalida", "Pasul de rotunjire a pretului nu e un numar bun.");
   }

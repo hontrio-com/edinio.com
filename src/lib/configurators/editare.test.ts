@@ -342,21 +342,72 @@ test("schimbarea bazei nu sterge taxa de pornire", () => {
   assert.equal("taxaInitiala" in c.pretuire, false);
 });
 
-test("un pret maxim de 0 lei chiar da marfa pe gratis, si trece de validare", () => {
+test("⚠ un pret maxim de 0 lei NU se mai poate publica", () => {
   /*
-   * Masurat cu chiar motorul: pretul iese 0, nu negativ, deci nici `pret_negativ` nu-l prinde.
-   * De aceea avertismentul din panou nu e o politete.
+   * ⚠ PROBA ASTA A FOST INTOARSA PE FATA CEALALTA, si merita spus de ce.
+   *
+   * Pana la auditul probelor ea afirma exact pe dos: ca pretul iese 0 SI ca `sePoatePublica` e
+   * `true`, cu mesajul „si publicarea o primeste fara o vorba”. Adica documenta un defect si il
+   * si INGHETA — o proba care, in ziua in care cineva ar fi reparat defectul, ar fi devenit rosie
+   * si l-ar fi impins sa repare proba.
+   *
+   * Ce ramane adevarat, si de aceea se masoara mai jos cu chiar motorul: pretul iese 0, nu
+   * negativ, deci `pret_negativ` NU-l prinde. Motorul e in regula asa — toata apararea impotriva
+   * marfii date pe gratis sta la PUBLICARE, unde comerciantul o poate inca repara.
+   *
+   * ⚠ Iar zeroul in campul „Pret maxim” nu e o greseala ciudata: e felul obisnuit in care omul
+   * scrie „fara limita”. Gol inseamna fara limita; zero inseamna gratis.
    */
   const d = definitieDeProba();
   const pretuire: Pretuire = { baza: "produs", maxim: 0 };
   const stare = aplicaRegulile(d, [], {});
   const r = calculeazaPretul({ definitie: d, pretuire, stare, pretProdus: 100 });
-  assert.equal(r.ok, true);
-  assert.equal(r.ok && r.d.unitar, 0, "o suta de lei devin zero");
-  assert.equal(valideaza({ definitie: d, reguli: [], pretuire, pretProdus: 100 }).sePoatePublica, true,
-    "si publicarea o primeste fara o vorba");
+  assert.equal(r.ok, true, "motorul nu se plange: zero nu e negativ");
+  assert.equal(r.ok && r.d.unitar, 0, "o suta de lei chiar devin zero");
 
+  const v = valideaza({ definitie: d, reguli: [], pretuire, pretProdus: 100 });
+  assert.equal(v.sePoatePublica, false, "marfa pe gratis nu are voie sa plece in vanzare");
+  assert.ok(v.constatari.some((x) => x.cod === "plafon_pret_zero"), JSON.stringify(v.constatari));
+
+  // Si avertismentul din panou ramane, ca omul sa afle inainte sa apese „Publica”.
   assert.ok(problemeleDePret(pretuire).some((x) => x.includes("0 lei")));
+});
+
+test("⚠ un factor de inmultire 0 nu se mai poate publica", () => {
+  /*
+   * ⚠ Acelasi efect, alta usa: `fel: "inmultire"` cu `valoare: 0` inmulteste tot subtotalul cu
+   * zero. Se scrie la fel de usor din reflex, si nu se vede nicaieri altundeva decat in pretul
+   * final — adica dupa ce prima comanda a intrat pe gratis.
+   */
+  const d = definitieDeProba();
+  const pretuire: Pretuire = {
+    baza: "produs",
+    modificatori: [{ id: "m1", eticheta: "Reducere", fel: "inmultire", valoare: 0 }],
+  };
+  const stare = aplicaRegulile(d, [], {});
+  const r = calculeazaPretul({ definitie: d, pretuire, stare, pretProdus: 100 });
+  assert.equal(r.ok && r.d.unitar, 0, "motorul chiar da zero");
+
+  const v = valideaza({ definitie: d, reguli: [], pretuire, pretProdus: 100 });
+  assert.equal(v.sePoatePublica, false);
+  assert.ok(v.constatari.some((x) => x.cod === "inmultire_cu_zero"), JSON.stringify(v.constatari));
+});
+
+test("un plafon si un factor OBISNUITE nu supara pe nimeni", () => {
+  /*
+   * ⚠ Perechea obligatorie: fara ea, garda de mai sus ar fi putut refuza orice plafon si nimeni
+   * n-ar fi observat pana cand un comerciant cu un maxim legitim de 5000 de lei n-ar mai fi putut
+   * publica deloc.
+   */
+  const d = definitieDeProba();
+  const v = valideaza({
+    definitie: d, reguli: [], pretProdus: 100,
+    pretuire: {
+      baza: "produs", minim: 50, maxim: 5000,
+      modificatori: [{ id: "m1", eticheta: "TVA", fel: "inmultire", valoare: 1.19 }],
+    },
+  });
+  assert.equal(v.sePoatePublica, true, JSON.stringify(v.constatari));
 });
 
 test("problemele de pret le prind pe cele pe care le poate face chiar ecranul", () => {

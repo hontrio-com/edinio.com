@@ -1,7 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getFromR2 } from "@/lib/r2";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { TIPURI_IMAGINE } from "@/lib/configurators/fisiere";
 
 /**
  * Fisierul incarcat de un cumparator, servit inapoi.
@@ -32,6 +34,29 @@ import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 
 /** Cate cereri pe minut de la un IP. Generos: o pagina cu trei poze face trei cereri. */
 const PE_MINUT = 120;
+
+/**
+ * Latimile la care se poate cere o imagine micsorata, prin `?lat=`.
+ *
+ * ═══ ⚠ CE REPARA ═══
+ *
+ * Fisierul se poate incarca pana la 25 MB, iar el se ARATA in trei locuri, toate mici: chipul de
+ * 80×80 de sub campul cumparatorului, patratul de 56×56 din comanda comerciantului, si desenul din
+ * previzualizare. Toate trei cereau ORIGINALUL. O comanda cu zece gravuri insemna, pe ecranul
+ * comerciantului, pana la 250 MB descarcati ca sa se deseneze zece patrate de-o unghie — pe o
+ * conexiune de telefon, o pagina care nu se mai incarca niciodata.
+ *
+ * ═══ ⚠ DE CE O LISTA INCHISA, SI NU ORICE NUMAR ═══
+ *
+ * Fiindca fiecare latime noua e o rulare de `sharp` pe o imagine de pana la 25 MB. Cu `?lat=` liber,
+ * o mie de latimi cerute pe acelasi id ar fi o mie de rulari — pragul de mai sus numara cererile,
+ * nu munca lor. Patru valori acopera cele trei locuri la ecrane de pana la 4x, si nimic mai mult.
+ *
+ * ⚠ SI NU SE SCRIE NIMIC IN R2. `/api/img` isi tine miniaturile acolo, dar galeata e cu citire
+ * PUBLICA: originalul de aici e aparat tocmai fiindca cheia lui nu se poate compune, iar o
+ * miniatura scrisa langa el ar fi trebuit aparata la fel. Poza unui strain nu merita a doua usa.
+ */
+const LATIMI = new Set([160, 320, 640, 1280]);
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const ip = clientIpFromHeaders(req.headers);
@@ -79,11 +104,55 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const numeCurat = String(data.nume ?? "fisier").replace(/[^\w.-]+/g, "_").slice(0, 80);
   const inline = data.mime !== "application/pdf";
 
-  return new NextResponse(new Uint8Array(octeti), {
+  /*
+   * ⚠ Micsorarea se face DUPA toate verificarile si NUMAI pe imagini.
+   *
+   * Tipul se ia din randul nostru, nu din antetul cererii, si se cere sa fie chiar unul dintre
+   * cele trei pe care le primim la incarcare — nu `startsWith("image/")`. Un mime scris altfel in
+   * baza n-ar trebui sa existe, dar daca ar exista, el ar ajunge la `sharp` ca „imagine".
+   */
+  const cerut = Number(req.nextUrl.searchParams.get("lat"));
+  let corp = octeti;
+  let tip = data.mime;
+
+  if (LATIMI.has(cerut) && (TIPURI_IMAGINE as readonly string[]).includes(data.mime)) {
+    try {
+      corp = await sharp(octeti, { limitInputPixels: 268_402_689 })
+        /*
+         * ⚠ `rotate()` fara argument aplica orientarea din EXIF, si e OBLIGATORIU aici. Browserul
+         * o aplica singur pe originalul JPEG; `sharp` scoate metadatele la iesire. Fara ea, poza
+         * facuta cu telefonul apare culcata in miniatura si dreapta cand se deschide — iar in
+         * previzualizare, culcata peste desenul comerciantului.
+         */
+        .rotate()
+        .resize({ width: cerut, height: cerut, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 82 })
+        .toBuffer();
+      tip = "image/webp";
+    } catch {
+      /*
+       * ⚠ Se cade INAPOI PE ORIGINAL, nu pe 500. `sharp` poate arunca pe un fisier stricat care
+       * totusi are semnatura buna — la incarcare tratam la fel. O poza grea servita intreaga e
+       * un necaz mic; un patrat gol in comanda comerciantului, unul mare: el nu mai vede ce a
+       * cerut clientul si nu are de unde sa banuiasca de ce.
+       */
+      corp = octeti;
+      tip = data.mime;
+    }
+  }
+
+  return new NextResponse(new Uint8Array(corp), {
     headers: {
-      "Content-Type": data.mime,
-      "Content-Length": String(octeti.length),
-      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${numeCurat}"`,
+      "Content-Type": tip,
+      "Content-Length": String(corp.length),
+      /*
+       * ⚠ Micsorata, poza pleaca ca `.webp` oricare i-ar fi fost numele: cine o salveaza cu
+       * numele vechi ar avea pe disc un `poza.jpg` care nu e JPEG. Legatura de descarcare din
+       * ecrane arata oricum spre ORIGINAL, fara `?lat=` — asta e doar pentru „salveaza imaginea".
+       */
+      "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${
+        tip === data.mime ? numeCurat : numeCurat.replace(/\.[^.]+$/, "") + ".webp"
+      }"`,
       "Cache-Control": "private, no-store",
       /*
        * ⚠ Fisierul e ales de un strain si servit de pe originea platformei. `nosniff` opreste

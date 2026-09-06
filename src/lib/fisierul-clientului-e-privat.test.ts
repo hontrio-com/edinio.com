@@ -342,3 +342,127 @@ test("⚠ un antet LIPSA se primeste, ca sa nu se rupa browserele vechi", () => 
   const s = faraComentarii(sursa(INCARCARE));
   assert.match(s, /if \(!loc\) return true;/, "o cerere fara antet se refuza acum");
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MINIATURILE
+   ══════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠ Fisierul se poate incarca pana la 25 MB si se ARATA in trei locuri, toate mici. Toate trei
+ * cereau ORIGINALUL: o comanda cu zece gravuri insemna, pe ecranul comerciantului, pana la 250 MB
+ * descarcati ca sa se deseneze zece patrate de-o unghie.
+ */
+
+test("⚠ latimile cerute vin dintr-o lista INCHISA", () => {
+  /*
+   * ⚠ Cu `?lat=` liber, o mie de latimi cerute pe acelasi id ar fi o mie de rulari de `sharp` pe o
+   * imagine de pana la 25 MB. Pragul de pe ruta numara CERERILE, nu munca lor — deci el n-ar fi
+   * aparat nimic aici.
+   */
+  /*
+   * ⚠ PRIMA FORMA A PROBEI ASTEIA A SCAPAT MUTANTUL, si merita scris de ce.
+   *
+   * Ea mai avea o a treia parte: „nu exista `Math.min` DUPA citirea parametrului", ca sa prinda
+   * strangerea intr-un interval. Mutantul l-a pus INAINTE — `Math.min(2000, Number(...))` — si
+   * expresia n-a potrivit nimic. Dar mutantul acela nici nu era un defect: cu `LATIMI.has(cerut)`
+   * inca la locul lui, o strangere in plus nu deschide nimic.
+   *
+   * Defectul adevarat e SCHIMBAREA PORTII, nu ce se intampla inaintea ei: `LATIMI.has(cerut)`
+   * inlocuit cu un interval. Asta o prinde `assert.match` de mai jos — o guarda scrisa pe ce
+   * TREBUIE sa fie acolo, nu pe ce n-are voie sa apara pe langa.
+   */
+  const s = faraComentarii(sursa(SERVIRE));
+  assert.match(s, /const LATIMI = new Set\(\[[\d, ]+\]\);/, "latimile nu mai sunt o lista inchisa");
+  assert.match(s, /if \(LATIMI\.has\(cerut\) &&/, "latimea ceruta nu se mai verifica fata de lista");
+});
+
+test("⚠ se micsoreaza DOAR cele trei tipuri pe care chiar le primim", () => {
+  /*
+   * ⚠ NU `startsWith("image/")`. Tipul vine din randul nostru si ar trebui sa fie deja unul dintre
+   * cele trei; dar daca vreodata n-ar fi, o potrivire pe prefix l-ar duce oricum la `sharp`. Lista
+   * e ACEEASI cu cea a incarcarii, importata — scrisa a doua oara aici, prima divergenta ar fi
+   * fost tacuta.
+   */
+  const s = faraComentarii(sursa(SERVIRE));
+  assert.match(s, /import \{ TIPURI_IMAGINE \} from "@\/lib\/configurators\/fisiere";/);
+  assert.match(s, /\(TIPURI_IMAGINE as readonly string\[\]\)\.includes\(data\.mime\)/);
+  assert.equal(s.includes('startsWith("image/")'), false, "tipul se recunoaste dupa prefix");
+});
+
+test("⚠ miniatura NU se scrie in R2", () => {
+  /*
+   * ⚠ `/api/img` isi tine miniaturile in galeata, si e in regula acolo: acele imagini sunt publice.
+   * Aici nu. Originalul e aparat tocmai fiindca cheia lui e semnata si nu se poate compune, iar o
+   * miniatura scrisa langa el ar fi avut nevoie de exact aceeasi paza — adica o a doua usa la o
+   * poza care nu e a noastra.
+   */
+  const s = faraComentarii(sursa(SERVIRE));
+  assert.equal(/uploadToR2|putToR2|\.put\(/.test(s), false, "servirea a inceput sa scrie in depozit");
+});
+
+test("⚠ o poza stricata cade INAPOI pe original, nu pe 500", () => {
+  /*
+   * ⚠ `sharp` poate arunca pe un fisier stricat care totusi are semnatura buna — la incarcare se
+   * trateaza la fel. O poza grea servita intreaga e un necaz mic; un patrat gol in comanda
+   * comerciantului e unul mare: el nu mai vede ce a cerut clientul si n-are de unde sa banuiasca.
+   */
+  const s = sursa(SERVIRE);
+  assert.match(s, /\} catch \{[\s\S]{0,600}?corp = octeti;\s*\n\s*tip = data\.mime;/);
+});
+
+test("⚠ cele trei ecrane CER miniatura, iar descarcarea cere originalul", () => {
+  /*
+   * ⚠ Ruta poate micsora cat vrea: daca ecranele nu cer, nu s-a reparat nimic. Iar `<a href>` din
+   * comanda trebuie sa ramana FARA `?lat=` — comerciantul care deschide fisierul vrea originalul,
+   * cel care se trimite in atelier.
+   */
+  const comanda = sursa("components/dashboard/OrderDetailClient.tsx");
+  const slot = sursa("components/storefront/sections/product/_shared/ConfiguratorSlot.tsx");
+
+  assert.match(comanda, /src=\{`\/api\/configurator\/fisier\/\$\{id\}\?lat=160`\}/, "patratul din comanda cere originalul");
+  assert.match(comanda, /href=\{`\/api\/configurator\/fisier\/\$\{id\}`\}/, "descarcarea din comanda nu mai da originalul");
+
+  assert.match(slot, /src=\{`\/api\/configurator\/fisier\/\$\{f\.id\}\?lat=320`\}/, "chipul de 80px cere originalul");
+  assert.match(slot, /src=\{`\/api\/configurator\/fisier\/\$\{ce\.fisierId\}\?lat=640`\}/, "previzualizarea cere originalul");
+  assert.match(slot, /href=\{`\/api\/configurator\/fisier\/\$\{f\.id\}`\}/, "documentul nu se mai deschide intreg");
+
+  /* ⚠ Si ca fiecare latime ceruta de ecrane e CHIAR in lista rutei. */
+  const ruta = sursa(SERVIRE);
+  const lista = /const LATIMI = new Set\(\[([\d, ]+)\]\);/.exec(ruta)![1]
+    .split(",").map((x) => Number(x.trim()));
+  for (const cerut of [160, 320, 640]) {
+    assert.ok(lista.includes(cerut), `ecranele cer \`?lat=${cerut}\`, dar ruta nu-l are in lista`);
+  }
+});
+
+test("⚠ micsorarea CHIAR face o poza mica, si CHIAR o intoarce dupa EXIF", async () => {
+  /*
+   * ⚠ Singura proba din lot care ruleaza `sharp` cu chiar optiunile rutei, si nu se uita la sursa.
+   *
+   * `rotate()` fara argument aplica orientarea din EXIF. Browserul o aplica singur pe JPEG-ul
+   * original, dar `sharp` scoate metadatele la iesire — deci fara ea poza facuta cu telefonul ar fi
+   * aparut CULCATA in miniatura si dreapta cand se deschide. Iar in previzualizare, culcata peste
+   * desenul comerciantului. Mutantul care o dovedeste e chiar scoaterea lui `rotate()`: masurat
+   * mai jos, 80x160 devine 160x80.
+   */
+  const sharp = (await import("sharp")).default;
+
+  const original = await sharp({
+    create: { width: 1200, height: 600, channels: 3, background: { r: 200, g: 30, b: 30 } },
+  }).withMetadata({ orientation: 6 }).jpeg().toBuffer();
+
+  const mica = await sharp(original, { limitInputPixels: 268_402_689 })
+    .rotate()
+    .resize({ width: 160, height: 160, fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 82 })
+    .toBuffer();
+
+  const m = await sharp(mica).metadata();
+  assert.equal(m.format, "webp");
+  assert.ok(Math.max(m.width ?? 0, m.height ?? 0) <= 160, `latura mare e ${m.width}x${m.height}`);
+  assert.ok(mica.length < original.length, "miniatura nu e mai mica decat originalul");
+  /* Orientarea 6 e „intoarce la dreapta": o poza lata devine INALTA. */
+  assert.ok((m.height ?? 0) > (m.width ?? 0), `EXIF-ul nu s-a aplicat: ${m.width}x${m.height}`);
+
+  /* Si ca ruta chiar cheama `rotate()` inaintea micsorarii. */
+  assert.match(sursa(SERVIRE), /\.rotate\(\)\s*\n\s*\.resize\(\{ width: cerut/);
+});

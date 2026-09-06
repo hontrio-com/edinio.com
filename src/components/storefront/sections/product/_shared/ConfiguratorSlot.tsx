@@ -552,9 +552,15 @@ function CampFisiere({
                   Document
                 </a>
               ) : (
+                /*
+                 * ⚠ `?lat=320` pentru un chip de 80 de pixeli (deci pana la ecrane de 4x). Fara
+                 * el, cumparatorul isi descarca inapoi propria poza de pana la 25 MB doar ca sa
+                 * vada ca a mers incarcarea — de pe telefon, chiar pe legatura pe care tocmai a
+                 * urcat-o.
+                 */
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
-                  src={`/api/configurator/fisier/${f.id}`}
+                  src={`/api/configurator/fisier/${f.id}?lat=320`}
                   alt="Fisierul incarcat de tine"
                   className="h-20 w-20 rounded-lg border border-border object-cover"
                 />
@@ -734,10 +740,18 @@ function ZonaDesenata({ ce }: { ce: CeSeDeseneaza }) {
       );
 
     case "fisier":
-      /* eslint-disable-next-line @next/next/no-img-element */
+      /*
+       * ⚠ `?lat=640`, mai mare decat la chipuri si mai mica decat originalul.
+       *
+       * Aici poza se DESENEAZA peste produs, deci o miniatura de 320 s-ar vedea moale cand zona de
+       * previzualizare tine o jumatate de ecran. 640 acopera zona pe un desktop obisnuit; pe cea a
+       * comerciantului, previzualizarea din panou trece prin ACEEASI componenta, deci prin aceeasi
+       * latime — si ce vede el e chiar ce vede clientul.
+       */
       return (
+        /* eslint-disable-next-line @next/next/no-img-element */
         <img
-          src={`/api/configurator/fisier/${ce.fisierId}`}
+          src={`/api/configurator/fisier/${ce.fisierId}?lat=640`}
           alt=""
           className="h-full w-full object-contain"
           style={ce.asezare ? {

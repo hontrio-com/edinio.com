@@ -1608,11 +1608,17 @@ function ConfiguratiaLiniei({ linie }: { linie: OrderItem }) {
                     ⚠ `<img>`, nu `next/image`. Optimizatorul cere o cale pe care i-o poate cere
                     inapoi el insusi, iar ruta noastra raspunde doar cu `private, no-store` — deci
                     ar fi trebuit fie sa deschidem fisierul, fie sa nu se vada nimic.
+
+                    ⚠ `?lat=160` pentru un patrat de 56 de pixeli (adica pana la ecrane de 2,8x).
+                    Fara el, cele zece gravuri ale unei comenzi puteau insemna 250 MB descarcati ca
+                    sa se deseneze zece patrate de-o unghie. Legatura de deasupra ramane FARA
+                    `?lat=`: cand comerciantul deschide fisierul, el vrea originalul.
                   */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`/api/configurator/fisier/${id}`}
+                    src={`/api/configurator/fisier/${id}?lat=160`}
                     alt="Fisierul incarcat de client"
+                    loading="lazy"
                     className="h-full w-full object-cover"
                   />
                 </a>

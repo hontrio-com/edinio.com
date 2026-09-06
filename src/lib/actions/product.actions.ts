@@ -57,11 +57,11 @@ interface ProductData {
     /*
      * ⚠ Forma vine din MODULUL PUR, nu se mai enumera aici.
      *
-     * Cheile erau scrise de mana, iar ⚠type⚠ era doar ⚠string⚠ — deci tocmai copia care scrie in
+     * Cheile erau scrise de mana, iar `type` era doar `string` — deci tocmai copia care scrie in
      * baza nu prindea un tip inventat, si nici nu stia de cele patru tipuri noi. Un camp adaugat in
-     * formular ar fi ajuns in ⚠page_sections⚠ fara ca nimic sa-l fi verificat pe drum.
+     * formular ar fi ajuns in `page_sections` fara ca nimic sa-l fi verificat pe drum.
      *
-     * ⚠ Ce chiar apara datele e ⚠normalizeazaDefinitia⚠, la CITIRE: ea arunca ce nu intelege, si
+     * ⚠ Ce chiar apara datele e `normalizeazaDefinitia`, la CITIRE: ea arunca ce nu intelege, si
      * ruleaza si peste randurile care exista deja in baza. Tipul de aici e un contract, nu o poarta.
      */
     customization?: DefinitiePersonalizare;

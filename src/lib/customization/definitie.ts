@@ -414,8 +414,19 @@ export function normalizeazaDefinitia(raw: unknown): DefinitiePersonalizare | nu
  * ⚠ Trece prin acelasi cititor ca restul, ca sa nu existe un al doilea raspuns: un camp pe care
  * cititorul il arunca (fara `id`, cu `type` necunoscut) nu trebuie sa faca produsul „personalizabil"
  * pe carduri si sa ascunda butonul de cos pentru un formular care iese gol.
+ *
+ * ⚠ SI RASPUNDE SI PE FORMA SLIMUITA. Pe suprafetele de catalog — acasa, magazin, cautare,
+ * categorii — `page_sections` ajunge in browser taiat de `slimPageSections`, care pastreaza doar
+ * ce deseneaza lista. Campurile NU se trimit acolo, dinadins: un catalog de o mie de produse ar fi
+ * purtat degeaba etichetele, optiunile si preturile lor.
+ *
+ * Deci slimuirea lasa in loc un steag, `{ cere: true }`, si el se citeste aici. Fara ramura asta,
+ * intrebarea „cere personalizare?" ar fi raspuns „nu" pe TOATE cardurile — si tocmai de acolo
+ * veneau drumurile prin care un produs personalizabil ajungea in cos la pretul de baza.
  */
 export function cerePersonalizarea(pageSections: unknown): boolean {
   const ps = esteObiect(pageSections) ? pageSections : null;
-  return normalizeazaDefinitia(ps?.customization) !== null;
+  const c = ps?.customization;
+  if (esteObiect(c) && c.cere === true) return true;
+  return normalizeazaDefinitia(c) !== null;
 }

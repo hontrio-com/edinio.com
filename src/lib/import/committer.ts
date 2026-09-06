@@ -376,6 +376,22 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
    * sa afli patruzeci de id-uri care incap intr-o interogare.
    */
   const idDupaExternal = new Map<string, string>();
+  /*
+   * ⚠ PERSONALIZAREA PRODUSELOR EXISTENTE, ca sa nu fie stearsa de reimport.
+   *
+   * `buildPayload` reconstruieste `page_sections` de la zero din coloanele fisierului, iar
+   * actualizarea o scrie INTREAGA. Cheia `customization` nu vine niciodata dintr-un CSV, deci un
+   * reimport cu „suprascrie" o rade — cu tot cu campuri si cu tariful pe metru patrat.
+   *
+   * Comerciantul isi configureaza fototapetul, isi actualizeaza preturile din fisier a doua zi, si
+   * produsul se intoarce la pretul de catalog. Fara nicio eroare, si fara niciun rand in raportul
+   * importului: pentru import, nimic nu a esuat.
+   *
+   * ⚠ Se citeste in ACEEASI interogare, nu una pe produs: la un fisier de patru mii de randuri,
+   * un `maybeSingle()` pe produs ar fi insemnat patru mii de dus-intorsuri — chiar defectul pe
+   * care il repara comentariul de deasupra.
+   */
+  const personalizareaVeche = new Map<string, unknown>();
   if (options.overwrite_existing) {
     const externals = [...new Set(
       pending.map((r) => (r.parsed as unknown as StagedProduct | null)?.external_id)
@@ -383,7 +399,7 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
     if (externals.length > 0) {
       const { data: existente, error } = await admin
         .from("products")
-        .select("id, external_id")
+        .select("id, external_id, page_sections")
         .eq("business_id", businessId)
         .eq("source", source)
         .in("external_id", externals);
@@ -392,6 +408,8 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
       if (error) throw new Error(`cautarea produselor existente a esuat: ${error.message}`);
       for (const e of existente ?? []) {
         if (e.external_id) idDupaExternal.set(e.external_id as string, e.id as string);
+        const c = (e.page_sections as { customization?: unknown } | null)?.customization;
+        if (c) personalizareaVeche.set(e.id as string, c);
       }
     }
   }
@@ -432,7 +450,7 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
       // Ce s-a pregatit pana aici se scrie mai jos; restul se marcheaza deodata.
       await scrieMarcaje(admin, deEsuat);
       deltas.failed += deEsuat.length;
-      await scrieProdusele(admin, businessId, deScris, deltas);
+      await scrieProdusele(admin, businessId, deScris, deltas, personalizareaVeche);
       const { count, error: eSarite } = await admin
         .from("product_import_rows")
         .update({ status: "skipped", error: "Limita de plan atinsa" }, { count: "exact" })
@@ -481,7 +499,7 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
   // ── Faza 2: scrierea, in valuri ────────────────────────────────────────────
   await scrieMarcaje(admin, deEsuat);
   deltas.failed += deEsuat.length;
-  await scrieProdusele(admin, businessId, deScris, deltas);
+  await scrieProdusele(admin, businessId, deScris, deltas, personalizareaVeche);
 
 
   /* ⚠ Perechea de sus: `remaining ?? 0` pe o numaratoare picata declara importul terminat.
@@ -554,6 +572,7 @@ async function scrieProdusele(
   businessId: string,
   pregatite: ProdusPregatit[],
   deltas: CommitDeltas,
+  personalizareaVeche: Map<string, unknown>,
 ): Promise<void> {
   for (let i = 0; i < pregatite.length; i += SCRIERI_DEODATA) {
     await Promise.all(pregatite.slice(i, i + SCRIERI_DEODATA).map(async (it) => {
@@ -561,6 +580,17 @@ async function scrieProdusele(
         // Slugul existent se pastreaza (ca sa nu se ciocneasca); restul se scrie.
         const { slug: _slug, ...rest } = it.payload;
         void _slug;
+        /*
+         * ⚠ Personalizarea se pune INAPOI, peste `page_sections` reconstruit din fisier.
+         * Vezi `personalizareaVeche`: fara randurile astea, un reimport o sterge tacut.
+         */
+        const persVeche = personalizareaVeche.get(it.existingId);
+        if (persVeche) {
+          rest.page_sections = {
+            ...((rest.page_sections ?? {}) as Record<string, unknown>),
+            customization: persVeche,
+          } as unknown as never;
+        }
         const { error } = await admin
           .from("products")
           .update({ ...rest, updated_at: new Date().toISOString() })

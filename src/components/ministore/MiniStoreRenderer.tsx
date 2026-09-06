@@ -15,6 +15,7 @@ import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import type { BusinessPublic } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
 import { VariantQuickAdd, type QuickAddLine } from "./VariantQuickAdd";
+import { cerePersonalizarea } from "@/lib/customization/definitie";
 import { parseVariants } from "@/lib/storefront/variants";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
@@ -1415,6 +1416,26 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   function handleAddToCart(product: Product) {
     // Variable product: open the picker instead of silently adding at base price.
     if (parseVariants(product.page_sections)) { setQuickAddProduct(product); return; }
+    /*
+     * ⚠ PRODUSUL PERSONALIZABIL NU SE ADAUGA DE PE CARD — se deschide pagina lui.
+     *
+     * Cardul n-are unde sa ceara dimensiunile sau materialul, iar linia de cos n-are unde sa le
+     * poarte. Adaugat de aici, un fototapet de 910 lei intra la pretul de catalog: 89. Nu e o
+     * lipsa de date, e o pierdere de bani — a comerciantului.
+     *
+     * ⚠ Pana acum drumul asta era deschis, si nimic nu-l inchidea: poarta exista DOAR pe pagina
+     * de produs. Iar de pe card nici nu se putea sti, fiindca `slimPageSections` taia
+     * `customization` din tot ce ajunge in browser pe suprafetele de catalog.
+     */
+    if (cerePersonalizarea(product.page_sections)) {
+      /*
+       * ⚠ `router.push`, nu `window.location.href` — fisierul are hotararea scrisa mai sus, la
+       * `const router`: o reincarcare intreaga trimite ~207 kB in loc de ~45 kB de payload RSC si
+       * sare derularea in capul paginii.
+       */
+      router.push(`${basePath}/product/${product.slug ?? product.id}`);
+      return;
+    }
     const images = Array.isArray(product.images) ? product.images : [];
     const price = Number(product.price);
     addItem({

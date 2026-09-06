@@ -1,3 +1,4 @@
+import { cerePersonalizarea } from "@/lib/customization/definitie";
 import { getProductPriceRange, type PriceRange } from "@/lib/utils/product-price";
 
 /**
@@ -62,6 +63,7 @@ export function slimPageSections(pageSections: unknown): Record<string, unknown>
   const ps = (pageSections ?? null) as {
     variants?: { enabled?: boolean; options?: unknown } | null;
     bundle?: unknown;
+    customization?: unknown;
   } | null;
 
   let slim: Record<string, unknown> | null = null;
@@ -70,6 +72,26 @@ export function slimPageSections(pageSections: unknown): Record<string, unknown>
   }
   if (ps?.bundle) {
     slim = { ...(slim ?? {}), bundle: ps.bundle };
+  }
+  /*
+   * ⚠ UN SINGUR STEAG, nu campurile.
+   *
+   * Cardul din grila nu deseneaza formularul; are nevoie sa stie DOAR daca produsul cere
+   * personalizare, ca sa nu-l adauge direct in cos. Cu campurile intregi, un catalog de o mie de
+   * produse ar fi purtat in browser si etichetele, si optiunile, si preturile lor — pe o pagina
+   * care nu le foloseste.
+   *
+   * ⚠ Iar fara steagul asta cardul nu putea sti NIMIC: pana acum `slimPageSections` pastra doar
+   * `variants` si `bundle`, deci `cerePersonalizare(product.page_sections)` raspundea „nu" pe TOATE
+   * suprafetele de catalog. De acolo veneau cele doua drumuri prin care un produs personalizabil
+   * ajungea in cos la pretul de baza: cardul din grila si blocul de produse din paginile proprii.
+   *
+   * ⚠ Celelalte suprafete erau deja aparate, si nu le-am atins: ofertele prin `needsChoice`,
+   * pachetele prin filtrul de componente, cosurile abandonate la restaurare, si paginile de produs
+   * prin `cerePersonalizare`. Le-am verificat una cate una inainte sa adaug ceva.
+   */
+  if (cerePersonalizarea({ customization: ps?.customization })) {
+    slim = { ...(slim ?? {}), customization: { cere: true } };
   }
   return slim;
 }

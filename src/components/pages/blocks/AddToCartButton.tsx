@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ShoppingCart, Check } from "lucide-react";
+import { cerePersonalizarea } from "@/lib/customization/definitie";
 import { parseVariants } from "@/lib/storefront/variants";
 import { VariantQuickAdd, type QuickAddLine } from "@/components/ministore/VariantQuickAdd";
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
@@ -69,6 +70,14 @@ export function AddToCartButton({ product, storeSlug, color }: {
     e.preventDefault();
     e.stopPropagation();
     if (variants) { setPickerOpen(true); return; }
+    /*
+     * ⚠ La fel ca pe cardul din grila: blocul asta n-are unde sa ceara personalizarea, iar
+     * linia de cos n-are unde s-o poarte. Se duce la pagina produsului, unde exista formularul.
+     */
+    if (cerePersonalizarea(product.pageSections)) {
+      window.location.href = `/${storeSlug}/product/${product.slug ?? product.id}`;
+      return;
+    }
     writeLine({ productId: product.id, slug: product.slug ?? undefined, name: product.name, price: product.price, imageUrl: product.image });
   }
 

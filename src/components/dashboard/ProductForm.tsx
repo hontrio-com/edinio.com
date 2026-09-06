@@ -863,7 +863,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
           combinations: form.variants.combinations.map(c => ({ ...c, gtin: c.gtin.trim() })),
         },
         /*
-         * ⚠ SE TRIMITE SI ⚠pret⚠. Copiat camp cu camp fara el, modul de pretuire pe suprafata se
+         * ⚠ SE TRIMITE SI `pret`. Copiat camp cu camp fara el, modul de pretuire pe suprafata se
          * pierdea la fiecare salvare: comerciantul configura fototapetul la 89 lei/m², salva, si
          * produsul se intorcea la pretul de catalog — fara nicio eroare, si fara ca ecranul sa
          * arate ca s-a pierdut ceva.

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { mutaMapareaCategoriei } from "@/lib/marketplace/mapare-categorii";
+import { legaturileUrmeazaCategoria, legaturileUitaCategoriile } from "@/lib/configurators/redenumire";
 import { createClient } from "@/lib/supabase/server";
 import { collectSubtreeIds } from "@/lib/categories/tree";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
@@ -213,6 +214,14 @@ export async function updateCategory(
        * din ea — iar ecranul cere sa fie legata o categorie pe care omul o legase deja.
        */
       await mutaMapareaCategoriei(businessId, numeVechi, payload.name);
+      /*
+       * ⚠ SI LEGATURILE CONFIGURATOARELOR, din acelasi motiv.
+       *
+       * `configurator_categorii.categorie` tine tot NUMELE. Ramasa pe cel vechi, legatura arata
+       * spre o categorie pe care n-o mai poarta nimeni, si configuratorul dispare de pe produse
+       * fara ca cineva sa fi atins ceva.
+       */
+      await legaturileUrmeazaCategoria(businessId, numeVechi, payload.name);
     }
   }
 
@@ -368,6 +377,15 @@ export async function deleteCategory(
   const produseMutate = disparute.length
     ? await remapeazaProduse(supabase, businessId, disparute, destinatie)
     : 0;
+
+  /*
+   * ⚠ Legaturile configuratoarelor se STERG, nu urca la parinte odata cu produsele.
+   *
+   * Mutate pe `destinatie`, configuratorul s-ar fi intins peste toti fratii: produse care nu
+   * l-au avut niciodata ar fi devenit deodata configurabile, cu alt pret. Un produs vandut
+   * simplu e o paguba mica; unul configurabil din greseala e una mare.
+   */
+  if (disparute.length) await legaturileUitaCategoriile(businessId, disparute);
 
   revalidatePath("/dashboard/products/categories");
   revalidatePath("/dashboard/products");

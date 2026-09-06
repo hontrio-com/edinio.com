@@ -18,7 +18,7 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { magazinulMeu } from "@/lib/auth/magazinul-meu";
+import { esteAlMagazinului, magazinulMeu } from "@/lib/auth/magazinul-meu";
 import { logError } from "@/lib/error-logger";
 import { citesteContinut } from "@/lib/configurators/citeste";
 import { compileaza } from "@/lib/configurators/compileaza";
@@ -390,4 +390,382 @@ export async function stergeConfigurator(id: string): Promise<Raspuns> {
   if (error) return { error: "Nu am putut sterge. Incearca din nou." };
   revalidatePath(CALEA);
   return { success: true };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   APLICAREA: pe ce produse se pune configuratorul
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * ⚠ TREI FELURI DE LEGATURA, SI DE CE NU-S DOUA.
+ *
+ *   - DIRECTA pe produs: comerciantul a spus explicit, deci bate orice.
+ *   - Pe CATEGORIE: se aplica tuturor produselor din ea si din subarbore, si celor viitoare.
+ *   - EXCLUDERE: scoate un singur produs de sub o mostenire de categorie.
+ *
+ * Fara excludere, singurul fel de a scoate un produs dintr-o categorie configurata ar fi fost
+ * sa-l muti in alta categorie — adica sa strici asezarea magazinului ca sa repari un pret.
+ */
+
+export interface ProdusScurt {
+  id: string;
+  nume: string;
+  categorie: string | null;
+  imagine: string | null;
+}
+
+export interface ProdusGasit extends ProdusScurt {
+  /** Numele configuratorului care l-a luat deja direct, cand nu e chiar al nostru. */
+  luatDe: string | null;
+}
+
+export interface Aplicare {
+  /** Legate direct. */
+  produse: ProdusScurt[];
+  /** Scoase anume de sub mostenirea din categorie. */
+  excluse: ProdusScurt[];
+  categorii: string[];
+  /** Categoriile magazinului, ca sa se poata alege dintre ele. */
+  categoriiDisponibile: string[];
+}
+
+/** Cate id-uri se primesc dintr-o data. `.in()` pleaca in ADRESA: peste ~700 cade cererea. */
+const MAXIM_PE_LOT = 200;
+
+/** Lista venita de la client, adusa la o forma in care se poate lucra. */
+function idsCurate(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const out: string[] = [];
+  const vazute = new Set<string>();
+  for (const x of v) {
+    if (typeof x !== "string") continue;
+    const t = x.trim();
+    if (!t || vazute.has(t)) continue;
+    vazute.add(t);
+    out.push(t);
+    if (out.length >= MAXIM_PE_LOT) break;
+  }
+  return out;
+}
+
+/** Prima imagine a produsului, cand are. */
+function primaImagine(v: unknown): string | null {
+  if (!Array.isArray(v)) return null;
+  for (const x of v) if (typeof x === "string" && x.trim()) return x;
+  return null;
+}
+
+function scurt(p: { id: string; name: string; category: string | null; images: unknown }): ProdusScurt {
+  return { id: p.id, nume: p.name, categorie: p.category, imagine: primaImagine(p.images) };
+}
+
+/**
+ * Configuratorul se aplica la ce, acum.
+ *
+ * ⚠ Se cer si categoriile magazinului, in aceeasi trecere. Ecranul are nevoie de ele ca sa poata
+ * alege, iar o a doua chemare doar pentru asta ar fi insemnat inca un dus-intors la fiecare
+ * deschidere a filei.
+ */
+export async function citesteAplicarea(
+  id: string,
+): Promise<{ error: string } | { success: true; aplicare: Aplicare }> {
+  const a = await magazinulMeu();
+  if (!a.ok) return { error: a.error };
+  if (!(await esteAlMagazinului(a.supabase, "configuratoare", id, a.magazin.id))) {
+    return { error: "Configuratorul nu exista." };
+  }
+
+  const [legaturi, categorii, arbore] = await Promise.all([
+    a.supabase.from("configurator_produse")
+      .select("product_id, fel")
+      .eq("configurator_id", id).eq("business_id", a.magazin.id)
+      .limit(1000),
+    a.supabase.from("configurator_categorii")
+      .select("categorie")
+      .eq("configurator_id", id).eq("business_id", a.magazin.id)
+      .order("categorie"),
+    a.supabase.from("categories").select("name").eq("business_id", a.magazin.id).order("name"),
+  ]);
+
+  if (legaturi.error || categorii.error || arbore.error) {
+    logError({
+      action: "configurator.citesteAplicarea",
+      message: legaturi.error?.message ?? categorii.error?.message ?? arbore.error?.message ?? "necunoscuta",
+      businessId: a.magazin.id, severity: "warning",
+    });
+    return { error: "Nu am putut citi aplicarea. Incearca din nou." };
+  }
+
+  const randuri = legaturi.data ?? [];
+  const ids = randuri.map((r) => r.product_id);
+
+  /*
+   * ⚠ Produsele se cer O SINGURA DATA, pentru amandoua listele. Cerute pe rand, un configurator
+   * cu doua sute de produse legate ar fi facut doua sute de cereri la fiecare deschidere.
+   */
+  const produse = new Map<string, ProdusScurt>();
+  for (let i = 0; i < ids.length; i += MAXIM_PE_LOT) {
+    const { data } = await a.supabase
+      .from("products").select("id, name, category, images")
+      .eq("business_id", a.magazin.id)
+      .in("id", ids.slice(i, i + MAXIM_PE_LOT));
+    for (const p of data ?? []) produse.set(p.id, scurt(p));
+  }
+
+  const alese = (fel: string) => randuri
+    .filter((r) => r.fel === fel)
+    .map((r) => produse.get(r.product_id))
+    .filter((p): p is ProdusScurt => !!p)
+    .sort((x, y) => x.nume.localeCompare(y.nume, "ro"));
+
+  // ⚠ Numele unice: unicitatea din `categories` e pe frati, deci acelasi nume poate veni de doua
+  // ori din doua ramuri, si ecranul l-ar fi aratat de doua ori.
+  const disponibile = [...new Set((arbore.data ?? []).map((c) => c.name).filter(Boolean))];
+
+  return {
+    success: true,
+    aplicare: {
+      produse: alese("direct"),
+      excluse: alese("exclus"),
+      categorii: (categorii.data ?? []).map((c) => c.categorie),
+      categoriiDisponibile: disponibile,
+    },
+  };
+}
+
+/**
+ * Produse de legat, cautate dupa nume.
+ *
+ * ⚠ Se spune din CAUTARE daca produsul e deja luat de alt configurator, nu abia din eroarea de
+ * la salvare. Baza il refuza oricum — un produs are cel mult un configurator legat direct — dar
+ * un refuz care vine dupa ce omul a bifat douazeci de produse il pune sa ghiceasca pe care.
+ */
+export async function cautaProduseDeLegat(
+  id: string,
+  termen: string,
+): Promise<{ error: string } | { success: true; produse: ProdusGasit[] }> {
+  const a = await magazinulMeu();
+  if (!a.ok) return { error: a.error };
+  if (!(await esteAlMagazinului(a.supabase, "configuratoare", id, a.magazin.id))) {
+    return { error: "Configuratorul nu exista." };
+  }
+
+  const t = (termen ?? "").trim().slice(0, 120);
+  // ⚠ `%` si `_` din termen se escapeaza: fara asta, o cautare dupa „50%" aducea tot catalogul.
+  const sablon = t.replace(/([%_\\])/g, "\\$1");
+
+  const cerere = t
+    ? a.supabase.from("products").select("id, name, category, images")
+        .eq("business_id", a.magazin.id).eq("is_active", true).ilike("name", `%${sablon}%`)
+        .order("name").limit(30)
+    : a.supabase.from("products").select("id, name, category, images")
+        .eq("business_id", a.magazin.id).eq("is_active", true)
+        .order("name").limit(30);
+
+  const { data, error } = await cerere;
+  if (error) {
+    logError({ action: "configurator.cautaProduse", message: error.message, businessId: a.magazin.id, severity: "warning" });
+    return { error: "Nu am putut cauta produsele. Incearca din nou." };
+  }
+
+  const gasite = data ?? [];
+  const luate = new Map<string, string>();
+  if (gasite.length) {
+    const { data: alteLegaturi } = await a.supabase
+      .from("configurator_produse")
+      .select("product_id, configurator_id, configuratoare(nume)")
+      .eq("business_id", a.magazin.id)
+      .eq("fel", "direct")
+      .neq("configurator_id", id)
+      .in("product_id", gasite.map((p) => p.id));
+    for (const l of alteLegaturi ?? []) {
+      const c = l.configuratoare as { nume?: string } | { nume?: string }[] | null;
+      const nume = Array.isArray(c) ? c[0]?.nume : c?.nume;
+      luate.set(l.product_id, nume ?? "alt configurator");
+    }
+  }
+
+  return {
+    success: true,
+    produse: gasite.map((p) => ({ ...scurt(p), luatDe: luate.get(p.id) ?? null })),
+  };
+}
+
+/**
+ * Leaga produse de configurator, direct sau ca excludere.
+ *
+ * ⚠ Id-urile primite NU se cred. Se pastreaza numai cele care chiar sunt produse ale acestui
+ * magazin: altfel oricine ar fi putut lega produsul altui comerciant de configuratorul lui, si
+ * randul ar fi trecut de RLS fiindca `business_id`-ul scris e al lui.
+ */
+export async function aplicaLaProduse(
+  id: string,
+  produse: unknown,
+  fel: unknown,
+): Promise<{ error: string } | { success: true; legate: number; refuzate: ProdusScurt[] }> {
+  const a = await magazinulMeu();
+  if (!a.ok) return { error: a.error };
+  if (fel !== "direct" && fel !== "exclus") return { error: "Fel de legatura necunoscut." };
+  if (!(await esteAlMagazinului(a.supabase, "configuratoare", id, a.magazin.id))) {
+    return { error: "Configuratorul nu exista." };
+  }
+
+  const cerute = idsCurate(produse);
+  if (!cerute.length) return { success: true, legate: 0, refuzate: [] };
+
+  const { data: aleMele, error: eP } = await a.supabase
+    .from("products").select("id, name, category, images")
+    .eq("business_id", a.magazin.id).in("id", cerute);
+  if (eP) return { error: "Nu am putut verifica produsele. Incearca din nou." };
+
+  const validate = new Map((aleMele ?? []).map((p) => [p.id, scurt(p)]));
+  if (!validate.size) return { error: "Niciunul dintre produse nu e al magazinului tau." };
+
+  /*
+   * ⚠ Cine e deja luat se afla INAINTE de scriere.
+   *
+   * Baza are un index unic partial pe `(product_id) where fel = 'direct'`, deci un produs legat
+   * de alt configurator ar fi facut TOT lotul sa pice — si celelalte legaturi bune odata cu el.
+   * Se scot din lot si se raporteaza pe nume.
+   */
+  const refuzate: ProdusScurt[] = [];
+  let deScris = [...validate.keys()];
+  if (fel === "direct") {
+    const { data: luate, error: eL } = await a.supabase
+      .from("configurator_produse").select("product_id")
+      .eq("business_id", a.magazin.id).eq("fel", "direct").neq("configurator_id", id)
+      .in("product_id", deScris);
+    if (eL) return { error: "Nu am putut verifica legaturile. Incearca din nou." };
+    const ocupate = new Set((luate ?? []).map((l) => l.product_id));
+    if (ocupate.size) {
+      for (const pid of ocupate) {
+        const p = validate.get(pid);
+        if (p) refuzate.push(p);
+      }
+      deScris = deScris.filter((pid) => !ocupate.has(pid));
+    }
+  }
+
+  if (!deScris.length) return { success: true, legate: 0, refuzate };
+
+  /*
+   * ⚠ `upsert`, nu `insert`: perechea (produs, configurator) e unica, iar un produs bifat de
+   * doua ori — sau mutat din „exclus" in „direct" — ar fi picat cu 23505. Asa, felul se schimba.
+   */
+  const { error } = await a.supabase
+    .from("configurator_produse")
+    .upsert(
+      deScris.map((pid) => ({
+        business_id: a.magazin.id, configurator_id: id, product_id: pid, fel,
+      })),
+      { onConflict: "product_id,configurator_id" },
+    );
+
+  if (error) {
+    logError({ action: "configurator.aplicaLaProduse", message: error.message, businessId: a.magazin.id, severity: "warning" });
+    // 23505 aici inseamna ca cineva a legat produsul intre verificare si scriere.
+    return {
+      error: error.code === "23505"
+        ? "Un produs tocmai a fost legat de alt configurator. Reincarca si incearca din nou."
+        : "Nu am putut lega produsele. Incearca din nou.",
+    };
+  }
+
+  revalidatePath(CALEA);
+  return { success: true, legate: deScris.length, refuzate };
+}
+
+/** Scoate produsele de sub configurator — si legaturile directe, si excluderile. */
+export async function scoateProduse(
+  id: string,
+  produse: unknown,
+): Promise<Raspuns<{ scoase: number }>> {
+  const a = await magazinulMeu();
+  if (!a.ok) return { error: a.error };
+  if (!(await esteAlMagazinului(a.supabase, "configuratoare", id, a.magazin.id))) {
+    return { error: "Configuratorul nu exista." };
+  }
+
+  const cerute = idsCurate(produse);
+  if (!cerute.length) return { success: true, scoase: 0 };
+
+  const { data, error } = await a.supabase
+    .from("configurator_produse").delete()
+    .eq("business_id", a.magazin.id).eq("configurator_id", id)
+    .in("product_id", cerute)
+    .select("id");
+
+  if (error) return { error: "Nu am putut scoate produsele. Incearca din nou." };
+  revalidatePath(CALEA);
+  return { success: true, scoase: (data ?? []).length };
+}
+
+/**
+ * Leaga configuratorul de categorii, dupa NUME.
+ *
+ * ⚠ Se primesc numai nume care chiar exista in magazin. Un nume liber ar fi parut ca merge si
+ * n-ar fi prins niciun produs — iar comerciantul ar fi cautat greseala in reguli, nu in litera
+ * gresita din numele categoriei.
+ */
+export async function aplicaLaCategorii(
+  id: string,
+  categorii: unknown,
+): Promise<{ error: string } | { success: true; legate: number; necunoscute: string[] }> {
+  const a = await magazinulMeu();
+  if (!a.ok) return { error: a.error };
+  if (!(await esteAlMagazinului(a.supabase, "configuratoare", id, a.magazin.id))) {
+    return { error: "Configuratorul nu exista." };
+  }
+
+  const cerute = idsCurate(categorii);
+  if (!cerute.length) return { success: true, legate: 0, necunoscute: [] };
+
+  const { data: ale, error: eC } = await a.supabase
+    .from("categories").select("name").eq("business_id", a.magazin.id).in("name", cerute);
+  if (eC) return { error: "Nu am putut verifica categoriile. Incearca din nou." };
+
+  const bune = new Set((ale ?? []).map((c) => c.name));
+  const necunoscute = cerute.filter((n) => !bune.has(n));
+  const deScris = cerute.filter((n) => bune.has(n));
+  if (!deScris.length) return { success: true, legate: 0, necunoscute };
+
+  const { error } = await a.supabase
+    .from("configurator_categorii")
+    .upsert(
+      deScris.map((categorie) => ({ business_id: a.magazin.id, configurator_id: id, categorie })),
+      { onConflict: "business_id,configurator_id,categorie", ignoreDuplicates: true },
+    );
+
+  if (error) {
+    logError({ action: "configurator.aplicaLaCategorii", message: error.message, businessId: a.magazin.id, severity: "warning" });
+    return { error: "Nu am putut lega categoriile. Incearca din nou." };
+  }
+
+  revalidatePath(CALEA);
+  return { success: true, legate: deScris.length, necunoscute };
+}
+
+/** Scoate categoriile de sub configurator. */
+export async function scoateCategorii(
+  id: string,
+  categorii: unknown,
+): Promise<Raspuns<{ scoase: number }>> {
+  const a = await magazinulMeu();
+  if (!a.ok) return { error: a.error };
+  if (!(await esteAlMagazinului(a.supabase, "configuratoare", id, a.magazin.id))) {
+    return { error: "Configuratorul nu exista." };
+  }
+
+  const cerute = idsCurate(categorii);
+  if (!cerute.length) return { success: true, scoase: 0 };
+
+  const { data, error } = await a.supabase
+    .from("configurator_categorii").delete()
+    .eq("business_id", a.magazin.id).eq("configurator_id", id)
+    .in("categorie", cerute)
+    .select("id");
+
+  if (error) return { error: "Nu am putut scoate categoriile. Incearca din nou." };
+  revalidatePath(CALEA);
+  return { success: true, scoase: (data ?? []).length };
 }

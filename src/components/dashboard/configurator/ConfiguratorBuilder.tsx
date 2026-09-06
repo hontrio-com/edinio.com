@@ -18,6 +18,7 @@ import {
 import type { Constatare } from "@/lib/configurators/validare";
 import { useAutosalvare } from "./useAutosalvare";
 import { InspectorNod } from "./InspectorNod";
+import { PanouAplicare } from "./PanouAplicare";
 
 /**
  * Builderul de configurator.
@@ -59,6 +60,7 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
   const [nume, setNume] = useState(initial.nume);
   const [selectat, setSelectat] = useState<string | null>(null);
   const [constatari, setConstatari] = useState<Constatare[] | null>(null);
+  const [fila, setFila] = useState<"structura" | "aplicare">("structura");
   const [publica, incepePublicarea] = useTransition();
 
   const salvare = useAutosalvare(initial.id, continut, initial.revizie);
@@ -145,6 +147,23 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
         </button>
       </header>
 
+      {/*
+        ⚠ DOUA FILE, si de ce nu-s doua pagini.
+
+        Structura e o CIORNA care se publica; aplicarea intra in vigoare pe loc. Doua pagini
+        ar fi despartit doua intrebari pe care comerciantul le are in aceeasi clipa — cum
+        arata, si pe ce se pune — si l-ar fi pus sa navigheze inainte si inapoi ca sa vada
+        ce a facut. Deosebirea de inteles se spune in scris, in fila de aplicare.
+      */}
+      <div className="flex gap-1 border-b border-border px-4" role="tablist" aria-label="Ce editezi">
+        <Fila activa={fila === "structura"} onAlege={() => setFila("structura")}>Structura</Fila>
+        <Fila activa={fila === "aplicare"} onAlege={() => setFila("aplicare")}>Aplicare</Fila>
+      </div>
+
+      {fila === "aplicare" ? (
+        <PanouAplicare configuratorId={initial.id} />
+      ) : (
+      <>
       {constatari && constatari.length > 0 && (
         <ListaConstatari constatari={constatari} onMergiLa={setSelectat} />
       )}
@@ -286,7 +305,31 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
           )}
         </aside>
       </div>
+      </>
+      )}
     </div>
+  );
+}
+
+/** O fila din bara de sub antet. */
+function Fila({ activa, onAlege, children }: {
+  activa: boolean; onAlege: () => void; children: React.ReactNode;
+}) {
+  /*
+   * ⚠ Culoarea nu e singurul semn ca fila e aleasa: are si chenarul de jos, si
+   * `aria-selected` pentru cititoarele de ecran.
+   */
+  return (
+    <button
+      type="button" role="tab" aria-selected={activa} onClick={onAlege}
+      className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+        activa
+          ? "border-primary text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

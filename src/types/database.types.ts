@@ -1498,6 +1498,7 @@ export type Database = {
           business_id: string
           category: string | null
           cauta_norm: string
+          cere_configurare: boolean
           compare_at_price: number | null
           creat: string
           descriere_scurta: string
@@ -1509,6 +1510,7 @@ export type Database = {
           is_featured: boolean
           name: string
           optiuni: Json | null
+          pret_pornire: number | null
           price: number
           price_max: number
           price_min: number
@@ -1525,6 +1527,7 @@ export type Database = {
           business_id: string
           category?: string | null
           cauta_norm?: string
+          cere_configurare?: boolean
           compare_at_price?: number | null
           creat: string
           descriere_scurta?: string
@@ -1536,6 +1539,7 @@ export type Database = {
           is_featured?: boolean
           name: string
           optiuni?: Json | null
+          pret_pornire?: number | null
           price: number
           price_max: number
           price_min: number
@@ -1552,6 +1556,7 @@ export type Database = {
           business_id?: string
           category?: string | null
           cauta_norm?: string
+          cere_configurare?: boolean
           compare_at_price?: number | null
           creat?: string
           descriere_scurta?: string
@@ -1563,6 +1568,7 @@ export type Database = {
           is_featured?: boolean
           name?: string
           optiuni?: Json | null
+          pret_pornire?: number | null
           price?: number
           price_max?: number
           price_min?: number

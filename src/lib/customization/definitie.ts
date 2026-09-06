@@ -359,6 +359,32 @@ function citestePret(raw: unknown, campuri: CampPersonalizare[]): ModPret | unde
   const campTarif = text(raw.campTarif, 64).trim();
   const sursa = campuri.find((c) => c.id === campTarif && c.type === "butoane");
 
+  /*
+   * ⚠ NU SE POATE AJUNGE LA ZERO LEI. Trei conditii, si toate trei au fost masurate ca gauri.
+   *
+   * Cu baza STINSA, tot pretul vine din suprafata. Deci daca suprafata sau tariful pot lipsi,
+   * pretul iese 0 — si nimic nu se plange: valorile sunt „valide", calculul da zero, comanda
+   * pleaca. Probat inainte de reparatie: camp de dimensiuni NEobligatoriu + tarif 0 + baza stinsa
+   * = produs vandut la 0 lei, cu `ok: true`.
+   *
+   *   1. Un tarif de zero nu e o configurare, e una neterminata: tariful trebuie sa fie > 0, fie
+   *      cel de baza, fie de pe FIECARE optiune a sursei.
+   *   2. Campul de dimensiuni devine OBLIGATORIU. Fara valori nu exista suprafata, deci nici pret.
+   *   3. Ce nu trece cade inapoi pe „adaugat" — pretul de catalog, care e mereu vandabil.
+   *
+   * ⚠ Se apara la CITIRE, nu doar in panou: aici trec si randurile scrise inainte de reparatie,
+   * si orice ar ajunge in `page_sections` pe alt drum.
+   */
+  const tarifeSursa = sursa
+    ? (sursa.optiuni ?? []).map((o) => (o.impact?.fel === "pe_m2" ? o.impact.suma : tarif))
+    : [];
+  const totTarifulEBun = sursa
+    ? tarifeSursa.length > 0 && tarifeSursa.every((t) => t > 0)
+    : tarif > 0;
+  if (!totTarifulEBun) return { fel: "adaugat" };
+
+  dim.required = true;
+
   const minim = suma(raw.minimM2);
   const rot = numar(raw.rotunjire);
 

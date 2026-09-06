@@ -263,7 +263,14 @@ type PageSections = {
   short_description?: string;
   seo?: { title: string; description: string };
   variants?: { enabled: boolean; options: Omit<VariantOption, "inputValue">[]; combinations: VariantCombination[] };
-  customization?: { enabled: boolean; fields: CustomizationField[] };
+  /*
+   * ⚠ Forma CITITA din baza, si ea trebuie sa fie cea intreaga.
+   *
+   * Scrisa aici de mana, fara `pret`, citirea arunca tacut modul de pretuire pe suprafata — si
+   * tsc nu semnala nimic, fiindca tipul spunea ca acel camp nu exista. Un drum dus-intors prin
+   * formular stergea 89 lei/m² de pe un fototapet.
+   */
+  customization?: StareCustomizare;
   google?: {
     gtin?: string; brand?: string; mpn?: string; google_product_category?: string;
     condition?: string; gender?: string; age_group?: string;
@@ -330,8 +337,22 @@ function productToForm(p: Product): FormState {
           combinations: vars.combinations.map(c => ({ ...c, gtin: c.gtin ?? "" })),
         }
       : { enabled: false, options: [], combinations: [] },
+    /*
+     * ⚠ SE CITESTE SI `pret`. Fara el, drumul dus-intors pierdea tacut modul de pretuire:
+     * comerciantul configura fototapetul la 89 lei/m², salva (si ajungea in baza), redeschidea
+     * produsul ca sa-i schimbe titlul, salva iar — si pretul pe suprafata disparea, fiindca
+     * formularul nu-l mai avea in stare. Produsul se intorcea la pretul de catalog, fara nicio
+     * eroare si fara vreun semn pe ecran.
+     *
+     * Scrierea il trimitea corect de la inceput; CITIREA il arunca. Cele doua se probeaza acum
+     * impreuna, pe drumul intreg.
+     */
     customization: ps.customization
-      ? { enabled: ps.customization.enabled, fields: ps.customization.fields }
+      ? {
+          enabled: ps.customization.enabled,
+          fields: ps.customization.fields,
+          ...(ps.customization.pret ? { pret: ps.customization.pret } : {}),
+        }
       : { enabled: false, fields: [] },
     /* ⚠ Citit fara sa presupunem forma: `page_sections` e jsonb, si produsele vechi n-au cheia. */
     gpsr: (() => {

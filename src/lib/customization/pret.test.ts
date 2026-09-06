@@ -246,3 +246,116 @@ test("⚠ modul „suprafata\" cade inapoi pe „adaugat\" cand ii lipseste teme
   assert.equal(p.bazaInclusa, true);
   assert.equal(pretUnitar(p, 89), 89);
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ ZERO LEI: masurat ca gaura, apoi inchis
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ un TARIF DE ZERO nu vinde produsul pe gratis", () => {
+  /*
+   * ⚠ ASTA S-A MASURAT, nu s-a banuit. Sonda de dinainte de reparatie, pe o definitie cu tarif
+   * 0 si baza stinsa, a raspuns textual:
+   *
+   *     valori ok: true | supliment: 0 | bazaInclusa: false | PRET FINAL cu catalog 89: 0
+   *
+   * Adica un produs vandut cu ZERO lei, cu `ok: true` si fara nicio eroare nicaieri: valorile
+   * erau valide, calculul dadea zero, comanda pleaca. Un tarif gol nu e o configurare — e una
+   * neterminata — si raspunsul corect e pretul de catalog, care e mereu vandabil.
+   */
+  const d = normalizeazaDefinitia({
+    enabled: true,
+    fields: [{
+      id: "dim", type: "dimensiuni", label: "Dimensiuni", required: false, unitate: "cm",
+      latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 },
+    }],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 0, includePretulProdusului: false },
+  })!;
+  assert.equal(d.pret?.fel, "adaugat", "tariful zero a ramas mod de suprafata");
+  const { v, p } = socoteste(d, { dim: { latime: 350, inaltime: 250 } });
+  assert.equal(v.ok, true);
+  assert.equal(p.bazaInclusa, true, "baza a ramas stinsa, deci nu mai plateste nimeni nimic");
+  assert.equal(pretUnitar(p, 89), 89);
+});
+
+test("⚠ o SINGURA optiune de material fara tarif strica tot modul, nu doar optiunea ei", () => {
+  /*
+   * Sursa de tarif INLOCUIESTE tariful de baza, deci o optiune fara tarif propriu nu cade inapoi
+   * pe el — ea ar fi socotit 0 lei/m². Comerciantul care adauga a treia optiune si uita sa-i
+   * puna pretul ar fi vandut fototapetele de 8,75 m² pe gratis, si numai pe ramura aia.
+   *
+   * ⚠ Se cere ca TOATE optiunile sursei sa aiba tarif > 0, nu doar cea aleasa: verdictul se da
+   * la CITIRE, pe definitie, nu pe valorile unei comenzi anume.
+   */
+  const cuGaura = normalizeazaDefinitia({
+    enabled: true,
+    fields: [
+      { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+        latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+      { id: "mat", type: "butoane", label: "Material", required: true,
+        optiuni: [
+          { id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } },
+          { id: "uitat", eticheta: "Uitat", impact: { fel: "fara" } },
+        ] },
+    ],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 0, campTarif: "mat", includePretulProdusului: false },
+  })!;
+  assert.equal(cuGaura.pret?.fel, "adaugat");
+  /*
+   * ⚠ SI CAT COSTA CADEREA, fiindca proba asta a raspuns intai altceva decat credeam.
+   *
+   * Cazut pe „adaugat", tariful de pe optiuni nu dispare: el se citeste acum ca SUPLIMENT pe m²,
+   * peste pretul de catalog. Deci 8,75 m² x 69 = 603,75, plus 89 din catalog = 692,75 — nu 89, cum
+   * scrisesem aici prima data.
+   *
+   * Sensul optiunilor se schimba (inlocuiau tariful, acum se adauga la pret), si asta e de stiut.
+   * Dar directia e cea buna: caderea urca pretul, nu il coboara. Cealalta varianta — sa se arunce
+   * si suplimentele pe m² — ar fi vandut 8,75 m² de Premium cu 89 de lei, adica exact paguba de
+   * care fuge toata reparatia. Ce se apara aici e ca nu se ajunge la ZERO, si nici sub catalog.
+   */
+  const cazut = pretUnitar(socoteste(cuGaura, { dim: { latime: 350, inaltime: 250 }, mat: "std" }).p, 89);
+  assert.equal(cazut, 692.75);
+  assert.ok(cazut >= 89, "caderea pe „adaugat\" a coborat sub pretul de catalog");
+
+  /* Si perechea: cu tariful pus pe amandoua, modul ramane „suprafata" si se incaseaza 603,75. */
+  const intreg = normalizeazaDefinitia({
+    enabled: true,
+    fields: [
+      { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+        latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+      { id: "mat", type: "butoane", label: "Material", required: true,
+        optiuni: [
+          { id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } },
+          { id: "pus", eticheta: "Pus", impact: { fel: "pe_m2", suma: 89 } },
+        ] },
+    ],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 0, campTarif: "mat", includePretulProdusului: false },
+  })!;
+  assert.equal(intreg.pret?.fel, "suprafata");
+  assert.equal(pretUnitar(socoteste(intreg, { dim: { latime: 350, inaltime: 250 }, mat: "std" }).p, 89), 603.75);
+});
+
+test("⚠ campul de dimensiuni devine OBLIGATORIU cand pretul atarna de el", () => {
+  /*
+   * A doua jumatate a aceleiasi gauri, si singura care se vedea pe ecran: comerciantul putea lasa
+   * campul neobligatoriu. Clientul nu completa nimic, suprafata iesea 0 m², suplimentul 0 lei, si
+   * cu baza stinsa comanda pleaca la ZERO — cu `ok: true`, fiindca un camp neobligatoriu gol e
+   * un raspuns valid.
+   *
+   * Nu se refuza configurarea, se REPARA la citire: fara valori nu exista suprafata, deci campul
+   * n-are cum sa fie optional. Asa se apara si randurile scrise inainte de reparatie.
+   */
+  const d = normalizeazaDefinitia({
+    enabled: true,
+    fields: [{
+      id: "dim", type: "dimensiuni", label: "Dimensiuni", required: false, unitate: "cm",
+      latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 },
+    }],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 69, includePretulProdusului: false },
+  })!;
+  assert.equal(d.pret?.fel, "suprafata");
+  assert.equal(d.fields[0].required, true, "campul de dimensiuni a ramas optional");
+  /* Si consecinta: gol, comanda se REFUZA — nu se pretuieste la zero. */
+  const { v, p } = socoteste(d, {});
+  assert.equal(v.ok, false, "un camp gol a trecut, si pretul ar fi iesit zero");
+  assert.equal(pretUnitar(p, 89), 0, "confirmarea ca fara poarta chiar ieseau 0 lei");
+});

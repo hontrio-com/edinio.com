@@ -195,3 +195,32 @@ test("ACCEPTANTA: fototapetul configurat din panou da 910 lei la comanda", () =>
   assert.equal(p.supliment, 910);
   assert.equal(pretUnitar(p, 89), 910, "pretul de catalog s-a incasat pe langa suprafata");
 });
+
+test("⚠ drumul DUS-INTORS al formularului nu pierde nicio cheie", () => {
+  /*
+   * ⚠ PROBA DE DINAINTE VERIFICA DOAR JUMATATE DE DRUM, si de-aia defectul a trecut de ea.
+   *
+   * Ea cerea ca SCRIEREA sa poarte `pret` — si o purta. CITIREA il arunca: formularul copia
+   * `customization` cheie cu cheie, `enabled` si `fields`, atat. Deci comerciantul configura
+   * fototapetul la 89 lei/m², salva (si ajungea corect in baza), redeschidea produsul ca sa-i
+   * schimbe titlul, salva iar — si modul de pretuire disparea. Produsul se intorcea la pretul de
+   * catalog, fara nicio eroare si fara vreun semn pe ecran.
+   *
+   * ⚠ SI DE-AIA PROBA ASTA NU INGHEATA O LISTA DE CHEI. Scrisa asa, ar fi cerut `pret` si ar fi
+   * lasat urmatoarea cheie sa cada la fel de tacut. Ea compara MULTIMILE: ce stie formularul sa
+   * scrie trebuie sa stie si sa citeasca inapoi.
+   */
+  const s = sursa(FORMULAR);
+  const chei = (prefix: string) =>
+    new Set([...s.matchAll(new RegExp(`\\b${prefix}\\.customization\\.(\\w+)`, "g"))].map((m) => m[1]));
+
+  const citite = chei("ps");     /* din `page_sections`, la deschiderea produsului */
+  const scrise = chei("form");   /* in `page_sections`, la salvare */
+
+  assert.ok(citite.size >= 3, `am gasit doar ${citite.size} chei citite — cititorul probei e rupt`);
+  assert.deepEqual(
+    [...scrise].sort(), [...citite].sort(),
+    "formularul scrie si citeste multimi DIFERITE de chei — ce lipseste dintr-una se pierde tacut la fiecare salvare",
+  );
+  assert.ok(scrise.has("pret"), "modul de pretuire nu mai face parte din drum");
+});

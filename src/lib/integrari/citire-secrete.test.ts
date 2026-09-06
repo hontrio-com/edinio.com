@@ -99,8 +99,42 @@ for (const { fisier, coloana, cate } of CITIRI_PUNCTUALE) {
       de = idx + tinta.length;
       const inainte = sursa.slice(Math.max(0, idx - 220), idx);
       const client = inainte.slice(inainte.lastIndexOf("await "));
+      /*
+       * ⚠ SI CAND CLIENTUL E TINUT INTR-O VARIABILA.
+       *
+       * Prima forma cerea `createAdminClient()` chiar in fereastra de 220 de caractere dinaintea
+       * citirii. Purtarea aia e buna — invariantul se vede la locul apelului — dar a facut proba
+       * ROSIE pe o schimbare corecta: `const admin = createAdminClient();` cu doua randuri mai
+       * sus, refolosit apoi si de alta chemare.
+       *
+       * ⚠ NU se slabeste verificarea. Se rezolva NUMELE: identificatorul de dupa `await` se
+       * cauta inapoi, si trebuie sa fie legat CHIAR de `createAdminClient()`. Un `const x =
+       * createClient()` nu trece, si nici un nume nelegat nicaieri.
+       */
+      const numit = /^await\s+([A-Za-z_$][\w$]*)\s*\n?\s*\./.exec(client);
+      /*
+       * ⚠ NUMELE SE REZOLVA IN FUNCTIA LUI, nu in tot fisierul — si asta a prins-o un mutant.
+       *
+       * Prima incercare cauta `const admin = createAdminClient()` oriunde mai sus in fisier.
+       * Dar `abandoned-cart.actions.ts` are TREI functii care isi fac fiecare cate un `admin`,
+       * asa ca mutantul care punea `const admin = supabase` chiar la citirea secretelor trecea:
+       * proba gasea legatura buna in alta functie, cu doua sute de randuri mai sus.
+       *
+       * Se cauta acum doar de la inceputul functiei care contine citirea. O rezolvare de nume
+       * care ignora domeniul raspunde despre alt cod.
+       */
+      const inceputFunctie = Math.max(
+        sursa.lastIndexOf("\nexport async function ", idx),
+        sursa.lastIndexOf("\nasync function ", idx),
+        sursa.lastIndexOf("\nexport function ", idx),
+        sursa.lastIndexOf("\nfunction ", idx),
+      );
+      const domeniu = sursa.slice(inceputFunctie === -1 ? 0 : inceputFunctie, idx);
+      const legatDeAdmin = numit
+        ? new RegExp(`const\\s+${numit[1]}\\s*=\\s*createAdminClient\\(\\)`).test(domeniu)
+        : false;
       assert.ok(
-        client.includes("createAdminClient()"),
+        client.includes("createAdminClient()") || legatDeAdmin,
         `citirea ${i + 1} a lui ${coloana} din ${fisier} nu foloseste service role:\n${client.trim()}`,
       );
     }

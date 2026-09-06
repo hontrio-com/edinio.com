@@ -33,7 +33,19 @@ import { totaluriComanda } from "@/lib/orders/totals-box";
 /** Banii unei comenzi, asa cum ii trimite `order.actions.ts` catre emailuri. */
 export interface BaniComanda {
   /** Liniile comenzii CU `product_id`: dupa el se recunosc extraoptiunile. */
-  items: { product_id: string; name: string; quantity: number; price: number }[];
+  items: {
+    product_id: string; name: string; quantity: number; price: number;
+    /**
+     * Instantaneul personalizarii, exact cum sta in `orders.items[].customization`.
+     *
+     * ⚠ `unknown`, NU un tip concret, si nu din comoditate. `orders.items` e jsonb vechi de
+     * luni si editabil din panou: un tip concret ar fi o promisiune pe care n-o poate tine
+     * nimeni, iar un email care ARUNCA la randare nu se mai trimite deloc — comanda ar ramane
+     * nestiuta, adica mai rau decat un email fara detalii. Cine il citeste o face DEFENSIV;
+     * vezi `randPersonalizare` de la coada lui `src/lib/email.ts`.
+     */
+    customization?: unknown;
+  }[];
   subtotal: number;
   shipping_cost: number;
   discount_code?: string | null;

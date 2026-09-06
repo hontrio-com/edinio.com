@@ -16,6 +16,9 @@ import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
 import { totaluriComanda, type SetariTvaMagazin } from "@/lib/orders/totals-box";
+import {
+  citesteDefalcarea, suprafataDeAratat, caM2, type DefalcareCitita,
+} from "@/lib/orders/defalcare-personalizare";
 import { updateOrder, deleteOrder, sendCustomerNotification, sendCustomerSms } from "@/lib/actions/order.actions";
 import {
   generateOrderInvoice,
@@ -61,6 +64,14 @@ interface OrderItem {
   price: number;
   quantity: number;
   customization?: Record<string, { type: string; label: string; value: string | string[] }>;
+  /**
+   * Din ce se compune pretul liniei, scris de server odata cu `customization`.
+   *
+   * ⚠ Ramane `unknown` dinadins. E jsonb vechi, iar liniile trecute prin editarea din panou isi
+   * pastreaza cheile necunoscute printr-un spread: o forma DECLARATA aici ar fi fost o promisiune
+   * pe care baza n-o tine. Se verifica la citire, in `citesteDefalcarea`.
+   */
+  personalizare?: unknown;
 }
 
 interface ShippingAddress {
@@ -134,6 +145,46 @@ function StatusStepper({ status }: { status: string }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * Din ce se compune pretul unei linii personalizate.
+ *
+ * ⚠ SE AFISEAZA CE A SCRIS SERVERUL cand a incasat — nimic nu se resocoteste aici. Doua socoteli
+ * s-ar fi departat, si atunci panoul ar fi contrazis factura emisa din aceleasi date.
+ *
+ * ⚠ SUMELE SUNT PE BUCATA, ca si `price` de pe linie; pretul din dreapta randului de produs e
+ * inmultit cu cantitatea. La cantitate mai mare de una se scrie pe ecran, altfel randurile n-ar da
+ * numarul de deasupra lor si comerciantul ar cauta o diferenta care nu exista.
+ */
+function DefalcareaPersonalizarii({ d, cantitate }: { d: DefalcareCitita; cantitate: number }) {
+  const suprafata = suprafataDeAratat(d);
+  return (
+    <div className="mt-2 pt-2 border-t border-purple-200 space-y-1">
+      <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest">
+        Pretul personalizarii{cantitate > 1 ? " · pe bucata" : ""}
+      </p>
+      {d.randuri.map((r, ri) => (
+        <div key={ri} className="flex items-start justify-between gap-3 text-xs">
+          <span className="min-w-0 break-words text-muted-foreground">
+            {r.eticheta}
+            {r.detaliu ? <span className="ml-1.5">{r.detaliu}</span> : null}
+          </span>
+          <span className="font-medium text-foreground flex-shrink-0">{formatPrice(r.suma)}</span>
+        </div>
+      ))}
+      {/*
+        ⚠ Suprafata facturata se arata DOAR cand difera de cea masurata: atunci a intrat suprafata
+        minima facturabila sau rotunjirea in sus, si asta e chiar intrebarea pe care o pune
+        clientul — de ce plateste mai mult decat masura pe care a dat-o.
+      */}
+      {suprafata && (
+        <p className="text-[11px] text-muted-foreground">
+          Masurat {caM2(suprafata.masurat)}, facturat {caM2(suprafata.facturat)} (minim sau rotunjire)
+        </p>
+      )}
     </div>
   );
 }
@@ -1006,57 +1057,76 @@ export function OrderDetailClient({
           <div className={`${CARD} p-5 space-y-3 overflow-hidden`}>
             <h2 className="text-sm font-semibold text-foreground">Produse comandate</h2>
             <div className="space-y-2">
-              {items.map((item, i) => (
-                <div key={i}>
-                  {/*
-                    Numele produsului se vede INTREG, pe cate randuri e nevoie.
-                    Avea `truncate`, iar pe telefon taia exact partea care
-                    deosebeste produsele intre ele: din zece randuri cu "Tulipan
-                    Negro Gel Dus ..." nu se mai vedea care e care.
-                    Alinierea trece pe `items-start`, ca iconita, bucata si pretul
-                    sa stea in dreptul PRIMULUI rand, nu la mijlocul unui nume de
-                    trei randuri. Bucata sta lipita de nume, in aceeasi curgere,
-                    ca sa nu ramana singura pe un rand nou.
-                  */}
-                  <div className="flex items-start justify-between gap-3 text-sm">
-                    <div className="flex items-start gap-2 min-w-0 flex-1">
-                      <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-[3px]" />
-                      <span className="min-w-0 break-words text-foreground">
-                        {item.name}
-                        <span className="ml-1.5 whitespace-nowrap text-muted-foreground">x{item.quantity}</span>
-                      </span>
+              {items.map((item, i) => {
+                /*
+                  Serverul scrie pe linia personalizata DOUA chei, si amandoua se citesc aici:
+                  `customization` (ce a ales clientul) si `personalizare` (din ce se compune
+                  pretul). Cat timp se citea doar prima, linia scria 910 lei pe un produs al carui
+                  catalog zice 89 si nimic de pe ecran nu spunea de unde vin — desi platforma
+                  salvase chiar explicatia.
+
+                  ⚠ Comenzile de pana acum n-au niciuna dintre chei, si atunci blocul nu se
+                  randeaza deloc: pentru ele panoul arata exact ca inainte.
+                */
+                const campuri = item.customization && typeof item.customization === "object"
+                  ? Object.values(item.customization)
+                  : [];
+                const defalcare = citesteDefalcarea(item.personalizare);
+                return (
+                  <div key={i}>
+                    {/*
+                      Numele produsului se vede INTREG, pe cate randuri e nevoie.
+                      Avea `truncate`, iar pe telefon taia exact partea care
+                      deosebeste produsele intre ele: din zece randuri cu "Tulipan
+                      Negro Gel Dus ..." nu se mai vedea care e care.
+                      Alinierea trece pe `items-start`, ca iconita, bucata si pretul
+                      sa stea in dreptul PRIMULUI rand, nu la mijlocul unui nume de
+                      trei randuri. Bucata sta lipita de nume, in aceeasi curgere,
+                      ca sa nu ramana singura pe un rand nou.
+                    */}
+                    <div className="flex items-start justify-between gap-3 text-sm">
+                      <div className="flex items-start gap-2 min-w-0 flex-1">
+                        <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-[3px]" />
+                        <span className="min-w-0 break-words text-foreground">
+                          {item.name}
+                          <span className="ml-1.5 whitespace-nowrap text-muted-foreground">x{item.quantity}</span>
+                        </span>
+                      </div>
+                      <span className="font-medium text-foreground flex-shrink-0 ml-3">{formatPrice(item.price * item.quantity)}</span>
                     </div>
-                    <span className="font-medium text-foreground flex-shrink-0 ml-3">{formatPrice(item.price * item.quantity)}</span>
+                    {(campuri.length > 0 || defalcare) && (
+                      <div className="ml-6 mt-1.5 pl-3 border-l-2 border-purple-200 space-y-1.5">
+                        <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest">Personalizare</p>
+                        {campuri.map((field, fi) => (
+                          <div key={fi}>
+                            <p className="text-[11px] font-semibold text-purple-600 uppercase tracking-wide">{field.label}</p>
+                            {field.type === "image" && Array.isArray(field.value) ? (
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                {(field.value as string[]).map((url, imgI) => (
+                                  <a key={imgI} href={url} target="_blank" rel="noopener noreferrer"
+                                    className="relative block w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors">
+                                    <Image src={url} alt={`Personalizare ${imgI + 1}`} fill sizes="56px" className="object-cover" />
+                                  </a>
+                                ))}
+                              </div>
+                            ) : field.type === "color" ? (
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="w-5 h-5 rounded border border-border" style={{ backgroundColor: field.value as string }} />
+                                <span className="text-xs text-muted-foreground font-mono">{field.value}</span>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-foreground">{field.value as string}</p>
+                            )}
+                          </div>
+                        ))}
+                        {defalcare && (
+                          <DefalcareaPersonalizarii d={defalcare} cantitate={Number(item.quantity) || 1} />
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {item.customization && Object.keys(item.customization).length > 0 && (
-                    <div className="ml-6 mt-1.5 pl-3 border-l-2 border-purple-200 space-y-1.5">
-                      <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest">Personalizare</p>
-                      {Object.values(item.customization).map((field, fi) => (
-                        <div key={fi}>
-                          <p className="text-[11px] font-semibold text-purple-600 uppercase tracking-wide">{field.label}</p>
-                          {field.type === "image" && Array.isArray(field.value) ? (
-                            <div className="flex flex-wrap gap-1.5 mt-1">
-                              {(field.value as string[]).map((url, imgI) => (
-                                <a key={imgI} href={url} target="_blank" rel="noopener noreferrer"
-                                  className="relative block w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors">
-                                  <Image src={url} alt={`Personalizare ${imgI + 1}`} fill sizes="56px" className="object-cover" />
-                                </a>
-                              ))}
-                            </div>
-                          ) : field.type === "color" ? (
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="w-5 h-5 rounded border border-border" style={{ backgroundColor: field.value as string }} />
-                              <span className="text-xs text-muted-foreground font-mono">{field.value}</span>
-                            </div>
-                          ) : (
-                            <p className="text-sm text-foreground">{field.value as string}</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
             {/*
                 Toate cifrele de aici vin din `totaluriComanda`, nu din coloane

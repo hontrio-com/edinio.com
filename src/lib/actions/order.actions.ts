@@ -1746,7 +1746,19 @@ export async function placeOrder(data: {
         // Liniile pleaca CU `product_id`: dupa prefixul `extra_` isi recunoaste
         // emailul extraoptiunile, iar fara ele „Subtotal" din emailul
         // comerciantului nu se aduna cu lista de deasupra lui. Vezi `BaniComanda`.
-        items: allItems.map(i => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price })),
+        //
+        // ⚠ Si INSTANTANEUL personalizarii, cand linia il are. Fara el atelierul primeste
+        // „Fototapet personalizat x1 — 1.234,00 lei" si trebuie sa deschida panoul ca sa afle ce
+        // are de tiparit: dimensiunile, textul scris de client si fisierul incarcat sunt toate
+        // in comanda. Acelasi `emailPayload` pleaca si catre CLIENT, care trebuie sa poata
+        // confirma ce a comandat inainte sa intre in productie.
+        //
+        // ⚠ Spread CONDITIONAT: `allItems` e o uniune de trei forme, iar liniile venite din cos
+        // si extraoptiunile n-au campul deloc.
+        items: allItems.map(i => ({
+          product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price,
+          ...("customization" in i ? { customization: i.customization } : {}),
+        })),
         shipping_cost: shipping,
         /*
          * Reducerea si codul sunt ALE SERVERULUI: exact ce s-a scris in `orders`

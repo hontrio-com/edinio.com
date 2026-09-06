@@ -366,6 +366,22 @@ export async function saveAbandonedCartAutomation(
   return { success: true };
 }
 
+/*
+ * ⚠ ACELASI REFUZ SI ACELASI TEXT PE AMANDOUA CANALELE.
+ *
+ * Cine trimite manual din panou nu vede ce contine cosul repretuit, ci doar
+ * mesajul asta — deci el trebuie sa numeasca TOATE motivele pentru care linia
+ * dispare, altfel comerciantul cauta acolo unde nu e. Pana acum spunea „nu mai
+ * sunt in catalog / sunt dezactivate / au variante" si pentru un produs activ,
+ * fara variante, care doar CERE PERSONALIZARE: omul se uita la un produs
+ * sanatos si nu intelege ce i se cere.
+ *
+ * (Nu e o formula de politete: motivele sunt chiar cele din `liniiRecuperabile`.
+ * Cand se adauga acolo un motiv nou, se adauga si aici.)
+ */
+const COS_NERECUPERABIL =
+  "Produsele din acest cos nu se mai pot pune inapoi in cos: nu mai sunt in catalog, sunt dezactivate, au variante sau cer personalizare. Linkul de recuperare ar duce clientul la un cos gol, deci mesajul nu a plecat. Sterge cosul sau verifica produsele.";
+
 // ── Recovery: email (owner) ────────────────────────────────────────────────────
 export async function sendAbandonedCartEmail(
   businessId: string,
@@ -396,7 +412,7 @@ export async function sendAbandonedCartEmail(
   // asa raspunsul nu depinde de politicile RLS de pe `products`.
   const proaspat = await cosRecuperabil(createAdminClient(), businessId, (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[]);
   if (proaspat.items.length === 0) {
-    return { error: "Produsele din acest cos nu mai sunt in catalog, sunt dezactivate sau au variante, deci linkul de recuperare ar duce clientul la un cos gol. Sterge cosul sau reactiveaza produsele." };
+    return { error: COS_NERECUPERABIL };
   }
 
   try {
@@ -448,7 +464,8 @@ export async function sendAbandonedCartSms(
   // utilizatorului `smso_config.api_key` si `notice_config.api_token` ar veni ca
   // siruri `enc.v1.…` (`privat.decripteaza_config` nu decripteaza pentru
   // `authenticated`), iar furnizorul ar refuza fiecare SMS de recuperare.
-  const { data: settings } = await createAdminClient()
+  const admin = createAdminClient();
+  const { data: settings } = await admin
     .from("store_settings").select("smso_config, notice_config").eq("business_id", businessId).single();
   const smso = settings?.smso_config as SmsoConfig | null;
   const notice = settings?.notice_config as NoticeConfig | null;
@@ -457,10 +474,33 @@ export async function sendAbandonedCartSms(
   if (!smsoReady && !noticeReady) return { error: "Activeaza SMSO sau notice.ro (cos abandonat) ca sa trimiti SMS." };
 
   const { data: cart } = await supabase
-    .from("abandoned_carts").select("id, customer_name, phone, recovery_count")
+    .from("abandoned_carts").select("id, customer_name, phone, items, recovery_count")
     .eq("id", cartId).eq("business_id", businessId).single();
   if (!cart) return { error: "Cosul nu a fost gasit." };
   if (!cart.phone) return { error: "Clientul nu a lasat un numar de telefon." };
+
+  /*
+   * ⚠ ACELASI REFUZ CA LA EMAIL, SI DIN ACELASI MOTIV — pana acum lipsea, iar
+   * `items` nici macar nu se cerea in interogarea de mai sus.
+   *
+   * SMS-ul poarta doar linkul, deci pare ca n-are ce pret sa minta. Numai ca la
+   * capatul linkului vitrina iese pe `items.length === 0` inainte de `restoreCart`
+   * si sterge si parametrul `recover` din adresa: clientul ajunge pe prima pagina,
+   * fara cos si fara nicio explicatie — dupa un SMS pe care comerciantul l-a
+   * PLATIT, si cu `recovery_count` crescut degeaba.
+   *
+   * Un produs care cere personalizare (fototapetul la lei/m2) nimereste aici de
+   * fiecare data: butonul de cos e ascuns, singurul drum de cumparare e formularul
+   * de comanda, si tot el captureaza cosul cu o singura linie — chiar linia pe care
+   * `liniiRecuperabile` o arunca.
+   *
+   * Client de admin, ca la email: dreptul asupra magazinului e verificat mai sus,
+   * iar asa raspunsul nu depinde de politicile RLS de pe `products`.
+   */
+  const proaspat = await cosRecuperabil(admin, businessId, (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[]);
+  if (proaspat.items.length === 0) {
+    return { error: COS_NERECUPERABIL };
+  }
 
   const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
   const recoverUrl = buildRecoverUrl(storeUrl, cartId, discountCode?.trim() || null);

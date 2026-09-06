@@ -169,7 +169,7 @@ export async function sendOrderConfirmationToCustomer(
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span>${randPersonalizare(i)}</td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
@@ -1226,7 +1226,7 @@ export async function sendNewOrderEmail(
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span>${randPersonalizare(i)}</td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
@@ -1793,4 +1793,73 @@ export async function sendBlogSubscribeConfirmation(email: string, adresaConfirm
     subject: "Confirmă abonarea la blogul Edinio",
     html: baseTemplate(content),
   });
+}
+
+/**
+ * Ce a personalizat clientul, scris sub numele produsului in emailurile de comanda.
+ *
+ * ⚠ FARA EL EMAILUL MINTE PRIN OMISIUNE. Atelierul primeste „Fototapet personalizat x1 —
+ * 1.234,00 lei" si atat: nici dimensiunile, nici textul scris de client, nici fisierul
+ * incarcat, desi toate trei sunt scrise in comanda. Ca sa afle ce are de tiparit trebuie sa
+ * deschida panoul. Iar cand baza nu se incaseaza, cifra din email nu se poate impaca cu nimic
+ * din magazin: 1.234 lei pe un produs care afiseaza „de la 89".
+ *
+ * ⚠ SE CITESTE DEFENSIV, si asta nu e prudenta de forma. `orders.items` e jsonb vechi de luni
+ * si editabil din panou, deci forma de azi nu e o promisiune. Un email care ARUNCA la randare
+ * nu se mai trimite deloc, si atunci comanda ramane nestiuta — mai rau decat un email fara
+ * detalii. Orice intrare fara eticheta sau fara valoare se SARE, nu opreste randul.
+ *
+ * ⚠ TOT CE IESE TRECE PRIN `esc`. Etichetele vin din definitia produsului, dar valorile sunt
+ * siruri scrise de un strain prin formularul PUBLIC de comanda, si ajung intr-un HTML deschis
+ * in casuta comerciantului. Adresele de fisier trec prin `escapeUrl`, nu prin `esc`: escaparea
+ * singura inchide iesirea din atribut, dar lasa in picioare un `javascript:` intr-un `href`.
+ *
+ * ⚠ LA FISIERE NU SE PUN ETICHETE DE IMAGINE. Clientii de mail blocheaza imaginile din oficiu,
+ * deci o poza incarcata ar fi ajuns un dreptunghi gol. Se scrie numarul de fisiere plus
+ * legaturi numerotate, ca atelierul sa le poata deschide.
+ */
+export function randPersonalizare(linie: unknown): string {
+  if (!linie || typeof linie !== "object") return "";
+  const brut = (linie as { customization?: unknown }).customization;
+  if (!brut || typeof brut !== "object" || Array.isArray(brut)) return "";
+
+  const bucati: string[] = [];
+  for (const intrare of Object.values(brut as Record<string, unknown>)) {
+    if (!intrare || typeof intrare !== "object" || Array.isArray(intrare)) continue;
+    const camp = intrare as { label?: unknown; value?: unknown };
+    const eticheta = typeof camp.label === "string" ? camp.label.trim() : "";
+    if (!eticheta) continue;
+
+    /*
+     * ⚠ „Fisiere" se hotaraste dupa FORMA valorii, nu dupa `type`: si `type` sta in acelasi
+     * jsonb editabil, deci nu e o marturie mai buna decat valoarea insasi. La campurile de
+     * imagine valoarea E un tablou de adrese (vezi `caText` din `customization/comanda.ts`).
+     */
+    if (Array.isArray(camp.value)) {
+      const adrese = camp.value.filter((a): a is string => typeof a === "string" && a.trim() !== "");
+      if (adrese.length === 0) continue;
+      const legaturi = adrese
+        .map((a, n) => `<a href="${escapeUrl(a.trim())}" style="color:#2563eb;text-decoration:underline;">${n + 1}</a>`)
+        .join(", ");
+      const cuvant = adrese.length === 1 ? "fisier" : "fisiere";
+      bucati.push(`${esc(eticheta)}: ${adrese.length} ${cuvant} (${legaturi})`);
+      continue;
+    }
+
+    const text = typeof camp.value === "string"
+      ? camp.value.trim()
+      : typeof camp.value === "number" || typeof camp.value === "boolean"
+        ? String(camp.value)
+        : "";
+    if (!text) continue;
+    /*
+     * Randurile scrise de client raman randuri: `<br>` se pune DUPA escapare, deci nu poate
+     * veni din ce a trimis el. Un textarea turtit intr-un singur rand ar fi tiparit altceva
+     * decat a cerut omul.
+     */
+    bucati.push(`${esc(eticheta)}: ${esc(text).replace(/\r?\n/g, "<br>")}`);
+  }
+
+  if (bucati.length === 0) return "";
+  return `<br><span style="font-size:12px;color:#71717a;line-height:1.6;">${bucati.join(" · ")}</span>`;
 }

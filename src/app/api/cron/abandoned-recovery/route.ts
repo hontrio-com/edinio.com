@@ -213,26 +213,57 @@ export async function GET(req: NextRequest) {
       // (matters when automation is enabled on already-old carts that catch up).
       if (cart.last_recovery_at && now.getTime() - new Date(cart.last_recovery_at).getTime() < 3_600_000) continue;
 
+      /*
+       * Pregatirile IEFTINE ale canalului stau inaintea drumului la catalog: un cos
+       * fara adresa, fara telefon sau prins de orele linistite se sare oricum, si
+       * n-are de ce sa coste o interogare la fiecare rulare. Ce urmeaza dupa ele e
+       * comun amandurora.
+       */
+      const optedOut = !!(cart.email && optoutSet.has(`${store.businessId}:${cart.email.toLowerCase()}`));
+      const canal = step.channel === "email"
+        ? (cart.email && !optedOut ? ({ fel: "email", email: cart.email } as const) : null)
+        : (cart.phone && (smsoReady || noticeReady) ? ({ fel: "sms", phone: cart.phone } as const) : null);
+      if (!canal) { await revendicaPasul(admin, cart.id, cart, now); continue; }
+      // Orele linistite AMANA SMS-ul fara sa revendice pasul: se reia mai tarziu.
+      if (canal.fel === "sms" && isQuietHour(store.automation.quiet_hours, nowHour)) continue;
+
+      /*
+       * ⚠ COSUL PROASPAT SE SOCOTESTE O SINGURA DATA, PENTRU AMANDOUA CANALELE.
+       *
+       * Preturile din `cart.items` sunt cele inghetate in localStorage la captura.
+       * Mesajul e semnat de magazin, deci nu are voie sa republice un pret pe care
+       * magazinul nu-l mai onoreaza: se repretuiesc din catalog, prin acelasi calcul
+       * ca linkul de recuperare.
+       *
+       * ⚠ Si mai ales: pana acum poarta traia DOAR pe ramura de email, iar SMS-ul
+       * pleca de-a dreptul cu `recoverUrl`. La un produs care cere personalizare
+       * (fototapetul la lei/m2) butonul de cos e ascuns, deci singurul drum de
+       * cumparare e formularul de comanda — si tot el captureaza cosul abandonat, cu
+       * o singura linie: exact linia pe care `liniiRecuperabile` o arunca. Adica
+       * TOATE SMS-urile de recuperare pentru asemenea cosuri duceau garantat intr-un
+       * cos gol: vitrina iese pe `items.length === 0` inainte de `restoreCart` si
+       * sterge si parametrul `recover` din adresa, deci omul ajunge pe prima pagina
+       * fara cos si fara nicio explicatie — dupa un SMS PLATIT. Pe rand se scria
+       * totusi `recovery_sms_sent_at` si `recovery_count + 1`, deci si raportul de
+       * recuperari iesea umflat.
+       *
+       * Fara nicio linie ramasa se revendica pasul si se trece mai departe: secventa
+       * avanseaza FARA sa numere o trimitere si fara sa se blocheze pe cosul asta la
+       * fiecare rulare.
+       */
+      const proaspat = await cosRecuperabil(admin, store.businessId, (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[]);
+      if (proaspat.items.length === 0) { await revendicaPasul(admin, cart.id, cart, now); continue; }
+
+      // Pasul se ia INAINTE de trimitere. Daca alt lucrator l-a luat deja, se sare:
+      // asa nu poate pleca acelasi mesaj de doua ori.
+      if (!(await revendicaPasul(admin, cart.id, cart, now))) continue;
+
       const recoverUrl = buildRecoverUrl(storeUrl, cart.id, step.discount_code ?? null);
 
-      if (step.channel === "email") {
-        const optedOut = !!(cart.email && optoutSet.has(`${store.businessId}:${cart.email.toLowerCase()}`));
-        if (!cart.email || optedOut) { await revendicaPasul(admin, cart.id, cart, now); continue; }
-        // Preturile din `cart.items` sunt cele inghetate in localStorage la
-        // captura. Emailul e semnat de magazin, deci nu are voie sa republice un
-        // pret pe care magazinul nu-l mai onoreaza: se repretuiesc din catalog,
-        // prin acelasi calcul ca linkul de recuperare din email.
-        const proaspat = await cosRecuperabil(admin, store.businessId, (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[]);
-        // Niciun produs recuperabil: linkul ar duce clientul la un cos gol. Se
-        // avanseaza pasul fara sa se numere o trimitere, ca secventa sa nu se
-        // blocheze pe cosul asta la fiecare rulare orara.
-        if (proaspat.items.length === 0) { await revendicaPasul(admin, cart.id, cart, now); continue; }
-        // Pasul se ia INAINTE de trimitere. Daca alt lucrator l-a luat deja, se
-        // sare: asa nu poate pleca acelasi mesaj de doua ori.
-        if (!(await revendicaPasul(admin, cart.id, cart, now))) continue;
+      if (canal.fel === "email") {
         try {
           const emailSender = await getStoreEmailSender(admin, store.businessId);
-          await sendAbandonedCartRecovery(cart.email, {
+          await sendAbandonedCartRecovery(canal.email, {
             storeName,
             recoverUrl,
             customerName: cart.customer_name,
@@ -241,7 +272,7 @@ export async function GET(req: NextRequest) {
             color: biz.primary_color ?? "#1AB554",
             message: step.message ? interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName }) : undefined,
             discountCode: step.discount_code ?? undefined,
-            unsubscribeUrl: urlDezabonare(PLATFORM_ORIGIN, store.businessId, cart.email),
+            unsubscribeUrl: urlDezabonare(PLATFORM_ORIGIN, store.businessId, canal.email),
           }, emailSender);
           await marcheazaTrimis(admin, cart.id, cart, now, "email");
           sent++;
@@ -255,20 +286,17 @@ export async function GET(req: NextRequest) {
            */
         }
       } else {
-        if (!cart.phone || (!smsoReady && !noticeReady)) { await revendicaPasul(admin, cart.id, cart, now); continue; }
-        if (isQuietHour(store.automation.quiet_hours, nowHour)) continue; // defer SMS
-        if (!(await revendicaPasul(admin, cart.id, cart, now))) continue;
         const body = step.message
           ? `${interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName })} ${recoverUrl}`
           : defaultRecoverySms({ name: cart.customer_name, storeName, url: recoverUrl, code: step.discount_code ?? null });
         // Prefer notice.ro when enabled for abandoned carts, else SMSO.
         let smsOk = false;
         if (noticeReady) {
-          const r = await sendNoticeAbandonedSms(admin, store.notice, { businessId: store.businessId, phone: cart.phone, body });
+          const r = await sendNoticeAbandonedSms(admin, store.notice, { businessId: store.businessId, phone: canal.phone, body });
           smsOk = r.success;
         } else {
           const res = await sendSms(store.smso!.api_key, {
-            to: cart.phone, sender: store.smso!.sender_id, body, type: "marketing", remove_special_chars: true,
+            to: canal.phone, sender: store.smso!.sender_id, body, type: "marketing", remove_special_chars: true,
           });
           smsOk = res.success;
         }

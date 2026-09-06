@@ -18,7 +18,7 @@ import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
 import { getAttribution } from "@/lib/storefront/attribution";
 import { pretPeTrepte, type QuantityTier } from "@/lib/storefront/quantity-tiers";
-import { useCartOptional } from "@/components/storefront/cart/CartProvider";
+import { lineKey, useCartOptional, type CartItem } from "@/components/storefront/cart/CartProvider";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { CompanyFields, useCompanyBilling } from "./CompanyFields";
@@ -92,7 +92,14 @@ interface Props {
   initialQuantity?: number;
   customizationFields?: CustomizationFieldDef[];
   /** Items already in the storefront cart, carried into this order. */
-  cartItems?: { productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string }[];
+  /*
+   * ⚠ Chiar forma din cos, nu o copie ingustata.
+   *
+   * Scrisa aici camp cu camp, forma se poate desincroniza tacut de cea adevarata: tipul spune
+   * ca un camp nu exista, dar obiectul il poarta oricum, si atunci merge din intamplare pana la
+   * prima rescriere care construieste liniile camp cu camp.
+   */
+  cartItems?: CartItem[];
   /** Called after the order is placed so the caller can clear the cart. */
   /**
    * Comanda a plecat cu liniile astea de cos in ea.
@@ -260,7 +267,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [custValues, setCustValues] = useState<Record<string, string | string[]>>({});
   const [custUploading, setCustUploading] = useState<Record<string, boolean>>({});
   // Editable copy of the carried-over cart (change quantity / remove inside the form).
-  const [cartLines, setCartLines] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string }[]>(cartItems ?? []);
+  const [cartLines, setCartLines] = useState<CartItem[]>(cartItems ?? []);
 
   // Discount state
   const [discountInput, setDiscountInput] = useState("");
@@ -280,9 +287,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // (this product + cart) so discount, min-order, free-shipping and total all
   // account for it; `productSubtotal` stays for this product's own lines.
   const cart = cartLines;
-  // A carried line is identified by product + variant, so two variants of the same
-  // product stay distinct when editing quantity / removing / rendering.
-  const cartLineKey = (l: { productId: string; variantTitle?: string }) => l.variantTitle ? `${l.productId}::${l.variantTitle}` : l.productId;
+  /*
+   * ⚠ ACEEASI cheie ca in cos, nu o a doua copie.
+   *
+   * Era scrisa aici a doua oara, litera cu litera: produs plus varianta. Comportamentul e
+   * identic azi — de aceea nici nu s-a vazut — dar proiectul are tiparul asta scris de patru
+   * ori, si de fiecare data a doua copie a divergit. Iar cand diverge, se vede ca doua linii
+   * contopite intr-un rand, cu `+`/`-` si stergerea lucrand pe amandoua: clientul scoate din
+   * comanda o linie pe care n-o vede.
+   */
+  const cartLineKey = lineKey;
   // Liniile purtate din cos se socotesc prin cos, ca sa poarte cu ele treptele de
   // cantitate: acelasi numar in sertar, pe pagina de cos, aici si la server.
   const totalLinieCos = (i: { productId: string; price: number; quantity: number; variantTitle?: string }) =>

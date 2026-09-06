@@ -23,7 +23,7 @@ interface OrderInfo {
   deadlineNote: string;
 }
 
-type Selection = Record<string, { checked: boolean; quantity: number }>;
+type Selection = Record<number, { checked: boolean; quantity: number }>;
 
 export function ReturnRequestClient({ businessId, basePath, color, storeName, prefillOrder }: Props) {
   const [step, setStep] = useState<"identify" | "select" | "done">("identify");
@@ -63,21 +63,26 @@ export function ReturnRequestClient({ businessId, basePath, color, storeName, pr
     });
     // Preselect all items at full quantity (most returns are full-order).
     const initial: Selection = {};
-    res.items.forEach((i) => { initial[i.product_id] = { checked: true, quantity: i.quantity }; });
+    /*
+     * ⚠ CHEIA E INDEXUL LINIEI, nu produsul. Doua marimi ale aceleiasi camasi sunt doua linii
+     * cu ACELASI `product_id`: pe cheia veche aveau o singura bifa, `key`-ul lor de React se
+     * dubla, iar serverul inregistra returul pentru amandoua cand omul ceruse una.
+     */
+    res.items.forEach((i) => { initial[i.index] = { checked: true, quantity: i.quantity }; });
     setSelection(initial);
     setStep("select");
   }
 
-  function toggleItem(id: string) {
+  function toggleItem(id: number) {
     setSelection((s) => ({ ...s, [id]: { ...s[id], checked: !s[id]?.checked } }));
   }
 
-  function setQty(id: string, qty: number, max: number) {
+  function setQty(id: number, qty: number, max: number) {
     const q = Math.max(1, Math.min(max, Math.floor(qty) || 1));
     setSelection((s) => ({ ...s, [id]: { checked: true, quantity: q } }));
   }
 
-  const selectedCount = order ? order.items.filter((i) => selection[i.product_id]?.checked).length : 0;
+  const selectedCount = order ? order.items.filter((i) => selection[i.index]?.checked).length : 0;
   const ibanMissing = refundMethod === "iban" && refundIban.trim().length < 15;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -88,8 +93,8 @@ export function ReturnRequestClient({ businessId, basePath, color, storeName, pr
     if (ibanMissing) { setError("Introdu un IBAN valid pentru rambursare."); return; }
 
     const items = order.items
-      .filter((i) => selection[i.product_id]?.checked)
-      .map((i) => ({ product_id: i.product_id, quantity: selection[i.product_id]?.quantity ?? i.quantity }));
+      .filter((i) => selection[i.index]?.checked)
+      .map((i) => ({ index: i.index, quantity: selection[i.index]?.quantity ?? i.quantity }));
 
     setLoading(true);
     const res = await submitReturnRequest({
@@ -173,12 +178,12 @@ export function ReturnRequestClient({ businessId, basePath, color, storeName, pr
             <p className="text-sm font-medium text-gray-700 mb-2">Ce produse returnezi?</p>
             <div className="space-y-2">
               {order.items.map((i) => {
-                const sel = selection[i.product_id];
+                const sel = selection[i.index];
                 const checked = !!sel?.checked;
                 return (
-                  <div key={i.product_id} className={`rounded-xl border px-3.5 py-3 transition-colors ${checked ? "border-gray-300 bg-white" : "border-gray-100 bg-gray-50/50"}`}>
+                  <div key={i.index} className={`rounded-xl border px-3.5 py-3 transition-colors ${checked ? "border-gray-300 bg-white" : "border-gray-100 bg-gray-50/50"}`}>
                     <label className="flex items-start gap-3 cursor-pointer">
-                      <input type="checkbox" checked={checked} onChange={() => toggleItem(i.product_id)}
+                      <input type="checkbox" checked={checked} onChange={() => toggleItem(i.index)}
                         className="mt-0.5 h-4 w-4 rounded border-gray-300" style={{ accentColor: color }} />
                       <span className="flex-1 min-w-0">
                         <span className="block text-sm font-medium text-gray-900">{i.name}</span>
@@ -195,7 +200,7 @@ export function ReturnRequestClient({ businessId, basePath, color, storeName, pr
                       <div className="flex items-center gap-2 mt-2.5 pl-7">
                         <span className="text-xs text-gray-500">Cantitate de returnat:</span>
                         <input type="number" min={1} max={i.quantity} value={sel?.quantity ?? i.quantity}
-                          onChange={(e) => setQty(i.product_id, Number(e.target.value), i.quantity)}
+                          onChange={(e) => setQty(i.index, Number(e.target.value), i.quantity)}
                           className="w-16 px-2 py-1 rounded-lg border border-border text-sm text-center focus:outline-none focus:ring-2"
                           style={ringStyle} />
                       </div>

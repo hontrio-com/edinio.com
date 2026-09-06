@@ -76,7 +76,7 @@ test("liniile stricate nu opresc restul comenzii", () => {
   // `items` e jsonb: nimic nu garanteaza forma. O linie fara product_id se sare,
   // dar coletul tot pleaca cu greutatea celorlalte.
   const items = [null, { quantity: 2 }, { product_id: "", quantity: 1 }, linie(UUID_A, 1)];
-  assert.deepEqual(liniileComenzii(items), [{ productId: UUID_A, quantity: 1, grameConfiguratie: 0 }]);
+  assert.deepEqual(liniileComenzii(items), [{ productId: UUID_A, quantity: 1 }]);
   assert.equal(greutateaColetului(items, [p(UUID_A, 2000)]).kg, 2);
 });
 
@@ -103,77 +103,6 @@ test("comanda PARTIALA: cifra e incompleta, si o spune", () => {
   ]);
   assert.equal(r.kg, 0.4);
   assert.equal(r.dinCatalog, false, "incompleta nu se marcheaza ca venita din catalog");
-  assert.equal(r.liniiFaraGreutate, 1);
-});
-
-/**
- * Greutatea CONFIGURATIEI, adusa de comanda, nu de catalog.
- *
- * O cana cu cutie de lemn isi are cutia pe o optiune de configurator. `Optiune.grame` era compilat
- * si scris in comanda, dar coletul pleca la toti cei saisprezece curieri cu greutatea produsului
- * gol din catalog — iar curierul cantareste la depozit si refactureaza banda adevarata.
- */
-
-/** O linie configurata, asa cum o scrie `order.actions.ts` in `orders.items`. */
-const linieCfg = (pid: string, qty: number, grame: unknown) => ({
-  product_id: pid,
-  quantity: qty,
-  name: "Cana gravata",
-  price: 89,
-  configuratie: {
-    configuratorId: "c1",
-    versiuneId: "v1",
-    numarVersiune: 2,
-    amprenta: "0f3asj30xcbam60dg0nhd0fcl9j4",
-    grame,
-    valori: { amb: { f: "alegere", v: "cutie" } },
-    rezumat: [{ id: "amb", eticheta: "Ambalaj", valoare: "Cutie de lemn", scurt: true }],
-  },
-});
-
-test("gramele configuratiei intra in greutatea coletului", () => {
-  const r = greutateaColetului([linieCfg(UUID_A, 1, 750)], [p(UUID_A, 300)]);
-  assert.equal(r.kg, 1.05); // 0,3 din catalog + 0,75 din cutia aleasa
-  assert.equal(r.dinCatalog, true);
-});
-
-test("gramele configuratiei sunt PER BUCATA", () => {
-  /*
-   * ⚠ Adunate o singura data, zece cani cu cutie ar fi plecat declarate la 3,75 kg in loc de 10,5
-   * — banda de tarif a unui colet de patru kilograme pentru unul de zece.
-   */
-  assert.equal(greutateaColetului([linieCfg(UUID_A, 10, 750)], [p(UUID_A, 300)]).kg, 10.5);
-});
-
-test("liniile configurate si cele simple se aduna in acelasi colet", () => {
-  const r = greutateaColetului(
-    [linieCfg(UUID_A, 2, 750), linie(UUID_B, 1)],
-    [p(UUID_A, 300), p(UUID_B, 400)],
-  );
-  assert.equal(r.kg, 2.5); // 2 x (0,3 + 0,75) + 0,4
-});
-
-test("o comanda VECHE, fara grame in instantaneu, cantareste exact cat cantarea", () => {
-  // ⚠ Comenzile scrise inainte de campul asta n-au voie sa isi schimbe greutatea: AWB-urile lor
-  // deja emise si facturate raman cele de dinainte.
-  assert.equal(greutateaColetului([linieCfg(UUID_A, 2, undefined)], [p(UUID_A, 300)]).kg, 0.6);
-});
-
-test("o greutate stricata in instantaneu nu otraveste coletul", () => {
-  // `orders.items` e jsonb si se poate edita de mana. `NaN` ar fi facut greutatea intregii comenzi
-  // nefinita, iar o valoare negativa ar fi scazut din colet.
-  for (const grame of ["750", "greu", -900, Number.NaN, null, {}]) {
-    const r = greutateaColetului([linieCfg(UUID_A, 1, grame)], [p(UUID_A, 300)]);
-    assert.equal(r.kg, 0.3, `${JSON.stringify(grame)} a ajuns in colet`);
-  }
-});
-
-test("configuratia cantareste si cand produsul n-are greutate in catalog", () => {
-  // Sporul nu vine din `products`, deci nu se pierde fiindca produsul e necantarit. Cifra ramane
-  // insa marcata ca incompleta: cana insasi tot nu e cantarita.
-  const r = greutateaColetului([linieCfg(UUID_A, 1, 750)], [p(UUID_A, null)]);
-  assert.equal(r.kg, 0.75);
-  assert.equal(r.dinCatalog, false);
   assert.equal(r.liniiFaraGreutate, 1);
 });
 

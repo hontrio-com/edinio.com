@@ -3,8 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Check, Layers, Package, ShoppingCart } from "lucide-react";
-import { formatPrice, formatPriceFrom, formatPriceRange } from "@/lib/utils/format";
-import { etichetaDePornire } from "@/lib/configurators/eticheta-pornire";
+import { formatPrice, formatPriceRange } from "@/lib/utils/format";
 import { parseVariants } from "@/lib/storefront/variants";
 import { gtagEvent } from "@/lib/marketing";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
@@ -55,17 +54,6 @@ export interface ProductCardProps {
  */
 const SIZES_IMAGINE = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 280px";
 
-/**
- * Aceleasi clase pentru buton si pentru legatura care il inlocuieste.
- *
- * ⚠ Copiate in doua locuri, s-ar fi despartit la prima schimbare de design — si atunci produsele
- * configurabile ar fi avut, in aceeasi grila, un alt buton decat vecinii lor.
- */
-const CLASE_ACTIUNE = "w-full py-2.5 text-sm font-bold text-white rounded-xl transition-all "
-  + "active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed flex items-center "
-  + "justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 "
-  + "focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30";
-
 export function ProductCard({
   product,
   color,
@@ -93,23 +81,7 @@ export function ProductCard({
   // Reducerea se raporteaza la pretul AFISAT, nu la cel de baza: pe un produs
   // variabil cu baza 175 si toate marimile 203, cardul scria „203 lei" taiat cu
   // „200 lei" si o insigna de -12% care nu exista.
-  /*
-   * Produsul cere configurare inainte sa poata fi cumparat.
-   *
-   * ⚠ Raspunsul vine de la SERVER, din proiectia de catalog. Legaturile configuratorului sunt
-   * directe, pe categorie, cu excluderi si cu mostenire in subarbore — nimic din toate astea nu
-   * se poate deriva dintr-un rand de produs, si cu atat mai putin in browser.
-   */
-  const cereConfigurare = product.cere_configurare;
-  // Ce scrie cardul, hotarat de un modul PUR: componenta doar formateaza numarul primit.
-  const eticheta = etichetaDePornire(cereConfigurare, product.pret_pornire, priceRange.min);
-  /*
-   * ⚠ Pe produsele configurabile NU se arata reducere, din chiar motivul scris mai sus: procentul
-   * se raporteaza la pretul AFISAT. Pretul afisat e acum cel de PORNIRE, care poate fi peste
-   * `compare_at_price` (un material implicit scump), si atunci insigna ar fi anuntat o reducere
-   * la un pret mai mare decat cel taiat.
-   */
-  const hasDiscount = !cereConfigurare && !priceRange.hasRange && product.compare_at_price && Number(product.compare_at_price) > priceRange.min;
+  const hasDiscount = !priceRange.hasRange && product.compare_at_price && Number(product.compare_at_price) > priceRange.min;
   const discountPct = hasDiscount
     ? Math.round((1 - priceRange.min / Number(product.compare_at_price)) * 100)
     : 0;
@@ -201,44 +173,20 @@ export function ProductCard({
           </h3>
           <div className="flex items-baseline gap-2 mb-3">
             <span className="font-bold text-lg" style={{ color }}>
-              {eticheta.text === "dela"
-                ? formatPriceFrom(eticheta.valoare)
-                : showPriceRange
-                  ? formatPriceRange(priceRange.min, priceRange.max)
-                  : formatPrice(priceRange.min)}
+              {showPriceRange
+                ? formatPriceRange(priceRange.min, priceRange.max)
+                : formatPrice(priceRange.min)}
             </span>
             {hasDiscount && (
               <span className="text-sm text-muted-foreground line-through">{formatPrice(Number(product.compare_at_price))}</span>
             )}
           </div>
         </a>
-        {/*
-          * ⚠ O LEGATURA, NU UN BUTON, cand produsul cere configurare.
-          *
-          * `onAddToCart` ar fi pus in cos o linie NECONFIGURATA, la pretul de baza: fara valori,
-          * fara amprenta si fara pretul socotit de motor. Repretuirea de la plasarea comenzii o
-          * refuza — deci clientul ar fi ajuns pana la plata ca sa afle ca nu se poate. Aici
-          * cardul duce unde se poate configura, si atat.
-          *
-          * Epuizat ramane butonul stins de azi: o legatura n-are `disabled`, iar un card
-          * „Alege optiunile” pe marfa care nu exista ar fi trimis omul degeaba pe pagina.
-          */}
-        {cereConfigurare && !isOutOfStock ? (
-          <a
-            href={productHref}
-            onClick={fireSelect}
-            className={CLASE_ACTIUNE}
-            style={{ backgroundColor: color, boxShadow: `0 2px 8px ${color}40` }}
-          >
-            <ShoppingCart className="h-4 w-4" />
-            Alege optiunile
-          </a>
-        ) : (
         <button
           type="button"
           onClick={onAddToCart}
           disabled={isOutOfStock}
-          className={CLASE_ACTIUNE}
+          className="w-full py-2.5 text-sm font-bold text-white rounded-xl transition-all active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
           style={{
             backgroundColor: color,
             boxShadow: isAdded ? `0 0 0 3px ${color}33` : `0 2px 8px ${color}40`,
@@ -261,7 +209,6 @@ export function ProductCard({
             </>
           )}
         </button>
-        )}
       </div>
     </div>
   );

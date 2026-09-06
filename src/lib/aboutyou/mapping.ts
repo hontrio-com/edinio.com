@@ -7,7 +7,6 @@
 // current rate); in `manual_eur` mode the per-variant EUR price is used. Prices
 // are emitted per ship country. Per-variant RON pricing is a later refinement.
 
-import { motivulConfiguratorului } from "@/lib/configurators/nu-se-exporta";
 import {
   cerePersonalizare, comboCompareAtPrice, comboStock, comboUnitPrice, parseVariants,
   type VariantCombo,
@@ -404,14 +403,6 @@ export interface BuildContext {
   product: MappableProduct;
   listing: AboutYouListingEnrichment;
   variants: AboutYouVariantData[];
-  /**
-   * Produsul are un configurator servit acum?
-   *
-   * ⚠ NU se poate afla din randul produsului: legaturile stau in `configurator_produse` si in
-   * `configurator_categorii`. Apelantul le citeste (o data pe lot) si pune raspunsul aici, ca
-   * fisierul asta sa ramana pur. Vezi nota din `validateListing`.
-   */
-  areConfigurator?: boolean;
 }
 
 // Effective category id: listing override, else the store's category_map entry.
@@ -567,20 +558,6 @@ export function validateListing(ctx: BuildContext, material?: CerintaMaterialLis
       "Produsul cere date de la cumpărător (personalizare), iar comanda About You nu are "
       + "cum să le transmită. Stinge personalizarea sau scoate produsul de pe About You.",
     );
-  }
-  /*
-   * ⚠ SI CONFIGURATORUL, IN ACELASI LOC SI CU O PAGUBA MAI MARE.
-   *
-   * Personalizarea pierde un TEXT — comanda vine, dar fara numele de gravat. Configuratorul
-   * pierde si PRETUL: el se naste din ce alege cumparatorul (latime, material, bucati), iar la
-   * About You produsul ar sta la pretul de baza, adica la pretul unui obiect care nu exista.
-   *
-   * ⚠ Steagul lipsa NU inseamna „n-are”: `undefined` intra pe ramura falsa, deci apelantul care
-   * uita sa-l completeze scoate garda in tacere. Amandoua chemarile il dau MEREU, si amandoua
-   * trateaza „n-am putut afla” ca pe un blocaj, nu ca pe un „nu”.
-   */
-  if (ctx.areConfigurator) {
-    issues.push(motivulConfiguratorului("About You"));
   }
   const brand = listing.brand_id ?? config.brand_id;
   if (!brand) issues.push("Lipsește brandul About You.");

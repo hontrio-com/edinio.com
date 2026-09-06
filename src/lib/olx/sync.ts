@@ -17,7 +17,6 @@ import {
   type OlxResult,
 } from "./client";
 import { isProductSellable, toOlxAdvertBody, type MappableBusiness, type MappableProduct } from "./mapping";
-import { configurabileDeExport } from "@/lib/configurators/nu-se-exporta";
 import type { GpsrConfig } from "@/lib/gpsr";
 import type { OlxAdvert, OlxConfig } from "./types";
 import { logError } from "@/lib/error-logger";
@@ -808,43 +807,6 @@ async function upsertRemote(
     return { ok: false, permanent: true, error: "Există mai multe anunțuri OLX pentru acest produs. Alege pe care îl păstrezi." };
   }
 
-  /*
-   * ═══ ⚠ PRODUSELE CONFIGURABILE NU SE POSTEAZA PE OLX ═══
-   *
-   * Pretul lor se naste din ce alege cumparatorul (latime, material, bucati). Un anunt OLX poarta
-   * un singur pret si nicio intrebare, iar mesajul cumparatorului nu e o configuratie: postat,
-   * produsul se vinde acolo la pretul de baza — pretul unui obiect care nu exista.
-   *
-   * ⚠ CAMPUL NECOMPLETAT OPRESTE TRIMITEREA, nu o lasa sa treaca. `undefined` citit ca „n-are”
-   * ar fi facut ca un apelant nou, care uita sa puna steagul, sa deschida gaura in tacere — si
-   * tocmai tacerea e ce face gaura asta scumpa. Cauza e trecatoare: lucrarea se reia.
-   */
-  if (product.areConfigurator == null) {
-    return {
-      ok: false, permanent: false,
-      error: "Nu s-a aflat daca produsul are configurator, deci nu s-a trimis nimic la OLX.",
-    };
-  }
-  if (product.areConfigurator) {
-    /*
-     * ⚠ Fara rand local nu se INTREABA nimic la ei. `stingeTotulPentruProdus` cauta si anunturile
-     * orfane cu acelasi `external_id`, adica o cerere OLX — arsa la fiecare atingere a fiecarui
-     * produs configurabil, din cota de treizeci de lucrari pe minut a magazinului. Iar orfan nu
-     * poate fi decat un anunt pe care l-am facut NOI, si atunci exista si randul.
-     */
-    if (!row) return { ok: true, action: "skipped" };
-    const areRost = row.olx_advert_id != null && ["active", "new", "unconfirmed"].includes(row.status);
-    if (!areRost) return { ok: true, action: "skipped" };
-    /*
-     * ⚠ `produs-inactiv`, si nu un motiv nou: `dezactivat_de` are un CHECK in baza cu patru
-     * valori, iar o a cincea ar fi picat scrierea — adica anuntul ar fi ramas la vanzare tocmai
-     * cand il retrageam. Motivul nu se arata nicaieri comerciantului; el raspunde la o singura
-     * intrebare, „l-am stins noi sau omul?", iar raspunsul e acelasi: noi. Deci cand
-     * configuratorul e scos de pe produs, anuntul se poate reaprinde singur.
-     */
-    return stingeTotulPentruProdus(admin, ctx, businessId, offerId, row, "produs-inactiv", product.id);
-  }
-
   // Inactive or out of stock -> deactivate but keep the advert for later.
   if (!isProductSellable(product)) {
     /*
@@ -1371,25 +1333,7 @@ export async function syncProductNow(admin: Db, ctx: OlxSyncContext, businessId:
      * OLX. Un timeout de o secunda ar fi retras un anunt viu.
      */
     if (error) throw new CitireOlxEsuata(`produsul nu s-a putut citi: ${error.message}`);
-    const produs = (data as MappableProduct | null) ?? null;
-    if (!produs) return upsertRemote(admin, ctx, businessId, productId, null);
-    /*
-     * ⚠ Steagul se completeaza AICI, nu se lasa nespus: `upsertRemote` refuza o forma in care
-     * intrebarea n-a fost pusa deloc.
-     *
-     * ⚠ Si „n-am putut intreba" arunca, exact ca citirea de deasupra: e aceeasi regula. Citit ca
-     * „n-are configurator", un produs configurabil ar fi plecat pe OLX la pretul de baza dintr-o
-     * apasare a comerciantului, si de acolo nu se mai intoarce cu o reincercare.
-     */
-    const configurabile = await configurabileDeExport(businessId, [
-      { id: produs.id, category: produs.category },
-    ]);
-    if (!configurabile.ok) {
-      throw new CitireOlxEsuata("nu s-a putut afla daca produsul are configurator");
-    }
-    return upsertRemote(admin, ctx, businessId, productId, {
-      ...produs, areConfigurator: configurabile.ids.has(produs.id),
-    });
+    return upsertRemote(admin, ctx, businessId, productId, (data as MappableProduct | null) ?? null);
   });
 }
 

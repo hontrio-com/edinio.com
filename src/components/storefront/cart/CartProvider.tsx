@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getCartSessionId } from "@/lib/cart-session";
-import { getCartConfiguredPricing, getCartPricing } from "@/lib/actions/store.actions";
+import { getCartPricing } from "@/lib/actions/store.actions";
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
@@ -58,14 +58,6 @@ export interface CartContextValue {
   lineUnit: (item: CartItem) => number;
   /** Cat economiseste linia fata de pretul intreg (0 cand nu se aplica nimic). */
   lineSavings: (item: CartItem) => number;
-  /**
-   * De ce linia nu se mai poate comanda, sau `null` cand se poate.
-   *
-   * ⚠ Se intampla la liniile CONFIGURATE, cand comerciantul schimba configuratorul dupa ce
-   * produsul a intrat in cos: o optiune scoasa, un camp devenit obligatoriu. Aflat abia la
-   * finalizare, clientul completeaza tot formularul si primeste un refuz la ultima apasare.
-   */
-  lineProblema: (item: CartItem) => string | null;
   total: number;
   count: number;
   clear: () => void;
@@ -165,32 +157,14 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
    */
   function addItem(item: Omit<CartItem, "quantity">, cantitate = 1) {
     const n = normalizeazaCantitate(cantitate);
-    /*
-     * ⚠ LINIA NOUA SE NORMALIZEAZA INAINTE SA I SE CAUTE CHEIA.
-     *
-     * Aici se lua cheia de pe obiectul BRUT venit din pagina, iar pagina nu trimite `amprenta`
-     * — ea se calculeaza in `normalizeazaCos`, care pana acum rula doar la hidratare si la
-     * evenimentul `storage`. Deci `lineKey` cadea pe forma VECHE a cheii (fara amprenta), si
-     * doua configuratii diferite ale aceluiasi produs primeau ACEEASI cheie.
-     *
-     * Ce se intampla: pui in cos cana cu „Ana” (100 lei), apoi aceeasi cana cu gravura aurita
-     * (160 lei). Cosul arata O SINGURA linie, 2 bucati, 200 lei, cu gravura „Ana” de doua ori.
-     * A doua configuratie e SUPRASCRISA in localStorage si nu se mai poate recupera, iar
-     * atelierul graveaza „Ana” de doua ori. Comerciantul pierde 60 de lei de marfa.
-     *
-     * Normalizarea recalculeaza amprenta din configuratie (si n-o crede niciodata pe cuvant),
-     * deci trecerea prin ea inchide toata clasa, nu doar campul asta.
-     */
-    const [curatat] = normalizeazaCos([{ ...item, quantity: n }]);
-    if (!curatat) return;
     save((prev) => {
-      const key = lineKey(curatat);
+      const key = lineKey(item);
       const exists = prev.find((i) => lineKey(i) === key);
       return exists
         // Se clemeaza SUMA, nu incrementul: altfel o mie de apasari pe „+" duc
         // linia peste plafon, iar serverul refuza acum toata comanda.
         ? prev.map((i) => (lineKey(i) === key ? { ...i, quantity: normalizeazaCantitate(i.quantity + n) } : i))
-        : [...prev, curatat];
+        : [...prev, { ...item, quantity: n }];
     });
   }
 
@@ -240,84 +214,18 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
     return () => { activ = false; };
   }, [hydrated, businessId, cheieProduse]);
 
-  /*
-   * ⚠ Preturile liniilor CONFIGURATE se cer separat, si numai cand exista.
-   *
-   * `getCartPricing` raspunde despre produse: acelasi pret pentru orice linie a aceluiasi
-   * produs. Doua cani cu gravuri diferite sunt insa doua linii cu doua preturi. Fara pasul
-   * asta, cosul ar fi aratat pretul de BAZA pentru o cana gravata — mai mic decat ce incaseaza
-   * serverul la finalizare.
-   */
-  const [configurate, setConfigurate] = useState<Record<string, { pret: number | null; motiv?: string }>>({});
-  const cheieConfigurate = items
-    .filter((i) => i.amprenta)
-    .map((i) => `${lineKey(i)}|${i.amprenta}`)
-    .sort()
-    .join(",");
-  useEffect(() => {
-    /*
-     * ⚠ Nu se GOLESTE nimic cand nu mai sunt linii configurate.
-     *
-     * Golirea ar fi fost o scriere de stare chiar in corpul efectului, adica o randare in
-     * cascada la fiecare trecere. Si nici n-ar apara ceva: cheia unei intrari e cheia liniei,
-     * care contine amprenta configuratiei — deci o intrare ramasa in urma nu poate fi gasita
-     * decat de o linie cu EXACT aceeasi configuratie, adica exact acelasi pret.
-     */
-    if (!hydrated || !businessId || !cheieConfigurate) return;
-    let activ = true;
-    const cerute = items
-      .filter((i) => i.configuratie)
-      .map((i) => ({
-        cheie: lineKey(i), productId: i.productId,
-        variantTitle: i.variantTitle, configuratie: i.configuratie,
-      }));
-    getCartConfiguredPricing(businessId, cerute)
-      .then((r) => { if (activ) setConfigurate(r); })
-      .catch(() => {});
-    return () => { activ = false; };
-    // ⚠ Dependinta e CHEIA, nu `items`: obiectul se schimba la fiecare randare, iar pus aici
-    // ar fi cerut preturile la nesfarsit. Cheia se schimba doar cand chiar s-a schimbat ceva.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, businessId, cheieConfigurate]);
-
   const pretUnitar = useMemo(() => (item: CartItem): number => {
-    /*
-     * ⚠ Pretul CONFIGURAT bate pretul de catalog.
-     *
-     * Lasat catalogul sa castige, o cana gravata ar fi aratat in cos pretul canii simple, iar
-     * la finalizare serverul ar fi cerut altul. Cat timp raspunsul n-a ajuns — sau linia nu mai
-     * e buna — ramane pretul salvat la adaugare, ca randul sa nu ramana gol.
-     */
-    if (item.configuratie) {
-      const c = configurate[lineKey(item)];
-      return c?.pret ?? item.price;
-    }
     const reguli = preturi[item.productId];
     if (!reguli) return item.price;
     const varianta = item.variantTitle ? reguli.combos[item.variantTitle] : undefined;
     return varianta != null ? varianta : reguli.price;
-  }, [preturi, configurate]);
+  }, [preturi]);
 
   const linie = useMemo(() => (item: CartItem) => {
     const unitar = pretUnitar(item);
-    /*
-     * ⚠ O linie CONFIGURATA nu trece prin treptele de cantitate.
-     *
-     * Treptele sunt preturi de PACHET scrise pentru produsul din catalog. Aplicate peste o
-     * configuratie, trei bucati configurate ar fi aratat pretul pachetului simplu — iar
-     * serverul, care le sare, ar fi cerut altceva la finalizare. Aceeasi regula in amandoua
-     * locurile, ca numerele sa nu se departeze.
-     */
-    if (item.configuratie) return { subtotal: unitar * item.quantity, savings: 0, unitPrice: unitar };
     const trepte = construiesteTrepte(preturi[item.productId]?.tiers, unitar);
     return pretPeTrepte(trepte, item.quantity, unitar);
   }, [preturi, pretUnitar]);
-
-  const lineProblema = (item: CartItem): string | null => {
-    if (!item.configuratie) return null;
-    const c = configurate[lineKey(item)];
-    return c && c.pret === null ? (c.motiv ?? "Configuratia nu mai e valabila.") : null;
-  };
 
   const lineTotal = (item: CartItem) => linie(item).subtotal;
   const lineSavings = (item: CartItem) => linie(item).savings;
@@ -330,7 +238,7 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineProblema, total, count, clear, restoreCart, sessionId, hydrated }}
+      value={{ items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, total, count, clear, restoreCart, sessionId, hydrated }}
     >
       {children}
     </CartContext.Provider>
@@ -373,10 +281,6 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
         lineTotal: (item) => item.price * item.quantity,
         lineUnit: (item) => item.price,
         lineSavings: () => 0,
-        // ⚠ Miniatura nu intreaba serverul nimic, deci nu poate afla ca o linie configurata
-        // nu mai e buna. Raspunde mereu „se poate”, ca sa nu arate comerciantului o problema
-        // inventata intr-un cos care nici nu exista.
-        lineProblema: () => null,
         removeItem: (key) => setItems((prev) => prev.filter((i) => lineKey(i) !== key)),
         updateQty: (key, qty) =>
           setItems((prev) =>

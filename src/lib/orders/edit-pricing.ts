@@ -105,14 +105,6 @@ export interface CatalogEdit {
    * salvare cu un mesaj despre pachete, dupa ce omul a mai corectat si alte campuri.
    */
   activ: boolean;
-  /**
-   * Produsul are un configurator care se serveste acum?
-   *
-   * ⚠ NU se poate afla din `page_sections`: legatura sta in tabele proprii si se poate
-   * mosteni din categorie. Il afla apelantul, care oricum citeste din baza, iar modulul asta
-   * ramane pur si probabil fara nicio interogare.
-   */
-  areConfigurator?: boolean;
   /** `null` cand produsul nu e variabil. */
   variante: VarianteSlim | null;
   /** Configuratia bruta din `page_sections.quantity_tiers`. */
@@ -219,16 +211,10 @@ export function cheieLinie(productId: string, variantTitle?: string | null): str
  * Cheile pe care le stie o linie obisnuita de marfa.
  *
  * `placeOrder` mai poate pune si `customization` (personalizarea ceruta de
- * client) sau `configuratie` (instantaneul configuratorului), iar comenzile de
- * marketplace pun `sku` sau `barcode`. Toate spun ceva despre ACELE bucati, nu
- * despre produs, deci o linie care le poarta nu se contopeste: cele doua bucati
- * adaugate de comerciant ar fi mostenit tacit gravura comandata de client.
- *
- * ⚠ Si nu se REPRETUIESTE. Pretul unei configuratii poate fi din intamplare chiar
- * pretul din catalog — o configuratie care nu adauga nimic — iar atunci linia ar fi
- * parut „autoritara” si ar fi trecut prin treptele de cantitate, pe care calea de
- * vanzare le sare dinadins. Lista alba de mai jos e singurul lucru care apara asta;
- * probele o tin pe loc.
+ * client), iar comenzile de marketplace pun `sku` sau `barcode`. Toate spun ceva
+ * despre ACELE bucati, nu despre produs, deci o linie care le poarta nu se
+ * contopeste: cele doua bucati adaugate de comerciant ar fi mostenit tacit
+ * gravura comandata de client.
  */
 const CHEI_DE_LINIE_SIMPLA = new Set(["product_id", "name", "price", "quantity"]);
 
@@ -435,21 +421,6 @@ export function planificaAdaugarea(
       nume = cat.name;
     }
 
-    /*
-     * ⚠ UN PRODUS CONFIGURABIL NU SE ADAUGA DIN PANOU, si asta e o poarta, nu o lipsa.
-     *
-     * Panoul adauga o linie dintr-o apasare: n-are unde sa aleaga latimea, materialul sau
-     * gravura. Lasat sa treaca, produsul intra ca linie SIMPLA, la pretul de BAZA, fara nicio
-     * specificatie — iar atelierul primeste o cana nescrisa la pretul uneia nescrise, langa
-     * una gravata pe care a platit-o clientul. Nimic nu cade, si nimeni nu afla.
-     *
-     * Aceeasi hotarare ca la variante de mai sus: se refuza cu numele produsului, si se spune
-     * unde se poate face.
-     */
-    if (cat.areConfigurator) {
-      return { error: `Produsul „${cat.name}" se configureaza de catre client, deci nu poate fi adaugat din panou. Trimite-i un link catre pagina produsului.` };
-    }
-
     const trepte = construiesteTrepte(cat.trepte, unitar);
     const separat = pretPeTrepte(trepte, cerut.quantity, unitar);
     const cheie = cheieLinie(cerut.product_id, cerut.variant_title);
@@ -584,14 +555,7 @@ function identificaVarianta(linie: LinieComanda, cat: CatalogEdit): string | nul
 const MOTIV_FARA_CATALOG = "Produsul nu mai este in catalog, deci nu pot verifica stocul pentru bucati in plus. Scoate linia sau adauga alt produs.";
 const MOTIV_INACTIV = "Produsul e dezactivat in catalog, deci nu se mai pot vinde bucati in plus din el. Reactiveaza-l din pagina produsului, apoi incearca din nou.";
 const MOTIV_VARIANTA = "Nu pot recunoaste varianta acestei linii in catalogul de azi (numele s-a schimbat sau combinatia a fost stinsa), deci nu pot scadea stocul potrivit. Adauga bucatile in plus din cautarea de mai jos.";
-/*
- * ⚠ Mesajul spune ce e ADEVARAT, nu ce era adevarat cand a fost scris.
- *
- * Zicea „personalizare sau vine dintr-un marketplace”. De cand exista configuratoare, cel mai
- * des motiv e altul — linia poarta o configuratie — iar comerciantul citea un mesaj care nu
- * avea nicio legatura cu ce vedea pe ecran, si cauta problema in alta parte.
- */
-const MOTIV_LINIE_SPECIALA = "Linia poarta date proprii bucatilor ei (o configuratie, o personalizare, sau un cod de marketplace), deci bucatile in plus n-ar mosteni corect datele. Adauga-le ca linie noua.";
+const MOTIV_LINIE_SPECIALA = "Linia poarta personalizare sau vine dintr-un marketplace, deci bucatile in plus n-ar mosteni corect datele ei. Adauga-le ca linie noua.";
 const MOTIV_NECITIBILA = "Linia are o forma pe care nu o pot citi. Contacteaza suportul.";
 
 export function capacitatiLinii(prevItems: unknown[], catalog: Map<string, CatalogEdit>): CapacitateLinie[] {

@@ -17,15 +17,6 @@ import { normalizeazaCantitate } from "@/lib/orders/quantity";
 export interface LinieCotata {
   productId: string;
   quantity: number;
-  /**
-   * Cat adauga configuratia liniei, in grame, PER BUCATA.
-   *
-   * ⚠ Nu vine niciodata din browser, ci din instantaneul scris in comanda de server
-   * (`InstantaneuConfiguratie.grame`). O greutate declarata de client ar fi insemnat ca cine cere
-   * o cotatie pentru o cutie de lemn de doua kilograme trimite „zero" si o plateste ca pe o cana
-   * goala — exact atacul de care se apara si greutatea din catalog, in antetul fisierului.
-   */
-  grameConfiguratie?: number;
 }
 
 /** Doar campurile de care depinde transportul, asa cum vin din `products`. */
@@ -66,22 +57,6 @@ export function contextulCosului(linii: LinieCotata[] | undefined, produse: Prod
     // absurda sau negativa.
     const qty = normalizeazaCantitate(linie.quantity);
     quantity += qty;
-    /*
-     * Sporul de greutate al configuratiei se aduna INAINTE de cautarea in catalog, si
-     * dinadins.
-     *
-     * O cana cu cutie de lemn cantareste azi exact cat cana goala, la toti cei saisprezece
-     * curieri: `Optiune.grame` era compilat si trimis, dar nu-l aduna nimeni. Sporul nu vine din
-     * `products` — el sta pe alegerea cumparatorului — deci nu are de ce sa depinda de faptul ca
-     * produsul s-a mai gasit sau nu in catalog. Stiut, se numara.
-     *
-     * ⚠ Se cere FINIT si pozitiv, nu doar `|| 0` ca la `weight_grams`. Sporul vine din `orders.items`,
-     * adica din jsonb care se poate edita de mana, iar `Infinity` trece nevatamat printr-un `|| 0`:
-     * o singura linie stricata ar fi facut greutatea INTREGII comenzi nefinita, si atata ar fi
-     * plecat in cererea catre curier. Negativa, ar fi scazut din colet.
-     */
-    const sporCfg = Number(linie.grameConfiguratie);
-    grame += (Number.isFinite(sporCfg) && sporCfg > 0 ? sporCfg : 0) * qty;
     const p = byId.get(linie.productId);
     // Un produs care nu s-a regasit (sters, al altui magazin) NU se sare la
     // numaratoare: bucatile lui tot pleaca in colet. Doar greutatea lui lipseste,

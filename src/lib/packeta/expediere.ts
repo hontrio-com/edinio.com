@@ -129,7 +129,7 @@ export function despartuStrada(strada: string | null | undefined, numar: string 
   if (n) return { street: taie(s, LIMITE.street), houseNumber: taie(n, LIMITE.houseNumber) };
 
   /* Ultima bucata care incepe cu o cifra, la sfarsitul sirului: „Aleea Zorilor 12B". */
-  const m = /^(.*?)[\s,]+(\d[\dA-Za-z/-]*)$/.exec(s);
+  const m = /^(.*?)[\s,]+(\d[\dA-Za-z\/-]*)$/.exec(s);
   if (m && m[1].trim()) {
     return { street: taie(m[1], LIMITE.street), houseNumber: taie(m[2], LIMITE.houseNumber) };
   }

@@ -441,9 +441,7 @@ export function useCheckoutOrder({
     }
     startTransition(async () => {
       const allItems = [
-        // ⚠ `configuratie` merge cu linia. `price` se trimite ca pana acum, dar serverul nu-l
-        // citeste: repretuieste fiecare linie din catalog si din valorile configuratiei.
-        ...items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity, variant_title: i.variantTitle, configuratie: i.configuratie })),
+        ...items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity, variant_title: i.variantTitle })),
         ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, price: o.pricing!.price, quantity: 1 })),
       ];
       const payload = {

@@ -33,21 +33,7 @@ import { totaluriComanda } from "@/lib/orders/totals-box";
 /** Banii unei comenzi, asa cum ii trimite `order.actions.ts` catre emailuri. */
 export interface BaniComanda {
   /** Liniile comenzii CU `product_id`: dupa el se recunosc extraoptiunile. */
-  items: {
-    product_id: string; name: string; quantity: number; price: number;
-    /**
-     * Instantaneul configuratorului, cand linia are unul.
-     *
-     * ⚠ `unknown`, ca peste tot unde se citeste: randul poate fi scris de o versiune veche
-     * de cod si se poate edita din panou. `instantaneulLiniei` nu arunca niciodata.
-     *
-     * ⚠ A LIPSIT DIN TIP, si de aceea a lipsit si din emailuri. `order.actions.ts` compunea
-     * lista cu un `.map` care enumera patru campuri, iar al cincilea cadea tacut: `tsc` n-avea
-     * ce spune, fiindca `randConfiguratie` primeste `unknown` si intoarce sirul gol pentru
-     * orice. Deci toate cele TREI randuri de email erau moarte de la primul apel.
-     */
-    configuratie?: unknown;
-  }[];
+  items: { product_id: string; name: string; quantity: number; price: number }[];
   subtotal: number;
   shipping_cost: number;
   discount_code?: string | null;

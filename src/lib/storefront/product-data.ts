@@ -4,8 +4,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { readBundleConfig } from "@/lib/bundles";
-import { configuratorulProdusului, type ConfiguratorDeVitrina } from "@/lib/configurators/vitrina";
-import { pentruSursaPaginii } from "@/lib/configurators/compileaza";
 import type { Database } from "@/types/database.types";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
@@ -66,32 +64,8 @@ export async function enrichStoreProduct(
   altMap: Record<string, string>;
   hasCardPayment: boolean;
   bundleComponents: BundleComponent[];
-  /**
-   * Configuratorul care se aplica produsului, deja compilat pentru vitrina — sau `null`.
-   *
-   * ⚠ AICI, si nu in fiecare ruta, fiindca asta e SINGURUL loc prin care trec amandoua intrarile
-   * in pagina de produs: `/[slug]/product/[productSlug]` si magazinul cu un singur produs. Pusa
-   * in ruta, functia ar fi trebuit sa fie legata de doua ori si ar fi divergit la prima
-   * schimbare — chiar felul de scapare pe care fisierul asta exista ca s-o inchida.
-   */
-  configurator: ConfiguratorDeVitrina | null;
 }> {
   const supabase = await createClient();
-
-  /*
-   * ⚠ CONFIGURATORUL SE PORNESTE AICI, SI SE ASTEAPTA LA CAPAT.
-   *
-   * Nu depinde de nimic din ce urmeaza, deci pornit la rand ar fi adaugat un dus-intors intreg
-   * la fiecare pagina de produs din platforma. Pornit acum, se face in acelasi timp cu citirile
-   * de mai jos si nu costa aproape nimic in ceas.
-   *
-   * ⚠ Se poate astepta linistit mai tarziu: `configuratorulProdusului` nu arunca NICIODATA — la
-   * orice necaz intoarce `null`, si produsul se vinde ca inainte. Daca ar fi putut arunca, o
-   * promisiune pornita si neasteptata inca ar fi devenit o respingere netratata.
-   */
-  const configurator = configuratorulProdusului(business.id, {
-    id: product.id, category: product.category,
-  });
 
   // SEO: map product image URLs to their Media Library alt text / title.
   // media_library is owner-only (no anon access), so read it via the service role.
@@ -155,21 +129,5 @@ export async function enrichStoreProduct(
     });
   }
 
-  /*
-   * ⚠ AICI SE TAIE CE N-ARE CE CAUTA IN SURSA PAGINII.
-   *
-   * Ce se intoarce de aici pleaca drept prop catre o componenta de client, deci ajunge intreg
-   * in incarcatura paginii, la vedere. Versiunea publicata poarta pe fiecare piesa `produsId`,
-   * adica `products.id` al randului din care se scade stocul — un rand tinut STINS dinadins,
-   * fiindca balamaua nu se vinde la bucata. Browserul n-are nicio folosinta pentru el.
-   *
-   * ⚠ Taierea sta AICI, la granita, si nu in `configuratoarePentruProduse`: calea de server —
-   * repretuirea comenzii — citeste prin aceeasi functie si ARE nevoie de `produsId`, ca sa stie
-   * din ce produs scade. Taiat acolo, o comanda configurata n-ar mai fi scazut nicio piesa.
-   */
-  const cfg = await configurator;
-  return {
-    altMap, hasCardPayment, bundleComponents,
-    configurator: cfg ? { ...cfg, compilat: pentruSursaPaginii(cfg.compilat) } : null,
-  };
+  return { altMap, hasCardPayment, bundleComponents };
 }

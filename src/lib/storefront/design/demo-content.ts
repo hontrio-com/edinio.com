@@ -281,9 +281,5 @@ export function demoProducts(businessId: string) {
     },
     weight_grams: null,
     fara_stoc: false,
-    // Catalogul de design-uri nu arata configuratoare: miniatura trebuie sa arate MODELUL de
-    // pagina, iar un „De la ... lei” pe carduri ar fi vorbit despre altceva decat alege omul.
-    cere_configurare: false,
-    pret_pornire: null,
   }));
 }

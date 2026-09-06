@@ -64,14 +64,6 @@ export interface ProdusDeVerificat {
    * imprimat". Vezi nota din `ceLipseste`.
    */
   personalizare?: { enabled?: boolean; fields?: { required?: boolean }[] } | null;
-  /**
-   * Produsul are un configurator servit acum?
-   *
-   * ⚠ NU se poate afla din randul produsului: legaturile stau in `configurator_produse` si in
-   * `configurator_categorii`. Apelantul le citeste (o data pe lot) si pune raspunsul aici, ca
-   * fisierul asta sa ramana pur si sa poata fi chemat si din ecran. Vezi nota din `ceLipseste`.
-   */
-  areConfigurator?: boolean | null;
   /** Pachet Edinio: stoc derivat din componente. Vezi nota din `ceLipseste`. */
   estePachet?: boolean | null;
 }
@@ -139,27 +131,6 @@ export function ceLipseste(
           + "(personalizare), iar comanda eMAG nu are cum să le transmită."
         : "Produsul are personalizare activă, iar comanda eMAG nu are cum să transmită "
           + "răspunsurile cumpărătorului.",
-      gravitate: "blocheaza",
-    });
-  }
-
-  /*
-   * ═══ ⚠ SI PRODUSELE CONFIGURABILE, CU O PAGUBA IN PLUS ═══
-   *
-   * Personalizarea de mai sus pierde un TEXT: comanda vine, dar fara numele de gravat. Un
-   * configurator pierde si PRETUL — el se naste din ce alege cumparatorul (latime, material,
-   * bucati), iar pe eMAG produsul ar sta la pretul de baza, adica pretul unui obiect care nu
-   * exista. Comerciantul incaseaza 170 pentru ceva ce costa 400 si nici macar nu stie ce sa faca.
-   *
-   * ⚠ CAMPUL LIPSA NU INSEAMNA „N-ARE”. `undefined` intra pe ramura falsa, deci apelantul care
-   * uita sa-l completeze deschide gaura in tacere — de-aia `trimite.ts` il completeaza MEREU,
-   * si de-aia acolo un verdict necunoscut face lucrarea trecatoare in loc s-o lase sa plece.
-   */
-  if (produs.areConfigurator) {
-    out.push({
-      camp: "configurator",
-      eticheta: "Produsul are un configurator: pretul lui se naste din ce alege cumparatorul, "
-        + "iar comanda eMAG n-are unde sa poarte alegerile. Publicat, s-ar vinde la pretul de baza.",
       gravitate: "blocheaza",
     });
   }

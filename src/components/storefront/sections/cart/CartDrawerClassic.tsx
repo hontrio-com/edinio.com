@@ -8,7 +8,6 @@ import { gtagEvent } from "@/lib/marketing";
 import { CartRecommendations } from "@/components/ministore/CartRecommendations";
 import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import { computeCartPricing, type CartPricingInput } from "@/lib/storefront/cart/pricing";
-import { RezumatLinie } from "./_shared/CartPieces";
 
 /**
  * Sertarul de cos, varianta classic.
@@ -218,7 +217,6 @@ export function CartDrawerClassic({
                       <p className="text-sm font-medium text-foreground leading-snug truncate">{item.name}</p>
                     )}
                     {item.variantTitle && <p className="text-xs text-muted-foreground leading-snug truncate">{item.variantTitle}</p>}
-                    <RezumatLinie item={item} />
                     {/* Peste o bucata, un singur numar scris in accent se
                         citeste ca total de linie si face subtotalul de jos sa
                         para gresit — paginile de cos arata acolo chiar totalul

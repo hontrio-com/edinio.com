@@ -18,9 +18,6 @@ import {
   comboEpuizat, comboStock, toateCombinatiileEpuizate, cerePersonalizare, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
-import type { ConfiguratorDeVitrina } from "@/lib/configurators/vitrina";
-import { ConfiguratorSlot } from "./_shared/ConfiguratorSlot";
-import { useConfigurator } from "./_shared/useConfigurator";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
 import { construiesteTrepte } from "@/lib/storefront/quantity-tiers";
 import { ProductOffers } from "@/components/ministore/ProductOffers";
@@ -149,21 +146,13 @@ function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], configurator = null, altMap = {}, isHome = false, productOffers = [], setari = {}, demo = false }: {
+export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, demo = false }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
   basePath?: string;
   hasCardPayment?: boolean;
   bundleComponents?: BundleComponent[];
-  /**
-   * Configuratorul care se aplica produsului, deja compilat. `null` cand n-are.
-   *
-   * ⚠ Slotul e ACELASI in ambele modele de pagina (`ConfiguratorSlot`). Scris de doua ori, ar fi
-   * divergit la prima schimbare, iar comerciantii de pe celalalt model ar fi ramas cu forma
-   * veche fara ca `tsc` sa poata prinde ceva.
-   */
-  configurator?: ConfiguratorDeVitrina | null;
   altMap?: Record<string, string>;
   /** When this product page IS the store homepage (One Product Store mode):
    *  hides the "back to store" breadcrumb since there is no catalog behind it. */
@@ -343,22 +332,6 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // clientul platea altceva decat i s-a aratat.
   const basePrice = Number(product.price);
   const displayPrice = comboUnitPrice(selectedCombo, basePrice);
-
-  /*
-   * ⚠ Starea configuratorului sta AICI, nu in slot.
-   *
-   * Pagina are nevoie de raspunsul lui in trei locuri deodata: pretul, daca butonul se poate
-   * apasa, si ce se pune in cos la apasare. Tinuta in slot, ar fi trebuit sa iasa inapoi
-   * printr-un `onSchimbare` — adica un efect al copilului care scrie in parinte la fiecare
-   * tasta. Carligul e acelasi in amandoua modelele, deci regula „cand se poate comanda” e
-   * scrisa o singura data.
-   *
-   * ⚠ Se da `displayPrice`, adica pretul VARIANTEI alese, nu cel de baza: la un produs cu
-   * variante, configuratorul socoteste peste ce se vinde cu adevarat.
-   */
-  const cfg = useConfigurator(configurator, displayPrice, {
-    businessId: business.id, productId: product.id,
-  });
   const displayComparePrice = comboCompareAtPrice(
     selectedCombo,
     product.compare_at_price ? Number(product.compare_at_price) : null,
@@ -419,18 +392,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // Combinatia trebuie sa EXISTE si sa fie activa, nu doar sa aiba titlul
   // complet: altfel linia intra in cos cu pretul de baza, iar serverul respinge
   // comanda intreaga la trimitere.
-  /*
-   * ⚠ „Mai e ceva de ales inainte de a putea comanda?” — si varianta, SI configuratorul.
-   *
-   * Se numea `needsVariant` si insemna numai varianta. Legat doar de varianta, butonul s-ar
-   * fi putut apasa cu o gravura obligatorie necompletata: comanda ar fi plecat in atelier
-   * fara sa se stie ce scrie pe obiect, si abia acolo s-ar fi aflat.
-   *
-   * Numele s-a schimbat odata cu intelesul. Lasat cel vechi peste un inteles nou, urmatorul
-   * care il citeste ar fi crezut ca stie ce face — chiar felul de scapare pe care proiectul
-   * il are scris despre un prop inghitit de `{...props}`.
-   */
-  const maiEDeAles = (!!variantsData && !selectedCombo) || !cfg.gata;
+  const needsVariant = !!variantsData && !selectedCombo;
 
   // Specifications — auto-append dimensions if present.
   //
@@ -455,20 +417,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // de trei ori — aici, in cealalta pagina de produs si in `construiesteTrepte` —
   // desi docstring-ul motorului sustinea deja ca exista un singur loc. Copiile
   // se pot desincroniza tacit de motorul care chiar incaseaza.
-  /*
-   * ⚠ TREPTELE NU SE OFERA PE O LINIE CONFIGURATA, fiindca serverul le sare.
-   *
-   * `order.actions.ts` pretuieste linia configurata din valori si NU trece prin trepte —
-   * dinadins: o treapta e un pret scris pentru produsul din catalog, iar aplicata peste o
-   * configuratie ar fi vandut-o la pretul pachetului simplu, cu toata configurarea pe gratis.
-   *
-   * Dar pagina le ARATA mai departe. „3 bucati — 150 lei” ducea in fereastra de comanda cu
-   * cantitatea 3, subtotal 150, iar serverul cerea 3 x pretul configurat. Pe o cana de 100 lei
-   * configurati: afisat 150, incasat 300.
-   */
-  const quantityTiers: QuantityTier[] | undefined = configurator
-    ? undefined
-    : construiesteTrepte(tierConfig, displayPrice);
+  const quantityTiers: QuantityTier[] | undefined = construiesteTrepte(tierConfig, displayPrice);
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
@@ -516,7 +465,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   const [adaugatInCos, setAdaugatInCos] = useState(false);
 
   function adaugaInCos() {
-    if (demo || !cos || isOutOfStock || maiEDeAles) return;
+    if (demo || !cos || isOutOfStock || needsVariant) return;
     cos.addItem({
       productId: product.id,
       slug: product.slug ?? undefined,
@@ -524,25 +473,12 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       // linie iese identica cu cea din grila si acelasi produs creste in
       // cantitate in loc sa se dubleze.
       name: product.name,
-      /*
-       * ⚠ Pretul si configuratia vin din carlig, nu din pagina.
-       *
-       * `displayPrice` e pretul produsului sau al variantei; pe un produs configurat el nu mai
-       * e pretul liniei. Pus asa, cosul ar fi aratat pretul de baza pentru o cana gravata, iar
-       * la finalizare serverul ar fi cerut altul — exact deosebirea pe care auditul de preturi
-       * al proiectului a inchis-o de patruzeci de ori.
-       *
-       * ⚠ `configuratie` NU e o promisiune de pret: serverul primeste valorile si le
-       * recalculeaza el insusi la plasarea comenzii.
-       */
-      price: cfg.pretUnitar,
+      price: displayPrice,
       imageUrl: selectedCombo?.image || slides[0] || null,
       variantTitle: selectedComboTitle ?? undefined,
       variantSku: selectedCombo?.sku || undefined,
-      configuratie: cfg.valori ?? undefined,
-      rezumat: cfg.rezumat ?? undefined,
     });
-    trackAddToCart({ productId: product.id, name: product.name, price: cfg.pretUnitar });
+    trackAddToCart({ productId: product.id, name: product.name, price: displayPrice });
     setAdaugatInCos(true);
     setTimeout(() => setAdaugatInCos(false), 1800);
   }
@@ -787,24 +723,13 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
           </motion.div>
         )}
 
-        {/*
-          ⚠ Configuratorul, INAINTE de AMANDOUA actiunile — si de „Comanda", si de „Adauga in
-          cos". Cumparatorul alege inainte sa apese, nu dupa, la fel ca la selectorul de varianta
-          de mai sus.
-
-          ⚠ Fara marginile lui: coloana e `flex flex-col gap-…`, deci spatierea o da parintele.
-          Un `mb-4` pus aici s-ar fi adunat peste `gap` si ar fi rupt ritmul doar la produsele cu
-          configurator.
-        */}
-        {configurator && <ConfiguratorSlot cfg={cfg} />}
-
         {/* CTA */}
-        <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={maiEDeAles} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => { setFbtOffer(undefined); setModalOpen(true); }} />
+        <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => { setFbtOffer(undefined); setModalOpen(true); }} />
 
         {/* Comanda directa ramane actiunea principala; cosul e pentru cine mai
             vrea sa se uite prin magazin inainte sa cumpere. */}
         {arataButonCos && (
-          <button type="button" onClick={adaugaInCos} disabled={isOutOfStock || maiEDeAles || (!demo && !cos)}
+          <button type="button" onClick={adaugaInCos} disabled={isOutOfStock || needsVariant || (!demo && !cos)}
             className="w-full py-3.5 text-base font-semibold rounded-xl border-2 bg-surface hover:bg-muted/40 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{ borderColor: color, color }}>
             {adaugatInCos ? <Check size={18} /> : <ShoppingCart size={18} />}
@@ -923,7 +848,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       <div ref={refOferte}>
         <ProductOffers offers={productOffers} basePath={basePath} color={color}
           anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
-          ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : maiEDeAles ? { motiv: "Selecteaza optiunile" } : null}
+          ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null}
           onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
       </div>
 
@@ -1131,7 +1056,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
                 )}
               </div>
             </div>
-            <button type="button" onClick={() => { setFbtOffer(undefined); setModalOpen(true); }} disabled={isOutOfStock || maiEDeAles}
+            <button type="button" onClick={() => { setFbtOffer(undefined); setModalOpen(true); }} disabled={isOutOfStock || needsVariant}
               className="flex items-center gap-2 px-5 py-3 text-sm font-bold text-white rounded-xl flex-shrink-0 disabled:opacity-40 hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
               style={{ backgroundColor: color }}>
               <ShoppingBag size={16} />
@@ -1148,30 +1073,10 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         product={{
           id: product.id,
           name: selectedCombo ? `${product.name} (${selectedCombo.title})` : product.name,
-          /*
-           * ⚠ PRETUL CONFIGURAT, nu cel din catalog.
-           *
-           * Aici statea `displayPrice`, si din el iesea TOT ce se aduna in fereastra de comanda:
-           * treapta de cantitate, subtotalul, pragul de transport gratuit, comanda minima,
-           * reducerea de card, TVA-ul, suma declarata la ramburs si numarul mare de langa poza.
-           * Serverul insa nu citeste `product_price` pe o linie configurata — el calculeaza
-           * `unitar * cantitate` din valori.
-           *
-           * Deci omul configura cana la 149 lei, apasa „Comanda acum”, si formularul ii scria
-           * 89. Completa adresa, trimitea, si comanda intra la 149. La usa, curierul cerea 149.
-           * Exact clasa „afisat 170, incasat 179,98” pe care auditul de preturi al proiectului a
-           * inchis-o de patruzeci de ori — si nicio garda nu se aprindea, fiindca
-           * `authoritativeSubtotal` (cu toleranta lui de 0,50 lei) e ocolit pe ramura configurata.
-           *
-           * Calea cosului facea deja bine (`addItem` primeste `cfg.pretUnitar`); doar asta nu.
-           */
-          price: cfg.gata ? cfg.pretUnitar : displayPrice,
+          price: displayPrice,
           compare_at_price: displayComparePrice,
           images: slides,
           variantTitle: selectedComboTitle ?? undefined,
-          // ⚠ Configuratia pleaca odata cu produsul. Serverul o recalculeaza; ce se trimite
-          // de aici nu e niciodata un pret.
-          configuratie: cfg.valori ?? undefined,
         }}
         business={{ id: business.id, slug: business.slug, basePath, primary_color: color }}
         shippingCost={shippingCost}

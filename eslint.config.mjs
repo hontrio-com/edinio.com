@@ -9,28 +9,6 @@ const eslintConfig = defineConfig([
     rules: {
       /*
         ═══════════════════════════════════════════════════════════════════════
-        ESCAPARILE PIERDUTE INTR-UN TEMPLATE LITERAL
-        ═══════════════════════════════════════════════════════════════════════
-
-        ⚠ PORNITA DUPA A TREIA APARITIE A ACELUIASI DEFECT. Ultima:
-
-            new RegExp(`\.from\("${tabela}"\)`, "g")
-
-        Intr-un template literal, `\.` devine `.` si `\(` devine `(` — adica un
-        GRUP, nu o paranteza. Regexul iesit cerea `from` urmat direct de
-        ghilimea, ceea ce nu se scrie niciodata. Masurat: ZERO potriviri pe un
-        text care contine sirul de doua ori.
-
-        Randul ala era intr-o PROBA, iar bucla de sub el nu s-a executat
-        niciodata: proba trecea verde pentru orice actiune noua care uita sa
-        murdareasca proiectia catalogului. O proba care nu potriveste nimic
-        arata exact ca una multumita.
-
-        Regula asta semnaleaza chiar cele trei caractere, la scriere.
-      */
-      "no-useless-escape": "error",
-      /*
-        ═══════════════════════════════════════════════════════════════════════
         JSX SCRIS ÎN AFARA LUI `return` — COMPILEAZĂ ȘI NU AJUNGE NICĂIERI
         ═══════════════════════════════════════════════════════════════════════
 

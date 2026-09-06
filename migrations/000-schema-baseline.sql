@@ -2043,21 +2043,6 @@ begin
     fatete           = coalesce(
                          (select array_agg(x #>> '{}') from jsonb_array_elements(r->'fatete') x),
                          '{}'::text[]),
-    -- CHEIA LIPSA INSEAMNA "N-AM AFLAT", SI ATUNCI SE PASTREAZA CE ERA.
-    --
-    -- Scrise neconditionat, un lot venit de la un proiector caruia i-a picat citirea
-    -- configuratoarelor ar fi stins steagul pe toate produsele lui - si nimic nu l-ar mai fi
-    -- reaprins pana cand cineva atingea produsul. Amandoua coloanele se uita la ACEEASI cheie:
-    -- sunt un singur raspuns, iar `pret_pornire` fara `cere_configurare` n-ar insemna nimic.
-    -- `jsonb_exists(...)`, nu operatorul de intrebare. Sunt acelasi lucru pentru Postgres, dar
-    -- semnul e si marca de parametru pentru mai multe drivere (JDBC si altele): trecuta printr-unul
-    -- dintre ele, migratia ar fi picat cu "insufficient parameters" pe o instructiune valida.
-    cere_configurare = case when jsonb_exists(r, 'cere_configurare')
-                            then coalesce((r->>'cere_configurare')::boolean, false)
-                            else cp.cere_configurare end,
-    pret_pornire     = case when jsonb_exists(r, 'cere_configurare')
-                            then (r->>'pret_pornire')::numeric
-                            else cp.pret_pornire end,
     proiectat_la     = (r->>'proiectat_la')::timestamptz
   from jsonb_array_elements(p_randuri) r
   where cp.product_id = (r->>'product_id')::uuid;
@@ -2236,44 +2221,6 @@ AS $function$
               and floor(coalesce(c.stock_quantity, 0)::numeric / it.qty) < 1)
     )
   end
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.catalog_murdareste_configurator(p_business uuid, p_configurator uuid, p_categorii text[])
- RETURNS integer
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-declare
-  v_nr int;
-begin
-  insert into public.catalog_murdar (product_id, business_id)
-  select p.id, p.business_id
-    from public.products p
-   where p.business_id = p_business
-     and (
-       -- `btrim`, fiindca ASA potriveste si rezolvarea.
-       --
-       -- `rezolvare.ts` compara cu `(produs.category ?? "").trim()`. Fara `btrim` aici, un produs
-       -- cu `category = 'Rame '` MOSTENESTE configuratorul pe vitrina, dar nu e marcat niciodata:
-       -- in Postgres `'Rame ' = 'Rame'` e fals. Cardul lui ar fi ramas mincinos la nesfarsit,
-       -- fiindca nimic nu-l mai pune la coada.
-       (p_categorii is not null and btrim(p.category) = any(p_categorii))
-       or (p_configurator is not null and exists (
-             select 1 from public.configurator_produse cp
-              where cp.business_id = p_business
-                and cp.configurator_id = p_configurator
-                and cp.product_id = p.id))
-     )
-  -- `marcat_la = now()` la conflict, nu `do nothing`: un rand deja in coada, dar cu marcaj
-  -- vechi, ar fi fost sters de lucratorul care tocmai il proiecta cu datele DE DINAINTE de
-  -- schimbarea asta. Vezi `pragCoada` din `proiector.ts`.
-  on conflict (product_id) do update set marcat_la = now();
-
-  get diagnostics v_nr = row_count;
-  return v_nr;
-end;
 $function$
 ;
 
@@ -2657,61 +2604,6 @@ BEGIN
   GET DIAGNOSTICS v_claimed = ROW_COUNT;
   RETURN v_claimed > 0;
 END;
-$function$
-;
-
-CREATE OR REPLACE FUNCTION public.configurator_versiuni_imutabile()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-begin
-  if tg_op = 'DELETE' then
-    /*
-     * Cascada de la magazinul sters trece: `on delete cascade` sterge copiii printr-un
-     * declansator AFTER pe parinte, deci cand ajungem aici randul din `businesses` e deja plecat.
-     * La o stergere DIRECTA el exista, si exceptia se ridica mai departe.
-     */
-    if not exists (select 1 from public.businesses b where b.id = old.business_id) then
-      return old;
-    end if;
-    raise exception 'Versiunile publicate nu se sterg. Arhiveaza configuratorul.';
-  end if;
-
-  -- Completarea lui `compilat`, ca pana acum.
-  if old.compilat is null and new.compilat is not null
-     and new.id = old.id
-     and new.business_id = old.business_id
-     and new.configurator_id = old.configurator_id
-     and new.numar = old.numar
-     and new.definitie = old.definitie
-     and new.reguli = old.reguli
-     and new.pretuire = old.pretuire
-     and new.publicat_la = old.publicat_la then
-    return new;
-  end if;
-
-  /*
-   * `publicat_de -> null`, si NUMAI el. Vine din `on delete set null` cand se sterge
-   * utilizatorul care a publicat. Orice alta coloana schimbata odata cu el cade mai departe:
-   * comparatia de mai jos le enumera pe toate.
-   */
-  if old.publicat_de is not null and new.publicat_de is null
-     and new.id = old.id
-     and new.business_id = old.business_id
-     and new.configurator_id = old.configurator_id
-     and new.numar = old.numar
-     and new.definitie = old.definitie
-     and new.reguli = old.reguli
-     and new.pretuire = old.pretuire
-     and new.compilat is not distinct from old.compilat
-     and new.publicat_la = old.publicat_la then
-    return new;
-  end if;
-
-  raise exception 'Versiunile publicate nu se modifica. Publica o versiune noua.';
-end;
 $function$
 ;
 
@@ -6471,9 +6363,7 @@ create table if not exists public.catalog_produs (
   descriere_scurta text default ''::text not null,
   cauta_norm text default ''::text not null,
   fatete text[] default '{}'::text[] not null,
-  proiectat_la timestamp with time zone,
-  cere_configurare boolean default false not null,
-  pret_pornire numeric);
+  proiectat_la timestamp with time zone);
 
 create table if not exists public.catalog_rezumat (
   business_id uuid not null,
@@ -6500,68 +6390,6 @@ create table if not exists public.categories (
   updated_at timestamp with time zone default now(),
   image_url text,
   is_active boolean default true not null);
-
-create table if not exists public.configuratoare (
-  id uuid default gen_random_uuid() not null,
-  business_id uuid not null,
-  nume text not null,
-  stare text default 'ciorna'::text not null,
-  ciorna jsonb default '{}'::jsonb not null,
-  versiune_activa_id uuid,
-  revizie integer default 0 not null,
-  created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
-
-create table if not exists public.configurator_categorii (
-  id uuid default gen_random_uuid() not null,
-  business_id uuid not null,
-  configurator_id uuid not null,
-  categorie text not null,
-  si_viitoarele boolean default true not null,
-  created_at timestamp with time zone default now() not null);
-
-create table if not exists public.configurator_componente (
-  id uuid default gen_random_uuid() not null,
-  business_id uuid not null,
-  nume text not null,
-  product_id uuid,
-  pret_bucata numeric(10,2) default 0 not null,
-  cost_bucata numeric(10,2),
-  activa boolean default true not null,
-  created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
-
-create table if not exists public.configurator_fisiere (
-  id uuid default gen_random_uuid() not null,
-  business_id uuid not null,
-  cheie text not null,
-  mime text not null,
-  octeti bigint not null,
-  latime integer,
-  inaltime integer,
-  nume text,
-  comanda_id uuid,
-  creat_la timestamp with time zone default now() not null);
-
-create table if not exists public.configurator_produse (
-  id uuid default gen_random_uuid() not null,
-  business_id uuid not null,
-  configurator_id uuid not null,
-  product_id uuid not null,
-  fel text default 'direct'::text not null,
-  created_at timestamp with time zone default now() not null);
-
-create table if not exists public.configurator_versiuni (
-  id uuid default gen_random_uuid() not null,
-  business_id uuid not null,
-  configurator_id uuid not null,
-  numar integer not null,
-  definitie jsonb not null,
-  reguli jsonb default '[]'::jsonb not null,
-  pretuire jsonb default '{}'::jsonb not null,
-  compilat jsonb,
-  publicat_de uuid,
-  publicat_la timestamp with time zone default now() not null);
 
 create table if not exists public.custom_pages (
   id uuid default gen_random_uuid() not null,
@@ -7711,12 +7539,6 @@ alter table public.catalog_produs add constraint catalog_produs_pkey PRIMARY KEY
 alter table public.catalog_rezumat add constraint catalog_rezumat_pkey PRIMARY KEY (business_id, fara_imagini, fara_stoc_ascuns);
 alter table public.catalog_rezumat_murdar add constraint catalog_rezumat_murdar_pkey PRIMARY KEY (business_id);
 alter table public.categories add constraint categories_pkey PRIMARY KEY (id);
-alter table public.configuratoare add constraint configuratoare_pkey PRIMARY KEY (id);
-alter table public.configurator_categorii add constraint configurator_categorii_pkey PRIMARY KEY (id);
-alter table public.configurator_componente add constraint configurator_componente_pkey PRIMARY KEY (id);
-alter table public.configurator_fisiere add constraint configurator_fisiere_pkey PRIMARY KEY (id);
-alter table public.configurator_produse add constraint configurator_produse_pkey PRIMARY KEY (id);
-alter table public.configurator_versiuni add constraint configurator_versiuni_pkey PRIMARY KEY (id);
 alter table public.custom_pages add constraint custom_pages_pkey PRIMARY KEY (id);
 alter table public.customers add constraint customers_pkey PRIMARY KEY (id);
 alter table public.dhl_etichete add constraint dhl_etichete_pkey PRIMARY KEY (order_id);
@@ -7796,9 +7618,6 @@ alter table public.brevo_suppressions add constraint brevo_suppressions_business
 alter table public.businesses add constraint businesses_custom_domain_key UNIQUE (custom_domain);
 alter table public.businesses add constraint businesses_slug_key UNIQUE (slug);
 alter table public.categories add constraint categories_business_id_parent_id_name_key UNIQUE (business_id, parent_id, name);
-alter table public.configurator_categorii add constraint configurator_categorii_business_id_configurator_id_categori_key UNIQUE (business_id, configurator_id, categorie);
-alter table public.configurator_produse add constraint configurator_produse_product_id_configurator_id_key UNIQUE (product_id, configurator_id);
-alter table public.configurator_versiuni add constraint configurator_versiuni_configurator_id_numar_key UNIQUE (configurator_id, numar);
 alter table public.custom_pages add constraint custom_pages_business_id_slug_key UNIQUE (business_id, slug);
 alter table public.customers add constraint customers_business_key_unique UNIQUE (business_id, key);
 alter table public.discounts add constraint discounts_business_id_code_key UNIQUE (business_id, code);
@@ -7839,16 +7658,6 @@ alter table public.blog_redirects add constraint blog_redirects_not_circular CHE
 alter table public.blog_tags add constraint blog_tags_slug_form CHECK ((slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'::text));
 alter table public.businesses add constraint businesses_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text));
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
-alter table public.configuratoare add constraint configuratoare_nume_check CHECK ((btrim(nume) <> ''::text));
-alter table public.configuratoare add constraint configuratoare_stare_check CHECK ((stare = ANY (ARRAY['ciorna'::text, 'activ'::text, 'dezactivat'::text, 'arhivat'::text])));
-alter table public.configurator_categorii add constraint configurator_categorii_categorie_check CHECK ((btrim(categorie) <> ''::text));
-alter table public.configurator_componente add constraint configurator_componente_cost_check CHECK (((cost_bucata IS NULL) OR (cost_bucata >= (0)::numeric)));
-alter table public.configurator_componente add constraint configurator_componente_nume_check CHECK ((btrim(nume) <> ''::text));
-alter table public.configurator_componente add constraint configurator_componente_pret_check CHECK ((pret_bucata >= (0)::numeric));
-alter table public.configurator_fisiere add constraint configurator_fisiere_cheie_check CHECK ((btrim(cheie) <> ''::text));
-alter table public.configurator_fisiere add constraint configurator_fisiere_mime_check CHECK ((btrim(mime) <> ''::text));
-alter table public.configurator_fisiere add constraint configurator_fisiere_octeti_check CHECK (((octeti > 0) AND (octeti <= 26214400)));
-alter table public.configurator_produse add constraint configurator_produse_fel_check CHECK ((fel = ANY (ARRAY['direct'::text, 'exclus'::text])));
 alter table public.discounts add constraint discounts_type_check CHECK ((type = ANY (ARRAY['percent'::text, 'fixed'::text, 'free_shipping'::text])));
 alter table public.domain_orders add constraint domain_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'cancelled'::text, 'refunded'::text])));
 alter table public.edinio_conversion_outbox add constraint edinio_conversion_outbox_destinatie_check CHECK ((destinatie = ANY (ARRAY['meta'::text, 'tiktok'::text])));
@@ -7921,20 +7730,6 @@ alter table public.catalog_rezumat add constraint catalog_rezumat_business_id_fk
 alter table public.catalog_rezumat_murdar add constraint catalog_rezumat_murdar_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.categories add constraint categories_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.categories add constraint categories_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE CASCADE;
-alter table public.configuratoare add constraint configuratoare_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
-alter table public.configuratoare add constraint configuratoare_versiune_activa_fkey FOREIGN KEY (versiune_activa_id) REFERENCES configurator_versiuni(id) ON DELETE SET NULL;
-alter table public.configurator_categorii add constraint configurator_categorii_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
-alter table public.configurator_categorii add constraint configurator_categorii_configurator_id_fkey FOREIGN KEY (configurator_id) REFERENCES configuratoare(id) ON DELETE CASCADE;
-alter table public.configurator_componente add constraint configurator_componente_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
-alter table public.configurator_componente add constraint configurator_componente_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
-alter table public.configurator_fisiere add constraint configurator_fisiere_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
-alter table public.configurator_fisiere add constraint configurator_fisiere_comanda_id_fkey FOREIGN KEY (comanda_id) REFERENCES orders(id) ON DELETE SET NULL;
-alter table public.configurator_produse add constraint configurator_produse_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
-alter table public.configurator_produse add constraint configurator_produse_configurator_id_fkey FOREIGN KEY (configurator_id) REFERENCES configuratoare(id) ON DELETE CASCADE;
-alter table public.configurator_produse add constraint configurator_produse_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
-alter table public.configurator_versiuni add constraint configurator_versiuni_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
-alter table public.configurator_versiuni add constraint configurator_versiuni_configurator_id_fkey FOREIGN KEY (configurator_id) REFERENCES configuratoare(id) ON DELETE CASCADE;
-alter table public.configurator_versiuni add constraint configurator_versiuni_publicat_de_fkey FOREIGN KEY (publicat_de) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.custom_pages add constraint custom_pages_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.customers add constraint customers_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.dhl_etichete add constraint dhl_etichete_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -8133,16 +7928,6 @@ CREATE INDEX cm_biz ON public.catalog_murdar USING btree (business_id, marcat_la
 CREATE INDEX coada_conversii_de_trimis ON public.edinio_conversion_outbox USING btree (next_retry_at) WHERE ((trimis_la IS NULL) AND (abandonat_la IS NULL));
 CREATE INDEX coada_conversii_dupa_vizitator ON public.edinio_conversion_outbox USING btree (vizitator) WHERE ((vizitator IS NOT NULL) AND (trimis_la IS NULL) AND (abandonat_la IS NULL));
 CREATE UNIQUE INDEX coada_conversii_unic ON public.edinio_conversion_outbox USING btree (destinatie, nume_eveniment, event_id);
-CREATE INDEX configuratoare_magazin_idx ON public.configuratoare USING btree (business_id, updated_at DESC);
-CREATE INDEX configurator_categorii_pe_nume_idx ON public.configurator_categorii USING btree (business_id, categorie);
-CREATE INDEX configurator_componente_magazin_idx ON public.configurator_componente USING btree (business_id, nume);
-CREATE INDEX configurator_componente_produs_idx ON public.configurator_componente USING btree (product_id) WHERE (product_id IS NOT NULL);
-CREATE INDEX configurator_fisiere_comanda_idx ON public.configurator_fisiere USING btree (comanda_id) WHERE (comanda_id IS NOT NULL);
-CREATE INDEX configurator_fisiere_magazin_idx ON public.configurator_fisiere USING btree (business_id, creat_la DESC);
-CREATE INDEX configurator_fisiere_orfani_idx ON public.configurator_fisiere USING btree (creat_la) WHERE (comanda_id IS NULL);
-CREATE INDEX configurator_produse_ale_configuratorului_idx ON public.configurator_produse USING btree (configurator_id, fel);
-CREATE UNIQUE INDEX configurator_produse_un_singur_direct_idx ON public.configurator_produse USING btree (product_id) WHERE (fel = 'direct'::text);
-CREATE INDEX configurator_versiuni_ale_configuratorului_idx ON public.configurator_versiuni USING btree (configurator_id, numar DESC);
 CREATE INDEX cp_cat ON public.catalog_produs USING btree (business_id, category);
 CREATE INDEX cp_creat ON public.catalog_produs USING btree (business_id, creat DESC, product_id);
 CREATE INDEX cp_fat ON public.catalog_produs USING gin (fatete);
@@ -8432,9 +8217,6 @@ CREATE TRIGGER set_businesses_updated_at BEFORE UPDATE ON public.businesses FOR 
 CREATE TRIGGER catalog_produs_cuvinte AFTER INSERT OR DELETE OR UPDATE ON public.catalog_produs FOR EACH ROW EXECUTE FUNCTION trg_catalog_cuvinte_murdar();
 CREATE TRIGGER catalog_produs_rezumat AFTER INSERT OR DELETE OR UPDATE ON public.catalog_produs FOR EACH ROW EXECUTE FUNCTION trg_catalog_rezumat_murdar();
 CREATE TRIGGER categorii_rezumat_murdar AFTER INSERT OR DELETE OR UPDATE ON public.categories FOR EACH ROW EXECUTE FUNCTION trg_categorii_rezumat_murdar();
-CREATE TRIGGER set_configuratoare_updated_at BEFORE UPDATE ON public.configuratoare FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER set_configurator_componente_updated_at BEFORE UPDATE ON public.configurator_componente FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER configurator_versiuni_imutabile BEFORE DELETE OR UPDATE ON public.configurator_versiuni FOR EACH ROW EXECUTE FUNCTION configurator_versiuni_imutabile();
 CREATE TRIGGER customers_touch BEFORE UPDATE ON public.customers FOR EACH ROW EXECUTE FUNCTION touch_customers();
 CREATE TRIGGER set_domain_orders_updated_at BEFORE UPDATE ON public.domain_orders FOR EACH ROW EXECUTE FUNCTION update_domain_orders_updated_at();
 CREATE TRIGGER set_emag_offers_updated_at BEFORE UPDATE ON public.emag_offers FOR EACH ROW EXECUTE FUNCTION set_updated_at();
@@ -8497,12 +8279,6 @@ alter table public.catalog_produs enable row level security;
 alter table public.catalog_rezumat enable row level security;
 alter table public.catalog_rezumat_murdar enable row level security;
 alter table public.categories enable row level security;
-alter table public.configuratoare enable row level security;
-alter table public.configurator_categorii enable row level security;
-alter table public.configurator_componente enable row level security;
-alter table public.configurator_fisiere enable row level security;
-alter table public.configurator_produse enable row level security;
-alter table public.configurator_versiuni enable row level security;
 alter table public.custom_pages enable row level security;
 alter table public.customers enable row level security;
 alter table public.dhl_etichete enable row level security;
@@ -8660,44 +8436,6 @@ create policy "Public read categories of published businesses" on public.categor
 create policy "Users manage own categories" on public.categories as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
-create policy owner_all_configuratoare on public.configuratoare as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid))))) with check ((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
-create policy owner_all_configurator_categorii on public.configurator_categorii as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid))))) with check (((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))) AND (EXISTS ( SELECT 1
-   FROM configuratoare c
-  WHERE ((c.id = configurator_categorii.configurator_id) AND (c.business_id = configurator_categorii.business_id))))));
-create policy owner_all_configurator_componente on public.configurator_componente as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid))))) with check (((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))) AND ((product_id IS NULL) OR (EXISTS ( SELECT 1
-   FROM products p
-  WHERE ((p.id = configurator_componente.product_id) AND (p.business_id = configurator_componente.business_id)))))));
-create policy owner_select_configurator_fisiere on public.configurator_fisiere as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
-create policy owner_all_configurator_produse on public.configurator_produse as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid))))) with check (((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))) AND (EXISTS ( SELECT 1
-   FROM configuratoare c
-  WHERE ((c.id = configurator_produse.configurator_id) AND (c.business_id = configurator_produse.business_id)))) AND (EXISTS ( SELECT 1
-   FROM products p
-  WHERE ((p.id = configurator_produse.product_id) AND (p.business_id = configurator_produse.business_id))))));
-create policy owner_all_configurator_versiuni on public.configurator_versiuni as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid))))) with check (((business_id IN ( SELECT businesses.id
-   FROM businesses
-  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))) AND (EXISTS ( SELECT 1
-   FROM configuratoare c
-  WHERE ((c.id = configurator_versiuni.configurator_id) AND (c.business_id = configurator_versiuni.business_id))))));
 create policy "Admins can manage all pages" on public.custom_pages as PERMISSIVE for ALL to public using (is_admin()) with check (is_admin());
 create policy "Owners can manage own pages" on public.custom_pages as PERMISSIVE for ALL to public using ((EXISTS ( SELECT 1
    FROM businesses b
@@ -9563,68 +9301,6 @@ grant SELECT on table public.categories to service_role;
 grant TRIGGER on table public.categories to service_role;
 grant TRUNCATE on table public.categories to service_role;
 grant UPDATE on table public.categories to service_role;
-grant DELETE on table public.configuratoare to authenticated;
-grant INSERT on table public.configuratoare to authenticated;
-grant SELECT on table public.configuratoare to authenticated;
-grant UPDATE on table public.configuratoare to authenticated;
-grant DELETE on table public.configuratoare to service_role;
-grant INSERT on table public.configuratoare to service_role;
-grant REFERENCES on table public.configuratoare to service_role;
-grant SELECT on table public.configuratoare to service_role;
-grant TRIGGER on table public.configuratoare to service_role;
-grant TRUNCATE on table public.configuratoare to service_role;
-grant UPDATE on table public.configuratoare to service_role;
-grant DELETE on table public.configurator_categorii to authenticated;
-grant INSERT on table public.configurator_categorii to authenticated;
-grant SELECT on table public.configurator_categorii to authenticated;
-grant UPDATE on table public.configurator_categorii to authenticated;
-grant DELETE on table public.configurator_categorii to service_role;
-grant INSERT on table public.configurator_categorii to service_role;
-grant REFERENCES on table public.configurator_categorii to service_role;
-grant SELECT on table public.configurator_categorii to service_role;
-grant TRIGGER on table public.configurator_categorii to service_role;
-grant TRUNCATE on table public.configurator_categorii to service_role;
-grant UPDATE on table public.configurator_categorii to service_role;
-grant DELETE on table public.configurator_componente to authenticated;
-grant INSERT on table public.configurator_componente to authenticated;
-grant SELECT on table public.configurator_componente to authenticated;
-grant UPDATE on table public.configurator_componente to authenticated;
-grant DELETE on table public.configurator_componente to service_role;
-grant INSERT on table public.configurator_componente to service_role;
-grant REFERENCES on table public.configurator_componente to service_role;
-grant SELECT on table public.configurator_componente to service_role;
-grant TRIGGER on table public.configurator_componente to service_role;
-grant TRUNCATE on table public.configurator_componente to service_role;
-grant UPDATE on table public.configurator_componente to service_role;
-grant DELETE on table public.configurator_fisiere to service_role;
-grant INSERT on table public.configurator_fisiere to service_role;
-grant REFERENCES on table public.configurator_fisiere to service_role;
-grant SELECT on table public.configurator_fisiere to service_role;
-grant TRIGGER on table public.configurator_fisiere to service_role;
-grant TRUNCATE on table public.configurator_fisiere to service_role;
-grant UPDATE on table public.configurator_fisiere to service_role;
-grant DELETE on table public.configurator_produse to authenticated;
-grant INSERT on table public.configurator_produse to authenticated;
-grant SELECT on table public.configurator_produse to authenticated;
-grant UPDATE on table public.configurator_produse to authenticated;
-grant DELETE on table public.configurator_produse to service_role;
-grant INSERT on table public.configurator_produse to service_role;
-grant REFERENCES on table public.configurator_produse to service_role;
-grant SELECT on table public.configurator_produse to service_role;
-grant TRIGGER on table public.configurator_produse to service_role;
-grant TRUNCATE on table public.configurator_produse to service_role;
-grant UPDATE on table public.configurator_produse to service_role;
-grant DELETE on table public.configurator_versiuni to authenticated;
-grant INSERT on table public.configurator_versiuni to authenticated;
-grant SELECT on table public.configurator_versiuni to authenticated;
-grant UPDATE on table public.configurator_versiuni to authenticated;
-grant DELETE on table public.configurator_versiuni to service_role;
-grant INSERT on table public.configurator_versiuni to service_role;
-grant REFERENCES on table public.configurator_versiuni to service_role;
-grant SELECT on table public.configurator_versiuni to service_role;
-grant TRIGGER on table public.configurator_versiuni to service_role;
-grant TRUNCATE on table public.configurator_versiuni to service_role;
-grant UPDATE on table public.configurator_versiuni to service_role;
 grant DELETE on table public.custom_pages to anon;
 grant INSERT on table public.custom_pages to anon;
 grant REFERENCES on table public.custom_pages to anon;
@@ -10966,15 +10642,6 @@ grant SELECT (website) on table public.businesses to anon;
 grant UPDATE (website) on table public.businesses to authenticated;
 grant SELECT (whatsapp) on table public.businesses to anon;
 grant UPDATE (whatsapp) on table public.businesses to authenticated;
-grant SELECT (business_id) on table public.configurator_fisiere to authenticated;
-grant SELECT (comanda_id) on table public.configurator_fisiere to authenticated;
-grant SELECT (creat_la) on table public.configurator_fisiere to authenticated;
-grant SELECT (id) on table public.configurator_fisiere to authenticated;
-grant SELECT (inaltime) on table public.configurator_fisiere to authenticated;
-grant SELECT (latime) on table public.configurator_fisiere to authenticated;
-grant SELECT (mime) on table public.configurator_fisiere to authenticated;
-grant SELECT (nume) on table public.configurator_fisiere to authenticated;
-grant SELECT (octeti) on table public.configurator_fisiere to authenticated;
 grant SELECT (announcements_seen_at) on table public.users_profile to authenticated;
 grant UPDATE (announcements_seen_at) on table public.users_profile to authenticated;
 grant SELECT (avatar_url) on table public.users_profile to authenticated;
@@ -11071,7 +10738,6 @@ grant execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[]
 grant execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) to authenticated;
 grant execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) to service_role;
 grant execute on function public.catalog_fara_stoc(p_id uuid) to service_role;
-grant execute on function public.catalog_murdareste_configurator(p_business uuid, p_configurator uuid, p_categorii text[]) to service_role;
 grant execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) to anon;
 grant execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) to authenticated;
 grant execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) to service_role;
@@ -11084,7 +10750,6 @@ grant execute on function public.catalog_verifica(p_esantion integer) to service
 grant execute on function public.categorii_ascunse(p_business uuid) to service_role;
 grant execute on function public.ceasul_bazei() to service_role;
 grant execute on function public.claim_discount_use(p_discount_id uuid) to service_role;
-grant execute on function public.configurator_versiuni_imutabile() to service_role;
 grant execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer) to service_role;
 grant execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) to service_role;
@@ -11289,7 +10954,6 @@ revoke execute on function public.catalog_aplica_proiectii(p_randuri jsonb) from
 revoke execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) from public;
 revoke execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) from public;
 revoke execute on function public.catalog_fara_stoc(p_id uuid) from public;
-revoke execute on function public.catalog_murdareste_configurator(p_business uuid, p_configurator uuid, p_categorii text[]) from public;
 revoke execute on function public.catalog_pagina(p_business uuid, p_filtre jsonb, p_limit integer, p_offset integer) from public;
 revoke execute on function public.catalog_randuri(p_business uuid, p_spec jsonb) from public;
 revoke execute on function public.catalog_reface_cuvinte(p_business uuid) from public;
@@ -11298,7 +10962,6 @@ revoke execute on function public.catalog_verifica(p_esantion integer) from publ
 revoke execute on function public.categorii_ascunse(p_business uuid) from public;
 revoke execute on function public.ceasul_bazei() from public;
 revoke execute on function public.claim_discount_use(p_discount_id uuid) from public;
-revoke execute on function public.configurator_versiuni_imutabile() from public;
 revoke execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer) from public;
 revoke execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) from public;

@@ -178,30 +178,3 @@ test("fara trepte configurate, pretul ramane cel din catalog", () => {
 });
 
 function round2(n: number): number { return Math.round(n * 100) / 100; }
-
-test("PRODUSUL CONFIGURABIL nu se recupereaza: cosul salvat nu-i poarta alegerile", () => {
-  /*
-   * ⚠ Consecinta e mai scumpa decat la variante. `restoreCart` scrie cosul INTREG peste cel al
-   * clientului, iar linia refacuta n-are nicio alegere: la finalizare serverul o refuza (un camp
-   * obligatoriu necompletat). Clientul ramane cu o linie pe care n-o poate cumpara si care i-a
-   * inlocuit cosul — dupa ce emailul i-a promis un pret, cel de baza, pe care nici nu-l poate
-   * obtine.
-   */
-  const salvate: AbandonedCartItem[] = [
-    { product_id: "p1", name: "Cana gravata", price: 50, quantity: 1 },
-    { product_id: "p2", name: "Cana simpla", price: 40, quantity: 2 },
-  ];
-  const catalog = new Map<string, ProdusCosSalvat>([
-    ["p1", produs({ id: "p1", areConfigurator: true })],
-    ["p2", produs({ id: "p2" })],
-  ]);
-  const out = liniiRecuperabile(salvate, catalog);
-  assert.deepEqual(out.map((i) => i.product_id), ["p2"]);
-});
-
-test("un produs FARA configurator se recupereaza mai departe", () => {
-  // ⚠ Steagul lipsa nu inseamna „are": el vine de la apelant si e optional.
-  const salvate: AbandonedCartItem[] = [{ product_id: "p1", name: "Cana", price: 50, quantity: 1 }];
-  const catalog = new Map<string, ProdusCosSalvat>([["p1", produs({ id: "p1" })]]);
-  assert.equal(liniiRecuperabile(salvate, catalog).length, 1);
-});

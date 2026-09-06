@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { amprentaConfiguratiei } from "@/lib/configurators/amprenta";
-import { normalizeazaValori } from "@/lib/configurators/valori";
 import { Truck, MapPin, Package, Loader2, Search, X, ChevronDown } from "lucide-react";
 import { getShippingOptions, getLockers, type ShippingOption, type LockerItem } from "@/lib/actions/shipping.actions";
 
@@ -118,7 +116,7 @@ interface Props {
   /** Required for international (used by DPD to price + create the AWB). */
   postCode?: string;
   /** Cart lines for conditional shipping rules (weight/value/class-based pricing). */
-  cart?: { productId: string; quantity: number; configuratie?: unknown }[];
+  cart?: { productId: string; quantity: number }[];
   /** Goods value after promo — feeds value-based shipping rules. */
   subtotal?: number;
   onSelect: (selection: CourierSelection | null) => void;
@@ -149,29 +147,9 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
     ? (!!postCode && postCode.trim().length >= 3 && city.trim().length >= 2)
     : (!!county && city.trim().length >= 2);
 
-  /*
-   * Stable signature of the cart — recomputes options when contents/value change
-   * (conditional rules depend on weight/classes/value derived from the cart).
-   *
-   * ⚠ SI CONFIGURATIA INTRA IN EA.
-   *
-   * Doua configuratii ale aceluiasi produs, in aceeasi cantitate, dau acelasi „produs x
-   * cantitate” — deci semnatura veche nu se schimba, si cotatia NU se mai cere. Cumparatorul
-   * care adauga o cutie de lemn de doua kilograme ar fi ramas cu pretul de transport al canii
-   * goale, si l-ar fi si platit: pretul pleaca SEMNAT de la server.
-   *
-   * Se foloseste amprenta, nu `JSON.stringify`: ea e facuta chiar pentru asta si nu se schimba
-   * de la ordinea cheilor sau de la un spatiu in plus — altfel fiecare tasta apasata intr-un
-   * camp de gravura ar fi cerut o cotatie noua la toti curierii magazinului.
-   */
-  const cartSig = (cart ?? [])
-    .map((c) => {
-      const cfg = c.configuratie
-        ? amprentaConfiguratiei(normalizeazaValori(c.configuratie))
-        : "";
-      return `${c.productId}x${c.quantity}${cfg ? "#" + cfg : ""}`;
-    })
-    .join(",");
+  // Stable signature of the cart — recomputes options when contents/value change
+  // (conditional rules depend on weight/classes/value derived from the cart).
+  const cartSig = (cart ?? []).map((c) => `${c.productId}x${c.quantity}`).join(",");
 
   // Fetch shipping options when the destination is sufficiently filled in
   useEffect(() => {

@@ -38,7 +38,6 @@ import {
   type AboutYouStoredMaterial, type MappableProduct,
 } from "@/lib/aboutyou/mapping";
 import { traduMotive, type MotivAfisat } from "@/lib/aboutyou/respingeri";
-import { configurabileDeExport } from "@/lib/configurators/nu-se-exporta";
 import type {
   AboutYouAttributeGroup, AboutYouBrand, AboutYouCarrier, AboutYouCategory, AboutYouCategoryMapEntry,
   AboutYouConfig, AboutYouCountriesResponse, AboutYouEnvironment, AboutYouFulfillmentType,
@@ -1080,20 +1079,6 @@ export async function validateAboutYouListing(
     sale_price_eur: v.sale_price_eur, enabled: v.enabled,
   })));
 
-  /*
-   * ⚠ ACELASI VERDICT CA PE CALEA AUTOMATA (`aboutyou/sync.ts`).
-   *
-   * Ecranul si cronul care raspund altfel la aceeasi intrebare e chiar felul de deosebire pe care
-   * nimeni n-o cauta: „merge cand public de mana, esueaza cand publica singur" — sau, mai rau,
-   * invers, si atunci ecranul spune verde peste un blocaj.
-   *
-   * ⚠ „N-AM PUTUT AFLA” INTRA CA BLOCAJ, nu ca „n-are”. Ramane o problema afisata langa
-   * celelalte, deci comerciantul vede TOT ce mai are de reparat si poate incerca din nou.
-   */
-  const configurabile = await configurabileDeExport(businessId, [
-    { id: produs.id, category: produs.category },
-  ]);
-
   const { issues, warnings } = validateListing({
     config,
     product: produs,
@@ -1103,11 +1088,7 @@ export async function validateAboutYouListing(
       country_of_origin: input.country_of_origin, hs_code: input.hs_code,
     },
     variants,
-    areConfigurator: configurabile.ids.has(produs.id),
   }, cerintaMaterial);
-  if (!configurabile.ok) {
-    issues.push("Nu s-a putut verifica daca produsul are configurator. Incearca din nou.");
-  }
 
   /*
    * ═══ ⚠ DOUA REGULI ALE LOR PE CARE NU LE PUTEM CITI (27.08.2026) ═══

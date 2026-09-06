@@ -9,7 +9,6 @@ import { getAccessToken } from "@/lib/google-merchant/oauth";
 import { insertProductInput, deleteProductInput, getProduct, mapProductStatus } from "@/lib/google-merchant/client";
 import { expandProductOffers, type MappableBusiness, type MappableProduct } from "@/lib/google-merchant/mapping";
 import { DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
-import { configurabileDeExport } from "@/lib/configurators/nu-se-exporta";
 
 type Admin = SupabaseClient<Database>;
 const QUEUE_BATCH = 100;
@@ -88,46 +87,7 @@ export async function GET(req: NextRequest) {
         .from("products")
         .select("id, name, slug, description, price, compare_at_price, images, category, is_active, is_bundle, track_inventory, stock_quantity, weight_grams, page_sections")
         .in("id", upsertIds);
-      /*
-       * ═══ ⚠ PRODUSELE CONFIGURABILE NU AJUNG IN MERCHANT CENTER ═══
-       *
-       * Pretul lor se naste din ce alege cumparatorul. Trimis la Google, produsul isi ia pretul
-       * de baza — adica pretul unui obiect care nu exista — iar clientul ajunge pe pagina si
-       * vede alt pret. Aia e chiar definitia divergentei din care ies suspendarile de cont, ca
-       * la pachetele care plecau „IN_STOCK”; si intre timp reclama plateste pentru un pret care
-       * n-a fost niciodata adevarat.
-       *
-       * ⚠ SE SCOT DIN `productMap`, nu se sar cu `continue`: negasit, elementul cade mai jos pe
-       * ramura de RETRAGERE, deci un produs caruia comerciantul tocmai i-a legat un configurator
-       * este si scos de la Google, nu doar lasat acolo cum era. Exact ce face si un produs
-       * dezactivat, cu randul de deasupra.
-       *
-       * ⚠ O citire pe LOT, nu pe produs: `configurabileDeExport` intreaba intai daca magazinul
-       * are vreun configurator activ si se opreste acolo. La magazinele fara — aproape toate —
-       * garda costa o singura citire pe index la fiecare trecere.
-       *
-       * ⚠ SI DACA N-AM PUTUT AFLA, NU SE ATINGE NIMIC. Elementele raman nerevendicate: nu se
-       * sterg, nu-si ard incercarile, si se reiau cand expira imprumutul. Citit ca „niciunul
-       * n-are”, un magazin cu configuratoare si-ar fi trimis tot catalogul la pretul de baza,
-       * pentru o pana de o clipa a bazei.
-       */
-      const configurabile = await configurabileDeExport(
-        businessId,
-        (prods ?? []).map((p) => ({ id: p.id, category: p.category })),
-      );
-      if (!configurabile.ok) {
-        await logError({
-          action: "gmc-sync", severity: "error",
-          message: "nu s-a putut afla care produse au configurator; nu s-a trimis nimic la Google",
-          details: { cate: items.length }, businessId,
-        });
-        continue;
-      }
-      for (const p of prods ?? []) {
-        if (!p.is_active) continue;
-        if (configurabile.ids.has(p.id)) continue;
-        productMap.set(p.id, p as MappableProduct);
-      }
+      for (const p of prods ?? []) if (p.is_active) productMap.set(p.id, p as MappableProduct);
     }
 
     for (const item of items ?? []) {

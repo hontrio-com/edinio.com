@@ -1,9 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
-import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
-import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { createClient } from "@/lib/supabase/server";
@@ -720,96 +717,5 @@ export async function getCartPricing(
       tiers: ((p.page_sections ?? {}) as { quantity_tiers?: Json }).quantity_tiers ?? null,
     };
   }
-  return out;
-}
-
-/**
- * Pretul autoritar al liniilor CONFIGURATE din cos.
- *
- * ═══ ⚠ DE CE E O A DOUA ACTIUNE, SI NU O EXTINDERE A CELEI DE SUS ═══
- *
- * `getCartPricing` raspunde despre PRODUSE: acelasi raspuns pentru orice linie a aceluiasi
- * produs. Doua cani cu gravuri diferite sunt insa doua linii cu doua preturi, deci intrebarea de
- * aici e despre LINII, si se raspunde pe cheia liniei.
- *
- * ⚠ Se cheama numai cand chiar exista linii configurate. Aproape niciun cos n-are, si o cerere in
- * plus la fiecare deschidere de sertar, pentru toata platforma, ar fi fost pretul platit degeaba.
- *
- * ═══ ⚠ CE SE INTOARCE CAND LINIA NU MAI E BUNA ═══
- *
- * `null`, si motivul. Se intampla cand comerciantul a schimbat configuratorul intre timp: o
- * optiune scoasa, un camp devenit obligatoriu. Cosul pastreaza atunci pretul lui vechi ca sa aiba
- * ce afisa, dar STIE ca linia nu se poate comanda — iar finalizarea o va refuza cu acelasi motiv,
- * nu cu un „ceva n-a mers".
- *
- * Public si fara secrete: se intoarce un pret si un motiv, calculate din definitia PUBLICATA.
- */
-export async function getCartConfiguredPricing(
-  businessId: string,
-  linii: { cheie: string; productId: string; variantTitle?: string; configuratie: unknown }[],
-): Promise<Record<string, { pret: number | null; motiv?: string }>> {
-  const cerute = (linii ?? [])
-    .filter((l) => l && typeof l.cheie === "string" && typeof l.productId === "string")
-    // ⚠ Un cos adevarat n-are cincizeci de linii CONFIGURATE. Plafonul e mic dinadins.
-    .slice(0, 50);
-  if (!businessId || cerute.length === 0) return {};
-
-  /*
-   * ⚠ CAPAT PUBLIC CARE RULEAZA MOTORUL PE VALORI VENITE DE LA CLIENT.
-   *
-   * Spre deosebire de `getCartPricing`, care doar citeste preturi, aici se evalueaza reguli si
-   * formule pe ce a trimis cel care cheama. Fiecare evaluare e marginita din constructie
-   * (`MAX_TRECERI`, `MAX_NODURI`, `MAX_ADANCIME`), deci nu se poate cere o socoteala fara
-   * capat — dar cincizeci de linii inmultite cu oricate cereri pe secunda tot inseamna munca.
-   *
-   * Doua straturi, ca la cautarea din vitrina: unul in memoria instantei, care taie rafalele,
-   * si unul durabil in Postgres, fiindca instantele sunt multe si cea din memorie nu limiteaza
-   * cu adevarat nimic (vezi `limita-durabila.ts`).
-   *
-   * ⚠ La depasire se intoarce GOL, nu o eroare: cosul cade atunci pe preturile salvate si
-   * ramane citibil. Serverul repretuieste oricum la plasarea comenzii, deci nimic nu se pierde
-   * in afara de prospetimea afisata.
-   */
-  const ip = clientIpFromHeaders(await headers());
-  if (!rateLimit(`cfgPret:${ip}`, 30, 60_000)) return {};
-  if (!(await consumaLimita(`cfgPret:${ip}`, 300, 3600)).permis) return {};
-
-  const { repretuiesteLinii } = await import("@/lib/configurators/repretuire");
-  const { pretulLiniei } = await import("@/lib/orders/variant-guard");
-
-  const admin = createAdminClient();
-  const ids = [...new Set(cerute.map((l) => l.productId))];
-  const { data } = await admin
-    .from("products")
-    .select("id, name, price, category, page_sections")
-    .eq("business_id", businessId)
-    .eq("is_active", true)
-    .in("id", ids);
-
-  const catalog = new Map((data ?? []).map((p) => [p.id, p]));
-  const bune = cerute.filter((l) => catalog.has(l.productId));
-  if (bune.length === 0) return {};
-
-  const verdicte = await repretuiesteLinii(businessId, bune.map((l) => {
-    const p = catalog.get(l.productId)!;
-    const baza = Math.round((Number(p.price) || 0) * 100) / 100;
-    // Pretul de pornire e al VARIANTEI alese, ca pe pagina de produs si ca la plasarea comenzii.
-    const r = pretulLiniei({ name: String(p.name ?? ""), price: baza, page_sections: p.page_sections }, l.variantTitle);
-    return {
-      productId: l.productId,
-      category: p.category ?? null,
-      configuratie: l.configuratie,
-      pretCatalog: r.fel === "ok" ? r.unitPrice : baza,
-    };
-  }));
-
-  const out: Record<string, { pret: number | null; motiv?: string }> = {};
-  bune.forEach((l, i) => {
-    const v = verdicte[i];
-    if (v.fel === "ok") out[l.cheie] = { pret: v.unitar };
-    else if (v.fel === "refuz") out[l.cheie] = { pret: null, motiv: v.motive[0] };
-    // ⚠ `fara` NU se scrie: produsul nu mai are configurator, deci linia se pretuieste ca oricare
-    // alta, din `getCartPricing`. Scris cu pretul de catalog, ar fi ocolit treptele de cantitate.
-  });
   return out;
 }

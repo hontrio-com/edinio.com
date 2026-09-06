@@ -1,6 +1,5 @@
 import { Resend } from "resend";
 import { formatPrice } from "@/lib/utils/format";
-import { instantaneulLiniei } from "@/lib/configurators/instantaneu";
 import { escapeHtml as esc, escapeUrl } from "@/lib/utils/html-escape";
 import type { StoreEmailSender } from "@/lib/email/config";
 import { storeEmailShell } from "@/lib/email/store-shell";
@@ -10,7 +9,6 @@ import type { BillingCompany } from "@/lib/billing/company";
 // Randurile de bani ale unei comenzi (Subtotal, extraoptiuni, reduceri, TVA) se
 // construiesc INTR-UN SINGUR LOC, pentru amandoua emailurile. Vezi acolo de ce.
 import { randuriDeBani, type BaniComanda } from "@/lib/email/order-totals";
-import { randConfiguratie } from "@/lib/email/rand-configuratie";
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -171,7 +169,7 @@ export async function sendOrderConfirmationToCustomer(
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span>${randConfiguratie(i)}</td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
@@ -259,11 +257,7 @@ export async function sendAbandonedCartRecovery(
     storeName: string;
     recoverUrl: string;
     customerName?: string | null;
-    items: {
-      name: string; quantity: number; price: number; image_url?: string | null;
-      /** ⚠ `unknown`: randul poate fi scris de o versiune veche de cod. Vezi `randConfiguratie`. */
-      configuratie?: unknown;
-    }[];
+    items: { name: string; quantity: number; price: number; image_url?: string | null }[];
     total: number;
     color?: string;
     message?: string;
@@ -283,7 +277,7 @@ export async function sendAbandonedCartRecovery(
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span>${randConfiguratie(i)}</td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
@@ -1232,7 +1226,7 @@ export async function sendNewOrderEmail(
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span>${randConfiguratie(i)}</td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
@@ -1800,4 +1794,3 @@ export async function sendBlogSubscribeConfirmation(email: string, adresaConfirm
     html: baseTemplate(content),
   });
 }
-

@@ -71,24 +71,4 @@ export type StorefrontProduct = Pick<
    * numarul de produse care il poarta.
    */
   f?: number[];
-  /**
-   * Produsul cere configurare inainte sa poata fi cumparat.
-   *
-   * ⚠ Camp CERUT, ca `fara_stoc`, si din acelasi motiv: un steag optional se uita exact acolo
-   * unde conteaza. Cardul care nu-l primeste ar fi scris „Adauga in cos" pe un produs care nu se
-   * poate cumpara fara sa alegi intai ceva — iar linia ar fi intrat in cos la pretul de baza.
-   *
-   * Raspunsul vine gata luat din `catalog_produs.cere_configurare`: legaturile configuratorului
-   * (directe, pe categorie, cu excluderi si cu mostenire in subarbore) nu se pot deriva in
-   * browser, si nici macar dintr-un singur rand de produs.
-   */
-  cere_configurare: boolean;
-  /**
-   * De la ce pret porneste, adica pretul configuratiei IMPLICITE.
-   *
-   * ⚠ `null` inseamna „nu se poate socoti” — un camp obligatoriu fara valoare implicita — si NU
-   * zero. Cardul cade atunci pe pretul simplu, dar tot cu „De la”: pretul de baza al unui produs
-   * configurabil nu e un pret la care se poate cumpara ceva.
-   */
-  pret_pornire: number | null;
 };

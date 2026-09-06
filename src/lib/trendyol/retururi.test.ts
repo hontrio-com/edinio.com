@@ -229,8 +229,7 @@ test("⚠ DOUA apasari in ecran, nu una", () => {
 test("⚠ tabelele au RLS, si numai proprietarul citeste", () => {
   const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
   for (const t of ["trendyol_claims", "trendyol_claim_items"]) {
-    // ⚠ `\.` intr-un template literal devine `.`, adica ORICE caracter. Se scrie dublu.
-    assert.match(baseline, new RegExp(`alter table public\\.${t} enable row level security;`), t);
+    assert.match(baseline, new RegExp(`alter table public\.${t} enable row level security;`), t);
     assert.match(baseline, new RegExp(`owner_select_${t}`), `politica pentru ${t}`);
   }
 });

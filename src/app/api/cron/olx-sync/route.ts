@@ -13,7 +13,6 @@ import { alegeInRotatie, magazineConectate } from "@/lib/marketplace/rotatie";
 import { lamurestePlata, platiNelamurite } from "@/lib/olx/plati";
 import { advertCommand } from "@/lib/olx/client";
 import type { MappableProduct } from "@/lib/olx/mapping";
-import { configurabileDeExport } from "@/lib/configurators/nu-se-exporta";
 
 // OLX rate limits are not clearly documented — pace conservatively and keep the
 // per-run volume small (the cron fires every minute). Each write op also costs
@@ -308,42 +307,7 @@ export async function GET(req: NextRequest) {
         });
         continue;
       }
-      /*
-       * ═══ ⚠ CONFIGURATOARELE, O SINGURA CITIRE PENTRU TOT LOTUL ═══
-       *
-       * `upsertRemote` refuza sa trimita un produs pentru care intrebarea n-a fost pusa, deci
-       * steagul trebuie sa ajunga pe FIECARE rand din harta. Intrebat pe produs, un lot de
-       * treizeci ar fi facut o suta douazeci de dus-intorsuri pe minut; asa se citeste o data,
-       * iar la magazinele fara configuratoare — aproape toate — costa o citire pe index.
-       *
-       * ⚠ SI DACA N-AM PUTUT AFLA, NU PLEACA NIMIC. Aceeasi hotarare ca la citirea produselor de
-       * deasupra, si din acelasi motiv: „n-am putut intreba" nu e „n-are". Citit ca „n-are",
-       * produsele configurabile ale magazinului ar fi ajuns la vanzare pe OLX la pretul de baza.
-       */
-      const configurabile = await configurabileDeExport(
-        businessId,
-        ((prods ?? []) as MappableProduct[]).map((p) => ({ id: p.id, category: p.category })),
-      );
-      if (!configurabile.ok) {
-        for (const it of items) {
-          const attempts = (it.attempts ?? 0) + 1;
-          await scrieDacaNeschimbat(admin, COADA, it, {
-            attempts,
-            last_error: "nu s-a putut afla care produse au configurator".slice(0, 500),
-            next_retry_at: asteptareaUrmatoare(attempts),
-            ...(attempts >= MAX_ATTEMPTS ? { abandonat_la: now } : {}),
-          });
-        }
-        await logError({
-          action: "olx-sync", severity: "error",
-          message: "nu s-a putut afla care produse au configurator; nu s-a trimis nimic la OLX",
-          details: { cate: items.length }, businessId,
-        });
-        continue;
-      }
-      for (const p of (prods ?? []) as MappableProduct[]) {
-        productMap.set(p.id, { ...p, areConfigurator: configurabile.ids.has(p.id) });
-      }
+      for (const p of (prods ?? []) as MappableProduct[]) productMap.set(p.id, p);
     }
 
     for (const item of items) {

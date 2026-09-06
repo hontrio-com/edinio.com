@@ -5,8 +5,6 @@ import { headers } from "next/headers";
 import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import { CheckCircle, Package, Phone, ArrowLeft, XCircle } from "lucide-react";
 import { formatPrice, unitarSeInchide } from "@/lib/utils/format";
-import { instantaneulLiniei } from "@/lib/configurators/instantaneu";
-import { caUnRand } from "@/lib/configurators/rezumat";
 import { ConfettiEffect } from "@/components/ministore/ConfettiEffect";
 import { FbPurchaseEvent } from "@/components/public/FbPurchaseEvent";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
@@ -49,16 +47,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
   // Fetch order details via admin client (orders RLS restricts anonymous SELECT)
-  let orderItems: {
-    product_id?: string; name: string; price: number; quantity: number;
-    /**
-     * Instantaneul configuratorului.
-     *
-     * ⚠ `unknown`, nu forma lui: randul poate fi scris de o versiune veche de cod si se
-     * poate edita din panou. Se citeste cu `instantaneulLiniei`, care nu arunca niciodata.
-     */
-    configuratie?: unknown;
-  }[] = [];
+  let orderItems: { product_id?: string; name: string; price: number; quantity: number }[] = [];
   let shippingCost = 0;
   let discountAmount = 0;
   let cardDiscountAmount = 0;
@@ -101,7 +90,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
         order.payment_method as string | null,
         order.payment_status as string | null,
       );
-      orderItems = (order.items as typeof orderItems) ?? [];
+      orderItems = (order.items as { product_id?: string; name: string; price: number; quantity: number }[]) ?? [];
       shippingCost = order.shipping_cost ?? 0;
       discountAmount = order.discount_amount ?? 0;
       cardDiscountAmount = order.card_discount_amount ?? 0;
@@ -287,26 +276,6 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
                         <div key={i} className="flex items-center justify-between px-4 py-3">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-[var(--st-text)] truncate">{item.name}</p>
-                            {/*
-                              ⚠ CE A CONFIGURAT CLIENTUL, pe pagina lui de confirmare.
-
-                              Fara randul asta, singura pagina pe care omul o vede dupa ce a platit ii
-                              arata „Cana personalizata x1” si atat — nu poate verifica daca gravura pe
-                              care a scris-o e cea care pleaca in productie. Iar cand nu e, afla abia
-                              cand desface coletul, si atunci e o retur, nu o corectura.
-
-                              Se arata rezumatul INTREG, nu primele trei ca in cos: aici nu e o
-                              eticheta de reamintire, e dovada a ce a comandat.
-                            */}
-                            {(() => {
-                              const cfg = instantaneulLiniei(item);
-                              if (!cfg) return null;
-                              return (
-                                <p className="mt-0.5 text-xs text-[var(--st-muted)]">
-                                  {caUnRand(cfg.rezumat)}
-                                </p>
-                              );
-                            })()}
                             {item.quantity > 1 && (
                               <p className="text-xs text-[var(--st-muted)]">
                                 {unitarSeInchide(item.price, item.quantity)

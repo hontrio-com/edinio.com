@@ -1,5 +1,4 @@
-import { instantaneulLiniei } from "@/lib/configurators/instantaneu";
-import { contextulCosului, type LinieCotata, type ProdusCotat } from "./cart-weight";
+import { contextulCosului, type ProdusCotat } from "./cart-weight";
 
 /**
  * Greutatea cu care pleaca efectiv coletul la curier.
@@ -22,13 +21,6 @@ import { contextulCosului, type LinieCotata, type ProdusCotat } from "./cart-wei
  * Sta in modul pur pentru ca actiunile de mai sus sunt „use server" si
  * harness-ul de teste nu le poate incarca. Regula de adunare a greutatii NU se
  * rescrie aici: se cheama `contextulCosului`, exact ca la cotatie.
- *
- * ⚠ CE ADUCE COMANDA PE LANGA CATALOG: greutatea CONFIGURATIEI. O cana cu cutie
- * de lemn isi are cutia pe o optiune de configurator, nu in `products`, si pana
- * acum nu o aduna nimeni — coletul pleca la toti cei saisprezece curieri cu
- * greutatea produsului gol. Sporul se ia din instantaneul scris in comanda, deci
- * din ce s-a VANDUT, si e per bucata: se inmulteste cu cantitatea liniei, in
- * `contextulCosului`, langa `weight_grams`.
  */
 
 /**
@@ -101,27 +93,13 @@ interface LinieStocata {
 }
 
 /** Liniile comenzii in forma pe care o intelege `contextulCosului`. */
-export function liniileComenzii(items: unknown): LinieCotata[] {
+export function liniileComenzii(items: unknown): { productId: string; quantity: number }[] {
   if (!Array.isArray(items)) return [];
-  const linii: LinieCotata[] = [];
+  const linii: { productId: string; quantity: number }[] = [];
   for (const brut of items) {
     const pid = (brut as LinieStocata | null)?.product_id;
     if (typeof pid !== "string" || pid === "") continue;
-    linii.push({
-      productId: pid,
-      quantity: Number((brut as LinieStocata).quantity),
-      /*
-       * ⚠ Greutatea configuratiei se ia din INSTANTANEUL vandut, nu din configuratorul de azi.
-       *
-       * O cana cu cutie de lemn are cutia pe o optiune, nu in `products.weight_grams`. Fara randul
-       * asta, AWB-ul declara cana goala: curierul cantareste coletul la depozit, refactureaza banda
-       * adevarata, si diferenta o plateste comerciantul fara sa apara nicaieri in panou.
-       *
-       * `orders.items` e jsonb si poate fi scris de o versiune veche de cod sau editat de mana, deci
-       * se citeste cu cititorul defensiv — care da zero pentru orice nu e o greutate buna.
-       */
-      grameConfiguratie: instantaneulLiniei(brut)?.grame ?? 0,
-    });
+    linii.push({ productId: pid, quantity: Number((brut as LinieStocata).quantity) });
   }
   return linii;
 }

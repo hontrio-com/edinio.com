@@ -36,15 +36,6 @@ export interface MappableProduct {
    * fara campul asta. `gpsrDinProdus` citeste `unknown` fara sa presupuna nimic despre forma.
    */
   page_sections?: unknown;
-  /**
-   * Produsul are un configurator servit acum?
-   *
-   * ⚠ NU se poate citi din randul produsului: legaturile stau in `configurator_produse` si in
-   * `configurator_categorii`. Se calculeaza de apelant, o data pe lot, ca `pachetDisponibil` la
-   * celelalte feeduri — iar `upsertRemote` REFUZA sa trimita ceva cand campul lipseste, fiindca
-   * `undefined` citit ca „n-are” ar posta pe OLX un produs configurabil la pretul de baza.
-   */
-  areConfigurator?: boolean;
 }
 
 export function isProductSellable(p: Pick<MappableProduct, "is_active" | "track_inventory" | "stock_quantity">): boolean {
@@ -77,7 +68,7 @@ function removeContacts(text: string): string {
     // bare domains like magazin.ro / shop.com (no scheme)
     .replace(/\b[a-z0-9-]+\.(?:ro|com|net|org|eu|shop|store|online|site)(?:\/\S*)?\b/gi, " ");
   // phone-like sequences: strip only when the run contains 9+ digits
-  out = out.replace(/\+?\d[\d\s()./-]{6,}\d/g, (m) => ((m.match(/\d/g)?.length ?? 0) >= 9 ? " " : m));
+  out = out.replace(/\+?\d[\d\s().\/-]{6,}\d/g, (m) => ((m.match(/\d/g)?.length ?? 0) >= 9 ? " " : m));
   return out.replace(/[ \t]{2,}/g, " ").trim();
 }
 

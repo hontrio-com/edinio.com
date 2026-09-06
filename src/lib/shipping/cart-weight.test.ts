@@ -70,61 +70,6 @@ test("clasele, categoriile si id-urile ies fara duplicate", () => {
   assert.deepEqual(c.productIds, ["p1", "p2"]);
 });
 
-/* ── Greutatea configuratiei ─────────────────────────────────────────────── */
-
-/*
- * O cana cu cutie de lemn cantarea exact cat cana goala, la toti cei saisprezece curieri:
- * `Optiune.grame` era compilat si trimis, dar nu-l aduna nimeni.
- */
-
-test("gramele configuratiei se adauga peste greutatea din catalog", () => {
-  const c = contextulCosului([{ productId: "p1", quantity: 1, grameConfiguratie: 750 }], [p("p1", { weight_grams: 300 })]);
-  assert.equal(c.weightKg, 1.05);
-});
-
-test("gramele configuratiei sunt PER BUCATA, deci se inmultesc cu cantitatea", () => {
-  /*
-   * ⚠ Aici e greseala scumpa. Adunata o singura data, o comanda de zece cani cu cutie ar fi
-   * declarat 3,75 kg in loc de 10,5 — adica banda de tarif a unui colet de patru kilograme pentru
-   * unul de zece. Diferenta o refactureaza curierul dupa cantarirea din depozit.
-   */
-  const c = contextulCosului([{ productId: "p1", quantity: 10, grameConfiguratie: 750 }], [p("p1", { weight_grams: 300 })]);
-  assert.equal(c.weightKg, 10.5);
-});
-
-test("configuratia cantareste si cand produsul n-are greutate in catalog", () => {
-  // Sporul nu vine din `products`, ci din alegerea cumparatorului: nu are de ce sa se piarda
-  // fiindca produsul e necantarit.
-  const c = contextulCosului([{ productId: "p1", quantity: 2, grameConfiguratie: 500 }], [p("p1", { weight_grams: null })]);
-  assert.equal(c.weightKg, 1);
-});
-
-test("configuratia cantareste si cand produsul nu s-a regasit in catalog", () => {
-  // Sters sau al altui magazin: greutatea lui lipseste sincer, dar ce stim despre linie se numara.
-  const c = contextulCosului([{ productId: "strain", quantity: 2, grameConfiguratie: 500 }], []);
-  assert.equal(c.weightKg, 1);
-});
-
-test("o greutate de configuratie aiurea nu strica adunarea", () => {
-  /*
-   * ⚠ Negativa, ar fi SCAZUT din colet — aceeasi hotarare ca la `weight_grams` negativ de mai sus.
-   * `NaN` ar fi otravit toata suma: o singura linie stricata ar fi trimis intreaga comanda la
-   * curier cu greutate nefinita.
-   */
-  const linii = (g: unknown) => [{ productId: "p1", quantity: 1, grameConfiguratie: g as number }];
-  for (const g of [undefined, null, -500, Number.NaN, Number.POSITIVE_INFINITY, "greu", {}, [1, 2]]) {
-    assert.equal(contextulCosului(linii(g), [p("p1")]).weightKg, 1, `${JSON.stringify(g)}`);
-  }
-  // Un numar scris ca text se converteste, exact ca `weight_grams` venit din baza. Ce nu e o
-  // greutate buna e oprit mai devreme, de cititorul defensiv din `instantaneu.ts`.
-  assert.equal(contextulCosului(linii("750"), [p("p1")]).weightKg, 1.75);
-});
-
-test("liniile fara configuratie cantaresc exact cat cantareau", () => {
-  // Garda de regresie pentru cele 127 de magazine fara niciun configurator.
-  assert.equal(contextulCosului([{ productId: "p1", quantity: 3 }], [p("p1", { weight_grams: 250 })]).weightKg, 0.75);
-});
-
 test("fara cos, contextul e gol — nu zero-uri inventate", () => {
   assert.deepEqual(contextulCosului(undefined, []), {
     weightKg: 0, quantity: 0, classIds: [], categories: [], productIds: [],

@@ -23,7 +23,6 @@ import {
   type AboutYouListingEnrichment, type AboutYouStoredMaterial, type AboutYouVariantData,
   type MappableProduct,
 } from "./mapping";
-import { configurabileDeExport } from "@/lib/configurators/nu-se-exporta";
 import { EroareCitireBaza, randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { patchAboutYouConfig } from "./config";
@@ -1892,33 +1891,8 @@ export async function syncProductNow(admin: Db, ctx: AboutYouSyncContext, produc
     // Nu stim daca cere marime: nu deducem „nu cere". Se reia.
     return { ok: false, error: "Nu am putut citi atributele categoriei About You.", status: 0 };
   }
-  /*
-   * ⚠ CONFIGURATORUL SE INTREABA PE CALEA AUTOMATA, NU DOAR IN EDITOR.
-   *
-   * Aceeasi lectie ca la `validateListing` insusi: verificarea traia intr-un singur loc — butonul
-   * „Salveaza si trimite" — iar calea automata (auto_sync, o schimbare de pret, cronul) ajungea
-   * direct la constructia articolelor. O garda pusa numai in ecran nu apara nimic: produsele
-   * pleaca cel mai des fara ca cineva sa se uite la ecran.
-   *
-   * ⚠ Un produs, un lot: elementul de coada poarta unul singur, iar citirea intreaba intai daca
-   * magazinul are vreun configurator activ si se opreste acolo.
-   *
-   * ⚠ „N-AM PUTUT AFLA” NU E „N-ARE”. `status: 0` inseamna cauza trecatoare: elementul ramane in
-   * coada fara sa arda o incercare, si listarea nu se inrosaste pentru ceva ce comerciantul n-are
-   * cum sa repare. Citit ca „n-are”, produsul ar fi plecat la About You la pretul de baza.
-   */
-  const configurabile = await configurabileDeExport(ctx.businessId, [
-    { id: productId, category: produs.category },
-  ]);
-  if (!configurabile.ok) {
-    return { ok: false, error: "Nu s-a putut afla daca produsul are configurator. Se reia singur.", status: 0 };
-  }
-
   const verificare = validateListing(
-    {
-      config: ctx.config, product: produs, listing: enrichment, variants,
-      areConfigurator: configurabile.ids.has(productId),
-    },
+    { config: ctx.config, product: produs, listing: enrichment, variants },
     { tip: cerinta.tip, path: cerinta.path, cereMarime: marimeCeruta },
   );
   if (verificare.issues.length > 0) {

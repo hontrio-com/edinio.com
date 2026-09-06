@@ -20,11 +20,6 @@ import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
 import type { OrderSource } from "@/lib/storefront/attribution";
 import { comboStockMap, enabledComboPriceMap, parseVariants } from "@/lib/storefront/variants";
-import { repretuiesteLinii, type PretConfigurat } from "@/lib/configurators/repretuire";
-import {
-  contopesteConsumul, decrementeleComponentelor, numelePieselor, type BucataConsumata,
-} from "@/lib/configurators/componente";
-import { configuratoarePentruProduse } from "@/lib/configurators/vitrina";
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import {
   amprentaLinii,
@@ -46,8 +41,6 @@ import { stocRezervat } from "@/lib/orders/stoc-rezervat";
 import { cheiEticheta } from "@/lib/gls/eticheta";
 import { deleteFromR2 } from "@/lib/r2";
 import { interpreteazaRevendicarea, type Revendicare } from "@/lib/orders/verdict-stoc";
-import type { PieseleConfiguratiei } from "@/lib/orders/refuz-stoc";
-import { legaFisiereleDeComanda } from "@/lib/configurators/legare-fisiere";
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
 import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
 import { esteIdExtra } from "@/lib/orders/extras";
@@ -602,37 +595,10 @@ async function pesteRafalaMagazinului(
  * `nerevendicat` (functia din baza inca nu exista) — chemata si dupa o revendicare
  * reusita, ar scadea a doua oara.
  */
-/**
- * O linie asa cum se scrie in `orders.items` si cum pleaca la emailuri.
- *
- * ⚠ `configuratie` E IN TIP, si asta nu e o formalitate. Fara ea, TypeScript deducea forma
- * array-ului din elementele care N-o au (liniile din cos, extraoptiunile) si o taia tacut din
- * primul element — apoi `.map` catre emailuri o pierdea fara ca `tsc` sa spuna nimic, fiindca
- * `randConfiguratie` primeste `unknown`. Toate cele trei randuri de configuratie din emailuri
- * au fost moarte din ziua in care au fost scrise.
- */
-interface LinieScrisa {
-  product_id: string;
-  name: string;
-  price: number;
-  quantity: number;
-  variant_title?: string | null;
-  customization?: unknown;
-  configuratie?: unknown;
-}
-
 async function revendicaStocul(
   admin: SupabaseClient<Database>,
   decrements: { product_id: string; quantity: number }[],
   liniiVarianta: { product_id: string; variant_title?: string | null; quantity: number }[] = [],
-  /**
-   * Care dintre produsele cerute sunt PIESE de configuratie.
-   *
-   * ⚠ Fara ele, un refuz pe o balama ii spunea cumparatorului sa scoata din cos un produs
-   * pe care nu-l are acolo si de care n-a auzit — si ii dadea pe deasupra numele intern al
-   * unui rand de stoc tinut ascuns. Vezi `mesajRefuzStoc`.
-   */
-  piese?: PieseleConfiguratiei,
 ): Promise<Revendicare> {
   const variante = liniiVarianta
     .filter((l) => l.variant_title)
@@ -672,7 +638,7 @@ async function revendicaStocul(
       severity: "critical",
     });
   }
-  const verdict = interpreteazaRevendicarea(data, error, piese);
+  const verdict = interpreteazaRevendicarea(data, error);
   if (verdict.fel === "esuat" && !error) {
     await logError({ action: "revendicaStocul", message: "raspuns de forma neasteptata", details: { produse: decrements.length, raspuns: data }, severity: "critical" });
   }
@@ -746,14 +712,6 @@ export async function placeOrder(data: {
   product_price: number;
   /** Combinatia de varianta aleasa, cand produsul are variante. */
   variant_title?: string;
-  /**
-   * Ce a ales cumparatorul in configurator: VALORI, nu un pret.
-   *
-   * ⚠ Cand exista, `product_price` NU se mai citeste deloc. Pretul unei configuratii nu e
-   * unul dintre preturile legitime din catalog, deci nu se poate verifica prin potrivire: se
-   * calculeaza de la zero, aici, din valorile astea si din definitia publicata acum.
-   */
-  configuratie?: unknown;
   quantity: number;
   shipping_cost: number;
   /** Semnatura cotatiei de transport (vezi `quote-token.ts`). */
@@ -793,10 +751,7 @@ export async function placeOrder(data: {
   customization?: Record<string, { type: string; label: string; value: string | string[] }>;
   /** Items carried over from the storefront cart (priced server-side; variant lines
    *  are re-priced from the product's enabled combination, base otherwise). */
-  additional_items?: {
-    product_id: string; name: string; quantity: number;
-    variant_title?: string; configuratie?: unknown;
-  }[];
+  additional_items?: { product_id: string; name: string; quantity: number; variant_title?: string }[];
   /** Ids of order-bump offers the customer accepted — re-priced server-side (never trusted). */
   accepted_offer_ids?: string[];
   payment_method?: string;
@@ -916,9 +871,7 @@ export async function placeOrder(data: {
   // Reload product + store config and recompute every price server-side.
   const [{ data: product, error: eroareProdus }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
     admin.from("products")
-      // ⚠ `category` se cere pentru configuratoare: unul legat de o categorie se mosteneste
-      // prin NUMELE ei. Fara coloana, produsul ar fi parut ca n-are configurator.
-      .select("id, name, price, is_active, business_id, page_sections, category")
+      .select("id, name, price, is_active, business_id, page_sections")
       .eq("id", data.product_id)
       .eq("business_id", data.business_id)
       .single(),
@@ -999,70 +952,7 @@ export async function placeOrder(data: {
     return { error: linieP.error };
   }
 
-  /*
-   * Piesele consumate de liniile CONFIGURATE, in bucati de produs.
-   *
-   * ⚠ NU E O A DOUA CALE DE SCADERE A STOCULUI, E ACEEASI. Lista de mai jos se adauga la ce se
-   * trimite lui `expandBundleStock` — exact acolo unde intra si componentele unui pachet — si de
-   * acolo incolo totul e drumul care exista deja: `revendica_stoc_complet` verifica si scade
-   * atomic, `stocRezervat` scrie sub cheia `produse`, `elibereaza_stoc_comanda` da inapoi la
-   * anulare. Nicio functie noua in baza, si nicio cheie noua pe comanda — tocmai fiindca cele
-   * TREI functii din baza care REscriu `stoc_rezervat` o rescriu cu exact doua chei, si o a
-   * treia ar fi fost stearsa tacut la prima editare de comanda.
-   */
-  const consumComponente: { product_id: string; quantity: number }[] = [];
-  /*
-   * Aceleasi piese, dar INTREGI: cu numele lor de la publicare.
-   *
-   * ⚠ `decrementeleComponentelor` da doar `{product_id, quantity}`, adica exact ce trebuie
-   * scazut si nimic din ce trebuie SPUS. Numele se pierdea acolo, iar refuzul de stoc ramanea
-   * cu singurul nume pe care il stia baza: al produsului ascuns.
-   */
-  const bucatiConsumate: BucataConsumata[] = [];
-
-  /*
-   * ⚠ CAND PRODUSUL E CONFIGURAT, PRETUL NU SE POTRIVESTE — SE CALCULEAZA.
-   *
-   * `authoritativeSubtotal` accepta pretul cerut de client doar daca se potriveste cu unul
-   * dintre preturile legitime ale produsului (baza, combinatie, pachet). Pretul unei
-   * configuratii nu e niciunul dintre ele, deci calea aceea l-ar fi refuzat pe toate: nicio
-   * comanda configurata n-ar fi putut fi plasata din formularul de produs.
-   *
-   * Aici se face invers si mai strans: `product_price` nu se mai citeste deloc, iar pretul se
-   * socoteste din valori si din definitia publicata ACUM.
-   *
-   * ⚠ Un REFUZ opreste comanda. Cazuta pe pretul de baza, ar fi dat gratis tot ce a
-   * configurat cumparatorul, iar atelierul ar fi primit o comanda fara specificatie.
-   */
-  const verdicteleMele = await repretuiesteLinii(data.business_id, [{
-    productId: data.product_id,
-    category: (product as { category?: string | null }).category ?? null,
-    configuratie: data.configuratie,
-    pretCatalog: linieP.unitPrice,
-  }]);
-  const cfgPrincipal = verdicteleMele[0];
-  if (cfgPrincipal.fel === "refuz") {
-    logError({
-      action: "placeOrder.configuratieRespinsa",
-      message: cfgPrincipal.motive.join(" | ").slice(0, 300),
-      details: { businessId: data.business_id, productId: data.product_id },
-      severity: "warning",
-    });
-    return { error: `${linieP.nume}: ${cfgPrincipal.motive[0]}` };
-  }
-  if (cfgPrincipal.fel === "ok") {
-    consumComponente.push(...decrementeleComponentelor(cfgPrincipal.consum, cantitate));
-    bucatiConsumate.push(...cfgPrincipal.consum);
-  }
-
-  /*
-   * ⚠ Configurata, linia NU trece prin trepte sau pachete: alea sunt preturi scrise pentru
-   * produsul din catalog, iar aplicate peste o configuratie ar fi vandut-o la pretul
-   * pachetului simplu, cu toata configurarea pe gratis. Vezi aceeasi nota la calea cosului.
-   */
-  const mainSubtotal = cfgPrincipal.fel === "ok"
-    ? round2(cfgPrincipal.unitar * cantitate)
-    : authoritativeSubtotal(product as OrderProduct, data.product_price, cantitate, data.variant_title);
+  const mainSubtotal = authoritativeSubtotal(product as OrderProduct, data.product_price, cantitate, data.variant_title);
   if (mainSubtotal === null) {
     logError({ action: "placeOrder.priceRejected", message: "Client price did not match any legitimate configuration", details: { businessId: data.business_id, productId: data.product_id, claimedUnit: data.product_price, quantity: data.quantity, cantitate }, severity: "warning" });
     return { error: "Pretul comenzii nu este valid. Reincarca pagina si incearca din nou." };
@@ -1084,7 +974,7 @@ export async function placeOrder(data: {
   if (data.additional_items?.length) {
     const ids = [...new Set(data.additional_items.map((i) => i.product_id))].filter((id) => id !== data.product_id);
     if (ids.length > 0) {
-      const { data: extraProducts, error: eroareExtra } = await admin.from("products").select("id, name, price, is_active, page_sections, category").in("id", ids).eq("business_id", data.business_id);
+      const { data: extraProducts, error: eroareExtra } = await admin.from("products").select("id, name, price, is_active, page_sections").in("id", ids).eq("business_id", data.business_id);
       // O interogare cazuta arunca TOT cosul purtat, in tacere: clientul ar primi
       // o comanda doar cu produsul din formular, la un total pe care nu l-a vazut.
       if (eroareExtra) {
@@ -1145,51 +1035,8 @@ export async function placeOrder(data: {
       }
       const liniiDinCos = cerute.map((c) => ({ ...c.linie, quantity: (c.ceruta as { cantitate: number }).cantitate }));
       liniiCuVarianta.push(...liniiDinCos);
-
-      /*
-       * ⚠ Si liniile PURTATE DIN COS se repretuiesc, nu doar produsul din formular.
-       *
-       * Un cos deschis odata cu pagina de produs poate contine oricate produse configurate.
-       * Lasate pe pretul de catalog, ar fi plecat in comanda cu specificatia pierduta si cu
-       * configurarea neplatita — exact paguba de care se fereste linia principala de mai sus.
-       */
-      const categoriiExtra = new Map((extraProducts ?? []).map((p) => [p.id, p.category ?? null]));
-      const verdicteCos = await repretuiesteLinii(
-        data.business_id,
-        liniiDinCos.map((i) => {
-          const meta = extraMap.get(i.product_id)!;
-          const r = pretulLiniei({ name: meta.name, price: meta.price, page_sections: meta.pageSections }, i.variant_title);
-          return {
-            productId: i.product_id,
-            category: categoriiExtra.get(i.product_id) ?? null,
-            configuratie: i.configuratie,
-            pretCatalog: r.fel === "ok" ? r.unitPrice : meta.price,
-          };
-        }),
-      );
-      const respinsaCos = verdicteCos.findIndex((v) => v.fel === "refuz");
-      if (respinsaCos >= 0) {
-        const v = verdicteCos[respinsaCos] as Extract<PretConfigurat, { fel: "refuz" }>;
-        const linie = liniiDinCos[respinsaCos];
-        logError({
-          action: "placeOrder.configuratieRespinsaInCos",
-          message: v.motive.join(" | ").slice(0, 300),
-          details: { businessId: data.business_id, productId: linie.product_id },
-          severity: "warning",
-        });
-        return { error: `${extraMap.get(linie.product_id)?.name ?? "Un produs din cos"}: ${v.motive[0]}` };
-      }
-      // ⚠ Si liniile PURTATE DIN COS consuma. Numarate doar pe produsul din formular, o comanda
-      // cu doua usi configurate in cos ar fi scazut balamalele uneia singure.
-      for (let i = 0; i < verdicteCos.length; i++) {
-        const vc = verdicteCos[i];
-        if (vc.fel !== "ok") continue;
-        consumComponente.push(...decrementeleComponentelor(vc.consum, liniiDinCos[i].quantity));
-        bucatiConsumate.push(...vc.consum);
-      }
-
       cartItems = liniiDinCos
-        .map((i, idx) => {
+        .map((i) => {
           const meta = extraMap.get(i.product_id)!;
           // Pretul si numele vin din ACEEASI functie care a dat verdictul mai sus.
           // Aici era portita: o varianta dezactivata intre timp cadea pe pretul de
@@ -1202,27 +1049,12 @@ export async function placeOrder(data: {
           // Treptele se aplica si liniilor purtate din cos in comanda directa,
           // cu acelasi motor. Altfel cosul arata pretul de pachet, iar comanda
           // plecata din formularul de produs il pierde pe drum.
-          const cfg = verdicteCos[idx];
-          // ⚠ Configurata, linia sare peste trepte — aceeasi regula ca pe calea cosului.
-          const linie = cfg.fel === "ok"
-            ? { unitPrice: cfg.unitar }
-            : pretPeTrepte(construiesteTrepte(meta.tiers, unitPrice), i.quantity, unitPrice);
+          const linie = pretPeTrepte(construiesteTrepte(meta.tiers, unitPrice), i.quantity, unitPrice);
           return {
             product_id: i.product_id,
             name: rezolvata.fel === "ok" ? rezolvata.nume : meta.name,
             price: linie.unitPrice,
             quantity: i.quantity,
-            ...(cfg.fel === "ok" && {
-              configuratie: {
-                configuratorId: cfg.configuratorId,
-                versiuneId: cfg.versiuneId,
-                numarVersiune: cfg.numarVersiune,
-                amprenta: cfg.amprenta,
-                grame: cfg.grame,
-                valori: cfg.valori,
-                rezumat: cfg.rezumat,
-              },
-            }),
           };
         });
     }
@@ -1427,22 +1259,6 @@ export async function placeOrder(data: {
   }
 
   /*
-   * ⚠ PIESELE SE CONTOPESC AICI, DUPA DESFACEREA PACHETELOR, NU INAINTE DE EA.
-   *
-   * Trecute prin `expandBundleStock`, ar fi cazut peste garda ei `is_active`: o balama, un tub
-   * de silicon sau o ora de manopera se tin STINSE dinadins — sunt randuri de stoc, nu marfa de
-   * raft. Fiecare comanda cu o usa configurata ar fi fost oprita cu „Un produs din pachet nu mai
-   * este disponibil. Scoate pachetul din cos”, adica un mesaj despre un pachet care nu exista,
-   * pe o comanda perfect buna — si niciun magazin n-ar fi putut vinde nimic configurat.
-   *
-   * ⚠ Si nu se pierde nicio aparare: `revendica_stoc_complet` verifica sub acelasi lacat sub
-   * care scade si refuza cu numele piesei si cu cate au mai ramas. Randurile sunt deja adunate
-   * pe produs, deci aceeasi balama vanduta la bucata SI consumata de configuratie in aceeasi
-   * comanda nu se poate lua de doua ori. Vezi `contopesteConsumul`.
-   */
-  const decremente = contopesteConsumul(stockExp.decrements, consumComponente);
-
-  /*
    * Prins aici, nu lasat sa iasa: o actiune de server care arunca ii da clientului
    * un ecran de eroare opac („An error occurred in the Server Components render"),
    * in loc de un mesaj din care sa inteleaga ca poate reincerca.
@@ -1472,7 +1288,7 @@ export async function placeOrder(data: {
   // la trimitere, iar garda din `reconcile.ts` modeleaza exact acea rotunjire si
   // absoarbe diferenta cu o linie de ajustare.
   const unitPrice = mainSubtotal / cantitate;
-  const allItems: LinieScrisa[] = [
+  const allItems = [
     {
       product_id: data.product_id,
       // Numele din CATALOG, cu marimea coapta de noi. Venea de la client, iar
@@ -1484,28 +1300,6 @@ export async function placeOrder(data: {
       price: unitPrice,
       quantity: cantitate,
       ...(data.customization && { customization: data.customization }),
-      /*
-       * ⚠ Instantaneul configuratiei intra in comanda, ca sa se poata citi si peste un an,
-       * chiar daca intre timp comerciantul a publicat o versiune in care a redenumit optiuni.
-       */
-      ...(cfgPrincipal.fel === "ok" && {
-        configuratie: {
-          configuratorId: cfgPrincipal.configuratorId,
-          versiuneId: cfgPrincipal.versiuneId,
-          numarVersiune: cfgPrincipal.numarVersiune,
-          amprenta: cfgPrincipal.amprenta,
-          /*
-           * ⚠ Greutatea intra si ea in comanda, nu se recalculeaza la emitere.
-           *
-           * Fara ea in `orders.items`, AWB-ul ar fi declarat greutatea produsului gol din catalog:
-           * curierul cantareste la depozit si refactureaza banda adevarata, iar diferenta o
-           * plateste comerciantul, tacut.
-           */
-          grame: cfgPrincipal.grame,
-          valori: cfgPrincipal.valori,
-          rezumat: cfgPrincipal.rezumat,
-        },
-      }),
     },
     ...cartItems,
     ...validatedExtras.map(e => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
@@ -1551,10 +1345,7 @@ export async function placeOrder(data: {
   // de mai sus a citit doar, iar intre citire si scaderea de dupa insert incapeau
   // patru cereri paralele care vindeau toate acelasi ultim produs. Vezi
   // `revendicaStocul`.
-  const stoc = await revendicaStocul(
-    admin, decremente, liniiCuVarianta,
-    numelePieselor(stockExp.decrements, bucatiConsumate),
-  );
+  const stoc = await revendicaStocul(admin, stockExp.decrements, liniiCuVarianta);
   /*
    * `!== "revendicat"`, nu doar `=== "refuzat"`.
    *
@@ -1683,10 +1474,7 @@ export async function placeOrder(data: {
         ...(data.dhl_local_product_code ? { dhl_local_product_code: data.dhl_local_product_code } : {}),
       }),
     },
-    // ⚠ `as never` ca la celelalte coloane jsonb: `LinieScrisa` n-are semnatura de index,
-    // deci nu se potriveste structural cu `Json`. Tipul e scris pentru CE PLEACA MAI DEPARTE
-    // (emailuri, legarea fisierelor), nu pentru coloana — coloana primeste oricum jsonb.
-    items: allItems as never,
+    items: allItems,
     subtotal,
     shipping_cost: shipping,
     discount_code: validDiscountId ? data.discount_code : null,
@@ -1724,7 +1512,7 @@ export async function placeOrder(data: {
     discount_id: (validDiscountId ?? null) as never,
     /* Ce s-a rezervat, ca sa se poata da inapoi intocmai la anulare. `as never`
      * ca la `discount_id`: coloana e noua si tipurile generate n-o stiu inca. */
-    stoc_rezervat: stocRezervat(decremente, liniiCuVarianta) as never,
+    stoc_rezervat: stocRezervat(stockExp.decrements, liniiCuVarianta) as never,
   }).select("id, order_number").single();
 
   if (error) {
@@ -1732,23 +1520,10 @@ export async function placeOrder(data: {
     // inapoi. Fara a doua linie, marfa ramanea scazuta pentru o comanda care nu
     // exista nicaieri — adica exact pe dos fata de cursa pe care o repara.
     await elibereazaCuponul(admin, validDiscountId);
-    if (stoc.fel === "revendicat") await elibereazaStocul(admin, decremente, liniiCuVarianta);
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCuVarianta);
     await logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
-
-  /*
-   * ⚠ FISIERELE INCARCATE PRIMESC ACUM UN MOTIV SA EXISTE.
-   *
-   * Pana aici randul lor e ORFAN: cine le-a incarcat n-are cont, deci nu exista niciun om in
-   * spatele lor, si ce nu ajunge pe o comanda se matura peste o saptamana. `comanda_id` e
-   * capatul care le tine in viata.
-   *
-   * ⚠ Se cheama DUPA insert si nu opreste nimic daca pica — comanda e deja inserata si, pe
-   * calea cu cardul, deja platita. Dar se jurnalizeaza `critical`: o legare picata inseamna ca
-   * peste o saptamana atelierul deschide o comanda PLATITA si gaseste o trimitere catre nimic.
-   */
-  await legaFisiereleDeComanda(admin, data.business_id, order.id, allItems);
 
   /*
    * Acceptarile de oferta intra in contor ABIA ACUM, cand comanda chiar exista.
@@ -1772,11 +1547,11 @@ export async function placeOrder(data: {
   // inainte de insert. Nu mai exista nicio a doua cale.
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
-  dupaRaspuns(() => enqueueGmcSyncMany(data.business_id, [...decremente.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueGmcSyncMany", data.business_id);
-  dupaRaspuns(() => enqueueOlxSyncMany(data.business_id, [...decremente.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueOlxSyncMany", data.business_id);
-  dupaRaspuns(() => enqueueAboutYouStockMany(data.business_id, [...decremente.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueAboutYouStockMany", data.business_id);
-  dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...decremente.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
-  dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...decremente.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
+  dupaRaspuns(() => enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueGmcSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueOlxSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueAboutYouStockMany", data.business_id);
+  dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
+  dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
 
   /*
     Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
@@ -1840,18 +1615,7 @@ export async function placeOrder(data: {
         // Liniile pleaca CU `product_id`: dupa prefixul `extra_` isi recunoaste
         // emailul extraoptiunile, iar fara ele „Subtotal" din emailul
         // comerciantului nu se aduna cu lista de deasupra lui. Vezi `BaniComanda`.
-        /*
-         * ⚠ SI CU `configuratie`. Lipsea, si asta facea MOARTE toate cele trei randuri de
-         * configuratie din emailuri: `randConfiguratie` primeste `unknown`, deci `tsc` n-avea ce
-         * spune, iar functia intorcea sirul gol pentru fiecare linie. Comerciantul primea
-         * „Cana personalizata x1” si atat — iar cu doua cani gravate diferit, doua randuri
-         * identice in ambele emailuri. Marfa pleaca gresit, si emailul e primul loc unde omul
-         * se uita.
-         */
-        items: allItems.map((i) => ({
-          product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price,
-          ...(i.configuratie ? { configuratie: i.configuratie } : {}),
-        })),
+        items: allItems.map(i => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price })),
         shipping_cost: shipping,
         /*
          * Reducerea si codul sunt ALE SERVERULUI: exact ce s-a scris in `orders`
@@ -2743,22 +2507,9 @@ export async function updateOrderDetails(orderId: string, data: {
   const live = new Map<string, { id: string; page_sections: unknown }>();
   if (idsToate.length > 0) {
     const { data: products } = await admin.from("products")
-      // ⚠ `category` se cere pentru configuratoare: unul legat de o categorie se mosteneste
-      // prin NUMELE ei, deci fara coloana produsul ar parea ca n-are.
-      .select("id, name, price, is_active, is_bundle, page_sections, category")
+      .select("id, name, price, is_active, is_bundle, page_sections")
       .in("id", idsToate)
       .eq("business_id", order.business_id);
-    /*
-     * ⚠ Configuratoarele produselor, in masa.
-     *
-     * Se cer pentru ADAUGARE: un produs configurabil adaugat din panou ar intra ca linie
-     * simpla, la pretul de baza, fara nicio specificatie. Costa o citire pe index pentru
-     * magazinele fara configuratoare, adica aproape toate.
-     */
-    const configurabile = await configuratoarePentruProduse(
-      order.business_id,
-      (products ?? []).map((p) => ({ id: p.id as string, category: p.category })),
-    );
     for (const p of products ?? []) {
       // Doar produsele adaugate trebuie sa fie ACTIVE; cele deja vandute nu.
       if (!p.is_active && idsAdaugate.includes(p.id as string)) continue;
@@ -2768,7 +2519,6 @@ export async function updateOrderDetails(orderId: string, data: {
         price: round2(Number(p.price)),
         is_bundle: !!p.is_bundle,
         activ: !!p.is_active,
-        areConfigurator: configurabile.has(p.id as string),
         variante: slabesteVariante(p.page_sections, round2(Number(p.price))),
         trepte: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers ?? null,
       });
@@ -2820,31 +2570,6 @@ export async function updateOrderDetails(orderId: string, data: {
     );
     if (eroareStoc) return { error: eroareStoc };
 
-    /*
-     * ⚠ PIESELE UNUI CONFIGURATOR NU INTRA AICI, SI NU E O SCAPARE.
-     *
-     * Nicio linie ADAUGATA din panou nu poate consuma piese, si o tin doua garzi din
-     * `edit-pricing.ts`, nu buna-credinta:
-     *
-     *   - `planificaAdaugarea` REFUZA un produs cu configurator („se configureaza de catre
-     *     client, deci nu poate fi adaugat din panou”), fiindca panoul n-are unde sa aleaga
-     *     latimea sau materialul;
-     *   - o linie care POARTA o configuratie nu e `eLinieSimpla`, deci `poateCreste` e fals si
-     *     cantitatea ei nu se poate mari — numai scadea.
-     *
-     * Deci `plan.adaugate` nu contine niciodata o linie configurata, si n-are ce piese sa ceara.
-     * Cine scoate vreodata una dintre garzile alea trebuie sa adauge consumul si aici, ca pe
-     * celelalte doua cai — altfel bucatile ar pleca din depozit fara ca vreo comanda s-o arate.
-     *
-     * ⚠ CE RAMANE DESCHIS, si e scris ca sa nu fie luat drept intamplare: la SCOATEREA unei
-     * linii configurate se da inapoi produsul, nu si piesele ei. `plan.scoase` e o lista de
-     * `{produs, varianta, cantitate}` care nu spune CARE linie a fost, deci doua linii ale
-     * aceluiasi produs cu doua configuratii nu se pot deosebi. Pana se poate, purtarea e cea
-     * PRUDENTA: piesele raman rezervate pe comanda si se intorc intregi la anularea ei, prin
-     * `elibereaza_stoc_comanda`, care da inapoi tot `stoc_rezervat` — unde ele CHIAR sunt,
-     * fiindca s-au scris sub cheia `produse`. Se pierde vederea corecta a raftului pana atunci;
-     * nu se vinde nimic ce nu exista.
-     */
     // Stocul de produs se verifica si se scade DOAR pe cantitatea adaugata, si
     // dupa contopire: altfel componentele pachetelor s-ar scadea a doua oara.
     const stockExp = await expandBundleStock(admin, order.business_id, plan.adaugate.map((a) => ({ product_id: a.product_id, quantity: a.quantity })));
@@ -3491,14 +3216,7 @@ export async function sendCustomerSms(orderId: string, message: string) {
 export async function placeCartOrder(data: {
   business_id: string;
   cart_session_id?: string;
-  /**
-   * ⚠ `price` NU se citeste. Fiecare linie se repretuieste din catalog, iar `configuratie`
-   * e o multime de VALORI, nu un pret: serverul o normalizeaza el insusi si socoteste din ea.
-   */
-  items: {
-    product_id: string; name: string; price: number; quantity: number;
-    variant_title?: string; configuratie?: unknown;
-  }[];
+  items: { product_id: string; name: string; price: number; quantity: number; variant_title?: string }[];
   shipping_cost: number;
   /** Semnatura cotatiei de transport (vezi `quote-token.ts`). */
   shipping_token?: string;
@@ -3636,10 +3354,7 @@ export async function placeCartOrder(data: {
   const [{ data: dbProducts, error: eroareProduse }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
     admin.from("products")
       // `name` se cere ca linia sa poarte numele din CATALOG, nu sirul din browser.
-      // ⚠ `category` se cere pentru configuratoare: unul legat de o categorie se mosteneste
-      // prin NUMELE ei, iar fara coloana asta produsul ar fi parut ca n-are configurator si
-      // s-ar fi vandut la pretul de baza cu tot ce a configurat clientul.
-      .select("id, name, price, is_active, page_sections, category")
+      .select("id, name, price, is_active, page_sections")
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
@@ -3736,65 +3451,12 @@ export async function placeCartOrder(data: {
     activeProducts.map((p) => [p.id, (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers]),
   );
 
-  /*
-   * ⚠ REPRETUIREA CONFIGURATIILOR, inaintea treptelor si a ofertelor.
-   *
-   * Serverul primeste VALORILE, nu pretul: le normalizeaza el insusi, verifica ce a ales
-   * clientul fata de definitia publicata ACUM, si calculeaza. Un pret venit de la browser nu
-   * e o informatie, e o cerere — aceeasi regula ca la cupoane, la oferte si la variante.
-   *
-   * ⚠ O linie REFUZATA opreste comanda, nu se vinde la pretul de baza. Trecuta mai departe,
-   * ar fi dat gratis tot ce a configurat cumparatorul, iar comanda ar fi ajuns in atelier fara
-   * specificatie. Un refuz e o comanda pierduta; o vanzare gresita e marfa lucrata degeaba.
-   */
-  const categoriiProduse = new Map(activeProducts.map((p) => [p.id, p.category ?? null]));
-  const verdicteCfg = await repretuiesteLinii(
-    data.business_id,
-    liniiCerute.map((i) => {
-      const r = pretulLiniei(catalogLinii.get(i.product_id)!, i.variant_title);
-      return {
-        productId: i.product_id,
-        category: categoriiProduse.get(i.product_id) ?? null,
-        configuratie: i.configuratie,
-        pretCatalog: r.fel === "ok" ? r.unitPrice : priceMap.get(i.product_id)!,
-      };
-    }),
-  );
-  const respinsaCfg = verdicteCfg.findIndex((v) => v.fel === "refuz");
-  if (respinsaCfg >= 0) {
-    const v = verdicteCfg[respinsaCfg] as Extract<PretConfigurat, { fel: "refuz" }>;
-    const linie = liniiCerute[respinsaCfg];
-    logError({
-      action: "placeCartOrder.configuratieRespinsa",
-      message: v.motive.join(" | ").slice(0, 300),
-      details: { businessId: data.business_id, productId: linie.product_id },
-      severity: "warning",
-    });
-    // ⚠ Cu numele din CATALOG si cu motivul, ca omul sa stie CE si DE CE, nu doar ca nu merge.
-    return { error: `${catalogLinii.get(linie.product_id)?.name ?? "Un produs"}: ${v.motive[0]}` };
-  }
-
-  /*
-   * Piesele consumate de liniile configurate din cos. Vezi nota din `placeOrder`: se adauga la
-   * ce primeste `expandBundleStock`, deci merg pe chiar drumul de stoc al pachetelor.
-   */
-  const consumComponente: { product_id: string; quantity: number }[] = [];
-  /** Aceleasi piese, cu numele lor. Vezi nota din `placeOrder`. */
-  const bucatiConsumate: BucataConsumata[] = [];
-  for (let i = 0; i < verdicteCfg.length; i++) {
-    const vc = verdicteCfg[i];
-    if (vc.fel !== "ok") continue;
-    consumComponente.push(...decrementeleComponentelor(vc.consum, liniiCerute[i].quantity));
-    bucatiConsumate.push(...vc.consum);
-  }
-
-  let validatedItems = liniiCerute.map((i, idx) => {
+  let validatedItems = liniiCerute.map((i) => {
     // Acelasi ajutor care a dat verdictul mai sus da si pretul: verificat si
     // pretuit de doua functii diferite, cele doua ajungeau sa nu mai spuna
     // acelasi lucru — chiar asta era defectul.
     const rezolvata = pretulLiniei(catalogLinii.get(i.product_id)!, i.variant_title);
     const unitPrice = rezolvata.fel === "ok" ? rezolvata.unitPrice : priceMap.get(i.product_id)!;
-    const cfg = verdicteCfg[idx];
     // Treptele de cantitate se aplica si pe calea cosului, cu ACELASI motor pe
     // care il foloseste pagina de produs. Pana acum le onora doar comanda
     // directa: pagina promitea „3 bucati 250 lei", iar clientul care punea 3 in
@@ -3804,19 +3466,7 @@ export async function placeCartOrder(data: {
     // sa dea exact totalul pachetului. Rotunjit la ban, linia ar iesi 249,99 si
     // clientul ar plati alt total decat cel din cos. E acelasi lucru pe care il
     // trimite deja calea comenzii directe.
-    /*
-     * ⚠ O LINIE CONFIGURATA NU TRECE PRIN TREPTELE DE CANTITATE.
-     *
-     * Treptele sunt preturi de PACHET, scrise pentru produsul asa cum e in catalog: „3 bucati
-     * 250 lei". Aplicate peste o configuratie de 300 de lei bucata, trei bucati configurate
-     * s-ar fi vandut cu 250 — adica pretul pachetului simplu, cu toata configurarea pe gratis.
-     *
-     * Sunt doua modele de pret diferite, si nu se amesteca tacut. Comerciantul care vrea
-     * reduceri de volum pe un produs configurabil le scrie in configurator.
-     */
-    const linie = cfg.fel === "ok"
-      ? { unitPrice: cfg.unitar }
-      : pretPeTrepte(construiesteTrepte(trepteMap.get(i.product_id), unitPrice), i.quantity, unitPrice);
+    const linie = pretPeTrepte(construiesteTrepte(trepteMap.get(i.product_id), unitPrice), i.quantity, unitPrice);
     return {
       product_id: i.product_id,
       // Numele din CATALOG, nu cel din browser: pana acum `orders.items[].name`
@@ -3825,24 +3475,6 @@ export async function placeCartOrder(data: {
       name: rezolvata.fel === "ok" ? rezolvata.nume : String(i.name ?? "").slice(0, 200),
       price: linie.unitPrice,
       quantity: i.quantity,
-      /*
-       * ⚠ Instantaneul se scrie IN COMANDA, nu se lasa ca o trimitere catre versiune.
-       *
-       * Atelierul citeste comanda, nu configuratorul. Iar cand comerciantul publica o versiune
-       * noua in care redenumeste o optiune, comanda veche trebuie sa ramana citibila exact cum
-       * a fost cumparata.
-       */
-      ...(cfg.fel === "ok" && {
-        configuratie: {
-          configuratorId: cfg.configuratorId,
-          versiuneId: cfg.versiuneId,
-          numarVersiune: cfg.numarVersiune,
-          amprenta: cfg.amprenta,
-          grame: cfg.grame,
-          valori: cfg.valori,
-          rezumat: cfg.rezumat,
-        },
-      }),
     };
   });
   // Aceeasi re-evaluare ca la comanda directa, fara ancora: „cumparate frecvent
@@ -4000,29 +3632,11 @@ export async function placeCartOrder(data: {
 
   // Bundle-aware stock: expand any bundle into its components + validate availability
   // before creating the order (prevents overselling components).
-  const stockExp = await expandBundleStock(admin, data.business_id, [
-    ...validatedItems.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
-  ]);
+  const stockExp = await expandBundleStock(admin, data.business_id, validatedItems.map(i => ({ product_id: i.product_id, quantity: i.quantity })));
   if ("error" in stockExp) {
     logError({ action: "placeCartOrder.bundleStock", message: stockExp.motiv, details: { businessId: data.business_id, componenta: stockExp.componenta }, severity: "warning" });
     return { error: stockExp.error };
   }
-
-  /*
-   * ⚠ PIESELE SE CONTOPESC AICI, DUPA DESFACEREA PACHETELOR, NU INAINTE DE EA.
-   *
-   * Trecute prin `expandBundleStock`, ar fi cazut peste garda ei `is_active`: o balama, un tub
-   * de silicon sau o ora de manopera se tin STINSE dinadins — sunt randuri de stoc, nu marfa de
-   * raft. Fiecare comanda cu o usa configurata ar fi fost oprita cu „Un produs din pachet nu mai
-   * este disponibil. Scoate pachetul din cos”, adica un mesaj despre un pachet care nu exista,
-   * pe o comanda perfect buna — si niciun magazin n-ar fi putut vinde nimic configurat.
-   *
-   * ⚠ Si nu se pierde nicio aparare: `revendica_stoc_complet` verifica sub acelasi lacat sub
-   * care scade si refuza cu numele piesei si cu cate au mai ramas. Randurile sunt deja adunate
-   * pe produs, deci aceeasi balama vanduta la bucata SI consumata de configuratie in aceeasi
-   * comanda nu se poate lua de doua ori. Vezi `contopesteConsumul`.
-   */
-  const decremente = contopesteConsumul(stockExp.decrements, consumComponente);
 
   /*
    * Prins aici, nu lasat sa iasa: o actiune de server care arunca ii da clientului
@@ -4039,7 +3653,7 @@ export async function placeCartOrder(data: {
     return { error: "Nu am putut genera numarul comenzii. Reincearca peste cateva momente." };
   }
 
-  const allItems: LinieScrisa[] = [
+  const allItems = [
     ...validatedItems,
     ...validatedExtras.map((e) => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),
   ];
@@ -4082,10 +3696,7 @@ export async function placeCartOrder(data: {
 
   // Ca la comanda din formular: stocul se revendica atomic inainte de inserare,
   // fiindca `expandBundleStock` doar citeste. Vezi `revendicaStocul`.
-  const stoc = await revendicaStocul(
-    admin, decremente, liniiCerute,
-    numelePieselor(stockExp.decrements, bucatiConsumate),
-  );
+  const stoc = await revendicaStocul(admin, stockExp.decrements, liniiCerute);
   /*
    * `!== "revendicat"`, nu doar `=== "refuzat"`.
    *
@@ -4214,10 +3825,7 @@ export async function placeCartOrder(data: {
         ...(data.dhl_local_product_code ? { dhl_local_product_code: data.dhl_local_product_code } : {}),
       }),
     },
-    // ⚠ `as never` ca la celelalte coloane jsonb: `LinieScrisa` n-are semnatura de index,
-    // deci nu se potriveste structural cu `Json`. Tipul e scris pentru CE PLEACA MAI DEPARTE
-    // (emailuri, legarea fisierelor), nu pentru coloana — coloana primeste oricum jsonb.
-    items: allItems as never,
+    items: allItems,
     subtotal,
     shipping_cost: shipping,
     discount_code: validDiscountId ? data.discount_code : null,
@@ -4256,30 +3864,17 @@ export async function placeCartOrder(data: {
      * scris. Un comentariu gresit e mai rau decat lipsa lui: opreste pe urmatorul
      * din a se mai uita.
      */
-    stoc_rezervat: stocRezervat(decremente, liniiCerute) as never,
+    stoc_rezervat: stocRezervat(stockExp.decrements, liniiCerute) as never,
   }).select("id, order_number, total").single();
 
   if (error) {
     // Comanda n-a intrat: se dau inapoi si utilizarea cuponului, si stocul
     // rezervat. Vezi `placeOrder`.
     await elibereazaCuponul(admin, validDiscountId);
-    if (stoc.fel === "revendicat") await elibereazaStocul(admin, decremente, liniiCerute);
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCerute);
     await logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
-
-  /*
-   * ⚠ FISIERELE INCARCATE PRIMESC ACUM UN MOTIV SA EXISTE.
-   *
-   * Pana aici randul lor e ORFAN: cine le-a incarcat n-are cont, deci nu exista niciun om in
-   * spatele lor, si ce nu ajunge pe o comanda se matura peste o saptamana. `comanda_id` e
-   * capatul care le tine in viata.
-   *
-   * ⚠ Se cheama DUPA insert si nu opreste nimic daca pica — comanda e deja inserata si, pe
-   * calea cu cardul, deja platita. Dar se jurnalizeaza `critical`: o legare picata inseamna ca
-   * peste o saptamana atelierul deschide o comanda PLATITA si gaseste o trimitere catre nimic.
-   */
-  await legaFisiereleDeComanda(admin, data.business_id, order.id, validatedItems);
 
   // Acelasi motiv ca pe calea directa: contorul se misca abia dupa ce comanda a
   // intrat cu adevarat.
@@ -4294,11 +3889,11 @@ export async function placeCartOrder(data: {
   // Stocul — de produs si de marime — e deja scazut inainte de insert.
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
-  dupaRaspuns(() => enqueueGmcSyncMany(data.business_id, [...decremente.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueGmcSyncMany", data.business_id);
-  dupaRaspuns(() => enqueueOlxSyncMany(data.business_id, [...decremente.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueOlxSyncMany", data.business_id);
-  dupaRaspuns(() => enqueueAboutYouStockMany(data.business_id, [...decremente.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueAboutYouStockMany", data.business_id);
-  dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...decremente.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
-  dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...decremente.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
+  dupaRaspuns(() => enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueGmcSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueOlxSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueAboutYouStockMany", data.business_id);
+  dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
+  dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
   // Acelasi prag moale pe magazin ca la comanda din formular: peste el comanda se
   // salveaza, dar emailurile si SMS-ul nu mai pleaca. Vezi `pesteRafalaMagazinului`.
   const pesteRafala = await pesteRafalaMagazinului(admin, data.business_id, "placeCartOrder");
@@ -4359,18 +3954,7 @@ export async function placeCartOrder(data: {
         // Liniile pleaca CU `product_id`: dupa prefixul `extra_` isi recunoaste
         // emailul extraoptiunile, iar fara ele „Subtotal" din emailul
         // comerciantului nu se aduna cu lista de deasupra lui. Vezi `BaniComanda`.
-        /*
-         * ⚠ SI CU `configuratie`. Lipsea, si asta facea MOARTE toate cele trei randuri de
-         * configuratie din emailuri: `randConfiguratie` primeste `unknown`, deci `tsc` n-avea ce
-         * spune, iar functia intorcea sirul gol pentru fiecare linie. Comerciantul primea
-         * „Cana personalizata x1” si atat — iar cu doua cani gravate diferit, doua randuri
-         * identice in ambele emailuri. Marfa pleaca gresit, si emailul e primul loc unde omul
-         * se uita.
-         */
-        items: allItems.map((i) => ({
-          product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price,
-          ...(i.configuratie ? { configuratie: i.configuratie } : {}),
-        })),
+        items: allItems.map(i => ({ product_id: i.product_id, name: i.name, quantity: i.quantity, price: i.price })),
         shipping_cost: shipping,
         /*
          * Reducerea si codul sunt ALE SERVERULUI: exact ce s-a scris in `orders`

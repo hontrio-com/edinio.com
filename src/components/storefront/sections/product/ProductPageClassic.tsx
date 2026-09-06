@@ -478,13 +478,31 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
    * In miniatura din catalogul de design-uri (`demo`) butonul ramane vizibil: acolo se
    * alege un ASPECT, iar continutul e demonstrativ.
    */
+  /*
+   * ⚠ BUTONUL DE COS E INAPOI SI PE PRODUSELE PERSONALIZABILE.
+   *
+   * Era ascuns fiindca `CartItem` n-avea unde sa poarte valorile: linia ar fi ajuns in comanda
+   * fara gravura si fara dimensiuni, iar pretul s-ar fi luat din CATALOG — 89 de lei in loc de 910.
+   *
+   * Acum linia le poarta, `lineKey` le numara in identitatea ei („Robert" si „Maria" sunt doua
+   * linii), iar `placeCartOrder` repretuieste fiecare linie din definitia serverului.
+   *
+   * ⚠ CE RAMANE ASCUNS: butonul de pe CARD si din blocul paginilor proprii. Acolo nu exista
+   * niciun formular in care sa se completeze ceva, deci ele duc mai departe la pagina — vezi
+   * `niciun-drum-nu-ocoleste.test.ts`.
+   */
   const cerePersonalizarea = cerePersonalizare(product.page_sections);
-  const arataButonCos =
-    setari.showAddToCart !== false && (demo || (!cerePersonalizarea && chrome?.cartMode !== "hidden"));
+  const arataButonCos = setari.showAddToCart !== false && (demo || chrome?.cartMode !== "hidden");
   const [adaugatInCos, setAdaugatInCos] = useState(false);
 
   function adaugaInCos() {
     if (demo || !cos || isOutOfStock || needsVariant) return;
+    /*
+     * ⚠ ACEEASI POARTA CA LA „COMANDA ACUM": un camp obligatoriu necompletat opreste adaugarea,
+     * si constatarile se aprind langa campuri. Fara ea, linia ar ajunge in cos incompleta, iar
+     * clientul ar afla abia la checkout — dupa ce si-a scris toata adresa.
+     */
+    if (!pers.verifica()) return;
     cos.addItem({
       productId: product.id,
       slug: product.slug ?? undefined,
@@ -496,6 +514,11 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       imageUrl: selectedCombo?.image || slides[0] || null,
       variantTitle: selectedComboTitle ?? undefined,
       variantSku: selectedCombo?.sku || undefined,
+      /*
+       * ⚠ VALORILE, nu pretul. `price` de mai sus ramane cel de CATALOG, iar suplimentul il
+       * socoteste serverul din definitia lui — la fel ca pe calea comenzii directe.
+       */
+      ...(cerePersonalizarea ? { customization: pers.valori } : {}),
     });
     trackAddToCart({ productId: product.id, name: product.name, price: displayPrice });
     setAdaugatInCos(true);

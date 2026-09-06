@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { normalizeazaCos } from "./normalize";
+import { normalizeazaCos, lineKey } from "./normalize";
 
 /**
  * Cosul se citea din localStorage cu `JSON.parse` intors direct in stare. Adica
@@ -75,4 +75,87 @@ test("campurile optionale supravietuiesc, cele de tip gresit nu", () => {
 
 test("pretul se pastreaza cu zecimalele lui: liniile de pachet sunt nerotunjite", () => {
   assert.equal(normalizeazaCos([linie({ price: 250 / 3 })])[0].price, 250 / 3);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ PERSONALIZAREA INTRA IN IDENTITATEA LINIEI
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ „Robert” si „Maria” sunt DOUA linii, chiar la acelasi pret", () => {
+  /*
+   * ⚠ CE COSTA CAND NU SUNT: a doua adaugare doar crestea cantitatea primeia, iar clientul
+   * primea doua cani gravate cu acelasi nume. Si n-avea cum sa afle — cosul ii arata o singura
+   * linie, cu cantitatea 2. Personalizarea nu e un detaliu al liniei; ea E linia.
+   */
+  const baza = { productId: "p1", name: "Cana", price: 41, imageUrl: null };
+  const robert = { ...baza, customization: { nume: "Robert" } };
+  const maria = { ...baza, customization: { nume: "Maria" } };
+
+  assert.notEqual(lineKey(robert), lineKey(maria));
+  assert.equal(lineKey(robert), lineKey({ ...baza, customization: { nume: "Robert" } }));
+});
+
+test("⚠ ordinea in care completeaza clientul campurile NU face doua linii", () => {
+  /*
+   * `JSON.stringify` pastreaza ordinea in care au fost puse cheile, iar ea difera intre doi
+   * clienti care completeaza aceleasi campuri in alta ordine. Fara sortare, aceeasi personalizare
+   * ar fi dat doua chei — deci doua linii identice in cos, una langa alta.
+   */
+  const a = { productId: "p1", name: "F", price: 89, imageUrl: null,
+    customization: { dim: { latime: 350, inaltime: 250 }, mat: "prm" } };
+  const b = { productId: "p1", name: "F", price: 89, imageUrl: null,
+    customization: { mat: "prm", dim: { inaltime: 250, latime: 350 } } };
+  assert.equal(lineKey(a), lineKey(b));
+});
+
+test("⚠ produsele FARA personalizare pastreaza cheia de dinainte, caracter cu caracter", () => {
+  /*
+   * ⚠ PERECHEA CARE APARA TOATE MAGAZINELE. Cosurile deja salvate in browserele oamenilor sunt
+   * cheiate cu forma veche; o cheie schimbata le-ar fi pliat sau despartit gresit la prima
+   * incarcare a paginii.
+   */
+  assert.equal(lineKey({ productId: "p1" }), "p1");
+  assert.equal(lineKey({ productId: "p1", variantTitle: "S / Rosu" }), "p1::S / Rosu");
+  /* Si un obiect GOL nu schimba nimic — o personalizare necompletata nu e o alta linie. */
+  assert.equal(lineKey({ productId: "p1", customization: {} }), "p1");
+});
+
+test("⚠ personalizarea din localStorage trece prin aceleasi reguli ca restul", () => {
+  /*
+   * `localStorage` e scris de client. Ce n-are forma buna se SCOATE, nu se duce mai departe pe
+   * jumatate: un tablou sau un sir pus acolo ar fi ajuns in `lineKey` si ar fi rupt identitatea.
+   */
+  const linie = (c: unknown) => normalizeazaCos([
+    { productId: "p1", name: "C", price: 10, quantity: 1, customization: c },
+  ])[0];
+
+  assert.deepEqual(linie({ nume: "Robert" }).customization, { nume: "Robert" });
+  assert.equal(linie("un sir").customization, undefined);
+  assert.equal(linie(["un", "tablou"]).customization, undefined);
+  assert.equal(linie(null).customization, undefined);
+
+  /* ⚠ Si marimea se margineste: o personalizare uriasa ar fi umflat fiecare cheie de linie. */
+  const uriasa: Record<string, string> = {};
+  for (let i = 0; i < 500; i++) uriasa[`c${i}`] = "x".repeat(50);
+  assert.equal(linie(uriasa).customization, undefined);
+});
+
+test("⚠ doua personalizari diferite NU se pliaza la normalizare", () => {
+  /*
+   * `normalizeazaCos` plieaza liniile cu aceeasi cheie, adunand cantitatile — corect pentru
+   * variante scrise strambe. Cu personalizarea in cheie, doua gravuri diferite raman doua linii.
+   */
+  const cos = normalizeazaCos([
+    { productId: "p1", name: "C", price: 41, quantity: 1, customization: { nume: "Robert" } },
+    { productId: "p1", name: "C", price: 41, quantity: 1, customization: { nume: "Maria" } },
+  ]);
+  assert.equal(cos.length, 2);
+
+  /* Perechea: aceeasi gravura CHIAR se pliaza, si cantitatile se aduna. */
+  const acelasi = normalizeazaCos([
+    { productId: "p1", name: "C", price: 41, quantity: 1, customization: { nume: "Robert" } },
+    { productId: "p1", name: "C", price: 41, quantity: 2, customization: { nume: "Robert" } },
+  ]);
+  assert.equal(acelasi.length, 1);
+  assert.equal(acelasi[0].quantity, 3);
 });

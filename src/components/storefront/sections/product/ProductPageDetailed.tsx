@@ -494,12 +494,16 @@ export function ProductPageDetailed({
   // sertar, fara pagina. Un buton „Adauga in cos" ar confirma o actiune care nu
   // duce nicaieri. In miniatura din catalog nu exista chrome, dar butonul
   // trebuie sa se vada — el e jumatate din designul ales.
-  // Aceeasi regula ca in modelul clasic, si din acelasi motiv: cosul n-are unde sa duca
-  // valorile personalizarii, deci butonul ar promite o comanda din care lipsesc. Vezi
-  // `cerePersonalizare`.
+  /*
+   * ⚠ BUTONUL DE COS E INAPOI SI PE PRODUSELE PERSONALIZABILE — vezi modelul clasic pentru
+   * povestea intreaga. Pe scurt: linia de cos poarta acum valorile, `lineKey` le numara in
+   * identitatea ei, si `placeCartOrder` repretuieste din definitia serverului.
+   *
+   * ⚠ Butonul de pe CARD si din blocul paginilor proprii ramane ascuns: acolo nu exista niciun
+   * formular in care sa se completeze ceva.
+   */
   const cerePersonalizarea = cerePersonalizare(product.page_sections);
-  const arataButonCos =
-    setari.showAddToCart !== false && (demo || (!cerePersonalizarea && chrome?.cartMode !== "hidden"));
+  const arataButonCos = setari.showAddToCart !== false && (demo || chrome?.cartMode !== "hidden");
   const miniaturiInStanga = setari.galleryThumbs !== "bottom";
   const arataDetalii = setari.showDetails !== false;
   const arataRezumatSpec = setari.showSpecsSummary !== false;
@@ -523,6 +527,8 @@ export function ProductPageDetailed({
 
   function adaugaInCos() {
     if (demo || !cos || isOutOfStock || needsVariant) return;
+    /* ⚠ Aceeasi poarta ca la „Comanda acum": un camp obligatoriu necompletat opreste adaugarea. */
+    if (!pers.verifica()) return;
     const imagine = selectedCombo?.image || slides[0] || null;
     cos.addItem({
       productId: product.id,
@@ -535,6 +541,8 @@ export function ProductPageDetailed({
       imageUrl: imagine,
       variantTitle: selectedComboTitle ?? undefined,
       variantSku: selectedCombo?.sku || undefined,
+      /* ⚠ VALORILE, nu pretul: suplimentul il socoteste serverul din definitia lui. */
+      ...(cerePersonalizarea ? { customization: pers.valori } : {}),
     }, cantitate);
     trackAddToCart({ productId: product.id, name: product.name, price: displayPrice, cantitate });
     setAdaugat(true);

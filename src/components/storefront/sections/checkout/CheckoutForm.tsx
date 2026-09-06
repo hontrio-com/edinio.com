@@ -277,7 +277,12 @@ export function CheckoutForm({
               // trimitea deja; pagina de checkout nu, deci acelasi cos dadea
               // doua preturi de transport, dupa drumul ales de client.
               cart={[
-                ...items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+                /*
+                 * ⚠ Linia isi duce si personalizarea: de ea atarna VALOAREA MARFII, care pleaca la
+                 * curier ca valoare declarata si hotaraste pragul de livrare gratuita. Un fototapet
+                 * de 910 lei asigurat pe 89 costa diferenta chiar comerciantul.
+                 */
+                ...items.map((i) => ({ productId: i.productId, quantity: i.quantity, personalizare: i.customization })),
                 ...acceptedBumpOffers.map((o) => ({ productId: o.products[0]!.id, quantity: 1 })),
               ]}
               subtotal={Math.max(0, goodsTotal - discountAmount)}

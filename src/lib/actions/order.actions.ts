@@ -16,7 +16,7 @@ import type { Database } from "@/types/database.types";
 import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer, sendCustomerMessage } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { logError } from "@/lib/error-logger";
-import { verificaPersonalizarea } from "@/lib/customization/comanda";
+import { verificaPersonalizarea, type PersonalizareComanda } from "@/lib/customization/comanda";
 import { cerePersonalizarea } from "@/lib/customization/definitie";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
@@ -3359,7 +3359,14 @@ export async function sendCustomerSms(orderId: string, message: string) {
 export async function placeCartOrder(data: {
   business_id: string;
   cart_session_id?: string;
-  items: { product_id: string; name: string; price: number; quantity: number; variant_title?: string }[];
+  items: {
+    product_id: string; name: string; price: number; quantity: number; variant_title?: string;
+    /**
+     * ⚠ VALORILE BRUTE, nu un pret. Ca peste tot, clientul spune ce a ales si serverul
+     * socoteste cat costa, din definitia LUI. Vezi `verificaPersonalizarea`.
+     */
+    customization?: Record<string, unknown>;
+  }[];
   shipping_cost: number;
   /** Semnatura cotatiei de transport (vezi `quote-token.ts`). */
   shipping_token?: string;
@@ -3548,13 +3555,29 @@ export async function placeCartOrder(data: {
     return { error: eroareVar };
   }
   /*
-   * ⚠ Vezi `linieCarePerePersonalizare`: cosul nu poate purta personalizarea, deci o linie care
-   * o cere n-are cum sa fie pretuita corect aici. Se refuza inainte de orice scriere.
+   * ═══ ⚠ PERSONALIZAREA, VERIFICATA SI REPRETUITA PE FIECARE LINIE ═══
+   *
+   * Pana acum calea asta REFUZA orice linie care cerea personalizare — o poarta de bani pusa
+   * fiindca `CartItem` n-avea unde s-o poarte, deci linia s-ar fi pretuit din CATALOG: 89 de lei
+   * in loc de 910. Acum o poarta, deci se poate si pretui.
+   *
+   * ⚠ SE VERIFICA PE INDEX, nu pe produs. Doua linii ale ACELUIASI produs pot avea
+   * personalizari diferite — o cana „Robert" si una „Maria" — iar o harta cheiata pe `product_id`
+   * ar fi pretuit-o pe a doua cu valorile primeia.
+   *
+   * ⚠ DEFINITIA E A SERVERULUI. Clientul trimite doar ce a ales; `verificaPersonalizarea`
+   * citeste `page_sections` din baza, refuza campurile obligatorii lipsa si optiunile inventate,
+   * si intoarce suplimentul socotit de noi. Un pret trimis de browser nu se citeste nicaieri.
    */
-  const eroarePers = linieCarePerePersonalizare(activeProducts, data.items);
-  if (eroarePers) {
-    logError({ action: "placeCartOrder.customizationRequired", message: eroarePers, details: { businessId: data.business_id, productIds }, severity: "warning" });
-    return { error: eroarePers };
+  const personalizariLinii: (PersonalizareComanda | null)[] = [];
+  for (const linie of data.items) {
+    const produs = activeProducts.find((p) => p.id === linie.product_id);
+    const pers = verificaPersonalizarea(produs?.page_sections, linie.customization, data.business_id);
+    if (pers.fel === "eroare") {
+      logError({ action: "placeCartOrder.customizationRejected", message: pers.mesaj, details: { businessId: data.business_id, productId: linie.product_id }, severity: "warning" });
+      return { error: pers.mesaj };
+    }
+    personalizariLinii.push(pers.fel === "ok" ? pers.date : null);
   }
   /*
    * Stocul DECLARAT pe combinatie.
@@ -3603,7 +3626,7 @@ export async function placeCartOrder(data: {
     activeProducts.map((p) => [p.id, (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers]),
   );
 
-  let validatedItems = liniiCerute.map((i) => {
+  let validatedItems = liniiCerute.map((i, idx) => {
     // Acelasi ajutor care a dat verdictul mai sus da si pretul: verificat si
     // pretuit de doua functii diferite, cele doua ajungeau sa nu mai spuna
     // acelasi lucru — chiar asta era defectul.
@@ -3619,14 +3642,29 @@ export async function placeCartOrder(data: {
     // clientul ar plati alt total decat cel din cos. E acelasi lucru pe care il
     // trimite deja calea comenzii directe.
     const linie = pretPeTrepte(construiesteTrepte(trepteMap.get(i.product_id), unitPrice), i.quantity, unitPrice);
+    /*
+     * ⚠ ACEEASI FORMULA CA PE COMANDA DIRECTA: `(bazaInclusa ? baza : 0) + supliment`.
+     *
+     * `bazaInclusa` e un STEAG, nu o scadere — la un fototapet vandut la metru patrat pretul de
+     * catalog nu se incaseaza deloc. Scazut in loc sa fie stins, un catalog mai mare decat
+     * suprafata ar fi dus linia sub zero.
+     *
+     * ⚠ Treapta de cantitate se aplica pe BAZA, iar suplimentul e pe bucata — la fel ca acolo.
+     */
+    const pers = personalizariLinii[idx];
+    const pretCuPersonalizare = pers
+      ? round2(Math.max(0, (pers.bazaInclusa ? linie.unitPrice : 0) + pers.supliment))
+      : linie.unitPrice;
     return {
       product_id: i.product_id,
       // Numele din CATALOG, nu cel din browser: pana acum `orders.items[].name`
       // era un sir liber de la client, purtat mai departe pe factura si in
       // emailuri. Calea comenzii directe folosea de mult numele autoritar.
       name: rezolvata.fel === "ok" ? rezolvata.nume : String(i.name ?? "").slice(0, 200),
-      price: linie.unitPrice,
+      price: pretCuPersonalizare,
       quantity: i.quantity,
+      /* ⚠ INSTANTANEUL SERVERULUI, nu blobul clientului — etichetele sunt ale noastre. */
+      ...(pers ? { customization: pers.instantaneu, personalizare: pers.detaliu } : {}),
     };
   });
   // Aceeasi re-evaluare ca la comanda directa, fara ancora: „cumparate frecvent

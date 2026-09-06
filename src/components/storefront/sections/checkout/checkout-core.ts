@@ -441,7 +441,16 @@ export function useCheckoutOrder({
     }
     startTransition(async () => {
       const allItems = [
-        ...items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity, variant_title: i.variantTitle })),
+        /*
+         * ⚠ PERSONALIZAREA PLEACA CU LINIA, si numai VALORILE — `price` ramane cel de CATALOG.
+         * Serverul repretuieste fiecare linie din definitia lui (`placeCartOrder`); un pret
+         * trimis de aici n-ar fi citit nicaieri.
+         */
+        ...items.map(i => ({ product_id: i.productId, name: i.name, price: i.price, quantity: i.quantity, variant_title: i.variantTitle, customization: i.customization })),
+        /*
+         * ⚠ Bump-urile NU pot purta personalizare, si de-aia serverul le si refuza: ele se
+         * accepta cu o bifa, fara niciun formular in care sa se completeze ceva.
+         */
         ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, price: o.pricing!.price, quantity: 1 })),
       ];
       const payload = {

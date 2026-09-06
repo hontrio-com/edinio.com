@@ -1,4 +1,5 @@
 "use client";
+import { rezumatPersonalizare } from "@/lib/storefront/cart/normalize";
 
 import { useEffect, useRef } from "react";
 import Image from "next/image";
@@ -217,6 +218,12 @@ export function CartDrawerClassic({
                       <p className="text-sm font-medium text-foreground leading-snug truncate">{item.name}</p>
                     )}
                     {item.variantTitle && <p className="text-xs text-muted-foreground leading-snug truncate">{item.variantTitle}</p>}
+                    {/* ⚠ Vezi `rezumatPersonalizare`: doua linii personalizate diferit trebuie sa ARATE diferit. */}
+                    {rezumatPersonalizare(item.customization) && (
+                      <p className="text-xs text-muted-foreground leading-snug truncate">
+                        {rezumatPersonalizare(item.customization)}
+                      </p>
+                    )}
                     {/* Peste o bucata, un singur numar scris in accent se
                         citeste ca total de linie si face subtotalul de jos sa
                         para gresit — paginile de cos arata acolo chiar totalul

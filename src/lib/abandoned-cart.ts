@@ -123,9 +123,18 @@ export function liniiRecuperabile(
   for (const it of salvate ?? []) {
     const p = it && catalog.get(it.product_id);
     if (!p || !p.is_active) continue;
-    // Si personalizarea, din acelasi motiv ca variantele: `restoreCart` scrie cosul
-    // INTREG, iar o linie pe care clientul n-o poate completa ar ramane acolo
-    // necomandabila si nestearsa. Vezi `cerePersonalizare`.
+    /*
+     * ⚠ SI PERSONALIZAREA, DIN ACELASI MOTIV CA VARIANTELE — dar motivul s-a schimbat.
+     *
+     * Cosul poarta acum personalizarea, iar `placeCartOrder` o repretuieste. Ce NU o poarta e
+     * INSTANTANEUL de aici: `AbandonedCartItem` are cinci campuri, si nici `variantTitle` nu e
+     * printre ele. Deci o linie restaurata din el ar reveni in cos FARA gravura si fara dimensiuni
+     * — necomandabila, exact ca una cu varianta pierduta.
+     *
+     * ⚠ Se sare, si asa refuzul de mai sus (email si SMS) ramane adevarat: linkul de recuperare
+     * n-ar duce la un cos pe care omul sa-l poata cumpara. Purtarea LOR e o lucrare simetrica cu
+     * cea a variantelor, si una fara alta ar fi mai rau decat niciuna.
+     */
     if (hasVariants(p.page_sections) || cerePersonalizare(p.page_sections)) continue;
     out.push({
       product_id: p.id,

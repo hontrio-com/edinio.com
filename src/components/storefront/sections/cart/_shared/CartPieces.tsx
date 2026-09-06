@@ -1,4 +1,5 @@
 "use client";
+import { rezumatPersonalizare } from "@/lib/storefront/cart/normalize";
 
 import { useRef } from "react";
 import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
@@ -147,6 +148,16 @@ export function CartLine({
         )}
         {item.variantTitle && (
           <p className="text-xs text-muted-foreground mt-0.5">{item.variantTitle}</p>
+        )}
+        {/*
+          ⚠ Fara randul asta, doua linii personalizate diferit arata IDENTIC: clientul crede ca
+          a apasat de doua ori, sau sterge randul gresit. Iar la un produs vandut la metru patrat
+          numarul de pe linie e mai mare decat pretul de catalog, si nimic nu explica de ce.
+        */}
+        {rezumatPersonalizare(item.customization) && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {rezumatPersonalizare(item.customization)}
+          </p>
         )}
         <p className="text-xs text-muted-foreground mt-1">{formatPrice(pretBucata)} bucata</p>
 

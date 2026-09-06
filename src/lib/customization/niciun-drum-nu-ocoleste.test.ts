@@ -110,11 +110,32 @@ test("⚠ drumurile care erau DEJA aparate au ramas aparate", () => {
     /if \(hasVariants\(p\.page_sections\) \|\| cerePersonalizare\(p\.page_sections\)\) continue;/,
     "restaurarea cosului abandonat nu mai sare produsele personalizabile",
   );
+  /*
+   * ⚠ PAGINA DE PRODUS S-A MUTAT DE PARTEA CEALALTA, si asta e o hotarare, nu o scapare.
+   *
+   * Proba cerea aici ca butonul de cos sa fie ASCUNS pe produsele personalizabile, in amandoua
+   * modelele. Era corect cat timp `CartItem` n-avea unde sa poarte valorile: linia ar fi ajuns in
+   * comanda fara gravura, la pretul de catalog.
+   *
+   * Acum linia le poarta, iar pagina e SINGURUL loc care are formularul — deci exact acolo butonul
+   * trebuie sa existe. Ce ramane aparat sunt drumurile FARA formular: cardul din grila si blocul
+   * din paginile proprii, probate separat mai sus.
+   */
   for (const model of ["ProductPageClassic", "ProductPageDetailed"]) {
+    const s = sursa(`src/components/storefront/sections/product/${model}.tsx`);
+    assert.equal(
+      /!cerePersonalizarea? &&/.test(s), false,
+      `${model} ascunde iar butonul de cos, desi pagina e singurul loc cu formular`,
+    );
+    /* ⚠ Dar NU se adauga fara verificare: un camp obligatoriu necompletat opreste adaugarea. */
     assert.match(
-      sursa(`src/components/storefront/sections/product/${model}.tsx`),
-      /!cerePersonalizarea? &&/,
-      `${model} arata iar butonul de cos pe produsele personalizabile`,
+      s, /if \(!pers\.verifica\(\)\) return;\n\s*(const imagine = [^\n]*\n\s*)?cos\.addItem\(/,
+      `${model} adauga in cos fara sa verifice personalizarea`,
+    );
+    /* Si duce VALORILE, nu un pret. */
+    assert.match(
+      s, /\.\.\.\(cerePersonalizarea \? \{ customization: pers\.valori \} : \{\}\)/,
+      `${model} nu mai duce valorile personalizarii in cos`,
     );
   }
 });
@@ -151,31 +172,62 @@ test("⚠ importul CSV nu mai STERGE personalizarea la reimport", () => {
   assert.equal(chemari, 2, `harta ajunge la ${chemari} chemari din 2`);
 });
 
-test("⚠ SERVERUL refuza liniile personalizabile pe caile care n-au unde sa le tina", () => {
+test("⚠ COSUL o pretuieste, iar liniile PURTATE tot o refuza", () => {
   /*
-   * ⚠ INTERFATA CARE ASCUNDE UN BUTON NU E O POARTA DE SECURITATE, si probele de mai sus apara
-   * exact interfata: cardul duce la pagina, blocul din paginile proprii la fel. Toate trei sunt
-   * reguli ale BROWSERULUI.
+   * ⚠ DOUA CAI, DOUA RASPUNSURI DIFERITE, si amandoua sunt hotarari, nu scapari.
    *
-   * `placeCartOrder` si `additional_items` sunt exporturi dintr-un modul „use server", adica
-   * capete publice. O cerere scrisa de mana cu id-ul unui fototapet trecea de tot restul
-   * verificarilor — produs activ, varianta, stoc, trepte — si se pretuia din CATALOG: 89 de lei in
-   * loc de 910. Nu date lipsa: bani pierduti de comerciant la fiecare comanda asa.
+   * COSUL o poarta acum: `CartItem` are camp, `lineKey` il numara in identitatea liniei, iar
+   * `placeCartOrder` verifica si REPRETUIESTE fiecare linie cu `verificaPersonalizarea`, din
+   * definitia SERVERULUI. Pana ieri o refuza — o poarta de bani pusa fiindca linia n-avea unde sa
+   * tina valorile, deci s-ar fi pretuit din CATALOG: 89 de lei in loc de 910.
    *
-   * ⚠ Se REFUZA, nu se pretuieste. Sa socotim suplimentul aici ar fi cerut valorile, iar ele nu
-   * exista pe drumul asta — nici cosul, nici liniile purtate nu le trimit.
+   * LINIILE PURTATE din formularul de comanda (`additional_items`) o refuza mai departe, si nu
+   * din lene: ele vin din bump-uri si din „cumparate impreuna", unde nu exista niciun formular in
+   * care clientul sa completeze ceva. Sa le pretuim ar fi cerut valori care nu se trimit de acolo.
+   *
+   * ⚠ Amandoua sunt exporturi dintr-un modul „use server", adica CAPETE PUBLICE. Interfata care
+   * ascunde un buton nu e o poarta de securitate.
    */
   const s = sursa("src/lib/actions/order.actions.ts");
-  assert.match(s, /function linieCarePerePersonalizare\(/, "ajutorul nu mai exista");
 
-  /* Calea COSULUI. */
+  /* COSUL: verifica pe INDEX, fiindca doua linii ale aceluiasi produs pot fi personalizate altfel. */
   assert.match(
-    s, /const eroarePers = linieCarePerePersonalizare\(activeProducts, data\.items\);/,
-    "`placeCartOrder` nu mai verifica personalizarea",
+    s, /const personalizariLinii: \(PersonalizareComanda \| null\)\[\] = \[\];/,
+    "`placeCartOrder` nu mai tine personalizarea pe linie",
   );
-  assert.match(s, /placeCartOrder\.customizationRequired/, "refuzul de pe cos nu se logheaza");
+  assert.match(
+    s, /verificaPersonalizarea\(produs\?\.page_sections, linie\.customization, data\.business_id\)/,
+    "`placeCartOrder` nu mai verifica personalizarea din definitia serverului",
+  );
+  assert.match(s, /placeCartOrder\.customizationRejected/, "refuzul de pe cos nu se logheaza");
+  /* Si suplimentul intra CHIAR in pretul liniei, cu formula de pe comanda directa. */
+  assert.match(
+    s, /\(pers\.bazaInclusa \? linie\.unitPrice : 0\) \+ pers\.supliment/,
+    "cosul socoteste altfel decat comanda directa",
+  );
+  /*
+   * ⚠ SI SCRIE INSTANTANEUL SERVERULUI, nu blobul clientului — cu perechea negativa, fiindca
+   * un mutant a aratat ca fara ea proba trecea.
+   *
+   * Etichetele din `orders.items[].customization` ajung pe hartia dupa care se produce marfa si
+   * in emailul catre atelier. Scrise de client, ele ar fi fost text liber trimis prin formularul
+   * PUBLIC — chiar defectul inchis pe calea comenzii directe.
+   */
+  assert.match(s, /customization: pers\.instantaneu, personalizare: pers\.detaliu/);
+  /*
+   * ⚠ SE CAUTA IN LINIA DE COS, nu in tot fisierul: `emailPayload` chiar poarta
+   * `customization: i.customization`, si acolo e corect — acela e deja INSTANTANEUL, citit din
+   * randul construit mai sus. O aserta pe tot fisierul ar fi rosie pe un cod bun.
+   */
+  const linia = s.slice(s.indexOf("let validatedItems = liniiCerute.map("));
+  const capat = linia.indexOf("\n  });");
+  assert.equal(
+    /customization: i\.customization/.test(capat === -1 ? linia : linia.slice(0, capat)), false,
+    "cosul scrie iar in comanda blobul trimis de client",
+  );
 
-  /* Liniile PURTATE din formularul de comanda. */
+  /* LINIILE PURTATE: refuzul ramane. */
+  assert.match(s, /function linieCarePerePersonalizare\(/, "ajutorul nu mai exista");
   assert.match(
     s, /linieCarePerePersonalizare\(extraProducts \?\? \[\], data\.additional_items\);/,
     "`additional_items` nu mai verifica personalizarea",

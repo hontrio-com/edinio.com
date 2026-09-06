@@ -236,7 +236,12 @@ function sursaComenzii(): string {
 
 test("⚠ `placeOrder` CHEAMA poarta, si se opreste la refuz", () => {
   const s = sursaComenzii();
-  assert.match(s, /import \{ verificaPersonalizarea \} from "@\/lib\/customization\/comanda";/);
+  /*
+   * ⚠ Se cere NUMELE, nu forma intreaga a importului. Prima forma ingheta linia caracter cu
+   * caracter si a picat cand poarta cosului a avut nevoie si de TIPUL `PersonalizareComanda` —
+   * o schimbare care nu atinge cu nimic ce apara proba asta.
+   */
+  assert.match(s, /import \{[^}]*verificaPersonalizarea[^}]*\} from "@\/lib\/customization\/comanda";/);
   assert.match(s, /const pers = personalizareaLiniei\(product\.page_sections, data\.customization, data\.business_id\);/);
   assert.match(s, /if \("eroare" in pers\) \{[\s\S]{0,400}?return \{ error: pers\.eroare \};/);
   assert.match(s, /action: "placeOrder\.customizationRejected"/);

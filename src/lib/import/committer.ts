@@ -23,6 +23,11 @@ import { rehostProductImages, rehostImageUrl, needsRehost, isR2Url, type CacheRe
 import { parseShippingClasses } from "@/lib/shipping/rules";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 
+/** Un obiect simplu — nu null, nu tablou. */
+function esteObiectSimplu(x: unknown): x is Record<string, unknown> {
+  return !!x && typeof x === "object" && !Array.isArray(x);
+}
+
 type Admin = ReturnType<typeof createAdminClient>;
 
 /*
@@ -391,7 +396,7 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
    * un `maybeSingle()` pe produs ar fi insemnat patru mii de dus-intorsuri — chiar defectul pe
    * care il repara comentariul de deasupra.
    */
-  const personalizareaVeche = new Map<string, unknown>();
+  const personalizareaVeche = new Map<string, Record<string, unknown>>();
   if (options.overwrite_existing) {
     const externals = [...new Set(
       pending.map((r) => (r.parsed as unknown as StagedProduct | null)?.external_id)
@@ -408,8 +413,23 @@ async function commitChunk(admin: Admin, job: JobRow): Promise<{ deltas: CommitD
       if (error) throw new Error(`cautarea produselor existente a esuat: ${error.message}`);
       for (const e of existente ?? []) {
         if (e.external_id) idDupaExternal.set(e.external_id as string, e.id as string);
-        const c = (e.page_sections as { customization?: unknown } | null)?.customization;
-        if (c) personalizareaVeche.set(e.id as string, c);
+        /*
+         * ⚠ SE TINE `page_sections` INTREG, nu doar `customization` — gasit verificand
+         * auditul, nu de el.
+         *
+         * Aceeasi gaura, alta cheie: reimportul stergea si `gpsr` (116 produse in productie la
+         * 06.09.2026, adica siguranta produsului, obligatorie prin regulament), si campurile
+         * `google.*` pe care fisierul nu le poarta. Comerciantul isi actualizeaza preturile din
+         * CSV si ramane fara datele de conformitate, fara nicio eroare si fara vreun rand in
+         * raportul importului.
+         *
+         * Numele variabilei ramane cel de dinainte fiindca rolul e acelasi: ce stia randul si
+         * fisierul nu stie.
+         */
+        const veche = e.page_sections;
+        if (veche && typeof veche === "object" && !Array.isArray(veche)) {
+          personalizareaVeche.set(e.id as string, veche as Record<string, unknown>);
+        }
       }
     }
   }
@@ -572,7 +592,7 @@ async function scrieProdusele(
   businessId: string,
   pregatite: ProdusPregatit[],
   deltas: CommitDeltas,
-  personalizareaVeche: Map<string, unknown>,
+  personalizareaVeche: Map<string, Record<string, unknown>>,
 ): Promise<void> {
   for (let i = 0; i < pregatite.length; i += SCRIERI_DEODATA) {
     await Promise.all(pregatite.slice(i, i + SCRIERI_DEODATA).map(async (it) => {
@@ -581,14 +601,36 @@ async function scrieProdusele(
         const { slug: _slug, ...rest } = it.payload;
         void _slug;
         /*
-         * ⚠ Personalizarea se pune INAPOI, peste `page_sections` reconstruit din fisier.
-         * Vezi `personalizareaVeche`: fara randurile astea, un reimport o sterge tacut.
+         * ⚠ CE STIE RANDUL SI NU STIE FISIERUL SE PASTREAZA.
+         *
+         * `buildPayload` reconstruieste `page_sections` de la zero din coloanele CSV-ului, iar
+         * actualizarea il scrie INTREG. Deci fiecare cheie care nu vine niciodata dintr-un fisier
+         * — `customization`, `gpsr`, `bundle` — era rasa la un reimport cu „suprascrie".
+         *
+         * ⚠ Fisierul CASTIGA pe cheile lui: spread-ul vechi e primul, iar cel nou il acopera.
+         * Altfel importul n-ar mai putea sterge nimic, si asta e chiar ce se asteapta de la el.
+         *
+         * ⚠ `google` se comaseaza pe UN NIVEL, si numai el: fisierul poarta doar `gtin` si
+         * `brand`, deci scris peste, ar fi sters restul campurilor Google completate din panou.
+         * Celelalte chei se inlocuiesc intregi, fiindca acolo fisierul chiar e sursa.
          */
-        const persVeche = personalizareaVeche.get(it.existingId);
-        if (persVeche) {
+        const psVeche = personalizareaVeche.get(it.existingId);
+        if (psVeche) {
+          /* Supabase tipeaza campul ca `{}`, iar TS il tine asa si dupa ingustare. */
+          const psNoua = (esteObiectSimplu(rest.page_sections) ? rest.page_sections : {}) as Record<string, unknown>;
+          const googleVechi = psVeche.google;
+          const googleNou = psNoua.google;
           rest.page_sections = {
-            ...((rest.page_sections ?? {}) as Record<string, unknown>),
-            customization: persVeche,
+            ...psVeche,
+            ...psNoua,
+            ...(esteObiectSimplu(googleVechi) || esteObiectSimplu(googleNou)
+              ? {
+                  google: {
+                    ...(esteObiectSimplu(googleVechi) ? googleVechi : {}),
+                    ...(esteObiectSimplu(googleNou) ? googleNou : {}),
+                  },
+                }
+              : {}),
           } as unknown as never;
         }
         const { error } = await admin

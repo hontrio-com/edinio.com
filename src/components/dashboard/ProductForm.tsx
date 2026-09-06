@@ -858,6 +858,23 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
       is_active: form.is_active,
       weight_grams: form.weight_grams ? parseInt(form.weight_grams) : null,
       page_sections: {
+        /*
+         * ⚠ CE NU CUNOASTE FORMULARUL SE PASTREAZA, si asta e o linie ieftina care inchide o
+         * clasa intreaga de pierderi tacute.
+         *
+         * Literalul de mai jos are unsprezece chei, iar salvarea INLOCUIESTE `page_sections`
+         * intreg — nu comaseaza. Deci orice cheie scrisa de alt drum (azi `bundle`, maine
+         * oricare alta) dispare la prima salvare din formular, fara nicio eroare. Exact asa s-a
+         * pierdut personalizarea la reimportul CSV, si tot asa se pierdea modul de pret.
+         *
+         * ⚠ Spread-ul sta PRIMUL: cele unsprezece chei cunoscute il suprascriu imediat, deci
+         * purtarea de azi ramane neschimbata pana la ultimul caracter. Se pastreaza doar restul.
+         *
+         * ⚠ E sigur fiindca formularul primeste mereu randul INTREG (`select("*")` in pagina
+         * de editare), niciodata forma taiata de `slimPageSections` — daca vreodata cineva ii
+         * da forma slabita, spread-ul ar scrie inapoi un `page_sections` ciuntit.
+         */
+        ...((product?.page_sections ?? {}) as Record<string, unknown>),
         specifications: form.specifications.filter(s => s.label.trim() && s.value.trim()),
         quantity_tiers: {
           enabled: form.quantity_tiers.enabled,

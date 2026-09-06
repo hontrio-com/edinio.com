@@ -1,7 +1,10 @@
 "use client";
 
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
-import { TIPURI, UNITATI, type CampPersonalizare, type Impact } from "@/lib/customization/definitie";
+import {
+  MAX_CAMPURI, MAX_ETICHETA, MAX_OPTIUNI, TIPURI, UNITATI,
+  type CampPersonalizare, type Impact,
+} from "@/lib/customization/definitie";
 import { cn } from "@/lib/utils";
 
 /**
@@ -99,7 +102,20 @@ export function PersonalizareCampuri({ stare, seteaza }: Props) {
     seteaza({ ...stare, fields, ...(pret ? { pret } : {}) });
   };
 
+  /*
+   * ⚠ PLAFOANELE CITITORULUI, ADUSE IN PANOU.
+   *
+   * `normalizeazaDefinitia` taie la `MAX_CAMPURI` campuri si `MAX_OPTIUNI` optiuni — dinadins,
+   * fiindca purtarea aia apara CITIREA. Dar panoul nu le stia: comerciantul adauga campul 31,
+   * primea „Salvat", si vitrina servea 30. Nimic pe ecran nu spunea care lipseste.
+   *
+   * ⚠ Se importa, nu se rescriu. Doua cifre in doua fisiere ar fi divergit la prima schimbare,
+   * si atunci panoul ar fi promis exact ce cititorul arunca.
+   */
+  const laPlafonulDeCampuri = campuri.length >= MAX_CAMPURI;
+
   const adauga = () => {
+    if (laPlafonulDeCampuri) return;
     seteaza({
       ...stare,
       fields: [
@@ -166,7 +182,9 @@ export function PersonalizareCampuri({ stare, seteaza }: Props) {
 
           <div>
             <label className={ETICHETA}>Eticheta</label>
-            <input type="text" value={camp.label} onChange={(e) => schimba(idx, { label: e.target.value })}
+            {/* ⚠ Acelasi plafon ca la citire: mai lung, textul s-ar fi taiat abia in vitrina. */}
+            <input type="text" maxLength={MAX_ETICHETA}
+              value={camp.label} onChange={(e) => schimba(idx, { label: e.target.value })}
               placeholder="ex: Dimensiunile peretelui" className={INPUT} />
           </div>
 
@@ -181,10 +199,16 @@ export function PersonalizareCampuri({ stare, seteaza }: Props) {
         </div>
       ))}
 
-      <button type="button" onClick={adauga}
-        className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+      <button type="button" onClick={adauga} disabled={laPlafonulDeCampuri}
+        className="flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
         <Plus className="h-4 w-4" /> Adauga camp de personalizare
       </button>
+      {laPlafonulDeCampuri && (
+        <p className="text-xs text-amber-600">
+          Ai atins plafonul de {MAX_CAMPURI} campuri. Peste el, campurile in plus n-ar fi servite in
+          magazin — asa ca butonul e oprit aici, nu la salvare.
+        </p>
+      )}
 
       {campuri.length === 0 && (
         <p className="text-xs text-muted-foreground py-3 text-center border border-dashed border-border rounded-lg">
@@ -310,12 +334,12 @@ function Reglaje({ camp, idx, schimba }: RegProps) {
           </div>
           {(["latime", "inaltime"] as const).map((latura) => {
             const v = camp[latura];
-            const pune = (k: "min" | "max" | "implicit", val: number | undefined) =>
+            const pune = (k: "min" | "max" | "implicit" | "pas", val: number | undefined) =>
               schimba(idx, {
                 [latura]: { min: v?.min ?? 0, max: v?.max ?? 0, ...(v ?? {}), [k]: val },
               } as Partial<CampAdmin>);
             return (
-              <div key={latura} className="grid grid-cols-3 gap-2">
+              <div key={latura} className="grid grid-cols-4 gap-2">
                 <div>
                   <label className={ETICHETA}>{latura === "latime" ? "Latime" : "Inaltime"} min</label>
                   <input type="number" value={v?.min ?? ""} onChange={(e) => pune("min", nr(e.target.value))}
@@ -330,6 +354,14 @@ function Reglaje({ camp, idx, schimba }: RegProps) {
                   <label className={ETICHETA}>implicit</label>
                   <input type="number" value={v?.implicit ?? ""} onChange={(e) => pune("implicit", nr(e.target.value))}
                     className={INPUT} />
+                </div>
+                <div>
+                  {/* ⚠ Pe FIECARE latura: materialele vin pe role, si de obicei doar una din
+                      cele doua masuri e legata de latimea rolei. Un pas pe tot campul l-ar fi
+                      impus si acolo unde nu exista. */}
+                  <label className={ETICHETA}>pas</label>
+                  <input type="number" value={v?.pas ?? ""} onChange={(e) => pune("pas", nr(e.target.value))}
+                    placeholder="oricat" className={INPUT} />
                 </div>
               </div>
             );
@@ -420,7 +452,10 @@ function Optiuni({ camp, idx, schimba }: RegProps) {
       ))}
       <button type="button"
         onClick={() => schimba(idx, {
-          optiuni: [...optiuni, { id: crypto.randomUUID(), eticheta: "", impact: { fel: "fara" } }],
+          /* ⚠ Acelasi plafon ca la citire: peste el, optiunile in plus se arunca in tacere. */
+          optiuni: optiuni.length >= MAX_OPTIUNI
+            ? optiuni
+            : [...optiuni, { id: crypto.randomUUID(), eticheta: "", impact: { fel: "fara" } }],
         })}
         className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80">
         <Plus className="h-3.5 w-3.5" /> Adauga optiune

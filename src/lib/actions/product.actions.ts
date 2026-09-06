@@ -26,6 +26,7 @@ import {
   enqueueEmagPretMany, enqueueEmagRetragereInainteDeStergere,
   enqueueEmagSync, enqueueEmagSyncMany,
 } from "@/lib/emag/queue";
+import { problemaPersonalizarii } from "@/lib/customization/salvare";
 
 interface ProductData {
   name: string;
@@ -142,6 +143,12 @@ export async function createProduct(businessId: string, data: ProductData) {
 
   const problemaTrepte = problemaTrepteProdus(data);
   if (problemaTrepte) return { error: problemaTrepte };
+  /*
+   * ⚠ Aceeasi regula ca la trepte: ce nu se poate SERVI nu se salveaza in tacere.
+   * Vezi `problemaPersonalizarii` — se raporteaza, nu se rescrie.
+   */
+  const problemaPers = problemaPersonalizarii(data.page_sections);
+  if (problemaPers) return { error: problemaPers };
 
   // Check plan product limit
   const { data: profile } = await supabase
@@ -217,6 +224,12 @@ export async function updateProduct(productId: string, businessId: string, data:
 
   const problemaTrepte = problemaTrepteProdus(data);
   if (problemaTrepte) return { error: problemaTrepte };
+  /*
+   * ⚠ Aceeasi regula ca la trepte: ce nu se poate SERVI nu se salveaza in tacere.
+   * Vezi `problemaPersonalizarii` — se raporteaza, nu se rescrie.
+   */
+  const problemaPers = problemaPersonalizarii(data.page_sections);
+  if (problemaPers) return { error: problemaPers };
 
   /*
    * ⚠ SI `is_active`, nu doar imaginile.
@@ -353,11 +366,24 @@ export async function duplicateProduct(productId: string, businessId: string) {
     return { error: `Ai atins limita de ${limit} produse. Upgradeaza planul.` };
   }
 
+  /*
+   * ⚠ `.eq("is_bundle", false)`, ca in `updateProduct` — gasit verificand auditul, nu de el.
+   *
+   * Fara filtru, duplicarea unui PACHET citea randul de pachet si il insera fara `is_bundle`,
+   * iar coloana are `default false`. Iesea un produs SIMPLU la pretul inghetat al pachetului,
+   * purtand un `page_sections.bundle` pe care nimeni nu-l mai citeste (toti cititorii se uita
+   * intai la coloana). Copia se vindea la pretul unui set, dar livra o singura bucata — si prima
+   * salvare din formular i-ar fi sters tacut si cheia `bundle`.
+   *
+   * Astazi butonul nici nu se ofera pe pachete (`produse-filtre.ts` le scoate din lista), deci
+   * poarta inchide un cap care se deschide la prima schimbare de filtru.
+   */
   const { data: original } = await supabase
     .from("products")
     .select("*")
     .eq("id", productId)
     .eq("business_id", businessId)
+    .eq("is_bundle", false)
     .single();
 
   if (!original) return { error: "Produs negasit" };

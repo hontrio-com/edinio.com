@@ -12,6 +12,7 @@ import {
   ExternalLink, Pencil, Compass, Building2,
 } from "lucide-react";
 import { marketplaceCareTineComanda, cineTineComanda } from "@/lib/orders/origin";
+import { instantaneulLiniei } from "@/lib/configurators/instantaneu";
 import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
@@ -61,6 +62,14 @@ interface OrderItem {
   price: number;
   quantity: number;
   customization?: Record<string, { type: string; label: string; value: string | string[] }>;
+  /**
+   * Instantaneul configuratorului, scris la vanzare.
+   *
+   * ⚠ `unknown`, nu forma lui: randul poate fi scris acum trei luni, de o versiune de cod
+   * care nu mai exista, si se poate si edita din panou. Se citeste cu `instantaneulLiniei`, care
+   * nu arunca niciodata — iar un `as` aici ar fi fost o promisiune pe care n-o poate tine nimeni.
+   */
+  configuratie?: unknown;
 }
 
 interface ShippingAddress {
@@ -1028,6 +1037,13 @@ export function OrderDetailClient({
                     </div>
                     <span className="font-medium text-foreground flex-shrink-0 ml-3">{formatPrice(item.price * item.quantity)}</span>
                   </div>
+                  {/*
+                    ⚠ CONFIGURATIA, langa personalizare si inaintea ei.
+                    De aici afla atelierul ce are de facut. Fara randurile astea, doua cani gravate
+                    diferit sunt DOUA RANDURI IDENTICE pe ecran, iar comerciantul nu poate sti care
+                    e care nici macar deschizand comanda.
+                  */}
+                  <ConfiguratiaLiniei linie={item} />
                   {item.customization && Object.keys(item.customization).length > 0 && (
                     <div className="ml-6 mt-1.5 pl-3 border-l-2 border-purple-200 space-y-1.5">
                       <p className="text-[10px] font-bold text-purple-500 uppercase tracking-widest">Personalizare</p>
@@ -1536,6 +1552,41 @@ export function OrderDetailClient({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Ce a configurat clientul pe linia asta.
+ *
+ * ⚠ Se citeste APARARE, nu se crede pe cuvant: `orders.items` e jsonb vechi de luni, editabil
+ * din panou si atins uneori de mana. O forma neasteptata nu are voie sa doboare pagina din care
+ * comerciantul isi vede comenzile.
+ *
+ * ⚠ Se arata TOATE randurile, nu primele trei ca in cos. Aici nu e o eticheta de reamintire,
+ * e specificatia dupa care se lucreaza produsul.
+ */
+function ConfiguratiaLiniei({ linie }: { linie: OrderItem }) {
+  const cfg = instantaneulLiniei(linie);
+  if (!cfg) return null;
+  return (
+    <div className="ml-6 mt-1.5 space-y-1.5 border-l-2 border-sky-200 pl-3">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-sky-500">
+        Configuratie
+        {cfg.numarVersiune !== null && (
+          /* ⚠ Versiunea se arata: doua comenzi ale aceluiasi produs pot fi facute dupa doua
+             definitii diferite, iar cand ceva nu se potriveste asta e prima intrebare. */
+          <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground">
+            versiunea {cfg.numarVersiune}
+          </span>
+        )}
+      </p>
+      {cfg.rezumat.map((r, i) => (
+        <div key={`${r.id}-${i}`}>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-600">{r.eticheta}</p>
+          <p className="text-sm text-foreground">{r.valoare}</p>
+        </div>
+      ))}
     </div>
   );
 }

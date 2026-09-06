@@ -21,6 +21,7 @@ import { markCartConverted } from "@/lib/abandoned-cart";
 import type { OrderSource } from "@/lib/storefront/attribution";
 import { comboStockMap, enabledComboPriceMap, parseVariants } from "@/lib/storefront/variants";
 import { repretuiesteLinii, type PretConfigurat } from "@/lib/configurators/repretuire";
+import { configuratoarePentruProduse } from "@/lib/configurators/vitrina";
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import {
   amprentaLinii,
@@ -2622,9 +2623,22 @@ export async function updateOrderDetails(orderId: string, data: {
   const live = new Map<string, { id: string; page_sections: unknown }>();
   if (idsToate.length > 0) {
     const { data: products } = await admin.from("products")
-      .select("id, name, price, is_active, is_bundle, page_sections")
+      // ⚠ `category` se cere pentru configuratoare: unul legat de o categorie se mosteneste
+      // prin NUMELE ei, deci fara coloana produsul ar parea ca n-are.
+      .select("id, name, price, is_active, is_bundle, page_sections, category")
       .in("id", idsToate)
       .eq("business_id", order.business_id);
+    /*
+     * ⚠ Configuratoarele produselor, in masa.
+     *
+     * Se cer pentru ADAUGARE: un produs configurabil adaugat din panou ar intra ca linie
+     * simpla, la pretul de baza, fara nicio specificatie. Costa o citire pe index pentru
+     * magazinele fara configuratoare, adica aproape toate.
+     */
+    const configurabile = await configuratoarePentruProduse(
+      order.business_id,
+      (products ?? []).map((p) => ({ id: p.id as string, category: p.category })),
+    );
     for (const p of products ?? []) {
       // Doar produsele adaugate trebuie sa fie ACTIVE; cele deja vandute nu.
       if (!p.is_active && idsAdaugate.includes(p.id as string)) continue;
@@ -2634,6 +2648,7 @@ export async function updateOrderDetails(orderId: string, data: {
         price: round2(Number(p.price)),
         is_bundle: !!p.is_bundle,
         activ: !!p.is_active,
+        areConfigurator: configurabile.has(p.id as string),
         variante: slabesteVariante(p.page_sections, round2(Number(p.price))),
         trepte: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers ?? null,
       });

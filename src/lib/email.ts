@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { formatPrice } from "@/lib/utils/format";
+import { instantaneulLiniei } from "@/lib/configurators/instantaneu";
 import { escapeHtml as esc, escapeUrl } from "@/lib/utils/html-escape";
 import type { StoreEmailSender } from "@/lib/email/config";
 import { storeEmailShell } from "@/lib/email/store-shell";
@@ -169,7 +170,7 @@ export async function sendOrderConfirmationToCustomer(
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span>${randConfiguratie(i)}</td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
@@ -257,7 +258,11 @@ export async function sendAbandonedCartRecovery(
     storeName: string;
     recoverUrl: string;
     customerName?: string | null;
-    items: { name: string; quantity: number; price: number; image_url?: string | null }[];
+    items: {
+      name: string; quantity: number; price: number; image_url?: string | null;
+      /** ⚠ `unknown`: randul poate fi scris de o versiune veche de cod. Vezi `randConfiguratie`. */
+      configuratie?: unknown;
+    }[];
     total: number;
     color?: string;
     message?: string;
@@ -277,7 +282,7 @@ export async function sendAbandonedCartRecovery(
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span>${randConfiguratie(i)}</td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
@@ -1226,7 +1231,7 @@ export async function sendNewOrderEmail(
     .map(
       (i) =>
         `<tr>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span>${randConfiguratie(i)}</td>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
         </tr>`
     )
@@ -1793,4 +1798,25 @@ export async function sendBlogSubscribeConfirmation(email: string, adresaConfirm
     subject: "Confirmă abonarea la blogul Edinio",
     html: baseTemplate(content),
   });
+}
+
+/**
+ * Ce a configurat clientul, sub numele produsului, in orice email care insira linii.
+ *
+ * ⚠ FARA EL, EMAILUL MINTE PRIN OMISIUNE. Comerciantul primeste „Cana personalizata x1 — 89
+ * lei” si atat: nu afla ce gravura, iar cu doua cani gravate diferit vede doua randuri
+ * identice. Emailul e adesea singurul lucru pe care il citeste inainte sa se apuce de lucru.
+ *
+ * ⚠ SE ESCAPEAZA, SI ASTA NU E O FORMALITATE. Textul vine din campul de gravura completat
+ * de cumparator — adica un sir ales de un strain, lipit intr-un HTML care ajunge in casuta
+ * comerciantului. `esc` e singurul lucru care sta intre cele doua.
+ *
+ * ⚠ Se citeste APARARE: `orders.items` e jsonb vechi de luni, editabil din panou. Un email
+ * care arunca nu se trimite deloc, si comanda ramane nestiuta.
+ */
+function randConfiguratie(linie: unknown): string {
+  const cfg = instantaneulLiniei(linie);
+  if (!cfg) return "";
+  const text = cfg.rezumat.map((r) => `${r.eticheta}: ${r.valoare}`).join(" · ");
+  return `<br><span style="font-size:12px;color:#71717a;">${esc(text)}</span>`;
 }

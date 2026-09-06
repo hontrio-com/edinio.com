@@ -981,3 +981,35 @@ test("o linie configurata NU se contopeste cu una adaugata din panou", () => {
   const r = plan(prev, [{ product_id: "p1", quantity: 1 }], catalogCu([["p1", simplu()]]));
   assert.equal(r.items.length, 2, "raman doua linii: una gravata, una simpla");
 });
+
+test("PANOUL NU POATE ADAUGA un produs configurabil ca linie simpla", () => {
+  /*
+   * ⚠ Panoul adauga o linie dintr-o apasare: n-are unde sa aleaga latimea, materialul sau gravura.
+   * Lasat sa treaca, produsul intra ca linie SIMPLA, la pretul de BAZA, fara nicio specificatie —
+   * iar atelierul primeste o cana nescrisa la pretul uneia nescrise, langa una gravata pe care a
+   * platit-o clientul. Nimic nu cade, si nimeni nu afla.
+   */
+  const cfg = catalogCu([["p1", { ...simplu(), areConfigurator: true }]]);
+  const r = planificaAdaugarea([], [{ product_id: "p1", quantity: 1 }], cfg);
+  assert.ok("error" in r);
+  if (!("error" in r)) return;
+  assert.ok(r.error.includes("Produs simplu"), "mesajul numeste produsul");
+  assert.ok(r.error.includes("configureaza"), "si spune de ce");
+});
+
+test("un produs FARA configurator se adauga mai departe", () => {
+  // ⚠ Steagul lipsa nu inseamna „are": vine de la apelant si e optional.
+  const r = plan([], [{ product_id: "p1", quantity: 1 }], catalogCu([["p1", simplu()]]));
+  assert.equal(r.items.length, 1);
+});
+
+test("mesajul liniei speciale spune ce e ADEVARAT", () => {
+  /*
+   * ⚠ Zicea „personalizare sau vine dintr-un marketplace". De cand exista configuratoare, cel mai
+   * des motiv e altul, iar comerciantul citea un mesaj fara nicio legatura cu ce vedea pe ecran.
+   */
+  const prev = [{ ...linie({ price: 180 }), configuratie: CONFIGURATA }];
+  const caps = capacitatiLinii(prev, catalogCu([["p1", simplu()]]));
+  assert.equal(caps[0].poateCreste, false);
+  assert.ok(caps[0].motivCrestere?.includes("configuratie"), `mesajul: ${caps[0].motivCrestere}`);
+});

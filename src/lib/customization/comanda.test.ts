@@ -1,0 +1,238 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { verificaPersonalizarea } from "./comanda";
+
+/**
+ * Poarta personalizarii pe drumul comenzii.
+ *
+ * ⚠ CE APARA: pana acum serverul scria blobul clientului VERBATIM in `orders.items[].customization`
+ * — fara sa verifice ca produsul are personalizare pornita, ca id-urile campurilor exista, ca un
+ * camp obligatoriu a fost completat, sau ca adresa unui fisier arata catre depozitul nostru.
+ *
+ * Adica „Camp obligatoriu" era o regula a BROWSERULUI: cine trimitea cererea de mana o ocolea.
+ * Acum e si o poarta de BANI, fiindca personalizarea poate schimba pretul.
+ */
+
+const BIZ = "11111111-1111-4111-8111-111111111111";
+const ALT_BIZ = "22222222-2222-4222-8222-222222222222";
+
+/** ⚠ `.r2.dev/` se recunoaste fara variabile de mediu — vezi `r2-url.ts`. */
+const NOSTRU = `https://x.r2.dev/products/customizations/${BIZ}/poza.jpg`;
+
+const FOTOTAPET = {
+  customization: {
+    enabled: true,
+    fields: [
+      { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+        latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+      { id: "mat", type: "butoane", label: "Material", required: true,
+        optiuni: [
+          { id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } },
+          { id: "prm", eticheta: "Premium", impact: { fel: "pe_m2", suma: 89 } },
+        ] },
+      { id: "prot", type: "comutator", label: "Protectie impermeabila", required: false,
+        impact: { fel: "pe_m2", suma: 15 } },
+    ],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 69, campTarif: "mat", includePretulProdusului: false },
+  },
+};
+
+test("ACCEPTANTA: serverul socoteste 910 lei, si scrie instantaneul LUI", () => {
+  const r = verificaPersonalizarea(
+    FOTOTAPET,
+    { dim: { latime: 350, inaltime: 250 }, mat: "prm", prot: true },
+    BIZ,
+  );
+  assert.equal(r.fel, "ok");
+  if (r.fel !== "ok") return;
+  assert.equal(r.date.supliment, 910);
+  assert.equal(r.date.bazaInclusa, false);
+  assert.equal(r.date.detaliu.aria, 8.75);
+  assert.equal(r.date.detaliu.tarifM2, 89);
+
+  /* ⚠ Etichetele sunt cele ale SERVERULUI, si valorile citibile de om. */
+  assert.equal(r.date.instantaneu.dim.label, "Dimensiuni");
+  assert.equal(r.date.instantaneu.dim.value, "350 x 250 cm");
+  assert.deepEqual(r.date.instantaneu.dim.dim, { latime: 350, inaltime: 250, unitate: "cm" });
+  assert.equal(r.date.instantaneu.mat.value, "Premium", "in comanda scrie id-ul, nu eticheta");
+  assert.equal(r.date.instantaneu.mat.optiuneId, "prm");
+  assert.equal(r.date.instantaneu.prot.value, "Da");
+});
+
+test("⚠ un camp OBLIGATORIU lipsa REFUZA comanda, nu doar butonul", () => {
+  /*
+   * Mutantul care o dovedeste: se scoate chemarea `normalizeazaValorile` din poarta. Atunci o
+   * cerere trimisa de mana, fara dimensiuni, ar fi trecut — iar comerciantul ar fi primit o
+   * comanda de fototapet fara sa stie cat de mare.
+   */
+  const r = verificaPersonalizarea(FOTOTAPET, { mat: "prm" }, BIZ);
+  assert.equal(r.fel, "eroare");
+  if (r.fel !== "eroare") return;
+  assert.match(r.mesaj, /Dimensiuni/);
+});
+
+test("⚠ o optiune care NU EXISTA refuza comanda", () => {
+  /*
+   * Fara verificarea asta, un client putea cere „Premium" la pretul lui „Standard" trimitand un id
+   * inventat: optiunea nu s-ar fi gasit, tariful ar fi cazut pe cel de baza, si marfa Premium ar
+   * fi plecat la 69 lei/m² in loc de 89.
+   */
+  const r = verificaPersonalizarea(
+    FOTOTAPET, { dim: { latime: 100, inaltime: 100 }, mat: "aur-masiv" }, BIZ,
+  );
+  assert.equal(r.fel, "eroare");
+});
+
+test("⚠ dimensiunile in afara marginilor refuza comanda", () => {
+  const r = verificaPersonalizarea(
+    FOTOTAPET, { dim: { latime: 5000, inaltime: 250 }, mat: "std" }, BIZ,
+  );
+  assert.equal(r.fel, "eroare");
+});
+
+test("⚠ PRETUL TRIMIS DE CLIENT E IGNORAT CU TOTUL", () => {
+  /*
+   * ⚠ CEA MAI IMPORTANTA. Clientul trimite ce a ALES, niciodata cat costa. Chiar daca inventeaza
+   * campuri de pret in payload, ele nu ajung nicaieri: serverul citeste definitia lui si pune el
+   * suma. Acelasi tipar ca `validateExtras`.
+   */
+  const cinstit = verificaPersonalizarea(
+    FOTOTAPET, { dim: { latime: 350, inaltime: 250 }, mat: "prm", prot: true }, BIZ,
+  );
+  const mincinos = verificaPersonalizarea(
+    FOTOTAPET,
+    {
+      dim: { latime: 350, inaltime: 250 }, mat: "prm", prot: true,
+      supliment: 1, pret: 1, price: 1, tarif: 0.01,
+    },
+    BIZ,
+  );
+  assert.equal(cinstit.fel, "ok");
+  assert.equal(mincinos.fel, "ok");
+  if (cinstit.fel !== "ok" || mincinos.fel !== "ok") return;
+  assert.equal(mincinos.date.supliment, 910, "un pret trimis de client a schimbat suma");
+  assert.equal(mincinos.date.supliment, cinstit.date.supliment);
+  /* Si cheile inventate nu ajung in comanda. */
+  assert.deepEqual(Object.keys(mincinos.date.instantaneu).sort(), ["dim", "mat", "prot"]);
+});
+
+test("⚠ FISIERUL trebuie sa fie al NOSTRU, si al MAGAZINULUI ASTA", () => {
+  /*
+   * ⚠ Doua verificari, amandoua cu pret.
+   *
+   * 1. Sa fie o adresa din depozitul nostru. Fara ea, `value` era un sir liber care ajungea direct
+   *    intr-un `<a href>` din panoul comerciantului (`OrderDetailClient.tsx:1041`) — iar un
+   *    `javascript:` acolo ruleaza in sesiunea lui autentificata. XSS stocat, trimis prin
+   *    formularul public de comanda.
+   * 2. Sa fie sub prefixul de incarcari AL MAGAZINULUI, altfel un client putea trimite adresa unei
+   *    poze a altui magazin si ea aparea in comanda ca „fisierul incarcat de client".
+   */
+  const cuPoza = {
+    customization: {
+      enabled: true,
+      fields: [{ id: "p", type: "image", label: "Poza", required: true }],
+    },
+  };
+
+  assert.equal(verificaPersonalizarea(cuPoza, { p: [NOSTRU] }, BIZ).fel, "ok");
+
+  for (const rea of [
+    "javascript:alert(document.cookie)",
+    "https://evil.example.com/poza.jpg",
+    "data:text/html;base64,PHNjcmlwdD4=",
+    `https://x.r2.dev/products/customizations/${ALT_BIZ}/poza.jpg`,
+    "https://x.r2.dev/products/alt-produs/poza.jpg",
+  ]) {
+    const r = verificaPersonalizarea(cuPoza, { p: [rea] }, BIZ);
+    assert.equal(r.fel, "eroare", `a trecut adresa: ${rea}`);
+  }
+});
+
+test("⚠ produs FARA personalizare: datele trimise se REFUZA, nu se ignora", () => {
+  /*
+   * Ignorate, ele ar fi disparut tacit: clientul crede ca a comandat o gravura, comerciantul
+   * produce o cana simpla. Iar in celalalt sens, comerciantul care tocmai a stins personalizarea
+   * ar fi continuat sa primeasca cereri de gravura din paginile ramase deschise.
+   */
+  assert.equal(verificaPersonalizarea({}, undefined, BIZ).fel, "fara");
+  assert.equal(verificaPersonalizarea({}, {}, BIZ).fel, "fara");
+  assert.equal(verificaPersonalizarea({}, { gravura: "Robert" }, BIZ).fel, "eroare");
+  assert.equal(
+    verificaPersonalizarea({ customization: { enabled: false, fields: [] } }, { x: "y" }, BIZ).fel,
+    "eroare",
+  );
+});
+
+test("⚠ produsele VECHI trec neatinse, si fara niciun supliment", () => {
+  /* Cele 29 din productie: `text`, `textarea`, `image`, fara pret. */
+  const vechi = {
+    customization: {
+      enabled: true,
+      fields: [
+        { id: "f1", type: "text", label: "Nume gravat", required: true, max_length: 20 },
+        { id: "f2", type: "image", label: "Poza", required: false, max_files: 3 },
+      ],
+    },
+  };
+  const r = verificaPersonalizarea(vechi, { f1: "Robert", f2: [] }, BIZ);
+  assert.equal(r.fel, "ok");
+  if (r.fel !== "ok") return;
+  assert.equal(r.date.supliment, 0, "un produs vechi a devenit mai scump");
+  assert.equal(r.date.bazaInclusa, true);
+  assert.equal(r.date.instantaneu.f1.value, "Robert");
+  assert.equal(r.date.instantaneu.f1.label, "Nume gravat");
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Ca poarta e chiar CABLATA in `placeOrder`
+   ══════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠ Probele de deasupra tin FUNCTIA. Cele de aici tin LANTUL: o poarta perfecta pe care n-o cheama
+ * nimeni apara exact la fel de mult ca una care nu exista. Se citeste sursa, fiindca actiunea de
+ * server nu se poate rula intr-o proba.
+ */
+
+function sursaComenzii(): string {
+  return readFileSync(
+    path.resolve(process.cwd(), "src/lib/actions/order.actions.ts"),
+    "utf8",
+  ).replace(/\r\n/g, "\n");
+}
+
+test("⚠ `placeOrder` CHEAMA poarta, si se opreste la refuz", () => {
+  const s = sursaComenzii();
+  assert.match(s, /import \{ verificaPersonalizarea \} from "@\/lib\/customization\/comanda";/);
+  assert.match(s, /const pers = personalizareaLiniei\(product\.page_sections, data\.customization, data\.business_id\);/);
+  assert.match(s, /if \("eroare" in pers\) \{[\s\S]{0,400}?return \{ error: pers\.eroare \};/);
+  assert.match(s, /action: "placeOrder\.customizationRejected"/);
+});
+
+test("⚠ suplimentul intra in SUBTOTALUL liniei, nu doar in pretul afisat", () => {
+  /*
+   * Lipit doar pe `unitPrice`, invariantul `suma(price x quantity) == subtotal` s-ar fi rupt —
+   * chiar cel pentru care pretul unitar se lasa nerotunjit. Iar pragul de transport gratuit, TVA-ul
+   * si factura ar fi socotit mai departe pretul de catalog.
+   */
+  const s = sursaComenzii();
+  assert.match(s, /const subtotalLinie = round2\(\s*\n?\s*\(pers\.bazaInclusa \? mainSubtotal : 0\) \+ pers\.supliment \* cantitate,/);
+  assert.match(s, /const subtotal = round2\(subtotalLinie \+ cartSubtotal\);/);
+  assert.match(s, /const unitPrice = subtotalLinie \/ cantitate;/);
+  /* ⚠ Si ca vechea forma NU mai exista nicaieri: o ramasita ar fi facut cele doua sa divergheze. */
+  assert.equal(
+    /const subtotal = round2\(mainSubtotal \+ cartSubtotal\);/.test(s),
+    false,
+    "subtotalul se mai socoteste inca din pretul de catalog",
+  );
+});
+
+test("⚠ in comanda se scrie INSTANTANEUL SERVERULUI, nu blobul clientului", () => {
+  const s = sursaComenzii();
+  assert.equal(
+    /\.\.\.\(data\.customization && \{ customization: data\.customization \}\)/.test(s),
+    false,
+    "blobul clientului se scrie inca verbatim in comanda",
+  );
+  assert.match(s, /\{ customization: pers\.instantaneu, personalizare: pers\.detaliu \}/);
+});

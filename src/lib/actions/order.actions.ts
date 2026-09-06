@@ -16,6 +16,7 @@ import type { Database } from "@/types/database.types";
 import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer, sendCustomerMessage } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { logError } from "@/lib/error-logger";
+import { verificaPersonalizarea } from "@/lib/customization/comanda";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
 import type { OrderSource } from "@/lib/storefront/attribution";
@@ -312,6 +313,34 @@ function validateExtras(
     .map((e) => byId.get(e.id))
     .filter((e): e is CheckoutExtra => !!e)
     .map((e) => ({ id: e.id, label: e.label, price: round2(Number(e.price)) }));
+}
+
+/**
+ * Personalizarea liniei: se verifica si se PRETUIESTE pe server.
+ *
+ * ⚠ Pana acum, blobul clientului se scria verbatim in `orders.items[].customization`, fara nicio
+ * verificare — nici ca produsul are personalizare pornita, nici ca id-urile campurilor exista, nici
+ * ca un camp obligatoriu a fost completat. Adica „Camp obligatoriu" era o regula a BROWSERULUI, iar
+ * cine trimitea cererea de mana o ocolea.
+ *
+ * ⚠ Acum e si o poarta de BANI: personalizarea poate schimba pretul. Clientul trimite ce a ALES,
+ * niciodata cat costa — acelasi tipar ca `validateExtras`, unde din extraoptiune se pastreaza doar
+ * `id`-ul. Deosebirea: aici o alegere neinteleasa se REFUZA zgomotos, nu dispare intr-un filtru.
+ */
+function personalizareaLiniei(
+  pageSections: unknown,
+  brut: unknown,
+  businessId: string,
+): { eroare: string } | { supliment: number; bazaInclusa: boolean; instantaneu?: Record<string, unknown>; detaliu?: Record<string, unknown> } {
+  const r = verificaPersonalizarea(pageSections, brut, businessId);
+  if (r.fel === "eroare") return { eroare: r.mesaj };
+  if (r.fel === "fara") return { supliment: 0, bazaInclusa: true };
+  return {
+    supliment: r.date.supliment,
+    bazaInclusa: r.date.bazaInclusa,
+    instantaneu: r.date.instantaneu,
+    detaliu: r.date.detaliu,
+  };
 }
 
 /**
@@ -958,6 +987,45 @@ export async function placeOrder(data: {
     return { error: "Pretul comenzii nu este valid. Reincarca pagina si incearca din nou." };
   }
 
+  /*
+   * ⚠ PERSONALIZAREA SE VERIFICA SI SE PRETUIESTE AICI, dupa ce pretul de baza a trecut poarta.
+   *
+   * Ordinea conteaza: `authoritativeSubtotal` ramane neatins si primeste, ca si pana acum, pretul
+   * de CATALOG cerut de client. Suplimentul se adauga peste rezultatul lui, deci toleranta de 0,50
+   * lei si multimea preturilor legitime raman exact cum erau — cu probele lor.
+   */
+  const pers = personalizareaLiniei(product.page_sections, data.customization, data.business_id);
+  if ("eroare" in pers) {
+    logError({
+      action: "placeOrder.customizationRejected", message: pers.eroare,
+      details: { businessId: data.business_id, productId: data.product_id },
+      severity: "warning",
+    });
+    return { error: pers.eroare };
+  }
+
+  /*
+   * ⚠ SUPLIMENTUL INTRA IN SUBTOTALUL LINIEI, nu doar in pretul afisat.
+   *
+   * De aici curge singur mai departe: in `subtotal`, in pragul de transport gratuit, in baza de
+   * TVA, in reduceri si pe factura. Lipit doar pe `unitPrice`, invariantul
+   * `suma(price x quantity) == subtotal` s-ar fi rupt — chiar cel pentru care pretul unitar se
+   * lasa nerotunjit, mai jos.
+   *
+   * ⚠ `bazaInclusa` e un STEAG, nu o scadere. La un fototapet vandut la metru patrat, pretul de
+   * catalog nu se incaseaza deloc; scazut din supliment, un pret de catalog mai mare decat
+   * suprafata ar fi dus linia sub zero — si de acolo fiecare socoteala de dupa (TVA, prag de
+   * transport, ramburs) ar fi primit un numar in care nu crede.
+   *
+   * ⚠ ANCORA OFERTELOR RAMANE PE `mainSubtotal`, adica pe pretul de catalog. Ofertele nu se
+   * arata oricum pe produsele care cer personalizare (`needsChoice` din `offers.ts`), iar mutata
+   * pe pretul personalizat ar fi schimbat tacit reducerile procentuale ale ALTOR produse din
+   * aceeasi comanda.
+   */
+  const subtotalLinie = round2(
+    (pers.bazaInclusa ? mainSubtotal : 0) + pers.supliment * cantitate,
+  );
+
   // Items carried over from the cart (product-page "Comanda" with a non-empty cart).
   // Priced server-side at the product's current base price — never trusted from the
   // client (same model as placeCartOrder). The current product is excluded to avoid
@@ -1096,7 +1164,7 @@ export async function placeOrder(data: {
   if (oferte.error) return { error: oferte.error };
   cartItems = oferte.items;
   const cartSubtotal = round2(cartItems.reduce((s, i) => s + i.price * i.quantity, 0));
-  const subtotal = round2(mainSubtotal + cartSubtotal);
+  const subtotal = round2(subtotalLinie + cartSubtotal);
 
   // Enforce the merchant's minimum order value (Setari > Livrare) against the authoritative subtotal.
   const minOrder = cfgRow?.min_order_amount != null ? Number(cfgRow.min_order_amount) : null;
@@ -1287,7 +1355,7 @@ export async function placeOrder(data: {
   // Documentul primeste oricum doi bani: cele trei case rotunjesc pretul unitar
   // la trimitere, iar garda din `reconcile.ts` modeleaza exact acea rotunjire si
   // absoarbe diferenta cu o linie de ajustare.
-  const unitPrice = mainSubtotal / cantitate;
+  const unitPrice = subtotalLinie / cantitate;
   const allItems = [
     {
       product_id: data.product_id,
@@ -1299,7 +1367,17 @@ export async function placeOrder(data: {
       name: linieP.nume,
       price: unitPrice,
       quantity: cantitate,
-      ...(data.customization && { customization: data.customization }),
+      /*
+       * ⚠ INSTANTANEUL SERVERULUI, nu blobul clientului.
+       *
+       * Etichetele sunt cele din definitia produsului la momentul comenzii — pana acum veneau de la
+       * client, care putea scrie ce voia, iar atelierul producea dupa ele. Si nu se citesc mai
+       * tarziu din produsul viu: comerciantul poate redenumi campul maine, iar comanda de azi
+       * trebuie sa spuna in continuare ce s-a vandut.
+       */
+      ...(pers.instantaneu && Object.keys(pers.instantaneu).length > 0
+        ? { customization: pers.instantaneu, personalizare: pers.detaliu }
+        : {}),
     },
     ...cartItems,
     ...validatedExtras.map(e => ({ product_id: `extra_${e.id}`, name: e.label, price: e.price, quantity: 1 })),

@@ -18,6 +18,8 @@ import {
   comboEpuizat, comboStock, toateCombinatiileEpuizate, cerePersonalizare, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
+import type { ConfiguratorDeVitrina } from "@/lib/configurators/vitrina";
+import { ConfiguratorSlot } from "./_shared/ConfiguratorSlot";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
 import { construiesteTrepte } from "@/lib/storefront/quantity-tiers";
 import { ProductOffers } from "@/components/ministore/ProductOffers";
@@ -146,13 +148,21 @@ function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, demo = false }: {
+export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], configurator = null, altMap = {}, isHome = false, productOffers = [], setari = {}, demo = false }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
   basePath?: string;
   hasCardPayment?: boolean;
   bundleComponents?: BundleComponent[];
+  /**
+   * Configuratorul care se aplica produsului, deja compilat. `null` cand n-are.
+   *
+   * ⚠ Slotul e ACELASI in ambele modele de pagina (`ConfiguratorSlot`). Scris de doua ori, ar fi
+   * divergit la prima schimbare, iar comerciantii de pe celalalt model ar fi ramas cu forma
+   * veche fara ca `tsc` sa poata prinde ceva.
+   */
+  configurator?: ConfiguratorDeVitrina | null;
   altMap?: Record<string, string>;
   /** When this product page IS the store homepage (One Product Store mode):
    *  hides the "back to store" breadcrumb since there is no catalog behind it. */
@@ -722,6 +732,17 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
             </span>
           </motion.div>
         )}
+
+        {/*
+          ⚠ Configuratorul, INAINTE de AMANDOUA actiunile — si de „Comanda", si de „Adauga in
+          cos". Cumparatorul alege inainte sa apese, nu dupa, la fel ca la selectorul de varianta
+          de mai sus.
+
+          ⚠ Fara marginile lui: coloana e `flex flex-col gap-…`, deci spatierea o da parintele.
+          Un `mb-4` pus aici s-ar fi adunat peste `gap` si ar fi rupt ritmul doar la produsele cu
+          configurator.
+        */}
+        {configurator && <ConfiguratorSlot configurator={configurator} pretProdus={displayPrice} />}
 
         {/* CTA */}
         <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => { setFbtOffer(undefined); setModalOpen(true); }} />

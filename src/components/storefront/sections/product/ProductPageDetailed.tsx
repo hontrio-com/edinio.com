@@ -17,6 +17,8 @@ import {
   comboEpuizat, comboStock, toateCombinatiileEpuizate, pozePeValoare, cerePersonalizare, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
 import { OrderModal } from "@/components/ministore/OrderModal";
+import type { ConfiguratorDeVitrina } from "@/lib/configurators/vitrina";
+import { ConfiguratorSlot } from "./_shared/ConfiguratorSlot";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
 import { construiesteTrepte } from "@/lib/storefront/quantity-tiers";
 import { ProductOffers } from "@/components/ministore/ProductOffers";
@@ -216,6 +218,7 @@ export function ProductPageDetailed({
   basePath: basePathProp,
   hasCardPayment = false,
   bundleComponents = [],
+  configurator = null,
   altMap = {},
   isHome = false,
   productOffers = [],
@@ -228,6 +231,14 @@ export function ProductPageDetailed({
   basePath?: string;
   hasCardPayment?: boolean;
   bundleComponents?: BundleComponent[];
+  /**
+   * Configuratorul care se aplica produsului, deja compilat. `null` cand n-are.
+   *
+   * ⚠ Slotul e ACELASI in ambele modele de pagina (`ConfiguratorSlot`). Scris de doua ori, ar fi
+   * divergit la prima schimbare, iar comerciantii de pe celalalt model ar fi ramas cu forma
+   * veche fara ca `tsc` sa poata prinde ceva.
+   */
+  configurator?: ConfiguratorDeVitrina | null;
   altMap?: Record<string, string>;
   isHome?: boolean;
   productOffers?: ResolvedOffer[];
@@ -773,6 +784,14 @@ export function ProductPageDetailed({
                 Aceasta combinatie nu este disponibila.
               </p>
             )}
+
+            {/*
+              ⚠ Configuratorul, INAINTE de AMANDOUA actiunile — si de „Adauga in cos", si de
+              „Comanda". Cumparatorul alege inainte sa apese, nu dupa, la fel ca la selectorul de
+              varianta de mai sus. Pus intre cele doua butoane, ar fi despartit o pereche care in
+              modelul asta se citeste impreuna.
+            */}
+            {configurator && <ConfiguratorSlot configurator={configurator} pretProdus={displayPrice} />}
 
             {/* Cantitate + cele doua actiuni */}
             <div className="flex flex-col gap-2.5 pt-1">

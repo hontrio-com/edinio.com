@@ -172,7 +172,7 @@ export default async function ProductDetailPage({ params }: Props) {
 
   // Shared enrichment (Media Library alt text, card-payment flag, bundle
   // components) + server-side rich-text sanitization of the product, in place.
-  const { altMap, hasCardPayment, bundleComponents } = await enrichStoreProduct(business, product);
+  const { altMap, hasCardPayment, bundleComponents, configurator } = await enrichStoreProduct(business, product);
 
   // Cross-sell / FBT offers for this product. `offers` is owner-only (not anon-readable),
   // so it's resolved server-side with the service role — exactly like storeSettings above.
@@ -252,6 +252,7 @@ export default async function ProductDetailPage({ params }: Props) {
             basePath={basePath}
             hasCardPayment={hasCardPayment}
             bundleComponents={bundleComponents}
+            configurator={configurator}
             altMap={altMap}
             productOffers={productOffers}
           />

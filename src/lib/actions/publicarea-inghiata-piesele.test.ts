@@ -107,18 +107,43 @@ test("⚠ compilarea primeste harta pieselor", () => {
     "compilarea nu inghiata pretul si produsul piesei");
 });
 
-test("⚠ `cost_bucata` nu se citeste NICAIERI in actiunile configuratorului", () => {
+test("⚠ `cost_bucata` nu se citeste pe drumul PUBLICARII", () => {
   /*
-   * ⚠ Ce ar fi costat: ce se citeste aici ajunge in `configurator_versiuni.compilat`, iar aceea
+   * ⚠ Ce ar costa: ce citeste publicarea ajunge in `configurator_versiuni.compilat`, iar aceea
    * pleaca INTREAGA la pagina de produs, care e „use client" — deci in sursa HTML, vizibila
    * oricui. Cat plateste comerciantul pe piesa la furnizor ar fi fost public pe magazinul lui.
    *
-   * Se cere pe TOT fisierul, nu doar pe publicare: o actiune viitoare care listeaza piesele in
-   * panou are voie sa citeasca costul, dar atunci randul asta trebuie schimbat dinadins, cu
-   * cineva care se uita la unde ajunge.
+   * ⚠ PROBA A FOST RESTRANSA DINADINS, si nota ei veche o ceruse: ea se uita la TOT fisierul si
+   * spunea „o actiune viitoare care listeaza piesele in panou are voie sa citeasca costul, dar
+   * atunci randul asta trebuie schimbat dinadins, cu cineva care se uita la unde ajunge".
+   *
+   * Acela e momentul asta. `listeazaPiese` CITESTE costul, si trebuie: e ecranul pe care
+   * comerciantul isi vede marja, iar datele sunt ale lui. Verificat unde ajunge:
+   *
+   *   - publicarea citeste `id, nume, product_id, pret_bucata` — fara cost;
+   *   - `ComponentaRezolvata` n-are camp de cost, deci versiunea compilata nu-l poate purta nici
+   *     din greseala (a doua proba, mai jos);
+   *   - `listeazaPiese` raspunde doar panoului, care cere sesiune si magazinul propriu.
+   *
+   * Deci garda se muta de pe FISIER pe DRUMUL care duce la cumparator.
    */
-  assert.equal(sursa().includes("cost_bucata"), false,
-    "costul comerciantului nu are ce cauta in actiunile care compun versiunea servita");
+  assert.equal(corpulPublicarii().includes("cost_bucata"), false,
+    "costul comerciantului nu are ce cauta in actiunea care compune versiunea servita");
+});
+
+test("⚠ si forma inghetata nici nu are unde sa-l poarte", () => {
+  /*
+   * ⚠ A doua incuietoare, si e cea care nu se poate uita: `ComponentaRezolvata` e tot ce primeste
+   * `compileaza` despre o piesa. Fara camp de cost acolo, nicio citire viitoare gresita n-ar avea
+   * unde sa-l puna — `tsc` ar refuza-o.
+   */
+  const s = readFileSync(
+    path.resolve(process.cwd(), "src/lib/configurators/compileaza.ts"), "utf8",
+  ).replace(/\r\n/g, "\n");
+  const i = s.indexOf("export interface ComponentaRezolvata");
+  assert.ok(i > 0, "nu gasesc forma piesei rezolvate; proba s-a rupt");
+  const bloc = s.slice(i, s.indexOf("}", i));
+  assert.equal(/cost/i.test(bloc), false, `forma inghetata poarta costul: ${bloc}`);
 });
 
 test("⚠ INGHETAREA ia CHIAR randul piesei, nu valori scrise de mana", () => {

@@ -27,10 +27,18 @@ import { pixeliCeruti, MAX_FISIERE_PE_NOD, MAX_OCTETI } from "@/lib/configurator
  * scriere, si niciodata in mijlocul unui calcul.
  */
 
-export function InspectorNod({ nod, definitie, onSchimba }: {
+export function InspectorNod({ nod, definitie, piese, onSchimba }: {
   nod: Nod;
   /** Trebuie previzualizarii: ea aseaza zone peste CELELALTE campuri. */
   definitie: Definitie;
+  /**
+   * Piesele magazinului, ca sa se poata lega de o optiune.
+   *
+   * ⚠ Numai cele APRINSE ajung aici, iar comerciantul le face pe ecranul de piese. Fara
+   * lista, campul `componenta` ar fi cerut un uuid tastat de mana — adica un camp pe care
+   * nimeni nu-l poate completa corect.
+   */
+  piese: PiesaDeAles[];
   onSchimba: (n: Nod) => void;
 }) {
   const pune = (campuri: Partial<Nod>) => onSchimba({ ...nod, ...campuri } as Nod);
@@ -98,7 +106,7 @@ export function InspectorNod({ nod, definitie, onSchimba }: {
         </>
       )}
       {(nod.fel === "alegere" || nod.fel === "alegeri") && (
-        <SetariAlegeri nod={nod} onSchimba={onSchimba} />
+        <SetariAlegeri nod={nod} onSchimba={onSchimba} piese={piese} />
       )}
 
       <Probleme probleme={problemeleNodului(nod)} />
@@ -539,7 +547,18 @@ function SetariText({ nod, onSchimba }: { nod: Nod & { fel: "text" }; onSchimba:
  * comerciantul le-ar fi scris, ar fi publicat, si n-ar fi vazut nicio schimbare pe magazin.
  * Culoarea SE arata, fiindca pastilele chiar o folosesc.
  */
-function SetariAlegeri({ nod, onSchimba }: { nod: Nod & { fel: "alegere" | "alegeri" }; onSchimba: (n: Nod) => void }) {
+/** O piesa, cat ii trebuie campului de legare. */
+export interface PiesaDeAles {
+  id: string;
+  nume: string;
+  pretBucata: number;
+}
+
+function SetariAlegeri({ nod, onSchimba, piese }: {
+  nod: Nod & { fel: "alegere" | "alegeri" };
+  onSchimba: (n: Nod) => void;
+  piese: PiesaDeAles[];
+}) {
   const optiuni = nod.optiuni ?? [];
   const ePastila = nod.fel === "alegere" && nod.control === "culori";
   const schimbaOptiunea = (id: string, campuri: Partial<Optiune>) =>
@@ -653,6 +672,53 @@ function SetariAlegeri({ nod, onSchimba }: { nod: Nod & { fel: "alegere" | "aleg
                   />
                 </label>
               </div>
+
+              {/*
+                ⚠ PIESA CONSUMATA DE ALEGERE. Fara randul asta, `Optiune.componenta` era un camp
+                care exista in model, se parsa, se compila — si pe care nimeni nu-l putea completa.
+                Motorul stia sa scada balamale de la F5; comerciantul n-avea de unde sa spuna cate.
+
+                ⚠ Se scriu DOAR `id` si `bucati`. Pretul si produsul din care iese piesa se
+                INGHEATA LA PUBLICARE, pe server, din `configurator_componente` — si `citeste.ts`
+                le arunca dinadins cand vin dintr-o ciorna. Altfel oricine poate salva o ciorna ar
+                fi scris el pretul dupa care se incaseaza.
+              */}
+              {piese.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Consuma</span>
+                  <IntrareNumar
+                    valoare={o.componenta?.bucati}
+                    onSchimba={(n) => schimbaOptiunea(o.id, {
+                      componenta: n && o.componenta?.id ? { id: o.componenta.id, bucati: n } : undefined,
+                    })}
+                    clase="h-8 w-16 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+                    eticheta={`Cate bucati consuma optiunea ${o.eticheta}`}
+                  />
+                  <select
+                    value={o.componenta?.id ?? ""}
+                    onChange={(e) => schimbaOptiunea(o.id, {
+                      componenta: e.target.value
+                        ? { id: e.target.value, bucati: o.componenta?.bucati || 1 }
+                        : undefined,
+                    })}
+                    aria-label={`Ce piesa consuma optiunea ${o.eticheta}`}
+                    className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-1.5 text-xs outline-none focus:border-primary"
+                  >
+                    <option value="">Nicio piesa</option>
+                    {/*
+                      ⚠ Piesa ALEASA ramane in lista chiar daca a fost stinsa intre timp, ca omul sa
+                      vada CE anume s-a rupt. Scoasa, selectul ar fi cazut pe „Nicio piesa" si ar fi
+                      parut ca legatura n-a existat niciodata.
+                    */}
+                    {o.componenta?.id && !piese.some((x) => x.id === o.componenta?.id) && (
+                      <option value={o.componenta.id}>Piesa nu mai e disponibila</option>
+                    )}
+                    {piese.map((x) => (
+                      <option key={x.id} value={x.id}>{x.nume} ({x.pretBucata} lei/buc)</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
                 {/*

@@ -59,9 +59,28 @@ test("se compileaza CIORNA cu acelasi `compileaza` ca publicarea", () => {
   assert.ok(s.includes('from "@/lib/configurators/compileaza"'), "nu mai trece prin compilare");
   assert.match(
     s,
-    /compileaza\(continut\.definitie, continut\.reguli, continut\.pretuire\)/,
-    "compilarea nu mai porneste de la ciorna",
+    /compileaza\(continut\.definitie, continut\.reguli, continut\.pretuire, harta\)/,
+    "compilarea nu mai porneste de la ciorna, sau nu mai primeste piesele",
   );
+});
+
+test("⚠ si PRETURILE PIESELOR ajung in previzualizare", () => {
+  /*
+   * ⚠ PROBA DE DEASUPRA INGHETASE DIVERGENTA. Ea cerea textual `compileaza(...)` cu TREI
+   * argumente — fara harta pieselor. Iar `compileaza` pune `pretBucata` pe o optiune doar cand
+   * harta i-l da: publicarea i-l da, previzualizarea nu.
+   *
+   * Masurat inainte de reparatie, pe o usa care consuma patru balamale de 9 lei:
+   *     publicat  : [{ eticheta: "Balama 35 mm", suma: 36 }]
+   *     previzual : []
+   *
+   * Adica comerciantul verifica pe un ecran care arata 36 de lei mai putin decat incaseaza —
+   * pe CHIAR fisierul al carui antet spune ca previzualizarea trebuie sa fie vitrina.
+   */
+  const s = sursa();
+  assert.match(s, /piese: \{ id: string; nume: string; pretBucata: number \}\[\]/,
+    "previzualizarea nu mai primeste piesele");
+  assert.match(s, /new Map\(piese\.map\(/, "piesele se primesc si nu se folosesc");
 });
 
 test("verificarea ruleaza LA FIECARE SCHIMBARE, nu doar la publicare", () => {
@@ -80,6 +99,15 @@ test("fila e legata in builder si primeste CIORNA", () => {
     path.resolve(process.cwd(), "src/components/dashboard/configurator/ConfiguratorBuilder.tsx"),
     "utf8",
   ).replace(/\r\n/g, "\n");
-  assert.ok(b.includes("<Previzualizare continut={continut} />"), "fila nu e legata, sau nu pe ciorna");
+  assert.ok(
+    b.includes("<Previzualizare continut={continut} piese={pieseDeAles} />"),
+    "fila nu e legata, nu primeste ciorna, sau nu primeste piesele",
+  );
   assert.ok(b.includes('setFila("previzualizare")'), "butonul de fila lipseste");
+  /*
+   * ⚠ Si ca piesele date sunt CELE APRINSE. O piesa stinsa se pastreaza pentru versiunile
+   * publicate care o poarta, dar nu se mai poate lega de o optiune noua — iar previzualizarea
+   * trebuie sa arate ce se va PUBLICA, nu ce s-a publicat candva.
+   */
+  assert.match(b, /piese\.filter\(\(x\) => x\.activa\)/, "previzualizarea primeste si piesele stinse");
 });

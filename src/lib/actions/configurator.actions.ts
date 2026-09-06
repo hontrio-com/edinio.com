@@ -950,3 +950,255 @@ export async function scoateCategorii(
   revalidatePath(CALEA);
   return { success: true, scoase: (data ?? []).length };
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PIESELE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Ce vede comerciantul in lista de piese.
+ *
+ * ⚠ `cost_bucata` AJUNGE la browserul COMERCIANTULUI, si nicaieri altundeva.
+ *
+ * E cat platim NOI la furnizor. Ecranul de piese e locul unde comerciantul isi vede marja, deci
+ * acolo trebuie sa ajunga — sunt datele lui, iar panoul cere sesiune si magazinul propriu.
+ *
+ * ⚠ Ce NU se intampla, si e pazit cu proba: costul nu intra pe drumul PUBLICARII. Aceea citeste
+ * doar `id, nume, product_id, pret_bucata`, iar `ComponentaRezolvata` — tot ce primeste
+ * `compileaza` despre o piesa — n-are camp de cost. Deci versiunea servita cumparatorului nu-l
+ * poate purta nici din greseala.
+ */
+export interface RandPiesa {
+  id: string;
+  nume: string;
+  productId: string | null;
+  /** Numele produsului din care iese piesa de pe raft, cand mai exista. */
+  produsNume: string | null;
+  pretBucata: number;
+  costBucata: number | null;
+  activa: boolean;
+}
+
+/**
+ * Piesele magazinului.
+ *
+ * ⚠ SI CELE STINSE. O piesa stinsa ramane ceruta de versiunile publicate care o poarta, deci
+ * comerciantul trebuie s-o vada ca s-o poata reaprinde. Ascunse, ar fi cautat-o degeaba.
+ */
+export async function listeazaPiese(): Promise<{ error: string } | { success: true; randuri: RandPiesa[] }> {
+  const a = await magazinulMeu();
+  if (!a.ok) return { error: a.error };
+
+  const { data, error } = await a.supabase
+    .from("configurator_componente")
+    .select("id, nume, product_id, pret_bucata, cost_bucata, activa, products(name)")
+    .eq("business_id", a.magazin.id)
+    .order("nume")
+    .limit(MAX_PIESE);
+
+  if (error) {
+    logError({ action: "configurator.listeazaPiese", message: error.message, businessId: a.magazin.id, severity: "error" });
+    return { error: "Nu am putut citi piesele. Incearca din nou." };
+  }
+
+  return {
+    success: true,
+    randuri: (data ?? []).map((r) => ({
+      id: r.id,
+      nume: r.nume,
+      productId: r.product_id ?? null,
+      /* Legatura vine ca obiect sau ca vector de unul, dupa cum o vede PostgREST. */
+      produsNume: numeleProdusului(r.products),
+      pretBucata: Number(r.pret_bucata) || 0,
+      costBucata: r.cost_bucata === null ? null : Number(r.cost_bucata),
+      activa: r.activa !== false,
+    })),
+  };
+}
+
+/** Cate piese se citesc. Un magazin cu mai multe de atat are nevoie de cautare, nu de o lista. */
+const MAX_PIESE = 500;
+
+function numeleProdusului(v: unknown): string | null {
+  if (Array.isArray(v)) return (v[0] as { name?: string } | undefined)?.name ?? null;
+  if (v && typeof v === "object") return (v as { name?: string }).name ?? null;
+  return null;
+}
+
+/** Ce se poate scrie pe o piesa. `undefined` inseamna „nu se atinge”. */
+export interface PiesaDeScris {
+  nume?: string;
+  /** `null` = piesa nu se tine pe stoc (manopera, consumabil). */
+  productId?: string | null;
+  pretBucata?: number;
+  costBucata?: number | null;
+  activa?: boolean;
+}
+
+/**
+ * Curata ce a scris comerciantul, si spune ce e in neregula.
+ *
+ * ⚠ Se scrie o data, si se foloseste si la creare, si la editare: doua verificari scrise separat
+ * ar fi ajuns sa nu mai spuna acelasi lucru, iar editarea e drumul pe care se strecoara valorile
+ * pe care crearea le refuza.
+ */
+function curataPiesa(x: PiesaDeScris): { error: string } | { ok: true; camp: Record<string, unknown> } {
+  const camp: Record<string, unknown> = {};
+
+  if (x.nume !== undefined) {
+    const nume = String(x.nume ?? "").trim().slice(0, 200);
+    if (!nume) return { error: "Da-i un nume piesei." };
+    camp.nume = nume;
+  }
+
+  if (x.pretBucata !== undefined) {
+    const pret = Number(x.pretBucata);
+    /*
+     * ⚠ Negativul se REFUZA, nu se prinde la zero. Un pret negativ pe piesa ar fi insemnat ca
+     * cine consuma din depozit primeste bani inapoi: cumparatorul ar fi ales optiunea care ne
+     * costa cel mai mult ca sa-si ieftineasca comanda, si cu cat mai multe bucati, cu atat mai
+     * ieftin. Baza il refuza si ea (`check`), dar mesajul de acolo n-ar spune nimic omului.
+     */
+    if (!Number.isFinite(pret) || pret < 0) return { error: "Pretul pe bucata nu poate fi negativ." };
+    camp.pret_bucata = Math.round(pret * 100) / 100;
+  }
+
+  if (x.costBucata !== undefined) {
+    if (x.costBucata === null) camp.cost_bucata = null;
+    else {
+      const cost = Number(x.costBucata);
+      if (!Number.isFinite(cost) || cost < 0) return { error: "Costul pe bucata nu poate fi negativ." };
+      camp.cost_bucata = Math.round(cost * 100) / 100;
+    }
+  }
+
+  if (x.activa !== undefined) camp.activa = x.activa === true;
+  if (x.productId !== undefined) camp.product_id = x.productId || null;
+
+  return { ok: true, camp };
+}
+
+/**
+ * Produsul e al magazinului?
+ *
+ * ⚠ FARA ASTA, O PIESA POATE ARATA CATRE PRODUSUL ALTUI MAGAZIN. Cheia straina catre `products`
+ * e globala si se verifica cu drepturile proprietarului constrangerii, deci OCOLESTE RLS-ul de pe
+ * `products`. Iar id-urile de produs sunt publice pe vitrina: se citesc din formularul de comanda.
+ *
+ * Ce s-ar fi intamplat: fiecare comanda de pe magazinul MEU scade stocul unui produs al VICTIMEI,
+ * fiindca `revendica_stoc_complet` cauta `where id = pid`, fara `business_id`. Nu supravanzare "
+ * blocarea vanzarii altcuiva, de la distanta, si fara nicio urma dupa anulare.
+ */
+async function produsulEAlMeu(
+  a: Extract<Awaited<ReturnType<typeof magazinulMeu>>, { ok: true }>,
+  productId: string,
+): Promise<boolean> {
+  const { data } = await a.supabase
+    .from("products").select("id")
+    .eq("id", productId).eq("business_id", a.magazin.id).maybeSingle();
+  return !!data;
+}
+
+export async function creeazaPiesa(x: PiesaDeScris): Promise<{ error: string } | { success: true; id: string }> {
+  const a = await magazinulMeu();
+  if (!a.ok) return { error: a.error };
+
+  const curat = curataPiesa({ nume: "", pretBucata: 0, ...x });
+  if ("error" in curat) return curat;
+  if (!curat.camp.nume) return { error: "Da-i un nume piesei." };
+
+  if (curat.camp.product_id && !(await produsulEAlMeu(a, String(curat.camp.product_id)))) {
+    return { error: "Produsul ales nu e al magazinului tau." };
+  }
+
+  const { data, error } = await a.supabase
+    .from("configurator_componente")
+    .insert({ ...curat.camp, business_id: a.magazin.id } as never)
+    .select("id").single();
+
+  if (error) {
+    logError({ action: "configurator.creeazaPiesa", message: error.message, businessId: a.magazin.id, severity: "error" });
+    return { error: "Nu am putut salva piesa. Incearca din nou." };
+  }
+  revalidatePath(CALEA);
+  return { success: true, id: data.id };
+}
+
+/**
+ * Schimba o piesa. Tot pe aici se si STINGE, cu `{ activa: false }`.
+ *
+ * ⚠ Nu exista `stingePiesa`, si a existat cinci minute. Era un alias de un rand catre functia
+ * asta — dar fiecare export dintr-un modul `"use server"` e un capat HTTP public, cu
+ * identificatorul lui, chemabil de oriunde. Un capat in plus care nu adauga nimic e suprafata
+ * de atac platita degeaba, si fisierul isi scrie regula in antet: nu se exporta ajutoare.
+ *
+ * ⚠ SE STINGE, NU SE STERGE: versiunile PUBLICATE poarta `componenta.id` inghetat. Stearsa,
+ * `validare.ts` ar fi raportat-o ca FANTOMA la urmatoarea publicare a oricarui configurator
+ * care o cere — iar comerciantul ar fi citit pe ecran ca o piesa pe care tocmai a scos-o
+ * dinadins e o greseala. Stinsa, ramane citibila si se poate reaprinde.
+ *
+ * Comenzile deja plasate nu sunt atinse: ele poarta pretul si produsul inghetate la publicare.
+ */
+export async function schimbaPiesa(id: string, x: PiesaDeScris): Promise<Raspuns> {
+  const a = await magazinulMeu();
+  if (!a.ok) return { error: a.error };
+
+  const curat = curataPiesa(x);
+  if ("error" in curat) return curat;
+  if (Object.keys(curat.camp).length === 0) return { success: true };
+
+  if (curat.camp.product_id && !(await produsulEAlMeu(a, String(curat.camp.product_id)))) {
+    return { error: "Produsul ales nu e al magazinului tau." };
+  }
+
+  const { data, error } = await a.supabase
+    .from("configurator_componente")
+    .update(curat.camp as never)
+    .eq("id", id).eq("business_id", a.magazin.id)
+    .select("id").maybeSingle();
+
+  if (error) {
+    logError({ action: "configurator.schimbaPiesa", message: error.message, businessId: a.magazin.id, severity: "error" });
+    return { error: "Nu am putut salva piesa. Incearca din nou." };
+  }
+  if (!data) return { error: "Piesa nu exista." };
+  revalidatePath(CALEA);
+  return { success: true };
+}
+
+
+/**
+ * Produsele din care poate iesi o piesa de pe raft.
+ *
+ * ⚠ O CAUTARE APARTE, si nu din lene. `cautaProduseDeLegat` filtreaza `is_active = true`, fiindca
+ * acolo se cauta marfa de vandut. Piesele sunt exact pe dos: produsul din care iese o balama se
+ * tine STINS dinadins, ca sa nu apara in grila, in feeduri si in cautarea de produse. Cu filtrul
+ * acela, campul „din ce produs iese” n-ar fi gasit NICIODATA o piesa — si comerciantul ar fi cautat
+ * greseala la el.
+ *
+ * ⚠ Se cere un termen de cel putin doua litere: fara el, ar fi intors primele 20 de produse ale
+ * magazinului, care aproape sigur nu sunt piese.
+ */
+export async function cautaProduseDePiesa(
+  termen: string,
+): Promise<{ error: string } | { success: true; produse: { id: string; name: string }[] }> {
+  const a = await magazinulMeu();
+  if (!a.ok) return { error: a.error };
+
+  const t = (termen ?? "").trim().slice(0, 120);
+  if (t.length < 2) return { success: true, produse: [] };
+  // ⚠ `%` si `_` se escapeaza: fara asta, o cautare dupa „50%” aducea tot catalogul.
+  const sablon = t.replace(/([%_\\])/g, "\\$1");
+
+  const { data, error } = await a.supabase
+    .from("products").select("id, name")
+    .eq("business_id", a.magazin.id)
+    .ilike("name", `%${sablon}%`)
+    .order("name").limit(20);
+
+  if (error) {
+    logError({ action: "configurator.cautaProduseDePiesa", message: error.message, businessId: a.magazin.id, severity: "warning" });
+    return { error: "Nu am putut cauta produsele. Incearca din nou." };
+  }
+  return { success: true, produse: (data ?? []).map((r) => ({ id: r.id, name: String(r.name ?? "") })) };
+}

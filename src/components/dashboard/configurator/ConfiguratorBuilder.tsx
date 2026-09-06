@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -8,7 +8,9 @@ import {
   ArrowLeft, Check, ChevronDown, ChevronUp, CircleAlert, Loader2, Plus, Rocket, Trash2, TriangleAlert,
 } from "lucide-react";
 import type { ConfiguratorIncarcat } from "@/lib/actions/configurator.actions";
-import { publicaConfigurator, redenumesteConfigurator } from "@/lib/actions/configurator.actions";
+import {
+  listeazaPiese, publicaConfigurator, redenumesteConfigurator, type RandPiesa,
+} from "@/lib/actions/configurator.actions";
 import type { Continut } from "@/lib/configurators/citeste";
 import type { Nod } from "@/lib/configurators/definitie";
 import {
@@ -20,6 +22,7 @@ import { useAutosalvare } from "./useAutosalvare";
 import { InspectorNod } from "./InspectorNod";
 import { PanouAplicare } from "./PanouAplicare";
 import { PanouPret } from "./PanouPret";
+import { PanouPiese } from "./PanouPiese";
 import { PanouReguli } from "./PanouReguli";
 import { Previzualizare } from "./Previzualizare";
 
@@ -77,7 +80,7 @@ function nodNou(fel: Nod["fel"], control: string, eticheta: string): Nod {
  * previzualizare, comerciantul ar fi crezut ca a terminat cand a vazut campurile desenate — si
  * ar fi publicat un configurator care nu costa nimic si nu ascunde nimic.
  */
-type Fila = "structura" | "reguli" | "pret" | "previzualizare" | "aplicare";
+type Fila = "structura" | "reguli" | "pret" | "piese" | "previzualizare" | "aplicare";
 
 export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat }) {
   const router = useRouter();
@@ -89,6 +92,26 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
   const [publica, incepePublicarea] = useTransition();
 
   const salvare = useAutosalvare(initial.id, continut, initial.revizie);
+
+  /*
+   * ⚠ PIESELE SE CITESC O DATA, in builder, si se dau mai departe la doua ecrane: fila lor si
+   * inspectorul de optiuni. Citite in fiecare, cele doua ar fi ajuns sa arate liste diferite —
+   * comerciantul face o piesa noua in fila „Piese", trece la „Structura", si n-o gaseste.
+   *
+   * ⚠ Numai cele APRINSE ajung la inspector: o piesa stinsa se pastreaza pentru versiunile
+   * publicate care o poarta, dar nu se mai poate LEGA de o optiune noua. `PanouPiese` le vede
+   * pe toate, fiindca acolo trebuie sa se poata si reaprinde.
+   */
+  const [piese, setPiese] = useState<RandPiesa[]>([]);
+  const reincarcaPiesele = useCallback(() => {
+    void listeazaPiese().then((r) => { if ("randuri" in r) setPiese(r.randuri); });
+  }, []);
+  useEffect(reincarcaPiesele, [reincarcaPiesele]);
+
+  const pieseDeAles = useMemo(
+    () => piese.filter((x) => x.activa).map((x) => ({ id: x.id, nume: x.nume, pretBucata: x.pretBucata })),
+    [piese],
+  );
 
   /** Orice schimbare a ciornei trece pe aici, ca autosalvarea sa stie ca are ce scrie. */
   const schimba = useCallback((urmator: Continut) => {
@@ -193,6 +216,7 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
         <FilaBuc activa={fila === "structura"} onAlege={() => setFila("structura")}>Structura</FilaBuc>
         <FilaBuc activa={fila === "reguli"} onAlege={() => setFila("reguli")}>Reguli</FilaBuc>
         <FilaBuc activa={fila === "pret"} onAlege={() => setFila("pret")}>Pret</FilaBuc>
+        <FilaBuc activa={fila === "piese"} onAlege={() => setFila("piese")}>Piese</FilaBuc>
         <FilaBuc activa={fila === "previzualizare"} onAlege={() => setFila("previzualizare")}>Previzualizare</FilaBuc>
         <FilaBuc activa={fila === "aplicare"} onAlege={() => setFila("aplicare")}>Aplicare</FilaBuc>
       </div>
@@ -203,13 +227,20 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
         <PanouReguli continut={continut} onSchimba={schimba} />
       ) : fila === "pret" ? (
         <PanouPret continut={continut} onSchimba={schimba} />
+      ) : fila === "piese" ? (
+        /*
+         * ⚠ Piesele sunt ale MAGAZINULUI, nu ale configuratorului: aceeasi balama se consuma
+         * de usi si de dulapuri. De aceea panoul nu primeste `continut` — el nici nu atinge
+         * ciorna. Ce leaga o piesa de o optiune se scrie in fila „Structura”.
+         */
+        <PanouPiese onSchimbat={reincarcaPiesele} />
       ) : fila === "previzualizare" ? (
         /*
          * ⚠ Se da CIORNA, nu versiunea publicata: rostul filei e sa arate ce se va servi
          * DUPA publicare. Data versiunea activa, comerciantul ar fi verificat exact ce avea
          * deja, si n-ar fi vazut niciodata ce tocmai a schimbat.
          */
-        <Previzualizare continut={continut} />
+        <Previzualizare continut={continut} piese={pieseDeAles} />
       ) : (
       <>
       {constatari && constatari.length > 0 && (
@@ -345,6 +376,7 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
             <InspectorNod
               nod={nodSelectat}
               definitie={continut.definitie}
+              piese={pieseDeAles}
               onSchimba={(n) => schimba(schimbaNod(continut, n))}
             />
           ) : (

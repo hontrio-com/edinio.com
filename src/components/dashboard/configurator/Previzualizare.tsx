@@ -34,12 +34,37 @@ import { useConfigurator } from "@/components/storefront/sections/product/_share
 /** Pretul produsului pe care sta configuratorul, in previzualizare. */
 const PRET_DEMO = 100;
 
-export function Previzualizare({ continut }: { continut: Continut }) {
+export function Previzualizare({ continut, piese }: {
+  continut: Continut;
+  /**
+   * Piesele magazinului, cu preturile lor.
+   *
+   * ⚠ FARA ELE, PREVIZUALIZAREA ARATA ALT PRET DECAT VANZAREA. `compileaza` pune `pretBucata`
+   * pe o optiune doar cand harta i-l da; publicarea i-l da (il citeste de pe server, din
+   * `configurator_componente`), iar aici nu i-l dadea nimeni. Deci o usa care consuma patru
+   * balamale de 9 lei se arata cu 36 de lei mai IEFTINA decat se vinde — si comerciantul
+   * verifica pe ecranul acela inainte sa publice.
+   *
+   * Fisierul asta exista tocmai ca previzualizarea sa fie CHIAR vitrina, si divergenta era
+   * ultima ramasa.
+   */
+  piese: { id: string; nume: string; pretBucata: number }[];
+}) {
   const [pretProdus, setPretProdus] = useState(PRET_DEMO);
 
+  /*
+   * ⚠ `produsId` ramane gol dinadins: din panou nu se scade niciun stoc, si nici n-am de unde
+   * sti aici din ce produs iese piesa. Ce conteaza pentru previzualizare e PRETUL, iar el se
+   * socoteste la fel ca la vanzare.
+   */
+  const harta = useMemo(
+    () => new Map(piese.map((x) => [x.id, { produsId: null, pretBucata: x.pretBucata, nume: x.nume }])),
+    [piese],
+  );
+
   const compilat = useMemo(
-    () => compileaza(continut.definitie, continut.reguli, continut.pretuire),
-    [continut],
+    () => compileaza(continut.definitie, continut.reguli, continut.pretuire, harta),
+    [continut, harta],
   );
 
   const constatari = useMemo(

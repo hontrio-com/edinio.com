@@ -148,7 +148,13 @@ test("⚠ rezultatul reactivarii se citeste", () => {
   const i = sync.indexOf('if (stareaAcum === "outdated" || stinsDeNoi)');
   assert.notEqual(i, -1);
   const bloc = faraComentarii(sync.slice(i, sync.indexOf('return { ok: true, action: "updated"', i)));
-  assert.match(bloc, /const activare = await activateRemote\(admin, ctx, freshRow\);/);
+  /*
+   * ⚠ Ancora cere DOUA lucruri, si niciunul nu e lista de argumente: raspunsul se leaga de un
+   * nume, si ce se aprinde e randul RECITIT (`freshRow`), nu cel vechi. Scrisa cu argumentele
+   * inghetate, s-a rupt la prima paza adaugata in `activateRemote` (06.09.2026, poarta de
+   * personalizare a cerut si `businessId`) — adica exact la o schimbare care intarea codul.
+   */
+  assert.match(bloc, /const activare = await activateRemote\([^)]*freshRow\);/);
   assert.match(bloc, /if \(!activare\.ok\) return activare;/);
   assert.doesNotMatch(bloc, /^\s*await activateRemote\(/m,
     "chemata fara sa i se citeasca raspunsul, reactivarea e o parere");

@@ -5,6 +5,9 @@ import { storeBaseUrl } from "@/lib/seo";
 // trimite. Verificarea e comuna cu feedul Facebook si cu datele structurate.
 import { isValidGtin, normalizeGtin } from "@/lib/gtin";
 import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice, combinatiiActiveUnice } from "@/lib/storefront/variants";
+// Pretul de catalog a incetat sa fie pretul produsului cand personalizarea a capatat pret. Aceeasi
+// poarta se pune pe feedul Meta: altfel minciuna doar se muta pe celalalt canal.
+import { pretulDinCatalogMinte } from "@/lib/customization/pretul-din-catalog-minte";
 import { CURRENCY, DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "./types";
 
 export interface MappableBusiness {
@@ -170,6 +173,24 @@ export function expandProductOffers(
   product: MappableProduct,
   config: GoogleMerchantConfig,
 ): OfferInput[] {
+  /*
+   * ═══ ⚠ UN PRET CARE MINTE NU SE MAPEAZA, SE RETRAGE ═══
+   *
+   * `products.price` pleaca de aici la Google, si la un fototapet vandut la metru patrat el nu se
+   * incaseaza niciodata: cardul zice 89 de lei, pagina cere 603,75. Google numeste asta
+   * nepotrivire intre feed si pagina, si suspenda oferta; pana atunci comerciantul plateste
+   * clicurile oamenilor care pleaca de pe pagina cand vad alt pret.
+   *
+   * ⚠ ZERO OFERTE INSEAMNA RETRAGERE, nu „nu s-a schimbat nimic": cronul compara ofertele produse
+   * aici cu cele sincronizate inainte si le sterge de la Google pe cele care nu mai apar. Deci si
+   * un produs publicat luna trecuta iese, nu doar unul nou care nu intra.
+   *
+   * ⚠ Poarta CHIAR AICI, in mapper, nu doar in cron: mapperul e locul prin care trece orice drum
+   * catre Google, si a doua chemare a lui — un buton „trimite acum", o reluare — n-are de unde sa
+   * stie ce verificase cronul.
+   */
+  if (pretulDinCatalogMinte(product)) return [];
+
   const variants = parseVariants(product.page_sections);
   // Cate o oferta pe TITLU, nu pe rand: titlurile duplicate au si `id` duplicat,
   // deci a doua oferta o suprascria pe prima la Google (acelasi `offerId`) si

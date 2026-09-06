@@ -194,7 +194,10 @@ test("⚠ motivul refuzului se SCRIE, altfel produsul tace", () => {
     "`saveError` trebuie sa-si citeasca scrierea si s-o raporteze");
   /* ⚠ Si TOATE chemarile ei citesc raspunsul: una lasata pe dinafara pierde motivul la fel de bine. */
   const chemari = [...sync.matchAll(/await saveError\(/g)];
-  assert.equal(chemari.length, 4, `asteptam patru chemari, sunt ${chemari.length}`);
+  /* ⚠ Numarul creste cand se adauga o poarta noua — a cincea e cea de personalizare (06.09.2026).
+     El sta aici ca sa nu se strecoare o chemare NOUA care nu-si citeste scrierea, nu ca sa inghete
+     cate porti are `upsertRemote`: cine adauga una o trece si prin bucla de mai jos. */
+  assert.equal(chemari.length, 5, `asteptam cinci chemari, sunt ${chemari.length}`);
   for (const m of chemari) {
     const inainte = sync.slice(Math.max(0, (m.index ?? 0) - 22), m.index);
     assert.match(inainte, /const scris = $/,

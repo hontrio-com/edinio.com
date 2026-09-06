@@ -8,12 +8,23 @@ import type { Database } from "@/types/database.types";
 import { getAccessToken } from "@/lib/google-merchant/oauth";
 import { insertProductInput, deleteProductInput, getProduct, mapProductStatus } from "@/lib/google-merchant/client";
 import { expandProductOffers, type MappableBusiness, type MappableProduct } from "@/lib/google-merchant/mapping";
+import { MOTIV_PRET_CARE_MINTE, pretulDinCatalogMinte } from "@/lib/customization/pretul-din-catalog-minte";
 import { DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
 
 type Admin = SupabaseClient<Database>;
 const QUEUE_BATCH = 100;
 const STATUS_BATCH = 40;
 const MAX_ATTEMPTS = 5;
+
+/**
+ * Statusul randului retras fiindca pretul din catalog nu e cel platit.
+ *
+ * ⚠ NU e „error": nu s-a stricat nimic, iar comerciantul are ceva de facut, nu de reincercat.
+ * Statusurile celelalte vin de la Google (`active`, `pending`, `disapproved`); asta e al nostru,
+ * si de-aia randul lui e SARIT la reimprospatarea de status — altfel raspunsul lui Google i-ar
+ * sterge motivul si comerciantul ar ramane iar fara explicatie.
+ */
+const STARE_EXCLUS = "exclus";
 
 function verifyCron(req: NextRequest): boolean {
   // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
@@ -92,7 +103,27 @@ export async function GET(req: NextRequest) {
 
     for (const item of items ?? []) {
       try {
-        if (item.op === "delete" || (item.op === "upsert" && item.product_id && !productMap.has(item.product_id))) {
+        /*
+         * ═══ ⚠ UN PRET CARE MINTE SE TRATEAZA CA O STERGERE, NU CA O TRIMITERE ═══
+         *
+         * De cand personalizarea are pret, `products.price` poate sa nu fie platit de nimeni: la
+         * un fototapet cu `includePretulProdusului` stins, feedul anunta 89 de lei si pagina cere
+         * 603,75. Google numeste asta nepotrivire intre feed si pagina si suspenda oferta, iar
+         * pana atunci comerciantul plateste clicuri care pleaca.
+         *
+         * ⚠ SI OFERTELE VECHI TREBUIE SA IASA, nu doar cele noi sa nu intre. De-aia ramura e
+         * lipita de cea a produsului disparut: ea sterge de la Google TOATE ofertele sincronizate
+         * vreodata pentru produsul asta, inclusiv cele pe varianta. Daca ne-am fi multumit sa nu-l
+         * mai punem la coada, fototapetul publicat luna trecuta ar fi ramas la vanzare cu pretul
+         * mincinos, si nimic nu l-ar mai fi scos vreodata.
+         *
+         * ⚠ Produsele VECHI cu personalizare — text, poza, gravura fara pret — raspund „nu minte"
+         * si trec pe aici neatinse: sunt 29 in productie si se vand corect azi.
+         */
+        const produs = item.product_id ? productMap.get(item.product_id) : undefined;
+        const pretulMinte = !!produs && pretulDinCatalogMinte(produs);
+
+        if (pretulMinte || item.op === "delete" || (item.op === "upsert" && item.product_id && !productMap.has(item.product_id))) {
           // Remove every offer we ever synced for this product — including variant
           // offers (offer_id = "<product>-<combo>"). On deletes product_id is null,
           // so match by the product key on either column.
@@ -107,6 +138,23 @@ export async function GET(req: NextRequest) {
           }
           await admin.from("gmc_products").delete().eq("business_id", businessId)
             .or(`product_id.eq.${productKey},offer_id.eq.${item.offer_id}`);
+          /*
+           * ⚠ COMERCIANTUL TREBUIE SA AFLE DE CE, nu sa deduca din faptul ca nu mai vinde.
+           *
+           * Randul se scrie INAPOI dupa stergerea de mai sus, dinadins: nu e o urma de
+           * sincronizare, e motivul retragerii, si sta in acelasi tabel din care se face tabelul
+           * „Produse in Google". Fara el, un fototapet ar fi disparut din lista fara o vorba —
+           * exact felul de tacere din care comerciantul crede ca integrarea s-a stricat.
+           *
+           * `last_synced_at` ramane gol: nu s-a trimis nimic. Cand pretul din catalog redevine cel
+           * de pornire, urmatoarea sincronizare rescrie randul peste, cu status de la Google.
+           */
+          if (pretulMinte && item.product_id) {
+            await admin.from("gmc_products").upsert(
+              { business_id: businessId, product_id: item.product_id, offer_id: item.offer_id, status: STARE_EXCLUS, error: MOTIV_PRET_CARE_MINTE, last_synced_at: null, updated_at: now },
+              { onConflict: "business_id,offer_id" },
+            );
+          }
           await stergeDacaNeschimbat(admin, COADA, item);
           deleted++;
         } else {
@@ -187,6 +235,9 @@ export async function GET(req: NextRequest) {
   const { data: stale } = await admin
     .from("gmc_products")
     .select("id, business_id, offer_id")
+    /* ⚠ Randul RETRAS de noi nu se intreaba la Google: n-are oferta acolo, iar raspunsul i-ar
+       sterge motivul si l-ar da drept „In asteptare" la nesfarsit. Vezi `STARE_EXCLUS`. */
+    .neq("status", STARE_EXCLUS)
     .or(`last_status_at.is.null,last_status_at.lt.${staleBefore}`)
     .limit(STATUS_BATCH);
 

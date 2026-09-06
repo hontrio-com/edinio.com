@@ -20,6 +20,7 @@ import { isProductSellable, toOlxAdvertBody, type MappableBusiness, type Mappabl
 import type { GpsrConfig } from "@/lib/gpsr";
 import type { OlxAdvert, OlxConfig } from "./types";
 import { logError } from "@/lib/error-logger";
+import { cerePersonalizarea } from "@/lib/customization/definitie";
 
 type Db = SupabaseClient<Database>;
 
@@ -582,6 +583,16 @@ const VIU_LA_EI = ["active", "new", "unconfirmed"];
 const NU_E_LA_VANZARE = [...STINS_LA_EI, "limited", "unpaid"];
 
 /**
+ * De ce nu poate sta un produs personalizabil pe OLX. Vezi poarta din `upsertRemote`.
+ *
+ * ⚠ UN SINGUR TEXT PENTRU AMANDOUA USILE (publicarea si „Activează"). Scris de doua ori, s-ar fi
+ * despartit la prima corectura — iar comerciantul ar fi primit doua explicatii deosebite pentru
+ * acelasi refuz, pe acelasi produs.
+ */
+const MOTIV_PERSONALIZARE = "Produsul cere date de la cumparator (personalizare), iar anuntul OLX "
+  + "nu are cum sa le transmita. Stinge personalizarea sau scoate produsul de pe OLX.";
+
+/**
  * Ce zice OLX ca e acum, cand a refuzat comanda noastra cu `400`.
  *
  * ═══ RELUAREA TREBUIE SA STIE CE INCERCA, NU DOAR CE A PATIT (31.08.2026) ═══
@@ -723,8 +734,50 @@ async function deactivateRemote(
   return { ok: false, permanent: false, asteptare: asteptareaLor(res), error: res.error };
 }
 
-async function activateRemote(admin: Db, ctx: OlxSyncContext, row: OlxAdvertRow): Promise<SyncOutcome> {
+async function activateRemote(
+  admin: Db, ctx: OlxSyncContext, businessId: string, row: OlxAdvertRow,
+): Promise<SyncOutcome> {
   if (!row.olx_advert_id) return { ok: true, action: "skipped" };
+
+  /*
+   * ═══ ⚠ SI „ACTIVEAZĂ" TRECE PRIN POARTA DE PERSONALIZARE ═══
+   *
+   * Poarta din `upsertRemote` opreste PUBLICAREA. Aici e a doua usa catre acelasi capat — un anunt
+   * VIU la OLX pentru un produs care cere date de la cumparator — si e chiar usa pe care o deschide
+   * poarta insasi:
+   *
+   *     poarta stinge anuntul la ei si scrie `status: "error"`
+   *     sondarea (din doua in doua ore) citeste starea LOR: `removed_by_user`
+   *     ecranul arata butonul „Activează" (`canActivate`, in `OlxClient`)
+   *     omul apasa -> anuntul se aprinde iar, la pretul de catalog si fara intrebarea de gravat
+   *     -> si nimic nu-l mai coboara pana la urmatoarea editare de pret sau de stoc
+   *
+   * ⚠ PAZA STA LA LUCRATOR, NU LA CHEMATOR. Aici trec TOATE cele trei drumuri care aprind un
+   * anunt: apasarea din ecran (`activateOlxProduct` -> `activateProductNow`), lucrarea
+   * `op: "activate"` din coada, si reaprinderea de dupa intoarcerea stocului din `upsertRemote`.
+   * Trei verificari in trei chematori s-ar fi despartit la prima schimbare.
+   *
+   * ⚠ O citire in plus, si numai pe drumuri rare: activarea e o apasare de om sau o intoarcere de
+   * stoc, nu o trecere de cron peste tot catalogul. Pe drumul din `upsertRemote` citirea e chiar
+   * de prisos — acolo poarta a raspuns deja, cu cateva randuri mai sus — dar o exceptie facuta ca
+   * sa se scuteasca o citire pe o ramura rara e chiar felul in care o paza ajunge sa aiba gauri.
+   *
+   * ⚠ `offer_id` E id-ul produsului, pentru toate drumurile din fisierul asta.
+   */
+  const { data: prod, error: eProdus } = await admin
+    .from("products").select("page_sections")
+    .eq("business_id", businessId).eq("id", row.offer_id).maybeSingle();
+  /* ⚠ „N-am putut citi" NU inseamna „n-are personalizare": se reia, nu se aprinde pe o presupunere. */
+  if (eProdus) {
+    return {
+      ok: false, permanent: false,
+      error: `nu am putut verifica daca produsul cere personalizare, deci nu activam anuntul: ${eProdus.message}`,
+    };
+  }
+  if (cerePersonalizarea(prod?.page_sections)) {
+    return { ok: false, permanent: true, error: MOTIV_PERSONALIZARE };
+  }
+
   const res = await advertCommand(ctx.token, row.olx_advert_id, "activate");
   const now = new Date().toISOString();
   if (!isOlxError(res)) {
@@ -820,6 +873,77 @@ async function upsertRemote(
       admin, ctx, businessId, offerId, row,
       product.is_active ? "stoc" : "produs-inactiv", product.id,
     );
+  }
+
+  /*
+   * ═══ ⚠ PERSONALIZAREA NU SE POATE ONORA PRINTR-UN ANUNT OLX ═══
+   *
+   * Aceeasi hotarare ca la eMAG (`emag/pregatire.ts`, `ceLipseste`) si la Trendyol
+   * (`trendyol/sync.ts`, chiar inaintea trimiterii), si din acelasi motiv: anuntul lor n-are unde
+   * sa poarte „numele care trebuie gravat", iar cumparatorul nici nu trece prin pagina de produs,
+   * singurul loc unde formularul exista.
+   *
+   * ⚠ CE COSTA daca produsul pleaca: o cana cu gravura are 89 de lei in catalog si 109 cu
+   * suplimentul de personalizare, iar `toOlxAdvertBody` pretuieste din `products.price` — deci
+   * anuntul cere 89 pentru o marfa de 109, si nici nu poarta raspunsul din care se face gravura.
+   * Cu „Livrare prin OLX" pornita, comanda intra singura si nu mai are cine s-o opreasca.
+   *
+   * ⚠ Se opreste ORICE personalizare pornita, nu doar cea cu campuri obligatorii: un camp
+   * „optional" tot inseamna ca vitrina promite ceva ce anuntul nu poate transmite.
+   *
+   * ⚠ SI CE E DEJA PUBLICAT SE RETRAGE. Un motiv scris pe randul local nu stinge un anunt viu:
+   * el ar fi ramas la vanzare, la pretul de catalog, exact cat tine defectul. Se stinge intai la
+   * ei, si abia apoi se scrie motivul.
+   *
+   * ⚠ Se stinge NUMAI anuntul pe care il stim (`olx_advert_id`). Unul orfan — viu la ei,
+   * necunoscut la noi — ar cere cautarea dupa `external_id`, adica o cerere la OLX pe FIECARE
+   * trecere si pe FIECARE produs personalizabil; iar coada se umple la fiecare editare de pret
+   * sau de stoc. Orfanii raman pe seama caii de nevandabil si a apasarii „Șterge anunțul".
+   *
+   * Masurat pe productie la 06.09.2026: `olx_adverts` e GOALA (zero anunturi, pe toata platforma),
+   * si coada la fel. Deci garda nu scoate azi nimic din vanzare — se aprinde la prima mapare de
+   * categorie care prinde un produs personalizabil.
+   *
+   * ⚠ SI CATE SUNT ALEA. 78 de produse au steagul `customization.enabled = true`, dar numai 29 au
+   * si campuri — iar poarta intreaba prin `cerePersonalizarea`, care raspunde NU pe un formular
+   * gol. Deci opreste 29, nu 78. Numarul mare e masurat cu ALTA intrebare decat cea pe care o
+   * pune poarta, si citit repede ar face pe cineva sa caute 49 de produse oprite degeaba.
+   */
+  if (cerePersonalizarea(product.page_sections)) {
+    const motiv = MOTIV_PERSONALIZARE;
+    /*
+     * ⚠ SE SARE PESTE STINGERE NUMAI CAND STIM CA E STINS, nu cand stim ca e viu.
+     *
+     * Prima varianta cerea `VIU_LA_EI.includes(row.status)`, adica pornea de la starea NOASTRA ca
+     * sa hotarasca despre anuntul LOR. Iar una dintre stari e chiar scrisa de noi peste un anunt
+     * viu: `saveError` pune `status: "error"` si nu atinge `olx_advert_id`. Deci:
+     *
+     *     anuntul e ACTIV la ei; un `PUT` pica definitiv (atribut refuzat, moderare)
+     *     -> `saveError` scrie „error" peste rand, anuntul ramane VIU
+     *     comerciantul porneste personalizarea -> poarta de aici
+     *     -> „error" nu e in `VIU_LA_EI` -> nu se stinge nimic, si anuntul ramane la vanzare
+     *     -> iar lucrarea iese `permanent`, deci nimic n-o mai reia
+     *
+     * `NU_E_LA_VANZARE` e lista starilor in care chiar nu mai e nimic de stins (stins, expirat,
+     * `limited`, `unpaid`). Restul — inclusiv „error", care nu spune nimic despre ei — trece prin
+     * `stingeLaEi`, care intreaba si confirma din starea LOR. O cerere in plus pe o stare
+     * nelamurita, in schimbul unui anunt care altfel ramanea viu.
+     */
+    if (row?.olx_advert_id && !NU_E_LA_VANZARE.includes(row.status)) {
+      const stins = await stingeLaEi(ctx, row.olx_advert_id);
+      if (!stins.ok) return stins.esec;
+    }
+    /*
+     * ⚠ Fara rand local nu se scrie niciunul, ca la categoria nemapata de mai jos: coada OLX se
+     * umple cu TOATE produsele magazinului, deci un raft de fototapete ar fi umplut ecranul cu
+     * erori pentru produse pe care nimeni n-a cerut sa fie publicate. Refuzul se intoarce oricum,
+     * deci „Postează pe OLX" spune limpede de ce nu pleaca.
+     */
+    if (row) {
+      const scris = await saveError(admin, businessId, offerId, product.id, motiv);
+      if (!scris.ok) return { ok: false, permanent: false, error: `${motiv} (motivul nu s-a putut scrie: ${scris.error})` };
+    }
+    return { ok: false, permanent: true, error: motiv };
   }
 
   const entry = product.category ? ctx.config.category_map?.[product.category] : undefined;
@@ -934,7 +1058,7 @@ async function upsertRemote(
          * ⚠ Reluarea e ieftina si sigura: `PUT`-ul de mai sus e idempotent, iar o comanda de
          * activare pe un anunt deja activ raspunde `400 invalid status`, pe care il tratam ca gata.
          */
-        const activare = await activateRemote(admin, ctx, freshRow);
+        const activare = await activateRemote(admin, ctx, businessId, freshRow);
         if (!activare.ok) return activare;
       }
     }
@@ -1315,7 +1439,7 @@ async function processQueueItemIntern(
     }
     case "activate": {
       const row = await getRow(admin, item.business_id, item.offer_id);
-      return row ? activateRemote(admin, ctx, row) : { ok: true, action: "skipped" };
+      return row ? activateRemote(admin, ctx, item.business_id, row) : { ok: true, action: "skipped" };
     }
     default:
       return upsertRemote(admin, ctx, item.business_id, item.offer_id, product);
@@ -1351,7 +1475,7 @@ export async function deactivateProductNow(admin: Db, ctx: OlxSyncContext, busin
 export async function activateProductNow(admin: Db, ctx: OlxSyncContext, businessId: string, productId: string): Promise<SyncOutcome> {
   return faraCitiriPicate(async () => {
     const row = await getRow(admin, businessId, productId);
-    return row ? activateRemote(admin, ctx, row) : { ok: true, action: "skipped" };
+    return row ? activateRemote(admin, ctx, businessId, row) : { ok: true, action: "skipped" };
   });
 }
 

@@ -11,6 +11,10 @@ import { storeBaseUrl } from "@/lib/seo";
 // o folosesc feedul Google Merchant si datele structurate ale paginii.
 import { isValidGtin } from "@/lib/gtin";
 import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice, combinatiiActiveUnice } from "@/lib/storefront/variants";
+// Aceeasi poarta ca la Google Merchant, si din acelasi motiv: `products.price` a incetat sa fie
+// pretul produsului cand personalizarea a capatat pret. Pusa doar pe un canal, minciuna s-ar fi
+// mutat pe celalalt.
+import { pretulDinCatalogMinte } from "@/lib/customization/pretul-din-catalog-minte";
 
 const CURRENCY = "RON";
 
@@ -102,6 +106,20 @@ const VARIANT_SLOTS = ["color", "size", "material", "pattern"] as const;
  * are skipped (Meta requires image_link and won't run imageless items in ads).
  */
 export function buildCatalogItems(business: CatalogBusiness, product: CatalogProduct): CatalogItem[] {
+  /*
+   * ═══ ⚠ UN PRET CARE MINTE NU INTRA IN CATALOG ═══
+   *
+   * Feedul asta e o ruta PUBLICA pe care Meta o citeste singura, programat: nu exista niciun ecran
+   * in care cineva sa vada ce pleaca. Cat timp pretul venea din `products.price`, un fototapet
+   * vandut la metru patrat se anunta cu 89 de lei si costa 603,75 pe pagina — iar reclamele
+   * dinamice duc omul exact acolo, pe banii comerciantului.
+   *
+   * ⚠ Se lasa afara TOT produsul, si variantele lui: pretul de baza e cel care minte, deci niciuna
+   * dintre ofertele derivate din el nu e cinstita. Acelasi „return []" ca la produsul fara imagine,
+   * si din acelasi socotit: un articol lipsa costa mai putin decat unul mincinos.
+   */
+  if (pretulDinCatalogMinte(product)) return [];
+
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
   const primaryImage = images[0];
   if (!primaryImage) return [];

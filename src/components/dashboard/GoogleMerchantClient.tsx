@@ -394,6 +394,10 @@ function StatusBadge({ status }: { status: string }) {
     pending: { label: "În așteptare", cls: "bg-warning/10 text-warning", icon: Clock },
     disapproved: { label: "Respins", cls: "bg-destructive/10 text-destructive", icon: CircleX },
     error: { label: "Eroare", cls: "bg-destructive/10 text-destructive", icon: AlertTriangle },
+    /* ⚠ Retras de NOI, nu de Google: pretul din catalog nu e cel platit pe pagina. Fara randul
+       asta, produsul ar fi purtat eticheta implicita „In asteptare" — adica exact minciuna
+       inversa: comerciantul ar fi asteptat o aprobare care nu vine niciodata. */
+    exclus: { label: "Retras", cls: "bg-warning/10 text-warning", icon: AlertTriangle },
   };
   const s = map[status] ?? map.pending;
   const Icon = s.icon;

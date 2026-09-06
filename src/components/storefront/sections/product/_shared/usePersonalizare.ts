@@ -6,7 +6,10 @@ import {
   type CampPersonalizare,
   type DefinitiePersonalizare,
 } from "@/lib/customization/definitie";
-import { podeaPersonalizarii, pretUnitar, pretulPersonalizarii, type RezultatPret } from "@/lib/customization/pret";
+import {
+  campurileFaraSuprafata, podeaPersonalizarii, pretUnitar, pretulPersonalizarii,
+  type RezultatPret,
+} from "@/lib/customization/pret";
 import { formatPrice } from "@/lib/utils/format";
 import { normalizeazaValorile } from "@/lib/customization/valori";
 
@@ -143,18 +146,32 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
     [definitie, curate],
   );
 
+  /*
+   * ⚠ CAMPURILE CARE CER O SUPRAFATA PE CARE N-O AU, aratate langa ele.
+   *
+   * Serverul le refuza oricum (vezi `verificaPersonalizarea`), dar aici omul afla INAINTE sa-si
+   * scrie toata adresa — si afla langa campul vinovat, nu intr-un mesaj general.
+   */
+  const cerSuprafata = useMemo(
+    () => (definitie && curate ? campurileFaraSuprafata(definitie, curate.valori) : []),
+    [definitie, curate],
+  );
+
   const constatari = useMemo(() => {
     if (!aratate || !curate) return {};
     const out: Record<string, string> = {};
     for (const c of curate.constatari) if (!out[c.campId]) out[c.campId] = c.mesaj;
+    for (const camp of cerSuprafata) {
+      if (!out[camp.id]) out[camp.id] = "Completeaza dimensiunile, ca sa putem socoti pretul.";
+    }
     return out;
-  }, [aratate, curate]);
+  }, [aratate, curate, cerSuprafata]);
 
   const verifica = useCallback(() => {
     if (!definitie || !curate) return true;
     setAratate(true);
-    return curate.ok;
-  }, [definitie, curate]);
+    return curate.ok && cerSuprafata.length === 0;
+  }, [definitie, curate, cerSuprafata]);
 
   const incarcaFisiere = useCallback(
     async (camp: CampPersonalizare, fisiere: FileList | null) => {
@@ -251,7 +268,9 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
     constatari,
     /* ⚠ `true` si cand produsul n-are personalizare — altfel butonul ar fi fost stins pe TOT
        magazinul, nu doar pe produsele personalizabile. */
-    gata: !definitie || (curate?.ok ?? true),
+    /* ⚠ `true` si cand produsul n-are personalizare — altfel butonul ar fi fost stins pe TOT
+       magazinul. Si `false` cand un supliment pe m² n-are de unde sa-si ia metrii. */
+    gata: !definitie || ((curate?.ok ?? true) && cerSuprafata.length === 0),
     supliment: detalii.supliment,
     pretDeAfisat,
     detalii,

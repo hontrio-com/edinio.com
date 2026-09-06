@@ -1,6 +1,6 @@
 import { r2KeyFromUrl } from "@/lib/r2-url";
 import { normalizeazaDefinitia, type CampPersonalizare } from "./definitie";
-import { pretulPersonalizarii, type RandDefalcare } from "./pret";
+import { campurileFaraSuprafata, pretulPersonalizarii, type RandDefalcare } from "./pret";
 import { normalizeazaValorile, type ValoareCamp } from "./valori";
 
 /**
@@ -246,6 +246,28 @@ export function verificaPersonalizarea(
      */
     const c = curate.constatari[0];
     return { fel: "eroare", mesaj: c.eticheta ? `${c.eticheta}: ${c.mesaj}` : c.mesaj };
+  }
+
+  /*
+   * ⚠ UN SUPLIMENT PE M² CERE METRI, si daca nu-i are, comanda se OPRESTE.
+   *
+   * `pretulPersonalizarii` il sare dinadins — la nivelul socotelii, „nu incasez nimic" e mai
+   * putin rau decat „inventez un numar". Dar sarit si nespus, devine TACERE: comerciantul a
+   * configurat „Protectie impermeabila +15 lei/m²", o vede salvata, si incaseaza ZERO. Clientul
+   * primeste protectia pe gratis, si nimeni nu afla pana la inventar.
+   *
+   * ⚠ Se intreaba despre ALEGEREA clientului, nu despre configurare: cine nu bifeaza nimic pe
+   * metru nu e obligat sa dea dimensiuni. Vezi `campurileFaraSuprafata`.
+   */
+  const faraSuprafata = campurileFaraSuprafata(definitie, curate.valori);
+  if (faraSuprafata.length > 0) {
+    const cere = faraSuprafata.map((c) => c.label).filter(Boolean).join(", ");
+    return {
+      fel: "eroare",
+      mesaj: cere
+        ? `Completeaza dimensiunile: fara ele nu se poate socoti ${cere}.`
+        : "Completeaza dimensiunile: fara ele nu se poate socoti pretul.",
+    };
   }
 
   /* ── Fisierele: proprietate, nu doar forma ──────────────────────────────── */

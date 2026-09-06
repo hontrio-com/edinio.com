@@ -92,13 +92,62 @@ function impactulAles(camp: CampPersonalizare, v: ValoareCamp | undefined): Impa
  * din lista" ar fi fost stabila pana cand cineva reordoneaza campurile, si atunci pretul s-ar fi
  * schimbat singur, pe un produs pe care nimeni nu l-a atins.
  */
-function campulDeSuprafata(definitie: DefinitiePersonalizare): CampPersonalizare | undefined {
+export function campulDeSuprafata(definitie: DefinitiePersonalizare): CampPersonalizare | undefined {
   const mod = definitie.pret;
   if (mod?.fel === "suprafata") {
     return definitie.fields.find((c) => c.id === mod.campDimensiuni && c.type === "dimensiuni");
   }
   const dims = definitie.fields.filter((c) => c.type === "dimensiuni");
   return dims.length === 1 ? dims[0] : undefined;
+}
+
+/**
+ * Campurile care CER o suprafata si n-o au.
+ *
+ * ═══ ⚠ CE COSTA CAND NIMENI NU INTREABA ASTA ═══
+ *
+ * `pretulPersonalizarii` SARE un supliment pe m² cand nu exista suprafata — si o face dinadins:
+ * la nivelul socotelii, „nu incasez nimic" e mai putin rau decat „inventez un numar". Dar sarita
+ * acolo si nespusa nicaieri, alegerea aia devine TACERE.
+ *
+ * Masurat pe patru configurari, inainte de reparatie, cu „Protectie impermeabila +15 lei/m²":
+ *
+ *     pe_m2 fara camp de dimensiuni      -> supliment 0 | PRET 100 | la salvare: TRECE
+ *     pe_m2 cu DOUA campuri de dimensiuni -> supliment 0 | PRET 100 | la salvare: TRECE
+ *     pe_m2 cu camp optional necompletat  -> supliment 0 | PRET 100 | la salvare: TRECE
+ *     MARTOR, dimensiuni completate       -> supliment 131,25 | PRET 231,25
+ *
+ * Comerciantul configureaza tariful, il vede salvat, si incaseaza zero. Clientul primeste marfa
+ * cu protectie fara s-o plateasca, si nimeni nu afla — pana la inventar.
+ *
+ * ⚠ SE INTREABA DESPRE ALEGEREA CLIENTULUI, nu despre configurare. Un `pe_m2` pus pe o optiune
+ * pe care nimeni n-a ales-o nu cere nimic; abia cand omul bifeaza protectia are nevoie de metri.
+ * Asa dimensiunile pot ramane OPTIONALE pentru cine nu cumpara nimic pe metru.
+ *
+ * Configurarea in care suprafata nu se poate afla NICIODATA (zero campuri de dimensiuni, sau doua
+ * si niciunul numit) se opreste in alta parte: la SALVARE, in `problemaPersonalizarii`. Acolo e
+ * greseala comerciantului, si tot el trebuie s-o repare.
+ */
+export function campurileFaraSuprafata(
+  definitie: DefinitiePersonalizare,
+  valori: Map<string, ValoareCamp>,
+): CampPersonalizare[] {
+  const campDim = campulDeSuprafata(definitie);
+  const v = campDim ? valori.get(campDim.id) : undefined;
+  const areSuprafata =
+    !!campDim && v?.fel === "dimensiuni"
+    && suprafataM2(v.latime, v.inaltime, campDim.unitate ?? "cm") !== null;
+  if (areSuprafata) return [];
+
+  const out: CampPersonalizare[] = [];
+  for (const camp of definitie.fields) {
+    if (campDim && camp.id === campDim.id) continue;
+    /* Campul-sursa de tarif nu intra: in modul „suprafata" el DA tariful, nu un supliment. */
+    if (definitie.pret?.fel === "suprafata" && camp.id === definitie.pret.campTarif) continue;
+    const imp = impactulAles(camp, valori.get(camp.id));
+    if (imp?.fel === "pe_m2" && imp.suma > 0) out.push(camp);
+  }
+  return out;
 }
 
 export function pretulPersonalizarii(

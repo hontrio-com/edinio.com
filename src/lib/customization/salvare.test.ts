@@ -186,3 +186,79 @@ test("⚠ poarta e CHEMATA in amandoua actiunile de salvare, nu doar scrisa", ()
     "in baza nu se mai scrie ce a trimis comerciantul",
   );
 });
+
+test("⚠ un pret pe m² fara nicio sursa de suprafata se REFUZA la salvare", () => {
+  /*
+   * ⚠ DOUA FELURI IN CARE SUPRAFATA NU SE POATE AFLA NICIODATA, si amandoua sunt greseli de
+   * configurare — numai comerciantul le poate repara, deci se opresc la scriere.
+   *
+   * Al doilea merita explicat: `campulDeSuprafata` refuza sa aleaga „primul camp de dimensiuni
+   * din lista" cand sunt doua. O alegere pe pozitie ar fi fost stabila pana cand cineva
+   * reordoneaza campurile — si atunci pretul s-ar fi mutat singur, pe un produs pe care nimeni nu
+   * l-a atins.
+   */
+  const protectie = {
+    id: "prot", type: "comutator", label: "Protectie impermeabila", required: false,
+    impact: { fel: "pe_m2", suma: 15 },
+  };
+  const dim = (id: string) => ({
+    id, type: "dimensiuni", label: "Dimensiuni", required: false, unitate: "cm",
+    latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 },
+  });
+
+  const fara = problemaPersonalizarii({ customization: { enabled: true, fields: [protectie] } });
+  assert.ok(fara, "un pret pe m² fara niciun camp de dimensiuni s-a salvat in tacere");
+  assert.match(fara, /n-are niciun camp de dimensiuni/);
+  assert.match(fara, /Protectie impermeabila/, "mesajul nu spune CARE camp");
+
+  const doua = problemaPersonalizarii({ customization: { enabled: true, fields: [
+    dim("d1"), dim("d2"), protectie,
+  ] } });
+  assert.ok(doua, "doua campuri de dimensiuni si niciunul ales — s-a salvat in tacere");
+  assert.match(doua, /niciunul nu e ales ca sursa/);
+
+  /* Si pe OPTIUNILE unui camp de butoane, nu doar pe camp. */
+  const peOptiune = problemaPersonalizarii({ customization: { enabled: true, fields: [
+    { id: "f", type: "butoane", label: "Finisaj", required: true, optiuni: [
+      { id: "o", eticheta: "Lucios", impact: { fel: "pe_m2", suma: 9 } },
+    ] },
+  ] } });
+  assert.ok(peOptiune, "un pret pe m² pus pe o OPTIUNE a trecut");
+});
+
+test("⚠ configurarile CINSTITE pe m² trec mai departe", () => {
+  /*
+   * Perechea obligatorie: o poarta care refuza tot ar fi trecut probele de mai sus si ar fi blocat
+   * fiecare fototapet din platforma.
+   */
+  const cuUnCamp = problemaPersonalizarii({ customization: { enabled: true, fields: [
+    { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: false, unitate: "cm",
+      latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+    { id: "prot", type: "comutator", label: "Protectie", required: false,
+      impact: { fel: "pe_m2", suma: 15 } },
+  ] } });
+  assert.equal(cuUnCamp, null, "un camp de dimensiuni e destul, si a fost refuzat");
+
+  /* Doua campuri de dimensiuni, dar UNUL ales ca sursa: se stie din care se socoteste. */
+  const cuSursa = problemaPersonalizarii({ customization: {
+    enabled: true,
+    fields: [
+      { id: "d1", type: "dimensiuni", label: "Peretele", required: true, unitate: "cm",
+        latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+      { id: "d2", type: "dimensiuni", label: "Rama", required: false, unitate: "cm",
+        latime: { min: 1, max: 50 }, inaltime: { min: 1, max: 50 } },
+      { id: "prot", type: "comutator", label: "Protectie", required: false,
+        impact: { fel: "pe_m2", suma: 15 } },
+    ],
+    pret: { fel: "suprafata", campDimensiuni: "d1", tarif: 69, includePretulProdusului: false },
+  } });
+  assert.equal(cuSursa, null, "sursa era numita, si tot s-a refuzat");
+
+  /* Si un supliment FIX nu cere nicio suprafata. */
+  assert.equal(
+    problemaPersonalizarii({ customization: { enabled: true, fields: [
+      { id: "g", type: "text", label: "Gravura", required: true, impact: { fel: "fix", suma: 20 } },
+    ] } }),
+    null,
+  );
+});

@@ -1,6 +1,7 @@
 import {
   MAX_CAMPURI, MAX_OPTIUNI, normalizeazaDefinitia,
 } from "./definitie";
+import { campulDeSuprafata } from "./pret";
 
 /**
  * Poarta de SCRIERE a personalizarii: ce salveaza comerciantul se si serveste, sau afla de ce nu.
@@ -67,6 +68,43 @@ export function problemaPersonalizarii(pageSections: unknown): string | null {
     if ((camp.optiuni ?? []).length < optiuniTrimise.length) {
       return `Campul „${camp.label}” are optiuni care nu se pot folosi — fiecare are nevoie de un`
         + " nume propriu, care nu se repeta.";
+    }
+  }
+
+  /*
+   * ⚠ UN „+15 LEI/M²" CARE N-ARE DE UNDE SA-SI IA METRII.
+   *
+   * `pretulPersonalizarii` sare un supliment pe m² cand nu exista suprafata, si o face dinadins:
+   * la nivelul socotelii, „nu incasez nimic" e mai putin rau decat „inventez un numar". Dar
+   * configurarea in care suprafata nu se poate afla NICIODATA nu e un caz de rulare — e o greseala
+   * de configurare, si numai comerciantul o poate repara.
+   *
+   * Masurat inainte de reparatie, cu „Protectie impermeabila +15 lei/m²" pe un produs cu pret
+   * standard 100 lei: supliment 0, pret 100, si la salvare TRECEA. Comerciantul vedea tariful
+   * salvat si incasa zero, pe fiecare comanda.
+   *
+   * ⚠ Doua feluri in care suprafata nu se poate afla, si amandoua se opresc aici: niciun camp de
+   * dimensiuni, sau DOUA si niciunul numit ca sursa (`campulDeSuprafata` refuza sa aleaga „primul
+   * din lista": ordinea campurilor se poate schimba, si atunci pretul s-ar muta singur).
+   *
+   * ⚠ Cazul in care campul EXISTA dar clientul nu l-a completat NU se opreste aici — acolo
+   * dimensiunile pot ramane optionale pentru cine nu cumpara nimic pe metru, iar refuzul vine la
+   * comanda, langa campul vinovat (`campurileFaraSuprafata`).
+   */
+  if (!campulDeSuprafata(citita)) {
+    const peM2 = citita.fields.filter((c) =>
+      c.impact?.fel === "pe_m2" && c.impact.suma > 0
+      || (c.optiuni ?? []).some((o) => o.impact?.fel === "pe_m2" && o.impact.suma > 0));
+    if (peM2.length > 0) {
+      const nume = peM2.map((c) => c.label).filter(Boolean).join(", ");
+      const areDimensiuni = citita.fields.some((c) => c.type === "dimensiuni");
+      return (nume ? `„${nume}” are pret pe metru patrat, dar` : "Ai un pret pe metru patrat, dar")
+        + (areDimensiuni
+          ? " sunt mai multe campuri de dimensiuni si niciunul nu e ales ca sursa a suprafetei."
+            + " Alege modul „Calculat din suprafata” si spune din care camp se socoteste, sau lasa"
+            + " un singur camp de dimensiuni."
+          : " produsul n-are niciun camp de dimensiuni. Adauga unul, altfel suplimentul nu se poate"
+            + " socoti si nu se incaseaza nimic.");
     }
   }
 

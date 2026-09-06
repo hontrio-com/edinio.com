@@ -2,7 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeazaDefinitia, type DefinitiePersonalizare } from "./definitie";
 import { normalizeazaValorile } from "./valori";
-import { podeaPersonalizarii, pretUnitar, pretulDepindeDeAlegeri, pretulPersonalizarii } from "./pret";
+import {
+  campurileFaraSuprafata, podeaPersonalizarii, pretUnitar, pretulDepindeDeAlegeri,
+  pretulPersonalizarii,
+} from "./pret";
 
 /**
  * Pretul unei personalizari.
@@ -561,4 +564,86 @@ test("⚠ un supliment OBLIGATORIU urca podeaua; unul optional, nu", () => {
   })!;
   assert.equal(podeaPersonalizarii(optional, 89), 89);
   assert.equal(pretulDepindeDeAlegeri(optional, 89), false);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ UN „+15 LEI/M²" CARE N-ARE DE UNDE SA-SI IA METRII
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Protectia din audit: comutator optional, cu pret pe metru patrat. */
+const PROTECTIE = {
+  id: "prot", type: "comutator", label: "Protectie impermeabila", required: false,
+  impact: { fel: "pe_m2", suma: 15 },
+};
+const DIM_OPTIONAL = {
+  id: "dim", type: "dimensiuni", label: "Dimensiuni", required: false, unitate: "cm",
+  latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 },
+};
+
+test("⚠ suplimentul pe m² CERE metri, si spune care camp ii cere", () => {
+  /*
+   * ⚠ MASURAT INAINTE DE REPARATIE, pe patru configurari, cu „Protectie impermeabila +15 lei/m²"
+   * pe un produs de 100 de lei:
+   *
+   *     pe_m2 fara camp de dimensiuni       -> supliment 0 | PRET 100 | la salvare: TRECE
+   *     pe_m2 cu DOUA campuri de dimensiuni -> supliment 0 | PRET 100 | la salvare: TRECE
+   *     pe_m2 cu camp optional necompletat  -> supliment 0 | PRET 100 | la salvare: TRECE
+   *     MARTOR, dimensiuni completate       -> supliment 131,25 | PRET 231,25
+   *
+   * Comerciantul configura tariful, il vedea salvat, si incasa ZERO. Clientul primea protectia pe
+   * gratis. Nimeni nu afla pana la inventar.
+   *
+   * ⚠ `pretulPersonalizarii` SARE suplimentul dinadins — la nivelul socotelii, „nu incasez
+   * nimic" e mai putin rau decat „inventez un numar". Greseala n-a fost saritura, ci ca nimeni nu
+   * intreba nicaieri daca ea s-a intamplat.
+   */
+  const d = normalizeazaDefinitia({
+    enabled: true, fields: [DIM_OPTIONAL, PROTECTIE],
+  })!;
+
+  const lipsa = campurileFaraSuprafata(d, socoteste(d, { prot: true }).v.valori);
+  assert.equal(lipsa.length, 1, "nimeni nu observa ca protectia n-are metri");
+  assert.equal(lipsa[0].label, "Protectie impermeabila", "nu se spune CARE camp cere suprafata");
+});
+
+test("⚠ cine NU alege nimic pe metru nu e obligat sa dea dimensiuni", () => {
+  /*
+   * ⚠ PERECHEA CARE FACE REPARATIA SA MERITE, si hotararea de proiectare din spatele ei.
+   *
+   * Se putea si mai simplu: campul de dimensiuni fortat OBLIGATORIU ori de cate ori exista un
+   * supliment pe m². Dar atunci fiecare cumparator ar fi trebuit sa dea masuri chiar si cand nu
+   * cumpara nimic pe metru — un cost platit de toti, pentru o alegere pe care o fac putini.
+   *
+   * Se intreaba deci despre ALEGEREA clientului, nu despre configurare.
+   */
+  const d = normalizeazaDefinitia({ enabled: true, fields: [DIM_OPTIONAL, PROTECTIE] })!;
+  assert.deepEqual(campurileFaraSuprafata(d, socoteste(d, {}).v.valori), []);
+  assert.equal(pretUnitar(socoteste(d, {}).p, 100), 100, "s-a schimbat pretul cui nu cere nimic");
+
+  /* Si cu dimensiunile completate, protectia se incaseaza: 8,75 m² x 15 = 131,25. */
+  const cu = socoteste(d, { dim: { latime: 350, inaltime: 250 }, prot: true });
+  assert.deepEqual(campurileFaraSuprafata(d, cu.v.valori), []);
+  assert.equal(pretUnitar(cu.p, 100), 231.25);
+});
+
+test("⚠ campul-SURSA de tarif nu intra in socoteala asta", () => {
+  /*
+   * In modul „suprafata", campul de material DA tariful, nu un supliment peste el — iar campul de
+   * dimensiuni de acolo e oricum obligatoriu (vezi `citestePret`). Numarat gresit, fototapetul
+   * intreg ar fi fost refuzat la fiecare comanda.
+   */
+  const d = normalizeazaDefinitia({
+    enabled: true,
+    fields: [
+      { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+        latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+      { id: "mat", type: "butoane", label: "Material", required: true, optiuni: [
+        { id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } },
+      ] },
+    ],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 69, campTarif: "mat",
+      includePretulProdusului: false },
+  })!;
+  /* Fara dimensiuni, comanda cade oricum pe „Completeaza Latimea" — dar NU pe materialul-sursa. */
+  assert.deepEqual(campurileFaraSuprafata(d, socoteste(d, { mat: "std" }).v.valori), []);
 });

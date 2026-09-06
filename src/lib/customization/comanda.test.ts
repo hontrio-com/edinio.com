@@ -269,3 +269,52 @@ test("⚠ in comanda se scrie INSTANTANEUL SERVERULUI, nu blobul clientului", ()
   );
   assert.match(s, /\{ customization: pers\.instantaneu, personalizare: pers\.detaliu \}/);
 });
+
+test("⚠ un supliment pe m² fara dimensiuni OPRESTE comanda, nu o lasa pe gratis", () => {
+  /*
+   * ⚠ MASURAT INAINTE DE REPARATIE, pe „Protectie impermeabila +15 lei/m²" peste un produs de
+   * 100 de lei, cu campul de dimensiuni OPTIONAL si necompletat:
+   *
+   *     valori ok: true | constatari: [] | supliment: 0 | PRET 100
+   *
+   * Comanda pleaca, e „valida", si comerciantul incaseaza ZERO pentru o protectie pe care clientul
+   * a cerut-o si o primeste. Nimeni nu afla pana la inventar.
+   *
+   * ⚠ `pretulPersonalizarii` sare suplimentul dinadins — „nu incasez nimic" e mai putin rau
+   * decat „inventez un numar". Greseala n-a fost saritura, ci ca nimeni nu intreba daca ea s-a
+   * intamplat.
+   *
+   * ⚠ Refuzul spune si CE camp cere metrii, ca omul sa stie ce sa completeze.
+   */
+  const produs = {
+    customization: { enabled: true, fields: [
+      { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: false, unitate: "cm",
+        latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+      { id: "prot", type: "comutator", label: "Protectie impermeabila", required: false,
+        impact: { fel: "pe_m2", suma: 15 } },
+    ] },
+  };
+
+  const fara = verificaPersonalizarea(produs, { prot: true }, BIZ);
+  assert.equal(fara.fel, "eroare", "comanda a plecat cu protectia pe gratis");
+  assert.match(String((fara as { mesaj: string }).mesaj), /Protectie impermeabila/);
+  assert.match(String((fara as { mesaj: string }).mesaj), /dimensiunile/i);
+
+  /*
+   * ⚠ DOUA PERECHI, si amandoua sunt necesare.
+   *
+   * Prima: cu dimensiunile completate se incaseaza 8,75 m² x 15 = 131,25 peste catalog.
+   * A doua, si cea care apara hotararea de proiectare: cine NU bifeaza protectia nu e obligat sa
+   * dea masuri. Fortand campul obligatoriu ori de cate ori exista un pret pe m², fiecare cumparator
+   * ar fi platit cu timpul lui o alegere pe care o fac putini.
+   */
+  const cu = verificaPersonalizarea(produs, { dim: { latime: 350, inaltime: 250 }, prot: true }, BIZ);
+  assert.equal(cu.fel, "ok");
+  if (cu.fel !== "ok") return;
+  assert.equal(cu.date.supliment, 131.25);
+
+  const nimic = verificaPersonalizarea(produs, {}, BIZ);
+  assert.equal(nimic.fel, "ok", "cine nu cere nimic pe metru a fost oprit degeaba");
+  if (nimic.fel !== "ok") return;
+  assert.equal(nimic.date.supliment, 0);
+});

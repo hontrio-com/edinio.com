@@ -3,7 +3,10 @@
 import { useState } from "react";
 
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
-import type { Nod, Optiune } from "@/lib/configurators/definitie";
+import type { Definitie, Nod, Optiune, ZonaPreviz } from "@/lib/configurators/definitie";
+import {
+  cutiaZonei, nodurileCareSePotDesena, MAX_ZONE,
+} from "@/lib/configurators/previzualizare";
 import {
   adaugaOptiune, comutaImplicitAlegeri, mutaOptiune, problemeleNodului,
   puneImplicitAlegere, schimbaOptiune, stergeOptiune,
@@ -24,7 +27,12 @@ import { pixeliCeruti, MAX_FISIERE_PE_NOD, MAX_OCTETI } from "@/lib/configurator
  * scriere, si niciodata in mijlocul unui calcul.
  */
 
-export function InspectorNod({ nod, onSchimba }: { nod: Nod; onSchimba: (n: Nod) => void }) {
+export function InspectorNod({ nod, definitie, onSchimba }: {
+  nod: Nod;
+  /** Trebuie previzualizarii: ea aseaza zone peste CELELALTE campuri. */
+  definitie: Definitie;
+  onSchimba: (n: Nod) => void;
+}) {
   const pune = (campuri: Partial<Nod>) => onSchimba({ ...nod, ...campuri } as Nod);
 
   return (
@@ -70,6 +78,9 @@ export function InspectorNod({ nod, onSchimba }: { nod: Nod; onSchimba: (n: Nod)
       {nod.fel === "numar" && <SetariNumar nod={nod} onSchimba={onSchimba} />}
       {nod.fel === "text" && <SetariText nod={nod} onSchimba={onSchimba} />}
       {nod.fel === "fisiere" && <SetariFisiere nod={nod} onSchimba={onSchimba} />}
+      {nod.fel === "afisaj" && nod.control === "previzualizare" && (
+        <SetariPreviz nod={nod} definitie={definitie} onSchimba={onSchimba} />
+      )}
       {nod.fel === "comutator" && (
         <>
           <Camp eticheta="Cat adauga la pret cand e pornit" ajutor="In lei. Lasa gol daca nu schimba pretul.">
@@ -240,6 +251,194 @@ function SetariFisiere({ nod, onSchimba }: { nod: Nod & { fel: "fisiere" }; onSc
           </fieldset>
         </>
       )}
+    </>
+  );
+}
+
+/**
+ * Unde se deseneaza fiecare camp pe poza produsului.
+ *
+ * ⚠ SE OFERA DOAR CAMPURILE CARE CHIAR SE POT DESENA. Un camp de numar in lista l-ar fi lasat
+ * pe comerciant sa aseze o zona peste el, s-o mute cu grija, sa publice — si sa nu vada nimic.
+ * Apoi ar fi cautat greseala la el. Cine hotaraste e `nodurileCareSePotDesena`, cu probe.
+ *
+ * ⚠ NUMERELE SUNT PROCENTE, NU PIXELI, si asa le si scrie omul. Poza produsului se vede altfel
+ * pe telefon decat pe ecran mare; o zona in pixeli ar fi nimerit alaturi pe jumatate din aparate.
+ */
+function SetariPreviz({ nod, definitie, onSchimba }: {
+  nod: Nod & { fel: "afisaj" };
+  definitie: Definitie;
+  onSchimba: (n: Nod) => void;
+}) {
+  const cfg = nod.previzualizare ?? { zone: [] };
+  const zone = cfg.zone ?? [];
+  const candidati = nodurileCareSePotDesena(definitie);
+
+  const puneCfg = (x: Partial<typeof cfg>) =>
+    onSchimba({ ...nod, previzualizare: { ...cfg, ...x } } as Nod);
+  const puneZona = (i: number, x: Partial<ZonaPreviz>) =>
+    puneCfg({ zone: zone.map((z, j) => (j === i ? { ...z, ...x } : z)) });
+
+  return (
+    <>
+      <Camp
+        eticheta="Poza produsului"
+        ajutor="Adresa pozei peste care se deseneaza. Fara ea nu se vede nimic."
+      >
+        <input
+          value={cfg.imagine ?? ""}
+          onChange={(e) => puneCfg({ imagine: e.target.value || undefined })}
+          placeholder="https://..."
+          className={INTRARE}
+        />
+      </Camp>
+
+      {/*
+        ⚠ Se arata cum arata, chiar aici. Fara oglinda, comerciantul muta numere pe orb: ar fi
+        trebuit sa treaca pe fila de previzualizare dupa fiecare procent schimbat.
+      */}
+      {cfg.imagine && (
+        <div className="relative overflow-hidden rounded-lg border border-border">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={cfg.imagine} alt="" className="block w-full" />
+          {zone.map((z, i) => {
+            const c = cutiaZonei(z);
+            return (
+              <div
+                key={i}
+                className="absolute border-2 border-dashed border-primary/70 bg-primary/10"
+                style={{
+                  left: `${c.x * 100}%`, top: `${c.y * 100}%`,
+                  width: `${c.l * 100}%`, height: `${c.i * 100}%`,
+                  transform: c.rotire ? `rotate(${c.rotire}deg)` : undefined,
+                }}
+              >
+                <span className="absolute left-0 top-0 bg-primary px-1 text-[10px] leading-4 text-primary-foreground">
+                  {i + 1}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <fieldset className="space-y-2">
+        <legend className="text-xs font-medium text-muted-foreground">Ce se deseneaza</legend>
+
+        {candidati.length === 0 && (
+          <p className="rounded-lg bg-muted px-3 py-2 text-[11px] text-muted-foreground">
+            {/*
+              ⚠ Se spune de ce lista e goala, nu se arata doar un buton care nu face nimic.
+            */}
+            Nu ai inca niciun camp care sa se poata desena. Se pot desena campurile de text, cele de
+            incarcare, si alegerile ale caror optiuni au esantion sau culoare.
+          </p>
+        )}
+
+        <ul className="space-y-2">
+          {zone.map((z, i) => (
+            <li key={i} className="space-y-1.5 rounded-lg border border-border/70 p-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-muted-foreground">{i + 1}.</span>
+                <select
+                  value={z.nod}
+                  onChange={(e) => puneZona(i, { nod: e.target.value })}
+                  aria-label={`Ce se deseneaza in zona ${i + 1}`}
+                  className="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+                >
+                  {/*
+                    ⚠ Campul ALES ramane in lista chiar daca a fost sters intre timp, ca omul sa
+                    vada CE anume s-a rupt. Scos, ar fi aratat prima optiune si ar fi parut in regula.
+                  */}
+                  {!candidati.some((c) => c.id === z.nod) && (
+                    <option value={z.nod}>{z.nod} (campul nu mai exista)</option>
+                  )}
+                  {candidati.map((c) => (
+                    <option key={c.id} value={c.id}>{c.eticheta || c.id}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => puneCfg({ zone: zone.filter((_, j) => j !== i) })}
+                  aria-label={`Sterge zona ${i + 1}`}
+                  className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-4 gap-1.5">
+                {([
+                  ["Stanga %", "x"], ["Sus %", "y"], ["Latime %", "l"], ["Inaltime %", "i"],
+                ] as const).map(([et, cheie]) => (
+                  <label key={cheie} className="block">
+                    <span className="mb-0.5 block text-[10px] text-muted-foreground">{et}</span>
+                    <IntrareNumar
+                      valoare={Math.round((z[cheie] ?? 0) * 100)}
+                      onSchimba={(n) => puneZona(i, { [cheie]: (n ?? 0) / 100 })}
+                      clase="h-8 w-full rounded-md border border-border bg-background px-1.5 text-xs outline-none focus:border-primary"
+                      eticheta={`${et} pentru zona ${i + 1}`}
+                    />
+                  </label>
+                ))}
+              </div>
+
+              {/*
+                ⚠ Culoarea si marimea se arata DOAR pentru campurile de text. Pe o poza n-au ce
+                face, iar aratate oricum comerciantul le-ar fi reglat si s-ar fi mirat ca nu se vede.
+              */}
+              {candidati.find((c) => c.id === z.nod)?.fel === "text" && (
+                <div className="grid grid-cols-3 gap-1.5">
+                  <label className="block">
+                    <span className="mb-0.5 block text-[10px] text-muted-foreground">Culoare</span>
+                    <input
+                      type="color"
+                      value={z.culoare ?? "#111111"}
+                      onChange={(e) => puneZona(i, { culoare: e.target.value })}
+                      aria-label={`Culoarea textului din zona ${i + 1}`}
+                      className="h-8 w-full rounded-md border border-border bg-background"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-0.5 block text-[10px] text-muted-foreground">Marime %</span>
+                    <IntrareNumar
+                      valoare={Math.round((z.marime ?? 0.06) * 100)}
+                      onSchimba={(n) => puneZona(i, { marime: (n ?? 6) / 100 })}
+                      clase="h-8 w-full rounded-md border border-border bg-background px-1.5 text-xs outline-none focus:border-primary"
+                      eticheta={`Marimea textului din zona ${i + 1}`}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-0.5 block text-[10px] text-muted-foreground">Aliniere</span>
+                    <select
+                      value={z.aliniere ?? "centru"}
+                      onChange={(e) => puneZona(i, { aliniere: e.target.value as ZonaPreviz["aliniere"] })}
+                      aria-label={`Alinierea textului din zona ${i + 1}`}
+                      className="h-8 w-full rounded-md border border-border bg-background px-1 text-xs outline-none focus:border-primary"
+                    >
+                      <option value="stanga">Stanga</option>
+                      <option value="centru">Centru</option>
+                      <option value="dreapta">Dreapta</option>
+                    </select>
+                  </label>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        <button
+          type="button"
+          disabled={candidati.length === 0 || zone.length >= MAX_ZONE}
+          onClick={() => puneCfg({
+            zone: [...zone, { nod: candidati[0].id, x: 0.25, y: 0.35, l: 0.5, i: 0.2 }],
+          })}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-40"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden />
+          Adauga o zona
+        </button>
+      </fieldset>
     </>
   );
 }

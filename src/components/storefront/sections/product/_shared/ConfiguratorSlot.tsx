@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Nod, NodFisiere, NodNumar } from "@/lib/configurators/definitie";
+import type { Definitie, Nod, NodFisiere, NodNumar } from "@/lib/configurators/definitie";
+import {
+  nodurileAsezateInPreviz, previzualizareaDeDesenat, type CeSeDeseneaza,
+} from "@/lib/configurators/previzualizare";
 import { cateFisiere, catePotOcupa, tipurilePermise } from "@/lib/configurators/fisiere";
-import { esteAscuns, esteCerut, optiuniDeAles } from "@/lib/configurators/reguli";
+import { esteAscuns, esteCerut, optiuniDeAles, type Stare } from "@/lib/configurators/reguli";
 import { pretDeAfisat } from "@/lib/configurators/pret";
 import type { Verdict } from "@/lib/configurators/raspuns";
 import type { FisierAles, Valori } from "@/lib/configurators/valori";
@@ -81,6 +84,8 @@ export function ConfiguratorSlot({ cfg }: { cfg: StareConfigurator }) {
                         dezactivat={stare.dezactivate.has(nod.id)}
                         optiuni={optiuniDeAles(nod, stare)}
                         limite={stare.limite.get(nod.id)}
+                        definitie={definitie}
+                        stare={stare}
                         onSchimba={(v) => pune(nod.id, v)}
                       />
                     );
@@ -165,10 +170,12 @@ function Pret({ verdict }: { verdict: Verdict }) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function Camp({
-  nod, valori, cerut, dezactivat, optiuni, limite, onSchimba, unde,
+  nod, valori, cerut, dezactivat, optiuni, limite, onSchimba, unde, definitie, stare,
 }: {
   nod: Nod;
   valori: Valori;
+  definitie: Definitie;
+  stare: Stare;
   /** Pe ce pagina stam. Trebuie doar incarcarii de fisiere; `null` in previzualizare. */
   unde: { businessId: string; productId: string } | null;
   cerut: boolean;
@@ -318,6 +325,9 @@ function Camp({
     case "afisaj":
       if (nod.control === "separator") return <hr className="border-border" />;
       if (nod.control === "titlu") return <h4 className="text-sm font-semibold text-foreground">{nod.eticheta}</h4>;
+      if (nod.control === "previzualizare") {
+        return <Previzualizarea nod={nod} definitie={definitie} stare={stare} />;
+      }
       return nod.continut ? <p className="text-sm text-muted-foreground">{nod.continut}</p> : null;
 
     case "fisiere":
@@ -326,6 +336,7 @@ function Camp({
           nod={nod} idCamp={idCamp} eticheta={eticheta} ajutor={ajutor} descrisDe={descrisDe}
           alese={valori[nod.id]?.f === "fisiere" ? (valori[nod.id].v as FisierAles[]) : []}
           dezactivat={dezactivat} unde={unde} onSchimba={onSchimba}
+          asezat={nodurileAsezateInPreviz(definitie).has(nod.id)}
         />
       );
 
@@ -441,7 +452,7 @@ function CampNumar({
  * urma — o specificatie mai rea decat una fara ele, fiindca pare ca spune ceva.
  */
 function CampFisiere({
-  nod, idCamp, eticheta, ajutor, descrisDe, alese, dezactivat, unde, onSchimba,
+  nod, idCamp, eticheta, ajutor, descrisDe, alese, dezactivat, unde, onSchimba, asezat,
 }: {
   nod: NodFisiere;
   idCamp: string;
@@ -452,6 +463,15 @@ function CampFisiere({
   dezactivat: boolean;
   unde: { businessId: string; productId: string } | null;
   onSchimba: (v: unknown) => void;
+  /**
+   * O previzualizare aseaza campul asta undeva pe produs?
+   *
+   * ⚠ DE ASTA ATARNA DECUPAREA, si nu de felul nodului. `FisierAles.t` inseamna asezarea
+   * imaginii INTR-O zona; fara zona, cele patru numere n-au fata de ce sa fie socotite, iar in
+   * comanda ar fi ajuns o instructiune pe care atelierul n-o poate urma. Uneltele se arata deci
+   * exact cand exista o zona care le da inteles, si nu altfel.
+   */
+  asezat: boolean;
 }) {
   const [urca, setUrca] = useState(false);
   const [problema, setProblema] = useState<string | null>(null);
@@ -552,6 +572,19 @@ function CampFisiere({
         </ul>
       )}
 
+      {/*
+        ⚠ ASEZAREA se arata DOAR pentru prima poza, si doar cand o previzualizare o aseaza
+        undeva. Prima, fiindca o zona e UN loc si acolo se deseneaza primul fisier (vezi
+        `ceDeseneaza`): unelte care schimba ceva ce nu se vede nicaieri sunt mai rele decat
+        lipsa lor, fiindca omul crede ca a facut ceva.
+      */}
+      {asezat && alese.length > 0 && !dezactivat && (
+        <Asezarea
+          fisier={alese[0]}
+          onSchimba={(t) => onSchimba({ f: "fisiere", v: [{ ...alese[0], t }, ...alese.slice(1)] })}
+        />
+      )}
+
       {mai > 0 && !dezactivat && unde && (
         <input
           id={idCamp}
@@ -601,6 +634,192 @@ function CampFisiere({
       </p>
 
       {ajutor}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PREVIZUALIZAREA
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Gravura lui, pe cana lui.
+ *
+ * ⚠ CE HOTARASTE STA IN `previzualizare.ts`, CU PROBE. Aici raman doar `div`-urile: ce se
+ * deseneaza, unde, si cu ce culoare e o hotarare care poate gresi tacut, iar o componenta `.tsx`
+ * nu se poate rula in harnasament. Aceeasi impartire ca la campul de numar.
+ *
+ * ⚠ NU E O PROMISIUNE DE PRODUCTIE, e o asemanare: fontul de pe ecran nu e cel al gravorului,
+ * iar culoarea unui ecran necalibrat nu e culoarea vopselei. Scopul ei e sa-l opreasca pe cumparator
+ * sa comande „Familia Ionesku" — si de aceea nimic de aici nu intra in pret sau in comanda.
+ */
+function Previzualizarea({ nod, definitie, stare }: {
+  nod: Nod & { fel: "afisaj" };
+  definitie: Definitie;
+  stare: Stare;
+}) {
+  const p = previzualizareaDeDesenat(definitie, nod, stare);
+  if (!p) return null;
+
+  return (
+    <figure className="space-y-1.5">
+      <div className="relative overflow-hidden rounded-lg border border-border bg-muted">
+        {/*
+          ⚠ `<img>`, nu `next/image`. Imaginea de fundal e aleasa de comerciant si poate fi orice
+          adresa a lui; optimizatorul cere gazde scrise in configuratie, iar o gazda noua ar fi
+          cazut cu 400 pe pagina de produs a magazinului lui.
+        */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={p.imagine} alt={nod.eticheta || "Produsul configurat"} className="block w-full" />
+
+        {p.zone.map((z) => (
+          <div
+            key={z.cheie}
+            aria-hidden
+            className="pointer-events-none absolute"
+            style={{
+              left: `${z.cutie.x * 100}%`,
+              top: `${z.cutie.y * 100}%`,
+              width: `${z.cutie.l * 100}%`,
+              height: `${z.cutie.i * 100}%`,
+              transform: z.cutie.rotire ? `rotate(${z.cutie.rotire}deg)` : undefined,
+              /*
+               * ⚠ ZONA E CONTAINERUL DE INTEROGARE, si de aceea marimea literei se scaleaza
+               * odata cu poza. Ea are latime SI inaltime scrise mai sus, deci `container-type:
+               * size` nu o prabuseste. Pus pe imaginea de deasupra, ar fi facut-o: inaltimea ei
+               * vine chiar din continut, iar un container de marime taie legatura aia.
+               */
+              containerType: "size",
+            }}
+          >
+            <ZonaDesenata ce={z.ce} />
+          </div>
+        ))}
+      </div>
+      <figcaption className="text-[11px] text-muted-foreground">
+        {/*
+          ⚠ SE SPUNE CA E O ASEMANARE, si nu ca o formalitate. Cumparatorul care crede ca vede
+          bunul de tipar se cearta pe culoare cand primeste coletul, si are dreptate sa se certe
+          daca nimeni nu i-a spus altceva.
+        */}
+        Asa arata aproximativ. Fontul si culorile de pe ecran pot fi putin diferite de produsul finit.
+      </figcaption>
+    </figure>
+  );
+}
+
+function ZonaDesenata({ ce }: { ce: CeSeDeseneaza }) {
+  switch (ce.fel) {
+    case "text":
+      return (
+        <span
+          className="flex h-full w-full items-center leading-tight"
+          style={{
+            color: ce.culoare,
+            /*
+              ⚠ Marimea e in `cqh`, nu in `px`: zona se scaleaza odata cu imaginea, iar o marime
+              in pixeli ar fi facut gravura sa para uriasa pe telefon si minuscula pe ecran mare.
+              Containerul de interogare e chiar zona, si `previzualizareaDeDesenat` a adus deja
+              marimea din fractiuni de IMAGINE in fractiuni de ZONA — vezi nota de acolo.
+            */
+            fontSize: `${ce.marime * 100}cqh`,
+            justifyContent: ce.aliniere === "stanga" ? "flex-start"
+              : ce.aliniere === "dreapta" ? "flex-end" : "center",
+            textAlign: ce.aliniere === "stanga" ? "left" : ce.aliniere === "dreapta" ? "right" : "center",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {ce.text}
+        </span>
+      );
+
+    case "fisier":
+      /* eslint-disable-next-line @next/next/no-img-element */
+      return (
+        <img
+          src={`/api/configurator/fisier/${ce.fisierId}`}
+          alt=""
+          className="h-full w-full object-contain"
+          style={ce.asezare ? {
+            transform: `translate(${ce.asezare.x * 100}%, ${ce.asezare.y * 100}%) scale(${ce.asezare.s}) rotate(${ce.asezare.r}deg)`,
+          } : undefined}
+        />
+      );
+
+    case "imagine":
+      /* eslint-disable-next-line @next/next/no-img-element */
+      return <img src={ce.imagine} alt="" className="h-full w-full object-cover" />;
+
+    case "culoare":
+      return <span className="block h-full w-full" style={{ backgroundColor: ce.culoare }} />;
+
+    default:
+      return null;
+  }
+}
+
+/**
+ * Cum sta poza in locul ei de pe produs.
+ *
+ * ⚠ SE ARATA DOAR CAND EXISTA UN LOC. Vezi `asezat` din `CampFisiere`: fara o zona de
+ * previzualizare care asaza chiar campul asta, cele patru numere n-au fata de ce sa fie socotite.
+ *
+ * ⚠ TREI GLISOARE, NU O PANZA CU TRAS DE MAUS. Doua motive, si al doilea e cel greu: un tras
+ * cu degetul pe telefon se bate cu derularea paginii, iar o panza n-are cum sa fie folosita de
+ * cineva cu tastatura sau cu cititor de ecran. Glisoarele sunt controale native: se muta cu
+ * sagetile, se anunta singure, si dau acelasi rezultat pe orice aparat.
+ *
+ * ⚠ Ce iese de aici intra in comanda. Deci se margineste: o scara de 40 sau o deplasare de
+ * zece ecrane ar fi scos poza din zona cu totul, iar atelierul ar fi primit o instructiune care
+ * spune „nicaieri".
+ */
+function Asezarea({ fisier, onSchimba }: {
+  fisier: FisierAles;
+  onSchimba: (t: { x: number; y: number; s: number; r: number } | undefined) => void;
+}) {
+  const t = fisier.t ?? { x: 0, y: 0, s: 1, r: 0 };
+  const pune = (parte: Partial<typeof t>) => onSchimba({ ...t, ...parte });
+
+  const glisor = (
+    eticheta: string,
+    cheie: "x" | "y" | "s" | "r",
+    min: number, max: number, pas: number,
+  ) => (
+    <label className="block">
+      <span className="mb-0.5 flex items-center justify-between text-[11px] text-muted-foreground">
+        <span>{eticheta}</span>
+        <span className="tabular-nums">{t[cheie]}</span>
+      </span>
+      <input
+        type="range"
+        min={min} max={max} step={pas}
+        value={t[cheie]}
+        onChange={(e) => pune({ [cheie]: Number(e.target.value) })}
+        className="w-full"
+      />
+    </label>
+  );
+
+  return (
+    <div className="mb-2 space-y-1.5 rounded-lg border border-border/70 p-2.5">
+      <p className="text-[11px] font-medium text-foreground">Aseaza poza pe produs</p>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+        {glisor("Stanga / dreapta", "x", -0.5, 0.5, 0.01)}
+        {glisor("Sus / jos", "y", -0.5, 0.5, 0.01)}
+        {glisor("Marime", "s", 0.2, 3, 0.05)}
+        {glisor("Rotire", "r", -180, 180, 1)}
+      </div>
+      {/*
+        ⚠ Se poate si RENUNTA. Fara butonul asta, omul care a tras de glisoare si nu-i mai place
+        n-avea cum sa se intoarca la asezarea din start decat nimerind exact zerourile.
+      */}
+      <button
+        type="button"
+        onClick={() => onSchimba(undefined)}
+        className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+      >
+        Pune la loc cum era
+      </button>
     </div>
   );
 }

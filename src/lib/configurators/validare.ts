@@ -31,6 +31,7 @@ import { calculeazaPretul, type Pretuire } from "./pret";
 import { normalizeazaValoare, type Valoare, type Valori } from "./valori";
 import { componentaEStricata, trimiterileLaComponente } from "./componente";
 import { MAX_FISIERE_PE_NOD, MAX_OCTETI } from "./fisiere";
+import { nodurileCareSePotDesena, MAX_ZONE } from "./previzualizare";
 import { eNumarBun } from "./unitati";
 
 export type Treapta = "critic" | "atentie";
@@ -257,6 +258,41 @@ export function valideaza(intrare: IntrareValidare): RezultatValidare {
         adauga("atentie", "fisiere_prea_multe",
           `La „${nod.eticheta}” se pot incarca cel mult ${MAX_FISIERE_PE_NOD} fisiere, oricat ai scrie.`,
           nod.id);
+      }
+    }
+
+    /*
+     * ⚠ PREVIZUALIZAREA E CEL MAI USOR DE CONSTRUIT PE JUMATATE din tot builderul.
+     *
+     * Comerciantul aseaza zone tragand cu mausul, si fiecare din cele de mai jos arata pe ecranul
+     * lui exact ca una care merge: zona sta acolo, se muta, se coloreaza. Doar ca pe magazin nu
+     * deseneaza nimic — si el afla asta abia daca deschide chiar el pagina produsului.
+     */
+    if (nod.fel === "afisaj" && nod.control === "previzualizare") {
+      const zone = nod.previzualizare?.zone ?? [];
+      if (!nod.previzualizare?.imagine && zone.length > 0) {
+        adauga("atentie", "previz_fara_imagine",
+          `„${nod.eticheta}” are zone asezate, dar n-are poza de fundal, deci nu deseneaza nimic.`,
+          nod.id);
+      }
+      const potFiDesenate = new Set(nodurileCareSePotDesena(d).map((n) => n.id));
+      for (const z of zone.slice(0, MAX_ZONE)) {
+        if (!z?.nod) continue;
+        const tinta = noduri.find((n) => n.id === z.nod);
+        if (!tinta) {
+          adauga("critic", "previz_nod_lipsa",
+            `„${nod.eticheta}” deseneaza un camp care nu mai exista (${z.nod}).`, nod.id);
+        } else if (!potFiDesenate.has(tinta.id)) {
+          /*
+           * ⚠ `atentie`, nu `critic`: nu se vinde nimic gresit, doar nu se vede nimic. Iar
+           * comerciantul poate sa fi schimbat felul campului dinadins si sa vrea sa scoata zona
+           * mai tarziu — oprit din publicare, ar fi trebuit s-o stearga ca s-o refaca.
+           */
+          adauga("atentie", "previz_nod_nedesenabil",
+            `„${nod.eticheta}” incearca sa deseneze „${tinta.eticheta}”, care n-are ce infatisa: `
+            + "se pot desena doar campurile de text, de incarcare si alegerile cu esantion.",
+            nod.id);
+        }
       }
     }
     /*

@@ -189,11 +189,48 @@ export interface NodCalcul extends NodComun {
   arata?: { unitate: string; zecimale?: number };
 }
 
+/**
+ * O zona din previzualizare: ce se deseneaza, si unde.
+ *
+ * ⚠ TOTUL IN FRACTIUNI DIN IMAGINE, niciodata in pixeli. Poza produsului se vede altfel pe
+ * telefon decat pe ecran mare, iar o zona scrisa in pixeli ar fi nimerit alaturi pe jumatate
+ * dintre aparate. Fractiunile se scaleaza odata cu imaginea, deci gravura ramane pe cana.
+ */
+export interface ZonaPreviz {
+  /** Nodul a carui valoare se deseneaza aici. */
+  nod: string;
+  /** Coltul din stanga sus, 0..1. */
+  x: number;
+  y: number;
+  /** Latimea si inaltimea, 0..1. */
+  l: number;
+  i: number;
+  /** Doar pentru text: culoarea si marimea (fractiune din inaltimea imaginii). */
+  culoare?: string;
+  marime?: number;
+  aliniere?: "stanga" | "centru" | "dreapta";
+  /** Rotirea zonei intregi, in grade. */
+  rotire?: number;
+}
+
 /** Text, titlu, rezumat, pret, previzualizare. Nu produce nicio valoare. */
 export interface NodAfisaj extends NodComun {
   fel: "afisaj";
   control: "text" | "titlu" | "separator" | "rezumat" | "pret" | "previzualizare";
   continut?: string;
+  /**
+   * Ce se deseneaza, cand `control` e `previzualizare`.
+   *
+   * ⚠ Pana la faza asta, `previzualizare` era un `control` pe care nu-l desena nimeni: se putea
+   * alege in panou si nu se vedea nimic pe vitrina. Un camp care exista si nu face nimic e chiar
+   * felul de defect pe care fisierul asta il numeste in cateva locuri — comerciantul il pune,
+   * publica, si cauta greseala la el.
+   */
+  previzualizare?: {
+    /** Imaginea de fundal: poza produsului peste care se deseneaza. */
+    imagine?: string;
+    zone: ZonaPreviz[];
+  };
 }
 
 export type Nod =

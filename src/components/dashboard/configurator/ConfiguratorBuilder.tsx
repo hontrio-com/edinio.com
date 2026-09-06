@@ -50,6 +50,12 @@ const FELURI: { fel: Nod["fel"]; control: string; eticheta: string }[] = [
    */
   { fel: "fisiere", control: "imagine", eticheta: "Incarcare imagine" },
   { fel: "fisiere", control: "document", eticheta: "Incarcare document" },
+  /*
+   * ⚠ Previzualizarea nu produce nicio valoare si nu costa nimic: e o oglinda. Sta la coada
+   * listei fiindca n-are ce arata pana nu exista campuri de aratat — adaugata prima, ar fi fost
+   * un dreptunghi gol pe care comerciantul l-ar fi crezut stricat.
+   */
+  { fel: "afisaj", control: "previzualizare", eticheta: "Cum arata produsul" },
 ];
 
 function nodNou(fel: Nod["fel"], control: string, eticheta: string): Nod {
@@ -338,6 +344,7 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
           {nodSelectat ? (
             <InspectorNod
               nod={nodSelectat}
+              definitie={continut.definitie}
               onSchimba={(n) => schimba(schimbaNod(continut, n))}
             />
           ) : (

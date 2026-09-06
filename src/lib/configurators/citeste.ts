@@ -27,9 +27,11 @@
 
 import {
   type Definitie, type Grup, type ModAfisare, type Nod, type Optiune, type Pas,
+  type ZonaPreviz,
   MAX_GRUPURI_PE_PAS, MAX_NODURI, MAX_NODURI_PE_GRUP, MAX_OPTIUNI_PE_NOD, MAX_PASI,
   VERSIUNE_SCHEMA,
 } from "./definitie";
+import { MAX_ZONE } from "./previzualizare";
 import { type Expresie, type OperatieBinara, type OperatieRotunjire, MAX_ADANCIME } from "./expresii";
 import type { Actiune, Conditie, NivelMesaj, Regula } from "./reguli";
 import type { BazaProcent, FelBaza, Modificator, Pretuire } from "./pret";
@@ -267,11 +269,56 @@ export function citesteNod(brut: unknown): Nod | null {
     case "afisaj": {
       const n = { ...comun, fel: "afisaj", control } as Nod & { fel: "afisaj" };
       const c = sir(o.continut, 2000); if (c) n.continut = c;
+      const prv = citestePrevizualizarea(o.previzualizare);
+      if (prv) n.previzualizare = prv;
       return n;
     }
     default:
       return null;
   }
+}
+
+/**
+ * Ce deseneaza o previzualizare, citit fara sa se creada nimic.
+ *
+ * ⚠ NUMERELE SE MARGINESC AICI, la citire, nu doar la desenare. Ele ajung intr-un `style`
+ * inline: un `l: 1e30` scris intr-o ciorna ar fi intins o cutie peste toata pagina de produs, iar
+ * un `NaN` ar fi produs un `left: NaNpx` care in unele browsere pune elementul la zero si in altele
+ * il ascunde. Aceeasi regula ca peste tot in fisierul asta: ce iese de aici e deja bun de folosit.
+ */
+function citestePrevizualizarea(brut: unknown): { imagine?: string; zone: ZonaPreviz[] } | null {
+  const o = obiect(brut);
+  if (!o) return null;
+  const imagine = sir(o.imagine, 600);
+  const zone: ZonaPreviz[] = [];
+  if (Array.isArray(o.zone)) {
+    for (const x of o.zone.slice(0, MAX_ZONE)) {
+      const z = obiect(x);
+      if (!z) continue;
+      const nod = sir(z.nod, 64);
+      if (!nod) continue;
+      const parte = (v: unknown, implicit: number) => {
+        const n = numar(v);
+        return n === null ? implicit : Math.min(1, Math.max(0, n));
+      };
+      const zona: ZonaPreviz = {
+        nod,
+        x: parte(z.x, 0), y: parte(z.y, 0),
+        l: parte(z.l, 0.3), i: parte(z.i, 0.15),
+      };
+      const culoare = sir(z.culoare, 32); if (culoare) zona.culoare = culoare;
+      const marime = numar(z.marime); if (marime !== null) zona.marime = Math.min(0.5, Math.max(0.005, marime));
+      if (z.aliniere === "stanga" || z.aliniere === "dreapta" || z.aliniere === "centru") {
+        zona.aliniere = z.aliniere;
+      }
+      const rotire = numar(z.rotire);
+      if (rotire !== null) zona.rotire = Math.min(180, Math.max(-180, rotire));
+      zone.push(zona);
+    }
+  }
+  /* Fara imagine si fara zone n-are ce purta: nu se scrie o cheie goala in definitie. */
+  if (!imagine && zone.length === 0) return null;
+  return { ...(imagine ? { imagine } : {}), zone };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

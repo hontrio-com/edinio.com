@@ -5,7 +5,7 @@ import {
   citesteActiune, citesteReguli, citestePretuire, citesteContinut,
 } from "./citeste";
 import { MAX_ADANCIME } from "./expresii";
-import { MAX_NODURI, VERSIUNE_SCHEMA } from "./definitie";
+import { MAX_NODURI, VERSIUNE_SCHEMA, type Nod } from "./definitie";
 import { evalueaza } from "./expresii";
 
 /* ── Expresii ────────────────────────────────────────────────────────────── */
@@ -300,4 +300,46 @@ test("dus si intors: ce se scrie se citeste la fel", () => {
   // Trecut prin JSON, ca sa fie exact ce face si baza de date.
   const doi = citesteContinut(JSON.parse(JSON.stringify(unu)));
   assert.deepEqual(doi, unu, "citirea trebuie sa fie idempotenta");
+});
+
+test("⚠ numerele unei zone de previzualizare se marginesc LA CITIRE", () => {
+  /*
+   * ⚠ Ele ajung intr-un `style` inline. Un `l: 1e30` scris intr-o ciorna ar fi intins o cutie
+   * peste toata pagina de produs, iar un `NaN` da un `width: NaN%` pe care browserele il trateaza
+   * fiecare altfel — unele pun elementul la zero, altele il ascund.
+   *
+   * ⚠ `cutiaZonei` margineste si ea, la desenare. Asta NU face verificarea de aici de prisos:
+   * ce iese din `citeste` se si SCRIE inapoi in ciorna prin autosalvare, deci un numar nebun
+   * pastrat aici ramane in baza pentru totdeauna, si iese la orice cititor viitor care n-o stie.
+   */
+  const d = citesteDefinitie({
+    versiuneSchema: 1, mod: "auto",
+    pasi: [{ id: "p1", eticheta: "P", grupuri: [{ id: "g1", noduri: [
+      { id: "prv", eticheta: "Cum arata", fel: "afisaj", control: "previzualizare",
+        previzualizare: { imagine: "/c.jpg", zone: [
+          { nod: "grav", x: -5, y: 1e30, l: 99, i: "abc", rotire: 5000, marime: 40 },
+        ] } },
+    ] }] }],
+  });
+  const nod = d.pasi[0].grupuri[0].noduri[0] as Nod & { fel: "afisaj" };
+  const z = nod.previzualizare!.zone[0];
+  assert.equal(z.x, 0);
+  assert.equal(z.y, 1);
+  assert.equal(z.l, 1);
+  assert.equal(z.i, 0.15, "un sir cade pe implicit, nu pe NaN");
+  assert.equal(z.rotire, 180);
+  assert.equal(z.marime, 0.5);
+});
+
+test("o zona fara nod nu se pastreaza deloc", () => {
+  // ⚠ Fara `nod` n-are ce desena, si ar fi ramas in ciorna ca o cutie care nu tinteste nimic.
+  const d = citesteDefinitie({
+    versiuneSchema: 1, mod: "auto",
+    pasi: [{ id: "p1", eticheta: "P", grupuri: [{ id: "g1", noduri: [
+      { id: "prv", eticheta: "C", fel: "afisaj", control: "previzualizare",
+        previzualizare: { imagine: "/c.jpg", zone: [{ x: 0.1 }, { nod: "grav" }] } },
+    ] }] }],
+  });
+  const nod = d.pasi[0].grupuri[0].noduri[0] as Nod & { fel: "afisaj" };
+  assert.equal(nod.previzualizare!.zone.length, 1);
 });

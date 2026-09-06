@@ -557,3 +557,46 @@ test("o conditie pe un camp care NU are optiuni nu produce alarma de optiune", (
   ];
   assert.ok(!coduri(val({ definitie: d, reguli })).includes("regula_conditie_optiune_lipsa"));
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PREVIZUALIZAREA
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const previz = (zone: { nod: string }[], imagine = "/cana.jpg"): Nod =>
+  ({ fel: "afisaj", control: "previzualizare", id: "prv", eticheta: "Cum arata",
+     previzualizare: { imagine, zone } } as Nod);
+
+test("⚠ o zona care deseneaza un camp STERS opreste publicarea", () => {
+  /*
+   * ⚠ Pe ecranul comerciantului zona sta acolo, se muta, se coloreaza — arata exact ca una
+   * care merge. Pe magazin nu deseneaza nimic, si el afla asta abia daca deschide chiar el pagina
+   * produsului. De aceea se spune la publicare, cand e ieftin de reparat.
+   */
+  const d = def([alegere("mat", [{ id: "a", eticheta: "A" }]), previz([{ nod: "sters" }])]);
+  assert.ok(critice(val({ definitie: d })).includes("previz_nod_lipsa"));
+});
+
+test("o zona pe un camp care N-ARE ce infatisa e doar atentie", () => {
+  /*
+   * ⚠ Nu se vinde nimic gresit, doar nu se vede nimic. Iar comerciantul poate sa fi schimbat
+   * felul campului dinadins — oprit din publicare, ar fi trebuit sa stearga zona ca s-o refaca.
+   */
+  const d = def([numar("lat"), previz([{ nod: "lat" }])]);
+  const r = val({ definitie: d });
+  assert.ok(coduri(r).includes("previz_nod_nedesenabil"));
+  assert.equal(r.sePoatePublica, true);
+});
+
+test("zone asezate fara poza de fundal se spun pe fata", () => {
+  // ⚠ Zonele sunt asezate in fractiuni DIN ea; fara ea, nu se deseneaza absolut nimic.
+  const d = def([alegere("mat", [{ id: "a", eticheta: "A" }]), previz([{ nod: "mat" }], "")]);
+  assert.ok(coduri(val({ definitie: d })).includes("previz_fara_imagine"));
+});
+
+test("o previzualizare intreaga nu supara pe nimeni", () => {
+  const d = def([
+    { fel: "text", control: "scurt", id: "grav", eticheta: "Gravura" } as Nod,
+    previz([{ nod: "grav" }]),
+  ]);
+  assert.ok(!coduri(val({ definitie: d })).some((c) => c.startsWith("previz_")), coduri(val({ definitie: d })).join(", "));
+});

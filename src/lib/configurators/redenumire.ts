@@ -151,14 +151,89 @@ export async function legaturileUrmeazaCategoria(
   }
 }
 
-/** Acelasi lucru pentru mai multe nume disparute deodata, la stergerea unei ramuri. */
+/**
+ * Cate nume incap intr-un `.in()`.
+ *
+ * ⚠ Mai putine decat cele 200 de id-uri obisnuite ale proiectului, si dinadins: filtrul pleaca in
+ * ADRESA, iar aici valorile nu sunt uuid-uri de lungime fixa, ci NUME scrise de om. Masurat in
+ * baza: cel mai lung e de 60 de caractere, media 16,5 — dar cu spatii si diacritice escapate un
+ * nume poate ajunge la vreo 180 de octeti in adresa. La 100 de nume asta face ~18 KB, adica sub
+ * marginea la care PostgREST incepe sa raspunda 400 (masurata pe id-uri intre 600 si 700).
+ */
+const NUME_PE_LOT = 100;
+
+/**
+ * Acelasi lucru pentru mai multe nume disparute deodata, la stergerea unei ramuri.
+ *
+ * ═══ ⚠ NU E O BUCLA PESTE FUNCTIA DE DEASUPRA, SI NU MAI POATE FI ═══
+ *
+ * Era: `legaturileUrmeazaCategoria` chemata o data pe nume. Fiecare chemare deschide un client,
+ * face o citire si pana la doua scrieri — deci pentru un subarbore sters cu 145 de categorii
+ * (cel mai mare magazin de azi) ieseau pana la 435 de dus-intorsuri intr-o singura apasare de
+ * buton, toate in cererea actiunii. Vechea margine de `.slice(0, 500)` nu era o limita a bazei,
+ * ci un plafon pus ca actiunea sa nu cada pe timeout — si taia TACUT: legaturile de peste 500
+ * ramaneau pe nume moarte, adica exact paguba pe care fisierul asta o repara.
+ *
+ * ═══ ⚠ SI DE CE E MAI SIMPLU DECAT REDENUMIREA ═══
+ *
+ * Fiindca la disparitie nu exista mutare, deci nu exista nici ciocnire de unicitate: `planulRedenumirii`
+ * cu `numeNou === null` trimite la stergere FIECARE legatura cu numele cerut, si nimic altceva.
+ * Ce era un plan citit in Node devine chiar filtrul stergerii, iar citirea de dinainte dispare.
+ */
 export async function legaturileUitaCategoriile(
   businessId: string,
   disparute: string[],
 ): Promise<void> {
-  // ⚠ Pe rand, nu cu un `.in()` mare: lista vine dintr-un subarbore sters si poate fi lunga, iar
-  // `.in()` pleaca in ADRESA — peste ~700 de valori PostgREST raspunde 400 la marginea cererii.
-  for (const nume of (disparute ?? []).slice(0, 500)) {
-    await legaturileUrmeazaCategoria(businessId, nume, null);
+  const nume = [...new Set((disparute ?? []).filter((n) => typeof n === "string" && n))];
+  if (!businessId || !nume.length) return;
+
+  /*
+   * ⚠ Nu arunca niciodata, ca si sora ei: categoria s-a sters deja, iar o exceptie de aici ar fi
+   * spus omului ca stergerea n-a mers pentru o operatie care a mers.
+   */
+  try {
+    const supabase = await createClient();
+    let sterse = 0;
+
+    for (let i = 0; i < nume.length; i += NUME_PE_LOT) {
+      const lot = nume.slice(i, i + NUME_PE_LOT);
+      const { data, error } = await supabase
+        .from("configurator_categorii")
+        .delete()
+        .eq("business_id", businessId)
+        .in("categorie", lot)
+        // ⚠ Se cere ce s-a sters, ca sa se poata SPUNE cate. Fara `.select`, PostgREST nu intoarce
+        // randurile, iar jurnalul de mai jos ar fi trebuit sa ghiceasca.
+        .select("id");
+
+      if (error) {
+        logError({
+          action: "configurator.redenumire.stergere", message: error.message,
+          businessId, severity: "error", details: { nume: lot.length, deLa: i },
+        });
+        // ⚠ Se merge mai departe pe loturile urmatoare: un lot picat nu e un motiv sa ramana pe
+        // nume moarte si celelalte. Ce n-a mers e in jurnal, cu locul din lista.
+        continue;
+      }
+      sterse += (data ?? []).length;
+    }
+
+    if (sterse > 0) {
+      /*
+       * ⚠ Se jurnalizeaza chiar si cand merge. Un configurator care nu se mai aplica dupa ce
+       * comerciantul a sters o ramura e o schimbare pe care el n-o vede nicaieri — si de care isi
+       * va aminti abia cand un client cumpara produsul neconfigurat.
+       */
+      logError({
+        action: "configurator.redenumire.legaturiSterse",
+        message: `${sterse} legaturi de categorie au ramas fara categorie si au fost sterse`,
+        businessId, severity: "warning", details: { nume: nume.length },
+      });
+    }
+  } catch (e) {
+    logError({
+      action: "configurator.redenumire", message: e instanceof Error ? e.message : String(e),
+      businessId, severity: "error",
+    });
   }
 }

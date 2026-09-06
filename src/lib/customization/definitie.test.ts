@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   MAX_CAMPURI, MAX_OPTIUNI,
-  cerePersonalizarea, citesteImpact, normalizeazaDefinitia,
+  cerePersonalizarea, citesteImpact, laturaSchimbata, normalizeazaDefinitia,
 } from "./definitie";
 
 /**
@@ -225,4 +225,106 @@ test("⚠ nu arunca niciodata, oricat de strambe ar fi datele", () => {
   ]) {
     assert.doesNotThrow(() => normalizeazaDefinitia(intrare), `a aruncat pe ${JSON.stringify(intrare)}`);
   }
+});
+
+test("⚠ „numar” cu minimul peste maxim iese din cititor FARA margini", () => {
+  /*
+   * Plasa pentru randurile care ajung in baza pe alt drum decat panoul (import, scris de mana):
+   * poarta de salvare le-ar fi ratat, iar produsul ar fi ramas nevandabil pentru totdeauna.
+   *
+   * ⚠ Se arunca AMANDOUA marginile, nu una. Pastrata singura, cealalta ar fi taiat tacut
+   * jumatate din intervalul pe care comerciantul credea ca l-a pus.
+   */
+  const d = normalizeazaDefinitia({ enabled: true, fields: [
+    { id: "n", type: "numar", label: "Bucati", required: true, min: 100, max: 10 },
+  ] })!;
+  assert.equal(d.fields[0].min, undefined);
+  assert.equal(d.fields[0].max, undefined);
+
+  /* Perechea: marginile bune raman. */
+  const bun = normalizeazaDefinitia({ enabled: true, fields: [
+    { id: "n", type: "numar", label: "Bucati", required: true, min: 10, max: 100 },
+  ] })!;
+  assert.equal(bun.fields[0].min, 10);
+  assert.equal(bun.fields[0].max, 100);
+});
+
+test("⚠ valoarea implicita trece prin ACELEASI reguli ca valoarea clientului", () => {
+  /*
+   * Preumpluta cu ceva ce validarea refuza, casuta arata clientului o valoare care pica la prima
+   * apasare — pe un camp pe care el nu l-a atins. Regula „e pe pas" e acum una singura
+   * (`pePas`), folosita si de cititor, si de validare: scrise separat, prima nepotrivire ar fi
+   * fost tocmai casuta asta.
+   */
+  const citeste = (extra: Record<string, unknown>) => normalizeazaDefinitia({
+    enabled: true, fields: [{ id: "n", type: "numar", label: "N", required: false, ...extra }],
+  })!.fields[0];
+
+  assert.equal(citeste({ min: 10, max: 100, implicit: 5 }).implicit, undefined, "sub minim");
+  assert.equal(citeste({ min: 10, max: 100, implicit: 200 }).implicit, undefined, "peste maxim");
+  assert.equal(citeste({ min: 0, max: 100, pas: 10, implicit: 37 }).implicit, undefined, "nu e pe pas");
+  assert.equal(citeste({ min: 0, max: 100, pas: 10, implicit: 30 }).implicit, 30);
+  assert.equal(citeste({ implicit: 7 }).implicit, 7, "fara margini, orice implicit e bun");
+
+  /* Si la laturile campului de dimensiuni, aceeasi regula. */
+  const dim = normalizeazaDefinitia({ enabled: true, fields: [
+    { id: "d", type: "dimensiuni", label: "D", required: false, unitate: "cm",
+      latime: { min: 100, max: 500, pas: 10, implicit: 137 },
+      inaltime: { min: 70, max: 350, pas: 10, implicit: 150 } },
+  ] })!.fields[0];
+  assert.equal(dim.latime?.implicit, undefined, "137 nu e pe pasul de 10 masurat de la 100");
+  assert.equal(dim.inaltime?.implicit, 150);
+});
+
+test("⚠ sase secvente de tastare din panou: ce se trimite e ce se serveste", () => {
+  /*
+   * ⚠ PROBA ASTA A EXISTAT ABIA DUPA UN MUTANT. Reducerul traia intr-o componenta React, deci nu
+   * se putea proba — si tocmai in el era greseala: punea `min: 0` si `max: 0` la fiecare atingere,
+   * iar `citesteLatura` arunca apoi toata latura.
+   *
+   * Cele sase secvente sunt cele masurate pe reducerul adevarat. Fiecare se ruleaza pana la capat,
+   * apoi se trece prin CITITOR — fiindca intrebarea nu e „ce obiect iese din panou", ci „ce ajunge
+   * sa fie servit clientului".
+   */
+  const tasteaza = (pasi: Array<["min" | "max" | "implicit" | "pas", number | undefined]>) => {
+    let v: Record<string, number> | undefined;
+    for (const [k, val] of pasi) v = laturaSchimbata(v, k, val);
+    const d = normalizeazaDefinitia({
+      enabled: true,
+      fields: [{ id: "d", type: "dimensiuni", label: "D", required: false, unitate: "cm",
+        latime: v, inaltime: { min: 70, max: 350 } }],
+    });
+    return { trimis: v, servit: d?.fields[0].latime };
+  };
+
+  /* A) min apoi max — merge si azi, si trebuie sa ramana asa. */
+  const a = tasteaza([["min", 100], ["max", 500]]);
+  assert.deepEqual(a.trimis, { min: 100, max: 500 });
+  assert.deepEqual(a.servit, { min: 100, max: 500 });
+
+  /* B) DOAR „max" — inainte se trimitea {min:0, max:500} si nu se servea NIMIC. */
+  const b = tasteaza([["max", 500]]);
+  assert.deepEqual(b.trimis, { max: 500 }, "panoul fabrica iar un minim pe care nimeni nu l-a scris");
+
+  /* D) min, max, apoi se STERGE min — cheia trebuie sa dispara, nu sa ramana `undefined`. */
+  const d = tasteaza([["min", 100], ["max", 500], ["min", undefined]]);
+  assert.deepEqual(d.trimis, { max: 500 });
+
+  /*
+   * F) DOAR „pas" — cazul care nu cere nicio greseala, si cel mai scump.
+   * Inainte: {min:0, max:0, pas:10} -> se servea NIMIC, deci regula rolei disparea in tacere.
+   */
+  const f = tasteaza([["pas", 10]]);
+  assert.deepEqual(f.trimis, { pas: 10 }, "panoul fabrica iar margini pe care nimeni nu le-a scris");
+
+  /* Si golirea ultimei casute lasa latura NEEXISTENTA, nu un obiect gol. */
+  assert.equal(tasteaza([["pas", 10], ["pas", undefined]]).trimis, undefined);
+
+  /*
+   * ⚠ CE RAMANE ADEVARAT: cititorul tot arunca laturile fara margini bune, si asta e deliberat —
+   * el apara vanzarea. Diferenta e ca acum poarta de SALVARE o spune (vezi `salvare.test.ts`), in
+   * loc s-o lase tacuta.
+   */
+  assert.equal(b.servit, undefined);
+  assert.equal(f.servit, undefined);
 });

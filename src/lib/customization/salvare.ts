@@ -31,6 +31,22 @@ function esteObiectSimplu(x: unknown): x is Record<string, unknown> {
   return !!x && typeof x === "object" && !Array.isArray(x);
 }
 
+/**
+ * Cum se numeste campul intr-un mesaj catre comerciant.
+ *
+ * ⚠ ETICHETA GOALA E LEGITIMA, si asta s-a masurat inainte de a scrie randurile de mai jos:
+ * 17 din cele 49 de campuri vii din productie, pe 9 produse, au `label` gol — iar formularul
+ * creeaza campurile noi tot asa. Un mesaj care spune „Campul «»" nu ajuta pe nimeni, iar un REFUZ
+ * pe eticheta goala ar fi facut cele 9 produse nesalvabile: comerciantul care intra sa schimbe
+ * pretul ar fi primit o eroare despre un camp de personalizare pe care nu l-a atins.
+ *
+ * Deci se cade pe POZITIE, nu se refuza.
+ */
+function numeleCampului(eticheta: string, pozitie: number): string {
+  const e = eticheta.trim();
+  return e ? `„${e}”` : `al ${pozitie}-lea camp`;
+}
+
 export function problemaPersonalizarii(pageSections: unknown): string | null {
   const ps = esteObiectSimplu(pageSections) ? pageSections : null;
   const brut = ps?.customization;
@@ -56,8 +72,74 @@ export function problemaPersonalizarii(pageSections: unknown): string | null {
       + " — verifica sa aiba fiecare un tip cunoscut, si un nume care nu se repeta.";
   }
 
-  for (const camp of citita.fields) {
+  for (const [pozitie, camp] of citita.fields.entries()) {
+    const nume = numeleCampului(camp.label, pozitie + 1);
+
+    /*
+     * ⚠ CAMP OBLIGATORIU PE CARE NIMENI NU-L POATE COMPLETA.
+     *
+     * Un `butoane` sau `select` obligatoriu si fara nicio optiune se salveaza azi fara niciun
+     * mesaj. In vitrina apare eticheta cu steluta rosie si, dedesubt, NIMIC. Clientul apasa
+     * „Comanda": fereastra nu se deschide, si scrie „Alege o optiune." sub un rand pe care nu e
+     * nimic de ales. Apasa iar. Si iar.
+     *
+     * ⚠ `pers.verifica()` nu poate intoarce NICIODATA `true` pe o asemenea configurare, deci
+     * produsul e pierdut pana cand cineva observa — iar comerciantul n-are cum sa observe din
+     * panou, fiindca acolo scrie ca s-a salvat.
+     *
+     * Se cere doar la campurile OBLIGATORII: unul optional si gol se poate sari, deci nu blocheaza
+     * nimic, iar refuzul ar fi oprit un comerciant care tocmai adauga campul si n-a apucat sa
+     * scrie optiunile.
+     */
+    if (camp.required) {
+      const fara = camp.type === "butoane"
+        ? (camp.optiuni ?? []).length === 0
+        : camp.type === "select" && (camp.options ?? []).length === 0;
+      if (fara) {
+        return `${nume} e obligatoriu si n-are nicio optiune, deci clientul nu-l poate completa —`
+          + " produsul nu s-ar putea comanda. Adauga cel putin o optiune, sau fa campul optional.";
+      }
+    }
+
+    /*
+     * ⚠ MARGINI CARE S-AU TRIMIS SI NU S-AU CITIT.
+     *
+     * Cititorul arunca marginile fara sens ca interval, si bine face — asa campul ramane
+     * completabil in loc sa blocheze vanzarea. Dar aruncate in TACERE, comerciantul crede ca a pus
+     * „intre 100 si 500 cm" si serveste un camp nemarginit: clientul comanda 1 cm sau 90 de metri,
+     * si comanda trece.
+     */
     const trimis = campuriTrimise.find((f) => esteObiectSimplu(f) && f.id === camp.id);
+    if (camp.type === "numar" && esteObiectSimplu(trimis)) {
+      const min = Number(trimis.min);
+      const max = Number(trimis.max);
+      if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
+        return `${nume}: minimul (${min}) e mai mare decat maximul (${max}). Nicio valoare n-ar`
+          + " putea fi scrisa in campul asta.";
+      }
+      const imp = Number(trimis.implicit);
+      if (Number.isFinite(imp) && camp.implicit === undefined) {
+        return `${nume}: valoarea implicita ${imp} nu se potriveste cu marginile sau cu pasul, deci`
+          + " ea ar fi refuzata chiar de verificarea campului. Schimb-o sau scoate-o.";
+      }
+    }
+    if (camp.type === "dimensiuni" && esteObiectSimplu(trimis)) {
+      for (const [cheie, numeLatura] of [["latime", "latimii"], ["inaltime", "inaltimii"]] as const) {
+        const l = trimis[cheie];
+        const citit = camp[cheie];
+        if (esteObiectSimplu(l) && Object.keys(l).length > 0 && citit === undefined) {
+          return `${nume}: marginile ${numeLatura} nu se pot folosi. Minimul trebuie sa fie mai mare`
+            + " ca zero, iar maximul cel putin cat minimul — altfel campul ramane nemarginit si"
+            + " clientul poate cere orice masura.";
+        }
+        if (esteObiectSimplu(l) && citit !== undefined
+          && l.implicit !== undefined && citit.implicit === undefined) {
+          return `${nume}: valoarea implicita a ${numeLatura} nu e intre margini sau nu se potriveste`
+            + " cu pasul, deci ea ar fi refuzata chiar de verificarea campului.";
+        }
+      }
+    }
+
     const optiuniTrimise =
       esteObiectSimplu(trimis) && Array.isArray(trimis.optiuni) ? trimis.optiuni : null;
     if (!optiuniTrimise) continue;

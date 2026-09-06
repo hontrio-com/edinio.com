@@ -262,3 +262,133 @@ test("⚠ configurarile CINSTITE pe m² trec mai departe", () => {
     null,
   );
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ CONFIGURARI PE CARE CLIENTUL NU LE POATE COMPLETA CU NIMIC
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ un camp obligatoriu FARA optiuni face produsul necumparabil, si se spune", () => {
+  /*
+   * ⚠ CE SE VEDEA PE ECRAN, masurat inainte de reparatie:
+   *
+   *     butoane obligatoriu, optiuni: []  -> problemaPersonalizarii = null  => se salveaza
+   *     select obligatoriu, options: []   -> null                          => se salveaza
+   *
+   * In vitrina apare eticheta cu steluta rosie si, dedesubt, NIMIC. Clientul apasa „Comanda":
+   * fereastra nu se deschide, si scrie „Alege o optiune." sub un rand pe care nu e nimic de ales.
+   * Apasa iar. Si iar.
+   *
+   * ⚠ `pers.verifica()` nu poate intoarce NICIODATA `true` pe forma asta, deci produsul e
+   * pierdut pana cand cineva observa — iar comerciantul n-are cum sa observe din panou, fiindca
+   * acolo scrie ca s-a salvat. Trafic si zero comenzi, fara niciun indiciu nicaieri.
+   */
+  for (const camp of [
+    { id: "b", type: "butoane", label: "Material", required: true, optiuni: [] },
+    { id: "b", type: "butoane", label: "Material", required: true },
+    { id: "s", type: "select", label: "Model", required: true, options: [] },
+  ]) {
+    const mesaj = problemaPersonalizarii({ customization: { enabled: true, fields: [camp] } });
+    assert.ok(mesaj, `s-a salvat in tacere: ${JSON.stringify(camp)}`);
+    assert.match(mesaj, /nicio optiune/);
+  }
+
+  /*
+   * ⚠ PERECHEA, si fara ea poarta ar fi oprit un comerciant care n-a gresit nimic: un camp
+   * OPTIONAL si fara optiuni se poate sari, deci nu blocheaza nicio comanda. Exact asta face
+   * cineva care tocmai a adaugat campul si n-a apucat sa scrie optiunile.
+   */
+  assert.equal(
+    problemaPersonalizarii({ customization: { enabled: true, fields: [
+      { id: "b", type: "butoane", label: "Material", required: false, optiuni: [] },
+    ] } }),
+    null,
+  );
+});
+
+test("⚠ ETICHETA GOALA RAMANE PERMISA — 9 produse vii ar fi devenit nesalvabile", () => {
+  /*
+   * ⚠ AUDITUL CEREA SA FIE REFUZATA, si asta ar fi fost o regresie mai scumpa decat defectul.
+   *
+   * Masurat in productie: 17 din cele 49 de campuri vii, pe 9 produse distincte, au `label` gol —
+   * si toate 17 sunt optionale, deci nici macar fundaturi potentiale. Formularul creeaza campurile
+   * noi tot cu eticheta goala.
+   *
+   * Refuzata la salvare, comerciantul care intra sa schimbe PRETUL ar fi primit o eroare despre un
+   * camp de personalizare pe care nu l-a atins, si n-ar mai fi putut salva deloc.
+   *
+   * Ce s-a facut in schimb: mesajele cad pe POZITIE cand eticheta lipseste, ca sa fie citibile.
+   */
+  assert.equal(
+    problemaPersonalizarii({ customization: { enabled: true, fields: [
+      { id: "a", type: "image", label: "", required: false },
+      { id: "b", type: "textarea", label: "", required: false },
+    ] } }),
+    null,
+    "un produs viu a devenit nesalvabil",
+  );
+
+  /* Si cand chiar exista o problema, mesajul spune „al 2-lea camp", nu „«»". */
+  const mesaj = problemaPersonalizarii({ customization: { enabled: true, fields: [
+    { id: "a", type: "image", label: "", required: false },
+    { id: "b", type: "butoane", label: "", required: true, optiuni: [] },
+  ] } });
+  assert.match(String(mesaj), /al 2-lea camp/);
+});
+
+test("⚠ marginile care se ARUNCA la citire nu se mai arunca in TACERE", () => {
+  /*
+   * ⚠ CE COSTA, si de ce nu e o pedanterie. Cititorul arunca marginile fara sens ca interval, si
+   * bine face: asa campul ramane completabil in loc sa blocheze vanzarea. Dar aruncate in tacere,
+   * comerciantul crede ca a pus „intre 100 si 500 cm" si serveste un camp NEMARGINIT.
+   *
+   * Masurat, pe mod „adaugat" cu 15 lei/m²:
+   *     dimensiuni {min:0, max:500}  -> se serveste NICIO margine
+   *                                  -> 9000 x 9000 cm trece: 8100 m², supliment 121.500 lei
+   *     dimensiuni {min:500, max:100} -> la fel
+   *
+   * Si in celalalt sens: marginea de jos disparuta lasa sa treaca 1 x 70 cm, adica 0,10 lei de
+   * supliment pe un produs pentru care exista tocmai ca sa nu se poata.
+   */
+  const cuLatura = (latime: Record<string, number | undefined>) => problemaPersonalizarii({
+    customization: { enabled: true, fields: [
+      { id: "d", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+        latime, inaltime: { min: 70, max: 350 } },
+    ] },
+  });
+
+  for (const rea of [{ min: 0, max: 500 }, { min: 500, max: 100 }, { min: 100, max: 0 }, { pas: 10 }]) {
+    const mesaj = cuLatura(rea);
+    assert.ok(mesaj, `s-au aruncat in tacere: ${JSON.stringify(rea)}`);
+    assert.match(mesaj, /marginile latimii/);
+  }
+
+  /* Perechea: marginile bune trec. */
+  assert.equal(cuLatura({ min: 100, max: 500 }), null);
+  assert.equal(cuLatura({ min: 100, max: 500, pas: 10 }), null);
+});
+
+test("⚠ campul „numar” cu minimul peste maxim nu mai poate fi salvat", () => {
+  /*
+   * ⚠ ACELASI MOTIV pe care il scrie de mult comentariul lui `citesteLatura` — „cu min > max
+   * nicio valoare nu trece validarea, iar clientul ramane blocat pe un camp obligatoriu" — doar ca
+   * la `numar` lipsea, in acelasi fisier, la optzeci de randuri distanta.
+   *
+   * Masurat: camp OBLIGATORIU cu min 100 / max 10 — valorile 50, 100 si 10 pica toate, iar gol da
+   * „Camp obligatoriu.". Butonul „Comanda" nu deschide nimic, la infinit.
+   */
+  const numar = (extra: Record<string, unknown>) => problemaPersonalizarii({
+    customization: { enabled: true, fields: [
+      { id: "n", type: "numar", label: "Bucati", required: true, ...extra },
+    ] },
+  });
+
+  assert.match(String(numar({ min: 100, max: 10 })), /mai mare decat maximul/);
+  assert.match(String(numar({ min: 10, max: 100, implicit: 5 })), /valoarea implicita 5/);
+  assert.match(String(numar({ min: 0, max: 100, pas: 10, implicit: 37 })), /valoarea implicita 37/);
+
+  /* Perechea: configurarile bune trec. */
+  assert.equal(numar({ min: 10, max: 100 }), null);
+  assert.equal(numar({ min: 10, max: 100, implicit: 50 }), null);
+  assert.equal(numar({ min: 0, max: 100, pas: 10, implicit: 30 }), null);
+  assert.equal(numar({}), null, "un camp fara margini a fost refuzat degeaba");
+});

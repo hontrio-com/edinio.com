@@ -1,5 +1,6 @@
 import {
   MAX_LUNGIME_TEXT,
+  pePas,
   type CampPersonalizare,
   type DefinitiePersonalizare,
 } from "./definitie";
@@ -56,13 +57,6 @@ function sir(x: unknown): string {
   return typeof x === "string" ? x : "";
 }
 
-/** Numarul de zecimale ale unui pas, ca sa se poata spune „multiplu de 0,5". */
-function multipluDe(valoare: number, pas: number): boolean {
-  if (!(pas > 0)) return true;
-  const raport = valoare / pas;
-  return Math.abs(raport - Math.round(raport)) < 1e-6;
-}
-
 /** Numarul scris asa cum il vede omul: 8,75 nu 8.75. */
 function caText(n: number): string {
   return String(Math.round(n * 100) / 100).replace(".", ",");
@@ -103,7 +97,7 @@ function citesteLatura(
    * Se masoara de la `min`, nu de la zero: „intre 100 si 500, din 10 in 10" inseamna 100, 110,
    * 120 — nu 100, 110 doar din intamplare fiindca 100 se imparte la 10.
    */
-  if (marg?.pas !== undefined && !multipluDe(n - marg.min, marg.pas)) {
+  if (marg?.pas !== undefined && !pePas(n - marg.min, marg.pas)) {
     constatari.push({
       campId: camp.id, eticheta: camp.label,
       mesaj: `${numeLatura} creste din ${caText(marg.pas)} in ${caText(marg.pas)} ${u}.`,
@@ -212,7 +206,7 @@ function citesteCamp(
         constatari.push({ campId: camp.id, eticheta: camp.label, mesaj: `Cel mult ${caText(camp.max)}.` });
         return null;
       }
-      if (camp.pas !== undefined && !multipluDe(n - (camp.min ?? 0), camp.pas)) {
+      if (camp.pas !== undefined && !pePas(n - (camp.min ?? 0), camp.pas)) {
         constatari.push({
           campId: camp.id, eticheta: camp.label,
           mesaj: `Valoarea creste din ${caText(camp.pas)} in ${caText(camp.pas)}.`,

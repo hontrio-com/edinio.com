@@ -2,7 +2,7 @@
 
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
 import {
-  MAX_CAMPURI, MAX_ETICHETA, MAX_OPTIUNI, TIPURI, UNITATI,
+  MAX_CAMPURI, MAX_ETICHETA, MAX_OPTIUNI, TIPURI, UNITATI, laturaSchimbata,
   type CampPersonalizare, type Impact,
 } from "@/lib/customization/definitie";
 import { cn } from "@/lib/utils";
@@ -344,10 +344,15 @@ function Reglaje({ camp, idx, schimba }: RegProps) {
           </div>
           {(["latime", "inaltime"] as const).map((latura) => {
             const v = camp[latura];
+            /*
+             * ⚠ REGULA E IN MODULUL PUR, nu aici: greseala a fost tocmai in reducerul asta, iar
+             * in componenta nu se putea proba. Vezi `laturaSchimbata` pentru ce fabrica forma
+             * veche si cat costa.
+             */
             const pune = (k: "min" | "max" | "implicit" | "pas", val: number | undefined) =>
               schimba(idx, {
-                [latura]: { min: v?.min ?? 0, max: v?.max ?? 0, ...(v ?? {}), [k]: val },
-              } as Partial<CampAdmin>);
+                [latura]: laturaSchimbata(v as Record<string, number> | undefined, k, val),
+              } as unknown as Partial<CampAdmin>);
             return (
               <div key={latura} className="grid grid-cols-4 gap-2">
                 <div>

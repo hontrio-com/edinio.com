@@ -248,6 +248,58 @@ export function citesteImpact(raw: unknown): Impact {
   return { fel: "fara" };
 }
 
+/**
+ * Cum arata o latura dupa ce comerciantul atinge O casuta din panou.
+ *
+ * ═══ ⚠ DE CE E AICI, SI NU IN COMPONENTA ═══
+ *
+ * Fiindca greseala a fost tocmai in reducerul din panou, si acolo nu se putea proba: nicio
+ * componenta React nu se randeaza intr-o proba a proiectului. Mutata aici, regula se confrunta cu
+ * secventele reale de tastare.
+ *
+ * ⚠ CE FACEA FORMA VECHE. Ea punea `min: 0` si `max: 0` ori de cate ori se atingea ORICE
+ * casuta, iar `citesteLatura` arunca toata latura cand `min` nu e mai mare ca zero. Deci:
+ *
+ *     completezi DOAR „max"        -> {min:0, max:500}        -> se serveste NIMIC
+ *     completezi DOAR „pas"        -> {min:0, max:0, pas:10}  -> se serveste NIMIC
+ *     scrii min, apoi il stergi    -> zerourile raman         -> se serveste NIMIC
+ *
+ * Al doilea e cel mai scump, fiindca nu cere nicio greseala: caseta „pas" are chiar placeholderul
+ * „oricat", iar pasul exista fiindca materialele vin pe role. Comerciantul completeaza exact caseta
+ * aia, primeste „Salvat", si regula rolei nu exista. Clientul comanda 137 cm, si atelierul taie o
+ * rola degeaba.
+ *
+ * ⚠ O casuta GOLITA sterge cheia, nu o pastreaza cu `undefined`: pastrata, ea ar fi trecut mai
+ * departe ca „am pus ceva acolo" si ar fi produs aceleasi margini fantoma.
+ */
+export function laturaSchimbata(
+  acum: Record<string, number> | undefined,
+  cheie: "min" | "max" | "implicit" | "pas",
+  valoare: number | undefined,
+): Record<string, number> | undefined {
+  const urm: Record<string, number> = { ...(acum ?? {}) };
+  if (valoare === undefined) delete urm[cheie];
+  else urm[cheie] = valoare;
+  return Object.keys(urm).length > 0 ? urm : undefined;
+}
+
+/**
+ * E `valoare` un multiplu al pasului?
+ *
+ * ⚠ O SINGURA REGULA, si de-aia sta aici. Ea raspunde la doua intrebari care trebuie sa aiba
+ * acelasi raspuns: „valoarea trimisa de client e pe pas?" (in `valori.ts`, la comanda) si
+ * „implicitul pus de comerciant e pe pas?" (chiar aici, la citire). Scrise separat, prima
+ * nepotrivire ar fi fost o casuta preumpluta cu ceva ce propria validare refuza.
+ *
+ * ⚠ Toleranta nu e cochetarie: `0.3 / 0.1` da 2,9999999999999996 in virgula mobila, deci o
+ * comparatie exacta ar fi refuzat chiar valorile pe care comerciantul le-a scris cu mana.
+ */
+export function pePas(valoare: number, pas: number): boolean {
+  if (!(pas > 0)) return true;
+  const raport = valoare / pas;
+  return Math.abs(raport - Math.round(raport)) < 1e-6;
+}
+
 function citesteLatura(raw: unknown): Latura | undefined {
   if (!esteObiect(raw)) return undefined;
   const min = numar(raw.min);
@@ -262,10 +314,14 @@ function citesteLatura(raw: unknown): Latura | undefined {
   const implicit = numar(raw.implicit);
   /* Un pas care nu e pozitiv n-ar putea fi respectat de nicio valoare: se arunca, nu se pastreaza. */
   const pas = numar(raw.pas);
+  const pasBun = pas !== undefined && pas > 0 ? pas : undefined;
   return {
     min, max,
-    ...(implicit !== undefined && implicit >= min && implicit <= max ? { implicit } : {}),
-    ...(pas !== undefined && pas > 0 ? { pas } : {}),
+    /* ⚠ Implicitul trece prin ACELEASI reguli ca valoarea clientului — vezi ramura „numar". */
+    ...(implicit !== undefined && implicit >= min && implicit <= max
+      && (pasBun === undefined || pePas(implicit - min, pasBun))
+      ? { implicit } : {}),
+    ...(pasBun !== undefined ? { pas: pasBun } : {}),
   };
 }
 
@@ -336,10 +392,39 @@ function citesteCamp(raw: unknown): CampPersonalizare | null {
 
   /* — cele noi — */
   if (type === "numar") {
-    const min = numar(raw.min); if (min !== undefined) camp.min = min;
-    const max = numar(raw.max); if (max !== undefined) camp.max = max;
+    const min = numar(raw.min);
+    const max = numar(raw.max);
+    /*
+     * ⚠ ACEEASI REGULA CA LA `citesteLatura`, si din acelasi motiv — doar ca aici lipsea.
+     *
+     * Cu `min > max` nicio valoare nu trece validarea: clientul ramane blocat pe un camp
+     * obligatoriu pe care nu-l poate completa CU NIMIC, iar butonul „Comanda" nu deschide nimic,
+     * la infinit. Trafic si zero comenzi, fara niciun indiciu nicaieri.
+     *
+     * Se arunca AMANDOUA marginile, nu una: pastrata singura, cealalta ar fi taiat tacut jumatate
+     * din intervalul pe care comerciantul credea ca l-a pus.
+     */
+    if (min !== undefined && max !== undefined && min > max) {
+      /* margini fara sens ca interval: se arunca, campul ramane nemarginit */
+    } else {
+      if (min !== undefined) camp.min = min;
+      if (max !== undefined) camp.max = max;
+    }
     const pas = numar(raw.pas); if (pas !== undefined && pas > 0) camp.pas = pas;
-    const imp = numar(raw.implicit); if (imp !== undefined) camp.implicit = imp;
+    /*
+     * ⚠ SI VALOAREA IMPLICITA TREBUIE SA TREACA DE PROPRIA VALIDARE.
+     *
+     * Preumpluta cu ceva ce validarea refuza, casuta arata clientului o valoare care pica la
+     * prima apasare — pe un camp pe care el nu l-a atins. Se pastreaza doar daca e in interval SI
+     * pe pas, masurat de la minim, exact ca in `valori.ts`.
+     */
+    const imp = numar(raw.implicit);
+    if (
+      imp !== undefined
+      && (camp.min === undefined || imp >= camp.min)
+      && (camp.max === undefined || imp <= camp.max)
+      && (camp.pas === undefined || pePas(imp - (camp.min ?? 0), camp.pas))
+    ) camp.implicit = imp;
     const u = text(raw.unitate_text, 12); if (u) camp.unitate_text = u;
   }
   if (type === "dimensiuni") {

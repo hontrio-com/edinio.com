@@ -21,6 +21,9 @@ import { markCartConverted } from "@/lib/abandoned-cart";
 import type { OrderSource } from "@/lib/storefront/attribution";
 import { comboStockMap, enabledComboPriceMap, parseVariants } from "@/lib/storefront/variants";
 import { repretuiesteLinii, type PretConfigurat } from "@/lib/configurators/repretuire";
+import {
+  contopesteConsumul, decrementeleComponentelor, numelePieselor, type BucataConsumata,
+} from "@/lib/configurators/componente";
 import { configuratoarePentruProduse } from "@/lib/configurators/vitrina";
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import {
@@ -43,6 +46,7 @@ import { stocRezervat } from "@/lib/orders/stoc-rezervat";
 import { cheiEticheta } from "@/lib/gls/eticheta";
 import { deleteFromR2 } from "@/lib/r2";
 import { interpreteazaRevendicarea, type Revendicare } from "@/lib/orders/verdict-stoc";
+import type { PieseleConfiguratiei } from "@/lib/orders/refuz-stoc";
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
 import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
 import { esteIdExtra } from "@/lib/orders/extras";
@@ -601,6 +605,14 @@ async function revendicaStocul(
   admin: SupabaseClient<Database>,
   decrements: { product_id: string; quantity: number }[],
   liniiVarianta: { product_id: string; variant_title?: string | null; quantity: number }[] = [],
+  /**
+   * Care dintre produsele cerute sunt PIESE de configuratie.
+   *
+   * ⚠ Fara ele, un refuz pe o balama ii spunea cumparatorului sa scoata din cos un produs
+   * pe care nu-l are acolo si de care n-a auzit — si ii dadea pe deasupra numele intern al
+   * unui rand de stoc tinut ascuns. Vezi `mesajRefuzStoc`.
+   */
+  piese?: PieseleConfiguratiei,
 ): Promise<Revendicare> {
   const variante = liniiVarianta
     .filter((l) => l.variant_title)
@@ -640,7 +652,7 @@ async function revendicaStocul(
       severity: "critical",
     });
   }
-  const verdict = interpreteazaRevendicarea(data, error);
+  const verdict = interpreteazaRevendicarea(data, error, piese);
   if (verdict.fel === "esuat" && !error) {
     await logError({ action: "revendicaStocul", message: "raspuns de forma neasteptata", details: { produse: decrements.length, raspuns: data }, severity: "critical" });
   }
@@ -968,6 +980,27 @@ export async function placeOrder(data: {
   }
 
   /*
+   * Piesele consumate de liniile CONFIGURATE, in bucati de produs.
+   *
+   * ⚠ NU E O A DOUA CALE DE SCADERE A STOCULUI, E ACEEASI. Lista de mai jos se adauga la ce se
+   * trimite lui `expandBundleStock` — exact acolo unde intra si componentele unui pachet — si de
+   * acolo incolo totul e drumul care exista deja: `revendica_stoc_complet` verifica si scade
+   * atomic, `stocRezervat` scrie sub cheia `produse`, `elibereaza_stoc_comanda` da inapoi la
+   * anulare. Nicio functie noua in baza, si nicio cheie noua pe comanda — tocmai fiindca cele
+   * TREI functii din baza care REscriu `stoc_rezervat` o rescriu cu exact doua chei, si o a
+   * treia ar fi fost stearsa tacut la prima editare de comanda.
+   */
+  const consumComponente: { product_id: string; quantity: number }[] = [];
+  /*
+   * Aceleasi piese, dar INTREGI: cu numele lor de la publicare.
+   *
+   * ⚠ `decrementeleComponentelor` da doar `{product_id, quantity}`, adica exact ce trebuie
+   * scazut si nimic din ce trebuie SPUS. Numele se pierdea acolo, iar refuzul de stoc ramanea
+   * cu singurul nume pe care il stia baza: al produsului ascuns.
+   */
+  const bucatiConsumate: BucataConsumata[] = [];
+
+  /*
    * ⚠ CAND PRODUSUL E CONFIGURAT, PRETUL NU SE POTRIVESTE — SE CALCULEAZA.
    *
    * `authoritativeSubtotal` accepta pretul cerut de client doar daca se potriveste cu unul
@@ -996,6 +1029,10 @@ export async function placeOrder(data: {
       severity: "warning",
     });
     return { error: `${linieP.nume}: ${cfgPrincipal.motive[0]}` };
+  }
+  if (cfgPrincipal.fel === "ok") {
+    consumComponente.push(...decrementeleComponentelor(cfgPrincipal.consum, cantitate));
+    bucatiConsumate.push(...cfgPrincipal.consum);
   }
 
   /*
@@ -1121,6 +1158,14 @@ export async function placeOrder(data: {
           severity: "warning",
         });
         return { error: `${extraMap.get(linie.product_id)?.name ?? "Un produs din cos"}: ${v.motive[0]}` };
+      }
+      // ⚠ Si liniile PURTATE DIN COS consuma. Numarate doar pe produsul din formular, o comanda
+      // cu doua usi configurate in cos ar fi scazut balamalele uneia singure.
+      for (let i = 0; i < verdicteCos.length; i++) {
+        const vc = verdicteCos[i];
+        if (vc.fel !== "ok") continue;
+        consumComponente.push(...decrementeleComponentelor(vc.consum, liniiDinCos[i].quantity));
+        bucatiConsumate.push(...vc.consum);
       }
 
       cartItems = liniiDinCos
@@ -1362,6 +1407,22 @@ export async function placeOrder(data: {
   }
 
   /*
+   * ⚠ PIESELE SE CONTOPESC AICI, DUPA DESFACEREA PACHETELOR, NU INAINTE DE EA.
+   *
+   * Trecute prin `expandBundleStock`, ar fi cazut peste garda ei `is_active`: o balama, un tub
+   * de silicon sau o ora de manopera se tin STINSE dinadins — sunt randuri de stoc, nu marfa de
+   * raft. Fiecare comanda cu o usa configurata ar fi fost oprita cu „Un produs din pachet nu mai
+   * este disponibil. Scoate pachetul din cos”, adica un mesaj despre un pachet care nu exista,
+   * pe o comanda perfect buna — si niciun magazin n-ar fi putut vinde nimic configurat.
+   *
+   * ⚠ Si nu se pierde nicio aparare: `revendica_stoc_complet` verifica sub acelasi lacat sub
+   * care scade si refuza cu numele piesei si cu cate au mai ramas. Randurile sunt deja adunate
+   * pe produs, deci aceeasi balama vanduta la bucata SI consumata de configuratie in aceeasi
+   * comanda nu se poate lua de doua ori. Vezi `contopesteConsumul`.
+   */
+  const decremente = contopesteConsumul(stockExp.decrements, consumComponente);
+
+  /*
    * Prins aici, nu lasat sa iasa: o actiune de server care arunca ii da clientului
    * un ecran de eroare opac („An error occurred in the Server Components render"),
    * in loc de un mesaj din care sa inteleaga ca poate reincerca.
@@ -1470,7 +1531,10 @@ export async function placeOrder(data: {
   // de mai sus a citit doar, iar intre citire si scaderea de dupa insert incapeau
   // patru cereri paralele care vindeau toate acelasi ultim produs. Vezi
   // `revendicaStocul`.
-  const stoc = await revendicaStocul(admin, stockExp.decrements, liniiCuVarianta);
+  const stoc = await revendicaStocul(
+    admin, decremente, liniiCuVarianta,
+    numelePieselor(stockExp.decrements, bucatiConsumate),
+  );
   /*
    * `!== "revendicat"`, nu doar `=== "refuzat"`.
    *
@@ -1637,7 +1701,7 @@ export async function placeOrder(data: {
     discount_id: (validDiscountId ?? null) as never,
     /* Ce s-a rezervat, ca sa se poata da inapoi intocmai la anulare. `as never`
      * ca la `discount_id`: coloana e noua si tipurile generate n-o stiu inca. */
-    stoc_rezervat: stocRezervat(stockExp.decrements, liniiCuVarianta) as never,
+    stoc_rezervat: stocRezervat(decremente, liniiCuVarianta) as never,
   }).select("id, order_number").single();
 
   if (error) {
@@ -1645,7 +1709,7 @@ export async function placeOrder(data: {
     // inapoi. Fara a doua linie, marfa ramanea scazuta pentru o comanda care nu
     // exista nicaieri — adica exact pe dos fata de cursa pe care o repara.
     await elibereazaCuponul(admin, validDiscountId);
-    if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCuVarianta);
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, decremente, liniiCuVarianta);
     await logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
@@ -1672,11 +1736,11 @@ export async function placeOrder(data: {
   // inainte de insert. Nu mai exista nicio a doua cale.
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
-  dupaRaspuns(() => enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueGmcSyncMany", data.business_id);
-  dupaRaspuns(() => enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueOlxSyncMany", data.business_id);
-  dupaRaspuns(() => enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueAboutYouStockMany", data.business_id);
-  dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
-  dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
+  dupaRaspuns(() => enqueueGmcSyncMany(data.business_id, [...decremente.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueGmcSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueOlxSyncMany(data.business_id, [...decremente.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueOlxSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueAboutYouStockMany(data.business_id, [...decremente.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueAboutYouStockMany", data.business_id);
+  dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...decremente.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
+  dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...decremente.map((d) => d.product_id), data.product_id, ...cartItems.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
 
   /*
     Server-side GA4 purchase (Measurement Protocol) — deduped with the gtag event
@@ -2709,6 +2773,31 @@ export async function updateOrderDetails(orderId: string, data: {
     );
     if (eroareStoc) return { error: eroareStoc };
 
+    /*
+     * ⚠ PIESELE UNUI CONFIGURATOR NU INTRA AICI, SI NU E O SCAPARE.
+     *
+     * Nicio linie ADAUGATA din panou nu poate consuma piese, si o tin doua garzi din
+     * `edit-pricing.ts`, nu buna-credinta:
+     *
+     *   - `planificaAdaugarea` REFUZA un produs cu configurator („se configureaza de catre
+     *     client, deci nu poate fi adaugat din panou”), fiindca panoul n-are unde sa aleaga
+     *     latimea sau materialul;
+     *   - o linie care POARTA o configuratie nu e `eLinieSimpla`, deci `poateCreste` e fals si
+     *     cantitatea ei nu se poate mari — numai scadea.
+     *
+     * Deci `plan.adaugate` nu contine niciodata o linie configurata, si n-are ce piese sa ceara.
+     * Cine scoate vreodata una dintre garzile alea trebuie sa adauge consumul si aici, ca pe
+     * celelalte doua cai — altfel bucatile ar pleca din depozit fara ca vreo comanda s-o arate.
+     *
+     * ⚠ CE RAMANE DESCHIS, si e scris ca sa nu fie luat drept intamplare: la SCOATEREA unei
+     * linii configurate se da inapoi produsul, nu si piesele ei. `plan.scoase` e o lista de
+     * `{produs, varianta, cantitate}` care nu spune CARE linie a fost, deci doua linii ale
+     * aceluiasi produs cu doua configuratii nu se pot deosebi. Pana se poate, purtarea e cea
+     * PRUDENTA: piesele raman rezervate pe comanda si se intorc intregi la anularea ei, prin
+     * `elibereaza_stoc_comanda`, care da inapoi tot `stoc_rezervat` — unde ele CHIAR sunt,
+     * fiindca s-au scris sub cheia `produse`. Se pierde vederea corecta a raftului pana atunci;
+     * nu se vinde nimic ce nu exista.
+     */
     // Stocul de produs se verifica si se scade DOAR pe cantitatea adaugata, si
     // dupa contopire: altfel componentele pachetelor s-ar scadea a doua oara.
     const stockExp = await expandBundleStock(admin, order.business_id, plan.adaugate.map((a) => ({ product_id: a.product_id, quantity: a.quantity })));
@@ -3638,6 +3727,20 @@ export async function placeCartOrder(data: {
     return { error: `${catalogLinii.get(linie.product_id)?.name ?? "Un produs"}: ${v.motive[0]}` };
   }
 
+  /*
+   * Piesele consumate de liniile configurate din cos. Vezi nota din `placeOrder`: se adauga la
+   * ce primeste `expandBundleStock`, deci merg pe chiar drumul de stoc al pachetelor.
+   */
+  const consumComponente: { product_id: string; quantity: number }[] = [];
+  /** Aceleasi piese, cu numele lor. Vezi nota din `placeOrder`. */
+  const bucatiConsumate: BucataConsumata[] = [];
+  for (let i = 0; i < verdicteCfg.length; i++) {
+    const vc = verdicteCfg[i];
+    if (vc.fel !== "ok") continue;
+    consumComponente.push(...decrementeleComponentelor(vc.consum, liniiCerute[i].quantity));
+    bucatiConsumate.push(...vc.consum);
+  }
+
   let validatedItems = liniiCerute.map((i, idx) => {
     // Acelasi ajutor care a dat verdictul mai sus da si pretul: verificat si
     // pretuit de doua functii diferite, cele doua ajungeau sa nu mai spuna
@@ -3850,11 +3953,29 @@ export async function placeCartOrder(data: {
 
   // Bundle-aware stock: expand any bundle into its components + validate availability
   // before creating the order (prevents overselling components).
-  const stockExp = await expandBundleStock(admin, data.business_id, validatedItems.map(i => ({ product_id: i.product_id, quantity: i.quantity })));
+  const stockExp = await expandBundleStock(admin, data.business_id, [
+    ...validatedItems.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
+  ]);
   if ("error" in stockExp) {
     logError({ action: "placeCartOrder.bundleStock", message: stockExp.motiv, details: { businessId: data.business_id, componenta: stockExp.componenta }, severity: "warning" });
     return { error: stockExp.error };
   }
+
+  /*
+   * ⚠ PIESELE SE CONTOPESC AICI, DUPA DESFACEREA PACHETELOR, NU INAINTE DE EA.
+   *
+   * Trecute prin `expandBundleStock`, ar fi cazut peste garda ei `is_active`: o balama, un tub
+   * de silicon sau o ora de manopera se tin STINSE dinadins — sunt randuri de stoc, nu marfa de
+   * raft. Fiecare comanda cu o usa configurata ar fi fost oprita cu „Un produs din pachet nu mai
+   * este disponibil. Scoate pachetul din cos”, adica un mesaj despre un pachet care nu exista,
+   * pe o comanda perfect buna — si niciun magazin n-ar fi putut vinde nimic configurat.
+   *
+   * ⚠ Si nu se pierde nicio aparare: `revendica_stoc_complet` verifica sub acelasi lacat sub
+   * care scade si refuza cu numele piesei si cu cate au mai ramas. Randurile sunt deja adunate
+   * pe produs, deci aceeasi balama vanduta la bucata SI consumata de configuratie in aceeasi
+   * comanda nu se poate lua de doua ori. Vezi `contopesteConsumul`.
+   */
+  const decremente = contopesteConsumul(stockExp.decrements, consumComponente);
 
   /*
    * Prins aici, nu lasat sa iasa: o actiune de server care arunca ii da clientului
@@ -3914,7 +4035,10 @@ export async function placeCartOrder(data: {
 
   // Ca la comanda din formular: stocul se revendica atomic inainte de inserare,
   // fiindca `expandBundleStock` doar citeste. Vezi `revendicaStocul`.
-  const stoc = await revendicaStocul(admin, stockExp.decrements, liniiCerute);
+  const stoc = await revendicaStocul(
+    admin, decremente, liniiCerute,
+    numelePieselor(stockExp.decrements, bucatiConsumate),
+  );
   /*
    * `!== "revendicat"`, nu doar `=== "refuzat"`.
    *
@@ -4082,14 +4206,14 @@ export async function placeCartOrder(data: {
      * scris. Un comentariu gresit e mai rau decat lipsa lui: opreste pe urmatorul
      * din a se mai uita.
      */
-    stoc_rezervat: stocRezervat(stockExp.decrements, liniiCerute) as never,
+    stoc_rezervat: stocRezervat(decremente, liniiCerute) as never,
   }).select("id, order_number, total").single();
 
   if (error) {
     // Comanda n-a intrat: se dau inapoi si utilizarea cuponului, si stocul
     // rezervat. Vezi `placeOrder`.
     await elibereazaCuponul(admin, validDiscountId);
-    if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCerute);
+    if (stoc.fel === "revendicat") await elibereazaStocul(admin, decremente, liniiCerute);
     await logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
   }
@@ -4107,11 +4231,11 @@ export async function placeCartOrder(data: {
   // Stocul — de produs si de marime — e deja scazut inainte de insert.
 
   // Reflect stock/availability changes in Google Merchant + OLX (if connected).
-  dupaRaspuns(() => enqueueGmcSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueGmcSyncMany", data.business_id);
-  dupaRaspuns(() => enqueueOlxSyncMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueOlxSyncMany", data.business_id);
-  dupaRaspuns(() => enqueueAboutYouStockMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueAboutYouStockMany", data.business_id);
-  dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
-  dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...stockExp.decrements.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
+  dupaRaspuns(() => enqueueGmcSyncMany(data.business_id, [...decremente.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueGmcSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueOlxSyncMany(data.business_id, [...decremente.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueOlxSyncMany", data.business_id);
+  dupaRaspuns(() => enqueueAboutYouStockMany(data.business_id, [...decremente.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueAboutYouStockMany", data.business_id);
+  dupaRaspuns(() => enqueueTrendyolInventoryMany(data.business_id, [...decremente.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueTrendyolInventoryMany", data.business_id);
+  dupaRaspuns(() => enqueueEmagStocMany(data.business_id, [...decremente.map((d) => d.product_id), ...data.items.map((i) => i.product_id)]), "enqueueEmagStocMany", data.business_id);
   // Acelasi prag moale pe magazin ca la comanda din formular: peste el comanda se
   // salveaza, dar emailurile si SMS-ul nu mai pleaca. Vezi `pesteRafalaMagazinului`.
   const pesteRafala = await pesteRafalaMagazinului(admin, data.business_id, "placeCartOrder");

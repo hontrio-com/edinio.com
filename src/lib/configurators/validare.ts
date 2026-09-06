@@ -26,9 +26,10 @@ import {
   producesValoare, toateIdurile, toateNodurile,
 } from "./definitie";
 import { adancimea, numaraNoduri, referinteleDin, MAX_ADANCIME, MAX_NODURI as MAX_NODURI_EXPR } from "./expresii";
-import { aplicaRegulile, nodurileCerute, type Regula } from "./reguli";
+import { aplicaRegulile, nodurileCerute, optiunileCerute, type Regula } from "./reguli";
 import { calculeazaPretul, type Pretuire } from "./pret";
 import { normalizeazaValoare, type Valoare, type Valori } from "./valori";
+import { componentaEStricata, trimiterileLaComponente } from "./componente";
 import { eNumarBun } from "./unitati";
 
 export type Treapta = "critic" | "atentie";
@@ -101,6 +102,16 @@ export interface IntrareValidare {
   pretProdus?: number;
   /** Semne lasate de sablon, care NU au voie sa ajunga in vanzare. */
   marcajeDemo?: string[];
+  /**
+   * Id-urile pieselor care CHIAR exista in `configurator_componente`, citite de apelant.
+   *
+   * ⚠ `undefined` INSEAMNA „N-AM INTREBAT”, NU „nu exista niciuna”, si deosebirea costa.
+   * Previzualizarea din panou ruleaza validatorul pe ciorna din memorie, fara nicio citire; daca
+   * lipsa listei ar fi fost citita ca multime goala, comerciantul ar fi vazut TOATE piesele lui
+   * raportate ca fantome, la fiecare tasta. Publicarea, singura care chiar poate intreba baza,
+   * trimite lista — si numai atunci se verifica.
+   */
+  componenteCunoscute?: readonly string[];
 }
 
 export function valideaza(intrare: IntrareValidare): RezultatValidare {
@@ -187,6 +198,31 @@ export function valideaza(intrare: IntrareValidare): RezultatValidare {
         `„${nod.eticheta}": minimul este mai mare decat maximul.`, nod.id);
     }
     /*
+     * """ + W + """ CATE BIFE SE CER, FATA DE CATE EXISTA.
+     *
+     * De cand campurile astea se pot scrie din panou, un „cel putin 5" pe un camp cu doua optiuni
+     * se publica linistit — si produsul nu se mai poate comanda NICIODATA: verificarea raspunsului
+     * cere cinci bife, iar cumparatorul n-are de unde sa le ia. Nimic nu cade, nimeni nu afla, si
+     * comerciantul cauta greseala in reguli.
+     *
+     * Aceeasi familie cu `limite_pe_dos` de mai sus, si aceeasi treapta: critic.
+     */
+    if (nod.fel === "alegeri") {
+      const cateActive = (nod.optiuni ?? []).filter(optiuneActiva).length;
+      if (eNumarBun(nod.minAlese) && eNumarBun(nod.maxAlese) && nod.minAlese > nod.maxAlese) {
+        adauga("critic", "alese_pe_dos",
+          `„${nod.eticheta}": cere cel putin ${nod.minAlese} alegeri, dar nu mai mult de ${nod.maxAlese}.`, nod.id);
+      }
+      if (eNumarBun(nod.minAlese) && nod.minAlese > cateActive) {
+        adauga("critic", "prea_putine_optiuni",
+          `„${nod.eticheta}": cere cel putin ${nod.minAlese} alegeri, dar are doar ${cateActive} optiuni active.`,
+          nod.id);
+      }
+      if (eNumarBun(nod.minAlese) && nod.minAlese < 0) {
+        adauga("critic", "alese_negativ", `„${nod.eticheta}": numarul de alegeri nu poate fi negativ.`, nod.id);
+      }
+    }
+    /*
      * ⚠ INCARCAREA DE FISIERE NU SE PUBLICA INCA, si asta e o garda, nu o lipsa.
      *
      * `ConfiguratorSlot` intoarce `null` pentru nodurile de fisiere: depozitul privat, verificarea
@@ -220,6 +256,56 @@ export function valideaza(intrare: IntrareValidare): RezultatValidare {
             nod.id);
         }
       }
+    }
+  }
+
+  /* ── Piesele consumate ──────────────────────────────────── */
+
+  /*
+   * ⚠ UN `componenta` STRICAT DISPARE IN TACERE, SI DE-AIA SE SPUNE AICI.
+   *
+   * `citeste.ts` arunca orice componenta al carei `bucati` nu e un numar finit si pozitiv — asa
+   * se citeste `jsonb` peste tot in proiect, si e bine ca asa se citeste. Dar comerciantul care
+   * scrie „doua” in loc de „2” vede campul salvat, publica linistit, si piesele nu se scad
+   * niciodata: marfa pleaca din depozit fara ca vreo comanda sa arate ca a luat-o. Locul unde
+   * tacerea aia se poate transforma intr-o propozitie pe ecranul lui e chiar aici.
+   *
+   * Se uita la ciorna din memorie, care N-A trecut prin `citeste.ts`; pe drumul publicarii, unde
+   * a trecut, campul stricat e deja disparut si constatarea nu apare. Aceeasi impartire ca la
+   * `grame_optiune_nevalid`, si din acelasi motiv.
+   */
+  for (const nod of noduri) {
+    if (!areOptiuni(nod)) continue;
+    for (const o of nod.optiuni ?? []) {
+      if (componentaEStricata(o)) {
+        adauga("critic", "componenta_nevalida",
+          `Optiunea „${o.eticheta}” din „${nod.eticheta}” consuma o piesa, dar numarul de bucati nu e un numar pozitiv.`,
+          nod.id);
+      }
+    }
+  }
+
+  /*
+   * ⚠ O PIESA FANTOMA OPRESTE PUBLICAREA.
+   *
+   * Un `componenta.id` care nu mai are rand in `configurator_componente` — piesa stearsa, o
+   * ciorna copiata din alt magazin, un id scris de mana — nu se poate rezolva la compilare.
+   * Versiunea ar fi plecat cu `componenta` fara `produsId` si fara `pretBucata`, adica exact
+   * defectul pe care fisierul asta il inchide: alegerea nu costa nimic si nu scade nimic. Iar
+   * versiunile publicate sunt IMUTABILE, deci greseala nu s-ar mai fi putut repara in ea — numai
+   * publicand alta, dupa ce cineva observa. Pana atunci, piesele plecau pe gratis.
+   *
+   * Se numeste OPTIUNEA, nu id-ul singur: un uuid pe ecran nu-i spune comerciantului unde sa se
+   * uite.
+   */
+  if (intrare.componenteCunoscute) {
+    const bune = new Set(intrare.componenteCunoscute);
+    for (const t of trimiterileLaComponente(d)) {
+      if (bune.has(t.componentaId)) continue;
+      adauga("critic", "componenta_fantoma",
+        `Optiunea „${t.optiuneEticheta}” din „${t.nodEticheta}” consuma o piesa care nu mai exista. `
+        + "Alege alta piesa, sau scoate consumul de pe optiune.",
+        t.nodId);
     }
   }
 
@@ -269,7 +355,34 @@ export function valideaza(intrare: IntrareValidare): RezultatValidare {
     for (const n of nodurileCerute(r.cand)) {
       if (!cunoscute.has(n)) {
         adauga("critic", "regula_conditie_lipsa",
-          `O regula se uita la o optiune care nu mai exista (${n}).`, r.id);
+          `O regula se uita la un camp care nu mai exista (${n}).`, r.id);
+      }
+    }
+
+    /*
+     * ⚠ SI OPTIUNEA PE CARE O NUMESTE, nu doar campul.
+     *
+     * Partea `atunci` era pazita de `regula_optiune_lipsa` inca de la inceput; partea `cand`,
+     * deloc. Deci comerciantul care sterge optiunea „Stejar” publica linistit regula scrisa
+     * pe ea — o vede in lista, arata intreaga, si nu se aprinde niciodata. Nimic nu cade, si
+     * singurul semn e ca magazinul se poarta altfel decat scriu propriile lui reguli.
+     *
+     * ⚠ STEARSA e `critic`, STINSA e doar `atentie`, si deosebirea e a comerciantului, nu a
+     * codului: pe cea stearsa nu poate hotari nimic, e o greseala oricum ai lua-o; pe cea
+     * stinsa poate — poate a scos-o din vanzare pentru o luna si vrea sa se intoarca la ea, cu
+     * tot cu regula scrisa pe ea.
+     */
+    for (const oc of optiunileCerute(r.cand)) {
+      const nod = noduri.find((n) => n.id === oc.nod);
+      if (!nod || !areOptiuni(nod)) continue;
+      const optiune = (nod.optiuni ?? []).find((x) => x.id === oc.optiune);
+      if (!optiune) {
+        adauga("critic", "regula_conditie_optiune_lipsa",
+          `O regula se uita la o optiune care nu mai exista in „${nod.eticheta}”.`, r.id);
+      } else if (!optiuneActiva(optiune)) {
+        adauga("atentie", "regula_conditie_optiune_stinsa",
+          `O regula se aprinde pe „${optiune.eticheta}”, care e scoasa din vanzare: nu se va aprinde `
+          + "niciodata.", r.id);
       }
     }
     for (const a of r.atunci ?? []) {

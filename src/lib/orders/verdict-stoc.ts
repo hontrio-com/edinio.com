@@ -1,4 +1,4 @@
-import { mesajRefuzStoc, type RefuzStoc } from "./refuz-stoc";
+import { mesajRefuzStoc, type PieseleConfiguratiei, type RefuzStoc } from "./refuz-stoc";
 
 /**
  * Ce s-a intamplat cu rezervarea de stoc a unei comenzi.
@@ -42,12 +42,14 @@ export const MESAJ_ESUAT =
 export function interpreteazaRevendicarea(
   data: unknown,
   error: { message?: string } | null,
+  /** Piesele configuratiilor din comanda. Vezi `mesajRefuzStoc`. */
+  piese?: PieseleConfiguratiei,
 ): Revendicare {
   if (error) return { fel: "esuat", error: MESAJ_ESUAT };
 
   const rez = data as (RefuzStoc & { ok?: boolean }) | null;
   if (rez?.ok === true) return { fel: "revendicat" };
-  if (rez?.ok === false) return { fel: "refuzat", error: mesajRefuzStoc(rez) };
+  if (rez?.ok === false) return { fel: "refuzat", error: mesajRefuzStoc(rez, piese) };
 
   /*
    * Raspuns de alta forma: se OPRESTE, nu se presupune nimic.

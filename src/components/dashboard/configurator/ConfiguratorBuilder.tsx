@@ -19,6 +19,8 @@ import type { Constatare } from "@/lib/configurators/validare";
 import { useAutosalvare } from "./useAutosalvare";
 import { InspectorNod } from "./InspectorNod";
 import { PanouAplicare } from "./PanouAplicare";
+import { PanouPret } from "./PanouPret";
+import { PanouReguli } from "./PanouReguli";
 import { Previzualizare } from "./Previzualizare";
 
 /**
@@ -62,13 +64,23 @@ function nodNou(fel: Nod["fel"], control: string, eticheta: string): Nod {
   return { ...baza, fel, control } as Nod;
 }
 
+/**
+ * Filele, in ordinea in care se lucreaza.
+ *
+ * ⚠ REGULILE SI PRETUL STAU INTRE STRUCTURA SI PREVIZUALIZARE, nu dupa ea. Ce se construieste
+ * se construieste in primele trei; a patra e locul unde te uiti la ce a iesit. Puse dupa
+ * previzualizare, comerciantul ar fi crezut ca a terminat cand a vazut campurile desenate — si
+ * ar fi publicat un configurator care nu costa nimic si nu ascunde nimic.
+ */
+type Fila = "structura" | "reguli" | "pret" | "previzualizare" | "aplicare";
+
 export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat }) {
   const router = useRouter();
   const [continut, setContinut] = useState<Continut>(initial.continut);
   const [nume, setNume] = useState(initial.nume);
   const [selectat, setSelectat] = useState<string | null>(null);
   const [constatari, setConstatari] = useState<Constatare[] | null>(null);
-  const [fila, setFila] = useState<"structura" | "previzualizare" | "aplicare">("structura");
+  const [fila, setFila] = useState<Fila>("structura");
   const [publica, incepePublicarea] = useTransition();
 
   const salvare = useAutosalvare(initial.id, continut, initial.revizie);
@@ -164,21 +176,28 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
       </header>
 
       {/*
-        ⚠ DOUA FILE, si de ce nu-s doua pagini.
+        ⚠ FILE, si de ce nu-s pagini.
 
-        Structura e o CIORNA care se publica; aplicarea intra in vigoare pe loc. Doua pagini
-        ar fi despartit doua intrebari pe care comerciantul le are in aceeasi clipa — cum
-        arata, si pe ce se pune — si l-ar fi pus sa navigheze inainte si inapoi ca sa vada
-        ce a facut. Deosebirea de inteles se spune in scris, in fila de aplicare.
+        Structura, regulile si pretul sunt o CIORNA care se publica; aplicarea intra in vigoare
+        pe loc. Pagini separate ar fi despartit intrebari pe care comerciantul le are in aceeasi
+        clipa — cum arata, cand se schimba, cat costa, si pe ce se pune — si l-ar fi pus sa
+        navigheze inainte si inapoi ca sa vada ce a facut. Deosebirea de inteles se spune in
+        scris, in fila de aplicare.
       */}
       <div className="flex gap-1 border-b border-border px-4" role="tablist" aria-label="Ce editezi">
-        <Fila activa={fila === "structura"} onAlege={() => setFila("structura")}>Structura</Fila>
-        <Fila activa={fila === "previzualizare"} onAlege={() => setFila("previzualizare")}>Previzualizare</Fila>
-        <Fila activa={fila === "aplicare"} onAlege={() => setFila("aplicare")}>Aplicare</Fila>
+        <FilaBuc activa={fila === "structura"} onAlege={() => setFila("structura")}>Structura</FilaBuc>
+        <FilaBuc activa={fila === "reguli"} onAlege={() => setFila("reguli")}>Reguli</FilaBuc>
+        <FilaBuc activa={fila === "pret"} onAlege={() => setFila("pret")}>Pret</FilaBuc>
+        <FilaBuc activa={fila === "previzualizare"} onAlege={() => setFila("previzualizare")}>Previzualizare</FilaBuc>
+        <FilaBuc activa={fila === "aplicare"} onAlege={() => setFila("aplicare")}>Aplicare</FilaBuc>
       </div>
 
       {fila === "aplicare" ? (
         <PanouAplicare configuratorId={initial.id} />
+      ) : fila === "reguli" ? (
+        <PanouReguli continut={continut} onSchimba={schimba} />
+      ) : fila === "pret" ? (
+        <PanouPret continut={continut} onSchimba={schimba} />
       ) : fila === "previzualizare" ? (
         /*
          * ⚠ Se da CIORNA, nu versiunea publicata: rostul filei e sa arate ce se va servi
@@ -336,7 +355,7 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
 }
 
 /** O fila din bara de sub antet. */
-function Fila({ activa, onAlege, children }: {
+function FilaBuc({ activa, onAlege, children }: {
   activa: boolean; onAlege: () => void; children: React.ReactNode;
 }) {
   /*

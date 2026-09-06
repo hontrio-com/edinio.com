@@ -380,3 +380,146 @@ test("CULOAREA se valideaza, fiindca modelul promite ca se valideaza", () => {
   assert.ok(!critice(r).includes("culoare_nevalida"));
   assert.equal(r.sePoatePublica, true);
 });
+
+/* -- Cate bife se cer, fata de cate exista -------------------------------- */
+
+const alegeri = (id: string, extra: Record<string, unknown>, cate = 2): Nod =>
+  ({
+    fel: "alegeri", control: "bifare", id, eticheta: id,
+    optiuni: Array.from({ length: cate }, (_, i) => ({ id: `${id}${i}`, eticheta: `O${i}` })),
+    ...extra,
+  } as Nod);
+
+test("un camp care cere MAI MULTE BIFE decat are optiuni nu se publica", () => {
+  /*
+   * ⚠ De cand campurile astea se pot scrie din panou, un „cel putin 5" pe un camp cu doua optiuni
+   * se publica linistit — si produsul nu se mai poate comanda NICIODATA: verificarea raspunsului
+   * cere cinci bife, iar cumparatorul n-are de unde sa le ia. Nimic nu cade si nimeni nu afla.
+   */
+  const r = val({ definitie: def([alegeri("e", { minAlese: 5 }, 2)]) });
+  assert.equal(r.sePoatePublica, false);
+  assert.ok(critice(r).includes("prea_putine_optiuni"));
+});
+
+test("minim mai mare decat maximul, la bife, nu se publica", () => {
+  const r = val({ definitie: def([alegeri("e", { minAlese: 3, maxAlese: 1 }, 5)]) });
+  assert.equal(r.sePoatePublica, false);
+  assert.ok(critice(r).includes("alese_pe_dos"));
+});
+
+test("un numar negativ de alegeri nu se publica", () => {
+  const r = val({ definitie: def([alegeri("e", { minAlese: -1 }, 3)]) });
+  assert.equal(r.sePoatePublica, false);
+  assert.ok(critice(r).includes("alese_negativ"));
+});
+
+test("limitele bune de bife trec mai departe", () => {
+  const r = val({ definitie: def([alegeri("e", { minAlese: 1, maxAlese: 2 }, 3)]) });
+  assert.ok(!coduri(r).some((c) => c.startsWith("alese_") || c === "prea_putine_optiuni"));
+});
+
+test("⚠ optiunile STINSE nu se numara la minim", () => {
+  /*
+   * Comerciantul a scos doua din vanzare. Numarate, campul ar fi parut ca are de unde alege — iar
+   * cumparatorul ar fi vazut trei optiuni si i s-ar fi cerut patru.
+   */
+  const cuStinse = {
+    fel: "alegeri", control: "bifare", id: "e", eticheta: "Extra", minAlese: 3,
+    optiuni: [
+      { id: "a", eticheta: "A" }, { id: "b", eticheta: "B" },
+      { id: "c", eticheta: "C", activa: false }, { id: "d", eticheta: "D", activa: false },
+    ],
+  } as Nod;
+  const r = val({ definitie: def([cuStinse]) });
+  assert.ok(critice(r).includes("prea_putine_optiuni"));
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   REGULI SCRISE PE OPTIUNI CARE NU MAI SUNT
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ o regula care se APRINDE pe o optiune stearsa nu se publica", () => {
+  /*
+   * ⚠ CE SE INTAMPLA FARA ALARMA ASTA. Partea `atunci` era pazita de la inceput, partea
+   * `cand` deloc. Deci comerciantul care sterge optiunea „Stejar” publica linistit regula
+   * scrisa pe ea: o vede in lista, arata intreaga, si nu se aprinde niciodata. Nimic nu cade,
+   * si singurul semn e ca magazinul se poarta altfel decat scriu propriile lui reguli — iar
+   * comerciantul cauta greseala la el, luni intregi.
+   */
+  const reguli: Regula[] = [
+    { id: "r", cand: { c: "este", nod: "mat", v: "stejar-sters" }, atunci: [{ a: "ascunde", tinta: "mat" }] },
+  ];
+  assert.ok(critice(val({ reguli })).includes("regula_conditie_optiune_lipsa"));
+});
+
+test("si prin `una_din`, si prin `si`/`sau` imbricate", () => {
+  /*
+   * ⚠ O conditie compusa e chiar forma in care se scriu regulile adevarate. Cautata doar la
+   * suprafata, alarma ar fi lipsit tocmai de la regulile complicate — singurele pe care
+   * comerciantul nu le poate verifica din ochi.
+   */
+  const reguli: Regula[] = [{
+    id: "r",
+    cand: {
+      c: "sau",
+      din: [
+        { c: "si", din: [{ c: "una_din", nod: "mat", v: ["a", "zzz"] }] },
+      ],
+    },
+    atunci: [{ a: "ascunde", tinta: "mat" }],
+  }];
+  assert.ok(critice(val({ reguli })).includes("regula_conditie_optiune_lipsa"));
+});
+
+test("o regula scrisa pe o optiune STINSA e doar atentie, nu opreste publicarea", () => {
+  /*
+   * ⚠ Deosebirea e a COMERCIANTULUI, nu a codului. Pe optiunea stearsa nu poate hotari nimic;
+   * pe cea stinsa poate — poate a scos-o din vanzare o luna si vrea sa se intoarca la ea, cu tot
+   * cu regula scrisa pe ea. Oprita publicarea, l-am fi silit sa-si stearga regula ca s-o
+   * rescrie peste o luna.
+   */
+  const d = def([alegere("mat", [
+    { id: "a", eticheta: "A" },
+    { id: "stejar", eticheta: "Stejar", activa: false },
+  ])]);
+  const reguli: Regula[] = [
+    { id: "r", cand: { c: "este", nod: "mat", v: "stejar" }, atunci: [{ a: "ascunde", tinta: "mat" }] },
+  ];
+  const r = val({ definitie: d, reguli });
+  assert.ok(coduri(r).includes("regula_conditie_optiune_stinsa"));
+  assert.ok(!critice(r).includes("regula_conditie_optiune_stinsa"));
+  assert.equal(r.sePoatePublica, true);
+});
+
+test("o regula scrisa pe o optiune VIE nu supara pe nimeni", () => {
+  const reguli: Regula[] = [
+    { id: "r", cand: { c: "este", nod: "mat", v: "a" }, atunci: [{ a: "ascunde", tinta: "mat" }] },
+  ];
+  const c = coduri(val({ reguli }));
+  assert.ok(!c.includes("regula_conditie_optiune_lipsa"));
+  assert.ok(!c.includes("regula_conditie_optiune_stinsa"));
+});
+
+test("⚠ un TEXT sau un NUMAR comparat nu se ia drept id de optiune", () => {
+  /*
+   * ⚠ `contine`/`incepe_cu` cauta intr-un text scris de cumparator, iar `cmp`/`intre` compara
+   * numere: acolo `v` nu e id-ul nimanui. Cerut sa fie, alarma ar fi sunat pe FIECARE regula
+   * sanatoasa — si o alarma care suna mereu e una pe care nimeni n-o mai citeste.
+   */
+  const d = def([{ fel: "text", control: "scurt", id: "grav", eticheta: "Gravura" } as Nod, numar("lat")]);
+  const reguli: Regula[] = [
+    { id: "r1", cand: { c: "contine", nod: "grav", v: "zzz" }, atunci: [{ a: "ascunde", tinta: "lat" }] },
+    { id: "r2", cand: { c: "cmp", nod: "lat", op: ">", v: 10 }, atunci: [{ a: "ascunde", tinta: "grav" }] },
+  ];
+  const c = coduri(val({ definitie: d, reguli }));
+  assert.ok(!c.includes("regula_conditie_optiune_lipsa"), c.join(", "));
+});
+
+test("o conditie pe un camp care NU are optiuni nu produce alarma de optiune", () => {
+  // ⚠ `completat` merge pe orice fel de nod. Cerut sa numeasca o optiune, ar fi sunat degeaba.
+  const d = def([numar("lat")]);
+  const reguli: Regula[] = [
+    { id: "r", cand: { c: "completat", nod: "lat" }, atunci: [{ a: "ascunde", tinta: "lat" }] },
+  ];
+  assert.ok(!coduri(val({ definitie: d, reguli })).includes("regula_conditie_optiune_lipsa"));
+});

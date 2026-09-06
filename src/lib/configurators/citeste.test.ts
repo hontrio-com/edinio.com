@@ -73,10 +73,40 @@ test("un CONTROL care nu se potriveste cu felul nodului il refuza", () => {
   assert.ok(citesteNod({ fel: "numar", control: "glisor", id: "x", eticheta: "X" }));
 });
 
-test("nodurile fara id sau fara eticheta se scot", () => {
+test("nodurile fara ID se scot: fara identitate n-ai ce pastra", () => {
   assert.equal(citesteNod({ fel: "text", control: "scurt", eticheta: "X" }), null);
-  assert.equal(citesteNod({ fel: "text", control: "scurt", id: "x" }), null);
-  assert.equal(citesteNod({ fel: "text", control: "scurt", id: "x", eticheta: "   " }), null);
+});
+
+test("⚠ NUMELE GOL NU STERGE NODUL", () => {
+  /*
+   * Cititorul intorcea `null` pentru un nod fara nume, iar `salveazaCiorna` scrie CE A CITIT.
+   * Deci comerciantul care sterge numele ca sa-l rescrie pierdea, dupa 1,2 secunde de autosalvare,
+   * TOT nodul: felul lui, pretul, optiunile, limitele si regulile care trimiteau la el. Sub
+   * degete, in timp ce tasta, si fara niciun mesaj.
+   *
+   * Identitatea e `id`, nu numele. Iar publicarea refuza deja un nume gol, deci nimic gol nu
+   * ajunge in vanzare: cititorul pastreaza, validatorul refuza.
+   */
+  const gol = citesteNod({ fel: "text", control: "scurt", id: "x" });
+  assert.equal(gol?.id, "x");
+  assert.equal(gol?.eticheta, "");
+
+  const spatii = citesteNod({ fel: "text", control: "scurt", id: "x", eticheta: "   " });
+  assert.equal(spatii?.id, "x");
+  assert.equal(spatii?.eticheta, "");
+});
+
+test("⚠ si o OPTIUNE fara nume ramane, din acelasi motiv", () => {
+  const c = citesteContinut({
+    definitie: { versiuneSchema: 1, mod: "auto", pasi: [{ id: "p", eticheta: "P", grupuri: [{
+      id: "g", noduri: [{ fel: "alegere", control: "lista", id: "n", eticheta: "N",
+        optiuni: [{ id: "o1", eticheta: "Buna" }, { id: "o2" }] }],
+    }] }] },
+  });
+  const noduri = c.definitie.pasi[0].grupuri[0].noduri;
+  const optiuni = (noduri[0] as { optiuni?: { id: string; eticheta: string }[] }).optiuni ?? [];
+  assert.deepEqual(optiuni.map((o) => o.id), ["o1", "o2"], "optiunea fara nume nu se pierde");
+  assert.equal(optiuni[1].eticheta, "");
 });
 
 test("un fel de nod NECUNOSCUT dispare, nu se randeaza gol", () => {

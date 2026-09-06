@@ -65,8 +65,24 @@ export interface Optiune {
   pret?: number;
   /** Cat adauga la greutate, in grame. */
   grame?: number;
-  /** Componenta consumata, si cate bucati. */
-  componenta?: { id: string; bucati: number };
+  /**
+   * Piesa consumata, si cate bucati.
+   *
+   * ⚠ COMERCIANTUL SCRIE DOAR `id` SI `bucati`. Restul se INGHEATA LA PUBLICARE, pe server,
+   * din `configurator_componente` — vezi antetul lui `componente.ts`. `citeste.ts` le si arunca
+   * dinadins cand vin dintr-o ciorna: forma asta pleaca INTREAGA la vitrina, iar un `pretBucata`
+   * scris de mana in ciorna ar fi devenit pretul dupa care se incaseaza.
+   */
+  componenta?: {
+    id: string;
+    bucati: number;
+    /** Produsul al carui stoc E stocul piesei. Lipsa = piesa nu se tine pe stoc. */
+    produsId?: string;
+    /** Cat plateste CUMPARATORUL pe bucata, din `pret_bucata`. Costul nostru NU ajunge aici. */
+    pretBucata?: number;
+    /** Numele piesei la data publicarii, pentru descompunerea de pret. */
+    nume?: string;
+  };
   /** Stinsa: se vede, dar nu se poate alege. Publicarea o pastreaza pentru comenzile vechi. */
   activa?: boolean;
 }

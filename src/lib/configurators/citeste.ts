@@ -127,13 +127,25 @@ const CONTROALE: Record<string, readonly string[]> = {
   afisaj: ["text", "titlu", "separator", "rezumat", "pret", "previzualizare"],
 };
 
+/*
+ * ⚠ O ETICHETA GOALA NU STERGE NIMIC, SI ASTA E O REPARATIE, NU O SLABIRE.
+ *
+ * Cititorul intorcea `null` pentru un nod sau o optiune fara nume, iar `salveazaCiorna` scrie
+ * CE A CITIT. Deci comerciantul care sterge numele ca sa-l rescrie pierdea, dupa 1,2 secunde de
+ * autosalvare, tot nodul: felul lui, pretul, optiunile, limitele si regulile care trimiteau la
+ * el. Sub degete, in timp ce tasta, si fara niciun mesaj.
+ *
+ * Identitatea unui nod e `id`, nu numele. Fara `id` nu se poate pastra nimic — acolo aruncarea
+ * ramane. Iar publicarea REFUZA deja un nume gol (`fara_eticheta` si `optiune_fara_eticheta`,
+ * amandoua critice), deci nimic gol nu ajunge in vanzare. Impartirea muncii e cea a casei:
+ * cititorul pastreaza, validatorul refuza.
+ */
 function citesteOptiune(brut: unknown): Optiune | null {
   const o = obiect(brut);
   if (!o) return null;
   const id = sir(o.id, 64);
-  const eticheta = sir(o.eticheta, 200);
-  if (!id || !eticheta) return null;
-  const out: Optiune = { id, eticheta };
+  if (!id) return null;
+  const out: Optiune = { id, eticheta: sir(o.eticheta, 200) ?? "" };
   const d = sir(o.descriere, 500); if (d) out.descriere = d;
   const c = sir(o.culoare, 32); if (c) out.culoare = c;
   const im = sir(o.imagine, 500); if (im) out.imagine = im;
@@ -142,6 +154,16 @@ function citesteOptiune(brut: unknown): Optiune | null {
   const comp = obiect(o.componenta);
   if (comp) {
     const cid = sir(comp.id, 64); const buc = numar(comp.bucati);
+    /*
+     * ⚠ SE CITESC DOAR `id` SI `bucati`, SI E O PAZA, NU O LIPSA.
+     *
+     * `produsId`, `pretBucata` si `nume` de pe o componenta se scriu NUMAI la publicare, de
+     * `compileaza`, din randul din `configurator_componente`. Aici se citeste CIORNA, adica un
+     * `jsonb` pe care il scrie panoul — deci si oricine ajunge la actiunea de salvare. Citite si
+     * ele, un `pretBucata` pus de mana in ciorna ar fi trecut prin publicare neatins si ar fi
+     * devenit chiar pretul dupa care se incaseaza; iar un `produsId` strain ar fi scazut stocul
+     * unui produs care nu are nicio treaba cu configuratorul.
+     */
     if (cid && buc !== null && buc > 0) out.componenta = { id: cid, bucati: buc };
   }
   if (o.activa === false) out.activa = false;
@@ -153,11 +175,11 @@ export function citesteNod(brut: unknown): Nod | null {
   if (!o) return null;
   const fel = typeof o.fel === "string" ? o.fel : "";
   const id = sir(o.id, 64);
-  const eticheta = sir(o.eticheta, 200);
-  if (!id || !eticheta) return null;
+  // ⚠ Vezi nota de la `citesteOptiune`: numele gol se pastreaza, publicarea il refuza.
+  if (!id) return null;
 
   const comun = {
-    id, eticheta,
+    id, eticheta: sir(o.eticheta, 200) ?? "",
     ...(sir(o.ajutor, 500) ? { ajutor: sir(o.ajutor, 500)! } : {}),
     ...(o.obligatoriu === true ? { obligatoriu: true } : {}),
     ...(o.inRezumat === true ? { inRezumat: true } : {}),

@@ -2,8 +2,12 @@
 
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import type { Nod, Optiune } from "@/lib/configurators/definitie";
-import { adaugaOptiune, mutaOptiune, stergeOptiune } from "@/lib/configurators/editare";
-import { esteUnitateLungime, inLungime, inMilimetri, type UnitateLungime } from "@/lib/configurators/unitati";
+import {
+  adaugaOptiune, comutaImplicitAlegeri, mutaOptiune, problemeleNodului,
+  puneImplicitAlegere, schimbaOptiune, stergeOptiune,
+} from "@/lib/configurators/editare";
+import { esteCuloare } from "@/lib/configurators/validare";
+import { Bifa, Camp, INTRARE, IntrareNumar, Probleme } from "./bucati";
 
 /**
  * Setarile optiunii alese.
@@ -31,7 +35,7 @@ export function InspectorNod({ nod, onSchimba }: { nod: Nod; onSchimba: (n: Nod)
         <input
           value={nod.eticheta}
           onChange={(e) => pune({ eticheta: e.target.value })}
-          className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-primary"
+          className={INTRARE}
         />
       </Camp>
 
@@ -39,7 +43,7 @@ export function InspectorNod({ nod, onSchimba }: { nod: Nod; onSchimba: (n: Nod)
         <input
           value={nod.ajutor ?? ""}
           onChange={(e) => pune({ ajutor: e.target.value || undefined })}
-          className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-primary"
+          className={INTRARE}
         />
       </Camp>
 
@@ -63,18 +67,26 @@ export function InspectorNod({ nod, onSchimba }: { nod: Nod; onSchimba: (n: Nod)
       {nod.fel === "numar" && <SetariNumar nod={nod} onSchimba={onSchimba} />}
       {nod.fel === "text" && <SetariText nod={nod} onSchimba={onSchimba} />}
       {nod.fel === "comutator" && (
-        <Camp eticheta="Cat adauga la pret cand e pornit" ajutor="In lei. Lasa gol daca nu schimba pretul.">
-          <input
-            type="number" step="0.01" inputMode="decimal"
-            value={nod.pret ?? ""}
-            onChange={(e) => onSchimba({ ...nod, pret: numarSauNimic(e.target.value) })}
-            className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-primary"
+        <>
+          <Camp eticheta="Cat adauga la pret cand e pornit" ajutor="In lei. Lasa gol daca nu schimba pretul.">
+            <IntrareNumar
+              valoare={nod.pret}
+              onSchimba={(n) => onSchimba({ ...nod, pret: n })}
+            />
+          </Camp>
+          <Bifa
+            eticheta="Pornit din start"
+            ajutor="Asa deschide cumparatorul pagina, si asa intra si in pretul afisat."
+            pornit={nod.implicit === true}
+            onSchimba={(v) => onSchimba({ ...nod, implicit: v || undefined })}
           />
-        </Camp>
+        </>
       )}
       {(nod.fel === "alegere" || nod.fel === "alegeri") && (
-        <ListaOptiuni nod={nod} onSchimba={onSchimba} />
+        <SetariAlegeri nod={nod} onSchimba={onSchimba} />
       )}
+
+      <Probleme probleme={problemeleNodului(nod)} />
     </div>
   );
 }
@@ -84,26 +96,13 @@ export function InspectorNod({ nod, onSchimba }: { nod: Nod; onSchimba: (n: Nod)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function SetariNumar({ nod, onSchimba }: { nod: Nod & { fel: "numar" }; onSchimba: (n: Nod) => void }) {
-  const u: UnitateLungime = esteUnitateLungime(nod.unitate) ? nod.unitate : "mm";
-  const eLungime = esteUnitateLungime(nod.unitate);
-
-  /** Milimetri -> unitatea aleasa, pentru afisare. */
-  const afisat = (v: number | undefined) =>
-    v === undefined ? "" : String(eLungime ? inLungime(v, u) : v);
-  /** Unitatea aleasa -> milimetri, la scriere. */
-  const scris = (s: string): number | undefined => {
-    const n = numarSauNimic(s);
-    if (n === undefined) return undefined;
-    return eLungime ? inMilimetri(n, u) : n;
-  };
-
   return (
     <>
       <Camp eticheta="Unitate">
         <select
           value={nod.unitate ?? ""}
           onChange={(e) => onSchimba({ ...nod, unitate: (e.target.value || undefined) as never })}
-          className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-primary"
+          className={INTRARE}
         >
           <option value="">Fara unitate</option>
           <option value="mm">Milimetri</option>
@@ -115,33 +114,41 @@ function SetariNumar({ nod, onSchimba }: { nod: Nod & { fel: "numar" }; onSchimb
 
       <div className="grid grid-cols-3 gap-2">
         <Camp eticheta="Minim">
-          <input
-            type="number" inputMode="decimal" value={afisat(nod.min)}
-            onChange={(e) => onSchimba({ ...nod, min: scris(e.target.value) })}
-            className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+          <IntrareNumar
+            valoare={nod.min}
+            onSchimba={(n) => onSchimba({ ...nod, min: n })}
+            unitate={nod.unitate}
+            clase="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
           />
         </Camp>
         <Camp eticheta="Maxim">
-          <input
-            type="number" inputMode="decimal" value={afisat(nod.max)}
-            onChange={(e) => onSchimba({ ...nod, max: scris(e.target.value) })}
-            className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+          <IntrareNumar
+            valoare={nod.max}
+            onSchimba={(n) => onSchimba({ ...nod, max: n })}
+            unitate={nod.unitate}
+            clase="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
           />
         </Camp>
         <Camp eticheta="Pas">
-          <input
-            type="number" inputMode="decimal" value={afisat(nod.pas)}
-            onChange={(e) => onSchimba({ ...nod, pas: scris(e.target.value) })}
-            className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+          <IntrareNumar
+            valoare={nod.pas}
+            onSchimba={(n) => onSchimba({ ...nod, pas: n })}
+            unitate={nod.unitate}
+            clase="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
           />
         </Camp>
       </div>
 
+      {/*
+        ⚠ `zecimale` LIPSESTE DINADINS. Campul exista in model, dar nimic din vitrina nu-l
+        citeste: `ConfiguratorSlot` deseneaza numarul fara el. Oferit aici, comerciantul l-ar fi
+        pus, ar fi publicat, si n-ar fi vazut nicio schimbare — apoi ar fi cautat greseala la el.
+      */}
       <Camp eticheta="Valoare de pornire">
-        <input
-          type="number" inputMode="decimal" value={afisat(nod.implicit)}
-          onChange={(e) => onSchimba({ ...nod, implicit: scris(e.target.value) })}
-          className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm outline-none focus:border-primary"
+        <IntrareNumar
+          valoare={nod.implicit}
+          onSchimba={(n) => onSchimba({ ...nod, implicit: n })}
+          unitate={nod.unitate}
         />
       </Camp>
     </>
@@ -157,19 +164,51 @@ function SetariText({ nod, onSchimba }: { nod: Nod & { fel: "text" }; onSchimba:
   };
   return (
     <>
+      {/*
+        ⚠ Textul sters se arata DOAR la textul scurt, fiindca doar acolo ajunge: caseta lunga
+        din `ConfiguratorSlot` primeste `rows`, nu `placeholder`. Oferit si la ea, comerciantul
+        l-ar fi scris si nu l-ar fi vazut niciodata pe magazin.
+      */}
+      {nod.control === "scurt" && (
+        <Camp eticheta="Text sters din camp" ajutor="Se vede pana scrie cumparatorul. Nu e o valoare.">
+          <input
+            value={nod.substituent ?? ""}
+            onChange={(e) => onSchimba({ ...nod, substituent: e.target.value || undefined })}
+            className={INTRARE}
+          />
+        </Camp>
+      )}
+
+      <Camp eticheta="Text de pornire" ajutor="Chiar intra in comanda, si se plateste ca orice text scris.">
+        <input
+          value={nod.implicit ?? ""}
+          onChange={(e) => onSchimba({ ...nod, implicit: e.target.value || undefined })}
+          className={INTRARE}
+        />
+      </Camp>
+
+      {nod.control === "lung" && (
+        <Camp eticheta="Cate randuri are caseta">
+          <IntrareNumar
+            valoare={nod.maxRanduri}
+            onSchimba={(n) => onSchimba({ ...nod, maxRanduri: n })}
+          />
+        </Camp>
+      )}
+
       <div className="grid grid-cols-2 gap-2">
         <Camp eticheta="Minim caractere">
-          <input
-            type="number" inputMode="numeric" value={nod.minCaractere ?? ""}
-            onChange={(e) => onSchimba({ ...nod, minCaractere: numarSauNimic(e.target.value) })}
-            className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+          <IntrareNumar
+            valoare={nod.minCaractere}
+            onSchimba={(n) => onSchimba({ ...nod, minCaractere: n })}
+            clase="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
           />
         </Camp>
         <Camp eticheta="Maxim caractere">
-          <input
-            type="number" inputMode="numeric" value={nod.maxCaractere ?? ""}
-            onChange={(e) => onSchimba({ ...nod, maxCaractere: numarSauNimic(e.target.value) })}
-            className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+          <IntrareNumar
+            valoare={nod.maxCaractere}
+            onSchimba={(n) => onSchimba({ ...nod, maxCaractere: n })}
+            clase="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
           />
         </Camp>
       </div>
@@ -178,24 +217,24 @@ function SetariText({ nod, onSchimba }: { nod: Nod & { fel: "text" }; onSchimba:
         <legend className="px-1 text-xs font-medium text-muted-foreground">Pretul textului</legend>
         <div className="grid grid-cols-3 gap-2">
           <Camp eticheta="Fix">
-            <input
-              type="number" step="0.01" inputMode="decimal" value={pret.fix ?? ""}
-              onChange={(e) => punePret({ fix: numarSauNimic(e.target.value) })}
-              className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+            <IntrareNumar
+              valoare={pret.fix}
+              onSchimba={(n) => punePret({ fix: n })}
+              clase="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
             />
           </Camp>
           <Camp eticheta="Pe caracter">
-            <input
-              type="number" step="0.01" inputMode="decimal" value={pret.peCaracter ?? ""}
-              onChange={(e) => punePret({ peCaracter: numarSauNimic(e.target.value) })}
-              className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+            <IntrareNumar
+              valoare={pret.peCaracter}
+              onSchimba={(n) => punePret({ peCaracter: n })}
+              clase="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
             />
           </Camp>
           <Camp eticheta="Incluse">
-            <input
-              type="number" inputMode="numeric" value={pret.caractereIncluse ?? ""}
-              onChange={(e) => punePret({ caractereIncluse: numarSauNimic(e.target.value) })}
-              className="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+            <IntrareNumar
+              valoare={pret.caractereIncluse}
+              onSchimba={(n) => punePret({ caractereIncluse: n })}
+              clase="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
             />
           </Camp>
         </div>
@@ -204,81 +243,168 @@ function SetariText({ nod, onSchimba }: { nod: Nod & { fel: "text" }; onSchimba:
   );
 }
 
-function ListaOptiuni({ nod, onSchimba }: { nod: Nod & { fel: "alegere" | "alegeri" }; onSchimba: (n: Nod) => void }) {
+/**
+ * Optiunile unei alegeri, cu tot ce poarta fiecare.
+ *
+ * ⚠ SE ARATA DOAR CAMPURILE PE CARE VITRINA CHIAR LE DESENEAZA. `descriere` si `cautare` exista
+ * in model si sunt pastrate de compilare, dar `ConfiguratorSlot` nu le citeste: puse aici,
+ * comerciantul le-ar fi scris, ar fi publicat, si n-ar fi vazut nicio schimbare pe magazin.
+ * Culoarea SE arata, fiindca pastilele chiar o folosesc.
+ */
+function SetariAlegeri({ nod, onSchimba }: { nod: Nod & { fel: "alegere" | "alegeri" }; onSchimba: (n: Nod) => void }) {
   const optiuni = nod.optiuni ?? [];
+  const ePastila = nod.fel === "alegere" && nod.control === "culori";
   const schimbaOptiunea = (id: string, campuri: Partial<Optiune>) =>
-    onSchimba({ ...nod, optiuni: optiuni.map((o) => (o.id === id ? { ...o, ...campuri } : o)) });
+    onSchimba(schimbaOptiune(nod, id, campuri));
+
+  const ePornire = (o: Optiune) =>
+    nod.fel === "alegere" ? nod.implicit === o.id : (nod.implicit ?? []).includes(o.id);
+  const comutaPornirea = (o: Optiune) => onSchimba(
+    nod.fel === "alegere"
+      ? puneImplicitAlegere(nod, ePornire(o) ? undefined : o.id)
+      : comutaImplicitAlegeri(nod, o.id),
+  );
 
   return (
-    <fieldset className="space-y-2">
-      <legend className="text-xs font-medium text-muted-foreground">Optiuni de ales</legend>
-      <ul className="space-y-2">
-        {optiuni.map((o, i) => (
-          <li key={o.id} className="rounded-lg border border-border/70 p-2">
-            <div className="flex items-center gap-1.5">
-              <input
-                value={o.eticheta}
-                onChange={(e) => schimbaOptiunea(o.id, { eticheta: e.target.value })}
-                aria-label={`Numele optiunii ${i + 1}`}
-                className="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-primary"
-              />
-              <input
-                type="number" step="0.01" inputMode="decimal"
-                value={o.pret ?? ""}
-                onChange={(e) => schimbaOptiunea(o.id, { pret: numarSauNimic(e.target.value) })}
-                placeholder="lei"
-                aria-label={`Cat adauga la pret optiunea ${o.eticheta}`}
-                className="h-9 w-20 shrink-0 rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-primary"
-              />
-              <span className="inline-flex shrink-0">
-                <button
-                  type="button" disabled={i === 0}
-                  onClick={() => onSchimba(mutaOptiune(nod, o.id, -1))}
-                  aria-label={`Muta optiunea ${o.eticheta} mai sus`}
-                  className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"
-                >
-                  <ChevronUp className="h-3.5 w-3.5" aria-hidden />
-                </button>
-                <button
-                  type="button" disabled={i === optiuni.length - 1}
-                  onClick={() => onSchimba(mutaOptiune(nod, o.id, 1))}
-                  aria-label={`Muta optiunea ${o.eticheta} mai jos`}
-                  className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"
-                >
-                  <ChevronDown className="h-3.5 w-3.5" aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onSchimba(stergeOptiune(nod, o.id))}
-                  aria-label={`Sterge optiunea ${o.eticheta}`}
-                  className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                </button>
-              </span>
-            </div>
-            {/*
-              ⚠ Optiunea stinsa se PASTREAZA, nu se sterge: comenzile vechi trimit la id-ul ei, si
-              o regula n-o poate reaprinde. Vezi `optiuniDeAles`.
-            */}
-            <label className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-              <input
-                type="checkbox" checked={o.activa === false}
-                onChange={(e) => schimbaOptiunea(o.id, { activa: e.target.checked ? false : undefined })}
-                className="h-3.5 w-3.5 rounded border-border"
-              />
-              Scoasa din vanzare
-            </label>
-          </li>
-        ))}
-      </ul>
-      <button
-        type="button" onClick={() => onSchimba(adaugaOptiune(nod))}
-        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
-      >
-        <Plus className="h-3.5 w-3.5" aria-hidden /> Adauga optiune
-      </button>
-    </fieldset>
+    <>
+      {nod.fel === "alegeri" && (
+        <div className="grid grid-cols-2 gap-2">
+          <Camp eticheta="Cel putin cate" ajutor="Sub atat, comanda nu trece.">
+            <IntrareNumar
+              valoare={nod.minAlese}
+              onSchimba={(n) => onSchimba({ ...nod, minAlese: n })}
+              clase="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+            />
+          </Camp>
+          <Camp eticheta="Cel mult cate">
+            <IntrareNumar
+              valoare={nod.maxAlese}
+              onSchimba={(n) => onSchimba({ ...nod, maxAlese: n })}
+              clase="h-10 w-full rounded-lg border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+            />
+          </Camp>
+        </div>
+      )}
+
+      <fieldset className="space-y-2">
+        <legend className="text-xs font-medium text-muted-foreground">Optiuni de ales</legend>
+        <ul className="space-y-2">
+          {optiuni.map((o, i) => (
+            <li key={o.id} className="space-y-1.5 rounded-lg border border-border/70 p-2">
+              <div className="flex items-center gap-1.5">
+                <input
+                  value={o.eticheta}
+                  onChange={(e) => schimbaOptiunea(o.id, { eticheta: e.target.value })}
+                  aria-label={`Numele optiunii ${i + 1}`}
+                  className="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+                />
+                <IntrareNumar
+                  valoare={o.pret}
+                  onSchimba={(n) => schimbaOptiunea(o.id, { pret: n })}
+                  clase="h-9 w-20 shrink-0 rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-primary"
+                  eticheta={`Cat adauga la pret optiunea ${o.eticheta}`}
+                  placeholder="lei"
+                />
+                <span className="inline-flex shrink-0">
+                  <button
+                    type="button" disabled={i === 0}
+                    onClick={() => onSchimba(mutaOptiune(nod, o.id, -1))}
+                    aria-label={`Muta optiunea ${o.eticheta} mai sus`}
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"
+                  >
+                    <ChevronUp className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                  <button
+                    type="button" disabled={i === optiuni.length - 1}
+                    onClick={() => onSchimba(mutaOptiune(nod, o.id, 1))}
+                    aria-label={`Muta optiunea ${o.eticheta} mai jos`}
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSchimba(stergeOptiune(nod, o.id))}
+                    aria-label={`Sterge optiunea ${o.eticheta}`}
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {ePastila && (
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {/*
+                      ⚠ Se arata si o pastila alaturi, nu doar sirul. Browserul inghite in tacere o
+                      culoare pe care n-o intelege, iar comerciantul ar fi vazut lista lui de
+                      esantioane iesind alba pe magazin fara sa afle de ce.
+                    */}
+                    <span
+                      aria-hidden
+                      className="h-5 w-5 shrink-0 rounded-full border border-border"
+                      style={esteCuloare(o.culoare) ? { backgroundColor: o.culoare } : undefined}
+                    />
+                    <input
+                      value={o.culoare ?? ""} placeholder="#8a5a2b"
+                      onChange={(e) => schimbaOptiunea(o.id, { culoare: e.target.value || undefined })}
+                      aria-label={`Culoarea optiunii ${o.eticheta}`}
+                      className="h-8 w-28 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+                    />
+                  </label>
+                )}
+
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  Grame
+                  <IntrareNumar
+                    valoare={o.grame}
+                    onSchimba={(n) => schimbaOptiunea(o.id, { grame: n })}
+                    clase="h-8 w-20 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+                    eticheta={`Cat adauga la greutate optiunea ${o.eticheta}`}
+                  />
+                </label>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                {/*
+                  ⚠ Optiunea de pornire nu se poate pune pe una stinsa: `validare.ts` o sare in
+                  tacere, deci pagina s-ar fi deschis cu campul gol in timp ce panoul arata ca
+                  bifa e pusa. De aceea bifa e chiar oprita cand optiunea e scoasa din vanzare.
+                */}
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox" checked={ePornire(o)} disabled={o.activa === false}
+                    onChange={() => comutaPornirea(o)}
+                    className="h-3.5 w-3.5 rounded border-border disabled:opacity-40"
+                  />
+                  Aleasa din start
+                </label>
+
+                {/*
+                  ⚠ Optiunea stinsa se PASTREAZA, nu se sterge: comenzile vechi trimit la id-ul ei,
+                  si o regula n-o poate reaprinde. Vezi `optiuniDeAles`.
+                */}
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox" checked={o.activa === false}
+                    onChange={(e) => schimbaOptiunea(o.id, { activa: e.target.checked ? false : undefined })}
+                    className="h-3.5 w-3.5 rounded border-border"
+                  />
+                  Scoasa din vanzare
+                </label>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button" onClick={() => onSchimba(adaugaOptiune(nod))}
+          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden /> Adauga optiune
+        </button>
+      </fieldset>
+    </>
   );
 }
 
@@ -286,45 +412,11 @@ function ListaOptiuni({ nod, onSchimba }: { nod: Nod & { fel: "alegere" | "alege
    BUCATI MICI
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function Camp({ eticheta, ajutor, children }: { eticheta: string; ajutor?: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-muted-foreground">{eticheta}</span>
-      {children}
-      {ajutor && <span className="mt-1 block text-[11px] text-muted-foreground">{ajutor}</span>}
-    </label>
-  );
-}
-
-function Bifa({ eticheta, ajutor, pornit, onSchimba }: {
-  eticheta: string; ajutor?: string; pornit: boolean; onSchimba: (v: boolean) => void;
-}) {
-  return (
-    <label className="flex items-start gap-2.5">
-      <input
-        type="checkbox" checked={pornit} onChange={(e) => onSchimba(e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
-      />
-      <span>
-        <span className="block text-sm text-foreground">{eticheta}</span>
-        {ajutor && <span className="block text-[11px] text-muted-foreground">{ajutor}</span>}
-      </span>
-    </label>
-  );
-}
-
-/**
- * Ce a scris omul, ca numar — sau nimic.
- *
- * ⚠ Sirul GOL da `undefined`, nu zero. `Number("")` e 0, iar un camp golit ar fi devenit tacut
- * „minim 0" in loc de „fara minim" — adica alta regula decat cea pe care a sters-o.
+/*
+ * ⚠ `Camp`, `Bifa` si citirea numerelor scrise de om NU mai stau aici: sunt in `./bucati` si in
+ * `editare.ts`, fiindca le folosesc si filele de reguli si de pret. Trei copii ale aceleiasi
+ * etichete de camp ar fi insemnat ca a treia arata altfel dupa prima retusare.
  */
-function numarSauNimic(s: string): number | undefined {
-  const t = s.trim();
-  if (!t) return undefined;
-  const n = Number(t.replace(",", "."));
-  return Number.isFinite(n) ? n : undefined;
-}
 
 function felOmenesc(nod: Nod): string {
   switch (nod.fel) {

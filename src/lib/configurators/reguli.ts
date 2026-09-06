@@ -235,6 +235,47 @@ export function nodurileCerute(c: Conditie, out = new Set<string>(), adancime = 
   return out;
 }
 
+/** O optiune numita de o conditie, impreuna cu nodul de la care se cere. */
+export interface OptiuneCeruta {
+  nod: string;
+  optiune: string;
+}
+
+/**
+ * Fiecare optiune pe care o conditie o numeste pe id.
+ *
+ * ⚠ PERECHEA LUI `nodurileCerute`, SI LIPSEA. Validatorul stia sa spuna „regula se uita la un
+ * camp care nu mai exista", dar nu si „regula se uita la o OPTIUNE care nu mai exista". Deci
+ * comerciantul care sterge sau stinge optiunea „Stejar" publica linistit o regula scrisa pe ea:
+ * regula ramane in lista, arata intreaga pe ecranul lui, si nu se aprinde niciodata. Nimic nu
+ * cade, si singurul semn e ca magazinul se poarta altfel decat scrie in propriile lui reguli.
+ *
+ * ⚠ Numai conditiile care numesc o optiune pe ID. `contine`/`incepe_cu` cauta intr-un TEXT
+ * scris de cumparator, iar `cmp`/`intre` compara numere — acolo `v` nu e id-ul nimanui, si cerut
+ * sa fie ar fi produs o alarma pe fiecare regula sanatoasa.
+ */
+export function optiunileCerute(
+  c: Conditie,
+  out: OptiuneCeruta[] = [],
+  adancime = 1,
+): OptiuneCeruta[] {
+  if (adancime > 8) return out;
+  if (c.c === "si" || c.c === "sau") {
+    for (const x of c.din ?? []) optiunileCerute(x, out, adancime + 1);
+    return out;
+  }
+  if (c.c === "este" || c.c === "nu_este") {
+    if (typeof c.v === "string" && c.v) out.push({ nod: c.nod, optiune: c.v });
+    return out;
+  }
+  if (c.c === "una_din" || c.c === "niciuna_din") {
+    for (const o of c.v ?? []) {
+      if (typeof o === "string" && o) out.push({ nod: c.nod, optiune: o });
+    }
+  }
+  return out;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    APLICAREA
    ═══════════════════════════════════════════════════════════════════════════ */

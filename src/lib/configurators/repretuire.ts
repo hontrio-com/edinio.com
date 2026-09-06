@@ -23,6 +23,7 @@
  */
 
 import type { Compilat } from "./compileaza";
+import { consumulPeStare, type BucataConsumata } from "./componente";
 import { grameleConfiguratiei } from "./greutate";
 import { verificaRaspunsul } from "./raspuns";
 import { rezumatConfiguratiei, type RandRezumat } from "./rezumat";
@@ -56,6 +57,17 @@ export type PretConfigurat =
        * cumparat-o nimeni.
        */
       grame: number;
+      /**
+       * Piesele consumate de configuratie, PER BUCATA.
+       *
+       * ⚠ Iese pe verdict, langa pret si greutate, si din acelasi motiv ca ele: toate trei se
+       * hotarasc din aceleasi alegeri si din aceeasi stare. Lasat pe seama unui al doilea drum,
+       * consumul s-ar fi socotit pe alta stare decat pretul — si din depozit ar fi plecat
+       * balamalele unei usi pe care n-a cumparat-o nimeni.
+       *
+       * ⚠ Inmultirea cu cantitatea liniei se face la apelant, cu `decrementeleComponentelor`.
+       */
+      consum: BucataConsumata[];
       valori: Valori;
       amprenta: string;
       configuratorId: string;
@@ -94,6 +106,13 @@ export function verdictulLiniei(
     fel: "ok",
     unitar: v.unitar,
     grame: grameleConfiguratiei(compilat, v.valori),
+    /*
+     * ⚠ Din `v.stare`, nu din `v.valori`. Starea e cea pe care a asezat-o deja motorul de
+     * reguli chiar in `verificaRaspunsul`; pornita a doua oara de la valori, ar fi fost
+     * aceeasi socoteala facuta inca o data — si prima regula care ar fi ajuns sa depinda de
+     * ordinea trecerilor ar fi facut cele doua raspunsuri sa se desparta.
+     */
+    consum: consumulPeStare(compilat.definitie, v.stare),
     valori: v.valori,
     amprenta: v.amprenta,
     rezumat: rezumatConfiguratiei(compilat, v.valori),

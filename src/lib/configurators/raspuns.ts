@@ -36,6 +36,7 @@ import type { Compilat } from "./compileaza";
 import { producesValoare, type Nod, type Definitie } from "./definitie";
 import { aplicaRegulile, esteCerut, optiuniDeAles, type Stare } from "./reguli";
 import { calculeazaPretul, type Descompunere } from "./pret";
+import { consumulPeStare, costulComponentelor } from "./componente";
 import { normalizeazaValori, type Valori } from "./valori";
 import { amprentaConfiguratiei } from "./amprenta";
 import { eNumarBun } from "./unitati";
@@ -119,7 +120,27 @@ export function verificaRaspunsul(
 
   if (motive.length > 0) return { ok: false, motive, stare };
 
-  const pret = calculeazaPretul({ definitie, pretuire, stare, pretProdus });
+  /*
+   * ⚠ PASUL 6 ARE, IN SFARSIT, UN APELANT.
+   *
+   * `calculeazaPretul` primea `componente` de la nimeni: singurul loc din toata aplicatia care
+   * il cheama e chiar randul asta, si el nu-l trimitea. Deci o optiune care consuma patru
+   * balamale nu costa nimic — comerciantul completa campul, il vedea salvat, si dadea piesele
+   * pe gratis pana le termina din depozit, fara nicio eroare nicaieri.
+   *
+   * ⚠ SI SE SOCOTESTE DIN `stare`, NU DIN VALORILE BRUTE. Aceeasi stare din care se socotesc
+   * pretul si greutatea, deci un camp ascuns de reguli nici nu plateste, nici nu cantareste,
+   * nici nu consuma. Socotite pe multimi diferite, cele trei ar fi divergit la prima regula
+   * noua.
+   *
+   * ⚠ CE COSTA O PIESA VINE DIN VERSIUNEA PUBLICATA, nu dintr-o citire de acum: `compileaza`
+   * a inghetat `pretBucata` la publicare, pe server. De aceea randul asta ruleaza la fel in
+   * browser si pe server — fara ca vreun cost al comerciantului sa plece la cumparator.
+   */
+  const consum = consumulPeStare(definitie, stare);
+  const pret = calculeazaPretul({
+    definitie, pretuire, stare, pretProdus, componente: costulComponentelor(consum),
+  });
   if (!pret.ok) {
     /*
      * ⚠ NU se cade pe pretul de baza. Un calcul care n-a iesit inseamna ca nu stim cat costa, iar

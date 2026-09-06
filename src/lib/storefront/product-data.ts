@@ -5,6 +5,7 @@ import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { readBundleConfig } from "@/lib/bundles";
 import { configuratorulProdusului, type ConfiguratorDeVitrina } from "@/lib/configurators/vitrina";
+import { pentruSursaPaginii } from "@/lib/configurators/compileaza";
 import type { Database } from "@/types/database.types";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
@@ -154,5 +155,21 @@ export async function enrichStoreProduct(
     });
   }
 
-  return { altMap, hasCardPayment, bundleComponents, configurator: await configurator };
+  /*
+   * ⚠ AICI SE TAIE CE N-ARE CE CAUTA IN SURSA PAGINII.
+   *
+   * Ce se intoarce de aici pleaca drept prop catre o componenta de client, deci ajunge intreg
+   * in incarcatura paginii, la vedere. Versiunea publicata poarta pe fiecare piesa `produsId`,
+   * adica `products.id` al randului din care se scade stocul — un rand tinut STINS dinadins,
+   * fiindca balamaua nu se vinde la bucata. Browserul n-are nicio folosinta pentru el.
+   *
+   * ⚠ Taierea sta AICI, la granita, si nu in `configuratoarePentruProduse`: calea de server —
+   * repretuirea comenzii — citeste prin aceeasi functie si ARE nevoie de `produsId`, ca sa stie
+   * din ce produs scade. Taiat acolo, o comanda configurata n-ar mai fi scazut nicio piesa.
+   */
+  const cfg = await configurator;
+  return {
+    altMap, hasCardPayment, bundleComponents,
+    configurator: cfg ? { ...cfg, compilat: pentruSursaPaginii(cfg.compilat) } : null,
+  };
 }

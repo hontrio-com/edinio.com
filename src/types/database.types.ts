@@ -1771,6 +1771,57 @@ export type Database = {
           },
         ]
       }
+      configurator_componente: {
+        Row: {
+          activa: boolean
+          business_id: string
+          cost_bucata: number | null
+          created_at: string
+          id: string
+          nume: string
+          pret_bucata: number
+          product_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          activa?: boolean
+          business_id: string
+          cost_bucata?: number | null
+          created_at?: string
+          id?: string
+          nume: string
+          pret_bucata?: number
+          product_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          activa?: boolean
+          business_id?: string
+          cost_bucata?: number | null
+          created_at?: string
+          id?: string
+          nume?: string
+          pret_bucata?: number
+          product_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "configurator_componente_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "configurator_componente_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       configurator_produse: {
         Row: {
           business_id: string

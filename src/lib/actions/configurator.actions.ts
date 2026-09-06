@@ -31,7 +31,8 @@ import { esteAlMagazinului, magazinulMeu } from "@/lib/auth/magazinul-meu";
 import { extindeCategoriile } from "@/lib/offers/offer-pricing";
 import { logError } from "@/lib/error-logger";
 import { citesteContinut } from "@/lib/configurators/citeste";
-import { compileaza } from "@/lib/configurators/compileaza";
+import { compileaza, type ComponentaRezolvata } from "@/lib/configurators/compileaza";
+import { componenteleCerute } from "@/lib/configurators/componente";
 import { valideaza, type Constatare } from "@/lib/configurators/validare";
 import {
   murdaresteCategoriile, murdaresteConfiguratorul, murdaresteSiProiecteaza,
@@ -39,6 +40,9 @@ import {
 import type { Json } from "@/types/database.types";
 
 const CALEA = "/dashboard/products/configurators";
+
+/** Cat cere PostgREST intr-un `.in()`. Filtrul pleaca in ADRESA: peste ~700 cade cererea. */
+const MAXIM_COMPONENTE_PE_LOT = 200;
 
 /* ═══════════════════════════════════════════════════════════════════════════
    FORME
@@ -293,8 +297,56 @@ export async function publicaConfigurator(id: string): Promise<{ error: string; 
   if (!rand) return { error: "Configuratorul nu exista." };
 
   const continut = citesteContinut(rand.ciorna);
+
+  /*
+   * ⚠ PIESELE SE CITESC INAINTE DE VALIDARE, SI SE FOLOSESC DE DOUA ORI.
+   *
+   * O data ca sa se refuze o piesa FANTOMA (un id care nu mai are rand: piesa stearsa, o
+   * ciorna copiata din alt magazin, un id scris de mana). Si a doua oara ca sa se INGHETE in
+   * versiune ce costa piesa si din ce produs iese ea de pe raft.
+   *
+   * ⚠ O CITIRE PICATA OPRESTE PUBLICAREA, nu o lasa sa mearga cu harta goala. Cu harta goala,
+   * `valideaza` ar fi strigat ca toate piesele sunt fantome (si publicarea ar fi cazut oricum,
+   * dar cu un mesaj mincinos); iar daca cineva ar scoate candva verificarea aia, versiunea ar
+   * pleca fara `pretBucata` si fara `produsId` — adica IMUTABILA si gratuita. Aici degradarea
+   * corecta nu e „publica oricum”, ci „nu publica”.
+   *
+   * ⚠ SI SE FILTREAZA `activa`: o piesa stinsa nu se mai poate lega intr-o versiune noua, dar
+   * randul ei ramane, fiindca versiunile deja publicate il pomenesc.
+   */
+  const cerute = componenteleCerute(continut.definitie);
+  const componente = new Map<string, ComponentaRezolvata>();
+  /*
+   * ⚠ IN LOTURI, fiindca `.in()` pleaca in ADRESA cererii: peste vreo sapte sute de id-uri
+   * PostgREST refuza cererea intreaga. Iar un `.slice(0, 200)` ar fi fost mai rau decat un
+   * refuz — piesele de peste prag n-ar fi fost gasite, deci ar fi fost raportate ca FANTOME,
+   * si comerciantul ar fi citit pe ecran ca piese care exista in fata lui nu exista. Acelasi
+   * plafon si acelasi motiv ca `MAXIM_PE_LOT` din `vitrina.ts`.
+   */
+  for (let i = 0; i < cerute.length; i += MAXIM_COMPONENTE_PE_LOT) {
+    const lot = cerute.slice(i, i + MAXIM_COMPONENTE_PE_LOT);
+    const { data: piese, error: ePiese } = await a.supabase
+      .from("configurator_componente")
+      .select("id, nume, product_id, pret_bucata")
+      .eq("business_id", a.magazin.id)
+      .eq("activa", true)
+      .in("id", lot);
+    if (ePiese) {
+      logError({ action: "configurator.publica.componente", message: ePiese.message, businessId: a.magazin.id, severity: "error" });
+      return { error: "Nu am putut citi piesele consumate de configurator. Incearca din nou." };
+    }
+    for (const p of piese ?? []) {
+      componente.set(p.id, {
+        produsId: p.product_id ?? null,
+        pretBucata: Number(p.pret_bucata) || 0,
+        nume: p.nume,
+      });
+    }
+  }
+
   const verdict = valideaza({
     definitie: continut.definitie, reguli: continut.reguli, pretuire: continut.pretuire,
+    componenteCunoscute: [...componente.keys()],
   });
   if (!verdict.sePoatePublica) {
     return {
@@ -303,7 +355,7 @@ export async function publicaConfigurator(id: string): Promise<{ error: string; 
     };
   }
 
-  const compilat = compileaza(continut.definitie, continut.reguli, continut.pretuire);
+  const compilat = compileaza(continut.definitie, continut.reguli, continut.pretuire, componente);
 
   for (let incercare = 0; incercare < 2; incercare++) {
     const { data: ultima } = await a.supabase

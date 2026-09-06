@@ -9,6 +9,25 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl } from "@/lib/seo";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
+/*
+ * ⚠ IMPORT STATIC, SI ASTA E O HOTARARE MASURATA — nu scapare.
+ *
+ * Lantul `ProductPageDinDesign` -> `ProductPageSection` -> `ProductPageClassic` ->
+ * `useConfigurator` -> `raspuns.ts` trage motorul intreg (reguli, pret, expresii, validare,
+ * componente, previzualizare) in pachetul de intrare al paginii de start a fiecarui magazin:
+ * `static/chunks/*` de 44.055 octeti bruti, ~13.5 KiB gzip. Iar ramura care il deseneaza e una
+ * singura — magazinul cu UN produs: 1 din 131, si niciunul cu configurator.
+ *
+ * L-am adus lenes cu `dynamic()` si am masurat build cu build acelasi `entryJSFiles`:
+ *     cu dynamic()   : 20 fisiere, 1.284.124 octeti, motorul INAUNTRU
+ *     fara dynamic() : 20 fisiere, 1.284.124 octeti, motorul INAUNTRU
+ * Identic la octet. `next/dynamic` intr-o componenta de SERVER nu taie nimic din pachetul de
+ * intrare: importul intra oricum in graful clientului al paginii, si numai randarea se amana.
+ *
+ * Ce ar taia cu adevarat e sa nu mai fie `useConfigurator` chemat neconditionat din modelele de
+ * pagina — adica o rescriere a starii, nu un import. Nu merita 13 KiB dintr-o intrare de 1,2 MiB,
+ * deci ramane asa, scris aici ca sa nu se reia.
+ */
 import { ProductPageDinDesign } from "@/components/storefront/sections/product/ProductPageDinDesign";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { parseStoreMode } from "@/lib/storefront/store-mode";

@@ -1639,6 +1639,8 @@ export type HotarareReconciliere =
   | { fel: "sters-de-om" }
   /** Produsul are deja alt anunt legat: doua anunturi, si nu alege un cron care. */
   | { fel: "duplicat"; legat: number }
+  /** E al nostru si nelegat, dar produsul cere personalizare: se stinge la ei, apoi se leaga. */
+  | { fel: "stinge" }
   /** E al nostru si nelegat: se leaga inapoi. */
   | { fel: "leaga" };
 
@@ -1651,11 +1653,18 @@ export type HotarareReconciliere =
  *   2. nu e produsul nostru    -> NU se atinge. Contul lui de OLX e al lui.
  *   3. omul l-a sters la noi   -> nu se readuce, oricat ar parea de „lipsa"
  *   4. produsul are alt anunt  -> se scrie, nu se alege
- *   5. altfel                  -> se leaga
+ *   5. cere personalizare      -> se stinge la ei, apoi se leaga
+ *   6. altfel                  -> se leaga
  *
  * ⚠ Nicaieri „se sterge". Stergerea unui anunt e singurul efect din tot marketplace-ul care nu se
  * poate desface de la noi, si o reconciliere care sterge pe o presupunere e cel mai scump fel de a
  * gresi.
+ *
+ * ⚠ PERSONALIZAREA VINE ULTIMA, si asta e chiar regula ei: se stinge NUMAI ce am fi adoptat
+ * oricum. Pusa mai sus, aceeasi intrebare ar fi stins un anunt din contul LUI (pasul 2), ar fi
+ * calcat peste o stergere pe care a cerut-o el (pasul 3), sau ar fi ales singura intr-un conflict
+ * de doua anunturi (pasul 4) — adica exact cele trei lucruri pe care reconcilierea nu are voie sa
+ * le faca.
  */
 export function hotarareaReconcilierii(a: {
   advertId: number;
@@ -1664,12 +1673,22 @@ export function hotarareaReconcilierii(a: {
   /** Id-ul asta e deja scris pe un rand de-al nostru. */
   cunoscut: boolean;
   randul?: { olx_advert_id: number | null; sters_de_om_la: string | null };
+  /**
+   * Produsul cere date de la cumparator, deci anuntul n-avea ce cauta la OLX nici o clipa.
+   *
+   * ⚠ LIPSA INSEAMNA „NU CERE", deci un chemator care uita sa raspunda adopta anuntul si atat —
+   * tacut, si tocmai pe drumul pe care nimeni nu se mai uita. De-aia raspunsul nu se apara numai
+   * de aici, ci si de o proba care cheama chiar `reconciliazaAnunturile` si numara ce a plecat
+   * catre OLX.
+   */
+  cerePersonalizare?: boolean;
 }): HotarareReconciliere {
   if (a.cunoscut) return { fel: "stim" };
   if (!a.eAlNostru) return { fel: "nu-e-al-nostru" };
   if (a.randul?.sters_de_om_la) return { fel: "sters-de-om" };
   const legat = a.randul?.olx_advert_id;
   if (legat != null && legat !== a.advertId) return { fel: "duplicat", legat };
+  if (a.cerePersonalizare) return { fel: "stinge" };
   return { fel: "leaga" };
 }
 
@@ -1695,6 +1714,30 @@ export function hotarareaReconcilierii(a: {
  * unui anunt e singurul efect din tot marketplace-ul care nu se poate desface de la noi — vezi nota
  * de la paza anti-duplicat — iar o reconciliere care sterge singura, pe o presupunere, e cel mai
  * scump fel de a gresi.
+ *
+ * ═══ ⚠ ORFANUL UNUI PRODUS PERSONALIZABIL SE STINGE, NU SE ADOPTA SI ATAT (06.09.2026) ═══
+ *
+ * Poarta de personalizare opreste PUBLICAREA (`upsertRemote`) si „Activează" (`activateRemote`).
+ * Dar un anunt VIU la ei si necunoscut la noi nu trece prin niciuna din ele: aici era adoptat, si
+ * dupa adoptie ramanea la vanzare pana cand ceva il resincroniza — adica pana la urmatoarea
+ * editare de pret sau de stoc, care poate sa nu vina niciodata.
+ *
+ * Iar pentru un produs personalizabil el n-avea ce cauta acolo deloc: anuntul lor nu poate purta
+ * gravura, dimensiunile sau poza clientului, iar descrierea nu duce niciun link inapoi la pagina
+ * de produs — singurul loc unde formularul exista. Cu „Livrare prin OLX" pornita, comanda intra
+ * singura, la pretul din catalog, si nu mai are cine s-o opreasca.
+ *
+ * ⚠ SE STINGE INTAI, SI ABIA APOI SE LEAGA. Legat mai intai, anuntul devine „cunoscut" — iar la
+ * trecerea urmatoare hotararea e „stim" si nimeni nu se mai uita la el. Deci o stingere picata
+ * dupa o legare reusita ar fi ramas asa pe veci: viu la ei, linistit la noi. In ordinea asta, un
+ * esec lasa anuntul tot orfan, si trecerea urmatoare il ia de la capat.
+ *
+ * ⚠ SI CADE INCHIS. Daca produsele nu se pot citi, nu se stinge si nu se leaga nimic: pagina se
+ * lasa pentru trecerea urmatoare. „N-am putut citi" n-are voie sa insemne nici „n-are
+ * personalizare", nici „stinge-l pe banuiala".
+ *
+ * Masurat pe productie la 06.09.2026: `olx_adverts` e GOALA pe toata platforma, deci reparatia
+ * nu scoate azi nimic din vanzare — inchide un cap care se deschide la prima publicare.
  */
 export async function reconciliazaAnunturile(
   admin: Db, ctx: OlxSyncContext, businessId: string, deLa: number,
@@ -1723,10 +1766,16 @@ export async function reconciliazaAnunturile(
   /* ⚠ Fara randurile noastre, „necunoscut la noi" ar fi un neadevar despre TOATE. */
   if (eRanduri) return { ok: false, error: `randurile locale nu s-au putut citi: ${eRanduri.message}` };
 
+  /*
+   * ⚠ `page_sections` E IN LISTA PENTRU POARTA DE PERSONALIZARE. Fara coloana, `cerePersonalizarea`
+   * ar raspunde „nu" pe TOATE produsele, iar un anunt de fototapet ar fi adoptat si lasat la vanzare
+   * — felul de reparatie care arata facuta. Si tot AICI, nu intr-o a doua interogare pe produs: aia
+   * ar fi o cerere pe fiecare anunt din pagina, la fiecare trecere de reconciliere.
+   */
   const { data: produse, error: eProduse } = await admin
-    .from("products").select("id").eq("business_id", businessId).in("id", idsProduse);
+    .from("products").select("id, page_sections").eq("business_id", businessId).in("id", idsProduse);
   if (eProduse) return { ok: false, error: `produsele nu s-au putut citi: ${eProduse.message}` };
-  const aleMele = new Set((produse ?? []).map((p) => p.id));
+  const aleMele = new Map((produse ?? []).map((p) => [p.id, p.page_sections]));
 
   const dupaOferta = new Map((randuri ?? []).map((r) => [r.offer_id, r]));
   const idLegate = new Set((randuri ?? []).map((r) => r.olx_advert_id).filter((x): x is number => x != null));
@@ -1741,6 +1790,7 @@ export async function reconciliazaAnunturile(
       eAlNostru: aleMele.has(produs),
       cunoscut: idLegate.has(a.id),
       randul,
+      cerePersonalizare: cerePersonalizarea(aleMele.get(produs)),
     });
     if (hot.fel === "stim") continue;
     if (hot.fel === "nu-e-al-nostru") {
@@ -1775,9 +1825,47 @@ export async function reconciliazaAnunturile(
       });
       continue;
     }
+    /*
+     * ⚠ STINGEREA VINE INAINTEA LEGARII. Vezi nota de la capul functiei: legat mai intai, anuntul
+     * devine „cunoscut", si o stingere picata dupa aceea nu se mai reia niciodata.
+     */
+    let motiv: string | null = null;
+    if (hot.fel === "stinge") {
+      /*
+       * ⚠ Starea de aici e a LOR, citita chiar acum din lista lor — nu una scrisa de noi. De-aia
+       * are voie sa fie crezuta pe cuvant cand spune ca anuntul nu mai e la vanzare, si sa scuteasca
+       * o comanda. Poarta din `upsertRemote` n-are luxul asta: acolo starea e `olx_adverts.status`,
+       * pe care il scriem chiar noi — si de-aia acolo se intreaba.
+       */
+      if (!NU_E_LA_VANZARE.includes(String(a.status ?? "").toLowerCase())) {
+        /* ⚠ Acelasi helper ca la celelalte doua porti: confirma din starea LOR si stie ca `400` si
+           `404` inseamna „gata". Doua drumuri catre acelasi capat n-au voie sa aiba doua politici. */
+        const stins = await stingeLaEi(ctx, a.id);
+        if (!stins.ok) {
+          /* ⚠ Nestins, NU se leaga: adoptat acum, la trecerea urmatoare ar iesi „stim" si nimeni
+             nu s-ar mai uita la el. Lasat orfan, reconcilierea il ia de la capat. */
+          await logError({
+            action: "olx.reconciliere", severity: "error",
+            message: `anuntul OLX ${a.id} e al unui produs care cere personalizare si n-a putut fi stins`,
+            details: { businessId, advertId: a.id, offerId: produs, status: a.status }, businessId,
+          });
+          continue;
+        }
+      }
+      motiv = MOTIV_PERSONALIZARE;
+    }
+
     /* Randul exista dar e nelegat, sau nu exista deloc: in amandoua cazurile, se leaga. */
     const { error: eLegat } = await admin.from("olx_adverts").upsert(
-      { business_id: businessId, offer_id: produs, product_id: produs, ...advertPatch(a, now) } as never,
+      {
+        business_id: businessId, offer_id: produs, product_id: produs, ...advertPatch(a, now),
+        /*
+         * ⚠ MOTIVUL SE SCRIE PE RANDUL LOCAL, ca la celelalte doua porti — acelasi text, ca sa nu
+         * primeasca doua explicatii pentru acelasi refuz. Fara el, ecranul ar arata un anunt stins
+         * fara sa spuna de ce, si comerciantul l-ar aprinde inapoi chiar de acolo.
+         */
+        ...(motiv ? { status: "error", error: motiv } : {}),
+      } as never,
       { onConflict: "business_id,offer_id" },
     );
     if (eLegat) {
@@ -1791,7 +1879,9 @@ export async function reconciliazaAnunturile(
     adoptate++;
     await logError({
       action: "olx.reconciliere", severity: "warning",
-      message: `anuntul OLX ${a.id} era viu la ei si necunoscut la noi; a fost legat inapoi la produs`,
+      message: motiv
+        ? `anuntul OLX ${a.id} era viu la ei pentru un produs care cere personalizare; a fost stins si legat`
+        : `anuntul OLX ${a.id} era viu la ei si necunoscut la noi; a fost legat inapoi la produs`,
       details: { businessId, advertId: a.id, offerId: produs, status: a.status }, businessId,
     });
   }

@@ -107,9 +107,19 @@ test("⚠ reconcilierea nu sterge NIMIC", () => {
   assert.notEqual(i, -1);
   const corp = faraComentarii(sync.slice(i));
   assert.doesNotMatch(corp, /deleteAdvert\(/);
-  assert.doesNotMatch(corp, /advertCommand\(/);
   assert.doesNotMatch(corp, /\.delete\(\)/);
-  /* Si nici nu scrie peste anunt la ei: singura scriere e randul local. */
+  /*
+   * ⚠ DE LA 06.09.2026 RECONCILIEREA ARE VOIE SA STINGA — dar numai orfanul unui produs care cere
+   * personalizare, si numai prin `stingeLaEi`, care confirma din starea LOR si stie ca `400` si
+   * `404` inseamna „gata". Stingerea se desface de la noi (butonul „Activează" exista), pe cand
+   * stergerea nu se desface nicicum — de-aia una e ingaduita si cealalta nu.
+   *
+   * O `advertCommand` scrisa de mana aici ar fi tocmai stingerea FARA confirmare, deci ramane
+   * oprita. Ce se stinge, si ce nu se stinge, sta scris in
+   * `orfanul-personalizabil-se-stinge.test.ts`.
+   */
+  assert.doesNotMatch(corp, /advertCommand\(/);
+  /* Si nici nu scrie peste anunt la ei: singura scriere la ei e stingerea de mai sus. */
   assert.doesNotMatch(corp, /updateAdvert\(|createAdvert\(/);
 });
 

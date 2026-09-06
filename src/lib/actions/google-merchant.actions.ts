@@ -82,6 +82,17 @@ async function saveConfig(supabase: ServerClient, businessId: string, config: Go
   return !error;
 }
 
+/**
+ * ⚠ Statusul scris de NOI cand o oferta e retrasa fiindca `products.price` nu e suma platita
+ * pe pagina. Nu vine de la Google, deci nu e nici „active", nici „pending", nici „disapproved".
+ *
+ * Sirul asta e scris in `src/app/api/cron/gmc-sync/route.ts` (`STARE_EXCLUS`) si citit in
+ * `GoogleMerchantClient` (`StatusBadge`). Nu se importa dintr-un loc in altul fiindca ruta de
+ * cron trage dupa ea `next/server` si tot cronul in pachetul actiunii; costul e ca sirul se
+ * schimba in TREI locuri deodata sau in niciunul.
+ */
+const STARE_EXCLUS = "exclus";
+
 // ── Status (for the dashboard) ──────────────────────────────────────────────────
 export interface MerchantStatus {
   configured: boolean;
@@ -113,9 +124,23 @@ export async function getMerchantStatus(businessId: string): Promise<MerchantSta
 
   // Numaratori exclusiv prin count/head (exacte la orice volum) — fetch-ul de
   // randuri pentru numarat se trunchia silentios la 1000 (cap PostgREST).
+  /*
+   * ⚠ „PRODUSE ACTIVE" NUMARA CE E CHIAR LA VANZARE, nu cate randuri sunt in tabel.
+   *
+   * Randul retras de noi (`exclus`) si randul ramas in eroare exista in `gmc_products`, dar
+   * niciunul n-are oferta la Google. Numarate laolalta cu restul, casuta arata un numar mai
+   * mare decat adevarul — si tocmai din casuta aia isi face comerciantul parerea daca
+   * integrarea merge; un fototapet retras il facea sa creada ca inca se vinde.
+   *
+   * ⚠ Celelalte numaratori NU au patania asta, si s-au citit ca sa se stie, nu s-a presupus:
+   * `active`/`pending`/`disapproved` filtreaza fiecare pe cate un status anume (deci `exclus`
+   * si `error` cad singure), `queued` numara in alt tabel (coada), iar `total` numara produsele
+   * active din catalog, care habar n-au de Google.
+   */
   const [{ count: total }, { count: synced }, { count: activeCnt }, { count: pendingCnt }, { count: disapprovedCnt }, { count: queued }] = await Promise.all([
     supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("is_active", true),
-    supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId),
+    supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId)
+      .not("status", "in", `(${STARE_EXCLUS},error)`),
     supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "active"),
     supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "pending"),
     supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "disapproved"),
@@ -380,20 +405,73 @@ export interface MerchantProductRow {
   error: string | null;
 }
 
+/** Cate randuri intra intr-o felie a tabelului „Produse in Google". Sunt DOUA felii, vezi jos. */
+const LIMITA_LISTA = 200;
+
+/** Aceleasi coloane in amandoua feliile: randurile lor ajung intr-o singura lista. */
+const COLOANE_LISTA = "product_id, offer_id, status, issues, last_synced_at, error, products(name)";
+
 export async function getMerchantProducts(businessId: string): Promise<MerchantProductRow[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
   if (!(await ownedBusiness(supabase, businessId, user.id))) return [];
 
-  const { data } = await supabase
-    .from("gmc_products")
-    .select("product_id, offer_id, status, issues, last_synced_at, error, products(name)")
-    .eq("business_id", businessId)
-    .order("last_status_at", { ascending: false, nullsFirst: false })
-    .limit(200);
+  /*
+   * ═══ ⚠ RANDUL CARE ARE CEVA DE SPUS NU ARE VOIE SA CADA SUB TAIETURA ═══
+   *
+   * Felia obisnuita e sortata dupa `last_status_at` si taiata la 200. Randul retras de noi are
+   * `last_status_at` GOL dinadins — asa prima verificare de status vine imediat ce comerciantul
+   * repara pretul, nu peste pana la o jumatate de ora — deci sortarea il aseaza ultimul. Pe un
+   * magazin cu peste 200 de randuri care au deja o data, motivul retragerii nu se vedea
+   * NICIODATA: produsul disparea de la vanzare fara o vorba, adica exact tacerea pe care randul
+   * acela a fost scris ca s-o rupa. Aceeasi soarta o aveau randurile `error` mai vechi.
+   *
+   * ⚠ SE REPARA LA CITIRE, nu punand o data pe randul retras. O data pusa acolo l-ar face sa
+   * arate proaspat, dar ar amana cu pana la 30 de minute prima verificare de status de dupa
+   * reparatia pretului — adica am fi platit vizibilitatea cu intarziere la revenire.
+   *
+   * ⚠ CE COSTA: o a doua interogare la fiecare deschidere a panoului, si o lista care poate
+   * ajunge la 400 de randuri in loc de 200. Sortarea feliei obisnuite ramane neatinsa; randurile
+   * cu motiv trec doar inaintea ei, fiindca ele sunt cele la care comerciantul are de facut ceva.
+   */
+  const [cuMotiv, recente] = await Promise.all([
+    supabase
+      .from("gmc_products")
+      .select(COLOANE_LISTA)
+      .eq("business_id", businessId)
+      .or(`status.eq.${STARE_EXCLUS},status.eq.error,error.not.is.null`)
+      .order("updated_at", { ascending: false })
+      .limit(LIMITA_LISTA),
+    supabase
+      .from("gmc_products")
+      .select(COLOANE_LISTA)
+      .eq("business_id", businessId)
+      .order("last_status_at", { ascending: false, nullsFirst: false })
+      .limit(LIMITA_LISTA),
+  ]);
+  /*
+   * ⚠ O cadere a feliei cu motive nu are voie sa treaca drept „n-are nimic de spus": panoul ar
+   * arata linistit exact acolo unde omul vine sa afle de ce nu mai vinde. Lista obisnuita se
+   * arata mai departe (mai bine ceva decat un ecran gol), dar caderea se scrie in jurnal.
+   */
+  if (cuMotiv.error) {
+    logError({
+      action: "gmc.getMerchantProducts", message: `felia cu motive nu s-a putut citi: ${cuMotiv.error.message}`,
+      details: { businessId }, userId: user.id,
+    });
+  }
 
-  return (data ?? []).map((r) => {
+  /* Acelasi rand poate fi in amandoua feliile: cheia lui e `offer_id`, nu produsul (variantele
+     au cate un rand fiecare, pe acelasi `product_id`). */
+  const vazute = new Set<string>();
+  const data = [...(cuMotiv.data ?? []), ...(recente.data ?? [])].filter((r) => {
+    if (vazute.has(r.offer_id)) return false;
+    vazute.add(r.offer_id);
+    return true;
+  });
+
+  return data.map((r) => {
     const prod = r.products as { name?: string } | { name?: string }[] | null;
     const name = Array.isArray(prod) ? prod[0]?.name : prod?.name;
     return {

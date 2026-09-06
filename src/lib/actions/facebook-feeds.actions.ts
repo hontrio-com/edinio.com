@@ -4,11 +4,15 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cheieDinNume, numeCuDescendenti, produseDinFeed, type RegulaFeed } from "@/lib/facebook/feeduri";
+import { lasateAfaraDinCatalog } from "@/lib/facebook/catalog-feed";
+import type { ProdusLasatAfara } from "@/lib/facebook/lasate-afara";
+import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import type { StoreCategoryNode } from "@/lib/storefront/store-content.types";
 import type { Json } from "@/types/database.types";
 
 /**
- * Feedurile Meta segmentate, salvate din panou.
+ * Feedurile Meta segmentate, salvate din panou — si intrebarea pe care si-o pune panoul despre
+ * feedul INTREG: cine ramane afara din el.
  *
  * ⚠ Fisier cu `"use server"`: FIECARE export devine un endpoint apelabil de
  * oriunde, cu un simplu POST. De aia n-are ajutoare exportate — doar actiuni
@@ -216,4 +220,53 @@ export async function cautaProduseFeed(
   }
 
   return { produse: randuri, total: count ?? randuri.length };
+}
+
+/** Cate produse lasate afara se arata pe ecran. Numarul TOTAL se spune oricum. */
+const MAX_LASATE_AFARA = 20;
+
+/**
+ * Ce NU pleaca in feedul intreg, si de ce.
+ *
+ * ⚠ Se socoteste LA CERERE, din produse: n-am adaugat nicio tabela si nimic de tinut in acord cu
+ * realitatea. Un tabel de „produse lipsa" ar fi fost un al doilea adevar, care ramane in urma
+ * exact cand comerciantul repara ceva si vrea sa vada ca s-a reparat.
+ *
+ * ⚠ Se citeste cu `fetchAllRowsStrict`, ca si feedul: PostgREST taie tacut la 1000 de randuri, iar
+ * un magazin cu 1200 de produse ar fi primit un numar mai mic decat adevarul — adica exact
+ * linistea pe care ecranul asta o repara. Iar o citire cazuta ARUNCA, si atunci panoul spune ca
+ * n-a putut verifica, in loc sa arate „zero produse afara" pe o citire pe jumatate.
+ *
+ * ⚠ Aceleasi filtre ca ruta feedului (`is_active`, aceeasi ordine): altfel numarul de aici si
+ * feedul ar vorbi despre doua magazine diferite.
+ */
+export async function produseleLasateAfaraDinCatalog(): Promise<
+  { total: number; produse: ProdusLasatAfara[] } | { error: string }
+> {
+  /*
+   * ⚠ SI VERIFICAREA OMULUI E INAUNTRU. `magazinulMeu()` vorbeste cu Supabase, deci poate arunca —
+   * iar o actiune de server care arunca respinge promisiunea din browser, nu intoarce `{ error }`.
+   * Panoul ar fi ramas atunci fara niciun raspuns, adica fara nicio linie: exact tacerea care se
+   * citeste „pleaca toate".
+   */
+  try {
+    const biz = await magazinulMeu();
+    if (!biz) return { error: "Neautorizat" };
+
+    const admin = createAdminClient();
+    const produse = await fetchAllRowsStrict("fbCatalog.lasateAfara", (from, to) =>
+      admin
+        .from("products")
+        .select("id, name, price, images, page_sections")
+        /* ⚠ Citirea e cu clientul ADMIN, deci trece peste RLS: filtrul asta e SINGURA granita
+           dintre magazine. Fara el, fiecare comerciant ar vedea numele produselor tuturor. */
+        .eq("business_id", biz.id)
+        .eq("is_active", true)
+        .order("id")
+        .range(from, to),
+    );
+    return lasateAfaraDinCatalog(produse, MAX_LASATE_AFARA);
+  } catch {
+    return { error: "Nu am putut citi produsele." };
+  }
 }

@@ -332,8 +332,14 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
           </div>
         ) : (
           <div className="divide-y divide-border">
+            {/* ⚠ Cheia randului e `offer_id`, nu produsul: un produs cu variante are cate un rand
+                pe FIECARE oferta, iar de cand randul cu motiv e adus in capul listei el ajunge sa
+                stea langa suratele lui. Cu doua chei la fel, React scoate unul dintre randuri la
+                reimprospatare — si cel scos poate fi chiar randul retras, adica exact ce venise
+                omul sa vada. `offer_id` e unic pe magazin (indexul `gmc_products_business_offer_uidx`)
+                si e cheia dupa care actiunea dezduplica lista. */}
             {products.map((p) => (
-              <div key={p.product_id} className="flex items-start gap-3 px-5 py-3">
+              <div key={p.offer_id} className="flex items-start gap-3 px-5 py-3">
                 <StatusBadge status={p.status} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{p.name}</p>

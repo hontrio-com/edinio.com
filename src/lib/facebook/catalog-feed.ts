@@ -14,7 +14,10 @@ import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice, 
 // Aceeasi poarta ca la Google Merchant, si din acelasi motiv: `products.price` a incetat sa fie
 // pretul produsului cand personalizarea a capatat pret. Pusa doar pe un canal, minciuna s-ar fi
 // mutat pe celalalt.
-import { pretulDinCatalogMinte } from "@/lib/customization/pretul-din-catalog-minte";
+import { pretulDinCatalogMinte, type RandDeCatalog } from "@/lib/customization/pretul-din-catalog-minte";
+// Motivele si textele lor stau in `lasate-afara.ts`: le citeste si panoul, care e componenta
+// client. Hotararea ramane aici, langa generatorul care o aplica.
+import type { MotivLipsaDinCatalog, ProdusLasatAfara } from "./lasate-afara";
 
 const CURRENCY = "RON";
 
@@ -100,28 +103,109 @@ const SIZE_RE = /m[aă]rim|size|talie|numar|număr/i;
 const MATERIAL_RE = /material|tesatur|țesătur|compozi/i;
 const VARIANT_SLOTS = ["color", "size", "material", "pattern"] as const;
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   CINE NU AJUNGE IN CATALOG, SI DE CE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Cat citeste hotararea dintr-un rand de produs. `CatalogProduct` o indeplineste deja. */
+export interface RandDeCatalogMeta extends RandDeCatalog {
+  /** `products.images`, asa cum vine din baza: jsonb, deci orice. */
+  images: unknown;
+}
+
+/**
+ * Prima imagine folosibila, aleasa EXACT ca in generator.
+ *
+ * ⚠ `String(brut)`, nu o verificare de tip: si in generator un `null` din tablou devine sirul
+ * „null" si pleaca in feed asa. Aici nu se repara nimic — se raspunde la aceeasi intrebare, cu
+ * acelasi raspuns, altfel motivul aratat comerciantului n-ar mai fi motivul adevarat.
+ *
+ * Se opreste la prima gasita: pe un catalog de mii de produse, hotararea se ia si atunci cand
+ * feedul nu se genereaza (panoul), si nu e nevoie sa mai construiasca inca un tablou.
+ */
+function primaImagine(rand: RandDeCatalogMeta): string | undefined {
+  if (!Array.isArray(rand.images)) return undefined;
+  for (const brut of rand.images) {
+    const u = String(brut);
+    if (u) return u;
+  }
+  return undefined;
+}
+
+/**
+ * De ce nu ajunge produsul asta in catalogul Meta — sau `null` cand ajunge.
+ *
+ * ═══ ⚠ O SINGURA HOTARARE, CITITA DIN DOUA LOCURI ═══
+ *
+ * Generatorul de mai jos O APLICA (ii ignora motivul si intoarce zero articole), iar panoul o
+ * CITESTE, ca sa-i poata spune comerciantului ce ramane afara. Cat timp lista de motive traia doar
+ * in generator, feedul sarea produse in tacere si ecranul spunea „N produse active in magazin.
+ * Feed-ul se actualizeaza automat" — deci omul credea ca pleaca toate.
+ *
+ * ⚠ A doua lista, scrisa pentru ecran, s-ar fi departat de asta la prima schimbare, si atunci
+ * panoul ar fi mintit cu incredere. De-aia motivul se INTOARCE de aici, nu se deduce a doua oara.
+ *
+ * ⚠ UN PRET CARE MINTE NU INTRA IN CATALOG. Cat timp pretul venea din `products.price`, un
+ * fototapet vandut la metru patrat se anunta cu 89 de lei si costa 603,75 pe pagina — iar reclamele
+ * dinamice duc omul exact acolo, pe banii comerciantului. Se lasa afara TOT produsul, si variantele
+ * lui: pretul de baza e cel care minte, deci niciuna dintre ofertele derivate din el nu e cinstita.
+ * Acelasi „afara" ca la produsul fara imagine, si din acelasi socotit: un articol lipsa costa mai
+ * putin decat unul mincinos.
+ *
+ * ⚠ ORDINEA E RASPUNSUL DAT OMULUI, nu o optimizare. Un fototapet fara poza are amandoua motivele;
+ * i se spune cel al pretului, fiindca daca i-am cere intai poza, ar adauga-o si produsul TOT n-ar
+ * pleca. Se raspunde cu ce il opreste, nu cu ce e mai usor de reparat.
+ */
+export function motivulLipseiDinCatalog(rand: RandDeCatalogMeta): MotivLipsaDinCatalog | null {
+  if (pretulDinCatalogMinte(rand)) return "pret-care-minte";
+  if (!primaImagine(rand)) return "fara-imagine";
+  return null;
+}
+
+/**
+ * Cate produse raman afara, si primele dintre ele cu motivul fiecaruia.
+ *
+ * ⚠ `total` se numara pe TOATE, nu doar pe cele aratate: „3 produse" cu doua exemple e adevarat,
+ * „2 produse" fiindca atatea incap pe ecran ar fi o minciuna linistitoare — exact felul de cifra
+ * din care comerciantul afla mai tarziu, din vanzari.
+ */
+export function lasateAfaraDinCatalog<T extends RandDeCatalogMeta & { id: string; name: string }>(
+  produse: readonly T[],
+  plafon: number,
+): { total: number; produse: ProdusLasatAfara[] } {
+  let total = 0;
+  const primele: ProdusLasatAfara[] = [];
+  for (const p of produse) {
+    const motiv = motivulLipseiDinCatalog(p);
+    if (!motiv) continue;
+    total++;
+    if (primele.length < plafon) primele.push({ id: p.id, name: p.name, motiv });
+  }
+  return { total, produse: primele };
+}
+
 /**
  * Build one Meta catalog item for a simple product, or one per enabled variant
- * (linked by item_group_id) for a variable product. Products without an image
- * are skipped (Meta requires image_link and won't run imageless items in ads).
+ * (linked by item_group_id) for a variable product. Products left out — no image,
+ * or a catalog price that lies — are decided by `motivulLipseiDinCatalog` above,
+ * which is the same verdict the dashboard shows the merchant.
  */
 export function buildCatalogItems(business: CatalogBusiness, product: CatalogProduct): CatalogItem[] {
-  /*
-   * ═══ ⚠ UN PRET CARE MINTE NU INTRA IN CATALOG ═══
-   *
-   * Feedul asta e o ruta PUBLICA pe care Meta o citeste singura, programat: nu exista niciun ecran
-   * in care cineva sa vada ce pleaca. Cat timp pretul venea din `products.price`, un fototapet
-   * vandut la metru patrat se anunta cu 89 de lei si costa 603,75 pe pagina — iar reclamele
-   * dinamice duc omul exact acolo, pe banii comerciantului.
-   *
-   * ⚠ Se lasa afara TOT produsul, si variantele lui: pretul de baza e cel care minte, deci niciuna
-   * dintre ofertele derivate din el nu e cinstita. Acelasi „return []" ca la produsul fara imagine,
-   * si din acelasi socotit: un articol lipsa costa mai putin decat unul mincinos.
-   */
-  if (pretulDinCatalogMinte(product)) return [];
+  if (motivulLipseiDinCatalog(product)) return [];
 
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
-  const primaryImage = images[0];
+  /*
+   * ⚠ ACEEASI functie ca in motivul „fara imagine", nu doar aceeasi conditie: `images[0]` scris a
+   * doua oara aici ar fi fost o a doua regula despre ce inseamna „are poza", si prima zi in care
+   * s-ar fi despartit de cealalta e ziua in care panoul spune „fara imagine" despre un produs care
+   * pleaca, sau tace despre unul care nu pleaca.
+   *
+   * ⚠ `return []`-ul de mai jos nu se atinge NICIODATA: motivul de la intrarea in functie a scos
+   * deja produsul. Ramane pentru tip — `primaryImage` trebuie sa fie un sir. Masurat: mutantul care
+   * il stinge trece toate probele, fiindca e cod mort. Ce apara probele cu adevarat e regula din
+   * `primaImagine` (mutantul care o slabeste pica pe produsul cu poze goale).
+   */
+  const primaryImage = primaImagine(product);
   if (!primaryImage) return [];
 
   const link = `${storeBaseUrl(business)}/product/${product.slug ?? product.id}`;

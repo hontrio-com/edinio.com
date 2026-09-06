@@ -1,6 +1,8 @@
+import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { citesteCompilat, type Compilat } from "./compileaza";
+import { arboreleCategoriilor } from "./arborele";
 import {
   configuratorulAplicat, doarActive, rezolvitorul,
   type LegaturaCategorie, type LegaturaProdus, type RandCategorie,
@@ -65,6 +67,51 @@ export interface RaspunsConfiguratoare {
 const MAXIM_PE_LOT = 200;
 
 /**
+ * Ce configuratoare ACTIVE are magazinul. Citit O SINGURA DATA pe randare.
+ *
+ * ═══ ⚠ DE CE E MEMORATA TOCMAI ASTA ═══
+ *
+ * E prima intrebare a fiecarui drum si singura care se pune cu ACELASI argument de fiecare data:
+ * un magazin, atat. Restul citirilor primesc alte loturi de produse la fiecare chemare, deci
+ * n-au ce sa impartaseasca; asta le raspunde tuturor la fel.
+ *
+ * Iar drumurile sunt multe pe o singura pagina de start: proiectia catalogului, pagina produsului
+ * si CELE TREI locuri din `offers.ts` care aduc produse pentru oferte (`fetchOfferProducts`,
+ * categoria, si cosul). Fiecare intreba din nou. Pentru magazinele fara niciun configurator —
+ * masurat, 131 din 131 — raspunsul „niciunul" opreste tot restul, deci intrebarea asta ERA
+ * intreaga cheltuiala: pana la cinci dus-intorsuri pe randare, toate cu acelasi raspuns gol.
+ *
+ * `cache` din React deduplica pe durata UNEI cereri, nu intre cereri: comerciantul care isi
+ * activeaza configuratorul il vede la urmatoarea incarcare, ca pana acum. In afara unei cereri
+ * (cron, calea de comanda) nu memoreaza nimic si drumul ramane exact cel de dinainte.
+ *
+ * ⚠ SI PANA E MEMORATA LA FEL CA IZBANDA, dinadins. Cu esecul nememorat, o baza care refuza ar
+ * fi fost intrebata de cinci ori pe randare in loc de una, si — mai rau — doua drumuri ale
+ * ACELEIASI pagini ar fi putut primi raspunsuri diferite: cardul din grila spunand „n-are",
+ * pagina produsului spunand „are". Un singur verdict pe cerere e mai bun decat cinci incercari.
+ *
+ * ⚠ Multimea se intoarce ca `ReadonlySet` fiindca de acum e IMPARTITA: cine ar scoate un id din
+ * ea l-ar scoate si pentru celelalte drumuri ale aceleiasi randari.
+ */
+const configuratoareleActive = cache(async (
+  businessId: string,
+): Promise<{ ok: boolean; ids: ReadonlySet<string> }> => {
+  const { data, error } = await createAdminClient()
+    .from("configuratoare")
+    .select("id")
+    .eq("business_id", businessId)
+    .eq("stare", "activ");
+  if (error) {
+    logError({
+      action: "configurator.vitrina.active", message: error.message,
+      businessId, severity: "error",
+    });
+    return { ok: false, ids: new Set<string>() };
+  }
+  return { ok: true, ids: new Set((data ?? []).map((c) => c.id)) };
+});
+
+/**
  * Configuratoarele mai multor produse deodata.
  *
  * ═══ ⚠ IN MASA, NU PE RAND ═══
@@ -117,24 +164,14 @@ export async function configuratoareleCuVerdict(
   try {
     const admin = createAdminClient();
 
-    const active = await admin
-      .from("configuratoare")
-      .select("id")
-      .eq("business_id", businessId)
-      .eq("stare", "activ");
+    const active = await configuratoareleActive(businessId);
 
-    if (active.error) {
-      logError({
-        action: "configurator.vitrina.active", message: active.error.message,
-        businessId, severity: "error",
-      });
-      return { ok: false, harta: gol };
-    }
+    if (!active.ok) return { ok: false, harta: gol };
     // Cazul obisnuit al platformei: magazinul n-are niciun configurator, si se opreste aici.
     // ⚠ `ok: true`: raspunsul „niciunul” e citit, nu presupus — si tocmai el da steagul `false`
     // pe tot catalogul magazinului, deci trebuie sa poata fi SCRIS.
-    if (!active.data || active.data.length === 0) return { ok: true, harta: gol };
-    const idActive = new Set(active.data.map((c) => c.id));
+    if (active.ids.size === 0) return { ok: true, harta: gol };
+    const idActive = active.ids;
 
     /* ── Legaturile ──────────────────────────────────────────────────────── */
 
@@ -183,8 +220,6 @@ export async function configuratoareleCuVerdict(
     // n-au niciuna, si atunci citirea lui ar fi fost pretul platit degeaba pe fiecare pagina.
     let arbore: RandCategorie[] = [];
     if (aleCategoriilor.length > 0) {
-      const { data, error: eArb } = await admin
-        .from("categories").select("id, name, parent_id").eq("business_id", businessId);
       /*
        * ⚠ Singura citire care NU opreste totul, si singura al carei esec era pana acum invizibil.
        *
@@ -193,15 +228,15 @@ export async function configuratoareleCuVerdict(
        * nu se mai poate spune, iar proiectia n-are voie sa scrie asa ceva: un magazin care isi
        * leaga configuratorul de o categorie ar fi ramas cu steagul stins pe toate produsele ei,
        * pana cand cineva le atingea pe rand.
+       *
+       * ⚠ Si de aceea trece prin `arboreleCategoriilor`: acolo se plimba plafonul de 1000 de
+       * randuri al PostgREST-ului, care TAIE TACUT. Taiat, arborele ar fi pierdut ramuri fara sa
+       * dea nicio eroare — adica `sigur` ar fi ramas `true` peste un raspuns incomplet, si
+       * proiectia ar fi SCRIS „n-are configurator" pe produsele de sub ramurile lipsa.
        */
-      if (eArb) {
-        sigur = false;
-        logError({
-          action: "configurator.vitrina.arbore", message: eArb.message,
-          businessId, severity: "error",
-        });
-      }
-      arbore = (data ?? []) as RandCategorie[];
+      const citit = await arboreleCategoriilor(admin, businessId, "configurator.vitrina.arbore");
+      if (!citit.ok) sigur = false;
+      arbore = citit.randuri;
     }
 
     /* ── Rezolvarea ──────────────────────────────────────────────────────── */

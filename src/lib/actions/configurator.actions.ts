@@ -30,6 +30,7 @@ import { revalidatePath } from "next/cache";
 import { esteAlMagazinului, magazinulMeu } from "@/lib/auth/magazinul-meu";
 import { extindeCategoriile } from "@/lib/offers/offer-pricing";
 import { logError } from "@/lib/error-logger";
+import { arboreleCategoriilor } from "@/lib/configurators/arborele";
 import { citesteContinut } from "@/lib/configurators/citeste";
 import { compileaza, type ComponentaRezolvata } from "@/lib/configurators/compileaza";
 import { componenteleCerute } from "@/lib/configurators/componente";
@@ -565,13 +566,21 @@ export async function citesteAplicarea(
       .select("categorie")
       .eq("configurator_id", id).eq("business_id", a.magazin.id)
       .order("categorie"),
-    a.supabase.from("categories").select("name").eq("business_id", a.magazin.id).order("name"),
+    /*
+     * ⚠ Lista din care omul alege trece prin ACELASI cititor ca legarea, `arboreleCategoriilor`.
+     *
+     * Aici se vedea deja divergenta pe care modulul acela o inchide: locul asta cerea `name`, iar
+     * legarea cerea `id, name, parent_id` — doua citiri ale aceluiasi arbore, cu forme diferite si
+     * niciuna plimband plafonul de 1000 de randuri. Taiata, lista ar fi ascuns categorii pe care
+     * magazinul le ARE, iar omul n-ar fi avut de unde sa banuiasca: ecranul arata o lista intreaga.
+     */
+    arboreleCategoriilor(a.supabase, a.magazin.id, "configurator.citesteAplicarea.arbore"),
   ]);
 
-  if (legaturi.error || categorii.error || arbore.error) {
+  if (legaturi.error || categorii.error || !arbore.ok) {
     logError({
       action: "configurator.citesteAplicarea",
-      message: legaturi.error?.message ?? categorii.error?.message ?? arbore.error?.message ?? "necunoscuta",
+      message: legaturi.error?.message ?? categorii.error?.message ?? "arborele de categorii",
       businessId: a.magazin.id, severity: "warning",
     });
     return { error: "Nu am putut citi aplicarea. Incearca din nou." };
@@ -599,9 +608,17 @@ export async function citesteAplicarea(
     .filter((p): p is ProdusScurt => !!p)
     .sort((x, y) => x.nume.localeCompare(y.nume, "ro"));
 
-  // ⚠ Numele unice: unicitatea din `categories` e pe frati, deci acelasi nume poate veni de doua
-  // ori din doua ramuri, si ecranul l-ar fi aratat de doua ori.
-  const disponibile = [...new Set((arbore.data ?? []).map((c) => c.name).filter(Boolean))];
+  /*
+   * ⚠ Numele unice: unicitatea din `categories` e pe frati, deci acelasi nume poate veni de doua
+   * ori din doua ramuri, si ecranul l-ar fi aratat de doua ori.
+   *
+   * ⚠ SI SE SORTEAZA AICI, nu in baza. `arboreleCategoriilor` cere `order("id")` fiindca plimbarea
+   * ferestrelor are nevoie de o ordine STABILA si totala, iar `name` nu e niciuna dintre ele.
+   * Ordonarea pentru ochi se face deci in Node — si tot aici, cu `localeCompare(..., "ro")`, ceea
+   * ce `order("name")` nu facea: baza aseza „Șosete” dupa „Zahar”.
+   */
+  const disponibile = [...new Set(arbore.randuri.map((c) => c.name).filter(Boolean))]
+    .sort((x, y) => x.localeCompare(y, "ro"));
 
   return {
     success: true,
@@ -890,13 +907,21 @@ export async function aplicaLaProduseleDinCategorie(
   const nume = typeof categorie === "string" ? categorie.trim() : "";
   if (!nume) return { error: "Alege o categorie." };
 
-  const { data: arbore, error: eA } = await a.supabase
-    .from("categories").select("id, name, parent_id").eq("business_id", a.magazin.id);
-  if (eA) return { error: "Nu am putut citi categoriile. Incearca din nou." };
-  if (!(arbore ?? []).some((c) => c.name === nume)) {
+  /*
+   * ⚠ Prin `arboreleCategoriilor`: plafonul de 1000 de randuri taie TACUT, iar aici un arbore
+   * taiat are DOUA fete, amandoua rele. Categoria aleasa poate cadea dincolo de taietura si omul
+   * citeste „Categoria nu exista in magazinul tau" despre una pe care tocmai a ales-o dintr-o
+   * lista a noastra; sau ea intra, dar subcategoriile ei nu, si legarea raporteaza izbanda peste
+   * o categorie legata pe jumatate.
+   */
+  const citit = await arboreleCategoriilor(
+    a.supabase, a.magazin.id, "configurator.aplicaLaCategorie.arbore",
+  );
+  if (!citit.ok) return { error: "Nu am putut citi categoriile. Incearca din nou." };
+  if (!citit.randuri.some((c) => c.name === nume)) {
     return { error: "Categoria nu exista in magazinul tau." };
   }
-  const numele = [...extindeCategoriile(arbore ?? [], [nume])];
+  const numele = [...extindeCategoriile(citit.randuri, [nume])];
 
   /*
    * ⚠ Se cer id-urile, si se SPUNE cate au intrat.

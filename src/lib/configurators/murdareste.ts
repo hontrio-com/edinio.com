@@ -36,6 +36,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { extindeCategoriile } from "@/lib/offers/offer-pricing";
 import { logError } from "@/lib/error-logger";
 import { proiecteazaImediat } from "@/lib/storefront/catalog/proiector";
+import { arboreleCategoriilor } from "./arborele";
 
 /** Clientul panoului, asa cum il da `magazinulMeu`. Citirile trec prin el, deci si prin RLS. */
 type ClientPanou = Extract<Autorizare, { ok: true }>["supabase"];
@@ -145,25 +146,26 @@ async function desfaSubarborele(
   businessId: string,
   alese: string[],
 ): Promise<string[]> {
-  const { data, error } = await supabase
-    .from("categories").select("id, name, parent_id").eq("business_id", businessId);
+  /*
+   * ⚠ Prin `arboreleCategoriilor`, si nu cu o citire scrisa aici: plafonul de 1000 de randuri al
+   * PostgREST-ului taie TACUT, iar un arbore taiat ar fi lasat ramurile lipsa nemarcate — adica
+   * exact felul de card invechit pe care modulul asta exista sa-l previna, fara nicio eroare.
+   */
+  const citit = await arboreleCategoriilor(supabase, businessId, "configurator.murdareste.arbore");
 
-  if (error) {
+  if (!citit.ok) {
     /*
      * ⚠ Se marcheaza ce STIM, si se striga tare.
      *
      * Fara arbore se pierd subcategoriile, deci raman carduri invechite acolo. Dar a nu marca
      * nimic ar fi lasat invechite si categoriile numite pe fata — adica mai rau, pentru acelasi
-     * necaz. Jurnalul e singurul loc din care se poate afla ca s-a intamplat.
+     * necaz. Jurnalul e singurul loc din care se poate afla ca s-a intamplat, si el se scrie deja
+     * in `arboreleCategoriilor`.
      */
-    logError({
-      action: "configurator.murdareste.arbore", message: error.message,
-      businessId, severity: "error", details: { categorii: alese.length },
-    });
     return alese;
   }
 
-  return [...extindeCategoriile(data ?? [], alese)];
+  return [...extindeCategoriile(citit.randuri, alese)];
 }
 
 /**

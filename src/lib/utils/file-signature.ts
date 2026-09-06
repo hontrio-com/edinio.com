@@ -1,4 +1,31 @@
 /**
+ * Cati pixeli are voie sa aiba o imagine pe care o DECODAM noi.
+ *
+ * ═══ ⚠ DE CE EXISTA NUMARUL ASTA ═══
+ *
+ * Semnatura din octeti spune ce FEL de fisier e, nu cat de mare se desface. Un PNG
+ * INTERLAZAT de 16000x16000 cu pixeli zero se comprima la 973 KiB — trece lejer de plafonul de
+ * 10 MB — dar `sharp` il decodeaza intreg, fiindca interlazarea nu se poate citi in flux.
+ *
+ * Masurat, cu chiar lantul din `/api/img` (rotate + resize 256 + webp):
+ *
+ *     16000x16000 interlazat (973 KiB), fara plafon : OK  1772 ms, varf 1166 MiB
+ *     acelasi, cu plafonul de mai jos               : refuzat in 1 ms, 73 MiB
+ *     2000x1500 obisnuita, cu plafon                : OK  27 ms, 93 MiB
+ *
+ * Amplificare de ~1200x. O functie de 1024 MB moare la o singura cerere, iar capatul e PUBLIC si
+ * scutit de poarta MFA — deci nu trebuie nici macar un cont.
+ *
+ * ⚠ 50 de megapixeli e peste ORICE telefon (48 MP = 8000x6000), deci nicio poza adevarata nu
+ * pateste nimic. Numarul sta aici, langa celelalte reguli despre continutul fisierelor, ca sa fie
+ * unul singur pentru toate cele trei capete care decodeaza.
+ *
+ * ⚠ EXEMPLUL DIN AUDIT — 50000x50000 — nu era cel periculos: `sharp` il refuza si fara noi,
+ * din plafonul lui implicit de 268 de megapixeli. Cel care trece e tocmai cel care incape sub el.
+ */
+export const MAX_PIXELI = 50_000_000;
+
+/**
  * Validates real file content by inspecting magic bytes, instead of trusting the
  * client-supplied MIME type (which is trivially spoofable). Returns the detected
  * image MIME type, or null if the bytes do not match a supported image format.

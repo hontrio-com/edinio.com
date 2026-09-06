@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { getFromR2, uploadToR2 } from "@/lib/r2";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
+import { MAX_PIXELI } from "@/lib/utils/file-signature";
 
 export const runtime = "nodejs";
 
@@ -79,7 +80,12 @@ export async function GET(req: NextRequest) {
     if (!out) {
       const original = await getFromR2(key);
       if (!original) return fallback();
-      out = await sharp(original)
+      /*
+       * ⚠ PLAFON DE PIXELI, nu doar de octeti. Vezi `MAX_PIXELI`: un PNG interlazat de sub un
+       * megaoctet se desface in peste un gigaoctet de memorie, iar capatul asta e public si scutit
+       * de poarta MFA. Fara randul asta, o singura cerere omoara functia.
+       */
+      out = await sharp(original, { limitInputPixels: MAX_PIXELI })
         .rotate()
         .resize({ width, withoutEnlargement: true })
         .webp({ quality })

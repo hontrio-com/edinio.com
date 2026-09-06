@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { normalizeazaDefinitia, TIPURI } from "./definitie";
 import { normalizeazaValorile } from "./valori";
-import { verificaPersonalizarea } from "./comanda";
+import { sePoateRandaCaImagine, verificaPersonalizarea } from "./comanda";
 import { detectDocMime, detectImageMime, isAllowedImage } from "@/lib/utils/file-signature";
 
 /**
@@ -138,17 +138,77 @@ test("⚠ lantul e INTREG: ruta cere felul, iar cele trei ecrane nu deseneaza mi
   assert.match(carlig, /if \(documente\) fd\.append\("documente", "1"\);/);
 
   /* 3. Vitrina si panoul nu randeaza miniatura pentru un document. */
+  /*
+   * ⚠ PROBA ASTA INGHETASE FORMA, si a picat cand forma s-a facut mai buna.
+   *
+   * Ea cerea textual `{adrese.length > 0 && !documente && (` — adica doua liste paralele, una
+   * pentru documente si una pentru imagini. Purtarea aia era corecta pentru PDF si GRESITA pentru
+   * HEIC: o poza de pe iPhone e o imagine adevarata, intr-un camp de imagini, si tot nu se poate
+   * desena. Intrebarea buna nu e „ce fel de CAMP e", ci „se poate desena ADRESA asta".
+   *
+   * Se cere acum REGULA: fiecare adresa trece prin `sePoateRandaCaImagine`, in amandoua ecranele.
+   */
   const vitrina = sursa("src/components/storefront/sections/product/_shared/CampuriPersonalizare.tsx");
-  assert.match(vitrina, /const documente = camp\.type === "fisier";/);
-  assert.match(vitrina, /\{adrese\.length > 0 && !documente && \(/, "vitrina deseneaza miniaturi si pentru documente");
+  assert.match(vitrina, /sePoateRandaCaImagine\(url\) \? \(/,
+    "vitrina deseneaza miniaturi fara sa intrebe daca se poate");
+  assert.equal(
+    /\{adrese\.length > 0 && !documente && \(/.test(vitrina), false,
+    "vitrina alege iar dupa TIPUL campului, nu dupa ce se poate desena",
+  );
 
   const panou = sursa("src/components/dashboard/OrderDetailClient.tsx");
   assert.match(
     panou, /field\.type === "fisier" && Array\.isArray\(field\.value\) \?/,
     "panoul de comenzi randeaza un PDF ca imagine",
   );
+  assert.match(panou, /sePoateRandaCaImagine\(url\) \? \(/,
+    "panoul cere miniatura si pentru ce nu se poate decoda");
 
   /* 4. Comerciantul poate CHIAR sa aleaga tipul. */
   const editor = sursa("src/components/dashboard/PersonalizareCampuri.tsx");
   assert.match(editor, /fisier: "Fisier \(PDF sau imagine\)",/, "tipul nu se poate alege din meniu");
+});
+
+test("⚠ HEIC e o imagine ADEVARATA care nu se poate DESENA", () => {
+  /*
+   * ⚠ DOUA INTREBARI DIFERITE, si aici se vede de ce n-au acelasi raspuns.
+   *
+   * `TERMINATII` spune ce are voie intr-un camp: `.heic` e o imagine, trece de verificarea pe
+   * octeti, si are voie intr-un camp de tip `image`. `sePoateRandaCaImagine` spune altceva: se
+   * poate DESENA? Nu — Chrome, Firefox si Edge n-au decodor HEIC, iar `/api/img` refuza `.heic`
+   * dinadins, ca octetii HEIF trimisi de un anonim sa nu ajunga la libheif.
+   *
+   * ⚠ CE COSTA CAND CELE DOUA SE CONFUNDA, masurat inainte de reparatie: clientul de pe Windows
+   * alege `IMG_0421.HEIC`, incarcarea REUSESTE (200), si vede un patrat rupt exact in locul unde
+   * tocmai a pus poza — fara niciun mesaj, fiindca nu e nicio eroare. Iar in panou `/api/img`
+   * raspundea 404, deci comerciantul vedea acelasi patrat gol pe hartia dupa care produce marfa —
+   * in ORICE browser, Safari inclusiv.
+   */
+  const nostru = (n: string) => `https://pub-alnostru.r2.dev/products/customizations/${BIZ}/${n}`;
+
+  /* Are VOIE intr-un camp de imagini... */
+  assert.equal(verificaPersonalizarea(produs("image"), { f: [nostru("poza.heic")] }, BIZ).fel, "ok");
+  /* ...dar NU se deseneaza. */
+  assert.equal(sePoateRandaCaImagine(nostru("poza.heic")), false);
+  assert.equal(sePoateRandaCaImagine(nostru("poza.heif")), false);
+
+  /* Perechea: formatele care chiar se pot desena. */
+  for (const n of ["poza.jpg", "poza.jpeg", "poza.PNG", "poza.webp", "poza.gif"]) {
+    assert.equal(sePoateRandaCaImagine(nostru(n)), true, n);
+  }
+  /* Si documentele, care n-au fost niciodata desenabile. */
+  assert.equal(sePoateRandaCaImagine(nostru("tipar.pdf")), false);
+  /*
+   * ⚠ TERMINATIA SE IA DIN CALE, nu din tot sirul — si asta a prins-o un mutant.
+   *
+   * O adresa poate purta un parametru (`?v=2`, sau prefixul de redimensionare al CDN-ului). Citita
+   * ca sir intreg, `poza.jpg?x=.pdf` ar fi parut un PDF, iar `tipar.pdf?v=.jpg` o imagine — adica
+   * exact pe dos, si tocmai pe adresele pe care le compune singur CDN-ul.
+   */
+  assert.equal(sePoateRandaCaImagine(nostru("poza.jpg") + "?x=.pdf"), true);
+  assert.equal(sePoateRandaCaImagine(nostru("tipar.pdf") + "?v=.jpg"), false);
+
+  /* O adresa care nu se poate citi nu se deseneaza pe o presupunere. */
+  assert.equal(sePoateRandaCaImagine("nu-e-o-adresa"), false);
+  assert.equal(sePoateRandaCaImagine(nostru("fara-terminatie")), false);
 });

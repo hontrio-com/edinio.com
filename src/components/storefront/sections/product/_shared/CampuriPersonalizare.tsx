@@ -2,6 +2,7 @@
 
 import { FileText, Loader2, Palette, Upload, X } from "lucide-react";
 import type { CampPersonalizare } from "@/lib/customization/definitie";
+import { sePoateRandaCaImagine } from "@/lib/customization/comanda";
 import type { StarePersonalizare } from "./usePersonalizare";
 
 /**
@@ -319,11 +320,20 @@ function Control(p: ControlProps) {
 function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, incarcaFisiere, scoateFisier }: ControlProps) {
   const adrese = Array.isArray(valoare) ? (valoare as string[]) : [];
   /*
-   * ⚠ UN DOCUMENT N-ARE MINIATURA, si nu se preface ca are.
+   * ⚠ MINIATURA DOAR PENTRU CE SE POATE CHIAR DESENA, si asta e o singura regula, nu doua.
    *
-   * Randat cu `<img>`, un PDF da o poza rupta in locul in care clientul tocmai a incarcat
-   * fisierul de tipar — adica exact semnul „nu s-a incarcat". De-aia campul de tip `fisier` arata
-   * pictograma si numele, nu o imagine.
+   * Randat cu `<img>`, un fisier care nu se poate decoda da o poza rupta chiar in locul in care
+   * clientul tocmai a incarcat ceva — adica exact semnul „n-a mers". Fara niciun mesaj, fiindca nu
+   * e nicio eroare. El sterge, incarca iar, si vede acelasi patrat.
+   *
+   * Doua feluri de fisiere pateau asta, si prima forma a codului il apara doar pe primul:
+   *  - PDF-urile, la campul de tip `fisier`;
+   *  - HEIC/HEIF, la campul de tip `image` — pozele venite de pe iPhone. Chrome, Firefox si Edge
+   *    n-au decodor HEIC, iar `/api/img` nu le primeste dinadins (vezi `sePoateRandaCaImagine`).
+   *
+   * Deci intrebarea nu e „ce fel de CAMP e", ci „se poate desena ADRESA asta" — si se pune pe
+   * fiecare fisier in parte. Asa un JPG incarcat intr-un camp de fisiere isi capata miniatura, iar
+   * un HEIC dintr-un camp de imagini isi capata numele si legatura.
    */
   const documente = camp.type === "fisier";
   const maxim = camp.max_files ?? 5;
@@ -339,45 +349,41 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, incarcaFisie
 
   return (
     <div className="space-y-2">
-      {adrese.length > 0 && documente && (
-        <ul className="space-y-1">
-          {adrese.map((url, i) => (
-            <li key={`${url}-${i}`} className="flex items-center gap-2 text-sm">
-              <FileText size={15} className="shrink-0" style={{ color }} />
-              <a
-                href={url} target="_blank" rel="noopener noreferrer"
-                className="truncate hover:underline text-foreground"
-              >
-                {numeleFisierului(url, i)}
-              </a>
-              <button
-                type="button"
-                onClick={() => scoateFisier(camp.id, i)}
-                aria-label={`Scoate fisierul ${i + 1}`}
-                className="ml-auto shrink-0 w-5 h-5 rounded-full bg-surface border border-border flex items-center justify-center hover:bg-red-50"
-              >
-                <X size={10} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {adrese.length > 0 && !documente && (
+      {adrese.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {adrese.map((url, i) => (
-            <div key={`${url}-${i}`} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border bg-surface group">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={url} alt={`Fisierul ${i + 1}`} className="w-full h-full object-cover" />
-              <button
-                type="button"
-                onClick={() => scoateFisier(camp.id, i)}
-                aria-label={`Scoate fisierul ${i + 1}`}
-                className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-              >
-                <X size={10} />
-              </button>
-            </div>
+            sePoateRandaCaImagine(url) ? (
+              <div key={`${url}-${i}`} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border bg-surface group">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt={`Fisierul ${i + 1}`} className="w-full h-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => scoateFisier(camp.id, i)}
+                  aria-label={`Scoate fisierul ${i + 1}`}
+                  className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            ) : (
+              <div key={`${url}-${i}`} className="flex items-center gap-2 text-sm w-full">
+                <FileText size={15} className="shrink-0" style={{ color }} />
+                <a
+                  href={url} target="_blank" rel="noopener noreferrer"
+                  className="truncate hover:underline text-foreground"
+                >
+                  {numeleFisierului(url, i)}
+                </a>
+                <button
+                  type="button"
+                  onClick={() => scoateFisier(camp.id, i)}
+                  aria-label={`Scoate fisierul ${i + 1}`}
+                  className="ml-auto shrink-0 w-5 h-5 rounded-full bg-surface border border-border flex items-center justify-center hover:bg-red-50"
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            )
           ))}
         </div>
       )}
@@ -395,7 +401,7 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, incarcaFisie
             type="file"
             /*
              * ⚠ ACEEASI LISTA CA PE SERVER (ruta `upload-customization`), si de-aia sunt si
-             * HEIC/HEIF aici: serverul le primeste de la un an, dar campul nu le declara, deci
+             * HEIC/HEIF aici: serverul le primeste din 07.06.2026, dar campul nu le declara, deci
              * fereastra de alegere a fisierelor le arata GRI pe iPhone — formatul implicit al
              * pozelor de acolo. Clientul vedea ca „nu se poate incarca poza mea".
              *

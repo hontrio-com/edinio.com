@@ -52,19 +52,53 @@ const TERMINATII: Record<string, readonly string[]> = {
   fisier: ["jpg", "jpeg", "png", "webp", "heic", "heif", "pdf"],
 };
 
-function terminatiaSePotriveste(adresa: string, tip: string): boolean {
-  const permise = TERMINATII[tip];
-  /* Un tip fara lista nu are fisiere; verificarea de mai jos nu se aplica. */
-  if (!permise) return true;
+/**
+ * Se poate desena adresa asta ca IMAGINE, in browser si in panou?
+ *
+ * ═══ ⚠ DE CE NU E ACELASI LUCRU CU „E O IMAGINE" ═══
+ *
+ * `heic` si `heif` sunt imagini adevarate, trec de verificarea pe octeti, si au voie intr-un
+ * camp de tip `image` — vezi `TERMINATII`. Dar nu se pot DESENA: Chrome, Firefox si Edge n-au
+ * decodor HEIC, iar `/api/img` nu le primeste dinadins, ca octetii HEIF trimisi de un anonim sa
+ * nu ajunga la libheif (vezi `securitate-audit.test.ts`).
+ *
+ * Deci un client care incarca poza de pe iPhone vedea un patrat rupt in locul in care tocmai
+ * pusese poza — fara niciun mesaj, fiindca nu era nicio eroare. Sterge, incarca iar, acelasi
+ * patrat. Iar in panoul comerciantului se rupea in ORICE browser, Safari inclusiv: `/api/img`
+ * raspunde 404 pe `.heic`, masurat. Adica pe hartia dupa care se produce marfa.
+ *
+ * ⚠ Raspunsul e o singura regula, folosita de amandoua ecranele: unde nu se poate desena, se
+ * arata numele si o legatura — chiar tiparul scris pentru documente. Doua reguli s-ar fi departat,
+ * si atunci un ecran ar fi aratat poza si celalalt un patrat.
+ *
+ * ⚠ SI NU SE REPARA „EVIDENT": nu se adauga `.heic` in `KEY_RE` din `/api/img` si nu se
+ * pune conversie cu `sharp` pe server. Amandoua ar duce octeti straini la libheif, adica ar
+ * redeschide o usa inchisa cu bilet. Daca se vrea vreodata HEIC vizibil, conversia se face IN
+ * BROWSER.
+ */
+export function sePoateRandaCaImagine(adresa: string): boolean {
+  return terminatia(adresa) !== null
+    && ["jpg", "jpeg", "png", "webp", "gif", "avif"].includes(terminatia(adresa) as string);
+}
+
+/** Terminatia adresei, mica, sau `null` cand nu se poate citi. */
+function terminatia(adresa: string): string | null {
   let cale: string;
   try {
     cale = new URL(adresa).pathname;
   } catch {
-    return false;
+    return null;
   }
   const punct = cale.lastIndexOf(".");
-  if (punct === -1) return false;
-  return permise.includes(cale.slice(punct + 1).toLowerCase());
+  return punct === -1 ? null : cale.slice(punct + 1).toLowerCase();
+}
+
+function terminatiaSePotriveste(adresa: string, tip: string): boolean {
+  const permise = TERMINATII[tip];
+  /* Un tip fara lista nu are fisiere; verificarea de mai jos nu se aplica. */
+  if (!permise) return true;
+  const t = terminatia(adresa);
+  return t !== null && permise.includes(t);
 }
 
 /** O intrare din instantaneul scris in comanda. Forma e cea pe care o citeste deja panoul. */

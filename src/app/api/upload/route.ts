@@ -4,7 +4,7 @@ import sharp from "sharp";
 import { createClient } from "@/lib/supabase/server";
 import { uploadToR2 } from "@/lib/r2";
 import { registerMedia } from "@/lib/actions/media.actions";
-import { detectImageMime } from "@/lib/utils/file-signature";
+import { detectImageMime, MAX_PIXELI } from "@/lib/utils/file-signature";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 
@@ -148,9 +148,17 @@ export async function POST(request: NextRequest) {
       ? `${bucket}/${user.id}/${folder}/${filename}`
       : `${bucket}/${user.id}/${filename}`;
 
-    const url = await uploadToR2(buffer, key, tipReal);
-
-    // Register in the Media Library (best-effort; never blocks the upload).
+    /*
+     * ⚠ DIMENSIUNILE SE CITESC INAINTE DE SCRIERE, nu dupa.
+     *
+     * Erau citite mai jos, doar ca sa umple biblioteca media — deci o imagine care se desface in
+     * peste un gigaoctet ajungea oricum in depozit, si de acolo o putea declansa oricine ii cerea
+     * o miniatura prin `/api/img`. Vezi `MAX_PIXELI` pentru cifrele masurate.
+     *
+     * ⚠ `metadata()` citeste doar antetul. Ce nu e imagine (PDF) sau nu se poate citi lasa
+     * dimensiunile goale, ca pana acum — aici capatul e autentificat, deci refuzul n-ar apara
+     * altceva decat o coloana necompletata.
+     */
     let width: number | null = null;
     let height: number | null = null;
     try {
@@ -158,6 +166,16 @@ export async function POST(request: NextRequest) {
       width = meta.width ?? null;
       height = meta.height ?? null;
     } catch { /* non-image (e.g. pdf) or unreadable — leave dims null */ }
+    if (width !== null && height !== null && width * height > MAX_PIXELI) {
+      return NextResponse.json(
+        { error: "Imaginea are prea multi pixeli. Micsoreaz-o si incearca din nou." },
+        { status: 400 },
+      );
+    }
+
+    const url = await uploadToR2(buffer, key, tipReal);
+
+    // Register in the Media Library (best-effort; never blocks the upload).
     await registerMedia({
       url,
       type: "image",

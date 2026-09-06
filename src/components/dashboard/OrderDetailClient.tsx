@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { sePoateRandaCaImagine } from "@/lib/customization/comanda";
 import { toast } from "sonner";
 import {
   ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard,
@@ -1138,12 +1139,26 @@ export function OrderDetailClient({
                                 ))}
                               </ul>
                             ) : field.type === "image" && Array.isArray(field.value) ? (
+                              /*
+                               * ⚠ SI AICI miniatura doar pentru ce se poate DESENA. O poza venita
+                               * de pe iPhone e `.heic`: `/api/img` o refuza dinadins (ca octetii
+                               * HEIF sa nu ajunga la libheif), deci `<Image>` raspundea 404 si
+                               * comerciantul vedea un patrat gol pe chiar hartia dupa care produce
+                               * marfa. Se rupea in ORICE browser, Safari inclusiv.
+                               */
                               <div className="flex flex-wrap gap-1.5 mt-1">
                                 {(field.value as string[]).map((url, imgI) => (
-                                  <a key={imgI} href={url} target="_blank" rel="noopener noreferrer"
-                                    className="relative block w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors">
-                                    <Image src={url} alt={`Personalizare ${imgI + 1}`} fill sizes="56px" className="object-cover" />
-                                  </a>
+                                  sePoateRandaCaImagine(url) ? (
+                                    <a key={imgI} href={url} target="_blank" rel="noopener noreferrer"
+                                      className="relative block w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors">
+                                      <Image src={url} alt={`Personalizare ${imgI + 1}`} fill sizes="56px" className="object-cover" />
+                                    </a>
+                                  ) : (
+                                    <a key={imgI} href={url} target="_blank" rel="noopener noreferrer"
+                                      className="text-sm text-primary hover:underline break-all">
+                                      {numeleFisierului(url, imgI)}
+                                    </a>
+                                  )
                                 ))}
                               </div>
                             ) : field.type === "color" ? (

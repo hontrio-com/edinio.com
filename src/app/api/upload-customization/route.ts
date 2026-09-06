@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { uploadToR2 } from "@/lib/r2";
-import { detectDocMime, detectImageMime, isAllowedImage } from "@/lib/utils/file-signature";
+import { detectDocMime, detectImageMime, isAllowedImage, MAX_PIXELI } from "@/lib/utils/file-signature";
+import sharp from "sharp";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
@@ -115,6 +116,43 @@ export async function POST(request: NextRequest) {
       },
       { status: 400 },
     );
+  }
+
+  /*
+   * ⚠ SI CATI PIXELI SE DESFAC DIN EI, nu doar ce fel de octeti sunt.
+   *
+   * Semnatura spune „e un PNG", plafonul de marime spune „are sub 10 MB" — si amandoua sunt
+   * adevarate despre un PNG interlazat de 16000x16000 care se desface in peste un gigaoctet.
+   * Vezi `MAX_PIXELI` pentru cifrele masurate.
+   *
+   * ⚠ Se opreste AICI, la intrare, nu doar la `/api/img`. Altfel bomba se scrie in depozit, si
+   * de acolo o poate declansa oricine ii cere miniatura — inclusiv comerciantul care deschide
+   * comanda, fara sa stie ce apasa.
+   *
+   * ⚠ `metadata()` citeste doar ANTETUL, nu decodeaza; iar un PDF nu are antet de imagine, deci
+   * la documente se sare (verificarea lor s-a facut deja, pe octeti).
+   */
+  if (detected !== "application/pdf") {
+    try {
+      const m = await sharp(buffer).metadata();
+      const pixeli = (m.width ?? 0) * (m.height ?? 0);
+      if (pixeli > MAX_PIXELI) {
+        return NextResponse.json(
+          { error: "Imaginea are prea multi pixeli. Micsoreaz-o si incearca din nou." },
+          { status: 400 },
+        );
+      }
+    } catch {
+      /*
+       * ⚠ Antetul necitit inseamna REFUZ, nu „probabil e bine": pana aici s-a stabilit deja ca
+       * octetii sunt ai unei imagini cunoscute, deci daca `sharp` nu-i poate citi antetul,
+       * fisierul e stricat sau anume compus. Nu se pune in depozit ce nu se poate masura.
+       */
+      return NextResponse.json(
+        { error: "Imaginea nu a putut fi citita. Incearca alt fisier." },
+        { status: 400 },
+      );
+    }
   }
 
   const ext = EXT_BY_MIME[detected] ?? "jpg";

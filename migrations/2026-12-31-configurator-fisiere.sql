@@ -23,8 +23,9 @@
 --
 --   2. CE NU AJUNGE PE O COMANDA E GUNOI, SI TREBUIE MATURAT. Altfel oricine poate umple
 --      depozitul nostru la nesfarsit, gratis, incarcand si inchizand fila. `comanda_id is null`
---      plus `creat_la` mai vechi de o zi = se sterge (cronul orar de eliberare a cupoanelor, care
---      matura deja `rate_limits` din acelasi motiv).
+--      plus `creat_la` mai vechi de SAPTE zile = se sterge (cronul orar de eliberare a cupoanelor,
+--      care matura deja `rate_limits` din acelasi motiv). Sapte, nu una: atat traieste un cos
+--      abandonat, iar emailul de recuperare il aduce pe om inapoi zile mai tarziu.
 --
 --   3. FISIERUL NU SE SERVESTE PUBLIC. R2 e servit prin CDN cu `max-age` de un an, deci o cheie
 --      ghicibila ar fi insemnat ca poza pe care un cumparator a incarcat-o (o dedicatie, un act,
@@ -148,7 +149,25 @@ create index if not exists configurator_fisiere_magazin_idx
 
 revoke all on table public.configurator_fisiere from anon;
 revoke all on table public.configurator_fisiere from authenticated;
-grant select on table public.configurator_fisiere to authenticated;
+
+-- ⚠ GRANT PE COLOANE, si `cheie` NU e printre ele.
+--
+-- RLS filtreaza RANDURI, nu COLOANE — lectia e scrisa deja in proiect. Cu un `grant select` pe
+-- tot tabelul, comerciantul putea cere prin Data API, cu cheia publica si jetonul lui:
+--     from("configurator_fisiere").select("cheie")
+-- si primea cheia R2 intreaga, cu semnatura cu tot. Din ea compune adresa de pe CDN — iar
+-- depozitul e public-read (vezi `/api/img/route.ts`: „Depozitul e public oricum"). Adica o
+-- capacitate PERMANENTA si neautentificata catre fisierul unui tert, care nu se mai poate
+-- revoca: fisierele legate de o comanda nu se sterg niciodata.
+--
+-- Nu e o escaladare intre magazine (sunt fisierele magazinului lui), dar e exact ce ruta
+-- pereche se straduieste sa evite, cu antet si cu semnatura.
+--
+-- ⚠ Si nimic din aplicatie n-are nevoie de `cheie` pe client: singurele trei citiri sunt pe
+-- server, cu `service_role`. Repretuirea nici macar n-o cere.
+grant select (id, business_id, mime, octeti, latime, inaltime, nume, comanda_id, creat_la)
+  on table public.configurator_fisiere to authenticated;
+
 grant all on table public.configurator_fisiere to service_role;
 
 alter table public.configurator_fisiere enable row level security;
@@ -158,11 +177,11 @@ create policy owner_select_configurator_fisiere on public.configurator_fisiere
     select id from public.businesses where user_id = (select auth.uid())));
 
 comment on table public.configurator_fisiere is
-  'Fisierele incarcate de CUMPARATORI intr-un configurator. Randul se naste orfan si se leaga de comanda la plasare; ce ramane orfan o zi se matura. Servite doar prin ruta autentificata, niciodata public de pe CDN.';
+  'Fisierele incarcate de CUMPARATORI intr-un configurator. Randul se naste orfan si se leaga de comanda la plasare; ce ramane orfan sapte zile se matura. Servite doar prin ruta autentificata, niciodata public de pe CDN.';
 comment on column public.configurator_fisiere.cheie is
   'Cheia din R2, cu semnatura HMAC in nume. Se pastreaza, nu se recompune: secretul se poate schimba.';
 comment on column public.configurator_fisiere.comanda_id is
-  'Scris la PLASAREA comenzii. NULL = orfan, se matura dupa o zi.';
+  'Scris la PLASAREA comenzii. NULL = orfan, se matura dupa SAPTE zile (cat traieste un cos abandonat).';
 
 commit;
 

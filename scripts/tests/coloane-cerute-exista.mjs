@@ -67,6 +67,19 @@ const TABELE = [
     tipurile pot fi vechi, PostgREST-ul nu.
   */
   "catalog_produs", "catalog_murdar",
+  /*
+    ⚠ CELE SASE TABELE DE CONFIGURATOR, si lipseau desi doua migratii spun pe fata
+    „se ruleaza `npm run verifica:coloane` inainte de push”.
+
+    Lista de aici e INCHISA, deci unealta trecea vesela peste orice coloana ceruta de codul de
+    configurator — inclusiv peste tabele care nici nu existau in productie. Adica exact
+    promisiunea din antetele migratiilor nu era acoperita de nimic.
+
+    `catalog_produs` era acoperit din alt motiv (proiectia), si de aceea cazul cu pedeapsa cea
+    mai mare — grila goala pe toate magazinele — chiar era aparat. Restul, nu.
+  */
+  "configuratoare", "configurator_versiuni", "configurator_produse", "configurator_categorii",
+  "configurator_componente", "configurator_fisiere",
 ];
 
 /* ── 1. Ce coloane cere codul ─────────────────────────────────────────────── */
@@ -204,7 +217,8 @@ function scrieriDinFisier(text) {
       const curat = linie.trim();
       if (nivel === 0) {
         const k = /^([a-z_][a-z0-9_]*)\s*:/i.exec(curat);
-        if (k) chei.push(k[1]);
+        // ⚠ Vezi `OPTIUNI_NU_COLOANE`: `{ count }` nu e o coloana scrisa.
+        if (k && !OPTIUNI_NU_COLOANE.has(k[1])) chei.push(k[1]);
       }
       nivel += (linie.match(/[{[]/g) ?? []).length - (linie.match(/[}\]]/g) ?? []).length;
       if (nivel < 0) nivel = 0;
@@ -214,6 +228,20 @@ function scrieriDinFisier(text) {
   return cereri;
 }
 
+/*
+ * ⚠ OPTIUNILE LUI POSTGREST NU SUNT COLOANE.
+ *
+ * `.select("id", { count: "exact", head: true })` are al doilea argument un obiect de OPTIUNI.
+ * Extractorul de chei de mai sus il citea la fel ca pe unul de valori scrise, deci aduna `count`
+ * si `head` in lista de coloane cerute. Cerute apoi lui PostgREST, ele fac raspunsul sa cada cu
+ * `42803` — iar unealta scrie `NEVERIFICAT` si merge mai departe.
+ *
+ * Adica tabelele care foloseau `{ count }` erau raportate ca nepazite, si nimeni nu se uita la
+ * randul ala: un `NEVERIFICAT` arata ca un mesaj de mediu, nu ca o gaura. Doua dintre cele sase
+ * tabele de configurator au iesit asa din prima rulare.
+ */
+const OPTIUNI_NU_COLOANE = new Set(["count", "head", "ascending", "nullsFirst", "referencedTable", "foreignTable"]);
+
 /** Numele de coloane dintr-o lista de `select`, fara embeduri si fara alias-uri. */
 function coloaneDin(lista) {
   return lista
@@ -221,7 +249,8 @@ function coloaneDin(lista) {
     .replace(/(\w+)\s*\([^()]*\)/g, "")
     .split(",")
     .map((c) => c.trim().split(":").pop().trim())
-    .filter((c) => /^[a-z_][a-z0-9_]*$/i.test(c));
+    .filter((c) => /^[a-z_][a-z0-9_]*$/i.test(c))
+    .filter((c) => !OPTIUNI_NU_COLOANE.has(c));
 }
 
 /* ── 2. Ce coloane are baza ───────────────────────────────────────────────── */
@@ -256,6 +285,17 @@ async function verificaColoane(url, cheie, tabel, coloane) {
     const m = /column\s+\S*?["']?([a-z0-9_]+)["']?\s+does not exist/i.exec(corp.message ?? "");
     return { fel: "lipsa", coloana: m?.[1] ?? corp.message ?? "necunoscuta" };
   }
+  /*
+   * ⚠ PGRST205 = TABELUL NU EXISTA, si asta NU e „neverificabil" — e chiar paguba pe care
+   * unealta o pazeste, in forma ei cea mai mare.
+   *
+   * Pana acum cadea pe ramura de mai jos, adica un AVERTISMENT care nu schimba codul de iesire.
+   * Deci daca singura problema era ca tot tabelul lipseste — exact ce se intampla cand codul
+   * pleaca inaintea migratiei — unealta iesea cu 0 si lasa push-ul sa treaca. O coloana lipsa
+   * bloca; un TABEL lipsa, nu.
+   */
+  if (corp?.code === "PGRST205") return { fel: "tabel_lipsa" };
+
   /* 42501 = „permission denied": tabelul e inchis pentru cheia asta. */
   return { fel: "neverificabil", motiv: `${r.status} ${corp?.code ?? ""} ${corp?.message ?? ""}`.trim() };
 }
@@ -326,6 +366,11 @@ for (const [tabel, coloane] of cerute) {
   const r = await verificaColoane(url, cheie, tabel, coloane.keys());
   if (r.fel === "ok") {
     console.log(`OK        ${tabel}: ${coloane.size} coloane`);
+    continue;
+  }
+  if (r.fel === "tabel_lipsa") {
+    lipsuri += coloane.size;
+    console.error(`LIPSA     ${tabel}: TABELUL nu exista in PostgREST (${coloane.size} coloane cerute de cod)`);
     continue;
   }
   if (r.fel === "neverificabil") {

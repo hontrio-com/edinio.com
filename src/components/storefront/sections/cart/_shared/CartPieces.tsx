@@ -8,6 +8,7 @@ import { formatPrice } from "@/lib/utils/format";
 import { gtagEvent } from "@/lib/marketing";
 import { lineKey, useCart, type CartItem } from "@/components/storefront/cart/CartProvider";
 import type { CartPricing } from "@/lib/storefront/cart/pricing";
+import { caUnRand, rezumatScurt } from "@/lib/configurators/rezumat";
 
 /**
  * Piesele din care sunt facute modelele de pagina de cos.
@@ -148,6 +149,7 @@ export function CartLine({
         {item.variantTitle && (
           <p className="text-xs text-muted-foreground mt-0.5">{item.variantTitle}</p>
         )}
+        <RezumatLinie item={item} />
         <p className="text-xs text-muted-foreground mt-1">{formatPrice(pretBucata)} bucata</p>
 
         {/* Zona de atins a butonului „Sterge" e adusa la inaltimea stepperului
@@ -373,5 +375,32 @@ export function CosGol({ basePath, color }: { basePath: string; color: string })
         Vezi produsele
       </a>
     </div>
+  );
+}
+
+/**
+ * Configuratia liniei, scrisa scurt sub numele produsului.
+ *
+ * ⚠ FARA EA, DOUA LINII CONFIGURATE ARATA IDENTIC. Acelasi nume, aceeasi poza, adesea
+ * acelasi pret — iar cumparatorul care vrea sa stearga cana gravata cu „Maria” nu are cum sa
+ * stie pe care apasa. Nu e o scapare de afisare: butonul de stergere lucreaza pe cheia liniei,
+ * deci greseala nu se vede pana la comanda.
+ *
+ * ⚠ Se ia din LINIE, nu din configurator. Cosul n-are definitia la indemana, deci
+ * etichetele n-ar putea fi aflate aici; ele se scriu pe linie la adaugare, cand definitia
+ * exista.
+ *
+ * Se arata cel mult trei campuri — cele marcate de comerciant, iar daca n-a marcat niciunul,
+ * primele. Un cos in care fiecare linie are zece randuri de rezumat nu se mai poate citi.
+ */
+export function RezumatLinie({ item }: { item: CartItem }) {
+  if (!item.rezumat || item.rezumat.length === 0) return null;
+  const randuri = rezumatScurt(item.rezumat);
+  const restul = item.rezumat.length - randuri.length;
+  return (
+    <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
+      {caUnRand(randuri)}
+      {restul > 0 && <span> · +{restul}</span>}
+    </p>
   );
 }

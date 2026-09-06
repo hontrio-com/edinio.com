@@ -525,6 +525,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
       variantTitle: selectedComboTitle ?? undefined,
       variantSku: selectedCombo?.sku || undefined,
       configuratie: cfg.valori ?? undefined,
+      rezumat: cfg.rezumat ?? undefined,
     });
     trackAddToCart({ productId: product.id, name: product.name, price: cfg.pretUnitar });
     setAdaugatInCos(true);

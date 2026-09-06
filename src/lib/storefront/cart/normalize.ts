@@ -1,6 +1,7 @@
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { amprentaConfiguratiei, cheieLinie } from "@/lib/configurators/amprenta";
 import { normalizeazaValori, type Valori } from "@/lib/configurators/valori";
+import type { RandRezumat } from "@/lib/configurators/rezumat";
 
 /** O linie de cos, asa cum sta in `localStorage.cart_<slug>`. */
 export interface CartItem {
@@ -29,6 +30,17 @@ export interface CartItem {
    * diferite intr-o singura linie — si a doua ar fi disparut inainte ca cineva s-o vada.
    */
   amprenta?: string;
+  /**
+   * Configuratia scrisa in cuvinte, ca sa se poata citi linia din cos.
+   *
+   * ⚠ Fara ea, doua cani cu gravuri diferite arata IDENTIC in cos: acelasi nume, aceeasi
+   * poza, acelasi pret uneori. Cumparatorul n-ar avea cum sa stie pe care o sterge.
+   *
+   * ⚠ Se scrie la adaugare, cand definitia e la indemana. In cos nu exista definitia
+   * configuratorului, deci etichetele n-ar putea fi aflate acolo. Si nu intra in amprenta:
+   * identitatea liniei se face din VALORI, nu din felul in care le scriem.
+   */
+  rezumat?: RandRezumat[];
 }
 
 /**
@@ -113,9 +125,12 @@ export function normalizeazaCos(raw: unknown): CartItem[] {
     if (Object.keys(valori).length > 0) {
       curata.configuratie = valori;
       curata.amprenta = amprentaConfiguratiei(valori);
+      curata.rezumat = curataRezumatul(curata.rezumat);
+      if (!curata.rezumat) delete curata.rezumat;
     } else {
       delete curata.configuratie;
       delete curata.amprenta;
+      delete curata.rezumat;
     }
     if (typeof curata.variantTitle !== "string") delete curata.variantTitle;
     if (typeof curata.variantSku !== "string") delete curata.variantSku;
@@ -130,4 +145,33 @@ export function normalizeazaCos(raw: unknown): CartItem[] {
     else curate.set(cheie, curata);
   }
   return [...curate.values()];
+}
+
+/** Cate randuri de rezumat se pastreaza, si cat de lungi. */
+const MAX_RANDURI_REZUMAT = 50;
+const MAX_TEXT_REZUMAT = 200;
+
+/**
+ * Rezumatul din localStorage, adus la o forma care se poate desena.
+ *
+ * ⚠ E text pe care il poate scrie oricine. React scapa oricum continutul, deci nu e o
+ * poarta de injectie — dar un sir de zece mii de caractere pus de mana ar fi rupt asezarea
+ * cosului, si o mie de randuri l-ar fi facut nefolosibil. Se taie, si ce nu se intelege se lasa.
+ */
+function curataRezumatul(brut: unknown): RandRezumat[] | undefined {
+  if (!Array.isArray(brut)) return undefined;
+  const out: RandRezumat[] = [];
+  for (const x of brut.slice(0, MAX_RANDURI_REZUMAT)) {
+    if (!x || typeof x !== "object") continue;
+    const r = x as Record<string, unknown>;
+    if (typeof r.eticheta !== "string" || typeof r.valoare !== "string") continue;
+    if (!r.eticheta.trim() || !r.valoare.trim()) continue;
+    out.push({
+      id: typeof r.id === "string" ? r.id.slice(0, MAX_TEXT_REZUMAT) : "",
+      eticheta: r.eticheta.slice(0, MAX_TEXT_REZUMAT),
+      valoare: r.valoare.slice(0, MAX_TEXT_REZUMAT),
+      scurt: r.scurt === true,
+    });
+  }
+  return out.length > 0 ? out : undefined;
 }

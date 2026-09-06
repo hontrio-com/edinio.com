@@ -146,3 +146,54 @@ test("varianta SI configuratia impreuna fac o cheie unica", () => {
   ]);
   assert.equal(cos.length, 3);
 });
+
+test("REZUMATUL se curata: text pe care il poate scrie oricine", () => {
+  /*
+   * ⚠ React scapa continutul, deci nu e o poarta de injectie — dar un sir de zece mii de caractere
+   * pus de mana ar fi rupt asezarea cosului, si o mie de randuri l-ar fi facut nefolosibil.
+   */
+  const cos = normalizeazaCos([{
+    productId: "p1", name: "Cana", price: 50, quantity: 1,
+    configuratie: { g: { f: "text", v: "Robert" } },
+    rezumat: [
+      { id: "g", eticheta: "Gravura", valoare: "Robert", scurt: true },
+      { id: "x", eticheta: "L".repeat(5000), valoare: "V".repeat(5000), scurt: false },
+      { eticheta: "fara valoare" },
+      "gunoi",
+      null,
+      ...Array.from({ length: 200 }, (_, i) => ({ id: `n${i}`, eticheta: "E", valoare: "V" })),
+    ],
+  }]);
+  const r = cos[0].rezumat!;
+  assert.ok(r.length <= 50, `am pastrat ${r.length} randuri`);
+  assert.equal(r[0].eticheta, "Gravura");
+  assert.ok(r[1].eticheta.length <= 200 && r[1].valoare.length <= 200, "textele se taie");
+  assert.ok(!r.some((x) => x.valoare === undefined), "randurile fara valoare se arunca");
+});
+
+test("rezumatul dispare odata cu configuratia", () => {
+  // Altfel o linie fara configurator ar fi purtat un rezumat pe care nimic nu-l explica.
+  const cos = normalizeazaCos([{
+    productId: "p1", name: "Cana", price: 50, quantity: 1,
+    rezumat: [{ id: "g", eticheta: "Gravura", valoare: "Robert", scurt: true }],
+  }]);
+  assert.equal(cos[0].rezumat, undefined);
+});
+
+test("rezumatul NU intra in identitatea liniei", () => {
+  /*
+   * ⚠ Identitatea se face din VALORI, nu din felul in care le scriem. Doua linii cu aceleasi
+   * alegeri dar cu rezumate scrise altfel (o versiune noua a configuratorului a redenumit un
+   * camp) trebuie sa ramana aceeasi linie.
+   */
+  const cos = normalizeazaCos([
+    { productId: "p1", name: "Cana", price: 50, quantity: 1,
+      configuratie: { g: { f: "text", v: "Robert" } },
+      rezumat: [{ id: "g", eticheta: "Gravura", valoare: "Robert", scurt: true }] },
+    { productId: "p1", name: "Cana", price: 50, quantity: 1,
+      configuratie: { g: { f: "text", v: "Robert" } },
+      rezumat: [{ id: "g", eticheta: "Text gravat", valoare: "Robert", scurt: true }] },
+  ]);
+  assert.equal(cos.length, 1, "aceeasi configuratie, deci aceeasi linie");
+  assert.equal(cos[0].quantity, 2);
+});

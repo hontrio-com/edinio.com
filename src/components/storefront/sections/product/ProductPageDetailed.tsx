@@ -565,6 +565,7 @@ export function ProductPageDetailed({
       variantTitle: selectedComboTitle ?? undefined,
       variantSku: selectedCombo?.sku || undefined,
       configuratie: cfg.valori ?? undefined,
+      rezumat: cfg.rezumat ?? undefined,
     }, cantitate);
     trackAddToCart({ productId: product.id, name: product.name, price: cfg.pretUnitar, cantitate });
     setAdaugat(true);

@@ -4,6 +4,7 @@ import Image from "next/image";
 import { formatPrice } from "@/lib/utils/format";
 import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import type { CheckoutEngine } from "./checkout-core";
+import { RezumatLinie } from "../cart/_shared/CartPieces";
 
 /**
  * Rezumatul comenzii: ce cumperi si cat costa.
@@ -33,6 +34,7 @@ export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; col
             <div className="flex-1 min-w-0">
               <p className="font-bold text-sm text-foreground truncate">{item.name}</p>
               {item.variantTitle && <p className="text-xs text-muted-foreground truncate">{item.variantTitle}</p>}
+              <RezumatLinie item={item} />
               {/* Pretul pe bucata vine de la COS, nu din `item.price`: acela e
                   instantaneul din localStorage, iar totalul de langa el vine deja
                   de la server. Aici e capatul fluxului pe care il repara

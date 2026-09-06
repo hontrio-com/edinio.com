@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ConfiguratorDeVitrina } from "@/lib/configurators/vitrina";
 import { verificaRaspunsul, type Verdict } from "@/lib/configurators/raspuns";
+import { rezumatConfiguratiei, type RandRezumat } from "@/lib/configurators/rezumat";
 import type { Valori } from "@/lib/configurators/valori";
 
 /**
@@ -46,6 +47,14 @@ export interface StareConfigurator {
   /** Valorile de dus in cos si in comanda. `null` cand nu e nimic de dus. */
   valori: Valori | null;
   amprenta?: string;
+  /**
+   * Configuratia scrisa in cuvinte, pentru linia din cos.
+   *
+   * ⚠ Se compune AICI, unde definitia e la indemana. In cos nu exista definitia
+   * configuratorului, deci etichetele n-ar mai putea fi aflate acolo — si doua cani cu gravuri
+   * diferite ar fi aratat identic.
+   */
+  rezumat: RandRezumat[] | null;
 }
 
 export function useConfigurator(
@@ -72,11 +81,17 @@ export function useConfigurator(
     [configurator, brute, pretProdus],
   );
 
+  const rezumat = useMemo(
+    () => (configurator && verdict?.ok ? rezumatConfiguratiei(configurator.compilat, verdict.valori) : null),
+    [configurator, verdict],
+  );
+
   return {
     configurator,
     brute,
     pune,
     verdict,
+    rezumat,
     gata: !configurator || (verdict?.ok ?? false),
     pretUnitar: verdict?.ok ? verdict.unitar : pretProdus,
     valori: verdict?.ok ? verdict.valori : null,

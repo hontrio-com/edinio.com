@@ -70,3 +70,31 @@ test("PANOUL DE EDITARE refuza sa adauge un produs configurabil", () => {
     "catalogul de editare nu mai afla care produse sunt configurabile, deci poarta e mereu deschisa",
   );
 });
+
+test("PAGINA DE CONFIRMARE arata clientului ce a configurat", () => {
+  /*
+   * ⚠ E singura pagina pe care omul o vede dupa ce a platit. Fara randul de configuratie, ii
+   * arata „Cana personalizata x1" si atat — nu poate verifica daca gravura pe care a scris-o e cea
+   * care pleaca in productie. Iar cand nu e, afla cand desface coletul: atunci e un retur, nu o
+   * corectura.
+   */
+  const s = sursa("app/(public)/[slug]/confirm/page.tsx");
+  assert.ok(s.includes("instantaneulLiniei(item)"), "pagina de confirmare nu mai citeste configuratia");
+  assert.ok(s.includes("caUnRand(cfg.rezumat)"), "si n-o mai scrie");
+});
+
+test("CONTINUTUL AWB-ului ramane numele produselor, si asta e o hotarare", () => {
+  /*
+   * ⚠ NU se adauga configuratia acolo, si merita scris de ce: campul are 100 de caractere si
+   * spune curierului CE E in cutie, pentru manipulare si vama. Umplut cu gravuri, ar fi impins
+   * afara chiar numele produselor — iar curierul n-are ce face cu textul gravat.
+   *
+   * Specificatia e a atelierului, si ea ajunge acolo prin panou si prin emailul comerciantului.
+   */
+  const s = sursa("lib/actions/bulk-orders.actions.ts");
+  assert.match(
+    s,
+    /const content = \(items\.map\(\(i\) => i\?\.name\)/,
+    "continutul coletului s-a schimbat; daca a fost dinadins, muta si nota asta",
+  );
+});

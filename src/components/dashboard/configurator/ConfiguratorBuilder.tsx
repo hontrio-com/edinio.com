@@ -19,6 +19,7 @@ import type { Constatare } from "@/lib/configurators/validare";
 import { useAutosalvare } from "./useAutosalvare";
 import { InspectorNod } from "./InspectorNod";
 import { PanouAplicare } from "./PanouAplicare";
+import { Previzualizare } from "./Previzualizare";
 
 /**
  * Builderul de configurator.
@@ -67,7 +68,7 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
   const [nume, setNume] = useState(initial.nume);
   const [selectat, setSelectat] = useState<string | null>(null);
   const [constatari, setConstatari] = useState<Constatare[] | null>(null);
-  const [fila, setFila] = useState<"structura" | "aplicare">("structura");
+  const [fila, setFila] = useState<"structura" | "previzualizare" | "aplicare">("structura");
   const [publica, incepePublicarea] = useTransition();
 
   const salvare = useAutosalvare(initial.id, continut, initial.revizie);
@@ -103,6 +104,14 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
       const r = await publicaConfigurator(initial.id);
       if ("error" in r) {
         setConstatari(r.constatari ?? null);
+        /*
+         * ⚠ SE DUCE UNDE SE VAD CONSTATARILE.
+         *
+         * Blocul lor traieste in fila Structura si in Previzualizare. Cine apasa „Publica" din
+         * fila Aplicare primea un mesaj scurt de eroare si NIMIC altceva — lista de motive era
+         * scrisa pe un ecran pe care nu se uita nimeni. Zece minute de cautat de ce nu merge.
+         */
+        if (r.constatari?.length) setFila("previzualizare");
         toast.error(r.error);
         return;
       }
@@ -164,11 +173,19 @@ export function ConfiguratorBuilder({ initial }: { initial: ConfiguratorIncarcat
       */}
       <div className="flex gap-1 border-b border-border px-4" role="tablist" aria-label="Ce editezi">
         <Fila activa={fila === "structura"} onAlege={() => setFila("structura")}>Structura</Fila>
+        <Fila activa={fila === "previzualizare"} onAlege={() => setFila("previzualizare")}>Previzualizare</Fila>
         <Fila activa={fila === "aplicare"} onAlege={() => setFila("aplicare")}>Aplicare</Fila>
       </div>
 
       {fila === "aplicare" ? (
         <PanouAplicare configuratorId={initial.id} />
+      ) : fila === "previzualizare" ? (
+        /*
+         * ⚠ Se da CIORNA, nu versiunea publicata: rostul filei e sa arate ce se va servi
+         * DUPA publicare. Data versiunea activa, comerciantul ar fi verificat exact ce avea
+         * deja, si n-ar fi vazut niciodata ce tocmai a schimbat.
+         */
+        <Previzualizare continut={continut} />
       ) : (
       <>
       {constatari && constatari.length > 0 && (

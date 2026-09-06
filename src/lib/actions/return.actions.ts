@@ -6,6 +6,8 @@
 // comenzilor. Administrarea (dashboard) e owner-only prin RLS.
 
 import { revalidatePath } from "next/cache";
+import { instantaneulLiniei } from "@/lib/configurators/instantaneu";
+import { caUnRand } from "@/lib/configurators/rezumat";
 import { headers } from "next/headers";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { createClient } from "@/lib/supabase/server";
@@ -23,10 +25,29 @@ const RETURN_STATUSES = ["nou", "aprobat", "respins", "rambursat"] as const;
 type ReturnStatus = (typeof RETURN_STATUSES)[number];
 
 export interface ReturnableItem {
+  /**
+   * Locul liniei in `orders.items`, si CHEIA ei.
+   *
+   * ⚠ NU `product_id`. Doua cani gravate diferit sunt doua linii cu ACELASI produs: pe cheia
+   * veche, o bifa le lua pe amandoua, iar serverul inregistra returul pentru doua cani cand
+   * omul ceruse una. In React, `key` se dubla si el.
+   *
+   * Indexul e stabil in cadrul unei comenzi: `orders.items` nu se reordoneaza — editarea din
+   * panou scoate sau schimba linii pe loc, prin spread, dar nu le amesteca.
+   */
+  index: number;
   product_id: string;
   name: string;
   price: number;
   quantity: number;
+  /**
+   * Configuratia, scrisa scurt.
+   *
+   * ⚠ Fara ea, cele doua linii arata IDENTIC pe ecranul de retur, si nici cheia buna nu-l
+   * ajuta pe om sa aleaga: „Cana personalizata, 89 lei” de doua ori. Se ia din instantaneu,
+   * care poarta etichetele de la momentul vanzarii.
+   */
+  rezumat?: string;
 }
 
 type OrderRow = {
@@ -61,15 +82,27 @@ function orderNumberCandidates(raw: string): string[] {
 // Only real products are returnable — drop checkout extras (product_id 'extra_*').
 function returnableItems(items: unknown): ReturnableItem[] {
   if (!Array.isArray(items)) return [];
+  /*
+   * ⚠ Indexul se ia INAINTE de filtrare, ca sa fie chiar pozitia din `orders.items`. Luat
+   * dupa, extraoptiunile scoase l-ar fi decalat, iar serverul ar fi returnat alta linie decat
+   * cea bifata — tacut, si numai pe comenzile care au extraoptiuni.
+   */
   return items
-    .filter((i): i is Record<string, unknown> => !!i && typeof i === "object")
-    .filter((i) => !String(i.product_id ?? "").startsWith("extra_"))
-    .map((i) => ({
-      product_id: String(i.product_id ?? ""),
-      name: String(i.name ?? "Produs"),
-      price: Number(i.price ?? 0) || 0,
-      quantity: Math.max(1, Math.floor(Number(i.quantity ?? 1)) || 1),
-    }));
+    .map((linie, index) => ({ linie, index }))
+    .filter((x): x is { linie: Record<string, unknown>; index: number } =>
+      !!x.linie && typeof x.linie === "object")
+    .filter((x) => !String(x.linie.product_id ?? "").startsWith("extra_"))
+    .map(({ linie, index }) => {
+      const cfg = instantaneulLiniei(linie);
+      return {
+        index,
+        product_id: String(linie.product_id ?? ""),
+        name: String(linie.name ?? "Produs"),
+        price: Number(linie.price ?? 0) || 0,
+        quantity: Math.max(1, Math.floor(Number(linie.quantity ?? 1)) || 1),
+        ...(cfg ? { rezumat: caUnRand(cfg.rezumat) } : {}),
+      };
+    });
 }
 
 async function findOrder(
@@ -154,7 +187,12 @@ export async function submitReturnRequest(input: {
   businessId: string;
   orderNumber: string;
   contact: string;
-  items: { product_id: string; quantity: number }[];
+  /**
+   * Ce se returneaza, pe INDEXUL liniei din comanda.
+   *
+   * ⚠ `product_id` nu deosebeste doua cani gravate diferit. Vezi `ReturnableItem.index`.
+   */
+  items: { index: number; quantity: number }[];
   reason?: string;
   refundMethod?: string;
   refundIban?: string;
@@ -188,10 +226,24 @@ export async function submitReturnRequest(input: {
   // Re-derive the returned items from the authoritative order (never trust client
   // names/prices); keep only selected products, clamp quantity to what was ordered.
   const orderItems = returnableItems(order.items);
-  const wanted = new Map((input.items ?? []).map((i) => [String(i.product_id), Math.max(1, Math.floor(Number(i.quantity ?? 1)) || 1)]));
+  const wanted = new Map(
+    (input.items ?? []).map((i) => [Number(i.index), Math.max(1, Math.floor(Number(i.quantity ?? 1)) || 1)]),
+  );
+  /*
+   * ⚠ SE POTRIVESTE PE INDEX, nu pe produs. Cu `product_id`, o singura bifa pe o cana gravata
+   * prindea AMANDOUA liniile cu acel produs, iar returul se inregistra pentru doua cani. Iar
+   * comerciantul nu afla nici macar CARE gravura se intoarce.
+   *
+   * ⚠ Rezumatul intra si el pe cererea de retur: fara el, cele doua randuri raman identice si
+   * pe ecranul lui, si in emailurile de retur.
+   */
   const selected = orderItems
-    .filter((i) => wanted.has(i.product_id))
-    .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: Math.min(i.quantity, wanted.get(i.product_id)!) }));
+    .filter((i) => wanted.has(i.index))
+    .map((i) => ({
+      product_id: i.product_id, name: i.name, price: i.price,
+      quantity: Math.min(i.quantity, wanted.get(i.index)!),
+      ...(i.rezumat ? { rezumat: i.rezumat } : {}),
+    }));
   if (selected.length === 0) return { error: "Selecteaza cel putin un produs pentru retur." };
 
   const reason = (input.reason ?? "").trim().slice(0, 2000) || null;

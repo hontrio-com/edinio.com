@@ -137,8 +137,23 @@ test("⚠ fereastra de comanda NU mai cere aceleasi campuri a doua oara", () => 
     "fereastra isi tine inca propria stare de personalizare",
   );
   assert.match(modal, /Personalizarea ta/, "fereastra nu arata rezumatul");
-  /* ⚠ Si ca suplimentul intra in subtotalul AFISAT, altfel omul vede aici alt numar decat pe pagina. */
-  assert.match(modal, /treapta\.subtotal \+ \(personalizare\?\.supliment \?\? 0\) \* quantity/);
+  /*
+   * ⚠ PROBA ASTA INGHETASE O FORMULA GRESITA, si merită scris limpede.
+   *
+   * Ea cerea textual `treapta.subtotal + supliment * quantity` — adica exact adunarea oarba care
+   * ignora `bazaInclusa`. La un fototapet cu baza stinsa, fereastra arata 89 + 910 = 999, pagina
+   * arata 910, si serverul incasa 910. Proba era VERDE peste toate trei.
+   *
+   * O proba care cere o formula anume, si nu un REZULTAT, apara implementarea de care s-a scris
+   * odata — nu purtarea care trebuie. Acum se cere ca `bazaInclusa` sa fie CITITA, si formula sa
+   * fie aceeasi cu cea din `placeOrder`.
+   */
+  assert.match(modal, /personalizare\?\.detalii\.bazaInclusa === false \? 0 : treapta\.subtotal/);
+  assert.match(modal, /\+ \(personalizare\?\.supliment \?\? 0\) \* quantity/);
+  assert.equal(
+    /const productSubtotal = treapta\.subtotal \+ \(personalizare/.test(modal), false,
+    "fereastra aduna iar suplimentul peste baza, fara sa citeasca `bazaInclusa`",
+  );
 });
 
 test("⚠ nicaieri nu se mai construieste payload-ul cu etichete de la client", () => {

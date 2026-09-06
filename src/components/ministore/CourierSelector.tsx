@@ -116,7 +116,7 @@ interface Props {
   /** Required for international (used by DPD to price + create the AWB). */
   postCode?: string;
   /** Cart lines for conditional shipping rules (weight/value/class-based pricing). */
-  cart?: { productId: string; quantity: number }[];
+  cart?: { productId: string; quantity: number; personalizare?: unknown }[];
   /** Goods value after promo — feeds value-based shipping rules. */
   subtotal?: number;
   onSelect: (selection: CourierSelection | null) => void;

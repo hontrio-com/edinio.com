@@ -158,6 +158,17 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // discount FBT), fara ca discountul de cantitate sa se cumuleze peste cel de set.
   const hasTiers = !!tiers && tiers.length > 0 && !fbtOffer;
   const hasCustomization = !!personalizare?.definitie;
+  /*
+   * ⚠ SE TRIMIT VALORILE BRUTE, nu `{ type, label, value }`.
+   *
+   * Etichetele veneau de la client si ajungeau nemodificate in comanda — adica in hartia dupa
+   * care se produce marfa. Acum serverul le pune pe ale lui, din definitia produsului.
+   *
+   * ⚠ Sta AICI, nu in handler, fiindca il cere si cotarea transportului (vezi `cart` de mai
+   * jos): valoarea declarata la curier trebuie sa fie a fototapetului de 910 lei, nu a pretului
+   * de catalog de 89. Doua copii ale aceleiasi expresii s-ar fi departat.
+   */
+  const customizationPayload = hasCustomization ? personalizare?.valori : undefined;
   const [liveCheckoutConfig, setLiveCheckoutConfig] = useState<CheckoutConfig | undefined>(undefined);
   const [newsletterOffer, setNewsletterOffer] = useState(false);
   const [newsletterOptIn, setNewsletterOptIn] = useState(false);
@@ -295,7 +306,19 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
    * ca pe pagina si ca pe factura. Serverul il socoteste din nou, din valori — vezi
    * `verificaPersonalizarea`. Ce pleaca de aici nu e niciodata un pret.
    */
-  const productSubtotal = treapta.subtotal + (personalizare?.supliment ?? 0) * quantity;
+  /*
+   * ⚠ `bazaInclusa` SE CITESTE SI AICI, nu doar pe server.
+   *
+   * Prima versiune aduna orbeste suplimentul peste treapta: la un fototapet cu baza STINSA,
+   * fereastra arata 89 + 910 = 999, pagina arata 910, si serverul incasa 910. Trei numere pentru
+   * aceeasi comanda, iar cel gresit era chiar cel de sub butonul de plata — si el intra si in
+   * reducerea de card, si in pragul de comanda minima, si in previzualizarea de TVA.
+   *
+   * Formula e acum aceeasi ca in `placeOrder`: `(bazaInclusa ? baza : 0) + supliment * cantitate`.
+   */
+  const productSubtotal =
+    (personalizare?.detalii.bazaInclusa === false ? 0 : treapta.subtotal)
+    + (personalizare?.supliment ?? 0) * quantity;
   // Cart carried over from the storefront. `subtotal` is the COMBINED goods value
   // (this product + cart) so discount, min-order, free-shipping and total all
   // account for it; `productSubtotal` stays for this product's own lines.
@@ -692,14 +715,6 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (!validate()) return;
     const unitPrice = treapta.unitPrice;
     startTransition(async () => {
-      /*
-       * ⚠ SE TRIMIT VALORILE BRUTE, nu `{ type, label, value }`.
-       *
-       * Etichetele veneau de la client si ajungeau nemodificate in comanda — adica in hartia dupa
-       * care se produce marfa. Acum serverul le pune pe ale lui, din definitia produsului.
-       */
-      const customizationPayload = hasCustomization ? personalizare?.valori : undefined;
-
       const allAdditional = [
         ...cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity, variant_title: i.variantTitle })),
         ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, quantity: 1 })),
@@ -1211,7 +1226,18 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   postCode={isIntl ? form.postCode : undefined}
                   cod={paymentMethod === "cash_on_delivery" ? subtotal : 0}
                   cart={[
-                    { productId: product.id, quantity },
+                    /*
+                     * ⚠ Linia principala isi duce si personalizarea, fiindca de ea atarna cat
+                     * valoreaza marfa: 910 lei de fototapet, nu 89 de catalog. Serverul o
+                     * repretuieste din definitia lui (`subtotalMaximDinCatalog`); de aici pleaca
+                     * doar ce a ales clientul.
+                     *
+                     * ⚠ Recotarea se declanseaza prin `subtotal`, care e deja in cheia memoului
+                     * din `CourierSelector`. O personalizare care schimba plafonul schimba prin
+                     * definitie si subtotalul, deci nu mai trebuie o a doua amprenta — iar una pe
+                     * valorile brute ar fi recotat degeaba la fiecare poza incarcata.
+                     */
+                    { productId: product.id, quantity, personalizare: customizationPayload },
                     ...cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
                     // Aceleasi linii ca in `allAdditional`: companionul din cos e
                     // numarat o data, cu toate bucatile lui. Pana acum coletul se

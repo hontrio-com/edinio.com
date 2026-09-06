@@ -1,5 +1,8 @@
 import { enabledComboPriceMap } from "@/lib/storefront/variants";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
+import { normalizeazaDefinitia } from "@/lib/customization/definitie";
+import { normalizeazaValorile } from "@/lib/customization/valori";
+import { pretUnitar, pretulPersonalizarii } from "@/lib/customization/pret";
 
 /**
  * Ce stie cotatia despre cosul care se livreaza.
@@ -17,6 +20,13 @@ import { normalizeazaCantitate } from "@/lib/orders/quantity";
 export interface LinieCotata {
   productId: string;
   quantity: number;
+  /**
+   * Valorile BRUTE ale personalizarii, exact cum le trimite pagina de produs.
+   *
+   * ⚠ Nu un PRET. Ca peste tot pe drumul asta, clientul spune ce a ales si serverul socoteste
+   * cat costa, din definitia lui. Vezi `subtotalMaximDinCatalog`.
+   */
+  personalizare?: unknown;
 }
 
 /** Doar campurile de care depinde transportul, asa cum vin din `products`. */
@@ -109,7 +119,49 @@ export function contextulCosului(linii: LinieCotata[] | undefined, produse: Prod
  * activa). Linia nu spune ce combinatie s-a ales — `LinieCotata` n-o poarta — dar
  * pentru un PLAFON asta e alegerea corecta: apara mai departe impotriva umflarii,
  * si nu mai poate taia in carne vie o suma adevarata.
+ *
+ * ⚠ SI PERSONALIZAREA URCA PLAFONUL (reparat 06.09.2026).
+ *
+ * De cand personalizarea are pret, `products.price` nu mai e nici macar limita de sus a unei
+ * linii: un fototapet cu pretul de catalog 89 se vinde cu 910 lei pe 8,75 m² de material Premium.
+ * Plafonul il taia la 89, si asta se vedea in doua locuri, amandoua in dauna comerciantului:
+ *
+ *  1. `valoareMarfii` pleaca la DHL ca `declaredValue`. Coletul se asigura pe 89 de lei in loc
+ *     de 910 — pierdut pe drum, diferenta o plateste magazinul.
+ *  2. „Livrare gratuita peste 200 de lei" nu se declansa la o comanda de 910 lei.
+ *
+ * Se socoteste cu ACELASI modul pur ca `placeOrder` (`pretulPersonalizarii` + `pretUnitar`),
+ * din definitia AUTORITARA a produsului. Deci nu e „ce zice clientul ca face": e pretul pe care
+ * l-ar plati chiar el daca ar comanda acum valorile astea. Ce nu trece de validare — camp
+ * obligatoriu lipsa, optiune inventata, dimensiune peste marginile comerciantului — cade inapoi pe
+ * pretul de catalog: un plafon prea MIC nu strica nimic, unul umflat pe date stricate ar strica.
+ *
+ * ⚠ Marginile sunt ALE COMERCIANTULUI, si de-aia nu e o gaura noua: cine cere o cotatie cu
+ * 5000 cm inaltime nu ridica plafonul la cerul lui, fiindca validarea tine marginile din
+ * definitie. Ce ramane deschis e vechea gaura, decisa 04.08.2026 si documentata in
+ * `quote-token.ts`: cosul nu e legat de semnatura, deci o lista de produse declarata umflat
+ * urca plafonul oricum. Reparatia asta nu o largeste; doar nu se preface ca n-ar exista.
  */
+/**
+ * Pretul unei bucati cand linia poarta si personalizare.
+ *
+ * ⚠ Intoarce `maxim` — pretul de catalog — ori de cate ori nu poate sustine altceva: produs
+ * fara personalizare, valori lipsa (cosul nu le poarta), sau valori care nu trec de validare.
+ * Plafonul e ce putem SUSTINE noi, deci in dubiu ramane cel mic.
+ */
+function cuPersonalizarea(p: ProdusCotat, brut: unknown, maxim: number): number {
+  if (brut === undefined || brut === null) return maxim;
+  const ps = p.page_sections && typeof p.page_sections === "object"
+    ? (p.page_sections as Record<string, unknown>)
+    : null;
+  const definitie = normalizeazaDefinitia(ps?.customization);
+  if (!definitie) return maxim;
+  const curate = normalizeazaValorile(definitie, brut);
+  if (!curate.ok) return maxim;
+  const pret = pretUnitar(pretulPersonalizarii(definitie, curate.valori), maxim);
+  return Number.isFinite(pret) && pret > 0 ? pret : maxim;
+}
+
 export function subtotalMaximDinCatalog(
   linii: LinieCotata[] | undefined,
   produse: ProdusCotat[],
@@ -125,7 +177,7 @@ export function subtotalMaximDinCatalog(
     for (const pret of enabledComboPriceMap(p.page_sections, baza).values()) {
       if (Number.isFinite(pret) && pret > maxim) maxim = pret;
     }
-    total += maxim * normalizeazaCantitate(linie.quantity);
+    total += cuPersonalizarea(p, linie.personalizare, maxim) * normalizeazaCantitate(linie.quantity);
   }
   return Math.round(total * 100) / 100;
 }

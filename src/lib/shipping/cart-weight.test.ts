@@ -165,3 +165,90 @@ test("o combinatie DEZACTIVATA nu ridica plafonul", () => {
 test("fara combinatii, plafonul ramane exact cel de dinainte", () => {
   assert.equal(subtotalMaximDinCatalog([{ productId: "p1", quantity: 2 }], CATALOG), 100);
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ PERSONALIZAREA URCA PLAFONUL
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** Fototapetul: 89 lei in catalog, 910 lei cum se vinde el cu adevarat. */
+const FOTOTAPET: ProdusCotat[] = [{
+  id: "ft",
+  price: 89,
+  page_sections: {
+    customization: {
+      enabled: true,
+      fields: [
+        { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+          latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+        { id: "mat", type: "butoane", label: "Material", required: true,
+          optiuni: [
+            { id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } },
+            { id: "prm", eticheta: "Premium", impact: { fel: "pe_m2", suma: 89 } },
+          ] },
+        { id: "prot", type: "comutator", label: "Protectie", required: false,
+          impact: { fel: "pe_m2", suma: 15 } },
+      ],
+      pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 69, campTarif: "mat",
+        includePretulProdusului: false },
+    },
+  },
+}];
+
+const PERSONALIZARE = { dim: { latime: 350, inaltime: 250 }, mat: "prm", prot: true };
+
+test("⚠ plafonul cuprinde si pretul personalizarii, nu doar pe cel de catalog", () => {
+  /*
+   * ⚠ CE COSTA CAND NU-L CUPRINDE, si sunt doua lucruri, amandoua in dauna comerciantului:
+   *
+   *  1. `valoareMarfii` pleaca la DHL ca `declaredValue`. Coletul se asigura pe 89 de lei in
+   *     loc de 910 — pierdut pe drum, diferenta o plateste magazinul.
+   *  2. „Livrare gratuita peste 200 de lei" nu se declansa la o comanda de 910 lei.
+   *
+   * Perechea obligatorie: FARA valori se ramane la 89. Numai asa se vede ca cifra de 910 vine
+   * chiar din personalizare, si nu dintr-un plafon devenit permisiv.
+   */
+  assert.equal(
+    subtotalMaximDinCatalog([{ productId: "ft", quantity: 1 }], FOTOTAPET), 89,
+    "fara valori, plafonul trebuie sa ramana cel de catalog",
+  );
+  assert.equal(
+    subtotalMaximDinCatalog([{ productId: "ft", quantity: 1, personalizare: PERSONALIZARE }], FOTOTAPET),
+    910,
+  );
+  /* Si se inmulteste cu bucatile, ca orice linie. */
+  assert.equal(
+    subtotalMaximDinCatalog([{ productId: "ft", quantity: 2, personalizare: PERSONALIZARE }], FOTOTAPET),
+    1820,
+  );
+});
+
+test("⚠ valorile care NU trec de validare cad inapoi pe pretul de catalog", () => {
+  /*
+   * Plafonul e ce putem SUSTINE noi, deci in dubiu ramane cel MIC: un plafon prea mic nu strica
+   * nimic (suma ceruta de browser e oricum plafonata in jos), unul umflat pe date stricate ar fi
+   * scos livrare gratuita semnata.
+   *
+   * ⚠ Si asta e granita reala a portii: cine trimite 5000 cm inaltime nu ridica plafonul la
+   * cerul lui, fiindca marginile sunt ALE COMERCIANTULUI si validarea le tine.
+   */
+  const rele = [
+    {},                                                        /* camp obligatoriu lipsa */
+    { dim: { latime: 350, inaltime: 250 }, mat: "inventat" },   /* optiune care nu exista */
+    { dim: { latime: 5000, inaltime: 5000 }, mat: "prm" },      /* peste marginile comerciantului */
+    { dim: "text", mat: "prm" },                                /* forma cu totul gresita */
+  ];
+  for (const brut of rele) {
+    assert.equal(
+      subtotalMaximDinCatalog([{ productId: "ft", quantity: 1, personalizare: brut }], FOTOTAPET), 89,
+      `plafonul s-a lasat urcat de ${JSON.stringify(brut)}`,
+    );
+  }
+});
+
+test("⚠ un produs FARA personalizare ignora valorile trimise langa el", () => {
+  /* Altfel un client putea urca plafonul oricarui produs trimitand valori pe langa. */
+  assert.equal(
+    subtotalMaximDinCatalog([{ productId: "p1", quantity: 2, personalizare: PERSONALIZARE }], CATALOG),
+    100,
+  );
+});

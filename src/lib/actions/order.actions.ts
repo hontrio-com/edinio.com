@@ -17,6 +17,7 @@ import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCus
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { logError } from "@/lib/error-logger";
 import { verificaPersonalizarea } from "@/lib/customization/comanda";
+import { cerePersonalizarea } from "@/lib/customization/definitie";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
 import type { OrderSource } from "@/lib/storefront/attribution";
@@ -298,6 +299,41 @@ function autoritativeShipping(
    * ramane dator, cum ramanea cand se cadea sec pe tariful implicit.
    */
   return Math.max(claimed, Math.max(0, round2(tarifImplicit)));
+}
+
+/**
+ * Liniile care CER personalizare, pe caile care n-o pot purta.
+ *
+ * ⚠ INTERFATA CARE ASCUNDE UN BUTON NU E O POARTA DE SECURITATE.
+ *
+ * Cosul nu poarta personalizare: `CartItem` n-are camp, iar `placeCartOrder` n-o declara in
+ * `items`. Pagina de produs ascunde butonul „Adauga in cos" tocmai de aceea, si cardul din
+ * grila duce la pagina — dar amandoua sunt reguli ale BROWSERULUI.
+ *
+ * `placeCartOrder` si `additional_items` sunt exporturi dintr-un modul „use server", adica
+ * capete publice. O cerere scrisa de mana cu id-ul unui fototapet trecea de tot restul verificarilor
+ * — produs activ, varianta, stoc, trepte — si se pretuia din CATALOG: 89 de lei in loc de 910.
+ * Nu date lipsa: bani pierduti de comerciant, la fiecare comanda asa.
+ *
+ * ⚠ Se refuza, nu se pretuieste. Sa socotim aici suplimentul ar fi cerut valorile, iar ele nu
+ * exista pe drumul asta: nici cosul, nici formularul de comanda nu le trimit pentru liniile
+ * purtate. Refuzul e singurul raspuns adevarat.
+ *
+ * ⚠ SI NU REFUZA NIMIC DIN CE MERGEA, masurat in productie inainte de livrare (06.09.2026):
+ * 29 de produse personalizabile active, dintre care 0 in oferte (bump/FBT), 0 in pachete, si
+ * 0 comenzi din tot istoricul cu un asemenea produs pe o linie purtata. Poarta inchide un cap
+ * public nefolosit, nu un drum de vanzare.
+ */
+function linieCarePerePersonalizare(
+  produse: { id: string; page_sections: unknown }[],
+  linii: { product_id: string }[],
+): string | null {
+  const cere = new Set(produse.filter((p) => cerePersonalizarea(p.page_sections)).map((p) => p.id));
+  if (cere.size === 0) return null;
+  const gasit = linii.find((l) => cere.has(l.product_id));
+  return gasit
+    ? "Unul dintre produse se comanda personalizat, din pagina lui. Deschide-l si completeaza optiunile."
+    : null;
 }
 
 type CheckoutExtra = { id: string; label: string; price: number };
@@ -1056,6 +1092,15 @@ export async function placeOrder(data: {
       if (eroareExtra) {
         logError({ action: "placeOrder.cartItemsUnavailable", message: eroareExtra.message, details: { businessId: data.business_id, ids }, severity: "error" });
         return { error: "Nu am putut verifica produsele din cos. Te rugam incearca din nou in cateva momente." };
+      }
+      /*
+       * ⚠ Aceeasi poarta ca pe cos: liniile purtate n-au unde sa duca valorile personalizarii,
+       * iar mai jos se repretuiesc ca produs simplu, din catalog.
+       */
+      const eroarePersCos = linieCarePerePersonalizare(extraProducts ?? [], data.additional_items);
+      if (eroarePersCos) {
+        logError({ action: "placeOrder.customizationRequiredInCart", message: eroarePersCos, details: { businessId: data.business_id, ids }, severity: "warning" });
+        return { error: eroarePersCos };
       }
       const extraMap = new Map((extraProducts ?? []).filter((p) => p.is_active).map((p) => {
         const base = round2(Number(p.price));
@@ -3489,6 +3534,15 @@ export async function placeCartOrder(data: {
   if (eroareVar) {
     logError({ action: "placeCartOrder.variantUnavailable", message: eroareVar, details: { businessId: data.business_id, productIds }, severity: "warning" });
     return { error: eroareVar };
+  }
+  /*
+   * ⚠ Vezi `linieCarePerePersonalizare`: cosul nu poate purta personalizarea, deci o linie care
+   * o cere n-are cum sa fie pretuita corect aici. Se refuza inainte de orice scriere.
+   */
+  const eroarePers = linieCarePerePersonalizare(activeProducts, data.items);
+  if (eroarePers) {
+    logError({ action: "placeCartOrder.customizationRequired", message: eroarePers, details: { businessId: data.business_id, productIds }, severity: "warning" });
+    return { error: eroarePers };
   }
   /*
    * Stocul DECLARAT pe combinatie.

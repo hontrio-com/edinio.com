@@ -137,3 +137,43 @@ test("⚠ importul CSV nu mai STERGE personalizarea la reimport", () => {
   const chemari = (s.match(/scrieProdusele\(admin, businessId, \w+, \w+, personalizareaVeche\)/g) ?? []).length;
   assert.equal(chemari, 2, `harta ajunge la ${chemari} chemari din 2`);
 });
+
+test("⚠ SERVERUL refuza liniile personalizabile pe caile care n-au unde sa le tina", () => {
+  /*
+   * ⚠ INTERFATA CARE ASCUNDE UN BUTON NU E O POARTA DE SECURITATE, si probele de mai sus apara
+   * exact interfata: cardul duce la pagina, blocul din paginile proprii la fel. Toate trei sunt
+   * reguli ale BROWSERULUI.
+   *
+   * `placeCartOrder` si `additional_items` sunt exporturi dintr-un modul „use server", adica
+   * capete publice. O cerere scrisa de mana cu id-ul unui fototapet trecea de tot restul
+   * verificarilor — produs activ, varianta, stoc, trepte — si se pretuia din CATALOG: 89 de lei in
+   * loc de 910. Nu date lipsa: bani pierduti de comerciant la fiecare comanda asa.
+   *
+   * ⚠ Se REFUZA, nu se pretuieste. Sa socotim suplimentul aici ar fi cerut valorile, iar ele nu
+   * exista pe drumul asta — nici cosul, nici liniile purtate nu le trimit.
+   */
+  const s = sursa("src/lib/actions/order.actions.ts");
+  assert.match(s, /function linieCarePerePersonalizare\(/, "ajutorul nu mai exista");
+
+  /* Calea COSULUI. */
+  assert.match(
+    s, /const eroarePers = linieCarePerePersonalizare\(activeProducts, data\.items\);/,
+    "`placeCartOrder` nu mai verifica personalizarea",
+  );
+  assert.match(s, /placeCartOrder\.customizationRequired/, "refuzul de pe cos nu se logheaza");
+
+  /* Liniile PURTATE din formularul de comanda. */
+  assert.match(
+    s, /linieCarePerePersonalizare\(extraProducts \?\? \[\], data\.additional_items\);/,
+    "`additional_items` nu mai verifica personalizarea",
+  );
+  assert.match(s, /placeOrder\.customizationRequiredInCart/, "refuzul de pe liniile purtate nu se logheaza");
+
+  /*
+   * ⚠ Si ca poarta chiar OPRESTE. Fara `return`, ea ar fi doar un rand in jurnal, iar comanda
+   * ar fi plecat la pretul de catalog exact ca inainte — cu urma care spune ca stiam.
+   */
+  for (const m of s.matchAll(/const (eroarePers|eroarePersCos) = linieCarePerePersonalizare[\s\S]{0,400}?\n(\s*)\}/g)) {
+    assert.match(m[0], /return \{ error: eroarePers(Cos)? \};/, "poarta logheaza, dar nu opreste comanda");
+  }
+});

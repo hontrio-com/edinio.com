@@ -368,7 +368,8 @@ export async function getShippingOptions(
      * adica exact +18 pana la +45 de lei peste 0,00 pe „Ridicare personala", la 5
      * magazine publicate.
      */
-    cart?: { productId: string; quantity: number }[];
+    /* ⚠ `personalizare` sunt VALORILE, nu un pret — vezi `subtotalMaximDinCatalog`. */
+    cart?: { productId: string; quantity: number; personalizare?: unknown }[];
     /** Valoarea marfii dupa promotii, de la client. Vezi avertismentul de la `ctx.subtotal`. */
     subtotal?: number;
   },

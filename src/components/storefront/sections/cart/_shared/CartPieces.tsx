@@ -394,13 +394,39 @@ export function CosGol({ basePath, color }: { basePath: string; color: string })
  * primele. Un cos in care fiecare linie are zece randuri de rezumat nu se mai poate citi.
  */
 export function RezumatLinie({ item }: { item: CartItem }) {
-  if (!item.rezumat || item.rezumat.length === 0) return null;
-  const randuri = rezumatScurt(item.rezumat);
-  const restul = item.rezumat.length - randuri.length;
+  const { lineProblema } = useCart();
+  const problema = lineProblema(item);
+
+  if ((!item.rezumat || item.rezumat.length === 0) && !problema) return null;
+  const randuri = rezumatScurt(item.rezumat ?? []);
+  const restul = (item.rezumat?.length ?? 0) - randuri.length;
   return (
-    <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
-      {caUnRand(randuri)}
-      {restul > 0 && <span> · +{restul}</span>}
-    </p>
+    <>
+      {randuri.length > 0 && (
+        <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
+          {caUnRand(randuri)}
+          {restul > 0 && <span> · +{restul}</span>}
+        </p>
+      )}
+
+      {/*
+        ⚠ CAND SERVERUL SPUNE CA LINIA NU MAI E BUNA, SE VEDE AICI.
+
+        `lineProblema` se socotea, se punea in context — si nu-l citea nimeni. Deci cosul cadea
+        tacut pe pretul salvat (`c?.pret ?? item.price`) si arata un total perfect normal.
+        Cumparatorul completa numele, telefonul, adresa, alegea curierul, apasa „Trimite
+        comanda” — si abia atunci primea „Cana: Fisierul incarcat la «Poza» nu mai e disponibil”.
+        La ultimul clic, dupa toata munca. Aia e o comanda pierduta, nu un mesaj intarziat.
+
+        ⚠ Aici, si nu in fiecare suprafata de cos: piesa asta e randata de toate patru
+        (sertar, pagina de cos, rezumatul de finalizare, fereastra de comanda). Scris in
+        fiecare, al patrulea l-ar fi uitat.
+      */}
+      {problema && (
+        <p role="alert" className="mt-1 rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive">
+          {problema}
+        </p>
+      )}
+    </>
   );
 }

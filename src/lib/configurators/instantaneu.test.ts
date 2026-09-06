@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { citesteInstantaneul, instantaneulLiniei } from "./instantaneu";
+import { MAX_CAMPURI, MAX_LUNGIME_TEXT } from "./valori";
 
 const BUN = {
   configuratorId: "c1",
@@ -90,11 +91,17 @@ test("randurile stricate se arunca, cele bune raman", () => {
   assert.deepEqual(r.rezumat.map((x) => x.eticheta), ["Gravura"]);
 });
 
-test("textele se taie, ca sa nu rupa nici ecranul, nici AWB-ul", () => {
+test("⚠ textele se taie DOAR peste ce se poate scrie, nu sub", () => {
   /*
-   * ⚠ Aceleasi randuri ajung pe ecranul de panou, in email si pe continutul coletului. Un sir de
-   * zece mii de caractere venit dintr-o comanda veche sau dintr-o editare de mana le rupea pe
-   * toate trei.
+   * ⚠ PROBA ASTA A FOST STRANSA, si merita spus de ce. Ea cerea `<= 50` randuri si `<= 200`
+   * caractere — numere alese in cititor, sub ce poate SCRIE cumparatorul (2000 de caractere,
+   * 200 de campuri). Deci pironea o taiere TACUTA: o placuta cu 320 de caractere se scria
+   * intreaga in comanda si se citea taiata la 200, fara puncte de suspensie si fara niciun semn,
+   * pe toate suprafetele. Atelierul grava primele 200 si taia in mijlocul unui cuvant.
+   *
+   * Marginile raman — instantaneul e `jsonb` editabil din panou, si un sir de zece mii de
+   * caractere ar rupe si ecranul, si emailul, si continutul coletului — dar se iau acum de la
+   * ce se poate scrie.
    */
   const r = citesteInstantaneul({
     rezumat: [
@@ -103,9 +110,21 @@ test("textele se taie, ca sa nu rupa nici ecranul, nici AWB-ul", () => {
     ],
   });
   assert.ok(r);
-  assert.ok(r.rezumat.length <= 50, `am pastrat ${r.rezumat.length} randuri`);
-  assert.ok(r.rezumat[0].eticheta.length <= 200);
-  assert.ok(r.rezumat[0].valoare.length <= 200);
+  assert.ok(r.rezumat.length <= MAX_CAMPURI, `am pastrat ${r.rezumat.length} randuri`);
+  assert.ok(r.rezumat[0].valoare.length <= MAX_LUNGIME_TEXT);
+
+  /*
+   * ⚠ SI CA NU SE TAIE CE E LEGITIM. Fara randul asta, garda de mai sus ar fi trecut si cu o
+   * taiere la 10 caractere: `<= MAX` e adevarat pentru orice numar mai mic.
+   */
+  const lung = "x".repeat(320);
+  const bun = citesteInstantaneul({ rezumat: [{ id: "g", eticheta: "Gravura", valoare: lung }] });
+  assert.equal(bun?.rezumat[0].valoare, lung, "o gravura de 320 de caractere se taie tacut");
+
+  const multe = citesteInstantaneul({
+    rezumat: Array.from({ length: 60 }, (_, i) => ({ id: `n${i}`, eticheta: "A", valoare: "B" })),
+  });
+  assert.equal(multe?.rezumat.length, 60, "un configurator cu 60 de campuri pierde randuri");
 });
 
 test("VALORILE trec prin normalizare, nu se iau asa cum vin", () => {

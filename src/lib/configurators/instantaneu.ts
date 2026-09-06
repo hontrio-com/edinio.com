@@ -23,12 +23,30 @@
  * o eventuala recalculare, si lipsa lor nu opreste afisarea.
  */
 
-import { normalizeazaValori, type Valori } from "./valori";
+import { normalizeazaValori, MAX_CAMPURI, MAX_LUNGIME_TEXT, type Valori } from "./valori";
 import type { RandRezumat } from "./rezumat";
 
-/** Cate randuri se citesc, si cat de lungi. Aceleasi margini ca la linia de cos. */
-const MAX_RANDURI = 50;
-const MAX_TEXT = 200;
+/**
+ * Cat se citeste dintr-un instantaneu.
+ *
+ * ⚠ MARGINILE SUNT ALE SCRIERII, NU NUMERE ALESE AICI, si asta e o reparatie.
+ *
+ * Erau 50 de randuri si 200 de caractere, cu nota „aceleasi margini ca la linia de cos”. Dar
+ * cumparatorul poate SCRIE 2000 de caractere (`MAX_LUNGIME_TEXT`), iar `maxCaractere` e un camp
+ * OPTIONAL pe care publicarea nu-l cere. Deci o placuta cu 320 de caractere se scria intreaga in
+ * comanda si se citea TAIATA la 200 — fara puncte de suspensie, fara niciun semn, pe toate
+ * suprafetele: panoul, emailurile, pagina de confirmare. Atelierul grava primele 200 si taia in
+ * mijlocul unui cuvant.
+ *
+ * La fel randurile: un configurator cu 60 de campuri pierdea 10 de pe fiecare ecran.
+ *
+ * ⚠ Marginile RAMAN, si nu sunt o formalitate: instantaneul e `jsonb` vechi de luni, editabil
+ * din panou, iar un sir de zece mii de caractere ajuns aici dintr-o editare de mana ar rupe
+ * asezarea in toate trei locurile. Dar ele se iau acum de la CE SE POATE SCRIE, deci nu mai pot
+ * taia nimic legitim. Cine schimba una dintre ele le schimba pe amandoua dintr-un loc.
+ */
+const MAX_RANDURI = MAX_CAMPURI;
+const MAX_TEXT = MAX_LUNGIME_TEXT;
 
 export interface InstantaneuCitit {
   configuratorId: string | null;

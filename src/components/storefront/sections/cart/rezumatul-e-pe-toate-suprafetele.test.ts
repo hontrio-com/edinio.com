@@ -74,8 +74,24 @@ test("rezumatul scurt se taie, nu se revarsa", () => {
    * configuratie cu doisprezece campuri ar fi umplut randul si ar fi facut cosul necitibil.
    */
   const s = sursa("storefront/sections/cart/_shared/CartPieces.tsx");
-  assert.ok(s.includes("rezumatScurt(item.rezumat)"), "piesa nu mai taie lista");
+  assert.ok(s.includes("rezumatScurt(item.rezumat ?? [])"), "piesa nu mai taie lista");
   assert.ok(s.includes("caUnRand(randuri)"), "piesa nu mai scrie randul din bucata taiata");
+});
+
+test("⚠ linia care NU se poate comanda o spune, pe toate cele patru suprafete", () => {
+  /*
+   * ⚠ `lineProblema` se socotea, se punea in context — si nu-l citea nimeni. Cosul cadea deci
+   * tacut pe pretul salvat si arata un total perfect normal. Cumparatorul completa numele,
+   * telefonul, adresa, alegea curierul, apasa „Trimite comanda” — si abia atunci afla ca linia
+   * nu mai e buna. La ultimul clic, dupa toata munca: aia e o comanda pierduta.
+   *
+   * ⚠ Se cere pe PIESA COMUNA, nu pe fiecare suprafata: cele patru randeaza `RezumatLinie`,
+   * iar scrisa in fiecare, a patra ar fi uitat-o.
+   */
+  const s = sursa("storefront/sections/cart/_shared/CartPieces.tsx");
+  assert.ok(s.includes("const problema = lineProblema(item);"), "piesa nu mai intreaba daca linia e buna");
+  assert.match(s, /\{problema && \(/, "raspunsul se socoteste si nu se deseneaza");
+  assert.match(s, /role="alert"/, "avertismentul nu se anunta la cititorul de ecran");
 });
 
 test("FEREASTRA DE COMANDA foloseste ACEEASI cheie de linie ca restul cosului", () => {

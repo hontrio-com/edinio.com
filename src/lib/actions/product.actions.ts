@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { getProductLimit, numaraProduseleContului } from "@/lib/plan-limits";
 import { deleteOrphanImages } from "@/lib/r2-cleanup";
+import type { DefinitiePersonalizare } from "@/lib/customization/definitie";
 import { logError } from "@/lib/error-logger";
 import { resolveUniqueProductSlug } from "@/lib/slug";
 import { readBundleConfig } from "@/lib/bundles";
@@ -53,22 +54,17 @@ interface ProductData {
       options: { id: string; name: string; values: string[] }[];
       combinations: { id: string; title: string; price: string; sku: string; enabled: boolean }[];
     };
-    customization?: {
-      enabled: boolean;
-      fields: {
-        id: string;
-        type: string;
-        label: string;
-        placeholder?: string;
-        required: boolean;
-        max_length?: number;
-        max_files?: number;
-        max_file_size_mb?: number;
-        options?: string[];
-        default_color?: string;
-        helper_text?: string;
-      }[];
-    };
+    /*
+     * ⚠ Forma vine din MODULUL PUR, nu se mai enumera aici.
+     *
+     * Cheile erau scrise de mana, iar ⚠type⚠ era doar ⚠string⚠ — deci tocmai copia care scrie in
+     * baza nu prindea un tip inventat, si nici nu stia de cele patru tipuri noi. Un camp adaugat in
+     * formular ar fi ajuns in ⚠page_sections⚠ fara ca nimic sa-l fi verificat pe drum.
+     *
+     * ⚠ Ce chiar apara datele e ⚠normalizeazaDefinitia⚠, la CITIRE: ea arunca ce nu intelege, si
+     * ruleaza si peste randurile care exista deja in baza. Tipul de aici e un contract, nu o poarta.
+     */
+    customization?: DefinitiePersonalizare;
     google?: {
       gtin?: string; brand?: string; mpn?: string; google_product_category?: string;
       condition?: string; gender?: string; age_group?: string;

@@ -37,7 +37,7 @@ interface Props {
 }
 
 export function CampuriPersonalizare({ stare, color, numeroteaza = true, titlu }: Props) {
-  const { definitie, valori, pune, constatari, incarca, incarcaFisiere, scoateFisier } = stare;
+  const { definitie, valori, pune, constatari, incarca, motive, incarcaFisiere, scoateFisier } = stare;
   if (!definitie) return null;
 
   return (
@@ -77,7 +77,7 @@ export function CampuriPersonalizare({ stare, color, numeroteaza = true, titlu }
               color={color}
               eroare={!!eroare}
               idEroare={idEroare}
-              incarca={incarca}
+              incarca={incarca} motive={motive}
               incarcaFisiere={incarcaFisiere}
               scoateFisier={scoateFisier}
             />
@@ -107,6 +107,7 @@ interface ControlProps {
   eroare: boolean;
   idEroare: string;
   incarca: Record<string, boolean>;
+  motive: StarePersonalizare["motive"];
   incarcaFisiere: StarePersonalizare["incarcaFisiere"];
   scoateFisier: StarePersonalizare["scoateFisier"];
 }
@@ -317,7 +318,7 @@ function Control(p: ControlProps) {
   }
 }
 
-function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, incarcaFisiere, scoateFisier }: ControlProps) {
+function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, motive, incarcaFisiere, scoateFisier }: ControlProps) {
   const adrese = Array.isArray(valoare) ? (valoare as string[]) : [];
   /*
    * ⚠ MINIATURA DOAR PENTRU CE SE POATE CHIAR DESENA, si asta e o singura regula, nu doua.
@@ -437,9 +438,19 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, incarcaFisie
         /* ⚠ Pana acum un fisier prea mare sau o incarcare picata erau sarite in TACERE: clientul
            alegea patru poze si vedea trei, fara niciun mesaj. */
         <p role="alert" className="text-xs text-red-500">
-          {documente ? "Unele fisiere" : "Unele imagini"} n-au putut fi incarcate. Accepta{" "}
-          {documente ? "PDF, JPG, PNG, WEBP si HEIC" : "JPG, PNG, WEBP si HEIC"}, pana in{" "}
-          {camp.max_file_size_mb ?? (documente ? 40 : 10)} MB.
+          {/*
+            ⚠ CUVINTELE SERVERULUI, cand le are. Explicatia compusa din reglajele campului putea
+            fi FALSA in amandoua jumatatile — „pana in 100 MB" pe un fisier de 55 MB refuzat la 40,
+            si „accepta PDF" pe chiar un PDF. Genericul ramane doar pentru caderea de retea, unde
+            n-avem de la cine sa aflam motivul.
+          */}
+          {motive[camp.id] || (
+            <>
+              {documente ? "Unele fisiere" : "Unele imagini"} n-au putut fi incarcate. Accepta{" "}
+              {documente ? "PDF, JPG, PNG, WEBP si HEIC" : "JPG, PNG, WEBP si HEIC"}, pana in{" "}
+              {Math.min(camp.max_file_size_mb ?? (documente ? 40 : 10), documente ? 40 : 10)} MB.
+            </>
+          )}
         </p>
       )}
     </div>

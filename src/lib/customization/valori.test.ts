@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeazaDefinitia, type DefinitiePersonalizare } from "./definitie";
-import { normalizeazaValorile } from "./valori";
+import {
+  FISIERE_IMPLICIT, MAX_FISIERE, fisiereleCampului, normalizeazaValorile,
+} from "./valori";
 
 /**
  * Ce trimite clientul, curatat.
@@ -156,14 +158,54 @@ test("⚠ pasul se verifica, ca sa nu iasa dimensiuni pe care atelierul nu le po
   assert.match(gresit.constatari[0].mesaj, /din 5 in 5/);
 });
 
-test("⚠ fisierele: lista goala pica pe camp obligatoriu, si numarul lor se plafoneaza", () => {
+test("⚠ fisierele peste plafon SE SPUN, nu se taie in tacere", () => {
+  /*
+   * ⚠ PROBA ASTA INGHETASE TAIEREA TACUTA, si merita scris limpede ce apara acum.
+   *
+   * Ea cerea `ok: true` si doua adrese pastrate din patru trimise — adica exact purtarea care
+   * facea posibila SINGURA cale din tot sistemul prin care o comanda iese REUSITA cu date lipsa.
+   *
+   * Masurat pe drumul intreg, inainte de reparatie: comerciantul scrie 50 la „Fisiere max"
+   * (panoul il lasa), clientul incarca 50 de poze, le vede pe toate 50 pe ecran SI in rezumatul
+   * comenzii, apasa „Comanda" — iar serverul pastra 20, cu `ok: true` si `constatari: []`.
+   * Albumul se producea din 20 de poze, si nu afla nimeni: nici clientul, care vazuse 50, nici
+   * comerciantul, care vede 20 in panou si crede ca atat s-a incarcat.
+   *
+   * ⚠ O taiere care nu se spune nu e o plafonare, e o pierdere de date cu confirmare.
+   */
   const d = def([{ id: "i", type: "image", label: "Poza", required: true, max_files: 2 }]);
   assert.equal(normalizeazaValorile(d, { i: [] }).ok, false);
   assert.equal(normalizeazaValorile(d, { i: "nu-i tablou" }).ok, false);
+
   const r = normalizeazaValorile(d, { i: ["a", "b", "c", "d"] });
-  assert.equal(r.ok, true);
-  const v = r.valori.get("i");
+  assert.equal(r.ok, false, "patru fisiere pe un camp de doua au trecut in tacere");
+  assert.match(r.constatari[0].mesaj, /cel mult 2/);
+  assert.match(r.constatari[0].mesaj, /ai incarcat 4/);
+
+  /* Perechea: exact cate incap trec, si toate se pastreaza. */
+  const bun = normalizeazaValorile(d, { i: ["a", "b"] });
+  assert.equal(bun.ok, true);
+  const v = bun.valori.get("i");
   assert.equal(v?.fel === "fisiere" && v.adrese.length, 2);
+});
+
+test("⚠ plafonul NOSTRU sta peste cel al comerciantului", () => {
+  /*
+   * Comerciantul putea scrie 50, iar panoul il lasa. `fisiereleCampului` pune plafonul platformei
+   * deasupra, si e o singura functie — folosita si de vitrina (cate se pot alege), si de validare
+   * (cate se accepta). Doua cifre ar fi insemnat un ecran care promite mai mult decat se ia.
+   */
+  const d = def([{ id: "i", type: "image", label: "Poza", required: true, max_files: 50 }]);
+  assert.equal(fisiereleCampului(d.fields[0]), MAX_FISIERE);
+
+  const multe = Array.from({ length: MAX_FISIERE + 1 }, (_, i) => `a${i}`);
+  const r = normalizeazaValorile(d, { i: multe });
+  assert.equal(r.ok, false, "s-a trecut peste plafonul platformei");
+  assert.match(r.constatari[0].mesaj, new RegExp(`cel mult ${MAX_FISIERE}`));
+
+  /* Si fara nicio cerere a comerciantului, implicitul e cel de azi. */
+  const implicit = def([{ id: "i", type: "image", label: "Poza", required: true }]);
+  assert.equal(fisiereleCampului(implicit.fields[0]), FISIERE_IMPLICIT);
 });
 
 test("⚠ culoarea trebuie sa fie chiar o culoare", () => {

@@ -46,6 +46,27 @@ export const MAX_LUNGIME_TEXT = 2000;
 /** Cat de lunga poate fi o eticheta scrisa de comerciant, ca sa nu rupa randarea. */
 export const MAX_ETICHETA = 200;
 
+/**
+ * Cati megaocteti primeste chiar ruta de incarcare, pe fel de continut.
+ *
+ * ⚠ CIFRELE ASTEA ERAU SCRISE DOAR IN RUTA, si panoul nu le stia. Comerciantul putea scrie 100
+ * la „MB pe fisier", primea „Salvat", si clientul citea pe ecran „100 MB fiecare" — iar serverul
+ * refuza la 40. Fisierul lui ERA sub 100 MB si formatul ERA bun, deci amandoua explicatiile pe
+ * care i le dadea ecranul erau false, iar campul fiind obligatoriu nu mai avea ce sa incerce.
+ * Comanda pierduta, fara nicio urma nici la comerciant.
+ *
+ * Sunt aici, si nu in ruta, fiindca de ele are nevoie si POARTA DE SALVARE, si TEXTUL din vitrina.
+ * Ruta le importa de aici — o singura cifra pentru toate trei.
+ */
+export const MB_IMAGINE = 10;
+/** ⚠ Documentele au plafonul lor: un PDF de tipar la un metru patrat trece lejer de 10 MB. */
+export const MB_DOCUMENT = 40;
+
+/** Cati megaocteti are voie sa ceara un camp, dupa tipul lui. */
+export function megaoctetiiCampului(tip: string): number {
+  return tip === "fisier" ? MB_DOCUMENT : MB_IMAGINE;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    TIPURI
    ═══════════════════════════════════════════════════════════════════════════ */

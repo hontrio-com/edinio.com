@@ -1,6 +1,6 @@
 import { combinatiiActiveUnice, comboUnitPrice, parseVariants } from "@/lib/storefront/variants";
 import { normalizeazaDefinitia } from "@/lib/customization/definitie";
-import { podeaPersonalizarii, pretulDepindeDeAlegeri } from "@/lib/customization/pret";
+import { podeaPersonalizarii, pretulPoateCreste } from "@/lib/customization/pret";
 
 export interface PriceRange {
   min: number;
@@ -89,7 +89,16 @@ export function getProductPriceRange(basePrice: number, pageSections: unknown): 
 
   const podea = (pret: number): number =>
     definitie ? podeaPersonalizarii(definitie, pret) ?? pret : pret;
-  const dePornire = definitie ? pretulDepindeDeAlegeri(definitie, base) : steagSlim;
+  /*
+   * ⚠ ALTA INTREBARE DECAT POARTA FEEDURILOR, si asta a costat.
+   *
+   * Eticheta cerea pana acum `pretulDepindeDeAlegeri` — „minte pretul din catalog?". Dar
+   * intrebarea cardului e alta: „numarul asta e un MINIM?". Cand comerciantul facea EXACT ce-i
+   * cere platforma prin mesajul de la Google — „pretul din catalog [trebuie sa devina] chiar
+   * pretul de pornire" — podeaua ajungea egala cu catalogul, prima intrebare raspundea „nu", si
+   * cardul isi pierdea tacut „de la". Pe un produs care se vinde pana la 1557 de lei.
+   */
+  const dePornire = definitie ? pretulPoateCreste(definitie, base) : steagSlim;
   const cuSteag = (r: PriceRange): PriceRange => (dePornire ? { ...r, dePornire: true } : r);
 
   const variants = parseVariants(pageSections);

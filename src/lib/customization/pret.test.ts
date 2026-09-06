@@ -4,6 +4,7 @@ import { normalizeazaDefinitia, type DefinitiePersonalizare } from "./definitie"
 import { normalizeazaValorile } from "./valori";
 import {
   campurileFaraSuprafata, podeaPersonalizarii, pretUnitar, pretulDepindeDeAlegeri,
+  pretulPoateCreste,
   pretulPersonalizarii,
 } from "./pret";
 
@@ -646,4 +647,145 @@ test("⚠ campul-SURSA de tarif nu intra in socoteala asta", () => {
   })!;
   /* Fara dimensiuni, comanda cade oricum pe „Completeaza Latimea" — dar NU pe materialul-sursa. */
   assert.deepEqual(campurileFaraSuprafata(d, socoteste(d, { mat: "std" }).v.valori), []);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ DOUA INTREBARI, NU UNA: „minte catalogul?" si „poate creste?"
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ instructiunea platformei il ducea pe comerciant CHIAR in defect", () => {
+  /*
+   * ⚠ SCENARIUL, masurat pe fototapetul din probele proiectului:
+   *
+   *   Ziua 1: catalog 89. Cardul scrie corect „de la 48,30 lei" — dar poarta de feed scoate
+   *           produsul din Google si Meta si ii scrie comerciantului in panou chiar mesajul
+   *           nostru: „pretul din catalog [trebuie sa devina] chiar pretul de pornire".
+   *   Ziua 2: comerciantul face ce i s-a cerut si pune 48,30. Produsul se intoarce in feeduri —
+   *           si, fara ca nimeni sa fi atins cardul, grila incepe sa scrie „48,30 lei" in loc de
+   *           „de la 48,30 lei". Pe un produs care se vinde pana la 1557 de lei.
+   *   Ziua 3: clientul sorteaza dupa pret, il gaseste intre marunțisuri, apasa — si pe pagina
+   *           scrie „de la 48,30 lei". Doua ecrane, doua promisiuni, acelasi produs.
+   *
+   * Cauza: o singura functie raspundea la doua intrebari diferite. Cand podeaua ajunge egala cu
+   * catalogul, „minte catalogul?" devine NU — corect pentru feed, gresit pentru eticheta.
+   */
+  const d = fototapet();
+
+  /* Ziua 1: amandoua raspund „da", din motive diferite. */
+  assert.equal(pretulDepindeDeAlegeri(d, 89), true, "poarta de feed n-a vazut minciuna");
+  assert.equal(pretulPoateCreste(d, 89), true);
+
+  /* Ziua 2: feedul se linisteste, eticheta NU. Asta e toata reparatia. */
+  assert.equal(podeaPersonalizarii(d, 48.3), 48.3);
+  assert.equal(pretulDepindeDeAlegeri(d, 48.3), false, "produsul ar ramane scos din feeduri");
+  assert.equal(pretulPoateCreste(d, 48.3), true, "cardul si-a pierdut iar „de la”");
+});
+
+test("⚠ produsele VECHI raman fara „de la” — sunt 29 in productie", () => {
+  /*
+   * Perechea obligatorie: un predicat care spune „da" la tot ar fi trecut proba de mai sus si ar
+   * fi pus „de la" pe fiecare card din platforma.
+   */
+  const d = normalizeazaDefinitia({
+    enabled: true,
+    fields: [
+      { id: "t", type: "text", label: "Nume gravat", required: true, max_length: 20 },
+      { id: "p", type: "image", label: "", required: false },
+    ],
+  })!;
+  assert.equal(pretulPoateCreste(d, 41), false);
+  assert.equal(pretulDepindeDeAlegeri(d, 41), false);
+});
+
+test("⚠ un supliment doar OPTIONAL capata „de la” — schimbare vizibila, anuntata", () => {
+  /*
+   * ⚠ CONSECINTA DE STIUT, si nu una strecurata: un card care azi scrie „100 lei" pe un produs
+   * cu cutie cadou optionala +35 va scrie „de la 100 lei".
+   *
+   * Nu e un pret schimbat — 100 ramane platibil, si e chiar pretul de pornire. E raspunsul cinstit
+   * la intrebarea „poate cineva plati mai mult?".
+   *
+   * ⚠ Si poarta feedurilor NU se misca: acolo 100 chiar E pretul de pornire, deci produsul ramane
+   * publicat. Daca cele doua ar fi ramas o singura functie, reparatia etichetei ar fi scos din
+   * Google si Meta fiecare produs cu supliment optional.
+   */
+  const d = normalizeazaDefinitia({
+    enabled: true,
+    fields: [{ id: "c", type: "comutator", label: "Cutie cadou", required: false,
+      impact: { fel: "fix", suma: 35 } }],
+  })!;
+  assert.equal(pretulPoateCreste(d, 100), true);
+  assert.equal(pretulDepindeDeAlegeri(d, 100), false, "produsul ar fi fost scos din feeduri");
+});
+
+test("⚠ plafonul alege optiunea cea mai SCUMPA, si comutatorul PORNIT", () => {
+  /* Oglinda podelei. Fara ea, „poate creste?" ar fi raspuns „nu" pe chiar produsele care cresc. */
+  const d = fototapet();
+  /* Podea: 100x70 cm cu Standard = 0,7 m² x 69 = 48,30. Plafon: 500x350 cu Premium = 17,5 x 89. */
+  assert.equal(podeaPersonalizarii(d, 89), 48.3);
+  assert.equal(pretulPoateCreste(d, 48.3), true);
+
+  /* Si la un produs unde nimic nu poate creste, raspunsul e „nu". */
+  const fix = normalizeazaDefinitia({
+    enabled: true,
+    fields: [{ id: "g", type: "text", label: "Gravura", required: true,
+      impact: { fel: "fix", suma: 20 } }],
+  })!;
+  assert.equal(podeaPersonalizarii(fix, 100), 120);
+  assert.equal(pretulPoateCreste(fix, 100), false, "un supliment OBLIGATORIU si fix nu poate creste");
+});
+
+test("⚠ fiecare jumatate a plafonului conteaza SINGURA", () => {
+  /*
+   * ⚠ PROBELE DE MAI SUS N-AU PRINS DOI MUTANTI, si merita scris de ce.
+   *
+   * La fototapet, „poate creste?" ramane ADEVARAT chiar daca plafonul ia optiunea cea mai ieftina
+   * SAU laturile minime — fiindca cealalta jumatate singura duce oricum pretul mai sus. Un
+   * raspuns bun din motiv gresit e tot un raspuns pe care nu te poti bizui.
+   *
+   * Aici fiecare dimensiune e IZOLATA: un caz in care poate varia doar OPTIUNEA, si unul in care
+   * pot varia doar LATURILE.
+   */
+
+  /* 1. Doar optiunea: fara camp de dimensiuni, deci laturile nu pot schimba nimic. */
+  const doarOptiunea = normalizeazaDefinitia({
+    enabled: true,
+    fields: [{ id: "f", type: "butoane", label: "Finisaj", required: true, optiuni: [
+      { id: "simplu", eticheta: "Simplu" },
+      { id: "lux", eticheta: "Lux", impact: { fel: "fix", suma: 50 } },
+    ] }],
+  })!;
+  assert.equal(podeaPersonalizarii(doarOptiunea, 100), 100, "podeaua ia optiunea gratuita");
+  assert.equal(
+    pretulPoateCreste(doarOptiunea, 100), true,
+    "plafonul nu mai ia optiunea cea mai SCUMPA",
+  );
+
+  /*
+   * 2. Doar LATIMEA, si numai ea: inaltimea e pironita (min = max), iar tariful are o singura
+   *    optiune. ⚠ Cu amandoua laturile libere, un mutant care strica DOAR latimea trecea —
+   *    inaltimea singura ducea oricum aria mai sus. Fiecare latura isi cere cazul ei.
+   */
+  const doarLatimea = normalizeazaDefinitia({
+    enabled: true,
+    fields: [
+      { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+        latime: { min: 100, max: 500 }, inaltime: { min: 100, max: 100 } },
+    ],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 69, includePretulProdusului: false },
+  })!;
+  assert.equal(podeaPersonalizarii(doarLatimea, 89), 69, "1 m² x 69");
+  assert.equal(pretulPoateCreste(doarLatimea, 89), true, "plafonul nu mai ia LATIMEA maxima");
+
+  /* 3. Si oglinda: doar INALTIMEA, cu latimea pironita. */
+  const doarInaltimea = normalizeazaDefinitia({
+    enabled: true,
+    fields: [
+      { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+        latime: { min: 100, max: 100 }, inaltime: { min: 100, max: 350 } },
+    ],
+    pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 69, includePretulProdusului: false },
+  })!;
+  assert.equal(podeaPersonalizarii(doarInaltimea, 89), 69);
+  assert.equal(pretulPoateCreste(doarInaltimea, 89), true, "plafonul nu mai ia INALTIMEA maxima");
 });

@@ -293,3 +293,43 @@ test("⚠ butonul cardului SPUNE ce face, nu ce ar vrea clientul sa faca", () =>
     assert.match(s, /Personalizeaza/, `${fisier} promite inca altceva decat face`);
   }
 });
+
+test("⚠ cardul pastreaza „de la” si dupa ce comerciantul face ce-i cere platforma", () => {
+  /*
+   * ⚠ ZIUA 2 DIN SCENARIU, si e chiar drumul pe care il indica platforma.
+   *
+   * Poarta de feed scoate fototapetul din Google si ii scrie comerciantului „pretul din catalog
+   * [trebuie sa devina] chiar pretul de pornire". El pune 48,30 — produsul se intoarce in feeduri,
+   * si pana la reparatie cardul isi pierdea tacut „de la", pe un produs care se vinde pana la
+   * 1557 de lei.
+   */
+  const fototapet = {
+    customization: {
+      enabled: true,
+      fields: [
+        { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+          latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+        { id: "mat", type: "butoane", label: "Material", required: true, optiuni: [
+          { id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } },
+          { id: "prm", eticheta: "Premium", impact: { fel: "pe_m2", suma: 89 } },
+        ] },
+      ],
+      pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 69, campTarif: "mat",
+        includePretulProdusului: false },
+    },
+  };
+
+  /* Ziua 1: catalog 89 — cardul spune „de la 48,30". */
+  assert.equal(getProductPriceRange(89, fototapet).dePornire, true);
+
+  /* Ziua 2: catalog 48,30 — podeaua e chiar catalogul, si „de la" TREBUIE sa ramana. */
+  const ziua2 = getProductPriceRange(48.3, fototapet);
+  assert.equal(ziua2.min, 48.3);
+  assert.equal(ziua2.dePornire, true, "cardul si-a pierdut „de la” exact cand nu trebuia");
+
+  /* Si in payload-ul slim, de unde il citeste cardul din grila. */
+  assert.deepEqual(
+    slimPageSections(fototapet, 48.3)?.customization,
+    { cere: true, dePornire: true },
+  );
+});

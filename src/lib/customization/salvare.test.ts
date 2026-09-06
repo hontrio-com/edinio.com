@@ -392,3 +392,55 @@ test("⚠ campul „numar” cu minimul peste maxim nu mai poate fi salvat", () 
   assert.equal(numar({ min: 0, max: 100, pas: 10, implicit: 30 }), null);
   assert.equal(numar({}), null, "un camp fara margini a fost refuzat degeaba");
 });
+
+test("⚠ limitele de incarcare nu pot depasi ce accepta serverul", () => {
+  /*
+   * ⚠ DOUA MINCIUNI DIFERITE, si prima e cea grava.
+   *
+   * NUMARUL: comerciantul scrie 50 la „Fisiere max", primeste „Salvat", clientul incarca 50 de
+   * poze si le vede pe toate 50 pe ecran si in rezumat — iar serverul pastra 20, cu `ok: true`.
+   * Comanda REUSITA cu date lipsa; albumul se producea din 20 de poze si nu afla nimeni.
+   *
+   * MARIMEA: comerciantul scrie 100 la „MB pe fisier" fiindca atat au PDF-urile lui. Clientul
+   * citeste „100 MB fiecare", alege un PDF de 55 MB, iar serverul il refuza la 40 — si ecranul ii
+   * spune „pana in 100 MB" si „accepta PDF". Amandoua false, pe un camp obligatoriu de care
+   * atarna comanda. Comanda pierduta, fara nicio urma nici la comerciant.
+   */
+  const camp = (extra: Record<string, unknown>) => problemaPersonalizarii({
+    customization: { enabled: true, fields: [
+      { id: "i", type: "image", label: "Poza", required: true, ...extra },
+    ] },
+  });
+
+  assert.match(String(camp({ max_files: 50 })), /cel mult 20 fisiere/);
+  assert.match(String(camp({ max_file_size_mb: 100 })), /cel mult 10 MB/);
+
+  /* Campul de FISIER are plafonul lui, mai mare — un PDF de tipar trece lejer de 10 MB. */
+  const doc = (extra: Record<string, unknown>) => problemaPersonalizarii({
+    customization: { enabled: true, fields: [
+      { id: "f", type: "fisier", label: "Tipar", required: true, ...extra },
+    ] },
+  });
+  assert.equal(doc({ max_file_size_mb: 40 }), null, "40 MB e chiar plafonul documentelor");
+  assert.match(String(doc({ max_file_size_mb: 100 })), /cel mult 40 MB/);
+
+  /*
+   * ⚠ PERECHEA, si ea e masurata pe productie: cele 25 de campuri de imagine vii stau intre 1 si
+   * 10 MB si intre 1 si 5 fisiere. Nicio salvare existenta nu incepe sa cada.
+   */
+  assert.equal(camp({ max_files: 5, max_file_size_mb: 10 }), null);
+  assert.equal(camp({}), null, "un camp fara limite scrise a fost refuzat degeaba");
+});
+
+test("⚠ mesajul se poate citi si cand campul n-are eticheta", () => {
+  /*
+   * 8 din cele 25 de campuri de imagine vii au eticheta GOALA. Un mesaj „Campul «» cere..." nu
+   * ajuta pe nimeni — cade pe pozitie, ca toate celelalte din fisierul asta.
+   */
+  const mesaj = problemaPersonalizarii({
+    customization: { enabled: true, fields: [
+      { id: "i", type: "image", label: "", required: false, max_files: 50 },
+    ] },
+  });
+  assert.match(String(mesaj), /^al 1-lea camp/);
+});

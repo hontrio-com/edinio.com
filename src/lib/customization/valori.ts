@@ -47,9 +47,14 @@ export interface ValoriCurate {
 }
 
 /** Cate fisiere accepta un camp cand comerciantul n-a spus. Aceeasi cifra ca in formularul de azi. */
-const FISIERE_IMPLICIT = 5;
+export const FISIERE_IMPLICIT = 5;
 /** Plafonul nostru peste cel al comerciantului. */
-const MAX_FISIERE = 20;
+export const MAX_FISIERE = 20;
+
+/** Cate fisiere accepta CHIAR campul asta, cu plafonul nostru peste al comerciantului. */
+export function fisiereleCampului(camp: CampPersonalizare): number {
+  return Math.min(camp.max_files ?? FISIERE_IMPLICIT, MAX_FISIERE);
+}
 /** Cat de lunga poate fi adresa unui fisier. */
 const MAX_ADRESA = 500;
 
@@ -159,11 +164,33 @@ function citesteCamp(
        * serverului nu exista, deci ar fi trecut orice.
        */
       const brute = Array.isArray(brut) ? brut : [];
-      const adrese = brute
-        .filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= MAX_ADRESA)
-        .slice(0, Math.min(camp.max_files ?? FISIERE_IMPLICIT, MAX_FISIERE));
-      if (!adrese.length) return lipsa("Incarca cel putin un fisier.");
-      return { fel: "fisiere", adrese };
+      const bune = brute
+        .filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= MAX_ADRESA);
+      const cate = fisiereleCampului(camp);
+      /*
+       * ⚠ CE E PESTE PLAFON SE SPUNE, NU SE TAIE IN TACERE.
+       *
+       * Pana acum aici era doar un `.slice()`. Masurat: comerciantul scrie 50 la „Fisiere max"
+       * (panoul il lasa), clientul incarca 50 de poze si le vede pe toate 50 pe ecran si in
+       * rezumatul comenzii — iar serverul pastra 20, cu `ok: true` si `constatari: []`.
+       *
+       * Comanda se inregistra REUSITA, albumul se producea din 20 de poze, si nu afla nimeni:
+       * nici clientul, care vazuse 50, nici comerciantul, care vede 20 in panou si crede ca atat
+       * s-a incarcat. Singura cale din tot sistemul prin care o comanda iese buna cu date lipsa.
+       *
+       * ⚠ Se opreste ca o CONSTATARE, nu ca o taiere: modulul ruleaza pe amandoua partile, deci
+       * mesajul apare si langa camp in vitrina, si opreste comanda pe server.
+       */
+      if (bune.length > cate) {
+        constatari.push({
+          campId: camp.id, eticheta: camp.label,
+          mesaj: `Se pot trimite cel mult ${cate} ${cate === 1 ? "fisier" : "fisiere"};`
+            + ` ai incarcat ${bune.length}. Sterge din ele.`,
+        });
+        return null;
+      }
+      if (!bune.length) return lipsa("Incarca cel putin un fisier.");
+      return { fel: "fisiere", adrese: bune };
     }
 
     case "select": {

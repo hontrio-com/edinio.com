@@ -1,5 +1,5 @@
 import type { CampPersonalizare, DefinitiePersonalizare, Impact } from "./definitie";
-import { suprafataFacturata, suprafataM2 } from "./suprafata";
+import { MAX_LATURA_M, suprafataFacturata, suprafataM2 } from "./suprafata";
 import type { ValoareCamp } from "./valori";
 
 /**
@@ -377,6 +377,124 @@ export function podeaPersonalizarii(
   const valori = valoriDePodea(definitie);
   if (!valori) return null;
   return pretUnitar(pretulPersonalizarii(definitie, valori), bazaPeBucata);
+}
+
+/**
+ * Valorile CELE MAI SCUMPE pe care le poate alege un client — oglinda podelei.
+ *
+ * ⚠ Aceleasi reguli, intoarse: laturile la MAXIM, comutatoarele PORNITE, iar la `butoane`
+ * optiunea cea mai scumpa — si la campurile OBLIGATORII, si la cele optionale, fiindca omul le
+ * poate alege pe amandoua. Restul e identic cu `valoriDePodea`, inclusiv trucul pentru campul-sursa
+ * de tarif, unde o optiune fara `pe_m2` inseamna „tariful de baza", nu „gratis".
+ */
+function valoriDePlafon(definitie: DefinitiePersonalizare): Map<string, ValoareCamp> | null {
+  const mod = definitie.pret ?? { fel: "adaugat" as const };
+  const valori = new Map<string, ValoareCamp>();
+  const campDim = campulDeSuprafata(definitie);
+  const campTarifId = mod.fel === "suprafata" ? mod.campTarif : undefined;
+
+  let m2 = 0;
+  if (campDim) {
+    /*
+     * ⚠ Laturile NEMARGINITE dau un plafon urias, dar FINIT (`MAX_LATURA_M`). El nu ajunge
+     * niciodata intr-un numar afisat — se foloseste doar ca sa se raspunda „poate creste?".
+     */
+    const lat = campDim.latime?.max ?? MAX_LATURA_M * 100;
+    const inalt = campDim.inaltime?.max ?? MAX_LATURA_M * 100;
+    const a = suprafataM2(lat, inalt, campDim.unitate ?? "cm");
+    if (a === null) { if (mod.fel === "suprafata") return null; }
+    else {
+      m2 = suprafataFacturata(
+        a,
+        mod.fel === "suprafata" ? mod.minimM2 : undefined,
+        mod.fel === "suprafata" ? mod.rotunjire : undefined,
+      );
+      valori.set(campDim.id, { fel: "dimensiuni", latime: lat, inaltime: inalt });
+    }
+  } else if (mod.fel === "suprafata") {
+    return null;
+  }
+
+  const cost = (imp: Impact | undefined): number => {
+    if (!imp || imp.fel === "fara" || imp.suma <= 0) return 0;
+    return imp.fel === "pe_m2" ? imp.suma * m2 : imp.suma;
+  };
+
+  for (const camp of definitie.fields) {
+    if (campDim && camp.id === campDim.id) continue;
+
+    if (camp.type === "butoane") {
+      const optiuni = camp.optiuni ?? [];
+      if (!optiuni.length) continue;
+      const eSursa = camp.id === campTarifId;
+      const costulOptiunii = (o: { impact?: Impact }): number =>
+        eSursa && mod.fel === "suprafata" && o.impact?.fel !== "pe_m2"
+          ? mod.tarif * m2
+          : cost(o.impact);
+      let cea = optiuni[0];
+      for (const o of optiuni) if (costulOptiunii(o) > costulOptiunii(cea)) cea = o;
+      valori.set(camp.id, { fel: "optiune", id: cea.id });
+      continue;
+    }
+
+    /* ⚠ Comutatorul PORNIT, spre deosebire de podea, unde e stins. */
+    if (camp.type === "comutator") {
+      valori.set(camp.id, { fel: "pornit", pornit: true });
+      continue;
+    }
+
+    valori.set(camp.id, { fel: "text", text: "" });
+  }
+
+  return valori;
+}
+
+/** Cel mai mare pret pe bucata pe care il poate plati cineva, sau `null` cand nu se poate afla. */
+function plafonPersonalizarii(
+  definitie: DefinitiePersonalizare,
+  bazaPeBucata: number,
+): number | null {
+  const valori = valoriDePlafon(definitie);
+  if (!valori) return null;
+  return pretUnitar(pretulPersonalizarii(definitie, valori), bazaPeBucata);
+}
+
+/**
+ * Poate cineva plati MAI MULT decat numarul afisat?
+ *
+ * ═══ ⚠ DE CE E O A DOUA INTREBARE, SI NU ACEEASI ═══
+ *
+ * `pretulDepindeDeAlegeri` raspunde la „minte pretul din catalog?" — si ea pazeste FEEDURILE
+ * publice, unde un produs scos e o paguba. `pretulPoateCreste` raspunde la „numarul asta e un
+ * MINIM?" — si ea hotaraste doar eticheta „de la" de pe card.
+ *
+ * Confundate, se strica una pe alta, si asta s-a masurat:
+ *
+ *   Ziua 1: fototapet cu `products.price` = 89. Cardul scrie corect „de la 48,30 lei", dar poarta
+ *           de feed il scoate din Google si Meta, si ii scrie comerciantului in panou chiar
+ *           instructiunea noastra: „pretul din catalog [trebuie sa devina] chiar pretul de pornire".
+ *   Ziua 2: comerciantul face ce i s-a cerut si pune 48,30. Produsul se intoarce in feeduri — si,
+ *           fara ca nimeni sa fi atins cardul, grila incepe sa scrie „48,30 lei" in loc de
+ *           „de la 48,30 lei". Podeaua a ajuns egala cu catalogul, deci raspunsul s-a schimbat.
+ *   Ziua 3: clientul sorteaza dupa pret, gaseste fototapetul intre marunțisuri la 48,30, apasa, si
+ *           pe pagina scrie „de la 48,30 lei". Isi pune 3x2,5 m Premium: 667,50.
+ *
+ * Adica instructiunea platformei il ducea pe comerciant chiar in defect.
+ *
+ * ⚠ CONSECINTA DE STIUT: „de la" apare acum si la produsele din modul „adaugat" cu supliment
+ * doar OPTIONAL — un card care azi scrie „100 lei" va scrie „de la 100 lei". Nu e un pret
+ * schimbat: 100 ramane platibil, si e chiar pretul de pornire. E raspunsul cinstit la intrebarea
+ * pusa, si e o schimbare vizibila pe carduri care azi arata bine.
+ */
+export function pretulPoateCreste(
+  definitie: DefinitiePersonalizare,
+  bazaPeBucata: number,
+): boolean {
+  const podea = podeaPersonalizarii(definitie, bazaPeBucata);
+  const plafon = plafonPersonalizarii(definitie, bazaPeBucata);
+  /* Ce nu se poate socoti nu se poate promite ca pret exact. */
+  if (podea === null || plafon === null) return true;
+  return round2(plafon) > round2(podea);
 }
 
 /**

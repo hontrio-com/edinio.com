@@ -1,6 +1,7 @@
 import {
-  MAX_CAMPURI, MAX_OPTIUNI, normalizeazaDefinitia,
+  MAX_CAMPURI, MAX_OPTIUNI, megaoctetiiCampului, normalizeazaDefinitia,
 } from "./definitie";
+import { MAX_FISIERE } from "./valori";
 import { campulDeSuprafata } from "./pret";
 
 /**
@@ -98,6 +99,29 @@ export function problemaPersonalizarii(pageSections: unknown): string | null {
       if (fara) {
         return `${nume} e obligatoriu si n-are nicio optiune, deci clientul nu-l poate completa —`
           + " produsul nu s-ar putea comanda. Adauga cel putin o optiune, sau fa campul optional.";
+      }
+    }
+
+    /*
+     * ⚠ LIMITELE DE INCARCARE NU POT DEPASI CE ACCEPTA SERVERUL.
+     *
+     * Casutele „Fisiere max" si „MB pe fisier" erau libere, si nimic nu le margine — nici panoul,
+     * nici cititorul (spre deosebire de vecinul lor, `max_length`, unde plafonul CHIAR se pune).
+     * Deci comerciantul scria 50 si 100, primea „Salvat", si mintea apoi propriul client de doua
+     * ori: ecranul promitea „50 fisiere, 100 MB fiecare", iar serverul pastra 20 si refuza la 40.
+     *
+     * ⚠ Numarul e jumatatea GRAVA: doar el produce o comanda REUSITA cu date lipsa. Marimea
+     * macar cade zgomotos, chiar daca pe un mesaj gresit.
+     */
+    if (camp.type === "image" || camp.type === "fisier") {
+      if ((camp.max_files ?? 0) > MAX_FISIERE) {
+        return `${nume}: se pot trimite cel mult ${MAX_FISIERE} fisiere pe camp; ai cerut`
+          + ` ${camp.max_files}. Peste atat, restul s-ar pierde fara ca cineva sa afle.`;
+      }
+      const mb = megaoctetiiCampului(camp.type);
+      if ((camp.max_file_size_mb ?? 0) > mb) {
+        return `${nume}: se accepta cel mult ${mb} MB pe fisier; ai cerut`
+          + ` ${camp.max_file_size_mb}. Peste atat, incarcarea cade si clientul nu afla de ce.`;
       }
     }
 

@@ -3,10 +3,21 @@ import { randomUUID } from "node:crypto";
 import { uploadToR2 } from "@/lib/r2";
 import { detectDocMime, detectImageMime, isAllowedImage, MAX_PIXELI } from "@/lib/utils/file-signature";
 import sharp from "sharp";
+import { MB_DOCUMENT, MB_IMAGINE } from "@/lib/customization/definitie";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 
+/*
+ * ⚠ RULEAZA PE NODE, si nu e o formalitate: ruta foloseste `sharp`, care e un modul NATIV.
+ *
+ * Fara randul asta build-ul cade la export cu „Failed to load external module sharp:
+ * sharp.libvipsVersion is not a function" — masurat. Cele doua surori care folosesc `sharp`
+ * (`/api/img` si `/api/upload`) il aveau de la inceput; ruta asta n-avea nevoie pana cand a
+ * capatat plafonul de pixeli.
+ */
+export const runtime = "nodejs";
+
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
-const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_SIZE = MB_IMAGINE * 1024 * 1024;
 /*
  * ⚠ DOCUMENTELE AU PLAFONUL LOR, si nu din generozitate: un PDF de tipar la un metru patrat, cu
  * imagini incorporate, trece lejer de 10 MB. Cu plafonul imaginilor, campul de fisier ar fi fost o
@@ -15,7 +26,7 @@ const MAX_SIZE = 10 * 1024 * 1024; // 10MB
  * ⚠ Si ramane un plafon: capatul e PUBLIC si neautentificat, iar depozitul se plateste. 40 MB e
  * cat un PDF de tipar cinstit, si nu cat o arhiva.
  */
-const MAX_SIZE_DOC = 40 * 1024 * 1024; // 40MB
+const MAX_SIZE_DOC = MB_DOCUMENT * 1024 * 1024;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EXT_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic",

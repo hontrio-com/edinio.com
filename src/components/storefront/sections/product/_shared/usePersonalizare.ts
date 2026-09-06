@@ -11,7 +11,8 @@ import {
   type RezultatPret,
 } from "@/lib/customization/pret";
 import { formatPrice } from "@/lib/utils/format";
-import { normalizeazaValorile } from "@/lib/customization/valori";
+import { fisiereleCampului, normalizeazaValorile } from "@/lib/customization/valori";
+import { megaoctetiiCampului } from "@/lib/customization/definitie";
 
 /**
  * Starea personalizarii pe pagina de produs si in formularul de comanda.
@@ -78,6 +79,15 @@ export interface StarePersonalizare {
   verifica: () => boolean;
   /** Fisierele in curs de incarcare, pe camp. */
   incarca: Record<string, boolean>;
+  /**
+   * De ce n-a mers incarcarea, pe camp — CU CUVINTELE SERVERULUI.
+   *
+   * ⚠ Fara asta, ecranul isi compunea singur o explicatie din reglajele campului („pana in 100
+   * MB", „accepta PDF, JPG..."), iar cand comerciantul ceruse un plafon peste cel al serverului
+   * amandoua erau FALSE: fisierul chiar era sub 100 MB si chiar era PDF. Pe un camp obligatoriu,
+   * omul ramanea fara nimic de incercat.
+   */
+  motive: Record<string, string>;
   incarcaFisiere: (camp: CampPersonalizare, fisiere: FileList | null) => Promise<void>;
   scoateFisier: (campId: string, index: number) => void;
 }
@@ -128,6 +138,7 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
   const [valori, setValori] = useState<ValoriBrute>(() => valoriDePornire(definitie));
   const [aratate, setAratate] = useState(false);
   const [incarca, setIncarca] = useState<Record<string, boolean>>({});
+  const [motive, setMotive] = useState<Record<string, string>>({});
 
   const pune = useCallback((campId: string, valoare: unknown) => {
     setValori((v) => ({ ...v, [campId]: valoare }));
@@ -179,7 +190,8 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
       setIncarca((u) => ({ ...u, [camp.id]: true }));
       try {
         const acum = Array.isArray(valori[camp.id]) ? (valori[camp.id] as string[]) : [];
-        const maxim = camp.max_files ?? 5;
+        /* ⚠ Plafonul nostru peste al comerciantului — vezi `fisiereleCampului`. */
+        const maxim = fisiereleCampului(camp);
         /*
          * ⚠ Campul de FISIER are alt implicit decat cel de imagine: un PDF de tipar la un metru
          * patrat trece lejer de 10 MB, iar cu plafonul imaginilor tipul asta ar fi refuzat chiar
@@ -187,9 +199,18 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
          * scrie comerciantul se respecta oricum, daca a scris ceva.
          */
         const documente = camp.type === "fisier";
-        const octetiMax = (camp.max_file_size_mb ?? (documente ? 40 : 10)) * 1024 * 1024;
+        /*
+         * ⚠ ACELASI PLAFON CA AL SERVERULUI, nu unul mai mare. Comerciantul putea scrie 100, iar
+         * filtrul de aici il credea: fisierul pleca, serverul il refuza la 40, si ecranul ii spunea
+         * clientului „pana in 100 MB" — adica il mintea de doua ori. Poarta de salvare nu mai lasa
+         * cifra sa treaca, dar randul asta o margineste si pe randurile scrise inainte.
+         */
+        const mbMax = Math.min(camp.max_file_size_mb ?? megaoctetiiCampului(camp.type),
+          megaoctetiiCampului(camp.type));
+        const octetiMax = mbMax * 1024 * 1024;
         const adrese: string[] = [];
         let refuzat = false;
+        let motiv = "";
 
         for (const f of Array.from(fisiere).slice(0, Math.max(0, maxim - acum.length))) {
           /*
@@ -211,7 +232,18 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
             const res = await fetch("/api/upload-customization", { method: "POST", body: fd });
             const date = (await res.json()) as { url?: string; error?: string };
             if (date.url) adrese.push(date.url);
-            else refuzat = true;
+            else {
+              refuzat = true;
+              /*
+               * ⚠ SE PASTREAZA MESAJUL SERVERULUI, nu se arunca.
+               *
+               * Aruncat, ecranul scria o explicatie generica din reglajele campului — „pana in
+               * 100 MB", „accepta PDF, JPG..." — iar fisierul clientului ERA sub 100 MB si ERA
+               * PDF. Amandoua explicatiile false, pe un camp obligatoriu de care depinde comanda.
+               * Serverul stie adevaratul motiv; el trebuie sa ajunga la om.
+               */
+              if (!motiv && typeof date.error === "string" && date.error) motiv = date.error;
+            }
           } catch {
             /* ⚠ Si o retea cazuta se spune. Pana acum `fetch` nu era nici macar in `try`. */
             refuzat = true;
@@ -222,6 +254,8 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
         if (refuzat) {
           setAratate(true);
           setIncarca((u) => ({ ...u, [`${camp.id}:eroare`]: true }));
+          /* Textul serverului, cand exista; altfel ramane cel generic din componenta. */
+          setMotive((m) => ({ ...m, [camp.id]: motiv }));
         }
       } finally {
         setIncarca((u) => ({ ...u, [camp.id]: false }));
@@ -276,6 +310,7 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
     detalii,
     verifica,
     incarca,
+    motive,
     incarcaFisiere,
     scoateFisier,
   };

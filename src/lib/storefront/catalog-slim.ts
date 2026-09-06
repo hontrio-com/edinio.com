@@ -1,5 +1,5 @@
 import { cerePersonalizarea, normalizeazaDefinitia } from "@/lib/customization/definitie";
-import { pretulDepindeDeAlegeri } from "@/lib/customization/pret";
+import { pretulPoateCreste } from "@/lib/customization/pret";
 import { getProductPriceRange, type PriceRange } from "@/lib/utils/product-price";
 
 /**
@@ -114,10 +114,11 @@ export function slimPageSections(
      * ce arata azi.
      */
     const definitie = normalizeazaDefinitia((ps as { customization?: unknown } | null)?.customization);
+    /* ⚠ Vezi `pretulPoateCreste`: alta intrebare decat poarta feedurilor, dinadins. */
     const dePornire =
       definitie !== null
       && pretDeBaza !== undefined
-      && pretulDepindeDeAlegeri(definitie, pretDeBaza);
+      && pretulPoateCreste(definitie, pretDeBaza);
     slim = {
       ...(slim ?? {}),
       customization: { cere: true, ...(dePornire ? { dePornire: true } : {}) },

@@ -18,7 +18,8 @@ import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
 import { getAttribution } from "@/lib/storefront/attribution";
 import { pretPeTrepte, type QuantityTier } from "@/lib/storefront/quantity-tiers";
-import { useCartOptional } from "@/components/storefront/cart/CartProvider";
+import { lineKey, useCartOptional, type CartItem } from "@/components/storefront/cart/CartProvider";
+import { RezumatLinie } from "@/components/storefront/sections/cart/_shared/CartPieces";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { CompanyFields, useCompanyBilling } from "./CompanyFields";
@@ -100,7 +101,15 @@ interface Props {
   initialQuantity?: number;
   customizationFields?: CustomizationFieldDef[];
   /** Items already in the storefront cart, carried into this order. */
-  cartItems?: { productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string; configuratie?: unknown }[];
+  /*
+   * ⚠ Chiar forma din cos, nu o copie ingustata.
+   *
+   * Scrisa aici camp cu camp, forma pierdea `amprenta` — iar `lineKey` o citeste ca sa
+   * deosebeasca doua gravuri diferite ale aceluiasi produs. Tipul spunea ca nu exista, dar
+   * obiectul o purta: mergea din intamplare, si s-ar fi stricat la prima rescriere care
+   * construieste liniile camp cu camp.
+   */
+  cartItems?: CartItem[];
   /** Called after the order is placed so the caller can clear the cart. */
   /**
    * Comanda a plecat cu liniile astea de cos in ea.
@@ -268,7 +277,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const [custValues, setCustValues] = useState<Record<string, string | string[]>>({});
   const [custUploading, setCustUploading] = useState<Record<string, boolean>>({});
   // Editable copy of the carried-over cart (change quantity / remove inside the form).
-  const [cartLines, setCartLines] = useState<{ productId: string; name: string; price: number; imageUrl: string | null; quantity: number; variantTitle?: string; configuratie?: unknown }[]>(cartItems ?? []);
+  const [cartLines, setCartLines] = useState<CartItem[]>(cartItems ?? []);
 
   // Discount state
   const [discountInput, setDiscountInput] = useState("");
@@ -288,9 +297,18 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // (this product + cart) so discount, min-order, free-shipping and total all
   // account for it; `productSubtotal` stays for this product's own lines.
   const cart = cartLines;
-  // A carried line is identified by product + variant, so two variants of the same
-  // product stay distinct when editing quantity / removing / rendering.
-  const cartLineKey = (l: { productId: string; variantTitle?: string }) => l.variantTitle ? `${l.productId}::${l.variantTitle}` : l.productId;
+  /*
+   * ⚠ ACEEASI cheie ca in cos, nu o a doua copie.
+   *
+   * Era scrisa aici a doua oara, in forma de dinaintea configuratoarelor: produs plus varianta.
+   * Doua cani cu gravuri diferite cad pe aceeasi cheie, deci in fereastra asta se contopeau
+   * intr-un singur rand — iar `+`/`-` si stergerea lucrau pe AMANDOUA. Clientul ar fi scos din
+   * comanda o gravura pe care n-o vedea.
+   *
+   * `lineKey` intoarce litera cu litera cheia veche pentru liniile fara configuratie, deci
+   * nimic din ce mergea nu se schimba.
+   */
+  const cartLineKey = lineKey;
   // Liniile purtate din cos se socotesc prin cos, ca sa poarte cu ele treptele de
   // cantitate: acelasi numar in sertar, pe pagina de cos, aici si la server.
   const totalLinieCos = (i: { productId: string; price: number; quantity: number; variantTitle?: string }) =>
@@ -986,6 +1004,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm text-foreground truncate">{ci.name}</p>
                         {ci.variantTitle && <p className="text-xs text-muted-foreground truncate">{ci.variantTitle}</p>}
+                        <RezumatLinie item={ci} />
                         <p className="text-sm font-bold mt-0.5" style={{ color }}>{formatPrice(totalLinieCos(ci))}</p>
                         {ci.quantity > 1 && (
                           <p className="text-[11px] text-muted-foreground">{formatPrice(pretBucataCos(ci))} bucata</p>

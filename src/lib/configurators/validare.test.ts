@@ -281,3 +281,52 @@ test("`atentie` singura NU opreste publicarea", () => {
   assert.ok(r.constatari.some((x) => x.treapta === "atentie"));
   assert.equal(r.sePoatePublica, true);
 });
+
+/* -- Ce nu se poate servi inca ---------------------------------------------- */
+
+test("un camp de INCARCARE FISIERE opreste publicarea", () => {
+  /*
+   * ⚠ `ConfiguratorSlot` intoarce `null` pentru nodurile de fisiere: depozitul privat si legarea
+   * de comanda vin in faza lor. Publicat asa, campul ar fi INVIZIBIL pe vitrina — iar daca era si
+   * obligatoriu, produsul n-ar mai fi putut fi cumparat DELOC, fiindca `esteCerut` l-ar fi cerut
+   * la fiecare incercare si nimeni n-ar fi avut unde sa-l completeze.
+   */
+  const fisiere = { fel: "fisiere", control: "imagine", id: "poza", eticheta: "Poza ta" } as Nod;
+  const r = val({ definitie: def([alegere("mat", [{ id: "a", eticheta: "A" }]), fisiere]) });
+  assert.equal(r.sePoatePublica, false);
+  assert.ok(critice(r).includes("fisiere_indisponibil"));
+});
+
+test("CULOAREA se valideaza, fiindca modelul promite ca se valideaza", () => {
+  /*
+   * ⚠ `definitie.ts` scrie despre `Optiune.culoare` ca e „validata la publicare". Nu era: se citea
+   * ca sir de cel mult 32 de caractere si ajungea de-a dreptul in `style`. Browserul o ignora,
+   * pastila iese fara culoare, si comerciantul nu afla de ce.
+   */
+  const bune = val({
+    definitie: def([alegere("mat", [
+      { id: "a", eticheta: "A" }, { id: "b", eticheta: "B" }, { id: "c", eticheta: "C" },
+    ])]),
+  });
+  assert.ok(!coduri(bune).includes("culoare_nevalida"), "fara culoare, nicio constatare");
+
+  const cuCulori = def([{
+    fel: "alegere", control: "culori", id: "mat", eticheta: "Material",
+    optiuni: [
+      { id: "a", eticheta: "A", culoare: "#fff" },
+      { id: "b", eticheta: "B", culoare: "#a1b2c3" },
+      { id: "c", eticheta: "C", culoare: "red" },
+    ],
+  } as Nod]);
+  assert.ok(!coduri(val({ definitie: cuCulori })).includes("culoare_nevalida"), "formele bune trec");
+
+  const stricate = def([{
+    fel: "alegere", control: "culori", id: "mat", eticheta: "Material",
+    optiuni: [{ id: "a", eticheta: "A", culoare: "rosu aprins;" }],
+  } as Nod]);
+  const r = val({ definitie: stricate });
+  assert.ok(coduri(r).includes("culoare_nevalida"));
+  // ⚠ E doar ATENTIE, nu critic: o pastila fara culoare se vinde in continuare.
+  assert.ok(!critice(r).includes("culoare_nevalida"));
+  assert.equal(r.sePoatePublica, true);
+});

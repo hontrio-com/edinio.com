@@ -13,6 +13,7 @@ import { esteUuid } from "@/lib/supabase/ids";
 import { hasVariants, cerePersonalizare } from "@/lib/storefront/variants";
 import { type BumpItem } from "@/lib/offers/bump-pricing";
 import { pretulSetului } from "@/lib/offers/fbt-pricing";
+import { configuratoarePentruProduse } from "@/lib/configurators/vitrina";
 import {
   cereArboreleDeCategorii, expandarePeOferta, normalizeazaIds,
   opresteComanda, pretuiesteOfertele,
@@ -96,7 +97,7 @@ function toOfferProduct(p: {
   id: string; name: string; slug: string | null; price: number | string;
   compare_at_price: number | string | null; images: unknown;
   track_inventory: boolean; stock_quantity: number | null; page_sections?: unknown;
-}): OfferProduct {
+}, configurabile?: ReadonlySet<string>): OfferProduct {
   return {
     id: p.id,
     name: p.name,
@@ -105,8 +106,42 @@ function toOfferProduct(p: {
     compareAtPrice: p.compare_at_price != null ? Number(p.compare_at_price) : null,
     imageUrl: firstImage(p.images),
     outOfStock: p.track_inventory && p.stock_quantity !== null && p.stock_quantity <= 0,
-    needsChoice: hasVariants(p.page_sections) || cerePersonalizare(p.page_sections),
+    /*
+     * ⚠ SI CONFIGURABILELE, din exact acelasi motiv ca variantele si personalizarea.
+     *
+     * O oferta se adauga DINTR-O APASARE: nu exista unde sa se aleaga latimea, materialul sau
+     * gravura. Lasat cumparabil, un produs configurabil facea doua pagube diferite, dupa cale:
+     * din formularul de produs ajungea in `additional_items` fara nicio configuratie si
+     * REFUZA toata comanda (un camp obligatoriu necompletat), iar din cos era adaugat DUPA
+     * repretuire si se vindea simplu, la pretul ofertei, fara nicio specificatie.
+     *
+     * `needsChoice` e mecanismul care exista deja pentru asta: scoate produsul din seturile
+     * FBT si dintre bump-uri (`esteCumparabil`), si face cardul sa trimita la pagina de produs
+     * in loc sa arate un buton de adaugare.
+     */
+    needsChoice: hasVariants(p.page_sections) || cerePersonalizare(p.page_sections)
+      || configurabile?.has(p.id) === true,
   };
+}
+
+/**
+ * Care dintre produsele astea au un configurator care se serveste acum.
+ *
+ * ⚠ Se cheama pe rand din cele TREI locuri care aduc produse pentru oferte. Pusa intr-unul
+ * singur, regula ar fi lipsit din celelalte doua — iar cele doua cai de comanda ale
+ * proiectului au divergit deja de doua ori exact asa.
+ *
+ * ⚠ Costa o citire pe index pentru magazinele fara configuratoare, adica aproape toate:
+ * `configuratoarePentruProduse` intreaba intai daca magazinul are vreunul activ si se opreste
+ * acolo.
+ */
+async function celeConfigurabile(
+  businessId: string,
+  randuri: { id: string; category: string | null }[],
+): Promise<Set<string>> {
+  if (randuri.length === 0) return new Set();
+  const harta = await configuratoarePentruProduse(businessId, randuri);
+  return new Set(harta.keys());
 }
 
 // `category` intra aici pentru re-evaluarea de la comanda: declansatoarele pe
@@ -126,11 +161,12 @@ async function fetchOfferProducts(
     .from("products").select(OFFER_PRODUCT_COLS)
     .eq("business_id", businessId).in("id", wanted);
   const byId = new Map((data ?? []).map((p) => [p.id, p]));
+  const configurabile = await celeConfigurabile(businessId, data ?? []);
   const out: OfferProduct[] = [];
   for (const id of wanted) {
     const p = byId.get(id);
     if (!p || p.is_bundle || !p.is_active) continue;
-    out.push(toOfferProduct(p));
+    out.push(toOfferProduct(p, configurabile));
   }
   return out;
 }
@@ -146,10 +182,11 @@ async function fetchCategoryProducts(
     .eq("is_active", true).eq("is_bundle", false)
     .order("created_at", { ascending: false })
     .limit(limit + excludeIds.size);
+  const configurabile = await celeConfigurabile(businessId, data ?? []);
   const out: OfferProduct[] = [];
   for (const p of data ?? []) {
     if (excludeIds.has(p.id)) continue;
-    out.push(toOfferProduct(p));
+    out.push(toOfferProduct(p, configurabile));
     if (out.length >= limit) break;
   }
   return out;
@@ -422,11 +459,14 @@ export async function applyOfferPricing(
 
   const categoriaLui = new Map<string, string | null>();
   const oferibile = new Map<string, OfferProduct>();
+  // ⚠ Si aici, nu doar la afisare: un id de oferta revendicat de un browser care nu s-a
+  // uitat niciodata la pagina trebuie sa primeasca acelasi raspuns.
+  const configurabile = await celeConfigurabile(businessId, randuriProduse);
   for (const p of randuriProduse) {
     categoriaLui.set(p.id, p.category);
     // Aceleasi doua conditii ca `fetchOfferProducts`: ce nu se poate oferi la
     // afisare nu se poate nici pretui la incasare.
-    if (p.is_active && !p.is_bundle) oferibile.set(p.id, toOfferProduct(p));
+    if (p.is_active && !p.is_bundle) oferibile.set(p.id, toOfferProduct(p, configurabile));
   }
 
   // La AFISARE, un arbore necitit inseamna cel mult o oferta care nu se arata; la

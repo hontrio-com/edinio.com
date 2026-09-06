@@ -6,6 +6,7 @@ import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tier
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { hasVariants, cerePersonalizare } from "@/lib/storefront/variants";
+import { configuratoarePentruProduse } from "@/lib/configurators/vitrina";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 
 export interface AbandonedCartItem {
@@ -81,6 +82,14 @@ export interface ProdusCosSalvat {
   images: unknown;
   is_active: boolean | null;
   page_sections: unknown;
+  /**
+   * Produsul are un configurator care se serveste acum?
+   *
+   * ⚠ NU se poate afla din `page_sections`: legatura sta in tabele proprii, si se poate
+   * mosteni din categorie. Il afla apelantul, care oricum citeste din baza, iar functia pura de
+   * mai jos ramane probabila fara nicio interogare.
+   */
+  areConfigurator?: boolean;
 }
 
 /**
@@ -126,7 +135,17 @@ export function liniiRecuperabile(
     // Si personalizarea, din acelasi motiv ca variantele: `restoreCart` scrie cosul
     // INTREG, iar o linie pe care clientul n-o poate completa ar ramane acolo
     // necomandabila si nestearsa. Vezi `cerePersonalizare`.
-    if (hasVariants(p.page_sections) || cerePersonalizare(p.page_sections)) continue;
+    /*
+     * ⚠ SI PRODUSELE CONFIGURABILE, din acelasi motiv, dar cu o urmare mai scumpa.
+     *
+     * Cosul salvat nu poarta configuratia — `AbandonedCartItem` n-are camp pentru ea. Deci linia
+     * refacuta ar avea produsul si cantitatea, dar nicio alegere: la finalizare serverul o REFUZA
+     * (un camp obligatoriu necompletat), iar `restoreCart` a scris deja cosul INTREG peste cel al
+     * clientului. Ar fi ramas cu o linie pe care n-o poate cumpara si care i-a inlocuit cosul.
+     *
+     * Si mai rau: emailul i-ar fi promis un pret — cel de baza — pe care nu-l poate obtine.
+     */
+    if (hasVariants(p.page_sections) || cerePersonalizare(p.page_sections) || p.areConfigurator) continue;
     out.push({
       product_id: p.id,
       // Si numele, si poza vin din catalog: daca produsul a fost redenumit intre
@@ -184,11 +203,29 @@ export async function cosRecuperabil(
 
   const { data } = await client
     .from("products")
-    .select("id, name, price, images, is_active, page_sections")
+    // ⚠ `category` se cere pentru configuratoare: unul legat de o categorie se mosteneste
+    // prin NUMELE ei, deci fara coloana produsul ar parea ca n-are.
+    .select("id, name, price, images, is_active, page_sections, category")
     .eq("business_id", businessId)
     .in("id", ids);
 
-  const catalog = new Map<string, ProdusCosSalvat>((data ?? []).map((p) => [p.id, p as ProdusCosSalvat]));
+  const randuri = data ?? [];
+  /*
+   * ⚠ O citire cazuta NU inseamna „niciun produs n-are configurator".
+   *
+   * `configuratoarePentruProduse` intoarce o harta goala la orice necaz — dinadins, fiindca pe
+   * vitrina degradarea corecta e „produsul se vinde simplu". Aici insa gol inseamna „se poate
+   * recupera", adica exact ce vrem sa evitam. Deci se citeste, si daca magazinul chiar n-are
+   * niciun configurator raspunsul e gol dupa o singura interogare pe index.
+   */
+  const configuratoare = await configuratoarePentruProduse(
+    businessId,
+    randuri.map((p) => ({ id: p.id, category: p.category })),
+  );
+
+  const catalog = new Map<string, ProdusCosSalvat>(
+    randuri.map((p) => [p.id, { ...p, areConfigurator: configuratoare.has(p.id) } as ProdusCosSalvat]),
+  );
   const items = liniiRecuperabile(salvate, catalog);
   return { items, total: totalCosRecuperabil(items) };
 }

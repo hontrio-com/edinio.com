@@ -166,6 +166,41 @@ export function valideaza(intrare: IntrareValidare): RezultatValidare {
       adauga("critic", "limite_pe_dos",
         `„${nod.eticheta}": minimul este mai mare decat maximul.`, nod.id);
     }
+    /*
+     * ⚠ INCARCAREA DE FISIERE NU SE PUBLICA INCA, si asta e o garda, nu o lipsa.
+     *
+     * `ConfiguratorSlot` intoarce `null` pentru nodurile de fisiere: depozitul privat, verificarea
+     * octetilor si legarea fisierului de comanda vin in faza lor. Publicat asa, nodul ar fi
+     * INVIZIBIL pe vitrina — iar daca era si obligatoriu, `esteCerut` l-ar fi cerut la fiecare
+     * incercare de comanda si produsul n-ar mai fi putut fi cumparat DELOC, fara ca nimeni sa vada
+     * de ce.
+     *
+     * Se refuza la publicare, nu se ascunde din editor pe tacute: comerciantul trebuie sa afle ca
+     * ce a construit nu se poate servi inca.
+     */
+    if (nod.fel === "fisiere") {
+      adauga("critic", "fisiere_indisponibil",
+        `„${nod.eticheta}": incarcarea de fisiere nu se poate publica inca. Scoate campul si publica restul.`,
+        nod.id);
+    }
+    /*
+     * ⚠ Culoarea CHIAR se valideaza aici, fiindca modelul promite ca se valideaza.
+     *
+     * `definitie.ts` scrie despre `Optiune.culoare` ca e „validata la publicare". Nu era: se citea
+     * ca sir de cel mult 32 de caractere si ajungea de-a dreptul in `style={{ backgroundColor }}`.
+     * Un sir care nu e o culoare nu strica nimic — browserul il ignora — dar pastila iese fara
+     * culoare, iar comerciantul nu afla de ce. O promisiune scrisa in model si netinuta e mai rea
+     * decat una nescrisa.
+     */
+    if (areOptiuni(nod)) {
+      for (const o of nod.optiuni ?? []) {
+        if (o.culoare !== undefined && !esteCuloare(o.culoare)) {
+          adauga("atentie", "culoare_nevalida",
+            `Optiunea „${o.eticheta}" din „${nod.eticheta}" are o culoare pe care browserul n-o va intelege.`,
+            nod.id);
+        }
+      }
+    }
   }
 
   /* ── Formule: referinte, marime, cicluri ─────────────────────────────── */
@@ -328,4 +363,20 @@ export function ciclurileDintreCalcule(d: Definitie): string[] {
     }
   }
   return gasite;
+}
+
+/**
+ * O culoare pe care browserul chiar o intelege.
+ *
+ * ⚠ Se primesc DOAR formele scurte si sigure: `#rgb`, `#rrggbb`, `#rrggbbaa` si numele CSS
+ * scrise cu litere. Nu se primeste `rgb(...)`, `var(...)` sau orice altceva cu paranteze: valoarea
+ * ajunge intr-un `style` pe vitrina, si o gramatica larga aici ar fi insemnat sa ne bizuim pe
+ * felul in care fiecare browser repara un sir stricat.
+ */
+export function esteCuloare(v: unknown): boolean {
+  if (typeof v !== "string") return false;
+  const s = v.trim();
+  if (!s || s.length > 32) return false;
+  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s)) return true;
+  return /^[a-zA-Z]{3,20}$/.test(s);
 }

@@ -50,11 +50,23 @@ function corpul(nume: string): string {
 
 const CAI = ["placeOrder", "placeCartOrder"];
 
+/*
+ * ⚠ CATE LOCURI SCRIU, PE FIECARE CALE.
+ *
+ * `placeOrder` are DOUA: produsul din formular, si liniile PURTATE DIN COS odata cu el. Sunt
+ * scrise separat, la doua sute de randuri distanta, si tocmai de aia se numara: o proba care
+ * cere doar „exista undeva un instantaneu" trece si dupa ce a doua scriere a disparut — iar
+ * cosul purtat ar fi plecat in comanda cu configurarea pierduta si neplatita.
+ */
+const SCRIERI = new Map([["placeOrder", 2], ["placeCartOrder", 1]]);
+
 test("AMANDOUA caile de comanda repretuiesc configuratia pe server", () => {
   for (const cale of CAI) {
-    assert.ok(
-      corpul(cale).includes("await repretuiesteLinii("),
-      `${cale} nu repretuieste configuratiile: ar incasa pretul trimis de browser`,
+    const c = corpul(cale);
+    const cate = c.split("await repretuiesteLinii(").length - 1;
+    assert.equal(
+      cate, SCRIERI.get(cale),
+      `${cale} repretuieste in ${cate} locuri, nu in ${SCRIERI.get(cale)}: o cale a ramas pe pretul trimis de browser`,
     );
   }
 });
@@ -105,7 +117,11 @@ test("AMANDOUA scriu instantaneul configuratiei in linia comenzii", () => {
   // Atelierul citeste comanda, nu configuratorul. Vezi `rezumat.ts`.
   for (const cale of CAI) {
     const c = corpul(cale);
-    assert.ok(c.includes("configuratie: {"), `${cale} nu scrie instantaneul`);
+    const cate = c.split("configuratie: {").length - 1;
+    assert.equal(
+      cate, SCRIERI.get(cale),
+      `${cale} scrie instantaneul in ${cate} locuri, nu in ${SCRIERI.get(cale)}`,
+    );
     for (const camp of ["configuratorId:", "versiuneId:", "numarVersiune:", "amprenta:", "valori:", "rezumat:"]) {
       assert.ok(c.includes(camp), `${cale} scrie instantaneul fara ${camp}`);
     }

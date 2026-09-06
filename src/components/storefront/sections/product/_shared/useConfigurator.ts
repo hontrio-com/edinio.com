@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { ConfiguratorDeVitrina } from "@/lib/configurators/vitrina";
 import { verificaRaspunsul, type Verdict } from "@/lib/configurators/raspuns";
 import { rezumatConfiguratiei, type RandRezumat } from "@/lib/configurators/rezumat";
+import { configuratiaImplicita } from "@/lib/configurators/validare";
 import type { Valori } from "@/lib/configurators/valori";
 
 /**
@@ -61,7 +62,21 @@ export function useConfigurator(
   configurator: ConfiguratorDeVitrina | null,
   pretProdus: number,
 ): StareConfigurator {
-  const [brute, setBrute] = useState<Record<string, unknown>>({});
+  /*
+   * ⚠ PAGINA SE DESCHIDE CU IMPLICITELE COMERCIANTULUI, nu goala.
+   *
+   * `implicit` era al optulea camp mort din model: se parsa, se compila, se folosea la
+   * VALIDAREA de publicare — si nu ajungea niciodata pe vitrina. Efectul nu era doar estetic:
+   * validatorul ruleaza motorul pe configuratia implicita, deci un configurator care „trece la
+   * publicare” putea deschide pagina cu „Completeaza optiunile ca sa vezi pretul” si sa nu
+   * arate niciun pret pana cand cumparatorul completa singur ce pusese comerciantul.
+   *
+   * ⚠ Se seamana O SINGURA DATA, la montare. Puse la fiecare randare, ar fi readus
+   * implicitul peste un camp pe care omul tocmai l-a golit.
+   */
+  const [brute, setBrute] = useState<Record<string, unknown>>(
+    () => (configurator ? { ...configuratiaImplicita(configurator.compilat.definitie) } : {}),
+  );
 
   const pune = useCallback((id: string, valoare: unknown) => {
     setBrute((x) => {

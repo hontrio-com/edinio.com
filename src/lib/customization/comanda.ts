@@ -1,5 +1,4 @@
-import { r2KeyFromUrl } from "@/lib/r2-url";
-import { PREFIX_INCARCARI, terminatia } from "./adresa";
+import { terminatia } from "./adresa";
 import { normalizeazaDefinitia, type CampPersonalizare } from "./definitie";
 import { esteCheiaNoastra } from "./fisiere-private";
 import { campurileFaraSuprafata, pretulPersonalizarii, type RandDefalcare } from "./pret";
@@ -103,86 +102,41 @@ export type RezultatPersonalizare =
   | { fel: "eroare"; mesaj: string };
 
 /**
- * Adresa asta arata catre un fisier incarcat de un client AL MAGAZINULUI ASTA?
+ * O valoare de fisier e a magazinului asta?
  *
- * ⚠ DOUA VERIFICARI, SI AMANDOUA CONTEAZA.
+ * ⚠ O SINGURA FORMA: CHEIA SEMNATA. Ruta de incarcare intoarce cheia, purtand o semnatura HMAC
+ * din secretul serverului. Ce se scrie in comanda si ce pleaca in email e cheia, nu adresa.
+ * Vezi `fisiere-private.ts`.
  *
- * 1. Sa fie una dintre originile NOASTRE de depozit (`r2KeyFromUrl`). Fara ea, `value` era un sir
- *    liber care ajungea direct intr-un `<a href>` din panoul comerciantului — iar un
- *    `javascript:` acolo ruleaza in sesiunea lui autentificata. Adica XSS stocat, trimis prin
- *    formularul public de comanda.
- * 2. Sa fie sub prefixul de incarcari AL MAGAZINULUI. Fara ea, un client putea trimite adresa
- *    unei poze de produs a altui magazin, sau orice alt obiect din galeata, si el ar fi aparut in
- *    comanda ca „fisierul incarcat de client".
+ * ═══ ⚠ DE CE EXISTA POARTA ASTA, DE LA INCEPUT ═══
+ *
+ * `value` venea din formularul PUBLIC de comanda si ajungea direct intr-un `<a href>` din panoul
+ * comerciantului — iar un `javascript:` acolo ruleaza in sesiunea lui autentificata. Adica XSS
+ * stocat. Si, a doua oara: fara cererea ca fisierul sa fie sub prefixul MAGAZINULUI, un client
+ * putea trimite poza de produs a altui magazin, sau orice alt obiect din galeata, si ea aparea in
+ * comanda ca „fisierul incarcat de client".
+ *
+ * ⚠ Semnatura le acopera pe amandoua deodata, si mai strans decat verificarea de adresa: cheia
+ * poarta `business_id`-ul in chiar textul semnat, deci nu se poate compune pentru alt magazin,
+ * si nu e o adresa, deci nu exista nicio schema de pus in ea.
+ *
+ * ═══ ⚠ FEREASTRA DE DESFASURARE: INCHISA 07.09.2026 ═══
+ *
+ * Aici a stat o a doua ramura, `esteAdresaVeche`, care primea adresa publica din depozitul
+ * nostru — pentru paginile ramase deschise in browsere peste desfasurarea care a introdus cheile.
+ * Nu mai exista asemenea pagini, iar ruta de incarcare nu mai intoarce `url` deloc (acelasi comit).
+ *
+ * ⚠ Nu era o ramura periculoasa, era doar una de sustinut: verifica gazda EXACT, nu prin
+ * `r2KeyFromUrl`, tocmai fiindca ajutorul comun primeste orice `*.r2.dev` si o galeata straina cu
+ * prefixul nostru ar fi trecut. Scoasa, si acea capcana dispare cu ea.
+ *
+ * ⚠ NU EXISTA DATE VECHI DE SUSTINUT: masurat inainte de prima livrare, 0 din 381 de comenzi
+ * purtau vreun fisier de personalizare, si de atunci singura forma scrisa e cheia. Citirea
+ * adresei intregi ramane totusi in `adresa.ts` (`terminatia`, `numeleFisierului`), fiindca acolo
+ * e despre CE SE ARATA pe un rand deja existent, nu despre ce se primeste la comanda.
  */
-function gazdeleNoastre(): Set<string> {
-  const out = new Set<string>();
-  for (const v of [process.env.R2_PUBLIC_URL, process.env.NEXT_PUBLIC_CDN_URL]) {
-    if (!v) continue;
-    try { out.add(new URL(v).host.toLowerCase()); } catch { /* configurare stricata: se ignora */ }
-  }
-  return out;
-}
-
 function esteFisierulNostru(adresa: string, businessId: string): boolean {
-  /*
-   * ⚠ FORMA NOUA: O CHEIE SEMNATA, fara nicio adresa.
-   *
-   * Ruta de incarcare intoarce cheia, purtand o semnatura HMAC din secretul serverului. Ce se
-   * scrie in comanda si ce pleaca in email e cheia, nu adresa. Vezi `fisiere-private.ts`.
-   *
-   * ⚠ IN FEREASTRA DE DESFASURARE ruta intoarce si `url`, ca paginile ramase deschise in browsere
-   * sa nu se rupa — de-aia ramura de mai jos nu e inca moarta. Cele doua se scot IMPREUNA.
-   */
-  if (esteCheiaNoastra(adresa, businessId)) return true;
-
-  /*
-   * ⚠ FEREASTRA DE DESFASURARE, si numai ea.
-   *
-   * O pagina ramasa deschisa in browserul cuiva a incarcat fisierele PE FORMA VECHE si trimite
-   * adrese publice. Refuzate sec, ele ar fi dat „fisierul nu e valid" pe un fisier pe care omul
-   * tocmai l-a vazut incarcat — la un camp obligatoriu, comanda pierduta fara nicio explicatie pe
-   * care s-o poata urma.
-   *
-   * ⚠ Se pastreaza ACELEASI verificari ca pana acum, nu mai slabe. Si e o ramura care se poate
-   * scoate: masurat inainte de livrare, 0 din 381 de comenzi poarta vreun fisier de personalizare,
-   * deci nu exista date vechi de sustinut — doar pagini deschise.
-   */
-  return esteAdresaVeche(adresa, businessId);
-}
-
-/** Forma de dinaintea cheilor semnate: adresa publica din depozitul nostru. */
-function esteAdresaVeche(adresa: string, businessId: string): boolean {
-  /*
-   * ⚠ GAZDA SE VERIFICA EXACT, nu prin `r2KeyFromUrl`.
-   *
-   * Ajutorul comun accepta ORICE `*.r2.dev`, si o face dinadins: adresele salvate pot folosi
-   * inca domeniul brut al galetii dupa ce `R2_PUBLIC_URL` a fost mutat pe CDN, iar sase alte
-   * locuri din proiect se bazeaza pe purtarea aia. Nu il string aici — l-as fi stricat pentru ele.
-   *
-   * Dar pentru poarta ASTA e prea larg: oricine isi poate face o galeata R2, deci
-   * `https://galeata-straina.r2.dev/products/customizations/<id-ul-victimei>/x.jpg` trecea de
-   * verificarea de prefix. Fisierul ar fi aparut in comanda ca „incarcat de client", cu continut
-   * ales de altcineva, si s-ar fi deschis din panoul comerciantului.
-   *
-   * ⚠ Si se parseaza ca ADRESA, nu se cauta un subsir: `.r2.dev/` poate aparea oriunde intr-un
-   * sir — inclusiv intr-o cale sau intr-un parametru al unui domeniu strain.
-   */
-  let gazda: string;
-  let cale: string;
-  try {
-    const u = new URL(adresa);
-    if (u.protocol !== "https:") return false;
-    gazda = u.host.toLowerCase();
-    cale = u.pathname.replace(/^\/+/, "");
-  } catch {
-    return false;
-  }
-  if (!gazdeleNoastre().has(gazda)) return false;
-
-  /* Cheia se ia tot prin ajutorul comun, ca sa se scoata prefixul de redimensionare al CDN-ului. */
-  const cheie = r2KeyFromUrl(adresa) ?? cale;
-  return cheie.startsWith(`${PREFIX_INCARCARI}${businessId}/`);
+  return esteCheiaNoastra(adresa, businessId);
 }
 
 /**

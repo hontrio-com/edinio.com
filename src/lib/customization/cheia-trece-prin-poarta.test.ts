@@ -84,18 +84,42 @@ test("⚠ o cheie a ALTUI magazin, sau una compusa de mana, se refuza", () => {
   assert.equal(verificaPersonalizarea(produs("image"), { f: [cuDosar] }, BIZ).fel, "eroare");
 });
 
-test("⚠ adresa veche trece mai departe: fereastra de desfasurare", () => {
+test("⚠ fereastra de desfasurare e INCHISA: nicio adresa nu mai trece, nici a noastra", () => {
   /*
-   * O pagina ramasa deschisa in browserul cuiva a incarcat pe forma veche si trimite adresa
-   * intreaga. Refuzata sec, ar fi dat „fisierul nu e valid" pe un fisier pe care omul tocmai l-a
-   * vazut incarcat — la un camp obligatoriu, comanda pierduta fara nicio explicatie de urmat.
+   * ═══ ⚠ CE APARA RANDURILE ASTEA ═══
+   *
+   * O desfasurare intreaga, poarta a primit si adresa publica din depozitul NOSTRU
+   * (`esteAdresaVeche`), ca paginile ramase deschise in browsere sa nu se rupa. Ramura a fost
+   * scoasa pe 07.09.2026, odata cu `url` din raspunsul rutei de incarcare.
+   *
+   * ⚠ SI NU E O STRANGERE COSMETICA. Cat traia ramura, o adresa insemna ca poarta trebuia sa
+   * ghiceasca daca gazda e a noastra — iar `r2KeyFromUrl`, ajutorul comun, primeste dinadins ORICE
+   * `*.r2.dev`. Adica `https://galeata-straina.r2.dev/products/customizations/<id-ul-victimei>/x.jpg`
+   * a fost, o vreme, o gaura adevarata. Fara nicio adresa, intrebarea nu se mai pune.
+   *
+   * ⚠ PROBA ASTA TREBUIE SA POATA CADEA: reintorsul ramurii o face rosie pe primul rand.
    */
-  const veche = `https://pub-alnostru.r2.dev/products/customizations/${BIZ}/${NUME}.jpg`;
-  assert.equal(verificaPersonalizarea(produs("image"), { f: [veche] }, BIZ).fel, "ok");
+  const aNoastra = `https://pub-alnostru.r2.dev/products/customizations/${BIZ}/${NUME}.jpg`;
+  const r = verificaPersonalizarea(produs("image"), { f: [aNoastra] }, BIZ);
+  assert.equal(
+    r.fel, "eroare",
+    "adresa publica mai trece prin poarta: fereastra de desfasurare a ramas deschisa",
+  );
+  assert.match(mesaj(r), /nu e valid/);
 
-  /* Perechea: aceeasi forma veche, dar dintr-o galeata straina, ramane refuzata. */
-  const straina = `https://pub-astraina.r2.dev/products/customizations/${BIZ}/${NUME}.jpg`;
+  /* Si galeata straina cu prefixul nostru, cea care trecea inainte de a se verifica gazda exact. */
+  const straina = `https://galeata-straina.r2.dev/products/customizations/${BIZ}/${NUME}.jpg`;
   assert.equal(verificaPersonalizarea(produs("image"), { f: [straina] }, BIZ).fel, "eroare");
+
+  /*
+   * ⚠ PERECHEA POZITIVA, pe acelasi fisier: cheia semnata a ACELUIASI obiect trece. Fara randul
+   * asta, proba ar fi trecut verde si peste o poarta care refuza tot — adica peste chiar defectul
+   * din 06.09, cand `new URL()` arunca pe o cheie si niciun fototapet nu se putea comanda.
+   */
+  assert.equal(
+    verificaPersonalizarea(produs("image"), { f: [cheieIncarcare(BIZ, NUME, "jpg")] }, BIZ).fel, "ok",
+    "poarta refuza si forma noua: nu s-a inchis o fereastra, s-a inchis drumul",
+  );
 });
 
 test("⚠ instantaneul scris in comanda poarta chiar cheia, nu altceva", () => {

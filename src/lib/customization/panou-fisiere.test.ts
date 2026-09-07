@@ -195,18 +195,44 @@ test("⚠ legatura din panou chiar cere ruta privata, cu TREI parametri cu numel
   assert.deepEqual(ceruti, trimisi, "ruta si panoul nu mai vorbesc despre aceiasi parametri");
 });
 
-test("⚠ o comanda VECHE, cu adresa intreaga, pleaca NEATINSA catre depozit", () => {
+test("⚠ nici macar o adresa intreaga nu mai pleaca NEATINSA in `href`", () => {
   /*
-   * Comenzile de dinaintea trecerii la chei poarta adrese absolute. Ele nu au ce cauta pe ruta
-   * privata (cheia lor n-ar trece de verificarea de forma), deci valoarea pleaca neatinsa.
+   * ═══ ⚠ AFIRMATIA ASTA S-A INTORS PE 07.09.2026 ═══
    *
-   * ⚠ ATAT SE MASOARA AICI: ADRESA. Ce se VEDE pe randul unei comenzi vechi s-a schimbat totusi —
-   * numele vine acum din regula comuna, deci scrie „Fisierul N.ext” in loc de ultima bucata din
-   * adresa. E o schimbare voita: bucata aia era `<uuid>.jpg`, adica tot nu numele omului.
+   * Pana atunci panoul avea o ramura care intorcea `valoare` NEATINSA cand incepea cu `https://`:
+   * pentru comenzile de dinaintea cheilor, si pentru fereastra de desfasurare in care ruta de
+   * incarcare mai intorcea `url`. Fereastra s-a inchis, iar existenta randurilor vechi s-a pus
+   * BAZEI: din 384 de comenzi, ZERO poarta vreo personalizare.
+   *
+   * ⚠ DE CE E O PROBA, SI NU O STERGERE. Ramura aia punea un sir din formularul PUBLIC direct in
+   * `href` — chiar defectul reparat in runda P0, unde un `javascript:` rula in sesiunea
+   * autentificata a comerciantului. Cat timp poarta comenzii nu mai scrie nicio adresa, ramura era
+   * de neatins; dar cod mort de felul asta invie prin prima „compatibilitate" pusa la loc, si
+   * atunci invie fara poarta care il facea sigur. Randul de mai jos e ce se opune reinvierii.
    */
   const adresaFisierului = functiaDinPanou("adresaFisierului");
-  const veche = "https://pub-alnostru.r2.dev/products/customizations/x/poza.jpg";
-  assert.equal(adresaFisierului(veche, BIZ, COMANDA), veche);
+
+  for (const valoare of [
+    "https://pub-alnostru.r2.dev/products/customizations/x/poza.jpg",
+    "http://pub-alnostru.r2.dev/products/customizations/x/poza.jpg",
+    "javascript:alert(document.cookie)",
+    "https://evil.example.com/poza.jpg",
+  ]) {
+    const iesire = adresaFisierului(valoare, BIZ, COMANDA);
+    assert.equal(
+      iesire.startsWith("/api/customization-file?"), true,
+      `valoarea a plecat pe alt drum decat ruta cu sesiune: ${iesire}`,
+    );
+    /*
+     * ⚠ SI NU DOAR „INCEPE CU”: valoarea trebuie sa fie INVELITA, nu lipita. Neincodata, un `&`
+     * sau un `#` din ea ar rupe interogarea si ar putea schimba `businessId` sau `comanda` — adica
+     * exact cele doua lucruri pe care ruta le verifica.
+     */
+    const u = new URL(iesire, "https://magazin.exemplu");
+    assert.equal(u.searchParams.get("cheie"), valoare, "valoarea nu a ajuns intreaga la ruta");
+    assert.equal(u.searchParams.get("businessId"), BIZ);
+    assert.equal(u.searchParams.get("comanda"), COMANDA);
+  }
 });
 
 test("⚠ nicio valoare de fisier nu mai pleaca BRUTA in `href` sau `src`", () => {

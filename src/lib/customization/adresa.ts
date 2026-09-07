@@ -110,9 +110,13 @@ export function numeleFisierului(valoare: string, i: number, nume?: string): str
   if (nume && nume.trim() !== "") return nume.trim();
 
   /*
-   * ⚠ COMENZILE VECHI PASTREAZA CE ARATAU. Ele poarta adresa intreaga, iar panoul scria de acolo
-   * ultima bucata a caii. Sarita, fiecare fisier al lor ar fi devenit „Fisierul N" peste noapte —
-   * o schimbare in rau pe randuri pe care nimeni nu le-a atins.
+   * ⚠ O VALOARE CARE E ADRESA ISI PASTREAZA NUMELE DIN CALE. Sarita, un asemenea rand ar fi aratat
+   * „Fisierul N" in loc de ce arata pana acum.
+   *
+   * ⚠ MASURAT PE 07.09.2026: nu exista niciun asemenea rand — din 384 de comenzi, ZERO poarta vreo
+   * personalizare. Deci ramura nu sustine date reale; e o citire care nu poate gresi pe un sir
+   * neasteptat, intr-un modul PUR care nu deschide nimic si nu autorizeaza nimic. Poarta comenzii
+   * (`comanda.ts`) si panoul nu mai primesc adrese deloc — acolo era pretul, si el s-a platit.
    */
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(valoare)) {
     try {

@@ -13,16 +13,23 @@ import { esteCheiaNoastra } from "@/lib/customization/fisiere-private";
  *
  * Raspunsul s-a redenumit din `{ url }` in `{ cheie }` fara ca nimic sa scartaie: tsc trece
  * (raspunsul e `NextResponse.json(...)`, adica `any` pentru apelant), eslint trece, build-ul trece.
- * Dar pachetul care ruleaza ACUM in browserele cumparatorilor citeste `date.url`, si face
+ * Dar pachetul care rula atunci in browserele cumparatorilor citea `date.url`, si facea
  * `if (date.url) ... else { refuzat = true; }`. Fara `url`, orice pagina ramasa deschisa peste
- * desfasurare ia ramura de esec pe un fisier care TOCMAI a fost scris cu succes in depozit, si
+ * desfasurare lua ramura de esec pe un fisier care TOCMAI fusese scris cu succes in depozit, si
  * arata textul generic „Accepta JPG, PNG, WEBP si HEIC, pana in 10 MB” — format si marime, doua
  * explicatii false. Campul de personalizare e de obicei OBLIGATORIU: comanda se pierde, si fiecare
  * reincercare mai lasa un obiect orfan in depozitul platit.
  *
  * De-aia proba de aici nu se uita la sursa, ci RULEAZA CHIAR RUTA si citeste raspunsul exact cum
- * il citeste pachetul vechi si cum il citeste cel nou. O redenumire tacuta nu mai are pe unde sa
- * treaca.
+ * il citeste pachetul din browser. O redenumire tacuta nu mai are pe unde sa treaca.
+ *
+ * ═══ ⚠ FEREASTRA S-A INCHIS PE 07.09.2026, SI FISIERUL RAMANE ═══
+ *
+ * `url` a iesit din raspuns, impreuna cu `esteAdresaVeche` din `comanda.ts`. Numele fisierului
+ * ramane cel de acum, fiindca intrebarea e aceeasi — CE POARTA RASPUNSUL RUTEI —, doar ca
+ * raspunsul corect s-a intors: atunci se cerea ca `url` sa FIE acolo, acum se cere sa NU fie, si
+ * niciun fel de adresa cu el. Probele care apara o granita nu se sterg cand granita se muta; se
+ * intorc, si atunci pastreaza si istoria mutarii.
  *
  * ═══ ⚠ SI CA PLAFONUL DURABIL CHIAR E CONSULTAT ═══
  *
@@ -207,39 +214,41 @@ function cere(p: { ip?: string; businessId?: string | null; octeti?: Buffer | nu
    FORMA RASPUNSULUI LA SUCCES — cea pe care n-o fixa nimic
    ═══════════════════════════════════════════════════════════════════════════ */
 
-test("⚠ pagina de DINAINTEA desfasurarii mai poate incarca: raspunsul poarta `url`", async () => {
+test("⚠ FEREASTRA E INCHISA: raspunsul nu mai poarta nicio adresa", async () => {
+  /*
+   * ═══ ⚠ CE SE APARA AICI, DE ACUM ═══
+   *
+   * O desfasurare intreaga raspunsul a purtat si `url`, ca paginile ramase deschise sa nu se rupa
+   * — pachetul de atunci facea `if (date.url) adrese.push(date.url); else { refuzat = true; }`.
+   * Pe 07.09.2026 `url` a iesit, odata cu `esteAdresaVeche` din `comanda.ts`.
+   *
+   * ⚠ ACUM AFIRMATIA SE INTOARCE: adresa publica a fisierului nu mai are voie sa iasa din ruta.
+   * Ea e chiar lucrul de care lucrarea asta a scapat — o adresa plecata in raspuns ajunge in
+   * comanda, de acolo in emailul catre atelier, si de acolo in casutele a doi furnizori, ani de
+   * zile, fara nimic care s-o expire. `uploadToR2` o intoarce mai departe (asa o cer celelalte
+   * doua duzini de locuri care urca imagini de produs), deci singurul lucru care o opreste sa
+   * iasa e randul de mai jos.
+   *
+   * ⚠ SE CERE PE VALOARE, nu doar pe numele cheii: `url` redenumit in `adresa`, `href` sau
+   * `publicUrl` ar fi trecut de o proba care se uita numai la `Object.keys`.
+   */
   const { req } = cere();
   const r = await POST(req);
   assert.equal(r.status, 200, "incarcarea a esuat inainte sa se ajunga la forma raspunsului");
 
-  /*
-   * ⚠ CHIAR CODUL PACHETULUI VECHI, copiat din `HEAD:usePersonalizare.ts` (randurile 233-234).
-   * Nu o parafraza: asta e propozitia care ruleaza in browserele oamenilor in ziua desfasurarii.
-   */
-  const date = (await r.json()) as { url?: string; error?: string };
-  const adrese: string[] = [];
-  let refuzat = false;
-  if (date.url) adrese.push(date.url);
-  else refuzat = true;
+  const date = (await r.json()) as Record<string, unknown>;
+  assert.deepEqual(Object.keys(date), ["cheie"], "raspunsul poarta si altceva decat cheia");
 
-  assert.equal(
-    refuzat, false,
-    "pagina veche a crezut ca incarcarea a esuat — clientul vede „formatul sau marimea nu se accepta” pe un fisier deja scris in depozit",
-  );
-  assert.equal(adrese.length, 1, "pagina veche n-a retinut nicio adresa, deci campul obligatoriu ramane gol");
+  const brut = JSON.stringify(date);
+  assert.equal(brut.includes(CDN), false, `adresa publica a iesit din ruta: ${brut}`);
+  assert.equal(/https?:\/\//.test(brut), false, `raspunsul poarta o adresa: ${brut}`);
 });
 
-test("⚠ si pagina NOUA primeste cheia semnata, iar adresa arata catre exact acel fisier", async () => {
+test("⚠ cheia intoarsa e chiar fisierul scris, si trece de poarta comenzii", async () => {
   const { req } = cere();
   const r = await POST(req);
   assert.equal(r.status, 200);
   const date = (await r.json()) as Record<string, unknown>;
-
-  /*
-   * ⚠ CHEILE, EXACT ACESTEA DOUA. Aici se opreste redenumirea tacuta: o cheie in plus, una in
-   * minus sau una scrisa altfel pica pe randul asta, nu peste trei zile in browserul cuiva.
-   */
-  assert.deepEqual(Object.keys(date).sort(), ["cheie", "url"], "forma raspunsului s-a schimbat");
 
   const cheie = date.cheie as string;
   assert.equal(
@@ -248,15 +257,11 @@ test("⚠ si pagina NOUA primeste cheia semnata, iar adresa arata catre exact ac
   );
 
   /*
-   * ⚠ ADRESA SI CHEIA TREBUIE SA FIE ACELASI FISIER. Sunt doua forme ale aceluiasi lucru: pagina
-   * veche scrie adresa in comanda, cea noua scrie cheia, iar `comanda.ts` scoate din adresa exact
-   * calea si o cere sub prefixul magazinului. Doua fisiere diferite ar insemna ca una din cele
-   * doua pagini trimite in comanda ceva ce nu s-a incarcat.
+   * ⚠ SI E CHIAR FISIERUL SCRIS. De cand `url` a iesit, cheia intoarsa e SINGURA legatura dintre
+   * ce s-a urcat si ce se poate comanda: intoarsa alta, cumparatorul ar trimite in comanda o cheie
+   * valida catre un obiect care nu exista, iar atelierul ar primi o comanda cu un fisier gol.
+   * Octetii, antetul care nu lasa urme, si cheia — toate trei pe acelasi rand.
    */
-  const url = date.url as string;
-  assert.equal(new URL(url).pathname.replace(/^\/+/, ""), cheie, "adresa nu arata catre cheia intoarsa");
-
-  /* Si octetii chiar au ajuns in depozit, sub aceeasi cheie, cu antetul care nu lasa urme. */
   assert.deepEqual(
     scrieri, [{ cheie, tip: "image/png", cache: "private, no-store", octeti: PNG.length }],
     "poza cumparatorului nu s-a scris asa cum promite ruta",

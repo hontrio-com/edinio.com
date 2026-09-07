@@ -6,6 +6,7 @@ import { normalizeazaDefinitia, TIPURI } from "./definitie";
 import { normalizeazaValorile } from "./valori";
 import { sePoateRandaCaImagine } from "./adresa";
 import { verificaPersonalizarea } from "./comanda";
+import { cheieIncarcare } from "./fisiere-private";
 import { detectDocMime, detectImageMime, isAllowedImage } from "@/lib/utils/file-signature";
 
 /**
@@ -24,9 +25,28 @@ import { detectDocMime, detectImageMime, isAllowedImage } from "@/lib/utils/file
  */
 
 process.env.R2_PUBLIC_URL = "https://pub-alnostru.r2.dev";
+process.env.CUSTOMIZATION_FILE_SECRET = "secret-de-proba-pentru-fisiere";
 
 const BIZ = "11111111-1111-4111-8111-111111111111";
-const adr = (nume: string) => `https://pub-alnostru.r2.dev/products/customizations/${BIZ}/${nume}`;
+
+/**
+ * Un fisier al magazinului asta, in forma pe care o scrie ruta de incarcare: cheie semnata.
+ *
+ * ⚠ ERA O ADRESA PANA PE 07.09.2026, cand s-a inchis fereastra de desfasurare si poarta comenzii
+ * a incetat sa mai primeasca adrese. Numele se da tot ca „ceva.ext", fiindca aici se probeaza
+ * TERMINATIA — dar el se desface si intra in chiar textul semnat, deci ce ajunge la poarta e
+ * exact ce ar veni din productie.
+ *
+ * ⚠ Un nume fara punct iese cu terminatia `bin` (vezi `cheieIncarcare`), adica tot un caz de
+ * „terminatie pe care n-o primeste niciun tip" — ce cerea si varianta de dinainte.
+ */
+const punct = (nume: string) => nume.lastIndexOf(".");
+const adr = (nume: string) =>
+  cheieIncarcare(
+    BIZ,
+    punct(nume) === -1 ? nume : nume.slice(0, punct(nume)),
+    punct(nume) === -1 ? "" : nume.slice(punct(nume) + 1),
+  );
 
 function produs(tip: "image" | "fisier") {
   return {
@@ -86,7 +106,7 @@ test("⚠ UN PDF INTR-UN CAMP DE IMAGINE SE REFUZA LA COMANDA", () => {
 });
 
 test("⚠ o terminatie inventata nu trece pe niciun tip", () => {
-  /* Adresa e a depozitului nostru, prefixul e bun — si totusi nu poate veni de la ruta noastra. */
+  /* Cheia e semnata de noi, pentru magazinul asta — si totusi nu poate veni de la ruta noastra. */
   for (const tip of ["image", "fisier"] as const) {
     for (const nume of ["ceva.exe", "ceva.svg", "fara-terminatie"]) {
       assert.equal(
@@ -185,13 +205,32 @@ test("⚠ HEIC e o imagine ADEVARATA care nu se poate DESENA", () => {
    * raspundea 404, deci comerciantul vedea acelasi patrat gol pe hartia dupa care produce marfa —
    * in ORICE browser, Safari inclusiv.
    */
+  /*
+   * ⚠ DOUA FORME, DINADINS, fiindca sunt doua intrebari diferite.
+   *
+   * Poarta comenzii primeste doar CHEIA semnata (`adr`) — fereastra adreselor s-a inchis pe
+   * 07.09.2026. `sePoateRandaCaImagine` traieste in `adresa.ts`, care citeste si adresa intreaga,
+   * fiindca el raspunde despre CE SE ARATA pe un rand deja scris: comenzile de dinaintea cheilor
+   * si orice alta valoare ajunsa in panou. Probata numai pe chei, regula aia si-ar fi pierdut
+   * tacut jumatate din intrebuintare.
+   */
   const nostru = (n: string) => `https://pub-alnostru.r2.dev/products/customizations/${BIZ}/${n}`;
 
   /* Are VOIE intr-un camp de imagini... */
-  assert.equal(verificaPersonalizarea(produs("image"), { f: [nostru("poza.heic")] }, BIZ).fel, "ok");
+  assert.equal(verificaPersonalizarea(produs("image"), { f: [adr("poza.heic")] }, BIZ).fel, "ok");
   /* ...dar NU se deseneaza. */
   assert.equal(sePoateRandaCaImagine(nostru("poza.heic")), false);
   assert.equal(sePoateRandaCaImagine(nostru("poza.heif")), false);
+
+  /*
+   * ⚠ SI PE FORMA VIE, CHEIA. Randurile de deasupra o probeaza pe cea din comenzile vechi; asta e
+   * cea pe care o scrie ruta azi, deci cea care hotaraste ce vede cumparatorul sub camp. Exact
+   * despartirea asta — regula probata pe forma veche, folosita pe cea noua — a lasat pe 06.09 un
+   * defect blocant sub 6.292 de probe verzi.
+   */
+  assert.equal(sePoateRandaCaImagine(adr("poza.heic")), false, "cheia HEIC se crede desenabila");
+  assert.equal(sePoateRandaCaImagine(adr("poza.jpg")), true, "cheia JPG nu se mai deseneaza");
+  assert.equal(sePoateRandaCaImagine(adr("tipar.pdf")), false);
 
   /* Perechea: formatele care chiar se pot desena. */
   for (const n of ["poza.jpg", "poza.jpeg", "poza.PNG", "poza.webp", "poza.gif"]) {

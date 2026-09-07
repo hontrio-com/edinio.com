@@ -159,17 +159,25 @@ function StatusStepper({ status }: { status: string }) {
  * ⚠ SE TRIMITE SI COMANDA, fiindca ruta cere cheia sa fie chiar pe ea. Panoul o stie oricum:
  * fisierul se arata din interiorul unei comenzi deschise, niciodata singur.
  *
- * ⚠ Comenzile de dinaintea schimbarii poarta inca adrese intregi, si ele se deschid ca pana acum:
- * un `https://` e adresa, restul e cheie.
+ * ═══ ⚠ NU MAI EXISTA O RAMURA DE ADRESA, SI ASTA S-A MASURAT ═══
  *
- * ⚠ SI NU E DOAR ISTORIE. Cat tine fereastra de desfasurare, ruta de incarcare intoarce si `url`
- * pe langa cheie (vezi nota din `api/upload-customization/route.ts`), ca o pagina ramasa deschisa
- * in browserul unui cumparator sa nu refuze un fisier tocmai urcat cu succes. Adica se scriu si
- * ACUM comenzi cu adresa intreaga. Ramura asta iese impreuna cu `esteAdresaVeche` din
- * `customization/comanda.ts`, nu inaintea ei.
+ * Aici a stat un `if (/^https?:\/\//.test(valoare)) return valoare;` — pentru comenzile de
+ * dinaintea cheilor, si pentru fereastra de desfasurare in care ruta mai intorcea `url`. Fereastra
+ * s-a inchis pe 07.09.2026, iar intrebarea „mai exista randuri vechi?" s-a pus BAZEI, nu memoriei:
+ * din 384 de comenzi, ZERO poarta vreo personalizare — nici macar cheia `customization` pe vreo
+ * linie, si niciun `r2.dev` sau `customizations/` in tot `items`.
+ *
+ * ⚠ DE CE S-A SCOS, si nu doar s-a lasat acolo: ramura intorcea `valoare` NEATINSA drept `href`,
+ * iar `href` cu un sir din formularul public e chiar defectul reparat in runda P0 (`javascript:`
+ * rulat in sesiunea comerciantului). Poarta comenzii nu mai lasa nicio adresa sa se scrie, deci
+ * ramura era de-acum de neatins — dar cod mort de felul asta invie prin prima „compatibilitate"
+ * adaugata la loc, si atunci invie fara poarta care il facea sigur.
+ *
+ * ⚠ CE SE INTAMPLA DACA TOTUSI APARE UN ASEMENEA RAND: se cere prin ruta cu sesiune, care il
+ * refuza fiindca nu e o cheie a noastra. Adica o legatura care nu se deschide — vizibil, si nu o
+ * poarta ocolita in tacere.
  */
 function adresaFisierului(valoare: string, businessId: string, comandaId: string): string {
-  if (/^https?:\/\//i.test(valoare)) return valoare;
   return `/api/customization-file?cheie=${encodeURIComponent(valoare)}`
     + `&businessId=${encodeURIComponent(businessId)}`
     + `&comanda=${encodeURIComponent(comandaId)}`;

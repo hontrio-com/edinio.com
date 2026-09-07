@@ -267,36 +267,32 @@ export async function POST(request: NextRequest) {
      * ⚠ `private, no-store` in loc de un an de cache public. Continutul e poza de familie a
      * unui cumparator, nu o imagine de produs — aceeasi hotarare ca la etichetele AWB.
      */
-    const url = await uploadToR2(buffer, key, detected, "private, no-store");
     /*
-     * ⚠ SE INTOARCE CHEIA. Ea e forma noua: adresa publica nu mai pleaca in comanda si nici in
-     * email. Continutul se serveste prin `/api/customization-file`, care cere sesiune,
-     * proprietatea magazinului, si ca fisierul sa fie chiar pe o comanda a lui.
+     * ⚠ ADRESA INTOARSA DE DEPOZIT SE ARUNCA DINADINS, nu se leaga de nicio variabila.
      *
-     * ═══ ⚠ SI `url` PE LANGA EA, PENTRU FEREASTRA DE DESFASURARE ═══
-     *
-     * Raspunsul asta se intorcea doar ca `{ cheie }`, si aia rupea pagina ramasa deschisa in
-     * browserul unui cumparator peste desfasurare. Pachetul de dinainte face
-     * `if (date.url) adrese.push(date.url); else { refuzat = true; ... }` — deci fara `url` cadea
-     * MEREU pe ramura de esec, iar `date.error` lipsind si el, sub camp iesea textul generic:
-     * „Accepta JPG, PNG, WEBP si HEIC, pana in 10 MB”. Adica ii spuneam omului ca formatul sau
-     * marimea nu se accepta, pentru un fisier care TOCMAI fusese scris cu succes in depozit. La un
-     * camp obligatoriu asta inseamna comanda pierduta, si cate un obiect orfan la fiecare
-     * reincercare. `comanda.ts` are dinadins ramura `esteAdresaVeche` pentru exact fereastra asta;
-     * jumatatea de la incarcare lipsea, si tocmai ea e cea pe care o vede cumparatorul.
-     *
-     * ⚠ CE COSTA: cateva zile, adresa publica pleaca din nou in browser, si o pagina veche o va
-     * scrie ca atare in comanda. Pretul e mic si masurat: adresa se da chiar celui care tocmai a
-     * urcat octetii, deci nu afla nimic nou; poarta comenzii o accepta deliberat prin
-     * `esteAdresaVeche`; iar emailul catre atelier nu mai scrie adrese deloc, deci partea care
-     * chiar scurgea — casutele a doi furnizori, ani de zile — ramane inchisa. Pagina noua citeste
-     * `cheie` si ignora `url`.
-     *
-     * ⚠ CAND SE SCOATE: la desfasurarea urmatoare, impreuna cu `esteAdresaVeche` din `comanda.ts`.
-     * Cele doua ies IMPREUNA — scos doar `url`, paginile vechi se rup din nou; scoasa doar
-     * `esteAdresaVeche`, adresele plecate in fereastra asta nu mai trec de poarta comenzii.
+     * `uploadToR2` intoarce adresa publica fiindca asa o cer celelalte doua duzini de locuri care
+     * urca imagini de produs. Aici ea e chiar lucrul de care scapam: octetii sunt poza de familie
+     * a unui cumparator, iar adresa asta n-are voie sa iasa din functie.
      */
-    return NextResponse.json({ cheie: key, url });
+    await uploadToR2(buffer, key, detected, "private, no-store");
+    /*
+     * ⚠ SE INTOARCE DOAR CHEIA. Adresa publica nu mai pleaca in comanda si nici in email.
+     * Continutul se serveste prin `/api/customization-file`, care cere sesiune, proprietatea
+     * magazinului, si ca fisierul sa fie chiar pe o comanda a lui.
+     *
+     * ═══ ⚠ FEREASTRA DE DESFASURARE: INCHISA 07.09.2026 ═══
+     *
+     * Vreme de o desfasurare raspunsul a purtat si `url`, ca pagina ramasa deschisa in browserul
+     * unui cumparator peste desfasurare sa nu se rupa: pachetul de atunci facea
+     * `if (date.url) adrese.push(date.url); else { refuzat = true; ... }`, deci fara `url` cadea
+     * MEREU pe ramura de esec, si sub camp iesea textul generic despre format si marime — pentru
+     * un fisier TOCMAI scris cu succes in depozit.
+     *
+     * Acum nu mai exista pagini pe forma aia: desfasurarea care le-a inlocuit e live, iar cheia e
+     * singura forma pe care o scrie cineva. `url` iese IMPREUNA cu `esteAdresaVeche` din
+     * `comanda.ts`, in acelasi comit — scoasa doar una, drumul se rupe pe cealalta jumatate.
+     */
+    return NextResponse.json({ cheie: key });
   } catch (err) {
     console.error("[upload-customization] R2 upload failed:", err);
     return NextResponse.json({ error: "Incarcarea a esuat. Incearca din nou." }, { status: 500 });

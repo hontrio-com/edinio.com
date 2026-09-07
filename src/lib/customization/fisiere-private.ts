@@ -32,9 +32,10 @@ import { PREFIX_INCARCARI } from "./adresa";
  *    nu poate scrie adresa fisierului.
  * 2. **Adresa nu se mai DA.** Ruta de incarcare intoarce CHEIA; in comanda se scrie cheia; iar
  *    continutul se serveste printr-o ruta care cere sesiune si proprietatea magazinului, cu
- *    `Cache-Control: private, no-store`. ⚠ Cat tine fereastra de desfasurare ruta intoarce si
- *    `url`, ca paginile ramase deschise in browsere sa nu se rupa — vezi motivarea intreaga in
- *    `api/upload-customization/route.ts`. Se scoate impreuna cu `esteAdresaVeche` din `comanda.ts`.
+ *    `Cache-Control: private, no-store`. ⚠ Vreme de o desfasurare ruta a intors si `url`, ca
+ *    paginile ramase deschise in browsere sa nu se rupa; fereastra aia s-a INCHIS pe 07.09.2026,
+ *    odata cu `esteAdresaVeche` din `comanda.ts`. Acum nicio adresa nu mai iese din ruta si niciuna
+ *    nu mai intra pe poarta comenzii.
  *
  * Sunt independente dinadins: daca o cheie scapa, tot nu se poate compune alta; daca cineva
  * deduce structura cheii, ruta tot cere autentificare.

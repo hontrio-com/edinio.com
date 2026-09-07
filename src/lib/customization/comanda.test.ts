@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { verificaPersonalizarea } from "./comanda";
+import { cheieIncarcare } from "./fisiere-private";
 
 /**
  * Poarta personalizarii pe drumul comenzii.
@@ -19,23 +20,27 @@ const BIZ = "11111111-1111-4111-8111-111111111111";
 const ALT_BIZ = "22222222-2222-4222-8222-222222222222";
 
 /*
- * ⚠ GAZDELE NOASTRE SE DECLARA, si proba trebuie sa le declare la fel ca productia.
+ * ⚠ SECRETUL DE SEMNARE SE DECLARA, si proba trebuie sa-l declare la fel ca productia.
  *
- * `esteFisierulNostru` cere ca gazda adresei sa fie EXACT una dintre cele configurate. Intr-un
- * mediu fara `R2_PUBLIC_URL` multimea e GOALA si se refuza tot — purtare corecta (fara depozit
- * configurat nu exista incarcari), dar proba trebuie sa puna variabila, altfel ar fi trecut din
- * motivul gresit: ar fi vazut „refuzat" peste tot, inclusiv peste adresa buna.
+ * De cand fereastra de desfasurare s-a inchis (07.09.2026), `esteFisierulNostru` cunoaste O
+ * SINGURA forma: cheia semnata. Fara secret, `cheieIncarcare` ARUNCA (dinadins — vezi `secret()`
+ * din `fisiere-private`), deci proba n-ar mai avea niciun caz pozitiv si ar fi ramas cu o lista de
+ * refuzuri, adica exact felul de proba care trece si peste o poarta care refuza tot.
  *
- * ⚠ Chiar asa a picat prima data, si de-aia scrie aici: fara linia de mai jos, randul care
- * cere `ok` pe `NOSTRU` a dat `eroare`. Perechea „una trece, restul cad" e ce face proba sa
- * insemne ceva; una singura din ele, oricare, se poate satisface si cu o poarta stricata.
+ * ⚠ Perechea „una trece, restul cad" e ce face proba sa insemne ceva; una singura din ele,
+ * oricare, se poate satisface si cu o poarta stricata.
  *
- * Variabila se citeste la FIECARE apel (vezi `gazdeleNoastre`), deci o atribuire aici, dupa
- * importuri, ajunge.
+ * Secretul se citeste la FIECARE semnatura, deci o atribuire aici, dupa importuri, ajunge.
+ *
+ * ⚠ `R2_PUBLIC_URL` RAMANE PUS, si nu degeaba: cat timp poarta se uita numai la chei, o gazda
+ * configurata nu mai poate face nicio adresa sa treaca. Randul asta il aseaza pe cel mai bun
+ * teren pentru atacator — gazda lui e a noastra — si cere ca adresa sa cada TOTUSI.
  */
+process.env.CUSTOMIZATION_FILE_SECRET = "secret-de-proba-pentru-comanda";
 process.env.R2_PUBLIC_URL = "https://pub-alnostru.r2.dev";
 
-const NOSTRU = `https://pub-alnostru.r2.dev/products/customizations/${BIZ}/poza.jpg`;
+/** Forma pe care o scrie ruta de incarcare, si singura pe care o mai primeste poarta. */
+const NOSTRU = cheieIncarcare(BIZ, "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", "jpg");
 
 const FOTOTAPET = {
   customization: {
@@ -136,14 +141,20 @@ test("⚠ PRETUL TRIMIS DE CLIENT E IGNORAT CU TOTUL", () => {
 
 test("⚠ FISIERUL trebuie sa fie al NOSTRU, si al MAGAZINULUI ASTA", () => {
   /*
-   * ⚠ Doua verificari, amandoua cu pret.
+   * ⚠ Doua lucruri, amandoua cu pret.
    *
-   * 1. Sa fie o adresa din depozitul nostru. Fara ea, `value` era un sir liber care ajungea direct
-   *    intr-un `<a href>` din panoul comerciantului (`OrderDetailClient.tsx:1041`) — iar un
+   * 1. Sa fie un fisier din depozitul nostru. Fara asta, `value` era un sir liber care ajungea
+   *    direct intr-un `<a href>` din panoul comerciantului (`OrderDetailClient.tsx:1041`) — iar un
    *    `javascript:` acolo ruleaza in sesiunea lui autentificata. XSS stocat, trimis prin
    *    formularul public de comanda.
-   * 2. Sa fie sub prefixul de incarcari AL MAGAZINULUI, altfel un client putea trimite adresa unei
-   *    poze a altui magazin si ea aparea in comanda ca „fisierul incarcat de client".
+   * 2. Sa fie al MAGAZINULUI ASTA, altfel un client putea trimite fisierul altui magazin si el
+   *    aparea in comanda ca „fisierul incarcat de client".
+   *
+   * ⚠ DE CE LISTA DE ADRESE A RAMAS, desi poarta nu mai citeste adrese deloc. Ea nu mai apara
+   * granita de azi, o apara pe cea de MAINE: prima incercare de a primi iar o adresa — un import,
+   * o migrare, o „compatibilitate" — cade aici, pe toata lista deodata, cu motivele scrise. E
+   * ieftina si nu poate imbatrani in tacere: cazul pozitiv de deasupra ei cere ca poarta sa lase
+   * totusi ceva sa treaca.
    */
   const cuPoza = {
     customization: {
@@ -158,6 +169,12 @@ test("⚠ FISIERUL trebuie sa fie al NOSTRU, si al MAGAZINULUI ASTA", () => {
     "javascript:alert(document.cookie)",
     "https://evil.example.com/poza.jpg",
     "data:text/html;base64,PHNjcmlwdD4=",
+    /*
+     * ⚠ ADRESA NOASTRA, A MAGAZINULUI ASTA, PE HTTPS — cea care TRECEA in fereastra de
+     * desfasurare, si singura din lista care a fost vreodata acceptata. Randul asta e chiar
+     * inchiderea ferestrei: pus inainte de 07.09.2026, ar fi fost rosu.
+     */
+    `https://pub-alnostru.r2.dev/products/customizations/${BIZ}/poza.jpg`,
     `https://pub-alnostru.r2.dev/products/customizations/${ALT_BIZ}/poza.jpg`,
     "https://pub-alnostru.r2.dev/products/alt-produs/poza.jpg",
     /*

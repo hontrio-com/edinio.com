@@ -222,7 +222,6 @@ export async function GET(req: NextRequest) {
       const step = store.automation.steps[cart.automation_step];
       if (!step) continue; // sequence finished
 
-      if (store.automation.min_cart_value && Number(cart.subtotal || 0) < store.automation.min_cart_value) continue;
       const hoursOld = (now.getTime() - new Date(cart.created_at).getTime()) / 3_600_000;
       if (hoursOld < step.delay_hours) continue;
       // Anti-spam: never send two automation messages within an hour of each other
@@ -269,6 +268,30 @@ export async function GET(req: NextRequest) {
        */
       const proaspat = await cosRecuperabil(admin, store.businessId, (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[]);
       if (proaspat.items.length === 0) { await revendicaPasul(admin, cart.id, cart, now); continue; }
+
+      /*
+       * ═══ ⚠ PRAGUL COMERCIANTULUI SE JUDECA PE VALOAREA AUTORITARA ═══
+       *
+       * Statea mai sus, inaintea drumului la catalog, si se uita la `cart.subtotal`. Doua lucruri
+       * rele intr-unul singur:
+       *
+       *   1. `cart.subtotal` il socoteste `trackAbandonedCart` din preturile trimise de BROWSER,
+       *      iar aceea e o actiune publica. Cine vrea sa primeasca mesajele isi declara ce suma
+       *      pofteste; cine nu vrea, isi declara zero.
+       *
+       *   2. Chiar cinstit fiind, numarul era gresit pentru produsele personalizate: cosul salva
+       *      pretul de CATALOG, deci un fototapet de 910 lei intra in baza cu 89. Cu pragul pus la
+       *      300, mesajul nu pleca niciodata, si comerciantul nu avea cum sa afle de ce tocmai
+       *      comenzile lui mari nu se recuperau.
+       *
+       * `proaspat.total` e repretuit din catalog cu aceeasi socoteala ca linkul de recuperare, deci
+       * e chiar suma pe care omul ar plati-o daca s-ar intoarce. Aia e valoarea despre care
+       * comerciantul a spus „peste 300 de lei".
+       *
+       * ⚠ COSTA O INTEROGARE IN PLUS pentru cosurile care oricum n-ar fi trecut pragul. Se plateste
+       * dinadins: singura alternativa ieftina era sa credem browserul.
+       */
+      if (store.automation.min_cart_value && proaspat.total < store.automation.min_cart_value) continue;
 
       // Pasul se ia INAINTE de trimitere. Daca alt lucrator l-a luat deja, se sare:
       // asa nu poate pleca acelasi mesaj de doua ori.

@@ -158,14 +158,19 @@ export interface ProdusCosSalvat {
  * promite un pret pe care magazinul nu-l mai onoreaza e mai rau decat niciun
  * email.
  *
- * O linie DISPARE cand produsul nu mai e in catalog, e dezactivat, are variante,
- * sau cere personalizare. Nu e o alegere de afisare, ci consecinta: exact astea
- * sunt liniile pe care linkul de recuperare nu le mai poate pune inapoi in cos
- * (produsul cu variante n-are marimea salvata nicaieri — 0 din cele 129 de linii
- * din productie poarta vreuna; produsul personalizat n-are unde sa-si tina textul,
- * fiindca `CartItem` n-are camp pentru el). Daca emailul le-ar lista, clientul ar
- * da clic si ar ajunge pe un cos care nu contine ce i s-a promis. In productie
- * asta goleste 6 cosuri din 96, adica exact cele care oricum nu se pot recupera.
+ * O linie DISPARE cand produsul nu mai e in catalog sau e dezactivat, si cand
+ * produsul CERE ceva ce randul salvat n-are: varianta pentru un produs cu
+ * variante, personalizarea pentru unul care o cere. Nu e o alegere de afisare, ci
+ * consecinta: exact astea sunt liniile pe care linkul de recuperare nu le mai
+ * poate pune inapoi in cos, iar daca emailul le-ar lista, clientul ar da clic si
+ * ar ajunge pe un cos care nu contine ce i s-a promis.
+ *
+ * ⚠ TEXTUL DE AICI SPUNEA ALTCEVA PANA PE 07.09.2026: ca se sare peste ORICE
+ * produs cu variante sau cu personalizare. Asa era, si era corect atunci, fiindca
+ * instantaneul avea cinci campuri si nu le purta. Acum le poarta (vezi
+ * `AbandonedCartItem`), deci se sare doar randul care chiar nu se poate reface.
+ * Regula scrisa e cea de la `liniiRecuperabile`, mai jos; randurile astea o
+ * rezuma, si au ramas in urma o zi.
  */
 /** Pretul unitar cu treptele aplicate, in unitatea in care emailul inmulteste. */
 function esteObiect(v: unknown): v is Record<string, unknown> {

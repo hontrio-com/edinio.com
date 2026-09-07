@@ -461,20 +461,51 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         name: form.name.trim() || undefined,
         email: form.email.trim() || undefined,
         phone: form.phone.replace(/[\s\-().]/g, "") || undefined,
-        /* ⚠ Si personalizarea, ca linia sa se poata reface — vezi nota din `checkout-core.ts`. */
-        items: [{
-          product_id: product.id,
-          name: product.name,
-          price: unit,
-          quantity,
-          image_url: product.images?.[0] ?? null,
-          ...(product.variantTitle ? { variant_title: product.variantTitle } : {}),
-          ...(customizationPayload ? { customization: customizationPayload } : {}),
-        }],
+        /*
+         * ═══ ⚠ SI LINIILE PURTATE DIN COS, NU DOAR PRODUSUL DE PE „CUMPARA ACUM" ═══
+         *
+         * `placeOrder` le comanda demult pe amandoua (vezi `additional_items` mai jos), dar
+         * instantaneul de aici salva o singura linie. Iar cosul abandonat se scrie pe SESIUNE:
+         * clientul cu o cana „Robert" in cos care apasa „Comanda acum" pe un tricou si apoi se
+         * razgandeste ramanea cu un cos de recuperat din care cana disparuse. Recuperarea ii
+         * restaura mai putin decat avea, si `restoreCart` SUPRASCRIE, deci pierderea era definitiva.
+         *
+         * ⚠ Personalizarea si varianta pleaca pentru fiecare linie, ca linia sa se poata reface.
+         *
+         * ⚠ PRETUL E CEL EFECTIV, prin `pretBucataCos`: acolo intra treptele de cantitate si
+         * personalizarea. `i.price` e instantaneul de catalog din localStorage, adica 89 in loc de
+         * 910 pentru un fototapet, si pe numerele astea se judeca pragul automatizarii.
+         */
+        items: [
+          {
+            product_id: product.id,
+            name: product.name,
+            price: unit,
+            quantity,
+            image_url: product.images?.[0] ?? null,
+            ...(product.variantTitle ? { variant_title: product.variantTitle } : {}),
+            ...(customizationPayload ? { customization: customizationPayload } : {}),
+          },
+          ...cart.map((i) => ({
+            product_id: i.productId,
+            name: i.variantTitle ? `${i.name} (${i.variantTitle})` : i.name,
+            price: pretBucataCos(i),
+            quantity: i.quantity,
+            image_url: i.imageUrl ?? null,
+            ...(i.variantTitle ? { variant_title: i.variantTitle } : {}),
+            ...(i.customization ? { customization: i.customization } : {}),
+          })),
+        ],
       });
     }, 1500);
     return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };
-  }, [open, sessionId, business.id, business.slug, form.name, form.phone, form.email, productSubtotal, quantity, product.id, product.name, product.price, product.images]);
+    /*
+     * ⚠ `cart` E IN DEPENDINTE. Fara el, o linie scoasa din cos in timp ce formularul e deschis nu
+     * s-ar fi vazut niciodata in instantaneu. `pretBucataCos` nu intra: e refacut la fiecare
+     * randare, deci ar reporni cronometrul fara oprire, iar ce se schimba cu adevarat e `cart`.
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, sessionId, business.id, business.slug, form.name, form.phone, form.email, productSubtotal, quantity, product.id, product.name, product.price, product.images, cart]);
 
   // Funnel event: opening the order form = InitiateCheckout / begin_checkout.
   // The single-product buy-now flow has no cart step, so this is where the

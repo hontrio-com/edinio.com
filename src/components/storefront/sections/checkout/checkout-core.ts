@@ -59,7 +59,7 @@ export function useCheckoutOrder({
   preview = null,
   suprafata = "modal",
 }: CheckoutOrderInput) {
-  const { items, total, clear, sessionId, hydrated, lineUnit } = useCart();
+  const { items, total, clear, sessionId, hydrated, lineUnit, lineNeedsReview } = useCart();
   const [checkoutConfig, setCheckoutConfig] = useState<StorePageContent["checkout_config"]>(
     preview ? preview.checkoutConfig : ({ email_field: emailFieldConfig } as StorePageContent["checkout_config"])
   );
@@ -133,6 +133,18 @@ export function useCheckoutOrder({
   // acceptate incluse), ca butonul sa nu ramana blocat pe o comanda pe care
   // serverul ar accepta-o.
   const belowMinOrder = minOrderAmount !== null && goodsTotal < minOrderAmount;
+  /*
+   * ═══ ⚠ LINII CARE NU SE MAI POT COMANDA ═══
+   *
+   * Comerciantul a scos „Premium" dintre optiuni, sau a schimbat un camp, iar linia din cos poarta
+   * o configuratie care nu mai exista. Rezumatul o marca deja („Necesita actualizare"), dar butonul
+   * ramanea apasabil: clientul completa tot formularul, apasa, si serverul refuza, pe drept, dar
+   * dupa ce omul isi daduse adresa si alesese plata.
+   *
+   * ⚠ NU E O PROBLEMA DE BANI, e una de drum inchis. Poarta adevarata e si ramane la server; asta e
+   * doar ca omul sa afle inainte, nu dupa.
+   */
+  const liniiDeRevizuit = items.filter(lineNeedsReview);
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
   const baseShippingCost = courierSelection ? courierSelection.price : shippingCost;
   const discountAmount = appliedDiscount ? Math.min(appliedDiscount.discountAmount, goodsTotal) : 0;
@@ -356,7 +368,22 @@ export function useCheckoutOrder({
         items: items.map(i => ({
           product_id: i.productId,
           name: i.variantTitle ? `${i.name} (${i.variantTitle})` : i.name,
-          price: i.price,
+          /*
+           * ═══ ⚠ PRETUL LINIEI, NU CEL DIN CATALOG ═══
+           *
+           * Aici mergea `i.price`, adica instantaneul de catalog salvat in localStorage la
+           * adaugare. Pentru un fototapet de 910 lei, cosul abandonat se salva cu 89: fara
+           * suprafata, fara Premium, fara protectie.
+           *
+           * ⚠ CE STRICA: `trackAbandonedCart` face subtotalul din numerele astea, iar el ajunge
+           * apoi in „Valoare cosuri abandonate", in media pe cos si in raportul de potential. Mai
+           * rau, automatizarea are un prag „trimite doar peste 300 de lei": un cos de 910 lei
+           * salvat ca 89 nu primea NICIODATA mesajul, si comerciantul nu avea cum sa afle de ce.
+           *
+           * ⚠ `lineUnit` E CHIAR PRETUL PE BUCATA AL LINIEI, treptele de cantitate si
+           * personalizarea cu tot. Acelasi pe care il vede clientul pe ecran.
+           */
+          price: lineUnit(i),
           quantity: i.quantity,
           image_url: i.imageUrl,
           ...(i.variantTitle ? { variant_title: i.variantTitle } : {}),
@@ -365,6 +392,12 @@ export function useCheckoutOrder({
       });
     }, 1500);
     return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };
+    /*
+     * ⚠ `lineUnit` NU intra in dependinte: e refacut la fiecare randare a furnizorului de cos, deci
+     * ar reporni cronometrul de captura fara oprire. Ce se schimba cu adevarat sunt `items`, si ele
+     * sunt acolo.
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview, open, sessionId, businessId, form.name, form.phone, form.email, items]);
 
   /**
@@ -619,6 +652,7 @@ export function useCheckoutOrder({
     appliedDiscount,
     availablePaymentMethods,
     belowMinOrder,
+    liniiDeRevizuit,
     bumps,
     cardDiscountAmount,
     codDiscountAmount,

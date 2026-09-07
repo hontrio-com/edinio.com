@@ -62,6 +62,7 @@ export function CheckoutForm({
     appliedDiscount,
     availablePaymentMethods,
     belowMinOrder,
+    liniiDeRevizuit,
     bumps,
     acceptedBumpOffers,
     companyBilling,
@@ -478,10 +479,24 @@ export function CheckoutForm({
               Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount!)}</strong>. Mai adauga <strong className="text-foreground">{formatPrice(minOrderAmount! - goodsTotal)}</strong> pentru a finaliza.
             </p>
           )}
+          {/*
+            ⚠ O LINIE CARE NU SE MAI POATE COMANDA OPRESTE BUTONUL, nu doar rezumatul.
+            Optiunea aleasa de client a fost scoasa de comerciant intre timp. Serverul refuza
+            oricum comanda, deci nu e o poarta de bani; e ca omul sa afle INAINTE sa-si dea
+            adresa si sa aleaga plata, nu dupa ce apasa. Textul spune si ce are de facut.
+          */}
+          {liniiDeRevizuit.length > 0 && (
+            <p role="alert" className="text-xs text-center text-amber-600 dark:text-amber-500">
+              {liniiDeRevizuit.length === 1
+                ? <>Un produs din comanda are optiuni care nu mai sunt disponibile.</>
+                : <>{liniiDeRevizuit.length} produse din comanda au optiuni care nu mai sunt disponibile.</>}
+              {" "}Deschide produsul din rezumat si alege din nou ca sa poti finaliza.
+            </p>
+          )}
           {errors._ && <p role="alert" className="text-sm text-red-500 text-center">{errors._}</p>}
           <button
             type="submit"
-            disabled={isPending || belowMinOrder}
+            disabled={isPending || belowMinOrder || liniiDeRevizuit.length > 0}
             className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}
           >

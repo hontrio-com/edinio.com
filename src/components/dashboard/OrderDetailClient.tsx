@@ -177,10 +177,16 @@ function StatusStepper({ status }: { status: string }) {
  * refuza fiindca nu e o cheie a noastra. Adica o legatura care nu se deschide — vizibil, si nu o
  * poarta ocolita in tacere.
  */
-function adresaFisierului(valoare: string, businessId: string, comandaId: string): string {
+function adresaFisierului(
+  valoare: string,
+  businessId: string,
+  comandaId: string,
+  mic = false,
+): string {
   return `/api/customization-file?cheie=${encodeURIComponent(valoare)}`
     + `&businessId=${encodeURIComponent(businessId)}`
-    + `&comanda=${encodeURIComponent(comandaId)}`;
+    + `&comanda=${encodeURIComponent(comandaId)}`
+    + (mic ? "&mic=1" : "");
 }
 
 /*
@@ -1193,25 +1199,27 @@ export function OrderDetailClient({
                                         o poate citi el, iar ruta noastra cere SESIUNEA
                                         comerciantului. Cu `<Image>` miniatura ar fi raspuns 401.
 
-                                        ⚠ PATRATUL DE 56px TRAGE ORIGINALUL. Ruta intoarce octetii
-                                        de la incarcare, nemicsorati (plafonul e 10 MB pe imagine),
-                                        si cu `private, no-store`, deci nici browserul nu-i tine:
-                                        o comanda cu cinci poze de telefon costa 40 MB la FIECARE
-                                        deschidere a paginii. `lazy` amana ce nu se vede si
-                                        `async` scoate decodarea de pe firul care deseneaza — atat
-                                        se poate face din panou.
-                                        ⚠ Restul nu e de aici: ruta ar trebui sa primeasca o
-                                        latime (trepte fixe, ca `/api/img`) si sa micsoreze cu
-                                        `sharp` pentru miniatura, pastrand originalul pentru
-                                        legatura; iar antetul poate fi `private, max-age=…` —
-                                        `no-store` nu apara nimic peste `private`, doar plateste.
+                                        ⚠ `mic` NU E DECOR. Fara el, patratul de 56px tragea
+                                        ORIGINALUL: octetii de la incarcare, nemicsorati (plafonul
+                                        e 10 MB pe imagine), si cu `private, no-store`, deci nici
+                                        browserul nu-i tinea. O comanda cu cinci poze de telefon
+                                        costa 40 MB la FIECARE deschidere a paginii. Acum ruta
+                                        serveste miniatura facuta la incarcare, sub 20 KB.
+
+                                        ⚠ LEGATURA DE DEASUPRA RAMANE PE ORIGINAL. Comerciantul
+                                        apasa ca sa vada macheta la marimea ei; miniatura e doar
+                                        pentru patrat, si nu e buna de tipar.
+
+                                        ⚠ SI DACA MINIATURA LIPSESTE (fisier urcat inainte de
+                                        schimbarea asta), ruta cade singura pe original: patratul
+                                        arata mai departe, doar ca mai scump.
 
                                         ⚠ Dezactivarea de lint de mai jos e DOAR pe randul asta.
                                         Celelalte `<img>` din fisier sunt de dinainte si isi
                                         pastreaza avertismentul: regula nu e oprita pe fisier.
                                       */}
                                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                                      <img src={adresaFisierului(url, order.business_id, order.id)} alt={`Personalizare ${imgI + 1}`} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                                      <img src={adresaFisierului(url, order.business_id, order.id, true)} alt={`Personalizare ${imgI + 1}`} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                                     </a>
                                   ) : (
                                     <a key={imgI} href={adresaFisierului(url, order.business_id, order.id)} target="_blank" rel="noopener noreferrer"

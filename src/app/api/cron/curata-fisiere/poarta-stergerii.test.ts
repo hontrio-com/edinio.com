@@ -4,6 +4,7 @@ import { register } from "node:module";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { NextRequest } from "next/server";
+import { cheieMiniatura } from "@/lib/customization/fisiere-private";
 
 /**
  * PORTILE STERGERII — probate pe CHIAR RUTA, fiindca ele nu incap in modulul pur.
@@ -387,6 +388,46 @@ test("⚠ ce se apara si ce se sterge, pe acelasi drum", async () => {
   /* ⚠ Perechea, spusa pe fata: fisierul proaspat si cel de pe comanda noua sunt INCA acolo. */
   assert.equal(sterse.includes(proaspat), false, "s-a sters fisierul urcat azi");
   assert.equal(sterse.includes(peComanda), false, "s-a sters fisierul unei comenzi din fereastra");
+});
+
+test("⚠ MINIATURA unui fisier aparat e si ea aparata, desi nu sta in nicio comanda", async () => {
+  /*
+   * ═══ ⚠ CHEIA MINIATURII NU SE SCRIE NICAIERI ═══
+   *
+   * Ea se deriva din a originalului, la servire. Deci cronul n-o poate vedea citind comenzile, si
+   * fara randul care o adauga la multimea aparata fiecare miniatura ar fi iesit ORFANA: stearsa la
+   * treizeci de zile, tacut. Panoul ar fi cazut singur inapoi pe original, deci nimic nu s-ar fi
+   * stricat pe ecran, si nimeni n-ar fi aflat de ce factura de egress s-a intors de unde a plecat.
+   *
+   * ⚠ SI PERECHEA: miniatura unui ORFAN se sterge. Altfel „aparam miniaturile" ar fi insemnat
+   * „nu mai stergem nimic care se termina in `.mic.webp`", adica o scurgere pe alta usa.
+   */
+  const peComanda = pune("pe-comanda-noua.jpg", 100);
+  const miniaturaAparata = pune("pe-comanda-noua.jpg.mic.webp", 100);
+  const orfan = pune("orfan.jpg", 60);
+  const miniaturaOrfanului = pune("orfan.jpg.mic.webp", 60);
+
+  /* ⚠ Ca proba sa nu se sprijine pe forma sirului, cheile derivate se cer chiar functiei. */
+  assert.equal(miniaturaAparata, cheieMiniatura(peComanda));
+  assert.equal(miniaturaOrfanului, cheieMiniatura(orfan));
+
+  comenzi.push({
+    id: "c1",
+    created_at: acumMinus(100).toISOString(),
+    items: [{ customization: { p: { type: "image", label: "Poza", value: peComanda } } }],
+  });
+
+  const r = await GET(cere());
+  assert.equal(((await r.json()) as { ok: boolean }).ok, true);
+
+  assert.equal(
+    sterse.includes(miniaturaAparata), false,
+    "s-a sters miniatura unui fisier de pe o comanda din fereastra",
+  );
+  assert.deepEqual(
+    sterse.sort(), [orfan, miniaturaOrfanului].sort(),
+    "s-a sters altceva decat orfanul si miniatura lui",
+  );
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════

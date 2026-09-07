@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
-  areFormaCheii, cheieIncarcare, esteCheiaNoastra,
+  areFormaCheii, cheieIncarcare, cheieMiniatura, esteCheiaNoastra,
 } from "@/lib/customization/fisiere-private";
 /*
  * ⚠ Terminatia se citeste din modulul PUR, nu de aici: `fisiere-private` importa `node:crypto`,
@@ -35,10 +35,17 @@ const BIZ = "11111111-1111-4111-8111-111111111111";
 const ALT_BIZ = "22222222-2222-4222-8222-222222222222";
 const NUME = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 
-/** ⚠ Secretul se pune AICI, nu se presupune: `secret()` il citeste la fiecare chemare. */
-process.env.SHIPPING_QUOTE_SECRET = "secret-de-proba-pentru-semnatura";
-/* Si cel dedicat se stinge, ca proba sa masoare chiar lantul, nu ce s-a nimerit in mediu. */
-delete process.env.CUSTOMIZATION_FILE_SECRET;
+/**
+ * ⚠ Secretul se pune AICI, nu se presupune: `secret()` il citeste la fiecare chemare.
+ *
+ * ⚠ SI E CEL DEDICAT, din 07.09.2026. Pana atunci proba folosea dinadins `SHIPPING_QUOTE_SECRET`,
+ * ca sa masoare LANTUL de rezerve. Lantul a fost scos: lega cheile fisierelor personale de
+ * cotatiile de transport si de cheia de serviciu a bazei, iar urmarea era ca secretul asta nu se
+ * putea roti fara sa opreasca altceva.
+ */
+process.env.CUSTOMIZATION_FILE_SECRET = "secret-de-proba-pentru-semnatura";
+/* Si celelalte doua se sting, ca proba sa cada daca lantul se intoarce. */
+delete process.env.SHIPPING_QUOTE_SECRET;
 
 /* ═══════════════════════════════════════════════════════════════════════════
    1. DUS-INTORS: ce scriem noi, recunoastem noi
@@ -53,6 +60,29 @@ test("⚠ cheia scrisa de noi se recunoaste de noi", () => {
   const cheie = cheieIncarcare(BIZ, NUME, "jpg");
   assert.ok(cheie.startsWith(`${PREFIX_INCARCARI}${BIZ}/`), cheie);
   assert.ok(esteCheiaNoastra(cheie, BIZ), `cheia noastra nu se recunoaste: ${cheie}`);
+});
+
+test("⚠ CHEIA MINIATURII NU E O CHEIE DE COMANDA, si asta e dinadins", () => {
+  /*
+   * ═══ ⚠ MINIATURA NU ARE VOIE SA INTRE INTR-O COMANDA ═══
+   *
+   * Ea se deriva la servire din cheia originalului, nu se semneaza si nu se scrie nicaieri. Daca
+   * ar fi trecut de porti, ar fi fost o A DOUA cheie catre acelasi fisier: una pe care poarta
+   * comenzii ar fi primit-o, si atunci comerciantul ar fi ajuns sa tipareasca dintr-o poza de 160
+   * de pixeli fara sa stie. Se cere aici sa CADA la amandoua portile.
+   *
+   * ⚠ SI SA RAMANA SUB ACELASI PREFIX, altfel cronul de retentie n-ar fi maturat-o niciodata si
+   * miniaturile s-ar fi adunat in depozit pe veci.
+   */
+  const cheie = cheieIncarcare(BIZ, NUME, "jpg");
+  const mica = cheieMiniatura(cheie);
+
+  assert.ok(mica.startsWith(`${cheie}`), `miniatura nu porneste de la original: ${mica}`);
+  assert.ok(mica.startsWith(`${PREFIX_INCARCARI}${BIZ}/`), `miniatura a iesit din prefix: ${mica}`);
+  assert.equal(esteCheiaNoastra(mica, BIZ), false, "miniatura trece drept cheie semnata de noi");
+  assert.equal(areFormaCheii(mica, BIZ), false, "miniatura are forma unei chei de comanda");
+  /* ⚠ Si nu se poate compune de doua ori: derivata din ea insasi tot nu devine cheie buna. */
+  assert.equal(esteCheiaNoastra(cheieMiniatura(mica), BIZ), false);
 });
 
 test("terminatia se normalizeaza, si ce nu e terminatie devine `bin`", () => {
@@ -108,12 +138,12 @@ test("⚠ semnatura tine cont si de NUME si de TERMINATIE", () => {
 
 test("⚠ semnatura depinde CHIAR de secret", () => {
   const cheie = cheieIncarcare(BIZ, NUME, "jpg");
-  const vechi = process.env.SHIPPING_QUOTE_SECRET;
+  const vechi = process.env.CUSTOMIZATION_FILE_SECRET;
   try {
-    process.env.SHIPPING_QUOTE_SECRET = "cu-totul-alt-secret";
+    process.env.CUSTOMIZATION_FILE_SECRET = "cu-totul-alt-secret";
     assert.equal(esteCheiaNoastra(cheie, BIZ), false, "cheia trece si cu alt secret: semnatura nu e o semnatura");
   } finally {
-    process.env.SHIPPING_QUOTE_SECRET = vechi;
+    process.env.CUSTOMIZATION_FILE_SECRET = vechi;
   }
 });
 
@@ -219,4 +249,43 @@ test("⚠ forma cheii se poate verifica SI fara secret, pentru cand el s-a rotit
   assert.equal(areFormaCheii(cheieIncarcare(ALT_BIZ, NUME, "jpg"), BIZ), false, "cheia altui magazin");
   assert.equal(areFormaCheii(`${PREFIX_INCARCARI}${BIZ}/../alt/x-000000000000000000000000.jpg`, BIZ), false);
   assert.equal(areFormaCheii(`${PREFIX_INCARCARI}${BIZ}/${NUME}.jpg`, BIZ), false, "fara semnatura deloc");
+});
+
+test("⚠ LANTUL DE REZERVE A DISPARUT: numai secretul dedicat semneaza", () => {
+  /*
+   * ═══ ⚠ DE CE CONTEAZA CA E SINGUR ═══
+   *
+   * `secret()` cadea pe `SHIPPING_QUOTE_SECRET`, apoi pe `SUPABASE_SERVICE_ROLE_KEY`. Criptografic
+   * mergea. Dar lega trei lucruri fara nicio legatura intre ele, iar urmarea practica era ca
+   * secretul fisierelor personale NU SE PUTEA ROTI: schimbat, ar fi oprit transportul sau baza. Un
+   * secret care nu se poate roti nu e o masura de securitate, e o speranta.
+   *
+   * ⚠ SE MASOARA PRIN PURTARE, nu prin citirea sursei: se sterge cel dedicat si se lasa celelalte
+   * doua pline. Daca lantul se intoarce vreodata, semnarea va merge mai departe si proba cade.
+   */
+  const dedicat = process.env.CUSTOMIZATION_FILE_SECRET;
+  const transport = process.env.SHIPPING_QUOTE_SECRET;
+  const serviciu = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  try {
+    delete process.env.CUSTOMIZATION_FILE_SECRET;
+    process.env.SHIPPING_QUOTE_SECRET = "secretul-transportului";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "cheia-de-serviciu";
+
+    assert.throws(
+      () => cheieIncarcare(BIZ, NUME, "jpg"), /CUSTOMIZATION_FILE_SECRET/,
+      "semnarea cade iar pe secretul altui subsistem",
+    );
+  } finally {
+    if (dedicat === undefined) delete process.env.CUSTOMIZATION_FILE_SECRET;
+    else process.env.CUSTOMIZATION_FILE_SECRET = dedicat;
+    if (transport === undefined) delete process.env.SHIPPING_QUOTE_SECRET;
+    else process.env.SHIPPING_QUOTE_SECRET = transport;
+    if (serviciu === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = serviciu;
+  }
+
+  /* ⚠ Si e OBLIGATORIU in productie: fara el, desfasurarea se opreste cu numele cheii in jurnal. */
+  const cfg = readFileSync(path.resolve(process.cwd(), "next.config.ts"), "utf8");
+  const obligatorii = cfg.slice(cfg.indexOf("const CHEI_OBLIGATORII"), cfg.indexOf("const CHEI_ASTEPTATE"));
+  assert.match(obligatorii, /"CUSTOMIZATION_FILE_SECRET"/, "secretul nu opreste o desfasurare fara el");
 });

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { galeataCheii, linkDeCitirePrivata } from "@/lib/r2";
+import { galeataCheii, galeataIncarcarilor, linkDeCitirePrivata, masoaraIncarcarea } from "@/lib/r2";
 import { rateLimit } from "@/lib/utils/rate-limit";
-import { areFormaCheii } from "@/lib/customization/fisiere-private";
+import { areFormaCheii, cheieMiniatura } from "@/lib/customization/fisiere-private";
 import { terminatia } from "@/lib/customization/adresa";
 
 export const runtime = "nodejs";
@@ -293,13 +293,43 @@ export async function GET(req: NextRequest) {
    */
   const ext = terminatia(cheie) ?? "bin";
 
+  /*
+   * ═══ ⚠ MINIATURA, DACA E CERUTA SI DACA EXISTA ═══
+   *
+   * Panoul cere `mic=1` pentru patratelele de langa fiecare camp, si nimic pentru descarcarea de la
+   * apasare. Diferenta e de zeci de megaocteti pe o comanda cu poze de telefon.
+   *
+   * ⚠ CHEIA MINIATURII SE DERIVA AICI, din cheia originalului care a trecut deja TOATE portile.
+   * Nu vine din adresa si nu se poate cere una anume: `mic` e doar un da/nu. Daca ar fi venit din
+   * adresa, ar fi fost o a doua cale catre octeti, ocolind `areFormaCheii` si legatura cu comanda,
+   * adica exact greseala din [[alta-usa-catre-aceiasi-octeti]].
+   *
+   * ⚠ SI SE CADE INAPOI PE ORIGINAL cand miniatura nu exista: fisierele urcate inainte de schimbarea
+   * asta n-au una, si comenzile lor trebuie sa se deschida mai departe. La fel pentru PDF-uri, care
+   * n-au niciodata miniatura.
+   */
+  let cheieServita = cheie;
+  let extServita = ext;
+  if (cauta.get("mic") === "1" && ext !== "pdf") {
+    try {
+      const mica = cheieMiniatura(cheie);
+      if (await masoaraIncarcarea(mica)) {
+        cheieServita = mica;
+        extServita = "webp";
+      }
+    } catch (e) {
+      /* ⚠ Nu se opreste: fara miniatura se serveste originalul, ca inainte. */
+      console.error("[customization-file] miniatura nu a putut fi cautata", { motiv: String(e) });
+    }
+  }
+
   try {
     const link = await linkDeCitirePrivata(
-      cheie,
-      bucket,
+      cheieServita,
+      cheieServita === cheie ? bucket : galeataIncarcarilor(),
       /* ⚠ Numele vine din comanda si din cheie, deci din datele noastre — nu de la client. */
-      numeDescarcare(comanda.order_number, comanda.items, cheie, ext),
-      TIP_DUPA_EXT[ext] ?? "application/octet-stream",
+      numeDescarcare(comanda.order_number, comanda.items, cheie, extServita),
+      TIP_DUPA_EXT[extServita] ?? "application/octet-stream",
     );
     /*
      * ⚠ 302 SI `no-store`: raspunsul asta poarta un link semnat. Cache-uit undeva pe drum, el ar

@@ -5,6 +5,7 @@ import { logError } from "@/lib/error-logger";
 import { PREFIX_INCARCARI } from "@/lib/customization/adresa";
 import { listeazaIncarcari, stergeIncarcari } from "@/lib/r2";
 import { cheileComenzii, deSters, pragulComenzilor, LUNI_PE_COMANDA, ZILE_ORFAN } from "./reguli";
+import { cheieMiniatura } from "@/lib/customization/fisiere-private";
 
 /**
  * Sterge fisierele incarcate de cumparatori care nu mai au de ce sa existe.
@@ -154,6 +155,24 @@ export async function GET(req: NextRequest) {
   }
 
   /*
+   * ═══ ⚠ SI MINIATURILE LOR ═══
+   *
+   * Miniatura nu sta in nicio comanda: cheia ei se deriva din a originalului, la servire. Deci
+   * pasii de mai sus n-o pot vedea, si fara randurile astea fiecare miniatura ar fi iesit ORFANA
+   * si ar fi fost stearsa dupa treizeci de zile. Panoul ar fi cazut inapoi pe original, tacut:
+   * nimic stricat pe ecran, doar factura de egress inapoi de unde a plecat, si nimeni n-ar fi
+   * stiut de ce.
+   *
+   * ⚠ SE IA O COPIE A MULTIMII, fiindca se adauga in ea chiar in timp ce se parcurge.
+   *
+   * ⚠ SE ADAUGA FARA SA SE INTREBE DACA EXISTA: o cheie aparata care nu e in depozit nu costa
+   * nimic (verdictul se da pe obiectele listate), iar o interogare pe fiecare cheie ar fi insemnat
+   * mii de `HeadObject` la fiecare rulare.
+   */
+  const cheiAparate = aparate.size;
+  for (const cheie of [...aparate]) aparate.add(cheieMiniatura(cheie));
+
+  /*
    * ═══ 2. CE E IN DEPOZIT ═══
    *
    * ⚠ LISTAREA TREBUIE SA SE TERMINE. Oprita la jumatate, restul obiectelor pur si simplu n-ar fi
@@ -224,7 +243,13 @@ export async function GET(req: NextRequest) {
     ok: true,
     comenziCitite,
     cosuriCitite,
-    cheiAparate: aparate.size,
+    /*
+     * ⚠ CATE CHEI S-AU GASIT IN DATE, nu cate sunt in multime. Multimea mai poarta si cheile
+     * DERIVATE ale miniaturilor, care nu stau nicaieri; numarate impreuna, raportul s-ar fi
+     * dublat peste noapte fara ca nimic sa se fi schimbat in comenzi, iar omul care-l citeste
+     * l-ar fi luat drept semn.
+     */
+    cheiAparate,
     obiecte: obiecte.length,
     trunchiat,
     deSters: verdicte.length,

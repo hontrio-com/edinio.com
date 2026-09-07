@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import {
-  inceputulIncarcarii, masoaraIncarcarea, mutaIncarcarea, stergeIncarcarea,
+  incarcaMiniatura, inceputulIncarcarii, masoaraIncarcarea, mutaIncarcarea, stergeIncarcarea,
 } from "@/lib/r2";
 import { detectDocMime, detectImageMime, isAllowedImage, MAX_PIXELI } from "@/lib/utils/file-signature";
 import { MB_DOCUMENT, MB_IMAGINE } from "@/lib/customization/definitie";
-import { cheiaDefinitiva, esteCheieProvizorie } from "@/lib/customization/fisiere-private";
+import { cheiaDefinitiva, cheieMiniatura, esteCheieProvizorie } from "@/lib/customization/fisiere-private";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { verificaPermisul } from "@/lib/customization/permis-incarcare";
 
@@ -58,6 +58,15 @@ const CAT_SE_CITESTE = 512 * 1024;
  * bucata de mai sus e oricum de ajuns pentru antet.
  */
 const ADU_INTREG_SUB = 2 * 1024 * 1024;
+
+/**
+ * Cat de lata iese miniatura din panou.
+ *
+ * ⚠ Patratul are 56 de pixeli, dar pe ecrane cu densitate dubla el cere 112. 160 acopera si cazul
+ * asta, si o eventuala marire a patratului, si tot ramane sub 20 KB pe imagine, fata de cele 8 MB
+ * ale originalului.
+ */
+const LATIME_MINIATURA = 160;
 
 export async function POST(request: NextRequest) {
   const ip = clientIp(request);
@@ -175,6 +184,48 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[finalizeaza] mutarea a esuat:", err);
     return refuza("Incarcarea a esuat. Incearca din nou.", 500);
+  }
+
+  /*
+   * ═══ ⚠ MINIATURA, PENTRU PATRATUL DE 56px DIN PANOU ═══
+   *
+   * Panoul comenzii arata pozele clientului in patratele mici. Fara miniatura, fiecare patrat trage
+   * ORIGINALUL: o poza de telefon de 8 MB, nemicsorata, la fiecare deschidere a paginii. Si fiindca
+   * antetul e `private, no-store` (corect, sunt date personale), nici browserul n-o tine: se
+   * plateste din nou la fiecare reincarcare. O comanda cu zece poze cerea zeci de megaocteti ca sa
+   * arate zece patratele.
+   *
+   * ⚠ SE FACE DUPA MUTARE, si esecul ei NU strica incarcarea. Miniatura e o inlesnire; originalul e
+   * lucrul dupa care se produce marfa. O cadere a lui `sharp` pe un format ciudat n-are voie sa
+   * piarda fisierul pentru care omul a completat tot formularul: panoul cade inapoi pe original,
+   * exact ca pana acum.
+   *
+   * ⚠ NUMAI LA IMAGINI. Un PDF de tipar n-are miniatura, si nici nu i-ar folosi nimanui: panoul ii
+   * arata numele, nu o previzualizare.
+   */
+  if (detected !== "application/pdf") {
+    try {
+      /*
+       * ⚠ ACUM SE ADUC OCTETII INTREGI, spre deosebire de verificare: pentru micsorare nu ajunge
+       * antetul. E o citire din depozit, nu un raspuns catre client, deci nu atinge marginea de
+       * 4,5 MB; iar plafonul de pixeli a fost deja verificat mai sus, deci `sharp` nu poate fi pus
+       * sa desfaca o bomba.
+       */
+      const tot = masura.octeti <= inceput.length
+        ? inceput
+        : await inceputulIncarcarii(cheie, masura.octeti);
+      if (tot) {
+        const mica = await sharp(tot)
+          .rotate()
+          .resize(LATIME_MINIATURA, LATIME_MINIATURA, { fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 72 })
+          .toBuffer();
+        await incarcaMiniatura(cheieMiniatura(cheie), mica);
+      }
+    } catch (err) {
+      /* ⚠ SE SPUNE, dar nu se opreste: fisierul e deja bun si mutat. */
+      console.error("[finalizeaza] miniatura nu s-a putut face:", err);
+    }
   }
 
   /*

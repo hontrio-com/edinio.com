@@ -1351,14 +1351,14 @@ const SECTIUNI: Sectiune[] = [
       /*
        * ⚠ ADĂUGAT 07.09.2026, LA CEREREA EXPRESĂ A PROPRIETARULUI PLATFORMEI.
        *
-       * Restul documentului e transcris cuvânt cu cuvânt de la client și nu se atinge — vezi nota
+       * Restul documentului e transcris cuvânt cu cuvânt de la client și nu se atinge; vezi nota
        * din `confidentialitate/page.tsx`. Paragrafele astea sunt singura excepție, și există fiindcă
        * platforma a căpătat o regulă tehnică pe care textul n-o spunea nicăieri: fișierele urcate de
        * cumpărători se șterg automat.
        *
        * ⚠ CIFRELE SUNT CELE DIN COD, nu rotunjite pentru text: `ZILE_ORFAN = 30` și
        * `LUNI_PE_COMANDA = 6` din `api/cron/curata-fisiere/reguli.ts`. Dacă se schimbă acolo, se
-       * schimbă și aici — altfel politica ar promite altceva decât face cronul.
+       * schimbă și aici, altfel politica ar promite altceva decât face cronul.
        */
       {
         tip: "paragraf",
@@ -1367,7 +1367,7 @@ const SECTIUNI: Sectiune[] = [
       },
       {
         tip: "paragraf",
-        text: "Fișierele care nu ajung pe nicio comandă — încărcate și abandonate înainte de finalizare — sunt șterse după 30 de zile.",
+        text: "Fișierele care nu ajung pe nicio comandă, încărcate și abandonate înainte de finalizare, sunt șterse după 30 de zile.",
         evidenta: ["30 de zile"],
       },
       {

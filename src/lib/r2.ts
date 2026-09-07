@@ -300,7 +300,7 @@ const BUCKET_PRIVAT = process.env.R2_BUCKET_PRIVAT?.trim() || "";
  * Citirea are propria ei cadere inapoi — vezi `citestePrivat`: fisierele urcate inainte de mutare
  * stau in galeata veche, iar cheile lor sunt deja scrise in comenzi.
  */
-function galeataIncarcarilor(): string {
+export function galeataIncarcarilor(): string {
   if (!BUCKET_PRIVAT) {
     throw new Error(
       "[r2] R2_BUCKET_PRIVAT lipseste: incarcarile cumparatorilor nu se scriu in galeata publica.",
@@ -592,4 +592,19 @@ export async function stergeIncarcarea(key: string): Promise<void> {
   try {
     await s3.send(new DeleteObjectCommand({ Bucket: galeataIncarcarilor(), Key: key }));
   } catch { /* stergerea unui obiect deja disparut nu e o problema */ }
+}
+
+/**
+ * Scrie o miniatura langa fisierul cumparatorului, in galeata incarcarilor.
+ *
+ * ⚠ Aceleasi antete ca originalul: `private, no-store`. E tot poza omului, doar mai mica.
+ */
+export async function incarcaMiniatura(key: string, buffer: Buffer): Promise<void> {
+  await s3.send(new PutObjectCommand({
+    Bucket: galeataIncarcarilor(),
+    Key: key,
+    Body: buffer,
+    ContentType: "image/webp",
+    CacheControl: "private, no-store",
+  }));
 }

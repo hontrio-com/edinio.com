@@ -52,19 +52,30 @@ import { PREFIX_INCARCARI } from "./adresa";
  */
 
 /**
- * Secretul de semnare.
+ * Secretul de semnare al fisierelor cumparatorilor.
  *
- * ⚠ NU CADE PE SIRUL GOL. Cu secret gol semnatura tot iese — HMAC merge si cu cheie vida — deci
- * oricine ar fi putut compune o cheie valida fara sa stie nimic. Se arunca, si asta e purtarea
- * corecta chiar pe drumul cel mai fierbinte: la INCARCARE cade cererea (500, un fisier neurcat),
- * la VERIFICARE cade in `false` (vezi `esteCheiaNoastra`), niciodata intr-un „da" nemeritat.
+ * ═══ ⚠ FARA REZERVE, DIN 07.09.2026 ═══
+ *
+ * Aici era un lant: `CUSTOMIZATION_FILE_SECRET` sau `SHIPPING_QUOTE_SECRET` sau
+ * `SUPABASE_SERVICE_ROLE_KEY`. Criptografic mergea, dar lega trei lucruri care n-au nimic de-a face
+ * unul cu altul: cheile fisierelor personale, cotatiile de transport si cheia de serviciu a bazei.
+ *
+ * Urmarea practica: secretul asta nu se putea roti. Cine ar fi vrut sa-l schimbe ar fi trebuit sa
+ * atinga transportul sau cheia de serviciu, adica sa opreasca altceva. Iar un secret care nu se
+ * poate roti nu e o masura de securitate, e o speranta.
+ *
+ * ⚠ E OBLIGATORIU IN PRODUCTIE (vezi `CHEI_OBLIGATORII` din `next.config.ts`), deci o desfasurare
+ * fara el se opreste cu numele cheii in jurnal. Aruncarea de mai jos e a doua plasa, pentru cazul
+ * in care variabila dispare DUPA o desfasurare reusita.
+ *
+ * ⚠ SI ARUNCA, nu cade pe sirul gol: cu secret vid HMAC merge mai departe si semnatura tot iese,
+ * deci oricine ar fi putut compune o cheie valida fara sa stie nimic. La INCARCARE cade cererea
+ * (500, un fisier neurcat), la VERIFICARE cade in `false` (vezi `esteCheiaNoastra`), niciodata
+ * intr-un „da" nemeritat.
  */
 function secret(): string {
-  const s = process.env.CUSTOMIZATION_FILE_SECRET
-    || process.env.SHIPPING_QUOTE_SECRET
-    || process.env.SUPABASE_SERVICE_ROLE_KEY
-    || "";
-  if (!s) throw new Error("[fisiere-private] lipseste secretul de semnare");
+  const s = process.env.CUSTOMIZATION_FILE_SECRET?.trim();
+  if (!s) throw new Error("[fisiere-private] lipseste CUSTOMIZATION_FILE_SECRET");
   return s;
 }
 
@@ -221,4 +232,29 @@ export function cheiaDefinitiva(provizorie: string, businessId: string, ext: str
   const rest = provizorie.slice(`${PREFIX_PROVIZORIU}${businessId}/`.length);
   const corp = rest.slice(0, rest.lastIndexOf("."));
   return cheieIncarcare(businessId, corp.slice(0, corp.lastIndexOf("-")), ext);
+}
+
+/**
+ * Cheia MINIATURII unui fisier de cumparator.
+ *
+ * ═══ ⚠ DE CE EXISTA ═══
+ *
+ * In panoul comenzii, pozele clientului se arata intr-un patrat de 56 de pixeli. Pana acum patratul
+ * ala tragea ORIGINALUL: o poza de telefon de 8 MB, nemicsorata, la fiecare deschidere a paginii.
+ * Iar `private, no-store` (corect, sunt date personale) inseamna ca nici browserul n-o tine, deci se
+ * plateste din nou la fiecare reincarcare. O comanda cu zece poze cerea zeci de megaocteti ca sa
+ * arate zece patratele.
+ *
+ * ⚠ SE DERIVA DIN CHEIA ORIGINALULUI, si numai pe server. Clientul cere „vreau miniatura", nu „vreau
+ * cheia asta": altfel ar fi fost inca un sir venit din browser care ajunge la depozit.
+ *
+ * ⚠ SI STA SUB ACELASI PREFIX, ca sa fie maturata de cronul de retentie odata cu originalul. Un
+ * dosar nou ar fi fost un colt de depozit pe care nu-l mai curata nimeni.
+ *
+ * ⚠ NU TRECE de `esteCheiaNoastra` si nici de `areFormaCheii`, si asa trebuie: miniatura nu e un
+ * fisier pe care sa-l poata trimite cineva intr-o comanda. Ruta o serveste doar dupa ce ORIGINALUL
+ * a trecut toate portile.
+ */
+export function cheieMiniatura(cheie: string): string {
+  return `${cheie}.mic.webp`;
 }

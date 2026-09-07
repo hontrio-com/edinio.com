@@ -93,6 +93,18 @@ const CHEI_OBLIGATORII = [
     intoarcere tacuta la depozitul public nu se vede niciodata.
   */
   "R2_BUCKET_PRIVAT",
+  /*
+    ⚠ MUTATA AICI PE 07.09.2026. Secretul care semneaza cheile fisierelor cumparatorilor cadea
+    inainte pe `SHIPPING_QUOTE_SECRET` sau pe cheia de serviciu a bazei. Criptografic mergea, dar
+    lega trei lucruri fara nicio legatura intre ele, si urmarea practica era ca secretul asta NU se
+    putea roti: schimbat, ar fi oprit transportul sau baza.
+
+    ⚠ PUNEREA LUI ROTESTE SEMNATURA. Fisierele deja pe comenzi se deschid mai departe (ruta de
+    servire verifica FORMA cheii si apartenenta la comanda, nu semnatura), dar un cos aflat in zbor
+    in clipa desfasurarii isi pierde fisierele la trimitere. Fereastra e de minute; se face cand
+    magazinele sunt linistite.
+  */
+  "CUSTOMIZATION_FILE_SECRET",
 ] as const;
 
 /*

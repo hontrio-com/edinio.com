@@ -4,7 +4,8 @@ import { register } from "node:module";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { NextRequest } from "next/server";
-import { esteCheiaNoastra } from "@/lib/customization/fisiere-private";
+import sharp from "sharp";
+import { cheieMiniatura, esteCheiaNoastra } from "@/lib/customization/fisiere-private";
 import { semneazaPermisul } from "@/lib/customization/permis-incarcare";
 import { MB_IMAGINE } from "@/lib/customization/definitie";
 
@@ -152,7 +153,8 @@ const HOOK = `data:text/javascript,${encodeURIComponent(
            + "export const masoaraIncarcarea = async (k) => globalThis.__depozit.masoara(k);"
            + "export const inceputulIncarcarii = async (k, n) => globalThis.__depozit.inceput(k, n);"
            + "export const mutaIncarcarea = async (a, b, t) => globalThis.__depozit.muta(a, b, t);"
-           + "export const stergeIncarcarea = async (k) => globalThis.__depozit.sterge(k);"),
+           + "export const stergeIncarcarea = async (k) => globalThis.__depozit.sterge(k);"
+           + "export const incarcaMiniatura = async (k, b) => globalThis.__depozit.miniatura(k, b);"),
          shortCircuit: true, format: "module",
        };
      }
@@ -178,6 +180,13 @@ let sterse: string[] = [];
 /** Linkurile date, cu ce s-a semnat in ele. */
 let linkuri: { cheie: string; tip: string; octeti: number }[] = [];
 
+/** Cate si ce s-a citit inapoi din depozit. Asa se vede daca un PDF mare a fost adus INTREG. */
+let citiri: { cheie: string; octeti: number }[] = [];
+/** Ce miniaturi s-au scris, in ordine. */
+let miniaturi: { cheie: string; octeti: Buffer }[] = [];
+/** Pornit, scrierea miniaturii arunca. Incarcarea trebuie sa reuseasca mai departe. */
+let cadeMiniatura = false;
+
 let POST: (req: NextRequest) => Promise<Response>;
 let FINAL: (req: NextRequest) => Promise<Response>;
 
@@ -201,7 +210,10 @@ before(async () => {
     },
     masoara: async (k: string) =>
       depozit[k] ? { octeti: depozit[k].octeti.length, contentType: depozit[k].tip } : null,
-    inceput: async (k: string, n: number) => (depozit[k] ? depozit[k].octeti.subarray(0, n) : null),
+    inceput: async (k: string, n: number) => {
+      citiri.push({ cheie: k, octeti: n });
+      return depozit[k] ? depozit[k].octeti.subarray(0, n) : null;
+    },
     muta: async (de: string, la: string, t: string) => {
       const o = depozit[de];
       delete depozit[de];
@@ -209,6 +221,11 @@ before(async () => {
       scrieri.push({ cheie: la, tip: t, octeti: o.octeti.length });
     },
     sterge: async (k: string) => { delete depozit[k]; sterse.push(k); },
+    miniatura: async (k: string, b: Buffer) => {
+      if (cadeMiniatura) throw new Error("proba: scrierea miniaturii a cazut");
+      depozit[k] = { octeti: b, tip: "image/webp" };
+      miniaturi.push({ cheie: k, octeti: b });
+    },
   };
 
   ({ POST } = (await import("./route")) as unknown as { POST: typeof POST });
@@ -228,6 +245,9 @@ beforeEach(() => {
   depozit = {};
   sterse = [];
   linkuri = [];
+  miniaturi = [];
+  citiri = [];
+  cadeMiniatura = false;
 });
 
 /**
@@ -766,6 +786,117 @@ test("⚠ finalizarea refuza o referinta care nu e a noastra, sau e a ALTUI maga
     assert.equal(r.status, 403, `referinta ${nume} a trecut`);
   }
   assert.deepEqual(scrieri, [], "s-a scris pe o cheie definitiva pentru o referinta straina");
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MINIATURA: ca patratul din panou sa nu mai traga originalul
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ o imagine primeste MINIATURA, pe cheia derivata, micsorata", async () => {
+  /*
+   * ═══ ⚠ DE CE SE FACE AICI, LA INCARCARE, SI NU LA CERERE ═══
+   *
+   * Panoul comerciantului arata pozele in patratele de 56px. Fara miniatura, fiecare patrat tragea
+   * ORIGINALUL: o poza de telefon de 8 MB, si cum antetul e `private, no-store` (corect, sunt date
+   * personale), nici browserul n-o tinea. Facuta la cerere, micsorarea s-ar fi platit la fiecare
+   * deschidere de pagina; facuta o data, aici, se plateste o data.
+   *
+   * ⚠ SE CERE SI MARIMEA, nu doar existenta: o „miniatura" de aceeasi latime cu originalul ar fi
+   * trecut o proba care se uita numai la cheie, si n-ar fi economisit nimic.
+   */
+  const mare = await sharp({
+    create: { width: 900, height: 600, channels: 3, background: "#3366aa" },
+  }).png().toBuffer();
+
+  const { final } = await urca({ octeti: mare });
+  assert.equal(final?.status, 200, "incarcarea a picat");
+  const { cheie } = (await final!.json()) as { cheie: string };
+
+  assert.equal(miniaturi.length, 1, "nu s-a scris nicio miniatura");
+  assert.equal(miniaturi[0].cheie, cheieMiniatura(cheie), "miniatura nu sta pe cheia derivata");
+
+  const m = await sharp(miniaturi[0].octeti).metadata();
+  assert.equal(m.format, "webp", `miniatura nu e webp: ${m.format}`);
+  assert.equal(m.width, 160, `miniatura nu s-a micsorat: ${m.width}px`);
+  assert.ok(
+    miniaturi[0].octeti.length < mare.length / 2,
+    `miniatura nu e mai usoara decat originalul: ${miniaturi[0].octeti.length} vs ${mare.length}`,
+  );
+
+  /* ⚠ SI ORIGINALUL RAMANE. Miniatura e in plus, nu in loc: din ea nu se poate tipari. */
+  assert.equal(depozit[cheie]?.octeti.length, mare.length, "originalul s-a pierdut");
+});
+
+test("⚠ o imagine PESTE 2 MB primeste si ea miniatura: se aduc octetii INTREGI", async () => {
+  /*
+   * ═══ ⚠ VERIFICAREA CITESTE DOAR ANTETUL, MICSORAREA ARE NEVOIE DE TOT ═══
+   *
+   * Peste 2 MB, `inceput` e o felie de 512 KB, cat trebuie ca sa se citeasca semnatura si antetul.
+   * Data lui `sharp` pentru micsorare, felia aia e o imagine TAIATA: `sharp` arunca, prinderea
+   * inghite, si tocmai pozele MARI, cele pentru care miniatura conteaza, ar fi ramas fara ea.
+   * Fisierul s-ar fi incarcat cu bine, panoul ar fi cazut inapoi pe original, si economia s-ar fi
+   * pierdut exact acolo unde era de facut.
+   *
+   * ⚠ Imaginea e ZGOMOT dinadins: una in culoare plina s-ar fi comprimat la cativa kiloocteti si
+   * n-ar fi trecut niciodata de pragul pe care proba il masoara.
+   */
+  const mare = await sharp({
+    create: {
+      width: 1400, height: 1400, channels: 3, background: "#000000",
+      noise: { type: "gaussian", mean: 128, sigma: 60 },
+    },
+  }).png({ compressionLevel: 0 }).toBuffer();
+  assert.ok(mare.length > 2 * 1024 * 1024, `proba slaba: fisierul are doar ${mare.length} octeti`);
+
+  const { final } = await urca({ octeti: mare });
+  assert.equal(final?.status, 200);
+  assert.equal(miniaturi.length, 1, "poza mare a ramas fara miniatura: s-a micsorat o felie taiata");
+  assert.equal((await sharp(miniaturi[0].octeti).metadata()).width, 160);
+});
+
+test("⚠ un PDF de tipar NU primeste miniatura, si nu se aduce INTREG in memorie", async () => {
+  /*
+   * ═══ ⚠ CE APARA CU ADEVARAT `detected !== "application/pdf"` ═══
+   *
+   * Ca miniatura nu iese, o apara si `sharp`: dat un PDF, arunca, prinderea inghite, si depozitul
+   * ramane fara miniatura. Masurat cu un mutant care scoate conditia, o proba care se uita numai la
+   * `miniaturi` trece, deci n-ar fi aparat nimic.
+   *
+   * ⚠ CE SE PIERDE FARA CONDITIE E MEMORIA. Ca sa micsoreze, ramura aduce octetii INTREGI; pe un
+   * fisier de tipar (plafonul e 40 MB) asta inseamna 40 MB in memoria functiei, la fiecare
+   * incarcare, ca sa se arunce imediat dupa. Deci proba nu se uita la ce a iesit, ci la CE S-A
+   * CERUT DEPOZITULUI: nicio citire peste felia de antet.
+   *
+   * ⚠ PDF-ul e mare dinadins: sub 2 MB ruta aduce oricum tot fisierul (ca `sharp` sa nu vada
+   * niciodata o imagine taiata), si atunci proba n-ar fi putut deosebi cele doua purtari.
+   */
+  const marePdf = Buffer.concat([PDF, Buffer.alloc(3 * 1024 * 1024, 0x20)]);
+  const { final } = await urca({ documente: true, octeti: marePdf, camp: "tipar" });
+
+  assert.equal(final?.status, 200);
+  assert.deepEqual(miniaturi, [], "s-a incercat o miniatura pentru un PDF");
+  assert.deepEqual(
+    citiri.map((c) => c.octeti), [512 * 1024],
+    `PDF-ul a fost citit altfel decat o singura felie de antet: ${citiri.map((c) => c.octeti).join(", ")}`,
+  );
+});
+
+test("⚠ MINIATURA PICATA nu strica incarcarea: fisierul ramane bun", async () => {
+  /*
+   * ═══ ⚠ ASTA E ORDINEA DE PRIORITATI, SCRISA CA PROBA ═══
+   *
+   * Miniatura e o inlesnire; originalul e lucrul dupa care se produce marfa. Daca `sharp` cade pe
+   * un format ciudat sau depozitul clipeste la scrierea miniaturii, omul care tocmai a completat
+   * tot formularul NU are voie sa-si piarda fisierul. Panoul cade singur inapoi pe original.
+   */
+  cadeMiniatura = true;
+
+  const { final } = await urca();
+  assert.equal(final?.status, 200, "o miniatura picata a stricat incarcarea");
+  const { cheie } = (await final!.json()) as { cheie: string };
+  assert.ok(esteCheiaNoastra(cheie, BIZ), "cheia data nu e una de-a noastra");
+  assert.ok(depozit[cheie], "fisierul nu e in depozit dupa ce miniatura a picat");
+  assert.deepEqual(sterse, [], "fisierul bun a fost sters din cauza miniaturii");
 });
 
 test("⚠ o referinta a ALTUI magazin nu se poate finaliza cu permisul tau", async () => {

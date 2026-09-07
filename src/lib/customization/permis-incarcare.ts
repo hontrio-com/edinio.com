@@ -46,12 +46,29 @@ import type { DefinitiePersonalizare } from "./definitie";
  * nu trece pe jumatate: cheile se scriu, permisele nu se verifica. Cade in aceeasi rezerva, deci
  * ori merg amandoua, ori niciunul.
  */
+/**
+ * Secretul de semnare al fisierelor cumparatorilor.
+ *
+ * ═══ ⚠ FARA REZERVE, DIN 07.09.2026 ═══
+ *
+ * Aici era un lant: `CUSTOMIZATION_FILE_SECRET` sau `SHIPPING_QUOTE_SECRET` sau
+ * `SUPABASE_SERVICE_ROLE_KEY`. Criptografic mergea, dar lega trei lucruri care n-au nimic de-a face
+ * unul cu altul: cheile fisierelor personale, cotatiile de transport si cheia de serviciu a bazei.
+ *
+ * Urmarea practica: secretul asta nu se putea roti. Cine ar fi vrut sa-l schimbe ar fi trebuit sa
+ * atinga transportul sau cheia de serviciu, adica sa opreasca altceva. Iar un secret care nu se
+ * poate roti nu e o masura de securitate, e o speranta.
+ *
+ * ⚠ E OBLIGATORIU IN PRODUCTIE (vezi `CHEI_OBLIGATORII` din `next.config.ts`), deci o desfasurare
+ * fara el se opreste cu numele cheii in jurnal. Aruncarea de mai jos e a doua plasa, pentru cazul
+ * in care variabila dispare DUPA o desfasurare reusita.
+ *
+ * ⚠ SI ARUNCA, nu cade pe sirul gol: cu secret vid HMAC merge mai departe si semnatura tot iese,
+ * deci oricine ar fi putut compune o cheie valida fara sa stie nimic.
+ */
 function secret(): string {
-  const s = process.env.CUSTOMIZATION_FILE_SECRET
-    || process.env.SHIPPING_QUOTE_SECRET
-    || process.env.SUPABASE_SERVICE_ROLE_KEY
-    || "";
-  if (!s) throw new Error("[permis-incarcare] lipseste secretul de semnare");
+  const s = process.env.CUSTOMIZATION_FILE_SECRET?.trim();
+  if (!s) throw new Error("[permis-incarcare] lipseste CUSTOMIZATION_FILE_SECRET");
   return s;
 }
 

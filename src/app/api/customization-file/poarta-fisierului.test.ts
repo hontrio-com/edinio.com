@@ -4,7 +4,7 @@ import { register } from "node:module";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { NextRequest } from "next/server";
-import { cheieIncarcare, esteCheiaNoastra } from "@/lib/customization/fisiere-private";
+import { cheieIncarcare, cheieMiniatura, esteCheiaNoastra } from "@/lib/customization/fisiere-private";
 /*
  * ⚠ ASTA E MODULUL ADEVARAT `@/lib/r2`, si ramane adevarat.
  *
@@ -175,6 +175,8 @@ const HOOK = `data:text/javascript,${encodeURIComponent(
        return {
          url: "data:text/javascript," + encodeURIComponent(
            "export const galeataCheii = async (k) => globalThis.__r2DeProba(k);"
+           + "export const galeataIncarcarilor = () => globalThis.__galeataPrivataDeProba();"
+           + "export const masoaraIncarcarea = async (k) => globalThis.__masoaraDeProba(k);"
            + "export const linkDeCitirePrivata = async (k, b, n, t) => globalThis.__linkDeProba(k, b, n, t);"
            + "export const getFromR2 = async (k) => null;"
          ),
@@ -191,6 +193,8 @@ let utilizator: string | null = UTILIZATOR;
 let depozit: Record<string, Buffer> = {};
 /** Pornit, depozitul nu raspunde deloc — incident R2, credentiala schimbata, timeout. */
 let esecDepozit = false;
+/** Pornit, cautarea miniaturii arunca. Originalul trebuie sa se serveasca mai departe. */
+let cadeCautareaMiniaturii = false;
 /** In ce galeata „sta" fisierul de proba. */
 const GALEATA = "edinio-uploads-privat";
 
@@ -233,6 +237,18 @@ before(async () => {
       if (esecDepozit) throw new Error("proba: depozitul nu raspunde");
       return depozit[k] ? GALEATA : null;
     };
+  /*
+   * ⚠ MINIATURA SE CAUTA CU `masoaraIncarcarea`, IN GALEATA PRIVATA. Depozitul de proba e acelasi,
+   * deci ajunge sa i se puna in el cheia miniaturii ca sa „existe".
+   */
+  (globalThis as unknown as { __galeataPrivataDeProba: () => string }).__galeataPrivataDeProba =
+    () => GALEATA;
+  (globalThis as unknown as {
+    __masoaraDeProba: (k: string) => Promise<{ octeti: number; contentType: string } | null>;
+  }).__masoaraDeProba = async (k) => {
+    if (cadeCautareaMiniaturii) throw new Error("proba: HeadObject a cazut");
+    return depozit[k] ? { octeti: depozit[k].length, contentType: "" } : null;
+  };
   /* Linkul semnat de proba poarta ce i s-a cerut, ca probele sa se poata uita la el. */
   (globalThis as unknown as {
     __linkDeProba: (k: string, b: string, n: string, t: string) => Promise<string>;
@@ -253,6 +269,7 @@ beforeEach(() => {
   cadeCitireaComenzii = false;
   cadeCitireaMagazinului = false;
   esecDepozit = false;
+  cadeCautareaMiniaturii = false;
   cai = [];
   depozit = { [CHEIE]: Buffer.from("octetii-pozei"), [CHEIE_PDF]: Buffer.from("%PDF-1.4 ") };
   comenzi = [
@@ -275,11 +292,12 @@ beforeEach(() => {
   ];
 });
 
-function cere(p: { cheie?: string; businessId?: string; comanda?: string }) {
+function cere(p: { cheie?: string; businessId?: string; comanda?: string; mic?: string }) {
   const u = new URL("https://panou.edinio.com/api/customization-file");
   if (p.cheie !== undefined) u.searchParams.set("cheie", p.cheie);
   if (p.businessId !== undefined) u.searchParams.set("businessId", p.businessId);
   if (p.comanda !== undefined) u.searchParams.set("comanda", p.comanda);
+  if (p.mic !== undefined) u.searchParams.set("mic", p.mic);
   return new NextRequest(u.toString());
 }
 
@@ -705,6 +723,93 @@ test("⚠ si o eticheta LUNGA ramane un nume: fiecare bucata se taie la 24 de ca
 /* ═══════════════════════════════════════════════════════════════════════════
    FRANA
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MINIATURA: patratul de 56px nu mai trage originalul de 8 MB
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ `mic=1` serveste MINIATURA, nu originalul", async () => {
+  /*
+   * ⚠ ASTA E TOATA ECONOMIA. Fara ea, panoul cerea octetii de la incarcare pentru un patrat de
+   * 56px, iar `private, no-store` facea ca fiecare reincarcare de pagina sa-i ceara din nou: o
+   * comanda cu cinci poze de telefon costa 40 MB de fiecare data.
+   */
+  const mica = cheieMiniatura(CHEIE);
+  depozit[mica] = Buffer.from("octetii-miniaturii");
+
+  const r = await GET(cere({ cheie: CHEIE, businessId: BIZ, comanda: COMANDA, mic: "1" }));
+  assert.equal(r.status, 302);
+  const l = linkul(r);
+  assert.equal(l.cheie, mica, "linkul arata tot catre original: miniatura nu se serveste");
+  assert.equal(l.tip, "image/webp", "miniatura e webp, dar tipul a ramas al originalului");
+  assert.ok(l.nume.endsWith(".webp"), `numele nu s-a potrivit cu octetii serviti: ${l.nume}`);
+});
+
+test("⚠ FARA `mic` se serveste ORIGINALUL, chiar daca miniatura exista", async () => {
+  /*
+   * ⚠ APASAREA E PENTRU TIPAR. Daca legatura ar fi dat tot miniatura, atelierul ar fi tiparit o
+   * poza de 160 de pixeli dintr-un original de 4000, si ar fi aflat abia pe hartie.
+   */
+  depozit[cheieMiniatura(CHEIE)] = Buffer.from("octetii-miniaturii");
+
+  const r = await GET(cere({ cheie: CHEIE, businessId: BIZ, comanda: COMANDA }));
+  assert.equal(linkul(r).cheie, CHEIE, "legatura de descarcare a dat miniatura in loc de original");
+});
+
+test("⚠ MINIATURA LIPSA cade inapoi pe original, nu pe 404", async () => {
+  /*
+   * ⚠ FISIERELE URCATE INAINTE DE SCHIMBAREA ASTA n-au miniatura, si comenzile lor se deschid mai
+   * departe. Un 404 aici ar fi golit patratele din TOATE comenzile vechi dintr-o data.
+   */
+  const r = await GET(cere({ cheie: CHEIE, businessId: BIZ, comanda: COMANDA, mic: "1" }));
+  assert.equal(r.status, 302);
+  assert.equal(linkul(r).cheie, CHEIE, "fara miniatura, ruta n-a cazut inapoi pe original");
+});
+
+test("⚠ CAUTAREA MINIATURII PICATA nu strica servirea originalului", async () => {
+  /* Miniatura e o inlesnire; un `HeadObject` cazut n-are voie sa inchida fisierul insusi. */
+  cadeCautareaMiniaturii = true;
+
+  const r = await GET(cere({ cheie: CHEIE, businessId: BIZ, comanda: COMANDA, mic: "1" }));
+  assert.equal(r.status, 302, "un HeadObject cazut a inchis fisierul");
+  assert.equal(linkul(r).cheie, CHEIE);
+});
+
+test("⚠ un PDF nu se cauta niciodata ca miniatura", async () => {
+  /*
+   * ⚠ Si daca cineva ar pune in depozit un obiect pe cheia derivata, tot nu s-ar servi: un PDF de
+   * tipar ramane PDF. Proba il asaza acolo dinadins.
+   */
+  depozit[cheieMiniatura(CHEIE_PDF)] = Buffer.from("nu-are-ce-cauta");
+  comenzi[0].items = [{
+    product_id: "p-1", name: "Afis", quantity: 1, price: 99,
+    customization: { d: { type: "fisier", label: "Macheta", value: [CHEIE_PDF] } },
+  }];
+
+  const r = await GET(cere({ cheie: CHEIE_PDF, businessId: BIZ, comanda: COMANDA, mic: "1" }));
+  assert.equal(linkul(r).cheie, CHEIE_PDF, "un PDF a fost servit ca miniatura");
+  assert.equal(linkul(r).tip, "application/pdf");
+});
+
+test("⚠ CHEIA MINIATURII NU SE POATE CERE DE-A DREPTUL: `mic` e doar un da/nu", async () => {
+  /*
+   * ═══ ⚠ ASTA E PAZA INTREGII SCHEME ═══
+   *
+   * Daca panoul ar fi trimis cheia miniaturii ca `cheie`, capatul ar fi avut o A DOUA usa catre
+   * octeti: cheia derivata NU e in `items`, deci n-ar fi trecut de poarta 4, iar cine ar fi
+   * „reparat" asta slabind poarta ar fi deschis chiar gaura din [[alta-usa-catre-aceiasi-octeti]].
+   *
+   * Aici se masoara ca usa nu exista: cheia derivata cade INAINTE de baza, pe forma.
+   */
+  const mica = cheieMiniatura(CHEIE);
+  depozit[mica] = Buffer.from("octetii-miniaturii");
+  assert.equal(esteCheiaNoastra(mica, BIZ), false, "cheia miniaturii trece drept cheie de comanda");
+
+  cai = [];
+  const r = await GET(cere({ cheie: mica, businessId: BIZ, comanda: COMANDA }));
+  assert.equal(r.status, 404, "cheia miniaturii s-a servit cand a fost ceruta de-a dreptul");
+  assert.deepEqual(cai, [], "cheia miniaturii a atins totusi baza");
+});
 
 test("⚠ o bucla e franata, si cererea franata nu mai atinge baza", async () => {
   /*

@@ -57,13 +57,18 @@ const CHEIE_PDF = cheia("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee-9dc7928fd4d9cf1a54
  * `new URL()` pe o cheie. Panoul e o componenta „use client” plina de React si de iconite, deci
  * nu se poate importa dintr-un test de Node: se taie bucata si i se scot adnotarile de tip.
  */
-function functiaDinPanou(nume: string): (...a: string[]) => string {
+/*
+ * ⚠ SI ARGUMENTE CARE NU SUNT SIRURI. `adresaFisierului` a primit al patrulea parametru, `mic`,
+ * un da/nu: cu semnatura veche proba lui n-ar fi compilat, iar solutia usoara ar fi fost sa nu
+ * se probeze deloc chemarea cu miniatura.
+ */
+function functiaDinPanou(nume: string): (...a: (string | boolean)[]) => string {
   const start = panou.indexOf(`function ${nume}(`);
   assert.notEqual(start, -1, `${nume} nu mai exista in ${PANOU}`);
   const stop = panou.indexOf("\n}\n", start);
   assert.notEqual(stop, -1, `nu gasesc capatul lui ${nume}`);
   const js = panou.slice(start, stop + 2).replace(/: string/g, "");
-  return new Function(`return (${js})`)() as (...a: string[]) => string;
+  return new Function(`return (${js})`)() as (...a: (string | boolean)[]) => string;
 }
 
 /**
@@ -192,7 +197,20 @@ test("⚠ legatura din panou chiar cere ruta privata, cu TREI parametri cu numel
    * ea, iar panoul ar fi ramas pe numele vechi — 404 pe fiecare fisier, cu suita verde.
    */
   const ceruti = [...sursa(RUTA).matchAll(/cauta\.get\("([^"]+)"\)/g)].map((m) => m[1]).sort();
-  assert.deepEqual(ceruti, trimisi, "ruta si panoul nu mai vorbesc despre aceiasi parametri");
+
+  /*
+   * ═══ ⚠ AL PATRULEA PARAMETRU: `mic` ═══
+   *
+   * Panoul il trimite DOAR pentru patratul de 56px, ca ruta sa serveasca miniatura in loc de
+   * originalul de 8 MB. Deci lista celor trimisi depinde de apel, iar cea cerute de ruta e
+   * REUNIUNEA lor: proba se uita la amandoua chemarile, altfel `mic` ar fi putut fi redenumit
+   * la un capat si nu la celalalt, si panoul ar fi cerut mai departe originalul, tacut si scump.
+   */
+  const uMic = new URL(adresaFisierului(CHEIE_JPG, BIZ, COMANDA, true), "https://magazin.exemplu");
+  assert.equal(uMic.searchParams.get("mic"), "1", "panoul nu mai cere miniatura pentru patrat");
+  const trimisiVreodata = [...new Set([...trimisi, ...uMic.searchParams.keys()])].sort();
+
+  assert.deepEqual(ceruti, trimisiVreodata, "ruta si panoul nu mai vorbesc despre aceiasi parametri");
 });
 
 test("⚠ nici macar o adresa intreaga nu mai pleaca NEATINSA in `href`", () => {
@@ -242,7 +260,12 @@ test("⚠ nicio valoare de fisier nu mai pleaca BRUTA in `href` sau `src`", () =
    * mort. E chiar felul in care se pierde piesa la o rezolvare de conflict.
    */
   assert.doesNotMatch(codul, /(href|src)=\{url\}/, "o valoare de fisier pleaca neinvelita");
-  const folosiri = codul.match(/adresaFisierului\(url, order\.business_id, order\.id\)/g) ?? [];
+  /*
+   * ⚠ Al patrulea argument (`mic`) e OPTIONAL si il pune numai miniatura, deci potrivirea se
+   * opreste la virgula sau la paranteza. Fara asta, proba ar fi numarat trei folosiri din patru
+   * chiar in ziua in care miniatura a inceput sa ceara altceva.
+   */
+  const folosiri = codul.match(/adresaFisierului\(url, order\.business_id, order\.id[,)]/g) ?? [];
   assert.ok(
     folosiri.length >= 4,
     `panoul arata fisierele in patru locuri (doua liste si doua feluri de miniatura); gasite ${folosiri.length}`,
@@ -264,16 +287,34 @@ test("⚠ optimizatorul de imagini nu mai e importat in panou", () => {
   );
 });
 
-test("⚠ miniatura de 56px nu mai cere originalul pe firul care deseneaza", () => {
+test("⚠ PATRATUL DE 56px CERE MINIATURA, iar legatura de sub el cere ORIGINALUL", () => {
   /*
-   * Ruta intoarce OCTETII ORIGINALI (pana la 10 MB pe imagine, `MB_IMAGINE`) si cu
-   * `private, no-store`, deci nici browserul nu-i tine: o comanda cu cinci poze de telefon costa
-   * ~40 MB la FIECARE deschidere a paginii. Din panou se poate face doar atat: `lazy` amana ce nu
-   * se vede, `async` scoate decodarea de pe firul principal. Restul cere un parametru de latime
-   * PE RUTA, care nu se schimba de aici.
+   * ═══ ⚠ AFIRMATIA S-A INTORS PE 07.09.2026 ═══
+   *
+   * Pana atunci ruta n-avea decat originalul: octetii de la incarcare (pana la 10 MB pe imagine,
+   * `MB_IMAGINE`), cu `private, no-store`, deci nici browserul nu-i tinea. O comanda cu cinci poze
+   * de telefon costa ~40 MB la FIECARE deschidere a paginii, iar din panou nu se putea face decat
+   * `lazy` si `async`. Proba spunea atunci ca „restul cere un parametru PE RUTA".
+   *
+   * Parametrul exista acum, si se cheama `mic`. Deci proba nu se mai multumeste cu amanarea: cere
+   * ca patratul sa CEARA miniatura.
+   *
+   * ⚠ SI JUMATATEA CEALALTA, care conteaza la fel de mult: legatura din jurul lui NU are voie sa
+   * ceara miniatura. Comerciantul apasa ca sa vada macheta la marimea ei; servita de acolo, ar fi
+   * tiparit dintr-o poza de 160 de pixeli fara sa afle pana pe hartie.
    */
   const tag = codul.match(/<img\s[^>]*adresaFisierului\([^>]*\/>/);
   assert.ok(tag, "nu mai exista miniatura fisierului in panou");
   assert.match(tag[0], /loading="lazy"/, "miniatura se cere si cand nu se vede");
   assert.match(tag[0], /decoding="async"/, "decodarea sta pe firul care deseneaza pagina");
+  assert.match(
+    tag[0], /adresaFisierului\(url, order\.business_id, order\.id, true\)/,
+    "patratul de 56px cere iar ORIGINALUL: miniatura nu se mai foloseste",
+  );
+
+  const legaturi = codul.match(/href=\{adresaFisierului\([^}]*\)\}/g) ?? [];
+  assert.ok(legaturi.length >= 3, `panoul are trei legaturi de fisier; gasite ${legaturi.length}`);
+  for (const l of legaturi) {
+    assert.doesNotMatch(l, /,\s*true\)/, `o legatura de descarcare cere miniatura: ${l}`);
+  }
 });

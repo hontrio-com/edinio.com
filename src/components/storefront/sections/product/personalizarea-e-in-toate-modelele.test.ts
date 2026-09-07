@@ -66,13 +66,44 @@ test("⚠ FIECARE model cheama carligul si randeaza componenta comuna", () => {
       s, /import \{ usePersonalizare \} from "\.\/_shared\/usePersonalizare";/,
       `${model} nu importa carligul`,
     );
+    /*
+     * ⚠ AL DOILEA ARGUMENT S-A SCHIMBAT PE 07.09.2026: era `business.id`, e PERMISUL de incarcare.
+     * Id-ul magazinului era in HTML-ul fiecarui magazin, deci nu dovedea nimic — carligul il trimitea
+     * mai departe rutei ca si cum ar fi fost o legitimatie. Acum ce dovedeste ceva e semnat pe
+     * server; vezi `permis-incarcare.ts`.
+     */
     assert.match(
-      s, /const pers = usePersonalizare\(product\.page_sections, business\.id\);/,
+      s, /const pers = usePersonalizare\(product\.page_sections, permisIncarcare\);/,
       `${model} nu cheama carligul`,
     );
+    /*
+     * ⚠ SI PERMISUL CHIAR AJUNGE PANA LA EL. Un prop declarat dar necitit e o capabilitate care nu
+     * exista — chiar tiparul prins in proiect la `<Panel title>` inghitit de `{...props}`: tsc,
+     * eslint, teste si build au trecut toate peste el, pe 39 de panouri.
+     */
+    assert.match(s, /permisIncarcare\?: string \| null;/, `${model} nu declara permisul`);
     assert.match(
       s, /<CampuriPersonalizare stare=\{pers\}/,
       `${model} nu randeaza campurile — un produs personalizabil arata acolo ca unul oarecare`,
+    );
+  }
+});
+
+test("⚠ permisul e emis pe SERVER, in AMANDOUA rutele care randeaza pagina de produs", () => {
+  /*
+   * ⚠ DOUA RUTE, NU UNA: pagina de produs si magazinul „un singur produs". Emis doar intr-una,
+   * campurile de fisier ar fi incetat sa functioneze pe jumatate din magazine — si tacut, fiindca
+   * refuzul se vede abia cand cumparatorul alege o poza.
+   */
+  for (const ruta of [
+    "src/app/(public)/[slug]/product/[productSlug]/page.tsx",
+    "src/app/(public)/[slug]/page.tsx",
+  ]) {
+    const v = readFileSync(path.resolve(process.cwd(), ruta), "utf8").replace(/\r\n/g, "\n");
+    assert.match(v, /semneazaPermisul\(/, `${ruta} nu emite niciun permis`);
+    assert.match(
+      v, /permisIncarcare=\{permisulProdusului\(business\.id, product\.id, product\.page_sections\)\}/,
+      `${ruta} nu trimite permisul mai departe`,
     );
   }
 });

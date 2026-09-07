@@ -5,6 +5,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { NextRequest } from "next/server";
 import { esteCheiaNoastra } from "@/lib/customization/fisiere-private";
+import { semneazaPermisul } from "@/lib/customization/permis-incarcare";
 
 /**
  * CE POARTA RASPUNSUL RUTEI DE INCARCARE — si de ce forma lui e o promisiune, nu un detaliu.
@@ -52,6 +53,8 @@ import { esteCheiaNoastra } from "@/lib/customization/fisiere-private";
 
 const BIZ = "11111111-1111-4111-8111-111111111111";
 const NEPUBLICAT = "22222222-2222-4222-8222-222222222222";
+/** Produsul de pe a carui pagina se incarca — intra in permis. */
+const PRODUS = "33333333-3333-4333-8333-333333333333";
 /** Ce ar fi intors `uploadToR2`: adresa publica. Ramane ca sa se poata cere ca ea sa NU apara. */
 const CDN = "https://cdn-de-proba.r2.dev";
 
@@ -202,14 +205,31 @@ beforeEach(() => {
  * verifica, iar proba ar fi devenit una care pica dupa ordinea in care e rulata.
  */
 let nrIp = 0;
-function cere(p: { ip?: string; businessId?: string | null; octeti?: Buffer | null; documente?: boolean } = {}) {
+function cere(p: {
+  ip?: string;
+  businessId?: string | null;
+  octeti?: Buffer | null;
+  documente?: boolean;
+  /** Permis dat de-a gata — pentru probele care vor unul stricat, expirat sau lipsa. */
+  permis?: string | null;
+  /** Ce camp se declara. Implicit cel care exista in permis. */
+  camp?: string;
+} = {}) {
   const ip = p.ip ?? `203.0.113.${++nrIp}`;
   const fd = new FormData();
   if (p.octeti !== null) {
     fd.append("file", new File([new Uint8Array(p.octeti ?? PNG)], "poza.png", { type: "image/png" }));
   }
-  if (p.businessId !== null) fd.append("business_id", p.businessId ?? BIZ);
-  if (p.documente) fd.append("documente", "1");
+  /*
+   * ⚠ AICI STATEA `business_id`, TRIMIS DE CLIENT. De pe 07.09.2026 ruta cere un PERMIS semnat pe
+   * server: magazinul, produsul, campurile de fisier si FELUL fiecaruia ies din el, nu din ce
+   * declara cel care incarca. Vezi `permis-incarcare.ts`.
+   */
+  const permis = p.permis !== undefined
+    ? p.permis
+    : semneazaPermisul(p.businessId ?? BIZ, PRODUS, { poza: "i", tipar: "d" });
+  if (permis !== null) fd.append("permis", permis);
+  fd.append("camp", p.camp ?? (p.documente ? "tipar" : "poza"));
   const req = new NextRequest("https://magazin.edinio.com/api/upload-customization", {
     method: "POST",
     body: fd,
@@ -405,21 +425,63 @@ test("⚠ primul strat, cel din memorie, taie rafala FARA sa atinga baza", async
    CELELALTE DOUA PAZE — cele pentru care exista schela, dar nu si proba
    ═══════════════════════════════════════════════════════════════════════════ */
 
-test("⚠ un magazin NEPUBLICAT nu capata voie sa scrie in depozitul platit", async () => {
+test("⚠ FARA PERMIS nu se scrie nimic in depozitul platit, oricat de valid ar fi UUID-ul", async () => {
   /*
-   * ⚠ SCHELA EXISTA DE LA INCEPUT SI NU CEREA NIMENI NIMIC: `NEPUBLICAT`, randul lui din
-   * `MAGAZINE` si filtrarea pe `is_published` din baza de proba erau toate scrise, deci fisierul se
-   * CITEA ca si cum cazul ar fi acoperit. Nu era: masurat, `if (false)` peste refuz trece 7/7, si
-   * nicio alta proba din proiect nu-l prinde (`Magazin indisponibil` nu apare in niciun `.test.ts`).
+   * ═══ ⚠ GARANTIA S-A MUTAT, NU A DISPARUT — 07.09.2026 ═══
    *
-   * Ce apara randul asta: fara el, orice UUID inventat redevine un prefix in care se poate scrie la
-   * nesfarsit sub `products/customizations/<uuid>/` — obiecte fara proprietar, pe care nimic nu le
-   * sterge vreodata (`deleteOrphanImages` e no-op explicit), pe o factura care se plateste.
+   * Proba cerea aici 404 pentru un magazin NEPUBLICAT, si ca ruta sa fi INTREBAT baza. Amandoua
+   * descriau interogarea de magazin — care nu mai exista. Nu fiindca gaura s-ar fi inchis singura,
+   * ci fiindca intrebarea s-a mutat mai devreme: permisul se emite cand se randeaza pagina
+   * produsului, iar pagina aia nu se randeaza pentru un magazin nepublicat. Ruta nu mai are ce sa
+   * intrebe — si nu mai poate nici sa cada deschis, cum cadea.
+   *
+   * ⚠ SI CE APARA ACUM, mai mult decat inainte: `business_id` era in HTML-ul fiecarui magazin, deci
+   * refuzul de dinainte oprea doar UUID-urile INVENTATE. Cine il copia pe cel adevarat al unui
+   * magazin publicat trecea. Acum nu trece nimeni fara semnatura noastra — nici cu id-ul corect al
+   * unui magazin viu.
    */
-  const r = await POST(cere({ businessId: NEPUBLICAT }).req);
-  assert.equal(r.status, 404, "un magazin nepublicat a putut scrie in depozit");
-  assert.deepEqual(scrieri, [], "s-a scris in depozit pentru un magazin care nu e pe vitrina");
-  assert.equal(cai.includes("businesses"), true, "magazinul nici nu s-a cautat: refuzul ar veni din alta parte");
+  for (const [nume, permis] of [
+    ["lipsa cu totul", null],
+    ["inventat", "9999999999999.eyJiIjoiYSJ9.nuEsemnaturaNoastra"],
+    ["ciuntit", "nu-e-un-permis"],
+  ] as const) {
+    scrieri = [];
+    const r = await POST(cere({ permis }).req);
+    assert.equal(r.status, 403, `permis ${nume}: a trecut`);
+    assert.deepEqual(scrieri, [], `permis ${nume}: s-a scris in depozit`);
+  }
+
+  /*
+   * ⚠ SI CAND EXPIRA, RASPUNSUL E ALTUL — o fila lasata deschisa peste noapte nu e un abuz, si
+   * omul trebuie sa afle ca are de reincarcat pagina, nu de reparat fisierul. Un singur „nu"
+   * pentru toate ar fi trimis exact indicatia gresita celui nevinovat, la un camp obligatoriu.
+   */
+  scrieri = [];
+  const expirat = semneazaPermisul(BIZ, PRODUS, { poza: "i" }, Date.now() - 1000);
+  const r = await POST(cere({ permis: expirat }).req);
+  assert.equal(r.status, 400, "un permis expirat n-a fost deosebit de unul falsificat");
+  assert.match(
+    ((await r.json()) as { error: string }).error, /Reincarc/,
+    "omul nu afla ce are de facut cu o pagina veche",
+  );
+  assert.deepEqual(scrieri, [], "un permis expirat a scris in depozit");
+});
+
+test("⚠ permisul leaga CAMPUL, nu doar magazinul", async () => {
+  /*
+   * Fara asta, un permis luat de pe pagina oricarui produs cu un camp de fisier ar fi fost o cheie
+   * catre tot depozitul magazinului. Si tot fara asta, plafonul de 40 MB al documentelor se cerea
+   * de pe un camp de imagine, unde el e 10 — chiar gaura pe care ruta si-o marturisea in comentariu
+   * cat timp `documente=1` venea de la client.
+   */
+  const doarPoza = semneazaPermisul(BIZ, PRODUS, { poza: "i" });
+  const r = await POST(cere({ permis: doarPoza, camp: "tipar" }).req);
+  assert.equal(r.status, 403, "s-a incarcat pe un camp care nu e in permis");
+  assert.deepEqual(scrieri, [], "s-a scris in depozit pentru un camp nepermis");
+
+  /* Iar campul care CHIAR e in permis trece — altfel proba ar fi cerut doar refuzuri. */
+  const bun = await POST(cere({ permis: doarPoza, camp: "poza" }).req);
+  assert.equal(bun.status, 200, "campul din permis a fost refuzat");
 });
 
 test("⚠ terminatia cheii urmeaza OCTETII, nu antetul trimis de browser", async () => {

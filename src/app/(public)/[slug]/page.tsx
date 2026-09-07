@@ -41,6 +41,8 @@ import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { jsonLdSafe } from "@/lib/json-ld";
 import { clasificaSursa, taraDinAnteturi, referrerScurt, primaValoare } from "@/lib/storefront/sursa-vizita";
+import { normalizeazaDefinitia } from "@/lib/customization/definitie";
+import { campurileDeIncarcare, semneazaPermisul } from "@/lib/customization/permis-incarcare";
 
 /*
  * `sort`, `pmin`, `pmax` si `stoc` sunt aici fiindca grila paginii principale are
@@ -188,6 +190,24 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     },
     alternates: { canonical: url },
   };
+}
+
+/**
+ * Permisul de incarcare al produsului asta — emis AICI, pe server.
+ *
+ * ⚠ ACESTA E LOCUL, si nu ruta de incarcare: pagina nu se randeaza pentru un magazin nepublicat
+ * ori pentru un produs care nu exista, deci verificarea s-a facut deja, o data, unde oricum se
+ * facea. Ruta de incarcare nu mai intreaba nimic baza — vezi `permis-incarcare.ts` pentru de ce
+ * asta e mai bun decat interogarea de acolo, care cadea deschis.
+ *
+ * ⚠ `null` cand produsul n-are niciun camp de fisier: atunci pagina lui nu e o usa de incarcare
+ * deloc, si n-are rost sa care o cheie prin HTML.
+ */
+function permisulProdusului(businessId: string, productId: string, pageSections: unknown): string | null {
+  const definitie = normalizeazaDefinitia(
+    (pageSections && typeof pageSections === "object" ? (pageSections as Record<string, unknown>) : null)?.customization,
+  );
+  return semneazaPermisul(businessId, productId, campurileDeIncarcare(definitie));
 }
 
 export default async function SlugPage({ params, searchParams }: Props) {
@@ -709,6 +729,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
                 bundleComponents={bundleComponents}
                 altMap={altMap}
                 productOffers={opsProductOffers}
+                permisIncarcare={permisulProdusului(business.id, product.id, product.page_sections)}
                 isHome
               />
             </StorePageShell>

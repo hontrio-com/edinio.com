@@ -149,7 +149,7 @@ function Gallery({ slides, activeSlide, goTo, mobile, color, imgAlt, hasDiscount
 
 /* ─── Main component ──────────────────────────────────────────────────────── */
 
-export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, demo = false }: {
+export function ProductPageClassic({ business, product, storeSettings, basePath: basePathProp, hasCardPayment = false, bundleComponents = [], altMap = {}, isHome = false, productOffers = [], setari = {}, demo = false, permisIncarcare = null }: {
   business: Business;
   product: Product;
   storeSettings: StoreSettings | null;
@@ -175,6 +175,16 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
    * si zona de cumparare: pagina intreaga trece de 3000 px si, micsorata intr-un
    * card, ar deveni o banda ilizibila.
    */
+  /**
+   * Permisul de incarcare a fisierelor, emis pe SERVER cand s-a randat pagina.
+   *
+   * ⚠ NU E O PODOABA DE PROP: fara el, campurile de fisier ale produsului nu mai pot urca nimic —
+   * ruta refuza cu mesaj. Se emite in pagina de rută (`semneazaPermisul`), fiindca doar acolo se
+   * stie ca magazinul e publicat si ca produsul exista. Vezi `permis-incarcare.ts`.
+   *
+   * ⚠ `null` pe suprafetele care nu-l pot emite (previzualizarea din panou, miniatura de design).
+   */
+  permisIncarcare?: string | null;
   demo?: boolean;
 }) {
   const basePath = basePathProp ?? `/${business.slug}`;
@@ -350,7 +360,7 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
    *
    * Suplimentul calatoreste separat, ca VALORI, si serverul il socoteste el.
    */
-  const pers = usePersonalizare(product.page_sections, business.id);
+  const pers = usePersonalizare(product.page_sections, permisIncarcare);
   const pretAfisat = pers.pretDeAfisat(displayPrice);
   const displayComparePrice = comboCompareAtPrice(
     selectedCombo,

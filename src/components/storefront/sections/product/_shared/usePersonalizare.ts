@@ -156,7 +156,14 @@ export interface StarePersonalizare {
 }
 
 
-export function usePersonalizare(pageSections: unknown, businessId: string): StarePersonalizare {
+/**
+ * @param permis Permisul de incarcare, emis pe SERVER cand s-a randat pagina produsului.
+ *
+ * ⚠ `null` inseamna „produsul n-are campuri de fisier" SAU „pagina asta nu emite permise" (de
+ * pilda previzualizarea din panou). In amandoua cazurile ruta refuza incarcarea CU MESAJ, nu se
+ * preface ca merge — vezi `permis-incarcare.ts`.
+ */
+export function usePersonalizare(pageSections: unknown, permis?: string | null): StarePersonalizare {
   const definitie = useMemo(() => {
     const ps = pageSections && typeof pageSections === "object"
       ? (pageSections as Record<string, unknown>)
@@ -298,13 +305,19 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
           if (f.size > octetiMax) { refuzat = true; continue; }
           const fd = new FormData();
           fd.append("file", f);
-          fd.append("business_id", businessId);
           /*
-           * ⚠ NU E O POARTA, e o cerere: ruta accepta PDF numai cand i se cere, si tot ea
-           * verifica OCTETII. Potrivirea adevarata dintre tipul campului si ce s-a incarcat se
-           * face la COMANDA, in `verificaPersonalizarea`, unde se stie definitia produsului.
+           * ═══ ⚠ PERMISUL, IN LOCUL LUI `business_id` SI AL LUI `documente` ═══
+           *
+           * Amandoua veneau de aici, adica de la client. Id-ul magazinului e in HTML-ul fiecarui
+           * magazin, deci nu dovedea nimic; iar `documente=1` cerea plafonul de 40 MB al
+           * documentelor si de pe un camp de imagine, unde el e 10.
+           *
+           * Permisul e emis pe SERVER, cand s-a randat pagina, si poarta magazinul, produsul,
+           * campurile care primesc fisiere si FELUL fiecaruia. Ce trimitem de aici e doar „care
+           * camp" — restul nu mai e al nostru de spus. Vezi `permis-incarcare.ts`.
            */
-          if (documente) fd.append("documente", "1");
+          fd.append("permis", permis ?? "");
+          fd.append("camp", camp.id);
           try {
             const res = await fetch("/api/upload-customization", { method: "POST", body: fd });
             const date = (await res.json()) as { cheie?: string; error?: string };
@@ -389,7 +402,7 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
         setIncarca((u) => ({ ...u, [camp.id]: false }));
       }
     },
-    [businessId, valori],
+    [permis, valori],
   );
 
   const scoateFisier = useCallback(

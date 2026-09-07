@@ -7,6 +7,7 @@ import { MB_DOCUMENT, MB_IMAGINE } from "@/lib/customization/definitie";
 import { cheieIncarcare } from "@/lib/customization/fisiere-private";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { verificaPermisul } from "@/lib/customization/permis-incarcare";
 
 /*
  * ⚠ RULEAZA PE NODE, si nu e o formalitate: ruta foloseste `sharp`, care e un modul NATIV.
@@ -50,27 +51,45 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
-  const businessId = formData.get("business_id") as string | null;
   /*
-   * ⚠ CE FEL DE CONTINUT SE ASTEAPTA, spus de campul care cere incarcarea.
+   * ═══ ⚠ PERMISUL, IN LOCUL LUI `business_id` SI AL LUI `documente` ═══
    *
-   * `documente` inseamna „campul e de tip `fisier`, deci accepta si PDF”. Lipsa inseamna
-   * IMAGINE, exact ca pana acum — deci paginile ramase deschise in browserele oamenilor si orice
-   * alt apelant se poarta identic.
+   * Pana acum capatul cerea doar un `business_id` care sa fie UUID valid si un magazin publicat.
+   * Id-ul ala e in HTML-ul fiecarui magazin: cine il citea putea urca fisiere pe factura acelui
+   * comerciant, pe orice cale, la nesfarsit in marginea plafoanelor. Iar `documente=1` venea tot
+   * de la client — asa ca plafonul de 40 MB al documentelor se putea cere si de pe un camp de
+   * imagine, unde el e 10.
    *
-   * ⚠ NU E O POARTA DE AUTORIZARE, si nu se preface ca ar fi: vine de la client, deci oricine
-   * poate cere „documente” si urca un PDF si dintr-un camp de imagine. Ce apara asta e MARIMEA si
-   * mesajul de eroare. Adevarata potrivire intre TIPUL campului si CE s-a incarcat se face la
-   * COMANDA, in `verificaPersonalizarea`, unde se stie si definitia produsului — acolo un PDF
-   * pus intr-un camp de imagine se refuza.
+   * Acum amandoua ies din PERMIS, emis pe server cand s-a randat pagina produsului. Vezi
+   * `permis-incarcare.ts`: ce leaga, cat traieste, si de ce el inlocuieste interogarea de magazin
+   * in loc s-o faca „fail closed".
    */
-  const cereDocumente = formData.get("documente") === "1";
+  const permis = formData.get("permis") as string | null;
+  const campId = formData.get("camp") as string | null;
 
   if (!file) {
     return NextResponse.json({ error: "Fisier obligatoriu." }, { status: 400 });
   }
 
-  if (!businessId || !UUID_RE.test(businessId)) {
+  const verdict = verificaPermisul(permis, campId ?? "");
+  if (!verdict.ok) {
+    /*
+     * ⚠ UN PERMIS EXPIRAT NU E UN ABUZ, e o fila lasata deschisa peste noapte — si omul trebuie sa
+     * afle ca n-are de reparat fisierul, ci de reincarcat pagina. Un singur mesaj pentru toate ar
+     * fi trimis exact indicatia gresita celui nevinovat, la un camp obligatoriu.
+     */
+    if (verdict.motiv === "expirat") {
+      return NextResponse.json(
+        { error: "Pagina e deschisa de prea mult timp. Reincarc-o si incearca din nou." },
+        { status: 400 },
+      );
+    }
+    return NextResponse.json({ error: "Incarcare nepermisa." }, { status: 403 });
+  }
+  const businessId = verdict.businessId;
+  const cereDocumente = verdict.document;
+
+  if (!UUID_RE.test(businessId)) {
     return NextResponse.json({ error: "business_id invalid." }, { status: 400 });
   }
 
@@ -109,9 +128,12 @@ export async function POST(request: NextRequest) {
    * o blocare de-o ora peste el ar tine departe cumparatori care n-au facut nimic. Fereastra
    * expira singura si omul poate continua.
    *
-   * ⚠ SE CONSULTA INAINTEA INTEROGARII DE MAI JOS, nu dupa: si interogarea aia e o cerere de baza
-   * pe care capatul asta o da oricui, iar fara plafon inaintea ei capatul devine si o sonda
-   * gratuita de „exista magazinul asta?”.
+   * ⚠ SE CONSULTA DUPA PERMIS, si asta s-a schimbat pe 07.09.2026: aici scria ca plafoanele merg
+   * INAINTEA interogarii de magazin, ca sa nu ramana capatul o sonda gratuita de „exista magazinul
+   * asta?". Interogarea aia nu mai exista — permisul o inlocuieste (vezi mai sus) — si el nu
+   * atinge baza deloc, deci nu mai e nimic de sondat inaintea plafoanelor. In schimb, contorul
+   * durabil nu se mai consuma pentru cereri fara permis: cine bate la usa fara cheie nu mai poate
+   * epuiza cota unui magazin adevarat.
    *
    * ⚠ CADE DESCHIS la eroare de baza, ca tot restul rutei — vezi `consumaLimita`, care raspunde
    * „permis” cand contorul nu poate fi consultat. Limitatorul nu are voie sa devina el insusi
@@ -131,43 +153,22 @@ export async function POST(request: NextRequest) {
   }
 
   /*
-   * Magazinul trebuie sa EXISTE si sa fie publicat.
+   * ═══ ⚠ AICI STATEA INTEROGAREA CARE CADEA DESCHIS. NU MAI E NEVOIE DE EA ═══
    *
-   * Pana acum se verifica doar FORMA lui `business_id` (UUID valid), deci oricine
-   * putea scrie in R2 sub `products/customizations/<uuid-inventat>/` la nesfarsit,
-   * pe orice UUID. Fisierele acelea nu sunt legate de nicio comanda si nimic nu le
-   * sterge vreodata (`deleteOrphanImages` e no-op explicit), deci era stocare
-   * platita pe veci, fara proprietar.
+   * Ruta intreba baza daca magazinul exista si e publicat, si la eroare de baza lasa incarcarea sa
+   * treaca („fail open") — dinadins: alternativa era ca poza sa dispara tacut din formular si omul
+   * sa ramana blocat la un camp obligatoriu.
    *
-   * FAIL OPEN la eroare de baza, deliberat: daca Supabase clipeste, incarcarea
-   * trece. Alternativa — sa raspundem 400 — ar face imaginea de personalizare sa
-   * dispara in tacere din formularul de comanda (OrderModal nu arata eroarea), iar
-   * la un camp obligatoriu clientul ar ramane blocat fara sa inteleaga de ce.
-   * Comanda pierduta e mai scumpa decat cateva fisiere orfane.
+   * Auditul cerea sa devina „fail closed". Ar fi fost mai rau decat gaura pe care o inchidea: o
+   * clipire a bazei ar fi oprit ATUNCI toate comenzile personalizate din platforma, si tot
+   * platforma ar fi platit.
+   *
+   * Permisul face intrebarea inutila. El se emite CHIAR CAND se randeaza pagina produsului, iar
+   * pagina aia nu se randeaza pentru un magazin nepublicat ori pentru un produs care nu exista —
+   * verificarea s-a facut deci deja, o data, acolo unde oricum se facea. Ruta nu mai intreaba
+   * nimic: nici nu cade inchis, nici nu cade deschis, si a mai scapat si de o interogare de pe
+   * drumul cel mai fierbinte.
    */
-  try {
-    /*
-     * ⚠ IMPORTUL ASTA NU MAI AMANA NIMIC, si e scris in asa fel incat pare ca amana. A fost
-     * dinamic ca sa nu traga clientul de administrare pe drumurile care nu ajung pana aici; dar
-     * `consumaLimita` (importat static, sus) vine din `limita-durabila.ts`, care importa STATIC
-     * `@/lib/supabase/admin`. Modulul e deci deja incarcat cand se ajunge aici, iar `await
-     * import()` doar il scoate din cache. Se lasa asa fiindca nu costa nimic si fiindca amanarea
-     * redevine adevarata daca plafonul durabil iese vreodata din ruta — dar cine citeste sa nu
-     * creada ca ruta EVITA clientul de administrare: nu-l evita.
-     */
-    const { createAdminClient } = await import("@/lib/supabase/admin");
-    const { data: magazin, error } = await createAdminClient()
-      .from("businesses")
-      .select("id")
-      .eq("id", businessId)
-      .eq("is_published", true)
-      .maybeSingle();
-    if (!error && !magazin) {
-      return NextResponse.json({ error: "Magazin indisponibil." }, { status: 404 });
-    }
-  } catch {
-    /* fail open — vezi comentariul de mai sus */
-  }
 
   const plafon = cereDocumente ? MAX_SIZE_DOC : MAX_SIZE;
   if (file.size > plafon) {

@@ -225,6 +225,7 @@ export function ProductPageDetailed({
   productOffers = [],
   setari = {},
   demo = false,
+  permisIncarcare = null,
 }: {
   business: Business;
   product: Product;
@@ -238,6 +239,16 @@ export function ProductPageDetailed({
   /** Reglajele variantei, din `design.product.page.settings`. Vezi registry. */
   setari?: Record<string, unknown>;
   /** Miniatura din catalogul de design-uri: pagina se randeaza inerta. Vezi `classic`. */
+  /**
+   * Permisul de incarcare a fisierelor, emis pe SERVER cand s-a randat pagina.
+   *
+   * ⚠ NU E O PODOABA DE PROP: fara el, campurile de fisier ale produsului nu mai pot urca nimic —
+   * ruta refuza cu mesaj. Se emite in pagina de rută (`semneazaPermisul`), fiindca doar acolo se
+   * stie ca magazinul e publicat si ca produsul exista. Vezi `permis-incarcare.ts`.
+   *
+   * ⚠ `null` pe suprafetele care nu-l pot emite (previzualizarea din panou, miniatura de design).
+   */
+  permisIncarcare?: string | null;
   demo?: boolean;
 }) {
   const basePath = basePathProp ?? `/${business.slug}`;
@@ -364,7 +375,7 @@ export function ProductPageDetailed({
    *
    * Suplimentul calatoreste separat, ca VALORI, si serverul il socoteste el.
    */
-  const pers = usePersonalizare(product.page_sections, business.id);
+  const pers = usePersonalizare(product.page_sections, permisIncarcare);
   const pretAfisat = pers.pretDeAfisat(displayPrice);
   const displayComparePrice = comboCompareAtPrice(
     selectedCombo,

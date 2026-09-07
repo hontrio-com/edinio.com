@@ -146,17 +146,44 @@ test("⚠ lantul e INTREG: ruta cere felul, iar cele trei ecrane nu deseneaza mi
   const sursa = (r: string) =>
     readFileSync(path.resolve(process.cwd(), r), "utf8").replace(/\r\n/g, "\n");
 
-  /* 1. Ruta: plafon propriu si octeti verificati separat. */
+  /*
+   * 1. Ruta: plafon propriu si octeti verificati separat.
+   *
+   * ⚠ DE UNDE VINE „E DOCUMENT" S-A SCHIMBAT PE 07.09.2026, si asta e chiar o reparatie.
+   *
+   * Steagul venea de la CLIENT (`documente=1` in formular), iar ruta si-o marturisea singura in
+   * comentariu: „NU E O POARTA DE AUTORIZARE... oricine poate cere «documente»". Adica plafonul de
+   * 40 MB al documentelor se cerea si de pe un camp de imagine, unde el e 10 — pe cel mai expus
+   * capat din proiect, care scrie in depozit platit.
+   *
+   * Acum felul iese din PERMISUL semnat pe server, deci din definitia produsului. Ce se cere aici
+   * ramane aceeasi garantie — ca documentele au plafonul si verificarea LOR —, dar sursa felului
+   * nu mai poate fi aleasa de cel care incarca.
+   */
   const ruta = sursa("src/app/api/upload-customization/route.ts");
-  assert.match(ruta, /const cereDocumente = formData\.get\("documente"\) === "1";/);
+  assert.match(ruta, /const cereDocumente = verdict\.document;/);
   assert.match(ruta, /const document = cereDocumente \? detectDocMime\(buffer\) : null;/);
   assert.match(ruta, /"application\/pdf": "pdf",/, "ruta n-ar sti ce terminatie sa puna");
   assert.match(ruta, /const plafon = cereDocumente \? MAX_SIZE_DOC : MAX_SIZE;/);
+  /* ⚠ Si felul nu se mai poate cere din formular — altfel vechea usa ar fi ramas deschisa alaturi. */
+  assert.equal(
+    /formData\.get\("documente"\)/.test(ruta), false,
+    "ruta accepta iar felul campului de la client",
+  );
 
-  /* 2. Carligul chiar CERE documentele; fara asta ruta ar refuza fiecare PDF. */
+  /*
+   * 2. Carligul spune CARE camp, iar felul lui il stie permisul.
+   *
+   * Fara `camp`, permisul n-ar avea ce verifica si fiecare PDF ar fi refuzat; iar cu felul trimis
+   * tot de aici, reparatia de mai sus ar fi fost degeaba.
+   */
   const carlig = sursa("src/components/storefront/sections/product/_shared/usePersonalizare.ts");
   assert.match(carlig, /const documente = camp\.type === "fisier";/);
-  assert.match(carlig, /if \(documente\) fd\.append\("documente", "1"\);/);
+  assert.match(carlig, /fd\.append\("camp", camp\.id\);/);
+  assert.equal(
+    /fd\.append\("documente"/.test(carlig), false,
+    "carligul declara iar singur ca urca un document",
+  );
 
   /* 3. Vitrina si panoul nu randeaza miniatura pentru un document. */
   /*

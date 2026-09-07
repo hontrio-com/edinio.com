@@ -22,6 +22,8 @@ import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-v
 import { resolveDesign } from "@/lib/storefront/design/parse";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { jsonLdSafe } from "@/lib/json-ld";
+import { normalizeazaDefinitia } from "@/lib/customization/definitie";
+import { campurileDeIncarcare, semneazaPermisul } from "@/lib/customization/permis-incarcare";
 
 interface Props {
   params: Promise<{ slug: string; productSlug: string }>;
@@ -115,6 +117,24 @@ function buildBreadcrumbJsonLd(storeName: string, storeUrl: string, productName:
       { "@type": "ListItem", position: 2, name: productName, item: productUrl },
     ],
   };
+}
+
+/**
+ * Permisul de incarcare al produsului asta — emis AICI, pe server.
+ *
+ * ⚠ ACESTA E LOCUL, si nu ruta de incarcare: pagina nu se randeaza pentru un magazin nepublicat
+ * ori pentru un produs care nu exista, deci verificarea s-a facut deja, o data, unde oricum se
+ * facea. Ruta de incarcare nu mai intreaba nimic baza — vezi `permis-incarcare.ts` pentru de ce
+ * asta e mai bun decat interogarea de acolo, care cadea deschis.
+ *
+ * ⚠ `null` cand produsul n-are niciun camp de fisier: atunci pagina lui nu e o usa de incarcare
+ * deloc, si n-are rost sa care o cheie prin HTML.
+ */
+function permisulProdusului(businessId: string, productId: string, pageSections: unknown): string | null {
+  const definitie = normalizeazaDefinitia(
+    (pageSections && typeof pageSections === "object" ? (pageSections as Record<string, unknown>) : null)?.customization,
+  );
+  return semneazaPermisul(businessId, productId, campurileDeIncarcare(definitie));
 }
 
 export default async function ProductDetailPage({ params }: Props) {
@@ -254,6 +274,7 @@ export default async function ProductDetailPage({ params }: Props) {
             bundleComponents={bundleComponents}
             altMap={altMap}
             productOffers={productOffers}
+            permisIncarcare={permisulProdusului(business.id, product.id, product.page_sections)}
           />
         </StorePageShell>
       </StorefrontThemeScope>

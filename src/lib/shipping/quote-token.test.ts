@@ -1,6 +1,31 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { signShippingQuote, verifyShippingQuote, semneazaOptiuni } from "./quote-token";
+import { createHmac } from "node:crypto";
+import { signShippingQuote, verificaCotatia, semneazaOptiuni, TOLERANTA_GRAME } from "./quote-token";
+
+/**
+ * ⚠ PROBELE DE MAI JOS SUNT DESPRE SEMNATURA, nu despre greutate, si raman asa.
+ *
+ * Pe 08.09.2026 tokenul a capatat si gramele cosului, iar verificarea a devenit un verdict cu
+ * motiv, nu un boolean. Ajutoarele astea duc probele vechi peste schimbare NEATINSE: ele semneaza
+ * cu zero grame si nu trimit nicio greutate la verificare, adica exact intrebarea pe care o puneau
+ * si inainte. Greutatea isi are probele ei, la finalul fisierului.
+ */
+const semneaza = (
+  businessId: string,
+  dest: Parameters<typeof signShippingQuote>[1],
+  price: number,
+  optiune: Parameters<typeof signShippingQuote>[3],
+  expiraLa?: number,
+) => signShippingQuote(businessId, dest, price, optiune, 0, expiraLa);
+
+const verifica = (
+  businessId: string,
+  dest: Parameters<typeof verificaCotatia>[1],
+  price: number,
+  token: string | null | undefined,
+  optiune: Parameters<typeof verificaCotatia>[4],
+) => verificaCotatia(businessId, dest, price, token, optiune).ok;
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
@@ -20,46 +45,46 @@ const BIZ = "biz-1";
 const DEST = { county: "Cluj", city: "Cluj-Napoca", country: "RO", postCode: "400000" };
 
 test("cotatia proprie trece", () => {
-  const t = signShippingQuote(BIZ, DEST, 24.5, OPT);
-  assert.equal(verifyShippingQuote(BIZ, DEST, 24.5, t, OPT), true);
+  const t = semneaza(BIZ, DEST, 24.5, OPT);
+  assert.equal(verifica(BIZ, DEST, 24.5, t, OPT), true);
 });
 
 test("alta suma pe aceeasi cotatie nu trece", () => {
-  const t = signShippingQuote(BIZ, DEST, 24.5, OPT);
-  assert.equal(verifyShippingQuote(BIZ, DEST, 0, t, OPT), false);
-  assert.equal(verifyShippingQuote(BIZ, DEST, 24.49, t, OPT), false);
+  const t = semneaza(BIZ, DEST, 24.5, OPT);
+  assert.equal(verifica(BIZ, DEST, 0, t, OPT), false);
+  assert.equal(verifica(BIZ, DEST, 24.49, t, OPT), false);
 });
 
 test("cotatia unui alt magazin nu trece", () => {
-  const t = signShippingQuote("biz-2", DEST, 24.5, OPT);
-  assert.equal(verifyShippingQuote(BIZ, DEST, 24.5, t, OPT), false);
+  const t = semneaza("biz-2", DEST, 24.5, OPT);
+  assert.equal(verifica(BIZ, DEST, 24.5, t, OPT), false);
 });
 
 test("cotatia altei destinatii nu trece", () => {
-  const t = signShippingQuote(BIZ, { ...DEST, city: "Bucuresti" }, 24.5, OPT);
-  assert.equal(verifyShippingQuote(BIZ, DEST, 24.5, t, OPT), false);
+  const t = semneaza(BIZ, { ...DEST, city: "Bucuresti" }, 24.5, OPT);
+  assert.equal(verifica(BIZ, DEST, 24.5, t, OPT), false);
 });
 
 test("destinatia se normalizeaza, deci spatiile si majusculele nu strica nimic", () => {
-  const t = signShippingQuote(BIZ, DEST, 24.5, OPT);
-  assert.equal(verifyShippingQuote(BIZ, { ...DEST, city: "  cluj-napoca " }, 24.5, t, OPT), true);
+  const t = semneaza(BIZ, DEST, 24.5, OPT);
+  assert.equal(verifica(BIZ, { ...DEST, city: "  cluj-napoca " }, 24.5, t, OPT), true);
 });
 
 test("tara lipsa inseamna Romania, in ambele sensuri", () => {
-  const t = signShippingQuote(BIZ, { county: "Cluj", city: "Cluj-Napoca", postCode: "400000" }, 24.5, OPT);
-  assert.equal(verifyShippingQuote(BIZ, { ...DEST, country: "RO" }, 24.5, t, OPT), true);
+  const t = semneaza(BIZ, { county: "Cluj", city: "Cluj-Napoca", postCode: "400000" }, 24.5, OPT);
+  assert.equal(verifica(BIZ, { ...DEST, country: "RO" }, 24.5, t, OPT), true);
 });
 
 test("o cotatie expirata nu mai trece", () => {
-  const t = signShippingQuote(BIZ, DEST, 24.5, OPT, Date.now() - 1000);
-  assert.equal(verifyShippingQuote(BIZ, DEST, 24.5, t, OPT), false);
+  const t = semneaza(BIZ, DEST, 24.5, OPT, Date.now() - 1000);
+  assert.equal(verifica(BIZ, DEST, 24.5, t, OPT), false);
 });
 
 test("token lipsa sau stricat nu trece", () => {
-  assert.equal(verifyShippingQuote(BIZ, DEST, 24.5, null, OPT), false);
-  assert.equal(verifyShippingQuote(BIZ, DEST, 24.5, "", OPT), false);
-  assert.equal(verifyShippingQuote(BIZ, DEST, 24.5, "fara-punct", OPT), false);
-  assert.equal(verifyShippingQuote(BIZ, DEST, 24.5, `${Date.now() + 10000}.gresit`, OPT), false);
+  assert.equal(verifica(BIZ, DEST, 24.5, null, OPT), false);
+  assert.equal(verifica(BIZ, DEST, 24.5, "", OPT), false);
+  assert.equal(verifica(BIZ, DEST, 24.5, "fara-punct", OPT), false);
+  assert.equal(verifica(BIZ, DEST, 24.5, `${Date.now() + 10000}.gresit`, OPT), false);
 });
 
 /*
@@ -71,13 +96,13 @@ test("token lipsa sau stricat nu trece", () => {
  */
 test("destinatie interna doar cu judet si oras: semneaza si verifica identic", () => {
   const dest = { county: "Cluj", city: "Cluj-Napoca" };
-  const t = signShippingQuote(BIZ, dest, 19.99, OPT);
-  assert.equal(verifyShippingQuote(BIZ, dest, 19.99, t, OPT), true);
+  const t = semneaza(BIZ, dest, 19.99, OPT);
+  assert.equal(verifica(BIZ, dest, 19.99, t, OPT), true);
 });
 
 test("codul postal adaugat pe o singura parte rupe verificarea", () => {
-  const t = signShippingQuote(BIZ, { county: "Cluj", city: "Cluj-Napoca" }, 19.99, OPT);
-  assert.equal(verifyShippingQuote(BIZ, { county: "Cluj", city: "Cluj-Napoca", postCode: "400000" }, 19.99, t, OPT), false);
+  const t = semneaza(BIZ, { county: "Cluj", city: "Cluj-Napoca" }, 19.99, OPT);
+  assert.equal(verifica(BIZ, { county: "Cluj", city: "Cluj-Napoca", postCode: "400000" }, 19.99, t, OPT), false);
 });
 
 /*
@@ -92,22 +117,22 @@ test("codul postal adaugat pe o singura parte rupe verificarea", () => {
  */
 test("cotatie internationala: se semneaza si se verifica cu tara si codul postal", () => {
   const dest = { county: "", city: "Ratibor", country: "DE", postCode: "02627" };
-  const t = signShippingQuote(BIZ, dest, 95.84, OPT);
-  assert.equal(verifyShippingQuote(BIZ, dest, 95.84, t, OPT), true);
+  const t = semneaza(BIZ, dest, 95.84, OPT);
+  assert.equal(verifica(BIZ, dest, 95.84, t, OPT), true);
 });
 
 test("cotatie internationala: alta tara sau alt cod postal nu trece", () => {
   const dest = { county: "", city: "Ratibor", country: "DE", postCode: "02627" };
-  const t = signShippingQuote(BIZ, dest, 95.84, OPT);
-  assert.equal(verifyShippingQuote(BIZ, { ...dest, country: "AT" }, 95.84, t, OPT), false);
-  assert.equal(verifyShippingQuote(BIZ, { ...dest, postCode: "97941" }, 95.84, t, OPT), false);
+  const t = semneaza(BIZ, dest, 95.84, OPT);
+  assert.equal(verifica(BIZ, { ...dest, country: "AT" }, 95.84, t, OPT), false);
+  assert.equal(verifica(BIZ, { ...dest, postCode: "97941" }, 95.84, t, OPT), false);
   // Si nici tariful implicit intern nu poate trece drept cotatie semnata.
-  assert.equal(verifyShippingQuote(BIZ, dest, 18, t, OPT), false);
+  assert.equal(verifica(BIZ, dest, 18, t, OPT), false);
 });
 
 test("codul postal netaiat la cotare si taiat la comanda semneaza la fel", () => {
-  const t = signShippingQuote(BIZ, { county: "", city: "Ratibor", country: "DE", postCode: " 02627 " }, 95.84, OPT);
-  assert.equal(verifyShippingQuote(BIZ, { county: "", city: "Ratibor", country: "DE", postCode: "02627" }, 95.84, t, OPT), true);
+  const t = semneaza(BIZ, { county: "", city: "Ratibor", country: "DE", postCode: " 02627 " }, 95.84, OPT);
+  assert.equal(verifica(BIZ, { county: "", city: "Ratibor", country: "DE", postCode: "02627" }, 95.84, t, OPT), true);
 });
 
 /*
@@ -124,11 +149,11 @@ test("semneazaOptiuni pune token pe FIECARE optiune, si fiecare se verifica cu e
     { courier: "pickup", deliveryType: "address", price: 0 },
     { courier: "sameday", deliveryType: "locker", price: 19 },
   ];
-  const semnate = semneazaOptiuni(BIZ, dest, false, optiuni);
+  const semnate = semneazaOptiuni(BIZ, dest, false, 0, optiuni);
   assert.equal(semnate.length, 3);
   for (const o of semnate) {
     assert.ok(o.token, `optiunea ${o.courier} a plecat fara token`);
-    assert.equal(verifyShippingQuote(BIZ, dest, o.price, o.token, { courier: o.courier, deliveryType: o.deliveryType, ramburs: false }), true);
+    assert.equal(verifica(BIZ, dest, o.price, o.token, { courier: o.courier, deliveryType: o.deliveryType, ramburs: false }), true);
   }
 });
 
@@ -140,30 +165,30 @@ test("semneazaOptiuni pune token pe FIECARE optiune, si fiecare se verifica cu e
  */
 test("tokenul de la Ridicare personala NU legitimeaza livrarea cu curier", () => {
   const dest = { county: "Cluj", city: "Cluj-Napoca" };
-  const [pickup] = semneazaOptiuni(BIZ, dest, false, [{ courier: "pickup", deliveryType: "address", price: 0 }]);
+  const [pickup] = semneazaOptiuni(BIZ, dest, false, 0, [{ courier: "pickup", deliveryType: "address", price: 0 }]);
   // Cu el insusi, da.
-  assert.equal(verifyShippingQuote(BIZ, dest, 0, pickup.token, { courier: "pickup", deliveryType: "address", ramburs: false }), true);
+  assert.equal(verifica(BIZ, dest, 0, pickup.token, { courier: "pickup", deliveryType: "address", ramburs: false }), true);
   // Pe alt curier, nu — asta e gaura inchisa.
-  assert.equal(verifyShippingQuote(BIZ, dest, 0, pickup.token, { courier: "cargus", deliveryType: "address", ramburs: false }), false);
-  assert.equal(verifyShippingQuote(BIZ, dest, 0, pickup.token, { courier: "sameday", deliveryType: "address", ramburs: false }), false);
+  assert.equal(verifica(BIZ, dest, 0, pickup.token, { courier: "cargus", deliveryType: "address", ramburs: false }), false);
+  assert.equal(verifica(BIZ, dest, 0, pickup.token, { courier: "sameday", deliveryType: "address", ramburs: false }), false);
 });
 
 test("tokenul de locker nu trece pentru livrare la adresa, si invers", () => {
   const dest = { county: "Cluj", city: "Cluj-Napoca" };
-  const [laLocker] = semneazaOptiuni(BIZ, dest, false, [{ courier: "sameday", deliveryType: "locker", price: 19 }]);
-  assert.equal(verifyShippingQuote(BIZ, dest, 19, laLocker.token, { courier: "sameday", deliveryType: "locker", ramburs: false }), true);
-  assert.equal(verifyShippingQuote(BIZ, dest, 19, laLocker.token, { courier: "sameday", deliveryType: "address", ramburs: false }), false);
+  const [laLocker] = semneazaOptiuni(BIZ, dest, false, 0, [{ courier: "sameday", deliveryType: "locker", price: 19 }]);
+  assert.equal(verifica(BIZ, dest, 19, laLocker.token, { courier: "sameday", deliveryType: "locker", ramburs: false }), true);
+  assert.equal(verifica(BIZ, dest, 19, laLocker.token, { courier: "sameday", deliveryType: "address", ramburs: false }), false);
 });
 
 test("curierul lipsa de o singura parte nu trece drept potrivire", () => {
   const dest = { county: "Cluj", city: "Cluj-Napoca" };
-  const [o] = semneazaOptiuni(BIZ, dest, false, [{ courier: "cargus", deliveryType: "address", price: 17 }]);
-  assert.equal(verifyShippingQuote(BIZ, dest, 17, o.token, { ramburs: false }), false);
-  assert.equal(verifyShippingQuote(BIZ, dest, 17, o.token, { courier: undefined, deliveryType: "address", ramburs: false }), false);
+  const [o] = semneazaOptiuni(BIZ, dest, false, 0, [{ courier: "cargus", deliveryType: "address", price: 17 }]);
+  assert.equal(verifica(BIZ, dest, 17, o.token, { ramburs: false }), false);
+  assert.equal(verifica(BIZ, dest, 17, o.token, { courier: undefined, deliveryType: "address", ramburs: false }), false);
 });
 
 test("semneazaOptiuni pastreaza campurile optiunii neatinse", () => {
-  const semnate = semneazaOptiuni(BIZ, { county: "Cluj", city: "Cluj-Napoca" }, false, [
+  const semnate = semneazaOptiuni(BIZ, { county: "Cluj", city: "Cluj-Napoca" }, false, 0, [
     { courier: "woot", price: 19.99, wootServiceId: 7, courierLabel: "Woot" },
   ]);
   assert.equal(semnate[0].wootServiceId, 7);
@@ -175,24 +200,24 @@ test("tokenul unei optiuni nu trece pentru pretul alteia, la curier IDENTIC", ()
   // Curierul si tipul de livrare sunt aceleasi pe ambele: asa testul cade daca
   // se scoate PRETUL din amprenta, nu doar daca se scoate curierul.
   const dest = { county: "", city: "Ratibor", country: "DE", postCode: "02627" };
-  const [ieftina, scumpa] = semneazaOptiuni(BIZ, dest, false, [
+  const [ieftina, scumpa] = semneazaOptiuni(BIZ, dest, false, 0, [
     { courier: "dpd", deliveryType: "address", price: 18 },
     { courier: "dpd", deliveryType: "address", price: 95.84 },
   ]);
-  assert.equal(verifyShippingQuote(BIZ, dest, 95.84, ieftina.token, { courier: "dpd", deliveryType: "address", ramburs: false }), false);
-  assert.equal(verifyShippingQuote(BIZ, dest, 18, scumpa.token, { courier: "dpd", deliveryType: "address", ramburs: false }), false);
-  assert.equal(verifyShippingQuote(BIZ, dest, 18, ieftina.token, { courier: "dpd", deliveryType: "address", ramburs: false }), true);
+  assert.equal(verifica(BIZ, dest, 95.84, ieftina.token, { courier: "dpd", deliveryType: "address", ramburs: false }), false);
+  assert.equal(verifica(BIZ, dest, 18, scumpa.token, { courier: "dpd", deliveryType: "address", ramburs: false }), false);
+  assert.equal(verifica(BIZ, dest, 18, ieftina.token, { courier: "dpd", deliveryType: "address", ramburs: false }), true);
 });
 
 test("tokenul unei optiuni nu trece pentru pretul alteia din aceeasi lista", () => {
   const dest = { county: "", city: "Ratibor", country: "DE", postCode: "02627" };
-  const [ieftina, scumpa] = semneazaOptiuni(BIZ, dest, false, [{ price: 18 }, { price: 95.84 }]);
-  assert.equal(verifyShippingQuote(BIZ, dest, 95.84, ieftina.token, OPT), false);
-  assert.equal(verifyShippingQuote(BIZ, dest, 18, scumpa.token, OPT), false);
+  const [ieftina, scumpa] = semneazaOptiuni(BIZ, dest, false, 0, [{ price: 18 }, { price: 95.84 }]);
+  assert.equal(verifica(BIZ, dest, 95.84, ieftina.token, OPT), false);
+  assert.equal(verifica(BIZ, dest, 18, scumpa.token, OPT), false);
 });
 
 test("lista goala ramane goala, fara sa se prabuseasca", () => {
-  assert.deepEqual(semneazaOptiuni(BIZ, { county: "Cluj", city: "Cluj-Napoca" }, false, []), []);
+  assert.deepEqual(semneazaOptiuni(BIZ, { county: "Cluj", city: "Cluj-Napoca" }, false, 0, []), []);
 });
 
 /*
@@ -204,24 +229,24 @@ test("lista goala ramane goala, fara sa se prabuseasca", () => {
  */
 test("eticheta face parte din semnatura: schimbata, tokenul nu mai trece", () => {
   const dest = { county: "Cluj", city: "Cluj-Napoca" };
-  const [pickup] = semneazaOptiuni(BIZ, dest, false, [
+  const [pickup] = semneazaOptiuni(BIZ, dest, false, 0, [
     { courier: "pickup", deliveryType: "address", courierLabel: "Ridicare personala", price: 0 },
   ]);
-  assert.equal(verifyShippingQuote(BIZ, dest, 0, pickup.token,
+  assert.equal(verifica(BIZ, dest, 0, pickup.token,
     { courier: "pickup", deliveryType: "address", courierLabel: "Ridicare personala", ramburs: false }), true);
   // Exact atacul: token de pickup, eticheta de Cargus.
-  assert.equal(verifyShippingQuote(BIZ, dest, 0, pickup.token,
+  assert.equal(verifica(BIZ, dest, 0, pickup.token,
     { courier: "pickup", deliveryType: "address", courierLabel: "Livrare prin Cargus", ramburs: false }), false);
 });
 
 test("eticheta bogata supravietuieste dus-intors, neatinsa", () => {
   const dest = { county: "", city: "Ratibor", country: "DE", postCode: "02627" };
   for (const eticheta of ["Sameday EasyBox (locker)", "DPD International (Germania)", "Cargus Ship & Go (punct)"]) {
-    const [o] = semneazaOptiuni(BIZ, dest, false, [
+    const [o] = semneazaOptiuni(BIZ, dest, false, 0, [
       { courier: "dpd", deliveryType: "locker", courierLabel: eticheta, price: 24.5 },
     ]);
     assert.equal(o.courierLabel, eticheta);
-    assert.equal(verifyShippingQuote(BIZ, dest, 24.5, o.token,
+    assert.equal(verifica(BIZ, dest, 24.5, o.token,
       { courier: "dpd", deliveryType: "locker", courierLabel: eticheta, ramburs: false }), true);
   }
 });
@@ -241,12 +266,12 @@ const optiuneReala = (over = {}) => ({
 
 test("apelantul care uita eticheta NU poate valida o cotatie reala", () => {
   const dest = { county: "Cluj", city: "Cluj-Napoca" };
-  const [o] = semneazaOptiuni(BIZ, dest, false, [optiuneReala()]);
+  const [o] = semneazaOptiuni(BIZ, dest, false, 0, [optiuneReala()]);
   // Asa gresea `updateOrderDetails`: fara `courierLabel`.
-  assert.equal(verifyShippingQuote(BIZ, dest, 17, o.token,
+  assert.equal(verifica(BIZ, dest, 17, o.token,
     { courier: "cargus", deliveryType: "address", ramburs: false }), false);
   // Asa e corect.
-  assert.equal(verifyShippingQuote(BIZ, dest, 17, o.token,
+  assert.equal(verifica(BIZ, dest, 17, o.token,
     { courier: "cargus", deliveryType: "address", courierLabel: "Livrare prin Cargus", ramburs: false }), true);
 });
 
@@ -260,9 +285,9 @@ test("fiecare eticheta reala de productie se verifica dus-intors", () => {
     optiuneReala({ courier: "dpd", courierLabel: "DPD International (Germania)", price: 95.84 }),
   ];
   for (const c of cazuri) {
-    const [o] = semneazaOptiuni(BIZ, dest, false, [c]);
+    const [o] = semneazaOptiuni(BIZ, dest, false, 0, [c]);
     assert.equal(
-      verifyShippingQuote(BIZ, dest, c.price, o.token,
+      verifica(BIZ, dest, c.price, o.token,
         { courier: c.courier, deliveryType: c.deliveryType, courierLabel: c.courierLabel, ramburs: false }),
       true,
       `nu se verifica: ${c.courierLabel}`,
@@ -287,11 +312,11 @@ const CARGUS = { courier: "cargus", deliveryType: "address", courierLabel: "Livr
 test("cotatia ceruta fara ramburs NU legitimeaza o comanda cu ramburs", () => {
   const dest = { county: "Suceava", city: "Suceava" };
   // Asa arata atacul: se cere pretul fara ramburs (mai mic, fara comision)...
-  const [faraRamburs] = semneazaOptiuni(BIZ, dest, false, [{ ...CARGUS, price: 17 }]);
+  const [faraRamburs] = semneazaOptiuni(BIZ, dest, false, 0, [{ ...CARGUS, price: 17 }]);
   // ...si se comanda cu ramburs, unde curierul incaseaza si isi ia comisionul.
-  assert.equal(verifyShippingQuote(BIZ, dest, 17, faraRamburs.token, { ...CARGUS, ramburs: true }), false);
+  assert.equal(verifica(BIZ, dest, 17, faraRamburs.token, { ...CARGUS, ramburs: true }), false);
   // Cu el insusi, ramane valid: clientul care chiar plateste cu cardul nu patimeste.
-  assert.equal(verifyShippingQuote(BIZ, dest, 17, faraRamburs.token, { ...CARGUS, ramburs: false }), true);
+  assert.equal(verifica(BIZ, dest, 17, faraRamburs.token, { ...CARGUS, ramburs: false }), true);
 });
 
 test("si invers: cotatia de ramburs nu trece drept cotatie fara ramburs", () => {
@@ -300,9 +325,9 @@ test("si invers: cotatia de ramburs nu trece drept cotatie fara ramburs", () => 
   // goleste selectia si blocheaza trimiterea), deci clientul cinstit nu ajunge
   // niciodata sa trimita un token dintr-un regim in celalalt.
   const dest = { county: "Suceava", city: "Suceava" };
-  const [cuRamburs] = semneazaOptiuni(BIZ, dest, true, [{ ...CARGUS, price: 19.5 }]);
-  assert.equal(verifyShippingQuote(BIZ, dest, 19.5, cuRamburs.token, { ...CARGUS, ramburs: false }), false);
-  assert.equal(verifyShippingQuote(BIZ, dest, 19.5, cuRamburs.token, { ...CARGUS, ramburs: true }), true);
+  const [cuRamburs] = semneazaOptiuni(BIZ, dest, true, 0, [{ ...CARGUS, price: 19.5 }]);
+  assert.equal(verifica(BIZ, dest, 19.5, cuRamburs.token, { ...CARGUS, ramburs: false }), false);
+  assert.equal(verifica(BIZ, dest, 19.5, cuRamburs.token, { ...CARGUS, ramburs: true }), true);
 });
 
 test("regimul se leaga si pe cotatia internationala, care iese pe alt drum", () => {
@@ -310,12 +335,12 @@ test("regimul se leaga si pe cotatia internationala, care iese pe alt drum", () 
   // mai plecat o data nesemnata din cauza asta. Trece prin acelasi ajutor, deci
   // primeste si acelasi regim — testul o tine acolo.
   const dest = { county: "", city: "Ratibor", country: "DE", postCode: "02627" };
-  const [intl] = semneazaOptiuni(BIZ, dest, false, [
+  const [intl] = semneazaOptiuni(BIZ, dest, false, 0, [
     { courier: "dpd", deliveryType: "address", courierLabel: "DPD International (Germania)", price: 95.84 },
   ]);
   const optIntl = { courier: "dpd", deliveryType: "address", courierLabel: "DPD International (Germania)" };
-  assert.equal(verifyShippingQuote(BIZ, dest, 95.84, intl.token, { ...optIntl, ramburs: true }), false);
-  assert.equal(verifyShippingQuote(BIZ, dest, 95.84, intl.token, { ...optIntl, ramburs: false }), true);
+  assert.equal(verifica(BIZ, dest, 95.84, intl.token, { ...optIntl, ramburs: true }), false);
+  assert.equal(verifica(BIZ, dest, 95.84, intl.token, { ...optIntl, ramburs: false }), true);
 });
 
 test("un lot semnat cu ramburs poarta regimul pe FIECARE optiune, nu doar pe prima", () => {
@@ -328,10 +353,10 @@ test("un lot semnat cu ramburs poarta regimul pe FIECARE optiune, nu doar pe pri
     { courier: "cargus", deliveryType: "locker", courierLabel: "Cargus Ship & Go (punct)", price: 17.5 },
     { courier: "pickup", deliveryType: "address", courierLabel: "Ridicare personala", price: 0 },
   ];
-  for (const o of semneazaOptiuni(BIZ, dest, true, optiuni)) {
+  for (const o of semneazaOptiuni(BIZ, dest, true, 0, optiuni)) {
     const baza = { courier: o.courier, deliveryType: o.deliveryType, courierLabel: o.courierLabel };
-    assert.equal(verifyShippingQuote(BIZ, dest, o.price, o.token, { ...baza, ramburs: true }), true, `regim pierdut: ${o.courierLabel}`);
-    assert.equal(verifyShippingQuote(BIZ, dest, o.price, o.token, { ...baza, ramburs: false }), false, `regim nelegat: ${o.courierLabel}`);
+    assert.equal(verifica(BIZ, dest, o.price, o.token, { ...baza, ramburs: true }), true, `regim pierdut: ${o.courierLabel}`);
+    assert.equal(verifica(BIZ, dest, o.price, o.token, { ...baza, ramburs: false }), false, `regim nelegat: ${o.courierLabel}`);
   }
 });
 
@@ -348,9 +373,9 @@ test("un lot semnat cu ramburs poarta regimul pe FIECARE optiune, nu doar pe pri
 test("pickup: 0 lei semnat intr-un regim nu trece in celalalt", () => {
   const dest = { county: "Cluj", city: "Cluj-Napoca" };
   const opt = { courier: "pickup", deliveryType: "address", courierLabel: "Ridicare personala" };
-  const [p] = semneazaOptiuni(BIZ, dest, true, [{ ...opt, price: 0 }]);
-  assert.equal(verifyShippingQuote(BIZ, dest, 0, p.token, { ...opt, ramburs: true }), true);
-  assert.equal(verifyShippingQuote(BIZ, dest, 0, p.token, { ...opt, ramburs: false }), false);
+  const [p] = semneazaOptiuni(BIZ, dest, true, 0, [{ ...opt, price: 0 }]);
+  assert.equal(verifica(BIZ, dest, 0, p.token, { ...opt, ramburs: true }), true);
+  assert.equal(verifica(BIZ, dest, 0, p.token, { ...opt, ramburs: false }), false);
 });
 
 /*
@@ -404,7 +429,7 @@ test("⚠ o comanda cu total 0 in care se adauga marfa NU pierde re-cotarea", ()
   const totalNou = totalDupaEditare(500);
   const rambursCerut = rambursDeIncasat({ payment_status: comandaZero.payment_status, total: totalNou }) > 0;
   assert.equal(rambursCerut, true, "panoul n-ar mai cere ramburs pe o comanda neplatita de 500 lei");
-  const [semnata] = semneazaOptiuni(BIZ, dest, rambursCerut, [{ ...opt, price: 21 }]);
+  const [semnata] = semneazaOptiuni(BIZ, dest, rambursCerut, 0, [{ ...opt, price: 21 }]);
 
   /* Serverul: acelasi calcul, din datele lui. */
   const rambursVerificat = rambursDeIncasat({
@@ -412,7 +437,7 @@ test("⚠ o comanda cu total 0 in care se adauga marfa NU pierde re-cotarea", ()
     total: totalDupaEditare(500),
   }) > 0;
   assert.equal(
-    verifyShippingQuote(BIZ, dest, 21, semnata.token, { ...opt, ramburs: rambursVerificat }),
+    verifica(BIZ, dest, 21, semnata.token, { ...opt, ramburs: rambursVerificat }),
     true,
     "re-cotarea din panou e refuzata tacit pe o comanda care era la total 0",
   );
@@ -427,7 +452,7 @@ test("⚠ o comanda cu total 0 in care se adauga marfa NU pierde re-cotarea", ()
   }) > 0;
   assert.equal(cumGresea, false, "premisa s-a schimbat: totalul vechi nu mai da «platit»");
   assert.equal(
-    verifyShippingQuote(BIZ, dest, 21, semnata.token, { ...opt, ramburs: cumGresea }),
+    verifica(BIZ, dest, 21, semnata.token, { ...opt, ramburs: cumGresea }),
     false,
     "proba e slaba: si cu steagul vechi semnatura ar fi trecut",
   );
@@ -441,10 +466,10 @@ test("⚠ si invers: golirea comenzii nu lasa un token de «ramburs» sa treaca 
    */
   const dest = { county: "Cluj", city: "Cluj-Napoca" };
   const opt = { courier: "cargus", deliveryType: "address", courierLabel: "Livrare prin Cargus" };
-  const [caRamburs] = semneazaOptiuni(BIZ, dest, true, [{ ...opt, price: 24 }]);
+  const [caRamburs] = semneazaOptiuni(BIZ, dest, true, 0, [{ ...opt, price: 24 }]);
 
-  assert.equal(verifyShippingQuote(BIZ, dest, 24, caRamburs.token, { ...opt, ramburs: false }), false);
-  assert.equal(verifyShippingQuote(BIZ, dest, 24, caRamburs.token, { ...opt, ramburs: true }), true);
+  assert.equal(verifica(BIZ, dest, 24, caRamburs.token, { ...opt, ramburs: false }), false);
+  assert.equal(verifica(BIZ, dest, 24, caRamburs.token, { ...opt, ramburs: true }), true);
 });
 
 test("⚠ SI APELANTUL chiar foloseste totalul nou, nu pe cel din comanda", () => {
@@ -468,9 +493,13 @@ test("⚠ SI APELANTUL chiar foloseste totalul nou, nu pe cel din comanda", () =
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^[ \t]*\/\/.*$/gm, "");
 
-  const i = cod.indexOf("const semnaturaBuna = verifyShippingQuote(");
+  const i = cod.indexOf("const semnaturaBuna = verificaCotatia(");
   assert.ok(i > 0, "verificarea cotatiei din panou si-a schimbat forma");
-  const apel = cod.slice(i, cod.indexOf("});", i) + 3);
+  /*
+   * ⚠ Apelul se incheie acum cu `null);` (greutatea nu se judeca pe drumul panoului), nu cu `});`.
+   * Se taie pana la `sePoateAplica`, prima linie de dupa el.
+   */
+  const apel = cod.slice(i, cod.indexOf("const sePoateAplica", i));
 
   assert.match(apel, /ramburs: rambursDeIncasat\(/, "steagul nu mai iese din `rambursDeIncasat`");
   assert.match(apel, /recalculeazaTotal\(/, "steagul nu se mai socoteste din totalul de dupa editare");
@@ -479,4 +508,133 @@ test("⚠ SI APELANTUL chiar foloseste totalul nou, nu pe cel din comanda", () =
     apel, /total: order\.total/,
     "steagul s-a intors pe totalul VECHI: re-cotarea moare tacit pe comenzile care erau la total 0",
   );
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GREUTATEA COSULUI, LEGATA DE COTATIE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * ═══ ⚠ CE APARA, SI DE CE ABIA ACUM ═══
+ *
+ * Pana pe 08.09.2026 amprenta nu lega cosul: se cerea o cotatie pentru un cos usor, se primea un
+ * token valid, si se comanda apoi unul greu la acelasi pret. Decizia de a lasa asa, luata pe
+ * 04.08, era intemeiata ATUNCI: gaura se putea folosi la un singur magazin, cu produse de cel mult
+ * un kilogram, iar o legare gresita trimite comenzi REALE pe `max(suma ceruta, tarif implicit)`.
+ *
+ * Premisa s-a schimbat, masurat: 16 magazine cu curier activ, 5.064 de produse cantarite, pana la
+ * 40 de kilograme bucata.
+ */
+const DEST_CJ = { county: "Cluj", city: "Cluj-Napoca" };
+const OPT_CARGUS = { courier: "cargus", deliveryType: "address", courierLabel: "Livrare prin Cargus", ramburs: false };
+
+test("⚠ COSUL MAI GREU DECAT CEL COTAT nu mai trece", () => {
+  /* Se coteaza un kilogram, se comanda cincisprezece: chiar forma atacului. */
+  const t = signShippingQuote(BIZ, DEST_CJ, 18, OPT_CARGUS, 1000);
+  const v = verificaCotatia(BIZ, DEST_CJ, 18, t, OPT_CARGUS, 15000);
+  assert.equal(v.ok, false, "cosul de 15 kg a trecut pe cotatia de 1 kg");
+  assert.equal(v.ok === false && v.motiv, "greutate", "motivul nu spune ca e greutatea");
+});
+
+test("⚠ SI MOTIVUL CONTEAZA: greutatea cere recotare, semnatura cade pe tarif", () => {
+  /*
+   * ═══ ⚠ DOUA ESECURI, DOUA PURTARI OPUSE ═══
+   *
+   * Nota veche din `quote-token.ts` cerea explicit celui care reia legarea cosului: „nu lega cosul
+   * cu esec pe tariful implicit. Esueaza in FAVOAREA clientului". Motivul e numeric: rezerva e
+   * `max(suma ceruta, tarif implicit)`, deci pe „Ridicare personala" la 0,00 lei o cadere face
+   * transportul 18 pana la 45 de lei, fara ca omul sa fi vazut suma.
+   *
+   * De aceea verdictul poarta MOTIVUL: `autoritativeShipping` cade pe tarif doar pentru semnatura,
+   * si refuza comanda pentru greutate.
+   */
+  const t = signShippingQuote(BIZ, DEST_CJ, 18, OPT_CARGUS, 1000);
+  const stricat = verificaCotatia(BIZ, DEST_CJ, 19, t, OPT_CARGUS, 500);
+  assert.equal(stricat.ok === false && stricat.motiv, "semnatura", "un pret schimbat da motiv de greutate");
+});
+
+test("⚠ COSUL MAI USOR TRECE, si asta e dinadins", () => {
+  /*
+   * ⚠ JUMATATEA CARE APARA COMENZILE CINSTITE. Intre cotatie si comanda serverul arunca liniile
+   * indisponibile si desface pachetele pentru stoc; un cos care iese mai usor e un cos cinstit.
+   * Clientul plateste atunci un transport prea scump PENTRU EL, iar comerciantul nu pierde nimic.
+   * Cerut „identic", fiecare din cazurile astea ar fi blocat o comanda buna.
+   */
+  const t = signShippingQuote(BIZ, DEST_CJ, 18, OPT_CARGUS, 15000);
+  assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, t, OPT_CARGUS, 1000).ok, true, "un cos mai usor a fost refuzat");
+  assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, t, OPT_CARGUS, 0).ok, true, "un cos fara greutati a fost refuzat");
+  /* Si exact cat s-a cotat, evident. */
+  assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, t, OPT_CARGUS, 15000).ok, true);
+});
+
+test("⚠ toleranta absoarbe o rotunjire, nu o bucata in plus", () => {
+  const t = signShippingQuote(BIZ, DEST_CJ, 18, OPT_CARGUS, 1000);
+  assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, t, OPT_CARGUS, 1000 + TOLERANTA_GRAME).ok, true);
+  assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, t, OPT_CARGUS, 1000 + TOLERANTA_GRAME + 1).ok, false);
+  /*
+   * ⚠ SI E MICA DINADINS: cel mai usor produs cantarit din platforma are zeci de grame, deci
+   * toleranta nu poate acoperi nicio bucata. Larga, ar fi fost o portita cu numele de rotunjire.
+   */
+  assert.ok(TOLERANTA_GRAME < 50, `toleranta a crescut la ${TOLERANTA_GRAME} grame si poate ascunde o bucata`);
+});
+
+test("⚠ GRAMELE SUNT SEMNATE, nu doar purtate", () => {
+  /*
+   * Calatoresc in clar, ca verificarea sa aiba fata de ce sa compare. Daca n-ar fi acoperite de
+   * semnatura, cine comanda greu ar rescrie pur si simplu numarul din token si ar trece.
+   */
+  const t = signShippingQuote(BIZ, DEST_CJ, 18, OPT_CARGUS, 1000);
+  const [expira, grame, mac] = t.split(".");
+  assert.equal(grame, "1000", "gramele nu mai calatoresc in clar");
+
+  const umflat = `${expira}.900000.${mac}`;
+  const v = verificaCotatia(BIZ, DEST_CJ, 18, umflat, OPT_CARGUS, 15000);
+  assert.equal(v.ok, false, "gramele rescrise de mana au trecut");
+  assert.equal(v.ok === false && v.motiv, "semnatura", "rescrierea gramelor n-a cazut pe semnatura");
+});
+
+test("⚠ FARA greutate ceruta, greutatea nu se judeca deloc", () => {
+  /*
+   * Drumul panoului („Recoteaza transportul") coteaza fara lista de produse, deci semneaza zero
+   * grame; comparata cu greutatea reala a comenzii, fiecare re-cotare din panou ar fi fost
+   * refuzata. Acolo se trimite `null`, si atunci poarta tace.
+   */
+  const t = signShippingQuote(BIZ, DEST_CJ, 18, OPT_CARGUS, 0);
+  assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, t, OPT_CARGUS, null).ok, true);
+  assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, t, OPT_CARGUS).ok, true);
+  /* ⚠ Iar cand CHIAR se cere, aceeasi cotatie de zero grame refuza un colet adevarat. */
+  assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, t, OPT_CARGUS, 15000).ok, false);
+});
+
+test("⚠ TOKENELE DE FORMA VECHE se mai citesc, cat le tine viata", () => {
+  /*
+   * ═══ ⚠ DE CE E O PROBA ═══
+   *
+   * Un token traieste 24 de ore. In clipa desfasurarii, fiecare pagina de finalizare deschisa
+   * poarta unul de forma veche, cu doua bucati. Refuzate, ar fi cazut comenzi CINSTITE, in curs, la
+   * 16 magazine. Gaura a stat deschisa luni de zile; inca o zi de coada nu schimba nimic, in timp
+   * ce comenzile pierdute ar fi fost pierdute de-a binelea.
+   *
+   * Tokenul de mai jos se compune in forma VECHE, cu semnatura veche, nu prin functia de azi:
+   * altfel proba s-ar muta odata cu codul si n-ar mai apara nimic.
+   */
+  const expira = Date.now() + 60_000;
+  const amprentaVeche = [
+    BIZ, "cluj", "cluj-napoca", "ro", "", "1800", "cargus", "address", "livrare prin cargus", "platit",
+  ].join("|");
+  const mac = createHmac("sha256", process.env.SHIPPING_QUOTE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "")
+    .update(`${amprentaVeche}|${expira}`)
+    .digest("base64url");
+  const vechi = `${expira}.${mac}`;
+
+  assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, vechi, OPT_CARGUS).ok, true, "un token de forma veche nu mai trece");
+  /* ⚠ Si pe el greutatea NU se judeca: n-o poarta, deci n-avem fata de ce sa comparam. */
+  assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, vechi, OPT_CARGUS, 15000).ok, true);
+});
+
+test("⚠ un token cu mai mult de trei bucati nu trece", () => {
+  /* Forma se citeste strict: doua bucati (vechi) sau trei (nou), nimic altceva. */
+  const t = signShippingQuote(BIZ, DEST_CJ, 18, OPT_CARGUS, 1000);
+  assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, `${t}.inca-ceva`, OPT_CARGUS, 0).ok, false);
+  assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, "fara-nimic", OPT_CARGUS, 0).ok, false);
 });

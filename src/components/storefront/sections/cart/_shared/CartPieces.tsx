@@ -366,19 +366,23 @@ export function RezumatCos({
       <div aria-live="polite" aria-atomic="true" className="space-y-2 text-sm">
         <div className="flex justify-between text-muted-foreground">
           <span>Subtotal</span>
-          <span className="font-medium text-foreground tabular-nums">{formatPrice(total)}</span>
+          <span className="font-medium text-foreground tabular-nums">
+            {liniiNevalidate > 0 ? "..." : formatPrice(total)}
+          </span>
         </div>
         <div className="flex justify-between text-muted-foreground">
           <span>Livrare</span>
           <span className={pricing.shipping === 0 ? "font-medium" : "font-medium text-foreground"}
             style={pricing.shipping === 0 ? { color } : undefined}>
-            {pricing.shipping === 0 ? "Gratuita" : formatPrice(pricing.shipping)}
+            {liniiNevalidate > 0 ? "..." : pricing.shipping === 0 ? "Gratuita" : formatPrice(pricing.shipping)}
           </span>
         </div>
         {pricing.vatAmount !== null && (
           <div className="flex justify-between text-muted-foreground">
             <span>{pricing.vatLabel}</span>
-            <span className="font-medium text-foreground tabular-nums">{formatPrice(pricing.vatAmount)}</span>
+            <span className="font-medium text-foreground tabular-nums">
+              {liniiNevalidate > 0 ? "..." : formatPrice(pricing.vatAmount)}
+            </span>
           </div>
         )}
         <div className="flex justify-between font-bold text-base text-foreground pt-2 border-t border-border">
@@ -390,7 +394,8 @@ export function RezumatCos({
         </div>
       </div>
 
-      {pricing.belowMinOrder && minOrderAmount !== null && (
+      {/* ⚠ Si pragul minim tace: „mai adauga X lei" s-ar socoti din acelasi total incomplet. */}
+      {!liniiNevalidate && pricing.belowMinOrder && minOrderAmount !== null && (
         <p className="text-xs text-center text-muted-foreground">
           Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount)}</strong>.
           Mai adauga <strong className="text-foreground">{formatPrice(pricing.minOrderRemaining)}</strong> pentru a finaliza.

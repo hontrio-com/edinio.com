@@ -700,30 +700,65 @@ export async function getCartPricing(
   combos: Record<string, number>;
   tiers: Json | null;
   customization: Json | null;
+  areVariante: boolean;
 }>> {
   const ids = [...new Set((productIds ?? []).filter((id) => typeof id === "string" && id))].slice(0, 200);
   if (!businessId || ids.length === 0) return {};
 
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("products")
     .select("id, price, page_sections")
     .eq("business_id", businessId)
     .eq("is_active", true)
     .in("id", ids);
 
-  const { enabledComboPriceMap } = await import("@/lib/storefront/variants");
+  /*
+   * ═══ ⚠ O CITIRE CAZUTA ARUNCA, NU INTOARCE UN COS GOL ═══
+   *
+   * `error` nu se citea deloc, iar functia mergea mai departe cu `data ?? []` si intorcea `{}`.
+   * Pentru apelant, aia arata IDENTIC cu „magazinul n-are produsele astea": raspuns reusit, zero
+   * reguli.
+   *
+   * Ce strica: `CartProvider` are de pe 08.09.2026 trei stari, `incarca`, `gata` si `eroare`, cu o
+   * reincercare si un buton. Un `{}` intors ca succes le ocoleste pe toate. Cosul ramanea la
+   * „Se verifica preturile produselor personalizate..." PENTRU TOTDEAUNA, cu butonul de comanda
+   * stins si fara nicio cale de a mai incerca: linia personalizata e pe drept nevalidata, dar omul
+   * nu afla niciodata ca a fost o eroare si nu primeste butonul de reincercare.
+   *
+   * ⚠ SE ARUNCA, nu se intoarce un semn: functia asta e chemata dintr-un `.then/.catch` care stie
+   * deja ce sa faca cu un esec. Un al treilea fel de raspuns ar fi cerut fiecarui apelant sa-l
+   * inteleaga, si primul care l-ar fi uitat ar fi adus inapoi chiar starea de acum.
+   */
+  if (error) {
+    logError({
+      action: "getCartPricing",
+      message: `preturile cosului nu s-au putut citi: ${error.message}`,
+      businessId,
+      severity: "error",
+    });
+    throw new Error("Preturile cosului nu s-au putut citi.");
+  }
+
+  const { enabledComboPriceMap, parseVariants } = await import("@/lib/storefront/variants");
   const out: Record<string, {
     price: number;
     combos: Record<string, number>;
     tiers: Json | null;
     customization: Json | null;
+    areVariante: boolean;
   }> = {};
   for (const p of data ?? []) {
     const base = Math.round((Number(p.price) || 0) * 100) / 100;
     out[p.id] = {
       price: base,
       combos: Object.fromEntries(enabledComboPriceMap(p.page_sections, base)),
+      /*
+       * ⚠ NU SE POATE DEDUCE DIN `combos`. Un produs cu toate combinatiile STINSE are `combos` gol
+       * si totusi cere o alegere: poarta comenzii refuza linia fara titlu. Fara steagul asta, cosul
+       * ar fi lasat linia sa ajunga la finalizare, unde serverul o respinge. Vezi `cereRevizuire`.
+       */
+      areVariante: parseVariants(p.page_sections) !== null,
       tiers: ((p.page_sections ?? {}) as { quantity_tiers?: Json }).quantity_tiers ?? null,
       /*
        * ⚠ DEFINITIA PERSONALIZARII, si de-aia e aici.

@@ -103,13 +103,26 @@ export function CheckoutTotals({
   const {
     acceptedBumpOffers, appliedDiscount, cardDiscountAmount, codDiscountAmount, codFeeAmount, discountAmount,
     extrasTotal, goodsTotal, grandTotal, isFreeShippingDiscount, shipping,
-    total, vatAmount, vatConfig,
+    total, vatAmount, vatConfig, liniiNevalidate,
   } = motor;
+  /*
+   * ═══ ⚠ CAT TIMP O LINIE NU S-A VALIDAT, NICIO SUMA CARE O CONTINE NU SE ARATA ═══
+   *
+   * Ascunsul pretului pe linie nu ajunge: „Produse", TVA-ul, transportul si totalul sunt socotite
+   * TOATE din acelasi `total`, in care linia intra cu pretul ei de BAZA. Un fototapet de 910 lei
+   * intra cu 89, deci fiecare rand de aici ar fi fost un numar plauzibil si gresit, langa o linie
+   * care spune limpede „se verifica pretul".
+   *
+   * ⚠ SI INDICIILE CARE ATARNA DE ELE: „mai adauga X pentru livrare gratuita" se socoteste din
+   * acelasi total, deci ar fi cerut o suma care nu e adevarata.
+   */
+  const nesigur = liniiNevalidate.length > 0;
+  const suma = (n: number) => (nesigur ? "..." : formatPrice(n));
   return (
       <div className="rounded-xl p-3 space-y-1.5 text-sm bg-muted/40 border border-border">
         <div className="flex justify-between text-muted-foreground">
           <span>Produse</span>
-          <span className="font-medium text-foreground">{formatPrice(total)}</span>
+          <span className="font-medium text-foreground">{suma(total)}</span>
         </div>
         {acceptedBumpOffers.map((o) => (
           <div key={o.id} className="flex justify-between" style={{ color }}>
@@ -126,13 +139,13 @@ export function CheckoutTotals({
         <div className="flex justify-between text-muted-foreground">
           <span>Transport</span>
           <span className={shipping === 0 ? "font-medium" : "font-medium text-foreground"} style={shipping === 0 ? { color } : undefined}>
-            {shipping === 0 ? "Gratuit" : formatPrice(shipping)}
+            {nesigur ? "..." : shipping === 0 ? "Gratuit" : formatPrice(shipping)}
           </span>
         </div>
         {vatConfig.vat_enabled && vatConfig.show_vat_breakdown && vatAmount > 0 && (
           <div className="flex justify-between text-muted-foreground">
             <span>TVA ({vatConfig.vat_rate}%){vatConfig.prices_include_vat ? " inclus" : ""}</span>
-            <span className="font-medium text-foreground">{formatPrice(vatAmount)}</span>
+            <span className="font-medium text-foreground">{suma(vatAmount)}</span>
           </div>
         )}
         {appliedDiscount && (discountAmount > 0 || isFreeShippingDiscount) && (
@@ -161,14 +174,14 @@ export function CheckoutTotals({
             <span className="font-medium">{formatPrice(codFeeAmount)}</span>
           </div>
         )}
-        {freeShippingThreshold && goodsTotal < freeShippingThreshold && (
+        {!nesigur && freeShippingThreshold && goodsTotal < freeShippingThreshold && (
           <p className="text-xs text-muted-foreground">
             Mai adauga <strong>{formatPrice(freeShippingThreshold - goodsTotal)}</strong> pentru livrare gratuita
           </p>
         )}
         <div className="flex justify-between font-bold text-base border-t border-border pt-2">
           <span>Total</span>
-          <span style={{ color }}>{formatPrice(grandTotal)}</span>
+          <span style={{ color }}>{suma(grandTotal)}</span>
         </div>
       </div>
   );

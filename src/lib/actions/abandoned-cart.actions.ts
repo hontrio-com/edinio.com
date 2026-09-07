@@ -142,6 +142,19 @@ export async function trackAbandonedCart(input: {
      * Pretul intra si in `items`, nu doar in `subtotal`: „Top produse abandonate" citeste din brut.
      */
     const cuPreturi = await cuPreturileDinCatalog(admin, input.businessId, items);
+    /*
+     * ⚠ FARA PRETURI VERIFICATE NU SE SCRIE NIMIC.
+     *
+     * Se cadea inapoi pe numerele trimise de browser, si atunci o pana de baza deschidea exact
+     * poarta pe care repretuirea o inchide: cine cheama actiunea asta publica cu `price: 9.999.999`
+     * isi vedea numarul in „Valoare cosuri abandonate", in media pe cos si in venitul potential.
+     *
+     * ⚠ SE PIERDE CAPTURA, SI E ALEGEREA BUNA. Randul e o unealta de marketing, nu o comanda:
+     * pierdut, nu se pierde nicio vanzare, si captura se reia la urmatoarea tastare a clientului,
+     * fiindca e pe cronometru. Persistat cu cifre neverificate, ar murdari raportul dupa care
+     * comerciantul isi masoara magazinul, si nimeni n-ar sti ca sunt inventate.
+     */
+    if (!cuPreturi) return;
     const subtotal = round2(cuPreturi.reduce((s, i, idx) => s + (Number(i.price) || 0) * cantitati[idx], 0));
     const itemCount = cantitati.reduce((s, q) => s + q, 0);
     const now = new Date().toISOString();

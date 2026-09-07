@@ -416,7 +416,7 @@ export async function cuPreturileDinCatalog(
   client: SupabaseClient<Database>,
   businessId: string,
   salvate: AbandonedCartItem[],
-): Promise<AbandonedCartItem[]> {
+): Promise<AbandonedCartItem[] | null> {
   const ids = [...new Set((salvate ?? []).map((i) => i?.product_id).filter(Boolean))];
   if (ids.length === 0) return salvate ?? [];
 
@@ -426,11 +426,20 @@ export async function cuPreturileDinCatalog(
     .eq("business_id", businessId)
     .in("id", ids);
   /*
-   * ⚠ CITIREA PICATA LASA PRETURILE CUM AU VENIT, si nu le face zero: randul e si instantaneul din
-   * care se reface cosul. Zero peste tot ar fi facut cosul sa para gol, iar recuperarea lui n-ar
-   * mai fi plecat niciodata din cauza pragului comerciantului.
+   * ═══ ⚠ CITIREA PICATA NU INTOARCE PRETURILE DIN CERERE ═══
+   *
+   * Aici se cadea inapoi pe `salvate`, adica tocmai pe numerele trimise de browser. Rationamentul
+   * de atunci era despre instantaneu: zero peste tot ar face cosul sa para gol. Numai ca urmarea
+   * practica era alta, si mai rea: intr-o pana de baza, cine cheama actiunea publica de captura cu
+   * `price: 9.999.999` isi vedea numarul SCRIS in rand, de unde intra in „Valoare cosuri
+   * abandonate", in media pe cos si in venitul potential.
+   *
+   * ⚠ SE INTOARCE `null`, adica „n-am putut verifica". Apelantul hotaraste ce face cu asta, si
+   * hotaraste in favoarea datelor: `trackAbandonedCart` nu mai scrie deloc randul. Mai bine o
+   * captura pierduta decat cifre financiare despre care stim ca n-au fost verificate; captura se
+   * reia oricum la urmatoarea tastare a clientului, ca e pe cronometru.
    */
-  if (error) return salvate ?? [];
+  if (error) return null;
 
   const catalog = new Map<string, ProdusCosSalvat>((data ?? []).map((p) => [p.id, p as ProdusCosSalvat]));
   return (salvate ?? []).map((it) => {

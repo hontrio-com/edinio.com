@@ -166,7 +166,15 @@ export function CartDrawerClassic({
 
         {areaPrag && (
           <div className="px-5 py-3 bg-muted/40 border-b border-border">
-            {shippingIsFree ? (
+            {/*
+              ⚠ CAT TIMP O LINIE NU S-A VALIDAT, PROGRESUL TACE. „Mai adauga 40 de lei pentru
+              livrare gratuita" se socoteste din acelasi total in care fototapetul intra cu 89 in
+              loc de 910: omul ar fi pus in cos ceva de care n-avea nevoie, ca sa treaca un prag pe
+              care il trecuse deja.
+            */}
+            {liniiNevalidate > 0 ? (
+              <p className="text-xs text-muted-foreground">Se verifica preturile...</p>
+            ) : shippingIsFree ? (
               <p className="text-xs font-semibold flex items-center gap-1.5" style={{ color }}>
                 <Check className="h-3.5 w-3.5" /> Ai obtinut livrare gratuita!
               </p>
@@ -315,26 +323,31 @@ export function CartDrawerClassic({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span>
-                <span className="font-medium text-foreground">{formatPrice(total)}</span>
+                <span className="font-medium text-foreground">
+                  {liniiNevalidate > 0 ? "..." : formatPrice(total)}
+                </span>
               </div>
               <div className="flex justify-between text-muted-foreground">
                 <span>Livrare</span>
-                <span className={shipping === 0 ? "font-medium" : "font-medium text-foreground"} style={shipping === 0 ? { color } : undefined}>
-                  {shipping === 0 ? "Gratuita" : formatPrice(shipping)}
+                <span className={shipping === 0 && !liniiNevalidate ? "font-medium" : "font-medium text-foreground"} style={shipping === 0 && !liniiNevalidate ? { color } : undefined}>
+                  {liniiNevalidate > 0 ? "..." : shipping === 0 ? "Gratuita" : formatPrice(shipping)}
                 </span>
               </div>
               {vatAmount !== null && (
                 <div className="flex justify-between text-muted-foreground">
                   <span>{vatLabel}</span>
-                  <span className="font-medium text-foreground">{formatPrice(vatAmount)}</span>
+                  <span className="font-medium text-foreground">
+                    {liniiNevalidate > 0 ? "..." : formatPrice(vatAmount)}
+                  </span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-base text-foreground pt-2 border-t border-border">
                 <span>Total</span>
-                <span style={{ color }}>{formatPrice(grandTotal)}</span>
+                <span style={{ color }}>{liniiNevalidate > 0 ? "..." : formatPrice(grandTotal)}</span>
               </div>
             </div>
-            {belowMinOrder && (
+            {/* ⚠ Si pragul minim: „mai adauga X lei" iese din acelasi total incomplet. */}
+            {!liniiNevalidate && belowMinOrder && (
               <p className="text-xs text-center text-muted-foreground">
                 Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount!)}</strong>. Mai adauga <strong className="text-foreground">{formatPrice(minOrderRemaining)}</strong> pentru a finaliza.
               </p>

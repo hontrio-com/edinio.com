@@ -94,7 +94,8 @@ export function CartPageCompact({
         </p>
       )}
 
-      {pricing.belowMinOrder && minOrderAmount !== null && (
+      {/* ⚠ Pragul minim tace cat timp totalul e incomplet: „mai adauga X lei" ar fi o suma falsa. */}
+      {!liniiNevalidate && pricing.belowMinOrder && minOrderAmount !== null && (
         <p className="mt-4 text-xs text-muted-foreground">
           Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount)}</strong>.
           Mai adauga <strong className="text-foreground">{formatPrice(pricing.minOrderRemaining)}</strong> pentru a finaliza.
@@ -107,7 +108,9 @@ export function CartPageCompact({
         <div className="flex items-center gap-4">
           <div className="min-w-0">
             <p className="text-xs text-muted-foreground truncate">
-              {pricing.shipping === 0 ? "Livrare gratuita" : `Livrare ${formatPrice(pricing.shipping)}`}
+              {liniiNevalidate > 0
+                ? "Se verifica preturile..."
+                : pricing.shipping === 0 ? "Livrare gratuita" : `Livrare ${formatPrice(pricing.shipping)}`}
             </p>
             <p className="text-base font-bold text-foreground tabular-nums truncate">
               {liniiNevalidate > 0 ? "..." : formatPrice(pricing.grandTotal)}

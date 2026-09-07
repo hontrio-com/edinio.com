@@ -33,6 +33,18 @@ export interface RegulaPretCos {
   combos: Record<string, number>;
   tiers: unknown;
   customization: unknown;
+  /**
+   * Produsul mai vinde pe variante?
+   *
+   * ⚠ NU E ACELASI LUCRU CU „`combos` are chei". Un produs poate avea variante cu TOATE
+   * combinatiile stinse: atunci `combos` e gol, dar produsul cere mai departe o alegere, iar poarta
+   * comenzii refuza linia fara titlu. Fara steagul asta, cosul n-ar fi avut cum sa deosebeasca
+   * cazul, si ar fi lasat sa se ajunga la finalizare o linie pe care serverul o respinge.
+   *
+   * ⚠ Optional dinadins: cine construieste o regula de mana (probe, drumuri vechi) nu e obligat sa
+   * stie, iar `undefined` inseamna „nu spun", nu „nu are". Vezi `cereRevizuire`.
+   */
+  areVariante?: boolean;
 }
 
 /** Aceeasi rotunjire la ban ca pe server, ca cele doua numere sa fie chiar acelasi numar. */
@@ -136,9 +148,39 @@ export function pretulLiniei(item: CartItem, regula: RegulaPretCos | undefined):
  * separat s-ar fi departat, iar cosul ar fi strigat pe linii pe care serverul le accepta.
  */
 export function cereRevizuire(item: CartItem, regula: RegulaPretCos | undefined): boolean {
+  if (!regula) return false;
+
+  /*
+   * ═══ ⚠ SI VARIANTA, NU DOAR PERSONALIZAREA ═══
+   *
+   * Pana pe 08.09.2026 intrebarea asta se uita numai la personalizare. Un tricou „XXL" cu gravura
+   * „Robert" al carui XXL a fost stins de comerciant intre timp trecea drept perfect valid:
+   * gravura chiar ERA valida, deci semnalul tacea, butonul de finalizare ramanea aprins, iar
+   * pretul afisat cadea tacut pe cel al produsului de baza. Abia `placeCartOrder` refuza, cu
+   * „Varianta «XXL» nu mai este disponibila", dupa ce omul isi daduse adresa si alesese plata.
+   *
+   * ⚠ ACEEASI REGULA CA LA POARTA COMENZII (`orders/variant-guard.ts`), cele trei ramuri ale ei:
+   * titlu pe un produs fara variante, lipsa de titlu pe unul cu variante, si titlu care nu mai e
+   * printre combinatiile active. Scrisa altfel, cosul ar fi strigat pe linii pe care serverul le
+   * accepta, sau ar fi tacut pe cele pe care le refuza.
+   *
+   * ⚠ SE JUDECA INAINTEA PERSONALIZARII, si de aceea `regula` se cere mai sus: o linie poate avea
+   * varianta stricata si personalizarea intreaga, iar atunci tot trebuie sa fie marcata.
+   */
+  const titlu = typeof item.variantTitle === "string" ? item.variantTitle : "";
+  if (titlu) {
+    /*
+     * Nu mai e printre combinatiile ACTIVE: ori a fost stinsa, ori produsul nu mai are variante
+     * deloc. Amandoua sunt refuzuri la comanda, si amandoua se vad la fel de aici.
+     */
+    if (regula.combos[titlu] == null) return true;
+  } else if (regula.areVariante === true) {
+    /* ⚠ Numai `=== true`: `undefined` inseamna „nu stiu", si pe o presupunere nu se strica un cos. */
+    return true;
+  }
+
   const valori = item.customization;
   if (!valori || typeof valori !== "object" || Object.keys(valori).length === 0) return false;
-  if (!regula) return false;
   const definitie = normalizeazaDefinitia(regula.customization);
   /*
    * ⚠ Produsul care nu mai are personalizare DELOC: linia poarta valori pe care definitia de acum

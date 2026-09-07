@@ -151,19 +151,58 @@ function amprenta(businessId: string, dest: QuoteDestination, price: number, opt
   ].join("|");
 }
 
+/**
+ * ═══ ⚠ GREUTATEA COTATA, PURTATA IN CLAR SI SEMNATA ═══
+ *
+ * Pana pe 08.09.2026 amprenta NU lega cosul, si asta era scris pe fata aici, ca decizie luata pe
+ * 04.08 dupa auditul de securitate. Motivul de atunci: gaura era exploatabila la UN SINGUR magazin
+ * (253 de produse cantarite, cel mult 1 kg bucata), in timp ce o legare GRESITA a cosului trimite
+ * comenzi REALE pe `max(suma ceruta, tarif implicit)`, adica omul vede 0,00 lei la „Ridicare
+ * personala" si plateste intre 18 si 45. Riscul pentru cumparatori depasea castigul.
+ *
+ * ⚠ PREMISA S-A SCHIMBAT, si asta s-a masurat, nu presupus. Pe 08.09.2026: 16 magazine cu curier
+ * activ (erau 3), 16 magazine cu produse cantarite, 5.064 de produse cu greutate, pana la 40 de
+ * kilograme bucata. Ce era un colt e acum drumul obisnuit.
+ *
+ * ═══ ⚠ DE CE GREUTATEA, SI DE CE IN CLAR ═══
+ *
+ * Nu se leaga lista de produse, ci NUMARUL pe care lista il produce si care pleaca la curier. Doua
+ * castiguri:
+ *
+ *   1. Nu cere ca liniile finale sa fie identice cu cele cotate. Intre cotatie si comanda serverul
+ *      repretuieste ofertele si desface pachetele pentru stoc; o amprenta pe linii ar fi cazut la
+ *      fiecare dintre ele, si atunci ar fi cazut chiar comenzi cinstite.
+ *
+ *   2. Se poate compara cu „mai mic sau egal" in loc de „identic". Un cos mai USOR decat cel cotat
+ *      trece: clientul plateste un transport prea scump pentru el, comerciantul nu pierde nimic, si
+ *      nicio comanda cinstita nu se blocheaza. Doar cosul mai GREU cade, si aia e chiar singura
+ *      forma a atacului.
+ *
+ * Ca sa se poata compara, gramele calatoresc IN CLAR in token si sunt acoperite de semnatura: doar
+ * asa verificarea stie fata de ce sa compare, fara sa ghiceasca.
+ *
+ * ⚠ CE NU LEAGA: clasele si categoriile de transport, pe care se pot scrie reguli conditionate.
+ * Masurat pe 08.09.2026: ZERO magazine din 131 au vreo clasa sau vreo regula de transport, deci azi
+ * vectorul ala e gol. Cine adauga reguli sa recitesca randurile astea.
+ */
+export const TOLERANTA_GRAME = 5;
+
 /** Semneaza o optiune de transport. Rezultatul calatoreste pana la comanda. */
 export function signShippingQuote(
   businessId: string,
   dest: QuoteDestination,
   price: number,
   optiune: QuoteOption,
+  /** Gramele pe care le-a socotit SERVERUL pentru cosul cotat. Vezi nota de mai sus. */
+  grame: number,
   expiraLa?: number,
 ): string {
   const expira = expiraLa ?? Date.now() + VALABILITATE_MS;
+  const g = Math.max(0, Math.round(Number(grame) || 0));
   const mac = createHmac("sha256", secret())
-    .update(`${amprenta(businessId, dest, price, optiune)}|${expira}`)
+    .update(`${amprenta(businessId, dest, price, optiune)}|${g}|${expira}`)
     .digest("base64url");
-  return `${expira}.${mac}`;
+  return `${expira}.${g}.${mac}`;
 }
 
 /**
@@ -187,40 +226,112 @@ export function semneazaOptiuni<T extends { price: number; courier?: string; del
   businessId: string,
   dest: QuoteDestination,
   ramburs: boolean,
+  /**
+   * Gramele cosului, socotite de server din catalog.
+   *
+   * ⚠ OBLIGATORIU si inaintea listei, ca si `ramburs`, si din acelasi motiv: cine adauga o iesire
+   * noua din `getShippingOptions` e obligat de `tsc` sa spuna pe ce greutate a cotat. Optional la
+   * coada, exact asta s-ar fi uitat, iar iesirea noua ar fi plecat cu zero grame semnate, adica cu
+   * poarta deschisa.
+   */
+  grame: number,
   optiuni: T[],
 ): (T & { token: string })[] {
   return optiuni.map((o) => ({
     ...o,
     token: signShippingQuote(businessId, dest, o.price, {
       courier: o.courier, deliveryType: o.deliveryType, courierLabel: o.courierLabel, ramburs,
-    }),
+    }, grame),
   }));
 }
 
 /**
- * Chiar am cotat noi pretul asta, pentru magazinul, destinatia, optiunea SI
- * regimul de plata astea?
+ * Chiar am cotat noi pretul asta, pentru magazinul, destinatia, optiunea, regimul de plata SI
+ * greutatea astea?
+ *
+ * ═══ ⚠ S-A REDENUMIT DIN `verifyShippingQuote`, SI NU DE STIL ═══
+ *
+ * Raspunsul nu mai e un boolean, ci un verdict cu motiv, fiindca cele doua feluri de esec cer
+ * purtari OPUSE: o semnatura care nu bate cade pe tariful implicit (o cotatie pierduta n-are voie
+ * sa coste o vanzare), iar o greutate depasita trebuie sa REFUZE comanda si sa ceara recotare.
+ *
+ * ⚠ Un obiect e insa mereu adevarat in JavaScript. Pastrat numele, fiecare `if (verifyShippingQuote(...))`
+ * din proiect ar fi devenit „mereu da" fara ca `tsc` sa clipeasca: exact drumul prin care s-ar fi
+ * deschis larg poarta pe care lucrarea asta o inchide. Redenumita, orice apelant neactualizat cade
+ * la compilare.
  */
-export function verifyShippingQuote(
+export function verificaCotatia(
   businessId: string,
   dest: QuoteDestination,
   price: number,
   token: string | null | undefined,
   optiune: QuoteOption,
-): boolean {
-  if (!token || !businessId) return false;
-  const taiat = token.indexOf(".");
-  if (taiat <= 0) return false;
+  /**
+   * Gramele cosului care se comanda ACUM, socotite din liniile finale.
+   *
+   * ⚠ `null` inseamna „n-am de unde sti", si atunci greutatea nu se judeca deloc. Nu e o portita:
+   * apelantul care nu poate socoti greutatea n-are nici cu ce sa minta. Drumurile care CHIAR o pot
+   * socoti o trimit, si acolo poarta lucreaza.
+   */
+  grameComandate?: number | null,
+): { ok: true } | { ok: false; motiv: "semnatura" | "greutate" } {
+  const nu = (motiv: "semnatura" | "greutate") => ({ ok: false as const, motiv });
+  if (!token || !businessId) return nu("semnatura");
+  const bucati = token.split(".");
+  if (bucati.length !== 2 && bucati.length !== 3) return nu("semnatura");
 
-  const expira = Number(token.slice(0, taiat));
-  if (!Number.isFinite(expira) || expira < Date.now()) return false;
+  const expira = Number(bucati[0]);
+  if (!Number.isFinite(expira) || expira < Date.now()) return nu("semnatura");
 
-  const asteptat = Buffer.from(signShippingQuote(businessId, dest, price, optiune, expira));
-  const primit = Buffer.from(token);
-  if (asteptat.length !== primit.length) return false;
-  try {
-    return timingSafeEqual(asteptat, primit);
-  } catch {
-    return false;
+  /*
+   * ⚠ TOKENELE DE FORMA VECHE (doua bucati) SE MAI ACCEPTA, si asta e dinadins.
+   *
+   * Un token traieste 24 de ore. In clipa desfasurarii, fiecare pagina de finalizare deschisa
+   * poarta unul vechi: refuzate, ar fi cazut comenzi CINSTITE, in curs, la 16 magazine. Gaura pe
+   * care o inchidem a stat deschisa luni de zile, deci inca o zi de coada nu schimba nimic, in timp
+   * ce comenzile pierdute ar fi fost pierdute de-a binelea.
+   *
+   * ⚠ Ele nu poarta greutate, deci pe ele greutatea nu se judeca. Se sting singure in 24 de ore.
+   */
+  if (bucati.length === 2) {
+    const macVechi = createHmac("sha256", secret())
+      .update(`${amprenta(businessId, dest, price, optiune)}|${expira}`)
+      .digest("base64url");
+    const asteptatVechi = Buffer.from(`${expira}.${macVechi}`);
+    const primitVechi = Buffer.from(token);
+    if (asteptatVechi.length !== primitVechi.length) return nu("semnatura");
+    try {
+      return timingSafeEqual(asteptatVechi, primitVechi) ? { ok: true } : nu("semnatura");
+    } catch {
+      return nu("semnatura");
+    }
   }
+
+  const grameSemnate = Number(bucati[1]);
+  if (!Number.isFinite(grameSemnate) || grameSemnate < 0) return nu("semnatura");
+
+  const asteptat = Buffer.from(signShippingQuote(businessId, dest, price, optiune, grameSemnate, expira));
+  const primit = Buffer.from(token);
+  if (asteptat.length !== primit.length) return nu("semnatura");
+  try {
+    if (!timingSafeEqual(asteptat, primit)) return nu("semnatura");
+  } catch {
+    return nu("semnatura");
+  }
+
+  /*
+   * ⚠ „MAI USOR TRECE", si numai mai greu cade.
+   *
+   * Cosul mai usor decat cel cotat inseamna ca omul plateste un transport prea scump PENTRU EL;
+   * comerciantul nu pierde nimic, si nicio comanda cinstita nu se blocheaza. Cosul mai greu e chiar
+   * atacul: se cere pretul pentru un kilogram si se comanda cincisprezece.
+   *
+   * ⚠ Toleranta e de cinci grame, cat sa absoarba o rotunjire, nu o bucata in plus: cel mai usor
+   * produs cantarit din platforma are zeci de grame.
+   */
+  if (grameComandate != null && Number.isFinite(grameComandate)
+      && Math.round(grameComandate) > grameSemnate + TOLERANTA_GRAME) {
+    return nu("greutate");
+  }
+  return { ok: true };
 }

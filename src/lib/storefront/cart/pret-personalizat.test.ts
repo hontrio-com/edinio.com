@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { pretulBucatii, pretulLiniei, pretulNevalidat, type RegulaPretCos } from "./pret-linie";
+import { cereRevizuire, pretulBucatii, pretulLiniei, pretulNevalidat, type RegulaPretCos } from "./pret-linie";
 import type { CartItem } from "./normalize";
 
 /**
@@ -194,4 +194,71 @@ test("⚠ serverul trimite chiar DEFINITIA personalizarii catre cos", () => {
   assert.notEqual(pana, -1, "nu s-a gasit sfarsitul lui `getCartPricing`");
   const felie = sursa.slice(de, pana);
   assert.match(felie, /customization:/, "definitia personalizarii nu mai pleaca spre cos");
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VARIANTA DISPARUTA CERE REVIZUIRE, NU CADE TACUT PE PRETUL DE BAZA
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Tricou cu marimi si cu gravura: chiar combinatia „varianta + personalizare". */
+const TRICOU: RegulaPretCos = {
+  price: 50,
+  combos: { "S / Rosu": 50, "XXL / Rosu": 65 },
+  tiers: null,
+  areVariante: true,
+  customization: {
+    enabled: true,
+    fields: [{ id: "text", type: "text", label: "Textul gravat", required: true }],
+    pret: { fel: "adaugat" },
+  },
+};
+
+test("⚠ o marime STINSA de comerciant marcheaza linia, desi gravura e valida", () => {
+  /*
+   * ═══ ⚠ CE ERA INAINTE ═══
+   *
+   * `cereRevizuire` se uita numai la personalizare. Tricoul „XXL" cu gravura „Robert" al carui XXL
+   * a fost stins intre timp trecea drept perfect valid: gravura CHIAR era valida, deci semnalul
+   * tacea, butonul de finalizare ramanea aprins, iar pretul cadea tacut pe cel al produsului de
+   * baza (50 in loc de 65). Abia `placeCartOrder` refuza, cu „Varianta «XXL» nu mai este
+   * disponibila", dupa ce omul isi daduse adresa si alesese plata.
+   */
+  const item = linie({ productId: "t", name: "Tricou", price: 50, variantTitle: "XXL / Rosu", customization: { text: "Robert" } });
+  const faraXXL: RegulaPretCos = { ...TRICOU, combos: { "S / Rosu": 50 } };
+
+  assert.equal(cereRevizuire(item, faraXXL), true, "marimea stinsa nu mai marcheaza linia");
+  /* ⚠ Si perechea: cu marimea la locul ei, linia e curata. */
+  assert.equal(cereRevizuire(item, TRICOU), false, "o linie perfect buna a fost marcata");
+});
+
+test("⚠ un produs care nu mai are variante DELOC marcheaza linia care poarta una", () => {
+  /* A doua ramura a regulii serverului: „Produsul nu mai are optiuni de ales." */
+  const item = linie({ productId: "t", name: "Tricou", price: 50, variantTitle: "XXL / Rosu" });
+  const faraVariante: RegulaPretCos = { price: 50, combos: {}, tiers: null, customization: null, areVariante: false };
+  assert.equal(cereRevizuire(item, faraVariante), true);
+});
+
+test("⚠ si linia FARA varianta, pe un produs care cere una", () => {
+  /*
+   * A treia ramura: „Alege o optiune". Se poate ajunge aici cu o linie veche, salvata inainte ca
+   * produsul sa capete marimi.
+   *
+   * ⚠ `undefined` NU marcheaza: cine construieste o regula fara steag nu spune „n-are variante", ci
+   * „nu stiu", si pe o presupunere nu se strica un cos.
+   */
+  const item = linie({ productId: "t", name: "Tricou", price: 50 });
+  assert.equal(cereRevizuire(item, { ...TRICOU, combos: {} }), true, "linia fara marime nu se marcheaza");
+  assert.equal(cereRevizuire(item, { price: 50, combos: {}, tiers: null, customization: null }), false,
+    "o regula care nu spune nimic despre variante a marcat linia");
+});
+
+test("⚠ pretul afisat ramane cel de baza, dar linia NU mai trece tacut", () => {
+  /*
+   * Numarul nu se schimba: functia n-are de unde scoate pretul unei marimi care nu mai exista. Ce
+   * se schimba e ca linia se vede acum ca stricata, deci butonul de finalizare nu mai pleaca.
+   */
+  const item = linie({ productId: "t", name: "Tricou", price: 50, variantTitle: "XXL / Rosu" });
+  const faraXXL: RegulaPretCos = { ...TRICOU, combos: { "S / Rosu": 50 } };
+  assert.equal(pretulLiniei(item, faraXXL).subtotal, 50, "premisa s-a schimbat: nu mai cade pe baza");
+  assert.equal(cereRevizuire(item, faraXXL), true);
 });

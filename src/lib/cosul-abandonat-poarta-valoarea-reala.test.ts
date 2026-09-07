@@ -239,3 +239,24 @@ test("⚠ steagul „preturi sigure” ajunge de la repretuire pana in email", (
     "preturile pe linie se scriu oricum");
   assert.match(email, /\$\{preturiSigure \? `/, "totalul se scrie oricum");
 });
+
+test("⚠ FARA preturi verificate nu se scrie NIMIC in rand", () => {
+  /*
+   * ═══ ⚠ O PANA DE BAZA NU ARE VOIE SA REDESCHIDA POARTA ═══
+   *
+   * `cuPreturileDinCatalog` cadea inapoi pe `salvate`, adica tocmai pe numerele trimise de browser.
+   * Deci intr-o pana de baza, cine cheama actiunea publica de captura cu `price: 9.999.999` isi
+   * vedea numarul SCRIS in rand, de unde intra in „Valoare cosuri abandonate", in media pe cos si
+   * in venitul potential. Repretuirea parea pusa si nu apara nimic tocmai cand conta.
+   *
+   * ⚠ SE PIERDE CAPTURA, SI E ALEGEREA BUNA: randul e o unealta de marketing, nu o comanda. Pierdut,
+   * nu se pierde nicio vanzare, iar captura se reia la urmatoarea tastare a clientului, fiindca e pe
+   * cronometru.
+   */
+  const ajutor = sursa("src/lib/abandoned-cart.ts");
+  assert.match(ajutor, /if \(error\) return null;/, "o citire cazuta intoarce iar preturile din cerere");
+  assert.doesNotMatch(ajutor, /if \(error\) return salvate/, "caderea pe preturile clientului s-a intors");
+
+  const actiuni = sursa(ACTIUNI);
+  assert.match(actiuni, /if \(!cuPreturi\) return;/, "captura scrie randul chiar si fara preturi verificate");
+});

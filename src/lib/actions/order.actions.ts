@@ -35,7 +35,7 @@ import {
   type ModificareLinie,
   type VarianteSlim,
 } from "@/lib/orders/edit-pricing";
-import { verifyShippingQuote } from "@/lib/shipping/quote-token";
+import { verificaCotatia } from "@/lib/shipping/quote-token";
 import { parseBillingCompany, type BillingCompany, type BillingCompanyInput } from "@/lib/billing/company";
 import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleRelease, expandBundleStock } from "@/lib/bundles";
@@ -237,11 +237,37 @@ function autoritativeShipping(
    * curieri activi au prag, deci ar fi cazut exact comenzile mari.
    */
   esteGratuit: boolean,
-): number {
-  if (esteGratuit) return 0;
+  /**
+   * Gramele cosului care se comanda ACUM, socotite din liniile finale si din catalog.
+   *
+   * ⚠ `null` inseamna „n-am de unde sti", si atunci greutatea nu se judeca. Vezi `verificaCotatia`.
+   */
+  grameComandate: number | null,
+): { shipping: number } | { recotare: true } {
+  if (esteGratuit) return { shipping: 0 };
 
   const claimed = Math.max(0, round2(Number(cerut) || 0));
-  if (verifyShippingQuote(businessId, dest, claimed, token, optiune)) return claimed;
+  const verdict = verificaCotatia(businessId, dest, claimed, token, optiune, grameComandate);
+  if (verdict.ok) return { shipping: claimed };
+
+  /*
+   * ═══ ⚠ GREUTATEA DEPASITA REFUZA COMANDA, NU CADE PE TARIF ═══
+   *
+   * Asta e regula pe care nota veche din `quote-token.ts` o cerea explicit celui care ar relua
+   * legarea cosului: „nu lega cosul cu esec pe tariful implicit. Esueaza in FAVOAREA clientului".
+   *
+   * Motivul e numeric. Rezerva e `max(suma ceruta, tarif implicit)`: pe o comanda cu „Ridicare
+   * personala" la 0,00 lei, o cadere ar face-o 18 pana la 45 de lei, fara ca omul sa fi vazut
+   * vreodata suma aia. Cinci magazine publicate au ridicare personala langa curieri platiti.
+   *
+   * O cotatie careia nu-i bate SEMNATURA e altceva: poate fi un token pierdut, o desfasurare la
+   * mijloc, un magazin fara curieri. Aia cade mai departe pe tariful implicit, ca pana acum: o
+   * cotatie pierduta n-are voie sa coste o vanzare.
+   *
+   * Greutatea, in schimb, nu se pierde din intamplare. Ea nu bate doar cand cosul comandat e mai
+   * GREU decat cel cotat, si atunci singurul raspuns cinstit e sa se ceara o cotatie noua.
+   */
+  if (verdict.motiv === "greutate") return { recotare: true };
 
   /*
    * REZERVA e tariful implicit al magazinului, si NIMIC ales de client.
@@ -253,7 +279,7 @@ function autoritativeShipping(
    * macar nu e o optiune ofertabila. Rezerva trebuie sa fie un numar pe care
    * l-a scris comerciantul si pe care clientul nu-l poate misca.
    */
-  if (tarifImplicit == null) return claimed;
+  if (tarifImplicit == null) return { shipping: claimed };
 
   /*
    * Magazin fara niciun curier de ales, care cere exact tariful implicit: e
@@ -269,11 +295,13 @@ function autoritativeShipping(
    * 0, cu tarif live, deci acolo nu exista niciun numar declarat sub care sa nu
    * se poata cobori. Tocmai de aceea amprenta trebuie sa lege TOT ce a produs
    * pretul, nu doar destinatia: pe okxi, o cotatie stricata nu costa nimic.
-   * Regimul de ramburs e legat (vezi `QuoteOption.ramburs`); greutatea inca nu —
-   * ea se calculeaza server-side, dar din lista de produse DECLARATA de client.
+   * Regimul de ramburs e legat (vezi `QuoteOption.ramburs`), si de pe 08.09.2026 si GREUTATEA:
+   * ea se socoteste server-side din catalog, se semneaza in token, si la comanda se cere sa nu fi
+   * crescut. Ce ramane nelegat sunt clasele si categoriile de transport, pe care azi nu le
+   * foloseste niciun magazin din 131.
    */
   const areCurieri = Object.values(zone ?? {}).some((z) => z?.enabled);
-  if (!areCurieri && claimed === round2(tarifImplicit)) return claimed;
+  if (!areCurieri && claimed === round2(tarifImplicit)) return { shipping: claimed };
 
   logError({
     action: "placeOrder.shippingRejected",
@@ -298,7 +326,36 @@ function autoritativeShipping(
    * plateste ce a vazut pe ecran, nu un tarif mai mic — asa comerciantul nu mai
    * ramane dator, cum ramanea cand se cadea sec pe tariful implicit.
    */
-  return Math.max(claimed, Math.max(0, round2(tarifImplicit)));
+  return { shipping: Math.max(claimed, Math.max(0, round2(tarifImplicit))) };
+}
+
+/**
+ * Cate grame cantaresc liniile care se comanda ACUM.
+ *
+ * ═══ ⚠ DIN CATALOG, NICIODATA DIN CE TRIMITE BROWSERUL ═══
+ *
+ * Numarul asta se compara cu cel semnat in cotatie (vezi `verificaCotatia`). Luat de la client, ar
+ * fi fost chiar lucrul pe care poarta il verifica: cine coteaza un kilogram si comanda
+ * cincisprezece ar fi declarat mai departe un kilogram.
+ *
+ * ⚠ UN PRODUS FARA GREUTATE ADUCE ZERO, nu o rezerva. Rezerva de un kilogram din cotare e o
+ * alegere despre cum se cere pretul curierului, nu despre cat cantareste coletul; pusa si aici, un
+ * magazin fara greutati completate ar fi avut mereu zero semnat si mii comandate, deci fiecare
+ * comanda a lui ar fi cerut recotare la nesfarsit.
+ *
+ * ⚠ SI UN PRODUS NEGASIT ADUCE TOT ZERO. E aceeasi purtare ca in `contextulCosului`, care produce
+ * numarul semnat: doua socoteli care ar trata altfel acelasi caz s-ar despartit, iar despartirea
+ * s-ar vedea ca o comanda cinstita refuzata.
+ */
+function grameleLiniilor(
+  linii: { product_id: string; quantity: number }[],
+  greutati: Map<string, number | null | undefined>,
+): number {
+  let grame = 0;
+  for (const l of linii) {
+    grame += Math.max(0, Number(greutati.get(l.product_id)) || 0) * Math.max(0, Number(l.quantity) || 0);
+  }
+  return Math.round(grame);
 }
 
 type CheckoutExtra = { id: string; label: string; price: number };
@@ -914,7 +971,7 @@ export async function placeOrder(data: {
   // Reload product + store config and recompute every price server-side.
   const [{ data: product, error: eroareProdus }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
     admin.from("products")
-      .select("id, name, price, is_active, business_id, page_sections")
+      .select("id, name, price, is_active, business_id, page_sections, weight_grams")
       .eq("id", data.product_id)
       .eq("business_id", data.business_id)
       .single(),
@@ -1067,13 +1124,23 @@ export async function placeOrder(data: {
   const stocPeVarianta = new Map<string, Map<string, number>>([
     [product.id, comboStockMap(product.page_sections)],
   ]);
+  /*
+   * ⚠ GREUTATILE DIN CATALOG, pentru poarta cotatiei de transport.
+   *
+   * Se strang aici fiindca liniile purtate din cos se citesc mai jos, intr-o ramura: culese abia
+   * acolo, produsul principal ar fi lipsit din socoteala si comanda ar fi parut mai usoara decat
+   * cea cotata. Vezi `grameleLiniilor` si `verificaCotatia`.
+   */
+  const greutatiPeProdus = new Map<string, number | null | undefined>([
+    [product.id, product.weight_grams],
+  ]);
   const liniiCuVarianta: { product_id: string; variant_title?: string | null; quantity: number }[] = [
     { product_id: data.product_id, variant_title: data.variant_title, quantity: cantitate },
   ];
   if (data.additional_items?.length) {
     const ids = [...new Set(data.additional_items.map((i) => i.product_id))].filter((id) => id !== data.product_id);
     if (ids.length > 0) {
-      const { data: extraProducts, error: eroareExtra } = await admin.from("products").select("id, name, price, is_active, page_sections").in("id", ids).eq("business_id", data.business_id);
+      const { data: extraProducts, error: eroareExtra } = await admin.from("products").select("id, name, price, is_active, page_sections, weight_grams").in("id", ids).eq("business_id", data.business_id);
       // O interogare cazuta arunca TOT cosul purtat, in tacere: clientul ar primi
       // o comanda doar cu produsul din formular, la un total pe care nu l-a vazut.
       if (eroareExtra) {
@@ -1092,6 +1159,7 @@ export async function placeOrder(data: {
       const extraMap = new Map((extraProducts ?? []).filter((p) => p.is_active).map((p) => {
         const base = round2(Number(p.price));
         stocPeVarianta.set(p.id, comboStockMap(p.page_sections));
+        greutatiPeProdus.set(p.id, p.weight_grams);
         return [p.id, {
           name: String(p.name),
           price: base,
@@ -1309,7 +1377,7 @@ export async function placeOrder(data: {
   // Livrarea gratuita se hotaraste INAINTE de verificare: browserul trimite zero,
   // dar tokenul lui e semnat pe pretul cotat al curierului, deci n-are cum sa bata.
   const esteGratuit = isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold);
-  const shipping = autoritativeShipping(
+  const verdictTransport = autoritativeShipping(
     data.business_id,
     data.shipping_cost,
     data.shipping_token,
@@ -1327,7 +1395,35 @@ export async function placeOrder(data: {
     },
     (cfgRow?.shipping_zones ?? null) as Record<string, { enabled?: boolean; price?: number }> | null,
     esteGratuit,
+    /*
+     * ⚠ GREUTATEA COMANDATA, din liniile FINALE: produsul din formular plus tot ce s-a purtat din
+     * cos. Bump-urile si companionii „cumparate frecvent impreuna" sunt si ei in `cartItems`, deci
+     * intra si ei, ca in colet.
+     */
+    grameleLiniilor(
+      [
+        { product_id: data.product_id, quantity: cantitate },
+        ...cartItems.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
+      ],
+      greutatiPeProdus,
+    ),
   );
+  if ("recotare" in verdictTransport) {
+    /*
+     * ⚠ COSUL MAI GREU DECAT CEL COTAT NU SE COMANDA, SE RECOTEAZA.
+     *
+     * Nu se cade pe tariful implicit: pe „Ridicare personala" la 0,00 lei, o cadere ar face-o 18
+     * pana la 45 de lei fara ca omul sa fi vazut vreodata suma. Vezi `autoritativeShipping`.
+     */
+    logError({
+      action: "placeOrder.shippingRequote",
+      message: "Ordered cart is heavier than the quoted one",
+      details: { businessId: data.business_id, productId: data.product_id, courier: data.selected_courier },
+      severity: "warning",
+    });
+    return { error: "Cosul s-a schimbat de cand am calculat transportul. Reincarca pagina ca sa afli costul livrarii." };
+  }
+  const shipping = verdictTransport.shipping;
 
   // VAT: recomputed server-side (mirrors placeCartOrder + the storefront) so single-
   // product / One-Product-Store orders collect VAT too. Only VAT-exclusive pricing
@@ -2943,7 +3039,7 @@ export async function updateOrderDetails(orderId: string, data: {
      * salvata e a destinatiei VECHI, iar o mutare in alta tara ar compara
      * „Livrare prin DPD" cu „DPD International (Germania)".
      */
-    const semnaturaBuna = verifyShippingQuote(order.business_id, { county, city }, cerut, data.shipping_token, {
+    const semnaturaBuna = verificaCotatia(order.business_id, { county, city }, cerut, data.shipping_token, {
       courier: typeof prevShip.courier === "string" ? prevShip.courier : undefined,
       deliveryType: prevShip.delivery_type === "locker" ? "locker" : "address",
       courierLabel: data.courier_label,
@@ -2987,8 +3083,21 @@ export async function updateOrderDetails(orderId: string, data: {
           vat: vatCfg,
         }).total,
       }) > 0,
-    });
-    const sePoateAplica = semnaturaBuna
+    },
+    /*
+     * ⚠ GREUTATEA NU SE JUDECA PE DRUMUL ASTA, si e o alegere, nu o scapare.
+     *
+     * Panoul cere cotatia cu `comanda: order.id` si FARA lista de produse (sumele le citeste
+     * serverul din comanda), deci cotatia se semneaza cu zero grame. Comparata cu greutatea reala a
+     * comenzii, fiecare re-cotare din panou ar fi fost refuzata.
+     *
+     * ⚠ Si nu e o portita catre cumparator: aici se ajunge doar dintr-o sesiune de comerciant care
+     * detine magazinul si comanda, iar el isi hotaraste oricum singur transportul. Atacul pe care
+     * il inchide greutatea e „coteaza usor, comanda greu" pe vitrina, unde tokenul chiar poarta
+     * gramele.
+     */
+    null);
+    const sePoateAplica = semnaturaBuna.ok
       && order.payment_status !== "paid"
       && !areAwb
       && !numarFactura
@@ -3582,7 +3691,7 @@ export async function placeCartOrder(data: {
   const [{ data: dbProducts, error: eroareProduse }, { data: cfgRow, error: eroareCfg }] = await Promise.all([
     admin.from("products")
       // `name` se cere ca linia sa poarte numele din CATALOG, nu sirul din browser.
-      .select("id, name, price, is_active, page_sections")
+      .select("id, name, price, is_active, page_sections, weight_grams")
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
@@ -3702,6 +3811,10 @@ export async function placeCartOrder(data: {
   // sus pentru variante si stoc, deci treptele nu costa nicio interogare in plus.
   const trepteMap = new Map(
     activeProducts.map((p) => [p.id, (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers]),
+  );
+  /* ⚠ Greutatile din catalog, pentru poarta cotatiei. Vezi `grameleLiniilor`. */
+  const greutatiPeProdus = new Map<string, number | null | undefined>(
+    activeProducts.map((p) => [p.id, (p as { weight_grams?: number | null }).weight_grams]),
   );
 
   let validatedItems = liniiCerute.map((i, idx) => {
@@ -3830,7 +3943,7 @@ export async function placeCartOrder(data: {
   // Livrarea gratuita se hotaraste INAINTE de verificare: browserul trimite zero,
   // dar tokenul lui e semnat pe pretul cotat al curierului, deci n-are cum sa bata.
   const esteGratuit = isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold);
-  const shipping = autoritativeShipping(
+  const verdictTransport = autoritativeShipping(
     data.business_id,
     data.shipping_cost,
     data.shipping_token,
@@ -3845,7 +3958,27 @@ export async function placeCartOrder(data: {
     },
     (cfgRow?.shipping_zones ?? null) as Record<string, { enabled?: boolean; price?: number }> | null,
     esteGratuit,
+    /*
+     * ⚠ GREUTATEA COMANDATA, din liniile de DUPA oferte: alea sunt liniile care intra in comanda.
+     * Ofertele schimba preturi, nu produse sau cantitati, dar se citesc de acolo dinadins, ca sa nu
+     * existe niciun pas intre ce se cantareste si ce se scrie in comanda.
+     */
+    grameleLiniilor(
+      validatedItems.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
+      greutatiPeProdus,
+    ),
   );
+  if ("recotare" in verdictTransport) {
+    /* ⚠ Se cere recotare, nu se cade pe tarif. Vezi `autoritativeShipping` si comanda directa. */
+    logError({
+      action: "placeCartOrder.shippingRequote",
+      message: "Ordered cart is heavier than the quoted one",
+      details: { businessId: data.business_id, courier: data.selected_courier },
+      severity: "warning",
+    });
+    return { error: "Cosul s-a schimbat de cand am calculat transportul. Reincarca pagina ca sa afli costul livrarii." };
+  }
+  const shipping = verdictTransport.shipping;
 
   // Aceeasi baza ca la comanda directa si ca in magazin: marfa, extraoptiunile si
   // TRANSPORTUL, dupa toate reducerile, plus taxa de ramburs. Vezi `vatBase`.

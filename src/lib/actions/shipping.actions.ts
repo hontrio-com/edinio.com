@@ -534,6 +534,19 @@ export async function getShippingOptions(
     cos = contextulCosului(destination.cart, produseCotate);
   }
   const cartWeightKg = cos.weightKg;
+  /*
+   * ⚠ GREUTATEA CARE INTRA IN SEMNATURA, si care se compara la comanda.
+   *
+   * E cea BRUTA, nu `weight` de mai jos: rezerva de un kilogram e o alegere de cotare (un cos fara
+   * greutati completate tot trebuie cotat cumva), pe cand aici trebuie sa stea numarul care se
+   * poate reconstrui EXACT din liniile finale ale comenzii. Semnata rezerva, un magazin fara
+   * greutati ar fi avut mereu 1000 de grame semnate si zero comandate, deci poarta n-ar fi aparat
+   * nimic si ar fi parut ca apara.
+   *
+   * ⚠ SE SEMNEAZA IN GRAME, intregi: kilogramele cu trei zecimale se compara prost, iar catalogul
+   * tine oricum grame.
+   */
+  const grameCotate = Math.round(cartWeightKg * 1000);
 
   // Greutatea cu care se cere pretul curierilor interni. Un kilogram ramane
   // rezerva pentru cosurile ale caror produse n-au greutate completata.
@@ -658,7 +671,7 @@ export async function getShippingOptions(
       // functie inainte de pasul de la final, si tocmai de aceea pleca fara
       // token. Cu `semneazaOptiuni` in amandoua iesirile, o optiune nesemnata
       // nu mai poate scapa dintr-un `return` nou.
-      return semneazaOptiuni(businessId, destination, esteRamburs, [{
+      return semneazaOptiuni(businessId, destination, esteRamburs, grameCotate, [{
         courier: "dpd",
         courierLabel: `DPD International (${eu!.name})`,
         deliveryType: "address" as const,
@@ -1566,7 +1579,7 @@ export async function getShippingOptions(
   // Fiecare optiune pleaca semnata. Tokenul se intoarce cu comanda si e singurul
   // fel in care serverul poate sti ca pretul livrarii chiar a fost cotat de el.
   // Vezi `quote-token.ts`.
-  const semnate = semneazaOptiuni(businessId, destination, esteRamburs, finalOptions);
+  const semnate = semneazaOptiuni(businessId, destination, esteRamburs, grameCotate, finalOptions);
 
   // Sort: address first, then lockers, by price
   return semnate.sort((a, b) => {

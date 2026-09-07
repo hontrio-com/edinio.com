@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { formatPrice } from "@/lib/utils/format";
 import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
+import { rezumatPersonalizare } from "@/lib/storefront/cart/normalize";
 import type { CheckoutEngine } from "./checkout-core";
 
 /**
@@ -33,6 +34,21 @@ export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; col
             <div className="flex-1 min-w-0">
               <p className="font-bold text-sm text-foreground truncate">{item.name}</p>
               {item.variantTitle && <p className="text-xs text-muted-foreground truncate">{item.variantTitle}</p>}
+              {/*
+                ⚠ SI PERSONALIZAREA, cu ACELASI ajutor ca in sertarul de cos.
+
+                Asta e ULTIMUL ecran de dinaintea platii. Fara ea, omul care a scris „Robert" pe o
+                cana si „Maria" pe alta vedea doua randuri identice, cu acelasi nume si acelasi
+                pret — deci nu putea verifica nimic, si nici macar nu putea sti daca a apasat de
+                doua ori din greseala. La fototapet e si mai rau: numarul de pe linie nu se
+                explica nicaieri, fiindca el vine din dimensiuni, nu din catalog.
+
+                ⚠ Acelasi `rezumatPersonalizare`, nu un al doilea formator: scrise separat, cele
+                doua ecrane ar fi ajuns sa numeasca altfel aceleasi alegeri.
+              */}
+              {rezumatPersonalizare(item.customization) && (
+                <p className="text-xs text-muted-foreground truncate">{rezumatPersonalizare(item.customization)}</p>
+              )}
               {/* Pretul pe bucata vine de la COS, nu din `item.price`: acela e
                   instantaneul din localStorage, iar totalul de langa el vine deja
                   de la server. Aici e capatul fluxului pe care il repara

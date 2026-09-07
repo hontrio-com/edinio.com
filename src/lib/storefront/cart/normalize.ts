@@ -49,18 +49,40 @@ const MAX_PERSONALIZARE = 20_000;
 /**
  * Amprenta scurta a unui text, cand el nu incape intreg in cheie.
  *
- * ⚠ NU E O SEMNATURA si nu apara nimic: e FNV-1a, opt caractere, si sta langa prefixul intreg si
- * langa lungime. Rostul ei e sa DEOSEBEASCA doua personalizari lungi care incep la fel — fara ea,
- * doua comenzi diferite de fototapet, cu aceleasi campuri si alte fisiere, cadeau pe aceeasi cheie
- * si se pliau intr-o singura linie cu cantitatea 2.
+ * ⚠ NU E O SEMNATURA si nu apara nimic: e FNV-1a, si sta langa prefixul intreg si langa lungime.
+ * Rostul ei e sa DEOSEBEASCA doua personalizari lungi care incep la fel — fara ea, doua comenzi
+ * diferite de fototapet, cu aceleasi campuri si alte fisiere, cadeau pe aceeasi cheie si se pliau
+ * intr-o singura linie cu cantitatea 2.
+ *
+ * ═══ ⚠ DE CE PATRU TRECERI SI NU UNA ═══
+ *
+ * Era una singura, pe 32 de biti, iar langa ea scria ca „doua texte diferite nu mai pot da aceeasi
+ * cheie". Nu e adevarat, si nu era o subtilitate: 32 de biti au coliziuni, iar aici intrarea e
+ * scrisa de CLIENT. O coliziune nu-l lasa sa fraudeze pretul — serverul repretuieste oricum — dar
+ * face exact paguba de la care s-a plecat: doua personalizari diferite ajung o singura linie cu
+ * cantitatea 2, si omul primeste doua cani cu acelasi nume.
+ *
+ * Patru treceri cu ofseturi de pornire diferite dau 128 de biti. Nu sunt independente ca un
+ * SHA-256, dar deosebirea practica fata de o coliziune organica e uriasa — iar `lineKey` trebuie
+ * sa ramana SINCRON (se cheama la randare, in `key` de React), unde WebCrypto nu se poate chema.
+ *
+ * ⚠ SI NU STA SINGURA: langa ea sunt primele 2.000 de caractere si lungimea EXACTA a textului
+ * intreg. Ca sa se contopeasca doua linii, ele ar trebui sa aiba acelasi prefix de 2.000, aceeasi
+ * lungime, SI aceeasi amprenta de 128 de biti.
  */
+const OFSETURI = [0x811c9dc5, 0x01000193, 0x9e3779b9, 0x85ebca6b];
+
 function amprenta(s: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
+  let out = "";
+  for (const ofset of OFSETURI) {
+    let h = ofset;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    out += h.toString(16).padStart(8, "0");
   }
-  return h.toString(16).padStart(8, "0");
+  return out;
 }
 
 /**
@@ -116,7 +138,13 @@ export function lineKey(
    * in comparatii, dar o taiere seaca aducea inapoi chiar defectul de la care s-a plecat: doua
    * personalizari DIFERITE care incep la fel — acelasi fototapet, aceleasi campuri, alte fisiere —
    * dadeau acelasi text si se pliau intr-o linie cu cantitatea 2. Lungimea si amprenta intregului
-   * text se pun langa prefix, deci doua texte diferite nu mai pot da aceeasi cheie.
+   * text se pun langa prefix.
+   *
+   * ⚠ AICI SCRIA CA „doua texte diferite nu mai pot da aceeasi cheie". NU E ADEVARAT, si e chiar
+   * felul de nota care promite o plasa inexistenta: o amprenta are coliziuni, oricat de lunga ar
+   * fi. Ce se poate spune cinstit e ca doua linii se contopesc numai daca au acelasi prefix de
+   * 2.000 de caractere, aceeasi lungime exacta SI aceeasi amprenta de 128 de biti — vezi
+   * `amprenta`, unde scrie si de ce nu e un SHA-256.
    */
   if (scris.length <= MAX_CHEIE_PERSONALIZARE) return `${baza}::${scris}`;
   return `${baza}::${scris.slice(0, MAX_CHEIE_PERSONALIZARE)}#${scris.length}#${amprenta(scris)}`;

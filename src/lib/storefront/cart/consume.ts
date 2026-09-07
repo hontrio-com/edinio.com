@@ -3,6 +3,19 @@ import { lineKey } from "./normalize";
 export interface LinieCos {
   productId: string;
   variantTitle?: string;
+  /*
+   * ⚠ DECLARATA, desi `lineKey` o citea si fara ea.
+   *
+   * Identitatea unei linii include personalizarea: „Robert" si „Maria" sunt doua linii ale
+   * aceluiasi produs. Tipul de aici nu o pomenea, iar la rulare mergea din intamplare fericita —
+   * apelantii dau chiar obiectele din cos, filtrate, nu remapate, deci campul era acolo.
+   *
+   * ⚠ „Din intamplare fericita" nu e o paza. Un apelant care ar fi construit lista prin
+   * `.map(i => ({ productId: i.productId }))` — ceva ce tipul PERMITEA — ar fi produs chei care nu
+   * se potrivesc cu niciuna din cos: ori nu se scotea nimic, ori se scotea linia gresita. Declarata,
+   * greseala aia devine o eroare de compilare, nu o comanda cu cana greșita.
+   */
+  customization?: Record<string, unknown>;
 }
 
 /**

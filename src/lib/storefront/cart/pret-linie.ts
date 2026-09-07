@@ -54,6 +54,26 @@ function personalizarea(item: CartItem, regula: RegulaPretCos | undefined) {
   const definitie = normalizeazaDefinitia(regula?.customization);
   if (!definitie) return null;
   const curate = normalizeazaValorile(definitie, valori);
+  /*
+   * ⚠ `curate.ok` SE CITESTE, si pana pe 07.09.2026 nu se citea.
+   *
+   * Comentariul de deasupra promitea de mult ca se cade pe `null` „cand valorile nu se mai
+   * potrivesc cu definitia" — dar codul lua `curate.valori` oricum. Iar la nepotrivire aia e o
+   * multime PARTIALA: campurile care s-au curatat sunt acolo, cele care n-au trecut lipsesc.
+   *
+   * Deci cosul socotea linistit un pret din jumatate de configuratie si il arata ca pe unul bun.
+   * Se intampla exact cand comerciantul schimba definitia dupa ce clientul a pus produsul in cos:
+   * sterge optiunea „Premium", face un camp obligatoriu, stramteaza marginile. Clientul vedea o
+   * suma plauzibila si afla abia la finalizare ca nu se poate comanda.
+   *
+   * ⚠ NU E O GAURA DE BANI: serverul repretuieste si REFUZA ce nu se potriveste, deci nimeni n-a
+   * putut cumpara pe suma aia. E o minciuna de ecran — si un comentariu care promitea o plasa
+   * inexistenta.
+   *
+   * ⚠ CE RAMANE DE FACUT: linia ar trebui sa spuna „Necesita actualizare", nu sa arate tacut
+   * pretul de catalog. Aici se opreste minciuna; semnalul catre client e o lucrare de interfata.
+   */
+  if (!curate.ok) return null;
   return pretulPersonalizarii(definitie, curate.valori);
 }
 

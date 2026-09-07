@@ -174,6 +174,27 @@ test("⚠ niciun drum de SCRIERE nu compune o adresa publica, si niciunul nu cad
     bucata("mutaIncarcarea"), /private, no-store/,
     "s-a pierdut antetul care opreste cache-ul intermediarilor",
   );
+  assert.match(
+    bucata("linkDeCitirePrivata"), /ResponseCacheControl: "private, no-store"/,
+    "linkul semnat lasa fisierul cumparatorului sa fie tinut pe drum",
+  );
+
+  /*
+   * ═══ ⚠ `inline`, NU `attachment` — SI PROBA ASTA LIPSEA ═══
+   *
+   * Cand servirea a trecut pe link semnat, dispozitia a fost scrisa din greseala `attachment`. Ea
+   * hotaraste ce se intampla la CLIC in panou: `inline` deschide fisierul intr-o fila noua, cum il
+   * stiu comerciantii; `attachment` il descarca.
+   *
+   * ⚠ SI NU S-AR FI VAZUT. Miniaturile mergeau si asa (Chrome randeaza `<img>` dupa `Content-Type`,
+   * nu dupa dispozitie), iar probele de atunci ceruse doar NUMELE fisierului — chiar eu scosesem
+   * `inline; filename=` din ele cand am intors afirmatiile. Deosebirea s-ar fi aratat abia la
+   * primul clic al unui comerciant care se astepta la altceva.
+   */
+  assert.match(
+    bucata("linkDeCitirePrivata"), /`inline; filename=/,
+    "clicul din panou descarca fisierul in loc sa-l deschida, cum facea pana acum",
+  );
 
   /*
    * ═══ ⚠ SI SCRIEREA NU MAI CADE PE GALEATA PUBLICA ═══

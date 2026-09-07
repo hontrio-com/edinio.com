@@ -487,6 +487,15 @@ export async function linkDeIncarcarePrivata(
  *
  * ⚠ NUMELE DE SALVARE se semneaza si el: fara `ResponseContentDisposition`, browserul ar fi
  * salvat fisierul cu numele cheii — 65 de caractere de hexazecimal.
+ *
+ * ⚠ `inline`, NU `attachment`, si e purtarea de dinainte de mutare. Prima varianta a acestei
+ * functii scria `attachment`, ceea ce ar fi schimbat tacut ce se intampla la clic in panou: linkul
+ * de sub miniatura deschide fisierul intr-o fila noua, si asa il stiu comerciantii. Cu `attachment`
+ * ar fi inceput sa se descarce, fara ca nimeni sa fi cerut schimbarea.
+ *
+ * ⚠ Miniaturile mergeau si asa (Chrome randeaza `<img>` dupa `Content-Type`, nu dupa dispozitie),
+ * deci deosebirea NU s-ar fi vazut la o privire pe ecran — s-ar fi vazut abia la primul clic al
+ * unui comerciant care se astepta la altceva.
  */
 export async function linkDeCitirePrivata(
   key: string,
@@ -501,7 +510,7 @@ export async function linkDeCitirePrivata(
     ResponseContentType: contentType,
     /* ⚠ Numele se curata: un `"` sau un rand nou in antet ar fi despartit raspunsul in doua. */
     ResponseContentDisposition:
-      `attachment; filename="${numeDeSalvare.replace(/[^\w.\- ]+/g, "_").slice(0, 120)}"`,
+      `inline; filename="${numeDeSalvare.replace(/[^\w.\- ]+/g, "_").slice(0, 120)}"`,
     ResponseCacheControl: "private, no-store",
   });
   return getSignedUrl(s3, command, { expiresIn });

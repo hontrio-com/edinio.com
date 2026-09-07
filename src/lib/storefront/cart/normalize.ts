@@ -23,8 +23,45 @@ export interface CartItem {
   customization?: Record<string, unknown>;
 }
 
-/** Cat de lunga poate fi partea de personalizare din cheia unei linii. */
+/**
+ * Cat de lunga poate fi partea de personalizare din CHEIA unei linii.
+ *
+ * ⚠ E o margine de identitate, nu una de date — vezi `MAX_PERSONALIZARE`. Erau acelasi numar, si
+ * de aceea o personalizare care nu incapea in cheie disparea cu totul din linie.
+ */
 const MAX_CHEIE_PERSONALIZARE = 2000;
+
+/**
+ * Cat de mare poate fi personalizarea PASTRATA pe o linie.
+ *
+ * ⚠ CIFRA VINE DIN CE ACCEPTA SERVERUL, nu dintr-o preferinta: poarta comenzii primeste pana la
+ * 40 de fisiere pe linie, iar o cheie de fisier are vreo 130 de caractere — deci numai fisierele
+ * pot trece de 5.000. Cu vechea margine de 2.000, un client care incarca sapte poze pentru un
+ * fototapet isi pierdea TOATA personalizarea la prima reincitire a cosului, in tacere.
+ *
+ * ⚠ SI CE SE INTAMPLA CAND SE DEPASESTE: se arunca LINIA, nu personalizarea ei. O linie fara
+ * personalizare arata ca un produs obisnuit: ori o refuza serverul si omul nu afla de ce, ori —
+ * mai rau — trece, si atunci se produce o cana negravata pentru cine a cerut una gravata. O linie
+ * lipsa din cos se vede.
+ */
+const MAX_PERSONALIZARE = 20_000;
+
+/**
+ * Amprenta scurta a unui text, cand el nu incape intreg in cheie.
+ *
+ * ⚠ NU E O SEMNATURA si nu apara nimic: e FNV-1a, opt caractere, si sta langa prefixul intreg si
+ * langa lungime. Rostul ei e sa DEOSEBEASCA doua personalizari lungi care incep la fel — fara ea,
+ * doua comenzi diferite de fototapet, cu aceleasi campuri si alte fisiere, cadeau pe aceeasi cheie
+ * si se pliau intr-o singura linie cu cantitatea 2.
+ */
+function amprenta(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
 
 /**
  * Personalizarea, scrisa la fel de fiecare data.
@@ -73,7 +110,16 @@ export function lineKey(
    */
   const c = item.customization;
   if (!c || typeof c !== "object" || Object.keys(c).length === 0) return baza;
-  return `${baza}::${scriereCanonica(c).slice(0, MAX_CHEIE_PERSONALIZARE)}`;
+  const scris = scriereCanonica(c);
+  /*
+   * ⚠ TAIEREA NU POATE SA CONTOPEASCA. Cheia se margineste fiindca se pune in `key` de React si
+   * in comparatii, dar o taiere seaca aducea inapoi chiar defectul de la care s-a plecat: doua
+   * personalizari DIFERITE care incep la fel — acelasi fototapet, aceleasi campuri, alte fisiere —
+   * dadeau acelasi text si se pliau intr-o linie cu cantitatea 2. Lungimea si amprenta intregului
+   * text se pun langa prefix, deci doua texte diferite nu mai pot da aceeasi cheie.
+   */
+  if (scris.length <= MAX_CHEIE_PERSONALIZARE) return `${baza}::${scris}`;
+  return `${baza}::${scris.slice(0, MAX_CHEIE_PERSONALIZARE)}#${scris.length}#${amprenta(scris)}`;
 }
 
 /**
@@ -170,12 +216,18 @@ export function normalizeazaCos(raw: unknown): CartItem[] {
      *
      * ⚠ Marimea se margineste tot aici: `localStorage` e scris de client, iar o personalizare
      * de un megaoctet ar fi umflat fiecare cheie de linie si fiecare comparatie.
+     *
+     * ⚠ DAR PREA MARE ARUNCA LINIA, nu doar personalizarea — vezi `MAX_PERSONALIZARE`. Stearsa
+     * numai ea, linia ramanea in cos aratand ca un produs obisnuit: aceeasi cana, fara gravura.
      */
     if (
       !curata.customization || typeof curata.customization !== "object"
       || Array.isArray(curata.customization)
-      || scriereCanonica(curata.customization).length > MAX_CHEIE_PERSONALIZARE
-    ) delete curata.customization;
+    ) {
+      delete curata.customization;
+    } else if (scriereCanonica(curata.customization).length > MAX_PERSONALIZARE) {
+      continue;
+    }
     if (typeof curata.variantTitle !== "string") delete curata.variantTitle;
     if (typeof curata.variantSku !== "string") delete curata.variantSku;
     if (typeof curata.slug !== "string") delete curata.slug;

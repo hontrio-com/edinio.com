@@ -695,7 +695,12 @@ export async function updateProfileName(
 export async function getCartPricing(
   businessId: string,
   productIds: string[],
-): Promise<Record<string, { price: number; combos: Record<string, number>; tiers: Json | null }>> {
+): Promise<Record<string, {
+  price: number;
+  combos: Record<string, number>;
+  tiers: Json | null;
+  customization: Json | null;
+}>> {
   const ids = [...new Set((productIds ?? []).filter((id) => typeof id === "string" && id))].slice(0, 200);
   if (!businessId || ids.length === 0) return {};
 
@@ -708,13 +713,33 @@ export async function getCartPricing(
     .in("id", ids);
 
   const { enabledComboPriceMap } = await import("@/lib/storefront/variants");
-  const out: Record<string, { price: number; combos: Record<string, number>; tiers: Json | null }> = {};
+  const out: Record<string, {
+    price: number;
+    combos: Record<string, number>;
+    tiers: Json | null;
+    customization: Json | null;
+  }> = {};
   for (const p of data ?? []) {
     const base = Math.round((Number(p.price) || 0) * 100) / 100;
     out[p.id] = {
       price: base,
       combos: Object.fromEntries(enabledComboPriceMap(p.page_sections, base)),
       tiers: ((p.page_sections ?? {}) as { quantity_tiers?: Json }).quantity_tiers ?? null,
+      /*
+       * ⚠ DEFINITIA PERSONALIZARII, si de-aia e aici.
+       *
+       * Fara ea cosul afisa pretul de CATALOG pentru un produs personalizat, iar serverul incasa
+       * pretul adevarat: fototapet de 3,5 x 2,5 m aratat cu 89 de lei in cos si in finalizare, si
+       * scris in comanda cu 778,75. Clientul confirma o suma si i se cerea alta la usa.
+       *
+       * ⚠ Pleaca DEFINITIA, nu un pret. Pretul se socoteste din ea cu acelasi modul pur pe care il
+       * foloseste si poarta comenzii — un numar trimis de aici ar fi fost tot un pret de client,
+       * doar cu alt drum.
+       *
+       * ⚠ E deja publica: aceeasi definitie sta in `page_sections` pe pagina de produs, de unde
+       * clientul isi completeaza campurile.
+       */
+      customization: ((p.page_sections ?? {}) as { customization?: Json }).customization ?? null,
     };
   }
   return out;

@@ -134,10 +134,51 @@ test("⚠ personalizarea din localStorage trece prin aceleasi reguli ca restul",
   assert.equal(linie(["un", "tablou"]).customization, undefined);
   assert.equal(linie(null).customization, undefined);
 
-  /* ⚠ Si marimea se margineste: o personalizare uriasa ar fi umflat fiecare cheie de linie. */
+  /*
+   * ⚠ MARIMEA SE MARGINESTE, DAR NU LA CAT INCAPE IN CHEIE.
+   *
+   * Marginea era 2.000 de caractere — chiar cea a cheii de linie — si peste ea personalizarea se
+   * STERGEA din linie. Dar o singura cheie de fisier are vreo 130 de caractere, iar poarta comenzii
+   * primeste pana la 40: un client care incarca sapte poze pentru un fototapet trecea de 2.000 si
+   * isi pierdea TOATA personalizarea la prima recitire a cosului, in tacere. Ramanea in cos o linie
+   * care arata ca un produs obisnuit.
+   */
+  const cuFisiere: Record<string, unknown> = {
+    dim: { latime: 350, inaltime: 250 },
+    poze: Array.from({ length: 7 }, (_, i) =>
+      `products/customizations/11111111-1111-4111-8111-111111111111/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeee${i}-0123456789abcdef01234567.jpg`),
+  };
+  assert.deepEqual(linie(cuFisiere).customization, cuFisiere, "sapte poze si personalizarea dispare");
+
+  /*
+   * ⚠ SI CE SE INTAMPLA PESTE MARGINEA ADEVARATA: se arunca LINIA, nu personalizarea ei. Stearsa
+   * numai ea, linia ramanea comandabila si se producea o cana negravata pentru cine a cerut una
+   * gravata. O linie lipsa din cos se vede.
+   */
   const uriasa: Record<string, string> = {};
   for (let i = 0; i < 500; i++) uriasa[`c${i}`] = "x".repeat(50);
-  assert.equal(linie(uriasa).customization, undefined);
+  assert.equal(linie(uriasa), undefined, "linia care nu incape a ramas in cos fara personalizare");
+});
+
+test("⚠ doua personalizari lungi si diferite nu pot cadea pe aceeasi cheie", () => {
+  /*
+   * ⚠ CHEIA SE TAIE, SI TAIEREA POATE CONTOPI. Partea de personalizare din cheie se margineste la
+   * 2.000 de caractere. Doua comenzi de fototapet cu aceleasi campuri si ALTE fisiere au primele
+   * mii de caractere identice — deci, taiate sec, dadeau aceeasi cheie: a doua adaugare doar
+   * crestea cantitatea primeia, si clientul primea de doua ori acelasi tipar. Exact defectul de la
+   * care s-a plecat cand personalizarea a intrat in identitatea liniei.
+   */
+  const cheia = (ultima: string) => lineKey({
+    productId: "p1",
+    customization: {
+      a: "x".repeat(2100),
+      z: ultima,
+    },
+  });
+  assert.notEqual(cheia("poza-unu.jpg"), cheia("poza-doi.jpg"), "doua personalizari diferite s-au contopit");
+
+  /* Perechea: aceeasi personalizare da chiar aceeasi cheie, deci liniile se pliaza cand trebuie. */
+  assert.equal(cheia("poza-unu.jpg"), cheia("poza-unu.jpg"));
 });
 
 test("⚠ doua personalizari diferite NU se pliaza la normalizare", () => {

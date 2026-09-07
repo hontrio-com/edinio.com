@@ -3,9 +3,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getCartSessionId } from "@/lib/cart-session";
 import { getCartPricing } from "@/lib/actions/store.actions";
-import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
+import { pretulBucatii, pretulLiniei } from "@/lib/storefront/cart/pret-linie";
 
 /**
  * Cosul storefrontului: stare in memorie oglindita in localStorage, per magazin.
@@ -214,24 +214,26 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
     return () => { activ = false; };
   }, [hydrated, businessId, cheieProduse]);
 
-  const pretUnitar = useMemo(() => (item: CartItem): number => {
-    const reguli = preturi[item.productId];
-    if (!reguli) return item.price;
-    const varianta = item.variantTitle ? reguli.combos[item.variantTitle] : undefined;
-    return varianta != null ? varianta : reguli.price;
-  }, [preturi]);
-
-  const linie = useMemo(() => (item: CartItem) => {
-    const unitar = pretUnitar(item);
-    const trepte = construiesteTrepte(preturi[item.productId]?.tiers, unitar);
-    return pretPeTrepte(trepte, item.quantity, unitar);
-  }, [preturi, pretUnitar]);
+  /*
+   * ⚠ SOCOTEALA S-A MUTAT IN `cart/pret-linie.ts`, si nu de dragul ordinii.
+   *
+   * Cat traia aici, in componenta, nu putea fi probata fara browser — iar proiectul n-are jsdom.
+   * Asa a putut sa intre in productie un cos care arata pretul de CATALOG pentru un produs
+   * personalizat, in timp ce serverul incasa pretul adevarat: 89 de lei pe ecran, 778,75 in
+   * comanda. Acum e o functie pura, langa o proba care pune fata in fata numarul cosului cu chiar
+   * formula pe care o foloseste poarta comenzii.
+   */
+  const linie = useMemo(() => (item: CartItem) => pretulLiniei(item, preturi[item.productId]), [preturi]);
 
   const lineTotal = (item: CartItem) => linie(item).subtotal;
   const lineSavings = (item: CartItem) => linie(item).savings;
-  // Acelasi `pretUnitar` din care porneste si `linie`, expus ca sa nu mai fie
-  // nevoie de `item.price` nicaieri in afara.
-  const lineUnit = (item: CartItem) => pretUnitar(item);
+  // Aceeasi sursa din care porneste si `linie`, expusa ca sa nu mai fie nevoie
+  // de `item.price` nicaieri in afara.
+  //
+  // ⚠ POARTA SI PERSONALIZAREA. Fara ea randul scria „2 buc x 89 lei" langa un
+  // total de 1.557,50, si invariantul „unitar x cantitate = total + economie"
+  // cadea tocmai pe liniile la care se vede cel mai bine.
+  const lineUnit = (item: CartItem) => pretulBucatii(item, preturi[item.productId]);
 
   const total = items.reduce((s, i) => s + linie(i).subtotal, 0);
   const count = items.reduce((s, i) => s + i.quantity, 0);

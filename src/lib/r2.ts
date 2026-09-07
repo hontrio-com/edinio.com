@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Key extraction recognizes every equivalent origin (raw *.r2.dev + CDN domain),
@@ -143,6 +143,30 @@ export async function citesteDinR2(key: string): Promise<CitireR2> {
 export async function getFromR2(key: string): Promise<Buffer | null> {
   const r = await citesteDinR2(key);
   return r.fel === "octeti" ? r.octeti : null;
+}
+
+/**
+ * Exista obiectul asta, fara sa-i aducem octetii?
+ *
+ * ⚠ DE CE NU `getFromR2(...) !== null`. Aia descarca fisierul intreg doar ca sa afle daca e
+ * acolo. Pe drumul pentru care s-a scris functia — `/api/img`, care raspunde cu o REDIRECTARE
+ * catre varianta gata facuta — octetii nu-i trebuie nimanui: ii ia browserul, direct de la
+ * Cloudflare. O varianta de un megaoctet adusa si aruncata la fiecare cerere ar fi transformat
+ * chiar economia pe care o cauta ruta intr-o cheltuiala de timp.
+ *
+ * ⚠ SI RASPUNDE `false` NUMAI LA LIPSA ADEVARATA. `esteObiectLipsa` deosebeste „nu exista" de
+ * „nu am voie" / „galeata nu e acolo" — vezi nota de la ea. O credentiala schimbata ar fi iesit
+ * ca „nu exista" pe TOATE obiectele deodata, iar apelantul ar fi refacut linistit tot depozitul.
+ * Aici, o asemenea cadere ARUNCA, si apelantul hotaraste ce face cu ea.
+ */
+export async function existaInR2(key: string): Promise<boolean> {
+  try {
+    await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));
+    return true;
+  } catch (e) {
+    if (esteObiectLipsa(e)) return false;
+    throw e;
+  }
 }
 
 export async function deleteFromR2(key: string): Promise<void> {

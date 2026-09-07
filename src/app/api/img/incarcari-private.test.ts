@@ -63,7 +63,7 @@ const HOOK = `data:text/javascript,${encodeURIComponent(
      if (specifier === "@/lib/r2") {
        return {
          url: "data:text/javascript," + encodeURIComponent(
-           "export const getFromR2 = async (k) => globalThis.__r2Citeste(k); export const uploadToR2 = async (b, k, t) => globalThis.__r2Scrie(b, k, t);"
+           "export const getFromR2 = async (k) => globalThis.__r2Citeste(k); export const uploadToR2 = async (b, k, t) => globalThis.__r2Scrie(b, k, t); export const existaInR2 = async (k) => globalThis.__r2Exista(k);"
          ),
          shortCircuit: true, format: "module",
        };
@@ -83,6 +83,7 @@ const HOOK = `data:text/javascript,${encodeURIComponent(
 type Global = typeof globalThis & {
   __r2Citeste: (k: string) => Promise<Buffer | null>;
   __r2Scrie: (b: Buffer, k: string, t: string) => Promise<string>;
+  __r2Exista: (k: string) => Promise<boolean>;
   __sharpChemat: unknown[];
 };
 
@@ -114,7 +115,18 @@ before(async () => {
   };
   g.__r2Scrie = async (_b, k) => {
     scrieri.push(k);
+    depozit[k] = Buffer.from("octeti-webp");
     return `${R2_PUBLIC}/${k}`;
+  };
+  /*
+   * ⚠ VERIFICAREA DE EXISTENTA SE NUMARA CA CITIRE. De cand ruta raspunde cu o redirectare, ea nu
+   * mai ADUCE varianta, ci doar intreaba daca e acolo — iar probele de mai jos masoara „depozitul
+   * nici nu se atinge". Netrecuta prin `citiri`, o cheie de cumparator ajunsa pana la `existaInR2`
+   * ar fi ramas nevazuta de exact proba scrisa s-o prinda.
+   */
+  g.__r2Exista = async (k) => {
+    citiri.push(k);
+    return depozit[k] !== undefined;
   };
   g.__sharpChemat = [];
 
@@ -256,15 +268,53 @@ test("⚠ si bara LITERALA, si `%2F`: amandoua sunt aceeasi cale", async () => {
    PERECHEA POZITIVA — fara ea, probele de mai sus trec si cu ruta stricata cu totul
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 
-test("⚠ POZITIV: imaginea de produs primeste octeti si isi scrie varianta", async () => {
+test("⚠ POZITIV: imaginea de produs isi scrie varianta si primeste DRUMUL catre ea", async () => {
+  /*
+   * ⚠ RUTA NU MAI CARA OCTETII, ARATA DRUMUL. Pana pe 07.09.2026 raspundea cu imaginea insasi,
+   * ceea ce punea Vercel — care factureaza transferul — pe drumul fiecarui octet de poza din
+   * platforma. Acum scrie varianta si trimite browserul direct la ea, pe domeniul depozitului,
+   * unde egressul e zero.
+   *
+   * ⚠ SI TOTUSI SE CERE CA VARIANTA SA FI FOST SCRISA INAINTE de redirectare. Asta e afirmatia
+   * care tine noul drum in picioare: o redirectare catre un obiect care nu exista nu e o poza mai
+   * putin clara, e o POZA RUPTA. Ordinea „scrie, apoi trimite" nu se poate inversa.
+   */
   depozit[CHEIE_PRODUS] = Buffer.from("octetii-produsului");
 
   const r = await GET(cere(CHEIE_PRODUS, 512));
 
-  assert.equal(r.status, 200, "refuzul a prins si imaginile de produs ale tuturor magazinelor");
-  assert.equal(r.headers.get("Content-Type"), "image/webp");
-  assert.equal(Buffer.from(await r.arrayBuffer()).toString(), "octeti-webp");
-  assert.deepEqual(scrieri, [`_optim/w512q75/${CHEIE_PRODUS}.webp`], "varianta nu s-a mai scris");
+  const varianta = `_optim/w512q75/${CHEIE_PRODUS}.webp`;
+  assert.equal(r.status, 302, "refuzul a prins si imaginile de produs ale tuturor magazinelor");
+  assert.equal(r.headers.get("location"), `${R2_PUBLIC}/${varianta}`, "drumul nu duce la varianta");
+  assert.deepEqual(scrieri, [varianta], "varianta nu s-a mai scris");
+
+  /* ⚠ Si niciun octet de poza n-a trecut prin noi — tocmai asta e economia. */
+  assert.equal((await r.arrayBuffer()).byteLength, 0, "raspunsul poarta octeti");
+
+  /*
+   * ⚠ REDIRECTAREA SE TINE IN CACHE. Fara antetul asta, functia s-ar trezi la fiecare cerere de
+   * poza ca sa raspunda mereu acelasi lucru — costul mutat din transfer in invocari, nu inlaturat.
+   */
+  assert.match(String(r.headers.get("cache-control")), /immutable/);
+});
+
+test("⚠ a doua cerere NU mai reface varianta — se transforma o data, vreodata", async () => {
+  /*
+   * ⚠ ASTA E CHIAR MOTIVUL LUCRARII. Redimensionatorul Cloudflare factureaza transformari unice
+   * pe LUNA: acelasi fisier se plateste iar in fiecare ciclu, fiindca inchiriezi taietorul, nu
+   * poza taiata. Varianta scrisa in depozit se face O DATA si ramane.
+   *
+   * Se cere prin PURTARE: a doua cerere nu mai cheama `sharp` si nu mai scrie nimic.
+   */
+  depozit[CHEIE_PRODUS] = Buffer.from("octetii-produsului");
+  await GET(cere(CHEIE_PRODUS, 512));
+  assert.equal(scrieri.length, 1, "prima cerere n-a scris varianta");
+
+  scrieri = [];
+  const r = await GET(cere(CHEIE_PRODUS, 512));
+
+  assert.equal(r.status, 302);
+  assert.deepEqual(scrieri, [], "varianta s-a refacut la a doua cerere");
 });
 
 test("⚠ POZITIV: imaginea de produs care nu e in depozit cade tot pe 302", async () => {
@@ -283,5 +333,6 @@ test("⚠ POZITIV: o poza de produs al carei NUME contine cuvantul trece — ref
 
   const r = await GET(cere(cheie, 512));
 
-  assert.equal(r.status, 200, "refuzul se uita la substring, nu la segmentele caii");
+  assert.equal(r.status, 302, "refuzul se uita la substring, nu la segmentele caii");
+  assert.equal(r.headers.get("location"), `${R2_PUBLIC}/_optim/w512q75/${cheie}.webp`);
 });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
-import { getFromR2, uploadToR2 } from "@/lib/r2";
+import { existaInR2, getFromR2, uploadToR2 } from "@/lib/r2";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { MAX_PIXELI } from "@/lib/utils/file-signature";
 import { PREFIX_INCARCARI } from "@/lib/customization/adresa";
@@ -8,6 +8,20 @@ import { PREFIX_INCARCARI } from "@/lib/customization/adresa";
 export const runtime = "nodejs";
 
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL ?? "";
+
+/**
+ * Unde trimitem browserul dupa varianta gata facuta.
+ *
+ * ⚠ CDN-UL INAINTEA GALETII BRUTE, si nu din obisnuinta: domeniul Cloudflare e cel care tine
+ * fisierul la margine si care nu taxeaza egress. Galeata bruta (`*.r2.dev`) ramane ca rezerva
+ * pentru mediile in care CDN-ul nu e configurat.
+ *
+ * ⚠ SI FARA NICIUNA DIN ELE se serveste ca pana acum, cu octetii prin noi. Un mediu de proba fara
+ * domeniu public trebuie sa arate poze, nu sa redirecteze catre nicaieri.
+ */
+function adresaPublica(): string {
+  return (process.env.NEXT_PUBLIC_CDN_URL || R2_PUBLIC_URL || "").replace(/\/+$/, "");
+}
 
 // Only allow our own upload prefixes + image extensions — the route must not be
 // usable to resize arbitrary objects.
@@ -141,8 +155,30 @@ export async function GET(req: NextRequest) {
   try {
     const variantKey = `_optim/w${width}q${quality}/${key}.webp`;
 
-    let out = await getFromR2(variantKey);
-    if (!out) {
+    /*
+     * ═══ ⚠ RUTA ASTA ARATA DRUMUL, NU MAI CARA OCTETII ═══
+     *
+     * Pana acum raspundea cu imaginea insasi. Mergea, dar punea Vercel pe drumul FIECARUI octet
+     * de poza din platforma, iar Vercel factureaza transferul — pe cand depozitul, servit prin
+     * domeniul lui Cloudflare, are egress ZERO.
+     *
+     * Deci acum: ne asiguram ca varianta EXISTA, si trimitem browserul direct la ea. Octetii nu
+     * mai trec pe la noi niciodata. Ce ramane de partea noastra e o redirectare de cateva sute de
+     * octeti, marcata `immutable` — deci o tine si marginea Vercel, si browserul, si functia nu se
+     * mai trezeste a doua oara pentru aceeasi adresa.
+     *
+     * ⚠ SI DE-AIA NU SE MAI PREGENEREAZA NIMIC. Varianta se face la prima cerere si ramane pe
+     * veci; se nasc doar latimile pe care le cere cineva cu adevarat. Alternativa — sa le facem pe
+     * toate dinainte — insemna 25.227 de imagini × 8 latimi ≈ 200.000 de obiecte si vreo 6 GB din
+     * cele 10 GB gratuite, ca sa acopere si latimi pe care nu le cere nimeni. Mai rau: o varianta
+     * lipsa ar fi fost o POZA RUPTA, iar imaginile intra in depozit pe patru drumuri. Asa, ruta se
+     * vindeca singura si nu poate lipsi nimic.
+     *
+     * ⚠ EXISTENTA SE VERIFICA CU `existaInR2`, nu aducand fisierul: octetii nu-i trebuie nimanui
+     * aici, iar o varianta de un megaoctet adusa si aruncata la fiecare cerere ar fi mancat chiar
+     * castigul.
+     */
+    if (!(await existaInR2(variantKey))) {
       const original = await getFromR2(key);
       if (!original) return fallback();
       /*
@@ -150,17 +186,54 @@ export async function GET(req: NextRequest) {
        * megaoctet se desface in peste un gigaoctet de memorie, iar capatul asta e public si scutit
        * de poarta MFA. Fara randul asta, o singura cerere omoara functia.
        */
-      out = await sharp(original, { limitInputPixels: MAX_PIXELI })
+      const out = await sharp(original, { limitInputPixels: MAX_PIXELI })
         .rotate()
         .resize({ width, withoutEnlargement: true })
         .webp({ quality })
         .toBuffer();
-      try { await uploadToR2(out, variantKey, "image/webp"); } catch { /* caching is best-effort */ }
+
+      /*
+       * ⚠ AICI SCRIEREA NU MAI E „best-effort", si asta e schimbarea care conteaza.
+       *
+       * Cat timp raspunsul purta octetii, o scriere esuata insemna doar ca se reface data
+       * viitoare. Acum adresa catre care trimitem TREBUIE sa existe, altfel browserul primeste
+       * 404 — adica o poza rupta. Deci daca scrierea cade, se cade inapoi pe servirea octetilor,
+       * ca pana acum: mai scump, dar intreg.
+       */
+      try {
+        await uploadToR2(out, variantKey, "image/webp");
+      } catch {
+        return new NextResponse(new Uint8Array(out), {
+          headers: {
+            "Content-Type": "image/webp",
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        });
+      }
     }
 
-    return new NextResponse(new Uint8Array(out), {
+    const gazda = adresaPublica();
+    /* Fara domeniu public configurat n-avem unde trimite: se serveste ca pana acum. */
+    if (!gazda) {
+      const out = await getFromR2(variantKey);
+      if (!out) return fallback();
+      return new NextResponse(new Uint8Array(out), {
+        headers: {
+          "Content-Type": "image/webp",
+          "Cache-Control": "public, max-age=31536000, immutable",
+        },
+      });
+    }
+
+    return new NextResponse(null, {
+      status: 302,
       headers: {
-        "Content-Type": "image/webp",
+        Location: `${gazda}/${variantKey}`,
+        /*
+         * ⚠ CHIAR REDIRECTAREA SE TINE IN CACHE. Fara antetul asta, functia s-ar trezi la fiecare
+         * cerere de poza din platforma ca sa raspunda de fiecare data acelasi lucru — adica exact
+         * costul pe care mutarea il inlatura, doar ca mutat din transfer in invocari.
+         */
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });

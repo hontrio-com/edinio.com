@@ -118,9 +118,16 @@ test("⚠ butonul de finalizare din cos e stins cat timp o linie nu s-a validat"
 });
 
 test("⚠ finalizarea nu se poate trimite, si se spune de ce", () => {
+  /*
+   * ⚠ AFIRMATIA S-A INTORS PE 08.09.2026: se cere predicatul COMBINAT.
+   *
+   * Se filtra pe `linePretNevalidat`, adica numai pe „nu stiu inca". Dar o linie de REVIZUIT
+   * (marimea stinsa, optiunea disparuta) intra si ea in total cu pretul ei de BAZA, deci sumele
+   * sunt la fel de gresite din amandoua pricinile. Vezi `pretulNesigur`.
+   */
   const nucleu = sursa(NUCLEU);
-  assert.match(nucleu, /const liniiNevalidate = items\.filter\(linePretNevalidat\)/,
-    "finalizarea nu mai stie care linii au pretul nevalidat");
+  assert.match(nucleu, /const liniiNevalidate = items\.filter\(linePretNesigur\)/,
+    "finalizarea judeca iar numai «nu stiu inca», nu si liniile stricate");
 
   const form = sursa(FORMULAR);
   assert.match(form, /disabled=\{[^}]*liniiNevalidate\.length > 0\}/,
@@ -137,9 +144,16 @@ test("⚠ si «Comanda acum» refuza cat timp o linie PURTATA DIN COS nu s-a val
    * incaseaza pretul adevarat.
    */
   const s = sursa(COMANDA_ACUM);
-  assert.match(s, /linePretNevalidat/, "«Comanda acum» nu intreaba nimic despre liniile din cos");
+  /*
+   * ⚠ SI PE LINIILE STRICATE, nu doar pe cele nevalidate. Aici se filtra pe `linePretNevalidat`:
+   * un produs din cos caruia comerciantul ii stinsese marimea era purtat mai departe, clientul
+   * completa tot formularul, si abia serverul il refuza. Nu se pierdeau bani; omul afla prea tarziu.
+   */
+  assert.match(s, /cosMagazin\.linePretNesigur\(i\)/, "«Comanda acum» nu mai cantareste amandoua pricinile");
   assert.match(s, /disabled=\{isPending \|\| belowMinOrder \|\| liniiNevalidate > 0\}/,
-    "«Comanda acum» pleaca peste un pret nevalidat purtat din cos");
+    "«Comanda acum» pleaca peste un pret nesigur purtat din cos");
+  /* ⚠ Si i se spune omului CE anume, altfel un buton stins nu-l ajuta cu nimic. */
+  assert.match(s, /optiuni care nu mai sunt disponibile/, "nu se spune ca linia din cos e stricata");
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -238,4 +252,36 @@ test("⚠ si INDICIILE care atarna de totalul incomplet tac", () => {
     assert.match(sursa(fisier), /\{!liniiNevalidate &&[^}]*belowMinOrder/,
       `${nume} arata mai departe cat mai lipseste pana la comanda minima`);
   }
+});
+
+test("⚠ NICIUN NUMAR nu mai pleaca dintr-un total incomplet, nici de pe buton", () => {
+  /*
+   * ═══ ⚠ ULTIMELE DOUA LOCURI ═══
+   *
+   * Butonul de plata era deja stins, dar ETICHETA lui scria mai departe „Plata la livrare - 129
+   * lei" pentru un cos care valoreaza 950: ultimul numar pe care il vede omul inainte de plata.
+   * Iar „Comanda minima este X, mai adauga Y" se socotea din acelasi total.
+   */
+  for (const [nume, fisier] of [["finalizarea", FORMULAR], ["«Comanda acum»", COMANDA_ACUM]] as const) {
+    const s = sursa(fisier);
+    assert.match(s, /liniiNevalidate[^\n]*\n?[^\n]*Se verifica preturile\.\.\./,
+      `${nume} scrie mai departe totalul pe butonul stins`);
+    assert.match(s, /\{!liniiNevalidate[^&]*&& belowMinOrder/,
+      `${nume} arata mai departe cat mai lipseste pana la comanda minima`);
+  }
+});
+
+test("⚠ si bara de progres din PAGINILE de cos tace, nu doar cea din sertar", () => {
+  /*
+   * Sertarul fusese reparat, dar cele trei pagini de cos (Split, Wide, Compact) folosesc bucata
+   * comuna `ProgresTransport`, si ea nu stia. Se putea vedea „Mai adauga 111 lei pentru livrare
+   * gratuita" socotit cu fototapetul la 89 in loc de 910, pe un prag deja trecut.
+   */
+  const s = sursa(PIESE);
+  const i = s.indexOf("export function ProgresTransport");
+  assert.ok(i > 0, "bara de progres comuna si-a schimbat numele");
+  const corp = s.slice(i, i + 1200);
+  assert.match(corp, /cos\.items\.some\(cos\.linePretNesigur\)/,
+    "bara de progres nu intreaba daca vreo suma e incompleta");
+  assert.match(corp, /Se verifica preturile\.\.\./, "bara intreaba, dar arata numarul oricum");
 });

@@ -358,11 +358,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
    * loc de 910 pe un fototapet. `placeOrder` recalculeaza si incaseaza 910, deci omul ar confirma
    * un total si i s-ar cere altul.
    *
+   * ⚠ SI LINIILE DE REVIZUIT, nu doar cele nevalidate. O linie purtata din cos poate fi stricata
+   * (comerciantul a stins marimea, a scos optiunea) fara ca asta sa se vada aici: „Comanda acum" o
+   * ducea mai departe, clientul completa tot formularul, si abia serverul o refuza. Nu se pierdeau
+   * bani, dar omul afla prea tarziu ce nu se poate. Vezi `pretulNesigur`.
+   *
    * ⚠ Fara `CartProvider` (miniatura din editor) nu exista nici cerere, nici buton adevarat, deci
    * nu e nimic de asteptat.
    */
   const liniiNevalidate = cosMagazin
-    ? cart.filter((i) => cosMagazin.linePretNevalidat(i)).length
+    ? cart.filter((i) => cosMagazin.linePretNesigur(i)).length
     : 0;
   /*
    * Setul „cumparate frecvent impreuna" asezat peste liniile purtate din cos.
@@ -1589,14 +1594,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 )}
                 <div className="flex justify-between text-muted-foreground">
                   <span>Transport</span>
-                  <span className={shipping === 0 ? "font-medium" : "font-medium text-foreground"} style={shipping === 0 ? { color } : undefined}>
-                    {shipping === 0 ? "Gratuit" : formatPrice(shipping)}
+                  <span className={shipping === 0 && !liniiNevalidate ? "font-medium" : "font-medium text-foreground"} style={shipping === 0 && !liniiNevalidate ? { color } : undefined}>
+                    {liniiNevalidate > 0 ? "..." : shipping === 0 ? "Gratuit" : formatPrice(shipping)}
                   </span>
                 </div>
                 {vatConfig.vat_enabled && vatConfig.show_vat_breakdown && vatAmount > 0 && (
                   <div className="flex justify-between text-muted-foreground">
                     <span>TVA ({vatConfig.vat_rate}%){vatConfig.prices_include_vat ? " inclus" : ""}</span>
-                    <span className="font-medium text-foreground">{formatPrice(vatAmount)}</span>
+                    <span className="font-medium text-foreground">
+                      {liniiNevalidate > 0 ? "..." : formatPrice(vatAmount)}
+                    </span>
                   </div>
                 )}
                 <div className="flex justify-between font-bold text-base border-t border-border pt-2">
@@ -1626,7 +1633,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
 
               {errors._ && <p className="text-sm text-red-500 text-center">{errors._}</p>}
 
-              {belowMinOrder && (
+              {/*
+                ⚠ Pragul minim tace cat timp o linie purtata din cos are pretul nesigur: „mai adauga
+                X lei" se socoteste din acelasi `subtotal` in care linia intra cu pretul ei de baza,
+                deci ar cere o suma care nu e adevarata.
+              */}
+              {!liniiNevalidate && belowMinOrder && (
                 <p className="text-sm text-center text-muted-foreground">
                   Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount!)}</strong>. Mai adauga <strong className="text-foreground">{formatPrice(minOrderAmount! - subtotal)}</strong> pentru a comanda.
                 </p>
@@ -1640,7 +1652,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 <p role="status" className="text-sm text-center text-muted-foreground">
                   {cosMagazin?.pricingStare === "eroare"
                     ? <>Nu am putut verifica preturile produselor din cos. <button type="button" onClick={cosMagazin.reincearcaPreturile} className="underline font-medium text-foreground">Incearca din nou</button></>
-                    : <>Se verifica preturile produselor din cos...</>}
+                    : cosMagazin && cart.some((i) => cosMagazin.lineNeedsReview(i))
+                      ? <>Un produs din cos are optiuni care nu mai sunt disponibile. Deschide cosul si alege din nou.</>
+                      : <>Se verifica preturile produselor din cos...</>}
                 </p>
               )}
 
@@ -1648,8 +1662,15 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               <button type="submit" disabled={isPending || belowMinOrder || liniiNevalidate > 0}
                 className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                 style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}>
+                {/*
+                  ⚠ SI ETICHETA POARTA TOTALUL. Stins cum e, butonul tot scria „Plata la livrare -
+                  129 lei" pentru un cos care valoreaza 950: ultimul numar pe care il vede omul
+                  inainte de plata n-are voie sa fie unul incomplet.
+                */}
                 {isPending
                   ? <><Loader2 size={18} className="animate-spin" />Se proceseaza...</>
+                  : liniiNevalidate > 0
+                    ? <>Se verifica preturile...</>
                   : belowMinOrder
                     ? <>Comanda minima {formatPrice(minOrderAmount!)}</>
                     : paymentMethod === "cash_on_delivery"

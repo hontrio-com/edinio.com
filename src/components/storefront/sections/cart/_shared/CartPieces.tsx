@@ -152,6 +152,13 @@ export function CartLine({
    * omul confirma un numar pe care nimeni nu-l onora.
    */
   const nevalidat = cos.linePretNevalidat(item);
+  /*
+   * ⚠ SI LINIA DE REVIZUIT ISI ASCUNDE PRETUL. „Necesita actualizare" spunea deja ca linia e
+   * stricata, dar langa ea statea un pret de catalog: tricoul „XXL" cu marimea stinsa arata 50 in
+   * loc de 65, iar fototapetul fara „Premium" arata 89 in loc de 910. Cele doua mesaje raman
+   * deosebite; ce dispare din amandoua e numarul. Vezi `pretulNesigur`.
+   */
+  const nesigur = cos.linePretNesigur(item);
   // Pretul intreg al liniei, cel taiat cand se aplica o treapta. Prin definitia
   // din `pretPeTrepte` e chiar `unitar x cantitate`, adica `totalLinie +
   // economie`: asa raman toate trei numerele impacate intre ele.
@@ -231,8 +238,8 @@ export function CartLine({
               : "Necesita actualizare — deschide produsul si alege din nou"}
           </p>
         )}
-        {nevalidat
-          ? <p className="text-xs text-muted-foreground mt-1">Se verifica pretul...</p>
+        {nesigur
+          ? <p className="text-xs text-muted-foreground mt-1">{nevalidat ? "Se verifica pretul..." : "Pretul se recalculeaza"}</p>
           : <p className="text-xs text-muted-foreground mt-1">{formatPrice(pretBucata)} bucata</p>}
 
         {/* Zona de atins a butonului „Sterge" e adusa la inaltimea stepperului
@@ -259,14 +266,14 @@ export function CartLine({
       {/* Totalul liniei vine de la cos, nu din inmultire locala: doar acolo se
           aplica treptele de cantitate, si tot acolo se uita si serverul. */}
       <div className="shrink-0 text-right">
-        {nevalidat ? (
+        {nesigur ? (
           <p className="text-sm font-medium text-muted-foreground tabular-nums">...</p>
         ) : (
         <p className="text-sm sm:text-base font-bold tabular-nums" style={{ color }}>
           {formatPrice(totalLinie)}
         </p>
         )}
-        {!nevalidat && economie > 0 && (
+        {!nesigur && economie > 0 && (
           <>
             <p className="text-xs text-muted-foreground line-through tabular-nums">
               {formatPrice(intreg)}
@@ -307,7 +314,24 @@ export function ProgresTransport({
   pricing: CartPricing;
   color: string;
 }) {
+  const cos = useCart();
   if (!pricing.areaPrag) return null;
+
+  /*
+   * ⚠ PROGRESUL TACE CAT TIMP O SUMA E INCOMPLETA.
+   *
+   * „Mai adauga 111 lei pentru livrare gratuita" se socoteste din acelasi total in care fototapetul
+   * intra cu 89 in loc de 910: pragul putea fi DEJA trecut, iar omul ar fi pus in cos ceva de care
+   * n-avea nevoie. Sertarul o facea deja; cele trei pagini de cos folosesc bucata asta comuna, si
+   * ea nu stia.
+   */
+  if (cos.items.some(cos.linePretNesigur)) {
+    return (
+      <div className="p-3.5 rounded-2xl border border-border bg-surface">
+        <p className="text-sm text-muted-foreground">Se verifica preturile...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-3.5 rounded-2xl border border-border bg-surface">
@@ -358,7 +382,7 @@ export function RezumatCos({
    * lipsesc din ele chiar suplimentele: 89 in loc de 910 pe un fototapet. Numarul ar fi plauzibil
    * si gresit, iar clientul l-ar duce mai departe pana la finalizare.
    */
-  const liniiNevalidate = cos.items.filter(cos.linePretNevalidat).length;
+  const liniiNevalidate = cos.items.filter(cos.linePretNesigur).length;
   return (
     <div className="space-y-4">
       {/* Totalurile se schimba la fiecare apasare pe „+", fara reincarcare si

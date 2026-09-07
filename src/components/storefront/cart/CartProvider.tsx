@@ -6,7 +6,7 @@ import { getCartPricing } from "@/lib/actions/store.actions";
 import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { inlocuiesteLinia } from "@/lib/storefront/cart/editare";
-import { cereRevizuire, pretulNevalidat, pretulBucatii, pretulLiniei, rezumatulLiniei } from "@/lib/storefront/cart/pret-linie";
+import { cereRevizuire, pretulNevalidat, pretulNesigur, pretulBucatii, pretulLiniei, rezumatulLiniei } from "@/lib/storefront/cart/pret-linie";
 import { rezumatPersonalizare } from "@/lib/storefront/cart/normalize";
 
 /**
@@ -69,6 +69,15 @@ export interface CartContextValue {
    * plece pana nu se stie.
    */
   linePretNevalidat: (item: CartItem) => boolean;
+  /**
+   * Ne putem lega de pretul liniei? `false` cand ori nu-l stim inca, ori il stim stricat.
+   *
+   * ⚠ ASTA E INTREBAREA PE CARE O PUN SUMELE. `linePretNevalidat` si `lineNeedsReview` sunt pentru
+   * TEXTUL de langa linie, care trebuie sa fie deosebit („se verifica pretul" fata de „necesita
+   * actualizare"). Pentru subtotal, TVA, transport si total cele doua inseamna acelasi lucru: linia
+   * intra cu pretul ei de BAZA. Vezi `pretulNesigur`.
+   */
+  linePretNesigur: (item: CartItem) => boolean;
   /**
    * Cum a mers ultima cerere de preturi catre server.
    *
@@ -335,6 +344,8 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
    * din afara cele trei nu se deosebesc, iar niciunul dintre ele nu da voie sa se arate un pret.
    */
   const linePretNevalidat = (item: CartItem) => pretulNevalidat(item, preturi[item.productId]);
+  /* ⚠ Amandoua pricinile intr-una: vezi `pretulNesigur`. Sumele intreaba numai asta. */
+  const linePretNesigur = (item: CartItem) => pretulNesigur(item, preturi[item.productId]);
   /*
    * ⚠ Rezumatul se face DIN DEFINITIE, nu din valorile brute — vezi `rezumatulLiniei`. Fara ea,
    * cosul arata id-ul optiunii („91c8409f-8bdf-4a…") in loc de „Premium", si sarea peste
@@ -347,7 +358,7 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, replaceItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, linePretNevalidat, pricingStare, reincearcaPreturile: () => setIncercare((n) => n + 1), lineSummary, total, count, clear, restoreCart, sessionId, hydrated }}
+      value={{ items, addItem, replaceItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, linePretNevalidat, linePretNesigur, pricingStare, reincearcaPreturile: () => setIncercare((n) => n + 1), lineSummary, total, count, clear, restoreCart, sessionId, hydrated }}
     >
       {children}
     </CartContext.Provider>
@@ -411,6 +422,7 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
          * ingrijorat degeaba omul care isi aranjeaza pagina.
          */
         linePretNevalidat: () => false,
+        linePretNesigur: () => false,
         pricingStare: "gata",
         reincearcaPreturile: () => {},
         /* Fara `CartProvider` nu exista definitii, deci se cade pe rezumatul din valorile brute. */

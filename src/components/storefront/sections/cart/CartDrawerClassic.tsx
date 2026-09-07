@@ -41,10 +41,10 @@ export function CartDrawerClassic({
 }) {
   const {
     items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview,
-    linePretNevalidat, pricingStare, reincearcaPreturile, lineSummary, total, count,
+    linePretNevalidat, linePretNesigur, pricingStare, reincearcaPreturile, lineSummary, total, count,
   } = useCart();
   /* Cate linii personalizate asteapta inca validarea pretului. Vezi `pretulNevalidat`. */
-  const liniiNevalidate = items.filter(linePretNevalidat).length;
+  const liniiNevalidate = items.filter(linePretNesigur).length;
 
   /**
    * Sertarul se declara `aria-modal`, deci trebuie sa si tina focusul inauntru.
@@ -265,8 +265,10 @@ export function CartDrawerClassic({
                       cererea de preturi nu s-a intors, sau a picat, aratand 89 nu spunem „usor
                       vechi", ci alt ordin de marime.
                     */}
-                    {linePretNevalidat(item) ? (
-                      <p className="text-xs text-muted-foreground mt-0.5">Se verifica pretul...</p>
+                    {linePretNesigur(item) ? (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {linePretNevalidat(item) ? "Se verifica pretul..." : "Pretul se recalculeaza"}
+                      </p>
                     ) : (
                       <>
                         {item.quantity > 1 && (

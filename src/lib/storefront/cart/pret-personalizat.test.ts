@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { cereRevizuire, pretulBucatii, pretulLiniei, pretulNevalidat, type RegulaPretCos } from "./pret-linie";
+import { cereRevizuire, pretulBucatii, pretulLiniei, pretulNesigur, pretulNevalidat, type RegulaPretCos } from "./pret-linie";
 import type { CartItem } from "./normalize";
 
 /**
@@ -261,4 +261,35 @@ test("⚠ pretul afisat ramane cel de baza, dar linia NU mai trece tacut", () =>
   const faraXXL: RegulaPretCos = { ...TRICOU, combos: { "S / Rosu": 50 } };
   assert.equal(pretulLiniei(item, faraXXL).subtotal, 50, "premisa s-a schimbat: nu mai cade pe baza");
   assert.equal(cereRevizuire(item, faraXXL), true);
+});
+
+test("⚠ `pretulNesigur` cuprinde AMANDOUA pricinile, si numai ele", () => {
+  /*
+   * ═══ ⚠ DE CE E O A TREIA INTREBARE ═══
+   *
+   * Pentru OM, „inca nu stiu pretul" si „stiu, si e stricat" sunt lucruri diferite si trebuie sa
+   * scrie altceva pe ecran. Pentru SUME sunt acelasi lucru: linia intra in total cu pretul ei de
+   * BAZA, iar el poate fi 89 in loc de 910.
+   *
+   * Fara intrebarea asta, fiecare ecran ar fi trebuit sa-si aduca aminte sa le puna pe amandoua,
+   * iar primul care uita una lasa jumatate din gaura deschisa. Asa s-a si intamplat: dupa ce s-a
+   * inchis cazul „nevalidat", cazul „de revizuit" a mai aratat o vreme un pret de catalog in cos.
+   */
+  const nevalidata = linie({ price: 89, customization: { dim: { latime: 350, inaltime: 250 }, mat: "prm" } });
+  assert.equal(pretulNesigur(nevalidata, undefined), true, "«nu stiu inca» nu mai e nesigur");
+
+  const stricata = linie({ productId: "t", name: "Tricou", price: 50, variantTitle: "XXL / Rosu", customization: { text: "Robert" } });
+  const faraXXL: RegulaPretCos = { ...TRICOU, combos: { "S / Rosu": 50 } };
+  assert.equal(pretulNesigur(stricata, faraXXL), true, "«stricat» nu mai e nesigur");
+  /* ⚠ Si chiar era invizibil pentru cealalta intrebare: pretul E validat, doar ca e al altei marimi. */
+  assert.equal(pretulNevalidat(stricata, faraXXL), false, "premisa s-a schimbat: cazul era deja acoperit");
+
+  /*
+   * ⚠ PERECHEA CARE MARGINESTE. Fara ea, o functie care raspunde mereu `true` ar fi trecut, si
+   * atunci butonul de comanda ar fi ramas stins pentru totdeauna, pe orice cos.
+   */
+  assert.equal(pretulNesigur(linie({ price: 50 }), { price: 50, combos: {}, tiers: null, customization: null }), false,
+    "o linie perfect buna a fost declarata nesigura");
+  const buna = linie({ productId: "t", name: "Tricou", price: 50, variantTitle: "S / Rosu", customization: { text: "Robert" } });
+  assert.equal(pretulNesigur(buna, TRICOU), false, "o linie cu varianta si gravura valide a fost declarata nesigura");
 });

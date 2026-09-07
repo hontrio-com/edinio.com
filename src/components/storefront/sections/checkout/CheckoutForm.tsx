@@ -477,7 +477,8 @@ export function CheckoutForm({
           {/* Pragul comerciantului, cu cat mai lipseste, in aceiasi termeni ca
               in sertar. Fara el, clientul completa tot formularul si afla de
               prag abia de la server, dupa apasarea butonului. */}
-          {belowMinOrder && (
+          {/* ⚠ Si pragul minim tace: „mai adauga X lei" iese din acelasi total incomplet. */}
+          {!liniiNevalidate.length && belowMinOrder && (
             <p className="text-xs text-center text-muted-foreground">
               Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount!)}</strong>. Mai adauga <strong className="text-foreground">{formatPrice(minOrderAmount! - goodsTotal)}</strong> pentru a finaliza.
             </p>
@@ -515,11 +516,18 @@ export function CheckoutForm({
             className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}
           >
+            {/*
+              ⚠ SI ETICHETA BUTONULUI POARTA TOTALUL. Stins cum e, el tot scria „Plata la livrare -
+              129 lei" pentru un cos care valoreaza 950: ultimul numar pe care il vede omul inainte
+              de plata n-are voie sa fie unul incomplet.
+            */}
             {isPending
               ? <><Loader2 className="h-[18px] w-[18px] animate-spin" />Se proceseaza...</>
-              : paymentMethod === "cash_on_delivery"
-                ? <><Banknote className="h-5 w-5" />Plata la livrare - {formatPrice(grandTotal)}</>
-                : <><CreditCard className="h-5 w-5" />{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {formatPrice(grandTotal)}</>
+              : liniiNevalidate.length > 0
+                ? <>Se verifica preturile...</>
+                : paymentMethod === "cash_on_delivery"
+                  ? <><Banknote className="h-5 w-5" />Plata la livrare - {formatPrice(grandTotal)}</>
+                  : <><CreditCard className="h-5 w-5" />{paymentMethods.find((m) => m.type === paymentMethod)?.label ?? "Plateste"} - {formatPrice(grandTotal)}</>
             }
           </button>
           <p className="text-center text-xs text-muted-foreground">

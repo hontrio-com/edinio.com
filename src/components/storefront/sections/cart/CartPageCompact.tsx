@@ -46,13 +46,13 @@ export function CartPageCompact({
   const catreProduse = chromeCatalog?.catalogRoot ?? `${basePath}/`;
   const {
     items, addItem, updateQty, removeItem, total, count, hydrated,
-    linePretNevalidat, pricingStare, reincearcaPreturile,
+    linePretNesigur, pricingStare, reincearcaPreturile,
   } = useCart();
   /*
    * ⚠ Cate linii personalizate asteapta inca validarea pretului. Pana atunci `grandTotal` e socotit
    * cu pretul lor de BAZA, fara suplimente: 89 in loc de 910 pe un fototapet. Vezi `pretulNevalidat`.
    */
-  const liniiNevalidate = items.filter(linePretNevalidat).length;
+  const liniiNevalidate = items.filter(linePretNesigur).length;
   const pricing = computeCartPricing({ total, shippingCost, freeShippingThreshold, minOrderAmount, vat });
   const areRecomandari = settings.showRecommendations !== false && !preview;
   const arePrag = settings.showProgress !== false;

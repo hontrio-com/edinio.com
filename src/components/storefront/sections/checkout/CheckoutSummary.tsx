@@ -22,7 +22,7 @@ export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; col
   const { items } = motor;
   // Totalul liniei vine tot de la cos, ca sa fie acelasi numar aici, in sertar,
   // pe pagina de cos si la server.
-  const { lineTotal, lineSavings, lineUnit, lineNeedsReview, linePretNevalidat, lineSummary } = useCart();
+  const { lineTotal, lineSavings, lineUnit, lineNeedsReview, linePretNevalidat, linePretNesigur, lineSummary } = useCart();
   return (
       <div className="space-y-2">
         {items.map((item) => (
@@ -68,12 +68,14 @@ export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; col
                 inainte de plata, deci e chiar locul in care o cifra plauzibila si gresita costa cel
                 mai mult. Vezi `pretulNevalidat`.
               */}
-              {linePretNevalidat(item)
-                ? <p className="text-xs text-muted-foreground mt-0.5">{item.quantity} buc, se verifica pretul...</p>
+              {linePretNesigur(item)
+                ? <p className="text-xs text-muted-foreground mt-0.5">
+                    {item.quantity} buc, {linePretNevalidat(item) ? "se verifica pretul..." : "pretul se recalculeaza"}
+                  </p>
                 : <p className="text-xs text-muted-foreground mt-0.5">{item.quantity} buc &times; {formatPrice(lineUnit(item))}</p>}
             </div>
             <div className="shrink-0 text-right">
-              {linePretNevalidat(item) ? (
+              {linePretNesigur(item) ? (
                 <p className="text-sm font-medium text-muted-foreground tabular-nums">...</p>
               ) : (
                 <>

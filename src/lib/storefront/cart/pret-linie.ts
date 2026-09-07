@@ -296,3 +296,30 @@ export function pretulNevalidat(item: CartItem, regula: RegulaPretCos | undefine
   if (!valori || typeof valori !== "object" || Object.keys(valori).length === 0) return false;
   return !regula;
 }
+
+/**
+ * Ne putem lega de pretul acestei linii?
+ *
+ * ═══ ⚠ DOUA FELURI DE „NU", O SINGURA URMARE ═══
+ *
+ * `pretulNevalidat` spune „inca nu stiu, sau n-am aflat": preturile se incarca, cererea a picat,
+ * produsul n-a venit in raspuns. `cereRevizuire` spune „stiu, si e stricat": marimea a fost stinsa,
+ * optiunea a disparut, campul a devenit obligatoriu.
+ *
+ * Pentru OM cele doua sunt lucruri diferite si trebuie sa scrie altceva pe ecran, „se verifica
+ * pretul" fata de „necesita actualizare". Pentru SUME insa sunt acelasi lucru: in amandoua cazurile
+ * linia intra in total cu pretul ei de BAZA, iar el poate fi 89 in loc de 910. Un total socotit cu
+ * el e un numar plauzibil si gresit, la fel de gresit din amandoua pricinile.
+ *
+ * ⚠ DE-AIA EXISTA INTREBAREA ASTA A TREIA. Fara ea, fiecare ecran ar fi trebuit sa-si aduca aminte
+ * sa le puna pe amandoua, iar primul care uita una lasa exact jumatate din gaura deschisa. Asa s-a
+ * si intamplat: dupa ce s-a inchis cazul „nevalidat", cazul „de revizuit" a mai aratat o vreme un
+ * pret de catalog in cos si lasa „Comanda acum" sa plece cu o linie pe care serverul o refuza.
+ *
+ * ⚠ CE SE FACE CU RASPUNSUL tine de ecran: pretul liniei si TOATE sumele care o contin se ascund,
+ * iar butoanele de comanda nu pleaca. Textul de langa ele ramane deosebit, ca omul sa stie daca are
+ * de asteptat sau de reparat.
+ */
+export function pretulNesigur(item: CartItem, regula: RegulaPretCos | undefined): boolean {
+  return pretulNevalidat(item, regula) || cereRevizuire(item, regula);
+}

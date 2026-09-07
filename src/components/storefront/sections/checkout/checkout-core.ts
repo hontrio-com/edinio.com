@@ -61,7 +61,7 @@ export function useCheckoutOrder({
 }: CheckoutOrderInput) {
   const {
     items, total, clear, sessionId, hydrated, lineUnit, lineNeedsReview,
-    linePretNevalidat, pricingStare, reincearcaPreturile,
+    linePretNesigur, pricingStare, reincearcaPreturile,
   } = useCart();
   const [checkoutConfig, setCheckoutConfig] = useState<StorePageContent["checkout_config"]>(
     preview ? preview.checkoutConfig : ({ email_field: emailFieldConfig } as StorePageContent["checkout_config"])
@@ -162,7 +162,11 @@ export function useCheckoutOrder({
    * ⚠ NUMAI LINIILE PERSONALIZATE. Un produs obisnuit ramane comandabil pe pretul lui de catalog
    * chiar daca cererea a picat: altfel o clipire de retea ar opri vanzarile pe toata platforma.
    */
-  const liniiNevalidate = items.filter(linePretNevalidat);
+  /*
+   * ⚠ AMANDOUA PRICINILE, nu doar „nu stiu inca". O linie de REVIZUIT intra si ea in total cu
+   * pretul ei de baza, deci sumele sunt la fel de gresite. Vezi `pretulNesigur`.
+   */
+  const liniiNevalidate = items.filter(linePretNesigur);
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
   const baseShippingCost = courierSelection ? courierSelection.price : shippingCost;
   const discountAmount = appliedDiscount ? Math.min(appliedDiscount.discountAmount, goodsTotal) : 0;

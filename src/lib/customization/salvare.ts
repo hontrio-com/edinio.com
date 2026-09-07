@@ -1,5 +1,6 @@
 import {
-  MAX_CAMPURI, MAX_OPTIUNI, megaoctetiiCampului, normalizeazaDefinitia,
+  MAX_CAMPURI, MAX_LUNGIME_TEXT, MAX_OPTIUNI, MAX_PERSONALIZARE_LINIE, megaoctetiiCampului,
+  normalizeazaDefinitia, type DefinitiePersonalizare,
 } from "./definitie";
 import { MAX_FISIERE } from "./valori";
 import { campulDeSuprafata } from "./pret";
@@ -64,6 +65,21 @@ export function problemaPersonalizarii(pageSections: unknown): string | null {
 
   if (campuriTrimise.length > MAX_CAMPURI) {
     return `Personalizarea accepta cel mult ${MAX_CAMPURI} campuri; ai ${campuriTrimise.length}.`;
+  }
+  /*
+   * ⚠ GREUTATEA, nu doar numarul de campuri. Vezi `MAX_PERSONALIZARE_LINIE`: cosul isi taie
+   * liniile mai grele de atat, iar schema ingaduia de trei ori mai mult. Deci se putea configura
+   * ceva pe care pagina il accepta, „Adauga in cos" il accepta, si care DISPARE la prima
+   * reimprospatare — fara ca nimic sa scartaie.
+   *
+   * Comerciantul afla acum cand configureaza, cu un mesaj care spune ce sa taie.
+   */
+  const greutate = greutateaMaximaAPersonalizarii(citita);
+  if (greutate > MAX_PERSONALIZARE_LINIE) {
+    return "Campurile de personalizare pot aduna prea mult text pentru o singura linie de cos"
+      + ` (pana la ${greutate.toLocaleString("ro-RO")} de caractere, iar limita e`
+      + ` ${MAX_PERSONALIZARE_LINIE.toLocaleString("ro-RO")}). Scurteaza limitele de caractere sau`
+      + " scoate cateva campuri.";
   }
   if (citita.fields.length < campuriTrimise.length) {
     const cate = campuriTrimise.length - citita.fields.length;
@@ -226,4 +242,52 @@ export function problemaPersonalizarii(pageSections: unknown): string | null {
       + " casuta „Tarif lei/m²”, fie pe FIECARE optiune a campului care da tariful.";
   }
   return null;
+}
+
+/**
+ * Cat poate cantari, in cel mai rau caz, personalizarea unei linii cu definitia asta.
+ *
+ * ⚠ SE SOCOTESTE PE CAZUL CEL MAI GREU, nu pe cel obisnuit: cosul taie linia cand payload-ul
+ * REAL depaseste plafonul, iar un client care completeaza tot la maximum e un client obisnuit,
+ * nu un atacator. O socoteala „in medie" ar fi lasat exact configuratia care se evapora.
+ *
+ * ⚠ CIFRELE SUNT MARGINI DE SUS, cu antetul JSON inauntru: cheia campului, ghilimelele si virgula.
+ * Mai degraba prea mari decat prea mici — un plafon care lasa sa treaca ceva ce cosul taie mai
+ * tarziu nu apara nimic.
+ */
+export function greutateaMaximaAPersonalizarii(definitie: DefinitiePersonalizare): number {
+  let total = 2; /* acoladele obiectului */
+  for (const camp of definitie.fields) {
+    total += camp.id.length + 6; /* "id": , */
+    switch (camp.type) {
+      case "text":
+      case "textarea":
+        total += Math.min(camp.max_length ?? MAX_LUNGIME_TEXT, MAX_LUNGIME_TEXT) + 2;
+        break;
+      case "image":
+      case "fisier":
+        /* Fiecare cheie de fisier: `products/customizations/<uuid>/<uuid>-<24 hex>.<ext>` ≈ 120. */
+        total += (camp.max_files ?? 1) * 124 + 2;
+        break;
+      case "butoane":
+      case "select":
+        /* Id-ul optiunii alese; la `select` vechi, chiar textul optiunii. */
+        total += Math.max(40, ...(camp.optiuni ?? []).map((o) => o.id.length + 4),
+          ...(camp.options ?? []).map((o) => o.length + 4));
+        break;
+      case "dimensiuni":
+        total += 60;
+        break;
+      case "numar":
+        total += 24;
+        break;
+      case "comutator":
+        total += 8;
+        break;
+      default:
+        /* `color` si orice tip nou: o valoare scurta, cu marja. */
+        total += 64;
+    }
+  }
+  return total;
 }

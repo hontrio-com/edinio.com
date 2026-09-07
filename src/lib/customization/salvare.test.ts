@@ -74,10 +74,22 @@ test("⚠ campul al 31-lea se REFUZA la salvare, nu se arunca in tacere la citir
   assert.ok(mesaj, "campul in plus a trecut");
   assert.match(mesaj, new RegExp(String(MAX_CAMPURI)), "mesajul nu spune care e plafonul");
 
-  /* Perechea: exact la plafon se salveaza. */
+  /*
+   * Perechea: exact la plafon se salveaza.
+   *
+   * ⚠ CU `max_length` MIC, SI ASTA S-A SCHIMBAT PE 07.09.2026. De cand salvarea cantareste si
+   * GREUTATEA maxima a personalizarii, treizeci de campuri de text FARA limita de caractere se
+   * refuza pe drept: fara `max_length`, fiecare accepta 2.000 (vezi `valori.ts`), deci
+   * 30 × 2.000 = 60.000 — de trei ori cat poate purta o linie de cos. Configuratia aia se salva
+   * inainte, si linia clientului DISPAREA la prima reimprospatare.
+   *
+   * Proba de aici e despre NUMARUL de campuri, nu despre greutate: fixtura primeste o limita mica,
+   * ca sa masoare in continuare exact ce voia sa masoare.
+   */
+  const scurt = (i: number) => ({ ...camp(i), max_length: 100 });
   assert.equal(
     problemaPersonalizarii({ customization: {
-      enabled: true, fields: Array.from({ length: MAX_CAMPURI }, (_, i) => camp(i)),
+      enabled: true, fields: Array.from({ length: MAX_CAMPURI }, (_, i) => scurt(i)),
     } }),
     null,
   );

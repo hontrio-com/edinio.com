@@ -1,3 +1,4 @@
+import { MAX_PERSONALIZARE_LINIE } from "@/lib/customization/definitie";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 
 /** O linie de cos, asa cum sta in `localStorage.cart_<slug>`. */
@@ -43,8 +44,14 @@ const MAX_CHEIE_PERSONALIZARE = 2000;
  * personalizare arata ca un produs obisnuit: ori o refuza serverul si omul nu afla de ce, ori —
  * mai rau — trece, si atunci se produce o cana negravata pentru cine a cerut una gravata. O linie
  * lipsa din cos se vede.
+ *
+ * ⚠ CIFRA E UNA SINGURA IN TOT PROIECTUL, si de-aia se importa. Era scrisa si aici, si implicit in
+ * schema (30 de campuri × 2.000 = 60.000), iar cele doua nu se stiau una pe alta: se putea
+ * configura un produs pe care pagina il accepta, „Adauga in cos" il accepta, si a carui linie
+ * DISPARE la prima reimprospatare. Acum salvarea refuza asemenea configuratii — vezi
+ * `greutateaMaximaAPersonalizarii`.
  */
-const MAX_PERSONALIZARE = 20_000;
+const MAX_PERSONALIZARE = MAX_PERSONALIZARE_LINIE;
 
 /**
  * Amprenta scurta a unui text, cand el nu incape intreg in cheie.

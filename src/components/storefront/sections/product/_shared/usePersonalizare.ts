@@ -74,6 +74,12 @@ export interface StarePersonalizare {
    * pagina, si defectul ar fi reaparut tacut. Textul nu se poate gresi asa.
    */
   pretDeAfisat: (bazaPeBucata: number) => string;
+  /**
+   * Aceeasi suma ca `pretDeAfisat`, ca NUMAR — pentru analytics, unde se trimite o valoare, nu un
+   * text. Vezi nota de la implementare: cand pretul nu se poate sti inca, intoarce PODEAUA, adica
+   * exact cifra pe care o vede omul cu „de la" in fata.
+   */
+  pretPeBucata: (bazaPeBucata: number) => number;
   detalii: RezultatPret;
   /**
    * Verifica tot si aprinde constatarile. `true` cand se poate merge mai departe.
@@ -432,6 +438,30 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
     [elibereaza],
   );
 
+  /**
+   * Acelasi pret ca `pretDeAfisat`, dar ca NUMAR.
+   *
+   * ⚠ EXISTA CA SA NU FIE DOUA SOCOTELI. Analytics are nevoie de o suma, nu de un text, iar
+   * calculata a doua oara la apelant s-ar fi departat de ce vede omul pe ecran — exact felul de
+   * despartire pe care restul lucrarii a inchis-o peste tot.
+   *
+   * ⚠ SI INTOARCE PODEAUA cand pretul inca nu se poate sti (laturi necompletate, sursa de tarif
+   * nealeasa), fiindca aia e cifra ARATATA, cu „de la" in fata. Un zero trimis la Meta si GA4 ar fi
+   * stricat chiar cifrele pe care se socotesc pragurile de licitatie.
+   */
+  const pretPeBucata = useCallback(
+    (bazaPeBucata: number): number => {
+      const exact = pretUnitar(detalii, bazaPeBucata);
+      if (!definitie) return exact;
+      const nedeterminat =
+        exact <= 0
+        || (definitie.pret?.fel === "suprafata" && detalii.ariaFacturata === undefined);
+      if (!nedeterminat) return exact;
+      return podeaPersonalizarii(definitie, bazaPeBucata) ?? exact;
+    },
+    [definitie, detalii],
+  );
+
   const pretDeAfisat = useCallback(
     (bazaPeBucata: number): string => {
       const exact = pretUnitar(detalii, bazaPeBucata);
@@ -465,6 +495,7 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
     gata: !definitie || ((curate?.ok ?? true) && cerSuprafata.length === 0),
     supliment: detalii.supliment,
     pretDeAfisat,
+    pretPeBucata,
     detalii,
     verifica,
     incarca,

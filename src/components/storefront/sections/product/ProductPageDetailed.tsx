@@ -544,7 +544,22 @@ export function ProductPageDetailed({
       /* ⚠ VALORILE, nu pretul: suplimentul il socoteste serverul din definitia lui. */
       ...(cerePersonalizarea ? { customization: pers.valori } : {}),
     }, cantitate);
-    trackAddToCart({ productId: product.id, name: product.name, price: displayPrice, cantitate });
+    /*
+     * ⚠ PRETUL PE CARE IL VEDE OMUL, nu cel de catalog.
+     *
+     * Aici mergea `displayPrice`, deci un fototapet de 910 lei intra in rapoarte ca 89. Comanda si
+     * serverul erau corecte — paguba era doar in cifre: valoarea „add_to_cart" din Meta, TikTok si
+     * GA4 e cea pe care se socotesc mai tarziu pragurile de licitatie si randamentul reclamelor.
+     *
+     * ⚠ `pretAfisat` E CEL CARE SE VEDE, si tot el se trimite aici. `displayPrice` ramane cel
+     * TRIMIS mai departe la comanda — vezi nota de la `addToCart`: `authoritativeSubtotal` il
+     * compara cu preturile de CATALOG, iar cu suplimentul inclus comanda ar fi fost refuzata.
+     * Doua numere, doua rosturi; aici il trebuie pe cel vazut.
+     *
+     * ⚠ SI NIMIC DIN VALORI. Ce a scris omul — gravura, numele copilului, fisierele — nu pleaca
+     * la niciun furnizor de reclame. Se trimite doar suma.
+     */
+    trackAddToCart({ productId: product.id, name: product.name, price: pers.pretPeBucata(displayPrice), cantitate });
     setAdaugat(true);
     setTimeout(() => setAdaugat(false), 1800);
   }

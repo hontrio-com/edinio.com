@@ -43,6 +43,28 @@ export const MAX_CAMPURI = 30;
 export const MAX_OPTIUNI = 40;
 /** Cat poate scrie clientul intr-un camp de text, cand comerciantul n-a pus o limita. */
 export const MAX_LUNGIME_TEXT = 2000;
+
+/**
+ * Cat poate cantari, in caractere, personalizarea UNEI LINII — toate campurile la un loc.
+ *
+ * ═══ ⚠ O SINGURA LIMITA, FIINDCA ERAU DOUA CARE NU SE STIAU ═══
+ *
+ * Cosul isi taia demult liniile peste 20.000 de caractere (`localStorage` e scris de client, iar o
+ * personalizare de un megaoctet ar umfla fiecare cheie de linie si fiecare comparatie). Dar schema
+ * ingaduia 30 de campuri × 2.000 de caractere = 60.000.
+ *
+ * Deci un comerciant putea configura ceva pe care pagina de produs il accepta, „Adauga in cos" il
+ * accepta, `localStorage` il salveaza — si care DISPARE la prima reimprospatare, cand cosul se
+ * reciteste. O contradictie de contract, nu un defect vizibil: nimic nu scartaia.
+ *
+ * ⚠ SE PLAFONEAZA LA SALVARE, nu se largeste cosul. Comerciantul afla cand configureaza, cu un
+ * mesaj care spune ce sa taie — nu clientul, printr-o linie care se evapora.
+ *
+ * ⚠ Masurat in productie pe 07.09.2026, inainte de a pune plafonul: 71 de produse personalizabile
+ * active, cu maximum 3 campuri, 500 de caractere si 5 fisiere. Cel mai greu payload real e sub
+ * 1.500 de caractere — deci plafonul nu refuza nimic din ce exista, doar inchide o portita.
+ */
+export const MAX_PERSONALIZARE_LINIE = 20_000;
 /** Cat de lunga poate fi o eticheta scrisa de comerciant, ca sa nu rupa randarea. */
 export const MAX_ETICHETA = 200;
 

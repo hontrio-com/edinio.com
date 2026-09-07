@@ -65,11 +65,14 @@ export const PREFIX_VARIANTE = "_optim";
 /**
  * Cheia variantei gata facute a unei imagini.
  *
- * ⚠ O SINGURA DEFINITIE, pentru PATRU locuri care trebuie sa compuna exact acelasi sir:
- * `/api/img` (o scrie), loaderul lui `next/image` si `cdnImage` (o cer, in modul direct), si
- * Workerul din Cloudflare (o desface inapoi in cheie + latime + calitate). Despartite, oricare
- * doua ar fi aratat catre fisiere diferite — iar in modul direct asta nu inseamna o poza mai
- * putin clara, ci o POZA RUPTA.
+ * ⚠ O SINGURA DEFINITIE. Azi o foloseste doar `/api/img`, care scrie varianta si apoi trimite
+ * browserul la ea — dar chiar acolo se cere de doua ori, la scriere si la redirectare, iar cele
+ * doua trebuie sa dea acelasi sir. Compusa de mana in fiecare loc, o schimbare ar fi trimis
+ * browserul catre un fisier care nu s-a scris niciodata.
+ *
+ * ⚠ Prefixul e si temelia curateniei: `scripts/curata-optim-personalizari.mjs` cauta sub el.
+ * Schimbat aici si nu acolo, unealta ar fi cautat intr-un dosar gol si ar fi raportat linistita
+ * „nimic de sters".
  *
  * ⚠ TERMINATIA ORIGINALULUI RAMANE IN CHEIE, si nu din neglijenta: `poza.jpg` da
  * `…/poza.jpg.webp`. Asa doua originale cu acelasi nume si terminatii diferite nu se calca, iar

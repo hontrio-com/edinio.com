@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { CALITATE, LATIMI, LATIMI_ECRAN, LATIMI_MICI, latimeaDePeScara } from "./latimi-imagini";
+import { CALITATE, LATIMI, LATIMI_ECRAN, LATIMI_MICI, PREFIX_VARIANTE, cheieVarianta, latimeaDePeScara } from "./latimi-imagini";
 
 /**
  * SCARA DE LATIMI — proba care tine cele trei cai impreuna.
@@ -18,10 +18,10 @@ import { CALITATE, LATIMI, LATIMI_ECRAN, LATIMI_MICI, latimeaDePeScara } from ".
  * (640/750/828/1080/1200/1920/2048/3840) si numerele scrise de mana in apelurile `cdnImage`
  * (64/96/160/256/320/480/1600/2560). Acum e una singura, si probele de aici o tin asa.
  *
- * ⚠ SI DE CE CONTEAZA MAI MULT DE ACUM INCOLO: pasul urmator e sa PREGENERAM variantele in R2 si
- * sa le servim ca obiecte simple, ca sa nu se mai transforme nimic lunar. Aia merge numai daca
- * toate caile cer EXACT aceleasi latimi. O latime ceruta de o cale si negenerata de alta nu e o
- * poza mai putin clara — e o poza care lipseste.
+ * ⚠ SI SCARA TREBUIE SA SE POTRIVEASCA CU TREPTELE LUI `/api/img`: ruta urca latimea ceruta la
+ * una din treptele EI inainte de a compune cheia variantei. O latime a scarii care nu e printre
+ * ele ar fi taiata la alta marime decat cea ceruta — un fisier in plus in depozit, pentru fiecare
+ * poza, si niciodata cel cerut.
  */
 
 const sursa = (r: string) => readFileSync(path.resolve(process.cwd(), r), "utf8").replace(/\r\n/g, "\n");
@@ -55,8 +55,8 @@ test("⚠ latimea URCA pe scara, si se plafoneaza", () => {
 
   /*
    * ⚠ PLAFONUL: cine cere 2560 primeste 1920. Fara el, un singur numar scris intr-o componenta ar
-   * fi nascut o latime in afara scarii — adica o transformare noua in fiecare luna, si un fisier
-   * pe care pregenerarea nu l-ar face niciodata.
+   * fi nascut o latime in afara scarii — adica inca un fisier tinut pe veci in depozit, pentru
+   * fiecare poza careia i se cere.
    */
   assert.equal(latimeaDePeScara(1921), 1920);
   assert.equal(latimeaDePeScara(2560), 1920);
@@ -70,12 +70,10 @@ test("⚠ latimea URCA pe scara, si se plafoneaza", () => {
 
 test("⚠ TOATE latimile scarii exista in treptele lui `/api/img`", () => {
   /*
-   * ⚠ ASTA E PROBA CARE APARA PASUL URMATOR.
-   *
    * `/api/img` genereaza si pastreaza `_optim/w<W>q<Q>/<cheie>.webp`, si el urca latimea ceruta la
-   * una din treptele LUI. Daca scara comuna ar cere o latime care nu e printre ele, calea
-   * pregenerata si calea Cloudflare ar arata catre fisiere DIFERITE — si atunci pregenerarea n-ar
-   * mai scoate niciun ban din factura, fiindca fisierul cerut n-ar exista niciodata.
+   * una din treptele LUI inainte de a compune cheia. Daca scara ar cere o latime care nu e printre
+   * ele — 828, sa zicem — loaderul ar cere 828 si ruta ar taia la 896: o poza mai grea decat trebuie,
+   * un fisier in plus tinut pe veci, si niciodata marimea ceruta. Tacut, pe fiecare poza.
    *
    * ⚠ Se citeste din SURSA fiindca ruta importa `sharp` si `@/lib/r2`, adica lucruri care nu se
    * incarca intr-o proba pura. Deci se cere ca LISTA sa fie acolo, nu ca functia sa raspunda —
@@ -141,4 +139,46 @@ test("⚠ `cdnImage` nu mai poate cere o latime din afara scarii", () => {
   );
   /* Si cea mai scumpa dintre ele, 2560 din lightbox, chiar coboara. */
   assert.equal(latimeaDePeScara(2560), 1920);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CHEIA VARIANTEI — mutata aici cand a fost scos Workerul
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ terminatia originalului RAMANE in cheia variantei", () => {
+  /*
+   * ⚠ `poza.jpg` si `poza.webp` sunt DOUA fisiere. Daca varianta ar arunca terminatia
+   * originalului, amandoua ar da `…/poza.webp` — adica una ar fi servita in locul celeilalte,
+   * tacut, si comerciantul ar vedea alta poza decat a urcat.
+   *
+   * ⚠ Randurile astea vin din `varianta-si-worker.test.ts`, sters odata cu Workerul pe
+   * 07.09.2026. Contractul cu Cloudflare a disparut; cerinta asupra cheii, nu.
+   */
+  const a = cheieVarianta("products/x/poza.jpg", 640, 75);
+  const b = cheieVarianta("products/x/poza.webp", 640, 75);
+  assert.notEqual(a, b, "doua originale diferite au ajuns la aceeasi varianta");
+  assert.equal(a, "_optim/w640q75/products/x/poza.jpg.webp");
+  assert.equal(b, "_optim/w640q75/products/x/poza.webp.webp");
+});
+
+test("⚠ cheia variantei poarta latimea SI calitatea, deosebite intre ele", () => {
+  /*
+   * Ele sunt tot ce deosebeste doua taieturi ale aceleiasi poze. Lipite fara despartitor, sau una
+   * scrisa peste cealalta, `w64q75` si `w6q475` ar fi ajuns acelasi fisier.
+   */
+  const chei = new Set<string>();
+  for (const l of LATIMI) for (const q of [50, 75, 95]) chei.add(cheieVarianta("products/x/p.webp", l, q));
+  assert.equal(chei.size, LATIMI.length * 3, "doua combinatii de latime si calitate se calca");
+});
+
+test("⚠ toate cheile stau sub un singur prefix, cel pe care il curata unealta", () => {
+  /*
+   * `scripts/curata-optim-personalizari.mjs` si orice viitoare curatenie se sprijina pe prefixul
+   * asta. Schimbat aici si nu acolo, unealta ar fi cautat intr-un dosar gol si ar fi raportat
+   * linistita „nimic de sters".
+   */
+  for (const l of LATIMI) {
+    assert.ok(cheieVarianta("products/x/p.webp", l, CALITATE).startsWith(`${PREFIX_VARIANTE}/`));
+  }
+  assert.equal(PREFIX_VARIANTE, "_optim");
 });

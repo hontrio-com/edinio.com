@@ -127,26 +127,44 @@ export function lineKey(
   item: Pick<CartItem, "productId" | "variantTitle" | "customization">,
 ): string {
   /*
-   * ⚠ SEPARATORUL SE ESCAPEAZA IN TITLUL VARIANTEI, si nu e pedanterie.
+   * ═══ ⚠ TITLUL VARIANTEI NU SE MAI ESCAPEAZA. SE MASOARA ═══
    *
-   * Cheia se compune lipind bucati cu `::`. Un titlu de varianta care contine chiar `::` poate,
-   * teoretic, sa reproduca inceputul unei alte linii: „X::{...}" fara personalizare si „X" cu
-   * personalizarea aia dau acelasi sir. Doua linii diferite ar cadea pe o singura cheie, cu
-   * cantitatea 2 — exact paguba de la care a plecat tot helperul.
+   * Cheia se compune lipind bucati cu `::`, deci un titlu care contine chiar `::` putea reproduce
+   * inceputul altei linii — doua linii diferite pe o singura cheie, cu cantitatea 2.
    *
-   * ⚠ Titlurile de varianta le scrie COMERCIANTUL, deci nu e o cale de atac a cumparatorului — dar
-   * identitatea comerciala a unei linii nu se sprijina pe „nimeni n-o sa scrie asta".
+   * Prima reparatie a fost o escapare: `replaceAll("::", ":\\:")`. E GRESITA, si a doua oara pe
+   * acelasi rand. Nu fiindca ar fi scrisa prost, ci fiindca escaparea nu escapa si CARACTERUL DE
+   * ESCAPARE — asa ca nu e injectiva. Demonstrat, nu banuit:
    *
-   * ⚠ SE ESCAPEAZA DOAR `::`, nu fiecare `:`. Asa, orice titlu care nu-l contine pastreaza cheia
-   * de dinainte CARACTER CU CARACTER — si cosurile aflate acum in browserele oamenilor raman
-   * valabile. Escapand tot, fiecare cos cu variante s-ar fi repliat gresit la prima deschidere.
+   *     „::"   -> „:\:"
+   *     „:\:"  -> „:\:"      ← acelasi sir, doua titluri diferite
+   *
+   * Adica exact coliziunea pe care escaparea trebuia s-o inchida, mutata cu un caracter mai
+   * incolo. Iar „escapeaza si backslash-ul" ar fi mers, dar ar fi schimbat cheia oricarui titlu
+   * care contine un backslash — deci ar fi repliat gresit cosurile aflate acum in browsere.
+   *
+   * ═══ ⚠ CE SE FACE IN LOC: DOUA FAMILII DISJUNCTE ═══
+   *
+   * 1. Titlul CUMINTE (fara `::` si fara `\`) pastreaza forma de pana acum, caracter cu caracter:
+   *    `produs::titlu`. Asta e cazul tuturor cosurilor reale, deci nimic din ce e salvat acum in
+   *    browserele oamenilor nu se repliaza.
+   *
+   * 2. Titlul care ar putea sa incurce se scrie MASURAT: `produs::\v1:<lungime>:<titlu>`. Cu
+   *    lungimea in fata, sirul se citeste inapoi fara nicio ambiguitate — deci codarea e injectiva
+   *    prin constructie, nu prin „n-are cum sa iasa la fel".
+   *
+   * ⚠ SI CELE DOUA FAMILII NU SE POT ATINGE: marcajul contine `\`, iar familia 1 il exclude prin
+   * chiar conditia ei. Un titlu cuminte nu poate imita niciodata un titlu masurat.
+   *
+   * ⚠ NIMENI NU DECODEAZA CHEIA — verificat: se foloseste doar la comparat si la `key`-ul din
+   * React. Lungimea sta acolo ca sa faca sirul unic, nu ca sa fie citita inapoi.
    */
-  /*
-   * ⚠ `":\\:"` — DOUA caractere in sursa pentru unul singur in sir, si asta a fost deja gresit o
-   * data: scris `":\:"`, JS citeste `\:` ca escape necunoscut si il reduce la `:`, deci
-   * inlocuirea devine `"::"` cu `"::"` — un no-op perfect tacut. Proba de mai jos l-a prins.
-   */
-  const titlu = item.variantTitle?.replaceAll("::", ":\\:");
+  const brut = item.variantTitle;
+  const titlu = !brut
+    ? undefined
+    : brut.includes("::") || brut.includes("\\")
+      ? `\\v1:${brut.length}:${brut}`
+      : brut;
   const baza = titlu ? `${item.productId}::${titlu}` : item.productId;
   /*
    * ⚠ PERSONALIZAREA INTRA IN IDENTITATE, si asta e tot rostul ei aici.

@@ -109,6 +109,26 @@ test("⚠ fara variabila, purtarea e EXACT cea de pana acum", () => {
    */
   const obligatorii = cfg.slice(cfg.indexOf("const CHEI_OBLIGATORII"), cfg.indexOf("const CHEI_ASTEPTATE"));
   assert.doesNotMatch(obligatorii, /R2_BUCKET_PRIVAT/, "cheia opreste desfasurarea inainte sa existe galeata");
+
+  /*
+   * ═══ ⚠ DAR O GALEATA „PRIVATA" CARE E CHIAR CEA PUBLICA OPRESTE DESFASURAREA ═══
+   *
+   * Cele doua cazuri nu se poarta la fel, si nu e o nepotrivire:
+   *
+   *   LIPSA e o aparare care inca nu exista. Purtarea fara ea e exact cea de pana acum, deci se
+   *   striga si atat — o oprire ar fi lasat magazinele fara vanzare de produse personalizate.
+   *
+   *   PUSA GRESIT e mai rau decat lipsa: spune „gata, fisierele cumparatorilor sunt private" si nu
+   *   sunt. Cine o pune se uita o data la panou, vede variabila acolo, si nu se mai intoarce — iar
+   *   pozele de familie ale clientilor raman pe un domeniu public, cu convingerea ca nu sunt.
+   *
+   * O desfasurare oprita cu numele cheii in jurnal e ieftina si reversibila. O falsa siguranta nu
+   * se vede niciodata.
+   */
+  assert.match(
+    cfg, /if \(privat && privat === process\.env\.R2_BUCKET_NAME\?\.trim\(\)\) \{\s*\n\s*throw new Error\(/,
+    "o galeata „privata” pusa pe chiar galeata publica trece de build",
+  );
 });
 
 test("⚠ `incarcaPrivat` nu intoarce nicio adresa", () => {

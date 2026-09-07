@@ -94,6 +94,26 @@ export async function POST(request: NextRequest) {
   }
 
   /*
+   * ═══ ⚠ MARIMEA SE VERIFICA INAINTEA PLAFOANELOR, si nu e o mutare cosmetica ═══
+   *
+   * Plafonul pe OCTETI de mai jos consuma din fereastra magazinului cati megaocteti are fisierul.
+   * Verificat dupa el, un fisier de 500 MB — pe care ruta oricum il refuza — ar fi consumat 500 de
+   * unitati inainte sa fie refuzat: cinci cereri de-astea si cota magazinului pe ora e goala, iar
+   * cumparatorii lui adevarati primesc 429. Adica plafonul care apara depozitul ar fi devenit o
+   * cale de a inchide vanzarile magazinului.
+   *
+   * Verificarea e locala si nu costa nimic (`file.size` e deja citit din corpul cererii), deci nu
+   * are de ce sa stea mai jos.
+   */
+  const plafon = cereDocumente ? MAX_SIZE_DOC : MAX_SIZE;
+  if (file.size > plafon) {
+    return NextResponse.json(
+      { error: `Fisierul depaseste limita de ${Math.round(plafon / 1024 / 1024)}MB.` },
+      { status: 400 },
+    );
+  }
+
+  /*
    * ═══ ⚠ AL DOILEA STRAT DE LIMITARE, cel care CHIAR TINE ═══
    *
    * `rateLimit` de mai sus sta in memoria procesului. Pe serverless asta inseamna ca fereastra se
@@ -145,6 +165,39 @@ export async function POST(request: NextRequest) {
       { status: 429 },
     );
   }
+  /*
+   * ═══ ⚠ AL TREILEA PLAFON: OCTETII, NU NUMARUL DE FISIERE ═══
+   *
+   * Cele doua de mai sus numara CERERI. Dar ce se plateste aici nu e numarul de cereri, ci ce se
+   * scrie in depozit — si depozitul se plateste lunar, la nesfarsit, fiindca un fisier fara comanda
+   * traieste pana il ia cronul de retentie.
+   *
+   * Socoteala pe marginile de dinainte: 400 de fisiere pe ora pe magazin × 40 MB = ~16 GB pe ora,
+   * pe un capat public la care oricine deschide pagina unui produs capata un permis legitim.
+   * Permisul leaga CINE si CE, dar nu si CAT.
+   *
+   * ⚠ 2 GB PE ORA PE MAGAZIN. Un cumparator adevarat urca poze de telefon (3-8 MB) sau un PDF de
+   * tipar (10-40 MB); chiar si zece cumparatori deodata, fiecare cu cinci fisiere mari, stau sub
+   * 2 GB. Cifra taie abuzul fara sa atinga vanzarea — iar refuzul are text propriu, deci daca
+   * vreun magazin adevarat ajunge acolo, e o cifra de ridicat, nu o cadere tacuta.
+   *
+   * ⚠ SE SOCOTESTE IN MEGAOCTETI, ROTUNJIT IN SUS. Contorul numara intregi; un fisier de 200 KB
+   * costa 1, nu 0 — altfel o mie de fisiere mici ar fi trecut fara sa consume nimic.
+   *
+   * ⚠ SI SE CONSUMA INAINTE DE SCRIERE, ca toate celelalte porti: un plafon verificat dupa ce
+   * octetii sunt deja in depozit n-ar apara nimic.
+   *
+   * ⚠ Nu exista o cheie pe IP pentru octeti, dinadins. IP-ul e impartit de orase intregi prin NAT
+   * (vezi nota de mai sus), iar un plafon de octeti pe el ar fi lovit intai cumparatorii adevarati
+   * de pe mobil, la un camp OBLIGATORIU. Magazinul e granita care are inteles: el plateste factura.
+   */
+  const megaocteti = Math.max(1, Math.ceil(file.size / (1024 * 1024)));
+  if (!(await consumaLimita(`upload-personalizare:mb:${businessId}`, 2048, 3600, 0, megaocteti)).permis) {
+    return NextResponse.json(
+      { error: "Magazinul a primit prea multe fisiere in ultima ora. Incearca din nou mai tarziu." },
+      { status: 429 },
+    );
+  }
   if (!(await consumaLimita(`upload-personalizare:mag:${businessId}`, 400, 3600)).permis) {
     return NextResponse.json(
       { error: "Magazinul a primit prea multe fisiere in ultima ora. Incearca din nou mai tarziu." },
@@ -169,14 +222,6 @@ export async function POST(request: NextRequest) {
    * nimic: nici nu cade inchis, nici nu cade deschis, si a mai scapat si de o interogare de pe
    * drumul cel mai fierbinte.
    */
-
-  const plafon = cereDocumente ? MAX_SIZE_DOC : MAX_SIZE;
-  if (file.size > plafon) {
-    return NextResponse.json(
-      { error: `Fisierul depaseste limita de ${Math.round(plafon / 1024 / 1024)}MB.` },
-      { status: 400 },
-    );
-  }
 
   const buffer = Buffer.from(await file.arrayBuffer());
   /*

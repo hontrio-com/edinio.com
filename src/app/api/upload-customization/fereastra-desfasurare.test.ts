@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import { NextRequest } from "next/server";
 import { esteCheiaNoastra } from "@/lib/customization/fisiere-private";
 import { semneazaPermisul } from "@/lib/customization/permis-incarcare";
+import { MB_IMAGINE } from "@/lib/customization/definitie";
 
 /**
  * CE POARTA RASPUNSUL RUTEI DE INCARCARE — si de ce forma lui e o promisiune, nu un detaliu.
@@ -72,7 +73,7 @@ const PDF = Buffer.from("%PDF-1.4\n1 0 obj\n<< >>\nendobj\ntrailer\n<< >>\n%%EOF
 
 /* ── Baza de proba: atat PostgREST cat intreaba ruta ──────────────────────────── */
 
-type ApelLimita = { p_cheie: string; p_limita: number; p_fereastra_sec: number; p_blocare_sec?: number };
+type ApelLimita = { p_cheie: string; p_limita: number; p_fereastra_sec: number; p_blocare_sec?: number; p_cost?: number };
 
 /** Cheile pentru care contorul raspunde „nu mai ai”. */
 let epuizate = new Set<string>();
@@ -314,8 +315,14 @@ test("⚠ contorul din baza e chemat pe AMANDOUA cheile, si inainte de orice scr
   assert.equal(r.status, 200);
 
   const chei = apeluri.map((a) => a.p_cheie);
+  /*
+   * ⚠ TREI CHEI DE PE 07.09.2026, nu doua. A treia numara OCTETI, nu cereri: cu 400 de fisiere pe
+   * ora si 40 MB pe fisier, marginea „in cereri" ingaduia ~16 GB pe ora pe magazin — iar depozitul
+   * se plateste lunar, la nesfarsit.
+   */
   assert.deepEqual(
-    chei, [`upload-personalizare:ip:${ip}`, `upload-personalizare:mag:${BIZ}`],
+    chei,
+    [`upload-personalizare:ip:${ip}`, `upload-personalizare:mb:${BIZ}`, `upload-personalizare:mag:${BIZ}`],
     "capatul public scrie in depozit fara contorul durabil (cel din memorie se pierde la fiecare desfasurare)",
   );
   /*
@@ -334,8 +341,15 @@ test("⚠ contorul din baza e chemat pe AMANDOUA cheile, si inainte de orice scr
   for (const a of apeluri) {
     assert.equal(a.p_fereastra_sec, 3600, `fereastra lui ${a.p_cheie} nu mai e de o ora`);
     assert.ok(Number.isFinite(a.p_limita) && a.p_limita > 0, `limita lui ${a.p_cheie} nu e un numar folositor`);
+    /*
+     * ⚠ MARGINEA DE SUS E PE SCARA CHEII. Cele care numara CERERI stau sub 1000; cea care numara
+     * MEGAOCTETI e pe alta scara si i se cere alta margine — 4 GB pe ora pe magazin. Aceeasi cifra
+     * pentru amandoua ar fi insemnat ori un plafon de octeti inutilizabil, ori unul de cereri
+     * desfiintat.
+     */
+    const marginea = a.p_cheie.includes(":mb:") ? 4096 : 1000;
     assert.ok(
-      a.p_limita <= 1000,
+      a.p_limita <= marginea,
       `limita lui ${a.p_cheie} e ${a.p_limita} pe ora: plafonul exista doar pe hartie`,
     );
     /*
@@ -375,6 +389,64 @@ test("⚠ si cota MAGAZINULUI opreste, cand abuzatorul isi schimba IP-ul", async
   assert.equal(r.status, 429, "cheia pe magazin nu opreste nimic: cine roteste IP-uri urca mai departe");
   assert.match((await r.json() as { error: string }).error, /magazinul/i);
   assert.deepEqual(scrieri, [], "s-a scris in depozit desi magazinul isi epuizase cota");
+});
+
+test("⚠ si cota de OCTETI opreste, cand fisierele sunt putine dar uriase", async () => {
+  /*
+   * ═══ ⚠ CE NU ACOPEREA NUMARATOAREA DE CERERI ═══
+   *
+   * 400 de fisiere pe ora pe magazin × 40 MB = ~16 GB pe ora, pe un capat public la care oricine
+   * deschide pagina unui produs capata un permis legitim. Permisul leaga CINE si CE, dar nu si CAT
+   * — iar depozitul se plateste lunar, la nesfarsit, fiindca un fisier fara comanda traieste pana
+   * il ia cronul de retentie.
+   */
+  epuizate.add(`upload-personalizare:mb:${BIZ}`);
+  const r = await POST(cere().req);
+  assert.equal(r.status, 429, "cota de octeti nu opreste nimic: 400 de fisiere mari trec la fel ca 400 mici");
+  assert.deepEqual(scrieri, [], "s-a scris in depozit desi magazinul isi epuizase cota de octeti");
+});
+
+test("⚠ costul e in MEGAOCTETI, rotunjit in sus", async () => {
+  /*
+   * ⚠ ROTUNJIT IN SUS, si nu e pedanterie: contorul numara intregi, deci un fisier de 200 KB ar fi
+   * costat 0 — si o mie de fisiere mici ar fi trecut fara sa consume nimic din fereastra.
+   */
+  await POST(cere().req);
+  const mic = apeluri.find((a) => a.p_cheie.includes(":mb:"));
+  /*
+   * ⚠ LIPSA INSEAMNA 1, si de-aia se cere intelesul, nu prezenta cheii. `consumaLimita` trimite
+   * `p_cost` numai cand e diferit de 1 — asa, chemarea ramane pe patru argumente in cazul obisnuit
+   * si merge si pe baza fara migratia aplicata inca. Cerand cheia prezenta, proba ar fi cerut de
+   * fapt ca migratia sa fie deja peste tot.
+   */
+  assert.equal(mic?.p_cost ?? 1, 1, `un PNG de cativa octeti a costat ${mic?.p_cost}`);
+
+  /* Iar un fisier mare costa cati megaocteti are — altfel plafonul ar fi decor. */
+  apeluri = [];
+  const mare = Buffer.concat([PNG, Buffer.alloc(3 * 1024 * 1024)]);
+  await POST(cere({ octeti: mare }).req);
+  const greu = apeluri.find((a) => a.p_cheie.includes(":mb:"));
+  assert.equal(greu?.p_cost, 4, `un fisier de ~3,1 MB a costat ${greu?.p_cost}`);
+
+  /* ⚠ Si celelalte doua chei raman pe cost 1: ele numara CERERI, nu octeti. */
+  for (const a of apeluri.filter((x) => !x.p_cheie.includes(":mb:"))) {
+    assert.ok(a.p_cost === undefined || a.p_cost === 1, `${a.p_cheie} a primit cost ${a.p_cost}`);
+  }
+});
+
+test("⚠ un fisier PESTE plafon e refuzat INAINTE sa consume cota de octeti", async () => {
+  /*
+   * ═══ ⚠ ALTFEL PLAFONUL DEVINE O CALE DE A INCHIDE VANZARILE ═══
+   *
+   * Cota se consuma cu cati megaocteti are fisierul. Verificata dupa ea, o cerere de 500 MB — pe
+   * care ruta oricum o refuza pentru marime — ar fi consumat 500 de unitati inainte de refuz: cinci
+   * cereri de-astea si cota magazinului pe ora e goala, iar cumparatorii lui adevarati primesc 429.
+   */
+  const urias = Buffer.concat([PNG, Buffer.alloc((MB_IMAGINE + 1) * 1024 * 1024)]);
+  const r = await POST(cere({ octeti: urias }).req);
+  assert.equal(r.status, 400, "un fisier peste plafon n-a fost refuzat pentru marime");
+  assert.deepEqual(apeluri, [], "fisierul refuzat a consumat totusi din cota magazinului");
+  assert.deepEqual(scrieri, []);
 });
 
 test("⚠ contorul cazut LASA cumparatorul sa urce — limitatorul nu devine el caderea", async () => {

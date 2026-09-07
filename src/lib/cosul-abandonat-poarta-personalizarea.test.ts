@@ -83,6 +83,136 @@ test("⚠ pretul din email include SUPLIMENTUL, nu doar catalogul", () => {
   assert.equal(r[0].price, 778.75, "emailul promite pretul de catalog pentru un produs personalizat");
 });
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRETUL VARIANTEI — al doilea numar pe care emailul il lua de unde nu trebuie
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Un produs cu variante SI cu trepte de cantitate SI cu personalizare.
+ *
+ * ⚠ TOATE TREI PE ACELASI PRODUS, dinadins: fiecare in parte trecea, iar defectul era in ORDINEA
+ * in care se aplica. Un produs cu o singura complicatie nu poate arata ca treapta s-a socotit din
+ * pretul variantei, si nu din cel de catalog.
+ */
+const TRICOU: ProdusCosSalvat = {
+  id: "p3",
+  name: "Tricou",
+  price: 100,
+  images: [],
+  is_active: true,
+  page_sections: {
+    variants: {
+      enabled: true,
+      options: [{ id: "o1", name: "Marime", values: ["M", "XL"] }],
+      combinations: [
+        { title: "M", price: "", enabled: true },
+        { title: "XL", price: "150", enabled: true },
+      ],
+    },
+    /* La 2 bucati, 10% reducere — se socoteste din pretul variantei. */
+    quantity_tiers: { enabled: true, mode: "percent", tier2_percent: 10 },
+  },
+};
+
+/**
+ * Acelasi tricou, dar SI cu personalizare.
+ *
+ * ⚠ DOUA FIXTURI, NU UNA. Un produs care cere personalizare face `liniiRecuperabile` sa SARA
+ * liniile fara valori — asa si trebuie —, deci pe el nu se poate masura pretul variantei SINGUR.
+ * Cu doua fixturi, fiecare afirmatie masoara un lucru.
+ */
+const TRICOU_PERS: ProdusCosSalvat = {
+  ...TRICOU,
+  id: "p4",
+  page_sections: {
+    ...(TRICOU.page_sections as Record<string, unknown>),
+    customization: {
+      enabled: true,
+      fields: [{
+        id: "mat", type: "butoane", label: "Material", required: true,
+        optiuni: [{ id: "prm", eticheta: "Premium", impact: { fel: "fix", suma: 30 } }],
+      }],
+    },
+  },
+};
+
+test("⚠ emailul promite pretul VARIANTEI, nu al produsului", () => {
+  /*
+   * ═══ ⚠ CE MASURASE AUDITUL ═══
+   *
+   * Produs 100 lei, marimea XL 150 lei, linia salvata cu „XL". `pretEfectiv` pornea intotdeauna
+   * de la `p.price` si nu se uita niciodata la `variant_title` — desi linia il pastreaza de pe
+   * 07.09.2026. Emailul scria „XL — 100 lei", iar cosul o repretuia la 150 imediat ce omul apasa
+   * linkul: promisiunea nu se tinea nici pana la prima pagina.
+   */
+  const r = liniiRecuperabile(
+    [linie({ product_id: "p3", name: "Tricou", price: 100, variant_title: "XL" })],
+    catalog(TRICOU),
+  );
+  assert.equal(r[0].price, 150, "emailul promite pretul de catalog pentru o varianta mai scumpa");
+
+  /* Si varianta FARA pret propriu ramane pe cel de baza — „fara pret" nu inseamna „gratis". */
+  const m = liniiRecuperabile(
+    [linie({ product_id: "p3", name: "Tricou", price: 100, variant_title: "M" })],
+    catalog(TRICOU),
+  );
+  assert.equal(m[0].price, 100);
+});
+
+test("⚠ treapta de cantitate se socoteste din pretul VARIANTEI", () => {
+  /*
+   * ⚠ AICI SE VEDE ORDINEA, si de-aia nu ajungea sa reparam doar prima linie. Cu treapta aplicata
+   * peste catalog ar fi iesit 90; peste varianta iese 135. Un mutant care lasa `construiesteTrepte`
+   * pe pretul de baza trece de proba de dinainte si cade aici.
+   */
+  const r = liniiRecuperabile(
+    [linie({ product_id: "p3", name: "Tricou", price: 100, quantity: 2, variant_title: "XL" })],
+    catalog(TRICOU),
+  );
+  assert.equal(r[0].price, 135, "treapta s-a socotit din alt pret decat cel al variantei");
+});
+
+test("⚠ varianta + personalizare: suplimentul se adauga PESTE pretul variantei", () => {
+  /*
+   * 150 (XL) + 30 (Premium) = 180. Cu pretul de catalog dedesubt ar fi iesit 130 — adica emailul
+   * ar fi promis cu 50 de lei mai putin decat incaseaza serverul.
+   */
+  const r = liniiRecuperabile(
+    [linie({ product_id: "p4", name: "Tricou", price: 100, variant_title: "XL", customization: { mat: "prm" } })],
+    catalog(TRICOU_PERS),
+  );
+  assert.equal(r[0].price, 180, "suplimentul s-a adaugat peste pretul gresit");
+
+  /*
+   * ⚠ SI TOATE TREI DEODATA: 135 (XL cu treapta) + 30 = 165.
+   *
+   * ⚠ CIFRA ASTA E A COSULUI, nu una aleasa de mine. Prima varianta a probei cerea 162, adica
+   * treapta aplicata peste (150 + 30). Gresit: `pretulLiniei` din cos aplica treapta pe pretul de
+   * CATALOG al variantei si abia apoi adauga suplimentul. Emailul trebuie sa spuna ce spune cosul
+   * la clic — daca ar socoti „mai corect" decat el, ar minti tot, doar in alta directie.
+   */
+  const tot = liniiRecuperabile(
+    [linie({
+      product_id: "p4", name: "Tricou", price: 100, quantity: 2,
+      variant_title: "XL", customization: { mat: "prm" },
+    })],
+    catalog(TRICOU_PERS),
+  );
+  assert.equal(tot[0].price, 165, "ordinea varianta -> treapta -> personalizare nu e cea din cos");
+});
+
+test("⚠ o varianta STEARSA din catalog cade pe pretul de baza, nu pe unul inventat", () => {
+  /*
+   * Comerciantul sterge marimea dupa ce clientul a abandonat cosul. Un numar vechi e mai bun decat
+   * unul inventat — iar cosul marcheaza linia „Necesita actualizare" la restaurare, deci omul afla.
+   */
+  const r = liniiRecuperabile(
+    [linie({ product_id: "p3", name: "Tricou", price: 100, variant_title: "XXL" })],
+    catalog(TRICOU),
+  );
+  assert.equal(r[0].price, 100);
+});
+
 test("⚠ o linie care CERE personalizare si n-are valori se sare in continuare", () => {
   /*
    * ⚠ PERECHEA CARE APARA CLIENTUL. Randurile salvate INAINTE de 07.09.2026 n-au campul deloc.

@@ -134,6 +134,27 @@ function verificaCheileDeProductie(faza: string): void {
     }
   }
 
+  /*
+    ⚠ O GALEATA „PRIVATA" CARE E CHIAR CEA PUBLICA OPRESTE DESFASURAREA.
+
+    Cheia lipsa e o aparare care inca nu exista — se STRIGA, si atat, fiindca purtarea fara ea e
+    exact cea de pana acum. Cheia PUSA GRESIT e altceva: ea spune „gata, fisierele cumparatorilor
+    sunt private" si nu sunt. Cine o pune se uita o data la panou, vede variabila acolo, si nu se
+    mai intoarce niciodata — iar pozele de familie ale clientilor raman pe un domeniu public, cu
+    convingerea ca nu sunt.
+
+    ⚠ De aceea asta ARUNCA, spre deosebire de lista de mai sus: o desfasurare oprita cu numele
+    cheii in jurnal e ieftina si reversibila; o falsa siguranta nu se vede niciodata.
+  */
+  const privat = process.env.R2_BUCKET_PRIVAT?.trim();
+  if (privat && privat === process.env.R2_BUCKET_NAME?.trim()) {
+    throw new Error(
+      "[chei] R2_BUCKET_PRIVAT e chiar galeata publica (R2_BUCKET_NAME). Incarcarile "
+        + "cumparatorilor ar fi ramas publice, dar configuratia ar fi aratat ca sunt private. "
+        + "Creeaza o galeata separata, fara acces public, si pune numele ei aici.",
+    );
+  }
+
   const lipsa = CHEI_OBLIGATORII.filter((c) => !process.env[c]?.trim());
   if (lipsa.length === 0) return;
 

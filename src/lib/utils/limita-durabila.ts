@@ -38,14 +38,52 @@ export async function consumaLimita(
   limita: number,
   fereastraSec: number,
   blocareSec = 0,
+  /**
+   * Cat consuma chemarea asta din fereastra. `1` = o incercare, ca pana acum.
+   *
+   * ═══ ⚠ DE CE EXISTA: SUNT LIMITE CARE NU SE NUMARA IN CERERI ═══
+   *
+   * La autentificare, o incercare e o incercare. La incarcarea de fisiere, ce se plateste nu e
+   * numarul de cereri, ci OCTETII scrisi in depozit — iar depozitul se plateste lunar, la
+   * nesfarsit. Cu 400 de fisiere pe ora pe magazin si 40 MB pe fisier, marginea „in cereri"
+   * ingaduie ~16 GB pe ora fara ca nimic sa se opuna.
+   *
+   * ⚠ Vezi `migrations/2026-09-07-limita-cu-cost.sql`, unde scrie si de ce e DROP+CREATE si de ce
+   * drepturile se refac de mana.
+   */
+  cost = 1,
 ): Promise<RezultatLimita> {
   try {
-    const { data, error } = await createAdminClient().rpc("consuma_limita", {
+    let { data, error } = await createAdminClient().rpc("consuma_limita", {
       p_cheie: cheie,
       p_limita: limita,
       p_fereastra_sec: fereastraSec,
       p_blocare_sec: blocareSec,
+      ...(cost !== 1 ? { p_cost: cost } : {}),
     });
+
+    /*
+     * ⚠ DACA BAZA N-ARE INCA PARAMETRUL, SE INCEARCA DIN NOU FARA EL — si nu e pedanterie.
+     *
+     * Migratia si codul pleaca separat: migratia se aplica de mana, desfasurarea vine de la
+     * `git push`. Fara randurile astea, orice fereastra intre ele ar fi facut chemarile cu cost sa
+     * cada in `esecTacut`, care raspunde PERMIS — adica exact limita pe care o intarim ar fi fost
+     * SINGURA stinsa, si tacut, pe drumul cel mai expus din proiect.
+     *
+     * ⚠ A doua incercare pierde greutatea (costul devine 1), dar pastreaza limita. Mai putin decat
+     * vrem, mult mai mult decat nimic — si numai pana se aplica migratia.
+     *
+     * ⚠ SE INCEARCA DOAR PE „nu exista functia asta", nu pe orice eroare: o cadere adevarata a
+     * bazei nu are de ce sa fie chemata de doua ori.
+     */
+    if (error && cost !== 1 && /function|PGRST202|schema cache/i.test(error.message)) {
+      ({ data, error } = await createAdminClient().rpc("consuma_limita", {
+        p_cheie: cheie,
+        p_limita: limita,
+        p_fereastra_sec: fereastraSec,
+        p_blocare_sec: blocareSec,
+      }));
+    }
 
     if (error) return esecTacut(cheie, error.message);
 

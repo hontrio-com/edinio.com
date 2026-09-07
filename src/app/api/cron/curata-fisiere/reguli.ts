@@ -37,10 +37,25 @@
  * oricat — omul lasa fila deschisa, se razgandeste, revine a doua zi. Fara ea, cronul ar sterge
  * fisierul din formularul pe care cineva tocmai il completeaza.
  *
- * ⚠ CE NU APARA NIMIC: cosurile abandonate. Instantaneul lor (`AbandonedCartItem`) are cinci
- * campuri si nu poarta personalizarea, deci un cos deschis de peste 30 de zile isi pierde
- * fisierele. Treizeci de zile e mult mai mult decat traieste un cos in fapt, si liniile
- * personalizate sunt oricum sarite de `liniiRecuperabile`.
+ * ═══ ⚠ SI COSURILE ABANDONATE, DE PE 07.09.2026 ═══
+ *
+ * Aici scria ca ele nu apara nimic, „fiindca instantaneul lor are cinci campuri si nu poarta
+ * personalizarea, iar liniile personalizate sunt oricum sarite de `liniiRecuperabile`". Era
+ * adevarat cand s-a scris, si a incetat sa fie in aceeasi saptamana, cand cosul abandonat a
+ * capatat `variant_title` si `customization` si a inceput sa refaca liniile personalizate.
+ *
+ * Doua subsisteme schimbate separat, si nimic intre ele: masurat pe 07.09.2026, 23 de cosuri
+ * DESCHISE mai vechi de 30 de zile. Fisierele lor nu erau pe nicio comanda, deci cronul le vedea
+ * drept orfani si le stergea — iar linkul de recuperare refacea linia cu cheia unui fisier ai
+ * carui octeti nu mai existau.
+ *
+ * Acum ruta aduna cheile SI din cosurile `open` din aceeasi fereastra de `LUNI_PE_COMANDA` — un
+ * singur prag, ca sa nu existe un interval in care cosul e recuperabil si fisierele lui nu mai
+ * sunt. Peste el, un cos deschis de peste sase luni nu mai e o vanzare care se recupereaza.
+ *
+ * ⚠ TERMENUL ASTA E O PROMISIUNE MARGINITA, si merita spus pe fata: dupa sase luni de la ultima
+ * miscare, un link de recuperare inca deschide cosul, dar fisierele lui pot lipsi. E o margine
+ * aleasa, nu una uitata.
  */
 
 /** Cat traieste un fisier care nu e pe nicio comanda. */
@@ -136,15 +151,44 @@ export function cheileComenzii(items: unknown, prefix: string): string[] {
 
   for (const linie of items) {
     const pers = (linie as { customization?: unknown } | null)?.customization;
-    if (!pers || typeof pers !== "object" || Array.isArray(pers)) continue;
-
-    for (const intrare of Object.values(pers as Record<string, unknown>)) {
-      const v = (intrare as { value?: unknown } | null)?.value;
-      for (const s of Array.isArray(v) ? v : [v]) {
-        if (typeof s === "string" && s.startsWith(prefix)) out.push(s);
-      }
-    }
+    /*
+     * ⚠ SE CAUTA IN ADANCIME, si asta s-a schimbat pe 07.09.2026.
+     *
+     * Cautarea mergea exact doi pasi: `customization[camp].value`. E forma INSTANTANEULUI de pe
+     * comanda — dar cheile aceleasi stau si in `abandoned_carts.items[].customization`, unde
+     * valorile sunt BRUTE (`customization[camp]` direct, fara `.value`). Cu o cautare fixata pe
+     * adancime, cronul „nu vedea" fisierele coserilor deschise si le stergea dupa 30 de zile, desi
+     * linkul de recuperare inca le cerea.
+     *
+     * ⚠ Iar o a doua functie, scrisa special pentru cealalta forma, ar fi fost inca un loc de tinut
+     * in sincron — si tocmai nesincronizarea a produs gaura asta. Se cauta FORMA valorii (prefixul
+     * incarcarilor), care nu se schimba niciodata sub noi, oriunde ar sta ea.
+     */
+    aduna(pers, prefix, out, 0);
   }
 
   return out;
+}
+
+/**
+ * ⚠ ADANCIMEA E MARGINITA. `items` e jsonb scris de client prin cos: fara plafon, un obiect
+ * imbricat de zece mii de niveluri ar fi oprit chiar cronul care apara fisierele — adica ar fi
+ * transformat o paguba de stocare intr-una de disponibilitate. Sase niveluri acopera lejer si
+ * instantaneul (`camp.value[]`), si valorile brute (`camp[]`), si orice forma intermediara.
+ */
+const ADANCIME_MAXIMA = 6;
+
+function aduna(v: unknown, prefix: string, out: string[], adancime: number): void {
+  if (adancime > ADANCIME_MAXIMA) return;
+  if (typeof v === "string") {
+    if (v.startsWith(prefix)) out.push(v);
+    return;
+  }
+  if (Array.isArray(v)) {
+    for (const x of v) aduna(x, prefix, out, adancime + 1);
+    return;
+  }
+  if (v && typeof v === "object") {
+    for (const x of Object.values(v as Record<string, unknown>)) aduna(x, prefix, out, adancime + 1);
+  }
 }

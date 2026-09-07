@@ -88,6 +88,53 @@ export async function GET(req: NextRequest) {
   }
 
   /*
+   * ═══ 1b. SI COSURILE INCA RECUPERABILE ═══
+   *
+   * ⚠ GAURA PE CARE O INCHIDE, masurata pe 07.09.2026: 23 de cosuri DESCHISE mai vechi de 30 de
+   * zile. Fisierele lor nu erau pe nicio comanda, deci cronul le vedea drept orfani si le stergea —
+   * iar linkul de recuperare, care merge mai departe, refacea linia cu cheia unui fisier ai carui
+   * octeti nu mai exista. Clientul ajungea la un cos cu poza lui lipsa, fara sa afle de ce.
+   *
+   * ⚠ NU EXISTA PANA DE CURAND. Cat timp `AbandonedCartItem` avea cinci campuri si nu purta
+   * personalizarea, `liniiRecuperabile` sarea liniile personalizate: nu era nimic de aparat. De cand
+   * le poarta si le reface, cele doua subsisteme trebuie sa spuna acelasi lucru — si nu-l spuneau.
+   *
+   * ⚠ ACELASI PRAG CA LA COMENZI, si dinadins unul singur. Un cos deschis de peste sase luni nu mai
+   * e o vanzare care se recupereaza; peste pragul asta fisierele lui pot pleca. Doua praguri
+   * diferite ar fi insemnat o fereastra in care un cos e „recuperabil" si fisierele lui nu mai sunt.
+   *
+   * ⚠ SI NUMAI CELE `open`: un cos `converted` are deja comanda lui, iar comanda il apara prin
+   * bucla de mai sus, cu propriul termen socotit de la data ei.
+   */
+  let cosuriCitite = 0;
+  for (let de = 0; ; de += PAGINA) {
+    const { data, error } = await admin
+      .from("abandoned_carts")
+      .select("id, items")
+      .eq("status", "open")
+      .gte("last_activity_at", prag.toISOString())
+      .order("last_activity_at", { ascending: true })
+      .range(de, de + PAGINA - 1);
+
+    if (error) {
+      /* ⚠ CADE INCHIS, ca la comenzi: fara lista intreaga nu se sterge NIMIC. */
+      await logError({
+        action: "curata-fisiere.cosuri",
+        message: `citirea cosurilor abandonate a esuat, nu se sterge nimic: ${error.message}`,
+        severity: "error",
+      });
+      return NextResponse.json({ ok: false, motiv: "cosurile nu s-au putut citi" }, { status: 200 });
+    }
+
+    for (const c of data ?? []) {
+      cosuriCitite++;
+      for (const cheie of cheileComenzii(c.items, PREFIX_INCARCARI)) aparate.add(cheie);
+    }
+
+    if (!data || data.length < PAGINA) break;
+  }
+
+  /*
    * ═══ 2. CE E IN DEPOZIT ═══
    *
    * ⚠ LISTAREA TREBUIE SA SE TERMINE. Oprita la jumatate, restul obiectelor pur si simplu n-ar fi
@@ -157,6 +204,7 @@ export async function GET(req: NextRequest) {
   const raport = {
     ok: true,
     comenziCitite,
+    cosuriCitite,
     cheiAparate: aparate.size,
     obiecte: obiecte.length,
     trunchiat,

@@ -119,6 +119,54 @@ test("⚠ „adaugat in cos” raporteaza pretul PERSONALIZAT, nu pe cel de cata
   }
 });
 
+test("⚠ „incepe finalizarea” raporteaza pretul AUTORITAR, pe AMANDOUA drumurile", () => {
+  /*
+   * ═══ ⚠ JUMATATE DIN MAGAZINE RAPORTAU CORECT, SI JUMATATE NU ═══
+   *
+   * `begin_checkout` / `InitiateCheckout` pleaca din DOUA locuri: pagina de finalizare (magazinele
+   * cu `comandaPePagina`) si modalul din sertar (restul). Prima a fost reparata; a doua a ramas pe
+   * `i.price` — instantaneul de CATALOG salvat in localStorage la adaugare.
+   *
+   * Urmarea, pentru un fototapet: acelasi mesaj purta `value: 910` (totalul autoritar) si
+   * `items[0].price: 89`. Doua lucruri diferite despre aceeasi comanda, iar pe cifrele astea se
+   * socotesc pragurile de licitatie si randamentul reclamelor.
+   *
+   * ⚠ SE CER AMANDOUA LOCURILE, dinadins. Un singur loc verificat e chiar felul de proba care a
+   * lasat deosebirea asta sa existe: reparat unul, „exista o proba" devine adevarat, si a doua
+   * jumatate a magazinelor ramane gresita in tacere.
+   */
+  for (const [nume, f] of [
+    ["pagina de finalizare", "src/components/storefront/sections/checkout/CheckoutPageClient.tsx"],
+    ["modalul din sertar", "src/components/ministore/MiniStoreRenderer.tsx"],
+  ] as const) {
+    const s = sursa(f);
+    /*
+     * ⚠ SE CITESC CHIAR RANDURILE EVENIMENTELOR, nu o fereastra in jurul lor. Prima varianta lua
+     * o felie de la `InitiateCheckout` incoace si pica pe pagina de finalizare — unde liniile se
+     * compun INTR-O VARIABILA, deasupra apelurilor. Proba raporta un defect pe un fisier corect.
+     */
+    const randuri = s.split("\n").filter(
+      (r) => r.includes('ttqTrack("InitiateCheckout"') || r.includes('gtagEvent("begin_checkout"'),
+    );
+    assert.ok(randuri.length >= 2, `${nume}: am gasit ${randuri.length} apeluri, asteptam 2`);
+    for (const r of randuri) {
+      assert.ok(
+        !/price: i\.price/.test(r),
+        `${nume} raporteaza inca pretul de catalog langa un total autoritar:\n${r.trim()}`,
+      );
+    }
+    /*
+     * ⚠ SI PERECHEA: pretul autoritar chiar se foloseste undeva pentru linii. Fara ea, un apel
+     * care ar scoate cu totul `price` ar fi trecut verde — „nu mai raporteaza gresit" nu inseamna
+     * „raporteaza".
+     */
+    assert.ok(
+      /price: lineUnit\(i\)/.test(s),
+      `${nume} nu foloseste nicaieri pretul de linie al cosului`,
+    );
+  }
+});
+
 test("⚠ `pretPeBucata` si `pretDeAfisat` spun acelasi lucru", () => {
   /*
    * Unul e text, celalalt numar, dar amandoua trebuie sa cada pe PODEA cand pretul nu se poate sti

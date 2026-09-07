@@ -173,6 +173,61 @@ test("⚠ un text obisnuit NU e luat drept cheie", () => {
   assert.deepEqual(cheileComenzii(items, PREFIX), []);
 });
 
+test("⚠ SI FORMA COSULUI ABANDONAT, nu doar cea a comenzii", () => {
+  /*
+   * ═══ ⚠ DOUA SUBSISTEME SCHIMBATE SEPARAT ═══
+   *
+   * Cautarea mergea exact doi pasi — `customization[camp].value` —, adica forma INSTANTANEULUI de
+   * pe comanda. Aceleasi chei stau insa si in `abandoned_carts.items[].customization`, unde
+   * valorile sunt BRUTE: `customization[camp]` direct, fara `.value`.
+   *
+   * Masurat pe 07.09.2026: 23 de cosuri DESCHISE mai vechi de 30 de zile. Fisierele lor nu erau pe
+   * nicio comanda, deci cronul le vedea drept orfani si le stergea — iar linkul de recuperare,
+   * care merge mai departe, refacea linia cu cheia unui fisier ai carui octeti nu mai existau.
+   *
+   * ⚠ Cat timp cosul abandonat NU purta personalizarea, aici nu era nimic de aparat. Gaura s-a
+   * deschis chiar in saptamana in care el a inceput s-o poarte.
+   */
+  const cos = [
+    { product_id: "p1", customization: { p: cheie("cos-poza.png") } },
+    { product_id: "p2", customization: { f: [cheie("cos-a.pdf"), cheie("cos-b.jpg")] } },
+    { product_id: "p3", customization: { g: "Robert", d: { latime: 350, inaltime: 250 } } },
+  ];
+  assert.deepEqual(
+    cheileComenzii(cos, PREFIX).sort(),
+    [cheie("cos-a.pdf"), cheie("cos-b.jpg"), cheie("cos-poza.png")],
+    "cheile din forma BRUTA a cosului nu se vad: fisierele lor s-ar sterge sub un cos recuperabil",
+  );
+
+  /* ⚠ Si amandoua formele in acelasi lot — cronul le aduna in aceeasi multime. */
+  const amestec = [
+    { customization: { p: { type: "image", label: "Poza", value: cheie("comanda.png") } } },
+    { customization: { p: cheie("cos.png") } },
+  ];
+  assert.deepEqual(cheileComenzii(amestec, PREFIX).sort(), [cheie("comanda.png"), cheie("cos.png")]);
+});
+
+test("⚠ o imbricare adanca nu tine cronul pe loc", () => {
+  /*
+   * `items` e jsonb scris de client prin cos. Fara plafon de adancime, un obiect imbricat de zece
+   * mii de niveluri ar fi oprit chiar cronul care apara fisierele — adica ar fi transformat o
+   * paguba de stocare intr-una de disponibilitate.
+   *
+   * ⚠ Se cere si ca plafonul sa fie mai adanc decat formele reale: cheia de la nivelul 3 (forma
+   * comenzii cu valoare in lista) trebuie sa se vada in continuare.
+   */
+  let adanc: unknown = cheie("prea-adanc.jpg");
+  for (let i = 0; i < 5000; i++) adanc = { x: adanc };
+  assert.doesNotThrow(() => cheileComenzii([{ customization: { c: adanc } }], PREFIX));
+  assert.deepEqual(cheileComenzii([{ customization: { c: adanc } }], PREFIX), []);
+
+  assert.deepEqual(
+    cheileComenzii([{ customization: { f: { value: [cheie("la-adancime-normala.pdf")] } } }], PREFIX),
+    [cheie("la-adancime-normala.pdf")],
+    "forma obisnuita a comenzii a cazut sub plafonul de adancime",
+  );
+});
+
 test("⚠ forme stramte de `items` nu arunca si nu inventeaza chei", () => {
   /*
    * Cronul citeste `items` din randuri scrise de-a lungul anilor. O exceptie aici ar opri INTREAGA

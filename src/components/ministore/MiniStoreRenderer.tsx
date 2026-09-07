@@ -530,7 +530,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     numaraSelectia(selectieFatete) +
     (onSaleOnly ? 1 : 0) +
     (inStockOnly ? 1 : 0);
-  const { addItem, count, total, restoreCart, items: cartItemsForTracking } = useCart();
+  const { addItem, count, total, restoreCart, lineUnit, items: cartItemsForTracking } = useCart();
 
   // Cart recovery: a ?recover=<cartId> link rebuilds the saved cart and opens
   // checkout (optionally pre-applying a discount code from &code=).
@@ -1720,9 +1720,25 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
             // direct pe adresa si s-ar dubla pentru cine vine din sertar.
             if (comandaPePagina) { mergiLaComanda(); return; }
             setCheckoutOpen(true);
+            /*
+             * ⚠ `lineUnit(i)`, NU `i.price` — aceeasi reparatie ca pe pagina de finalizare, care
+             * aici fusese uitata.
+             *
+             * `i.price` e instantaneul de CATALOG salvat in localStorage la adaugare. Pentru un
+             * fototapet, evenimentul pleca cu `value: 910` (totalul autoritar) si `items[0].price:
+             * 89` in ACELASI mesaj — doua lucruri diferite despre aceeasi comanda. Iar pe cifrele
+             * astea se socotesc mai tarziu pragurile de licitatie si randamentul reclamelor.
+             *
+             * ⚠ SI DOUA DRUMURI CATRE ACELASI EVENIMENT: magazinele cu finalizare pe PAGINA erau
+             * reparate, cele cu MODAL nu. Jumatate din magazine raportau corect si jumatate nu,
+             * fara ca nimic sa arate deosebirea.
+             *
+             * ⚠ SI NIMIC DIN PERSONALIZARE nu pleaca la furnizorii de reclame: nici valorile, nici
+             * numele fisierelor. Doar sume si identificatori de produs.
+             */
             fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count, content_type: "product", content_ids: cartItemsForTracking.map((i) => i.productId) });
-            ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: cartItemsForTracking.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: i.price, quantity: i.quantity })) });
-            gtagEvent("begin_checkout", { currency: "RON", value: total, items: cartItemsForTracking.map((i) => ({ item_id: i.productId, item_name: i.name, price: i.price, quantity: i.quantity })) });
+            ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: cartItemsForTracking.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
+            gtagEvent("begin_checkout", { currency: "RON", value: total, items: cartItemsForTracking.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
           }}
           shippingCost={shippingCost}
           freeShippingThreshold={freeShippingThreshold}

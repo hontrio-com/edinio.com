@@ -5,7 +5,7 @@
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import { hasVariants, cerePersonalizare } from "@/lib/storefront/variants";
+import { hasVariants, cerePersonalizare, parseVariants, findCombo, comboUnitPrice } from "@/lib/storefront/variants";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { normalizeazaDefinitia } from "@/lib/customization/definitie";
 import { normalizeazaValorile } from "@/lib/customization/valori";
@@ -133,8 +133,38 @@ function esteObiect(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
 
-function pretEfectiv(p: ProdusCosSalvat, cantitate: number, personalizare: unknown): number {
-  const unitar = round2(Number(p.price) || 0);
+function pretEfectiv(
+  p: ProdusCosSalvat,
+  cantitate: number,
+  personalizare: unknown,
+  variantTitle: string | null | undefined,
+): number {
+  /*
+   * ═══ ⚠ PRETUL VARIANTEI, NU AL PRODUSULUI ═══
+   *
+   * Aici se pornea intotdeauna de la `p.price` — pretul de CATALOG — desi `liniiRecuperabile`
+   * pastreaza de curand `variant_title`. Masurat: produs 100 lei, marimea XL 150 lei, linia
+   * salvata cu „XL" — emailul de recuperare scria „XL — 100 lei", iar cosul o repretuia la 150
+   * imediat ce omul apasa linkul. Adica exact felul de discrepanta pe care regula asta exista ca
+   * s-o opreasca: promisiunea din email nu se tinea nici pana la prima pagina.
+   *
+   * ⚠ SE FOLOSESTE ACELASI AJUTOR CA VITRINA (`comboUnitPrice` peste `findCombo`), nu o citire
+   * proprie a combinatiilor. Scrisa aici a doua oara, ea ar fi divergit de vitrina — si tocmai
+   * asta e greseala pe care emailul o face vizibila clientului.
+   *
+   * ⚠ SI ORDINEA E CEA A COSULUI: pret de varianta -> treapta de cantitate -> personalizare.
+   * Treptele se socotesc din pretul CHIAR AL VARIANTEI (asa face si `construiesteTrepte` pe
+   * pagina de produs, unde primeste `displayPrice`), iar suplimentul se adauga la urma.
+   *
+   * ⚠ O varianta disparuta din catalog (comerciantul a sters marimea) cade pe pretul de baza —
+   * un numar vechi, nu unul inventat —, iar cosul marcheaza linia „Necesita actualizare" la
+   * restaurare.
+   */
+  const baza = round2(Number(p.price) || 0);
+  const variante = parseVariants(p.page_sections);
+  const unitar = variante
+    ? round2(comboUnitPrice(findCombo(variante, variantTitle ?? null), baza))
+    : baza;
   const trepte = construiesteTrepte((p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers, unitar);
   const cuTrepte = pretPeTrepte(trepte, cantitate, unitar).subtotal / cantitate;
   /*
@@ -219,7 +249,7 @@ export function liniiRecuperabile(
        * inmulteste; `pretPeTrepte` lasa dinadins pretul unitar nerotunjit, ca
        * `pret x cantitate` sa dea exact subtotalul (vezi constatarea 15).
        */
-      price: pretEfectiv(p, normalizeazaCantitate(it.quantity), it.customization),
+      price: pretEfectiv(p, normalizeazaCantitate(it.quantity), it.customization, it.variant_title),
       quantity: normalizeazaCantitate(it.quantity),
       image_url: (Array.isArray(p.images) && p.images.length ? (p.images[0] as string) : it.image_url) ?? null,
       /*

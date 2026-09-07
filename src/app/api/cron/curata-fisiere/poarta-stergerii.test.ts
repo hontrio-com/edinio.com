@@ -57,6 +57,12 @@ let cadeBaza = false;
 let intervale: string[] = [];
 /** Filtrul pe `created_at` pe care l-a trimis ruta. */
 let filtre: string[] = [];
+/** Cosurile abandonate pe care le intoarce baza de proba. */
+let cosuri: { id: string; items: unknown }[] = [];
+/** Pornit, citirea cosurilor cade. */
+let cadCosurile = false;
+/** Ce a filtrat ruta pe `abandoned_carts`: asa se vede ca cere doar cele `open` din fereastra. */
+let filtreCosuri: string[] = [];
 
 const baza = http.createServer((req, res) => {
   const url = new URL(req.url ?? "/", "http://baza");
@@ -64,6 +70,19 @@ const baza = http.createServer((req, res) => {
   const bucati: Buffer[] = [];
   req.on("data", (c: Buffer) => bucati.push(c));
   req.on("end", () => {
+    if (cale === "abandoned_carts") {
+      if (cadCosurile) {
+        res.writeHead(500, { "content-type": "application/json" });
+        return res.end(JSON.stringify({ code: "57014", message: "baza de proba: cosurile au cazut" }));
+      }
+      for (const [k, v] of url.searchParams) {
+        if (k === "status" || k === "last_activity_at") filtreCosuri.push(`${k}=${v}`);
+      }
+      const off = Number(url.searchParams.get("offset") ?? 0);
+      const lim = Number(url.searchParams.get("limit") ?? cosuri.length);
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify(cosuri.slice(off, off + lim)));
+    }
     if (cale !== "orders") {
       res.writeHead(200, { "content-type": "application/json" });
       return res.end("[]");
@@ -162,6 +181,9 @@ beforeEach(() => {
   stergeriEsuate = new Set();
   intervale = [];
   filtre = [];
+  cosuri = [];
+  cadCosurile = false;
+  filtreCosuri = [];
 });
 
 function cere(secret: string | null = SECRET) {
@@ -356,4 +378,60 @@ test("⚠ ce se apara si ce se sterge, pe acelasi drum", async () => {
   /* ⚠ Perechea, spusa pe fata: fisierul proaspat si cel de pe comanda noua sunt INCA acolo. */
   assert.equal(sterse.includes(proaspat), false, "s-a sters fisierul urcat azi");
   assert.equal(sterse.includes(peComanda), false, "s-a sters fisierul unei comenzi din fereastra");
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   POARTA 5 — cosurile abandonate inca recuperabile
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ fisierul unui cos DESCHIS nu se sterge, desi nu e pe nicio comanda", async () => {
+  /*
+   * ═══ ⚠ DOUA SUBSISTEME SCHIMBATE SEPARAT ═══
+   *
+   * Cronul apara doar fisierele de pe COMENZI. Cat timp cosul abandonat nu purta personalizarea,
+   * asta era complet: liniile personalizate erau oricum sarite de `liniiRecuperabile`, deci nu
+   * exista nimic de recuperat. In saptamana in care cosul a inceput sa le poarte si sa le refaca,
+   * regula cronului a ramas neschimbata — si nimic n-a scartait.
+   *
+   * Masurat pe 07.09.2026: 23 de cosuri DESCHISE mai vechi de 30 de zile. Fisierul lor era orfan
+   * dupa regula veche, deci se stergea; linkul de recuperare, care merge mai departe, refacea
+   * linia cu cheia unui fisier ai carui octeti nu mai existau. Clientul vedea poza lui lipsa, fara
+   * sa afle de ce.
+   */
+  const alCosului = pune("poza-din-cos.png", 60);
+  const orfanAdevarat = pune("chiar-orfan.png", 60);
+  cosuri = [{ id: "c1", items: [{ product_id: "p1", customization: { p: alCosului } }] }];
+
+  const r = await GET(cere());
+  assert.equal(((await r.json()) as { ok: boolean }).ok, true);
+  assert.deepEqual(sterse, [orfanAdevarat], "s-a sters fisierul unui cos inca recuperabil");
+});
+
+test("⚠ se cer doar cosurile DESCHISE, si doar cele din fereastra", async () => {
+  /*
+   * ⚠ AMANDOUA FILTRELE CONTEAZA, si din motive opuse. Fara `status`, un cos `converted` de acum
+   * doi ani si-ar apara fisierele pe veci — desi comanda lui le apara oricum, cu termenul ei.
+   * Fara fereastra, orice cos deschis vreodata le-ar apara la nesfarsit, si retentia n-ar mai
+   * exista pentru ele.
+   */
+  pune("ceva.png", 60);
+  await GET(cere());
+  assert.ok(filtreCosuri.some((f) => f === "status=eq.open"), `filtrele au fost ${JSON.stringify(filtreCosuri)}`);
+  assert.ok(
+    filtreCosuri.some((f) => f.startsWith("last_activity_at=gte.")),
+    `nu s-a cerut fereastra: ${JSON.stringify(filtreCosuri)}`,
+  );
+});
+
+test("⚠ daca citirea COSURILOR cade, nu se sterge nimic", async () => {
+  /*
+   * Aceeasi asimetrie ca la comenzi: o rulare sarita se reia peste 24 de ore si nu costa nimic, o
+   * stergere gresita e definitiva. „N-am putut citi cosurile" nu inseamna „n-au fisiere".
+   */
+  pune("ar-fi-fost-sters.png", 60);
+  cadCosurile = true;
+
+  const r = await GET(cere());
+  assert.equal(((await r.json()) as { ok: boolean }).ok, false);
+  assert.deepEqual(sterse, [], "s-a sters desi lista cosurilor era incompleta");
 });

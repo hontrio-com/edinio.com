@@ -120,6 +120,55 @@ test("⚠ produsele FARA personalizare pastreaza cheia de dinainte, caracter cu 
   assert.equal(lineKey({ productId: "p1", customization: {} }), "p1");
 });
 
+test("⚠ titluri de varianta DIFERITE nu pot da aceeasi cheie — nici cele care imita escaparea", () => {
+  /*
+   * ═══ ⚠ A DOUA OARA PE ACELASI RAND, SI A DOUA OARA GASIT DIN AFARA ═══
+   *
+   * Prima reparatie a fost o escapare: `replaceAll("::", ":\\:")`. Proba de atunci cerea ca „a::b"
+   * si „a:\:b" sa dea chei diferite — si trecea. Dar escaparea NU escapa caracterul de escapare,
+   * deci nu e injectiva, si perechea care o rupe e chiar cea mai scurta cu putinta:
+   *
+   *     „::"   -> „:\:"
+   *     „:\:"  -> „:\:"
+   *
+   * O proba care verifica UN caz de conflict nu spune nimic despre celelalte. De aceea aici nu se
+   * mai insiruie perechi: se cere ca TOATE titlurile din lista sa dea chei DOUA CATE DOUA diferite,
+   * si lista contine dinadins fiecare fel de sir care poate imita marcajul.
+   */
+  const titluri = [
+    "S / Rosu", "::", ":\\:", "\\", "\\\\", "a::b", "a:\\:b", ":", ":::",
+    /* Si sirurile care imita chiar forma masurata `\v1:<lungime>:<titlu>`. */
+    "\\v1:2:XX", "v1:2:XX", "\\v1:1:X", "\\v1:", "",
+  ];
+  const chei = new Map<string, string>();
+  for (const t of titluri) {
+    const k = lineKey({ productId: "p1", variantTitle: t });
+    const geaman = chei.get(k);
+    assert.equal(
+      geaman, undefined,
+      `titlurile ${JSON.stringify(geaman)} si ${JSON.stringify(t)} dau aceeasi cheie ${JSON.stringify(k)}`,
+    );
+    chei.set(k, t);
+  }
+
+  /*
+   * ⚠ SI TITLUL CUMINTE PASTREAZA FORMA VECHE, caracter cu caracter — altfel cosurile din
+   * browserele oamenilor s-ar repllia gresit la prima incarcare. Doar cele care ar fi putut
+   * incurca trec pe forma masurata.
+   */
+  assert.equal(lineKey({ productId: "p1", variantTitle: "S / Rosu" }), "p1::S / Rosu");
+  assert.equal(lineKey({ productId: "p1", variantTitle: "::" }), "p1::\\v1:2:::");
+
+  /*
+   * ⚠ SI GRANITA DINTRE TITLU SI PERSONALIZARE NU SE POATE MUTA: un titlu care contine chiar
+   * separatorul plus o personalizare nu are voie sa arate ca alt titlu cu alta personalizare.
+   * Asta era paguba de la care a plecat tot helperul.
+   */
+  const a = lineKey({ productId: "p1", variantTitle: "A::{}", customization: { g: "x" } });
+  const b = lineKey({ productId: "p1", variantTitle: "A", customization: { "}::{g": "x" } });
+  assert.notEqual(a, b, "granita dintre titlu si personalizare s-a mutat");
+});
+
 test("⚠ personalizarea din localStorage trece prin aceleasi reguli ca restul", () => {
   /*
    * `localStorage` e scris de client. Ce n-are forma buna se SCOATE, nu se duce mai departe pe

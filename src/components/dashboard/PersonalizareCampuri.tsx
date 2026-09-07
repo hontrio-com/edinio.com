@@ -43,6 +43,13 @@ export type ModPretAdmin =
     };
 
 export interface StareCustomizare {
+  /**
+   * Se pun numere in fata campurilor pe pagina de produs?
+   *
+   * ⚠ LIPSA INSEAMNA „DA", si de-aia se scrie `false` numai cand se stinge: asa, produsele
+   * configurate pana acum raman byte cu byte cum sunt in baza, si arata la fel.
+   */
+  numeroteaza?: boolean;
   enabled: boolean;
   fields: CampAdmin[];
   pret?: ModPretAdmin;
@@ -132,6 +139,27 @@ export function PersonalizareCampuri({ stare, seteaza }: Props) {
   return (
     <div className="space-y-4">
       <ModPret stare={stare} seteaza={seteaza} dimensiuni={dimensiuni} butoane={butoane} />
+
+      {/*
+        ⚠ NUMEROTAREA — o capabilitate pe care vitrina o avea, dar pe care n-o putea alege nimeni.
+        `CampuriPersonalizare` are de mult prop-ul `numeroteaza`, insa era fixat pe `true` la
+        fiecare chemare. Un reglaj pe care panoul nu-l ofera nu exista.
+
+        ⚠ Se scrie `false` NUMAI cand se stinge: lipsa inseamna „da", deci produsele configurate
+        pana acum arata exact cum arata azi.
+      */}
+      <label className="flex items-center gap-2.5 text-sm cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={stare.numeroteaza !== false}
+          onChange={(e) => {
+            const { numeroteaza: _, ...rest } = stare;
+            seteaza(e.target.checked ? rest : { ...rest, numeroteaza: false });
+          }}
+          className="w-4 h-4 rounded border-border accent-primary"
+        />
+        <span className="text-foreground">Numeroteaza campurile pe pagina produsului</span>
+      </label>
 
       {campuri.map((camp, idx) => (
         <div key={camp.id} className="border border-border rounded-xl p-4 space-y-3">

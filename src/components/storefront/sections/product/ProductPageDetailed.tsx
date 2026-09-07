@@ -818,7 +818,7 @@ export function ProductPageDetailed({
 
             {/* ⚠ Formularul e ACELASI in amandoua modelele: o componenta, nu doua copii. */}
             {pers.definitie && (
-              <CampuriPersonalizare stare={pers} color={color} titlu="Personalizeaza produsul" />
+              <CampuriPersonalizare stare={pers} color={color} titlu="Personalizeaza produsul" numeroteaza={pers.definitie?.numeroteaza !== false} />
             )}
 
             {/* Cantitate + cele doua actiuni */}

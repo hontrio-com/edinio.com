@@ -119,3 +119,66 @@ test("⚠ panoul lasa comerciantul sa aleaga desenul", () => {
   assert.ok(panou.includes("Casuta de bifat"), "panoul nu ofera casuta de bifat");
   assert.ok(panou.includes("Cum se afiseaza"), "reglajul n-are nume in panou");
 });
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NUMEROTAREA — un reglaj pe care vitrina il avea, dar panoul nu-l oferea
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ numerotarea se poate stinge, iar lipsa inseamna „da”", () => {
+  /*
+   * ⚠ CE ERA: `CampuriPersonalizare` avea de mult prop-ul `numeroteaza`, dar era fixat pe `true` la
+   * fiecare chemare. Un reglaj pe care panoul nu-l ofera nu exista.
+   *
+   * ⚠ SI DE CE „LIPSA INSEAMNA DA": toate cele 71 de produse vii n-au cheia. Un implicit gresit ar
+   * fi stins numerotarea peste noapte pe fiecare dintre ele.
+   */
+  const fara = normalizeazaDefinitia({ enabled: true, fields: [{ id: "t", type: "text", label: "T", required: false }] })!;
+  assert.equal(fara.numeroteaza, undefined, "s-a scris o cheie pe produsele care n-o aveau");
+
+  const stinsa = normalizeazaDefinitia({
+    enabled: true, numeroteaza: false,
+    fields: [{ id: "t", type: "text", label: "T", required: false }],
+  })!;
+  assert.equal(stinsa.numeroteaza, false, "numerotarea nu se poate stinge");
+
+  /* Si numai `false` o stinge — un „nu" scris altfel nu trebuie sa schimbe nimic. */
+  for (const rau of ["false", 0, null, "nu"]) {
+    const d = normalizeazaDefinitia({
+      enabled: true, numeroteaza: rau,
+      fields: [{ id: "t", type: "text", label: "T", required: false }],
+    })!;
+    assert.equal(d.numeroteaza, undefined, `${JSON.stringify(rau)} a stins numerotarea`);
+  }
+});
+
+test("⚠ reglajul supravietuieste DUS-INTORS prin formular", () => {
+  /*
+   * ⚠ CHIAR DEFECTUL DIN RUNDA P0, ALTA CHEIE. Acolo `pret` se pierdea la CITIRE, deci la a doua
+   * salvare produsul se intorcea la pretul de catalog — fara nicio eroare. Aici, necitita,
+   * numerotarea s-ar fi reaprins singura si comerciantul ar fi vazut numerele intorcandu-se fara
+   * sa ceara.
+   */
+  const form = sursa("src/components/dashboard/ProductForm.tsx");
+  const citiri = (form.match(/numeroteaza === false \? \{ numeroteaza: false \} : \{\}/g) ?? []).length;
+  assert.equal(citiri, 2, `reglajul se duce doar intr-un sens (${citiri} din 2)`);
+});
+
+test("⚠ vitrina chiar il asculta, pe amandoua modelele de pagina", () => {
+  /*
+   * O lista de locuri e o mostra: sunt DOUA modele de pagina de produs, si reparat doar unul,
+   * jumatate din magazine ar fi ignorat reglajul.
+   */
+  for (const f of [
+    "src/components/storefront/sections/product/ProductPageClassic.tsx",
+    "src/components/storefront/sections/product/ProductPageDetailed.tsx",
+  ]) {
+    assert.ok(
+      sursa(f).includes("numeroteaza={pers.definitie?.numeroteaza !== false}"),
+      `${f} nu trimite alegerea comerciantului la randare`,
+    );
+  }
+  assert.ok(
+    sursa("src/components/dashboard/PersonalizareCampuri.tsx").includes("Numeroteaza campurile"),
+    "panoul nu ofera reglajul",
+  );
+});

@@ -273,6 +273,13 @@ export interface DefinitiePersonalizare {
   fields: CampPersonalizare[];
   /** Lipsa inseamna `{ fel: "adaugat" }` — adica purtarea de dinainte de preturi. */
   pret?: ModPret;
+  /**
+   * Se pun numere („1.", „2.") in fata campurilor pe pagina de produs?
+   *
+   * ⚠ LIPSA INSEAMNA „DA": asa arata toate produsele configurate pana acum, si nu se schimba
+   * niciunul. Numai un `false` scris limpede stinge numerotarea.
+   */
+  numeroteaza?: boolean;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -667,7 +674,17 @@ export function normalizeazaDefinitia(raw: unknown): DefinitiePersonalizare | nu
   if (!fields.length) return null;
 
   const pret = citestePret(c.pret, fields);
-  return { enabled: true, fields, ...(pret ? { pret } : {}) };
+  /*
+   * ⚠ NUMEROTAREA E O ALEGERE A COMERCIANTULUI, si pana pe 07.09.2026 nu era.
+   *
+   * Vitrina stia sa deseneze si cu numar, si fara — `CampuriPersonalizare` are de mult prop-ul
+   * `numeroteaza` — dar nimeni nu-l putea schimba: era fixat pe `true` la fiecare chemare. O
+   * capabilitate pe care panoul n-o ofera e o capabilitate care nu exista.
+   *
+   * ⚠ LIPSA INSEAMNA „DA", ca produsele deja configurate sa arate exact cum arata acum.
+   */
+  const numeroteaza = c.numeroteaza === false ? { numeroteaza: false } : {};
+  return { enabled: true, fields, ...(pret ? { pret } : {}), ...numeroteaza };
 }
 
 /**

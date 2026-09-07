@@ -352,6 +352,9 @@ function productToForm(p: Product): FormState {
           enabled: ps.customization.enabled,
           fields: ps.customization.fields,
           ...(ps.customization.pret ? { pret: ps.customization.pret } : {}),
+          /* ⚠ Si numerotarea, din acelasi motiv ca `pret`: necitita, s-ar fi reaprins singura la a
+             doua salvare, iar comerciantul ar fi vazut numerele intorcandu-se fara sa ceara. */
+          ...(ps.customization.numeroteaza === false ? { numeroteaza: false } : {}),
         }
       : { enabled: false, fields: [] },
     /* ⚠ Citit fara sa presupunem forma: `page_sections` e jsonb, si produsele vechi n-au cheia. */
@@ -910,6 +913,9 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
           enabled: form.customization.enabled,
           fields: form.customization.fields,
           ...(form.customization.pret ? { pret: form.customization.pret } : {}),
+          /* ⚠ Numai cand e STINSA: lipsa inseamna „da", deci produsele de pana acum raman in baza
+             exact cum sunt, fara o cheie noua scrisa peste tot degeaba. */
+          ...(form.customization.numeroteaza === false ? { numeroteaza: false } : {}),
         },
         /*
          * ⚠ Se scrie doar ce a completat OMUL. Un obiect plin de siruri goale ar arata, la citire,

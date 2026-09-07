@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { sePoateRandaCaImagine } from "@/lib/customization/comanda";
+import { numeleFisierului, sePoateRandaCaImagine } from "@/lib/customization/adresa";
 import { toast } from "sonner";
 import {
   ArrowLeft, User, Phone, MapPin, Package, Banknote, CreditCard,
@@ -151,6 +150,45 @@ function StatusStepper({ status }: { status: string }) {
 }
 
 /**
+ * Adresa prin care comerciantul vede un fisier incarcat de client.
+ *
+ * ⚠ NU MAI E ADRESA PUBLICA DIN DEPOZIT. Valoarea din comanda e o CHEIE semnata, iar continutul
+ * se serveste printr-o ruta care cere sesiune, proprietatea magazinului, si ca fisierul sa fie
+ * chiar pe o comanda a lui. Vezi `customization/fisiere-private.ts`.
+ *
+ * ⚠ SE TRIMITE SI COMANDA, fiindca ruta cere cheia sa fie chiar pe ea. Panoul o stie oricum:
+ * fisierul se arata din interiorul unei comenzi deschise, niciodata singur.
+ *
+ * ⚠ Comenzile de dinaintea schimbarii poarta inca adrese intregi, si ele se deschid ca pana acum:
+ * un `https://` e adresa, restul e cheie.
+ *
+ * ⚠ SI NU E DOAR ISTORIE. Cat tine fereastra de desfasurare, ruta de incarcare intoarce si `url`
+ * pe langa cheie (vezi nota din `api/upload-customization/route.ts`), ca o pagina ramasa deschisa
+ * in browserul unui cumparator sa nu refuze un fisier tocmai urcat cu succes. Adica se scriu si
+ * ACUM comenzi cu adresa intreaga. Ramura asta iese impreuna cu `esteAdresaVeche` din
+ * `customization/comanda.ts`, nu inaintea ei.
+ */
+function adresaFisierului(valoare: string, businessId: string, comandaId: string): string {
+  if (/^https?:\/\//i.test(valoare)) return valoare;
+  return `/api/customization-file?cheie=${encodeURIComponent(valoare)}`
+    + `&businessId=${encodeURIComponent(businessId)}`
+    + `&comanda=${encodeURIComponent(comandaId)}`;
+}
+
+/*
+ * ⚠ NUMELE FISIERULUI NU SE MAI SCRIE AICI — se importa din `@/lib/customization/adresa`.
+ *
+ * Panoul avea o copie proprie, care facea `new URL(url).pathname`. Valoarea din comanda nu mai e
+ * o adresa, e o CHEIE relativa: `new URL` arunca pe ea la fiecare apel, deci FIECARE fisier iesea
+ * „Fisierul N”, fara terminatie. Un atelier de tipar vedea trei randuri identice si nu mai putea
+ * spune care e macheta si care e poza — pe chiar hartia dupa care se produce marfa.
+ *
+ * ⚠ SI NU SE FACE A TREIA COPIE. Regula era scrisa de doua ori — aici si in vitrina — si cele
+ * doua copii S-AU DEPARTAT la trecerea pe chei: una cadea pe „Fisierul N”, cealalta scria 65 de
+ * caractere de hexazecimal. De acum e una singura, folosita de amandoua ecranele.
+ */
+
+/**
  * Din ce se compune pretul unei linii personalizate.
  *
  * ⚠ SE AFISEAZA CE A SCRIS SERVERUL cand a incasat — nimic nu se resocoteste aici. Doua socoteli
@@ -160,22 +198,6 @@ function StatusStepper({ status }: { status: string }) {
  * inmultit cu cantitatea. La cantitate mai mare de una se scrie pe ecran, altfel randurile n-ar da
  * numarul de deasupra lor si comerciantul ar cauta o diferenta care nu exista.
  */
-/**
- * Numele fisierului, din adresa lui.
- *
- * ⚠ Adresa e produsa de NOI (ruta de incarcare pune un UUID si terminatia luata din octeti),
- * deci numele afisat nu e un sir venit de la client. Cade pe „Fisierul N" cand adresa nu se poate
- * citi: un rand de comanda vechi sau editat de mana n-are voie sa arunce panoul.
- */
-function numeleFisierului(url: string, i: number): string {
-  try {
-    const p = new URL(url).pathname;
-    return decodeURIComponent(p.slice(p.lastIndexOf("/") + 1)) || `Fisierul ${i + 1}`;
-  } catch {
-    return `Fisierul ${i + 1}`;
-  }
-}
-
 function DefalcareaPersonalizarii({ d, cantitate }: { d: DefalcareCitita; cantitate: number }) {
   const suprafata = suprafataDeAratat(d);
   return (
@@ -486,7 +508,7 @@ export function OrderDetailClient({
     { id: "gls", name: "GLS", logo: "/integrations/gls.svg", enabled: !!glsEnabled, awb: (order.gls_awb_number as string | null) ?? null, open: () => setGlsModalOpen(true) },
     /* ⚠ `id` trebuie sa fie EXACT valoarea pe care checkout-ul o scrie in
        `shipping_address.courier` — altfel `chosenCourier` ramane nedefinit si
-       panoul arata „Curier recomandat" in loc de „Clientul a ales". */
+       panoul arata „Curier recomandat” in loc de „Clientul a ales”. */
     { id: "pallex", name: "Pall-Ex", logo: "/integrations/pallex.avif", enabled: !!pallexEnabled, awb: (order.pallex_awb_number as string | null) ?? null, open: () => setPallexModalOpen(true) },
     { id: "ecolet", name: "eColet", logo: "/integrations/ecolet.png", enabled: !!ecoletEnabled, awb: (order.ecolet_awb_number as string | null) ?? null, open: () => setEcoletModalOpen(true) },
     /* ⚠ `id` trebuie sa fie EXACT valoarea pe care checkout-ul o scrie in
@@ -501,7 +523,7 @@ export function OrderDetailClient({
     { id: "smartship", name: "SmartShip", logo: "/integrations/smartship.png", enabled: !!smartshipEnabled, awb: (order.smartship_awb_number as string | null) ?? null, open: () => setSmartshipModalOpen(true) },
     /* ⚠ `id` trebuie sa fie sir-cu-sir acelasi cu ce scrie checkout-ul in
        `shipping_address.courier`, cu `SHIPPING_METHODS`, cu `activeCourierIds` si
-       cu `COURIER_LABELS`. „shipo" contra „shipo-ro" nu produce nicio eroare:
+       cu `COURIER_LABELS`. „shipo” contra „shipo-ro” nu produce nicio eroare:
        `chosenCourier` ramane `undefined` si comerciantului i se propune butonul
        ALTUI curier decat cel platit de client. */
     { id: "shipo", name: "Shipo.ro", logo: "/integrations/shipo.ro.svg", enabled: !!shipoEnabled, awb: (order.shipo_awb_number as string | null) ?? null, open: () => setShipoModalOpen(true) },
@@ -512,8 +534,8 @@ export function OrderDetailClient({
        `shipping_address.courier` — vezi nota de la Shipo. */
     { id: "ups", name: "UPS", logo: "/integrations/ups.svg", enabled: !!upsEnabled, awb: (order.ups_awb_number as string | null) ?? null, open: () => setUpsModalOpen(true) },
     /* ⚠ `id` trebuie sa fie sir-cu-sir acelasi cu ce scrie checkout-ul in
-       `shipping_address.courier` — vezi nota de la Shipo. La DHL sirul e „dhl", scurt si
-       usor de confundat cu numele afisat „DHL Express": numele e pentru om, `id`-ul e
+       `shipping_address.courier` — vezi nota de la Shipo. La DHL sirul e „dhl”, scurt si
+       usor de confundat cu numele afisat „DHL Express”: numele e pentru om, `id`-ul e
        pentru `chosenCourier`. */
     { id: "dhl", name: "DHL Express", logo: "/integrations/dhl.svg", enabled: !!dhlEnabled, awb: (order.dhl_awb_number as string | null) ?? null, open: () => setDhlModalOpen(true) },
     { id: "colete", name: "Colete Online", logo: "/integrations/colete-online.svg", enabled: !!coleteEnabled, awb: (order.colete_awb_number as string | null) ?? null, open: () => setColeteModalOpen(true) },
@@ -1119,9 +1141,9 @@ export function OrderDetailClient({
                             <p className="text-[11px] font-semibold text-purple-600 uppercase tracking-wide">{field.label}</p>
                             {field.type === "fisier" && Array.isArray(field.value) ? (
                               /*
-                               * ⚠ UN DOCUMENT N-ARE MINIATURA. Randat cu `<Image>`, un PDF da o
+                               * ⚠ UN DOCUMENT N-ARE MINIATURA. Randat ca imagine, un PDF da o
                                * poza rupta in dreptul fisierului de tipar — adica exact semnul
-                               * „nu s-a incarcat", pe hartia dupa care se produce marfa.
+                               * „nu s-a incarcat”, pe hartia dupa care se produce marfa.
                                *
                                * ⚠ Se hotaraste dupa `type`, ca la `image` de mai jos, dar
                                * ADEVARUL despre ce e in fisier vine din alta parte: ruta de
@@ -1131,7 +1153,7 @@ export function OrderDetailClient({
                               <ul className="mt-1 space-y-0.5">
                                 {(field.value as string[]).map((url, fiI) => (
                                   <li key={fiI}>
-                                    <a href={url} target="_blank" rel="noopener noreferrer"
+                                    <a href={adresaFisierului(url, order.business_id, order.id)} target="_blank" rel="noopener noreferrer"
                                       className="text-sm text-primary hover:underline break-all">
                                       {numeleFisierului(url, fiI)}
                                     </a>
@@ -1141,20 +1163,50 @@ export function OrderDetailClient({
                             ) : field.type === "image" && Array.isArray(field.value) ? (
                               /*
                                * ⚠ SI AICI miniatura doar pentru ce se poate DESENA. O poza venita
-                               * de pe iPhone e `.heic`: `/api/img` o refuza dinadins (ca octetii
-                               * HEIF sa nu ajunga la libheif), deci `<Image>` raspundea 404 si
-                               * comerciantul vedea un patrat gol pe chiar hartia dupa care produce
-                               * marfa. Se rupea in ORICE browser, Safari inclusiv.
+                               * de pe iPhone e `.heic`, iar Chrome, Firefox si Edge n-au decodor
+                               * pentru ea: desenata ca imagine, da un patrat rupt pe chiar hartia
+                               * dupa care se produce marfa. Se arata deci ca legatura cu nume,
+                               * dupa aceeasi regula in amandoua ecranele — doua reguli s-ar fi
+                               * departat, si comerciantul ar fi vazut alta pagina decat clientul.
+                               *
+                               * ⚠ REGULA E A LUI `customization/adresa.ts`, NU A LUI `/api/img`.
+                               * Panoul nu mai trece deloc prin optimizator, deci cine crede ca
+                               * lipsa miniaturii atarna de `KEY_RE` de acolo si adauga `.heic` in
+                               * ea nu repara nimic aici — si deschide o usa pe care `adresa.ts` o
+                               * tine inchisa dinadins: octeti HEIF straini dusi la libheif.
                                */
                               <div className="flex flex-wrap gap-1.5 mt-1">
                                 {(field.value as string[]).map((url, imgI) => (
                                   sePoateRandaCaImagine(url) ? (
-                                    <a key={imgI} href={url} target="_blank" rel="noopener noreferrer"
+                                    <a key={imgI} href={adresaFisierului(url, order.business_id, order.id)} target="_blank" rel="noopener noreferrer"
                                       className="relative block w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-primary transition-colors">
-                                      <Image src={url} alt={`Personalizare ${imgI + 1}`} fill sizes="56px" className="object-cover" />
+                                      {/*
+                                        ⚠ `<img>`, nu `<Image>`: optimizatorul cere o adresa pe care
+                                        o poate citi el, iar ruta noastra cere SESIUNEA
+                                        comerciantului. Cu `<Image>` miniatura ar fi raspuns 401.
+
+                                        ⚠ PATRATUL DE 56px TRAGE ORIGINALUL. Ruta intoarce octetii
+                                        de la incarcare, nemicsorati (plafonul e 10 MB pe imagine),
+                                        si cu `private, no-store`, deci nici browserul nu-i tine:
+                                        o comanda cu cinci poze de telefon costa 40 MB la FIECARE
+                                        deschidere a paginii. `lazy` amana ce nu se vede si
+                                        `async` scoate decodarea de pe firul care deseneaza — atat
+                                        se poate face din panou.
+                                        ⚠ Restul nu e de aici: ruta ar trebui sa primeasca o
+                                        latime (trepte fixe, ca `/api/img`) si sa micsoreze cu
+                                        `sharp` pentru miniatura, pastrand originalul pentru
+                                        legatura; iar antetul poate fi `private, max-age=…` —
+                                        `no-store` nu apara nimic peste `private`, doar plateste.
+
+                                        ⚠ Dezactivarea de lint de mai jos e DOAR pe randul asta.
+                                        Celelalte `<img>` din fisier sunt de dinainte si isi
+                                        pastreaza avertismentul: regula nu e oprita pe fisier.
+                                      */}
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img src={adresaFisierului(url, order.business_id, order.id)} alt={`Personalizare ${imgI + 1}`} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                                     </a>
                                   ) : (
-                                    <a key={imgI} href={url} target="_blank" rel="noopener noreferrer"
+                                    <a key={imgI} href={adresaFisierului(url, order.business_id, order.id)} target="_blank" rel="noopener noreferrer"
                                       className="text-sm text-primary hover:underline break-all">
                                       {numeleFisierului(url, imgI)}
                                     </a>
@@ -1233,7 +1285,7 @@ export function OrderDetailClient({
               </div>
               {totaluri.tvaEticheta && (
                 <div className="flex justify-between text-muted-foreground">
-                  {/* La preturi cu TVA inclus eticheta poarta cuvantul „inclus" si
+                  {/* La preturi cu TVA inclus eticheta poarta cuvantul „inclus” si
                       cifra NU se aduna: e portiunea extrasa din randurile de mai
                       sus, nu o suma in plus. Pe comanda #0074, adunata, ducea
                       coloana la 66,94 sub un Total de 60. */}
@@ -1251,7 +1303,7 @@ export function OrderDetailClient({
                 <div className="flex justify-between text-warning">
                   {/* Cand diferenta e chiar cat TVA-ul, ea are un nume: caseta nu
                       mai tipareste acelasi numar de doua ori, o data ca „TVA
-                      inclus" si o data ca „nejustificat". */}
+                      inclus” si o data ca „nejustificat”. */}
                   <span>{totaluri.tvaAdunatPesteTotal ? "TVA adunat peste total la plasare" : "Diferenta nejustificata"}</span>
                   <span className="font-medium">{totaluri.diferenta > 0 ? "-" : "+"}{formatPrice(Math.abs(totaluri.diferenta))}</span>
                 </div>
@@ -1296,7 +1348,7 @@ export function OrderDetailClient({
             {/*
               ⚠ LA O COMANDA DE MARKETPLACE STAREA E A LOR, SI SE VEDE CA ATARE (25.08.2026).
 
-              ⚠ SI TEXTUL ISI IA NUMELE DIN COMANDA (26.08.2026). Scria „eMAG" oricare ar fi
+              ⚠ SI TEXTUL ISI IA NUMELE DIN COMANDA (26.08.2026). Scria „eMAG” oricare ar fi
               fost marketplace-ul, fiindca atunci eMAG era singurul din lista. Cand a intrat
               si Trendyol, o comanda Trendyol si-ar fi trimis comerciantul in contul eMAG sa
               caute o comanda care acolo nu exista.
@@ -1537,7 +1589,7 @@ export function OrderDetailClient({
         buton rosu care arata apasabil si da eroare abia dupa apasare e o cursa: omul crede
         ca a facut o greseala, incearca din nou, si abia apoi citeste.
 
-        ⚠ Se ascunde CARTEA intreaga, nu doar butonul: un titlu „Sterge comanda" deasupra
+        ⚠ Se ascunde CARTEA intreaga, nu doar butonul: un titlu „Sterge comanda” deasupra
         unui buton mort ar fi fost la fel de mincinos.
       */}
       {!tinutaDeEi && (

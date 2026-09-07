@@ -1811,12 +1811,13 @@ export async function sendBlogSubscribeConfirmation(email: string, adresaConfirm
  *
  * ⚠ TOT CE IESE TRECE PRIN `esc`. Etichetele vin din definitia produsului, dar valorile sunt
  * siruri scrise de un strain prin formularul PUBLIC de comanda, si ajung intr-un HTML deschis
- * in casuta comerciantului. Adresele de fisier trec prin `escapeUrl`, nu prin `esc`: escaparea
- * singura inchide iesirea din atribut, dar lasa in picioare un `javascript:` intr-un `href`.
+ * in casuta comerciantului.
  *
- * ⚠ LA FISIERE NU SE PUN ETICHETE DE IMAGINE. Clientii de mail blocheaza imaginile din oficiu,
- * deci o poza incarcata ar fi ajuns un dreptunghi gol. Se scrie numarul de fisiere plus
- * legaturi numerotate, ca atelierul sa le poata deschide.
+ * ⚠ LA FISIERE NU IESE NIMIC IN AFARA DE NUMARUL LOR — nici imagine, nici legatura. Clientii de
+ * mail blocheaza imaginile din oficiu, deci o poza incarcata ar fi ajuns oricum un dreptunghi gol;
+ * iar o adresa scrisa aici ramane in casute ani de zile si nu mai poate fi luata inapoi.
+ * Comerciantul le deschide din panou, prin ruta care cere sesiune si proprietatea comenzii;
+ * cumparatorul nu are panou, si de ce nu i se da nimic in loc e scris la fisiere, mai jos.
  */
 export function randPersonalizare(linie: unknown): string {
   if (!linie || typeof linie !== "object") return "";
@@ -1838,11 +1839,43 @@ export function randPersonalizare(linie: unknown): string {
     if (Array.isArray(camp.value)) {
       const adrese = camp.value.filter((a): a is string => typeof a === "string" && a.trim() !== "");
       if (adrese.length === 0) continue;
-      const legaturi = adrese
-        .map((a, n) => `<a href="${escapeUrl(a.trim())}" style="color:#2563eb;text-decoration:underline;">${n + 1}</a>`)
-        .join(", ");
-      const cuvant = adrese.length === 1 ? "fisier" : "fisiere";
-      bucati.push(`${esc(eticheta)}: ${adrese.length} ${cuvant} (${legaturi})`);
+      /*
+       * ⚠ EMAILUL NU MAI POARTA ADRESA FISIERULUI, si asta era jumatatea cea mai scumpa.
+       *
+       * Un email trece prin serverele a doi furnizori si ramane in casute ani de zile. Adresa
+       * pozei de familie a unui cumparator, pusa acolo, nu mai poate fi luata inapoi — si nimic
+       * n-o expira vreodata. Pana acum se scriau legaturi numerotate catre depozitul public.
+       *
+       * Se scrie doar CATE fisiere sunt.
+       *
+       * ⚠ SI NU COSTA LA FEL PE CEI DOI CITITORI, fiindca ajutorul asta e chemat din AMANDOUA
+       * emailurile de comanda, nu din unul:
+       *   * `sendNewOrderEmail` (COMERCIANTUL) pierde doar un drum. Fisierele se deschid din
+       *     panou, prin ruta cu sesiune si proprietatea comenzii, iar butonul „Vezi comanda in
+       *     dashboard” e chiar dedesubt, in acelasi email.
+       *   * `sendOrderConfirmationToCustomer` (CUMPARATORUL) nu are panou, si emailul lui n-are
+       *     niciun buton catre comanda. El ramane doar cu cifra; inainte avea o legatura
+       *     numerotata pe care putea da clic.
+       *
+       * ⚠ SI TOTUSI NU I SE PUNE NIMIC IN LOC, dinadins — nu din scapare:
+       *   * Nu adresa, si nici o legatura semnata scurta. Tocmai ele nu mai au voie sa plece:
+       *     casuta cumparatorului e la fel de neexpirabila ca a atelierului, si trece prin
+       *     aceiasi doi furnizori. Ar da inapoi exact ce s-a scos.
+       *   * Nu numele fisierului. Cheia e `<uuid>-<semnatura>.<ext>`: numele trimis de browser
+       *     nu se scrie NICIODATA pe disc (vezi `customization/adresa.ts`), deci tot ce s-ar
+       *     putea tipari cinstit e „Fisierul 2.jpg” — o pozitie si o terminatie, nu un raspuns
+       *     la „care poza a plecat?”.
+       *
+       * ⚠ CE RAMANE DECI NEREZOLVAT, ca sa nu para inchis: omul care a incarcat doua poze si vrea
+       * sa le vada inainte de tipar nu are din email nicio cale, si scrie magazinului. Raspunsul
+       * adevarat ar fi o galeata privata cu adrese care EXPIRA si o ruta care lasa inauntru un om
+       * FARA cont — alta piesa, de infrastructura, nu un rand aici.
+       *
+       * ⚠ Nici pentru comenzile vechi, care poarta inca adrese intregi: castigul e tocmai ca
+       * adresa sa nu mai plece nicaieri.
+       */
+      const cuvant = adrese.length === 1 ? "fisier incarcat" : "fisiere incarcate";
+      bucati.push(`${esc(eticheta)}: ${adrese.length} ${cuvant}`);
       continue;
     }
 

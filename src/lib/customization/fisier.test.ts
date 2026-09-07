@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { normalizeazaDefinitia, TIPURI } from "./definitie";
 import { normalizeazaValorile } from "./valori";
-import { sePoateRandaCaImagine, verificaPersonalizarea } from "./comanda";
+import { sePoateRandaCaImagine } from "./adresa";
+import { verificaPersonalizarea } from "./comanda";
 import { detectDocMime, detectImageMime, isAllowedImage } from "@/lib/utils/file-signature";
 
 /**

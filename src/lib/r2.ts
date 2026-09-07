@@ -74,16 +74,75 @@ export async function createPresignedPutUrl(
   return { uploadUrl, publicUrl: `${PUBLIC_URL}/${key}` };
 }
 
-/** Read an object from R2 as a Buffer; null if it doesn't exist (used by the image optimizer). */
-export async function getFromR2(key: string): Promise<Buffer | null> {
+/**
+ * Ce s-a intamplat la o citire din depozit.
+ *
+ * ═══ ⚠ „NU EXISTA” SI „N-AM PUTUT CITI” NU SUNT ACELASI LUCRU ═══
+ *
+ * `getFromR2` intoarce `null` pentru amandoua, fiindca a fost scris pentru optimizatorul de
+ * imagini, unde raspunsul e acelasi: se cade pe originalul intreg. Pentru un fisier de tipar al
+ * unui cumparator raspunsul NU e acelasi: „negasit” il trimite pe comerciant sa ceara clientului
+ * macheta din nou, cand de fapt R2 avea un incident de zece minute sau cineva schimbase
+ * `R2_ACCESS_KEY_ID`. Octetii erau acolo tot timpul.
+ *
+ * Acelasi rationament e scris deja, cu aceleasi cuvinte, la citirea comenzii din
+ * `/api/customization-file`: o citire cazuta nu e „n-are dreptul” si nu e „nu exista”.
+ */
+export type CitireR2 =
+  | { fel: "octeti"; octeti: Buffer }
+  | { fel: "lipsa" }
+  | { fel: "eroare"; motiv: string };
+
+/**
+ * Eroarea asta inseamna „obiectul nu e acolo”, nu „n-am putut citi”?
+ *
+ * ⚠ LISTA E SCURTA DINADINS. `NoSuchBucket`, `InvalidAccessKeyId`, `AccessDenied`, un timeout sau
+ * un 500 de la Cloudflare sunt configurari sau caderi — cine le-ar trece drept „lipsa” ar spune
+ * exact minciuna pe care tipul asta o repara. Numai obiectul care chiar nu exista (`NoSuchKey`,
+ * `NotFound`) e lipsa.
+ *
+ * ⚠ SI 404 NU E DE AJUNS CA SEMN. `NoSuchBucket` vine tot cu 404: o galeata redenumita sau cu
+ * credentiale schimbate ar fi iesit „fisier negasit” pe TOATE fisierele deodata, adica exact cand
+ * minciuna costa cel mai mult. De-aia caderile cunoscute se numesc pe nume inainte de a privi
+ * codul HTTP.
+ */
+const CADERI_CU_404 = ["NoSuchBucket", "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch"];
+
+export function esteObiectLipsa(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const err = e as { name?: unknown; Code?: unknown; $metadata?: { httpStatusCode?: number } };
+  const nume = typeof err.name === "string" ? err.name
+    : typeof err.Code === "string" ? err.Code : "";
+  if (nume === "NoSuchKey" || nume === "NotFound") return true;
+  if (CADERI_CU_404.includes(nume)) return false;
+  return err.$metadata?.httpStatusCode === 404;
+}
+
+/** Citeste un obiect din R2 si SPUNE care din cele trei lucruri s-a intamplat. */
+export async function citesteDinR2(key: string): Promise<CitireR2> {
   try {
     const res = await s3.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
-    if (!res.Body) return null;
+    /* Un raspuns fara corp nu e o lipsa: obiectul a fost gasit si tot n-avem octetii. */
+    if (!res.Body) return { fel: "eroare", motiv: "raspuns fara corp" };
     const bytes = await res.Body.transformToByteArray();
-    return Buffer.from(bytes);
-  } catch {
-    return null;
+    return { fel: "octeti", octeti: Buffer.from(bytes) };
+  } catch (e) {
+    if (esteObiectLipsa(e)) return { fel: "lipsa" };
+    return { fel: "eroare", motiv: e instanceof Error ? `${e.name}: ${e.message}` : String(e) };
   }
+}
+
+/**
+ * Read an object from R2 as a Buffer; null if it doesn't exist (used by the image optimizer).
+ *
+ * ⚠ PURTAREA RAMANE EXACT CEA DE DINAINTE — si lipsa, si eroarea ies `null` — fiindca cei cinci
+ * apelanti (`api/img` de doua ori, `ecolet/awb`, `gls/awb`, `pallex/document`) se sprijina pe ea:
+ * toti au deja o cale de rezerva (originalul, sau reemiterea documentului) si un `null` acolo nu
+ * minte pe nimeni. Cine are nevoie de deosebire cheama `citesteDinR2`.
+ */
+export async function getFromR2(key: string): Promise<Buffer | null> {
+  const r = await citesteDinR2(key);
+  return r.fel === "octeti" ? r.octeti : null;
 }
 
 export async function deleteFromR2(key: string): Promise<void> {

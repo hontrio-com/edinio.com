@@ -2,7 +2,8 @@
 
 import { FileText, Loader2, Palette, Upload, X } from "lucide-react";
 import type { CampPersonalizare } from "@/lib/customization/definitie";
-import { sePoateRandaCaImagine } from "@/lib/customization/comanda";
+import { numeleFisierului, sePoateRandaCaImagine } from "@/lib/customization/adresa";
+import { fisiereleCampului } from "@/lib/customization/valori";
 import type { StarePersonalizare } from "./usePersonalizare";
 
 /**
@@ -11,7 +12,7 @@ import type { StarePersonalizare } from "./usePersonalizare";
  * ═══ ⚠ DE CE O COMPONENTA, SI NU COD IN FIECARE PAGINA ═══
  *
  * Pana acum formularul traia intr-un singur loc — `OrderModal` — si nicaieri altundeva: pagina de
- * produs arata doar o pastila „Personalizabil", si aia numai in modelul `classic`. Modelele sunt
+ * produs arata doar o pastila „Personalizabil”, si aia numai in modelul `classic`. Modelele sunt
  * doua si vor fi mai multe; scris in fiecare, formularul ar fi divergit, iar divergenta s-ar fi
  * vazut ca un model in care lipseste un camp obligatoriu.
  *
@@ -30,14 +31,17 @@ interface Props {
   stare: StarePersonalizare;
   /** Culoarea magazinului. Se aplica prin `style`, ca peste tot in vitrina. */
   color: string;
-  /** Numerotarea pasilor („1. Scrie dimensiunile"). */
+  /** Numerotarea pasilor („1. Scrie dimensiunile”). */
   numeroteaza?: boolean;
   /** Titlul de deasupra. Lipsa in formularul de comanda, unde exista deja unul. */
   titlu?: string;
 }
 
 export function CampuriPersonalizare({ stare, color, numeroteaza = true, titlu }: Props) {
-  const { definitie, valori, pune, constatari, incarca, motive, incarcaFisiere, scoateFisier } = stare;
+  const {
+    definitie, valori, pune, constatari, incarca, motive, previzualizari, nume,
+    incarcaFisiere, scoateFisier,
+  } = stare;
   if (!definitie) return null;
 
   return (
@@ -77,7 +81,7 @@ export function CampuriPersonalizare({ stare, color, numeroteaza = true, titlu }
               color={color}
               eroare={!!eroare}
               idEroare={idEroare}
-              incarca={incarca} motive={motive}
+              incarca={incarca} motive={motive} previzualizari={previzualizari} nume={nume}
               incarcaFisiere={incarcaFisiere}
               scoateFisier={scoateFisier}
             />
@@ -108,6 +112,8 @@ interface ControlProps {
   idEroare: string;
   incarca: Record<string, boolean>;
   motive: StarePersonalizare["motive"];
+  previzualizari: StarePersonalizare["previzualizari"];
+  nume: StarePersonalizare["nume"];
   incarcaFisiere: StarePersonalizare["incarcaFisiere"];
   scoateFisier: StarePersonalizare["scoateFisier"];
 }
@@ -318,13 +324,13 @@ function Control(p: ControlProps) {
   }
 }
 
-function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, motive, incarcaFisiere, scoateFisier }: ControlProps) {
+function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, motive, previzualizari, nume, incarcaFisiere, scoateFisier }: ControlProps) {
   const adrese = Array.isArray(valoare) ? (valoare as string[]) : [];
   /*
    * ⚠ MINIATURA DOAR PENTRU CE SE POATE CHIAR DESENA, si asta e o singura regula, nu doua.
    *
    * Randat cu `<img>`, un fisier care nu se poate decoda da o poza rupta chiar in locul in care
-   * clientul tocmai a incarcat ceva — adica exact semnul „n-a mers". Fara niciun mesaj, fiindca nu
+   * clientul tocmai a incarcat ceva — adica exact semnul „n-a mers”. Fara niciun mesaj, fiindca nu
    * e nicio eroare. El sterge, incarca iar, si vede acelasi patrat.
    *
    * Doua feluri de fisiere pateau asta, si prima forma a codului il apara doar pe primul:
@@ -332,35 +338,62 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, motive, inca
    *  - HEIC/HEIF, la campul de tip `image` — pozele venite de pe iPhone. Chrome, Firefox si Edge
    *    n-au decodor HEIC, iar `/api/img` nu le primeste dinadins (vezi `sePoateRandaCaImagine`).
    *
-   * Deci intrebarea nu e „ce fel de CAMP e", ci „se poate desena ADRESA asta" — si se pune pe
+   * Deci intrebarea nu e „ce fel de CAMP e”, ci „se poate desena CHEIA asta” — si se pune pe
    * fiecare fisier in parte. Asa un JPG incarcat intr-un camp de fisiere isi capata miniatura, iar
-   * un HEIC dintr-un camp de imagini isi capata numele si legatura.
+   * un HEIC dintr-un camp de imagini isi capata NUMELE.
+   *
+   * ⚠ NUMELE, SI ATAT — randul asta spunea pana ieri „numele si legatura”. Legatura n-a
+   * supravietuit trecerii la chei semnate: nu mai exista o adresa publica de deschis, deci `<a
+   * href>` a devenit `<span>` mai jos. Fisierul insusi il vede doar comerciantul, prin ruta cu
+   * sesiune.
    */
   const documente = camp.type === "fisier";
-  const maxim = camp.max_files ?? 5;
+  /*
+   * ⚠ ACELASI PLAFON CA AL CARLIGULUI, dintr-o singura functie — erau doua cifre.
+   *
+   * Aici scria `camp.max_files ?? 5`, iar carligul si poarta de comanda socotesc
+   * `fisiereleCampului(camp)`, adica cel mult 20. Pentru un camp cu 50 scris in panou ecranul
+   * promitea 50 si continua sa invite la incarcare si dupa al 20-lea: fisierele plecau in R2,
+   * platite, iar comanda era oprita oricum de constatarea „se pot trimite cel mult 20”. Cifra
+   * promisa si cifra aparata trebuie sa fie ACEEASI cifra.
+   */
+  const maxim = fisiereleCampului(camp);
   const seIncarca = !!incarca[camp.id];
-  const numeleFisierului = (url: string, i: number) => {
-    try {
-      const cale = new URL(url).pathname;
-      return decodeURIComponent(cale.slice(cale.lastIndexOf("/") + 1)) || `Fisierul ${i + 1}`;
-    } catch {
-      return `Fisierul ${i + 1}`;
-    }
-  };
+  /*
+   * ⚠ NUMELE NU SE MAI CITESTE DIN CHEIE, si nici nu se mai scrie aici a treia oara.
+   *
+   * Ultima bucata a cheii noi e `<uuid>-<semnatura>.<ext>` — 65 de caractere de hexazecimal, si
+   * `truncate` le taie pe telefon la primele cateva: trei poze aratau IDENTIC, iar cine voia sa
+   * scoata poza gresita apasa X-ul altei poze. Aratam numele adevarat, pe care carligul l-a tinut
+   * din `File.name` (`stare.nume`), si cadem pe „Fisierul N.<ext>” dupa reincarcarea paginii, cand
+   * harta e goala. Regula sta o singura data, in `@/lib/customization/adresa` — erau doua copii
+   * (vitrina si panoul) si se departasera deja.
+   */
 
   return (
     <div className="space-y-2">
       {adrese.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {adrese.map((url, i) => (
-            sePoateRandaCaImagine(url) ? (
+            /*
+             * ⚠ MINIATURA VINE DIN BROWSER, nu de la server.
+             *
+             * Valoarea e o cheie, iar continutul se serveste doar comerciantului, pe o ruta cu
+             * sesiune. Previzualizarea se face din chiar fisierul pe care omul tocmai l-a ales
+             * (`URL.createObjectURL`) — deci poza lui nu mai face drumul inapoi ca sa se vada.
+             *
+             * ⚠ La reincarcarea paginii ea se pierde, si atunci se arata NUMELE. Valoarea
+             * ramane, deci comanda e intreaga; doar imaginea nu se mai poate desena fara sa cerem
+             * octetii de undeva.
+             */
+            previzualizari[url] && sePoateRandaCaImagine(url) ? (
               <div key={`${url}-${i}`} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border bg-surface group">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={`Fisierul ${i + 1}`} className="w-full h-full object-cover" />
+                <img src={previzualizari[url]} alt={numeleFisierului(url, i, nume[url])} className="w-full h-full object-cover" />
                 <button
                   type="button"
-                  onClick={() => scoateFisier(camp.id, i)}
-                  aria-label={`Scoate fisierul ${i + 1}`}
+                  onClick={() => scoateFisier(camp.id, i, url)}
+                  aria-label={`Scoate ${numeleFisierului(url, i, nume[url])}`}
                   className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
                 >
                   <X size={10} />
@@ -369,16 +402,17 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, motive, inca
             ) : (
               <div key={`${url}-${i}`} className="flex items-center gap-2 text-sm w-full">
                 <FileText size={15} className="shrink-0" style={{ color }} />
-                <a
-                  href={url} target="_blank" rel="noopener noreferrer"
-                  className="truncate hover:underline text-foreground"
-                >
-                  {numeleFisierului(url, i)}
-                </a>
+                {/*
+                  ⚠ NU MAI E O LEGATURA, fiindca nu mai exista o adresa publica de deschis. Ce se
+                  arata e numele; fisierul insusi il vede doar comerciantul, prin ruta cu sesiune.
+                */}
+                <span className="truncate text-foreground" title={numeleFisierului(url, i, nume[url])}>
+                  {numeleFisierului(url, i, nume[url])}
+                </span>
                 <button
                   type="button"
-                  onClick={() => scoateFisier(camp.id, i)}
-                  aria-label={`Scoate fisierul ${i + 1}`}
+                  onClick={() => scoateFisier(camp.id, i, url)}
+                  aria-label={`Scoate ${numeleFisierului(url, i, nume[url])}`}
                   className="ml-auto shrink-0 w-5 h-5 rounded-full bg-surface border border-border flex items-center justify-center hover:bg-red-50"
                 >
                   <X size={10} />
@@ -391,7 +425,9 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, motive, inca
 
       {adrese.length < maxim && (
         <label
-          className="flex items-center gap-2 px-3 py-2.5 bg-surface border border-dashed rounded-lg cursor-pointer hover:border-foreground/40 transition-colors w-fit"
+          className={`flex items-center gap-2 px-3 py-2.5 bg-surface border border-dashed rounded-lg hover:border-foreground/40 transition-colors w-fit ${
+            seIncarca ? "cursor-wait opacity-70" : "cursor-pointer"
+          }`}
           style={{ borderColor: eroare ? "#f87171" : undefined }}
         >
           {seIncarca ? <Loader2 size={15} className="animate-spin" style={{ color }} /> : <Upload size={15} style={{ color }} />}
@@ -404,7 +440,7 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, motive, inca
              * ⚠ ACEEASI LISTA CA PE SERVER (ruta `upload-customization`), si de-aia sunt si
              * HEIC/HEIF aici: serverul le primeste din 07.06.2026, dar campul nu le declara, deci
              * fereastra de alegere a fisierelor le arata GRI pe iPhone — formatul implicit al
-             * pozelor de acolo. Clientul vedea ca „nu se poate incarca poza mea".
+             * pozelor de acolo. Clientul vedea ca „nu se poate incarca poza mea”.
              *
              * ⚠ Nu e o poarta: filtrul din browser doar ajuta la alegere. Serverul verifica
              * OCTETII fisierului, nu antetul trimis (`detectImageMime`), deci ocolit de aici
@@ -414,6 +450,13 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, motive, inca
               ? "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,application/pdf,.pdf"
               : "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"}
             multiple
+            /*
+             * ⚠ INCHIS CAT TIMP URCA. Deschis, a doua apasare pornea o a doua rulare peste prima,
+             * si scrierea ei o suprascria: pe 4G, cine alegea doua poze si mai adauga una in
+             * timpul urcarii ramanea cu una singura. Scrierea functionala din carlig apara
+             * valoarea; asta apara si plafonul, si nervii omului.
+             */
+            disabled={seIncarca}
             className="hidden"
             aria-invalid={eroare || undefined}
             aria-describedby={eroare ? idEroare : undefined}
@@ -440,8 +483,8 @@ function Fisiere({ camp, valoare, color, eroare, idEroare, incarca, motive, inca
         <p role="alert" className="text-xs text-red-500">
           {/*
             ⚠ CUVINTELE SERVERULUI, cand le are. Explicatia compusa din reglajele campului putea
-            fi FALSA in amandoua jumatatile — „pana in 100 MB" pe un fisier de 55 MB refuzat la 40,
-            si „accepta PDF" pe chiar un PDF. Genericul ramane doar pentru caderea de retea, unde
+            fi FALSA in amandoua jumatatile — „pana in 100 MB” pe un fisier de 55 MB refuzat la 40,
+            si „accepta PDF” pe chiar un PDF. Genericul ramane doar pentru caderea de retea, unde
             n-avem de la cine sa aflam motivul.
           */}
           {motive[camp.id] || (

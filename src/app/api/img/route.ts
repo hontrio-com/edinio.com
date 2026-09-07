@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { getFromR2, uploadToR2 } from "@/lib/r2";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { MAX_PIXELI } from "@/lib/utils/file-signature";
+import { PREFIX_INCARCARI } from "@/lib/customization/adresa";
 
 export const runtime = "nodejs";
 
@@ -11,6 +12,55 @@ const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL ?? "";
 // Only allow our own upload prefixes + image extensions — the route must not be
 // usable to resize arbitrary objects.
 const KEY_RE = /^(products|gallery|logos|covers|avatars)\/[\w./-]+\.(webp|jpe?g|png|gif|avif)$/i;
+
+/*
+ * ⚠ INCARCARILE CUMPARATORILOR NU TREC PE AICI, PE NICIUN DRUM.
+ *
+ * Fisierele urcate din formularul public de personalizare stau sub `PREFIX_INCARCARI`, adica
+ * chiar sub `products/`, deci `KEY_RE` le primea INTREGI. Iar ruta asta n-are sesiune (e
+ * scutita dinadins si de poarta MFA, vezi `API_FARA_POARTA` din `lib/auth/poarta-mfa.ts`), nu
+ * stie de niciun magazin si de nicio comanda. Cele patru porti ale lui
+ * `/api/customization-file` — semnatura cheii, sesiune, proprietatea magazinului, si cheia sa
+ * fie chiar pe comanda ceruta — se ocoleau aici cu un singur GET fara cont:
+ *
+ *   1. cu `w`, se serveau OCTETII pozei, cu `public, max-age=31536000, immutable` — chiar
+ *      antetul pe care ruta de incarcare tocmai il schimbase in `private, no-store`, ca poza
+ *      de familie a unui cumparator sa nu ramana un an la un intermediar sau in CDN;
+ *   2. si, ca efect secundar, se scria o A DOUA copie in depozit, la
+ *      `_optim/w<W>q<Q>/<cheie>.webp`, tot cu antetul public implicit al lui `uploadToR2`.
+ *      Copia aia nu sta sub prefixul incarcarilor, nu poarta semnatura si n-o cunoaste niciun
+ *      drum de stergere: ramanea publica si dupa ce comanda ar fi fost stearsa;
+ *   3. si oricand octetii lipseau din depozit, `fallback()` raspundea 302 catre
+ *      `${R2_PUBLIC_URL}/<cheie>` — adica ruta noastra dadea inapoi chiar adresa publica pe
+ *      care toata piesa exista ca s-o scoata din circulatie.
+ *
+ * ⚠ FARA `w` NU se ajungea la drumul 3, cum scria aici. Latimea cade pe 16 (vezi nota de la
+ * `fallback()`, mai jos), deci se serveau tot octetii — drumul 1, la 16 pixeli. Masurat, cu
+ * cheia in depozit si refuzul scos: 200, nu 302.
+ *
+ * De-aia refuzul se face AICI, inaintea oricarei atingeri a depozitului, si NU prin
+ * `fallback()`: `fallback()` este drumul 3.
+ *
+ * ⚠ SE COMPARA PE SEGMENTE, nu cu `startsWith`. `KEY_RE` e insensibila la litere si `[\w./-]+`
+ * primeste si `//`, si `/./` — deci `PRODUCTS/CUSTOMIZATIONS/…`, `products//customizations/…`
+ * si `products/./customizations/…` treceau de un `startsWith`, iar de acolo plecau ca
+ * `Location` catre un intermediar care aduna segmentele caii inapoi in cheia adevarata.
+ *
+ * ⚠ SI PANA UNDE TINE TITLUL DE SUS: pana la ruta ASTA. Cu `NEXT_PUBLIC_CDN_URL` pus,
+ * `supabase-image-loader.ts` nu mai compune `/api/img?p=…`, ci
+ * `${CDN}/cdn-cgi/image/width=…/<cheie>` — Cloudflare taie si tine la margine, si nicio ruta
+ * de-a noastra nu mai e pe drum ca sa poata refuza ceva. Azi drumul ala nu e ajungibil pentru
+ * incarcarile cumparatorilor: loaderul cere o ADRESA R2 ca `src`, iar campurile de personalizare
+ * poarta acum o CHEIE, deci `extractR2Key` da null si `<Image>` lasa `src`-ul neatins — dar asta
+ * e o conventie, nu o paza, si nu se probeaza de aici.
+ */
+const SEGMENTE_INCARCARI = PREFIX_INCARCARI.toLowerCase().split("/").filter(Boolean);
+
+function esteIncarcareDeCumparator(cheie: string): boolean {
+  /* Segmentele caii, cum le-ar citi depozitul: fara goluri, fara „.” si fara litere mari. */
+  const segmente = cheie.toLowerCase().split("/").filter((s) => s !== "" && s !== ".");
+  return segmente.some((_, i) => SEGMENTE_INCARCARI.every((s, j) => segmente[i + j] === s));
+}
 
 /**
  * Self-hosted image optimizer. Resizes an R2-hosted image to the requested width
@@ -29,6 +79,14 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams;
   const key = sp.get("p") ?? "";
+
+  /*
+   * ⚠ Vezi nota de la `esteIncarcareDeCumparator`: refuzul sta inaintea oricarei atingeri a
+   * depozitului si nu trece prin `fallback()`. `searchParams` a decodat deja `%2F`, deci si
+   * cheia scrisa procentual e citita tot ca o cale. Raspunsul e 404, acelasi pe care il da o
+   * cheie inexistenta: ruta n-are voie sa spuna nimanui ca fisierul exista.
+   */
+  if (esteIncarcareDeCumparator(key)) return new NextResponse("Not found", { status: 404 });
 
   /*
    * Latimea si calitatea se ROTUNJESC la o lista fixa.
@@ -63,8 +121,15 @@ export async function GET(req: NextRequest) {
    * nu era o escaladare de drepturi — dar era o redirectare arbitrara servita de noi,
    * dintr-o ruta scutita dinadins de poarta MFA.
    *
-   * Ce NU se schimba: o cheie valida fara latime cade in continuare pe imaginea intreaga.
-   * Aia e purtarea pe care se bizuie apelantii care vor originalul.
+   * ⚠ SI CE NU FACE `fallback()`: nu e drumul pentru „vreau imaginea intreaga”. Aici scria ca
+   * „o cheie valida fara latime cade in continuare pe imaginea intreaga” — nu e adevarat, si
+   * n-a fost niciodata: fara `w`, `parseInt` da NaN, `|| 0` da 0, iar `Math.max(16, 0)` da 16,
+   * deci `width` nu poate fi 0 si `!width` nu se aprinde din lipsa de latime. Cine cere
+   * `/api/img?p=<cheie>` fara `w` primeste o miniatura de 16 pixeli. Purtarea ramane cum e —
+   * niciun apelant din proiect nu cere ruta fara `w` (`supabase-image-loader.ts` il pune
+   * mereu) — dar promisiunea pleaca de aici: ea ar fi trimis pe drum gresit exact pe cine
+   * repara ruta. `!width` ramane ca paza pentru ziua in care treptele se schimba, nu ca drum
+   * umblat azi.
    */
   const cheieValida = !!key && !key.includes("..") && KEY_RE.test(key);
   const originalUrl = cheieValida && R2_PUBLIC_URL ? `${R2_PUBLIC_URL}/${key}` : null;

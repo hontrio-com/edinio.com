@@ -1,5 +1,7 @@
 import { r2KeyFromUrl } from "@/lib/r2-url";
+import { PREFIX_INCARCARI, terminatia } from "./adresa";
 import { normalizeazaDefinitia, type CampPersonalizare } from "./definitie";
+import { esteCheiaNoastra } from "./fisiere-private";
 import { campurileFaraSuprafata, pretulPersonalizarii, type RandDefalcare } from "./pret";
 import { normalizeazaValorile, type ValoareCamp } from "./valori";
 
@@ -29,8 +31,7 @@ import { normalizeazaValorile, type ValoareCamp } from "./valori";
  * a cerut altceva decat i se livreaza.
  */
 
-/** Prefixul sub care ruta publica de incarcare scrie fisierele clientilor. */
-const PREFIX_INCARCARI = "products/customizations/";
+
 
 /** Cate fisiere se accepta in total pe o linie, oricum ar fi configurate campurile. */
 const MAX_FISIERE_PE_LINIE = 40;
@@ -52,46 +53,12 @@ const TERMINATII: Record<string, readonly string[]> = {
   fisier: ["jpg", "jpeg", "png", "webp", "heic", "heif", "pdf"],
 };
 
-/**
- * Se poate desena adresa asta ca IMAGINE, in browser si in panou?
- *
- * ═══ ⚠ DE CE NU E ACELASI LUCRU CU „E O IMAGINE" ═══
- *
- * `heic` si `heif` sunt imagini adevarate, trec de verificarea pe octeti, si au voie intr-un
- * camp de tip `image` — vezi `TERMINATII`. Dar nu se pot DESENA: Chrome, Firefox si Edge n-au
- * decodor HEIC, iar `/api/img` nu le primeste dinadins, ca octetii HEIF trimisi de un anonim sa
- * nu ajunga la libheif (vezi `securitate-audit.test.ts`).
- *
- * Deci un client care incarca poza de pe iPhone vedea un patrat rupt in locul in care tocmai
- * pusese poza — fara niciun mesaj, fiindca nu era nicio eroare. Sterge, incarca iar, acelasi
- * patrat. Iar in panoul comerciantului se rupea in ORICE browser, Safari inclusiv: `/api/img`
- * raspunde 404 pe `.heic`, masurat. Adica pe hartia dupa care se produce marfa.
- *
- * ⚠ Raspunsul e o singura regula, folosita de amandoua ecranele: unde nu se poate desena, se
- * arata numele si o legatura — chiar tiparul scris pentru documente. Doua reguli s-ar fi departat,
- * si atunci un ecran ar fi aratat poza si celalalt un patrat.
- *
- * ⚠ SI NU SE REPARA „EVIDENT": nu se adauga `.heic` in `KEY_RE` din `/api/img` si nu se
- * pune conversie cu `sharp` pe server. Amandoua ar duce octeti straini la libheif, adica ar
- * redeschide o usa inchisa cu bilet. Daca se vrea vreodata HEIC vizibil, conversia se face IN
- * BROWSER.
+/*
+ * ⚠ `sePoateRandaCaImagine` si `terminatia` s-au mutat in `adresa.ts`, si nu de dragul ordinii:
+ * amandoua le cerea cate o componenta `"use client"`, iar de aici ar fi tras cu ele
+ * `fisiere-private.ts`, adica `node:crypto`, in pachetul de browser al fiecarei pagini de produs.
+ * Modulul de acolo e pur si citeste amandoua formele valorii — cheia noua si adresa veche.
  */
-export function sePoateRandaCaImagine(adresa: string): boolean {
-  return terminatia(adresa) !== null
-    && ["jpg", "jpeg", "png", "webp", "gif", "avif"].includes(terminatia(adresa) as string);
-}
-
-/** Terminatia adresei, mica, sau `null` cand nu se poate citi. */
-function terminatia(adresa: string): string | null {
-  let cale: string;
-  try {
-    cale = new URL(adresa).pathname;
-  } catch {
-    return null;
-  }
-  const punct = cale.lastIndexOf(".");
-  return punct === -1 ? null : cale.slice(punct + 1).toLowerCase();
-}
 
 function terminatiaSePotriveste(adresa: string, tip: string): boolean {
   const permise = TERMINATII[tip];
@@ -158,6 +125,34 @@ function gazdeleNoastre(): Set<string> {
 }
 
 function esteFisierulNostru(adresa: string, businessId: string): boolean {
+  /*
+   * ⚠ FORMA NOUA: O CHEIE SEMNATA, fara nicio adresa.
+   *
+   * Ruta de incarcare intoarce cheia, purtand o semnatura HMAC din secretul serverului. Ce se
+   * scrie in comanda si ce pleaca in email e cheia, nu adresa. Vezi `fisiere-private.ts`.
+   *
+   * ⚠ IN FEREASTRA DE DESFASURARE ruta intoarce si `url`, ca paginile ramase deschise in browsere
+   * sa nu se rupa — de-aia ramura de mai jos nu e inca moarta. Cele doua se scot IMPREUNA.
+   */
+  if (esteCheiaNoastra(adresa, businessId)) return true;
+
+  /*
+   * ⚠ FEREASTRA DE DESFASURARE, si numai ea.
+   *
+   * O pagina ramasa deschisa in browserul cuiva a incarcat fisierele PE FORMA VECHE si trimite
+   * adrese publice. Refuzate sec, ele ar fi dat „fisierul nu e valid" pe un fisier pe care omul
+   * tocmai l-a vazut incarcat — la un camp obligatoriu, comanda pierduta fara nicio explicatie pe
+   * care s-o poata urma.
+   *
+   * ⚠ Se pastreaza ACELEASI verificari ca pana acum, nu mai slabe. Si e o ramura care se poate
+   * scoate: masurat inainte de livrare, 0 din 381 de comenzi poarta vreun fisier de personalizare,
+   * deci nu exista date vechi de sustinut — doar pagini deschise.
+   */
+  return esteAdresaVeche(adresa, businessId);
+}
+
+/** Forma de dinaintea cheilor semnate: adresa publica din depozitul nostru. */
+function esteAdresaVeche(adresa: string, businessId: string): boolean {
   /*
    * ⚠ GAZDA SE VERIFICA EXACT, nu prin `r2KeyFromUrl`.
    *

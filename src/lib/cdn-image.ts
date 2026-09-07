@@ -5,6 +5,8 @@
 // return the URL untouched. Safe by construction — with no CDN env, or for any
 // non-R2 / already-transformed URL, the original string is returned unchanged.
 
+import { CALITATE, latimeaDePeScara } from "./latimi-imagini";
+
 const CDN = process.env.NEXT_PUBLIC_CDN_URL?.replace(/\/+$/, "") || "";
 
 function extractR2Key(src: string): string | null {
@@ -25,9 +27,20 @@ function extractR2Key(src: string): string | null {
  * original URL whenever transformation isn't applicable, so call sites can wrap
  * any `src` without a guard.
  */
-export function cdnImage(url: string, width: number, quality = 75): string {
+export function cdnImage(url: string, width: number, quality = CALITATE): string {
   if (!url || !CDN || url.includes("/cdn-cgi/image/")) return url;
   const key = extractR2Key(url);
   if (!key) return url;
-  return `${CDN}/cdn-cgi/image/width=${width},quality=${quality},format=auto/${key}`;
+  /*
+   * ⚠ LATIMEA URCA PE SCARA COMUNA, nu se ia cum a fost ceruta. Vezi `latimi-imagini.ts`:
+   * Cloudflare factureaza imagine × set de parametri, lunar, deci fiecare numar scris de mana
+   * intr-o componenta era o transformare noua, in fiecare luna, pentru fiecare poza. Erau opt
+   * astfel de numere (64, 96, 160, 256, 320, 480, 1600, 2560), niciunul comun cu latimile pe care
+   * le cere `next/image` — deci un logo la 480 si un card la 640 erau doua fisiere pentru marimi
+   * pe care ochiul nu le deosebeste.
+   *
+   * Apelantii pot cere in continuare orice numar, si asta e voit: locul de randare stie cat ii
+   * trebuie, iar scara are grija sa nu iasa un fisier nou din asta.
+   */
+  return `${CDN}/cdn-cgi/image/width=${latimeaDePeScara(width)},quality=${quality},format=auto/${key}`;
 }

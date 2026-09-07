@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 import { RE_GAZDA_PLATFORMA } from "./src/lib/platform-hosts";
+import { CALITATE, LATIMI_ECRAN, LATIMI_MICI } from "./src/lib/latimi-imagini";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -245,6 +246,49 @@ const nextConfig: NextConfig = {
   images: {
     loader: "custom",
     loaderFile: "./src/lib/supabase-image-loader.ts",
+    /*
+     * ═══ ⚠ FIECARE LATIME DIN LISTELE ASTEA E BANI, IN FIECARE LUNA ═══
+     *
+     * Loaderul nostru trimite imaginile prin redimensionatorul de la marginea Cloudflare
+     * (`/cdn-cgi/image/width=W,quality=Q,format=auto/<cheie>`). Cloudflare factureaza
+     * TRANSFORMARI UNICE, iar unic inseamna imagine × SET DE PARAMETRI — deci aceeasi poza
+     * ceruta la 640 si la 828 e platita de doua ori. Si contorul se RESETEAZA lunar: rezultatul
+     * ramane in cache, dar in ciclul urmator se numara din nou. Nu inchiriezi o poza taiata, ci
+     * taietorul.
+     *
+     * Masurat pe 07.09.2026, dupa 9 zile din ciclu: 21.520 de transformari unice, 8,50 $, cu o
+     * proiectie de 29,28 $ pe ciclu. Catalogul are 25.227 de imagini pe 7.004 produse active —
+     * adica in jur de TREI latimi distincte cerute in medie pentru fiecare poza. Iar in acele
+     * noua zile s-au creat doar 79 de produse: nu era continut nou, era chiar resetarea lunara.
+     *
+     * ⚠ CU `sizes` PUS, NEXT FACE `srcset` DIN AMANDOUA LISTELE. Vezi
+     * `node_modules/next/dist/docs/01-app/03-api-reference/02-components/image.md`: `imageSizes`
+     * „are concatenated with the array of device sizes". Cu implicitele (8 + 7) ieseau
+     * CINCISPREZECE latimi posibile pentru fiecare poza, iar browserele chiar se imprastiau pe
+     * ele: un telefon cerea 640, altul 750, altul 828 — trei fisiere aproape identice, trei
+     * transformari platite.
+     *
+     * ⚠ CE S-A TAIAT, SI DE CE TOCMAI ASTEA:
+     *   - tripleta 640/750/828 -> a ramas 640. Sunt latimi vecine intre care ochiul nu deosebeste
+     *     nimic, dar factura da;
+     *   - 1200/2048/3840 -> au ramas 1536 si 1920. 3840 se cerea de pe ecranele 4K la `100vw`,
+     *     adica exact cea mai scumpa transformare, pentru o poza de produs;
+     *   - din `imageSizes` au ramas patru: miniaturile cerute de interfata sunt intre 28 si 128 de
+     *     pixeli, iar 384 le acopera si la trei ori densitatea.
+     *
+     * ⚠ VALORILE SUNT ALESE SA EXISTE SI IN `TREPTE_LATIME` din `src/app/api/img/route.ts`.
+     * Nu e o coincidenta si nu se strica fara motiv: pasul urmator e sa PREGENERAM variantele in
+     * R2 si sa le servim ca obiecte simple, ca sa nu se mai transforme nimic lunar. Aia merge
+     * numai daca amandoua caile cer exact aceleasi latimi; una singura pe langa inseamna un
+     * fisier care lipseste si o poza rupta.
+     *
+     * ⚠ SI CALITATEA SE FIXEAZA. Un singur `quality={90}` scapat intr-o componenta ar fi deschis
+     * un set INTREG de variante noi, in paralel cu cele de 75 — dublarea facturii, fara ca nimic
+     * sa arate altfel pe ecran. Masurat azi: zero apelanti cer alta calitate.
+     */
+    deviceSizes: [...LATIMI_ECRAN],
+    imageSizes: [...LATIMI_MICI],
+    qualities: [CALITATE],
   },
   async headers() {
     // Permissive where third parties need it (Stripe, Netopia, FB/TikTok/Google

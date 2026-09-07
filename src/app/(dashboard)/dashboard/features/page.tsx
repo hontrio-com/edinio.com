@@ -185,7 +185,7 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "Altex",       logo: "/integrations/altex.webp", soon: true },
       { name: "Cel.ro",      logo: "/integrations/cel.ro.webp", soon: true },
       { name: "Okazii.ro",   logo: "/integrations/okazii.ro.svg", soon: true },
-      { name: "Pepita.com",  logo: "/integrations/pepita.svg", soon: true },
+      { name: "Pepita.com",  logo: "/integrations/pepita.svg", id: "pepita" },
       /* Doua care nu sunt marketplace-uri in sens strict, puse aici fiindca e
          cea mai apropiata rubrica si fiindca acolo le cauta un comerciant:
          Compari.ro e comparator de preturi (trimite trafic in magazinul TAU,

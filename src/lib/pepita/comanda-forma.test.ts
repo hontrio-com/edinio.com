@@ -1,0 +1,178 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { citesteComanda, MAX_LINII } from "./comanda-forma";
+
+/*
+ * ⚠ SARCINA UTILA DE MAI JOS E CEA DIN DOCUMENTATIA LOR, reparata numai acolo unde
+ * exemplul lor nu e JSON valid: `"payment_mode":cod` fara ghilimele, o virgula lipsa
+ * intre `total_shipping_price_currency` si `voucher`, si virgule la coada listelor.
+ *
+ * ⚠ NU S-A SCHIMBAT NICIUN NUME DE CAMP si nicio valoare. Rescrisa „cum ar trebui sa
+ * arate", proba ar fi aparat forma pe care mi-o inchipui eu, nu pe cea care soseste.
+ */
+const OFICIAL = {
+  origin: "pepita.hu",
+  id: 118924,
+  date: "2018-05-21 10:23:41",
+  payment_mode: "cod",
+  customer_message: "Tisztelt Partnerünk! Vevő megjegyzése: Kézbesítés előtt fél órával, hívjon!",
+  courier_message: "Keremhivjanakelotte",
+  status: "new_order",
+  payment_status: "unpaid",
+  total_shipping_price: 1200,
+  total_shipping_price_currency: "HUF",
+  voucher: "",
+  delivery_mod: "mpl",
+  customer: {
+    last_name: "Teszt", first_name: "Péter", phone: "06201111111", email: "teszt.peter@pepita.hu",
+    billing_name: "Teszt Péter", billing_country: "HU", billing_city: "Miskolc",
+    billing_street: "Teszt u.14", billing_street_address: "Teszt u.", billing_house_number: "14",
+    billing_postal_code: "3534",
+    shipping_country: "HU", shipping_city: "Miskolc", shipping_street: "Teszt u.14",
+    shipping_street_address: "Teszt u", shipping_house_number: "14", shipping_postal_code: "3534",
+  },
+  products: [
+    { id: "139955", sku: "ozq123", currency: "HUF", quantity: 2, price: 3192, vat: 27 },
+    { id: "139956", sku: "ozq124", currency: "HUF", quantity: 2, price: 3192, vat: 27 },
+  ],
+};
+
+const bun = (brut: unknown) => {
+  const v = citesteComanda(brut);
+  assert.equal(v.ok, true, `asteptam o comanda valida, am primit ${JSON.stringify(v)}`);
+  return v.ok ? v.comanda : (undefined as never);
+};
+
+const rau = (brut: unknown, cod: string) => {
+  const v = citesteComanda(brut);
+  assert.equal(v.ok, false, "asteptam un refuz");
+  if (!v.ok) assert.equal(v.cod, cod);
+  return v;
+};
+
+test("sarcina utila oficiala se citeste intreaga", () => {
+  const c = bun(OFICIAL);
+  assert.equal(c.externalId, "118924");
+  assert.equal(c.origine, "pepita.hu");
+  assert.equal(c.modPlata, "cod");
+  assert.equal(c.starePlata, "unpaid");
+  assert.equal(c.modLivrare, "mpl");
+  assert.equal(c.transport, 1200);
+  assert.equal(c.monedaTransport, "HUF");
+  assert.equal(c.voucher, 0);
+  assert.equal(c.linii.length, 2);
+  assert.deepEqual(c.linii[0], { idPepita: "139955", sku: "ozq123", moneda: "HUF", cantitate: 2, pret: 3192, tva: 27 });
+  assert.equal(c.client.prenume, "Péter");
+  assert.equal(c.client.nume, "Teszt");
+  assert.equal(c.client.livrare.oras, "Miskolc");
+});
+
+test("⚠ `id`-ul numeric si cel text duc la acelasi identificator", () => {
+  /* Exemplul lor trimite `"id":118924` (numar) la comanda si `"id":"139955"` (sir) la
+     produse. Citit numai ca sir, comanda intreaga ar fi fost respinsa. */
+  assert.equal(bun({ ...OFICIAL, id: "118924" }).externalId, "118924");
+  assert.equal(bun({ ...OFICIAL, id: 118924 }).externalId, "118924");
+});
+
+test("⚠ se citeste si `delivery_mod`, si `delivery_mode`", () => {
+  /* Documentatia lor scrie `delivery_mod` si in definitie, si in exemplu. Poate fi o
+     greseala de tipar. Aleasa una singura, jumatate din comenzi ar fi ramas fara mod
+     de livrare. */
+  assert.equal(bun({ ...OFICIAL, delivery_mod: "gls" }).modLivrare, "gls");
+  const faraMod = { ...OFICIAL, delivery_mod: undefined };
+  assert.equal(bun({ ...faraMod, delivery_mode: "gls_parcelshop" }).modLivrare, "gls_parcelshop");
+});
+
+test("judetul romanesc se citeste, si lipseste pe alte piete", () => {
+  /* Documentatia lor: „only for Romanian orders". */
+  const ro = bun({ ...OFICIAL, customer: { ...OFICIAL.customer, shipping_country: "RO", shipping_county: "Cluj" } });
+  assert.equal(ro.client.livrare.judet, "Cluj");
+  assert.equal(bun(OFICIAL).client.livrare.judet, null);
+});
+
+test("codul fiscal al unei comenzi pe firma se pastreaza", () => {
+  const c = bun({ ...OFICIAL, customer: { ...OFICIAL.customer, tax_number: "RO12345678" } });
+  assert.equal(c.client.codFiscal, "RO12345678");
+});
+
+test("⚠ campurile necunoscute NU opresc comanda", () => {
+  /* Ei pot adauga maine un camp. O comanda respinsa pentru asta ar fi o comanda pierduta,
+     si ar cadea toate deodata. */
+  const c = bun({ ...OFICIAL, camp_nou_2027: { orice: [1, 2] }, products: [{ ...OFICIAL.products[0], nou: true }] });
+  assert.equal(c.linii.length, 1);
+});
+
+test("⚠ campurile critice lipsa opresc comanda, cu motiv", () => {
+  rau({}, "corp-gol");
+  rau(null, "corp-gol");
+  rau("nu e obiect", "corp-gol");
+  rau({ ...OFICIAL, id: undefined }, "fara-id");
+  rau({ ...OFICIAL, id: "   " }, "fara-id");
+  rau({ ...OFICIAL, products: [] }, "fara-produse");
+  rau({ ...OFICIAL, products: "nu e listă" }, "fara-produse");
+});
+
+test("⚠ cantitatea si pretul se verifica PE LINIE", () => {
+  /* O linie cu cantitate zero sau negativa ar CRESTE stocul la consum. */
+  for (const q of [0, -1, 1.5, "abc", null, undefined]) {
+    rau({ ...OFICIAL, products: [{ ...OFICIAL.products[0], quantity: q }] }, "cantitate-nevalida");
+  }
+  rau({ ...OFICIAL, products: [{ ...OFICIAL.products[0], price: -1 }] }, "pret-nevalid");
+  rau({ ...OFICIAL, products: [{ ...OFICIAL.products[0], price: "abc" }] }, "pret-nevalid");
+});
+
+test("pretul zero pe o linie e primit: un cadou din campanie e o linie reala", () => {
+  const c = bun({ ...OFICIAL, products: [{ ...OFICIAL.products[0], price: 0 }] });
+  assert.equal(c.linii[0].pret, 0);
+});
+
+test("⚠ o comanda cu prea multe linii se opreste, nu se prelucreaza pe jumatate", () => {
+  const multe = Array.from({ length: MAX_LINII + 1 }, () => OFICIAL.products[0]);
+  rau({ ...OFICIAL, products: multe }, "prea-multe-linii");
+  /* Chiar la limita trece: 50 de articole intr-o comanda e mult, dar cu putinta. */
+  const laLimita = Array.from({ length: MAX_LINII }, () => OFICIAL.products[0]);
+  assert.equal(bun({ ...OFICIAL, products: laLimita }).linii.length, MAX_LINII);
+});
+
+test("⚠ campul gol inseamna „lipsește”, nu „zero lei”", () => {
+  /* `Number("")` e zero, iar zero are inteles la transport: un transport netrimis ar fi
+     aparut ca transport gratuit. Aici amandoua ies 0, dar din drumuri diferite. */
+  assert.equal(bun({ ...OFICIAL, voucher: "" }).voucher, 0);
+  assert.equal(bun({ ...OFICIAL, voucher: "500" }).voucher, 500);
+  assert.equal(bun({ ...OFICIAL, total_shipping_price: "1.200" }).transport, 1.2);
+});
+
+test("moneda se citeste numai daca arata a cod de moneda", () => {
+  assert.equal(bun({ ...OFICIAL, products: [{ ...OFICIAL.products[0], currency: "ron" }] }).linii[0].moneda, "RON");
+  assert.equal(bun({ ...OFICIAL, products: [{ ...OFICIAL.products[0], currency: "lei romanesti" }] }).linii[0].moneda, null);
+  assert.equal(bun({ ...OFICIAL, total_shipping_price_currency: 42 }).monedaTransport, null);
+});
+
+test("⚠ data NU se converteste, se pastreaza ca sir", () => {
+  /*
+   * Formatul lor n-are fus orar si documentatia nu spune in ce fus e. Citita ca UTC, o
+   * comanda de la 01:00 ar aparea in ziua precedenta; citita local, una din alt fus ar
+   * sari inainte.
+   */
+  assert.equal(bun(OFICIAL).dataBruta, "2018-05-21 10:23:41");
+  assert.equal(bun({ ...OFICIAL, date: "nu e o data" }).dataBruta, "nu e o data");
+});
+
+test("clientul lipsa nu darama comanda, dar se vede ca lipseste", () => {
+  const c = bun({ ...OFICIAL, customer: undefined });
+  assert.equal(c.client.nume, "");
+  assert.equal(c.client.telefon, "");
+  assert.equal(c.client.email, null);
+});
+
+test("sirurile foarte lungi se taie, nu se scriu intregi in baza", () => {
+  const c = bun({ ...OFICIAL, customer_message: "a".repeat(50_000) });
+  assert.ok((c.mesajClient ?? "").length <= 2000);
+});
+
+test("valorile ostile raman TEXT, nu devin cod", () => {
+  /* Ce vine de la ei e text neincrezator peste tot: in panou, in XML si in loguri. */
+  const c = bun({ ...OFICIAL, customer_message: "<script>alert(1)</script>", products: [{ ...OFICIAL.products[0], sku: "'; drop table orders; --" }] });
+  assert.equal(c.mesajClient, "<script>alert(1)</script>");
+  assert.equal(c.linii[0].sku, "'; drop table orders; --");
+});

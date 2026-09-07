@@ -4143,6 +4143,152 @@ export type Database = {
           },
         ]
       }
+      pepita_chei: {
+        Row: {
+          amprenta: string
+          business_id: string
+          creat_la: string
+          fel: string
+          id: string
+          revocat_la: string | null
+          ultima_folosire: string | null
+        }
+        Insert: {
+          amprenta: string
+          business_id: string
+          creat_la?: string
+          fel: string
+          id?: string
+          revocat_la?: string | null
+          ultima_folosire?: string | null
+        }
+        Update: {
+          amprenta?: string
+          business_id?: string
+          creat_la?: string
+          fel?: string
+          id?: string
+          revocat_la?: string | null
+          ultima_folosire?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pepita_chei_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pepita_comenzi: {
+        Row: {
+          business_id: string
+          external_order_id: string
+          id: string
+          incercari: number
+          motiv: string | null
+          order_id: string | null
+          origine: string | null
+          prelucrat_la: string | null
+          primit_la: string
+          rezumat: Json
+          stare: string
+          ultima_eroare: string | null
+        }
+        Insert: {
+          business_id: string
+          external_order_id: string
+          id?: string
+          incercari?: number
+          motiv?: string | null
+          order_id?: string | null
+          origine?: string | null
+          prelucrat_la?: string | null
+          primit_la?: string
+          rezumat?: Json
+          stare?: string
+          ultima_eroare?: string | null
+        }
+        Update: {
+          business_id?: string
+          external_order_id?: string
+          id?: string
+          incercari?: number
+          motiv?: string | null
+          order_id?: string | null
+          origine?: string | null
+          prelucrat_la?: string | null
+          primit_la?: string
+          rezumat?: Json
+          stare?: string
+          ultima_eroare?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pepita_comenzi_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pepita_comenzi_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pepita_listari: {
+        Row: {
+          actualizat_la: string
+          business_id: string
+          creat_la: string
+          id: string
+          inclus: boolean
+          pret_override: number | null
+          product_id: string
+          safety_stock: number | null
+        }
+        Insert: {
+          actualizat_la?: string
+          business_id: string
+          creat_la?: string
+          id?: string
+          inclus?: boolean
+          pret_override?: number | null
+          product_id: string
+          safety_stock?: number | null
+        }
+        Update: {
+          actualizat_la?: string
+          business_id?: string
+          creat_la?: string
+          id?: string
+          inclus?: boolean
+          pret_override?: number | null
+          product_id?: string
+          safety_stock?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pepita_listari_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pepita_listari_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_settings: {
         Row: {
           key: string
@@ -4772,6 +4918,7 @@ export type Database = {
           gls_config: Json | null
           innoship_config: Json | null
           packeta_config: Json | null
+          pepita_config: Json
           gpsr_config: Json
           google_analytics_config: Json
           google_merchant_config: Json
@@ -4847,6 +4994,7 @@ export type Database = {
           gls_config?: Json | null
           innoship_config?: Json | null
           packeta_config?: Json | null
+          pepita_config?: Json
           gpsr_config?: Json
           google_analytics_config?: Json
           google_merchant_config?: Json
@@ -4922,6 +5070,7 @@ export type Database = {
           gls_config?: Json | null
           innoship_config?: Json | null
           packeta_config?: Json | null
+          pepita_config?: Json
           gpsr_config?: Json
           google_analytics_config?: Json
           google_merchant_config?: Json

@@ -11,7 +11,7 @@ import {
   RotateCcw, AlertTriangle, XCircle, ArrowRight, FileCheck, Trash2, Truck,
   ExternalLink, Pencil, Compass, Building2,
 } from "lucide-react";
-import { marketplaceCareTineComanda, cineTineComanda } from "@/lib/orders/origin";
+import { marketplaceCareTineComanda, cineTineComanda, mementoulMarketplace } from "@/lib/orders/origin";
 import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
@@ -427,6 +427,9 @@ export function OrderDetailClient({
      `marketplaceCareTineComanda`: cine tine ciclul comenzii, tine si starea. */
   const cineTine = marketplaceCareTineComanda(order.order_source);
   const tinutaDeEi = cineTine != null;
+  /* ⚠ Alta intrebare decat cea de mai sus: „mai trebuie facut ceva si la ei?". Vezi
+     `MEMENTO_LA_MARKETPLACE`. */
+  const memento = mementoulMarketplace(order.order_source);
 
   const currentStatus = STATUS_OPTIONS.find(s => s.value === status) ?? STATUS_OPTIONS[0];
   const currentPayment = PAYMENT_OPTIONS.find(p => p.value === paymentStatus) ?? PAYMENT_OPTIONS[0];
@@ -1379,6 +1382,18 @@ export function OrderDetailClient({
             {tinutaDeEi && (
               <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
                 {cineTineComanda(cineTine!).titlu}{" "}{cineTineComanda(cineTine!).urmator}
+              </p>
+            )}
+
+            {/*
+              ⚠ Memento, nu eroare. Butoanele raman apasabile, fiindca la Pepita comanda chiar
+              se administreaza de aici. Ce se aminteste e ca aceeasi miscare trebuie facuta si
+              la ei, unde noi n-avem cum sa ajungem. Un chenar rosu permanent s-ar invata pe
+              dinafara si s-ar sari cu ochii.
+            */}
+            {memento && (
+              <p className="rounded-lg border border-warning/20 bg-warning/5 px-3 py-2 text-xs text-foreground">
+                {memento}
               </p>
             )}
 

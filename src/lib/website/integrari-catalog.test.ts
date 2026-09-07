@@ -176,8 +176,10 @@ test("numărătoarea de active și de anunțate e cea din panou", () => {
     starea: eMAG era in amandoua listele, deci trecea. De aceea exista acum si
     proba `starile din catalog sunt cele din panou`.
   */
-  assert.equal(NUMAR_IN_CURAND, 25);
-  assert.equal(NUMAR_ACTIVE, 40);
+  /* ⚠ 08.09.2026: Pepita a trecut din „in curand" in „activa". Numerele se mișcă ODATĂ cu
+     livrarea, de mână: asta e chiar rostul lor. */
+  assert.equal(NUMAR_IN_CURAND, 24);
+  assert.equal(NUMAR_ACTIVE, 41);
 });
 
 test("siglele intră în locașul cardului fără să iasă mâzgălituri", () => {

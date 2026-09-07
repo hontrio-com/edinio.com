@@ -241,6 +241,15 @@ const API_FARA_POARTA = [
   "/api/google-merchant/webhook",
   "/api/aboutyou/webhook",
   "/api/ty/webhook",
+  /*
+   * Pepita: cele doua feeduri pe care le CITESTE ea, si adresa pe care ne IMPINGE
+   * comenzile. Toate trei sunt chemate de o masina, fara cookie, cu cheia proprie in
+   * cale. `evalueazaCerere` ar iesi oricum pe prima linie la o cerere fara sesiune,
+   * dar scutirea le scoate cu totul din drumul portii: feedul de stoc e citit din ora
+   * in ora pentru fiecare magazin conectat, iar o cerere spre serverul de
+   * autentificare la fiecare citire ar fi cost curat.
+   */
+  "/api/pepita/",
   // aterizari OAuth
   "/api/google-analytics/oauth/callback",
   "/api/google-merchant/oauth/callback",

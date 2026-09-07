@@ -1,0 +1,148 @@
+/**
+ * Formele si constantele integrarii Pepita.
+ *
+ * ═══ CE POATE SI CE NU POATE INTEGRAREA ASTA ═══
+ *
+ * Documentatia publica Pepita (verificata 08.09.2026) descrie DOUA cai, si numai
+ * doua:
+ *
+ *   Edinio -> Pepita : feed XML de produse si feed XML de stoc, pe care le CITESTE ei.
+ *   Pepita -> Edinio : comanda, impinsa prin HTTP pe adresa noastra.
+ *
+ * ⚠ NU EXISTA drum inapoi pentru comenzi. Nici confirmare, nici anulare, nici
+ * status, nici AWB, nici retur, nici decontari, nici stare de aprobare a
+ * produsului, nici API de categorii. Documentul lor de „Automatic order
+ * forwarding" spune raspicat directia: „Pepita -> Partner store (push)", iar
+ * Seller Center cere confirmarea comenzii IN PANOUL LOR, in cel mult o zi.
+ *
+ * De aceea in Edinio nu exista si nu trebuie sa apara niciun buton care sa
+ * sugereze ca trimite ceva spre Pepita. Ce stim noi despre o comanda Pepita este
+ * numai ce ne-au trimis ei la ingest.
+ */
+
+/** Cheia sub care se recunoaste marketplace-ul peste tot in cod si in date. */
+export const PEPITA = "pepita" as const;
+
+/**
+ * Piata pe care merge integrarea.
+ *
+ * Pepita are magazine in HU, RO, SK, DE, PL, BG, HR. Edinio porneste pe Romania,
+ * dar moneda si piata stau AICI, intr-un singur loc, nu imprastiate prin cod: o
+ * a doua piata cere un rand in tabelul de mai jos, nu o rescriere.
+ */
+export type PiataPepita = "ro";
+
+export interface DescrierePiata {
+  eticheta: string;
+  moneda: string;
+  gazda: string;
+}
+
+export const PIETE: Record<PiataPepita, DescrierePiata> = {
+  ro: { eticheta: "România", moneda: "RON", gazda: "pepita.ro" },
+};
+
+export const PIATA_IMPLICITA: PiataPepita = "ro";
+
+/** Strategia de pret pentru feed. Aceeasi socoteala, un singur loc. */
+export type FelStrategiePret = "identic" | "procent" | "fix";
+
+export interface StrategiePret {
+  fel: FelStrategiePret;
+  /** Procent (10 = +10%) sau suma fixa in moneda pietei. Ignorat pe „identic". */
+  valoare: number;
+}
+
+/** Tipurile de garantie pe care le accepta `<Warranty><Type>`. */
+export const TIPURI_GARANTIE = ["None", "Day", "Week", "Month", "Year"] as const;
+export type TipGarantie = (typeof TIPURI_GARANTIE)[number];
+
+export interface PepitaConfig {
+  /** Comerciantul a pornit integrarea. Oprita, feedurile nu mai raspund cu date. */
+  activ: boolean;
+  piata: PiataPepita;
+  strategie_pret: StrategiePret;
+  /**
+   * Cate bucati se tin deoparte si NU se anunta la Pepita.
+   *
+   * ⚠ Nu atinge stocul real din Edinio. Scade numai cifra EXPORTATA.
+   */
+  safety_stock: number;
+  /** Zile lucratoare de pregatire, trimise ca `<ShippingDelay>`. `null` = nu se trimite. */
+  shipping_delay: number | null;
+  /**
+   * Cost de transport PE BUCATA, trimis ca `<ShippingPrice>`.
+   *
+   * ⚠ Documentatia lor spune „Termék darabonként értendő", adica per bucata, si
+   * marketplace-ul il inmulteste singur cu cantitatea. Noi nu inmultim nimic.
+   * `null` = nu se trimite deloc, si atunci Pepita foloseste costul implicit
+   * convenit la activare.
+   */
+  shipping_price: number | null;
+  garantie: { tip: TipGarantie; durata: number } | null;
+  /** „toate" = tot ce e activ in magazin; „selectate" = doar ce a bifat comerciantul. */
+  mod_includere: "toate" | "selectate";
+  /** Momentul in care comerciantul a marcat ca a trimis datele catre Pepita. */
+  trimis_la: string | null;
+  /**
+   * Comerciantul emite factura catre clientul final pentru comenzile Pepita.
+   *
+   * ⚠ STINS DIN START, si nu din prudenta generala: documentatia lor publica nu spune
+   * cine factureaza, iar o factura fiscala emisa degeaba nu se retrage, se storneaza.
+   * Hotararea e a comerciantului, fiindca a lui e raspunderea fiscala.
+   */
+  factureaza_clientul: boolean;
+  /**
+   * Cheile, in clar. Se cripteaza in repaus (`privat.campuri_secrete`) si nu
+   * pleaca NICIODATA spre browser decat prin actiunea de dezvaluire.
+   *
+   * ⚠ Adevarul despre ce cheie e valida sta in `pepita_chei`, nu aici: acolo se
+   * cauta la fiecare cerere, dupa amprenta. Campurile astea exista doar ca
+   * omul sa-si poata reciti si copia adresele.
+   */
+  feed_token?: string;
+  order_key?: string;
+}
+
+export const CONFIG_IMPLICIT: PepitaConfig = {
+  activ: false,
+  piata: PIATA_IMPLICITA,
+  strategie_pret: { fel: "identic", valoare: 0 },
+  safety_stock: 0,
+  shipping_delay: null,
+  shipping_price: null,
+  garantie: null,
+  mod_includere: "selectate",
+  trimis_la: null,
+  factureaza_clientul: false,
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COMANDA PRIMITA DE LA EI
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Modurile de plata din documentatia lor.
+ *
+ * ⚠ VALOAREA BRUTA SE PASTREAZA MEREU. Un mod necunoscut NU se traduce tacut in
+ * „ramburs": ar insemna ca marfa pleaca la un client care platise deja cu cardul,
+ * iar curierul mai cere o data banii.
+ */
+export const PLATI_PEPITA = { cod: "cod", transfer: "transfer", creditcard: "creditcard" } as const;
+
+/** Starile de plata din documentatia lor. */
+export const STARI_PLATA_PEPITA = { paid: "paid", unpaid: "unpaid" } as const;
+
+/**
+ * Modurile de livrare din documentatia lor.
+ *
+ * ⚠ Lista e a pietei UNGARE (GLS, GLS ParcelShop, MPL). Pentru Romania nu exista
+ * inca o lista publicata, deci orice valoare noua trebuie sa treaca prin
+ * „necunoscut" si sa fie VAZUTA de comerciant, nu ghicita.
+ */
+export const LIVRARI_PEPITA = {
+  shipping: "shipping",
+  gls: "gls",
+  gls_parcelshop: "gls_parcelshop",
+  mpl: "mpl",
+} as const;

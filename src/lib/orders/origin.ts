@@ -37,7 +37,44 @@ export const MARKETPLACE_ORIGINI: Record<string, { label: string; badge: string 
      hotaraste daca omul poate factura si expedia comanda cum e obisnuit, sau daca
      trebuie sa treaca prin panoul eMAG. */
   emag: { label: "eMAG", badge: "bg-blue-100 text-blue-800 border-blue-200" },
+  /* Verdele Pepita. Fara randul asta, o comanda Pepita s-ar vedea in tabel cu eticheta
+     implicita, adica exact ca una din magazinul propriu. */
+  pepita: { label: "Pepita", badge: "bg-emerald-100 text-emerald-800 border-emerald-200" },
 };
+
+/*
+ * ═══ MARKETPLACE-URILE CARE CER O MISCARE IN PANOUL LOR ═══
+ *
+ * ⚠ NU E ACELASI LUCRU CU `MARKETPLACE_CU_CICLU_PROPRIU`, si deosebirea conteaza.
+ *
+ * Acolo sunt cele care ne spun ele starea, deci butoanele noastre se INCHID: apasate, ar
+ * fi sterse la prima recitire, iar carligele pornite intre timp ar ramane pornite.
+ *
+ * Pepita e pe dos: nu exista NICIO cale prin care sa aflam sau sa trimitem starea. Deci
+ * butoanele raman deschise, fiindca la noi comanda chiar se administreaza de aici, si
+ * pentru factura si AWB avem nevoie de ele. Ce se adauga e un memento: aceeasi miscare
+ * trebuie facuta si la ei.
+ *
+ * ⚠ INCHISE, butoanele l-ar fi lasat pe comerciant fara nicio cale de a-si duce comanda
+ * la capat. O comanda pe care n-o poti nici onora, nici anula e mai rea decat una
+ * administrata in doua locuri.
+ */
+export const MEMENTO_LA_MARKETPLACE: Record<string, string> = {
+  pepita: "Comanda vine de la Pepita. Statusul pe care îl pui aici NU ajunge la ei: "
+    + "confirmarea și expedierea se operează și în Pepita Admin, în cel mult o zi de la primirea comenzii.",
+};
+
+/**
+ * Ce trebuie amintit comerciantului pe comanda asta, sau `null`.
+ *
+ * ⚠ SE CITESTE DIN `order_source`, ca si `marketplaceCareTineComanda`, si nu din
+ * `payment_method`: acolo o comanda Pepita cu ramburs scrie „cash_on_delivery", exact ca
+ * una din magazin.
+ */
+export function mementoulMarketplace(orderSource: unknown): string | null {
+  const m = (orderSource as { marketplace?: string } | null)?.marketplace;
+  return m ? MEMENTO_LA_MARKETPLACE[m] ?? null : null;
+}
 
 /*
  * ═══ ⚠ CINE TINE CICLUL DE VIATA AL COMENZII ═══

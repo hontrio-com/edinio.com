@@ -32,7 +32,24 @@ function esteFisier(cale) {
   }
 }
 
+/*
+ * ⚠ `server-only` NU EXISTA IN `node_modules`, si totusi aplicatia se construieste.
+ *
+ * Next il rezolva singur, prin alias, la construire. Node curat insa arunca
+ * `ERR_MODULE_NOT_FOUND`, deci ORICE fisier de server care il importa devine netestabil,
+ * iar logica din el ajunge sa plece in alta parte doar ca sa poata fi verificata. E chiar
+ * paguba scrisa de trei ori mai jos, despre `./offer.types`, despre modulele-director si
+ * despre `next/*`.
+ *
+ * Marcajul e o declaratie, nu cod: in aplicatie el nu face decat sa OPREASCA importul dintr-o
+ * componenta de client. La probe, unde nu exista client, un modul gol are exact acelasi inteles.
+ */
+const MARCAJE_GOALE = new Set(["server-only", "client-only"]);
+
 export async function resolve(specifier, context, next) {
+  if (MARCAJE_GOALE.has(specifier)) {
+    return { url: "data:text/javascript,export{}", format: "module", shortCircuit: true };
+  }
   if (specifier.startsWith("@/")) {
     const base = path.join(SRC, specifier.slice(2));
     for (const candidate of [base, `${base}.ts`, `${base}.tsx`, path.join(base, "index.ts")]) {

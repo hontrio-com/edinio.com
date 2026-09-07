@@ -1,0 +1,205 @@
+/* ⚠ Fara chei de mediu: `createAdminClient()` arunca pe loc, iar `logError` se opreste in
+   `catch`-ul lui, fara sa deschida nicio conexiune. Vezi nota din `ingest.test.ts`. */
+delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import { XMLValidator } from "fast-xml-parser";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
+import { pregateste, scrieFeed } from "./feed";
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ ATOMICITATEA FEEDULUI, PROBATA PE STARI, NU PE TEXTUL CODULUI
+   ══════════════════════════════════════════════════════════════════════════
+
+   Intrebarea nu e „scrie in cod `yield INCHEIERE` la sfarsit", ci „ce iese cand baza cade la
+   mijloc". Un feed VALID cu jumatate de catalog inseamna jumatate de magazin scos de la
+   vanzare la ei, fara ca nimeni sa afle. Un feed neinchis e invalid, deci il resping intreg
+   si pastreaza ce aveau.
+*/
+
+const BID = "99999999-8888-7777-6666-555555555555";
+
+const produs = (i: number, peste: Record<string, unknown> = {}) => ({
+  id: `3f2504e0-4f89-41d3-9a0c-0305e82c${String(i).padStart(4, "0")}`,
+  name: `Produs ${i}`, slug: `produs-${i}`, description: "Descriere.",
+  price: 100, compare_at_price: null, sku: `SKU-${i}`,
+  images: ["https://cdn.ro/a.jpg"], category: "Scaune",
+  track_inventory: true, stock_quantity: 3, weight_grams: null,
+  page_sections: {}, is_bundle: false, updated_at: "2026-09-01T10:00:00.000Z", is_active: true,
+  ...peste,
+});
+
+interface Optiuni {
+  produse?: ReturnType<typeof produs>[];
+  listari?: { product_id: string; inclus: boolean; safety_stock: number | null; pret_override: number | null }[];
+  config?: Record<string, unknown>;
+  /** De la a cata pagina de produse cade citirea. `null` = niciodata. */
+  cadeLaPagina?: number | null;
+}
+
+function faceBaza(o: Optiuni = {}) {
+  const produse = o.produse ?? [produs(1), produs(2)];
+  let pagini = 0;
+
+  const raspunde = (tabela: string, filtre: [string, unknown][], interval: [number, number] | null) => {
+    if (tabela === "businesses") {
+      return { data: { id: BID, slug: "magazin", custom_domain: null, store_name: "Magazin", business_name: "SRL", is_published: true }, error: null };
+    }
+    if (tabela === "store_settings") {
+      return {
+        data: {
+          pepita_config: { activ: true, ...(o.config ?? {}) },
+          vat_enabled: true, vat_rate: 21, prices_include_vat: true,
+        },
+        error: null,
+      };
+    }
+    if (tabela === "categories") {
+      return { data: [{ id: "c1", name: "Scaune", parent_id: null }], error: null };
+    }
+    if (tabela === "pepita_listari") {
+      return { data: o.listari ?? [], error: null };
+    }
+    if (tabela === "products") {
+      pagini++;
+      if (o.cadeLaPagina && pagini >= o.cadeLaPagina) {
+        return { data: null, error: { code: "57014", message: "citirea a cazut" } };
+      }
+      const [de, pana] = interval ?? [0, 999];
+      /* ⚠ Filtrul pe magazin chiar se aplica, ca proba de izolare sa insemne ceva. */
+      const aleLui = produse.filter(() => filtre.some(([k, v]) => k === "business_id" && v === BID));
+      return { data: aleLui.slice(de, pana + 1), error: null };
+    }
+    return { data: null, error: null };
+  };
+
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const builder = (tabela: string) => {
+    const filtre: [string, unknown][] = [];
+    let interval: [number, number] | null = null;
+    const b: any = {
+      select: () => b,
+      eq: (k: string, v: unknown) => { filtre.push([k, v]); return b; },
+      in: () => b, is: () => b, not: () => b, neq: () => b, order: () => b, limit: () => b,
+      range: (a: number, c: number) => { interval = [a, c]; return b; },
+      maybeSingle: () => Promise.resolve(raspunde(tabela, filtre, interval)),
+      single: () => Promise.resolve(raspunde(tabela, filtre, interval)),
+      then: (bun: (v: unknown) => unknown, rau?: (e: unknown) => unknown) =>
+        Promise.resolve(raspunde(tabela, filtre, interval)).then(bun, rau),
+    };
+    return b;
+  };
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  return { from: (t: string) => builder(t) } as unknown as SupabaseClient<Database>;
+}
+
+async function feed(db: SupabaseClient<Database>, fel: "produse" | "stoc" = "produse") {
+  const pre = await pregateste(db, BID);
+  assert.ok(pre, "pregatirea trebuie sa reuseasca");
+  let out = "";
+  for await (const bucata of scrieFeed(db, BID, pre, fel)) out += bucata;
+  return out;
+}
+
+test("feedul intreg e XML valid si contine produsele incluse", async () => {
+  const xml = await feed(faceBaza({ config: { mod_includere: "toate" } }));
+  assert.equal(XMLValidator.validate(xml), true);
+  assert.equal((xml.match(/<Product>/g) ?? []).length, 2);
+});
+
+test("⚠ o cadere a bazei la mijloc lasa XML NEINCHIS, nu un feed valid pe jumatate", async () => {
+  const db = faceBaza({
+    config: { mod_includere: "toate" },
+    produse: Array.from({ length: 900 }, (_, i) => produs(i)),
+    cadeLaPagina: 2,
+  });
+  const pre = await pregateste(db, BID);
+  assert.ok(pre);
+
+  let out = "";
+  let aAruncat = false;
+  try {
+    for await (const bucata of scrieFeed(db, BID, pre, "produse")) out += bucata;
+  } catch {
+    aAruncat = true;
+  }
+
+  assert.equal(aAruncat, true, "caderea nu se inghite");
+  assert.ok(out.includes("<Product>"), "ce apucase sa iasa a iesit");
+  assert.ok(!out.includes("</Catalog>"), "⚠ incheierea NU se scrie pe calea de eroare");
+  assert.notEqual(XMLValidator.validate(out), true, "⚠ si tocmai de aceea XML-ul e invalid");
+});
+
+test("⚠ integrarea oprita nu da un feed GOL, ci niciun feed", async () => {
+  /* Un `<Catalog>` gol i-ar spune lui Pepita „nu mai am niciun produs", si ar scoate tot de
+     la vanzare. Ruta raspunde 404, si atunci ei pastreaza ce au. */
+  const pre = await pregateste(faceBaza({ config: { activ: false } }), BID);
+  assert.equal(pre, null);
+});
+
+test("pe „doar produsele alese” pleaca numai cele bifate", async () => {
+  const produse = [produs(1), produs(2), produs(3)];
+  const db = faceBaza({
+    config: { mod_includere: "selectate" },
+    produse,
+    listari: [{ product_id: produse[1].id, inclus: true, safety_stock: null, pret_override: null }],
+  });
+  const xml = await feed(db);
+  assert.equal((xml.match(/<Product>/g) ?? []).length, 1);
+  assert.ok(xml.includes(produse[1].id));
+});
+
+test("pe „toate produsele active” un rand cu `inclus=false` SCOATE produsul", async () => {
+  const produse = [produs(1), produs(2)];
+  const db = faceBaza({
+    config: { mod_includere: "toate" },
+    produse,
+    listari: [{ product_id: produse[0].id, inclus: false, safety_stock: null, pret_override: null }],
+  });
+  const xml = await feed(db);
+  assert.equal((xml.match(/<Product>/g) ?? []).length, 1);
+  assert.ok(!xml.includes(produse[0].id));
+});
+
+test("suprascrierile pe produs bat setarile integrarii", async () => {
+  const p = produs(1, { stock_quantity: 10 });
+  const db = faceBaza({
+    config: { mod_includere: "toate", safety_stock: 8 },
+    produse: [p],
+    listari: [{ product_id: p.id, inclus: true, safety_stock: 1, pret_override: 250 }],
+  });
+  const xml = await feed(db);
+  assert.ok(xml.includes("<Price>250</Price>"), "pretul impus pe produs");
+  assert.ok(xml.includes("<Quantity>9</Quantity>"), "stocul de siguranta al produsului, nu cel general");
+});
+
+test("un produs nevalid nu darama feedul celorlalte", async () => {
+  /* Aceeasi hotarare ca in panou: produsul iese, restul pleaca. */
+  const db = faceBaza({
+    config: { mod_includere: "toate" },
+    produse: [produs(1, { images: [] }), produs(2)],
+  });
+  const xml = await feed(db);
+  assert.equal(XMLValidator.validate(xml), true);
+  assert.equal((xml.match(/<Product>/g) ?? []).length, 1);
+});
+
+test("feedul de stoc are aceleasi produse, dar numai disponibilitatea", async () => {
+  const db = faceBaza({ config: { mod_includere: "toate" } });
+  const stoc = await feed(db, "stoc");
+  assert.equal(XMLValidator.validate(stoc), true);
+  assert.equal((stoc.match(/<Product>/g) ?? []).length, 2);
+  assert.ok(!stoc.includes("<Prices>"));
+  assert.ok(!stoc.includes("<Descriptions>"));
+});
+
+test("un catalog gol da un feed valid si gol, nu o cadere", async () => {
+  const xml = await feed(faceBaza({ config: { mod_includere: "toate" }, produse: [] }));
+  assert.equal(XMLValidator.validate(xml), true);
+  assert.ok(!xml.includes("<Product>"));
+  assert.ok(xml.includes("</Catalog>"));
+});

@@ -357,7 +357,7 @@ export const INTEGRARI: Integrare[] = [
   {
     cheie: "pepita",
     categorie: "marketplace",
-    stare: "in-curand",
+    stare: "activa",
     descriere: "Marketplace românesc, cu produsele tale listate automat.",
   },
   {

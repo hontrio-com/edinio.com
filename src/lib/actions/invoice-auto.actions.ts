@@ -122,6 +122,29 @@ export async function maybeAutoInvoice(
       return;
     }
 
+    /*
+     * ═══ ⚠ PEPITA: COMUTATOR, STINS DIN START ═══
+     *
+     * Documentatia publica Pepita nu spune cine emite factura catre clientul final, si nu
+     * exista niciun capat prin care sa i-o trimitem sau sa aflam ce a emis ea. Deci nu se
+     * poate rezolva prin cod: ori comerciantul stie din contractul lui ca el factureaza, ori
+     * nu.
+     *
+     * ⚠ SI ATUNCI IMPLICITUL E „NU". O factura fiscala emisa degeaba nu se retrage, se
+     * STORNEAZA, iar doua documente pentru aceeasi marfa sunt mai greu de reparat decat unul
+     * lipsa. Aceeasi socoteala ca la Trendyol, si acolo scrie de ce.
+     */
+    const ePepita = src?.marketplace === "pepita";
+    if (ePepita) {
+      const { data: st, error: eSt } = await supabase
+        .from("store_settings").select("pepita_config").eq("business_id", businessId).maybeSingle();
+      /* ⚠ O citire picata NU porneste facturarea: o trecere sarita se reia, o factura gresita
+         se storneaza. */
+      if (eSt) return;
+      const cfg = (st?.pepita_config ?? {}) as { factureaza_clientul?: boolean };
+      if (cfg.factureaza_clientul !== true) return;
+    }
+
     if (eTrendyol) {
       const { data: st, error: eSt } = await supabase
         .from("store_settings").select("trendyol_config").eq("business_id", businessId).maybeSingle();
@@ -131,7 +154,7 @@ export async function maybeAutoInvoice(
       const cfg = (st?.trendyol_config ?? {}) as { factureaza_clientul?: boolean };
       if (cfg.factureaza_clientul !== true) return;
     }
-    if (!eEmag && !eTrendyol && (src?.marketplace || o.payment_method === "aboutyou")) return;
+    if (!eEmag && !eTrendyol && !ePepita && (src?.marketplace || o.payment_method === "aboutyou")) return;
 
     /*
      * ═══ ⚠ O COMANDĂ eMAG INCOMPLETĂ NU SE FACTUREAZĂ ═══

@@ -41,6 +41,15 @@ import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
 /** Canalele care pot primi o mișcare de stoc. */
 export type Canal = "emag" | "trendyol" | "aboutyou" | "gmc" | "olx";
 
+/**
+ * Canalele care pot VINDE, care sunt mai multe decât cele care pot primi.
+ *
+ * ⚠ Pepita nu primește nimic de la noi: își citește singură feedurile, o dată pe oră
+ * pentru stoc. Deci nu are coadă și nu are ce să i se împingă. Dar vinde, iar când vinde
+ * trebuie să afle celelalte cinci canale, exact ca la orice altă vânzare.
+ */
+export type CanalVanzator = Canal | "pepita";
+
 const IMPINGERI: Record<Canal, (b: string, p: (string | null | undefined)[]) => Promise<unknown>> = {
   emag: enqueueEmagStocMany,
   trendyol: enqueueTrendyolInventoryMany,
@@ -63,7 +72,7 @@ const IMPINGERI: Record<Canal, (b: string, p: (string | null | undefined)[]) => 
 export async function impingeStoculPeCeleLalteCanale(
   businessId: string,
   productIds: (string | null | undefined)[],
-  venitDe: Canal,
+  venitDe: CanalVanzator,
 ): Promise<void> {
   const curate = [...new Set(productIds.filter((x): x is string => !!x))];
   if (curate.length === 0) return;

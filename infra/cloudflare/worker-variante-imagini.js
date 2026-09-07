@@ -56,7 +56,21 @@ export default {
     /* Ce nu e o citire simpla nu ne priveste: se duce la depozit asa cum e. */
     if (request.method !== "GET" && request.method !== "HEAD") return fetch(request);
 
-    const raspuns = await fetch(request);
+    /*
+     * ⚠ 404-URILE NU AU VOIE SA INTRE IN CACHE, si asta e cea mai importanta hotarare de aici.
+     *
+     * Masurat pe productie inainte ca Workerul sa fie viu: cererile mele de proba au lasat 404-uri
+     * in cache-ul Cloudflare (`cf-cache-status: HIT`). Cu ele acolo, Workerul intra intr-un fund de
+     * sac: `fetch` ii da 404-ul din CACHE, cere originii sa faca varianta (si ea o face), reincearca
+     * — si primeste tot 404-ul din cache. La nesfarsit, pentru fiecare vizitator, desi fisierul
+     * exista de mult in depozit.
+     *
+     * `cacheTtlByStatus` cu 0 pe 404 opreste otrava sa se mai formeze; raspunsurile bune se tin un
+     * an, ca pana acum.
+     */
+    const CACHE_FARA_404 = { "200-299": 31536000, "404": 0, "500-599": 0 };
+
+    const raspuns = await fetch(request, { cf: { cacheTtlByStatus: CACHE_FARA_404 } });
     if (raspuns.status !== 404) return raspuns;
 
     /* A doua trecere: varianta tot nu e acolo. Se da 404-ul, nu se mai incearca. */
@@ -100,6 +114,14 @@ export default {
      */
     const dinNou = new Request(request, { headers: new Headers(request.headers) });
     dinNou.headers.set(SEMN, "1");
-    return fetch(dinNou);
+    /*
+     * ⚠ REINCERCAREA OCOLESTE CACHE-UL. Varianta tocmai s-a scris in depozit acum o clipa; citita
+     * prin cache, am fi luat inapoi chiar 404-ul de acum doua randuri. `cacheTtl: 0` cere sa se mearga
+     * la obarsie.
+     *
+     * ⚠ Si tot cu `cacheTtlByStatus`, ca raspunsul BUN pe care il aducem acum sa se aseze in cache
+     * pentru cererile urmatoare — altfel fiecare vizitator ar fi platit acelasi drum pana la origine.
+     */
+    return fetch(dinNou, { cf: { cacheTtl: 0, cacheTtlByStatus: CACHE_FARA_404 } });
   },
 };

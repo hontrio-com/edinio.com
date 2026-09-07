@@ -542,7 +542,25 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     let cancelled = false;
     getRecoverableCart(cartId).then((items) => {
       if (cancelled || items.length === 0) return;
-      restoreCart(items.map((i) => ({ productId: i.product_id, name: i.name, price: i.price, imageUrl: i.image_url ?? null, quantity: i.quantity })));
+      /*
+       * ⚠ SI VARIANTA, SI PERSONALIZAREA. Fara ele, „recupereaza cosul" punea in cos aceeasi cana
+       * dar GOALA — si nici macar aceeasi linie, fiindca identitatea unei linii le numara
+       * (`lineKey`). Pana pe 07.09.2026 nici nu se ajungea aici: asemenea linii erau sarite de
+       * `liniiRecuperabile`, deci recuperarea nu functiona deloc pentru produsele personalizate.
+       *
+       * ⚠ Daca definitia s-a schimbat intre timp, linia se reface si cosul o marcheaza „Necesita
+       * actualizare" (`cereRevizuire`). Sarita, ar fi disparut fara explicatie dintr-un email pe
+       * care tot noi i l-am trimis.
+       */
+      restoreCart(items.map((i) => ({
+        productId: i.product_id,
+        name: i.name,
+        price: i.price,
+        imageUrl: i.image_url ?? null,
+        quantity: i.quantity,
+        ...(i.variant_title ? { variantTitle: i.variant_title } : {}),
+        ...(i.customization ? { customization: i.customization } : {}),
+      })));
       if (code) setRecoverDiscountCode(code);
       // Magazinele cu finalizarea pe pagina n-au ce modal sa deschida: linkul
       // din emailul de recuperare trebuie sa ajunga tot la formular, deci

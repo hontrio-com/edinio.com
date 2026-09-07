@@ -7,6 +7,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { hasVariants, cerePersonalizare } from "@/lib/storefront/variants";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
+import { normalizeazaDefinitia } from "@/lib/customization/definitie";
+import { normalizeazaValorile } from "@/lib/customization/valori";
+import { pretUnitar as pretUnitarCuPersonalizare, pretulPersonalizarii } from "@/lib/customization/pret";
 
 export interface AbandonedCartItem {
   product_id: string;
@@ -14,6 +17,23 @@ export interface AbandonedCartItem {
   price: number;
   quantity: number;
   image_url?: string | null;
+  /**
+   * Combinatia aleasa („S / Rosu") si personalizarea, ca linia sa se poata REFACE intreaga.
+   *
+   * ═══ ⚠ DE CE N-AU FOST AICI PANA PE 07.09.2026 ═══
+   *
+   * Instantaneul avea cinci campuri, iar cele doua cai care il scriu il compun cu un `.map()` care
+   * le arunca. Deci `liniiRecuperabile` SAREA peste orice produs cu variante sau cu personalizare:
+   * o linie refacuta fara marime sau fara gravura ar fi intrat in cos necomandabila, iar
+   * `restoreCart` SUPRASCRIE cosul — clientul ar fi ramas cu o comanda pe care n-o poate trimite.
+   *
+   * Sarirea era raspunsul corect ATUNCI. Acum linia le poarta, deci se poate reface intreaga.
+   *
+   * ⚠ SE PASTREAZA VALORILE, NU PRETUL. Ca peste tot pe drumul asta: `price` se ia din catalog la
+   * recuperare, iar suplimentul se socoteste din definitia de ATUNCI, nu din ce s-a salvat.
+   */
+  variant_title?: string | null;
+  customization?: Record<string, unknown> | null;
 }
 
 export interface AbandonedProduct {
@@ -109,10 +129,34 @@ export interface ProdusCosSalvat {
  * asta goleste 6 cosuri din 96, adica exact cele care oricum nu se pot recupera.
  */
 /** Pretul unitar cu treptele aplicate, in unitatea in care emailul inmulteste. */
-function pretEfectiv(p: ProdusCosSalvat, cantitate: number): number {
+function esteObiect(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function pretEfectiv(p: ProdusCosSalvat, cantitate: number, personalizare: unknown): number {
   const unitar = round2(Number(p.price) || 0);
   const trepte = construiesteTrepte((p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers, unitar);
-  return pretPeTrepte(trepte, cantitate, unitar).subtotal / cantitate;
+  const cuTrepte = pretPeTrepte(trepte, cantitate, unitar).subtotal / cantitate;
+  /*
+   * ═══ ⚠ SI SUPLIMENTUL DE PERSONALIZARE ═══
+   *
+   * Fara el, emailul de recuperare ar promite 89 de lei pentru un fototapet care costa 910 — exact
+   * felul de minciuna pe care regula asta exista ca s-o opreasca (vezi nota de deasupra: 33 din 129
+   * de linii tineau alt pret decat catalogul, si doua emailuri plecasera deja asa).
+   *
+   * ⚠ SE SOCOTESTE DIN DEFINITIA DE ACUM, nu din pretul salvat: valorile sunt ale clientului,
+   * suma e a noastra. Daca definitia s-a schimbat si valorile nu se mai potrivesc, se cade pe
+   * pretul de catalog — un numar vechi, dar nu unul inventat — iar cosul marcheaza linia
+   * „Necesita actualizare" la restaurare.
+   */
+  if (!esteObiect(personalizare)) return cuTrepte;
+  const definitie = normalizeazaDefinitia(
+    (p.page_sections as { customization?: unknown } | null)?.customization,
+  );
+  if (!definitie) return cuTrepte;
+  const curate = normalizeazaValorile(definitie, personalizare);
+  if (!curate.ok) return cuTrepte;
+  return round2(pretUnitarCuPersonalizare(pretulPersonalizarii(definitie, curate.valori), cuTrepte));
 }
 
 export function liniiRecuperabile(
@@ -135,7 +179,25 @@ export function liniiRecuperabile(
      * n-ar duce la un cos pe care omul sa-l poata cumpara. Purtarea LOR e o lucrare simetrica cu
      * cea a variantelor, si una fara alta ar fi mai rau decat niciuna.
      */
-    if (hasVariants(p.page_sections) || cerePersonalizare(p.page_sections)) continue;
+    /*
+     * ═══ ⚠ CE SE MAI SARE, SI CE NU (schimbat 07.09.2026) ═══
+     *
+     * Se sarea ORICE produs cu variante sau cu personalizare, fiindca instantaneul nu le purta:
+     * linia refacuta ar fi intrat in cos fara marime si fara gravura, iar `restoreCart` SUPRASCRIE
+     * cosul — clientul ar fi ramas cu o comanda pe care n-o poate trimite.
+     *
+     * Acum instantaneul le poarta. Deci se sare doar linia care CHIAR nu se poate reface:
+     * produsul cere ceva, si randul salvat n-are ce sa-i dea.
+     *
+     * ⚠ SI NU SE VERIFICA AICI DACA VALORILE MAI SUNT VALIDE. Definitia se poate schimba intre
+     * timp — dar atunci linia se reface si cosul o marcheaza „Necesita actualizare"
+     * (`cereRevizuire`), iar omul o poate repara. Sarita, ar fi disparut fara explicatie dintr-un
+     * email pe care tot noi i l-am trimis.
+     */
+    const areVariante = hasVariants(p.page_sections);
+    const cerePers = cerePersonalizare(p.page_sections);
+    if (areVariante && !it.variant_title) continue;
+    if (cerePers && !esteObiect(it.customization)) continue;
     out.push({
       product_id: p.id,
       // Si numele, si poza vin din catalog: daca produsul a fost redenumit intre
@@ -157,9 +219,16 @@ export function liniiRecuperabile(
        * inmulteste; `pretPeTrepte` lasa dinadins pretul unitar nerotunjit, ca
        * `pret x cantitate` sa dea exact subtotalul (vezi constatarea 15).
        */
-      price: pretEfectiv(p, normalizeazaCantitate(it.quantity)),
+      price: pretEfectiv(p, normalizeazaCantitate(it.quantity), it.customization),
       quantity: normalizeazaCantitate(it.quantity),
       image_url: (Array.isArray(p.images) && p.images.length ? (p.images[0] as string) : it.image_url) ?? null,
+      /*
+       * ⚠ SE DUC MAI DEPARTE, ca linia refacuta sa fie CHIAR linia lui. Fara ele, „recupereaza
+       * cosul" ar fi pus in cos aceeasi cana, dar goala — iar identitatea liniei (`lineKey`) le
+       * numara, deci n-ar fi fost nici macar aceeasi linie.
+       */
+      ...(it.variant_title ? { variant_title: it.variant_title } : {}),
+      ...(esteObiect(it.customization) ? { customization: it.customization } : {}),
     });
   }
   return out;

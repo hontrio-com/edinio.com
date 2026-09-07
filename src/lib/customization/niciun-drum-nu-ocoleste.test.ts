@@ -105,10 +105,25 @@ test("⚠ drumurile care erau DEJA aparate au ramas aparate", () => {
     /!hasVariants\(p\.page_sections\) && !cerePersonalizare\(p\.page_sections\)/,
     "pachetele accepta iar componente personalizabile",
   );
+  /*
+   * ⚠ COSUL ABANDONAT S-A MUTAT DE PARTEA CEALALTA PE 07.09.2026, si e o hotarare, nu o scapare.
+   *
+   * Sarea ORICE produs cu variante sau personalizare, fiindca instantaneul nu le purta: o linie
+   * refacuta fara marime si fara gravura ar fi intrat in cos necomandabila, iar `restoreCart`
+   * SUPRASCRIE cosul. Acum instantaneul le poarta, deci se sare doar linia care CHIAR nu se poate
+   * reface — produsul cere ceva, si randul salvat n-are ce sa-i dea.
+   *
+   * ⚠ Ce se cere aici ramane acelasi lucru: ca poarta sa EXISTE si sa se uite la ce lipseste, nu
+   * ca ea sa refuze tot.
+   */
+  const cos = sursa("src/lib/abandoned-cart.ts");
   assert.match(
-    sursa("src/lib/abandoned-cart.ts"),
-    /if \(hasVariants\(p\.page_sections\) \|\| cerePersonalizare\(p\.page_sections\)\) continue;/,
-    "restaurarea cosului abandonat nu mai sare produsele personalizabile",
+    cos, /if \(areVariante && !it\.variant_title\) continue;/,
+    "cosul abandonat reface linii cu variante fara sa aiba marimea",
+  );
+  assert.match(
+    cos, /if \(cerePers && !esteObiect\(it\.customization\)\) continue;/,
+    "cosul abandonat reface linii personalizabile fara valori: ajung necomandabile in cos",
   );
   /*
    * ⚠ PAGINA DE PRODUS S-A MUTAT DE PARTEA CEALALTA, si asta e o hotarare, nu o scapare.

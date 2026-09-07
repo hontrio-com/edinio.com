@@ -461,7 +461,16 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         name: form.name.trim() || undefined,
         email: form.email.trim() || undefined,
         phone: form.phone.replace(/[\s\-().]/g, "") || undefined,
-        items: [{ product_id: product.id, name: product.name, price: unit, quantity, image_url: product.images?.[0] ?? null }],
+        /* ⚠ Si personalizarea, ca linia sa se poata reface — vezi nota din `checkout-core.ts`. */
+        items: [{
+          product_id: product.id,
+          name: product.name,
+          price: unit,
+          quantity,
+          image_url: product.images?.[0] ?? null,
+          ...(product.variantTitle ? { variant_title: product.variantTitle } : {}),
+          ...(customizationPayload ? { customization: customizationPayload } : {}),
+        }],
       });
     }, 1500);
     return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };

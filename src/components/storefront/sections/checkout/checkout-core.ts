@@ -344,7 +344,24 @@ export function useCheckoutOrder({
         name: form.name.trim() || undefined,
         email: form.email.trim() || undefined,
         phone: form.phone.replace(/[\s\-().]/g, "") || undefined,
-        items: items.map(i => ({ product_id: i.productId, name: i.variantTitle ? `${i.name} (${i.variantTitle})` : i.name, price: i.price, quantity: i.quantity, image_url: i.imageUrl })),
+        /*
+         * ⚠ SI VARIANTA, SI PERSONALIZAREA. Pana pe 07.09.2026 `.map`-ul asta le arunca, iar
+         * `liniiRecuperabile` sarea apoi peste orice linie cu variante sau personalizare — fiindca
+         * refacuta fara ele ar fi fost necomandabila. Deci exact produsele personalizate, cele mai
+         * scumpe, pierdeau recuperarea cu totul.
+         *
+         * ⚠ Numele pastreaza varianta in paranteza ca pana acum (asa se vede in panou si in email),
+         * dar `variant_title` pleaca si separat: din nume nu se poate reface linia.
+         */
+        items: items.map(i => ({
+          product_id: i.productId,
+          name: i.variantTitle ? `${i.name} (${i.variantTitle})` : i.name,
+          price: i.price,
+          quantity: i.quantity,
+          image_url: i.imageUrl,
+          ...(i.variantTitle ? { variant_title: i.variantTitle } : {}),
+          ...(i.customization ? { customization: i.customization } : {}),
+        })),
       });
     }, 1500);
     return () => { if (trackTimer.current) clearTimeout(trackTimer.current); };

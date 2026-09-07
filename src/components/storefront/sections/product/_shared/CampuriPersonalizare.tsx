@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Loader2, Palette, Upload, X } from "lucide-react";
+import { Check, FileText, Loader2, Palette, Upload, X } from "lucide-react";
 import type { CampPersonalizare } from "@/lib/customization/definitie";
 import { numeleFisierului, sePoateRandaCaImagine } from "@/lib/customization/adresa";
 import { fisiereleCampului } from "@/lib/customization/valori";
@@ -260,6 +260,46 @@ function Control(p: ControlProps) {
 
     case "butoane": {
       const ales = typeof valoare === "string" ? valoare : "";
+      /*
+       * ═══ ⚠ ACELASI CAMP, ALT DESEN ═══
+       *
+       * `radio` nu e un tip aparte: e `butoane` desenat ca o lista cu bulina. Alegerea, pretul,
+       * validarea si instantaneul comenzii sunt identice — vezi nota de la `stil` din
+       * `definitie.ts` pentru de ce nu sunt doua tipuri.
+       *
+       * ⚠ Semantica pentru cititorul de ecran ramane ACEEASI in amandoua (`radiogroup` + `radio`),
+       * fiindca si intelesul e acelasi: o singura alegere din mai multe.
+       */
+      if (camp.stil === "radio") {
+        return (
+          <div role="radiogroup" aria-label={camp.label} className="flex flex-col gap-1.5">
+            {(camp.optiuni ?? []).map((o) => {
+              const e = o.id === ales;
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={e}
+                  onClick={() => pune(camp.id, o.id)}
+                  className="flex items-center gap-2.5 text-left text-sm py-1.5"
+                >
+                  <span
+                    aria-hidden
+                    className="w-[18px] h-[18px] rounded-full border-2 shrink-0 flex items-center justify-center"
+                    style={{ borderColor: e ? color : "var(--color-border)" }}
+                  >
+                    {e && <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />}
+                  </span>
+                  <span style={{ color: e ? "var(--color-foreground)" : "var(--color-muted-foreground)" }}>
+                    {o.eticheta}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      }
       return (
         /* ⚠ `role="radiogroup"`: butoanele sunt o alegere unica, si asa o citeste si un cititor
            de ecran, nu ca pe o insiruire de butoane fara legatura. */
@@ -290,6 +330,32 @@ function Control(p: ControlProps) {
 
     case "comutator": {
       const pornit = valoare === true;
+      /*
+       * ⚠ `bifa` e acelasi comutator, desenat ca o casuta. Valoarea ramane `true`/`false`, deci
+       * pretul, poarta comenzii si instantaneul nu stiu nimic despre desen.
+       */
+      if (camp.stil === "bifa") {
+        return (
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={pornit}
+            onClick={() => pune(camp.id, !pornit)}
+            className="flex items-center gap-2.5 text-left text-sm py-1.5"
+          >
+            <span
+              aria-hidden
+              className="w-[18px] h-[18px] rounded-[5px] border-2 shrink-0 flex items-center justify-center"
+              style={{ borderColor: pornit ? color : "var(--color-border)", backgroundColor: pornit ? color : "transparent" }}
+            >
+              {pornit && <Check className="w-3 h-3" style={{ color: "var(--color-background)" }} />}
+            </span>
+            <span style={{ color: pornit ? "var(--color-foreground)" : "var(--color-muted-foreground)" }}>
+              {camp.label}
+            </span>
+          </button>
+        );
+      }
       return (
         <div className="flex gap-2">
           {[

@@ -385,11 +385,59 @@ function Reglaje({ camp, idx, schimba }: RegProps) {
       );
 
     case "butoane":
-      return <Optiuni camp={camp} idx={idx} schimba={schimba} />;
+      return (
+        <>
+          <Stil camp={camp} idx={idx} schimba={schimba}
+            optiuni={[["butoane", "Butoane"], ["radio", "Lista cu bulina"]]} />
+          <Optiuni camp={camp} idx={idx} schimba={schimba} />
+        </>
+      );
 
     case "comutator":
-      return <PretCamp camp={camp} idx={idx} schimba={schimba} cand="cand e pornit" />;
+      return (
+        <>
+          <Stil camp={camp} idx={idx} schimba={schimba}
+            optiuni={[["comutator", "Da / Nu"], ["bifa", "Casuta de bifat"]]} />
+          <PretCamp camp={camp} idx={idx} schimba={schimba} cand="cand e pornit" />
+        </>
+      );
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Cum se deseneaza campul
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Alege DESENUL, nu comportamentul.
+ *
+ * ⚠ Nu schimba nici pretul, nici validarea, nici ce ajunge in comanda — vezi nota de la `stil` din
+ * `definitie.ts`. De-aia sta aici, langa reglajele campului, si nu langa alegerea TIPULUI: un
+ * comerciant care schimba desenul nu trebuie sa se teme ca-si strica preturile.
+ */
+function Stil({ camp, idx, schimba, optiuni }: RegProps & { optiuni: [string, string][] }) {
+  const ales = camp.stil ?? optiuni[0][0];
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-muted-foreground">Cum se afiseaza</label>
+      <div className="flex flex-wrap gap-2">
+        {optiuni.map(([valoare, eticheta]) => (
+          <button
+            key={valoare}
+            type="button"
+            onClick={() => schimba(idx, { stil: valoare as never })}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+              ales === valoare
+                ? "border-primary bg-primary/10 text-foreground"
+                : "border-border text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {eticheta}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

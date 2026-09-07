@@ -112,6 +112,15 @@ export const TIPURI = [
 
 export type TipCamp = (typeof TIPURI)[number];
 
+/**
+ * Felul in care se deseneaza un camp cu alegeri sau un comutator.
+ *
+ * `butoane` si `comutator` sunt implicitele si raman cele de pana acum, deci produsele deja
+ * configurate nu se schimba cu nimic.
+ */
+export const STILURI = ["butoane", "radio", "comutator", "bifa"] as const;
+export type StilCamp = (typeof STILURI)[number];
+
 /** Unitatile in care se scriu dimensiunile. Se socoteste mereu in metri. */
 export const UNITATI = ["mm", "cm", "m"] as const;
 export type Unitate = (typeof UNITATI)[number];
@@ -198,6 +207,25 @@ export interface CampPersonalizare {
 
   /* — butoane — */
   optiuni?: OptiuneCamp[];
+
+  /**
+   * Cum se DESENEAZA campul. Nu schimba nimic altceva: nici pretul, nici validarea, nici
+   * instantaneul comenzii.
+   *
+   * ═══ ⚠ DE CE UN STIL, SI NU DOUA TIPURI NOI ═══
+   *
+   * Specificatia cerea si `radio`, si `checkbox`. Dar `radio` e vizual acelasi lucru cu `butoane`
+   * (o alegere din mai multe, si chiar asa il anunta si cititorului de ecran: `role="radiogroup"`),
+   * iar `checkbox` acelasi lucru cu `comutator` (pornit / stins).
+   *
+   * Tipuri noi ar fi insemnat inca doua ramuri in FIECARE loc care se uita la `type`: pretuirea,
+   * validarea de salvare, greutatea maxima, poarta comenzii, rezumatul din cos, instantaneul,
+   * emailul, panoul. Opt locuri care trebuie sa ramana in sincron, pentru o deosebire care e numai
+   * de desen — si fiecare dintre ele o cale pe care un tip nou e uitat si cade tacut pe `default`.
+   *
+   * ⚠ Deci deosebirea sta unde e cu adevarat: la randare.
+   */
+  stil?: StilCamp;
 
   /**
    * Pretul cand campul e COMPLETAT (text/textarea/image) sau PORNIT (comutator).
@@ -487,6 +515,23 @@ function citesteCamp(raw: unknown): CampPersonalizare | null {
    */
   if (type !== "butoane" && type !== "select" && raw.impact !== undefined) {
     camp.impact = citesteImpact(raw.impact);
+  }
+
+  /*
+   * ⚠ STILUL SE CITESTE DOAR UNDE ARE INTELES, si numai valorile potrivite tipului.
+   *
+   * `radio` pe un camp de text n-ar insemna nimic, iar `bifa` pe `butoane` ar fi desenat un
+   * comutator peste o lista de optiuni. Un stil nepotrivit se ARUNCA — campul cade pe desenul lui
+   * obisnuit, care merge intotdeauna.
+   */
+  const stiluriPermise: Partial<Record<TipCamp, readonly StilCamp[]>> = {
+    butoane: ["butoane", "radio"],
+    select: ["butoane", "radio"],
+    comutator: ["comutator", "bifa"],
+  };
+  const permise = stiluriPermise[type];
+  if (permise && typeof raw.stil === "string" && (permise as readonly string[]).includes(raw.stil)) {
+    camp.stil = raw.stil as StilCamp;
   }
 
   return camp;

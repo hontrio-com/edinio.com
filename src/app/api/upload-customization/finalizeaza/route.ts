@@ -4,7 +4,6 @@ import {
   incarcaMiniatura, inceputulIncarcarii, masoaraIncarcarea, mutaIncarcarea, stergeIncarcarea,
 } from "@/lib/r2";
 import { detectDocMime, detectImageMime, isAllowedImage, MAX_PIXELI } from "@/lib/utils/file-signature";
-import { MB_DOCUMENT, MB_IMAGINE } from "@/lib/customization/definitie";
 import { cheiaDefinitiva, cheieMiniatura, esteCheieProvizorie } from "@/lib/customization/fisiere-private";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { verificaPermisul } from "@/lib/customization/permis-incarcare";
@@ -31,8 +30,6 @@ import { verificaPermisul } from "@/lib/customization/permis-incarcare";
 export const runtime = "nodejs";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
-const MAX_SIZE = MB_IMAGINE * 1024 * 1024;
-const MAX_SIZE_DOC = MB_DOCUMENT * 1024 * 1024;
 const EXT_BY_MIME: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic",
   "application/pdf": "pdf",
@@ -129,8 +126,12 @@ export async function POST(request: NextRequest) {
    * ⚠ MARIMEA ADEVARATA, desi e si semnata in link. Semnatura o apara la scriere, dar plafonul
    * nostru se poate schimba intre darea linkului si finalizare, iar o a doua citire nu costa nimic:
    * `HeadObject` nu aduce octeti.
+   *
+   * ⚠ SI E PLAFONUL CAMPULUI, nu cel global: comerciantul poate cere „cel mult 2 MB" pe un camp, iar
+   * pana acum regula aia traia numai in browser. Numarul vine din permisul semnat de noi, deci nu
+   * poate fi ales de cel care incarca. Vezi `campurileDeIncarcare`.
    */
-  const plafon = cereDocumente ? MAX_SIZE_DOC : MAX_SIZE;
+  const plafon = verdict.maxOcteti;
   if (masura.octeti > plafon) {
     return refuza(`Fisierul depaseste limita de ${Math.round(plafon / 1024 / 1024)}MB.`);
   }

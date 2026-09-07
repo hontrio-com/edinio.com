@@ -123,7 +123,7 @@ test("⚠ trimiterea manuala de SMS din panou trece prin aceeasi poarta", () => 
    * Ordinea coloanelor nu se ingheata aici: ar face sa pice si o rescriere care nu strica nimic.
    */
   assert.match(
-    corp, /\.from\("abandoned_carts"\)\.select\("[^"]*\bitems\b[^"]*"\)/,
+    corp, /\.from\("abandoned_carts"\)\s*\.select\("[^"]*\bitems\b[^"]*"\)/,
     "cosul se citeste fara `items`, deci poarta n-are ce sa judece",
   );
 

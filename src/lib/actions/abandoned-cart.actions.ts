@@ -16,7 +16,7 @@ import { sendAbandonedCartRecovery } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { storeBaseUrl } from "@/lib/seo";
 import { isPremiumPlan } from "@/lib/plans";
-import { ABANDON_MINUTES, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
+import { ABANDON_MINUTES, COS_PREA_VECHI, cosulMaiPoateFiRecuperat, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";
 import { pragulComenzilor } from "@/app/api/cron/curata-fisiere/reguli";
 
@@ -182,8 +182,7 @@ export async function getRecoverableCart(cartId: string): Promise<AbandonedCartI
      * ⚠ ACELASI PRAG, DINTR-O SINGURA SURSA. Doua numere care se apropie ar fi lasat o fereastra
      * in care cosul e recuperabil si fisierele lui nu mai sunt — exact defectul de acum.
      */
-    const miscat = cart.last_activity_at ? new Date(cart.last_activity_at) : null;
-    if (!miscat || Number.isNaN(miscat.getTime()) || miscat < pragulComenzilor(new Date())) return [];
+    if (!cosulMaiPoateFiRecuperat(cart.last_activity_at, pragulComenzilor(new Date()))) return [];
 
     const stored = (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[];
     /*
@@ -421,10 +420,22 @@ export async function sendAbandonedCartEmail(
   if (!biz) return { error: "Magazin negasit" };
 
   const { data: cart } = await supabase
-    .from("abandoned_carts").select("id, customer_name, email, items, subtotal, recovery_count")
+    .from("abandoned_carts")
+    .select("id, customer_name, email, items, subtotal, recovery_count, last_activity_at")
     .eq("id", cartId).eq("business_id", businessId).single();
   if (!cart) return { error: "Cosul nu a fost gasit." };
   if (!cart.email) return { error: "Clientul nu a lasat un email." };
+  /*
+   * ⚠ ACEEASI VARSTA CA LA LINK, si pana acum lipsea tocmai aici.
+   *
+   * `getRecoverableCart` refuza un cos iesit din fereastra, dar trimiterea nici macar nu citea
+   * `last_activity_at`. Deci mesajul pleca pe un cos de sapte luni, clientul apasa, si vitrina il
+   * lasa pe prima pagina fara cos si fara nicio explicatie. Verificat DUPA gasirea cosului, ca
+   * mesajul de eroare sa fie cel adevarat, nu „nu a fost gasit".
+   */
+  if (!cosulMaiPoateFiRecuperat(cart.last_activity_at, pragulComenzilor(new Date()))) {
+    return { error: COS_PREA_VECHI };
+  }
 
   // Preturile din `cart.items` sunt cele inghetate in localStorage la captura,
   // deci pot fi vechi de saptamani; se aduc la zi din catalog inainte sa plece
@@ -495,10 +506,19 @@ export async function sendAbandonedCartSms(
   if (!smsoReady && !noticeReady) return { error: "Activeaza SMSO sau notice.ro (cos abandonat) ca sa trimiti SMS." };
 
   const { data: cart } = await supabase
-    .from("abandoned_carts").select("id, customer_name, phone, items, recovery_count")
+    .from("abandoned_carts")
+    .select("id, customer_name, phone, items, recovery_count, last_activity_at")
     .eq("id", cartId).eq("business_id", businessId).single();
   if (!cart) return { error: "Cosul nu a fost gasit." };
   if (!cart.phone) return { error: "Clientul nu a lasat un numar de telefon." };
+  /*
+   * ⚠ SI AICI VARSTA, INAINTE DE ORICE. La SMS conteaza mai mult decat la email: mesajul e PLATIT
+   * de comerciant, iar la capatul lui clientul gaseste un cos care nu mai exista. Se plateste ca
+   * omul sa fie trimis intr-un zid.
+   */
+  if (!cosulMaiPoateFiRecuperat(cart.last_activity_at, pragulComenzilor(new Date()))) {
+    return { error: COS_PREA_VECHI };
+  }
 
   /*
    * ⚠ ACELASI REFUZ CA LA EMAIL, SI DIN ACELASI MOTIV — pana acum lipsea, iar

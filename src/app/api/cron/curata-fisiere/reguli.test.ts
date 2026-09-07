@@ -70,8 +70,9 @@ test("⚠ un fisier de pe o comanda din fereastra NU se sterge, oricat de vechi 
   /*
    * ⚠ VECHIMEA OBIECTULUI NU HOTARASTE CAND E APARAT. Un fisier urcat acum cinci luni, pe o
    * comanda de acum cinci luni, e cu mult peste cele 30 de zile — si totusi trebuie sa ramana,
-   * fiindca hotararea proprietarului e SASE luni de la data comenzii. O regula care s-ar fi uitat
-   * numai la vechimea obiectului ar fi sters hartia dupa care atelierul tocmai a produs marfa.
+   * fiindca hotararea proprietarului e SASE luni de la ULTIMA ATINGERE a comenzii. O regula care
+   * s-ar fi uitat numai la vechimea obiectului ar fi sters hartia dupa care atelierul tocmai a
+   * produs marfa.
    */
   const o = obiect("pe-comanda.jpg", 150);
   const v = deSters([o], new Set([o.cheie]), ACUM);

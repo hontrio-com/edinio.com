@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { signShippingQuote, verifyShippingQuote, semneazaOptiuni } from "./quote-token";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
+import { recalculeazaTotal } from "@/lib/orders/edit-pricing";
 
 /** Optiunea folosita de testele care nu se ocupa chiar ele de legarea optiunii. */
 const OPT = { courier: "sameday", deliveryType: "address", courierLabel: "Sameday Courier", ramburs: false };
@@ -347,4 +351,132 @@ test("pickup: 0 lei semnat intr-un regim nu trece in celalalt", () => {
   const [p] = semneazaOptiuni(BIZ, dest, true, [{ ...opt, price: 0 }]);
   assert.equal(verifyShippingQuote(BIZ, dest, 0, p.token, { ...opt, ramburs: true }), true);
   assert.equal(verifyShippingQuote(BIZ, dest, 0, p.token, { ...opt, ramburs: false }), false);
+});
+
+/*
+ * ═══ REGIMUL DE RAMBURS, CERUT SI VERIFICAT DIN ACELASI TOTAL ═══
+ *
+ * Panoul cere cotatia cu `cod: rambursDeIncasat(..., totalul PREVIZUALIZAT)`, iar
+ * `updateOrderDetails` verifica semnatura cu acelasi ajutor. Multa vreme partea a doua folosea
+ * `order.total`, adica totalul VECHI, cu explicatia ca „steagul e doar > 0".
+ *
+ * Nu era de ajuns, si asta apara proba de mai jos: pe o comanda neplatita cu total 0 in care
+ * comerciantul adauga marfa, panoul cere „ramburs" si serverul verifica „platit". Semnatura nu
+ * bate, `sePoateAplica` iese fals, si re-cotarea se arunca TACIT: comerciantul citeste „Comanda a
+ * fost actualizata" peste transportul vechi. Exact felul in care a mai murit o data, cand se
+ * verifica fara eticheta.
+ *
+ * ⚠ SE MASOARA PE AJUTOARELE ADEVARATE, nu pe siruri din sursa: si panoul si serverul cheama
+ * `recalculeazaTotal` cu aceleasi intrari, apoi `rambursDeIncasat`. Daca cele doua formule se
+ * despart vreodata, proba cade aici, nu la un comerciant.
+ */
+const comandaZero = {
+  payment_status: "unpaid",
+  total: 0,
+  subtotal: 0,
+  discount_amount: 0,
+  card_discount_amount: 0,
+  cod_discount_amount: 0,
+  shipping_cost: 25,
+};
+const vatOprit = { vat_enabled: false, vat_rate: 0, prices_include_vat: false };
+
+/** Totalul, socotit cum il socotesc AMANDOUA capetele: cu transportul vechi. */
+function totalDupaEditare(subtotalNou: number): number {
+  return recalculeazaTotal({
+    subtotal: subtotalNou,
+    extras: 0,
+    discount: comandaZero.discount_amount,
+    cardDiscount: comandaZero.card_discount_amount,
+    codDiscount: comandaZero.cod_discount_amount,
+    codFee: 0,
+    shipping: comandaZero.shipping_cost,
+    freeShippingThreshold: null,
+    vat: vatOprit,
+  }).total;
+}
+
+test("⚠ o comanda cu total 0 in care se adauga marfa NU pierde re-cotarea", () => {
+  const dest = { county: "Cluj", city: "Cluj-Napoca" };
+  const opt = { courier: "cargus", deliveryType: "address", courierLabel: "Livrare prin Cargus" };
+
+  /* Panoul: totalul PREVIZUALIZAT, adica dupa ce s-au adaugat 500 de lei de marfa. */
+  const totalNou = totalDupaEditare(500);
+  const rambursCerut = rambursDeIncasat({ payment_status: comandaZero.payment_status, total: totalNou }) > 0;
+  assert.equal(rambursCerut, true, "panoul n-ar mai cere ramburs pe o comanda neplatita de 500 lei");
+  const [semnata] = semneazaOptiuni(BIZ, dest, rambursCerut, [{ ...opt, price: 21 }]);
+
+  /* Serverul: acelasi calcul, din datele lui. */
+  const rambursVerificat = rambursDeIncasat({
+    payment_status: comandaZero.payment_status,
+    total: totalDupaEditare(500),
+  }) > 0;
+  assert.equal(
+    verifyShippingQuote(BIZ, dest, 21, semnata.token, { ...opt, ramburs: rambursVerificat }),
+    true,
+    "re-cotarea din panou e refuzata tacit pe o comanda care era la total 0",
+  );
+
+  /*
+   * ⚠ PERECHEA, ca proba sa insemne ceva: asa gresea inainte. Cu totalul VECHI (0), steagul iese
+   * „platit" si semnatura nu mai bate, adica exact tacerea pe care o inchidem.
+   */
+  const cumGresea = rambursDeIncasat({
+    payment_status: comandaZero.payment_status,
+    total: comandaZero.total,
+  }) > 0;
+  assert.equal(cumGresea, false, "premisa s-a schimbat: totalul vechi nu mai da «platit»");
+  assert.equal(
+    verifyShippingQuote(BIZ, dest, 21, semnata.token, { ...opt, ramburs: cumGresea }),
+    false,
+    "proba e slaba: si cu steagul vechi semnatura ar fi trecut",
+  );
+});
+
+test("⚠ si invers: golirea comenzii nu lasa un token de «ramburs» sa treaca drept «platit»", () => {
+  /*
+   * Cealalta jumatate a aceleiasi reguli. Steagul nu e o formalitate: cotatia „platit" e cea
+   * IEFTINA, fiindca n-are comisionul de ramburs. Cine ar potrivi steagurile „ca sa mearga" ar
+   * deschide chiar gaura pentru care exista.
+   */
+  const dest = { county: "Cluj", city: "Cluj-Napoca" };
+  const opt = { courier: "cargus", deliveryType: "address", courierLabel: "Livrare prin Cargus" };
+  const [caRamburs] = semneazaOptiuni(BIZ, dest, true, [{ ...opt, price: 24 }]);
+
+  assert.equal(verifyShippingQuote(BIZ, dest, 24, caRamburs.token, { ...opt, ramburs: false }), false);
+  assert.equal(verifyShippingQuote(BIZ, dest, 24, caRamburs.token, { ...opt, ramburs: true }), true);
+});
+
+test("⚠ SI APELANTUL chiar foloseste totalul nou, nu pe cel din comanda", () => {
+  /*
+   * ═══ ⚠ DE CE E NEAPARATA SI PROBA ASTA ═══
+   *
+   * Cele doua de mai sus apara REGULA, si trec verzi si daca `updateOrderDetails` s-ar intoarce
+   * maine la `order.total`: ele isi construiesc singure amandoua capetele. Masurat cu un mutant care
+   * pune la loc totalul vechi in ruta, niciuna n-a clipit.
+   *
+   * Un drum intreg nu se poate rula aici (`updateOrderDetails` cere sesiune, baza si catalog), dar
+   * ce trebuie aparat e o singura hotarare: din CE total iese steagul. Aia se vede din sursa.
+   *
+   * ⚠ Comentariile se taie inainte de cautare: fisierul isi explica pe larg propria greseala
+   * veche, iar o cautare peste el ar fi gasit `order.total` chiar in explicatie si ar fi picat pe
+   * un cod corect.
+   */
+  const brut = readFileSync(path.resolve(process.cwd(), "src/lib/actions/order.actions.ts"), "utf8");
+  const cod = brut
+    .replace(/\r\n/g, "\n")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
+
+  const i = cod.indexOf("const semnaturaBuna = verifyShippingQuote(");
+  assert.ok(i > 0, "verificarea cotatiei din panou si-a schimbat forma");
+  const apel = cod.slice(i, cod.indexOf("});", i) + 3);
+
+  assert.match(apel, /ramburs: rambursDeIncasat\(/, "steagul nu mai iese din `rambursDeIncasat`");
+  assert.match(apel, /recalculeazaTotal\(/, "steagul nu se mai socoteste din totalul de dupa editare");
+  assert.match(apel, /shipping: shippingDeBaza/, "totalul se socoteste cu alt transport decat vede panoul");
+  assert.doesNotMatch(
+    apel, /total: order\.total/,
+    "steagul s-a intors pe totalul VECHI: re-cotarea moare tacit pe comenzile care erau la total 0",
+  );
 });

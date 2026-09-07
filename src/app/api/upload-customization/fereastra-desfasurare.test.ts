@@ -274,6 +274,8 @@ interface Parametri {
   marime?: number;
   /** Ce referinta trimite la finalizare, cand proba vrea una straina. */
   referinta?: string;
+  /** Campurile puse in permis, cand proba vrea o limita proprie pe camp. */
+  campuri?: Parameters<typeof semneazaPermisul>[2];
 }
 
 function cere(p: Parametri = {}) {
@@ -285,7 +287,7 @@ function cere(p: Parametri = {}) {
    */
   const permis = p.permis !== undefined
     ? p.permis
-    : semneazaPermisul(p.businessId ?? BIZ, PRODUS, { poza: "i", tipar: "d" });
+    : semneazaPermisul(p.businessId ?? BIZ, PRODUS, p.campuri ?? { poza: "i", tipar: "d" });
   /*
    * ⚠ SI NU MAI PLEACA NICIUN OCTET PE AICI. Ruta da doar voie: primeste tipul si marimea
    * DECLARATE si intoarce un link semnat. Vezi antetul ei pentru de ce — Vercel refuza cererile de
@@ -325,7 +327,7 @@ async function urca(p: Parametri = {}) {
 
   const permis = p.permis !== undefined
     ? p.permis
-    : semneazaPermisul(p.businessId ?? BIZ, PRODUS, { poza: "i", tipar: "d" });
+    : semneazaPermisul(p.businessId ?? BIZ, PRODUS, p.campuri ?? { poza: "i", tipar: "d" });
   const final = await FINAL(new NextRequest(
     "https://magazin.edinio.com/api/upload-customization/finalizeaza",
     {
@@ -941,6 +943,83 @@ test("⚠ o referinta pe care nu s-a urcat nimic iese 404, nu o cheie goala", as
   ));
   assert.equal(r.status, 404, "o referinta fara octeti a primit totusi o cheie");
   assert.deepEqual(scrieri, []);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIMITA COMERCIANTULUI: pana acum traia numai in browser
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ LIMITA CAMPULUI opreste linkul, nu doar interfata", async () => {
+  /*
+   * ═══ ⚠ CE APARA ═══
+   *
+   * In Admin se poate pune pe camp „Imagine, cel mult 2 MB". Pana pe 07.09.2026 regula aia se
+   * respecta numai in `usePersonalizare`, adica in browser: serverul stia doar plafoanele globale
+   * (10 MB imagine, 40 document). Cine trimitea cererea de mana cerea link pentru 8 MB pe campul de
+   * 2 si il primea, urca, finaliza, si cheia intra in comanda. Nu falsifica niciun pret, dar o
+   * regula pusa de magazin nu era o regula.
+   *
+   * ⚠ SI SE MASOARA CA PICA LA LINK, nu la finalizare: marimea intra in SEMNATURA linkului, deci un
+   * link dat pentru 8 MB e un link cu care se pot chiar scrie 8 MB in depozitul PLATIT. Oprit abia
+   * dupa, octetii ar fi fost deja acolo.
+   */
+  const campuri = { poza: { t: "i" as const, m: 2 * 1024 * 1024 }, tipar: "d" as const };
+  const { req } = cere({ campuri, marime: 8 * 1024 * 1024 });
+  const r = await POST(req);
+
+  assert.equal(r.status, 400, "s-a dat link peste limita pusa de comerciant");
+  assert.match((await r.json() as { error: string }).error, /limita de 2MB/);
+  assert.deepEqual(linkuri, [], "s-a semnat totusi un link");
+});
+
+test("⚠ SI perechea: sub limita campului trece mai departe", async () => {
+  /* Fara randul asta, proba de sus ar fi trecut si daca ruta ar refuza pur si simplu totul. */
+  const campuri = { poza: { t: "i" as const, m: 2 * 1024 * 1024 }, tipar: "d" as const };
+  const { req } = cere({ campuri, marime: 1024 * 1024 });
+  assert.equal((await POST(req)).status, 200, "un fisier sub limita a fost refuzat");
+  assert.equal(linkuri.length, 1);
+});
+
+test("⚠ LIMITA CAMPULUI se cere si la FINALIZARE, pe octetii adevarati", async () => {
+  /*
+   * Cine cere link pentru 1 MB si urca 3 nu poate: `ContentLength` e semnat in link, iar R2 refuza.
+   * Dar plafoanele se pot schimba intre darea voii si finalizare, iar `HeadObject` nu costa nimic.
+   * Deci si aici se masoara limita CAMPULUI, nu cea globala de 10 MB.
+   */
+  const campuri = { poza: { t: "i" as const, m: 2 * 1024 * 1024 }, tipar: "d" as const };
+  const mare = Buffer.concat([PNG, Buffer.alloc(3 * 1024 * 1024)]);
+  const { final, referinta } = await urca({ campuri, octeti: mare, marime: PNG.length });
+
+  assert.equal(final?.status, 400, "un fisier peste limita campului a primit cheie buna");
+  assert.match((await final!.json() as { error: string }).error, /limita de 2MB/);
+  assert.deepEqual(sterse, [referinta], "fisierul peste limita a ramas in depozit");
+});
+
+test("⚠ LIMITA NU POATE RIDICA PLAFONUL GLOBAL, oricat ar scrie in permis", async () => {
+  /*
+   * ⚠ Permisul il semnam noi, deci in mod normal nu poate cere 900 MB. Dar definitiile sunt vechi
+   * de luni si `salvare.ts` n-a refuzat mereu tot; iar daca vreodata secretul se scurge, permisul
+   * n-are voie sa fie o cheie catre un plafon mai mare decat cel al platformei. `Math.min` de la
+   * verificare e ce se masoara aici.
+   */
+  const campuri = { poza: { t: "i" as const, m: 900 * 1024 * 1024 }, tipar: "d" as const };
+  const { req } = cere({ campuri, marime: (MB_IMAGINE + 1) * 1024 * 1024 });
+  const r = await POST(req);
+
+  assert.equal(r.status, 400, "un permis cu limita umflata a ridicat plafonul global");
+  assert.match((await r.json() as { error: string }).error, /limita de 10MB/);
+});
+
+test("⚠ PERMISELE VECHI, cu forma scurta, se citesc mai departe", async () => {
+  /*
+   * ═══ ⚠ DE CE E O PROBA, SI NU O PARANTEZA ═══
+   *
+   * Permisele traiesc 12 ore. In clipa desfasurarii, fiecare fila deschisa poarta unul de forma
+   * VECHE (`{poza: "i"}`, fara limita). O verificare care ar accepta doar forma noua ar fi rupt
+   * incarcarile pentru o jumatate de zi, pe un camp de obicei OBLIGATORIU: adica pe comenzi.
+   */
+  const { final } = await urca({ campuri: { poza: "i", tipar: "d" } });
+  assert.equal(final?.status, 200, "un permis de forma veche nu mai e primit");
 });
 
 test("⚠ marimea se cere si la finalizare, pe octetii ADEVARATI", async () => {

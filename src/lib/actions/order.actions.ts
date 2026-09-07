@@ -2955,10 +2955,38 @@ export async function updateOrderDetails(orderId: string, data: {
        * Panoul cere cotatia cu `cod: rambursDeIncasat(...)`, adica dupa BANI, nu
        * dupa metoda: o comanda cu card ramasa neplatita pleaca oricum cu ramburs
        * la curier. Deci si aici se raspunde cu acelasi ajutor, nu cu
-       * `isCodPaymentMethod`. `order.total` in loc de totalul nou: steagul e doar
-       * „> 0", iar `sePoateAplica` de mai jos cere oricum o comanda neplatita.
+       * `isCodPaymentMethod`.
+       *
+       * ═══ ⚠ SI PE TOTALUL NOU, NU PE CEL VECHI ═══
+       *
+       * Aici scria `order.total`, cu explicatia ca „steagul e doar > 0". Nu era
+       * de ajuns: panoul cere cotatia cu totalul PREVIZUALIZAT, deci o comanda
+       * neplatita cu total 0 in care comerciantul adauga marfa de 500 de lei
+       * cerea „ramburs" si se verifica drept „platit". Semnatura nu batea,
+       * `sePoateAplica` iesea fals, si re-cotarea se arunca TACIT: comerciantul
+       * vedea „Comanda a fost actualizata" peste transportul vechi. Exact felul
+       * in care a mai murit o data, cand se verifica fara eticheta.
+       *
+       * ⚠ ACELASI CALCUL CA IN PANOU, nu unul apropiat: `recalculeazaTotal` cu
+       * transportul VECHI, fiindca aceea e valoarea pe care o vede
+       * previzualizarea in clipa cand cere cotatia (cotatia noua nu e inca
+       * aplicata). Doua formule apropiate ar fi lasat aceeasi tacere, doar mai
+       * rar.
        */
-      ramburs: rambursDeIncasat({ payment_status: order.payment_status, total: order.total }) > 0,
+      ramburs: rambursDeIncasat({
+        payment_status: order.payment_status,
+        total: recalculeazaTotal({
+          subtotal: newSubtotal,
+          extras: extrasTotal,
+          discount: Number(order.discount_amount) || 0,
+          cardDiscount: Number(order.card_discount_amount) || 0,
+          codDiscount: Number(order.cod_discount_amount) || 0,
+          codFee,
+          shipping: shippingDeBaza,
+          freeShippingThreshold: pragTransportGratuit(cfgRow?.free_shipping_threshold),
+          vat: vatCfg,
+        }).total,
+      }) > 0,
     });
     const sePoateAplica = semnaturaBuna
       && order.payment_status !== "paid"

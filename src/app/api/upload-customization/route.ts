@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { linkDeIncarcarePrivata } from "@/lib/r2";
-import { MB_DOCUMENT, MB_IMAGINE } from "@/lib/customization/definitie";
 import { cheieProvizorie } from "@/lib/customization/fisiere-private";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
@@ -39,8 +38,6 @@ export const runtime = "nodejs";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
 const TIPURI_DOCUMENT = [...ALLOWED_TYPES, "application/pdf"];
-const MAX_SIZE = MB_IMAGINE * 1024 * 1024;
-const MAX_SIZE_DOC = MB_DOCUMENT * 1024 * 1024;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -103,7 +100,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const plafon = cereDocumente ? MAX_SIZE_DOC : MAX_SIZE;
+  /*
+   * ═══ ⚠ PLAFONUL VINE DIN PERMIS, NU DIN CONSTANTELE GLOBALE ═══
+   *
+   * Comerciantul poate pune pe camp „cel mult 2 MB". Pana acum regula aia se respecta numai in
+   * browser: serverul stia doar 10 MB la imagini si 40 la documente, deci cine trimitea cererea de
+   * mana cerea link pentru 8 MB pe campul de 2 si il primea. Nu falsifica niciun pret, dar limita
+   * pusa de magazin nu era o limita, era o sugestie.
+   *
+   * ⚠ SI VINE SEMNATA. Ceruta in corpul cererii, limita ar fi fost aleasa chiar de cel pe care il
+   * margineste. `maxOcteti` e citit din permisul emis de noi, cand s-a randat pagina produsului, si
+   * e deja impletit cu plafonul global, deci nu-l poate ridica.
+   *
+   * ⚠ SI E IMPORTANT SA CADA AICI, nu doar la finalizare: marimea intra in SEMNATURA linkului, deci
+   * un link dat pentru 8 MB e un link cu care se pot chiar scrie 8 MB in depozitul platit. Oprit
+   * abia la finalizare, fisierul ar fi fost deja urcat si ar fi trebuit sters.
+   */
+  const plafon = verdict.maxOcteti;
   if (!Number.isFinite(octeti) || octeti <= 0 || octeti > plafon) {
     return NextResponse.json(
       { error: `Fisierul depaseste limita de ${Math.round(plafon / 1024 / 1024)}MB.` },

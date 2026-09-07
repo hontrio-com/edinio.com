@@ -136,7 +136,14 @@ test("⚠ recuperarea unui cos expira odata cu fisierele lui", () => {
   const act = sursa("src/lib/actions/abandoned-cart.actions.ts");
   assert.match(act, /import \{ pragulComenzilor \} from "@\/app\/api\/cron\/curata-fisiere\/reguli";/,
     "recuperarea isi scrie propriul termen in loc sa-l ia de la retentie");
-  assert.match(act, /miscat < pragulComenzilor\(new Date\(\)\)\) return \[\];/,
+  /*
+   * ⚠ REGULA S-A MUTAT INTR-UN AJUTOR COMUN, si de-aia proba nu mai cauta comparatia scrisa de
+   * mana. Pana pe 07.09.2026 varsta se judeca numai AICI, la link; emailul, SMS-ul si cronul de
+   * automatizare trimiteau mai departe pe cosuri de sapte luni. Regula desfasurata in patru locuri
+   * s-ar fi departat la prima corectie facuta intr-unul singur, deci e una singura acum, iar
+   * celelalte trei drumuri sunt aparate in `recuperarea-nu-trece-de-sase-luni`.
+   */
+  assert.match(act, /cosulMaiPoateFiRecuperat\(cart\.last_activity_at, pragulComenzilor\(new Date\(\)\)\)/,
     "recuperarea nu se uita la varsta cosului");
   assert.match(act, /select\("business_id, items, status, last_activity_at"\)/,
     "varsta nici nu se citeste din baza");

@@ -87,6 +87,45 @@ export interface AbandonedCartsData {
 // How long without activity before an open cart is considered "abandoned".
 export const ABANDON_MINUTES = 60;
 
+/**
+ * Mai poate fi recuperat cosul asta, sau a trecut fereastra de retentie?
+ *
+ * ═══ ⚠ O SINGURA REGULA PENTRU PATRU DRUMURI ═══
+ *
+ * Linkul de recuperare o avea (`getRecoverableCart`), iar celelalte trei nu: emailul manual, SMS-ul
+ * manual si automatizarea din cron. Deci un cos de sapte luni primea mesajul, uneori un SMS PLATIT
+ * de comerciant, clientul apasa, si la capat il astepta o vitrina care sterge parametrul si nu
+ * spune nimic. Comerciantul platea ca sa trimita omul intr-un zid.
+ *
+ * ⚠ TERMENUL E CHIAR AL FISIERELOR, nu unul ales aparte: dupa `LUNI_PE_COMANDA` cronul de
+ * curatenie sterge pozele cumparatorilor din cosurile deschise (vezi `curata-fisiere/reguli.ts`).
+ * Doua numere apropiate ar fi lasat o fereastra in care cosul se recupereaza si fisierele lui nu mai
+ * sunt, adica exact defectul reparat la link.
+ *
+ * ⚠ CEASUL E `last_activity_at`, NU `created_at`. Un cos lucrat luni de zile, la care omul se
+ * intoarce, e viu; unul deschis o data si uitat nu.
+ *
+ * ⚠ SI O DATA LIPSA E „PREA VECHI", nu „proaspat": nu se trimite un mesaj pe o presupunere, si nu
+ * se sterg fisiere pe una. Aceeasi purtare ca la link.
+ */
+export function cosulMaiPoateFiRecuperat(
+  ultimaMiscare: string | null | undefined,
+  prag: Date,
+): boolean {
+  if (!ultimaMiscare) return false;
+  const t = new Date(ultimaMiscare);
+  return !Number.isNaN(t.getTime()) && t >= prag;
+}
+
+/**
+ * Ce i se spune comerciantului cand incearca sa trimita pe un cos iesit din fereastra.
+ *
+ * ⚠ SPUNE SI DE CE, si ce mai poate face: „nu se poate" l-ar fi trimis la suport.
+ */
+export const COS_PREA_VECHI =
+  "Cosul asta e mai vechi de sase luni, deci nu mai poate fi recuperat: fisierele si preturile lui"
+  + " au expirat, iar linkul l-ar duce pe client la un cos gol. Mesajul nu a plecat.";
+
 // ── Repretuirea unui cos salvat ────────────────────────────────────────────────
 
 function round2(n: number): number {

@@ -175,10 +175,32 @@ test("⚠ lantul e INTREG: ruta cere felul, iar cele trei ecrane nu deseneaza mi
   assert.match(fin, /const cereDocumente = verdict\.document;/);
   assert.match(fin, /const document = cereDocumente \? detectDocMime\(inceput\) : null;/);
   assert.match(fin, /"application\/pdf": "pdf",/, "finalizarea n-ar sti ce terminatie sa puna");
-  assert.match(ruta, /const plafon = cereDocumente \? MAX_SIZE_DOC : MAX_SIZE;/,
-    "voia nu mai margineste marimea declarata");
-  assert.match(fin, /const plafon = cereDocumente \? MAX_SIZE_DOC : MAX_SIZE;/,
-    "finalizarea nu mai margineste marimea ADEVARATA");
+  /*
+   * ═══ ⚠ AFIRMATIA S-A INTORS PE 07.09.2026 ═══
+   *
+   * Aici se cerea `const plafon = cereDocumente ? MAX_SIZE_DOC : MAX_SIZE`, adica plafonul GLOBAL,
+   * 10 MB la imagini si 40 la documente. Era tot ce stia serverul, iar limita pe care comerciantul
+   * o punea pe camp („Logo: cel mult 2 MB") traia numai in browser: cine trimitea cererea de mana
+   * cerea link pentru 8 MB pe campul de 2 si il primea.
+   *
+   * Acum plafonul vine din PERMIS, deja impletit cu cel global (vezi `campurileDeIncarcare`), deci
+   * amandoua rutele intreaba un singur numar in loc sa aleaga intre doua. Proba cere chiar asta:
+   * numarul sa vina din permis, nu din constantele modulului.
+   */
+  assert.match(ruta, /const plafon = verdict\.maxOcteti;/,
+    "voia nu mai margineste marimea declarata cu limita CAMPULUI");
+  assert.match(fin, /const plafon = verdict\.maxOcteti;/,
+    "finalizarea nu mai margineste marimea ADEVARATA cu limita CAMPULUI");
+  /*
+   * ⚠ SI PERECHEA: plafoanele globale n-au voie sa se mai citeasca de aici. Lasate alaturi, prima
+   * „reparatie" care le pune la loc ar sterge tacut limita comerciantului, si suita ar fi verde.
+   */
+  for (const [nume, v] of [["voia", ruta], ["finalizarea", fin]] as const) {
+    assert.equal(
+      /MAX_SIZE|MB_IMAGINE|MB_DOCUMENT/.test(v), false,
+      `${nume} judeca iar pe plafonul global, nu pe cel al campului`,
+    );
+  }
   /* ⚠ Si felul nu se mai poate cere din formular — altfel vechea usa ar fi ramas deschisa alaturi. */
   for (const [nume, v] of [["voia", ruta], ["finalizarea", fin]] as const) {
     assert.equal(

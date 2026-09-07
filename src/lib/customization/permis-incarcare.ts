@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { MB_DOCUMENT, MB_IMAGINE } from "./definitie";
 import type { DefinitiePersonalizare } from "./definitie";
 
 /**
@@ -39,13 +40,17 @@ import type { DefinitiePersonalizare } from "./definitie";
  * intreaga. Permisul apara DEPOZITUL, nu comanda.
  */
 
-/**
- * ⚠ ACELASI LANT DE REZERVE CA LA `fisiere-private`, si dinadins acelasi.
+/*
+ * ⚠ ACELASI SECRET CA LA `fisiere-private`, si dinadins acelasi.
  *
- * Doua secrete diferite pentru acelasi drum ar fi insemnat ca o desfasurare cu unul pus si altul
- * nu trece pe jumatate: cheile se scriu, permisele nu se verifica. Cade in aceeasi rezerva, deci
- * ori merg amandoua, ori niciunul.
+ * Doua secrete diferite pentru acelasi drum ar insemna ca o desfasurare cu unul pus si altul nu
+ * trece pe jumatate: cheile se scriu, permisele nu se verifica. Fiind unul singur, ori merg
+ * amandoua, ori niciunul.
+ *
+ * (Aici scria „acelasi LANT DE REZERVE". Lantul a disparut pe 07.09.2026, si randurile astea au
+ * ramas in urma o zi. Ce era adevarat in ele si a ramas adevarat e chiar propozitia de mai sus.)
  */
+
 /**
  * Secretul de semnare al fisierelor cumparatorilor.
  *
@@ -87,16 +92,54 @@ export const VALABILITATE_MS = 12 * 60 * 60 * 1000;
 export type FelDeCamp = "i" | "d";
 
 /**
- * Campurile produsului care CHIAR primesc fisiere, cu felul fiecaruia.
+ * Un camp de incarcare, asa cum sta in permis.
+ *
+ * ═══ ⚠ DOUA FORME, SI AMANDOUA SE CITESC ═══
+ *
+ * Sirul scurt (`"i"`) e forma de la inceput si ramane cea obisnuita: majoritatea campurilor n-au
+ * limita proprie, si atunci n-are ce sa se scrie. Forma cu obiect apare numai cand comerciantul a
+ * pus o limita sub plafonul global.
+ *
+ * ⚠ FORMA VECHE TREBUIE SA SE CITEASCA MAI DEPARTE, si nu e politete: permisele traiesc 12 ore.
+ * O schimbare care ar fi acceptat doar forma noua ar fi rupt, pentru o jumatate de zi, fiecare
+ * fila deschisa in clipa desfasurarii, pe un camp de obicei OBLIGATORIU, deci pe comenzi, nu pe
+ * un colt de interfata.
+ */
+export type CampDeIncarcare = FelDeCamp | { t: FelDeCamp; m: number };
+
+/**
+ * Campurile produsului care CHIAR primesc fisiere, cu felul si limita fiecaruia.
  *
  * ⚠ Un produs fara niciun camp de fisier intoarce `{}` — si atunci nu se emite niciun permis, deci
  * pagina lui nu e o usa de incarcare deloc.
+ *
+ * ═══ ⚠ SI LIMITA COMERCIANTULUI INTRA IN PERMIS ═══
+ *
+ * `max_file_size_mb` se putea pune in Admin („Logo: cel mult 2 MB") si se respecta numai in
+ * browser. Serverul stia doar plafoanele globale, 10 MB la imagini si 40 la documente, deci cine
+ * trimitea cererea de mana cerea link pentru 8 MB pe un camp de 2 si trecea. Nu falsifica niciun
+ * pret, dar o regula pusa de magazin era, practic, o sugestie.
+ *
+ * ⚠ SE SEMNEAZA, nu se cere de la client. Trimisa in cerere, limita ar fi fost aleasa chiar de cel
+ * pe care il margineste. Aici vine din definitia produsului, citita pe server cand se randeaza
+ * pagina.
+ *
+ * ⚠ SI NU POATE URCA PESTE PLAFONUL GLOBAL. `salvare.ts` refuza deja o limita mai mare, dar
+ * definitiile sunt vechi de luni si se pot fi scris si altfel; `Math.min` de la verificare face ca
+ * permisul sa nu poata RIDICA niciodata plafonul, doar sa-l coboare.
  */
-export function campurileDeIncarcare(definitie: DefinitiePersonalizare | null): Record<string, FelDeCamp> {
-  const out: Record<string, FelDeCamp> = {};
+export function campurileDeIncarcare(
+  definitie: DefinitiePersonalizare | null,
+): Record<string, CampDeIncarcare> {
+  const out: Record<string, CampDeIncarcare> = {};
   for (const c of definitie?.fields ?? []) {
-    if (c.type === "image") out[c.id] = "i";
-    else if (c.type === "fisier") out[c.id] = "d";
+    const fel: FelDeCamp | null = c.type === "image" ? "i" : c.type === "fisier" ? "d" : null;
+    if (!fel) continue;
+    const mb = c.max_file_size_mb;
+    const plafon = fel === "d" ? MB_DOCUMENT : MB_IMAGINE;
+    out[c.id] = typeof mb === "number" && Number.isFinite(mb) && mb > 0 && mb < plafon
+      ? { t: fel, m: Math.floor(mb * 1024 * 1024) }
+      : fel;
   }
   return out;
 }
@@ -104,7 +147,7 @@ export function campurileDeIncarcare(definitie: DefinitiePersonalizare | null): 
 interface Continut {
   b: string;
   p: string;
-  c: Record<string, FelDeCamp>;
+  c: Record<string, CampDeIncarcare>;
 }
 
 function mac(sarcina: string, expira: number): string {
@@ -122,7 +165,7 @@ function mac(sarcina: string, expira: number): string {
 export function semneazaPermisul(
   businessId: string,
   productId: string,
-  campuri: Record<string, FelDeCamp>,
+  campuri: Record<string, CampDeIncarcare>,
   expiraLa?: number,
 ): string | null {
   if (!businessId || !productId || Object.keys(campuri).length === 0) return null;
@@ -132,7 +175,7 @@ export function semneazaPermisul(
    * definitie o poate schimba comerciantul; o semnatura care depinde de ea ar fi fost valabila si
    * nevalabila pe rand, fara nicio schimbare de inteles.
    */
-  const ordonate: Record<string, FelDeCamp> = {};
+  const ordonate: Record<string, CampDeIncarcare> = {};
   for (const k of Object.keys(campuri).sort()) ordonate[k] = campuri[k];
   const continut: Continut = { b: businessId, p: productId, c: ordonate };
   const sarcina = Buffer.from(JSON.stringify(continut), "utf8").toString("base64url");
@@ -140,7 +183,19 @@ export function semneazaPermisul(
 }
 
 export type Verdict =
-  | { ok: true; businessId: string; productId: string; document: boolean }
+  | {
+      ok: true;
+      businessId: string;
+      productId: string;
+      document: boolean;
+      /**
+       * Cati octeti are voie fisierul de pe CAMPUL asta.
+       *
+       * ⚠ E deja impletit cu plafonul global, deci apelantul nu mai are de ales intre doua numere:
+       * un permis nu poate ridica plafonul, doar sa-l coboare. Vezi `campurileDeIncarcare`.
+       */
+      maxOcteti: number;
+    }
   | { ok: false; motiv: "lipsa" | "expirat" | "stricat" | "camp" };
 
 /**
@@ -185,8 +240,25 @@ export function verificaPermisul(permis: string | null | undefined, campId: stri
   }
   if (!continut?.b || !continut?.p || !continut?.c) return { ok: false, motiv: "stricat" };
 
-  const fel = continut.c[campId];
+  /*
+   * ⚠ SE CITESC AMANDOUA FORMELE: sirul scurt de la inceput, si obiectul cu limita proprie. Vezi
+   * `CampDeIncarcare` pentru de ce forma veche nu se poate scoate.
+   */
+  const camp = continut.c[campId];
+  const fel = typeof camp === "string" ? camp : camp?.t;
   if (fel !== "i" && fel !== "d") return { ok: false, motiv: "camp" };
 
-  return { ok: true, businessId: continut.b, productId: continut.p, document: fel === "d" };
+  const plafon = (fel === "d" ? MB_DOCUMENT : MB_IMAGINE) * 1024 * 1024;
+  const alCampului = typeof camp === "object" && Number.isFinite(camp.m) && camp.m > 0
+    ? camp.m
+    : plafon;
+
+  return {
+    ok: true,
+    businessId: continut.b,
+    productId: continut.p,
+    document: fel === "d",
+    /* ⚠ `min`, ca permisul sa nu poata RIDICA plafonul global, oricat ar scrie in el. */
+    maxOcteti: Math.min(alCampului, plafon),
+  };
 }

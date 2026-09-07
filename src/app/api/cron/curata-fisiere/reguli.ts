@@ -14,11 +14,18 @@
  * Se sterg AMANDOUA felurile: si orfanii, si cele ajunse pe comenzi.
  *
  *   - ORFAN: la 30 de zile de la incarcare.
- *   - PE COMANDA: la 6 luni DE LA DATA COMENZII.
+ *   - PE COMANDA: la 6 luni DE LA ULTIMA ATINGERE a comenzii.
  *
- * ⚠ „De la data comenzii", nu de la starea finala — alegerea lui, spusa pe fata. Pretul ei: o
- * comanda care sta in productie mai mult de sase luni isi pierde fisierul sub mana atelierului.
- * Scris aici ca sa nu para o scapare cand se intampla.
+ * ⚠ CEASUL S-A MUTAT PE `updated_at`, si asta e a doua hotarare, din aceeasi zi. Intai s-a scris
+ * „de la data comenzii" (`created_at`), si aici statea marturisit pretul ei: o comanda care sta in
+ * productie mai mult de sase luni isi pierde fisierul sub mana atelierului. Nu era o teamă goala,
+ * masurat atunci: din 389 de comenzi, 175 stau la `shipped` si nu ajung niciodata la o stare
+ * finala. Cu `updated_at`, cat timp comerciantul lucreaza comanda, fisierele ei raman; termenul
+ * incepe sa curga de la ultima miscare.
+ *
+ * ⚠ SI DE CE NU DE LA FINALIZARE, cum ar parea firesc: fiindca finalizarea nu vine. Un ceas pornit
+ * de la o stare pe care 175 de comenzi n-o ating niciodata nu porneste deloc, iar retentia ar fi
+ * fost o promisiune care nu se implineste.
  *
  * ═══ ⚠ SI DE CE CELE DOUA REGULI SUNT DE FAPT UNA ═══
  *
@@ -53,15 +60,19 @@
  * singur prag, ca sa nu existe un interval in care cosul e recuperabil si fisierele lui nu mai
  * sunt. Peste el, un cos deschis de peste sase luni nu mai e o vanzare care se recupereaza.
  *
- * ⚠ TERMENUL ASTA E O PROMISIUNE MARGINITA, si merita spus pe fata: dupa sase luni de la ultima
- * miscare, un link de recuperare inca deschide cosul, dar fisierele lui pot lipsi. E o margine
- * aleasa, nu una uitata.
+ * ⚠ SI DINCOLO DE TERMEN NU SE MAI TRIMITE NIMIC. Aici scria ca dupa sase luni „un link de
+ * recuperare inca deschide cosul, dar fisierele lui pot lipsi". Nu mai e asa, si bine: acelasi prag
+ * inchide acum toate cele patru drumuri ale recuperarii. `getRecoverableCart` refuza cosul,
+ * emailul si SMS-ul de mana refuza sa plece, si cronul de automatizare nu-l mai culege deloc (vezi
+ * `cosulMaiPoateFiRecuperat` din `lib/abandoned-cart.ts`).
+ *
+ * Altfel comerciantul platea un SMS ca sa-si trimita clientul pe o pagina care nu spune nimic.
  */
 
 /** Cat traieste un fisier care nu e pe nicio comanda. */
 export const ZILE_ORFAN = 30;
 
-/** Cat traieste un fisier de pe o comanda, socotit de la DATA COMENZII. */
+/** Cat traieste un fisier de pe o comanda, socotit de la ULTIMA ATINGERE a ei (`updated_at`). */
 export const LUNI_PE_COMANDA = 6;
 
 const ZI = 24 * 60 * 60 * 1000;

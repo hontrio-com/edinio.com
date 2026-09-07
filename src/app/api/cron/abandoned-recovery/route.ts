@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
+import { pragulComenzilor } from "@/app/api/cron/curata-fisiere/reguli";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
@@ -99,6 +100,20 @@ export async function GET(req: NextRequest) {
     new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Bucharest", hour: "2-digit", hour12: false }).format(now),
   );
   const thresholdIso = new Date(now.getTime() - ABANDON_MINUTES * 60_000).toISOString();
+  /*
+   * ═══ ⚠ SI O MARGINE DE JOS, NU DOAR UNA DE SUS ═══
+   *
+   * Pana acum se cerea doar „mai vechi de o ora". Deci automatizarea trimitea si pe cosuri de sapte
+   * luni: email, si la magazinele cu SMS pornit un mesaj PLATIT. Clientul apasa, iar la capat
+   * `getRecoverableCart` refuza cosul (e chiar fereastra dupa care cronul de fisiere sterge pozele
+   * lui), vitrina scoate parametrul din adresa si il lasa pe prima pagina fara nicio explicatie.
+   *
+   * Comerciantul platea, asadar, ca sa-si trimita clientul intr-un zid.
+   *
+   * ⚠ ACELASI PRAG CA LINKUL SI CA TRIMITEREA DE MANA, dintr-o singura sursa: trei numere care se
+   * apropie ar fi lasat exact fereastra pe care o inchidem aici.
+   */
+  const pragRecuperare = pragulComenzilor(now).toISOString();
   let sent = 0;
 
   // Stores opted in + with automation enabled. Windowed — un query simplu e
@@ -194,6 +209,7 @@ export async function GET(req: NextRequest) {
       .eq("business_id", store.businessId)
       .eq("status", "open")
       .lt("last_activity_at", thresholdIso)
+      .gte("last_activity_at", pragRecuperare)
       .limit(500);
       if (eCarts) {
         // Magazinul asta se sare, dar SE SPUNE: altfel un magazin cu o citire

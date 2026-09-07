@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { normalizeazaDefinitia } from "./definitie";
 import { campurileDeIncarcare, semneazaPermisul, verificaPermisul, VALABILITATE_MS } from "./permis-incarcare";
+import { MB_DOCUMENT, MB_IMAGINE } from "./definitie";
 
 /**
  * ═══ PERMISUL DE INCARCARE ═══
@@ -44,6 +45,100 @@ test("⚠ numai campurile care CHIAR primesc fisiere ajung in permis", () => {
   assert.deepEqual(campurileDeIncarcare(faraFisiere), {});
   assert.equal(semneazaPermisul(BIZ, PRODUS, campurileDeIncarcare(faraFisiere)), null);
   assert.deepEqual(campurileDeIncarcare(null), {});
+});
+
+test("⚠ LIMITA PUSA DE COMERCIANT intra in permis, si numai daca coboara plafonul", () => {
+  /*
+   * ═══ ⚠ CE ERA INAINTE ═══
+   *
+   * `max_file_size_mb` se putea pune in Admin si se respecta numai in browser. Serverul stia doar
+   * plafoanele globale, deci cine trimitea cererea de mana cerea link pentru 8 MB pe un camp de 2.
+   * De aici incolo limita calatoreste SEMNATA, si nu poate fi aleasa de cel pe care il margineste.
+   *
+   * ⚠ SI SE PASTREAZA FORMA SCURTA cand nu e nimic de spus. Nu de dragul octetilor: forma scurta e
+   * chiar cea pe care o poarta permisele deja emise, iar ele traiesc 12 ore.
+   */
+  const d = normalizeazaDefinitia({
+    enabled: true,
+    fields: [
+      { id: "logo", type: "image", label: "Logo", required: true, max_file_size_mb: 2 },
+      { id: "poza", type: "image", label: "Poza", required: true },
+      { id: "tipar", type: "fisier", label: "Tipar", required: false, max_file_size_mb: 5 },
+    ],
+  })!;
+  assert.deepEqual(campurileDeIncarcare(d), {
+    logo: { t: "i", m: 2 * 1024 * 1024 },
+    poza: "i",
+    tipar: { t: "d", m: 5 * 1024 * 1024 },
+  });
+
+  /*
+   * ⚠ O limita EGALA cu plafonul global nu se scrie: n-ar margini nimic, si ar umfla degeaba fiecare
+   * permis al platformei.
+   */
+  const catPlafonul = normalizeazaDefinitia({
+    enabled: true,
+    fields: [{ id: "poza", type: "image", label: "Poza", required: false, max_file_size_mb: MB_IMAGINE }],
+  })!;
+  assert.deepEqual(campurileDeIncarcare(catPlafonul), { poza: "i" });
+});
+
+test("⚠ PLAFONUL IESE DIN PERMIS gata impletit cu cel global", () => {
+  /*
+   * ⚠ APELANTUL NU MAI ALEGE INTRE DOUA NUMERE. Lasat sa compare singur limita campului cu cea
+   * globala, fiecare din cele doua rute ar fi avut ocazia sa greseasca, si una din ele chiar a
+   * gresit odata: `documente=1` venea de la client.
+   */
+  const p = semneazaPermisul(BIZ, PRODUS, {
+    mic: { t: "i", m: 2 * 1024 * 1024 },
+    poza: "i",
+    tipar: "d",
+  })!;
+
+  const mic = verificaPermisul(p, "mic");
+  assert.ok(mic.ok && mic.maxOcteti === 2 * 1024 * 1024, "limita campului nu iese din permis");
+
+  const poza = verificaPermisul(p, "poza");
+  assert.ok(poza.ok && poza.maxOcteti === MB_IMAGINE * 1024 * 1024, "campul fara limita a pierdut plafonul global");
+
+  const tipar = verificaPermisul(p, "tipar");
+  assert.ok(tipar.ok && tipar.maxOcteti === MB_DOCUMENT * 1024 * 1024, "documentul n-a primit plafonul lui");
+});
+
+test("⚠ un permis nu poate RIDICA plafonul global, oricat ar scrie in el", () => {
+  /*
+   * Permisele le semnam noi, deci in mod obisnuit nu poate aparea un asemenea numar. Dar
+   * definitiile sunt vechi de luni, iar daca vreodata secretul se scurge, permisul n-are voie sa
+   * fie o cheie catre un depozit fara plafon. `Math.min` de la verificare e ce se cere aici.
+   */
+  const umflat = semneazaPermisul(BIZ, PRODUS, { poza: { t: "i", m: 900 * 1024 * 1024 } })!;
+  const v = verificaPermisul(umflat, "poza");
+  assert.ok(v.ok && v.maxOcteti === MB_IMAGINE * 1024 * 1024, "permisul a ridicat plafonul platformei");
+
+  /* ⚠ Si un numar fara noima cade pe plafon, nu pe zero: zero ar fi refuzat ORICE fisier. */
+  for (const m of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const ciudat = semneazaPermisul(BIZ, PRODUS, { poza: { t: "i", m } })!;
+    const r = verificaPermisul(ciudat, "poza");
+    assert.ok(r.ok && r.maxOcteti === MB_IMAGINE * 1024 * 1024, `m=${m} n-a cazut pe plafonul global`);
+  }
+});
+
+test("⚠ PERMISELE DE FORMA VECHE se citesc mai departe, 12 ore dupa desfasurare", () => {
+  /*
+   * ═══ ⚠ DE CE E O PROBA ═══
+   *
+   * Permisul traieste 12 ore. In clipa desfasurarii, fiecare fila deschisa poarta unul de forma
+   * veche, cu sirul scurt. O verificare care ar fi cerut forma noua ar fi rupt incarcarile pentru o
+   * jumatate de zi, pe un camp de obicei OBLIGATORIU, adica pe comenzi.
+   *
+   * Permisul de mai jos e compus DE MANA in forma veche, nu prin `campurileDeIncarcare`: altfel
+   * proba s-ar fi mutat odata cu codul si n-ar mai fi aparat nimic.
+   */
+  const vechi = semneazaPermisul(BIZ, PRODUS, { poza: "i", tipar: "d" })!;
+  const v = verificaPermisul(vechi, "poza");
+  assert.ok(v.ok, "un permis de forma veche nu mai trece");
+  assert.ok(v.ok && v.document === false);
+  assert.ok(v.ok && v.maxOcteti === MB_IMAGINE * 1024 * 1024, "forma veche n-a cazut pe plafonul global");
 });
 
 test("⚠ un permis al nostru trece, si spune al CUI e", () => {

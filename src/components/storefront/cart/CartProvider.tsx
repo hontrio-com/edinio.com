@@ -5,7 +5,7 @@ import { getCartSessionId } from "@/lib/cart-session";
 import { getCartPricing } from "@/lib/actions/store.actions";
 import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
-import { pretulBucatii, pretulLiniei } from "@/lib/storefront/cart/pret-linie";
+import { cereRevizuire, pretulBucatii, pretulLiniei } from "@/lib/storefront/cart/pret-linie";
 
 /**
  * Cosul storefrontului: stare in memorie oglindita in localStorage, per magazin.
@@ -36,6 +36,18 @@ export interface CartContextValue {
    * dintre ele ar fi diferit de cel pe care il incaseaza serverul.
    */
   lineTotal: (item: CartItem) => number;
+  /**
+   * Configuratia liniei nu se mai potriveste cu definitia de ACUM a produsului.
+   *
+   * ⚠ NU E O EROARE DE PRET, ci un semnal catre om. Pretul cade deja pe catalog cand valorile nu
+   * se mai potrivesc — dar tace, iar clientul afla abia la finalizare, cand serverul refuza, ca
+   * linia nu se poate comanda. Se intampla cand comerciantul schimba definitia dupa ce omul a pus
+   * produsul in cos: sterge o optiune, face un camp obligatoriu, stramteaza o dimensiune.
+   *
+   * ⚠ `false` si cand nu stim inca: preturile ajung asincron, iar pana atunci o linie perfect buna
+   * ar fi fost aratata ca stricata.
+   */
+  lineNeedsReview: (item: CartItem) => boolean;
   /**
    * Cat costa O BUCATA din linie, inainte de treptele de cantitate.
    *
@@ -234,13 +246,22 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
   // total de 1.557,50, si invariantul „unitar x cantitate = total + economie"
   // cadea tocmai pe liniile la care se vede cel mai bine.
   const lineUnit = (item: CartItem) => pretulBucatii(item, preturi[item.productId]);
+  /*
+   * ⚠ Linia a carei configuratie nu mai e valida fata de definitia de ACUM a produsului.
+   *
+   * Pretul cade deja pe catalog cand valorile nu se mai potrivesc — dar tace. Fara semnalul asta,
+   * clientul vede o suma plauzibila si afla abia la finalizare, cand serverul refuza, ca linia nu
+   * se poate comanda. Se intampla cand comerciantul schimba definitia dupa ce omul a pus produsul
+   * in cos, iar nimic din asta nu e vina lui.
+   */
+  const lineNeedsReview = (item: CartItem) => cereRevizuire(item, preturi[item.productId]);
 
   const total = items.reduce((s, i) => s + linie(i).subtotal, 0);
   const count = items.reduce((s, i) => s + i.quantity, 0);
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, total, count, clear, restoreCart, sessionId, hydrated }}
+      value={{ items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, total, count, clear, restoreCart, sessionId, hydrated }}
     >
       {children}
     </CartContext.Provider>
@@ -283,6 +304,8 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
         lineTotal: (item) => item.price * item.quantity,
         lineUnit: (item) => item.price,
         lineSavings: () => 0,
+        /* In afara unui `CartProvider` nu exista preturi, deci nici cum sa stim ca ceva s-a stricat. */
+        lineNeedsReview: () => false,
         removeItem: (key) => setItems((prev) => prev.filter((i) => lineKey(i) !== key)),
         updateQty: (key, qty) =>
           setItems((prev) =>

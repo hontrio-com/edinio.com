@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { lineKey } from "./normalize";
 import { cosDupaComanda } from "./consume";
-import { pretulBucatii } from "./pret-linie";
+import { cereRevizuire, pretulBucatii } from "./pret-linie";
 import type { CartItem } from "@/components/storefront/cart/CartProvider";
 
 /**
@@ -203,4 +203,72 @@ test("⚠ finalizarea arata personalizarea, cu ACELASI ajutor ca sertarul de cos
   /* Si sertarul foloseste exact acelasi ajutor — altfel „acelasi" n-ar insemna nimic. */
   const sertar = sursa("src/components/storefront/sections/cart/CartDrawerClassic.tsx");
   assert.match(sertar, /rezumatPersonalizare\(item\.customization\)/);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   P1.7, jumatatea de interfata — semnalul catre om
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ o configuratie care nu se mai potriveste CERE revizuire", () => {
+  /*
+   * ⚠ CEALALTA JUMATATE A LUI P1.7. Caderea pe pretul de catalog opreste minciuna de pret — dar
+   * TACE. Clientul vede o suma plauzibila si afla abia la finalizare, cand serverul refuza, ca
+   * linia nu se poate comanda. Nimic din asta nu e vina lui: comerciantul a schimbat definitia
+   * dupa ce el pusese produsul in cos.
+   */
+  const stricata = { ...CANA, customization: { g: "Robert", mat: "premium-sters" } } as CartItem;
+  assert.equal(cereRevizuire(stricata, REGULA_CU_OPTIUNI), true, "linia stricata nu se anunta");
+});
+
+test("⚠ o linie BUNA nu se anunta niciodata ca stricata", () => {
+  /*
+   * ⚠ PERECHEA CARE APARA VANZAREA. Un semnal pus pe linii valide ar speria clientii de pe
+   * fiecare cos — mai rau decat tacerea pe care o repara.
+   */
+  const bun = { ...CANA, customization: { g: "Robert", mat: "std" } } as CartItem;
+  assert.equal(cereRevizuire(bun, REGULA_CU_OPTIUNI), false, "o linie valida se anunta ca stricata");
+  /* Si un produs fara personalizare deloc. */
+  assert.equal(cereRevizuire(CANA, REGULA_CU_OPTIUNI), false);
+});
+
+test("⚠ pana ajung preturile, nicio linie nu e aratata ca stricata", () => {
+  /*
+   * ⚠ Preturile ajung in browser ASINCRON. Pana atunci `regula` lipseste — si daca lipsa ar
+   * insemna „stricata", fiecare cos ar fi clipit rosu la fiecare incarcare de pagina, pe linii
+   * perfect bune.
+   *
+   * Se cere sa STIM ca nu se potriveste, nu doar sa nu stim ca se potriveste.
+   */
+  const oricare = { ...CANA, customization: { g: "Robert" } } as CartItem;
+  assert.equal(cereRevizuire(oricare, undefined), false, "linia clipeste rosu pana ajung preturile");
+});
+
+test("⚠ produsul caruia i s-a STINS personalizarea cere revizuire", () => {
+  /*
+   * Cazul care nu se vede din formule: linia poarta valori, dar produsul nu mai are personalizare
+   * deloc. Serverul o va refuza (`verificaPersonalizarea` intoarce „fara" si atunci datele
+   * trimise se refuza), deci omul trebuie sa afle acum, nu la plata.
+   */
+  const cuValori = { ...CANA, customization: { g: "Robert" } } as CartItem;
+  assert.equal(cereRevizuire(cuValori, { price: 100, combos: {}, tiers: null, customization: null }), true);
+});
+
+test("⚠ semnalul se vede in TOATE cele trei suprafete, nu doar in una", () => {
+  /*
+   * ⚠ O LISTA DE LOCURI E O MOSTRA, NU MULTIMEA. Cosul are un sertar SI trei modele de pagina
+   * (care impart `CartPieces`), iar finalizarea are rezumatul ei. Pus intr-unul singur, omul care
+   * cumpara din sertar — sau care ajunge direct la finalizare — n-ar fi aflat nimic.
+   */
+  const sursa = (r: string) =>
+    readFileSync(path.resolve(process.cwd(), r), "utf8").replace(/\r\n/g, "\n");
+
+  for (const [fisier, ce] of [
+    ["src/components/storefront/sections/cart/_shared/CartPieces.tsx", "cele trei pagini de cos"],
+    ["src/components/storefront/sections/cart/CartDrawerClassic.tsx", "sertarul de cos"],
+    ["src/components/storefront/sections/checkout/CheckoutSummary.tsx", "finalizarea"],
+  ] as const) {
+    const s = sursa(fisier);
+    assert.match(s, /lineNeedsReview\(item\)/, `${ce} nu arata semnalul`);
+    assert.match(s, /Necesita actualizare/, `${ce} nu spune omului ce are de facut`);
+  }
 });

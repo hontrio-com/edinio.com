@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
 import { PREFIX_INCARCARI } from "@/lib/customization/adresa";
-import { listeazaPrefix, stergeMulteDinR2 } from "@/lib/r2";
+import { listeazaIncarcari, stergeIncarcari } from "@/lib/r2";
 import { cheileComenzii, deSters, pragulComenzilor, LUNI_PE_COMANDA, ZILE_ORFAN } from "./reguli";
 
 /**
@@ -97,11 +97,16 @@ export async function GET(req: NextRequest) {
    * inchis. Deci o listare incompleta doar amana, nu strica — si totusi se opreste, ca sa nu se
    * raporteze o curatenie „terminata" care n-a fost.
    */
-  let obiecte: { cheie: string; incarcatLa: Date }[];
+  let obiecte: { cheie: string; incarcatLa: Date; bucket: string }[];
   let trunchiat: boolean;
 
   try {
-    const r = await listeazaPrefix(PREFIX_INCARCARI, MAX_OBIECTE_LISTATE);
+    /*
+     * ⚠ AMANDOUA GALETILE. De cand incarcarile se scriu intr-o galeata PRIVATA, cele urcate
+     * inainte au ramas in cea veche — iar retentia trebuie sa le prinda si pe ele, altfel tocmai
+     * fisierele din galeata PUBLICA ar fi ramas acolo pe veci.
+     */
+    const r = await listeazaIncarcari(PREFIX_INCARCARI, MAX_OBIECTE_LISTATE);
     obiecte = r.obiecte;
     trunchiat = r.trunchiat;
   } catch (e) {
@@ -131,7 +136,15 @@ export async function GET(req: NextRequest) {
   }
 
   /* ═══ 4. STERGEREA. Raspunsul se citeste in `stergeMulteDinR2` — vezi nota de acolo. ═══ */
-  const { sterse, esecuri } = await stergeMulteDinR2(deExecutat.map((v) => v.cheie));
+  /*
+   * ⚠ FIECARE CHEIE SE STERGE DIN GALEATA EI. Aceeasi cheie poate exista in amandoua in timpul
+   * migrarii; stearsa din cea gresita, ar fi iesit „stearsa" fara sa dispara nimic — si cronul ar
+   * fi raportat, in fiecare zi, o curatenie care nu s-a facut.
+   */
+  const galeataCheii = new Map(obiecte.map((o) => [o.cheie, o.bucket]));
+  const { sterse, esecuri } = await stergeIncarcari(
+    deExecutat.map((v) => ({ cheie: v.cheie, bucket: galeataCheii.get(v.cheie) ?? "" })),
+  );
 
   if (esecuri.length) {
     await logError({

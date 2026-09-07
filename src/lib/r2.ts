@@ -252,3 +252,153 @@ export async function stergeMulteDinR2(chei: string[]): Promise<{ sterse: number
 
   return { sterse, esecuri };
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GALEATA PRIVATA — fisierele urcate de cumparatori
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Unde stau fisierele urcate din formularul public de personalizare.
+ *
+ * ═══ ⚠ DE CE O GALEATA SEPARATA, SI NU ALT PREFIX ═══
+ *
+ * Fisierele astea sunt poza de nunta, poza copilului, macheta de tipar — date ale unor OAMENI care
+ * n-au fost intrebati nimic despre stocare. Ele au capatat, pe rand: o cheie cu semnatura HMAC, o
+ * ruta de servire care cere sesiune si proprietatea magazinului, antetul `private, no-store`, si
+ * refuzul din `/api/img`.
+ *
+ * ⚠ SI TOTUSI OCTETII STATEAU IN GALEATA PUBLICA. Cine are cheia INTREAGA — iar cheia o primeste
+ * chiar clientul care a urcat fisierul — o putea lipi dupa domeniul public si ocolea toate cele
+ * patru porti. Comentariul din `fisiere-private.ts` o spunea limpede: neghicibil nu inseamna
+ * privat. `Cache-Control: private` nu face o galeata publica sa fie privata.
+ *
+ * Aici se inchide asta: alta galeata, fara domeniu propriu si fara adresa de dezvoltare, deci fara
+ * NICIO cale de acces in afara credentialelor serverului.
+ *
+ * ⚠ CAND `R2_BUCKET_PRIVAT` NU E CONFIGURATA se foloseste galeata de pana acum, exact ca inainte.
+ * Purtarea nu se inrautateste niciodata fata de azi, iar desfasurarea codului nu trebuie sa astepte
+ * o variabila — dar cat timp lipseste, aparearea nu exista. De-aia cheia e trecuta si in
+ * `CHEI_ASTEPTATE` din `next.config.ts`, care STRIGA in jurnalul de build fara sa opreasca nimic.
+ */
+const BUCKET_PRIVAT = process.env.R2_BUCKET_PRIVAT?.trim() || "";
+
+/** Galeata privata daca exista, altfel cea de pana acum. Vezi nota de mai sus. */
+function galeataIncarcarilor(): string {
+  return BUCKET_PRIVAT || BUCKET;
+}
+
+/** Chiar exista o galeata privata, sau ne bazam inca pe cea publica? */
+export function incarcarileSuntPrivate(): boolean {
+  return BUCKET_PRIVAT !== "" && BUCKET_PRIVAT !== BUCKET;
+}
+
+/**
+ * Scrie un fisier de cumparator.
+ *
+ * ⚠ NU INTOARCE NICIO ADRESA, spre deosebire de `uploadToR2`. Aia intoarce adresa publica fiindca
+ * asa o cer cele doua duzini de locuri care urca imagini de produs — si chiar adresa aia e lucrul
+ * de care fisierele astea au scapat. Aici se intoarce cheia, si atat.
+ */
+export async function incarcaPrivat(buffer: Buffer, key: string, contentType: string): Promise<string> {
+  await s3.send(new PutObjectCommand({
+    Bucket: galeataIncarcarilor(),
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+    /* Chiar daca galeata e privata: un intermediar nu are voie sa tina poza cuiva un an. */
+    CacheControl: "private, no-store",
+  }));
+  return key;
+}
+
+/**
+ * Citeste un fisier de cumparator, cu CADERE INAPOI pe galeata de pana acum.
+ *
+ * ⚠ CADEREA INAPOI NU E O SLABICIUNE, E MIGRAREA. Fisierele urcate inainte de a exista galeata
+ * privata stau in cea veche, iar cheile lor sunt deja scrise in comenzi. Citite doar din cea noua,
+ * comerciantul ar fi deschis o comanda de saptamana trecuta si n-ar mai fi gasit macheta dupa care
+ * trebuie sa produca marfa.
+ *
+ * ⚠ SI NU LARGESTE NIMIC: caderea e la CITIRE, pe ruta care cere deja sesiune, proprietatea
+ * magazinului si ca fisierul sa fie chiar pe comanda ceruta. Nimeni nu ajunge aici fara ele.
+ *
+ * ⚠ CAND SE SCOATE: dupa ce cronul de retentie a golit prefixul din galeata veche. Pana atunci,
+ * scoasa, ar rupe comenzile vechi.
+ */
+export async function citestePrivat(key: string): Promise<CitireR2> {
+  const principala = await citesteDinGaleata(galeataIncarcarilor(), key);
+  if (principala.fel !== "lipsa" || !incarcarileSuntPrivate()) return principala;
+  return citesteDinGaleata(BUCKET, key);
+}
+
+async function citesteDinGaleata(bucket: string, key: string): Promise<CitireR2> {
+  try {
+    const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    if (!res.Body) return { fel: "eroare", motiv: "raspuns fara corp" };
+    const bytes = await res.Body.transformToByteArray();
+    return { fel: "octeti", octeti: Buffer.from(bytes) };
+  } catch (e) {
+    if (esteObiectLipsa(e)) return { fel: "lipsa" };
+    return { fel: "eroare", motiv: e instanceof Error ? `${e.name}: ${e.message}` : String(e) };
+  }
+}
+
+/** Ce sta sub un prefix, in AMANDOUA galetile. Cronul de retentie trebuie sa le curete pe ambele. */
+export async function listeazaIncarcari(
+  prefix: string,
+  maxObiecte: number,
+): Promise<{ obiecte: (ObiectListat & { bucket: string })[]; trunchiat: boolean }> {
+  const galeti = incarcarileSuntPrivate() ? [galeataIncarcarilor(), BUCKET] : [BUCKET];
+  const obiecte: (ObiectListat & { bucket: string })[] = [];
+  let trunchiat = false;
+
+  for (const bucket of galeti) {
+    let cursor: string | undefined;
+    do {
+      const r = await s3.send(new ListObjectsV2Command({
+        Bucket: bucket, Prefix: prefix, ContinuationToken: cursor, MaxKeys: 1000,
+      }));
+      for (const o of r.Contents ?? []) {
+        if (!o.Key || !o.LastModified) continue;
+        obiecte.push({ cheie: o.Key, incarcatLa: new Date(o.LastModified), octeti: o.Size ?? 0, bucket });
+      }
+      if (obiecte.length >= maxObiecte) return { obiecte, trunchiat: true };
+      cursor = r.IsTruncated ? r.NextContinuationToken : undefined;
+    } while (cursor);
+  }
+
+  return { obiecte, trunchiat };
+}
+
+/**
+ * Sterge fisiere de cumparator, fiecare din galeata LUI.
+ *
+ * ⚠ GALEATA VINE CU OBIECTUL, nu se ghiceste. Aceeasi cheie poate exista in amandoua in timpul
+ * migrarii; stearsa din galeata gresita, ar fi iesit „sters" fara sa dispara nimic — si cronul ar
+ * fi raportat o curatenie care nu s-a facut, in fiecare zi.
+ */
+export async function stergeIncarcari(
+  tinte: { cheie: string; bucket: string }[],
+): Promise<{ sterse: number; esecuri: string[] }> {
+  let sterse = 0;
+  const esecuri: string[] = [];
+  const peGaleata = new Map<string, string[]>();
+  for (const t of tinte) peGaleata.set(t.bucket, [...(peGaleata.get(t.bucket) ?? []), t.cheie]);
+
+  for (const [bucket, chei] of peGaleata) {
+    for (let i = 0; i < chei.length; i += 1000) {
+      const felie = chei.slice(i, i + 1000);
+      try {
+        const r = await s3.send(new DeleteObjectsCommand({
+          Bucket: bucket, Delete: { Objects: felie.map((Key) => ({ Key })), Quiet: true },
+        }));
+        for (const e of r.Errors ?? []) esecuri.push(`${bucket}/${e.Key}: ${e.Code}`);
+        sterse += felie.length - (r.Errors?.length ?? 0);
+      } catch (e) {
+        esecuri.push(`${bucket}, felia care incepe la ${i}: ${(e as Error).message}`);
+      }
+    }
+  }
+
+  return { sterse, esecuri };
+}

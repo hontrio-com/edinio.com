@@ -174,7 +174,7 @@ const HOOK = `data:text/javascript,${encodeURIComponent(
      if (specifier === "@/lib/r2") {
        return {
          url: "data:text/javascript," + encodeURIComponent(
-           "export const citesteDinR2 = async (k) => globalThis.__r2DeProba(k);"
+           "export const citestePrivat = async (k) => globalThis.__r2DeProba(k);"
            + "export const getFromR2 = async (k) => { const r = await globalThis.__r2DeProba(k); return r.fel === 'octeti' ? r.octeti : null; };"
          ),
          shortCircuit: true, format: "module",

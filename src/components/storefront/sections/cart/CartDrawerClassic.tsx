@@ -38,7 +38,7 @@ export function CartDrawerClassic({
    */
   inline?: boolean;
 }) {
-  const { items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, total, count } = useCart();
+  const { items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, total, count } = useCart();
 
   /**
    * Sertarul se declara `aria-modal`, deci trebuie sa si tina focusul inauntru.
@@ -222,6 +222,15 @@ export function CartDrawerClassic({
                     {rezumatPersonalizare(item.customization) && (
                       <p className="text-xs text-muted-foreground leading-snug truncate">
                         {rezumatPersonalizare(item.customization)}
+                      </p>
+                    )}
+                    {/*
+                      ⚠ Acelasi semnal ca pe paginile de cos — vezi nota din `CartPieces`. Aratat intr-un singur
+                      loc, omul care cumpara din sertar (sau care ajunge direct la finalizare) n-ar fi aflat.
+                    */}
+                    {lineNeedsReview(item) && (
+                      <p className="text-xs mt-1 font-medium text-amber-600 dark:text-amber-500">
+                        Necesita actualizare — deschide produsul si alege din nou
                       </p>
                     )}
                     {/* Peste o bucata, un singur numar scris in accent se

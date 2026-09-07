@@ -23,7 +23,7 @@ export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; col
   const { items } = motor;
   // Totalul liniei vine tot de la cos, ca sa fie acelasi numar aici, in sertar,
   // pe pagina de cos si la server.
-  const { lineTotal, lineSavings, lineUnit } = useCart();
+  const { lineTotal, lineSavings, lineUnit, lineNeedsReview } = useCart();
   return (
       <div className="space-y-2">
         {items.map((item) => (
@@ -48,6 +48,15 @@ export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; col
               */}
               {rezumatPersonalizare(item.customization) && (
                 <p className="text-xs text-muted-foreground truncate">{rezumatPersonalizare(item.customization)}</p>
+              )}
+              {/*
+                ⚠ Acelasi semnal ca pe paginile de cos — vezi nota din `CartPieces`. Aratat intr-un singur
+                loc, omul care cumpara din sertar (sau care ajunge direct la finalizare) n-ar fi aflat.
+              */}
+              {lineNeedsReview(item) && (
+                <p className="text-xs mt-1 font-medium text-amber-600 dark:text-amber-500">
+                  Necesita actualizare — deschide produsul si alege din nou
+                </p>
               )}
               {/* Pretul pe bucata vine de la COS, nu din `item.price`: acela e
                   instantaneul din localStorage, iar totalul de langa el vine deja

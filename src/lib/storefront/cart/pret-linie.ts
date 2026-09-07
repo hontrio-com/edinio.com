@@ -113,3 +113,37 @@ export function pretulLiniei(item: CartItem, regula: RegulaPretCos | undefined):
     savings: Math.max(0, round2((faraTrepte - bucata) * item.quantity)),
   };
 }
+
+/**
+ * Mai e configuratia liniei valida fata de definitia de ACUM a produsului?
+ *
+ * ═══ ⚠ DE CE E O INTREBARE SEPARATA ═══
+ *
+ * `pretulBucatii` cade pe pretul de catalog cand valorile nu se mai potrivesc — asta opreste
+ * minciuna de pret, dar tace. Clientul vede o suma plauzibila si afla abia la finalizare, cand
+ * serverul refuza, ca linia nu se poate comanda.
+ *
+ * Se intampla cand comerciantul schimba definitia dupa ce omul a pus produsul in cos: sterge o
+ * optiune, face un camp obligatoriu, stramteaza marginile unei dimensiuni. Nimic din asta nu e
+ * vina clientului, si nimic nu i-o spune.
+ *
+ * ⚠ RASPUNDE `false` SI CAND NU STIM INCA. Preturile ajung in browser asincron; pana atunci
+ * `regula` lipseste, iar o linie perfect buna ar fi fost aratata ca stricata. Se cere sa STIM ca
+ * nu se potriveste, nu doar sa nu stim ca se potriveste.
+ *
+ * ⚠ SI NU E O A DOUA JUDECATA DE PRET: intreaba chiar `normalizeazaValorile`, cel pe care il
+ * foloseste si pretuirea, si pe care serverul il cheama din nou la comanda. Doua reguli scrise
+ * separat s-ar fi departat, iar cosul ar fi strigat pe linii pe care serverul le accepta.
+ */
+export function cereRevizuire(item: CartItem, regula: RegulaPretCos | undefined): boolean {
+  const valori = item.customization;
+  if (!valori || typeof valori !== "object" || Object.keys(valori).length === 0) return false;
+  if (!regula) return false;
+  const definitie = normalizeazaDefinitia(regula.customization);
+  /*
+   * ⚠ Produsul care nu mai are personalizare DELOC: linia poarta valori pe care definitia de acum
+   * nu le mai cunoaste. Serverul o va refuza, deci omul trebuie sa afle acum.
+   */
+  if (!definitie) return true;
+  return !normalizeazaValorile(definitie, valori).ok;
+}

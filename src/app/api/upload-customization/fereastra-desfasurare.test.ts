@@ -52,7 +52,7 @@ import { esteCheiaNoastra } from "@/lib/customization/fisiere-private";
 
 const BIZ = "11111111-1111-4111-8111-111111111111";
 const NEPUBLICAT = "22222222-2222-4222-8222-222222222222";
-/** Ce ar intoarce `uploadToR2` adevarat: `${R2_PUBLIC_URL}/${cheie}`. */
+/** Ce ar fi intors `uploadToR2`: adresa publica. Ramane ca sa se poata cere ca ea sa NU apara. */
 const CDN = "https://cdn-de-proba.r2.dev";
 
 /** Un PNG de 1x1 adevarat: octetii trec si de semnatura, si de `sharp`. */
@@ -144,7 +144,7 @@ const HOOK = `data:text/javascript,${encodeURIComponent(
      if (specifier === "@/lib/r2") {
        return {
          url: "data:text/javascript," + encodeURIComponent(
-           "export const uploadToR2 = async (b, k, t, c) => globalThis.__r2DeProba(b, k, t, c);"),
+           "export const incarcaPrivat = async (b, k, t) => globalThis.__r2DeProba(b, k, t);"),
          shortCircuit: true, format: "module",
        };
      }
@@ -152,7 +152,15 @@ const HOOK = `data:text/javascript,${encodeURIComponent(
    }`,
 )}`;
 
-type Scriere = { cheie: string; tip: string; cache: string; octeti: number };
+/*
+ * ⚠ `cache` A IESIT DE AICI, si nu s-a pierdut.
+ *
+ * Antetul `private, no-store` era un ARGUMENT dat de ruta lui `uploadToR2`, deci se putea masura
+ * din afara. De cand incarcarile trec prin `incarcaPrivat`, el e hardcodat ACOLO — ruta nu-l mai
+ * poate gresi, fiindca nu-l mai trimite. Afirmatia s-a mutat unde traieste acum garantia:
+ * `galeata-privata.test.ts`, „`incarcaPrivat` nu intoarce nicio adresa".
+ */
+type Scriere = { cheie: string; tip: string; octeti: number };
 let scrieri: Scriere[] = [];
 
 let POST: (req: NextRequest) => Promise<Response>;
@@ -167,7 +175,7 @@ before(async () => {
   register(HOOK);
   (globalThis as unknown as { __r2DeProba: (b: Buffer, k: string, t: string, c: string) => Promise<string> })
     .__r2DeProba = async (b, k, t, c) => {
-      scrieri.push({ cheie: k, tip: t, cache: c, octeti: b.length });
+      scrieri.push({ cheie: k, tip: t, octeti: b.length });
       return `${CDN}/${k}`;
     };
 
@@ -263,7 +271,7 @@ test("⚠ cheia intoarsa e chiar fisierul scris, si trece de poarta comenzii", a
    * Octetii, antetul care nu lasa urme, si cheia — toate trei pe acelasi rand.
    */
   assert.deepEqual(
-    scrieri, [{ cheie, tip: "image/png", cache: "private, no-store", octeti: PNG.length }],
+    scrieri, [{ cheie, tip: "image/png", octeti: PNG.length }],
     "poza cumparatorului nu s-a scris asa cum promite ruta",
   );
 });

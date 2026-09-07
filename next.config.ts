@@ -88,7 +88,19 @@ const CHEI_OBLIGATORII = [
   Goala acum. E locul pentru urmatoarea cheie a carei stare n-o cunoastem: se
   striga in jurnalul de build, nu se opreste desfasurarea, pana se uita cineva.
 */
-const CHEI_ASTEPTATE: readonly string[] = [];
+const CHEI_ASTEPTATE: readonly string[] = [
+  /*
+    ⚠ FISIERELE CUMPARATORILOR. Fara ea, incarcarile din formularul public de personalizare se
+    scriu in galeata PUBLICA, la fel ca pana pe 07.09.2026 — si atunci cine are cheia intreaga
+    (adica chiar clientul care a urcat fisierul) ajunge la octeti lipind-o dupa domeniul public,
+    ocolind toate cele patru porti ale rutei de servire.
+
+    ⚠ STRIGA, NU OPRESTE. Purtarea fara ea e exact cea de azi, nu una stricata: o desfasurare
+    oprita ar fi fost o paguba mai mare decat cea pe care o apara. Se muta in `CHEI_OBLIGATORII`
+    dupa ce galeata privata e creata si variabila pusa in Production.
+  */
+  "R2_BUCKET_PRIVAT",
+];
 
 function verificaCheileDeProductie(faza: string): void {
   /*
@@ -105,11 +117,19 @@ function verificaCheileDeProductie(faza: string): void {
   if (process.env.VERCEL_ENV !== "production") return;
   if (faza !== "phase-production-build") return;
 
+  /*
+    ⚠ MESAJUL E GENERAL, si a fost scris despre `email.ts`.
+
+    Cat timp lista avea o singura cheie, textul putea numi urmarea ei. Cu a doua, el ar fi
+    MINTIT — ar fi spus despre `R2_BUCKET_PRIVAT` ca „formularele raspund ca a mers fara sa plece
+    niciun mesaj", ceea ce n-are nicio legatura. Ce trebuie sa afle cine citeste jurnalul e care
+    cheie lipseste; de ce conteaza scrie langa ea, in lista.
+  */
   for (const c of CHEI_ASTEPTATE) {
     if (!process.env[c]?.trim()) {
       console.warn(
-        `[chei] ${c} lipseste din Production. Nu opresc desfasurarea — dar fara ea ` +
-          "`email.ts` iese devreme, iar formularele raspund ca a mers fara sa plece niciun mesaj.",
+        `[chei] ${c} lipseste din Production. Nu opresc desfasurarea — dar apararea pe care o ` +
+          "aduce nu exista pana nu e pusa. Vezi nota de langa ea in `CHEI_ASTEPTATE`.",
       );
     }
   }

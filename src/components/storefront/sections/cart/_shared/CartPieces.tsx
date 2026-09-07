@@ -159,6 +159,19 @@ export function CartLine({
             {rezumatPersonalizare(item.customization)}
           </p>
         )}
+        {/*
+          ⚠ SEMNALUL CATRE OM, cand configuratia nu se mai potriveste cu definitia de ACUM.
+
+          Pretul cade deja pe catalog in cazul asta — dar tace, iar clientul afla abia la
+          finalizare, cand serverul refuza. Se intampla cand comerciantul schimba definitia dupa ce
+          omul a pus produsul in cos: sterge o optiune, face un camp obligatoriu, stramteaza o
+          dimensiune. Nimic din asta nu e vina lui, si nimic nu i-o spunea.
+        */}
+        {cos.lineNeedsReview(item) && (
+          <p className="text-xs mt-1 font-medium text-amber-600 dark:text-amber-500">
+            Necesita actualizare — deschide produsul si alege din nou
+          </p>
+        )}
         <p className="text-xs text-muted-foreground mt-1">{formatPrice(pretBucata)} bucata</p>
 
         {/* Zona de atins a butonului „Sterge" e adusa la inaltimea stepperului

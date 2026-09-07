@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { uploadToR2 } from "@/lib/r2";
+import { incarcaPrivat } from "@/lib/r2";
 import { detectDocMime, detectImageMime, isAllowedImage, MAX_PIXELI } from "@/lib/utils/file-signature";
 import sharp from "sharp";
 import { MB_DOCUMENT, MB_IMAGINE } from "@/lib/customization/definitie";
@@ -274,7 +274,7 @@ export async function POST(request: NextRequest) {
      * urca imagini de produs. Aici ea e chiar lucrul de care scapam: octetii sunt poza de familie
      * a unui cumparator, iar adresa asta n-are voie sa iasa din functie.
      */
-    await uploadToR2(buffer, key, detected, "private, no-store");
+    await incarcaPrivat(buffer, key, detected);
     /*
      * ⚠ SE INTOARCE DOAR CHEIA. Adresa publica nu mai pleaca in comanda si nici in email.
      * Continutul se serveste prin `/api/customization-file`, care cere sesiune, proprietatea

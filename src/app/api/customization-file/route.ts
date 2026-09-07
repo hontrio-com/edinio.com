@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { citesteDinR2 } from "@/lib/r2";
+import { citestePrivat } from "@/lib/r2";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { areFormaCheii } from "@/lib/customization/fisiere-private";
 import { terminatia } from "@/lib/customization/adresa";
@@ -250,7 +250,7 @@ export async function GET(req: NextRequest) {
    * o trimita din nou — cand trebuia doar sa mai incerce peste zece minute. Deci se cere citirea
    * care DEOSEBESTE (`citesteDinR2`), si esecul iese cu acelasi 503 ca o baza cazuta.
    */
-  const citire = await citesteDinR2(cheie);
+  const citire = await citestePrivat(cheie);
   if (citire.fel === "eroare") {
     console.error("[customization-file] depozitul nu a putut fi citit", { motiv: citire.motiv });
     return NextResponse.json(

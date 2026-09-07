@@ -100,8 +100,8 @@ const HOOK = `data:text/javascript,${encodeURIComponent(
      if (specifier === "@/lib/r2") {
        return {
          url: "data:text/javascript," + encodeURIComponent(
-           "export const listeazaPrefix = async (p, m) => globalThis.__r2Lista(p, m);" +
-           "export const stergeMulteDinR2 = async (c) => globalThis.__r2Sterge(c);"),
+           "export const listeazaIncarcari = async (p, m) => globalThis.__r2Lista(p, m);" +
+           "export const stergeIncarcari = async (c) => globalThis.__r2Sterge(c);"),
          shortCircuit: true, format: "module",
        };
      }
@@ -121,20 +121,29 @@ before(async () => {
   register(HOOK);
   const g = globalThis as unknown as {
     __r2Lista: (p: string, m: number) => Promise<unknown>;
-    __r2Sterge: (c: string[]) => Promise<unknown>;
+    __r2Sterge: (t: { cheie: string; bucket: string }[]) => Promise<unknown>;
   };
   g.__r2Lista = async (prefix, max) => {
     if (cadeListarea) throw new Error("depozitul de proba: listarea a cazut");
-    const obiecte = depozit.filter((o) => o.cheie.startsWith(prefix));
+    /*
+     * ⚠ FIECARE OBIECT POARTA GALEATA LUI. De cand incarcarile stau intr-o galeata PRIVATA, iar
+     * cele vechi au ramas in cea publica, cronul curata amandoua — si sterge fiecare cheie din
+     * galeata ei. Fara campul asta aici, proba ar fi masurat altceva decat ruleaza in productie.
+     */
+    const obiecte = depozit
+      .filter((o) => o.cheie.startsWith(prefix))
+      .map((o) => ({ ...o, bucket: "galeata-privata-de-proba" }));
     return { obiecte: obiecte.slice(0, max), trunchiat: obiecte.length > max };
   };
-  g.__r2Sterge = async (chei) => {
+  g.__r2Sterge = async (tinte) => {
     const esecuri: string[] = [];
-    for (const c of chei) {
-      if (stergeriEsuate.has(c)) esecuri.push(`${c}: AccessDenied`);
-      else sterse.push(c);
+    for (const t of tinte) {
+      /* ⚠ Si galeata trebuie sa vina cu cheia: stearsa din cea gresita, n-ar dispărea nimic. */
+      if (!t.bucket) esecuri.push(`${t.cheie}: fara galeata`);
+      else if (stergeriEsuate.has(t.cheie)) esecuri.push(`${t.cheie}: AccessDenied`);
+      else sterse.push(t.cheie);
     }
-    return { sterse: chei.length - esecuri.length, esecuri };
+    return { sterse: tinte.length - esecuri.length, esecuri };
   };
 
   ({ GET } = (await import("./route")) as unknown as { GET: typeof GET });

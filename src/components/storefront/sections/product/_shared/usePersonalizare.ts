@@ -11,7 +11,7 @@ import {
   type RezultatPret,
 } from "@/lib/customization/pret";
 import { formatPrice } from "@/lib/utils/format";
-import { fisiereleCampului, normalizeazaValorile } from "@/lib/customization/valori";
+import { fisiereleCampului, normalizeazaValorile, valoriDePornire, valorileDinLinie } from "@/lib/customization/valori";
 import { megaoctetiiCampului } from "@/lib/customization/definitie";
 /*
  * ⚠ DIN `adresa`, NU DIN `comanda`. Modulul asta e pur (fara `node:*`, fara `process.env`) tocmai
@@ -141,42 +141,20 @@ export interface StarePersonalizare {
    * cheia in mana; o trece mai departe, si eliberarea ramane in ascultatorul de apasare.
    */
   scoateFisier: (campId: string, index: number, cheie?: string) => void;
+  /**
+   * Umple formularul cu valorile unei linii de cos — editarea unei personalizari deja facute.
+   *
+   * ⚠ SE IAU DOAR CAMPURILE CARE MAI EXISTA in definitia de ACUM. Linia poate fi veche de zile,
+   * iar comerciantul poate fi sters intre timp un camp: turnata intreaga, valoarea lui ar fi
+   * calatorit mai departe intr-o comanda pentru un camp care nu mai e — invizibila pe ecran,
+   * fiindca nimic n-o mai deseneaza. Ce lipseste din linie ramane pe implicitul comerciantului.
+   *
+   * ⚠ SI SE STING CONSTATARILE. Ele se aprind dupa prima apasare pe „Adauga"; o linie adusa din
+   * cos n-a fost inca trimisa de pe ecranul asta, deci n-are de ce sa se deschida cu rosu.
+   */
+  incarcaValori: (v: Record<string, unknown>) => void;
 }
 
-/** Valorile de pornire: implicitele comerciantului, ca pretul sa fie de la inceput adevarat. */
-function valoriDePornire(definitie: DefinitiePersonalizare | null): ValoriBrute {
-  const out: ValoriBrute = {};
-  for (const c of definitie?.fields ?? []) {
-    switch (c.type) {
-      case "image":
-        out[c.id] = [];
-        break;
-      case "color":
-        out[c.id] = c.default_color ?? "#000000";
-        break;
-      case "comutator":
-        out[c.id] = false;
-        break;
-      case "numar":
-        out[c.id] = c.implicit ?? "";
-        break;
-      case "dimensiuni":
-        out[c.id] = { latime: c.latime?.implicit ?? "", inaltime: c.inaltime?.implicit ?? "" };
-        break;
-      case "butoane":
-        /*
-         * ⚠ NU se alege singura o optiune. La un camp obligatoriu, o preselectie ar fi facut
-         * clientul sa cumpere Standard fara sa fi ales nimic — iar comerciantul ar fi produs dupa
-         * o alegere pe care nimeni n-a facut-o.
-         */
-        out[c.id] = "";
-        break;
-      default:
-        out[c.id] = "";
-    }
-  }
-  return out;
-}
 
 export function usePersonalizare(pageSections: unknown, businessId: string): StarePersonalizare {
   const definitie = useMemo(() => {
@@ -227,6 +205,11 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
   const pune = useCallback((campId: string, valoare: unknown) => {
     setValori((v) => ({ ...v, [campId]: valoare }));
   }, []);
+
+  const incarcaValori = useCallback((aduse: Record<string, unknown>) => {
+    setValori(valorileDinLinie(definitie, aduse));
+    setAratate(false);
+  }, [definitie]);
 
   const curate = useMemo(
     () => (definitie ? normalizeazaValorile(definitie, valori) : null),
@@ -487,6 +470,7 @@ export function usePersonalizare(pageSections: unknown, businessId: string): Sta
     definitie,
     valori,
     pune,
+    incarcaValori,
     constatari,
     /* ⚠ `true` si cand produsul n-are personalizare — altfel butonul ar fi fost stins pe TOT
        magazinul, nu doar pe produsele personalizabile. */

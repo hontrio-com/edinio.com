@@ -297,3 +297,63 @@ export function normalizeazaValorile(
 
   return { ok: constatari.length === 0, valori, constatari };
 }
+
+/** Valorile de pornire: implicitele comerciantului, ca pretul sa fie de la inceput adevarat. */
+export function valoriDePornire(definitie: DefinitiePersonalizare | null): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const c of definitie?.fields ?? []) {
+    switch (c.type) {
+      case "image":
+        out[c.id] = [];
+        break;
+      case "color":
+        out[c.id] = c.default_color ?? "#000000";
+        break;
+      case "comutator":
+        out[c.id] = false;
+        break;
+      case "numar":
+        out[c.id] = c.implicit ?? "";
+        break;
+      case "dimensiuni":
+        out[c.id] = { latime: c.latime?.implicit ?? "", inaltime: c.inaltime?.implicit ?? "" };
+        break;
+      case "butoane":
+        /*
+         * ⚠ NU se alege singura o optiune. La un camp obligatoriu, o preselectie ar fi facut
+         * clientul sa cumpere Standard fara sa fi ales nimic — iar comerciantul ar fi produs dupa
+         * o alegere pe care nimeni n-a facut-o.
+         */
+        out[c.id] = "";
+        break;
+      default:
+        out[c.id] = "";
+    }
+  }
+  return out;
+}
+
+/**
+ * Valorile cu care se deschide formularul cand pagina a fost chemata SA REPARE o linie din cos.
+ *
+ * ═══ ⚠ SE IAU DOAR CAMPURILE CARE MAI EXISTA ═══
+ *
+ * Linia poate fi veche de zile, iar comerciantul poate fi sters intre timp un camp sau i-a schimbat
+ * id-ul. Turnata intreaga, valoarea lui ar fi calatorit mai departe intr-o comanda pentru un camp
+ * care nu mai e — INVIZIBILA pe ecran, fiindca nimic n-o mai deseneaza, dar tot acolo. Omul ar fi
+ * salvat o linie despre care n-avea cum sa stie ce contine.
+ *
+ * ⚠ SI CE LIPSESTE DIN LINIE RAMANE PE IMPLICITUL COMERCIANTULUI, nu gol: un camp adaugat DUPA ce
+ * omul a pus produsul in cos trebuie sa se deschida asa cum il deschide oricine altcineva.
+ */
+export function valorileDinLinie(
+  definitie: DefinitiePersonalizare | null,
+  aduse: Record<string, unknown>,
+): Record<string, unknown> {
+  const out = valoriDePornire(definitie);
+  if (!definitie) return out;
+  for (const c of definitie.fields) {
+    if (Object.prototype.hasOwnProperty.call(aduse, c.id)) out[c.id] = aduse[c.id];
+  }
+  return out;
+}

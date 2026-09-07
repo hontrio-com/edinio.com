@@ -5,6 +5,7 @@ import { getCartSessionId } from "@/lib/cart-session";
 import { getCartPricing } from "@/lib/actions/store.actions";
 import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
+import { inlocuiesteLinia } from "@/lib/storefront/cart/editare";
 import { cereRevizuire, pretulBucatii, pretulLiniei, rezumatulLiniei } from "@/lib/storefront/cart/pret-linie";
 import { rezumatPersonalizare } from "@/lib/storefront/cart/normalize";
 
@@ -27,6 +28,13 @@ export { lineKey };
 export interface CartContextValue {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "quantity">, cantitate?: number) => void;
+  /**
+   * Inlocuieste o linie cu alta — editarea personalizarii, din cos.
+   *
+   * ⚠ O SINGURA SCRIERE, nu „adauga apoi sterge": vezi implementarea, unde scrie si de ce
+   * editarea unei linii NESCHIMBATE ar fi golit-o din cos.
+   */
+  replaceItem: (cheieVeche: string, item: Omit<CartItem, "quantity">, cantitate?: number) => void;
   removeItem: (key: string) => void;
   updateQty: (key: string, qty: number) => void;
   /**
@@ -187,6 +195,17 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
     });
   }
 
+  /**
+   * Inlocuieste linia `cheieVeche` cu una noua — editarea din cos.
+   *
+   * ⚠ REGULA E IN MODULUL PUR, nu aici: e singura parte din cos in care o gresala scrie in
+   * `localStorage` o linie in plus sau una in minus, deci trebuie sa se poata proba fara browser.
+   * Vezi `inlocuiesteLinia`, unde stau si cele trei cazuri, si de ce nu „adauga apoi sterge".
+   */
+  function replaceItem(cheieVeche: string, item: Omit<CartItem, "quantity">, cantitate = 1) {
+    save((prev) => inlocuiesteLinia(prev, cheieVeche, item, cantitate));
+  }
+
   function removeItem(key: string) {
     save((prev) => prev.filter((i) => lineKey(i) !== key));
   }
@@ -274,7 +293,7 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, lineSummary, total, count, clear, restoreCart, sessionId, hydrated }}
+      value={{ items, addItem, replaceItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, lineSummary, total, count, clear, restoreCart, sessionId, hydrated }}
     >
       {children}
     </CartContext.Provider>
@@ -309,6 +328,19 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
               ? prev.map((i) => (lineKey(i) === lineKey(item) ? { ...i, quantity: normalizeazaCantitate(i.quantity + n) } : i))
               : [...prev, { ...item, quantity: n }],
           );
+        },
+        /*
+         * Miniatura de design n-are pagina de produs, deci n-are de unde porni o editare. Ramane
+         * definita fiindca tipul contextului o cere, si se poarta cinstit: pune linia noua in
+         * LOCUL celei vechi, ca in cosul adevarat.
+         */
+        replaceItem: (cheieVeche, item, cantitate = 1) => {
+          const n = normalizeazaCantitate(cantitate);
+          setItems((prev) => {
+            const pozitie = prev.findIndex((i) => lineKey(i) === cheieVeche);
+            if (pozitie < 0) return [...prev, { ...item, quantity: n }];
+            return prev.map((i, idx) => (idx === pozitie ? { ...item, quantity: n } : i));
+          });
         },
         // Miniatura nu citeste nimic de la server, deci nu are trepte: pretul de
         // linie ramane inmultirea simpla. Si aici cele doua numere trebuie sa

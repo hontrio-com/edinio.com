@@ -13,7 +13,7 @@ import type { BundleComponent } from "@/lib/storefront/product-data";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import { vatLabel } from "@/lib/utils/vat";
 import {
-  parseVariants, comboTitle, findCombo, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
+  parseVariants, comboTitle, findCombo, optiunileDinTitlu, isValueAvailable, comboUnitPrice, comboCompareAtPrice,
   comboEpuizat, comboStock, toateCombinatiileEpuizate, pozePeValoare, cerePersonalizare, VARIANT_TITLE_SEP,
 } from "@/lib/storefront/variants";
 import { CampuriPersonalizare } from "./_shared/CampuriPersonalizare";
@@ -26,6 +26,8 @@ import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
 import { useAfisariOferte } from "@/lib/offers/use-afisari-oferte";
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
+import { useEditareLinie } from "./_shared/useEditareLinie";
+import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { cosDupaComanda } from "@/lib/storefront/cart/consume";
 import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
@@ -489,7 +491,45 @@ export function ProductPageDetailed({
   const [fbtOffer, setFbtOffer] = useState<{ id: string; items: { product_id: string; name: string; imageUrl: string | null; price: number; quantity: number }[] } | undefined>(undefined);
 
   const cos = useCartOptional();
+
+  /*
+   * ═══ PAGINA DESCHISA CA SA REPARE O LINIE DIN COS ═══
+   *
+   * Cine gresea o gravura, sau caruia cosul ii scria „Necesita actualizare", n-avea pana acum
+   * decat sa stearga linia si s-o ia de la zero — cu tot cu pozele incarcate. De aici incolo,
+   * „Editeaza" din cos deschide chiar pagina asta cu ce a completat el, si „Salveaza modificarile"
+   * INLOCUIESTE linia, nu adauga una noua.
+   */
+  const editare = useEditareLinie(cos?.items ?? [], cos?.hydrated ?? false, product.id);
+  /*
+   * ⚠ SE TOARNA O SINGURA DATA, si de-aia e nevoie de steag.
+   *
+   * `editare.linie` se schimba la fiecare scriere in cos, iar un efect fara steag ar fi turnat
+   * valorile vechi peste ce tocmai tasta omul — la propriu: fiecare litera scrisa in campul de
+   * gravura ar fi fost inghitita inapoi. Ce s-a adus din cos e un PUNCT DE PLECARE, nu o legatura
+   * vie.
+   */
+  const turnata = useRef(false);
+  useEffect(() => {
+    const linie = editare.linie;
+    if (turnata.current || !linie) return;
+    turnata.current = true;
+    if (linie.customization) pers.incarcaValori(linie.customization);
+    /*
+     * ⚠ VARIANTA SE RESTAUREAZA DOAR DACA SE POATE CITI CU CERTITUDINE — vezi `optiunileDinTitlu`,
+     * unde scrie de ce o taiere oarba a titlului putea deschide pagina pe ALTA marime decat cea
+     * din cos. Cand nu se poate, alegerea ramane goala si omul o face din nou: butonul e oricum
+     * stins pana atunci.
+     */
+    const optiuni = variantsData ? optiunileDinTitlu(variantsData.options, linie.variantTitle) : null;
+    if (optiuni) setSelectedOptions(optiuni);
+    /* Modelul asta are selector de bucati, deci si el se aduce din linie. */
+    setCantitate(normalizeazaCantitate(linie.quantity));
+  }, [editare.linie, pers, variantsData]);
+
   const chrome = useStoreChromeOptional();
+  /* Unde se intoarce omul dupa ce salveaza sau renunta. */
+  const inapoiLaCos = chrome?.cartHref ?? `${basePath}/cos`;
   // In magazinul cu un singur produs cosul e ascuns peste tot: fara header, fara
   // sertar, fara pagina. Un buton „Adauga in cos" ar confirma o actiune care nu
   // duce nicaieri. In miniatura din catalog nu exista chrome, dar butonul
@@ -530,7 +570,7 @@ export function ProductPageDetailed({
     /* ⚠ Aceeasi poarta ca la „Comanda acum": un camp obligatoriu necompletat opreste adaugarea. */
     if (!pers.verifica()) return;
     const imagine = selectedCombo?.image || slides[0] || null;
-    cos.addItem({
+    const linieNoua = {
       productId: product.id,
       slug: product.slug ?? undefined,
       // Numele ramane SIMPLU, combinatia sta in `variantTitle`: asa cheia de
@@ -543,7 +583,30 @@ export function ProductPageDetailed({
       variantSku: selectedCombo?.sku || undefined,
       /* ⚠ VALORILE, nu pretul: suplimentul il socoteste serverul din definitia lui. */
       ...(cerePersonalizarea ? { customization: pers.valori } : {}),
-    }, cantitate);
+    };
+
+    /*
+     * ═══ ⚠ EDITARE: SE INLOCUIESTE, NU SE ADAUGA ═══
+     *
+     * Fara ramura asta, „Salveaza modificarile" ar fi pus in cos o A DOUA linie, langa cea pe care
+     * omul tocmai o repara — si ar fi platit de doua ori acelasi fototapet.
+     *
+     * ⚠ CANTITATEA VINE DE PE LINIA VECHE. Editarea schimba CE se produce, nu cate bucati; cine
+     * pusese trei ramane cu trei. (Modelul cu selector de bucati il aduce si pe el din linie, deci
+     * omul il poate schimba tot de aici.)
+     *
+     * ⚠ SI NU SE TRIMITE `add_to_cart` LA RECLAME. Nimic nu s-a adaugat: cosul are acelasi numar
+     * de linii ca inainte. Trimis, evenimentul ar fi numarat inca o data un produs deja numarat —
+     * iar pe cifrele astea se socotesc pragurile de licitatie.
+     */
+    if (editare.activ && editare.cheie) {
+      cos.replaceItem(editare.cheie, linieNoua, cantitate);
+      editare.incheieEditarea();
+      window.location.href = inapoiLaCos;
+      return;
+    }
+
+    cos.addItem(linieNoua, cantitate);
     /*
      * ⚠ PRETUL PE CARE IL VEDE OMUL, nu cel de catalog.
      *
@@ -821,18 +884,40 @@ export function ProductPageDetailed({
               <CampuriPersonalizare stare={pers} color={color} titlu="Personalizeaza produsul" numeroteaza={pers.definitie?.numeroteaza !== false} />
             )}
 
+            {/*
+              ⚠ ACELASI ANUNT CA IN CELALALT MODEL — vezi `ProductPageClassic`. Fara el, pagina
+              arata ca una obisnuita, cu campurile misterios pre-completate.
+            */}
+            {editare.activ && (
+              <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
+                <p className="font-medium text-foreground">Editezi un produs din cos</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Modificarile inlocuiesc linia de acum. Cat timp nu salvezi, cosul ramane neatins.
+                </p>
+              </div>
+            )}
+            {editare.disparuta && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+                <p className="font-medium text-amber-700 dark:text-amber-400">Linia nu mai e in cos</p>
+                <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-0.5">
+                  A fost stearsa intre timp. Ce ai completat aici se pastreaza — apasa
+                  „Adauga in cos” ca sa o pui din nou.
+                </p>
+              </div>
+            )}
+
             {/* Cantitate + cele doua actiuni */}
             <div className="flex flex-col gap-2.5 pt-1">
               <div className="flex items-stretch gap-2.5">
                 <Stepper valoare={cantitate} seteaza={setCantitate}
                   maxim={stocRamas !== null && stocRamas > 0 ? stocRamas : null} />
-                {arataButonCos && (
+                {(arataButonCos || editare.activ) && (
                   <button type="button" onClick={adaugaInCos}
                     disabled={isOutOfStock || needsVariant || (!demo && !cos)}
                     className="flex-1 min-w-0 h-12 px-4 rounded-md font-semibold text-sm text-white flex items-center justify-center gap-2 transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                     style={{ backgroundColor: color }}>
                     {adaugat ? <Check size={17} /> : <ShoppingCart size={17} />}
-                    <span className="truncate">{adaugat ? "Adaugat in cos" : "Adauga in cos"}</span>
+                    <span className="truncate">{editare.activ ? "Salveaza" : adaugat ? "Adaugat in cos" : "Adauga in cos"}</span>
                   </button>
                 )}
               </div>
@@ -840,7 +925,11 @@ export function ProductPageDetailed({
               {/* Perechea din model: cosul poarta culoarea magazinului, comanda
                   directa e neagra. Butonul comun ii da si efectele alese de
                   comerciant, doar forma difera. */}
-              <CTAButton color={NEGRU} isOutOfStock={isOutOfStock} isPreorder={isPreorder}
+              {/*
+                ⚠ „Comanda acum" DISPARE cat timp editam — aceeasi hotarare ca in celalalt model:
+                lasat, ar fi trimis o comanda directa si ar fi lasat linia stricata in cos.
+              */}
+              {!editare.activ && <CTAButton color={NEGRU} isOutOfStock={isOutOfStock} isPreorder={isPreorder}
                 needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect}
                 onClick={() => { if (!pers.verifica()) return; setFbtOffer(undefined); setModalOpen(true); }}
                 clase="w-full h-12 text-sm font-semibold text-white rounded-md hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
@@ -852,7 +941,14 @@ export function ProductPageDetailed({
                       : isPreorder ? "Precomanda acum"
                       : "Comanda acum"}
                   </>
-                } />
+                } />}
+              {/* ⚠ Anularea, la fel de la indemana ca salvarea — vezi nota din `ProductPageClassic`. */}
+              {editare.activ && (
+                <a href={inapoiLaCos} onClick={() => editare.incheieEditarea()}
+                  className="w-full h-11 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground inline-flex items-center justify-center transition-colors">
+                  Renunta la modificari
+                </a>
+              )}
               <p aria-live="polite" className="sr-only">{adaugat ? "Produsul a fost adaugat in cos" : ""}</p>
             </div>
 

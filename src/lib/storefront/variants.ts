@@ -155,6 +155,39 @@ export function comboTitle(options: VariantOption[], selected: Record<string, st
   return parts.join(VARIANT_TITLE_SEP);
 }
 
+/**
+ * Inversul lui `comboTitle`: din titlul salvat pe o linie de cos, inapoi la alegerile de pe pagina.
+ *
+ * ⚠ DOUA CONDITII, SI AMANDOUA CONTEAZA: atatea bucati cate optiuni, si fiecare bucata sa fie
+ * chiar una dintre valorile DECLARATE ale optiunii ei. Separatorul e „ / ", iar o valoare scrisa
+ * de comerciant il poate CONTINE („Alb / Crem"): taiat orb, „S / Alb / Crem" da trei bucati pentru
+ * doua optiuni, iar o potrivire lacoma ar fi deschis pagina pe alta varianta decat cea din cos —
+ * adica alta marime trimisa la productie.
+ *
+ * ⚠ AICI A STAT SI O VERIFICARE DUS-INTORS (`comboTitle(...) === title`). Suna a plasa, dar era
+ * cod mort: `split` urmat de `join` cu acelasi separator reproduce intotdeauna sirul de la care s-a
+ * plecat, deci conditia nu putea sa cada niciodata. Un mutant care o stergea nu strica nimic —
+ * chiar felul de „plasa" care linisteste fara sa apere.
+ *
+ * ⚠ `null` inseamna „nu stim", nu „nimic": cine cheama lasa pagina neatinsa, deci omul alege din
+ * nou. O alegere gresita restaurata tacit ar fi trimis alta marime la productie.
+ */
+export function optiunileDinTitlu(
+  options: VariantOption[],
+  title: string | null | undefined,
+): Record<string, string> | null {
+  if (!title || options.length === 0) return null;
+  const parts = title.split(VARIANT_TITLE_SEP);
+  if (parts.length !== options.length) return null;
+  const out: Record<string, string> = {};
+  for (let i = 0; i < options.length; i++) {
+    const val = parts[i];
+    if (!options[i].values.includes(val)) return null;
+    out[options[i].name] = val;
+  }
+  return out;
+}
+
 /** The enabled combination matching a title, or null (stale / disabled / partial). */
 export function findCombo(variants: VariantsData, title: string | null): VariantCombo | null {
   if (!title) return null;

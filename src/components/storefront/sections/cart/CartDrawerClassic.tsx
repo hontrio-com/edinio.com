@@ -8,6 +8,8 @@ import { gtagEvent } from "@/lib/marketing";
 import { CartRecommendations } from "@/components/ministore/CartRecommendations";
 import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
 import { computeCartPricing, type CartPricingInput } from "@/lib/storefront/cart/pricing";
+import { adresaDeEditare } from "@/lib/storefront/cart/editare";
+import { ButonEditeaza } from "@/components/storefront/sections/cart/_shared/CartPieces";
 
 /**
  * Sertarul de cos, varianta classic.
@@ -229,7 +231,10 @@ export function CartDrawerClassic({
                     */}
                     {lineNeedsReview(item) && (
                       <p className="text-xs mt-1 font-medium text-amber-600 dark:text-amber-500">
-                        Necesita actualizare — deschide produsul si alege din nou
+                        {/* ⚠ Aceeasi indicatie ca pe paginile de cos, si tot dupa ce se vede pe rand. */}
+                        {adresaDeEditare(basePath, item)
+                          ? "Necesita actualizare — apasa „Editeaza” si alege din nou"
+                          : "Necesita actualizare — deschide produsul si alege din nou"}
                       </p>
                     )}
                     {/* Peste o bucata, un singur numar scris in accent se
@@ -261,6 +266,12 @@ export function CartDrawerClassic({
                         className="w-7 h-7 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors">
                         <Plus className="h-3 w-3" />
                       </button>
+                      {/*
+                        ⚠ SI IN SERTAR, nu doar pe paginile de cos. Cine cumpara dintr-un magazin cu
+                        sertar poate ajunge la finalizare fara sa deschida vreodata pagina cosului:
+                        pus intr-un singur loc, butonul ar fi lipsit tocmai celor care au nevoie de el.
+                      */}
+                      <ButonEditeaza item={item} basePath={basePath} cheie={key} />
                     </div>
                   </div>
                   <button type="button" aria-label={`Sterge ${item.name} din cos`} onClick={() => { gtagEvent("remove_from_cart", { currency: "RON", value: lineTotal(item), items: [{ item_id: item.productId, item_name: item.name, price: lineUnit(item), quantity: item.quantity }] }); removeItem(key); }}

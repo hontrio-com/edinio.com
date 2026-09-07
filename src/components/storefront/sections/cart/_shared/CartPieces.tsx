@@ -3,11 +3,12 @@
 import { useRef } from "react";
 import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
 import Image from "next/image";
-import { Check, Minus, Package, Plus, ShoppingCart, Truck, X } from "lucide-react";
+import { Check, Minus, Package, Pencil, Plus, ShoppingCart, Truck, X } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { gtagEvent } from "@/lib/marketing";
 import { lineKey, useCart, type CartItem } from "@/components/storefront/cart/CartProvider";
 import type { CartPricing } from "@/lib/storefront/cart/pricing";
+import { adresaDeEditare, porneste } from "@/lib/storefront/cart/editare";
 
 /**
  * Piesele din care sunt facute modelele de pagina de cos.
@@ -22,6 +23,47 @@ import type { CartPricing } from "@/lib/storefront/cart/pricing";
  * paginile e aritmetica (`lib/storefront/cart/pricing.ts`), adica exact partea
  * in care o diferenta ar insemna doua totaluri pentru acelasi cos.
  */
+
+/**
+ * „Editeaza" — duce linia inapoi pe pagina produsului, cu ce a completat omul.
+ *
+ * ═══ ⚠ DE CE EXISTA ═══
+ *
+ * Pana acum, cine gresea o gravura n-avea decat sa stearga linia si s-o ia de la zero — cu tot cu
+ * cele sapte poze de fototapet incarcate din nou. Iar cand comerciantul schimba definitia, cosul
+ * chiar ii CEREA asta („deschide produsul si alege din nou") fara sa-i dea unde.
+ *
+ * ⚠ SE ARATA DOAR PE LINIILE PERSONALIZATE. Pe un produs obisnuit n-ar avea ce edita, si un buton
+ * care nu face nimic e mai rau decat lipsa lui.
+ *
+ * ⚠ SI DOAR CAND LINIA STIE DE UNDE VINE. Liniile salvate inainte de `slug` n-au cheia: fara ea
+ * nu exista pagina de produs catre care sa duca. Atunci butonul nu se deseneaza — vezi
+ * `adresaDeEditare`.
+ *
+ * ⚠ NAVIGAREA SE FACE DE MANA, DUPA ce cheia a fost pusa deoparte. Daca stocarea nu merge
+ * (navigare privata, stocare inchisa pe site), se merge la produs FARA steag: pagina se deschide
+ * obisnuit, ca „adauga in cos". O editare care nu stie ce editeaza ar fi adaugat o linie noua
+ * langa cea veche, si omul ar fi platit de doua ori.
+ */
+export function ButonEditeaza({ item, basePath, cheie }: { item: CartItem; basePath: string; cheie: string }) {
+  const areValori = !!item.customization && Object.keys(item.customization).length > 0;
+  const adresa = adresaDeEditare(basePath, item);
+  if (!areValori || !adresa || !item.slug) return null;
+  const simpla = `${basePath}/product/${item.slug}`;
+  return (
+    <a
+      href={adresa}
+      onClick={(e) => {
+        e.preventDefault();
+        window.location.href = porneste(cheie) ? adresa : simpla;
+      }}
+      className="h-9 -ml-2 px-2 rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+    >
+      <Pencil className="h-3.5 w-3.5" />
+      Editeaza
+    </a>
+  );
+}
 
 /**
  * Butoanele de cantitate, cu stergere la scaderea sub unu.
@@ -168,7 +210,15 @@ export function CartLine({
         */}
         {cos.lineNeedsReview(item) && (
           <p className="text-xs mt-1 font-medium text-amber-600 dark:text-amber-500">
-            Necesita actualizare — deschide produsul si alege din nou
+            {/*
+              ⚠ INDICATIA URMEAZA CE SE VEDE PE RAND. Cat timp editarea n-a existat, singurul sfat
+              care se putea da era „ia-o de la capat". Acum, pe liniile care au butonul, el e chiar
+              raspunsul — iar pe cele care nu-l au (linii vechi, fara `slug`) sfatul vechi ramane
+              singurul adevarat.
+            */}
+            {adresaDeEditare(basePath, item)
+              ? "Necesita actualizare — apasa „Editeaza” si alege din nou"
+              : "Necesita actualizare — deschide produsul si alege din nou"}
           </p>
         )}
         <p className="text-xs text-muted-foreground mt-1">{formatPrice(pretBucata)} bucata</p>
@@ -177,13 +227,14 @@ export function CartLine({
             si departata de „+": text de 12 px inseamna vreo 16 px de atins, iar
             o atingere ratata cadea pe „+" si crestea cantitatea in loc sa stearga
             linia — greseala cea mai scumpa cu putinta intr-un cos. */}
-        <div className="flex items-center gap-4 mt-3">
+        <div className="flex items-center gap-2 sm:gap-4 mt-3 flex-wrap">
           <StepperCantitate
             cantitate={item.quantity}
             nume={item.name}
             marime={dens === "compact" ? "mic" : "normal"}
             onSchimba={(n) => { if (n <= 0) mutaFocalizarea(); onQty(key, n); }}
           />
+          <ButonEditeaza item={item} basePath={basePath} cheie={key} />
           <button type="button" aria-label={`Sterge ${item.name} din cos`} data-sterge-linie=""
             onClick={() => { mutaFocalizarea(); stergeCuEveniment(item, totalLinie, pretBucata); onRemove(key); }}
             className="h-9 -ml-2 px-2 rounded-lg text-xs text-muted-foreground hover:text-destructive transition-colors inline-flex items-center gap-1">

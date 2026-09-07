@@ -142,11 +142,25 @@ test("⚠ drumurile care erau DEJA aparate au ramas aparate", () => {
       /!cerePersonalizarea? &&/.test(s), false,
       `${model} ascunde iar butonul de cos, desi pagina e singurul loc cu formular`,
     );
-    /* ⚠ Dar NU se adauga fara verificare: un camp obligatoriu necompletat opreste adaugarea. */
-    assert.match(
-      s, /if \(!pers\.verifica\(\)\) return;\n\s*(const imagine = [^\n]*\n\s*)?cos\.addItem\(/,
-      `${model} adauga in cos fara sa verifice personalizarea`,
-    );
+    /*
+     * ⚠ Dar NU se adauga fara verificare: un camp obligatoriu necompletat opreste adaugarea.
+     *
+     * ⚠ FORMA S-A SCHIMBAT PE 07.09.2026, GARANTIA NU. Proba cerea `cos.addItem(` IMEDIAT dupa
+     * `verifica()`; de cand pagina poate si INLOCUI o linie (editarea din cos), intre ele stau
+     * `const linieNoua = {...}` si ramura de editare. Ceruta mai departe forma veche, proba ar fi
+     * cazut peste un cod corect — chiar tiparul „cheia noua, probele vechi" prins in proiect.
+     *
+     * Ce se cere acum e GARANTIA, nu asezarea: `verifica()` sta in `adaugaInCos`, si AMANDOUA
+     * iesirile catre cos — adaugarea si inlocuirea — sunt dupa ea. Un mutant care mota verificarea
+     * sub oricare dintre ele cade aici.
+     */
+    const corp = s.slice(s.indexOf("function adaugaInCos()"));
+    const poarta = corp.indexOf("if (!pers.verifica()) return;");
+    assert.ok(poarta > 0, `${model} nu mai verifica personalizarea la adaugare`);
+    for (const iesire of ["cos.addItem(", "cos.replaceItem("]) {
+      const unde = corp.indexOf(iesire);
+      assert.ok(unde > poarta, `${model}: „${iesire}" scapa pe langa verificare`);
+    }
     /* Si duce VALORILE, nu un pret. */
     assert.match(
       s, /\.\.\.\(cerePersonalizarea \? \{ customization: pers\.valori \} : \{\}\)/,

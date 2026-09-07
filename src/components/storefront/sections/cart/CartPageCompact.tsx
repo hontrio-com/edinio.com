@@ -44,7 +44,15 @@ export function CartPageCompact({
    */
   const chromeCatalog = useStoreChromeOptional();
   const catreProduse = chromeCatalog?.catalogRoot ?? `${basePath}/`;
-  const { items, addItem, updateQty, removeItem, total, count, hydrated } = useCart();
+  const {
+    items, addItem, updateQty, removeItem, total, count, hydrated,
+    linePretNevalidat, pricingStare, reincearcaPreturile,
+  } = useCart();
+  /*
+   * ⚠ Cate linii personalizate asteapta inca validarea pretului. Pana atunci `grandTotal` e socotit
+   * cu pretul lor de BAZA, fara suplimente: 89 in loc de 910 pe un fototapet. Vezi `pretulNevalidat`.
+   */
+  const liniiNevalidate = items.filter(linePretNevalidat).length;
   const pricing = computeCartPricing({ total, shippingCost, freeShippingThreshold, minOrderAmount, vat });
   const areRecomandari = settings.showRecommendations !== false && !preview;
   const arePrag = settings.showProgress !== false;
@@ -77,6 +85,15 @@ export function CartPageCompact({
         ))}
       </div>
 
+      {/* ⚠ Si de ce e stins butonul, altfel omul apasa si nu se intampla nimic. */}
+      {liniiNevalidate > 0 && (
+        <p className="mt-4 text-xs text-muted-foreground" role="status">
+          {pricingStare === "eroare"
+            ? <>Nu am putut verifica preturile produselor personalizate. <button type="button" onClick={reincearcaPreturile} className="underline font-medium text-foreground">Incearca din nou</button></>
+            : <>Se verifica preturile produselor personalizate...</>}
+        </p>
+      )}
+
       {pricing.belowMinOrder && minOrderAmount !== null && (
         <p className="mt-4 text-xs text-muted-foreground">
           Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount)}</strong>.
@@ -92,9 +109,11 @@ export function CartPageCompact({
             <p className="text-xs text-muted-foreground truncate">
               {pricing.shipping === 0 ? "Livrare gratuita" : `Livrare ${formatPrice(pricing.shipping)}`}
             </p>
-            <p className="text-base font-bold text-foreground tabular-nums truncate">{formatPrice(pricing.grandTotal)}</p>
+            <p className="text-base font-bold text-foreground tabular-nums truncate">
+              {liniiNevalidate > 0 ? "..." : formatPrice(pricing.grandTotal)}
+            </p>
           </div>
-          <button type="button" onClick={onCheckout} disabled={pricing.belowMinOrder}
+          <button type="button" onClick={onCheckout} disabled={pricing.belowMinOrder || liniiNevalidate > 0}
             className="ml-auto shrink-0 h-11 px-5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{ backgroundColor: color }}>
             Finalizeaza comanda

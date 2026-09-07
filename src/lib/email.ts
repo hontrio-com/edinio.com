@@ -259,6 +259,20 @@ export async function sendAbandonedCartRecovery(
     customerName?: string | null;
     items: { name: string; quantity: number; price: number; image_url?: string | null }[];
     total: number;
+    /**
+     * Ne putem lega de sumele de mai sus?
+     *
+     * ⚠ `false` cand o linie a cazut inapoi pe pretul de CATALOG fiindca definitia personalizarii
+     * s-a schimbat dupa ce omul a pus produsul in cos: comerciantul a scos „Premium". Atunci
+     * emailul ar promite 89 de lei pentru un fototapet care costa 910, iar dupa clic clientul
+     * gaseste linia marcata „Necesita actualizare". Un mesaj SEMNAT DE MAGAZIN care cere mai putin
+     * decat se poate onora e a doua fata a minciunii pe care o repara `pretEfectiv`.
+     *
+     * Nelegat, emailul isi pastreaza rostul (cheama omul inapoi in cos) dar nu mai scrie preturi.
+     *
+     * ⚠ Lipsa inseamna „sigur", ca apelantii vechi sa nu se schimbe in purtare fara sa vrea.
+     */
+    preturiSigure?: boolean;
     color?: string;
     message?: string;
     discountCode?: string | null;
@@ -273,12 +287,18 @@ export async function sendAbandonedCartRecovery(
   const color = esc(data.color || "#1AB554");
   const first = data.customerName?.trim().split(/\s+/)[0];
 
+  /*
+   * ⚠ FARA PRETURI cand nu ne putem lega de ele. Se pastreaza produsele si cantitatile, ca omul sa
+   * recunoasca ce a lasat in cos; ce dispare e numarul pe care magazinul nu-l poate onora. Vezi
+   * `preturiSigure`.
+   */
+  const preturiSigure = data.preturiSigure !== false;
   const itemsRows = data.items
     .map(
       (i) =>
         `<tr>
           <td style="padding:8px 0;font-size:14px;color:#3f3f46;border-bottom:1px solid #f4f4f5;">${esc(i.name)} <span style="color:#a1a1aa;">x${i.quantity}</span></td>
-          <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${formatPrice(i.price * i.quantity)}</td>
+          <td style="padding:8px 0;font-size:14px;color:#3f3f46;text-align:right;border-bottom:1px solid #f4f4f5;white-space:nowrap;">${preturiSigure ? formatPrice(i.price * i.quantity) : ""}</td>
         </tr>`
     )
     .join("");
@@ -310,10 +330,14 @@ export async function sendAbandonedCartRecovery(
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
       <tr><td colspan="2" style="font-size:13px;color:#a1a1aa;padding-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Cosul tau</td></tr>
       ${itemsRows}
+      ${preturiSigure ? `
       <tr>
         <td style="padding-top:10px;font-size:16px;font-weight:700;color:#18181b;border-top:2px solid #e4e4e7;">Total</td>
         <td style="padding-top:10px;font-size:16px;font-weight:700;color:${color};text-align:right;border-top:2px solid #e4e4e7;">${formatPrice(data.total)}</td>
-      </tr>
+      </tr>` : `
+      <tr>
+        <td colspan="2" style="padding-top:10px;font-size:13px;color:#a1a1aa;border-top:2px solid #e4e4e7;">Unele optiuni alese nu mai sunt disponibile, asa ca pretul se recalculeaza in cos.</td>
+      </tr>`}
     </table>
     ${data.discountCode ? `
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">

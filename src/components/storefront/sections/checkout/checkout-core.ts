@@ -59,7 +59,10 @@ export function useCheckoutOrder({
   preview = null,
   suprafata = "modal",
 }: CheckoutOrderInput) {
-  const { items, total, clear, sessionId, hydrated, lineUnit, lineNeedsReview } = useCart();
+  const {
+    items, total, clear, sessionId, hydrated, lineUnit, lineNeedsReview,
+    linePretNevalidat, pricingStare, reincearcaPreturile,
+  } = useCart();
   const [checkoutConfig, setCheckoutConfig] = useState<StorePageContent["checkout_config"]>(
     preview ? preview.checkoutConfig : ({ email_field: emailFieldConfig } as StorePageContent["checkout_config"])
   );
@@ -145,6 +148,21 @@ export function useCheckoutOrder({
    * doar ca omul sa afle inainte, nu dupa.
    */
   const liniiDeRevizuit = items.filter(lineNeedsReview);
+  /*
+   * ═══ ⚠ LINII AL CAROR PRET NU S-A VALIDAT ═══
+   *
+   * Alta intrebare decat cea de sus. Acolo se stie ca linia e stricata; aici nu se stie NIMIC:
+   * cererea de preturi nu s-a intors inca, sau a picat, sau produsul n-a venit in raspuns. Iar cat
+   * timp nu se stie, `total` e socotit cu pretul de BAZA al liniilor personalizate, adica fara
+   * suplimente: 89 in loc de 910 pe un fototapet.
+   *
+   * ⚠ SERVERUL N-A FOST PACALIT NICIODATA: el recalculeaza si incaseaza 910. Tocmai asta e
+   * problema: omul confirma 89 si i se cere 910. Butonul nu pleaca pana nu stim.
+   *
+   * ⚠ NUMAI LINIILE PERSONALIZATE. Un produs obisnuit ramane comandabil pe pretul lui de catalog
+   * chiar daca cererea a picat: altfel o clipire de retea ar opri vanzarile pe toata platforma.
+   */
+  const liniiNevalidate = items.filter(linePretNevalidat);
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
   const baseShippingCost = courierSelection ? courierSelection.price : shippingCost;
   const discountAmount = appliedDiscount ? Math.min(appliedDiscount.discountAmount, goodsTotal) : 0;
@@ -653,6 +671,9 @@ export function useCheckoutOrder({
     availablePaymentMethods,
     belowMinOrder,
     liniiDeRevizuit,
+    liniiNevalidate,
+    pricingStare,
+    reincearcaPreturile,
     bumps,
     cardDiscountAmount,
     codDiscountAmount,

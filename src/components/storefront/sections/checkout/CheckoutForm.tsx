@@ -63,6 +63,9 @@ export function CheckoutForm({
     availablePaymentMethods,
     belowMinOrder,
     liniiDeRevizuit,
+    liniiNevalidate,
+    pricingStare,
+    reincearcaPreturile,
     bumps,
     acceptedBumpOffers,
     companyBilling,
@@ -485,6 +488,18 @@ export function CheckoutForm({
             oricum comanda, deci nu e o poarta de bani; e ca omul sa afle INAINTE sa-si dea
             adresa si sa aleaga plata, nu dupa ce apasa. Textul spune si ce are de facut.
           */}
+          {/*
+            ⚠ SI CAND NU STIM INCA PRETUL. Pe o linie personalizata, numarul afisat pana la
+            raspunsul serverului e cel de BAZA: 89 in loc de 910. Butonul nu pleaca pana nu se
+            stie, si i se spune omului de ce, cu un buton de reincercare cand cererea chiar a picat.
+          */}
+          {liniiNevalidate.length > 0 && (
+            <p role="status" className="text-xs text-center text-muted-foreground">
+              {pricingStare === "eroare"
+                ? <>Nu am putut verifica preturile produselor personalizate. <button type="button" onClick={reincearcaPreturile} className="underline font-medium text-foreground">Incearca din nou</button></>
+                : <>Se verifica preturile produselor personalizate...</>}
+            </p>
+          )}
           {liniiDeRevizuit.length > 0 && (
             <p role="alert" className="text-xs text-center text-amber-600 dark:text-amber-500">
               {liniiDeRevizuit.length === 1
@@ -496,7 +511,7 @@ export function CheckoutForm({
           {errors._ && <p role="alert" className="text-sm text-red-500 text-center">{errors._}</p>}
           <button
             type="submit"
-            disabled={isPending || belowMinOrder || liniiDeRevizuit.length > 0}
+            disabled={isPending || belowMinOrder || liniiDeRevizuit.length > 0 || liniiNevalidate.length > 0}
             className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
             style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}
           >

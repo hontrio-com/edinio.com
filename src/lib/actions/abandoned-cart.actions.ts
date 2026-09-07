@@ -16,7 +16,7 @@ import { sendAbandonedCartRecovery } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { storeBaseUrl } from "@/lib/seo";
 import { isPremiumPlan } from "@/lib/plans";
-import { ABANDON_MINUTES, COS_PREA_VECHI, cosulMaiPoateFiRecuperat, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
+import { ABANDON_MINUTES, COS_PREA_VECHI, cosulMaiPoateFiRecuperat, cuPreturileDinCatalog, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";
 import { pragulComenzilor } from "@/app/api/cron/curata-fisiere/reguli";
 
@@ -126,7 +126,23 @@ export async function trackAbandonedCart(input: {
     // INTEGER, deci o cantitate fractionara ar face upsertul sa cada, iar
     // `catch`-ul de mai jos e gol — cosul s-ar pierde in tacere.
     const cantitati = items.map((i) => normalizeazaCantitate(i.quantity));
-    const subtotal = round2(items.reduce((s, i, idx) => s + (Number(i.price) || 0) * cantitati[idx], 0));
+    /*
+     * ═══ ⚠ PRETURILE SE IAU DIN CATALOG, NU DIN CERERE ═══
+     *
+     * Actiunea asta e PUBLICA si anonima. Pretul trimis se aduna mai departe in „Valoare cosuri
+     * abandonate", in media pe cos, in venitul potential si in „Cele mai abandonate produse": cine
+     * o cheama de mana isi declara ce suma pofteste si murdareste cifrele dupa care comerciantul
+     * isi masoara magazinul. Nu se poate cumpara nimic pe pretul asta, dar nici nu trebuie sa fie
+     * crezut.
+     *
+     * ⚠ SI PENTRU UN APELANT CINSTIT ERA TOT GRESIT: pana pe 07.09.2026 cosul salva pretul de BAZA
+     * al liniilor personalizate. Un fototapet de 910 lei intra in baza cu 89.
+     *
+     * ⚠ O SINGURA INTEROGARE in plus, cu `in (...)`, pe o actiune care oricum face deja trei.
+     * Pretul intra si in `items`, nu doar in `subtotal`: „Top produse abandonate" citeste din brut.
+     */
+    const cuPreturi = await cuPreturileDinCatalog(admin, input.businessId, items);
+    const subtotal = round2(cuPreturi.reduce((s, i, idx) => s + (Number(i.price) || 0) * cantitati[idx], 0));
     const itemCount = cantitati.reduce((s, q) => s + q, 0);
     const now = new Date().toISOString();
 
@@ -140,7 +156,7 @@ export async function trackAbandonedCart(input: {
         phone,
         // Si jsonb-ul, nu doar coloanele: altfel randul se contrazice singur, iar
         // „Top produse abandonate" si linkul de recuperare citesc tot din brut.
-        items: items.map((i, idx) => ({ ...i, quantity: cantitati[idx] })) as never,
+        items: cuPreturi.map((i, idx) => ({ ...i, quantity: cantitati[idx] })) as never,
         item_count: itemCount,
         subtotal,
         status: "open",
@@ -456,6 +472,8 @@ export async function sendAbandonedCartEmail(
       customerName: cart.customer_name,
       items: proaspat.items,
       total: proaspat.total,
+      /* ⚠ Vezi `preturiSigure`: o linie cazuta pe catalog nu are voie sa devina promisiune. */
+      preturiSigure: proaspat.sigur,
       color: biz.primary_color ?? "#1AB554",
       message: message?.trim() ? interpolateRecoveryMessage(message, { name: cart.customer_name, store: biz.store_name ?? biz.business_name }) : undefined,
       discountCode: discountCode?.trim() || undefined,

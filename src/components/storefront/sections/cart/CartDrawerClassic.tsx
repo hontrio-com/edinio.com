@@ -39,7 +39,12 @@ export function CartDrawerClassic({
    */
   inline?: boolean;
 }) {
-  const { items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, lineSummary, total, count } = useCart();
+  const {
+    items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview,
+    linePretNevalidat, pricingStare, reincearcaPreturile, lineSummary, total, count,
+  } = useCart();
+  /* Cate linii personalizate asteapta inca validarea pretului. Vezi `pretulNevalidat`. */
+  const liniiNevalidate = items.filter(linePretNevalidat).length;
 
   /**
    * Sertarul se declara `aria-modal`, deci trebuie sa si tina focusul inauntru.
@@ -246,12 +251,24 @@ export function CartDrawerClassic({
                         `item.price`: acela e instantaneul salvat in localStorage
                         la adaugare, iar totalul de dedesubt venea deja de la
                         server.  */}
-                    {item.quantity > 1 && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(lineUnit(item))} bucata</p>
-                    )}
-                    <p className="text-sm font-semibold mt-0.5" style={{ color }}>{formatPrice(lineTotal(item))}</p>
-                    {lineSavings(item) > 0 && (
-                      <p className="text-[11px] text-muted-foreground line-through tabular-nums">{formatPrice(lineUnit(item) * item.quantity)}</p>
+                    {/*
+                      ⚠ UN PRET NEVALIDAT NU SE ARATA CA PRET. Pe o linie personalizata, numarul din
+                      localStorage e cel de BAZA: 89 de lei pe un fototapet care costa 910. Cat timp
+                      cererea de preturi nu s-a intors, sau a picat, aratand 89 nu spunem „usor
+                      vechi", ci alt ordin de marime.
+                    */}
+                    {linePretNevalidat(item) ? (
+                      <p className="text-xs text-muted-foreground mt-0.5">Se verifica pretul...</p>
+                    ) : (
+                      <>
+                        {item.quantity > 1 && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(lineUnit(item))} bucata</p>
+                        )}
+                        <p className="text-sm font-semibold mt-0.5" style={{ color }}>{formatPrice(lineTotal(item))}</p>
+                        {lineSavings(item) > 0 && (
+                          <p className="text-[11px] text-muted-foreground line-through tabular-nums">{formatPrice(lineUnit(item) * item.quantity)}</p>
+                        )}
+                      </>
                     )}
                     {/* Etichetele poarta numele produsului: altfel un cititor de
                         ecran anunta cate un „Scade cantitatea" identic pentru
@@ -322,7 +339,19 @@ export function CartDrawerClassic({
                 Comanda minima este <strong className="text-foreground">{formatPrice(minOrderAmount!)}</strong>. Mai adauga <strong className="text-foreground">{formatPrice(minOrderRemaining)}</strong> pentru a finaliza.
               </p>
             )}
-            <button type="button" onClick={onCheckout} disabled={belowMinOrder}
+            {/*
+              ⚠ SI TOTALUL DE SUS E INCOMPLET cat timp o linie nu s-a validat, deci butonul nu
+              pleaca. Fara randul asta, clientul ar duce mai departe un total din care lipsesc
+              suplimentele si ar afla la finalizare ca datoreaza de zece ori atat.
+            */}
+            {liniiNevalidate > 0 && (
+              <p className="text-xs text-center text-muted-foreground" role="status">
+                {pricingStare === "eroare"
+                  ? <>Nu am putut verifica preturile. <button type="button" onClick={reincearcaPreturile} className="underline font-medium text-foreground">Incearca din nou</button></>
+                  : <>Se verifica preturile produselor personalizate...</>}
+              </p>
+            )}
+            <button type="button" onClick={onCheckout} disabled={belowMinOrder || liniiNevalidate > 0}
               className="flex items-center justify-center gap-2 w-full py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
               style={{ backgroundColor: color }}>
               Finalizeaza comanda

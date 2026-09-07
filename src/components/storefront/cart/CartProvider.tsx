@@ -6,7 +6,7 @@ import { getCartPricing } from "@/lib/actions/store.actions";
 import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { inlocuiesteLinia } from "@/lib/storefront/cart/editare";
-import { cereRevizuire, pretulBucatii, pretulLiniei, rezumatulLiniei } from "@/lib/storefront/cart/pret-linie";
+import { cereRevizuire, pretulNevalidat, pretulBucatii, pretulLiniei, rezumatulLiniei } from "@/lib/storefront/cart/pret-linie";
 import { rezumatPersonalizare } from "@/lib/storefront/cart/normalize";
 
 /**
@@ -57,6 +57,28 @@ export interface CartContextValue {
    * ar fi fost aratata ca stricata.
    */
   lineNeedsReview: (item: CartItem) => boolean;
+  /**
+   * Pretul aratat pentru linia asta n-a putut fi validat la server.
+   *
+   * ⚠ NU E ACELASI LUCRU CU `lineNeedsReview`. Aceea spune „configuratia s-a stricat"; asta spune
+   * „inca nu stiu, sau n-am aflat". Pentru un produs obisnuit n-are importanta: se arata pretul de
+   * catalog, poate vechi de-o zi, dar din aceeasi lume. Pentru unul personalizat, pretul salvat e
+   * cel de BAZA, fara supliment: 89 de lei pe un fototapet care costa 910.
+   *
+   * Vezi `pretulNevalidat`. Ecranele scriu „se valideaza" in loc de suma, si nu lasa comanda sa
+   * plece pana nu se stie.
+   */
+  linePretNevalidat: (item: CartItem) => boolean;
+  /**
+   * Cum a mers ultima cerere de preturi catre server.
+   *
+   * `"incarca"` la inceput si intre incercari, `"gata"` dupa un raspuns, `"eroare"` dupa ce si
+   * reincercarea a picat. Ecranele au nevoie de deosebirea asta ca sa poata spune omului ce se
+   * intampla si sa-i dea un buton de reincercare, in loc sa arate tacut un numar gresit.
+   */
+  pricingStare: "incarca" | "gata" | "eroare";
+  /** Cere din nou preturile. Pentru butonul de reincercare. */
+  reincearcaPreturile: () => void;
   /**
    * Personalizarea liniei, scrisa cum o citeste omul: etichetele optiunilor, unitatile, si
    * comutatoarele pornite. Vezi `rezumatulLiniei` — cel din `normalize.ts` lucreaza pe valorile
@@ -242,15 +264,41 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
    * usor vechi e mai bun decat unul care nu afiseaza nimic.
    */
   const [preturi, setPreturi] = useState<Awaited<ReturnType<typeof getCartPricing>>>({});
+  /*
+   * ═══ ⚠ STAREA CERERII, NU DOAR REZULTATUL EI ═══
+   *
+   * Aici era `.catch(() => {})`, adica esecul se inghitea in tacere si nimeni nu-l mai putea afla.
+   * Pentru un produs obisnuit purtarea era buna: se ramanea pe pretul de catalog, poate vechi de-o
+   * zi. Pentru unul personalizat, pretul salvat e cel de BAZA: fototapetul de 910 lei se arata cu
+   * 89, clientul apasa, si comanda pleca cu 910. Serverul n-a fost pacalit nicio clipa, dar omului
+   * i se aratase un numar pe care nimeni nu-l onora.
+   *
+   * ⚠ TREI STARI, fiindca `preturi` gol inseamna trei lucruri diferite si niciunul nu se vede din
+   * el: inca se incarca, cererea a picat, sau produsul nu mai e in catalog. Primul trece singur,
+   * celelalte doua nu trec niciodata.
+   */
+  const [pricingStare, setPricingStare] = useState<"incarca" | "gata" | "eroare">("incarca");
+  /* Se schimba ca sa reporneasca efectul; asta e tot ce face butonul de reincercare. */
+  const [incercare, setIncercare] = useState(0);
   const cheieProduse = items.map((i) => i.productId).sort().join(",");
   useEffect(() => {
     if (!hydrated || !businessId || !cheieProduse) return;
     let activ = true;
-    getCartPricing(businessId, cheieProduse.split(","))
-      .then((r) => { if (activ) setPreturi(r); })
-      .catch(() => {});
+    setPricingStare("incarca");
+    /*
+     * ⚠ O REINCERCARE AUTOMATA, si numai una. Cele mai multe esecuri de aici sunt o clipire de
+     * retea la schimbarea paginii; a doua cerere le rezolva fara ca omul sa afle ca a fost ceva.
+     * Mai multe ar fi insemnat sa tinem butonul de comanda stins minute intregi pe un magazin chiar
+     * cazut, si atunci butonul de reincercare de mai jos e raspunsul cinstit.
+     */
+    const cere = (): Promise<void> =>
+      getCartPricing(businessId, cheieProduse.split(","))
+        .then((r) => { if (activ) { setPreturi(r); setPricingStare("gata"); } });
+    cere()
+      .catch(() => cere())
+      .catch(() => { if (activ) setPricingStare("eroare"); });
     return () => { activ = false; };
-  }, [hydrated, businessId, cheieProduse]);
+  }, [hydrated, businessId, cheieProduse, incercare]);
 
   /*
    * ⚠ SOCOTEALA S-A MUTAT IN `cart/pret-linie.ts`, si nu de dragul ordinii.
@@ -282,6 +330,12 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
    */
   const lineNeedsReview = (item: CartItem) => cereRevizuire(item, preturi[item.productId]);
   /*
+   * ⚠ Pretul liniei personalizate pe care nu l-am putut valida. Vezi `pretulNevalidat`: cade `true`
+   * si cat timp se incarca, si cand cererea a picat, si cand produsul nu mai e in raspuns, fiindca
+   * din afara cele trei nu se deosebesc, iar niciunul dintre ele nu da voie sa se arate un pret.
+   */
+  const linePretNevalidat = (item: CartItem) => pretulNevalidat(item, preturi[item.productId]);
+  /*
    * ⚠ Rezumatul se face DIN DEFINITIE, nu din valorile brute — vezi `rezumatulLiniei`. Fara ea,
    * cosul arata id-ul optiunii („91c8409f-8bdf-4a…") in loc de „Premium", si sarea peste
    * comutatoarele pornite, deci „Protectie: Da" nu aparea niciodata.
@@ -293,7 +347,7 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, replaceItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, lineSummary, total, count, clear, restoreCart, sessionId, hydrated }}
+      value={{ items, addItem, replaceItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, linePretNevalidat, pricingStare, reincearcaPreturile: () => setIncercare((n) => n + 1), lineSummary, total, count, clear, restoreCart, sessionId, hydrated }}
     >
       {children}
     </CartContext.Provider>
@@ -351,6 +405,14 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
         lineSavings: () => 0,
         /* In afara unui `CartProvider` nu exista preturi, deci nici cum sa stim ca ceva s-a stricat. */
         lineNeedsReview: () => false,
+        /*
+         * ⚠ SI NICI CA E NEVALIDAT. Rezerva asta e pentru miniatura din editorul comerciantului, care
+         * nu cere nimic de la server si nu are buton de comanda: un „se valideaza" acolo ar fi
+         * ingrijorat degeaba omul care isi aranjeaza pagina.
+         */
+        linePretNevalidat: () => false,
+        pricingStare: "gata",
+        reincearcaPreturile: () => {},
         /* Fara `CartProvider` nu exista definitii, deci se cade pe rezumatul din valorile brute. */
         lineSummary: (item) => rezumatPersonalizare(item.customization as Record<string, unknown> | undefined),
         removeItem: (key) => setItems((prev) => prev.filter((i) => lineKey(i) !== key)),

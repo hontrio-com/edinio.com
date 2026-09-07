@@ -176,8 +176,66 @@ test("⚠ finalizarea se blocheaza cand o linie cere revizuire, nu doar se plang
   assert.match(core, /lineNeedsReview/, "`lineNeedsReview` nu se mai cere de la cos");
 
   const form = sursa(FORMULAR);
-  assert.match(form, /disabled=\{isPending \|\| belowMinOrder \|\| liniiDeRevizuit\.length > 0\}/,
+  /*
+   * ⚠ Butonul are acum si a treia conditie, pentru liniile al caror pret nu s-a validat. Proba se
+   * uita la CE se cere, nu la sirul intreg, ca sa nu cada la fiecare conditie noua adaugata pe
+   * langa ea.
+   */
+  assert.match(form, /disabled=\{isPending \|\| belowMinOrder \|\|[^}]*liniiDeRevizuit\.length > 0/,
     "butonul de finalizare se apasa iar peste o linie care nu se poate comanda");
   /* ⚠ Si i se SPUNE de ce, altfel un buton stins fara explicatie e mai rau decat unul care refuza. */
   assert.match(form, /liniiDeRevizuit\.length > 0 && \(/, "nu se spune de ce e blocat butonul");
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   4. PRETURILE SCRISE IN RAND VIN DIN CATALOG, NU DIN CERERE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const ACTIUNI = "src/lib/actions/abandoned-cart.actions.ts";
+const EMAIL = "src/lib/email.ts";
+
+test("⚠ captura REPRETUIESTE inainte sa scrie, si scrie ce a repretuit", () => {
+  /*
+   * ═══ ⚠ ACTIUNEA E PUBLICA SI ANONIMA ═══
+   *
+   * Id-ul ei ajunge in pachetul fiecarui magazin. Pretul trimis se aduna in „Valoare cosuri
+   * abandonate", in media pe cos, in venitul potential si in „Cele mai abandonate produse": cine o
+   * cheama de mana isi declara ce suma pofteste. Nu se poate cumpara nimic pe pretul asta, dar
+   * cifrele dupa care comerciantul isi masoara magazinul se pot murdari.
+   *
+   * ⚠ SI NU AJUNGE SA SE CHEME REPRETUIREA: rezultatul ei trebuie sa ajunga si in `subtotal`, si in
+   * `items`. „Top produse abandonate" citeste din jsonb-ul brut, deci un rand care s-ar contrazice
+   * singur ar fi lasat jumatate din defect in loc.
+   */
+  const cod = sursa(ACTIUNI);
+  const i = cod.indexOf("export async function trackAbandonedCart");
+  assert.ok(i > 0, "captura si-a schimbat numele");
+  const corp = cod.slice(i, cod.indexOf("export async function", i + 40));
+
+  assert.match(corp, /const cuPreturi = await cuPreturileDinCatalog\(admin, input\.businessId, items\)/,
+    "captura nu mai repretuieste din catalog");
+  assert.match(corp, /cuPreturi\.reduce\(/, "subtotalul se socoteste iar din preturile trimise");
+  assert.match(corp, /items: cuPreturi\.map\(/, "jsonb-ul pastreaza preturile trimise de client");
+  assert.doesNotMatch(corp, /const subtotal = round2\(items\.reduce\(/,
+    "subtotalul s-a intors pe preturile din cerere");
+});
+
+test("⚠ steagul „preturi sigure” ajunge de la repretuire pana in email", () => {
+  /*
+   * Cand o linie a cazut inapoi pe pretul de catalog (comerciantul a scos „Premium"), suma nu mai
+   * poate fi promisa. Cele doua drumuri care trimit emailul trebuie sa duca steagul mai departe,
+   * iar sablonul chiar sa se uite la el.
+   */
+  for (const [nume, fisier] of [["cronul", CRON], ["trimiterea de mana", ACTIUNI]] as const) {
+    assert.match(sursa(fisier), /preturiSigure: proaspat\.sigur/,
+      `${nume} nu mai duce steagul pana la email`);
+  }
+
+  const email = sursa(EMAIL);
+  assert.match(email, /const preturiSigure = data\.preturiSigure !== false/,
+    "sablonul nu se mai uita la steag");
+  /* ⚠ Si chiar ASCUNDE suma: un sablon care citeste steagul si-l ignora ar fi trecut altfel. */
+  assert.match(email, /preturiSigure \? formatPrice\(i\.price \* i\.quantity\) : ""/,
+    "preturile pe linie se scriu oricum");
+  assert.match(email, /\$\{preturiSigure \? `/, "totalul se scrie oricum");
 });

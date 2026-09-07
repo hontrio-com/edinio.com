@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  cosRecuperabil,
   liniiRecuperabile,
+  pretulEsteNesigur,
   totalCosRecuperabil,
   type AbandonedCartItem,
   type ProdusCosSalvat,
@@ -178,3 +180,141 @@ test("fara trepte configurate, pretul ramane cel din catalog", () => {
 });
 
 function round2(n: number): number { return Math.round(n * 100) / 100; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRETURILE DIN CATALOG PESTE INSTANTANEUL PUBLIC
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Fototapetul de 910 lei: 350 x 250 cm = 8,75 m², Premium 89 lei/m² plus protectie 15 lei/m².
+ * Pretul de catalog e 89 si NU se aduna, exact ca in `pret-personalizat.test.ts`.
+ */
+const FOTOTAPET = {
+  enabled: true,
+  fields: [
+    { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+      latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+    { id: "mat", type: "butoane", label: "Material", required: true,
+      optiuni: [
+        { id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } },
+        { id: "prm", eticheta: "Premium", impact: { fel: "pe_m2", suma: 89 } },
+      ] },
+    { id: "prot", type: "comutator", label: "Protectie", required: false,
+      impact: { fel: "pe_m2", suma: 15 } },
+  ],
+  pret: { fel: "suprafata", campDimensiuni: "dim", tarif: 69, campTarif: "mat",
+    includePretulProdusului: false },
+};
+
+const VALORI = { dim: { latime: 350, inaltime: 250 }, mat: "prm", prot: true };
+
+test("⚠ PRETUL DIN CERERE NU SE CREDE: se ia din catalog, si se socoteste personalizarea", () => {
+  /*
+   * ═══ ⚠ DE CE E O POARTA, NU O INFRUMUSETARE ═══
+   *
+   * `trackAbandonedCart` e o actiune de server PUBLICA si anonima: id-ul ei ajunge in pachetul
+   * fiecarui magazin. Pretul trimis se aduna in „Valoare cosuri abandonate", in media pe cos, in
+   * venitul potential si in „Cele mai abandonate produse". Cine o cheama de mana isi declara ce
+   * suma pofteste si murdareste cifrele dupa care comerciantul isi masoara magazinul.
+   *
+   * ⚠ SI PENTRU UN APELANT CINSTIT era tot gresit: cosul salva pretul de BAZA al liniilor
+   * personalizate, adica 89 in loc de 910.
+   */
+  const inventat = salvata({ product_id: "ft", price: 9_999_999, customization: VALORI });
+  const p = produs({ id: "ft", name: "Fototapet", price: 89, page_sections: { customization: FOTOTAPET } });
+
+  const out = liniiRecuperabile([inventat], catalog(p));
+  assert.equal(out.length, 1);
+  assert.equal(out[0].price, 910, "pretul inventat de apelant a supravietuit repretuirii");
+});
+
+test("⚠ COSUL E NESIGUR cand o linie a cazut inapoi pe catalog", () => {
+  /*
+   * ═══ ⚠ CE APARA: UN EMAIL SEMNAT DE MAGAZIN ═══
+   *
+   * Comerciantul scoate „Premium" dupa ce omul a pus fototapetul in cos. `pretEfectiv` cade atunci
+   * pe pretul de CATALOG, si bine: un numar vechi e mai bun decat unul inventat. Dar emailul de
+   * recuperare ar scrie 89 de lei pentru un cos de 910, iar dupa clic clientul gaseste linia
+   * marcata „Necesita actualizare". Un mesaj de marketing care cere mai putin decat se poate onora
+   * e a doua fata a minciunii pe care `pretEfectiv` exista ca s-o opreasca.
+   *
+   * ⚠ LINIA NU DEVINE NERECUPERABILA: se reface in cos si omul alege din nou. Ce se schimba e doar
+   * ca emailul nu mai scrie o suma.
+   */
+  const faraPremium = {
+    ...FOTOTAPET,
+    fields: FOTOTAPET.fields.map((c) =>
+      c.id === "mat"
+        ? { ...c, optiuni: [{ id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } }] }
+        : c),
+  };
+  const p = produs({ id: "ft", name: "Fototapet", price: 89, page_sections: { customization: faraPremium } });
+
+  assert.equal(pretulEsteNesigur(p, VALORI), true, "o optiune disparuta nu face pretul nesigur");
+  /* ⚠ Si pretul chiar cade pe catalog, ca proba sa nu vorbeasca despre altceva decat se intampla. */
+  assert.equal(liniiRecuperabile([salvata({ product_id: "ft", customization: VALORI })], catalog(p))[0].price, 89);
+});
+
+test("⚠ si perechea: cu definitia neatinsa, cosul e SIGUR", () => {
+  /*
+   * Fara randul asta, o functie care raspunde mereu „nesigur" ar fi trecut, si atunci NICIUN email
+   * de recuperare n-ar mai fi purtat vreodata o suma.
+   */
+  const p = produs({ id: "ft", name: "Fototapet", price: 89, page_sections: { customization: FOTOTAPET } });
+  assert.equal(pretulEsteNesigur(p, VALORI), false, "un cos perfect valid a fost declarat nesigur");
+  /* ⚠ Si un produs FARA personalizare nu e niciodata nesigur: n-are ce sa i se strice. */
+  assert.equal(pretulEsteNesigur(produs({ id: "x" }), undefined), false);
+  assert.equal(pretulEsteNesigur(produs({ id: "x" }), {}), false);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SI CA STEAGUL CHIAR IESE DIN `cosRecuperabil`, PANA LA EMAIL
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Atat cat cere `cosRecuperabil` de la client: un `select ... eq ... in`.
+ *
+ * ⚠ SE RULEAZA CHIAR FUNCTIA. Masurat cu un mutant care pune `const sigur = true`, probele pe
+ * `pretulEsteNesigur` au trecut toate verzi: ele apara REGULA, nu cablarea ei. Cu clientul de proba
+ * de aici, mutantul cade.
+ */
+function clientDeProba(produse: ProdusCosSalvat[]) {
+  return {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          in: async () => ({ data: produse, error: null }),
+        }),
+      }),
+    }),
+  } as never;
+}
+
+test("⚠ `cosRecuperabil` SPUNE daca se poate lega cineva de suma pe care o intoarce", async () => {
+  const faraPremium = {
+    ...FOTOTAPET,
+    fields: FOTOTAPET.fields.map((c) =>
+      c.id === "mat"
+        ? { ...c, optiuni: [{ id: "std", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } }] }
+        : c),
+  };
+  const linie = salvata({ product_id: "ft", customization: VALORI });
+
+  const bun = await cosRecuperabil(
+    clientDeProba([produs({ id: "ft", price: 89, page_sections: { customization: FOTOTAPET } })]),
+    "biz", [linie],
+  );
+  assert.equal(bun.sigur, true, "un cos perfect valid iese ca nesigur");
+  assert.equal(bun.total, 910, "premisa s-a schimbat: nu mai iese 910");
+
+  const stricat = await cosRecuperabil(
+    clientDeProba([produs({ id: "ft", price: 89, page_sections: { customization: faraPremium } })]),
+    "biz", [linie],
+  );
+  assert.equal(stricat.sigur, false, "cosul cazut pe pretul de catalog se da drept sigur");
+  /*
+   * ⚠ SI TOTALUL CHIAR E CEL MINCINOS, ca proba sa arate de ce conteaza steagul: 89 in loc de 910.
+   * Emailul l-ar fi scris ca promisiune a magazinului.
+   */
+  assert.equal(stricat.total, 89);
+});

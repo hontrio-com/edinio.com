@@ -233,6 +233,37 @@ function pretEfectiv(
   return round2(pretUnitarCuPersonalizare(pretulPersonalizarii(definitie, curate.valori), cuTrepte));
 }
 
+/**
+ * Pretul liniei asteia e o CADERE PE CATALOG, nu suma ei adevarata?
+ *
+ * ═══ ⚠ DE CE TREBUIE STIUT IN AFARA ═══
+ *
+ * `pretEfectiv` cade pe pretul de catalog cand valorile nu se mai potrivesc cu definitia de acum:
+ * comerciantul a scos „Premium" dupa ce omul pusese produsul in cos. E purtarea corecta pentru un
+ * NUMAR (mai bine unul vechi decat unul inventat), dar tace, iar emailul de recuperare e semnat de
+ * magazin: el ajunge sa promita 89 de lei pentru un fototapet care costa 910, si dupa clic clientul
+ * gaseste linia marcata „Necesita actualizare".
+ *
+ * Un mesaj de marketing care cere mai putin decat se poate onora e a doua fata a aceleiasi
+ * minciuni pe care o repara `pretEfectiv`.
+ *
+ * ⚠ NU FACE LINIA NERECUPERABILA. Ea se reface in cos si omul poate alege din nou; ce se schimba e
+ * doar ca emailul nu mai scrie o suma pe care n-o poate sustine.
+ */
+export function pretulEsteNesigur(p: ProdusCosSalvat, personalizare: unknown): boolean {
+  /*
+   * ⚠ SI O PERSONALIZARE GOALA E „FARA PERSONALIZARE". Linia n-are niciun supliment de pierdut,
+   * deci pretul de catalog e chiar pretul ei: nu se ascunde nimic pentru un `{}`. Aceeasi margine
+   * ca la `pretulNevalidat`, din cos.
+   */
+  if (!esteObiect(personalizare) || Object.keys(personalizare).length === 0) return false;
+  const definitie = normalizeazaDefinitia(
+    (p.page_sections as { customization?: unknown } | null)?.customization,
+  );
+  if (!definitie) return true;
+  return !normalizeazaValorile(definitie, personalizare).ok;
+}
+
 export function liniiRecuperabile(
   salvate: AbandonedCartItem[],
   catalog: Map<string, ProdusCosSalvat>,
@@ -330,9 +361,9 @@ export async function cosRecuperabil(
   client: SupabaseClient<Database>,
   businessId: string,
   salvate: AbandonedCartItem[],
-): Promise<{ items: AbandonedCartItem[]; total: number }> {
+): Promise<{ items: AbandonedCartItem[]; total: number; sigur: boolean }> {
   const ids = [...new Set((salvate ?? []).map((i) => i?.product_id).filter(Boolean))];
-  if (ids.length === 0) return { items: [], total: 0 };
+  if (ids.length === 0) return { items: [], total: 0, sigur: true };
 
   const { data } = await client
     .from("products")
@@ -342,7 +373,75 @@ export async function cosRecuperabil(
 
   const catalog = new Map<string, ProdusCosSalvat>((data ?? []).map((p) => [p.id, p as ProdusCosSalvat]));
   const items = liniiRecuperabile(salvate, catalog);
-  return { items, total: totalCosRecuperabil(items) };
+  /*
+   * ⚠ SI CAT DE MULT NE PUTEM LEGA DE SUMA ASTA. Cand o linie a cazut inapoi pe pretul de catalog
+   * fiindca definitia s-a schimbat, totalul e un numar plauzibil pe care magazinul nu-l poate
+   * onora. Emailul si SMS-ul se uita la steagul asta si nu mai scriu suma; cosul, la clic, o
+   * marcheaza oricum „Necesita actualizare".
+   */
+  const sigur = (salvate ?? []).every((it) => {
+    const p = catalog.get(it?.product_id);
+    return !p || !pretulEsteNesigur(p, it.customization);
+  });
+  return { items, total: totalCosRecuperabil(items), sigur };
+}
+
+/**
+ * Instantaneul cosului, cu preturile ADUSE LA ZI din catalog, fara sa piarda vreo linie.
+ *
+ * ═══ ⚠ DE CE E ALTCEVA DECAT `cosRecuperabil` ═══
+ *
+ * Aceea raspunde la „ce se mai poate pune inapoi in cos", si de aceea ARUNCA liniile care nu se mai
+ * pot reface. Aici intrebarea e alta: ce scriem in rand. Randul e si arhiva cosului, deci liniile
+ * raman toate; ce se schimba e numarul de langa ele.
+ *
+ * ═══ ⚠ DE CE NU SE CRED PRETURILE TRIMISE ═══
+ *
+ * `trackAbandonedCart` e o actiune de server PUBLICA si anonima: id-ul ei ajunge in pachetul
+ * fiecarui magazin. Cine o cheama de mana isi declara ce pret pofteste, iar numarul ala se aduna
+ * mai departe in „Valoare cosuri abandonate", in media pe cos, in venitul potential si in „Cele mai
+ * abandonate produse". Nu se poate CUMPARA nimic pe pretul asta, dar se pot murdari cifrele dupa
+ * care comerciantul isi masoara magazinul.
+ *
+ * ⚠ SI PENTRU CINSTIT E TOT GRESIT: cosul salva pretul de BAZA al liniilor personalizate, adica 89
+ * in loc de 910 pe un fototapet.
+ *
+ * ⚠ O SINGURA INTEROGARE, nu una pe linie: aceeasi citire ca la recuperare, cu `in (...)`.
+ *
+ * ⚠ CE NU MAI E IN CATALOG capata ZERO, nu pretul declarat. Un produs sters nu se poate vinde, deci
+ * n-are ce cauta in valoarea cosurilor recuperabile; linia ramane totusi in rand, ca sa se vada ce
+ * a avut omul.
+ */
+export async function cuPreturileDinCatalog(
+  client: SupabaseClient<Database>,
+  businessId: string,
+  salvate: AbandonedCartItem[],
+): Promise<AbandonedCartItem[]> {
+  const ids = [...new Set((salvate ?? []).map((i) => i?.product_id).filter(Boolean))];
+  if (ids.length === 0) return salvate ?? [];
+
+  const { data, error } = await client
+    .from("products")
+    .select("id, name, price, images, is_active, page_sections")
+    .eq("business_id", businessId)
+    .in("id", ids);
+  /*
+   * ⚠ CITIREA PICATA LASA PRETURILE CUM AU VENIT, si nu le face zero: randul e si instantaneul din
+   * care se reface cosul. Zero peste tot ar fi facut cosul sa para gol, iar recuperarea lui n-ar
+   * mai fi plecat niciodata din cauza pragului comerciantului.
+   */
+  if (error) return salvate ?? [];
+
+  const catalog = new Map<string, ProdusCosSalvat>((data ?? []).map((p) => [p.id, p as ProdusCosSalvat]));
+  return (salvate ?? []).map((it) => {
+    const p = catalog.get(it.product_id);
+    const cantitate = normalizeazaCantitate(it.quantity);
+    return {
+      ...it,
+      quantity: cantitate,
+      price: p ? pretEfectiv(p, cantitate, it.customization, it.variant_title) : 0,
+    };
+  });
 }
 
 // Called from order creation (admin client in scope): when an order is placed,

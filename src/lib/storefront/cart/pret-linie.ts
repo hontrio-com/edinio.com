@@ -221,3 +221,36 @@ export function rezumatulLiniei(item: CartItem, regula: RegulaPretCos | undefine
 
   return bucati.join(" · ");
 }
+
+/**
+ * Pretul aratat pentru linia asta e unul pe care NU l-am putut valida la server?
+ *
+ * ═══ ⚠ DE CE E O A TREIA INTREBARE, PE LANGA PRET SI REVIZUIRE ═══
+ *
+ * Cand `regula` lipseste, `pretulLiniei` cade pe `item.price`. Pentru un produs obisnuit aia e o
+ * purtare buna: pretul de catalog salvat la adaugare, poate vechi de-o zi, dar din aceeasi lume cu
+ * cel adevarat. Un cos care arata ceva usor vechi e mai bun decat unul care nu arata nimic.
+ *
+ * ⚠ PENTRU O LINIE PERSONALIZATA E CU TOTUL ALTCEVA. Acolo `item.price` e pretul de BAZA, salvat
+ * dinadins fara supliment: fototapetul de 3,5 x 2,5 m cu Premium si protectie costa 910 lei si are
+ * `price: 89`. Nu e „usor vechi", e alt ordin de marime. Clientul vedea 89, apasa, si comanda
+ * pleca cu 910. Serverul nu putea fi pacalit nicio clipa, dar omului i se aratase un numar pe care
+ * nimeni nu-l onora.
+ *
+ * ⚠ SI `cereRevizuire` NU ACOPERA CAZUL: ea raspunde `false` cand `regula` lipseste, dinadins,
+ * fiindca „nu stiu inca" nu inseamna „stricat". Aceeasi lipsa are insa PATRU pricini care nu se
+ * deosebesc din afara: preturile inca se incarca, cererea a picat, produsul a fost sters, sau
+ * produsul n-a venit in raspuns. Prima e trecatoare; celelalte trei nu trec niciodata singure.
+ *
+ * Deci intrebarea de aici nu e „e stricata linia", ci „am voie sa arat un pret pentru ea". Ce se
+ * face cu raspunsul, tine de ecran: cosul scrie „se valideaza" in loc de suma, iar finalizarea nu
+ * se lasa apasata.
+ *
+ * ⚠ NUMAI PENTRU LINIILE CU PERSONALIZARE. Un produs obisnuit nu se opreste dintr-o cerere picata:
+ * ar fi insemnat sa nu se mai poata comanda nimic pe platforma la o clipire de retea.
+ */
+export function pretulNevalidat(item: CartItem, regula: RegulaPretCos | undefined): boolean {
+  const valori = item.customization;
+  if (!valori || typeof valori !== "object" || Object.keys(valori).length === 0) return false;
+  return !regula;
+}

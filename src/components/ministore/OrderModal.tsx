@@ -350,6 +350,21 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   const pretBucataCos = (i: { productId: string; price: number; quantity: number; variantTitle?: string }) =>
     cosMagazin ? cosMagazin.lineUnit({ ...i, name: "", imageUrl: null } as never) : i.price;
   /*
+   * ═══ ⚠ SI LINIILE PURTATE DIN COS POT FI NEVALIDATE ═══
+   *
+   * Produsul de pe care s-a apasat „Comanda acum" isi stie pretul: definitia lui e chiar in pagina,
+   * si `productSubtotal` il socoteste local. Dar liniile purtate din cos trec prin `cosMagazin`,
+   * care cade pe pretul lor de BAZA cat timp cererea de preturi nu s-a intors sau a picat: 89 in
+   * loc de 910 pe un fototapet. `placeOrder` recalculeaza si incaseaza 910, deci omul ar confirma
+   * un total si i s-ar cere altul.
+   *
+   * ⚠ Fara `CartProvider` (miniatura din editor) nu exista nici cerere, nici buton adevarat, deci
+   * nu e nimic de asteptat.
+   */
+  const liniiNevalidate = cosMagazin
+    ? cart.filter((i) => cosMagazin.linePretNevalidat(i)).length
+    : 0;
+  /*
    * Setul „cumparate frecvent impreuna" asezat peste liniile purtate din cos.
    *
    * Companionul aflat DEJA in cos nu se mai adauga a doua oara: linia lui ramane
@@ -1586,7 +1601,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 )}
                 <div className="flex justify-between font-bold text-base border-t border-border pt-2">
                   <span>Total</span>
-                  <span style={{ color }}>{formatPrice(total)}</span>
+                  <span style={{ color }}>{liniiNevalidate > 0 ? "..." : formatPrice(total)}</span>
                 </div>
               </div>
 
@@ -1617,8 +1632,20 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                 </p>
               )}
 
+              {/*
+                ⚠ SI CAT TIMP UN PRET PURTAT DIN COS NU S-A VALIDAT. Totalul de deasupra il include
+                cu pretul lui de baza, deci ar fi plauzibil si gresit.
+              */}
+              {liniiNevalidate > 0 && (
+                <p role="status" className="text-sm text-center text-muted-foreground">
+                  {cosMagazin?.pricingStare === "eroare"
+                    ? <>Nu am putut verifica preturile produselor din cos. <button type="button" onClick={cosMagazin.reincearcaPreturile} className="underline font-medium text-foreground">Incearca din nou</button></>
+                    : <>Se verifica preturile produselor din cos...</>}
+                </p>
+              )}
+
               {/* Submit */}
-              <button type="submit" disabled={isPending || belowMinOrder}
+              <button type="submit" disabled={isPending || belowMinOrder || liniiNevalidate > 0}
                 className="w-full flex items-center justify-center gap-3 py-4 font-bold text-base text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
                 style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}>
                 {isPending

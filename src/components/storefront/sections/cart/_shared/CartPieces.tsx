@@ -142,6 +142,16 @@ export function CartLine({
   // salvate sunt `buy_now`, n-au vazut niciodata cosul, si diferentele lor sunt
   // preturi de TREAPTA scrise dinadins de formularul de comanda.
   const pretBucata = cos.lineUnit(item);
+  /*
+   * ⚠ PRETUL PE CARE N-AM PUTUT SA-L VALIDAM NU SE ARATA CA PRET.
+   *
+   * Pentru o linie personalizata, numarul salvat in localStorage e cel de BAZA, fara supliment:
+   * fototapetul de 3,5 x 2,5 m cu Premium si protectie costa 910 lei si are `price: 89`. Cat timp
+   * cererea de preturi nu s-a intors, sau a picat, sau produsul n-a venit in raspuns, aratand 89 nu
+   * spunem „un pret usor vechi", ci alt ordin de marime. Serverul n-a fost pacalit nicio clipa, dar
+   * omul confirma un numar pe care nimeni nu-l onora.
+   */
+  const nevalidat = cos.linePretNevalidat(item);
   // Pretul intreg al liniei, cel taiat cand se aplica o treapta. Prin definitia
   // din `pretPeTrepte` e chiar `unitar x cantitate`, adica `totalLinie +
   // economie`: asa raman toate trei numerele impacate intre ele.
@@ -221,7 +231,9 @@ export function CartLine({
               : "Necesita actualizare — deschide produsul si alege din nou"}
           </p>
         )}
-        <p className="text-xs text-muted-foreground mt-1">{formatPrice(pretBucata)} bucata</p>
+        {nevalidat
+          ? <p className="text-xs text-muted-foreground mt-1">Se verifica pretul...</p>
+          : <p className="text-xs text-muted-foreground mt-1">{formatPrice(pretBucata)} bucata</p>}
 
         {/* Zona de atins a butonului „Sterge" e adusa la inaltimea stepperului
             si departata de „+": text de 12 px inseamna vreo 16 px de atins, iar
@@ -247,10 +259,14 @@ export function CartLine({
       {/* Totalul liniei vine de la cos, nu din inmultire locala: doar acolo se
           aplica treptele de cantitate, si tot acolo se uita si serverul. */}
       <div className="shrink-0 text-right">
+        {nevalidat ? (
+          <p className="text-sm font-medium text-muted-foreground tabular-nums">...</p>
+        ) : (
         <p className="text-sm sm:text-base font-bold tabular-nums" style={{ color }}>
           {formatPrice(totalLinie)}
         </p>
-        {economie > 0 && (
+        )}
+        {!nevalidat && economie > 0 && (
           <>
             <p className="text-xs text-muted-foreground line-through tabular-nums">
               {formatPrice(intreg)}
@@ -334,6 +350,15 @@ export function RezumatCos({
   onCheckout: () => void;
   etichetaButon?: string;
 }) {
+  const cos = useCart();
+  /*
+   * ⚠ CATE LINII PERSONALIZATE ASTEAPTA INCA VALIDAREA PRETULUI.
+   *
+   * Pana atunci `total` si `grandTotal` sunt socotite cu pretul de BAZA al liniilor astea, adica
+   * lipsesc din ele chiar suplimentele: 89 in loc de 910 pe un fototapet. Numarul ar fi plauzibil
+   * si gresit, iar clientul l-ar duce mai departe pana la finalizare.
+   */
+  const liniiNevalidate = cos.items.filter(cos.linePretNevalidat).length;
   return (
     <div className="space-y-4">
       {/* Totalurile se schimba la fiecare apasare pe „+", fara reincarcare si
@@ -358,7 +383,10 @@ export function RezumatCos({
         )}
         <div className="flex justify-between font-bold text-base text-foreground pt-2 border-t border-border">
           <span>Total</span>
-          <span className="tabular-nums" style={{ color }}>{formatPrice(pricing.grandTotal)}</span>
+          {/* ⚠ Nici totalul nu se arata cat timp o linie personalizata lipseste din el. */}
+          <span className="tabular-nums" style={{ color }}>
+            {liniiNevalidate > 0 ? "..." : formatPrice(pricing.grandTotal)}
+          </span>
         </div>
       </div>
 
@@ -369,7 +397,15 @@ export function RezumatCos({
         </p>
       )}
 
-      <button type="button" onClick={onCheckout} disabled={pricing.belowMinOrder}
+      {liniiNevalidate > 0 && (
+        <p className="text-xs text-center text-muted-foreground" role="status">
+          {cos.pricingStare === "eroare"
+            ? <>Nu am putut verifica preturile produselor personalizate. <button type="button" onClick={cos.reincearcaPreturile} className="underline font-medium text-foreground">Incearca din nou</button></>
+            : <>Se verifica preturile produselor personalizate...</>}
+        </p>
+      )}
+
+      <button type="button" onClick={onCheckout} disabled={pricing.belowMinOrder || liniiNevalidate > 0}
         className="w-full flex items-center justify-center gap-2 py-3.5 text-sm font-semibold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:ring-foreground/30"
         style={{ backgroundColor: color }}>
         {etichetaButon}

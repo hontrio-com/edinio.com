@@ -308,6 +308,8 @@ export async function GET(req: NextRequest) {
             customerName: cart.customer_name,
             items: proaspat.items,
             total: proaspat.total,
+            /* ⚠ Vezi `preturiSigure`: o linie cazuta pe catalog nu are voie sa devina promisiune. */
+            preturiSigure: proaspat.sigur,
             color: biz.primary_color ?? "#1AB554",
             message: step.message ? interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName }) : undefined,
             discountCode: step.discount_code ?? undefined,

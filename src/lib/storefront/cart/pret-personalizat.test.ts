@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { pretulBucatii, pretulLiniei, type RegulaPretCos } from "./pret-linie";
+import { pretulBucatii, pretulLiniei, pretulNevalidat, type RegulaPretCos } from "./pret-linie";
 import type { CartItem } from "./normalize";
 
 /**
@@ -122,15 +122,50 @@ test("⚠ treapta de cantitate se aplica pe BAZA, nu pe supliment", () => {
   assert.equal(l.subtotal, 315);
 });
 
-test("⚠ fara preturi de la server linia ramane la ce s-a salvat, nu la zero", () => {
+test("⚠ fara preturi de la server linia ramane la ce s-a salvat, DAR se stie ca e nevalidata", () => {
   /*
-   * Cererea de preturi poate cadea. Atunci nu se poate socoti personalizarea — dar nici nu se
-   * inventeaza un numar: se arata pretul salvat, exact ca inainte. Serverul refuza oricum ce nu se
-   * potriveste, deci nu se poate cumpara pe pretul asta.
+   * ═══ ⚠ AFIRMATIA S-A INTORS PE 08.09.2026 ═══
+   *
+   * Proba spunea doar prima jumatate: cererea de preturi poate cadea, si atunci nu se inventeaza un
+   * numar, se arata cel salvat. Adevarat, si ramane adevarat: functia asta n-are de unde sa scoata
+   * alt raspuns.
+   *
+   * ⚠ CE LIPSEA ERA CEREREA ADEVARATA. Pentru o linie PERSONALIZATA, „pretul salvat" e cel de BAZA,
+   * scris dinadins fara supliment: fototapetul de 3,5 x 2,5 m cu Premium costa 910 lei si are
+   * `price: 89`. Nu e un pret usor vechi, e alt ordin de marime, iar cosul il arata ca si cum ar fi
+   * al liniei. Clientul confirma 89 si serverul incasa 910.
+   *
+   * Deci numarul ramane cum era, dar acum se poate SI AFLA ca nu e validat, iar ecranele nu-l mai
+   * arata ca pret. Proba nu se sterge; capata perechea care lipsea.
    */
   const item = linie({ price: 89, customization: { dim: { latime: 350, inaltime: 250 }, mat: "prm" } });
   assert.equal(pretulLiniei(item, undefined).subtotal, 89);
   assert.equal(pretulBucatii(item, undefined), 89);
+  assert.equal(pretulNevalidat(item, undefined), true, "nimeni nu poate afla ca pretul asta nu e validat");
+});
+
+test("⚠ NEVALIDAT INSEAMNA DOAR LINIILE PERSONALIZATE, altfel o clipire de retea opreste vanzarile", () => {
+  /*
+   * ⚠ JUMATATEA CARE MARGINESTE REGULA. Un produs obisnuit ramane comandabil pe pretul lui de
+   * catalog chiar daca cererea a picat: acolo numarul salvat e din aceeasi lume cu cel adevarat, si
+   * a opri comanda ar fi insemnat ca o retea proasta inchide vanzarile pe toata platforma.
+   */
+  const simplu = linie({ price: 50, customization: undefined });
+  assert.equal(pretulNevalidat(simplu, undefined), false, "un produs obisnuit s-a blocat pe o cerere picata");
+
+  /* ⚠ Si o personalizare GOALA e tot un produs obisnuit: nu are supliment de pierdut. */
+  const goala = linie({ price: 50, customization: {} });
+  assert.equal(pretulNevalidat(goala, undefined), false);
+});
+
+test("⚠ cu preturile venite, linia personalizata NU mai e nevalidata", () => {
+  /*
+   * Perechea care face proba de sus sa insemne ceva: fara ea, o functie care raspunde mereu `true`
+   * ar fi trecut, si atunci butonul de comanda ar fi ramas stins pentru totdeauna.
+   */
+  const item = linie({ price: 89, customization: { dim: { latime: 350, inaltime: 250 }, mat: "prm", prot: true } });
+  assert.equal(pretulNevalidat(item, FOTOTAPET), false, "linia ramane nevalidata desi preturile au venit");
+  assert.equal(pretulLiniei(item, FOTOTAPET).subtotal, 910, "premisa s-a schimbat: nu mai iese 910");
 });
 
 test("⚠ un produs FARA personalizare pastreaza socoteala de dinainte, caracter cu caracter", () => {

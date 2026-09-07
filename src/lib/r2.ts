@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Key extraction recognizes every equivalent origin (raw *.r2.dev + CDN domain),
@@ -149,4 +149,82 @@ export async function deleteFromR2(key: string): Promise<void> {
   await s3.send(
     new DeleteObjectCommand({ Bucket: BUCKET, Key: key })
   );
+}
+
+/** Un obiect din depozit, cat foloseste cui il listeaza. */
+export interface ObiectListat {
+  cheie: string;
+  incarcatLa: Date;
+  octeti: number;
+}
+
+/**
+ * Tot ce sta sub un prefix, paginat pana la capat.
+ *
+ * ⚠ CLIENTUL S3 RAMANE PRIVAT, si de-aia listarea se scrie aici, nu la apelant: el e facut o
+ * singura data, din variabilele de mediu, si scos afara ar fi inceput sa fie facut si in alte
+ * locuri, cu alte reglaje.
+ *
+ * ⚠ `maxObiecte` NU E O OPTIMIZARE. Fara el, un prefix crescut peste asteptari ar tine o ruta
+ * ocupata pana la timeout, iar apelantul n-ar afla niciodata ca n-a vazut tot. Cu el, se intoarce
+ * `trunchiat: true` — o afirmatie pe care apelantul o poate citi si de care poate tine seama.
+ */
+export async function listeazaPrefix(
+  prefix: string,
+  maxObiecte: number,
+): Promise<{ obiecte: ObiectListat[]; trunchiat: boolean }> {
+  const obiecte: ObiectListat[] = [];
+  let cursor: string | undefined;
+
+  do {
+    const r = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: BUCKET,
+        Prefix: prefix,
+        ContinuationToken: cursor,
+        MaxKeys: 1000,
+      }),
+    );
+    for (const o of r.Contents ?? []) {
+      /* Fara cheie sau fara data nu se poate hotari nimic despre el; se sare, nu se ghiceste. */
+      if (!o.Key || !o.LastModified) continue;
+      obiecte.push({ cheie: o.Key, incarcatLa: new Date(o.LastModified), octeti: o.Size ?? 0 });
+    }
+    if (obiecte.length >= maxObiecte) return { obiecte, trunchiat: true };
+    cursor = r.IsTruncated ? r.NextContinuationToken : undefined;
+  } while (cursor);
+
+  return { obiecte, trunchiat: false };
+}
+
+/**
+ * Sterge mai multe obiecte deodata.
+ *
+ * ⚠ RASPUNSUL SE CITESTE, si asta e tot rostul functiei. `DeleteObjects` intoarce 200 si atunci
+ * cand obiecte individuale n-au putut fi sterse — ele stau in `Errors`, nu in codul HTTP. Cine
+ * numara felia ca reusita raporteaza o curatenie care nu s-a facut, si aceleasi fisiere ii ies
+ * „sterse" la fiecare rulare, la nesfarsit.
+ */
+export async function stergeMulteDinR2(chei: string[]): Promise<{ sterse: number; esecuri: string[] }> {
+  let sterse = 0;
+  const esecuri: string[] = [];
+
+  /* Cate 1000, cat primeste `DeleteObjects` intr-o cerere. */
+  for (let i = 0; i < chei.length; i += 1000) {
+    const felie = chei.slice(i, i + 1000);
+    try {
+      const r = await s3.send(
+        new DeleteObjectsCommand({
+          Bucket: BUCKET,
+          Delete: { Objects: felie.map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+      for (const e of r.Errors ?? []) esecuri.push(`${e.Key}: ${e.Code}`);
+      sterse += felie.length - (r.Errors?.length ?? 0);
+    } catch (e) {
+      esecuri.push(`felia care incepe la ${i}: ${(e as Error).message}`);
+    }
+  }
+
+  return { sterse, esecuri };
 }

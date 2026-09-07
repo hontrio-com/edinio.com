@@ -60,6 +60,64 @@ const s3 = new S3Client({
 const DE_STERS =
   /^_optim\/w\d{1,5}q\d{1,3}\/products\/customizations\/[0-9a-f-]{36}\/[^/]+\.webp$/i;
 
+/**
+ * Cate incarcari ORIGINALE exista, si de cand — masuratoarea de care depinde retentia.
+ *
+ * ⚠ NU STERGE NIMIC, niciodata, nici cu `--sterge`. Scriptul asta are un singur drum de
+ * stergere, cel al copiilor din `_optim/`. Aici doar se numara, fiindca inainte de a scrie un
+ * cron care sterge fisiere ale unor OAMENI trebuie stiut cate sunt si ce vechime au. Un
+ * stergator care n-a vazut niciodata galeata pe care o curata e o promisiune, nu o unealta.
+ */
+async function masoaraIncarcarile() {
+  const PREFIX = "products/customizations/";
+  const acum = Date.now();
+  const ZI = 24 * 3600 * 1000;
+  let cursor;
+  let n = 0;
+  let octeti = 0;
+  const galeti = { "sub 30 de zile": 0, "30 de zile - 6 luni": 0, "peste 6 luni": 0 };
+  const peMagazin = new Map();
+  let ceaMaiVeche = null;
+
+  do {
+    const r = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: R2_BUCKET_NAME,
+        Prefix: PREFIX,
+        ContinuationToken: cursor,
+        MaxKeys: 1000,
+      }),
+    );
+    for (const o of r.Contents ?? []) {
+      n++;
+      octeti += o.Size ?? 0;
+      const zile = (acum - new Date(o.LastModified).getTime()) / ZI;
+      if (zile < 30) galeti["sub 30 de zile"]++;
+      else if (zile < 183) galeti["30 de zile - 6 luni"]++;
+      else galeti["peste 6 luni"]++;
+      if (!ceaMaiVeche || new Date(o.LastModified) < ceaMaiVeche) ceaMaiVeche = new Date(o.LastModified);
+      const mag = o.Key.slice(PREFIX.length).split("/")[0];
+      peMagazin.set(mag, (peMagazin.get(mag) ?? 0) + 1);
+    }
+    cursor = r.IsTruncated ? r.NextContinuationToken : undefined;
+  } while (cursor);
+
+  console.log(`\n─── Incarcari originale sub ${PREFIX} ───`);
+  console.log(`Total: ${n} fisiere, ${(octeti / 1024 / 1024).toFixed(2)} MB`);
+  if (!n) return;
+  console.log(`Cea mai veche: ${ceaMaiVeche.toISOString().slice(0, 10)}`);
+  for (const [eticheta, cate] of Object.entries(galeti)) console.log(`  ${eticheta}: ${cate}`);
+  console.log(`Magazine atinse: ${peMagazin.size}`);
+  for (const [mag, cate] of [...peMagazin].sort((a, b) => b[1] - a[1]).slice(0, 10)) {
+    console.log(`  ${mag}: ${cate}`);
+  }
+  /*
+   * ⚠ CATE SUNT ORFANE nu se poate spune de aici: raspunsul sta in `orders`, nu in depozit.
+   * Masurat pe 07.09.2026, din 384 de comenzi ZERO poarta vreo personalizare — deci, la ziua
+   * asta, TOATE fisierele de mai sus sunt orfane. Cifra aia se reia inainte de orice stergere.
+   */
+}
+
 async function main() {
   let cursor;
   let vazute = 0;
@@ -86,6 +144,8 @@ async function main() {
   console.log(`Copii de personalizari: ${tinte.length} (${(octeti / 1024 / 1024).toFixed(2)} MB)`);
   for (const t of tinte.slice(0, 20)) console.log(`  ${t.cheie}`);
   if (tinte.length > 20) console.log(`  ... si inca ${tinte.length - 20}`);
+
+  await masoaraIncarcarile();
 
   if (!tinte.length) return;
   if (!STERGE) {

@@ -130,6 +130,10 @@
     {
       "path": "/api/cron/conversii",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/curata-fisiere",
+      "schedule": "37 4 * * *"
     }
   ]
 }

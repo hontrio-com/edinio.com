@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { existaInR2, getFromR2, uploadToR2 } from "@/lib/r2";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
+import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { MAX_PIXELI } from "@/lib/utils/file-signature";
 import { PREFIX_INCARCARI } from "@/lib/customization/adresa";
 
@@ -84,10 +85,26 @@ function esteIncarcareDeCumparator(cheie: string): boolean {
  * image never breaks.
  */
 export async function GET(req: NextRequest) {
-  // Cost guard: each miss runs sharp + R2 round-trips. With unbounded w/q params
-  // this is a cost-amplification vector, so throttle per IP. Generous because a
-  // page can legitimately request many variants (and in prod the CDN serves these).
-  if (!rateLimit(`img:${clientIp(req)}`, 240, 60_000)) {
+  /*
+   * ═══ ⚠ PLAFONUL S-A MUTAT UNDE SUNT BANII ═══
+   *
+   * Cifra de aici era 240 pe minut, si era buna cat timp ruta nu era pe drumul umblat: cu
+   * `NEXT_PUBLIC_CDN_URL` pus, loaderul chema `/cdn-cgi/image/`, nu ruta asta.
+   *
+   * De cand ruta a devenit drumul TUTUROR imaginilor, 240 pe minut taia cumparatori adevarati: o
+   * pagina de catalog cere lejer 30 de poze, deci un om care rasfoieste zece pagini atinge
+   * plafonul si vede imagini rupte. Iar pe un IP de operator mobil, impartit de mii de abonati,
+   * mult mai devreme.
+   *
+   * ⚠ SI CE COSTA NU E CEREREA, CI RATAREA. O cerere care gaseste varianta e o redirectare de
+   * cateva sute de octeti; una care n-o gaseste ruleaza `sharp` si scrie in depozit. De-aia sunt
+   * doua plafoane, si al doilea sta jos, pe drumul ratarii:
+   *
+   *   - AICI, in memorie: taie rafala, larg (2.000/minut), ca sa nu poata cineva tine functia
+   *     ocupata. Nu apara banii — se pierde la fiecare desfasurare si se inmulteste cu instantele.
+   *   - LA RATARE, in Postgres: acolo se cheltuie, si acolo se numara durabil.
+   */
+  if (!rateLimit(`img:${clientIp(req)}`, 2000, 60_000)) {
     return new NextResponse("Too many requests", { status: 429 });
   }
 
@@ -179,6 +196,31 @@ export async function GET(req: NextRequest) {
      * castigul.
      */
     if (!(await existaInR2(variantKey))) {
+      /*
+       * ⚠ AL DOILEA PLAFON, CHIAR INAINTE DE CHELTUIALA.
+       *
+       * Aici se ruleaza `sharp` si se scrie un obiect NOU, permanent, in depozit platit — si
+       * capatul e public si neautentificat. Latimile si calitatile sunt rotunjite la 18 × 5
+       * trepte, deci un singur atacator nu poate naste combinatii la nesfarsit; dar poate umbla
+       * peste cheile REALE ale catalogului si sili platforma sa produca zeci de mii de variante
+       * pe care nu le cere niciun cumparator.
+       *
+       * ⚠ CONTORUL DIN MEMORIE NU APARA ASTA: se pierde la fiecare desfasurare si se inmulteste
+       * cu instantele calde. Regula casei o spune pe fata in `limita-durabila.ts` — orice actiune
+       * care costa bani trece pe la contorul din Postgres.
+       *
+       * ⚠ SI STA PE DRUMUL RATARII, nu la intrare: cererile care gasesc varianta — adica aproape
+       * toate, dupa primele zile — nu ating baza deloc. Plafonul nu costa nimic tocmai pe drumul
+       * cel mai umblat.
+       *
+       * ⚠ CADE DESCHIS. Daca baza clipeste, imaginea se face. Vezi `consumaLimita`: un limitator
+       * n-are voie sa devina el insusi caderea care goleste vitrinele.
+       */
+      const ip = clientIp(req);
+      if (!(await consumaLimita(`img-variante:ip:${ip}`, 600, 3600)).permis) {
+        return fallback();
+      }
+
       const original = await getFromR2(key);
       if (!original) return fallback();
       /*

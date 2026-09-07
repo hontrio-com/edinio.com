@@ -1,21 +1,18 @@
-// Custom Next/Image loader.
+// Loaderul de imagini al lui `next/image`.
 //
-// Our images live on Cloudflare R2. There are two serving modes, chosen at build
-// time by whether NEXT_PUBLIC_CDN_URL is set:
+// Imaginile stau in R2. UN SINGUR DRUM: `/api/img`, optimizatorul nostru, care taie o data cu
+// `sharp`, pastreaza varianta in depozit si de-atunci arata drumul catre ea printr-o redirectare
+// `immutable`. Octetii vin de pe domeniul CDN, unde egressul e zero.
 //
-// 1. CDN mode (NEXT_PUBLIC_CDN_URL set) — the R2 bucket is connected to a
-//    Cloudflare custom domain with Image Transformations enabled. We serve through
-//    Cloudflare's edge resizer:
-//      <cdn>/cdn-cgi/image/width=W,quality=Q,format=auto/<key>
-//    Resize + webp/avif happen at the edge, globally cached → effectively instant.
+// ⚠ ERAU DOUA MODURI pana pe 07.09.2026, alese dupa `NEXT_PUBLIC_CDN_URL`: al doilea trecea prin
+// `/cdn-cgi/image/`, redimensionatorul Cloudflare. A fost scos fiindca se plateste IN FIECARE
+// LUNA — vezi motivarea intreaga la `imageLoader`, mai jos.
 //
-// 2. Fallback mode (no CDN env) — route through our self-hosted /api/img optimizer.
-//    This is the current production behaviour, kept so the loader is safe to deploy
-//    before the CDN domain exists and so flipping the env is fully reversible.
-//
-// In BOTH modes we extract the R2 object key from the stored URL — which may live on
-// the public *.r2.dev domain (existing rows) or on the CDN domain (new uploads) — so
-// no data migration is needed when the CDN is turned on.
+// Din cheia obiectului se citeste in continuare AMANDOUA formele de adresa stocata: domeniul
+// public `*.r2.dev` (randurile vechi) si domeniul CDN (incarcarile noi). Deci nu e nevoie de
+// nicio migrare de date, nici acum, nici cand s-a pornit CDN-ul.
+
+import { CALITATE } from "./latimi-imagini";
 
 const CDN = process.env.NEXT_PUBLIC_CDN_URL?.replace(/\/+$/, "") || "";
 
@@ -48,10 +45,29 @@ export default function imageLoader({
   const key = extractR2Key(src);
   if (!key) return src; // non-R2 image (external/local) — pass through untouched
 
-  const q = quality ?? 75;
-  if (CDN) {
-    // Keys contain only [\w./-]; safe as a path segment, no encoding needed.
-    return `${CDN}/cdn-cgi/image/width=${width},quality=${q},format=auto/${key}`;
-  }
+  const q = quality ?? CALITATE;
+
+  /*
+   * ═══ ⚠ UN SINGUR DRUM, SI DE CE NU MAI E CEL DE LA CLOUDFLARE ═══
+   *
+   * Aici se compunea `${CDN}/cdn-cgi/image/width=…/<cheie>`, adica redimensionatorul de la
+   * marginea Cloudflare. Mergea bine si era rapid, dar se plateste IN FIECARE LUNA: Cloudflare
+   * factureaza transformari UNICE (imagine × set de parametri) si reseteaza contorul lunar.
+   * Rezultatul ramane in cache, dar in ciclul urmator se numara din nou — inchiriezi taietorul,
+   * nu poza taiata. Masurat pe 07.09.2026: 8,50 $ dupa noua zile, proiectie 29,28 $ pe ciclu, pe
+   * un catalog in care se crease-ra 79 de produse noi.
+   *
+   * `/api/img` face acelasi lucru O SINGURA DATA: taie cu `sharp`, PASTREAZA varianta in depozit
+   * (`_optim/w<W>q<Q>/<cheie>.webp`) si de-atunci inainte doar arata drumul catre ea, cu o
+   * redirectare `immutable`. Octetii vin tot de pe domeniul CDN, unde egressul e zero — deci nu
+   * schimbam un cost pe altul.
+   *
+   * ⚠ MASURAT PE PRODUCTIE INAINTE DE COMUTARE, pe aceeasi poza si aceeasi latime: varianta
+   * noastra 28.506 octeti (WebP), Cloudflare 29.263 (AVIF). Nu se plateste in greutate.
+   *
+   * ⚠ `NEXT_PUBLIC_CDN_URL` RAMANE FOLOSITOR, doar isi schimba rostul: nu mai alege calea de
+   * aici, ci e gazda catre care redirecteaza `/api/img`. De-aia `extractR2Key` il citeste in
+   * continuare — adresele noi sunt scrise pe domeniul CDN.
+   */
   return `/api/img?p=${encodeURIComponent(key)}&w=${width}&q=${q}`;
 }

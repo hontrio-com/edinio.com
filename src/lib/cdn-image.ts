@@ -28,19 +28,33 @@ function extractR2Key(src: string): string | null {
  * any `src` without a guard.
  */
 export function cdnImage(url: string, width: number, quality = CALITATE): string {
-  if (!url || !CDN || url.includes("/cdn-cgi/image/")) return url;
+  /*
+   * ⚠ NU SE MAI CERE `CDN` CA SA SE COMPUNA ADRESA. Cat timp iesirea era
+   * `${CDN}/cdn-cgi/image/…`, fara variabila nu era ce compune, deci se intorcea adresa neatinsa
+   * — adica poza INTREAGA, la marimea ei de pe disc. Acum iesirea e `/api/img`, o cale relativa a
+   * noastra, care merge in orice mediu. `CDN` a ramas folositor doar ca sa se recunoasca cheia
+   * dintr-o adresa scrisa pe domeniul lui.
+   *
+   * ⚠ Si o adresa deja transformata se lasa in pace: ar fi intrat a doua oara in optimizator.
+   */
+  if (!url || url.includes("/cdn-cgi/image/")) return url;
   const key = extractR2Key(url);
   if (!key) return url;
   /*
-   * ⚠ LATIMEA URCA PE SCARA COMUNA, nu se ia cum a fost ceruta. Vezi `latimi-imagini.ts`:
-   * Cloudflare factureaza imagine × set de parametri, lunar, deci fiecare numar scris de mana
-   * intr-o componenta era o transformare noua, in fiecare luna, pentru fiecare poza. Erau opt
-   * astfel de numere (64, 96, 160, 256, 320, 480, 1600, 2560), niciunul comun cu latimile pe care
-   * le cere `next/image` — deci un logo la 480 si un card la 640 erau doua fisiere pentru marimi
-   * pe care ochiul nu le deosebeste.
+   * ⚠ LATIMEA URCA PE SCARA COMUNA, nu se ia cum a fost ceruta. Vezi `latimi-imagini.ts`: fiecare
+   * numar scris de mana intr-o componenta insemna un fisier nou. Erau opt astfel de numere (64,
+   * 96, 160, 256, 320, 480, 1600, 2560), niciunul comun cu latimile pe care le cere `next/image`
+   * — deci un logo la 480 si un card la 640 erau doua fisiere pentru marimi pe care ochiul nu le
+   * deosebeste.
    *
    * Apelantii pot cere in continuare orice numar, si asta e voit: locul de randare stie cat ii
    * trebuie, iar scara are grija sa nu iasa un fisier nou din asta.
+   *
+   * ⚠ SI SE TRECE PRIN `/api/img`, NU PRIN `/cdn-cgi/image/` — aceeasi hotarare ca in
+   * `supabase-image-loader.ts`, unde e scrisa pe larg: redimensionatorul Cloudflare se plateste
+   * lunar fiindca reseteaza contorul de transformari unice, pe cand varianta scrisa de noi in
+   * depozit se face o data si ramane. Cele doua cai TREBUIE sa ramana la fel: despartite, aceeasi
+   * poza s-ar fi facut de doua ori, o data pe fiecare drum.
    */
-  return `${CDN}/cdn-cgi/image/width=${latimeaDePeScara(width)},quality=${quality},format=auto/${key}`;
+  return `/api/img?p=${encodeURIComponent(key)}&w=${latimeaDePeScara(width)}&q=${quality}`;
 }

@@ -12,9 +12,17 @@
 // public `*.r2.dev` (randurile vechi) si domeniul CDN (incarcarile noi). Deci nu e nevoie de
 // nicio migrare de date, nici acum, nici cand s-a pornit CDN-ul.
 
-import { CALITATE } from "./latimi-imagini";
+import { CALITATE, cheieVarianta } from "./latimi-imagini";
 
 const CDN = process.env.NEXT_PUBLIC_CDN_URL?.replace(/\/+$/, "") || "";
+
+/**
+ * Cere browserul varianta DIRECT de pe domeniul CDN, sarind peste `/api/img`?
+ *
+ * ⚠ SE APRINDE NUMAI CU WORKERUL VIU. Vezi `infra/cloudflare/worker-variante-imagini.js`:
+ * fara el, o varianta nefacuta inca da 404, adica o poza rupta pe vitrina.
+ */
+const DIRECT = process.env.NEXT_PUBLIC_IMAGINI_DIRECT === "1";
 
 /** The object key (e.g. "products/uid/file.webp") if src is one of our R2 origins. */
 function extractR2Key(src: string): string | null {
@@ -68,6 +76,22 @@ export default function imageLoader({
    * ⚠ `NEXT_PUBLIC_CDN_URL` RAMANE FOLOSITOR, doar isi schimba rostul: nu mai alege calea de
    * aici, ci e gazda catre care redirecteaza `/api/img`. De-aia `extractR2Key` il citeste in
    * continuare — adresele noi sunt scrise pe domeniul CDN.
+   *
+   * ═══ ⚠ SI CALEA DIRECTA, CAT TIMP E APARATA DE WORKER ═══
+   *
+   * Redirectarea costa un salt: masurat din Romania, pe conexiune calda, 62 ms pana la marginea
+   * Vercel plus 14 ms pana la Cloudflare — fata de 24 ms cat lua drumul de dinainte. Cerut direct,
+   * obiectul vine in 14 ms, adica MAI REPEDE decat inainte de toata lucrarea.
+   *
+   * ⚠ DAR ASA O VARIANTA NEFACUTA INCA DA 404, adica o POZA RUPTA. De-aia calea directa se
+   * aprinde numai dupa ce Workerul din `infra/cloudflare/worker-variante-imagini.js` e viu pe
+   * `edinio-cdn.com/_optim/*`: el prinde 404-ul, cere originii sa faca varianta, si o serveste.
+   *
+   * ⚠ STEAGUL E STINS DIN OFICIU, si asta e chiar rostul lui: codul poate pleca in productie
+   * inaintea Workerului fara sa schimbe nimic. Se aprinde cand Cloudflare e gata, se stinge daca
+   * ceva scartaie — si se stinge INTAI el, si abia apoi se scoate Workerul.
    */
+  if (DIRECT && CDN) return `${CDN}/${cheieVarianta(key, width, q)}`;
+
   return `/api/img?p=${encodeURIComponent(key)}&w=${width}&q=${q}`;
 }

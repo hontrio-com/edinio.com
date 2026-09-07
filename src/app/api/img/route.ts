@@ -5,6 +5,7 @@ import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { MAX_PIXELI } from "@/lib/utils/file-signature";
 import { PREFIX_INCARCARI } from "@/lib/customization/adresa";
+import { cheieVarianta } from "@/lib/latimi-imagini";
 
 export const runtime = "nodejs";
 
@@ -170,7 +171,7 @@ export async function GET(req: NextRequest) {
   if (!cheieValida || !width) return fallback();
 
   try {
-    const variantKey = `_optim/w${width}q${quality}/${key}.webp`;
+    const variantKey = cheieVarianta(key, width, quality);
 
     /*
      * ═══ ⚠ RUTA ASTA ARATA DRUMUL, NU MAI CARA OCTETII ═══

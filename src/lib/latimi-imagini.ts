@@ -58,3 +58,23 @@ export function latimeaDePeScara(ceruta: number): number {
   if (!Number.isFinite(ceruta) || ceruta <= 0) return LATIMI[0];
   return LATIMI.find((l) => l >= ceruta) ?? LATIMI[LATIMI.length - 1];
 }
+
+/** Prefixul sub care stau variantele gata facute. Public pe domeniul CDN, `immutable`. */
+export const PREFIX_VARIANTE = "_optim";
+
+/**
+ * Cheia variantei gata facute a unei imagini.
+ *
+ * ⚠ O SINGURA DEFINITIE, pentru PATRU locuri care trebuie sa compuna exact acelasi sir:
+ * `/api/img` (o scrie), loaderul lui `next/image` si `cdnImage` (o cer, in modul direct), si
+ * Workerul din Cloudflare (o desface inapoi in cheie + latime + calitate). Despartite, oricare
+ * doua ar fi aratat catre fisiere diferite — iar in modul direct asta nu inseamna o poza mai
+ * putin clara, ci o POZA RUPTA.
+ *
+ * ⚠ TERMINATIA ORIGINALULUI RAMANE IN CHEIE, si nu din neglijenta: `poza.jpg` da
+ * `…/poza.jpg.webp`. Asa doua originale cu acelasi nume si terminatii diferite nu se calca, iar
+ * Workerul poate taia doar ultimul `.webp` ca sa afle cheia adevarata.
+ */
+export function cheieVarianta(cheie: string, latime: number, calitate: number): string {
+  return `${PREFIX_VARIANTE}/w${latime}q${calitate}/${cheie}.webp`;
+}

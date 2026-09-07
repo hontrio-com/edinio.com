@@ -5,9 +5,12 @@
 // return the URL untouched. Safe by construction — with no CDN env, or for any
 // non-R2 / already-transformed URL, the original string is returned unchanged.
 
-import { CALITATE, latimeaDePeScara } from "./latimi-imagini";
+import { CALITATE, cheieVarianta, latimeaDePeScara } from "./latimi-imagini";
 
 const CDN = process.env.NEXT_PUBLIC_CDN_URL?.replace(/\/+$/, "") || "";
+
+/** Vezi nota de la `DIRECT` din `supabase-image-loader.ts`: cele doua cai trebuie sa fie la fel. */
+const DIRECT = process.env.NEXT_PUBLIC_IMAGINI_DIRECT === "1";
 
 function extractR2Key(src: string): string | null {
   const marker = ".r2.dev/";
@@ -56,5 +59,8 @@ export function cdnImage(url: string, width: number, quality = CALITATE): string
    * depozit se face o data si ramane. Cele doua cai TREBUIE sa ramana la fel: despartite, aceeasi
    * poza s-ar fi facut de doua ori, o data pe fiecare drum.
    */
-  return `/api/img?p=${encodeURIComponent(key)}&w=${latimeaDePeScara(width)}&q=${quality}`;
+  const latime = latimeaDePeScara(width);
+  /* ⚠ Acelasi steag ca la `next/image` — vezi nota de acolo. Despartite, o cale ar fi ramas in urma. */
+  if (DIRECT && CDN) return `${CDN}/${cheieVarianta(key, latime, quality)}`;
+  return `/api/img?p=${encodeURIComponent(key)}&w=${latime}&q=${quality}`;
 }

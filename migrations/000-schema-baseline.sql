@@ -2607,7 +2607,7 @@ END;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer DEFAULT 0)
+CREATE OR REPLACE FUNCTION public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer DEFAULT 0, p_cost integer DEFAULT 1)
  RETURNS TABLE(permis boolean, blocat_pana timestamp with time zone)
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -2616,6 +2616,7 @@ AS $function$
 declare
   v_acum timestamptz := clock_timestamp();
   v_start timestamptz; v_lovituri integer; v_blocat timestamptz;
+  v_cost integer := greatest(1, coalesce(p_cost, 1));
 begin
   insert into public.rate_limits (cheie, fereastra_start, lovituri)
   values (p_cheie, v_acum, 0) on conflict (cheie) do nothing;
@@ -2632,7 +2633,7 @@ begin
     v_start := v_acum; v_lovituri := 0;
   end if;
 
-  v_lovituri := v_lovituri + 1;
+  v_lovituri := v_lovituri + v_cost;
   v_blocat := null;
   if v_lovituri > p_limita and p_blocare_sec > 0 then
     v_blocat := v_acum + make_interval(secs => p_blocare_sec);
@@ -10750,7 +10751,7 @@ grant execute on function public.catalog_verifica(p_esantion integer) to service
 grant execute on function public.categorii_ascunse(p_business uuid) to service_role;
 grant execute on function public.ceasul_bazei() to service_role;
 grant execute on function public.claim_discount_use(p_discount_id uuid) to service_role;
-grant execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer) to service_role;
+grant execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer, p_cost integer) to service_role;
 grant execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.cont_dupa_email(p_email text) to service_role;
@@ -10962,7 +10963,7 @@ revoke execute on function public.catalog_verifica(p_esantion integer) from publ
 revoke execute on function public.categorii_ascunse(p_business uuid) from public;
 revoke execute on function public.ceasul_bazei() from public;
 revoke execute on function public.claim_discount_use(p_discount_id uuid) from public;
-revoke execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer) from public;
+revoke execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer, p_cost integer) from public;
 revoke execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.cont_dupa_email(p_email text) from public;

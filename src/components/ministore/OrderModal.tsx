@@ -479,13 +479,40 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Funnel event: opening the order form = InitiateCheckout / begin_checkout.
   // The single-product buy-now flow has no cart step, so this is where the
   // mid-funnel signal is emitted (mirrors the cart checkout modal).
+  /*
+   * ═══ ⚠ PRETUL RAPORTAT E CEL PERSONALIZAT, NU CEL DE CATALOG ═══
+   *
+   * Aici mergea `product.price`. Pentru un fototapet de 910 lei, evenimentul pleca cu 89 — iar pe
+   * cifrele astea se socotesc mai tarziu pragurile de licitatie si randamentul reclamelor. Cosul si
+   * pagina de finalizare fusesera deja reparate; drumul „cumpara acum", care N-ARE pas de cos, nu.
+   *
+   * ⚠ `productSubtotal` E CHIAR SUMA AUTORITARA a liniilor produsului asta — aceeasi formula ca in
+   * `placeOrder`, si tot ea se afiseaza sub butonul de plata. Deci nu se socoteste nimic a doua
+   * oara aici.
+   *
+   * ⚠ SI SE CITESTE PRINTR-UN REF, nu din dependinte. Pus in dependinte, evenimentul ar fi plecat
+   * din nou la fiecare litera scrisa in campul de gravura si la fiecare schimbare de cantitate —
+   * adica zeci de „begin_checkout" pentru o singura deschidere de formular. Palnia s-ar fi umplut
+   * cu zgomot exact pe produsele personalizate.
+   *
+   * ⚠ SI NIMIC DIN VALORI: nici textul personalizarii, nici numele fisierelor. Doar suma si
+   * identificatorul produsului.
+   */
+  const quantityLaDeschidere = useRef(1);
+  quantityLaDeschidere.current = Math.max(1, quantity);
+  const sumaPentruPalnie = useRef(0);
+  sumaPentruPalnie.current = quantity > 0
+    ? Math.round((productSubtotal / quantity) * 100) / 100
+    : Number(product.price) || 0;
+
   useEffect(() => {
     if (!open) return;
-    const value = Number(product.price) || 0;
-    fbTrack("InitiateCheckout", { value, currency: "RON", content_ids: [product.id], content_name: product.name, content_type: "product", num_items: 1 });
-    ttqTrack("InitiateCheckout", { value, currency: "RON", contents: [{ content_id: product.id, content_type: "product", content_name: product.name, price: Number(product.price) || 0, quantity: 1 }] });
-    gtagEvent("begin_checkout", { currency: "RON", value, items: [{ item_id: product.id, item_name: product.name, price: Number(product.price) || 0, quantity: 1 }] });
-  }, [open, product.id, product.name, product.price]);
+    const pePiesa = sumaPentruPalnie.current;
+    const value = Math.round(pePiesa * quantityLaDeschidere.current * 100) / 100;
+    fbTrack("InitiateCheckout", { value, currency: "RON", content_ids: [product.id], content_name: product.name, content_type: "product", num_items: quantityLaDeschidere.current });
+    ttqTrack("InitiateCheckout", { value, currency: "RON", contents: [{ content_id: product.id, content_type: "product", content_name: product.name, price: pePiesa, quantity: quantityLaDeschidere.current }] });
+    gtagEvent("begin_checkout", { currency: "RON", value, items: [{ item_id: product.id, item_name: product.name, price: pePiesa, quantity: quantityLaDeschidere.current }] });
+  }, [open, product.id, product.name]);
 
   // Reset on open
   useEffect(() => {

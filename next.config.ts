@@ -78,6 +78,21 @@ const CHEI_OBLIGATORII = [
     si o cere; nu o sterge, muta-o.
   */
   "NEXT_PUBLIC_EDINIO_GA4_MEASUREMENT_ID",
+  /*
+    ⚠ MUTATA AICI PE 07.09.2026, dupa ce galeata privata a fost creata in Cloudflare, variabila
+    pusa in Vercel (Production si Preview) si drumul probat de la capat la capat: un fisier urcat
+    din formularul public a aterizat CHIAR in `edinio-uploads-privat`, sub
+    `products/customizations/`.
+
+    ⚠ CAT TIMP A FOST DOAR ASTEPTATA, purtarea fara ea era exact cea de dinainte — deci o oprire de
+    desfasurare ar fi fost o paguba mai mare decat cea pe care o apara. Acum e altfel: galeata
+    EXISTA, iar lipsa variabilei ar trimite tacut pozele de familie ale cumparatorilor inapoi in
+    galeata publica, pe un domeniu de pe care oricine are cheia intreaga ii poate lua octetii.
+
+    ⚠ Deci o desfasurare fara ea se OPRESTE, cu numele cheii in jurnal: ieftin si reversibil. O
+    intoarcere tacuta la depozitul public nu se vede niciodata.
+  */
+  "R2_BUCKET_PRIVAT",
 ] as const;
 
 /*
@@ -90,16 +105,10 @@ const CHEI_OBLIGATORII = [
 */
 const CHEI_ASTEPTATE: readonly string[] = [
   /*
-    ⚠ FISIERELE CUMPARATORILOR. Fara ea, incarcarile din formularul public de personalizare se
-    scriu in galeata PUBLICA, la fel ca pana pe 07.09.2026 — si atunci cine are cheia intreaga
-    (adica chiar clientul care a urcat fisierul) ajunge la octeti lipind-o dupa domeniul public,
-    ocolind toate cele patru porti ale rutei de servire.
-
-    ⚠ STRIGA, NU OPRESTE. Purtarea fara ea e exact cea de azi, nu una stricata: o desfasurare
-    oprita ar fi fost o paguba mai mare decat cea pe care o apara. Se muta in `CHEI_OBLIGATORII`
-    dupa ce galeata privata e creata si variabila pusa in Production.
+    Goala din 07.09.2026: `R2_BUCKET_PRIVAT` si-a facut drumul intreg de aici in
+    `CHEI_OBLIGATORII`, dupa ce galeata a fost creata si drumul probat. Lista ramane, ca loc pentru
+    urmatoarea cheie a carei stare n-o cunoastem.
   */
-  "R2_BUCKET_PRIVAT",
 ];
 
 function verificaCheileDeProductie(faza: string): void {

@@ -277,12 +277,11 @@ export function usePersonalizare(pageSections: unknown, permis?: string | null):
         /* ⚠ Plafonul nostru peste al comerciantului — vezi `fisiereleCampului`. */
         const maxim = fisiereleCampului(camp);
         /*
-         * ⚠ Campul de FISIER are alt implicit decat cel de imagine: un PDF de tipar la un metru
-         * patrat trece lejer de 10 MB, iar cu plafonul imaginilor tipul asta ar fi refuzat chiar
-         * fisierele pentru care exista. Plafonul serverului e 40 MB (vezi ruta de incarcare); ce
-         * scrie comerciantul se respecta oricum, daca a scris ceva.
+         * ⚠ AICI STATEA `const documente = camp.type === "fisier"`, si a ramas fara treaba dupa ce
+         * felul campului a inceput sa iasa din PERMIS, nu din ce declara clientul. Implicitul
+         * fiecarui tip (10 MB imagine, 40 MB fisier) il da acum `megaoctetiiCampului(camp.type)`,
+         * chiar mai jos — o singura sursa in loc de doua.
          */
-        const documente = camp.type === "fisier";
         /*
          * ⚠ ACELASI PLAFON CA AL SERVERULUI, nu unul mai mare. Comerciantul putea scrie 100, iar
          * filtrul de aici il credea: fisierul pleca, serverul il refuza la 40, si ecranul ii spunea
@@ -303,23 +302,64 @@ export function usePersonalizare(pageSections: unknown, permis?: string | null):
            * sa stie care lipseste.
            */
           if (f.size > octetiMax) { refuzat = true; continue; }
-          const fd = new FormData();
-          fd.append("file", f);
           /*
-           * ═══ ⚠ PERMISUL, IN LOCUL LUI `business_id` SI AL LUI `documente` ═══
+           * ═══ ⚠ TREI PASI, SI OCTETII NU TREC PRIN SERVERUL NOSTRU ═══
            *
-           * Amandoua veneau de aici, adica de la client. Id-ul magazinului e in HTML-ul fiecarui
-           * magazin, deci nu dovedea nimic; iar `documente=1` cerea plafonul de 40 MB al
-           * documentelor si de pe un camp de imagine, unde el e 10.
+           * Pana pe 07.09.2026 fisierul pleca intr-un `FormData` catre `/api/upload-customization`.
+           * Nu putea sa mearga peste 4,5 MB: Vercel refuza cererea cu 413 inainte ca vreun rand de
+           * pe server sa ruleze — iar campurile promiteau 10 MB (16 din 26, masurat). O poza de
+           * telefon de 6 MB pica pe un camp OBLIGATORIU, si omul citea „incarcarea a esuat" pentru
+           * un fisier pe care ecranul tocmai i-l acceptase.
            *
-           * Permisul e emis pe SERVER, cand s-a randat pagina, si poarta magazinul, produsul,
-           * campurile care primesc fisiere si FELUL fiecaruia. Ce trimitem de aici e doar „care
-           * camp" — restul nu mai e al nostru de spus. Vezi `permis-incarcare.ts`.
+           * Acum: (1) cerem voie si primim un link semnat, (2) punem octetii DE-A DREPTUL in
+           * depozit, (3) cerem serverului sa-i verifice si sa-i dea o cheie buna.
+           *
+           * ⚠ PERMISUL merge la pasii 1 si 3, ca inainte: el spune ce magazin, ce produs si ce
+           * camp. Ce se schimba e doar pe unde curg octetii.
            */
-          fd.append("permis", permis ?? "");
-          fd.append("camp", camp.id);
           try {
-            const res = await fetch("/api/upload-customization", { method: "POST", body: fd });
+            const cerere = await fetch("/api/upload-customization", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                permis: permis ?? "",
+                camp: camp.id,
+                /*
+                 * ⚠ TIPUL SI MARIMEA DECLARATE aici sunt doar o cerere, nu o dovada: marimea intra
+                 * in SEMNATURA linkului (deci R2 refuza orice altceva), iar tipul se rejudeca pe
+                 * OCTETI la pasul 3.
+                 */
+                tip: f.type || "application/octet-stream",
+                octeti: f.size,
+              }),
+            });
+            const voie = (await cerere.json()) as { incarcare?: string; referinta?: string; error?: string };
+            if (!voie.incarcare || !voie.referinta) {
+              refuzat = true;
+              if (voie.error) motiv = voie.error;
+              continue;
+            }
+
+            /*
+             * ⚠ PUT CURAT, cu EXACT antetul semnat: `Content-Type` si nimic altceva. Orice antet in
+             * plus schimba semnatura, si R2 raspunde 403.
+             */
+            const pus = await fetch(voie.incarcare, {
+              method: "PUT",
+              headers: { "content-type": f.type || "application/octet-stream" },
+              body: f,
+            });
+            if (!pus.ok) {
+              refuzat = true;
+              motiv = "Incarcarea nu a ajuns in depozit. Incearca din nou.";
+              continue;
+            }
+
+            const res = await fetch("/api/upload-customization/finalizeaza", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ permis: permis ?? "", camp: camp.id, referinta: voie.referinta }),
+            });
             const date = (await res.json()) as { cheie?: string; error?: string };
             if (date.cheie) {
               const cheie = date.cheie;

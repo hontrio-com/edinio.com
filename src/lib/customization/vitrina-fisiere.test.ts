@@ -225,24 +225,56 @@ function pregateste(): Imprejurimi {
     cereri: 0,
   };
 
-  globalThis.fetch = (async (_adresa: unknown, optiuni?: { body?: unknown }): Promise<Response> => {
+  /*
+   * ═══ ⚠ RETEAUA DE PROBA URMEAZA CEI TREI PASI ═══
+   *
+   * De pe 07.09.2026 octetii nu mai trec prin serverul nostru: Vercel refuza cererile de peste
+   * 4,5 MB, iar campurile promiteau 10 si 40. Deci carligul face trei cereri pe fisier:
+   *
+   *   1. POST /api/upload-customization           -> { incarcare, referinta }
+   *   2. PUT  <linkul semnat>                     -> octetii, direct in depozit
+   *   3. POST /api/upload-customization/finalizeaza -> { cheie }
+   *
+   * ⚠ NUMELE FISIERULUI SE AFLA ABIA LA PASUL 2, fiindca pasul 1 trimite doar tipul si marimea —
+   * serverul n-are nevoie de nume, si nu i-l dam degeaba. Deci proba leaga `referinta` de nume
+   * cand vede PUT-ul, si raspunde la pasul 3 dupa legatura aia. Asa raspunsurile raman legate de
+   * FISIER, nu de ordinea sosirii — iar cererile tinute in aer se termina oricum in alta ordine.
+   */
+  let nrRef = 0;
+  const numeDupaRef = new Map<string, string>();
+
+  globalThis.fetch = (async (adresa: unknown, optiuni?: { body?: unknown }): Promise<Response> => {
     retea.cereri += 1;
-    /*
-     * ⚠ Corpul se alege ACUM, dupa fisierul chiar din cerere — nu dupa ordinea sosirii si nu dupa
-     * ce s-a apucat de asteptat. Cererile tinute in aer se termina in alta ordine decat au plecat.
-     */
+    const url = String(adresa);
+
+    /* Pasul 2: octetii. Aici se afla ce fisier e. */
+    if (!url.startsWith("/api/upload-customization")) {
+      const f = optiuni?.body;
+      const ref = new URL(url).searchParams.get("ref") ?? "";
+      if (f instanceof File) numeDupaRef.set(ref, f.name);
+      if (tinute) await new Promise<void>((rezolva) => { tinute?.push(rezolva); });
+      return { ok: true, json: async () => ({}) } as unknown as Response;
+    }
+
+    /* Pasul 1: voia. Nu se stie inca ce fisier e, deci raspunsul e generic. */
+    if (!url.includes("/finalizeaza")) {
+      const referinta = `ref-${++nrRef}`;
+      if (tinute) await new Promise<void>((rezolva) => { tinute?.push(rezolva); });
+      return {
+        ok: true,
+        json: async () => ({ incarcare: `https://depozit-de-proba.invalid/put?ref=${referinta}`, referinta }),
+      } as unknown as Response;
+    }
+
+    /* Pasul 3: verdictul. Acum se stie fisierul, prin `referinta`. */
     let corp = urmatorul;
     if (dupaNume) {
       const trup = optiuni?.body;
-      const f = trup instanceof FormData ? trup.get("file") : null;
-      const n = f instanceof File ? f.name : "";
+      const ref = typeof trup === "string" ? (JSON.parse(trup) as { referinta?: string }).referinta ?? "" : "";
+      const n = numeDupaRef.get(ref) ?? "";
       corp = dupaNume[n] ?? { error: `proba: fisier neasteptat „${n}”` };
     }
-    if (tinute) {
-      await new Promise<void>((rezolva) => {
-        tinute?.push(rezolva);
-      });
-    }
+    if (tinute) await new Promise<void>((rezolva) => { tinute?.push(rezolva); });
     return { ok: true, json: async () => corp } as unknown as Response;
   }) as typeof globalThis.fetch;
 
@@ -683,20 +715,33 @@ test("⚠ 20 doua incarcari suprapuse: NICIUNA nu o pierde pe cealalta", async (
   try {
     const h = monteaza(() => usePersonalizare(PAGINA, BIZ));
 
+    /*
+     * ⚠ RASPUNSUL SE LEAGA DE FISIER, nu de ordinea sosirii — si asta a devenit obligatoriu de cand
+     * incarcarea are trei pasi. Cu un singur raspuns „urmatorul", verdictul se citea abia la pasul
+     * 3, adica dupa ce amandoua incarcarile plecasera: amandoua ar fi primit ultima cheie pusa, si
+     * proba ar fi masurat altceva decat spune.
+     */
+    im.retea.raspundePeNume({
+      "prima.jpg": { cheie: cheia(1, "jpg") },
+      "adoua.jpg": { cheie: cheia(2, "jpg") },
+    });
+
     im.retea.tine();
-    im.retea.raspunde({ cheie: cheia(1, "jpg") });
     const prima = h.stare.incarcaFisiere(CAMP, lista("prima.jpg"));
 
     /* Randare intre timp: exact ce se intampla in pagina cand se aprinde „Se incarca...”. */
     await h.act(() => Promise.resolve());
 
-    im.retea.raspunde({ cheie: cheia(2, "jpg") });
     const adoua = h.stare.incarcaFisiere(CAMP, lista("adoua.jpg"));
 
     im.retea.dezleaga();
     await h.act(() => Promise.all([prima, adoua]));
 
-    assert.equal(im.retea.cereri, 2, "n-au plecat doua cereri, deci nu s-au suprapus");
+    /*
+     * ⚠ SASE, NU DOUA: trei cereri pe fisier (voie, octeti, finalizare). Ce se masoara ramane
+     * acelasi lucru — ca amandoua incarcarile au plecat si s-au suprapus.
+     */
+    assert.equal(im.retea.cereri, 6, "n-au plecat doua incarcari, deci nu s-au suprapus");
     assert.deepEqual(
       [...fisiereleDin(h.stare)].sort(), [cheia(1, "jpg"), cheia(2, "jpg")].sort(),
       "a doua incarcare a suprascris-o pe prima: fisiere platite, orfane, si nimeni nu afla",

@@ -5944,6 +5944,7 @@ export type Database = {
         Args: {
           p_blocare_sec?: number
           p_cheie: string
+          p_cost?: number
           p_fereastra_sec: number
           p_limita: number
         }

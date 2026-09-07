@@ -174,8 +174,9 @@ const HOOK = `data:text/javascript,${encodeURIComponent(
      if (specifier === "@/lib/r2") {
        return {
          url: "data:text/javascript," + encodeURIComponent(
-           "export const citestePrivat = async (k) => globalThis.__r2DeProba(k);"
-           + "export const getFromR2 = async (k) => { const r = await globalThis.__r2DeProba(k); return r.fel === 'octeti' ? r.octeti : null; };"
+           "export const galeataCheii = async (k) => globalThis.__r2DeProba(k);"
+           + "export const linkDeCitirePrivata = async (k, b, n, t) => globalThis.__linkDeProba(k, b, n, t);"
+           + "export const getFromR2 = async (k) => null;"
          ),
          shortCircuit: true, format: "module",
        };
@@ -190,6 +191,8 @@ let utilizator: string | null = UTILIZATOR;
 let depozit: Record<string, Buffer> = {};
 /** Pornit, depozitul nu raspunde deloc — incident R2, credentiala schimbata, timeout. */
 let esecDepozit = false;
+/** In ce galeata „sta" fisierul de proba. */
+const GALEATA = "edinio-uploads-privat";
 
 let GET: (req: NextRequest) => Promise<Response>;
 let CHEIE = "";
@@ -219,12 +222,24 @@ before(async () => {
     auth: { getUser: async () => ({ data: { user: utilizator ? { id: utilizator } : null }, error: null }) },
     from: (tabel: string) => adevarat.from(tabel),
   });
-  (globalThis as unknown as { __r2DeProba: (k: string) => Promise<unknown> }).__r2DeProba =
+  /*
+   * ⚠ DEPOZITUL DE PROBA S-A INTORS PE DOS pe 07.09.2026, odata cu ruta: ea nu mai CITESTE octetii,
+   * ci intreaba in ce galeata sta cheia si da un link semnat. Vezi antetul rutei pentru de ce —
+   * Vercel refuza si raspunsurile de peste 4,5 MB, deci un PDF de tipar de 20 MB nu putea fi
+   * descarcat de comerciant prin forma veche.
+   */
+  (globalThis as unknown as { __r2DeProba: (k: string) => Promise<string | null> }).__r2DeProba =
     async (k) => {
-      if (esecDepozit) return { fel: "eroare", motiv: "proba: depozitul nu raspunde" };
-      const o = depozit[k];
-      return o ? { fel: "octeti", octeti: o } : { fel: "lipsa" };
+      if (esecDepozit) throw new Error("proba: depozitul nu raspunde");
+      return depozit[k] ? GALEATA : null;
     };
+  /* Linkul semnat de proba poarta ce i s-a cerut, ca probele sa se poata uita la el. */
+  (globalThis as unknown as {
+    __linkDeProba: (k: string, b: string, n: string, t: string) => Promise<string>;
+  }).__linkDeProba = async (k, b, n, t) =>
+    /* ⚠ Cheia se CODIFICA: unele chei poarta `?`, si necodificata ar fi rupt chiar adresa. */
+    `https://depozit-de-proba.invalid/${b}/${encodeURIComponent(k)}`
+    + `?nume=${encodeURIComponent(n)}&tip=${encodeURIComponent(t)}`;
 
   ({ GET } = (await import("./route")) as unknown as { GET: typeof GET });
 });
@@ -268,6 +283,28 @@ function cere(p: { cheie?: string; businessId?: string; comanda?: string }) {
   return new NextRequest(u.toString());
 }
 
+/**
+ * Ce a cerut ruta depozitului, citit din linkul semnat.
+ *
+ * ⚠ RUTA NU MAI INTOARCE OCTETI, si de-aia probele de mai jos s-au intors. Ea trece cele patru
+ * porti si apoi da un link semnat, scurt, catre depozit — fiindca Vercel refuza si RASPUNSURILE
+ * de peste 4,5 MB, deci tocmai fisierul de tipar de 20 MB era cel pe care comerciantul nu si-l
+ * putea descarca. Ce se cerea inainte de la corp si de la antete se cere acum de la link.
+ */
+function linkul(r: Response): { bucket: string; cheie: string; nume: string; tip: string } {
+  const loc = r.headers.get("Location");
+  assert.ok(loc, "raspunsul nu poarta niciun link semnat");
+  const u = new URL(loc);
+  const cale = u.pathname.replace(/^\//, "");
+  const taiere = cale.indexOf("/");
+  return {
+    bucket: cale.slice(0, taiere),
+    cheie: decodeURIComponent(cale.slice(taiere + 1)),
+    nume: u.searchParams.get("nume") ?? "",
+    tip: u.searchParams.get("tip") ?? "",
+  };
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    DRUMUL BUN — si el e o proba, fiindca a fost rupt o data
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -275,21 +312,22 @@ function cere(p: { cheie?: string; businessId?: string; comanda?: string }) {
 test("⚠ comerciantul care are comanda primeste octetii, cu antetele care nu lasa urme", async () => {
   const r = await GET(cere({ cheie: CHEIE, businessId: BIZ, comanda: COMANDA }));
 
-  /* Corpul se citeste O SINGURA DATA, deci mesajul de esec nu are voie sa-l consume. */
-  assert.equal(r.status, 200, "fisierul nu s-a servit");
-  assert.equal(Buffer.from(await r.arrayBuffer()).toString(), "octetii-pozei");
-  assert.equal(r.headers.get("Content-Type"), "image/jpeg", "terminatia cheii nu a devenit tip");
+  assert.equal(r.status, 302, "fisierul nu s-a servit");
+  const l = linkul(r);
+  assert.equal(l.cheie, CHEIE, "linkul arata catre alt fisier decat cel cerut");
+  assert.equal(l.bucket, GALEATA, "linkul arata catre alta galeata");
+  assert.equal(l.tip, "image/jpeg", "terminatia cheii nu a devenit tip");
   assert.equal(
     r.headers.get("Cache-Control"), "private, no-store",
-    "poza de familie a unui cumparator poate ramane la un intermediar sau in CDN",
+    "raspunsul poarta un link semnat: cache-uit pe drum, ar putea fi servit altcuiva cat mai e valabil",
   );
 });
 
 test("⚠ si un PDF de tipar iese ca PDF, nu ca octeti anonimi", async () => {
   comenzi[0].items = [{ customization: { f: { type: "fisier", label: "Macheta", value: [CHEIE_PDF] } } }];
   const r = await GET(cere({ cheie: CHEIE_PDF, businessId: BIZ, comanda: COMANDA }));
-  assert.equal(r.status, 200, "PDF-ul nu s-a servit");
-  assert.equal(r.headers.get("Content-Type"), "application/pdf");
+  assert.equal(r.status, 302, "PDF-ul nu s-a servit");
+  assert.equal(linkul(r).tip, "application/pdf");
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -378,8 +416,8 @@ test("⚠ UN SECRET ROTIT NU ASCUNDE fisierele comenzilor deja incasate", async 
   comenzi[0].items = [{ customization: { f: { type: "image", label: "Poză față", value: [cheieVeche] } } }];
 
   const r = await GET(cere({ cheie: cheieVeche, businessId: BIZ, comanda: COMANDA }));
-  assert.equal(r.status, 200, "un secret rotit a ascuns fisierul unei comenzi incasate");
-  assert.equal(Buffer.from(await r.arrayBuffer()).toString(), "macheta-platita");
+  assert.equal(r.status, 302, "un secret rotit a ascuns fisierul unei comenzi incasate");
+  assert.equal(linkul(r).cheie, cheieVeche, "linkul nu arata catre macheta platita");
 });
 
 test("⚠ si totusi o cheie inventata cu forma buna nu se serveste: comanda hotaraste", async () => {
@@ -573,15 +611,14 @@ test("⚠ fiecare fisier se salveaza cu numele LUI, nu cu «fisier.jpg»", async
 
   const numele = async (k: string) => {
     const r = await GET(cere({ cheie: k, businessId: BIZ, comanda: COMANDA }));
-    assert.equal(r.status, 200, `nu s-a servit ${k}`);
-    await r.arrayBuffer();
-    return r.headers.get("Content-Disposition");
+    assert.equal(r.status, 302, `nu s-a servit ${k}`);
+    return linkul(r).nume;
   };
 
   /* Numarul comenzii, eticheta campului (fara diacritice) si a cata valoare e. */
-  assert.equal(await numele(CHEIE), `inline; filename="c-1043-poza-fata-1.jpg"`);
-  assert.equal(await numele(aDoua), `inline; filename="c-1043-poza-fata-2.jpg"`);
-  assert.equal(await numele(CHEIE_PDF), `inline; filename="c-1043-macheta-spate-1.pdf"`);
+  assert.equal(await numele(CHEIE), "c-1043-poza-fata-1.jpg");
+  assert.equal(await numele(aDoua), "c-1043-poza-fata-2.jpg");
+  assert.equal(await numele(CHEIE_PDF), "c-1043-macheta-spate-1.pdf");
 });
 
 test("⚠ un camp FARA eticheta isi ia numele din id-ul lui, nu unul fix", async () => {
@@ -596,13 +633,12 @@ test("⚠ un camp FARA eticheta isi ia numele din id-ul lui, nu unul fix", async
 
   const numele = async (k: string) => {
     const r = await GET(cere({ cheie: k, businessId: BIZ, comanda: COMANDA }));
-    assert.equal(r.status, 200, `nu s-a servit ${k}`);
-    await r.arrayBuffer();
-    return r.headers.get("Content-Disposition");
+    assert.equal(r.status, 302, `nu s-a servit ${k}`);
+    return linkul(r).nume;
   };
 
-  assert.equal(await numele(CHEIE), `inline; filename="c-1043-fata-1.jpg"`);
-  assert.equal(await numele(aDoua), `inline; filename="c-1043-spate-1.jpg"`,
+  assert.equal(await numele(CHEIE), "c-1043-fata-1.jpg");
+  assert.equal(await numele(aDoua), "c-1043-spate-1.jpg",
     "doua campuri fara eticheta au dat acelasi nume de fisier");
 });
 
@@ -614,9 +650,8 @@ test("⚠ cheia gasita in alta forma de `items` tot primeste un nume care o deos
    */
   comenzi[0].items = [{ personalizare_veche: { poze: [CHEIE] } }];
   const r = await GET(cere({ cheie: CHEIE, businessId: BIZ, comanda: COMANDA }));
-  assert.equal(r.status, 200, "o forma necunoscuta de `items` a inchis fisierul");
-  await r.arrayBuffer();
-  assert.equal(r.headers.get("Content-Disposition"), `inline; filename="c-1043-aaaaaaaa.jpg"`);
+  assert.equal(r.status, 302, "o forma necunoscuta de `items` a inchis fisierul");
+  assert.equal(linkul(r).nume, "c-1043-aaaaaaaa.jpg");
 });
 
 test("⚠ o cheie a carei terminatie nu se poate citi iese ca octeti anonimi, nu ghicita", async () => {
@@ -631,10 +666,9 @@ test("⚠ o cheie a carei terminatie nu se poate citi iese ca octeti anonimi, nu
   comenzi[0].items = [{ customization: { f: { label: "Macheta", value: [ciudata] } } }];
 
   const r = await GET(cere({ cheie: ciudata, businessId: BIZ, comanda: COMANDA }));
-  assert.equal(r.status, 200, "o cheie cu terminatie necitibila a inchis fisierul");
-  await r.arrayBuffer();
-  assert.equal(r.headers.get("Content-Type"), "application/octet-stream", "tipul s-a ghicit");
-  assert.equal(r.headers.get("Content-Disposition"), `inline; filename="c-1043-macheta-1.bin"`);
+  assert.equal(r.status, 302, "o cheie cu terminatie necitibila a inchis fisierul");
+  assert.equal(linkul(r).tip, "application/octet-stream", "tipul s-a ghicit");
+  assert.equal(linkul(r).nume, "c-1043-macheta-1.bin");
 });
 
 test("⚠ o eticheta cu ghilimele sau rand nou nu poate rupe antetul", async () => {
@@ -644,10 +678,9 @@ test("⚠ o eticheta cu ghilimele sau rand nou nu poate rupe antetul", async () 
    */
   comenzi[0].items = [{ customization: { f: { label: `Poza" ;\r\n x=y`, value: [CHEIE] } } }];
   const r = await GET(cere({ cheie: CHEIE, businessId: BIZ, comanda: COMANDA }));
-  assert.equal(r.status, 200);
-  await r.arrayBuffer();
+  assert.equal(r.status, 302);
   assert.match(
-    r.headers.get("Content-Disposition") ?? "", /^inline; filename="[a-z0-9.-]+"$/,
+    linkul(r).nume, /^[a-z0-9.-]+$/,
     "in numele fisierului a ajuns text necuratat",
   );
 });
@@ -662,10 +695,9 @@ test("⚠ si o eticheta LUNGA ramane un nume: fiecare bucata se taie la 24 de ca
     customization: { f: { label: "Poza de pe capacul cutiei, varianta finala trimisa de client", value: [CHEIE] } },
   }];
   const r = await GET(cere({ cheie: CHEIE, businessId: BIZ, comanda: COMANDA }));
-  assert.equal(r.status, 200);
-  await r.arrayBuffer();
+  assert.equal(r.status, 302);
   assert.equal(
-    r.headers.get("Content-Disposition"), `inline; filename="c-1043-poza-de-pe-capacul-cutie-1.jpg"`,
+    linkul(r).nume, "c-1043-poza-de-pe-capacul-cutie-1.jpg",
     "eticheta lunga a intrat netaiata in numele fisierului",
   );
 });

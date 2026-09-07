@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, CopyObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Key extraction recognizes every equivalent origin (raw *.r2.dev + CDN domain),
@@ -282,9 +282,31 @@ export async function stergeMulteDinR2(chei: string[]): Promise<{ sterse: number
  */
 const BUCKET_PRIVAT = process.env.R2_BUCKET_PRIVAT?.trim() || "";
 
-/** Galeata privata daca exista, altfel cea de pana acum. Vezi nota de mai sus. */
+/**
+ * Unde se SCRIU incarcarile cumparatorilor.
+ *
+ * ═══ ⚠ NU MAI CADE PE GALEATA PUBLICA — 07.09.2026 ═══
+ *
+ * Aici era `BUCKET_PRIVAT || BUCKET`, si a fost purtarea corecta cat timp galeata privata nu
+ * exista: fara ea, o cadere ar fi oprit vanzarea produselor personalizate pe toata platforma, iar
+ * asta era o paguba mai mare decat cea pe care o apara.
+ *
+ * Acum galeata EXISTA si variabila e obligatorie in productie (vezi `CHEI_OBLIGATORII`). Deci
+ * caderea pe cea publica nu mai apara nimic — ar face doar ca o variabila stearsa din greseala sa
+ * trimita TACUT pozele de familie ale cumparatorilor inapoi pe un domeniu public. Un capat care
+ * refuza e ceva ce se vede si se repara; unul care scrie in alta parte, nu.
+ *
+ * ⚠ ARUNCA, si e chemata numai pe drumurile de SCRIERE (linkul de incarcare, mutarea, stergerea).
+ * Citirea are propria ei cadere inapoi — vezi `citestePrivat`: fisierele urcate inainte de mutare
+ * stau in galeata veche, iar cheile lor sunt deja scrise in comenzi.
+ */
 function galeataIncarcarilor(): string {
-  return BUCKET_PRIVAT || BUCKET;
+  if (!BUCKET_PRIVAT) {
+    throw new Error(
+      "[r2] R2_BUCKET_PRIVAT lipseste: incarcarile cumparatorilor nu se scriu in galeata publica.",
+    );
+  }
+  return BUCKET_PRIVAT;
 }
 
 /** Chiar exista o galeata privata, sau ne bazam inca pe cea publica? */
@@ -292,24 +314,15 @@ export function incarcarileSuntPrivate(): boolean {
   return BUCKET_PRIVAT !== "" && BUCKET_PRIVAT !== BUCKET;
 }
 
-/**
- * Scrie un fisier de cumparator.
+/*
+ * ⚠ AICI STATEA `incarcaPrivat`, si a fost SCOASA pe 07.09.2026 — n-o mai chema nimeni.
  *
- * ⚠ NU INTOARCE NICIO ADRESA, spre deosebire de `uploadToR2`. Aia intoarce adresa publica fiindca
- * asa o cer cele doua duzini de locuri care urca imagini de produs — si chiar adresa aia e lucrul
- * de care fisierele astea au scapat. Aici se intoarce cheia, si atat.
+ * Ea scria octetii primiti de ruta in galeata privata. De cand octetii nu mai trec prin functie
+ * (Vercel refuza cererile de peste 4,5 MB, iar campurile promiteau 10 si 40), browserul ii pune
+ * de-a dreptul in depozit printr-un link semnat — vezi `linkDeIncarcarePrivata` si
+ * `mutaIncarcarea`. Lasata, ar fi fost o a doua cale de scriere pe care nimeni n-o probeaza.
  */
-export async function incarcaPrivat(buffer: Buffer, key: string, contentType: string): Promise<string> {
-  await s3.send(new PutObjectCommand({
-    Bucket: galeataIncarcarilor(),
-    Key: key,
-    Body: buffer,
-    ContentType: contentType,
-    /* Chiar daca galeata e privata: un intermediar nu are voie sa tina poza cuiva un an. */
-    CacheControl: "private, no-store",
-  }));
-  return key;
-}
+
 
 /**
  * Citeste un fisier de cumparator, cu CADERE INAPOI pe galeata de pana acum.
@@ -326,8 +339,15 @@ export async function incarcaPrivat(buffer: Buffer, key: string, contentType: st
  * scoasa, ar rupe comenzile vechi.
  */
 export async function citestePrivat(key: string): Promise<CitireR2> {
+  /*
+   * ⚠ CITIREA NU ARUNCA FARA VARIABILA, spre deosebire de scriere. `galeataIncarcarilor` refuza
+   * acum sa cada pe galeata publica — dar aia e regula SCRIERII: acolo, o cadere ar trimite tacut
+   * poze de familie pe un domeniu public. Aici e invers: fara variabila, singurul loc unde pot sta
+   * fisierele e galeata veche, iar o exceptie ar ascunde comerciantului machetele comenzilor lui.
+   */
+  if (!incarcarileSuntPrivate()) return citesteDinGaleata(BUCKET, key);
   const principala = await citesteDinGaleata(galeataIncarcarilor(), key);
-  if (principala.fel !== "lipsa" || !incarcarileSuntPrivate()) return principala;
+  if (principala.fel !== "lipsa") return principala;
   return citesteDinGaleata(BUCKET, key);
 }
 
@@ -401,4 +421,166 @@ export async function stergeIncarcari(
   }
 
   return { sterse, esecuri };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TRANSPORTUL FISIERELOR MARI — direct intre browser si depozit
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ⚠ DE CE EXISTA, si de ce nu e o optimizare.
+
+   Vercel refuza cererile SI raspunsurile de peste 4,5 MB, cu 413
+   `FUNCTION_PAYLOAD_TOO_LARGE` — inainte ca vreun rand din codul nostru sa ruleze
+   (masurat in documentatia lor, verificata pe 07.09.2026). Iar platforma promitea
+   10 MB pe imagini si 40 MB pe fisiere de tipar: din 26 de campuri vii, 16 promiteau
+   peste 4 MB. O poza de telefon de 6 MB — perfect obisnuita — pica pe un camp
+   OBLIGATORIU, si cumparatorul citea „incarcarea a esuat" pentru un fisier despre
+   care ecranul tocmai ii spusese ca e bun.
+
+   Deci octetii nu mai trec prin functie deloc: browserul ii pune de-a dreptul in
+   galeata privata, printr-un link semnat de noi si valabil cateva minute.
+
+   ⚠ CE NU SE SCHIMBA: nicio verificare nu se pierde. Se MUTA dupa incarcare
+   (`finalizeaza`), unde se citesc octetii ADEVARATI din depozit — si daca nu trec,
+   obiectul se sterge pe loc si nu devine niciodata o cheie buna. */
+
+/**
+ * Link semnat pentru o incarcare directa in galeata INCARCARILOR (cea privata).
+ *
+ * ⚠ ALTA GALEATA DECAT `createPresignedPutUrl`. Aia scrie in galeata publica, pentru
+ * videoclipurile comerciantului; asta scrie unde stau pozele cumparatorilor. Doua functii, ca
+ * nimeni sa nu poata trimite din greseala fisierul unui client in galeata publica printr-un
+ * argument uitat.
+ *
+ * ⚠ SI NU INTOARCE NICIO ADRESA PUBLICA, spre deosebire de sora ei: galeata n-are domeniu, iar
+ * continutul se serveste doar prin `/api/customization-file`.
+ *
+ * ⚠ `contentLength` INTRA IN SEMNATURA, si de-aia e obligatoriu aici. Fara el, plafonul de
+ * marime ar fi ramas o promisiune a clientului: ar fi cerut un link pentru 2 MB si ar fi urcat
+ * 500. Cu el, R2 refuza orice incarcare care n-are EXACT dimensiunea semnata.
+ */
+export async function linkDeIncarcarePrivata(
+  key: string,
+  contentType: string,
+  contentLength: number,
+  expiresIn = 300,
+): Promise<string> {
+  const command = new PutObjectCommand({
+    Bucket: galeataIncarcarilor(),
+    Key: key,
+    ContentType: contentType,
+    ContentLength: contentLength,
+  });
+  return getSignedUrl(s3, command, { expiresIn });
+}
+
+/**
+ * Link semnat pentru CITIREA unui fisier de cumparator, dat comerciantului dupa ce a trecut de
+ * toate portile.
+ *
+ * ⚠ INLOCUIESTE UN RASPUNS DE 40 MB PRIN FUNCTIE. Ruta citea tot obiectul intr-un `Buffer` si il
+ * intorcea ca raspuns — peste 4,5 MB, Vercel il taia. Deci comerciantul nu-si putea descarca
+ * tocmai fisierul de tipar dupa care produce marfa.
+ *
+ * ⚠ SCURT DINADINS (un minut): linkul ocoleste cele patru porti ale rutei, deci nu are voie sa
+ * traiasca mai mult decat ii trebuie browserului ca sa inceapa descarcarea.
+ *
+ * ⚠ NUMELE DE SALVARE se semneaza si el: fara `ResponseContentDisposition`, browserul ar fi
+ * salvat fisierul cu numele cheii — 65 de caractere de hexazecimal.
+ */
+export async function linkDeCitirePrivata(
+  key: string,
+  bucket: string,
+  numeDeSalvare: string,
+  contentType: string,
+  expiresIn = 60,
+): Promise<string> {
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ResponseContentType: contentType,
+    /* ⚠ Numele se curata: un `"` sau un rand nou in antet ar fi despartit raspunsul in doua. */
+    ResponseContentDisposition:
+      `attachment; filename="${numeDeSalvare.replace(/[^\w.\- ]+/g, "_").slice(0, 120)}"`,
+    ResponseCacheControl: "private, no-store",
+  });
+  return getSignedUrl(s3, command, { expiresIn });
+}
+
+/** In care galeata sta cheia — sau `null` daca in niciuna. Descarcarea are nevoie sa stie. */
+export async function galeataCheii(key: string): Promise<string | null> {
+  for (const bucket of incarcarileSuntPrivate() ? [galeataIncarcarilor(), BUCKET] : [BUCKET]) {
+    try {
+      await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+      return bucket;
+    } catch (e) {
+      if (!esteObiectLipsa(e)) throw e;
+    }
+  }
+  return null;
+}
+
+/** Cat de mare e si ce zice ca e — fara sa aducem octetii. */
+export async function masoaraIncarcarea(
+  key: string,
+): Promise<{ octeti: number; contentType: string } | null> {
+  try {
+    const r = await s3.send(new HeadObjectCommand({ Bucket: galeataIncarcarilor(), Key: key }));
+    return { octeti: r.ContentLength ?? 0, contentType: r.ContentType ?? "" };
+  } catch (e) {
+    if (esteObiectLipsa(e)) return null;
+    throw e;
+  }
+}
+
+/**
+ * Primii octeti ai unui obiect, fara sa-l aducem intreg.
+ *
+ * ⚠ ATAT TREBUIE ca sa se hotarasca ce e fisierul: semnatura de format sta in primii octeti, iar
+ * `sharp().metadata()` citeste doar ANTETUL, nu decodeaza imaginea. Adus intreg, un PDF de tipar
+ * de 40 MB ar fi intrat in memoria functiei degeaba — si tocmai de asemenea drumuri scapam aici.
+ */
+export async function inceputulIncarcarii(key: string, octeti: number): Promise<Buffer | null> {
+  try {
+    const r = await s3.send(new GetObjectCommand({
+      Bucket: galeataIncarcarilor(), Key: key, Range: `bytes=0-${Math.max(0, octeti - 1)}`,
+    }));
+    if (!r.Body) return null;
+    return Buffer.from(await r.Body.transformToByteArray());
+  } catch (e) {
+    if (esteObiectLipsa(e)) return null;
+    throw e;
+  }
+}
+
+/**
+ * Muta obiectul de pe cheia provizorie pe cea definitiva, in aceeasi galeata.
+ *
+ * ⚠ COPIEREA E FACUTA DE DEPOZIT, nu de noi: octetii nu trec prin functie, deci un fisier de 40 MB
+ * costa aici cat unul de 40 KB.
+ *
+ * ⚠ DE CE PRIN DOUA CHEI, si nu direct pe cea buna: cheia definitiva poarta semnatura noastra, iar
+ * `esteCheiaNoastra` o accepta la comanda. Daca browserul ar scrie de-a dreptul pe ea, un fisier
+ * NEVERIFICAT ar fi avut deja o cheie valabila — clientul ar fi putut sari peste `finalizeaza` si
+ * trimite in comanda orice octeti, sub o cheie pe care poarta comenzii o crede a noastra. Asa,
+ * cheia buna se naste abia DUPA ce octetii au trecut verificarea.
+ */
+export async function mutaIncarcarea(deLa: string, la: string, contentType: string): Promise<void> {
+  const bucket = galeataIncarcarilor();
+  await s3.send(new CopyObjectCommand({
+    Bucket: bucket,
+    CopySource: `${bucket}/${encodeURIComponent(deLa).replace(/%2F/g, "/")}`,
+    Key: la,
+    ContentType: contentType,
+    MetadataDirective: "REPLACE",
+    CacheControl: "private, no-store",
+  }));
+  await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: deLa }));
+}
+
+/** Sterge o incarcare din galeata incarcarilor. Se cheama cand verificarea de dupa incarcare pica. */
+export async function stergeIncarcarea(key: string): Promise<void> {
+  try {
+    await s3.send(new DeleteObjectCommand({ Bucket: galeataIncarcarilor(), Key: key }));
+  } catch { /* stergerea unui obiect deja disparut nu e o problema */ }
 }

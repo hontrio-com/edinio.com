@@ -135,9 +135,17 @@ test("⚠ „incepe finalizarea” raporteaza pretul AUTORITAR, pe AMANDOUA drum
    * lasat deosebirea asta sa existe: reparat unul, „exista o proba" devine adevarat, si a doua
    * jumatate a magazinelor ramane gresita in tacere.
    */
+  /*
+   * ⚠ TREI DRUMURI, NU DOUA — al treilea gasit de auditul urmator, dupa ce doua erau deja reparate.
+   * „Cumpara acum" n-are pas de cos, deci evenimentul pleaca din `OrderModal`, si acolo mergea
+   * `product.price`: 89 pentru un fototapet de 910. Cu doua locuri verificate, „exista o proba"
+   * devenise adevarat si al treilea a ramas gresit in tacere — chiar tiparul pe care nota de mai sus
+   * il descrie.
+   */
   for (const [nume, f] of [
     ["pagina de finalizare", "src/components/storefront/sections/checkout/CheckoutPageClient.tsx"],
     ["modalul din sertar", "src/components/ministore/MiniStoreRenderer.tsx"],
+    ["cumpara acum", "src/components/ministore/OrderModal.tsx"],
   ] as const) {
     const s = sursa(f);
     /*
@@ -151,7 +159,7 @@ test("⚠ „incepe finalizarea” raporteaza pretul AUTORITAR, pe AMANDOUA drum
     assert.ok(randuri.length >= 2, `${nume}: am gasit ${randuri.length} apeluri, asteptam 2`);
     for (const r of randuri) {
       assert.ok(
-        !/price: i\.price/.test(r),
+        !/price: i\.price/.test(r) && !/price: Number\(product\.price\)/.test(r),
         `${nume} raporteaza inca pretul de catalog langa un total autoritar:\n${r.trim()}`,
       );
     }
@@ -159,10 +167,13 @@ test("⚠ „incepe finalizarea” raporteaza pretul AUTORITAR, pe AMANDOUA drum
      * ⚠ SI PERECHEA: pretul autoritar chiar se foloseste undeva pentru linii. Fara ea, un apel
      * care ar scoate cu totul `price` ar fi trecut verde — „nu mai raporteaza gresit" nu inseamna
      * „raporteaza".
+     *
+     * ⚠ Doua nume, fiindca sunt doua surse ale aceleiasi sume: cosul o da prin `lineUnit(i)`, iar
+     * „cumpara acum" prin `productSubtotal / cantitate` — acelasi numar ca sub butonul de plata.
      */
     assert.ok(
-      /price: lineUnit\(i\)/.test(s),
-      `${nume} nu foloseste nicaieri pretul de linie al cosului`,
+      /price: lineUnit\(i\)/.test(s) || /price: pePiesa/.test(s),
+      `${nume} nu foloseste nicaieri pretul autoritar al liniei`,
     );
   }
 });

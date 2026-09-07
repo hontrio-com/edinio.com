@@ -160,16 +160,32 @@ test("⚠ lantul e INTREG: ruta cere felul, iar cele trei ecrane nu deseneaza mi
    * ramane aceeasi garantie — ca documentele au plafonul si verificarea LOR —, dar sursa felului
    * nu mai poate fi aleasa de cel care incarca.
    */
+  /*
+   * ⚠ S-A DESPARTIT IN DOUA PE 07.09.2026, si scrie aici pe unde s-a dus fiecare bucata.
+   *
+   * Octetii nu mai trec prin functie — Vercel refuza cererile de peste 4,5 MB, iar platforma
+   * promitea 10 si 40 MB. Deci: ruta de VOIE da un link semnat (si acolo se cere plafonul, pe
+   * marimea declarata), iar ruta de FINALIZARE citeste octetii adevarati din depozit si hotaraste.
+   *
+   * Felul campului iese din permis in AMANDOUA, ca inainte: nu se mai poate cere de la client.
+   */
   const ruta = sursa("src/app/api/upload-customization/route.ts");
+  const fin = sursa("src/app/api/upload-customization/finalizeaza/route.ts");
   assert.match(ruta, /const cereDocumente = verdict\.document;/);
-  assert.match(ruta, /const document = cereDocumente \? detectDocMime\(buffer\) : null;/);
-  assert.match(ruta, /"application\/pdf": "pdf",/, "ruta n-ar sti ce terminatie sa puna");
-  assert.match(ruta, /const plafon = cereDocumente \? MAX_SIZE_DOC : MAX_SIZE;/);
+  assert.match(fin, /const cereDocumente = verdict\.document;/);
+  assert.match(fin, /const document = cereDocumente \? detectDocMime\(inceput\) : null;/);
+  assert.match(fin, /"application\/pdf": "pdf",/, "finalizarea n-ar sti ce terminatie sa puna");
+  assert.match(ruta, /const plafon = cereDocumente \? MAX_SIZE_DOC : MAX_SIZE;/,
+    "voia nu mai margineste marimea declarata");
+  assert.match(fin, /const plafon = cereDocumente \? MAX_SIZE_DOC : MAX_SIZE;/,
+    "finalizarea nu mai margineste marimea ADEVARATA");
   /* ⚠ Si felul nu se mai poate cere din formular — altfel vechea usa ar fi ramas deschisa alaturi. */
-  assert.equal(
-    /formData\.get\("documente"\)/.test(ruta), false,
-    "ruta accepta iar felul campului de la client",
-  );
+  for (const [nume, v] of [["voia", ruta], ["finalizarea", fin]] as const) {
+    assert.equal(
+      /documente"\)/.test(v), false,
+      `${nume} accepta iar felul campului de la client`,
+    );
+  }
 
   /*
    * 2. Carligul spune CARE camp, iar felul lui il stie permisul.
@@ -178,10 +194,23 @@ test("⚠ lantul e INTREG: ruta cere felul, iar cele trei ecrane nu deseneaza mi
    * tot de aici, reparatia de mai sus ar fi fost degeaba.
    */
   const carlig = sursa("src/components/storefront/sections/product/_shared/usePersonalizare.ts");
-  assert.match(carlig, /const documente = camp\.type === "fisier";/);
-  assert.match(carlig, /fd\.append\("camp", camp\.id\);/);
+  /*
+   * ⚠ PLAFONUL FIECARUI TIP vine dintr-un singur loc: `megaoctetiiCampului(camp.type)` — 10 MB la
+   * imagine, 40 la fisier. Aici se cerea un steag local `documente`, care a ramas fara treaba cand
+   * felul campului a inceput sa iasa din PERMIS; scos, sursa e una singura.
+   */
+  assert.match(carlig, /megaoctetiiCampului\(camp\.type\)/, "carligul nu mai stie plafonul tipului");
+  assert.match(carlig, /camp: camp\.id/, "carligul nu mai spune CARE camp");
+  /*
+   * ⚠ SI NU MAI DECLARA EL FELUL. Trimitea `documente=1`, adica cerea singur plafonul de 40 MB —
+   * si il putea cere si de pe un camp de imagine, unde el e 10.
+   */
+  /*
+   * ⚠ SE CITESTE CODUL, NU COMENTARIILE — a treia oara cand proiectul cade pe asta. Chiar nota care
+   * EXPLICA de ce nu se mai trimite `documente=1` contine cuvantul, si proba pica pe ea.
+   */
   assert.equal(
-    /fd\.append\("documente"/.test(carlig), false,
+    /documente/.test(carlig.replace(/\/\*[\s\S]*?\*\//g, "")), false,
     "carligul declara iar singur ca urca un document",
   );
 

@@ -152,7 +152,10 @@ test("⚠ ruta nu mai intreaba baza daca magazinul e publicat", () => {
   const ruta = sursa("src/app/api/upload-customization/route.ts");
   assert.equal(/is_published/.test(ruta), false, "ruta intreaba iar baza despre publicare");
   assert.equal(/fail open/i.test(ruta.replace(/AICI STATEA[\s\S]*?\*\//, "")), false, "a ramas o cadere deschisa");
-  assert.match(ruta, /verificaPermisul\(permis, campId \?\? ""\)/, "ruta nu verifica permisul");
+  assert.match(ruta, /verificaPermisul\(permis, campId\)/, "ruta nu verifica permisul");
   /* ⚠ Si `business_id` nu mai vine de la client: era in HTML-ul fiecarui magazin. */
-  assert.equal(/formData\.get\("business_id"\)/.test(ruta), false, "ruta ia iar magazinul de la client");
+  assert.equal(/business_id"\)/.test(ruta), false, "ruta ia iar magazinul de la client");
+  /* ⚠ SI PE RUTA DE FINALIZARE, cea care da cheia buna: permisul se cere si acolo. */
+  const fin = sursa("src/app/api/upload-customization/finalizeaza/route.ts");
+  assert.match(fin, /verificaPermisul\(permis, campId\)/, "finalizarea nu verifica permisul");
 });

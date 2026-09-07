@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { citestePrivat } from "@/lib/r2";
+import { galeataCheii, linkDeCitirePrivata } from "@/lib/r2";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { areFormaCheii } from "@/lib/customization/fisiere-private";
 import { terminatia } from "@/lib/customization/adresa";
@@ -243,22 +243,40 @@ export async function GET(req: NextRequest) {
   }
 
   /*
-   * ⚠ DEPOZITUL CAZUT NU E „FISIER NEGASIT”.
+   * ═══ ⚠ OCTETII NU MAI TREC PRIN FUNCTIE ═══
    *
-   * `getFromR2` intoarce `null` si pentru lipsa, si pentru un incident R2 sau o credentiala
-   * schimbata. Tradus in 404, comerciantul afla ca macheta „s-a pierdut” si ii cerea clientului sa
-   * o trimita din nou — cand trebuia doar sa mai incerce peste zece minute. Deci se cere citirea
-   * care DEOSEBESTE (`citesteDinR2`), si esecul iese cu acelasi 503 ca o baza cazuta.
+   * Aici se citea tot obiectul intr-un `Buffer` si se intorcea ca raspuns. Nu putea sa mearga
+   * pentru fisierele mari, si nu din vina codului: Vercel refuza si RASPUNSURILE de peste 4,5 MB,
+   * cu 413 `FUNCTION_PAYLOAD_TOO_LARGE`. Adica tocmai fisierul de tipar de 20 MB — cel dupa care
+   * comerciantul produce marfa — era cel pe care nu si-l putea descarca.
+   *
+   * Acum, dupa ce s-au trecut TOATE portile de mai sus (sesiune, proprietatea magazinului, comanda,
+   * cheia chiar pe comanda aia), se da un link semnat catre depozit, valabil un minut, si browserul
+   * ia octetii de-a dreptul de acolo.
+   *
+   * ⚠ PORTILE RAMAN INTREGI. Linkul se emite DUPA ele, nu in locul lor — si traieste un minut,
+   * exact cat ii trebuie browserului sa inceapa descarcarea. Nu se poate da mai departe, si nu
+   * poate fi refolosit maine.
+   *
+   * ⚠ SE CAUTA IN AMANDOUA GALETILE: fisierele urcate inainte de galeata privata au ramas in cea
+   * publica, iar comenzile lor se deschid mai departe.
    */
-  const citire = await citestePrivat(cheie);
-  if (citire.fel === "eroare") {
-    console.error("[customization-file] depozitul nu a putut fi citit", { motiv: citire.motiv });
+  let bucket: string | null;
+  try {
+    bucket = await galeataCheii(cheie);
+  } catch (e) {
+    /*
+     * ⚠ DEPOZITUL CAZUT NU E „FISIER NEGASIT”. Tradus in 404, comerciantul afla ca macheta „s-a
+     * pierdut" si ii cerea clientului sa o trimita din nou — cand trebuia doar sa mai incerce peste
+     * zece minute. Esecul iese cu acelasi 503 ca o baza cazuta.
+     */
+    console.error("[customization-file] depozitul nu a putut fi citit", { motiv: String(e) });
     return NextResponse.json(
       { error: "Nu am putut verifica fisierul. Incearca din nou." },
       { status: 503 },
     );
   }
-  if (citire.fel === "lipsa") {
+  if (!bucket) {
     return NextResponse.json({ error: "Fisier negasit" }, { status: 404 });
   }
 
@@ -274,13 +292,28 @@ export async function GET(req: NextRequest) {
    * anonimi si `.bin` sunt raspunsul cinstit, nu un `Content-Type` ghicit.
    */
   const ext = terminatia(cheie) ?? "bin";
-  return new NextResponse(new Uint8Array(citire.octeti), {
-    headers: {
-      "Content-Type": TIP_DUPA_EXT[ext] ?? "application/octet-stream",
-      "Cache-Control": "private, no-store",
+
+  try {
+    const link = await linkDeCitirePrivata(
+      cheie,
+      bucket,
       /* ⚠ Numele vine din comanda si din cheie, deci din datele noastre — nu de la client. */
-      "Content-Disposition":
-        `inline; filename="${numeDescarcare(comanda.order_number, comanda.items, cheie, ext)}"`,
-    },
-  });
+      numeDescarcare(comanda.order_number, comanda.items, cheie, ext),
+      TIP_DUPA_EXT[ext] ?? "application/octet-stream",
+    );
+    /*
+     * ⚠ 302 SI `no-store`: raspunsul asta poarta un link semnat. Cache-uit undeva pe drum, el ar
+     * putea fi servit altcuiva cat timp mai e valabil.
+     */
+    return NextResponse.redirect(link, {
+      status: 302,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (e) {
+    console.error("[customization-file] linkul semnat nu s-a putut da", { motiv: String(e) });
+    return NextResponse.json(
+      { error: "Nu am putut verifica fisierul. Incearca din nou." },
+      { status: 503 },
+    );
+  }
 }

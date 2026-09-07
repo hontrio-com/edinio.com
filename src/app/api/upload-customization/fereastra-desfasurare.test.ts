@@ -148,7 +148,11 @@ const HOOK = `data:text/javascript,${encodeURIComponent(
      if (specifier === "@/lib/r2") {
        return {
          url: "data:text/javascript," + encodeURIComponent(
-           "export const incarcaPrivat = async (b, k, t) => globalThis.__r2DeProba(b, k, t);"),
+           "export const linkDeIncarcarePrivata = async (k, t, n) => globalThis.__depozit.link(k, t, n);"
+           + "export const masoaraIncarcarea = async (k) => globalThis.__depozit.masoara(k);"
+           + "export const inceputulIncarcarii = async (k, n) => globalThis.__depozit.inceput(k, n);"
+           + "export const mutaIncarcarea = async (a, b, t) => globalThis.__depozit.muta(a, b, t);"
+           + "export const stergeIncarcarea = async (k) => globalThis.__depozit.sterge(k);"),
          shortCircuit: true, format: "module",
        };
      }
@@ -165,9 +169,17 @@ const HOOK = `data:text/javascript,${encodeURIComponent(
  * `galeata-privata.test.ts`, „`incarcaPrivat` nu intoarce nicio adresa".
  */
 type Scriere = { cheie: string; tip: string; octeti: number };
+/** Ce a ajuns pe o cheie DEFINITIVA — adica ce a trecut de toate verificarile. */
 let scrieri: Scriere[] = [];
+/** Ce sta chiar acum in depozit, pe orice cheie. Browserul „urca" scriind aici. */
+let depozit: Record<string, { octeti: Buffer; tip: string }> = {};
+/** Ce s-a sters, in ordine: asa se vede ca un fisier refuzat chiar pleaca. */
+let sterse: string[] = [];
+/** Linkurile date, cu ce s-a semnat in ele. */
+let linkuri: { cheie: string; tip: string; octeti: number }[] = [];
 
 let POST: (req: NextRequest) => Promise<Response>;
+let FINAL: (req: NextRequest) => Promise<Response>;
 
 before(async () => {
   await new Promise<void>((r) => baza.listen(0, "127.0.0.1", () => r()));
@@ -177,13 +189,30 @@ before(async () => {
   process.env.CUSTOMIZATION_FILE_SECRET = "secret-de-proba-pentru-semnatura";
 
   register(HOOK);
-  (globalThis as unknown as { __r2DeProba: (b: Buffer, k: string, t: string, c: string) => Promise<string> })
-    .__r2DeProba = async (b, k, t, c) => {
-      scrieri.push({ cheie: k, tip: t, octeti: b.length });
-      return `${CDN}/${k}`;
-    };
+  /*
+   * ⚠ DEPOZITUL DE PROBA, nu o pipa. De pe 07.09.2026 octetii nu mai trec prin functie: browserul
+   * ii pune de-a dreptul in depozit, printr-un link semnat. Aici „urcarea" e o scriere in `depozit`,
+   * facuta chiar de proba — exact ce face browserul in productie.
+   */
+  (globalThis as unknown as { __depozit: unknown }).__depozit = {
+    link: async (k: string, t: string, n: number) => {
+      linkuri.push({ cheie: k, tip: t, octeti: n });
+      return `https://depozit-de-proba.invalid/${encodeURIComponent(k)}`;
+    },
+    masoara: async (k: string) =>
+      depozit[k] ? { octeti: depozit[k].octeti.length, contentType: depozit[k].tip } : null,
+    inceput: async (k: string, n: number) => (depozit[k] ? depozit[k].octeti.subarray(0, n) : null),
+    muta: async (de: string, la: string, t: string) => {
+      const o = depozit[de];
+      delete depozit[de];
+      depozit[la] = { octeti: o.octeti, tip: t };
+      scrieri.push({ cheie: la, tip: t, octeti: o.octeti.length });
+    },
+    sterge: async (k: string) => { delete depozit[k]; sterse.push(k); },
+  };
 
   ({ POST } = (await import("./route")) as unknown as { POST: typeof POST });
+  ({ POST: FINAL } = (await import("./finalizeaza/route")) as unknown as { POST: typeof FINAL });
 });
 
 after(async () => {
@@ -196,6 +225,9 @@ beforeEach(() => {
   apeluri = [];
   cai = [];
   scrieri = [];
+  depozit = {};
+  sterse = [];
+  linkuri = [];
 });
 
 /**
@@ -206,21 +238,26 @@ beforeEach(() => {
  * verifica, iar proba ar fi devenit una care pica dupa ordinea in care e rulata.
  */
 let nrIp = 0;
-function cere(p: {
+interface Parametri {
   ip?: string;
   businessId?: string | null;
-  octeti?: Buffer | null;
+  /** Octetii pe care ii „urca" browserul. Implicit un PNG adevarat. */
+  octeti?: Buffer;
   documente?: boolean;
   /** Permis dat de-a gata — pentru probele care vor unul stricat, expirat sau lipsa. */
   permis?: string | null;
   /** Ce camp se declara. Implicit cel care exista in permis. */
   camp?: string;
-} = {}) {
+  /** Ce tip DECLARA clientul. Implicit cel potrivit campului — se rejudeca pe octeti la finalizare. */
+  tip?: string;
+  /** Ce marime DECLARA clientul, cand proba vrea alta decat cea adevarata. */
+  marime?: number;
+  /** Ce referinta trimite la finalizare, cand proba vrea una straina. */
+  referinta?: string;
+}
+
+function cere(p: Parametri = {}) {
   const ip = p.ip ?? `203.0.113.${++nrIp}`;
-  const fd = new FormData();
-  if (p.octeti !== null) {
-    fd.append("file", new File([new Uint8Array(p.octeti ?? PNG)], "poza.png", { type: "image/png" }));
-  }
   /*
    * ⚠ AICI STATEA `business_id`, TRIMIS DE CLIENT. De pe 07.09.2026 ruta cere un PERMIS semnat pe
    * server: magazinul, produsul, campurile de fisier si FELUL fiecaruia ies din el, nu din ce
@@ -229,14 +266,59 @@ function cere(p: {
   const permis = p.permis !== undefined
     ? p.permis
     : semneazaPermisul(p.businessId ?? BIZ, PRODUS, { poza: "i", tipar: "d" });
-  if (permis !== null) fd.append("permis", permis);
-  fd.append("camp", p.camp ?? (p.documente ? "tipar" : "poza"));
+  /*
+   * ⚠ SI NU MAI PLEACA NICIUN OCTET PE AICI. Ruta da doar voie: primeste tipul si marimea
+   * DECLARATE si intoarce un link semnat. Vezi antetul ei pentru de ce — Vercel refuza cererile de
+   * peste 4,5 MB, iar campurile promiteau 10 si 40.
+   */
+  const trup = p.octeti ?? PNG;
   const req = new NextRequest("https://magazin.edinio.com/api/upload-customization", {
     method: "POST",
-    body: fd,
-    headers: { "x-forwarded-for": ip },
+    body: JSON.stringify({
+      ...(permis !== null ? { permis } : {}),
+      camp: p.camp ?? (p.documente ? "tipar" : "poza"),
+      tip: p.tip ?? (p.documente ? "application/pdf" : "image/png"),
+      octeti: p.marime ?? trup.length,
+    }),
+    headers: { "x-forwarded-for": ip, "content-type": "application/json" },
   });
   return { req, ip };
+}
+
+/**
+ * Drumul INTREG, asa cum il face browserul: cere voie, urca octetii, cere verdictul.
+ *
+ * ⚠ „URCAREA" E O SCRIERE DIRECTA IN DEPOZITUL DE PROBA — exact ce face browserul in productie,
+ * prin linkul semnat. Serverul nu vede octetii pe drumul asta; ii citeste abia la finalizare, din
+ * depozit.
+ */
+async function urca(p: Parametri = {}) {
+  const { req, ip } = cere(p);
+  const voie = await POST(req);
+  if (voie.status !== 200) return { voie, final: null, ip };
+
+  const { referinta } = (await voie.json()) as { referinta: string };
+  depozit[referinta] = {
+    octeti: Buffer.from(p.octeti ?? PNG),
+    tip: p.documente ? "application/pdf" : "image/png",
+  };
+
+  const permis = p.permis !== undefined
+    ? p.permis
+    : semneazaPermisul(p.businessId ?? BIZ, PRODUS, { poza: "i", tipar: "d" });
+  const final = await FINAL(new NextRequest(
+    "https://magazin.edinio.com/api/upload-customization/finalizeaza",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...(permis !== null ? { permis } : {}),
+        camp: p.camp ?? (p.documente ? "tipar" : "poza"),
+        referinta: p.referinta ?? referinta,
+      }),
+      headers: { "x-forwarded-for": ip, "content-type": "application/json" },
+    },
+  ));
+  return { voie, final, referinta, ip };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -261,11 +343,10 @@ test("⚠ FEREASTRA E INCHISA: raspunsul nu mai poarta nicio adresa", async () =
    * ⚠ SE CERE PE VALOARE, nu doar pe numele cheii: `url` redenumit in `adresa`, `href` sau
    * `publicUrl` ar fi trecut de o proba care se uita numai la `Object.keys`.
    */
-  const { req } = cere();
-  const r = await POST(req);
-  assert.equal(r.status, 200, "incarcarea a esuat inainte sa se ajunga la forma raspunsului");
+  const { final } = await urca();
+  assert.equal(final?.status, 200, "incarcarea a esuat inainte sa se ajunga la forma raspunsului");
 
-  const date = (await r.json()) as Record<string, unknown>;
+  const date = (await final!.json()) as Record<string, unknown>;
   assert.deepEqual(Object.keys(date), ["cheie"], "raspunsul poarta si altceva decat cheia");
 
   const brut = JSON.stringify(date);
@@ -273,11 +354,43 @@ test("⚠ FEREASTRA E INCHISA: raspunsul nu mai poarta nicio adresa", async () =
   assert.equal(/https?:\/\//.test(brut), false, `raspunsul poarta o adresa: ${brut}`);
 });
 
-test("⚠ cheia intoarsa e chiar fisierul scris, si trece de poarta comenzii", async () => {
+test("⚠ VOIA nu da nicio adresa PUBLICA, si nici o cheie buna", async () => {
+  /*
+   * ═══ ⚠ PASUL 1 ESTE ACUM SUPRAFATA CEA MAI EXPUSA ═══
+   *
+   * El intoarce un link semnat catre depozit. Doua lucruri nu are voie sa dea:
+   *
+   *   ADRESA PUBLICA — chiar lucrul de care fisierele astea au scapat; plecata in raspuns, ea
+   *   ajunge in comanda si de acolo in emailuri, ani de zile.
+   *
+   *   O CHEIE BUNA — daca `referinta` ar trece de `esteCheiaNoastra`, cine cere voie ar putea sa NU
+   *   mai urce nimic, sa nu cheme finalizarea, si totusi sa trimita cheia in comanda. Comerciantul
+   *   ar primi o comanda cu un fisier care nu exista. Sau, mai rau, ar urca ce vrea si ar sari
+   *   peste verificari.
+   */
   const { req } = cere();
   const r = await POST(req);
   assert.equal(r.status, 200);
-  const date = (await r.json()) as Record<string, unknown>;
+  const date = (await r.json()) as { incarcare: string; referinta: string };
+  assert.deepEqual(Object.keys(date).sort(), ["incarcare", "referinta"]);
+  assert.equal(date.incarcare.includes(CDN), false, "linkul arata catre domeniul public");
+  assert.equal(
+    esteCheiaNoastra(date.referinta, BIZ), false,
+    "referinta provizorie trece de poarta comenzii: se putea sari peste verificari cu totul",
+  );
+  assert.deepEqual(scrieri, [], "s-a scris pe o cheie definitiva inainte de vreo verificare");
+
+  /* ⚠ Si marimea INTRA IN LINK: fara ea, plafonul ar fi ramas o promisiune a clientului. */
+  assert.deepEqual(
+    linkuri, [{ cheie: date.referinta, tip: "image/png", octeti: PNG.length }],
+    "linkul nu leaga marimea, deci cine cere voie pentru 2 MB poate urca 500",
+  );
+});
+
+test("⚠ cheia intoarsa e chiar fisierul scris, si trece de poarta comenzii", async () => {
+  const { final } = await urca();
+  assert.equal(final?.status, 200);
+  const date = (await final!.json()) as Record<string, unknown>;
 
   const cheie = date.cheie as string;
   assert.equal(
@@ -298,11 +411,13 @@ test("⚠ cheia intoarsa e chiar fisierul scris, si trece de poarta comenzii", a
 });
 
 test("⚠ raspunsul de EROARE nu poarta nici cheie, nici adresa", async () => {
-  const { req } = cere({ octeti: null });
+  /* ⚠ „Fara fisier" a devenit „fara marime": ruta nu mai primeste octeti, ci o declaratie. */
+  const { req } = cere({ marime: 0 });
   const r = await POST(req);
   assert.equal(r.status, 400);
   assert.deepEqual(Object.keys((await r.json()) as object), ["error"]);
   assert.deepEqual(scrieri, [], "s-a scris in depozit pentru o cerere refuzata");
+  assert.deepEqual(linkuri, [], "s-a dat un link semnat pentru o cerere refuzata");
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -451,11 +566,12 @@ test("⚠ un fisier PESTE plafon e refuzat INAINTE sa consume cota de octeti", a
 
 test("⚠ contorul cazut LASA cumparatorul sa urce — limitatorul nu devine el caderea", async () => {
   cadeRpc = true;
-  const r = await POST(cere().req);
+  const { voie, final } = await urca();
   assert.equal(
-    r.status, 200,
+    voie.status, 200,
     "o baza care clipeste opreste incarcarile: la un camp obligatoriu, asta e comanda pierduta",
   );
+  assert.equal(final?.status, 200, "finalizarea a cazut cu baza, desi ea nici n-o atinge");
   assert.equal(scrieri.length, 1, "fisierul n-a ajuns in depozit");
 });
 
@@ -481,14 +597,21 @@ test("⚠ primul strat, cel din memorie, taie rafala FARA sa atinga baza", async
   }
   const apeluriInainte = apeluri.length;
   const caiInainte = cai.length;
+  const linkuriInainte = linkuri.length;
 
   const r = await POST(cere({ ip }).req);
   assert.equal(r.status, 429, "stratul din memorie nu mai opreste nimic: rafala trece intreaga la baza");
+  /* ⚠ Cele douazeci de dinainte si-au luat linkul, cum trebuie; a douazeci si una nu. */
+  assert.equal(linkuri.length, linkuriInainte, "s-a dat un link semnat desi rafala fusese oprita");
   assert.match(
     (await r.json() as { error: string }).error, /in scurt timp/i,
     "a raspuns alt refuz decat cel din memorie",
   );
-  assert.equal(scrieri.length, 20, "cererea taiata a scris totusi in depozit");
+  /*
+   * ⚠ ZERO, NU DOUAZECI — si asta e chiar mutarea. Cererile de VOIE nu scriu nimic: ele dau un
+   * link. In depozit ajunge ceva abia dupa ce browserul urca si finalizarea verifica.
+   */
+  assert.equal(scrieri.length, 0, "cererea de voie a scris totusi in depozit");
   assert.equal(apeluri.length, apeluriInainte, "cererea taiata a mai consultat o data contorul din baza");
   assert.equal(cai.length, caiInainte, "cererea taiata a atins totusi baza");
 });
@@ -569,16 +692,135 @@ test("⚠ terminatia cheii urmeaza OCTETII, nu antetul trimis de browser", async
    * dispozitie. Un PDF de tipar scris `.jpg` ar fi o cheie semnata, valida, si desenata ca poza
    * rupta chiar comerciantului care trebuie sa execute comanda.
    */
-  const rPng = await POST(cere().req);
-  assert.equal(rPng.status, 200);
+  const png = await urca();
+  assert.equal(png.final?.status, 200);
   assert.equal(scrieri.length, 1);
   assert.match(scrieri[0].cheie, /\.png$/, `octeti PNG scrisi sub cheia ${scrieri[0].cheie}`);
   assert.equal(scrieri[0].tip, "image/png");
 
   scrieri = [];
-  const rPdf = await POST(cere({ octeti: PDF, documente: true }).req);
-  assert.equal(rPdf.status, 200, "PDF-ul de tipar a fost refuzat");
+  const pdf = await urca({ octeti: PDF, documente: true });
+  assert.equal(pdf.final?.status, 200, "PDF-ul de tipar a fost refuzat");
   assert.equal(scrieri.length, 1);
   assert.match(scrieri[0].cheie, /\.pdf$/, `octeti PDF scrisi sub cheia ${scrieri[0].cheie}`);
   assert.equal(scrieri[0].tip, "application/pdf");
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VERIFICAREA DE DUPA INCARCARE — paza care s-a MUTAT, nu s-a pierdut
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ octetii care NU trec verificarea nu capata cheie buna, si se STERG pe loc", async () => {
+  /*
+   * ═══ ⚠ CEA MAI IMPORTANTA PROBA A MUTARII ═══
+   *
+   * Cat timp octetii treceau prin functie, un fisier care nu era imagine nici nu ajungea in
+   * depozit. Acum ajunge — browserul il pune acolo direct — deci intrebarea devine alta: ce se
+   * intampla cu el dupa ce se afla ca nu e bun?
+   *
+   * Doua lucruri, si amandoua se cer aici: nu primeste cheie buna (deci nu poate intra intr-o
+   * comanda), si nu ramane pe factura comerciantului nici treizeci de zile.
+   */
+  const gunoi = Buffer.from("nu-sunt-o-imagine-si-nici-un-pdf-doar-text");
+  const { final, referinta } = await urca({ octeti: gunoi });
+
+  assert.equal(final?.status, 400, "octeti care nu-s imagine au primit o cheie buna");
+  assert.deepEqual(scrieri, [], "s-a scris pe o cheie definitiva pentru octeti nevalizi");
+  assert.deepEqual(sterse, [referinta], "fisierul refuzat a ramas in depozitul platit");
+  assert.equal(depozit[referinta!], undefined, "obiectul refuzat e inca acolo");
+});
+
+test("⚠ un PDF urcat pe un camp de IMAGINE se refuza — octetii hotarasc, nu ce s-a declarat", async () => {
+  /*
+   * Clientul cere voie pentru o imagine (campul `poza` e de imagine, si asta iese din PERMIS), dar
+   * urca un PDF. Pana la finalizare nimeni nu poate sti: linkul semneaza doar marimea si tipul
+   * DECLARAT. Aici se citesc octetii adevarati.
+   */
+  const { final, referinta } = await urca({ octeti: PDF });
+  assert.equal(final?.status, 400, "un PDF a intrat pe un camp de imagine");
+  assert.deepEqual(sterse, [referinta], "PDF-ul refuzat a ramas in depozit");
+});
+
+test("⚠ finalizarea refuza o referinta care nu e a noastra, sau e a ALTUI magazin", async () => {
+  /*
+   * ⚠ FARA ASTA, cine cheama finalizarea putea da orice sir si punea platforma sa copieze un obiect
+   * ales de el pe o cheie buna — inclusiv unul din prefixul altui magazin.
+   */
+  const permis = semneazaPermisul(BIZ, PRODUS, { poza: "i", tipar: "d" });
+  const cereFinal = async (referinta: string) => FINAL(new NextRequest(
+    "https://magazin.edinio.com/api/upload-customization/finalizeaza",
+    {
+      method: "POST",
+      body: JSON.stringify({ permis, camp: "poza", referinta }),
+      headers: { "x-forwarded-for": `203.0.113.${++nrIp}`, "content-type": "application/json" },
+    },
+  ));
+
+  for (const [nume, ref] of [
+    ["inventata", "products/customizations/_provizoriu/" + BIZ + "/oarecare.jpg"],
+    ["a altui magazin", "products/customizations/_provizoriu/" + NEPUBLICAT + "/x-abc.jpg"],
+    ["o cheie definitiva", "products/customizations/" + BIZ + "/x-abc.jpg"],
+    ["goala", ""],
+  ] as const) {
+    const r = await cereFinal(ref);
+    assert.equal(r.status, 403, `referinta ${nume} a trecut`);
+  }
+  assert.deepEqual(scrieri, [], "s-a scris pe o cheie definitiva pentru o referinta straina");
+});
+
+test("⚠ o referinta a ALTUI magazin nu se poate finaliza cu permisul tau", async () => {
+  /*
+   * Perechea celei de sus, pe drumul intreg: se cere voie ca magazinul vecin, se urca, si apoi se
+   * incearca finalizarea cu permisul propriu. Referinta e semnata pentru ALT magazin, deci cade.
+   */
+  const strain = await urca({ businessId: NEPUBLICAT });
+  scrieri = [];
+
+  const permis = semneazaPermisul(BIZ, PRODUS, { poza: "i", tipar: "d" });
+  const r = await FINAL(new NextRequest(
+    "https://magazin.edinio.com/api/upload-customization/finalizeaza",
+    {
+      method: "POST",
+      body: JSON.stringify({ permis, camp: "poza", referinta: strain.referinta }),
+      headers: { "x-forwarded-for": `203.0.113.${++nrIp}`, "content-type": "application/json" },
+    },
+  ));
+  assert.equal(r.status, 403, "fisierul altui magazin s-a mutat sub cheia ta");
+  assert.deepEqual(scrieri, []);
+});
+
+test("⚠ o referinta pe care nu s-a urcat nimic iese 404, nu o cheie goala", async () => {
+  /*
+   * Se cere voie si nu se mai urca nimic — pana? deschisa, retea cazuta, om razgandit. Finalizarea
+   * n-are ce muta: o cheie buna data acum ar fi trimis in comanda un fisier care nu exista, si
+   * atelierul ar fi primit o comanda cu o macheta goala.
+   */
+  const { req } = cere();
+  const voie = await POST(req);
+  const { referinta } = (await voie.json()) as { referinta: string };
+
+  const permis = semneazaPermisul(BIZ, PRODUS, { poza: "i", tipar: "d" });
+  const r = await FINAL(new NextRequest(
+    "https://magazin.edinio.com/api/upload-customization/finalizeaza",
+    {
+      method: "POST",
+      body: JSON.stringify({ permis, camp: "poza", referinta }),
+      headers: { "x-forwarded-for": `203.0.113.${++nrIp}`, "content-type": "application/json" },
+    },
+  ));
+  assert.equal(r.status, 404, "o referinta fara octeti a primit totusi o cheie");
+  assert.deepEqual(scrieri, []);
+});
+
+test("⚠ marimea se cere si la finalizare, pe octetii ADEVARATI", async () => {
+  /*
+   * ⚠ SEMNATURA LINKULUI APARA SCRIEREA, dar plafonul nostru se poate schimba intre darea voii si
+   * finalizare — iar `HeadObject` nu aduce octeti, deci a doua citire nu costa nimic. Aici se
+   * masoara ca ea CHIAR se face: se urca mai mult decat s-a declarat.
+   */
+  const mare = Buffer.concat([PNG, Buffer.alloc((MB_IMAGINE + 1) * 1024 * 1024)]);
+  const { final, referinta } = await urca({ octeti: mare, marime: PNG.length });
+  assert.equal(final?.status, 400, "un fisier peste plafon a primit cheie buna");
+  assert.match((await final!.json() as { error: string }).error, /limita de 10MB/);
+  assert.deepEqual(sterse, [referinta], "fisierul prea mare a ramas in depozit");
 });

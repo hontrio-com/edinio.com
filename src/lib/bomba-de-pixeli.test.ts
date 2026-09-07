@@ -142,9 +142,30 @@ test("⚠ plafonul e CHEMAT pe toate cele trei capete care ating octetii", () =>
    * MAX_PIXELI)` lasa expresia la locul ei si trecea: comparatia exista, dar nu mai hotara nimic.
    * Cerand `if (` lipit de comparatie, se cere ca ea sa fie CONDITIA, nu un fragment din ea.
    */
-  const pers = citeste("src/app/api/upload-customization/route.ts");
-  assert.match(pers, /await sharp\(buffer\)\.metadata\(\)/, "capatul public nu mai masoara imaginea");
-  assert.match(pers, /if \(pixeli > MAX_PIXELI\) \{/, "capatul public nu mai OPRESTE la plafon");
+  /*
+   * ⚠ S-A MUTAT PE 07.09.2026, SI E MAI BINE ASA. Octetii nu mai trec prin functie (Vercel refuza
+   * cererile de peste 4,5 MB, iar platforma promitea 10 si 40), deci masurarea se face la
+   * FINALIZARE, pe octetii citti inapoi din depozit.
+   *
+   * ⚠ SI SE MASOARA PE ANTET, nu pe fisierul intreg: `sharp().metadata()` nu decodeaza. Adus
+   * intreg, un PDF de 40 MB ar fi intrat degeaba in memoria functiei — adica exact drumul de care
+   * am scapat.
+   *
+   * ⚠ CE E NOU SI NU EXISTA INAINTE: bomba refuzata se si STERGE din depozit. Pana acum ea nici nu
+   * ajungea acolo; acum ajunge, deci trebuie scoasa — altfel ar fi ramas pe factura, si `/api/img`
+   * ar fi putut-o primi.
+   */
+  const pers = citeste("src/app/api/upload-customization/finalizeaza/route.ts");
+  assert.match(pers, /await sharp\(inceput\)\.metadata\(\)/, "capatul public nu mai masoara imaginea");
+  assert.match(
+    pers, /if \(\(m\.width \?\? 0\) \* \(m\.height \?\? 0\) > MAX_PIXELI\) \{/,
+    "capatul public nu mai OPRESTE la plafon",
+  );
+  assert.ok(
+    pers.indexOf("MAX_PIXELI") < pers.indexOf("await mutaIncarcarea("),
+    "bomba se masoara dupa ce a primit deja o cheie buna",
+  );
+  assert.match(pers, /await stergeIncarcarea\(referinta\)/, "bomba refuzata ramane in depozit");
 
   const media = citeste("src/app/api/upload/route.ts");
   assert.match(

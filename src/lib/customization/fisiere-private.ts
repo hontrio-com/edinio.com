@@ -40,10 +40,15 @@ import { PREFIX_INCARCARI } from "./adresa";
  * Sunt independente dinadins: daca o cheie scapa, tot nu se poate compune alta; daca cineva
  * deduce structura cheii, ruta tot cere autentificare.
  *
- * ⚠ SI CE NU FACE ASTA, ca sa nu para mai mult decat e: galeata R2 ramane publica pe domeniul ei,
- * deci cine are cheia INTREAGA poate ajunge la octeti fara sa treaca pe la noi. Paza nu e o
- * politica de acces pe depozit, e faptul ca adresa nu mai circula nicaieri. O galeata privata cu
- * adrese semnate temporar ar fi pasul urmator, si e o schimbare de infrastructura, nu de cod.
+ * ⚠ AICI SCRIA CA „galeata R2 ramane publica pe domeniul ei, deci cine are cheia INTREAGA poate
+ * ajunge la octeti fara sa treaca pe la noi", si ca o galeata privata ar fi pasul urmator. Pasul
+ * acela s-a facut pe 07.09.2026: incarcarile se scriu intr-o galeata FARA domeniu public, iar
+ * octetii se dau numai prin adrese semnate scurt, emise dupa cele patru porti ale rutei de servire.
+ * Deci paza nu mai e „adresa nu circula" — e o politica de acces pe depozit.
+ *
+ * ⚠ CE RAMANE ADEVARAT: fisierele urcate INAINTE de mutare stau mai departe in galeata veche, iar
+ * pentru ele apararea e tot cea de mai sus. Cheia semnata si ruta cu porti conteaza si acolo — de
+ * aceea nimic din ce scrie mai sus nu s-a scos, doar concluzia s-a mutat.
  */
 
 /**
@@ -139,4 +144,81 @@ export function areFormaCheii(cheie: string, businessId: string): boolean {
   const rest = cheie.slice(prefix.length);
   if (rest.includes("/")) return false;
   return /^.+-[0-9a-f]{24}\.[a-z0-9]{1,5}$/.test(rest);
+}
+
+/**
+ * Unde stau incarcarile care N-AU TRECUT INCA verificarea.
+ *
+ * ⚠ E sub acelasi prefix ca restul, dinadins: cronul de retentie listeaza
+ * `products/customizations/` si nimic altceva, deci obiectele lasate aici de cineva care n-a mai
+ * chemat `finalizeaza` se curata singure dupa termenul orfanilor. Un prefix nou ar fi fost un colt
+ * de depozit pe care nu-l mai matura nimeni.
+ */
+const PREFIX_PROVIZORIU = `${PREFIX_INCARCARI}_provizoriu/`;
+
+/**
+ * Cheia pe care o primeste browserul ca sa incarce DIRECT in depozit.
+ *
+ * ═══ ⚠ DE CE NU SE INCARCA DE-A DREPTUL PE CHEIA BUNA ═══
+ *
+ * Fiindca cheia buna e o LEGITIMATIE: `esteCheiaNoastra` o accepta la comanda, iar poarta comenzii
+ * o crede scrisa de noi. Daca browserul ar putea scrie direct pe ea, ar fi de ajuns sa ceara un
+ * link, sa urce ce vrea, si sa NU mai cheme `finalizeaza`: octetii n-ar fi trecut nicio verificare,
+ * dar cheia lor ar fi fost valabila, si ar fi intrat in comanda. Comerciantul ar fi descarcat orice.
+ *
+ * Cheia provizorie are un nivel de dosar in plus, deci `esteCheiaNoastra` o refuza prin chiar
+ * conditia ei („fara alte niveluri"). Cheia buna se naste abia dupa ce octetii au fost cititi si
+ * masurati — vezi `mutaIncarcarea`.
+ *
+ * ⚠ SI E TOT SEMNATA: altfel cine cheama `finalizeaza` ar putea da orice sir ca „referinta" si ar
+ * pune platforma sa copieze un obiect ales de el pe o cheie buna.
+ */
+export function cheieProvizorie(businessId: string, nume: string, ext: string): string {
+  const e = /^[a-z0-9]{1,5}$/i.test(ext) ? ext.toLowerCase() : "bin";
+  const mac = createHmac("sha256", secret())
+    .update(`provizoriu:${businessId}:${nume}:${e}`)
+    .digest("hex")
+    .slice(0, 24);
+  return `${PREFIX_PROVIZORIU}${businessId}/${nume}-${mac}.${e}`;
+}
+
+/** Chiar noi am dat cheia provizorie asta, magazinului asta? Refuza orice altceva. */
+export function esteCheieProvizorie(cheie: string, businessId: string): boolean {
+  if (typeof cheie !== "string") return false;
+  const prefix = `${PREFIX_PROVIZORIU}${businessId}/`;
+  if (!cheie.startsWith(prefix)) return false;
+  const rest = cheie.slice(prefix.length);
+  if (rest.includes("/")) return false;
+
+  const punct = rest.lastIndexOf(".");
+  if (punct <= 0) return false;
+  const ext = rest.slice(punct + 1);
+  const corp = rest.slice(0, punct);
+  const liniuta = corp.lastIndexOf("-");
+  if (liniuta <= 0) return false;
+
+  const asteptat = Buffer.from(cheieProvizorie(businessId, corp.slice(0, liniuta), ext));
+  const primit = Buffer.from(cheie);
+  if (asteptat.length !== primit.length) return false;
+  try {
+    return timingSafeEqual(asteptat, primit);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Cheia definitiva care ii corespunde unei chei provizorii.
+ *
+ * ⚠ TERMINATIA VINE DIN OCTETI, nu de pe cheia provizorie. Aceea o compune clientul din numele
+ * fisierului lui: cine urca un PDF numit „poza.jpg" ar fi primit o cheie definitiva `.jpg` pentru
+ * un document. Iar mai tarziu, in panoul atelierului — unde nu mai exista octeti — terminatia e
+ * SINGURUL lucru pe care `sePoateRandaCaImagine` il are la dispozitie: ar fi desenat o poza rupta
+ * comerciantului care trebuie sa execute comanda.
+ */
+export function cheiaDefinitiva(provizorie: string, businessId: string, ext: string): string | null {
+  if (!esteCheieProvizorie(provizorie, businessId)) return null;
+  const rest = provizorie.slice(`${PREFIX_PROVIZORIU}${businessId}/`.length);
+  const corp = rest.slice(0, rest.lastIndexOf("."));
+  return cheieIncarcare(businessId, corp.slice(0, corp.lastIndexOf("-")), ext);
 }

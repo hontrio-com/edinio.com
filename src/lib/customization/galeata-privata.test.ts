@@ -26,20 +26,33 @@ const sursa = (r: string) => readFileSync(path.resolve(process.cwd(), r), "utf8"
 test("⚠ incarcarea NU mai scrie prin `uploadToR2`", () => {
   /*
    * ⚠ DEOSEBIREA CARE CONTEAZA: `uploadToR2` scrie in galeata publica SI intoarce adresa publica —
-   * chiar lucrul de care fisierele astea au scapat. `incarcaPrivat` scrie in cealalta galeata si
-   * intoarce doar cheia.
+   * chiar lucrul de care fisierele astea au scapat.
+   *
+   * ⚠ S-A MUTAT PE 07.09.2026, si nu s-a slabit. Octetii nu mai trec deloc prin functie — Vercel
+   * refuza cererile de peste 4,5 MB, iar platforma promitea 10 si 40 MB. Browserul ii pune de-a
+   * dreptul in depozit, printr-un link semnat de noi CATRE GALEATA INCARCARILOR. Deosebirea fata de
+   * `uploadToR2` ramane aceeasi: aia scrie in galeata publica si intoarce adresa publica.
    */
   const ruta = sursa("src/app/api/upload-customization/route.ts");
-  assert.match(ruta, /incarcaPrivat\(buffer, key, detected\)/, "incarcarea nu mai trece prin galeata privata");
+  assert.match(
+    ruta, /linkDeIncarcarePrivata\(referinta, tip, octeti\)/,
+    "incarcarea nu mai trece prin galeata privata",
+  );
   assert.doesNotMatch(
-    ruta, /uploadToR2\(/,
-    "incarcarea inca scrie prin `uploadToR2`, adica in galeata publica",
+    ruta, /uploadToR2\(|createPresignedPutUrl\(/,
+    "incarcarea arata iar catre galeata publica",
   );
 });
 
 test("⚠ servirea citeste din galeata privata, nu din cea publica", () => {
+  /*
+   * ⚠ SI SERVIREA S-A MUTAT: ruta nu mai citeste octetii, ci intreaba in ce galeata sta cheia si da
+   * un link semnat scurt. Vercel refuza si RASPUNSURILE de peste 4,5 MB, deci tocmai fisierul de
+   * tipar de 20 MB era cel pe care comerciantul nu si-l putea descarca.
+   */
   const ruta = sursa("src/app/api/customization-file/route.ts");
-  assert.match(ruta, /citestePrivat\(cheie\)/, "ruta de servire nu cauta in galeata privata");
+  assert.match(ruta, /galeataCheii\(cheie\)/, "ruta de servire nu cauta in galeata privata");
+  assert.match(ruta, /linkDeCitirePrivata\(/, "ruta de servire nu da niciun link semnat");
   assert.doesNotMatch(ruta, /citesteDinR2\(/, "ruta de servire citeste inca din galeata publica");
 });
 
@@ -86,29 +99,32 @@ test("⚠ cronul curata AMANDOUA galetile, si sterge din cea potrivita", () => {
     "listarea nu mai trece prin amandoua galetile");
 });
 
-test("⚠ fara variabila, purtarea e EXACT cea de pana acum", () => {
+test("⚠ variabila e OBLIGATORIE in productie, si fara ea nu se scrie nicaieri", () => {
   /*
-   * ⚠ HOTARARE, NU SCAPARE. O desfasurare care refuza incarcarile pana cand cineva pune o variabila
-   * ar fi fost o paguba mai mare decat cea pe care o apara: magazinele n-ar mai fi putut vinde
-   * produse personalizate deloc.
+   * ═══ ⚠ PROBA S-A INTORS PE 07.09.2026, DUPA CE GALEATA A FOST CREATA ═══
    *
-   * Deci lipsa ei inseamna „ca ieri", si atat. Iar ca sa nu ramana asa in tacere, cheia e trecuta
-   * in `CHEI_ASTEPTATE` din `next.config.ts`, care STRIGA in jurnalul de build la fiecare
-   * desfasurare de productie.
+   * Aici scria ca lipsa variabilei inseamna „ca ieri", si ca ea trebuie doar STRIGATA in jurnal:
+   * o desfasurare oprita pentru o galeata care nu exista inca ar fi lasat magazinele fara vanzare
+   * de produse personalizate. Purtarea aia a fost corecta exact cat a durat.
+   *
+   * Galeata exista acum, variabila e pusa in Vercel, si drumul a fost probat de la capat la capat:
+   * un fisier urcat din formularul public a aterizat CHIAR in `edinio-uploads-privat`. De aici
+   * incolo, lipsa variabilei nu mai inseamna „ca ieri" — inseamna ca pozele de familie ale
+   * cumparatorilor se intorc TACUT pe un domeniu public.
+   *
+   * ⚠ Deci doua lucruri, si amandoua se cer: desfasurarea de productie se OPRESTE fara ea, iar
+   * scrierea REFUZA sa cada pe galeata publica. Prima e ieftina si reversibila; a doua e plasa
+   * pentru cazul in care cineva sterge variabila dupa o desfasurare reusita.
    */
-  const r2 = sursa("src/lib/r2.ts");
-  assert.match(r2, /return BUCKET_PRIVAT \|\| BUCKET;/, "fara variabila nu se mai cade pe galeata de pana acum");
-
   const cfg = sursa("next.config.ts");
-  const lista = cfg.slice(cfg.indexOf("const CHEI_ASTEPTATE"), cfg.indexOf("function verificaCheileDeProductie"));
-  assert.match(lista, /"R2_BUCKET_PRIVAT"/, "lipsa cheii nu se mai striga la build");
-
-  /*
-   * ⚠ SI NU E IN `CHEI_OBLIGATORII`: acolo, o desfasurare de productie s-ar OPRI. Se muta abia dupa
-   * ce galeata exista si variabila e pusa — pana atunci, oprirea ar fi paguba, nu paza.
-   */
   const obligatorii = cfg.slice(cfg.indexOf("const CHEI_OBLIGATORII"), cfg.indexOf("const CHEI_ASTEPTATE"));
-  assert.doesNotMatch(obligatorii, /R2_BUCKET_PRIVAT/, "cheia opreste desfasurarea inainte sa existe galeata");
+  assert.match(obligatorii, /"R2_BUCKET_PRIVAT"/, "cheia nu mai opreste o desfasurare fara galeata privata");
+
+  const asteptate = cfg.slice(cfg.indexOf("const CHEI_ASTEPTATE"), cfg.indexOf("function verificaCheileDeProductie"));
+  assert.doesNotMatch(
+    asteptate, /"R2_BUCKET_PRIVAT"/,
+    "cheia e in amandoua listele: una dintre ele minte despre ce se intampla fara ea",
+  );
 
   /*
    * ═══ ⚠ DAR O GALEATA „PRIVATA" CARE E CHIAR CEA PUBLICA OPRESTE DESFASURAREA ═══
@@ -131,17 +147,55 @@ test("⚠ fara variabila, purtarea e EXACT cea de pana acum", () => {
   );
 });
 
-test("⚠ `incarcaPrivat` nu intoarce nicio adresa", () => {
+test("⚠ niciun drum de SCRIERE nu compune o adresa publica, si niciunul nu cade pe galeata publica", () => {
   /*
-   * Perechea negativa a intregii lucrari: `uploadToR2` intoarce adresa publica fiindca asa o cer
-   * cele doua duzini de locuri care urca imagini de produs. Aici, o adresa intoarsa ar fi putut
-   * ajunge din nou intr-o comanda sau intr-un email — de unde a fost scoasa cu atata truda.
+   * ═══ ⚠ PROBA S-A INTORS PE 07.09.2026, PE ACELASI SUBIECT ═══
+   *
+   * Ea cerea ca `incarcaPrivat` sa intoarca doar cheia. Functia aia a fost SCOASA: octetii nu mai
+   * trec prin functie, deci n-o mai chema nimeni. Ce apara ea ramane insa adevarat, si acum trebuie
+   * cerut de la drumurile care i-au luat locul.
+   *
+   * ⚠ NICIO ADRESA PUBLICA: `uploadToR2` intoarce una fiindca asa o cer cele doua duzini de locuri
+   * care urca imagini de PRODUS. Pe drumul cumparatorilor, o adresa intoarsa ar ajunge din nou
+   * intr-o comanda si intr-un email — de unde a fost scoasa cu atata truda.
    */
   const r2 = sursa("src/lib/r2.ts");
-  const corp = r2.slice(r2.indexOf("export async function incarcaPrivat"));
-  const functia = corp.slice(0, corp.indexOf("\n}"));
-  assert.match(functia, /return key;/, "`incarcaPrivat` nu mai intoarce cheia");
-  assert.doesNotMatch(functia, /PUBLIC_URL/, "`incarcaPrivat` compune iar o adresa publica");
+  const bucata = (nume: string) => {
+    const de = r2.indexOf(`export async function ${nume}`);
+    assert.ok(de > 0, `n-am gasit ${nume}`);
+    return r2.slice(de, r2.indexOf("\n}", de));
+  };
+
+  for (const nume of ["linkDeIncarcarePrivata", "mutaIncarcarea", "stergeIncarcarea"]) {
+    assert.doesNotMatch(bucata(nume), /PUBLIC_URL/, `${nume} compune o adresa publica`);
+  }
   /* Si antetul ramane, chiar si intr-o galeata privata: un intermediar n-are voie s-o tina. */
-  assert.match(functia, /private, no-store/, "s-a pierdut antetul care opreste cache-ul intermediarilor");
+  assert.match(
+    bucata("mutaIncarcarea"), /private, no-store/,
+    "s-a pierdut antetul care opreste cache-ul intermediarilor",
+  );
+
+  /*
+   * ═══ ⚠ SI SCRIEREA NU MAI CADE PE GALEATA PUBLICA ═══
+   *
+   * `BUCKET_PRIVAT || BUCKET` a fost purtarea corecta cat timp galeata nu exista: fara ea, o cadere
+   * ar fi oprit vanzarea produselor personalizate pe toata platforma. Acum galeata exista si cheia e
+   * obligatorie — deci caderea n-ar mai apara nimic, ar face doar ca o variabila stearsa din greseala
+   * sa trimita TACUT pozele cumparatorilor inapoi pe un domeniu public. Un capat care refuza se
+   * vede; unul care scrie in alta parte, nu.
+   */
+  assert.match(
+    r2, /throw new Error\(\s*\n\s*"\[r2\] R2_BUCKET_PRIVAT lipseste/,
+    "scrierea cade iar pe galeata publica cand variabila lipseste",
+  );
+
+  /*
+   * ⚠ DAR CITIREA NU ARUNCA, si asta e perechea. Fisierele urcate inainte de mutare stau in galeata
+   * veche, iar cheile lor sunt deja in comenzi: o exceptie acolo ar ascunde comerciantului chiar
+   * machetele dupa care produce marfa.
+   */
+  assert.match(
+    bucata("citestePrivat"), /if \(!incarcarileSuntPrivate\(\)\) return citesteDinGaleata\(BUCKET, key\);/,
+    "citirea arunca fara variabila, in loc sa caute in galeata veche",
+  );
 });

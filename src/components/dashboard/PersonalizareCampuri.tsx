@@ -61,7 +61,6 @@ const NUME_TIP: Record<string, string> = {
   textarea: "Text lung",
   image: "Imagine (upload)",
   fisier: "Fisier (PDF sau imagine)",
-  select: "Selectie (lista)",
   color: "Culoare",
   numar: "Numar",
   dimensiuni: "Dimensiuni (latime x inaltime)",
@@ -315,19 +314,17 @@ function Reglaje({ camp, idx, schimba }: RegProps) {
         </div>
       );
 
-    case "select":
-      return (
-        <div>
-          <label className={ETICHETA}>Optiuni (una pe rand)</label>
-          <textarea rows={3} value={(camp.options ?? []).join("\n")}
-            onChange={(e) => schimba(idx, { options: e.target.value.split("\n").filter((o) => o.trim()) })}
-            placeholder={"Clasic\nModern"} className={`${INPUT} resize-none`} />
-          <p className="text-[11px] text-muted-foreground mt-1">
-            ⚠ Optiunile astea nu pot avea pret. Pentru preturi diferite, foloseste <strong>Butoane</strong>.
-          </p>
-        </div>
-      );
-
+    /*
+     * ═══ ⚠ AICI STATEA `select`, SI CHIAR PANOUL SPUNEA DE CE TREBUIA SA PLECE ═══
+     *
+     * Sub casuta lui scria, cu propriile noastre cuvinte: „⚠ Optiunile astea nu pot avea pret.
+     * Pentru preturi diferite, foloseste Butoane." Adica ofeream un tip despre care scriam alaturi
+     * ca e cel prost — si comerciantul afla asta abia dupa ce il alesese.
+     *
+     * De pe 07.09.2026 lista derulanta e un STIL al lui `butoane`: aceleasi optiuni, cu id stabil
+     * si cu pret, si acelasi desen pe vitrina. Avertismentul n-a mai fost nevoie sa fie scris,
+     * fiindca n-a mai fost nimic de avertizat.
+     */
     case "color":
       return (
         <div>
@@ -416,7 +413,7 @@ function Reglaje({ camp, idx, schimba }: RegProps) {
       return (
         <>
           <Stil camp={camp} idx={idx} schimba={schimba}
-            optiuni={[["butoane", "Butoane"], ["radio", "Lista cu bulina"]]} />
+            optiuni={[["butoane", "Butoane"], ["radio", "Lista cu bulina"], ["lista", "Lista derulanta"]]} />
           <Optiuni camp={camp} idx={idx} schimba={schimba} />
         </>
       );

@@ -109,9 +109,12 @@ export function problemaPersonalizarii(pageSections: unknown): string | null {
      * scrie optiunile.
      */
     if (camp.required) {
-      const fara = camp.type === "butoane"
-        ? (camp.optiuni ?? []).length === 0
-        : camp.type === "select" && (camp.options ?? []).length === 0;
+      /*
+       * ⚠ O SINGURA RAMURA, de cand `select` e un STIL al lui `butoane`. Erau doua, si a doua avea
+       * si alta forma de optiuni (`options: string[]`) — adica exact felul de pereche care se tine
+       * in sincron pana intr-o zi cand nu se mai tine.
+       */
+      const fara = camp.type === "butoane" && (camp.optiuni ?? []).length === 0;
       if (fara) {
         return `${nume} e obligatoriu si n-are nicio optiune, deci clientul nu-l poate completa —`
           + " produsul nu s-ar putea comanda. Adauga cel putin o optiune, sau fa campul optional.";
@@ -270,10 +273,8 @@ export function greutateaMaximaAPersonalizarii(definitie: DefinitiePersonalizare
         total += (camp.max_files ?? 1) * 124 + 2;
         break;
       case "butoane":
-      case "select":
-        /* Id-ul optiunii alese; la `select` vechi, chiar textul optiunii. */
-        total += Math.max(40, ...(camp.optiuni ?? []).map((o) => o.id.length + 4),
-          ...(camp.options ?? []).map((o) => o.length + 4));
+        /* Id-ul optiunii alese. (Lista derulanta e tot `butoane`, deci cantareste la fel.) */
+        total += Math.max(40, ...(camp.optiuni ?? []).map((o) => o.id.length + 4));
         break;
       case "dimensiuni":
         total += 60;

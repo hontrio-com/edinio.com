@@ -193,21 +193,14 @@ function citesteCamp(
       return { fel: "fisiere", adrese: bune };
     }
 
-    case "select": {
-      const t = sir(brut).trim();
-      if (!t) return lipsa("Alege o optiune.");
-      /*
-       * ⚠ Optiunea trebuie sa fie din lista. Fara verificarea asta, un client putea trimite orice
-       * text si el ajungea in comanda ca alegere „legitima" — iar la un camp cu pret ar fi fost o
-       * alegere fara pret.
-       */
-      if (!(camp.options ?? []).includes(t)) {
-        constatari.push({ campId: camp.id, eticheta: camp.label, mesaj: "Optiunea aleasa nu exista." });
-        return null;
-      }
-      return { fel: "text", text: t };
-    }
-
+    /*
+     * ═══ ⚠ AICI STATEA `select`. RAMURA A DISPARUT, GARANTIA NU ═══
+     *
+     * Verificarea ei — „optiunea trebuie sa fie din lista", fara de care un client putea trimite
+     * orice text si el ajungea in comanda ca alegere legitima — se face acum in ramura `butoane`,
+     * pe `optiuni`, unde alegerea se potriveste dupa ID, nu dupa eticheta. Lista derulanta e un
+     * STIL al lui `butoane`; vezi `TIP_INVECHIT_SELECT`.
+     */
     case "color": {
       const t = sir(brut).trim();
       if (!t) return lipsa("Alege o culoare.");

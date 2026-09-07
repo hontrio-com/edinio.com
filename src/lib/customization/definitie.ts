@@ -106,11 +106,39 @@ export function megaoctetiiCampului(tip: string): number {
  * il cere pe fata.
  */
 export const TIPURI = [
-  "text", "textarea", "image", "select", "color",
+  "text", "textarea", "image", "color",
   "numar", "dimensiuni", "butoane", "comutator", "fisier",
 ] as const;
 
 export type TipCamp = (typeof TIPURI)[number];
+
+/**
+ * ═══ ⚠ `select` A IESIT DINTRE TIPURI — 07.09.2026 ═══
+ *
+ * El era o alegere dintr-o lista, la fel ca `butoane`, si se deosebea de el numai prin DESEN. Dar
+ * era un tip aparte, si asta il costa scump pe cine il alegea:
+ *
+ *   - optiunile erau siruri simple (`options: string[]`), deci ETICHETA era identitatea. O
+ *     corectura de scriere („Premim" -> „Premium") facea optiunea sa para alta.
+ *   - si, tocmai de aceea, nu putea avea PRET pe optiune: nu exista de ce sa atarne pretul.
+ *
+ * Auditul cerea sa fie modernizat — adus la forma lui `butoane`, cu `{id, eticheta, impact}`. Asta
+ * ar fi facut din el un al doilea tip identic cu `butoane`, deosebit numai prin desen: exact
+ * lucrul pe care proiectul a refuzat sa-l faca la `radio` si `checkbox`, si din acelasi motiv —
+ * inca doua ramuri in FIECARE loc care se uita la `type` (pretuirea, validarea, greutatea, poarta
+ * comenzii, rezumatul din cos, instantaneul, emailul, panoul), tinute in sincron pentru o
+ * deosebire de desen.
+ *
+ * Asa ca `select` a devenit ce era: un STIL al lui `butoane` — „Lista derulanta". Primeste
+ * gratuit id-uri stabile si pret pe optiune, si SCOATE o ramura in loc sa adauge una.
+ *
+ * ⚠ SE CITESTE MAI DEPARTE, si de-aia sta scris aici. Baza n-are astazi niciun camp `select`
+ * (masurat 07.09.2026: 32 de produse cu personalizare, 0 selecturi, 0 chei `options`) — dar o
+ * copie de siguranta, un import vechi sau o ciorna neatinsa il pot aduce inapoi. Convertit la
+ * citire, el se deschide ca lista derulanta cu aceleasi optiuni; ARUNCAT, campul ar fi disparut
+ * din produs fara niciun semn.
+ */
+const TIP_INVECHIT_SELECT = "select";
 
 /**
  * Felul in care se deseneaza un camp cu alegeri sau un comutator.
@@ -118,7 +146,7 @@ export type TipCamp = (typeof TIPURI)[number];
  * `butoane` si `comutator` sunt implicitele si raman cele de pana acum, deci produsele deja
  * configurate nu se schimba cu nimic.
  */
-export const STILURI = ["butoane", "radio", "comutator", "bifa"] as const;
+export const STILURI = ["butoane", "radio", "lista", "comutator", "bifa"] as const;
 export type StilCamp = (typeof STILURI)[number];
 
 /** Unitatile in care se scriu dimensiunile. Se socoteste mereu in metri. */
@@ -185,9 +213,6 @@ export interface CampPersonalizare {
   /* — image — */
   max_files?: number;
   max_file_size_mb?: number;
-
-  /* — select (vechi) — */
-  options?: string[];
 
   /* — color (vechi) — */
   default_color?: string;
@@ -427,12 +452,87 @@ function citesteOptiuni(raw: unknown): OptiuneCamp[] | undefined {
   return out.length ? out : undefined;
 }
 
+/**
+ * Un id de optiune dedus dintr-o eticheta — numai pentru fostul `select`.
+ *
+ * ⚠ SE DEDUCE DIN ETICHETA, NU DIN POZITIE, si asta e chiar deosebirea care conteaza. Un id luat
+ * din index s-ar fi mutat cand comerciantul reordoneaza optiunile, iar pretul ar fi trecut tacut de
+ * pe „Premium" pe „Standard" — inclusiv pe comenzi deja plasate. Din eticheta, el ramane acelasi
+ * oricat s-ar muta randurile.
+ *
+ * ⚠ Si e DETERMINIST: aceeasi definitie citita de doua ori da aceleasi id-uri. Altfel valorile
+ * salvate in cos n-ar mai fi corespuns optiunilor dupa o simpla reincarcare de pagina.
+ *
+ * ⚠ Diacriticele se scot prin `\\p{M}+`, ca in cautarea magazinului — o singura regula in proiect
+ * pentru „acelasi cuvant, scris cu sau fara semne".
+ */
+function idDinEticheta(eticheta: string, i: number, vazute: Set<string>): string {
+  const baza = eticheta
+    .normalize("NFD").replace(/\p{M}+/gu, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  let id = baza || `o${i + 1}`;
+  /* Doua etichete care se reduc la acelasi sir („Alb!" si „Alb?") raman doua optiuni. */
+  let n = 2;
+  while (vazute.has(id)) id = `${baza || "o"}-${n++}`;
+  return id;
+}
+
+/**
+ * Un camp `select` vechi, adus la forma de acum: `butoane` desenat ca lista derulanta.
+ *
+ * ⚠ EXPORTAT fiindca il cheama SI cititorul (mai jos), SI panoul comerciantului. Panoul citeste
+ * campurile BRUTE din `page_sections`, nu prin cititor — asa ca fara chemarea de acolo un `select`
+ * stocat ar fi ajuns intr-un meniu de tipuri care nu-l mai contine, iar browserul ar fi aratat
+ * prima optiune din lista: „Text scurt". Comerciantul ar fi citit un tip FALS despre campul lui,
+ * si prima atingere l-ar fi si schimbat.
+ *
+ * ⚠ NU ATINGE NIMIC ALTCEVA. Orice alt camp se intoarce neschimbat: un „modernizator" care rescrie
+ * si ce e deja bun ar fi o migrare tacuta peste toate produsele vii, la fiecare deschidere de
+ * formular.
+ */
+export function modernizeazaSelectul(raw: unknown): unknown {
+  if (!esteObiect(raw) || raw.type !== TIP_INVECHIT_SELECT) return raw;
+  const vazute = new Set<string>();
+  const optiuni: OptiuneCamp[] = [];
+  const brute = Array.isArray(raw.options) ? raw.options : [];
+  for (const o of brute) {
+    if (optiuni.length >= MAX_OPTIUNI) break;
+    if (typeof o !== "string") continue;
+    const eticheta = text(o, MAX_ETICHETA);
+    if (!eticheta) continue;
+    const idOpt = idDinEticheta(eticheta, optiuni.length, vazute);
+    vazute.add(idOpt);
+    optiuni.push({ id: idOpt, eticheta });
+  }
+  return {
+    ...raw,
+    type: "butoane",
+    /*
+     * ⚠ DESENUL RAMANE CEL DE DINAINTE. Convertit fara stil, un „Material" cu opt optiuni s-ar fi
+     * desfacut peste noapte din lista derulanta in opt butoane pe pagina fiecarui produs.
+     */
+    stil: "lista",
+    optiuni,
+    options: undefined,
+  };
+}
+
 function citesteCamp(raw: unknown): CampPersonalizare | null {
   if (!esteObiect(raw)) return null;
   const id = text(raw.id, 64).trim();
-  const tip = raw.type;
-  if (!id || typeof tip !== "string" || !(TIPURI as readonly string[]).includes(tip)) return null;
-  const type = tip as TipCamp;
+  const tipBrut = raw.type;
+  if (!id || typeof tipBrut !== "string") return null;
+
+  /*
+   * ⚠ FOSTUL `select` SE CONVERTESTE, NU SE ARUNCA — vezi `TIP_INVECHIT_SELECT`. Aruncat, campul
+   * ar fi disparut din produs fara niciun semn: un fototapet cu „Material" obligatoriu ar fi
+   * devenit unul care se comanda fara material.
+   */
+  if (tipBrut === TIP_INVECHIT_SELECT) return citesteCamp(modernizeazaSelectul(raw));
+
+  if (!(TIPURI as readonly string[]).includes(tipBrut)) return null;
+  const type = tipBrut as TipCamp;
 
   const camp: CampPersonalizare = {
     id,
@@ -456,12 +556,6 @@ function citesteCamp(raw: unknown): CampPersonalizare | null {
     if (mf !== undefined && mf > 0) camp.max_files = Math.floor(mf);
     const ms = numar(raw.max_file_size_mb);
     if (ms !== undefined && ms > 0) camp.max_file_size_mb = ms;
-  }
-  if (type === "select") {
-    const o = Array.isArray(raw.options)
-      ? raw.options.filter((x): x is string => typeof x === "string").slice(0, MAX_OPTIUNI)
-      : [];
-    if (o.length) camp.options = o;
   }
   if (type === "color") {
     const c = text(raw.default_color, 32);
@@ -516,11 +610,12 @@ function citesteCamp(raw: unknown): CampPersonalizare | null {
     const o = citesteOptiuni(raw.optiuni); if (o) camp.optiuni = o;
   }
   /*
-   * ⚠ Pretul pe CAMP se citeste doar acolo unde are un inteles: la `butoane` si `select` alegerea
-   * e o optiune, deci pretul sta pe ea. Citit si aici, un comerciant ar fi putut pune si un pret
-   * pe camp, si unul pe optiune, iar ce se incaseaza n-ar mai fi fost limpede din ecran.
+   * ⚠ Pretul pe CAMP se citeste doar acolo unde are un inteles: la `butoane` alegerea e o optiune,
+   * deci pretul sta pe ea. Citit si aici, un comerciant ar fi putut pune si un pret pe camp, si unul
+   * pe optiune, iar ce se incaseaza n-ar mai fi fost limpede din ecran. (Fostul `select` intra tot
+   * pe aici: la citire el DEVINE `butoane`.)
    */
-  if (type !== "butoane" && type !== "select" && raw.impact !== undefined) {
+  if (type !== "butoane" && raw.impact !== undefined) {
     camp.impact = citesteImpact(raw.impact);
   }
 
@@ -532,8 +627,7 @@ function citesteCamp(raw: unknown): CampPersonalizare | null {
    * obisnuit, care merge intotdeauna.
    */
   const stiluriPermise: Partial<Record<TipCamp, readonly StilCamp[]>> = {
-    butoane: ["butoane", "radio"],
-    select: ["butoane", "radio"],
+    butoane: ["butoane", "radio", "lista"],
     comutator: ["comutator", "bifa"],
   };
   const permise = stiluriPermise[type];

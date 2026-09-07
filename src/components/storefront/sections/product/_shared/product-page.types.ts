@@ -1,6 +1,7 @@
 import type { MenuItem } from "@/lib/pages/menu";
 import type { BusinessPublic } from "@/lib/storefront/business-public";
 import type { Database } from "@/types/database.types";
+import type { CampPersonalizare } from "@/lib/customization/definitie";
 
 /**
  * Formele de date pe care le citeste orice varianta de pagina de produs.
@@ -64,19 +65,18 @@ export interface VariantCombo {
   enabled: boolean;
 }
 
-export interface CustomizationFieldDef {
-  id: string;
-  type: "text" | "textarea" | "image" | "select" | "color";
-  label: string;
-  placeholder?: string;
-  required: boolean;
-  max_length?: number;
-  max_files?: number;
-  max_file_size_mb?: number;
-  options?: string[];
-  default_color?: string;
-  helper_text?: string;
-}
+/**
+ * ⚠ ERA O COPIE, SI RAMASESE IN URMA. Descria cinci tipuri din noua (lipseau `numar`,
+ * `dimensiuni`, `butoane`, `comutator` si `fisier`) si mai purta `options: string[]`, forma pe care
+ * fostul `select` a lasat-o in urma pe 07.09.2026.
+ *
+ * Nu s-a vazut fiindca nimic nu citea prin ea: cititorul adevarat e `normalizeazaDefinitia`, care
+ * primeste `unknown`. Adica o descriere care putea sa minta oricat fara sa scartaie — si care
+ * INDRUMA gresit pe cine o citea ca sa afle ce campuri exista.
+ *
+ * Acum e un alias catre forma adevarata. Se schimba intr-un singur loc, sau nicaieri.
+ */
+export type CustomizationFieldDef = CampPersonalizare;
 
 export interface PageSections {
   short_description?: string;

@@ -109,6 +109,51 @@ test("⚠ amandoua desenele exista in vitrina, si spun acelasi lucru cititorului
   );
 });
 
+test("⚠ LISTA DERULANTA: al treilea desen, si un TIP mai putin", () => {
+  /*
+   * ═══ ⚠ CE S-A INTAMPLAT PE 07.09.2026 ═══
+   *
+   * `select` era un TIP aparte care se deosebea de `butoane` numai prin desen — si il costa scump
+   * pe cine il alegea: optiunile lui erau siruri simple, deci ETICHETA era identitatea, si tocmai
+   * de aceea nu putea avea pret pe optiune. Panoul insusi scria sub el, cu cuvintele noastre:
+   * „⚠ Optiunile astea nu pot avea pret. Pentru preturi diferite, foloseste Butoane."
+   *
+   * Auditul cerea sa fie MODERNIZAT — adus la `{id, eticheta, impact}`. Asta ar fi facut din el un
+   * al doilea tip identic cu `butoane`, exact ce s-a refuzat mai sus la `radio` si `checkbox`. Asa
+   * ca a devenit al TREILEA STIL: aceleasi optiuni, cu id si cu pret, si o ramura mai putin in
+   * fiecare din cele opt locuri care se uita la `type`.
+   */
+  const d = normalizeazaDefinitia(cuStil("lista"))!;
+  assert.equal(d.fields[0].stil, "lista", "stilul de lista nu se citeste");
+
+  /* ⚠ SI TOT NU MUTA NICIUN BAN — aceeasi afirmatie ca la celelalte doua desene. */
+  const valori = { mat: "prm", prot: true };
+  const sume = ["butoane", "radio", "lista"].map((stil) => {
+    const def = normalizeazaDefinitia(cuStil(stil))!;
+    return pretulPersonalizarii(def, normalizeazaValorile(def, valori).valori).supliment;
+  });
+  assert.deepEqual(sume, [45, 45, 45], "un desen a mutat pretul");
+
+  /* ⚠ Si `lista` n-are inteles pe un comutator: acolo se arunca, la fel ca `bifa` pe `butoane`. */
+  const gresit = normalizeazaDefinitia({
+    enabled: true,
+    fields: [{ id: "c", type: "comutator", label: "C", required: false, stil: "lista" }],
+  })!;
+  assert.equal(gresit.fields[0].stil, undefined, "`lista` a trecut pe un comutator");
+
+  /* Vitrina il deseneaza cu un `<select>` ADEVARAT — pe telefon, selectorul nativ. */
+  const v = sursa("src/components/storefront/sections/product/_shared/CampuriPersonalizare.tsx");
+  assert.ok(v.includes('camp.stil === "lista"'), "vitrina nu deseneaza lista derulanta");
+  assert.ok(v.includes("<option key={o.id} value={o.id}>{o.eticheta}</option>"),
+    "lista trimite eticheta in loc de id — chiar defectul tipului vechi");
+  assert.ok(!v.includes('case "select":'), "a ramas ramura tipului vechi in vitrina");
+
+  /* Si panoul il ofera ca desen, nu ca tip. */
+  const panou = sursa("src/components/dashboard/PersonalizareCampuri.tsx");
+  assert.ok(panou.includes('["lista", "Lista derulanta"]'), "panoul nu ofera desenul de lista");
+  assert.ok(!panou.includes('case "select":'), "panoul ofera iar tipul vechi");
+});
+
 test("⚠ panoul lasa comerciantul sa aleaga desenul", () => {
   /*
    * Un desen pe care il suporta vitrina dar nu-l poate alege nimeni e o capabilitate care nu

@@ -34,6 +34,7 @@ import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
 import { SEO_TITLE_IDEAL_MIN, SEO_TITLE_MAX, SEO_DESCRIPTION_IDEAL_MIN, SEO_DESCRIPTION_MAX } from "@/lib/seo";
 import { PersonalizareCampuri, type StareCustomizare } from "@/components/dashboard/PersonalizareCampuri";
 import type { CampPersonalizare } from "@/lib/customization/definitie";
+import { modernizeazaSelectul } from "@/lib/customization/definitie";
 import type { Database } from "@/types/database.types";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
@@ -350,7 +351,19 @@ function productToForm(p: Product): FormState {
     customization: ps.customization
       ? {
           enabled: ps.customization.enabled,
-          fields: ps.customization.fields,
+          /*
+           * ⚠ FOSTUL `select` SE ADUCE LA ZI CHIAR AICI, la incarcarea formularului.
+           *
+           * Panoul citeste campurile BRUTE din `page_sections`, nu prin `normalizeazaDefinitia` —
+           * asa ca un `select` stocat ar fi ajuns intr-un meniu de tipuri care nu-l mai contine, si
+           * `<select value="select">` fara optiunea potrivita arata PRIMA din lista: „Text scurt".
+           * Comerciantul ar fi citit un tip fals despre campul lui, iar prima atingere l-ar fi si
+           * schimbat — cu optiunile pierdute.
+           *
+           * ⚠ NIMIC ALTCEVA NU SE ATINGE: `modernizeazaSelectul` intoarce orice alt camp neschimbat,
+           * deci cele 32 de produse vii se incarca exact ca pana acum.
+           */
+          fields: (ps.customization.fields as unknown[]).map(modernizeazaSelectul) as CampPersonalizare[],
           ...(ps.customization.pret ? { pret: ps.customization.pret } : {}),
           /* ⚠ Si numerotarea, din acelasi motiv ca `pret`: necitita, s-ar fi reaprins singura la a
              doua salvare, iar comerciantul ar fi vazut numerele intorcandu-se fara sa ceara. */

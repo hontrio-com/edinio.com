@@ -62,9 +62,26 @@ test("⚠ optiunea trebuie sa fie DIN LISTA", () => {
   assert.equal(rea.valori.has("b"), false);
 });
 
-test("⚠ acelasi lucru pentru `select`-ul vechi", () => {
+test("⚠ `select`-ul vechi se valideaza pe ID, nu pe eticheta", () => {
+  /*
+   * ═══ ⚠ PROBA S-A INTORS PE 07.09.2026 ═══
+   *
+   * Ea cerea `{ s: "M" }` — eticheta — fiindca la `select`-ul vechi eticheta ERA identitatea. Chiar
+   * asta era defectul tipului: o corectura de scriere („Premim" -> „Premium") facea optiunea sa
+   * para alta, si tocmai de aceea pretul n-avea de ce sa atarne.
+   *
+   * De cand `select` se converteste in `butoane` cu stilul „lista", alegerea se potriveste dupa
+   * `id`, ca peste tot in restul sistemului.
+   *
+   * ⚠ SI CE INSEAMNA ASTA PENTRU O LINIE VECHE DIN COS: una salvata cu eticheta („M") nu mai
+   * valideaza. Nu e o pierdere tacuta — chiar asta aprinde `cereRevizuire`, deci cosul scrie
+   * „Necesita actualizare — apasa «Editeaza»" si omul isi reface alegerea in doua apasari. Iar in
+   * baza nu exista niciun asemenea camp: masurat pe 07.09.2026, 0 selecturi din 32 de produse
+   * personalizabile.
+   */
   const d = def([{ id: "s", type: "select", label: "Marime", required: true, options: ["S", "M"] }]);
-  assert.equal(normalizeazaValorile(d, { s: "M" }).ok, true);
+  assert.equal(normalizeazaValorile(d, { s: "m" }).ok, true, "id-ul optiunii n-a fost primit");
+  assert.equal(normalizeazaValorile(d, { s: "M" }).ok, false, "eticheta a trecut drept identitate");
   assert.equal(normalizeazaValorile(d, { s: "XXL" }).ok, false);
 });
 

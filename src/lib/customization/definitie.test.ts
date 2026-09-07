@@ -60,19 +60,69 @@ test("⚠ LEGACY: cele trei tipuri folosite in productie trec toate", () => {
   assert.equal(d.fields[2].max_file_size_mb, 8);
 });
 
-test("⚠ LEGACY: `select` ramane pe siruri, fara id-uri", () => {
+test("⚠ `select` se CONVERTESTE in lista derulanta, nu se arunca", () => {
   /*
-   * ⚠ Niciun produs din productie nu foloseste `select`, deci nu exista date de migrat. Tocmai de
-   * aceea nu se atinge: forma noua cu id-uri se numeste `butoane`, iar `select` ramane exact cum
-   * era. O „modernizare" a lui ar fi fost o migrare fara niciun castig.
+   * ═══ ⚠ PROBA S-A INTORS PE 07.09.2026 ═══
+   *
+   * Aici scria: „`select` ramane pe siruri, fara id-uri... o «modernizare» a lui ar fi fost o
+   * migrare fara niciun castig." Prima parte a ramas adevarata — baza n-are niciun `select`
+   * (masurat: 32 de produse cu personalizare, 0 selecturi, 0 chei `options`) —, dar concluzia s-a
+   * schimbat: tocmai fiindca nu-l foloseste nimeni, se putea RETRAGE, nu doar lasat in pace.
+   *
+   * Auditul cerea sa fie adus la forma lui `butoane`, cu `{id, eticheta, impact}`. Asta l-ar fi
+   * facut un al doilea tip identic cu `butoane`, deosebit numai prin desen — exact ce proiectul a
+   * refuzat la `radio` si `checkbox`. Asa ca a devenit un STIL: „Lista derulanta".
+   *
+   * ⚠ SI SE CONVERTESTE, NU SE ARUNCA. Baza n-are astazi niciunul, dar o copie de siguranta sau un
+   * import vechi il pot aduce inapoi. Aruncat, un „Marime" obligatoriu ar fi disparut din produs
+   * fara niciun semn — si produsul s-ar fi putut comanda fara marime.
    */
   const d = normalizeazaDefinitia({
     enabled: true,
     fields: [{ id: "s", type: "select", label: "Marime", required: true, options: ["S", "M", "L"] }],
   });
   assert.ok(d);
-  assert.deepEqual(d.fields[0].options, ["S", "M", "L"]);
-  assert.equal(d.fields[0].optiuni, undefined);
+  const c = d.fields[0];
+  assert.equal(c.type, "butoane", "campul nu s-a convertit");
+  /* ⚠ Desenul ramane cel de dinainte: altfel o lista de opt optiuni s-ar desface in opt butoane. */
+  assert.equal(c.stil, "lista", "desenul s-a schimbat sub ochii comerciantului");
+  assert.deepEqual(c.optiuni, [
+    { id: "s", eticheta: "S" },
+    { id: "m", eticheta: "M" },
+    { id: "l", eticheta: "L" },
+  ]);
+});
+
+test("⚠ id-urile convertite vin din ETICHETA, si sunt stabile", () => {
+  /*
+   * ⚠ NU DIN POZITIE. Un id luat din index s-ar fi mutat cand comerciantul reordoneaza optiunile,
+   * iar pretul ar fi trecut tacut de pe „Premium" pe „Standard" — inclusiv pe comenzi plasate.
+   */
+  const cu = (options: string[]) => normalizeazaDefinitia({
+    enabled: true,
+    fields: [{ id: "s", type: "select", label: "M", required: true, options }],
+  })!.fields[0].optiuni!;
+
+  const a = cu(["Standard", "Premium"]);
+  const b = cu(["Premium", "Standard"]);
+  assert.equal(a.find((o) => o.eticheta === "Premium")!.id, b.find((o) => o.eticheta === "Premium")!.id,
+    "id-ul s-a mutat odata cu randul");
+
+  /* ⚠ Diacriticele se scot, ca in cautarea magazinului — o singura regula in proiect. */
+  assert.equal(cu(["Mătase"])[0].id, "matase");
+
+  /*
+   * ⚠ SI DOUA ETICHETE CARE SE REDUC LA ACELASI SIR RAMAN DOUA OPTIUNI. Fara dezambiguizare, a
+   * doua ar fi fost inghitita de prima: comerciantul scria trei optiuni si clientul vedea doua.
+   */
+  const gemene = cu(["Alb!", "Alb?", "Alb"]);
+  assert.equal(gemene.length, 3, "o optiune s-a pierdut");
+  assert.equal(new Set(gemene.map((o) => o.id)).size, 3, "doua optiuni au primit acelasi id");
+
+  /* ⚠ Iar o eticheta din care nu ramane nicio litera capata totusi un id, nu dispare. */
+  const simboluri = cu(["★", "☆"]);
+  assert.equal(simboluri.length, 2);
+  assert.equal(new Set(simboluri.map((o) => o.id)).size, 2);
 });
 
 test("⚠ personalizarea stinsa sau goala inseamna NIMIC", () => {

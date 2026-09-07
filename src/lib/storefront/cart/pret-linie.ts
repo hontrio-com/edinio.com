@@ -189,8 +189,8 @@ export function rezumatulLiniei(item: CartItem, regula: RegulaPretCos | undefine
     if (v === null || v === undefined || v === "" || v === false) continue;
 
     switch (camp.type) {
-      case "butoane":
-      case "select": {
+      /* ⚠ Lista derulanta e tot `butoane` — un STIL, nu un tip. Vezi `TIP_INVECHIT_SELECT`. */
+      case "butoane": {
         const et = (camp.optiuni ?? []).find((o) => o.id === v)?.eticheta;
         /* Optiunea stearsa intre timp: se arata eticheta campului, nu un UUID gol de inteles. */
         bucati.push(et || (typeof v === "string" && (camp.optiuni ?? []).length === 0 ? v : camp.label));

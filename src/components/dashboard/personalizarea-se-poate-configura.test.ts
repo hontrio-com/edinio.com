@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { normalizeazaDefinitia } from "@/lib/customization/definitie";
+import { normalizeazaDefinitia, TIPURI } from "@/lib/customization/definitie";
 import { pretulPersonalizarii, pretUnitar } from "@/lib/customization/pret";
 import { normalizeazaValorile } from "@/lib/customization/valori";
 
@@ -36,7 +36,7 @@ test("⚠ probele stiu sa citeasca fisierele", () => {
   assert.ok(sursa(FORMULAR).length > 20_000);
 });
 
-test("⚠ TOATE cele noua tipuri se pot alege din meniu", () => {
+test("⚠ TOATE tipurile se pot alege din meniu, si niciunul retras", () => {
   /*
    * ⚠ Meniul se construieste din `TIPURI`, lista din modulul pur — nu dintr-o insiruire scrisa de
    * mana. Scris de mana, un tip nou adaugat in motor ar fi ramas invizibil in panou, si nimeni
@@ -44,10 +44,24 @@ test("⚠ TOATE cele noua tipuri se pot alege din meniu", () => {
    */
   const s = sursa(EDITOR);
   assert.match(s, /\{TIPURI\.map\(\(t\) => <option key=\{t\} value=\{t\}>\{NUME_TIP\[t\]\}<\/option>\)\}/);
-  /* Si ca fiecare tip are un nume omenesc, nu identificatorul din cod. */
-  for (const t of ["text", "textarea", "image", "select", "color", "numar", "dimensiuni", "butoane", "comutator"]) {
+  /*
+   * Si ca fiecare tip are un nume omenesc, nu identificatorul din cod.
+   *
+   * ⚠ LISTA VINE DIN `TIPURI`, nu scrisa de mana — asta s-a schimbat pe 07.09.2026. Scrisa de mana,
+   * ea a ramas in urma exact cum a ramas si codul: cerea `select`, care intre timp fusese retras si
+   * facut STIL al lui `butoane`. O proba care insira ce ar trebui sa existe imbatraneste la fel de
+   * usor ca lucrul pe care il pazeste; una care citeste sursa adevarului nu poate.
+   */
+  assert.ok(TIPURI.length >= 9, `am citit ${TIPURI.length} tipuri`);
+  for (const t of TIPURI) {
     assert.match(s, new RegExp(`^\\s*${t}: "`, "m"), `tipul \`${t}\` n-are nume in meniu`);
   }
+  /*
+   * ⚠ SI PE DOS: un tip RETRAS nu mai are voie sa aiba nume in meniu. Ramas, el s-ar fi randat ca
+   * o optiune pe care comerciantul o poate alege si pe care cititorul o refuza — adica un camp
+   * salvat care dispare de pe pagina produsului.
+   */
+  assert.equal(/^\s*select: "/m.test(s), false, "tipul retras `select` e iar in meniu");
 });
 
 test("⚠ tipurile noi au reglajele lor, si numai ele", () => {

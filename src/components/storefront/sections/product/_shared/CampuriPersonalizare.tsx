@@ -161,20 +161,6 @@ function Control(p: ControlProps) {
       );
     }
 
-    case "select":
-      return (
-        <select
-          {...comun}
-          value={typeof valoare === "string" ? valoare : ""}
-          onChange={(e) => pune(camp.id, e.target.value)}
-        >
-          <option value="">Selecteaza...</option>
-          {(camp.options ?? []).map((o) => (
-            <option key={o} value={o}>{o}</option>
-          ))}
-        </select>
-      );
-
     case "color": {
       const c = typeof valoare === "string" ? valoare : (camp.default_color ?? "#000000");
       return (
@@ -270,6 +256,32 @@ function Control(p: ControlProps) {
        * ⚠ Semantica pentru cititorul de ecran ramane ACEEASI in amandoua (`radiogroup` + `radio`),
        * fiindca si intelesul e acelasi: o singura alegere din mai multe.
        */
+      /*
+       * ⚠ LISTA DERULANTA E TOT `butoane`, doar altfel desenata — pana pe 07.09.2026 era un TIP
+       * aparte (`select`), cu optiuni ca siruri simple: eticheta era identitatea, deci o corectura
+       * de scriere muta alegerea, si pretul n-avea de ce sa atarne. Acum primeste gratuit id-uri
+       * stabile si pret pe optiune. Vezi `TIP_INVECHIT_SELECT`.
+       *
+       * ⚠ E un `<select>` ADEVARAT, nu o lista desenata de noi: pe telefon el deschide selectorul
+       * nativ, si tocmai de-aia il alege comerciantul cand are multe optiuni.
+       *
+       * ⚠ VALOAREA E `o.id`, nu eticheta — ca la celelalte doua desene. Aici statea chiar defectul
+       * tipului vechi.
+       */
+      if (camp.stil === "lista") {
+        return (
+          <select
+            {...comun}
+            value={ales}
+            onChange={(e) => pune(camp.id, e.target.value)}
+          >
+            <option value="">Selecteaza...</option>
+            {(camp.optiuni ?? []).map((o) => (
+              <option key={o.id} value={o.id}>{o.eticheta}</option>
+            ))}
+          </select>
+        );
+      }
       if (camp.stil === "radio") {
         return (
           <div role="radiogroup" aria-label={camp.label} className="flex flex-col gap-1.5">

@@ -18,11 +18,24 @@
 -- AMBIGUE — adica ar fi cazut toate limitele durabile din platforma deodata.
 --
 -- ⚠ SI DREPTURILE SE REFAC LA LOC, EXPLICIT. Masurat inainte: `{postgres=X/postgres,
--- service_role=X/postgres}` — adica EXECUTE fusese revocat de la PUBLIC. Un `DROP` sterge ACL-ul,
--- iar functia recreata l-ar fi capatat inapoi din oficiu: `anon` si `authenticated` ar fi putut
--- chema un `SECURITY DEFINER` care SCRIE in `rate_limits`, deci oricine de pe internet ar fi putut
--- epuiza de-a dreptul cota de autentificare a oricui. Vezi memoria „revoke ... from anon NU face
--- nimic": EXECUTE e al lui PUBLIC din oficiu.
+-- service_role=X/postgres}`. Un `DROP` sterge ACL-ul, iar functia recreata primeste drepturi din
+-- oficiu — si atunci `anon` ar putea chema un `SECURITY DEFINER` care SCRIE in `rate_limits`.
+-- Adica oricine de pe internet, cu cheia publica a proiectului, ar putea chema
+-- `consuma_limita('login:email:victima@x.ro', 1, 3600, 3600)` si ar bloca omul din propriul cont.
+--
+-- ═══ ⚠ SI DE LA CINE SE REVOCA: NU AJUNGE `PUBLIC` ═══
+--
+-- Prima varianta a migratiei asteia scria doar `revoke all ... from public`, dupa memoria
+-- „EXECUTE e al lui PUBLIC din oficiu". A fost aplicata pe productie pe 07.09.2026 si ACL-ul a
+-- iesit `{postgres, anon, authenticated, service_role}` — adica exact gaura de mai sus, deschisa
+-- de chiar migratia care voia s-o inchida.
+--
+-- Motivul: pe Supabase drepturile nu vin de la `PUBLIC`, ci din `ALTER DEFAULT PRIVILEGES`, care
+-- acorda EXECUTE lui `anon` si `authenticated` pe fiecare functie NOUA din schema `public`. Ele
+-- sunt granturi explicite pe roluri, deci un `revoke from public` nu le atinge. Se numesc pe fata.
+--
+-- ⚠ Prins pentru ca migratia a fost urmata imediat de o citire a lui `proacl`, nu pentru ca ar fi
+-- dat vreo eroare. `GRANT` nu scartaie niciodata.
 
 begin;
 
@@ -78,8 +91,25 @@ begin
 end; $function$;
 
 -- ⚠ EXACT DREPTURILE DE DINAINTE, nici unul in plus.
-revoke all on function public.consuma_limita(text, integer, integer, integer, integer) from public;
+-- ⚠ `anon` si `authenticated` SE NUMESC PE FATA: granturile lor vin din `ALTER DEFAULT PRIVILEGES`,
+--    sunt explicite pe rol, si un `revoke from public` nu le atinge. Vezi nota de sus.
+revoke all on function public.consuma_limita(text, integer, integer, integer, integer)
+  from anon, authenticated, public;
 grant execute on function public.consuma_limita(text, integer, integer, integer, integer) to service_role;
+
+-- ⚠ SI SE VERIFICA, in aceeasi tranzactie. `GRANT` nu scartaie niciodata: fara randul asta,
+--    greseala de mai sus s-ar fi vazut doar daca cineva s-ar fi gandit sa citeasca `proacl` dupa.
+do $$
+declare v_acl text;
+begin
+  select p.proacl::text into v_acl
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where p.proname = 'consuma_limita' and n.nspname = 'public';
+
+  if v_acl like '%anon=%' or v_acl like '%authenticated=%' then
+    raise exception 'consuma_limita a ramas chemabila de anon/authenticated: %', v_acl;
+  end if;
+end $$;
 
 commit;
 

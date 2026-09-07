@@ -22,9 +22,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { randuriCitite } from "@/lib/supabase/rand-citit";
 import { articolelePentruProdus, type ProblemaPepita, type ProdusPepita } from "@/lib/pepita/articole";
-import { adresaComenzi, adresaFeedProduse, adresaFeedStoc, cheieNoua, amprentaCheii, revocaToate, roteste } from "@/lib/pepita/chei";
+import { adresaComenzi, adresaFeedProduse, adresaFeedStoc, cheieNoua, amprentaCheii, revocaToate, stingeCheileVechi } from "@/lib/pepita/chei";
 import { citesteConfig, configFaraChei } from "@/lib/pepita/config";
-import { pregateste } from "@/lib/pepita/feed";
+import { COLOANE_PRODUS, pregateste } from "@/lib/pepita/feed";
 import type { PepitaConfig } from "@/lib/pepita/types";
 import { TIPURI_GARANTIE, type TipGarantie } from "@/lib/pepita/types";
 
@@ -210,8 +210,32 @@ export async function rotestePepita(businessId: string, fel: "feed" | "comenzi")
   const g = await poarta(businessId);
   if ("error" in g) return { error: g.error };
   try {
-    const cheie = await roteste(createAdminClient(), businessId, fel);
-    await scrieConfigul(businessId, fel === "feed" ? { feed_token: cheie } : { order_key: cheie });
+    /*
+     * ⚠ ORDINEA: cheia noua se pune, se SCRIE in configurare, si abia apoi se revoca cea
+     * veche.
+     *
+     * Scrisa invers, o pana intre revocare si salvare ar fi lasat magazinul cu adresa veche
+     * moarta si cu cea noua pierduta pentru totdeauna: feedul oprit, comenzile refuzate, si
+     * nimic de copiat pentru Pepita. De aceea `roteste` primeste aici sarcina de a scrie
+     * INTAI, si daca scrierea nu merge, cheia proaspata se stinge la loc.
+     */
+    const admin = createAdminClient();
+    const cheie = cheieNoua();
+    const { error: eNoua } = await admin.from("pepita_chei")
+      .insert({ business_id: businessId, fel, amprenta: amprentaCheii(cheie) } as never);
+    if (eNoua) throw eNoua;
+
+    try {
+      await scrieConfigul(businessId, fel === "feed" ? { feed_token: cheie } : { order_key: cheie });
+    } catch (eScriere) {
+      /* ⚠ Cheia noua se stinge, cea veche ramane in picioare: integrarea continua sa mearga. */
+      await admin.from("pepita_chei")
+        .update({ revocat_la: new Date().toISOString() } as never)
+        .eq("amprenta", amprentaCheii(cheie));
+      throw eScriere;
+    }
+
+    await stingeCheileVechi(admin, businessId, fel, amprentaCheii(cheie));
   } catch (e) {
     await logError({
       action: "pepita/rotire", message: e instanceof Error ? e.message : String(e),
@@ -381,9 +405,9 @@ export async function verificaProdusePepita(
     for (let de = 0; de < PLAFON_VERIFICARE; de += PAGINA) {
       const randuri = randuriCitite<ProdusPepita & { is_active: boolean }>(
         "pepita.verificaProduse",
-        await admin.from("products")
-          .select("id, name, slug, description, price, compare_at_price, sku, images, category, "
-            + "track_inventory, stock_quantity, weight_grams, page_sections, is_bundle, updated_at, is_active")
+        /* ⚠ ACEEASI lista de coloane ca feedul, din acelasi loc. O a doua copie s-ar fi
+           departat, iar panoul ar fi judecat produsul dupa alte campuri decat generatorul. */
+        await admin.from("products").select(COLOANE_PRODUS)
           .eq("business_id", businessId).eq("is_active", true)
           .order("id").range(de, de + PAGINA - 1) as never,
       );

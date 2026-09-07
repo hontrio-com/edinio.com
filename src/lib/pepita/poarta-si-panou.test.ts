@@ -125,3 +125,49 @@ test("mesajul catre Pepita raspunde la tot ce cere Seller Center-ul lor", () => 
   assert.match(m, /transport/i);
   assert.match(m, /termen/i);
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FIECARE ACTIUNE E O USA PUBLICA
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ Intr-un fisier `"use server"`, FIECARE export e un capat pe care oricine il poate
+   chema, cu ce argumente vrea. `businessId` vine din browser, deci o actiune fara poarta
+   ar lucra pe magazinul altcuiva. tsc si eslint nu au ce sa spuna despre asta.
+
+   ⚠ Proba SCANEAZA SURSA, si stie ce poate: confirma ca fiecare functie CHEAMA poarta, nu
+   ca poarta e corecta. Corectitudinea portii sta in `poarta()` insasi, intr-un singur loc,
+   si acolo se citeste.
+*/
+
+test("⚠ fiecare actiune Pepita trece prin poarta de proprietate", () => {
+  const cod = readFileSync("src/lib/actions/pepita.actions.ts", "utf8");
+  assert.match(cod, /^"use server";/, "fisierul chiar e unul de actiuni");
+
+  const bucati = cod.split(/\nexport (?:async )?function /).slice(1);
+  assert.ok(bucati.length >= 10, `asteptam actiunile, am gasit ${bucati.length}`);
+
+  const fara: string[] = [];
+  for (const b of bucati) {
+    const nume = b.slice(0, b.indexOf("("));
+    const sfarsit = b.indexOf("\n}\n");
+    const corp = sfarsit === -1 ? b : b.slice(0, sfarsit);
+    if (!corp.includes("await poarta(")) fara.push(nume);
+  }
+  assert.deepEqual(fara, [], "actiuni fara poarta de proprietate");
+});
+
+test("⚠ cheile nu pleaca spre browser odata cu starea integrarii", () => {
+  /*
+   * `configFaraChei` le scoate, si numai `dezvaluieAdresele` le mai poate scoate din baza.
+   * Daca vreodata mai apare un loc, regula „cheia nu coboara cu pagina" se pierde fara ca
+   * nimic sa dea eroare: ar sta in sarcina RSC a fiecarei incarcari.
+   */
+  const cod = readFileSync("src/lib/actions/pepita.actions.ts", "utf8");
+  const citiri = cod.match(/config\.(feed_token|order_key)/g) ?? [];
+  const bucati = cod.split(/\nexport (?:async )?function /).slice(1);
+  const careLeCitesc = bucati
+    .filter((b) => /config\.(feed_token|order_key)/.test(b))
+    .map((b) => b.slice(0, b.indexOf("(")));
+  assert.ok(citiri.length > 0, "proba stie sa gaseasca citirile");
+  assert.deepEqual(careLeCitesc.sort(), ["activeazaPepita", "dezvaluieAdresele"]);
+});

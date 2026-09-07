@@ -133,31 +133,23 @@ export async function magazinulCheii(admin: Db, fel: FelCheie, cheie: string): P
 }
 
 /**
- * Pune o cheie noua si o revoca pe cea veche, in aceasta ordine.
+ * Stinge toate cheile de felul dat, in afara de cea proaspata.
  *
- * ⚠ INTAI CEA NOUA. Invers, o pana intre cei doi pasi ar lasa magazinul fara
- * nicio cheie valida, deci cu feedul mort si comenzile respinse, si nimic nu
- * l-ar mai reporni de la sine.
+ * ⚠ SE CHEAMA ULTIMA, dupa ce cheia noua a fost si scrisa in configurare. Stinsa
+ * mai devreme, o pana intre cei doi pasi ar fi lasat magazinul fara nicio cheie
+ * valida: feed mort, comenzi refuzate, si nimic de copiat pentru Pepita.
  */
-export async function roteste(admin: Db, businessId: string, fel: FelCheie): Promise<string> {
-  const cheie = cheieNoua();
-  const { error: eNou } = await admin.from("pepita_chei").insert({
-    business_id: businessId,
-    fel,
-    amprenta: amprentaCheii(cheie),
-  } as never);
-  if (eNou) throw eNou;
-
-  const { error: eVechi } = await admin
+export async function stingeCheileVechi(
+  admin: Db, businessId: string, fel: FelCheie, amprentaNoua: string,
+): Promise<void> {
+  const { error } = await admin
     .from("pepita_chei")
     .update({ revocat_la: new Date().toISOString() } as never)
     .eq("business_id", businessId)
     .eq("fel", fel)
     .is("revocat_la", null)
-    .neq("amprenta", amprentaCheii(cheie));
-  if (eVechi) throw eVechi;
-
-  return cheie;
+    .neq("amprenta", amprentaNoua);
+  if (error) throw error;
 }
 
 /**

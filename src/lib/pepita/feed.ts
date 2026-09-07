@@ -38,8 +38,14 @@ type Db = SupabaseClient<Database>;
 /** Cate produse se citesc odata. Sub plafonul PostgREST de 1000. */
 const PAGINA = 500;
 
-/** Coloanele de care are nevoie hotararea din `articole.ts`. Niciuna in plus. */
-const COLOANE = "id, name, slug, description, price, compare_at_price, sku, images, category, "
+/**
+ * Coloanele de care are nevoie hotararea din `articole.ts`. Niciuna in plus.
+ *
+ * ⚠ SE EXPORTA, si panoul o foloseste pe ACEASTA. O a doua lista scrisa acolo s-ar fi
+ * departat la prima schimbare, iar panoul ar fi judecat produsul dupa alte campuri decat
+ * generatorul: „toate pleaca" despre un feed care sare produse.
+ */
+export const COLOANE_PRODUS = "id, name, slug, description, price, compare_at_price, sku, images, category, "
   + "track_inventory, stock_quantity, weight_grams, page_sections, is_bundle, updated_at, is_active";
 
 interface RandListare {
@@ -147,7 +153,7 @@ export async function* scrieFeed(
 
   for (let de = 0; ; de += PAGINA) {
     const { data, error } = await admin
-      .from("products").select(COLOANE)
+      .from("products").select(COLOANE_PRODUS)
       .eq("business_id", businessId).eq("is_active", true)
       .order("id").range(de, de + PAGINA - 1);
     /*

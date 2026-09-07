@@ -410,6 +410,44 @@ test("⚠ nota interna spune ca statusul nu pleaca inapoi la Pepita", async () =
   assert.match(b.orders[0].internal_notes, /Pepita Admin/);
 });
 
+test("⚠ comanda pe firma capata datele de facturare, cu prefixul „RO” drept martor", async () => {
+  /*
+   * Fara ele, o comanda pe firma s-ar factura pe persoana fizica, iar o factura fiscala
+   * gresita nu se retrage, se storneaza. `verified` ramane fals fiindca NU intrebam ANAF pe
+   * calea de ingest: ruta trebuie sa raspunda repede, iar panoul arata atunci „date
+   * neconfirmate", exact ce trebuie sa vada omul inainte sa emita.
+   */
+  const b = faceBaza();
+  await ingereaza(b.db, CTX, comanda({
+    customer: {
+      last_name: "Pop", first_name: "Ion", phone: "0720000000",
+      billing_name: "Firma Mea SRL", billing_city: "Cluj-Napoca", billing_street: "Str. Firmei 3",
+      shipping_country: "RO", shipping_city: "Cluj-Napoca", shipping_street: "Str. Florilor 12",
+      tax_number: "RO14399840",
+    },
+  }));
+  const f = (b.orders[0] as unknown as { billing_company: Record<string, unknown> }).billing_company;
+  assert.equal(f.cui, "14399840", "codul se pastreaza in cifre, prefixul e alt camp");
+  assert.equal(f.company_name, "Firma Mea SRL");
+  assert.equal(f.vat_payer, true, "prefixul „RO” inseamna inregistrat in scopuri de TVA");
+  assert.equal(f.verified, false, "n-am intrebat ANAF, si n-o pretindem");
+});
+
+test("un cod fiscal care nu e CUI valid nu produce date de facturare inventate", async () => {
+  /* O denumire pusa pe factura fara un cod valid e mai rea decat lipsa ei. */
+  const b = faceBaza();
+  await ingereaza(b.db, CTX, comanda({
+    customer: { last_name: "Pop", first_name: "Ion", phone: "0720000000", tax_number: "HU12345678", billing_name: "Kft" },
+  }));
+  assert.equal((b.orders[0] as unknown as { billing_company: unknown }).billing_company, null);
+});
+
+test("o comanda pe persoana fizica n-are date de firma", async () => {
+  const b = faceBaza();
+  await ingereaza(b.db, CTX, comanda());
+  assert.equal((b.orders[0] as unknown as { billing_company: unknown }).billing_company, null);
+});
+
 test("potrivirea liniilor nu cere nicio scriere", async () => {
   const b = faceBaza();
   const r = await leagaLiniile(b.db, BID, comanda().linii);

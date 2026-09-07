@@ -132,8 +132,21 @@ export async function primesteComanda(req: Request, cheieBruta: string | null): 
     return esec(400, verdict.mesaj);
   }
 
-  const { data: setari } = await admin
+  const { data: setari, error: eSetari } = await admin
     .from("store_settings").select("pepita_config").eq("business_id", businessId).maybeSingle();
+  /*
+   * ⚠ O CITIRE CAZUTA NU E „integrare oprita". Fara randul asta, o pana de doua secunde a
+   * bazei ar fi trimis comerciantului mesajul „ai oprit-o tu din panou", iar el l-ar fi
+   * crezut si ar fi cautat un comutator care e pornit. 503 spune adevarul, si ei reincearca.
+   */
+  if (eSetari) {
+    await logError({
+      action: "pepita/comenzi",
+      message: `configurarea nu s-a putut citi: ${eSetari.message}`,
+      businessId, severity: "critical",
+    });
+    return esec(503, "Serviciu temporar indisponibil.");
+  }
   const config = citesteConfig((setari as { pepita_config?: unknown } | null)?.pepita_config);
 
   /*

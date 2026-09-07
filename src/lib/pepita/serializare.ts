@@ -91,12 +91,15 @@ function disponibilitateXml(a: ArticolPepita, cuTermen = true): string {
   return grup("Availability", [
     el("Available", a.disponibil ? "true" : "false"),
     /*
-     * ⚠ `null` inseamna „nu tinem evidenta bucatilor" si atunci elementul
-     * LIPSESTE. Zero ar insemna „nu mai am niciuna", adica exact pe dos.
-     * `el()` sare peste sirul gol, dar zero e un numar valid si trebuie sa treaca,
-     * deci verificarea e explicita aici.
+     * ⚠ `null` inseamna „nu tinem evidenta bucatilor" si atunci elementul LIPSESTE. Zero
+     * inseamna „nu mai am niciuna", adica exact pe dos, si TREBUIE sa se scrie.
+     *
+     * ⚠ Nota de aici spunea, pana la proba cu mutanti, ca `el()` ar inghiti zeroul si ca
+     * de aceea scrierea e facuta de mana. Era fals: `el()` sare doar peste `null` si peste
+     * sirul gol, iar „0" nu e niciunul dintre ele. O nota care descrie o plasa inexistenta
+     * e mai rea decat lipsa notei, fiindca urmatorul om o crede.
      */
-    a.cantitate != null ? `<Quantity>${a.cantitate}</Quantity>` : "",
-    cuTermen && a.termenZile != null ? `<ShippingDelay>${a.termenZile}</ShippingDelay>` : "",
+    el("Quantity", a.cantitate),
+    cuTermen ? el("ShippingDelay", a.termenZile) : "",
   ].join(""));
 }

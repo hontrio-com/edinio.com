@@ -133,6 +133,20 @@ comment on table public.pepita_listari is
 create index if not exists pepita_listari_incluse_idx
   on public.pepita_listari (business_id, product_id) where inclus;
 
+/*
+ * ⚠ SI UN INDEX PE CHEIA STRAINA, cu `product_id` PE PRIMA POZITIE.
+ *
+ * Indexul de mai sus n-ajuta la stergerea unui produs: acolo Postgres cauta randurile care
+ * POMENESC produsul, iar `product_id` e a doua coloana si indexul e si partial. Fara el,
+ * fiecare produs sters scaneaza toata tabela asta.
+ *
+ * Nu e o teama teoretica: pe 27.08.2026 stergerea in masa a 340 de produse cadea cu
+ * `statement timeout` din exact aceeasi cauza, la alte doua tabele. Proba
+ * `chei-straine-indexate.test.ts` exista de atunci, si ea a prins si lipsa de aici.
+ */
+create index if not exists pepita_listari_produs_idx
+  on public.pepita_listari (product_id);
+
 alter table public.pepita_listari enable row level security;
 
 drop policy if exists owner_select_pepita_listari on public.pepita_listari;
@@ -189,6 +203,13 @@ create index if not exists pepita_comenzi_recente_idx
   on public.pepita_comenzi (business_id, primit_la desc);
 create index if not exists pepita_comenzi_carantina_idx
   on public.pepita_comenzi (business_id, primit_la desc) where stare <> 'importata';
+
+/*
+ * ⚠ Si cheia straina spre `orders`, din acelasi motiv. Partial, fiindca randurile in carantina
+ * n-au `order_id` si n-au ce cauta intr-un index folosit numai la stergerea unei comenzi.
+ */
+create index if not exists pepita_comenzi_comanda_idx
+  on public.pepita_comenzi (order_id) where order_id is not null;
 
 alter table public.pepita_comenzi enable row level security;
 

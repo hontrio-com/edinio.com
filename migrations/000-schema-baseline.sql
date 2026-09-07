@@ -8141,8 +8141,10 @@ CREATE INDEX page_form_submissions_business_idx ON public.page_form_submissions 
 CREATE INDEX pepita_chei_active_idx ON public.pepita_chei USING btree (business_id, fel) WHERE (revocat_la IS NULL);
 CREATE UNIQUE INDEX pepita_chei_amprenta_idx ON public.pepita_chei USING btree (amprenta);
 CREATE INDEX pepita_comenzi_carantina_idx ON public.pepita_comenzi USING btree (business_id, primit_la DESC) WHERE (stare <> 'importata'::text);
+CREATE INDEX pepita_comenzi_comanda_idx ON public.pepita_comenzi USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX pepita_comenzi_recente_idx ON public.pepita_comenzi USING btree (business_id, primit_la DESC);
 CREATE INDEX pepita_listari_incluse_idx ON public.pepita_listari USING btree (business_id, product_id) WHERE inclus;
+CREATE INDEX pepita_listari_produs_idx ON public.pepita_listari USING btree (product_id);
 CREATE INDEX product_import_rows_cursor_idx ON public.product_import_rows USING btree (import_id, status, row_index);
 CREATE INDEX product_import_rows_images_idx ON public.product_import_rows USING btree (import_id, row_index) WHERE (images_done = false);
 CREATE INDEX product_import_rows_product_id_idx ON public.product_import_rows USING btree (product_id) WHERE (product_id IS NOT NULL);

@@ -4,6 +4,7 @@ import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { combinatiiActiveUnice, parseVariants } from "@/lib/storefront/variants";
+import { parseBillingCompany, type BillingCompany } from "@/lib/billing/company";
 import { desfaIdArticol, amprentaCombinatie } from "./identitate";
 import { metodaPlata, modLivrareCunoscut, modPlataCunoscut, starePlata, statusInitial, etichetaLivrare, etichetaPlata } from "./mapare";
 import type { ComandaPepita, LiniePepita } from "./comanda-forma";
@@ -289,6 +290,7 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     payment_status: starePlata(c.starePlata, c.modPlata),
     notes: c.mesajClient,
     internal_notes: noteInterne(c, nelegate),
+    billing_company: firmaCumparatoare(c) as never,
     order_source: sursaComenzii(c, ctx) as never,
   } as never).select("id").maybeSingle();
 
@@ -427,6 +429,40 @@ async function consumaStocul(admin: Db, businessId: string, orderId: string, leg
 /* ═══════════════════════════════════════════════════════════════════════════
    FORMELE SCRISE PE COMANDA
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Firma cumparatoare, cand comanda e pe firma.
+ *
+ * ⚠ FARA EA, o comanda pe firma s-ar factura pe persoana fizica. Documentul ar fi gresit,
+ * iar o factura fiscala gresita nu se retrage, se storneaza.
+ *
+ * ⚠ `verified: false`, si asta e ADEVARUL, nu o scapare: `parseBillingCompany` il pune pe
+ * fals dinadins, iar noi NU intrebam ANAF aici. Ruta asta trebuie sa raspunda repede, si o
+ * cerere catre un serviciu al statului pe calea de ingest ar fi pus soarta comenzii in
+ * mainile disponibilitatii lui. Panoul arata atunci „date neconfirmate la ANAF", ceea ce e
+ * exact ce trebuie sa vada comerciantul inainte sa emita factura.
+ *
+ * ⚠ PREFIXUL „RO" E SINGURUL MARTOR pe care il avem despre calitatea de platitor de TVA, si
+ * e martorul obisnuit: in Romania codul se scrie cu prefix tocmai cand firma e inregistrata
+ * in scopuri de TVA. Nu e o garantie, si de aceea nu se pretinde ca ar fi una.
+ *
+ * Cand codul nu trece verificarea de CUI, se intoarce `null`: pusa pe factura, o denumire
+ * fara un cod valid e mai rea decat lipsa ei.
+ */
+function firmaCumparatoare(c: ComandaPepita): BillingCompany | null {
+  const cod = c.client.codFiscal;
+  if (!cod) return null;
+  const f = c.client.facturare;
+  return parseBillingCompany({
+    cui: cod,
+    company_name: f.nume ?? [c.client.prenume, c.client.nume].filter(Boolean).join(" "),
+    address: f.strada ?? [f.numeStrada, f.numar].filter(Boolean).join(" "),
+    city: f.oras ?? "",
+    county: "",
+    reg_com: "",
+    vat_payer: /^\s*ro/i.test(cod),
+  });
+}
 
 function adresaLivrare(c: ComandaPepita): Record<string, unknown> {
   const l = c.client.livrare;

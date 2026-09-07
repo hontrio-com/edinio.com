@@ -69,3 +69,7 @@ next-env.d.ts
 # siguranta la Contabo: serverul se reface de aici in zece minute. Netinut in depozit,
 # afirmatia aia ar fi fost falsa.
 !/scripts/emag-proxy/
+# Curatitorul copiilor `_optim/` ale incarcarilor de cumparatori: NU e scratch, e
+# unealta. Se ruleaza cu credentialele de productie, care nu stau in arbore, si
+# ramane de rulat ori de cate ori se banuieste ca vreo usa a mai lasat copii in urma.
+!/scripts/curata-optim-personalizari.mjs

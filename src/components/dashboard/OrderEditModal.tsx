@@ -82,6 +82,15 @@ interface PickerProduct {
   /** `null` cand produsul nu are variante de ales. */
   variante: VarianteSlim | null;
   trepte: unknown;
+  /**
+   * Produsul se comanda personalizat, deci NU se poate adauga de aici.
+   *
+   * ⚠ Ecranul asta trimite produs, varianta si cantitate — si atat. Un fototapet adaugat de aici ar
+   * intra in comanda fara dimensiuni si la pretul de CATALOG: 89 de lei in loc de 910, iar atelierul
+   * ar primi o comanda fara sa stie ce produce. Serverul il refuza oricum (vezi `updateOrderDetails`);
+   * steagul asta face refuzul sa se vada INAINTE de clic.
+   */
+  cerePersonalizare?: boolean;
 }
 
 interface AddedLine extends PickerProduct {
@@ -617,6 +626,17 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       county: county.trim(),
       city: city.trim(),
       cart: marfa.map((i) => ({ productId: i.product_id as string, quantity: Number(i.quantity) || 1 })),
+      /*
+       * ⚠ COMANDA SE NUMESTE, ca serverul sa-si poata citi propriile linii.
+       *
+       * Liniile de aici n-au personalizarea: instantaneul comenzii pastreaza textele („350 x 250
+       * cm"), nu valorile din care se socoteste pretul. Deci plafonul din `subtotalMaximDinCatalog`
+       * recalcula un fototapet de 910 lei ca fiind de 89 — iar `valoareMarfii` hotaraste si
+       * regulile de transport, SI valoarea declarata curierului. Coletul pleca asigurat la 89.
+       *
+       * ⚠ Nu se trimite niciun pret: doar id-ul. Sumele le citeste serverul din comanda.
+       */
+      comanda: order.id,
       subtotal: previzualizare.stare === "gata" ? previzualizare.subtotal : Number(order.subtotal),
       // Rambursul cotat e cel NOU: prima curierului se calculeaza pe suma pe
       // care o incaseaza el, iar aceea include produsele tocmai adaugate. Si aici
@@ -1127,7 +1147,12 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                       // produsului, iar un produs pe zero nu se poate vinde
                       // oricat de plina ar parea marimea.
                       const outProdus = p.track_inventory && (p.stock_quantity ?? 0) <= 0;
-                      const out = faraCombinatii || outProdus
+                      /*
+                       * ⚠ SI PRODUSELE PERSONALIZATE. Ecranul n-are cum sa culeaga dimensiunile,
+                       * materialul si fisierele — deci ar aduga linia la pretul de catalog. Se
+                       * comanda din magazin, unde formularul exista deja.
+                       */
+                      const out = faraCombinatii || outProdus || !!p.cerePersonalizare
                         || (areVariante && p.variante!.combos.every((c) => c.stock === 0));
                       return (
                         <button key={p.id}
@@ -1163,8 +1188,11 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
                             <p className="text-sm text-foreground break-words">{p.name}</p>
                             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                               <span className="text-sm font-medium text-foreground">{formatPrice(p.price)}</span>
-                              {faraCombinatii && <span className="text-[10px] font-bold text-destructive">FARA VARIANTE ACTIVE</span>}
-                              {out && !faraCombinatii && <span className="text-[10px] font-bold text-destructive">STOC 0</span>}
+                              {p.cerePersonalizare && (
+                                <span className="text-[10px] font-bold text-amber-600">SE COMANDA DIN MAGAZIN</span>
+                              )}
+                              {faraCombinatii && !p.cerePersonalizare && <span className="text-[10px] font-bold text-destructive">FARA VARIANTE ACTIVE</span>}
+                              {out && !faraCombinatii && !p.cerePersonalizare && <span className="text-[10px] font-bold text-destructive">STOC 0</span>}
                               {!out && areVariante && <span className="text-[10px] text-primary font-medium">ALEGE OPTIUNILE</span>}
                               {!out && !areVariante && p.track_inventory && (
                                 <span className="text-[10px] text-muted-foreground">stoc {p.stock_quantity}</span>

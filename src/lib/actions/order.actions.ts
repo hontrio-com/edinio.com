@@ -2340,6 +2340,12 @@ export async function searchOrderProducts(businessId: string, query: string): Pr
       imagine: primaImagine(p.images),
       variante: slabesteVariante(p.page_sections, round2(Number(p.price))),
       trepte: (p.page_sections as { quantity_tiers?: unknown } | null)?.quantity_tiers ?? null,
+      /*
+       * ⚠ NU SE POATE ADAUGA DE AICI — vezi garda din `updateOrderDetails`. Steagul pleaca la panou
+       * ca produsul sa apara stins, cu motivul scris: altfel comerciantul ar fi apasat si ar fi
+       * primit refuzul abia dupa ce a completat tot ecranul.
+       */
+      cerePersonalizare: cerePersonalizarea(p.page_sections),
     })),
   };
 }
@@ -2685,6 +2691,33 @@ export async function updateOrderDetails(orderId: string, data: {
     }
     if (idsAdaugate.some((id) => !catalog.has(id))) {
       return { error: "Unul dintre produsele adaugate nu mai este disponibil. Reincarca pagina si incearca din nou." };
+    }
+
+    /*
+     * ═══ ⚠ UN PRODUS CARE CERE PERSONALIZARE NU SE POATE ADAUGA DE AICI ═══
+     *
+     * `added_items` poarta produs, varianta si cantitate — si atat. Deci un fototapet adaugat din
+     * panou intra in comanda FARA dimensiuni, fara material si fara personalizare, la pretul de
+     * CATALOG: 89 de lei in loc de 910. Nu e o gaura pe care s-o poata folosi un cumparator
+     * (ecranul cere sesiune si proprietatea magazinului), dar e o comanda invalida si subevaluata
+     * pe care comerciantul o poate face fara sa vrea — iar atelierul ar primi-o fara sa stie ce
+     * produce.
+     *
+     * ⚠ SE REFUZA, NU SE CONSTRUIESTE PERSONALIZAREA AICI. Ar insemna al treilea formular de
+     * personalizare, langa pagina de produs si comanda directa — trei locuri de tinut in sincron
+     * pentru un drum pe care comerciantul il face rar. Cine vrea sa adauge un produs personalizat
+     * intr-o comanda il comanda din magazin, unde formularul exista deja.
+     *
+     * ⚠ SI PE SERVER, nu doar in panou: ecranul deseneaza produsele ca nealegibile, dar
+     * `added_items` vine de la client. O verificare doar pe ecran ar fi fost o sugestie.
+     */
+    const cerPersonalizare = idsAdaugate.filter((id) => cerePersonalizarea(live.get(id)?.page_sections));
+    if (cerPersonalizare.length) {
+      const nume = cerPersonalizare.map((id) => catalog.get(id)?.name).filter(Boolean);
+      return {
+        error: `${nume.join(", ") || "Produsul"} se comanda personalizat, din pagina lui: are optiuni`
+          + " care schimba pretul si care nu se pot alege de aici. Comanda-l din magazin.",
+      };
     }
   }
 

@@ -18,6 +18,7 @@ import { storeBaseUrl } from "@/lib/seo";
 import { isPremiumPlan } from "@/lib/plans";
 import { ABANDON_MINUTES, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";
+import { pragulComenzilor } from "@/app/api/cron/curata-fisiere/reguli";
 
 type CartRow = Database["public"]["Tables"]["abandoned_carts"]["Row"];
 
@@ -161,8 +162,28 @@ export async function getRecoverableCart(cartId: string): Promise<AbandonedCartI
     if (!cartId) return [];
     const admin = createAdminClient();
     const { data: cart } = await admin
-      .from("abandoned_carts").select("business_id, items, status").eq("id", cartId).single();
+      .from("abandoned_carts").select("business_id, items, status, last_activity_at").eq("id", cartId).single();
     if (!cart || cart.status === "converted") return [];
+
+    /*
+     * ═══ ⚠ ACELASI TERMEN CA RETENTIA FISIERELOR ═══
+     *
+     * Cronul de curatenie apara fisierele cosurilor deschise doar cat tine fereastra de
+     * `LUNI_PE_COMANDA` (vezi `curata-fisiere/reguli.ts`). Dupa ea le sterge — pe drept, altfel
+     * Edinio ar deveni un depozit permanent de fotografii ale cumparatorilor.
+     *
+     * Dar linkul de recuperare nu se uita la nicio varsta. Deci un cos de acum sapte luni se
+     * restaura cu cheile unor fisiere care nu mai exista: omul ajungea pe un cos in care poza lui
+     * lipseste, iar comanda ar fi fost refuzata la trimitere fara sa inteleaga de ce.
+     *
+     * ⚠ SE REFUZA INTREG, nu se refac liniile fara fisiere. `restoreCart` SUPRASCRIE cosul
+     * clientului: un cos „recuperat" pe jumatate i-ar fi sters si ce avea in el intre timp.
+     *
+     * ⚠ ACELASI PRAG, DINTR-O SINGURA SURSA. Doua numere care se apropie ar fi lasat o fereastra
+     * in care cosul e recuperabil si fisierele lui nu mai sunt — exact defectul de acum.
+     */
+    const miscat = cart.last_activity_at ? new Date(cart.last_activity_at) : null;
+    if (!miscat || Number.isNaN(miscat.getTime()) || miscat < pragulComenzilor(new Date())) return [];
 
     const stored = (Array.isArray(cart.items) ? cart.items : []) as unknown as AbandonedCartItem[];
     /*

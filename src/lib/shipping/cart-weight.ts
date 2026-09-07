@@ -165,6 +165,24 @@ function cuPersonalizarea(p: ProdusCotat, brut: unknown, maxim: number): number 
 export function subtotalMaximDinCatalog(
   linii: LinieCotata[] | undefined,
   produse: ProdusCotat[],
+  /**
+   * Preturi UNITARE dovedite de o comanda care EXISTA DEJA, cheiate pe produs.
+   *
+   * ═══ ⚠ DE CE E NEVOIE, SI DE CE NU E O PORTITA ═══
+   *
+   * Plafonul de mai jos recalculeaza personalizarea din definitia de ASTAZI, pornind de la valorile
+   * brute pe care le trimite cosul. O comanda deja plasata nu le mai are: instantaneul ei pastreaza
+   * etichetele si textele („350 x 250 cm"), nu valorile din care se socoteste.
+   *
+   * Deci la „Recoteaza transportul" din panou, un fototapet de 910 lei cadea inapoi pe cei 89 din
+   * catalog — iar `valoareMarfii` hotaraste si regulile de transport, SI valoarea declarata
+   * curierului. Coletul pleca asigurat la 89 in loc de 910.
+   *
+   * ⚠ NU E UN PRET DE LA CLIENT. Apelantul trimite doar id-ul comenzii; sumele le citeste serverul
+   * din `orders.items`, adica din ce s-a incasat deja. Un apelant anonim care ar ghici un id nu
+   * poate ridica plafonul decat la ce scrie chiar in acea comanda, si numai pentru produsele ei.
+   */
+  istoric?: Map<string, number>,
 ): number {
   const byId = new Map(produse.map((p) => [p.id, p]));
   let total = 0;
@@ -177,7 +195,13 @@ export function subtotalMaximDinCatalog(
     for (const pret of enabledComboPriceMap(p.page_sections, baza).values()) {
       if (Number.isFinite(pret) && pret > maxim) maxim = pret;
     }
-    total += cuPersonalizarea(p, linie.personalizare, maxim) * normalizeazaCantitate(linie.quantity);
+    /*
+     * ⚠ SE IA CEA MAI MARE dintre socoteala de azi si ce dovedeste comanda: o linie istorica nu
+     * poate valora mai putin decat s-a incasat pe ea, iar una noua nu e in `istoric` deloc.
+     */
+    const dinCatalog = cuPersonalizarea(p, linie.personalizare, maxim);
+    const dovedit = istoric?.get(linie.productId) ?? 0;
+    total += Math.max(dinCatalog, dovedit) * normalizeazaCantitate(linie.quantity);
   }
   return Math.round(total * 100) / 100;
 }

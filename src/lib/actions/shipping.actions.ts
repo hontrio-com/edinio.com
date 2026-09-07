@@ -372,6 +372,17 @@ export async function getShippingOptions(
     cart?: { productId: string; quantity: number; personalizare?: unknown }[];
     /** Valoarea marfii dupa promotii, de la client. Vezi avertismentul de la `ctx.subtotal`. */
     subtotal?: number;
+    /**
+     * Id-ul unei comenzi EXISTENTE, cand cotarea se face pentru ea („Recoteaza transportul").
+     *
+     * ⚠ NU E UN PRET, E O DOVADA. Plafonul din `subtotalMaximDinCatalog` recalculeaza
+     * personalizarea din definitia de azi, pornind de la valorile brute — pe care o comanda deja
+     * plasata nu le mai are (instantaneul ei pastreaza textele, nu valorile). Deci un fototapet de
+     * 910 lei cadea inapoi pe cei 89 din catalog, iar coletul pleca asigurat la 89.
+     *
+     * Sumele le citeste SERVERUL din `orders.items`, si numai dintr-o comanda a magazinului cerut.
+     */
+    comanda?: string;
   },
 ): Promise<ShippingOptionSemnata[]> {
   /*
@@ -568,9 +579,33 @@ export async function getShippingOptions(
    * odata cu `subtotal`. Ramane deschis doar pentru apelantii care ar trimite unul fara
    * celalalt, si acolo nu exista nimic care sa sustina suma.
    */
+  /*
+   * ⚠ CE S-A INCASAT DEJA PE COMANDA, cand se recoteaza una existenta. Vezi `comanda` din semnatura
+   * si nota lunga din `subtotalMaximDinCatalog`: fara ea, o comanda personalizata isi pierde
+   * valoarea la recotare — si la reguli, si la asigurare.
+   */
+  let istoric: Map<string, number> | undefined;
+  if (destination.comanda) {
+    const { data: veche } = await supabase
+      .from("orders")
+      .select("items")
+      .eq("id", destination.comanda)
+      .eq("business_id", businessId)
+      .maybeSingle();
+    const linii = Array.isArray(veche?.items) ? veche.items : [];
+    istoric = new Map();
+    for (const l of linii as { product_id?: unknown; price?: unknown }[]) {
+      const id = typeof l?.product_id === "string" ? l.product_id : null;
+      const pret = Number(l?.price);
+      if (!id || !Number.isFinite(pret) || pret <= 0) continue;
+      /* Aceeasi comanda poate avea doua linii ale aceluiasi produs; conteaza cea mai scumpa. */
+      istoric.set(id, Math.max(istoric.get(id) ?? 0, pret));
+    }
+  }
+
   const valoareMarfii = Math.min(
     Math.max(0, Number(destination.subtotal) || 0),
-    subtotalMaximDinCatalog(destination.cart, produseCotate),
+    subtotalMaximDinCatalog(destination.cart, produseCotate, istoric),
   );
 
   const options: ShippingOption[] = [];

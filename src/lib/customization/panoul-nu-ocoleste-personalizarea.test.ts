@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { subtotalMaximDinCatalog } from "@/lib/shipping/cart-weight";
+import { LUNI_PE_COMANDA, ZILE_ORFAN } from "@/app/api/cron/curata-fisiere/reguli";
 
 /**
  * ═══ CELE DOUA DRUMURI DIN PANOU CARE OCOLEAU PERSONALIZAREA ═══
@@ -139,4 +140,34 @@ test("⚠ recuperarea unui cos expira odata cu fisierele lui", () => {
     "recuperarea nu se uita la varsta cosului");
   assert.match(act, /select\("business_id, items, status, last_activity_at"\)/,
     "varsta nici nu se citeste din baza");
+});
+
+test("⚠ politica de confidentialitate spune EXACT ce face cronul", () => {
+  /*
+   * ═══ ⚠ DOUA LOCURI CARE TREBUIE SA SPUNA ACELASI LUCRU ═══
+   *
+   * Politica e un document juridic public: daca promite „6 luni" si cronul sterge la 3, platforma
+   * minte oamenii; daca promite 6 si cronul nu sterge niciodata, minte in cealalta directie — si
+   * atunci Edinio devine chiar depozitul permanent de fotografii pe care textul spune ca nu-l tine.
+   *
+   * ⚠ SE CER CIFRELE DIN COD, nu niste numere scrise in proba: importate din `reguli.ts`, ele se
+   * schimba impreuna sau proba cade. Scrise de mana aici, ar fi fost al treilea loc de tinut in
+   * sincron.
+   *
+   * ⚠ RESTUL DOCUMENTULUI NU SE ATINGE. E transcris cuvant cu cuvant de la proprietarul platformei
+   * — vezi nota din `confidentialitate/page.tsx` si lectia din proiect despre transcrierea mecanica
+   * a textelor juridice, pusa dupa ce un cuvant de-al meu a ajuns intr-un asemenea document.
+   */
+  const text = sursa("src/lib/website/confidentialitate.ts");
+  assert.match(text, new RegExp(`cel mult ${LUNI_PE_COMANDA} luni de la ultima activitate`),
+    "politica nu spune termenul pe care il aplica cronul comenzilor");
+  /* Textul poarta diacritice; se cauta bucata simpla, fara regex de construit. */
+  assert.ok(
+    text.includes(`${ZILE_ORFAN} de zile`),
+    "politica nu spune termenul fisierelor care nu ajung pe nicio comanda",
+  );
+
+  /* ⚠ Si data se muta odata cu textul: altfel `dateModified` spune ca politica n-a fost atinsa. */
+  const pagina = sursa("src/app/(website)/confidentialitate/page.tsx");
+  assert.match(pagina, /iso: "2026-09-07"/, "politica s-a schimbat, dar data ei a ramas cea veche");
 });

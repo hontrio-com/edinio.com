@@ -64,9 +64,28 @@ export async function GET(req: NextRequest) {
   for (let de = 0; ; de += PAGINA) {
     const { data, error } = await admin
       .from("orders")
-      .select("id, created_at, items")
-      .gte("created_at", prag.toISOString())
-      .order("created_at", { ascending: true })
+      .select("id, updated_at, items")
+      /*
+       * ═══ ⚠ CEASUL PORNESTE DE LA ULTIMA ATINGERE, NU DE LA PLASARE ═══
+       *
+       * Era `created_at`. Cu el, o comanda lucrata luni de zile (precomanda, tipar in asteptare,
+       * retur) isi pierdea machetele in timp ce atelierul inca avea nevoie de ele.
+       *
+       * ⚠ SI DE CE NU DE LA FINALIZARE, cum ar parea firesc: fiindca finalizarea nu vine.
+       * Masurat pe 07.09.2026, din 389 de comenzi — 175 stau la `shipped` si nu ajung niciodata
+       * `delivered`. Aproape jumatate din comenzi n-ar fi pornit ceasul NICIODATA, iar pozele
+       * cumparatorilor ar fi ramas pe veci. Un termen care nu se scurge nu e o retentie.
+       *
+       * `updated_at` le imapaca pe amandoua: cat timp cineva lucreaza la comanda, fisierele stau;
+       * cand nu se mai atinge nimeni de ea, ceasul curge si se opreste singur. Si e mereu >=
+       * `created_at`, deci nicio comanda nu poate expira mai devreme decat pana acum.
+       *
+       * ⚠ Masurat: 358 din 389 de comenzi sunt atinse dupa plasare, in medie la 3 zile, cel mult
+       * la 56. Deci pentru aproape toate cele doua ceasuri dau acelasi termen — schimbarea nu
+       * prelungeste retentia in fapt, doar nu mai taie peste o comanda inca vie.
+       */
+      .gte("updated_at", prag.toISOString())
+      .order("updated_at", { ascending: true })
       .range(de, de + PAGINA - 1);
 
     if (error) {

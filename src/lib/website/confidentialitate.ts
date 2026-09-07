@@ -1348,6 +1348,32 @@ const SECTIUNI: Sectiune[] = [
         text: "Aplicăm principiul limitării stocării: datele nu trebuie păstrate într-o formă identificabilă mai mult decât este necesar scopului pentru care sunt prelucrate.",
       },
       { tip: "paragraf", text: "Perioada diferă în funcție de categorie." },
+      /*
+       * ⚠ ADĂUGAT 07.09.2026, LA CEREREA EXPRESĂ A PROPRIETARULUI PLATFORMEI.
+       *
+       * Restul documentului e transcris cuvânt cu cuvânt de la client și nu se atinge — vezi nota
+       * din `confidentialitate/page.tsx`. Paragrafele astea sunt singura excepție, și există fiindcă
+       * platforma a căpătat o regulă tehnică pe care textul n-o spunea nicăieri: fișierele urcate de
+       * cumpărători se șterg automat.
+       *
+       * ⚠ CIFRELE SUNT CELE DIN COD, nu rotunjite pentru text: `ZILE_ORFAN = 30` și
+       * `LUNI_PE_COMANDA = 6` din `api/cron/curata-fisiere/reguli.ts`. Dacă se schimbă acolo, se
+       * schimbă și aici — altfel politica ar promite altceva decât face cronul.
+       */
+      {
+        tip: "paragraf",
+        text: "Fișierele încărcate de cumpărători pentru personalizarea produselor (fotografii, machete, documente de tipar) sunt păstrate cel mult 6 luni de la ultima activitate înregistrată pe comanda din care fac parte, după care sunt șterse definitiv și automat.",
+        evidenta: ["6 luni"],
+      },
+      {
+        tip: "paragraf",
+        text: "Fișierele care nu ajung pe nicio comandă — încărcate și abandonate înainte de finalizare — sunt șterse după 30 de zile.",
+        evidenta: ["30 de zile"],
+      },
+      {
+        tip: "paragraf",
+        text: "Informațiile necesare evidenței comenzii (produsul, opțiunile alese, sumele) se păstrează separat de fișiere, conform obligațiilor legale și contractuale.",
+      },
     ],
   },
   {

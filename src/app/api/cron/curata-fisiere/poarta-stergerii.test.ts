@@ -92,7 +92,13 @@ const baza = http.createServer((req, res) => {
       return res.end(JSON.stringify({ code: "57014", message: "baza de proba: comenzile au cazut" }));
     }
 
-    for (const [k, v] of url.searchParams) if (k === "created_at") filtre.push(v);
+    /*
+     * ⚠ `updated_at`, NU `created_at` — ceasul retentiei s-a mutat pe ULTIMA ATINGERE pe
+     * 07.09.2026. Vezi nota din ruta: pornit de la finalizare, el n-ar fi pornit niciodata pentru
+     * cele 175 de comenzi care stau la `shipped`; pornit de la plasare, taia peste comenzi inca
+     * vii.
+     */
+    for (const [k, v] of url.searchParams) if (k === "updated_at") filtre.push(`${k}=${v}`);
 
     /*
      * ⚠ PAGINAREA SE CITESTE DE UNDE O TRIMITE CHIAR CLIENTUL: `offset` si `limit` in ADRESA.
@@ -293,7 +299,10 @@ test("⚠ se cer doar comenzile din fereastra, nu toate din istorie", async () =
   pune("orice.jpg", 400);
   await GET(cere());
   assert.equal(filtre.length > 0, true, "nu s-a trimis niciun filtru pe data comenzii");
-  assert.ok(filtre.every((f) => f.startsWith("gte.")), `filtrul nu e o margine de jos: ${filtre.join(", ")}`);
+  assert.ok(
+    filtre.every((f) => f.startsWith("updated_at=gte.")),
+    `filtrul nu e o margine de jos pe ultima atingere: ${filtre.join(", ")}`,
+  );
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════

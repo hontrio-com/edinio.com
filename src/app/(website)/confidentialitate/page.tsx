@@ -31,7 +31,12 @@ export const metadata: Metadata = siteMetadata({
  * `dateModified` din datele structurate. Tinute separat, cine actualizeaza
  * politica ar schimba unul si ar lasa celalalt sa minta despre cat de recenta e.
  */
-const ULTIMA_ACTUALIZARE = { iso: "2026-06-16", text: "16 iunie 2026" };
+/*
+ * ⚠ MUTATA ODATA CU TEXTUL. Data alimenteaza si ecranul, si `dateModified` din datele structurate:
+ * lasata pe cea veche, politica ar fi spus ca n-a fost atinsa din iunie, desi retentia fisierelor
+ * incarcate de cumparatori a intrat in ea pe 07.09.2026.
+ */
+const ULTIMA_ACTUALIZARE = { iso: "2026-09-07", text: "7 septembrie 2026" };
 
 // Schema.org nu are tip pentru termeni sau politici de confidentialitate
 // (subtipurile de WebPage sunt AboutPage, ContactPage, CollectionPage, FAQPage,

@@ -1,5 +1,4 @@
 "use client";
-import { rezumatPersonalizare } from "@/lib/storefront/cart/normalize";
 
 import { useEffect, useRef } from "react";
 import Image from "next/image";
@@ -38,7 +37,7 @@ export function CartDrawerClassic({
    */
   inline?: boolean;
 }) {
-  const { items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, total, count } = useCart();
+  const { items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, lineSummary, total, count } = useCart();
 
   /**
    * Sertarul se declara `aria-modal`, deci trebuie sa si tina focusul inauntru.
@@ -219,9 +218,9 @@ export function CartDrawerClassic({
                     )}
                     {item.variantTitle && <p className="text-xs text-muted-foreground leading-snug truncate">{item.variantTitle}</p>}
                     {/* ⚠ Vezi `rezumatPersonalizare`: doua linii personalizate diferit trebuie sa ARATE diferit. */}
-                    {rezumatPersonalizare(item.customization) && (
+                    {lineSummary(item) && (
                       <p className="text-xs text-muted-foreground leading-snug truncate">
-                        {rezumatPersonalizare(item.customization)}
+                        {lineSummary(item)}
                       </p>
                     )}
                     {/*

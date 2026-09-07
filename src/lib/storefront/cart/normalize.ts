@@ -119,7 +119,28 @@ function scriereCanonica(v: unknown): string {
 export function lineKey(
   item: Pick<CartItem, "productId" | "variantTitle" | "customization">,
 ): string {
-  const baza = item.variantTitle ? `${item.productId}::${item.variantTitle}` : item.productId;
+  /*
+   * ⚠ SEPARATORUL SE ESCAPEAZA IN TITLUL VARIANTEI, si nu e pedanterie.
+   *
+   * Cheia se compune lipind bucati cu `::`. Un titlu de varianta care contine chiar `::` poate,
+   * teoretic, sa reproduca inceputul unei alte linii: „X::{...}" fara personalizare si „X" cu
+   * personalizarea aia dau acelasi sir. Doua linii diferite ar cadea pe o singura cheie, cu
+   * cantitatea 2 — exact paguba de la care a plecat tot helperul.
+   *
+   * ⚠ Titlurile de varianta le scrie COMERCIANTUL, deci nu e o cale de atac a cumparatorului — dar
+   * identitatea comerciala a unei linii nu se sprijina pe „nimeni n-o sa scrie asta".
+   *
+   * ⚠ SE ESCAPEAZA DOAR `::`, nu fiecare `:`. Asa, orice titlu care nu-l contine pastreaza cheia
+   * de dinainte CARACTER CU CARACTER — si cosurile aflate acum in browserele oamenilor raman
+   * valabile. Escapand tot, fiecare cos cu variante s-ar fi repliat gresit la prima deschidere.
+   */
+  /*
+   * ⚠ `":\\:"` — DOUA caractere in sursa pentru unul singur in sir, si asta a fost deja gresit o
+   * data: scris `":\:"`, JS citeste `\:` ca escape necunoscut si il reduce la `:`, deci
+   * inlocuirea devine `"::"` cu `"::"` — un no-op perfect tacut. Proba de mai jos l-a prins.
+   */
+  const titlu = item.variantTitle?.replaceAll("::", ":\\:");
+  const baza = titlu ? `${item.productId}::${titlu}` : item.productId;
   /*
    * ⚠ PERSONALIZAREA INTRA IN IDENTITATE, si asta e tot rostul ei aici.
    *

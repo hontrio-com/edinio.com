@@ -116,7 +116,13 @@ interface Props {
    * linii in formular: apelantul scade exact ce s-a comandat, nu ce era in
    * cos cand s-a deschis modalul.
    */
-  onCartConsumed?: (liniiComandate: { productId: string; variantTitle?: string }[]) => void;
+  /*
+   * ⚠ SI PERSONALIZAREA. `cosDupaComanda` scoate din cos exact liniile comandate, iar identitatea
+   * unei linii include personalizarea: „Robert" si „Maria" sunt doua linii ale aceluiasi produs.
+   * La rulare campul ajungea oricum (se dau chiar obiectele din cos, filtrate) — dar tipul PERMITEA
+   * un apelant care remapeaza si il pierde, si atunci s-ar fi scos din cos linia gresita.
+   */
+  onCartConsumed?: (liniiComandate: { productId: string; variantTitle?: string; customization?: Record<string, unknown> }[]) => void;
   /**
    * Clientul a schimbat o linie de cos din formular: `qty` zero inseamna stearsa.
    *

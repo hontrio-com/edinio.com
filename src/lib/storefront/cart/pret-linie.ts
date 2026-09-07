@@ -2,7 +2,7 @@ import { normalizeazaDefinitia } from "@/lib/customization/definitie";
 import { pretUnitar as pretUnitarCuPersonalizare, pretulPersonalizarii } from "@/lib/customization/pret";
 import { normalizeazaValorile } from "@/lib/customization/valori";
 import { construiesteTrepte, pretPeTrepte, type PretLinie } from "@/lib/storefront/quantity-tiers";
-import type { CartItem } from "./normalize";
+import { rezumatPersonalizare, type CartItem } from "./normalize";
 
 /**
  * Cat costa o linie de cos — SINGURA socoteala, si de-aia sta aici.
@@ -146,4 +146,78 @@ export function cereRevizuire(item: CartItem, regula: RegulaPretCos | undefined)
    */
   if (!definitie) return true;
   return !normalizeazaValorile(definitie, valori).ok;
+}
+
+/**
+ * Personalizarea liniei, scrisa asa cum o citeste OMUL — din definitia produsului.
+ *
+ * ═══ ⚠ CE REPARA, SI DE CE ERA VIZIBIL PE FIECARE COS ═══
+ *
+ * `rezumatPersonalizare` din `normalize.ts` lucreaza pe valorile BRUTE, fiindca acolo nu exista
+ * definitia. Iar valorile brute nu sunt ce vede omul:
+ *
+ *   - la `butoane` si `select`, valoarea e ID-ul optiunii — un UUID facut de panou. Clientul citea
+ *     in cos „350 x 250 · 91c8409f-8bdf-4a…" in loc de „350 × 250 cm · Premium";
+ *   - la `comutator`, valoarea e `true`, iar vechiul rezumat SAREA peste `true` cu totul. Deci
+ *     „Protectie impermeabila: Da" nu aparea NICIODATA, desi se si platea;
+ *   - dimensiunile ieseau fara unitate, iar numerele fara a lor.
+ *
+ * Serverul si instantaneul comenzii erau corecte de mult — acolo ID-ul devine „Premium". Minciuna
+ * era doar INAINTE de comanda, adica exact acolo unde omul verifica ce cumpara.
+ *
+ * ⚠ UN SINGUR FORMATOR, si asta e chiar cerinta: sertarul, cele trei pagini de cos si finalizarea
+ * il cheama pe acesta. Scrise separat, cele patru ecrane ar fi numit altfel aceleasi alegeri.
+ *
+ * ⚠ CE SE ARATA CU ETICHETA SI CE NU. „Premium" si „350 × 250 cm" se citesc singure; „Da" nu
+ * inseamna nimic fara numele campului. Deci eticheta se pune unde valoarea nu vorbeste singura.
+ *
+ * ⚠ CADE PE REZUMATUL VECHI cand definitia n-a ajuns inca (preturile vin asincron). Ala arata mai
+ * putin, dar arata ceva: doua linii personalizate diferit trebuie sa ARATE diferit chiar si in
+ * clipa dinaintea sosirii preturilor, altfel clientul crede ca a apasat de doua ori.
+ */
+export function rezumatulLiniei(item: CartItem, regula: RegulaPretCos | undefined): string {
+  const valori = item.customization;
+  if (!valori || typeof valori !== "object" || Object.keys(valori).length === 0) return "";
+
+  const definitie = normalizeazaDefinitia(regula?.customization);
+  if (!definitie) return rezumatPersonalizare(valori as Record<string, unknown>);
+
+  const bucati: string[] = [];
+  /* Se merge pe ORDINEA CAMPURILOR din definitie, nu pe cea a cheilor trimise de browser. */
+  for (const camp of definitie.fields) {
+    const v = (valori as Record<string, unknown>)[camp.id];
+    if (v === null || v === undefined || v === "" || v === false) continue;
+
+    switch (camp.type) {
+      case "butoane":
+      case "select": {
+        const et = (camp.optiuni ?? []).find((o) => o.id === v)?.eticheta;
+        /* Optiunea stearsa intre timp: se arata eticheta campului, nu un UUID gol de inteles. */
+        bucati.push(et || (typeof v === "string" && (camp.optiuni ?? []).length === 0 ? v : camp.label));
+        break;
+      }
+      case "comutator":
+        bucati.push(`${camp.label}: Da`);
+        break;
+      case "dimensiuni": {
+        const o = v as { latime?: unknown; inaltime?: unknown };
+        bucati.push(`${o.latime ?? "?"} × ${o.inaltime ?? "?"} ${camp.unitate ?? "cm"}`);
+        break;
+      }
+      case "numar":
+        bucati.push(camp.unitate_text ? `${v} ${camp.unitate_text}` : `${camp.label}: ${v}`);
+        break;
+      case "image":
+      case "fisier": {
+        const cate = Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim() !== "").length : 0;
+        if (cate > 0) bucati.push(`${cate} ${cate === 1 ? "fisier" : "fisiere"}`);
+        break;
+      }
+      default:
+        /* text, textarea, color: valoarea se citeste singura. Taiata, ca sa nu umple randul. */
+        bucati.push(String(v).slice(0, 40));
+    }
+  }
+
+  return bucati.join(" · ");
 }

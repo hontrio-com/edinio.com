@@ -1,5 +1,4 @@
 "use client";
-import { rezumatPersonalizare } from "@/lib/storefront/cart/normalize";
 
 import { useRef } from "react";
 import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
@@ -154,9 +153,9 @@ export function CartLine({
           a apasat de doua ori, sau sterge randul gresit. Iar la un produs vandut la metru patrat
           numarul de pe linie e mai mare decat pretul de catalog, si nimic nu explica de ce.
         */}
-        {rezumatPersonalizare(item.customization) && (
+        {cos.lineSummary(item) && (
           <p className="text-xs text-muted-foreground mt-0.5">
-            {rezumatPersonalizare(item.customization)}
+            {cos.lineSummary(item)}
           </p>
         )}
         {/*

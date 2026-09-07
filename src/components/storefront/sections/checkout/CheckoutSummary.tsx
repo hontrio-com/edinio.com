@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { formatPrice } from "@/lib/utils/format";
 import { lineKey, useCart } from "@/components/storefront/cart/CartProvider";
-import { rezumatPersonalizare } from "@/lib/storefront/cart/normalize";
 import type { CheckoutEngine } from "./checkout-core";
 
 /**
@@ -23,7 +22,7 @@ export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; col
   const { items } = motor;
   // Totalul liniei vine tot de la cos, ca sa fie acelasi numar aici, in sertar,
   // pe pagina de cos si la server.
-  const { lineTotal, lineSavings, lineUnit, lineNeedsReview } = useCart();
+  const { lineTotal, lineSavings, lineUnit, lineNeedsReview, lineSummary } = useCart();
   return (
       <div className="space-y-2">
         {items.map((item) => (
@@ -46,8 +45,8 @@ export function CheckoutCartLines({ motor, color }: { motor: CheckoutEngine; col
                 ⚠ Acelasi `rezumatPersonalizare`, nu un al doilea formator: scrise separat, cele
                 doua ecrane ar fi ajuns sa numeasca altfel aceleasi alegeri.
               */}
-              {rezumatPersonalizare(item.customization) && (
-                <p className="text-xs text-muted-foreground truncate">{rezumatPersonalizare(item.customization)}</p>
+              {lineSummary(item) && (
+                <p className="text-xs text-muted-foreground truncate">{lineSummary(item)}</p>
               )}
               {/*
                 ⚠ Acelasi semnal ca pe paginile de cos — vezi nota din `CartPieces`. Aratat intr-un singur

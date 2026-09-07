@@ -5,7 +5,8 @@ import { getCartSessionId } from "@/lib/cart-session";
 import { getCartPricing } from "@/lib/actions/store.actions";
 import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
-import { cereRevizuire, pretulBucatii, pretulLiniei } from "@/lib/storefront/cart/pret-linie";
+import { cereRevizuire, pretulBucatii, pretulLiniei, rezumatulLiniei } from "@/lib/storefront/cart/pret-linie";
+import { rezumatPersonalizare } from "@/lib/storefront/cart/normalize";
 
 /**
  * Cosul storefrontului: stare in memorie oglindita in localStorage, per magazin.
@@ -48,6 +49,12 @@ export interface CartContextValue {
    * ar fi fost aratata ca stricata.
    */
   lineNeedsReview: (item: CartItem) => boolean;
+  /**
+   * Personalizarea liniei, scrisa cum o citeste omul: etichetele optiunilor, unitatile, si
+   * comutatoarele pornite. Vezi `rezumatulLiniei` — cel din `normalize.ts` lucreaza pe valorile
+   * brute si scria id-uri de optiuni in loc de nume.
+   */
+  lineSummary: (item: CartItem) => string;
   /**
    * Cat costa O BUCATA din linie, inainte de treptele de cantitate.
    *
@@ -255,13 +262,19 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
    * in cos, iar nimic din asta nu e vina lui.
    */
   const lineNeedsReview = (item: CartItem) => cereRevizuire(item, preturi[item.productId]);
+  /*
+   * ⚠ Rezumatul se face DIN DEFINITIE, nu din valorile brute — vezi `rezumatulLiniei`. Fara ea,
+   * cosul arata id-ul optiunii („91c8409f-8bdf-4a…") in loc de „Premium", si sarea peste
+   * comutatoarele pornite, deci „Protectie: Da" nu aparea niciodata.
+   */
+  const lineSummary = (item: CartItem) => rezumatulLiniei(item, preturi[item.productId]);
 
   const total = items.reduce((s, i) => s + linie(i).subtotal, 0);
   const count = items.reduce((s, i) => s + i.quantity, 0);
 
   return (
     <CartContext.Provider
-      value={{ items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, total, count, clear, restoreCart, sessionId, hydrated }}
+      value={{ items, addItem, removeItem, updateQty, lineTotal, lineUnit, lineSavings, lineNeedsReview, lineSummary, total, count, clear, restoreCart, sessionId, hydrated }}
     >
       {children}
     </CartContext.Provider>
@@ -306,6 +319,8 @@ export function CartDemoProvider({ items: initiale, children }: { items: CartIte
         lineSavings: () => 0,
         /* In afara unui `CartProvider` nu exista preturi, deci nici cum sa stim ca ceva s-a stricat. */
         lineNeedsReview: () => false,
+        /* Fara `CartProvider` nu exista definitii, deci se cade pe rezumatul din valorile brute. */
+        lineSummary: (item) => rezumatPersonalizare(item.customization as Record<string, unknown> | undefined),
         removeItem: (key) => setItems((prev) => prev.filter((i) => lineKey(i) !== key)),
         updateQty: (key, qty) =>
           setItems((prev) =>

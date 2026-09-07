@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { lineKey } from "./normalize";
 import { cosDupaComanda } from "./consume";
-import { cereRevizuire, pretulBucatii } from "./pret-linie";
+import { cereRevizuire, pretulBucatii, rezumatulLiniei } from "./pret-linie";
 import type { CartItem } from "@/components/storefront/cart/CartProvider";
 
 /**
@@ -170,39 +170,27 @@ test("⚠ perechea: o alegere VALIDA se pretuieste in continuare", () => {
    P1.2 — ultima verificare de dinaintea platii
    ═══════════════════════════════════════════════════════════════════════════ */
 
-test("⚠ finalizarea arata personalizarea, cu ACELASI ajutor ca sertarul de cos", () => {
+test("⚠ finalizarea arata personalizarea, si o ia din ACELASI loc ca sertarul", () => {
   /*
    * ⚠ CE ERA: cosul o arata, finalizarea nu. Omul care scrisese „Robert" pe o cana si „Maria" pe
    * alta vedea la ultimul pas doua randuri identice — acelasi nume, acelasi pret — deci nu putea
    * verifica nimic si nici macar nu putea sti daca apasase de doua ori.
    *
-   * ⚠ Se cere si ca ajutorul sa fie ACELASI: doi formatori scrisi separat ar fi ajuns sa numeasca
-   * altfel aceleasi alegeri, iar cele doua ecrane s-ar fi contrazis.
-   *
-   * Proba e pe sursa fiindca proiectul n-are jsdom; ce se cere e o afirmatie structurala.
+   * ⚠ AFIRMATIA S-A MUTAT ODATA CU CODUL. Cerea `rezumatPersonalizare(item.customization)`, adica
+   * rezumatul din valorile BRUTE — cel care scria id-uri de optiuni in loc de „Premium". Acum toate
+   * ecranele cer `lineSummary`, care citeste definitia. Proba nu s-a sters, s-a intors.
    */
   const sursa = (r: string) =>
     readFileSync(path.resolve(process.cwd(), r), "utf8").replace(/\r\n/g, "\n");
 
   const checkout = sursa("src/components/storefront/sections/checkout/CheckoutSummary.tsx");
-  /*
-   * ⚠ SE CER AMANDOUA CHEMARILE: cea din conditie SI cea din randare. Cerand una singura, proba
-   * trecea si cand a doua era inlocuita cu `null` — adica un rand gol randat sub o conditie
-   * adevarata. Masurat cu un mutant care a facut exact asta.
-   */
-  const chemari = (checkout.match(/rezumatPersonalizare\(item\.customization\)/g) ?? []).length;
-  assert.ok(
-    chemari >= 2,
-    `finalizarea cheama ajutorul de ${chemari} ori din 2 (conditia si randarea): ecranul ramane gol`,
-  );
   assert.match(
-    checkout, /from "@\/lib\/storefront\/cart\/normalize"/,
-    "finalizarea si-a scris propriul formator",
+    checkout, /lineSummary\(item\)/,
+    "ultimul ecran de dinaintea platii nu arata ce s-a personalizat",
   );
-
-  /* Si sertarul foloseste exact acelasi ajutor — altfel „acelasi" n-ar insemna nimic. */
+  /* Si sertarul il ia din acelasi loc — altfel „acelasi" n-ar insemna nimic. */
   const sertar = sursa("src/components/storefront/sections/cart/CartDrawerClassic.tsx");
-  assert.match(sertar, /rezumatPersonalizare\(item\.customization\)/);
+  assert.match(sertar, /lineSummary\(item\)/);
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -271,4 +259,140 @@ test("⚠ semnalul se vede in TOATE cele trei suprafete, nu doar in una", () => 
     assert.match(s, /lineNeedsReview\(item\)/, `${ce} nu arata semnalul`);
     assert.match(s, /Necesita actualizare/, `${ce} nu spune omului ce are de facut`);
   }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REZUMATUL LINIEI — ce vede omul inainte sa plateasca
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Fototapetul din audit: dimensiuni, un tarif ales din butoane, si o protectie pe comutator. */
+const FOTOTAPET = {
+  price: 89,
+  combos: {},
+  tiers: null,
+  customization: {
+    enabled: true,
+    fields: [
+      { id: "dim", type: "dimensiuni", label: "Dimensiuni", required: true, unitate: "cm",
+        latime: { min: 100, max: 500 }, inaltime: { min: 70, max: 350 } },
+      { id: "mat", type: "butoane", label: "Material", required: true, optiuni: [
+        { id: "9c8409f1-8bdf-4a10-9d2e-000000000001", eticheta: "Standard", impact: { fel: "pe_m2", suma: 69 } },
+        { id: "9c8409f1-8bdf-4a10-9d2e-000000000002", eticheta: "Premium", impact: { fel: "pe_m2", suma: 89 } },
+      ] },
+      { id: "prot", type: "comutator", label: "Protectie impermeabila", required: false,
+        impact: { fel: "pe_m2", suma: 15 } },
+    ],
+  },
+};
+
+const LINIE_FOTOTAPET = {
+  ...CANA,
+  customization: {
+    dim: { latime: 350, inaltime: 250 },
+    mat: "9c8409f1-8bdf-4a10-9d2e-000000000002",
+    prot: true,
+  },
+} as CartItem;
+
+test("⚠ rezumatul arata ETICHETA optiunii, nu id-ul ei", () => {
+  /*
+   * ⚠ CE VEDEA CLIENTUL PANA PE 07.09.2026: „350 x 250 · 9c8409f1-8bdf-4a10…".
+   *
+   * Rezumatul de dinainte lucra pe valorile BRUTE din cos, iar la `butoane` valoarea e ID-ul
+   * optiunii — un UUID facut de panou. Serverul si instantaneul comenzii erau corecte de mult;
+   * minciuna era doar INAINTE de comanda, adica exact acolo unde omul verifica ce cumpara.
+   */
+  const r = rezumatulLiniei(LINIE_FOTOTAPET, FOTOTAPET);
+  assert.match(r, /Premium/, `rezumatul nu numeste optiunea aleasa: ${r}`);
+  assert.doesNotMatch(r, /9c8409f1/, `rezumatul arata id-ul optiunii clientului: ${r}`);
+});
+
+test("⚠ comutatorul PORNIT se vede, cu numele campului langa el", () => {
+  /*
+   * ⚠ VECHIUL REZUMAT IL ARUNCA CU TOTUL: `if (v === true) continue;`. Deci „Protectie
+   * impermeabila: Da" nu aparea NICIODATA — desi se si platea, 15 lei pe metru patrat.
+   *
+   * ⚠ Si se pune ETICHETA: „Da" singur nu inseamna nimic. „Premium" si „350 × 250 cm" se citesc
+   * singure, deci ele raman fara.
+   */
+  const r = rezumatulLiniei(LINIE_FOTOTAPET, FOTOTAPET);
+  assert.match(r, /Protectie impermeabila: Da/, `comutatorul pornit nu se vede: ${r}`);
+});
+
+test("⚠ dimensiunile poarta UNITATEA comerciantului", () => {
+  const r = rezumatulLiniei(LINIE_FOTOTAPET, FOTOTAPET);
+  assert.match(r, /350 × 250 cm/, `dimensiunile ies fara unitate: ${r}`);
+});
+
+test("⚠ rezumatul intreg, in ordinea campurilor din definitie", () => {
+  /*
+   * ⚠ ORDINEA E A DEFINITIEI, nu a cheilor trimise de browser: doi clienti care completeaza
+   * aceleasi campuri in alta ordine trebuie sa vada acelasi rand.
+   */
+  assert.equal(
+    rezumatulLiniei(LINIE_FOTOTAPET, FOTOTAPET),
+    "350 × 250 cm · Premium · Protectie impermeabila: Da",
+  );
+});
+
+test("⚠ comutatorul STINS nu se vede — altfel randul s-ar umple de „Nu”", () => {
+  const stins = { ...LINIE_FOTOTAPET, customization: { ...LINIE_FOTOTAPET.customization as object, prot: false } } as CartItem;
+  const r = rezumatulLiniei(stins, FOTOTAPET);
+  assert.doesNotMatch(r, /Protectie/, `un comutator stins umple randul: ${r}`);
+  assert.match(r, /Premium/, "restul rezumatului s-a pierdut odata cu comutatorul");
+});
+
+test("⚠ pana ajunge definitia, se cade pe rezumatul vechi — nu pe nimic", () => {
+  /*
+   * Preturile vin asincron. Un rezumat GOL in clipa aia ar face doua linii personalizate diferit
+   * sa arate identic — chiar defectul de la care a plecat tot helperul.
+   */
+  const r = rezumatulLiniei(LINIE_FOTOTAPET, undefined);
+  assert.notEqual(r, "", "linia ramane fara niciun semn distinctiv pana ajung preturile");
+  assert.match(r, /350 x 250/, "rezumatul de rezerva nu mai arata nimic recognoscibil");
+});
+
+test("⚠ toate cele patru ecrane cheama ACELASI rezumat", () => {
+  /*
+   * ⚠ Sertarul, cele trei modele de pagina de cos (prin `CartPieces`) si finalizarea. Scrise
+   * separat, cele patru ar fi numit altfel aceleasi alegeri — iar clientul care trece din cos in
+   * finalizare ar fi vazut alt text pentru acelasi produs.
+   */
+  const sursa = (r: string) =>
+    readFileSync(path.resolve(process.cwd(), r), "utf8").replace(/\r\n/g, "\n");
+
+  for (const f of [
+    "src/components/storefront/sections/cart/_shared/CartPieces.tsx",
+    "src/components/storefront/sections/cart/CartDrawerClassic.tsx",
+    "src/components/storefront/sections/checkout/CheckoutSummary.tsx",
+  ]) {
+    const s = sursa(f);
+    assert.match(s, /lineSummary\(item\)/, `${f} nu foloseste rezumatul comun`);
+    assert.doesNotMatch(
+      s, /rezumatPersonalizare\(item\.customization\)/,
+      `${f} inca foloseste rezumatul din valorile brute, care arata id-uri de optiuni`,
+    );
+  }
+});
+
+test("⚠ un titlu de varianta cu `::` nu poate imita o alta linie", () => {
+  /*
+   * ⚠ CAZUL EXOTIC, dar identitatea comerciala a unei linii nu se sprijina pe „nimeni n-o sa scrie
+   * asta". Cheia se compune lipind bucati cu `::`, deci un titlu care contine chiar `::` putea
+   * reproduce inceputul altei linii — si doua linii diferite cadeau pe o singura cheie, cu
+   * cantitatea 2.
+   */
+  const a = { ...CANA, variantTitle: 'X::{"g":"Robert"}' } as CartItem;
+  const b = { ...CANA, variantTitle: "X", customization: { g: "Robert" } } as CartItem;
+  assert.notEqual(lineKey(a), lineKey(b), "doua linii diferite au ajuns la aceeasi cheie");
+});
+
+test("⚠ titlurile OBISNUITE isi pastreaza cheia caracter cu caracter", () => {
+  /*
+   * ⚠ PERECHEA CARE APARA COSURILE DEJA SALVATE. Escapand fiecare `:`, orice cos cu variante aflat
+   * acum in browserul cuiva s-ar fi repliat gresit la prima deschidere. Se escapeaza DOAR `::`.
+   */
+  assert.equal(lineKey({ ...CANA, variantTitle: "Marimea: L" } as CartItem), "p1::Marimea: L");
+  assert.equal(lineKey({ ...CANA, variantTitle: "Rosu / L" } as CartItem), "p1::Rosu / L");
+  assert.equal(lineKey(CANA), "p1");
 });

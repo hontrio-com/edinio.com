@@ -716,7 +716,19 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     const unitPrice = treapta.unitPrice;
     startTransition(async () => {
       const allAdditional = [
-        ...cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity, variant_title: i.variantTitle })),
+        /*
+         * ⚠ SI PERSONALIZAREA, nu doar produsul si cantitatea.
+         *
+         * Pana pe 07.09.2026 se trimiteau numai cele patru campuri de mai jos, iar serverul — care
+         * n-avea de unde sti ce a ales clientul — REFUZA intreaga comanda daca vreo linie din cos
+         * cerea personalizare. Adica: pui un fototapet „Robert" in cos, apesi „Comanda acum" pe
+         * alt produs, si nu poti finaliza, desi linia din cos e perfect valida.
+         *
+         * ⚠ SE TRIMITE CE A ALES, NU CAT COSTA. Serverul reciteste definitia din baza si
+         * socoteste el suplimentul (`verificaPersonalizarea`); un pret venit de aici nu se citeste
+         * nicaieri.
+         */
+        ...cart.map((i) => ({ product_id: i.productId, name: i.name, quantity: i.quantity, variant_title: i.variantTitle, customization: i.customization })),
         ...acceptedBumpOffers.map((o) => ({ product_id: o.products[0]!.id, name: o.products[0]!.name, quantity: 1 })),
         // Doar companionii FARA linie in cos: ceilalti au plecat deja mai sus, cu
         // cantitatea lor reala. Trimisi si aici, serverul ar fi vazut DOUA linii
@@ -1238,7 +1250,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                      * valorile brute ar fi recotat degeaba la fiecare poza incarcata.
                      */
                     { productId: product.id, quantity, personalizare: customizationPayload },
-                    ...cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+                    /*
+                     * ⚠ SI AICI PERSONALIZAREA, din acelasi motiv ca pe linia comenzii: fara ea,
+                     * plafonul de transport si valoarea declarata se socoteau pe pretul de CATALOG
+                     * al liniei purtate — 89 de lei in loc de 910. Coletul ar fi plecat asigurat pe
+                     * o suma mai mica, iar „livrare gratuita peste 200 lei" nu s-ar fi aprins.
+                     */
+                    ...cart.map((i) => ({ productId: i.productId, quantity: i.quantity, personalizare: i.customization })),
                     // Aceleasi linii ca in `allAdditional`: companionul din cos e
                     // numarat o data, cu toate bucatile lui. Pana acum coletul se
                     // cota pe 1 bucata acolo unde clientul comanda 3.

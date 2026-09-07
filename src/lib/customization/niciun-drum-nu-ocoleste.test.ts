@@ -172,18 +172,23 @@ test("⚠ importul CSV nu mai STERGE personalizarea la reimport", () => {
   assert.equal(chemari, 2, `harta ajunge la ${chemari} chemari din 2`);
 });
 
-test("⚠ COSUL o pretuieste, iar liniile PURTATE tot o refuza", () => {
+test("⚠ AMANDOUA checkout-urile o pretuiesc, cu acelasi motor", () => {
   /*
-   * ⚠ DOUA CAI, DOUA RASPUNSURI DIFERITE, si amandoua sunt hotarari, nu scapari.
+   * ═══ ⚠ AFIRMATIA ASTA S-A INTORS PE 07.09.2026 ═══
    *
-   * COSUL o poarta acum: `CartItem` are camp, `lineKey` il numara in identitatea liniei, iar
-   * `placeCartOrder` verifica si REPRETUIESTE fiecare linie cu `verificaPersonalizarea`, din
-   * definitia SERVERULUI. Pana ieri o refuza — o poarta de bani pusa fiindca linia n-avea unde sa
-   * tina valorile, deci s-ar fi pretuit din CATALOG: 89 de lei in loc de 910.
+   * Aici scria „COSUL o pretuieste, iar liniile PURTATE tot o refuza", si motivarea era ca liniile
+   * purtate vin din bump-uri si din „cumparate impreuna", unde nu exista niciun formular in care
+   * clientul sa completeze ceva.
    *
-   * LINIILE PURTATE din formularul de comanda (`additional_items`) o refuza mai departe, si nu
-   * din lene: ele vin din bump-uri si din „cumparate impreuna", unde nu exista niciun formular in
-   * care clientul sa completeze ceva. Sa le pretuim ar fi cerut valori care nu se trimit de acolo.
+   * ⚠ MOTIVAREA ERA INCOMPLETA. `additional_items` poarta si LINIILE DIN COS, pe drumul „Comanda
+   * acum" din pagina produsului. De cand cosul poarta personalizarea, acele linii CHIAR au valori
+   * — doar ca `OrderModal` nu le trimitea. Urmarea: un client cu un fototapet personalizat in cos
+   * nu putea finaliza o comanda pornita de pe alt produs. Masurat inainte de reparatie: 13,5% din
+   * comenzi (52 din 384) au mai multe linii, deci drumul e umblat.
+   *
+   * Acum se refuza doar linia care CERE personalizare si vine FARA ea — acolo intra bump-urile si
+   * companionii, care chiar n-au de unde purta valori. Cea cu valori se pretuieste, cu ACELASI
+   * motor ca la cos.
    *
    * ⚠ Amandoua sunt exporturi dintr-un modul „use server", adica CAPETE PUBLICE. Interfata care
    * ascunde un buton nu e o poarta de securitate.
@@ -201,9 +206,15 @@ test("⚠ COSUL o pretuieste, iar liniile PURTATE tot o refuza", () => {
   );
   assert.match(s, /placeCartOrder\.customizationRejected/, "refuzul de pe cos nu se logheaza");
   /* Si suplimentul intra CHIAR in pretul liniei, cu formula de pe comanda directa. */
+  /*
+   * ⚠ SOCOTEALA E UNA SINGURA, si sta intr-un MODUL PUR (`customization/comanda.ts`), nu in
+   * actiunea de server: `order.actions.ts` e „use server", unde FIECARE export devine capat public
+   * — deci un ajutor exportat de acolo n-ar fi putut fi probat fara sa devina o ruta pe care o
+   * poate chema oricine.
+   */
   assert.match(
-    s, /\(pers\.bazaInclusa \? linie\.unitPrice : 0\) \+ pers\.supliment/,
-    "cosul socoteste altfel decat comanda directa",
+    s, /pretulCuPersonalizare\(linie\.unitPrice, pers\)/,
+    "cosul nu mai foloseste socoteala comuna",
   );
   /*
    * ⚠ SI SCRIE INSTANTANEUL SERVERULUI, nu blobul clientului — cu perechea negativa, fiindca
@@ -226,19 +237,39 @@ test("⚠ COSUL o pretuieste, iar liniile PURTATE tot o refuza", () => {
     "cosul scrie iar in comanda blobul trimis de client",
   );
 
-  /* LINIILE PURTATE: refuzul ramane. */
-  assert.match(s, /function linieCarePerePersonalizare\(/, "ajutorul nu mai exista");
+  /*
+   * LINIILE PURTATE: se verifica si se pretuiesc, tot pe INDEX.
+   *
+   * ⚠ Pe index, nu pe produs, din acelasi motiv ca la cos: doua linii ale ACELUIASI produs pot avea
+   * personalizari diferite — o cana „Robert" si una „Maria" — iar o harta cheiata pe `product_id`
+   * ar fi pretuit-o pe a doua cu valorile primeia.
+   */
   assert.match(
-    s, /linieCarePerePersonalizare\(extraProducts \?\? \[\], data\.additional_items\);/,
-    "`additional_items` nu mai verifica personalizarea",
+    s, /const persPurtate: \(PersonalizareComanda \| null\)\[\] = \[\];/,
+    "liniile purtate nu-si mai tin personalizarea pe index",
   );
-  assert.match(s, /placeOrder\.customizationRequiredInCart/, "refuzul de pe liniile purtate nu se logheaza");
+  assert.match(
+    s, /verificaPersonalizarea\(meta\.pageSections, i\.customization, data\.business_id\)/,
+    "liniile purtate nu se mai verifica din definitia serverului",
+  );
+  assert.match(
+    s, /price: pretulCuPersonalizare\(linie\.unitPrice, datePers\)/,
+    "liniile purtate nu mai poarta suplimentul in pret",
+  );
+  assert.match(s, /placeOrder\.customizationRejected/, "refuzul unei configuratii stricate nu se logheaza");
+
+  /* Si poarta care RAMANE: linia care cere personalizare si vine FARA ea. */
+  assert.match(
+    s, /linieFaraPersonalizare\(extraProducts \?\? \[\], data\.additional_items\)/,
+    "poarta pentru liniile fara valori a disparut cu totul",
+  );
+  assert.match(s, /placeOrder\.customizationRequiredInCart/, "poarta nu se mai logheaza");
 
   /*
    * ⚠ Si ca poarta chiar OPRESTE. Fara `return`, ea ar fi doar un rand in jurnal, iar comanda
    * ar fi plecat la pretul de catalog exact ca inainte — cu urma care spune ca stiam.
    */
-  for (const m of s.matchAll(/const (eroarePers|eroarePersCos) = linieCarePerePersonalizare[\s\S]{0,400}?\n(\s*)\}/g)) {
+  for (const m of s.matchAll(/const (eroarePers|eroarePersCos) = linieFaraPersonalizare[\s\S]{0,400}?\n(\s*)\}/g)) {
     assert.match(m[0], /return \{ error: eroarePers(Cos)? \};/, "poarta logheaza, dar nu opreste comanda");
   }
 });

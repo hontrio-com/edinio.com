@@ -16,7 +16,7 @@ import type { Database } from "@/types/database.types";
 import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer, sendCustomerMessage } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { logError } from "@/lib/error-logger";
-import { verificaPersonalizarea, type PersonalizareComanda } from "@/lib/customization/comanda";
+import { linieFaraPersonalizare, pretulCuPersonalizare, verificaPersonalizarea, type PersonalizareComanda } from "@/lib/customization/comanda";
 import { cerePersonalizarea } from "@/lib/customization/definitie";
 import { validateDiscount } from "@/lib/actions/discount.actions";
 import { markCartConverted } from "@/lib/abandoned-cart";
@@ -299,41 +299,6 @@ function autoritativeShipping(
    * ramane dator, cum ramanea cand se cadea sec pe tariful implicit.
    */
   return Math.max(claimed, Math.max(0, round2(tarifImplicit)));
-}
-
-/**
- * Liniile care CER personalizare, pe caile care n-o pot purta.
- *
- * ⚠ INTERFATA CARE ASCUNDE UN BUTON NU E O POARTA DE SECURITATE.
- *
- * Cosul nu poarta personalizare: `CartItem` n-are camp, iar `placeCartOrder` n-o declara in
- * `items`. Pagina de produs ascunde butonul „Adauga in cos" tocmai de aceea, si cardul din
- * grila duce la pagina — dar amandoua sunt reguli ale BROWSERULUI.
- *
- * `placeCartOrder` si `additional_items` sunt exporturi dintr-un modul „use server", adica
- * capete publice. O cerere scrisa de mana cu id-ul unui fototapet trecea de tot restul verificarilor
- * — produs activ, varianta, stoc, trepte — si se pretuia din CATALOG: 89 de lei in loc de 910.
- * Nu date lipsa: bani pierduti de comerciant, la fiecare comanda asa.
- *
- * ⚠ Se refuza, nu se pretuieste. Sa socotim aici suplimentul ar fi cerut valorile, iar ele nu
- * exista pe drumul asta: nici cosul, nici formularul de comanda nu le trimit pentru liniile
- * purtate. Refuzul e singurul raspuns adevarat.
- *
- * ⚠ SI NU REFUZA NIMIC DIN CE MERGEA, masurat in productie inainte de livrare (06.09.2026):
- * 29 de produse personalizabile active, dintre care 0 in oferte (bump/FBT), 0 in pachete, si
- * 0 comenzi din tot istoricul cu un asemenea produs pe o linie purtata. Poarta inchide un cap
- * public nefolosit, nu un drum de vanzare.
- */
-function linieCarePerePersonalizare(
-  produse: { id: string; page_sections: unknown }[],
-  linii: { product_id: string }[],
-): string | null {
-  const cere = new Set(produse.filter((p) => cerePersonalizarea(p.page_sections)).map((p) => p.id));
-  if (cere.size === 0) return null;
-  const gasit = linii.find((l) => cere.has(l.product_id));
-  return gasit
-    ? "Unul dintre produse se comanda personalizat, din pagina lui. Deschide-l si completeaza optiunile."
-    : null;
 }
 
 type CheckoutExtra = { id: string; label: string; price: number };
@@ -824,7 +789,12 @@ export async function placeOrder(data: {
   customization?: Record<string, unknown>;
   /** Items carried over from the storefront cart (priced server-side; variant lines
    *  are re-priced from the product's enabled combination, base otherwise). */
-  additional_items?: { product_id: string; name: string; quantity: number; variant_title?: string }[];
+  /*
+   * ⚠ `customization` e `unknown` DINADINS, ca peste tot pe drumul asta: forma o hotaraste
+   * `verificaPersonalizarea`, din definitia citita de pe server. Un tip mai stramt aici ar fi fost
+   * o promisiune pe care un capat public n-o poate tine.
+   */
+  additional_items?: { product_id: string; name: string; quantity: number; variant_title?: string; customization?: unknown }[];
   /** Ids of order-bump offers the customer accepted — re-priced server-side (never trusted). */
   accepted_offer_ids?: string[];
   payment_method?: string;
@@ -1074,7 +1044,24 @@ export async function placeOrder(data: {
   // Priced server-side at the product's current base price — never trusted from the
   // client (same model as placeCartOrder). The current product is excluded to avoid
   // double-counting, and unavailable/inactive items are dropped.
-  let cartItems: { product_id: string; name: string; price: number; quantity: number }[] = [];
+  /*
+   * ⚠ PERSONALIZAREA E DECLARATA AICI, desi e optionala, si nu din pedanterie.
+   *
+   * Campurile plecau prin `...(datePers ? { … } : {})`, iar un spread ocoleste verificarea de
+   * proprietati in plus: `tsc` trecea, dar TIPUL nu le mai vedea. Iar lista trece pe la
+   * `applyOfferPricing` si se REATRIBUIE din ce intoarce el. Astazi supravietuiesc, fiindca acolo
+   * se face `items.map((i) => ({ ...i }))` (`offers/offers.ts:442`) — dar asta e o purtare pe care
+   * nimic n-o cerea in scris, iar prima rescriere a functiei ar fi golit tacut personalizarea de
+   * pe liniile purtate. Declarate, macar se vede ce trebuie sa supravietuiasca.
+   */
+  let cartItems: {
+    product_id: string;
+    name: string;
+    price: number;
+    quantity: number;
+    customization?: Record<string, unknown>;
+    personalizare?: Record<string, unknown>;
+  }[] = [];
   // Stocul declarat pe fiecare combinatie, pentru produsul comandat si pentru
   // tot ce vine din cos odata cu el. Se verifica dupa ce se stiu toate liniile.
   const stocPeVarianta = new Map<string, Map<string, number>>([
@@ -1097,7 +1084,7 @@ export async function placeOrder(data: {
        * ⚠ Aceeasi poarta ca pe cos: liniile purtate n-au unde sa duca valorile personalizarii,
        * iar mai jos se repretuiesc ca produs simplu, din catalog.
        */
-      const eroarePersCos = linieCarePerePersonalizare(extraProducts ?? [], data.additional_items);
+      const eroarePersCos = linieFaraPersonalizare(extraProducts ?? [], data.additional_items);
       if (eroarePersCos) {
         logError({ action: "placeOrder.customizationRequiredInCart", message: eroarePersCos, details: { businessId: data.business_id, ids }, severity: "warning" });
         return { error: eroarePersCos };
@@ -1156,8 +1143,34 @@ export async function placeOrder(data: {
       }
       const liniiDinCos = cerute.map((c) => ({ ...c.linie, quantity: (c.ceruta as { cantitate: number }).cantitate }));
       liniiCuVarianta.push(...liniiDinCos);
+      /*
+       * ═══ ⚠ PERSONALIZAREA LINIILOR PURTATE, VERIFICATA SI PRETUITA ═══
+       *
+       * Pana pe 07.09.2026 calea asta REFUZA orice asemenea linie (vezi
+       * `linieFaraPersonalizare`), fiindca `CartItem` n-avea unde purta valorile. Acum le
+       * poarta, deci se pot si pretui — cu ACELASI motor ca la cos, nu cu un al doilea.
+       *
+       * ⚠ SE VERIFICA PE INDEX, nu pe produs. Doua linii ale ACELUIASI produs pot avea
+       * personalizari diferite — o cana „Robert" si una „Maria" — iar o harta cheiata pe
+       * `product_id` ar fi pretuit-o pe a doua cu valorile primeia. Aceeasi hotarare ca la cos.
+       *
+       * ⚠ DEFINITIA E A SERVERULUI: `pageSections` vine din baza. Clientul trimite doar ce a ALES.
+       *
+       * ⚠ SI SE FACE INAINTEA MAPARII, nu inauntrul ei: un `return` dintr-un `.map()` iese doar
+       * din callback, iar comanda ar fi mers mai departe cu linia stramba inauntru.
+       */
+      const persPurtate: (PersonalizareComanda | null)[] = [];
+      for (const i of liniiDinCos) {
+        const meta = extraMap.get(i.product_id)!;
+        const pers = verificaPersonalizarea(meta.pageSections, i.customization, data.business_id);
+        if (pers.fel === "eroare") {
+          logError({ action: "placeOrder.customizationRejected", message: pers.mesaj, details: { businessId: data.business_id, productId: i.product_id }, severity: "warning" });
+          return { error: pers.mesaj };
+        }
+        persPurtate.push(pers.fel === "ok" ? pers.date : null);
+      }
       cartItems = liniiDinCos
-        .map((i) => {
+        .map((i, idx) => {
           const meta = extraMap.get(i.product_id)!;
           // Pretul si numele vin din ACEEASI functie care a dat verdictul mai sus.
           // Aici era portita: o varianta dezactivata intre timp cadea pe pretul de
@@ -1171,11 +1184,15 @@ export async function placeOrder(data: {
           // cu acelasi motor. Altfel cosul arata pretul de pachet, iar comanda
           // plecata din formularul de produs il pierde pe drum.
           const linie = pretPeTrepte(construiesteTrepte(meta.tiers, unitPrice), i.quantity, unitPrice);
+          const datePers = persPurtate[idx];
           return {
             product_id: i.product_id,
             name: rezolvata.fel === "ok" ? rezolvata.nume : meta.name,
-            price: linie.unitPrice,
+            price: pretulCuPersonalizare(linie.unitPrice, datePers),
             quantity: i.quantity,
+            /* ⚠ INSTANTANEUL SERVERULUI, nu blobul clientului — etichetele dupa care se produce
+               marfa sunt ale noastre. Acelasi camp si aceeasi forma ca pe calea cosului. */
+            ...(datePers ? { customization: datePers.instantaneu, personalizare: datePers.detaliu } : {}),
           };
         });
     }
@@ -3652,9 +3669,7 @@ export async function placeCartOrder(data: {
      * ⚠ Treapta de cantitate se aplica pe BAZA, iar suplimentul e pe bucata — la fel ca acolo.
      */
     const pers = personalizariLinii[idx];
-    const pretCuPersonalizare = pers
-      ? round2(Math.max(0, (pers.bazaInclusa ? linie.unitPrice : 0) + pers.supliment))
-      : linie.unitPrice;
+    const pretCuPersonalizare = pretulCuPersonalizare(linie.unitPrice, pers);
     return {
       product_id: i.product_id,
       // Numele din CATALOG, nu cel din browser: pana acum `orders.items[].name`

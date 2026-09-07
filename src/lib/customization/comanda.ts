@@ -1,5 +1,5 @@
 import { terminatia } from "./adresa";
-import { normalizeazaDefinitia, type CampPersonalizare } from "./definitie";
+import { cerePersonalizarea, normalizeazaDefinitia, type CampPersonalizare } from "./definitie";
 import { esteCheiaNoastra } from "./fisiere-private";
 import { campurileFaraSuprafata, pretulPersonalizarii, type RandDefalcare } from "./pret";
 import { normalizeazaValorile, type ValoareCamp } from "./valori";
@@ -322,4 +322,69 @@ export function verificaPersonalizarea(
       },
     },
   };
+}
+
+/**
+ * Pretul unei bucati, cu personalizarea inauntru.
+ *
+ * ⚠ STA AICI, INTR-UN MODUL PUR, si nu langa apelanti. `order.actions.ts` e `"use server"`,
+ * unde FIECARE export devine un capat public — deci un ajutor exportat de acolo ar fi fost o ruta
+ * pe care o poate chema oricine, si nu s-ar fi putut proba fara sa devina asta.
+ *
+ * ⚠ IL CER AMANDOUA CHECKOUT-URILE: cosul (`placeCartOrder`) si comanda directa (`placeOrder`,
+ * pentru liniile purtate din cos). Scris de doua ori s-ar fi departat — chiar comentariile din
+ * `order.actions.ts` avertizeaza, de doua ori, ca exact asta s-a intamplat cu alte reguli scrise
+ * separat pe cele doua cai.
+ *
+ * ⚠ `bazaInclusa` E UN STEAG, NU O SCADERE. Cand pretul de catalog NU se incaseaza (suprafata cu
+ * baza stinsa), baza se pune pe ZERO — nu se scade din supliment. Scazuta, un pret de catalog mai
+ * mare decat suprafata ar fi dus linia sub zero.
+ *
+ * ⚠ Treapta de cantitate s-a aplicat deja pe BAZA; suplimentul e pe BUCATA.
+ */
+export function pretulCuPersonalizare(unitPrice: number, pers: PersonalizareComanda | null): number {
+  if (!pers) return unitPrice;
+  const baza = pers.bazaInclusa ? unitPrice : 0;
+  return Math.round(Math.max(0, baza + pers.supliment) * 100) / 100;
+}
+
+/**
+ * Linia purtata care CERE personalizare si nu o poarta — sau `null` cand toate sunt in regula.
+ *
+ * ═══ ⚠ CE S-A SCHIMBAT SUB POARTA ASTA (07.09.2026) ═══
+ *
+ * Scrisa, poarta refuza ORICE linie purtata a unui produs personalizabil, iar motivarea era
+ * „valorile nu exista pe drumul asta". Era adevarat atunci. Nu mai e: cosul poarta acum
+ * personalizarea (`CartItem.customization`), iar `OrderModal` o trimite mai departe.
+ *
+ * Premisa s-a invechit sub poarta, si asta costa un drum de vanzare intreg: un client cu un
+ * fototapet personalizat in cos care apasa „Comanda acum" pe ALT produs vedea comanda refuzata,
+ * desi linia din cos era perfect valida. Masurat: 13,5% din comenzi (52 din 384) au mai multe
+ * linii, deci drumul e umblat.
+ *
+ * ⚠ SE REFUZA DOAR CE CHIAR NU SE POATE PRETUI: o linie care CERE personalizare si vine FARA ea.
+ * Bump-urile si companionii „cumparate frecvent impreuna" intra tot aici — ei chiar n-au de unde
+ * purta valori, fiindca nu i-a configurat nimeni.
+ *
+ * ⚠ SI RAMANE O POARTA DE BANI. `placeOrder` e export dintr-un modul „use server", adica un capat
+ * public: o cerere scrisa de mana cu id-ul unui fototapet trecea de tot restul verificarilor si se
+ * pretuia din CATALOG — 89 de lei in loc de 910.
+ */
+export function linieFaraPersonalizare(
+  produse: { id: string; page_sections: unknown }[],
+  linii: { product_id: string; customization?: unknown }[],
+): string | null {
+  const cere = new Set(produse.filter((p) => cerePersonalizarea(p.page_sections)).map((p) => p.id));
+  if (cere.size === 0) return null;
+  /*
+   * ⚠ „Poarta valori" inseamna un OBIECT, nu orice. `null`, un sir sau o lista ar fi trecut de un
+   * simplu `!= null` si ar fi ajuns la `verificaPersonalizarea` ca sa fie refuzate acolo — dar
+   * atunci omul ar fi vazut un mesaj despre un camp lipsa, nu despre faptul ca produsul se comanda
+   * din pagina lui.
+   */
+  const poartaValori = (v: unknown) => !!v && typeof v === "object" && !Array.isArray(v);
+  const gasit = linii.find((l) => cere.has(l.product_id) && !poartaValori(l.customization));
+  return gasit
+    ? "Unul dintre produse se comanda personalizat, din pagina lui. Deschide-l si completeaza optiunile."
+    : null;
 }

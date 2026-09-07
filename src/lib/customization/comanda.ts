@@ -1,4 +1,4 @@
-import { terminatia } from "./adresa";
+import { numeleFisierului, terminatia } from "./adresa";
 import { cerePersonalizarea, normalizeazaDefinitia, type CampPersonalizare } from "./definitie";
 import { esteCheiaNoastra } from "./fisiere-private";
 import { campurileFaraSuprafata, pretulPersonalizarii, type RandDefalcare } from "./pret";
@@ -387,4 +387,66 @@ export function linieFaraPersonalizare(
   return gasit
     ? "Unul dintre produse se comanda personalizat, din pagina lui. Deschide-l si completeaza optiunile."
     : null;
+}
+
+/** Un rand din personalizarea unei linii, scris cum il citeste omul. */
+export interface RandInstantaneu {
+  eticheta: string;
+  text: string;
+}
+
+/**
+ * Personalizarea unei linii de comanda, scrisa pentru OCHII CUMPARATORULUI.
+ *
+ * ═══ ⚠ CE REPARA ═══
+ *
+ * Ecranul de confirmare („Comanda plasata") randa pe fiecare rand doar numele, cantitatea si
+ * pretul. Cine tocmai scrisese o gravura, alesese un material si incarcase o poza vedea un rand
+ * identic cu al unui produs obisnuit — si n-avea de unde sti daca alegerile lui au ajuns in
+ * comanda. Ultimul ecran al vanzarii, exact acolo unde omul vrea sa fie linistit.
+ *
+ * ═══ ⚠ DE CE NU SE ARATA SI IMAGINEA ═══
+ *
+ * Fiindca NU SE POATE, si asta e purtarea corecta. Octetii se servesc numai prin
+ * `/api/customization-file`, care cere sesiune de comerciant, proprietatea magazinului, si ca
+ * cheia sa fie chiar pe comanda ceruta. Cumparatorul de pe ecranul de confirmare e anonim.
+ *
+ * Ca sa i se arate poza inapoi ar trebui ori o adresa publica — adica fix ce s-a desfiintat cand
+ * incarcarile au trecut in galeata privata —, ori un mecanism nou de acces la date personale,
+ * pentru o simpla reasigurare. Ce-i lipseste omului nu e imaginea (o are pe telefon), ci
+ * CONFIRMAREA ca a ajuns. Deci se scrie numele fisierului, si niciun octet.
+ *
+ * ⚠ VALORILE SUNT DEJA CITIBILE, si nu se mai socoteste nimic aici: `caText` le-a scris asa la
+ * salvare — dimensiunile ies „350 x 250 cm", optiunea cu ETICHETA ei („Premium", nu „prm"),
+ * comutatorul „Da"/„Nu". Singurele necitibile sunt fisierele, care-s chei de depozit; pentru ele
+ * exista `numeleFisierului`, aceeasi regula ca in panou si in emailuri.
+ *
+ * ⚠ SE CITESTE INSTANTANEUL, NU DEFINITIA. Definitia se poate schimba dupa comanda; instantaneul e
+ * ce s-a cumparat. Ecranul trebuie sa arate comanda, nu produsul de azi.
+ *
+ * ⚠ CE E GOL SE SARE, nu se randeaza un rand fara valoare: un camp optional necompletat n-are ce
+ * cauta pe bonul omului.
+ */
+export function randurileInstantaneului(customization: unknown): RandInstantaneu[] {
+  if (!customization || typeof customization !== "object" || Array.isArray(customization)) return [];
+  const out: RandInstantaneu[] = [];
+
+  for (const brut of Object.values(customization as Record<string, unknown>)) {
+    if (!brut || typeof brut !== "object" || Array.isArray(brut)) continue;
+    const intrare = brut as Partial<IntrareInstantaneu>;
+    const eticheta = typeof intrare.label === "string" ? intrare.label.trim() : "";
+    const v = intrare.value;
+
+    if (Array.isArray(v)) {
+      const nume = v
+        .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+        .map((x, i) => numeleFisierului(x, i));
+      if (nume.length) out.push({ eticheta, text: nume.join(", ") });
+      continue;
+    }
+
+    if (typeof v === "string" && v.trim() !== "") out.push({ eticheta, text: v.trim() });
+  }
+
+  return out;
 }

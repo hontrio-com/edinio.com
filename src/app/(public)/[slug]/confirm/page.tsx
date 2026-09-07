@@ -16,6 +16,7 @@ import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import type { MarketingConfig } from "@/lib/marketing-config";
 import type { Metadata } from "next";
 import { vanzareaEConfirmata } from "@/lib/orders/vanzare-confirmata";
+import { randurileInstantaneului } from "@/lib/customization/comanda";
 
 // Order confirmation is personal + transient — keep it out of search.
 // `openGraph`/`twitter` se sting explicit: nedeclarate, pagina ar fi mostenit
@@ -47,7 +48,20 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   const basePath = isCustomDomain ? "" : `/${business.slug}`;
 
   // Fetch order details via admin client (orders RLS restricts anonymous SELECT)
-  let orderItems: { product_id?: string; name: string; price: number; quantity: number }[] = [];
+  let orderItems: {
+    product_id?: string; name: string; price: number; quantity: number;
+    /*
+     * ⚠ Vitrina lipeste combinatia in `name` (de pilda „Rochie … (S)"); cheia separata o scriu azi
+     * doar comenzile de marketplace — masurat pe 07.09.2026: 0 linii de vitrina o au, 91 de eMAG.
+     * Se citeste oricum, ca un drum nou care o scrie separat sa n-o piarda de pe ecran.
+     */
+    variant_title?: string | null;
+    /*
+     * Instantaneul scris de `verificaPersonalizarea`. Se citeste ca `unknown`: ecranul n-are de ce
+     * sa creada forma lui pe cuvant — vezi `randurileInstantaneului`, care o verifica el.
+     */
+    customization?: unknown;
+  }[] = [];
   let shippingCost = 0;
   let discountAmount = 0;
   let cardDiscountAmount = 0;
@@ -90,7 +104,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
         order.payment_method as string | null,
         order.payment_status as string | null,
       );
-      orderItems = (order.items as { product_id?: string; name: string; price: number; quantity: number }[]) ?? [];
+      orderItems = (order.items as typeof orderItems) ?? [];
       shippingCost = order.shipping_cost ?? 0;
       discountAmount = order.discount_amount ?? 0;
       cardDiscountAmount = order.card_discount_amount ?? 0;
@@ -273,11 +287,32 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
                     </div>
                     <div className="divide-y divide-[var(--st-border)]">
                       {orderItems.map((item, i) => (
-                        <div key={i} className="flex items-center justify-between px-4 py-3">
+                        <div key={i} className="flex items-start justify-between px-4 py-3">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-[var(--st-text)] truncate">{item.name}</p>
+                            {item.variant_title && (
+                              <p className="text-xs text-[var(--st-muted)] truncate">{item.variant_title}</p>
+                            )}
+                            {/*
+                              ⚠ PERSONALIZAREA, PE ULTIMUL ECRAN AL VANZARII.
+                              Aici se randa doar numele, cantitatea si pretul — deci cine tocmai
+                              scrisese o gravura si incarcase o poza vedea un rand identic cu al
+                              unui produs obisnuit, si n-avea de unde sti daca alegerile lui au
+                              ajuns in comanda.
+
+                              ⚠ IMAGINEA NU SE ARATA, si asa trebuie: octetii se servesc numai prin
+                              `/api/customization-file`, care cere sesiune de comerciant si
+                              proprietatea magazinului. Cumparatorul de aici e anonim. Ce-i lipseste
+                              nu e poza — o are pe telefon —, ci confirmarea ca a ajuns. Vezi
+                              `randurileInstantaneului`.
+                            */}
+                            {randurileInstantaneului(item.customization).map((r, ri) => (
+                              <p key={ri} className="text-xs text-[var(--st-muted)] mt-0.5 break-words">
+                                {r.eticheta ? `${r.eticheta}: ` : ""}{r.text}
+                              </p>
+                            ))}
                             {item.quantity > 1 && (
-                              <p className="text-xs text-[var(--st-muted)]">
+                              <p className="text-xs text-[var(--st-muted)] mt-0.5">
                                 {unitarSeInchide(item.price, item.quantity)
                                   ? `${item.quantity} x ${formatPrice(item.price)}`
                                   : `${item.quantity} buc.`}

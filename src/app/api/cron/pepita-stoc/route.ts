@@ -114,11 +114,23 @@ export async function GET(req: NextRequest) {
     return m;
   }
 
-  /* ⚠ Randul atins trece la coada, oricare ar fi verdictul. Vezi ordonarea de mai sus. */
-  async function trecutPrin(id: string): Promise<void> {
-    await admin.from("pepita_comenzi")
+  /**
+   * Randul atins trece la coada, oricare ar fi verdictul. Vezi ordonarea de mai sus.
+   *
+   * ⚠ O stampila nescrisa OPRESTE ROATA, deci nu se inghite tacut: randul ar ramane in capul
+   * cozii si ar manca un loc la fiecare trecere, fara ca nimic sa spuna de ce.
+   */
+  async function trecutPrin(id: string, businessId: string): Promise<void> {
+    const { error: eStampila } = await admin.from("pepita_comenzi")
       .update({ prelucrat_la: new Date().toISOString() } as never)
       .eq("id", id);
+    if (eStampila) {
+      await logError({
+        action: "pepita/cron-stoc",
+        message: `stampila de trecere nu s-a scris, randul ramane in capul cozii: ${eStampila.message}`,
+        details: { randId: id }, businessId, severity: "warning",
+      });
+    }
   }
 
   let reparate = 0;
@@ -126,6 +138,12 @@ export async function GET(req: NextRequest) {
   let sarite = 0;
 
   for (const r of randuri) {
+    /*
+     * ⚠ STAMPILA E IN `finally`, nu pe fiecare drum de iesire. Puse pe drumuri, doua dintre ele
+     * ramasesera nestampilate — iar unul se bizuia pe scrierea din `reproceseaza`, care are ea
+     * insasi o iesire timpurie inaintea ei. Un rand nestampilat ramane in capul cozii pentru
+     * totdeauna si mananca un loc din cele cincizeci.
+     */
     try {
       const moneda = await monedaMagazinului(r.business_id);
       if (moneda === null) {
@@ -152,7 +170,6 @@ export async function GET(req: NextRequest) {
          * nu para ca cronul le-a rezolvat, dar nu sunt esecuri de reincercat.
          */
         sarite++;
-        await trecutPrin(r.id);
         await logError({
           action: "pepita/cron-stoc",
           message: `reprocesarea a refuzat comanda: ${rezultat.mesaj}`,
@@ -169,7 +186,6 @@ export async function GET(req: NextRequest) {
          * zece minute.
          */
         picate++;
-        await trecutPrin(r.id);
         continue;
       }
 
@@ -188,6 +204,8 @@ export async function GET(req: NextRequest) {
         details: { externalId: r.external_order_id, orderId: r.order_id },
         businessId: r.business_id, severity: "critical",
       });
+    } finally {
+      await trecutPrin(r.id, r.business_id);
     }
   }
 

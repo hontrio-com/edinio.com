@@ -171,19 +171,23 @@ test("⚠ roata cronului se invarte: randul atins trece la coada, oricare ar fi 
   assert.match(SURSA_CRON, /\.order\("prelucrat_la"/, "roata se invarte pe clipa sosirii, deci nu se invarte");
   assert.ok(!/\.order\("primit_la"\)/.test(SURSA_CRON), "a ramas ordonarea dupa clipa sosirii");
   assert.match(SURSA_CRON, /trecutPrin\(/, "randul atins nu se mai stampileaza");
-
-  /* Si se stampileaza pe FIECARE drum de iesire din bucla, nu doar pe unul. */
-  const iesiri = (SURSA_CRON.match(/trecutPrin\(r\.id\)/g) ?? []).length;
-  assert.ok(iesiri >= 2, `randul se stampileaza pe ${iesiri} drumuri: unul dintre verdicte il lasa in cap`);
 });
 
-test("⚠ cronul nu se da drept om: nu stinge motivul monedei necitite", () => {
+test("⚠ cronul stampileaza randul pe FIECARE drum de iesire, nu doar pe cele de refuz", () => {
   /*
-   * `reproceseaza` inchide motivul „n-am putut citi moneda" DOAR cand a apasat un om, fiindca el
-   * nu se poate recalcula niciodata. Cronul care ar trece `true` ar scoate comenzi din carantina
-   * fara ca nimeni sa se fi uitat la ele, si ar stinge si steagul care opreste rambursul.
+   * Roata se invarte doar daca randul atins primeste `prelucrat_la` ORICE s-ar intampla cu el.
+   * Doua din patru iesiri nu-l scriau si se bizuiau pe scrierea din `reproceseaza` — care are
+   * ea insasi o iesire timpurie, pe „comanda nu mai are nimic de reparat", inainte de ea.
+   *
+   * ⚠ Se cere `finally`, nu un numar de apeluri: numarand apelurile, proba ramanea verde chiar
+   * cu un drum nestampilat.
    */
-  assert.ok(!/reproceseaza\([^)]*true/.test(SURSA_CRON), "cronul se da drept apasare de om");
+  const i = SURSA_CRON.indexOf("for (const r of randuri)");
+  assert.ok(i > 0, "bucla cronului nu se mai gaseste");
+  const bucla = SURSA_CRON.slice(i);
+  assert.match(bucla, /finally {[^}]*trecutPrin\(/, "stampila nu e pe un drum care se face oricum");
+  /* Si nicaieri altundeva: pusa si pe drumuri, s-ar scrie de doua ori si ar parea ca e nevoie. */
+  assert.equal((bucla.match(/trecutPrin\(/g) ?? []).length, 1, "stampila se scrie pe mai multe drumuri");
 });
 
 test("⚠ cronul nu atinge comenzile moarte, si CERE campurile de care atarna", () => {

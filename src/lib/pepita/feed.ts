@@ -118,7 +118,9 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
     if (eCat) throw eCat;
     const randuri = (data ?? []) as (RandCategorie & { updated_at: string | null })[];
     if (randuri.length === 0) break;
-    dupaCategorie = randuri[randuri.length - 1].id;
+    const ultimaCategorie = randuri[randuri.length - 1].id;
+    if (ultimaCategorie === dupaCategorie) break;
+    dupaCategorie = ultimaCategorie;
     categorii.push(...randuri);
     if (randuri.length < 1000) break;
   }
@@ -136,7 +138,9 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
     if (error) throw error;
     const randuri = (data ?? []) as RandListare[];
     if (randuri.length === 0) break;
-    dupaListare = randuri[randuri.length - 1].product_id;
+    const ultimaListare = randuri[randuri.length - 1].product_id;
+    if (ultimaListare === dupaListare) break;
+    dupaListare = ultimaListare;
     for (const r of randuri) listari.set(r.product_id, r);
     if (randuri.length < 1000) break;
   }
@@ -303,7 +307,10 @@ export async function* scrieFeed(
 
     const produse = (data ?? []) as unknown as (ProdusPepita & { is_active: boolean })[];
     if (produse.length === 0) break;
-    dupaId = produse[produse.length - 1].id;
+    /* ⚠ Cursorul care nu inainteaza opreste bucla: altfel feedul nu s-ar mai termina niciodata. */
+    const ultimulProdus = produse[produse.length - 1].id;
+    if (ultimulProdus === dupaId) break;
+    dupaId = ultimulProdus;
 
     const alese = produse.filter((p) => inclus(p, pre));
     if (alese.length > 0) {

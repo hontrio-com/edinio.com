@@ -864,7 +864,19 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                           })()}
                           <div className="text-xs">{order.customer_phone}</div>
                         </td>
-                        <td className="px-5 py-3.5 font-medium text-foreground whitespace-nowrap">
+                        <td
+                          className={cn(
+                            "px-5 py-3.5 font-medium whitespace-nowrap",
+                            moneda === "?" ? "text-warning" : "text-foreground",
+                          )}
+                          /*
+                            ⚠ „?" INSEAMNA CA NU STIM IN CE MONEDA E. Marketplace-ul a trimis un cod
+                            pe care nu l-am putut citi; rambursul si factura automata refuza deja pe
+                            comanda asta, iar fara semnul de aici comerciantul ar fi cautat degeaba
+                            de ce nu merg.
+                          */
+                          title={moneda === "?" ? "Moneda comenzii nu a putut fi citită. Verific-o înainte de a emite AWB cu ramburs sau factură." : undefined}
+                        >
                           {/* Comenzile de marketplace vin in moneda lor: „40 lei"
                               pe o comanda de 40 EUR ar fi mai putin de jumatate. */}
                           {moneda ? `${Number(order.total).toFixed(2)} ${moneda}` : formatPrice(Number(order.total))}

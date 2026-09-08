@@ -1198,9 +1198,16 @@ test("⚠ nota interna chiar AJUNGE PE UN ECRAN", () => {
    * ⚠ Plasa scaneaza componenta, deci spune ca nota e randata, nu cum arata. Ce apara e
    * intoarcerea la starea in care avertismentele se scriu si nu le vede nimeni.
    */
-  const ecran = readFileSync("src/components/dashboard/OrderDetailClient.tsx", "utf8");
+  /*
+   * ⚠ COMENTARIILE SE SCOT INTAI. Doua din cele trei tipare se potriveau si pe chiar nota care
+   * explica reparatia, deci proba ar fi ramas verde peste un ecran care nu randeaza nimic.
+   */
+  const ecran = readFileSync("src/components/dashboard/OrderDetailClient.tsx", "utf8")
+    .replace(/[/][*][^]*?[*][/]/g, " ")
+    .replace(/^\s*[/][/].*$/gm, " ");
   assert.match(ecran, /internal_notes/, "nota interna nu e citita de niciun ecran");
-  assert.match(ecran, /noteInterne &&/, "nota interna e citita, dar nu se randeaza");
+  assert.match(ecran, /{noteInterne && \(/, "nota interna e citita, dar nu se randeaza");
+  assert.match(ecran, /{noteInterne}/, "nota nu ajunge in niciun element");
   assert.match(ecran, /whitespace-pre-line/, "randurile notei se lipesc intre ele");
 });
 
@@ -1219,40 +1226,29 @@ async function comandaCuMonedaNecitita() {
   return b;
 }
 
-test("⚠ apasarea omului stinge SI motivul, SI steagul: altfel comanda ramane fara ramburs pe veci", async () => {
-  /*
-   * Steagul opreste rambursul precompletat si facturarea automata. Sters doar motivul, comanda
-   * iesea din carantina si arata normal in lista, dar ramanea pentru totdeauna cu ramburs zero
-   * si fara factura, fara ca nimic sa mai spuna de ce: coletul pleaca, curierul nu incaseaza,
-   * si nicio alta cale nu rescrie `order_source` dupa ingest.
-   */
-  const b = await comandaCuMonedaNecitita();
+test("⚠ NICIO reprocesare nu stinge steagul monedei necitite, nici cea apasata de om", () => {
+  return (async () => {
+    /*
+     * ⚠ Prima incercare il stingea la apasarea omului. Dar steagul e SINGURA paza care tine
+     * rambursul pe zero si facturarea automata oprita pe o comanda despre care noi insine am
+     * scris ca nu stim in ce moneda e. Stins, `rambursDeIncasat` intoarce totalul intreg — iar
+     * la generarea in MASA de AWB nu exista niciun camp de corectat, deci cifra ungureasca ar fi
+     * ceruta in LEI la usa. O apasare pe „Reprocesează" nu e o hotarare despre bani.
+     */
+    const b = await comandaCuMonedaNecitita();
 
-  const r = await reproceseaza(b.db, CTX, "555001", true);
+    const r = await reproceseaza(b.db, CTX, "555001");
 
-  assert.equal(r.ok, true);
-  assert.equal(b.comenzi[0].stare, "importata");
-  assert.equal(b.orders[0].order_source.moneda_necitita, undefined, "steagul a ramas aprins");
-  const o = b.orders[0];
-  assert.equal(
-    rambursDeIncasat({ payment_status: o.payment_status, total: o.total, order_source: o.order_source }),
-    o.total,
-    "rambursul a ramas zero desi comanda a iesit din carantina",
-  );
-});
+    assert.equal(r.ok, true);
+    assert.equal(b.comenzi[0].stare, "carantina", "comanda a iesit din carantina cu moneda tot necunoscuta");
+    assert.match(b.comenzi[0].motiv ?? "", /nu am putut-o citi/);
+    assert.equal(b.orders[0].order_source.moneda_necitita, true, "steagul s-a stins");
 
-test("⚠ cronul si retrimiterea lor NU sting steagul: nu s-a uitat nimeni la comanda", async () => {
-  /*
-   * Motivul „n-am putut citi moneda" nu se poate recalcula niciodata: sarcina bruta nu se
-   * pastreaza. Singurul lucru care il poate inchide e privirea cuiva pe comanda pe care scrie
-   * chiar el. O reprocesare automata nu e o privire.
-   */
-  const b = await comandaCuMonedaNecitita();
-
-  const r = await reproceseaza(b.db, CTX, "555001");
-
-  assert.equal(r.ok, true);
-  assert.equal(b.comenzi[0].stare, "carantina", "comanda a iesit din carantina fara sa se uite nimeni");
-  assert.match(b.comenzi[0].motiv ?? "", /nu am putut-o citi/);
-  assert.equal(b.orders[0].order_source.moneda_necitita, true);
+    const o = b.orders[0];
+    assert.equal(
+      rambursDeIncasat({ payment_status: o.payment_status, total: o.total, order_source: o.order_source }),
+      0,
+      "rambursul s-a deschis pe o comanda a carei moneda nu se stie",
+    );
+  })();
 });

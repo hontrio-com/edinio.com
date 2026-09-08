@@ -41,8 +41,6 @@ export type RezultatIncludere = {
    * e vorba; `chiarScrise` spune cate randuri s-au atins cu adevarat.
    */
   scrise: number;
-  /** Cate randuri s-au scris chiar acum. Zero la a doua apasare peste un catalog nemodificat. */
-  chiarScrise: number;
   /** Mai are de mers? Atunci `dupa` spune de unde se reia. */
   incomplet: boolean;
   dupa: string | null;
@@ -58,7 +56,6 @@ export async function includeToateActive(
   admin: Admin, businessId: string, dupa: string | null, acum: string,
 ): Promise<RezultatIncludere> {
   let scrise = 0;
-  let chiarScrise = 0;
   let cheie = dupa;
 
   while (scrise < PE_TRECERE) {
@@ -70,7 +67,7 @@ export async function includeToateActive(
     const { data, error } = await q;
     if (error) throw error;
     const ids = (data ?? []) as { id: string }[];
-    if (ids.length === 0) return { scrise, chiarScrise, incomplet: false, dupa: null };
+    if (ids.length === 0) return { scrise, incomplet: false, dupa: null };
 
     /*
      * ⚠ SE SCRIU DOAR RANDURILE CARE CHIAR SE SCHIMBA.
@@ -103,13 +100,19 @@ export async function includeToateActive(
       if (eCitire) throw eCitire;
       const randuri = (existente ?? []) as { product_id: string; inclus: boolean }[];
       if (randuri.length === 0) break;
-      dupaListare = randuri[randuri.length - 1].product_id;
+      /*
+       * ⚠ CURSORUL CARE NU INAINTEAZA OPRESTE BUCLA. O plimbare pe cheie se roteste la nesfarsit
+       * daca cheia nu creste — de pilda daca cineva scoate din greseala filtrul care o foloseste.
+       * Intr-o functie fara capat asta inseamna o cerere care nu se mai termina niciodata.
+       */
+      const ultimaListare = randuri[randuri.length - 1].product_id;
+      if (ultimaListare === dupaListare) break;
+      dupaListare = ultimaListare;
       for (const r of randuri) if (r.inclus) dejaIncluse.add(r.product_id);
       if (randuri.length < 1000) break;
     }
 
     const deScris = ids.filter((p) => !dejaIncluse.has(p.id));
-    chiarScrise += deScris.length;
     if (deScris.length > 0) {
       const { error: eScriere } = await admin.from("pepita_listari").upsert(
         /*
@@ -128,15 +131,18 @@ export async function includeToateActive(
      * ramane adevarat, iar la a doua apasare nu devine „0".
      */
     scrise += ids.length;
-    cheie = ids[ids.length - 1].id;
+    /* ⚠ Aceeasi paza: o cheie care nu creste ar tine bucla in loc. */
+    const ultimul = ids[ids.length - 1].id;
+    if (ultimul === cheie) break;
+    cheie = ultimul;
 
     /*
      * O pagina neplina inseamna ca nu mai e nimic dupa ea. Fara randul asta rezultatul ar fi
      * acelasi, dar fiecare rulare intreaga ar mai costa o citire despre care se stie ca vine
      * goala. De aia proba numara citirile.
      */
-    if (ids.length < PAGINA) return { scrise, chiarScrise, incomplet: false, dupa: null };
+    if (ids.length < PAGINA) return { scrise, incomplet: false, dupa: null };
   }
 
-  return { scrise, chiarScrise, incomplet: true, dupa: cheie };
+  return { scrise, incomplet: true, dupa: cheie };
 }

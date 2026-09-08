@@ -81,9 +81,17 @@ function faceBaza(opt: {
       },
       then: (bun: (v: unknown) => unknown, rau?: (e: unknown) => unknown) => {
         if (tabela === "pepita_listari") {
-          const randuri = [...listari.entries()]
-            .filter(([id]) => (dela === null || id >= dela) && (panala === null || id <= panala))
-            .map(([product_id, inclus]) => ({ product_id, inclus }));
+          /*
+           * ⚠ SI AICI SE PLIMBA CU ADEVARAT. Intervalul de chei acopera si listarile produselor
+           * INACTIVE dintre primul si ultimul id al paginii, deci poate depasi plafonul de 1000
+           * de randuri; cu `limit` si `gt` no-op, bucla de paginare n-ar fi fost probata deloc.
+           */
+          let randuri = [...listari.entries()]
+            .map(([product_id, inclus]) => ({ product_id, inclus }))
+            .filter((r) => (dela === null || r.product_id >= dela) && (panala === null || r.product_id <= panala))
+            .filter((r) => dupa === null || r.product_id > dupa)
+            .sort((a, c) => (a.product_id < c.product_id ? -1 : 1));
+          if (cate !== null) randuri = randuri.slice(0, cate);
           return Promise.resolve({ data: randuri, error: null }).then(bun, rau);
         }
         if (tabela !== "products") return Promise.resolve({ data: [], error: null }).then(bun, rau);
@@ -109,6 +117,8 @@ function faceBaza(opt: {
     from: (t: string) => builder(t),
     /* Ajutor de proba: scoate un produs din feed, ca la o apasare pe „scoate" din panou. */
     __scoate: (id: string) => listari.set(id, false),
+    /* Ajutor de proba: pune o listare care exista deja in baza, fara sa treaca prin cod. */
+    __pune: (id: string) => listari.set(id, true),
   } as unknown as SupabaseClient<Database>;
   return { db, scrise, citiri: () => citiri };
 }
@@ -263,4 +273,26 @@ test("⚠ un produs SCOS din feed se pune la loc la urmatoarea apasare", async (
 
   assert.equal(scrise.length, 3, "produsul scos n-a fost pus la loc");
   assert.equal(scrise[2].product_id, idProdus(1));
+});
+
+test("⚠ citirea listarilor deja incluse se PLIMBA: peste 1000 de randuri, PostgREST taie tacut", async () => {
+  /*
+   * Intervalul de chei al unei pagini acopera si listarile produselor INACTIVE dintre primul si
+   * ultimul id, deci poate depasi plafonul de 1000. Trunchiata, citirea ar fi lipsit randuri deja
+   * incluse, si le-am fi rescris degeaba: exact re-stampilarea pe care blocul o repara, si care
+   * face `<LastMod>` sa sara pe produse care n-au miscat.
+   */
+  const active = Array.from({ length: 3 }, (_, i) => idProdus(i * 1000));
+  const { db, scrise } = faceBaza({ produse: active });
+
+  /* Prima apasare pune cele trei randuri. */
+  await includeToateActive(db, BID, null, ACUM);
+  assert.equal(scrise.length, 3);
+
+  /* Iar intre ele traiesc 1500 de listari ale unor produse INACTIVE, care nu apar in pagina. */
+  const inactive = Array.from({ length: 1500 }, (_, i) => idProdus(i + 1));
+  for (const id of inactive) (db as unknown as { __pune: (id: string) => void }).__pune(id);
+
+  await includeToateActive(db, BID, null, ACUM);
+  assert.equal(scrise.length, 3, "s-au rescris randuri deja incluse: citirea s-a taiat la plafon");
 });

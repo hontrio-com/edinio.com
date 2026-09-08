@@ -1354,8 +1354,17 @@ export function OrderDetailClient({
 
           {noteInterne && (
             <div className={`${CARD} p-5 space-y-3`}>
+              {/*
+                ⚠ TRIUNGHI DOAR CAND CHIAR E UN AVERTISMENT. Nota se scrie pe FIECARE comandă de
+                marketplace, iar cele mai multe conțin doar lucruri de știut (cine duce coletul,
+                că statusul se operează la ei). Un semn de alarmă pe fiecare comandă curată se
+                învață repede să fie ignorat, și atunci nu se mai vede nici pe cea care contează.
+              */}
               <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-warning" />De știut înainte să expediezi
+                {noteInterne.includes("⚠")
+                  ? <AlertTriangle className="h-4 w-4 text-warning" />
+                  : <FileText className="h-4 w-4 text-muted-foreground" />}
+                {noteInterne.includes("⚠") ? "De știut înainte să expediezi" : "Despre această comandă"}
               </h2>
               {/*
                 ⚠ TEXT, NU HTML. Nota vine din codul nostru, dar contine si campuri primite de la
@@ -1364,6 +1373,14 @@ export function OrderDetailClient({
               */}
               <p className="whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
                 {noteInterne}
+              </p>
+              {/*
+                ⚠ SE SPUNE CAND A FOST SCRISA. Nota e o fotografie de la sosirea comenzii: dacă
+                între timp ai reparat o linie sau ai completat adresa, propozițiile de mai sus pot
+                fi depășite. Fără rândul ăsta, cineva ar putea crede că descriu starea de acum.
+              */}
+              <p className="text-[11px] text-muted-foreground/70">
+                Scrisă la primirea comenzii; dacă ai reparat ceva între timp, poate fi depășită.
               </p>
             </div>
           )}

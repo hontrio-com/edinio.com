@@ -922,14 +922,6 @@ export interface RezultatReprocesare {
 
 export async function reproceseaza(
   admin: Db, ctx: ContextIngest, externalId: string,
-  /**
-   * A apasat un OM butonul, pe o comanda pe care scrie chiar motivul?
-   *
-   * ⚠ De asta atarna un singur lucru, si e despre bani: motivul „nu am putut citi moneda" nu se
-   * poate recalcula NICIODATA (sarcina bruta nu se pastreaza), deci singurul lucru care il poate
-   * inchide e privirea cuiva. Cronul si retrimiterea lor nu se uita la nimic, deci il pastreaza.
-   */
-  omulAApasat = false,
 ): Promise<RezultatReprocesare> {
   /* ⚠ `business_id` e OBLIGATORIU: cu cheia de serviciu RLS nu mai apara nimic. */
   const { data: randBrut, error: eRand } = await admin
@@ -1091,9 +1083,24 @@ export async function reproceseaza(
    * e o privire a omului asupra unei comenzi pe care scrie chiar motivul, deci se socoteste
    * luare la cunostinta. Avertismentul nu se pierde: ramane in nota interna a comenzii.
    */
-  const cunoscute = [INCEPUT_CODURI, INCEPUT_NELIVRABILA, MOTIV_MONEDA_STRAINA, MOTIV_STOC_NEFACUT];
-  if (omulAApasat) cunoscute.push(MOTIV_MONEDA_NECITITA);
-  const pastrate = motiveNerecalculabile(rand.motiv, cunoscute);
+  /*
+   * ⚠ `MOTIV_MONEDA_NECITITA` NU E IN LISTA, si asta e o hotarare, nu o scapare.
+   *
+   * Prima incercare il stergea la apasarea omului, si stingea odata cu el si steagul
+   * `order_source.moneda_necitita`. Dar steagul e SINGURA paza care tine rambursul pe zero si
+   * facturarea automata oprita pe o comanda despre care noi insine am scris ca nu stim in ce
+   * moneda e. Stins, `rambursDeIncasat` intoarce totalul intreg — iar la generarea in MASA de
+   * AWB nu exista niciun camp de corectat, deci cifra ungureasca ar fi ceruta in LEI la usa.
+   *
+   * O apasare pe un buton al carui nume e „Reprocesează" nu e o hotarare despre bani. Deci
+   * motivul si steagul RAMAN amandoua, comanda ramane in verificare, iar cele doua porti de bani
+   * raman inchise: greseala in directia „nu se incaseaza" se vede si se repara, cea inversa nu.
+   * Ce lipseste ca sa se poata inchide e o intrebare limpede pusa comerciantului, si aia e o
+   * lucrare de sine statatoare.
+   */
+  const pastrate = motiveNerecalculabile(rand.motiv, [
+    INCEPUT_CODURI, INCEPUT_NELIVRABILA, MOTIV_MONEDA_STRAINA, MOTIV_STOC_NEFACUT,
+  ]);
   const motiv = compuneMotiv([
     motivCoduri(nelegate),
     motivNelivrabila(lipsuri),
@@ -1113,26 +1120,6 @@ export async function reproceseaza(
   if (seSchimbaLinii && !stocEsuat) {
     const { error } = await admin.from("orders")
       .update({ items: itemsNoi as never } as never)
-      .eq("id", o.id).eq("business_id", ctx.businessId);
-    if (error) throw error;
-  }
-
-  /*
-   * ⚠ STEAGUL SI MOTIVUL SPUN ACELASI LUCRU, deci se sting IMPREUNA.
-   *
-   * `order_source.moneda_necitita` opreste rambursul precompletat si facturarea automata. Sters
-   * doar motivul, comanda iesea din carantina si arata normal, dar ramanea pe veci cu ramburs
-   * zero si fara factura, fara ca nimic sa mai spuna de ce: coletul pleca, si curierul nu
-   * incasa nimic. Nicio alta cale nu rescrie `order_source` dupa ingest.
-   */
-  const stingeSteagul = omulAApasat
-    && (rand.motiv ?? "").includes(MOTIV_MONEDA_NECITITA)
-    && (o.order_source as { moneda_necitita?: unknown } | null)?.moneda_necitita === true;
-  if (stingeSteagul) {
-    const restulSursei = { ...(o.order_source as Record<string, unknown>) };
-    delete restulSursei.moneda_necitita;
-    const { error } = await admin.from("orders")
-      .update({ order_source: restulSursei as never } as never)
       .eq("id", o.id).eq("business_id", ctx.businessId);
     if (error) throw error;
   }

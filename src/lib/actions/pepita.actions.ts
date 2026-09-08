@@ -481,7 +481,10 @@ export async function verificaProdusePepita(
         await q as never,
       );
       if (randuri.length === 0) break;
-      dupaId = randuri[randuri.length - 1].id;
+      /* ⚠ Cursorul care nu inainteaza opreste bucla. Vezi aceeasi paza in `feed.ts`. */
+      const ultimulProdus = randuri[randuri.length - 1].id;
+      if (ultimulProdus === dupaId) break;
+      dupaId = ultimulProdus;
       active += randuri.length;
 
       for (const p of randuri) {
@@ -559,7 +562,9 @@ export async function verificaProdusePepita(
           if (error) throw error;
           const randuri = (data ?? []) as { articol_id: string; combinatie: string }[];
           if (randuri.length === 0) break;
-          dupaArticol = randuri[randuri.length - 1].articol_id;
+          const ultimulArticol = randuri[randuri.length - 1].articol_id;
+          if (ultimulArticol === dupaArticol) break;
+          dupaArticol = ultimulArticol;
           for (const r of randuri) {
             if (deAcum.has(r.articol_id)) continue;
             orfane = (orfane ?? 0) + 1;
@@ -752,8 +757,7 @@ export async function reproceseazaComandaPepita(businessId: string, externalId: 
       .from("store_settings").select("currency").eq("business_id", businessId).maybeSingle();
     const monedaMagazin = String((setari as { currency?: string } | null)?.currency ?? "RON").toUpperCase();
 
-    /* ⚠ `true`: butonul e apasat de om, pe o comanda pe care scrie chiar motivul. */
-    const r = await reproceseaza(admin, { businessId, monedaMagazin }, externalId, true);
+    const r = await reproceseaza(admin, { businessId, monedaMagazin }, externalId);
     revalidatePath(CALE);
     return r;
   } catch (e) {

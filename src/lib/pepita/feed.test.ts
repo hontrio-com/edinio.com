@@ -40,6 +40,8 @@ interface Optiuni {
   moneda?: string;
   /** Cota de TVA a magazinului. Schimbata, schimba pretul brut din feed. */
   tva?: number;
+  tvaPornit?: boolean;
+  preturiCuTva?: boolean;
   categoriiAtinseLa?: string;
   /** Cand s-a atins ultima oara magazinul: numele lui si adresa intra in feed. */
   magazinAtinsLa?: string;
@@ -103,7 +105,8 @@ function faceBaza(o: Optiuni = {}) {
       return {
         data: doar({
           pepita_config: configCurent,
-          vat_enabled: true, vat_rate: o.tva ?? 21, prices_include_vat: true,
+          vat_enabled: o.tvaPornit ?? true, vat_rate: o.tva ?? 21,
+          prices_include_vat: o.preturiCuTva ?? true,
           currency: o.moneda ?? "RON",
         }, coloane),
         error: null,
@@ -593,23 +596,30 @@ test("⚠ FIECARE camp al amprentei conteaza: schimbat, stampila se rescrie", as
    * preturile vechi pana cand cineva atinge produsele unul cate unul.
    */
   const deBaza = { mod_includere: "toate" } as Record<string, unknown>;
-  const amprenta = async (config: Record<string, unknown>, tva?: number) => {
-    const db = faceBaza({ config, produse: [produs(1)], tva });
+  const amprenta = async (config: Record<string, unknown>, peste: Partial<Optiuni> = {}) => {
+    const db = faceBaza({ config, produse: [produs(1)], ...peste });
     await feed(db);
     return (db as unknown as { __config: Record<string, unknown> }).__config.feed_amprenta as string;
   };
 
   const referinta = await amprenta(deBaza);
-  const variante: [string, Record<string, unknown>, number | undefined][] = [
-    ["strategia de pret", { ...deBaza, strategie_pret: { fel: "procent", valoare: 10 } }, undefined],
-    ["stocul de siguranta", { ...deBaza, safety_stock: 3 }, undefined],
-    ["termenul de livrare", { ...deBaza, shipping_delay: 4 }, undefined],
-    ["pretul transportului", { ...deBaza, shipping_price: 19.99 }, undefined],
-    ["garantia", { ...deBaza, garantie: { tip: "Year", durata: 2 } }, undefined],
-    ["modul de includere", { ...deBaza, mod_includere: "selectate" }, undefined],
-    ["cota de TVA", deBaza, 11],
+  const variante: [string, Record<string, unknown>, Partial<Optiuni>][] = [
+    ["strategia de pret", { ...deBaza, strategie_pret: { fel: "procent", valoare: 10 } }, {}],
+    ["stocul de siguranta", { ...deBaza, safety_stock: 3 }, {}],
+    ["termenul de livrare", { ...deBaza, shipping_delay: 4 }, {}],
+    ["pretul transportului", { ...deBaza, shipping_price: 19.99 }, {}],
+    ["garantia", { ...deBaza, garantie: { tip: "Year", durata: 2 } }, {}],
+    ["modul de includere", { ...deBaza, mod_includere: "selectate" }, {}],
+    ["cota de TVA", deBaza, { tva: 11 }],
+    ["TVA-ul pornit sau stins", deBaza, { tvaPornit: false }],
+    ["preturile cu sau fara TVA", deBaza, { preturiCuTva: false }],
   ];
-  for (const [nume, config, tva] of variante) {
-    assert.notEqual(await amprenta(config, tva), referinta, `${nume} nu intra in amprenta`);
+  for (const [nume, config, peste] of variante) {
+    assert.notEqual(await amprenta(config, peste), referinta, `${nume} nu intra in amprenta`);
   }
+
+  /*
+   * ⚠ Al zecelea camp, `config.piata`, nu se poate varia: `PIETE` are o singura piata („ro").
+   * Se spune, ca sa nu para acoperit de proba de mai sus.
+   */
 });

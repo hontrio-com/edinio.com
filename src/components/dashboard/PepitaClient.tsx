@@ -514,7 +514,7 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
     Ce a ramas neterminat dupa o rulare oprita la mijloc. Toastul dispare in cateva secunde,
     iar o includere pe jumatate facuta arata exact ca una intreaga: asta ramane pe ecran.
   */
-  const [ramas, setRamas] = useState<{ facut: number; dinCate: number | null } | null>(null);
+  const [ramas, setRamas] = useState<{ facut: number; dinCate: number | null; dupa: string | null } | null>(null);
 
   const incarca = async (p = pagina, termen = cauta) => {
     setIncarc(true);
@@ -573,10 +573,16 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
           onClick={async () => {
             if (!confirm("Toate produsele active din magazin vor fi incluse în feedul Pepita. Continui?")) return;
             setLucrez(true);
+            /*
+              ⚠ SE RELUA DE LA CAP. Cursorul traia doar in bucla, deci a doua apasare pornea de
+              la zero, iar avertismentul care promitea „se reia de unde a rămas" mintea. Nimic
+              nu se strica (upsertul e idempotent), dar un catalog mare se scria a doua oara
+              intreg. Acum cursorul supravietuieste in `ramas`.
+            */
+            let facut = ramas?.facut ?? 0;
+            let cursor: string | null = ramas?.dupa ?? null;
+            let dinCate: number | null = ramas?.dinCate ?? null;
             setRamas(null);
-            let facut = 0;
-            let cursor: string | null = null;
-            let dinCate: number | null = null;
             try {
               /*
                 ⚠ BUCLA E AICI, LA APASARE, nu pe server. Serverul face o trecere marginita si
@@ -589,7 +595,7 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
                 const r = await includeToateProdusePepita(businessId, cursor);
                 if ("error" in r) {
                   toast.error(`${r.error} S-au inclus ${facut} produse până aici.`);
-                  setRamas({ facut, dinCate });
+                  setRamas({ facut, dinCate, dupa: cursor });
                   break;
                 }
                 facut += r.scrise;
@@ -601,7 +607,7 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
               void incarca(pagina, cauta);
             } catch {
               toast.error(`Cererea nu a ajuns. S-au inclus ${facut} produse până aici.`);
-              setRamas({ facut, dinCate });
+              setRamas({ facut, dinCate, dupa: cursor });
             } finally { setLucrez(false); setProgres(null); }
           }}
         >

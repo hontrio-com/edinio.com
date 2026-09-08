@@ -210,3 +210,22 @@ test("⚠ `order_source` nu se mai scrie cu ce trimite browserul", () => {
     assert.ok(!lista.includes(cheie), `„${cheie}" hotaraste bani si nu se scrie de la cumparator`);
   }
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COLETUL DUS DE MARKETPLACE NU PRIMESTE AWB PROPRIU
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ La Pepita Delivery transportul e in fluxul lor, cu eticheta lor. Un AWB emis de comerciant
+   inseamna doua etichete pe acelasi pachet si un al doilea transport platit. Pe o comanda
+   deschisa de om paguba se vede si se opreste; la generarea IN MASA nu, fiindca acolo nu exista
+   niciun camp de corectat si nimeni nu se uita la fiecare rand.
+*/
+
+test("⚠ generarea in masa de AWB sare coletele duse de marketplace", () => {
+  const s = readFileSync("src/lib/actions/bulk-orders.actions.ts", "utf8");
+  assert.match(s, /livrareaEDusaDeMarketplace\(/, "lotul emite AWB si pe coletele duse de ei");
+  /* ⚠ Si CERE `order_source`: necerut, ar veni `undefined` si verificarea ar tacea. */
+  assert.match(s, /\.select\("[^"]*order_source[^"]*"\)/, "citirea lotului nu cere originea");
+  /* Si se SPUNE ce s-a sarit: „sarite" fara motiv arata ca un lot care a mers pe jumatate. */
+  assert.match(s, /duseDeEi/, "comenzile sarite nu se spun nicaieri");
+});

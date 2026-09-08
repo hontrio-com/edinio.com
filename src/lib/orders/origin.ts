@@ -120,6 +120,27 @@ export const MARKETPLACE_CU_CICLU_PROPRIU = new Set(["emag", "trendyol"]);
  * ⚠ Se citeste din `order_source`, care e scris la ingest si nu se mai schimba. Nu din
  * `payment_method`: acolo o comanda eMAG scrie „emag", dar una Trendyol nu neaparat.
  */
+/**
+ * Coletul e dus de curierul contractat de MARKETPLACE, nu de al comerciantului?
+ *
+ * ═══ ⚠ ATUNCI UN AWB PROPRIU E UN AL DOILEA COLET ═══
+ *
+ * La Pepita Delivery (orice mod de livrare `gls*`) transportul e in fluxul lor, cu eticheta lor.
+ * Un AWB emis de comerciant inseamna doua etichete pe acelasi pachet, si un al doilea transport
+ * platit. Rambursul e deja aparat — `rambursDeIncasat` intoarce zero pe comenzile astea — dar
+ * eticheta nu era.
+ *
+ * ⚠ Se citeste din `order_source.livrare_pepita`, scris la ingest, cu cadere pe modul de livrare
+ * pentru comenzile de dinainte de 08.09.2026, care n-au inca steagul.
+ */
+export function livrareaEDusaDeMarketplace(orderSource: unknown): boolean {
+  const src = orderSource as { livrare_pepita?: unknown; pepita_delivery_mode?: unknown } | null;
+  if (src?.livrare_pepita === true) return true;
+  if (src?.livrare_pepita === false) return false;
+  const mod = src?.pepita_delivery_mode;
+  return typeof mod === "string" && mod.toLowerCase().startsWith("gls");
+}
+
 export function marketplaceCareTineComanda(orderSource: unknown): string | null {
   const m = (orderSource as { marketplace?: string } | null)?.marketplace;
   return m && MARKETPLACE_CU_CICLU_PROPRIU.has(m) ? m : null;

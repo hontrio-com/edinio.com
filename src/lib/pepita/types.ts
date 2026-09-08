@@ -154,9 +154,20 @@ export const STARI_PLATA_PEPITA = { paid: "paid", unpaid: "unpaid" } as const;
  * inca o lista publicata, deci orice valoare noua trebuie sa treaca prin
  * „necunoscut" si sa fie VAZUTA de comerciant, nu ghicita.
  */
+/**
+ * Modurile de livrare pe care le cunoastem.
+ *
+ * ⚠ LISTA E DESCHISA LA CAPATUL GLS. Documentul lor de impingere a comenzilor (copia din
+ * `docs/pepita/`) scrie exact patru valori: `shipping`, `gls`, `gls_parcelshop`, `mpl`. Dar
+ * pagina lor despre Pepita Delivery pomeneste si `gls_parcellocker` si `gls_xxl`, iar cele doua
+ * documente NU sunt de acord intre ele. Deci le stim pe toate sase, si `esteLivrarePepita` nu se
+ * uita la lista, ci la PREFIX: vezi acolo de ce.
+ */
 export const LIVRARI_PEPITA = {
   shipping: "shipping",
   gls: "gls",
   gls_parcelshop: "gls_parcelshop",
+  gls_parcellocker: "gls_parcellocker",
+  gls_xxl: "gls_xxl",
   mpl: "mpl",
 } as const;

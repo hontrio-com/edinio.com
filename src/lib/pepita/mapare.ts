@@ -25,7 +25,20 @@ import { LIVRARI_PEPITA, PLATI_PEPITA, STARI_PLATA_PEPITA } from "./types";
  * Deosebirea nu e cosmetica: de ea atarna CINE incaseaza rambursul.
  */
 export function esteLivrarePepita(modLivrare: string | null): boolean {
-  return modLivrare === LIVRARI_PEPITA.gls || modLivrare === LIVRARI_PEPITA.gls_parcelshop;
+  /*
+   * ⚠ PE PREFIX, NU PE LISTA, si asta e chiar apararea.
+   *
+   * Documentele lor nu sunt de acord intre ele: cel de impingere a comenzilor scrie
+   * `gls_parcelshop`, pagina despre Pepita Delivery scrie `gls_parcellocker` si `gls_xxl`. O
+   * lista inchisa ar fi lasat o valoare noua sa treaca drept livrare PROPRIE, iar atunci
+   * `metodaPlata` ar fi scris `cash_on_delivery` si rambursul s-ar fi precompletat pe un colet
+   * dus de GLS-ul contractat de EI: clientul ar fi platit a doua oara la usa.
+   *
+   * Orice mod care incepe cu „gls" e transportul lor. Greseala posibila in cealalta directie —
+   * un mod GLS care ar fi de fapt al comerciantului — costa doar un ramburs necompletat, care
+   * se vede si se scrie de mana.
+   */
+  return typeof modLivrare === "string" && modLivrare.toLowerCase().startsWith("gls");
 }
 
 /**
@@ -47,27 +60,25 @@ export function esteLivrarePepita(modLivrare: string | null): boolean {
  * comanda GLS, clientul ar fi platit o data curierului Pepita si inca o data
  * curierului comerciantului.
  *
- * ⚠ SI TRANSFERUL nu se incaseaza la usa, DACA A FOST FACUT: banii vin la comerciant prin
- * banca, in avans. Un AWB cu ramburs acolo ar cere a doua oara aceiasi bani.
+ * ⚠ SI TRANSFERUL nu se incaseaza la usa: banii vin la comerciant prin banca, nu la curier.
  *
- * ⚠ DAR „TRANSFER" NU INSEAMNA „PLATIT", si aici era defectul reparatiei dintai. Functia
- * raspundea `true` pentru ORICE mod care nu e `cod`, deci si pentru un transfer NEFACUT sau
- * un card refuzat. `rambursDeIncasat` iese pe zero inaintea oricarei socoteli cand vede
- * marcajul, deci marfa ar fi plecat cu ramburs 0,00 la o comanda pe care nu o platise nimeni:
- * nici Pepita n-avea banii („Transferul nu ajunge la Pepita, ci direct la voi"), nici curierul
- * n-avea ce sa ceara. De aceea starea platii intra in socoteala, si e un argument CERUT: asa
- * `tsc` numeste fiecare apelant, in loc sa-l lase sa treaca pe langa schimbarea de inteles.
+ * ⚠ NICI CAND NU S-A PLATIT INCA, si aici am gresit o data, in ambele directii.
+ *
+ * O vreme functia a cerut si starea platii: pe „unpaid" raspundea ca banii nu sunt la nimeni,
+ * iar `rambursDeIncasat` precompleta atunci TOTALUL pe AWB. Adica un transfer bancar nefacut se
+ * transforma singur in ramburs: clientul, care alesese sa plateasca prin banca, se trezea cu
+ * curierul cerandu-i numerar la usa — o metoda de plata pe care n-a ales-o, si pe care cel mai
+ * adesea o refuza. Iar daca transferul sosea intre timp, platea de doua ori.
+ *
+ * ⚠ NOI NU SCHIMBAM METODA DE PLATA ALEASA LA EI. Un singur caz produce ramburs: `cod` dus de
+ * curierul COMERCIANTULUI. Pentru un transfer sau un card neplatit, marfa nu trebuie sa plece
+ * pana nu se lamuresc banii, iar asta se spune in nota comenzii — nu se rezolva punand un
+ * ramburs pe care nimeni nu l-a cerut.
  */
-export function incaseazaPepita(
-  modPlata: string | null, modLivrare: string | null, starePlatii: "paid" | "unpaid",
-): boolean {
+export function incaseazaPepita(modPlata: string | null, modLivrare: string | null): boolean {
   if (modPlata === PLATI_PEPITA.cod) return esteLivrarePepita(modLivrare);
-  /*
-   * Card platit: banii sunt la Pepita. Transfer facut: la comerciant, prin banca. In amandoua
-   * cazurile, la usa nu se incaseaza nimic. Neplatit inseamna ca banii nu sunt la nimeni, si
-   * atunci hotararea ramane a lui `payment_status`, adica a lui `rambursDeIncasat`.
-   */
-  return starePlatii === "paid";
+  /* Card, transfer, sau orice alt mod: la usa nu se incaseaza nimic. */
+  return true;
 }
 
 /**
@@ -143,6 +154,8 @@ const ETICHETE_LIVRARE: Record<string, string> = {
      shop, iar pagina romaneasca scrie „automat de colet GLS". Numele campului lor induce
      in eroare, deci eticheta arata ce e cu adevarat. */
   gls_parcelshop: "Automat de colet GLS (livrare Pepita)",
+  gls_parcellocker: "Automat de colet GLS (livrare Pepita)",
+  gls_xxl: "Curier GLS, colet mare (livrare Pepita)",
   mpl: "Curier MPL (Magyar Posta)",
 };
 

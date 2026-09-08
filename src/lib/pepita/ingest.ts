@@ -736,7 +736,7 @@ function sursaComenzii(c: ComandaPepita, ctx: ContextIngest, cote: CoteleLiniilo
      * Pentru Pepita Delivery (GLS), rambursul ajunge la ei: comerciantul nu are ce incasa
      * la usa, iar precompletat ar fi cerut clientului a doua oara aceiasi bani.
      */
-    incaseaza_marketplace: incaseazaPepita(c.modPlata, c.modLivrare, starePlata(c.starePlata, c.modPlata)),
+    incaseaza_marketplace: incaseazaPepita(c.modPlata, c.modLivrare),
     /* ⚠ Semnul ca s-au primit cote de TVA diferite pe linii. Se scrie o data, la ingest, ca sa
        nu depinda de recitirea liniilor la fiecare afisare. */
     ...(cote.uniforma ? {} : { vat_mixt: cote.cote }),

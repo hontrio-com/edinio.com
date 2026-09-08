@@ -587,26 +587,54 @@ test("⚠ transferul CONFIRMAT nu se incaseaza la usa", async () => {
   assert.match(o.internal_notes, /a ajuns direct la tine/);
 });
 
-test("⚠ transferul NEFACUT nu goleste rambursul: altfel marfa pleaca fara niciun ban", async () => {
-  /*
-   * ⚠ PROBA ASTA APARA EXACT DEFECTUL PE CARE PROBA DE DINAINTE IL PAZEA.
-   *
-   * Scrisa la P0-1, ea cerea ramburs ZERO pentru un transfer NEPLATIT, fiindca
-   * `incaseazaPepita` raspundea „banii sunt la altcineva" pentru orice mod care nu e `cod`.
-   * Dar la un transfer nefacut banii nu-i are nimeni: nici Pepita, care spune limpede ca
-   * transferul vine direct la comerciant, nici curierul, caruia i se dadea 0,00 pe AWB.
-   */
-  const b = faceBaza();
-  await ingereaza(b.db, CTX, comanda({ payment_mode: "transfer", payment_status: "unpaid", delivery_mod: "shipping" }));
-  const o = b.orders[0];
-  assert.equal(o.payment_status, "unpaid", "nu se pretinde ca banii au venit");
-  assert.equal(o.order_source.incaseaza_marketplace, false, "banii nu sunt la Pepita");
-  assert.equal(
-    rambursDeIncasat({ payment_status: o.payment_status, total: o.total, order_source: o.order_source }),
-    o.total,
-    "rambursul trebuie precompletat: comerciantul il sterge daca vede banii in extras",
-  );
-  assert.match(o.internal_notes, /NU a fost confirmată/);
+test("⚠ transferul NEFACUT nu se preface in ramburs: nu schimbam metoda aleasa la ei", () => {
+  return (async () => {
+    /*
+     * ⚠ AICI AM GRESIT IN AMANDOUA DIRECTIILE, si proba pastreaza povestea.
+     *
+     * O vreme rambursul se precompleta cu totalul pe un transfer neplatit — adica un transfer
+     * bancar nefacut se transforma singur in plata la livrare, iar clientul care alesese banca
+     * se trezea cu curierul cerandu-i numerar la usa. Nu schimbam metoda de plata aleasa la ei:
+     * marfa nu pleaca pana nu se lamuresc banii, si asta se SPUNE pe comanda.
+     */
+    const b = faceBaza();
+    await ingereaza(b.db, CTX, comanda({ payment_mode: "transfer", payment_status: "unpaid", delivery_mod: "shipping" }));
+    const o = b.orders[0];
+
+    assert.equal(o.payment_status, "unpaid", "nu se pretinde ca banii au venit");
+    assert.equal(o.payment_method, "pepita", "nu se scrie plata la livrare pe o comanda cu transfer");
+    assert.equal(
+      rambursDeIncasat({ payment_status: o.payment_status, total: o.total, order_source: o.order_source }),
+      0,
+      "un transfer nefacut a devenit ramburs",
+    );
+    /* ⚠ Si comerciantul afla, din nota randata pe pagina comenzii, ca banii n-au venit. */
+    assert.match(o.internal_notes, /NU a fost confirmată/);
+  })();
+});
+
+test("⚠ un mod de livrare GLS necunoscut inca nu produce ramburs la usa", () => {
+  return (async () => {
+    /*
+     * Documentele lor nu sunt de acord: pagina despre Pepita Delivery pomeneste
+     * `gls_parcellocker` si `gls_xxl`, documentul de impingere a comenzilor nu. Tratate ca
+     * livrare proprie, ar fi produs `cash_on_delivery` si un ramburs precompletat pe un colet
+     * dus de GLS-ul contractat de EI: clientul ar fi platit a doua oara la usa.
+     */
+    for (const mod of ["gls_parcellocker", "gls_xxl"]) {
+      const b = faceBaza();
+      await ingereaza(b.db, CTX, comanda({ payment_mode: "cod", payment_status: "unpaid", delivery_mod: mod, id: `x-${mod}` }));
+      const o = b.orders[0];
+      assert.equal(o.payment_method, "pepita", `${mod}: s-a scris plata la livrare`);
+      assert.equal(o.order_source.incaseaza_marketplace, true, `${mod}: rambursul ar fi al comerciantului`);
+      assert.equal(
+        rambursDeIncasat({ payment_status: o.payment_status, total: o.total, order_source: o.order_source }),
+        0,
+        `${mod}: clientul ar fi platit a doua oara la usa`,
+      );
+      assert.match(o.internal_notes, /Livrare Pepita/);
+    }
+  })();
 });
 
 /* ══════════════════════════════════════════════════════════════════════════

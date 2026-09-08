@@ -186,19 +186,26 @@ secventiale si zece concurente.
 | Pepita | Edinio | De ce |
 |---|---|---|
 | `payment_mode: cod` **si** livrare care NU e a Pepitei | `payment_method: cash_on_delivery` | Banii ii incaseaza CURIERUL comerciantului. `dhl.actions.ts` verifica textual valoarea asta. |
-| `payment_mode: cod` **si** `delivery_mod: gls` sau `gls_parcelshop` | `payment_method: pepita`, plus `order_source.incaseaza_marketplace: true` | ⚠ La Pepita Delivery **rambursul ajunge la Pepita**, scrie pe pagina lor pentru Romania. Precompletat pe un AWB propriu, clientul ar fi platit A DOUA OARA. |
-| `payment_mode: transfer` | `payment_method: pepita`, neincasat la usa | Transferul „nu ajunge la Pepita, ci direct la voi", tot pagina lor. |
+| `payment_mode: cod` **si** un `delivery_mod` care incepe cu `gls` | `payment_method: pepita`, plus `order_source.incaseaza_marketplace: true` | ⚠ La Pepita Delivery **rambursul ajunge la Pepita**, scrie pe pagina lor pentru Romania. Precompletat pe un AWB propriu, clientul ar fi platit A DOUA OARA. |
+| `payment_mode: transfer` sau `creditcard`, platit sau nu | `payment_method: pepita`, neincasat la usa | ⚠ NU schimbam metoda de plata aleasa la ei. Un transfer nefacut nu devine ramburs: clientul care a ales banca s-ar trezi cu curierul cerandu-i numerar. Ce lipseste se SPUNE in nota comenzii. |
 | `payment_mode` altul sau necunoscut | `payment_method: pepita` | Un necunoscut NU devine ramburs: curierul ar cere a doua oara banii deja platiti. |
 | `payment_status` | `paid` / `unpaid` | Lipsa se deduce din modul de plata: cardul e „paid" de obicei, scrie la ei. |
-| `delivery_mod` | hotaraste CINE incaseaza rambursul; curierul il alege comerciantul | Lista lor e a pietei UNGARE. La `gls_parcelshop` nu primim identificatorul punctului, iar traducerea lor maghiara ii spune „csomagautomata", adica **automat de colet**, nu parcel shop: eticheta din panou spunea gresit. |
+| `delivery_mod` | hotaraste CINE incaseaza rambursul si CINE duce coletul; curierul il alege comerciantul | ⚠ Se citeste pe PREFIX: orice valoare care incepe cu `gls` e transportul LOR. Documentele lor nu sunt de acord intre ele — cel de impingere a comenzilor scrie `gls_parcelshop`, pagina despre Pepita Delivery scrie `gls_parcellocker` si `gls_xxl` — iar o lista inchisa ar fi lasat o valoare noua sa treaca drept livrare proprie. La automatul de colet nu primim identificatorul punctului, iar traducerea lor maghiara ii spune „csomagautomata", adica **automat de colet**, nu parcel shop. |
 | `currency` pe linii | `order_source.currency` | Trebuie sa fie UNA singura: doua monede resping comanda, fiindca totalul s-ar aduna din mere si pere. Alta decat a magazinului duce comanda in carantina. |
 | `vat` pe linie | `orders.items[].vat_rate` | ⚠ Cota ramane PE LINIE. `orders.vat_rate` e cota liniei cu valoarea cea mai mare, nu maximul cotelor. |
 | `status` | mereu `pending` | Campul lor e negarantat, cu valori convenite de la caz la caz. Nu exista lista de tradus. |
 | `tax_number` | `orders.billing_company` | Numai daca trece verificarea de CUI. `verified: false`, fiindca NU intrebam ANAF pe calea de ingest. Prefixul „RO" e martorul pentru `vat_payer`. |
 
-⚠ `order_source.incaseaza_marketplace` e cheia de care atarna rambursul, si e ADEVARATA doar cand
-banii chiar sunt la altcineva: ramburs dus de GLS-ul Pepitei, sau card/transfer **confirmat platit**.
-Un transfer nefacut nu goleste rambursul, fiindca banii nu-i are nici Pepita, nici curierul.
+⚠ `order_source.incaseaza_marketplace` e cheia de care atarna rambursul. E FALSA intr-un singur
+caz: `cod` dus de curierul COMERCIANTULUI. In rest — orice livrare `gls*`, orice card, orice
+transfer, platit sau nu — la usa nu se incaseaza nimic.
+
+⚠ **Si asta a fost gresit o data in AMANDOUA directiile.** O vreme functia cerea si starea platii:
+pe „unpaid" raspundea ca banii nu sunt la nimeni, iar rambursul se precompleta cu totalul. Adica un
+transfer bancar nefacut se transforma singur in plata la livrare, si clientul — care alesese banca —
+se trezea cu curierul cerandu-i numerar la usa, o metoda de plata pe care n-o alesese. Nu schimbam
+metoda de plata aleasa la ei: marfa nu pleaca pana nu se lamuresc banii, si asta se spune in nota
+comenzii, care se vede pe pagina ei.
 
 Campul e **obligatoriu** in `ComandaCuRamburs`, tocmai ca `tsc` sa numeasca fiecare din cele
 douazeci si unu de locuri care cheama `rambursDeIncasat`: unsprezece dintre ele pasau un obiect
@@ -234,6 +241,17 @@ deci o adresa incompleta nu opreste nimic si nu produce carantina.
 
 ⚠ **Stocul se scade oricum**, si pentru comenzile in carantina: marfa e vanduta la ei, iar nescazuta
 se supravinde pe celelalte cinci canale.
+
+### AWB-ul propriu si Pepita Delivery
+
+La `gls*` coletul e dus de GLS-ul contractat de EI, cu eticheta lor. Un AWB emis de comerciant
+inseamna doua etichete pe acelasi pachet si un al doilea transport platit.
+
+- rambursul e aparat de mult: `rambursDeIncasat` intoarce zero pe comenzile astea;
+- **generarea in MASA de AWB le SARE**, si spune care si de ce. Acolo nu exista niciun camp de
+  corectat si nimeni nu se uita la fiecare rand;
+- pe o comanda deschisa de om, emiterea ramane cu putinta, dinadins: daca eticheta lor n-a venit,
+  comerciantul trebuie sa poata expedia. Nota de pe comanda ii spune ce se intampla.
 
 **„Reprocesează"** (panou, langa fiecare comanda cu probleme) leaga din nou liniile, completeaza
 `orders.items`, duce stocul la capat si recalculeaza motivele. Aceeasi socoteala o foloseste si

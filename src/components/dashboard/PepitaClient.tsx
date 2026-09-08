@@ -464,11 +464,17 @@ function Setari({ businessId, config }: { businessId: string; config: StarePepit
           onChange={(e) => setF({ ...f, factureaza_clientul: e.target.checked })}
         />
         <span className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Emit eu factura către client</span>
+          <span className="font-medium text-foreground">Include comenzile Pepita în facturarea automată</span>
           <br />
+          {/*
+            ⚠ NUMELE SPUNE CE FACE COMUTATORUL, nu pune o întrebare la care nu putem răspunde.
+            Forma veche — „Emit eu factura către client" — suna ca și cum n-ar fi limpede cine
+            facturează, iar asta e o chestiune între comerciant și Pepita, nu una pe care s-o
+            hotărască un comutator din Edinio.
+          */}
           Pornit, comenzile Pepita intră în facturarea automată, ca oricare altă comandă. Lasă-l
-          stins dacă nu ești sigur: Pepita nu ne poate spune dacă a emis ea factura, iar două
-          documente pentru aceeași marfă se repară mai greu decât unul lipsă.
+          stins dacă facturezi din alt sistem: Pepita nu ne poate spune ce document a ieșit acolo,
+          iar două facturi pentru aceeași marfă se repară mai greu decât una lipsă.
         </span>
       </label>
 
@@ -870,8 +876,17 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Comenzile Pepita apar în lista obișnuită de comenzi, cu eticheta Pepita. Le poți factura și
-        le poți genera AWB ca la orice altă comandă.
+        {/*
+          ⚠ „AWB ca la orice altă comandă" era ADEVĂRAT DOAR PE JUMĂTATE: la Pepita Delivery
+          transportul e în fluxul lor, cu eticheta lor, iar un AWB propriu ar fi al doilea colet
+          pe același pachet. Generarea în masă le sare acum, dar textul le promitea.
+        */}
+        Comenzile Pepita apar în lista obișnuită de comenzi, cu eticheta Pepita. Le poți factura ca
+        la orice altă comandă, iar pe cele cu livrare proprie le poți și expedia cu curierul tău.
+        {" "}
+        <strong className="text-foreground">La Pepita Delivery coletul îl duce GLS-ul contractat
+        de ei</strong>: acolo nu emite AWB propriu, ar fi a doua etichetă pe același pachet, iar
+        generarea în masă le sare.
         {" "}
         <strong className="text-foreground">Statusul lor nu pleacă înapoi la Pepita</strong>: după
         ce expediezi, treci comanda pe „trimisă” și în Pepita Admin.

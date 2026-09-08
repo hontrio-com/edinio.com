@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { marketplaceCareTineComanda } from "@/lib/orders/origin";
+import { livrareaEDusaDeMarketplace, marketplaceCareTineComanda } from "@/lib/orders/origin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
@@ -332,6 +332,8 @@ export async function bulkGenerateAwbs(
   // sfarsit, o singura linie: pana acum TOATE plecau pe un kilogram si nu se
   // vedea nicaieri.
   const peRezerva: string[] = [];
+  /** Comenzile sarite fiindca transportul lor e in fluxul marketplace-ului. Se spun la sfarsit. */
+  const duseDeEi: string[] = [];
 
   // Map a stored checkout courier value to our supported set.
   const COURIER_ALIASES: Record<string, Exclude<BulkCourier, "auto">> = {
@@ -397,6 +399,20 @@ export async function bulkGenerateAwbs(
       : row.dpd_shipment_id;
     if (existing) { result.skipped++; return; }
 
+    /*
+     * ⚠ COLETUL DUS DE MARKETPLACE NU PRIMESTE AWB PROPRIU.
+     *
+     * La Pepita Delivery transportul e in fluxul lor, cu eticheta lor: un AWB emis aici ar fi al
+     * doilea colet pe acelasi pachet, si al doilea transport platit. Pe o comanda deschisa de om
+     * paguba se vede si se opreste; aici nu, fiindca generarea in masa nu are niciun camp de
+     * corectat si nimeni nu se uita la fiecare rand.
+     */
+    if (livrareaEDusaDeMarketplace(row.order_source)) {
+      result.skipped++;
+      duseDeEi.push(o.order_number);
+      return;
+    }
+
     const greutate = greutateaColetului(o.items, produse);
     // Si cele PARTIALE, nu doar cele fara nicio greutate: acelea sunt cazul
     // periculos — un numar incomplet care pleaca la curier fara interventie
@@ -419,6 +435,14 @@ export async function bulkGenerateAwbs(
       result.errors.push({ order: o.order_number, message: (e as Error).message });
     }
   }, AWB_CONCURRENCY);
+
+  if (duseDeEi.length > 0) {
+    /* ⚠ Se SPUNE ce s-a sarit: „sarite" fara motiv arata ca un lot care a mers pe jumatate. */
+    result.errors.push({
+      order: duseDeEi.join(", "),
+      message: "Transportul e în fluxul marketplace-ului (Pepita Delivery): eticheta o face el, nu se emite AWB propriu.",
+    });
+  }
 
   if (peRezerva.length > 0) {
     logError({ action: "bulkGenerateAwbs", message: `${peRezerva.length} colete au plecat pe greutatea de rezerva (produse fara weight_grams): ${peRezerva.join(", ")}`, details: { businessId }, businessId, userId: g.userId, severity: "warning" });

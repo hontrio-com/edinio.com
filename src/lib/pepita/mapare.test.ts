@@ -31,34 +31,45 @@ test("⚠ `cash_on_delivery` NUMAI cand incaseaza curierul comerciantului", () =
 test("⚠ cine ia banii: un singur caz e al comerciantului", () => {
   /* „In cazul curierilor proprii sau al serviciilor terte (inclusiv MPL), decontarea se face
      direct intre tine si compania de curierat." Restul ajunge la Pepita, sau prin banca. */
-  assert.equal(incaseazaPepita("cod", "shipping", "unpaid"), false, "singurul caz al comerciantului");
-  assert.equal(incaseazaPepita("cod", "mpl", "unpaid"), false);
-  assert.equal(incaseazaPepita("cod", null, "unpaid"), false, "necunoscut: se presupune curierul lui, si se avertizeaza");
+  assert.equal(incaseazaPepita("cod", "shipping"), false, "singurul caz al comerciantului");
+  assert.equal(incaseazaPepita("cod", "mpl"), false);
+  assert.equal(incaseazaPepita("cod", null), false, "necunoscut: se presupune curierul lui, si se avertizeaza");
 
-  assert.equal(incaseazaPepita("cod", "gls", "unpaid"), true);
-  assert.equal(incaseazaPepita("cod", "gls_parcelshop", "unpaid"), true);
-  assert.equal(incaseazaPepita("creditcard", "shipping", "paid"), true, "cardul se incaseaza pe site-ul lor");
+  assert.equal(incaseazaPepita("cod", "gls"), true);
+  assert.equal(incaseazaPepita("cod", "gls_parcelshop"), true);
+  assert.equal(incaseazaPepita("creditcard", "shipping"), true, "cardul se incaseaza pe site-ul lor");
   /* ⚠ Transferul ajunge la comerciant, dar prin BANCA, in avans. La usa nu se ia nimic. */
-  assert.equal(incaseazaPepita("transfer", "shipping", "paid"), true);
+  assert.equal(incaseazaPepita("transfer", "shipping"), true);
 });
 
-test("⚠ NEPLATIT nu inseamna „banii sunt la altcineva”: marfa ar pleca fara nicio incasare", () => {
+test("⚠ NOI NU SCHIMBAM METODA DE PLATA ALEASA LA EI", () => {
   /*
-   * Aici era defectul reparatiei dintai: functia raspundea „da" pentru orice mod care nu e
-   * `cod`, deci si pentru un transfer NEFACUT. `rambursDeIncasat` iese pe zero inaintea
-   * oricarei socoteli cand vede marcajul, deci coletul ar fi plecat cu ramburs 0,00 la o
-   * comanda pe care nu o platise nimeni. Nici Pepita n-avea banii, nici curierul n-avea ce cere.
+   * O vreme functia a cerut si starea platii: pe „unpaid" raspundea ca banii nu sunt la nimeni,
+   * iar rambursul se precompleta cu totalul. Adica un transfer bancar nefacut se transforma
+   * singur in ramburs, si clientul — care alesese sa plateasca prin banca — se trezea cu
+   * curierul cerandu-i numerar la usa. Un singur caz produce ramburs: `cod` dus de curierul
+   * COMERCIANTULUI. Restul se lamureste inainte de expediere, nu la usa.
    */
-  assert.equal(incaseazaPepita("transfer", "shipping", "unpaid"), false, "transfer nefacut");
-  assert.equal(incaseazaPepita("creditcard", "shipping", "unpaid"), false, "card refuzat");
-  assert.equal(incaseazaPepita("bitcoin", "shipping", "unpaid"), false, "mod necunoscut, neplatit");
+  for (const mod of ["transfer", "creditcard", "bitcoin", null]) {
+    assert.equal(incaseazaPepita(mod, "shipping"), true, `${mod}: la usa nu se incaseaza nimic`);
+  }
 });
 
-test("livrarea Pepita se recunoaste numai pe cele doua valori GLS", () => {
-  assert.equal(esteLivrarePepita("gls"), true);
-  assert.equal(esteLivrarePepita("gls_parcelshop"), true);
-  for (const m of ["shipping", "mpl", null, "", "easybox", "GLS"]) {
-    assert.equal(esteLivrarePepita(m), false, `${m}`);
+test("⚠ ORICE mod de livrare care incepe cu «gls» e transportul LOR", () => {
+  /*
+   * Documentele lor nu sunt de acord intre ele: cel de impingere a comenzilor scrie
+   * `gls_parcelshop`, pagina despre Pepita Delivery scrie `gls_parcellocker` si `gls_xxl`. O
+   * lista inchisa ar fi lasat o valoare noua sa treaca drept livrare PROPRIE, iar atunci
+   * rambursul s-ar fi precompletat pe un colet dus de GLS-ul contractat de EI: clientul ar fi
+   * platit a doua oara la usa.
+   */
+  for (const mod of ["gls", "gls_parcelshop", "gls_parcellocker", "gls_xxl", "GLS_XXL", "gls_ceva_nou"]) {
+    assert.equal(esteLivrarePepita(mod), true, mod);
+    assert.equal(incaseazaPepita("cod", mod), true, `${mod}: rambursul e al lor`);
+    assert.equal(metodaPlata("cod", mod), "pepita", `${mod}: nu se scrie plata la livrare`);
+  }
+  for (const mod of ["shipping", "mpl", "", null, "glas"]) {
+    assert.equal(esteLivrarePepita(mod), false, `${mod}`);
   }
 });
 

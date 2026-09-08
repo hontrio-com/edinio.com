@@ -3604,6 +3604,7 @@ export type Database = {
           pallex_status_id: string | null
           payment_method: string
           payment_status: string
+          prices_include_vat: boolean | null
           posta_awb_at: string | null
           packeta_address_id: string | null
           packeta_awb_at: string | null
@@ -3795,6 +3796,7 @@ export type Database = {
           pallex_status_id?: string | null
           payment_method?: string
           payment_status?: string
+          prices_include_vat?: boolean | null
           posta_awb_at?: string | null
           packeta_address_id?: string | null
           packeta_awb_at?: string | null
@@ -3986,6 +3988,7 @@ export type Database = {
           pallex_status_id?: string | null
           payment_method?: string
           payment_status?: string
+          prices_include_vat?: boolean | null
           posta_awb_at?: string | null
           packeta_address_id?: string | null
           packeta_awb_at?: string | null
@@ -4228,6 +4231,8 @@ export type Database = {
       pepita_comenzi: {
         Row: {
           business_id: string
+          eticheta_la: string | null
+          eticheta_stare: string | null
           external_order_id: string
           id: string
           incercari: number
@@ -4242,6 +4247,8 @@ export type Database = {
         }
         Insert: {
           business_id: string
+          eticheta_la?: string | null
+          eticheta_stare?: string | null
           external_order_id: string
           id?: string
           incercari?: number
@@ -4256,6 +4263,8 @@ export type Database = {
         }
         Update: {
           business_id?: string
+          eticheta_la?: string | null
+          eticheta_stare?: string | null
           external_order_id?: string
           id?: string
           incercari?: number

@@ -99,12 +99,42 @@ test("⚠ imaginile care nu se pot deschide de la ei nu sunt imagini", () => {
   assert.deepEqual(pozeFolosibile(["https://cdn.ro/a.jpg", "https://cdn.ro/a.jpg"]), ["https://cdn.ro/a.jpg"]);
 });
 
-test("un produs fara EAN pleaca, dar cu avertisment", () => {
-  /* Documentatia il numeste „Ajanlott", recomandat. Blocat, ar scoate de la vanzare
-     cataloage intregi pe o presupunere. */
+test("⚠ lipsa EAN-ului ramane AVERTISMENT, si asta e o hotarare, nu o scapare", () => {
+  /*
+   * ═══ ⚠ PROBA CARE APARA O HOTARARE IMPOTRIVA UNUI AUDIT (09.09.2026) ═══
+   *
+   * Un audit a cerut ca produsul fara EAN sa fie OPRIT din feed, citand termenii contractuali
+   * („the XML must contain … GTIN"). Am recitit atunci cele TREI documente ale lor, si nu spun
+   * acelasi lucru — adresele sunt in nota lunga din `articole.ts`:
+   *
+   *   1. specificatia tehnica XML, chiar cea dupa care se scrie feedul asta: `<StructuredId>`
+   *      (UPC/EAN/ISBN) si `<ProductNumber>` (MPN) sunt amandoua „Ajanlott" / Recommended;
+   *   2. Seller Center, pagina despre FEEDURI: obligatoriu „(in specific categories)";
+   *   3. Seller Center, pagina despre incarcarea MANUALA: il pune intre obligatorii, iar mai jos,
+   *      la importul din Excel, il marcheaza „(Optional)". Se contrazice singura.
+   *
+   * ⚠ CE AR FI COSTAT RIDICAREA LA EROARE: produsele fara cod de bare — manufactura, pachete,
+   * marca proprie — ar fi DISPARUT tacut din feed. Un feed care nu trimite marfa buna e o paguba
+   * mai mare, si mai greu de vazut, decat un produs refuzat de ei la publicare.
+   *
+   * ⚠ PROBA DINAINTE CEREA DOAR CA CODUL SA APARA in lista. Un mutant care schimba
+   * `avertisment(` in `eroare(` trecea VERDE peste ea, fiindca articolele se construiesc oricum
+   * si abia feedul se uita la nivel. Acum se cere chiar NIVELUL.
+   *
+   * ⚠ DACA MAINE PEPITA CONFIRMA IN SCRIS CA E OBLIGATORIU PESTE TOT, proba asta trebuie sa cada
+   * — si atunci schimbarea e deliberata, nu o alunecare.
+   */
   const r = articolelePentruProdus(produs(), ctx());
   assert.equal(r.articole.length, 1);
-  assert.ok(coduri(r).includes("fara-ean"));
+  const ean = r.probleme.find((p) => p.cod === "fara-ean");
+  assert.ok(ean, "produsul fara EAN nu mai spune nimic");
+  assert.equal(
+    ean.nivel, "avertisment",
+    "lipsa EAN-ului a devenit EROARE: produsele fara cod de bare dispar tacut din feed",
+  );
+  /* ⚠ Si textul spune chiar ce spun ei: recomandat in general, cerut in unele categorii. */
+  assert.match(ean.mesaj, /recomandat/i);
+  assert.match(ean.mesaj, /categorii/i);
 });
 
 test("⚠ EAN-ul se trimite doar daca trece cifra de control", () => {

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cereNumeleCotei, invoiceVat, numeCota, numePeCote } from "./invoice-vat";
+import { readFileSync } from "node:fs";
+import { liniiFgo, liniiOblio, liniiSmartbill, reconciliazaComanda } from "./reconcile";
 
 /**
  * Aceeasi intrebare — ce cota poarta factura — avea trei raspunsuri, cate unul pe
@@ -160,4 +162,135 @@ test("⚠ cotele repetate nu se socotesc de doua ori", () => {
   const r = numePeCote([21, 21, 11, 11], CONFIGURAT, [{ name: "Normala", percentage: 21 }]);
   assert.equal(r.nume.size, 2);
   assert.deepEqual(r.faraNume, [11], "aceeasi cota a fost raportata de doua ori");
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   REGIMUL DE PRET, INGHETAT PE COMANDA (09.09.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ CE A FOST GRESIT. Cota era inghetata de mult; regimul — „sumele contin deja TVA?" — se lua
+   de fiecare data din setarea de AZI a magazinului. Iar toate cele patru marketplace-uri scriu in
+   comanda sume BRUTE, fiindca asa lucreaza ele. Pe un magazin cu preturi FARA TVA, facturarea le
+   citea ca nete.
+
+   ⚠ SI CE NU S-A INTAMPLAT, ca sa fie spus drept: garda de reconciliere prindea nepotrivirea si
+   REFUZA documentul. N-a plecat nicio factura umflata. Paguba adevarata era ca o comanda de
+   marketplace nu se putea factura DELOC pe un asemenea magazin, iar mesajul de refuz il trimitea
+   pe comerciant sa „editeze si sa salveze" — adica sa-si umfle chiar el totalul cu cota TVA.
+*/
+
+const MAGAZIN_NET = { vat_enabled: true, vat_rate: 21, prices_include_vat: false };
+const MAGAZIN_BRUT = { vat_enabled: true, vat_rate: 21, prices_include_vat: true };
+
+test("⚠ regimul INGHETAT pe comanda bate si setarea magazinului, si rezerva", () => {
+  /* Comanda spune „brut"; magazinul de azi zice „net". Comanda are dreptate: cifrele sunt ale ei. */
+  assert.equal(invoiceVat({ vat_rate: 21, prices_include_vat: true }, MAGAZIN_NET).taxIncluded, true);
+  /* Si invers, ca proba sa nu treaca doar fiindca raspunde mereu `true`. */
+  assert.equal(invoiceVat({ vat_rate: 21, prices_include_vat: false }, MAGAZIN_BRUT).taxIncluded, false);
+
+  /*
+   * ⚠ `false` E UN RASPUNS, nu o lipsa. Citit cu `||` sau cu un `??` pus peste o valoare falsa,
+   * ar fi fost trecut cu vederea si s-ar fi intrebat mai departe magazinul. Aceeasi capcana ca la
+   * cota zero pe o linie.
+   */
+  assert.equal(invoiceVat({ vat_rate: 21, prices_include_vat: false }, MAGAZIN_BRUT).taxIncluded, false);
+});
+
+test("⚠ comanda VECHE, fara regim scris, se poarta exact ca pana acum", () => {
+  /*
+   * 245 de comenzi din productie n-au coloana scrisa, si regimul de atunci chiar nu se mai poate
+   * afla. Ele cad pe setarea magazinului — adica pe purtarea de dinainte, bit cu bit.
+   */
+  assert.equal(invoiceVat({ vat_rate: 21 }, MAGAZIN_NET).taxIncluded, false);
+  assert.equal(invoiceVat({ vat_rate: 21 }, MAGAZIN_BRUT).taxIncluded, true);
+  assert.equal(invoiceVat({ vat_rate: 21, prices_include_vat: null }, MAGAZIN_NET).taxIncluded, false);
+  /* Si rezerva pentru comenzile de dinainte de pornirea TVA-ului ramane si ea neatinsa. */
+  const rezerva = invoiceVat({ vat_rate: 0 }, MAGAZIN_NET);
+  assert.equal(rezerva.fallback, true);
+  assert.equal(rezerva.taxIncluded, true, "rezerva nu mai forteaza regimul cu TVA inclus");
+});
+
+test("⚠ comanda de marketplace pe un magazin cu preturi FARA TVA se factureaza acum, la toate trei casele", () => {
+  /*
+   * ═══ ⚠ CHIAR DRUMUL CARE CADEA ═══
+   *
+   * Magazin: 100 lei NET, cota 21%. Feedul trimite la Pepita 121 (vezi `pretBrut`). Comanda se
+   * intoarce cu 121, si tot 121 se scrie in `orders.total`; `vat_amount` = 21, adica TVA-ul
+   * CONTINUT in ei.
+   *
+   * Fara regimul inghetat, `taxIncluded` iesea `false`, garda socotea baza 121 − 21 = 100 si o
+   * punea langa linii care insumeaza 121: refuz, cu 21 de lei diferenta.
+   */
+  const comanda = { total: 121, vat_amount: 21, vat_rate: 21, prices_include_vat: true };
+  const regim = invoiceVat(comanda, MAGAZIN_NET);
+  /* ⚠ `vat_rate` E SCRIS PE COMANDA, si trebuie sa fie si aici: fara el proba ar cadea pe rezerva
+     („comanda de dinainte de TVA"), care forteaza oricum `taxIncluded`, si ar fi trecut verde si
+     peste codul nereparat. Ingestul scrie chiar cota dominanta. */
+  assert.equal(regim.taxIncluded, true);
+
+  /* SmartBill si Oblio trimit preturi BRUTE: linia e chiar 121. */
+  assert.equal(reconciliazaComanda(liniiSmartbill([{ quantity: 1, price: 121 }]), comanda, regim).fel, "exact");
+  assert.equal(reconciliazaComanda(liniiOblio([{ quantity: 1, price: 121 }]), comanda, regim).fel, "exact");
+
+  /* fGO cere pretul NET, si atunci garda converteste ea totalul: 121 / 1,21 = 100. */
+  assert.equal(
+    reconciliazaComanda(liniiFgo([{ quantity: 1, unitPrice: 100 }]), comanda, regim, { liniiNete: true }).fel,
+    "exact",
+  );
+
+  /* ⚠ Iar fara regimul inghetat, aceeasi comanda era REFUZATA. Asta e ce s-a reparat. */
+  /* ⚠ Aceeasi comanda, DOAR fara regimul scris — adica exact ce era in baza pana azi. */
+  const { prices_include_vat: _regim, ...faraRegim } = comanda;
+  const vechi = invoiceVat(faraRegim, MAGAZIN_NET);
+  assert.equal(vechi.fallback, false, "proba ar masura rezerva, nu regimul");
+  const refuz = reconciliazaComanda(liniiSmartbill([{ quantity: 1, price: 121 }]), comanda, vechi);
+  assert.equal(refuz.fel, "refuz");
+  if (refuz.fel === "refuz") assert.equal(refuz.delta, -21);
+});
+
+test("⚠ pe un magazin cu preturi CU TVA nimic nu se schimba", () => {
+  const comanda = { total: 121, vat_amount: 21, vat_rate: 21, prices_include_vat: true };
+  assert.equal(invoiceVat(comanda, MAGAZIN_BRUT).taxIncluded, true);
+  assert.equal(
+    reconciliazaComanda(liniiSmartbill([{ quantity: 1, price: 121 }]), comanda, invoiceVat(comanda, MAGAZIN_BRUT)).fel,
+    "exact",
+  );
+});
+
+test("⚠ comerciantul schimba setarea magazinului: comanda VECHE nu-si schimba factura", () => {
+  /*
+   * ⚠ ASTA E JUMATATEA CARE NU TINE DE NICIUN MARKETPLACE. Comanda plasata cand magazinul tinea
+   * preturi FARA TVA, facturata dupa ce a trecut pe preturi CU TVA: aceleasi cifre, alt inteles,
+   * si nimic nu spunea nimanui. Aceeasi paguba pentru care cota era deja inghetata.
+   */
+  const comanda = { total: 100, vat_amount: 21, vat_rate: 21, prices_include_vat: false };
+  const inainte = invoiceVat(comanda, MAGAZIN_NET);
+  const dupaSchimbare = invoiceVat(comanda, MAGAZIN_BRUT);
+  assert.deepEqual(dupaSchimbare, inainte, "schimbarea setarii a rescris intelesul unei comenzi vechi");
+
+  /* Si garda vede aceleasi numere in amandoua clipele: 100 − 21 = 79 de baza neta. */
+  const linii = liniiSmartbill([{ quantity: 1, price: 79 }]);
+  assert.equal(reconciliazaComanda(linii, comanda, inainte).fel, "exact");
+  assert.equal(reconciliazaComanda(linii, comanda, dupaSchimbare).fel, "exact");
+});
+
+test("⚠ toate cele patru ingesturi de marketplace SCRIU regimul, nu-l lasa pe seama magazinului", () => {
+  /*
+   * ⚠ CE APARA. Sumele lor sunt brute prin constructie — la toate patru, nu doar la Pepita. Un
+   * ingest care uita randul asta trimite comanda in exact defectul reparat aici, si n-o vede
+   * nimeni pana cand primul magazin cu preturi fara TVA porneste marketplace-ul acela.
+   */
+  const ingesturi = [
+    "src/lib/pepita/ingest.ts",
+    "src/lib/emag/orders.ts",
+    "src/lib/trendyol/orders.ts",
+    "src/lib/aboutyou/orders.ts",
+  ];
+  for (const cale of ingesturi) {
+    const sursa = readFileSync(cale, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+    assert.match(
+      sursa, /prices_include_vat: true/,
+      `${cale}: comanda pleaca fara regimul de pret, deci facturarea il va ghici din setarea magazinului`,
+    );
+  }
 });

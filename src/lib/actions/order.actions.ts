@@ -1766,6 +1766,15 @@ export async function placeOrder(data: {
     total,
     vat_amount: vatAmount,
     vat_rate: vatEnabled ? vatRate : 0,
+    /*
+     * ⚠ SI REGIMUL SE INGHEATA, nu doar cota (09.09.2026).
+     *
+     * `vat_amount` si `total` de deasupra au fost socotite CU setarea de acum. Daca peste trei
+     * luni comerciantul trece magazinul de la „preturi fara TVA" la „preturi cu TVA inclus", o
+     * factura emisa atunci ar reciti aceleasi cifre altfel — desi clientul a platit exact atat.
+     * Aceeasi paguba pentru care `vat_rate` era deja inghetat. Vezi `invoiceVat`.
+     */
+    prices_include_vat: pricesIncludeVat,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields as unknown as string : null,
     payment_method: metodaPlata,
     payment_status: "unpaid",
@@ -3238,6 +3247,13 @@ export async function updateOrderDetails(orderId: string, data: {
       // `vat_amount > 0` peste o cota ramasa zero, iar SmartBill o citea in
       // continuare ca „istorica". Aceeasi expresie ca la plasare.
       vat_rate: vatCfg.vat_enabled ? vatCfg.vat_rate : 0,
+      /*
+       * ⚠ SI REGIMUL, din acelasi motiv ca la plasare: liniile de mai sus tocmai s-au
+       * RESOCOTIT cu setarea de acum a magazinului, deci ea e adevarul despre cifrele astea.
+       * Lasat nescris, o comanda de marketplace editata ar fi ramas marcata „brut" peste sume
+       * care intre timp au devenit nete. Vezi `invoiceVat`.
+       */
+      prices_include_vat: vatCfg.prices_include_vat,
       total: newTotal,
       // `as unknown as Json`: obiectul E jsonb valid, dar `plan.items` e `unknown[]`
       // si TS nu poate dovedi asta. Cast INGUST, doar pe argument — numele functiei
@@ -4300,6 +4316,15 @@ export async function placeCartOrder(data: {
     total,
     vat_amount: vatAmount,
     vat_rate: vatEnabled ? vatRate : 0,
+    /*
+     * ⚠ SI REGIMUL SE INGHEATA, nu doar cota (09.09.2026).
+     *
+     * `vat_amount` si `total` de deasupra au fost socotite CU setarea de acum. Daca peste trei
+     * luni comerciantul trece magazinul de la „preturi fara TVA" la „preturi cu TVA inclus", o
+     * factura emisa atunci ar reciti aceleasi cifre altfel — desi clientul a platit exact atat.
+     * Aceeasi paguba pentru care `vat_rate` era deja inghetat. Vezi `invoiceVat`.
+     */
+    prices_include_vat: pricesIncludeVat,
     notes: data.custom_fields && Object.keys(data.custom_fields).length > 0 ? data.custom_fields as unknown as string : null,
     payment_method: metodaPlata,
     payment_status: "unpaid",

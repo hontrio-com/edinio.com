@@ -324,6 +324,8 @@ export async function leagaLiniile(
  *
  * ⚠ SE CHEAMA DUPA ce randul are `order_id`, fiindca cheia din depozit se compune din comanda.
  * Chemata inainte, ar fi scris sub un identificator care inca nu exista.
+ *
+ * ⚠ INTOARCE CE S-A INTAMPLAT, si asta e chiar reparatia din 09.09.2026: vezi `StareEticheta`.
  */
 async function pastreazaEticheta(
   businessId: string, orderId: string, c: ComandaPepita,
@@ -335,13 +337,13 @@ async function pastreazaEticheta(
    * platita degeaba pe drumul cel mai des umblat.
    */
   doarDacaLipseste = false,
-): Promise<void> {
+): Promise<StareEticheta> {
   const citita = citesteEticheta(c.etichetaBruta);
-  if (citita.fel === "lipsa") return;
+  if (citita.fel === "lipsa") return "lipsa";
 
   if (doarDacaLipseste) {
     try {
-      if (await areEticheta(businessId, orderId)) return;
+      if (await areEticheta(businessId, orderId)) return "salvata";
     } catch {
       /*
        * ⚠ DEPOZITUL CAZUT LA INTREBARE NU OPRESTE INCERCAREA. Daca nu putem afla daca eticheta e
@@ -358,19 +360,73 @@ async function pastreazaEticheta(
       message: `eticheta primita nu s-a putut folosi: ${citita.motiv}`,
       details: { externalId: c.externalId, orderId }, businessId, severity: "warning",
     });
-    return;
+    return "nevalida";
   }
 
+  /*
+   * ⚠ SE MAI INCEARCA DE DOUA ORI, cu pauze scurte.
+   *
+   * O cadere de cateva secunde a depozitului nu e acelasi lucru cu o cadere adevarata, iar pana
+   * acum amandoua duceau in acelasi loc: eticheta pierduta pana cand cineva apasa „Resend order"
+   * la ei. Trei incercari peste opt sute de milisecunde acopera exact felul de intrerupere care
+   * se repara singura, si nu tin cererea lor ocupata destul cat sa conteze.
+   *
+   * ⚠ SCRIEREA E IDEMPOTENTA: aceeasi cheie, aceiasi octeti. O incercare care de fapt reusise si
+   * a raportat esec nu strica nimic la a doua.
+   */
+  let ultima: unknown = null;
+  for (let i = 0; i < INCERCARI_DEPOZIT; i++) {
+    try {
+      await salveazaEticheta(businessId, orderId, citita.octeti);
+      return "salvata";
+    } catch (e) {
+      ultima = e;
+      const pauza = PAUZA_DEPOZIT_MS[i];
+      if (pauza != null) await new Promise((r) => setTimeout(r, pauza));
+    }
+  }
+
+  await logError({
+    action: "pepita/eticheta",
+    message: `eticheta nu s-a putut pastra dupa ${INCERCARI_DEPOZIT} incercari: `
+      + `${ultima instanceof Error ? ultima.message : String(ultima)}. `
+      + "Se reincearca la urmatoarea retrimitere din panoul Pepita („Resend order”).",
+    details: { externalId: c.externalId, orderId, octeti: citita.octeti.length },
+    businessId, severity: "warning",
+  });
+  return "depozit-cazut";
+}
+
+/**
+ * Scrie starea etichetei pe randul de evidenta.
+ *
+ * ═══ ⚠ „LIPSA" SE SCRIE DOAR LA PRIMA SOSIRE ═══
+ *
+ * „Lipsa" inseamna doua lucruri deodata: ei n-au trimis nimic SI in depozit nu e nimic. A doua
+ * jumatate se stie sigur numai la prima sosire, unde comanda tocmai s-a nascut.
+ *
+ * La o retrimitere nu se stie: Pepita poate trimite comanda fara `package_label` desi eticheta a
+ * fost primita si salvata cu prima ocazie. Scrisa atunci, „lipsa" ar fi sters chiar dovada ca
+ * exista — si asta pe randul unei comenzi pe care comerciantul tocmai o pregateste de expediat.
+ *
+ * ⚠ Celelalte trei stari se scriu de pe amandoua drumurile: fiecare dintre ele s-a aflat CHIAR
+ * acum, si e mai proaspata decat ce era scris.
+ */
+async function scrieStareaEtichetei(
+  admin: Db, randId: string, stare: StareEticheta, primaSosire: boolean,
+): Promise<void> {
+  if (stare === "lipsa" && !primaSosire) return;
   try {
-    await salveazaEticheta(businessId, orderId, citita.octeti);
+    const { error } = await admin.from("pepita_comenzi")
+      .update({ eticheta_stare: stare, eticheta_la: new Date().toISOString() } as never)
+      .eq("id", randId);
+    if (error) throw error;
   } catch (e) {
+    /* ⚠ Un semn nescris nu are voie sa rastoarne comanda. Eticheta e deja acolo (sau nu e). */
     await logError({
       action: "pepita/eticheta",
-      message: "eticheta nu s-a putut pastra: "
-        + `${e instanceof Error ? e.message : String(e)}. `
-        + "Se reincearca la urmatoarea retrimitere din panoul Pepita („Resend order”).",
-      details: { externalId: c.externalId, orderId, octeti: citita.octeti.length },
-      businessId, severity: "warning",
+      message: `starea etichetei nu s-a putut scrie: ${e instanceof Error ? e.message : String(e)}`,
+      details: { randId, stare }, severity: "warning",
     });
   }
 }
@@ -378,6 +434,19 @@ async function pastreazaEticheta(
 function numeDeRezerva(l: LiniePepita): string {
   return l.sku ? `Produs Pepita ${l.sku}` : "Produs Pepita";
 }
+
+/**
+ * Ce s-a intamplat cu eticheta lor, in patru cuvinte.
+ *
+ * ⚠ „N-AU TRIMIS" SI „AM PIERDUT-O" NU SUNT ACELASI LUCRU, si pana pe 09.09.2026 aratau identic:
+ * eticheta lipsea din depozit, si atat. Prima nu cere nimic de la comerciant (livrare cu curierul
+ * lui); a doua ii cere sa apese „Resend order" in panoul Pepita, si n-avea de unde sti.
+ */
+export type StareEticheta = "lipsa" | "salvata" | "nevalida" | "depozit-cazut";
+
+/** Cate incercari de scriere in depozit, si cat se asteapta intre ele. */
+const INCERCARI_DEPOZIT = 3;
+const PAUZA_DEPOZIT_MS = [200, 600];
 
 /* ═══════════════════════════════════════════════════════════════════════════
    INGESTUL
@@ -462,7 +531,11 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
        * ⚠ `doarDacaLipseste`: pe drumul obisnuit (retrimitere peste o comanda intreaga) nu se
        * rescrie nimic, se face un singur HEAD. Reincercarea costa numai cand chiar lipseste.
        */
-      await pastreazaEticheta(ctx.businessId, rand.order_id, c, true);
+      await scrieStareaEtichetei(
+        admin, rand.id,
+        await pastreazaEticheta(ctx.businessId, rand.order_id, c, true),
+        false,
+      );
 
       /*
        * ⚠ O COMANDA IN CARANTINA SE INCEARCA DIN NOU, INTREAGA.
@@ -572,6 +645,12 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     total,
     vat_amount: tva,
     vat_rate: cote.cotaDominanta,
+    /*
+     * ⚠ SUMELE DE MAI SUS SUNT BRUTE, si asta se SCRIE, nu se deduce mai tarziu din setarea de
+     * atunci a magazinului. Pe un magazin cu preturi fara TVA, facturarea le-ar fi citit ca nete
+     * si ar fi adaugat cota deasupra. Vezi `invoiceVat`.
+     */
+    prices_include_vat: true,
     status: statusInitial(),
     payment_method: metodaPlata(c.modPlata, c.modLivrare),
     payment_status: starePlata(c.starePlata, c.modPlata),
@@ -642,7 +721,7 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     prelucrat_la: acum,
   } as never).eq("id", randId);
 
-  await pastreazaEticheta(ctx.businessId, orderId, c);
+  await scrieStareaEtichetei(admin, randId, await pastreazaEticheta(ctx.businessId, orderId, c), true);
 
   const verdictStoc = await consumaStocul(admin, ctx.businessId, orderId, legate);
   if (verdictStoc === "esec") {

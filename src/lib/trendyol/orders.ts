@@ -503,6 +503,12 @@ async function ingestPackageCitit(admin: Db, ctx: TrendyolSyncContext, pkg: Tren
     subtotal,
     total: round2(total),
     vat_amount: vatAmount,
+    /*
+     * ⚠ SUMELE DE MAI SUS SUNT BRUTE, si asta se SCRIE, nu se deduce mai tarziu din setarea de
+     * atunci a magazinului. Pe un magazin cu preturi fara TVA, facturarea le-ar fi citit ca nete
+     * si ar fi adaugat cota deasupra. Vezi `invoiceVat`.
+     */
+    prices_include_vat: true,
     payment_method: "trendyol",
     payment_status: "paid",
     status: edinioStatus,

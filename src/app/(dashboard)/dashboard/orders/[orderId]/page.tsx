@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { OrderDetailClient } from "@/components/dashboard/OrderDetailClient";
 import { areEticheta } from "@/lib/pepita/eticheta";
@@ -188,11 +189,35 @@ export default async function OrderDetailPage({ params }: Props) {
    * intreg — ea deosebeste „nu e acolo" de „depozitul n-a raspuns".
    */
   let areEtichetaPepita = false;
+  /*
+   * ═══ ⚠ „N-AU TRIMIS" SI „AM PIERDUT-O" NU SUNT ACELASI LUCRU (09.09.2026) ═══
+   *
+   * Depozitul raspunde la o singura intrebare: e acolo sau nu. Cele doua situatii de mai jos ii
+   * cer comerciantului lucruri OPUSE, si pana azi aratau identic — adica nu aratau nimic:
+   *
+   *   * Pepita n-a trimis eticheta (livrare cu curierul lui): nu are ce face;
+   *   * Pepita a trimis-o, iar noi n-am putut s-o pastram: are ce face, si anume „Resend order"
+   *     in panoul lor, care aduce sarcina inapoi si noi o reincercam.
+   *
+   * Semnul se citeste din `pepita_comenzi`, unde ingestul il scrie. Vezi `scrieStareaEtichetei`.
+   */
+  let stareEtichetaPepita: string | null = null;
   if ((order.order_source as { marketplace?: string } | null)?.marketplace === "pepita") {
     try {
       areEtichetaPepita = await areEticheta(biz.id, order.id as string);
     } catch {
       areEtichetaPepita = false;
+    }
+    /* ⚠ Cu SERVICE ROLE: `pepita_comenzi` n-are politica de citire pentru nimeni. Proprietatea
+       magazinului e deja dovedita mai sus, deci ocolirea RLS de aici nu deschide alt magazin. */
+    try {
+      const { data: randPepita } = await createAdminClient()
+        .from("pepita_comenzi").select("eticheta_stare")
+        .eq("business_id", biz.id).eq("order_id", order.id as string).maybeSingle();
+      stareEtichetaPepita = (randPepita as { eticheta_stare?: string | null } | null)?.eticheta_stare ?? null;
+    } catch {
+      /* ⚠ Nu cade pagina pentru o insemnare. Fara ea se arata exact ce se arata pana acum. */
+      stareEtichetaPepita = null;
     }
   }
 
@@ -201,6 +226,7 @@ export default async function OrderDetailPage({ params }: Props) {
       order={order}
       businessId={biz.id}
       areEtichetaPepita={areEtichetaPepita}
+      stareEtichetaPepita={stareEtichetaPepita}
       setariTva={setariTva}
       smartbillEnabled={smartbillEnabled}
       hasEstimateSeries={hasEstimateSeries}

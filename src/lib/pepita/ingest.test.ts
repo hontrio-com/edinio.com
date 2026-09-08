@@ -801,8 +801,11 @@ test("⚠ prima sosire NU intreaba depozitul degeaba", () => {
    * des umblat ar fi o cerere de retea platita la fiecare comanda, pentru un raspuns stiut.
    */
   const sursa = readFileSync("src/lib/pepita/ingest.ts", "utf8");
-  assert.match(sursa, /await pastreazaEticheta\(ctx\.businessId, orderId, c\);/,
+  /* ⚠ Trei argumente, nu patru: al patrulea e chiar steagul de recuperare, iar el aduce un HEAD. */
+  assert.match(sursa, /await pastreazaEticheta\(ctx\.businessId, orderId, c\)/,
     "pe drumul de creare pastrarea trebuie chemata FARA steagul de recuperare");
+  assert.doesNotMatch(sursa, /pastreazaEticheta\(ctx\.businessId, orderId, c, true\)/,
+    "drumul de creare a capatat steagul de recuperare, deci un HEAD pe fiecare comanda");
 });
 
 test("⚠ comanda pe o combinatie REDENUMITA se leaga si isi scade stocul, fara carantina", async () => {
@@ -1513,4 +1516,56 @@ test("⚠ NICIO reprocesare nu stinge steagul monedei necitite, nici cea apasata
       "rambursul s-a deschis pe o comanda a carei moneda nu se stie",
     );
   })();
+});
+
+test("⚠ starea etichetei se SCRIE: „n-au trimis” nu mai arata ca „am pierdut-o”", () => {
+  /*
+   * ═══ ⚠ DOUA SITUATII CARE CER LUCRURI OPUSE, SI ARATAU IDENTIC ═══
+   *
+   * Din panou, „nu exista eticheta" insemna pana azi si „Pepita n-a trimis niciuna" (livrare cu
+   * curierul comerciantului — nu are ce face), si „Pepita a trimis-o, iar noi n-am putut s-o
+   * pastram" (are ce face: „Resend order" in panoul lor). Singura urma a celei de-a doua era o
+   * linie in `error_logs`, unde nu se uita nimeni.
+   *
+   * ⚠ SI DE CE E O PROBA PE SURSA. Drumul trece prin depozitul R2 si prin baza; ce se poate
+   * proba aici fara amandoua e ca hotararea EXISTA si ca are cele patru raspunsuri. Purtarea pe
+   * octeti e probata in `eticheta.test.ts`.
+   */
+  const sursa = readFileSync("src/lib/pepita/ingest.ts", "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+
+  /* Cele patru stari, toate. Una lipsa inseamna un caz care cade tacut in alta. */
+  for (const stare of ["lipsa", "salvata", "nevalida", "depozit-cazut"]) {
+    assert.match(sursa, new RegExp(`return "${stare}"`), `starea „${stare}" nu se mai intoarce de nicaieri`);
+  }
+
+  /* ⚠ Si chiar se SCRIE, pe amandoua drumurile: prima sosire si retrimitere. */
+  const scrieri = sursa.match(/scrieStareaEtichetei\(/g) ?? [];
+  assert.ok(scrieri.length >= 3, `starea se scrie in ${scrieri.length} locuri, prea putine`);
+
+  /*
+   * ⚠ „LIPSA" SE SCRIE DOAR LA PRIMA SOSIRE. Ea inseamna doua lucruri deodata — n-au trimis SI
+   * in depozit nu e nimic — iar a doua jumatate se stie sigur numai acolo unde comanda tocmai
+   * s-a nascut. Scrisa la o retrimitere fara `package_label`, ar sterge chiar dovada ca eticheta
+   * a fost primita si salvata cu prima ocazie.
+   */
+  assert.match(sursa, /if \(stare === "lipsa" && !primaSosire\) return;/);
+  /* ⚠ Si cele doua drumuri chiar spun care sunt: creare `true`, retrimitere `false`. */
+  assert.match(sursa, /await pastreazaEticheta\(ctx\.businessId, orderId, c\), true\)/);
+  assert.match(sursa, /await pastreazaEticheta\(ctx\.businessId, rand\.order_id, c, true\),\s*false,/);
+});
+
+test("⚠ depozitul cazut se mai incearca de doua ori inainte sa fie declarat pierdut", () => {
+  /*
+   * O intrerupere de cateva secunde nu e o cadere adevarata, dar pana azi amandoua duceau in
+   * acelasi loc: eticheta pierduta pana cand cineva apasa „Resend order" la ei.
+   *
+   * ⚠ SI SE OPRESTE UNDEVA: o bucla fara capat ar tine cererea LOR ocupata, iar Pepita ar
+   * declara webhook-ul cazut si ar retrimite comanda — adica exact ce n-am vrea.
+   */
+  const sursa = readFileSync("src/lib/pepita/ingest.ts", "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+  assert.match(sursa, /const INCERCARI_DEPOZIT = 3;/);
+  assert.match(sursa, /const PAUZA_DEPOZIT_MS = \[200, 600\];/);
+  assert.match(sursa, /for \(let i = 0; i < INCERCARI_DEPOZIT; i\+\+\)/);
+  /* Pauzele sunt cu una mai putine decat incercarile: dupa ultima nu se mai asteapta degeaba. */
+  assert.match(sursa, /const pauza = PAUZA_DEPOZIT_MS\[i\];/);
 });

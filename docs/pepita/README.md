@@ -101,3 +101,28 @@ recunoscut, pentru comenzile vechi.
   cât de mare poate fi `package_label`. Plafonul nostru e deci o alegere a noastră, și trebuie să
   fie destul de larg cât să încapă o etichetă, fiindcă o comandă respinsă cu 413 nu se reîncearcă
   singură.
+
+## GTIN: trei documente ale lor, trei răspunsuri (recitit 09.09.2026)
+
+Un audit a cerut ca produsul fără EAN să fie **oprit** din feed, citând termenii contractuali
+(„the XML must contain … GTIN"). Am recitit atunci sursele. Nu spun același lucru:
+
+| Sursa | Ce spune despre GTIN | Guvernează feedul? |
+| --- | --- | --- |
+| [Specificația XML](https://pepita.hu/partners/xml-format?lang=en) — cea după care e scris chiar feedul nostru | `<StructuredId>` (UPC/EAN/ISBN) = **„Ajánlott" / Recommended**, cu nota „amennyiben van, erősen ajánlott megadni". `<ProductNumber>` (MPN) tot **Recommended** | **Da** |
+| [Seller Center — Feed and API connections](https://sellercenter.pepita.com/en/feed-and-api-connections/) | Obligatoriu **„(in specific categories)"** | **Da** |
+| [Seller Center — Product listing and editing](https://sellercenter.pepita.com/en/product-listing-and-editing/) | Îl pune între câmpurile obligatorii ale încărcării **manuale**, iar mai jos, la importul din Excel, îl marchează **„(Optional)"** | Nu — e despre încărcarea manuală, și se contrazice singură |
+
+**Hotărârea:** lipsa EAN-ului rămâne **avertisment**, nu eroare. Cele două documente care chiar
+guvernează un feed XML spun amândouă că nu e obligatoriu peste tot; ridicat la eroare, un produs
+fără cod de bare ar **dispărea tăcut** din feed, iar produsele fără EAN sunt legitime și multe
+(manufactură, pachete, marcă proprie).
+
+⚠ Ce s-a făcut în schimb: panoul **numără** produsele fără EAN (`RezumatProduse.faraEan`), ca
+expunerea să se vadă. Un avertisment care se poate număra e altceva decât unul pierdut într-o
+listă de mii de rânduri.
+
+⚠ **Dacă Pepita confirmă în scris** că GTIN-ul e obligatoriu pentru fiecare ofertă din România,
+hotărârea se schimbă — și atunci se schimbă deliberat. Proba care o apără e în
+`src/lib/pepita/articole.test.ts` și trebuie să cadă odată cu ea.
+

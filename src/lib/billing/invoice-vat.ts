@@ -18,15 +18,35 @@
  * TVA-ul sa fie pornit — ele poarta zero, iar un comerciant platitor trebuie
  * totusi sa le poata factura.
  *
- * `orders.prices_include_vat` NU EXISTA: doar cota e inghetata pe comanda, nu si
- * regimul. De aceea rezerva forteaza `taxIncluded`: sumele unei comenzi vechi sunt
- * cele chiar platite de client, deci TVA-ul se EXTRAGE din ele, nu se adauga peste
- * — altfel factura ar cere mai mult decat s-a incasat.
+ * ═══ ⚠ SI REGIMUL SE INGHEATA, DIN 09.09.2026 ═══
+ *
+ * Pana atunci se ingheta doar COTA. Regimul — „sumele contin deja TVA?" — se intreba de fiecare
+ * data setarea de AZI a magazinului, si asta era gresit in doua feluri:
+ *
+ *   1. TOATE cele patru marketplace-uri (Pepita, eMAG, Trendyol, About You) scriu in comanda sume
+ *      BRUTE, fiindca asa lucreaza ei. Pe un magazin cu `prices_include_vat = false`, facturarea
+ *      le citea ca NETE si ar fi adaugat TVA deasupra: 121 de lei incasati, 146,41 pe factura.
+ *      Garda de reconciliere prindea si REFUZA documentul — deci n-a plecat nicio factura
+ *      gresita — dar comanda nu se putea factura deloc, iar mesajul de refuz il trimitea pe
+ *      comerciant sa „editeze si sa salveze", ceea ce i-ar fi umflat totalul cu chiar cota TVA.
+ *   2. Si fara niciun marketplace: comanda plasata cand magazinul tinea preturi FARA TVA,
+ *      facturata dupa ce comerciantul a trecut pe preturi CU TVA, isi schimba intelesul sub
+ *      picioare — aceeasi paguba pentru care cota fusese deja inghetata.
+ *
+ * `orders.prices_include_vat` e `null` pe comenzile de dinainte, si atunci se cade INAPOI pe
+ * rezerva de mai jos plus setarea magazinului, adica exact purtarea de pana acum.
  */
 
 export interface ComandaTva {
   /** Cota inghetata la vanzare. 0 pe comenzile de dinainte de pornirea TVA-ului. */
   vat_rate?: unknown;
+  /**
+   * Sumele comenzii contin deja TVA? Inghetat la nastere, ca si cota.
+   *
+   * ⚠ `null`/lipsa inseamna „nu se stie", nu „nu". Comenzile de dinainte de 09.09.2026 n-au
+   * coloana scrisa, si regimul de atunci chiar nu se mai poate afla; ele cad pe setarea de azi.
+   */
+  prices_include_vat?: unknown;
 }
 
 export interface MagazinTva {
@@ -59,7 +79,18 @@ export function invoiceVat(
   const cotaMagazinului = Number(magazin.vat_rate) || 0;
   const rate = platitor ? (cotaComenzii > 0 ? cotaComenzii : cotaMagazinului) : 0;
   const fallback = rate > 0 && cotaComenzii <= 0;
-  return { rate, taxIncluded: fallback ? true : magazin.prices_include_vat, fallback };
+
+  /*
+   * ⚠ REGIMUL INGHETAT BATE TOT — si rezerva, si setarea magazinului. El e singurul care stie ce
+   * inseamna cifrele CHIAR ALE ACESTEI COMENZI; celelalte doua sunt presupuneri despre ea.
+   *
+   * ⚠ Se cere `typeof === "boolean"`, nu adevar: `false` e un raspuns, iar `??` pe o valoare
+   * falsa ar fi trecut peste el si ar fi intrebat mai departe. Aceeasi capcana ca la
+   * `cotaLiniei`, unde zero e o cota si nu o lipsa.
+   */
+  const inghetat = typeof order.prices_include_vat === "boolean" ? order.prices_include_vat : null;
+  const taxIncluded = inghetat ?? (fallback ? true : magazin.prices_include_vat);
+  return { rate, taxIncluded, fallback };
 }
 
 /**

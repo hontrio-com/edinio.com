@@ -332,6 +332,7 @@ export function OrderDetailClient({
   order,
   businessId,
   areEtichetaPepita = false,
+  stareEtichetaPepita = null,
   setariTva,
   smartbillEnabled,
   hasEstimateSeries,
@@ -368,6 +369,8 @@ export function OrderDetailClient({
    * randeaza componenta sa nu trebuiasca sa stie de ea.
    */
   areEtichetaPepita?: boolean;
+  /** `lipsa` | `salvata` | `nevalida` | `depozit-cazut` | null (comanda veche). */
+  stareEtichetaPepita?: string | null;
   /*
    * OBLIGATORIU, nu optional cu implicit: fara el, caseta de totaluri nu poate
    * sti daca `orders.vat_amount` e o suma de adunat sau una deja continuta in
@@ -1583,6 +1586,22 @@ export function OrderDetailClient({
                       >
                         <Download className="h-4 w-4" />Eticheta Pepita (PDF)
                       </a>
+                    )}
+                    {/*
+                      ⚠ ETICHETA PRIMITA SI PIERDUTA ARE ALT RASPUNS DECAT ETICHETA NETRIMISA, si
+                      pana pe 09.09.2026 amandoua aratau la fel: butonul lipsea, si atat. Aici e
+                      singurul loc in care comerciantul poate afla ca mai are o miscare de facut.
+                    */}
+                    {!areEtichetaPepita && (stareEtichetaPepita === "depozit-cazut" || stareEtichetaPepita === "nevalida") && (
+                      <div className="flex items-start gap-2.5 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
+                        <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {stareEtichetaPepita === "nevalida"
+                            ? "Pepita a trimis o etichetă, dar fișierul primit nu era un PDF valid și nu s-a putut păstra."
+                            : "Pepita a trimis eticheta, dar nu am putut-o salva."}
+                          {" "}Deschide comanda în Pepita Admin și apasă „Resend order”: eticheta vine din nou și o păstrăm.
+                        </p>
+                      </div>
                     )}
                   </>
                 ) : primaryCourier ? (

@@ -404,6 +404,15 @@ export interface RezumatProduse {
   incluse: number;
   /** Cate dintre cele incluse au cel putin o eroare. */
   cuErori: number;
+  /**
+   * Cate dintre cele incluse pleaca FARA cod EAN.
+   *
+   * ⚠ NU E O EROARE, si nu opreste nimic — vezi nota lunga din `articole.ts`, cu cele trei
+   * documente ale lor care nu spun acelasi lucru. Dar e singura cifra care ii arata
+   * comerciantului cat de expus e in categoriile unde Pepita chiar cere GTIN. Un avertisment pe
+   * produs, intr-un catalog de mii, nu se vede; un numar se vede.
+   */
+  faraEan: number;
   /** Cate articole ar avea feedul (o combinatie aplatizata e un articol). */
   articole: number;
   /**
@@ -455,7 +464,7 @@ export async function verificaProdusePepita(
     const pre = await pregateste(admin, businessId);
     if (!pre) return { error: "Integrarea nu este pornită." };
 
-    let active = 0, incluse = 0, cuErori = 0, articole = 0;
+    let active = 0, incluse = 0, cuErori = 0, articole = 0, faraEan = 0;
     let partial = false;
     const produse: ProdusInPanou[] = [];
     /* Id-urile pe care feedul le-ar trimite ACUM. Se compara cu ce s-a trimis vreodata. */
@@ -501,6 +510,9 @@ export async function verificaProdusePepita(
         for (const a of r.articole) deAcum.add(a.id);
         const areErori = r.probleme.some((x) => x.nivel === "eroare");
         if (areErori) cuErori++;
+        /* ⚠ Se numara PRODUSUL, nu problemele: un produs cu variante poate raporta „fara-ean" de
+           zece ori, si zece nu e un numar despre care sa se poata spune ceva. */
+        if (r.probleme.some((x) => x.cod === "fara-ean")) faraEan++;
         /*
          * ⚠ In lista se aduna intai produsele cu probleme: comerciantul deschide
          * ecranul ca sa afle ce nu merge, nu ca sa se uite la ce merge.
@@ -583,7 +595,7 @@ export async function verificaProdusePepita(
       }
     }
 
-    return { active, incluse, cuErori, articole, partial, orfane, exempleOrfane, produse };
+    return { active, incluse, cuErori, faraEan, articole, partial, orfane, exempleOrfane, produse };
   } catch (e) {
     await logError({
       action: "pepita/verificare", message: e instanceof Error ? e.message : String(e),

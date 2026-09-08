@@ -1078,6 +1078,12 @@ async function ingereazaComandaCitita(
     subtotal: bani.subtotal,
     total: bani.total,
     vat_amount: bani.vat_amount,
+    /*
+     * ⚠ SUMELE DE MAI SUS SUNT BRUTE, si asta se SCRIE, nu se deduce mai tarziu din setarea de
+     * atunci a magazinului. Pe un magazin cu preturi fara TVA, facturarea le-ar fi citit ca nete
+     * si ar fi adaugat cota deasupra. Vezi `invoiceVat`.
+     */
+    prices_include_vat: true,
     payment_method: "emag",
     /* 1 = platita la ei (card sau transfer); ramburs se incaseaza la livrare. */
     payment_status: platitLaEi(c.payment_status),

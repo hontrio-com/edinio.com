@@ -720,6 +720,13 @@ function Catalog({ businessId }: { businessId: string }) {
             <Cifra eticheta="Incluse în feed" valoare={r.incluse} />
             <Cifra eticheta="Cu erori" valoare={r.cuErori} accent={r.cuErori > 0} />
             <Cifra eticheta="Articole trimise" valoare={r.articole} />
+            {/*
+              ⚠ NU E O EROARE, si de aceea nu e rosu. Specificatia XML a Pepita numeste
+              GTIN-ul „recomandat", dar in unele categorii il cere — vezi nota din
+              `articole.ts`, cu cele trei documente ale lor care nu spun acelasi lucru.
+              Cifra exista ca sa se poata VEDEA expunerea, nu ca sa opreasca feedul.
+            */}
+            <Cifra eticheta="Fără cod EAN" valoare={r.faraEan} />
           </div>
 
           {/*

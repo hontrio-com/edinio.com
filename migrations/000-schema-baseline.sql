@@ -7090,7 +7090,8 @@ create table if not exists public.orders (
   sameday_status_label text,
   sameday_status_checked_at timestamp with time zone,
   sameday_return_awb_number text,
-  sameday_return_awb_at timestamp with time zone);
+  sameday_return_awb_at timestamp with time zone,
+  prices_include_vat boolean);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -7131,7 +7132,9 @@ create table if not exists public.pepita_comenzi (
   primit_la timestamp with time zone default now() not null,
   prelucrat_la timestamp with time zone,
   incercari integer default 0 not null,
-  ultima_eroare text);
+  ultima_eroare text,
+  eticheta_stare text,
+  eticheta_la timestamp with time zone);
 
 create table if not exists public.pepita_listari (
   id uuid default gen_random_uuid() not null,
@@ -7743,6 +7746,7 @@ alter table public.operatii_externe add constraint operatii_externe_stare_check 
 alter table public.orders add constraint orders_payment_status_check CHECK ((payment_status = ANY (ARRAY['unpaid'::text, 'paid'::text, 'refunded'::text])));
 alter table public.orders add constraint orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text, 'delivered'::text, 'cancelled'::text, 'refunded'::text])));
 alter table public.pepita_chei add constraint pepita_chei_fel_check CHECK ((fel = ANY (ARRAY['feed'::text, 'comenzi'::text])));
+alter table public.pepita_comenzi add constraint pepita_comenzi_eticheta_stare_check CHECK (((eticheta_stare IS NULL) OR (eticheta_stare = ANY (ARRAY['lipsa'::text, 'salvata'::text, 'nevalida'::text, 'depozit-cazut'::text]))));
 alter table public.pepita_comenzi add constraint pepita_comenzi_stare_check CHECK ((stare = ANY (ARRAY['importata'::text, 'carantina'::text, 'respinsa'::text])));
 alter table public.pepita_listari add constraint pepita_listari_pret_override_check CHECK (((pret_override IS NULL) OR (pret_override > (0)::numeric)));
 alter table public.pepita_listari add constraint pepita_listari_safety_stock_check CHECK (((safety_stock IS NULL) OR (safety_stock >= 0)));
@@ -8175,6 +8179,7 @@ CREATE INDEX pepita_chei_active_idx ON public.pepita_chei USING btree (business_
 CREATE UNIQUE INDEX pepita_chei_amprenta_idx ON public.pepita_chei USING btree (amprenta);
 CREATE INDEX pepita_comenzi_carantina_idx ON public.pepita_comenzi USING btree (business_id, primit_la DESC) WHERE (stare <> 'importata'::text);
 CREATE INDEX pepita_comenzi_comanda_idx ON public.pepita_comenzi USING btree (order_id) WHERE (order_id IS NOT NULL);
+CREATE INDEX pepita_comenzi_eticheta_pierduta_idx ON public.pepita_comenzi USING btree (business_id, eticheta_la DESC) WHERE (eticheta_stare = ANY (ARRAY['depozit-cazut'::text, 'nevalida'::text]));
 CREATE INDEX pepita_comenzi_recente_idx ON public.pepita_comenzi USING btree (business_id, primit_la DESC);
 CREATE INDEX pepita_listari_incluse_idx ON public.pepita_listari USING btree (business_id, product_id) WHERE inclus;
 CREATE INDEX pepita_listari_produs_idx ON public.pepita_listari USING btree (product_id);

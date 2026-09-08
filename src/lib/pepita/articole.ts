@@ -223,9 +223,29 @@ function avertisment(cod: string, mesaj: string, combinatie?: string): ProblemaP
  * ⚠ O EROARE OPRESTE PRODUSUL, un avertisment nu. Regula e ingusta dinadins:
  * blocam numai ce am verificat ca Pepita refuza (pret zero, campuri obligatorii
  * lipsa) sau ce ar duce la o vanzare pe care comerciantul n-o poate onora.
- * Lipsa EAN-ului, de pilda, ramane avertisment: documentatia il numeste
- * „Ajanlott”, recomandat, nu obligatoriu, si blocandu-l am scoate de la vanzare
- * cataloage intregi pe o presupunere.
+ *
+ * ═══ ⚠ LIPSA EAN-ULUI RAMANE AVERTISMENT, SI IATA DE CE (recitit 09.09.2026) ═══
+ *
+ * Un audit a cerut sa devina EROARE, citand termenii contractuali („the XML must contain …
+ * GTIN"). Am recitit atunci CELE TREI documente ale lor, si nu spun acelasi lucru:
+ *
+ *   1. specificatia tehnica XML — chiar cea dupa care se scrie feedul asta —
+ *      <https://pepita.hu/partners/xml-format?lang=en>: `<StructuredId>` (UPC/EAN/ISBN) si
+ *      `<ProductNumber>` (MPN) sunt amandoua **„Ajanlott" / Recommended**, cu nota „amennyiben
+ *      van, erosen ajanlott megadni" — daca exista, e foarte recomandat sa fie trimis;
+ *   2. Seller Center, „Feed and API connections" — pagina despre FEEDURI: GTIN e obligatoriu
+ *      **„(in specific categories)"**, nu peste tot;
+ *   3. Seller Center, „Product listing and editing" — pagina despre incarcarea MANUALA: il pune
+ *      in lista de campuri obligatorii, iar mai jos, la importul din Excel, il marcheaza
+ *      „(Optional)". Se contrazice singura, si oricum nu vorbeste despre feed.
+ *
+ * Deci documentele care GUVERNEAZA un feed XML — 1 si 2 — spun amandoua ca nu e obligatoriu
+ * peste tot. Ridicat la eroare, un produs fara EAN ar DISPAREA tacut din feed; iar produsele
+ * fara EAN sunt legitime si multe: manufactura, pachete, marca proprie fara cod de bare.
+ *
+ * ⚠ CE SE FACE IN SCHIMB: se spune, si se NUMARA. `RezumatProduse.faraEan` arata comerciantului
+ * cate produse pleaca fara cod, ca sa stie cat de expus e in categoriile unde Pepita chiar il
+ * cere. Un avertisment care se poate numara e altceva decat unul pierdut intr-o lista lunga.
  */
 export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): RezultatArticole {
   const probleme: ProblemaPepita[] = [];
@@ -309,7 +329,8 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
     if (!gtinProdus) {
       probleme.push(avertisment(
         "fara-ean",
-        "Produsul nu are cod EAN. Pepita îl recomandă insistent, iar în unele categorii îl cere.",
+        "Produsul nu are cod EAN. Specificația XML a Pepita îl numește „recomandat”, dar în "
+        + "anumite categorii îl cere, iar acolo poate refuza publicarea. Completează-l dacă îl ai.",
       ));
     }
     const disp = disponibilitate({

@@ -499,6 +499,13 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
   const [maiSunt, setMaiSunt] = useState(false);
   const [incarc, setIncarc] = useState(false);
   const [lucrez, setLucrez] = useState(false);
+  /* Cat s-a facut pana acum in trecerea curenta, ca butonul sa nu para inghetat. */
+  const [progres, setProgres] = useState<{ facut: number; dinCate: number | null } | null>(null);
+  /*
+    Ce a ramas neterminat dupa o rulare oprita la mijloc. Toastul dispare in cateva secunde,
+    iar o includere pe jumatate facuta arata exact ca una intreaga: asta ramane pe ecran.
+  */
+  const [ramas, setRamas] = useState<{ facut: number; dinCate: number | null } | null>(null);
 
   const incarca = async (p = pagina, termen = cauta) => {
     setIncarc(true);
@@ -557,18 +564,51 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
           onClick={async () => {
             if (!confirm("Toate produsele active din magazin vor fi incluse în feedul Pepita. Continui?")) return;
             setLucrez(true);
+            setRamas(null);
+            let facut = 0;
+            let cursor: string | null = null;
+            let dinCate: number | null = null;
             try {
-              const r = await includeToateProdusePepita(businessId);
-              if ("error" in r && r.error) toast.error(r.error);
-              else { toast.success(`${r.scrise} produse incluse.`); void incarca(pagina, cauta); }
+              /*
+                ⚠ BUCLA E AICI, LA APASARE, nu pe server. Serverul face o trecere marginita si
+                spune de unde se reia; o singura cerere care ar merge pana la capat peste un
+                catalog mare ar depasi timpul functiei si ar cadea tocmai la magazinele mari.
+                Reluarea e sigura: scrierea e un upsert, deci a doua trecere peste acelasi
+                produs nu strica nimic.
+              */
+              for (;;) {
+                const r = await includeToateProdusePepita(businessId, cursor);
+                if ("error" in r) {
+                  toast.error(`${r.error} S-au inclus ${facut} produse până aici.`);
+                  setRamas({ facut, dinCate });
+                  break;
+                }
+                facut += r.scrise;
+                dinCate = r.dinCate ?? dinCate;
+                setProgres({ facut, dinCate });
+                if (!r.incomplet) { toast.success(`${facut} produse incluse.`); break; }
+                cursor = r.dupa;
+              }
+              void incarca(pagina, cauta);
             } catch {
-              toast.error("Cererea nu a ajuns. Încearcă din nou.");
-            } finally { setLucrez(false); }
+              toast.error(`Cererea nu a ajuns. S-au inclus ${facut} produse până aici.`);
+              setRamas({ facut, dinCate });
+            } finally { setLucrez(false); setProgres(null); }
           }}
         >
-          Include toate produsele active
+          {lucrez && progres
+            ? `Includ… ${progres.facut}${progres.dinCate ? ` din ${progres.dinCate}` : ""}`
+            : "Include toate produsele active"}
         </Button>
       </div>
+
+      {ramas && (
+        <Callout variant="warning" icon={AlertTriangle}>
+          S-au inclus {ramas.facut}{ramas.dinCate ? ` din ${ramas.dinCate}` : ""} produse, apoi
+          includerea s-a oprit. Apasă din nou pe butonul de includere: se reia de unde a rămas,
+          fără să scrie de două ori.
+        </Callout>
+      )}
 
       {lista === null && (
         <p className="text-xs text-muted-foreground">Caută un produs sau apasă „Caută” ca să vezi lista.</p>

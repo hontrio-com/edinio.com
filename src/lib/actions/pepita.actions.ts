@@ -20,6 +20,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
+import { includeToateActive } from "@/lib/pepita/includere-in-masa";
 import { randuriCitite } from "@/lib/supabase/rand-citit";
 import { articolelePentruProdus, type ProblemaPepita, type ProdusPepita } from "@/lib/pepita/articole";
 import { adresaComenzi, adresaFeedProduse, adresaFeedStoc, cheieNoua, amprentaCheii, revocaToate, stingeCheileVechi } from "@/lib/pepita/chei";
@@ -561,30 +562,24 @@ export async function listaProdusePepita(
  * ADAUGATE MAINE: pe „toate” ar pleca singure, pe „alese” nu. Doua intelesuri
  * diferite, deci doua comenzi diferite.
  */
-export async function includeToateProdusePepita(businessId: string) {
+export async function includeToateProdusePepita(businessId: string, dupa?: string | null) {
   const g = await poarta(businessId);
   if ("error" in g) return { error: g.error };
   const admin = createAdminClient();
 
   try {
-    const acum = new Date().toISOString();
-    let scrise = 0;
-    for (let de = 0; de < 20_000; de += 500) {
-      const { data, error } = await admin.from("products").select("id")
-        .eq("business_id", businessId).eq("is_active", true).order("id").range(de, de + 499);
-      if (error) throw error;
-      const ids = (data ?? []) as { id: string }[];
-      if (ids.length === 0) break;
-      const { error: eScriere } = await admin.from("pepita_listari").upsert(
-        ids.map((p) => ({ business_id: businessId, product_id: p.id, inclus: true, actualizat_la: acum })) as never,
-        { onConflict: "business_id,product_id" },
-      );
-      if (eScriere) throw eScriere;
-      scrise += ids.length;
-      if (ids.length < 500) break;
-    }
+    const r = await includeToateActive(admin, businessId, dupa ?? null, new Date().toISOString());
+
+    /*
+     * NUMITORUL. O citire ieftina, doar numaratoare, ca omul sa vada „12.000 din 25.000" in loc
+     * de un numar singur din care nu se poate afla daca s-a terminat.
+     */
+    const { count } = await admin.from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessId).eq("is_active", true);
+
     revalidatePath(CALE);
-    return { ok: true as const, scrise };
+    return { ok: true as const, scrise: r.scrise, incomplet: r.incomplet, dupa: r.dupa, dinCate: count ?? null };
   } catch (e) {
     await logError({
       action: "pepita/include-toate", message: e instanceof Error ? e.message : String(e),

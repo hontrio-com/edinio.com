@@ -82,16 +82,34 @@ ultimul stoc, si se poate vinde in continuare. Feedul n-are cum sa spuna „scoa
 si nu exista niciun API: singurul lucru cinstit e sa-l ARATAM. Panoul o face, din evidenta
 `pepita_articole`.
 
-⚠ **Cu o gaura stiuta:** `pepita_articole.product_id` are `on delete cascade`. Cand comerciantul
-STERGE produsul de tot (nu il dezactiveaza), randul de evidenta piere odata cu el, deci tocmai
-orfanul PERMANENT — cel pe care nimeni nu-l mai poate afla altfel — nu se mai poate arata. O
-varianta redenumita se vede, un produs sters nu. Repararea cere o migratie (`on delete set null`,
-cu numele produsului copiat la scriere), care se livreaza impreuna cu baseline-ul regenerat.
+⚠ **Gaura de aici s-a inchis pe 08.09.2026.** `pepita_articole.product_id` avea `on delete
+cascade`: cand comerciantul STERGEA produsul de tot (nu il dezactiva), randul de evidenta pierea
+odata cu el, deci tocmai orfanul PERMANENT — cel pe care nimeni nu-l mai poate afla altfel — nu se
+mai putea arata. O varianta redenumita se vedea, un produs sters nu.
+
+Acum cheia straina e `on delete set null`: randul ramane, iar coloana goala INSEAMNA ceva — „am
+trimis `<Id>`-ul asta, produsul din spatele lui nu mai exista". De aici vin doua lucruri:
+
+- panoul numara si articolul produsului sters, fiindca despre el chiar nu mai stie nimeni nimic;
+- **o comanda intarziata pe un produs sters nu mai spune „cod necunoscut"**, ci ca produsul a fost
+  sters din catalog, si din ce varianta venea. Deosebirea conteaza fiindca leacul e altul: la un
+  cod necunoscut cauti greseala in potrivire, aici nu mai e nimic de potrivit si singurul lucru de
+  facut e sa ceri Pepitei scoaterea articolului.
+
+Vezi `migrations/2027-01-01-pepita-articolul-ramane-orfan.sql`.
 
 ### Cum se socoteste `<LastMod>`
 
 Cel mai tarziu dintre: data produsului, data listarii lui (`pepita_listari.actualizat_la`), data
 magazinului, data celei mai recent atinse categorii, si o **stampila a configurarii**.
+
+⚠ `pepita_listari.actualizat_la` **se pune din baza, nu din buna-credinta a scriitorului**. Un
+declansator (`pepita_listari_stampileaza_clipa`, cu `when (old.* is distinct from new.*)`) il muta
+la `now()` ori de cate ori randul chiar se schimba. Pana atunci campul era scris cu mana de cei doi
+scriitori din cod, ceea ce mergea — dar primul ecran nou care ar fi uitat cele doua cuvinte ar fi
+INGHETAT timpul exact pe randurile pentru care el conteaza, si Pepita ar fi continuat sa vanda la
+pretul de ieri. Clauza `when` e la fel de importanta: fara ea, un upsert care rescrie aceleasi
+valori ar impinge `<LastMod>` inainte si i-ar pune pe ei sa reciteasca tot catalogul degeaba.
 
 ⚠ Stampila NU e `store_settings.updated_at`, si asta a fost prima incercare, gresita: coloana
 aceea urca la FIECARE COMANDA, fiindca numerotarea secventiala face `update store_settings set

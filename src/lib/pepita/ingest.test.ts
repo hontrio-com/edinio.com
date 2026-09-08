@@ -109,7 +109,7 @@ function doar<T extends Record<string, unknown>>(rand: T, coloane: string | unde
 }
 
 function faceBaza(
-  articole: { articol_id: string; product_id: string; combinatie: string }[] = [],
+  articole: { articol_id: string; product_id: string | null; combinatie: string }[] = [],
   /** De cate ori la rand cade consumul de stoc. Pentru „ce se intampla cand chiar pica". */
   cadeStocDeAtateaOri = 0,
 ) {
@@ -125,12 +125,24 @@ function faceBaza(
     const f = (k: string) => filtre.find((x) => x[0] === k)?.[1];
 
     if (tabela === "products") {
-      const ids = f("id") as string[] | undefined;
+      const ids = f("id") as (string | null)[] | undefined;
+      /*
+       * ⚠ UN `null` IN `.in("id", ...)` NU E O CITIRE GOALA, E O INTEROGARE CAZUTA.
+       *
+       * PostgREST primeste `id=in.(null)`, incearca sa citeasca sirul „null" ca `uuid` si
+       * raspunde `22P02`. Iar eroarea nu loveste doar linia orfana: cade CITIREA INTREAGA, deci
+       * niciun produs al comenzii nu se mai gaseste. De cand `pepita_articole.product_id` poate
+       * fi `null` (produs sters), asta chiar se poate intampla, si o baza falsa care ar raspunde
+       * linistit cu zero randuri ar lasa defectul sa treaca verde.
+       */
+      if (ids?.some((x) => typeof x !== "string")) {
+        return { data: null, error: { code: "22P02", message: 'invalid input syntax for type uuid: "null"' } };
+      }
       const skuri = f("sku") as string[] | undefined;
       const biz = f("business_id") as string;
       /* ⚠ Filtrul pe magazin se aplica CU ADEVARAT: altfel proba de izolare ar trece degeaba. */
       const gasite = PRODUSE.filter((p) => p.business_id === biz
-        && (ids ? ids.includes(p.id) : true)
+        && (ids ? (ids as string[]).includes(p.id) : true)
         && (skuri ? (p.sku != null && skuri.includes(p.sku)) : true));
       return { data: ids || skuri ? gasite.map((p) => doar(p as unknown as Record<string, unknown>, coloane)) : [], error: null };
     }
@@ -673,6 +685,61 @@ test("⚠ cand combinatia chiar a disparut, motivul o NUMESTE, nu spune „cod n
   assert.match(b.comenzi[0].motiv ?? "", /XL-vechi/);
   assert.match(b.comenzi[0].motiv ?? "", /Tricou/);
   assert.deepEqual(b.consumuri[0].produse, [], "si nu se scade nimic pe ghicite");
+});
+
+test("⚠ produsul STERS nu se confunda cu un cod necunoscut, si nu rastoarna restul comenzii", async () => {
+  /*
+   * ⚠ CE APARA. Pana la `on delete set null`, cheia straina era `on delete cascade`: stergerea
+   * produsului stergea si randul de evidenta, deci comanda intarziata a Pepitei ajungea in
+   * carantina cu „cod necunoscut", iar comerciantul n-avea de unde sa inceapa. Acum randul
+   * ramane cu `product_id` gol, si asta INSEAMNA ceva: articolul a plecat la ei, produsul nu mai
+   * e la noi. Vezi `2027-01-01-pepita-articolul-ramane-orfan.sql`.
+   *
+   * ⚠ SI DE CE COMANDA ARE DOUA LINII. Orfanul e periculos si prin altceva: `product_id`-ul gol
+   * ajungea nefiltrat in `.in("id", ...)`, iar PostgREST cade atunci cu `22P02` pe TOATA citirea.
+   * Adica o singura linie orfana ar fi rupt legarea liniei SANATOASE de langa ea. A doua linie e
+   * acolo ca sa se vada ca ea chiar se leaga si chiar isi scade stocul.
+   */
+  /*
+   * ⚠ `<Id>`-ul poarta chiar uuid-ul produsului STERS, fiindca asa a plecat el in feed. Deci nici
+   * drumul de rezerva (desfacerea codului) nu-l mai gaseste: produsul nu mai e in catalog. Asta e
+   * si deosebirea fata de proba de deasupra, unde produsul traieste si doar combinatia a murit.
+   */
+  const P_STERS = "dddddddd-1111-4222-8333-444444444444";
+  const codOrfan = idArticol(P_STERS, "M");
+  const b = faceBaza([{ articol_id: codOrfan, product_id: null, combinatie: "M" }]);
+  const r = await ingereaza(b.db, CTX, comanda({}, [
+    { id: "9", sku: codOrfan, currency: "RON", quantity: 1, price: 89, vat: 21 },
+    { id: "10", sku: idArticol(P_SIMPLU, null), currency: "RON", quantity: 2, price: 100, vat: 21 },
+  ]));
+
+  assert.equal(r.stare, "carantina");
+  const motiv = b.comenzi[0].motiv ?? "";
+  assert.match(motiv, /produsul a fost șters din catalog/, "motivul nu spune ce s-a intamplat");
+  /* ⚠ `/M/` singur ar fi trecut peste orice majuscula din motiv. Aici se cere chiar bucata care
+     NUMESTE combinatia: „varianta", ghilimeaua, M, ghilimeaua. */
+  assert.match(motiv, /varianta .M./, "si nici din ce varianta venea");
+  assert.match(motiv, /Coduri/, "codul orfan tot trebuie numit, ca sa se poata cauta la ei");
+  /* ⚠ Linia sanatoasa TOT se leaga si TOT isi scade stocul: orfanul n-a rasturnat citirea. */
+  assert.deepEqual(b.consumuri[0].produse, [{ product_id: P_SIMPLU, quantity: 2 }]);
+});
+
+test("⚠ si schema o pastreaza: `pepita_articole.product_id` e `on delete set null`", () => {
+  /*
+   * ⚠ TOATA PROBA DE DEASUPRA ATARNA DE ASTA. Cu `on delete cascade` — cum era pana pe
+   * 08.09.2026 — randul de evidenta dispare odata cu produsul, deci nu mai exista niciun
+   * `product_id` gol de recunoscut: mesajul precis n-ar avea de unde sa vina, iar articolul ramas
+   * la Pepita n-ar mai fi numarat de nimeni ca orfan.
+   */
+  /* ⚠ `String.fromCharCode(10)`, nu un sir cu backslash: escaparea se pierde pe drumul
+     dintre unealta si fisier, si atunci sirul ar contine un RAND ADEVARAT.
+     S-a intamplat chiar la scrierea probei asteia. */
+  const RAND_NOU = String.fromCharCode(10);
+  const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  const linie = baseline.split(RAND_NOU).find((l) => l.includes("pepita_articole_product_id_fkey"));
+  assert.ok(linie, "cheia straina a articolelor nu mai e in schema");
+  assert.match(linie, /ON DELETE SET NULL/,
+    "produsul sters ar duce cu el si dovada ca articolul a plecat la Pepita");
 });
 
 test("⚠ un `sku` care NU e `<Id>`-ul nostru derivat se leaga daca e in evidenta", async () => {

@@ -3058,11 +3058,14 @@ $function$
 ;
 
 CREATE OR REPLACE FUNCTION public.edinio_revendica_conversii(limita integer)
- RETURNS SETOF edinio_conversion_outbox
+ RETURNS TABLE(id uuid, destinatie text, nume_eveniment text, event_id text, sarcina jsonb, incercari integer, next_retry_at timestamp with time zone, trimis_la timestamp with time zone, ultima_eroare text, abandonat_la timestamp with time zone, creat_la timestamp with time zone, vizitator text)
  LANGUAGE sql
  SET search_path TO 'public', 'pg_temp'
 AS $function$
   update public.edinio_conversion_outbox o
+     -- ⚠ ARENDA DE UN MINUT, nu o incuietoare: daca rularea moare la jumatate, randul se
+     -- elibereaza singur. O incuietoare ar trebui desfacuta de cineva, iar cine moare nu desface.
+     -- `ARENDA_MS` din `coada-conversii.ts` e chiar minutul asta, citit de acolo.
      set next_retry_at = now() + interval '1 minute'
    where o.id in (
      select c.id
@@ -3072,9 +3075,13 @@ AS $function$
         and c.next_retry_at <= now()
       order by c.next_retry_at asc
       limit greatest(1, least(limita, 500))
+      -- ⚠ `skip locked` e mai tare decat serializarea scrierilor: a doua rulare SARE peste
+      -- randurile incuiate, in loc sa astepte dupa ele.
       for update skip locked
    )
-  returning o.*;
+  returning
+    o.id, o.destinatie, o.nume_eveniment, o.event_id, o.sarcina, o.incercari,
+    o.next_retry_at, o.trimis_la, o.ultima_eroare, o.abandonat_la, o.creat_la, o.vizitator;
 $function$
 ;
 
@@ -4272,6 +4279,18 @@ AS $function$
     case when coalesce(p_deplasare, 0) = 0 then null
          else public.inceput_fereastra_ro(p_zile, coalesce(p_deplasare, 0) - 1) end
   )
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.pepita_stampileaza_listarea()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+begin
+  new.actualizat_la := now();
+  return new;
+end;
 $function$
 ;
 
@@ -7086,7 +7105,7 @@ create table if not exists public.page_form_submissions (
 create table if not exists public.pepita_articole (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
-  product_id uuid not null,
+  product_id uuid,
   combinatie text default ''::text not null,
   articol_id text not null,
   creat_la timestamp with time zone default now() not null);
@@ -7839,7 +7858,7 @@ alter table public.page_form_submissions add constraint page_form_submissions_bu
 alter table public.page_form_submissions add constraint page_form_submissions_form_id_fkey FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE SET NULL;
 alter table public.page_form_submissions add constraint page_form_submissions_page_id_fkey FOREIGN KEY (page_id) REFERENCES custom_pages(id) ON DELETE SET NULL;
 alter table public.pepita_articole add constraint pepita_articole_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
-alter table public.pepita_articole add constraint pepita_articole_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
+alter table public.pepita_articole add constraint pepita_articole_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
 alter table public.pepita_chei add constraint pepita_chei_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.pepita_comenzi add constraint pepita_comenzi_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.pepita_comenzi add constraint pepita_comenzi_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
@@ -8299,6 +8318,7 @@ CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.emag_sync_queue FOR EACH RO
 CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.gmc_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
 CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.olx_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
 CREATE TRIGGER set_orders_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER pepita_listari_stampileaza_clipa BEFORE UPDATE ON public.pepita_listari FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION pepita_stampileaza_listarea();
 CREATE TRIGGER aboutyou_marcheaza_modificarea AFTER UPDATE OF name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity ON public.products FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION aboutyou_marcheaza_modificarea();
 CREATE TRIGGER products_catalog_proiectie AFTER INSERT OR DELETE OR UPDATE OF name, slug, description, price, compare_at_price, images, category, tags, is_featured, is_active, is_bundle, track_inventory, stock_quantity, sort_order, page_sections ON public.products FOR EACH ROW EXECUTE FUNCTION trg_catalog_proiectie();
 CREATE TRIGGER products_repretuieste_pachetele AFTER UPDATE OF price ON public.products FOR EACH ROW WHEN (((NOT COALESCE(new.is_bundle, false)) AND (new.price IS DISTINCT FROM old.price))) EXECUTE FUNCTION trg_repretuieste_pachetele();
@@ -11001,6 +11021,7 @@ grant execute on function public.orders_status_counts(bid uuid) to service_role;
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to anon;
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to authenticated;
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to service_role;
+grant execute on function public.pepita_stampileaza_listarea() to service_role;
 grant execute on function public.posta_aloca_cod(p_business_id uuid) to service_role;
 grant execute on function public.proba_stoc() to service_role;
 grant execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) to service_role;
@@ -11173,6 +11194,7 @@ revoke execute on function public.numar_produse_si_comenzi() from public;
 revoke execute on function public.numara_ofertele_emag(p_business_id uuid) from public;
 revoke execute on function public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb) from public;
 revoke execute on function public.olx_seteaza_categoria(p_business_id uuid, p_categorie text, p_intrare jsonb) from public;
+revoke execute on function public.pepita_stampileaza_listarea() from public;
 revoke execute on function public.posta_aloca_cod(p_business_id uuid) from public;
 revoke execute on function public.proba_stoc() from public;
 revoke execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) from public;

@@ -198,11 +198,19 @@ test("⚠ sarcina scrisa e exact atat: un camp in plus ar sterge reglajele de ma
    primul care uita cele doua cuvinte ar INGHETA timpul exact pe randurile pentru care el
    conteaza, iar Pepita ar vedea o data veche pe un produs al carui pret tocmai s-a schimbat.
 
-   ⚠ CE APARA PLASA, SI CE NU. Scaneaza sursa, deci spune ca fiecare scriere numeste campul,
-   nu ca valoarea scrisa e cea buna. Regula deplina ar fi un declansator in baza, cu
-   `when (old.* is distinct from new.*)`, ca la `aboutyou_marcheaza_listarea`. Nu e livrat aici
-   fiindca cere aplicarea migratiei in productie SI regenerarea baseline-ului, altfel poarta de
-   CI „Baseline-ul acopera toate migratiile" cade la primul push.
+   ⚠ ACUM SUNT DOUA PLASE, SI SPUN LUCRURI DIFERITE.
+
+   Prima scaneaza SURSA: spune ca fiecare scriere din cod numeste campul. Nu spune ca valoarea
+   scrisa e cea buna, si nu stie nimic despre o scriere venita din consola SQL sau dintr-o unealta
+   de maine.
+
+   A doua cere DECLANSATORUL din baza (`pepita_listari_stampileaza_clipa`, livrat pe 08.09.2026 in
+   `2026-12-31-pepita-listarea-isi-stampileaza-clipa.sql`). El e regula deplina: stampileaza orice
+   scriere, oricine ar fi scriitorul, si numai cand randul chiar s-a schimbat.
+
+   ⚠ SI PRIMA NU SE ARUNCA, desi a doua o cuprinde. Scrierea din cod care numeste campul e ce
+   citeste omul cand se intreaba de ce sare `<LastMod>`; iar daca declansatorul ar fi vreodata
+   scos dintr-o consola, plasa de sursa e singura care mai vorbeste despre intentie.
 */
 
 test("⚠ orice scriere in `pepita_listari` pune si `actualizat_la`", () => {
@@ -219,6 +227,25 @@ test("⚠ orice scriere in `pepita_listari` pune si `actualizat_la`", () => {
     });
   }
   assert.ok(scrieri >= 2, `gasite doar ${scrieri} scrieri: plasa n-are pe cine cadea`);
+});
+
+test("⚠ si baza o cere, nu doar codul: declansatorul de pe `pepita_listari`", () => {
+  /*
+   * ⚠ SE CITESTE DIN BASELINE, adica din schema pe care o are Git. Ca productia e la fel o spune
+   * jobul „schema din Git = productie"; aici se apara doar ca declansatorul nu dispare din schema
+   * fara ca cineva sa observe.
+   */
+  /* ⚠ `String.fromCharCode(10)`, nu un sir cu backslash: escaparea se pierde pe drumul
+     dintre unealta si fisier, si atunci sirul ar contine un RAND ADEVARAT.
+     S-a intamplat chiar la scrierea probei asteia. */
+  const RAND_NOU = String.fromCharCode(10);
+  const baseline = readFileSync("migrations/000-schema-baseline.sql", "utf8");
+  const linie = baseline.split(RAND_NOU).find((l) => l.includes("pepita_listari_stampileaza_clipa"));
+  assert.ok(linie, "declansatorul nu mai e in schema: `actualizat_la` se bizuie iar pe memoria scriitorilor");
+  assert.match(linie, /BEFORE UPDATE ON public\.pepita_listari/);
+  /* ⚠ Fara clauza asta, un upsert care rescrie aceleasi valori ar impinge `<LastMod>` degeaba,
+     si Pepita ar reciti tot catalogul la fiecare apasare. */
+  assert.match(linie, /WHEN \(\(old\.\* IS DISTINCT FROM new\.\*\)\)/);
 });
 
 test("⚠ a doua apasare peste acelasi catalog nu cade: upsertul are TINTA de conflict", () => {

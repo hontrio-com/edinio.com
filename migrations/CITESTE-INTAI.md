@@ -15,6 +15,30 @@ Toate fisierele cu data din dosarul asta sunt ISTORIC si NU se reaplica.**
 Atat. Asta e exact ce face si CI-ul (`.github/workflows/ci.yml`, jobul de
 restaurare, pe un PostgreSQL 17 curat).
 
+### ⚠ Si pana pe 08.09.2026 cei doi pasi NU MERGEAU
+
+Baseline-ul emite sectiunea FUNCTII **inaintea** sectiunii TABELE. Din 166 de
+functii, exact una numea un tip de tabela in semnatura:
+
+```
+create or replace function public.edinio_revendica_conversii(limita integer)
+returns setof public.edinio_conversion_outbox
+```
+
+Tabela nu exista inca in clipa aceea, deci aplicarea cadea. Si nu ajuta
+`set check_function_bodies = off` din antet: acolo se verifica CORPUL, iar aici
+pica TIPUL DE INTOARCERE, care se rezolva oricum.
+
+Jobul de CI striga asta de saptamani — pasul „2 functii", iesirea 3 — pe fiecare
+commit, inclusiv pe cele vechi. Nimeni nu se uitase la el.
+
+Reparat in `2026-12-30-conversiile-isi-scriu-coloanele.sql`: semnatura isi scrie
+coloanele, corpul ramane identic. **Regula, de acum: nicio functie din `public`
+sau `privat` nu are voie sa numeasca o tabela sau o vedere in semnatura** — nici
+la intoarcere, nici la argumente. Cine are nevoie de forma unei tabele o scrie cu
+`returns table (...)`. Paza e `src/lib/supabase/baza-se-poate-reface.test.ts`,
+care scaneaza baseline-ul si cade daca reapare.
+
 ## De ce nu se aplica si celelalte fisiere
 
 Pentru ca `000-schema-baseline.sql` **le contine deja**. E un dump al productiei,

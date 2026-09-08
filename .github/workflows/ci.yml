@@ -80,17 +80,28 @@ jobs:
           set -o pipefail
           npm ci --loglevel verbose 2>&1 | tee /tmp/npm-ci-1.log             || (sleep 20 && npm ci --loglevel verbose 2>&1 | tee /tmp/npm-ci-2.log)
 
-      # ── Ce a picat, citibil FARA drepturi de admin pe repo ─────────────────
+      # ── Ce a picat, citibil FARA NICIUN DREPT PE REPO ──────────────────────
       #
       # `npm ci` pica pe Linux nedeterminist de saptamani, si toate ipotezele
       # ieftine au fost excluse cu probe (lockfile nesincronizat, lockfile stricat,
       # dependinte optionale, pachete legate de platforma, scripturi de instalare,
-      # cache). Ce lipsea era chiar CAUZA din log — iar logurile unui job se pot
-      # citi doar cu drepturi de admin, si API-ul raspunde 403.
+      # cache). Ce lipsea era chiar CAUZA din log.
       #
-      # Deci logul iese pe DOUA cai care nu cer nimic: ultimele randuri intra in
-      # rezumatul rularii, iar logul intreg pleaca drept artefact descarcabil.
-      # Fara asta, urmatoarea cadere e la fel de oarba ca toate cele dinainte.
+      # ⚠ SI TEXTUL DE AICI SPUNEA CA CELE DOUA CAI DE MAI JOS „nu cer nimic". Era FALS,
+      # si de aia diagnosticul a stat scris saptamani intregi fara ca cineva sa-l poata
+      # citi. Masurat pe 08.09.2026, fara token:
+      #
+      #     GET /repos/{o}/{r}/actions/jobs/{id}/logs      → 403 „Must have admin rights"
+      #     GET /repos/{o}/{r}/actions/artifacts/{id}/zip  → 401
+      #     rezumatul rularii ($GITHUB_STEP_SUMMARY)       → doar din interfata, autentificat
+      #
+      # Ce se citeste CU ADEVARAT fara nimic sunt ADNOTARILE:
+      #
+      #     GET /repos/{o}/{r}/commits/{sha}/check-runs
+      #     GET /repos/{o}/{r}/check-runs/{id}/annotations   → 200, cu titlu si mesaj
+      #
+      # Deci logul pleaca acum si pe calea aia. Rezumatul si artefactul raman: pentru
+      # cine ARE drepturi sunt mai comode decat o adnotare, si nu costa nimic.
       - name: Ce a picat la npm ci
         if: steps.instalare_stricta.outcome == 'failure'
         # ⚠ `continue-on-error`: pasii astia stau INTRE `npm ci` picat si instalarea
@@ -99,6 +110,20 @@ jobs:
         # care il salveaza — diagnosticul ar deveni cauza avariei pe care o descrie.
         continue-on-error: true
         run: |
+          # ⚠ ORDINEA ESCAPARILOR NU E LA VOIA INTAMPLARII: intai `%` devine `%25`, abia
+          # apoi randurile devin `%0A`. Pe dos, fiecare `%0A` proaspat s-ar fi transformat
+          # in `%250A`, si adnotarea ar fi iesit un sir de gunoi — adica inca un diagnostic
+          # care exista si nu se poate citi.
+          adnoteaza() {
+            printf '::error title=%s::' "$1"
+            sed -e 's/%/%25/g' "$2" | tail -c 6000 | awk '{ printf "%s%%0A", $0 }'
+            echo
+          }
+          for f in /tmp/npm-ci-1.log /tmp/npm-ci-2.log; do
+            [ -f "$f" ] || continue
+            adnoteaza "npm ci a picat ($f)" "$f"
+          done
+          echo "::notice title=Unelte::Node $(node -v) · npm $(npm -v) · $(uname -srm)"
           {
             echo "### Cauza caderii \`npm ci\`"
             echo
@@ -152,11 +177,27 @@ jobs:
       - name: Arborele instalat e tot cel din lockfile
         if: steps.instalare_stricta.outcome == 'failure'
         run: |
-          if ! git diff --exit-code -- package-lock.json; then
-            echo "::error title=Lockfile rescris::\`npm install\` a schimbat \`package-lock.json\`, deci arborele instalat NU e cel din lockfile. Typecheck, teste si build ar masura altceva decat pleaca in productie." >&2
-            exit 1
+          if git diff --quiet -- package-lock.json; then
+            echo "\`package-lock.json\` neatins de \`npm install\`: arborele instalat e cel din lockfile." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
-          echo "\`package-lock.json\` neatins de \`npm install\`: arborele instalat e cel din lockfile." >> "$GITHUB_STEP_SUMMARY"
+          # ⚠ SI SE SPUNE CE ANUME S-A SCHIMBAT.
+          #
+          # Pana pe 08.09.2026 pasul asta spunea doar CA lockfile-ul a fost rescris. Dar
+          # tocmai continutul rescrierii e diagnosticul cautat de saptamani: ce a rezolvat
+          # `npm install` pe Linux altfel decat scrie in lockfile e chiar raspunsul la „de
+          # ce pica `npm ci`". Iar el statea in log, adica exact acolo unde nu ajunge
+          # nimeni fara drepturi de admin. Adnotarea se citeste fara niciun token.
+          git diff --stat -- package-lock.json
+          git diff -U0 -- package-lock.json > /tmp/lock.diff
+          {
+            printf '::error title=Lockfile rescris::'
+            printf '`npm install` a schimbat `package-lock.json`, deci arborele instalat NU e cel din lockfile.%%0A'
+            printf 'Typecheck, teste si build ar masura altceva decat pleaca in productie.%%0A%%0A'
+            sed -e 's/%/%25/g' /tmp/lock.diff | head -c 6000 | awk '{ printf "%s%%0A", $0 }'
+            echo
+          } >&2
+          exit 1
 
       # ⚠ Verdele jobului nu are voie sa spuna ceva ce nu s-a verificat.
       #

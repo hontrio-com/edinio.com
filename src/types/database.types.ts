@@ -4144,13 +4144,15 @@ export type Database = {
         ]
       }
       pepita_articole: {
+        /* ⚠ `product_id` e `null` cand produsul a fost STERS din Edinio: cheia straina e
+           `on delete set null`, iar randul ramane fiindca articolul a ramas la Pepita. */
         Row: {
           articol_id: string
           business_id: string
           combinatie: string
           creat_la: string
           id: string
-          product_id: string
+          product_id: string | null
         }
         Insert: {
           articol_id: string
@@ -4158,7 +4160,7 @@ export type Database = {
           combinatie?: string
           creat_la?: string
           id?: string
-          product_id: string
+          product_id?: string | null
         }
         Update: {
           articol_id?: string
@@ -4166,7 +4168,7 @@ export type Database = {
           combinatie?: string
           creat_la?: string
           id?: string
-          product_id?: string
+          product_id?: string | null
         }
         Relationships: [
           {
@@ -6002,6 +6004,11 @@ export type Database = {
       /* Cele doua functii `security definer` de langa blog: `users_profile` NU tine
          adresa de email — ea sta in `auth.users`, la care PostgREST nu ajunge. */
       cont_dupa_email: { Args: { p_email: string }; Returns: { id: string; rol: string }[] }
+      /* ⚠ NU MAI E `setof edinio_conversion_outbox`, si de aceea nu mai are `SetofOptions`.
+         Semnatura isi scrie coloanele fiindca un tip de TABELA in semnatura facea ca baza sa nu
+         se mai poata reface din baseline: functiile se emit inaintea tabelelor. Coloanele si
+         ordinea lor sunt identice cu ale tabelei, deci raspunsul e acelasi.
+         Vezi `migrations/2026-12-30-conversiile-isi-scriu-coloanele.sql`. */
       edinio_revendica_conversii: {
         Args: { limita: number }
         Returns: {
@@ -6016,13 +6023,8 @@ export type Database = {
           sarcina: Json
           trimis_la: string | null
           ultima_eroare: string | null
+          vizitator: string | null
         }[]
-        SetofOptions: {
-          from: "*"
-          to: "edinio_conversion_outbox"
-          isOneToOne: false
-          isSetofReturn: true
-        }
       }
       redactorii_blogului: {
         Args: Record<string, never>

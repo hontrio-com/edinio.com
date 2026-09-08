@@ -154,7 +154,13 @@ export async function leagaLiniile(
    * nu se mai potriveste. Linia ajungea in carantina fara sa stim macar despre ce produs e
    * vorba, deci comerciantul nu avea de unde sa inceapa.
    */
-  const evidenta = new Map<string, { product_id: string; combinatie: string }>();
+  /*
+   * ⚠ `product_id` POATE FI `null`, si asta NU e o scapare: cheia straina catre `products` e
+   * `on delete set null`, tocmai ca randul sa supravietuiasca stergerii produsului. Un `<Id>`
+   * plecat in feed ramane la Pepita orice am face noi, deci randul e singura dovada ca articolul
+   * e inca la vanzare acolo. Vezi `2027-01-01-pepita-articolul-ramane-orfan.sql`.
+   */
+  const evidenta = new Map<string, { product_id: string | null; combinatie: string }>();
   const codurile = [...new Set(linii.flatMap((l) => [l.sku, l.idPepita]).filter((x): x is string => !!x))];
   if (codurile.length > 0) {
     for (let i = 0; i < codurile.length; i += 200) {
@@ -162,7 +168,7 @@ export async function leagaLiniile(
         .from("pepita_articole").select("articol_id, product_id, combinatie")
         .eq("business_id", businessId).in("articol_id", codurile.slice(i, i + 200));
       if (error) throw error;
-      for (const r of (data ?? []) as { articol_id: string; product_id: string; combinatie: string }[]) {
+      for (const r of (data ?? []) as { articol_id: string; product_id: string | null; combinatie: string }[]) {
         evidenta.set(r.articol_id, { product_id: r.product_id, combinatie: r.combinatie });
       }
     }
@@ -170,7 +176,10 @@ export async function leagaLiniile(
 
   const productIds = [...new Set([
     ...idDupaLinie.filter((x) => x != null).map((x) => x!.productId),
-    ...[...evidenta.values()].map((v) => v.product_id),
+    /* ⚠ Orfanii se STRECOARA AICI. Un `null` ajuns in `.in("id", ...)` ar cere lui PostgREST un
+       produs cu identificatorul „null" si ar strica interogarea pentru TOATE liniile comenzii,
+       nu doar pentru cea orfana. */
+    ...[...evidenta.values()].map((v) => v.product_id).filter((x): x is string => !!x),
   ])];
 
   const dupaId = new Map<string, ProdusGasit>();
@@ -213,12 +222,26 @@ export async function leagaLiniile(
     const scris = (linie.sku ? evidenta.get(linie.sku) : undefined)
       ?? (linie.idPepita ? evidenta.get(linie.idPepita) : undefined);
 
-    const produs = (scris ? dupaId.get(scris.product_id) : undefined)
+    const produs = (scris?.product_id ? dupaId.get(scris.product_id) : undefined)
       ?? (desfacut ? dupaId.get(desfacut.productId) : undefined)
       ?? (linie.sku ? dupaSku.get(linie.sku) : undefined);
 
     if (!produs) {
-      nelegate.push(linie.sku ?? linie.idPepita ?? "(fara cod)");
+      /*
+       * ⚠ DOUA FELURI DE „NU S-A GASIT", si nu se spun la fel.
+       *
+       * Cand evidenta are randul dar `product_id` e gol, stim exact ce s-a intamplat: produsul a
+       * fost STERS din Edinio dupa ce `<Id>`-ul plecase in feed. Pana la
+       * `on delete set null` randul disparea odata cu produsul, deci si cazul asta ajungea la
+       * „cod necunoscut" — iar comerciantul nu avea de unde sa inceapa cautarea.
+       *
+       * Deosebirea conteaza fiindca leacul e altul: la un cod necunoscut se cauta greseala in
+       * potrivire, aici nu mai e nimic de potrivit si singurul lucru de facut e sa ceri Pepitei
+       * scoaterea articolului.
+       */
+      nelegate.push(scris && scris.product_id === null
+        ? `${linie.sku ?? "(fara cod)"} (produsul a fost șters din catalog${scris.combinatie ? `, varianta „${scris.combinatie}”` : ""})`
+        : linie.sku ?? linie.idPepita ?? "(fara cod)");
       legate.push({ linie, productId: null, variantTitle: null, nume: numeDeRezerva(linie) });
       continue;
     }

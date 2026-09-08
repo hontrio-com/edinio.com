@@ -74,7 +74,19 @@ export async function GET(req: NextRequest) {
      */
     .not("orders.status", "in", "(cancelled,refunded)")
     .is("orders.stoc_eliberat_la", null)
-    .order("primit_la")
+    /*
+     * ⚠ ROATA SE INVARTE PE `prelucrat_la`, NU PE `primit_la`.
+     *
+     * Un rand iese din multimea asta doar cand i se pune `stoc_marketplace_la`. Dar reprocesarea
+     * are verdicte care NU ating stocul dinadins: liniile care nu mai corespund cu ce ne-au
+     * trimis ei, sau o legatura pierduta. Ordonat dupa clipa sosirii, un asemenea rand e mereu
+     * primul si mananca la nesfarsit din cele 50 de locuri; cu 50 de astfel de randuri, cronul
+     * nu mai ajunge niciodata la comanda al carei stoc chiar a picat.
+     *
+     * `prelucrat_la` se scrie de fiecare trecere, ORICARE ar fi verdictul, deci randul atins
+     * trece la coada si lasa loc urmatorului.
+     */
+    .order("prelucrat_la", { ascending: true, nullsFirst: true })
     .limit(PE_TRECERE);
 
   if (error) {
@@ -85,16 +97,28 @@ export async function GET(req: NextRequest) {
   type Rand = { id: string; business_id: string; external_order_id: string; order_id: string };
   const randuri = (data ?? []) as unknown as Rand[];
 
-  /* Moneda magazinului se citeste o data pe magazin, nu o data pe comanda. */
-  const monede = new Map<string, string>();
-  async function monedaMagazinului(businessId: string): Promise<string> {
-    const stiuta = monede.get(businessId);
-    if (stiuta) return stiuta;
-    const { data: setari } = await admin
+  /*
+   * Moneda magazinului se citeste o data pe magazin, nu o data pe comanda.
+   *
+   * ⚠ O CITIRE CAZUTA NU DEVINE „RON". De moneda atarna carantina si rambursul; presupusa
+   * gresit, o comanda in forinti ar fi iesit din carantina ca si cum ar fi in lei. Cand nu se
+   * poate citi, comanda se lasa pentru trecerea urmatoare.
+   */
+  const monede = new Map<string, string | null>();
+  async function monedaMagazinului(businessId: string): Promise<string | null> {
+    if (monede.has(businessId)) return monede.get(businessId) ?? null;
+    const { data: setari, error: eSetari } = await admin
       .from("store_settings").select("currency").eq("business_id", businessId).maybeSingle();
-    const m = String((setari as { currency?: string } | null)?.currency ?? "RON").toUpperCase();
+    const m = eSetari ? null : String((setari as { currency?: string } | null)?.currency ?? "RON").toUpperCase();
     monede.set(businessId, m);
     return m;
+  }
+
+  /* ⚠ Randul atins trece la coada, oricare ar fi verdictul. Vezi ordonarea de mai sus. */
+  async function trecutPrin(id: string): Promise<void> {
+    await admin.from("pepita_comenzi")
+      .update({ prelucrat_la: new Date().toISOString() } as never)
+      .eq("id", id);
   }
 
   let reparate = 0;
@@ -103,9 +127,21 @@ export async function GET(req: NextRequest) {
 
   for (const r of randuri) {
     try {
+      const moneda = await monedaMagazinului(r.business_id);
+      if (moneda === null) {
+        picate++;
+        await logError({
+          action: "pepita/cron-stoc",
+          message: "moneda magazinului nu s-a putut citi; comanda se lasa pe trecerea urmatoare",
+          details: { externalId: r.external_order_id, orderId: r.order_id },
+          businessId: r.business_id, severity: "warning",
+        });
+        continue;
+      }
+
       const rezultat = await reproceseaza(
         admin,
-        { businessId: r.business_id, monedaMagazin: await monedaMagazinului(r.business_id) },
+        { businessId: r.business_id, monedaMagazin: moneda },
         r.external_order_id,
       );
 
@@ -116,6 +152,7 @@ export async function GET(req: NextRequest) {
          * nu para ca cronul le-a rezolvat, dar nu sunt esecuri de reincercat.
          */
         sarite++;
+        await trecutPrin(r.id);
         await logError({
           action: "pepita/cron-stoc",
           message: `reprocesarea a refuzat comanda: ${rezultat.mesaj}`,
@@ -126,17 +163,19 @@ export async function GET(req: NextRequest) {
       }
 
       if (rezultat.stocEsuat) {
+        /*
+         * ⚠ FARA AL DOILEA JURNAL. `reproceseaza` scrie deja unul „critical" cu raspunsul
+         * functiei din baza; inca unul aici ar fi doua alarme pentru acelasi esec, la fiecare
+         * zece minute.
+         */
         picate++;
-        await logError({
-          action: "pepita/cron-stoc",
-          message: "reincercarea consumului a picat",
-          details: { externalId: r.external_order_id, orderId: r.order_id },
-          businessId: r.business_id, severity: "critical",
-        });
+        await trecutPrin(r.id);
         continue;
       }
 
-      reparate++;
+      /* ⚠ „Reparate" inseamna „stocul chiar s-a facut", nu „trecerea n-a aruncat". */
+      if (rezultat.schimbat) reparate++;
+      else sarite++;
     } catch (e) {
       /*
        * ⚠ O comanda cazuta nu opreste trecerea. `reproceseaza` arunca la o pana de baza, iar

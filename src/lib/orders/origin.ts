@@ -195,7 +195,15 @@ export function claseSursa(origin: OrderOrigin): string {
  * inseamna lei — asa sunt toate comenzile din magazin si toate cele vechi.
  */
 export function monedaComenzii(raw: unknown): string | null {
-  const src = asSource(raw) as ({ currency?: string } | null);
+  const src = asSource(raw) as ({ currency?: string; moneda_necitita?: unknown } | null);
+  /*
+   * ⚠ SI CAND N-AM PUTUT CITI CODUL. Marketplace-ul a trimis o moneda pe care n-am inteles-o;
+   * `currency` de pe comanda e cea mai buna presupunere, si poate fi chiar „RON". Fara semnul
+   * asta, lista arata o comanda obisnuita — desi cele doua porti de bani o refuza deja:
+   * rambursul nu se precompleteaza si factura automata nu pleaca. Comerciantul ar fi cautat
+   * degeaba de ce nu merge.
+   */
+  if (src?.moneda_necitita === true) return "?";
   const c = src?.currency;
   return typeof c === "string" && c.toUpperCase() !== "RON" ? c.toUpperCase() : null;
 }

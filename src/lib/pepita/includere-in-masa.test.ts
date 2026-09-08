@@ -220,9 +220,17 @@ test("⚠ a doua apasare peste acelasi catalog nu cade: upsertul are TINTA de co
    */
   return (async () => {
     const produse = Array.from({ length: 3 }, (_, i) => idProdus(i));
-    const { db } = faceBaza({ produse });
+    const { db, scrise } = faceBaza({ produse });
     await includeToateActive(db, BID, null, ACUM);
+
+    /*
+     * ⚠ A DOUA APASARE TREBUIE SA CHEME CHIAR UPSERTUL. Fara randul asta, dedublarea sare toate
+     * randurile, `upsert` nu se cheama deloc, si proba ar fi ramas verde chiar cu tinta de
+     * conflict stearsa: paza ar fi fost tinuta de cu totul alta proba.
+     */
+    (db as unknown as { __scoate: (id: string) => void }).__scoate(produse[0]);
     await includeToateActive(db, BID, null, ACUM);
+    assert.equal(scrise.length, 4, "a doua apasare n-a scris nimic: proba nu exercita paza");
   })();
 });
 

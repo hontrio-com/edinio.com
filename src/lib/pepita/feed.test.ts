@@ -47,6 +47,8 @@ interface Optiuni {
   cateCategorii?: number;
   /** Scrierea evidentei articolelor trimise cade. Feedul NU are voie sa se rupa din asta. */
   cadeEvidenta?: boolean;
+  /** Scrierea stampilei de configurare cade. Feedul NU are voie sa se rupa din asta. */
+  cadeStampila?: boolean;
   config?: Record<string, unknown>;
   /** De la a cata pagina de produse cade citirea. `null` = niciodata. */
   cadeLaPagina?: number | null;
@@ -81,7 +83,19 @@ function faceBaza(o: Optiuni = {}) {
   /* Ce a scris feedul in evidenta articolelor trimise. */
   const scrise: { product_id: string; combinatie: string; articol_id: string }[] = [];
 
-  const raspunde = (tabela: string, filtre: [string, unknown][], interval: [number, number] | null, corp: unknown = null, coloane?: string, optiuni?: { onConflict?: string }) => {
+  const raspunde = (tabela: string, filtre: [string, unknown][], interval: [number, number] | null, corp: unknown = null, coloane?: string, optiuni?: { onConflict?: string }, dupa?: string | null, cate?: number | null) => {
+    /*
+     * ⚠ Plimbarea pe CHEIE se aplica cu adevarat: cu `gt` si `limit` no-op, mutarea feedului
+     * de pe offset pe cheie ar fi trecut neprobata, si un `break` pus in loc de conditie ar fi
+     * ramas verde.
+     */
+    const felie = <T>(v: T[], cheia?: (x: T) => string): T[] => {
+      let r = v;
+      if (dupa != null && cheia) r = r.filter((x) => cheia(x) > dupa);
+      if (interval) r = r.slice(interval[0], interval[1] + 1);
+      if (cate != null) r = r.slice(0, cate);
+      return r;
+    };
     if (tabela === "businesses") {
       return { data: doar({ id: BID, slug: "magazin", custom_domain: null, store_name: "Magazin", business_name: "SRL", is_published: true, updated_at: o.magazinAtinsLa ?? "2026-08-01T10:00:00.000Z" }, coloane), error: null };
     }
@@ -114,11 +128,11 @@ function faceBaza(o: Optiuni = {}) {
           ? (o.categoriiAtinseLa ?? "2026-08-01T10:00:00.000Z")
           : "2026-08-01T10:00:00.000Z",
       }));
-      const [de, pana] = interval ?? [0, 999];
-      return { data: toate.slice(de, pana + 1).map((c) => doar(c, coloane)), error: null };
+      return { data: felie(toate, (c) => c.id).map((c) => doar(c, coloane)), error: null };
     }
     if (tabela === "pepita_listari") {
-      return { data: (o.listari ?? []).map((r) => doar(r as unknown as Record<string, unknown>, coloane)), error: null };
+      const toate = [...(o.listari ?? [])].sort((a, c) => (a.product_id < c.product_id ? -1 : 1));
+      return { data: felie(toate, (r) => r.product_id).map((r) => doar(r as unknown as Record<string, unknown>, coloane)), error: null };
     }
     if (tabela === "pepita_articole") {
       if (o.cadeEvidenta) return { data: null, error: { code: "42P01", message: "relation does not exist" } };
@@ -139,10 +153,9 @@ function faceBaza(o: Optiuni = {}) {
       if (o.cadeLaPagina && pagini >= o.cadeLaPagina) {
         return { data: null, error: { code: "57014", message: "citirea a cazut" } };
       }
-      const [de, pana] = interval ?? [0, 999];
       /* ⚠ Filtrul pe magazin chiar se aplica, ca proba de izolare sa insemne ceva. */
       const aleLui = produse.filter(() => filtre.some(([k, v]) => k === "business_id" && v === BID));
-      return { data: aleLui.slice(de, pana + 1).map((p) => doar(p as unknown as Record<string, unknown>, coloane)), error: null };
+      return { data: felie(aleLui, (p) => p.id).map((p) => doar(p as unknown as Record<string, unknown>, coloane)), error: null };
     }
     return { data: null, error: null };
   };
@@ -154,16 +167,20 @@ function faceBaza(o: Optiuni = {}) {
     let corp: unknown = null;
     let coloane: string | undefined;
     let optiuni: { onConflict?: string } | undefined;
+    let dupa: string | null = null;
+    let cate: number | null = null;
     const b: any = {
       select: (c?: string) => { coloane = c; return b; },
       upsert: (p: unknown, opt?: { onConflict?: string }) => { corp = p; optiuni = opt; return b; },
       eq: (k: string, v: unknown) => { filtre.push([k, v]); return b; },
-      in: () => b, is: () => b, not: () => b, neq: () => b, order: () => b, limit: () => b,
+      in: () => b, is: () => b, not: () => b, neq: () => b, order: () => b,
+      gt: (_k: string, v: string) => { dupa = v; return b; },
+      limit: (n: number) => { cate = n; return b; },
       range: (a: number, c: number) => { interval = [a, c]; return b; },
-      maybeSingle: () => Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane, optiuni)),
-      single: () => Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane, optiuni)),
+      maybeSingle: () => Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane, optiuni, dupa, cate)),
+      single: () => Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane, optiuni, dupa, cate)),
       then: (bun: (v: unknown) => unknown, rau?: (e: unknown) => unknown) =>
-        Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane, optiuni)).then(bun, rau),
+        Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane, optiuni, dupa, cate)).then(bun, rau),
     };
     return b;
   };
@@ -173,6 +190,19 @@ function faceBaza(o: Optiuni = {}) {
     from: (t: string) => builder(t),
     rpc: (nume: string, args: Record<string, unknown>) => {
       if (nume === "jsonb_merge_config") {
+        if (o.cadeStampila) return Promise.resolve({ data: null, error: { message: "randul e incuiat" } });
+        /*
+         * ⚠ COLOANA SI MAGAZINUL CHIAR SE VERIFICA. Imbinat orbeste, un mutant care scrie in
+         * `olx_config` sau pe alt magazin trecea toate probele de `<LastMod>`, desi in productie
+         * nimic nu s-ar fi pastrat: amprenta ar fi fost mereu lipsa, stampila s-ar fi rescris la
+         * fiecare citire, si data ar fi devenit „acum" pe tot catalogul — chiar defectul reparat.
+         */
+        if (args.p_column !== "pepita_config") {
+          return Promise.resolve({ data: null, error: { message: `coloana gresita: ${String(args.p_column)}` } });
+        }
+        if (args.p_business_id !== BID) {
+          return Promise.resolve({ data: null, error: { message: "alt magazin" } });
+        }
         const petic = args.p_patch as Record<string, unknown>;
         Object.assign(configCurent, petic);
         stampile.push(petic);
@@ -494,4 +524,92 @@ test("⚠ o schimbare de COTA DE TVA urca si ea `LastMod`: schimba pretul brut d
   const amprenteDiferite = (db as unknown as { __config: Record<string, unknown> }).__config.feed_amprenta
     !== (db2 as unknown as { __config: Record<string, unknown> }).__config.feed_amprenta;
   assert.ok(amprenteDiferite, "cota de TVA nu intra in amprenta, deci o schimbare de pret nu urca data");
+});
+
+test("⚠ feedul se plimba pe CHEIE: un produs inserat in timpul citirii nu SARE niciun produs", async () => {
+  /*
+   * `products.id` e uuid aleator, iar `.range()` numara randurile DUPA ordonare: un import care
+   * insereaza un id mai mic muta fereastra cu unu si un produs de la granita paginii lipseste
+   * din feedul trimis lui Pepita. Pe deasupra, articolele lui raman in evidenta si sunt numarate
+   * ORFANE la urmatoarea verificare, iar comerciantului i se spune sa ceara scoaterea lor.
+   */
+  /* ⚠ PESTE o pagina (500): sub atat, catalogul incape intr-o citire si mutantul nu se vede. */
+  const multe = Array.from({ length: 700 }, (_, i) => produs(i * 2 + 1));
+  const db = faceBaza({ config: TOATE, produse: multe });
+
+  /* Dupa prima pagina apare un produs cu id mai mic decat fereastra curenta. */
+  let paginiCitite = 0;
+  const originalFrom = (db as unknown as { from: (t: string) => unknown }).from;
+  (db as unknown as { from: (t: string) => unknown }).from = (t: string) => {
+    if (t === "products") {
+      paginiCitite += 1;
+      if (paginiCitite === 1) multe.unshift(produs(0));
+    }
+    return (originalFrom as (x: string) => unknown)(t);
+  };
+
+  const xml = await feed(db);
+  assert.ok(paginiCitite >= 2, "catalogul a incaput intr-o citire: proba nu masoara nimic");
+  for (const p of multe) {
+    assert.ok(xml.includes(`<Id>${p.id}</Id>`), `produsul ${p.id} lipseste din feed`);
+  }
+});
+
+test("⚠ si listarile se citesc pe cheie: un rand sarit scoate produsul din feed", async () => {
+  /*
+   * Pe modul „doar cele alese", un rand de listare sarit inseamna un produs care nu mai pleaca.
+   * Pe modul „toate", inseamna un produs care isi pierde pretul propriu si stocul de siguranta.
+   */
+  const multe = Array.from({ length: 1400 }, (_, i) => produs(i * 2 + 1));
+  const listari = multe.map((p) => ({ product_id: p.id, inclus: true, safety_stock: null, pret_override: null, actualizat_la: null }));
+  const xml = await feedAsezat(faceBaza({ produse: multe, listari }));
+
+  for (const p of multe.slice(-3)) {
+    assert.ok(xml.includes(`<Id>${p.id}</Id>`), `produsul ${p.id} a fost scos din feed de o listare sarita`);
+  }
+});
+
+test("⚠ o stampila care nu se poate scrie NU rupe feedul", async () => {
+  /*
+   * Stampila e o imbunatatire a lui `<LastMod>`, nu o parte din feed. Fara `try/catch`, o pana a
+   * lui `jsonb_merge_config` (randul incuiat de o salvare de setari, magazin fara rand in
+   * `privat.store_settings`) ar fi facut `pregateste` sa arunce, iar ruta ar fi raspuns 503 in
+   * loc de XML — pentru ORICE magazin, la fiecare citire.
+   */
+  const db = faceBaza({ config: TOATE, produse: [produs(1), produs(2)], cadeStampila: true });
+  const xml = await feed(db);
+
+  assert.match(xml, /<\/Catalog>/, "feedul s-a rupt");
+  assert.equal((xml.match(/<Product>/g) ?? []).length, 2);
+  /* Fara stampila pastrata, pragul e „acum": proaspat, adica directia care nu strica nimic. */
+  assert.ok((lastMod(xml) ?? 0) > secunde("2026-09-08T00:00:00.000Z"));
+});
+
+test("⚠ FIECARE camp al amprentei conteaza: schimbat, stampila se rescrie", async () => {
+  /*
+   * Amprenta are unsprezece valori. Probele fixau doua, deci scoaterea oricareia dintre celelalte
+   * trecea verde — iar cea mai grava e strategia de pret: schimbata, TOATE preturile din feed se
+   * schimba, dar `<LastMod>` n-ar mai fi urcat pe niciun produs, si Pepita ar fi vandut la
+   * preturile vechi pana cand cineva atinge produsele unul cate unul.
+   */
+  const deBaza = { mod_includere: "toate" } as Record<string, unknown>;
+  const amprenta = async (config: Record<string, unknown>, tva?: number) => {
+    const db = faceBaza({ config, produse: [produs(1)], tva });
+    await feed(db);
+    return (db as unknown as { __config: Record<string, unknown> }).__config.feed_amprenta as string;
+  };
+
+  const referinta = await amprenta(deBaza);
+  const variante: [string, Record<string, unknown>, number | undefined][] = [
+    ["strategia de pret", { ...deBaza, strategie_pret: { fel: "procent", valoare: 10 } }, undefined],
+    ["stocul de siguranta", { ...deBaza, safety_stock: 3 }, undefined],
+    ["termenul de livrare", { ...deBaza, shipping_delay: 4 }, undefined],
+    ["pretul transportului", { ...deBaza, shipping_price: 19.99 }, undefined],
+    ["garantia", { ...deBaza, garantie: { tip: "Year", durata: 2 } }, undefined],
+    ["modul de includere", { ...deBaza, mod_includere: "selectate" }, undefined],
+    ["cota de TVA", deBaza, 11],
+  ];
+  for (const [nume, config, tva] of variante) {
+    assert.notEqual(await amprenta(config, tva), referinta, `${nume} nu intra in amprenta`);
+  }
 });

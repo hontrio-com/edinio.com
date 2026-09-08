@@ -514,7 +514,7 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
     Ce a ramas neterminat dupa o rulare oprita la mijloc. Toastul dispare in cateva secunde,
     iar o includere pe jumatate facuta arata exact ca una intreaga: asta ramane pe ecran.
   */
-  const [ramas, setRamas] = useState<{ facut: number; dinCate: number | null; dupa: string | null } | null>(null);
+  const [ramas, setRamas] = useState<{ facut: number; dinCate: number | null } | null>(null);
 
   const incarca = async (p = pagina, termen = cauta) => {
     setIncarc(true);
@@ -574,14 +574,15 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
             if (!confirm("Toate produsele active din magazin vor fi incluse în feedul Pepita. Continui?")) return;
             setLucrez(true);
             /*
-              ⚠ SE RELUA DE LA CAP. Cursorul traia doar in bucla, deci a doua apasare pornea de
-              la zero, iar avertismentul care promitea „se reia de unde a rămas" mintea. Nimic
-              nu se strica (upsertul e idempotent), dar un catalog mare se scria a doua oara
-              intreg. Acum cursorul supravietuieste in `ramas`.
+              ⚠ SE IA MEREU DE LA CAP, si asta e alegerea buna acum.
+              Un cursor pastrat intre apasari ar sari produsele aparute intre timp: fila poate
+              sta deschisa ore, iar un import care se termina intre timp adauga produse cu
+              id-uri mai mici decat cursorul. Iar reluarea de la zero nu mai costa aproape nimic:
+              serverul citeste ce e deja in feed si scrie DOAR ce se schimba.
             */
-            let facut = ramas?.facut ?? 0;
-            let cursor: string | null = ramas?.dupa ?? null;
-            let dinCate: number | null = ramas?.dinCate ?? null;
+            let facut = 0;
+            let cursor: string | null = null;
+            let dinCate: number | null = null;
             setRamas(null);
             try {
               /*
@@ -595,7 +596,7 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
                 const r = await includeToateProdusePepita(businessId, cursor);
                 if ("error" in r) {
                   toast.error(`${r.error} S-au inclus ${facut} produse până aici.`);
-                  setRamas({ facut, dinCate, dupa: cursor });
+                  setRamas({ facut, dinCate });
                   break;
                 }
                 facut += r.scrise;
@@ -607,7 +608,7 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
               void incarca(pagina, cauta);
             } catch {
               toast.error(`Cererea nu a ajuns. S-au inclus ${facut} produse până aici.`);
-              setRamas({ facut, dinCate, dupa: cursor });
+              setRamas({ facut, dinCate });
             } finally { setLucrez(false); setProgres(null); }
           }}
         >
@@ -620,8 +621,8 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
       {ramas && (
         <Callout variant="warning" icon={AlertTriangle}>
           S-au inclus {ramas.facut}{ramas.dinCate ? ` din ${ramas.dinCate}` : ""} produse, apoi
-          includerea s-a oprit. Apasă din nou pe butonul de includere: se reia de unde a rămas,
-          fără să scrie de două ori.
+          includerea s-a oprit. Apasă din nou: o ia de la început, dar sare peste ce e deja în
+          feed, deci nu rescrie nimic degeaba.
         </Callout>
       )}
 
@@ -741,10 +742,18 @@ function Catalog({ businessId }: { businessId: string }) {
                   feedul nu are cum să spună „scoate produsul ăsta".
                 */}
                 <p className="text-[11px] text-muted-foreground">
-                  De obicei asta înseamnă că ai redenumit sau ai șters o variantă. Articolele
-                  vechi rămân la Pepita cu ultimul preț și ultimul stoc trimise, și se pot vinde
-                  în continuare, iar noi nu le putem retrage din feed. Verifică-le întâi în
-                  Pepita Admin, iar pe cele care chiar nu mai există cere-le lor să le scoată.
+                  {/*
+                    ⚠ CIFRA AMESTECA TREI CAUZE, deci textul nu mai afirma una singura. Un articol
+                    iese din feed si cand varianta a fost redenumita sau ștearsă, si cand produsul
+                    a fost dezactivat, dar SI cand produsul are o eroare care îl oprește: acela e
+                    în lista de mai jos și se repară, nu se cere scos de la Pepita.
+                  */}
+                  Se întâmplă când ai redenumit sau ai șters o variantă, când ai dezactivat
+                  produsul, dar și când un produs are o eroare care îl oprește din feed: pe
+                  acelea le vezi mai jos și se repară aici. Articolele rămase la Pepita păstrează
+                  ultimul preț și ultimul stoc trimise și se pot vinde în continuare, iar noi nu
+                  le putem retrage din feed: verifică-le întâi, iar pe cele care chiar nu mai
+                  există cere-le celor de la Pepita să le scoată.
                   {r.exempleOrfane.length > 0 && ` Primele: ${r.exempleOrfane.slice(0, 5).join(", ")}.`}
                 </p>
               </div>

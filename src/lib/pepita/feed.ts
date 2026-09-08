@@ -108,23 +108,35 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
    * fi iesit gresite sau goale, fara nicio eroare.
    */
   const categorii: RandCategorie[] = [];
-  for (let de = 0; ; de += 1000) {
-    const { data, error: eCat } = await admin
+  let dupaCategorie: string | null = null;
+  for (;;) {
+    let qc = admin
       .from("categories").select("id, name, parent_id, updated_at")
-      .eq("business_id", businessId).order("id").range(de, de + 999);
+      .eq("business_id", businessId).order("id").limit(1000);
+    if (dupaCategorie) qc = qc.gt("id", dupaCategorie);
+    const { data, error: eCat } = await qc;
     if (eCat) throw eCat;
     const randuri = (data ?? []) as (RandCategorie & { updated_at: string | null })[];
+    if (randuri.length === 0) break;
+    dupaCategorie = randuri[randuri.length - 1].id;
     categorii.push(...randuri);
     if (randuri.length < 1000) break;
   }
 
+  /* ⚠ Pe cheie, ca produsele: un rand sarit de o fereastra mutata ar scoate tacut produsul din
+     feed pe modul „doar cele alese", sau i-ar pierde pretul propriu pe modul „toate". */
   const listari = new Map<string, RandListare>();
-  for (let de = 0; ; de += 1000) {
-    const { data, error } = await admin
+  let dupaListare: string | null = null;
+  for (;;) {
+    let ql = admin
       .from("pepita_listari").select("product_id, inclus, safety_stock, pret_override, actualizat_la")
-      .eq("business_id", businessId).order("product_id").range(de, de + 999);
+      .eq("business_id", businessId).order("product_id").limit(1000);
+    if (dupaListare) ql = ql.gt("product_id", dupaListare);
+    const { data, error } = await ql;
     if (error) throw error;
     const randuri = (data ?? []) as RandListare[];
+    if (randuri.length === 0) break;
+    dupaListare = randuri[randuri.length - 1].product_id;
     for (const r of randuri) listari.set(r.product_id, r);
     if (randuri.length < 1000) break;
   }
@@ -210,7 +222,7 @@ async function stampilaConfigurarii(
     setari.vat_enabled === true,
     Number(setari.vat_rate ?? 0),
     setari.prices_include_vat !== false,
-    String(setari.currency ?? ""),
+    /* ⚠ `store_settings.currency` NU intra: in XML pleaca moneda PIETEI Pepita, nu a magazinului. */
     config.piata,
     config.strategie_pret,
     config.safety_stock,
@@ -265,11 +277,23 @@ export async function* scrieFeed(
   /* Ce s-a trimis in pagina curenta, scris in baza dupa fiecare pagina. */
   const trimise: ArticolTrimis[] = [];
 
-  for (let de = 0; ; de += PAGINA) {
-    const { data, error } = await admin
+  /*
+   * ⚠ PLIMBARE PE CHEIE, nu pe offset. `products.id` e uuid aleator, iar `.range()` numara
+   * randurile DUPA ordonare: un import care ruleaza in acelasi timp si insereaza un produs cu
+   * id mai mic muta fereastra si SARE un produs. Aici asta inseamna un produs care lipseste din
+   * feedul trimis lui Pepita — si, pe deasupra, articolele lui raman in evidenta si sunt
+   * numarate ORFANE la urmatoarea verificare.
+   *
+   * Aceeasi lectie e scrisa la `includeToateActive` si la `verificaProdusePepita`.
+   */
+  let dupaId: string | null = null;
+  for (;;) {
+    let q = admin
       .from("products").select(COLOANE_PRODUS)
       .eq("business_id", businessId).eq("is_active", true)
-      .order("id").range(de, de + PAGINA - 1);
+      .order("id").limit(PAGINA);
+    if (dupaId) q = q.gt("id", dupaId);
+    const { data, error } = await q;
     /*
      * ⚠ SE ARUNCA. Fluxul se rupe, `</Catalog>` nu se mai scrie, iar Pepita
      * primeste XML invalid. E raspunsul corect: alternativa ar fi un feed valid
@@ -279,6 +303,7 @@ export async function* scrieFeed(
 
     const produse = (data ?? []) as unknown as (ProdusPepita & { is_active: boolean })[];
     if (produse.length === 0) break;
+    dupaId = produse[produse.length - 1].id;
 
     const alese = produse.filter((p) => inclus(p, pre));
     if (alese.length > 0) {

@@ -23,8 +23,13 @@ const LEGATURA = " | ";
  *
  * ⚠ NU E MARGINEA COLOANEI: coloana e `text`, deci incape orice. E marginea a ceea ce se poate
  * CITI de un om intr-o lista, si de aceea ce nu incape se arunca INTREG, nu se taie.
+ *
+ * ⚠ SI E ALEASA SA INCAPA TOATE MOTIVELE DEODATA. Lista de coduri isi ia cel mult
+ * `LOC_PENTRU_CODURI`, iar celelalte trei (nelivrabila, moneda, stoc) au impreuna sub trei sute
+ * de semne. Stramtata, prima aruncata ar fi ultima din sir — adesea chiar cea de STOC, fara de
+ * care cronul nu mai recunoaste randul si comanda ramane in carantina pe vecie.
  */
-const MAX = 500;
+const MAX = 1000;
 
 /**
  * Cat loc are voie sa ia lista de coduri din motiv.
@@ -74,8 +79,10 @@ export function compuneMotiv(parti: (string | null | undefined)[]): string | nul
 /**
  * Scoate o bucata din motiv si intoarce ce ramane (sau `null`, daca nu mai ramane nimic).
  *
- * ⚠ Nu e o comparatie pe egalitate: cronul de stoc trebuie sa poata scoate DOAR bucata lui
- * dintr-un motiv compus, si sa lase comanda in carantina daca mai ramane ceva de rezolvat.
+ * ⚠ NU MAI E PE DRUMUL NIMANUI de cand cronul cheama `reproceseaza`, care recalculeaza motivele
+ * intregi in loc sa taie o bucata. Se pastreaza fiindca e chiar oglinda lui `compuneMotiv` si
+ * probele o folosesc ca sa arate ca legarea si dezlegarea sunt aceeasi socoteala: o bucata pusa
+ * de `compuneMotiv` trebuie sa poata fi scoasa intreaga.
  */
 export function scoateBucata(motiv: string | null | undefined, bucata: string): string | null {
   if (!motiv) return null;

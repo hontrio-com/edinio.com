@@ -46,12 +46,12 @@ test("⚠ ce nu incape se ARUNCA INTREG, nu se taie prin mijloc", () => {
    * Daca ciotul era chiar motivul de stoc, cronul nu-l mai gasea si nu mai scotea comanda din
    * carantina niciodata.
    */
-  const m = compuneMotiv([("x").repeat(400), ("y").repeat(400)]);
-  assert.equal(m, ("x").repeat(400), "a doua bucata a fost taiata in loc sa fie lasata afara");
+  const m = compuneMotiv([("x").repeat(900), ("y").repeat(900)]);
+  assert.equal(m, ("x").repeat(900), "a doua bucata a fost taiata in loc sa fie lasata afara");
 
-  const cuStoc = compuneMotiv([("x").repeat(400), STOC]) as string;
+  const cuStoc = compuneMotiv([("x").repeat(900), STOC]) as string;
   assert.ok(cuStoc.includes(STOC), "motivul de stoc trebuie sa incapa INTREG, ca sa fie recunoscut");
-  assert.equal(scoateBucata(cuStoc, STOC), ("x").repeat(400));
+  assert.equal(scoateBucata(cuStoc, STOC), ("x").repeat(900));
 });
 
 test("⚠ semnul dintre motive se scoate din bucati: altfel un nume de produs rupe motivul", () => {
@@ -158,6 +158,34 @@ test("⚠ cronul nu-si mai face socoteala lui: cheama `reproceseaza`", () => {
   assert.ok(!/consuma_stoc_comanda_marketplace/.test(SURSA_CRON), "cronul consuma stoc pe cont propriu");
 });
 
+test("⚠ roata cronului se invarte: randul atins trece la coada, oricare ar fi verdictul", () => {
+  /*
+   * Un rand iese din interogarea cronului doar cand i se pune `stoc_marketplace_la`. Dar
+   * reprocesarea are verdicte care NU ating stocul dinadins: liniile care nu mai corespund cu ce
+   * ne-au trimis ei, sau o legatura pierduta. Ordonat dupa clipa sosirii, un asemenea rand e
+   * mereu primul si mananca la nesfarsit din cele 50 de locuri; cu 50 de astfel de randuri,
+   * cronul nu mai ajunge NICIODATA la comanda al carei stoc chiar a picat.
+   *
+   * Aceeasi lectie ca la rotatiile celorlalte cozi: roata se invarte pe campul NOSTRU.
+   */
+  assert.match(SURSA_CRON, /\.order\("prelucrat_la"/, "roata se invarte pe clipa sosirii, deci nu se invarte");
+  assert.ok(!/\.order\("primit_la"\)/.test(SURSA_CRON), "a ramas ordonarea dupa clipa sosirii");
+  assert.match(SURSA_CRON, /trecutPrin\(/, "randul atins nu se mai stampileaza");
+
+  /* Si se stampileaza pe FIECARE drum de iesire din bucla, nu doar pe unul. */
+  const iesiri = (SURSA_CRON.match(/trecutPrin\(r\.id\)/g) ?? []).length;
+  assert.ok(iesiri >= 2, `randul se stampileaza pe ${iesiri} drumuri: unul dintre verdicte il lasa in cap`);
+});
+
+test("⚠ cronul nu se da drept om: nu stinge motivul monedei necitite", () => {
+  /*
+   * `reproceseaza` inchide motivul „n-am putut citi moneda" DOAR cand a apasat un om, fiindca el
+   * nu se poate recalcula niciodata. Cronul care ar trece `true` ar scoate comenzi din carantina
+   * fara ca nimeni sa se fi uitat la ele, si ar stinge si steagul care opreste rambursul.
+   */
+  assert.ok(!/reproceseaza\([^)]*true/.test(SURSA_CRON), "cronul se da drept apasare de om");
+});
+
 test("⚠ cronul nu atinge comenzile moarte, si CERE campurile de care atarna", () => {
   assert.match(SURSA_CRON, /status, stoc_marketplace_la, stoc_eliberat_la/, "citirea nu cere campurile");
   assert.match(SURSA_CRON, /orders\.status/, "nu se uita la starea comenzii");
@@ -255,7 +283,7 @@ test("⚠ lista de coduri se margineste SINGURA, ca sa nu impinga afara celelalt
 
   assert.ok(m.startsWith(INCEPUT_CODURI));
   assert.match(m, /și încă \d+/, "lista nu s-a marginit");
-  assert.ok(m.length <= 500, `motivul are ${m.length} semne`);
+  assert.ok(m.length <= 1000, `motivul are ${m.length} semne`);
   assert.ok(m.includes(MOTIV_STOC_NEFACUT), "motivul de stoc a fost impins afara: cronul nu-l mai gaseste");
   assert.equal(scoateBucata(m, MOTIV_STOC_NEFACUT)?.startsWith(INCEPUT_CODURI), true);
 });

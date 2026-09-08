@@ -922,6 +922,14 @@ export interface RezultatReprocesare {
 
 export async function reproceseaza(
   admin: Db, ctx: ContextIngest, externalId: string,
+  /**
+   * A apasat un OM butonul, pe o comanda pe care scrie chiar motivul?
+   *
+   * ⚠ De asta atarna un singur lucru, si e despre bani: motivul „nu am putut citi moneda" nu se
+   * poate recalcula NICIODATA (sarcina bruta nu se pastreaza), deci singurul lucru care il poate
+   * inchide e privirea cuiva. Cronul si retrimiterea lor nu se uita la nimic, deci il pastreaza.
+   */
+  omulAApasat = false,
 ): Promise<RezultatReprocesare> {
   /* ⚠ `business_id` e OBLIGATORIU: cu cheia de serviciu RLS nu mai apara nimic. */
   const { data: randBrut, error: eRand } = await admin
@@ -1083,9 +1091,9 @@ export async function reproceseaza(
    * e o privire a omului asupra unei comenzi pe care scrie chiar motivul, deci se socoteste
    * luare la cunostinta. Avertismentul nu se pierde: ramane in nota interna a comenzii.
    */
-  const pastrate = motiveNerecalculabile(rand.motiv, [
-    INCEPUT_CODURI, INCEPUT_NELIVRABILA, MOTIV_MONEDA_STRAINA, MOTIV_MONEDA_NECITITA, MOTIV_STOC_NEFACUT,
-  ]);
+  const cunoscute = [INCEPUT_CODURI, INCEPUT_NELIVRABILA, MOTIV_MONEDA_STRAINA, MOTIV_STOC_NEFACUT];
+  if (omulAApasat) cunoscute.push(MOTIV_MONEDA_NECITITA);
+  const pastrate = motiveNerecalculabile(rand.motiv, cunoscute);
   const motiv = compuneMotiv([
     motivCoduri(nelegate),
     motivNelivrabila(lipsuri),
@@ -1105,6 +1113,26 @@ export async function reproceseaza(
   if (seSchimbaLinii && !stocEsuat) {
     const { error } = await admin.from("orders")
       .update({ items: itemsNoi as never } as never)
+      .eq("id", o.id).eq("business_id", ctx.businessId);
+    if (error) throw error;
+  }
+
+  /*
+   * ⚠ STEAGUL SI MOTIVUL SPUN ACELASI LUCRU, deci se sting IMPREUNA.
+   *
+   * `order_source.moneda_necitita` opreste rambursul precompletat si facturarea automata. Sters
+   * doar motivul, comanda iesea din carantina si arata normal, dar ramanea pe veci cu ramburs
+   * zero si fara factura, fara ca nimic sa mai spuna de ce: coletul pleca, si curierul nu
+   * incasa nimic. Nicio alta cale nu rescrie `order_source` dupa ingest.
+   */
+  const stingeSteagul = omulAApasat
+    && (rand.motiv ?? "").includes(MOTIV_MONEDA_NECITITA)
+    && (o.order_source as { moneda_necitita?: unknown } | null)?.moneda_necitita === true;
+  if (stingeSteagul) {
+    const restulSursei = { ...(o.order_source as Record<string, unknown>) };
+    delete restulSursei.moneda_necitita;
+    const { error } = await admin.from("orders")
+      .update({ order_source: restulSursei as never } as never)
       .eq("id", o.id).eq("business_id", ctx.businessId);
     if (error) throw error;
   }

@@ -235,6 +235,14 @@ test("⚠ verificarea produselor se plimba pe CHEIE, nu pe offset", () => {
   assert.match(bucata, /if \(dupaId\) q = q\.gt\("id", dupaId\)/,
     "plimbare pe offset: un import care ruleaza in acelasi timp face sa fie sarit un produs");
   assert.ok(!/\.range\(/.test(bucata), "a ramas o plimbare pe offset");
+
+  /*
+   * ⚠ SI SONDAJUL DE PLAFON NU-SI INGHITE EROAREA. Inghitita, ea da `partial: false`, adica „am
+   * parcurs tot catalogul" — iar de asta atarna blocul de orfani: pe un catalog citit pe
+   * jumatate, produsele nevazute apar ca articole ORFANE, si comerciantului i se spune sa ceara
+   * scoaterea lor de la Pepita, adica sa-si stinga listari vii.
+   */
+  assert.match(bucata, /eSondaj \? true :/, "o citire cazuta se citeste drept „am parcurs tot catalogul”");
 });
 
 test("⚠ orfanii nu se socotesc cand nu se poate: `null`, nu zero", () => {
@@ -250,7 +258,17 @@ test("⚠ orfanii nu se socotesc cand nu se poate: `null`, nu zero", () => {
   const bucata = ACTIUNI.slice(i, i + 2400);
   const j = bucata.indexOf("} catch (e) {");
   assert.ok(j > 0, "blocul orfanilor n-are catch propriu");
-  const corp = bucata.slice(j, j + 200);
+  /*
+   * ⚠ CORPUL SE TAIE PE ACOLADE, nu pe un numar de semne. Fereastra de 200 nu acoperea corpul,
+   * care are 267: un `throw e;` pus in coada lui trecea verde.
+   */
+  let adanc = 0;
+  let sfarsit = bucata.length;
+  for (let k = bucata.indexOf("{", j); k < bucata.length; k++) {
+    if (bucata[k] === "{") adanc++;
+    else if (bucata[k] === "}") { adanc--; if (adanc === 0) { sfarsit = k; break; } }
+  }
+  const corp = bucata.slice(j, sfarsit);
   assert.ok(!/throw/.test(corp), "catch-ul arunca mai departe, deci sterge tot panoul");
   assert.match(corp, /orfane = null/, "catch-ul nu marcheaza cifra ca necunoscuta");
 });

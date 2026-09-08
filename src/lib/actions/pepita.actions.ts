@@ -515,10 +515,18 @@ export async function verificaProdusePepita(
        * de orfani era sarit tacut, pentru totdeauna.
        */
       if (citite + PAGINA >= PLAFON_VERIFICARE) {
-        const { data: maiE } = await admin.from("products").select("id")
+        const { data: maiE, error: eSondaj } = await admin.from("products").select("id")
           .eq("business_id", businessId).eq("is_active", true)
           .gt("id", dupaId).order("id").limit(1);
-        partial = ((maiE ?? []) as { id: string }[]).length > 0;
+        /*
+         * ⚠ O CITIRE CAZUTA INSEAMNA „NU STIU", si „nu stiu" se trateaza ca „taiat".
+         *
+         * Inghitita, ea ar fi dat `partial: false`, adica „am parcurs tot catalogul" — iar de
+         * asta atarna blocul de orfani, care compara evidenta cu ce s-a citit. Pe un catalog
+         * citit pe jumatate, produsele nevazute apar ca articole ORFANE, si comerciantului i se
+         * spune sa ceara scoaterea lor de la Pepita: adica sa-si stinga listari vii.
+         */
+        partial = eSondaj ? true : ((maiE ?? []) as { id: string }[]).length > 0;
       }
     }
 
@@ -744,7 +752,8 @@ export async function reproceseazaComandaPepita(businessId: string, externalId: 
       .from("store_settings").select("currency").eq("business_id", businessId).maybeSingle();
     const monedaMagazin = String((setari as { currency?: string } | null)?.currency ?? "RON").toUpperCase();
 
-    const r = await reproceseaza(admin, { businessId, monedaMagazin }, externalId);
+    /* ⚠ `true`: butonul e apasat de om, pe o comanda pe care scrie chiar motivul. */
+    const r = await reproceseaza(admin, { businessId, monedaMagazin }, externalId, true);
     revalidatePath(CALE);
     return r;
   } catch (e) {

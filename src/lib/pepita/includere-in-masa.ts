@@ -35,8 +35,14 @@ export const PAGINA = 500;
 export const PE_TRECERE = 20_000;
 
 export type RezultatIncludere = {
-  /** Cate randuri au INTRAT in trecerea asta, nu cate s-au gasit. */
+  /**
+   * Cate produse active au fost PARCURSE in trecerea asta: si cele scrise acum, si cele care
+   * erau deja in feed. E numarul care se arata omului („N produse incluse"), fiindca despre ele
+   * e vorba; `chiarScrise` spune cate randuri s-au atins cu adevarat.
+   */
   scrise: number;
+  /** Cate randuri s-au scris chiar acum. Zero la a doua apasare peste un catalog nemodificat. */
+  chiarScrise: number;
   /** Mai are de mers? Atunci `dupa` spune de unde se reia. */
   incomplet: boolean;
   dupa: string | null;
@@ -52,6 +58,7 @@ export async function includeToateActive(
   admin: Admin, businessId: string, dupa: string | null, acum: string,
 ): Promise<RezultatIncludere> {
   let scrise = 0;
+  let chiarScrise = 0;
   let cheie = dupa;
 
   while (scrise < PE_TRECERE) {
@@ -63,7 +70,7 @@ export async function includeToateActive(
     const { data, error } = await q;
     if (error) throw error;
     const ids = (data ?? []) as { id: string }[];
-    if (ids.length === 0) return { scrise, incomplet: false, dupa: null };
+    if (ids.length === 0) return { scrise, chiarScrise, incomplet: false, dupa: null };
 
     /*
      * ⚠ SE SCRIU DOAR RANDURILE CARE CHIAR SE SCHIMBA.
@@ -77,19 +84,32 @@ export async function includeToateActive(
      * cateva sute de uuid-uri pleaca in ADRESA si cade. Pagina e ordonata dupa `id`, deci
      * intervalul o acopera exact.
      */
-    const { data: existente, error: eCitire } = await admin.from("pepita_listari")
-      .select("product_id, inclus")
-      .eq("business_id", businessId)
-      .gte("product_id", ids[0].id)
-      .lte("product_id", ids[ids.length - 1].id);
-    if (eCitire) throw eCitire;
-    const dejaIncluse = new Set(
-      ((existente ?? []) as { product_id: string; inclus: boolean }[])
-        .filter((r) => r.inclus)
-        .map((r) => r.product_id),
-    );
+    const dejaIncluse = new Set<string>();
+    /*
+     * ⚠ SI CITIREA ASTA E PAGINATA. Intervalul acopera si listarile produselor INACTIVE dintre
+     * primul si ultimul id al paginii, deci poate depasi plafonul PostgREST de 1000 de randuri.
+     * Trunchiata, ar fi lipsit randuri deja incluse, si le-am fi rescris degeaba: exact
+     * re-stampilarea pe care o repara blocul asta.
+     */
+    let dupaListare: string | null = null;
+    for (;;) {
+      let ql = admin.from("pepita_listari")
+        .select("product_id, inclus")
+        .eq("business_id", businessId)
+        .lte("product_id", ids[ids.length - 1].id)
+        .order("product_id").limit(1000);
+      ql = dupaListare ? ql.gt("product_id", dupaListare) : ql.gte("product_id", ids[0].id);
+      const { data: existente, error: eCitire } = await ql;
+      if (eCitire) throw eCitire;
+      const randuri = (existente ?? []) as { product_id: string; inclus: boolean }[];
+      if (randuri.length === 0) break;
+      dupaListare = randuri[randuri.length - 1].product_id;
+      for (const r of randuri) if (r.inclus) dejaIncluse.add(r.product_id);
+      if (randuri.length < 1000) break;
+    }
 
     const deScris = ids.filter((p) => !dejaIncluse.has(p.id));
+    chiarScrise += deScris.length;
     if (deScris.length > 0) {
       const { error: eScriere } = await admin.from("pepita_listari").upsert(
         /*
@@ -115,8 +135,8 @@ export async function includeToateActive(
      * acelasi, dar fiecare rulare intreaga ar mai costa o citire despre care se stie ca vine
      * goala. De aia proba numara citirile.
      */
-    if (ids.length < PAGINA) return { scrise, incomplet: false, dupa: null };
+    if (ids.length < PAGINA) return { scrise, chiarScrise, incomplet: false, dupa: null };
   }
 
-  return { scrise, incomplet: true, dupa: cheie };
+  return { scrise, chiarScrise, incomplet: true, dupa: cheie };
 }

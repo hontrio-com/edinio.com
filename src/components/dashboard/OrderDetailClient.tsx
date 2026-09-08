@@ -412,6 +412,18 @@ export function OrderDetailClient({
   const address = (order.shipping_address as unknown as ShippingAddress) ?? {};
   const firma = readBillingCompany(order.billing_company);
   const notes = order.notes as Record<string, string> | null;
+  /*
+   * ⚠ NOTA INTERNA SE VEDE, si pana pe 08.09.2026 nu se vedea NICAIERI.
+   *
+   * Ingestul de marketplace scrie in `internal_notes` tocmai lucrurile de care atarna banii:
+   * cine incaseaza rambursul la o comanda Pepita Delivery, ca totalul e in alta moneda, ca
+   * moneda n-a putut fi citita, ca liniile au cote de TVA diferite. Codul care le scrie spunea
+   * in comentarii „aici afla cine intra pe lista obisnuita de comenzi" — dar niciun ecran nu le
+   * randa, deci comerciantul apasa pe factura sau pe AWB fara sa fi avut cum sa afle.
+   */
+  const noteInterne = typeof (order as unknown as { internal_notes?: unknown }).internal_notes === "string"
+    ? ((order as unknown as { internal_notes: string }).internal_notes).trim()
+    : "";
   const ord = order as unknown as Record<string, unknown>;
   // Trendyol ships with its own cargo (no courier AWB) — swap the shipping panel.
   const isTrendyol = (order.order_source as { marketplace?: string } | null)?.marketplace === "trendyol";
@@ -1339,6 +1351,22 @@ export function OrderDetailClient({
               )}
             </div>
           </div>
+
+          {noteInterne && (
+            <div className={`${CARD} p-5 space-y-3`}>
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-warning" />De știut înainte să expediezi
+              </h2>
+              {/*
+                ⚠ TEXT, NU HTML. Nota vine din codul nostru, dar contine si campuri primite de la
+                marketplace (numele variantei, codul primit): randata ca marcaj, ar fi o usa.
+                `whitespace-pre-line` pastreaza randurile, care sunt scrise anume cate unul.
+              */}
+              <p className="whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                {noteInterne}
+              </p>
+            </div>
+          )}
 
           {/* Custom fields / notes */}
           {notes && Object.keys(notes).length > 0 && (

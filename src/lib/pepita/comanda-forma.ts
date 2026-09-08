@@ -84,6 +84,16 @@ export interface ComandaPepita {
   status: string | null;
   mesajClient: string | null;
   mesajCurier: string | null;
+  /**
+   * `package_label` — eticheta de colet, PDF codificat Base64, asa cum a venit.
+   *
+   * ⚠ SE PASTREAZA BRUTA aici, nu decodata. Citirea, validarea si plafonul de marime sunt in
+   * `eticheta.ts`, si trebuie sa ramana acolo: forma comenzii spune CE ne-au trimis, nu daca e
+   * bun. Un `Buffer` in tipul asta ar fi facut ca fiecare proba de forma sa care octeti dupa ea.
+   *
+   * ⚠ Si nu e obligatoriu. Vine numai la Pepita Delivery, si nici acolo mereu.
+   */
+  etichetaBruta: string | null;
   transport: number;
   monedaTransport: string | null;
   voucher: number;
@@ -282,6 +292,13 @@ export function citesteComanda(brut: unknown): Verdict {
       status: sir(c.status),
       mesajClient: sir(c.customer_message),
       mesajCurier: sir(c.courier_message),
+      /*
+       * ⚠ CAMPUL ASTA A FOST ARUNCAT TACUT PANA PE 08.09.2026, si nu dintr-o scapare de cod:
+       * dintr-una de documentatie. Copia pe care o pastram noi era o versiune veche, si pe ea am
+       * si raspuns, de doua ori, ca `package_label` nu exista la ei. Exista.
+       * Vezi `docs/pepita/README.md`.
+       */
+      etichetaBruta: sir(c.package_label),
       transport,
       monedaTransport: mTransport.fel === "cod" ? mTransport.cod : null,
       /** Moneda UNICA a comenzii, deja dovedita coerenta. `null` daca ei n-au trimis niciuna. */

@@ -167,3 +167,37 @@ test("⚠ orice cale care emite o factura trece prin poarta cotelor amestecate",
     assert.match(linii.slice(i, i + 12).join(" "), /return/, `${f}: nu se opreste`);
   }
 });
+
+test("⚠ poarta sta in CONSTRUCTORUL sarcinii utile, nu doar in butoane", () => {
+  /*
+   * ⚠ CE A SCAPAT PANA PE 08.09.2026. Poarta era chemata din generatoarele de FACTURA, si lipsea
+   * din doua drumuri care ajung tot la un document fiscal:
+   *
+   *   1. PROFORMELE. `generateOrderEstimate` si `generateOblioProforma` construiau liniile prin
+   *      aceiasi constructori si nu chemau poarta. Iar `convertEstimateToInvoice` transforma
+   *      proforma in FACTURA fara sa reconstruiasca liniile: o cota unica pusa pe proforma trecea
+   *      intreaga in documentul fiscal.
+   *   2. `maybeAutoGenerateInvoice` (SmartBill), care isi face singura sarcina utila si e un export
+   *      dintr-un modul „use server", adica o adresa publica.
+   *
+   * Mutata in constructor, poarta acopera toate drumurile de azi SI pe cel adaugat maine de cineva
+   * care nici nu stie ca exista.
+   */
+  const perechi: [string, string][] = [
+    ["src/lib/actions/smartbill.actions.ts", "async function buildInvoiceParams("],
+    ["src/lib/actions/oblio.actions.ts", "async function buildInvoiceData("],
+  ];
+
+  for (const [cale, antet] of perechi) {
+    const sursa = readFileSync(cale, "utf8");
+    const i = sursa.indexOf(antet);
+    assert.notEqual(i, -1, `${cale}: n-am gasit ${antet}`);
+    const sfarsit = sursa.indexOf(String.fromCharCode(10) + "}", i);
+    const corp = sursa.slice(i, sfarsit === -1 ? sursa.length : sfarsit);
+    assert.ok(
+      corp.includes("motivCoteAmestecate("),
+      `${cale}: constructorul nu mai trece prin poarta cotelor amestecate, deci proforma si calea `
+      + "automata pot emite un document cu o singura cota peste linii care au cote diferite",
+    );
+  }
+});

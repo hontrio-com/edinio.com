@@ -121,13 +121,28 @@ const baza = http.createServer((req, res) => {
 
 /* ── Ce se inlocuieste: `@/lib/r2`, si nimic altceva ──────────────────────── */
 
+/* ⚠ Cheia etichetei aparate se semneaza cu secretul fisierelor private. Fara el, cronul ARUNCA —
+   si asa trebuie: fara chei aparate, urmatorul pas ar sterge etichete de pe comenzi vii. */
+process.env.CUSTOMIZATION_FILE_SECRET ??= "secret-de-proba";
+
 const HOOK = `data:text/javascript,${encodeURIComponent(
   `export async function resolve(specifier, context, next) {
      if (specifier === "@/lib/r2") {
        return {
          url: "data:text/javascript," + encodeURIComponent(
            "export const listeazaIncarcari = async (p, m) => globalThis.__r2Lista(p, m);" +
-           "export const stergeIncarcari = async (c) => globalThis.__r2Sterge(c);"),
+           "export const stergeIncarcari = async (c) => globalThis.__r2Sterge(c);" +
+           /* ⚠ Cronul matura acum si etichetele Pepita, deci importa modulul lor, care cere
+              si el din r2. Un modul fals caruia ii lipseste un export nu da o proba rosie
+              lamurita, ci un SyntaxError la incarcare, pe TOATE probele din fisier.
+              ⚠ SI FARA ACCENTE GRAVE SI FARA GHILIMELE DUBLE aici: tot blocul sta INTR-UN
+              SABLON. Un accent grav il inchide, iar o ghilimea escapata scrisa in sablon ajunge
+              in modulul generat ca ghilimea adevarata si ii rupe sirul. Amandoua s-au intamplat,
+              ordinea asta. De-aia sirurile de mai jos folosesc apostrofuri. */
+           "export const galeataIncarcarilor = () => 'galeata-falsa';" +
+           "export const incarcaPrivat = async () => {};" +
+           "export const linkDeCitirePrivata = async () => 'link';" +
+           "export const existaInGaleata = async () => false;"),
          shortCircuit: true, format: "module",
        };
      }

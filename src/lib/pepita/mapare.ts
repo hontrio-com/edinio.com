@@ -28,9 +28,14 @@ export function esteLivrarePepita(modLivrare: string | null): boolean {
   /*
    * ⚠ PE PREFIX, NU PE LISTA, si asta e chiar apararea.
    *
-   * Documentele lor nu sunt de acord intre ele: cel de impingere a comenzilor scrie
-   * `gls_parcelshop`, pagina despre Pepita Delivery scrie `gls_parcellocker` si `gls_xxl`. O
-   * lista inchisa ar fi lasat o valoare noua sa treaca drept livrare PROPRIE, iar atunci
+   * ⚠ SI AICI SCRIA CA „documentele lor nu sunt de acord intre ele". Nu se contraziceau: copia
+   * noastra era o reimprimare a unei versiuni vechi. Documentul lor de azi listeaza `shipping`,
+   * `gls`, `gls_parcellocker`, `gls_xxl`, `mpl` — iar `gls_parcelshop` a fost INLOCUIT de
+   * `gls_parcellocker`, nu adaugat pe langa. Vezi `docs/pepita/README.md`.
+   *
+   * Argumentul pentru prefix ramane insa intreg, si e mai bun decat motivul din care s-a nascut: o
+   * lista inchisa ar lasa o valoare NOUA, adaugata maine de ei, sa treaca drept livrare PROPRIE,
+   * iar atunci
    * `metodaPlata` ar fi scris `cash_on_delivery` si rambursul s-ar fi precompletat pe un colet
    * dus de GLS-ul contractat de EI: clientul ar fi platit a doua oara la usa.
    *

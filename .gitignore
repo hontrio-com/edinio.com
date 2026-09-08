@@ -63,6 +63,11 @@ next-env.d.ts
 # fisierele exista local, dar nu ajung niciodata in depozit.
 !/scripts/verifica-tipuri-db.mjs
 !/scripts/tipuri-db-prag.json
+# Poarta de lint cu prag, adaugata pe 08.09.2026. Aceeasi socoteala: CI-ul cheama
+# `npm run lint:prag -- --check`, iar fara randurile astea ar cadea la FIECARE push, cu unealta
+# existand doar pe masina care a scris-o. Chiar capcana descrisa mai sus.
+!/scripts/lint-prag.mjs
+!/scripts/lint-prag.json
 # Iesirea catre eMAG: NU e scratch, e infrastructura. eMAG accepta apeluri doar de la
 # IP-uri albite, iar Vercel n-are IP fix — deci exista un server propriu, cu proxy
 # CONNECT, iar dosarul asta e TOATA starea lui. Chiar de aia nu se plateste copie de

@@ -8,6 +8,7 @@
     "build:ci": "next build --experimental-build-mode compile",
     "start": "next start",
     "lint": "eslint",
+    "lint:prag": "node scripts/lint-prag.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --import ./scripts/tests/register.mjs --test \"src/**/*.test.ts\"",
     "verifica:rpc-blog": "node scripts/tests/blog-rpc-chemabile.mjs",

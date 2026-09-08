@@ -355,6 +355,19 @@ async function buildInvoiceData(
   slot: SlotFacturare,
   extra?: Partial<OblioInvoiceData>,
 ): Promise<OblioInvoiceData | { error: string }> {
+  /*
+   * ═══ ⚠ POARTA COTELOR AMESTECATE, MUTATA AICI — 08.09.2026 ═══
+   *
+   * Statea numai in generatorul de FACTURA, si lipsea din PROFORMA. Proforma nu e document fiscal,
+   * deci parea inofensiva — dar ea se poate transforma in factura fara ca liniile sa fie
+   * reconstruite, si atunci cota unica trece intreaga in documentul fiscal.
+   *
+   * Pusa in CONSTRUCTORUL comun, poarta nu se mai poate uita: cine adauga maine un al treilea drum
+   * trece prin ea fara sa stie ca exista.
+   */
+  const coteAmestecate = motivCoteAmestecate((order as { items?: unknown }).items);
+  if (coteAmestecate) return { error: coteAmestecate };
+
   const addr = order.shipping_address as ShippingAddress | null;
   const today = new Date().toISOString().split("T")[0];
   const products = await buildProducts(sursa, order, config, vat, vatName);

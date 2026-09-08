@@ -6,6 +6,7 @@ import { PREFIX_INCARCARI } from "@/lib/customization/adresa";
 import { listeazaIncarcari, stergeIncarcari } from "@/lib/r2";
 import { cheileComenzii, deSters, pragulComenzilor, LUNI_PE_COMANDA, ZILE_ORFAN } from "./reguli";
 import { cheieMiniatura } from "@/lib/customization/fisiere-private";
+import { cheieEticheta, PREFIX_ETICHETE } from "@/lib/pepita/eticheta";
 
 /**
  * Sterge fisierele incarcate de cumparatori care nu mai au de ce sa existe.
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest) {
   for (let de = 0; ; de += PAGINA) {
     const { data, error } = await admin
       .from("orders")
-      .select("id, updated_at, items")
+      .select("id, business_id, updated_at, items")
       /*
        * ═══ ⚠ CEASUL PORNESTE DE LA ULTIMA ATINGERE, NU DE LA PLASARE ═══
        *
@@ -102,6 +103,18 @@ export async function GET(req: NextRequest) {
     for (const c of data ?? []) {
       comenziCitite++;
       for (const cheie of cheileComenzii(c.items, PREFIX_INCARCARI)) aparate.add(cheie);
+      /*
+       * ═══ ⚠ SI ETICHETA PEPITA A COMENZII ═══
+       *
+       * Ea nu sta in `items` si nu se poate deduce din nimic de acolo: cheia se deriva din magazin
+       * si comanda, ca la miniaturi. Fara randul asta, prefixul `awb/pepita/` — care poarta numele,
+       * adresa si telefonul cumparatorului intr-un PDF — ar fi iesit ORFAN si ar fi fost sters dupa
+       * treizeci de zile, de sub o comanda inca vie.
+       *
+       * ⚠ Se adauga FARA sa se intrebe daca exista: majoritatea comenzilor n-au eticheta, iar o
+       * cheie aparata care nu e in depozit nu costa nimic (verdictul se da pe obiectele LISTATE).
+       */
+      if (c.business_id) aparate.add(cheieEticheta(c.business_id as string, c.id as string));
     }
 
     if (!data || data.length < PAGINA) break;
@@ -192,8 +205,17 @@ export async function GET(req: NextRequest) {
      * fisierele din galeata PUBLICA ar fi ramas acolo pe veci.
      */
     const r = await listeazaIncarcari(PREFIX_INCARCARI, MAX_OBIECTE_LISTATE);
-    obiecte = r.obiecte;
-    trunchiat = r.trunchiat;
+    /*
+     * ⚠ SI PREFIXUL ETICHETELOR PEPITA, in aceeasi rulare. Un prefix pe care nu-l matura nimeni
+     * inseamna date personale pastrate la nesfarsit — si nimeni n-ar fi observat, fiindca
+     * curatenia ar fi raportat, in fiecare zi, ca s-a terminat cu bine.
+     *
+     * ⚠ Plafonul de listare se imparte intre cele doua prefixe, nu se dubleaza: e acolo ca sa nu
+     * tina ruta ocupata la nesfarsit, si motivul nu se schimba fiindca am adaugat un dosar.
+     */
+    const e = await listeazaIncarcari(PREFIX_ETICHETE, Math.max(0, MAX_OBIECTE_LISTATE - r.obiecte.length));
+    obiecte = [...r.obiecte, ...e.obiecte];
+    trunchiat = r.trunchiat || e.trunchiat;
   } catch (e) {
     await logError({
       action: "curata-fisiere.listare",

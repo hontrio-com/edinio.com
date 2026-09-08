@@ -650,8 +650,9 @@ test("⚠ transferul NEFACUT nu se preface in ramburs: nu schimbam metoda aleasa
 test("⚠ un mod de livrare GLS necunoscut inca nu produce ramburs la usa", () => {
   return (async () => {
     /*
-     * Documentele lor nu sunt de acord: pagina despre Pepita Delivery pomeneste
-     * `gls_parcellocker` si `gls_xxl`, documentul de impingere a comenzilor nu. Tratate ca
+     * ⚠ Aici scria ca „documentele lor nu sunt de acord". Nu era asa: documentul lor de azi le
+     * listeaza pe amandoua, iar copia noastra era o reimprimare a unei versiuni vechi (vezi
+     * `docs/pepita/README.md`). Ce ramane adevarat e pericolul. Tratate ca
      * livrare proprie, ar fi produs `cash_on_delivery` si un ramburs precompletat pe un colet
      * dus de GLS-ul contractat de EI: clientul ar fi platit a doua oara la usa.
      */

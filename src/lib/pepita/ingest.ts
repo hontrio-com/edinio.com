@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
+import { citesteEticheta, salveazaEticheta } from "./eticheta";
 import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { combinatiiActiveUnice, parseVariants } from "@/lib/storefront/variants";
 import { parseBillingCompany, type BillingCompany } from "@/lib/billing/company";
@@ -288,6 +289,49 @@ export async function leagaLiniile(
   return { legate, nelegate };
 }
 
+/**
+ * Pune deoparte eticheta de colet trimisa de ei, daca a venit.
+ *
+ * ═══ ⚠ NU RUPE INGESTUL, NICIODATA ═══
+ *
+ * O eticheta nesalvata nu are voie sa se transforme in 503 catre Pepita. Raspunsul acela le cere
+ * sa retrimita, iar retrimiterea e un buton apasat de om: comanda ar ramane in aer pentru un PDF.
+ * Marfa si banii sunt in comanda; eticheta e o comoditate, si se poate cere din panoul lor.
+ *
+ * ⚠ SI O ETICHETA REA SE SPUNE, nu se inghite. Un PDF care nu e PDF, sau unul peste plafon, e
+ * ceva ce comerciantul trebuie sa poata afla cand se intreaba de ce nu poate tipari nimic. Nu
+ * intra insa in motivul de CARANTINA: comanda e buna, marfa poate pleca, doar hartia lipseste.
+ *
+ * ⚠ SE CHEAMA DUPA ce randul are `order_id`, fiindca cheia din depozit se compune din comanda.
+ * Chemata inainte, ar fi scris sub un identificator care inca nu exista.
+ */
+async function pastreazaEticheta(
+  businessId: string, orderId: string, c: ComandaPepita,
+): Promise<void> {
+  const citita = citesteEticheta(c.etichetaBruta);
+  if (citita.fel === "lipsa") return;
+
+  if (citita.fel === "rea") {
+    await logError({
+      action: "pepita/eticheta",
+      message: `eticheta primita nu s-a putut folosi: ${citita.motiv}`,
+      details: { externalId: c.externalId, orderId }, businessId, severity: "warning",
+    });
+    return;
+  }
+
+  try {
+    await salveazaEticheta(businessId, orderId, citita.octeti);
+  } catch (e) {
+    await logError({
+      action: "pepita/eticheta",
+      message: `eticheta nu s-a putut pastra: ${e instanceof Error ? e.message : String(e)}`,
+      details: { externalId: c.externalId, orderId, octeti: citita.octeti.length },
+      businessId, severity: "warning",
+    });
+  }
+}
+
 function numeDeRezerva(l: LiniePepita): string {
   return l.sku ? `Produs Pepita ${l.sku}` : "Produs Pepita";
 }
@@ -538,6 +582,8 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     motiv: compuneMotiv([motivNelegate, motivLipsuri, motivMoneda]),
     prelucrat_la: acum,
   } as never).eq("id", randId);
+
+  await pastreazaEticheta(ctx.businessId, orderId, c);
 
   const verdictStoc = await consumaStocul(admin, ctx.businessId, orderId, legate);
   if (verdictStoc === "esec") {

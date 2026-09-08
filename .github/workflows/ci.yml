@@ -240,6 +240,23 @@ jobs:
 
       - run: npm run typecheck
 
+      # ── Lint, ca poarta CU PRAG ────────────────────────────────────────────
+      #
+      # ⚠ `lint` NU RULA NICAIERI in CI pana pe 08.09.2026, desi exista scriptul. Ridicat de un
+      # audit extern, si pe drept: nimic nu oprea o eroare noua.
+      #
+      # ⚠ SI NU CERE ZERO, fiindca repo-ul avea 90 de erori in ziua in care s-a pus poarta, pe 39
+      # de fisiere, toate vechi si niciuna legata de lucrarea in curs (38 `set-state-in-effect`,
+      # 16 `no-unescaped-entities`, 15 `static-components`, restul marunte). O poarta stricta ar fi
+      # facut jobul rosu pentru totdeauna din prima zi — iar un rosu permanent nu mai e o poarta, e
+      # zgomot pe care toata lumea invata sa-l sara. Chiar in repo-ul asta jobul de restaurare a
+      # schemei a stat rosu saptamani intregi fara ca cineva sa se uite la el.
+      #
+      # Deci: se cere sa nu CREASCA. Pragul e in `scripts/lint-prag.json` si se coboara oricand
+      # repara cineva ceva. Acelasi tipar ca la `verifica-tipuri-db.mjs`.
+      - name: Lint (nu creste)
+        run: npm run lint:prag -- --check
+
       - run: npm test
 
       # ── Build-ul, in modul „compile" ───────────────────────────────────────

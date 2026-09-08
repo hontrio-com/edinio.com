@@ -57,7 +57,10 @@ test("⚠ NOI NU SCHIMBAM METODA DE PLATA ALEASA LA EI", () => {
 
 test("⚠ ORICE mod de livrare care incepe cu «gls» e transportul LOR", () => {
   /*
-   * Documentele lor nu sunt de acord intre ele: cel de impingere a comenzilor scrie
+   * ⚠ Documentul lor de AZI listeaza `shipping`, `gls`, `gls_parcellocker`, `gls_xxl`, `mpl`, iar
+   * `gls_parcelshop` a fost INLOCUIT. Nota de mai jos spunea ca documentele se contrazic, si era
+   * gresita: copia noastra era veche. Vezi `docs/pepita/README.md`. Textul vechi, pastrat fiindca
+   * explica de ce citim pe prefix: cel de impingere a comenzilor scrie
    * `gls_parcelshop`, pagina despre Pepita Delivery scrie `gls_parcellocker` si `gls_xxl`. O
    * lista inchisa ar fi lasat o valoare noua sa treaca drept livrare PROPRIE, iar atunci
    * rambursul s-ar fi precompletat pe un colet dus de GLS-ul contractat de EI: clientul ar fi

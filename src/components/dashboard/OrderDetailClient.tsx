@@ -331,6 +331,7 @@ const CARD = "bg-surface border border-border rounded-xl";
 export function OrderDetailClient({
   order,
   businessId,
+  areEtichetaPepita = false,
   setariTva,
   smartbillEnabled,
   hasEstimateSeries,
@@ -359,6 +360,14 @@ export function OrderDetailClient({
 }: {
   order: Order;
   businessId: string;
+  /**
+   * Pepita a trimis eticheta de colet pentru comanda asta?
+   *
+   * ⚠ Se afla din DEPOZIT, pe server (vezi pagina), fiindca eticheta n-are nicio coloana in baza:
+   * cheia ei se deriva din magazin si comanda. Implicit `false`, ca vechile pagini si probele care
+   * randeaza componenta sa nu trebuiasca sa stie de ea.
+   */
+  areEtichetaPepita?: boolean;
   /*
    * OBLIGATORIU, nu optional cu implicit: fara el, caseta de totaluri nu poate
    * sti daca `orders.vat_amount` e o suma de adunat sau una deja continuta in
@@ -1551,12 +1560,31 @@ export function OrderDetailClient({
                     </button>
                   </>
                 ) : refuzAwbPropriu ? (
-                  /* ⚠ Nu un buton stins, ci MOTIVUL. Un buton gri il pune pe om sa caute ce
-                     reglaj ii lipseste; propozitia ii spune ce s-a intamplat si ce urmeaza. */
-                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-warning/5 border border-warning/20">
-                    <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-muted-foreground leading-relaxed">{refuzAwbPropriu}</p>
-                  </div>
+                  <>
+                    {/* ⚠ Nu un buton stins, ci MOTIVUL. Un buton gri il pune pe om sa caute ce
+                        reglaj ii lipseste; propozitia ii spune ce s-a intamplat si ce urmeaza. */}
+                    <div className="flex items-start gap-2.5 p-3 rounded-xl bg-warning/5 border border-warning/20">
+                      <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-muted-foreground leading-relaxed">{refuzAwbPropriu}</p>
+                    </div>
+                    {/*
+                      ⚠ CAPATUL CELALALT AL ACELEIASI HOTARARI. Am inchis emiterea de AWB propriu
+                      fiindca ar fi a doua eticheta pe acelasi colet; fara asta, comerciantul ramanea
+                      cu un pachet pe care nu-l poate expedia. Eticheta LOR vine chiar in comanda.
+
+                      ⚠ Se arata NUMAI cand chiar exista in depozit: un buton care duce la 404 e mai
+                      rau decat lipsa lui.
+                    */}
+                    {areEtichetaPepita && (
+                      <a
+                        href={`/api/pepita/eticheta?business=${encodeURIComponent(businessId)}&comanda=${encodeURIComponent(order.id)}&numar=${encodeURIComponent(String(orderNumber))}`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-lg bg-primary hover:bg-primary/90 transition-colors"
+                      >
+                        <Download className="h-4 w-4" />Eticheta Pepita (PDF)
+                      </a>
+                    )}
+                  </>
                 ) : primaryCourier ? (
                   <>
                     <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">

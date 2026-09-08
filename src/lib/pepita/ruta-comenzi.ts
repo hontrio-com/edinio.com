@@ -45,8 +45,26 @@ function esec(status: number, mesaj: string): Response {
   return raspunde(status, { isError: true, responseCode: status, messages: [mesaj], message: mesaj });
 }
 
-/** Cat de mare poate fi corpul unei comenzi. */
-const MAX_OCTETI = 512 * 1024;
+/**
+ * Cat de mare poate fi corpul unei comenzi.
+ *
+ * ═══ ⚠ RIDICAT DE LA 512 KB PE 08.09.2026, SI DE CE ANUME LA ATAT ═══
+ *
+ * Documentatia lor are `package_label`: eticheta de colet, PDF in Base64, CHIAR IN CORPUL
+ * comenzii. Base64 umfla cu 4/3, deci cu vechiul plafon orice eticheta peste ~380 KB facea
+ * comanda sa cada cu 413 — si nu doar eticheta, TOATA comanda, inainte ca ceva sa fie salvat.
+ * Iar „Resend order" e un buton apasat de om, nu o reincercare automata: comanda ramanea pierduta.
+ *
+ * ⚠ 2 MB, nu „cat sa incapa orice". O eticheta A6 face zeci de kiloocteti; plafonul PROPRIU al
+ * etichetei e un megaoctet decodat (`MAX_ETICHETA_OCTETI`), adica ~1,34 MB codat, plus restul
+ * comenzii. Doua megaocteti lasa loc si raman departe de cei 4,5 MB la care taie Vercel — acolo
+ * cererea moare INAINTE de codul nostru, deci n-am mai avea nici macar un rand in jurnal.
+ *
+ * ⚠ SI NU E O RIDICARE GRATUITA: plafonul asta apara memoria functiei, iar limitatorul durabil
+ * lasa 600 de comenzi pe minut pe magazin. Verificarea pe `content-length` de mai jos taie
+ * INAINTE de `req.text()`, tocmai ca un corp urias sa nu fie nici macar citit.
+ */
+export const MAX_OCTETI = 2 * 1024 * 1024;
 
 /**
  * Corpul primit depaseste plafonul?

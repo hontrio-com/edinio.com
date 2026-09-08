@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { OrderDetailClient } from "@/components/dashboard/OrderDetailClient";
+import { areEticheta } from "@/lib/pepita/eticheta";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { WootConfig } from "@/lib/woot";
 import type { COConfig } from "@/lib/colete";
@@ -175,10 +176,31 @@ export default async function OrderDetailPage({ params }: Props) {
     prices_include_vat: settings?.prices_include_vat ?? true,
   };
 
+  /*
+   * ⚠ SE INTREABA DEPOZITUL, SI NUMAI PENTRU COMENZILE PEPITA.
+   *
+   * Eticheta nu are nicio coloana in baza: cheia ei se deriva din magazin si comanda (vezi
+   * `eticheta.ts`), tocmai ca sa nu fie nevoie de o migratie. Deci singurul fel de a sti daca a
+   * venit e un HEAD in depozit.
+   *
+   * ⚠ SI NU CADE PAGINA DIN ASTA. O pana de depozit ar fi lasat comerciantul fara pagina de
+   * comanda, pentru un buton. Cade in „n-are eticheta", iar ruta care o serveste spune adevarul
+   * intreg — ea deosebeste „nu e acolo" de „depozitul n-a raspuns".
+   */
+  let areEtichetaPepita = false;
+  if ((order.order_source as { marketplace?: string } | null)?.marketplace === "pepita") {
+    try {
+      areEtichetaPepita = await areEticheta(biz.id, order.id as string);
+    } catch {
+      areEtichetaPepita = false;
+    }
+  }
+
   return (
     <OrderDetailClient
       order={order}
       businessId={biz.id}
+      areEtichetaPepita={areEtichetaPepita}
       setariTva={setariTva}
       smartbillEnabled={smartbillEnabled}
       hasEstimateSeries={hasEstimateSeries}

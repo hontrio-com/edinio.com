@@ -157,11 +157,22 @@ export const STARI_PLATA_PEPITA = { paid: "paid", unpaid: "unpaid" } as const;
 /**
  * Modurile de livrare pe care le cunoastem.
  *
- * ⚠ LISTA E DESCHISA LA CAPATUL GLS. Documentul lor de impingere a comenzilor (copia din
- * `docs/pepita/`) scrie exact patru valori: `shipping`, `gls`, `gls_parcelshop`, `mpl`. Dar
- * pagina lor despre Pepita Delivery pomeneste si `gls_parcellocker` si `gls_xxl`, iar cele doua
- * documente NU sunt de acord intre ele. Deci le stim pe toate sase, si `esteLivrarePepita` nu se
- * uita la lista, ci la PREFIX: vezi acolo de ce.
+ * ⚠ LISTA OFICIALA DE AZI ARE CINCI VALORI: `shipping`, `gls`, `gls_parcellocker`, `gls_xxl`,
+ * `mpl`. Verificat pe 08.09.2026 in chiar fisierul lor
+ * (`docs/pepita/order-forwarding-2026-09-08-OFICIAL.pdf`, autor „Pepita").
+ *
+ * ⚠ `gls_parcelshop` A FOST INLOCUIT, nu completat: numele vechi nu mai apare nicaieri la ei, iar
+ * `gls_parcellocker` ii ia locul, cu aceeasi descriere. Il pastram fiindca poate veni pe o comanda
+ * mai veche, si fiindca nu costa nimic sa-l recunoastem.
+ *
+ * ⚠ SI TEXTUL DE AICI SPUNEA ALTCEVA, GRESIT: ca documentul de impingere scrie „exact patru
+ * valori" si ca „cele doua documente NU sunt de acord intre ele". Nu se contraziceau; copia pe care
+ * o aveam era o REIMPRIMARE a unei versiuni vechi, nu fisierul lor. Vezi `docs/pepita/README.md`.
+ *
+ * ⚠ Lista ramane DESCHISA la capatul GLS oricum: `esteLivrarePepita` nu se uita la ea, ci la
+ * PREFIX. Hotararea aia, luata cand credeam ca documentele se bat cap in cap, e singurul lucru care
+ * ne-a scutit de un defect adevarat — si ramane buna si acum, pentru urmatoarea valoare pe care o
+ * adauga ei.
  */
 export const LIVRARI_PEPITA = {
   shipping: "shipping",

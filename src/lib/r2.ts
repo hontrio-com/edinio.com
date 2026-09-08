@@ -160,8 +160,19 @@ export async function getFromR2(key: string): Promise<Buffer | null> {
  * Aici, o asemenea cadere ARUNCA, si apelantul hotaraste ce face cu ea.
  */
 export async function existaInR2(key: string): Promise<boolean> {
+  return existaInGaleata(key, BUCKET);
+}
+
+/**
+ * Acelasi lucru, dar in galeata pe care o spui.
+ *
+ * ⚠ EXISTA CA SA POATA FI INTREBATA SI CEA PRIVATA. `existaInR2` cauta in galeata publica; o
+ * eticheta de colet nu e acolo si nu trebuie sa fie, iar o cautare in galeata gresita ar fi
+ * raspuns linistit „nu exista" pentru fiecare eticheta din depozit.
+ */
+export async function existaInGaleata(key: string, bucket: string): Promise<boolean> {
   try {
-    await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }));
+    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
     return true;
   } catch (e) {
     if (esteObiectLipsa(e)) return false;
@@ -314,14 +325,35 @@ export function incarcarileSuntPrivate(): boolean {
   return BUCKET_PRIVAT !== "" && BUCKET_PRIVAT !== BUCKET;
 }
 
-/*
- * ⚠ AICI STATEA `incarcaPrivat`, si a fost SCOASA pe 07.09.2026 — n-o mai chema nimeni.
+/**
+ * Scrie octeti in galeata PRIVATA.
  *
- * Ea scria octetii primiti de ruta in galeata privata. De cand octetii nu mai trec prin functie
- * (Vercel refuza cererile de peste 4,5 MB, iar campurile promiteau 10 si 40), browserul ii pune
- * de-a dreptul in depozit printr-un link semnat — vezi `linkDeIncarcarePrivata` si
- * `mutaIncarcarea`. Lasata, ar fi fost o a doua cale de scriere pe care nimeni n-o probeaza.
+ * ═══ ⚠ A FOST SCOASA, SI S-A INTORS — AMANDOUA CU MOTIV ═══
+ *
+ * Pe 07.09.2026 a fost stearsa fiindca n-o mai chema nimeni: incarcarile cumparatorilor trec de
+ * atunci direct in depozit, printr-un link semnat, iar o a doua cale de scriere pe care n-o
+ * probeaza nimeni e o datorie, nu o comoditate.
+ *
+ * Pe 08.09.2026 s-a intors fiindca are un apelant ADEVARAT si probat: eticheta de colet trimisa de
+ * Pepita in corpul comenzii. Acolo octetii SUNT deja la noi in memorie — au venit in sarcina utila
+ * — deci nu exista link semnat de dat cuiva; singura intrebare e in ce galeata ajung.
+ *
+ * ⚠ SI DE CE NU `uploadToR2`: aceea scrie in galeata PUBLICA, intoarce adresa publica, si are
+ * implicit `public, max-age=31536000, immutable`. Pentru un document cu numele, adresa si
+ * telefonul unui cumparator, fiecare dintre cele trei e gresita.
  */
+export async function incarcaPrivat(
+  key: string, body: Buffer, contentType: string,
+): Promise<void> {
+  await s3.send(new PutObjectCommand({
+    Bucket: galeataIncarcarilor(),
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+    /* ⚠ Explicit, nu implicit: vezi nota de la `uploadToR2`. */
+    CacheControl: "private, no-store",
+  }));
+}
 
 
 /**

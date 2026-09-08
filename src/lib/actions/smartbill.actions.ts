@@ -315,6 +315,24 @@ async function buildInvoiceParams(
   slot: SlotFacturare,
   extraParams?: Partial<MerchantInvoiceParams>
 ): Promise<MerchantInvoiceParams | { error: string }> {
+  /*
+   * ═══ ⚠ POARTA COTELOR AMESTECATE, MUTATA AICI — 08.09.2026 ═══
+   *
+   * Statea numai in generatoarele de FACTURA, si de acolo lipsea din doua drumuri care ajung tot
+   * la un document:
+   *
+   *   1. PROFORMA. Nu e document fiscal, deci parea inofensiva — dar `convertEstimateToInvoice` o
+   *      transforma in factura cu `useEstimateDetails: true`, adica FARA sa reconstruiasca liniile.
+   *      O proforma cu o singura cota devenea o FACTURA cu o singura cota, ocolind poarta.
+   *   2. `maybeAutoGenerateInvoice`, care isi construieste singura sarcina utila si e un export
+   *      dintr-un modul „use server", adica o adresa publica.
+   *
+   * Pusa in CONSTRUCTORUL comun, poarta nu se mai poate uita: cine adauga maine al treilea drum
+   * trece prin ea fara sa stie ca exista. Aceeasi lectie ca la poarta AWB-ului.
+   */
+  const coteAmestecate = motivCoteAmestecate((order as { items?: unknown }).items);
+  if (coteAmestecate) return { error: coteAmestecate };
+
   const address = order.shipping_address as ShippingAddress | null;
   const products = await buildInvoiceProducts(sursa, config, order, pricesIncludeVat, vatEnabled, storeVatRate);
   if ("error" in products) return products;

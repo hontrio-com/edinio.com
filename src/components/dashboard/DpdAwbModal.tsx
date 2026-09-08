@@ -92,7 +92,7 @@ export function DpdAwbModal({
     // (`lib/dpd.ts`), deci un numar precompletat aici ar promite o incasare care
     // nu se intampla.
     if (open && !hasAwb) {
-      setCashOnDelivery(intlCountry ? "0" : rambursDeIncasat({ payment_status: order.payment_status, total: order.total }).toFixed(2));
+      setCashOnDelivery(intlCountry ? "0" : rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2));
     }
   }, [open, hasAwb, intlCountry, order.payment_status, order.total]);
 

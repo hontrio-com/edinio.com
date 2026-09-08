@@ -325,7 +325,7 @@ export async function createPallexAwbAction(
    * raspunde dupa BANI, nu dupa metoda de plata: o comanda cu card ramasa
    * neplatita intra si ea aici, si e chiar cazul care s-a intamplat in productie.
    */
-  const deIncasat = rambursDeIncasat({ payment_status: order.payment_status, total: order.total });
+  const deIncasat = rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source });
   if (deIncasat > 0 && !date.confirmaFaraIncasare) {
     return {
       error:

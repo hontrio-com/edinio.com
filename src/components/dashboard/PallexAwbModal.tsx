@@ -153,7 +153,7 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
    * ramasa neplatita arata ca una cu cardul si ar trece nebagata in seama. Vezi
    * `rambursDeIncasat` — s-a intamplat deja in productie.
    */
-  const deIncasat = areAwb ? 0 : rambursDeIncasat({ payment_status: order.payment_status, total: order.total });
+  const deIncasat = areAwb ? 0 : rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source });
   const [confirmaFaraIncasare, setConfirmaFaraIncasare] = useState(false);
 
   const [creating, setCreating] = useState(false);

@@ -49,7 +49,7 @@ test("daca factura iese incasata, curierul nu mai are ce colecta", () => {
    */
   for (const stare of ["paid", "unpaid", "refunded", "pending", "failed"]) {
     if (baniiAuIntrat({ payment_status: stare })) {
-      assert.equal(rambursDeIncasat({ payment_status: stare, total: 105.5 }), 0, stare);
+      assert.equal(rambursDeIncasat({ payment_status: stare, total: 105.5, order_source: null }), 0, stare);
     }
   }
 });

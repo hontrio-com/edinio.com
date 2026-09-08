@@ -2,22 +2,52 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import {
-  etichetaLivrare, etichetaPlata, metodaPlata, modLivrareCunoscut, modPlataCunoscut,
-  starePlata, statusInitial,
+  esteLivrarePepita, etichetaLivrare, etichetaPlata, incaseazaPepita, metodaPlata,
+  modLivrareCunoscut, modPlataCunoscut, starePlata, statusInitial,
 } from "./mapare";
 
-test("⚠ rambursul Pepita se scrie `cash_on_delivery`, ca sa-l vada toate caile de ramburs", () => {
+test("⚠ `cash_on_delivery` NUMAI cand incaseaza curierul comerciantului", () => {
   /*
-   * La eMAG si Trendyol banii ii incaseaza marketplace-ul. La Pepita cu `cod` ii incaseaza
-   * CURIERUL comerciantului, deci comanda e, in toate privintele care conteaza, una cu plata
-   * la livrare. `dhl.actions.ts` verifica textual `payment_method === "cash_on_delivery"`.
+   * ⚠ DEFECTUL PE CARE IL APARA, gasit la auditul din 08.09.2026: pana atunci ORICE `cod`
+   * primea `cash_on_delivery`, indiferent de livrare. Pentru o comanda Pepita Delivery,
+   * clientul ar fi platit o data curierului Pepita si inca o data curierului comerciantului.
+   *
+   * Seller Center, pagina romaneasca: „In cazul comenzilor Pepita Delivery (momentan automat
+   * de colet GLS sau livrare GLS la adresa), suma ramburs ajunge la Pepita."
    */
-  assert.equal(metodaPlata("cod"), "cash_on_delivery");
-  assert.equal(metodaPlata("creditcard"), "pepita");
-  assert.equal(metodaPlata("transfer"), "pepita");
-  assert.equal(metodaPlata(null), "pepita");
+  assert.equal(metodaPlata("cod", "shipping"), "cash_on_delivery", "curierul lui incaseaza");
+  assert.equal(metodaPlata("cod", "mpl"), "cash_on_delivery", "MPL: contract direct cu el");
+  assert.equal(metodaPlata("cod", null), "cash_on_delivery", "livrare nespecificata: cade pe curierul lui");
+  assert.equal(metodaPlata("cod", "gls"), "pepita", "⚠ Pepita Delivery: NU e rambursul lui");
+  assert.equal(metodaPlata("cod", "gls_parcelshop"), "pepita", "⚠ automat de colet GLS: la fel");
+
+  assert.equal(metodaPlata("creditcard", "shipping"), "pepita");
+  assert.equal(metodaPlata("transfer", "shipping"), "pepita");
+  assert.equal(metodaPlata(null, "shipping"), "pepita");
   /* ⚠ Un mod necunoscut NU devine ramburs: curierul ar mai cere o data banii deja platiti. */
-  assert.equal(metodaPlata("bitcoin"), "pepita");
+  assert.equal(metodaPlata("bitcoin", "shipping"), "pepita");
+});
+
+test("⚠ cine ia banii: un singur caz e al comerciantului", () => {
+  /* „In cazul curierilor proprii sau al serviciilor terte (inclusiv MPL), decontarea se face
+     direct intre tine si compania de curierat." Restul ajunge la Pepita, sau prin banca. */
+  assert.equal(incaseazaPepita("cod", "shipping"), false, "singurul caz al comerciantului");
+  assert.equal(incaseazaPepita("cod", "mpl"), false);
+  assert.equal(incaseazaPepita("cod", null), false, "necunoscut: se presupune curierul lui, si se avertizeaza");
+
+  assert.equal(incaseazaPepita("cod", "gls"), true);
+  assert.equal(incaseazaPepita("cod", "gls_parcelshop"), true);
+  assert.equal(incaseazaPepita("creditcard", "shipping"), true, "cardul se incaseaza pe site-ul lor");
+  /* ⚠ Transferul ajunge la comerciant, dar prin BANCA, in avans. La usa nu se ia nimic. */
+  assert.equal(incaseazaPepita("transfer", "shipping"), true);
+});
+
+test("livrarea Pepita se recunoaste numai pe cele doua valori GLS", () => {
+  assert.equal(esteLivrarePepita("gls"), true);
+  assert.equal(esteLivrarePepita("gls_parcelshop"), true);
+  for (const m of ["shipping", "mpl", null, "", "easybox", "GLS"]) {
+    assert.equal(esteLivrarePepita(m), false, `${m}`);
+  }
 });
 
 test("starea de plata se citeste de la ei cand o trimit", () => {
@@ -48,7 +78,11 @@ test("⚠ necunoscutul se ARATA, nu se ascunde intr-o eticheta linistitoare", ()
   assert.equal(etichetaPlata("cod"), "Ramburs la curier");
   assert.equal(etichetaPlata("bitcoin"), "Necunoscut (bitcoin)");
   assert.equal(etichetaPlata(null), "Nespecificat de Pepita");
-  assert.equal(etichetaLivrare("gls_parcelshop"), "GLS ParcelShop");
+  /* ⚠ Eticheta spune CE E, nu cum se cheama campul lor: documentatia maghiara traduce
+     `gls_parcelshop` prin „csomagautomata" (automat de colet), iar cea romaneasca prin
+     „automat de colet GLS". Numele campului induce in eroare. */
+  assert.equal(etichetaLivrare("gls_parcelshop"), "Automat de colet GLS (livrare Pepita)");
+  assert.match(etichetaLivrare("gls"), /livrare Pepita/);
   assert.equal(etichetaLivrare("easybox"), "Necunoscut (easybox)");
 });
 

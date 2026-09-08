@@ -44,7 +44,7 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
   const addr = order.shipping_address as ShippingAddress;
   // Ramburs dupa BANI, nu dupa metoda: o comanda cu plata online ramasa neplatita
   // pleca altfel fara nicio cale de incasare. Vezi `rambursDeIncasat`.
-  const ramburs = rambursDeIncasat({ payment_status: order.payment_status, total: order.total });
+  const ramburs = rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source });
 
   const hasAwb = !!(order as unknown as Record<string, unknown>)["colete_awb_number"];
   const awbNumber = ((order as unknown as Record<string, unknown>)["colete_awb_number"] as string) ?? "";

@@ -24,10 +24,44 @@ function round2(n: number): number {
 /** Starile in care banii au fost deja decontati intr-un fel sau altul. */
 const FARA_INCASARE = new Set(["paid", "refunded"]);
 
-export function rambursDeIncasat(o: {
+/**
+ * Banii ii incaseaza marketplace-ul, nu curierul comerciantului?
+ *
+ * ═══ ⚠ DE CE NU SE DEDUCE AICI, CI SE CITESTE ═══
+ *
+ * Raspunsul depinde de reguli ale FURNIZORULUI, si nu de aceleasi la fiecare: la
+ * Pepita atarna de perechea plata + livrare (rambursul unei comenzi Pepita Delivery
+ * ajunge la ei, al uneia cu curierul comerciantului nu). Regula aia se poate schimba
+ * la ei fara sa ne spuna nimeni.
+ *
+ * De aceea hotararea se ia O SINGURA DATA, la ingest, cu documentatia in fata, si se
+ * SCRIE pe comanda. Aici doar se citeste. Dedusa la fiecare emitere de AWB, s-ar fi
+ * putut schimba sub picioarele unei comenzi deja intrate.
+ *
+ * ⚠ Lipsa cheii inseamna „nu stim, deci se poarta ca pana acum". Comenzile din
+ * magazin si cele ale marketplace-urilor care nu o scriu raman neatinse.
+ */
+export function baniiIiIaMarketplaceul(orderSource: unknown): boolean {
+  return (orderSource as { incaseaza_marketplace?: unknown } | null)?.incaseaza_marketplace === true;
+}
+
+export interface ComandaCuRamburs {
   payment_status?: string | null;
   total?: unknown;
-}): number {
+  /**
+   * ⚠ OBLIGATORIU, SI ASTA E TOATA IDEEA.
+   *
+   * Campul e cerut, nu optional, fiindca altfel cele unsprezece locuri care pasau
+   * `{ payment_status, total }` ar fi trecut mai departe pe langa regula noua fara ca
+   * nimic sa spuna ceva: exact tiparul „paza pe un fisier nu e paza pe regula".
+   * Cerut, `tsc` numeste fiecare apelant care nu-l trimite.
+   *
+   * Poate fi `null` la comenzile vechi: acolo nu exista `order_source` deloc.
+   */
+  order_source: unknown;
+}
+
+export function rambursDeIncasat(o: ComandaCuRamburs): number {
   /*
    * Se incaseaza doar cand banii chiar lipsesc. „Platita" e limpede; „restituita"
    * intra si ea aici, fiindca a incasa la livrare o comanda ai carei bani tocmai
@@ -36,6 +70,14 @@ export function rambursDeIncasat(o: {
    * favoarea clientului se vede si se repara, cea inversa se vede abia la reclamatie.
    */
   if (o.payment_status && FARA_INCASARE.has(o.payment_status)) return 0;
+  /*
+   * ⚠ SI CAND BANII AJUNG LA MARKETPLACE, oricare ar fi starea platii.
+   *
+   * O comanda Pepita Delivery cu ramburs e „neplatita" pana cand clientul plateste la
+   * usa, dar plateste curierului LOR, iar decontarea vine de la ei. Precompletat aici,
+   * totalul ar fi fost cerut a doua oara de curierul comerciantului.
+   */
+  if (baniiIiIaMarketplaceul(o.order_source)) return 0;
   const total = round2(Number(o.total));
   return total > 0 ? total : 0;
 }

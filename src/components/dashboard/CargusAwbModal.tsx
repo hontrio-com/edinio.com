@@ -88,7 +88,7 @@ export function CargusAwbModal({
   // Rambursul se completeaza dupa BANI, nu dupa metoda: o comanda cu plata online
   // ramasa neplatita pleca altfel cu ramburs zero. Vezi `rambursDeIncasat`.
   useEffect(() => {
-    if (open && !hasAwb) setCashRepayment(rambursDeIncasat({ payment_status: order.payment_status, total: order.total }).toFixed(2));
+    if (open && !hasAwb) setCashRepayment(rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2));
   }, [open, hasAwb, order.payment_status, order.total]);
 
   const weightNum = parseFloat(weight) || 1;

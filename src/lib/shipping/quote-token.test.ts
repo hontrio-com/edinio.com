@@ -427,7 +427,7 @@ test("⚠ o comanda cu total 0 in care se adauga marfa NU pierde re-cotarea", ()
 
   /* Panoul: totalul PREVIZUALIZAT, adica dupa ce s-au adaugat 500 de lei de marfa. */
   const totalNou = totalDupaEditare(500);
-  const rambursCerut = rambursDeIncasat({ payment_status: comandaZero.payment_status, total: totalNou }) > 0;
+  const rambursCerut = rambursDeIncasat({ payment_status: comandaZero.payment_status, total: totalNou, order_source: null }) > 0;
   assert.equal(rambursCerut, true, "panoul n-ar mai cere ramburs pe o comanda neplatita de 500 lei");
   const [semnata] = semneazaOptiuni(BIZ, dest, rambursCerut, 0, [{ ...opt, price: 21 }]);
 
@@ -435,6 +435,7 @@ test("⚠ o comanda cu total 0 in care se adauga marfa NU pierde re-cotarea", ()
   const rambursVerificat = rambursDeIncasat({
     payment_status: comandaZero.payment_status,
     total: totalDupaEditare(500),
+    order_source: null,
   }) > 0;
   assert.equal(
     verifica(BIZ, dest, 21, semnata.token, { ...opt, ramburs: rambursVerificat }),
@@ -449,6 +450,7 @@ test("⚠ o comanda cu total 0 in care se adauga marfa NU pierde re-cotarea", ()
   const cumGresea = rambursDeIncasat({
     payment_status: comandaZero.payment_status,
     total: comandaZero.total,
+    order_source: null,
   }) > 0;
   assert.equal(cumGresea, false, "premisa s-a schimbat: totalul vechi nu mai da «platit»");
   assert.equal(

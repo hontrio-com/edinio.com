@@ -645,6 +645,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       cod: rambursDeIncasat({
         payment_status: order.payment_status,
         total: previzualizare.stare === "gata" ? previzualizare.total : Number(order.total),
+        order_source: order.order_source,
       }),
     }).then((optiuni) => {
       setRequoting(false);

@@ -73,6 +73,7 @@ test("⚠ drumul intreg: comanda cu ramburs marcata „platit” tot se incaseaz
       { payment_status: "paid" },            // noi: cineva a pus „platit”
     ),
     total: 105.5,                            // chiar suma comenzii #0033
+    order_source: null,                      // comanda eMAG: banii ii ia curierul comerciantului
   });
   assert.equal(ramburs, 105.5, "curierul are de incasat");
 });
@@ -82,6 +83,7 @@ test("si o comanda chiar platita la ei ramane cu zero", () => {
   const ramburs = rambursDeIncasat({
     payment_status: stareaPlatiiPentruRamburs({ payment_status: 1 }, { payment_status: "unpaid" }),
     total: 105.5,
+    order_source: null,
   });
   assert.equal(ramburs, 0);
 });
@@ -142,6 +144,6 @@ test("⚠ VALOAREA TREBUIE SA FIE UNA PE CARE BAZA O PRIMESTE", () => {
 test("⚠ si rambursul se poarta la fel ca inainte", () => {
   /* Schimbarea n-are voie sa mute banii. `rambursDeIncasat` nu incaseaza doar la
      `paid`/`refunded`, iar „unpaid" e in afara acelei multimi exact ca „pending". */
-  assert.equal(rambursDeIncasat({ payment_status: platitLaEi(0), total: 105.5 }), 105.5);
-  assert.equal(rambursDeIncasat({ payment_status: platitLaEi(1), total: 105.5 }), 0);
+  assert.equal(rambursDeIncasat({ payment_status: platitLaEi(0), total: 105.5, order_source: null }), 105.5);
+  assert.equal(rambursDeIncasat({ payment_status: platitLaEi(1), total: 105.5, order_source: null }), 0);
 });

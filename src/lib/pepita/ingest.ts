@@ -6,7 +6,10 @@ import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale
 import { combinatiiActiveUnice, parseVariants } from "@/lib/storefront/variants";
 import { parseBillingCompany, type BillingCompany } from "@/lib/billing/company";
 import { desfaIdArticol, amprentaCombinatie } from "./identitate";
-import { metodaPlata, modLivrareCunoscut, modPlataCunoscut, starePlata, statusInitial, etichetaLivrare, etichetaPlata } from "./mapare";
+import {
+  esteLivrarePepita, incaseazaPepita, metodaPlata, modLivrareCunoscut, modPlataCunoscut,
+  starePlata, statusInitial, etichetaLivrare, etichetaPlata,
+} from "./mapare";
 import type { ComandaPepita, LiniePepita } from "./comanda-forma";
 
 /**
@@ -286,7 +289,7 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     vat_amount: tva,
     vat_rate: cote.length > 0 ? Math.max(...cote) : 0,
     status: statusInitial(),
-    payment_method: metodaPlata(c.modPlata),
+    payment_method: metodaPlata(c.modPlata, c.modLivrare),
     payment_status: starePlata(c.starePlata, c.modPlata),
     notes: c.mesajClient,
     internal_notes: noteInterne(c, nelegate),
@@ -510,6 +513,18 @@ function sursaComenzii(c: ComandaPepita, ctx: ContextIngest): Record<string, unk
     pepita_payment_status: c.starePlata,
     pepita_delivery_mode: c.modLivrare,
     pepita_status: c.status,
+    /*
+     * ⚠ CINE IA BANII, hotarat AICI si scris pe comanda, nu dedus mai tarziu.
+     *
+     * `rambursDeIncasat` il citeste la fiecare emitere de AWB. Dedus acolo, regula ar fi
+     * atarnat de o traducere care se poate schimba la ei fara sa ne spuna nimeni, iar o
+     * comanda deja intrata si-ar fi schimbat intelesul sub picioare.
+     *
+     * Pentru Pepita Delivery (GLS), rambursul ajunge la ei: comerciantul nu are ce incasa
+     * la usa, iar precompletat ar fi cerut clientului a doua oara aceiasi bani.
+     */
+    incaseaza_marketplace: incaseazaPepita(c.modPlata, c.modLivrare),
+    livrare_pepita: esteLivrarePepita(c.modLivrare),
     ...(c.voucher > 0 ? { voucher: round2(c.voucher) } : {}),
     ...(c.client.codFiscal ? { tax_number: c.client.codFiscal } : {}),
     /*
@@ -533,6 +548,21 @@ function noteInterne(c: ComandaPepita, nelegate: string[]): string {
     `Plată: ${etichetaPlata(c.modPlata)}. Livrare aleasă la Pepita: ${etichetaLivrare(c.modLivrare)}.`,
     "Confirmarea și statusul comenzii se operează în Pepita Admin: nu există legătură prin care Edinio să le trimită.",
   ];
+  /*
+   * ⚠ CINE INCASEAZA, SPUS PE COMANDA. Fara randul asta, comerciantul vede „Ramburs la
+   * curier" si emite un AWB cu ramburs, iar clientul plateste de doua ori: o data
+   * curierului Pepita si o data al lui.
+   */
+  if (esteLivrarePepita(c.modLivrare)) {
+    randuri.push(
+      "⚠ Livrare Pepita: coletul e dus de GLS-ul contractat de Pepita, nu de curierul tău. "
+      + (c.modPlata === "cod"
+        ? "Rambursul îl încasează Pepita și îți vine în decontarea lor, deci NU pune ramburs pe niciun AWB propriu."
+        : "Nu ai ce încasa la livrare."),
+    );
+  } else if (c.modPlata === "transfer") {
+    randuri.push("Plata prin transfer ajunge direct la tine, în avans. Nu se încasează nimic la livrare.");
+  }
   if (c.mesajCurier) randuri.push(`Mesaj pentru curier: ${c.mesajCurier}`);
   if (c.client.codFiscal) randuri.push(`Cod fiscal cumpărător: ${c.client.codFiscal} (neverificat la ANAF).`);
   if (!modPlataCunoscut(c.modPlata)) {

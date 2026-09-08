@@ -62,7 +62,7 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   const addr = order.shipping_address as ShippingAddress;
   // Ramburs dupa BANI, nu dupa metoda: comanda #0033 a plecat cu plata online
   // neincasata si ramburs zero. Vezi `rambursDeIncasat`.
-  const ramburs = rambursDeIncasat({ payment_status: order.payment_status, total: order.total });
+  const ramburs = rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source });
 
   // Receiver state
   const [counties, setCounties] = useState<WootCounty[]>([]);

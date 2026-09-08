@@ -106,7 +106,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
    * online ramasa neplatita arata ca una cu cardul si ar pleca cu ramburs zero.
    */
   const [ramburs, setRamburs] = useState(() =>
-    gata || inCurs ? "0" : rambursDeIncasat({ payment_status: order.payment_status, total: order.total }).toFixed(2),
+    gata || inCurs ? "0" : rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2),
   );
   const [continut, setContinut] = useState(() => {
     const items = (Array.isArray(order.items) ? order.items : []) as { name?: string }[];

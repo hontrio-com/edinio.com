@@ -109,7 +109,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
    * Ramane EDITABIL: e valoarea implicita, nu o incuietoare.
    */
   const [ramburs, setRamburs] = useState(() =>
-    areAwb ? "0" : rambursDeIncasat({ payment_status: order.payment_status, total: order.total }).toFixed(2),
+    areAwb ? "0" : rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2),
   );
   const [continut, setContinut] = useState(() => {
     const items = (Array.isArray(order.items) ? order.items : []) as { name?: string }[];

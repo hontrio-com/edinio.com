@@ -121,7 +121,7 @@ export function SamedayAwbModal({
   // ramasa neplatita pleca altfel cu ramburs zero. Vezi `rambursDeIncasat`.
   useEffect(() => {
     if (open && !hasAwb) {
-      setCod(rambursDeIncasat({ payment_status: order.payment_status, total: order.total }).toFixed(2));
+      setCod(rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2));
       // Valoarea asigurata e valoarea MARFII, nu suma de incasat: o comanda deja
       // platita calatoreste cu aceeasi marfa, deci se declara la fel.
       setInsuredValue((Number(order.total) || 0).toFixed(2));

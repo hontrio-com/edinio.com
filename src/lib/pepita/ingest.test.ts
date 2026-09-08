@@ -25,6 +25,7 @@ import type { Database } from "@/types/database.types";
 import { citesteComanda, type ComandaPepita } from "./comanda-forma";
 import { idArticol } from "./identitate";
 import { ingereaza, leagaLiniile } from "./ingest";
+import { rambursDeIncasat } from "@/lib/orders/ramburs";
 
 /* ══════════════════════════════════════════════════════════════════════════
    O BAZA FALSA CU CONSTRANGERILE ADEVARATE
@@ -446,6 +447,58 @@ test("o comanda pe persoana fizica n-are date de firma", async () => {
   const b = faceBaza();
   await ingereaza(b.db, CTX, comanda());
   assert.equal((b.orders[0] as unknown as { billing_company: unknown }).billing_company, null);
+});
+
+test("⚠ comanda Pepita Delivery cu ramburs NU mai ajunge sa fie incasata si de curierul nostru", async () => {
+  /*
+   * ═══ DEFECTUL, DE LA UN CAPAT LA ALTUL ═══
+   *
+   * Nu se probeaza ca `metodaPlata` intoarce un sir, ci ca suma pe care o precompleteaza
+   * formularele de AWB e ZERO. Intre cele doua stau ingestul, `order_source` si
+   * `rambursDeIncasat`, iar defectul traia tocmai in cusatura dintre ele: fiecare piesa
+   * parea corecta.
+   */
+  const b = faceBaza();
+  await ingereaza(b.db, CTX, comanda({ payment_mode: "cod", delivery_mod: "gls", total_shipping_price: 0 }));
+  const o = b.orders[0];
+
+  assert.equal(o.payment_method, "pepita", "nu e rambursul comerciantului");
+  assert.equal(o.payment_status, "unpaid", "si totusi banii chiar n-au intrat inca");
+  assert.equal(o.order_source.incaseaza_marketplace, true);
+  assert.equal(
+    rambursDeIncasat({ payment_status: o.payment_status, total: o.total, order_source: o.order_source }),
+    0,
+    "⚠ zero: altfel clientul plateste o data curierului Pepita si inca o data al nostru",
+  );
+  assert.match(o.internal_notes, /Livrare Pepita/);
+  assert.match(o.internal_notes, /NU pune ramburs/);
+});
+
+test("⚠ perechea: cu curierul comerciantului, rambursul se incaseaza ca oricare altul", async () => {
+  const b = faceBaza();
+  await ingereaza(b.db, CTX, comanda({ payment_mode: "cod", delivery_mod: "shipping", total_shipping_price: 0 }));
+  const o = b.orders[0];
+  assert.equal(o.payment_method, "cash_on_delivery");
+  assert.equal(o.order_source.incaseaza_marketplace, false);
+  assert.equal(
+    rambursDeIncasat({ payment_status: o.payment_status, total: o.total, order_source: o.order_source }),
+    o.total,
+    "aici marfa chiar pleaca fara bani daca nu se incaseaza",
+  );
+});
+
+test("⚠ transferul in avans nu se incaseaza la usa", async () => {
+  /* „Transferul nu ajunge la Pepita, ci direct la voi", scrie la ei: banii vin prin banca. */
+  const b = faceBaza();
+  await ingereaza(b.db, CTX, comanda({ payment_mode: "transfer", payment_status: "unpaid", delivery_mod: "shipping" }));
+  const o = b.orders[0];
+  assert.equal(o.payment_status, "unpaid", "nu se pretinde ca banii au venit");
+  assert.equal(
+    rambursDeIncasat({ payment_status: o.payment_status, total: o.total, order_source: o.order_source }),
+    0,
+    "dar la livrare nu se cere nimic",
+  );
+  assert.match(o.internal_notes, /transfer ajunge direct la tine/);
 });
 
 test("potrivirea liniilor nu cere nicio scriere", async () => {

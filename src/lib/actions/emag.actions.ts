@@ -1478,7 +1478,7 @@ export async function emiteAwbEmag(
    * Calea eMAG era singura care n-o folosea.
    */
   const { data: comandaLocala, error: eComanda } = await admin.from("orders")
-    .select("payment_status, total").eq("id", orderId).eq("business_id", businessId).maybeSingle();
+    .select("payment_status, total, order_source").eq("id", orderId).eq("business_id", businessId).maybeSingle();
   if (eComanda) return { error: `Comanda nu s-a putut citi: ${eComanda.message}` };
 
   /*
@@ -1494,6 +1494,10 @@ export async function emiteAwbEmag(
    * factura.
    */
   const ramburs = rambursDeIncasat({
+    /* ⚠ La eMAG rambursul il incaseaza curierul COMERCIANTULUI, deci comenzile lor nu poarta
+       marcajul `incaseaza_marketplace`. Originea se citeste oricum, ca regula despre „cine ia
+       banii" sa vina din acelasi loc pentru toate comenzile, nu sa fie presupusa aici. */
+    order_source: (comandaLocala as { order_source?: unknown } | null)?.order_source ?? null,
     payment_status: stareaPlatiiPentruRamburs(
       brut as { payment_status?: unknown },
       comandaLocala as { payment_status?: string | null } | null,
@@ -2461,7 +2465,7 @@ export async function pregatireAwbEmag(
   /* ⚠ Comanda NOASTRA, pentru ramburs. Vezi nota din `emiteAwbEmag`: `cashed_cod` e cat
      s-a incasat deja, deci zero inainte de livrare. */
   const { data: comandaPentruRamburs, error: eRamburs } = await admin.from("orders")
-    .select("payment_status, total").eq("id", orderId).eq("business_id", businessId).maybeSingle();
+    .select("payment_status, total, order_source").eq("id", orderId).eq("business_id", businessId).maybeSingle();
   /*
    * ⚠ AICI SE PIERD BANI, SI S-AU MAI PIERDUT O DATA.
    *
@@ -2480,6 +2484,7 @@ export async function pregatireAwbEmag(
        needitabil, deci daca cele doua socoteli s-ar departa, omul ar vedea o cifra si ar
        pleca alta. Vezi `stareaPlatiiPentruRamburs`. */
     ramburs: rambursDeIncasat({
+      order_source: (comandaPentruRamburs as { order_source?: unknown } | null)?.order_source ?? null,
       payment_status: stareaPlatiiPentruRamburs(
         brut as { payment_status?: unknown },
         comandaPentruRamburs as { payment_status?: string | null } | null,

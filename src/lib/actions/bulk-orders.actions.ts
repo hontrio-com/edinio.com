@@ -320,7 +320,7 @@ export async function bulkGenerateAwbs(
        ar prinde duplicatul, dar comanda ar fi numarata „generata" in loc de
        „sarita", si la Posta s-ar consuma cate un cod din plaja la fiecare rulare.
        Aceeasi lectie ca la `COURIER_FIELDS` din aboutyou/sync.ts. */
-    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number")
+    .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, order_source, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number")
     .eq("business_id", businessId).in("id", ids);
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
@@ -434,6 +434,16 @@ type BulkOrderRow = {
   // De starea platii atarna rambursul. Nedeclarata, ar fi fost mereu `undefined`,
   // deci orice comanda ar fi plecat cu ramburs, inclusiv cele deja platite.
   payment_status: string | null;
+  /*
+   * ⚠ SI ORIGINEA, din exact acelasi motiv, cu o miza in plus.
+   *
+   * De ea atarna „cine ia banii": la o comanda Pepita Delivery rambursul il incaseaza
+   * Pepita, deci comerciantul nu are ce cere la usa. Necerut in `select`, campul ar fi
+   * venit `undefined`, regula n-ar fi vazut nimic, si TOATE coletele din lot ar fi plecat
+   * cu ramburs. Iar generarea in masa n-are niciun camp de corectat: ce iese de aici
+   * pleaca direct pe colet.
+   */
+  order_source: unknown;
   shipping_address: unknown; items: unknown;
 };
 

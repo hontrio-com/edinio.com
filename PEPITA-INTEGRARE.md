@@ -67,6 +67,14 @@ schimba). Un articol aplatizat nu are structura de variatii, deci n-are ce sa se
 ⚠ **La activare li se spune ca feedul NU contine produse cu variatii.** Sablonul din `activare.ts` o
 scrie. Crezand altceva, ar astepta structura `<Variations>` si ar putea grupa gresit articolele.
 
+Cele doua capete ale promisiunii — textul catre ei si ce emite chiar serializatorul — sunt legate de
+`promisiunea-fara-variatii.test.ts`. Traiau despartite, iar o reparatie care ar fi inceput sa emita
+`<Variations>` ar fi trecut de toate probele, si prima care ar fi aflat ar fi fost Pepita.
+
+Documentatia lor, asa cum a fost descarcata pe 08.09.2026, e pastrata in `docs/pepita/`, cu
+propozitia despre variatii citabila la fata locului. Pana atunci copiile traiau doar in dosarul
+temporar al unei sesiuni, deci verificarea afirmatiei cerea recuperare din transcrieri.
+
 ## Adresele, si cheile lor
 
 ```
@@ -231,17 +239,27 @@ migrations/2026-12-28-pepita-marketplace.sql
 
 Lista de intrebari deschise, in ordinea in care conteaza:
 
-1. **Ce pune Pepita in `sku` la comanda?** Presupunem `<Id>`-ul din feedul nostru, fiindca e singurul
-   identificator dat de partener pe care il au. Daca trimit `ProductNumber` sau altceva, potrivirea
-   cade pe plasa de rezerva (SKU-ul produsului) si restul ajunge in carantina.
-2. **Daca un magazin trimite totusi produse cu `<Variations>`, ce `sku` intorc pentru o linie?**
-   Raspunsul hotaraste daca modul nativ merita construit vreodata.
-3. **Cine emite factura catre clientul final** pe piata din Romania?
-4. **Lista de `delivery_mod` pentru Romania.** Cea publicata (`shipping`, `gls`, `gls_parcelshop`,
+> Documentatia lor, asa cum a fost descarcata pe 08.09.2026, e pastrata in `docs/pepita/`.
+> Intrebarile de mai jos sunt exact ce NU scrie acolo.
+
+1. **In `products[].sku` al comenzii pe care ne-o impingeti, ce camp din feedul nostru puneti:
+   `<Id>`, `<ProductNumber>` sau `<StructuredId>`?** Documentatia spune doar „stock-keeping unit
+   code of the product (given by the partner)". Noi presupunem `<Id>`. Daca trimiteti altceva,
+   potrivirea cade pe plasa de rezerva (SKU-ul produsului) si restul ajunge in carantina.
+   *Se poate afla si fara ei, cu o singura cumparatura reala dintr-un produs cu variante:
+   `select rezumat from pepita_comenzi where external_order_id = '<id>'` pastreaza `sku`-ul primit.*
+2. **Ce se intampla cu un articol al carui `<Id>` nu mai apare intr-o citire ulterioara a
+   feedului?** Ramane publicat cu ultimele date, sau il scoateti de la vanzare, si dupa cate zile?
+   De raspuns atarna cat de grav e un articol orfan lasat dupa o redenumire de varianta.
+3. **Trimitem fiecare varianta ca `<Product>` de sine statator, cu `<Id>` propriu, dar cu
+   `<ProductNumber>` (MPN) IDENTIC pe toate variantele aceluiasi produs. Dedupleaza sistemul
+   vostru dupa `<ProductNumber>`?** Daca da, variantele s-ar putea contopi la ei.
+4. **Cine emite factura catre clientul final** pe piata din Romania?
+5. **Lista de `delivery_mod` pentru Romania.** Cea publicata (`shipping`, `gls`, `gls_parcelshop`,
    `mpl`) e a pietei ungare.
-5. **`ShippingDelay`**: zile lucratoare, confirmat in documentatie. Se cere confirmarea ca se
+6. **`ShippingDelay`**: zile lucratoare, confirmat in documentatie. Se cere confirmarea ca se
    masoara de la primirea comenzii.
-6. **Blocurile repetate din exemplul lor de XML** (`<Prices>...</Prices><Prices>...</Prices>`) sunt
+7. **Blocurile repetate din exemplul lor de XML** (`<Prices>...</Prices><Prices>...</Prices>`) sunt
    marcaje de colapsare ale paginii lor sau chiar mai multe blocuri, pentru mai multe monede? Noi
    trimitem cate unul singur, ceea ce e sigur in orice caz.
 

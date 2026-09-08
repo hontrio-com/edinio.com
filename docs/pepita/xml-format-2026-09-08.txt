@@ -1,0 +1,736 @@
+
+ Pepita.hu - XML ismertető
+ Szállítás ide 
+ HUF
+ Magyarország (HUF)
+ RON
+ Románia (RON)
+ EUR
+ Németország (EUR)
+ EUR
+ Szlovákia (EUR)
+ EUR
+ Ausztria (EUR)
+ PLN
+ Lengyelország (PLN)
+ EUR
+ Bulgária (EUR)
+ EUR
+ Horvátország (EUR)
+ Magyar
+ Területi és nyelvi beállítások 
+ ×
+ Szállítási ország és pénznem:
+ Magyarország (HUF)
+ Magyarország (HUF)
+ Románia (RON)
+ Németország (EUR)
+ Szlovákia (EUR)
+ Ausztria (EUR)
+ Lengyelország (PLN)
+ Bulgária (EUR)
+ Horvátország (EUR)
+ Nyelv:
+ Magyar
+ English 
+ Magyar 
+ Română 
+ Deutsch 
+ Slovenčina 
+ Polski 
+ Български 
+ Hrvatski 
+ Beállítások mentése
+ belépés 
+ Hello, jelentkezz be 
+ 6 ok, hogy miért 
+ Bejelentkezés 
+ Még nincs fiókod? 
+ Regisztrálj 
+ 6 ok, hogy regisztrálj 
+ Személyre szabott ajánlatok és kedvezmények 
+ Elsőbbség privát akcióknál 
+ Gyorsabb vásárlás 
+ Egyszerűbb garanciális ügyintézés 
+ Rendelésed követése 
+ Korábbi rendeléseid 
+ belépés 
+ Hello, jelentkezz be 
+ 6 ok, hogy miért 
+ Bejelentkezés 
+ Még nincs fiókod? 
+ Regisztrálj 
+ 6 ok, hogy regisztrálj 
+ Személyre szabott ajánlatok és kedvezmények 
+ Elsőbbség privát akcióknál 
+ Gyorsabb vásárlás 
+ Egyszerűbb garanciális ügyintézés 
+ Rendelésed követése 
+ Korábbi rendeléseid 
+ Keresés
+ Keresés
+ « Vissza
+ Keresés
+ Kategóriák és profil
+ Bejelentkezés
+ Pepita BOOM!
+ Best sellers
+ Összes kategória
+ Ügyfélszolgálat
+ Magyar
+ English
+ XML ismertető
+ Jelen ismertető az alábbiakat tartalmazza:
+ Termék és készlet adatok átadása a Pepita.hu rendszerébe
+ Termék XML fájl szerkezete és feltüntetendő mezők
+ Termék XML fájl szerkezete variációs termék esetén
+ Példa termék XML fájl
+ Készlet átadása a Pepita.hu rendszerébe
+ Készlet XML fájl szerkezete és feltüntetendő mezők
+ Készlet XML fájl szerkezete variációs termék esetén
+ Példa készlet XML fájl
+ Termékek átadása a Pepita.hu rendszerébe
+ Az átadott terméklistának az alábbi szabályoknak kell megfelelnie:
+ Az XML terméklista kódolása kizárólag UTF-8 lehet
+ Az árakat minden esetben kötelező megadni, 0-s árat rendszerünk nem fogad el
+ A speciális karakterek XML szabványnak megfelelő kódolása kötelező.
+ ("&, <, >" karakterek helyett &amp;, &gt;, &lt; használata)
+ URL-ek esetében kérjük ügyeljen arra, hogy az url csak szabványos karaktereket
+ tartalmazzon (például szóköz helyett +, vagy %20 karakter)
+ Az XML fájl szerkezetét és a feltüntetendő mezőket az alábbi táblázat tartalmazza:
+ Elem
+ Kötelező?
+ Leírás
+ <Id>
+ Kötelező
+ A termék egyedi azonosítója. Ez egy szöveges érték, ami:
+ Tetszőlegesen megválasztható (lehet az adatbázisotokban levő egyedi azonosító, cikkszám, EAN/UPC kód,
+ etc.)
+ Termékenként egyedi, azaz két termék nem rendelkezik ugyanazzal az ID-val
+ Nem változik (azaz ha a terméket adatai változnak, készlet változik, etc. ez az azonosító ugyanaz
+ marad)
+ <LastMod>
+ Opcionális
+ A termék utolsó módosítási időpontja, időbélyege. Formátuma egy számérték (timestamp), pl.: 1583996473 (Ez 2020-03-12 07:01:13 időpontnak felel meg).
+ <StructuredId>
+ Ajánlott
+ Termék UPC/EAN/ISBN kódja, melyet a gyártó adott meg a termékhez. Amennyiben van, erősen ajánlott megadni a
+ gyorsabb és hatékonyabb feldolgozás érdekében.
+ <ProductNumber>
+ Ajánlott
+ A gyártó által megadott termékkód (MPN - gyártói cikkszám)
+ <Descriptions>
+ Kötelező
+ ├── <Name>
+ Kötelező
+ A termék neve.
+ ├── <Description>
+ Kötelező
+ A termék (hosszú) leírása. A leírás részeként megküldött képek, videók és egyéb médiatartalmak nem kerülnek átvételre, így azok nem jelennek meg a termékleírásban.
+ ├── <Brand>
+ Opcionális
+ A termék brandje.
+ ├── <Manufacturer>
+ Opcionális
+ A termék gyártójának neve.
+ ├── <Author>
+ Opcionális
+ Könyv típusú termék esetén a könyv szerzőjének neve.
+ ├── <Publisher>
+ Opcionális
+ Könyv típusú termék esetén a könyv kiadójának neve.
+ <Prices>
+ Kötelező
+ ├── <Currency>
+ Kötelező
+ A termék ár pénznemének ISO 4217 kódja. (pl. Ft esetén HUF)
+ ├── <Price>
+ Kötelező
+ A termék ára (a <Currency> tag-ben megadott pénznemben).
+ ├── <VatPercent>
+ Kötelező
+ A termék áfa tartalma.
+ ├── <DiscountedPrice>
+ Opcionális
+ Kedvezményes/leárazott termék esetén a termék kedvezményes/leárazott ára (a <Currency> tag-ben megadott pénznemben).
+ ├── <PurchaseNetPrice>
+ Opcionális
+ A termék nettó átadási ára (a <Currency> tag-ben megadott pénznemben).
+ ├── <ShippingPrice>
+ Opcionális
+ A termék szállítási költsége, amennyiben az eltér az alapértelmezetten beállított szállítási költségetől. Termék darabonként értendő, tehát pl.: nagy csomagok, súly határon, vagy méret határon kívüli termékek (a <Currency> tag-ben megadott pénznemben).
+ <Warranty>
+ Opcionális
+ Garanciainformációkat tartalmaz a termékről
+ ├── <Type>
+ Opcionális
+ Amennyiben a termékre vállalnak garanciát, a garanciális időszak típusát tartalmazza. Lehetséges értékek:
+ Érték
+ Jelentés
+ None
+ Nincs garancia
+ Day
+ A <Duration> mező a garanciális időszak hosszát tartalmazza munkanapokban.
+ Week
+ A <Duration> mező a garanciális időszak hosszát tartalmazza hetekben.
+ Month
+ A <Duration> mező a garanciális időszak hosszát tartalmazza hónapokban.
+ Year
+ A <Duration> mező a garanciális időszak hosszát tartalmazza években.
+ ├── <Duration>
+ Opcionális
+ A garanciális időszak hossza
+ <Categories>
+ Kötelező
+ Milyen kategóriákhoz tartozik a termék, a legfelsőbb kategóriától a legalsóbbig. (pl. Könyvek > Babanapló). Egy vagy több <Category> elemet tartalmaz.
+ ├── <Category>
+ Kötelező
+ A termék egyik kategóriáját írja le
+    ├── <Id>
+ Opcionális
+ Kategória egyedi azonosítója saját áruházának nyilvántartásában
+    ├── <Name>
+ Kötelező
+ Kategória neve
+ <Photos>
+ Kötelező
+ Milyen képek tartoznak a termékhez; egy vagy több <Photo> elemet tartalmaz.
+ ├── <Photo>
+ Kötelező
+ A termék egyik képét írja le
+    ├── <Url>
+ Kötelező
+ Kép teljes URL-je
+    ├── <IsPrimary>
+ Kötelező
+ Ez a kép a termék elsődleges/alapértelmezett képe? (true vagy false értéket vehet fel)
+    ├── <Title>
+ Opcionális
+ Kép aláírása
+    ├── <PrimaryVariation>
+ Opcionális
+ Ha a kép a termék egy változatához tartozik, az elsődleges tulajdonság értéke (a PrimaryAttribute mezőben megadott tulajdonsághoz tartozó érték)
+    ├── <SecondaryVariation>
+ Opcionális
+ Ha a kép a termék egy változatához tartozik, a másodlagos tulajdonság értéke (a SecondaryAttribute mezőben megadott tulajdonsághoz tartozó érték)
+    ├── <TertiaryVariation>
+ Opcionális
+ Ha a kép a termék egy változatához tartozik, a harmadlagos tulajdonság értéke (a TertiaryAttribute mezőben megadott tulajdonsághoz tartozó érték)
+ <VideoLinks>
+ Opcionális
+ Milyen videók tartoznak a termékhez. Egy vagy több videó teljes URL-je, vesszővel elválasztva
+ <ProductUrl>
+ Opcionális
+ A termék teljes URL-je
+ <Availability>
+ Kötelező
+ Készletinformációkat tartalmaz a termékről
+ ├── <Available>
+ Kötelező
+ Készleten van a termék? (true vagy false értéket vehet fel)
+ ├── <Quantity>
+ Opcionális
+ Hány termék van készleten jelenleg
+ ├── <RestockDate>
+ Opcionális
+ Mikorra várható a következő készletfeltöltés? (YYYY-MM-DD formátumú dátum)
+ ├── <ShippingDelay>
+ Opcionális
+ Várható összekészítési idő, munkanapokban
+ <Attributes>
+ Opcionális
+ Termékjellemzők megadására szolgáló mező. Érdemes minél több termékjellemzőt átadni, ugyanis a termék ezek alapján válik kereshetővé a rendszerben a vásárlók számára.
+ ├── <Attribute>
+ Kötelező
+ Egy konkrét termékjellemző megadását teszi lehetővé és tetszőleges számú attribútum küldhető a feed-ben
+    ├── <AttributeName>
+ Kötelező
+ A termékjellemző konkrét megnevezése, pl.: Memória (GB)
+    ├── <AttributeValue>
+ Kötelező
+ A termékjellemző konkrét értéke, pl.: az előző, memória példánál maradva - 16
+ <VolumeDimensions>
+ Opcionális
+ Termék térfogat adatainak és súlyának (Szélesség,Hosszúság,Magasság,Súly) megadására szolgáló mező.
+    ├── <Width>
+ Opcionális
+ A termék szélessége cm mértékegységben. Helyes formátumok: "15"; "0.5"; "0,68"; 
+    ├── <Height>
+ Opcionális
+ A termék magassága cm mértékegységben. Helyes formátumok: "15"; "0.5"; "0,68"; 
+    ├── <Length>
+ Opcionális
+ A termék hosszúsága cm mértékegységben. Helyes formátumok: "15"; "0.5"; "0,68"; 
+    ├── <Weight>
+ Opcionális
+ A termék súlya kg mértékegységben. Helyes formátumok: "15"; "0.5"; "0,68"; "0.0001"; 
+ Az XML fájl szerkezete variációs termékek esetén a következőképpen egészül ki:
+ Elem
+ Kötelező?
+ Leírás
+ <Variations>
+ Opcionális
+ Milyen variációk tartoznak a termékhez. (Ha egy termék egyszer variációsként lett átadva, azon változtatni nem szabad)
+ ├── <PrimaryAttribute>
+ Kötelező
+ Megadja, hogy milyen tulajdonság alapján vannak megkülönböztetve a variációk.
+ (pl. ha egy babakocsi 3 színben elérhető, akkor az elsődleges tulajdonság a szín lesz)
+ ├── <SecondaryAttribute>
+ Opcionális
+ Ha két tulajdonság alapján is megkülönbözhethetjük a termék variációkat, megadja a második tulajdonságot.
+ (pl. ha egy póló több színben és méretben is elérhető)
+ ├── <TertiaryAttribute>
+ Opcionális
+ Ha három tulajdonság alapján is megkülönbözhethetjük a termék variációkat, megadja a harmadik tulajdonságot.
+ ├── <Variation>
+ Kötelező
+ A termék egy változatát írja le. 
+    ├── <PrimaryVariation>
+ Kötelező
+ Elsődleges tulajdonság értéke (a PrimaryAttribute mezőben megadott tulajdonsághoz tartozó érték)
+    ├── <SecondaryVariation>
+ Opcionális
+ Másodlagos tulajdonság értéke (a SecondaryAttribute mezőben megadott tulajdonsághoz tartozó érték)
+    ├── <TertiaryVariation>
+ Opcionális
+ Harmadlagos tulajdonság értéke (a TertiaryAttribute mezőben megadott tulajdonsághoz tartozó érték)
+    ├── <Prices>
+ Opcionális
+ Amennyiben a termék különböző változatai más árakkal rendelkeznek, itt lehet azokat megadni.
+       ├── <Currency>
+ Kötelező
+ A termékvariáció ár pénznemének ISO 4217 kódja. (pl. Ft esetén HUF)
+       ├── <Price>
+ Kötelező
+ A termékvariáció ára (a <Currency> tag-ben megadott pénznemben).
+       ├── <DiscountedPrice>
+ Opcionális
+ Kedvezményes/leárazott termék esetén a termékvariáció kedvezményes/leárazott ára (a <Currency> tag-ben megadott pénznemben).
+       ├── <PurchaseNetPrice>
+ Opcionális
+ A termék nettó átadási ára (a <Currency> tag-ben megadott pénznemben).
+       ├── <ShippingPrice>
+ Opcionális
+ A termékvariáció szállítási költsége, amennyiben az eltér az alapértelmezetten beállított szállítási költségetől (a <Currency> tag-ben megadott pénznemben).
+    ├──<Availability>
+ Kötelező
+ Készletinformációkat tartalmaz a termékváltozatról
+       ├── <Available>
+ Kötelező
+ Készleten van ez a termékváltozat? (true vagy false értéket vehet fel)
+       ├── <Quantity>
+ Opcionális
+ Hány termék van készleten jelenleg
+       ├── <RestockDate>
+ Opcionális
+ Mikorra várható a következő készletfeltöltés? (YYYY-MM-DD formátumú dátum)
+       ├── <ShippingDelay>
+ Opcionális
+ Várható összekészítési idő, munkanapokban
+Példa XML
+Példa XML letöltése
+ <Catalog xmlns="https://pepita.hu/feed/1.0">
+ <!-- Példa normál termékre -->
+ <Product>
+ <Id>1234</Id>
+ <LastMod>1583996473</LastMod>
+ <StructuredId>9789633736579</StructuredId>
+ <Descriptions>
+ <Name>Játékos babafejlesztés</Name>
+ <Description>
+ Ez az ellenállhatatlan könyv, a baba életkorához igazodó, inspiráló tevékenységeket soroltat fel az első 12 hónap minden egyes napjára, az újszülött kortól egészen a 12 hónapos korig. Játékok és programok a babával, megspékelve sok-sok remek tanáccsal és ötlettel az újdonsült anyukák és apukák számára. A kicsi fejlődését elősegítő játékokkal feldobhatod a mindennapi szülői rutinteendőket, és stimuláló, fejlesztő közeget biztosíthatsz a babádnak.
+ </Description>
+ <Description>...</Description>
+ <Author>Susannah Steel</Author>
+ <Publisher>Central Médiacsoport Zrt.</Publisher>
+ </Descriptions>
+ <Descriptions>...</Descriptions>
+ <Prices>
+ <Currency>HUF</Currency>
+ <Price>1500</Price>
+ <VatPercent>27</VatPercent>
+ <DiscountedPrice>1200</DiscountedPrice>
+ <PurchaseNetPrice>800</PurchaseNetPrice>
+ </Prices>
+ <Prices>...</Prices>
+ <Categories>
+ <Category>
+ <Id>674</Id>
+ <Name>Könyvek</Name>
+ </Category>
+ <Category>...</Category>
+ <Category>
+ <Id>1087</Id>
+ <Name>Család és szülők</Name>
+ </Category>
+ <Category>...</Category>
+ </Categories>
+ <Categories>...</Categories>
+ <Photos>
+ <Photo>
+ <Url>
+ http://i.pepita.hu/images/product/147925/30150920_original.jpg
+ </Url>
+ <Url>...</Url>
+ <IsPrimary>true</IsPrimary>
+ </Photo>
+ <Photo>...</Photo>
+ <Photo>
+ <Url>
+ http://i.pepita.hu/images/product/145293/30145188_original.jpg
+ </Url>
+ <Url>...</Url>
+ <IsPrimary>false</IsPrimary>
+ </Photo>
+ <Photo>...</Photo>
+ </Photos>
+ <Photos>...</Photos>
+ <VideoLinks>https://www.youtube.com/watch?v=npMXbz3r218,https://www.youtube.com/watch?v=zXQ7JFOgEmc</VideoLinks>
+ <ProductUrl>https://pepita.hu/gyerekulesek-c1170/summer-baby-berton-sps-isofix-gyerekules-0-36kg-ajandek-fekete-szurke-p275589</ProductUrl>
+ <Availability>
+ <Available>true</Available>
+ <Quantity>13</Quantity>
+ <ShippingDelay>3</ShippingDelay>
+ </Availability>
+ <Availability>...</Availability>
+ <Attributes>
+ <Attribute>
+ <AttributeName>Memória</AttributeName>
+ <AttributeValue>8 Gb</AttributeValue>
+ </Attribute>
+ <Attribute>
+ <AttributeName>Processzor</AttributeName>
+ <AttributeValue>3 Ghz</AttributeValue>
+ </Attribute>
+ <Attribute>...</Attribute>
+ </Attributes>
+ <VolumeDimensions>
+ <Length>20.3</Length>
+ <Width>15.6</Width>
+ <Height>8.5</Height>
+ <Weight>10.3</Weight>
+ </VolumeDimensions>
+ </Product>
+ <Product>...</Product>
+ <!-- Példa több változattal rendelkező termékre -->
+ <Product>
+ <Id>1235</Id>
+ <StructuredId>9789633736586</StructuredId>
+ <Descriptions>
+ <Name>CAM Agile babakocsi 2017</Name>
+ <Description>
+ Könnyű (5,6 kg) fémvázas babakocsi különálló tolókarokkal, 2 pozíciós háttámlával, levehető kapaszkodóval.
+ </Description>
+ <Description>...</Description>
+ </Descriptions>
+ <Descriptions>...</Descriptions>
+ <Prices>
+ <Currency>HUF</Currency>
+ <Price>19900</Price>
+ <VatPercent>27</VatPercent>
+ </Prices>
+ <Prices>...</Prices>
+ <Categories>
+ <Category>
+ <Id>1207</Id>
+ <Name>Babakocsik</Name>
+ </Category>
+ <Category>...</Category>
+ </Categories>
+ <Categories>...</Categories>
+ <Photos>
+ <Photo>
+ <Url>
+ http://i.pepita.hu/images/product/153024/30205902_original.jpg
+ </Url>
+ <Url>...</Url>
+ <IsPrimary>true</IsPrimary>
+ <!--
+ Ha egy kép nem a termékhez tartozik általánosan, hanem egy adott variációval,
+ azt a PrimaryVariation/SeondaryVariation tulajdonságokkal kell jelezni.
+ Ha a kép nem variációhoz kötött, akkor ezt a taget el kell hagyni.
+ -->
+ <!--...-->
+ <PrimaryVariation>red</PrimaryVariation>
+ </Photo>
+ <Photo>...</Photo>
+ <Photo>
+ <Url>
+ http://i.pepita.hu/images/product/153025/30205903_original.jpg
+ </Url>
+ <Url>...</Url>
+ <IsPrimary>true</IsPrimary>
+ <PrimaryVariation>green</PrimaryVariation>
+ </Photo>
+ <Photo>...</Photo>
+ </Photos>
+ <Photos>...</Photos>
+ <VideoLinks>https://www.youtube.com/watch?v=npMXbz3r218,https://www.youtube.com/watch?v=zXQ7JFOgEmc</VideoLinks>
+ <ProductUrl>https://pepita.hu/gyerekulesek-c1170/summer-baby-berton-sps-isofix-gyerekules-0-36kg-ajandek-fekete-szurke-p275589</ProductUrl>
+ <!-- Termék változatok megadása -->
+ <Variations>
+ <!--
+ Megadja, hogy milyen tulajdonság alapján vannak megkülönböztetve a variációk.
+ pl. ha egy babakocsi 3 színben elérhető, akkor az elsődleges tulajdonság a szín lesz.
+ Ha egy póló 2 színben és 4 méretben elérhető, akkor az elsődleges tulajdonság a szín,
+ a másodlagos tulajdonság a méret lesz.
+ -->
+ <!--...-->
+ <PrimaryAttribute>color</PrimaryAttribute>
+ <!-- Első termék variáció -->
+ <Variation>
+ <!-- Elsődleges tulajdonság értéke - vörös szín -->
+ <PrimaryVariation>red</PrimaryVariation>
+ <!--
+ Ha egy termék több variációval rendelkezik, a készletet külön kell megadni minden variációnál
+ -->
+ <!--...-->
+ <Availability>
+ <Available>true</Available>
+ <Quantity>3</Quantity>
+ </Availability>
+ <Prices>
+ <Currency>HUF</Currency>
+ <Price>15990</Price>
+ <VatPercent>27</VatPercent>
+ </Prices>
+ <Availability>...</Availability>
+ </Variation>
+ <Variation>...</Variation>
+ <Variation>
+ <!-- Elsődleges tulajdonság értéke - zöld szín -->
+ <PrimaryVariation>green</PrimaryVariation>
+ <Availability>
+ <Available>false</Available>
+ <Quantity>0</Quantity>
+ </Availability>
+ <Prices>
+ <Currency>HUF</Currency>
+ <Price>13990</Price>
+ <VatPercent>27</VatPercent>
+ </Prices>
+ <Availability>...</Availability>
+ </Variation>
+ <Variation>...</Variation>
+ </Variations>
+ <Variations>...</Variations>
+ </Product>
+ <Product>...</Product>
+ </Catalog>
+ <Catalog xmlns="https://pepita.hu/feed/1.0">...</Catalog>
+ Készlet átadása a Pepita.hu rendszerébe
+ A készlet XML fájl szerkezetét és a feltüntetendő mezőket az alábbi táblázat tartalmazza:
+ Elem
+ Kötelező?
+ Leírás
+ <Id>
+ Kötelező
+ A termék egyedi azonosítója. Ez egy szöveges érték, ami:
+ Tetszőlegesen megválasztható (lehet az adatbázisotokban levő egyedi azonosító, cikkszám, EAN/UPC kód,
+ etc.)
+ Termékenként egyedi, azaz két termék nem rendelkezik ugyanazzal az ID-val
+ Nem változik (azaz ha a terméket adatai változnak, készlet változik, etc. ez az azonosító ugyanaz
+ marad)
+ <Availability>
+ Kötelező
+ Készletinformációkat tartalmaz a termékről
+ ├── <Available>
+ Kötelező
+ Készleten van a termék? (true vagy false értéket vehet fel)
+ ├── <Quantity>
+ Opcionális
+ Hány termék van készleten jelenleg
+ A készlet XML fájl szerkezete variációs termékek esetén a következőképpen egészül ki:
+ Elem
+ Kötelező?
+ Leírás
+ <Variations>
+ Opcionális
+ Milyen variációk tartoznak a termékhez.
+ ├── <PrimaryAttribute>
+ Kötelező
+ Megadja, hogy milyen tulajdonság alapján vannak megkülönböztetve a variációk.
+ (pl. ha egy babakocsi 3 színben elérhető, akkor az elsődleges tulajdonság a szín lesz)
+ ├── <SecondaryAttribute>
+ Opcionális
+ Ha két tulajdonság alapján is megkülönbözhethetjük a termék variációkat, megadja a második tulajdonságot.
+ (pl. ha egy póló több színben és méretben is elérhető)
+ ├── <TertiaryAttribute>
+ Opcionális
+ Ha három tulajdonság alapján is megkülönbözhethetjük a termék variációkat, megadja a harmadik tulajdonságot.
+ ├── <Variation>
+ Kötelező
+ A termék egy változatát írja le. 
+    ├── <PrimaryVariation>
+ Kötelező
+ Elsődleges tulajdonság értéke (a PrimaryAttribute mezőben megadott tulajdonsághoz tartozó érték)
+    ├── <SecondaryVariation>
+ Opcionális
+ Másodlagos tulajdonság értéke (a SecondaryAttribute mezőben megadott tulajdonsághoz tartozó érték)
+    ├── <TertiaryVariation>
+ Opcionális
+ Harmadlagos tulajdonság értéke (a TertiaryAttribute mezőben megadott tulajdonsághoz tartozó érték)
+    ├──<Availability>
+ Kötelező
+ Készletinformációkat tartalmaz a termékváltozatról
+       ├── <Available>
+ Kötelező
+ Készleten van ez a termékváltozat? (true vagy false értéket vehet fel)
+       ├── <Quantity>
+ Opcionális
+ Hány termék van készleten jelenleg
+Példa készlet XML
+Példa készlet XML letöltése
+ <Catalog xmlns="https://pepita.hu/feed/1.0">
+ <!-- Példa normál termékre -->
+ <Product>
+ <Id>1234</Id>
+ <Availability>
+ <Available>true</Available>
+ <Quantity>13</Quantity>
+ </Availability>
+ <Availability>...</Availability>
+ </Product>
+ <Product>...</Product>
+ <!-- Példa több változattal rendelkező termékre -->
+ <Product>
+ <Id>1235</Id>
+ <!-- Termék változatok megadása -->
+ <Variations>
+ <!--
+ Megadja, hogy milyen tulajdonság alapján vannak megkülönböztetve a variációk.
+ pl. ha egy babakocsi 3 színben elérhető, akkor az elsődleges tulajdonság a szín lesz.
+ Ha egy póló 2 színben és 4 méretben elérhető, akkor az elsődleges tulajdonság a szín,
+ a másodlagos tulajdonság a méret lesz.
+ -->
+ <!--...-->
+ <PrimaryAttribute>color</PrimaryAttribute>
+ <!-- Első termék variáció -->
+ <Variation>
+ <!-- Elsődleges tulajdonság értéke - vörös szín -->
+ <PrimaryVariation>red</PrimaryVariation>
+ <!--
+ Ha egy termék több variációval rendelkezik, a készletet külön kell megadni minden variációnál
+ -->
+ <!--...-->
+ <Availability>
+ <Available>true</Available>
+ <Quantity>3</Quantity>
+ </Availability>
+ <Availability>...</Availability>
+ </Variation>
+ <Variation>...</Variation>
+ <Variation>
+ <!-- Elsődleges tulajdonság értéke - zöld szín -->
+ <PrimaryVariation>green</PrimaryVariation>
+ <Availability>
+ <Available>false</Available>
+ <Quantity>0</Quantity>
+ </Availability>
+ <Availability>...</Availability>
+ </Variation>
+ <Variation>...</Variation>
+ </Variations>
+ <Variations>...</Variations>
+ </Product>
+ <Product>...</Product>
+ </Catalog>
+ <Catalog xmlns="https://pepita.hu/feed/1.0">...</Catalog>
+ Pepita Marketplace
+ Több mint 9 888 000 termék a marketplacen 
+ Havi 4 000 000+ látogató 
+ Nincs adminisztráció, automata XML importálás 
+ Ingyenes belistázás, csak valós eladások után van jutalék 
+ Szeretnék eladó lenni a Pepitán 
+ Vállalati beszerzések 
+ 1 500 000 000 Ft céges megrendelés az elmúlt 12 hónapban 
+ Mennyiségi kedvezmény már 1 000 000 Ft megrendeléstől 
+ Utalványok nagy tételben, rugalmas ajándék a kollégáknak 
+ Dedikált kapcsolattartó segít megtalálni neked a legjobb termékeket 
+ Szeretnék mennyiségi kedvezménnyel vásárolni 
+ Rólunk 
+ Rólunk 
+ Rólunk 
+ Karrier 
+ Impresszum 
+ Cookie használat 
+ Pepita blog
+ Instagram
+ Facebook
+ LinkedIn
+ Rendelés és szállítás 
+ Rendelés és szállítás 
+ Fizetési módok 
+ Szállítási információk 
+ Gyakran ismételt kérdések 
+ Fogalom és jelmagyarázat 
+ Nyereményjáték szabályzat 
+ Termékvisszahívás 
+ Fedezz fel többet 
+ Fedezz fel többet 
+ Pepita BOOM!
+ Best sellers 
+ Automata kávéfőzők
+ Trambulinok
+ Fémvázas medencék
+ Kutyaeledelek
+ Pelenkák
+ Porszívók
+ Kerti pavilonok
+ Vásárlási utalvány 
+ Elérhetőségek
+ Elérhetőségek
+ Vásárlóknak 
+ Kapcsolatfelvétel 
+ Reklamáció 
+ Hírlevél leiratkozás 
+ Partnereinknek 
+ Regisztráció eladóknak 
+ Vállalati beszerzések 
+ Pepita Group 
+ Pepita Magyarország
+ Pepita Románia
+ Pepita Szlovákia
+ Pepita Németország
+ Pepita Lengyelország
+ Pepita Bulgária
+ Pepita Horvátország
+ Babafalva.hu 
+ Black.Friday.hu 
+ A feltüntetett árak bruttó árak, tartalmazzák az általános forgalmi adót. 
+ Egyes tartalmak MI által generáltak, vagy módosítottak. 
+ Adatkezelési tájékoztató 
+ Használati szabályzat 
+ Jogellenes tartalom bejelentése 
+ Aktív igénybe vevők száma 
+ Bíróságon kívüli vitarendezési súgó 
+ Akadálymentességi nyilatkozat 
+ Egyedüli kapcsolattartási pont (HU, EN, DE) 
+ © Pepita Group Zrt. 2017-2026.
+ Minden jog fenntartva. 
+ Hello, Jelentkezz be!
+ Pepita BOOM! 
+ Főoldal
+ Profilom 
+ Megrendeléseim 
+ Ügyfélszolgálat 
+ Csomagkövetés 
+ Kategóriák
+ TOP
+ Top termékek 
+ Otthon és kert
+ Játékok
+ Babák és tipegők
+ Szépség és egészség
+ Műszaki cikk és elektronika
+ Építkezés és felújítás
+ Bútorok
+ Állattartás
+ Sport és szabadidő
+ Járművek és alkatrészek
+ Irodaszer és írószer
+ Élelmiszer és ital
+ Divat és öltözködés
+ Művészet és hobbi
+ Könyvek
+ Összes kategória »

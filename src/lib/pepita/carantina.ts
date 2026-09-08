@@ -79,33 +79,103 @@ function eRomania(tara: string | null): boolean {
   return t === "" || t === "RO" || t === "ROU" || t === "ROMANIA" || t === "ROMÂNIA";
 }
 
+/** Campurile de care atarna hotararea, oricare ar fi izvorul lor. */
+export interface CampuriLivrare {
+  nume: string;
+  telefon: string;
+  judet: string;
+  oras: string;
+  strada: string;
+  tara: string;
+  /** Coletul e dus de GLS-ul contractat de Pepita: atunci nu se cere nimic. */
+  livrarePepita: boolean;
+}
+
 /**
  * Ce lipseste ca sa poti expedia comanda cu mijloacele tale. Gol inseamna „se poate".
  *
  * Ordinea e cea in care le completeaza omul in formular, ca mesajul sa se citeasca firesc.
+ *
+ * ⚠ SOCOTEALA E PE CAMPURI, NU PE SARCINA LOR, fiindca se pune aceeasi intrebare de doua ori,
+ * din doua locuri: la sosire, despre ce ne-au trimis ei, si la reprocesare, despre comanda
+ * asa cum arata ACUM, dupa ce comerciantul a completat-o de mana. Doua socoteli apropiate ar
+ * fi ajuns sa raspunda diferit, si atunci butonul „Reprocesează" n-ar mai fi scos comanda din
+ * carantina niciodata.
  */
-export function lipsuriLivrare(c: ComandaPepita): string[] {
-  /* Livrarea Pepitei nu cere nimic de la noi: coletul pleaca cu eticheta lor. */
-  if (esteLivrarePepita(c.modLivrare)) return [];
+export function lipsuriDinCampuri(c: CampuriLivrare): string[] {
+  if (c.livrarePepita) return [];
 
+  const lipsuri: string[] = [];
+  if (!c.nume.trim()) lipsuri.push("numele clientului");
+  if (!areTelefon(c.telefon)) lipsuri.push("telefonul");
+  /* ⚠ „only for Romanian orders", scrie in documentatia lor: pe alte piete judetul lipseste pe drept. */
+  if (eRomania(c.tara) && !c.judet.trim()) lipsuri.push("județul");
+  if (!c.oras.trim()) lipsuri.push("localitatea");
+  if (!c.strada.trim()) lipsuri.push("strada");
+  return lipsuri;
+}
+
+/** Lipsurile, citite din sarcina primita de la ei. */
+export function lipsuriLivrare(c: ComandaPepita): string[] {
   const l = c.client.livrare;
   const f = c.client.facturare;
-  const lipsuri: string[] = [];
+  /* Aceleasi caderi pe facturare ca in `adresaLivrare`: datele le avem, doar in alt camp. */
+  return lipsuriDinCampuri({
+    nume: [c.client.prenume, c.client.nume].filter(Boolean).join(" ").trim() || (f.nume ?? ""),
+    telefon: c.client.telefon,
+    judet: l.judet ?? "",
+    oras: l.oras ?? f.oras ?? "",
+    strada: l.strada ?? ([l.numeStrada, l.numar].filter(Boolean).join(" ") || null)
+      ?? f.strada ?? ([f.numeStrada, f.numar].filter(Boolean).join(" ") || "") ?? "",
+    tara: l.tara ?? f.tara ?? "",
+    livrarePepita: esteLivrarePepita(c.modLivrare),
+  });
+}
 
-  const nume = [c.client.prenume, c.client.nume].filter(Boolean).join(" ").trim() || (c.client.facturare.nume ?? "");
-  if (!nume.trim()) lipsuri.push("numele clientului");
-  if (!areTelefon(c.client.telefon)) lipsuri.push("telefonul");
+/**
+ * Lipsurile, citite din comanda ASA CUM E SCRISA in Edinio.
+ *
+ * ⚠ Asta e drumul reprocesarii: sarcina bruta nu se pastreaza nicaieri, dinadins (`rezumat`
+ * n-are date personale). Dupa ce comerciantul completeaza adresa din „Editează comanda",
+ * adevarul e pe comanda, si tot de acolo se citeste.
+ */
+export function lipsuriComandaScrisa(o: {
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  shipping_address?: unknown;
+  order_source?: unknown;
+}): string[] {
+  const a = (o.shipping_address ?? {}) as {
+    address?: unknown; city?: unknown; county?: unknown; country?: unknown;
+  };
+  const text = (v: unknown) => (typeof v === "string" ? v : "");
+  return lipsuriDinCampuri({
+    nume: o.customer_name ?? "",
+    telefon: o.customer_phone ?? "",
+    judet: text(a.county),
+    oras: text(a.city),
+    strada: text(a.address),
+    tara: text(a.country),
+    /* ⚠ Semnul e scris pe comanda la ingest; recalculat aici din modul de livrare, ar fi cerut
+       sarcina lor, care nu se pastreaza. */
+    livrarePepita: (o.order_source as { livrare_pepita?: unknown } | null)?.livrare_pepita === true,
+  });
+}
 
-  /* ⚠ „only for Romanian orders", scrie in documentatia lor: pe alte piete judetul lipseste pe drept. */
-  if (eRomania(l.tara ?? f.tara) && !(l.judet ?? "").trim()) lipsuri.push("județul");
+/*
+ * ⚠ INCEPUTURILE MOTIVELOR, ca sa poata fi RECUNOSCUTE mai tarziu.
+ *
+ * Reprocesarea recalculeaza motivele pe care le poate afla din nou si le PASTREAZA pe cele pe
+ * care nu le poate (moneda necitita, de pilda: sarcina bruta nu se mai are de unde citi). Ca
+ * sa le deosebeasca, trebuie sa recunoasca inceputul fiecarui motiv scris de noi. Constantele
+ * de aici sunt singurul loc unde sunt scrise.
+ */
+export const INCEPUT_CODURI = "Coduri fără corespondent în Edinio: ";
+export const INCEPUT_NELIVRABILA = "Nu se poate expedia: ";
 
-  /* Aceleasi doua caderi pe facturare ca in `adresaLivrare`: datele le avem, doar in alt camp. */
-  if (!((l.oras ?? f.oras) ?? "").trim()) lipsuri.push("localitatea");
-  const strada = l.strada ?? ([l.numeStrada, l.numar].filter(Boolean).join(" ") || null)
-    ?? f.strada ?? ([f.numeStrada, f.numar].filter(Boolean).join(" ") || null);
-  if (!(strada ?? "").trim()) lipsuri.push("strada");
-
-  return lipsuri;
+/** Motivul de carantina pentru liniile pe care nu le-am putut lega de catalog. */
+export function motivCoduri(nelegate: string[]): string | null {
+  return nelegate.length ? `${INCEPUT_CODURI}${nelegate.join(", ")}` : null;
 }
 
 /** Motivul de carantina pentru o comanda pe care nu o poti expedia. `null` daca nu lipseste nimic. */
@@ -113,6 +183,19 @@ export function motivNelivrabila(lipsuri: string[]): string | null {
   if (lipsuri.length === 0) return null;
   const ce = lipsuri.join(", ");
   return lipsuri.length === 1
-    ? `Nu se poate expedia: lipsește ${ce}.`
-    : `Nu se poate expedia: lipsesc ${ce}.`;
+    ? `${INCEPUT_NELIVRABILA}lipsește ${ce}.`
+    : `${INCEPUT_NELIVRABILA}lipsesc ${ce}.`;
+}
+
+/**
+ * Bucatile motivului pe care reprocesarea NU le poate recalcula, deci le pastreaza asa cum sunt.
+ *
+ * ⚠ Alegerea e „pastreaza ce nu cunosti". Invers, o bucata scrisa maine de altcineva ar fi
+ * disparut tacut la prima apasare pe „Reprocesează", si comanda ar fi iesit din carantina cu
+ * problema nerezolvata.
+ */
+export function motiveNerecalculabile(motiv: string | null | undefined, cunoscute: string[]): string[] {
+  if (!motiv) return [];
+  return motiv.split(LEGATURA).map((p) => p.trim()).filter(Boolean)
+    .filter((p) => !cunoscute.some((c) => p === c || p.startsWith(c)));
 }

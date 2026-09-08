@@ -24,7 +24,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { citesteComanda, type ComandaPepita } from "./comanda-forma";
 import { idArticol } from "./identitate";
-import { ingereaza, leagaLiniile } from "./ingest";
+import { ingereaza, leagaLiniile, reproceseaza } from "./ingest";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -77,12 +77,16 @@ const PRODUSE: Produs[] = [
 interface RandComanda {
   id: string; business_id: string; external_order_id: string; order_id: string | null;
   stare: string; motiv: string | null; incercari: number; ultima_eroare: string | null;
+  rezumat: unknown;
 }
 interface RandOrder {
   id: string; business_id: string; order_number: string; total: number; subtotal: number;
   items: unknown; payment_method: string; payment_status: string; status: string;
   order_source: Record<string, unknown>; shipping_address: Record<string, unknown>;
-  internal_notes: string; stoc_marketplace_la: string | null;
+  customer_name: string; customer_phone: string;
+  internal_notes: string; stoc_marketplace_la: string | null; stoc_eliberat_la: string | null;
+  /** Ce s-a rezervat cu adevarat, ca in `orders.stoc_rezervat`: de el se leaga ajustarea. */
+  rezervat: { product_id: string; quantity: number }[];
 }
 
 function faceBaza(
@@ -93,6 +97,7 @@ function faceBaza(
   const comenzi: RandComanda[] = [];
   const orders: RandOrder[] = [];
   const consumuri: { orderId: string; produse: { product_id: string; quantity: number }[]; variante: unknown[] }[] = [];
+  const ajustari: { orderId: string; consumat: { product_id: string; quantity: number }[] }[] = [];
   let n = 0;
 
   const raspunde = (tabela: string, fel: string, corp: unknown, filtre: [string, unknown][]): { data: unknown; error: unknown } => {
@@ -133,6 +138,7 @@ function faceBaza(
         if (rand) Object.assign(rand, corp);
         return { data: null, error: null };
       }
+      /* Reprocesarea cauta randul dupa magazin si dupa id-ul lor, ca ingestul. */
       const rand = comenzi.find((x) => x.business_id === f("business_id") && x.external_order_id === f("external_order_id"));
       return { data: rand ?? null, error: null };
     }
@@ -143,12 +149,21 @@ function faceBaza(
         if (orders.some((x) => x.business_id === o.business_id && x.order_number === o.order_number)) {
           return { data: null, error: { code: "23505", message: "duplicate order_number" } };
         }
-        const rand = { ...o, id: `ord-${++n}`, stoc_marketplace_la: null };
+        const rand = { ...o, id: `ord-${++n}`, stoc_marketplace_la: null, stoc_eliberat_la: null, rezervat: [] };
         orders.push(rand);
         return { data: { id: rand.id }, error: null };
       }
-      const gasita = orders.find((x) => x.business_id === f("business_id") && x.order_number === f("order_number"));
-      return { data: gasita ? { id: gasita.id } : null, error: null };
+      if (fel === "update") {
+        const rand = orders.find((x) => x.id === f("id"));
+        if (rand) Object.assign(rand, corp);
+        return { data: null, error: null };
+      }
+      /* ⚠ Reprocesarea citeste comanda dupa `id`; ingestul, dupa numarul ei. Amandoua trec pe aici. */
+      const dupaId = f("id") as string | undefined;
+      const gasita = dupaId
+        ? orders.find((x) => x.id === dupaId && x.business_id === f("business_id"))
+        : orders.find((x) => x.business_id === f("business_id") && x.order_number === f("order_number"));
+      return { data: gasita ?? null, error: null };
     }
 
     return { data: null, error: null };
@@ -179,6 +194,32 @@ function faceBaza(
   const db = {
     from: (t: string) => builder(t),
     rpc: (nume: string, args: Record<string, unknown>) => {
+      if (nume === "ajusteaza_stoc_comanda_marketplace") {
+        /*
+         * ⚠ SEMANTICA FUNCTIEI DIN BAZA, copiata aici, fiindca de ea atarna reprocesarea:
+         *   - fara marcaj, refuza (nu s-a consumat nimic inca);
+         *   - dupa eliberare, refuza (marfa s-a intors pe raft);
+         *   - altfel scade DIFERENTA fata de ce e rezervat, si setul trimis e AUTORITAR.
+         */
+        const o = orders.find((x) => x.id === args.p_order_id);
+        if (!o) return Promise.resolve({ data: { gasit: false }, error: null });
+        if (!o.stoc_marketplace_la) return Promise.resolve({ data: { gasit: true, neconsumat: true, schimbat: false }, error: null });
+        if (o.stoc_eliberat_la) return Promise.resolve({ data: { gasit: true, eliberat: true, schimbat: false }, error: null });
+        const vechi = new Map(o.rezervat.map((x) => [x.product_id, x.quantity]));
+        const nou = new Map((args.p_produse as { product_id: string; quantity: number }[]).map((x) => [x.product_id, x.quantity]));
+        const consumat: { product_id: string; quantity: number }[] = [];
+        for (const [pid, q] of nou) {
+          const d = q - (vechi.get(pid) ?? 0);
+          if (d > 0) consumat.push({ product_id: pid, quantity: d });
+        }
+        const eliberat = [...vechi.keys()].filter((pid) => !nou.has(pid));
+        if (consumat.length === 0 && eliberat.length === 0) {
+          return Promise.resolve({ data: { gasit: true, schimbat: false }, error: null });
+        }
+        ajustari.push({ orderId: o.id, consumat });
+        o.rezervat = (args.p_produse as { product_id: string; quantity: number }[]).map((x) => ({ ...x }));
+        return Promise.resolve({ data: { gasit: true, schimbat: true }, error: null });
+      }
       if (nume !== "consuma_stoc_comanda_marketplace") return Promise.resolve({ data: null, error: null });
       if (cadeStocDeAtateaOri > 0) {
         cadeStocDeAtateaOri--;
@@ -192,6 +233,7 @@ function faceBaza(
        */
       if (o.stoc_marketplace_la) return Promise.resolve({ data: { gasit: true, deja: true, lipsa: [] }, error: null });
       o.stoc_marketplace_la = new Date().toISOString();
+      o.rezervat = (args.p_produse as { product_id: string; quantity: number }[]).map((x) => ({ ...x }));
       consumuri.push({
         orderId: o.id,
         produse: args.p_produse as { product_id: string; quantity: number }[],
@@ -201,7 +243,7 @@ function faceBaza(
     },
   };
 
-  return { db: db as unknown as SupabaseClient<Database>, comenzi, orders, consumuri };
+  return { db: db as unknown as SupabaseClient<Database>, comenzi, orders, consumuri, ajustari };
 }
 
 /* ── Sarcina utila ───────────────────────────────────────────────────────── */
@@ -795,4 +837,185 @@ test("⚠ un cod de moneda necitit duce comanda in carantina, nu la gunoi", asyn
   assert.equal(b.orders.length, 1);
   assert.equal(r.stare, "carantina");
   assert.match(b.comenzi[0].motiv ?? "", /nu am putut-o citi/);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   REPROCESAREA UNEI COMENZI DIN CARANTINA
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ Carantina era un fund de sac: comerciantul putea crea produsul lipsa, si comanda ramanea
+   acolo pentru totdeauna. Nici „Resend order" din panoul lor nu ajuta, fiindca sosirea a doua
+   raspundea „deja" la consumul de stoc si nu repara nimic.
+*/
+
+/** Un cod care nu se leaga de nimic: uuid care nu e al niciunui produs din baza falsa. */
+const P_INEXISTENT = "cccccccc-dddd-4eee-8fff-999999999999";
+
+/** O linie din `orders.items`, care in baza falsa e `unknown`. */
+const linie = (o: RandOrder, i: number) => (o.items as Record<string, unknown>[])[i];
+
+async function comandaInCarantina(evidenta: { articol_id: string; product_id: string; combinatie: string }[]) {
+  const b = faceBaza(evidenta);
+  const codOrfan = idArticol(P_INEXISTENT, null);
+  const r = await ingereaza(b.db, CTX, comanda({}, [
+    { id: "77", sku: idArticol(P_SIMPLU, null), currency: "RON", quantity: 2, price: 100 },
+    { id: "78", sku: codOrfan, currency: "RON", quantity: 3, price: 50 },
+  ]));
+  assert.equal(r.stare, "carantina");
+  return { b, codOrfan };
+}
+
+test("⚠ produsul creat intre timp scoate comanda din carantina, si se scade DOAR diferenta", async () => {
+  const evidenta: { articol_id: string; product_id: string; combinatie: string }[] = [];
+  const { b, codOrfan } = await comandaInCarantina(evidenta);
+
+  /* Prima scadere a luat doar linia legata: 2 bucati. */
+  assert.equal(b.consumuri.length, 1);
+  assert.deepEqual(b.consumuri[0].produse, [{ product_id: P_SIMPLU, quantity: 2 }]);
+  assert.equal(linie(b.orders[0], 1).product_id, null);
+
+  /* Comerciantul leaga codul de un produs (aici: evidenta capata randul care lipsea). */
+  evidenta.push({ articol_id: codOrfan, product_id: P_VARIANTE, combinatie: "" });
+
+  const r = await reproceseaza(b.db, CTX, "555001");
+
+  assert.equal(r.ok, true);
+  assert.equal(b.comenzi[0].stare, "importata", "comanda a ramas in carantina desi s-a reparat");
+  assert.equal(b.comenzi[0].motiv, null);
+  assert.equal(linie(b.orders[0], 1).product_id, P_VARIANTE, "linia n-a fost legata in `items`");
+
+  /*
+   * ⚠ AJUSTARE, NU CONSUM DE LA ZERO. Marcajul era pus, deci a doua chemare scade DIFERENTA:
+   * cele 3 bucati ale liniei tocmai reparate, si nimic din cele 2 scazute deja.
+   */
+  assert.equal(b.ajustari.length, 1);
+  assert.deepEqual(b.ajustari[0].consumat, [{ product_id: P_VARIANTE, quantity: 3 }]);
+  assert.equal(b.consumuri.length, 1, "s-a consumat de la zero peste ce era deja scazut");
+});
+
+test("⚠ marcajul `stoc_marketplace_la` NU se sterge la reprocesare", async () => {
+  const evidenta: { articol_id: string; product_id: string; combinatie: string }[] = [];
+  const { b, codOrfan } = await comandaInCarantina(evidenta);
+  const marcaj = b.orders[0].stoc_marketplace_la;
+  assert.ok(marcaj, "prima scadere n-a marcat nimic");
+
+  evidenta.push({ articol_id: codOrfan, product_id: P_VARIANTE, combinatie: "" });
+  await reproceseaza(b.db, CTX, "555001");
+
+  /* Sters, consumul ar porni de la zero peste ce s-a scazut deja. */
+  assert.equal(b.orders[0].stoc_marketplace_la, marcaj);
+});
+
+test("⚠ a doua apasare nu mai face nimic, si spune asta", async () => {
+  const evidenta: { articol_id: string; product_id: string; combinatie: string }[] = [];
+  const { b, codOrfan } = await comandaInCarantina(evidenta);
+  evidenta.push({ articol_id: codOrfan, product_id: P_VARIANTE, combinatie: "" });
+
+  await reproceseaza(b.db, CTX, "555001");
+  const aDoua = await reproceseaza(b.db, CTX, "555001");
+
+  assert.equal(aDoua.ok, true);
+  assert.equal(aDoua.schimbat, false);
+  assert.equal(b.ajustari.length, 1, "a doua apasare a mai scazut o data stoc");
+});
+
+test("comanda care nu se poate lega ramane in carantina, cu motivul ei", async () => {
+  const { b } = await comandaInCarantina([]);
+  const r = await reproceseaza(b.db, CTX, "555001");
+
+  assert.equal(r.ok, true);
+  assert.equal(b.comenzi[0].stare, "carantina");
+  assert.match(b.comenzi[0].motiv ?? "", /Coduri fără corespondent/);
+  assert.equal(b.ajustari.length, 0, "nu s-a schimbat nimic, deci nu se atinge stocul");
+});
+
+test("⚠ liniile care nu mai corespund OPRESC reparatia, in loc sa ghiceasca", async () => {
+  const evidenta: { articol_id: string; product_id: string; combinatie: string }[] = [];
+  const { b, codOrfan } = await comandaInCarantina(evidenta);
+  evidenta.push({ articol_id: codOrfan, product_id: P_VARIANTE, combinatie: "" });
+
+  /* Comerciantul a adaugat o linie de mana din panou: cale permisa azi. */
+  (b.orders[0].items as Record<string, unknown>[]).push({ product_id: P_SIMPLU, name: "Adaugat", price: 10, quantity: 1 });
+
+  const r = await reproceseaza(b.db, CTX, "555001");
+
+  assert.equal(r.ok, false);
+  assert.match(r.mesaj, /nu pot repara pe ghicite/);
+  /*
+   * ⚠ ASTA APARA BANII SI MARFA: setul trimis lui `ajusteaza` e AUTORITAR, iar linia adaugata
+   * de mana nu e in ce ne-au trimis ei. Reparata pe ghicite, i s-ar fi dat stocul inapoi.
+   */
+  assert.equal(b.ajustari.length, 0);
+  assert.equal(b.comenzi[0].stare, "carantina");
+});
+
+test("⚠ cand stocul n-a fost facut deloc, reprocesarea CONSUMA, nu ajusteaza", async () => {
+  const b = faceBaza([], 1);
+  const r = await ingereaza(b.db, CTX, comanda());
+  assert.equal(r.stare, "stoc-nefacut");
+  assert.equal(b.orders[0].stoc_marketplace_la, null);
+  assert.match(b.comenzi[0].motiv ?? "", /Stocul nu s-a putut scădea/);
+
+  const rep = await reproceseaza(b.db, CTX, "555001");
+
+  assert.equal(rep.ok, true);
+  assert.equal(rep.stocEsuat, false);
+  assert.equal(b.consumuri.length, 1, "consumul nu s-a facut");
+  assert.equal(b.ajustari.length, 0, "ajustarea refuza oricum fara marcaj, dar nici n-avea ce cauta aici");
+  assert.equal(b.comenzi[0].stare, "importata");
+});
+
+test("⚠ pe o comanda anulata, reprocesarea NU atinge stocul", async () => {
+  const evidenta: { articol_id: string; product_id: string; combinatie: string }[] = [];
+  const { b, codOrfan } = await comandaInCarantina(evidenta);
+  evidenta.push({ articol_id: codOrfan, product_id: P_VARIANTE, combinatie: "" });
+
+  /* Marfa s-a intors pe raft: un consum aici ar scadea pentru o comanda care nu mai exista. */
+  b.orders[0].stoc_eliberat_la = new Date().toISOString();
+
+  const r = await reproceseaza(b.db, CTX, "555001");
+
+  assert.equal(r.ok, true);
+  assert.equal(b.ajustari.length, 0);
+  assert.equal(b.consumuri.length, 1, "s-a mai scazut o data pe o comanda anulata");
+  assert.match(r.mesaj, /anulată sau restituită/);
+  /* Legatura din `items` se repara oricum: factura si AWB-ul o citesc. */
+  assert.equal(linie(b.orders[0], 1).product_id, P_VARIANTE);
+});
+
+test("⚠ retrimiterea lor face acum exact ce face butonul", async () => {
+  const evidenta: { articol_id: string; product_id: string; combinatie: string }[] = [];
+  const { b, codOrfan } = await comandaInCarantina(evidenta);
+  evidenta.push({ articol_id: codOrfan, product_id: P_VARIANTE, combinatie: "" });
+
+  /*
+   * Pana la reparatia asta, ramura de duplicat chema doar consumul de stoc, care raspunde
+   * „deja" cand marcajul e pus: comanda ramanea in carantina oricate retrimiteri ar fi venit.
+   */
+  const r = await ingereaza(b.db, CTX, comanda({}, [
+    { id: "77", sku: idArticol(P_SIMPLU, null), currency: "RON", quantity: 2, price: 100 },
+    { id: "78", sku: codOrfan, currency: "RON", quantity: 3, price: 50 },
+  ]));
+
+  assert.equal(r.stare, "duplicat");
+  assert.equal(b.comenzi[0].stare, "importata", "retrimiterea n-a scos comanda din carantina");
+  assert.equal(linie(b.orders[0], 1).product_id, P_VARIANTE);
+  assert.equal(b.orders.length, 1, "s-a facut o a doua comanda");
+});
+
+test("⚠ un motiv pe care reprocesarea nu-l poate recalcula SUPRAVIETUIESTE", async () => {
+  /*
+   * Sarcina bruta nu se pastreaza nicaieri, dinadins: unele motive (moneda necitita, de pilda)
+   * nu se mai pot afla din nou. Sterse la prima apasare, comanda ar fi iesit din carantina cu
+   * problema nerezolvata, adica ar fi disparut din lista comerciantului.
+   */
+  const evidenta: { articol_id: string; product_id: string; combinatie: string }[] = [];
+  const { b, codOrfan } = await comandaInCarantina(evidenta);
+  evidenta.push({ articol_id: codOrfan, product_id: P_VARIANTE, combinatie: "" });
+  b.comenzi[0].motiv = `${b.comenzi[0].motiv} | Ceva scris de altcineva, maine`;
+
+  await reproceseaza(b.db, CTX, "555001");
+
+  assert.equal(b.comenzi[0].stare, "carantina", "motivul nerecunoscut a fost sters");
+  assert.equal(b.comenzi[0].motiv, "Ceva scris de altcineva, maine");
 });

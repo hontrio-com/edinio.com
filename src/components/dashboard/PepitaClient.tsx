@@ -14,7 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import {
   activeazaPepita, deconecteazaPepita, dezvaluieAdresele, getComenziProblemaPepita,
-  includeToateProdusePepita, listaProdusePepita, marcheazaTrimis, rotestePepita,
+  includeToateProdusePepita, listaProdusePepita, marcheazaTrimis, reproceseazaComandaPepita,
+  rotestePepita,
   salveazaSetariPepita, setareProdusePepita, verificaProdusePepita,
   type AdresePepita, type ComandaProblema, type RandProdusPepita, type RezumatProduse,
   type SetariPepita, type StarePepita,
@@ -793,6 +794,8 @@ function Cifra({ eticheta, valoare, accent }: { eticheta: string; valoare: numbe
 function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita }) {
   const [lista, setLista] = useState<ComandaProblema[] | null>(null);
   const [incarc, setIncarc] = useState(false);
+  /** Comanda pe care o reincercam acum. Butonul se blocheaza doar pe randul ei. */
+  const [reincerc, setReincerc] = useState<string | null>(null);
 
   const incarca = async () => {
     setIncarc(true);
@@ -852,11 +855,40 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
                   <span className="font-medium text-foreground">Comanda Pepita {c.externalId}</span>
                   {" · "}{cand(c.primitLa)}
                   {c.motiv ? <span className="block text-muted-foreground">{c.motiv}</span> : null}
-                  {c.orderId && (
-                    <Link href={`/dashboard/orders/${c.orderId}`} className="text-primary underline underline-offset-2">
-                      Deschide comanda
-                    </Link>
-                  )}
+                  <span className="mt-1 flex flex-wrap items-center gap-3">
+                    {c.orderId && (
+                      <Link href={`/dashboard/orders/${c.orderId}`} className="text-primary underline underline-offset-2">
+                        Deschide comanda
+                      </Link>
+                    )}
+                    {/*
+                      ⚠ NUMELE BUTONULUI NU TRIMITE NIMIC SPRE PEPITA, si nici nu pare ca ar
+                      trimite. Legătura e într-un singur sens: ei împing comenzi la noi, noi
+                      n-avem cum să le trimitem nimic înapoi. „Reprocesează” lucrează numai
+                      în Edinio: leagă din nou liniile de catalog și duce stocul la capăt.
+                    */}
+                    <button
+                      type="button"
+                      className="text-primary underline underline-offset-2 disabled:opacity-50"
+                      disabled={reincerc !== null}
+                      onClick={async () => {
+                        setReincerc(c.externalId);
+                        try {
+                          const r = await reproceseazaComandaPepita(businessId, c.externalId);
+                          if ("error" in r) toast.error(r.error);
+                          else if (r.ok) {
+                            toast.success(r.mesaj);
+                            /* Lista se reîncarcă doar dacă s-a schimbat ceva: altfel ar clipi degeaba. */
+                            if (r.schimbat) await incarca();
+                          } else toast.error(r.mesaj);
+                        } catch {
+                          toast.error("Cererea nu a ajuns. Încearcă din nou.");
+                        } finally { setReincerc(null); }
+                      }}
+                    >
+                      {reincerc === c.externalId ? "Reprocesez…" : "Reprocesează"}
+                    </button>
+                  </span>
                 </li>
               ))}
             </ul>

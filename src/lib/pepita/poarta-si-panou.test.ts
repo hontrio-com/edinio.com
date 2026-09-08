@@ -87,12 +87,24 @@ const PANOU = readFileSync("src/components/dashboard/PepitaClient.tsx", "utf8")
 
 test("⚠ panoul nu promite nicio actiune trimisa spre Pepita", () => {
   const interzise = [
-    /Confirmă comanda la Pepita/i,
-    /Trimite (AWB|statusul|factura) (la|către) Pepita/i,
+    /Confirmă (comanda )?(la|către|în) Pepita/i,
+    /Trimite (AWB|statusul|factura|comanda) (la|către) Pepita/i,
     /Anulează la Pepita/i,
     /Sincroniz\w* cu Pepita/i,
     /Conectat la Pepita/i,
     /Pepita Sandbox/i,
+    /*
+     * ⚠ ADAUGATE ODATA CU BUTONUL „Reprocesează”. Butonul lucreaza NUMAI in Edinio: leaga din
+     * nou liniile de catalog si duce stocul la capat. Un nume care ar suna a trimitere ar fi
+     * fost o minciuna, iar lista de mai sus nu-l prindea: „Retrimite la Pepita” trecea de toate
+     * cele sase tipare de dinainte.
+     *
+     * ⚠ TIPARELE SUNT INGUSTE DINADINS. Unul larg, de felul „trimite … către Pepita”, ar fi
+     * cazut pe o propozitie adevarata din panou: „nu le publica si nu le trimite decat catre
+     * Pepita”, despre adresele cu chei. O plasa care pedepseste textul corect se scoate.
+     */
+    /Retrimite (la|către|în) Pepita/i,
+    /Actualizează (comanda|statusul) (la|în) Pepita/i,
   ];
   for (const r of interzise) {
     assert.ok(!r.test(PANOU), `panoul nu are voie sa contina ${r}`);

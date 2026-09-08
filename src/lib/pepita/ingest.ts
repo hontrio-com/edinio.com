@@ -12,7 +12,10 @@ import {
   starePlata, statusInitial, etichetaLivrare, etichetaPlata,
 } from "./mapare";
 import type { ComandaPepita, LiniePepita } from "./comanda-forma";
-import { compuneMotiv, lipsuriLivrare, motivNelivrabila } from "./carantina";
+import {
+  compuneMotiv, lipsuriComandaScrisa, lipsuriLivrare, motivCoduri, motiveNerecalculabile,
+  motivNelivrabila, INCEPUT_CODURI, INCEPUT_NELIVRABILA,
+} from "./carantina";
 
 /**
  * Comanda Pepita, adusa in Edinio.
@@ -335,6 +338,23 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
      * idempotenta, deci pe drumul obisnuit nu face nimic.
      */
     if (rand.order_id) {
+      /*
+       * ⚠ O COMANDA IN CARANTINA SE INCEARCA DIN NOU, INTREAGA.
+       *
+       * Pana acum ramura asta chema doar `consumaStocul`, care raspunde „deja" cand marcajul e
+       * pus. Deci o comanda pusa in carantina fiindca un produs lipsea din catalog ramanea
+       * acolo si dupa ce comerciantul crea produsul si apasa „Resend order" in panoul lor:
+       * singura cale de iesire era butonul din Edinio. Acum retrimiterea face exact ce face
+       * butonul, prin ACEEASI functie, ca sa nu existe doua adevaruri despre aceeasi comanda.
+       */
+      if (rand.stare === "carantina") {
+        const r = await reproceseaza(admin, ctx, c.externalId);
+        if (r.stocEsuat) {
+          return { stare: "stoc-nefacut", orderId: rand.order_id, mesaje: ["Comanda este salvată, dar procesarea nu s-a încheiat."] };
+        }
+        return { stare: "duplicat", orderId: rand.order_id, mesaje: [r.mesaj] };
+      }
+
       const legate = await leagaLiniile(admin, ctx.businessId, c.linii);
       /*
        * ⚠ AICI SE REPARA ce a ramas nefacut la prima sosire: `consuma_stoc_comanda_marketplace`
@@ -476,7 +496,7 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
    * ar fi facut a doua.
    */
   const areNelegate = nelegate.length > 0;
-  const motivNelegate = areNelegate ? `Coduri fără corespondent în Edinio: ${nelegate.join(", ")}` : null;
+  const motivNelegate = motivCoduri(nelegate);
   const motivLipsuri = motivNelivrabila(lipsuri);
   const motivMoneda = compuneMotiv([
     monedaStraina ? MOTIV_MONEDA_STRAINA : null,
@@ -825,5 +845,208 @@ export function rezumatSigur(c: ComandaPepita): Record<string, unknown> {
     tara_livrare: c.client.livrare.tara,
     /* Judetul e o categorie, nu o identificare, si e singurul lucru geografic util aici. */
     judet_livrare: c.client.livrare.judet,
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REPROCESAREA UNEI COMENZI DIN CARANTINA
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ⚠ CE REZOLVA. Carantina exista de la inceput, dar era un fund de sac: comerciantul putea
+   crea produsul lipsa sau completa adresa, si comanda ramanea acolo pentru totdeauna. Iar
+   „Resend order" din panoul lor nu ajuta: sosirea a doua intra pe ramura de duplicat, unde
+   consumul de stoc raspunde „deja" si nu se repara nimic.
+
+   ⚠ CELE DOUA DRUMURI DE STOC, SI DE CE NU E UNUL SINGUR.
+
+   `stoc_marketplace_la` e marcajul pus de FUNCTIA DIN BAZA, in aceeasi instructiune cu
+   scaderea. Un rand de evidenta poate spune orice; marcajul nu poate minti.
+     - marcaj LIPSA: nu s-a consumat nimic, deci se cheama `consuma_stoc_comanda_marketplace`,
+       care e idempotenta si marcheaza chiar ea;
+     - marcaj PUS: s-a consumat o parte, deci se cheama `ajusteaza_stoc_comanda_marketplace`,
+       care scade DIFERENTA fata de `stoc_rezervat`, adica exact linia tocmai reparata.
+
+   ⚠ `stoc_marketplace_la` NU SE STERGE NICIODATA. Sters, consumul ar porni de la zero peste ce
+   s-a scazut deja, si ar desface tocmai reparatia din 08.09.2026.
+
+   ⚠ SETUL TRIMIS LUI `ajusteaza` E AUTORITAR: ce lipseste din el se ELIBEREAZA inapoi pe raft.
+   De aceea se trimit TOATE liniile legate, nu doar cea reparata, si de aceea exista amprenta
+   de mai jos: o linie adaugata de mana din panou nu e in `rezumat.linii`, deci fara verificare
+   i-am fi dat stocul inapoi cu marfa plecata.
+*/
+
+export interface RezultatReprocesare {
+  ok: boolean;
+  /** S-a schimbat ceva in baza? Pe `false`, apelantul n-are ce reincarca. */
+  schimbat: boolean;
+  /** Stocul tot n-a putut fi facut. Ruta de comenzi raspunde ESEC pe asta, ca la ingest. */
+  stocEsuat: boolean;
+  mesaj: string;
+}
+
+export async function reproceseaza(
+  admin: Db, ctx: ContextIngest, externalId: string,
+): Promise<RezultatReprocesare> {
+  /* ⚠ `business_id` e OBLIGATORIU: cu cheia de serviciu RLS nu mai apara nimic. */
+  const { data: randBrut, error: eRand } = await admin
+    .from("pepita_comenzi").select("id, order_id, stare, motiv, rezumat")
+    .eq("business_id", ctx.businessId).eq("external_order_id", externalId).maybeSingle();
+  if (eRand) throw eRand;
+  const rand = randBrut as {
+    id: string; order_id: string | null; stare: string; motiv: string | null; rezumat: unknown;
+  } | null;
+  if (!rand) return { ok: false, schimbat: false, stocEsuat: false, mesaj: "Comanda nu se găsește." };
+
+  /* Idempotenta vazuta din afara: a doua apasare pe o comanda reparata nu face nimic. */
+  if (rand.stare === "importata") {
+    return { ok: true, schimbat: false, stocEsuat: false, mesaj: "Comanda nu mai are nimic de reparat." };
+  }
+  if (!rand.order_id) {
+    return {
+      ok: false, schimbat: false, stocEsuat: false,
+      mesaj: "Comanda nu s-a scris niciodată în Edinio. Retrimite-o din Pepita Admin, cu „Resend order”.",
+    };
+  }
+
+  const { data: comandaBruta, error: eComanda } = await admin
+    .from("orders")
+    /* ⚠ TOATE campurile de care atarna o hotarare de mai jos. Ce nu se cere vine `undefined`. */
+    .select("id, items, customer_name, customer_phone, shipping_address, order_source, stoc_marketplace_la, stoc_eliberat_la")
+    .eq("id", rand.order_id).eq("business_id", ctx.businessId).maybeSingle();
+  if (eComanda) throw eComanda;
+  const o = comandaBruta as {
+    id: string; items: unknown; customer_name: string | null; customer_phone: string | null;
+    shipping_address: unknown; order_source: unknown;
+    stoc_marketplace_la: string | null; stoc_eliberat_la: string | null;
+  } | null;
+  if (!o) return { ok: false, schimbat: false, stocEsuat: false, mesaj: "Comanda din Edinio nu se mai găsește." };
+
+  const rez = (rand.rezumat ?? {}) as { linii?: unknown };
+  const brute = Array.isArray(rez.linii) ? rez.linii : [];
+  const linii: LiniePepita[] = brute.map((x) => {
+    const l = (x ?? {}) as Record<string, unknown>;
+    return {
+      idPepita: typeof l.id === "string" ? l.id : null,
+      sku: typeof l.sku === "string" ? l.sku : null,
+      moneda: null,
+      cantitate: Number(l.cantitate) || 0,
+      pret: Number(l.pret) || 0,
+      tva: l.tva == null ? null : Number(l.tva),
+    };
+  });
+
+  const items = Array.isArray(o.items) ? (o.items as Record<string, unknown>[]) : [];
+
+  /*
+   * ⚠ AMPRENTA, INAINTE DE ORICE. Cele doua liste n-au chei: se leaga doar prin POZITIE. Iar
+   * adaugarea de linii pe o comanda de marketplace e permisa azi din panou, deci `orders.items`
+   * chiar poate sa nu mai semene cu ce ne-au trimis ei. Reparata pe ghicite, o linie adaugata
+   * de mana ar fi lipsit din setul trimis lui `ajusteaza` si i s-ar fi dat stocul inapoi, cu
+   * marfa plecata.
+   */
+  const potrivite = items.length === linii.length
+    && linii.every((l, i) => Number(items[i]?.quantity) === l.cantitate);
+  if (!potrivite) {
+    return {
+      ok: false, schimbat: false, stocEsuat: false,
+      mesaj: "Liniile comenzii nu mai corespund cu ce a trimis Pepita, deci nu pot repara pe ghicite. "
+        + "Scoate liniile adăugate manual și încearcă din nou.",
+    };
+  }
+
+  const { legate, nelegate } = await leagaLiniile(admin, ctx.businessId, linii);
+
+  /*
+   * ⚠ SE COMPLETEAZA DOAR LEGATURA. Pretul, cantitatea, cota si codul raman NEATINSE, si nu se
+   * recalculeaza niciun total: comanda e o tranzactie istorica, iar totalurile vin de la ei.
+   */
+  const itemsNoi = items.map((it, i) => {
+    const l = legate[i];
+    if (!l?.productId || it.product_id) return it;
+    return {
+      ...it,
+      product_id: l.productId,
+      name: l.nume,
+      ...(l.variantTitle ? { variant_title: l.variantTitle } : {}),
+    };
+  });
+  const seSchimbaLinii = itemsNoi.some((it, i) => it !== items[i]);
+
+  let stocEsuat = false;
+  let despreStoc = "";
+  if (o.stoc_eliberat_la) {
+    /* Marfa s-a intors pe raft (anulare sau restituire): un consum aici ar scadea degeaba. */
+    despreStoc = " Stocul nu s-a atins: comanda e anulată sau restituită.";
+  } else if (!o.stoc_marketplace_la) {
+    if (await consumaStocul(admin, ctx.businessId, o.id, legate) === "esec") stocEsuat = true;
+    else despreStoc = " Stocul a fost scăzut.";
+  } else if (seSchimbaLinii) {
+    const peProdus = new Map<string, number>();
+    const peVarianta = new Map<string, { product_id: string; variant_title: string; quantity: number }>();
+    for (const l of legate) {
+      if (!l.productId) continue;
+      peProdus.set(l.productId, (peProdus.get(l.productId) ?? 0) + l.linie.cantitate);
+      if (l.variantTitle) {
+        const cheie = `${l.productId}::${l.variantTitle}`;
+        const e = peVarianta.get(cheie);
+        if (e) e.quantity += l.linie.cantitate;
+        else peVarianta.set(cheie, { product_id: l.productId, variant_title: l.variantTitle, quantity: l.linie.cantitate });
+      }
+    }
+    const { data, error } = await admin.rpc("ajusteaza_stoc_comanda_marketplace", {
+      p_order_id: o.id,
+      p_business_id: ctx.businessId,
+      p_produse: [...peProdus.entries()].map(([product_id, quantity]) => ({ product_id, quantity })) as never,
+      p_variante: [...peVarianta.values()] as never,
+    });
+    const r = data as { gasit?: boolean; schimbat?: boolean } | null;
+    if (error || r?.gasit !== true) {
+      stocEsuat = true;
+      await logError({
+        action: "pepita/reprocesare",
+        message: error?.message ?? "ajustarea stocului n-a raspuns valid",
+        details: { orderId: o.id, raspuns: r }, businessId: ctx.businessId, severity: "critical",
+      });
+    } else if (r.schimbat) {
+      despreStoc = " Stocul liniei reparate a fost scăzut.";
+      await impingeStoculPeCeleLalteCanale(ctx.businessId, [...peProdus.keys()], "pepita");
+    }
+  }
+
+  const lipsuri = lipsuriComandaScrisa(o);
+  const monedaComenzii = (o.order_source as { currency?: unknown } | null)?.currency;
+  const monedaStraina = typeof monedaComenzii === "string" && monedaComenzii.trim() !== ""
+    && monedaComenzii.trim().toUpperCase() !== ctx.monedaMagazin.toUpperCase();
+
+  /* ⚠ Ce nu se poate recalcula se PASTREAZA: altfel ar disparea tacut la prima apasare. */
+  const pastrate = motiveNerecalculabile(rand.motiv, [
+    INCEPUT_CODURI, INCEPUT_NELIVRABILA, MOTIV_MONEDA_STRAINA, MOTIV_STOC_NEFACUT,
+  ]);
+  const motiv = compuneMotiv([
+    motivCoduri(nelegate),
+    motivNelivrabila(lipsuri),
+    monedaStraina ? MOTIV_MONEDA_STRAINA : null,
+    stocEsuat ? MOTIV_STOC_NEFACUT : null,
+    ...pastrate,
+  ]);
+
+  if (seSchimbaLinii) {
+    const { error } = await admin.from("orders")
+      .update({ items: itemsNoi as never } as never)
+      .eq("id", o.id).eq("business_id", ctx.businessId);
+    if (error) throw error;
+  }
+
+  const { error: eScriere } = await admin.from("pepita_comenzi")
+    .update({ stare: motiv ? "carantina" : "importata", motiv, prelucrat_la: new Date().toISOString() } as never)
+    .eq("id", rand.id);
+  if (eScriere) throw eScriere;
+
+  if (!motiv) return { ok: true, schimbat: true, stocEsuat: false, mesaj: `Comanda a ieșit din carantină.${despreStoc}` };
+  return {
+    ok: true,
+    schimbat: seSchimbaLinii || despreStoc !== "",
+    stocEsuat,
+    mesaj: `Comanda rămâne în verificare: ${motiv}${despreStoc}`,
   };
 }

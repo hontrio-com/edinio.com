@@ -21,6 +21,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { includeToateActive } from "@/lib/pepita/includere-in-masa";
+import { reproceseaza } from "@/lib/pepita/ingest";
 import { randuriCitite } from "@/lib/supabase/rand-citit";
 import { articolelePentruProdus, type ProblemaPepita, type ProdusPepita } from "@/lib/pepita/articole";
 import { adresaComenzi, adresaFeedProduse, adresaFeedStoc, cheieNoua, amprentaCheii, revocaToate, stingeCheileVechi } from "@/lib/pepita/chei";
@@ -636,6 +637,35 @@ export async function setareProdusePepita(
 /* ═══════════════════════════════════════════════════════════════════════════
    COMENZILE PROBLEMATICE
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Incearca din nou o comanda ramasa in carantina.
+ *
+ * ⚠ IDEMPOTENTA SI DIN AFARA: a doua apasare pe o comanda deja reparata nu face nimic si
+ * spune asta. Socoteala e in `reproceseaza`, aceeasi pe care o foloseste si retrimiterea lor,
+ * ca sa nu existe doua adevaruri despre aceeasi comanda.
+ */
+export async function reproceseazaComandaPepita(businessId: string, externalId: string) {
+  const g = await poarta(businessId);
+  if ("error" in g) return { error: g.error };
+  const admin = createAdminClient();
+  try {
+    /* ⚠ `currency` cerut anume: fara el, moneda magazinului ar veni `undefined`. */
+    const { data: setari } = await admin
+      .from("store_settings").select("currency").eq("business_id", businessId).maybeSingle();
+    const monedaMagazin = String((setari as { currency?: string } | null)?.currency ?? "RON").toUpperCase();
+
+    const r = await reproceseaza(admin, { businessId, monedaMagazin }, externalId);
+    revalidatePath(CALE);
+    return r;
+  } catch (e) {
+    await logError({
+      action: "pepita/reprocesare", message: e instanceof Error ? e.message : String(e),
+      businessId, severity: "error",
+    });
+    return { error: "Comanda nu s-a putut reprocesa." };
+  }
+}
 
 export interface ComandaProblema {
   externalId: string;

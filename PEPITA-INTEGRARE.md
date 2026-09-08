@@ -75,6 +75,39 @@ Documentatia lor, asa cum a fost descarcata pe 08.09.2026, e pastrata in `docs/p
 propozitia despre variatii citabila la fata locului. Pana atunci copiile traiau doar in dosarul
 temporar al unei sesiuni, deci verificarea afirmatiei cerea recuperare din transcrieri.
 
+### `<Id>`-ul unei combinatii nu se mai schimba cu numele ei
+
+Pepita cere textual ca `<Id>` sa fie „nem változik": sa nu se schimbe cand se schimba datele
+produsului. Pana pe 08.09.2026 el se deriva din TITLUL combinatiei, deci o redenumire nastea alt
+articol la ei, cu istoricul pierdut.
+
+⚠ **Si in Edinio redenumirea nici nu exista ca operatie.** Valorile se puteau doar adauga si sterge,
+iar `generateCombinations` potriveste combinatiile dupa TITLU: „Roșu" sters si „Roșu aprins" adaugat
+insemna combinatia ARUNCATA si alta nascuta goala, fara pret, SKU, EAN, stoc si imagine. De aceea un
+identificator stabil singur n-ar fi reparat nimic — randul care il purta murea oricum. Cele doua se
+livreaza impreuna, si asa au si fost facute.
+
+**Cum arata acum:**
+
+- fiecare combinatie are un `uid` de 16 hexa (`variante-identitate.ts`), iar `<Id>`-ul se deriva din
+  el, nu din titlu;
+- valoarea unei optiuni se poate REDENUMI pe loc, in formularul de produs, iar combinatiile isi
+  pastreaza randul intreg;
+- proba ceruta de audit trece cuvant cu cuvant: „Roșu / XL" redenumit in „Roșu aprins / XL" pleaca
+  cu acelasi `<Id>`.
+
+⚠ **Si nu s-a mutat niciun identificator deja trimis.** `uid`-ul se SEAMANA din amprenta titlului de
+acum, iar amprenta e chiar ce folosea `<Id>`-ul pana azi. Deci in ziua trecerii fiecare articol iese
+cu exact acelasi identificator — la Pepita, la Google si la Meta. Semanat altfel (un uuid nou), cele
+47.431 de combinatii ale platformei ar fi aparut ca oferte disparute si altele noi, cu istoricul de
+performanta pierdut. **Nicio migratie, nicio fereastra in care doua sisteme spun lucruri diferite.**
+
+⚠ **Capcana platita pe drum:** o valoare poate CONTINE separatorul („Alb / Crem" e o culoare de sine
+statatoare in productie). De aceea titlul nu se desparte cu `split(" / ")`, ci se POTRIVESTE axa cu
+axa, numai cu valorile declarate, incercandu-le pe cele mai lungi intai. Ce nu se poate desparti
+exact ramane neatins si se NUMARA in fata comerciantului: mai bine o combinatie cu numele vechi,
+vizibila, decat una legata gresit — acolo se scade stocul de pe alta marime.
+
 ### Articolele orfane, si ce NU se vede
 
 Un articol trimis candva si care azi nu mai e generat de feed ramane la ei, cu ultimul pret si

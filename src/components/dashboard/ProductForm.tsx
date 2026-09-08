@@ -36,6 +36,7 @@ import { PersonalizareCampuri, type StareCustomizare } from "@/components/dashbo
 import type { CampPersonalizare } from "@/lib/customization/definitie";
 import { modernizeazaSelectul } from "@/lib/customization/definitie";
 import type { Database } from "@/types/database.types";
+import { cuUid, redenumesteValoare } from "@/lib/storefront/variante-identitate";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
 
@@ -183,7 +184,14 @@ function generateCombinations(options: VariantOption[], existing: VariantCombina
       (acc, cur) => acc.flatMap(x => cur.map(y => [...x, y])),
       [[]] as string[][]
     );
-  return cartesian(filled.map(o => o.values)).map(combo => {
+  /*
+   * ⚠ `cuUid` DA IDENTITATE STABILA fiecarei combinatii, semanata din amprenta titlului ei de
+   * acum. Semanata, nu inventata: amprenta e chiar ce folosea `<Id>`-ul pana azi, deci niciun
+   * articol deja trimis la Pepita, Google sau Meta nu se naste din nou. Din clipa asta insa,
+   * identitatea tine de RAND, nu de text — si o redenumire n-o mai schimba.
+   * Vezi `src/lib/storefront/variante-identitate.ts`.
+   */
+  return cuUid(cartesian(filled.map(o => o.values)).map(combo => {
     const title = combo.join(" / ");
     return existing.find(e => e.title === title) ?? {
       id: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
@@ -196,7 +204,7 @@ function generateCombinations(options: VariantOption[], existing: VariantCombina
       image: "",
       enabled: true,
     };
-  });
+  }));
 }
 
 function computeSeoScore(form: FormState): number {
@@ -790,6 +798,45 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
     set("variants", { ...form.variants, options: newOptions, combinations: generateCombinations(newOptions, form.variants.combinations) });
   }
 
+  /**
+   * Redenumeste o valoare PASTRAND randurile combinatiilor.
+   *
+   * ═══ ⚠ PIESA CARE LIPSEA CU TOTUL ═══
+   *
+   * Pana azi singurul fel de a schimba „Roșu" in „Roșu aprins" era sa stergi valoarea si sa adaugi
+   * alta. Iar asta ARUNCA fiecare combinatie care o continea, cu pretul, SKU-ul, EAN-ul, stocul si
+   * imaginea ei: `generateCombinations` potriveste dupa TITLU, si titlul nu se mai potrivea.
+   *
+   * ⚠ De-aia un `uid` stabil singur n-ar fi reparat nimic: randul care il purta murea oricum.
+   * Cele doua se tin unul de altul, si numai impreuna fac ce cere Pepita — acelasi `<Id>` dupa o
+   * redenumire.
+   *
+   * ⚠ SI NU SE REGENEREAZA LISTA. `generateCombinations` ar fi rescris titlurile corect, dar ar fi
+   * cautat tot dupa titlu si ar fi nascut randuri goale. Aici combinatiile se TRANSFORMA.
+   */
+  function renameOptionValue(idx: number, vi: number, nou: string) {
+    const veche = form.variants.options[idx]?.values[vi];
+    if (veche === undefined) return;
+    const curat = nou.trim();
+    if (!curat || curat === veche) return;
+    if (form.variants.options[idx].values.some((v, j) => j !== vi && v === curat)) {
+      toast.error("Valoarea există deja la această opțiune.");
+      return;
+    }
+
+    const r = redenumesteValoare(form.variants.options, form.variants.combinations, idx, curat, veche);
+    /*
+     * ⚠ SE SPUNE CE N-A PUTUT FI ATINS. `desparteTitlu` refuza sa ghiceasca atunci cand titlul nu
+     * se poate descompune exact in valorile declarate — cazul in care o valoare contine chiar
+     * separatorul „ / ". Mai bine o combinatie ramasa cu numele vechi, vizibila, decat una legata
+     * gresit: acolo se scade stocul de pe alta marime.
+     */
+    if (r.neatinse > 0) {
+      toast.warning(`${r.neatinse} combinații nu s-au putut redenumi automat. Verifică-le în listă.`);
+    }
+    set("variants", { ...form.variants, options: r.optiuni, combinations: r.combinatii });
+  }
+
   function removeOptionValue(idx: number, vi: number) {
     const newOptions = form.variants.options.map((o, i) =>
       i === idx ? { ...o, values: o.values.filter((_, j) => j !== vi) } : o
@@ -1287,7 +1334,27 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                         <div className="flex flex-wrap gap-1.5">
                           {option.values.map((val, vi) => (
                             <span key={vi} className="flex items-center gap-1 px-2 py-1 bg-muted rounded-lg text-xs font-medium text-foreground">
-                              {val}
+                              {/*
+                                ⚠ SE EDITEAZA PE LOC. Pana azi chip-ul avea doar un X, deci
+                                singurul fel de a schimba un nume era sterge-si-adauga — iar aia
+                                arunca toate combinatiile care il conteau. Aici numele se schimba
+                                si randurile raman, cu tot cu identitatea trimisa la marketplace.
+
+                                ⚠ Se comite pe Enter si pe iesirea din camp, si se ANULEAZA pe
+                                Escape: un nume schimbat din greseala, cu Escape apasat, nu are
+                                voie sa se salveze — ar redenumi articolul si la Pepita.
+                              */}
+                              <input
+                                type="text" defaultValue={val} key={`${vi}-${val}`}
+                                aria-label={`Redenumește valoarea ${val}`}
+                                onKeyDown={e => {
+                                  if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); }
+                                  if (e.key === "Escape") { e.currentTarget.value = val; e.currentTarget.blur(); }
+                                }}
+                                onBlur={e => renameOptionValue(idx, vi, e.target.value)}
+                                className="bg-transparent border-none p-0 m-0 outline-none focus:ring-0 text-xs font-medium text-foreground"
+                                style={{ width: `${Math.max(2, val.length)}ch` }}
+                              />
                               <button type="button" onClick={() => removeOptionValue(idx, vi)}
                                 className="text-muted-foreground hover:text-foreground transition-colors ml-0.5">
                                 <X className="h-2.5 w-2.5" />

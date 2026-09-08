@@ -2,12 +2,13 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
-import { citesteEticheta, salveazaEticheta } from "./eticheta";
+import { areEticheta, citesteEticheta, salveazaEticheta } from "./eticheta";
 import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { combinatiiActiveUnice, parseVariants } from "@/lib/storefront/variants";
 import { parseBillingCompany, type BillingCompany } from "@/lib/billing/company";
 import { coteleLiniilor, type CoteleLiniilor } from "@/lib/billing/cote-pe-linii";
-import { desfaIdArticol, amprentaCombinatie } from "./identitate";
+import { desfaIdArticol } from "./identitate";
+import { identitateCombinatie } from "@/lib/storefront/variante-identitate";
 import {
   esteLivrarePepita, incaseazaPepita, metodaPlata, modLivrareCunoscut, modPlataCunoscut,
   starePlata, statusInitial, etichetaLivrare, etichetaPlata,
@@ -258,7 +259,10 @@ export async function leagaLiniile(
       const combinatii = combinatiiActiveUnice(parseVariants(produs.page_sections));
       variantTitle = titluCautat
         ? combinatii.find((c) => c.title === titluCautat)?.title ?? null
-        : combinatii.find((c) => amprentaCombinatie(c.title) === desfacut!.amprenta)?.title ?? null;
+        /* ⚠ IDENTITATEA, nu amprenta titlului: din 08.09.2026 combinatiile au `uid`, iar
+           `<Id>`-ul se deriva din el. Lasata pe amprenta, rezerva asta n-ar mai fi gasit nimic
+           exact pentru combinatiile REDENUMITE, adica exact cazul pentru care exista. */
+        : combinatii.find((c) => identitateCombinatie(c) === desfacut!.amprenta)?.title ?? null;
       if (!variantTitle) {
         /*
          * ⚠ AL DOILEA MARTOR A CAZUT. Produsul exista, combinatia nu: a fost stearsa,
@@ -307,9 +311,30 @@ export async function leagaLiniile(
  */
 async function pastreazaEticheta(
   businessId: string, orderId: string, c: ComandaPepita,
+  /**
+   * Se scrie doar daca eticheta nu e deja in depozit.
+   *
+   * ⚠ Adevarat NUMAI pe drumul de retrimitere. La prima sosire comanda tocmai s-a nascut, deci
+   * n-are cum sa aiba eticheta, iar un HEAD in plus pe fiecare comanda ar fi o cerere de retea
+   * platita degeaba pe drumul cel mai des umblat.
+   */
+  doarDacaLipseste = false,
 ): Promise<void> {
   const citita = citesteEticheta(c.etichetaBruta);
   if (citita.fel === "lipsa") return;
+
+  if (doarDacaLipseste) {
+    try {
+      if (await areEticheta(businessId, orderId)) return;
+    } catch {
+      /*
+       * ⚠ DEPOZITUL CAZUT LA INTREBARE NU OPRESTE INCERCAREA. Daca nu putem afla daca eticheta e
+       * acolo, incercarea de scriere e ieftina si idempotenta (aceeasi cheie, acelasi continut),
+       * iar renuntarea ar fi insemnat sa pastram gaura tocmai in ziua in care depozitul are
+       * probleme — adica exact ziua in care s-a pierdut.
+       */
+    }
+  }
 
   if (citita.fel === "rea") {
     await logError({
@@ -325,7 +350,9 @@ async function pastreazaEticheta(
   } catch (e) {
     await logError({
       action: "pepita/eticheta",
-      message: `eticheta nu s-a putut pastra: ${e instanceof Error ? e.message : String(e)}`,
+      message: "eticheta nu s-a putut pastra: "
+        + `${e instanceof Error ? e.message : String(e)}. `
+        + "Se reincearca la urmatoarea retrimitere din panoul Pepita („Resend order”).",
       details: { externalId: c.externalId, orderId, octeti: citita.octeti.length },
       businessId, severity: "warning",
     });
@@ -405,6 +432,22 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
      * idempotenta, deci pe drumul obisnuit nu face nimic.
      */
     if (rand.order_id) {
+      /*
+       * ═══ ⚠ SI ETICHETA SE MAI INCEARCA O DATA ═══
+       *
+       * Aici era o gaura pe care am facut-o chiar eu, cu o zi inainte: la prima sosire,
+       * `pastreazaEticheta` inghite o cadere a depozitului si merge mai departe — corect, o
+       * comanda nu se pierde pentru un PDF. Dar atunci eticheta era pierduta DEFINITIV: singurul
+       * loc unde mai exista Base64-ul e chiar sarcina utila, iar noi n-o pastram (are date
+       * personale). Retrimiterea lor, singura care aduce sarcina inapoi, nici nu incerca.
+       *
+       * Deci Pepita ne dadea eticheta, noi o pierdeam, si integrarea raporta ca totul e bine.
+       *
+       * ⚠ `doarDacaLipseste`: pe drumul obisnuit (retrimitere peste o comanda intreaga) nu se
+       * rescrie nimic, se face un singur HEAD. Reincercarea costa numai cand chiar lipseste.
+       */
+      await pastreazaEticheta(ctx.businessId, rand.order_id, c, true);
+
       /*
        * ⚠ O COMANDA IN CARANTINA SE INCEARCA DIN NOU, INTREAGA.
        *

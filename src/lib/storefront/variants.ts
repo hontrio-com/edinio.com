@@ -23,6 +23,19 @@ export interface VariantOption {
 
 export interface VariantCombo {
   id: string;
+  /**
+   * Identitatea STABILA a combinatiei, 16 hexa.
+   *
+   * ⚠ DEOSEBIT DE `id`, care e slugul TITLULUI si se schimba odata cu el. `uid` nu se schimba
+   * niciodata: din el se deriva `<Id>`-ul trimis marketplace-urilor, iar Pepita cere anume ca acela
+   * sa ramana acelasi cand se schimba datele produsului.
+   *
+   * ⚠ OPTIONAL, si asta e chiar migrarea: combinatiile scrise inainte de 08.09.2026 n-au unul, si
+   * pentru ele identitatea se socoteste ca pana acum, din amprenta titlului. `uid`-ul se SEAMANA
+   * din aceeasi amprenta, deci trecerea nu misca niciun `<Id>` deja trimis.
+   * Vezi `variante-identitate.ts`.
+   */
+  uid?: string;
   title: string;
   price: string;
   compare_at_price: string;

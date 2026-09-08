@@ -63,9 +63,34 @@ function jumatate(octeti: Uint8Array, samanta: number): string {
   return h.toString(16).padStart(8, "0");
 }
 
-/** `<Id>`-ul articolului: produsul simplu, sau o combinatie anume a lui. */
-export function idArticol(productId: string, titluCombinatie: string | null): string {
-  return titluCombinatie ? `${productId}${SEPARATOR}${amprentaCombinatie(titluCombinatie)}` : productId;
+/**
+ * `<Id>`-ul articolului: produsul simplu, sau o combinatie anume a lui.
+ *
+ * ═══ ⚠ COMBINATIA SE DA CA OBIECT, NU CA TITLU ═══
+ *
+ * Titlul se schimba cand comerciantul redenumeste o valoare („Roșu" → „Roșu aprins"), iar Pepita
+ * cere anume ca `<Id>` sa NU se schimbe cand se schimba datele produsului. De aceea identitatea se
+ * ia din `uid`-ul combinatiei, care nu se muta niciodata.
+ *
+ * ⚠ FORMA CU SIR RAMANE, si nu din politete fata de apelanti: combinatiile scrise inainte de
+ * 08.09.2026 n-au `uid`, iar pentru ele raspunsul trebuie sa fie EXACT cel de pana acum, altfel
+ * fiecare articol deja trimis s-ar naste din nou la ei. `uid`-ul e semanat din aceeasi amprenta,
+ * tocmai ca cele doua drumuri sa dea acelasi rezultat in ziua trecerii.
+ *
+ * ⚠ Si tipul e STRUCTURAL, nu `VariantCombo`: modulul asta e chemat si din browser si din feed, si
+ * un import catre `storefront/variants` ar fi facut un cerc (acela il importa pe el).
+ */
+export function idArticol(
+  productId: string,
+  combinatie: string | { title: string; uid?: string } | null,
+): string {
+  if (combinatie == null) return productId;
+  const identitate = typeof combinatie === "string"
+    ? amprentaCombinatie(combinatie)
+    : (combinatie.uid && /^[0-9a-f]{16}$/.test(combinatie.uid)
+        ? combinatie.uid
+        : amprentaCombinatie(combinatie.title));
+  return `${productId}${SEPARATOR}${identitate}`;
 }
 
 export interface IdDesfacut {

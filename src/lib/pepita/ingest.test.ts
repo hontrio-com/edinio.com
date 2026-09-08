@@ -710,6 +710,82 @@ test("⚠ cand combinatia chiar a disparut, motivul o NUMESTE, nu spune „cod n
   assert.deepEqual(b.consumuri[0].produse, [], "si nu se scade nimic pe ghicite");
 });
 
+/* ══════════════════════════════════════════════════════════════════════════
+   ETICHETA CARE NU S-A PUTUT PASTRA
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ AICI AM FACUT EU O GAURA, si a gasit-o auditul a doua zi. `pastreazaEticheta` inghite o
+   cadere a depozitului si merge mai departe — pana aici, corect: o comanda nu se pierde pentru un
+   PDF, iar un 503 catre Pepita ar cere o retrimitere apasata de OM.
+
+   Dar Base64-ul etichetei exista intr-un singur loc: sarcina utila, pe care noi n-o pastram (are
+   datele cumparatorului). Deci o cadere de o clipa a depozitului insemna eticheta pierduta
+   DEFINITIV, in timp ce integrarea raporta ca totul e bine. Iar retrimiterea lor — singura care
+   aduce sarcina inapoi — nici nu incerca.
+
+   ⚠ PROBELE DE MAI JOS RULEAZA FARA CHEI DE DEPOZIT, dinadins: `galeataIncarcarilor()` arunca
+   fara `R2_BUCKET_PRIVAT`, deci scrierea etichetei CHIAR pica. Asta e cazul de aparat, si nu
+   trebuie inscenat cu nimic.
+*/
+
+/** Un PDF adevarat, cat sa treaca de validare. */
+const ETICHETA_B64 = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n", "latin1").toString("base64");
+
+test("⚠ o eticheta care nu s-a putut pastra NU pierde comanda", async () => {
+  /*
+   * Cazul in care depozitul cade. Comanda, stocul si carantina nu au voie sa fie atinse de asta:
+   * marfa si banii sunt in comanda, eticheta e hartie si se poate cere din panoul lor.
+   */
+  const b = faceBaza();
+  const r = await ingereaza(b.db, CTX, comanda({ package_label: ETICHETA_B64 }));
+
+  assert.equal(r.stare, "creata", "caderea depozitului a rasturnat ingestul");
+  assert.equal(b.orders.length, 1);
+  assert.deepEqual(b.consumuri[0].produse, [{ product_id: P_SIMPLU, quantity: 2 }]);
+});
+
+test("⚠ si o eticheta STRICATA e la fel: se spune, nu se pierde comanda", async () => {
+  /* Un PDF care nu e PDF nu e o comanda proasta. Se noteaza si se merge mai departe. */
+  const b = faceBaza();
+  const r = await ingereaza(b.db, CTX, comanda({ package_label: "nu sunt base64!!" }));
+  assert.equal(r.stare, "creata");
+  assert.equal(b.orders.length, 1);
+});
+
+test("⚠ retrimiterea INCEARCA DIN NOU eticheta, altfel ea era pierduta definitiv", () => {
+  /*
+   * ⚠ SE CITESTE SURSA, si nu din lene: ce trebuie aparat aici e ca ramura de DUPLICAT sa cheme
+   * pastrarea INAINTE de despartirea in „carantina" si „drumul obisnuit" — altfel unul dintre cele
+   * doua drumuri ar ramane fara recuperare, tacut. O proba pe purtare, cu un depozit fals, ar fi
+   * spus doar ca „s-a incercat o data", nu si CA AMANDOUA drumurile trec pe acolo.
+   *
+   * ⚠ Si se cere steagul `true`: fara el, retrimiterea ar rescrie eticheta la fiecare sosire, iar
+   * „Resend order" apasat de zece ori ar insemna zece scrieri in depozit pentru acelasi PDF.
+   */
+  const sursa = readFileSync("src/lib/pepita/ingest.ts", "utf8");
+  const i = sursa.indexOf("if (rand.order_id) {");
+  assert.notEqual(i, -1, "ramura de duplicat nu se mai gaseste");
+  const j = sursa.indexOf('if (rand.stare === "carantina")', i);
+  assert.notEqual(j, -1, "despartirea in carantina nu se mai gaseste");
+
+  const inainteDeDespartire = sursa.slice(i, j);
+  assert.match(
+    inainteDeDespartire,
+    /await pastreazaEticheta\(ctx\.businessId, rand\.order_id, c, true\)/,
+    "retrimiterea nu mai incearca eticheta inaintea celor doua drumuri",
+  );
+});
+
+test("⚠ prima sosire NU intreaba depozitul degeaba", () => {
+  /*
+   * Comanda tocmai s-a nascut, deci n-are cum sa aiba eticheta. Un HEAD in plus pe drumul cel mai
+   * des umblat ar fi o cerere de retea platita la fiecare comanda, pentru un raspuns stiut.
+   */
+  const sursa = readFileSync("src/lib/pepita/ingest.ts", "utf8");
+  assert.match(sursa, /await pastreazaEticheta\(ctx\.businessId, orderId, c\);/,
+    "pe drumul de creare pastrarea trebuie chemata FARA steagul de recuperare");
+});
+
 test("⚠ produsul STERS nu se confunda cu un cod necunoscut, si nu rastoarna restul comenzii", async () => {
   /*
    * ⚠ CE APARA. Pana la `on delete set null`, cheia straina era `on delete cascade`: stergerea

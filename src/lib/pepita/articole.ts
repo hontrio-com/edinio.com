@@ -349,7 +349,13 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
 
   for (const combo of combinatii) {
     const titlu = combo.title;
-    const id = idArticol(p.id, titlu);
+    /*
+     * ⚠ SE DA COMBINATIA, NU TITLUL. De aici vine stabilitatea ceruta de ei: cu titlul, o
+     * redenumire nastea alt `<Id>`, adica alt articol la Pepita, cu istoricul pierdut.
+     * Pentru combinatiile fara `uid` (cele scrise inainte de 08.09.2026) raspunsul e identic cu
+     * cel de pana acum, deci trecerea nu misca nimic.
+     */
+    const id = idArticol(p.id, combo);
     /*
      * ⚠ Doua combinatii cu acelasi `<Id>` ar insemna ca a doua o suprascrie pe
      * prima la ei, deci un pret sau un stoc care nu e al niciuneia. Amprenta e pe

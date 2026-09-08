@@ -340,6 +340,29 @@ test("⚠ o citire cazuta a EVIDENTEI nu rupe feedul de stoc", async () => {
   assert.equal(xml.includes(idMort(1)), false);
 });
 
+test("⚠ evidenta articolelor se rescrie la FIECARE trecere, deci o scriere cazuta se repara singura", async () => {
+  /*
+   * ⚠ RIDICAT DE AUDIT CA P2: `tineMinteArticolele` inghite o eroare de baza si lasa feedul sa
+   * curga — corect, un XML bun nu se arunca pentru evidenta noastra. Dar atunci o comanda sosita
+   * dupa aceea s-ar putea sprijini tocmai pe randul care lipseste.
+   *
+   * Reconcilierea exista insa deja, si e chiar feedul: el NU scrie doar articolele noi, ci le
+   * trimite pe TOATE la fiecare trecere, cu `ignoreDuplicates`. Deci o scriere cazuta azi se
+   * repara la trecerea de maine, fara nicio piesa in plus.
+   *
+   * ⚠ Proba asta e ce face afirmatia adevarata. Optimizat cineva vreodata ca „se scriu doar cele
+   * noi", reconcilierea ar disparea tacut, si nimic altceva n-ar mai prinde-o.
+   */
+  const db = faceBaza({ config: { mod_includere: "toate" }, produse: [produs(1), produs(2)] });
+  await feed(db, "produse");
+  const dupaPrima = (db as unknown as { __scrise: unknown[] }).__scrise.length;
+  assert.ok(dupaPrima >= 2, `prima trecere a scris doar ${dupaPrima} articole`);
+
+  await feed(db, "produse");
+  const dupaADoua = (db as unknown as { __scrise: unknown[] }).__scrise.length;
+  assert.equal(dupaADoua, dupaPrima * 2, "a doua trecere n-a mai rescris evidenta: reparatia de la sine a disparut");
+});
+
 test("feedul intreg e XML valid si contine produsele incluse", async () => {
   const xml = await feed(faceBaza({ config: { mod_includere: "toate" } }));
   assert.equal(XMLValidator.validate(xml), true);

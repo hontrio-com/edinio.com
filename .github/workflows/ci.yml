@@ -233,10 +233,8 @@ jobs:
             echo "Daca l-ar fi rescris, jobul cade rosu: atunci arborele chiar ar fi altul."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Cheile nu ajung niciodata in CI, si nu trebuie. Build-ul e verificat ca
-      # trece cu `.env.example`: Next.js are nevoie ca VARIABILELE SA EXISTE, nu
-      # ca ele sa fie adevarate. Asta face ca poarta sa mearga si pe fork-uri,
-      # unde secretele nu sunt disponibile.
+      # Cheile nu ajung niciodata in CI, si nu trebuie. Asta face ca poarta sa
+      # mearga si pe fork-uri, unde secretele nu sunt disponibile.
       - name: Mediu de proba
         run: cp .env.example .env.local
 
@@ -244,7 +242,48 @@ jobs:
 
       - run: npm test
 
-      - run: npm run build
+      # ── Build-ul, in modul „compile" ───────────────────────────────────────
+      #
+      # ⚠ TEXTUL DE AICI SPUNEA CA „build-ul e verificat ca trece cu `.env.example`:
+      # Next.js are nevoie ca VARIABILELE SA EXISTE, nu ca ele sa fie adevarate".
+      # ERA FALS, si nu s-a vazut fiindca pasul asta N-A RULAT NICIODATA in CI: pana
+      # pe 08.09.2026 jobul murea mai sus, la instalare.
+      #
+      # Prima rulare adevarata a cazut asa:
+      #
+      #     Error occurred prerendering page "/blog/feed"
+      #     [blog] citirea publica „articolePentruFeed" a esuat: TypeError: fetch failed
+      #
+      # `/blog/feed` are `revalidate = 3600`, deci se PRERANDEAZA la build si citeste
+      # din baza cu cheia publica. Cu `.env.example` adresa nu exista, citirea cade, si
+      # ruta arunca — dinadins, fiindca un feed gol ar arata ca „nu exista articole" si
+      # Google ar scoate paginile din index. Deci nu e un defect de cod: e o poarta care
+      # cere DATE de productie, iar CI-ul n-are chei si nu trebuie sa aiba.
+      #
+      # `--experimental-build-mode compile` compileaza tot si trece prin „Collecting page
+      # data" — adica IMPORTA fiecare ruta, ceea ce prinde erorile de import si de
+      # granita client/server — dar sare peste generarea statica, singura parte care are
+      # nevoie de baza. Verificarea de tipuri e oricum un pas separat, mai sus.
+      #
+      # ⚠ CE NU MAI ACOPERA POARTA ASTA: prerandarea propriu-zisa. Aceea se dovedeste la
+      # desfasurarea pe Vercel, care ruleaza build-ul INTREG cu cheile adevarate si
+      # opreste desfasurarea daca pica. Impartirea e cinstita: aici se masoara CODUL,
+      # acolo codul PLUS datele.
+      - name: Build (compile)
+        run: |
+          set -o pipefail
+          npm run build:ci 2>&1 | tee /tmp/build.log
+
+      # Si daca a picat, se spune DE CE fara drepturi de admin. Vezi nota lunga de la
+      # „Ce a picat la npm ci": adnotarile sunt singurul canal deschis.
+      - name: Ce a picat la build
+        if: failure()
+        continue-on-error: true
+        run: |
+          [ -f /tmp/build.log ] || exit 0
+          printf '::error title=Build picat::'
+          sed -e 's/%/%25/g' /tmp/build.log | tail -c 6000 | awk '{ printf "%s%%0A", $0 }'
+          echo
 
   # ── Deriva de schema ────────────────────────────────────────────────────────
   #

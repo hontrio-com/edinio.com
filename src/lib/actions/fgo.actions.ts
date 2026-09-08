@@ -12,9 +12,7 @@ import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { invoiceParty } from "@/lib/billing/invoice-party";
 import { cheieDocument, slotFacturare } from "@/lib/billing/refacturare";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
-import {
-  cotaDeFacturare, grupePeCota, imparteProportional, motivCoteAmestecate, tvaContinut,
-} from "@/lib/billing/cote-pe-linii";
+import { planulCotelor } from "@/lib/billing/cote-pe-linii";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
 import { liniiFgo, mesajRefuz, pretDeDocument, reconciliazaComanda } from "@/lib/billing/reconcile";
@@ -132,50 +130,26 @@ async function buildItems(
     pretDeDocument(vat.taxIncluded && cota > 0 ? gross / (1 + cota / 100) : gross);
 
   /*
-   * Grupele de cota ale comenzii. La o singura cota (adica la orice comanda din magazin) totul de
-   * mai jos se comporta EXACT ca pana acum: `imparteProportional` da o singura bucata, iar
-   * `toNet` primeste chiar `vat.rate`.
+   * Grupele de cota ale comenzii, si impartirea sumelor care n-au cota proprie in baza. La o
+   * singura cota (adica la orice comanda din magazin) totul de mai jos se comporta EXACT ca pana
+   * acum: `peGrupe` intoarce suma intreaga, pe chiar cota documentului, iar `toNet` primeste
+   * chiar `effectiveVat`. Vezi `planulCotelor`, unde socoteala e si probata pe valori.
    */
-  const grupe = grupePeCota(order.items, effectiveVat);
-  const amestecate = grupe.length > 1;
-  /** Numele liniei: cu cota in coada doar cand chiar sunt mai multe, ca sa nu apara doua „Transport". */
-  const numeCuCota = (nume: string, cota: number) => (amestecate ? `${nume} (${cota}%)` : nume);
-  /**
-   * Sumele care n-au cota proprie nicaieri in baza — transport, reduceri, taxa de ramburs — se
-   * impart intre grupe, proportional cu valoarea lor.
-   *
-   * ⚠ La o singura cota asta e o lista cu un element, deci o singura linie, ca inainte.
-   */
-  const peGrupe = (suma: number) => [...imparteProportional(suma, grupe).entries()]
-    .filter(([, valoare]) => Math.abs(valoare) >= 0.005);
+  const { grupe, amestecate, peGrupe, numeCuCota, tvaDinTotal, cotaLiniei } = planulCotelor(order.items, effectiveVat);
   /** Cota liniei de ajustare: cea cu valoarea cea mai mare, ca sa mustre cel mai putin. */
   const cotaAjustarii = grupe.reduce((a, g) => (g.valoare > a.valoare ? g : a), grupe[0] ?? { cota: effectiveVat, valoare: 0 }).cota;
-  /**
-   * TVA-ul continut in `orders.total`, socotit pe grupe.
-   *
-   * ⚠ Transportul, reducerile si taxele intra si ele in total, si se impart intre grupe exact ca
-   * la liniile de mai sus. Altfel garda ar compara doua numere socotite dupa reguli diferite.
-   */
-  const tvaContinutulComenzii = () => {
-    const suplimente = new Map(grupe.map((g) => [g.cota, g.valoare]));
-    const adauga = (suma: number, semn: number) => {
-      for (const [cota, valoare] of imparteProportional(suma, grupe)) {
-        suplimente.set(cota, (suplimente.get(cota) ?? 0) + semn * valoare);
-      }
-    };
-    adauga(Math.max(0, Number(order.shipping_cost) || 0), 1);
-    adauga(Math.max(0, Number(order.cod_fee_amount) || 0), 1);
-    adauga(Math.max(0, Number(order.discount_amount) || 0), -1);
-    adauga(Math.max(0, Number(order.card_discount_amount) || 0), -1);
-    adauga(Math.max(0, Number(order.cod_discount_amount) || 0), -1);
-    return tvaContinut([...suplimente.entries()].map(([cota, valoare]) => ({ cota, valoare })));
-  };
+  /** TVA-ul continut in `orders.total`, socotit pe grupe, cu tot cu sumele care se impart. */
+  const tvaContinutulComenzii = () => tvaDinTotal({
+    transport: order.shipping_cost,
+    taxaRamburs: order.cod_fee_amount,
+    reduceri: [order.discount_amount, order.card_discount_amount, order.cod_discount_amount],
+  });
 
   const lineItems: FgoLineItem[] = items.map(item => {
     // fGO n-are natura de linie in model (`FgoLineItem` nu are camp de tip, iar
     // `Tip` se pune doar la „Discount"), deci de aici se foloseste doar codul.
     const { code } = codSiNatura(item, skus);
-    const cota = cotaDeFacturare(item, effectiveVat);
+    const cota = cotaLiniei(item);
     return {
       name: item.name,
       quantity: item.quantity,
@@ -489,18 +463,10 @@ export async function generateFgoInvoice(
 
 
   /*
-   * ⚠ COTE DIFERITE PE LINII: NU SE EMITE.
-   *
-   * `invoiceVat` intoarce UN singur numar, iar casa il pune pe TOATE liniile. Pana pe
-   * 08.09.2026 `orders.vat_rate` era `max(cote)`, deci greseala mergea in directia care
-   * supra-taxeaza: gresit, dar fara pagubă fiscala. De cand e cota liniei celei mai valoroase,
-   * aceeasi apasare poate SUB-declara TVA-ul, si aia e alta clasa de problema.
-   *
-   * Calea automata se oprea deja; asta e aceeasi regula pe butonul apasat de om, cu mesajul
-   * care spune si unde se face factura corect.
+   * ⚠ Poarta cotelor amestecate a fost RIDICATA pe 09.09.2026: liniile isi poarta cotele lor.
+   * Vezi `planulCotelor` si nota din constructorul de linii. Ce mai poate opri documentul e o
+   * cota fara nume in contul de facturare, si acolo se opreste — nu aici.
    */
-  const coteAmestecate = motivCoteAmestecate((order as { items?: unknown }).items);
-  if (coteAmestecate) return { error: coteAmestecate };
 
   const orderData = order as typeof order & {
     fgo_invoice_number?: string | null;

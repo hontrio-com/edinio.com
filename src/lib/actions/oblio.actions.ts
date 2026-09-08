@@ -23,8 +23,8 @@ import {
   slotFacturare,
   type SlotFacturare,
 } from "@/lib/billing/refacturare";
-import { cereNumeleCotei, invoiceVat, numeCota, type RegimTva } from "@/lib/billing/invoice-vat";
-import { motivCoteAmestecate } from "@/lib/billing/cote-pe-linii";
+import { cereNumeleCotei, invoiceVat, numeCota, numePeCote, type RegimTva } from "@/lib/billing/invoice-vat";
+import { coteleLiniilor, planulCotelor } from "@/lib/billing/cote-pe-linii";
 import {
   getOblioToken,
   getCompanies,
@@ -102,38 +102,80 @@ async function regimSiNume(
   config: OblioConfig,
   order: { vat_rate?: unknown },
   magazin: { vatEnabled: boolean; vatRate: unknown; pricesIncludeVat: boolean },
-): Promise<{ vat: RegimTva; vatName: string }> {
+  /** Cotele care chiar apar pe linii. Gol inseamna „doar cota documentului". */
+  coteDistincte: number[] = [],
+): Promise<{ vat: RegimTva; vatName: string; numePeCota: Map<number, string>; fiaraFaraNume: number[] }> {
   const vat = invoiceVat(
     order,
     { vat_enabled: magazin.vatEnabled, vat_rate: magazin.vatRate, prices_include_vat: magazin.pricesIncludeVat },
     !!config.vat_name,
   );
   const configurat = { name: config.vat_name, percentage: Number(config.vat_percentage) || 0 };
-  if (!cereNumeleCotei(vat.rate, configurat.percentage)) return { vat, vatName: configurat.name };
+
+  /*
+   * ═══ ⚠ UN NUME PENTRU FIECARE COTA DISTINCTA (09.09.2026) ═══
+   *
+   * Oblio nu primeste un procent, primeste un NUME din nomenclatorul contului, iar numele e cel
+   * care selecteaza cota. Cu cote pe linii, acelasi nume pus peste doua procente diferite ar scrie
+   * pe hartie alta cota decat cea trimisa — sau ar face documentul sa fie refuzat cu totul.
+   *
+   * `fiaraFaraNume` aduna cotele pentru care contul comerciantului n-are nicio intrare. La o
+   * singura cota purtarea ramane cea de pana acum (se trimite numele configurat si se scrie in
+   * jurnal); la cote amestecate apelantul REFUZA, fiindca acolo greseala nu mai e aproximativa.
+   */
+  /*
+   * ⚠ NEPLATITOR (sau platitor fara cota): nicio cota n-are nume, si nici nu trebuie sa aiba.
+   * Pana pe 09.09.2026 scurtatura de mai jos acoperea si cazul asta, fiindca `cereNumeleCotei`
+   * cere `rate > 0`; de cand ea cere si „o singura cota", o comanda de marketplace cu doua cote
+   * la un NEPLATITOR ar fi ajuns sa ceara nomenclatorul degeaba.
+   */
+  if (vat.rate <= 0) {
+    return { vat, vatName: configurat.name, numePeCota: new Map(), fiaraFaraNume: [] };
+  }
+
+  const cotele = [...new Set([vat.rate, ...coteDistincte])];
+
+  /*
+   * ⚠ SCURTATURA RAMANE, dar numai cand chiar e o singura cota si perechea configurata o descrie.
+   * Atunci nomenclatorul n-are ce adauga, si nu se mai plateste o cerere de retea pe fiecare
+   * factura — exact purtarea de pana acum.
+   */
+  if (!cereNumeleCotei(vat.rate, configurat.percentage) && cotele.length === 1) {
+    return {
+      vat, vatName: configurat.name,
+      numePeCota: new Map([[vat.rate, configurat.name]]), fiaraFaraNume: [],
+    };
+  }
 
   // De aici incolo numele configurat NU mai descrie cota trimisa. Orice iesire pe
   // numele vechi pleaca deci cu o pereche nepotrivita, iar la Oblio numele chiar
   // selecteaza cota din nomenclatorul contului: daca documentul e refuzat, calea
   // automata inghite esecul si comanda ramane nefacturata fara sa afle nimeni.
   // De aceea se scrie in jurnal, chiar daca factura pleaca oricum.
-  const nepotrivit = (motiv: string) => {
+  let nomenclator: { name: string; percentage: number }[] | undefined;
+  try {
+    nomenclator = (await getVatRates(token, config.cif)).map((c) => ({ name: c.name, percentage: c.percent }));
+  } catch {
+    /* Nomenclatorul necitit nu are voie sa opreasca factura CU O SINGURA COTA: ramane numele
+       configurat. La cote amestecate, `numePeCote` le trece pe toate in `faraNume`. */
+    nomenclator = undefined;
+  }
+
+  const { nume: numePeCota, faraNume: fiaraFaraNume } = numePeCote(cotele, configurat, nomenclator);
+
+  for (const cota of fiaraFaraNume) {
     logError({
       action: "oblio.numeCota", message: "Numele cotei configurate nu descrie cota facturii",
-      details: { motiv, cotaFacturii: vat.rate, cotaConfigurata: configurat.percentage, numeConfigurat: configurat.name, cif: config.cif },
+      details: {
+        motiv: nomenclator ? "cota lipseste din contul Oblio" : "nomenclatorul de cote nu s-a putut citi",
+        cotaFacturii: cota, cotaConfigurata: configurat.percentage,
+        numeConfigurat: configurat.name, cif: config.cif,
+      },
       severity: "warning",
     });
-    return { vat, vatName: configurat.name };
-  };
-
-  try {
-    const cote = await getVatRates(token, config.cif);
-    const nume = numeCota(vat.rate, configurat, cote.map((c) => ({ name: c.name, percentage: c.percent })));
-    // Nomenclatorul citit, dar fara nicio cota cu procentul cerut.
-    return nume === configurat.name ? nepotrivit("cota lipseste din contul Oblio") : { vat, vatName: nume };
-  } catch {
-    // Nomenclatorul necitit nu are voie sa opreasca factura: ramane numele configurat.
-    return nepotrivit("nomenclatorul de cote nu s-a putut citi");
   }
+
+  return { vat, vatName: numePeCota.get(vat.rate) ?? configurat.name, numePeCota, fiaraFaraNume };
 }
 
 async function buildProducts(
@@ -154,6 +196,10 @@ async function buildProducts(
   config: OblioConfig,
   vat: RegimTva,
   vatName: string,
+  /** Numele cotei, pentru fiecare cota distincta. Vezi `regimSiNume`. */
+  numePeCota: Map<number, string> = new Map(),
+  /** Cotele pentru care contul Oblio n-are nicio intrare in nomenclator. Vezi `regimSiNume`. */
+  fiaraFaraNume: number[] = [],
 ): Promise<OblioProduct[] | { error: string }> {
   const items = (order.items as OrderItem[]) ?? [];
   const skus = await fetchSkuMap(sursa.supabase, sursa.businessId, items, (m) =>
@@ -171,11 +217,61 @@ async function buildProducts(
    * contului Oblio, deci un nume vechi langa alt procent ar fi o minciuna.
    */
   const vatIncluded: 0 | 1 = vat.taxIncluded ? 1 : 0;
-  // Neplatitor: vatName gol + 0% (Oblio aplica profilul firmei) — ca modulul
-  // oficial, NU "SFDD" (nume incert in Oblio).
-  const vatFields = vat.rate > 0 && vatName
-    ? { vatName, vatPercentage: vat.rate, vatIncluded }
-    : { vatName: "", vatPercentage: 0, vatIncluded: 0 as const };
+  /*
+   * Neplatitor: vatName gol + 0% (Oblio aplica profilul firmei) — ca modulul oficial, NU "SFDD"
+   * (nume incert in Oblio).
+   *
+   * ⚠ ACUM E O FUNCTIE DE COTA, nu un obiect. Oblio primeste un NUME, iar numele selecteaza cota
+   * din nomenclatorul contului: acelasi nume pus peste doua procente ar scrie pe hartie alta cota
+   * decat cea trimisa. Fiecare linie isi cere numele ei.
+   *
+   * ⚠ La o singura cota, `numePeCota` are o singura intrare si totul iese exact ca pana acum.
+   */
+  const faraTva = { vatName: "", vatPercentage: 0, vatIncluded: 0 as const };
+  const platitor = vat.rate > 0 && !!vatName;
+  const campuriTva = (cota: number) => {
+    /*
+     * ⚠ NEPLATITORUL RAMANE NEPLATITOR, oricat TVA ar fi scris pe liniile marketplace-ului. Fara
+     * randul asta, `cotaLiniei` ar fi fost oricum 0 (vezi `planulCotelor`), dar regula se scrie si
+     * aici: campurile de TVA pleaca spre Oblio, si nu se cade sa atarne de un singur loc.
+     */
+    if (!platitor) return faraTva;
+    const nume = numePeCota.get(cota) ?? vatName;
+    /*
+     * ⚠ COTA ZERO CU NUME E ALTCEVA DECAT LIPSA DE TVA. Un produs scutit, pe factura unui
+     * PLATITOR, pleaca cu numele lui („Scutit") si 0% — nu cu campurile goale, care la Oblio
+     * inseamna „aplica profilul firmei", adica tocmai cota obisnuita.
+     */
+    return nume ? { vatName: nume, vatPercentage: cota, vatIncluded } : faraTva;
+  };
+  const vatFields = campuriTva(vat.rate);
+
+  /*
+   * Grupele de cota ale comenzii. Sumele care n-au cota proprie in baza — transport, reduceri de
+   * plata, taxa de ramburs — se impart intre ele, proportional cu valoarea marfii.
+   *
+   * ⚠ REDUCEREA PROMO NU E AICI, dinadins: la Oblio ea pleaca cu `discountAllAbove: 1` si FARA
+   * campuri de TVA, adica o imparte chiar Oblio peste liniile de deasupra, fiecare cu cota ei.
+   * Impartita si de noi, s-ar fi scazut de doua ori.
+   */
+  const { grupe, amestecate, peGrupe, numeCuCota, cotaLiniei } = planulCotelor(
+    order.items, platitor ? vat.rate : 0,
+  );
+
+  /*
+   * ⚠ O COTA FARA NUME OPRESTE DOCUMENTUL, dar numai cand cotele difera.
+   *
+   * Oblio nu primeste un procent, primeste un NUME, iar numele selecteaza cota din nomenclatorul
+   * contului. Pe drumul cu o singura cota, un nume aproximativ e de ani de zile mai bun decat o
+   * factura neemisa, si asa ramane. Cu doua cote pe acelasi document, acelasi nume ar pleca langa
+   * amandoua — adica documentul ar iesi cu o cota scrisa peste alta.
+   */
+  const faraNume = amestecate ? grupe.map(g => g.cota).filter(c => fiaraFaraNume.includes(c)) : [];
+  if (faraNume.length > 0) {
+    return { error: `Comanda are cote de TVA diferite (${grupe.map(g => `${g.cota}%`).join(", ")}), `
+      + `dar contul tau Oblio nu are nicio cota definita pentru ${faraNume.map(c => `${c}%`).join(", ")}. `
+      + "Adauga cotele lipsa in Oblio si incearca din nou." };
+  }
 
   const itemType = config.product_type?.trim() || "Marfa";
 
@@ -221,20 +317,24 @@ async function buildProducts(
       productType: esteServiciu ? "Serviciu" : itemType,
       ...(gestiune && !esteServiciu ? { management: gestiune } : {}),
       save: 0,
-      ...vatFields,
+      ...campuriTva(cotaLiniei(item)),
     };
   });
 
   if (Number(order.shipping_cost) > 0) {
-    products.push({
-      name: "Transport",
-      price: Number(order.shipping_cost),
-      measuringUnit: "buc",
-      quantity: 1,
-      productType: "Serviciu",
-      save: 0,
-      ...vatFields,
-    });
+    /* ⚠ Transportul n-are cota proprie nicaieri in baza; cu cote amestecate urmeaza marfa pe care
+       o duce, proportional. La o singura cota e o singura linie, ca inainte. */
+    for (const [cota, valoare] of peGrupe(Number(order.shipping_cost))) {
+      products.push({
+        name: numeCuCota("Transport", cota),
+        price: valoare,
+        measuringUnit: "buc",
+        quantity: 1,
+        productType: "Serviciu",
+        save: 0,
+        ...campuriTva(cota),
+      });
+    }
   }
 
   if (Number(order.discount_amount) > 0) {
@@ -246,44 +346,56 @@ async function buildProducts(
     });
   }
 
-  // Reducerea la plata online e deja scazuta din orders.total la plasare; fara
-  // linia asta factura ar iesi mai mare decat totalul comenzii (si mai mare decat
-  // incasarea). O adaugam ca linie cu valoare negativa (dupa discountul promo, ca
-  // sa nu interfereze cu discountAllAbove), purtand aceleasi campuri de TVA.
+  /*
+   * Reducerea la plata online e deja scazuta din orders.total la plasare; fara linia asta factura
+   * ar iesi mai mare decat totalul comenzii (si mai mare decat incasarea). O adaugam ca linie cu
+   * valoare negativa, dupa discountul promo, ca sa nu interfereze cu `discountAllAbove`.
+   *
+   * ⚠ SI EA SE IMPARTE PE COTE, spre deosebire de cea promo de deasupra: aceea pleaca FARA campuri
+   * de TVA si o imparte chiar Oblio peste liniile de deasupra, fiecare cu cota ei. Asta e o linie
+   * obisnuita, cu cota scrisa pe ea, deci daca ar ramane pe cota documentului ar scadea TVA la
+   * 21% dintr-o baza care are si 11%.
+   */
   if (Number(order.card_discount_amount) > 0) {
-    products.push({
-      name: "Reducere plata online",
-      price: -Math.abs(Number(order.card_discount_amount)),
-      measuringUnit: "buc",
-      quantity: 1,
-      productType: "Serviciu",
-      save: 0,
-      ...vatFields,
-    });
+    for (const [cota, valoare] of peGrupe(Math.abs(Number(order.card_discount_amount)))) {
+      products.push({
+        name: numeCuCota("Reducere plata online", cota),
+        price: -valoare,
+        measuringUnit: "buc",
+        quantity: 1,
+        productType: "Serviciu",
+        save: 0,
+        ...campuriTva(cota),
+      });
+    }
   }
   // Reducerea la plata ramburs — aceeasi logica, linie negativa separata.
   if (Number(order.cod_discount_amount) > 0) {
-    products.push({
-      name: "Reducere plata ramburs",
-      price: -Math.abs(Number(order.cod_discount_amount)),
-      measuringUnit: "buc",
-      quantity: 1,
-      productType: "Serviciu",
-      save: 0,
-      ...vatFields,
-    });
+    for (const [cota, valoare] of peGrupe(Math.abs(Number(order.cod_discount_amount)))) {
+      products.push({
+        name: numeCuCota("Reducere plata ramburs", cota),
+        price: -valoare,
+        measuringUnit: "buc",
+        quantity: 1,
+        productType: "Serviciu",
+        save: 0,
+        ...campuriTva(cota),
+      });
+    }
   }
   // Taxa de ramburs e adunata in total: linie de serviciu cu pret POZITIV.
   if (Number(order.cod_fee_amount) > 0) {
-    products.push({
-      name: "Taxa plata ramburs",
-      price: Math.abs(Number(order.cod_fee_amount)),
-      measuringUnit: "buc",
-      quantity: 1,
-      productType: "Serviciu",
-      save: 0,
-      ...vatFields,
-    });
+    for (const [cota, valoare] of peGrupe(Math.abs(Number(order.cod_fee_amount)))) {
+      products.push({
+        name: numeCuCota("Taxa plata ramburs", cota),
+        price: valoare,
+        measuringUnit: "buc",
+        quantity: 1,
+        productType: "Serviciu",
+        save: 0,
+        ...campuriTva(cota),
+      });
+    }
   }
 
   // Suma liniilor trebuie sa dea chiar `orders.total`. Rotunjirea documentului se
@@ -293,6 +405,12 @@ async function buildProducts(
     return { error: mesajRefuz(rec, order.order_number ?? "", order.payment_status === "paid") };
   }
   if (rec.fel === "ajustare") {
+    /*
+     * ⚠ AJUSTAREA NU SE IMPARTE PE GRUPE, si asta e o hotarare. E de ordinul banilor — chiar asta
+     * o face o ajustare de rotunjire — iar impartita ar fi dat doua linii de cate un ban, cu nume
+     * diferite, pe o factura pe care comerciantul o citeste. Pusa pe cota documentului (adica pe
+     * cota DOMINANTA a comenzii), eroarea de TVA pe care o introduce e sub o miime de leu.
+     */
     products.push({
       name: "Ajustare rotunjire",
       price: rec.delta,
@@ -350,27 +468,34 @@ async function buildInvoiceData(
   seriesName: string,
   vat: RegimTva,
   vatName: string,
+  /** Numele cotei pentru fiecare cota distincta; gol pastreaza purtarea cu o singura cota. */
+  numePeCota: Map<number, string>,
+  /** Cotele fara nume in contul Oblio. Opresc documentul doar cand cotele chiar difera. */
+  fiaraFaraNume: number[],
   sursa: SursaCoduri,
   /** Ce document desfiintat inlocuieste acesta. Vezi `billing/refacturare.ts`. */
   slot: SlotFacturare,
   extra?: Partial<OblioInvoiceData>,
 ): Promise<OblioInvoiceData | { error: string }> {
   /*
-   * ═══ ⚠ POARTA COTELOR AMESTECATE, MUTATA AICI — 08.09.2026 ═══
+   * ═══ COTELE AMESTECATE SE FACTUREAZA — 09.09.2026 ═══
    *
-   * Statea numai in generatorul de FACTURA, si lipsea din PROFORMA. Proforma nu e document fiscal,
-   * deci parea inofensiva — dar ea se poate transforma in factura fara ca liniile sa fie
-   * reconstruite, si atunci cota unica trece intreaga in documentul fiscal.
+   * Aici statea o poarta care oprea documentul cand liniile aveau cote diferite, si a fost buna
+   * exact cat a durat: cat timp casa punea O SINGURA cota pe toate liniile, un document cu
+   * jumatate din linii la cota gresita era mai rau decat unul neemis.
    *
-   * Pusa in CONSTRUCTORUL comun, poarta nu se mai poate uita: cine adauga maine un al treilea drum
-   * trece prin ea fara sa stie ca exista.
+   * ⚠ CE S-A SCHIMBAT: fiecare linie isi poarta acum cota ei (`cotaDeFacturare`), iar sumele care
+   * n-au cota proprie in baza — transport, reduceri, taxa de ramburs — se impart intre grupele de
+   * cota, proportional (`planulCotelor`). Nu mai exista „cota documentului" pusa peste tot.
+   *
+   * ⚠ POARTA N-A DISPARUT, S-A MUTAT SI S-A INGUSTAT. Ce opreste azi documentul e o cota pentru
+   * care contul comerciantului n-are nume in nomenclator — vezi `numePeCote` si refuzul din
+   * constructorul de linii. Acolo greseala ar fi tot o cota scrisa peste alta.
    */
-  const coteAmestecate = motivCoteAmestecate((order as { items?: unknown }).items);
-  if (coteAmestecate) return { error: coteAmestecate };
 
   const addr = order.shipping_address as ShippingAddress | null;
   const today = new Date().toISOString().split("T")[0];
-  const products = await buildProducts(sursa, order, config, vat, vatName);
+  const products = await buildProducts(sursa, order, config, vat, vatName, numePeCota, fiaraFaraNume);
   if ("error" in products) return products;
   const parte = invoiceParty(order, addr);
   const collect = buildCollect(order);
@@ -593,18 +718,10 @@ export async function generateOblioInvoice(
 
 
   /*
-   * ⚠ COTE DIFERITE PE LINII: NU SE EMITE.
-   *
-   * `invoiceVat` intoarce UN singur numar, iar casa il pune pe TOATE liniile. Pana pe
-   * 08.09.2026 `orders.vat_rate` era `max(cote)`, deci greseala mergea in directia care
-   * supra-taxeaza: gresit, dar fara pagubă fiscala. De cand e cota liniei celei mai valoroase,
-   * aceeasi apasare poate SUB-declara TVA-ul, si aia e alta clasa de problema.
-   *
-   * Calea automata se oprea deja; asta e aceeasi regula pe butonul apasat de om, cu mesajul
-   * care spune si unde se face factura corect.
+   * ⚠ Poarta cotelor amestecate a fost RIDICATA pe 09.09.2026: liniile isi poarta cotele lor.
+   * Vezi `planulCotelor` si nota din constructorul de linii. Ce mai poate opri documentul e o
+   * cota fara nume in contul de facturare, si acolo se opreste — nu aici.
    */
-  const coteAmestecate = motivCoteAmestecate((order as { items?: unknown }).items);
-  if (coteAmestecate) return { error: coteAmestecate };
 
   const orderData = order as typeof order & {
     oblio_invoice_number?: string | null;
@@ -622,8 +739,13 @@ export async function generateOblioInvoice(
 
   try {
     const token = await getOblioToken(config.client_id, config.client_secret);
-    const { vat, vatName } = await regimSiNume(token, config, order, { vatEnabled, vatRate, pricesIncludeVat });
-    const data = await buildInvoiceData(config, order, config.series_invoice, vat, vatName, { supabase, businessId }, slot);
+    /* ⚠ Cotele DISTINCTE ale liniilor, ca sa se rezolve cate un nume pentru fiecare. La o
+       singura cota lista are un element si totul iese ca pana acum. */
+    const { vat, vatName, numePeCota, fiaraFaraNume } = await regimSiNume(
+      token, config, order, { vatEnabled, vatRate, pricesIncludeVat },
+      coteleLiniilor((order as { items?: unknown }).items).cote,
+    );
+    const data = await buildInvoiceData(config, order, config.series_invoice, vat, vatName, numePeCota, fiaraFaraNume, { supabase, businessId }, slot);
     // Comanda care nu se reconciliaza NU se factureaza. Vezi `reconcile.ts`.
     if ("error" in data) return { error: data.error };
     /*
@@ -752,10 +874,15 @@ export async function generateOblioProforma(
 
   try {
     const token = await getOblioToken(config.client_id, config.client_secret);
-    const { vat, vatName } = await regimSiNume(token, config, order, { vatEnabled, vatRate, pricesIncludeVat });
+    /* ⚠ Cotele DISTINCTE ale liniilor, ca sa se rezolve cate un nume pentru fiecare. La o
+       singura cota lista are un element si totul iese ca pana acum. */
+    const { vat, vatName, numePeCota, fiaraFaraNume } = await regimSiNume(
+      token, config, order, { vatEnabled, vatRate, pricesIncludeVat },
+      coteleLiniilor((order as { items?: unknown }).items).cote,
+    );
     // Proforma nu se storneaza niciodata (se anuleaza, prin `cancelOblioProforma`,
     // care ii goleste numarul), deci slotul ei nu inlocuieste vreun document.
-    const data = await buildInvoiceData(config, order, config.series_proforma, vat, vatName, { supabase, businessId }, { poateEmite: true });
+    const data = await buildInvoiceData(config, order, config.series_proforma, vat, vatName, numePeCota, fiaraFaraNume, { supabase, businessId }, { poateEmite: true });
     // O proforma gresita e sursa unei facturi gresite, deci trece prin aceeasi garda.
     if ("error" in data) return { error: data.error };
     // Proforma nu are incasare si nu se trimite in SPV (nu e document fiscal).

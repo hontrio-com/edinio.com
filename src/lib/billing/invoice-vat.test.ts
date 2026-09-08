@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cereNumeleCotei, invoiceVat, numeCota } from "./invoice-vat";
+import { cereNumeleCotei, invoiceVat, numeCota, numePeCote } from "./invoice-vat";
 
 /**
  * Aceeasi intrebare — ce cota poarta factura — avea trei raspunsuri, cate unul pe
@@ -94,4 +94,70 @@ test("nomenclatorul se reciteste doar cand numele nu se mai potriveste", () => {
   assert.equal(cereNumeleCotei(21, 21), false);
   assert.equal(cereNumeleCotei(19, 21), true);
   assert.equal(cereNumeleCotei(0, 21), false, "factura fara TVA n-are nevoie de nume");
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UN NUME PENTRU FIECARE COTA (09.09.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   SmartBill si Oblio primesc PERECHEA nume+procent, iar in nomenclatorul contului numele e cel
+   legat de procent. Cat timp documentul avea o singura cota, un nume aproximativ era doar
+   aproximativ. Cu doua cote pe acelasi document, acelasi nume ar pleca langa amandoua.
+*/
+
+const NOMENCLATOR = [
+  { name: "Normala", percentage: 21 },
+  { name: "Redusa", percentage: 11 },
+  { name: "Scutit", percentage: 0 },
+];
+const CONFIGURAT = { name: "Normala", percentage: 21 };
+
+test("⚠ fiecare cota isi ia numele ei din nomenclator", () => {
+  const r = numePeCote([21, 11, 0], CONFIGURAT, NOMENCLATOR);
+  assert.equal(r.nume.get(21), "Normala");
+  assert.equal(r.nume.get(11), "Redusa");
+  /* ⚠ ZERO E O COTA, nu o lipsa: are si el nume, si el trebuie gasit. */
+  assert.equal(r.nume.get(0), "Scutit");
+  assert.deepEqual(r.faraNume, []);
+});
+
+test("⚠ o cota care nu exista in cont se SPUNE, nu se acopera cu numele configurat", () => {
+  /*
+   * ⚠ CE APARA. `numeCota` cade pe numele configurat cand nu gaseste nimic — purtare buna pentru
+   * un document cu o singura cota, si o minciuna pe hartie pentru unul cu doua: „Normala" ar fi
+   * plecat scris langa 11%. Apelantul trebuie sa poata deosebi „am gasit" de „am cazut inapoi".
+   */
+  const doar21 = [{ name: "Normala", percentage: 21 }];
+  const r = numePeCote([21, 11], CONFIGURAT, doar21);
+  assert.equal(r.nume.get(11), "Normala", "caderea inapoi a disparut, si ea e purtarea buna la o cota");
+  assert.deepEqual(r.faraNume, [11], "cota fara pereche adevarata n-a fost semnalata");
+});
+
+test("⚠ fara nomenclator, singura pereche cunoscuta e cea CONFIGURATA", () => {
+  /*
+   * Reteaua cazuta nu opreste o factura cu o singura cota: perechea configurata e chiar cea a
+   * comerciantului. Dar nu poate acoperi si celelalte cote, si nici nu pretinde ca poate.
+   */
+  const r = numePeCote([21, 11], CONFIGURAT, undefined);
+  assert.equal(r.nume.get(21), "Normala");
+  assert.deepEqual(r.faraNume, [11]);
+});
+
+test("⚠ numele configurat care nu e in cont nu tine loc de pereche", () => {
+  /*
+   * SmartBill trimite `percentage: -1` cand numele din configurare nu se gaseste in cont: nu i se
+   * cunoaste procentul, deci nu poate pretinde ca descrie vreo cota. Cu nomenclatorul citit, cota
+   * se gaseste dupa PROCENT si perechea iese adevarata.
+   */
+  const necunoscut = { name: "Normala", percentage: -1 };
+  assert.deepEqual(numePeCote([21], necunoscut, NOMENCLATOR).faraNume, []);
+  assert.equal(numePeCote([21], necunoscut, NOMENCLATOR).nume.get(21), "Normala");
+  /* Fara nomenclator insa, nimic nu confirma perechea. */
+  assert.deepEqual(numePeCote([21], necunoscut, undefined).faraNume, [21]);
+});
+
+test("⚠ cotele repetate nu se socotesc de doua ori", () => {
+  const r = numePeCote([21, 21, 11, 11], CONFIGURAT, [{ name: "Normala", percentage: 21 }]);
+  assert.equal(r.nume.size, 2);
+  assert.deepEqual(r.faraNume, [11], "aceeasi cota a fost raportata de doua ori");
 });

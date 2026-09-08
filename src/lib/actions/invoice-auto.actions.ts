@@ -2,7 +2,7 @@
 
 import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
 import { logError } from "@/lib/error-logger";
-import { coteleLiniilor, motivCoteAmestecate } from "@/lib/billing/cote-pe-linii";
+import { coteleLiniilor } from "@/lib/billing/cote-pe-linii";
 
 /**
  * Central auto-invoicing dispatcher. On an order status/payment change it issues
@@ -117,28 +117,24 @@ export async function maybeAutoInvoice(
      * comerciantului. Se scrie in jurnal si se lasa pe seama lui.
      */
     /*
-     * ═══ ⚠ NU SE FACTUREAZA CU O SINGURA COTA O COMANDA CU MAI MULTE (08.09.2026) ═══
+     * ═══ COTELE AMESTECATE SE FACTUREAZA SI AUTOMAT — 09.09.2026 ═══
      *
-     * `invoiceVat` intoarce UN numar, iar SmartBill, Oblio si fGO il pun pe TOATE liniile.
-     * Pentru o comanda din magazin asta e adevarat prin constructie: cota e a magazinului.
-     * Pentru una de marketplace nu: Pepita trimite TVA pe fiecare produs, iar in Romania
-     * cotele chiar difera (hrana 11%, restul 21%).
+     * Aici statea o oprire: comanda cu cote diferite pe linii nu se factura deloc, fiindca cele
+     * trei case puneau o singura cota pe toate liniile. De cand fiecare linie isi poarta cota ei
+     * (`cotaDeFacturare`) si sumele fara cota proprie se impart intre grupe (`planulCotelor`),
+     * documentul iese corect si calea automata n-are de ce sa mai stea deoparte.
      *
-     * ⚠ SE OPRESTE, NU SE APROXIMEAZA. O factura cu cota gresita pe jumatate din linii nu se
-     * retrage, se STORNEAZA. Aceeasi hotarare ca la moneda, cateva randuri mai jos, si din
-     * acelasi motiv: nu luam noi decizii fiscale in locul comerciantului.
+     * ⚠ SE PASTREAZA O URMA IN JURNAL, la nivel de informare. Prima comanda cu doua cote emisa
+     * automat e un lucru pe care vrem sa-l putem gasi, nu unul pe care sa-l aflam de la client.
      */
-    /* ⚠ ACEEASI socoteala ca la butoanele apasate de om, prin acelasi ajutor: doua verificari
-       apropiate ar fi ajuns sa raspunda diferit despre aceeasi comanda. */
-    const coteAmestecate = motivCoteAmestecate(o.items);
-    if (coteAmestecate) {
+    const cotele = coteleLiniilor(o.items);
+    if (!cotele.uniforma) {
       await logError({
         action: "invoice-auto",
-        message: "comanda are cote de TVA diferite pe linii, iar facturarea automata emite cu o singura cota: nu s-a emis nimic",
-        details: { orderId, cote: coteleLiniilor(o.items).cote, marketplace: src?.marketplace ?? null },
-        businessId, severity: "warning",
+        message: "comanda are cote de TVA diferite pe linii; factura pleaca cu cota fiecarei linii",
+        details: { orderId, cote: cotele.cote, marketplace: src?.marketplace ?? null },
+        businessId, severity: "info",
       });
-      return;
     }
 
     /*

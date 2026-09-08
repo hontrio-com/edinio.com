@@ -85,6 +85,47 @@ export function numeCota(
   return dupaProcent?.name ?? configurat.name;
 }
 
+
+/**
+ * Cate un nume pentru FIECARE cota care apare pe linii, si lista celor care n-au niciunul.
+ *
+ * ═══ ⚠ DE CE NU E DE AJUNS `numeCota` DE MAI SUS ═══
+ *
+ * SmartBill si Oblio primesc PERECHEA nume+procent, iar in nomenclatorul contului numele e cel
+ * legat de procent. Cat timp documentul avea o singura cota, un nume aproximativ era doar
+ * aproximativ: procentul trimis ramanea cel bun. Cu doua cote pe acelasi document, acelasi nume ar
+ * pleca langa amandoua — adica documentul ar iesi cu o cota scrisa peste alta.
+ *
+ * ⚠ SI DE ACEEA SE INTOARCE SI CE NU S-A GASIT. O cota fara pereche adevarata nu e o aproximatie,
+ * e o minciuna pe hartie; apelantul hotaraste ce face cu ea, dar nu mai poate spune ca n-a stiut.
+ * La o singura cota ramane purtarea de pana acum (se trimite numele configurat si factura pleca),
+ * la cote amestecate se opreste.
+ *
+ * ⚠ NOMENCLATORUL LIPSA („nu s-a putut citi") NU E TOT UNA CU „cota nu exista in cont", dar aici
+ * duce in acelasi loc: fara lista, singura pereche pe care o cunoastem e cea CONFIGURATA. Toate
+ * celelalte cote intra in `faraNume`.
+ */
+export function numePeCote(
+  cote: number[],
+  configurat: { name: string; percentage: number },
+  nomenclator?: { name: string; percentage: number }[],
+): { nume: Map<number, string>; faraNume: number[] } {
+  const nume = new Map<number, string>();
+  const faraNume: number[] = [];
+
+  for (const cota of new Set(cote)) {
+    const n = numeCota(cota, configurat, nomenclator);
+    nume.set(cota, n);
+    const perecheConfigurata = n === configurat.name && potrivesteCota(configurat.percentage, cota);
+    const perecheDinCont = (nomenclator ?? []).some(
+      (t) => t.name === n && potrivesteCota(t.percentage, cota),
+    );
+    if (!perecheConfigurata && !perecheDinCont) faraNume.push(cota);
+  }
+
+  return { nume, faraNume };
+}
+
 /** Merita citit nomenclatorul de cote de la furnizor? Doar cand numele nu se mai potriveste. */
 export function cereNumeleCotei(rate: number, configuratPercentage: number): boolean {
   return rate > 0 && !potrivesteCota(configuratPercentage, rate);

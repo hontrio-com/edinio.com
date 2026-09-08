@@ -1,23 +1,25 @@
 /**
  * Cotele de TVA ale liniilor unei comenzi, si ce se poate face cu ele.
  *
- * ═══ ⚠ EDINIO FACTUREAZA CU O SINGURA COTA ═══
+ * ═══ FIECARE LINIE ISI POARTA COTA EI ═══
  *
- * `invoiceVat` intoarce UN numar, iar SmartBill, Oblio si fGO il pun pe toate liniile. Pentru
- * o comanda din magazin asta e adevarat prin constructie: cota e a magazinului, una singura.
+ * Pentru o comanda din magazin exista o singura cota, prin constructie: e a magazinului. Pentru
+ * una de marketplace nu — Pepita trimite TVA pe FIECARE linie, iar in Romania cotele chiar
+ * difera: hrana are 11%, restul 21%.
  *
- * ⚠ NU SI PENTRU O COMANDA DE MARKETPLACE. Pepita trimite TVA pe FIECARE linie, iar in Romania
- * cotele chiar difera: hrana are 11%, restul 21%. O comanda cu amandoua, facturata cu o
- * singura cota, produce un document fiscal gresit. Iar o factura fiscala gresita nu se retrage,
- * se STORNEAZA.
+ * ⚠ TREI ETAPE, IN TREI ZILE, SI MERITA STIUTE TOATE. Pana la 08.09.2026 `orders.vat_rate` era
+ * `max(cote)`: cea mai proasta alegere din toate, fiindca supra-taxeaza TOATE liniile si o face
+ * tacut. Pe 08.09 a devenit cota liniei celei mai valoroase (`cotaDominanta`) si s-a pus o
+ * POARTA: comanda cu cote diferite nu se mai factura deloc. Pe 09.09 poarta a fost ridicata,
+ * fiindca liniile au inceput sa-si poarte cotele lor — vezi `cotaDeFacturare` si `planulCotelor`.
  *
- * ⚠ DE CE NU SE ALEGE PUR SI SIMPLU CEA MAI MARE. Asta faceam pana la auditul din 08.09.2026:
- * `max(cote)`. E cea mai proasta alegere din toate, fiindca supra-taxeaza TOATE liniile, si o
- * face tacut. Cand chiar trebuie ales un singur numar, se alege cota liniei cu valoarea cea
- * mai mare: aceea aduce totalul cel mai aproape de adevar.
+ * ⚠ `cotaDominanta` NU A DISPARUT, si nu e o scapare: `orders.vat_rate` ramane UN singur numar,
+ * iar el e cel scris acolo. E cota DOCUMENTULUI, cea pe care cade orice linie care nu-si poarta
+ * cota proprie, si cea a liniei de ajustare a rotunjirii. Nu mai e insa cota liniilor.
  *
- * ⚠ DAR ALEGEREA NU E O REPARATIE, ci o valoare de rezerva. Cand cotele difera, factura NU se
- * emite automat, si comerciantul afla de ce.
+ * ⚠ CE POATE INCA OPRI UN DOCUMENT: o cota pentru care contul de facturare n-are nume in
+ * nomenclator. SmartBill si Oblio primesc perechea nume+procent, si acolo greseala ar fi tot o
+ * cota scrisa peste alta. Vezi `numePeCote` din `invoice-vat.ts`.
  *
  * Modul e PUR: se cheama si din ingest, si din facturare, si din panou.
  */
@@ -181,16 +183,112 @@ export function imparteProportional(suma: number, grupe: GrupaDeCota[]): Map<num
   return out;
 }
 
+
 /**
- * Ce i se spune comerciantului cand comanda are cote diferite, sau `null` cand n-are.
+ * Tot ce trebuie sa stie o casa de facturare despre cotele unei comenzi.
  *
- * ⚠ SPUNE SI UNDE SE FACE, nu doar ca nu se poate. Un „nu se poate" fara urmatoarea miscare
- * l-a pus deja pe comerciant sa apese de 208 ori un buton care n-avea cum sa mearga.
+ * ═══ ⚠ DE CE E AICI SI NU DE TREI ORI ═══
+ *
+ * SmartBill, Oblio si fGO faceau, fiecare, exact aceleasi patru randuri: grupele, „sunt mai multe
+ * cote?", impartirea sumelor fara cota proprie, si numele cu procentul in coada. Scrise de trei
+ * ori, ele se puteau desparti in trei — si nimic nu le-ar fi comparat vreodata.
+ *
+ * ⚠ SI, MAI ALES: scrise in `.actions.ts`, adica in module `"use server"`, socoteala nu se putea
+ * proba pe VALORI. Ramaneau doar probe care citesc sursa si spun ca s-a chemat o functie — adica
+ * exact felul de proba care a lasat cosul sa arate 89 in timp ce serverul incasa 910.
  */
-export function motivCoteAmestecate(items: unknown): string | null {
-  const r = coteleLiniilor(items);
-  if (r.uniforma) return null;
-  return `Comanda are cote de TVA diferite pe linii (${r.cote.map((c) => `${c}%`).join(", ")}), `
-    + "iar Edinio emite factura cu o singură cotă. Emite factura din contul tău de facturare, "
-    + "cu cotele corecte pe fiecare produs.";
+export interface PlanulCotelor {
+  /** Grupele de cota ale marfii, crescator. */
+  grupe: GrupaDeCota[];
+  /** Comanda are mai mult de o cota pe linii. */
+  amestecate: boolean;
+  /**
+   * Cum se imparte o suma care n-are cota proprie nicaieri in baza: transport, reduceri, taxe.
+   *
+   * ⚠ LA O SINGURA COTA NU SE IMPARTE NIMIC: suma intreaga, pe chiar cota documentului. Trecuta si
+   * atunci prin impartire, o comanda FARA linii si-ar fi pierdut tacut transportul, iar preturile
+   * s-ar fi rotunjit la doi bani inainte de vreme.
+   */
+  peGrupe(suma: number): [number, number][];
+  /** Numele liniei: cu procentul in coada doar cand chiar sunt mai multe cote. */
+  numeCuCota(nume: string, cota: number): string;
+  /**
+   * Codul de produs al liniei.
+   *
+   * ⚠ PE CONTURILE CU GESTIUNE, CODUL E ARTICOLUL, iar un articol are o singura cota: doua linii
+   * „transport" cu 11% si cu 21% ar fi cerut aceluiasi articol doua cote deodata.
+   */
+  codCuCota(cod: string, cota: number): string;
+  /**
+   * Cota cu care pleaca ACEASTA linie: a ei, altfel a documentului.
+   *
+   * ═══ ⚠ SI ZERO PE DOCUMENT INSEAMNA ZERO PE TOATE LINIILE ═══
+   *
+   * Aici a fost o regresie a mea, prinsa la recitire si nu de vreo proba. `cotaDeFacturare(item,
+   * 0)` intoarce cota SCRISA PE LINIE, iar liniile de marketplace o poarta mereu: la un comerciant
+   * NEPLATITOR de TVA, o comanda Pepita ar fi plecat spre fGO cu 11% si 21% pe linii, desi omul nu
+   * e platitor si factura lui n-are voie sa arate niciun TVA.
+   *
+   * Regula sta AICI, nu in cele trei case, tocmai fiindca acolo a fost scrisa gresit de trei ori.
+   */
+  cotaLiniei(l: LinieCuTva): number;
+  /**
+   * TVA-ul continut in totalul comenzii, cu tot cu sumele care se impart.
+   *
+   * ⚠ TRANSPORTUL SI REDUCERILE INTRA SI ELE IN TOTAL. Socotit doar pe marfa, numarul asta ar fi
+   * fost comparat de garda de reconciliere cu un total care contine mai mult decat marfa.
+   */
+  tvaDinTotal(sume: SumeFaraCota): number;
+}
+
+/** Sumele comenzii care n-au cota proprie. Pozitive se adauga, reducerile se scad. */
+export interface SumeFaraCota {
+  transport?: unknown;
+  taxaRamburs?: unknown;
+  reduceri?: unknown[];
+}
+
+export function planulCotelor(items: unknown, cotaDocumentului: number): PlanulCotelor {
+  /* ⚠ Cota zero pe document inseamna „nu se taxeaza nimic": nici grupele nu se mai fac, altfel
+     s-ar imparti transportul intre cote care nu vor ajunge pe nicio linie. */
+  const grupe = cotaDocumentului > 0 ? grupePeCota(items, cotaDocumentului) : [];
+  const amestecate = grupe.length > 1;
+
+  /*
+   * ⚠ LA O SINGURA GRUPA, SUMA URMEAZA GRUPA — nu cota documentului.
+   *
+   * De obicei sunt acelasi numar: pentru o comanda din magazin nicio linie nu poarta cota proprie,
+   * deci grupa se face chiar pe cota documentului. Se despart pe o comanda de marketplace la care
+   * TOATE liniile au 11%, dar `orders.vat_rate` a ramas 21 — asa arata comenzile intrate inainte ca
+   * ingestul sa scrie cota dominanta. Transportul ar fi plecat atunci cu 21% peste marfa de 11%.
+   *
+   * `grupe` gol (comanda fara linii, sau neplatitor) cade inapoi pe cota documentului.
+   */
+  const peGrupe = (suma: number): [number, number][] => (amestecate
+    ? [...imparteProportional(suma, grupe).entries()].filter(([, v]) => Math.abs(v) >= 0.005)
+    : [[grupe[0]?.cota ?? cotaDocumentului, suma]]);
+
+  const pozitiv = (v: unknown) => Math.max(0, Number(v) || 0);
+
+  return {
+    grupe,
+    amestecate,
+    peGrupe,
+    numeCuCota: (nume, cota) => (amestecate ? `${nume} (${cota}%)` : nume),
+    cotaLiniei: (l) => (cotaDocumentului > 0 ? cotaDeFacturare(l, cotaDocumentului) : 0),
+    codCuCota: (cod, cota) => (amestecate ? `${cod}-${String(cota).replace(".", "-")}` : cod),
+    tvaDinTotal: (sume) => {
+      const peCota = new Map(grupe.map((g) => [g.cota, g.valoare]));
+      const adauga = (suma: number, semn: number) => {
+        if (suma <= 0) return;
+        for (const [cota, valoare] of peGrupe(suma)) {
+          peCota.set(cota, (peCota.get(cota) ?? 0) + semn * valoare);
+        }
+      };
+      adauga(pozitiv(sume.transport), 1);
+      adauga(pozitiv(sume.taxaRamburs), 1);
+      for (const r of sume.reduceri ?? []) adauga(pozitiv(r), -1);
+      return tvaContinut([...peCota.entries()].map(([cota, valoare]) => ({ cota, valoare })));
+    },
+  };
 }

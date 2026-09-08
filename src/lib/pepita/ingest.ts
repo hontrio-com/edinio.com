@@ -951,15 +951,21 @@ function noteInterne(
     randuri.push(`⚠ Mod de livrare necunoscut („${c.modLivrare ?? "lipsă"}”). Alege curierul manual.`);
   }
   /*
-   * ⚠ AMESTECUL DE COTE SE SPUNE PE COMANDA, nu doar in jurnal. Facturarea automata se
-   * opreste singura, dar butoanele de facturare din panou raman apasabile, iar comerciantul
-   * trebuie sa afle INAINTE sa apese, nu dupa ce a iesit documentul.
+   * ⚠ AMESTECUL DE COTE SE SPUNE PE COMANDA, nu doar in jurnal.
+   *
+   * ⚠ SI NU MAI E UN AVERTISMENT, din 09.09.2026. Pana atunci textul spunea „Edinio emite factura
+   * cu o singură cotă, emite-o din contul tău" — adevarat atunci, si fals de cand fiecare linie
+   * isi poarta cota ei. Un avertisment care nu mai e adevarat e mai rau decat niciunul: il trimite
+   * pe comerciant sa faca de mana ce se face singur.
+   *
+   * Ramane insa SPUS, fiindca factura va arata altfel decat cele obisnuite: transportul si
+   * reducerile apar despartite pe cote, cu procentul in coada numelui.
    */
   if (!cote.uniforma) {
     randuri.push(
-      `⚠ Comanda are cote de TVA diferite pe linii (${cote.cote.map((x) => `${x}%`).join(", ")}). `
-      + "Edinio emite factura cu o singură cotă, deci emite-o din contul tău de facturare, cu "
-      + "cotele corecte pe fiecare produs.",
+      `Comanda are cote de TVA diferite pe linii (${cote.cote.map((x) => `${x}%`).join(", ")}). `
+      + "Factura pleacă cu cota fiecărei linii; transportul și reducerile se împart între cote, "
+      + "proporțional, deci vor apărea ca linii separate.",
     );
   }
   if (nelegate.length > 0) {

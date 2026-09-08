@@ -10,8 +10,8 @@ import { invoiceParty } from "@/lib/billing/invoice-party";
 import { baniiAuIntrat } from "@/lib/billing/incasare";
 import { cheieDocument, mentiuneRefacturare, slotFacturare, type SlotFacturare } from "@/lib/billing/refacturare";
 import { cheieOperatie, cuRegistru, type Verdict } from "@/lib/operatii/registru";
-import { invoiceVat, numeCota } from "@/lib/billing/invoice-vat";
-import { motivCoteAmestecate } from "@/lib/billing/cote-pe-linii";
+import { invoiceVat, numeCota, numePeCote } from "@/lib/billing/invoice-vat";
+import { coteleLiniilor, planulCotelor } from "@/lib/billing/cote-pe-linii";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
 import { liniiSmartbill, mesajRefuz, pretDeDocument, reconciliazaComanda } from "@/lib/billing/reconcile";
@@ -112,21 +112,75 @@ async function buildInvoiceProducts(
   // configurat castiga INTOTDEAUNA, deci pe o comanda veche la alta cota factura ar
   // fi plecat cu „Normala" scris langa procentul altei cote. Retea, best-effort.
   let taxName = config.tax_name;
+  /*
+   * ═══ ⚠ UN NUME PENTRU FIECARE COTA CARE CHIAR APARE PE LINII (09.09.2026) ═══
+   *
+   * SmartBill primeste PERECHEA nume+procent, iar in nomenclatorul contului numele e cel legat de
+   * procent. Cu cote pe linii, acelasi nume pus peste doua procente ar trimite „Normala 21%" scris
+   * langa 11 — adica exact defectul pe care despartirea de mai jos il repara.
+   *
+   * `fiaraFaraNume` aduna cotele pentru care contul comerciantului n-are nicio intrare. La o
+   * singura cota purtarea ramane cea de pana acum (se trimite numele configurat, aproximativ dar
+   * emitand); la cote amestecate se REFUZA, fiindca acolo perechea gresita nu mai e o aproximatie.
+   */
+  let numePeCota = new Map<number, string>();
+  let fiaraFaraNume: number[] = [];
+
   if (effectiveVat > 0) {
     const taxList = await getMerchantTaxes(config);
-    if (!("error" in taxList) && taxList.length > 0) {
-      const configurat = taxList.find(t => t.name === config.tax_name);
-      // Un nume care nu e in cont n-are procent cunoscut, deci nu poate pretinde ca
-      // se potriveste: -1 il trimite direct la cautarea dupa procent.
-      taxName = numeCota(effectiveVat, { name: config.tax_name, percentage: configurat?.percentage ?? -1 }, taxList);
-    }
+    const nomenclator = !("error" in taxList) && taxList.length > 0 ? taxList : undefined;
+    const configurat = nomenclator?.find(t => t.name === config.tax_name);
+    // Un nume care nu e in cont n-are procent cunoscut, deci nu poate pretinde ca
+    // se potriveste: -1 il trimite direct la cautarea dupa procent.
+    const baza = { name: config.tax_name, percentage: configurat?.percentage ?? -1 };
+    const r = numePeCote([effectiveVat, ...coteleLiniilor(order.items).cote], baza, nomenclator);
+    numePeCota = r.nume;
+    fiaraFaraNume = r.faraNume;
+    taxName = numeCota(effectiveVat, baza, nomenclator);
   }
 
   const hasTax = effectiveVat > 0 && !!taxName;
 
-  const taxFields = hasTax
-    ? { taxName, taxPercentage: effectiveVat }
-    : {};
+  /*
+   * ⚠ ACUM E O FUNCTIE DE COTA, nu un obiect. La o singura cota intoarce exact obiectul de pana
+   * acum, bit cu bit — `numePeCota` are o singura intrare, si aceea e chiar `taxName`.
+   */
+  const campuriTva = (cota: number) => {
+    if (!hasTax) return {};
+    const nume = numePeCota.get(cota) ?? taxName;
+    return nume ? { taxName: nume, taxPercentage: cota } : {};
+  };
+  const taxFields = campuriTva(effectiveVat);
+
+  /*
+   * Grupele de cota ale comenzii, si impartirea sumelor care n-au cota proprie nicaieri in baza:
+   * transportul, reducerile, taxa de ramburs. Ele micsoreaza (sau maresc) baza FIECAREI grupe,
+   * deci se impart proportional cu valoarea marfii — pusa intreaga pe o cota, o reducere scrie
+   * TVA gresit, cu semn OPUS fata de eroarea de pe linii, si totalul pare in continuare corect.
+   *
+   * ⚠ CAND COTA E UNA SINGURA, `peGrupe` intoarce chiar suma intreaga, pe chiar cota documentului:
+   * o singura linie, cu acelasi nume si acelasi cod ca pana acum. Drumul vechi ramane neatins.
+   */
+  const { grupe, amestecate, peGrupe, numeCuCota, codCuCota, cotaLiniei } = planulCotelor(
+    order.items, hasTax ? effectiveVat : 0,
+  );
+
+  /*
+   * ⚠ O COTA FARA NUME OPRESTE DOCUMENTUL, dar numai cand cotele chiar difera.
+   *
+   * Pe drumul cu o singura cota, un nume aproximativ e de ani de zile mai bun decat o factura
+   * neemisa, si asa ramane — procentul trimis e oricum cel bun. Cu doua cote pe acelasi document,
+   * acelasi nume ar pleca langa amandoua, adica documentul ar iesi cu o cota scrisa peste alta.
+   *
+   * ⚠ SI NOMENCLATORUL NECITIT AJUNGE TOT AICI: fara lista, singura pereche cunoscuta e cea
+   * configurata, deci celelalte cote sunt in `fiaraFaraNume`. „Nu stiu" se opreste, nu ghiceste.
+   */
+  const faraNume = amestecate ? grupe.map(g => g.cota).filter(c => fiaraFaraNume.includes(c)) : [];
+  if (faraNume.length > 0) {
+    return { error: `Comanda are cote de TVA diferite (${grupe.map(g => `${g.cota}%`).join(", ")}), `
+      + `dar contul tau SmartBill n-are nicio cota pe care sa o putem folosi pentru `
+      + `${faraNume.map(c => `${c}%`).join(", ")}. Adauga cotele lipsa in SmartBill si incearca din nou.` };
+  }
 
   const products: MerchantInvoiceProduct[] = items.map(item => {
     // Extraoptiunile primesc cod si pleaca ca SERVICIU: ca linie de marfa fara cod
@@ -141,96 +195,113 @@ async function buildInvoiceProducts(
       quantity: item.quantity,
       price: pretDeDocument(item.price),
       isTaxIncluded: taxIncluded,
-      ...taxFields,
+      ...campuriTva(cotaLiniei(item)),
     };
   });
 
   if (Number(order.shipping_cost) > 0) {
-    products.push({
-      name: "Transport",
-      code: "transport",
-      measuringUnitName: "buc",
-      currency: "RON",
-      quantity: 1,
-      price: Number(order.shipping_cost),
-      isTaxIncluded: taxIncluded,
-      isService: true,
-      ...taxFields,
-    });
+    for (const [cota, valoare] of peGrupe(Number(order.shipping_cost))) {
+      products.push({
+        name: numeCuCota("Transport", cota),
+        code: codCuCota("transport", cota),
+        measuringUnitName: "buc",
+        currency: "RON",
+        quantity: 1,
+        price: valoare,
+        isTaxIncluded: taxIncluded,
+        isService: true,
+        ...campuriTva(cota),
+      });
+    }
   }
 
   // Liniile de discount poarta aceleasi campuri de TVA ca produsele — altfel, la
   // platitorii de TVA cu preturi cu TVA inclus, SmartBill ar trata valoarea ca
   // neta (isTaxIncluded default false) si totalul facturii n-ar mai bate.
   if (Number(order.discount_amount) > 0) {
-    products.push({
-      isDiscount: true,
-      name: `Discount${order.discount_code ? ` (${order.discount_code})` : ""}`,
-      measuringUnitName: "buc",
-      currency: "RON",
-      quantity: 1,
-      price: 0,
-      numberOfItems: products.length,
-      discountType: 1,
-      discountValue: -Math.abs(Number(order.discount_amount)),
-      isTaxIncluded: taxIncluded,
-      ...taxFields,
-    });
+    for (const [cota, valoare] of peGrupe(Math.abs(Number(order.discount_amount)))) {
+      products.push({
+        isDiscount: true,
+        name: numeCuCota(`Discount${order.discount_code ? ` (${order.discount_code})` : ""}`, cota),
+        measuringUnitName: "buc",
+        currency: "RON",
+        quantity: 1,
+        price: 0,
+        /*
+         * ⚠ `numberOfItems` ramane „tot ce e deasupra mea", si creste cu fiecare linie pusa — exact
+         * tiparul pe care fisierul asta il foloseste de la inceput pentru cele trei reduceri una
+         * dupa alta. Suma nu atarna de el: `discountValue` e explicit, si cota la fel.
+         */
+        numberOfItems: products.length,
+        discountType: 1,
+        discountValue: -valoare,
+        isTaxIncluded: taxIncluded,
+        ...campuriTva(cota),
+      });
+    }
   }
 
   // Reducerea la plata online e scazuta din orders.total la plasarea comenzii —
   // fara linia asta factura ar iesi mai mare decat suma platita de client.
   if (Number(order.card_discount_amount) > 0) {
-    products.push({
-      isDiscount: true,
-      name: "Reducere plata online",
-      measuringUnitName: "buc",
-      currency: "RON",
-      quantity: 1,
-      price: 0,
-      numberOfItems: products.length,
-      discountType: 1,
-      discountValue: -Math.abs(Number(order.card_discount_amount)),
-      isTaxIncluded: taxIncluded,
-      ...taxFields,
-    });
+    for (const [cota, valoare] of peGrupe(Math.abs(Number(order.card_discount_amount)))) {
+      products.push({
+        isDiscount: true,
+        name: numeCuCota("Reducere plata online", cota),
+        measuringUnitName: "buc",
+        currency: "RON",
+        quantity: 1,
+        price: 0,
+        /* Vezi nota de la prima reducere: „tot ce e deasupra mea". */
+        numberOfItems: products.length,
+        discountType: 1,
+        discountValue: -valoare,
+        isTaxIncluded: taxIncluded,
+        ...campuriTva(cota),
+      });
+    }
   }
   // Reducerea la plata ramburs — aceeasi logica, linie de discount separata.
   if (Number(order.cod_discount_amount) > 0) {
-    products.push({
-      isDiscount: true,
-      name: "Reducere plata ramburs",
-      measuringUnitName: "buc",
-      currency: "RON",
-      quantity: 1,
-      price: 0,
-      numberOfItems: products.length,
-      discountType: 1,
-      discountValue: -Math.abs(Number(order.cod_discount_amount)),
-      isTaxIncluded: taxIncluded,
-      ...taxFields,
-    });
+    for (const [cota, valoare] of peGrupe(Math.abs(Number(order.cod_discount_amount)))) {
+      products.push({
+        isDiscount: true,
+        name: numeCuCota("Reducere plata ramburs", cota),
+        measuringUnitName: "buc",
+        currency: "RON",
+        quantity: 1,
+        price: 0,
+        /* Vezi nota de la prima reducere: „tot ce e deasupra mea". */
+        numberOfItems: products.length,
+        discountType: 1,
+        discountValue: -valoare,
+        isTaxIncluded: taxIncluded,
+        ...campuriTva(cota),
+      });
+    }
   }
   // Taxa de ramburs e ADUNATA in orders.total, deci pe factura e o linie de
   // serviciu obisnuita, cu pret pozitiv — nu un discount. Trecuta ca discount cu
   // valoare negativa, ar fi aparut pe factura drept reducere de suma negativa.
   if (Number(order.cod_fee_amount) > 0) {
-    products.push({
-      name: "Taxa plata ramburs",
-      // `code` si `isService` copiaza linia de Transport de mai sus, si nu din
-      // simetrie: pe conturile SmartBill cu gestiune si „Foloseste cod produs"
-      // activ, un rand de MARFA fara cod produs nu exista in gestiune si emiterea
-      // esueaza. Pe calea automata esecul e mut (`maybeAutoGenerateInvoice`
-      // intoarce false), deci comenzile cu taxa ar fi ramas tacut nefacturate.
-      code: "taxa-ramburs",
-      measuringUnitName: "buc",
-      currency: "RON",
-      quantity: 1,
-      price: Math.abs(Number(order.cod_fee_amount)),
-      isTaxIncluded: taxIncluded,
-      isService: true,
-      ...taxFields,
-    });
+    for (const [cota, valoare] of peGrupe(Math.abs(Number(order.cod_fee_amount)))) {
+      products.push({
+        name: numeCuCota("Taxa plata ramburs", cota),
+        // `code` si `isService` copiaza linia de Transport de mai sus, si nu din
+        // simetrie: pe conturile SmartBill cu gestiune si „Foloseste cod produs"
+        // activ, un rand de MARFA fara cod produs nu exista in gestiune si emiterea
+        // esueaza. Pe calea automata esecul e mut (`maybeAutoGenerateInvoice`
+        // intoarce false), deci comenzile cu taxa ar fi ramas tacut nefacturate.
+        code: codCuCota("taxa-ramburs", cota),
+        measuringUnitName: "buc",
+        currency: "RON",
+        quantity: 1,
+        price: valoare,
+        isTaxIncluded: taxIncluded,
+        isService: true,
+        ...campuriTva(cota),
+      });
+    }
   }
 
   /*
@@ -246,6 +317,13 @@ async function buildInvoiceProducts(
     return { error: mesajRefuz(rec, order.order_number ?? "", order.payment_status === "paid") };
   }
   if (rec.fel === "ajustare") {
+    /*
+     * ⚠ AJUSTAREA NU SE IMPARTE PE GRUPE, si asta e o hotarare, nu o scapare. Ea e de ordinul
+     * banilor — chiar asta o face o ajustare de rotunjire si nu altceva — iar impartita ar fi dat
+     * doua linii de cate un ban, cu nume diferite, pe o factura pe care comerciantul o citeste.
+     * Pusa intreaga pe cota documentului (adica pe cota DOMINANTA a comenzii, vezi `invoiceVat` si
+     * `cotaDominanta`), eroarea de TVA pe care o introduce e sub o miime de leu.
+     */
     products.push(rec.delta < 0 ? {
       // In MINUS, ajustarea merge pe acelasi tipar ca toate celelalte scaderi din
       // fisierul asta: `isDiscount` + `discountValue`. Un rand de marfa cu pret
@@ -316,22 +394,20 @@ async function buildInvoiceParams(
   extraParams?: Partial<MerchantInvoiceParams>
 ): Promise<MerchantInvoiceParams | { error: string }> {
   /*
-   * ═══ ⚠ POARTA COTELOR AMESTECATE, MUTATA AICI — 08.09.2026 ═══
+   * ═══ COTELE AMESTECATE SE FACTUREAZA — 09.09.2026 ═══
    *
-   * Statea numai in generatoarele de FACTURA, si de acolo lipsea din doua drumuri care ajung tot
-   * la un document:
+   * Aici statea o poarta care oprea documentul cand liniile aveau cote diferite, si a fost buna
+   * exact cat a durat: cat timp casa punea O SINGURA cota pe toate liniile, un document cu
+   * jumatate din linii la cota gresita era mai rau decat unul neemis.
    *
-   *   1. PROFORMA. Nu e document fiscal, deci parea inofensiva — dar `convertEstimateToInvoice` o
-   *      transforma in factura cu `useEstimateDetails: true`, adica FARA sa reconstruiasca liniile.
-   *      O proforma cu o singura cota devenea o FACTURA cu o singura cota, ocolind poarta.
-   *   2. `maybeAutoGenerateInvoice`, care isi construieste singura sarcina utila si e un export
-   *      dintr-un modul „use server", adica o adresa publica.
+   * ⚠ CE S-A SCHIMBAT: fiecare linie isi poarta acum cota ei (`cotaDeFacturare`), iar sumele care
+   * n-au cota proprie in baza — transport, reduceri, taxa de ramburs — se impart intre grupele de
+   * cota, proportional (`planulCotelor`). Nu mai exista „cota documentului" pusa peste tot.
    *
-   * Pusa in CONSTRUCTORUL comun, poarta nu se mai poate uita: cine adauga maine al treilea drum
-   * trece prin ea fara sa stie ca exista. Aceeasi lectie ca la poarta AWB-ului.
+   * ⚠ POARTA N-A DISPARUT, S-A MUTAT SI S-A INGUSTAT. Ce opreste azi documentul e o cota pentru
+   * care contul comerciantului n-are nume in nomenclator — vezi `numePeCote` si refuzul din
+   * constructorul de linii. Acolo greseala ar fi tot o cota scrisa peste alta.
    */
-  const coteAmestecate = motivCoteAmestecate((order as { items?: unknown }).items);
-  if (coteAmestecate) return { error: coteAmestecate };
 
   const address = order.shipping_address as ShippingAddress | null;
   const products = await buildInvoiceProducts(sursa, config, order, pricesIncludeVat, vatEnabled, storeVatRate);
@@ -668,18 +744,10 @@ export async function generateOrderInvoice(
   if (!order) return { error: "Comanda nu a fost gasita." };
 
   /*
-   * ⚠ COTE DIFERITE PE LINII: NU SE EMITE.
-   *
-   * `invoiceVat` intoarce UN singur numar, iar casa il pune pe TOATE liniile. Pana pe
-   * 08.09.2026 `orders.vat_rate` era `max(cote)`, deci greseala mergea in directia care
-   * supra-taxeaza: gresit, dar fara pagubă fiscala. De cand e cota liniei celei mai valoroase,
-   * aceeasi apasare poate SUB-declara TVA-ul, si aia e alta clasa de problema.
-   *
-   * Calea automata se oprea deja; asta e aceeasi regula pe butonul apasat de om, cu mesajul
-   * care spune si unde se face factura corect.
+   * ⚠ Poarta cotelor amestecate a fost RIDICATA pe 09.09.2026: liniile isi poarta cotele lor.
+   * Vezi `planulCotelor` si nota din constructorul de linii. Ce mai poate opri documentul e o
+   * cota fara nume in contul de facturare, si acolo se opreste — nu aici.
    */
-  const coteAmestecate = motivCoteAmestecate((order as { items?: unknown }).items);
-  if (coteAmestecate) return { error: coteAmestecate };
 
   // Slotul e ocupat doar cat timp exista o factura FARA storno. Dupa storno,
   // factura e desfiintata fiscal si comanda e din nou facturabila. Vezi

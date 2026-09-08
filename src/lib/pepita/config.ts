@@ -70,7 +70,3 @@ export function configFaraChei(c: PepitaConfig): Omit<PepitaConfig, "feed_token"
   return { ...restul, areFeedToken: !!feed_token, areOrderKey: !!order_key };
 }
 
-/** Moneda pietei configurate. */
-export function monedaConfig(c: PepitaConfig): string {
-  return (PIETE[c.piata] ?? PIETE[PIATA_IMPLICITA]).moneda;
-}

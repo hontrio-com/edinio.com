@@ -93,3 +93,17 @@ test("⚠ starea „stoc-nefacut” raspunde cu ESEC, nu cu reusita", () => {
   assert.match(bucata, /esec\(503/, "se raspunde 503, ca ei sa retrimita");
   assert.ok(!/isError:\s*false/.test(bucata), "si NU ca reusita");
 });
+
+test("⚠ ruta CERE moneda magazinului in `select`", () => {
+  /*
+   * ⚠ A CINCEA OARA cand tiparul „ce nu se cere vine undefined" era gata sa treaca. Fara
+   * `currency` in citire, moneda magazinului ar fi `undefined`, comparatia din ingest ar tace
+   * exact pe magazinele pentru care exista, si o comanda in HUF ar trece drept „importata".
+   *
+   * Plasa scaneaza sursa fiindca aici nu se poate altfel: calea aia atinge baza, iar probele
+   * de mai sus se opresc dinadins inainte de ea.
+   */
+  const s = readFileSync("src/lib/pepita/ruta-comenzi.ts", "utf8");
+  assert.match(s, /\.select\("[^"]*currency[^"]*"\)/, "citirea setarilor nu cere moneda magazinului");
+  assert.match(s, /monedaMagazin/, "moneda magazinului nu ajunge in ingest");
+});

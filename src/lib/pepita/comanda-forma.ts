@@ -62,6 +62,19 @@ export interface ClientPepita {
 
 export interface ComandaPepita {
   externalId: string;
+  /**
+   * Moneda comenzii, aceeasi pe toate liniile si pe transport. `null` cand ei n-au trimis-o
+   * deloc; atunci ingestul cade pe moneda magazinului.
+   */
+  moneda: string | null;
+  /**
+   * Un cod de moneda a fost TRIMIS si nu s-a putut citi.
+   *
+   * ⚠ Deosebit de `moneda === null`, care inseamna „n-au trimis niciunul" si e in regula.
+   * Aici stim ca ne-au spus ceva despre bani si n-am inteles, deci nu avem voie sa punem in
+   * loc moneda magazinului si sa mergem mai departe ca si cum am sti.
+   */
+  monedaNevalida: boolean;
   origine: string | null;
   /** Data lor, PASTRATA CA SIR. Vezi nota de la `citesteComanda`. */
   dataBruta: string | null;
@@ -113,10 +126,31 @@ function obiect(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
 
-/** Codul de moneda, daca arata a cod de moneda. */
-function moneda(v: unknown): string | null {
+/**
+ * Codul de moneda, cu TREI raspunsuri, nu doua.
+ *
+ * ⚠ „Lipsa" si „nevalida" nu inseamna acelasi lucru, si de aia nu mai ies amandoua `null`.
+ * Un camp care lipseste e o comanda dintr-o piata unde ei nu-l trimit, si atunci se cade pe
+ * moneda magazinului. Un camp PREZENT dar strambat („LEI", „12", „ronn") e o greseala de date,
+ * iar reparata tacut ar fi facut o comanda in alta moneda sa arate ca una in lei.
+ *
+ * ⚠ NU EXISTA LISTA ALBA DE MONEDE, dinadins. O lista prea stramta respinge o comanda
+ * adevarata dintr-o piata noua, iar o comanda respinsa e o comanda PIERDUTA: ei nu reincearca
+ * singuri. Ce se verifica e forma codului si COERENTA lui in cadrul comenzii.
+ *
+ * ⚠ SI CELE DOUA ABATERI NU COSTA LA FEL, deci nu se trateaza la fel:
+ *   - DOUA monede pe aceeasi comanda RESPING comanda, ca un pret negativ: totalul se aduna din
+ *     preturile liniilor, deci ar fi un numar care arata a bani si nu e. Aceeasi treapta cu
+ *     `pret-nevalid` si `cantitate-nevalida`, care resping de mult;
+ *   - un cod PREZENT dar strambat („LEI", „12") nu respinge nimic, fiindca nu strica nicio
+ *     socoteala: duce comanda in CARANTINA. Nici reparata tacut, nici pierduta.
+ */
+type Moneda = { fel: "lipsa" } | { fel: "cod"; cod: string } | { fel: "nevalida" };
+
+function moneda(v: unknown): Moneda {
   const s = sir(v);
-  return s && /^[A-Za-z]{3}$/.test(s) ? s.toUpperCase() : null;
+  if (!s) return { fel: "lipsa" };
+  return /^[A-Za-z]{3}$/.test(s) ? { fel: "cod", cod: s.toUpperCase() } : { fel: "nevalida" };
 }
 
 /**
@@ -154,6 +188,14 @@ export function citesteComanda(brut: unknown): Verdict {
   }
 
   const linii: LiniePepita[] = [];
+  /*
+   * ⚠ MONEDA COMENZII SE ADUNA DIN LINII, si trebuie sa fie UNA. Doua monede pe aceeasi
+   * comanda inseamna ca totalul, care se aduna din preturile liniilor, ar fi o suma de mere
+   * cu pere: un numar care arata a bani si nu e.
+   */
+  let monedaComenzii: string | null = null;
+  /** Un cod a fost trimis si nu s-a putut citi. Nu opreste comanda, o duce in carantina. */
+  let monedaNevalida = false;
   for (const p of produseBrute) {
     const l = obiect(p);
     const cantitate = numar(l.quantity);
@@ -169,14 +211,34 @@ export function citesteComanda(brut: unknown): Verdict {
     if (pret == null || pret < 0) {
       return { ok: false, cod: "pret-nevalid", mesaj: "O linie are preț nevalid.", externalId };
     }
+    const m = moneda(l.currency);
+    if (m.fel === "nevalida") monedaNevalida = true;
+    if (m.fel === "cod") {
+      if (monedaComenzii && monedaComenzii !== m.cod) {
+        return { ok: false, cod: "monede-amestecate", mesaj: "Comanda are linii în monede diferite.", externalId };
+      }
+      monedaComenzii = m.cod;
+    }
     linii.push({
       idPepita: sir(l.id),
       sku: sir(l.sku),
-      moneda: moneda(l.currency),
+      moneda: m.fel === "cod" ? m.cod : null,
       cantitate,
       pret,
       tva: numar(l.vat),
     });
+  }
+
+  /*
+   * ⚠ SI TRANSPORTUL E BANI. Adunat la total intr-o alta moneda decat liniile, ar fi produs
+   * acelasi numar fals. Cu transport zero nu se compara nimic: n-are ce sa strice.
+   */
+  const transport = numar(c.total_shipping_price) ?? 0;
+  const mTransport = moneda(c.total_shipping_price_currency);
+  /* Cu transport zero, moneda lui nu atinge nicio socoteala: nu e nici macar o abatere. */
+  if (mTransport.fel === "nevalida" && transport > 0) monedaNevalida = true;
+  if (transport > 0 && mTransport.fel === "cod" && monedaComenzii && mTransport.cod !== monedaComenzii) {
+    return { ok: false, cod: "monede-amestecate", mesaj: "Transportul e în altă monedă decât produsele.", externalId };
   }
 
   const cl = obiect(c.customer);
@@ -220,8 +282,11 @@ export function citesteComanda(brut: unknown): Verdict {
       status: sir(c.status),
       mesajClient: sir(c.customer_message),
       mesajCurier: sir(c.courier_message),
-      transport: numar(c.total_shipping_price) ?? 0,
-      monedaTransport: moneda(c.total_shipping_price_currency),
+      transport,
+      monedaTransport: mTransport.fel === "cod" ? mTransport.cod : null,
+      /** Moneda UNICA a comenzii, deja dovedita coerenta. `null` daca ei n-au trimis niciuna. */
+      moneda: monedaComenzii,
+      monedaNevalida,
       voucher: numar(c.voucher) ?? 0,
       client,
       linii,

@@ -143,8 +143,26 @@ test("⚠ campul gol inseamna „lipsește”, nu „zero lei”", () => {
 });
 
 test("moneda se citeste numai daca arata a cod de moneda", () => {
-  assert.equal(bun({ ...OFICIAL, products: [{ ...OFICIAL.products[0], currency: "ron" }] }).linii[0].moneda, "RON");
-  assert.equal(bun({ ...OFICIAL, products: [{ ...OFICIAL.products[0], currency: "lei romanesti" }] }).linii[0].moneda, null);
+  /* Moneda liniilor SI a transportului deodata: altfel amestecul opreste comanda, pe drept. */
+  const ron = bun({
+    ...OFICIAL,
+    products: [{ ...OFICIAL.products[0], currency: "ron" }],
+    total_shipping_price_currency: "ron",
+  });
+  assert.equal(ron.linii[0].moneda, "RON");
+  assert.equal(ron.monedaNevalida, false);
+
+  /*
+   * ⚠ PROBA ASTA APARA ALTCEVA DECAT INAINTE. Pana acum cerea ca un cod strambat sa devina
+   * `null`, adica exact repararea tacuta: comanda mergea mai departe cu moneda magazinului,
+   * ca si cum am fi stiut. Acum codul necitit ramane `null` PE LINIE, dar comanda poarta
+   * semnul, si ingestul o duce in carantina.
+   */
+  const stramb = bun({ ...OFICIAL, products: [{ ...OFICIAL.products[0], currency: "lei romanesti" }] });
+  assert.equal(stramb.linii[0].moneda, null);
+  assert.equal(stramb.monedaNevalida, true);
+
+  /* Un camp care nu e nici macar text nu e „trimis": e lipsa. */
   assert.equal(bun({ ...OFICIAL, total_shipping_price_currency: 42 }).monedaTransport, null);
 });
 
@@ -175,4 +193,83 @@ test("valorile ostile raman TEXT, nu devin cod", () => {
   const c = bun({ ...OFICIAL, customer_message: "<script>alert(1)</script>", products: [{ ...OFICIAL.products[0], sku: "'; drop table orders; --" }] });
   assert.equal(c.mesajClient, "<script>alert(1)</script>");
   assert.equal(c.linii[0].sku, "'; drop table orders; --");
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MONEDA: FORMA SI COERENTA
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ Ce se verifica NU e o lista alba de monede. O lista prea stramta ar respinge o comanda
+   adevarata dintr-o piata noua, iar o comanda respinsa e o comanda PIERDUTA: „Resend order"
+   e un buton apasat de om, nu o reincercare. Se verifica forma codului si coerenta lui in
+   cadrul comenzii; alta moneda decat a magazinului duce comanda in carantina, nu la gunoi.
+*/
+
+function cuMonede(linii: unknown[], peste: Record<string, unknown> = {}) {
+  return citesteComanda({
+    id: 900, payment_mode: "cod", delivery_mod: "shipping",
+    customer: { last_name: "P", first_name: "I", phone: "0720000000" },
+    products: linii, ...peste,
+  });
+}
+
+test("⚠ doua monede pe aceeasi comanda se RESPING: totalul ar fi mere adunate cu pere", () => {
+  const v = cuMonede([
+    { id: "1", sku: "A", quantity: 1, price: 10, currency: "RON" },
+    { id: "2", sku: "B", quantity: 1, price: 10, currency: "HUF" },
+  ]);
+  assert.equal(v.ok, false);
+  assert.equal(v.ok === false && v.cod, "monede-amestecate");
+});
+
+test("⚠ un cod de moneda strambat nu se mai repara tacut, dar nici nu pierde comanda", () => {
+  for (const rea of ["12", "ronn", "R", "lei romanesti", "-"]) {
+    const v = cuMonede([{ id: "1", sku: "A", quantity: 1, price: 10, currency: rea }]);
+    /* Comanda intra: un cod necitit nu strica nicio socoteala, spre deosebire de doua monede. */
+    assert.equal(v.ok, true, `„${rea}" a pierdut comanda`);
+    assert.equal(v.ok && v.comanda.moneda, null);
+    assert.equal(v.ok && v.comanda.monedaNevalida, true, `„${rea}" a trecut ca si cum ar fi in regula`);
+  }
+
+  /*
+   * ⚠ CE NU PRINDE FORMA, SI SE STIE: „LEI" are trei litere, deci trece de verificarea de
+   * forma si devine o moneda cu numele „LEI". Nu se pierde nimic: nefiind moneda magazinului,
+   * ingestul o duce tot in carantina, doar cu celalalt motiv. O lista alba ar fi prins-o aici,
+   * si ar fi respins in schimb o comanda adevarata dintr-o piata pe care n-o cunoastem.
+   */
+  const lei = cuMonede([{ id: "1", sku: "A", quantity: 1, price: 10, currency: "LEI" }]);
+  assert.equal(lei.ok && lei.comanda.moneda, "LEI");
+  assert.equal(lei.ok && lei.comanda.monedaNevalida, false);
+});
+
+test("moneda lipsa NU e o abatere: sunt piete unde ei n-o trimit", () => {
+  const v = cuMonede([{ id: "1", sku: "A", quantity: 1, price: 10 }]);
+  assert.equal(v.ok, true);
+  assert.equal(v.ok && v.comanda.moneda, null);
+});
+
+test("o singura moneda pe toate liniile devine moneda comenzii", () => {
+  const v = cuMonede([
+    { id: "1", sku: "A", quantity: 1, price: 10, currency: "huf" },
+    { id: "2", sku: "B", quantity: 1, price: 10, currency: "HUF" },
+  ]);
+  assert.equal(v.ok, true);
+  assert.equal(v.ok && v.comanda.moneda, "HUF");
+});
+
+test("⚠ si transportul e bani: in alta moneda decat liniile, comanda se respinge", () => {
+  const v = cuMonede(
+    [{ id: "1", sku: "A", quantity: 1, price: 10, currency: "RON" }],
+    { total_shipping_price: 20, total_shipping_price_currency: "HUF" },
+  );
+  assert.equal(v.ok, false);
+  assert.equal(v.ok === false && v.cod, "monede-amestecate");
+});
+
+test("transport ZERO nu se compara cu nimic: n-are ce sa strice", () => {
+  const v = cuMonede(
+    [{ id: "1", sku: "A", quantity: 1, price: 10, currency: "RON" }],
+    { total_shipping_price: 0, total_shipping_price_currency: "HUF" },
+  );
+  assert.equal(v.ok, true);
 });

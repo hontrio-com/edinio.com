@@ -5,7 +5,7 @@ import { rateLimit } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { formaCheieValida, magazinulCheii } from "./chei";
 import { citesteComanda } from "./comanda-forma";
-import { citesteConfig, monedaConfig } from "./config";
+import { citesteConfig } from "./config";
 import { ingereaza } from "./ingest";
 
 /**
@@ -141,7 +141,12 @@ export async function primesteComanda(req: Request, cheieBruta: string | null): 
   }
 
   const { data: setari, error: eSetari } = await admin
-    .from("store_settings").select("pepita_config").eq("business_id", businessId).maybeSingle();
+    /*
+     * ⚠ `currency` E CERUT ANUME. Fara el, moneda magazinului ar veni `undefined`, comparatia
+     * din ingest ar tacea exact pe comenzile pentru care exista, si o comanda in alta moneda ar
+     * trece drept „importata". Tiparul „ce nu se cere vine undefined" a mai trecut de patru ori.
+     */
+    .from("store_settings").select("pepita_config, currency").eq("business_id", businessId).maybeSingle();
   /*
    * ⚠ O CITIRE CAZUTA NU E „integrare oprita". Fara randul asta, o pana de doua secunde a
    * bazei ar fi trimis comerciantului mesajul „ai oprit-o tu din panou", iar el l-ar fi
@@ -178,7 +183,8 @@ export async function primesteComanda(req: Request, cheieBruta: string | null): 
   }
 
   try {
-    const r = await ingereaza(admin, { businessId, moneda: monedaConfig(config) }, verdict.comanda);
+    const monedaMagazin = String((setari as { currency?: string } | null)?.currency ?? "RON").toUpperCase();
+    const r = await ingereaza(admin, { businessId, monedaMagazin }, verdict.comanda);
 
     if (r.stare === "esec") {
       /* ⚠ 503, nu 200: comanda NU s-a scris, iar „Resend order” e singura ei sansa. */

@@ -229,7 +229,7 @@ function comanda(peste: Record<string, unknown> = {}, linii?: Record<string, unk
   return v.ok ? v.comanda : (undefined as never);
 }
 
-const CTX = { businessId: BID, moneda: "RON" };
+const CTX = { businessId: BID, monedaMagazin: "RON" };
 
 /* ── Probele ─────────────────────────────────────────────────────────────── */
 
@@ -739,4 +739,60 @@ test("⚠ doua motive de carantina stau AMANDOUA pe rand, unul nu-l sterge pe ce
   const motiv = b.comenzi[0].motiv ?? "";
   assert.match(motiv, /COD-INVENTAT/, "motivul liniei nelegate a fost sters de cel de stoc");
   assert.match(motiv, /Stocul nu s-a putut scădea/, "motivul de stoc lipseste");
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MONEDA
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ o comanda in alta moneda decat magazinul intra, dar in CARANTINA", async () => {
+  const b = faceBaza();
+  const r = await ingereaza(b.db, CTX, comanda(
+    { total_shipping_price_currency: "HUF" },
+    [{ id: "77", sku: idArticol(P_SIMPLU, null), currency: "HUF", quantity: 1, price: 3192 }],
+  ));
+
+  assert.equal(r.stare, "carantina");
+  assert.match(b.comenzi[0].motiv ?? "", /altă monedă/);
+  assert.equal(b.orders[0].order_source.currency, "HUF");
+  /* ⚠ Cifra de pe comanda nu e in lei, si o afla si cine intra pe lista obisnuita de comenzi. */
+  assert.match(b.orders[0].internal_notes, /în HUF/);
+  assert.match(b.orders[0].internal_notes, /NU emite AWB cu ramburs/);
+});
+
+test("⚠ rambursul unei comenzi in alta moneda e ZERO: curierul incaseaza lei", async () => {
+  const b = faceBaza();
+  await ingereaza(b.db, CTX, comanda(
+    { total_shipping_price_currency: "HUF" },
+    [{ id: "77", sku: idArticol(P_SIMPLU, null), currency: "HUF", quantity: 1, price: 3192 }],
+  ));
+  const o = b.orders[0];
+
+  assert.equal(rambursDeIncasat({
+    payment_status: o.payment_status, total: o.total, order_source: o.order_source,
+  }), 0, "cifra ungureasca ar fi fost ceruta la usa in LEI");
+});
+
+test("moneda netrimisa NU e o abatere: se cade pe moneda magazinului", async () => {
+  const b = faceBaza();
+  const r = await ingereaza(b.db, CTX, comanda(
+    { total_shipping_price_currency: undefined },
+    [{ id: "77", sku: idArticol(P_SIMPLU, null), quantity: 1, price: 100 }],
+  ));
+
+  assert.equal(r.stare, "creata");
+  assert.equal(b.orders[0].order_source.currency, "RON");
+});
+
+test("⚠ un cod de moneda necitit duce comanda in carantina, nu la gunoi", async () => {
+  const b = faceBaza();
+  const r = await ingereaza(b.db, CTX, comanda(
+    { total_shipping_price_currency: undefined },
+    [{ id: "77", sku: idArticol(P_SIMPLU, null), currency: "ronn", quantity: 1, price: 100 }],
+  ));
+
+  /* Comanda E scrisa, dar nu trece drept lamurita: nu avem voie sa presupunem despre bani. */
+  assert.equal(b.orders.length, 1);
+  assert.equal(r.stare, "carantina");
+  assert.match(b.comenzi[0].motiv ?? "", /nu am putut-o citi/);
 });

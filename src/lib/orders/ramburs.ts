@@ -45,6 +45,21 @@ export function baniiIiIaMarketplaceul(orderSource: unknown): boolean {
   return (orderSource as { incaseaza_marketplace?: unknown } | null)?.incaseaza_marketplace === true;
 }
 
+/**
+ * Comanda e intr-o moneda pe care curierul nu o poate incasa la usa.
+ *
+ * ⚠ REGULA E „RON", nu „moneda magazinului", si asta nu e o scapare: rambursul il incaseaza
+ * un curier care lucreaza in lei. Nu poti cere unui curier roman sa stranga 15.000 de forinti,
+ * oricare ar fi moneda in care isi tine magazinul socotelile.
+ *
+ * ⚠ Lipsa cheii inseamna „nu stim, deci se poarta ca pana acum": comenzile din magazin si cele
+ * vechi, care n-au deloc `order_source`, raman neatinse.
+ */
+export function monedaNeincasabila(orderSource: unknown): boolean {
+  const m = (orderSource as { currency?: unknown } | null)?.currency;
+  return typeof m === "string" && m.trim() !== "" && m.trim().toUpperCase() !== "RON";
+}
+
 export interface ComandaCuRamburs {
   payment_status?: string | null;
   total?: unknown;
@@ -78,6 +93,12 @@ export function rambursDeIncasat(o: ComandaCuRamburs): number {
    * totalul ar fi fost cerut a doua oara de curierul comerciantului.
    */
   if (baniiIiIaMarketplaceul(o.order_source)) return 0;
+  /*
+   * ⚠ SI CAND CIFRA NU E IN LEI. `orders.total` e citit ca lei peste tot; precompletat pe o
+   * comanda in HUF, ar fi trecut cifra ungureasca in campul de ramburs al AWB-ului, si curierul
+   * ar fi cerut atatia LEI la usa. Comerciantul completeaza suma convertita cu mana.
+   */
+  if (monedaNeincasabila(o.order_source)) return 0;
   const total = round2(Number(o.total));
   return total > 0 ? total : 0;
 }

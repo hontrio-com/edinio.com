@@ -52,6 +52,25 @@ type Db = SupabaseClient<Database>;
  */
 export const MOTIV_STOC_NEFACUT = "Stocul nu s-a putut scădea. Se reîncearcă automat.";
 
+/**
+ * ⚠ ALTA MONEDA DECAT A MAGAZINULUI.
+ *
+ * `orders.total` e citit ca lei peste tot: pe AWB, in ramburs, in rapoarte. O comanda in HUF
+ * lasata sa treaca drept „importata" ar fi produs un AWB cu ramburs in cifra ungureasca si o
+ * factura in lei pe o suma care nu e in lei. Comanda intra oricum, fiindca e o vanzare
+ * adevarata; ce se opreste e trecerea ei tacuta mai departe.
+ */
+export const MOTIV_MONEDA_STRAINA = "Comandă în altă monedă decât magazinul. Verific-o înainte de expediere și de facturare.";
+
+/**
+ * ⚠ NE-AU SPUS CEVA DESPRE BANI SI N-AM INTELES.
+ *
+ * Deosebit de „n-au trimis moneda", care e in regula pe pietele unde ei n-o trimit. Aici a
+ * venit un cod si nu s-a putut citi, deci a pune in loc moneda magazinului ar fi o presupunere
+ * despre bani, luata tacut.
+ */
+export const MOTIV_MONEDA_NECITITA = "Moneda comenzii a venit într-o formă pe care nu am putut-o citi. Verifică suma înainte de expediere și de facturare.";
+
 export type StareIngest =
   | "creata"
   | "duplicat"
@@ -253,8 +272,14 @@ function numeDeRezerva(l: LiniePepita): string {
 
 export interface ContextIngest {
   businessId: string;
-  /** Moneda pietei configurate, pentru cand ei nu trimit una pe linie. */
-  moneda: string;
+  /**
+   * Moneda in care lucreaza MAGAZINUL (`store_settings.currency`), nu a pietei Pepita.
+   *
+   * ⚠ REDENUMIT DINADINS. Se chema `moneda` si era moneda pietei configurate; de ea atarna
+   * acum si hotararea „comanda asta e in alta moneda decat magazinul". Lasat cu numele vechi,
+   * fiecare apelant ar fi trecut neatins peste schimbarea de INTELES, iar `tsc` ar fi tacut.
+   */
+  monedaMagazin: string;
 }
 
 /**
@@ -375,6 +400,12 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
    */
   const lipsuri = lipsuriLivrare(c);
 
+  /*
+   * ⚠ Moneda comenzii e deja dovedita coerenta la citire: aici se compara doar cu a
+   * magazinului. Lipsa ei nu e o abatere, e o piata unde ei n-o trimit.
+   */
+  const monedaStraina = c.moneda != null && c.moneda.toUpperCase() !== ctx.monedaMagazin.toUpperCase();
+
   const numeClient = [c.client.prenume, c.client.nume].filter(Boolean).join(" ").trim()
     || c.client.facturare.nume
     || "Client Pepita";
@@ -398,7 +429,7 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     payment_method: metodaPlata(c.modPlata, c.modLivrare),
     payment_status: starePlata(c.starePlata, c.modPlata),
     notes: c.mesajClient,
-    internal_notes: noteInterne(c, nelegate, cote, lipsuri),
+    internal_notes: noteInterne(c, nelegate, cote, lipsuri, monedaStraina ? ctx.monedaMagazin : null),
     billing_company: firmaCumparatoare(c) as never,
     order_source: sursaComenzii(c, ctx, cote) as never,
   } as never).select("id").maybeSingle();
@@ -447,16 +478,20 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
   const areNelegate = nelegate.length > 0;
   const motivNelegate = areNelegate ? `Coduri fără corespondent în Edinio: ${nelegate.join(", ")}` : null;
   const motivLipsuri = motivNelivrabila(lipsuri);
+  const motivMoneda = compuneMotiv([
+    monedaStraina ? MOTIV_MONEDA_STRAINA : null,
+    c.monedaNevalida ? MOTIV_MONEDA_NECITITA : null,
+  ]);
   /*
    * ⚠ DOUA FELURI DE CARANTINA, si niciunul nu-l cuprinde pe celalalt: o linie pe care n-o
    * putem lega de catalog, si o comanda pe care comerciantul n-o poate expedia cu mijloacele
    * lui. Motivele se leaga, nu se inlocuiesc: vezi `compuneMotiv`.
    */
-  const inCarantina = areNelegate || lipsuri.length > 0;
+  const inCarantina = areNelegate || lipsuri.length > 0 || motivMoneda != null;
   await admin.from("pepita_comenzi").update({
     order_id: orderId,
     stare: inCarantina ? "carantina" : "importata",
-    motiv: compuneMotiv([motivNelegate, motivLipsuri]),
+    motiv: compuneMotiv([motivNelegate, motivLipsuri, motivMoneda]),
     prelucrat_la: acum,
   } as never).eq("id", randId);
 
@@ -473,7 +508,7 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
        * stoc scoate din carantina randurile al caror motiv e chiar el: o comanda cu linii
        * nelegate SI stoc nescazut ar fi iesit din carantina cu prima problema nerezolvata.
        */
-      motiv: compuneMotiv([motivNelegate, motivLipsuri, MOTIV_STOC_NEFACUT]),
+      motiv: compuneMotiv([motivNelegate, motivLipsuri, motivMoneda, MOTIV_STOC_NEFACUT]),
     } as never).eq("id", randId);
   }
 
@@ -503,6 +538,8 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
   const mesaje: string[] = [];
   if (areNelegate) mesaje.push(`Comandă salvată. Coduri necunoscute: ${nelegate.join(", ")}`);
   if (lipsuri.length > 0) mesaje.push(`Comandă salvată, dar nu se poate expedia: lipsesc ${lipsuri.join(", ")}.`);
+  if (monedaStraina) mesaje.push(`Comandă salvată. Moneda ei (${c.moneda}) nu e cea a magazinului.`);
+  if (c.monedaNevalida) mesaje.push("Comandă salvată, dar codul de monedă trimis nu s-a putut citi.");
 
   return {
     stare: inCarantina ? "carantina" : regasita ? "duplicat" : "creata",
@@ -690,7 +727,7 @@ function sursaComenzii(c: ComandaPepita, ctx: ContextIngest, cote: CoteleLiniilo
      * automata se opreste singura cand vede alta moneda. O comanda in HUF fara semn ar
      * fi fost facturata ca lei, iar o factura fiscala gresita nu se retrage, se storneaza.
      */
-    currency: (c.linii.find((l) => l.moneda)?.moneda ?? c.monedaTransport ?? ctx.moneda).toUpperCase(),
+    currency: (c.moneda ?? ctx.monedaMagazin).toUpperCase(),
   };
 }
 
@@ -700,7 +737,11 @@ function sursaComenzii(c: ComandaPepita, ctx: ContextIngest, cote: CoteleLiniilo
  * ⚠ AICI SE SPUNE SI CE NU FACEM. Statusul nu pleaca inapoi la Pepita, fiindca nu
  * exista prin ce. Scris in comanda, omul afla exact acolo unde ar apasa gresit.
  */
-function noteInterne(c: ComandaPepita, nelegate: string[], cote: CoteleLiniilor, lipsuri: string[]): string {
+function noteInterne(
+  c: ComandaPepita, nelegate: string[], cote: CoteleLiniilor, lipsuri: string[],
+  /** Moneda magazinului, DOAR cand difera de cea a comenzii. Altfel `null`. */
+  monedaMagazin: string | null,
+): string {
   const randuri: string[] = [
     `Comandă Pepita ${c.externalId}${c.origine ? ` (${c.origine})` : ""}.`,
     `Plată: ${etichetaPlata(c.modPlata)}. Livrare aleasă la Pepita: ${etichetaLivrare(c.modLivrare)}.`,
@@ -751,6 +792,16 @@ function noteInterne(c: ComandaPepita, nelegate: string[], cote: CoteleLiniilor,
    */
   if (lipsuri.length > 0) {
     randuri.push(`⚠ Comanda nu se poate expedia așa cum a venit: lipsesc ${lipsuri.join(", ")}. Completează-le din „Editează comanda” înainte de a emite AWB-ul.`);
+  }
+  /*
+   * ⚠ CIFRA DE PE COMANDA NU E IN LEI. Se spune pe comanda, nu doar in panoul Pepita:
+   * cine emite AWB-ul sau factura intra pe lista obisnuita de comenzi.
+   */
+  if (monedaMagazin) {
+    randuri.push(
+      `⚠ Totalul comenzii este în ${c.moneda}, iar magazinul lucrează în ${monedaMagazin}. `
+      + "NU emite AWB cu ramburs și NU factura până nu convertești suma.",
+    );
   }
   return randuri.join("\n");
 }

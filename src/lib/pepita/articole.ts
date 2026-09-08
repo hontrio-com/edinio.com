@@ -119,6 +119,13 @@ export interface ContextArticole {
   baza: string;
   /** Stocul de siguranta al produsului asta, daca are unul propriu. */
   safetyStock?: number;
+  /**
+   * Cand s-a schimbat ultima oara ceva care atinge TOT feedul: setarile magazinului, numele
+   * lui, arborele de categorii. Secunde Unix. Vezi nota lunga din `feed.ts`.
+   */
+  pragMagazin?: number;
+  /** Cand s-a atins ultima oara listarea produsului asta (pret propriu, stoc de siguranta). */
+  listareAtinsaLa?: string | null;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -259,7 +266,22 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
   const variante = parseVariants(p.page_sections);
   const combinatii = combinatiiActiveUnice(variante);
   const siguranta = ctx.safetyStock ?? ctx.config.safety_stock ?? 0;
-  const ultimaModificare = p.updated_at ? Math.floor(new Date(p.updated_at).getTime() / 1000) : undefined;
+  /*
+   * ⚠ `<LastMod>` E CEL MAI TARZIU DINTRE TOATE, nu doar data produsului.
+   *
+   * Feedul se schimba si fara ca produsul sa fie atins: strategia de pret, stocul de siguranta,
+   * TVA-ul, categoriile, numele magazinului. Trimis doar `products.updated_at`, spuneam „nimic
+   * nou aici" despre un produs al carui pret tocmai se schimbase.
+   *
+   * ⚠ SE PASTREAZA DOAR NUMERELE ADEVARATE. O data nevalida da `NaN`, iar `el()` nu sare peste
+   * sirul „NaN": ar fi iesit `<LastMod>NaN</LastMod>` in XML.
+   */
+  const candidati = [
+    p.updated_at ? new Date(p.updated_at).getTime() / 1000 : NaN,
+    ctx.listareAtinsaLa ? new Date(ctx.listareAtinsaLa).getTime() / 1000 : NaN,
+    ctx.pragMagazin ?? NaN,
+  ].filter((n) => Number.isFinite(n));
+  const ultimaModificare = candidati.length ? Math.floor(Math.max(...candidati)) : undefined;
   const url = `${ctx.baza}/product/${p.slug ?? p.id}`;
 
   /** Ce e comun intre articolul simplu si fiecare combinatie aplatizata. */

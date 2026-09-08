@@ -54,6 +54,8 @@ interface RandListare {
   inclus: boolean;
   safety_stock: number | null;
   pret_override: number | null;
+  /** Cand s-a atins ultima oara listarea. Intra in `<LastMod>`: vezi nota de la `pragMagazin`. */
+  actualizat_la: string | null;
 }
 
 export interface PregatireFeed {
@@ -72,18 +74,19 @@ export interface PregatireFeed {
 export async function pregateste(admin: Db, businessId: string): Promise<PregatireFeed | null> {
   const { data: biz, error: eBiz } = await admin
     .from("businesses")
-    .select("id, slug, custom_domain, store_name, business_name, is_published")
+    .select("id, slug, custom_domain, store_name, business_name, is_published, updated_at")
     .eq("id", businessId).maybeSingle();
   if (eBiz) throw eBiz;
   const business = biz as {
     id: string; slug: string; custom_domain: string | null;
     store_name: string | null; business_name: string; is_published: boolean;
+    updated_at: string | null;
   } | null;
   if (!business) return null;
 
   const { data: setari, error: eSet } = await admin
     .from("store_settings")
-    .select("pepita_config, vat_enabled, vat_rate, prices_include_vat")
+    .select("pepita_config, vat_enabled, vat_rate, prices_include_vat, updated_at")
     .eq("business_id", businessId).maybeSingle();
   if (eSet) throw eSet;
 
@@ -98,14 +101,26 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
    */
   if (!config.activ) return null;
 
-  const { data: cat, error: eCat } = await admin
-    .from("categories").select("id, name, parent_id").eq("business_id", businessId);
-  if (eCat) throw eCat;
+  /*
+   * ⚠ PAGINAT, ca `pepita_listari` de mai jos. PostgREST intoarce cel mult 1000 de randuri, iar
+   * o citire fara paginare taia tacut arborele: la peste 1000 de categorii, caile din feed ar
+   * fi iesit gresite sau goale, fara nicio eroare.
+   */
+  const categorii: RandCategorie[] = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error: eCat } = await admin
+      .from("categories").select("id, name, parent_id, updated_at")
+      .eq("business_id", businessId).order("id").range(de, de + 999);
+    if (eCat) throw eCat;
+    const randuri = (data ?? []) as (RandCategorie & { updated_at: string | null })[];
+    categorii.push(...randuri);
+    if (randuri.length < 1000) break;
+  }
 
   const listari = new Map<string, RandListare>();
   for (let de = 0; ; de += 1000) {
     const { data, error } = await admin
-      .from("pepita_listari").select("product_id, inclus, safety_stock, pret_override")
+      .from("pepita_listari").select("product_id, inclus, safety_stock, pret_override, actualizat_la")
       .eq("business_id", businessId).order("product_id").range(de, de + 999);
     if (error) throw error;
     const randuri = (data ?? []) as RandListare[];
@@ -113,7 +128,37 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
     if (randuri.length < 1000) break;
   }
 
-  const s = (setari ?? {}) as { vat_enabled?: boolean; vat_rate?: number; prices_include_vat?: boolean };
+  const s = (setari ?? {}) as {
+    vat_enabled?: boolean; vat_rate?: number; prices_include_vat?: boolean; updated_at?: string | null;
+  };
+
+  /*
+   * ═══ ⚠ PRAGUL DE JOS AL LUI `<LastMod>` ═══
+   *
+   * `LastMod` venea DOAR din `products.updated_at`, si asta il facea sa minta: feedul se
+   * schimba si fara ca produsul sa fie atins. Strategia de pret, stocul de siguranta, garantia,
+   * termenul si pretul de livrare, cota de TVA, numele magazinului, adresa lui, arborele de
+   * categorii: toate intra in XML, si niciuna nu urca `products.updated_at`. Pepita ar fi vazut
+   * o data veche pe un produs al carui pret tocmai se schimbase.
+   *
+   * ⚠ SE FOLOSESTE `store_settings.updated_at`, DESI E GROSIER, si e o alegere, nu o scapare.
+   * El e un singur timp pentru vreo saptezeci de coloane de configurare: salvata cheia Netopia,
+   * pragul urca si `LastMod` sare pe TOT catalogul, desi feedul n-a miscat un octet. Costul e
+   * cateva re-citiri in plus la ei. Alternativa precisa, o stampila scrisa doar cand se schimba
+   * campurile care ajung in feed, ar fi lasat pe dinafara chiar TVA-ul, care n-are alt semn: si
+   * atunci o schimbare de cota n-ar mai fi ajuns niciodata la ei. Prea proaspat costa o citire;
+   * prea vechi costa un pret gresit la vanzare.
+   */
+  const clipa = (v: string | null | undefined): number => {
+    const t = v ? new Date(v).getTime() : NaN;
+    return Number.isFinite(t) ? Math.floor(t / 1000) : 0;
+  };
+  const pragMagazin = Math.max(
+    clipa(business.updated_at),
+    clipa(s.updated_at),
+    ...categorii.map((c) => clipa((c as { updated_at?: string | null }).updated_at)),
+    0,
+  );
   const ctx: ContextArticole = {
     business,
     config,
@@ -124,8 +169,9 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
          preturile cu TVA inauntru, si a presupune altfel ar adauga TVA a doua oara. */
       prices_include_vat: s.prices_include_vat ?? true,
     },
-    caleCategorie: caleaCategoriilor((cat ?? []) as RandCategorie[]),
+    caleCategorie: caleaCategoriilor(categorii),
     baza: storeBaseUrl(business),
+    pragMagazin,
   };
 
   return { ctx, config, listari };
@@ -183,7 +229,12 @@ export async function* scrieFeed(
             price: rand?.pret_override ?? p.price,
             pachetDisponibil: p.is_bundle ? disponibilPachet.get(p.id) : undefined,
           },
-          { ...pre.ctx, safetyStock: rand?.safety_stock ?? pre.config.safety_stock },
+          {
+            ...pre.ctx,
+            safetyStock: rand?.safety_stock ?? pre.config.safety_stock,
+            /* Reglajele per produs se schimba fara ca produsul sa fie atins: vezi `pragMagazin`. */
+            listareAtinsaLa: rand?.actualizat_la ?? null,
+          },
         );
         for (const a of articole) {
           /* ⚠ Perechea (produs, combinatie) se tine minte pentru drumul INAPOI: vezi

@@ -34,10 +34,31 @@ const produs = (i: number, peste: Record<string, unknown> = {}) => ({
 
 interface Optiuni {
   produse?: ReturnType<typeof produs>[];
-  listari?: { product_id: string; inclus: boolean; safety_stock: number | null; pret_override: number | null }[];
+  listari?: { product_id: string; inclus: boolean; safety_stock: number | null; pret_override: number | null; actualizat_la?: string | null }[];
+  /** Cand s-au atins ultima oara setarile magazinului. Intra in `<LastMod>`. */
+  setariAtinseLa?: string;
+  categoriiAtinseLa?: string;
+  /** Cand s-a atins ultima oara magazinul: numele lui si adresa intra in feed. */
+  magazinAtinsLa?: string;
   config?: Record<string, unknown>;
   /** De la a cata pagina de produse cade citirea. `null` = niciodata. */
   cadeLaPagina?: number | null;
+}
+
+/**
+ * Randul, taiat la COLOANELE CERUTE.
+ *
+ * ⚠ FARA ASTA, BAZA FALSA E MAI DARNICA DECAT CEA ADEVARATA, si atunci probele apara mai
+ * putin decat par. In repo-ul asta cea mai des repetata greseala e chiar aceasta: un camp
+ * necerut in `.select()` vine `undefined`, iar verificarea de mai jos tace exact pe randurile
+ * pentru care exista. O baza falsa care intoarce tot n-o poate prinde NICIODATA.
+ */
+function doar<T extends Record<string, unknown>>(rand: T, coloane: string | undefined): Record<string, unknown> {
+  if (!coloane || coloane.includes("*")) return rand;
+  const chei = coloane.split(",").map((c) => c.trim()).filter(Boolean);
+  const iesire: Record<string, unknown> = {};
+  for (const k of chei) if (k in rand) iesire[k] = rand[k];
+  return iesire;
 }
 
 function faceBaza(o: Optiuni = {}) {
@@ -46,24 +67,25 @@ function faceBaza(o: Optiuni = {}) {
   /* Ce a scris feedul in evidenta articolelor trimise. */
   const scrise: { product_id: string; combinatie: string; articol_id: string }[] = [];
 
-  const raspunde = (tabela: string, filtre: [string, unknown][], interval: [number, number] | null, corp: unknown = null) => {
+  const raspunde = (tabela: string, filtre: [string, unknown][], interval: [number, number] | null, corp: unknown = null, coloane?: string) => {
     if (tabela === "businesses") {
-      return { data: { id: BID, slug: "magazin", custom_domain: null, store_name: "Magazin", business_name: "SRL", is_published: true }, error: null };
+      return { data: doar({ id: BID, slug: "magazin", custom_domain: null, store_name: "Magazin", business_name: "SRL", is_published: true, updated_at: o.magazinAtinsLa ?? "2026-08-01T10:00:00.000Z" }, coloane), error: null };
     }
     if (tabela === "store_settings") {
       return {
-        data: {
+        data: doar({
           pepita_config: { activ: true, ...(o.config ?? {}) },
           vat_enabled: true, vat_rate: 21, prices_include_vat: true,
-        },
+          updated_at: o.setariAtinseLa ?? "2026-08-01T10:00:00.000Z",
+        }, coloane),
         error: null,
       };
     }
     if (tabela === "categories") {
-      return { data: [{ id: "c1", name: "Scaune", parent_id: null }], error: null };
+      return { data: [doar({ id: "c1", name: "Scaune", parent_id: null, updated_at: o.categoriiAtinseLa ?? "2026-08-01T10:00:00.000Z" }, coloane)], error: null };
     }
     if (tabela === "pepita_listari") {
-      return { data: o.listari ?? [], error: null };
+      return { data: (o.listari ?? []).map((r) => doar(r as unknown as Record<string, unknown>, coloane)), error: null };
     }
     if (tabela === "pepita_articole") {
       for (const r of (corp as { product_id: string; combinatie: string; articol_id: string }[]) ?? []) scrise.push(r);
@@ -77,7 +99,7 @@ function faceBaza(o: Optiuni = {}) {
       const [de, pana] = interval ?? [0, 999];
       /* ⚠ Filtrul pe magazin chiar se aplica, ca proba de izolare sa insemne ceva. */
       const aleLui = produse.filter(() => filtre.some(([k, v]) => k === "business_id" && v === BID));
-      return { data: aleLui.slice(de, pana + 1), error: null };
+      return { data: aleLui.slice(de, pana + 1).map((p) => doar(p as unknown as Record<string, unknown>, coloane)), error: null };
     }
     return { data: null, error: null };
   };
@@ -87,16 +109,17 @@ function faceBaza(o: Optiuni = {}) {
     const filtre: [string, unknown][] = [];
     let interval: [number, number] | null = null;
     let corp: unknown = null;
+    let coloane: string | undefined;
     const b: any = {
-      select: () => b,
+      select: (c?: string) => { coloane = c; return b; },
       upsert: (p: unknown) => { corp = p; return b; },
       eq: (k: string, v: unknown) => { filtre.push([k, v]); return b; },
       in: () => b, is: () => b, not: () => b, neq: () => b, order: () => b, limit: () => b,
       range: (a: number, c: number) => { interval = [a, c]; return b; },
-      maybeSingle: () => Promise.resolve(raspunde(tabela, filtre, interval, corp)),
-      single: () => Promise.resolve(raspunde(tabela, filtre, interval, corp)),
+      maybeSingle: () => Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane)),
+      single: () => Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane)),
       then: (bun: (v: unknown) => unknown, rau?: (e: unknown) => unknown) =>
-        Promise.resolve(raspunde(tabela, filtre, interval, corp)).then(bun, rau),
+        Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane)).then(bun, rau),
     };
     return b;
   };
@@ -257,4 +280,81 @@ test("⚠ feedul de STOC nu scrie evidenta: aceleasi randuri, de 24 de ori pe zi
   const db = faceBaza({ config: { mod_includere: "toate" }, produse: [cuDouaVariante(1)] });
   await feed(db, "stoc");
   assert.deepEqual((db as unknown as { __scrise: unknown[] }).__scrise, []);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   `<LastMod>` NU MAI MINTE
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ Venea doar din `products.updated_at`. Dar feedul se schimba si fara ca produsul sa fie
+   atins: strategia de pret, stocul de siguranta, TVA-ul, garantia, transportul, numele
+   magazinului, arborele de categorii. Pepita citea „nimic nou aici" despre un produs al carui
+   pret tocmai se schimbase.
+*/
+
+const secunde = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
+const lastMod = (xml: string): number | null => {
+  const m = xml.match(/<LastMod>(\d+)<\/LastMod>/);
+  return m ? Number(m[1]) : null;
+};
+
+test("⚠ o schimbare in setarile magazinului urca `LastMod`, desi produsul n-a fost atins", async () => {
+  const TOATE = { mod_includere: "toate" };
+  const vechi = await feed(faceBaza({ config: TOATE, produse: [produs(1, { updated_at: "2026-01-01T00:00:00.000Z" })] }));
+  assert.equal(lastMod(vechi), secunde("2026-08-01T10:00:00.000Z"), "pragul magazinului nu se vede deloc");
+
+  const nou = await feed(faceBaza({
+    config: TOATE,
+    produse: [produs(1, { updated_at: "2026-01-01T00:00:00.000Z" })],
+    setariAtinseLa: "2026-09-05T12:00:00.000Z",
+  }));
+  assert.equal(lastMod(nou), secunde("2026-09-05T12:00:00.000Z"));
+});
+
+test("un produs atins mai tarziu decat setarile isi pastreaza propria data", async () => {
+  const xml = await feed(faceBaza({ config: { mod_includere: "toate" }, produse: [produs(1, { updated_at: "2026-09-07T08:00:00.000Z" })] }));
+  assert.equal(lastMod(xml), secunde("2026-09-07T08:00:00.000Z"));
+});
+
+test("⚠ reglajul pus pe UN produs urca `LastMod` doar la el", async () => {
+  const p1 = produs(1, { updated_at: "2026-01-01T00:00:00.000Z" });
+  const p2 = produs(2, { updated_at: "2026-01-01T00:00:00.000Z" });
+  const xml = await feed(faceBaza({
+    produse: [p1, p2],
+    listari: [
+      { product_id: p1.id, inclus: true, safety_stock: 2, pret_override: null, actualizat_la: "2026-09-06T09:00:00.000Z" },
+      { product_id: p2.id, inclus: true, safety_stock: null, pret_override: null, actualizat_la: null },
+    ],
+  }));
+  const toate = [...xml.matchAll(/<LastMod>(\d+)<\/LastMod>/g)].map((m) => Number(m[1]));
+  assert.equal(toate.length, 2);
+  assert.equal(toate[0], secunde("2026-09-06T09:00:00.000Z"));
+  assert.equal(toate[1], secunde("2026-08-01T10:00:00.000Z"), "al doilea produs a primit data primului");
+});
+
+test("o redenumire de categorie urca `LastMod`", async () => {
+  const xml = await feed(faceBaza({
+    config: { mod_includere: "toate" },
+    produse: [produs(1, { updated_at: "2026-01-01T00:00:00.000Z" })],
+    categoriiAtinseLa: "2026-09-04T07:00:00.000Z",
+  }));
+  assert.equal(lastMod(xml), secunde("2026-09-04T07:00:00.000Z"));
+});
+
+test("⚠ o data nevalida nu scrie `NaN` in XML", async () => {
+  /* `el()` nu sare peste sirul „NaN": ar fi iesit `<LastMod>NaN</LastMod>`, adica XML minciuna. */
+  const xml = await feed(faceBaza({ config: { mod_includere: "toate" }, produse: [produs(1, { updated_at: "nu e o data" })] }));
+  assert.ok(!xml.includes("NaN"), "a iesit NaN in feed");
+  assert.equal(lastMod(xml), secunde("2026-08-01T10:00:00.000Z"));
+});
+
+test("⚠ magazinul redenumit urca si el `LastMod`: numele lui pleaca in fiecare articol", () => {
+  return (async () => {
+    const xml = await feed(faceBaza({
+      config: { mod_includere: "toate" },
+      produse: [produs(1, { updated_at: "2026-01-01T00:00:00.000Z" })],
+      magazinAtinsLa: "2026-09-03T06:00:00.000Z",
+    }));
+    assert.equal(lastMod(xml), secunde("2026-09-03T06:00:00.000Z"));
+  })();
 });

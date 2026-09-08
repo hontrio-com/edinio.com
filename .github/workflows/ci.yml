@@ -36,13 +36,10 @@ jobs:
           # Aceeasi linie majora ca local (v24) si ca pe Vercel. O versiune mai
           # veche ar trece aici si ar cadea la deploy — adica exact pe dos.
           node-version: '24'
-          # FARA `cache: npm`, deliberat.
-          #
-          # `npm ci` cade in ~2s, adica in faza de SCRIERE, nu la validare
-          # (`--dry-run` trece, si e verificat ca el chiar prinde o desincronizare:
-          # pus `zod@^99`, da `ETARGET`). O cadere imediata la scriere arata a cache
-          # stricat restaurat intre rulari — `EINTEGRITY` se poarta exact asa.
-          # Costa ~20s pe rulare; certitudinea face mai mult.
+          # FARA `cache: npm`. Ipoteza care a scos-o de aici — „cache stricat
+          # restaurat intre rulari" — s-a dovedit GRESITA pe 08.09.2026 (cauza
+          # adevarata e mai jos), deci se poate pune la loc oricand, pentru ~20s
+          # pe rulare. Lasata scoasa doar ca sa nu se schimbe doua lucruri odata.
 
       # Pasii de instalare sunt SEPARATI si numiti anume.
       #
@@ -55,23 +52,39 @@ jobs:
 
       # ── Instalarea, in DOI pasi, ca sa se vada care drum a mers ────────────
       #
-      # `npm ci` pica pe Linux nedeterminist: din patru rulari pe acelasi cod, a
-      # trecut o data. Caderile sunt IMEDIATE (~2s), deci e o eroare de validare,
-      # nu de retea sau de descarcare.
+      # ⚠ CAUZA, GASITA PE 08.09.2026, DUPA SAPTAMANI. Nu era nedeterminism, si nu
+      # era nimic din ce banuisem (cache, integritate, retea, platforma). Era o
+      # nepotrivire de VERSIUNE DE NPM:
       #
-      # Ce am verificat si e in regula: clona curata instaleaza 842 de pachete
-      # fara eroare (pe Windows), `package.json` e identic cu radacina
-      # lockfile-ului, toate cele 919 pachete vin din registrul public, binarele de
-      # Linux au si `resolved` si `integrity`, nicio dependenta optionala nu
-      # lipseste, si niciun pachet neoptional n-are restrictie de platforma.
-      # `npm ci --dry-run` trece si el pe Linux. Cauza reala cere logul jobului,
-      # care se poate citi doar cu drepturi de admin.
+      #     npm error code EUSAGE
+      #     npm error Missing: @emnapi/runtime@1.11.3 from lock file
+      #     npm error Missing: @emnapi/core@1.11.3 from lock file
       #
-      # Pana atunci: pasul strict incearca, si daca nu reuseste se cade pe
-      # `npm install` — dar ca PAS SEPARAT, nu ascuns intr-un `||`. Asa se vede din
-      # afara, din simpla lista de pasi, daca drumul strict a mers sau nu. O poarta
-      # care nu poate rula nu apara nimic; una care minte ca a rulat strict e mai
-      # rau. Asta nici nu ruleaza degeaba, nici nu minte.
+      # `@napi-rs/wasm-runtime@1.1.4` isi declara `@emnapi/core` si `@emnapi/runtime`
+      # drept `peerDependencies`. npm 11.19.0 (cel de pe runner, adus de Node 24.20)
+      # le cere in lockfile; npm 11.6.2 (cel de pe masina care a scris lockfile-ul) nu.
+      # Deci acelasi cod dadea doua raspunsuri, dupa cine instala — si de aici parea
+      # nedeterminism.
+      #
+      # ⚠ SI DE CE A TINUT ATAT. Raspunsul statea in log de la inceput. Logul cere
+      # drepturi de admin, artefactul cere autentificare, rezumatul la fel. Prima
+      # rulare care a scos aceleasi randuri ca ADNOTARE a fost si prima in care s-a
+      # putut citi. Vezi pasul „Ce a picat la npm ci".
+      #
+      # Lockfile-ul e acum regenerat cu npm 11.19.0: patru intrari adaugate, ZERO
+      # scoase, ZERO versiuni schimbate, si `peer` sters de pe 30 de intrari vechi.
+      # Verificat ca e primit de npm 10.9.2, 11.0.0, 11.6.2 si 11.19.0 — deci nu
+      # rupe nici masina de dezvoltare, nici Vercel.
+      #
+      # ⚠ REGULA CARE RAMANE: lockfile-ul se scrie cu npm ≥ 11.19.0. Un `npm install`
+      # rulat cu 11.6.2 SCOATE la loc cele patru intrari, si CI-ul cade iar. Cand se
+      # intampla: `npx npm@11.19.0 install --package-lock-only`.
+      #
+      # Cei doi pasi raman. Ei sunt cei care au prins asta: pasul strict incearca, si
+      # daca nu reuseste se cade pe `npm install` — dar ca PAS SEPARAT, nu ascuns
+      # intr-un `||`. Asa se vede din afara, din simpla lista de pasi, daca drumul
+      # strict a mers. O poarta care nu poate rula nu apara nimic; una care minte ca a
+      # rulat strict e mai rau. Asta nici nu ruleaza degeaba, nici nu minte.
       - name: Instaleaza (npm ci)
         id: instalare_stricta
         continue-on-error: true

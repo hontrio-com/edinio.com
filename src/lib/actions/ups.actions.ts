@@ -23,6 +23,7 @@ import {
 import { ofertePosibile } from "@/lib/ups/preturi";
 import { serviciiPropuse } from "@/lib/ups/servicii";
 import type { Json } from "@/types/database.types";
+import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
 
 /**
  * Actiunile UPS.
@@ -430,6 +431,12 @@ export async function createUpsAwbAction(
 ): Promise<{ awb: string } | { error: string }> {
   const ctx = await configSiComanda(businessId, orderId);
   if ("error" in ctx) return { error: ctx.error as string };
+
+  /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
+     colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
+  const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+  if (refuzAwb) return { error: refuzAwb };
+
   const { supabase, admin, config, order } = ctx;
 
   const comanda = order as typeof order & { ups_awb_number?: string | null; order_number?: string | number | null };

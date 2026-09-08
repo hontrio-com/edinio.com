@@ -182,10 +182,14 @@ const SECTIONS: { id: string; label: string; integrations: Integration[] }[] = [
       { name: "About You", logo: "/integrations/aboutyou.png", id: "aboutyou" },
       { name: "Trendyol", logo: "/integrations/trendyol.svg", id: "trendyol" },
       { name: "eMAG", logo: "/integrations/emag.webp", id: "emag" },
+      /* ⚠ CE MERGE AZI STA INAINTEA LUI „IN CURAND", in fiecare rubrica. Pepita a fost livrata
+         pe 08.09.2026 si a ramas trei randuri mai jos, sub trei integrari care nu exista inca:
+         un comerciant care se uita peste rubrica se opreste la primul „In curand" si crede ca de
+         acolo incolo nu mai e nimic de folosit. Paza e `ordinea-integrarilor.test.ts`. */
+      { name: "Pepita.com",  logo: "/integrations/pepita.svg", id: "pepita" },
       { name: "Altex",       logo: "/integrations/altex.webp", soon: true },
       { name: "Cel.ro",      logo: "/integrations/cel.ro.webp", soon: true },
       { name: "Okazii.ro",   logo: "/integrations/okazii.ro.svg", soon: true },
-      { name: "Pepita.com",  logo: "/integrations/pepita.svg", id: "pepita" },
       /* Doua care nu sunt marketplace-uri in sens strict, puse aici fiindca e
          cea mai apropiata rubrica si fiindca acolo le cauta un comerciant:
          Compari.ro e comparator de preturi (trimite trafic in magazinul TAU,
@@ -465,7 +469,24 @@ export default async function IntegrationsPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {section.integrations.map((integration) => {
+              {/*
+                ⚠ CE MERGE AZI, INTAI; „IN CURAND", LA FINAL — si sortat AICI, nu doar scris
+                asa in lista. Pepita a fost livrata pe 08.09.2026 si a ramas sub trei
+                integrari care nu exista inca: un comerciant care se uita peste rubrica se
+                opreste la primul „In curand" si crede ca de acolo incolo nu mai e nimic de
+                folosit. Scrisa doar in lista, regula se pierde la prima integrare adaugata
+                la coada.
+
+                ⚠ SE SORTEAZA DUPA `soon`, NU dupa `isUnlocked`. Lacatul si „In curand" spun
+                doua lucruri diferite: una exista si asteapta o conditie, cealalta nu exista.
+                Si `isUnlocked` atarna de intrerupatoare de mediu, deci ordinea ar fi sarit
+                de la o desfasurare la alta.
+
+                Sortarea e STABILA (ES2019), deci ordinea scrisa in fiecare grupa ramane.
+              */}
+              {[...section.integrations]
+                .sort((a, b) => (a.soon ? 1 : 0) - (b.soon ? 1 : 0))
+                .map((integration) => {
                 /* Decis INAINTE de lanturile de mai jos. Fara `id` ar cadea
                    oricum pe ramura fara link, dar ar iesi cu LACAT — vezi
                    comentariul de la `soon` in tipul `Integration`: lacatul si

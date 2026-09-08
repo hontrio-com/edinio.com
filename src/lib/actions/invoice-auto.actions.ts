@@ -170,14 +170,21 @@ export async function maybeAutoInvoice(
     /*
      * ═══ ⚠ PEPITA: COMUTATOR, STINS DIN START ═══
      *
-     * Documentatia publica Pepita nu spune cine emite factura catre clientul final, si nu
-     * exista niciun capat prin care sa i-o trimitem sau sa aflam ce a emis ea. Deci nu se
-     * poate rezolva prin cod: ori comerciantul stie din contractul lui ca el factureaza, ori
-     * nu.
+     * ⚠ CINE FACTUREAZA E LIMPEDE, SI TEXTUL DE AICI SPUNEA PE DOS. Statea scris ca
+     * „documentatia publica Pepita nu spune cine emite factura". Nu e asa: factura catre
+     * clientul final o emite PARTENERUL, adica magazinul, si tot pe baza facturii lui se face
+     * decontarea. Ridicat de auditul extern din 08.09.2026, si primit: copiile pe care le tinem
+     * in `docs/pepita/` acopera doar impingerea comenzilor si formatul XML, deci intrebarea nu
+     * se putea lamuri din ele — dar asta nu inseamna ca raspunsul nu exista.
      *
-     * ⚠ SI ATUNCI IMPLICITUL E „NU". O factura fiscala emisa degeaba nu se retrage, se
-     * STORNEAZA, iar doua documente pentru aceeasi marfa sunt mai greu de reparat decat unul
-     * lipsa. Aceeasi socoteala ca la Trendyol, si acolo scrie de ce.
+     * ⚠ SI ATUNCI COMUTATORUL NU MAI E DESPRE RESPONSABILITATE, CI DESPRE AUTOMATIZARE.
+     * Comerciantul factureaza oricum; aici alege doar daca s-o faca Edinio in locul lui, prin
+     * integrarea lui de facturare, sau el din SmartBill, din contabilitate, din alt ERP.
+     *
+     * ⚠ IMPLICITUL RAMANE „NU", si nu din nesiguranta. O factura fiscala emisa degeaba nu se
+     * retrage, se STORNEAZA, iar doua documente pentru aceeasi marfa sunt mai greu de reparat
+     * decat unul lipsa — si nu avem cum sa aflam de la Pepita ce document a mai iesit in alta
+     * parte. Aceeasi socoteala ca la Trendyol, si acolo scrie de ce.
      */
     const ePepita = src?.marketplace === "pepita";
     if (ePepita) {

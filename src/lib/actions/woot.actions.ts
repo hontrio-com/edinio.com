@@ -16,6 +16,7 @@ import {
   getAccountInfo, getCredit, getLocations, wootPhone,
   type WootConfig, type WootParcel, type WootPriceResult, type WootLocation,
 } from "@/lib/woot";
+import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
 
 /*
  * Clientul de sistem vine acum din `@/lib/supabase/admin`, nu se mai construieste
@@ -247,6 +248,11 @@ export async function createWootAwb(
   receiverLocationId?: number
 ): Promise<{ success: boolean; error?: string; awbNumber?: string; wootOrderId?: number }> {
   if (!(await checkAccess(businessId))) return { success: false, error: "Neautorizat" };
+
+  /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
+     colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
+  const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+  if (refuzAwb) return { success: false, error: refuzAwb };
 
   const config = await loadConfig(businessId);
   if (!config?.enabled || !config.public_key || !config.secret_key) {

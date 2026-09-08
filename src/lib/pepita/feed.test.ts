@@ -9,6 +9,7 @@ import { XMLValidator } from "fast-xml-parser";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { pregateste, scrieFeed } from "./feed";
+import { idArticol } from "./identitate";
 
 /* ══════════════════════════════════════════════════════════════════════════
    ⚠ ATOMICITATEA FEEDULUI, PROBATA PE STARI, NU PE TEXTUL CODULUI
@@ -54,6 +55,10 @@ interface Optiuni {
   config?: Record<string, unknown>;
   /** De la a cata pagina de produse cade citirea. `null` = niciodata. */
   cadeLaPagina?: number | null;
+  /** `<Id>`-urile trimise CANDVA, asa cum stau in `pepita_articole`. */
+  evidenta?: string[];
+  /** Citirea evidentei cade. Feedul de stoc NU are voie sa se rupa din asta. */
+  cadeCitireaEvidentei?: boolean;
 }
 
 /**
@@ -138,6 +143,16 @@ function faceBaza(o: Optiuni = {}) {
       return { data: felie(toate, (r) => r.product_id).map((r) => doar(r as unknown as Record<string, unknown>, coloane)), error: null };
     }
     if (tabela === "pepita_articole") {
+      /*
+       * ⚠ CITIRE SAU SCRIERE, dupa cum a venit un corp. Pietrele de mormant CITESC evidenta;
+       * feedul de produse o SCRIE. Amestecate, proba pietrelor ar fi trecut peste o citire care
+       * nu s-a facut niciodata.
+       */
+      if (corp === null) {
+        if (o.cadeCitireaEvidentei) return { data: null, error: { code: "57014", message: "citirea evidentei a cazut" } };
+        const toate = [...(o.evidenta ?? [])].sort().map((articol_id) => ({ articol_id }));
+        return { data: felie(toate, (r) => r.articol_id).map((r) => doar(r, coloane)), error: null };
+      }
       if (o.cadeEvidenta) return { data: null, error: { code: "42P01", message: "relation does not exist" } };
       /*
        * ⚠ TINTA CONFLICTULUI CHIAR SE VERIFICA. Tabela are unic pe (business_id, articol_id);
@@ -223,6 +238,107 @@ async function feed(db: SupabaseClient<Database>, fel: "produse" | "stoc" = "pro
   for await (const bucata of scrieFeed(db, BID, pre, fel)) out += bucata;
   return out;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PIETRELE DE MORMANT DIN FEEDUL DE STOC
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ CE REPARA. Feedurile noastre spun ce EXISTA, niciodata ce a disparut, iar Pepita pastreaza
+   ce nu mai primeste: un articol scos din feed ramane la ei cu ULTIMUL pret si ULTIMUL stoc, si
+   se vinde mai departe. Panoul stia sa NUMERE orfanii si scria negru pe alb ce se intampla — deci
+   stiam de problema si o aratam, fara sa facem nimic. Tiparul e cel mai urat cu putinta: nu se
+   vede in QA, se vede peste doua saptamani ca „am sters produsul si a mai intrat o comanda".
+
+   Formatul lor da chiar leacul: acelasi `<Id>`, cu `Available=false` si `Quantity=0`.
+*/
+
+const idMort = (n: number) => `MORT-${n}`;
+
+test("⚠ articolul trimis candva si care azi nu mai e in feed pleaca cu stoc ZERO", async () => {
+  const p = produs(1);
+  const viu = idArticol(p.id, null);
+  const db = faceBaza({
+    config: { mod_includere: "toate" },
+    produse: [p],
+    evidenta: [viu, idMort(1), idMort(2)],
+  });
+  const xml = await feed(db, "stoc");
+
+  assert.equal(XMLValidator.validate(xml), true, "feedul cu pietre trebuie sa ramana XML valid");
+  for (const mort of [idMort(1), idMort(2)]) {
+    const bucata = xml.slice(xml.indexOf(`<Id>${mort}</Id>`));
+    assert.ok(xml.includes(`<Id>${mort}</Id>`), `${mort} n-a fost ingropat`);
+    assert.match(bucata.slice(0, 200), /<Available>false<\/Available>/, mort);
+    assert.match(bucata.slice(0, 200), /<Quantity>0<\/Quantity>/, mort);
+  }
+});
+
+test("⚠ articolul VIU nu primeste piatra de mormant", async () => {
+  /*
+   * Greseala din partea cealalta nu e mai putin grava: un `Available=false` pe un articol care
+   * chiar se vinde il scoate din vanzare pana la trecerea urmatoare.
+   */
+  const p = produs(1);
+  const viu = idArticol(p.id, null);
+  const xml = await feed(faceBaza({ config: { mod_includere: "toate" }, produse: [p], evidenta: [viu] }), "stoc");
+
+  assert.equal((xml.match(/<Product>/g) ?? []).length, 1, "articolul viu a primit si o piatra");
+  assert.match(xml, /<Available>true<\/Available>/);
+});
+
+test("⚠ feedul de PRODUSE nu ingroapa pe nimeni", async () => {
+  /*
+   * Acolo `<Availability>` face parte din descrierea produsului, nu e un semnal de scoatere din
+   * vanzare, iar feedul de produse se citeste o data pe zi. Locul pietrelor e in cel de stoc,
+   * citit din ora in ora.
+   */
+  const xml = await feed(faceBaza({ config: { mod_includere: "toate" }, produse: [produs(1)], evidenta: [idMort(1)] }));
+  assert.equal(xml.includes(idMort(1)), false);
+});
+
+test("⚠ o trecere INTRERUPTA nu ingroapa nimic: altfel ar scoate din vanzare jumatate de magazin", async () => {
+  /*
+   * ⚠ ASTA E PAZA CEA MAI IMPORTANTA DE AICI. Daca plimbarea prin catalog cade la jumatate,
+   * multimea „ce a plecat azi" e incompleta, si tot ce n-a apucat sa treaca ar parea orfan.
+   * Ingropate, ar fi zeci de mii de articole vii puse pe zero dintr-o pana de retea.
+   *
+   * Paza nu e un steag, e forma codului: orice citire cazuta ARUNCA, deci generatorul moare
+   * inainte de partea cu pietrele. Proba cere si ca XML-ul sa ramana NEINCHIS, adica invalid,
+   * adica respins intreg de Pepita.
+   */
+  const db = faceBaza({
+    config: { mod_includere: "toate" },
+    produse: Array.from({ length: 3 }, (_, i) => produs(i + 1)),
+    evidenta: [idMort(1)],
+    cadeLaPagina: 1,
+  });
+  const pre = await pregateste(db, BID);
+  assert.ok(pre);
+  let out = "";
+  await assert.rejects(async () => {
+    for await (const bucata of scrieFeed(db, BID, pre, "stoc")) out += bucata;
+  });
+  assert.equal(out.includes(idMort(1)), false, "s-a ingropat pe o trecere incompleta");
+  assert.equal(out.includes("</Catalog>"), false, "feedul rupt a iesit totusi valid");
+});
+
+test("⚠ o citire cazuta a EVIDENTEI nu rupe feedul de stoc", async () => {
+  /*
+   * Aici suntem DUPA tot catalogul. O exceptie ar lasa `</Catalog>` nescris si Pepita ar respinge
+   * un feed care era bun pentru tot restul magazinului. Alegerea e intre „orfanii mai stau o ora
+   * pe stocul vechi" si „nimeni nu primeste stocul de azi".
+   */
+  const xml = await feed(faceBaza({
+    config: { mod_includere: "toate" },
+    produse: [produs(1)],
+    evidenta: [idMort(1)],
+    cadeCitireaEvidentei: true,
+  }), "stoc");
+
+  assert.equal(XMLValidator.validate(xml), true);
+  assert.ok(xml.includes("</Catalog>"), "feedul s-a rupt dintr-o citire de evidenta");
+  assert.equal(xml.includes(idMort(1)), false);
+});
 
 test("feedul intreg e XML valid si contine produsele incluse", async () => {
   const xml = await feed(faceBaza({ config: { mod_includere: "toate" } }));

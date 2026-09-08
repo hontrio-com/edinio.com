@@ -40,8 +40,26 @@ const FARA_INCASARE = new Set(["paid", "refunded"]);
  *
  * ⚠ Lipsa cheii inseamna „nu stim, deci se poarta ca pana acum". Comenzile din
  * magazin si cele ale marketplace-urilor care nu o scriu raman neatinse.
+ *
+ * ═══ ⚠ NUMELE VECHI SPUNEA MAI MULT DECAT E ADEVARAT ═══
+ *
+ * Functia s-a chemat `baniiIiIaMarketplaceul`, iar cheia din baza se cheama si azi
+ * `incaseaza_marketplace`. La ramburs dus de GLS-ul Pepitei asa si e: banii ii ia chiar
+ * marketplace-ul si vin in decontarea lui. Dar cheia e ADEVARATA si la transfer si la card, unde
+ * Pepita NU incaseaza nimic: banii merg direct la comerciant, prin banca sau prin procesator.
+ *
+ * Ce spune ea cu adevarat, in toate cazurile, e mai putin si mai exact: LA USA NU SE INCASEAZA
+ * NIMIC. De-aia functia se cheama acum asa.
+ *
+ * ⚠ CHEIA DIN BAZA RAMANE `incaseaza_marketplace`, si nu din lene: ea e scrisa in `order_source`
+ * pe fiecare comanda Pepita deja intrata. Redenumita, ar fi trebuit citita in doua feluri pentru
+ * totdeauna, adica exact felul de „curatenie" care lasa in urma un al doilea drum pe care il uita
+ * cineva. Numele care se citeste zilnic e cel din cod; cel din date e o eticheta istorica.
+ *
+ * ⚠ SI DE-AIA NU SE FOLOSESTE CA „marketplace-ul are banii". Urmatorul marketplace care
+ * refoloseste helperul trebuie sa se intrebe „se incaseaza ceva la usa?", nu „cine tine banii?".
  */
-export function baniiIiIaMarketplaceul(orderSource: unknown): boolean {
+export function nuSeIncaseazaLaUsa(orderSource: unknown): boolean {
   return (orderSource as { incaseaza_marketplace?: unknown } | null)?.incaseaza_marketplace === true;
 }
 
@@ -93,13 +111,14 @@ export function rambursDeIncasat(o: ComandaCuRamburs): number {
    */
   if (o.payment_status && FARA_INCASARE.has(o.payment_status)) return 0;
   /*
-   * ⚠ SI CAND BANII AJUNG LA MARKETPLACE, oricare ar fi starea platii.
+   * ⚠ SI CAND LA USA NU E NIMIC DE INCASAT, oricare ar fi starea platii.
    *
-   * O comanda Pepita Delivery cu ramburs e „neplatita" pana cand clientul plateste la
-   * usa, dar plateste curierului LOR, iar decontarea vine de la ei. Precompletat aici,
-   * totalul ar fi fost cerut a doua oara de curierul comerciantului.
+   * Doua situatii, cu acelasi raspuns. La Pepita Delivery cu ramburs comanda e „neplatita" pana
+   * cand clientul plateste la usa — dar plateste curierului LOR, iar decontarea vine de la ei;
+   * precompletat aici, totalul ar fi fost cerut a doua oara de curierul comerciantului. La
+   * transfer si la card nu incaseaza nimeni la usa: banii vin inainte, direct la comerciant.
    */
-  if (baniiIiIaMarketplaceul(o.order_source)) return 0;
+  if (nuSeIncaseazaLaUsa(o.order_source)) return 0;
   /*
    * ⚠ SI CAND CIFRA NU E IN LEI. `orders.total` e citit ca lei peste tot; precompletat pe o
    * comanda in HUF, ar fi trecut cifra ungureasca in campul de ramburs al AWB-ului, si curierul

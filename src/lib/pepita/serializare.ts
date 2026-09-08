@@ -87,6 +87,30 @@ export function stocXml(a: ArticolPepita): string {
   return grup("Product", el("Id", a.id) + disponibilitateXml(a, false)) + "\n";
 }
 
+/**
+ * `<Product>` pentru un articol care NU MAI EXISTA la noi: piatra lui de mormant.
+ *
+ * ═══ ⚠ DE CE E NEVOIE DE ASA CEVA ═══
+ *
+ * Feedurile noastre spun ce EXISTA, niciodata ce a disparut. Pepita citeste ce ii dam si
+ * pastreaza restul: un articol scos din feed nu se sterge la ei, ramane la vanzare cu ULTIMUL
+ * pret si ULTIMUL stoc trimise. Deci un produs sters, dezactivat, scos din listare sau o
+ * combinatie disparuta continua sa se vanda cu „mai am 5 bucati" — si comanda chiar vine.
+ *
+ * Nu exista niciun API prin care sa cerem stergerea. Singura cale pe care ne-o da formatul lor
+ * e chiar asta: acelasi `<Id>`, cu `Available=false` si `Quantity=0`. Nu sterge oferta, dar o
+ * scoate din vanzare, si asta opreste supravanzarea.
+ *
+ * ⚠ ZEROUL SE SCRIE, nu se lasa pe dinafara. `null` ar insemna „nu tinem evidenta bucatilor",
+ * adica exact pe dos. Vezi nota de la `disponibilitateXml`.
+ */
+export function stocDisparutXml(articolId: string): string {
+  return grup(
+    "Product",
+    el("Id", articolId) + grup("Availability", el("Available", "false") + el("Quantity", 0)),
+  ) + "\n";
+}
+
 function disponibilitateXml(a: ArticolPepita, cuTermen = true): string {
   return grup("Availability", [
     el("Available", a.disponibil ? "true" : "false"),

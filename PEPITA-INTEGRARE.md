@@ -96,6 +96,18 @@ trimis `<Id>`-ul asta, produsul din spatele lui nu mai exista". De aici vin doua
   cod necunoscut cauti greseala in potrivire, aici nu mai e nimic de potrivit si singurul lucru de
   facut e sa ceri Pepitei scoaterea articolului.
 
+⚠ **Si articolele orfane pleaca acum cu stoc ZERO.** Feedul de stoc, dupa ce a trecut prin tot
+catalogul, mai scrie cate un `<Product>` cu `Available=false` si `Quantity=0` pentru fiecare `<Id>`
+trimis candva si care azi nu mai e in feed. Nu sterge oferta la ei — n-avem cum — dar o scoate din
+vanzare, si asta opreste supravanzarea.
+
+⚠ **Paza care conteaza acolo nu e un steag, e forma codului.** Pietrele se scriu doar dupa ce
+plimbarea prin catalog s-a terminat de la sine; orice citire cazuta ARUNCA, deci fluxul moare
+inainte sa se ajunga la ele. Altfel un feed taiat la jumatate ar fi declarat orfan tot ce n-a
+apucat sa treaca — adica ar fi scos din vanzare jumatate de magazin, in tacere. Iar o citire cazuta
+a EVIDENTEI nu rupe feedul: orfanii mai stau o ora pe stocul vechi, restul magazinului isi
+primeste stocul de azi.
+
 Vezi `migrations/2027-01-01-pepita-articolul-ramane-orfan.sql`.
 
 ### Cum se socoteste `<LastMod>`
@@ -260,16 +272,39 @@ deci o adresa incompleta nu opreste nimic si nu produce carantina.
 ⚠ **Stocul se scade oricum**, si pentru comenzile in carantina: marfa e vanduta la ei, iar nescazuta
 se supravinde pe celelalte cinci canale.
 
-### AWB-ul propriu si Pepita Delivery
+### Cand NU se poate emite AWB propriu
 
-La `gls*` coletul e dus de GLS-ul contractat de EI, cu eticheta lor. Un AWB emis de comerciant
-inseamna doua etichete pe acelasi pachet si un al doilea transport platit.
+Regula sta intr-un singur loc, `src/lib/orders/awb-propriu.ts`, si e chemata de amandoua
+straturile: ecranul comenzii ca sa nu arate un buton care oricum ar fi refuzat, si
+`src/lib/orders/poarta-awb.ts` in **fiecare** actiune de emitere, ca sa refuze cu adevarat.
+Actiunile de curier sunt „use server", adica adrese publice: se pot chema din doua file deschise,
+dintr-un dublu-click sau direct. Ecranul poate doar sa taca; refuzul trebuie sa fie unde se emite.
 
-- rambursul e aparat de mult: `rambursDeIncasat` intoarce zero pe comenzile astea;
-- **generarea in MASA de AWB le SARE**, si spune care si de ce. Acolo nu exista niciun camp de
-  corectat si nimeni nu se uita la fiecare rand;
-- pe o comanda deschisa de om, emiterea ramane cu putinta, dinadins: daca eticheta lor n-a venit,
-  comerciantul trebuie sa poata expedia. Nota de pe comanda ii spune ce se intampla.
+**1. Livrarea e a lor.** La `gls*` coletul pleaca prin GLS-ul contractat de ei, cu eticheta lor.
+Un AWB propriu inseamna a doua eticheta pe acelasi pachet, un al doilea transport platit, si un
+client care poate fi taxat de doua ori.
+
+⚠ **Aici a fost o portita, si a fost scoasa pe 08.09.2026.** Textul de mai jos spunea ca „pe o
+comanda deschisa de om, emiterea ramane cu putinta, dinadins: daca eticheta lor n-a venit,
+comerciantul trebuie sa poata expedia". Argumentul suna bine si e gresit: leacul unei etichete
+care nu vine e la Pepita, nu la al doilea curier. Rambursul era aparat de mult
+(`rambursDeIncasat` intoarce zero), generarea in MASA sarea peste randurile astea — dar butonul de
+pe pagina comenzii se putea apasa, si nicio actiune de server nu verifica nimic.
+
+**2. Banii n-au venit inca.** La `transfer` si `creditcard` plata e in avans si nu trece prin
+curier, deci rambursul e zero: un AWB emis inainte de confirmare trimite marfa fara niciun ban si
+fara nicio incasare la usa. ⚠ **Si nu e un zid**: comerciantul se uita in extras, marcheaza comanda
+ca platita, si poarta se ridica. Verificarea devine un gest anume, nu ceva sarit din graba.
+
+⚠ Legat de asta, `starePlata` s-a inasprit: **numai un `paid` spus de EI inseamna platit.** Pana
+atunci o stare lipsa sau necunoscuta cadea pe modul de plata, si `creditcard` insemna „platit" —
+desi o plata cu cardul poate fi inca nefinalizata cand ne impinge comanda. Asimetria de cost care
+tinea regula veche a disparut: pe comenzile Pepita rambursul e zero oricum, deci un „neplatit" pus
+gresit nu mai precompleteaza nimic.
+
+⚠ Ce NU intra in poarta: `cod` dus de curierul comerciantului (acolo „neplatit" e starea normala,
+curierul chiar incaseaza), returul Sameday (coletul vine inapoi, nu se dubleaza nimic), si
+comenzile care nu sunt Pepita.
 
 **„Reprocesează"** (panou, langa fiecare comanda cu probleme) leaga din nou liniile, completeaza
 `orders.items`, duce stocul la capat si recalculeaza motivele. Aceeasi socoteala o foloseste si
@@ -287,9 +322,17 @@ sarcina utila e nevalida (400).
 
 ## Facturarea
 
-Comutator in setari, **stins din start**. Documentatia publica Pepita nu spune cine emite factura
-catre clientul final, si nu exista nicio cale prin care sa i-o trimitem sau sa aflam ce a emis ea. O
-factura emisa degeaba nu se retrage, se storneaza. Aceeasi socoteala ca la Trendyol.
+**Factura catre clientul final o emite PARTENERUL**, adica magazinul, si tot pe baza facturii lui
+se face decontarea. Textul de aici spunea pana pe 08.09.2026 ca „documentatia publica Pepita nu
+spune cine emite factura" — nu e asa, si a fost indreptat dupa auditul extern. ⚠ Copiile pastrate in
+`docs/pepita/` acopera doar impingerea comenzilor si formatul XML, deci intrebarea nu se putea
+lamuri din ele; cand se descarca termenii lor comerciali, se pun tot acolo.
+
+Comutatorul din setari e deci despre **automatizare**, nu despre responsabilitate: comerciantul
+factureaza oricum, iar aici alege doar daca s-o faca Edinio in locul lui, prin integrarea lui de
+facturare. ⚠ Ramane **stins din start**, fiindca o factura emisa degeaba nu se retrage, se
+storneaza, iar Pepita nu ne poate spune ce document a mai iesit in alta parte. Aceeasi socoteala ca
+la Trendyol.
 
 ⚠ **TVA-ul ramane pe fiecare linie**, in `orders.items[].vat_rate`. `orders.vat_rate` nu mai e
 `max(cote)` — care gresea in aceeasi directie pe fiecare linie, deci o comanda cu hrana la 11% si o
@@ -383,16 +426,17 @@ Lista de intrebari deschise, in ordinea in care conteaza:
    `select rezumat from pepita_comenzi where external_order_id = '<id>'` pastreaza `sku`-ul primit.*
 2. **Ce se intampla cu un articol al carui `<Id>` nu mai apare intr-o citire ulterioara a
    feedului?** Ramane publicat cu ultimele date, sau il scoateti de la vanzare, si dupa cate zile?
-   De raspuns atarna cat de grav e un articol orfan lasat dupa o redenumire de varianta.
+   ⚠ De raspunsul asta nu mai atarna nimic grav: din 08.09.2026 feedul de stoc trimite pentru
+   fiecare articol disparut `Available=false` si `Quantity=0`, deci oferta se scoate din vanzare
+   oricare ar fi purtarea lor implicita. Intrebarea ramane, ca sa stim daca mai si dispare.
 3. **Trimitem fiecare varianta ca `<Product>` de sine statator, cu `<Id>` propriu, dar cu
    `<ProductNumber>` (MPN) IDENTIC pe toate variantele aceluiasi produs. Dedupleaza sistemul
    vostru dupa `<ProductNumber>`?** Daca da, variantele s-ar putea contopi la ei.
-4. **Cine emite factura catre clientul final** pe piata din Romania?
-5. **Lista de `delivery_mod` pentru Romania.** Cea publicata (`shipping`, `gls`, `gls_parcelshop`,
+4. **Lista de `delivery_mod` pentru Romania.** Cea publicata (`shipping`, `gls`, `gls_parcelshop`,
    `mpl`) e a pietei ungare.
-6. **`ShippingDelay`**: zile lucratoare, confirmat in documentatie. Se cere confirmarea ca se
+5. **`ShippingDelay`**: zile lucratoare, confirmat in documentatie. Se cere confirmarea ca se
    masoara de la primirea comenzii.
-7. **Blocurile repetate din exemplul lor de XML** (`<Prices>...</Prices><Prices>...</Prices>`) sunt
+6. **Blocurile repetate din exemplul lor de XML** (`<Prices>...</Prices><Prices>...</Prices>`) sunt
    marcaje de colapsare ale paginii lor sau chiar mai multe blocuri, pentru mai multe monede? Noi
    trimitem cate unul singur, ceea ce e sigur in orice caz.
 

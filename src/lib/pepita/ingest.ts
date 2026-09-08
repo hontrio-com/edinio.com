@@ -815,16 +815,27 @@ function noteInterne(
         ? "Rambursul îl încasează Pepita și îți vine în decontarea lor, deci NU pune ramburs pe niciun AWB propriu."
         : "Nu ai ce încasa la livrare."),
     );
-  } else if (c.modPlata === "transfer") {
+  } else if (c.modPlata === "transfer" || c.modPlata === "creditcard") {
     /*
-     * ⚠ „TRANSFER" NU INSEAMNA „PLATIT". Nota spunea neconditionat „nu se incaseaza nimic la
-     * livrare", iar pe o comanda cu transferul NEFACUT asta trimitea marfa fara niciun ban:
-     * banii nu-i are nici Pepita („Transferul nu ajunge la Pepita, ci direct la voi"), nici
+     * ⚠ „TRANSFER" SI „CARD" NU INSEAMNA „PLATIT". Nota spunea neconditionat „nu se incaseaza
+     * nimic la livrare", iar pe o comanda cu transferul NEFACUT asta trimitea marfa fara niciun
+     * ban: banii nu-i are nici Pepita („Transferul nu ajunge la Pepita, ci direct la voi"), nici
      * curierul n-are ce cere.
+     *
+     * ⚠ SI DE AICI S-A SCOS „altfel lasă rambursul pe AWB". Era un indemn sa transformi cu mana
+     * o plata bancara aleasa de client in plata la livrare: clientul care alesese banca s-ar fi
+     * trezit cu curierul cerandu-i numerar, o metoda pe care n-o alesese. Metoda de plata aleasa
+     * la ei NU se schimba de noi. Ce lipseste se SPUNE, si atat.
+     *
+     * ⚠ Cardul a intrat si el in ramura asta: e tot o plata in avans, si tot poate fi
+     * nefinalizata cand ne impinge comanda.
      */
+    const cum = c.modPlata === "transfer" ? "prin transfer" : "cu cardul";
     randuri.push(starePlata(c.starePlata, c.modPlata) === "paid"
-      ? "Plata prin transfer a ajuns direct la tine, în avans. Nu se încasează nimic la livrare."
-      : "⚠ Plata prin transfer NU a fost confirmată. Verifică în extras dacă banii au intrat; altfel lasă rambursul pe AWB sau nu expedia.");
+      ? `Plata ${cum} a ajuns direct la tine, în avans. Nu se încasează nimic la livrare.`
+      : `⚠ Plata ${cum} NU e confirmată de Pepita, iar la livrare nu se încasează nimic. `
+        + "Verifică încasarea înainte de expediere. Cât timp comanda nu e marcată ca plătită, "
+        + "AWB-ul propriu e blocat.");
   }
   if (c.mesajCurier) randuri.push(`Mesaj pentru curier: ${c.mesajCurier}`);
   if (c.client.codFiscal) randuri.push(`Cod fiscal cumpărător: ${c.client.codFiscal} (neverificat la ANAF).`);

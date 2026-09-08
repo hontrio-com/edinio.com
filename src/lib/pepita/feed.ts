@@ -8,7 +8,7 @@ import { logError } from "@/lib/error-logger";
 import { articolelePentruProdus, type ContextArticole, type ProdusPepita } from "./articole";
 import { caleaCategoriilor, type RandCategorie } from "./categorii";
 import { citesteConfig } from "./config";
-import { produsXml, stocXml } from "./serializare";
+import { produsXml, stocDisparutXml, stocXml } from "./serializare";
 import { ANTET, INCHEIERE } from "./xml";
 import type { PepitaConfig } from "./types";
 
@@ -282,6 +282,16 @@ export async function* scrieFeed(
   const trimise: ArticolTrimis[] = [];
 
   /*
+   * ⚠ TOATE `<Id>`-urile plecate in trecerea ASTA, si numai pentru feedul de stoc.
+   *
+   * De ele atarna pietrele de mormant de la sfarsit: ce e in evidenta si nu e aici a disparut
+   * din catalog. Se tine un `Set` de siruri — la un catalog de douazeci si cinci de mii de
+   * articole inseamna in jur de doi megaocteti, iar alternativa (o a doua trecere prin catalog)
+   * ar fi costat inca o data toata munca.
+   */
+  const plecateAzi = new Set<string>();
+
+  /*
    * ⚠ PLIMBARE PE CHEIE, nu pe offset. `products.id` e uuid aleator, iar `.range()` numara
    * randurile DUPA ordonare: un import care ruleaza in acelasi timp si insereaza un produs cu
    * id mai mic muta fereastra si SARE un produs. Aici asta inseamna un produs care lipseste din
@@ -336,6 +346,7 @@ export async function* scrieFeed(
           /* ⚠ Perechea (produs, combinatie) se tine minte pentru drumul INAPOI: vezi
              `tineMinteArticolele`. `a.id` e chiar ce pleaca in `<Id>`. */
           if (fel === "produse") trimise.push({ productId: p.id, combinatie: a.combinatie, articolId: a.id });
+          else plecateAzi.add(a.id);
           yield fel === "produse" ? produsXml(a) : stocXml(a);
         }
       }
@@ -346,7 +357,95 @@ export async function* scrieFeed(
     if (produse.length < PAGINA) break;
   }
 
+  /*
+   * ⚠ ABIA AICI, SI TOCMAI DE-AIA E AICI.
+   *
+   * Randul asta se atinge NUMAI dupa ce plimbarea prin catalog s-a terminat de la sine. Orice
+   * citire cazuta de mai sus ARUNCA, deci generatorul moare si nu se ajunge niciodata pana
+   * jos. Asta e chiar paza pe care o cere intrebarea „dar daca trecerea a fost incompleta?":
+   * nu e un steag pe care sa-l uite cineva, e forma codului.
+   *
+   * Fara ea, un feed taiat la jumatate ar fi declarat orfan tot ce n-a apucat sa treaca —
+   * adica ar fi scos din vanzare jumatate de magazin, cu Available=false, in tacere.
+   */
+  if (fel === "stoc") yield* pietreDeMormant(admin, businessId, plecateAzi);
+
   yield INCHEIERE;
+}
+
+/** Cate pagini de evidenta se plimba cel mult intr-o trecere. 100 × 1000 = 100.000 de articole. */
+const PAGINI_EVIDENTA = 100;
+
+/**
+ * `Available=false, Quantity=0` pentru fiecare `<Id>` trimis candva si care azi nu mai e in feed.
+ *
+ * ═══ ⚠ CE REPARA ═══
+ *
+ * Panoul stia deja sa NUMERE articolele ramase la ei si scria negru pe alb ca „pastreaza ultimul
+ * pret si ultimul stoc trimise si se pot vinde in continuare". Adica stiam de problema si o
+ * aratam, dar nu faceam nimic in privinta ei: un produs sters la noi ramanea la Pepita cu „mai
+ * am 5 bucati", si comanda venea. Tiparul e cel mai urat cu putinta — nu se vede in QA, se vede
+ * peste doua saptamani ca „am sters produsul si a mai intrat o comanda".
+ *
+ * ═══ ⚠ CE NU FACE, SI DE CE ═══
+ *
+ * NU sterge randul din `pepita_articole`. Articolul ramane la ei chiar si dupa ce l-am pus pe
+ * zero, deci evidenta lui e in continuare singura dovada ca a plecat vreodata — si tot de ea
+ * atarna legarea unei comenzi intarziate de produsul ei.
+ *
+ * ⚠ SI NU ARUNCA. Aici suntem DUPA tot catalogul: o citire cazuta ar rupe fluxul, `</Catalog>`
+ * n-ar mai fi scris, si Pepita ar respinge un feed care era bun pentru TOT restul magazinului.
+ * Alegerea e intre „orfanii mai stau o ora pe stocul vechi" si „nimeni nu primeste stocul de
+ * azi". Prima e mai ieftina, si se repara singura la trecerea urmatoare.
+ */
+async function* pietreDeMormant(
+  admin: Db, businessId: string, plecateAzi: Set<string>,
+): AsyncGenerator<string> {
+  let dupaArticol: string | null = null;
+  let ingropate = 0;
+
+  try {
+    for (let pagina = 0; pagina < PAGINI_EVIDENTA; pagina++) {
+      let q = admin
+        .from("pepita_articole").select("articol_id")
+        .eq("business_id", businessId).order("articol_id").limit(1000);
+      if (dupaArticol) q = q.gt("articol_id", dupaArticol);
+      const { data, error } = await q;
+      if (error) throw error;
+
+      const randuri = (data ?? []) as { articol_id: string }[];
+      if (randuri.length === 0) return;
+
+      /* ⚠ Cursorul care nu inainteaza opreste plimbarea; altfel n-ar mai avea capat. */
+      const ultimul = randuri[randuri.length - 1].articol_id;
+      if (ultimul === dupaArticol) return;
+      dupaArticol = ultimul;
+
+      for (const r of randuri) {
+        if (plecateAzi.has(r.articol_id)) continue;
+        ingropate++;
+        yield stocDisparutXml(r.articol_id);
+      }
+
+      if (randuri.length < 1000) return;
+    }
+
+    /*
+     * ⚠ PLAFONUL SE SPUNE. Taiat in tacere, ar fi insemnat ca de la al o sutalea mia de articol
+     * incolo supravanzarea ramane deschisa si nimeni nu stie de ce.
+     */
+    await logError({
+      action: "pepita/pietre-de-mormant",
+      message: `evidenta articolelor depaseste ${PAGINI_EVIDENTA * 1000} de randuri; restul nu s-a putut marca indisponibil in trecerea asta`,
+      details: { ingropate }, businessId, severity: "warning",
+    });
+  } catch (e) {
+    await logError({
+      action: "pepita/pietre-de-mormant",
+      message: `articolele disparute nu s-au putut marca indisponibile: ${e instanceof Error ? e.message : String(e)}`,
+      details: { ingropate }, businessId, severity: "warning",
+    });
+  }
 }
 
 /**

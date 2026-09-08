@@ -79,9 +79,21 @@ test("starea de plata se citeste de la ei cand o trimit", () => {
   assert.equal(starePlata("unpaid", "cod"), "unpaid");
 });
 
-test("⚠ starea lipsa se deduce din modul de plata, cu documentatia lor drept martor", () => {
-  /* „paid: this status is normally assigned to payment by credit card". */
-  assert.equal(starePlata(null, "creditcard"), "paid");
+test("⚠ tot ce nu e un «paid» spus de EI inseamna neplatit, cardul inclusiv", () => {
+  /*
+   * ⚠ REGULA S-A RASTURNAT PE 08.09.2026, si proba veche apara chiar defectul.
+   *
+   * Ea cerea `starePlata(null, "creditcard") === "paid"`, pe temeiul ca documentatia lor
+   * spune ca `paid` „se atribuie de obicei platilor cu cardul". „De obicei" nu e o
+   * confirmare, e o statistica — iar o plata cu cardul poate fi inca NEFINALIZATA cand ne
+   * impinge comanda.
+   *
+   * Asimetria de cost care tinea regula veche a disparut: pe comenzile Pepita rambursul e
+   * zero oricum, deci un „neplatit" pus gresit nu mai precompleteaza nimic. A ramas doar
+   * greseala care costa marfa.
+   */
+  assert.equal(starePlata(null, "creditcard"), "unpaid", "cardul nefinalizat trecea drept platit");
+  assert.equal(starePlata("ceva-nou", "creditcard"), "unpaid");
   assert.equal(starePlata(null, "cod"), "unpaid");
   assert.equal(starePlata(null, "transfer"), "unpaid");
   assert.equal(starePlata("ceva-nou", "cod"), "unpaid");

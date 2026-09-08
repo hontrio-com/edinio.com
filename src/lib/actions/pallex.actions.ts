@@ -40,6 +40,7 @@ import { clasificaStatus, EXPLICATIE_CLASIFICARE, trebuieSemnalat } from "@/lib/
 import { cheieDocument } from "@/lib/pallex/documente";
 import { deleteFromR2 } from "@/lib/r2";
 import type { Json } from "@/types/database.types";
+import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
 
 /**
  * Actiunile Pall-Ex (ClientPlus).
@@ -261,6 +262,12 @@ export async function createPallexAwbAction(
 > {
   const ctx = await configSiComanda(businessId, orderId);
   if ("error" in ctx) return { error: ctx.error as string };
+
+  /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
+     colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
+  const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+  if (refuzAwb) return { error: refuzAwb };
+
   const { supabase, config, order, firma } = ctx;
 
   const comanda = order as typeof order & ComandaPallex;

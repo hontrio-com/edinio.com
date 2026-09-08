@@ -336,6 +336,14 @@ export const INTEGRARI: Integrare[] = [
     stare: "activa",
     descriere: "Cel mai mare marketplace din România, cu produsele și stocul din magazinul tău.",
   },
+  /* ⚠ CE MERGE AZI STA INAINTEA LUI „In curând", in fiecare rubrica. Vezi nota din panou si
+     `ordinea-integrarilor.test.ts`, care cade daca o integrare livrata ramane sub una anuntata. */
+  {
+    cheie: "pepita",
+    categorie: "marketplace",
+    stare: "activa",
+    descriere: "Marketplace românesc, cu produsele tale listate automat.",
+  },
   {
     cheie: "altex",
     categorie: "marketplace",
@@ -353,12 +361,6 @@ export const INTEGRARI: Integrare[] = [
     categorie: "marketplace",
     stare: "in-curand",
     descriere: "Marketplace românesc generalist, cu vânzare la preț fix sau prin licitație.",
-  },
-  {
-    cheie: "pepita",
-    categorie: "marketplace",
-    stare: "activa",
-    descriere: "Marketplace românesc, cu produsele tale listate automat.",
   },
   {
     cheie: "compari",

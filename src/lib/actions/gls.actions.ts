@@ -34,6 +34,7 @@ import { codPostalOras } from "@/lib/gls/puncte";
 import { cheiEticheta, cheieEticheta } from "@/lib/gls/eticheta";
 import { deleteFromR2, uploadToR2 } from "@/lib/r2";
 import type { Json } from "@/types/database.types";
+import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
 
 /**
  * Actiunile GLS (MyGLS).
@@ -196,6 +197,12 @@ export async function createGlsAwbAction(
 ): Promise<{ awb: string; etichetaBase64: string | null } | { error: string }> {
   const ctx = await configSiComanda(businessId, orderId);
   if ("error" in ctx) return { error: ctx.error as string };
+
+  /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
+     colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
+  const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+  if (refuzAwb) return { error: refuzAwb };
+
   const { supabase, config, order, firma } = ctx;
 
   const comanda = order as typeof order & { gls_awb_number?: string | null };

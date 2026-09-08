@@ -19,6 +19,7 @@ import { euCountryByIso2 } from "@/lib/eu-countries";
 import { logError } from "@/lib/error-logger";
 import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
 import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
+import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
 
 // ─── Config actions ───────────────────────────────────────────────────────────
 
@@ -126,6 +127,12 @@ export async function createDpdShipmentAction(
 ): Promise<{ shipmentId: number; barcode: string } | { error: string }> {
   const ctx = await getConfigAndOrder(businessId, orderId);
   if ("error" in ctx) return { error: ctx.error as string };
+
+  /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
+     colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
+  const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+  if (refuzAwb) return { error: refuzAwb };
+
   const { supabase, config, order } = ctx;
 
   const orderData = order as typeof order & {

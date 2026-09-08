@@ -106,24 +106,32 @@ export function metodaPlata(modPepita: string | null, modLivrare: string | null)
 /**
  * Starea platii, in valorile pe care le primeste `orders_payment_status_check`.
  *
- * ⚠ CELE DOUA GRESELI POSIBILE NU COSTA LA FEL, si de-aia regula nu e simetrica:
+ * ⚠ NUMAI UN „paid” SPUS DE EI INSEAMNA PLATIT. Orice altceva — „unpaid”, o valoare
+ * pe care n-o cunoastem, sau lipsa campului — inseamna „inca nu stim”, si „inca nu
+ * stim” se poarta ca „nu”.
  *
- *   „platit” pus gresit pe o comanda neplatita: curierul livreaza si nu incaseaza.
- *   Banii se pierd, si se afla abia la inchiderea lunii.
+ * ═══ ⚠ AICI ERA ALTA REGULA, SI DE CE S-A RASTURNAT (08.09.2026) ═══
  *
- *   „neplatit” pus gresit pe o comanda platita: `rambursDeIncasat` pune totalul in
- *   AWB, iar comerciantul il sterge inainte sa emita. Suma e editabila peste tot,
- *   dinadins.
+ * Pana azi, o stare lipsa sau necunoscuta cadea pe modul de plata: `creditcard`
+ * insemna „platit”. Argumentul era o asimetrie de cost — un „neplatit” pus gresit
+ * umplea rambursul din AWB si-l punea pe comerciant sa-l stearga cu mana.
  *
- * ⚠ DAR NU SE CADE ORBESTE PE „neplatit”. Documentatia lor spune despre `paid`:
- * „this status is normally assigned to payment by credit card”. Deci, cand starea
- * lipseste sau vine cu o valoare pe care n-o cunoastem, modul de plata e martorul
- * urmator: cardul inseamna platit, restul nu.
+ * Asimetria aia NU MAI EXISTA. Pe comenzile Pepita `payment_method` e „pepita”, deci
+ * `rambursDeIncasat` intoarce zero oricum: un „neplatit” pus gresit nu mai precompleteaza
+ * nimic. A ramas doar cealalta greseala, care costa marfa: un „platit” pus pe o plata
+ * nefinalizata trimite coletul fara niciun ban, si se afla la inchiderea lunii.
+ *
+ * ⚠ Si cardul e chiar cazul cu pricina: o plata cu cardul poate fi inca NEFINALIZATA
+ * cand ne impinge comanda. Documentatia lor spune ca `paid` „se atribuie de obicei
+ * platilor cu cardul” — „de obicei” nu e o confirmare, e o statistica.
+ *
+ * ⚠ SI NU BLOCHEAZA PE NIMENI. Din 08.09.2026 o comanda Pepita cu plata in avans
+ * neconfirmata nu poate primi AWB propriu (`poarta-awb.ts`), dar comerciantul se uita in
+ * extras, marcheaza comanda ca platita, si poarta se ridica. Verificarea devine un gest
+ * anume, nu ceva sarit din graba.
  */
-export function starePlata(starePepita: string | null, modPepita: string | null): "paid" | "unpaid" {
-  if (starePepita === STARI_PLATA_PEPITA.paid) return "paid";
-  if (starePepita === STARI_PLATA_PEPITA.unpaid) return "unpaid";
-  return modPepita === PLATI_PEPITA.creditcard ? "paid" : "unpaid";
+export function starePlata(starePepita: string | null, _modPepita: string | null): "paid" | "unpaid" {
+  return starePepita === STARI_PLATA_PEPITA.paid ? "paid" : "unpaid";
 }
 
 /** Modul de plata e unul dintre cele documentate? Ce nu e, ajunge in fata comerciantului. */

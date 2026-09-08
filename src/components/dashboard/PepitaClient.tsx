@@ -453,9 +453,14 @@ function Setari({ businessId, config }: { businessId: string; config: StarePepit
       </div>
 
       {/*
-        ⚠ STINS DIN START, si scris de ce. Pepita nu spune public cine emite factura catre
-        clientul final, si nu exista nicio cale prin care să i-o trimitem sau să aflăm ce a
-        emis ea. O factură emisă degeaba nu se retrage, se stornează.
+        ⚠ CINE FACTUREAZĂ NU E O ÎNTREBARE: factura către clientul final o emite PARTENERUL,
+        adică magazinul, și tot pe baza facturii lui se face decontarea. Textul de aici spunea
+        altceva („Pepita nu spune public cine emite factura"), și a fost îndreptat pe 08.09.2026,
+        după auditul extern.
+
+        ⚠ Deci comutatorul e despre AUTOMATIZARE, nu despre responsabilitate. Rămâne stins din
+        start fiindcă o factură emisă degeaba nu se retrage, se stornează, iar Pepita nu ne poate
+        spune ce document a ieșit în altă parte.
       */}
       <label className="flex items-start gap-2 rounded-xl border border-border bg-muted/40 p-3">
         <input
@@ -472,9 +477,10 @@ function Setari({ businessId, config }: { businessId: string; config: StarePepit
             facturează, iar asta e o chestiune între comerciant și Pepita, nu una pe care s-o
             hotărască un comutator din Edinio.
           */}
-          Pornit, comenzile Pepita intră în facturarea automată, ca oricare altă comandă. Lasă-l
-          stins dacă facturezi din alt sistem: Pepita nu ne poate spune ce document a ieșit acolo,
-          iar două facturi pentru aceeași marfă se repară mai greu decât una lipsă.
+          Factura către client o emiți tu, ca partener Pepita. Pornit, comenzile Pepita intră în
+          facturarea automată Edinio, ca oricare altă comandă. Lasă-l stins dacă facturezi din alt
+          sistem: Pepita nu ne poate spune ce document a ieșit acolo, iar două facturi pentru
+          aceeași marfă se repară mai greu decât una lipsă.
         </span>
       </label>
 

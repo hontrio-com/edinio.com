@@ -479,14 +479,33 @@ test("ramburs si card se scriu diferit, iar necunoscutul nu devine ramburs", asy
   }
 });
 
-test("⚠ starea de plata lipsa se deduce din modul de plata, nu se pune „platit” din reflex", async () => {
+test("⚠ starea de plata lipsa NU se completeaza din modul de plata, nici pentru card", async () => {
+  /*
+   * ⚠ PROBA ASTA CEREA PE DOS PANA PE 08.09.2026, si apara chiar defectul.
+   *
+   * Ea cerea ca o comanda cu cardul si FARA stare de plata sa iasa „paid", pe temeiul ca
+   * documentatia lor spune ca `paid` „se atribuie de obicei platilor cu cardul". „De obicei"
+   * nu e o confirmare: o plata cu cardul poate fi inca nefinalizata cand ne impinge comanda,
+   * iar noi o scriam ca incasata.
+   *
+   * Ce tinea regula veche era o asimetrie de cost care intre timp a disparut: pe comenzile
+   * Pepita rambursul e zero oricum, deci un „neplatit" pus gresit nu mai precompleteaza nimic.
+   * A ramas doar greseala care costa marfa.
+   */
   const b1 = faceBaza();
   await ingereaza(b1.db, CTX, comanda({ payment_mode: "cod", payment_status: undefined }));
   assert.equal(b1.orders[0].payment_status, "unpaid", "rambursul neplatit: curierul incaseaza");
 
   const b2 = faceBaza();
   await ingereaza(b2.db, CTX, comanda({ payment_mode: "creditcard", payment_status: undefined }));
-  assert.equal(b2.orders[0].payment_status, "paid", "documentatia lor: cardul e „paid” de obicei");
+  assert.equal(b2.orders[0].payment_status, "unpaid", "cardul nefinalizat trecea drept incasat");
+  /* ⚠ Si omul afla din nota, nu doar dintr-o coloana pe care n-o citeste nimeni. */
+  assert.match(b2.orders[0].internal_notes, /Plata cu cardul NU e confirmată/);
+
+  /* Un „paid” spus de EI ramane platit: nu s-a inasprit peste ce zic ei, doar peste ce ghicim noi. */
+  const b3 = faceBaza();
+  await ingereaza(b3.db, CTX, comanda({ payment_mode: "creditcard", payment_status: "paid" }));
+  assert.equal(b3.orders[0].payment_status, "paid");
 });
 
 test("adresa se NORMALIZEAZA la numele pe care le citeste restul aplicatiei", async () => {
@@ -621,7 +640,10 @@ test("⚠ transferul NEFACUT nu se preface in ramburs: nu schimbam metoda aleasa
       "un transfer nefacut a devenit ramburs",
     );
     /* ⚠ Si comerciantul afla, din nota randata pe pagina comenzii, ca banii n-au venit. */
-    assert.match(o.internal_notes, /NU a fost confirmată/);
+    assert.match(o.internal_notes, /Plata prin transfer NU e confirmată/);
+    /* ⚠ Si NU mai indeamna la ramburs. Textul spunea „altfel lasă rambursul pe AWB", adica
+       exact transformarea pe care restul probei o interzice. */
+    assert.doesNotMatch(o.internal_notes, /rambursul pe AWB/);
   })();
 });
 

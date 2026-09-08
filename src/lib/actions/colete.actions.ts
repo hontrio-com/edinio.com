@@ -20,6 +20,7 @@ import {
   type COReceiver,
   type COParcel,
 } from "@/lib/colete";
+import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
 
 /** Config-driven extras (repayment routing + insurance), shared by quote and AWB. */
 function configExtras(config: COConfig, subtotal?: number): COOrderExtras {
@@ -179,6 +180,11 @@ export async function createCOAwb(
 
     const { data: biz } = await supabase.from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
     if (!biz) return { error: "Business negasit" };
+
+    /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
+       colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
+    const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+    if (refuzAwb) return { error: refuzAwb };
 
     const admin = adminClient();
     const [{ data: order }, { data: settings }] = await Promise.all([

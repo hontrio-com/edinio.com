@@ -12,6 +12,7 @@ import {
   ExternalLink, Pencil, Compass, Building2,
 } from "lucide-react";
 import { marketplaceCareTineComanda, cineTineComanda, mementoulMarketplace } from "@/lib/orders/origin";
+import { deCeNuSePoateAwbPropriu } from "@/lib/orders/awb-propriu";
 import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
@@ -575,6 +576,23 @@ export function OrderDetailClient({
   const chosenCourier = enabledCouriers.find(c => c.id === address.courier);
   const primaryCourier = shippedCourier ?? chosenCourier ?? enabledCouriers[0];
   const otherCouriers = enabledCouriers.filter(c => c.id !== primaryCourier?.id);
+
+  /*
+   * ⚠ ACEEASI REGULA CA PE SERVER, DIN ACELASI FISIER (`@/lib/orders/awb-propriu`).
+   *
+   * Ecranul nu apara nimic — poarta adevarata e `poarta-awb.ts`, in fiecare actiune de
+   * emitere. Ce face aici e sa nu arate un buton care oricum ar fi refuzat, si sa spuna DE CE.
+   * Un buton care se apasa si da eroare e mai rau decat unul care lipseste cu explicatie.
+   *
+   * ⚠ SE CITESTE `order.payment_status`, adica valoarea SALVATA, nu `paymentStatus` din stare.
+   * Cu starea locala, butonul s-ar fi aprins in clipa in care omul muta selectorul pe „platit",
+   * inainte de a salva — iar serverul, care citeste din baza, l-ar fi refuzat oricum. Doua
+   * adevaruri despre aceeasi comanda, si cel de pe ecran ar fi fost crezut.
+   */
+  const refuzAwbPropriu = deCeNuSePoateAwbPropriu({
+    order_source: ord["order_source"] ?? null,
+    payment_status: (order.payment_status as string | null) ?? null,
+  });
   const deliveryInfo = address.delivery_type === "locker" && address.locker_name ? address.locker_name : null;
 
   const NOTIF_TEMPLATES: Record<string, { label: string; subject: string; body: string }> = {
@@ -767,7 +785,9 @@ export function OrderDetailClient({
   // Mobile sticky action bar: single most relevant next action.
   const mobileAction = hasChanges
     ? { label: isPending ? "Se salveaza..." : "Salveaza modificarile", onClick: () => setShowSaveConfirm(true), disabled: isPending }
-    : (!isTrendyol && !shippedCourier && primaryCourier)
+    /* ⚠ Si bara de jos: era a doua usa catre acelasi buton, si pe telefon e chiar cea
+       apasata. Vezi `refuzAwbPropriu`. */
+    : (!isTrendyol && !shippedCourier && !refuzAwbPropriu && primaryCourier)
       ? { label: `Creeaza AWB ${primaryCourier.name}`, onClick: primaryCourier.open, disabled: false }
       : null;
 
@@ -1530,6 +1550,13 @@ export function OrderDetailClient({
                       <Package className="h-4 w-4" />Gestioneaza AWB
                     </button>
                   </>
+                ) : refuzAwbPropriu ? (
+                  /* ⚠ Nu un buton stins, ci MOTIVUL. Un buton gri il pune pe om sa caute ce
+                     reglaj ii lipseste; propozitia ii spune ce s-a intamplat si ce urmeaza. */
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-warning/5 border border-warning/20">
+                    <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground leading-relaxed">{refuzAwbPropriu}</p>
+                  </div>
                 ) : primaryCourier ? (
                   <>
                     <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 space-y-2">

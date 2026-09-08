@@ -34,6 +34,7 @@ import { avertismentePlaja, codurileRamase, problemePlaja, type PlajaConfig } fr
 import { cheileNomenclatorului, unitatiIncomplete } from "@/lib/posta/unitati";
 import { adaugaZileLucratoare, ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import type { Json } from "@/types/database.types";
+import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
 
 /**
  * Actiunile Poșta Română.
@@ -332,6 +333,12 @@ export async function createPostaAwbAction(
 ): Promise<{ awb: string; avertismente: string[] } | { error: string }> {
   const ctx = await configSiComanda(businessId, orderId);
   if ("error" in ctx) return { error: ctx.error as string };
+
+  /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
+     colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
+  const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+  if (refuzAwb) return { error: refuzAwb };
+
   const { supabase, admin, config, order, firma } = ctx;
 
   const comanda = order as typeof order & { posta_awb_number?: string | null };

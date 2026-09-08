@@ -76,9 +76,22 @@ test("⚠ cele doua functii care isi citesc singure comanda CER `order_source`",
    */
   for (const f of ["src/lib/brevo-sync.ts", "src/lib/mailchimp-sync.ts"]) {
     const s = readFileSync(f, "utf8");
+    /*
+     * ⚠ BUCATA SE TAIE PE ACOLADE, nu pe un numar de caractere. Fereastra de 900 avea 68 de
+     * caractere de rezerva la Mailchimp: doua randuri de comentariu in plus si proba ar fi
+     * cazut pe cod corect. Iar in celalalt sens, o alta functie scurta strecurata intre `select`
+     * si poarta ar fi tinut-o verde chiar cu poarta stearsa.
+     */
     const i = s.indexOf("OrderPaid");
     assert.ok(i > 0, `${f}: nu s-a gasit functia de marcare`);
-    const bucata = s.slice(i, i + 900);
+    const inceput = s.lastIndexOf("export async function", i);
+    let adanc = 0;
+    let sfarsit = s.length;
+    for (let k = s.indexOf("{", i); k < s.length; k++) {
+      if (s[k] === "{") adanc++;
+      else if (s[k] === "}") { adanc--; if (adanc === 0) { sfarsit = k; break; } }
+    }
+    const bucata = s.slice(inceput, sfarsit);
     assert.match(bucata, /\.select\("[^"]*order_source[^"]*"\)/, `${f}: citirea nu cere originea`);
     assert.match(bucata, /clientDeMarketplace\(/, `${f}: poarta lipseste din functie`);
   }

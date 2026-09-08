@@ -75,6 +75,36 @@ Documentatia lor, asa cum a fost descarcata pe 08.09.2026, e pastrata in `docs/p
 propozitia despre variatii citabila la fata locului. Pana atunci copiile traiau doar in dosarul
 temporar al unei sesiuni, deci verificarea afirmatiei cerea recuperare din transcrieri.
 
+### Articolele orfane, si ce NU se vede
+
+Un articol trimis candva si care azi nu mai e generat de feed ramane la ei, cu ultimul pret si
+ultimul stoc, si se poate vinde in continuare. Feedul n-are cum sa spuna „scoate produsul asta",
+si nu exista niciun API: singurul lucru cinstit e sa-l ARATAM. Panoul o face, din evidenta
+`pepita_articole`.
+
+⚠ **Cu o gaura stiuta:** `pepita_articole.product_id` are `on delete cascade`. Cand comerciantul
+STERGE produsul de tot (nu il dezactiveaza), randul de evidenta piere odata cu el, deci tocmai
+orfanul PERMANENT — cel pe care nimeni nu-l mai poate afla altfel — nu se mai poate arata. O
+varianta redenumita se vede, un produs sters nu. Repararea cere o migratie (`on delete set null`,
+cu numele produsului copiat la scriere), care se livreaza impreuna cu baseline-ul regenerat.
+
+### Cum se socoteste `<LastMod>`
+
+Cel mai tarziu dintre: data produsului, data listarii lui (`pepita_listari.actualizat_la`), data
+magazinului, data celei mai recent atinse categorii, si o **stampila a configurarii**.
+
+⚠ Stampila NU e `store_settings.updated_at`, si asta a fost prima incercare, gresita: coloana
+aceea urca la FIECARE COMANDA, fiindca numerotarea secventiala face `update store_settings set
+order_counter = ...`, iar pe tabela din spatele vederii sta un declansator care pune `updated_at`
+neconditionat. `LastMod` ar fi fost „acum" in fiecare zi, pe tot catalogul: corect, dar fara
+nicio informatie.
+
+In loc, feedul socoteste o **amprenta** a campurilor care chiar ajung in XML (TVA, moneda,
+strategia de pret, stocul de siguranta, transportul, garantia, piata, modul de includere) si,
+cand difera de cea pastrata in `pepita_config`, scrie una noua impreuna cu clipa de acum. Deci
+stampila e clipa in care s-a OBSERVAT schimbarea: mereu mai tarziu decat schimbarea, niciodata
+mai devreme, deci nu poate ingheta un pret vechi.
+
 ## Adresele, si cheile lor
 
 ```
@@ -114,7 +144,8 @@ buclei.**
 ⚠ **Integrarea oprita da 404, nu un feed gol.** Un `<Catalog>` gol le-ar spune „nu mai am niciun
 produs", si ar scoate tot de la vanzare.
 
-Ce se trimite, pe scurt: `Id`, `LastMod` (din `updated_at`), `StructuredId` (EAN validat cu cifra de
+Ce se trimite, pe scurt: `Id`, `LastMod` (cel mai tarziu dintre `products.updated_at`,
+`pepita_listari.actualizat_la` si un prag al magazinului; vezi nota lunga din `feed.ts`), `StructuredId` (EAN validat cu cifra de
 control), `ProductNumber`, `Descriptions` (text simplu, fara marcaj), `Prices` (brut, cu
 `VatPercent` din setarile magazinului, `DiscountedPrice` doar cand exista reducere reala),
 `Warranty`, `Categories` (de la parinte la copil, cu id-urile NOASTRE, cum permit ei),
@@ -162,14 +193,22 @@ secventiale si zece concurente.
 | `delivery_mod` | hotaraste CINE incaseaza rambursul; curierul il alege comerciantul | Lista lor e a pietei UNGARE. La `gls_parcelshop` nu primim identificatorul punctului, iar traducerea lor maghiara ii spune „csomagautomata", adica **automat de colet**, nu parcel shop: eticheta din panou spunea gresit. |
 | `currency` pe linii | `order_source.currency` | Trebuie sa fie UNA singura: doua monede resping comanda, fiindca totalul s-ar aduna din mere si pere. Alta decat a magazinului duce comanda in carantina. |
 | `vat` pe linie | `orders.items[].vat_rate` | ⚠ Cota ramane PE LINIE. `orders.vat_rate` e cota liniei cu valoarea cea mai mare, nu maximul cotelor. |
-
-⚠ `order_source.incaseaza_marketplace` e cheia de care atarna rambursul. Campul e **obligatoriu** in
-`ComandaCuRamburs`, tocmai ca `tsc` sa numeasca fiecare din cele 21 de locuri care cheama
-`rambursDeIncasat`: unsprezece dintre ele pasau un obiect ingustat, iar o verificare pusa doar in
-functie le-ar fi lasat pe toate deschise, tacut. Cel mai periculos era generarea in MASA de AWB,
-unde `select`-ul nici nu cerea `order_source`.
 | `status` | mereu `pending` | Campul lor e negarantat, cu valori convenite de la caz la caz. Nu exista lista de tradus. |
 | `tax_number` | `orders.billing_company` | Numai daca trece verificarea de CUI. `verified: false`, fiindca NU intrebam ANAF pe calea de ingest. Prefixul „RO" e martorul pentru `vat_payer`. |
+
+⚠ `order_source.incaseaza_marketplace` e cheia de care atarna rambursul, si e ADEVARATA doar cand
+banii chiar sunt la altcineva: ramburs dus de GLS-ul Pepitei, sau card/transfer **confirmat platit**.
+Un transfer nefacut nu goleste rambursul, fiindca banii nu-i are nici Pepita, nici curierul.
+
+Campul e **obligatoriu** in `ComandaCuRamburs`, tocmai ca `tsc` sa numeasca fiecare din cele
+douazeci si unu de locuri care cheama `rambursDeIncasat`: unsprezece dintre ele pasau un obiect
+ingustat, iar o verificare pusa doar in functie le-ar fi lasat pe toate deschise, tacut. Cel mai
+periculos era generarea in MASA de AWB, unde `select`-ul nici nu cerea `order_source`.
+
+⚠ Si `order_source` nu se mai scrie cu ce trimite browserul. Pe comenzile din magazin se facea
+`{ ...source }` dintr-o actiune publica, deci un cumparator putea trimite
+`incaseaza_marketplace: true` si primea un colet cu ramburs 0,00. Lista e alba acum: vezi
+`CHEI_ATRIBUIRE` in `order.actions.ts`.
 
 **Totalurile vin de la ei si nu se recalculeaza niciodata** din preturile noastre de azi: comanda e o
 tranzactie istorica.

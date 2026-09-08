@@ -726,7 +726,7 @@ function Catalog({ businessId }: { businessId: string }) {
             </Callout>
           )}
 
-          {r.orfane > 0 && (
+          {(r.orfane ?? 0) > 0 && (
             <Callout variant="warning" icon={AlertTriangle}>
               <div className="space-y-1">
                 <p className="text-xs text-foreground">
@@ -742,11 +742,23 @@ function Catalog({ businessId }: { businessId: string }) {
                 */}
                 <p className="text-[11px] text-muted-foreground">
                   De obicei asta înseamnă că ai redenumit sau ai șters o variantă. Articolele
-                  vechi rămân la Pepita și se pot vinde în continuare, iar noi nu le putem
-                  retrage din feed: cere-le celor de la Pepita să le scoată.
+                  vechi rămân la Pepita cu ultimul preț și ultimul stoc trimise, și se pot vinde
+                  în continuare, iar noi nu le putem retrage din feed. Verifică-le întâi în
+                  Pepita Admin, iar pe cele care chiar nu mai există cere-le lor să le scoată.
                   {r.exempleOrfane.length > 0 && ` Primele: ${r.exempleOrfane.slice(0, 5).join(", ")}.`}
                 </p>
               </div>
+            </Callout>
+          )}
+
+          {r.orfane === null && !r.partial && (
+            <Callout variant="warning" icon={AlertTriangle}>
+              {/*
+                ⚠ „0 articole rămase" ar fi o AFIRMATIE. Citirea evidenței a picat, deci nu știm
+                nimic despre ele; restul cifrelor de mai sus sunt însă bune.
+              */}
+              Nu am putut verifica dacă au rămas articole la Pepita care nu mai sunt generate de
+              feed. Restul cifrelor de mai sus sunt corecte.
             </Callout>
           )}
 
@@ -816,6 +828,8 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
   const [incarc, setIncarc] = useState(false);
   /** Comanda pe care o reincercam acum. Butonul se blocheaza doar pe randul ei. */
   const [reincerc, setReincerc] = useState<string | null>(null);
+  /* Citirile care hranesc CHIAR acest panou. Cea a feedului tine de Conexiune. */
+  const picateAici = stare.citiriPicate.filter((c) => c !== CITIRI_PANOU.feed);
 
   const incarca = async () => {
     setIncarc(true);
@@ -837,7 +851,10 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
         <Cifra eticheta="Cu probleme" valoare={stare.comenziCarantina} accent={(stare.comenziCarantina ?? 0) > 0} />
         <div className="rounded-xl border border-border p-3">
           <p className="truncate text-sm font-semibold text-foreground">
-            {stare.ultimaComanda ? cand(stare.ultimaComanda) : "Nicio comandă"}
+            {/* ⚠ „Nicio comandă" e o AFIRMATIE. Cand citirea a picat, nu stim nimic: „—". */}
+            {stare.ultimaComanda
+              ? cand(stare.ultimaComanda)
+              : stare.citiriPicate.includes(CITIRI_PANOU.ultimaComanda) ? "—" : "Nicio comandă"}
           </p>
           <p className="text-[11px] text-muted-foreground">Ultima comandă</p>
         </div>
@@ -851,9 +868,14 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
         ce expediezi, treci comanda pe „trimisă” și în Pepita Admin.
       </p>
 
-      {stare.citiriPicate.length > 0 && (
+      {/*
+        ⚠ NUMAI CITIRILE ACESTUI PANOU. Lista vine intreaga de la server, iar „ultima citire a
+        feedului" tine de panoul Conexiune, unde e si tratata. Aratat aici, avertismentul punea
+        la indoiala trei cifre care erau bune.
+      */}
+      {picateAici.length > 0 && (
         <Callout variant="warning" icon={AlertTriangle}>
-          Nu am putut citi {stare.citiriPicate.join(", ")}. Cifrele de mai sus pot fi incomplete.
+          Nu am putut citi {picateAici.join(", ")}. Cifrele de mai sus pot fi incomplete.
           Reîncarcă pagina peste câteva minute.
         </Callout>
       )}

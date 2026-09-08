@@ -215,3 +215,47 @@ test("⚠ panoul arata necunoscutul ca necunoscut", () => {
   const panou = readFileSync("src/components/dashboard/PepitaClient.tsx", "utf8");
   assert.match(panou, /valoare \?\? "—"/, "cifra necunoscuta se randeaza tot ca un numar");
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   VERIFICAREA PRODUSELOR: PLIMBARE PE CHEIE, SI NECUNOSCUTUL NU E ZERO
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ Aici nu conteaza doar ca citirea e completa. Articolele unui produs SARIT de o plimbare pe
+   offset raman in evidenta si sunt numarate ORFANE, iar comerciantului i se spune sa ceara
+   scoaterea lor de la Pepita: adica sa-si stinga listari vii.
+*/
+
+test("⚠ verificarea produselor se plimba pe CHEIE, nu pe offset", () => {
+  /*
+   * ⚠ ANCORAT PE RANDUL EXACT. Prima forma cerea doar „exista un `.gt(\"id\"` in bucata", iar
+   * bucata mai contine unul: sondajul care afla daca mai e ceva dincolo de plafon. Mutantul care
+   * scotea plimbarea trecea verde.
+   */
+  const bucata = ACTIUNI.slice(ACTIUNI.indexOf("let dupaId"), ACTIUNI.indexOf("const exempleOrfane"));
+  assert.match(bucata, /if \(dupaId\) q = q\.gt\("id", dupaId\)/,
+    "plimbare pe offset: un import care ruleaza in acelasi timp face sa fie sarit un produs");
+  assert.ok(!/\.range\(/.test(bucata), "a ramas o plimbare pe offset");
+});
+
+test("⚠ orfanii nu se socotesc cand nu se poate: `null`, nu zero", () => {
+  /* Ancorat pe CAMPUL din interfata: variabila locala are acelasi tip si trecea in locul lui. */
+  assert.match(ACTIUNI, /orfane: number \| null;\s*\n\s*exempleOrfane: string\[\];/,
+    "campul din rezumat a redevenit un numar care nu poate lipsi");
+
+  /*
+   * ⚠ SI CATCH-UL TREBUIE SA INGHITA, nu sa arunce mai departe: blocul asta e o socoteala in
+   * plus, iar o exceptie din el sterge TOT ecranul de verificare.
+   */
+  const i = ACTIUNI.indexOf("const exempleOrfane");
+  const bucata = ACTIUNI.slice(i, i + 2400);
+  const j = bucata.indexOf("} catch (e) {");
+  assert.ok(j > 0, "blocul orfanilor n-are catch propriu");
+  const corp = bucata.slice(j, j + 200);
+  assert.ok(!/throw/.test(corp), "catch-ul arunca mai departe, deci sterge tot panoul");
+  assert.match(corp, /orfane = null/, "catch-ul nu marcheaza cifra ca necunoscuta");
+});
+
+test("⚠ „ultima comanda” nu se afirma pe o citire cazuta", () => {
+  assert.match(ACTIUNI, /ultimaComanda: ultima\.error \? null :/,
+    "o citire cazuta se scrie ca „nicio comanda”, adica exact zeroul fals");
+});

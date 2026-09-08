@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
@@ -86,7 +87,7 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
 
   const { data: setari, error: eSet } = await admin
     .from("store_settings")
-    .select("pepita_config, vat_enabled, vat_rate, prices_include_vat, updated_at")
+    .select("pepita_config, vat_enabled, vat_rate, prices_include_vat, currency")
     .eq("business_id", businessId).maybeSingle();
   if (eSet) throw eSet;
 
@@ -129,7 +130,8 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
   }
 
   const s = (setari ?? {}) as {
-    vat_enabled?: boolean; vat_rate?: number; prices_include_vat?: boolean; updated_at?: string | null;
+    vat_enabled?: boolean; vat_rate?: number; prices_include_vat?: boolean; currency?: string | null;
+    pepita_config?: Record<string, unknown> | null;
   };
 
   /*
@@ -141,21 +143,29 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
    * categorii: toate intra in XML, si niciuna nu urca `products.updated_at`. Pepita ar fi vazut
    * o data veche pe un produs al carui pret tocmai se schimbase.
    *
-   * ⚠ SE FOLOSESTE `store_settings.updated_at`, DESI E GROSIER, si e o alegere, nu o scapare.
-   * El e un singur timp pentru vreo saptezeci de coloane de configurare: salvata cheia Netopia,
-   * pragul urca si `LastMod` sare pe TOT catalogul, desi feedul n-a miscat un octet. Costul e
-   * cateva re-citiri in plus la ei. Alternativa precisa, o stampila scrisa doar cand se schimba
-   * campurile care ajung in feed, ar fi lasat pe dinafara chiar TVA-ul, care n-are alt semn: si
-   * atunci o schimbare de cota n-ar mai fi ajuns niciodata la ei. Prea proaspat costa o citire;
-   * prea vechi costa un pret gresit la vanzare.
+   * ⚠ NU SE FOLOSESTE `store_settings.updated_at`, si asta a fost prima incercare, gresita.
+   * Coloana aceea urca la FIECARE COMANDA: numerotarea secventiala face
+   * `update store_settings set order_counter = order_counter + 1`, iar pe tabela din spatele
+   * vederii sta un declansator care pune `updated_at = now()` neconditionat. Deci pragul ar fi
+   * fost „acum" in fiecare zi, pe tot catalogul, si `<LastMod>` n-ar mai fi insemnat nimic:
+   * corect, dar fara nicio informatie.
+   *
+   * ⚠ IN LOC, O AMPRENTA A CAMPURILOR CARE CHIAR AJUNG IN FEED. Se socoteste la fiecare citire
+   * a feedului; cand difera de cea pastrata, se scrie una noua impreuna cu clipa de acum.
+   * Stampila e deci clipa in care s-a OBSERVAT schimbarea, nu cea in care s-a facut: mereu mai
+   * tarziu decat schimbarea, niciodata mai devreme, deci nu poate ingheta un pret vechi.
+   *
+   * TVA-ul intra si el in amprenta, desi nu are stampila proprie nicaieri: el schimba pretul
+   * brut din feed, deci lasat pe dinafara ar fi fost tocmai schimbarea care nu ajunge la ei.
    */
   const clipa = (v: string | null | undefined): number => {
     const t = v ? new Date(v).getTime() : NaN;
     return Number.isFinite(t) ? Math.floor(t / 1000) : 0;
   };
+  const stampilaSetari = await stampilaConfigurarii(admin, businessId, s, config);
   const pragMagazin = Math.max(
     clipa(business.updated_at),
-    clipa(s.updated_at),
+    clipa(stampilaSetari),
     ...categorii.map((c) => clipa((c as { updated_at?: string | null }).updated_at)),
     0,
   );
@@ -175,6 +185,60 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
   };
 
   return { ctx, config, listari };
+}
+
+/**
+ * Clipa ultimei schimbari a configurarilor care ajung in feed.
+ *
+ * ⚠ NU ARUNCA NICIODATA. E o imbunatatire a lui `<LastMod>`, nu o parte din feed: o pana la
+ * scriere intoarce clipa de acum, adica „proaspat", care e directia care nu strica nimic.
+ */
+async function stampilaConfigurarii(
+  admin: Db,
+  businessId: string,
+  setari: { vat_enabled?: boolean; vat_rate?: number; prices_include_vat?: boolean; currency?: string | null; pepita_config?: Record<string, unknown> | null },
+  config: PepitaConfig,
+): Promise<string> {
+  const acum = new Date().toISOString();
+  const brut = setari.pepita_config ?? {};
+
+  /*
+   * ⚠ NUMAI CE AJUNGE IN XML. `activ` si cheile nu intra: pornirea integrarii nu schimba
+   * niciun camp al vreunui produs, iar o rotire de cheie cu atat mai putin.
+   */
+  const amprenta = createHash("sha256").update(JSON.stringify([
+    setari.vat_enabled === true,
+    Number(setari.vat_rate ?? 0),
+    setari.prices_include_vat !== false,
+    String(setari.currency ?? ""),
+    config.piata,
+    config.strategie_pret,
+    config.safety_stock,
+    config.shipping_delay,
+    config.shipping_price,
+    config.garantie,
+    config.mod_includere,
+  ])).digest("hex").slice(0, 16);
+
+  const veche = typeof brut.feed_amprenta === "string" ? brut.feed_amprenta : null;
+  const stampila = typeof brut.feed_stamp === "string" ? brut.feed_stamp : null;
+  if (veche === amprenta && stampila) return stampila;
+
+  try {
+    const { error } = await admin.rpc("jsonb_merge_config", {
+      p_business_id: businessId,
+      p_column: "pepita_config",
+      p_patch: { feed_amprenta: amprenta, feed_stamp: acum } as never,
+    });
+    if (error) throw error;
+  } catch (e) {
+    await logError({
+      action: "pepita/feed-stampila",
+      message: `stampila configurarii nu s-a putut scrie: ${e instanceof Error ? e.message : String(e)}`,
+      businessId, severity: "warning",
+    });
+  }
+  return acum;
 }
 
 /** Produsul intra in feed? */

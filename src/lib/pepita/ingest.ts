@@ -424,7 +424,8 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
    * ⚠ Moneda comenzii e deja dovedita coerenta la citire: aici se compara doar cu a
    * magazinului. Lipsa ei nu e o abatere, e o piata unde ei n-o trimit.
    */
-  const monedaStraina = c.moneda != null && c.moneda.toUpperCase() !== ctx.monedaMagazin.toUpperCase();
+  const monedaComenzii = c.moneda ?? c.monedaTransport;
+  const monedaStraina = monedaComenzii != null && monedaComenzii.toUpperCase() !== ctx.monedaMagazin.toUpperCase();
 
   const numeClient = [c.client.prenume, c.client.nume].filter(Boolean).join(" ").trim()
     || c.client.facturare.nume
@@ -558,7 +559,7 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
   const mesaje: string[] = [];
   if (areNelegate) mesaje.push(`Comandă salvată. Coduri necunoscute: ${nelegate.join(", ")}`);
   if (lipsuri.length > 0) mesaje.push(`Comandă salvată, dar nu se poate expedia: lipsesc ${lipsuri.join(", ")}.`);
-  if (monedaStraina) mesaje.push(`Comandă salvată. Moneda ei (${c.moneda}) nu e cea a magazinului.`);
+  if (monedaStraina) mesaje.push(`Comandă salvată. Moneda ei (${monedaComenzii}) nu e cea a magazinului.`);
   if (c.monedaNevalida) mesaje.push("Comandă salvată, dar codul de monedă trimis nu s-a putut citi.");
 
   return {
@@ -746,8 +747,20 @@ function sursaComenzii(c: ComandaPepita, ctx: ContextIngest, cote: CoteleLiniilo
      * ⚠ MONEDA SE SCRIE MEREU. `orders.total` e citit peste tot ca lei, iar facturarea
      * automata se opreste singura cand vede alta moneda. O comanda in HUF fara semn ar
      * fi fost facturata ca lei, iar o factura fiscala gresita nu se retrage, se storneaza.
+     *
+     * ⚠ TRANSPORTUL E REZERVA, si nu e o subtilitate. Sunt sarcini in care liniile nu poarta
+     * `currency`, dar `total_shipping_price_currency` da „HUF": fara caderea asta se scria
+     * moneda magazinului, deci o comanda de forinti era marcata „RON", nu intra in carantina,
+     * si cifra ei pleca in rambursul unui AWB si intr-o factura in lei.
      */
-    currency: (c.moneda ?? ctx.monedaMagazin).toUpperCase(),
+    currency: (c.moneda ?? c.monedaTransport ?? ctx.monedaMagazin).toUpperCase(),
+    /*
+     * ⚠ CAND N-AM PUTUT CITI CODUL, SE SPUNE. `currency` de mai sus ramane cea mai buna
+     * presupunere, fiindca rapoartele si ecranele au nevoie de ceva; dar cele doua cai pe care
+     * atarna bani (rambursul precompletat si facturarea automata) se uita la steagul asta si
+     * refuza, in loc sa se sprijine pe o afirmatie pe care noi insine am scris ca n-o sustinem.
+     */
+    ...(c.monedaNevalida ? { moneda_necitita: true } : {}),
   };
 }
 
@@ -834,7 +847,7 @@ function noteInterne(
   }
   if (monedaMagazin) {
     randuri.push(
-      `⚠ Totalul comenzii este în ${c.moneda}, iar magazinul lucrează în ${monedaMagazin}. `
+      `⚠ Totalul comenzii este în ${c.moneda ?? c.monedaTransport}, iar magazinul lucrează în ${monedaMagazin}. `
       + "NU emite AWB cu ramburs și NU factura până nu convertești suma.",
     );
   }

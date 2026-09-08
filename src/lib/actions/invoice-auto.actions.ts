@@ -141,6 +141,21 @@ export async function maybeAutoInvoice(
       return;
     }
 
+    /*
+     * ⚠ SI CAND NU STIM IN CE MONEDA E. Steagul e pus la ingest cand codul trimis de marketplace
+     * n-a putut fi citit: `currency` ramane cea mai buna presupunere, dar o factura fiscala
+     * emisa pe o presupunere despre bani nu se retrage, se storneaza.
+     */
+    if ((src as { moneda_necitita?: unknown } | null)?.moneda_necitita === true) {
+      await logError({
+        action: "invoice-auto",
+        message: "moneda comenzii n-a putut fi citita, iar facturarea automata emite in lei: nu s-a emis nimic",
+        details: { orderId, marketplace: src?.marketplace ?? null },
+        businessId, severity: "warning",
+      });
+      return;
+    }
+
     const monedaComenzii = (src as { currency?: string } | null)?.currency;
     if (monedaComenzii && monedaComenzii.toUpperCase() !== "RON") {
       await logError({

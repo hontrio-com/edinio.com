@@ -65,17 +65,48 @@ export async function includeToateActive(
     const ids = (data ?? []) as { id: string }[];
     if (ids.length === 0) return { scrise, incomplet: false, dupa: null };
 
-    const { error: eScriere } = await admin.from("pepita_listari").upsert(
-      /*
-       * ⚠ SARCINA RAMANE EXACT ATAT. Un `safety_stock: null` sau un `pret_override: null`
-       * adaugat aici ar sterge, pe `onConflict`, reglajele puse de mana pe fiecare produs.
-       */
-      ids.map((p) => ({ business_id: businessId, product_id: p.id, inclus: true, actualizat_la: acum })) as never,
-      { onConflict: "business_id,product_id" },
+    /*
+     * ⚠ SE SCRIU DOAR RANDURILE CARE CHIAR SE SCHIMBA.
+     *
+     * `actualizat_la` intra in `<LastMod>`: e singurul semn ca s-a schimbat un reglaj per
+     * produs. Rescris pe tot catalogul la fiecare apasare, ar fi facut data sa sara pe produse
+     * care n-au miscat — si comerciantul e chiar indemnat sa apese din nou, de avertismentul
+     * care spune ca includerea se reia. Deci se citeste intai ce e deja acolo.
+     *
+     * ⚠ Citirea merge pe INTERVALUL de chei al paginii, nu pe o lista de id-uri: un `.in()` cu
+     * cateva sute de uuid-uri pleaca in ADRESA si cade. Pagina e ordonata dupa `id`, deci
+     * intervalul o acopera exact.
+     */
+    const { data: existente, error: eCitire } = await admin.from("pepita_listari")
+      .select("product_id, inclus")
+      .eq("business_id", businessId)
+      .gte("product_id", ids[0].id)
+      .lte("product_id", ids[ids.length - 1].id);
+    if (eCitire) throw eCitire;
+    const dejaIncluse = new Set(
+      ((existente ?? []) as { product_id: string; inclus: boolean }[])
+        .filter((r) => r.inclus)
+        .map((r) => r.product_id),
     );
-    if (eScriere) throw eScriere;
 
-    /* ⚠ Se aduna DUPA ce scrierea a reusit: „cate au INTRAT", nu „cate s-au gasit". */
+    const deScris = ids.filter((p) => !dejaIncluse.has(p.id));
+    if (deScris.length > 0) {
+      const { error: eScriere } = await admin.from("pepita_listari").upsert(
+        /*
+         * ⚠ SARCINA RAMANE EXACT ATAT. Un `safety_stock: null` sau un `pret_override: null`
+         * adaugat aici ar sterge, pe `onConflict`, reglajele puse de mana pe fiecare produs.
+         */
+        deScris.map((p) => ({ business_id: businessId, product_id: p.id, inclus: true, actualizat_la: acum })) as never,
+        { onConflict: "business_id,product_id" },
+      );
+      if (eScriere) throw eScriere;
+    }
+
+    /*
+     * ⚠ Se aduna DUPA ce scrierea a reusit. Se numara toate produsele paginii, nu doar
+     * randurile scrise: cele sarite erau deja in feed, deci raspunsul „N produse incluse"
+     * ramane adevarat, iar la a doua apasare nu devine „0".
+     */
     scrise += ids.length;
     cheie = ids[ids.length - 1].id;
 

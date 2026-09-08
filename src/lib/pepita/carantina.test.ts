@@ -3,11 +3,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { citesteComanda, type ComandaPepita } from "./comanda-forma";
 import {
-  compuneMotiv, lipsuriComandaScrisa, lipsuriLivrare, motivNelivrabila, scoateBucata,
+  compuneMotiv, INCEPUT_CODURI, lipsuriComandaScrisa, lipsuriLivrare, motivCoduri,
+  motivNelivrabila, scoateBucata,
 } from "./carantina";
+/*
+ * ⚠ CONSTANTELE ADEVARATE, nu copii scrise de mana. Cu o copie, o reformulare a textului
+ * trecea verde aici, iar in productie cronul nu-si mai recunostea propriul motiv pe randurile
+ * scrise inainte de desfasurare si nu le mai scotea din carantina niciodata.
+ */
+import { MOTIV_STOC_NEFACUT } from "./ingest";
 
-const STOC = "Stocul nu s-a putut scădea. Se reîncearcă automat.";
-const CODURI = "Coduri fără corespondent în Edinio: ABC";
+const STOC = MOTIV_STOC_NEFACUT;
+const CODURI = motivCoduri(["ABC"]) as string;
 
 /* ══════════════════════════════════════════════════════════════════════════
    MOTIVELE SE ADUNA
@@ -126,23 +133,36 @@ test("judetul se cere DOAR la comenzile romanesti", () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
-   CRONUL NU MAI COMPARA PE EGALITATE
+   CRONUL N-ARE SOCOTEALA LUI
    ══════════════════════════════════════════════════════════════════════════
 
-   ⚠ Plasa scaneaza sursa, si stie ce poate: spune ca hotararea cronului trece prin
-   `scoateBucata`, nu ca se poarta bine. Purtarea e probata mai sus, pe valori. Ce apara e
-   intoarcerea la comparatia pe egalitate, care lasa in carantina tocmai comenzile reparate.
+   ⚠ Pana pe 08.09.2026 cronul isi refacea singur cantitatile din `orders.items` si chema direct
+   functia de consum din baza. Doua adevaruri despre aceeasi comanda, si al doilea n-avea
+   niciuna dintre pazele primului: consuma A DOUA OARA o linie adaugata de mana din panou, si
+   scadea stocul unei comenzi anulate inainte de orice consum. Acum cheama `reproceseaza`.
+
+   ⚠ CE APARA PLASA, SI CE NU. Scaneaza sursa, deci spune ca nu mai exista a doua socoteala si
+   ca interogarea cere si filtreaza ce trebuie. Purtarea e probata in `ingest.test.ts`, pe
+   `reproceseaza`, prin baza falsa: acolo se vede ce se scade si ce nu.
 */
 
 const CRON = "src/app/api/cron/pepita-stoc/route.ts";
+/* Comentariile se scot INTAI: plasa a cazut deja o data pe chiar nota care apara regula. */
+const SURSA_CRON = readFileSync(CRON, "utf8")
+  .replace(/[/][*][^]*?[*][/]/g, " ")
+  .replace(/^\s*[/][/].*$/gm, " ");
 
-test("⚠ cronul de stoc nu compara motivul pe egalitate", () => {
-  const s = readFileSync(CRON, "utf8");
-  assert.match(s, /scoateBucata\(/, "cronul nu-si mai scoate bucata din motivul compus");
-  assert.match(s, /includes\(MOTIV_STOC_NEFACUT\)/, "cronul nu mai recunoaste motivul intr-un sir compus");
-  /* ⚠ Orice comparatie pe egalitate, oricum s-ar chema variabila din stanga. */
-  assert.ok(!/=== MOTIV_STOC_NEFACUT/.test(s),
-    "comparatia pe egalitate nu recunoaste un motiv compus");
+test("⚠ cronul nu-si mai face socoteala lui: cheama `reproceseaza`", () => {
+  assert.match(SURSA_CRON, /reproceseaza\(/, "cronul nu mai trece prin socoteala comuna");
+  assert.ok(!/\.rpc\(/.test(SURSA_CRON), "cronul cheama direct o functie din baza: a doua socoteala");
+  assert.ok(!/consuma_stoc_comanda_marketplace/.test(SURSA_CRON), "cronul consuma stoc pe cont propriu");
+});
+
+test("⚠ cronul nu atinge comenzile moarte, si CERE campurile de care atarna", () => {
+  assert.match(SURSA_CRON, /status, stoc_marketplace_la, stoc_eliberat_la/, "citirea nu cere campurile");
+  assert.match(SURSA_CRON, /orders\.status/, "nu se uita la starea comenzii");
+  assert.match(SURSA_CRON, /cancelled/, "comenzile anulate nu sunt excluse");
+  assert.match(SURSA_CRON, /orders\.stoc_eliberat_la/, "comenzile cu marfa intoarsa pe raft nu sunt excluse");
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -204,20 +224,38 @@ test("campurile care nu sunt text nu trec drept completate", () => {
   assert.deepEqual(l, ["numele clientului", "telefonul", "județul", "localitatea", "strada"]);
 });
 
-test("⚠ cronul de stoc nu atinge comenzile moarte", () => {
+test("⚠ o comanda de dinaintea acestei versiuni se recunoaste tot ca livrare Pepita", async () => {
   /*
-   * Comanda al carei consum a picat la sosire ramane cu `stoc_marketplace_la` NULL. Anulata
-   * intre timp, `elibereaza_stoc_comanda` iese cu „necunoscut" si NU stampileaza
-   * `stoc_eliberat_la`, fiindca n-are ce elibera. Deci randul ramanea in interogarea cronului
-   * pentru totdeauna, si prima rulare care prindea baza sanatoasa scadea stocul pentru o
-   * comanda care nu pleaca niciodata — iar cifra falsa pleca pe alte cinci canale.
-   *
-   * Cele doua verificari nu se acopera una pe alta, deci se cer amandoua.
+   * `livrare_pepita` se scrie abia de la ingestul din 08.09.2026. Comenzile mai vechi au doar
+   * `pepita_delivery_mode`. Fara caderea pe el, o comanda Pepita Delivery ramasa in carantina de
+   * pe versiunea veche s-ar purta ca una cu curier propriu, iar la automatul de colet adresa
+   * lipseste PE DREPT: n-ar iesi din carantina niciodata, oricat ar repara comerciantul.
    */
-  const s = readFileSync(CRON, "utf8");
-  assert.match(s, /orders\.status/, "cronul nu se uita la starea comenzii");
-  assert.match(s, /cancelled/, "comenzile anulate nu sunt excluse");
-  assert.match(s, /orders\.stoc_eliberat_la/, "comenzile cu marfa deja intoarsa pe raft nu sunt excluse");
-  /* Si campurile chiar se cer: necerute, ar veni `undefined`. */
-  assert.match(s, /status, stoc_marketplace_la, stoc_eliberat_la/, "citirea nu cere campurile de care atarna");
+  const veche = {
+    customer_name: "", customer_phone: "",
+    shipping_address: {},
+    order_source: { marketplace: "pepita", pepita_delivery_mode: "gls_parcelshop" },
+  };
+  assert.deepEqual(lipsuriComandaScrisa(veche), []);
+
+  /* Iar una veche cu curier propriu ramane cu lipsurile ei. */
+  const vecheProprie = { ...veche, order_source: { marketplace: "pepita", pepita_delivery_mode: "shipping" } };
+  assert.ok(lipsuriComandaScrisa(vecheProprie).length > 0);
+});
+
+test("⚠ lista de coduri se margineste SINGURA, ca sa nu impinga afara celelalte motive", () => {
+  /*
+   * Textul per linie nelegata a crescut de la un cod (~10 semne) la o propozitie intreaga
+   * („ABC (varianta «Rosu» nu mai există la produsul Set de ustensile)"). Patru linii umpleau
+   * singure tot motivul, si impingeau afara avertismentul de moneda sau pe cel de STOC — iar
+   * fara motivul de stoc, cronul nu mai recunoaste randul si comanda ramane in carantina pe vecie.
+   */
+  const multe = Array.from({ length: 40 }, (_, i) => `COD-${i} (varianta «Rosu aprins» nu mai există la produsul Set de ustensile pentru grătar, 12 piese)`);
+  const m = compuneMotiv([motivCoduri(multe), MOTIV_STOC_NEFACUT]) as string;
+
+  assert.ok(m.startsWith(INCEPUT_CODURI));
+  assert.match(m, /și încă \d+/, "lista nu s-a marginit");
+  assert.ok(m.length <= 500, `motivul are ${m.length} semne`);
+  assert.ok(m.includes(MOTIV_STOC_NEFACUT), "motivul de stoc a fost impins afara: cronul nu-l mai gaseste");
+  assert.equal(scoateBucata(m, MOTIV_STOC_NEFACUT)?.startsWith(INCEPUT_CODURI), true);
 });

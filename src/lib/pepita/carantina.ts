@@ -18,8 +18,23 @@ import { esteLivrarePepita } from "./mapare";
 /** Semnul dintre motive. Ales ca sa nu apara in text scris de om. */
 const LEGATURA = " | ";
 
-/** Cat incape in coloana. */
+/**
+ * Cat se scrie in `motiv`.
+ *
+ * ⚠ NU E MARGINEA COLOANEI: coloana e `text`, deci incape orice. E marginea a ceea ce se poate
+ * CITI de un om intr-o lista, si de aceea ce nu incape se arunca INTREG, nu se taie.
+ */
 const MAX = 500;
+
+/**
+ * Cat loc are voie sa ia lista de coduri din motiv.
+ *
+ * ⚠ MARGINIREA E PE LUNGIME, NU PE NUMAR. Textul per linie nu mai e un cod de zece semne, ci o
+ * propozitie intreaga („ABC (varianta «Rosu» nu mai există la produsul Set de ustensile pentru
+ * grătar, 12 piese)"), deci si trei linii pot umple singure tot motivul. Restul motivului
+ * trebuie sa incapa oricum: mai ales cel de STOC, fara de care cronul nu recunoaste randul.
+ */
+const LOC_PENTRU_CODURI = 260;
 
 /**
  * Lipeste motivele intr-unul singur.
@@ -87,6 +102,14 @@ export function scoateBucata(motiv: string | null | undefined, bucata: string): 
    internationale, iar Pepita nu il trimite mereu. Ramane un risc stiut la eColet, care il cere
    la fiecare adresa; acolo cotarea se intoarce fara oferte, si asta se vede la emitere.
 */
+
+/** Coletul e dus de Pepita? Citit de pe comanda, cu o cadere pentru randurile de dinainte. */
+function livrareaEAPepitei(orderSource: unknown): boolean {
+  const src = orderSource as { livrare_pepita?: unknown; pepita_delivery_mode?: unknown } | null;
+  if (src?.livrare_pepita === true) return true;
+  if (src?.livrare_pepita === false) return false;
+  return typeof src?.pepita_delivery_mode === "string" && esteLivrarePepita(src.pepita_delivery_mode);
+}
 
 /** Cate cifre are cel mai scurt numar de telefon adevarat. Sub atat e altceva. */
 const CIFRE_TELEFON = 7;
@@ -186,9 +209,17 @@ export function lipsuriComandaScrisa(o: {
     oras: text(a.city),
     strada: text(a.address),
     tara: text(a.country),
-    /* ⚠ Semnul e scris pe comanda la ingest; recalculat aici din modul de livrare, ar fi cerut
-       sarcina lor, care nu se pastreaza. */
-    livrarePepita: (o.order_source as { livrare_pepita?: unknown } | null)?.livrare_pepita === true,
+    /*
+     * ⚠ Semnul e scris pe comanda la ingest; recalculat aici din modul de livrare, ar fi cerut
+     * sarcina lor, care nu se pastreaza.
+     *
+     * ⚠ SI O CADERE PENTRU COMENZILE DE DINAINTE. `livrare_pepita` se scrie abia de la ingestul
+     * din 08.09.2026; comenzile mai vechi au doar `pepita_delivery_mode`. Fara caderea asta, o
+     * comanda Pepita Delivery ramasa in carantina de pe versiunea veche s-ar fi purtat ca una cu
+     * curier propriu, iar la automatul de colet adresa lipseste PE DREPT: n-ar fi iesit din
+     * carantina niciodata, oricat ar fi reparat comerciantul.
+     */
+    livrarePepita: livrareaEAPepitei(o.order_source),
   });
 }
 
@@ -203,9 +234,31 @@ export function lipsuriComandaScrisa(o: {
 export const INCEPUT_CODURI = "Coduri fără corespondent în Edinio: ";
 export const INCEPUT_NELIVRABILA = "Nu se poate expedia: ";
 
-/** Motivul de carantina pentru liniile pe care nu le-am putut lega de catalog. */
+/**
+ * Motivul de carantina pentru liniile pe care nu le-am putut lega de catalog.
+ *
+ * ⚠ ISI MARGINESTE SINGURA LISTA. Textul per linie a crescut de la un cod (~10 semne) la o
+ * propozitie intreaga („ABC (varianta «Rosu» nu mai există la produsul Set de ustensile)"), deci
+ * patru linii nelegate umpleau singure tot motivul si impingeau afara avertismentul de moneda
+ * sau pe cel de stoc — iar fara motivul de stoc, cronul nu mai recunoaste randul si comanda
+ * ramane in carantina pe vecie.
+ */
 export function motivCoduri(nelegate: string[]): string | null {
-  return nelegate.length ? `${INCEPUT_CODURI}${nelegate.join(", ")}` : null;
+  if (nelegate.length === 0) return null;
+
+  const numite: string[] = [];
+  let lungime = 0;
+  for (const cod of nelegate) {
+    const cost = (numite.length ? 2 : 0) + cod.length;
+    /* Cel putin unul se numeste mereu: un motiv fara niciun cod n-ar spune nimic. */
+    if (numite.length > 0 && lungime + cost > LOC_PENTRU_CODURI) break;
+    numite.push(cod);
+    lungime += cost;
+  }
+
+  const restul = nelegate.length - numite.length;
+  const lista = numite.join(", ").slice(0, LOC_PENTRU_CODURI);
+  return `${INCEPUT_CODURI}${lista}${restul > 0 ? `, și încă ${restul}` : ""}`;
 }
 
 /** Motivul de carantina pentru o comanda pe care nu o poti expedia. `null` daca nu lipseste nimic. */

@@ -1143,3 +1143,44 @@ test("⚠ cand ajustarea PICA, liniile NU se scriu: altfel a doua apasare iese f
   assert.equal(linie(b.orders[0], 1).product_id, P_VARIANTE);
   assert.equal(b.comenzi[0].stare, "importata");
 });
+
+test("⚠ cand liniile n-au moneda, o da TRANSPORTUL: altfel o comanda de forinti iese „RON”", async () => {
+  /*
+   * Sunt sarcini in care `products[].currency` lipseste, dar `total_shipping_price_currency` e
+   * „HUF". Fara caderea pe transport, comanda se scria cu moneda magazinului: nu intra in
+   * carantina, nu primea nota, iar cifra ei pleca in rambursul unui AWB si intr-o factura in lei.
+   */
+  const b = faceBaza();
+  const r = await ingereaza(b.db, CTX, comanda(
+    { total_shipping_price: 1490, total_shipping_price_currency: "HUF" },
+    [{ id: "77", sku: idArticol(P_SIMPLU, null), quantity: 1, price: 3192 }],
+  ));
+
+  assert.equal(b.orders[0].order_source.currency, "HUF");
+  assert.equal(r.stare, "carantina");
+  assert.match(b.comenzi[0].motiv ?? "", /altă monedă/);
+  assert.match(b.orders[0].internal_notes, /în HUF/);
+});
+
+test("⚠ codul necitit pune un STEAG, si el opreste rambursul", async () => {
+  /*
+   * `currency` ramane cea mai buna presupunere, fiindca rapoartele au nevoie de ceva. Dar a
+   * precompleta un ramburs pe o presupunere despre bani inseamna sa ceri la usa o cifra care
+   * poate fi in alta moneda.
+   */
+  const b = faceBaza();
+  await ingereaza(b.db, CTX, comanda(
+    { total_shipping_price_currency: undefined },
+    [{ id: "77", sku: idArticol(P_SIMPLU, null), currency: "Ft", quantity: 1, price: 100 }],
+  ));
+  const o = b.orders[0];
+
+  assert.equal(o.order_source.moneda_necitita, true);
+  assert.equal(
+    rambursDeIncasat({ payment_status: o.payment_status, total: o.total, order_source: o.order_source }),
+    0,
+    "s-a precompletat un ramburs pe o moneda pe care am scris ca n-o stim",
+  );
+  /* ⚠ Si cine intra pe lista obisnuita de comenzi afla din nota, nu doar din panoul Pepita. */
+  assert.match(o.internal_notes, /nu s-a putut citi/);
+});

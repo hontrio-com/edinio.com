@@ -372,7 +372,8 @@ export async function getStarePepita(businessId: string): Promise<StarePepita | 
       ultimaCitire: (chei.data?.[0] as { ultima_folosire: string | null } | undefined)?.ultima_folosire ?? null,
       comenziTotal: total.error ? null : total.count ?? 0,
       comenziCarantina: carantina.error ? null : carantina.count ?? 0,
-      ultimaComanda: (ultima.data?.[0] as { primit_la: string } | undefined)?.primit_la ?? null,
+      /* ⚠ Si aici: o citire cazuta nu inseamna „nicio comanda". Vezi `citiriPicate`. */
+      ultimaComanda: ultima.error ? null : (ultima.data?.[0] as { primit_la: string } | undefined)?.primit_la ?? null,
       citiriPicate,
     };
   } catch (e) {
@@ -422,7 +423,11 @@ export interface RezumatProduse {
    * ⚠ NU-L PUTEM STERGE NOI: feedul nu are cum sa spuna „scoate produsul asta", si nu exista
    * niciun API. Singurul lucru cinstit e sa i-l ARATAM comerciantului.
    */
-  orfane: number;
+  /**
+   * ⚠ `null` = NU S-A PUTUT SOCOTI, si nu se amesteca cu zero: verificarea a fost taiata la
+   * plafon, sau citirea evidentei a cazut. Zero inseamna „am numarat si nu e niciunul".
+   */
+  orfane: number | null;
   exempleOrfane: string[];
   produse: ProdusInPanou[];
 }
@@ -456,16 +461,27 @@ export async function verificaProdusePepita(
     /* Id-urile pe care feedul le-ar trimite ACUM. Se compara cu ce s-a trimis vreodata. */
     const deAcum = new Set<string>();
 
-    for (let de = 0; de < PLAFON_VERIFICARE; de += PAGINA) {
+    /*
+     * ⚠ PLIMBARE PE CHEIE, nu pe offset. `products.id` e uuid aleator, iar `.range()` numara
+     * randurile DUPA ordonare: un import care insereaza in acelasi timp un id mai mic muta
+     * fereastra si SARE un produs. Aici asta nu e doar o citire incompleta: articolele
+     * produsului sarit raman in evidenta si sunt numarate ORFANE, iar comerciantului i se
+     * spune sa ceara scoaterea lor de la Pepita — adica sa-si stinga listari vii.
+     */
+    let dupaId: string | null = null;
+    for (let citite = 0; citite < PLAFON_VERIFICARE; citite += PAGINA) {
+      let q = admin.from("products").select(COLOANE_PRODUS)
+        .eq("business_id", businessId).eq("is_active", true)
+        .order("id").limit(PAGINA);
+      if (dupaId) q = q.gt("id", dupaId);
       const randuri = randuriCitite<ProdusPepita & { is_active: boolean }>(
         "pepita.verificaProduse",
         /* ⚠ ACEEASI lista de coloane ca feedul, din acelasi loc. O a doua copie s-ar fi
            departat, iar panoul ar fi judecat produsul dupa alte campuri decat generatorul. */
-        await admin.from("products").select(COLOANE_PRODUS)
-          .eq("business_id", businessId).eq("is_active", true)
-          .order("id").range(de, de + PAGINA - 1) as never,
+        await q as never,
       );
       if (randuri.length === 0) break;
+      dupaId = randuri[randuri.length - 1].id;
       active += randuri.length;
 
       for (const p of randuri) {
@@ -492,7 +508,18 @@ export async function verificaProdusePepita(
       }
 
       if (randuri.length < PAGINA) break;
-      if (de + PAGINA >= PLAFON_VERIFICARE) partial = true;
+      /*
+       * ⚠ PLAFONUL SE DECLARA ATINS DOAR DACA CHIAR MAI E CEVA DUPA EL. Pus pe „am citit
+       * PLAFON randuri", un magazin cu fix atatea produse primea `partial: true` desi
+       * catalogul fusese parcurs intreg: i se spunea ca verificarea s-a oprit, si tot blocul
+       * de orfani era sarit tacut, pentru totdeauna.
+       */
+      if (citite + PAGINA >= PLAFON_VERIFICARE) {
+        const { data: maiE } = await admin.from("products").select("id")
+          .eq("business_id", businessId).eq("is_active", true)
+          .gt("id", dupaId).order("id").limit(1);
+        partial = ((maiE ?? []) as { id: string }[]).length > 0;
+      }
     }
 
     /*
@@ -502,20 +529,44 @@ export async function verificaProdusePepita(
      * repede sa fie ignorat.
      */
     const exempleOrfane: string[] = [];
-    let orfane = 0;
+    /*
+     * ⚠ `null` INSEAMNA „nu s-a putut socoti", si nu se amesteca cu zero.
+     *
+     * Blocul asta e o adaugire tarzie si NEESENTIALA: numara articole ramase la ei. O citire
+     * cazuta aici, sau migratia `pepita-articole-exportate` neaplicata inca, arunca dintr-un
+     * `throw` care urca in `catch`-ul functiei si sterge TOT ecranul — cate produse active,
+     * cate incluse, ce eroare are fiecare — pentru ceva ce nu exista ieri. Deci isi are
+     * propriul `catch`.
+     */
+    let orfane: number | null = partial ? null : 0;
     if (!partial) {
-      for (let de = 0; ; de += 1000) {
-        const { data, error } = await admin
-          .from("pepita_articole").select("articol_id, combinatie")
-          .eq("business_id", businessId).order("articol_id").range(de, de + 999);
-        if (error) throw error;
-        const randuri = (data ?? []) as { articol_id: string; combinatie: string }[];
-        for (const r of randuri) {
-          if (deAcum.has(r.articol_id)) continue;
-          orfane++;
-          if (exempleOrfane.length < 20) exempleOrfane.push(r.combinatie || r.articol_id);
+      try {
+        /* Plimbare pe cheie, ca la produse: `articol_id` e cheia lor, si nu se schimba. */
+        let dupaArticol: string | null = null;
+        for (;;) {
+          let qa = admin.from("pepita_articole").select("articol_id, combinatie")
+            .eq("business_id", businessId).order("articol_id").limit(1000);
+          if (dupaArticol) qa = qa.gt("articol_id", dupaArticol);
+          const { data, error } = await qa;
+          if (error) throw error;
+          const randuri = (data ?? []) as { articol_id: string; combinatie: string }[];
+          if (randuri.length === 0) break;
+          dupaArticol = randuri[randuri.length - 1].articol_id;
+          for (const r of randuri) {
+            if (deAcum.has(r.articol_id)) continue;
+            orfane = (orfane ?? 0) + 1;
+            if (exempleOrfane.length < 20) exempleOrfane.push(r.combinatie || r.articol_id);
+          }
+          if (randuri.length < 1000) break;
         }
-        if (randuri.length < 1000) break;
+      } catch (e) {
+        orfane = null;
+        exempleOrfane.length = 0;
+        await logError({
+          action: "pepita/verificare-orfani",
+          message: e instanceof Error ? e.message : String(e),
+          businessId, severity: "warning",
+        });
       }
     }
 

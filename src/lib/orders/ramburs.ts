@@ -56,7 +56,14 @@ export function baniiIiIaMarketplaceul(orderSource: unknown): boolean {
  * vechi, care n-au deloc `order_source`, raman neatinse.
  */
 export function monedaNeincasabila(orderSource: unknown): boolean {
-  const m = (orderSource as { currency?: unknown } | null)?.currency;
+  const src = orderSource as { currency?: unknown; moneda_necitita?: unknown } | null;
+  /*
+   * ⚠ SI CAND NU STIM IN CE MONEDA E. Marketplace-ul a trimis un cod pe care nu l-am putut citi;
+   * `currency` de pe comanda ramane cea mai buna presupunere, dar a precompleta un ramburs pe o
+   * presupunere despre bani inseamna sa ceri la usa o cifra care poate fi in alta moneda.
+   */
+  if (src?.moneda_necitita === true) return true;
+  const m = src?.currency;
   return typeof m === "string" && m.trim() !== "" && m.trim().toUpperCase() !== "RON";
 }
 

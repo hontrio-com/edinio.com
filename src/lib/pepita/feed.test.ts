@@ -37,9 +37,16 @@ interface Optiuni {
   listari?: { product_id: string; inclus: boolean; safety_stock: number | null; pret_override: number | null; actualizat_la?: string | null }[];
   /** Cand s-au atins ultima oara setarile magazinului. Intra in `<LastMod>`. */
   setariAtinseLa?: string;
+  moneda?: string;
+  /** Cota de TVA a magazinului. Schimbata, schimba pretul brut din feed. */
+  tva?: number;
   categoriiAtinseLa?: string;
   /** Cand s-a atins ultima oara magazinul: numele lui si adresa intra in feed. */
   magazinAtinsLa?: string;
+  /** Cate categorii are magazinul. Peste 1000, citirea TREBUIE paginata. */
+  cateCategorii?: number;
+  /** Scrierea evidentei articolelor trimise cade. Feedul NU are voie sa se rupa din asta. */
+  cadeEvidenta?: boolean;
   config?: Record<string, unknown>;
   /** De la a cata pagina de produse cade citirea. `null` = niciodata. */
   cadeLaPagina?: number | null;
@@ -63,31 +70,67 @@ function doar<T extends Record<string, unknown>>(rand: T, coloane: string | unde
 
 function faceBaza(o: Optiuni = {}) {
   const produse = o.produse ?? [produs(1), produs(2)];
+  /*
+   * ⚠ CONFIGURAREA E VIE, ca in baza: amprenta si stampila scrise de feed se intorc la citirea
+   * urmatoare. Fara asta, feedul ar fi scris o stampila noua la fiecare trecere si `<LastMod>`
+   * ar fi fost mereu „acum" in probe, adica exact defectul pe care il repara.
+   */
+  const configCurent: Record<string, unknown> = { activ: true, ...(o.config ?? {}) };
+  const stampile: Record<string, unknown>[] = [];
   let pagini = 0;
   /* Ce a scris feedul in evidenta articolelor trimise. */
   const scrise: { product_id: string; combinatie: string; articol_id: string }[] = [];
 
-  const raspunde = (tabela: string, filtre: [string, unknown][], interval: [number, number] | null, corp: unknown = null, coloane?: string) => {
+  const raspunde = (tabela: string, filtre: [string, unknown][], interval: [number, number] | null, corp: unknown = null, coloane?: string, optiuni?: { onConflict?: string }) => {
     if (tabela === "businesses") {
       return { data: doar({ id: BID, slug: "magazin", custom_domain: null, store_name: "Magazin", business_name: "SRL", is_published: true, updated_at: o.magazinAtinsLa ?? "2026-08-01T10:00:00.000Z" }, coloane), error: null };
     }
     if (tabela === "store_settings") {
       return {
         data: doar({
-          pepita_config: { activ: true, ...(o.config ?? {}) },
-          vat_enabled: true, vat_rate: 21, prices_include_vat: true,
-          updated_at: o.setariAtinseLa ?? "2026-08-01T10:00:00.000Z",
+          pepita_config: configCurent,
+          vat_enabled: true, vat_rate: o.tva ?? 21, prices_include_vat: true,
+          currency: o.moneda ?? "RON",
         }, coloane),
         error: null,
       };
     }
     if (tabela === "categories") {
-      return { data: [doar({ id: "c1", name: "Scaune", parent_id: null, updated_at: o.categoriiAtinseLa ?? "2026-08-01T10:00:00.000Z" }, coloane)], error: null };
+      /*
+       * ⚠ PAGINAT CA IN PRODUCTIE. Manipulatorul de dinainte intorcea intotdeauna UN rand si
+       * ignora `.range()`, deci bucla se rotea o singura data si un `break` neconditionat
+       * trecea verde. Un magazin cu peste 1000 de categorii primea un arbore taiat tacut.
+       */
+      const cate = o.cateCategorii ?? 1;
+      const toate = Array.from({ length: cate }, (_, i) => ({
+        id: i === 0 ? "c1" : `c${String(i + 1).padStart(5, "0")}`,
+        name: i === 0 ? "Scaune" : `Categoria ${i + 1}`,
+        parent_id: null,
+        /*
+         * ⚠ CLIPA NOUA STA PE ULTIMA CATEGORIE, dinadins. Pusa pe toate, o citire taiata la
+         * prima pagina ar fi dat acelasi maxim, si proba n-ar fi aparat nimic.
+         */
+        updated_at: i === cate - 1
+          ? (o.categoriiAtinseLa ?? "2026-08-01T10:00:00.000Z")
+          : "2026-08-01T10:00:00.000Z",
+      }));
+      const [de, pana] = interval ?? [0, 999];
+      return { data: toate.slice(de, pana + 1).map((c) => doar(c, coloane)), error: null };
     }
     if (tabela === "pepita_listari") {
       return { data: (o.listari ?? []).map((r) => doar(r as unknown as Record<string, unknown>, coloane)), error: null };
     }
     if (tabela === "pepita_articole") {
+      if (o.cadeEvidenta) return { data: null, error: { code: "42P01", message: "relation does not exist" } };
+      /*
+       * ⚠ TINTA CONFLICTULUI CHIAR SE VERIFICA. Tabela are unic pe (business_id, articol_id);
+       * cu alta tinta, Postgres raspunde 42P10 la fiecare scriere, `try/catch`-ul o inghite ca
+       * avertisment, si evidenta ramane GOALA pentru totdeauna — adica drumul inapoi al unei
+       * comenzi intarziate moare tacut.
+       */
+      if (optiuni?.onConflict !== "business_id,articol_id") {
+        return { data: null, error: { code: "42P10", message: "there is no unique constraint matching the ON CONFLICT specification" } };
+      }
       for (const r of (corp as { product_id: string; combinatie: string; articol_id: string }[]) ?? []) scrise.push(r);
       return { data: null, error: null };
     }
@@ -110,23 +153,34 @@ function faceBaza(o: Optiuni = {}) {
     let interval: [number, number] | null = null;
     let corp: unknown = null;
     let coloane: string | undefined;
+    let optiuni: { onConflict?: string } | undefined;
     const b: any = {
       select: (c?: string) => { coloane = c; return b; },
-      upsert: (p: unknown) => { corp = p; return b; },
+      upsert: (p: unknown, opt?: { onConflict?: string }) => { corp = p; optiuni = opt; return b; },
       eq: (k: string, v: unknown) => { filtre.push([k, v]); return b; },
       in: () => b, is: () => b, not: () => b, neq: () => b, order: () => b, limit: () => b,
       range: (a: number, c: number) => { interval = [a, c]; return b; },
-      maybeSingle: () => Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane)),
-      single: () => Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane)),
+      maybeSingle: () => Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane, optiuni)),
+      single: () => Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane, optiuni)),
       then: (bun: (v: unknown) => unknown, rau?: (e: unknown) => unknown) =>
-        Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane)).then(bun, rau),
+        Promise.resolve(raspunde(tabela, filtre, interval, corp, coloane, optiuni)).then(bun, rau),
     };
     return b;
   };
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
-  const db = { from: (t: string) => builder(t) } as unknown as SupabaseClient<Database>;
-  return Object.assign(db, { __scrise: scrise });
+  const db = {
+    from: (t: string) => builder(t),
+    rpc: (nume: string, args: Record<string, unknown>) => {
+      if (nume === "jsonb_merge_config") {
+        const petic = args.p_patch as Record<string, unknown>;
+        Object.assign(configCurent, petic);
+        stampile.push(petic);
+      }
+      return Promise.resolve({ data: null, error: null });
+    },
+  } as unknown as SupabaseClient<Database>;
+  return Object.assign(db, { __scrise: scrise, __config: configCurent, __stampile: stampile });
 }
 
 async function feed(db: SupabaseClient<Database>, fel: "produse" | "stoc" = "produse") {
@@ -290,6 +344,11 @@ test("⚠ feedul de STOC nu scrie evidenta: aceleasi randuri, de 24 de ori pe zi
    atins: strategia de pret, stocul de siguranta, TVA-ul, garantia, transportul, numele
    magazinului, arborele de categorii. Pepita citea „nimic nou aici" despre un produs al carui
    pret tocmai se schimbase.
+
+   ⚠ Prima incercare lua `store_settings.updated_at`, si era gresita: coloana aceea urca la
+   FIECARE COMANDA, prin numerotarea secventiala. Pragul ar fi fost „acum" in fiecare zi, pe tot
+   catalogul. Acum e o amprenta a campurilor care chiar ajung in feed, cu o stampila scrisa cand
+   amprenta se schimba.
 */
 
 const secunde = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
@@ -298,63 +357,141 @@ const lastMod = (xml: string): number | null => {
   return m ? Number(m[1]) : null;
 };
 
-test("⚠ o schimbare in setarile magazinului urca `LastMod`, desi produsul n-a fost atins", async () => {
-  const TOATE = { mod_includere: "toate" };
-  const vechi = await feed(faceBaza({ config: TOATE, produse: [produs(1, { updated_at: "2026-01-01T00:00:00.000Z" })] }));
-  assert.equal(lastMod(vechi), secunde("2026-08-01T10:00:00.000Z"), "pragul magazinului nu se vede deloc");
+const TOATE = { mod_includere: "toate" };
+const CLIPA_VECHE = "2026-08-01T10:00:00.000Z";
 
-  const nou = await feed(faceBaza({
-    config: TOATE,
-    produse: [produs(1, { updated_at: "2026-01-01T00:00:00.000Z" })],
-    setariAtinseLa: "2026-09-05T12:00:00.000Z",
-  }));
-  assert.equal(lastMod(nou), secunde("2026-09-05T12:00:00.000Z"));
+/**
+ * Feedul, cu stampila configurarii ASEZATA, ca sa nu domine.
+ *
+ * Prima trecere scrie amprenta (nu exista niciuna), a doua o gaseste potrivita si foloseste
+ * stampila. Intre ele o coboram la o clipa veche: altfel stampila ar fi „acum" si ar acoperi
+ * tot ce vrem sa masuram.
+ */
+async function feedAsezat(db: ReturnType<typeof faceBaza>, fel: "produse" | "stoc" = "produse") {
+  await feed(db, fel);
+  (db as unknown as { __config: Record<string, unknown> }).__config.feed_stamp = CLIPA_VECHE;
+  return feed(db, fel);
+}
+
+test("⚠ o schimbare in configurarea feedului urca `LastMod`, desi produsul n-a fost atins", async () => {
+  const db = faceBaza({ config: TOATE, produse: [produs(1, { updated_at: "2026-01-01T00:00:00.000Z" })] });
+  assert.equal(lastMod(await feedAsezat(db)), secunde(CLIPA_VECHE), "stampila configurarii nu se vede deloc");
+
+  /* Comerciantul schimba stocul de siguranta: nu atinge niciun produs, dar schimba feedul. */
+  (db as unknown as { __config: Record<string, unknown> }).__config.safety_stock = 3;
+  const xml = await feed(db);
+
+  const scrise = (db as unknown as { __stampile: Record<string, unknown>[] }).__stampile;
+  const ultima = scrise[scrise.length - 1].feed_stamp as string;
+  assert.equal(lastMod(xml), secunde(ultima), "schimbarea de configurare n-a urcat data");
+  assert.ok(secunde(ultima) > secunde(CLIPA_VECHE));
 });
 
-test("un produs atins mai tarziu decat setarile isi pastreaza propria data", async () => {
-  const xml = await feed(faceBaza({ config: { mod_includere: "toate" }, produse: [produs(1, { updated_at: "2026-09-07T08:00:00.000Z" })] }));
-  assert.equal(lastMod(xml), secunde("2026-09-07T08:00:00.000Z"));
+test("⚠ o trecere care nu schimba nimic NU rescrie stampila", async () => {
+  /*
+   * Altfel `<LastMod>` ar fi „acum" la fiecare citire a feedului, adica exact defectul primei
+   * incercari, mutat in alt loc.
+   */
+  const db = faceBaza({ config: TOATE, produse: [produs(1)] });
+  await feedAsezat(db);
+  const cate = (db as unknown as { __stampile: unknown[] }).__stampile.length;
+  await feed(db);
+  await feed(db);
+  assert.equal((db as unknown as { __stampile: unknown[] }).__stampile.length, cate);
+});
+
+test("un produs atins mai tarziu decat configurarea isi pastreaza propria data", async () => {
+  const db = faceBaza({ config: TOATE, produse: [produs(1, { updated_at: "2026-09-07T08:00:00.000Z" })] });
+  assert.equal(lastMod(await feedAsezat(db)), secunde("2026-09-07T08:00:00.000Z"));
 });
 
 test("⚠ reglajul pus pe UN produs urca `LastMod` doar la el", async () => {
   const p1 = produs(1, { updated_at: "2026-01-01T00:00:00.000Z" });
   const p2 = produs(2, { updated_at: "2026-01-01T00:00:00.000Z" });
-  const xml = await feed(faceBaza({
+  const db = faceBaza({
     produse: [p1, p2],
     listari: [
       { product_id: p1.id, inclus: true, safety_stock: 2, pret_override: null, actualizat_la: "2026-09-06T09:00:00.000Z" },
       { product_id: p2.id, inclus: true, safety_stock: null, pret_override: null, actualizat_la: null },
     ],
-  }));
+  });
+  const xml = await feedAsezat(db);
   const toate = [...xml.matchAll(/<LastMod>(\d+)<\/LastMod>/g)].map((m) => Number(m[1]));
   assert.equal(toate.length, 2);
   assert.equal(toate[0], secunde("2026-09-06T09:00:00.000Z"));
-  assert.equal(toate[1], secunde("2026-08-01T10:00:00.000Z"), "al doilea produs a primit data primului");
+  assert.equal(toate[1], secunde(CLIPA_VECHE), "al doilea produs a primit data primului");
 });
 
 test("o redenumire de categorie urca `LastMod`", async () => {
-  const xml = await feed(faceBaza({
-    config: { mod_includere: "toate" },
+  const db = faceBaza({
+    config: TOATE,
     produse: [produs(1, { updated_at: "2026-01-01T00:00:00.000Z" })],
     categoriiAtinseLa: "2026-09-04T07:00:00.000Z",
-  }));
-  assert.equal(lastMod(xml), secunde("2026-09-04T07:00:00.000Z"));
+  });
+  assert.equal(lastMod(await feedAsezat(db)), secunde("2026-09-04T07:00:00.000Z"));
+});
+
+test("⚠ magazinul redenumit urca si el `LastMod`: numele lui pleaca in fiecare articol", async () => {
+  const db = faceBaza({
+    config: TOATE,
+    produse: [produs(1, { updated_at: "2026-01-01T00:00:00.000Z" })],
+    magazinAtinsLa: "2026-09-03T06:00:00.000Z",
+  });
+  assert.equal(lastMod(await feedAsezat(db)), secunde("2026-09-03T06:00:00.000Z"));
 });
 
 test("⚠ o data nevalida nu scrie `NaN` in XML", async () => {
   /* `el()` nu sare peste sirul „NaN": ar fi iesit `<LastMod>NaN</LastMod>`, adica XML minciuna. */
-  const xml = await feed(faceBaza({ config: { mod_includere: "toate" }, produse: [produs(1, { updated_at: "nu e o data" })] }));
+  const db = faceBaza({ config: TOATE, produse: [produs(1, { updated_at: "nu e o data" })] });
+  const xml = await feedAsezat(db);
   assert.ok(!xml.includes("NaN"), "a iesit NaN in feed");
-  assert.equal(lastMod(xml), secunde("2026-08-01T10:00:00.000Z"));
+  assert.equal(lastMod(xml), secunde(CLIPA_VECHE));
 });
 
-test("⚠ magazinul redenumit urca si el `LastMod`: numele lui pleaca in fiecare articol", () => {
-  return (async () => {
-    const xml = await feed(faceBaza({
-      config: { mod_includere: "toate" },
-      produse: [produs(1, { updated_at: "2026-01-01T00:00:00.000Z" })],
-      magazinAtinsLa: "2026-09-03T06:00:00.000Z",
-    }));
-    assert.equal(lastMod(xml), secunde("2026-09-03T06:00:00.000Z"));
-  })();
+test("⚠ arborele de categorii se citeste PAGINAT: PostgREST da cel mult 1000 de randuri", async () => {
+  /*
+   * Fara paginare, un magazin cu peste 1000 de categorii primea un arbore taiat tacut: caile
+   * din feed ieseau gresite sau goale pentru produsele din ultimele categorii, iar `updated_at`
+   * al lor nu mai intra in pragul lui `<LastMod>`.
+   */
+  const xml = await feedAsezat(faceBaza({
+    config: TOATE,
+    produse: [produs(1)],
+    cateCategorii: 1400,
+    categoriiAtinseLa: "2026-09-04T07:00:00.000Z",
+  }));
+  /* Daca bucla s-ar opri la prima pagina, ultimele 400 de categorii n-ar intra in prag. */
+  assert.equal(lastMod(xml), secunde("2026-09-04T07:00:00.000Z"));
+  assert.match(xml, /<Category>/);
+});
+
+test("⚠ evidenta articolelor trimise NU are voie sa rupa feedul", async () => {
+  /*
+   * Invariantul cel mai apasat din `feed.ts`: o exceptie in scrierea evidentei ar iesi din
+   * generator, `</Catalog>` nu s-ar mai scrie, si TOATE magazinele ar livra XML invalid. Cazul
+   * concret: migratia `pepita-articole-exportate` neaplicata inca pe baza, deci 42P01 la fiecare
+   * scriere.
+   */
+  const db = faceBaza({ config: { mod_includere: "toate" }, produse: [produs(1), produs(2)], cadeEvidenta: true });
+  const xml = await feed(db);
+
+  assert.match(xml, /<\/Catalog>/, "feedul s-a rupt: XML neinchis");
+  assert.equal((xml.match(/<Product>/g) ?? []).length, 2, "produsele n-au mai plecat");
+  assert.equal((db as unknown as { __scrise: unknown[] }).__scrise.length, 0);
+});
+
+test("⚠ o schimbare de COTA DE TVA urca si ea `LastMod`: schimba pretul brut din feed", async () => {
+  /*
+   * TVA-ul n-are stampila proprie nicaieri in baza, si de aceea intra in amprenta. Lasat pe
+   * dinafara, o schimbare de cota — adica o schimbare de pret la ei — n-ar mai fi ajuns
+   * niciodata in `<LastMod>`.
+   */
+  const db = faceBaza({ config: TOATE, produse: [produs(1, { updated_at: "2026-01-01T00:00:00.000Z" })], tva: 21 });
+  assert.equal(lastMod(await feedAsezat(db)), secunde(CLIPA_VECHE));
+
+  const db2 = faceBaza({ config: TOATE, produse: [produs(1, { updated_at: "2026-01-01T00:00:00.000Z" })], tva: 11 });
+  await feed(db2);
+  const amprenteDiferite = (db as unknown as { __config: Record<string, unknown> }).__config.feed_amprenta
+    !== (db2 as unknown as { __config: Record<string, unknown> }).__config.feed_amprenta;
+  assert.ok(amprenteDiferite, "cota de TVA nu intra in amprenta, deci o schimbare de pret nu urca data");
 });

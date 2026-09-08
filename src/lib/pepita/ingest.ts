@@ -5,6 +5,7 @@ import { logError } from "@/lib/error-logger";
 import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { combinatiiActiveUnice, parseVariants } from "@/lib/storefront/variants";
 import { parseBillingCompany, type BillingCompany } from "@/lib/billing/company";
+import { coteleLiniilor, type CoteleLiniilor } from "@/lib/billing/cote-pe-linii";
 import { desfaIdArticol, amprentaCombinatie } from "./identitate";
 import {
   esteLivrarePepita, incaseazaPepita, metodaPlata, modLivrareCunoscut, modPlataCunoscut,
@@ -335,16 +336,37 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     return s + (cota > 0 ? brut - brut / (1 + cota / 100) : 0);
   }, 0));
   const total = Math.max(0, round2(marfa + c.transport - c.voucher));
-  const cote = [...new Set(legate.map((l) => l.linie.tva).filter((v): v is number => v != null && v > 0))];
 
   const items = legate.map((l) => ({
     product_id: l.productId,
     name: l.nume,
     price: round2(l.linie.pret),
     quantity: l.linie.cantitate,
+    /*
+     * ⚠ COTA RAMANE PE LINIE, nu doar in socoteala de mai sus.
+     *
+     * Pepita trimite TVA pe FIECARE produs, iar in Romania cotele chiar difera: hrana are
+     * 11%, restul 21%. Pastrata numai ca `orders.vat_rate`, adica un singur numar, informatia
+     * se pierdea si nimic nu mai putea sti ca a fost o comanda cu cote amestecate.
+     *
+     * ⚠ Scrisa aici, ea NU schimba singura felul in care factureaza Edinio, care tot cu o
+     * cota emite. Dar face ca amestecul sa poata fi VAZUT, iar emiterea automata sa se poata
+     * opri in loc sa scoata un document fiscal gresit.
+     */
+    ...(l.linie.tva != null ? { vat_rate: l.linie.tva } : {}),
     ...(l.variantTitle ? { variant_title: l.variantTitle } : {}),
     ...(l.linie.sku ? { sku: l.linie.sku } : {}),
   }));
+
+  /*
+   * ⚠ COTA COMENZII NU MAI E `max(cote)`.
+   *
+   * `max` supra-taxeaza TOATE liniile, si o face tacut: pe o comanda cu 11% si 21%, cele de
+   * 11% ar fi fost facturate cu 21%. Cand chiar trebuie ales un singur numar, se alege cota
+   * liniei cu valoarea cea mai mare, fiindca aduce totalul cel mai aproape de adevar. Iar cand
+   * cotele difera, factura automata nu mai pleaca deloc: vezi `maybeAutoInvoice`.
+   */
+  const cote = coteleLiniilor(items);
 
   const numeClient = [c.client.prenume, c.client.nume].filter(Boolean).join(" ").trim()
     || c.client.facturare.nume
@@ -364,14 +386,14 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     discount_amount: round2(c.voucher),
     total,
     vat_amount: tva,
-    vat_rate: cote.length > 0 ? Math.max(...cote) : 0,
+    vat_rate: cote.cotaDominanta,
     status: statusInitial(),
     payment_method: metodaPlata(c.modPlata, c.modLivrare),
     payment_status: starePlata(c.starePlata, c.modPlata),
     notes: c.mesajClient,
-    internal_notes: noteInterne(c, nelegate),
+    internal_notes: noteInterne(c, nelegate, cote),
     billing_company: firmaCumparatoare(c) as never,
-    order_source: sursaComenzii(c, ctx) as never,
+    order_source: sursaComenzii(c, ctx, cote) as never,
   } as never).select("id").maybeSingle();
 
   let orderId: string;
@@ -599,7 +621,7 @@ function adresaLivrare(c: ComandaPepita): Record<string, unknown> {
  * comenzi, filtrele, si pazele de marketing. Fara ea, comanda ar arata exact ca una
  * din magazinul propriu.
  */
-function sursaComenzii(c: ComandaPepita, ctx: ContextIngest): Record<string, unknown> {
+function sursaComenzii(c: ComandaPepita, ctx: ContextIngest, cote: CoteleLiniilor): Record<string, unknown> {
   return {
     marketplace: "pepita",
     order_number: c.externalId,
@@ -621,6 +643,9 @@ function sursaComenzii(c: ComandaPepita, ctx: ContextIngest): Record<string, unk
      * la usa, iar precompletat ar fi cerut clientului a doua oara aceiasi bani.
      */
     incaseaza_marketplace: incaseazaPepita(c.modPlata, c.modLivrare),
+    /* ⚠ Semnul ca s-au primit cote de TVA diferite pe linii. Se scrie o data, la ingest, ca sa
+       nu depinda de recitirea liniilor la fiecare afisare. */
+    ...(cote.uniforma ? {} : { vat_mixt: cote.cote }),
     livrare_pepita: esteLivrarePepita(c.modLivrare),
     ...(c.voucher > 0 ? { voucher: round2(c.voucher) } : {}),
     ...(c.client.codFiscal ? { tax_number: c.client.codFiscal } : {}),
@@ -639,7 +664,7 @@ function sursaComenzii(c: ComandaPepita, ctx: ContextIngest): Record<string, unk
  * ⚠ AICI SE SPUNE SI CE NU FACEM. Statusul nu pleaca inapoi la Pepita, fiindca nu
  * exista prin ce. Scris in comanda, omul afla exact acolo unde ar apasa gresit.
  */
-function noteInterne(c: ComandaPepita, nelegate: string[]): string {
+function noteInterne(c: ComandaPepita, nelegate: string[], cote: CoteleLiniilor): string {
   const randuri: string[] = [
     `Comandă Pepita ${c.externalId}${c.origine ? ` (${c.origine})` : ""}.`,
     `Plată: ${etichetaPlata(c.modPlata)}. Livrare aleasă la Pepita: ${etichetaLivrare(c.modLivrare)}.`,
@@ -667,6 +692,18 @@ function noteInterne(c: ComandaPepita, nelegate: string[]): string {
   }
   if (!modLivrareCunoscut(c.modLivrare)) {
     randuri.push(`⚠ Mod de livrare necunoscut („${c.modLivrare ?? "lipsă"}”). Alege curierul manual.`);
+  }
+  /*
+   * ⚠ AMESTECUL DE COTE SE SPUNE PE COMANDA, nu doar in jurnal. Facturarea automata se
+   * opreste singura, dar butoanele de facturare din panou raman apasabile, iar comerciantul
+   * trebuie sa afle INAINTE sa apese, nu dupa ce a iesit documentul.
+   */
+  if (!cote.uniforma) {
+    randuri.push(
+      `⚠ Comanda are cote de TVA diferite pe linii (${cote.cote.map((x) => `${x}%`).join(", ")}). `
+      + "Edinio emite factura cu o singură cotă, deci emite-o din contul tău de facturare, cu "
+      + "cotele corecte pe fiecare produs.",
+    );
   }
   if (nelegate.length > 0) {
     randuri.push(`⚠ Linii fără corespondent în catalog: ${nelegate.join(", ")}. Verifică ce s-a vândut înainte de expediere; stocul lor NU a fost scăzut.`);

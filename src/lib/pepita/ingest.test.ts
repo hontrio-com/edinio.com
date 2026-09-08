@@ -623,6 +623,41 @@ test("⚠ daca pica si a doua oara, verdictul ramane esec: reincercarea urmatoar
   assert.equal(b.consumuri.length, 1);
 });
 
+test("⚠ cota de TVA ramane PE FIECARE LINIE, nu doar in totalul comenzii", async () => {
+  /*
+   * Pepita trimite TVA pe fiecare produs, iar in Romania cotele chiar difera: hrana 11%,
+   * restul 21%. Pastrata numai ca `orders.vat_rate`, adica un singur numar, informatia se
+   * pierdea si nimic nu mai putea sti ca a fost o comanda cu cote amestecate.
+   */
+  const b = faceBaza();
+  await ingereaza(b.db, CTX, comanda({}, [
+    { id: "1", sku: idArticol(P_SIMPLU, null), currency: "RON", quantity: 1, price: 900, vat: 11 },
+    { id: "2", sku: idArticol(P_VARIANTE, "S"), currency: "RON", quantity: 1, price: 20, vat: 21 },
+  ]));
+  const items = b.orders[0].items as { vat_rate?: number }[];
+  assert.deepEqual(items.map((i) => i.vat_rate), [11, 21]);
+});
+
+test("⚠ cota comenzii NU mai e maximul: supra-taxa toate liniile", async () => {
+  /* 900 de lei cu 11% si 20 de lei cu 21%. `max` ar fi pus 21% pe toata comanda. */
+  const b = faceBaza();
+  await ingereaza(b.db, CTX, comanda({}, [
+    { id: "1", sku: idArticol(P_SIMPLU, null), currency: "RON", quantity: 1, price: 900, vat: 11 },
+    { id: "2", sku: idArticol(P_VARIANTE, "S"), currency: "RON", quantity: 1, price: 20, vat: 21 },
+  ]));
+  assert.equal((b.orders[0] as unknown as { vat_rate: number }).vat_rate, 11);
+  assert.deepEqual(b.orders[0].order_source.vat_mixt, [11, 21], "si amestecul se vede");
+  assert.match(b.orders[0].internal_notes, /cote de TVA diferite/);
+});
+
+test("o comanda cu o singura cota nu poarta niciun semn de amestec", async () => {
+  const b = faceBaza();
+  await ingereaza(b.db, CTX, comanda());
+  assert.equal((b.orders[0] as unknown as { vat_rate: number }).vat_rate, 21);
+  assert.equal(b.orders[0].order_source.vat_mixt, undefined);
+  assert.ok(!/cote de TVA diferite/.test(b.orders[0].internal_notes));
+});
+
 test("potrivirea liniilor nu cere nicio scriere", async () => {
   const b = faceBaza();
   const r = await leagaLiniile(b.db, BID, comanda().linii);

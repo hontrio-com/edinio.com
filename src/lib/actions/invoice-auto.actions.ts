@@ -2,6 +2,7 @@
 
 import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
 import { logError } from "@/lib/error-logger";
+import { coteleLiniilor } from "@/lib/billing/cote-pe-linii";
 
 /**
  * Central auto-invoicing dispatcher. On an order status/payment change it issues
@@ -25,7 +26,11 @@ export async function maybeAutoInvoice(
     const supabase = await clientFacturare(sistem);
     const { data: order } = await supabase
       .from("orders")
-      .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, payment_method, order_source")
+      /* ⚠ `items` E CERUT ANUME: de el atarna verificarea cotelor de mai jos. Necerut, ar fi
+         venit `undefined`, `coteleLiniilor` ar fi raspuns „uniforma" pe o lista goala, si
+         poarta ar fi tacut exact pe comenzile pentru care exista. Aceeasi lectie ca la
+         coloanele de AWB din generarea in masa. */
+      .select("smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, payment_method, order_source, items")
       .eq("id", orderId)
       .eq("business_id", businessId)
       .single();
@@ -111,6 +116,29 @@ export async function maybeAutoInvoice(
      * un tratament de TVA intracomunitar — trei hotarari fiscale pe care nu le luam in locul
      * comerciantului. Se scrie in jurnal si se lasa pe seama lui.
      */
+    /*
+     * ═══ ⚠ NU SE FACTUREAZA CU O SINGURA COTA O COMANDA CU MAI MULTE (08.09.2026) ═══
+     *
+     * `invoiceVat` intoarce UN numar, iar SmartBill, Oblio si fGO il pun pe TOATE liniile.
+     * Pentru o comanda din magazin asta e adevarat prin constructie: cota e a magazinului.
+     * Pentru una de marketplace nu: Pepita trimite TVA pe fiecare produs, iar in Romania
+     * cotele chiar difera (hrana 11%, restul 21%).
+     *
+     * ⚠ SE OPRESTE, NU SE APROXIMEAZA. O factura cu cota gresita pe jumatate din linii nu se
+     * retrage, se STORNEAZA. Aceeasi hotarare ca la moneda, cateva randuri mai jos, si din
+     * acelasi motiv: nu luam noi decizii fiscale in locul comerciantului.
+     */
+    const cote = coteleLiniilor(o.items);
+    if (!cote.uniforma) {
+      await logError({
+        action: "invoice-auto",
+        message: "comanda are cote de TVA diferite pe linii, iar facturarea automata emite cu o singura cota: nu s-a emis nimic",
+        details: { orderId, cote: cote.cote, marketplace: src?.marketplace ?? null },
+        businessId, severity: "warning",
+      });
+      return;
+    }
+
     const monedaComenzii = (src as { currency?: string } | null)?.currency;
     if (monedaComenzii && monedaComenzii.toUpperCase() !== "RON") {
       await logError({

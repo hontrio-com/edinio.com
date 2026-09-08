@@ -831,9 +831,15 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
       {stare.comenziCarantina > 0 && (
         <div className="space-y-2">
           <Callout variant="warning" icon={AlertTriangle}>
+            {/*
+              ⚠ TEXT NEUTRU, dinadins. Spunea „au linii pe care nu le-am putut lega" si „stocul
+              lor nu a fost scăzut", iar amândouă puteau minți: în carantină intră acum și o
+              comandă care nu se poate expedia (lipsește telefonul, strada), și una al cărei
+              stoc a scăzut în parte. Cauza adevărată e scrisă pe fiecare rând, mai jos.
+            */}
             {stare.comenziCarantina === 1
-              ? "O comandă Pepita are o linie pe care nu am putut-o lega de un produs din catalog. Stocul ei nu a fost scăzut."
-              : `${stare.comenziCarantina} comenzi Pepita au linii pe care nu le-am putut lega de produse din catalog. Stocul lor nu a fost scăzut.`}
+              ? "O comandă Pepita are nevoie de verificare înainte de expediere."
+              : `${stare.comenziCarantina} comenzi Pepita au nevoie de verificare înainte de expediere.`}
           </Callout>
           {!lista ? (
             <Button variant="outline" size="sm" onClick={incarca} disabled={incarc}>

@@ -665,3 +665,78 @@ test("potrivirea liniilor nu cere nicio scriere", async () => {
   assert.equal(r.legate[0].productId, P_SIMPLU);
   assert.equal(b.orders.length, 0);
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COMANDA PE CARE NU O POTI EXPEDIA
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const FARA_DATE = {
+  last_name: "Pop", first_name: "Ion", phone: "", email: "alias@pepita.ro",
+  shipping_country: "RO", shipping_county: "Cluj", shipping_city: "Cluj-Napoca",
+  shipping_street: "",
+};
+
+test("⚠ curier propriu fara telefon si fara strada: comanda intra, dar in CARANTINA", async () => {
+  const b = faceBaza();
+  const r = await ingereaza(b.db, CTX, comanda({ customer: FARA_DATE }));
+
+  /* Comanda E scrisa: o comanda pierduta e mai rea decat una care are nevoie de verificare. */
+  assert.equal(b.orders.length, 1);
+  assert.equal(r.stare, "carantina");
+  assert.equal(b.comenzi[0].stare, "carantina");
+  assert.match(b.comenzi[0].motiv ?? "", /telefonul/);
+  assert.match(b.comenzi[0].motiv ?? "", /strada/);
+
+  /* ⚠ Cine intra pe lista obisnuita de comenzi, nu prin panoul Pepita, afla din nota interna. */
+  assert.match(b.orders[0].internal_notes, /nu se poate expedia/i);
+  assert.ok(r.mesaje.some((m) => /nu se poate expedia/i.test(m)), "nu li s-a spus nimic");
+
+  /* ⚠ STOCUL SCADE OFICUM: marfa e vanduta la ei, iar nescazuta se supravinde pe alte canale. */
+  assert.equal(b.consumuri.length, 1);
+});
+
+test("⚠ aceleasi date lipsa, dar cu LIVRARE PEPITA, nu opresc nimic", async () => {
+  const b = faceBaza();
+  const r = await ingereaza(b.db, CTX, comanda({ customer: FARA_DATE, delivery_mod: "gls" }));
+
+  /* Coletul pleaca cu eticheta lor: telefonul si strada nu-i trebuie comerciantului. */
+  assert.equal(r.stare, "creata");
+  assert.equal(b.comenzi[0].stare, "importata");
+  assert.equal(b.comenzi[0].motiv, null);
+});
+
+test("⚠ datele de facturare tin loc celor de livrare, si comanda NU intra in carantina", async () => {
+  const b = faceBaza();
+  const r = await ingereaza(b.db, CTX, comanda({
+    customer: {
+      last_name: "Pop", first_name: "Ion", phone: "0720000000",
+      shipping_country: "RO", shipping_county: "Bihor", shipping_city: "", shipping_street: "",
+      billing_city: "Oradea", billing_street: "Str. Republicii 3", billing_postal_code: "410001",
+    },
+  }));
+
+  assert.equal(r.stare, "creata");
+  const a = b.orders[0].shipping_address as { city: string; address: string; postal_code: string };
+  assert.equal(a.city, "Oradea");
+  assert.equal(a.address, "Str. Republicii 3");
+  assert.equal(a.postal_code, "410001");
+});
+
+test("⚠ doua motive de carantina stau AMANDOUA pe rand, unul nu-l sterge pe celalalt", async () => {
+  /*
+   * Aici era defectul: esecul de stoc scria `motiv` peste cel dinainte, iar cronul de stoc
+   * scoate din carantina randurile al caror motiv e chiar al lui. Deci o comanda cu o linie
+   * nelegata SI stocul nescazut ar fi iesit din carantina cu prima problema nerezolvata,
+   * adica ar fi disparut din lista comerciantului.
+   */
+  const b = faceBaza([], 1);
+  const r = await ingereaza(b.db, CTX, comanda({}, [
+    { id: "77", sku: idArticol(P_SIMPLU, null), currency: "RON", quantity: 1, price: 100 },
+    { id: "78", sku: "COD-INVENTAT", currency: "RON", quantity: 1, price: 50 },
+  ]));
+
+  assert.equal(r.stare, "stoc-nefacut");
+  const motiv = b.comenzi[0].motiv ?? "";
+  assert.match(motiv, /COD-INVENTAT/, "motivul liniei nelegate a fost sters de cel de stoc");
+  assert.match(motiv, /Stocul nu s-a putut scădea/, "motivul de stoc lipseste");
+});

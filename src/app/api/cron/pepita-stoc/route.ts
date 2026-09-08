@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { MOTIV_STOC_NEFACUT } from "@/lib/pepita/ingest";
+import { scoateBucata } from "@/lib/pepita/carantina";
 
 /**
  * Duce la capat scaderea de stoc a comenzilor Pepita la care n-a apucat sa se faca.
@@ -114,9 +115,22 @@ export async function GET(req: NextRequest) {
      */
     const { data: randCurent } = await admin
       .from("pepita_comenzi").select("motiv").eq("id", r.id).maybeSingle();
-    if ((randCurent as { motiv: string | null } | null)?.motiv === MOTIV_STOC_NEFACUT) {
+    const motivCurent = (randCurent as { motiv: string | null } | null)?.motiv ?? null;
+    if (motivCurent?.includes(MOTIV_STOC_NEFACUT)) {
+      /*
+       * ⚠ SE SCOATE DOAR BUCATA LUI, nu tot motivul. Motivele se aduna: aceeasi comanda poate
+       * fi in carantina si pentru o linie nelegata, si pentru stocul nescazut. Comparatia pe
+       * egalitate de dinainte nu recunostea un motiv compus, deci lasa in carantina tocmai
+       * comenzile pe care le reparase; iar golit de tot, motivul ar fi scos din carantina o
+       * comanda cu prima problema nerezolvata. Vezi `compuneMotiv`.
+       */
+      const ramas = scoateBucata(motivCurent, MOTIV_STOC_NEFACUT);
       await admin.from("pepita_comenzi")
-        .update({ stare: "importata", motiv: null, prelucrat_la: new Date().toISOString() } as never)
+        .update({
+          stare: ramas ? "carantina" : "importata",
+          motiv: ramas,
+          prelucrat_la: new Date().toISOString(),
+        } as never)
         .eq("id", r.id);
     }
   }

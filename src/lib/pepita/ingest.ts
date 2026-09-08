@@ -12,6 +12,7 @@ import {
   starePlata, statusInitial, etichetaLivrare, etichetaPlata,
 } from "./mapare";
 import type { ComandaPepita, LiniePepita } from "./comanda-forma";
+import { compuneMotiv, lipsuriLivrare, motivNelivrabila } from "./carantina";
 
 /**
  * Comanda Pepita, adusa in Edinio.
@@ -368,6 +369,12 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
    */
   const cote = coteleLiniilor(items);
 
+  /*
+   * ⚠ CE LIPSESTE CA SA POATA FI EXPEDIATA. Se socoteste o data si se foloseste in trei
+   * locuri: starea randului de evidenta, nota interna a comenzii si raspunsul catre ei.
+   */
+  const lipsuri = lipsuriLivrare(c);
+
   const numeClient = [c.client.prenume, c.client.nume].filter(Boolean).join(" ").trim()
     || c.client.facturare.nume
     || "Client Pepita";
@@ -391,7 +398,7 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     payment_method: metodaPlata(c.modPlata, c.modLivrare),
     payment_status: starePlata(c.starePlata, c.modPlata),
     notes: c.mesajClient,
-    internal_notes: noteInterne(c, nelegate, cote),
+    internal_notes: noteInterne(c, nelegate, cote, lipsuri),
     billing_company: firmaCumparatoare(c) as never,
     order_source: sursaComenzii(c, ctx, cote) as never,
   } as never).select("id").maybeSingle();
@@ -438,10 +445,18 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
    * ar fi facut a doua.
    */
   const areNelegate = nelegate.length > 0;
+  const motivNelegate = areNelegate ? `Coduri fără corespondent în Edinio: ${nelegate.join(", ")}` : null;
+  const motivLipsuri = motivNelivrabila(lipsuri);
+  /*
+   * ⚠ DOUA FELURI DE CARANTINA, si niciunul nu-l cuprinde pe celalalt: o linie pe care n-o
+   * putem lega de catalog, si o comanda pe care comerciantul n-o poate expedia cu mijloacele
+   * lui. Motivele se leaga, nu se inlocuiesc: vezi `compuneMotiv`.
+   */
+  const inCarantina = areNelegate || lipsuri.length > 0;
   await admin.from("pepita_comenzi").update({
     order_id: orderId,
-    stare: areNelegate ? "carantina" : "importata",
-    motiv: areNelegate ? `Coduri fără corespondent în Edinio: ${nelegate.join(", ")}`.slice(0, 500) : null,
+    stare: inCarantina ? "carantina" : "importata",
+    motiv: compuneMotiv([motivNelegate, motivLipsuri]),
     prelucrat_la: acum,
   } as never).eq("id", randId);
 
@@ -453,8 +468,22 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
      */
     await admin.from("pepita_comenzi").update({
       stare: "carantina",
-      motiv: MOTIV_STOC_NEFACUT,
+      /*
+       * ⚠ SE ADUNA PESTE CELE DE MAI SUS. Scris singur, motivul asta le stergea, iar cronul de
+       * stoc scoate din carantina randurile al caror motiv e chiar el: o comanda cu linii
+       * nelegate SI stoc nescazut ar fi iesit din carantina cu prima problema nerezolvata.
+       */
+      motiv: compuneMotiv([motivNelegate, motivLipsuri, MOTIV_STOC_NEFACUT]),
     } as never).eq("id", randId);
+  }
+
+  if (lipsuri.length > 0) {
+    await logError({
+      action: "pepita/comenzi",
+      message: "comandă Pepita care nu se poate expedia cu datele primite",
+      details: { externalId: c.externalId, lipsuri, orderId },
+      businessId: ctx.businessId, severity: "warning",
+    });
   }
 
   if (areNelegate) {
@@ -470,13 +499,15 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     return { stare: "stoc-nefacut", orderId, mesaje: ["Comanda este salvată, dar procesarea nu s-a încheiat."] };
   }
 
+  /* ⚠ Se SPUNE ce lipseste, dar nu se spune ca n-am salvat: comanda e scrisa. */
+  const mesaje: string[] = [];
+  if (areNelegate) mesaje.push(`Comandă salvată. Coduri necunoscute: ${nelegate.join(", ")}`);
+  if (lipsuri.length > 0) mesaje.push(`Comandă salvată, dar nu se poate expedia: lipsesc ${lipsuri.join(", ")}.`);
+
   return {
-    stare: areNelegate ? "carantina" : regasita ? "duplicat" : "creata",
+    stare: inCarantina ? "carantina" : regasita ? "duplicat" : "creata",
     orderId,
-    mesaje: areNelegate
-      /* ⚠ Se SPUNE ca lipseste ceva, dar nu se spune ca n-am salvat: comanda e scrisa. */
-      ? [`Comandă salvată. Coduri necunoscute: ${nelegate.join(", ")}`]
-      : [],
+    mesaje,
   };
 }
 
@@ -597,14 +628,19 @@ function adresaLivrare(c: ComandaPepita): Record<string, unknown> {
    * ⚠ STRADA: `shipping_street` e deja „strada, numar”, iar celelalte doua sunt
    * bucatile ei. Se ia intregul cand exista; altfel se lipesc bucatile. Lipite
    * mereu peste intreg, ar fi iesit „Str. Teszt 14 Teszt u. 14”.
+   *
+   * ⚠ CADEREA PE FACTURARE. Cand adresa de livrare vine goala, datele omului sunt adesea
+   * chiar in obiect, la facturare. Fara caderea asta am fi carantinat comenzi ale caror date
+   * le aveam deja. Judetul n-are pereche la facturare in sarcina lor, deci ramane doar al livrarii.
    */
-  const strada = l.strada ?? ([l.numeStrada, l.numar].filter(Boolean).join(" ") || null);
+  const strada = l.strada ?? ([l.numeStrada, l.numar].filter(Boolean).join(" ") || null)
+    ?? f.strada ?? ([f.numeStrada, f.numar].filter(Boolean).join(" ") || null);
   return {
     address: strada ?? "",
-    city: l.oras ?? "",
+    city: l.oras ?? f.oras ?? "",
     county: l.judet ?? "",
-    postal_code: l.codPostal ?? "",
-    country: l.tara ?? "",
+    postal_code: l.codPostal ?? f.codPostal ?? "",
+    country: l.tara ?? f.tara ?? "",
     source: "pepita",
     /* Brutul ramane langa: nu strica nimic si pastreaza ce n-am tradus. */
     pepita: {
@@ -664,7 +700,7 @@ function sursaComenzii(c: ComandaPepita, ctx: ContextIngest, cote: CoteleLiniilo
  * ⚠ AICI SE SPUNE SI CE NU FACEM. Statusul nu pleaca inapoi la Pepita, fiindca nu
  * exista prin ce. Scris in comanda, omul afla exact acolo unde ar apasa gresit.
  */
-function noteInterne(c: ComandaPepita, nelegate: string[], cote: CoteleLiniilor): string {
+function noteInterne(c: ComandaPepita, nelegate: string[], cote: CoteleLiniilor, lipsuri: string[]): string {
   const randuri: string[] = [
     `Comandă Pepita ${c.externalId}${c.origine ? ` (${c.origine})` : ""}.`,
     `Plată: ${etichetaPlata(c.modPlata)}. Livrare aleasă la Pepita: ${etichetaLivrare(c.modLivrare)}.`,
@@ -707,6 +743,14 @@ function noteInterne(c: ComandaPepita, nelegate: string[], cote: CoteleLiniilor)
   }
   if (nelegate.length > 0) {
     randuri.push(`⚠ Linii fără corespondent în catalog: ${nelegate.join(", ")}. Verifică ce s-a vândut înainte de expediere; stocul lor NU a fost scăzut.`);
+  }
+  /*
+   * ⚠ AICI AFLA CINE INTRA PE LISTA OBISNUITA DE COMENZI, nu prin panoul Pepita. Un AWB
+   * emis fara telefon pleaca si nu ajunge nicaieri, iar comanda pare in regula pana cand
+   * clientul intreaba unde e coletul.
+   */
+  if (lipsuri.length > 0) {
+    randuri.push(`⚠ Comanda nu se poate expedia așa cum a venit: lipsesc ${lipsuri.join(", ")}. Completează-le din „Editează comanda” înainte de a emite AWB-ul.`);
   }
   return randuri.join("\n");
 }

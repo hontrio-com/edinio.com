@@ -12,7 +12,9 @@ import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { invoiceParty } from "@/lib/billing/invoice-party";
 import { cheieDocument, slotFacturare } from "@/lib/billing/refacturare";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
-import { motivCoteAmestecate } from "@/lib/billing/cote-pe-linii";
+import {
+  cotaDeFacturare, grupePeCota, imparteProportional, motivCoteAmestecate, tvaContinut,
+} from "@/lib/billing/cote-pe-linii";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
 import { liniiFgo, mesajRefuz, pretDeDocument, reconciliazaComanda } from "@/lib/billing/reconcile";
@@ -114,21 +116,71 @@ async function buildItems(
   const vat = invoiceVat(order, { vat_enabled: vatEnabled, vat_rate: vatRate, prices_include_vat: pricesIncludeVat });
   const effectiveVat = vat.rate;
 
-  // fGO cere PretUnitar FARA TVA; daca sumele comenzii contin deja TVA, se extrage netul.
-  // `pretDeDocument`: fGO taie oricum la doi bani la serializare (`fgo.ts`), dar
-  // taiat aici, garda de reconciliere compara chiar numarul care pleaca.
-  const toNet = (gross: number) =>
-    pretDeDocument(vat.taxIncluded && vat.rate > 0 ? gross / (1 + vat.rate / 100) : gross);
+  /*
+   * fGO cere PretUnitar FARA TVA; daca sumele comenzii contin deja TVA, se extrage netul.
+   * `pretDeDocument`: fGO taie oricum la doi bani la serializare (`fgo.ts`), dar taiat aici, garda
+   * de reconciliere compara chiar numarul care pleaca.
+   *
+   * ═══ ⚠ SI SE IMPARTE LA COTA LINIEI, NU LA CEA A DOCUMENTULUI (09.09.2026) ═══
+   *
+   * Aici era `vat.rate`, unul singur. Pe o comanda cu 11% si 21% asta insemna ca liniile de 11%
+   * plecau cu netul calculat la 21%: pretul scade cu vreo noua procente, TACUT, iar garda de
+   * reconciliere le certifica fiindca lucreaza tot pe baza neta. Adica exact tiparul de care ne
+   * temem cel mai mult: un document fiscal gresit pe care nimic nu-l contrazice.
+   */
+  const toNet = (gross: number, cota: number) =>
+    pretDeDocument(vat.taxIncluded && cota > 0 ? gross / (1 + cota / 100) : gross);
+
+  /*
+   * Grupele de cota ale comenzii. La o singura cota (adica la orice comanda din magazin) totul de
+   * mai jos se comporta EXACT ca pana acum: `imparteProportional` da o singura bucata, iar
+   * `toNet` primeste chiar `vat.rate`.
+   */
+  const grupe = grupePeCota(order.items, effectiveVat);
+  const amestecate = grupe.length > 1;
+  /** Numele liniei: cu cota in coada doar cand chiar sunt mai multe, ca sa nu apara doua „Transport". */
+  const numeCuCota = (nume: string, cota: number) => (amestecate ? `${nume} (${cota}%)` : nume);
+  /**
+   * Sumele care n-au cota proprie nicaieri in baza — transport, reduceri, taxa de ramburs — se
+   * impart intre grupe, proportional cu valoarea lor.
+   *
+   * ⚠ La o singura cota asta e o lista cu un element, deci o singura linie, ca inainte.
+   */
+  const peGrupe = (suma: number) => [...imparteProportional(suma, grupe).entries()]
+    .filter(([, valoare]) => Math.abs(valoare) >= 0.005);
+  /** Cota liniei de ajustare: cea cu valoarea cea mai mare, ca sa mustre cel mai putin. */
+  const cotaAjustarii = grupe.reduce((a, g) => (g.valoare > a.valoare ? g : a), grupe[0] ?? { cota: effectiveVat, valoare: 0 }).cota;
+  /**
+   * TVA-ul continut in `orders.total`, socotit pe grupe.
+   *
+   * ⚠ Transportul, reducerile si taxele intra si ele in total, si se impart intre grupe exact ca
+   * la liniile de mai sus. Altfel garda ar compara doua numere socotite dupa reguli diferite.
+   */
+  const tvaContinutulComenzii = () => {
+    const suplimente = new Map(grupe.map((g) => [g.cota, g.valoare]));
+    const adauga = (suma: number, semn: number) => {
+      for (const [cota, valoare] of imparteProportional(suma, grupe)) {
+        suplimente.set(cota, (suplimente.get(cota) ?? 0) + semn * valoare);
+      }
+    };
+    adauga(Math.max(0, Number(order.shipping_cost) || 0), 1);
+    adauga(Math.max(0, Number(order.cod_fee_amount) || 0), 1);
+    adauga(Math.max(0, Number(order.discount_amount) || 0), -1);
+    adauga(Math.max(0, Number(order.card_discount_amount) || 0), -1);
+    adauga(Math.max(0, Number(order.cod_discount_amount) || 0), -1);
+    return tvaContinut([...suplimente.entries()].map(([cota, valoare]) => ({ cota, valoare })));
+  };
 
   const lineItems: FgoLineItem[] = items.map(item => {
     // fGO n-are natura de linie in model (`FgoLineItem` nu are camp de tip, iar
     // `Tip` se pune doar la „Discount"), deci de aici se foloseste doar codul.
     const { code } = codSiNatura(item, skus);
+    const cota = cotaDeFacturare(item, effectiveVat);
     return {
       name: item.name,
       quantity: item.quantity,
-      unitPrice: toNet(item.price),
-      vatRate: effectiveVat,
+      unitPrice: toNet(item.price, cota),
+      vatRate: cota,
       unit: "BUC",
       ...(code ? { code } : {}),
     };
@@ -136,64 +188,86 @@ async function buildItems(
 
   const shippingCost = Number(order.shipping_cost);
   if (shippingCost > 0) {
-    lineItems.push({
-      name: "Transport",
-      quantity: 1,
-      unitPrice: toNet(shippingCost),
-      vatRate: effectiveVat,
-      unit: "BUC",
-    });
+    /*
+     * ⚠ TRANSPORTUL NU ARE COTA PROPRIE nicaieri in baza: `orders` are doar `vat_rate` si
+     * `vat_amount`. Cu cote amestecate se imparte proportional cu marfa pe care o duce — asta e si
+     * practica: transportul urmeaza regimul bunurilor livrate.
+     */
+    for (const [cota, valoare] of peGrupe(shippingCost)) {
+      lineItems.push({
+        name: numeCuCota("Transport", cota),
+        quantity: 1,
+        unitPrice: toNet(valoare, cota),
+        vatRate: cota,
+        unit: "BUC",
+      });
+    }
   }
 
   // Reducerile = linii Tip "Discount" (mecanismul documentat fGO), cu valoarea
   // neta pozitiva; fGO le scade (baza + TVA) din total.
   const discountAmount = Number(order.discount_amount);
   if (discountAmount > 0) {
-    lineItems.push({
-      name: `Discount${order.discount_code ? ` (${order.discount_code})` : ""}`,
-      quantity: 1,
-      unitPrice: toNet(discountAmount),
-      vatRate: effectiveVat,
-      unit: "BUC",
-      isDiscount: true,
-    });
+    /*
+     * ⚠ REDUCEREA SE SPARGE PE COTE, si asta e locul in care socoteala se poate rupe TACUT. O
+     * reducere de 100 de lei peste linii de 11% si 21% nu are o cota a ei: ea micsoreaza baza
+     * fiecarei grupe. Pusa intreaga pe una singura, TVA-ul reducerii iese gresit — si cu semn OPUS
+     * fata de eroarea de pe linii, deci totalul poate parea corect in timp ce defalcarea de TVA e
+     * gresita. Nici comerciantul, nici garda de reconciliere n-o vad.
+     */
+    for (const [cota, valoare] of peGrupe(discountAmount)) {
+      lineItems.push({
+        name: numeCuCota(`Discount${order.discount_code ? ` (${order.discount_code})` : ""}`, cota),
+        quantity: 1,
+        unitPrice: toNet(valoare, cota),
+        vatRate: cota,
+        unit: "BUC",
+        isDiscount: true,
+      });
+    }
   }
 
   // Reducerea la plata online e deja scazuta din orders.total la plasare; fara
   // linia asta factura ar iesi mai mare decat totalul comenzii.
   const cardDiscount = Number(order.card_discount_amount);
   if (cardDiscount > 0) {
-    lineItems.push({
-      name: "Reducere plata online",
-      quantity: 1,
-      unitPrice: toNet(cardDiscount),
-      vatRate: effectiveVat,
-      unit: "BUC",
-      isDiscount: true,
-    });
+    for (const [cota, valoare] of peGrupe(cardDiscount)) {
+      lineItems.push({
+        name: numeCuCota("Reducere plata online", cota),
+        quantity: 1,
+        unitPrice: toNet(valoare, cota),
+        vatRate: cota,
+        unit: "BUC",
+        isDiscount: true,
+      });
+    }
   }
   // Reducerea la plata ramburs — aceeasi logica, linie de discount separata.
   const codDiscount = Number(order.cod_discount_amount);
   if (codDiscount > 0) {
-    lineItems.push({
-      name: "Reducere plata ramburs",
-      quantity: 1,
-      unitPrice: toNet(codDiscount),
-      vatRate: effectiveVat,
-      unit: "BUC",
-      isDiscount: true,
-    });
+    for (const [cota, valoare] of peGrupe(codDiscount)) {
+      lineItems.push({
+        name: numeCuCota("Reducere plata ramburs", cota),
+        quantity: 1,
+        unitPrice: toNet(valoare, cota),
+        vatRate: cota,
+        unit: "BUC",
+        isDiscount: true,
+      });
+    }
   }
   // Taxa de ramburs e adunata in total: articol obisnuit, nu discount.
   const codFee = Number(order.cod_fee_amount);
   if (codFee > 0) {
-    lineItems.push({
-      name: "Taxa plata ramburs",
-      quantity: 1,
-      unitPrice: toNet(codFee),
-      vatRate: effectiveVat,
-      unit: "BUC",
-    });
+    for (const [cota, valoare] of peGrupe(codFee)) {
+      lineItems.push({
+        name: numeCuCota("Taxa plata ramburs", cota),
+        quantity: 1,
+        unitPrice: toNet(valoare, cota),
+        vatRate: cota,
+        unit: "BUC",
+      });
+    }
   }
 
   /*
@@ -204,7 +278,18 @@ async function buildItems(
    */
   // `liniiNete`: fGO cere pretul FARA TVA si il converteste chiar el mai sus, deci
   // liniile lui nu sunt in aceeasi unitate cu `orders.total`.
-  const rec = reconciliazaComanda(liniiFgo(lineItems), order, vat, { liniiNete: true });
+  /*
+   * ⚠ CU COTE AMESTECATE, TVA-UL CONTINUT SE DA SOCOTIT. Garda aduce `orders.total` in unitatea
+   * liniilor impartind la o singura cota; pe 11% si 21% nu exista un asemenea numar. Pe doua linii
+   * de 100 de lei, impartirea la 21% da 165,29 in loc de 172,73 — sapte lei si patruzeci si patru
+   * de bani, adica un refuz al documentului CORECT. Vezi proba din `cote-pe-linii.test.ts`.
+   *
+   * ⚠ Se da NUMAI cand cotele difera: pe drumul de pana acum garda ramane bit cu bit ce era.
+   */
+  const rec = reconciliazaComanda(liniiFgo(lineItems), order, vat, {
+    liniiNete: true,
+    ...(amestecate && vat.taxIncluded ? { tvaContinutInTotal: tvaContinutulComenzii() } : {}),
+  });
   if (rec.fel === "refuz") {
     return { error: mesajRefuz(rec, order.order_number ?? "", order.payment_status === "paid") };
   }
@@ -223,8 +308,16 @@ async function buildItems(
    * si atunci comerciantul stie de ce factura difera de comanda cu un ban.
    */
   if (vat.taxIncluded && vat.rate > 0) {
-    const net = lineItems.reduce((s, i) => s + pretDeDocument(Number(i.unitPrice) || 0) * (Number(i.quantity) || 0) * (i.isDiscount ? -1 : 1), 0);
-    const brutReconstruit = Math.round(net * (1 + vat.rate / 100) * 100) / 100;
+    /*
+     * ⚠ RECONSTRUCTIA SE FACE PE LINIE, cu cota EI. Cu o singura inmultire peste tot netul, o
+     * comanda cu cote amestecate ar fi parut ca iese cu lei intregi pe langa, si avertismentul —
+     * care exista tocmai ca sa spuna adevarul despre un ban — ar fi strigat despre o eroare
+     * inventata de el insusi.
+     */
+    const brutReconstruit = Math.round(lineItems.reduce((s, i) => {
+      const linie = pretDeDocument(Number(i.unitPrice) || 0) * (Number(i.quantity) || 0);
+      return s + linie * (1 + (Number(i.vatRate) || 0) / 100) * (i.isDiscount ? -1 : 1);
+    }, 0) * 100) / 100;
     const totalComanda = Math.round((Number(order.total) || 0) * 100) / 100;
     if (Math.abs(brutReconstruit - totalComanda) >= 0.01) {
       logError({
@@ -241,7 +334,9 @@ async function buildItems(
       name: "Ajustare rotunjire",
       quantity: 1,
       unitPrice: Math.abs(rec.delta),
-      vatRate: effectiveVat,
+      /* ⚠ Pe cota cu valoarea cea mai mare: ajustarea e de cativa bani, iar acolo mustra cel mai
+         putin. Vezi `cotaDominanta` din `cote-pe-linii.ts`. */
+      vatRate: cotaAjustarii,
       unit: "BUC",
       // fGO n-are linii cu valoare negativa: o ajustare in minus e „Discount".
       ...(rec.delta < 0 ? { isDiscount: true as const } : {}),

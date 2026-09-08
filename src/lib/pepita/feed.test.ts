@@ -273,6 +273,30 @@ test("⚠ articolul trimis candva si care azi nu mai e in feed pleaca cu stoc ZE
   }
 });
 
+test("⚠ plimbarea prin evidenta CONTINUA de unde a ramas, si sterge semnul la capat", async () => {
+  /*
+   * ═══ ⚠ CE APARA ═══
+   *
+   * Plafonul de o suta de pagini exista ca sa nu tina ruta ocupata la nesfarsit. Dar bucla pornea
+   * mereu de la primul articol: la un magazin cu peste 100.000 de articole in evidenta, cele de
+   * dupa nu erau vizitate NICIODATA, iar un produs sters ramanea la Pepita cu `Available=true` pe
+   * veci. Jurnalul spunea doar „s-a depasit plafonul", o data pe ora, pana nu se mai uita nimeni.
+   */
+  const p = produs(1);
+  const db = faceBaza({
+    config: { mod_includere: "toate", cursor_pietre: idMort(1) },
+    produse: [p],
+    evidenta: [idArticol(p.id, null), idMort(1), idMort(2)],
+  });
+  const xml = await feed(db, "stoc");
+
+  assert.equal(xml.includes(idMort(1)), false, "s-a reluat de la inceput, desi era un semn de continuare");
+  assert.ok(xml.includes(idMort(2)), "nu s-a continuat de unde ramasese");
+
+  /* ⚠ Si la capat semnul se STERGE, altfel prima felie n-ar mai fi vizitata niciodata. */
+  assert.equal((db as unknown as { __config: Record<string, unknown> }).__config.cursor_pietre, null);
+});
+
 test("⚠ articolul VIU nu primeste piatra de mormant", async () => {
   /*
    * Greseala din partea cealalta nu e mai putin grava: un `Available=false` pe un articol care

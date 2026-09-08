@@ -376,6 +376,46 @@ export async function* scrieFeed(
 /** Cate pagini de evidenta se plimba cel mult intr-o trecere. 100 × 1000 = 100.000 de articole. */
 const PAGINI_EVIDENTA = 100;
 
+/** Unde a ramas plimbarea prin evidenta, ca urmatoarea sa continue de acolo. */
+async function cursorulPietrelor(admin: Db, businessId: string): Promise<string | null> {
+  try {
+    const { data, error } = await admin
+      .from("store_settings").select("pepita_config").eq("business_id", businessId).maybeSingle();
+    if (error) throw error;
+    const cfg = (data as { pepita_config?: Record<string, unknown> } | null)?.pepita_config ?? {};
+    const c = cfg.cursor_pietre;
+    return typeof c === "string" && c ? c : null;
+  } catch {
+    /*
+     * ⚠ O citire cazuta REIA DE LA INCEPUT, nu opreste ingroparea. Pornirea de la capat e o
+     * pierdere de vreme, nu o greseala: se ingroapa aceleasi articole, doar in alta ordine.
+     */
+    return null;
+  }
+}
+
+/** Tine minte unde s-a ramas, sau sterge semnul cand s-a ajuns la capat. */
+async function scrieCursorul(admin: Db, businessId: string, cursor: string | null): Promise<void> {
+  try {
+    const { error } = await admin.rpc("jsonb_merge_config", {
+      p_business_id: businessId,
+      p_column: "pepita_config",
+      p_patch: { cursor_pietre: cursor } as never,
+    });
+    if (error) throw error;
+  } catch (e) {
+    /*
+     * ⚠ NU RUPE FEEDUL. Un semn nescris inseamna ca trecerea urmatoare o ia de la inceput —
+     * acelasi lucru care se intampla azi, la fiecare trecere. Nu merita un feed pierdut.
+     */
+    await logError({
+      action: "pepita/pietre-de-mormant",
+      message: `semnul de continuare nu s-a putut scrie: ${e instanceof Error ? e.message : String(e)}`,
+      businessId, severity: "warning",
+    });
+  }
+}
+
 /**
  * `Available=false, Quantity=0` pentru fiecare `<Id>` trimis candva si care azi nu mai e in feed.
  *
@@ -401,7 +441,26 @@ const PAGINI_EVIDENTA = 100;
 async function* pietreDeMormant(
   admin: Db, businessId: string, plecateAzi: Set<string>,
 ): AsyncGenerator<string> {
-  let dupaArticol: string | null = null;
+  /*
+   * ═══ ⚠ PLIMBAREA SE RELUA DE LA CAPAT, DECI COADA NU AJUNGEA NICIODATA (09.09.2026) ═══
+   *
+   * Plafonul de o suta de pagini exista ca sa nu tina ruta ocupata la nesfarsit, si e bun. Dar
+   * bucla pornea mereu de la primul articol: la un magazin cu peste 100.000 de articole in
+   * evidenta, cele de dupa nu erau vizitate NICIODATA. Un produs sters de acolo ramanea la Pepita
+   * cu `Available=true`, pe veci, iar jurnalul spunea doar „s-a depasit plafonul" — o data pe ora,
+   * pana nu se mai uita nimeni la el.
+   *
+   * Acum se tine minte unde s-a ramas. Fiecare trecere continua de acolo; cand se ajunge la capat,
+   * semnul se sterge si urmatoarea porneste iar de la inceput.
+   *
+   * ⚠ MULTIMEA „CE A PLECAT AZI" E INTREAGA ORICUM. Plimbarea prin CATALOG se face de fiecare data
+   * in intregime — reluarea priveste doar EVIDENTA. Deci o piatra pusa pe felia de azi e la fel de
+   * intemeiata ca una pusa pe prima felie.
+   *
+   * ⚠ SI NU SE SCRIE NIMIC CAND NU E NEVOIE: un magazin sub plafon nu atinge configurarea deloc.
+   * Cheia nu intra in amprenta feedului (vezi `stampilaConfigurarii`), deci nu misca `<LastMod>`.
+   */
+  let dupaArticol: string | null = await cursorulPietrelor(admin, businessId);
   let ingropate = 0;
 
   try {
@@ -418,7 +477,7 @@ async function* pietreDeMormant(
 
       /* ⚠ Cursorul care nu inainteaza opreste plimbarea; altfel n-ar mai avea capat. */
       const ultimul = randuri[randuri.length - 1].articol_id;
-      if (ultimul === dupaArticol) return;
+      if (ultimul === dupaArticol) { await scrieCursorul(admin, businessId, null); return; }
       dupaArticol = ultimul;
 
       for (const r of randuri) {
@@ -427,17 +486,19 @@ async function* pietreDeMormant(
         yield stocDisparutXml(r.articol_id);
       }
 
-      if (randuri.length < 1000) return;
+      if (randuri.length < 1000) { await scrieCursorul(admin, businessId, null); return; }
     }
 
     /*
-     * ⚠ PLAFONUL SE SPUNE. Taiat in tacere, ar fi insemnat ca de la al o sutalea mia de articol
-     * incolo supravanzarea ramane deschisa si nimeni nu stie de ce.
+     * ⚠ S-A ATINS PLAFONUL: se tine minte unde, ca trecerea urmatoare sa continue de acolo. Fara
+     * randul asta, ultimele articole ale unui magazin foarte mare n-ar fi ingropate niciodata.
      */
+    await scrieCursorul(admin, businessId, dupaArticol);
     await logError({
       action: "pepita/pietre-de-mormant",
-      message: `evidenta articolelor depaseste ${PAGINI_EVIDENTA * 1000} de randuri; restul nu s-a putut marca indisponibil in trecerea asta`,
-      details: { ingropate }, businessId, severity: "warning",
+      message: `evidenta articolelor depaseste ${PAGINI_EVIDENTA * 1000} de randuri intr-o trecere; `
+        + "restul se continua la trecerea urmatoare, de unde s-a ramas",
+      details: { ingropate, dupaArticol }, businessId, severity: "info",
     });
   } catch (e) {
     await logError({
@@ -530,9 +591,24 @@ async function tineMinteArticolele(admin: Db, businessId: string, trimise: Artic
         combinatie: t.combinatie,
         articol_id: t.articolId,
       })) as never,
-      /* ⚠ `ignoreDuplicates`: randul exista deja de la trecerea trecuta si nu are ce sa se
-         schimbe. Un update ar fi rescris zilnic tot catalogul, degeaba. */
-      { onConflict: "business_id,articol_id", ignoreDuplicates: true },
+      /*
+       * ═══ ⚠ AICI ERA `ignoreDuplicates: true`, SI A DEVENIT GRESIT (09.09.2026) ═══
+       *
+       * Argumentul de atunci era ca „randul exista deja si n-are ce sa se schimbe". Era adevarat
+       * cat timp `<Id>`-ul se derivа din titlu: acelasi articol insemna acelasi titlu.
+       *
+       * De cand combinatia are identitate STABILA, un articol isi poate schimba numele fara sa-si
+       * schimbe `<Id>`-ul — chiar asta am facut cu o zi inainte. Cu `ignoreDuplicates`, evidenta
+       * ramanea pe numele VECHI pentru totdeauna, iar ingestul, care cauta intai dupa numele scris,
+       * nu-l mai gasea printre combinatiile de azi: comanda intra in carantina si stocul nu se
+       * scadea. Adica reparatia de ieri isi crea singura urmatorul defect.
+       *
+       * ⚠ COSTUL, PE FATA: acum evidenta se rescrie la fiecare trecere a feedului de produse, adica
+       * o data pe zi. Randurile se trimiteau oricum toate — se schimba doar ce face baza cu ele —
+       * si sunt zeci de mii, nu milioane. Un nume invechit costa o comanda in carantina; o
+       * rescriere zilnica nu costa nimic.
+       */
+      { onConflict: "business_id,articol_id" },
     );
     if (error) throw error;
   } catch (e) {

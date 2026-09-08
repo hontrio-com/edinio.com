@@ -24,7 +24,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { readFileSync } from "node:fs";
 import { citesteComanda, type ComandaPepita } from "./comanda-forma";
-import { idArticol } from "./identitate";
+import { amprentaCombinatie, idArticol } from "./identitate";
 import { ingereaza, leagaLiniile, reproceseaza } from "./ingest";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 
@@ -52,6 +52,7 @@ const ALT_MAGAZIN = "11111111-1111-1111-1111-111111111111";
 const P_SIMPLU = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 const P_VARIANTE = "7a1b2c3d-4e5f-4a6b-8c9d-0e1f2a3b4c5d";
 const P_STRAIN = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const P_REDENUMIT = "5c6d7e8f-9012-4345-8678-9abcdef01234";
 
 interface Produs {
   id: string; business_id: string; name: string; sku: string | null; page_sections: unknown;
@@ -67,6 +68,24 @@ const PRODUSE: Produs[] = [
         combinations: [
           { id: "s", title: "S", price: "", compare_at_price: "", sku: "", stock_quantity: "5", image: "", enabled: true },
           { id: "m", title: "M", price: "", compare_at_price: "", sku: "", stock_quantity: "5", image: "", enabled: true },
+        ],
+      },
+    },
+  },
+  /*
+   * ⚠ PRODUSUL CU COMBINATIA REDENUMITA. „M" a devenit „M mare", dar `uid`-ul a ramas cel semanat
+   * din titlul vechi — deci `<Id>`-ul trimis la Pepita e neschimbat, exact cum cere ea.
+   */
+  {
+    id: P_REDENUMIT, business_id: BID, name: "Bluza", sku: "BLUZA", page_sections: {
+      variants: {
+        enabled: true,
+        options: [{ id: "o1", name: "Mărime", values: ["M mare"] }],
+        combinations: [
+          {
+            id: "m-mare", title: "M mare", uid: amprentaCombinatie("M"),
+            price: "", compare_at_price: "", sku: "", stock_quantity: "5", image: "", enabled: true,
+          },
         ],
       },
     },
@@ -784,6 +803,55 @@ test("⚠ prima sosire NU intreaba depozitul degeaba", () => {
   const sursa = readFileSync("src/lib/pepita/ingest.ts", "utf8");
   assert.match(sursa, /await pastreazaEticheta\(ctx\.businessId, orderId, c\);/,
     "pe drumul de creare pastrarea trebuie chemata FARA steagul de recuperare");
+});
+
+test("⚠ comanda pe o combinatie REDENUMITA se leaga si isi scade stocul, fara carantina", async () => {
+  /*
+   * ═══ ⚠ DRUMUL INTREG, CEL CARE LIPSEA ═══
+   *
+   *   1. combinatia „M" pleaca in feed, cu `<Id>` derivat din `uid`;
+   *   2. evidenta scrie `articol_id → combinatie „M"`;
+   *   3. comerciantul o redenumeste „M mare"; `uid`-ul RAMANE, deci `<Id>`-ul nu se schimba;
+   *   4. vine o comanda pe acelasi `<Id>`.
+   *
+   * ⚠ CE FACEA PANA AZI: ingestul cauta intai numele SCRIS in evidenta („M"), nu-l gasea printre
+   * combinatiile de acum („M mare"), si — fiindca exista un nume scris — NU mai incerca deloc
+   * identitatea. Comanda intra in carantina cu stocul nescazut, desi tot ce trebuia se stia.
+   *
+   * Adica reparatia identitatii, facuta cu o zi inainte, isi crea singura urmatorul defect. Proba
+   * de fata e drumul pe care niciuna dintre celelalte nu-l parcurgea.
+   */
+  const idVechi = idArticol(P_REDENUMIT, { title: "M", uid: amprentaCombinatie("M") });
+  const b = faceBaza([{ articol_id: idVechi, product_id: P_REDENUMIT, combinatie: "M" }]);
+
+  const r = await ingereaza(b.db, CTX, comanda({}, [
+    { id: "9", sku: idVechi, currency: "RON", quantity: 1, price: 89, vat: 21 },
+  ]));
+
+  assert.equal(r.stare, "creata", "comanda a ajuns in carantina dupa o simpla redenumire");
+  assert.equal(b.comenzi[0].motiv, null, `a ramas un motiv de carantina: ${b.comenzi[0].motiv}`);
+  /* ⚠ Si stocul se scade de pe combinatia de ACUM, nu de pe una care nu mai exista. */
+  assert.deepEqual(b.consumuri[0].variante, [
+    { product_id: P_REDENUMIT, variant_title: "M mare", quantity: 1 },
+  ]);
+});
+
+test("⚠ evidenta se ACTUALIZEAZA la fiecare feed, altfel numele ramane vechi pe veci", () => {
+  /*
+   * A doua jumatate a aceleiasi reparatii. Cu `ignoreDuplicates: true`, randul scris o data nu se
+   * mai schimba niciodata: dupa o redenumire, evidenta ar fi ramas pe numele vechi pentru
+   * totdeauna, iar rezerva de mai sus ar fi fost singurul lucru care mai tinea comanda in picioare.
+   */
+  const sursa = readFileSync("src/lib/pepita/feed.ts", "utf8");
+  const i = sursa.indexOf("async function tineMinteArticolele");
+  assert.notEqual(i, -1);
+  const corp = sursa.slice(i, sursa.indexOf(String.fromCharCode(10) + "}", i));
+  /* ⚠ SE SCOT COMENTARIILE INAINTE DE CAUTARE. Chiar functia isi explica in nota de ce NU mai
+     foloseste `ignoreDuplicates`, iar o cautare oarba ar fi cazut pe propriul ei text — a doua
+     oara cand se intampla asta intr-o zi. Se cauta CODUL, nu cuvantul. */
+  const faraNote = corp.replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.doesNotMatch(faraNote, /ignoreDuplicates/, "evidenta nu-si mai actualizeaza numele combinatiei");
+  assert.match(corp, /onConflict: "business_id,articol_id"/, "tinta conflictului a disparut");
 });
 
 test("⚠ produsul STERS nu se confunda cu un cod necunoscut, si nu rastoarna restul comenzii", async () => {

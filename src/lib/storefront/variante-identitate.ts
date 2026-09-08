@@ -54,6 +54,33 @@ export function identitateCombinatie(combo: { title: string; uid?: string }): st
 }
 
 /**
+ * Un `uid` NOU, pentru o combinatie care se naste acum.
+ *
+ * ═══ ⚠ DE CE NU TOT DIN TITLU (09.09.2026) ═══
+ *
+ * Semanata din titlu, o combinatie NOUA ar primi acelasi `uid` ca una veche care purta candva
+ * acelasi nume. Adica: „Roșu / XL" se redenumeste „Bordo / XL" (si isi pastreaza `uid`-ul, cum
+ * trebuie), apoi comerciantul adauga din nou „Roșu / XL" — iar aceasta primeste `uid`-ul celei
+ * dintai. Doua combinatii vii, acelasi identificator.
+ *
+ * Nu se ajunge la corupere tacuta: `articolelePentruProdus` vede doua articole cu acelasi `<Id>` si
+ * opreste produsul cu un motiv scris. Dar comerciantul ramane blocat pentru ca a refolosit un nume,
+ * ceea ce n-are de ce sa fie interzis.
+ *
+ * ⚠ SEMANAREA DIN TITLU RAMANE, dar NUMAI pentru combinatiile care existau la trecere: acolo e
+ * chiar rostul ei, sa nu se miste niciun `<Id>` deja trimis. Ce se naste de-acum incolo primeste
+ * intamplare curata.
+ *
+ * ⚠ Aceeasi FORMA, 16 hexa: `desfaIdArticol` valideaza forma la intoarcere, iar un `uid` de alta
+ * lungime ar face fiecare comanda pe combinatia aia sa cada la desfacere, adica in carantina.
+ */
+export function uidNou(): string {
+  const octeti = new Uint8Array(8);
+  crypto.getRandomValues(octeti);
+  return [...octeti].map((o) => o.toString(16).padStart(2, "0")).join("");
+}
+
+/**
  * Da `uid` combinatiilor care n-au, SEMANAT din titlul lor de acum.
  *
  * ⚠ Se cheama la fiecare regenerare a listei din formular, deci si la simpla deschidere-si-salvare

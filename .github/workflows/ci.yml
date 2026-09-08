@@ -85,9 +85,15 @@ jobs:
       # intr-un `||`. Asa se vede din afara, din simpla lista de pasi, daca drumul
       # strict a mers. O poarta care nu poate rula nu apara nimic; una care minte ca a
       # rulat strict e mai rau. Asta nici nu ruleaza degeaba, nici nu minte.
+      # ⚠ STRICT DIN 09.09.2026, fara plasa. Cat timp cauza caderii era necunoscuta, un job rosu la
+      # fiecare push ar fi oprit orice imbinare pentru o pana de infrastructura pe care n-o puteam
+      # nici macar citi — de aceea a existat drumul de rezerva, cu dovada ca arborele ramane cel din
+      # lockfile. Acum cauza e stiuta si reparata (lockfile scris de un npm mai vechi decat cel de pe
+      # runner), iar un verde trebuie sa insemne ce spune: instalarea reproductibila A MERS.
+      #
+      # ⚠ Reincercarea de mai jos ramane, si nu e o slabire: ea acopera reteaua, nu lockfile-ul.
       - name: Instaleaza (npm ci)
         id: instalare_stricta
-        continue-on-error: true
         # Iesirea se PASTREAZA, nu doar se afiseaza. Vezi pasul de diagnostic.
         run: |
           set -o pipefail
@@ -116,7 +122,9 @@ jobs:
       # Deci logul pleaca acum si pe calea aia. Rezumatul si artefactul raman: pentru
       # cine ARE drepturi sunt mai comode decat o adnotare, si nu costa nimic.
       - name: Ce a picat la npm ci
-        if: steps.instalare_stricta.outcome == 'failure'
+        # ⚠ `failure()`, nu `outcome == 'failure'`: fara `continue-on-error`, pasul de deasupra
+        # opreste jobul, iar starea lui nici nu se mai poate citi. Asa diagnosticul tot pleaca.
+        if: failure()
         # ⚠ `continue-on-error`: pasii astia stau INTRE `npm ci` picat si instalarea
         # de rezerva. Fara el, o cadere a diagnosticului (o comanda lipsa pe runner,
         # artefact care nu se poate incarca) ar opri jobul chiar inainte de pasul
@@ -153,7 +161,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Pastreaza logul npm ci
-        if: steps.instalare_stricta.outcome == 'failure'
+        if: failure()
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
@@ -161,77 +169,6 @@ jobs:
           path: /tmp/npm-ci-*.log
           if-no-files-found: warn
           retention-days: 14
-
-      # Daca pasul asta apare ca rulat, `npm ci` inca nu merge. Ce se instaleaza aici
-      # nu se ia insa pe incredere: pasul urmator DOVEDESTE ca arborele e tot cel din
-      # lockfile, si cade rosu daca nu e.
-      - name: Instaleaza (rezerva - npm ci a picat)
-        if: steps.instalare_stricta.outcome == 'failure'
-        run: npm install --no-audit --no-fund
-
-      # ⚠ SI SE DOVEDESTE CA ARBORELE E TOT CEL DIN LOCKFILE (25.08.2026)
-      #
-      # Auditul extern cerea `npm ci` strict, iar un job rosu la fiecare cadere. Cererea
-      # e intemeiata — un verde nu trebuie sa insemne „poate am testat altceva" — dar
-      # leacul propus opreste orice imbinare pentru o cadere nedeterminista de infra-
-      # structura, a carei cauza n-a putut fi citita inca (logurile jobului cer drepturi
-      # de admin, iar API-ul raspunde 403).
-      #
-      # Asta raspunde la INTREBAREA din spatele cererii, nu la forma ei: nu conteaza CU CE
-      # comanda s-a instalat, conteaza daca arborele instalat e cel din `package-lock.json`.
-      #
-      # `npm install` rescrie lockfile-ul EXACT atunci cand arborele rezolvat difera de el.
-      # Deci un lockfile neatins e dovada ca rezerva a instalat acelasi arbore. Iar daca
-      # l-a atins, jobul cade ROSU — atunci chiar am fi masurat altceva decat pleaca in
-      # productie, si asta e o poarta care merita inchisa.
-      #
-      # ⚠ `--exit-code`, nu un `diff` citit cu ochiul: o poarta care raporteaza dar nu
-      # opreste e o poarta pe care nimeni n-o citeste.
-      - name: Arborele instalat e tot cel din lockfile
-        if: steps.instalare_stricta.outcome == 'failure'
-        run: |
-          if git diff --quiet -- package-lock.json; then
-            echo "\`package-lock.json\` neatins de \`npm install\`: arborele instalat e cel din lockfile." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          # ⚠ SI SE SPUNE CE ANUME S-A SCHIMBAT.
-          #
-          # Pana pe 08.09.2026 pasul asta spunea doar CA lockfile-ul a fost rescris. Dar
-          # tocmai continutul rescrierii e diagnosticul cautat de saptamani: ce a rezolvat
-          # `npm install` pe Linux altfel decat scrie in lockfile e chiar raspunsul la „de
-          # ce pica `npm ci`". Iar el statea in log, adica exact acolo unde nu ajunge
-          # nimeni fara drepturi de admin. Adnotarea se citeste fara niciun token.
-          git diff --stat -- package-lock.json
-          git diff -U0 -- package-lock.json > /tmp/lock.diff
-          {
-            printf '::error title=Lockfile rescris::'
-            printf '`npm install` a schimbat `package-lock.json`, deci arborele instalat NU e cel din lockfile.%%0A'
-            printf 'Typecheck, teste si build ar masura altceva decat pleaca in productie.%%0A%%0A'
-            sed -e 's/%/%25/g' /tmp/lock.diff | head -c 6000 | awk '{ printf "%s%%0A", $0 }'
-            echo
-          } >&2
-          exit 1
-
-      # ⚠ Verdele jobului nu are voie sa spuna ceva ce nu s-a verificat.
-      #
-      # Pasul de deasupra a dovedit ca arborele e cel din lockfile, deci verdele NU mai
-      # minte. Ce ramane de spus e altceva: ca drumul strict n-a mers, si ca asta e o
-      # problema de infrastructura care inca asteapta o cauza. Scris in rezumat, se vede
-      # fara sa te uiti in lista de pasi.
-      #
-      # NU se iese cu 1 DE AICI: caderea lui `npm ci` singura nu mai inseamna ca am
-      # masurat altceva. Ce inseamna asta — un lockfile rescris — cade rosu mai sus.
-      - name: Semnaleaza instalarea degradata
-        if: steps.instalare_stricta.outcome == 'failure'
-        run: |
-          echo "::warning title=Instalare degradata::\`npm ci\` a picat; s-a folosit \`npm install\`. Arborele instalat poate diferi de lockfile." >&2
-          {
-            echo "### ⚠ Instalare degradata"
-            echo
-            echo "\`npm ci\` a picat, iar pasii urmatori au rulat peste un arbore instalat cu \`npm install\`."
-            echo "Pasul urmator verifica totusi ca \`npm install\` n-a rescris \`package-lock.json\`."
-            echo "Daca l-ar fi rescris, jobul cade rosu: atunci arborele chiar ar fi altul."
-          } >> "$GITHUB_STEP_SUMMARY"
 
       # Cheile nu ajung niciodata in CI, si nu trebuie. Asta face ca poarta sa
       # mearga si pe fork-uri, unde secretele nu sunt disponibile.

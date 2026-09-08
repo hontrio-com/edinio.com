@@ -36,7 +36,7 @@ import { PersonalizareCampuri, type StareCustomizare } from "@/components/dashbo
 import type { CampPersonalizare } from "@/lib/customization/definitie";
 import { modernizeazaSelectul } from "@/lib/customization/definitie";
 import type { Database } from "@/types/database.types";
-import { cuUid, redenumesteValoare } from "@/lib/storefront/variante-identitate";
+import { cuUid, redenumesteValoare, uidNou } from "@/lib/storefront/variante-identitate";
 
 type Product = Database["public"]["Tables"]["products"]["Row"];
 
@@ -191,10 +191,23 @@ function generateCombinations(options: VariantOption[], existing: VariantCombina
    * identitatea tine de RAND, nu de text — si o redenumire n-o mai schimba.
    * Vezi `src/lib/storefront/variante-identitate.ts`.
    */
-  return cuUid(cartesian(filled.map(o => o.values)).map(combo => {
+  return cartesian(filled.map(o => o.values)).map(combo => {
     const title = combo.join(" / ");
-    return existing.find(e => e.title === title) ?? {
+    const veche = existing.find(e => e.title === title);
+    /*
+     * ⚠ DOUA IZVOARE DE `uid`, SI DEOSEBIREA CONTEAZA (09.09.2026).
+     *
+     * Combinatia care EXISTA deja isi primeste `uid`-ul semanat din amprenta titlului ei — chiar
+     * rostul semanarii: asa niciun `<Id>` deja trimis nu se muta la trecere.
+     *
+     * Combinatia care se NASTE acum primeste intamplare curata. Semanata tot din titlu, ar fi
+     * capatat `uid`-ul unei combinatii vechi care purta candva acelasi nume: redenumesti „Roșu"
+     * in „Bordo", adaugi din nou „Roșu", si doua combinatii vii ajung cu acelasi identificator.
+     */
+    if (veche) return cuUid([veche])[0];
+    return {
       id: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      uid: uidNou(),
       title,
       price: "",
       compare_at_price: "",
@@ -204,7 +217,7 @@ function generateCombinations(options: VariantOption[], existing: VariantCombina
       image: "",
       enabled: true,
     };
-  }));
+  });
 }
 
 function computeSeoScore(form: FormState): number {

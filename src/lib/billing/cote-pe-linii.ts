@@ -48,8 +48,14 @@ function numar(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Cota unei linii, sau `null` cand linia n-o poarta. */
-function cotaLiniei(l: LinieCuTva): number | null {
+/**
+ * Cota unei linii, sau `null` cand linia n-o poarta.
+ *
+ * ⚠ LIPSA NU E ZERO, si asta e chiar deosebirea care conteaza. `Number(undefined) || 0` ar fi dat
+ * 0%, adica „scutit de TVA" — iar toate comenzile din magazin, care n-au cota pe linie, ar fi
+ * plecat cu 0% la facturare. Lipsa inseamna „linia n-are opinie", si atunci hotaraste documentul.
+ */
+export function cotaLiniei(l: LinieCuTva): number | null {
   if (l?.vat_rate === null || l?.vat_rate === undefined || l.vat_rate === "") return null;
   const n = Number(l.vat_rate);
   return Number.isFinite(n) && n >= 0 ? n : null;
@@ -83,6 +89,96 @@ export function coteleLiniilor(items: unknown): CoteleLiniilor {
   }
 
   return { cote, uniforma: cote.length === 1, cotaDominanta: dominanta };
+}
+
+/**
+ * Cota cu care pleaca ACEASTA linie pe factura: a ei, altfel a documentului.
+ *
+ * ⚠ REGULA E `cota liniei ?? cota documentului`, si trebuie probata chiar asa. Scrisa
+ * `Number(l.vat_rate) || cotaDocumentului`, o linie cu 0% ADEVARAT (o carte, un produs scutit) ar
+ * fi capatat tacut cota documentului. Zero e o cota, nu o lipsa.
+ */
+export function cotaDeFacturare(l: LinieCuTva, cotaDocumentului: number): number {
+  const a = cotaLiniei(l);
+  return a === null ? cotaDocumentului : a;
+}
+
+export interface GrupaDeCota {
+  cota: number;
+  /** Valoarea liniilor din grupa, in unitatea in care sunt scrise in comanda. */
+  valoare: number;
+}
+
+/**
+ * Liniile comenzii, adunate pe cote.
+ *
+ * ⚠ DE CE E NEVOIE: cand cotele difera, TVA-ul continut in totalul comenzii nu se mai poate scoate
+ * impartind la un singur numar. Se scoate pe grupe, si abia suma lor e adevarul. Vezi
+ * `reconciliazaFactura`.
+ *
+ * ⚠ Transportul, reducerile si taxele NU sunt aici. Ele n-au cota proprie nicaieri in baza, si
+ * apelantul trebuie sa hotarasca ce face cu ele — vezi `imparteProportional`.
+ */
+export function grupePeCota(items: unknown, cotaDocumentului: number): GrupaDeCota[] {
+  const linii = Array.isArray(items) ? (items as LinieCuTva[]) : [];
+  const peCota = new Map<number, number>();
+  for (const l of linii) {
+    const cota = cotaDeFacturare(l, cotaDocumentului);
+    const valoare = numar(l.price) * (numar(l.quantity) || 1);
+    peCota.set(cota, (peCota.get(cota) ?? 0) + valoare);
+  }
+  return [...peCota.entries()]
+    .map(([cota, valoare]) => ({ cota, valoare }))
+    .sort((a, b) => a.cota - b.cota);
+}
+
+/**
+ * TVA-ul CONTINUT intr-o suma bruta, pe grupe de cota.
+ *
+ * ⚠ `brut × c / (100 + c)`, nu `brut × c / 100`. A doua formula adauga TVA peste o suma care il
+ * contine deja, si iese cu vreo cincime mai mare — greseala clasica, si tacuta, fiindca rezultatul
+ * arata plauzibil.
+ */
+export function tvaContinut(grupe: GrupaDeCota[]): number {
+  const suma = grupe.reduce((s, g) => s + (g.valoare * g.cota) / (100 + g.cota), 0);
+  return Math.round(suma * 100) / 100;
+}
+
+/**
+ * Imparte o suma (reducere, transport, taxa) intre grupele de cota, PROPORTIONAL cu valoarea lor.
+ *
+ * ═══ ⚠ DE CE PROPORTIONAL, SI DE CE TREBUIE IMPARTITA ═══
+ *
+ * O reducere de 100 de lei peste linii de 11% si de 21% nu are o cota a ei: ea micsoreaza baza
+ * fiecarei grupe. Pusa intreaga pe o singura cota, TVA-ul reducerii iese gresit — si iese cu semn
+ * OPUS fata de eroarea de pe linii, deci totalul poate parea corect in timp ce defalcarea de TVA e
+ * gresita. Exact felul de eroare pe care n-o vede nici comerciantul, nici garda de reconciliere.
+ *
+ * ⚠ ULTIMA GRUPA IA RESTUL. Trei impartiri rotunjite la doi bani nu dau intotdeauna suma de la
+ * care s-a plecat; fara randul asta, factura ar fi iesit cu un ban pe langa si garda ar fi
+ * absorbit-o printr-o „ajustare de rotunjire" care de fapt ascunde o impartire gresita.
+ */
+export function imparteProportional(suma: number, grupe: GrupaDeCota[]): Map<number, number> {
+  const out = new Map<number, number>();
+  if (grupe.length === 0) return out;
+
+  const total = grupe.reduce((s, g) => s + g.valoare, 0);
+  if (total <= 0) {
+    /* Fara valoare pe care sa se sprijine impartirea, tot pe prima grupa: nu se inventeaza cote. */
+    out.set(grupe[0].cota, Math.round(suma * 100) / 100);
+    return out;
+  }
+
+  let dat = 0;
+  grupe.forEach((g, i) => {
+    const ultima = i === grupe.length - 1;
+    const parte = ultima
+      ? Math.round((suma - dat) * 100) / 100
+      : Math.round((suma * g.valoare / total) * 100) / 100;
+    dat += parte;
+    out.set(g.cota, (out.get(g.cota) ?? 0) + parte);
+  });
+  return out;
 }
 
 /**

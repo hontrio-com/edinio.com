@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { citesteComanda, MAX_LINII } from "./comanda-forma";
+import { citesteEticheta } from "./eticheta";
 
 /*
  * ⚠ SARCINA UTILA DE MAI JOS E CEA DIN DOCUMENTATIA LOR, reparata numai acolo unde
@@ -272,4 +273,69 @@ test("transport ZERO nu se compara cu nimic: n-are ce sa strice", () => {
     { total_shipping_price: 0, total_shipping_price_currency: "HUF" },
   );
   assert.equal(v.ok, true);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ETICHETA TRECE INTREAGA PRIN CITITOR (09.09.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ CE A SCAPAT. `package_label` se citea cu `sir()`, care taie la 2.000 de semne — bun pentru un
+   nume sau o adresa, dezastruos pentru un PDF codat Base64. O eticheta de numai 100 KB are peste
+   136.000 de semne, deci pastram 1,46% din ea.
+
+   ⚠ SI DE CE N-A SCARTAIT NIMIC. 2.000 se imparte exact la 4, deci ciotul ramane Base64 VALID;
+   decodat, incepe tot cu `%PDF-`, deci trecea si de verificarea de continut. Scriam in depozit un
+   PDF rupt si il numeam eticheta.
+
+   ⚠ SI DE CE N-A PRINS-O NICIUNA DIN CELE SAPTE PROBE ALE ETICHETEI: toate ii dadeau octetii
+   DIRECT lui `citesteEticheta`, niciuna nu trecea prin `citesteComanda`. Iar PDF-ul din ele avea
+   60 de octeti — sub plafon, deci nimic nu se taia. Un numar mare de probe nu inlocuieste o proba
+   pe DRUMUL adevarat.
+*/
+
+/** Un PDF de peste 100 KB, cu antet si coada adevarate. */
+function pdfMare(octetiUmplutura = 100 * 1024): Buffer {
+  return Buffer.concat([
+    Buffer.from("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n", "latin1"),
+    Buffer.alloc(octetiUmplutura, 0x41),
+    Buffer.from("\ntrailer\n%%EOF\n", "latin1"),
+  ]);
+}
+
+test("⚠ o eticheta de 100 KB trece INTREAGA prin citirea comenzii", () => {
+  const pdf = pdfMare();
+  const b64 = pdf.toString("base64");
+  assert.ok(b64.length > 130_000, `proba nu mai masoara ce credea: ${b64.length} semne`);
+
+  const c = bun({ ...OFICIAL, package_label: b64 });
+
+  assert.equal(c.etichetaBruta, b64, "eticheta a fost taiata pe drum");
+  const citita = citesteEticheta(c.etichetaBruta);
+  assert.equal(citita.fel, "buna");
+  if (citita.fel === "buna") assert.deepEqual(citita.octeti, pdf, "octetii nu mai sunt cei trimisi");
+});
+
+test("⚠ un PDF TAIAT se refuza, desi incepe cu `%PDF-` si e Base64 valid", () => {
+  /*
+   * Chiar forma pe care o producea defectul: primele 2.000 de semne dintr-o eticheta adevarata.
+   * Base64 valid (2.000 se imparte la 4), decodeaza in octeti care incep cu `%PDF-`, si totusi e un
+   * fisier rupt. A doua plasa il prinde dupa coada: orice PDF intreg se termina cu `%%EOF`.
+   */
+  const intreg = pdfMare().toString("base64");
+  const ciot = intreg.slice(0, 2000);
+  assert.equal(ciot.length % 4, 0, "ciotul trebuie sa fie Base64 valid, altfel proba nu apara nimic");
+
+  const citita = citesteEticheta(ciot);
+  assert.equal(citita.fel, "rea", "un PDF rupt a trecut drept eticheta buna");
+  if (citita.fel === "rea") assert.match(citita.motiv, /taiat/);
+});
+
+test("celelalte campuri RAMAN taiate la 2.000: plafonul n-a fost slabit pentru toata lumea", () => {
+  /*
+   * ⚠ Reparatia ar fi putut fi „mareste `MAX_SIR`". Ar fi mers pentru eticheta si ar fi deschis un
+   * mesaj de client de un megaoctet, pastrat pe comanda si randat in panou.
+   */
+  const c = bun({ ...OFICIAL, customer_message: "x".repeat(5000), package_label: pdfMare(1024).toString("base64") });
+  assert.equal(c.mesajClient?.length, 2000, "mesajul clientului nu mai e marginit");
+  assert.ok((c.etichetaBruta ?? "").length > 1300, "eticheta a ramas taiata");
 });

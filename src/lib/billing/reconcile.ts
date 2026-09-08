@@ -110,6 +110,21 @@ export function reconciliazaFactura(i: {
    * dedusa, comparatia punea linii nete langa un total brut si refuza tot.
    */
   liniiNete?: boolean;
+  /**
+   * TVA-ul CONTINUT in `totalComenzii`, cand cotele liniilor difera intre ele.
+   *
+   * ═══ ⚠ DE CE NU SE POATE DEDUCE AICI ═══
+   *
+   * Conversia de mai jos imparte totalul la O SINGURA cota. Cu 11% si 21% pe acelasi document,
+   * nu exista niciun numar la care sa imparti: TVA-ul continut se scoate pe GRUPE de cota si
+   * abia suma lor e adevarul. Grupele le stie apelantul, care are liniile comenzii.
+   *
+   * ⚠ LIPSA PASTREAZA PURTAREA DE PANA ACUM, bit cu bit. Toate cele trei case cheama garda asta
+   * de ani de zile pe comenzi cu o singura cota; o formula noua pusa pe drumul lor ar fi mutat
+   * rotunjirea cu un ban si ar fi refuzat comenzi bune, pentru un caz care in productie inca nu
+   * s-a intamplat. Deci calea veche ramane calea veche, si cotele amestecate iau alta.
+   */
+  tvaContinutInTotal?: number;
 }): Reconciliere {
   // Pretul unitar se rotunjeste INAINTE de inmultire: asta e chiar numarul pe care
   // il va scrie documentul. Fara rotunjire, garda ar certifica o suma pe care
@@ -121,7 +136,13 @@ export function reconciliazaFactura(i: {
   // TVA-ul continut in ele trebuie scos.
   const stocat = i.regim.taxIncluded ? round2(i.totalComenzii) : round2(i.totalComenzii - (i.vatAddOn ?? 0));
   const converteste = !!i.liniiNete && i.regim.taxIncluded && i.regim.rate > 0;
-  const gasit = converteste ? round2(stocat / (1 + i.regim.rate / 100)) : stocat;
+  const gasit = converteste
+    ? (i.tvaContinutInTotal === undefined
+        /* Calea de pana acum, neatinsa: o singura cota, o singura impartire. */
+        ? round2(stocat / (1 + i.regim.rate / 100))
+        /* Cote amestecate: TVA-ul continut vine socotit pe grupe, de la apelant. */
+        : round2(stocat - i.tvaContinutInTotal))
+    : stocat;
   const delta = round2(gasit - asteptat);
 
   if (delta === 0) return { fel: "exact" };
@@ -152,7 +173,7 @@ export function reconciliazaComanda(
   linii: LinieDocument[],
   order: { total?: unknown; vat_amount?: unknown },
   regim: RegimTva,
-  optiuni?: { liniiNete?: boolean },
+  optiuni?: { liniiNete?: boolean; tvaContinutInTotal?: number },
 ): Reconciliere {
   return reconciliazaFactura({
     linii,
@@ -161,6 +182,7 @@ export function reconciliazaComanda(
     // La preturi cu TVA inclus nu se adauga nimic peste sumele comenzii.
     vatAddOn: regim.taxIncluded ? 0 : Number(order.vat_amount) || 0,
     liniiNete: optiuni?.liniiNete,
+    tvaContinutInTotal: optiuni?.tvaContinutInTotal,
   });
 }
 

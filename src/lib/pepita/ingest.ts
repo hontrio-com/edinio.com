@@ -257,12 +257,28 @@ export async function leagaLiniile(
     let variantTitle: string | null = null;
     if (titluCautat || desfacut?.amprenta) {
       const combinatii = combinatiiActiveUnice(parseVariants(produs.page_sections));
-      variantTitle = titluCautat
+      /*
+       * ═══ ⚠ DOUA INCERCARI, IN ORDINEA ASTA — SI A DOUA LIPSEA (09.09.2026) ═══
+       *
+       * 1. NUMELE SCRIS in evidenta, cand exista. E martorul cel mai bun: spune ce combinatie a
+       *    plecat chiar sub `<Id>`-ul asta.
+       * 2. IDENTITATEA, adica `uid`-ul din care s-a derivat `<Id>`-ul.
+       *
+       * ⚠ Pana azi, cand exista un nume scris, a doua nici nu se incerca: `titluCautat ? … : …`.
+       * Deci o combinatie REDENUMITA ducea comanda in carantina, cu stocul nescazut, chiar daca
+       * `<Id>`-ul ei era neschimbat si identitatea o gasea imediat. Numele se invecheste, `uid`-ul
+       * nu — de aceea numele se incearca primul, dar niciodata singur.
+       *
+       * ⚠ Si evidenta se actualizeaza acum la fiecare feed (vezi `tineMinteArticolele`), deci
+       * fereastra in care numele scris e vechi tine cel mult o zi. Rezerva de aici o inchide de
+       * tot: chiar si in ziua aia, comanda se leaga.
+       */
+      variantTitle = (titluCautat
         ? combinatii.find((c) => c.title === titluCautat)?.title ?? null
-        /* ⚠ IDENTITATEA, nu amprenta titlului: din 08.09.2026 combinatiile au `uid`, iar
-           `<Id>`-ul se deriva din el. Lasata pe amprenta, rezerva asta n-ar mai fi gasit nimic
-           exact pentru combinatiile REDENUMITE, adica exact cazul pentru care exista. */
-        : combinatii.find((c) => identitateCombinatie(c) === desfacut!.amprenta)?.title ?? null;
+        : null)
+        ?? (desfacut?.amprenta
+          ? combinatii.find((c) => identitateCombinatie(c) === desfacut.amprenta)?.title ?? null
+          : null);
       if (!variantTitle) {
         /*
          * ⚠ AL DOILEA MARTOR A CAZUT. Produsul exista, combinatia nu: a fost stearsa,

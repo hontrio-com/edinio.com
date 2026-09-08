@@ -451,25 +451,39 @@ Lista de intrebari deschise, in ordinea in care conteaza:
 > Documentatia lor, asa cum a fost descarcata pe 08.09.2026, e pastrata in `docs/pepita/`.
 > Intrebarile de mai jos sunt exact ce NU scrie acolo.
 
-1. **In `products[].sku` al comenzii pe care ne-o impingeti, ce camp din feedul nostru puneti:
+1. **GTIN si MPN sunt OBLIGATORII sau doar recomandate?** ⚠ Ridicat de auditul din 09.09.2026, si
+   e o contradictie in documentele LOR, nu in ale noastre: specificatia XML publica marcheaza
+   `StructuredId` (EAN/GTIN) si `ProductNumber` (MPN) drept *recommended*, iar termenii contractuali
+   in vigoare din 15.04.2026 cer la 5.3 ca XML-ul sa contina GTIN si MPN, si permit la 5.6 refuzarea
+   unei oferte careia ii lipsesc date obligatorii, GTIN inclusiv.
+   *Intrebarea de trimis, cuvant cu cuvant:* „Pentru integrarea prin feed a sellerilor Pepita
+   Romania, GTIN si ProductNumber/MPN sunt obligatorii pentru toate produsele, sau se aplica regula
+   din specificatia XML unde sunt marcate Recommended?"
+   ⚠ **Pana la raspuns nu inventam regula noastra.** Validatorul de azi trateaza EAN-ul ca pe ceva
+   care se verifica daca exista (cifra de control), nu ca pe un camp fara de care produsul nu pleaca.
+   Cand vine raspunsul, se schimba si validatorul, si textul de aici. Nu blocheaza lansarea: daca
+   Pepita aproba feedul real al unui comerciant, intrebarea e lamurita in fapt.
+2. **In `products[].sku` al comenzii pe care ne-o impingeti, ce camp din feedul nostru puneti:
    `<Id>`, `<ProductNumber>` sau `<StructuredId>`?** Documentatia spune doar „stock-keeping unit
    code of the product (given by the partner)". Noi presupunem `<Id>`. Daca trimiteti altceva,
    potrivirea cade pe plasa de rezerva (SKU-ul produsului) si restul ajunge in carantina.
    *Se poate afla si fara ei, cu o singura cumparatura reala dintr-un produs cu variante:
    `select rezumat from pepita_comenzi where external_order_id = '<id>'` pastreaza `sku`-ul primit.*
-2. **Ce se intampla cu un articol al carui `<Id>` nu mai apare intr-o citire ulterioara a
+3. **Ce se intampla cu un articol al carui `<Id>` nu mai apare intr-o citire ulterioara a
    feedului?** Ramane publicat cu ultimele date, sau il scoateti de la vanzare, si dupa cate zile?
    ⚠ De raspunsul asta nu mai atarna nimic grav: din 08.09.2026 feedul de stoc trimite pentru
    fiecare articol disparut `Available=false` si `Quantity=0`, deci oferta se scoate din vanzare
    oricare ar fi purtarea lor implicita. Intrebarea ramane, ca sa stim daca mai si dispare.
-3. **Trimitem fiecare varianta ca `<Product>` de sine statator, cu `<Id>` propriu, dar cu
+4. **Trimitem fiecare varianta ca `<Product>` de sine statator, cu `<Id>` propriu, dar cu
    `<ProductNumber>` (MPN) IDENTIC pe toate variantele aceluiasi produs. Dedupleaza sistemul
    vostru dupa `<ProductNumber>`?** Daca da, variantele s-ar putea contopi la ei.
-4. **Lista de `delivery_mod` pentru Romania.** Cea publicata (`shipping`, `gls`, `gls_parcelshop`,
-   `mpl`) e a pietei ungare.
-5. **`ShippingDelay`**: zile lucratoare, confirmat in documentatie. Se cere confirmarea ca se
+5. **Lista de `delivery_mod` pentru Romania.** Cea publicata azi are cinci valori (`shipping`,
+   `gls`, `gls_parcellocker`, `gls_xxl`, `mpl`) si e a pietei ungare; pentru Romania nu exista
+   una separata. Citirea pe PREFIX le acopera pe toate si o va acoperi si pe urmatoarea, deci
+   intrebarea nu blocheaza nimic.
+6. **`ShippingDelay`**: zile lucratoare, confirmat in documentatie. Se cere confirmarea ca se
    masoara de la primirea comenzii.
-6. **Blocurile repetate din exemplul lor de XML** (`<Prices>...</Prices><Prices>...</Prices>`) sunt
+7. **Blocurile repetate din exemplul lor de XML** (`<Prices>...</Prices><Prices>...</Prices>`) sunt
    marcaje de colapsare ale paginii lor sau chiar mai multe blocuri, pentru mai multe monede? Noi
    trimitem cate unul singur, ceea ce e sigur in orice caz.
 

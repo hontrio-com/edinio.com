@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { amprentaCombinatie, idArticol } from "@/lib/pepita/identitate";
-import { cuUid, desparteTitlu, identitateCombinatie, redenumesteValoare } from "./variante-identitate";
+import {
+  cuUid, desparteTitlu, identitateCombinatie, redenumesteValoare, uidNou,
+} from "./variante-identitate";
 
 /* ══════════════════════════════════════════════════════════════════════════
    IDENTITATEA UNEI COMBINATII, CARE NU SE SCHIMBA CU NUMELE (08.09.2026)
@@ -158,7 +160,10 @@ test("⚠ formularul de produs redenumeste, nu sterge-si-adauga", () => {
   assert.match(sursa, /onBlur=\{e => renameOptionValue\(idx, vi, e\.target\.value\)\}/,
     "valoarea nu se mai poate edita pe loc");
   /* ⚠ Si fiecare combinatie generata primeste identitate, altfel prima redenumire ar pierde-o. */
-  assert.match(sursa, /return cuUid\(cartesian\(/, "combinatiile nu mai primesc `uid`");
+  /* ⚠ Regenerarea nu mai infasoara tot in `cuUid`: cele vechi si-l pastreaza semanat, cele noi
+     primesc intamplare. Vezi proba de mai jos. */
+  assert.match(sursa, /const veche = existing\.find\(e => e\.title === title\);/,
+    "combinatiile nu se mai potrivesc cu cele existente");
 });
 
 test("⚠ feedul deriva `<Id>` din COMBINATIE, nu din titlul ei", () => {
@@ -166,5 +171,54 @@ test("⚠ feedul deriva `<Id>` din COMBINATIE, nu din titlul ei", () => {
   assert.match(sursa, /idArticol\(p\.id, combo\)/, "feedul a revenit la titlu, deci `<Id>` sare la redenumire");
   /* Si potrivirea comenzii intoarse foloseste aceeasi identitate. */
   const ingest = readFileSync("src/lib/pepita/ingest.ts", "utf8");
-  assert.match(ingest, /identitateCombinatie\(c\) === desfacut!\.amprenta/);
+  assert.match(ingest, /identitateCombinatie\(c\) === desfacut\.amprenta/);
+});
+
+test("⚠ o denumire REFOLOSITA dupa o redenumire nu mai da acelasi identificator", () => {
+  /*
+   * ═══ ⚠ CAZUL GASIT DE AUDIT ═══
+   *
+   *   1. „Roșu / XL" primeste `uid` semanat din titlul ei;
+   *   2. se redenumeste „Bordo / XL"; `uid`-ul RAMANE, cum trebuie;
+   *   3. comerciantul adauga din nou o combinatie „Roșu / XL".
+   *
+   * Semanata tot din titlu, cea noua ar fi capatat `uid`-ul celei dintai: doua combinatii vii cu
+   * acelasi identificator. Nu se ajungea la corupere tacuta — `articolelePentruProdus` opreste
+   * produsul cu un motiv scris — dar comerciantul ramanea blocat fiindca a refolosit un nume.
+   */
+  const optiuni = [OPT("Culoare", ["Roșu"]), OPT("Marime", ["XL"])];
+  const [veche] = cuUid([COMBO("Roșu / XL")]);
+  const r = redenumesteValoare(optiuni, [veche], 0, "Bordo", "Roșu");
+  const redenumita = r.combinatii[0];
+
+  /* Cea noua se naste cum o naste formularul: cu intamplare curata. */
+  const nouCreata = { ...COMBO("Roșu / XL"), uid: uidNou() };
+
+  assert.equal(redenumita.title, "Bordo / XL");
+  assert.equal(redenumita.uid, veche.uid, "redenumirea a pierdut identitatea");
+  assert.notEqual(nouCreata.uid, redenumita.uid, "denumirea refolosita a primit acelasi identificator");
+
+  const PRODUS = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
+  assert.notEqual(idArticol(PRODUS, nouCreata), idArticol(PRODUS, redenumita));
+});
+
+test("`uidNou` are aceeasi FORMA ca amprenta, altfel comanda intoarsa cade la desfacere", () => {
+  /* `desfaIdArticol` valideaza 16 hexa. Alt format ar trimite in carantina fiecare comanda pe
+     combinatia aia — si abia la prima vanzare s-ar afla. */
+  for (let i = 0; i < 50; i++) assert.match(uidNou(), /^[0-9a-f]{16}$/);
+  /* Si chiar sunt diferite intre ele: un generator care intoarce mereu acelasi lucru ar fi mai rau
+     decat semanarea din titlu. */
+  const multe = new Set(Array.from({ length: 200 }, () => uidNou()));
+  assert.equal(multe.size, 200);
+});
+
+test("⚠ formularul da intamplare doar combinatiilor NOI, nu si celor vechi", () => {
+  /*
+   * Daca ar semana intamplare si pentru cele existente, fiecare deschidere-si-salvare a unui produs
+   * ar muta `<Id>`-urile lui la Pepita, la Google si la Meta. Semanarea din titlu e chiar ce face
+   * trecerea nevazuta.
+   */
+  const sursa = readFileSync("src/components/dashboard/ProductForm.tsx", "utf8");
+  assert.match(sursa, /if \(veche\) return cuUid\(\[veche\]\)\[0\];/, "combinatia veche nu-si mai pastreaza identitatea");
+  assert.match(sursa, /uid: uidNou\(\),/, "combinatia noua nu mai primeste intamplare");
 });

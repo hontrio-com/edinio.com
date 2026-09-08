@@ -123,6 +123,24 @@ export function citesteEticheta(brut: unknown): CitireEticheta {
     return { fel: "rea", motiv: "eticheta nu e un PDF" };
   }
 
+  /*
+   * ═══ ⚠ SI COADA, NU DOAR CAPUL (09.09.2026) ═══
+   *
+   * Un PDF taiat la mijloc pastreaza `%PDF-` la inceput si trece de verificarea de mai sus. Exact
+   * asa a scapat trunchierea la 2.000 de semne din `comanda-forma.ts`: fisierul rupt arata, la
+   * prima privire, ca unul bun.
+   *
+   * Orice PDF intreg se termina cu `%%EOF`. Se cauta in ULTIMII 2 KB, nu chiar la sfarsit: unele
+   * unelte lasa cateva randuri goale sau o semnatura dupa marcaj.
+   *
+   * ⚠ SI SE REFUZA, nu se avertizeaza. O eticheta rupta se tipareste si se afla la curier; una
+   * lipsa se vede pe loc si se cere din panoul lor. Iar retrimiterea incearca oricum din nou.
+   */
+  const coada = octeti.subarray(Math.max(0, octeti.length - 2048)).toString("latin1");
+  if (!coada.includes("%%EOF")) {
+    return { fel: "rea", motiv: "eticheta pare taiată: nu se termină cu %%EOF" };
+  }
+
   return { fel: "buna", octeti };
 }
 

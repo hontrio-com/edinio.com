@@ -105,6 +105,33 @@ export type Verdict =
   | { ok: true; comanda: ComandaPepita }
   | { ok: false; cod: string; mesaj: string; externalId: string | null };
 
+/**
+ * Eticheta de colet, CITITA INTREAGA.
+ *
+ * ═══ ⚠ AICI ERA `sir()`, SI TAIA ETICHETA LA 2.000 DE SEMNE (gasit 09.09.2026) ═══
+ *
+ * `sir()` exista ca sa nu putem primi un nume de client de un megaoctet, si e bun pentru asta. Dar
+ * o eticheta e un PDF codat Base64: unul de numai 100 KB are peste 136.000 de semne, deci pastram
+ * 1,46% din fisier.
+ *
+ * ⚠ SI DE CE N-A SCARTAIT NIMIC. 2.000 se imparte exact la 4, deci bucata taiata ramane Base64
+ * VALID; decodata, incepe tot cu `%PDF-`, deci trecea si de verificarea de continut. Adica scriam
+ * in depozit un PDF rupt si il numeam eticheta — mai rau decat lipsa ei, fiindca omul il tipareste
+ * si afla la curier.
+ *
+ * ⚠ SI DE CE N-A PRINS-O NICIO PROBA. Aveam sapte probe pe `citesteEticheta`, inclusiv pe plafonul
+ * de marime — dar toate ii dadeau octetii DIRECT. Niciuna nu trecea prin `citesteComanda`, adica
+ * prin chiar drumul pe care umbla eticheta adevarata. Iar PDF-ul din probe avea 60 de octeti.
+ *
+ * ⚠ NU SE MARESTE `MAX_SIR`. Mesajul clientului, adresa si numele n-au ce cauta la 1,5 MB. Plafonul
+ * etichetei e al ei, si se aplica in `citesteEticheta`, dupa ce se stie ca e chiar o eticheta.
+ */
+function etichetaDinSarcina(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  return s ? s : null;
+}
+
 function sir(v: unknown): string | null {
   if (typeof v === "string") {
     const s = v.trim();
@@ -298,7 +325,8 @@ export function citesteComanda(brut: unknown): Verdict {
        * si raspuns, de doua ori, ca `package_label` nu exista la ei. Exista.
        * Vezi `docs/pepita/README.md`.
        */
-      etichetaBruta: sir(c.package_label),
+      /* ⚠ `etichetaDinSarcina`, NU `sir`: aceea taie la 2.000 de semne. Vezi nota de la ea. */
+      etichetaBruta: etichetaDinSarcina(c.package_label),
       transport,
       monedaTransport: mTransport.fel === "cod" ? mTransport.cod : null,
       /** Moneda UNICA a comenzii, deja dovedita coerenta. `null` daca ei n-au trimis niciuna. */

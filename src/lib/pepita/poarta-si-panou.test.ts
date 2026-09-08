@@ -183,3 +183,35 @@ test("⚠ cheile nu pleaca spre browser odata cu starea integrarii", () => {
   assert.ok(citiri.length > 0, "proba stie sa gaseasca citirile");
   assert.deepEqual(careLeCitesc.sort(), ["activeazaPepita", "dezvaluieAdresele"]);
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ZEROUL FALS
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ O interogare PostgREST cazuta NU ARUNCA: intoarce `{ count: null, error }`. Cifrele din
+   panou se citeau cu `count ?? 0`, iar `catch`-ul de dedesubt nu se aprindea niciodata. Deci o
+   pana a bazei arata exact ca un magazin fara nicio comanda: „0 primite, 0 cu probleme".
+
+   ⚠ CE APARA PROBELE DE AICI, SI CE NU. Ele scaneaza sursa, deci spun ca forma e cea buna, nu
+   ca se poarta bine la o pana adevarata. Purtarea o apara `tsc`: `comenziTotal` fiind
+   `number | null`, niciun consumator nu mai poate trata necunoscutul ca pe un numar fara sa fie
+   numit. Proba pazeste tocmai intoarcerea la tipul care nu se poate gresi.
+*/
+
+const ACTIUNI = readFileSync("src/lib/actions/pepita.actions.ts", "utf8");
+
+test("⚠ cifrele panoului pot fi NECUNOSCUTE, nu doar zero", () => {
+  assert.match(ACTIUNI, /comenziTotal: number \| null/, "cifra a redevenit un numar care nu poate lipsi");
+  assert.match(ACTIUNI, /comenziCarantina: number \| null/);
+  assert.match(ACTIUNI, /citiriPicate/, "nu se mai spune CE nu s-a putut citi");
+});
+
+test("⚠ o citire cazuta nu se mai numara ca zero", () => {
+  assert.match(ACTIUNI, /total\.error \? null :/, "`count ?? 0` peste o citire cazuta da zero fals");
+  assert.match(ACTIUNI, /carantina\.error \? null :/);
+});
+
+test("⚠ panoul arata necunoscutul ca necunoscut", () => {
+  const panou = readFileSync("src/components/dashboard/PepitaClient.tsx", "utf8");
+  assert.match(panou, /valoare \?\? "—"/, "cifra necunoscuta se randeaza tot ca un numar");
+});

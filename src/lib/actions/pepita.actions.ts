@@ -28,7 +28,7 @@ import { adresaComenzi, adresaFeedProduse, adresaFeedStoc, cheieNoua, amprentaCh
 import { citesteConfig, configFaraChei } from "@/lib/pepita/config";
 import { COLOANE_PRODUS, pregateste } from "@/lib/pepita/feed";
 import type { PepitaConfig } from "@/lib/pepita/types";
-import { TIPURI_GARANTIE, type TipGarantie } from "@/lib/pepita/types";
+import { CITIRI_PANOU, TIPURI_GARANTIE, type TipGarantie } from "@/lib/pepita/types";
 
 const CALE = "/dashboard/features/pepita";
 
@@ -304,11 +304,24 @@ export async function marcheazaTrimis(businessId: string, trimis: boolean) {
 
 export interface StarePepita {
   config: ReturnType<typeof configFaraChei>;
-  /** Cand a citit Pepita ultima oara un feed. `null` = niciodata. */
+  /**
+   * Cand a citit Pepita ultima oara un feed. `null` = niciodata SAU nu s-a putut citi:
+   * cele doua se deosebesc dupa `citiriPicate`.
+   */
   ultimaCitire: string | null;
-  comenziTotal: number;
-  comenziCarantina: number;
+  /**
+   * ⚠ POT FI `null`, SI ASTA E TOATA IDEEA.
+   *
+   * Erau `number`, cu `count ?? 0` peste raspuns. Dar o interogare PostgREST cazuta nu ARUNCA:
+   * intoarce `{ count: null, error }`, iar `catch`-ul de mai jos nu se aprindea niciodata. Deci
+   * o pana a bazei arata in panou exact ca un magazin fara nicio comanda: „0 comenzi primite,
+   * 0 cu probleme". Cifra care lipseste nu se mai inventeaza.
+   */
+  comenziTotal: number | null;
+  comenziCarantina: number | null;
   ultimaComanda: string | null;
+  /** Ce nu s-a putut citi. Gol inseamna ca tot ce e mai sus e adevarat. */
+  citiriPicate: string[];
 }
 
 export async function getStarePepita(businessId: string): Promise<StarePepita | { error: string }> {
@@ -330,12 +343,37 @@ export async function getStarePepita(businessId: string): Promise<StarePepita | 
         .eq("business_id", businessId).order("primit_la", { ascending: false }).limit(1),
     ]);
 
+    /*
+     * ⚠ DEGRADARE PE CAMP, nu o cadere in bloc. Setarile si adresele trebuie sa ramana
+     * lucrabile chiar cand tabela de comenzi nu raspunde; ce nu s-a putut citi se arata ca
+     * necunoscut, nu ca zero.
+     */
+    const citiriPicate: string[] = [];
+    if (chei.error) citiriPicate.push(CITIRI_PANOU.feed);
+    if (total.error) citiriPicate.push(CITIRI_PANOU.comenzi);
+    if (carantina.error) citiriPicate.push(CITIRI_PANOU.carantina);
+    if (ultima.error) citiriPicate.push(CITIRI_PANOU.ultimaComanda);
+
+    if (citiriPicate.length > 0) {
+      /* Fara randul asta, o pana a panoului nu lasa nicio urma nicaieri. */
+      await logError({
+        action: "pepita/stare", message: "starea integrarii s-a citit doar in parte",
+        details: {
+          citiriPicate,
+          erori: [chei.error, total.error, carantina.error, ultima.error]
+            .filter(Boolean).map((e) => (e as { message?: string }).message ?? String(e)),
+        },
+        businessId, severity: "error",
+      });
+    }
+
     return {
       config: configFaraChei(config),
       ultimaCitire: (chei.data?.[0] as { ultima_folosire: string | null } | undefined)?.ultima_folosire ?? null,
-      comenziTotal: total.count ?? 0,
-      comenziCarantina: carantina.count ?? 0,
+      comenziTotal: total.error ? null : total.count ?? 0,
+      comenziCarantina: carantina.error ? null : carantina.count ?? 0,
       ultimaComanda: (ultima.data?.[0] as { primit_la: string } | undefined)?.primit_la ?? null,
+      citiriPicate,
     };
   } catch (e) {
     await logError({

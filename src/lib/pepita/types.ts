@@ -44,6 +44,20 @@ export const PIETE: Record<PiataPepita, DescrierePiata> = {
 
 export const PIATA_IMPLICITA: PiataPepita = "ro";
 
+/**
+ * Numele citirilor din panou, ca sa se poata spune CE anume n-a raspuns.
+ *
+ * ⚠ Stau aici, si nu langa actiune, fiindca fisierul acela are „use server": fiecare export
+ * al lui devine un capat HTTP, si o constanta n-are ce cauta acolo. Iar panoul are nevoie de
+ * exact acelasi sir, altfel ar cauta dupa un nume care nu se mai scrie nicaieri.
+ */
+export const CITIRI_PANOU = {
+  feed: "ultima citire a feedului",
+  comenzi: "numărul de comenzi",
+  carantina: "comenzile cu probleme",
+  ultimaComanda: "ultima comandă",
+} as const;
+
 /** Strategia de pret pentru feed. Aceeasi socoteala, un singur loc. */
 export type FelStrategiePret = "identic" | "procent" | "fix";
 

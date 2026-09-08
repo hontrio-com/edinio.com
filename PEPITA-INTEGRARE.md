@@ -154,21 +154,54 @@ secventiale si zece concurente.
 
 | Pepita | Edinio | De ce |
 |---|---|---|
-| `payment_mode: cod` | `payment_method: cash_on_delivery` | Banii ii incaseaza CURIERUL comerciantului, nu marketplace-ul. `dhl.actions.ts` verifica textual valoarea asta. |
+| `payment_mode: cod` **si** livrare care NU e a Pepitei | `payment_method: cash_on_delivery` | Banii ii incaseaza CURIERUL comerciantului. `dhl.actions.ts` verifica textual valoarea asta. |
+| `payment_mode: cod` **si** `delivery_mod: gls` sau `gls_parcelshop` | `payment_method: pepita`, plus `order_source.incaseaza_marketplace: true` | ⚠ La Pepita Delivery **rambursul ajunge la Pepita**, scrie pe pagina lor pentru Romania. Precompletat pe un AWB propriu, clientul ar fi platit A DOUA OARA. |
+| `payment_mode: transfer` | `payment_method: pepita`, neincasat la usa | Transferul „nu ajunge la Pepita, ci direct la voi", tot pagina lor. |
 | `payment_mode` altul sau necunoscut | `payment_method: pepita` | Un necunoscut NU devine ramburs: curierul ar cere a doua oara banii deja platiti. |
 | `payment_status` | `paid` / `unpaid` | Lipsa se deduce din modul de plata: cardul e „paid" de obicei, scrie la ei. |
-| `delivery_mod` | nimic automat | Lista lor e a pietei UNGARE, si la `gls_parcelshop` nu primim identificatorul punctului. Valoarea se ARATA, comerciantul alege curierul. |
+| `delivery_mod` | hotaraste CINE incaseaza rambursul; curierul il alege comerciantul | Lista lor e a pietei UNGARE. La `gls_parcelshop` nu primim identificatorul punctului, iar traducerea lor maghiara ii spune „csomagautomata", adica **automat de colet**, nu parcel shop: eticheta din panou spunea gresit. |
+| `currency` pe linii | `order_source.currency` | Trebuie sa fie UNA singura: doua monede resping comanda, fiindca totalul s-ar aduna din mere si pere. Alta decat a magazinului duce comanda in carantina. |
+| `vat` pe linie | `orders.items[].vat_rate` | ⚠ Cota ramane PE LINIE. `orders.vat_rate` e cota liniei cu valoarea cea mai mare, nu maximul cotelor. |
+
+⚠ `order_source.incaseaza_marketplace` e cheia de care atarna rambursul. Campul e **obligatoriu** in
+`ComandaCuRamburs`, tocmai ca `tsc` sa numeasca fiecare din cele 21 de locuri care cheama
+`rambursDeIncasat`: unsprezece dintre ele pasau un obiect ingustat, iar o verificare pusa doar in
+functie le-ar fi lasat pe toate deschise, tacut. Cel mai periculos era generarea in MASA de AWB,
+unde `select`-ul nici nu cerea `order_source`.
 | `status` | mereu `pending` | Campul lor e negarantat, cu valori convenite de la caz la caz. Nu exista lista de tradus. |
 | `tax_number` | `orders.billing_company` | Numai daca trece verificarea de CUI. `verified: false`, fiindca NU intrebam ANAF pe calea de ingest. Prefixul „RO" e martorul pentru `vat_payer`. |
 
 **Totalurile vin de la ei si nu se recalculeaza niciodata** din preturile noastre de azi: comanda e o
 tranzactie istorica.
 
-### Ce se intampla cand o linie nu se poate lega
+### Carantina: patru motive, si toate se aduna
 
-Comanda **se scrie oricum**, cu linia pe ea (`product_id: null`), randul din `pepita_comenzi` trece
-pe `carantina` cu motivul, nota interna a comenzii o spune, si panoul o ridica. Stocul se scade numai
-pentru liniile legate.
+Comanda **se scrie oricum**. Ce se schimba e ca randul din `pepita_comenzi` trece pe `carantina` cu
+motivul scris, nota interna a comenzii il spune, si panoul o ridica.
+
+| Motivul | Cand | Se repara |
+|---|---|---|
+| `Coduri fără corespondent în Edinio: …` | `sku`-ul primit nu se leaga de niciun produs | comerciantul creeaza produsul, apoi „Reprocesează" |
+| `Nu se poate expedia: lipsesc …` | curier propriu, si lipsesc numele, telefonul, judetul, localitatea sau strada | se completeaza din „Editează comanda", apoi „Reprocesează" |
+| `Comandă în altă monedă decât magazinul.` | `order_source.currency` difera de `store_settings.currency` | numai cu mana: suma se converteste inainte de AWB si de factura |
+| `Stocul nu s-a putut scădea.` | RPC-ul de consum a picat | cronul `pepita-stoc`, la fiecare zece minute, fara sa depinda de nimeni |
+
+⚠ **Motivele se leaga, nu se inlocuiesc.** Pana pe 08.09.2026 esecul de stoc scria peste motivul
+dinainte, iar cronul scoate din carantina randurile al caror motiv e chiar al lui: o comanda cu doua
+probleme ar fi iesit din carantina cu prima nerezolvata.
+
+⚠ **La livrarea Pepitei nu se cere nimic.** Coletul e dus de GLS-ul contractat de ei, cu eticheta lor,
+deci o adresa incompleta nu opreste nimic si nu produce carantina.
+
+⚠ **Stocul se scade oricum**, si pentru comenzile in carantina: marfa e vanduta la ei, iar nescazuta
+se supravinde pe celelalte cinci canale.
+
+**„Reprocesează"** (panou, langa fiecare comanda cu probleme) leaga din nou liniile, completeaza
+`orders.items`, duce stocul la capat si recalculeaza motivele. Aceeasi socoteala o foloseste si
+retrimiterea lor, ca sa nu existe doua adevaruri despre aceeasi comanda. Pe o comanda anulata nu
+atinge stocul; iar cand `orders.items` nu mai corespunde cu ce ne-au trimis ei (o linie adaugata de
+mana din panou) REFUZA in loc sa ghiceasca: setul trimis functiei de ajustare e autoritar, iar ce
+lipseste din el s-ar elibera inapoi pe raft cu marfa plecata.
 
 Raspunsul catre ei este `isError: false`, cu codul lipsa in `messages`. **E o hotarare, nu o
 scapare:** comanda E salvata, iar o retrimitere n-are cum sa repare un cod care nu exista in catalog.
@@ -183,6 +216,15 @@ Comutator in setari, **stins din start**. Documentatia publica Pepita nu spune c
 catre clientul final, si nu exista nicio cale prin care sa i-o trimitem sau sa aflam ce a emis ea. O
 factura emisa degeaba nu se retrage, se storneaza. Aceeasi socoteala ca la Trendyol.
 
+⚠ **TVA-ul ramane pe fiecare linie**, in `orders.items[].vat_rate`. `orders.vat_rate` nu mai e
+`max(cote)` — care gresea in aceeasi directie pe fiecare linie, deci o comanda cu hrana la 11% si o
+jucarie la 21% iesea integral cu 21% — ci cota liniei cu valoarea cea mai mare.
+
+⚠ Si **facturarea automata se opreste** cand cotele difera, cu motivul scris in jurnal si in nota
+interna a comenzii, ca omul sa afle inainte sa apese, nu dupa ce a iesit documentul. Limitarea
+ramane: Edinio trimite o singura cota catre SmartBill, Oblio si fGO. Rescrierea facturarii pe cote
+per linie atinge TOTI comerciantii, nu doar pe cei cu Pepita, si e o lucrare de sine statatoare.
+
 ## GDPR
 
 Comenzile Pepita poarta datele unor cumparatori ai marketplace-ului, iar emailul poate fi un **alias**
@@ -193,6 +235,15 @@ Pepita.
 - `pepita_comenzi.rezumat` e o tabela de DIAGNOSTIC si **nu tine date personale**: nici nume, nici
   telefon, nici email, nici adresa. Doar linii, sume, tara si judetul de livrare.
 - Sarcina utila BRUTA nu se pastreaza nicaieri.
+- ⚠ **Marketingul comerciantului nu primeste cumparatori de marketplace.** `clientDeMarketplace`
+  (in `src/lib/orders/`) opreste Brevo, Mailchimp si Klaviyo pe ORICE comanda cu
+  `order_source.marketplace`, deci si eMAG, Trendyol, About You. Poarta sta acolo unde se citeste
+  comanda, nu la apelant: sunt sase cai catre marcarea „platit", si una pusa la apelant ar fi pazit
+  o singura cale. Se opresc si cele trei butoane „Sincronizeaza clientii existenti", si potrivirea
+  avansata Meta/TikTok de pe pagina de confirmare.
+- **Ce NU se opreste:** automatizarile OPERATIONALE. Factura, AWB-ul, instiintarea de expediere si
+  SMS-ul de stare tin de executarea contractului. Conversia GA4 ramane si ea: nu duce nicio data
+  personala, iar venitul de marketplace se numara dinadins.
 
 ## Fisierele
 
@@ -215,13 +266,20 @@ src/lib/pepita/
   ingest.ts          scrierea comenzii, o singura data                    (server-only)
   ruta-comenzi.ts    autentificare, plafoane, raspunsul in forma lor      (server-only)
   activare.ts        mesajul pe care il trimite comerciantul catre Pepita (pur)
+  carantina.ts       motivele carantinei, si ce lipseste ca sa expediezi  (pur)
+  includere-in-masa.ts  „include toate produsele", pana la capat          (server-only)
 
 src/app/api/pepita/{produse,stoc}/[cheie]/route.ts
 src/app/api/pepita/comenzi/{route.ts,[cheie]/route.ts}
 src/app/(dashboard)/dashboard/features/pepita/page.tsx
 src/components/dashboard/PepitaClient.tsx
+src/app/api/cron/pepita-stoc/route.ts        reincercarea consumului de stoc, la 10 minute
+src/lib/orders/client-de-marketplace.ts      poarta marketingului, pentru TOATE marketplace-urile
 src/lib/actions/pepita.actions.ts
 migrations/2026-12-28-pepita-marketplace.sql
+migrations/2026-12-29-pepita-articole-exportate.sql
+migrations/2026-12-30-pepita-listarea-isi-stampileaza-clipa.sql
+docs/pepita/                                 documentatia lor oficiala, cu data descarcarii
 ```
 
 ## Cum se depaneaza
@@ -230,8 +288,9 @@ migrations/2026-12-28-pepita-marketplace.sql
 |---|---|
 | „Nu se intampla nimic dupa ce am trimis adresele" | Panou → Conexiune. Daca scrie „Configurat în Edinio", ei n-au citit inca niciun feed: `pepita_chei.ultima_folosire` e gol. Activarea o fac ei. |
 | „Produsele mele nu apar la ei" | Panou → „Verifică produsele". Aceleasi reguli ca feedul, deci ce scrie acolo e ce pleaca. |
-| „O comanda n-a intrat" | `pepita_comenzi` pe magazin: randul exista mereu, chiar si cand prelucrarea a picat. `stare` si `motiv` spun de ce. Plus `error_logs` cu `action` care incepe cu `pepita/`. |
-| „Stocul nu s-a scazut" | `orders.stoc_marketplace_la` gol inseamna ca scaderea n-a apucat sa se faca. O retrimitere din panoul lor o duce la capat. |
+| „O comanda n-a intrat" | `pepita_comenzi` pe magazin. ⚠ Randul exista de la prima citire REUSITA a sarcinii: un refuz mai devreme (cheie gresita 401, corp peste 512 KB 413, JSON stricat 400, plafon de cereri 429) nu lasa niciun rand, si atunci se cauta numai in `error_logs`, cu `action` care incepe cu `pepita/`. |
+| „Stocul nu s-a scazut" | `orders.stoc_marketplace_la` gol inseamna ca scaderea n-a apucat sa se faca. Cronul `pepita-stoc` o reia la fiecare zece minute, fara sa depinda de nimeni; butonul „Reprocesează" din panou face acelasi lucru pe loc. Un rand ramas in carantina cu motivul de stoc inseamna ca reincercarea inca n-a reusit. |
+| „O comanda a ramas cu probleme desi am reparat catalogul" | Panou → comenzile cu probleme → „Reprocesează". Daca raspunde ca liniile nu mai corespund, cineva a adaugat o linie de mana pe comanda: se scoate, apoi se reia. |
 | „Feedul da 404" | Cheia e revocata (rotire sau deconectare), sau integrarea e oprita din panou. |
 | „Feedul se taie" | Se cauta in `error_logs` `pepita/feed`. XML-ul neinchis e comportamentul CORECT la o cadere. |
 

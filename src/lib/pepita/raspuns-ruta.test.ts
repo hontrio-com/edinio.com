@@ -6,7 +6,7 @@ delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { primesteComanda, metodaGresita } from "./ruta-comenzi";
+import { corpPreaMare, primesteComanda, metodaGresita } from "./ruta-comenzi";
 
 /* ══════════════════════════════════════════════════════════════════════════
    CE VEDE PEPITA CAND NE INTREABA
@@ -106,4 +106,19 @@ test("⚠ ruta CERE moneda magazinului in `select`", () => {
   const s = readFileSync("src/lib/pepita/ruta-comenzi.ts", "utf8");
   assert.match(s, /\.select\("[^"]*currency[^"]*"\)/, "citirea setarilor nu cere moneda magazinului");
   assert.match(s, /monedaMagazin/, "moneda magazinului nu ajunge in ingest");
+});
+
+test("⚠ plafonul corpului se masoara in OCTETI, nu in caractere", () => {
+  /*
+   * Plafonul e 512 KB. `corp.length` numara caractere, iar in UTF-8 un caracter romanesc are
+   * doi octeti: sirul de mai jos are sub 512.000 de caractere, deci ar fi trecut de
+   * verificarea veche, dar are peste 512 KB si ar fi tinut memoria functiei pana la capat.
+   */
+  const aproapeJumatate = "ă".repeat(300_000);
+  assert.equal(aproapeJumatate.length < 512 * 1024, true, "proba nu mai masoara ce credea");
+  assert.equal(corpPreaMare(aproapeJumatate), true, "512.000 de caractere de doi octeti au trecut");
+
+  assert.equal(corpPreaMare("x".repeat(512 * 1024)), false, "exact plafonul nu se refuza");
+  assert.equal(corpPreaMare("x".repeat(512 * 1024 + 1)), true);
+  assert.equal(corpPreaMare(""), false);
 });

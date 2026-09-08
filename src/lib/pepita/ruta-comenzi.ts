@@ -48,6 +48,21 @@ function esec(status: number, mesaj: string): Response {
 /** Cat de mare poate fi corpul unei comenzi. */
 const MAX_OCTETI = 512 * 1024;
 
+/**
+ * Corpul primit depaseste plafonul?
+ *
+ * ⚠ SE MASOARA IN OCTETI, NU IN CARACTERE, si de asta atarna chiar numele constantei.
+ * `text.length` numara caractere, iar in UTF-8 un caracter maghiar sau romanesc are doi
+ * octeti, iar un emoji patru: un corp de 512.000 de caractere ar fi trecut de plafonul „de
+ * 512 KB" cu peste un megaoctet, si ar fi tinut memoria functiei pana la capat.
+ *
+ * ⚠ E SCOASA AFARA ca sa poata fi probata: verificarea din ruta sta dupa cautarea cheii in
+ * baza, deci nu se poate ajunge la ea intr-o proba fara baza.
+ */
+export function corpPreaMare(text: string): boolean {
+  return Buffer.byteLength(text, "utf8") > MAX_OCTETI;
+}
+
 export async function primesteComanda(req: Request, cheieBruta: string | null): Promise<Response> {
   /*
    * ⚠ CHEIA SE IA SI DIN CALE, SI DIN INTEROGARE.
@@ -117,7 +132,7 @@ export async function primesteComanda(req: Request, cheieBruta: string | null): 
   let brut: unknown;
   try {
     const corp = await req.text();
-    if (corp.length > MAX_OCTETI) return esec(413, "Conținut prea mare.");
+    if (corpPreaMare(corp)) return esec(413, "Conținut prea mare.");
     if (!corp.trim()) return esec(400, "Corp gol.");
     brut = JSON.parse(corp);
   } catch {

@@ -20,7 +20,7 @@ import {
   type AdresePepita, type ComandaProblema, type RandProdusPepita, type RezumatProduse,
   type SetariPepita, type StarePepita,
 } from "@/lib/actions/pepita.actions";
-import { TIPURI_GARANTIE, type TipGarantie } from "@/lib/pepita/types";
+import { CITIRI_PANOU, TIPURI_GARANTIE, type TipGarantie } from "@/lib/pepita/types";
 import { sablonMesajPepita } from "@/lib/pepita/activare";
 
 /**
@@ -118,6 +118,12 @@ function Conexiune({ stare, lucrez, porneste, opreste }: {
   const c = stare.config;
   const gata = c.activ && c.areFeedToken && c.areOrderKey;
   const aCitit = !!stare.ultimaCitire;
+  /*
+    ⚠ TREI STARI, NU DOUA. Dacă citirea a picat, nu știm dacă Pepita a citit vreodată feedul,
+    iar sfatul „Activarea conexiunii se face de către Pepita" ar fi fost tocmai sfatul greșit
+    dat unui magazin la care totul merge.
+  */
+  const stimDacaACitit = !stare.citiriPicate.includes(CITIRI_PANOU.feed);
 
   return (
     <Panel title="Conexiune">
@@ -146,9 +152,11 @@ function Conexiune({ stare, lucrez, porneste, opreste }: {
           <p className="text-xs text-muted-foreground">
             {gata && aCitit
               ? `Ultima citire: ${cand(stare.ultimaCitire)}. Frecvența o stabilește Pepita: de obicei stocul o dată pe oră, prețurile și descrierile o dată pe zi.`
-              : gata
+              : gata && stimDacaACitit
                 ? "Adresele sunt gata. Activarea conexiunii se face de către Pepita, după ce le trimiți."
-                : "Pornește integrarea ca să genereze adresele pe care le trimiți la Pepita."}
+                : gata
+                  ? "Adresele sunt gata. Nu am putut afla dacă Pepita a citit deja feedul."
+                  : "Pornește integrarea ca să genereze adresele pe care le trimiți la Pepita."}
           </p>
         </div>
 
@@ -778,10 +786,16 @@ function Catalog({ businessId }: { businessId: string }) {
   );
 }
 
-function Cifra({ eticheta, valoare, accent }: { eticheta: string; valoare: number; accent?: boolean }) {
+/**
+ * O cifra din panou.
+ *
+ * ⚠ `null` NU E ZERO. O interogare cazuta nu arunca, deci un `?? 0` pe raspunsul ei ar fi
+ * aratat exact ca un magazin fara nicio comanda. Necunoscutul se arata ca necunoscut.
+ */
+function Cifra({ eticheta, valoare, accent }: { eticheta: string; valoare: number | null; accent?: boolean }) {
   return (
     <div className="rounded-xl border border-border p-3">
-      <p className={`text-lg font-semibold ${accent ? "text-destructive" : "text-foreground"}`}>{valoare}</p>
+      <p className={`text-lg font-semibold ${accent ? "text-destructive" : "text-foreground"}`}>{valoare ?? "—"}</p>
       <p className="text-[11px] text-muted-foreground">{eticheta}</p>
     </div>
   );
@@ -814,7 +828,7 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
     <Panel title="Comenzi">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Cifra eticheta="Comenzi primite" valoare={stare.comenziTotal} />
-        <Cifra eticheta="Cu probleme" valoare={stare.comenziCarantina} accent={stare.comenziCarantina > 0} />
+        <Cifra eticheta="Cu probleme" valoare={stare.comenziCarantina} accent={(stare.comenziCarantina ?? 0) > 0} />
         <div className="rounded-xl border border-border p-3">
           <p className="truncate text-sm font-semibold text-foreground">
             {stare.ultimaComanda ? cand(stare.ultimaComanda) : "Nicio comandă"}
@@ -831,7 +845,14 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
         ce expediezi, treci comanda pe „trimisă” și în Pepita Admin.
       </p>
 
-      {stare.comenziCarantina > 0 && (
+      {stare.citiriPicate.length > 0 && (
+        <Callout variant="warning" icon={AlertTriangle}>
+          Nu am putut citi {stare.citiriPicate.join(", ")}. Cifrele de mai sus pot fi incomplete.
+          Reîncarcă pagina peste câteva minute.
+        </Callout>
+      )}
+
+      {(stare.comenziCarantina ?? 0) > 0 && (
         <div className="space-y-2">
           <Callout variant="warning" icon={AlertTriangle}>
             {/*

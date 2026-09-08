@@ -671,6 +671,30 @@ function Catalog({ businessId }: { businessId: string }) {
             </Callout>
           )}
 
+          {r.orfane > 0 && (
+            <Callout variant="warning" icon={AlertTriangle}>
+              <div className="space-y-1">
+                <p className="text-xs text-foreground">
+                  {r.orfane === 1
+                    ? "Un articol trimis anterior la Pepita nu mai este generat de feed."
+                    : `${r.orfane} articole trimise anterior la Pepita nu mai sunt generate de feed.`}
+                </p>
+                {/*
+                  ⚠ SE SPUNE SI CE SE POATE FACE. Cel mai des e o redenumire de variantă: în
+                  Edinio asta chiar distruge combinația, deci la Pepita rămâne un produs vechi
+                  care se poate vinde în continuare. Noi nu îl putem șterge de acolo, fiindcă
+                  feedul nu are cum să spună „scoate produsul ăsta".
+                */}
+                <p className="text-[11px] text-muted-foreground">
+                  De obicei asta înseamnă că ai redenumit sau ai șters o variantă. Articolele
+                  vechi rămân la Pepita și se pot vinde în continuare, iar noi nu le putem
+                  retrage din feed: cere-le celor de la Pepita să le scoată.
+                  {r.exempleOrfane.length > 0 && ` Primele: ${r.exempleOrfane.slice(0, 5).join(", ")}.`}
+                </p>
+              </div>
+            </Callout>
+          )}
+
           {r.incluse === 0 && (
             <p className="rounded-xl border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
               Niciun produs nu este inclus încă în feedul Pepita. Alege produsele din lista de

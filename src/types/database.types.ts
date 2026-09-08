@@ -4143,6 +4143,48 @@ export type Database = {
           },
         ]
       }
+      pepita_articole: {
+        Row: {
+          articol_id: string
+          business_id: string
+          combinatie: string
+          creat_la: string
+          id: string
+          product_id: string
+        }
+        Insert: {
+          articol_id: string
+          business_id: string
+          combinatie?: string
+          creat_la?: string
+          id?: string
+          product_id: string
+        }
+        Update: {
+          articol_id?: string
+          business_id?: string
+          combinatie?: string
+          creat_la?: string
+          id?: string
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pepita_articole_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pepita_articole_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pepita_chei: {
         Row: {
           amprenta: string

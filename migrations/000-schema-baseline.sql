@@ -7083,6 +7083,14 @@ create table if not exists public.page_form_submissions (
   created_at timestamp with time zone default now() not null,
   form_id uuid);
 
+create table if not exists public.pepita_articole (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  product_id uuid not null,
+  combinatie text default ''::text not null,
+  articol_id text not null,
+  creat_la timestamp with time zone default now() not null);
+
 create table if not exists public.pepita_chei (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -7610,6 +7618,7 @@ alter table public.olx_sync_queue add constraint olx_sync_queue_pkey PRIMARY KEY
 alter table public.operatii_externe add constraint operatii_externe_pkey PRIMARY KEY (id);
 alter table public.orders add constraint orders_pkey PRIMARY KEY (id);
 alter table public.page_form_submissions add constraint page_form_submissions_pkey PRIMARY KEY (id);
+alter table public.pepita_articole add constraint pepita_articole_pkey PRIMARY KEY (id);
 alter table public.pepita_chei add constraint pepita_chei_pkey PRIMARY KEY (id);
 alter table public.pepita_comenzi add constraint pepita_comenzi_pkey PRIMARY KEY (id);
 alter table public.pepita_listari add constraint pepita_listari_pkey PRIMARY KEY (id);
@@ -7671,6 +7680,8 @@ alter table public.mailchimp_suppressions add constraint mailchimp_suppressions_
 alter table public.olx_adverts add constraint olx_adverts_business_id_offer_id_key UNIQUE (business_id, offer_id);
 alter table public.olx_sync_queue add constraint olx_sync_queue_business_id_offer_id_op_key UNIQUE (business_id, offer_id, op);
 alter table public.orders add constraint orders_order_number_business_unique UNIQUE (business_id, order_number);
+alter table public.pepita_articole add constraint pepita_articole_business_id_articol_id_key UNIQUE (business_id, articol_id);
+alter table public.pepita_articole add constraint pepita_articole_business_id_product_id_combinatie_key UNIQUE (business_id, product_id, combinatie);
 alter table public.pepita_comenzi add constraint pepita_comenzi_business_id_external_order_id_key UNIQUE (business_id, external_order_id);
 alter table public.pepita_listari add constraint pepita_listari_business_id_product_id_key UNIQUE (business_id, product_id);
 alter table public.trendyol_batches add constraint trendyol_batches_business_id_batch_request_id_key UNIQUE (business_id, batch_request_id);
@@ -7827,6 +7838,8 @@ alter table public.orders add constraint orders_discount_id_fkey FOREIGN KEY (di
 alter table public.page_form_submissions add constraint page_form_submissions_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.page_form_submissions add constraint page_form_submissions_form_id_fkey FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE SET NULL;
 alter table public.page_form_submissions add constraint page_form_submissions_page_id_fkey FOREIGN KEY (page_id) REFERENCES custom_pages(id) ON DELETE SET NULL;
+alter table public.pepita_articole add constraint pepita_articole_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.pepita_articole add constraint pepita_articole_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
 alter table public.pepita_chei add constraint pepita_chei_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.pepita_comenzi add constraint pepita_comenzi_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.pepita_comenzi add constraint pepita_comenzi_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
@@ -8138,6 +8151,7 @@ CREATE INDEX orders_shipo_urmarire_idx ON public.orders USING btree (shipo_statu
 CREATE INDEX orders_smartship_urmarire_idx ON public.orders USING btree (smartship_status_checked_at NULLS FIRST) WHERE ((smartship_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_ups_urmarire_idx ON public.orders USING btree (ups_status_checked_at NULLS FIRST) WHERE ((ups_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX page_form_submissions_business_idx ON public.page_form_submissions USING btree (business_id, created_at DESC);
+CREATE INDEX pepita_articole_produs_idx ON public.pepita_articole USING btree (product_id);
 CREATE INDEX pepita_chei_active_idx ON public.pepita_chei USING btree (business_id, fel) WHERE (revocat_la IS NULL);
 CREATE UNIQUE INDEX pepita_chei_amprenta_idx ON public.pepita_chei USING btree (amprenta);
 CREATE INDEX pepita_comenzi_carantina_idx ON public.pepita_comenzi USING btree (business_id, primit_la DESC) WHERE (stare <> 'importata'::text);
@@ -8374,6 +8388,7 @@ alter table public.olx_sync_queue enable row level security;
 alter table public.operatii_externe enable row level security;
 alter table public.orders enable row level security;
 alter table public.page_form_submissions enable row level security;
+alter table public.pepita_articole enable row level security;
 alter table public.pepita_chei enable row level security;
 alter table public.pepita_comenzi enable row level security;
 alter table public.pepita_listari enable row level security;
@@ -8613,6 +8628,9 @@ create policy "Owners can read own submissions" on public.page_form_submissions 
 create policy "Owners can update own submissions" on public.page_form_submissions as PERMISSIVE for UPDATE to public using ((EXISTS ( SELECT 1
    FROM businesses b
   WHERE ((b.id = page_form_submissions.business_id) AND (b.user_id = auth.uid())))));
+create policy owner_select_pepita_articole on public.pepita_articole as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy owner_select_pepita_comenzi on public.pepita_comenzi as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
@@ -10014,6 +10032,27 @@ grant SELECT on table public.page_form_submissions to service_role;
 grant TRIGGER on table public.page_form_submissions to service_role;
 grant TRUNCATE on table public.page_form_submissions to service_role;
 grant UPDATE on table public.page_form_submissions to service_role;
+grant DELETE on table public.pepita_articole to anon;
+grant INSERT on table public.pepita_articole to anon;
+grant REFERENCES on table public.pepita_articole to anon;
+grant SELECT on table public.pepita_articole to anon;
+grant TRIGGER on table public.pepita_articole to anon;
+grant TRUNCATE on table public.pepita_articole to anon;
+grant UPDATE on table public.pepita_articole to anon;
+grant DELETE on table public.pepita_articole to authenticated;
+grant INSERT on table public.pepita_articole to authenticated;
+grant REFERENCES on table public.pepita_articole to authenticated;
+grant SELECT on table public.pepita_articole to authenticated;
+grant TRIGGER on table public.pepita_articole to authenticated;
+grant TRUNCATE on table public.pepita_articole to authenticated;
+grant UPDATE on table public.pepita_articole to authenticated;
+grant DELETE on table public.pepita_articole to service_role;
+grant INSERT on table public.pepita_articole to service_role;
+grant REFERENCES on table public.pepita_articole to service_role;
+grant SELECT on table public.pepita_articole to service_role;
+grant TRIGGER on table public.pepita_articole to service_role;
+grant TRUNCATE on table public.pepita_articole to service_role;
+grant UPDATE on table public.pepita_articole to service_role;
 grant DELETE on table public.pepita_chei to anon;
 grant INSERT on table public.pepita_chei to anon;
 grant REFERENCES on table public.pepita_chei to anon;

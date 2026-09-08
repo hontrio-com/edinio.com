@@ -85,7 +85,7 @@ interface RandOrder {
   internal_notes: string; stoc_marketplace_la: string | null;
 }
 
-function faceBaza() {
+function faceBaza(articole: { articol_id: string; product_id: string; combinatie: string }[] = []) {
   const comenzi: RandComanda[] = [];
   const orders: RandOrder[] = [];
   const consumuri: { orderId: string; produse: { product_id: string; quantity: number }[]; variante: unknown[] }[] = [];
@@ -103,6 +103,15 @@ function faceBaza() {
         && (ids ? ids.includes(p.id) : true)
         && (skuri ? (p.sku != null && skuri.includes(p.sku)) : true));
       return { data: ids || skuri ? gasite : [], error: null };
+    }
+
+    if (tabela === "pepita_articole") {
+      const coduri = f("articol_id") as string[] | undefined;
+      const biz = f("business_id") as string;
+      return {
+        data: articole.filter((a) => biz === BID && (coduri ? coduri.includes(a.articol_id) : true)),
+        error: null,
+      };
     }
 
     if (tabela === "pepita_comenzi") {
@@ -499,6 +508,67 @@ test("⚠ transferul in avans nu se incaseaza la usa", async () => {
     "dar la livrare nu se cere nimic",
   );
   assert.match(o.internal_notes, /transfer ajunge direct la tine/);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ COMANDA CARE SOSESTE DUPA CE VARIANTA A FOST REDENUMITA
+   ══════════════════════════════════════════════════════════════════════════
+
+   In Edinio, redenumirea unei valori CHIAR distruge combinatia: `generateCombinations` o
+   cauta dupa titlu, deci „M" redenumit in „Mediu" se naste ca o combinatie noua, cu pretul si
+   stocul goale. Deci `<Id>`-ul nou la Pepita e adevarul, nu o scapare a exportului.
+
+   Ce era stricat era DRUMUL INAPOI: comanda poarta `<Id>`-ul vechi, iar potrivirea recalcula
+   amprentele titlurilor de ACUM, deci nu se mai potrivea nimic si linia ajungea in carantina
+   fara sa stim macar despre ce produs e vorba.
+*/
+
+test("⚠ un `<Id>` vechi se leaga de produs prin evidenta, chiar dupa redenumire", async () => {
+  const idVechi = idArticol(P_VARIANTE, "M");
+  /* Evidenta spune ca `idVechi` a plecat pentru combinatia „M". Produsul o mai are. */
+  const b = faceBaza([{ articol_id: idVechi, product_id: P_VARIANTE, combinatie: "M" }]);
+  const r = await ingereaza(b.db, CTX, comanda({}, [
+    { id: "9", sku: idVechi, currency: "RON", quantity: 1, price: 89, vat: 21 },
+  ]));
+  assert.equal(r.stare, "creata");
+  assert.deepEqual(b.consumuri[0].variante, [{ product_id: P_VARIANTE, variant_title: "M", quantity: 1 }]);
+});
+
+test("⚠ cand combinatia chiar a disparut, motivul o NUMESTE, nu spune „cod necunoscut”", async () => {
+  /* Fara evidenta, tot ce puteam spune era ca un cod nu se potriveste cu nimic. Cu ea, stim
+     si produsul, si ce varianta era: de acolo comerciantul chiar poate porni. */
+  const idVechi = idArticol(P_VARIANTE, "XL-vechi");
+  const b = faceBaza([{ articol_id: idVechi, product_id: P_VARIANTE, combinatie: "XL-vechi" }]);
+  const r = await ingereaza(b.db, CTX, comanda({}, [
+    { id: "9", sku: idVechi, currency: "RON", quantity: 1, price: 89, vat: 21 },
+  ]));
+  assert.equal(r.stare, "carantina");
+  assert.match(b.comenzi[0].motiv ?? "", /XL-vechi/);
+  assert.match(b.comenzi[0].motiv ?? "", /Tricou/);
+  assert.deepEqual(b.consumuri[0].produse, [], "si nu se scade nimic pe ghicite");
+});
+
+test("⚠ un `sku` care NU e `<Id>`-ul nostru derivat se leaga daca e in evidenta", async () => {
+  /*
+   * Pana acum ne bizuiam pe presupunerea ca `sku`-ul intors de ei e chiar `<Id>`-ul din feed,
+   * recalculat. Daca Pepita trimite altceva ce noi am scris vreodata, evidenta il recunoaste.
+   */
+  const b = faceBaza([{ articol_id: "COD-CU-TOTUL-ALTFEL", product_id: P_SIMPLU, combinatie: "" }]);
+  const r = await ingereaza(b.db, CTX, comanda({}, [
+    { id: "9", sku: "COD-CU-TOTUL-ALTFEL", currency: "RON", quantity: 2, price: 100, vat: 21 },
+  ]));
+  assert.equal(r.stare, "creata");
+  assert.deepEqual(b.consumuri[0].produse, [{ product_id: P_SIMPLU, quantity: 2 }]);
+});
+
+test("evidenta unui alt magazin nu leaga nimic", async () => {
+  /* Filtrul pe magazin se aplica si la evidenta, nu doar la produse. */
+  const b = faceBaza([{ articol_id: "COD-STRAIN", product_id: P_STRAIN, combinatie: "" }]);
+  const r = await ingereaza(b.db, CTX, comanda({}, [
+    { id: "9", sku: "COD-STRAIN", currency: "RON", quantity: 1, price: 10, vat: 21 },
+  ]));
+  assert.equal(r.stare, "carantina");
+  assert.deepEqual(b.consumuri[0].produse, []);
 });
 
 test("potrivirea liniilor nu cere nicio scriere", async () => {

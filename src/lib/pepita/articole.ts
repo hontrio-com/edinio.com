@@ -37,6 +37,14 @@ export interface AtributPepita { nume: string; valoare: string }
 
 export interface ArticolPepita {
   id: string;
+  /**
+   * Titlul combinatiei din care s-a nascut articolul, sau sirul gol la produsul simplu.
+   *
+   * ⚠ NU pleaca in feed. E jumatatea de care are nevoie evidenta din `pepita_articole`, ca
+   * drumul inapoi de la o comanda sa fie o cautare exacta, nu o recalculare a amprentelor
+   * din titlurile de ACUM. Vezi `tineMinteArticolele`.
+   */
+  combinatie: string;
   nume: string;
   descriere: string;
   brand?: string;
@@ -293,6 +301,7 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
       articole: [{
         ...comun,
         id: idArticol(p.id, null),
+        combinatie: "",
         nume,
         gtin: gtinProdus,
         pret: preturi.pret,
@@ -385,6 +394,7 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
     articole.push({
       ...comun,
       id,
+      combinatie: titlu,
       nume: `${nume} (${titlu})`,
       gtin: gtinCombo,
       pret: preturi.pret,

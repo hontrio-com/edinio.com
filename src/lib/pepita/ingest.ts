@@ -95,8 +95,37 @@ export async function leagaLiniile(
   admin: Db, businessId: string, linii: LiniePepita[],
 ): Promise<{ legate: LinieLegata[]; nelegate: string[] }> {
   const idDupaLinie = linii.map((l) => desfaIdArticol(l.sku) ?? desfaIdArticol(l.idPepita));
-  const productIds = [...new Set(idDupaLinie.filter((x) => x != null).map((x) => x!.productId))];
   const skuriBrute = [...new Set(linii.map((l) => l.sku).filter((s): s is string => !!s))];
+
+  /*
+   * ═══ ⚠ PRIMUL MARTOR: CE AM TRIMIS CU ADEVARAT ═══
+   *
+   * Evidenta din `pepita_articole` spune, pentru fiecare `<Id>` plecat, de la ce produs si de
+   * la ce combinatie a venit. E o cautare exacta, nu o recalculare.
+   *
+   * ⚠ SI DE-AIA EXISTA. Recalcularea porneste de la titlurile de ACUM: o comanda sosita dupa
+   * ce comerciantul a redenumit o varianta poarta `<Id>`-ul VECHI, si atunci nicio amprenta
+   * nu se mai potriveste. Linia ajungea in carantina fara sa stim macar despre ce produs e
+   * vorba, deci comerciantul nu avea de unde sa inceapa.
+   */
+  const evidenta = new Map<string, { product_id: string; combinatie: string }>();
+  const codurile = [...new Set(linii.flatMap((l) => [l.sku, l.idPepita]).filter((x): x is string => !!x))];
+  if (codurile.length > 0) {
+    for (let i = 0; i < codurile.length; i += 200) {
+      const { data, error } = await admin
+        .from("pepita_articole").select("articol_id, product_id, combinatie")
+        .eq("business_id", businessId).in("articol_id", codurile.slice(i, i + 200));
+      if (error) throw error;
+      for (const r of (data ?? []) as { articol_id: string; product_id: string; combinatie: string }[]) {
+        evidenta.set(r.articol_id, { product_id: r.product_id, combinatie: r.combinatie });
+      }
+    }
+  }
+
+  const productIds = [...new Set([
+    ...idDupaLinie.filter((x) => x != null).map((x) => x!.productId),
+    ...[...evidenta.values()].map((v) => v.product_id),
+  ])];
 
   const dupaId = new Map<string, ProdusGasit>();
   const dupaSku = new Map<string, ProdusGasit>();
@@ -135,7 +164,11 @@ export async function leagaLiniile(
   for (let i = 0; i < linii.length; i++) {
     const linie = linii[i];
     const desfacut = idDupaLinie[i];
-    const produs = (desfacut ? dupaId.get(desfacut.productId) : undefined)
+    const scris = (linie.sku ? evidenta.get(linie.sku) : undefined)
+      ?? (linie.idPepita ? evidenta.get(linie.idPepita) : undefined);
+
+    const produs = (scris ? dupaId.get(scris.product_id) : undefined)
+      ?? (desfacut ? dupaId.get(desfacut.productId) : undefined)
       ?? (linie.sku ? dupaSku.get(linie.sku) : undefined);
 
     if (!produs) {
@@ -144,18 +177,32 @@ export async function leagaLiniile(
       continue;
     }
 
+    /*
+     * Titlul combinatiei: intai cel SCRIS la export, apoi, ca rezerva, cel recalculat din
+     * amprenta. Rezerva ramane pentru comenzile sosite inainte ca feedul sa fi apucat sa
+     * scrie evidenta.
+     */
+    const titluCautat = scris ? (scris.combinatie || null) : null;
     let variantTitle: string | null = null;
-    if (desfacut?.amprenta) {
+    if (titluCautat || desfacut?.amprenta) {
       const combinatii = combinatiiActiveUnice(parseVariants(produs.page_sections));
-      variantTitle = combinatii.find((c) => amprentaCombinatie(c.title) === desfacut.amprenta)?.title ?? null;
+      variantTitle = titluCautat
+        ? combinatii.find((c) => c.title === titluCautat)?.title ?? null
+        : combinatii.find((c) => amprentaCombinatie(c.title) === desfacut!.amprenta)?.title ?? null;
       if (!variantTitle) {
         /*
          * ⚠ AL DOILEA MARTOR A CAZUT. Produsul exista, combinatia nu: a fost stearsa,
          * redenumita sau dezactivata dupa ce feedul plecase. Linia NU se leaga de
          * produsul intreg, fiindca nu stim ce marime sa scadem, si a ghici inseamna
          * sa expediezi altceva.
+         *
+         * ⚠ Iar in Edinio redenumirea CHIAR distruge combinatia: `generateCombinations`
+         * o cauta dupa titlu, deci una redenumita se naste goala, fara pret si fara stoc.
+         * De aceea motivul spune ce s-a intamplat, nu doar „cod necunoscut".
          */
-        nelegate.push(linie.sku ?? "(varianta necunoscuta)");
+        nelegate.push(titluCautat
+          ? `${linie.sku ?? "(fara cod)"} (varianta „${titluCautat}" nu mai există la produsul ${produs.name})`
+          : linie.sku ?? "(varianta necunoscuta)");
         legate.push({ linie, productId: null, variantTitle: null, nume: produs.name });
         continue;
       }

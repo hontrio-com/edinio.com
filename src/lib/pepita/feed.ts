@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
 import { storeBaseUrl } from "@/lib/seo";
+import { logError } from "@/lib/error-logger";
 import { articolelePentruProdus, type ContextArticole, type ProdusPepita } from "./articole";
 import { caleaCategoriilor, type RandCategorie } from "./categorii";
 import { citesteConfig } from "./config";
@@ -151,6 +152,9 @@ export async function* scrieFeed(
 ): AsyncGenerator<string> {
   yield ANTET;
 
+  /* Ce s-a trimis in pagina curenta, scris in baza dupa fiecare pagina. */
+  const trimise: ArticolTrimis[] = [];
+
   for (let de = 0; ; de += PAGINA) {
     const { data, error } = await admin
       .from("products").select(COLOANE_PRODUS)
@@ -181,8 +185,15 @@ export async function* scrieFeed(
           },
           { ...pre.ctx, safetyStock: rand?.safety_stock ?? pre.config.safety_stock },
         );
-        for (const a of articole) yield fel === "produse" ? produsXml(a) : stocXml(a);
+        for (const a of articole) {
+          /* ⚠ Perechea (produs, combinatie) se tine minte pentru drumul INAPOI: vezi
+             `tineMinteArticolele`. `a.id` e chiar ce pleaca in `<Id>`. */
+          if (fel === "produse") trimise.push({ productId: p.id, combinatie: a.combinatie, articolId: a.id });
+          yield fel === "produse" ? produsXml(a) : stocXml(a);
+        }
       }
+      await tineMinteArticolele(admin, businessId, trimise);
+      trimise.length = 0;
     }
 
     if (produse.length < PAGINA) break;
@@ -241,4 +252,48 @@ async function disponibilitateaPachetelor(
     out.set(p.id, disponibilitatePachet(stare).inStock);
   }
   return out;
+}
+
+interface ArticolTrimis { productId: string; combinatie: string; articolId: string }
+
+/**
+ * Tine minte ce `<Id>` a plecat pentru fiecare produs si combinatie.
+ *
+ * ═══ ⚠ DE CE E NEVOIE, DESI `<Id>`-UL SE POATE RECALCULA ═══
+ *
+ * Recalcularea porneste de la titlurile de ACUM. O comanda care soseste dupa ce comerciantul
+ * a redenumit o varianta poarta `<Id>`-ul VECHI, si atunci nicio amprenta recalculata nu se
+ * mai potriveste: linia ajungea in carantina fara sa stim macar despre ce produs e vorba.
+ * Cu randul scris aici, cautarea e exacta si raspunsul e precis.
+ *
+ * ⚠ SE SCRIE DOAR PE FEEDUL DE PRODUSE, nu si pe cel de stoc. Ids-urile sunt aceleasi, dar
+ * stocul se citeste de douazeci si patru de ori mai des, iar randurile ar fi identice: ar fi
+ * douazeci si trei de scrieri pe zi fara niciun castig.
+ *
+ * ⚠ NU ARUNCA NICIODATA. Se cheama din mijlocul unui flux deja pornit; o exceptie ar rupe
+ * feedul si ar lasa XML-ul neinchis, adica ar transforma o scriere ratata de evidenta intr-un
+ * feed picat. Evidenta se poate reface la trecerea urmatoare; feedul nu.
+ */
+async function tineMinteArticolele(admin: Db, businessId: string, trimise: ArticolTrimis[]): Promise<void> {
+  if (trimise.length === 0) return;
+  try {
+    const { error } = await admin.from("pepita_articole").upsert(
+      trimise.map((t) => ({
+        business_id: businessId,
+        product_id: t.productId,
+        combinatie: t.combinatie,
+        articol_id: t.articolId,
+      })) as never,
+      /* ⚠ `ignoreDuplicates`: randul exista deja de la trecerea trecuta si nu are ce sa se
+         schimbe. Un update ar fi rescris zilnic tot catalogul, degeaba. */
+      { onConflict: "business_id,articol_id", ignoreDuplicates: true },
+    );
+    if (error) throw error;
+  } catch (e) {
+    await logError({
+      action: "pepita/articole",
+      message: `evidenta articolelor trimise nu s-a putut scrie: ${e instanceof Error ? e.message : String(e)}`,
+      details: { cate: trimise.length }, businessId, severity: "warning",
+    });
+  }
 }

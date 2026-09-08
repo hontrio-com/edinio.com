@@ -43,8 +43,10 @@ interface Optiuni {
 function faceBaza(o: Optiuni = {}) {
   const produse = o.produse ?? [produs(1), produs(2)];
   let pagini = 0;
+  /* Ce a scris feedul in evidenta articolelor trimise. */
+  const scrise: { product_id: string; combinatie: string; articol_id: string }[] = [];
 
-  const raspunde = (tabela: string, filtre: [string, unknown][], interval: [number, number] | null) => {
+  const raspunde = (tabela: string, filtre: [string, unknown][], interval: [number, number] | null, corp: unknown = null) => {
     if (tabela === "businesses") {
       return { data: { id: BID, slug: "magazin", custom_domain: null, store_name: "Magazin", business_name: "SRL", is_published: true }, error: null };
     }
@@ -63,6 +65,10 @@ function faceBaza(o: Optiuni = {}) {
     if (tabela === "pepita_listari") {
       return { data: o.listari ?? [], error: null };
     }
+    if (tabela === "pepita_articole") {
+      for (const r of (corp as { product_id: string; combinatie: string; articol_id: string }[]) ?? []) scrise.push(r);
+      return { data: null, error: null };
+    }
     if (tabela === "products") {
       pagini++;
       if (o.cadeLaPagina && pagini >= o.cadeLaPagina) {
@@ -80,21 +86,24 @@ function faceBaza(o: Optiuni = {}) {
   const builder = (tabela: string) => {
     const filtre: [string, unknown][] = [];
     let interval: [number, number] | null = null;
+    let corp: unknown = null;
     const b: any = {
       select: () => b,
+      upsert: (p: unknown) => { corp = p; return b; },
       eq: (k: string, v: unknown) => { filtre.push([k, v]); return b; },
       in: () => b, is: () => b, not: () => b, neq: () => b, order: () => b, limit: () => b,
       range: (a: number, c: number) => { interval = [a, c]; return b; },
-      maybeSingle: () => Promise.resolve(raspunde(tabela, filtre, interval)),
-      single: () => Promise.resolve(raspunde(tabela, filtre, interval)),
+      maybeSingle: () => Promise.resolve(raspunde(tabela, filtre, interval, corp)),
+      single: () => Promise.resolve(raspunde(tabela, filtre, interval, corp)),
       then: (bun: (v: unknown) => unknown, rau?: (e: unknown) => unknown) =>
-        Promise.resolve(raspunde(tabela, filtre, interval)).then(bun, rau),
+        Promise.resolve(raspunde(tabela, filtre, interval, corp)).then(bun, rau),
     };
     return b;
   };
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
-  return { from: (t: string) => builder(t) } as unknown as SupabaseClient<Database>;
+  const db = { from: (t: string) => builder(t) } as unknown as SupabaseClient<Database>;
+  return Object.assign(db, { __scrise: scrise });
 }
 
 async function feed(db: SupabaseClient<Database>, fel: "produse" | "stoc" = "produse") {
@@ -202,4 +211,50 @@ test("un catalog gol da un feed valid si gol, nu o cadere", async () => {
   assert.equal(XMLValidator.validate(xml), true);
   assert.ok(!xml.includes("<Product>"));
   assert.ok(xml.includes("</Catalog>"));
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   EVIDENTA A CE AM TRIMIS
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const cuDouaVariante = (i: number) => produs(i, {
+  page_sections: {
+    variants: {
+      enabled: true,
+      options: [{ id: "o1", name: "Mărime", values: ["S", "M"] }],
+      combinations: [
+        { id: "s", title: "S", price: "", compare_at_price: "", sku: "", stock_quantity: "2", image: "", enabled: true },
+        { id: "m", title: "M", price: "", compare_at_price: "", sku: "", stock_quantity: "2", image: "", enabled: true },
+      ],
+    },
+  },
+});
+
+test("⚠ feedul de produse tine minte ce `<Id>` a trimis pentru fiecare combinatie", async () => {
+  /* De aici traieste drumul inapoi: o comanda intarziata, sosita dupa o redenumire, poarta
+     `<Id>`-ul vechi si nu s-ar mai potrivi cu nicio amprenta recalculata. */
+  const db = faceBaza({ config: { mod_includere: "toate" }, produse: [cuDouaVariante(1)] });
+  const xml = await feed(db, "produse");
+  const scrise = (db as unknown as { __scrise: { product_id: string; combinatie: string; articol_id: string }[] }).__scrise;
+
+  assert.equal(scrise.length, 2, "cate un rand pentru fiecare combinatie trimisa");
+  assert.deepEqual(scrise.map((r) => r.combinatie).sort(), ["M", "S"]);
+  for (const r of scrise) {
+    assert.ok(xml.includes(`<Id>${r.articol_id}</Id>`), "id-ul scris e chiar cel trimis");
+  }
+});
+
+test("produsul simplu se tine minte cu combinatia sir GOL, nu `null`", async () => {
+  /* In Postgres doua `null` sunt distincte intr-un index unic, deci acelasi produs simplu ar
+     fi putut capata oricate randuri. */
+  const db = faceBaza({ config: { mod_includere: "toate" }, produse: [produs(1)] });
+  await feed(db, "produse");
+  const scrise = (db as unknown as { __scrise: { combinatie: string }[] }).__scrise;
+  assert.deepEqual(scrise.map((r) => r.combinatie), [""]);
+});
+
+test("⚠ feedul de STOC nu scrie evidenta: aceleasi randuri, de 24 de ori pe zi", async () => {
+  const db = faceBaza({ config: { mod_includere: "toate" }, produse: [cuDouaVariante(1)] });
+  await feed(db, "stoc");
+  assert.deepEqual((db as unknown as { __scrise: unknown[] }).__scrise, []);
 });

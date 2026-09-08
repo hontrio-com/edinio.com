@@ -372,6 +372,18 @@ export interface RezumatProduse {
    * produse dintr-un catalog de treizeci de mii ar fi o cifra linistitoare si falsa.
    */
   partial: boolean;
+  /**
+   * Articole trimise candva la Pepita si care azi nu se mai produc.
+   *
+   * ⚠ CEL MAI DES E O REDENUMIRE. In Edinio, schimbarea unei valori de varianta CHIAR
+   * distruge combinatia (`generateCombinations` o cauta dupa titlu), deci la Pepita apare un
+   * produs nou, iar cel vechi ramane acolo, orfan, si se poate vinde in continuare.
+   *
+   * ⚠ NU-L PUTEM STERGE NOI: feedul nu are cum sa spuna „scoate produsul asta", si nu exista
+   * niciun API. Singurul lucru cinstit e sa i-l ARATAM comerciantului.
+   */
+  orfane: number;
+  exempleOrfane: string[];
   produse: ProdusInPanou[];
 }
 
@@ -401,6 +413,8 @@ export async function verificaProdusePepita(
     let active = 0, incluse = 0, cuErori = 0, articole = 0;
     let partial = false;
     const produse: ProdusInPanou[] = [];
+    /* Id-urile pe care feedul le-ar trimite ACUM. Se compara cu ce s-a trimis vreodata. */
+    const deAcum = new Set<string>();
 
     for (let de = 0; de < PLAFON_VERIFICARE; de += PAGINA) {
       const randuri = randuriCitite<ProdusPepita & { is_active: boolean }>(
@@ -425,6 +439,7 @@ export async function verificaProdusePepita(
           { ...pre.ctx, safetyStock: rand?.safety_stock ?? pre.config.safety_stock },
         );
         articole += r.articole.length;
+        for (const a of r.articole) deAcum.add(a.id);
         const areErori = r.probleme.some((x) => x.nivel === "eroare");
         if (areErori) cuErori++;
         /*
@@ -440,7 +455,31 @@ export async function verificaProdusePepita(
       if (de + PAGINA >= PLAFON_VERIFICARE) partial = true;
     }
 
-    return { active, incluse, cuErori, articole, partial, produse };
+    /*
+     * ⚠ Orfanii se socotesc DUPA ce s-a trecut prin tot catalogul, si numai daca s-a trecut
+     * prin tot: pe o verificare taiata la plafon, orice articol dintr-o pagina necitita ar fi
+     * parut orfan. Un avertisment fals despre produse care se vand foarte bine se invata
+     * repede sa fie ignorat.
+     */
+    const exempleOrfane: string[] = [];
+    let orfane = 0;
+    if (!partial) {
+      for (let de = 0; ; de += 1000) {
+        const { data, error } = await admin
+          .from("pepita_articole").select("articol_id, combinatie")
+          .eq("business_id", businessId).order("articol_id").range(de, de + 999);
+        if (error) throw error;
+        const randuri = (data ?? []) as { articol_id: string; combinatie: string }[];
+        for (const r of randuri) {
+          if (deAcum.has(r.articol_id)) continue;
+          orfane++;
+          if (exempleOrfane.length < 20) exempleOrfane.push(r.combinatie || r.articol_id);
+        }
+        if (randuri.length < 1000) break;
+      }
+    }
+
+    return { active, incluse, cuErori, articole, partial, orfane, exempleOrfane, produse };
   } catch (e) {
     await logError({
       action: "pepita/verificare", message: e instanceof Error ? e.message : String(e),

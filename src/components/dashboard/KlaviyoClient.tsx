@@ -229,7 +229,7 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-foreground">Sincronizeaza clientii existenti</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Aboneaza in lista emailurile clientilor care au comandat deja (deduplicate). Foloseste doar daca ai consimtamantul lor de marketing.
+                  Aboneaza in lista emailurile clientilor care au comandat deja (deduplicate). Comenzile din marketplace (Pepita, eMAG, Trendyol, About You) sunt sarite: cumparatorii lor nu sunt clientii tai. Foloseste doar daca ai consimtamantul lor de marketing.
                 </p>
                 {config.last_sync_at && (
                   <p className="text-[11px] text-muted-foreground mt-1">Ultima sincronizare: {new Date(config.last_sync_at).toLocaleString("ro-RO")}</p>

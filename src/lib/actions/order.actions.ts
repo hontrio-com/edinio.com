@@ -1995,6 +1995,10 @@ export async function placeOrder(data: {
       // Mailchimp e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
       void maybeSyncMailchimpOrder({
         businessId: data.business_id,
+        /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
+           da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
+           Vezi `clientDeMarketplace`. */
+        orderSource: buildOrderSource(data.source, userAgent),
         storeName: businessName,
         storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
         order: {
@@ -2013,6 +2017,10 @@ export async function placeOrder(data: {
       // Brevo e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
       void maybeSyncBrevoOrder({
         businessId: data.business_id,
+        /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
+           da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
+           Vezi `clientDeMarketplace`. */
+        orderSource: buildOrderSource(data.source, userAgent),
         storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
         order: {
           id: order.id,
@@ -2028,6 +2036,10 @@ export async function placeOrder(data: {
       // Klaviyo e-commerce — "Placed Order" event (revenue + purchase segmentation + flows). Fire-and-forget.
       void maybeTrackKlaviyoOrder({
         businessId: data.business_id,
+        /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
+           da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
+           Vezi `clientDeMarketplace`. */
+        orderSource: buildOrderSource(data.source, userAgent),
         storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
         order: {
           id: order.id,
@@ -2342,8 +2354,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       store_url: biz.slug ? `${STORE_BASE_URL}/${biz.slug}` : "",
       date_added: order.created_at ? formatDate(order.created_at as string) : "",
     };
-    // `poateInstiinta` doar pe SMS-urile platite; marcarea „platit" din
-    // Mailchimp/Brevo de mai jos NU e o instiintare si ramane neatinsa.
+    // `poateInstiinta` se poarta doar pe SMS-uri.
     if (statusChanged) {
       const tk = noticeTriggerForStatus(data.status);
       if (poateInstiinta && tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
@@ -2351,8 +2362,24 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     if (paymentChanged) {
       const tk = noticeTriggerForPayment(data.payment_status);
       if (poateInstiinta && tk) void maybeSendNoticeNotification({ businessId: order.business_id, orderId, triggerKey: tk, phone: order.customer_phone, vars: noticeVars });
-      if (data.payment_status === "paid") { void maybeMarkMailchimpOrderPaid(orderId); void maybeMarkBrevoOrderPaid(orderId); }
     }
+  }
+
+  /*
+   * MARCAREA „PLATIT" IN MAILCHIMP SI BREVO.
+   *
+   * ⚠ STA AFARA DIN BLOCUL DE SMS, dinadins. Pana acum era inauntrul lui
+   * `if (order.customer_phone && …)`, deci pe o comanda fara telefon nu pleca NICIODATA,
+   * tacut, iar comentariul de deasupra spunea ca „ramane neatinsa": adevarat fata de
+   * `poateInstiinta`, fals fata de telefon.
+   *
+   * ⚠ CUMPARATORII DE MARKETPLACE nu se opresc aici, ci INAUNTRUL celor doua functii, acolo
+   * unde se citeste comanda: sunt sase cai catre ele, si o poarta pusa la apelant le-ar fi
+   * pazit pe una. Vezi `clientDeMarketplace`.
+   */
+  if (paymentChanged && data.payment_status === "paid") {
+    void maybeMarkMailchimpOrderPaid(orderId);
+    void maybeMarkBrevoOrderPaid(orderId);
   }
 
   revalidatePath("/dashboard/orders");
@@ -4494,6 +4521,10 @@ export async function placeCartOrder(data: {
       // Mailchimp e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
       void maybeSyncMailchimpOrder({
         businessId: data.business_id,
+        /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
+           da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
+           Vezi `clientDeMarketplace`. */
+        orderSource: buildOrderSource(data.source, userAgent),
         storeName: businessName,
         storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
         order: {
@@ -4512,6 +4543,10 @@ export async function placeCartOrder(data: {
       // Brevo e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
       void maybeSyncBrevoOrder({
         businessId: data.business_id,
+        /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
+           da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
+           Vezi `clientDeMarketplace`. */
+        orderSource: buildOrderSource(data.source, userAgent),
         storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
         order: {
           id: order.id,
@@ -4527,6 +4562,10 @@ export async function placeCartOrder(data: {
       // Klaviyo e-commerce — "Placed Order" event (revenue + purchase segmentation + flows). Fire-and-forget.
       void maybeTrackKlaviyoOrder({
         businessId: data.business_id,
+        /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
+           da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
+           Vezi `clientDeMarketplace`. */
+        orderSource: buildOrderSource(data.source, userAgent),
         storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
         order: {
           id: order.id,

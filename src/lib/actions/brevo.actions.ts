@@ -10,6 +10,7 @@ import {
   type BrevoConfig, type BrevoList, type BrevoContactInput, type BrevoPublicConfig,
 } from "@/lib/brevo";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
+import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
@@ -183,9 +184,22 @@ export async function syncExistingCustomers(
     fetchAllRowsStrict("brevo.syncExistingCustomers.orders", (from, to) =>
       owned.supabase
         .from("orders")
-        .select("customer_email, customer_name, customer_phone, created_at")
+        .select("customer_email, customer_name, customer_phone, created_at, order_source")
         .eq("business_id", businessId)
         .not("customer_email", "is", null)
+        /*
+         * ⚠ CUMPARATORUL UNUI MARKETPLACE NU E CLIENTUL COMERCIANTULUI.
+         *
+         * Butonul „Sincronizeaza clientii existenti" ia TOT istoricul de comenzi al
+         * magazinului. Fara randul de mai jos, o singura apasare ducea in lista de marketing
+         * fiecare cumparator Pepita, eMAG, Trendyol si About You, cu tot cu emailul lui, care
+         * la marketplace e adesea un ALIAS al platformei. Vezi `clientDeMarketplace`.
+         *
+         * Filtrul e in SQL ca sa nu-i aduca deloc, si e acelasi predicat cu care lista de
+         * comenzi din panou desparte „Magazin" de marketplace-uri. „Fara marker" prinde si
+         * comenzile vechi, care n-au deloc `order_source`.
+         */
+        .is("order_source->>marketplace", null)
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
         .range(from, to)
@@ -199,6 +213,11 @@ export async function syncExistingCustomers(
   const seen = new Set<string>();
   const contacts: BrevoContactInput[] = [];
   for (const o of orders) {
+    /*
+     * ⚠ A DOUA trecere peste acelasi adevar, si nu e de prisos: pazeste ziua in care cineva
+     * schimba interogarea de mai sus si scoate filtrul fara sa se uite incoace.
+     */
+    if (clientDeMarketplace(o.order_source)) continue;
     const email = (o.customer_email ?? "").trim().toLowerCase();
     if (!email || seen.has(email) || suppressed.has(email)) continue;
     seen.add(email);

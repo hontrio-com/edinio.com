@@ -10,6 +10,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
+import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
 import { upsertProfile, subscribeProfiles, splitName, type KlaviyoConfig } from "@/lib/klaviyo";
 import { trackPlacedOrder, upsertCatalogItem, deleteCatalogItem } from "@/lib/klaviyo-ecommerce";
 
@@ -94,6 +95,14 @@ type OrderItem = { product_id: string; name: string; price: number; quantity: nu
 export async function maybeTrackKlaviyoOrder(opts: {
   businessId: string;
   storeUrl?: string;
+  /**
+   * ⚠ OBLIGATORIU, ca `tsc` sa numeasca fiecare apelant.
+   *
+   * De el atarna daca un cumparator de marketplace intra sau nu in marketingul
+   * comerciantului. Optional, apelantii care nu se gandesc la asta l-ar fi omis tacut, iar
+   * poarta ar fi existat degeaba. Vezi `clientDeMarketplace`.
+   */
+  orderSource: unknown;
   order: {
     id: string;
     email: string | null | undefined;
@@ -104,6 +113,9 @@ export async function maybeTrackKlaviyoOrder(opts: {
   };
 }): Promise<void> {
   try {
+    /* ⚠ Cumparatorul unui marketplace nu e clientul comerciantului: vezi
+       `clientDeMarketplace`. Emailul poate fi chiar un alias al platformei. */
+    if (clientDeMarketplace(opts.orderSource)) return;
     const email = (opts.order.email ?? "").trim();
     if (!email || opts.order.items.length === 0) return;
 

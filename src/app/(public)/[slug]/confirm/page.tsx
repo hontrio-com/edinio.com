@@ -15,6 +15,7 @@ import { radacinaCatalog } from "@/lib/storefront/design/commerce";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import type { MarketingConfig } from "@/lib/marketing-config";
 import type { Metadata } from "next";
+import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
 import { vanzareaEConfirmata } from "@/lib/orders/vanzare-confirmata";
 import { randurileInstantaneului } from "@/lib/customization/comanda";
 
@@ -75,6 +76,14 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   let customerName: string | null = null;
   let customerEmail: string | null = null;
   let customerPhone: string | null = null;
+  /*
+    ⚠ ORIGINEA COMENZII, ceruta anume. De ea atarna daca potrivirea avansata a pixelilor
+    primeste sau nu datele omului. Pagina asta citeste ORICE comanda a magazinului dupa id,
+    cu clientul admin si fara sesiune, deci si una venita dintr-un marketplace: cumparatorul
+    de pe Pepita nu ajunge niciodata aici, dar comerciantul are id-ul in adresa panoului.
+    Vezi `clientDeMarketplace`.
+  */
+  let sursaComenzii: unknown = null;
   let totalComanda: number | null = null;
   /*
     ⚠ PORNESTE DE LA `false`, dinadins. Fara `orderId`, sau daca randul nu se
@@ -87,7 +96,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     const adminClient = createAdminClient();
     const { data: order } = await adminClient
       .from("orders")
-      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_amount, vat_rate, subtotal, total, customer_name, customer_email, customer_phone, payment_method, payment_status")
+      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_amount, vat_rate, subtotal, total, customer_name, customer_email, customer_phone, payment_method, payment_status, order_source")
       .eq("id", orderId)
       .eq("business_id", business.id)
       .single();
@@ -117,6 +126,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       customerName = order.customer_name ?? null;
       customerEmail = order.customer_email ?? null;
       customerPhone = order.customer_phone ?? null;
+      sursaComenzii = order.order_source ?? null;
       totalComanda = order.total != null ? Number(order.total) : null;
     }
   }
@@ -251,7 +261,13 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
               googleAdsConversionLabel={marketingConfig?.google_ads_conversion_label}
               fbPixelId={marketingConfig?.facebook_pixel_id}
               ttPixelId={marketingConfig?.tiktok_pixel_id}
-              customer={{ name: customerName, email: customerEmail, phone: customerPhone }}
+              /*
+                ⚠ `undefined`, nu un obiect cu campuri goale: `FbPurchaseEvent` face
+                `customer && {...}`, iar un obiect e mereu adevarat, deci potrivirea avansata
+                s-ar chema oricum. Venitul pleaca mai departe (asta e hotarat in
+                `vanzare-confirmata.ts`); omul nu.
+              */
+              customer={clientDeMarketplace(sursaComenzii) ? undefined : { name: customerName, email: customerEmail, phone: customerPhone }}
             />
           )}
 

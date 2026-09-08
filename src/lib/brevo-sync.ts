@@ -3,6 +3,7 @@
 // fire-and-forget — it must never break the order/popup/form flow it is called from.
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
 import { upsertContact, splitName, type BrevoConfig } from "@/lib/brevo";
@@ -102,6 +103,14 @@ function toLines(items: OrderItem[], storeUrl?: string) {
 export async function maybeSyncBrevoOrder(opts: {
   businessId: string;
   storeUrl?: string;
+  /**
+   * ⚠ OBLIGATORIU, ca `tsc` sa numeasca fiecare apelant.
+   *
+   * De el atarna daca un cumparator de marketplace intra sau nu in marketingul
+   * comerciantului. Optional, apelantii care nu se gandesc la asta l-ar fi omis tacut, iar
+   * poarta ar fi existat degeaba. Vezi `clientDeMarketplace`.
+   */
+  orderSource: unknown;
   order: {
     id: string;
     email: string | null | undefined;
@@ -112,6 +121,9 @@ export async function maybeSyncBrevoOrder(opts: {
   };
 }): Promise<void> {
   try {
+    /* ⚠ Cumparatorul unui marketplace nu e clientul comerciantului: vezi
+       `clientDeMarketplace`. Emailul poate fi chiar un alias al platformei. */
+    if (clientDeMarketplace(opts.orderSource)) return;
     const email = (opts.order.email ?? "").trim();
     if (!email || opts.order.items.length === 0) return;
 
@@ -173,8 +185,18 @@ export async function maybeMarkBrevoOrderPaid(orderId: string): Promise<void> {
   try {
     const admin = createAdminClient();
     const { data: order } = await admin
-      .from("orders").select("business_id, customer_email, total, items, created_at").eq("id", orderId).single();
+      .from("orders").select("business_id, customer_email, total, items, created_at, order_source").eq("id", orderId).single();
     if (!order?.customer_email) return;
+    /*
+     * ⚠ POARTA STA AICI, unde se citeste comanda, nu la apelant.
+     *
+     * Functia asta e chemata din `updateOrder` de fiecare data cand comerciantul trece o
+     * comanda pe „platit", si de acolo nu se uita nimeni la origine. Deci prima apasare pe
+     * butonul de plata trimitea emailul unui cumparator de marketplace, cu tot cu comanda,
+     * intr-o lista de marketing. Vezi `clientDeMarketplace`.
+     */
+    if (clientDeMarketplace((order as { order_source?: unknown }).order_source)) return;
+
 
     const config = await readConfig(order.business_id);
     if (!config?.enabled || !config.api_key || !config.list_id || !config.ecommerce_sync) return;

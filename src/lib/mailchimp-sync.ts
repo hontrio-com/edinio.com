@@ -5,6 +5,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
+import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
 import { upsertMember, splitName, type MailchimpConfig } from "@/lib/mailchimp";
 import { ensureStore, upsertProduct, deleteProduct, syncOrder, setOrderFinancialStatus, mailchimpStoreId, type EcomProduct } from "@/lib/mailchimp-ecommerce";
 
@@ -101,6 +102,13 @@ export async function maybeSyncMailchimpSubscriber(opts: {
  */
 export async function maybeSyncMailchimpOrder(opts: {
   businessId: string;
+  /**
+   * ⚠ OBLIGATORIU, ca `tsc` sa numeasca fiecare apelant.
+   *
+   * De el atarna daca un cumparator de marketplace intra sau nu in marketingul
+   * comerciantului. Optional, apelantii l-ar fi omis tacut. Vezi `clientDeMarketplace`.
+   */
+  orderSource: unknown;
   storeName: string;
   storeUrl?: string;
   storeDomain?: string;
@@ -116,6 +124,9 @@ export async function maybeSyncMailchimpOrder(opts: {
   };
 }): Promise<void> {
   try {
+    /* ⚠ Cumparatorul unui marketplace nu e clientul comerciantului: vezi
+       `clientDeMarketplace`. Emailul poate fi chiar un alias al platformei. */
+    if (clientDeMarketplace(opts.orderSource)) return;
     const email = (opts.order.email ?? "").trim();
     if (!email || opts.order.items.length === 0) return;
 
@@ -200,8 +211,20 @@ export async function maybeSyncMailchimpProduct(opts: {
 export async function maybeMarkMailchimpOrderPaid(orderId: string): Promise<void> {
   try {
     const admin = createAdminClient();
-    const { data: order } = await admin.from("orders").select("business_id").eq("id", orderId).single();
+    /* ⚠ `order_source` e CERUT anume: fara el poarta de mai jos ar citi `undefined` si ar
+       tacea exact pe comenzile pentru care exista. */
+    const { data: order } = await admin.from("orders").select("business_id, order_source").eq("id", orderId).single();
     if (!order) return;
+    /*
+     * ⚠ POARTA STA AICI, unde se citeste comanda, nu la apelant.
+     *
+     * Functia asta e chemata din `updateOrder` de fiecare data cand comerciantul trece o
+     * comanda pe „platit", si de acolo nu se uita nimeni la origine. Deci prima apasare pe
+     * butonul de plata trimitea emailul unui cumparator de marketplace, cu tot cu comanda,
+     * intr-o lista de marketing. Vezi `clientDeMarketplace`.
+     */
+    if (clientDeMarketplace((order as { order_source?: unknown }).order_source)) return;
+
     const { data: settings } = await admin
       .from("store_settings").select("mailchimp_config").eq("business_id", order.business_id).single();
     const config = settings?.mailchimp_config as MailchimpConfig | null;

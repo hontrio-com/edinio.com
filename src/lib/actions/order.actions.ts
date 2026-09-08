@@ -484,11 +484,43 @@ async function buildOrderNumber(supabase: SupabaseClient, businessId: string): P
   return `ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
 }
 
+/*
+  ═══ ⚠ CE ARE VOIE SA INTRE IN `order_source` DE LA CUMPARATOR ═══
+
+  Lista e ALBA, si asta nu e o precautie teoretica. `order_source` a incetat sa fie doar
+  atribuire de marketing: din 08.09.2026 pe el atarna si BANII. `rambursDeIncasat` intoarce
+  zero cand vede `incaseaza_marketplace: true` sau o moneda care nu e RON, iar
+  `clientDeMarketplace` opreste marketingul cand vede `marketplace`.
+
+  Iar `data.source` vine DIN BROWSER: `placeOrder` si `placeCartOrder` sunt exporturi dintr-un
+  modul „use server", adica un capat HTTP anonim, si checkout-ul e public. Cu raspandirea de
+  dinainte (`{ ...source }`), un cumparator putea trimite `{ "incaseaza_marketplace": true }`
+  cu o comanda cu plata la livrare de 850 de lei: coletul ar fi plecat cu ramburs 0,00, iar
+  generarea in MASA de AWB nici macar n-are camp de corectat.
+
+  ⚠ De aceea cheile care hotarasc bani (`incaseaza_marketplace`, `currency`, `marketplace`,
+  `livrare_pepita`, `vat_mixt`) se scriu NUMAI de caile de ingest ale marketplace-urilor, care
+  nu trec pe aici.
+*/
+const CHEI_ATRIBUIRE = [
+  "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+  "gclid", "fbclid", "ttclid", "referrer", "landing", "captured_at", "ga_client_id",
+] as const;
+
 // Merge client-captured attribution with the server-side user-agent into the
 // stored order_source (null when there's nothing to record).
 function buildOrderSource(source: OrderSource | undefined, userAgent: string | undefined): OrderSource | null {
   if (!source && !userAgent) return null;
-  return { ...(source ?? {}), ...(userAgent ? { user_agent: userAgent } : {}) };
+  const curat: Record<string, unknown> = {};
+  for (const cheie of CHEI_ATRIBUIRE) {
+    const v = (source as Record<string, unknown> | undefined)?.[cheie];
+    /* Siruri, si taiate: un camp de atribuire nu are de ce sa fie mai lung de atat. */
+    if (typeof v === "string" && v.trim() !== "") curat[cheie] = v.slice(0, 500);
+  }
+  /* `direct` e singurul boolean din atribuire, si se citeste ca boolean, nu ca „adevarat-ish". */
+  if ((source as Record<string, unknown> | undefined)?.direct === true) curat.direct = true;
+  if (userAgent) curat.user_agent = userAgent.slice(0, 500);
+  return Object.keys(curat).length > 0 ? (curat as OrderSource) : null;
 }
 
 /*

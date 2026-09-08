@@ -2,7 +2,7 @@
 
 import { clientFacturare, type SistemClient } from "@/lib/invoicing-context";
 import { logError } from "@/lib/error-logger";
-import { coteleLiniilor } from "@/lib/billing/cote-pe-linii";
+import { coteleLiniilor, motivCoteAmestecate } from "@/lib/billing/cote-pe-linii";
 
 /**
  * Central auto-invoicing dispatcher. On an order status/payment change it issues
@@ -128,12 +128,14 @@ export async function maybeAutoInvoice(
      * retrage, se STORNEAZA. Aceeasi hotarare ca la moneda, cateva randuri mai jos, si din
      * acelasi motiv: nu luam noi decizii fiscale in locul comerciantului.
      */
-    const cote = coteleLiniilor(o.items);
-    if (!cote.uniforma) {
+    /* ⚠ ACEEASI socoteala ca la butoanele apasate de om, prin acelasi ajutor: doua verificari
+       apropiate ar fi ajuns sa raspunda diferit despre aceeasi comanda. */
+    const coteAmestecate = motivCoteAmestecate(o.items);
+    if (coteAmestecate) {
       await logError({
         action: "invoice-auto",
         message: "comanda are cote de TVA diferite pe linii, iar facturarea automata emite cu o singura cota: nu s-a emis nimic",
-        details: { orderId, cote: cote.cote, marketplace: src?.marketplace ?? null },
+        details: { orderId, cote: coteleLiniilor(o.items).cote, marketplace: src?.marketplace ?? null },
         businessId, severity: "warning",
       });
       return;

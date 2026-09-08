@@ -278,7 +278,6 @@ src/lib/orders/client-de-marketplace.ts      poarta marketingului, pentru TOATE 
 src/lib/actions/pepita.actions.ts
 migrations/2026-12-28-pepita-marketplace.sql
 migrations/2026-12-29-pepita-articole-exportate.sql
-migrations/2026-12-30-pepita-listarea-isi-stampileaza-clipa.sql
 docs/pepita/                                 documentatia lor oficiala, cu data descarcarii
 ```
 

@@ -41,9 +41,28 @@ export async function GET(req: NextRequest) {
    */
   const { data, error } = await admin
     .from("pepita_comenzi")
-    .select("id, business_id, external_order_id, order_id, orders!inner(id, items, stoc_marketplace_la)")
+    /*
+     * ⚠ `status` E CERUT ANUME, si nu e de prisos. Fara el, campul ar veni `undefined`, iar
+     * verificarea de mai jos ar tace exact pe randurile pentru care exista.
+     */
+    .select("id, business_id, external_order_id, order_id, orders!inner(id, items, status, stoc_marketplace_la, stoc_eliberat_la)")
     .not("order_id", "is", null)
     .is("orders.stoc_marketplace_la", null)
+    /*
+     * ⚠ SI NU PE COMENZILE MOARTE.
+     *
+     * Comanda al carei consum a picat la sosire ramane cu `stoc_marketplace_la` NULL. Daca
+     * intre timp comerciantul o anuleaza, `elibereaza_stoc_comanda` iese cu „necunoscut" si
+     * NU pune `stoc_eliberat_la`, fiindca n-are ce elibera: `stoc_rezervat` e tot NULL. Deci
+     * randul ramanea in aceasta interogare pentru totdeauna, si prima rulare care prindea baza
+     * sanatoasa scadea stocul pentru o comanda care nu pleaca niciodata — iar cifra falsa
+     * pleca mai departe pe celelalte cinci canale.
+     *
+     * Cele doua verificari nu se acopera una pe alta: `stoc_eliberat_la` prinde comanda
+     * anulata DUPA un consum reusit, statusul o prinde pe cea anulata inainte.
+     */
+    .not("orders.status", "in", "(cancelled,refunded)")
+    .is("orders.stoc_eliberat_la", null)
     .order("primit_la")
     .limit(PE_TRECERE);
 
@@ -54,7 +73,10 @@ export async function GET(req: NextRequest) {
 
   type Rand = {
     id: string; business_id: string; external_order_id: string; order_id: string;
-    orders: { id: string; items: unknown; stoc_marketplace_la: string | null };
+    orders: {
+      id: string; items: unknown; status: string;
+      stoc_marketplace_la: string | null; stoc_eliberat_la: string | null;
+    };
   };
   const randuri = (data ?? []) as unknown as Rand[];
 

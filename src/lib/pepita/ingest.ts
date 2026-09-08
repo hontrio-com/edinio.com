@@ -735,7 +735,7 @@ function sursaComenzii(c: ComandaPepita, ctx: ContextIngest, cote: CoteleLiniilo
      * Pentru Pepita Delivery (GLS), rambursul ajunge la ei: comerciantul nu are ce incasa
      * la usa, iar precompletat ar fi cerut clientului a doua oara aceiasi bani.
      */
-    incaseaza_marketplace: incaseazaPepita(c.modPlata, c.modLivrare),
+    incaseaza_marketplace: incaseazaPepita(c.modPlata, c.modLivrare, starePlata(c.starePlata, c.modPlata)),
     /* ⚠ Semnul ca s-au primit cote de TVA diferite pe linii. Se scrie o data, la ingest, ca sa
        nu depinda de recitirea liniilor la fiecare afisare. */
     ...(cote.uniforma ? {} : { vat_mixt: cote.cote }),
@@ -780,7 +780,15 @@ function noteInterne(
         : "Nu ai ce încasa la livrare."),
     );
   } else if (c.modPlata === "transfer") {
-    randuri.push("Plata prin transfer ajunge direct la tine, în avans. Nu se încasează nimic la livrare.");
+    /*
+     * ⚠ „TRANSFER" NU INSEAMNA „PLATIT". Nota spunea neconditionat „nu se incaseaza nimic la
+     * livrare", iar pe o comanda cu transferul NEFACUT asta trimitea marfa fara niciun ban:
+     * banii nu-i are nici Pepita („Transferul nu ajunge la Pepita, ci direct la voi"), nici
+     * curierul n-are ce cere.
+     */
+    randuri.push(starePlata(c.starePlata, c.modPlata) === "paid"
+      ? "Plata prin transfer a ajuns direct la tine, în avans. Nu se încasează nimic la livrare."
+      : "⚠ Plata prin transfer NU a fost confirmată. Verifică în extras dacă banii au intrat; altfel lasă rambursul pe AWB sau nu expedia.");
   }
   if (c.mesajCurier) randuri.push(`Mesaj pentru curier: ${c.mesajCurier}`);
   if (c.client.codFiscal) randuri.push(`Cod fiscal cumpărător: ${c.client.codFiscal} (neverificat la ANAF).`);
@@ -817,6 +825,13 @@ function noteInterne(
    * ⚠ CIFRA DE PE COMANDA NU E IN LEI. Se spune pe comanda, nu doar in panoul Pepita:
    * cine emite AWB-ul sau factura intra pe lista obisnuita de comenzi.
    */
+  /* ⚠ Ramane pe comanda si dupa ce carantina se inchide: acolo il vede cine factureaza. */
+  if (c.monedaNevalida) {
+    randuri.push(
+      "⚠ Codul de monedă trimis de Pepita nu s-a putut citi, deci nu știm sigur în ce monedă e "
+      + "totalul. Verifică suma înainte de a emite AWB cu ramburs sau factura.",
+    );
+  }
   if (monedaMagazin) {
     randuri.push(
       `⚠ Totalul comenzii este în ${c.moneda}, iar magazinul lucrează în ${monedaMagazin}. `
@@ -881,6 +896,14 @@ export interface RezultatReprocesare {
   schimbat: boolean;
   /** Stocul tot n-a putut fi facut. Ruta de comenzi raspunde ESEC pe asta, ca la ingest. */
   stocEsuat: boolean;
+  /**
+   * A ramas in carantina?
+   *
+   * ⚠ Camp, nu o cautare in text. Panoul alege culoarea toastului dupa el; citit din `mesaj`,
+   * s-ar fi rupt la prima reformulare a propozitiei, si o comanda ramasa in verificare ar fi
+   * fost anuntata cu verde.
+   */
+  inCarantina: boolean;
   mesaj: string;
 }
 
@@ -895,15 +918,15 @@ export async function reproceseaza(
   const rand = randBrut as {
     id: string; order_id: string | null; stare: string; motiv: string | null; rezumat: unknown;
   } | null;
-  if (!rand) return { ok: false, schimbat: false, stocEsuat: false, mesaj: "Comanda nu se găsește." };
+  if (!rand) return { ok: false, schimbat: false, stocEsuat: false, inCarantina: false, mesaj: "Comanda nu se găsește." };
 
   /* Idempotenta vazuta din afara: a doua apasare pe o comanda reparata nu face nimic. */
   if (rand.stare === "importata") {
-    return { ok: true, schimbat: false, stocEsuat: false, mesaj: "Comanda nu mai are nimic de reparat." };
+    return { ok: true, schimbat: false, stocEsuat: false, inCarantina: false, mesaj: "Comanda nu mai are nimic de reparat." };
   }
   if (!rand.order_id) {
     return {
-      ok: false, schimbat: false, stocEsuat: false,
+      ok: false, schimbat: false, stocEsuat: false, inCarantina: true,
       mesaj: "Comanda nu s-a scris niciodată în Edinio. Retrimite-o din Pepita Admin, cu „Resend order”.",
     };
   }
@@ -911,15 +934,16 @@ export async function reproceseaza(
   const { data: comandaBruta, error: eComanda } = await admin
     .from("orders")
     /* ⚠ TOATE campurile de care atarna o hotarare de mai jos. Ce nu se cere vine `undefined`. */
-    .select("id, items, customer_name, customer_phone, shipping_address, order_source, stoc_marketplace_la, stoc_eliberat_la")
+    .select("id, items, status, customer_name, customer_phone, shipping_address, order_source, stoc_marketplace_la, stoc_eliberat_la")
     .eq("id", rand.order_id).eq("business_id", ctx.businessId).maybeSingle();
   if (eComanda) throw eComanda;
   const o = comandaBruta as {
-    id: string; items: unknown; customer_name: string | null; customer_phone: string | null;
+    id: string; items: unknown; status: string | null;
+    customer_name: string | null; customer_phone: string | null;
     shipping_address: unknown; order_source: unknown;
     stoc_marketplace_la: string | null; stoc_eliberat_la: string | null;
   } | null;
-  if (!o) return { ok: false, schimbat: false, stocEsuat: false, mesaj: "Comanda din Edinio nu se mai găsește." };
+  if (!o) return { ok: false, schimbat: false, stocEsuat: false, inCarantina: true, mesaj: "Comanda din Edinio nu se mai găsește." };
 
   const rez = (rand.rezumat ?? {}) as { linii?: unknown };
   const brute = Array.isArray(rez.linii) ? rez.linii : [];
@@ -948,7 +972,7 @@ export async function reproceseaza(
     && linii.every((l, i) => Number(items[i]?.quantity) === l.cantitate);
   if (!potrivite) {
     return {
-      ok: false, schimbat: false, stocEsuat: false,
+      ok: false, schimbat: false, stocEsuat: false, inCarantina: true,
       mesaj: "Liniile comenzii nu mai corespund cu ce a trimis Pepita, deci nu pot repara pe ghicite. "
         + "Scoate liniile adăugate manual și încearcă din nou.",
     };
@@ -972,11 +996,31 @@ export async function reproceseaza(
   });
   const seSchimbaLinii = itemsNoi.some((it, i) => it !== items[i]);
 
+  /*
+   * ⚠ O LEGATURA PIERDUTA OPRESTE ORICE ATINGERE A STOCULUI.
+   *
+   * Setul trimis lui `ajusteaza` e AUTORITAR: ce lipseste din el se ELIBEREAZA inapoi pe raft.
+   * Daca intre sosire si reprocesare comerciantul a redenumit varianta unei linii DEJA legate
+   * si consumate, `leagaLiniile` nu o mai gaseste, iar setul nou n-o mai contine: i-am fi dat
+   * stocul inapoi pentru marfa care chiar a plecat. Se repara motivele, nu stocul.
+   */
+  const pierdeLegaturi = items.some((it, i) => !!it.product_id && !legate[i]?.productId);
+
+  /*
+   * ⚠ COMANDA MOARTA NU MAI CONSUMA NIMIC. Doua verificari, si nu se acopera una pe alta:
+   * `stoc_eliberat_la` prinde anularea de DUPA un consum reusit; statusul o prinde pe cea
+   * anulata INAINTE, cand `elibereaza_stoc_comanda` iese cu „necunoscut" fiindca n-are ce
+   * elibera si nu stampileaza nimic.
+   */
+  const moarta = o.status === "cancelled" || o.status === "refunded";
+
   let stocEsuat = false;
   let despreStoc = "";
-  if (o.stoc_eliberat_la) {
+  if (o.stoc_eliberat_la || moarta) {
     /* Marfa s-a intors pe raft (anulare sau restituire): un consum aici ar scadea degeaba. */
     despreStoc = " Stocul nu s-a atins: comanda e anulată sau restituită.";
+  } else if (pierdeLegaturi) {
+    despreStoc = " Stocul nu s-a atins: o linie deja legată nu se mai recunoaște, iar ajustarea i-ar fi dat marfa înapoi pe raft.";
   } else if (!o.stoc_marketplace_la) {
     if (await consumaStocul(admin, ctx.businessId, o.id, legate) === "esec") stocEsuat = true;
     else despreStoc = " Stocul a fost scăzut.";
@@ -1019,8 +1063,15 @@ export async function reproceseaza(
     && monedaComenzii.trim().toUpperCase() !== ctx.monedaMagazin.toUpperCase();
 
   /* ⚠ Ce nu se poate recalcula se PASTREAZA: altfel ar disparea tacut la prima apasare. */
+  /*
+   * ⚠ `MOTIV_MONEDA_NECITITA` intra in lista, desi NU se poate recalcula: sarcina bruta nu se
+   * pastreaza. Lasat pe dinafara, ar fi fost pastrat la fiecare reprocesare, si comanda ar fi
+   * ramas in carantina pentru totdeauna, fara nicio cale de iesire. Apasarea pe „Reprocesează"
+   * e o privire a omului asupra unei comenzi pe care scrie chiar motivul, deci se socoteste
+   * luare la cunostinta. Avertismentul nu se pierde: ramane in nota interna a comenzii.
+   */
   const pastrate = motiveNerecalculabile(rand.motiv, [
-    INCEPUT_CODURI, INCEPUT_NELIVRABILA, MOTIV_MONEDA_STRAINA, MOTIV_STOC_NEFACUT,
+    INCEPUT_CODURI, INCEPUT_NELIVRABILA, MOTIV_MONEDA_STRAINA, MOTIV_MONEDA_NECITITA, MOTIV_STOC_NEFACUT,
   ]);
   const motiv = compuneMotiv([
     motivCoduri(nelegate),
@@ -1030,7 +1081,15 @@ export async function reproceseaza(
     ...pastrate,
   ]);
 
-  if (seSchimbaLinii) {
+  /*
+   * ⚠ NU SE SCRIU LINIILE CAND STOCUL A PICAT.
+   *
+   * Scrise oricum, a doua apasare ar fi vazut `items` deja reparate, deci `seSchimbaLinii`
+   * fals, deci n-ar mai fi chemat nici ajustarea, nici consumul: comanda ar fi iesit din
+   * carantina cu stocul nescazut, si n-ar mai fi avut cine sa-l scada (cronul cere marcajul
+   * gol, iar aici e pus). Nescrise, reincercarea gaseste aceeasi lume ca prima oara.
+   */
+  if (seSchimbaLinii && !stocEsuat) {
     const { error } = await admin.from("orders")
       .update({ items: itemsNoi as never } as never)
       .eq("id", o.id).eq("business_id", ctx.businessId);
@@ -1042,11 +1101,12 @@ export async function reproceseaza(
     .eq("id", rand.id);
   if (eScriere) throw eScriere;
 
-  if (!motiv) return { ok: true, schimbat: true, stocEsuat: false, mesaj: `Comanda a ieșit din carantină.${despreStoc}` };
+  if (!motiv) return { ok: true, schimbat: true, stocEsuat: false, inCarantina: false, mesaj: `Comanda a ieșit din carantină.${despreStoc}` };
   return {
     ok: true,
-    schimbat: seSchimbaLinii || despreStoc !== "",
+    schimbat: (seSchimbaLinii && !stocEsuat) || despreStoc !== "",
     stocEsuat,
+    inCarantina: true,
     mesaj: `Comanda rămâne în verificare: ${motiv}${despreStoc}`,
   };
 }

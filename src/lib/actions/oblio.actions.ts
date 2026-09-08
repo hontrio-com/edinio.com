@@ -24,6 +24,7 @@ import {
   type SlotFacturare,
 } from "@/lib/billing/refacturare";
 import { cereNumeleCotei, invoiceVat, numeCota, type RegimTva } from "@/lib/billing/invoice-vat";
+import { motivCoteAmestecate } from "@/lib/billing/cote-pe-linii";
 import {
   getOblioToken,
   getCompanies,
@@ -576,6 +577,21 @@ export async function generateOblioInvoice(
   const ctx = await getConfigAndOrder(businessId, orderId, sistem);
   if ("error" in ctx) return { error: ctx.error as string };
   const { supabase, config, order, pricesIncludeVat, vatEnabled, vatRate } = ctx;
+
+
+  /*
+   * ⚠ COTE DIFERITE PE LINII: NU SE EMITE.
+   *
+   * `invoiceVat` intoarce UN singur numar, iar casa il pune pe TOATE liniile. Pana pe
+   * 08.09.2026 `orders.vat_rate` era `max(cote)`, deci greseala mergea in directia care
+   * supra-taxeaza: gresit, dar fara pagubă fiscala. De cand e cota liniei celei mai valoroase,
+   * aceeasi apasare poate SUB-declara TVA-ul, si aia e alta clasa de problema.
+   *
+   * Calea automata se oprea deja; asta e aceeasi regula pe butonul apasat de om, cu mesajul
+   * care spune si unde se face factura corect.
+   */
+  const coteAmestecate = motivCoteAmestecate((order as { items?: unknown }).items);
+  if (coteAmestecate) return { error: coteAmestecate };
 
   const orderData = order as typeof order & {
     oblio_invoice_number?: string | null;

@@ -171,3 +171,29 @@ test("marcarea platit nu mai sta in blocul SMS-urilor", () => {
   assert.ok(linii.slice(sfarsit).some((l) => l.includes("maybeMarkMailchimpOrderPaid(orderId)")),
     "marcarea nu se mai cheama deloc dupa blocul SMS-urilor");
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CE ARE VOIE SA INTRE IN `order_source` DE LA CUMPARATOR
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ `order_source` a incetat sa fie doar atribuire de marketing: pe el atarna si BANII.
+   `rambursDeIncasat` intoarce zero cand vede `incaseaza_marketplace: true` sau o moneda care
+   nu e RON, iar poarta de mai sus se uita la `marketplace`. Iar `data.source` vine DIN BROWSER,
+   prin doua actiuni publice. Cu raspandirea obiectului (`{ ...source }`), un cumparator putea
+   trimite `{ "incaseaza_marketplace": true }` cu o comanda cu plata la livrare de 850 de lei:
+   coletul ar fi plecat cu ramburs 0,00, iar generarea in MASA de AWB n-are camp de corectat.
+*/
+
+test("⚠ `order_source` nu se mai scrie cu ce trimite browserul", () => {
+  const s = readFileSync("src/lib/actions/order.actions.ts", "utf8");
+  assert.ok(!/\.\.\.\(source \?\? \{\}\)/.test(s),
+    "obiectul din browser se raspandeste in `order_source`: orice cheie trece");
+  assert.match(s, /CHEI_ATRIBUIRE/, "lista alba a disparut");
+  /* Cheile care hotarasc bani nu au voie sa fie in lista alba. */
+  const i = s.indexOf("const CHEI_ATRIBUIRE");
+  assert.ok(i > 0);
+  const lista = s.slice(i, s.indexOf("]", i));
+  for (const cheie of ["incaseaza_marketplace", "currency", "marketplace", "livrare_pepita", "vat_mixt"]) {
+    assert.ok(!lista.includes(cheie), `„${cheie}" hotaraste bani si nu se scrie de la cumparator`);
+  }
+});

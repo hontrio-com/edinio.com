@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { coteleLiniilor, motivCoteAmestecate } from "./cote-pe-linii";
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -110,10 +110,60 @@ test("⚠ facturarea automata chiar CERE `items`, altfel poarta ar tacea", () =>
 });
 
 test("⚠ si opreste emiterea cand cotele difera", () => {
-  const fara = AUTO.replace(/\/\*[\s\S]*?\*\//g, " ");
-  const i = fara.indexOf("coteleLiniilor(o.items)");
-  assert.ok(i > 0, "poarta trebuie sa cheme socoteala pe liniile comenzii");
-  const bucata = fara.slice(i, i + 400);
-  assert.match(bucata, /!cote\.uniforma/);
-  assert.match(bucata, /return;/, "se opreste, nu doar se scrie in jurnal");
+  /*
+   * ⚠ PE LINII SI PE REGULA, nu pe forma. Versiunea dinainte cerea litera `!cote.uniforma`
+   * intr-o fereastra de 400 de caractere: s-a rupt la prima mutare a socotelii in ajutorul
+   * comun, desi regula era neatinsa. Iar fereastra avea 14 caractere de rezerva, deci s-ar fi
+   * rupt oricum la primul rand adaugat in jurnal.
+   */
+  const linii = AUTO.replace(/\/\*[\s\S]*?\*\//g, " ").split(/\r?\n/);
+  const i = linii.findIndex((l) => l.includes("motivCoteAmestecate(o.items)"));
+  assert.ok(i >= 0, "poarta automata nu mai cheama ajutorul comun");
+  const dupa = linii.slice(i, i + 12).join(" ");
+  assert.match(dupa, /return;/, "se opreste, nu doar se scrie in jurnal");
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   POARTA E PE TOATE CELE PATRU CAI, NU DOAR PE CEA AUTOMATA
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ `invoiceVat` intoarce UN singur numar, iar casa il pune pe TOATE liniile. Cat timp
+   `orders.vat_rate` era `max(cote)`, greseala mergea in directia care supra-taxeaza: gresit,
+   dar fara pagubă fiscala. De cand e cota liniei celei mai valoroase (08.09.2026), aceeasi
+   apasare poate SUB-declara TVA-ul.
+
+   ⚠ CE APARA PLASA, SI CE NU: scaneaza sursa, deci spune ca poarta e chemata, nu ca se poarta
+   bine. Purtarea e probata mai sus, pe valori. Ce apara e ziua in care cineva adauga a patra
+   casa de facturare si uita poarta.
+*/
+
+const CASE_DE_FACTURARE = readdirSync("src/lib/actions")
+  .filter((n) => n.endsWith(".actions.ts"))
+  .map((n) => `src/lib/actions/${n}`)
+  .filter((f) => readFileSync(f, "utf8").includes("invoiceVat("));
+
+test("⚠ plasa chiar are pe cine cadea", () => {
+  assert.ok(CASE_DE_FACTURARE.length >= 3, `gasite doar ${CASE_DE_FACTURARE.length} case de facturare`);
+});
+
+test("⚠ orice cale care emite o factura trece prin poarta cotelor amestecate", () => {
+  for (const f of CASE_DE_FACTURARE) {
+    const s = readFileSync(f, "utf8");
+    /*
+     * `order.actions.ts` cheama `invoiceVat` ca sa AFISEZE o cota si `maybeAutoInvoice` ca sa
+     * dea drumul altei actiuni: el nu emite niciun document, deci n-are ce pazi.
+     */
+    if (!/export async function generate\w*Invoice/.test(s) && !f.endsWith("invoice-auto.actions.ts")) continue;
+
+    /*
+     * ⚠ NU E DE AJUNS CA POARTA SA FIE CHEMATA: trebuie sa si OPREASCA. Prima forma a probei
+     * cerea doar apelul, iar un mutant care stergea `return` trecea verde.
+     */
+    const linii = s.split(/\r?\n/);
+    const i = linii.findIndex((l) => l.includes("motivCoteAmestecate("));
+    assert.ok(i >= 0, `${f}: emite o factura fara sa verifice cotele pe linii`);
+    const dupa = linii.slice(i, i + 4).join(" ");
+    assert.match(dupa, /if \(coteAmestecate\)/, `${f}: verifica cotele, dar emite oricum`);
+    assert.match(linii.slice(i, i + 12).join(" "), /return/, `${f}: nu se opreste`);
+  }
 });

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+import { readFileSync } from "node:fs";
 import { includeToateActive, PAGINA, PE_TRECERE } from "./includere-in-masa";
 
 const BID = "11111111-1111-1111-1111-111111111111";
@@ -125,4 +126,38 @@ test("⚠ sarcina scrisa e exact atat: un camp in plus ar sterge reglajele de ma
   assert.deepEqual(Object.keys(scrise[0]).sort(), ["actualizat_la", "business_id", "inclus", "product_id"]);
   assert.equal(scrise[0].inclus, true);
   assert.equal(scrise[0].actualizat_la, ACUM);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CINE SCRIE O LISTARE ii STAMPILEAZA SI CLIPA
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ `<LastMod>` din feedul de produse ia in seama si `pepita_listari.actualizat_la`: e singurul
+   semn ca s-a schimbat un reglaj PER PRODUS (pret propriu, stoc de siguranta, includere).
+   Cei doi scriitori de azi il pun cu mana, si o fac corect. Dar asta e o intelegere intre
+   oameni, nu o regula: ecranul care va scrie `pret_override` per produs inca nu exista, iar
+   primul care uita cele doua cuvinte ar INGHETA timpul exact pe randurile pentru care el
+   conteaza, iar Pepita ar vedea o data veche pe un produs al carui pret tocmai s-a schimbat.
+
+   ⚠ CE APARA PLASA, SI CE NU. Scaneaza sursa, deci spune ca fiecare scriere numeste campul,
+   nu ca valoarea scrisa e cea buna. Regula deplina ar fi un declansator in baza, cu
+   `when (old.* is distinct from new.*)`, ca la `aboutyou_marcheaza_listarea`. Nu e livrat aici
+   fiindca cere aplicarea migratiei in productie SI regenerarea baseline-ului, altfel poarta de
+   CI „Baseline-ul acopera toate migratiile" cade la primul push.
+*/
+
+test("⚠ orice scriere in `pepita_listari` pune si `actualizat_la`", () => {
+  const fisiere = ["src/lib/pepita/includere-in-masa.ts", "src/lib/actions/pepita.actions.ts"];
+  let scrieri = 0;
+  for (const f of fisiere) {
+    const linii = readFileSync(f, "utf8").split(/\r?\n/);
+    linii.forEach((l, i) => {
+      if (!l.includes('from("pepita_listari")')) return;
+      if (!/\.upsert\(|\.update\(|\.insert\(/.test(linii.slice(i, i + 4).join(" "))) return;
+      scrieri += 1;
+      const bucata = linii.slice(i, i + 12).join(" ");
+      assert.match(bucata, /actualizat_la/, `${f}:${i + 1} scrie o listare fara sa-i stampileze clipa`);
+    });
+  }
+  assert.ok(scrieri >= 2, `gasite doar ${scrieri} scrieri: plasa n-are pe cine cadea`);
 });

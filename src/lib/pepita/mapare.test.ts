@@ -31,15 +31,27 @@ test("⚠ `cash_on_delivery` NUMAI cand incaseaza curierul comerciantului", () =
 test("⚠ cine ia banii: un singur caz e al comerciantului", () => {
   /* „In cazul curierilor proprii sau al serviciilor terte (inclusiv MPL), decontarea se face
      direct intre tine si compania de curierat." Restul ajunge la Pepita, sau prin banca. */
-  assert.equal(incaseazaPepita("cod", "shipping"), false, "singurul caz al comerciantului");
-  assert.equal(incaseazaPepita("cod", "mpl"), false);
-  assert.equal(incaseazaPepita("cod", null), false, "necunoscut: se presupune curierul lui, si se avertizeaza");
+  assert.equal(incaseazaPepita("cod", "shipping", "unpaid"), false, "singurul caz al comerciantului");
+  assert.equal(incaseazaPepita("cod", "mpl", "unpaid"), false);
+  assert.equal(incaseazaPepita("cod", null, "unpaid"), false, "necunoscut: se presupune curierul lui, si se avertizeaza");
 
-  assert.equal(incaseazaPepita("cod", "gls"), true);
-  assert.equal(incaseazaPepita("cod", "gls_parcelshop"), true);
-  assert.equal(incaseazaPepita("creditcard", "shipping"), true, "cardul se incaseaza pe site-ul lor");
+  assert.equal(incaseazaPepita("cod", "gls", "unpaid"), true);
+  assert.equal(incaseazaPepita("cod", "gls_parcelshop", "unpaid"), true);
+  assert.equal(incaseazaPepita("creditcard", "shipping", "paid"), true, "cardul se incaseaza pe site-ul lor");
   /* ⚠ Transferul ajunge la comerciant, dar prin BANCA, in avans. La usa nu se ia nimic. */
-  assert.equal(incaseazaPepita("transfer", "shipping"), true);
+  assert.equal(incaseazaPepita("transfer", "shipping", "paid"), true);
+});
+
+test("⚠ NEPLATIT nu inseamna „banii sunt la altcineva”: marfa ar pleca fara nicio incasare", () => {
+  /*
+   * Aici era defectul reparatiei dintai: functia raspundea „da" pentru orice mod care nu e
+   * `cod`, deci si pentru un transfer NEFACUT. `rambursDeIncasat` iese pe zero inaintea
+   * oricarei socoteli cand vede marcajul, deci coletul ar fi plecat cu ramburs 0,00 la o
+   * comanda pe care nu o platise nimeni. Nici Pepita n-avea banii, nici curierul n-avea ce cere.
+   */
+  assert.equal(incaseazaPepita("transfer", "shipping", "unpaid"), false, "transfer nefacut");
+  assert.equal(incaseazaPepita("creditcard", "shipping", "unpaid"), false, "card refuzat");
+  assert.equal(incaseazaPepita("bitcoin", "shipping", "unpaid"), false, "mod necunoscut, neplatit");
 });
 
 test("livrarea Pepita se recunoaste numai pe cele doua valori GLS", () => {

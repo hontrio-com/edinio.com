@@ -47,14 +47,27 @@ export function esteLivrarePepita(modLivrare: string | null): boolean {
  * comanda GLS, clientul ar fi platit o data curierului Pepita si inca o data
  * curierului comerciantului.
  *
- * ⚠ SI TRANSFERUL nu se incaseaza la usa, desi banii chiar vin la comerciant: vin
- * prin banca, in avans. Un AWB cu ramburs acolo ar fi cerut a doua oara aceiasi bani.
+ * ⚠ SI TRANSFERUL nu se incaseaza la usa, DACA A FOST FACUT: banii vin la comerciant prin
+ * banca, in avans. Un AWB cu ramburs acolo ar cere a doua oara aceiasi bani.
+ *
+ * ⚠ DAR „TRANSFER" NU INSEAMNA „PLATIT", si aici era defectul reparatiei dintai. Functia
+ * raspundea `true` pentru ORICE mod care nu e `cod`, deci si pentru un transfer NEFACUT sau
+ * un card refuzat. `rambursDeIncasat` iese pe zero inaintea oricarei socoteli cand vede
+ * marcajul, deci marfa ar fi plecat cu ramburs 0,00 la o comanda pe care nu o platise nimeni:
+ * nici Pepita n-avea banii („Transferul nu ajunge la Pepita, ci direct la voi"), nici curierul
+ * n-avea ce sa ceara. De aceea starea platii intra in socoteala, si e un argument CERUT: asa
+ * `tsc` numeste fiecare apelant, in loc sa-l lase sa treaca pe langa schimbarea de inteles.
  */
-export function incaseazaPepita(modPlata: string | null, modLivrare: string | null): boolean {
+export function incaseazaPepita(
+  modPlata: string | null, modLivrare: string | null, starePlatii: "paid" | "unpaid",
+): boolean {
   if (modPlata === PLATI_PEPITA.cod) return esteLivrarePepita(modLivrare);
-  /* Card: banii ajung la Pepita. Transfer: ajung la comerciant, dar prin banca.
-     In amandoua cazurile, la usa nu se incaseaza nimic. */
-  return true;
+  /*
+   * Card platit: banii sunt la Pepita. Transfer facut: la comerciant, prin banca. In amandoua
+   * cazurile, la usa nu se incaseaza nimic. Neplatit inseamna ca banii nu sunt la nimeni, si
+   * atunci hotararea ramane a lui `payment_status`, adica a lui `rambursDeIncasat`.
+   */
+  return starePlatii === "paid";
 }
 
 /**

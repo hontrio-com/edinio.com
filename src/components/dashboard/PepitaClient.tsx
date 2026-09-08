@@ -891,14 +891,21 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
                     <button
                       type="button"
                       className="text-primary underline underline-offset-2 disabled:opacity-50"
-                      disabled={reincerc !== null}
+                      /* Se blochează doar rândul pe care se lucrează: celelalte rămân apăsabile. */
+                      disabled={reincerc === c.externalId}
                       onClick={async () => {
                         setReincerc(c.externalId);
                         try {
                           const r = await reproceseazaComandaPepita(businessId, c.externalId);
                           if ("error" in r) toast.error(r.error);
                           else if (r.ok) {
-                            toast.success(r.mesaj);
+                            /*
+                              ⚠ VERDE numai când comanda a IEȘIT din carantină. O reprocesare care
+                              a mers, dar a lăsat comanda în verificare, e o veste galbenă: un toast
+                              verde peste „rămâne în verificare" spune două lucruri deodată.
+                            */
+                            if (r.inCarantina) toast.warning(r.mesaj);
+                            else toast.success(r.mesaj);
                             /* Lista se reîncarcă doar dacă s-a schimbat ceva: altfel ar clipi degeaba. */
                             if (r.schimbat) await incarca();
                           } else toast.error(r.mesaj);

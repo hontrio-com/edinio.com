@@ -29,9 +29,31 @@ const MAX = 500;
  * mai scoate niciodata.
  */
 export function compuneMotiv(parti: (string | null | undefined)[]): string | null {
-  const bune = parti.map((p) => (p ?? "").trim()).filter(Boolean);
+  const bune = parti
+    /*
+     * ⚠ SEMNUL SE SCOATE DIN BUCATI. Un nume de produs poate sa-l contina („varianta «S | M»
+     * nu mai există"), si atunci bucata s-ar fi rupt in doua la prima citire: cronul n-ar mai
+     * fi recunoscut motivul lui, iar ciotul ramas ar fi tinut comanda in carantina pe veci.
+     */
+    .map((p) => (p ?? "").trim().split(LEGATURA).join(" / "))
+    .filter(Boolean);
   if (bune.length === 0) return null;
-  return bune.join(LEGATURA).slice(0, MAX);
+
+  /*
+   * ⚠ SE ARUNCA BUCATA INTREAGA CARE NU INCAPE, nu se taie prin mijlocul ei. Taiata, ultima
+   * bucata devenea un ciot pe care nimeni nu-l mai recunoaste: daca era chiar motivul de stoc,
+   * cronul nu-l mai gasea si nu mai scotea comanda din carantina niciodata.
+   */
+  const pastrate: string[] = [];
+  let lungime = 0;
+  for (const p of bune) {
+    const cost = (pastrate.length ? LEGATURA.length : 0) + p.length;
+    if (lungime + cost > MAX) break;
+    pastrate.push(p);
+    lungime += cost;
+  }
+  /* Daca nici prima bucata nu incape, mai bine una taiata decat niciun motiv. */
+  return pastrate.length ? pastrate.join(LEGATURA) : bune[0].slice(0, MAX);
 }
 
 /**
@@ -139,6 +161,13 @@ export function lipsuriLivrare(c: ComandaPepita): string[] {
  * n-are date personale). Dupa ce comerciantul completeaza adresa din „Editează comanda",
  * adevarul e pe comanda, si tot de acolo se citeste.
  */
+/**
+ * ⚠ Numele pe care il pune INGESTUL cand cumparatorul n-a trimis niciunul. Scris pe comanda,
+ * el ar face ca „lipsește numele clientului" sa nu poata fi niciodata adevarat la reprocesare,
+ * desi la sosire chiar era: comanda ar fi iesit din carantina cu o factura pe „Client Pepita".
+ */
+const NUME_INVENTAT = "Client Pepita";
+
 export function lipsuriComandaScrisa(o: {
   customer_name?: string | null;
   customer_phone?: string | null;
@@ -149,8 +178,9 @@ export function lipsuriComandaScrisa(o: {
     address?: unknown; city?: unknown; county?: unknown; country?: unknown;
   };
   const text = (v: unknown) => (typeof v === "string" ? v : "");
+  const nume = (o.customer_name ?? "").trim();
   return lipsuriDinCampuri({
-    nume: o.customer_name ?? "",
+    nume: nume === NUME_INVENTAT ? "" : nume,
     telefon: o.customer_phone ?? "",
     judet: text(a.county),
     oras: text(a.city),

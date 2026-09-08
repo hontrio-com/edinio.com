@@ -11,6 +11,7 @@ import { baniiAuIntrat } from "@/lib/billing/incasare";
 import { cheieDocument, mentiuneRefacturare, slotFacturare, type SlotFacturare } from "@/lib/billing/refacturare";
 import { cheieOperatie, cuRegistru, type Verdict } from "@/lib/operatii/registru";
 import { invoiceVat, numeCota } from "@/lib/billing/invoice-vat";
+import { motivCoteAmestecate } from "@/lib/billing/cote-pe-linii";
 import { codSiNatura } from "@/lib/billing/invoice-lines";
 import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
 import { liniiSmartbill, mesajRefuz, pretDeDocument, reconciliazaComanda } from "@/lib/billing/reconcile";
@@ -647,6 +648,21 @@ export async function generateOrderInvoice(
   const { data: order } = await supabase
     .from("orders").select("*").eq("id", orderId).eq("business_id", businessId).single();
   if (!order) return { error: "Comanda nu a fost gasita." };
+
+  /*
+   * ⚠ COTE DIFERITE PE LINII: NU SE EMITE.
+   *
+   * `invoiceVat` intoarce UN singur numar, iar casa il pune pe TOATE liniile. Pana pe
+   * 08.09.2026 `orders.vat_rate` era `max(cote)`, deci greseala mergea in directia care
+   * supra-taxeaza: gresit, dar fara pagubă fiscala. De cand e cota liniei celei mai valoroase,
+   * aceeasi apasare poate SUB-declara TVA-ul, si aia e alta clasa de problema.
+   *
+   * Calea automata se oprea deja; asta e aceeasi regula pe butonul apasat de om, cu mesajul
+   * care spune si unde se face factura corect.
+   */
+  const coteAmestecate = motivCoteAmestecate((order as { items?: unknown }).items);
+  if (coteAmestecate) return { error: coteAmestecate };
+
   // Slotul e ocupat doar cat timp exista o factura FARA storno. Dupa storno,
   // factura e desfiintata fiscal si comanda e din nou facturabila. Vezi
   // `billing/refacturare.ts` pentru cele 7 comenzi blocate definitiv din productie.

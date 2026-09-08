@@ -42,7 +42,29 @@ import type { ComandaPepita, LiniePepita } from "./comanda-forma";
 
 type Db = SupabaseClient<Database>;
 
-export type StareIngest = "creata" | "duplicat" | "carantina" | "respinsa" | "esec";
+/**
+ * Motivul scris pe randul de evidenta cand stocul n-a apucat sa scada.
+ *
+ * ⚠ E SI CHEIA REPARATIEI: cronul `pepita-stoc` cauta exact comenzile astea. Schimbat aici
+ * fara sa se schimbe si acolo, reparatia n-ar mai gasi nimic si ar tace la nesfarsit.
+ */
+export const MOTIV_STOC_NEFACUT = "Stocul nu s-a putut scădea. Se reîncearcă automat.";
+
+export type StareIngest =
+  | "creata"
+  | "duplicat"
+  | "carantina"
+  /**
+   * ⚠ Comanda E scrisa, dar stocul NU s-a scazut.
+   *
+   * Se raporteaza ca ESEC catre Pepita, dinadins. Cele doua greseli posibile nu costa la fel:
+   * spus „a mers", ei n-au niciun motiv sa retrimita, iar stocul nostru ramane umflat si se
+   * vinde marfa inexistenta pe celelalte cinci canale. Spus „n-a mers", o retrimitere intra
+   * pe ramura de duplicat, care duce consumul la capat, si nu se creeaza nimic de doua ori.
+   */
+  | "stoc-nefacut"
+  | "respinsa"
+  | "esec";
 
 export interface RezultatIngest {
   stare: StareIngest;
@@ -287,7 +309,15 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
      */
     if (rand.order_id) {
       const legate = await leagaLiniile(admin, ctx.businessId, c.linii);
-      await consumaStocul(admin, ctx.businessId, rand.order_id, legate.legate);
+      /*
+       * ⚠ AICI SE REPARA ce a ramas nefacut la prima sosire: `consuma_stoc_comanda_marketplace`
+       * e idempotenta, deci pe drumul obisnuit nu face nimic, iar dupa un esec duce treaba la
+       * capat. Daca pica si acum, verdictul urca, si retrimiterea urmatoare mai incearca o data.
+       */
+      const verdict = await consumaStocul(admin, ctx.businessId, rand.order_id, legate.legate);
+      if (verdict === "esec") {
+        return { stare: "stoc-nefacut", orderId: rand.order_id, mesaje: ["Comanda este salvată, dar procesarea nu s-a încheiat."] };
+      }
       return { stare: "duplicat", orderId: rand.order_id, mesaje: ["Comanda era deja înregistrată."] };
     }
     randId = rand.id;
@@ -393,7 +423,17 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     prelucrat_la: acum,
   } as never).eq("id", randId);
 
-  await consumaStocul(admin, ctx.businessId, orderId, legate);
+  const verdictStoc = await consumaStocul(admin, ctx.businessId, orderId, legate);
+  if (verdictStoc === "esec") {
+    /*
+     * ⚠ RANDUL NU RAMANE „importata". Starea „importata" inseamna „s-a facut tot ce era de
+     * facut"; scrisa aici, ar fi ascuns tocmai comanda al carei stoc n-a scazut.
+     */
+    await admin.from("pepita_comenzi").update({
+      stare: "carantina",
+      motiv: MOTIV_STOC_NEFACUT,
+    } as never).eq("id", randId);
+  }
 
   if (areNelegate) {
     await logError({
@@ -402,6 +442,10 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
       details: { externalId: c.externalId, coduri: nelegate.slice(0, 20), orderId },
       businessId: ctx.businessId, severity: "warning",
     });
+  }
+
+  if (verdictStoc === "esec") {
+    return { stare: "stoc-nefacut", orderId, mesaje: ["Comanda este salvată, dar procesarea nu s-a încheiat."] };
   }
 
   return {
@@ -420,7 +464,9 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
  * ⚠ NUMAI LINIILE LEGATE. O linie fara produs n-are ce sa scada, si a scadea „ceva”
  * pentru ea ar fi mai rau decat a nu scadea nimic.
  */
-async function consumaStocul(admin: Db, businessId: string, orderId: string, legate: LinieLegata[]): Promise<void> {
+async function consumaStocul(
+  admin: Db, businessId: string, orderId: string, legate: LinieLegata[],
+): Promise<"ok" | "esec"> {
   const peProdus = new Map<string, number>();
   const peVarianta = new Map<string, { product_id: string; variant_title: string; quantity: number }>();
 
@@ -445,17 +491,20 @@ async function consumaStocul(admin: Db, businessId: string, orderId: string, leg
   const r = data as { gasit?: boolean; deja?: boolean; lipsa?: unknown[] } | null;
   if (error || r?.gasit !== true) {
     /*
-     * ⚠ NU SE ARUNCA. Comanda e deja scrisa si trebuie sa ramana: o exceptie aici ar
-     * face ruta sa raspunda cu esec, Pepita ar retrimite, si retrimiterea ar intra pe
-     * ramura de duplicat, care cheama tot asta. Se scrie in jurnal, iar reincercarea
-     * comerciantului sau o retrimitere din panoul lor duce treaba la capat.
+     * ⚠ NU SE ARUNCA, DAR NICI NU SE TACE. Comanda e deja scrisa si trebuie sa ramana, deci
+     * o exceptie n-are ce cauta aici. Dar verdictul urca pana la ruta, care raspunde ESEC.
+     *
+     * Pana la reparatia din 08.09.2026 se scria doar in jurnal si se mergea mai departe, iar
+     * ruta raspundea „a mers". Adica: comanda exista, stocul NU scazuse, si Pepita n-avea
+     * niciun motiv sa retrimita. Stocul nostru ramanea umflat, iar celelalte cinci canale
+     * continuau sa vanda marfa care nu mai era.
      */
     await logError({
       action: "pepita/stoc",
       message: error?.message ?? "consumul de stoc n-a raspuns valid",
       details: { orderId, raspuns: r }, businessId, severity: "critical",
     });
-    return;
+    return "esec";
   }
 
   if (!r.deja && Array.isArray(r.lipsa) && r.lipsa.length > 0) {
@@ -474,6 +523,7 @@ async function consumaStocul(admin: Db, businessId: string, orderId: string, leg
   if (!r.deja) {
     await impingeStoculPeCeleLalteCanale(businessId, [...peProdus.keys()], "pepita");
   }
+  return "ok";
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

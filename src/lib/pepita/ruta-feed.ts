@@ -2,7 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { rateLimit } from "@/lib/utils/rate-limit";
-import { amprentaCheii, magazinulCheii } from "./chei";
+import { amprentaCheii, formaCheieValida, magazinulCheii } from "./chei";
 import { pregateste, scrieFeed } from "./feed";
 
 /**
@@ -42,6 +42,10 @@ export async function raspundeCuFeed(
   if (!rateLimit(`pepita:feed:${cheie.slice(0, 24)}`, 60, 60_000)) {
     return text("prea multe cereri", 429);
   }
+
+  /* ⚠ Inainte de orice client de baza: vezi `formaCheieValida`. Acelasi 404 ca la o cheie
+     gresita, ca cele doua cazuri sa nu se poata deosebi din afara. */
+  if (!formaCheieValida(cheie)) return text("Not found", 404);
 
   const admin = createAdminClient();
 

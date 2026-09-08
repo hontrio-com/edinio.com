@@ -76,6 +76,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/cron/pepita-stoc",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/domains-reconcile",
       "schedule": "23 * * * *"
     },

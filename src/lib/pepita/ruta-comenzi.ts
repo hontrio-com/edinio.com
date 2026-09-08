@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { rateLimit } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
-import { magazinulCheii } from "./chei";
+import { formaCheieValida, magazinulCheii } from "./chei";
 import { citesteComanda } from "./comanda-forma";
 import { citesteConfig, monedaConfig } from "./config";
 import { ingereaza } from "./ingest";
@@ -60,6 +60,14 @@ export async function primesteComanda(req: Request, cheieBruta: string | null): 
   const url = new URL(req.url);
   const cheie = (cheieBruta ?? url.searchParams.get("apikey") ?? url.searchParams.get("api_key") ?? "").trim();
   if (!cheie) return esec(401, "Cheie lipsă.");
+  /*
+   * ⚠ FORMA SE VERIFICA INAINTE DE ORICE CLIENT DE BAZA. Adresa e publica prin definitie, deci
+   * un sir care nici macar nu arata a cheie n-are de ce sa deschida o conexiune.
+   *
+   * ⚠ Si acelasi raspuns ca la o cheie gresita: din afara, „nu arata a cheie" si „nu e cheia
+   * ta" nu trebuie sa se poata deosebi, altfel adresa devine un instrument de ghicit.
+   */
+  if (!formaCheieValida(cheie)) return esec(401, "Cheie invalidă.");
 
   /*
    * ⚠ PLAFONUL ARE DOUA TREPTE, si a doua chiar tine.
@@ -175,6 +183,22 @@ export async function primesteComanda(req: Request, cheieBruta: string | null): 
     if (r.stare === "esec") {
       /* ⚠ 503, nu 200: comanda NU s-a scris, iar „Resend order” e singura ei sansa. */
       return esec(503, "Comanda nu a putut fi salvată. Trimiteți din nou.");
+    }
+
+    /*
+     * ⚠ COMANDA E SCRISA, DAR STOCUL N-A SCAZUT: tot ESEC.
+     *
+     * Cele doua greseli posibile nu costa la fel. Raspuns „a mers", ei n-au niciun motiv sa
+     * retrimita, iar stocul nostru ramane umflat: celelalte cinci canale continua sa vanda
+     * marfa care nu mai e. Raspuns „n-a mers", o retrimitere intra pe ramura de duplicat, care
+     * duce consumul la capat fara sa creeze nimic a doua oara.
+     *
+     * ⚠ SI NU NE BIZUIM PE RETRIMITEREA LOR: „Resend order" e un buton apasat de om in panoul
+     * lor, nu o reincercare automata. De aceea repararea are si un drum propriu, cronul
+     * `pepita-stoc`. Raspunsul de aici e prima sansa, cronul e cea care nu depinde de nimeni.
+     */
+    if (r.stare === "stoc-nefacut") {
+      return esec(503, "Comanda a fost salvată, dar procesarea nu s-a încheiat. Trimiteți din nou.");
     }
 
     /*

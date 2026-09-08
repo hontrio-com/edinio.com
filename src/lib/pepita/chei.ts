@@ -106,13 +106,21 @@ export interface CheieGasita {
  * ⚠ Se cheama cu clientul de sistem, dar filtrul dupa magazin nu dispare de
  * aceea: rezultatul E chiar magazinul, si tot ce urmeaza se leaga de el.
  */
+/**
+ * Sirul are macar FORMA unei chei de-ale noastre?
+ *
+ * ⚠ SE INTREABA INAINTE SA SE CONSTRUIASCA VREUN CLIENT DE BAZA. Adresele astea sunt publice
+ * prin definitie: Pepita nu se poate autentifica altfel. Fara verificarea asta, orice sir din
+ * adresa ar fi pornit o conexiune si o interogare, deci o rafala pe chei inventate ar fi
+ * devenit trafic in baza de date, platit de noi.
+ */
+export function formaCheieValida(cheie: string | null | undefined): boolean {
+  return /^[A-Za-z0-9_-]{20,128}$/.test((cheie ?? "").trim());
+}
+
 export async function magazinulCheii(admin: Db, fel: FelCheie, cheie: string): Promise<CheieGasita | null> {
   const curata = (cheie ?? "").trim();
-  /*
-   * ⚠ Forma se verifica INAINTE de baza. Fara asta, orice sir din adresa ar
-   * porni o interogare, deci un atac ieftin ar deveni trafic in baza de date.
-   */
-  if (!/^[A-Za-z0-9_-]{20,128}$/.test(curata)) return null;
+  if (!formaCheieValida(curata)) return null;
 
   const { data, error } = await admin
     .from("pepita_chei")

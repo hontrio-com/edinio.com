@@ -85,7 +85,11 @@ interface RandOrder {
   internal_notes: string; stoc_marketplace_la: string | null;
 }
 
-function faceBaza(articole: { articol_id: string; product_id: string; combinatie: string }[] = []) {
+function faceBaza(
+  articole: { articol_id: string; product_id: string; combinatie: string }[] = [],
+  /** De cate ori la rand cade consumul de stoc. Pentru „ce se intampla cand chiar pica". */
+  cadeStocDeAtateaOri = 0,
+) {
   const comenzi: RandComanda[] = [];
   const orders: RandOrder[] = [];
   const consumuri: { orderId: string; produse: { product_id: string; quantity: number }[]; variante: unknown[] }[] = [];
@@ -176,6 +180,10 @@ function faceBaza(articole: { articol_id: string; product_id: string; combinatie
     from: (t: string) => builder(t),
     rpc: (nume: string, args: Record<string, unknown>) => {
       if (nume !== "consuma_stoc_comanda_marketplace") return Promise.resolve({ data: null, error: null });
+      if (cadeStocDeAtateaOri > 0) {
+        cadeStocDeAtateaOri--;
+        return Promise.resolve({ data: null, error: { message: "statement timeout" } });
+      }
       const o = orders.find((x) => x.id === args.p_order_id);
       if (!o) return Promise.resolve({ data: { gasit: false }, error: null });
       /*
@@ -569,6 +577,50 @@ test("evidenta unui alt magazin nu leaga nimic", async () => {
   ]));
   assert.equal(r.stare, "carantina");
   assert.deepEqual(b.consumuri[0].produse, []);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ STOCUL CARE N-A SCAZUT NU SE RAPORTEAZA CA REUSITA
+   ══════════════════════════════════════════════════════════════════════════
+
+   Pana la reparatia din 08.09.2026, un consum picat se scria in jurnal si se mergea mai
+   departe, iar ruta raspundea „a mers". Deci: comanda exista, stocul NU scazuse, iar Pepita
+   n-avea niciun motiv sa retrimita. Stocul nostru ramanea umflat, si celelalte cinci canale
+   continuau sa vanda marfa care nu mai era.
+*/
+
+test("⚠ cand consumul de stoc pica, ingestul spune ESEC, nu tace", async () => {
+  const b = faceBaza([], 1);
+  const r = await ingereaza(b.db, CTX, comanda());
+
+  assert.equal(r.stare, "stoc-nefacut");
+  assert.equal(b.orders.length, 1, "comanda TOT se scrie: pierduta ar fi mai rau");
+  assert.equal(b.comenzi[0].stare, "carantina", "si nu ramane «importata», adica «s-a facut tot»");
+  assert.match(b.comenzi[0].motiv ?? "", /Stocul nu s-a putut scădea/);
+});
+
+test("⚠ o retrimitere dupa esec duce consumul la capat, fara sa faca a doua comanda", async () => {
+  const b = faceBaza([], 1);
+  const prima = await ingereaza(b.db, CTX, comanda());
+  assert.equal(prima.stare, "stoc-nefacut");
+  assert.equal(b.consumuri.length, 0, "premisa: chiar n-a scazut nimic");
+
+  const aDoua = await ingereaza(b.db, CTX, comanda());
+  assert.equal(aDoua.stare, "duplicat");
+  assert.equal(b.orders.length, 1, "tot o singura comanda");
+  assert.equal(b.consumuri.length, 1, "si stocul a scazut exact o data");
+});
+
+test("⚠ daca pica si a doua oara, verdictul ramane esec: reincercarea urmatoare mai are o sansa", async () => {
+  const b = faceBaza([], 2);
+  await ingereaza(b.db, CTX, comanda());
+  const aDoua = await ingereaza(b.db, CTX, comanda());
+  assert.equal(aDoua.stare, "stoc-nefacut");
+  assert.equal(b.consumuri.length, 0);
+
+  const aTreia = await ingereaza(b.db, CTX, comanda());
+  assert.equal(aTreia.stare, "duplicat");
+  assert.equal(b.consumuri.length, 1);
 });
 
 test("potrivirea liniilor nu cere nicio scriere", async () => {

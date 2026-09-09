@@ -25,7 +25,7 @@ import { reproceseaza } from "@/lib/pepita/ingest";
 import { randuriCitite } from "@/lib/supabase/rand-citit";
 import { articolelePentruProdus, type ProblemaPepita, type ProdusPepita } from "@/lib/pepita/articole";
 import { adresaComenzi, adresaFeedProduse, adresaFeedStoc, cheieNoua, amprentaCheii, revocaToate, stingeCheileVechi } from "@/lib/pepita/chei";
-import { citesteConfig, configFaraChei } from "@/lib/pepita/config";
+import { citesteConfig, configFaraChei, peticDePornire } from "@/lib/pepita/config";
 import { COLOANE_PRODUS, pregateste } from "@/lib/pepita/feed";
 import type { PepitaConfig } from "@/lib/pepita/types";
 import { CITIRI_PANOU, TIPURI_GARANTIE, type TipGarantie } from "@/lib/pepita/types";
@@ -64,6 +64,22 @@ async function citesteConfigul(businessId: string): Promise<PepitaConfig> {
     .from("store_settings").select("pepita_config").eq("business_id", businessId).maybeSingle();
   if (error) throw error;
   return citesteConfig((data as { pepita_config?: unknown } | null)?.pepita_config);
+}
+
+/**
+ * Configurarea asa cum sta ea in JSON, fara sa fie completata cu implicite.
+ *
+ * ⚠ SINGURUL LOC DIN CARE SE POATE AFLA CA UN CAMP N-A FOST SCRIS NICIODATA.
+ * `citesteConfig` intoarce mereu forma completa, deci prin ea „campul lipseste” si
+ * „campul e scris cu valoarea implicita” arata identic. Pentru `mod_includere`
+ * deosebirea e chiar diferenta dintre un feed plin si unul gol: vezi `activeazaPepita`.
+ */
+async function configulBrut(businessId: string): Promise<Record<string, unknown> | null> {
+  const { data, error } = await createAdminClient()
+    .from("store_settings").select("pepita_config").eq("business_id", businessId).maybeSingle();
+  if (error) throw error;
+  const v = (data as { pepita_config?: unknown } | null)?.pepita_config;
+  return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
 }
 
 async function scrieConfigul(businessId: string, petic: Record<string, unknown>): Promise<void> {
@@ -130,6 +146,23 @@ export async function salveazaSetariPepita(businessId: string, s: SetariPepita) 
  * ⚠ CHEILE SE GENEREAZA O SINGURA DATA. Repornirea unei integrari oprite nu le
  * schimba: adresele lipite la Pepita ar fi murit, si comerciantul ar fi trebuit sa
  * ceara din nou activarea de la ei, fara sa afle de ce.
+ *
+ * ═══ ⚠ SI SCRIE MODUL DE INCLUDERE, ALTFEL FEEDUL PLEACA GOL ═══
+ *
+ * Pana pe 09.09.2026 aici se scria numai `{activ: true}` plus cheile. `mod_includere`
+ * ramanea NESCRIS, iar `citesteConfig` citeste campul lipsa ca „selectate”, adica
+ * „doar ce a bifat omul”. Cine pornea integrarea si trimitea adresele fara sa treaca
+ * si prin formularul de Setari primea deci un `<Catalog>` valid si GOL, oricat de mare
+ * ii era magazinul.
+ *
+ * ⚠ NU E O IPOTEZA: s-a intamplat la TOATE cele trei magazine cu Pepita pornit, iar
+ * defectul l-a gasit Pepita, prin email („fluxurile trimise sunt goale”), nu noi. Un
+ * magazin cu 1.353 de produse active anunta ca n-are niciunul.
+ *
+ * ⚠ SE SCRIE DOAR CAND LIPSESTE, si de aceea se citeste JSON-ul BRUT. Un comerciant
+ * care a ales dinadins „doar produsele alese de mine”, apoi a oprit si a repornit
+ * integrarea, si-ar fi vazut tot catalogul plecand la Pepita fara sa fi cerut asta.
+ * Alegerea lui, odata scrisa, nu se atinge.
  */
 export async function activeazaPepita(businessId: string) {
   const g = await poarta(businessId);
@@ -137,8 +170,10 @@ export async function activeazaPepita(businessId: string) {
   const admin = createAdminClient();
 
   try {
-    const config = await citesteConfigul(businessId);
-    const petic: Record<string, unknown> = { activ: true };
+    const brut = await configulBrut(businessId);
+    const config = citesteConfig(brut);
+    /* Regula, cu motivul ei intreg si cu ramura care nu face nimic, sta in `peticDePornire`. */
+    const petic: Record<string, unknown> = { activ: true, ...peticDePornire(brut) };
 
     for (const [fel, camp] of [["feed", "feed_token"], ["comenzi", "order_key"]] as const) {
       const existenta = camp === "feed_token" ? config.feed_token : config.order_key;

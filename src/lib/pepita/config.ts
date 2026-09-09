@@ -55,6 +55,39 @@ export function citesteConfig(brut: unknown): PepitaConfig {
 }
 
 /**
+ * Ce trebuie scris in configurare la PORNIREA integrarii, in afara de `activ` si de chei.
+ *
+ * ═══ ⚠ DE CE E O FUNCTIE, SI NU DOUA RANDURI IN ACTIUNE ═══
+ *
+ * Fiindca regula are un caz in care trebuie sa NU faca nimic, iar cazul acela nu se vede
+ * din cod cand e scris in mijlocul unei actiuni care mai si genereaza chei. Aici se poate
+ * proba de-a dreptul, pe amandoua ramurile.
+ *
+ * ═══ ⚠ CE REPARA ═══
+ *
+ * `citesteConfig` de mai sus citeste un `mod_includere` LIPSA ca „selectate”, adica „trimite
+ * doar ce a bifat omul”, adica, pentru un magazin proaspat, NIMIC. Pana pe 09.09.2026
+ * pornirea integrarii nu scria campul, deci fiecare magazin nou servea un `<Catalog>` valid
+ * si gol. S-a intamplat la toate cele trei magazine cu Pepita pornit, si l-a gasit Pepita,
+ * prin email, nu noi.
+ *
+ * ⚠ IMPLICITUL DIN `citesteConfig` RAMANE „selectate”, DINADINS. El apara un JSON stricat
+ * sau golit de o salvare partiala: acolo directia sigura e „nu trimite”, nu „trimite tot”.
+ * Ce se repara e alt lucru, mai ingust: cand omul APASA „pornește integrarea”, el chiar cere
+ * sa vanda pe Pepita, deci lipsa campului nu mai are voie sa insemne tacere.
+ *
+ * ⚠ SI NU SE ATINGE O ALEGERE DEJA SCRISA. Cine a ales „doar produsele alese de mine”, apoi a
+ * oprit si a repornit integrarea, si-ar fi vazut tot catalogul plecand fara sa fi cerut-o.
+ * De asta se citeste JSON-ul BRUT: prin `citesteConfig` „nescris” si „scris selectate” arata la fel.
+ */
+export function peticDePornire(brut: unknown): Record<string, unknown> {
+  const c = (brut && typeof brut === "object" ? brut : {}) as Record<string, unknown>;
+  const mod = c.mod_includere;
+  if (mod === "toate" || mod === "selectate") return {};
+  return { mod_includere: "toate" };
+}
+
+/**
  * Configuratia fara chei, forma in care poate cobori in browser.
  *
  * ⚠ CHEILE NU PLEACA CU CONFIGURATIA. Panoul le cere separat, printr-o actiune

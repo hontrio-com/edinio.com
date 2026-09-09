@@ -8,6 +8,7 @@ import {
 } from "@/lib/orders/origin";
 import { PEPITA } from "./types";
 import { sablonMesajPepita } from "./activare";
+import { citesteConfig, peticDePornire } from "./config";
 
 /* ══════════════════════════════════════════════════════════════════════════
    POARTA
@@ -129,13 +130,80 @@ test("mesajul catre Pepita raspunde la tot ce cere Seller Center-ul lor", () => 
   assert.ok(m.includes("https://www.edinio.com/api/pepita/stoc/CHEIE.xml"));
   assert.ok(m.includes("https://www.edinio.com/api/pepita/comenzi/CHEIE2"));
   /*
-   * ⚠ Cele trei raspunsuri pe care le cer: variatii, cost de transport, termen de livrare.
-   * Iar raspunsul la primul e „nu", fiindca aplatizam: crezand altceva, ar astepta structura
-   * `<Variations>` si ar putea grupa gresit articolele.
+   * ⚠ Cele PATRU raspunsuri pe care le cer: variatii, cost de transport, termen de livrare
+   * si tara. Iar raspunsul la primul e „nu", fiindca aplatizam: crezand altceva, ar astepta
+   * structura `<Variations>` si ar putea grupa gresit articolele.
    */
   assert.match(m, /NU conține produse cu variații/);
   assert.match(m, /transport/i);
   assert.match(m, /termen/i);
+  /*
+   * ⚠ A PATRA A FOST ADAUGATA PE 09.09.2026, si proba asta a fost VERDE peste lipsa ei.
+   *
+   * Se numea „raspunde la tot ce cere Seller Center-ul lor" si verifica trei lucruri, fiindca
+   * trei scriau in documentatia lor. Apoi Pepita a intrebat un comerciant, prin email, „pentru
+   * ce tara a fost creat acest lucru", si atunci s-a vazut ca „tot" insemna „tot ce stiam noi".
+   *
+   * ⚠ Lectia nu e despre Pepita: o proba care numara punctele unei liste nu poate afla ca lista
+   * e incompleta. Vezi [[forma-noua-si-probele-vechi]]. Cand mai apare o cerinta de la ei,
+   * randul ei se adauga AICI, nu doar in sablon.
+   */
+  assert.match(m, /Țara pentru care este creat feedul/);
+  assert.match(m, /România/);
+  assert.match(m, /RON/);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PORNIREA NU ARE VOIE SA LASE FEEDUL GOL
+   ══════════════════════════════════════════════════════════════════════════
+
+   ⚠ 09.09.2026. Toate cele trei magazine cu Pepita pornit serveau un `<Catalog>` valid si
+   GOL, iar unul dintre ele avea 1.353 de produse active. Defectul l-a gasit Pepita, printr-un
+   email catre comerciant („fluxurile trimise sunt goale”), fiindca nimic din Edinio nu-l
+   putea arata: feedul raspundea 200, panoul arata bifa verde „Pepita citește feedul”, si
+   citirile lor chiar aveau loc, in fiecare zi.
+
+   Cauza: `activeazaPepita` scria doar `{activ: true}` plus cheile, iar `citesteConfig`
+   citeste un `mod_includere` lipsa ca „selectate”. Zero randuri in `pepita_listari` inseamna
+   atunci zero produse in feed.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ pornirea scrie modul de includere cand el LIPSESTE, ca feedul sa nu plece gol", () => {
+  /* Chiar starea celor trei magazine: pornit, adresele trimise, si nimic despre produse. */
+  assert.deepEqual(
+    peticDePornire({ activ: true, trimis_la: "2026-09-08T15:24:20.950Z" }),
+    { mod_includere: "toate" },
+  );
+  assert.deepEqual(peticDePornire({}), { mod_includere: "toate" });
+  assert.deepEqual(peticDePornire(null), { mod_includere: "toate" });
+  /* Un JSON stricat nu trebuie sa arunce: pornirea integrarii n-are voie sa cada din asta. */
+  assert.deepEqual(peticDePornire("nu e obiect"), { mod_includere: "toate" });
+  assert.deepEqual(peticDePornire({ mod_includere: "aiurea" }), { mod_includere: "toate" });
+});
+
+test("⚠ dar NU atinge o alegere pe care omul a facut-o deja", () => {
+  /*
+   * Cazul care face regula sa merite o functie: cine a ales dinadins „doar produsele alese
+   * de mine”, apoi a oprit si a repornit integrarea, si-ar fi vazut TOT catalogul plecand la
+   * Pepita fara sa fi cerut asta. O reparatie care rezolva feedul gol si publica in schimb
+   * catalogul cuiva nu e o reparatie.
+   */
+  assert.deepEqual(peticDePornire({ activ: false, mod_includere: "selectate" }), {});
+  assert.deepEqual(peticDePornire({ mod_includere: "toate" }), {});
+});
+
+test("⚠ implicitul din `citesteConfig` RAMANE „selectate”, si asta nu e o scapare", () => {
+  /*
+   * Cele doua reguli trag in directii opuse, dinadins, fiindca apara lucruri diferite.
+   * `citesteConfig` apara un JSON stricat sau golit de o salvare partiala: acolo „nu trimite”
+   * e directia sigura. `peticDePornire` apara apasarea pe „pornește integrarea”, care e o
+   * cerere limpede de a vinde pe Pepita.
+   *
+   * Proba asta exista ca sa nu „simplifice” cineva mutand implicitul pe „toate”: atunci un
+   * `pepita_config` stricat ar publica singur tot catalogul.
+   */
+  assert.equal(citesteConfig({ activ: true }).mod_includere, "selectate");
+  assert.equal(citesteConfig(null).mod_includere, "selectate");
 });
 
 /* ══════════════════════════════════════════════════════════════════════════

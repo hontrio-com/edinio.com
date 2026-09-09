@@ -479,11 +479,46 @@ test("feedul de stoc are aceleasi produse, dar numai disponibilitatea", async ()
   assert.ok(!stoc.includes("<Descriptions>"));
 });
 
-test("un catalog gol da un feed valid si gol, nu o cadere", async () => {
+test("un magazin FARA PRODUSE da un feed valid si gol, nu o cadere", async () => {
+  /* ⚠ Numele spune „fara produse”, si conteaza: e magazinul gol, nu cel plin cu feedul gol.
+     Cazul celalalt, care chiar s-a intamplat in productie, e imediat mai jos. */
   const xml = await feed(faceBaza({ config: { mod_includere: "toate" }, produse: [] }));
   assert.equal(XMLValidator.validate(xml), true);
   assert.ok(!xml.includes("<Product>"));
   assert.ok(xml.includes("</Catalog>"));
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ MAGAZIN PLIN, FEED GOL: STAREA REALA DIN 09.09.2026
+   ══════════════════════════════════════════════════════════════════════════
+
+   Trei magazine din trei serveau `<Catalog></Catalog>`, unul dintre ele cu 1.353 de produse
+   active. Nicio proba din repo nu acoperea starea asta: cea de deasupra porneste de la un
+   magazin CHIAR gol si de la modul „toate”, adica de la exact combinatia care nu se intampla.
+
+   Cele doua probe de mai jos stau impreuna dinadins. Prima descrie capcana, a doua arata ca
+   aceleasi produse pleaca de indata ce modul e scris; despartite, prima ar putea fi citita ca
+   „asa trebuie sa fie” si ar apara chiar defectul.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ cu `mod_includere` NESCRIS si zero listari, un magazin plin trimite un catalog GOL", async () => {
+  /* `config` fara `mod_includere`: chiar JSON-ul din productie, {activ, trimis_la, feed_*}. */
+  const db = faceBaza({ config: { activ: true }, listari: [] });
+  const xml = await feed(db);
+  assert.equal(XMLValidator.validate(xml), true);
+  assert.equal((xml.match(/<Product>/g) ?? []).length, 0);
+  /*
+   * ⚠ SI E VALID, adica exact felul de gol care doare: Pepita il primeste, il accepta si
+   * intelege „magazinul asta n-are niciun produs”. Un XML rupt ar fi fost respins si ar fi
+   * lasat catalogul lor neatins. Vezi si nota despre `</Catalog>` din `feed.ts`.
+   */
+  assert.ok(xml.includes("</Catalog>"));
+});
+
+test("⚠ iar cu modul scris „toate”, ACELEASI produse pleaca", async () => {
+  const db = faceBaza({ config: { activ: true, mod_includere: "toate" }, listari: [] });
+  const xml = await feed(db);
+  assert.equal((xml.match(/<Product>/g) ?? []).length, 2);
 });
 
 /* ══════════════════════════════════════════════════════════════════════════

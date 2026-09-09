@@ -9,7 +9,7 @@ export const SEO = {
   eyebrow: "SEO",
   titlu: "SEO integrat direct în magazin.",
   descriere:
-    "Organizăm magazinul într-o structură clară și optimizată, astfel încât produsele și paginile să poată fi descoperite și indexate corect.",
+    "Structura magazinului este gândită pentru SEO, astfel încât Google să poată găsi și indexa mai ușor produsele și paginile tale.",
 } as const;
 
 export interface CardSeo {
@@ -46,7 +46,7 @@ export const CARDURI_SEO: CardSeo[] = [
     id: "sitemap",
     titlu: "Sitemap generat automat",
     descriere:
-      "Edinio creează și actualizează automat harta magazinului, astfel încât motoarele de căutare să poată descoperi mai ușor paginile importante.",
+      "Sitemap-ul magazinului este creat și actualizat automat atunci când adaugi sau modifici produse și pagini.",
   },
   {
     id: "indexare",

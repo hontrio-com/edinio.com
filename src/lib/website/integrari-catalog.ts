@@ -19,18 +19,29 @@
  * de aici — dar ea păzește doar o direcție, și numai atât timp cât fișierul e în
  * arbore.
  *
- * ═══ DESCRIERILE SUNT PUSE DE MINE ═══
+ * ═══ DESCRIERILE SUNT ALE CLIENTULUI ═══
  *
- * ⚠ Toate cele 65. Nu sunt textele clientului, iar el le rescrie de fiecare dată
- * (vezi regula lui de gust: cere variante, le respinge, apoi dă textul cuvânt cu
- * cuvânt). Sunt scrise ca să poată fi înlocuite una câte una, fără să se atingă
- * nimic altceva.
+ * Toate cele 65, date cuvânt cu cuvânt (09.09.2026). Nu se rescriu. Înainte erau
+ * puse de mine; le-a înlocuit pe toate deodată.
  *
- * Regula pe care am ținut-o: descrii CE FACE serviciul și ce face Edinio cu el,
- * nu cât e de bun. Fără superlative și fără comparații („cel mai folosit", „cel
- * mai mare") — alea sunt afirmații care trebuie susținute, iar aici n-ar avea cum.
- * Singura excepție e eMAG, unde „cel mai mare marketplace din România" e un fapt
- * necontestat de piață.
+ * ⚠ DOUĂ ABATERI de la lista lui, amândouă cerute sau spuse:
+ *   1. `smso`: s-a adăugat punctul de la final. Lipsea din lista trimisă,
+ *      celelalte 64 îl au, iar proba „descrierile sunt o propoziție" îl cere.
+ *   2. `postaRomana`: textul trimis spunea „expedieri interne ȘI
+ *      INTERNAȚIONALE". Integrarea e numai internă, scris cu majuscule în
+ *      `posta/expediere.ts` („NUMAI INTERN"), tipul `AdresaPosta` n-are câmp de
+ *      țară, iar la checkout internaționalul iese DOAR pe DPD
+ *      (`shipping.actions.ts`). Arătat clientului, el a cerut „lasă doar
+ *      intern", deci au căzut două cuvinte.
+ *
+ * ⚠ DESCRIEREA INTRĂ ȘI ÎN CĂUTAREA DE PE PAGINĂ (`textDeCautare`), nu doar sub
+ * siglă: un cuvânt scos din ea scoate integrarea de la căutarea aceea. Textul
+ * nou al lui TBI nu mai conține „rate", nici cel al lui EuPlătesc, deci niciunul
+ * din cele două nu mai iese la „plăți în rate" (chiar exemplul din bara de căutare).
+ *
+ * Ce mai păzesc probele peste textele astea: între 30 și 110 semne (peste 110
+ * textul trece de patru rânduri și umflă rândul de carduri), punct la final,
+ * diacritice, și fără superlative nesusținute.
  */
 
 import { PROVIDER_LOGOS, type LogoKey } from "./logos";
@@ -72,7 +83,7 @@ export interface Integrare {
   cheie: LogoKey;
   categorie: CategorieId;
   stare: Stare;
-  /** O propoziție. Vezi avertismentul din capul fișierului: e pusă de mine. */
+  /** O propoziție. E a clientului: vezi nota din capul fișierului, nu se rescrie. */
   descriere: string;
 }
 
@@ -82,103 +93,103 @@ export const INTEGRARI: Integrare[] = [
     cheie: "fanCourier",
     categorie: "curieri",
     stare: "activa",
-    descriere: "AWB generat automat la fiecare comandă, cu urmărirea coletului până la livrare.",
+    descriere: "Pregătești livrările FAN Courier direct din Edinio, de la AWB până la tracking.",
   },
   {
     cheie: "dpd",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Expedieri în țară și în străinătate, cu AWB și ramburs direct din panou.",
+    descriere: "Generezi AWB-uri DPD pentru livrări interne și internaționale direct din Edinio.",
   },
   {
     cheie: "cargus",
     categorie: "curieri",
     stare: "activa",
-    descriere: "AWB automat, ridicare programată și urmărirea coletelor, fără să ieși din Edinio.",
+    descriere: "Generezi AWB-uri prin Cargus și gestionezi expedierile direct din comenzile tale.",
   },
   {
     cheie: "sameday",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Curier și rețeaua easybox: clientul își alege lockerul chiar la finalizarea comenzii.",
+    descriere: "Oferi livrare prin curier sau easybox, cu alegerea lockerului direct la checkout.",
   },
   {
     cheie: "gls",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Livrări în România și în Europa, cu AWB emis automat din comandă.",
+    descriere: "Trimiți comenzile prin GLS și generezi AWB-urile direct din magazin.",
   },
   {
     cheie: "woot",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Broker de curierat: compari tarifele mai multor curieri și alegi pentru fiecare colet.",
+    descriere: "Compari ofertele mai multor curieri și alegi varianta potrivită pentru fiecare colet.",
   },
   {
     cheie: "coleteOnline",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Broker de curierat cu tarife negociate, pentru colete în țară și în afara ei.",
+    descriere: "Vezi mai multe opțiuni de livrare și alegi curierul potrivit pentru fiecare colet.",
   },
   {
     cheie: "ecolet",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Broker de curierat: un singur cont, mai mulți curieri, AWB emis din panou.",
+    descriere: "Centralizezi mai mulți curieri și pregătești expedierile dintr-un singur loc.",
   },
   {
     cheie: "pallex",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Rețea de paleți, pentru marfa care nu încape într-un colet obișnuit.",
+    descriere: "Trimiți mărfuri paletizate prin rețeaua Pall-Ex direct din fluxul magazinului.",
   },
   {
     cheie: "dhl",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Livrări internaționale expres, cu urmărire până la destinație.",
+    descriere: "Pregătești expedieri internaționale prin DHL direct din comenzile magazinului.",
   },
   {
     cheie: "fedex",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Transport internațional expres, pentru comenzile care pleacă din țară.",
+    descriere: "Conectezi FedEx pentru livrările internaționale și gestionezi expedierile din Edinio.",
   },
   {
     cheie: "ups",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Livrări expres în țară și internațional, cu urmărire pe tot drumul.",
+    descriere: "Conectezi UPS pentru livrări naționale și internaționale direct din magazin.",
   },
   {
     cheie: "postaRomana",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Acoperire poștală în toată țara, inclusiv în localitățile mici.",
+    descriere: "Folosești serviciile Poștei Române pentru expedieri interne.",
   },
   {
     cheie: "packeta",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Rețea de puncte de ridicare din Europa Centrală și de Est.",
+    descriere: "Oferi livrare la adresă, punct pick-up sau locker prin rețeaua Packeta.",
   },
   {
     cheie: "innoship",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Alege singură curierul potrivit pentru fiecare comandă, după reguli pe care le pui tu.",
+    descriere: "Automatizezi alegerea curierului și gestionezi livrările dintr-un singur flux.",
   },
   {
     cheie: "smartship",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Administrarea expedierilor peste mai mulți curieri, dintr-un singur loc.",
+    descriere: "Centralizezi expedierile mai multor curieri și le gestionezi dintr-un singur loc.",
   },
   {
     cheie: "shipo",
     categorie: "curieri",
     stare: "activa",
-    descriere: "Compară tarifele curierilor și emite AWB-ul pentru cel ales.",
+    descriere: "Alegi curierul potrivit fiecărui colet și creezi AWB-ul direct din comandă.",
   },
 
   /* ── Plăți online ──────────────────────────────────────────────────────── */
@@ -186,85 +197,85 @@ export const INTEGRARI: Integrare[] = [
     cheie: "stripe",
     categorie: "plati",
     stare: "activa",
-    descriere: "Plăți cu cardul, cu banii decontați direct în contul tău bancar.",
+    descriere: "Accepți plăți online cu cardul prin Stripe direct în checkout-ul magazinului.",
   },
   {
     cheie: "netopia",
     categorie: "plati",
     stare: "activa",
-    descriere: "Procesator românesc de plăți cu cardul, cu plata în rate și portofele digitale.",
+    descriere: "Conectezi NETOPIA pentru plăți online și opțiunile de rate ale băncilor partenere.",
   },
   {
     cheie: "ipay",
     categorie: "plati",
     stare: "activa",
-    descriere: "Plăți cu cardul prin Banca Transilvania, cu decontare în contul tău.",
+    descriere: "Accepți plăți online prin soluția eCommerce a Băncii Transilvania.",
   },
   {
     cheie: "klarna",
     categorie: "plati",
     stare: "activa",
-    descriere: "Clientul cumpără acum și plătește mai târziu sau în rate; tu încasezi integral.",
+    descriere: "Le oferi clienților opțiunea să plătească mai târziu sau în rate prin Klarna.",
   },
   {
     cheie: "revolut",
     categorie: "plati",
     stare: "activa",
-    descriere: "Plăți cu cardul cu comisioane mici și decontare rapidă.",
+    descriere: "Conectezi Revolut Business pentru procesarea plăților online ale comenzilor.",
   },
   {
     cheie: "ingWebPay",
     categorie: "plati",
     stare: "in-curand",
-    descriere: "Procesatorul de plăți al ING, pentru magazinele cu cont la ei.",
+    descriere: "Le oferi clienților plata online prin serviciul eCommerce ING WebPay.",
   },
   {
     cheie: "payu",
     categorie: "plati",
     stare: "in-curand",
-    descriere: "Procesator de plăți cu acoperire în toată Europa Centrală și de Est.",
+    descriere: "Conectezi PayU pentru a procesa plățile online direct din magazin.",
   },
   {
     cheie: "euplatesc",
     categorie: "plati",
     stare: "in-curand",
-    descriere: "Procesator românesc de plăți cu cardul, cu plata în rate.",
+    descriere: "Le oferi clienților plata online prin procesatorul românesc EuPlătesc.",
   },
   {
     cheie: "tbi",
     categorie: "plati",
     stare: "in-curand",
-    descriere: "Plata în rate, cu cererea aprobată online, fără drum la bancă.",
+    descriere: "Le permiți clienților să aleagă finanțarea tbi direct la cumpărare.",
   },
   {
     cheie: "unicredit",
     categorie: "plati",
     stare: "in-curand",
-    descriere: "Plăți cu cardul prin UniCredit, cu decontare în contul tău.",
+    descriere: "Conectezi serviciul eCommerce UniCredit direct la checkout-ul magazinului.",
   },
   {
     cheie: "viva",
     categorie: "plati",
     stare: "in-curand",
-    descriere: "Plăți cu cardul pentru toată Europa, dintr-un singur cont.",
+    descriere: "Adaugi Smart Checkout în magazin pentru metodele de plată disponibile în Viva.com.",
   },
   {
     cheie: "libraPay",
     categorie: "plati",
     stare: "in-curand",
-    descriere: "Procesatorul de plăți al Libra Internet Bank.",
+    descriere: "Le oferi clienților plata cu cardul prin soluția eCommerce Libra Internet Bank.",
   },
   {
     cheie: "bcr",
     categorie: "plati",
     stare: "in-curand",
-    descriere: "Plăți cu cardul prin Banca Comercială Română.",
+    descriere: "Accepți plăți online prin GP Webpay, soluția Global Payments disponibilă prin BCR.",
   },
   {
     cheie: "saltBank",
     categorie: "plati",
     stare: "in-curand",
-    descriere: "Plăți cu cardul de la banca digitală a grupului Banca Transilvania.",
+    descriere: "Conectezi plățile EuPlătesc cu încasarea direct în contul tău Salt Business.",
   },
 
   /* ── Facturare ─────────────────────────────────────────────────────────── */
@@ -272,43 +283,43 @@ export const INTEGRARI: Integrare[] = [
     cheie: "smartbill",
     categorie: "facturare",
     stare: "activa",
-    descriere: "Factura pleacă singură la client, în clipa în care comanda e plătită.",
+    descriere: "Emiți facturi din comenzile Edinio și le trimiți clienților prin SmartBill.",
   },
   {
     cheie: "oblio",
     categorie: "facturare",
     stare: "activa",
-    descriere: "Facturi și storno emise automat, cu seriile și numerele din contul tău.",
+    descriere: "Generezi facturi, proforme și storno în Oblio folosind datele din comenzi.",
   },
   {
     cheie: "fgo",
     categorie: "facturare",
     stare: "activa",
-    descriere: "Facturare automată la fiecare comandă, cu produsele și TVA-ul luate din coș.",
+    descriere: "Conectezi FGO și generezi documentele folosind automat datele comenzii.",
   },
   {
     cheie: "saga",
     categorie: "facturare",
     stare: "in-curand",
-    descriere: "Programul de contabilitate folosit de mii de firme din România.",
+    descriere: "Trimiți datele comenzilor către SAGA și reduci introducerea manuală în contabilitate.",
   },
   {
     cheie: "facturis",
     categorie: "facturare",
     stare: "in-curand",
-    descriere: "Facturare și gestiune, cu documentele emise direct din comenzi.",
+    descriere: "Generezi documente și sincronizezi datele comerciale cu Facturis.",
   },
   {
     cheie: "easybill",
     categorie: "facturare",
     stare: "in-curand",
-    descriere: "Facturi emise automat, fără să treci nimic dintr-un program în altul.",
+    descriere: "Generezi documentele EasyBill direct folosind datele din fiecare comandă.",
   },
   {
     cheie: "factureaza",
     categorie: "facturare",
     stare: "in-curand",
-    descriere: "Facturare online, cu documentele legate de comenzile din magazin.",
+    descriere: "Transformi comenzile în facturi fără să copiezi manual clientul și produsele.",
   },
 
   /* ── Marketplace ───────────────────────────────────────────────────────── */
@@ -316,25 +327,25 @@ export const INTEGRARI: Integrare[] = [
     cheie: "olx",
     categorie: "marketplace",
     stare: "activa",
-    descriere: "Produsele tale, publicate automat pe OLX, cu stocul ținut la zi.",
+    descriere: "Publici produsele pe OLX și păstrezi informațiile sincronizate cu magazinul tău.",
   },
   {
     cheie: "aboutYou",
     categorie: "marketplace",
     stare: "activa",
-    descriere: "Vinzi haine și încălțăminte pe o platformă de modă din toată Europa.",
+    descriere: "Sincronizezi produsele, stocurile și comenzile cu ABOUT YOU Seller Center.",
   },
   {
     cheie: "trendyol",
     categorie: "marketplace",
     stare: "activa",
-    descriere: "Publici produsele pe marketplace-ul Trendyol, cu stocul sincronizat automat.",
+    descriere: "Publici produsele pe Trendyol și sincronizezi stocurile și comenzile.",
   },
   {
     cheie: "emag",
     categorie: "marketplace",
     stare: "activa",
-    descriere: "Cel mai mare marketplace din România, cu produsele și stocul din magazinul tău.",
+    descriere: "Conectezi catalogul magazinului cu eMAG pentru produse, oferte și comenzi.",
   },
   /* ⚠ CE MERGE AZI STA INAINTEA LUI „In curând", in fiecare rubrica. Vezi nota din panou si
      `ordinea-integrarilor.test.ts`, care cade daca o integrare livrata ramane sub una anuntata. */
@@ -342,37 +353,37 @@ export const INTEGRARI: Integrare[] = [
     cheie: "pepita",
     categorie: "marketplace",
     stare: "activa",
-    descriere: "Marketplace românesc, cu produsele tale listate automat.",
+    descriere: "Conectezi catalogul Edinio cu Pepita Marketplace pentru listarea produselor.",
   },
   {
     cheie: "altex",
     categorie: "marketplace",
     stare: "in-curand",
-    descriere: "Marketplace-ul retailerului de electronice Altex.",
+    descriere: "Listezi produsele pe Altex Marketplace și gestionezi comenzile mai ușor din Edinio.",
   },
   {
     cheie: "cel",
     categorie: "marketplace",
     stare: "in-curand",
-    descriere: "Marketplace românesc generalist, cu public propriu.",
+    descriere: "Listezi produsele pe CEL.ro Marketplace și centralizezi mai ușor comenzile.",
   },
   {
     cheie: "okazii",
     categorie: "marketplace",
     stare: "in-curand",
-    descriere: "Marketplace românesc generalist, cu vânzare la preț fix sau prin licitație.",
+    descriere: "Conectezi catalogul magazinului cu Okazii.ro pentru listarea produselor.",
   },
   {
     cheie: "compari",
     categorie: "marketplace",
     stare: "in-curand",
-    descriere: "Comparator de prețuri: trimite cumpărători direct în magazinul tău.",
+    descriere: "Listezi produsele în Compari.ro și aduci vizitatorii interesați direct în magazin.",
   },
   {
     cheie: "baseLinker",
     categorie: "marketplace",
     stare: "in-curand",
-    descriere: "Administrezi comenzile de pe toate canalele de vânzare într-un singur loc.",
+    descriere: "Sincronizezi comenzile și stocurile dintre Edinio și canalele gestionate în BaseLinker.",
   },
 
   /* ── Marketing ─────────────────────────────────────────────────────────── */
@@ -380,37 +391,37 @@ export const INTEGRARI: Integrare[] = [
     cheie: "facebookPixel",
     categorie: "marketing",
     stare: "activa",
-    descriere: "Măsori ce fac vizitatorii veniți din reclame și le poți arăta din nou produsele.",
+    descriere: "Trimiți către Meta acțiunile importante din magazin, de la vizualizare până la cumpărare.",
   },
   {
     cheie: "tiktokPixel",
     categorie: "marketing",
     stare: "activa",
-    descriere: "Urmărești ce se întâmplă după o reclamă TikTok, până la comanda plasată.",
+    descriere: "Urmărești ce fac vizitatorii după reclamele TikTok, până la cumpărarea finală.",
   },
   {
     cheie: "googleAds",
     categorie: "marketing",
     stare: "activa",
-    descriere: "Trimiți comenzile înapoi în Google Ads, ca să vezi care reclamă chiar vinde.",
+    descriere: "Măsori comenzile generate de reclame și trimiți valoarea conversiilor către Google Ads.",
   },
   {
     cheie: "googleMerchant",
     categorie: "marketing",
     stare: "activa",
-    descriere: "Produsele intră în Google Shopping, cu prețul și stocul actualizate singure.",
+    descriere: "Sincronizezi catalogul cu Merchant Center, inclusiv prețurile și disponibilitatea produselor.",
   },
   {
     cheie: "facebookCatalog",
     categorie: "marketing",
     stare: "activa",
-    descriere: "Catalogul pleacă singur către Meta, pentru reclame cu produse pe Facebook și Instagram.",
+    descriere: "Sincronizezi produsele cu Meta pentru reclame dinamice pe Facebook și Instagram.",
   },
   {
     cheie: "optinMonster",
     categorie: "marketing",
     stare: "in-curand",
-    descriere: "Ferestre și formulare care transformă vizitatorii în abonați.",
+    descriere: "Afișezi pop-up-uri și formulare targetate pentru abonări, oferte și recuperarea vizitatorilor.",
   },
 
   /* ── Statistici ────────────────────────────────────────────────────────── */
@@ -418,7 +429,7 @@ export const INTEGRARI: Integrare[] = [
     cheie: "googleAnalytics",
     categorie: "statistici",
     stare: "activa",
-    descriere: "Vezi de unde vin vizitatorii și pe unde se pierd până la comandă.",
+    descriere: "Urmărești produsele văzute, coșurile, checkout-urile și cumpărăturile în Google Analytics.",
   },
 
   /* ── Email marketing ───────────────────────────────────────────────────── */
@@ -426,25 +437,25 @@ export const INTEGRARI: Integrare[] = [
     cheie: "mailchimp",
     categorie: "email",
     stare: "activa",
-    descriere: "Clienții ajung singuri în listele tale, cu tot cu ce au cumpărat.",
+    descriere: "Sincronizezi clienții și comenzile cu Mailchimp pentru segmente și automatizări eCommerce.",
   },
   {
     cheie: "brevo",
     categorie: "email",
     stare: "activa",
-    descriere: "Campanii de email și automatizări, pe o listă care se completează din comenzi.",
+    descriere: "Conectezi Brevo pentru email marketing, automatizări și segmentarea clienților magazinului.",
   },
   {
     cheie: "klaviyo",
     categorie: "email",
     stare: "activa",
-    descriere: "Segmentezi clienții după ce cumpără și le trimiți mesajele potrivite.",
+    descriere: "Folosești istoricul de cumpărături pentru segmente și fluxuri automate în Klaviyo.",
   },
   {
     cheie: "theMarketer",
     categorie: "email",
     stare: "in-curand",
-    descriere: "Email, SMS și recomandări de produse, într-un singur instrument.",
+    descriere: "Conectezi magazinul cu theMarketer pentru email, SMS și recomandări de produse.",
   },
 
   /* ── SMS ───────────────────────────────────────────────────────────────── */
@@ -452,13 +463,13 @@ export const INTEGRARI: Integrare[] = [
     cheie: "notice",
     categorie: "sms",
     stare: "activa",
-    descriere: "SMS, WhatsApp și apeluri: clientul află singur în ce stadiu e comanda.",
+    descriere: "Trimiți notificări SMS automate despre comenzi direct prin Notice.ro.",
   },
   {
     cheie: "smso",
     categorie: "sms",
     stare: "activa",
-    descriere: "SMS-uri cu numele magazinului tău ca expeditor, la fiecare schimbare de status.",
+    descriere: "Notifici clienții prin SMS atunci când apar schimbări importante la comandă.",
   },
 
   /* ── Suport clienți ────────────────────────────────────────────────────── */
@@ -466,27 +477,190 @@ export const INTEGRARI: Integrare[] = [
     cheie: "tidio",
     categorie: "suport",
     stare: "in-curand",
-    descriere: "Fereastră de chat pe magazin, cu răspunsuri automate la întrebările obișnuite.",
+    descriere: "Adaugi chat Tidio în magazin pentru răspunsuri rapide și automatizări de suport.",
   },
   {
     cheie: "intercom",
     categorie: "suport",
     stare: "in-curand",
-    descriere: "Chat, tichete și mesaje automate către clienți, într-un singur loc.",
+    descriere: "Conectezi Intercom pentru conversații, tichete și fluxuri de suport direct în magazin.",
   },
   {
     cheie: "zendesk",
     categorie: "suport",
     stare: "in-curand",
-    descriere: "Sistem de tichete pentru cererile clienților, cu istoricul fiecărei discuții.",
+    descriere: "Centralizezi mesajele și tichetele clienților în Zendesk pentru un suport mai ușor de urmărit.",
   },
   {
     cheie: "tawkto",
     categorie: "suport",
     stare: "in-curand",
-    descriere: "Chat pe magazin, cu istoricul conversațiilor și răspunsuri gata scrise.",
+    descriere: "Adaugi live chat în magazin și răspunzi vizitatorilor în timp real prin tawk.to.",
   },
 ];
+
+/**
+ * ═══ SINONIME DE CĂUTARE ═══
+ *
+ * Cuvinte care intră în indexul de căutare, dar NU se văd pe pagină. Rostul lor:
+ * descrierea e text de vânzare, nu listă de cuvinte-cheie, iar cine caută
+ * „ramburs" nu caută o frază frumoasă, caută dacă poate lua banii la livrare.
+ *
+ * ⚠ DE CE EXISTĂ. Când clientul a înlocuit toate cele 65 de descrieri
+ * (09.09.2026), căutarea s-a subțiat fără ca ceva să se plângă: „card" a căzut
+ * de la 9 integrări la 2, iar „ramburs", „curierat" și „whatsapp" au căzut la
+ * ZERO. Cuvintele stăteau numai în descriere, iar descrierea e a lui și se
+ * schimbă. Aici stau separat, ca textul lui să se poată rescrie oricând fără să
+ * ia căutarea cu el.
+ *
+ * ⚠ UN SINONIM E O PROMISIUNE. Cine caută „ramburs" și vede cardul unui curier
+ * crede că poate încasa la livrare prin el. Deci fiecare cuvânt de aici are în
+ * spate cod care chiar face lucrul ăla, verificat pe CORPUL cererii, nu pe tip.
+ * Trei curieri NU au ramburs și nu-l primesc: DHL (`dhl/servicii.ts`: „EXISTA CA
+ * SI COD, SI NU SE VINDE DIN ROMANIA"), FedEx (`fedex/client.ts`
+ * `RAMBURS_INDISPONIBIL`, care chiar oprește emiterea) și Pall-Ex
+ * (`pallex/client.ts`: „nu exista ramburs. Niciun camp"). Cinci n-au urmărire,
+ * deci n-o primesc: FAN Courier, DPD, Cargus, Woot, Colete Online. Cei
+ * doisprezece care o au sunt exact cei cu cron în `vercel.json` și cu coloană
+ * `*_status_checked_at` în schemă.
+ *
+ * ⚠ NIMIC PE „ÎN CURÂND". O integrare nelivrată n-are cod, deci n-are cum să
+ * aibă dovadă: acolo un sinonim ar descrie o promisiune. Sinonimele ei se adaugă
+ * în același commit cu codul, ca migrațiile.
+ *
+ * ⚠ POTRIVIREA E PE SUBȘIR, deci nu se scrie aici ce se găsește deja prin nume,
+ * descriere sau rubrică. „internațional" nu e în listă fiindcă e deja în textul
+ * clientului. Dar „curierat" NU e subșir în „curieri", deci trebuie scris.
+ */
+export const SINONIME_CATEGORIE: Record<CategorieId, string[]> = {
+  /* Toate trei sunt adevărate despre toți cei 17, Pall-Ex inclusiv. „colet" NU
+     intră: Pall-Ex e rețea de marfă PALETIZATĂ, nu curier de colete. Nici „awb":
+     un cuvânt de rubrică trebuie să fie adevărat la TOȚI, iar Pall-Ex scoate
+     borderou de paleți. */
+  curieri: ["curierat", "livrare", "expediere"],
+  /*
+    ⚠ ASTA REPARĂ CEA MAI STRICATĂ CĂUTARE DE PE PAGINĂ, și e mai veche decât
+    textele noi. Se cere ca FIECARE cuvânt scris să apară undeva, iar „plata"
+    (singular) nu e în textul niciunuia dintre cele CINCI procesatoare care merg:
+    Stripe zice „plăți", Netopia „plăți", iPay „plăți", Klarna „plătească",
+    Revolut „plăților". Măsurat: „plata online" întorcea patru carduri, și toate
+    patru NELIVRATE. Omul care scria cel mai firesc lucru din lume vedea numai
+    promisiuni. E o formă gramaticală a etichetei „Plăți online", deci nu adaugă
+    nicio afirmație nouă.
+  */
+  plati: ["plata"],
+  /* Aceeași poveste, mai mică: „Facturare" dă „factura" și „facturare" la toate
+     șapte, dar „facturi" doar la patru. Tot o formă a etichetei. */
+  facturare: ["facturi"],
+  /* Nimic: „comenzi", „stoc", „produse" sunt adevărate doar la o parte din cele
+     zece, deci stau pe integrare, nu pe rubrică. */
+  marketplace: [],
+  marketing: [],
+  statistici: [],
+  /* „newsletter" și „campanii" descriu ce face platforma LOR. Edinio le trimite
+     clienți și comenzi; scrisorile le trimit ei. */
+  email: [],
+  /* „whatsapp" e adevărat doar la Notice.ro, deci stă pe ea. */
+  sms: [],
+  /* Toate patru sunt nelivrate. */
+  suport: [],
+};
+
+/**
+ * Sinonimele fiecărei integrări. Cheile care lipsesc n-au nevoie de niciunul:
+ * ce s-ar fi scris acolo se găsește deja prin nume, descriere sau rubrică.
+ *
+ * `Partial<Record<LogoKey, …>>` ar îngădui o cheie care nu e în catalog; proba
+ * „sinonimele stau pe integrări care există" o prinde.
+ */
+export const SINONIME: Partial<Record<LogoKey, string[]>> = {
+  /* ── Curieri ───────────────────────────────────────────────────────────────
+     `ramburs`: verificat pe corpul cererii de AWB (`cod`, `CashRepayment`,
+     `CODAmount`, `cashOnDelivery`, `repayment`…), nu pe tip.
+     `locker`/`punct`/`ridicare`: numai cei din `CURIERI_CU_LOCKERE`
+     (`shipping.actions.ts`), adică acolo unde CUMPĂRĂTORUL alege punctul la
+     checkout. Woot are puncte, dar le alege comerciantul după comandă, deci nu.
+     `urmarire`/`tracking`: numai cei doisprezece cu cron de tracking. */
+  fanCourier: ["ramburs", "fanbox", "locker", "punct", "ridicare"],
+  dpd: ["ramburs", "locker", "punct", "ridicare"],
+  cargus: ["ramburs", "locker", "punct", "ridicare"],
+  sameday: ["ramburs", "awb", "urmarire", "tracking", "punct", "ridicare"],
+  gls: ["ramburs", "locker", "parcelshop", "punct", "ridicare", "urmarire", "tracking"],
+  woot: ["ramburs", "awb"],
+  coleteOnline: ["ramburs", "awb"],
+  ecolet: ["ramburs", "awb", "urmarire", "tracking"],
+  /* Fără `ramburs` și fără `awb`: aici unitatea e PARTIDA, iar documentul e
+     borderou de paleți. Vezi `pallex/client.ts`. */
+  pallex: ["urmarire", "tracking"],
+  dhl: ["awb", "urmarire", "tracking", "expres"],
+  fedex: ["awb", "urmarire", "tracking", "expres"],
+  ups: ["ramburs", "awb", "urmarire", "tracking", "expres", "locker", "punct", "ridicare"],
+  /* `oficiu`, nu `easybox`: punctul Poștei e post-restant, iar cumpărătorul
+     citește „Ridicare de la oficiu poștal". Cine scrie „easybox" caută un dulap. */
+  postaRomana: ["ramburs", "awb", "urmarire", "tracking", "oficiu", "punct", "ridicare"],
+  packeta: ["ramburs", "awb", "urmarire", "tracking", "ridicare"],
+  innoship: ["ramburs", "awb", "urmarire", "tracking", "locker", "punct", "ridicare"],
+  /* Singurul cu DOUĂ rețele de lockere, easybox și FANbox, cu nomenclatoare
+     diferite. Vezi nota din `getLockers`. */
+  smartship: ["ramburs", "awb", "urmarire", "tracking", "locker", "easybox", "fanbox", "punct", "ridicare"],
+  shipo: ["ramburs", "urmarire", "tracking", "locker", "punct", "ridicare"],
+
+  /* ── Plăți online ──────────────────────────────────────────────────────────
+     Doar cele CINCI livrate. `card` lipsește la Stripe (e deja în descriere) și
+     la Klarna, care nu e card: e cumpără-acum-plătește-mai-târziu, singura
+     dintre cele cinci fără „Card" în eticheta din `payment-methods.ts`.
+     `rate` NU e la niciuna: Stripe închide lista pe `["card"]`, iar Netopia
+     primește `installments: 0` scris în cod. */
+  stripe: ["procesator"],
+  netopia: ["card", "cardul", "procesator", "checkout"],
+  ipay: ["card", "cardul", "procesator", "checkout", "banca"],
+  klarna: ["procesator", "checkout"],
+  revolut: ["card", "cardul", "procesator", "checkout"],
+
+  /* ── Facturare ─────────────────────────────────────────────────────────────
+     Numai cele trei livrate, și numai documentele care chiar se emit.
+     „contabilitate" nu intră nicăieri: Edinio emite documente, contabilitatea o
+     face omul în programul lui. Nici „e-factura"/„ANAF": nu există modul SPV,
+     iar `lib/anaf/` caută firma după CUI, la comenzile pe persoană juridică. */
+  smartbill: ["proforma", "storno"],
+  oblio: ["proforma"],
+  fgo: ["storno"],
+
+  /* ── Marketplace ───────────────────────────────────────────────────────────
+     OLX ține anunțuri, nu comenzi, și nu sincronizează stocul: la zero STINGE
+     anunțul (`olx/sync.ts`). */
+  olx: ["anunturi"],
+  emag: ["stoc"],
+  pepita: ["stoc", "comenzi"],
+
+  /* ── Marketing și statistici ───────────────────────────────────────────────
+     `shopping`: scope-ul Content al Merchant API e chiar permisiunea „Shopping"
+     de pe ecranul de consimțământ (`google-merchant/oauth.ts`), iar produsele se
+     împing acolo. Cuvântul căzuse la ZERO, și e chiar numele produsului.
+     `feed` numai la Meta: acolo chiar există generator RSS
+     (`facebook/catalog-feed.ts`). Google Merchant merge pe Content API, fără
+     feed scos de noi. */
+  googleMerchant: ["shopping"],
+  facebookCatalog: ["feed"],
+  googleAnalytics: ["ga4"],
+
+  /* ── Email marketing ───────────────────────────────────────────────────────
+     `newsletter`: cuvântul cădea la ZERO. Nu e o afirmație despre ce face
+     Edinio, ci despre la ce folosești unealta după ce îi trimitem clienții și
+     comenzile. theMarketer NU-l primește: e nelivrată. */
+  mailchimp: ["newsletter"],
+  brevo: ["newsletter"],
+  klaviyo: ["newsletter"],
+
+  /* ── SMS ───────────────────────────────────────────────────────────────────
+     ⚠ `whatsapp` e o capabilitate LIVRATĂ pe care textul nou n-o mai spune:
+     `notice.ts` face `POST /whatsapp/send`, chemat din `notice-notify.ts`. Fără
+     rândul ăsta, WhatsApp nu apare NICĂIERI pe site-ul de prezentare.
+     `abandonat`: amândouă trimit SMS de coș abandonat
+     (`abandoned-cart.actions.ts`). */
+  notice: ["whatsapp", "abandonat"],
+  smso: ["abandonat"],
+};
 
 /** Numele afișat al unei integrări. Vine din bibliotecă, nu se scrie de două ori. */
 export function numele(integrare: Integrare): string {
@@ -506,32 +680,65 @@ export function faraDiacritice(text: string): string {
 }
 
 /**
- * Ce se ia în seamă la căutare: numele, descrierea și rubrica.
+ * Ce se ia în seamă la căutare: numele, descrierea, rubrica și sinonimele.
  *
  * Rubrica intră dinadins: cine scrie „curier" se așteaptă să vadă toți curierii,
  * chiar dacă niciunul nu are cuvântul în nume.
+ *
+ * Sinonimele intră din același motiv, dar pentru cuvintele pe care descrierea
+ * nu le mai spune. Vezi blocul lor de mai sus: nu sunt text de pagină, sunt
+ * cuvinte de căutare, și fiecare are în spate o capabilitate din cod.
  */
 export function textDeCautare(integrare: Integrare): string {
   const categorie = CATEGORII.find((c) => c.id === integrare.categorie);
   return faraDiacritice(
-    `${numele(integrare)} ${integrare.descriere} ${categorie?.eticheta ?? ""}`,
+    [
+      numele(integrare),
+      integrare.descriere,
+      categorie?.eticheta ?? "",
+      (SINONIME[integrare.cheie] ?? []).join(" "),
+      SINONIME_CATEGORIE[integrare.categorie].join(" "),
+    ].join(" "),
   );
 }
+
+/**
+ * Cuvintele de legătură, scoase din căutare.
+ *
+ * ⚠ DE CE. Potrivirea cere ca FIECARE cuvânt scris să apară undeva. Asta e bine
+ * pentru cuvinte care spun ceva, și rău pentru „de": „punct de ridicare"
+ * întorcea UN singur curier din zece, fiindcă doar textul lui FAN Courier
+ * conținea din întâmplare grupul de litere „de" (în „de la AWB"). Ceilalți nouă
+ * ofereau exact același lucru și cădeau pe o prepoziție.
+ *
+ * Nu e o listă de oprire de motor de căutare, e scurtă dinadins: doar cuvinte
+ * care nu deosebesc NICIODATĂ o integrare de alta. Un cuvânt scos din greșeală
+ * de aici lărgește rezultatele, nu le taie, deci greșeala e în partea blândă.
+ */
+const CUVINTE_DE_LEGATURA = new Set([
+  "de", "cu", "la", "in", "pe", "din", "si", "sau", "prin", "pentru", "ca",
+  "un", "o", "a", "al", "ale", "lui", "se", "isi", "iti",
+]);
 
 /**
  * Adevărat dacă integrarea răspunde la ce s-a scris în bara de căutare.
  *
  * ⚠ SE POTRIVESC CUVINTELE, NU FRAZA. Prima formă căuta tot ce se scrisese ca pe
  * un singur șir, iar defectul a ieșit din chiar exemplul din bara de căutare:
- * „plăți în rate" întorcea ZERO. Cuvintele există toate — „plăți" e rubrica,
- * „rate" e în descrierea lui Netopia și a lui TBI — dar nu una lângă alta, în
- * ordinea aia, în același text.
+ * „plăți în rate" întorcea ZERO. Cuvintele există toate, dar nu una lângă alta,
+ * în ordinea aia, în același text.
  *
  * Un om nu scrie un citat, scrie cuvintele care îi vin. Deci: fiecare cuvânt
- * trebuie să apară undeva, oriunde, în oricare ordine.
+ * trebuie să apară undeva, oriunde, în oricare ordine. Afară de cele de
+ * legătură, care nu spun nimic despre ce caută omul.
+ *
+ * ⚠ Dacă a scris DOAR cuvinte de legătură, se poartă ca o căutare goală și nu
+ * filtrează nimic. Altfel „de" ar fi întors zero, iar pagina ar fi arătat
+ * ecranul „nu găsim nimic" pentru o prepoziție.
  */
 export function potrivire(integrare: Integrare, cautare: string): boolean {
-  const cuvinte = faraDiacritice(cautare).split(/\s+/).filter(Boolean);
+  const scrise = faraDiacritice(cautare).split(/\s+/).filter(Boolean);
+  const cuvinte = scrise.filter((c) => !CUVINTE_DE_LEGATURA.has(c));
   if (cuvinte.length === 0) return true;
   const text = textDeCautare(integrare);
   return cuvinte.every((c) => text.includes(c));

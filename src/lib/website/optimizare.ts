@@ -8,7 +8,7 @@ export const PERFORMANTA = {
   eyebrow: "Performanță",
   titlu: "Un magazin rapid se simte de la primul click.",
   descriere:
-    "Edinio este construit pentru încărcare rapidă și o experiență fluidă, indiferent dacă magazinul este accesat de pe telefon sau desktop.",
+    "Totul este optimizat pentru ca magazinul să se încarce rapid și să funcționeze fără probleme pe orice dispozitiv.",
 } as const;
 
 export interface CardPerformanta {

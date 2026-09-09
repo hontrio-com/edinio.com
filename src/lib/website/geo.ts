@@ -12,7 +12,7 @@ export const GEO = {
   eyebrow: "GEO",
   titlu: "Pregătit și pentru căutările bazate pe AI",
   descriere:
-    "Edinio organizează informațiile despre produse și magazin într-o structură clară, astfel încât să poată fi înțelese mai ușor de motoarele de căutare și sistemele bazate pe AI.",
+    "Produsele și informațiile magazinului sunt structurate astfel încât să poată fi interpretate atât de motoarele de căutare, cât și de sistemele bazate pe AI.",
 } as const;
 
 /** Întrebarea pusă în fereastra de discuție, cerută de client. */

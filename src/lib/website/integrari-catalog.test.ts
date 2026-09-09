@@ -14,8 +14,10 @@ import {
   ordonate,
   potrivire,
   textDeCautare,
+  SINONIME,
+  SINONIME_CATEGORIE,
 } from "./integrari-catalog";
-import { PROVIDER_LOGOS, logoSize } from "./logos";
+import { PROVIDER_LOGOS, logoSize, type LogoKey } from "./logos";
 
 const AICI = dirname(fileURLToPath(import.meta.url));
 const PANOU = join(AICI, "..", "..", "app", "(dashboard)", "dashboard", "features", "page.tsx");
@@ -47,9 +49,14 @@ test("descrierile sunt o propoziție, nu un paragraf", () => {
     const d = integrare.descriere;
     assert.ok(d.length >= 30, `${integrare.cheie}: descriere prea scurtă`);
     /*
-      Peste ~110 semne descrierea trece de patru rânduri pe un card de 280px si
-      cardurile din acelasi rand nu mai au aceeasi inaltime. Masurat pe grila de
-      trei coloane, la 13px.
+      Peste ~110 semne descrierea trece de patru rânduri pe un card de 280px.
+      Masurat pe grila de trei coloane, la 13px.
+
+      ⚠ 09.09.2026: aici scria si ca „cardurile din acelasi rand nu mai au
+      aceeasi inaltime". E FALS pe codul de azi: cardurile stau in `<li>`-uri de
+      grila, iar `<article>` are `h-full` (`BibliotecaIntegrari.tsx`), deci se
+      egalizeaza singure. Ce creste in realitate e INALTIMEA RANDULUI si golul
+      de sub cardurile scurte. Pragul ramane bun, motivul era gresit.
     */
     assert.ok(d.length <= 110, `${integrare.cheie}: ${d.length} semne, prea lungă`);
     assert.ok(d.endsWith("."), `${integrare.cheie}: descrierea nu se termină cu punct`);
@@ -75,12 +82,15 @@ test("descrierile sunt o propoziție, nu un paragraf", () => {
 test("descrierile nu se laudă: fără superlative nesusținute", () => {
   /*
     Publicitate comparativa, reglementata: fiecare afirmatie trebuie sa fie
-    verificabila. „Cel mai bun procesator" nu e. Singura exceptie ingaduita e
-    eMAG, unde marimea nu e contestata de nimeni pe piata din Romania.
+    verificabila. „Cel mai bun procesator" nu e.
+
+    ⚠ 09.09.2026: exista o exceptie, `emag`, fiindca vechea lui descriere zicea
+    „cel mai mare marketplace din Romania". Textul nou al clientului n-o mai
+    zice, si NICIUNA din cele 65 nu mai atinge tiparul. Deci exceptia a fost
+    SCOASA: lasata acolo, era o gaura in plasa exact pe cheia unde superlativul
+    e cel mai tentant. Daca se vrea inapoi, proba cade si cere o hotarare.
   */
-  const exceptii = new Set(["emag"]);
   for (const integrare of INTEGRARI) {
-    if (exceptii.has(integrare.cheie)) continue;
     const d = faraDiacritice(integrare.descriere);
     assert.ok(
       !/\bcel mai\b|\bcea mai\b|\bcele mai\b|\bnr\.? ?1\b|\blider\b/.test(d),
@@ -113,13 +123,21 @@ test("se potrivesc CUVINTELE, nu fraza", () => {
   /*
     ⚠ Defectul a ieșit din chiar exemplul scris în bara de căutare: „plăți în
     rate" întorcea ZERO. Cuvintele există toate — „plăți" e rubrica, „rate" e în
-    descrierea lui Netopia și a lui TBI — dar nu una lângă alta, în ordinea aia,
-    în același text. Un om nu scrie un citat, scrie cuvintele care îi vin.
+    descrierea lui Netopia și a lui Klarna, dar nu una lângă alta, în ordinea
+    aia, în același text. Un om nu scrie un citat, scrie cuvintele care îi vin.
+
+    ⚠ 09.09.2026: aici scria TBI. Clientul a dat texte noi pentru toate cele 65,
+    iar DOUĂ integrări de rate au rămas fără cuvântul „rate": TBI („finanțarea
+    tbi ... la cumpărare") și EuPlătesc („plata online prin procesatorul
+    românesc EuPlătesc"). Deci niciuna nu mai iese la căutarea „plăți în rate",
+    care e chiar exemplul scris în bara de căutare. Se repară adăugând cuvântul
+    în descriere, nu aici: proba păzește REGULA (cuvintele, oriunde, în orice
+    ordine), deci se poate rezema pe oricare două integrări care o arată.
   */
   const gaseste = (q: string) => INTEGRARI.filter((i) => potrivire(i, q)).map((i) => i.cheie);
 
   assert.ok(gaseste("plăți în rate").includes("netopia"));
-  assert.ok(gaseste("plati in rate").includes("tbi"));
+  assert.ok(gaseste("plati in rate").includes("klarna"));
   /* Ordinea cuvintelor nu contează. */
   assert.deepEqual(gaseste("rate plati").sort(), gaseste("plati rate").sort());
 
@@ -284,6 +302,218 @@ test("stările din catalog sunt cele din panou", () => {
     [],
     `site-ul spune „În curând" despre integrări pe care panoul le activează: ${mint.join(", ")}`,
   );
+});
+
+/* ═══════════════════ SINONIMELE DE CĂUTARE ═══════════════════ */
+
+test("sinonimele stau pe integrări care există, și pe niciuna anunțată", () => {
+  const dinCatalog = new Map(INTEGRARI.map((i) => [i.cheie, i]));
+
+  for (const cheie of Object.keys(SINONIME) as LogoKey[]) {
+    const integrare = dinCatalog.get(cheie);
+    assert.ok(integrare, `sinonime pe „${cheie}", care nu e în catalog`);
+    /*
+      ⚠ NIMIC PE „ÎN CURÂND". O integrare nelivrată n-are cod, deci un sinonim
+      n-are cum să aibă dovadă: ar descrie o promisiune. Iar cine caută „ramburs"
+      și vede un card crede că poate încasa la livrare prin el.
+    */
+    assert.equal(
+      integrare.stare,
+      "activa",
+      `„${cheie}" e anunțată, nu livrată, și n-are ce căuta în sinonime`,
+    );
+    assert.ok((SINONIME[cheie] ?? []).length > 0, `„${cheie}": listă goală, se scoate cheia`);
+  }
+});
+
+test("niciun sinonim nu repetă ce se găsește deja", () => {
+  /*
+    Un sinonim care se găsea și fără el nu apără nimic și minte pe cel care
+    citește tabelul: pare că acolo s-a luat o hotărâre, când de fapt cuvântul era
+    deja în nume, în descriere sau în eticheta rubricii. Prima formă a tabelului
+    avea patru așa („international" la DPD, DHL, FedEx, UPS), toate adevărate și
+    toate degeaba.
+  */
+  const degeaba: string[] = [];
+  for (const integrare of INTEGRARI) {
+    const proprii = SINONIME[integrare.cheie] ?? [];
+    if (proprii.length === 0) continue;
+    const categorie = CATEGORII.find((c) => c.id === integrare.categorie);
+    const faraSinonimeProprii = faraDiacritice(
+      `${numele(integrare)} ${integrare.descriere} ${categorie?.eticheta ?? ""} ${SINONIME_CATEGORIE[integrare.categorie].join(" ")}`,
+    );
+    for (const s of proprii) {
+      if (faraSinonimeProprii.includes(faraDiacritice(s))) {
+        degeaba.push(`${integrare.cheie}/${s}`);
+      }
+    }
+  }
+  assert.deepEqual(degeaba, [], `sinonime care se găseau și fără ele: ${degeaba.join(", ")}`);
+});
+
+test("un cuvânt de rubrică e adevărat la TOȚI membrii ei, deci nu se repetă pe integrare", () => {
+  /*
+    Rostul deosebirii: „curierat" e adevărat despre toți cei 17, deci stă pe
+    rubrică. „awb" e adevărat la 16 din 17 (Pall-Ex scoate borderou de paleți),
+    deci stă pe integrare. Dacă cineva urcă un cuvânt de pe integrări pe rubrică
+    fără să verifice, îl dă și celui care nu-l merită.
+  */
+  for (const c of CATEGORII) {
+    const aleRubricii = SINONIME_CATEGORIE[c.id];
+    const membri = INTEGRARI.filter((i) => i.categorie === c.id);
+    for (const s of aleRubricii) {
+      const peIntegrare = membri.filter((i) => (SINONIME[i.cheie] ?? []).includes(s));
+      assert.deepEqual(
+        peIntegrare.map((i) => i.cheie),
+        [],
+        `„${s}" e și pe rubrica ${c.id}, și pe integrare: unul din două e de prisos`,
+      );
+    }
+  }
+});
+
+test("rambursul nu ajunge la cei trei curieri care nu-l au", () => {
+  /*
+    ⚠ ASTA E PROBA CARE APĂRĂ CEL MAI MULT. Un sinonim e o promisiune: cine caută
+    „ramburs" și vede cardul unui curier crede că poate încasa la livrare prin el.
+
+    Trei nu pot, și fiecare o spune în codul lui:
+      DHL     `dhl/servicii.ts`  „EXISTA CA SI COD, SI NU SE VINDE DIN ROMANIA";
+                                 `DateExpediere` n-are deloc câmp de ramburs.
+      FedEx   `fedex/client.ts`  `RAMBURS_INDISPONIBIL`; câmpul există DOAR ca să
+                                 oprească emiterea (`fedex/expediere.ts`).
+      Pall-Ex `pallex/client.ts` „nu exista ramburs. Niciun camp"; integrarea
+                                 refuză comanda cu bani de luat.
+  */
+  const FARA_RAMBURS: LogoKey[] = ["dhl", "fedex", "pallex"];
+  const iesLaRamburs = INTEGRARI.filter((i) => potrivire(i, "ramburs")).map((i) => i.cheie);
+
+  for (const cheie of FARA_RAMBURS) {
+    assert.equal(
+      iesLaRamburs.includes(cheie),
+      false,
+      `„${cheie}" iese la căutarea „ramburs", dar nu încasează la livrare`,
+    );
+  }
+  /* Și, în sens invers, ceilalți paisprezece chiar ies: altfel proba ar trece și
+     pe un tabel golit de tot. */
+  const curieri = INTEGRARI.filter((i) => i.categorie === "curieri");
+  assert.equal(iesLaRamburs.length, curieri.length - FARA_RAMBURS.length);
+});
+
+test("urmărirea iese exact la curierii care au cron de urmărire", () => {
+  /*
+    Sursa adevărului nu e o listă scrisă de mână aici, e `vercel.json`: un curier
+    are urmărire dacă și numai dacă are cron. Așa, când se livrează urmărirea
+    pentru al treisprezecelea, proba cade și cere cuvântul, în loc să tacă.
+
+    ⚠ FAN Courier NU e printre ei, deși descrierea clientului spune „de la AWB
+    până la tracking". Cuvântul „tracking" îl găsește azi PRIN DESCRIERE, iar
+    proba asta se uită doar la ce dăm noi în plus.
+  */
+  const CRON_LA_CHEIE: Record<string, LogoKey> = {
+    dhl: "dhl", ecolet: "ecolet", fedex: "fedex", gls: "gls", innoship: "innoship",
+    packeta: "packeta", pallex: "pallex", posta: "postaRomana", sameday: "sameday",
+    shipo: "shipo", smartship: "smartship", ups: "ups",
+  };
+  const vercel = readFileSync(join(AICI, "..", "..", "..", "vercel.json"), "utf8");
+  const cuCron = new Set(
+    [...vercel.matchAll(/"\/api\/cron\/([a-z-]+)-tracking"/g)].map((m) => CRON_LA_CHEIE[m[1]]),
+  );
+
+  assert.ok(cuCron.size > 0, "n-am citit niciun cron de urmărire din vercel.json");
+  assert.equal(cuCron.has(undefined as unknown as LogoKey), false, "cron de urmărire fără cheie știută");
+
+  const cuSinonim = new Set(
+    INTEGRARI.filter((i) => (SINONIME[i.cheie] ?? []).includes("urmarire")).map((i) => i.cheie),
+  );
+  assert.deepEqual([...cuSinonim].sort(), [...cuCron].sort());
+});
+
+test("punct de ridicare arată exact curierii unde cumpărătorul chiar alege punctul", () => {
+  /*
+    ⚠ Nu e destul ca API-ul curierului să aibă lista de puncte: trebuie ca omul
+    să și poată alege unul LA CHECKOUT. Woot are puncte, dar le alege
+    comerciantul după comandă, deci un „locker" pe cardul lui ar promite
+    cumpărătorului o alegere pe care n-o are.
+
+    Sursa adevărului e `CURIERI_CU_LOCKERE` din `shipping.actions.ts`, citită de
+    aici ca să nu ajungă două liste ale aceluiași lucru.
+  */
+  const ID_LA_CHEIE: Record<string, LogoKey> = {
+    sameday: "sameday", "fan-courier": "fanCourier", dpd: "dpd", cargus: "cargus",
+    gls: "gls", posta: "postaRomana", innoship: "innoship", packeta: "packeta",
+    smartship: "smartship", shipo: "shipo", ups: "ups",
+  };
+  const sursa = readFileSync(
+    join(AICI, "..", "..", "lib", "actions", "shipping.actions.ts"),
+    "utf8",
+  );
+  const linia = /const CURIERI_CU_LOCKERE = new Set\(\[([^\]]+)\]\)/.exec(sursa);
+  assert.ok(linia, "n-am găsit CURIERI_CU_LOCKERE: s-a mutat sau i s-a schimbat forma");
+  const cuPuncte = new Set(
+    [...linia[1].matchAll(/"([^"]+)"/g)].map((m) => ID_LA_CHEIE[m[1]]),
+  );
+  assert.equal(cuPuncte.has(undefined as unknown as LogoKey), false, "curier cu lockere fără cheie știută");
+
+  const gasite = INTEGRARI.filter((i) => potrivire(i, "punct de ridicare")).map((i) => i.cheie);
+  assert.deepEqual(gasite.sort(), [...cuPuncte].sort());
+});
+
+test("căutările care cădeau la ZERO după textele noi întorc iar ce trebuie", () => {
+  /*
+    ⚠ Fiecare rând de aici a fost măsurat CĂZUT pe 09.09.2026, după ce clientul a
+    înlocuit toate cele 65 de descrieri. Cuvintele stăteau numai în descriere, iar
+    descrierea e a lui și se schimbă. Proba e ce ține sinonimele legate de
+    întrebările pe care le pune un comerciant.
+  */
+  const gaseste = (q: string) => INTEGRARI.filter((i) => potrivire(i, q)).map((i) => i.cheie);
+
+  /* Cădeau la zero de tot. */
+  assert.equal(gaseste("ramburs").length, 14);
+  assert.equal(gaseste("curierat").length, 17);
+  assert.equal(gaseste("expediere").length, 17);
+  assert.deepEqual(gaseste("whatsapp"), ["notice"]);
+  assert.deepEqual(gaseste("shopping"), ["googleMerchant"]);
+  assert.equal(gaseste("newsletter").length, 3);
+
+  /*
+    ⚠ CEA MAI STRICATĂ CĂUTARE DE PE PAGINĂ, și e mai veche decât textele noi:
+    „plata" (singular) nu era în textul niciunuia dintre cele CINCI procesatoare
+    care merg. „plata online" întorcea patru carduri, TOATE nelivrate: omul care
+    scria cel mai firesc lucru din lume vedea numai promisiuni.
+  */
+  const laPlataOnline = gaseste("plata online");
+  const LIVRATE: LogoKey[] = ["stripe", "netopia", "ipay", "klarna", "revolut"];
+  for (const cheie of LIVRATE) {
+    assert.ok(laPlataOnline.includes(cheie), `„plata online" nu-l mai găsește pe ${cheie}`);
+  }
+
+  /* Se subțiaseră fără să cadă de tot. */
+  assert.ok(gaseste("card").includes("netopia"));
+  assert.ok(gaseste("awb").includes("ecolet"));
+  assert.ok(gaseste("livrare").length === 17);
+});
+
+test("cuvintele de legătură nu taie rezultate", () => {
+  /*
+    ⚠ „punct de ridicare" întorcea UN singur curier din unsprezece, fiindcă doar
+    textul lui FAN Courier conținea din întâmplare grupul de litere „de" (în „de
+    la AWB"). Ceilalți zece ofereau exact același lucru și cădeau pe o prepoziție.
+  */
+  const cate = (q: string) => INTEGRARI.filter((i) => potrivire(i, q)).length;
+
+  assert.equal(cate("punct de ridicare"), cate("punct ridicare"));
+  assert.equal(cate("plata cu cardul"), cate("plata cardul"));
+  assert.equal(cate("plati in rate"), cate("plati rate"));
+
+  /* Scrise DOAR cuvinte de legătură, se poartă ca o căutare goală: altfel „de"
+     ar fi scos ecranul „nu găsim nimic" pentru o prepoziție. */
+  assert.equal(cate("de"), INTEGRARI.length);
+  assert.equal(cate("cu la"), INTEGRARI.length);
+
+  /* Dar un cuvânt care chiar nu există taie tot, chiar lângă unul de legătură. */
+  assert.equal(cate("de qwerty"), 0);
 });
 
 /** `sameday-mic.webp` și `sameday.webp` sunt aceeași marcă. */

@@ -62,6 +62,21 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
         oprește suita decât să apară un link mort în subsolul FIECĂREI pagini.
       */
       { label: "Migrare gratuită", href: "/migrare" },
+      /*
+        Cele trei de mai jos au fost cerute de client pe 09.09.2026, chiar în
+        ordinea asta: „adaugă și Optimizare și Integrări și Prețuri". Etichetele
+        sunt cele din meniul de sus (`nav.ts`), nu variante scrise din nou: același
+        loc numit cu două cuvinte diferite în bară și în subsol se citește ca două
+        pagini, iar la prima redenumire s-ar fi despărțit oricum.
+
+        ⚠ Coloana are acum cinci rânduri, dar fracția `0.95fr` din grila lui
+        `Footer.tsx` NU se schimbă: ea e măsurată din cel mai lung text al
+        coloanei, iar „Mentenanță gratuită" rămâne cel mai lung. Niciuna dintre
+        cele trei nu se apropie de el.
+      */
+      { label: "Optimizare", href: "/optimizare" },
+      { label: "Integrări", href: "/integrari" },
+      { label: "Prețuri", href: "/preturi" },
     ],
   },
   {

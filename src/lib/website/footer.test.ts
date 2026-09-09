@@ -73,11 +73,16 @@ test("fiecare link intern din subsol duce la o pagina care exista", () => {
     treaca. Randul „Creare magazin online" a plecat odata cu pagina
     `/magazin-online`, stearsa la cererea clientului.
 
-    Nu se scoate pragul, se coboara. El apara cazul in care o citire de
-    configuratie se rupe si lista iese goala — atunci bucla de mai jos n-ar
-    verifica nimic si proba ar fi verde pe zero.
+    ⚠ SI A URCAT LA 12 pe 09.09.2026, cand clientul a cerut „Optimizare",
+    „Integrari" si „Preturi" in coloana Platforma. Pragul se muta ODATA cu lista,
+    in amandoua directiile: lasat la 9, ar fi lasat sa treaca in tacere pierderea
+    a trei randuri din patru, adica exact ce trebuie sa prinda.
+
+    Nu se scoate pragul, se muta. El apara cazul in care o citire de configuratie
+    se rupe si lista iese goala: atunci bucla de mai jos n-ar verifica nimic si
+    proba ar fi verde pe zero.
   */
-  assert.ok(interne.length >= 9, `doar ${interne.length} linkuri interne — s-a taiat ceva?`);
+  assert.ok(interne.length >= 12, `doar ${interne.length} linkuri interne, s-a taiat ceva?`);
 
   for (const link of interne) {
     assert.ok(

@@ -100,10 +100,41 @@ export default async function BlogPage({ searchParams }: Props) {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdSafe(listaBlogJsonLd()) }} />
 
+      {/*
+        ⚠ CENTRAT, CA `/intrebari-frecvente` ȘI `/contact`, cerut de client pe
+        09.09.2026. Diferența se vedea trecând dintr-o pagină în alta: dintre
+        paginile la care se ajunge din bara de sus, `/preturi`,
+        `/intrebari-frecvente` și `/contact` au capul pe mijloc, iar `/blog`
+        pornea din marginea stângă.
+
+        ⚠ NU ERA SINGURA PAGINĂ CU FIRIMITURI LA STÂNGA, și merită spus, ca să nu
+        pară o scăpare rămasă în urmă: celelalte pagini de blog și paginile din
+        interiorul lui `/ajutor` sunt tot la stânga. La alea nu se ajunge din bară,
+        ci dintr-o listă, iar clientul a cerut anume pagina asta.
+
+        ⚠ SE CENTREAZĂ TOT CAPUL, nu doar firimiturile. `PageHero.tsx` povestește
+        perechea OPUSĂ, firimituri lăsate la stânga sub un titlu centrat, și o
+        respinge fiindcă rândul mic rămâne singur într-un colț. Jumătatea de
+        centrare arată prost în amândouă felurile, deci se mută tot capul sau
+        nimic.
+
+        ⚠ ȘI E O EXCEPȚIE DE LA REGULA DIN `PageHero.tsx`, scrisă aici ca să nu
+        pară o scăpare: acolo regula e că alinierea capului se potrivește cu
+        conținutul de sub el, iar sub capul ăsta grila de articole pornește din
+        marginea stângă. La `/intrebari-frecvente` placa stă chiar pe mijloc, deci
+        acolo regula și cererea spun același lucru; aici nu. A hotărât clientul,
+        care se uită la pagini, nu la reguli.
+
+        ⚠ NUMAI PAGINA ASTA. Cerut explicit: rubricile, etichetele, autorii,
+        căutarea și articolul rămân la stânga. Articolul mai ales, fiindcă sub
+        capul lui începe text aliniat la stânga, iar acolo regula de mai sus se
+        aplică fără nicio tensiune.
+      */}
       <PageHero
         sir={[ACASA, { label: "Blog" }]}
         title="Ghiduri și noutăți despre vânzarea online"
         lead="Scriem despre ce ține un magazin online pe picioare în România: curierat, facturare, plăți și tot ce aflăm construind Edinio."
+        aliniere="centru"
       />
 
       <section className="mx-auto max-w-[1200px] px-5 pt-10 pb-20 sm:px-6 lg:px-8 lg:pt-14">

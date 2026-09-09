@@ -71,31 +71,47 @@ export function BannerConsimtamant() {
       aria-modal="false"
       aria-label="Alegerea ta despre cookie-uri"
       /*
-        ⚠ CARTELA JOS-STANGA, NU BARA PE TOATA LATIMEA.
+        ⚠ DOUA FORME, DUPA LATIME: foaie lipita de marginea de jos pe telefon,
+        cartela jos-stanga de la `sm` in sus.
 
-        Prima forma era `inset-x-0 bottom-0` cu `bg-white/95` si acoperea butoanele
-        plutitoare de telefon si WhatsApp (`StickyContact`, `fixed bottom-6
-        right-6`). Iar fundalul semi-transparent lasa textul paginii sa razbata
-        prin el — arata a defect, nu a alegere.
+        Prima forma era `inset-x-0 bottom-0` cu `bg-white/95`: latimea era buna,
+        dar fundalul semi-transparent lasa textul paginii sa razbata prin el, si
+        atunci arata a defect, nu a alegere. Fundalul e OPAC de atunci, si asa
+        ramane.
 
-        Acum: fundal OPAC, si latime marginita ancorata la stanga, deci pe ecran
-        mare nu ajunge niciodata unde stau butoanele.
+        ⚠ PE TELEFON PORNESTE DE JOS DE TOT, si acopera butoanele plutitoare de
+        telefon si WhatsApp (`StickyContact`, `fixed bottom-6 right-6`, `z-30`).
+        Cerut de proprietar pe 09.09.2026, si e o alegere, nu o scapare: statea la
+        `bottom-[138px]`, exact cat sa treaca peste ele, si atunci plutea in
+        mijlocul ecranului, cu o dunga de pagina ramasa dedesubt.
 
-        ⚠ IAR PE TELEFON STA DEASUPRA LOR: `bottom-[138px]` = doua butoane de 48px
-        plus spatiul dintre ele plus `bottom-6`. Cifra e legata de `StickyContact`
-        (`fixed bottom-6 right-6`, doua ancore `h-12` cu `gap-2.5`) — daca se
-        adauga acolo un al treilea buton, aici trebuie crescuta.
+        ⚠ SI ODATA CU EA A PLECAT O CIFRA CARE PUTEA MINTI. `138px` era inaltimea
+        teancului de butoane din `StickyContact`, adica o masuratoare a ALTEI
+        componente, copiata aici cu mana. Un al treilea buton adaugat acolo ar fi
+        stricat asezarea in tacere, si nimic n-ar fi semnalat-o. Acum nu mai e
+        nimic de tinut in acord.
 
-        ⚠ SI DE CE ASA, si nu ridicand butoanele cat timp bannerul e afisat:
-        `StickyContact` e dinadins FARA `"use client"`, scos pe 31.08.2026 dupa ce
-        s-a masurat. Ar fi trebuit sa-l fac componenta de client ca sa asculte
-        consimtamantul — adica sa stric o optimizare dovedita ca sa-mi repar mie
-        asezarea. Bannerul se muta, nu ele.
+        ⚠ ACOPERIREA TINE CAT INTREBAREA, si numai atat. Bannerul se arata o
+        singura data, pana la primul raspuns; cele trei butoane ale lui sunt mereu
+        la indemana, iar dupa raspuns dispare cu totul si dedesubt totul e liber.
+        Asta e si motivul pentru care acoperirea e acceptabila: nu inchide nimic,
+        doar amana pana la o apasare.
+
+        ⚠ CE RAMANE DEASUPRA E DOAR BARA DE SUS (`z-50` in `SiteHeader`), fiindca
+        e `sticky top-0`, deci sta oricum in capul ecranului. Meniul de telefon
+        deschis e `z-40` (`MobileNav`, tot `fixed ... bottom-0`), deci trece PE SUB
+        banner. Asa era si inainte, cu bannerul tot pe `z-[60]`; se schimba doar
+        cat din meniu ramane acoperit. Un `z` mai mic aici ar fi mai rau: intrebarea
+        ar putea ajunge sub meniu, iar omul n-ar mai avea cum sa raspunda.
+
+        ⚠ DE LA `sm` IN SUS NU SE SCHIMBA NIMIC: latime marginita, ancorata la
+        stanga, deci pe ecran mare nu ajunge niciodata unde stau butoanele. De
+        acolo in sus se intorc si cele patru colturi, si chenarul intreg.
 
         ⚠ `z-[60]` ramane: peste `z-40` (bara de meniu) n-are voie nimic altceva,
         dar o intrebare la care omul TREBUIE sa poata raspunde e exceptia.
       */
-      className="fixed bottom-[138px] left-4 right-4 z-[60] rounded-[14px] border border-hairline bg-white shadow-[0_8px_40px_rgba(0,0,0,0.14)] sm:bottom-6 sm:left-6 sm:right-auto sm:max-w-[640px]"
+      className="fixed bottom-0 left-0 right-0 z-[60] rounded-t-[14px] border-t border-hairline bg-white shadow-[0_-8px_40px_rgba(0,0,0,0.14)] sm:bottom-6 sm:left-6 sm:right-auto sm:max-w-[640px] sm:rounded-[14px] sm:border sm:shadow-[0_8px_40px_rgba(0,0,0,0.14)]"
     >
       <div className="px-4 py-4 sm:px-5 sm:py-5">
         {!detaliat ? (

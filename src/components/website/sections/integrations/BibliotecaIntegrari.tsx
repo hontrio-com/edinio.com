@@ -112,8 +112,43 @@ export function BibliotecaIntegrari() {
           `items-start` e obligatoriu pentru ca panoul din stânga să se poată lipi
           la derulare: fără el, elementul se întinde pe toată înălțimea rândului
           și `sticky` n-are pe ce aluneca.
+
+          ═══ ⚠ `grid-rows-[auto_minmax(0,1fr)]`, ȘI FĂRĂ EL CĂUTAREA SE RUPE ═══
+
+          Rândurile erau lăsate amândouă pe `auto`, iar panoul din stânga le
+          traversează pe amândouă (`row-span-2`). Când e mai înalt decât ele două
+          la un loc, browserul îi împarte surplusul ÎN MOD EGAL între rânduri, așa
+          cere algoritmul de grilă. Cu lista întreagă de 65 de carduri nu se vede:
+          rândul al doilea e oricum mai înalt decât panoul, deci n-are ce împărți.
+
+          Dar căutarea taie lista. La un singur rezultat, rândurile ieșeau
+          `236px / 373px` în loc de `52px / 557px`: primul rând, care ține DOAR
+          bara de căutare de 52px, se umfla cu 184px de gol, iar cardul cădea la
+          jumătatea ecranului, despărțit de bara de căutare printr-o pată albă. E
+          exact ce se vedea în captura clientului (09.09.2026).
+
+          Cu al doilea rând flexibil, surplusul panoului se duce TOT în el:
+          rândul căutării rămâne cât bara, iar cardurile încep imediat sub ea.
+          Măsurat în browser, pe pagina din producție, înainte și după.
+
+          ⚠ Nu se repară nici cu `self-start` pe rezultate, nici cu altă spațiere:
+          cardul chiar STĂ la începutul rândului lui. Rândul e cel greșit.
+
+          ⚠ `minmax(0,1fr)` ȘI NU `1fr`, dar NU pentru că ar schimba ceva aici.
+          Măsurat: cu `auto_1fr` ies exact aceleași `52px / 557px`. Minimul
+          implicit al unei piste flexibile e `auto`, numai că pe un RÂND acela e o
+          înălțime de conținut, iar aici e 189px, mult sub cei 557 la care se
+          așază fracția. Deci pragul nu se atinge în nicio stare a paginii.
+
+          Se scrie totuși `minmax(0,1fr)`, ca să se citească la fel cu coloana de
+          alături, unde clema chiar lucrează: acolo minimul e o LĂȚIME de conținut,
+          iar grila de carduri de sub ea l-ar împinge.
+
+          ⚠ Deci nu copia forma asta pe un rând crezând că apără de lățime. Pe
+          rânduri apără de înălțime, și numai când conținutul chiar e mai înalt
+          decât pista.
         */}
-        <div className="mt-10 flex flex-col gap-6 lg:mt-12 lg:grid lg:grid-cols-[236px_minmax(0,1fr)] lg:items-start lg:gap-x-10 lg:gap-y-6">
+        <div className="mt-10 flex flex-col gap-6 lg:mt-12 lg:grid lg:grid-cols-[236px_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:items-start lg:gap-x-10 lg:gap-y-6">
           {/* ── Căutarea ────────────────────────────────────────────────── */}
           <div className="lg:col-start-2 lg:row-start-1">
             <BaraDeCautare

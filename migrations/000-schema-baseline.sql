@@ -7144,7 +7144,8 @@ create table if not exists public.pepita_comenzi (
   incercari integer default 0 not null,
   ultima_eroare text,
   eticheta_stare text,
-  eticheta_la timestamp with time zone);
+  eticheta_la timestamp with time zone,
+  eticheta_sha256 text);
 
 create table if not exists public.pepita_listari (
   id uuid default gen_random_uuid() not null,

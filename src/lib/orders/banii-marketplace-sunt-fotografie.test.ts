@@ -5,6 +5,7 @@ import { recalculeazaTotal } from "@/lib/orders/edit-pricing";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
 import { liniiSmartbill, reconciliazaComanda } from "@/lib/billing/reconcile";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
+import { livrareaEDusaDeMarketplace } from "@/lib/orders/origin";
 
 /* ══════════════════════════════════════════════════════════════════════════
    BANII UNEI COMENZI DE MARKETPLACE SUNT O FOTOGRAFIE (09.09.2026)
@@ -146,10 +147,27 @@ test("⚠ Pepita Delivery: datele destinatarului nu se corecteaza local", () => 
    * arata adresa noua si coletul ar pleca la cea veche — iar comerciantul ar avea toate motivele
    * sa creada ca a corectat-o.
    */
+  /*
+   * ⚠ PRIN HELPERUL COMUN, NU PRIN STEAGUL CRUD.
+   *
+   * Comenzile intrate INAINTE ca `livrare_pepita` sa existe poarta doar `pepita_delivery_mode`.
+   * Prima varianta a portii citea strict `livrare_pepita === true`, deci ele treceau — desi
+   * eticheta lor e tot a Pepitei, si coletul tot dupa ea pleaca. AWB-ul propriu si loturile
+   * foloseau deja helperul; editorul nu.
+   */
   assert.match(
-    FARA_COMENTARII, /livrare_pepita\?: unknown \} \| null\)\?\.livrare_pepita === true/,
-    "poarta Pepita Delivery nu se mai uita la steagul din `order_source`",
+    FARA_COMENTARII, /const livrarePepita = livrareaEDusaDeMarketplace\(order\.order_source\);/,
+    "poarta Pepita Delivery nu mai trece prin helperul comun, deci comenzile vechi scapa",
   );
+  /* Si helperul chiar stie sa raspunda pentru amandoua formele. */
+  assert.equal(livrareaEDusaDeMarketplace({ livrare_pepita: true }), true);
+  assert.equal(
+    livrareaEDusaDeMarketplace({ marketplace: "pepita", pepita_delivery_mode: "gls_parcellocker" }), true,
+    "comanda veche, cu doar `pepita_delivery_mode`, nu mai e recunoscuta ca Pepita Delivery",
+  );
+  /* ⚠ Si NU raspunde da pentru o comanda Pepita obisnuita, unde expediaza comerciantul. */
+  assert.equal(livrareaEDusaDeMarketplace({ marketplace: "pepita" }), false);
+  assert.equal(livrareaEDusaDeMarketplace({ livrare_pepita: false, pepita_delivery_mode: "gls" }), false);
   const i = FARA_COMENTARII.indexOf("const livrarePepita");
   assert.ok(i > 0);
   const bloc = FARA_COMENTARII.slice(i, i + 1200);
@@ -157,14 +175,33 @@ test("⚠ Pepita Delivery: datele destinatarului nu se corecteaza local", () => 
   for (const camp of ["name", "phone", "customer_email", "address", "city", "county", "postal_code"]) {
     assert.match(bloc, new RegExp(camp), `„${camp}" nu mai e comparat, deci se poate schimba tacut`);
   }
-  assert.match(bloc, /Resend order/, "mesajul nu mai spune care e calea adevarata");
+  /*
+   * ⚠ MESAJUL SPUNE UNDE SE FACE, dar NU promite un mecanism pe care ei nu-l documenteaza.
+   *
+   * Documentatia lor descrie transmiterea intr-o singura directie, iar „Resend order" ca pe o
+   * reincercare dupa un esec tehnic — nu ca pe o cale de editare a unei comenzi deja trimise.
+   * Noi suntem pregatiti daca sarcina vine schimbata (datele si eticheta se rescriu), dar asta e
+   * partea NOASTRA: scrisa pe ecran ca o garantie, ar fi un sfat care se poate sa nu se tina.
+   */
+  assert.match(bloc, /Pepita Admin/, "mesajul nu mai spune unde se face corectura");
+  assert.doesNotMatch(
+    bloc, /apasă „Resend order|apasa „Resend order/,
+    "mesajul promite din nou „Resend order” ca pe o cale garantata de resincronizare",
+  );
 });
 
-test("⚠ si «Resend order» chiar aduce datele inapoi, altfel poarta ar fi un «nu» fara urmare", () => {
+test("⚠ daca sarcina vine SCHIMBATA, o preluam — destinatar si eticheta deopotriva", () => {
   /*
-   * ⚠ LECTIA CARE A COSTAT DEJA: un „nu se poate" fara urmatoarea miscare l-a pus pe comerciant
-   * sa apese de 208 ori un buton care n-avea cum sa mearga. Daca inchidem corectura locala,
-   * retrimiterea TREBUIE sa rescrie destinatarul.
+   * ═══ ⚠ CE APARA, SI CE NU PROMITE ═══
+   *
+   * Documentatia lor descrie transmiterea intr-o singura directie, iar „Resend order" ca pe o
+   * reincercare dupa un esec tehnic — nu ca pe o cale de editare a unei comenzi deja trimise.
+   * Deci proba asta NU spune ca resincronizarea exista la ei. Spune ca, DACA sarcina vine
+   * schimbata, noi o luam corect: si datele destinatarului, si eticheta.
+   *
+   * ⚠ SI CELE DOUA TREBUIE SA MEARGA IMPREUNA. Ziua in care am facut una fara alta, comanda a
+   * ajuns cu adresa noua pe ecran si cu eticheta veche in imprimanta — coletul pleaca dupa
+   * eticheta. Doua reparatii bune, care puse una fara alta fac o paguba noua.
    */
   const ingest = readFileSync("src/lib/pepita/ingest.ts", "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
   assert.match(ingest, /async function improspateazaDestinatarul\(/);
@@ -178,6 +215,11 @@ test("⚠ si «Resend order» chiar aduce datele inapoi, altfel poarta ar fi un 
     assert.match(corp, new RegExp(camp), `„${camp}" nu se mai reimprospateaza`);
   }
   assert.match(corp, /\.\.\.prev,/, "adresa se inlocuieste, deci se pierd cheile puse de noi peste ea");
+
+  /* ⚠ SI ETICHETA, in aceeasi trecere: comparata pe CONTINUT, ca una noua sa o inlocuiasca pe
+     cea veche. Fara randul asta, adresa s-ar reimprospata iar PDF-ul ar ramane cel vechi. */
+  assert.match(ingest, /const sha = createHash\("sha256"\)\.update\(citita\.octeti\)/);
+  assert.match(ingest, /if \(shaCunoscut && shaCunoscut === sha\)/);
 });
 
 test("⚠ `editeaza_comanda_atomic` chiar scrie regimul de pret", () => {

@@ -4232,6 +4232,7 @@ export type Database = {
         Row: {
           business_id: string
           eticheta_la: string | null
+          eticheta_sha256: string | null
           eticheta_stare: string | null
           external_order_id: string
           id: string
@@ -4248,6 +4249,7 @@ export type Database = {
         Insert: {
           business_id: string
           eticheta_la?: string | null
+          eticheta_sha256?: string | null
           eticheta_stare?: string | null
           external_order_id: string
           id?: string
@@ -4264,6 +4266,7 @@ export type Database = {
         Update: {
           business_id?: string
           eticheta_la?: string | null
+          eticheta_sha256?: string | null
           eticheta_stare?: string | null
           external_order_id?: string
           id?: string

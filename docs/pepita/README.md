@@ -95,6 +95,11 @@ recunoscut, pentru comenzile vechi.
   változtatni nem szabad" — dacă un produs a fost predat o dată ca variațional, nu are voie să fie
   schimbat. Adică trecerea de la aplatizat la `<Variations>` nu e o hotărâre care se poate lua de
   două ori.
+- ⚠ **Și de aceea nu promitem „Resend order" ca resincronizare.** Suntem pregătiți: dacă sarcina
+  vine schimbată, rescriem destinatarul (`improspateazaDestinatarul`) și înlocuim eticheta când
+  amprenta ei diferă (`pastreazaEticheta`). Dar asta e partea **noastră**. Pe ecran, mesajul îi
+  spune comerciantului doar să corecteze la ei — nu că apăsând un buton se va sincroniza sigur.
+  Un sfat care se poate să nu se țină e mai rău decât lipsa lui.
 - **Răspunsul așteptat de ei** are `isError`, `responseCode` și un mesaj. Nu descrie niciun
   protocol de reîncercare: „Resend order" e un buton apăsat de om în panoul lor.
 - ⚠ **Nicio limită de dimensiune** a corpului cererii nu e documentată, în nicio limbă. Nu scriu

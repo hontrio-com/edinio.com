@@ -778,8 +778,16 @@ test("⚠ retrimiterea INCEARCA DIN NOU eticheta, altfel ea era pierduta definit
    * doua drumuri ar ramane fara recuperare, tacut. O proba pe purtare, cu un depozit fals, ar fi
    * spus doar ca „s-a incercat o data", nu si CA AMANDOUA drumurile trec pe acolo.
    *
-   * ⚠ Si se cere steagul `true`: fara el, retrimiterea ar rescrie eticheta la fiecare sosire, iar
-   * „Resend order" apasat de zece ori ar insemna zece scrieri in depozit pentru acelasi PDF.
+   * ⚠ Si se cere AMPRENTA CITITA DIN BAZA, nu un steag.
+   *
+   * Pana pe 09.09.2026 aici statea `true`, care insemna „daca exista o eticheta in depozit, n-o
+   * mai scrie". Bun cat timp retrimiterea insemna „aceeasi comanda, inca o data" — si gresit din
+   * clipa in care retrimiterea a inceput sa reimprospateze si DESTINATARUL: comanda venea cu
+   * adresa B si cu eticheta B, iar noi scriam adresa B si pastram eticheta A. Panoul arata o
+   * adresa, PDF-ul tiparit alta, si coletul pleaca dupa PDF.
+   *
+   * Amprenta raspunde la intrebarea buna: „e ALTA eticheta?". Zece retrimiteri identice tot nu
+   * scriu nimic; una cu eticheta noua o inlocuieste.
    */
   const sursa = readFileSync("src/lib/pepita/ingest.ts", "utf8");
   const i = sursa.indexOf("if (rand.order_id) {");
@@ -790,8 +798,46 @@ test("⚠ retrimiterea INCEARCA DIN NOU eticheta, altfel ea era pierduta definit
   const inainteDeDespartire = sursa.slice(i, j);
   assert.match(
     inainteDeDespartire,
-    /await pastreazaEticheta\(ctx\.businessId, rand\.order_id, c, true\)/,
-    "retrimiterea nu mai incearca eticheta inaintea celor doua drumuri",
+    /await pastreazaEticheta\(ctx\.businessId, rand\.order_id, c, rand\.eticheta_sha256 \?\? null\)/,
+    "retrimiterea nu mai incearca eticheta inaintea celor doua drumuri, sau nu-i mai da amprenta",
+  );
+});
+
+test("⚠ o eticheta NOUA o inlocuieste pe cea veche; una identica nu costa nimic", () => {
+  /*
+   * ═══ ⚠ CELE DOUA HOTARARI CARE S-AU CIOCNIT ═══
+   *
+   * Intr-o singura zi am facut retrimiterea sa reimprospateze destinatarul, si am lasat pastrarea
+   * etichetei pe regula veche „daca exista una, n-o mai scrie". Impreuna, ele trimiteau coletul
+   * la adresa veche cu adresa noua pe ecran — adica exact paguba pe care poarta din editor o
+   * inchisese cu o ora inainte, intrata pe alta usa.
+   *
+   * ⚠ CE SE CERE AICI, SI DE CE ASA: comparatia e pe CONTINUT (sha256 al octetilor decodati), nu
+   * pe existenta. Purtarea ei cere depozit si baza, deci ce se poate apara fara ele e regula.
+   */
+  const sursa = readFileSync("src/lib/pepita/ingest.ts", "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+
+  assert.match(
+    sursa, /const sha = createHash\("sha256"\)\.update\(citita\.octeti\)\.digest\("hex"\);/,
+    "amprenta nu se mai socoteste pe octetii DECODATI",
+  );
+  /* ⚠ Se sare peste scriere DOAR cand amprenta e aceeasi. */
+  assert.match(sursa, /if \(shaCunoscut && shaCunoscut === sha\)/);
+  /* ⚠ Si chiar si atunci se intreaba depozitul: obiectul poate lipsi desi amprenta e scrisa. */
+  const i = sursa.indexOf("if (shaCunoscut && shaCunoscut === sha)");
+  assert.match(sursa.slice(i, i + 400), /await areEticheta\(businessId, orderId\)/);
+
+  /*
+   * ⚠ AMPRENTA SE SCRIE DOAR CAND CHIAR EXISTA UNA. Pusa si pe „depozit-cazut", urmatoarea
+   * retrimitere ar fi spus „o avem deja" despre o eticheta care s-a pierdut, si n-ar mai fi fost
+   * rescrisa niciodata.
+   */
+  assert.match(sursa, /\.\.\.\(r\.sha \? \{ eticheta_sha256: r\.sha \} : \{\}\)/);
+  const j = sursa.indexOf('return { stare: "depozit-cazut" }');
+  assert.notEqual(j, -1, "starea de depozit cazut a disparut");
+  assert.doesNotMatch(
+    sursa.slice(Math.max(0, j - 300), j), /sha \}/,
+    "amprenta pleaca si pe drumul in care nu s-a scris nimic in depozit",
   );
 });
 
@@ -1535,7 +1581,10 @@ test("⚠ starea etichetei se SCRIE: „n-au trimis” nu mai arata ca „am pie
 
   /* Cele patru stari, toate. Una lipsa inseamna un caz care cade tacut in alta. */
   for (const stare of ["lipsa", "salvata", "nevalida", "depozit-cazut"]) {
-    assert.match(sursa, new RegExp(`return "${stare}"`), `starea „${stare}" nu se mai intoarce de nicaieri`);
+    assert.match(
+      sursa, new RegExp(`stare: "${stare}"`),
+      `starea „${stare}" nu se mai intoarce de nicaieri`,
+    );
   }
 
   /* ⚠ Si chiar se SCRIE, pe amandoua drumurile: prima sosire si retrimitere. */
@@ -1548,10 +1597,13 @@ test("⚠ starea etichetei se SCRIE: „n-au trimis” nu mai arata ca „am pie
    * s-a nascut. Scrisa la o retrimitere fara `package_label`, ar sterge chiar dovada ca eticheta
    * a fost primita si salvata cu prima ocazie.
    */
-  assert.match(sursa, /if \(stare === "lipsa" && !primaSosire\) return;/);
+  assert.match(sursa, /if \(r\.stare === "lipsa" && !primaSosire\) return;/);
   /* ⚠ Si cele doua drumuri chiar spun care sunt: creare `true`, retrimitere `false`. */
   assert.match(sursa, /await pastreazaEticheta\(ctx\.businessId, orderId, c\), true\)/);
-  assert.match(sursa, /await pastreazaEticheta\(ctx\.businessId, rand\.order_id, c, true\),\s*false,/);
+  assert.match(
+    sursa,
+    /await pastreazaEticheta\(ctx\.businessId, rand\.order_id, c, rand\.eticheta_sha256 \?\? null\),\s*false,/,
+  );
 });
 
 test("⚠ depozitul cazut se mai incearca de doua ori inainte sa fie declarat pierdut", () => {

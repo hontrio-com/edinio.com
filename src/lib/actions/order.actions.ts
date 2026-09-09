@@ -1,7 +1,7 @@
 "use server";
 
 import { after } from "next/server";
-import { marketplaceCareTineComanda, deCeNuDeAici } from "@/lib/orders/origin";
+import { livrareaEDusaDeMarketplace, marketplaceCareTineComanda, deCeNuDeAici } from "@/lib/orders/origin";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { scrieStatisticiOferte } from "@/lib/offers/statistici";
 import { revalidatePath } from "next/cache";
@@ -2832,12 +2832,21 @@ export async function updateOrderDetails(orderId: string, data: {
    * lor. Schimbata aici, Edinio ar arata adresa noua iar coletul ar pleca la cea veche — si
    * comerciantul ar avea toate motivele sa creada ca a corectat-o.
    *
-   * ⚠ SI EXISTA O CALE ADEVARATA, altfel poarta asta ar fi doar un „nu": se schimba in Pepita
-   * Admin, apoi „Resend order". Retrimiterea REscrie destinatarul si adresa — vezi
-   * `improspateazaDestinatarul` din `pepita/ingest.ts`, adaugata in aceeasi zi tocmai ca sfatul
-   * de mai jos sa fie adevarat.
+   * ⚠ CE SPUNEM SI CE NU. Corectura se face la ei, si atat: aia e sigur. Cand Pepita retrimite
+   * comanda, noi PRIMIM datele noi si eticheta noua si le scriem (vezi `improspateazaDestinatarul`
+   * si amprenta din `pastreazaEticheta`) — dar asta e partea NOASTRA a intelegerii.
+   *
+   * ⚠ NU PROMITEM CA „Resend order" E UN MECANISM DE RESINCRONIZARE. Documentatia lor descrie
+   * transmiterea intr-o singura directie, iar butonul acela ca pe o reincercare dupa un esec
+   * tehnic — nu ca pe o cale de editare a unei comenzi deja trimise. Ce facem noi e o pregatire
+   * defensiva, corecta daca sarcina vine schimbata; nu e o functie garantata de ei, si nu se
+   * scrie pe ecran ca si cum ar fi. Un sfat care nu se tine e mai rau decat lipsa lui.
+   *
+   * ⚠ SI PRIN HELPERUL COMUN, nu prin steagul crud: comenzile intrate INAINTE ca `livrare_pepita`
+   * sa existe poarta doar `pepita_delivery_mode: "gls…"`. Citite strict, ele ar fi trecut de
+   * poarta asta — desi eticheta lor e tot a Pepitei. Aceeasi socoteala ca la AWB si la loturi.
    */
-  const livrarePepita = (order.order_source as { livrare_pepita?: unknown } | null)?.livrare_pepita === true;
+  const livrarePepita = livrareaEDusaDeMarketplace(order.order_source);
   if (livrarePepita) {
     const vechiShip = (order.shipping_address ?? {}) as Record<string, unknown>;
     const sir = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -2849,7 +2858,7 @@ export async function updateOrderDetails(orderId: string, data: {
       || county !== sir(vechiShip.county)
       || (data.postal_code?.trim() ? data.postal_code.trim() !== sir(vechiShip.postal_code) : false);
     if (schimbat) {
-      return { error: "Comanda merge cu Pepita Delivery, iar eticheta e deja facuta de ei pentru adresa din comanda lor. Schimbata aici, coletul tot la adresa veche ar pleca. Corecteaza in Pepita Admin, apoi apasa „Resend order”: datele si eticheta vin din nou, iar noi le rescriem." };
+      return { error: "Comanda merge cu Pepita Delivery: adresa și eticheta sunt ale lor, iar eticheta e deja tipărită pentru adresa din comanda lor. Schimbată aici, coletul tot la adresa veche ar pleca. Corecteaz-o în Pepita Admin — dacă ei retrimit comanda, noi preluăm datele și eticheta nouă." };
     }
   }
 

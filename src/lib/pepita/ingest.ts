@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
+import { createHash } from "node:crypto";
 import { areEticheta, citesteEticheta, salveazaEticheta } from "./eticheta";
 import { impingeStoculPeCeleLalteCanale } from "@/lib/marketplace/stoc-pe-canale";
 import { combinatiiActiveUnice, parseVariants } from "@/lib/storefront/variants";
@@ -330,29 +331,30 @@ export async function leagaLiniile(
 async function pastreazaEticheta(
   businessId: string, orderId: string, c: ComandaPepita,
   /**
-   * Se scrie doar daca eticheta nu e deja in depozit.
+   * Amprenta etichetei aflate DEJA in depozit, sau `null` cand nu se stie.
    *
-   * ⚠ Adevarat NUMAI pe drumul de retrimitere. La prima sosire comanda tocmai s-a nascut, deci
-   * n-are cum sa aiba eticheta, iar un HEAD in plus pe fiecare comanda ar fi o cerere de retea
-   * platita degeaba pe drumul cel mai des umblat.
+   * ═══ ⚠ DE CE AMPRENTA, SI NU „EXISTA CEVA ACOLO" ═══
+   *
+   * Pana pe 09.09.2026 intrebarea era „mai e o eticheta in depozit?", si daca da nu se mai scria
+   * nimic. Bun cat timp retrimiterea insemna „aceeasi comanda, inca o data".
+   *
+   * ⚠ DAR IN ACEEASI ZI RETRIMITEREA A INCEPUT SA REIMPROSPATEZE DESTINATARUL, si cele doua
+   * hotarari s-au ciocnit: comanda vine cu adresa B si cu eticheta B, noi scriam adresa B si
+   * PASTRAM eticheta A. Panoul arata o adresa, PDF-ul tiparit alta — iar coletul pleaca dupa PDF.
+   * Adica exact paguba pe care poarta din editor o inchisese cu o ora inainte, intrata pe alta usa.
+   *
+   * Acum se compara CONTINUTUL: amprenta egala inseamna aceeasi eticheta, si atunci nu se scrie
+   * (si nici nu se mai plateste un HEAD). Amprenta diferita inseamna eticheta NOUA, si o
+   * inlocuieste pe cea veche — scrierea e pe aceeasi cheie, deci chiar o inlocuieste.
+   *
+   * ⚠ AMPRENTA EGALA MAI FACE UN HEAD, si nu e de prisos: obiectul poate lipsi din depozit desi
+   * amprenta e scrisa (o stergere, o pana). Fara el, o eticheta disparuta n-ar mai fi rescrisa
+   * niciodata. Costa exact cat costa si pana azi.
    */
-  doarDacaLipseste = false,
-): Promise<StareEticheta> {
+  shaCunoscut: string | null = null,
+): Promise<{ stare: StareEticheta; sha?: string }> {
   const citita = citesteEticheta(c.etichetaBruta);
-  if (citita.fel === "lipsa") return "lipsa";
-
-  if (doarDacaLipseste) {
-    try {
-      if (await areEticheta(businessId, orderId)) return "salvata";
-    } catch {
-      /*
-       * ⚠ DEPOZITUL CAZUT LA INTREBARE NU OPRESTE INCERCAREA. Daca nu putem afla daca eticheta e
-       * acolo, incercarea de scriere e ieftina si idempotenta (aceeasi cheie, acelasi continut),
-       * iar renuntarea ar fi insemnat sa pastram gaura tocmai in ziua in care depozitul are
-       * probleme — adica exact ziua in care s-a pierdut.
-       */
-    }
-  }
+  if (citita.fel === "lipsa") return { stare: "lipsa" };
 
   if (citita.fel === "rea") {
     await logError({
@@ -360,7 +362,21 @@ async function pastreazaEticheta(
       message: `eticheta primita nu s-a putut folosi: ${citita.motiv}`,
       details: { externalId: c.externalId, orderId }, businessId, severity: "warning",
     });
-    return "nevalida";
+    return { stare: "nevalida" };
+  }
+
+  const sha = createHash("sha256").update(citita.octeti).digest("hex");
+  if (shaCunoscut && shaCunoscut === sha) {
+    try {
+      if (await areEticheta(businessId, orderId)) return { stare: "salvata", sha };
+    } catch {
+      /*
+       * ⚠ DEPOZITUL CAZUT LA INTREBARE NU OPRESTE INCERCAREA. Daca nu putem afla daca eticheta e
+       * acolo, scrierea de mai jos e ieftina si idempotenta (aceeasi cheie, acelasi continut),
+       * iar renuntarea ar fi insemnat sa pastram gaura tocmai in ziua in care depozitul are
+       * probleme — adica exact ziua in care s-a pierdut.
+       */
+    }
   }
 
   /*
@@ -378,7 +394,7 @@ async function pastreazaEticheta(
   for (let i = 0; i < INCERCARI_DEPOZIT; i++) {
     try {
       await salveazaEticheta(businessId, orderId, citita.octeti);
-      return "salvata";
+      return { stare: "salvata", sha };
     } catch (e) {
       ultima = e;
       const pauza = PAUZA_DEPOZIT_MS[i];
@@ -394,7 +410,7 @@ async function pastreazaEticheta(
     details: { externalId: c.externalId, orderId, octeti: citita.octeti.length },
     businessId, severity: "warning",
   });
-  return "depozit-cazut";
+  return { stare: "depozit-cazut" };
 }
 
 /**
@@ -413,12 +429,21 @@ async function pastreazaEticheta(
  * acum, si e mai proaspata decat ce era scris.
  */
 async function scrieStareaEtichetei(
-  admin: Db, randId: string, stare: StareEticheta, primaSosire: boolean,
+  admin: Db, randId: string, r: { stare: StareEticheta; sha?: string }, primaSosire: boolean,
 ): Promise<void> {
-  if (stare === "lipsa" && !primaSosire) return;
+  if (r.stare === "lipsa" && !primaSosire) return;
   try {
     const { error } = await admin.from("pepita_comenzi")
-      .update({ eticheta_stare: stare, eticheta_la: new Date().toISOString() } as never)
+      .update({
+        eticheta_stare: r.stare,
+        eticheta_la: new Date().toISOString(),
+        /*
+         * ⚠ AMPRENTA SE SCRIE DOAR CAND CHIAR E UNA. Pe „depozit-cazut" nu exista nimic in
+         * depozit, deci scrisa ar fi spus la urmatoarea retrimitere „o avem deja" despre o
+         * eticheta pierduta — si n-ar mai fi fost rescrisa niciodata.
+         */
+        ...(r.sha ? { eticheta_sha256: r.sha } : {}),
+      } as never)
       .eq("id", randId);
     if (error) throw error;
   } catch (e) {
@@ -426,7 +451,7 @@ async function scrieStareaEtichetei(
     await logError({
       action: "pepita/eticheta",
       message: `starea etichetei nu s-a putut scrie: ${e instanceof Error ? e.message : String(e)}`,
-      details: { randId, stare }, severity: "warning",
+      details: { randId, stare: r.stare }, severity: "warning",
     });
   }
 }
@@ -546,10 +571,15 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     if (eNou.code !== "23505") throw eNou;
 
     const { data: vechi, error: eCitire } = await admin
-      .from("pepita_comenzi").select("id, order_id, stare, incercari")
+      .from("pepita_comenzi").select("id, order_id, stare, incercari, eticheta_sha256")
       .eq("business_id", ctx.businessId).eq("external_order_id", c.externalId).maybeSingle();
     if (eCitire) throw eCitire;
-    const rand = vechi as { id: string; order_id: string | null; stare: string; incercari: number } | null;
+    const rand = vechi as {
+      id: string; order_id: string | null; stare: string; incercari: number;
+      /* ⚠ Ceruta ANUME: fara ea nicio retrimitere n-ar mai sti ca eticheta primita e ACEEASI, si
+         ar rescrie PDF-ul la fiecare sosire. Vezi `pastreazaEticheta`. */
+      eticheta_sha256: string | null;
+    } | null;
     if (!rand) throw eNou;
 
     /* Cate ori a mai sosit. Se citeste si se scrie inapoi: nu e un contor pe care sa se bata
@@ -576,19 +606,26 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
        *
        * Deci Pepita ne dadea eticheta, noi o pierdeam, si integrarea raporta ca totul e bine.
        *
-       * ⚠ `doarDacaLipseste`: pe drumul obisnuit (retrimitere peste o comanda intreaga) nu se
-       * rescrie nimic, se face un singur HEAD. Reincercarea costa numai cand chiar lipseste.
+       * ⚠ SI DE PE 09.09.2026 SE COMPARA AMPRENTA, nu doar existenta. O retrimitere identica nu
+       * scrie nimic si nu plateste nicio cerere de retea; una care aduce ALTA eticheta o
+       * inlocuieste pe cea veche. Vezi nota lunga de la `pastreazaEticheta`: fara asta, comanda
+       * ar fi ajuns cu adresa noua pe ecran si cu eticheta veche in imprimanta.
        */
       await scrieStareaEtichetei(
         admin, rand.id,
-        await pastreazaEticheta(ctx.businessId, rand.order_id, c, true),
+        await pastreazaEticheta(ctx.businessId, rand.order_id, c, rand.eticheta_sha256 ?? null),
         false,
       );
 
       /*
        * ⚠ SI DATELE DESTINATARULUI, la Pepita Delivery. Acolo panoul nu le mai lasa corectate
-       * local (eticheta lor e deja tiparita pentru adresa lor), deci „Resend order" e SINGURA
-       * cale prin care o corectura ajunge la noi. Vezi `improspateazaDestinatarul`.
+       * local, fiindca eticheta lor e deja tiparita pentru adresa lor. Vezi
+       * `improspateazaDestinatarul`.
+       *
+       * ⚠ SE FACE PENTRU CA E CORECT, nu fiindca ei ar promite-o: documentatia lor descrie
+       * transmiterea intr-o singura directie, iar „Resend order" ca pe o reincercare dupa un esec
+       * tehnic. Noi ne pregatim ca sarcina sa poata veni schimbata; pe ecran insa NU se scrie ca
+       * ar fi o cale garantata de resincronizare. Vezi mesajul din `updateOrderDetails`.
        */
       if (esteLivrarePepita(c.modLivrare)) {
         await improspateazaDestinatarul(admin, ctx.businessId, rand.order_id, c);
@@ -776,6 +813,7 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
     prelucrat_la: acum,
   } as never).eq("id", randId);
 
+  /* ⚠ Prima sosire: comanda tocmai s-a nascut, deci n-are amprenta si nu se intreaba depozitul. */
   await scrieStareaEtichetei(admin, randId, await pastreazaEticheta(ctx.businessId, orderId, c), true);
 
   const verdictStoc = await consumaStocul(admin, ctx.businessId, orderId, legate);

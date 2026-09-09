@@ -433,14 +433,22 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
         ? `Comanda vine din ${marketplace}, iar liniile ei se schimba din contul de acolo — altfel urmatoarea sincronizare le-ar scrie la loc. Datele clientului si adresa se pot corecta si de aici.`
         : null;
   /*
-   * Adaugarea ramane exact cu conditia dinainte: doar factura o opreste.
+   * ═══ ⚠ SI ADAUGAREA SE OPRESTE PE O COMANDA DE MARKETPLACE (09.09.2026) ═══
    *
-   * Cand o opreste, motivul e ACELASI cu cel al liniilor si e deja scris mai sus,
-   * asa ca sectiunea de adaugare dispare cu totul in loc sa repete acelasi paragraf
-   * la doua degete distanta. Cand liniile sunt blocate din alt motiv (AWB emis,
-   * comanda de marketplace), adaugarea merge mai departe si sectiunea ramane.
+   * Pana azi doar factura o oprea, iar nota de aici spunea limpede ca „pentru o comanda de
+   * marketplace adaugarea merge mai departe". Asa era, si costa: comanda platita cu cardul la
+   * Pepita, 200 de lei, plus un produs de 50 adaugat aici. Edinio spune 250, ei spun 200,
+   * incasati raman 200 — si nu exista niciun capat prin care sa se mai ceara diferenta.
+   *
+   * ⚠ BUTONUL SE STINGE FIINDCA SI SERVERUL REFUZA, nu invers. Actiunile de server sunt
+   * endpointuri publice; poarta adevarata e in `updateOrderDetails`, iar asta de aici exista ca
+   * omul sa nu apese ceva ce oricum nu se poate. Un „nu se poate" descoperit dupa apasare l-a
+   * pus deja pe un comerciant sa incerce de 208 ori.
+   *
+   * Cand motivul e ACELASI cu cel al liniilor, sectiunea dispare cu totul in loc sa repete
+   * paragraful la doua degete distanta.
    */
-  const adaugareBlocata = hasInvoice;
+  const adaugareBlocata = hasInvoice || !!marketplace;
 
   /*
    * Cotatia moare odata cu destinatia pentru care a fost ceruta.
@@ -590,8 +598,13 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
   const eIntern = !addr.country || addr.country.toUpperCase() === "RO";
   // Lockerele sunt excluse: pretul ar veni pentru orasul nou, dar `locker_id` ar
   // ramane al lockerului din orasul VECHI, si coletul ar pleca spre el.
+  /*
+   * ⚠ SI NU PE O COMANDA DE MARKETPLACE: transportul ei e cel incasat la ei, iar recotat aici ar
+   * schimba totalul unei tranzactii deja incheiate. Serverul refuza oricum; butonul se stinge ca
+   * sa nu fie apasat degeaba.
+   */
   const potRecota = destinatieSchimbata && eIntern && !!addr.courier && !isPaid && !isLocker
-    && activeAwbs.length === 0 && !hasInvoice && Number(order.shipping_cost) > 0;
+    && activeAwbs.length === 0 && !hasInvoice && !marketplace && Number(order.shipping_cost) > 0;
 
   function addProduct(p: PickerProduct, variantTitle: string | null, unitPrice: number) {
     setAdded((prev) => {

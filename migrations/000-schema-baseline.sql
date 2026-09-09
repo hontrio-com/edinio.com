@@ -3177,6 +3177,16 @@ begin
     cod_fee_amount   = coalesce((p_patch->>'cod_fee_amount')::numeric, cod_fee_amount),
     vat_amount       = coalesce((p_patch->>'vat_amount')::numeric, vat_amount),
     vat_rate         = coalesce((p_patch->>'vat_rate')::numeric, vat_rate),
+    -- Regimul de pret al comenzii.
+    --
+    -- ⚠ LIPSEA DIN LISTA, iar aplicatia il trimitea in `p_patch`: o scriere care nu scria.
+    -- Conteaza pe comanda din magazin plasata cand preturile erau FARA TVA si editata dupa
+    -- ce comerciantul a trecut magazinul pe preturi CU TVA: totalul se resocoteste brut,
+    -- iar semnul ar fi ramas „net”, si atunci facturarea refuza documentul.
+    --
+    -- ⚠ Pe comenzile de MARKETPLACE nu se trimite deloc, si atunci `coalesce` pastreaza ce
+    -- era: banii lor sunt o fotografie. Vezi `updateOrderDetails`.
+    prices_include_vat = coalesce((p_patch->>'prices_include_vat')::boolean, prices_include_vat),
     total            = coalesce((p_patch->>'total')::numeric, total),
     updated_at       = now(),
     stoc_rezervat    = v_nou
@@ -11083,8 +11093,8 @@ grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(regdictionary, text) to anon;
 grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(regdictionary, text) to authenticated;
-grant execute on function public.unaccent(text) to service_role;
 grant execute on function public.unaccent(regdictionary, text) to service_role;
+grant execute on function public.unaccent(text) to service_role;
 grant execute on function public.unaccent_init(internal) to anon;
 grant execute on function public.unaccent_init(internal) to authenticated;
 grant execute on function public.unaccent_init(internal) to service_role;

@@ -448,6 +448,54 @@ export type StareEticheta = "lipsa" | "salvata" | "nevalida" | "depozit-cazut";
 const INCERCARI_DEPOZIT = 3;
 const PAUZA_DEPOZIT_MS = [200, 600];
 
+/**
+ * Destinatarul si adresa, rescrise din sarcina RETRIMISA.
+ *
+ * ═══ ⚠ NUMAI LA PEPITA DELIVERY, SI DE CE TOCMAI ACOLO ═══
+ *
+ * La `livrare_pepita` coletul pleaca cu eticheta PDF facuta de EI, pentru adresa din comanda LOR.
+ * Deci acolo adresa adevarata e a lor, iar panoul nostru n-are ce corecta: schimbata in Edinio,
+ * am fi aratat o adresa la care coletul nu ajunge. De aceea editarea locala e inchisa (vezi
+ * `updateOrderDetails`) — si tocmai de aceea „Resend order" trebuie sa CHIAR aduca datele noi,
+ * altfel poarta ar fi un „nu" fara nicio urmare.
+ *
+ * ⚠ PE CELELALTE COMENZI PEPITA NU SE ATINGE NIMIC. Acolo expediaza comerciantul, cu curierul
+ * lui, iar panoul e chiar locul unde se corecteaza o adresa gresita — vezi nota interna scrisa de
+ * `lipsuriLivrare`. Rescrisa la fiecare retrimitere, corectura lui ar fi fost stearsa.
+ *
+ * ⚠ SI NU STERGE CHEILE PUSE DE NOI peste adresa (curier, punct de ridicare, eticheta): se
+ * imbina, nu se inlocuieste. La Pepita Delivery ele n-ar trebui sa existe — AWB-ul propriu e
+ * inchis — dar o comanda veche le poate avea, si stergerea lor ar rupe ecranul de expediere.
+ */
+async function improspateazaDestinatarul(
+  admin: Db, businessId: string, orderId: string, c: ComandaPepita,
+): Promise<void> {
+  try {
+    const { data: vechi } = await admin
+      .from("orders").select("shipping_address")
+      .eq("id", orderId).eq("business_id", businessId).maybeSingle();
+    const prev = ((vechi as { shipping_address?: unknown } | null)?.shipping_address ?? {}) as Record<string, unknown>;
+
+    const { error } = await admin.from("orders").update({
+      customer_name: numeleClientului(c),
+      customer_phone: c.client.telefon || "",
+      customer_email: c.client.email,
+      shipping_address: { ...prev, ...adresaLivrare(c) } as never,
+    } as never).eq("id", orderId).eq("business_id", businessId);
+    if (error) throw error;
+  } catch (e) {
+    /*
+     * ⚠ NU RUPE RETRIMITEREA. Ea mai duce la capat stocul, carantina si eticheta; o adresa
+     * nerescrisa inseamna ca a ramas cea de dinainte, adica exact ce era si pana azi.
+     */
+    await logError({
+      action: "pepita/destinatar",
+      message: `datele destinatarului nu s-au putut reimprospata: ${e instanceof Error ? e.message : String(e)}`,
+      details: { orderId, externalId: c.externalId }, businessId, severity: "warning",
+    });
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    INGESTUL
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -538,6 +586,15 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
       );
 
       /*
+       * ⚠ SI DATELE DESTINATARULUI, la Pepita Delivery. Acolo panoul nu le mai lasa corectate
+       * local (eticheta lor e deja tiparita pentru adresa lor), deci „Resend order" e SINGURA
+       * cale prin care o corectura ajunge la noi. Vezi `improspateazaDestinatarul`.
+       */
+      if (esteLivrarePepita(c.modLivrare)) {
+        await improspateazaDestinatarul(admin, ctx.businessId, rand.order_id, c);
+      }
+
+      /*
        * ⚠ O COMANDA IN CARANTINA SE INCEARCA DIN NOU, INTREAGA.
        *
        * Pana acum ramura asta chema doar `consumaStocul`, care raspunde „deja" cand marcajul e
@@ -626,9 +683,7 @@ export async function ingereaza(admin: Db, ctx: ContextIngest, c: ComandaPepita)
   const monedaComenzii = c.moneda ?? c.monedaTransport;
   const monedaStraina = monedaComenzii != null && monedaComenzii.toUpperCase() !== ctx.monedaMagazin.toUpperCase();
 
-  const numeClient = [c.client.prenume, c.client.nume].filter(Boolean).join(" ").trim()
-    || c.client.facturare.nume
-    || "Client Pepita";
+  const numeClient = numeleClientului(c);
 
   const numarComanda = `PEP-${c.externalId}`;
   const { data: comandaNoua, error: eComanda } = await admin.from("orders").insert({
@@ -880,6 +935,18 @@ function firmaCumparatoare(c: ComandaPepita): BillingCompany | null {
     reg_com: "",
     vat_payer: /^\s*ro/i.test(cod),
   });
+}
+
+/**
+ * Numele clientului, dupa aceeasi regula pe amandoua drumurile.
+ *
+ * ⚠ Scris de doua ori — o data la creare, o data la reimprospatare — s-ar fi despartit, iar
+ * retrimiterea ar fi rescris numele cu alta regula decat cea cu care fusese pus.
+ */
+function numeleClientului(c: ComandaPepita): string {
+  return [c.client.prenume, c.client.nume].filter(Boolean).join(" ").trim()
+    || c.client.facturare.nume
+    || "Client Pepita";
 }
 
 function adresaLivrare(c: ComandaPepita): Record<string, unknown> {

@@ -2661,7 +2661,12 @@ export async function updateOrderDetails(orderId: string, data: {
     // ramanea cu greutatea si rambursul vechi.
     //
     // Se adauga ORICE curier nou aici, in aceeasi apasare cu coloana lui de AWB.
-    .select("id, business_id, status, payment_status, payment_method, customer_name, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, order_source, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, ecolet_order_to_send_id, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number")
+    //
+    // ⚠ `customer_phone` si `customer_email` sunt cerute ANUME: garda Pepita Delivery de mai
+    // jos compara datele NOI cu cele din baza, ca sa stie daca destinatarul chiar s-a
+    // schimbat. Necerute, ar fi venit `undefined`, comparatia ar fi raspuns „s-a schimbat" la
+    // fiecare salvare, si comerciantul n-ar mai fi putut salva nimic pe o comanda Pepita.
+    .select("id, business_id, status, payment_status, payment_method, customer_name, customer_phone, customer_email, billing_company, items, subtotal, total, shipping_address, shipping_cost, discount_amount, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_rate, order_source, stripe_session_id, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number, woot_awb_number, sameday_awb_number, cargus_awb_number, dpd_awb_number, fan_courier_awb_number, colete_awb_number, gls_awb_number, pallex_awb_number, ecolet_awb_number, ecolet_order_to_send_id, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number")
     .eq("id", orderId)
     .single();
   if (!order) return { error: "Comanda negasita" };
@@ -2797,6 +2802,55 @@ export async function updateOrderDetails(orderId: string, data: {
   const marketplace = (order.order_source as { marketplace?: string } | null)?.marketplace;
   if (cereModificari && marketplace) {
     return { error: `Comanda vine din ${marketplace} si liniile ei se schimba din contul de acolo — altfel urmatoarea sincronizare le-ar scrie la loc. Datele clientului si adresa se pot corecta si de aici.` };
+  }
+
+  /*
+   * ═══ ⚠ SI ADAUGAREA, SI TRANSPORTUL — 09.09.2026 ═══
+   *
+   * Poarta de deasupra oprea doar MODIFICAREA liniilor. Adaugarea trecea, si comentariul de mai
+   * sus chiar spunea ca „pentru marketplace adaugarea merge mai departe".
+   *
+   * ⚠ CE COSTA: comanda platita cu cardul la Pepita, 200 de lei. Comerciantul adauga in Edinio
+   * un produs de 50. Edinio spune 250, Pepita spune 200, incasati sunt 200. Nu exista niciun
+   * capat prin care sa se mai ceara diferenta — feedul e intr-o singura directie, iar comanda o
+   * tine marketplace-ul. Cei 50 de lei nu-i mai plateste nimeni.
+   *
+   * ⚠ SI TRANSPORTUL, din acelasi motiv: recotat aici, ar schimba totalul unei tranzactii care
+   * s-a incheiat la ei.
+   *
+   * Regula, intr-o propozitie: BANII unei comenzi de marketplace sunt o fotografie. Cine vrea
+   * sa-i mai dea ceva clientului face o comanda noua in Edinio.
+   */
+  if (marketplace && (cereAdaugari || cereTransport)) {
+    return { error: `Comanda vine din ${marketplace}, iar suma ei e cea incasata acolo: nu se poate adauga marfa si nu se poate schimba transportul din panou. Daca vrei sa mai trimiti ceva, fa o comanda noua in Edinio.` };
+  }
+
+  /*
+   * ═══ ⚠ PEPITA DELIVERY: DESTINATARUL E PE ETICHETA LOR, DEJA TIPARITA ═══
+   *
+   * La `livrare_pepita`, coletul pleaca cu eticheta PDF facuta de ei, pentru adresa din comanda
+   * lor. Schimbata aici, Edinio ar arata adresa noua iar coletul ar pleca la cea veche — si
+   * comerciantul ar avea toate motivele sa creada ca a corectat-o.
+   *
+   * ⚠ SI EXISTA O CALE ADEVARATA, altfel poarta asta ar fi doar un „nu": se schimba in Pepita
+   * Admin, apoi „Resend order". Retrimiterea REscrie destinatarul si adresa — vezi
+   * `improspateazaDestinatarul` din `pepita/ingest.ts`, adaugata in aceeasi zi tocmai ca sfatul
+   * de mai jos sa fie adevarat.
+   */
+  const livrarePepita = (order.order_source as { livrare_pepita?: unknown } | null)?.livrare_pepita === true;
+  if (livrarePepita) {
+    const vechiShip = (order.shipping_address ?? {}) as Record<string, unknown>;
+    const sir = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const schimbat = name !== (order.customer_name ?? "")
+      || phone !== sir(order.customer_phone)
+      || (data.customer_email?.trim() || "") !== sir(order.customer_email)
+      || address !== sir(vechiShip.address)
+      || city !== sir(vechiShip.city)
+      || county !== sir(vechiShip.county)
+      || (data.postal_code?.trim() ? data.postal_code.trim() !== sir(vechiShip.postal_code) : false);
+    if (schimbat) {
+      return { error: "Comanda merge cu Pepita Delivery, iar eticheta e deja facuta de ei pentru adresa din comanda lor. Schimbata aici, coletul tot la adresa veche ar pleca. Corecteaza in Pepita Admin, apoi apasa „Resend order”: datele si eticheta vin din nou, iar noi le rescriem." };
+    }
   }
 
   /*
@@ -3221,6 +3275,46 @@ export async function updateOrderDetails(orderId: string, data: {
   if (stoc.fel !== "revendicat") return { error: stoc.error };
 
   /*
+   * ═══ ⚠ BANII COMENZII, SI CINE ARE VOIE SA-I SCRIE (09.09.2026) ═══
+   *
+   * Pana azi, cele opt campuri de mai jos plecau la scriere de FIECARE data — si la o editare
+   * care schimba doar telefonul. Pe o comanda din magazin asta e in regula: totalul ei se naste
+   * din catalogul si din setarile magazinului, deci resocotit da acelasi numar.
+   *
+   * ⚠ PE O COMANDA DE MARKETPLACE, NU. Sumele ei vin de la ei si nu se pot deduce din nimic de
+   * la noi. Masurat pe cod: o comanda Pepita de 121 de lei bruti, pe un magazin cu preturi FARA
+   * TVA, iesea din editare cu `total = 146,41` si `vat_amount = 25,41` — pentru un telefon
+   * corectat. Iar `orders.total` e chiar suma pe care o cere curierul la usa
+   * (`rambursDeIncasat`), deci clientul ar fi platit 25,41 in plus.
+   *
+   * ⚠ SI TRANSPORTUL LOR SE PIERDEA: pragul de livrare gratuita al magazinului il ducea la zero.
+   * O comanda de 250 cu transport de 19,99 de la ei iesea cu transport 0.
+   *
+   * ⚠ CE NU SE VEDE DIN SCRIEREA ASTA: cheia lipsa din `p_patch` NU sterge coloana.
+   * `editeaza_comanda_atomic` aplica fiecare camp cu `coalesce(p_patch->>'x', x)`, deci ce nu se
+   * trimite ramane EXACT cum era. De asta poarta se poate pune aici, si nu in SQL.
+   */
+  const banii = marketplace ? {} : {
+    items: plan.items,
+    subtotal: newSubtotal,
+    shipping_cost: newShipping,
+    cod_fee_amount: codFee,
+    vat_amount: vatAmount,
+    // Cota, nu doar suma. Fara ea, o comanda cu `vat_rate = 0` primea un
+    // `vat_amount > 0` peste o cota ramasa zero, iar SmartBill o citea in
+    // continuare ca „istorica". Aceeasi expresie ca la plasare.
+    vat_rate: vatCfg.vat_enabled ? vatCfg.vat_rate : 0,
+    /*
+     * ⚠ SI REGIMUL: liniile tocmai s-au RESOCOTIT cu setarea de acum a magazinului, deci ea e
+     * adevarul despre cifrele astea. Lasat nescris, o comanda plasata pe preturi fara TVA si
+     * editata dupa ce magazinul a trecut pe preturi cu TVA ar fi ramas marcata „net" peste sume
+     * care intre timp au devenit brute. Vezi `invoiceVat`.
+     */
+    prices_include_vat: vatCfg.prices_include_vat,
+    total: newTotal,
+  };
+
+  /*
    * ═══ MODIFICAREA SI REZERVAREA, INTR-O SINGURA TRANZACTIE ═══
    *
    * Erau doua scrieri: `UPDATE orders` cu liniile si totalurile noi, apoi
@@ -3238,23 +3332,7 @@ export async function updateOrderDetails(orderId: string, data: {
       customer_phone: phone,
       customer_email: data.customer_email?.trim() || "",
       shipping_address: newShip,
-      items: plan.items,
-      subtotal: newSubtotal,
-      shipping_cost: newShipping,
-      cod_fee_amount: codFee,
-      vat_amount: vatAmount,
-      // Cota, nu doar suma. Fara ea, o comanda cu `vat_rate = 0` primea un
-      // `vat_amount > 0` peste o cota ramasa zero, iar SmartBill o citea in
-      // continuare ca „istorica". Aceeasi expresie ca la plasare.
-      vat_rate: vatCfg.vat_enabled ? vatCfg.vat_rate : 0,
-      /*
-       * ⚠ SI REGIMUL, din acelasi motiv ca la plasare: liniile de mai sus tocmai s-au
-       * RESOCOTIT cu setarea de acum a magazinului, deci ea e adevarul despre cifrele astea.
-       * Lasat nescris, o comanda de marketplace editata ar fi ramas marcata „brut" peste sume
-       * care intre timp au devenit nete. Vezi `invoiceVat`.
-       */
-      prices_include_vat: vatCfg.prices_include_vat,
-      total: newTotal,
+      ...banii,
       // `as unknown as Json`: obiectul E jsonb valid, dar `plan.items` e `unknown[]`
       // si TS nu poate dovedi asta. Cast INGUST, doar pe argument — numele functiei
       // si celelalte argumente raman verificate, spre deosebire de `as never` pe tot

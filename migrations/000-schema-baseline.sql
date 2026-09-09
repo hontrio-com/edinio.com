@@ -3968,8 +3968,17 @@ begin
   if v_cai is not null then
     foreach v_cale in array v_cai loop
       v_parti := string_to_array(v_cale, '.');
+
+      -- STERGERE CERUTA ANUME. `jsonb_typeof` intoarce 'null' DOAR pentru un JSON null chiar
+      -- prezent in petic; pentru o cale care lipseste intoarce SQL NULL, deci nu intra aici.
+      if jsonb_typeof(p_patch #> v_parti) = 'null' then
+        v_nou := v_nou #- v_parti;
+        continue;
+      end if;
+
       v_vechi   := v_curent #>> v_parti;
       v_nou_val := v_nou    #>> v_parti;
+      -- Sirul gol inseamna "ecranul mi-a trimis parola nemodificata": se pastreaza ce era.
       if coalesce(v_nou_val, '') = '' and coalesce(v_vechi, '') <> '' then
         v_nou := jsonb_set(v_nou, v_parti, to_jsonb(v_vechi), true);
       end if;

@@ -54,7 +54,7 @@ export function sablonMesajPepita(a: AdreseDeTrimis, piata: PiataPepita = PIATA_
       cu ea. Iar ei cer feeduri SEPARATE pe fiecare tara, deci a doua piata inseamna a doua
       pereche de adrese, nu un feed cu doua monede.
     */
-    `Țara pentru care este creat feedul: ${p.eticheta} (${p.gazda}). Prețurile sunt în ${p.moneda}.`,
+    `Țara pentru care este creat feedul: ${p.eticheta} (${p.adresa}). Prețurile sunt în ${p.moneda}.`,
     "",
     "Feedul NU conține produse cu variații: fiecare variantă este trimisă ca produs de sine",
     "stătător, cu identificator propriu.",

@@ -124,6 +124,19 @@ function Conexiune({ stare, lucrez, porneste, opreste }: {
     dat unui magazin la care totul merge.
   */
   const stimDacaACitit = !stare.citiriPicate.includes(CITIRI_PANOU.feed);
+  /*
+    ═══ ⚠ FEEDUL GOL STINGE BIFA VERDE ═══
+
+    Pana pe 09.09.2026 starea de aici se socotea DOAR din `gata` plus ultima citire, adica din
+    „exista chei" si „cineva a deschis adresa". Nimic despre continut. Trei magazine din trei
+    au avut deci bifa verde si „Pepita citește feedul" peste un `<Catalog>` gol, iar unul din
+    ele avea 1.353 de produse active. Comerciantul a aflat dintr-un email al Pepitei.
+
+    ⚠ `=== 0`, NU `!produseAlese`. Cifra e `number | null`, iar `null` inseamna „n-am putut
+    citi", nu „zero". Cu o verificare adevarat/fals, o pana a bazei ar fi aprins o alarma de
+    feed gol peste un feed plin, adica exact minciuna inversa.
+  */
+  const feedGol = stare.produseAlese === 0;
 
   return (
     <Panel title="Conexiune">
@@ -134,12 +147,18 @@ function Conexiune({ stare, lucrez, porneste, opreste }: {
               <Plug className="h-4 w-4" /> Neconfigurat
             </p>
           )}
-          {gata && !aCitit && (
+          {gata && feedGol && (
+            <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              {aCitit ? "Pepita citește un feed gol" : "Feedul nu conține niciun produs"}
+            </p>
+          )}
+          {gata && !feedGol && !aCitit && (
             <p className="flex items-center gap-2 text-sm text-foreground">
               <CheckCircle2 className="h-4 w-4 text-success" /> Configurat în Edinio
             </p>
           )}
-          {gata && aCitit && (
+          {gata && !feedGol && aCitit && (
             <p className="flex items-center gap-2 text-sm text-foreground">
               <CheckCircle2 className="h-4 w-4 text-success" /> Pepita citește feedul
             </p>
@@ -150,14 +169,27 @@ function Conexiune({ stare, lucrez, porneste, opreste }: {
             fiindcă nu avem nicio cale prin care să aflăm că au acceptat conexiunea.
           */}
           <p className="text-xs text-muted-foreground">
-            {gata && aCitit
-              ? `Ultima citire: ${cand(stare.ultimaCitire)}. Frecvența o stabilește Pepita: de obicei stocul o dată pe oră, prețurile și descrierile o dată pe zi.`
-              : gata && stimDacaACitit
-                ? "Adresele sunt gata. Activarea conexiunii se face de către Pepita, după ce le trimiți."
-                : gata
-                  ? "Adresele sunt gata. Nu am putut afla dacă Pepita a citit deja feedul."
-                  : "Pornește integrarea ca să genereze adresele pe care le trimiți la Pepita."}
+            {gata && feedGol
+              ? "Niciun produs nu pleacă spre Pepita, deci feedul răspunde cu un catalog gol. "
+                + "Alege ce trimiți în „Ce produse pleacă pe Pepita”, mai jos."
+              : gata && aCitit
+                ? `Ultima citire: ${cand(stare.ultimaCitire)}. Frecvența o stabilește Pepita: de obicei stocul o dată pe oră, prețurile și descrierile o dată pe zi.`
+                : gata && stimDacaACitit
+                  ? "Adresele sunt gata. Activarea conexiunii se face de către Pepita, după ce le trimiți."
+                  : gata
+                    ? "Adresele sunt gata. Nu am putut afla dacă Pepita a citit deja feedul."
+                    : "Pornește integrarea ca să genereze adresele pe care le trimiți la Pepita."}
           </p>
+          {/*
+            ⚠ CIFRA SE ARATA SI CAND E BUNA, nu doar cand e zero. Un numar care apare numai la
+            necaz nu se citeste ca o masuratoare, ci ca o alarma, si atunci nimeni nu-l foloseste
+            ca sa vada ca a scazut de la 1.024 la 12 dupa un import.
+          */}
+          {gata && stare.produseAlese !== null && !feedGol && (
+            <p className="text-xs text-muted-foreground">
+              {stare.produseAlese === 1 ? "Un produs este ales" : `${stare.produseAlese} produse sunt alese`} pentru feed.
+            </p>
+          )}
         </div>
 
         {c.activ ? (

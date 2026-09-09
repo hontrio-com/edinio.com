@@ -143,9 +143,26 @@ export async function salveazaSetariPepita(businessId: string, s: SetariPepita) 
 /**
  * Porneste integrarea: genereaza cheile care lipsesc si o marcheaza activa.
  *
- * ⚠ CHEILE SE GENEREAZA O SINGURA DATA. Repornirea unei integrari oprite nu le
+ * ⚠ CHEILE SE GENEREAZA O SINGURA DATA CAT TIMP EXISTA IN CONFIGURARE. O a doua
+ * apasare pe „pornește”, sau o repornire dupa o pana la mijlocul activarii, nu le
  * schimba: adresele lipite la Pepita ar fi murit, si comerciantul ar fi trebuit sa
  * ceara din nou activarea de la ei, fara sa afle de ce.
+ *
+ * ⚠ DAR DUPA O OPRIRE ADEVARATA, ADRESELE SUNT ALTELE, si asta e nou din
+ * 09.09.2026. Randul de mai sus spunea „repornirea unei integrari OPRITE nu le
+ * schimba", iar `deconecteazaPepita` spunea, zece randuri mai jos, exact pe dos:
+ * „cheile din configurare SE STERG, altfel o repornire ar fi reinviat exact adresele
+ * pe care omul le-a inchis". Amandoua nu puteau fi adevarate.
+ *
+ * Adevarata era prima, dar din greseala: `jsonb_merge_config` trata un `null` pe o
+ * cale secreta ca pe „lasa valoarea veche", deci oprirea nu stergea nimic. Cine isi
+ * oprea integrarea fiindca i se scursese adresa si-o rearma la repornire. Migratia
+ * `2027-01-06-null-pe-un-secret-inseamna-sterge.sql` desparte cele doua intelesuri,
+ * si acum stergerea chiar se intampla.
+ *
+ * ⚠ CE INSEAMNA PENTRU COMERCIANT: dupa „Oprește integrarea", repornirea da adrese
+ * NOI, iar cele vechi raman moarte. Trebuie trimise din nou la Pepita. E pretul
+ * pentru ca o oprire sa insemne cu adevarat o oprire.
  *
  * ═══ ⚠ SI SCRIE MODUL DE INCLUDERE, ALTFEL FEEDUL PLEACA GOL ═══
  *
@@ -355,6 +372,26 @@ export interface StarePepita {
   comenziTotal: number | null;
   comenziCarantina: number | null;
   ultimaComanda: string | null;
+  /**
+   * Cate produse ACTIVE sunt alese sa plece in feed. `null` = nu s-a putut citi.
+   *
+   * ═══ ⚠ DE CE EXISTA CIFRA ASTA ═══
+   *
+   * Pana pe 09.09.2026 panoul nu ducea NIMIC despre catalog: cele patru numere erau despre
+   * citiri si despre comenzi. Starea din „Conexiune" se socotea din `activ && areFeedToken &&
+   * areOrderKey` plus ultima citire, deci arata bifa verde si „Pepita citește feedul" peste un
+   * `<Catalog>` gol. Trei magazine din trei au stat asa, iar defectul l-a gasit Pepita, printr-un
+   * email catre comerciant, nu noi.
+   *
+   * ⚠ E NUMARUL DE PRODUSE ALESE, nu de articole care chiar ies. Validarea fiecarui produs
+   * (nume, descriere, categorie, poza, pret) se face abia in feed si costa o parcurgere a
+   * catalogului; ea sta in „Verifică produsele". Cifra de aici raspunde la o intrebare mai
+   * ingusta, dar exact la aia care lipsea: pleaca ceva, sau nu pleaca nimic?
+   *
+   * ⚠ SI POATE FI `null`, ca celelalte. Un zero inventat dintr-o citire cazuta ar aprinde o
+   * alarma de feed gol peste un feed plin. Vezi nota de la `comenziTotal`.
+   */
+  produseAlese: number | null;
   /** Ce nu s-a putut citi. Gol inseamna ca tot ce e mai sus e adevarat. */
   citiriPicate: string[];
 }
@@ -367,7 +404,23 @@ export async function getStarePepita(businessId: string): Promise<StarePepita | 
   try {
     const config = await citesteConfigul(businessId);
 
-    const [chei, total, carantina, ultima] = await Promise.all([
+    /*
+     * ⚠ CATE PRODUSE PLEACA, SOCOTIT DIN DOUA NUMARATORI, nu dintr-o parcurgere.
+     *
+     * Amandoua sunt `head: true`, deci Postgres numara si nu trimite niciun rand: costul nu
+     * creste cu marimea catalogului. Hotararea e chiar cea din `inclus()` (`lib/pepita/feed.ts`),
+     * scrisa in interogari:
+     *
+     *   „toate"     : toate produsele active, MINUS cele scoase anume printr-o listare
+     *   „selectate" : numai cele bifate anume, si numai daca produsul mai e activ
+     *
+     * ⚠ `products!inner` cu `is_active` NU e o podoaba. Fara el, o listare ramasa pe un produs
+     * dezactivat s-ar fi numarat: pe „toate" ar fi scazut din total un produs care oricum nu
+     * pleaca, iar pe „selectate" ar fi umflat cifra. Cifra din panou trebuie sa fie chiar ce
+     * iese pe usa, altfel devine inca un semn verde care linisteste degeaba.
+     */
+    const alegeToate = config.mod_includere === "toate";
+    const [chei, total, carantina, ultima, active, exceptii] = await Promise.all([
       admin.from("pepita_chei").select("ultima_folosire")
         .eq("business_id", businessId).eq("fel", "feed").is("revocat_la", null)
         .order("ultima_folosire", { ascending: false, nullsFirst: false }).limit(1),
@@ -376,6 +429,10 @@ export async function getStarePepita(businessId: string): Promise<StarePepita | 
         .eq("business_id", businessId).neq("stare", "importata"),
       admin.from("pepita_comenzi").select("primit_la")
         .eq("business_id", businessId).order("primit_la", { ascending: false }).limit(1),
+      admin.from("products").select("id", { count: "exact", head: true })
+        .eq("business_id", businessId).eq("is_active", true),
+      admin.from("pepita_listari").select("product_id, products!inner(id)", { count: "exact", head: true })
+        .eq("business_id", businessId).eq("inclus", !alegeToate).eq("products.is_active", true),
     ]);
 
     /*
@@ -388,6 +445,8 @@ export async function getStarePepita(businessId: string): Promise<StarePepita | 
     if (total.error) citiriPicate.push(CITIRI_PANOU.comenzi);
     if (carantina.error) citiriPicate.push(CITIRI_PANOU.carantina);
     if (ultima.error) citiriPicate.push(CITIRI_PANOU.ultimaComanda);
+    /* Amandoua numaratorile intra in aceeasi cifra, deci oricare picata o face necunoscuta. */
+    if (active.error || exceptii.error) citiriPicate.push(CITIRI_PANOU.produse);
 
     if (citiriPicate.length > 0) {
       /* Fara randul asta, o pana a panoului nu lasa nicio urma nicaieri. */
@@ -395,7 +454,7 @@ export async function getStarePepita(businessId: string): Promise<StarePepita | 
         action: "pepita/stare", message: "starea integrarii s-a citit doar in parte",
         details: {
           citiriPicate,
-          erori: [chei.error, total.error, carantina.error, ultima.error]
+          erori: [chei.error, total.error, carantina.error, ultima.error, active.error, exceptii.error]
             .filter(Boolean).map((e) => (e as { message?: string }).message ?? String(e)),
         },
         businessId, severity: "error",
@@ -409,6 +468,15 @@ export async function getStarePepita(businessId: string): Promise<StarePepita | 
       comenziCarantina: carantina.error ? null : carantina.count ?? 0,
       /* ⚠ Si aici: o citire cazuta nu inseamna „nicio comanda". Vezi `citiriPicate`. */
       ultimaComanda: ultima.error ? null : (ultima.data?.[0] as { primit_la: string } | undefined)?.primit_la ?? null,
+      /* ⚠ `Math.max(0, …)`: pe „toate", numaratorile vin din doua cereri, deci pot fi facute
+         la clipe usor diferite. Un produs dezactivat intre ele ar da un numar NEGATIV, adica
+         o cifra care nu inseamna nimic in panou. Zero e cel mai rau adevar posibil aici, si
+         oricum aprinde avertismentul, ceea ce e directia buna. */
+      produseAlese: active.error || exceptii.error
+        ? null
+        : alegeToate
+          ? Math.max(0, (active.count ?? 0) - (exceptii.count ?? 0))
+          : exceptii.count ?? 0,
       citiriPicate,
     };
   } catch (e) {

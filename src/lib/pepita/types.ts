@@ -35,11 +35,23 @@ export type PiataPepita = "ro";
 export interface DescrierePiata {
   eticheta: string;
   moneda: string;
-  gazda: string;
+  /**
+   * Adresa magazinului lor pentru piata asta, asa cum o scrie un om.
+   *
+   * ⚠ NU E UN NUME DE GAZDA, si campul chiar s-a numit `gazda` pana pe 09.09.2026, cu
+   * valoarea `pepita.ro`. Acel domeniu **nu exista**: nu raspunde deloc, verificat. Piata
+   * romaneasca sta pe o CALE, `pepita.com/ro`, nu pe un domeniu de tara.
+   *
+   * ⚠ Greseala a plecat spre un comerciant inainte sa fie prinsa: valoarea intra in mesajul
+   * de activare pe care el il trimite la Pepita, deci textul ii spunea sa vorbeasca despre un
+   * site inexistent. A prins-o proprietarul, nu vreo proba, fiindca nimic din repo nu putea
+   * sti daca un domeniu raspunde. De aceea numele campului spune acum ce e: o adresa.
+   */
+  adresa: string;
 }
 
 export const PIETE: Record<PiataPepita, DescrierePiata> = {
-  ro: { eticheta: "România", moneda: "RON", gazda: "pepita.ro" },
+  ro: { eticheta: "România", moneda: "RON", adresa: "pepita.com/ro" },
 };
 
 export const PIATA_IMPLICITA: PiataPepita = "ro";
@@ -56,6 +68,9 @@ export const CITIRI_PANOU = {
   comenzi: "numărul de comenzi",
   carantina: "comenzile cu probleme",
   ultimaComanda: "ultima comandă",
+  /* Cate produse pleaca in feed. Vezi `StarePepita.produseAlese`: fara cifra asta, panoul
+     arata bifa verde peste un catalog gol, si chiar asa a trecut neobservat trei magazine. */
+  produse: "numărul de produse din feed",
 } as const;
 
 /** Strategia de pret pentru feed. Aceeasi socoteala, un singur loc. */

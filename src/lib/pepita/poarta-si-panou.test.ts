@@ -6,7 +6,7 @@ import {
   MARKETPLACE_CU_CICLU_PROPRIU, MARKETPLACE_ORIGINI, deriveOrigin,
   marketplaceCareTineComanda, mementoulMarketplace,
 } from "@/lib/orders/origin";
-import { PEPITA } from "./types";
+import { PEPITA, PIETE } from "./types";
 import { sablonMesajPepita } from "./activare";
 import { citesteConfig, peticDePornire } from "./config";
 
@@ -151,6 +151,20 @@ test("mesajul catre Pepita raspunde la tot ce cere Seller Center-ul lor", () => 
   assert.match(m, /Țara pentru care este creat feedul/);
   assert.match(m, /România/);
   assert.match(m, /RON/);
+  /*
+   * ⚠ SI ADRESA LOR E `pepita.com/ro`, NU `pepita.ro`.
+   *
+   * Prima forma a randului spunea `pepita.ro`, si acel domeniu NU EXISTA: nu raspunde deloc,
+   * verificat prin HTTP pe 09.09.2026. Piata romaneasca sta pe o cale, nu pe un domeniu de
+   * tara, exact ca la alte marketplace-uri regionale.
+   *
+   * ⚠ Proba asta nu poate afla ca un domeniu raspunde, si nici nu incearca. Ea apara altceva:
+   * ca nimeni nu „indreapta" adresa inapoi la forma care pare logica. Greseala n-a fost prinsa
+   * de cod, ci de proprietar, dupa ce textul plecase deja spre un comerciant.
+   */
+  assert.match(m, /pepita\.com\/ro/);
+  assert.ok(!/pepita\.ro/.test(m), "pepita.ro nu exista; adresa pietei romanesti e pepita.com/ro");
+  assert.equal(PIETE.ro.adresa, "pepita.com/ro");
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -282,6 +296,91 @@ test("⚠ o citire cazuta nu se mai numara ca zero", () => {
 test("⚠ panoul arata necunoscutul ca necunoscut", () => {
   const panou = readFileSync("src/components/dashboard/PepitaClient.tsx", "utf8");
   assert.match(panou, /valoare \?\? "—"/, "cifra necunoscuta se randeaza tot ca un numar");
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ OPRIREA CHIAR STERGE CHEILE
+   ══════════════════════════════════════════════════════════════════════════
+
+   `jsonb_merge_config` trata un `null` pe o cale secreta ca pe „lasa valoarea veche", fiindca
+   verificarea se facea pe `#>>`, iar `#>>` da SQL NULL si pentru „calea lipseste", si pentru
+   „valoarea e JSON null". Deci `deconecteazaPepita` NU stergea cheile, desi comentariul lui
+   spunea raspicat ca le sterge, iar `activeazaPepita` le gasea acolo si INVIA adresa veche.
+   Cine isi oprea integrarea fiindca i se scursese adresa si-o rearma la repornire.
+
+   Reparat in `migrations/2027-01-06-null-pe-un-secret-inseamna-sterge.sql`, probat pe productie
+   intr-o tranzactie anulata: `null` sterge, sirul gol pastreaza, calea lipsa ramane neatinsa.
+
+   ⚠ Probele de aici pazesc partea din TypeScript. Daca cineva schimba `null` in `""` „ca sa fie
+   ca la celelalte ecrane", stergerea se stinge in tacere si nimic n-ar mai arata-o: functia din
+   Postgres ar face exact ce i se cere.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ oprirea trimite `null`, nu sir gol: numai `null` sterge secretul", () => {
+  const bucata = ACTIUNI.slice(ACTIUNI.indexOf("export async function deconecteazaPepita"));
+  assert.match(bucata, /feed_token: null/, "sir gol inseamna pastreaza, deci cheia ar supravietui opririi");
+  assert.match(bucata, /order_key: null/);
+});
+
+test("⚠ migratia exista si desparte cele trei intelesuri", () => {
+  const m = readFileSync("migrations/2027-01-06-null-pe-un-secret-inseamna-sterge.sql", "utf8");
+  /* Stergerea se citeste din PETIC, nu din documentul imbinat: altfel un `null` mai vechi ar
+     sterge campul la orice salvare care nu-l pomeneste. */
+  assert.match(m, /jsonb_typeof\(p_patch #> v_parti\) = 'null'/);
+  assert.match(m, /v_nou := v_nou #- v_parti/);
+  /* Iar plasa pentru parola mascata RAMANE: fara ea, orice salvare de formular ar goli cheia. */
+  assert.match(m, /coalesce\(v_nou_val, ''\) = '' and coalesce\(v_vechi, ''\) <> ''/);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ⚠ BIFA VERDE NU ARE VOIE SA STEA PESTE UN FEED GOL
+   ══════════════════════════════════════════════════════════════════════════
+
+   09.09.2026. Starea din „Conexiune" se socotea din `activ && areFeedToken && areOrderKey`
+   plus ultima citire: „exista chei" si „cineva a deschis adresa". Nimic despre CONTINUT. Trei
+   magazine din trei au avut bifa verde si „Pepita citește feedul" peste un `<Catalog>` gol,
+   unul dintre ele cu 1.353 de produse active, iar comerciantul a aflat dintr-un email al lor.
+
+   Acelasi tipar ca [[santinela-continut]]: patru defecte grave care raspund toate 200.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ starea panoului duce si o cifra despre CATALOG, nu doar despre comenzi", () => {
+  assert.match(ACTIUNI, /produseAlese: number \| null/,
+    "panoul a ramas fara nicio cifra despre ce contine feedul");
+  assert.match(ACTIUNI, /CITIRI_PANOU\.produse/,
+    "o citire cazuta a catalogului nu mai spune CE n-a mers");
+});
+
+test("⚠ si cifra aia poate fi NECUNOSCUTA, nu doar zero", () => {
+  /* Un zero inventat dintr-o citire cazuta aprinde alarma de feed gol peste un feed plin. */
+  assert.match(ACTIUNI, /active\.error \|\| exceptii\.error\s*\n?\s*\? null/,
+    "`count ?? 0` peste o citire cazuta da un zero fals, adica o alarma falsa");
+});
+
+test("⚠ numaratoarea sare peste produsele DEZACTIVATE", () => {
+  /*
+   * Fara `products!inner` + `is_active`, o listare ramasa pe un produs dezactivat s-ar fi
+   * numarat: pe „toate" ar fi scazut din total un produs care oricum nu pleaca, iar pe
+   * „selectate" ar fi umflat cifra. Panoul ar fi mintit despre feed exact in felul pe care
+   * `COLOANE_PRODUS` il evita, prin aceeasi lectie.
+   */
+  assert.match(ACTIUNI, /products!inner/);
+  assert.match(ACTIUNI, /\.eq\("products\.is_active", true\)/);
+});
+
+test("⚠ feedul gol se recunoaste cu `=== 0`, NU cu o verificare adevarat/fals", () => {
+  /*
+   * `produseAlese` e `number | null`. Cu `!produseAlese`, si `null` ar fi trecut drept feed
+   * gol, deci o pana a bazei ar fi aprins alarma peste un feed plin: minciuna inversa, si la
+   * fel de rea. Aceeasi lectie ca la [[boolean-devenit-obiect-se-redenumeste]]: forma
+   * valorii decide ce verificare e corecta.
+   */
+  const panou = readFileSync("src/components/dashboard/PepitaClient.tsx", "utf8");
+  assert.match(panou, /const feedGol = stare\.produseAlese === 0;/);
+  assert.ok(!/!stare\.produseAlese/.test(panou), "verificare adevarat/fals peste `number | null`");
+  /* Si bifa verde chiar atarna de ea, in amandoua ramurile ei. */
+  assert.match(panou, /gata && !feedGol && aCitit/);
+  assert.match(panou, /gata && !feedGol && !aCitit/);
 });
 
 /* ══════════════════════════════════════════════════════════════════════════

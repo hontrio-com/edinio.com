@@ -15,6 +15,7 @@ import {
 } from "@/lib/actions/google-merchant.actions";
 import { GOOGLE_CATEGORIES } from "@/lib/google-merchant/taxonomy";
 import { cn } from "@/lib/utils/cn";
+import { pluralRo } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Callout } from "@/components/ui/callout";
@@ -278,6 +279,24 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
       {c.queued > 0 && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {c.queued} produse în coada de sincronizare (se procesează automat).</p>
       )}
+      {/* Google scoate produsul la 30 de zile de la ultima trimitere. Cu sincronizarea automată,
+          cronul îl retrimite singur la 7 zile; aici se spune ce s-a pierdut deja și, când ea e
+          stinsă, ce urmează să se piardă. */}
+      {c.expirat > 0 && (
+        <p className="flex items-start gap-1.5 text-xs text-destructive">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {pluralRo(c.expirat)} {c.expirat === 1 ? "nu mai e" : "nu mai sunt"} la Google: au trecut 30 de zile de la ultima trimitere, sau {c.expirat === 1 ? "a fost scos" : "au fost scoase"} din Merchant Center.{" "}
+          {status.autoSync
+            ? `${c.expirat === 1 ? "Îl retrimitem" : "Le retrimitem"} automat în câteva minute.`
+            : `Apasă „Sincronizează acum” ca ${c.expirat === 1 ? "să-l" : "să le"} retrimiți.`}
+        </p>
+      )}
+      {!status.autoSync && c.laExpirare > 0 && (
+        <p className="flex items-start gap-1.5 text-xs text-warning">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {pluralRo(c.laExpirare)} n-{c.laExpirare === 1 ? "a" : "au"} mai fost {c.laExpirare === 1 ? "trimis" : "trimise"} la Google de peste 23 de zile, iar Google {c.laExpirare === 1 ? "îl scoate" : "le scoate"} la 30. Pornește „Sincronizare automată” din setări ca să retrimitem produsele săptămânal, sau apasă „Sincronizează acum”.
+        </p>
+      )}
 
       {/* Settings */}
       {showSettings && (
@@ -404,6 +423,9 @@ function StatusBadge({ status }: { status: string }) {
        asta, produsul ar fi purtat eticheta implicita „In asteptare" — adica exact minciuna
        inversa: comerciantul ar fi asteptat o aprobare care nu vine niciodata. */
     exclus: { label: "Retras", cls: "bg-warning/10 text-warning", icon: AlertTriangle },
+    /* ⚠ Google nu mai are oferta: au trecut 30 de zile de la ultima trimitere, sau a fost scoasa
+       din Merchant Center. Fara randul asta ar fi purtat eticheta implicita „In asteptare". */
+    expirat: { label: "Expirat la Google", cls: "bg-destructive/10 text-destructive", icon: AlertTriangle },
   };
   const s = map[status] ?? map.pending;
   const Icon = s.icon;

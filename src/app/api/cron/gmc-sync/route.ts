@@ -26,6 +26,40 @@ const MAX_ATTEMPTS = 5;
  */
 const STARE_EXCLUS = "exclus";
 
+/**
+ * ═══ ⚠ GOOGLE SCOATE PRODUSUL LA 30 DE ZILE DE LA ULTIMA TRIMITERE ═══
+ *
+ * „All products expire from your Merchant Center account 30 days after the last refresh", si asta e
+ * valabil si pentru produsele trimise prin API. Coada se umplea insa doar la o schimbare (editare,
+ * stoc dupa comanda, „Sincronizeaza acum"), deci un produs pe care nu-l atingea nimeni nu mai pleca
+ * niciodata. Reclamat de caian-textile.ro pe 10.09.2026: produsele active din Merchant Center au
+ * scazut de la 31 la 21, restul urmand sa expire; la suporti-numar si mokka ofertele trimise o
+ * singura data, in iulie si august, expirasera deja, fara ca panoul nostru sa spuna ceva.
+ *
+ * Deci orice oferta netrimisa de `ZILE_IMPROSPATARE` zile intra singura in coada: raman trei
+ * saptamani de rezerva pana la pragul lui Google, pentru o zi proasta a cronului sau a lor.
+ */
+const ZILE_IMPROSPATARE = 7;
+/** Cate oferte vechi se pun in coada la o rulare. Coada le trimite cate `QUEUE_BATCH` pe minut. */
+const IMPROSPATARE_BATCH = 200;
+/**
+ * Prioritatea retrimiterii de intretinere. Coada ia randurile in ordinea `prioritate` CRESCATOARE
+ * (`revendica_din_coada`), iar o editare reala intra cu implicitul 5: ea trece intai.
+ */
+const PRIORITATE_IMPROSPATARE = 9;
+/**
+ * Statusul scris de NOI cand Google nu mai are o oferta pe care i-am trimis-o (vezi
+ * reimprospatarea statusurilor, mai jos). Se citeste si in `google-merchant.actions.ts` si in
+ * `GoogleMerchantClient`, cu aceeasi regula ca `STARE_EXCLUS`: se schimba in trei locuri deodata.
+ */
+const STARE_EXPIRAT = "expirat";
+/**
+ * ⚠ UN 404 IMEDIAT DUPA TRIMITERE NU INSEAMNA „EXPIRAT". Google proceseaza oferta primita in cateva
+ * minute, iar pana atunci o citire raspunde 404. Tratat ca expirare, randul s-ar fi retrimis la
+ * nesfarsit: trimis, citit prea devreme, „expirat", trimis din nou.
+ */
+const ORE_PANA_LA_EXPIRAT = 2;
+
 function verifyCron(req: NextRequest): boolean {
   // Vezi src/lib/cron-auth.ts: varianta de dinainte trecea cand CRON_SECRET
   // lipsea din mediu (undefined === undefined).
@@ -44,7 +78,11 @@ export async function GET(req: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
   const now = new Date().toISOString();
-  let synced = 0, deleted = 0, failed = 0, statusChecked = 0;
+  let synced = 0, deleted = 0, failed = 0, statusChecked = 0, expirate = 0;
+
+  // ── 0) Retrimiterea de intretinere: ofertele netrimise de o saptamana ─────────────
+  // Inaintea revendicarii, ca produsele puse acum sa poata pleca chiar in rularea asta.
+  const improspatate = await improspateazaOferteleVechi(admin);
 
   // ── 1) Process the sync queue, grouped by business ─────────────────────────────
   /*
@@ -232,9 +270,10 @@ export async function GET(req: NextRequest) {
 
   // ── 2) Refresh statuses for products not checked recently ──────────────────────
   const staleBefore = new Date(Date.now() - 30 * 60_000).toISOString();
+  const pragExpirat = new Date(Date.now() - ORE_PANA_LA_EXPIRAT * 3_600_000).toISOString();
   const { data: stale } = await admin
     .from("gmc_products")
-    .select("id, business_id, offer_id")
+    .select("id, business_id, product_id, offer_id, last_synced_at")
     /* ⚠ Randul RETRAS de noi nu se intreaba la Google: n-are oferta acolo, iar raspunsul i-ar
        sterge motivul si l-ar da drept „In asteptare" la nesfarsit. Vezi `STARE_EXCLUS`. */
     .neq("status", STARE_EXCLUS)
@@ -250,6 +289,36 @@ export async function GET(req: NextRequest) {
     const res = await getProduct(token, config.account_id!, config.content_language || DEFAULT_CONTENT_LANGUAGE, config.feed_label || DEFAULT_FEED_LABEL, row.offer_id);
     statusChecked++;
     if ("error" in res) {
+      /*
+       * ⚠ 404 PE O OFERTA TRIMISA DE MULT = GOOGLE N-O MAI ARE: a expirat (30 de zile fara
+       * retrimitere) sau a fost scoasa din Merchant Center. Pana acum se nota doar ora citirii, iar
+       * randul ramanea cu statusul vechi: panoul arata „In asteptare", uneori chiar „Aprobat",
+       * pentru un produs care nu mai exista la Google. Caian-textile a aflat din emailul lui Google,
+       * nu de la noi.
+       *
+       * Orice alta eroare (retea, jeton, 5xx) nu spune nimic despre oferta: statusul ramane.
+       */
+      const trimisDeMult = !!row.last_synced_at && row.last_synced_at < pragExpirat;
+      if (res.status === 404 && trimisDeMult) {
+        const automat = config.auto_sync !== false;
+        await admin.from("gmc_products").update({
+          status: STARE_EXPIRAT,
+          error: automat
+            ? `Google nu mai are produsul: a expirat sau a fost scos din Merchant Center. L-am pus înapoi în coadă.`
+            : `Google nu mai are produsul: a expirat sau a fost scos din Merchant Center. Apasă „Sincronizează acum” ca să-l retrimiți.`,
+          last_status_at: now,
+          updated_at: now,
+        }).eq("id", row.id);
+        if (automat && row.product_id) {
+          // Pe PRODUS, ca la „Sincronizeaza acum": cronul il desface singur in ofertele lui.
+          await admin.from(COADA).upsert(
+            { business_id: row.business_id, product_id: row.product_id, offer_id: row.product_id, op: "upsert" },
+            { onConflict: "business_id,offer_id,op", ignoreDuplicates: true },
+          );
+        }
+        expirate++;
+        continue;
+      }
       await admin.from("gmc_products").update({ last_status_at: now }).eq("id", row.id);
       continue;
     }
@@ -257,8 +326,77 @@ export async function GET(req: NextRequest) {
     await admin.from("gmc_products").update({ status, issues: issues as never, destinations: destinations as never, last_status_at: now, updated_at: now }).eq("id", row.id);
   }
 
-  console.log(`[gmc-sync] synced=${synced} deleted=${deleted} failed=${failed} status=${statusChecked}`);
-  return NextResponse.json({ ok: true, synced, deleted, failed, statusChecked });
+  console.log(`[gmc-sync] synced=${synced} deleted=${deleted} failed=${failed} status=${statusChecked} improspatate=${improspatate} expirate=${expirate}`);
+  return NextResponse.json({ ok: true, synced, deleted, failed, statusChecked, improspatate, expirate });
+}
+
+/**
+ * Pune in coada produsele ale caror oferte n-au mai plecat la Google de `ZILE_IMPROSPATARE` zile.
+ * Intoarce cate produse a pus.
+ *
+ * ⚠ INTAI MAGAZINELE, APOI OFERTELE. O cerere care ar fi luat direct cele mai vechi
+ * `IMPROSPATARE_BATCH` oferte din toata platforma ar fi fost ocupata pe veci de un magazin
+ * deconectat sau cu sincronizarea stinsa: ofertele lui nu se retrimit, deci raman mereu cele mai
+ * vechi, iar ale celorlalti n-ar mai fi ajuns niciodata in fata.
+ *
+ * ⚠ DOAR CE E DEJA LA GOOGLE. Se retrimit ofertele din `gmc_products`, nu tot catalogul: un magazin
+ * care n-a trimis niciodata o parte din produse (tonel-beauty avea 69 de oferte din 500 de produse)
+ * nu se trezeste cu ele publicate de noi.
+ *
+ * ⚠ Sincronizarea automata STINSA inseamna „nu trimite singur schimbarile mele": acolo nu se
+ * retrimite nimic, iar panoul arata cate produse se apropie de expirare.
+ *
+ * `ignoreDuplicates`: un produs aflat deja in coada (o editare, poate cu reincercari in curs) nu se
+ * atinge; altfel i s-ar fi schimbat prioritatea si generatia cu care il revendica lucratorul.
+ */
+async function improspateazaOferteleVechi(admin: Admin): Promise<number> {
+  const { data: setari, error: eSetari } = await admin
+    .from("store_settings")
+    .select("business_id, account_id:google_merchant_config->>account_id, data_source_name:google_merchant_config->>data_source_name, auto_sync:google_merchant_config->>auto_sync")
+    .eq("google_merchant_config->>connected", "true");
+  if (eSetari) {
+    await logError({ action: "gmc-sync.improspatare", message: `magazinele nu s-au putut citi: ${eSetari.message}`, severity: "warning" });
+    return 0;
+  }
+  const magazine = ((setari ?? []) as unknown as { business_id: string; account_id: string | null; data_source_name: string | null; auto_sync: string | null }[])
+    .filter((s) => !!s.account_id && !!s.data_source_name && s.auto_sync !== "false")
+    .map((s) => s.business_id);
+  if (!magazine.length) return 0;
+
+  const prag = new Date(Date.now() - ZILE_IMPROSPATARE * 86_400_000).toISOString();
+  const { data: vechi, error: eVechi } = await admin
+    .from("gmc_products")
+    .select("business_id, product_id")
+    .in("business_id", magazine)
+    .lt("last_synced_at", prag)
+    /* ⚠ `not.in` sare peste NULL, deci statusul gol se cere anume. `exclus` si `error` raman pe
+       dinafara: primul l-am retras noi, al doilea asteapta o reparatie, nu o retrimitere. */
+    .or(`status.is.null,status.not.in.(${STARE_EXCLUS},error)`)
+    .not("product_id", "is", null)
+    .order("last_synced_at", { ascending: true })
+    .limit(IMPROSPATARE_BATCH);
+  if (eVechi) {
+    await logError({ action: "gmc-sync.improspatare", message: `ofertele vechi nu s-au putut citi: ${eVechi.message}`, severity: "warning" });
+    return 0;
+  }
+
+  // Coada lucreaza pe PRODUS: cronul il desface singur in ofertele lui, cu variante cu tot.
+  const randuri = new Map<string, { business_id: string; product_id: string; offer_id: string; op: string; prioritate: number }>();
+  for (const r of vechi ?? []) {
+    if (!r.product_id) continue;
+    randuri.set(`${r.business_id}|${r.product_id}`, {
+      business_id: r.business_id, product_id: r.product_id, offer_id: r.product_id, op: "upsert",
+      prioritate: PRIORITATE_IMPROSPATARE,
+    });
+  }
+  if (!randuri.size) return 0;
+  const { error: eCoada } = await admin.from(COADA)
+    .upsert([...randuri.values()], { onConflict: "business_id,offer_id,op", ignoreDuplicates: true });
+  if (eCoada) {
+    await logError({ action: "gmc-sync.improspatare", message: `coada nu a primit retrimiterile: ${eCoada.message}`, severity: "warning" });
+    return 0;
+  }
+  return randuri.size;
 }
 
 async function loadBusinessContext(admin: Admin, businessId: string): Promise<

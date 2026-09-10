@@ -93,6 +93,19 @@ async function saveConfig(supabase: ServerClient, businessId: string, config: Go
  */
 const STARE_EXCLUS = "exclus";
 
+/**
+ * Statusul scris de NOI cand Google nu mai are o oferta pe care i-am trimis-o: a expirat (30 de zile
+ * de la ultima trimitere) sau a fost scoasa din Merchant Center. Acelasi sir ca `STARE_EXPIRAT` din
+ * cronul `gmc-sync`, citit si de `StatusBadge`; aceeasi regula a celor trei locuri ca mai sus.
+ */
+const STARE_EXPIRAT = "expirat";
+
+/**
+ * Dupa cate zile fara trimitere avertizeaza panoul. Google scoate produsul la 30; cu sincronizarea
+ * automata pornita, cronul il retrimite oricum de la 7. Pragul conteaza deci doar cand ea e stinsa.
+ */
+const ZILE_PANA_LA_AVERTISMENT = 23;
+
 // ── Status (for the dashboard) ──────────────────────────────────────────────────
 export interface MerchantStatus {
   configured: boolean;
@@ -110,7 +123,11 @@ export interface MerchantStatus {
   conditionDefault: string;
   lastSyncAt?: string;
   categoryMap: Record<string, string>;
-  counts: { total: number; synced: number; active: number; pending: number; disapproved: number; queued: number };
+  /**
+   * `expirat`: ofertele pe care Google nu le mai are. `laExpirare`: ofertele netrimise de peste
+   * `ZILE_PANA_LA_AVERTISMENT` zile, pe care Google le scoate curand daca nu pleaca din nou.
+   */
+  counts: { total: number; synced: number; active: number; pending: number; disapproved: number; queued: number; expirat: number; laExpirare: number };
 }
 
 export async function getMerchantStatus(businessId: string): Promise<MerchantStatus | { error: string }> {
@@ -137,14 +154,20 @@ export async function getMerchantStatus(businessId: string): Promise<MerchantSta
    * si `error` cad singure), `queued` numara in alt tabel (coada), iar `total` numara produsele
    * active din catalog, care habar n-au de Google.
    */
-  const [{ count: total }, { count: synced }, { count: activeCnt }, { count: pendingCnt }, { count: disapprovedCnt }, { count: queued }] = await Promise.all([
+  /* ⚠ Si randul EXPIRAT iese din „Produse active": n-are oferta la Google, exact ca `exclus`. */
+  const pragAvertisment = new Date(Date.now() - ZILE_PANA_LA_AVERTISMENT * 86_400_000).toISOString();
+  const [{ count: total }, { count: synced }, { count: activeCnt }, { count: pendingCnt }, { count: disapprovedCnt }, { count: queued }, { count: expiratCnt }, { count: laExpirareCnt }] = await Promise.all([
     supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("is_active", true),
     supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId)
-      .not("status", "in", `(${STARE_EXCLUS},error)`),
+      .not("status", "in", `(${STARE_EXCLUS},error,${STARE_EXPIRAT})`),
     supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "active"),
     supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "pending"),
     supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", "disapproved"),
     supabase.from("gmc_sync_queue").select("id", { count: "exact", head: true }).eq("business_id", businessId),
+    supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("status", STARE_EXPIRAT),
+    supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId)
+      .lt("last_synced_at", pragAvertisment)
+      .or(`status.is.null,status.not.in.(${STARE_EXCLUS},error,${STARE_EXPIRAT})`),
   ]);
   const counts = {
     total: total ?? 0,
@@ -153,6 +176,8 @@ export async function getMerchantStatus(businessId: string): Promise<MerchantSta
     pending: pendingCnt ?? 0,
     disapproved: disapprovedCnt ?? 0,
     queued: queued ?? 0,
+    expirat: expiratCnt ?? 0,
+    laExpirare: laExpirareCnt ?? 0,
   };
 
   return {

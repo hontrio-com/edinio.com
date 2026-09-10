@@ -152,7 +152,18 @@ export async function updateCategory(
   const businessId = await getBusinessId(supabase, user.id);
   if (!businessId) return { error: "Magazin negasit" };
 
-  const payload = { ...data };
+  /*
+   * ⚠ LISTA ALBA, nu `{ ...data }`. Orice export dintr-un fisier „use server" e un punct de
+   * intrare public, iar tipul parametrului nu exista la rulare: cu imprastierea, o cerere
+   * mestesugita scria ORICE coloana a randului. `parent_id` trimis pe aici ocolea verificarile
+   * de ciclu si de parinte strain din `moveCategory`. Trec doar cele patru chei pe care le
+   * trimite chiar panoul.
+   */
+  const payload: { name?: string; sort_order?: number; image_url?: string | null; is_active?: boolean } = {};
+  if (data.name !== undefined) payload.name = data.name;
+  if (data.sort_order !== undefined) payload.sort_order = data.sort_order;
+  if (data.image_url !== undefined) payload.image_url = data.image_url;
+  if (data.is_active !== undefined) payload.is_active = data.is_active;
   let numeVechi: string | null = null;
   if (payload.name !== undefined) {
     const name = payload.name.trim();

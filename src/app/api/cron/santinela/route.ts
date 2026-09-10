@@ -3,12 +3,15 @@ import { verificaCron } from "@/lib/cron-auth";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
-import { PLATFORM_ORIGIN, storeBaseUrl } from "@/lib/seo";
+import { PLATFORM_ORIGIN, parseStoreSeo, storeBaseUrl } from "@/lib/seo";
 import { isSubscriptionInactive } from "@/lib/subscription";
 import { NON_STORE_SEGMENTS, primulSegment } from "@/lib/segmente-rezervate";
 import { ANTET_ROBOTS } from "@/lib/storefront/indexare-pe-platforma";
+import { UA_SANTINELA } from "@/lib/storefront/vizita-de-masurat";
 import { parseStoreModeFromSettings } from "@/lib/storefront/store-mode";
 import { caiInterziseStraine } from "@/app/robots";
+import { numeScurtMagazin } from "@/lib/storefront/catalog/descriere-generata";
+import { continutMeta, problemeDescriere } from "./descrieri";
 
 /**
  * SANTINELA: cere paginile importante si verifica CE CONTIN, nu doar ca raspund.
@@ -75,7 +78,12 @@ const TIMP_MAX_MS = 20_000;
 /** Uuid care nu exista, pentru un `.in()` care altfel ar ramane fara argumente. */
 const NICIUN_ID = "00000000-0000-0000-0000-000000000000";
 
-const ANTET = { "user-agent": "edinio-santinela" } as const;
+/*
+ * ⚠ User-agentul vine din `vizita-de-masurat.ts`, unde paginile il recunosc si NU scriu
+ * vizita. Scris de mana aici, fiecare rulare aparea la comerciant ca vizita „Direct"
+ * din Suedia (masurat: 252 in trei zile la eSAFE).
+ */
+const ANTET = { "user-agent": UA_SANTINELA } as const;
 
 type Admin = SupabaseClient<Database>;
 
@@ -1614,6 +1622,120 @@ export async function GET(req: NextRequest) {
           if (v.cuFirimituri && !areTip(noduri, "BreadcrumbList")) {
             cazute.push(`${v.eticheta}: ${v.url} n-are BreadcrumbList`);
           }
+        }
+        return cazute.length ? cazute.join(" | ") : null;
+      },
+    },
+    {
+      nume: "catalogul si categoriile au descrierea lor, nu pe a paginii principale",
+      ruleaza: async () => {
+        /*
+         * ═══ RECLAMATIA CAIAN-TEXTILE.RO (10.09.2026), MASURATA PE PRODUCTIE ═══
+         *
+         * Catalogul si fiecare categorie purtau in Google descrierea PAGINII PRINCIPALE,
+         * aceeasi in `<head>`, og, twitter si `CollectionPage`. Raspundeau 200, cu date
+         * structurate valide: nicio proba de aici nu le putea deosebi de pagini corecte.
+         * Probele de cod (`metadata-magazin.test.ts`) judeca metadata pe cod; asta judeca
+         * ce serveste productia. Ce anume se cere unei pagini: `descrieri.ts`.
+         *
+         * ═══ `magazinDescriere`: ALEGERE PROPRIE ═══
+         *
+         * Nu `magazinCuSitemap`, pe care il folosesc probele de robots.txt si de sitemap,
+         * si nici `magazinProba`: amandoua se aleg dupa marime, iar cel mai mare magazin
+         * cu domeniu (eSAFE, azi) n-are descrierea completata. Se cere, pe rand:
+         *   - domeniu propriu: pe platforma vitrinele sunt noindex si n-au sitemap;
+         *   - descrierea din Setari > SEO COMPLETATA: fara ea, pagina principala isi
+         *     scrie descrierea din slogan, si defectul, intors, n-ar avea ce text sa scurga;
+         *   - fara `noindex` de magazin: acolo catalogul nu emite `CollectionPage` dinadins;
+         *   - pagina de catalog SEPARATA, aflata cerand-o, ca la `magazinProba` (al carui
+         *     raspuns se refoloseste cand e chiar el).
+         *
+         * Categoriile se iau din SITEMAP, prima si ultima: sunt adresele declarate
+         * indexabile, deci si locul unde trebuie sa se vada decizia 6.
+         */
+        if (eroareMagazine) return eroareMagazine;
+        /* `clasament` iese gol cand rezumatele n-au putut fi citite: fara garda, proba ar fi
+           tacut tocmai atunci, ca si cum n-ar exista niciun magazin. */
+        if (eRezumate) return `citirea rezumatelor a esuat: ${eRezumate.message}`;
+        const cuDomeniu = clasament
+          .filter((c) => !!c.domeniuPropriu && !c.unSingurProdus)
+          // Domeniile dovedit sanatoase intai; intre ele, ordinea marimii (`sort` e stabil).
+          .sort((a, b) => Number(b.domeniuSanatos === true) - Number(a.domeniuSanatos === true));
+        if (cuDomeniu.length === 0) return motivFaraSitemap;
+
+        const { data: randuri, error: eSeo } = await admin
+          .from("businesses")
+          .select("id, business_name, store_name, store_settings(page_content)")
+          .in("id", cuDomeniu.map((c) => c.id));
+        if (eSeo) return `citirea setarilor SEO a esuat: ${eSeo.message}`;
+        type RandSeo = { id: string; business_name: string; store_name: string | null; store_settings: unknown };
+        const dupaId = new Map(((randuri ?? []) as unknown as RandSeo[]).map((r) => [r.id, r]));
+        const candidati = cuDomeniu.flatMap((m) => {
+          const r = dupaId.get(m.id);
+          if (!r) return [];
+          const ss = r.store_settings as { page_content?: unknown } | { page_content?: unknown }[] | null;
+          const seo = parseStoreSeo((Array.isArray(ss) ? ss[0] : ss)?.page_content ?? null);
+          if (!seo.description?.trim() || seo.noindex) return [];
+          return [{ m, nume: numeScurtMagazin(r.store_name ?? r.business_name) }];
+        });
+        /* Niciun magazin viu cu descrierea completata: n-avem ce scurgere cauta, si nu inventam. */
+        if (candidati.length === 0) return null;
+
+        let magazinDescriere: { m: MagazinViu; nume: string; catalog: Raspuns } | null = null;
+        const sarite: string[] = [];
+        for (const { m, nume } of candidati.slice(0, MAX_INCERCARI)) {
+          const r = magazinProba && magazinProba.id === m.id && magazinProba.paginaCatalogSeparata
+            ? magazinProba.primaPagina
+            : await ia(`${m.baza}/magazin`);
+          /* Un candidat SARIT nu se uita (vezi alegerea lui `magazinProba`). */
+          if (r.cod !== 200) { sarite.push(`${m.baza}/magazin raspunde cu ${r.cod}`); continue; }
+          /* Dus inapoi la radacina: n-are pagina de catalog separata, deci nici ce judeca aici. */
+          if (acelasiLoc(r.url, m.baza)) continue;
+          magazinDescriere = { m, nume, catalog: r };
+          break;
+        }
+        if (!magazinDescriere) {
+          return sarite.length
+            ? `niciun magazin cu descrierea SEO completata n-a putut fi masurat: ${sarite.join(", ")}`
+            : null;
+        }
+        const { m, nume, catalog } = magazinDescriere;
+        const cazute: string[] = sarite.length
+          ? [`am sarit magazine cu pagina de catalog cazuta: ${sarite.join(", ")}`]
+          : [];
+
+        const acasa = await ia(`${m.baza}/`);
+        if (acasa.cod !== 200) cazute.push(`pagina principala ${m.baza}/ raspunde cu ${acasa.cod}`);
+        const descriereAcasa = acasa.cod === 200 ? continutMeta(acasa.text, "name", "description") : null;
+
+        /* Adresele anuntate de sitemap: din ele se iau categoriile, si cu ele se judeca `noindex`. */
+        const sm = await ia(`${m.baza}/sitemap.xml`);
+        if (sm.cod !== 200) cazute.push(`sitemapul ${m.baza}/sitemap.xml raspunde cu ${sm.cod}`);
+        const locuri = sm.cod === 200 ? [...sm.text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((x) => x[1]) : [];
+        const categorii = locuri.filter((u) => u.startsWith(`${m.baza}/`) && /^\/magazin\/[^/]+$/.test(u.slice(m.baza.length)));
+        const deVerificat: { url: string; raspuns: Raspuns | null }[] = [
+          { url: `${m.baza}/magazin`, raspuns: catalog },
+          ...[...new Set([categorii[0], categorii[categorii.length - 1]])]
+            .filter((u): u is string => !!u)
+            .map((url) => ({ url, raspuns: null })),
+        ];
+
+        /* Descrierea deja vazuta, cu adresa ei: doua pagini cu acelasi text sunt tot dublura reparata aici. */
+        const vazute = new Map<string, string>();
+        for (const v of deVerificat) {
+          const r = v.raspuns ?? await ia(v.url);
+          if (r.cod !== 200) { cazute.push(`${v.url} raspunde cu ${r.cod}`); continue; }
+          const probleme = problemeDescriere({
+            html: r.text,
+            noduri: noduriJsonLd(r.text),
+            descriereAcasa,
+            numeScurt: nume,
+            dinSitemap: locuri.includes(v.url),
+          });
+          if (probleme.length) cazute.push(`${v.url}: ${probleme.join(", ")}`);
+          const d = continutMeta(r.text, "name", "description");
+          if (d && vazute.has(d)) cazute.push(`${v.url} are aceeasi descriere ca ${vazute.get(d)}`);
+          else if (d) vazute.set(d, v.url);
         }
         return cazute.length ? cazute.join(" | ") : null;
       },

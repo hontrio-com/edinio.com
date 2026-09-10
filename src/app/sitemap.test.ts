@@ -298,6 +298,10 @@ const DATE: DateMagazinPentruSitemap = {
     { id: "c2", name: "Stinsa", parent_id: null, is_active: false },
     { id: "c3", name: "Flori", parent_id: null, is_active: true }, // acelasi segment ca „Flori"
   ],
+  /* Rezumatul necitit (`null`): nu stim ce categorie are produse, deci toate raman.
+     Decizia 6 (categoriile fara produse ies) e probata in
+     `sitemap-categorii-fara-produse.test.ts`. */
+  categoriiCuProduse: null,
   produse: [
     { slug: "trandafiri", updated_at: "2026-08-20T00:00:00.000Z" },
     { slug: null, updated_at: null },

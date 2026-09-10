@@ -32,6 +32,25 @@ export function formatPrice(amount: number): string {
 }
 
 /**
+ * Numarul, cu substantivul acordat romaneste: „1 produs", „19 produse", „20 de
+ * produse", „1.353 de produse".
+ *
+ * ⚠ „de" il cer ULTIMELE DOUA cifre, nu marimea numarului: 101 si 1.001 se scriu
+ * fara „de" (ca 1), 120 si 1.353 cu „de" (ca 20). O regula scrisa ca „peste 19"
+ * greseste la 101, iar una scrisa ca `rest <= 20` greseste chiar la 20.
+ *
+ * Numarul se scrie cu separatorul de mii romanesc („1.353"): ajunge in texte citite
+ * de oameni, inclusiv in descrierile pe care le arata Google.
+ */
+export function pluralRo(n: number, unu = "produs", multe = "produse"): string {
+  if (n === 1) return `1 ${unu}`;
+  const numar = n.toLocaleString("ro-RO");
+  const rest = n % 100;
+  if (n === 0 || (rest >= 1 && rest <= 19)) return `${numar} ${multe}`;
+  return `${numar} de ${multe}`;
+}
+
+/**
  * Se poate arata pretul unitar langa totalul liniei, sau s-ar contrazice cu el?
  *
  * Pretul unitar al unui pachet e NEROTUNJIT in comanda (250 lei pe 3 bucati

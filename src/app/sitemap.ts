@@ -11,6 +11,8 @@ import { slugCategorie } from "@/lib/storefront/category-href";
 import { parseStoreDesign } from "@/lib/storefront/design/parse";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { categoriiVizibile } from "@/lib/categories/vizibilitate";
+import { subarboreAreProduse } from "@/lib/storefront/catalog/descriere-generata";
+import { rezumatMagazin } from "@/lib/storefront/catalog/context-descriere";
 import { toateArticolelePublicate } from "@/lib/blog/citire";
 import { CATEGORII_AJUTOR, TOATE_GHIDURILE } from "@/lib/website/ajutor";
 import { adresaCategorie, adresaGhid } from "@/lib/website/ajutor-cautare";
@@ -469,6 +471,15 @@ export type MagazinPentruSitemap = {
 /** Ce se citeste din baza pentru sitemapul unui magazin. */
 export type DateMagazinPentruSitemap = {
   categorii: Parameters<typeof categoriiVizibile>[0];
+  /**
+   * Numele de categorie purtate de produse vizibile: `catalog_rezumat.categorii`, din
+   * randul comutatoarelor MAGAZINULUI. `null` = nu stim (rezumat lipsa sau citire
+   * picata), deci toate categoriile raman, cum ramane indexabila si pagina lor.
+   *
+   * ⚠ Obligatoriu, nu optional: un apelant care uita sa-l dea n-ar mai aplica decizia 6
+   * (vezi `intrariMagazin`), iar `tsc` n-ar spune nimic.
+   */
+  categoriiCuProduse: readonly string[] | null;
   produse: { slug: string | null; updated_at: string | null }[];
   pagini: { slug: string | null; updated_at: string | null; seo: unknown }[];
 };
@@ -510,11 +521,26 @@ export function intrariMagazin(
     // raspund cautarilor de tip „bocanci de protectie". Cele stinse din panou
     // ies — pagina lor raspunde 404. Doua categorii pot da acelasi segment
     // (diferenta e doar la diacritice): intra o singura data, e o singura pagina.
+    //
+    // ⚠ DECIZIA 6 (10.09.2026): iese si categoria al carei subarbore n-are niciun
+    // produs. Pagina ei poarta `noindex, follow` (`metadata-magazin.ts`), iar o pagina
+    // `noindex` anuntata in sitemap e contradictia pe care Search Console o raporteaza
+    // ca eroare. Regula e UNA, `subarboreAreProduse`, chemata si de pagina, cu aceleasi
+    // intrari: categoriile vizibile, numele pe care pagina il rezolva din segment si
+    // `rezumat.categorii` pentru comutatoarele magazinului. Fara rezumat (`null`) nu
+    // stim, deci categoria ramane, cum ramane indexabila si pagina ei.
+    //
+    // ⚠ Segmentul se marcheaza VAZUT inainte de regula. Pagina unui segment e a PRIMEI
+    // categorii care il da, in ordinea din panou (`potrivesteCategorie`): cand aceea
+    // n-are produse, pagina e `noindex` chiar daca a doua, cu acelasi segment, are. De
+    // aceea `citesteDateMagazin` le citeste ordonate ca pagina (`sort_order`, `id`).
     const vazute = new Set<string>();
-    for (const c of categoriiVizibile(date.categorii)) {
+    const vizibile = categoriiVizibile(date.categorii);
+    for (const c of vizibile) {
       const seg = slugCategorie(c.name ?? "");
       if (!seg || vazute.has(seg)) continue;
       vazute.add(seg);
+      if (subarboreAreProduse(vizibile, c.name ?? "", date.categoriiCuProduse) === false) continue;
       entries.push({
         url: `${base}/${SEGMENT_MAGAZIN}/${seg}`,
         ...dataDacaOStim(biz.updated_at),
@@ -574,6 +600,25 @@ async function sitemapPeDomeniulPropriu(host: string): Promise<MetadataRoute.Sit
     .single();
   if (!biz) return [];
 
+  return intrariMagazin(`https://${host}`, biz, await citesteDateMagazin(biz, supabase));
+}
+
+/** Clientul cu care se citesc categoriile, produsele si paginile: al vizitatorului, ca pana acum. */
+type ClientSitemap = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * Tot ce citeste sitemapul unui magazin, pe langa randul lui.
+ *
+ * Scoasa din `sitemapPeDomeniulPropriu` ca sa poata fi RULATA in probe, pe o baza de
+ * proba: clientul vizitatorului (`createClient`) cere cookie-urile cererii, care sub
+ * `node --test` nu exista, deci il primeste de la apelant. Asa se verifica doua lucruri
+ * pe care `intrariMagazin` nu le poate vedea, amandoua ale deciziei 6: ca rezumatul e
+ * randul comutatoarelor magazinului si ca categoriile vin in ordinea paginii.
+ */
+export async function citesteDateMagazin(
+  biz: MagazinPentruSitemap & { id: string },
+  supabase: ClientSitemap,
+): Promise<DateMagazinPentruSitemap> {
   /*
    * Se citeste doar ce poate intra: categoriile numai daca exista pagina de
    * catalog (si nu e ascunsa de `noindex`), produsele numai daca magazinul nu e
@@ -583,10 +628,18 @@ async function sitemapPeDomeniulPropriu(host: string): Promise<MetadataRoute.Sit
    */
   const areCatalog = !homepageNoindex(biz) && shopOnPage(designPublicat(biz.store_settings));
   const unSingurProdus = parseStoreModeFromSettings(biz.store_settings).mode === "one_product";
-  const [categorii, produse, pagini] = await Promise.all([
+  /*
+   * Comutatoarele magazinului, citite ca la pagina (`metadata-magazin.ts`). ⚠ Randul de
+   * rezumat e al LOR: `catalog_rezumat` are patru randuri pe magazin, iar altul decat al
+   * paginii ar fi scos din sitemap categorii pe care pagina le arata, sau invers.
+   */
+  const pc = (pcDinRand(biz) ?? {}) as { hide_products_without_images?: unknown; hide_out_of_stock_products?: unknown };
+  const [categorii, produse, pagini, rezumat] = await Promise.all([
     areCatalog
       ? fetchAllRowsStrict("sitemap.store.categories", (from, to) =>
-        supabase.from("categories").select("id, name, parent_id, is_active").eq("business_id", biz.id).order("id").range(from, to),
+        // ⚠ Ordinea e a paginii (`categoriiMagazin`), nu doar `id`: vezi decizia 6 in
+        // `intrariMagazin`. `id` ramane al doilea, ca felierea sa fie stabila.
+        supabase.from("categories").select("id, name, parent_id, is_active").eq("business_id", biz.id).order("sort_order").order("id").range(from, to),
       )
       : Promise.resolve([]),
     unSingurProdus
@@ -610,9 +663,13 @@ async function sitemapPeDomeniulPropriu(host: string): Promise<MetadataRoute.Sit
         .order("id")
         .range(from, to),
     ),
+    // `null` la orice eroare (`rezumatMagazin` o scrie in jurnal): nu stim, deci nu scoatem nimic.
+    areCatalog
+      ? rezumatMagazin(biz.id, pc.hide_products_without_images === true, pc.hide_out_of_stock_products === true)
+      : Promise.resolve(null),
   ]);
 
-  return intrariMagazin(`https://${host}`, biz, { categorii, produse, pagini });
+  return { categorii, categoriiCuProduse: rezumat?.categorii ?? null, produse, pagini };
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

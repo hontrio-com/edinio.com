@@ -3,6 +3,7 @@
 import { adresaPublica } from "@/lib/storefront/identitate-publica";
 import { useState, useTransition, useEffect } from "react";
 import { toast } from "sonner";
+import Link from "next/link";
 import {
   Loader2, Save, FileText, Settings, Zap, Receipt,
   Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
@@ -2305,6 +2306,13 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     disabled={!businessId}
                   />
                   <p className="text-[11px] text-muted-foreground mt-1">Recomandat 150-160 de caractere. Nu schimba direct pozitia, dar creste rata de click.</p>
+                  {/* ⚠ Citata in centrul de ajutor (`ajutor-categorii/setari.ts`, „Unde se aplica valorile”). Se schimba impreuna. */}
+                  <p className="text-[11px] text-muted-foreground mt-1">Paginile de categorie, catalogul si politicile primesc automat o descriere proprie.</p>
+                  {/* Legatura catre editorul din Produse > Categorii (eticheta „Google" de pe rand). Citata tot in `setari.ts`. */}
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Pe o categorie poți înlocui textul automat cu unul scris de tine, din{" "}
+                    <Link href="/dashboard/products/categories" className="text-primary hover:underline">Produse &gt; Categorii</Link>.
+                  </p>
                 </div>
 
                 {/* Previzualizare Google */}

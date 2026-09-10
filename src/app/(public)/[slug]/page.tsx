@@ -1,13 +1,12 @@
 import { pentruBrowser } from "@/lib/storefront/business-public";
-import { textCurat } from "@/lib/storefront/date-structurate";
 import { graf, magazinJsonLd } from "@/lib/storefront/date-structurate";
-import { incarcaMagazinul, metadataMagazinNepublicat } from "@/lib/storefront/antet-magazin";
+import { incarcaMagazinul } from "@/lib/storefront/antet-magazin";
 import { disponibilitatePachet } from "@/lib/bundles";
 import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { parseStoreSeo, deriveStoreTitle, deriveStoreDescription, storeBaseUrl } from "@/lib/seo";
+import { storeBaseUrl } from "@/lib/seo";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
 import { ProductPageDinDesign } from "@/components/storefront/sections/product/ProductPageDinDesign";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
@@ -22,11 +21,12 @@ import { incarcaAcasaDeLaServer } from "@/lib/storefront/catalog/acasa-server";
 import { citesteAsezare, samantaAmestec, sortareaAsezarii } from "@/lib/storefront/asezare";
 import type { Fateta as FatetaCatalog } from "@/lib/storefront/catalog/facets";
 import type { StorefrontProduct } from "@/lib/storefront/product.types";
-import { isNonProductionHost } from "@/lib/storefront/host";
+import { seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
 import { hrefCatalog } from "@/lib/storefront/category-href";
 import { citesteFiltreDinAdresa, scrieFiltre } from "@/lib/storefront/catalog/url";
-import { SEGMENT_MAGAZIN, grilaRamaneAcasa, radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
-import { parseStoreDesign, resolveDesign } from "@/lib/storefront/design/parse";
+import { metadataPaginiiPrincipale } from "@/lib/storefront/catalog/metadata-acasa";
+import { grilaRamaneAcasa, radacinaCatalog, shopOnPage } from "@/lib/storefront/design/commerce";
+import { resolveDesign } from "@/lib/storefront/design/parse";
 import { esteEditorDeDesign } from "@/lib/storefront/design/preview-protocol";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
@@ -62,134 +62,17 @@ interface Props {
 }
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
-  const { slug } = await params;
-  const { page: pageQ, cat: catQ, sale: saleQ } = await searchParams;
-  // Read via the service role: the SEO overrides live in store_settings, which
-  // is no longer anon-readable, so a nested anon select would return null there.
-  const { data: business } = await createAdminClient()
-    .from("businesses")
-    .select("id, business_name, store_name, tagline, description, store_city, cover_url, custom_domain, is_published, store_settings(page_content, storefront_design)")
-    .eq("slug", slug)
-    .single();
-  if (!business) return {};
-
+  const [{ slug }, sp] = await Promise.all([params, searchParams]);
   /*
-   * Vitrina NEPUBLICATA raspunde 200 (ecranul „in curand disponibil"), deci
-   * metadata ei trebuie sa spuna explicit `noindex` — altfel magazinele in lucru
-   * intra in indexul Google ca pagini goale si raman acolo si dupa publicare,
-   * concurand chiar pagina adevarata. Vezi `incarcaMagazinul`.
-   */
-  if (!business.is_published) {
-    return metadataMagazinNepublicat(business.store_name ?? business.business_name);
-  }
-
-  // Merchant overrides (Settings > SEO) win; otherwise fall back to the
-  // auto-derived defaults (single source of truth in @/lib/seo).
-  const rawSettings = (business as unknown as { store_settings: { page_content: unknown; storefront_design?: unknown } | { page_content: unknown; storefront_design?: unknown }[] | null }).store_settings;
-  const settings = Array.isArray(rawSettings) ? rawSettings[0] : rawSettings;
-  const seo = parseStoreSeo(settings?.page_content ?? null);
-  // Designul PUBLICAT, doar ca sa stim daca exista pagina de catalog. Contextul e
-  // minimal: intrebarea nu depinde de culori sau de bannere.
-  const designPtSeo = parseStoreDesign(
-    (settings as { storefront_design?: unknown } | null)?.storefront_design ?? null,
-    { primaryColor: "#1AB554", pageContent: {}, features: {} },
-  );
-
-  const displayName = business.store_name ?? business.business_name;
-  const title = seo.title || deriveStoreTitle(displayName, business.store_city);
-  const description = seo.description || deriveStoreDescription({ tagline: business.tagline, description: business.description, displayName });
-  // When a custom domain is configured, consolidate SEO to it (so edinio.com/slug
-  // also points its canonical at the store's own domain).
-  const radacina = storeBaseUrl({ slug, custom_domain: business.custom_domain });
-  /*
-   * Canonicalul urmeaza filtrele care CHIAR schimba continutul.
+   * Tot corpul sta in `metadata-acasa.ts` (`metadataPaginiiPrincipale`), fara JSX, ca sa
+   * poata fi RULAT in probe. Garda care trimite adresele filtrate (`?cat=`, `?sale=1`,
+   * `?page=N`) la `metadataAcasaFiltrata` decide canonicalul paginii principale la TOATE
+   * magazinele, iar o garda rupta aici trecea de tsc, de probele pe sursa si de build.
    *
-   * Paginile 2..N, categoriile si reducerile sunt adrese crawlabile, cu produse
-   * diferite; toate aratau catre radacina, deci Google le vedea ca duplicate ale
-   * primei pagini si nu indexa niciuna. Cautarea libera (?q=) ramane in afara:
-   * acolo canonicalul catre radacina e corect, sunt infinit de multe.
+   * Produsul unic vine prin `getStoreProduct`, cu `cache()`: randarea de mai jos il cere
+   * cu aceleasi argumente, deci un singur drum la baza.
    */
-  // Codificarea e cea din linkuri (`encodeURIComponent`), nu cea din
-  // `URLSearchParams`: aceea scrie spatiile cu `+`, deci canonicalul ar arata
-  // catre alta adresa decat cea pe care a crawlat-o Google.
-  const filtre: string[] = [];
-  if (catQ) filtre.push(`cat=${encodeURIComponent(catQ)}`);
-  if (saleQ === "1") filtre.push("sale=1");
-  const nrPagina = Math.max(1, parseInt(pageQ ?? "1", 10) || 1);
-  if (nrPagina > 1) filtre.push(`page=${nrPagina}`);
-  const sir = filtre.join("&");
-  /*
-   * Cand catalogul are si pagina lui, versiunile FILTRATE ale paginii principale
-   * arata canonical catre ea.
-   *
-   * `/?cat=Manusi` si `/magazin?cat=Manusi` listeaza aceleasi produse. Lasate
-   * amandoua auto-canonice, Google ar fi ales singur intre ele si ar fi impartit
-   * semnalul de link in doua. Canonicalul e exact unealta pentru asta: cele doua
-   * adrese raman functionale pentru vizitator, dar una singura se indexeaza.
-   *
-   * Pagina principala NEfiltrata isi pastreaza canonicalul ei: nu e un duplicat,
-   * are hero, randuri alese si restul sectiunilor pe langa grila.
-   */
-  const areCatalogSeparat = shopOnPage(designPtSeo);
-  const radacinaCanonic = areCatalogSeparat && sir ? `${radacina}/${SEGMENT_MAGAZIN}` : radacina;
-  const url = sir ? `${radacinaCanonic}?${sir}` : radacina;
-
-  // One Product Store: the homepage *is* the chosen product's landing page, so its
-  // metadata comes from that product (canonical stays on the homepage URL). Store
-  // SEO overrides (Settings > SEO) still win when set.
-  const storeMode = parseStoreMode(settings?.page_content ?? null);
-  if (storeMode.mode === "one_product" && storeMode.productId) {
-    const product = await getStoreProduct(business.id, storeMode.productId);
-    if (product) {
-      const ps = product.page_sections as { seo?: { title?: string; description?: string }; short_description?: string } | null;
-      const opsTitle = seo.title || ps?.seo?.title || product.name;
-      const opsDescription = seo.description
-        || ps?.seo?.description
-        /* ⚠ `textCurat`, nu o taiere proprie: eticheta devine SPATIU, altfel „…cazare.Beneficii:". */
-    || textCurat(ps?.short_description, 155)
-        || (product.description ? textCurat(product.description, 155) : product.name);
-      const pImgs = product.images as string[] | null;
-      const opsImage = seo.ogImage || pImgs?.[0] || business.cover_url;
-      const opsImages = opsImage ? [opsImage] : [];
-      return {
-        title: { absolute: opsTitle },
-        description: opsDescription,
-        ...(seo.noindex ? { robots: { index: false, follow: true } } : {}),
-        // `type` si `locale` se scriu explicit: obiectul asta inlocuieste in
-        // intregime openGraph-ul din layout-ul radacina, deci ce nu e aici nu se
-        // emite deloc, iar og:type e obligatoriu in protocol.
-        openGraph: { type: "website", locale: "ro_RO", siteName: displayName, title: opsTitle, description: opsDescription, url, images: opsImages },
-        twitter: {
-          card: opsImages.length ? "summary_large_image" : "summary",
-          title: opsTitle,
-          description: opsDescription,
-          ...(opsImages.length ? { images: opsImages } : {}),
-        },
-        alternates: { canonical: url },
-      };
-    }
-    // Chosen product missing/inactive — fall through to the store metadata below.
-  }
-
-  const ogImage = seo.ogImage || business.cover_url;
-  const images = ogImage ? [ogImage] : [];
-  return {
-    // `absolute` strips the root layout's "%s | Edinio" template — storefronts
-    // must show only the merchant's own name in Google / browser tabs.
-    title: { absolute: title },
-    description,
-    // Advanced opt-in: hide the homepage from search. "follow" stays on so
-    // crawlers still reach the (indexable) product pages it links to.
-    ...(seo.noindex ? { robots: { index: false, follow: true } } : {}),
-    openGraph: { type: "website", locale: "ro_RO", siteName: displayName, title, description, url, images },
-    twitter: {
-      card: images.length ? "summary_large_image" : "summary",
-      title,
-      description,
-      ...(images.length ? { images } : {}),
-    },
-    alternates: { canonical: url },
-  };
+  return metadataPaginiiPrincipale({ slug, sp, incarcaProdus: getStoreProduct });
 }
 
 /**
@@ -536,9 +419,10 @@ export default async function SlugPage({ params, searchParams }: Props) {
   // Analitica, DUPA ce raspunsul a plecat (skip pentru proprietar). Sarita si pe
   // preview/localhost: acele medii scriu in baza de PRODUCTIE, deci fiecare
   // vizita de test ar aparea in statisticile comerciantului. Detalii in
-  // lib/storefront/host.ts.
-  if (!isOwner && !isNonProductionHost(host)) {
-    const ua = headersList.get("user-agent") ?? "";
+  // lib/storefront/host.ts. Si santinela: regula intreaga, cu motivul ei, sta in
+  // `vizita-de-masurat.ts`, aceeasi pentru pagina de catalog.
+  const ua = headersList.get("user-agent") ?? "";
+  if (seMasoaraVizita({ esteProprietar: isOwner, host, userAgent: ua })) {
     const device = /mobile/i.test(ua) ? "mobile" : /tablet/i.test(ua) ? "tablet" : "desktop";
     /*
       ═══ ⚠ SURSA SE MASOARA, NU SE PRESUPUNE (02.09.2026) ═══

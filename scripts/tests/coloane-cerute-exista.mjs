@@ -40,6 +40,12 @@ import { join } from "node:path";
 const TABELE = [
   "store_settings", "orders", "businesses", "users_profile",
   /*
+    ⚠ CATEGORIILE lipseau, desi codul le cere peste tot pe coloane numite. Cu `seo_description`
+    (migratia 2027-01-08) cererea e chiar pe fata: citirea tintita a vitrinei si salvarea din
+    panou. Fara tabelul aici, unealta spunea OK peste un cod care cere o coloana inexistenta.
+  */
+  "categories",
+  /*
     ⚠ BLOGUL E AICI FIINDCĂ NU E ÎN TIPURILE GENERATE.
 
     `src/types/database.types.ts` nu cunoaște niciun `blog_*`, deci tot codul de

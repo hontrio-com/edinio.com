@@ -28,6 +28,7 @@ export const PLATFORM_ORIGIN = "https://www.edinio.com";
  */
 export { isPlatformHost } from "@/lib/platform-hosts";
 import { esteDomeniulPropriu } from "@/lib/platform-hosts";
+import { textCurat } from "@/lib/storefront/date-structurate";
 
 /**
  * Adresa publica a unui magazin: domeniul propriu cand exista, altfel
@@ -116,6 +117,44 @@ export const SEO_TITLE_IDEAL_MIN = 50;
 export const SEO_TITLE_MAX = 60;
 export const SEO_DESCRIPTION_IDEAL_MIN = 140;
 export const SEO_DESCRIPTION_MAX = 160;
+
+/**
+ * Cat primeste descrierea scrisa pe o categorie (Produse > Categorii).
+ *
+ * Mai mult decat `SEO_DESCRIPTION_MAX`: Google taie oricum pe la 155-160 de caractere, iar
+ * contorul din panou se inroseste acolo, dar textul comerciantului se publica asa cum l-a
+ * scris, ca descrierea paginii principale. Peste prag salvarea il RESPINGE (nu-l taie pe
+ * tacute); citirea il taie, fiindca in baza se poate scrie si ocolind actiunea.
+ */
+export const SEO_DESCRIERE_CATEGORIE_MAX = 300;
+
+/*
+ * Caractere invizibile care n-au ce cauta intr-o descriere: controalele C0 si C1 (fara tab si
+ * rand nou, care devin spatiu mai jos), spatiile de latime zero, BOM-ul si controalele de
+ * directie.
+ *
+ * ⚠ Un control de directie (U+202E) intoarce pe ecran textul de dupa el: in rezultatele Google
+ * s-ar fi citit altceva decat vede comerciantul in panou. Iar NUL-ul (U+0000) il respinge
+ * Postgres, deci ar fi picat TOT update-ul.
+ */
+const INVIZIBILE = /[\u0000-\u0008\u000E-\u001F\u007F-\u009F\u061C\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g;
+
+/**
+ * Descrierea scrisa de om, adusa la forma in care se publica: fara etichete, fara caracterele
+ * invizibile de mai sus, cu spatiile comprimate. Sirul gol (sau orice nu e sir) da `null`,
+ * adica textul automat.
+ *
+ * `max` = taiere la cuvant, pentru CITIRE. Lipsa = fara taiere, pentru SALVARE: acolo un text
+ * prea lung se refuza, nu se scurteaza.
+ *
+ * ⚠ Trece prin ACELASI `textCurat` ca datele structurate, iar iesirea nu se mai schimba la a
+ * doua trecere. Deci ce se salveaza e exact ce apare in meta, og, twitter si JSON-LD. O regula
+ * a doua, scrisa aici de mana, s-ar fi despartit de prima la prima modificare.
+ */
+export function curataTextSeo(brut: unknown, max?: number): string | null {
+  if (typeof brut !== "string") return null;
+  return textCurat(brut.replace(INVIZIBILE, ""), max ?? Number.POSITIVE_INFINITY) || null;
+}
 
 /** Read & normalize the SEO overrides out of a `page_content` JSON blob. */
 export function parseStoreSeo(pageContent: unknown): StoreSeo {

@@ -5,6 +5,8 @@ import { mutaMapareaCategoriei } from "@/lib/marketplace/mapare-categorii";
 import { createClient } from "@/lib/supabase/server";
 import { collectSubtreeIds } from "@/lib/categories/tree";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
+import { curataTextSeo, SEO_DESCRIERE_CATEGORIE_MAX } from "@/lib/seo";
+import { descriereAutomataCategoriei, type DescriereAutomataCategorie } from "@/lib/storefront/catalog/descriere-automata";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
@@ -424,4 +426,92 @@ export async function reorderCategories(
   revalidatePath("/dashboard/products/categories");
   revalidatePath("/dashboard/products");
   return { success: true };
+}
+
+/** Plafonul textului BRUT, inaintea curatarii: etichetele si spatiile pot scurta mult, deci e larg. */
+const PLAFON_DESCRIERE_BRUTA = 10_000;
+const MESAJ_DESCRIERE_LUNGA = `Descrierea poate avea cel mult ${SEO_DESCRIERE_CATEGORIE_MAX} de caractere.`;
+
+/**
+ * Descrierea pentru Google a unei categorii, scrisa de comerciant (etapa 2 a descrierilor).
+ *
+ * `null`, sau un text care dupa curatare ramane gol, inseamna textul automat.
+ *
+ * ═══ CE SE SCRIE, SI DE CE EXACT ASA ═══
+ *
+ *   - textul trece prin `curataTextSeo`: fara etichete, fara caractere de control si de
+ *     directie, cu spatiile comprimate. Se salveaza forma in care se publica, deci panoul arata
+ *     dupa salvare exact ce primeste Google;
+ *   - peste `SEO_DESCRIERE_CATEGORIE_MAX` DUPA curatare: refuz, cu mesaj. Taiat pe tacute,
+ *     comerciantul ar fi aflat abia din Google ca i s-a pierdut finalul;
+ *   - o singura coloana, pe cheie EXPLICITA: `verifica:coloane` citeste cheile scrise pe fata,
+ *     iar o imprastiere l-ar fi orbit.
+ *
+ * ⚠ Validarea de aici NU e bariera: `authenticated` poate scrie direct prin PostgREST pe
+ * randurile lui. De aceea vitrina curata si taie din nou la citire (`citesteSeoCategorie`), iar
+ * baza are un CHECK de 1000.
+ *
+ * ⚠ Inaintea migratiei PostgREST respinge coloana: salvarea raspunde cu eroare, iar restul
+ * ecranului (redenumire, ascundere, imagine) merge mai departe, fiindca trimite doar cheile lui.
+ */
+export async function salveazaSeoCategorie(
+  id: string,
+  descriere: string | null,
+): Promise<{ error: string } | { success: true; descriere: string | null }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const businessId = await getBusinessId(supabase, user.id);
+  if (!businessId) return { error: "Magazin negasit" };
+
+  // Tipurile nu exista la rulare: o cerere mestesugita poate trimite orice. `undefined` nu
+  // trece drept `null`: un apel scapat fara al doilea argument ar fi sters textul.
+  if (typeof id !== "string" || !id || (descriere !== null && typeof descriere !== "string")) {
+    return { error: "Date invalide." };
+  }
+  if (descriere !== null && descriere.length > PLAFON_DESCRIERE_BRUTA) return { error: MESAJ_DESCRIERE_LUNGA };
+  const text = curataTextSeo(descriere);
+  if (text !== null && text.length > SEO_DESCRIERE_CATEGORIE_MAX) return { error: MESAJ_DESCRIERE_LUNGA };
+
+  const { data, error } = await supabase
+    .from("categories")
+    .update({ seo_description: text, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("business_id", businessId)
+    .select("id");
+
+  if (error) {
+    console.error("[categorii] descrierea n-a putut fi salvata:", error.message);
+    return { error: "Descrierea nu s-a putut salva." };
+  }
+  // Niciun rand atins: categoria nu exista, sau e a altui magazin (filtrul pe `business_id`).
+  if (!data || data.length === 0) return { error: "Categoria nu există." };
+
+  revalidatePath("/dashboard/products/categories");
+  return { success: true, descriere: text };
+}
+
+/**
+ * Textul AUTOMAT al paginii unei categorii, exact cel din magazin, plus ce trebuie sa stie
+ * editorul ca sa nu promita ce nu se intampla: categoria e ascunsa, alta categorie ii ia
+ * adresa, magazinul n-are domeniu propriu. Vezi `descriereAutomataCategoriei`.
+ *
+ * `null` = neautorizat, categoria nu e a magazinului lui, sau magazinul n-a putut fi citit.
+ */
+export async function descriereAutomataCategorie(id: string): Promise<DescriereAutomataCategorie | null> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const businessId = await getBusinessId(supabase, user.id);
+  if (!businessId) return null;
+  if (typeof id !== "string" || !id) return null;
+
+  try {
+    return await descriereAutomataCategoriei(businessId, id);
+  } catch (e) {
+    console.error("[categorii] textul automat n-a putut fi calculat:", e instanceof Error ? e.message : e);
+    return null;
+  }
 }

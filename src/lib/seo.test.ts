@@ -3,7 +3,10 @@ import { test, describe } from "node:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isPlatformHost as dinSeo, robotsVitrinaPeGazda, storeBaseUrl, verificareGooglePentru } from "./seo";
+import {
+  curataTextSeo, isPlatformHost as dinSeo, robotsVitrinaPeGazda, SEO_DESCRIERE_CATEGORIE_MAX, storeBaseUrl, verificareGooglePentru,
+} from "./seo";
+import { textCurat } from "./storefront/date-structurate";
 import { isPlatformHost as dinGazde } from "./platform-hosts";
 
 const AICI = dirname(fileURLToPath(import.meta.url));
@@ -181,5 +184,67 @@ describe("adresa publica a magazinului", () => {
     assert.equal(storeBaseUrl({ slug: "floraria-mea", custom_domain: "floraria.ro" }), "https://floraria.ro");
     assert.equal(storeBaseUrl({ slug: "floraria-mea", custom_domain: null }), "https://www.edinio.com/floraria-mea");
     assert.equal(storeBaseUrl({ slug: "floraria-mea" }), "https://www.edinio.com/floraria-mea");
+  });
+});
+
+/*
+ * ═══ curataTextSeo: DESCRIEREA SCRISA DE OM, IN FORMA IN CARE SE PUBLICA ═══
+ *
+ * O folosesc salvarea (`salveazaSeoCategorie`), citirea din vitrina (`citesteSeoCategorie`) si
+ * `descrierePaginii`. Caracterele invizibile se construiesc cu `String.fromCharCode`: scrise ca
+ * escapari in sursa, se pot pierde pe drum (vezi memoria „escaparile se pierd pe drum").
+ */
+describe("curataTextSeo", () => {
+  const c = (...coduri: number[]) => String.fromCharCode(...coduri);
+  const hex = (cod: number) => `U+${cod.toString(16).padStart(4, "0")}`;
+
+  test("etichetele devin spatiu, spatiile se comprima, capetele se taie", () => {
+    assert.equal(curataTextSeo("  <p>Prosoape</p><p>hoteliere</p>   de  500 GSM \n\t"), "Prosoape hoteliere de 500 GSM");
+  });
+
+  test("⚠ controalele C0 si C1, spatiile de latime zero, BOM-ul si controalele de directie dispar", () => {
+    const invizibile = [
+      0x0, 0x7, 0x8, 0xe, 0x1b, 0x1f, 0x7f, 0x85, 0x9f, 0x61c, 0x200b, 0x200e, 0x200f,
+      0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2060, 0x2066, 0x2067, 0x2068, 0x2069, 0xfeff,
+    ];
+    for (const cod of invizibile) assert.equal(curataTextSeo(`Pro${c(cod)}soape`), "Prosoape", hex(cod));
+  });
+
+  test("tab, rand nou si ceilalti separatori devin UN spatiu: nu lipesc cuvintele", () => {
+    for (const cod of [0x9, 0xa, 0xb, 0xc, 0xd, 0xa0, 0x2028, 0x2029, 0x3000]) {
+      assert.equal(curataTextSeo(`Prosoape${c(cod)}moi`), "Prosoape moi", hex(cod));
+    }
+  });
+
+  test("diacriticele, ghilimelele romanesti si emoji raman neatinse", () => {
+    const text = `Șervețele „moi” din bumbac ${c(0xd83e, 0xdd7a)} și prosoape`;
+    assert.equal(curataTextSeo(text), text);
+  });
+
+  test("gol, doar spatii, doar etichete, doar invizibile, sau nu e sir: null (textul automat)", () => {
+    for (const x of ["", "   ", "<p> </p>", c(0x202e, 0x200b), "\n\t", null, undefined, 42, {}, ["a"]]) {
+      assert.equal(curataTextSeo(x), null, JSON.stringify(x) ?? String(x));
+    }
+  });
+
+  test("fara `max` nu taie nimic (salvarea refuza, nu scurteaza); cu `max`, taie la cuvant", () => {
+    const lung = Array.from({ length: 80 }, (_, i) => `prosop${i}`).join(" ");
+    assert.ok(lung.length > 500);
+    assert.equal(curataTextSeo(lung), lung);
+    const t = curataTextSeo(lung, SEO_DESCRIERE_CATEGORIE_MAX) ?? "";
+    assert.ok(t.length <= 300 && t.length > 240, String(t.length));
+    assert.ok(lung.startsWith(t) && lung[t.length] === " ", "taiat prin mijlocul unui cuvant");
+  });
+
+  test("⚠ iesirea nu se mai schimba: nici la a doua trecere, nici prin `textCurat` din JSON-LD", () => {
+    for (const x of ["Preț  , mic ( 10 lei )", "<b>x</b>y", "a <> b", `A${c(0x202e)} . b`, "Saci <60L> si pungi", "  <p>unu</p><p>doi</p>  "]) {
+      const o = curataTextSeo(x) ?? "";
+      assert.equal(curataTextSeo(o) ?? "", o, x);
+      assert.equal(textCurat(o, 500), o, x);
+    }
+  });
+
+  test("pragul e 300: ce refuza salvarea si ce taie citirea", () => {
+    assert.equal(SEO_DESCRIERE_CATEGORIE_MAX, 300);
   });
 });

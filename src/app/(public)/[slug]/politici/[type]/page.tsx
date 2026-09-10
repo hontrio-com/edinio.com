@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { storeBaseUrl } from "@/lib/seo";
 import { politicaIndexabila } from "@/lib/storefront/policy-index";
+import { descrierePolitica } from "@/lib/storefront/policy-links";
+import { numeScurtMagazin } from "@/lib/storefront/catalog/descriere-generata";
 import { adresaPublica } from "@/lib/storefront/identitate-publica";
 import { jsonLdSafe } from "@/lib/json-ld";
 import { firimituriJsonLd, graf, paginaWebJsonLd, referintaMagazin } from "@/lib/storefront/date-structurate";
@@ -55,12 +57,24 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const titlu = `${meta.label} | ${numeMagazin}`;
   const url = `${storeBaseUrl(business)}/politici/${type}`;
   const imagine = business.cover_url ?? undefined;
+  /*
+   * Descrierea proprie a politicii (`descrierePolitica`), cu numele scurt al magazinului,
+   * fara „S.R.L." si fara slogan, ca in descrierile catalogului. Pana acum lipsea, deci
+   * pagina mostenea din layout descrierea PAGINII PRINCIPALE: cele sase politici aveau in
+   * Google textul primei pagini.
+   *
+   * ⚠ Aceeasi in `description`, og si twitter. og si twitter se declara mai jos INTREGI
+   * (Next inlocuieste cheia cu totul, nu o completeaza), deci o descriere lasata afara
+   * din ele n-ar mai veni de nicaieri.
+   */
+  const descriere = descrierePolitica(type, numeScurtMagazin(numeMagazin));
   // openGraph si twitter se declara aici, nu se lasa mostenite: pagina e legata
   // din subsolul fiecarui magazin, iar fara ele previzualizarea linkului trimis
   // pe WhatsApp sau Facebook arata cardul de marketing al Edinio, nu magazinul.
   return {
     // `absolute` strips the root layout's "%s | Edinio" template.
     title: { absolute: titlu },
+    description: descriere,
     // Cheia LIPSESTE cand e indexabila, nu `index: true` si nici `undefined`:
     // asa mosteneste ce spune layout-ul magazinului — `index` pe domeniul
     // propriu, `noindex` pe platforma — in loc sa contrazica antetul
@@ -74,12 +88,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       locale: "ro_RO",
       siteName: numeMagazin,
       title: titlu,
+      description: descriere,
       url,
       ...(imagine ? { images: [{ url: imagine }] } : {}),
     },
     twitter: {
       card: imagine ? "summary_large_image" : "summary",
       title: titlu,
+      description: descriere,
       ...(imagine ? { images: [imagine] } : {}),
     },
   };

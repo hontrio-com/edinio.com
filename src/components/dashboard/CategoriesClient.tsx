@@ -15,6 +15,9 @@ import { MediaPicker } from "@/components/media/MediaPicker";
 import { Button } from "@/components/ui/button";
 import { buildCategoryForest, collectSubtreeIds, searchCategoryForest } from "@/lib/categories/tree";
 import { idCategoriiAscunse } from "@/lib/categories/vizibilitate";
+import { stareDescriere, titluEticheta } from "@/lib/categories/descriere-google";
+import { EditorDescriereCategorie } from "@/components/dashboard/EditorDescriereCategorie";
+import { pluralRo } from "@/lib/utils/format";
 
 interface Category {
   id: string;
@@ -30,6 +33,14 @@ interface Category {
 
 interface Props {
   initialCategories: Category[];
+  /**
+   * Descrierile pentru Google scrise pe categorii (id -> text publicat), citite SEPARAT de lista.
+   * Tinute in afara lui `Category` dinadins: lista si descrierile vin din doua citiri, iar a doua
+   * poate cadea fara s-o ia pe prima cu ea.
+   */
+  descrieriInitiale: Record<string, string>;
+  /** `false` = descrierile n-au putut fi citite: eticheta nu pretinde „text automat". */
+  descrieriCitite: boolean;
 }
 
 // Indentation per tree level (px). Depth 1 lands on the old pl-10 (40px) look.
@@ -42,14 +53,6 @@ let tempSeq = 0;
 function nextTempId(): string {
   tempSeq += 1;
   return `temp-${tempSeq}`;
-}
-
-/** Romanian numeral agreement: 1 categorie / 3 categorii / 21 de categorii. */
-function pluralRo(n: number, one: string, many: string): string {
-  if (n === 1) return `1 ${one}`;
-  const rem = n % 100;
-  if (n === 0 || (rem >= 1 && rem <= 19)) return `${n} ${many}`;
-  return `${n} de ${many}`;
 }
 
 function EditableLabel({
@@ -102,9 +105,14 @@ function EditableLabel({
   );
 }
 
-export function CategoriesClient({ initialCategories }: Props) {
+export function CategoriesClient({ initialCategories, descrieriInitiale, descrieriCitite }: Props) {
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [isPending, startTransition] = useTransition();
+  // Descrierile pentru Google: eticheta de pe rand si editorul (Sheet) care se deschide din ea.
+  const [descrieri, setDescrieri] = useState<Record<string, string>>(descrieriInitiale);
+  const [descriereCatId, setDescriereCatId] = useState<string | null>(null);
+  const [descriereDeschisa, setDescriereDeschisa] = useState(false);
+  const [deschideri, setDeschideri] = useState(0);
 
   // Which item is being edited (id) or "new-root" / "new-sub-{parentId}"
   const [editing, setEditing] = useState<string | null>(null);
@@ -377,6 +385,49 @@ export function CategoriesClient({ initialCategories }: Props) {
     );
   }
 
+  function deschideDescrierea(id: string) {
+    setDescriereCatId(id);
+    setDeschideri(n => n + 1);
+    setDescriereDeschisa(true);
+  }
+
+  function descriereSalvata(id: string, text: string | null) {
+    setDescrieri(prev => {
+      const next = { ...prev };
+      if (text) next[id] = text; else delete next[id];
+      return next;
+    });
+  }
+
+  /**
+   * Eticheta „Google" de langa nume: deschide descrierea categoriei pentru Google.
+   *
+   * Gri = textul automat, colorata = text scris de comerciant. Are text VIZIBIL, nu doar o
+   * pictograma: randul are deja cinci butoane numai cu pictograma, iar un al saselea n-ar fi fost
+   * gasit de nimeni. Sta langa nume, nu intre actiuni: ghidurile din `ajutor-categorii/produse.ts`
+   * numesc butoanele dupa locul lor pe rand, iar unul in plus printre ele le-ar fi mutat pe toate.
+   */
+  function etichetaGoogle(cat: Category, isTemp: boolean) {
+    const stare = stareDescriere(descrieri[cat.id], descrieriCitite);
+    const titlu = titluEticheta(stare);
+    return (
+      <button
+        type="button"
+        onClick={() => deschideDescrierea(cat.id)}
+        disabled={isTemp}
+        title={titlu}
+        aria-label={titlu}
+        className={`px-1.5 py-0.5 rounded-md border text-[10px] font-semibold leading-none flex-shrink-0 transition-colors disabled:opacity-40 ${
+          stare === "proprie"
+            ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+            : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+        }`}
+      >
+        Google
+      </button>
+    );
+  }
+
   /**
    * Sagetile de ordine, la marginea din stanga a actiunilor.
    *
@@ -585,8 +636,11 @@ export function CategoriesClient({ initialCategories }: Props) {
             moveForm(cat)
           ) : (
             <>
-              <span className={`flex-1 text-sm truncate ${esteAscunsa ? "text-muted-foreground line-through decoration-muted-foreground/40" : "text-foreground"}`}>
-                {cat.name}
+              <span className="flex-1 min-w-0 flex items-center gap-2">
+                <span className={`min-w-0 text-sm truncate ${esteAscunsa ? "text-muted-foreground line-through decoration-muted-foreground/40" : "text-foreground"}`}>
+                  {cat.name}
+                </span>
+                {etichetaGoogle(cat, isTemp)}
               </span>
               {esteAscunsa && <span className="text-[10px] text-amber-600 flex-shrink-0">ascunsa</span>}
               {hasKids && (
@@ -720,8 +774,11 @@ export function CategoriesClient({ initialCategories }: Props) {
                     moveForm(cat)
                   ) : (
                     <>
-                      <span className={`flex-1 text-sm font-semibold truncate ${esteAscunsa ? "text-muted-foreground line-through decoration-muted-foreground/40" : "text-foreground"}`}>
-                        {cat.name}
+                      <span className="flex-1 min-w-0 flex items-center gap-2">
+                        <span className={`min-w-0 text-sm font-semibold truncate ${esteAscunsa ? "text-muted-foreground line-through decoration-muted-foreground/40" : "text-foreground"}`}>
+                          {cat.name}
+                        </span>
+                        {etichetaGoogle(cat, isTemp)}
                       </span>
                       {esteAscunsa && <span className="text-[10px] text-amber-600 flex-shrink-0">ascunsa</span>}
                       {hasKids && (
@@ -766,6 +823,8 @@ export function CategoriesClient({ initialCategories }: Props) {
             Categoriile create aici apar ca optiuni in formularul de adaugare/editare produs si, in aceasta ordine, in magazin. Poti crea subcategorii pe oricate niveluri.
             Sagetile schimba ordinea intre categoriile de la acelasi nivel. Ochiul ascunde o categorie din magazin impreuna cu subcategoriile si cu produsele ei — in panou ramane, iar produsele raman active.
             Stergerea unei categorii sterge si subcategoriile ei, iar produsele din ele trec la categoria de deasupra.
+            {/* ⚠ Citata in centrul de ajutor (`ajutor-categorii/produse.ts`). Se schimba impreuna. */}
+            {" "}Eticheta Google de lângă nume deschide descrierea cu care apare categoria în Google: gri înseamnă textul automat, colorată înseamnă un text scris de tine.
           </p>
         </div>
       )}
@@ -776,6 +835,16 @@ export function CategoriesClient({ initialCategories }: Props) {
         accept="image"
         bucket="products"
         onSelect={(urls) => { if (pickerCatId && urls[0]) void applyCategoryImage(pickerCatId, urls[0]); }}
+      />
+
+      <EditorDescriereCategorie
+        deschis={descriereDeschisa}
+        onDeschis={setDescriereDeschisa}
+        categorie={categories.find(c => c.id === descriereCatId) ?? null}
+        deschidere={deschideri}
+        salvata={descriereCatId ? descrieri[descriereCatId] ?? null : null}
+        citite={descrieriCitite}
+        onSalvata={descriereSalvata}
       />
     </div>
   );

@@ -1636,6 +1636,7 @@ export type Database = {
           is_active: boolean
           name: string
           parent_id: string | null
+          seo_description: string | null
           sort_order: number
           updated_at: string | null
         }
@@ -1647,6 +1648,7 @@ export type Database = {
           is_active?: boolean
           name: string
           parent_id?: string | null
+          seo_description?: string | null
           sort_order?: number
           updated_at?: string | null
         }
@@ -1658,6 +1660,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           parent_id?: string | null
+          seo_description?: string | null
           sort_order?: number
           updated_at?: string | null
         }

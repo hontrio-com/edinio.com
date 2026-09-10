@@ -6429,7 +6429,8 @@ create table if not exists public.categories (
   created_at timestamp with time zone default now(),
   updated_at timestamp with time zone default now(),
   image_url text,
-  is_active boolean default true not null);
+  is_active boolean default true not null,
+  seo_description text);
 
 create table if not exists public.custom_pages (
   id uuid default gen_random_uuid() not null,
@@ -7751,6 +7752,7 @@ alter table public.blog_redirects add constraint blog_redirects_not_circular CHE
 alter table public.blog_tags add constraint blog_tags_slug_form CHECK ((slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'::text));
 alter table public.businesses add constraint businesses_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text));
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
+alter table public.categories add constraint categories_seo_description_lungime CHECK ((char_length(seo_description) <= 1000));
 alter table public.discounts add constraint discounts_type_check CHECK ((type = ANY (ARRAY['percent'::text, 'fixed'::text, 'free_shipping'::text])));
 alter table public.domain_orders add constraint domain_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'cancelled'::text, 'refunded'::text])));
 alter table public.edinio_conversion_outbox add constraint edinio_conversion_outbox_destinatie_check CHECK ((destinatie = ANY (ARRAY['meta'::text, 'tiktok'::text])));

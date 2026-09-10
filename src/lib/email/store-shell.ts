@@ -1,5 +1,6 @@
 import { escapeHtml } from "@/lib/utils/html-escape";
 import type { EmailBranding } from "./config";
+import { atributeLogo, logoPentruEmail } from "./logo-email";
 
 const esc = escapeHtml;
 
@@ -15,8 +16,22 @@ export function storeEmailShell(branding: EmailBranding, content: string, opts?:
   const host = esc(branding.storeUrl.replace(/^https?:\/\//, ""));
   const editable = !!opts?.editable;
 
-  const logoInner = branding.logoUrl
-    ? `<img src="${esc(branding.logoUrl)}" alt="${name}" style="max-height:48px;width:auto;border:0;display:inline-block;" />`
+  /*
+   * In email pleaca varianta PNG a logoului, nu WebP-ul din baza: Gmail transforma WebP-ul in JPG,
+   * iar transparenta iese NEAGRA. Vezi `logoPentruEmail`.
+   *
+   * In editorul din panou (`editable`) ramane adresa din baza: acolo o arata chiar browserul
+   * comerciantului, care stie WebP cu transparenta cu tot.
+   */
+  const logo = editable ? branding.logoUrl : logoPentruEmail(branding.logoUrl);
+  /*
+   * `width` si `height` pentru Outlook pe Windows, care nu stie `max-height`; vezi `atributeLogo`.
+   * Doar pe PNG-ul trimis prin ruta: numai pentru el stim ce marime primeste clientul.
+   */
+  const dim = !editable && logo && logo !== branding.logoUrl ? atributeLogo(branding.logoDimensiuni) : null;
+  const marime = dim ? ` width="${dim.latime}" height="${dim.inaltime}"` : "";
+  const logoInner = logo
+    ? `<img src="${esc(logo)}"${marime} alt="${name}" style="max-height:48px;width:auto;border:0;display:inline-block;" />`
     : `<span style="font-size:20px;font-weight:800;color:${color};">${name}</span>`;
   // In edit mode the logo is a click target (opens the media picker in the parent)
   // and no link navigates the preview away.

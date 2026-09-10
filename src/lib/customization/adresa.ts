@@ -32,6 +32,25 @@
 /** Prefixul sub care ruta publica de incarcare scrie fisierele clientilor. */
 export const PREFIX_INCARCARI = "products/customizations/";
 
+const SEGMENTE_INCARCARI = PREFIX_INCARCARI.toLowerCase().split("/").filter(Boolean);
+
+/**
+ * Cheia e a unui fisier incarcat de un cumparator, oriunde ar sta prefixul in cale?
+ *
+ * ⚠ SE COMPARA PE SEGMENTE, nu cu `startsWith`: `PRODUCTS/CUSTOMIZATIONS/…`,
+ * `products//customizations/…` si `products/./customizations/…` sunt aceeasi cale pentru depozit.
+ * Povestea intreaga e la refuzul din `src/app/api/img/route.ts`.
+ *
+ * ⚠ STA AICI, langa prefix, fiindca o citesc DOUA locuri: `/api/img`, care refuza cheia inainte sa
+ * atinga depozitul, si regula comuna de chei (`cheieOptimizabila`), dupa care emailurile compun
+ * adrese catre ruta. Mutata din ruta pe 10.09.2026, neschimbata.
+ */
+export function esteIncarcareDeCumparator(cheie: string): boolean {
+  /* Segmentele caii, cum le-ar citi depozitul: fara goluri, fara „.” si fara litere mari. */
+  const segmente = cheie.toLowerCase().split("/").filter((s) => s !== "" && s !== ".");
+  return segmente.some((_, i) => SEGMENTE_INCARCARI.every((s, j) => segmente[i + j] === s));
+}
+
 /** Ce se poate DESENA ca imagine in browser. Vezi `sePoateRandaCaImagine`. */
 const DESENABILE = ["jpg", "jpeg", "png", "webp", "gif", "avif"];
 
@@ -85,7 +104,8 @@ export function terminatia(valoare: string): string | null {
  * arata numele si o legatura — chiar tiparul scris pentru documente. Doua reguli s-ar fi departat,
  * si atunci un ecran ar fi aratat poza si celalalt un patrat.
  *
- * ⚠ SI NU SE REPARA „EVIDENT": nu se adauga `.heic` in `KEY_RE` din `/api/img` si nu se
+ * ⚠ SI NU SE REPARA „EVIDENT": nu se adauga `.heic` in `KEY_RE` (regula de chei a lui `/api/img`,
+ * din `src/lib/latimi-imagini.ts`) si nu se
  * pune conversie cu `sharp` pe server. Amandoua ar duce octeti straini la libheif, adica ar
  * redeschide o usa inchisa cu bilet. Daca se vrea vreodata HEIC vizibil, conversia se face IN
  * BROWSER.

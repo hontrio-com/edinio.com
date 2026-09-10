@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseEmailConfig, buildStoreSender, type StoreEmailSender } from "./config";
+import { dimensiuniLogo } from "./dimensiuni-logo";
 
 /**
  * Load the store's email sender (branding + optional SMTP) for a business, so
@@ -53,12 +54,23 @@ export async function getStoreEmailSender(
   // SMTP propriu. Nu se distinge intre ele dinadins — asa nici nu se poate afla
   // dintr-un apel daca un magazin strain are sau nu server de email configurat.
   const vizibil = Array.isArray(data.store_settings) ? data.store_settings[0] : data.store_settings;
-  if (!vizibil) return buildStoreSender(parseEmailConfig(null), data);
+  if (!vizibil) return cuDimensiuniLogo(buildStoreSender(parseEmailConfig(null), data));
 
   const { data: ss } = await createAdminClient()
     .from("store_settings")
     .select("email_config")
     .eq("business_id", businessId)
     .single();
-  return buildStoreSender(parseEmailConfig(ss?.email_config), data);
+  return cuDimensiuniLogo(buildStoreSender(parseEmailConfig(ss?.email_config), data));
+}
+
+/**
+ * Expeditorul, cu dimensiunile logoului puse pe marca, cand se pot afla (vezi `dimensiuniLogo`).
+ *
+ * ⚠ AICI, fiindca aici e deja un drum asincron, chemat o data pe comanda; invelisul e pur si
+ * sincron. Fara dimensiuni, `<img>` ramane cum era, doar fara `width`/`height`.
+ */
+async function cuDimensiuniLogo(s: StoreEmailSender): Promise<StoreEmailSender> {
+  const logoDimensiuni = await dimensiuniLogo(s.branding.logoUrl);
+  return logoDimensiuni ? { ...s, branding: { ...s.branding, logoDimensiuni } } : s;
 }

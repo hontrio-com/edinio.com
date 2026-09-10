@@ -2,7 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { CALITATE, LATIMI, LATIMI_ECRAN, LATIMI_MICI, PREFIX_VARIANTE, cheieVarianta, latimeaDePeScara } from "./latimi-imagini";
+import {
+  CALITATE, LATIME_PNG, LATIMI, LATIMI_ECRAN, LATIMI_MICI, PREFIX_VARIANTE,
+  cheieOptimizabila, cheieVarianta, latimeaDePeScara, sursaCerePngInEmail,
+} from "./latimi-imagini";
 
 /**
  * SCARA DE LATIMI — proba care tine cele trei cai impreuna.
@@ -70,7 +73,8 @@ test("⚠ latimea URCA pe scara, si se plafoneaza", () => {
 
 test("⚠ TOATE latimile scarii exista in treptele lui `/api/img`", () => {
   /*
-   * `/api/img` genereaza si pastreaza `_optim/w<W>q<Q>/<cheie>.webp`, si el urca latimea ceruta la
+   * `/api/img` genereaza si pastreaza `_optim/w<W>q<Q>/<cheie>.webp` (si un singur `.png` pe poza, doar
+   * la `f=png`, pentru emailuri), si el urca latimea ceruta la
    * una din treptele LUI inainte de a compune cheia. Daca scara ar cere o latime care nu e printre
    * ele — 828, sa zicem — loaderul ar cere 828 si ruta ar taia la 896: o poza mai grea decat trebuie,
    * un fisier in plus tinut pe veci, si niciodata marimea ceruta. Tacut, pe fiecare poza.
@@ -181,4 +185,68 @@ test("⚠ toate cheile stau sub un singur prefix, cel pe care il curata unealta"
     assert.ok(cheieVarianta("products/x/p.webp", l, CALITATE).startsWith(`${PREFIX_VARIANTE}/`));
   }
   assert.equal(PREFIX_VARIANTE, "_optim");
+});
+
+test("⚠ varianta PNG isi are cheia ei si nu calca varianta WebP a aceleiasi poze", () => {
+  /*
+   * `png` exista doar pentru emailuri (vezi `FormatVarianta`). Fara formatul in cheie, PNG-ul
+   * logoului s-ar fi scris peste WebP-ul lui: vitrina ar fi primit un PNG sub numele unui WebP, sau
+   * emailul un WebP, adica exact dreptunghiul negru reclamat.
+   */
+  const webp = cheieVarianta("logos/x/logo.webp", 640, 75);
+  const png = cheieVarianta("logos/x/logo.webp", 640, 75, "png");
+  assert.equal(webp, "_optim/w640q75/logos/x/logo.webp.webp", "implicitul a incetat sa fie WebP");
+  assert.equal(png, "_optim/w640q75/logos/x/logo.webp.png");
+});
+
+test("⚠ `cheieOptimizabila` primeste prefixele noastre si refuza restul", () => {
+  for (const buna of ["logos/a/b.webp", "products/a/b.JPG", "covers/a/b.avif", "gallery/a/b.png", "avatars/a/b.gif"]) {
+    assert.equal(cheieOptimizabila(buna), true, buna);
+  }
+  for (const rea of [
+    "",
+    "alt-dosar/a/b.webp",
+    "logos/../facturi/x.webp",
+    "logos/a/b.svg",
+    "logos/a/b.webp?v=2",
+    "logos/a b.webp",
+    "_optim/w640q75/logos/a/b.webp.webp",
+    /* Incarcarile cumparatorilor: ruta le refuza, deci si regula comuna, in orice scriere. */
+    "products/customizations/11111111-1111-4111-8111-111111111111/poza.webp",
+    "PRODUCTS/CUSTOMIZATIONS/11111111-1111-4111-8111-111111111111/poza.webp",
+    "products//customizations/11111111-1111-4111-8111-111111111111/poza.webp",
+  ]) {
+    assert.equal(cheieOptimizabila(rea), false, rea);
+  }
+});
+
+test("⚠ ruta citeste regula de chei din modulul comun, nu dintr-o copie", () => {
+  /*
+   * ⚠ DE CE SE CITESTE SURSA: ruta importa `sharp` si `@/lib/r2`, deci nu se incarca intr-o proba
+   * pura; purtarea ei e probata in `src/app/api/img/*.test.ts`. Aici se cere doar ca regula sa fie
+   * UNA: o copie scrisa din nou in ruta s-ar desparti de cea citita de emailuri, iar emailurile ar
+   * compune adrese pe care ruta le refuza, adica logouri rupte.
+   */
+  const ruta = sursa("src/app/api/img/route.ts");
+  assert.equal(/const KEY_RE\s*=/.test(ruta), false, "ruta si-a scris din nou propria regula de chei");
+  assert.match(ruta, /cheieOptimizabila\(key\)/, "ruta nu mai trece cheia prin regula comuna");
+  assert.equal(
+    /function esteIncarcareDeCumparator/.test(ruta),
+    false,
+    "ruta si-a scris din nou refuzul incarcarilor, pe langa cel citit de regula comuna",
+  );
+});
+
+test("⚠ PNG doar pentru WebP si AVIF, si la o singura latime, de pe scara", () => {
+  /*
+   * Amandoua capetele citesc aceeasi regula: emailul, ca sa hotarasca ce trimite prin PNG, si ruta,
+   * ca sa nu faca PNG din nimic altceva. Latimea e una singura, ca sa existe cel mult un PNG pe poza.
+   */
+  for (const da of ["logos/a/b.webp", "logos/a/b.WEBP", "gallery/a/b.avif"]) {
+    assert.equal(sursaCerePngInEmail(da), true, da);
+  }
+  for (const nu of ["logos/a/b.png", "logos/a/b.jpg", "logos/a/b.jpeg", "logos/a/b.gif", "logos/a/b.webp.png"]) {
+    assert.equal(sursaCerePngInEmail(nu), false, nu);
+  }
+  assert.ok(LATIMI.includes(LATIME_PNG), `${LATIME_PNG} nu e pe scara comuna`);
 });

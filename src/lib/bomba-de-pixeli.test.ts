@@ -30,7 +30,7 @@ import { MAX_PIXELI } from "@/lib/utils/file-signature";
  * de-aia proba de mai jos construieste o imagine de 60 de megapixeli, nu una absurda.
  *
  * ⚠ SI CE NU SE FACE, fiindca ar redeschide o usa inchisa cu bilet: nu se adauga `.heic` in
- * `KEY_RE` din `/api/img`, si nu se pune conversie pe server. `securitate-audit.test.ts` pazeste
+ * `KEY_RE` (regula de chei a lui `/api/img`, din `latimi-imagini.ts`), si nu se pune conversie pe server. `securitate-audit.test.ts` pazeste
  * dinadins ca octetii HEIF trimisi de un anonim sa NU ajunga la libheif pe calea de decodare.
  */
 

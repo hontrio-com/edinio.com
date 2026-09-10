@@ -44,6 +44,12 @@ export interface EmailBranding {
   logoUrl: string | null;
   color: string;
   storeUrl: string;
+  /**
+   * Dimensiunile ORIGINALULUI logoului, cand se cunosc (vezi `dimensiuniLogo`). Din ele invelisul
+   * scrie `width`/`height` pe `<img>`: Outlook pe Windows nu stie `max-height` si, fara atribute,
+   * arata poza la marimea ei reala.
+   */
+  logoDimensiuni?: { latime: number; inaltime: number } | null;
 }
 
 export interface StoreEmailSender {

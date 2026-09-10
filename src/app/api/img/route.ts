@@ -4,8 +4,10 @@ import { existaInR2, getFromR2, uploadToR2 } from "@/lib/r2";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { MAX_PIXELI } from "@/lib/utils/file-signature";
-import { PREFIX_INCARCARI } from "@/lib/customization/adresa";
-import { cheieVarianta } from "@/lib/latimi-imagini";
+import { esteIncarcareDeCumparator } from "@/lib/customization/adresa";
+import {
+  CALITATE, LATIME_PNG, cheieOptimizabila, cheieVarianta, sursaCerePngInEmail, type FormatVarianta,
+} from "@/lib/latimi-imagini";
 
 export const runtime = "nodejs";
 
@@ -25,9 +27,8 @@ function adresaPublica(): string {
   return (process.env.NEXT_PUBLIC_CDN_URL || R2_PUBLIC_URL || "").replace(/\/+$/, "");
 }
 
-// Only allow our own upload prefixes + image extensions — the route must not be
-// usable to resize arbitrary objects.
-const KEY_RE = /^(products|gallery|logos|covers|avatars)\/[\w./-]+\.(webp|jpe?g|png|gif|avif)$/i;
+// Ce chei primeste ruta: `KEY_RE` si `cheieOptimizabila`, din `@/lib/latimi-imagini`. Stau acolo
+// fiindca si emailurile compun adrese catre ruta, iar cele doua trebuie sa raspunda la fel.
 
 /*
  * ⚠ INCARCARILE CUMPARATORILOR NU TREC PE AICI, PE NICIUN DRUM.
@@ -70,17 +71,14 @@ const KEY_RE = /^(products|gallery|logos|covers|avatars)\/[\w./-]+\.(webp|jpe?g|
  * poarta acum o CHEIE, deci `extractR2Key` da null si `<Image>` lasa `src`-ul neatins — dar asta
  * e o conventie, nu o paza, si nu se probeaza de aici.
  */
-const SEGMENTE_INCARCARI = PREFIX_INCARCARI.toLowerCase().split("/").filter(Boolean);
-
-function esteIncarcareDeCumparator(cheie: string): boolean {
-  /* Segmentele caii, cum le-ar citi depozitul: fara goluri, fara „.” si fara litere mari. */
-  const segmente = cheie.toLowerCase().split("/").filter((s) => s !== "" && s !== ".");
-  return segmente.some((_, i) => SEGMENTE_INCARCARI.every((s, j) => segmente[i + j] === s));
-}
+// `esteIncarcareDeCumparator` sta in `@/lib/customization/adresa`, langa `PREFIX_INCARCARI`: o
+// citeste si regula comuna de chei (`cheieOptimizabila`), dupa care emailurile compun adrese catre
+// ruta asta. Refuzul ramane insa AICI, primul, inaintea oricarei atingeri a depozitului.
 
 /**
  * Self-hosted image optimizer. Resizes an R2-hosted image to the requested width
- * (WebP) the first time it's requested, caches the variant back on R2, and serves
+ * (WebP; PNG only on an explicit `f=png`, for emails) the first time it's requested,
+ * caches the variant back on R2, and serves
  * it with an immutable cache header (so Vercel's edge + the browser cache it). If
  * anything fails, it falls back to the original full-size image, so a product
  * image never breaks.
@@ -143,6 +141,24 @@ export async function GET(req: NextRequest) {
   const quality = TREPTE_CALITATE.find((t) => t >= calitateCeruta) ?? 95;
 
   /*
+   * Formatul variantei: `webp`, afara de cererea explicita `f=png` pe o sursa WebP sau AVIF.
+   *
+   * ⚠ LISTA ALBA, nu „ce scrie in `f`": orice alta valoare cade pe `webp`, deci pe aici nu se poate
+   * naste alt fel de fisier in depozit. `png` exista DOAR pentru emailuri, unde WebP-ul transparent
+   * iese pe fond negru; vezi `FormatVarianta` si `logoPentruEmail`. Si doar pentru sursele pe care
+   * emailul le trimite prin PNG (`sursaCerePngInEmail`), aceeasi regula la ambele capete.
+   *
+   * ⚠ LA PNG, LATIMEA SI CALITATEA CERUTE NU INTRA IN CHEIE. Latimea e fixa, `LATIME_PNG`: pe toate
+   * cele 18 trepte, un PNG de fotografie ar fi cantarit de 3 pana la 6 ori cat WebP-ul ei, asa ca
+   * exista cel mult un PNG pe poza. Iar `q` n-ar schimba niciun octet al unui PNG, doar ar naste
+   * fisiere identice.
+   */
+  const format: FormatVarianta = sp.get("f") === "png" && sursaCerePngInEmail(key) ? "png" : "webp";
+  const tipContinut = format === "png" ? "image/png" : "image/webp";
+  const latimeVarianta = format === "png" ? LATIME_PNG : width;
+  const calitateCheie = format === "png" ? CALITATE : quality;
+
+  /*
    * ⚠ CHEIA SE VALIDEAZA INAINTE de a se compune adresa de rezerva.
    *
    * Pana acum `originalUrl` se construia din cheia BRUTA, iar `KEY_RE` se verifica dupa —
@@ -163,15 +179,23 @@ export async function GET(req: NextRequest) {
    * repara ruta. `!width` ramane ca paza pentru ziua in care treptele se schimba, nu ca drum
    * umblat azi.
    */
-  const cheieValida = !!key && !key.includes("..") && KEY_RE.test(key);
+  const cheieValida = cheieOptimizabila(key);
   const originalUrl = cheieValida && R2_PUBLIC_URL ? `${R2_PUBLIC_URL}/${key}` : null;
   const fallback = () =>
     originalUrl ? NextResponse.redirect(originalUrl, 302) : new NextResponse("Not found", { status: 404 });
+  /*
+   * Pe drumul PNG, rezerva inseamna WebP-ul original, adica exact dreptunghiul negru din email. Se
+   * spune in jurnal, ca o intoarcere a lui sa nu treaca neobservata.
+   */
+  const rezerva = (motiv: string) => {
+    if (format === "png") console.warn("[api/img] PNG-ul pentru email cade pe original", { motiv, cheie: key });
+    return fallback();
+  };
 
   if (!cheieValida || !width) return fallback();
 
   try {
-    const variantKey = cheieVarianta(key, width, quality);
+    const variantKey = cheieVarianta(key, latimeVarianta, calitateCheie, format);
 
     /*
      * ═══ ⚠ RUTA ASTA ARATA DRUMUL, NU MAI CARA OCTETII ═══
@@ -218,22 +242,37 @@ export async function GET(req: NextRequest) {
        * n-are voie sa devina el insusi caderea care goleste vitrinele.
        */
       const ip = clientIp(req);
-      if (!(await consumaLimita(`img-variante:ip:${ip}`, 600, 3600)).permis) {
-        return fallback();
+      /*
+       * ⚠ O RATARE PNG CANTARESTE CAT PATRU: plafonul numara ratari, nu octeti, iar un PNG are de
+       * cateva ori octetii WebP-ului aceleiasi poze. Asa un IP scrie pe ora cam cat scria si inainte.
+       * Emailurile nu simt nimic: fiecare logo se taie o singura data.
+       */
+      if (!(await consumaLimita(`img-variante:ip:${ip}`, 600, 3600, 0, format === "png" ? 4 : 1)).permis) {
+        return rezerva("plafonul de variante");
       }
 
       const original = await getFromR2(key);
-      if (!original) return fallback();
+      if (!original) return rezerva("originalul lipseste");
       /*
        * ⚠ PLAFON DE PIXELI, nu doar de octeti. Vezi `MAX_PIXELI`: un PNG interlazat de sub un
        * megaoctet se desface in peste un gigaoctet de memorie, iar capatul asta e public si scutit
        * de poarta MFA. Fara randul asta, o singura cerere omoara functia.
        */
-      const out = await sharp(original, { limitInputPixels: MAX_PIXELI })
+      const redimensionata = sharp(original, { limitInputPixels: MAX_PIXELI })
         .rotate()
-        .resize({ width, withoutEnlargement: true })
-        .webp({ quality })
-        .toBuffer();
+        .resize({ width: latimeVarianta, withoutEnlargement: true });
+      /*
+       * PNG-ul pastreaza transparenta intreaga. E fara pierderi, deci compresia maxima il face doar
+       * mai lent de produs, nu mai urat, iar el se produce o singura data pe poza.
+       *
+       * ⚠ 96 DPI, scris anume: fara el, libvips pune 25,4 DPI, iar un client de email care ar tine
+       * cont de densitate ar mari logoul de aproape patru ori. 96 e valoarea neutra. Se hotaraste
+       * acum, nu mai tarziu: varianta se face o data si ramane pe veci sub aceeasi cheie.
+       */
+      const out = await (format === "png"
+        ? redimensionata.png({ compressionLevel: 9, adaptiveFiltering: true }).withDensity(96)
+        : redimensionata.webp({ quality })
+      ).toBuffer();
 
       /*
        * ⚠ AICI SCRIEREA NU MAI E „best-effort", si asta e schimbarea care conteaza.
@@ -244,11 +283,11 @@ export async function GET(req: NextRequest) {
        * ca pana acum: mai scump, dar intreg.
        */
       try {
-        await uploadToR2(out, variantKey, "image/webp");
+        await uploadToR2(out, variantKey, tipContinut);
       } catch {
         return new NextResponse(new Uint8Array(out), {
           headers: {
-            "Content-Type": "image/webp",
+            "Content-Type": tipContinut,
             "Cache-Control": "public, max-age=31536000, immutable",
           },
         });
@@ -259,10 +298,10 @@ export async function GET(req: NextRequest) {
     /* Fara domeniu public configurat n-avem unde trimite: se serveste ca pana acum. */
     if (!gazda) {
       const out = await getFromR2(variantKey);
-      if (!out) return fallback();
+      if (!out) return rezerva("varianta lipseste");
       return new NextResponse(new Uint8Array(out), {
         headers: {
-          "Content-Type": "image/webp",
+          "Content-Type": tipContinut,
           "Cache-Control": "public, max-age=31536000, immutable",
         },
       });
@@ -280,7 +319,7 @@ export async function GET(req: NextRequest) {
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
-  } catch {
-    return fallback();
+  } catch (e) {
+    return rezerva(e instanceof Error ? e.message : String(e));
   }
 }

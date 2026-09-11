@@ -129,12 +129,8 @@ const PAGINI: Record<string, Asteptat> = {
     /* Se compune la rulare, deci nu stă ca literal întreg în sursă. */
     compusa: true,
   },
-  "/vs": {
-    fisier: "(website)/vs/page.tsx",
-    titlu: "Compară Edinio cu alte platforme eCommerce | Edinio",
-    descriere:
-      "Compară Edinio cu alte platforme eCommerce după costuri, funcționalități, integrări și mentenanță, ca să alegi soluția potrivită magazinului tău.",
-  },
+  /* `/vs` a plecat de aici pe 11.09.2026: pagina e retrasă (răspunde 410), deci
+     n-are titlu. Comparațiile `/vs/{concurent}` sunt probate mai jos. */
   "/termeni": {
     fisier: "(website)/termeni/page.tsx",
     titlu: "Termeni și condiții | Edinio",
@@ -377,7 +373,7 @@ describe("niciun titlu nu se termină în „Edinio | Edinio”", () => {
     assert.equal(primejdios("${c.titlu} - Centru de ajutor Edinio"), true);
     /* Descrierile se termină în punct, deci nu intră în discuție. */
     assert.equal(primejdios("Articole despre x de pe blogul Edinio."), false);
-    /* Titlul de la /vs îl are pe „Edinio" în față, nu la coadă. */
+    /* Titlul de la /vs/{concurent} îl are pe „Edinio" în față, nu la coadă. */
     assert.equal(primejdios("Edinio vs Shopify: care platformă eCommerce ți se potrivește?"), false);
   });
 });

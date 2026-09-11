@@ -70,11 +70,16 @@ export default async function ComparatiePage({ params }: Props) {
   if (!found) notFound();
 
   /*
-    ⚠ SINGURA PAGINA DE PREZENTARE CARE CHIAR STA SUB ALTA, si de aceea singura
-    cu `parinte`. Firimiturile obisnuite au doua trepte, fiindca site-ul a fost
-    plat; aici ierarhia adevarata e Acasa -> Comparatii -> pagina asta. Fara
-    treapta din mijloc am fi declarat ca pagina atarna direct de radacina, adica
-    am fi sarit peste chiar pagina din care se ajunge la ea.
+    ⚠ FIRIMITURILE AU DOUA TREPTE, Acasa -> pagina asta, de pe 11.09.2026.
+
+    Pana atunci aveau trei, cu `parinte: { nume: "Comparatii", cale: "vs" }` in
+    mijloc: paginile astea stateau sub indexul `/vs`, singura pagina de prezentare
+    care chiar statea sub alta. Indexul a fost retras la cererea clientului si
+    raspunde 410 (`../route.ts`). O treapta care trimite la el ar declara o
+    ierarhie printr-o adresa moarta, iar Google urmeaza legatura din
+    `BreadcrumbList` ca pe oricare alta. Adresa ramane `/vs/{concurent}`; doar
+    ierarhia declarata s-a scurtat, la cele doua trepte ale celorlalte pagini de
+    prezentare. Proba e in `../route.test.ts`.
 
     ⚠ CONSTRUIESTE firimiturile: `HeroPagina` nu primeste `sir`, deci nu emite
     niciunul. (Cadrul e cerut de client, vezi nota de mai jos.)
@@ -85,7 +90,6 @@ export default async function ComparatiePage({ params }: Props) {
     cale: `vs/${competitor}`,
     nume: found.titlu,
     descriere: found.lead,
-    parinte: { nume: "Comparatii", cale: "vs" },
   });
 
   return (

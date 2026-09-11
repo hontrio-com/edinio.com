@@ -108,7 +108,8 @@ describe("cine desenează firimituri nu le mai construiește", () => {
    * ⚠ CĂUTAREA E RECURSIVĂ, ȘI N-A FOST MEREU. Prima scriere se uita doar la
    * dosarele de pe primul nivel, fiindcă atunci toate paginile stăteau acolo.
    * `/vs/{concurent}` stă pe al doilea — adică exact pagina cu ierarhia cea mai
-   * adâncă, singura cu `parinte`, scăpa neverificată. Regula de mai jos e cu
+   * adâncă, singura cu `parinte` (până pe 11.09.2026, când a pierdut treapta
+   * odată cu indexul `/vs`), scăpa neverificată. Regula de mai jos e cu
    * atât mai importantă acolo: o pagină de adâncime 2 care ar emite două
    * `BreadcrumbList` ar fi și cea mai încurcată de citit pentru un motor.
    */
@@ -141,9 +142,9 @@ describe("cine desenează firimituri nu le mai construiește", () => {
         (`PageShell.tsx:66`, `PageHero.tsx`), deci o pagină care le folosește
         fără `sir` NU desenează nicio ierarhie.
 
-        ⚠ MĂSURAT, ȘI TOCMAI DE ASTA S-A SCHIMBAT RÂNDUL: /vs randează
-        `<PageShell>` fără `sir`, iar în producție documentul ei chiar n-are
-        niciun `BreadcrumbList`. Cu heuristica veche, /vs ar fi fost socotită
+        ⚠ MĂSURAT, ȘI TOCMAI DE ASTA S-A SCHIMBAT RÂNDUL: /vs randa
+        `<PageShell>` fără `sir` (pagina a fost retrasă pe 11.09.2026), iar în
+        producție documentul ei chiar n-avea niciun `BreadcrumbList`. Cu heuristica veche, /vs ar fi fost socotită
         „desenează", i s-ar fi cerut `faraFirimituri: true`, și ar fi rămas fără
         NICIO ierarhie — tăcut, cu proba verde. Regula era dormindă doar fiindcă
         nicio pagină fără `sir` nu chema încă `paginaSiteJsonLd`.

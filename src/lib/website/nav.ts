@@ -326,6 +326,10 @@ export const MENU_PREFIXES: Record<MenuId, string[]> = {
     "/optimizare",
     "/mentenanta-gratuita",
   ],
+  /*
+    PREFIX, nu legatura: aprinde „De ce noi?" pe `/vs/{concurent}`. Indexul `/vs`
+    insusi e retras din 11.09.2026 si raspunde 410; nicio legatura nu duce acolo.
+  */
   "de-ce-noi": ["/vs"],
   resurse: ["/ajutor", "/blog", "/intrebari-frecvente", "/migrare"],
 };

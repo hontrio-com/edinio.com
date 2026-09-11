@@ -62,7 +62,11 @@ export const H1_HERO =
   "text-[38px] font-bold leading-[1.04] tracking-[-0.035em] text-balance text-ink sm:text-[56px] lg:text-[66px]";
 
 /**
- * Titlul paginilor scurte de prezentare: `/vs` și `/blog`.
+ * Titlul lui `PageShell`, capul paginilor scurte de prezentare.
+ *
+ * ⚠ DIN 11.09.2026 N-O MAI FOLOSEȘTE NICIO PAGINĂ. Ultima, `/vs`, a fost retrasă
+ * (410), iar `/blog`, pe care enumerarea veche îl pomenea, nu trece pe
+ * `PageShell`. Treapta pleacă odată cu `PageShell`, dacă se șterge și el.
  *
  * (Enumerarea avea și `/magazin-online`, ștearsă pe 01.09.2026, și `/industrii/*`,
  * ștearsă pe 04.09.2026 — amândouă la cererea clientului. Treapta a rămas

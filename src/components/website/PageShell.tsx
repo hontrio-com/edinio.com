@@ -22,10 +22,12 @@ import { FinalCta } from "./sections/FinalCta";
  * iar celelalte pagini ale site-ului se termină cu banda de final. Una care se
  * oprește la hero nu arată scurtă, arată neterminată.
  *
- * ⚠ PATRU DIN CELE CINCI NU MAI EXISTĂ, iar nota le numea la prezent: pe
- * 31.08.2026 `/magazin-online` a fost ȘTEARSĂ (dă 308 către `/`), pe 04.09.2026
- * `/industrii` și `/industrii/[industrie]` au fost șterse (dau 410), iar `/blog` nu
- * trece pe `PageShell`. Rândul care spunea că spre `/magazin-online` „trimit deja
+ * ⚠ NICIUNA DIN CELE CINCI NU MAI TRECE PE AICI, iar nota le numea la prezent:
+ * pe 31.08.2026 `/magazin-online` a fost ȘTEARSĂ (dă 308 către `/`), pe
+ * 04.09.2026 `/industrii` și `/industrii/[industrie]` au fost șterse (dau 410),
+ * pe 11.09.2026 și `/vs` (dă 410), iar `/blog` nu trece pe `PageShell`. Din
+ * 11.09.2026 componenta n-are niciun folositor; vezi nota de la `LinkGrid`.
+ * Rândul care spunea că spre `/magazin-online` „trimit deja
  * pastila din hero și butonul din funcționalități" descria legături care nu mai
  * sunt. Numărul de pagini de atunci (unsprezece) l-am scos: nu l-am renumărat,
  * și un număr nerenumărat e tot o afirmație pe care n-o susține nimeni.
@@ -136,9 +138,11 @@ export function PageShell({
 /*
   Grilă de legături, folosită de paginile-index.
 
-  ⚠ AVEA DOI FOLOSITORI, A RĂMAS UNUL: `/vs`. Hub-ul `/industrii` a fost șters
-  pe 04.09.2026. Nu se topește în singurul apelant — o pagină-index nouă ar
-  rescrie altfel aceeași grilă, iar asta e chiar ce a adus componenta aici.
+  ⚠ AVEA DOI FOLOSITORI; DIN 11.09.2026 N-ARE NICIUNUL. Hub-ul `/industrii` a
+  fost șters pe 04.09.2026, iar `/vs` pe 11.09.2026, la cererea clientului
+  (amândouă răspund 410). Rămâne pentru următoarea pagină-index, care altfel ar
+  scrie din nou aceeași grilă. Dacă nu vine niciuna, se șterge împreună cu
+  `PageShell` de mai sus, rămas și el fără folositori.
 */
 export function LinkGrid({
   heading,

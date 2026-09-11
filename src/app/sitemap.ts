@@ -33,7 +33,7 @@ import {
  * per cerere), si cele doua ramuri nu se ating:
  *
  *   - pe www.edinio.com: NUMAI adresele platformei — pagina de start, preturi,
- *     contact, paginile juridice, paginile de prezentare, /vs,
+ *     contact, paginile juridice, paginile de prezentare, comparatiile /vs/{concurent},
  *     integrarile, centrul de ajutor cu ghidurile lui, blogul cu articole,
  *     rubrici si autori. NICIUN magazin, nicio pagina de magazin.
  *     (Etichetele au iesit pe 04.09.2026: sunt `noindex`. Vezi nota din
@@ -110,7 +110,16 @@ export function paginiDeSite(): string[] {
   for (const it of RESOURCES) adrese.add(it.href);
   for (const t of TOP_NAV) if ("href" in t) adrese.add(t.href);
 
-  adrese.add("/vs");
+  /*
+    ⚠ `/vs` A PLECAT DE AICI pe 11.09.2026, odată cu pagina. Clientul a cerut-o
+    ștearsă („nu o folosim") și scoasă din sitemap. Răspunde 410, ca `/industrii`
+    de mai jos; motivul e în `(website)/vs/route.ts`. Comparațiile
+    `/vs/{concurent}` RĂMÂN: intră mai jos, din `COMPETITORS`.
+
+    ⚠ DACĂ REVINE: se pune la loc `adrese.add("/vs")` ȘI se șterge
+    `(website)/vs/route.ts` cu proba lui. Până atunci probele din
+    `sitemap.test.ts` cad dinadins dacă adresa se întoarce în sitemap.
+  */
   /*
     ⚠ `/industrii` A PLECAT DE AICI pe 04.09.2026, odată cu cele nouă pagini.
 
@@ -342,10 +351,11 @@ export function intrariPlatforma(
       /integrari, /magazin-online, /optimizare, /mentenanta-gratuita, /vs,
       /industrii, /intrebari-frecvente, /migrare si /start. Toate raspundeau 200.
 
-      ⚠ TREI DIN CELE ZECE NU MAI SUNT, si numarul de mai sus ramane zece fiindca
+      ⚠ PATRU DIN CELE ZECE NU MAI SUNT, si numarul de mai sus ramane zece fiindca
       povesteste ce era ATUNCI: /magazin-online si /start au fost sterse (308 catre
-      `/`), iar /industrii a fost stearsa pe 04.09.2026 si raspunde 410. Renumarate,
-      ar fi sapte — dar atunci frazei i-ar lipsi tocmai defectul pe care il descrie.
+      `/`), iar /industrii (04.09.2026) si indexul /vs (11.09.2026) au fost sterse si
+      raspund 410. Renumarate, ar fi sase; dar atunci frazei i-ar lipsi tocmai
+      defectul pe care il descrie.
 
       Nu le-a observat nimeni fiindca o pagina lipsa dintr-un sitemap nu strica
       nimic si nu da nicio eroare — doar nu e gasita. E cel mai tacut fel de

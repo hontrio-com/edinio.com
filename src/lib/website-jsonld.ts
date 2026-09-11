@@ -135,11 +135,17 @@ export function paginaSiteJsonLd(a: {
    *
    * ⚠ EXISTA FIINDCA SITE-UL NU MAI E PLAT. Nota de deasupra spune „firimiturile
    * au mereu doua trepte — Acasa si pagina — fiindca site-ul e plat", si a fost
-   * adevarat cat toate paginile stateau la radacina. `/vs/{concurent}` sta sub
+   * adevarat cat toate paginile stateau la radacina. `/vs/{concurent}` statea sub
    * `/vs`; fara treapta asta, ierarhia declarata ar fi sarit peste chiar pagina
-   * din care se ajunge la ea, adica ar fi mintit despre structura.
+   * din care se ajungea la ea, adica ar fi mintit despre structura.
    *
    * Se pune DOAR unde e adevarat. Lipsa, firimiturile raman cele doua trepte.
+   *
+   * ⚠ DIN 11.09.2026 N-O MAI FOLOSESTE NICIO PAGINA. Indexul `/vs` a fost retras
+   * (raspunde 410), iar comparatiile au ramas cu doua trepte: o treapta catre o
+   * adresa moarta ar fi fost tot o afirmatie falsa despre structura, doar alta.
+   * Optiunea ramane, probata in `website-jsonld.test.ts`, pentru urmatoarea
+   * pagina care chiar sta sub alta.
    */
   parinte?: { nume: string; cale: string };
 }) {

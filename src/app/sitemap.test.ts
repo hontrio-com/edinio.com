@@ -25,8 +25,8 @@ import { PLATFORM_ORIGIN } from "@/lib/seo";
   Pe 30.08.2026 s-a descoperit ca ZECE pagini vii lipseau cu totul din sitemap:
   /blog, /integrari, /magazin-online, /optimizare, /mentenanta-gratuita, /vs,
   /intrebari-frecvente si /migrare. (Enumerarea e de la 30.08.2026; intre timp
-  /start, /despre, /magazin-online au primit redirectare, iar /industrii
-  raspunde 410. Ce a ramas se probeaza mai jos, pe nume.)
+  /start, /despre, /magazin-online au primit redirectare, iar /industrii si, din
+  11.09.2026, indexul /vs raspund 410. Ce a ramas se probeaza mai jos, pe nume.)
 
   Nu le observase nimeni luni de zile, si e usor de inteles de ce: o pagina
   lipsa dintr-un sitemap nu strica nimic, nu da nicio eroare si nu apare in
@@ -60,9 +60,11 @@ test("orice pagina din meniu e anuntata in sitemap", () => {
   }
 });
 
-test("fiecare pagina de comparatie e anuntata", () => {
-  // Sase pagini /vs/<concurent>, plus indexul lor.
-  assert.ok(ANUNTATE.has("/vs"), "lipseste indexul /vs");
+test("fiecare pagina de comparatie e anuntata, iar indexul lor nu", () => {
+  // Sase pagini /vs/<concurent>. Indexul /vs a fost RETRAS pe 11.09.2026 si
+  // raspunde 410 (`(website)/vs/route.ts`): anuntat, i-ar cere lui Google sa
+  // indexeze o adresa moarta.
+  assert.ok(!ANUNTATE.has("/vs"), "indexul /vs e retras (410), dar sitemapul il anunta");
   for (const c of COMPETITORS) {
     assert.ok(ANUNTATE.has(c.href), `${c.href} lipseste din sitemap`);
   }
@@ -254,9 +256,12 @@ test("sitemapul platformei e SINCRON, deci nu poate intreba baza de magazine", (
 
 test("sitemapul platformei pastreaza tot ce e al platformei", () => {
   const urluri = new Set(PLATFORMA.map((e) => e.url));
-  for (const cale of ["", "/preturi", "/contact", "/termeni", "/confidentialitate", "/cookies", "/gdpr", "/ajutor", "/vs", "/blog", "/integrari"]) {
+  for (const cale of ["", "/preturi", "/contact", "/termeni", "/confidentialitate", "/cookies", "/gdpr", "/ajutor", "/blog", "/integrari"]) {
     assert.ok(urluri.has(`${PLATFORM_ORIGIN}${cale}`), `lipseste ${cale || "/"}`);
   }
+  /* Indexul /vs e retras din 11.09.2026 (410). Proba de mai sus il cere pe
+     `paginiDeSite`; asta, pe sitemapul intreg, unde ar putea intra si pe alt drum. */
+  assert.ok(!urluri.has(`${PLATFORM_ORIGIN}/vs`), "indexul /vs e retras (410), dar sitemapul il anunta");
   assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/primul-articol`), "lipseste articolul");
   assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/categorie/ghiduri`), "lipseste rubrica");
   assert.ok(urluri.has(`${PLATFORM_ORIGIN}/blog/autor/ana`), "lipseste autorul");

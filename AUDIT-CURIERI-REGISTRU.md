@@ -36,7 +36,7 @@ Alte masuratori care schimba gravitatea unor constatari:
 - **0 din 129** de magazine au reguli sau clase de transport.
 - **0 din 129** au `default_shipping_cost` NULL sau zero.
 - **218 din 435** de comenzi poarta un AWB.
-- **0** AWB-uri GLS, Pall-Ex sau eColet.
+- **0** AWB-uri GLS, Pall-Ex sau eColet, si **0** comenzi Pepita.
 
 ## Constatari verificate
 
@@ -55,6 +55,7 @@ Alte masuratori care schimba gravitatea unor constatari:
 | SYS-P1-05 | CONFIRMAT (regresie proprie) | indisponibilitatea unui curier devenea oferta semnata la tariful zonei. Instanta vie masurata: `okxi` cu zona Sameday pe tarif viu si `price: 0`, deci pleca semnat „0,00 lei". Filtrul sta acum intr-un singur loc, inaintea semnarii, si prinde si cele 27 de situri preexistente | `8c1b7991` |
 | PLAT-P2-12 (a doua jumatate) | CONFIRMAT | rezultatul incert arata identic cu lipsa refuzurilor, pe patru drumuri. `refuzuriPeComanda` intoarce acum un verdict, iar panoul are a treia stare | `e5293e3e` |
 | SYS-P1-02 (ramura NULL) | CONFIRMAT, CU CORECTIE | `if (tarifImplicit == null) return { shipping: claimed }` accepta suma din browser neverificata: singurul loc unde transportul putea fi ales integral de client. Acum cere recotare, iar verdictul poarta cauza, ca mesajul sa nu minta. Masurat inainte: **0 din 129** de magazine aveau tarif implicit NULL, deci inchiderea fail-closed n-a atins niciun drum viu | `4cffd635` |
+| SYS-P1-09 / PLAT-P1-04 | **LARGIT** | `deleteOrder` stergea randul fara sa se uite daca exista un colet viu, si citea din cele 17 coloane de AWB exact una: `gls_awb_number`, curierul cu ZERO expedieri. Acum refuza cat expedierea e vie, citeste toate cele 17 si curata etichetele GLS, Pall-Ex si eColet. Masurat: din 218 de comenzi cu expediere se opresc **192** (cele la `shipped`); cele 26 incheiate raman stergibile, fiindca regula se uita la STARE, nu la existenta AWB-ului. Hotararea de produs a fost delegata de proprietar pe 14.09.2026: s-a ales tiparul Shopify/WooCommerce (fara stergere peste o expediere activa), fara arhivare, fiindca aici nu exista coloana de arhiva | `f1aceba7` |
 
 ### Confirmate, inca deschise
 
@@ -64,7 +65,6 @@ Alte masuratori care schimba gravitatea unor constatari:
 | SYS-P1-03 | CONFIRMAT | rambursul e semnat ca BOOLEAN, nu ca suma; `quote-token.ts:118-131` o spune pe fata |
 | SYS-P1-02 (restul) | CONFIRMAT | ramura NULL s-a inchis in `4cffd635`. RAMANE deschis ce e mai sus de ea: `esteGratuit` scurtcircuiteaza inaintea oricarei validari de serviciu sau punct, iar `max(suma, tarif implicit)` nu apara un magazin cu tariful zonei 0 |
 | SYS-P1-06 | CONFIRMAT | cheia registrului include furnizorul, deci doi curieri pot rezerva aceeasi comanda |
-| SYS-P1-09 / PLAT-P1-04 | CONFIRMAT | `deleteOrder` citeste o singura coloana de AWB din 17 si curata din R2 doar cheile GLS |
 
 ### Coborate de masuratoare
 
@@ -99,6 +99,13 @@ periculoasa decat lipsa ei.
    `pickup` si `gls`, aflate in `FARA_API_DE_TARIF`). Cele cinci stau pe trei magazine:
    `okxi`, `tonel-beauty`, `yulmis-sound`.
 
+3. **O proba de-a mea a lasat sa treaca un mutant, si de vina era proba, nu codul.**
+   Verificarea ca `deleteOrder` cere toate cele 17 coloane era `corp.includes("cargus_awb_number")`.
+   Mutantul care scria `NUcargus_awb_number` a TRECUT nevazut: subsirul e tot acolo. O
+   verificare pe subsir nu apara niciodata o lista de nume, fiindca fiecare nume stricat il
+   contine inca pe cel bun. Selectul se sparge acum pe virgula si se compara ca multime.
+   Fara banc de mutanti, proba ar fi ramas verde si goala.
+
 ## Constatari noi, pe care nu le are niciun audit
 
 | ce | dovada |
@@ -107,15 +114,18 @@ periculoasa decat lipsa ei.
 | comentariu ramas in urma la `order.actions.ts:294-297` | sustine ca `okxi` are `default_shipping_cost` 0,00; azi e **18,00**. Pretul zonei Sameday chiar e 0, deci jumatate din afirmatie e inca adevarata |
 | eColet depoziteaza eticheta cu antet public | reparat in `56796201`; Astra semnaleaza cazul doar la Pall-Ex |
 | Sameday si FAN trimiteau blocul din spate al PDF-ului | reparat in `a3558c42`; auditurile numesc doar Cargus si DPD |
+| eticheta Pepita ramanea ORFANA la fiecare stergere de comanda | ea sta in galeata PRIVATA, deci `deleteFromR2` ar fi cautat-o unde nu e si ar fi raportat linistit reusita; iar `pepita` NU e in `MARKETPLACE_CU_CICLU_PROPRIU`, deci comenzile ei chiar ajung la stergere. Reparat in `f1aceba7` cu `stergeIncarcarea`. Masurat: 0 comenzi Pepita azi |
 
 ## Hotarari care nu-mi apartin
 
-1. **Oprirea stergerii unei comenzi cu expediere activa.** Ar atinge **218 din 435** de
-   comenzi. E o hotarare de produs, nu o reparatie de defect.
-2. **`SHIPPING_QUOTE_SECRET` lipseste din `.env.local`**, deci cotatiile se semneaza cu cheia
-   de service role. Nu e secret gol, dar o rotire a cheii Supabase invalideaza instantaneu
-   toate cotatiile in circulatie.
-3. **Dezlegarea unui AWB Woot refuzat la anulare.** Azi nu se dezleaga nimic la refuz dovedit,
+1. **`SHIPPING_QUOTE_SECRET` lipseste din `.env.local`**, deci cotatiile se semneaza cu cheia
+   de service role. Verificat pe 14.09.2026: o rotire **NU** strica facturile deja urcate,
+   fiindca adresa lor se compune o singura data, la urcare, si nu se recompune niciodata ca
+   sa le citim (`factura-comenzii.ts:81-83`). Singurul cost e ca simbolurile aflate in
+   circulatie (24h) cad cateva minute pe `max(suma ceruta, tarif implicit)`, adica pe pretul
+   de pe ecran sau pe tariful magazinului, niciodata mai putin. Nu e in `CHEI_OBLIGATORII`,
+   deci nu opreste nicio desfasurare.
+2. **Dezlegarea unui AWB Woot refuzat la anulare.** Azi nu se dezleaga nimic la refuz dovedit,
    dinadins: `woot_order_id` e singura cheie de anulare si de eticheta.
 
 ## Ce nu s-a putut verifica

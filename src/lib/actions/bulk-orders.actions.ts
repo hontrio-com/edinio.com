@@ -89,8 +89,29 @@ async function guardBusiness(businessId: string): Promise<{ userId: string } | {
   return { userId: user.id };
 }
 
-function cleanIds(orderIds: string[]): string[] {
-  return [...new Set((orderIds ?? []).filter(Boolean))].slice(0, MAX_BULK);
+/**
+ * Id-urile cerute, curatate, SAU un refuz.
+ *
+ * ⚠ PLAFONUL SE SPUNE, NU SE TAIE IN TACERE (13.09.2026).
+ *
+ * Aici statea `.slice(0, MAX_BULK)`, fara niciun cuvant catre apelant. Iar `result.total`
+ * se calculeaza DUPA taiere, deci raspunsul nu purta nicio urma a celor aruncate: trimiteai
+ * 200 de id-uri, primeai „total: 50" si nimic despre celelalte 150.
+ *
+ * Din ecran nu se poate depasi (pagina de comenzi are tot 50, `ORDERS_PAGE_SIZE`), deci
+ * pentru comerciant nu se schimba nimic. Se schimba pentru orice ALT apelant: o unealta de
+ * suport, un lot pornit din alta parte, o versiune viitoare a ecranului. Un refuz limpede e
+ * mai ieftin decat o taiere pe care nimeni n-o vede.
+ */
+function cleanIds(orderIds: string[]): { ids: string[] } | { error: string } {
+  const unice = [...new Set((orderIds ?? []).filter(Boolean))];
+  if (unice.length > MAX_BULK) {
+    return {
+      error: `Un lot poate avea cel mult ${MAX_BULK} de comenzi, iar aici sunt ${unice.length}. `
+        + "Imparte-le in loturi mai mici.",
+    };
+  }
+  return { ids: unice };
 }
 
 // Concurrency-limited runner. JS is single-threaded, so the shared result object
@@ -169,7 +190,9 @@ export async function bulkGenerateInvoices(
 ): Promise<BulkResult | { error: string }> {
   const g = await guardBusiness(businessId);
   if ("error" in g) return g;
-  const ids = cleanIds(orderIds);
+  const curatate = cleanIds(orderIds);
+  if ("error" in curatate) return curatate;
+  const ids = curatate.ids;
   if (ids.length === 0) return { error: "Nicio comanda selectata." };
 
   const admin = createAdminClient();
@@ -241,7 +264,9 @@ export async function bulkGenerateAwbs(
 ): Promise<BulkResult | { error: string }> {
   const g = await guardBusiness(businessId);
   if ("error" in g) return g;
-  const ids = cleanIds(orderIds);
+  const curatate = cleanIds(orderIds);
+  if ("error" in curatate) return curatate;
+  const ids = curatate.ids;
   if (ids.length === 0) return { error: "Nicio comanda selectata." };
 
   const admin = createAdminClient();
@@ -1077,7 +1102,9 @@ export async function bulkUpdateOrderStatus(
   const g = await guardBusiness(businessId);
   if ("error" in g) return g;
   if (!(status in ORDER_STATUS)) return { error: "Status invalid." };
-  const idsCerute = cleanIds(orderIds);
+  const curatate = cleanIds(orderIds);
+  if ("error" in curatate) return curatate;
+  const idsCerute = curatate.ids;
   if (idsCerute.length === 0) return { error: "Nicio comanda selectata." };
 
   const admin = createAdminClient();

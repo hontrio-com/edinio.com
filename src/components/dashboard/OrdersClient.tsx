@@ -222,10 +222,36 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
 
   async function runBulk(title: string, fn: () => Promise<BulkResult | { error: string }>) {
     if (selected.size === 0) return;
+    /*
+     * ⚠ `try/catch/finally`, nu o stingere pe randul de dupa apel.
+     *
+     * Actiunea de server nu raspunde intotdeauna cu `{ error }`: taiata de platforma la
+     * `maxDuration` (300s, `dashboard/orders/page.tsx:27`) sau cu reteaua cazuta, ea
+     * RESPINGE. Atunci `setBulkBusy(false)` nu se mai executa, bara de lot ramane cu toate
+     * butoanele stinse pana la o reincarcare, si nu apare niciun mesaj.
+     *
+     * Ce facea omul: credea ca lotul inca lucreaza, reincarca, apasa din nou, si pornea un
+     * al doilea lot peste primul. Comenzile deja emise se sar corect, dar cele lasate
+     * `in_curs` raspund „deja in lucru", deci al doilea lot arata ca unul care esueaza fara
+     * motiv.
+     */
     setBulkBusy(true);
     setBulkResult(null);
-    const res = await fn();
-    setBulkBusy(false);
+    let res: BulkResult | { error: string };
+    try {
+      res = await fn();
+    } catch (e) {
+      /* ⚠ Mesajul spune ca NU STIM: o parte din comenzi pot fi deja emise la curier. */
+      toast.error(
+        `${title}: nu stim cate s-au facut, cererea nu a ajuns la capat`
+        + `${e instanceof Error && e.message ? ` (${e.message})` : ""}. `
+        + "Reincarca pagina si uita-te pe comenzi inainte sa incerci din nou.",
+      );
+      router.refresh();
+      return;
+    } finally {
+      setBulkBusy(false);
+    }
     if ("error" in res) { toast.error(res.error); return; }
     setBulkResult({ title, result: res });
     const parts = [`${res.done} reușite`];
@@ -775,6 +801,16 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                       <span className="font-mono font-semibold">{er.order}</span>: {er.message}
                     </li>
                   ))}
+                  {/* ⚠ TAIEREA SE SPUNE. Lista arata primele douazeci de motive; peste atat,
+                      omul repara ce vede, apasa din nou si cade iar, fara sa afle ca restul
+                      aveau ALT motiv. Randul asta nu rezolva taierea, dar o face vizibila. */}
+                  {bulkResult.result.errors.length > 20 && (
+                    <li className="text-[11px] font-semibold text-destructive">
+                      si inca {bulkResult.result.errors.length - 20}
+                      {bulkResult.result.errors.length - 20 === 1 ? " motiv nearatat" : " motive nearatate"}
+                      {" "}(pot fi altele decat cele de mai sus)
+                    </li>
+                  )}
                 </ul>
               )}
               {bulkResult.result.skipped > 0 && bulkResult.title === "AWB-uri" && (

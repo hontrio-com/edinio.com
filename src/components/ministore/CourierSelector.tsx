@@ -207,6 +207,20 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
           const ales = pastrata ?? opts[0];
           const k = optionKey(ales);
           setSelectedKey(k);
+
+          /*
+           * ⚠ O OPTIUNE DE TIP LOCKER NU SE RAPORTEAZA PANA NU SE ALEGE PUNCTUL.
+           *
+           * Aceeasi regula ca in `handleSelect` mai jos, si din acelasi motiv. Aici lipsea:
+           * efectul de mai sus a golit `selectedLocker` (linia 195), iar ramura asta raporta
+           * inapoi o optiune de tip locker FARA `lockerId`. Parintele ramanea cu o selectie pe
+           * jumatate, campul de mai jos arata din nou „Selecteaza un locker...", iar cumparatorul,
+           * care crede ca si-a ales deja punctul, afla abia din eroarea de la „Plaseaza
+           * comanda". Nu pleaca niciun colet gresit (checkout-ul are garda lui), dar se pierde
+           * tocmai alegerea lui, la ultimul pas.
+           */
+          if (ales.deliveryType === "locker") { onSelect(null); return; }
+
           onSelect({
             courier: ales.courier,
             courierLabel: ales.courierLabel,

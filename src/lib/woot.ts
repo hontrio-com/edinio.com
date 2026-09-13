@@ -1,4 +1,5 @@
 import { normalizePhone } from "@/lib/utils/phone";
+import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { eroareCuStatus, eroareDeTermen, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 import { cheieToken } from "@/lib/integrari/cheie-token";
 
@@ -238,23 +239,66 @@ async function wootReq<T>(token: string, method: string, path: string, body?: un
 
 // ─── Public endpoints (no auth) ───────────────────────────────────────────────
 
+/*
+ * ⚠ NOMENCLATORUL SE TINE IN MEMORIA INSTANTEI (13.09.2026).
+ *
+ * Cele doua liste stau in calea CUMPARATORULUI: cotarea Woot din checkout cere intai
+ * judetele, apoi localitatile judetului, apoi tokenul, apoi tarifele, patru asteptari una
+ * dupa alta. Necachate, fiecare vizitator care isi scrie orasul arde patru apeluri in loc
+ * de doua, iar plafoanele magazinului (60/IP si 600/magazin la 10 minute,
+ * `shipping.actions.ts:489-490`) se consuma de doua ori mai repede. Cand se epuizeaza,
+ * TOTI curierii magazinului trec pe tarif fix, deci o lista necachata strica si cotatiile
+ * celorlalti.
+ *
+ * ⚠ `no-store` RAMANE, si nu e in contradictie: comentariul de dinainte vorbea despre
+ * `force-cache`, adica Vercel Data Cache, care dadea 500 constant la runtime pe 17.07.2026.
+ * Aici se tine in memoria instantei, ca la SmartShip (`smartship/geo.ts:33-41`) si la
+ * eColet, deci fara niciun drum prin cache-ul platformei.
+ *
+ * ⚠ Cheia NU cuprinde magazinul si nici vreo credentiala: judetele si localitatile
+ * Romaniei sunt acelasi nomenclator public pentru orice cont. O cheie de cache care ar
+ * purta o credentiala ar fi si o scapare, si o risipa.
+ */
+const TTL_NOMENCLATOR_MS = 6 * 60 * 60_000;
+/** Un raspuns GOL se tine putin: poate fi o cadere de moment, nu adevarul. */
+const TTL_GOL_MS = 60_000;
+const CACHE_JUDETE = new CacheScurt<WootCounty[]>(TTL_NOMENCLATOR_MS, 4);
+const CACHE_ORASE = new CacheScurt<WootCity[]>(TTL_NOMENCLATOR_MS, 120);
+
+/** Pentru probe si pentru o improspatare ceruta de om. */
+export function uitaNomenclatorulWoot(): void {
+  CACHE_JUDETE.goleste();
+  CACHE_ORASE.goleste();
+}
+
 export async function fetchCounties(): Promise<WootCounty[]> {
-  // no-store intentionat: cu force-cache (Vercel Data Cache) fetch-ul dadea 500
-  // constant la runtime pe Vercel (2026-07-17) desi upstream-ul raspundea normal;
-  // fetchCities cu no-store nu a fost afectat. Lista e mica, nu merita cache.
-  const res = await fetch(`${WOOT_BASE}/general/counties?country_id=189`, {
-    cache: "no-store", signal: AbortSignal.timeout(ASTEPTARE_MS),
-  });
-  if (!res.ok) throw new Error("Nu s-au putut incarca judetele");
-  return res.json() as Promise<WootCounty[]>;
+  return CACHE_JUDETE.iaSau(
+    "ro",
+    async () => {
+      const res = await fetch(`${WOOT_BASE}/general/counties?country_id=189`, {
+        cache: "no-store", signal: AbortSignal.timeout(ASTEPTARE_MS),
+      });
+      if (!res.ok) throw new Error("Nu s-au putut incarca judetele");
+      return res.json() as Promise<WootCounty[]>;
+    },
+    (v) => v.length === 0,
+    TTL_GOL_MS,
+  );
 }
 
 export async function fetchCities(county_id: number): Promise<WootCity[]> {
-  const res = await fetch(`${WOOT_BASE}/general/cities?county_id=${county_id}&country_id=189`, {
-    cache: "no-store", signal: AbortSignal.timeout(ASTEPTARE_MS),
-  });
-  if (!res.ok) throw new Error("Nu s-au putut incarca orasele");
-  return res.json() as Promise<WootCity[]>;
+  return CACHE_ORASE.iaSau(
+    String(county_id),
+    async () => {
+      const res = await fetch(`${WOOT_BASE}/general/cities?county_id=${county_id}&country_id=189`, {
+        cache: "no-store", signal: AbortSignal.timeout(ASTEPTARE_MS),
+      });
+      if (!res.ok) throw new Error("Nu s-au putut incarca orasele");
+      return res.json() as Promise<WootCity[]>;
+    },
+    (v) => v.length === 0,
+    TTL_GOL_MS,
+  );
 }
 
 // ─── Authenticated endpoints ──────────────────────────────────────────────────

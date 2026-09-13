@@ -1681,6 +1681,78 @@ export type Database = {
           },
         ]
       }
+      courier_settlements: {
+        Row: {
+          amount_collected: number
+          awb_date: string | null
+          awb_number: string
+          business_id: string
+          content: string | null
+          courier: string
+          creat_la: string
+          id: string
+          order_id: string | null
+          raw: Json | null
+          recipient_locality: string | null
+          recipient_name: string | null
+          reimbursement_awb_number: string | null
+          return_awb_number: string | null
+          transaction_date: string | null
+          transfer_date: string
+        }
+        Insert: {
+          amount_collected: number
+          awb_date?: string | null
+          awb_number: string
+          business_id: string
+          content?: string | null
+          courier: string
+          creat_la?: string
+          id?: string
+          order_id?: string | null
+          raw?: Json | null
+          recipient_locality?: string | null
+          recipient_name?: string | null
+          reimbursement_awb_number?: string | null
+          return_awb_number?: string | null
+          transaction_date?: string | null
+          transfer_date: string
+        }
+        Update: {
+          amount_collected?: number
+          awb_date?: string | null
+          awb_number?: string
+          business_id?: string
+          content?: string | null
+          courier?: string
+          creat_la?: string
+          id?: string
+          order_id?: string | null
+          raw?: Json | null
+          recipient_locality?: string | null
+          recipient_name?: string | null
+          reimbursement_awb_number?: string | null
+          return_awb_number?: string | null
+          transaction_date?: string | null
+          transfer_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "courier_settlements_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "courier_settlements_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       custom_pages: {
         Row: {
           blocks: Json

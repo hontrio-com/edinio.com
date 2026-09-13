@@ -136,6 +136,10 @@
       "schedule": "5 */2 * * *"
     },
     {
+      "path": "/api/cron/fancourier-settlements",
+      "schedule": "27 5 * * *"
+    },
+    {
       "path": "/api/cron/conversii",
       "schedule": "* * * * *"
     },

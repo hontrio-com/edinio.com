@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Pencil, BarChart2, Settings,
   Package, ShoppingCart, ShoppingBag, Zap, Ticket, MessageSquare, LifeBuoy, ShieldCheck, FileText, Users, Sparkles,
+  Banknote,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/ui/Logo";
@@ -46,6 +47,9 @@ const NAV_ITEMS = [
       { href: "/dashboard/returns", label: "Retururi" },
     ],
   },
+  /* ⚠ Si in `DashboardTopbar`, care tine A DOUA copie a meniului. O intrare pusa intr-unul
+     singur apare doar pe jumatate din ecrane. */
+  { href: "/dashboard/settlements", icon: Banknote, label: "Decontari" },
   { href: "/dashboard/customers", icon: Users, label: "Clienti" },
   { href: "/dashboard/abandoned", icon: ShoppingBag, label: "Cosuri abandonate" },
   { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },

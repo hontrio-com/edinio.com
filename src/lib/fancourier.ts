@@ -193,6 +193,22 @@ export type FanCourierConfig = {
    * trimitea altfel stergerea pe contul NOU, iar FAN raspunde „nu e a ta".
    */
   last_pickup_client_id?: number | null;
+  /**
+   * ⚠ CURSORUL DECONTARILOR: ultima ZI pentru care s-au adunat virarile („YYYY-MM-DD").
+   *
+   * `reports/bank-transfers` cere `date` OBLIGATORIU si raspunde pentru o singura zi, deci
+   * cronul trebuie sa mearga zi cu zi si sa tina minte unde a ajuns.
+   *
+   * ⚠ NU SE DEDUCE DIN TABEL, si asta e miezul. Tentatia e `max(transfer_date)` din
+   * `courier_settlements`, fara nicio stare in plus. Dar o zi FARA nicio virare (weekend,
+   * sarbatoare, magazin care n-a expediat) nu misca acel maxim niciodata: cronul ar
+   * reinterogat aceeasi zi la nesfarsit si n-ar ajunge niciodata la ziua de azi.
+   *
+   * Se scrie deci explicit, si abia DUPA ce ziua a fost consumata intreaga, inclusiv toate
+   * paginile ei. Prin `jsonb_merge_config`, ca `last_pickup_date`: o salvare de setari
+   * facuta in acelasi timp nu are voie sa stearga cursorul, nici invers.
+   */
+  last_settlement_date?: string | null;
 };
 
 /**
@@ -1396,6 +1412,126 @@ export async function getFanCourierTracking(
 
   const data = await fanGet<UrmarireFan[]>(config.username, config.password, `reports/awb/tracking?${params.toString()}`);
   return Array.isArray(data) ? data : [];
+}
+
+// ─── Decontari: banii incasati de curier si virati comerciantului ─────────────
+
+/**
+ * ⚠ DOUA FORMATE DE DATA IN ACELASI ENDPOINT, SI ASTA E CAPCANA LUI.
+ *
+ * `reports/bank-transfers` PRIMESTE `date=YYYY-MM-DD`, dar RASPUNDE cu „27.02.2023", adica
+ * zi.luna.an (pag. 51). Trecut prin `new Date(sir)`, „01.03.2023" iese fie „Invalid Date", fie
+ * 3 ianuarie, dupa unealta si dupa masina. O data de virare gresita cu doua luni ar trimite
+ * comerciantul sa caute banii in extrasul altei luni.
+ *
+ * Se converteste explicit, si se intoarce `null` cand nu se potriveste forma: o data
+ * neinteleasa nu se ghiceste. Ziua virarii e cheie de deduplicare in `courier_settlements`,
+ * deci o valoare inventata acolo ar sparge si idempotenta.
+ */
+export function dataFanIso(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(v.trim());
+  if (!m) return null;
+  const zi = Number(m[1]);
+  const luna = Number(m[2]);
+  const an = Number(m[3]);
+  /* Nu se accepta 32.13.2023: FAN n-are de ce sa-l trimita, iar noi n-avem ce face cu el. */
+  if (luna < 1 || luna > 12 || zi < 1 || zi > 31 || an < 2000 || an > 2100) return null;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+/** O virare, asa cum o da `reports/bank-transfers` (pag. 51). Campurile sunt ale LOR. */
+export type VirareFan = {
+  info?: {
+    awbNumber?: unknown;
+    /** ⚠ „27.02.2023", nu ISO. Vezi `dataFanIso`. */
+    awbDate?: unknown;
+    amountCollected?: unknown;
+    content?: unknown;
+    /** ⚠ Ziua virarii, tot in format romanesc. */
+    transferDate?: unknown;
+    returnAwbNumber?: unknown;
+    reimbursementAwbNumber?: unknown;
+    transactionDate?: unknown;
+  } | null;
+  recipient?: { name?: unknown; contactPerson?: unknown; address?: { locality?: unknown } | null } | null;
+  sender?: { name?: unknown; contactPerson?: unknown } | null;
+};
+
+/** O pagina de virari, cu numerele din PLIC, nu doar randurile. */
+export type PaginaVirariFan = {
+  virari: VirareFan[];
+  paginaCurenta: number;
+  perPagina: number;
+  /** Cate virari are ziua in total, dupa socoteala LOR. De aici se stie daca mai urmeaza pagini. */
+  total: number;
+};
+
+/**
+ * Virarile dintr-o ZI (`reports/bank-transfers`, pag. 51).
+ *
+ * ⚠ NU TRECE PRIN `fanGet`, si nu din neglijenta. Acela intoarce doar `data.data` si arunca
+ * restul plicului, iar aici tocmai plicul poarta `total`, `currentPage` si `perPage`. Fara ele,
+ * apelantul n-ar sti niciodata daca ziua mai are pagini, si ar opri la prima suta de virari
+ * crezand ca a terminat.
+ *
+ * ⚠ Ziua se cere in `YYYY-MM-DD` si se verifica INAINTE de apel: un format gresit nu da eroare
+ * la ei, da alta zi sau o zi goala, adica o zi „consumata" degeaba si un cursor mutat peste
+ * bani reali.
+ */
+export async function getFanCourierBankTransfers(
+  config: FanCourierConfig,
+  zi: string,
+  pagina = 1,
+  perPagina = 100,
+): Promise<PaginaVirariFan> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(zi)) {
+    throw eroareRefuz(`FAN Courier: ziua decontarilor trebuie sa fie in forma AAAA-LL-ZZ (primit: ${zi}).`);
+  }
+
+  const params = new URLSearchParams({
+    clientId: clientIdValid(config),
+    date: zi,
+    perPage: String(perPagina),
+    page: String(pagina),
+  });
+
+  let res: Response;
+  try {
+    res = await fanFetch(config.username, config.password, `reports/bank-transfers?${params.toString()}`);
+  } catch (e) {
+    /* Citire pura: expirarea ei dovedeste ca nu s-a schimbat nimic nicaieri. */
+    throw eroareDeTermen(e, false, `citirea decontarilor pe ${zi}`, "FAN Courier");
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText);
+    throw eroareRefuz(`FAN Courier bank-transfers ${zi}: ${res.status} ${text.slice(0, 200)}`);
+  }
+
+  const json = (await res.json()) as {
+    status?: string; message?: string; data?: unknown;
+    total?: unknown; currentPage?: unknown; perPage?: unknown;
+  };
+  if (json.status !== "success") {
+    throw eroareRefuz(json.message ?? `FAN Courier bank-transfers ${zi}: raspuns fara succes`);
+  }
+
+  const numar = (v: unknown, implicit: number): number => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : implicit;
+  };
+
+  return {
+    virari: Array.isArray(json.data) ? (json.data as VirareFan[]) : [],
+    paginaCurenta: numar(json.currentPage, pagina),
+    perPagina: numar(json.perPage, perPagina),
+    /*
+     * ⚠ Implicitul e ZERO, nu numarul randurilor intoarse. Un `total` necitibil tratat ca
+     * „cate am primit" ar fi spus mereu „asta e tot", iar paginile urmatoare n-ar mai fi
+     * cerute niciodata: bani pierduti tacut, exact la magazinele mari.
+     */
+    total: numar(json.total, 0),
+  };
 }
 
 // ─── AWB Label (PDF) ──────────────────────────────────────────────────────────

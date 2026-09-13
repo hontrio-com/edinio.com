@@ -6432,6 +6432,24 @@ create table if not exists public.categories (
   is_active boolean default true not null,
   seo_description text);
 
+create table if not exists public.courier_settlements (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  courier text not null,
+  awb_number text not null,
+  awb_date date,
+  transfer_date date not null,
+  transaction_date date,
+  amount_collected numeric(10,2) not null,
+  content text,
+  return_awb_number text,
+  reimbursement_awb_number text,
+  recipient_name text,
+  recipient_locality text,
+  order_id uuid,
+  raw jsonb,
+  creat_la timestamp with time zone default now() not null);
+
 create table if not exists public.custom_pages (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -7631,6 +7649,7 @@ alter table public.catalog_produs add constraint catalog_produs_pkey PRIMARY KEY
 alter table public.catalog_rezumat add constraint catalog_rezumat_pkey PRIMARY KEY (business_id, fara_imagini, fara_stoc_ascuns);
 alter table public.catalog_rezumat_murdar add constraint catalog_rezumat_murdar_pkey PRIMARY KEY (business_id);
 alter table public.categories add constraint categories_pkey PRIMARY KEY (id);
+alter table public.courier_settlements add constraint courier_settlements_pkey PRIMARY KEY (id);
 alter table public.custom_pages add constraint custom_pages_pkey PRIMARY KEY (id);
 alter table public.customers add constraint customers_pkey PRIMARY KEY (id);
 alter table public.dhl_etichete add constraint dhl_etichete_pkey PRIMARY KEY (order_id);
@@ -7714,6 +7733,7 @@ alter table public.brevo_suppressions add constraint brevo_suppressions_business
 alter table public.businesses add constraint businesses_custom_domain_key UNIQUE (custom_domain);
 alter table public.businesses add constraint businesses_slug_key UNIQUE (slug);
 alter table public.categories add constraint categories_business_id_parent_id_name_key UNIQUE (business_id, parent_id, name);
+alter table public.courier_settlements add constraint courier_settlements_business_id_courier_awb_number_transfer_key UNIQUE (business_id, courier, awb_number, transfer_date);
 alter table public.custom_pages add constraint custom_pages_business_id_slug_key UNIQUE (business_id, slug);
 alter table public.customers add constraint customers_business_key_unique UNIQUE (business_id, key);
 alter table public.discounts add constraint discounts_business_id_code_key UNIQUE (business_id, code);
@@ -7836,6 +7856,8 @@ alter table public.catalog_rezumat add constraint catalog_rezumat_business_id_fk
 alter table public.catalog_rezumat_murdar add constraint catalog_rezumat_murdar_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.categories add constraint categories_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.categories add constraint categories_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE CASCADE;
+alter table public.courier_settlements add constraint courier_settlements_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.courier_settlements add constraint courier_settlements_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.custom_pages add constraint custom_pages_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.customers add constraint customers_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.dhl_etichete add constraint dhl_etichete_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -8043,6 +8065,9 @@ CREATE INDEX cm_biz ON public.catalog_murdar USING btree (business_id, marcat_la
 CREATE INDEX coada_conversii_de_trimis ON public.edinio_conversion_outbox USING btree (next_retry_at) WHERE ((trimis_la IS NULL) AND (abandonat_la IS NULL));
 CREATE INDEX coada_conversii_dupa_vizitator ON public.edinio_conversion_outbox USING btree (vizitator) WHERE ((vizitator IS NOT NULL) AND (trimis_la IS NULL) AND (abandonat_la IS NULL));
 CREATE UNIQUE INDEX coada_conversii_unic ON public.edinio_conversion_outbox USING btree (destinatie, nume_eveniment, event_id);
+CREATE INDEX courier_settlements_awb_idx ON public.courier_settlements USING btree (business_id, awb_number);
+CREATE INDEX courier_settlements_biz_idx ON public.courier_settlements USING btree (business_id, transfer_date DESC);
+CREATE INDEX courier_settlements_order_idx ON public.courier_settlements USING btree (order_id);
 CREATE INDEX cp_cat ON public.catalog_produs USING btree (business_id, category);
 CREATE INDEX cp_creat ON public.catalog_produs USING btree (business_id, creat DESC, product_id);
 CREATE INDEX cp_fat ON public.catalog_produs USING gin (fatete);
@@ -8406,6 +8431,7 @@ alter table public.catalog_produs enable row level security;
 alter table public.catalog_rezumat enable row level security;
 alter table public.catalog_rezumat_murdar enable row level security;
 alter table public.categories enable row level security;
+alter table public.courier_settlements enable row level security;
 alter table public.custom_pages enable row level security;
 alter table public.customers enable row level security;
 alter table public.dhl_etichete enable row level security;
@@ -8567,6 +8593,9 @@ create policy "Public read categories of published businesses" on public.categor
 create policy "Users manage own categories" on public.categories as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
+create policy owner_select_courier_settlements on public.courier_settlements as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
 create policy "Admins can manage all pages" on public.custom_pages as PERMISSIVE for ALL to public using (is_admin()) with check (is_admin());
 create policy "Owners can manage own pages" on public.custom_pages as PERMISSIVE for ALL to public using ((EXISTS ( SELECT 1
    FROM businesses b
@@ -9441,6 +9470,27 @@ grant SELECT on table public.categories to service_role;
 grant TRIGGER on table public.categories to service_role;
 grant TRUNCATE on table public.categories to service_role;
 grant UPDATE on table public.categories to service_role;
+grant DELETE on table public.courier_settlements to anon;
+grant INSERT on table public.courier_settlements to anon;
+grant REFERENCES on table public.courier_settlements to anon;
+grant SELECT on table public.courier_settlements to anon;
+grant TRIGGER on table public.courier_settlements to anon;
+grant TRUNCATE on table public.courier_settlements to anon;
+grant UPDATE on table public.courier_settlements to anon;
+grant DELETE on table public.courier_settlements to authenticated;
+grant INSERT on table public.courier_settlements to authenticated;
+grant REFERENCES on table public.courier_settlements to authenticated;
+grant SELECT on table public.courier_settlements to authenticated;
+grant TRIGGER on table public.courier_settlements to authenticated;
+grant TRUNCATE on table public.courier_settlements to authenticated;
+grant UPDATE on table public.courier_settlements to authenticated;
+grant DELETE on table public.courier_settlements to service_role;
+grant INSERT on table public.courier_settlements to service_role;
+grant REFERENCES on table public.courier_settlements to service_role;
+grant SELECT on table public.courier_settlements to service_role;
+grant TRIGGER on table public.courier_settlements to service_role;
+grant TRUNCATE on table public.courier_settlements to service_role;
+grant UPDATE on table public.courier_settlements to service_role;
 grant DELETE on table public.custom_pages to anon;
 grant INSERT on table public.custom_pages to anon;
 grant REFERENCES on table public.custom_pages to anon;

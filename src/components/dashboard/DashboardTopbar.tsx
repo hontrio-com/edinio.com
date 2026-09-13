@@ -7,7 +7,7 @@ import {
   Search, Bell, LogOut, ChevronDown, X, Menu,
   LayoutDashboard, Pencil, Package, ShoppingCart, Settings,
   BarChart2, Zap, Ticket, Megaphone, FileText, Users,
-  ShoppingBag, LifeBuoy, ShieldCheck, MessageSquare,
+  ShoppingBag, LifeBuoy, ShieldCheck, MessageSquare, Banknote,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { markNotificationsRead, markOrderNotificationsSeen } from "@/lib/actions/notification.actions";
@@ -70,6 +70,8 @@ const NAV_ITEMS: MobileNavItem[] = [
     ],
   },
   { href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi" },
+  /* ⚠ Si in `Sidebar`, care tine cealalta copie a meniului. Vezi nota de acolo. */
+  { href: "/dashboard/settlements", icon: Banknote, label: "Decontari" },
   { href: "/dashboard/customers", icon: Users, label: "Clienti" },
   { href: "/dashboard/abandoned", icon: ShoppingBag, label: "Cosuri abandonate" },
   { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },

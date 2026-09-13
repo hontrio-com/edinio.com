@@ -45,6 +45,7 @@ import { cheieDocument as cheieDocumentPallex } from "@/lib/pallex/documente";
 import { cheieEticheta as cheieEtichetaEcolet } from "@/lib/ecolet/documente";
 import { cheieEticheta as cheieEtichetaPepita } from "@/lib/pepita/eticheta";
 import { awburiDinRand } from "@/lib/orders/awb-propriu";
+import { campuriDeCurier, type ZoneleMagazinului } from "@/lib/shipping/curierul-declarat";
 import { deCeNuSeStergeComanda } from "@/lib/orders/stergerea-comenzii";
 import { deleteFromR2, stergeIncarcarea } from "@/lib/r2";
 import { interpreteazaRevendicarea, type Revendicare } from "@/lib/orders/verdict-stoc";
@@ -1701,11 +1702,21 @@ export async function placeOrder(data: {
             return cod ? { postal_code: cod } : {};
           })()
         : {}),
-      ...(data.selected_courier && {
-        courier: data.selected_courier,
-        courier_label: data.courier_label,
-        delivery_type: data.delivery_type,
-      }),
+      /*
+       * ⚠ CURIERUL SE SCRIE DOAR DACA E UNUL AL MAGAZINULUI (14.09.2026).
+       *
+       * Cele trei campuri veneau din browser si se scriau neatinse. Semnatura cotatiei le
+       * acopera, dar `autoritativeShipping` intoarce doar un NUMAR, deci nu spune niciodata
+       * ca optiunea pretinsa n-a fost verificata: pe livrarea gratuita si pe caderea pe tarif
+       * implicit ele ajungeau pe comanda oricum. Regula si masuratoarea stau in
+       * `curierul-declarat.ts`.
+       */
+      ...campuriDeCurier(
+        data.selected_courier,
+        data.courier_label,
+        data.delivery_type,
+        (cfgRow?.shipping_zones ?? null) as ZoneleMagazinului,
+      ),
       ...(data.locker_id && {
         locker_id: data.locker_id,
         locker_name: data.locker_name,
@@ -4460,11 +4471,21 @@ export async function placeCartOrder(data: {
             return cod ? { postal_code: cod } : {};
           })()
         : {}),
-      ...(data.selected_courier && {
-        courier: data.selected_courier,
-        courier_label: data.courier_label,
-        delivery_type: data.delivery_type,
-      }),
+      /*
+       * ⚠ CURIERUL SE SCRIE DOAR DACA E UNUL AL MAGAZINULUI (14.09.2026).
+       *
+       * Cele trei campuri veneau din browser si se scriau neatinse. Semnatura cotatiei le
+       * acopera, dar `autoritativeShipping` intoarce doar un NUMAR, deci nu spune niciodata
+       * ca optiunea pretinsa n-a fost verificata: pe livrarea gratuita si pe caderea pe tarif
+       * implicit ele ajungeau pe comanda oricum. Regula si masuratoarea stau in
+       * `curierul-declarat.ts`.
+       */
+      ...campuriDeCurier(
+        data.selected_courier,
+        data.courier_label,
+        data.delivery_type,
+        (cfgRow?.shipping_zones ?? null) as ZoneleMagazinului,
+      ),
       ...(data.locker_id && {
         locker_id: data.locker_id,
         locker_name: data.locker_name,

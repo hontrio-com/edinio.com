@@ -378,12 +378,28 @@ test("⚠ dezlegarea pastreaza banii cand coletul RAMANE viu la FAN", () => {
   assert.ok(!("fan_courier_cost" in ramaneViu), "tariful s-a sters desi coletul ramane viu la FAN");
   assert.ok(!("fan_courier_vat" in ramaneViu), "TVA-ul s-a sters desi coletul ramane viu la FAN");
   assert.ok(!("fan_courier_awb_client_id" in ramaneViu), "sucursala s-a sters desi coletul ramane viu");
+
+  /*
+   * ⚠ URMA URMARIRII PLEACA CU NUMARUL, NU CU BANII (13.09.2026).
+   *
+   * Cele trei coloane de urmarire descriu drumul ACESTUI AWB, iar numarul se scoate pe toate
+   * cele trei iesiri. Lasate langa bani, o comanda careia FAN i-a refuzat anularea ar fi
+   * pastrat `status_code`-ul coletului vechi, iar la o reemitere, pana la prima trecere a
+   * cronului, un colet abia predat ar fi aratat drept livrat.
+   */
+  assert.equal(ramaneViu.fan_courier_awb_at, null, "clipa emiterii a ramas pe o comanda fara AWB");
+  assert.equal(ramaneViu.fan_courier_status_code, null, "starea veche a ramas pe o comanda fara AWB");
+  assert.equal(ramaneViu.fan_courier_status_checked_at, null, "marcajul de urmarire a ramas pe o comanda fara AWB");
 });
 
 test("⚠ dar cand FAN chiar a anulat, se goleste tot: n-a costat nimic", () => {
   const anulat = campuriDezlegareFan(true, true);
   assert.deepEqual(anulat, {
     fan_courier_awb_number: null,
+    /* Cele trei de urmarire pleaca pe TOATE iesirile; aici se vad alaturi de restul. */
+    fan_courier_awb_at: null,
+    fan_courier_status_code: null,
+    fan_courier_status_checked_at: null,
     fan_courier_awb_client_id: null,
     fan_courier_cost: null,
     fan_courier_vat: null,

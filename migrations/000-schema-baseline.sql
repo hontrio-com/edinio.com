@@ -7114,7 +7114,10 @@ create table if not exists public.orders (
   prices_include_vat boolean,
   fan_courier_awb_client_id bigint,
   fan_courier_cost numeric,
-  fan_courier_vat numeric);
+  fan_courier_vat numeric,
+  fan_courier_awb_at timestamp with time zone,
+  fan_courier_status_code text,
+  fan_courier_status_checked_at timestamp with time zone);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -8188,6 +8191,7 @@ CREATE INDEX orders_cupon_neplatit_idx ON public.orders USING btree (payment_sta
 CREATE INDEX orders_dhl_urmarire_idx ON public.orders USING btree (dhl_status_checked_at NULLS FIRST) WHERE ((dhl_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_ecolet_emitere_idx ON public.orders USING btree (ecolet_status_checked_at NULLS FIRST) WHERE ((ecolet_order_to_send_id IS NOT NULL) AND (ecolet_awb_number IS NULL));
 CREATE INDEX orders_ecolet_urmarire_idx ON public.orders USING btree (ecolet_status_checked_at NULLS FIRST) WHERE ((ecolet_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
+CREATE INDEX orders_fan_courier_urmarire_idx ON public.orders USING btree (fan_courier_status_checked_at NULLS FIRST) WHERE ((fan_courier_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_fedex_urmarire_idx ON public.orders USING btree (fedex_status_checked_at NULLS FIRST) WHERE ((fedex_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_gls_urmarire_idx ON public.orders USING btree (gls_status_checked_at NULLS FIRST) WHERE ((gls_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_innoship_urmarire_idx ON public.orders USING btree (innoship_status_checked_at NULLS FIRST) WHERE ((innoship_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));

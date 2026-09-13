@@ -407,14 +407,16 @@ test("urmărirea iese exact la curierii care au cron de urmărire", () => {
     are urmărire dacă și numai dacă are cron. Așa, când se livrează urmărirea
     pentru al treisprezecelea, proba cade și cere cuvântul, în loc să tacă.
 
-    ⚠ FAN Courier NU e printre ei, deși descrierea clientului spune „de la AWB
-    până la tracking". Cuvântul „tracking" îl găsește azi PRIN DESCRIERE, iar
-    proba asta se uită doar la ce dăm noi în plus.
+    ⚠ FAN Courier A INTRAT pe 13.09.2026, al treisprezecelea, și proba asta a căzut
+    chiar atunci: exact ce își promitea rândul de mai sus, a cerut cuvântul în loc să
+    tacă. Până atunci, „tracking" se găsea doar PRIN DESCRIEREA clientului („de la AWB
+    până la tracking"), o promisiune pe care platforma încă n-o ținea; acum o ținem, și
+    cuvântul îl dăm și noi, prin sinonim.
   */
   const CRON_LA_CHEIE: Record<string, LogoKey> = {
-    dhl: "dhl", ecolet: "ecolet", fedex: "fedex", gls: "gls", innoship: "innoship",
-    packeta: "packeta", pallex: "pallex", posta: "postaRomana", sameday: "sameday",
-    shipo: "shipo", smartship: "smartship", ups: "ups",
+    dhl: "dhl", ecolet: "ecolet", fancourier: "fanCourier", fedex: "fedex", gls: "gls",
+    innoship: "innoship", packeta: "packeta", pallex: "pallex", posta: "postaRomana",
+    sameday: "sameday", shipo: "shipo", smartship: "smartship", ups: "ups",
   };
   const vercel = readFileSync(join(AICI, "..", "..", "..", "vercel.json"), "utf8");
   const cuCron = new Set(

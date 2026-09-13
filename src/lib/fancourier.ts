@@ -289,6 +289,21 @@ export function campuriDezlegareFan(
 ): Record<string, null> {
   return {
     fan_courier_awb_number: null,
+    /*
+     * ⚠ URMA URMARIRII PLEACA CU NUMARUL, NU CU BANII (13.09.2026).
+     *
+     * Cele trei descriu drumul ACESTUI AWB, iar numarul se goleste pe toate cele trei iesiri
+     * de mai sus. Lasate in urma, comanda ar fi aratat o stare de colet fara sa mai aiba
+     * vreun colet, iar o reemitere ar fi pornit cu `status_code`-ul celui vechi: pana la
+     * prima verificare a cronului, un colet abia predat ar fi parut deja livrat.
+     *
+     * ⚠ Nu stau langa bani dinadins. Tariful si sucursala RAMAN cand FAN a refuzat anularea,
+     * fiindca acel colet chiar pleaca si va veni pe factura. Starea, in schimb, nu mai poate
+     * fi aflata oricum: fara numar, cronul n-are ce intreba.
+     */
+    fan_courier_awb_at: null,
+    fan_courier_status_code: null,
+    fan_courier_status_checked_at: null,
     ...(anulatLaFan ? { fan_courier_awb_client_id: null, fan_courier_cost: null, fan_courier_vat: null } : {}),
     // `tracking_number` e comun tuturor curierilor: se goleste DOAR daca e chiar al acestui AWB.
     ...(trackingEsteAlAcestuiAwb ? { tracking_number: null } : {}),
@@ -1325,6 +1340,62 @@ export async function getFanCourierPickupPointById(
   const data = await fanGet<Record<string, unknown>[]>(username, password, `reports/pickup-points?id=${encodeURIComponent(id)}`);
   const first = Array.isArray(data) ? data[0] : undefined;
   return first ? mapPickupPoint(first, tip) : null;
+}
+
+// ─── Urmarirea AWB-ului ───────────────────────────────────────────────────────
+
+/** Un eveniment din viata coletului. `id` e codul din `reports/awb-events`. */
+export type EvenimentFan = {
+  /** Codul stabil: `S2` livrat, `S43` retur, `H2` in tranzit. Vezi `fancourier/statusuri.ts`. */
+  id: string;
+  name: string;
+  location: string;
+  /** „2023-03-06 13:58:43", FARA fus orar. Vezi nota din `ultimulEveniment`. */
+  date: string;
+};
+
+/** Starea unui AWB, asa cum o da `reports/awb/tracking` (pag. 45). */
+export type UrmarireFan = {
+  awbNumber: string;
+  content?: string | null;
+  date?: string | null;
+  paymentDate?: string | null;
+  returnAwbNumber?: string | null;
+  redirectionAwbNumber?: string | null;
+  reimbursementAwbNumber?: string | null;
+  oPODAwbNumber?: string | null;
+  confirmation?: { name?: string | null; date?: string | null } | null;
+  /** „on time delivery": durata intregului drum, ca text („24H"). */
+  OTD?: string | null;
+  events?: EvenimentFan[];
+};
+
+/**
+ * Starile mai multor AWB-uri deodata (`reports/awb/tracking`, pag. 45).
+ *
+ * ⚠ RASPUNSUL POATE FI MAI SCURT DECAT CEREREA, SI TACUT.
+ *
+ * Un AWB necunoscut contului pur si simplu LIPSESTE din `data`, fara vreo eroare. Apelantul
+ * NU are voie sa deduca „inca nu s-a schimbat nimic" din absenta lui: trebuie sa stampileze
+ * momentul verificarii pentru TOATE cele cerute, altfel un AWB strain ar fi reintrebat la
+ * nesfarsit si ar infometat rotatia. Aceeasi capcana e scrisa si in cronul eColet.
+ *
+ * ⚠ SE CERE IN LOTURI MICI. `awb[]` se repeta in URL, deci un lot mare face o adresa uriasa,
+ * pe care fie serverul, fie un intermediar o taie. Plafonul nu e documentat de FAN; apelantul
+ * imparte, iar functia asta refuza cererile goale ca sa nu plece un apel fara rost.
+ */
+export async function getFanCourierTracking(
+  config: FanCourierConfig,
+  awbs: readonly string[],
+): Promise<UrmarireFan[]> {
+  const curate = awbs.map((a) => (a ?? "").trim()).filter(Boolean);
+  if (curate.length === 0) return [];
+
+  const params = new URLSearchParams({ clientId: clientIdValid(config), language: "ro" });
+  for (const awb of curate) params.append("awb[]", awb);
+
+  const data = await fanGet<UrmarireFan[]>(config.username, config.password, `reports/awb/tracking?${params.toString()}`);
+  return Array.isArray(data) ? data : [];
 }
 
 // ─── AWB Label (PDF) ──────────────────────────────────────────────────────────

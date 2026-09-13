@@ -398,6 +398,19 @@ export async function createFanCourierAwbAction(
     fan_courier_awb_client_id: context.clientId,
     fan_courier_cost: context.tariff,
     fan_courier_vat: context.vat,
+    /*
+     * ⚠ CLIPA EMITERII, si fara ea urmarirea n-ar porni niciodata (13.09.2026).
+     *
+     * Cronul de urmarire cere starile doar pentru AWB-urile din ultimele saptamani, iar
+     * fereastra se masoara de aici. Lasata `null`, coloana ar fi ajuns intr-un filtru care
+     * n-ar fi potrivit nimic, si cronul ar fi rulat cuminte fara sa intrebe de nimeni.
+     *
+     * ⚠ E momentul in care AWB-ul ajunge PE COMANDA, nu neaparat cel in care l-a creat FAN:
+     * pe ramura `deja` a registrului, numarul vine dintr-o incercare anterioara. Diferenta e
+     * de secunde si nu conteaza pentru o fereastra de saptamani, dar coloana asta nu e o
+     * marturie despre FAN, ci despre noi.
+     */
+    fan_courier_awb_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     /* ⚠ SI PE MAGAZIN, ca la anulare: fara filtru, „zero randuri" ar putea
        insemna si „alta comanda", nu doar „scriere pierduta", iar alarma critica
@@ -815,6 +828,17 @@ export async function deleteFanCourierAwbAction(
       fan_courier_awb_client_id: null,
       fan_courier_cost: null,
       fan_courier_vat: null,
+      /*
+       * ⚠ SI URMA URMARIRII, nu doar numarul (13.09.2026).
+       *
+       * Lasate in urma, cele trei ar fi descris un colet care nu mai e al comenzii: pagina
+       * ar fi aratat o stare veche pe o comanda fara AWB, iar o reemitere ar fi pornit cu
+       * `status_code`-ul celui anulat, deci pana la prima verificare comanda ar fi parut
+       * deja livrata. Se sterg impreuna cu numarul, din acelasi `update`.
+       */
+      fan_courier_awb_at: null,
+      fan_courier_status_code: null,
+      fan_courier_status_checked_at: null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId).eq("business_id", businessId)
       .eq("fan_courier_awb_number", orderData.fan_courier_awb_number)

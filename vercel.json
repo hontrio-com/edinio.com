@@ -132,6 +132,10 @@
       "schedule": "11 */3 * * *"
     },
     {
+      "path": "/api/cron/fancourier-tracking",
+      "schedule": "5 */2 * * *"
+    },
+    {
       "path": "/api/cron/conversii",
       "schedule": "* * * * *"
     },

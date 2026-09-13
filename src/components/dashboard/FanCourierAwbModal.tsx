@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { useDialogAccesibil } from "./useDialogAccesibil";
 import { stradaDestinatarului } from "@/lib/orders/adresa";
@@ -34,19 +34,41 @@ const FANBOX_MAX_WEIGHT_KG = 30;
 const FANBOX_COMPARTMENT_CM = [40.4, 44.3, 45]; // sorted min→max
 const FAN_MAX_COD = 10000;
 
-export function FanCourierAwbModal({
-  open,
-  onClose,
-  order,
-  businessId,
-  onSuccess,
-}: {
+type Props = {
   open: boolean;
   onClose: () => void;
   order: Order;
   businessId: string;
   onSuccess: () => void;
-}) {
+};
+
+/**
+ * Invelisul care MONTEAZA formularul abia la deschidere.
+ *
+ * ═══ ⚠ ASTA INLOCUIESTE „AMPRENTA DESTINATARULUI" (13.09.2026) ═══
+ *
+ * Fereastra statea montata permanent in pagina comenzii: se randa cand FAN e activ, nu
+ * cand e deschis. Deci `useState(order....)` rula O SINGURA DATA, la incarcarea paginii,
+ * si starea supravietuia peste `router.refresh()`. Comerciantul corecta adresa gresita a
+ * unui client, panoul ii spunea „poti genera acum AWB-ul cu datele noi", si fereastra
+ * trimitea mai departe ADRESA VECHE: un colet fizic, cu ramburs, la destinatia gresita.
+ *
+ * Leacul de atunci a fost o amprenta a destinatarului, comparata la fiecare randare, care
+ * rescria campurile cand se schimba. Functiona, dar avea o gaura a ei: `setAmprentaAratata`
+ * rula NECONDITIONAT, iar rescrierea campurilor sta sub `if (!hasAwb)`. Deci pe o comanda
+ * cu AWB emis amprenta noua era CONSUMATA fara ca vreun camp sa se miste, si dupa stergerea
+ * AWB-ului fereastra ramanea cu datele vechi, de-a binelea.
+ *
+ * Montand la deschidere, `useState` ruleaza din nou de fiecare data si nu mai e nevoie
+ * nici de amprenta, nici de vreun efect care sa „resincronizeze". Acelasi tipar ca la
+ * `GlsAwbModal.tsx:61-78` si la celelalte cincisprezece ferestre.
+ */
+export function FanCourierAwbModal(props: Props) {
+  if (!props.open) return null;
+  return <Formular {...props} />;
+}
+
+function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const orderData = order as typeof order & {
     fan_courier_awb_number?: string | null;
   };
@@ -63,12 +85,18 @@ export function FanCourierAwbModal({
 
   // Greutatea vine din produsele comenzii, nu de la un kilogram fix. Vezi
   // `useGreutateaAwb`.
-  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
+  /* ⚠ `open: true`: formularul exista doar cat timp e deschis, vezi invelisul de mai sus. */
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open: true, hasAwb, businessId, orderId: order.id });
   const [parcels, setParcels] = useState("1");
   const [length, setLength] = useState("");
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
-  const [cod, setCod] = useState("0");
+  /* ⚠ Rambursul se calculeaza la MONTARE, adica la deschidere, si dupa BANI, nu dupa
+     metoda: o comanda cu plata online ramasa neplatita pleca altfel cu ramburs zero.
+     Vezi `rambursDeIncasat`. */
+  const [cod, setCod] = useState(
+    () => rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2),
+  );
   const [content, setContent] = useState("");
   const [observation, setObservation] = useState("");
 
@@ -94,52 +122,15 @@ export function FanCourierAwbModal({
     ? (codNum > 0 ? "FANbox Cont Colector" : "FANbox")
     : (codNum > 0 ? "Cont Colector" : "Standard");
 
-  // Rambursul se completeaza dupa BANI, nu dupa metoda: o comanda cu plata online
-  // ramasa neplatita pleca altfel cu ramburs zero. Vezi `rambursDeIncasat`.
-  useEffect(() => {
-    if (open && !hasAwb) setCod(rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2));
-  }, [open, hasAwb, order.payment_status, order.total]);
-
   /*
-   * ⚠ DESTINATARUL SE RECITESTE CAND SE SCHIMBA COMANDA.
+   * ⚠ AICI STATEAU DOUA OCOLIRI, si amandoua au disparut odata cu invelisul de sus:
+   * efectul care resincroniza rambursul, si „amprenta destinatarului" care compara la
+   * fiecare randare si rescria campurile. Existau amandoua din acelasi motiv: fereastra
+   * era montata permanent, deci `useState` rula o singura data, la incarcarea paginii.
    *
-   * Campurile de mai sus sunt `useState(order....)`, adica se umplu O SINGURA
-   * DATA. Iar modalul e montat PERMANENT in pagina comenzii, se randeaza cand
-   * FAN e activ, nu cand e deschis (`OrderDetailClient.tsx`, unde `open` e doar
-   * un prop). Deci starea supravietuia si peste `router.refresh()`.
-   *
-   * Ce costa: comerciantul corecteaza adresa gresita a unui client, pagina se
-   * reincarca, aplicatia ii spune „poti genera acum AWB-ul cu datele noi", si
-   * modalul trimite mai departe ADRESA VECHE. Un colet fizic, cu ramburs, plecat
-   * la destinatia gresita, fara ca nimic sa para stricat.
-   *
-   * ⚠ Se face la RANDARE, nu intr-un `useEffect`: asta e tiparul recomandat de
-   * React pentru „reseteaza starea cand se schimba un prop", si singurul care nu
-   * lasa sa se vada o randare cu datele vechi. Un efect ar fi si a doua
-   * incalcare a `react-hooks/set-state-in-effect` in acelasi fisier.
-   *
-   * Se resincronizeaza doar cat timp nu exista inca AWB: dupa emitere campurile
-   * arata ce s-a trimis, si nu au voie sa se miste sub ochii omului.
+   * Montata la deschidere, starea se deriva din comanda de ATUNCI, si nu mai are cine
+   * s-o resincronizeze. Vezi nota lunga de la `FanCourierAwbModal`.
    */
-  const amprentaDestinatarului = JSON.stringify([
-    order.customer_name, order.customer_phone, order.customer_email,
-    addr?.county, addr?.city, addr?.street, addr?.address, addr?.street_no, addr?.postal_code,
-    addr?.locker_county, addr?.locker_city, isFanboxDelivery,
-  ]);
-  const [amprentaAratata, setAmprentaAratata] = useState(amprentaDestinatarului);
-  if (amprentaAratata !== amprentaDestinatarului) {
-    setAmprentaAratata(amprentaDestinatarului);
-    if (!hasAwb) {
-      setRecipientName(order.customer_name);
-      setRecipientPhone(order.customer_phone);
-      setRecipientEmail(order.customer_email ?? "");
-      setRecipientCounty(isFanboxDelivery ? (addr?.locker_county ?? addr?.county ?? "") : (addr?.county ?? ""));
-      setRecipientLocality(isFanboxDelivery ? (addr?.locker_city ?? addr?.city ?? "") : (addr?.city ?? ""));
-      setRecipientStreet(stradaDestinatarului(addr));
-      setRecipientStreetNo(addr?.street_no ?? "");
-      setRecipientZipCode(addr?.postal_code ?? "");
-    }
-  }
 
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
@@ -275,9 +266,9 @@ export function FanCourierAwbModal({
     }
   }
 
-  const cutiaDialogului = useDialogAccesibil(open, onClose);
-
-  if (!open) return null;
+  /* ⚠ `true`: formularul exista doar cat timp e deschis, deci dialogul e mereu deschis
+     cat timp componenta asta traieste. Vezi invelisul de la `FanCourierAwbModal`. */
+  const cutiaDialogului = useDialogAccesibil(true, onClose);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

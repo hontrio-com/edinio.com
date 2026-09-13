@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { X, Package, Loader2, Download, Trash2, ExternalLink, MapPin } from "lucide-react";
@@ -30,19 +30,28 @@ type ShippingAddress = {
   locker_county?: string;
 };
 
-export function CargusAwbModal({
-  open,
-  onClose,
-  order,
-  businessId,
-  onSuccess,
-}: {
+type Props = {
   open: boolean;
   onClose: () => void;
   order: Order;
   businessId: string;
   onSuccess: () => void;
-}) {
+};
+
+/**
+ * Invelisul care MONTEAZA formularul abia la deschidere.
+ *
+ * ⚠ Montata permanent, fereastra citea adresa si rambursul O SINGURA DATA, la incarcarea
+ * paginii: o corectura facuta intre timp din „Editeaza comanda" nu mai ajungea pe colet,
+ * desi panoul spunea „poti genera acum AWB-ul cu datele noi". Nota lunga e in
+ * `ColeteAwbModal.tsx`; tiparul vine de la `GlsAwbModal.tsx:61-78`.
+ */
+export function CargusAwbModal(props: Props) {
+  if (!props.open) return null;
+  return <Formular {...props} />;
+}
+
+function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const orderData = order as typeof order & {
     cargus_awb_number?: string | null;
     cargus_service_name?: string | null;
@@ -59,13 +68,20 @@ export function CargusAwbModal({
   // Form state
   // Greutatea vine din produsele comenzii, nu de la un kilogram fix. Aici
   // atarna si serviciul: `getCargusServiceId` alege banda dupa ea.
-  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
+  /* ⚠ `open: true`: formularul exista doar cat timp e deschis, vezi invelisul de mai sus. */
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open: true, hasAwb, businessId, orderId: order.id });
   const [parcels, setParcels] = useState("1");
   const [shipmentKind, setShipmentKind] = useState<"parcel" | "envelope">("parcel");
   const [length, setLength] = useState("");
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
-  const [cashRepayment, setCashRepayment] = useState("");
+  /* ⚠ Rambursul se calculeaza la MONTARE, adica la deschidere, si dupa BANI, nu dupa
+     metoda: o comanda cu plata online ramasa neplatita pleca altfel cu ramburs zero.
+     Vezi `rambursDeIncasat`. Inainte statea intr-un efect, fiindca fereastra era montata
+     permanent si suma ar fi ramas cea de la incarcarea paginii. */
+  const [cashRepayment, setCashRepayment] = useState(
+    () => rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2),
+  );
   const [openPackage, setOpenPackage] = useState(false);
   const [saturdayDelivery, setSaturdayDelivery] = useState(false);
   const [observations, setObservations] = useState("");
@@ -85,12 +101,6 @@ export function CargusAwbModal({
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [downloadingFormat, setDownloadingFormat] = useState<0 | 1 | null>(null);
-
-  // Rambursul se completeaza dupa BANI, nu dupa metoda: o comanda cu plata online
-  // ramasa neplatita pleca altfel cu ramburs zero. Vezi `rambursDeIncasat`.
-  useEffect(() => {
-    if (open && !hasAwb) setCashRepayment(rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2));
-  }, [open, hasAwb, order.payment_status, order.total]);
 
   const weightNum = parseFloat(weight) || 1;
   const isEnvelope = shipmentKind === "envelope";
@@ -183,8 +193,6 @@ export function CargusAwbModal({
       setDownloadingFormat(null);
     }
   }
-
-  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

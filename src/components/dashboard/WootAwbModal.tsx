@@ -63,7 +63,20 @@ interface Props {
 
 const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
-export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Props) {
+/**
+ * Invelisul care MONTEAZA formularul abia la deschidere.
+ *
+ * ⚠ Montata permanent, fereastra citea adresa O SINGURA DATA, la incarcarea paginii:
+ * o corectura facuta intre timp din „Editeaza comanda" nu mai ajungea pe colet, desi
+ * panoul spunea „poti genera acum AWB-ul cu datele noi". Vezi nota lunga din
+ * `ColeteAwbModal.tsx` si tiparul din `GlsAwbModal.tsx:61-78`.
+ */
+export function WootAwbModal(props: Props) {
+  if (!props.open) return null;
+  return <Formular {...props} />;
+}
+
+function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress;
   // Ramburs dupa BANI, nu dupa metoda: comanda #0033 a plecat cu plata online
   // neincasata si ramburs zero. Vezi `rambursDeIncasat`.
@@ -120,16 +133,11 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   // Greutatea vine din produsele comenzii, nu de la un kilogram fix. La Woot
   // atarna de ea si lista de preturi de mai jos, nu doar eticheta: se cereau
   // tarife pentru un kilogram si se expedia coletul adevarat.
-  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
+  /* ⚠ `open: true`: formularul exista doar cat timp e deschis, vezi invelisul de mai sus. */
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open: true, hasAwb, businessId, orderId: order.id });
 
-  // Formularul se monteaza odata cu pagina, nu la deschidere, deci suma nu are voie
-  // sa ramana cea calculata la incarcare: dupa ce comerciantul marcheaza comanda
-  // platita, campul ar fi pastrat vechiul ramburs si l-ar fi trimis pe colet.
-  // Dependinte primitive, ca o simpla reimprospatare a paginii sa nu stearga suma
-  // scrisa cu mana.
-  useEffect(() => {
-    if (open && !hasAwb) setRepayment(String(Math.round(ramburs)));
-  }, [open, hasAwb, ramburs]);
+  /* ⚠ Efectul care resincroniza rambursul A DISPARUT: montarea la deschidere recalculeaza
+     `useState(String(Math.round(ramburs)))` de fiecare data, cu suma de ATUNCI. */
 
   // A service whose pickup isn't "door" needs the sender to hand the parcel over
   // at a Woot location, so it requires a sender location_id.
@@ -138,9 +146,8 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   // customer's pickup point (receiver.location_id) must be chosen.
   const needsReceiverLocation = !!selectedService?.service_delivery && selectedService.service_delivery !== "door";
 
-  // Load counties on open
+  // Nomenclatorul de judete, cerut o data, la montare (adica la deschidere).
   useEffect(() => {
-    if (!open) return;
     fetch("/api/woot/counties")
       .then(r => r.json())
       .then((data: WootCounty[]) => {
@@ -150,7 +157,7 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
         if (match) setCountyId(match.id);
       })
       .catch(() => {});
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load cities when county changes
   useEffect(() => {
@@ -168,25 +175,16 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
       .catch(() => setLoadingCities(false));
   }, [countyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset on close
-  useEffect(() => {
-    if (!open) {
-      setPrices([]);
-      setSelectedServiceId(null);
-      setSelectedService(null);
-      setPricesError("");
-      setPricesFetched(false);
-    }
-  }, [open]);
+  /* ⚠ Efectul de „reset la inchidere" A DISPARUT: inchiderea DEMONTEAZA acum formularul,
+     deci starea se duce cu el. Pastrat, ar fi golit preturile chiar in clipa montarii. */
 
   // Escape key
   useEffect(() => {
-    if (!open) return;
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
     document.body.style.overflow = "hidden";
     return () => { document.removeEventListener("keydown", handler); document.body.style.overflow = ""; };
-  }, [open, onClose]);
+  }, [onClose]);
 
   function buildParcels(): WootParcel[] {
     return [{
@@ -324,8 +322,6 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   function handleDownload(format: "A4" | "A6") {
     window.open(`/api/woot/awb?orderId=${order.id}&businessId=${businessId}&format=${format}`, "_blank");
   }
-
-  if (!open) return null;
 
   return (
     <>

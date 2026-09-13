@@ -33,19 +33,26 @@ type ShippingAddress = {
   locker_county?: string;
 };
 
-export function SamedayAwbModal({
-  open,
-  onClose,
-  order,
-  businessId,
-  onSuccess,
-}: {
+type Props = {
   open: boolean;
   onClose: () => void;
   order: Order;
   businessId: string;
   onSuccess: () => void;
-}) {
+};
+
+/**
+ * Invelisul care MONTEAZA formularul abia la deschidere.
+ *
+ * ⚠ Montata permanent, fereastra citea adresa si rambursul O SINGURA DATA, la incarcarea
+ * paginii. Nota lunga e in `ColeteAwbModal.tsx`; tiparul vine de la `GlsAwbModal.tsx:61-78`.
+ */
+export function SamedayAwbModal(props: Props) {
+  if (!props.open) return null;
+  return <Formular {...props} />;
+}
+
+function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const orderData = order as typeof order & {
     sameday_awb_number?: string | null;
     sameday_return_awb_number?: string | null;
@@ -94,14 +101,22 @@ export function SamedayAwbModal({
 
   // Greutatea vine din produsele comenzii, nu de la un kilogram fix. Vezi
   // `useGreutateaAwb`.
-  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
+  /* ⚠ `open: true`: formularul exista doar cat timp e deschis, vezi invelisul de mai sus. */
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open: true, hasAwb, businessId, orderId: order.id });
   const [packageNumber, setPackageNumber] = useState("1");
   const [packageType, setPackageType] = useState<0 | 1 | 2>(0);
   const [length, setLength] = useState("");
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
-  const [cod, setCod] = useState("0");
-  const [insuredValue, setInsuredValue] = useState("0");
+  /* ⚠ Rambursul se calculeaza la MONTARE, adica la deschidere, si dupa BANI, nu dupa
+     metoda: o comanda cu plata online ramasa neplatita pleca altfel cu ramburs zero.
+     Vezi `rambursDeIncasat`. */
+  const [cod, setCod] = useState(
+    () => rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2),
+  );
+  /* ⚠ Valoarea asigurata e valoarea MARFII, nu suma de incasat: o comanda deja platita
+     calatoreste cu aceeasi marfa, deci se declara la fel. */
+  const [insuredValue, setInsuredValue] = useState(() => (Number(order.total) || 0).toFixed(2));
   const [observation, setObservation] = useState("");
 
   const [recipientName, setRecipientName] = useState(order.customer_name);
@@ -119,21 +134,13 @@ export function SamedayAwbModal({
   const [deleting, setDeleting] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
-  // Rambursul se completeaza dupa BANI, nu dupa metoda: o comanda cu plata online
-  // ramasa neplatita pleca altfel cu ramburs zero. Vezi `rambursDeIncasat`.
-  useEffect(() => {
-    if (open && !hasAwb) {
-      setCod(rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2));
-      // Valoarea asigurata e valoarea MARFII, nu suma de incasat: o comanda deja
-      // platita calatoreste cu aceeasi marfa, deci se declara la fel.
-      setInsuredValue((Number(order.total) || 0).toFixed(2));
-    }
-  }, [open, hasAwb, order.payment_status, order.total]);
+  /* ⚠ Efectul care resincroniza rambursul si valoarea asigurata A DISPARUT: montarea la
+     deschidere recalculeaza initializatorii de mai sus de fiecare data, cu cifrele de ATUNCI. */
 
   /* Ce extraoptiuni are CHIAR contul. O bifa fara corespondent ar fi fost sarita tacut la
      emitere, iar omul ar fi crezut ca a cerut ceva ce nu s-a cerut niciodata. */
   useEffect(() => {
-    if (!open || hasAwb) return;
+    if (hasAwb) return;
     let anulat = false;
     (async () => {
       const r = await optiuniSamedayAction(businessId);
@@ -141,7 +148,7 @@ export function SamedayAwbModal({
       setCoduriCont([...new Set(r.servicii.flatMap((sv) => sv.optiuni.map((o) => o.taxCode)))]);
     })();
     return () => { anulat = true; };
-  }, [open, hasAwb, businessId]);
+  }, [hasAwb, businessId]);
 
   /*
    * Lockerele se cer DOAR cand comerciantul aprinde comutatorul.
@@ -153,7 +160,7 @@ export function SamedayAwbModal({
   useEffect(() => {
     /* ⚠ Si pentru retur, nu doar pentru livrare: acolo omul alege easybox-ul in care preda. */
     const cerute = (laEasybox && !lockerDinComanda) || felRetur === "locker";
-    if (!open || !cerute || lockere.length > 0) return;
+    if (!cerute || lockere.length > 0) return;
     let anulat = false;
     (async () => {
       /* ⚠ Aprinderea se face IN interiorul functiei asincrone, nu langa efect: un `setState`
@@ -169,7 +176,7 @@ export function SamedayAwbModal({
       setLockereIncarca(false);
     })();
     return () => { anulat = true; };
-  }, [open, laEasybox, lockerDinComanda, felRetur, lockere.length, businessId]);
+  }, [laEasybox, lockerDinComanda, felRetur, lockere.length, businessId]);
 
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
@@ -299,8 +306,6 @@ export function SamedayAwbModal({
       setDownloading(false);
     }
   }
-
-  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

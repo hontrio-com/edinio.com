@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { X, Loader2, Package, Truck, ChevronRight, Download, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
@@ -45,7 +45,32 @@ interface PriceItem {
   noVat: number;
 }
 
-export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: Props) {
+/**
+ * Invelisul care MONTEAZA formularul abia la deschidere.
+ *
+ * ═══ ⚠ CE STRICA O FEREASTRA MONTATA PERMANENT (13.09.2026) ═══
+ *
+ * Pana azi componenta ramanea montata cu `return null`, iar `open` era doar un prop.
+ * Deci `useState(...)` rula O SINGURA DATA, la incarcarea paginii, si nimic nu-l mai
+ * rescria: comerciantul corecta adresa gresita a unui client din „Editeaza comanda",
+ * pagina se reimprospata, panoul ii spunea „poti genera acum AWB-ul cu datele noi",
+ * iar fereastra trimitea mai departe ADRESA VECHE. Un colet fizic, cu ramburs, plecat
+ * la destinatia gresita, fara ca nimic sa para stricat.
+ *
+ * Montand la deschidere, initializatorii `useState` ruleaza din nou de fiecare data,
+ * si nu mai e nevoie de niciun efect care sa „resincronizeze" starea. Efectul acela e
+ * chiar ce interzice `react-hooks/set-state-in-effect`, si pe buna dreptate: starea
+ * derivata dintr-o proprietate nu se sincronizeaza, se DERIVA.
+ *
+ * ⚠ Acelasi tipar ca la GLS (`GlsAwbModal.tsx:61-78`), care il avea de dinainte, si ca
+ * la celelalte unsprezece ferestre migrate.
+ */
+export function ColeteAwbModal(props: Props) {
+  if (!props.open) return null;
+  return <Formular {...props} />;
+}
+
+function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const addr = order.shipping_address as ShippingAddress;
   // Ramburs dupa BANI, nu dupa metoda: o comanda cu plata online ramasa neplatita
   // pleca altfel fara nicio cale de incasare. Vezi `rambursDeIncasat`.
@@ -73,22 +98,19 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
   const [parcelType, setParcelType] = useState<"package" | "envelope">("package");
   // Greutatea vine din produsele comenzii, nu de la un kilogram fix. La Colete
   // Online atarna de ea si lista de tarife de mai jos, nu doar eticheta.
-  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
+  /* ⚠ `open: true`: formularul exista doar cat timp e deschis, vezi invelisul de mai sus.
+     Acelasi fel de chemare ca la celelalte unsprezece ferestre migrate. */
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open: true, hasAwb, businessId, orderId: order.id });
   const [length, setLength] = useState("30");
   const [width, setWidth] = useState("20");
   const [height, setHeight] = useState("10");
   const [content, setContent] = useState("Produse comerciale");
   const [repayment, setRepayment] = useState(String(Math.round(ramburs)));
 
-  // Formularul se monteaza odata cu pagina, nu la deschidere, deci suma nu are voie
-  // sa ramana cea calculata la incarcare: dupa ce comerciantul marcheaza comanda
-  // platita, campul ar fi pastrat vechiul ramburs si l-ar fi trimis pe colet.
-  // Dependinte primitive, ca o simpla reimprospatare a paginii sa nu stearga suma
-  // scrisa cu mana.
-  useEffect(() => {
-    if (open && !hasAwb) setRepayment(String(Math.round(ramburs)));
-  }, [open, hasAwb, ramburs]);
-
+  /* ⚠ Efectul care resincroniza rambursul A DISPARUT, si nu din neglijenta: formularul
+     se monteaza acum la deschidere, deci `useState(String(Math.round(ramburs)))` de mai
+     sus se calculeaza din nou de fiecare data, cu suma de ATUNCI. Pastrat, ar fi fost o
+     a doua sursa de adevar pentru acelasi camp. */
   const [openAtDelivery, setOpenAtDelivery] = useState(false);
   const [saturday, setSaturday] = useState(false);
 
@@ -101,8 +123,6 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
   const [, startCreateTransition] = useTransition();
   const [loadingPrices, setLoadingPrices] = useState(false);
   const [creating, setCreating] = useState(false);
-
-  if (!open) return null;
 
   function buildReceiver(): COReceiver {
     return {

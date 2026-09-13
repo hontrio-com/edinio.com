@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { X, Package, Loader2, Download, Trash2, MapPin } from "lucide-react";
@@ -29,19 +29,26 @@ type ShippingAddress = {
   locker_county?: string;
 };
 
-export function DpdAwbModal({
-  open,
-  onClose,
-  order,
-  businessId,
-  onSuccess,
-}: {
+type Props = {
   open: boolean;
   onClose: () => void;
   order: Order;
   businessId: string;
   onSuccess: () => void;
-}) {
+};
+
+/**
+ * Invelisul care MONTEAZA formularul abia la deschidere.
+ *
+ * ⚠ Montata permanent, fereastra citea adresa si rambursul O SINGURA DATA, la incarcarea
+ * paginii. Nota lunga e in `ColeteAwbModal.tsx`; tiparul vine de la `GlsAwbModal.tsx:61-78`.
+ */
+export function DpdAwbModal(props: Props) {
+  if (!props.open) return null;
+  return <Formular {...props} />;
+}
+
+function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const orderData = order as typeof order & {
     dpd_shipment_id?: number | null;
     dpd_awb_number?: string | null;
@@ -61,11 +68,19 @@ export function DpdAwbModal({
 
   // Greutatea vine din produsele comenzii, nu de la un kilogram fix. Vezi
   // `useGreutateaAwb`.
-  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open, hasAwb, businessId, orderId: order.id });
+  /* ⚠ `open: true`: formularul exista doar cat timp e deschis, vezi invelisul de mai sus. */
+  const { weight, setWeight, dinCatalog, liniiFaraGreutate } = useGreutateaAwb({ open: true, hasAwb, businessId, orderId: order.id });
   const [length, setLength] = useState("");
   const [width, setWidth] = useState("");
   const [height, setHeight] = useState("");
-  const [cashOnDelivery, setCashOnDelivery] = useState("0");
+  /* ⚠ Rambursul se calculeaza la MONTARE, adica la deschidere, si dupa BANI, nu dupa metoda.
+     ⚠ La INTERNATIONAL ramane zero: biblioteca il trimite oricum pe zero (`lib/dpd.ts`), deci
+     un numar precompletat aici ar promite o incasare care nu se intampla. */
+  const [cashOnDelivery, setCashOnDelivery] = useState(() => (
+    intlCountry
+      ? "0"
+      : rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2)
+  ));
   const [shipmentNote, setShipmentNote] = useState("");
   const [content, setContent] = useState(() => {
     const items = (Array.isArray(order.items) ? order.items : []) as { name?: string }[];
@@ -85,17 +100,6 @@ export function DpdAwbModal({
   const [creating, setCreating] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [downloadingFormat, setDownloadingFormat] = useState<"A4" | "A6" | null>(null);
-
-  // Rambursul se completeaza dupa BANI, nu dupa metoda: o comanda cu plata online
-  // ramasa neplatita pleca altfel cu ramburs zero. Vezi `rambursDeIncasat`.
-  useEffect(() => {
-    // La international rambursul nu exista: biblioteca il trimite oricum pe zero
-    // (`lib/dpd.ts`), deci un numar precompletat aici ar promite o incasare care
-    // nu se intampla.
-    if (open && !hasAwb) {
-      setCashOnDelivery(intlCountry ? "0" : rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2));
-    }
-  }, [open, hasAwb, intlCountry, order.payment_status, order.total]);
 
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
@@ -178,8 +182,6 @@ export function DpdAwbModal({
       setDownloadingFormat(null);
     }
   }
-
-  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

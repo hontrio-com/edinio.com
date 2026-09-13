@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSamedayAwbLabel, type SamedayConfig } from "@/lib/sameday/client";
 import { poartaEtichetei } from "@/lib/orders/poarta-eticheta";
+import { raspunsEticheta } from "@/lib/orders/raspuns-eticheta";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -46,12 +47,10 @@ export async function GET(req: NextRequest) {
     const pdfBuffer = await getSamedayAwbLabel(config, orderData.sameday_awb_number, labelType);
     const filename = `awb-sameday-${orderData.sameday_awb_number}.pdf`;
 
-    return new NextResponse(pdfBuffer.buffer as ArrayBuffer, {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-      },
-    });
+    /* ⚠ Trimitea `pdfBuffer.buffer`, adica BLOCUL din spate, nu documentul. Sameday NU a
+       fost numit de niciun audit; a iesit la cautarea pe TIPAR, nu pe instantele raportate.
+       Regula sta in `raspuns-eticheta.ts`. */
+    return raspunsEticheta(pdfBuffer, filename);
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

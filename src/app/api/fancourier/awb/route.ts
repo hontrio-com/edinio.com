@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { configPentruAwbEmis, getFanCourierAwbLabel, type FanCourierConfig } from "@/lib/fancourier";
 import { poartaEtichetei } from "@/lib/orders/poarta-eticheta";
+import { raspunsEticheta } from "@/lib/orders/raspuns-eticheta";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -59,16 +60,17 @@ export async function GET(req: NextRequest) {
     );
     const filename = `awb-fancourier-${orderData.fan_courier_awb_number}.pdf`;
 
-    return new NextResponse(pdfBuffer.buffer as ArrayBuffer, {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-        /* ⚠ Eticheta poarta numele, adresa si telefonul CUMPARATORULUI. Fara
-           antetul asta, un intermediar sau CDN-ul ar putea sa o tina. Cele patru
-           rute surori (GLS, eColet, Posta, Packeta) il pun deja, cu aceeasi nota. */
-        "Cache-Control": "private, no-store",
-      },
-    });
+    /*
+     * ⚠ Antetul `no-store` era corect si a fost pastrat, dar octetii NU: se trimitea
+     * `pdfBuffer.buffer`, adica blocul din spate. Amandoua regulile stau acum in
+     * `raspuns-eticheta.ts`.
+     *
+     * ⚠ Nota de dinainte spunea ca „cele patru rute surori (GLS, eColet, Posta, Packeta)
+     * il pun deja". Masurat pe 13.09.2026: adevarat doar pentru GLS si eColet. Posta NU are
+     * eticheta deloc (API-ul lor n-are metoda de tiparire), iar Packeta o trimite printr-o
+     * actiune, ca base64 decodat in browser, deci nu trece prin nicio ruta.
+     */
+    return raspunsEticheta(pdfBuffer, filename);
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { getWootToken, getOrderAwb, type WootConfig } from "@/lib/woot";
 import { poartaEtichetei } from "@/lib/orders/poarta-eticheta";
+import { raspunsEticheta } from "@/lib/orders/raspuns-eticheta";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -52,15 +53,9 @@ export async function GET(request: NextRequest) {
     const token = await getWootToken(config.public_key, config.secret_key);
     const { pdf } = await getOrderAwb(token, Number(order.woot_order_id), format);
 
-    const pdfBuffer = Buffer.from(pdf, "base64");
-    return new Response(pdfBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="AWB-${order.order_number}.pdf"`,
-        "Content-Length": String(pdfBuffer.length),
-      },
-    });
+    /* ⚠ Octetii erau corecti aici, dar lipsea `Cache-Control: private, no-store`: eticheta
+       poarta numele, adresa si telefonul cumparatorului. Vezi `raspuns-eticheta.ts`. */
+    return raspunsEticheta(Buffer.from(pdf, "base64"), `AWB-${order.order_number}.pdf`);
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

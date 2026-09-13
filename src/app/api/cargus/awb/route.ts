@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCargusAwbPdf, type CargusConfig } from "@/lib/cargus";
 import { poartaEtichetei } from "@/lib/orders/poarta-eticheta";
+import { raspunsEticheta } from "@/lib/orders/raspuns-eticheta";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -48,12 +49,9 @@ export async function GET(req: NextRequest) {
       ? `awb-cargus-${orderData.cargus_awb_number}-eticheta.pdf`
       : `awb-cargus-${orderData.cargus_awb_number}-a4.pdf`;
 
-    return new NextResponse(pdfBuffer.buffer as ArrayBuffer, {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-      },
-    });
+    /* ⚠ Trimitea `pdfBuffer.buffer`, adica BLOCUL din spate, nu documentul. Regula si
+       masuratoarea care a prins-o stau in `raspuns-eticheta.ts`. */
+    return raspunsEticheta(pdfBuffer, filename);
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

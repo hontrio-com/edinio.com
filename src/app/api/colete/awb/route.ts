@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { getCOToken, getCOOrderAwb, type COConfig } from "@/lib/colete";
 import { poartaEtichetei } from "@/lib/orders/poarta-eticheta";
+import { raspunsEticheta } from "@/lib/orders/raspuns-eticheta";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -52,14 +53,9 @@ export async function GET(request: NextRequest) {
     const token = await getCOToken(config.client_id, config.client_secret);
     const pdfBuffer = await getCOOrderAwb(token, config.sandbox ?? false, order.colete_order_id, format);
 
-    return new Response(pdfBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="AWB-${order.order_number}.pdf"`,
-        "Content-Length": String(pdfBuffer.byteLength),
-      },
-    });
+    /* ⚠ Octetii erau corecti aici, dar lipsea `Cache-Control: private, no-store`: eticheta
+       poarta numele, adresa si telefonul cumparatorului. Vezi `raspuns-eticheta.ts`. */
+    return raspunsEticheta(pdfBuffer, `AWB-${order.order_number}.pdf`);
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

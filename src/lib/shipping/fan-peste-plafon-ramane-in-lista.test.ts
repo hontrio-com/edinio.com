@@ -109,15 +109,49 @@ test("⚠ rezerva pe tariful zonei e NECONDITIONATA", () => {
 test("⚠ peste plafon optiunea pleaca MARCATA, nu scoasa din lista", () => {
   const s = sursa(COTARE);
   /*
-   * Marcarea sta dupa `Promise.all` dinadins: patru din cele sase optiuni FAN se imping
-   * din `.then()`/`.catch()`, deci inca nu exista in lista cand ramura se incheie.
+   * Marcarea sta dupa asteptarea promisiunilor dinadins: patru din cele sase optiuni FAN se
+   * imping din `.then()`/`.catch()`, deci inca nu exista in lista cand ramura se incheie.
+   *
+   * ⚠ ANCORA SE CERE GASITA, ALTFEL PROBA MINTE (13.09.2026). Forma dintai taia cu
+   * `s.slice(s.indexOf("await Promise.all(promises);"))`. In ziua in care asteptarea a primit
+   * un plafon de timp si a devenit `Promise.race([Promise.all(promises), plafon])`, `indexOf`
+   * a intors −1, iar `slice(-1)` da ULTIMUL CARACTER din fisier: un „\n" pe care nicio
+   * afirmatie nu-l potriveste. Proba a cazut cu mesajul GRESIT, aratand spre marcare cand
+   * stricata era taierea. De aia ancora se verifica intai si de aia e cea larga: se cere SA SE
+   * astepte promisiunile, nu felul in care se asteapta.
    */
-  const dupaAsteptare = s.slice(s.indexOf("await Promise.all(promises);"));
+  const ancora = s.indexOf("Promise.all(promises)");
+  assert.ok(ancora > 0,
+    "nu se mai asteapta promisiunile cotarii: taierea de mai jos n-ar mai insemna nimic");
+  const dupaAsteptare = s.slice(ancora);
   assert.match(dupaAsteptare, /if \(fanRambursPestePlafon\) \{/,
     "optiunile FAN nu se mai marcheaza dupa ce se aduna si cele cotate asincron");
   assert.match(dupaAsteptare, /o\.rambursIndisponibil = true/);
   assert.match(ramuraFan(), /fanRambursPestePlafon = hasApi && codAmount > FAN_MAX_COD;/,
     "steagul nu se mai calculeaza din plafon");
+});
+
+test("⚠ si optiunile puse de PLAFONUL DE TIMP trec tot prin marcare", () => {
+  /*
+   * ⚠ OBLIGATIE NOUA, NASCUTA DIN PLAFONUL DE 25s (13.09.2026).
+   *
+   * La expirare, curierii care n-au apucat sa raspunda intra in lista cu tariful fix al
+   * zonei, FAN inclusiv. Daca marcarea ar sta INAINTEA acelei bucle, optiunea FAN pusa pe
+   * tarif fix ar pleca NEMARCATA peste plafonul de ramburs: cumparatorul ar alege rambursul,
+   * si abia emiterea l-ar refuza. Adica exact defectul inchis mai sus, intors pe alta usa.
+   *
+   * Ordinea de azi e cea buna. Proba o tine acolo, fiindca nimic din cod nu o impune:
+   * amandoua blocurile sunt instructiuni de sine statatoare, si mutarea uneia peste cealalta
+   * ar fi trecut tacut.
+   */
+  const s = sursa(COTARE);
+  const umplere = s.indexOf("if (cotatieExpirata) {");
+  const marcare = s.indexOf("if (fanRambursPestePlafon) {");
+  assert.ok(umplere > 0,
+    "nu mai exista umplerea pe tarif fix la expirarea plafonului de timp: reciteste de ce exista regula");
+  assert.ok(marcare > 0, "nu mai exista marcarea optiunilor FAN peste plafonul de ramburs");
+  assert.ok(marcare > umplere,
+    "marcarea a ajuns INAINTEA umplerii pe tarif fix: optiunea FAN pusa la expirare pleaca nemarcata");
 });
 
 test("⚠ si ecranul chiar spune de ce, altfel marcajul nu ajunge la nimeni", () => {

@@ -8,7 +8,7 @@ import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { logError } from "@/lib/error-logger";
 import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday/client";
 import { coletImplicit, estimateFanCourierCost, FAN_MAX_COD, FANBOX_MAX_WEIGHT_KG, getFanCourierPickupPoints, incapeInFanbox, type FanCourierConfig, type FanCourierPickupPoint, type TarifFan } from "@/lib/fancourier";
-import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig } from "@/lib/woot";
+import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig, type WootPriceResult } from "@/lib/woot";
 import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type DpdConfig } from "@/lib/dpd";
 import { calculateCargusPrice, getCargusPudoPoints, type CargusConfig } from "@/lib/cargus";
 import { getCOToken, getPrices as fetchCOPrices, type COConfig } from "@/lib/colete";
@@ -701,6 +701,31 @@ export async function getShippingOptions(
    */
   let fanRambursPestePlafon = false;
 
+  /*
+   * ═══ ⚠ REGIMUL DE TVA E AL MAGAZINULUI, NU AL CURIERULUI (13.09.2026) ═══
+   *
+   * Steagul asta statea in ramura FAN, si de aceea DOAR FAN il respecta. Ceilalti impingeau
+   * pretul intors de furnizor asa cum vine, iar pe un magazin cu preturi FARA TVA
+   * (`vat_enabled` adevarat SI `prices_include_vat` fals) transportul intra in `vatBase` si
+   * `computeVat` ii mai adauga o data cota peste una deja inclusa. La FAN erau 31,17 facuti
+   * 37,09; la ceilalti se intampla si azi.
+   *
+   * ⚠ CINE INTOARCE PRET CU TVA, masurat pe 13.09.2026, cu documentatia furnizorului acolo
+   * unde exista: Cargus (`GrandTotal`), DPD intern (`price.total`), Woot (`final_total`),
+   * Colete (`price.total`), eColet (`prices_gross`), Innoship (`rateTotalAmount`),
+   * SmartShip (`cost`). Nedeterminabil static, fiindca atarna de contract: Shipo, UPS, DHL,
+   * FedEx. Acolo nu se atinge nimic, si asta e scris in dreptul fiecaruia.
+   *
+   * ⚠ NETUL NU SE DEDUCE NICIODATA DIN BRUT. Cota magazinului nu e neaparat cota
+   * curierului, iar comisionul de ramburs, inclus in cotatie, poate avea alt regim. Lipsa
+   * netului se trateaza ca la FAN: se arunca, si `.catch`-ul ramurii cade pe tariful fix al
+   * zonei. Un net inventat ar fi tot o suma gresita, doar tacuta.
+   *
+   * ⚠ `zone.price` NU se atinge nicaieri: e numarul scris de comerciant in Setari, deci e
+   * deja in regimul magazinului.
+   */
+  const tvaPeDeasupra = !!settings.vat_enabled && settings.prices_include_vat === false;
+
   for (const [courierId, zone] of enabledZones) {
     // `doarTarifeFixe` trece fiecare curier pe ramura de pret manual de mai jos,
     // adica exact drumul pe care merg deja magazinele fara API configurat. Nu
@@ -868,7 +893,8 @@ export async function getShippingOptions(
         && weight <= FANBOX_MAX_WEIGHT_KG
         && (!coletul || incapeInFanbox(coletul));
 
-      const tvaPeDeasupra = !!settings.vat_enabled && settings.prices_include_vat === false;
+      /* ⚠ `tvaPeDeasupra` s-a mutat deasupra buclei: acum il folosesc sapte curieri, nu doar
+         FAN. Vezi nota de acolo. */
       const pretFan = (t: TarifFan): number => {
         if (!tvaPeDeasupra) return Math.round(t.total * 100) / 100;
         if (t.costNoVAT === null) {
@@ -982,7 +1008,7 @@ export async function getShippingOptions(
       if (hasApi && useAutoPrice) {
         // Woot is a broker: fetch the live courier offers so the customer picks one.
         promises.push(
-          buildWootOptions(wootConfig!, destination, weight, zone.label)
+          buildWootOptions(wootConfig!, destination, weight, zone.label, tvaPeDeasupra)
             .then((wootOpts) => {
               if (wootOpts.length > 0) options.push(...wootOpts);
               else options.push(flat()); // locality not matched / no offers
@@ -1024,7 +1050,12 @@ export async function getShippingOptions(
             weightKg: weight,
             cod: destination.cod,
           })
-            .then((q) => pushBoth(q ? q.price : zone.price))
+            .then((q) => {
+              /* ⚠ Pe regim net se cere `priceNoVat`; lipsa lui inseamna „nu stim netul", si
+                 atunci se cade pe tariful fix al zonei, care e deja in regimul magazinului. */
+              const cotat = q ? (tvaPeDeasupra ? q.priceNoVat : q.price) : null;
+              pushBoth(cotat ?? zone.price);
+            })
             .catch((err) => {
               console.error("[shipping] DPD estimate failed:", err.message);
               pushBoth(zone.price);
@@ -1062,7 +1093,12 @@ export async function getShippingOptions(
             weightKg: weight,
             cod: destination.cod,
           })
-            .then((q) => pushBoth(q ? q.price : zone.price))
+            .then((q) => {
+              /* ⚠ Pe regim net se cere `priceNoVat` (`Subtotal`, verificat cu `Tax`); lipsa
+                 lui inseamna „nu stim netul", deci tariful fix al zonei. */
+              const cotat = q ? (tvaPeDeasupra ? q.priceNoVat : q.price) : null;
+              pushBoth(cotat ?? zone.price);
+            })
             .catch((err) => {
               console.error("[shipping] Cargus estimate failed:", err.message);
               pushBoth(zone.price);
@@ -1084,7 +1120,7 @@ export async function getShippingOptions(
       if (hasApi && useAutoPrice) {
         // Colete Online is a broker: fetch the live courier offers so the customer picks one.
         promises.push(
-          buildColeteOptions(coConfig!, destination, weight, zone.label)
+          buildColeteOptions(coConfig!, destination, weight, zone.label, tvaPeDeasupra)
             .then((coOpts) => {
               if (coOpts.length > 0) options.push(...coOpts);
               else options.push(flat());
@@ -1118,7 +1154,7 @@ export async function getShippingOptions(
       if (hasApi && useAutoPrice) {
         /* Broker: se aduc ofertele vii, ca sa aleaga cumparatorul. */
         promises.push(
-          buildEcoletOptions(ecoletCfg!, destination, weight, zone.label)
+          buildEcoletOptions(ecoletCfg!, destination, weight, zone.label, tvaPeDeasupra)
             .then((opts) => {
               if (opts.length > 0) options.push(...opts);
               else options.push(flat()); // localitate nepotrivita / zero oferte
@@ -1301,7 +1337,7 @@ export async function getShippingOptions(
 
       if (innoshipGata(innoCfg) && useAutoPrice) {
         promises.push(
-          buildInnoshipOptions(innoCfg, destination, weight, esteRamburs ? (destination.cod ?? 0) : 0, zone.label)
+          buildInnoshipOptions(innoCfg, destination, weight, esteRamburs ? (destination.cod ?? 0) : 0, zone.label, tvaPeDeasupra)
             .then((opts) => {
               if (opts.length > 0) options.push(...opts);
               /* Zero oferte inseamna destinatie neacoperita, nu defect: cade pe
@@ -1355,7 +1391,7 @@ export async function getShippingOptions(
 
       if (smartshipGata(ssCfg) && useAutoPrice) {
         promises.push(
-          buildSmartshipOptions(ssCfg, destination, weight, esteRamburs ? (destination.cod ?? 0) : 0, zone.label, businessId)
+          buildSmartshipOptions(ssCfg, destination, weight, esteRamburs ? (destination.cod ?? 0) : 0, zone.label, businessId, tvaPeDeasupra)
             .then((opts) => {
               if (opts.length > 0) options.push(...opts);
               /* Zero oferte inseamna destinatie neacoperita sau localitate
@@ -1632,7 +1668,61 @@ export async function getShippingOptions(
     }
   }
 
-  await Promise.all(promises);
+  /*
+   * ═══ ⚠ PLAFON DE ANSAMBLU PE COTATIE (13.09.2026) ═══
+   *
+   * Fiecare cerere are de azi termenul ei (`AbortSignal.timeout`), dar asta NU margineste
+   * asteptarea totala: curierii se cheama in paralel, iar `Promise.all` asteapta MEREU
+   * ramura cea mai lenta. Iar ramura cea mai lenta nu e o singura cerere, ci un LANT:
+   * tokenul, apoi nomenclatorul, apoi tariful. Masurat pe cel mai rau caz: ~80 de secunde
+   * in care cumparatorul se uita la o rotita pe ecranul de livrare.
+   *
+   * ⚠ SI DE CE NU IESE NICIODATA DEVREME SINGUR: fiecare `promises.push(...)` isi are
+   * propriul `.catch`, deci nicio respingere nu poate scurta `Promise.all`.
+   *
+   * Dupa plafon se arata CE A VENIT, iar curierii care n-au apucat sa raspunda intra cu
+   * tariful fix al zonei, exact ce fac deja cand cad. Cumparatorul vede lista intreaga;
+   * ce difera e ca unele preturi sunt cele din Setari, nu cele vii. O lista completa cu
+   * doua preturi de rezerva bate o rotita de un minut si jumatate.
+   *
+   * ⚠ Promisiunile ramase NU se anuleaza si nu se asteapta: daca apuca sa se aseze mai
+   * tarziu, `options.push` din `.then()` cade intr-o lista pe care n-o mai citeste nimeni.
+   * E fara urmare, fiindca lista de iesire se compune mai jos, dupa plafon.
+   */
+  const TERMEN_COTATIE_MS = 25_000;
+  let cotatieExpirata = false;
+  {
+    let ceas: ReturnType<typeof setTimeout> | undefined;
+    const plafon = new Promise<void>((gata) => {
+      ceas = setTimeout(() => { cotatieExpirata = true; gata(); }, TERMEN_COTATIE_MS);
+    });
+    await Promise.race([Promise.all(promises), plafon]);
+    if (ceas) clearTimeout(ceas);
+  }
+
+  if (cotatieExpirata) {
+    /*
+     * ⚠ Cine n-a pus NIMIC in lista intra cu tariful zonei. Se recunoaste dupa `courier`,
+     * nu dupa promisiune: promisiunile sunt `Promise<void>` si nu poarta niciun nume, iar
+     * un curier care a apucat sa raspunda are deja cel putin o optiune aici.
+     */
+    const intarziati: string[] = [];
+    for (const [courierId, zone] of enabledZones) {
+      if (options.some((o) => o.courier === courierId)) continue;
+      intarziati.push(courierId);
+      options.push({
+        courier: courierId,
+        courierLabel: zone.label || COURIER_LABELS[courierId] || courierId,
+        deliveryType: "address",
+        price: zone.price,
+      });
+    }
+    if (intarziati.length > 0) {
+      console.error(
+        `[shipping] cotatia a depasit ${TERMEN_COTATIE_MS} ms; pe tarif fix: ${intarziati.join(", ")}`,
+      );
+    }
+  }
 
   /*
    * ⚠ ABIA ACUM sunt in lista si optiunile cotate asincron. Marcate la fiecare
@@ -1745,6 +1835,8 @@ async function buildEcoletOptions(
   destination: { county: string; city: string; cod?: number; postCode?: string },
   weightKg: number,
   customLabel?: string,
+  /* ⚠ Regimul MAGAZINULUI. Vezi nota de deasupra buclei de curieri. */
+  tvaPeDeasupra = false,
 ): Promise<ShippingOption[]> {
   /*
    * ⚠ „Sector 3" NU exista in nomenclatorul eColet: acolo numele localitatii e
@@ -1799,7 +1891,9 @@ async function buildEcoletOptions(
 
   const cereRamburs = !!destination.cod && destination.cod > 0;
 
-  return oferteEcolet(raspuns, catalog, config.servicii_permise)
+  /* ⚠ Al patrulea argument e regimul magazinului: se citeste `prices_net` in loc de
+     `prices_gross`, iar sluggurile fara net pica la acelasi filtru ca cele fara pret. */
+  return oferteEcolet(raspuns, catalog, config.servicii_permise, tvaPeDeasupra)
     /*
      * ⚠ La un broker, rambursul e insusirea SERVICIULUI, nu a platformei — si se
      * poate inchide chiar si pentru o suma prea mare pe un serviciu care altfel il
@@ -1820,11 +1914,39 @@ async function buildEcoletOptions(
   }));
 }
 
+/**
+ * Pretul unei oferte Woot, in REGIMUL MAGAZINULUI. `null` = oferta nu se arata.
+ *
+ * ⚠ Woot intoarce SASE numere: tripleta de baza (`price`/`tax`/`total`) si cea finala
+ * (`final_price`/`final_tax`/`final_total`), care e cea de DUPA cupoane si datorii. In
+ * checkout se foloseste cea finala, deci si netul trebuie luat tot de acolo.
+ *
+ * ⚠ SI SE VERIFICA, nu se ia pe cuvant: `final_price + final_tax` trebuie sa dea
+ * `final_total`, cu o toleranta de un ban. Cupoanele si datoriile se aplica peste tripleta,
+ * iar daca cele trei nu se mai leaga intre ele nu stim ce inseamna fiecare pe comanda asta.
+ * Un net nesigur e mai rau decat lipsa lui: oferta se arunca, si daca raman zero oferte
+ * apelantul cade pe tariful fix al zonei.
+ */
+function pretWoot(p: WootPriceResult, tvaPeDeasupra: boolean): number | null {
+  const brut = Number(p.final_total);
+  if (!Number.isFinite(brut) || brut <= 0) return null;
+  if (!tvaPeDeasupra) return Math.round(brut * 100) / 100;
+
+  const net = Number(p.final_price);
+  const tva = Number(p.final_tax);
+  const credibil =
+    Number.isFinite(net) && net > 0 && net <= brut
+    && (!Number.isFinite(tva) || Math.abs(net + tva - brut) <= 0.01);
+  return credibil ? Math.round(net * 100) / 100 : null;
+}
+
 async function buildWootOptions(
   config: WootConfig,
   destination: { county: string; city: string; cod?: number },
   weightKg: number,
   customLabel?: string,
+  /* ⚠ Regimul MAGAZINULUI. Vezi nota de deasupra buclei de curieri. */
+  tvaPeDeasupra = false,
 ): Promise<ShippingOption[]> {
   const counties = await fetchWootCounties();
   const county = matchByName(counties, destination.county);
@@ -1854,15 +1976,20 @@ async function buildWootOptions(
     // location the customer picks — the storefront has no picker for them yet,
     // so only door-delivery offers are shown.
     .filter((p) => !p.service_delivery || p.service_delivery === "door")
-    .map((p): ShippingOption => ({
-      courier: "woot",
-      courierLabel: addrLabel(customLabel, p.courier_name),
-      deliveryType: "address",
-      price: Math.round(p.final_total * 100) / 100,
-      wootServiceId: p.service_id,
-      wootCourierName: p.courier_name,
-      wootServiceName: p.service_name,
-    }))
+    .flatMap((p): ShippingOption[] => {
+      const pret = pretWoot(p, tvaPeDeasupra);
+      /* Fara pret credibil in regimul magazinului, oferta nu se arata deloc. */
+      if (pret === null) return [];
+      return [{
+        courier: "woot",
+        courierLabel: addrLabel(customLabel, p.courier_name),
+        deliveryType: "address",
+        price: pret,
+        wootServiceId: p.service_id,
+        wootCourierName: p.courier_name,
+        wootServiceName: p.service_name,
+      }];
+    })
     .sort((a, b) => a.price - b.price);
 }
 
@@ -1885,6 +2012,8 @@ async function buildInnoshipOptions(
   weightKg: number,
   cod: number,
   labelCustom?: string,
+  /* ⚠ Regimul MAGAZINULUI. Vezi nota de deasupra buclei de curieri. */
+  tvaPeDeasupra = false,
 ): Promise<ShippingOption[]> {
   const corp = corpInnoship(
     {
@@ -1907,7 +2036,9 @@ async function buildInnoshipOptions(
   );
 
   const rates = await coteazaInnoship(config, corp);
-  return oferteInnoship(rates, config).map((o) => ({
+  /* ⚠ Al treilea argument e regimul magazinului: `ofertePosibile` alege `rateAmount` in loc
+     de `rateTotalAmount` si arunca ofertele fara net, fara sa deduca nimic. */
+  return oferteInnoship(rates, config, tvaPeDeasupra).map((o) => ({
     courier: "innoship",
     /* Eticheta comerciantului, cand exista, ramane deasupra numelui curierului:
        unii isi vand livrarea sub marca proprie. */
@@ -1945,6 +2076,8 @@ async function buildSmartshipOptions(
   cod: number,
   labelCustom: string | undefined,
   businessId: string,
+  /* ⚠ Regimul MAGAZINULUI. Vezi nota de deasupra buclei de curieri. */
+  tvaPeDeasupra = false,
 ): Promise<ShippingOption[]> {
   const loc = await rezolvaLocalitateSmartship(config, destination.city, destination.county);
   if (!loc) return [];
@@ -1995,18 +2128,26 @@ async function buildSmartshipOptions(
 
   const r = await coteazaSmartship(config, corpSmartship(date, config));
 
-  return oferteSmartship(r.costs, config).map((o): ShippingOption => ({
-    courier: "smartship",
-    /* Eticheta comerciantului, cand exista, ramane deasupra numelui curierului:
-       unii isi vand livrarea sub marca proprie. */
-    courierLabel: labelCustom ? `${labelCustom} · ${etichetaSmartship(o)}` : etichetaSmartship(o),
-    deliveryType: "address",
-    price: o.pret,
-    estimatedDays: termenSmartship(o),
-    smartshipCourierId: o.courierId,
-    smartshipCourierName: o.numeCurier || undefined,
-    smartshipOwnContract: o.contractPropriu,
-  }));
+  return oferteSmartship(r.costs, config).flatMap((o): ShippingOption[] => {
+    /*
+     * ⚠ `pretFaraTva` e DEJA calculat si normalizat in `smartship/preturi.ts:135`, doar ca
+     * pana azi nu-l citea nimeni: `cost` e cu TVA, `cost_fara_tva` e netul lor. Cand netul
+     * lipseste campul e `null`, si atunci oferta se arunca in loc sa cada tacut pe brut.
+     */
+    if (tvaPeDeasupra && o.pretFaraTva === null) return [];
+    return [{
+      courier: "smartship",
+      /* Eticheta comerciantului, cand exista, ramane deasupra numelui curierului:
+         unii isi vand livrarea sub marca proprie. */
+      courierLabel: labelCustom ? `${labelCustom} · ${etichetaSmartship(o)}` : etichetaSmartship(o),
+      deliveryType: "address",
+      price: tvaPeDeasupra ? o.pretFaraTva! : o.pret,
+      estimatedDays: termenSmartship(o),
+      smartshipCourierId: o.courierId,
+      smartshipCourierName: o.numeCurier || undefined,
+      smartshipOwnContract: o.contractPropriu,
+    }];
+  });
 }
 
 /**
@@ -2611,6 +2752,8 @@ async function buildColeteOptions(
   destination: { county: string; city: string; cod?: number },
   weightKg: number,
   customLabel?: string,
+  /* ⚠ Regimul MAGAZINULUI. Vezi nota de deasupra buclei de curieri. */
+  tvaPeDeasupra = false,
 ): Promise<ShippingOption[]> {
   const token = await getCOToken(config.client_id, config.client_secret);
   const result = await fetchCOPrices(
@@ -2637,14 +2780,31 @@ async function buildColeteOptions(
 
   return (result.list ?? [])
     .filter((item) => item?.service?.id && item?.price?.total > 0)
-    .map((item): ShippingOption => ({
-      courier: "colete",
-      courierLabel: addrLabel(customLabel, item.service.courierName),
-      deliveryType: "address",
-      price: Math.round(item.price.total * 100) / 100,
-      coleteServiceId: item.service.id,
-      coleteServiceName: `${item.service.courierName} — ${item.service.name}`,
-    }))
+    .flatMap((item): ShippingOption[] => {
+      /*
+       * ⚠ `price.noVat` e declarat NEOPTIONAL in tipul nostru (`colete.ts:69`), dar tipul e
+       * scris de mana, fara nicio garda la rulare, si nu exista in depozit niciun raspuns
+       * real care sa fixeze relatia `total` / `noVat`. Deci pe regim net se verifica la
+       * rulare, iar necredibil inseamna „nu stim": oferta se arunca, si daca raman zero
+       * apelantul cade pe tariful fix al zonei. La FAN campul e chiar `number | null`
+       * tocmai fiindca uneori lipseste.
+       */
+      const brut = Math.round(item.price.total * 100) / 100;
+      let pret = brut;
+      if (tvaPeDeasupra) {
+        const net = Number(item.price?.noVat);
+        if (!Number.isFinite(net) || net <= 0 || net > item.price.total) return [];
+        pret = Math.round(net * 100) / 100;
+      }
+      return [{
+        courier: "colete",
+        courierLabel: addrLabel(customLabel, item.service.courierName),
+        deliveryType: "address",
+        price: pret,
+        coleteServiceId: item.service.id,
+        coleteServiceName: `${item.service.courierName} — ${item.service.name}`,
+      }];
+    })
     .sort((a, b) => a.price - b.price);
 }
 

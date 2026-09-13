@@ -101,6 +101,18 @@ export function ofertePosibile(
   raspuns: RaspunsCotare,
   catalog: ServiciuEcolet[],
   serviciiPermise?: string[],
+  /*
+   * ⚠ Regimul MAGAZINULUI (13.09.2026). `prices_gross` e cu TVA; pe un magazin cu preturi
+   * fara TVA, cota s-ar adauga a doua oara in `computeVat`. Atunci se cere `prices_net`.
+   *
+   * ⚠ Si nu se deduce nimic: daca netul lipseste pentru un slug, oferta pica la filtrul 3
+   * de mai jos, exact ca una fara pret. eColet nu are in depozit nicio fixtura in care
+   * `prices_net` sa fie populat, deci pe regim net cazul „lipseste" e drumul asteptat, nu
+   * o exceptie: se cade pe tariful fix al zonei, nu pe un numar ghicit.
+   *
+   * Optional, cu implicit `false`, ca apelantii vechi sa ramana neschimbati.
+   */
+  tvaPeDeasupra = false,
 ): OfertaEcolet[] {
   const form = raspuns?.form;
   if (!form) return [];
@@ -115,7 +127,9 @@ export function ofertePosibile(
   for (const [slug, disponibil] of Object.entries(form.statuses ?? {})) {
     if (disponibil !== true) continue;                       // filtrul 2
 
-    const pret = parseazaPretRo(form.prices_gross?.[slug]);   // filtrul 3
+    const pret = parseazaPretRo(                              // filtrul 3
+      tvaPeDeasupra ? form.prices_net?.[slug] : form.prices_gross?.[slug],
+    );
     if (pret === null || pret <= 0) continue;
 
     const serviciu = dupaSlug.get(slug);                      // filtrul 4

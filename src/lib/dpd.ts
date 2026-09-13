@@ -403,11 +403,22 @@ export async function createDpdShipment(
  * order is ramburs. Resolves the site by county to quote the right locality.
  * null = destination not resolvable / no service (caller falls back to the
  * flat zone price).
+ *
+ * ⚠ INTOARCE AMANDOUA NUMERELE, si alegerea o face APELANTUL (13.09.2026).
+ *
+ * Acelasi obiect `ShipmentPrice` poarta `amount` (net), `vat` si `total` (brut). `price` e
+ * brutul, `priceNoVat` netul. Biblioteca NU stie regimul magazinului: pe unul cu preturi
+ * fara TVA, brutul ar primi cota a doua oara in `computeVat`. Acelasi tipar ca la FAN
+ * (`total` plus `costNoVAT`) si la Cargus (`GrandTotal` plus `Subtotal`).
+ *
+ * ⚠ `priceNoVat` poate fi `null`, si atunci apelantul cade pe tariful fix al zonei. Netul
+ * NU se deduce din brut: cota magazinului nu e neaparat cota lui DPD, iar comisionul de
+ * ramburs, inclus in cotatie, poate avea alt regim.
  */
 export async function calculateDpdDomesticPrice(
   config: DpdConfig,
   input: { city: string; county?: string; weightKg: number; cod?: number },
-): Promise<{ serviceId: number; price: number } | null> {
+): Promise<{ serviceId: number; price: number; priceNoVat: number | null } | null> {
   const siteId = await resolveDpdSiteId(config, input.city, input.county);
   const location: Record<string, unknown> = siteId
     ? { countryId: 642, siteId }
@@ -427,8 +438,10 @@ export async function calculateDpdDomesticPrice(
     };
   }
 
+  /* ⚠ `vat` era nedeclarat aici, desi vine in ACELASI obiect `ShipmentPrice` si e declarat
+     pe calea internationala. Sub-declarat, nu se putea verifica `amount + vat = total`. */
   const data = await dpdPost<{
-    calculations?: { price?: { amount?: number; total?: number; currency?: string }; error?: { message?: string } }[];
+    calculations?: { price?: { amount?: number; vat?: number; total?: number; currency?: string }; error?: { message?: string } }[];
   }>("calculate", {
     userName: config.username,
     password: config.password,
@@ -444,7 +457,28 @@ export async function calculateDpdDomesticPrice(
   // Customer-facing domestic price is the gross total (VAT + COD premium included).
   const gross = calc?.price?.total ?? calc?.price?.amount;
   if (typeof gross !== "number") return null;
-  return { serviceId, price: Math.round(gross * 100) / 100 };
+
+  /*
+   * ⚠ NETUL SE IA STRICT DIN `amount`, fara nicio cadere pe `total` (13.09.2026).
+   *
+   * Rândul de deasupra are dinadins `total ?? amount`: cand totalul lipseste, brutul cel mai
+   * bun pe care il avem e `amount`. Aici insa aceeasi cadere ar fi o capcana: ar reintroduce
+   * TACIT brutul drept net, si magazinul pe regim net ar primi cota peste un pret care o
+   * continea deja. Lipsa netului se spune (`null`), nu se acopera.
+   *
+   * Masurat in memoria proiectului pe un raspuns real: 80,50 net / 95,84 brut.
+   */
+  const net = calc?.price?.amount;
+  const vat = calc?.price?.vat;
+  const netCredibil =
+    typeof net === "number" && net > 0 && net <= gross
+    && (typeof vat !== "number" || Math.abs(net + vat - gross) <= 0.01);
+
+  return {
+    serviceId,
+    price: Math.round(gross * 100) / 100,
+    priceNoVat: netCredibil ? Math.round(net * 100) / 100 : null,
+  };
 }
 
 // ─── Pickup points (offices / lockers) ───────────────────────────────────────

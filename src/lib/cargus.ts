@@ -425,12 +425,25 @@ async function resolveCargusSenderLocation(
  * Live price via ShippingCalculation. The endpoint accepts county/locality
  * NAMES directly (no nomenclature ids needed), so we quote sender pickup point
  * -> customer city with the COD fee included. null = not resolvable (caller
- * falls back to the flat zone price). Returns GrandTotal (VAT included).
+ * falls back to the flat zone price).
+ *
+ * ⚠ INTOARCE AMANDOUA NUMERELE, si alegerea o face APELANTUL (13.09.2026).
+ *
+ * `price` e `GrandTotal`, adica CU TVA; `priceNoVat` e `Subtotal`, documentat de ei
+ * drept „total without VAT" (Cargus API v3, §8.2, pag. 27, unde apar impreuna cu `Tax`
+ * si `Subtotal + Tax = GrandTotal`). Biblioteca NU stie regimul magazinului, deci nu
+ * are cum sa aleaga: pe un magazin cu preturi fara TVA, `GrandTotal` ar primi cota a
+ * doua oara in `computeVat`. Acelasi tipar ca la FAN (`total` plus `costNoVAT`).
+ *
+ * ⚠ `priceNoVat` poate fi `null`: `Subtotal` e optional in raspunsul lor. Apelantul
+ * care are nevoie de net TREBUIE sa trateze lipsa, nu sa deduca netul impartind
+ * brutul: cota magazinului nu e neaparat cota lui Cargus, iar comisionul de ramburs,
+ * inclus in cotatie, poate avea alt regim.
  */
 export async function calculateCargusPrice(
   config: CargusConfig,
   input: { county: string; city: string; weightKg: number; cod?: number },
-): Promise<{ price: number; serviceId: number } | null> {
+): Promise<{ price: number; priceNoVat: number | null; serviceId: number } | null> {
   const sender = await resolveCargusSenderLocation(config);
   if (!sender) return null;
 
@@ -457,7 +470,7 @@ export async function calculateCargusPrice(
     PriceTableId: config.price_table_id,
   };
 
-  const result = await cargusPost<{ GrandTotal?: number; Subtotal?: number }>(
+  const result = await cargusPost<{ GrandTotal?: number; Subtotal?: number; Tax?: number }>(
     "ShippingCalculation",
     token,
     config.subscription_key,
@@ -465,7 +478,24 @@ export async function calculateCargusPrice(
   );
   const gross = result?.GrandTotal ?? null;
   if (typeof gross !== "number") return null;
-  return { price: Math.round(gross * 100) / 100, serviceId: service.id };
+
+  /*
+   * ⚠ Netul se ia DOAR din `Subtotal`, niciodata dedus din brut. Iar cand si `Tax` vine,
+   * se verifica: `Subtotal + Tax` trebuie sa dea `GrandTotal` (toleranta de un ban, pentru
+   * rotunjiri). Daca nu da, nu stim ce inseamna numerele lor pe contul asta, si un net
+   * nesigur e mai rau decat lipsa lui: apelantul cade pe tariful fix al zonei.
+   */
+  const net = typeof result?.Subtotal === "number" ? result.Subtotal : null;
+  const tax = typeof result?.Tax === "number" ? result.Tax : null;
+  const netCredibil =
+    net !== null && net > 0 && net <= gross
+    && (tax === null || Math.abs(net + tax - gross) <= 0.01);
+
+  return {
+    price: Math.round(gross * 100) / 100,
+    priceNoVat: netCredibil ? Math.round(net * 100) / 100 : null,
+    serviceId: service.id,
+  };
 }
 
 // ─── Ship & Go pickup points ─────────────────────────────────────────────────

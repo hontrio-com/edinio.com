@@ -24,17 +24,30 @@ export type OfertaAratata = {
 };
 
 /**
- * Pretul care ajunge la cumparator.
+ * Pretul care ajunge la cumparator, IN REGIMUL MAGAZINULUI.
  *
- * ⚠ `rateTotalAmount` (cu TVA), nu `rateAmount`. Preturile din checkout-ul
- * nostru sunt toate cu TVA inclus, iar un transport afisat fara ar fi cu ~19% mai
- * mic decat cel incasat — exact clasa de defecte pe care auditul de preturi a
- * inchis-o in 40 de locuri.
+ * ⚠ Implicit `rateTotalAmount` (cu TVA), fiindca asa sunt preturile din checkout-ul
+ * nostru la aproape toate magazinele: un transport afisat fara TVA ar fi cu ~19% mai
+ * mic decat cel incasat, exact clasa de defecte inchisa de auditul de preturi in 40
+ * de locuri.
  *
- * Cand totalul lipseste, se compune din net + TVA; abia in ultimul rand se ia
- * netul singur, si atunci se stie ca e o aproximatie.
+ * ⚠ `tvaPeDeasupra` INTOARCE ALEGEREA (13.09.2026). Cand magazinul isi tine preturile
+ * FARA TVA (`vat_enabled` si `prices_include_vat === false`), cota se adauga mai tarziu,
+ * in `computeVat`. Un pret cu TVA dat acolo primeste cota a doua oara. Atunci se cere
+ * `rateAmount`, netul lor.
+ *
+ * ⚠ SI NU SE DEDUCE NIMIC. Pe regim net, daca `rateAmount` lipseste, se intoarce `null`
+ * si oferta se arunca (vezi `ofertePosibile`): cota magazinului nu e neaparat cota
+ * curierului, iar un net inventat ar fi tot o suma gresita, doar tacuta.
+ *
+ * Argumentul e optional, cu implicit `false`, ca apelantii vechi sa ramana neschimbati.
  */
-export function pretCuTva(o: OfertaInnoship): number | null {
+export function pretCuTva(o: OfertaInnoship, tvaPeDeasupra = false): number | null {
+  if (tvaPeDeasupra) {
+    const net = Number(o.rateAmount);
+    return Number.isFinite(net) && net > 0 ? Math.round(net * 100) / 100 : null;
+  }
+
   const total = Number(o.rateTotalAmount);
   if (Number.isFinite(total) && total > 0) return Math.round(total * 100) / 100;
 
@@ -86,6 +99,8 @@ export function etichetaOferta(o: OfertaInnoship): string {
 export function ofertePosibile(
   rates: OfertaInnoship[],
   config?: Pick<InnoshipConfig, "curieri_permisi">,
+  /* ⚠ Regimul MAGAZINULUI. Vezi `pretCuTva`. Optional, ca apelantii vechi sa nu se schimbe. */
+  tvaPeDeasupra = false,
 ): OfertaAratata[] {
   const permisi = new Set((config?.curieri_permisi ?? []).filter((x) => Number.isInteger(x) && x > 0));
 
@@ -95,7 +110,7 @@ export function ofertePosibile(
   for (const o of rates ?? []) {
     const courierId = Number(o.carrierId);
     const serviceId = Number(o.serviceId);
-    const pret = pretCuTva(o);
+    const pret = pretCuTva(o, tvaPeDeasupra);
 
     /* Fara cele trei parti ale cheii, alegerea nu poate fi dusa pana la emitere. */
     if (!Number.isInteger(courierId) || courierId <= 0) continue;

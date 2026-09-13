@@ -58,3 +58,54 @@ export function rezervaEDeIncredere(courierId: string, pret: number, coteazaLive
      apare vreodata dintr-o setare stricata, n-are ce cauta intr-o oferta semnata. */
   return Number.isFinite(pret) && pret > 0;
 }
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * SUMA RAMBURSULUI NU COBOARA SUB CE SUSTINE CATALOGUL     (14.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Suma de ramburs vine de la browser si intra DIRECT in cererea catre curier; din ea iese
+ * comisionul de ramburs, deci ea misca pretul care pleaca apoi SEMNAT.
+ *
+ * ⚠ CE ERA DEJA INCHIS, ca sa nu se repare de doua ori. Cazul `cod: 0` cadea deja: cotatia se
+ * semneaza atunci cu regimul „platit”, iar la comanda regimul se ia din metoda de plata
+ * validata pe server, deci semnatura nu mai bate si comanda cere recotare. Ce ramanea deschis
+ * era numit pe fata in `quote-token.ts`: `cod: 0.01` pastreaza steagul si scapa de partea
+ * PROCENTUALA a comisionului.
+ *
+ * ⚠ DE CE UN PRAG, SI NU O INLOCUIRE. Formularul trimite la ramburs TOTALUL comenzii (marfa
+ * plus transport), iar `valoareMarfii` e doar marfa, plafonata cu ce sustine catalogul. Pusa
+ * IN LOCUL sumei, ar fi coborat rambursul cotat sub cel real ori de cate ori transportul intra
+ * in el, si diferenta de comision ar fi platit-o comerciantul. Un prag nu poate cobori nimic:
+ * pentru orice cumparator cinstit totalul e deja mai mare, deci se intoarce chiar numarul lui
+ * si nicio comanda reala nu-si schimba pretul. Masurat pe 14.09.2026: 234 de comenzi cu
+ * ramburs, 17 magazine, 214 in ultimele 90 de zile, niciuna atinsa.
+ *
+ * ⚠ SI DE CE NU E O INCHIDERE DEPLINA. Plafonul din catalog nu cunoaste transportul, deci cine
+ * subdeclara ramane dator cu comisionul aferent transportului, nu cu tot. Inchiderea deplina
+ * cere suma finala, care la cotare inca nu exista: ea contine chiar transportul pe care il
+ * cotam. Ce se inchide sigur e subdeclararea MARFII, care e partea mare.
+ *
+ * @param cerutDeBrowser suma trimisa de client (orice, inclusiv lipsa sau text)
+ * @param valoareMarfii `min(subtotal cerut, plafonul din catalog)`, socotita de server
+ * @param esteRamburs comanda chiar se incaseaza la livrare
+ */
+export function pragulRambursului(
+  cerutDeBrowser: unknown,
+  valoareMarfii: number,
+  esteRamburs: boolean,
+): number {
+  /* ⚠ Fara ramburs se cere ZERO, nu suma. Altfel fiecare cotatie platita in avans ar fi cerut
+     curierului comisionul de ramburs, adica un pret mai mare la toata lumea. */
+  if (!esteRamburs) return 0;
+
+  const cerut = Number(cerutDeBrowser);
+  const marfa = Number(valoareMarfii);
+  /* ⚠ `Number.isFinite` la amandoua: `Number(undefined)` e `NaN`, iar `Math.max` cu un `NaN`
+     intoarce `NaN`, care ar fi plecat ca atare in cererea catre curier. */
+  return Math.max(
+    0,
+    Number.isFinite(cerut) ? cerut : 0,
+    Number.isFinite(marfa) ? marfa : 0,
+  );
+}

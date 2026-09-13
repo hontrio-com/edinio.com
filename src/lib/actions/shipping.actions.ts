@@ -18,7 +18,7 @@ import { corpExpediere as corpEcolet } from "@/lib/ecolet/expediere";
 import { etichetaOferta as etichetaEcolet, ofertePosibile as oferteEcolet } from "@/lib/ecolet/preturi";
 import { rezolvaLocalitatea as rezolvaLocalitateEcolet } from "@/lib/ecolet/cautare";
 import { puncteGls } from "@/lib/gls/puncte";
-import { FARA_API_DE_TARIF, rezervaEDeIncredere } from "@/lib/shipping/optiuni-de-rezerva";
+import { FARA_API_DE_TARIF, pragulRambursului, rezervaEDeIncredere } from "@/lib/shipping/optiuni-de-rezerva";
 import { postaGata, unitatiLivrare, type PostaConfig } from "@/lib/posta/client";
 import { packetaGata, type PacketaConfig } from "@/lib/packeta/client";
 import { puncteRomania } from "@/lib/packeta/puncte-flux";
@@ -650,6 +650,20 @@ export async function getShippingOptions(
   );
 
   /*
+   * ⚠ SUMA RAMBURSULUI PRIMESTE UN PRAG PUS DE SERVER (14.09.2026).
+   *
+   * `destination.cod` vine de la browser si intra DIRECT in cererea catre curier: din ea iese
+   * comisionul de ramburs, deci ea misca un pret care pleaca apoi semnat. De aici incolo suma
+   * din browser nu mai are voie sa fie citita de nicio ramura de curier; toate primesc
+   * `rambursDeCotat`.
+   *
+   * Regula, masuratoarea si motivul pentru care e un PRAG si nu o inlocuire stau la
+   * `pragulRambursului`. Nu se repeta aici: aici e "use server", deci o regula scoasa in
+   * fisierul asta doar ca sa poata fi probata ar fi o usa noua catre browser.
+   */
+  const rambursDeCotat = pragulRambursului(destination.cod, valoareMarfii, esteRamburs);
+
+  /*
    * ⚠ `let`, nu `const`: lista se REASEAZA o data, la filtrul de rezerve de dinaintea
    * semnarii (vezi „o rezerva la 0 lei nu pleaca semnata", mai jos).
    *
@@ -770,7 +784,7 @@ export async function getShippingOptions(
             recipientCounty: destination.county,
             recipientCity: destination.city,
             weightKg: weight,
-            cashOnDelivery: destination.cod ?? 0,
+            cashOnDelivery: rambursDeCotat,
           })
             .then((r) => {
               const price = Math.round(r.amount * 100) / 100;
@@ -799,7 +813,7 @@ export async function getShippingOptions(
             recipientCounty: destination.county,
             recipientCity: destination.city,
             weightKg: weight,
-            cashOnDelivery: destination.cod ?? 0,
+            cashOnDelivery: rambursDeCotat,
             useLockerService: true,
           })
             .then((r) => {
@@ -844,7 +858,17 @@ export async function getShippingOptions(
     } else if (courierId === "fan-courier") {
       const fanConfig = settings.fan_courier_config as FanCourierConfig | null;
       const hasApi = !!(fanConfig?.enabled && fanConfig.username && fanConfig.client_id);
-      const codAmount = destination.cod ?? 0;
+      /*
+       * ⚠ ACELASI PRAG CA LA CEILALTI, si numele ramane `codAmount` dinadins: el e folosit in
+       * sase locuri din ramura FAN si e fixat de doua probe. Schimbata doar SURSA, niciunul din
+       * ele nu se misca.
+       *
+       * ⚠ Si nu schimba nimic pentru un cumparator cinstit. La FAN pretul comuta pe un boolean
+       * (`codAmount > 0`), iar pragul nu poate face un numar pozitiv sa devina zero. Singurul loc
+       * unde valoarea chiar conteaza e `fanRambursPestePlafon`, si acolo devine mai adevarata:
+       * cine subdeclara ca sa para sub plafonul de 10.000 nu mai pacaleste afisarea.
+       */
+      const codAmount = rambursDeCotat;
       /*
        * ⚠ PLAFONUL DE RAMBURS NU SCOATE OPTIUNEA DIN LISTA. Se SPUNE, nu se ascunde.
        *
@@ -1093,7 +1117,7 @@ export async function getShippingOptions(
       if (hasApi && useAutoPrice) {
         // Woot is a broker: fetch the live courier offers so the customer picks one.
         promises.push(
-          buildWootOptions(wootConfig!, destination, weight, zone.label, tvaPeDeasupra)
+          buildWootOptions(wootConfig!, destination, weight, rambursDeCotat, zone.label, tvaPeDeasupra)
             .then((wootOpts) => {
               if (wootOpts.length > 0) options.push(...wootOpts);
               else options.push(flat()); // locality not matched / no offers
@@ -1133,7 +1157,7 @@ export async function getShippingOptions(
             city: destination.city,
             county: destination.county,
             weightKg: weight,
-            cod: destination.cod,
+            cod: rambursDeCotat,
           })
             .then((q) => {
               /* ⚠ Pe regim net se cere `priceNoVat`; lipsa lui inseamna „nu stim netul", si
@@ -1176,7 +1200,7 @@ export async function getShippingOptions(
             county: destination.county,
             city: destination.city,
             weightKg: weight,
-            cod: destination.cod,
+            cod: rambursDeCotat,
           })
             .then((q) => {
               /* ⚠ Pe regim net se cere `priceNoVat` (`Subtotal`, verificat cu `Tax`); lipsa
@@ -1205,7 +1229,7 @@ export async function getShippingOptions(
       if (hasApi && useAutoPrice) {
         // Colete Online is a broker: fetch the live courier offers so the customer picks one.
         promises.push(
-          buildColeteOptions(coConfig!, destination, weight, zone.label, tvaPeDeasupra)
+          buildColeteOptions(coConfig!, destination, weight, rambursDeCotat, zone.label, tvaPeDeasupra)
             .then((coOpts) => {
               if (coOpts.length > 0) options.push(...coOpts);
               else options.push(flat());
@@ -1239,7 +1263,7 @@ export async function getShippingOptions(
       if (hasApi && useAutoPrice) {
         /* Broker: se aduc ofertele vii, ca sa aleaga cumparatorul. */
         promises.push(
-          buildEcoletOptions(ecoletCfg!, destination, weight, zone.label, tvaPeDeasupra)
+          buildEcoletOptions(ecoletCfg!, destination, weight, rambursDeCotat, zone.label, tvaPeDeasupra)
             .then((opts) => {
               if (opts.length > 0) options.push(...opts);
               else options.push(flat()); // localitate nepotrivita / zero oferte
@@ -1422,7 +1446,7 @@ export async function getShippingOptions(
 
       if (innoshipGata(innoCfg) && useAutoPrice) {
         promises.push(
-          buildInnoshipOptions(innoCfg, destination, weight, esteRamburs ? (destination.cod ?? 0) : 0, zone.label, tvaPeDeasupra)
+          buildInnoshipOptions(innoCfg, destination, weight, rambursDeCotat, zone.label, tvaPeDeasupra)
             .then((opts) => {
               if (opts.length > 0) options.push(...opts);
               /* Zero oferte inseamna destinatie neacoperita, nu defect: cade pe
@@ -1476,7 +1500,7 @@ export async function getShippingOptions(
 
       if (smartshipGata(ssCfg) && useAutoPrice) {
         promises.push(
-          buildSmartshipOptions(ssCfg, destination, weight, esteRamburs ? (destination.cod ?? 0) : 0, zone.label, businessId, tvaPeDeasupra)
+          buildSmartshipOptions(ssCfg, destination, weight, rambursDeCotat, zone.label, businessId, tvaPeDeasupra)
             .then((opts) => {
               if (opts.length > 0) options.push(...opts);
               /* Zero oferte inseamna destinatie neacoperita sau localitate
@@ -1555,7 +1579,7 @@ export async function getShippingOptions(
 
       if (shipoGata(shCfg) && useAutoPrice) {
         promises.push(
-          buildShipoOptions(shCfg, destination, weight, esteRamburs ? (destination.cod ?? 0) : 0, zone.label, businessId)
+          buildShipoOptions(shCfg, destination, weight, rambursDeCotat, zone.label, businessId)
             .then((opts) => {
               if (opts.length > 0) options.push(...opts);
               /* Zero oferte inseamna destinatie neacoperita, nu defect: cade pe
@@ -1637,7 +1661,7 @@ export async function getShippingOptions(
 
       if (upsGata(upsCfg) && useAutoPrice) {
         promises.push(
-          buildUpsOptions(upsCfg, destination, weight, esteRamburs ? (destination.cod ?? 0) : 0, zone.label, businessId)
+          buildUpsOptions(upsCfg, destination, weight, rambursDeCotat, zone.label, businessId)
             .then((opts) => {
               if (opts.length > 0) options.push(...opts);
               /* Zero oferte inseamna destinatie neacoperita, nu defect: cade pe
@@ -1955,8 +1979,11 @@ function matchByName<T extends { name: string }>(list: T[], name: string): T | u
  */
 async function buildEcoletOptions(
   config: EcoletConfig,
-  destination: { county: string; city: string; cod?: number; postCode?: string },
+  /* ⚠ `cod` scos din tip, ca la Woot si Colete. Vezi nota de la `buildWootOptions`. */
+  destination: { county: string; city: string; postCode?: string },
   weightKg: number,
+  /** Rambursul cu pragul serverului sub el. Vezi `pragulRambursului`. */
+  rambursCotat: number,
   customLabel?: string,
   /* ⚠ Regimul MAGAZINULUI. Vezi nota de deasupra buclei de curieri. */
   tvaPeDeasupra = false,
@@ -2002,7 +2029,7 @@ async function buildEcoletOptions(
       email: "",
     },
     greutateKg: weightKg,
-    ramburs: destination.cod && destination.cod > 0 ? destination.cod : undefined,
+    ramburs: rambursCotat > 0 ? rambursCotat : undefined,
     servicii: {
       deschidereLaLivrare: config.deschidere_la_livrare,
       livrareSambata: config.livrare_sambata,
@@ -2012,7 +2039,7 @@ async function buildEcoletOptions(
 
   const [raspuns, catalog] = await Promise.all([coteazaEcolet(config, corp), catalogEcolet(config)]);
 
-  const cereRamburs = !!destination.cod && destination.cod > 0;
+  const cereRamburs = rambursCotat > 0;
 
   /* ⚠ Al patrulea argument e regimul magazinului: se citeste `prices_net` in loc de
      `prices_gross`, iar sluggurile fara net pica la acelasi filtru ca cele fara pret. */
@@ -2065,8 +2092,16 @@ function pretWoot(p: WootPriceResult, tvaPeDeasupra: boolean): number | null {
 
 async function buildWootOptions(
   config: WootConfig,
-  destination: { county: string; city: string; cod?: number },
+  /*
+   * ⚠ `cod` NU MAI E AICI, si e acelasi motiv pentru care nu mai e nici `weightKg` in
+   * `getShippingOptions`: era un numar de la browser din care iese comisionul de ramburs, iar
+   * pretul care rezulta pleaca SEMNAT. Scos din TIP, nu doar ignorat, asa `tsc` enumera
+   * apelantii si niciunul nu poate ajunge din nou la el pe furis.
+   */
+  destination: { county: string; city: string },
   weightKg: number,
+  /** Rambursul cu pragul serverului sub el. Vezi `rambursDeCotat` in `getShippingOptions`. */
+  rambursCotat: number,
   customLabel?: string,
   /* ⚠ Regimul MAGAZINULUI. Vezi nota de deasupra buclei de curieri. */
   tvaPeDeasupra = false,
@@ -2090,7 +2125,7 @@ async function buildWootOptions(
       address: destination.city,
     },
     parcels: [{ type: "package", weight: weightKg, length: 30, width: 20, height: 10, content: "Comanda" }],
-    repayment: destination.cod && destination.cod > 0 ? destination.cod : undefined,
+    repayment: rambursCotat > 0 ? rambursCotat : undefined,
   });
 
   return prices
@@ -2872,8 +2907,11 @@ async function buildShipoOptions(
  */
 async function buildColeteOptions(
   config: COConfig,
-  destination: { county: string; city: string; cod?: number },
+  /* ⚠ `cod` scos din tip, ca la Woot si din acelasi motiv. Vezi nota de la `buildWootOptions`. */
+  destination: { county: string; city: string },
   weightKg: number,
+  /** Rambursul cu pragul serverului sub el. Vezi `rambursDeCotat` in `getShippingOptions`. */
+  rambursCotat: number,
   customLabel?: string,
   /* ⚠ Regimul MAGAZINULUI. Vezi nota de deasupra buclei de curieri. */
   tvaPeDeasupra = false,
@@ -2893,7 +2931,7 @@ async function buildColeteOptions(
       street_number: "",
     },
     [{ type: "package", weight: weightKg, length: 30, width: 20, height: 10, content: "Comanda" }],
-    destination.cod && destination.cod > 0 ? destination.cod : 0,
+    rambursCotat > 0 ? rambursCotat : 0,
     {
       repaymentType: config.repayment_type ?? "cash",
       repaymentIban: config.repayment_iban,

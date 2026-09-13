@@ -1,7 +1,19 @@
 # Registru de verificare: sistemul de livrare si cele 17 integrari de curierat
 
-**IN LUCRU.** Deschis pe 13.09.2026. Aduna cele doua audituri externe (Astra 09.09, Codex
-13.09) si verificarea mea proprie pe codul de azi.
+Deschis pe 13.09.2026. Aduna cele doua audituri externe (Astra 09.09, Codex 13.09) si
+verificarea mea proprie pe codul de azi.
+
+**UNDE S-A AJUNS, 14.09.2026:** 14 constatari inchise cu proba si mutanti, 4 coborate de
+masuratoare, 4 infirmate pe codul curent, si **una singura ramasa deschisa**: SYS-P1-03
+(restul), partea din comisionul de ramburs care atarna de transport. Aceea nu se poate inchide
+la cotare, fiindca cere suma finala, iar suma finala contine chiar transportul pe care il
+cotam. E scrisa asa, nu inchisa de forma.
+
+⚠ Cele patru constatari pe care auditurile le dau drept cele mai grave (SYS-P1-01, SYS-P1-06 si
+cele doua jumatati ale lui SYS-P1-02) s-au dovedit, pe masuratoare, ori inchise deja de alt
+mecanism, ori fara nicio instanta vie. Asta nu inseamna ca auditurile gresesc: arhitectural au
+dreptate. Inseamna ca ordinea de lucru nu se poate lua din gravitatea declarata, ci din ce
+atinge productia.
 
 ## Cum se citeste
 
@@ -36,6 +48,19 @@ Alte masuratori care schimba gravitatea unor constatari:
 - **0 din 129** de magazine au reguli sau clase de transport.
 - **0 din 129** au `default_shipping_cost` NULL sau zero.
 - **218 din 435** de comenzi poarta un AWB.
+- **234** de comenzi cu ramburs, la **17** magazine, **214** in ultimele 90 de zile. E cea mai
+  mare suprafata vie din tot sistemul de livrare, si de aceea rambursul a trecut inaintea
+  celorlalte constatari ramase.
+- **15** comenzi cu transport zero (5 magazine), si **14 din 129** de magazine cu prag de
+  livrare gratuita.
+- **254** de comenzi poarta un curier ales de cumparator (woot 216, pickup 12, own 11,
+  sameday 8, dpd 4, cargus 2, gls 1). **Zero** au o cheie care nu exista in `shipping_zones`,
+  dar **doua** stau pe o zona inchisa intre timp: cursa dintre checkout si setari.
+- **6** comenzi livrate la punct de ridicare, in tot istoricul: 5 Sameday, 1 DPD. Restul
+  comenzilor cu curier sunt la adresa.
+- **0** comenzi poarta un identificator de serviciu de curier. Numarand cheile din
+  `shipping_address` pe toate cele 436 de comenzi, `woot_service_id`, `colete_service_id`,
+  `ups_service_code`, `dhl_product_code` si `fan_point_type` nu apar niciunde.
 - **0** AWB-uri GLS, Pall-Ex sau eColet, si **0** comenzi Pepita.
 
 ## Constatari verificate
@@ -56,15 +81,14 @@ Alte masuratori care schimba gravitatea unor constatari:
 | PLAT-P2-12 (a doua jumatate) | CONFIRMAT | rezultatul incert arata identic cu lipsa refuzurilor, pe patru drumuri. `refuzuriPeComanda` intoarce acum un verdict, iar panoul are a treia stare | `e5293e3e` |
 | SYS-P1-02 (ramura NULL) | CONFIRMAT, CU CORECTIE | `if (tarifImplicit == null) return { shipping: claimed }` accepta suma din browser neverificata: singurul loc unde transportul putea fi ales integral de client. Acum cere recotare, iar verdictul poarta cauza, ca mesajul sa nu minta. Masurat inainte: **0 din 129** de magazine aveau tarif implicit NULL, deci inchiderea fail-closed n-a atins niciun drum viu | `4cffd635` |
 | SYS-P1-09 / PLAT-P1-04 | **LARGIT** | `deleteOrder` stergea randul fara sa se uite daca exista un colet viu, si citea din cele 17 coloane de AWB exact una: `gls_awb_number`, curierul cu ZERO expedieri. Acum refuza cat expedierea e vie, citeste toate cele 17 si curata etichetele GLS, Pall-Ex si eColet. Masurat: din 218 de comenzi cu expediere se opresc **192** (cele la `shipped`); cele 26 incheiate raman stergibile, fiindca regula se uita la STARE, nu la existenta AWB-ului. Hotararea de produs a fost delegata de proprietar pe 14.09.2026: s-a ales tiparul Shopify/WooCommerce (fara stergere peste o expediere activa), fara arhivare, fiindca aici nu exista coloana de arhiva | `f1aceba7` |
+| SYS-P1-03 (suma) | **LARGIT** | rambursul se semna ca BOOLEAN, iar SUMA venea din browser si intra direct in cererea catre curier. Auditurile numesc curierii; erau **opt** locuri, fiindca **Woot, Colete si eColet** primeau obiectul `destination` intreg si isi luau singuri `cod` din el. Acum toti primesc `pragulRambursului` = `max(cat cere browserul, valoareMarfii)`, iar la cei trei brokeri campul a fost scos din TIP, ca `tsc` sa enumere apelantii. Masurat: 234 de comenzi cu ramburs, 17 magazine, 214 in 90 de zile, **niciuna atinsa** (browserul trimite totalul, pragul e doar marfa, deci `max` intoarce chiar numarul lui) | `5d9f807b` |
+| SYS-P1-02 (identitatea curierului) | **LARGIT** | `selected_courier`, `courier_label` si `delivery_type` se scriau pe comanda direct din browser, in AMANDOUA checkout-urile. Auditul numeste doar livrarea gratuita; drumurile erau **doua**, fiindca `autoritativeShipping` intoarce un NUMAR si nu spune niciodata ca optiunea pretinsa n-a fost verificata: si `esteGratuit`, si caderea pe `max(suma, tarif implicit)`. Banii nu erau in joc, identitatea expedierii da (factura, emailul cumparatorului, panoul, punctul de ridicare). Acum se cere ca cheia sa EXISTE in `shipping_zones`; pornirea NU se cere, fiindca doua comenzi `own` reale stau pe o zona inchisa intre timp, si un zid acolo ar taia o vanzare cinstita. Masurat: din 254 de comenzi cu curier, **zero** ar fi pierdut ceva | `d2cc19ea` |
 
 ### Confirmate, inca deschise
 
 | ID | verdict | nota |
 |---|---|---|
-| SYS-P1-01 | CONFIRMAT | tokenul de cotare nu leaga serviciul, contractul/BYOC, punctul sau reteaua. Recunoscut si in comentariile fisierului |
-| SYS-P1-03 | CONFIRMAT | rambursul e semnat ca BOOLEAN, nu ca suma; `quote-token.ts:118-131` o spune pe fata |
-| SYS-P1-02 (restul) | CONFIRMAT | ramura NULL s-a inchis in `4cffd635`. RAMANE deschis ce e mai sus de ea: `esteGratuit` scurtcircuiteaza inaintea oricarei validari de serviciu sau punct, iar `max(suma, tarif implicit)` nu apara un magazin cu tariful zonei 0 |
-| SYS-P1-06 | CONFIRMAT | cheia registrului include furnizorul, deci doi curieri pot rezerva aceeasi comanda |
+| SYS-P1-03 (restul) | CONFIRMAT | suma s-a inchis in `5d9f807b`. RAMANE partea pe care pragul nu o poate acoperi: plafonul din catalog nu cunoaste transportul, deci cine subdeclara ramane dator cu comisionul aferent transportului. Inchiderea deplina cere suma finala, care la cotare inca nu exista: ea contine chiar transportul pe care il cotam |
 
 ### Coborate de masuratoare
 
@@ -72,6 +96,8 @@ Alte masuratori care schimba gravitatea unor constatari:
 |---|---|
 | SYS-P1-04 | regulile de transport nu sunt legate de cotatie, dar **0 din 129** de magazine au vreo regula sau clasa |
 | PLAT-P2-12 (prima jumatate) | gruparea doar dupa `fel` ar ascunde refuzul unui curier cand altul a reusit. Masurat: 172 de operatii AWB, 164 reusite, 8 esuate, si **ZERO** comenzi cu refuz ascuns de ALT furnizor. Cele 6 potriviri gasite sunt pe ACELASI furnizor, adica exact cazul tratat dinadins: reusita stinge alarma dupa ce problema s-a reparat |
+| SYS-P1-01 | tokenul chiar nu leaga serviciul, contractul/BYOC, punctul sau reteaua, si asta ramane adevarat arhitectural. Dar **niciuna** din cele 436 de comenzi nu poarta vreun identificator de serviciu: `shipping_address` nu contine nicaieri `woot_service_id`, `colete_service_id`, `ups_service_code`, `dhl_product_code` sau `fan_point_type`. Nici macar cele 216 comenzi Woot, singurul curier cu volum, fiindca serviciul se alege la EMITERE, de comerciant. A lega serviciul in semnatura ar schimba formatul de semnare si ar invalida toate cotatiile in circulatie, pentru campuri pe care nicio comanda reala nu le poarta |
+| SYS-P1-02 (punctul de ridicare) | blocul `locker_*` se scrie tot din browser (`order.actions.ts:1709`), dar **nu merita reparat, si asta s-a masurat**. Suprafata vie: **6** comenzi in total, 5 Sameday si 1 DPD; toate celelalte comenzi cu curier au `delivery_type: address` si niciun `locker_id`. Iar consumatorii il pazesc deja singuri: `cargus.actions.ts:160` si `dpd.actions.ts:161` il folosesc numai cand `courier` SI `delivery_type` se potrivesc, adica exact cele doua campuri devenite de incredere in `d2cc19ea`. Un id strain cade la emitere, la curier, sub ochii comerciantului. Inchiderea adevarata ar cere un apel la API-ul curierului chiar in pasul cu banii, exact ce `quote-token.ts` argumenteaza ca nu trebuie facut |
 
 ### Infirmate pe codul curent
 
@@ -80,6 +106,7 @@ Alte masuratori care schimba gravitatea unor constatari:
 | SSRF la Woot | `WOOT_BASE` e hardcodat (`woot.ts:6`) |
 | „Woot n-are termene" (jumatate din WO-P2-07) | `ASTEPTARE_MS = 20_000` pe fiecare cerere |
 | nota din ruta FAN: „Posta si Packeta pun deja `no-store`" | Posta **nu are eticheta deloc**; Packeta o trimite printr-o actiune, ca base64 in browser. Corectat in `33c955e1` |
+| SYS-P1-06: „doi curieri pot rezerva aceeasi comanda" | nu se mai poate din 09.09.2026. `poartaCuBaza` isi citeste singura comanda cu toate cele 17 coloane plus martorii, iar `deCeNuSePoateAwbPropriu` refuza pe AWB-ul oricarui ALT curier; `poarta-awb.test.ts:233` cere ca **fiecare** actiune de emitere sa treaca prin poarta, cu curierul ei. Furnizorul din cheia registrului e o alegere anume, scrisa in `awb-propriu.ts:20-28`: scos, al doilea curier ar ADOPTA referinta primului, si dintr-un defect vizibil ar iesi unul tacut |
 
 ## ⚠ Corectii la propriile mele afirmatii
 
@@ -115,6 +142,10 @@ periculoasa decat lipsa ei.
 | eColet depoziteaza eticheta cu antet public | reparat in `56796201`; Astra semnaleaza cazul doar la Pall-Ex |
 | Sameday si FAN trimiteau blocul din spate al PDF-ului | reparat in `a3558c42`; auditurile numesc doar Cargus si DPD |
 | eticheta Pepita ramanea ORFANA la fiecare stergere de comanda | ea sta in galeata PRIVATA, deci `deleteFromR2` ar fi cautat-o unde nu e si ar fi raportat linistit reusita; iar `pepita` NU e in `MARKETPLACE_CU_CICLU_PROPRIU`, deci comenzile ei chiar ajung la stergere. Reparat in `f1aceba7` cu `stergeIncarcarea`. Masurat: 0 comenzi Pepita azi |
+| suma rambursului ajungea la OPT locuri, nu la cei sase curieri numiti de audituri | **Woot, Colete si eColet** primeau obiectul `destination` intreg si isi luau singuri `cod` din el. Un prag pus doar la apelant i-ar fi ocolit pe toti trei, iar proba ar fi trecut verde. Reparat in `5d9f807b`, cu campul scos din TIPUL lor |
+| curierul nevalidat ajungea pe comanda pe DOUA drumuri, nu doar pe cel gratuit | auditul numeste `esteGratuit`. Cauza e mai sus: `autoritativeShipping` intoarce doar un NUMAR, deci nu spune niciodata ca optiunea pretinsa n-a fost verificata, si atunci campurile se scriu si cand semnatura pur si simplu nu bate. Reparat in `d2cc19ea` |
+| o cheie de pe lantul de prototipuri ar fi trecut drept curier | o verificare scrisa firesc ca `zone[curier] !== undefined` raspunde „da” pentru `constructor`, `toString` sau `__proto__`. Inchis din capul locului cu `hasOwnProperty.call`; niciun audit nu-l numeste |
+| `shipping_zones` in forma de ARRAY nu declara niciun curier | 110 magazine din 129 o au asa. Fara paza pe `Array.isArray`, un array cu o insusire cu nume ar fi trecut drept harta de zone |
 
 ## Hotarari care nu-mi apartin
 

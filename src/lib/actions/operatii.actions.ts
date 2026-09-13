@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import {
   deblocheazaOperatie, operatiiAtarnate, refuzuriPeComanda,
-  type OperatieAtarnata, type RefuzOperatie,
+  type OperatieAtarnata, type RezultatRefuzuri,
 } from "@/lib/operatii/registru";
 
 /*
@@ -47,8 +47,10 @@ export async function operatiiAtarnateAction(
 export async function refuzuriPeComandaAction(
   businessId: string,
   orderId: string,
-): Promise<RefuzOperatie[]> {
-  if (!(await detineMagazinul(businessId))) return [];
+): Promise<RezultatRefuzuri> {
+  /* ⚠ Si lipsa dreptului iese `{ ok: false }`, nu lista goala: altfel „nu e magazinul tau"
+     si „comanda e curata" arata identic in panou. Vezi `RezultatRefuzuri`. */
+  if (!(await detineMagazinul(businessId))) return { ok: false };
   return refuzuriPeComanda(createAdminClient(), businessId, orderId);
 }
 

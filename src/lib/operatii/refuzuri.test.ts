@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { refuzuriPeComanda } from "./registru";
+import type { RefuzOperatie, RezultatRefuzuri } from "./registru";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
@@ -54,16 +55,28 @@ function clientFals(randuri: Rand[], filtre: Record<string, unknown> = {}) {
   return { from: () => constructor } as unknown as SupabaseClient<Database>;
 }
 
+/**
+ * Randurile dintr-un rezultat despre care proba spune ca TREBUIE sa fie citit cu succes.
+ *
+ * ⚠ De pe 13.09.2026 `refuzuriPeComanda` nu mai intoarce o lista, ci un verdict: lista goala
+ * si „n-am putut citi" erau acelasi lucru, si tocmai asta ascundea refuzurile. Ajutorul cere
+ * `ok: true` chiar aici, ca fiecare proba de mai jos sa spuna limpede pe care ramura sta.
+ */
+function lista(r: RezultatRefuzuri): RefuzOperatie[] {
+  assert.equal(r.ok, true, "citirea a esuat acolo unde proba astepta randuri");
+  return r.ok ? r.refuzuri : [];
+}
+
 const R = (o: Partial<Rand> & { id: string; stare: string }): Rand => ({
   fel: "factura", furnizor: "oblio", ultima_eroare: "nu are Gestiune",
   incercari: 1, creat_la: "2026-09-01T06:00:00Z", ...o,
 });
 
 test("un refuz ajunge in fata omului, cu mesajul furnizorului intreg", async () => {
-  const r = await refuzuriPeComanda(
+  const r = lista(await refuzuriPeComanda(
     clientFals([R({ id: "1", stare: "esuat", ultima_eroare: "Produsul X nu are Gestiune (parametrul `management`)" })]),
     "biz", "cmd",
-  );
+  ));
   assert.equal(r.length, 1);
   assert.equal(r[0].mesaj, "Produsul X nu are Gestiune (parametrul `management`)",
     "mesajul furnizorului a fost taiat sau rescris — el e singurul care spune ce e de reparat");
@@ -78,18 +91,18 @@ test("⚠ O REUSITA STINGE REFUZUL de acelasi fel", async () => {
     ce s-a reparat problema invata omul s-o ignore — adica strica exact lucrul
     pentru care a fost pusa.
   */
-  const r = await refuzuriPeComanda(clientFals([
+  const r = lista(await refuzuriPeComanda(clientFals([
     R({ id: "1", stare: "esuat", creat_la: "2026-09-01T06:00:00Z" }),
     R({ id: "2", stare: "reusit", ultima_eroare: null, creat_la: "2026-09-01T07:00:00Z" }),
-  ]), "biz", "cmd");
+  ]), "biz", "cmd"));
   assert.deepEqual(r, [], "alarma ramane aprinsa dupa ce factura chiar s-a emis");
 });
 
 test("reusita stinge DOAR felul ei, nu si celelalte", async () => {
-  const r = await refuzuriPeComanda(clientFals([
+  const r = lista(await refuzuriPeComanda(clientFals([
     R({ id: "1", fel: "factura", stare: "reusit", ultima_eroare: null, creat_la: "2026-09-01T07:00:00Z" }),
     R({ id: "2", fel: "awb", furnizor: "sameday", stare: "esuat", ultima_eroare: "adresa incompleta", creat_la: "2026-09-01T06:00:00Z" }),
-  ]), "biz", "cmd");
+  ]), "biz", "cmd"));
   assert.equal(r.length, 1, "o factura reusita a stins si refuzul de AWB");
   assert.equal(r[0].fel, "awb");
 });
@@ -97,28 +110,29 @@ test("reusita stinge DOAR felul ei, nu si celelalte", async () => {
 test("din mai multe refuzuri pe acelasi fel se arata ULTIMUL", async () => {
   // ⚠ VetDepo avea patru randuri cu doua mesaje deosebite. Cel vechi („nu are
   // stoc suficient") ar fi trimis omul sa repare altceva decat ce blocheaza acum.
-  const r = await refuzuriPeComanda(clientFals([
+  const r = lista(await refuzuriPeComanda(clientFals([
     R({ id: "vechi", stare: "esuat", ultima_eroare: "nu are stoc suficient", creat_la: "2026-08-25T08:00:00Z" }),
     R({ id: "nou", stare: "esuat", ultima_eroare: "nu are Gestiune", creat_la: "2026-09-01T06:22:00Z" }),
-  ]), "biz", "cmd");
+  ]), "biz", "cmd"));
   assert.equal(r.length, 1, "acelasi fel apare de mai multe ori");
   assert.equal(r[0].id, "nou", "se arata refuzul vechi in locul celui de acum");
 });
 
 test("un refuz fara mesaj nu produce un chenar rosu gol", async () => {
   // Un chenar de alarma care nu spune nimic sperie fara sa lamureasca.
-  const r = await refuzuriPeComanda(clientFals([
+  const r = lista(await refuzuriPeComanda(clientFals([
     R({ id: "1", stare: "esuat", ultima_eroare: null }),
     R({ id: "2", fel: "awb", stare: "esuat", ultima_eroare: "   " }),
-  ]), "biz", "cmd");
+  ]), "biz", "cmd"));
   assert.deepEqual(r, []);
 });
 
 test("comanda sanatoasa nu arata nimic", async () => {
-  assert.deepEqual(await refuzuriPeComanda(clientFals([]), "biz", "cmd"), []);
+  /* ⚠ `ok: true` cu lista goala, nu doar „gol": aici chiar AM CITIT si chiar nu e nimic. */
+  assert.deepEqual(await refuzuriPeComanda(clientFals([]), "biz", "cmd"), { ok: true, refuzuri: [] });
   assert.deepEqual(
     await refuzuriPeComanda(clientFals([R({ id: "1", stare: "reusit", ultima_eroare: null })]), "biz", "cmd"),
-    [],
+    { ok: true, refuzuri: [] },
   );
 });
 
@@ -137,12 +151,21 @@ test("⚠ intrebarea e ingradita la magazinul SI comanda cerute", async () => {
     "ordinea nu mai e de la nou la vechi, deci „ultimul refuz\" nu mai e ultimul");
 });
 
-test("o eroare de citire nu arunca, doar nu arata nimic", async () => {
-  // Panoul de deblocare de alaturi trebuie sa apara chiar daca asta pica.
+test("⚠⚠ o eroare de citire NU mai arata ca lipsa de refuzuri", async () => {
+  /*
+   * ═══ ⚠ PROBA ASTA SUSTINEA CHIAR DEFECTUL (schimbata 13.09.2026) ═══
+   *
+   * Pana azi cerea `[]`, adica exact ce se intampla: o citire cazuta se intorcea ca lista
+   * goala, iar panoul o citea drept „comanda e curata" si nu arata nimic. Afirmatia era
+   * adevarata despre cod si gresita despre intentie, deci inghetase defectul in plasa.
+   *
+   * Acum cere verdictul: `{ ok: false }`. Panoul de deblocare de alaturi apare in
+   * continuare, fiindca cererea lui e separata; ce se schimba e ca refuzurile nu mai tac.
+   */
   const client = { from: () => ({
     select: () => ({ eq: () => ({ eq: () => ({ in: () => ({
       order: () => Promise.resolve({ data: null, error: { message: "cazut" } }),
     }) }) }) }),
   }) } as unknown as SupabaseClient<Database>;
-  assert.deepEqual(await refuzuriPeComanda(client, "biz", "cmd"), []);
+  assert.deepEqual(await refuzuriPeComanda(client, "biz", "cmd"), { ok: false });
 });

@@ -63,14 +63,15 @@ Alte masuratori care schimba gravitatea unor constatari:
 | SYS-P1-02 | CONFIRMAT, CU CORECTIE | fail-open-ul real e la `order.actions.ts:282` (tarif implicit NULL), nu peste tot. `esteGratuit` se decide server-side |
 | SYS-P1-06 | CONFIRMAT | cheia registrului include furnizorul, deci doi curieri pot rezerva aceeasi comanda |
 | SYS-P1-09 / PLAT-P1-04 | CONFIRMAT | `deleteOrder` citeste o singura coloana de AWB din 17 si curata din R2 doar cheile GLS |
-| PLAT-P2-12 | CONFIRMAT | `refuzuriPeComanda` grupeaza doar dupa `fel`, deci un AWB reusit stinge afisarea refuzului altui curier. In plus, o eroare de citire din baza se intoarce ca lista goala |
+| PLAT-P2-12 (a doua jumatate) | CONFIRMAT | „n-am putut afla" arata ca „niciun refuz", pe TREI drumuri: citirea cazuta din baza (`registru.ts:601-604`), lipsa dreptului pe magazin (`operatii.actions.ts:51`) si `.catch(() => {})` din interfata (`OperatiiAtarnate.tsx:71`). Aceeasi clasa cu [[zero-randuri-nu-e-succes]], traind in produs |
 
 ### Coborate de masuratoare
 
 | ID | de ce |
 |---|---|
 | SYS-P1-04 | regulile de transport nu sunt legate de cotatie, dar **0 din 129** de magazine au vreo regula sau clasa |
-| SYS-P1-02 (ramura NULL) | **0 din 129** au `default_shipping_cost` NULL sau zero. Magazinul `okxi`, citat in comentariile codului, a fost sters pe 11.09 |
+| SYS-P1-02 (ramura NULL) | **0 din 129** au `default_shipping_cost` NULL sau zero |
+| PLAT-P2-12 (prima jumatate) | gruparea doar dupa `fel` ar ascunde refuzul unui curier cand altul a reusit. Masurat: 172 de operatii AWB, 164 reusite, 8 esuate, si **ZERO** comenzi cu refuz ascuns de ALT furnizor. Cele 6 potriviri gasite sunt pe ACELASI furnizor, adica exact cazul tratat dinadins: reusita stinge alarma dupa ce problema s-a reparat |
 
 ### Infirmate pe codul curent
 

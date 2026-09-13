@@ -585,11 +585,26 @@ export interface RefuzOperatie {
  * la nesfarsit. Iar o alarma care ramane aprinsa dupa ce s-a reparat problema
  * invata omul s-o ignore — adica strica exact lucrul pentru care a fost pusa.
  */
+/**
+ * ═══ ⚠ „N-AM PUTUT AFLA" NU E „NICIUN REFUZ" (13.09.2026) ═══
+ *
+ * Pana azi functia intorcea `RefuzOperatie[]`, si pe ramura de eroare `[]`. Panoul deosebea
+ * atunci trei stari diferite... in niciun fel: comanda sanatoasa, citirea cazuta din baza, si
+ * lipsa dreptului pe magazin aratau toate la fel, adica niciun chenar pe ecran.
+ *
+ * Exact clasa despre care am scris azi in `zero-randuri-nu-e-succes`: un rezultat gol are
+ * DOUA cauze care cer purtari opuse, iar confundate, a doua o imbraca pe prima si raporteaza
+ * liniste. Aici linistea aia inseamna un refuz al furnizorului pe care comerciantul nu-l vede.
+ */
+export type RezultatRefuzuri =
+  | { ok: true; refuzuri: RefuzOperatie[] }
+  | { ok: false };
+
 export async function refuzuriPeComanda(
   admin: SupabaseClient<Database>,
   businessId: string,
   orderId: string,
-): Promise<RefuzOperatie[]> {
+): Promise<RezultatRefuzuri> {
   const { data, error } = await admin
     .from("operatii_externe")
     .select("id, fel, furnizor, stare, ultima_eroare, incercari, creat_la")
@@ -600,7 +615,9 @@ export async function refuzuriPeComanda(
 
   if (error) {
     console.error("[registru] nu am putut citi refuzurile:", error.message);
-    return [];
+    /* ⚠ NU `[]`. Vezi nota de la `RezultatRefuzuri`: lista goala ar fi citita drept „comanda
+       e curata", iar un refuz al furnizorului ar ramane nevazut. */
+    return { ok: false };
   }
 
   const randuri = data ?? [];
@@ -626,7 +643,7 @@ export async function refuzuriPeComanda(
       creatLa: String(r.creat_la),
     });
   }
-  return refuzuri.filter(r => r.mesaj.length > 0);
+  return { ok: true, refuzuri: refuzuri.filter(r => r.mesaj.length > 0) };
 }
 
 /**

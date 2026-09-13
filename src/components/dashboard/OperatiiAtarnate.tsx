@@ -45,6 +45,8 @@ export function OperatiiAtarnate({
   const [inLucru, setInLucru] = useState<string | null>(null);
   const [seIncarca, setSeIncarca] = useState(true);
   const [refuzuri, setRefuzuri] = useState<RefuzOperatie[]>([]);
+  /** ⚠ Starea a treia: nu „zero refuzuri", ci „n-am putut afla". Vezi `RezultatRefuzuri`. */
+  const [refuzuriNecitite, setRefuzuriNecitite] = useState(false);
 
   /*
    * Reincarcarea la FOCUS nu e o rafinare, e chiar drumul comerciantului.
@@ -67,16 +69,24 @@ export function OperatiiAtarnate({
         ascuns supapa care chiar conteaza.
       */
       refuzuriPeComandaAction(businessId, orderId)
-        .then((r) => { if (activ) setRefuzuri(r); })
-        .catch(() => {});
+        .then((r) => {
+          if (!activ) return;
+          setRefuzuriNecitite(!r.ok);
+          setRefuzuri(r.ok ? r.refuzuri : []);
+        })
+        /* ⚠ Si o cadere de retea e tot „n-am putut afla". Inainte era `.catch(() => {})`,
+           adica tacere: al treilea drum prin care un refuz ramanea nevazut. */
+        .catch(() => { if (activ) setRefuzuriNecitite(true); });
     };
     incarca();
     window.addEventListener("focus", incarca);
     return () => { activ = false; window.removeEventListener("focus", incarca); };
   }, [businessId, orderId]);
 
-  // Cazul normal: nimic atarnat SI niciun refuz, deci niciun chenar pe o comanda sanatoasa.
-  if (seIncarca || (operatii.length === 0 && refuzuri.length === 0)) return null;
+  /* Cazul normal: nimic atarnat SI niciun refuz, deci niciun chenar pe o comanda sanatoasa.
+     ⚠ `refuzuriNecitite` intra in conditie: fara el, tocmai starea „n-am putut afla" ar fi
+     iesit din componenta cu `null`, adica exact tacerea pe care reparatia o inchide. */
+  if (seIncarca || (operatii.length === 0 && refuzuri.length === 0 && !refuzuriNecitite)) return null;
 
   async function deblocheaza(op: OperatieAtarnata) {
     setInLucru(op.id);
@@ -190,6 +200,18 @@ export function OperatiiAtarnate({
       nicio hotarare de luat. Furnizorul a spus limpede nu, si nu s-a intamplat
       nimic la el. Singurul lucru care lipsea era sa se stie.
     */}
+    {refuzuriNecitite ? (
+      <div className="mb-5 rounded-lg border border-border bg-muted/40 p-4">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <p className="text-xs text-muted-foreground">
+            Nu am putut citi starea operatiilor refuzate pentru comanda asta. Nu inseamna ca
+            nu exista: inseamna ca nu stim. Reincarca pagina.
+          </p>
+        </div>
+      </div>
+    ) : null}
+
     {refuzuri.length > 0 ? (
       <div className="mb-5 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
         <div className="flex items-start gap-2">

@@ -69,7 +69,7 @@ export function FanCourierConfigClient({
       setSelectedClientName(result.branches[0].name);
     }
 
-    toast.success(`Cont FAN Courier conectat — ${result.branches.length} branch(e) disponibil(e)`);
+    toast.success(`Cont FAN Courier conectat, ${result.branches.length} branch(e) disponibil(e)`);
     setStep("settings");
   }
 
@@ -297,12 +297,11 @@ export function FanCourierConfigClient({
         <p className="mb-2 text-sm font-semibold text-foreground">Cum obtii accesul API FAN Courier?</p>
         <ol className="list-inside list-decimal space-y-1 text-xs text-muted-foreground">
           <li>Trebuie sa ai un contract semnat cu FAN Courier</li>
-          <li>Solicita credentialele selfAWB la <span className="font-semibold text-foreground">selfawb@fancourier.ro</span></li>
+          <li>Solicita credentialele selfAWB la <span className="font-semibold text-foreground">customer@fancourier.ro</span></li>
           <li>Introdu username + parola si apasa &quot;Conecteaza&quot;</li>
-          <li>Selecteaza branch-ul expeditor si salveaza</li>
         </ol>
         <a
-          href="https://selfawb.fancourier.ro"
+          href="https://www.selfawb.ro/new/login"
           target="_blank"
           rel="noopener noreferrer"
           className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"

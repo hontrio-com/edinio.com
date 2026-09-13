@@ -580,7 +580,7 @@ export const COMENZI_SI_LIVRARE: CategorieAjutor = {
             "Apasă \"Salvează configurația\".",
           ],
           detalii: [
-            { titlu: "De unde iei credențialele selfAWB", text: "Îți trebuie un contract semnat cu FAN Courier. Credențialele selfAWB se cer pe email la selfawb@fancourier.ro. În pagina de configurare ai blocul \"Cum obții accesul API FAN Courier?\", cu linkul \"Deschide platforma selfAWB\"." },
+            { titlu: "De unde iei credențialele selfAWB", text: "Îți trebuie un contract semnat cu FAN Courier. Credențialele selfAWB se cer pe email la customer@fancourier.ro. În pagina de configurare ai blocul \"Cum obții accesul API FAN Courier?\", cu linkul \"Deschide platforma selfAWB\"." },
             { titlu: "Ce e branch-ul expeditor", text: "Branch-ul este contul FAN Courier de pe care pleacă coletele. Fiecare opțiune din listă arată numele branch-ului, ID-ul lui și localitatea cu județul. Lista se umple doar după conectare. Până atunci, în locul ei scrie \"Conectează contul pentru a încărca branch-urile\"." },
             { titlu: "Ce face bifa Etichetă proprie (ePOD)", text: "Cu ea pornită printezi tu eticheta AWB în format A6, în loc de AWB-ul A5 pretipărit adus de curier. Activeaz-o doar dacă printezi etichetele înainte de predarea coletelor." },
             { titlu: "Cum știi că e gata", text: "După conectare primești confirmarea contului și numărul de branch-uri disponibile. După salvare apare mesajul \"Configurație FAN Courier salvată\", iar sus apare bannerul verde \"FAN Courier activ\", cu numele branch-ului și Client ID-ul." },

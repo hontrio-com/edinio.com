@@ -52,25 +52,25 @@ Alte masuratori care schimba gravitatea unor constatari:
 | (niciun ID) | **NOU** | cinci rute serveau eticheta fara `Cache-Control: private, no-store`, desi poarta datele cumparatorului | `a3558c42` |
 | UPS-P1-01 / SYS-P1-11 | CONFIRMAT | `BUGET_MS` iesea exact 0, deci cronul sarea fiecare colet si raporta `ok: true` | `9003b35a` |
 | PALLEX-08 | **LARGIT** | eticheta se depozita in R2 cu implicitul `public, max-age=31536000`. Astra numeste doar Pall-Ex; **eColet** facea la fel si nu e numit de nimeni | `56796201` |
+| SYS-P1-05 | CONFIRMAT (regresie proprie) | indisponibilitatea unui curier devenea oferta semnata la tariful zonei. Instanta vie masurata: `okxi` cu zona Sameday pe tarif viu si `price: 0`, deci pleca semnat „0,00 lei". Filtrul sta acum intr-un singur loc, inaintea semnarii, si prinde si cele 27 de situri preexistente | `8c1b7991` |
+| PLAT-P2-12 (a doua jumatate) | CONFIRMAT | rezultatul incert arata identic cu lipsa refuzurilor, pe patru drumuri. `refuzuriPeComanda` intoarce acum un verdict, iar panoul are a treia stare | `e5293e3e` |
+| SYS-P1-02 (ramura NULL) | CONFIRMAT, CU CORECTIE | `if (tarifImplicit == null) return { shipping: claimed }` accepta suma din browser neverificata: singurul loc unde transportul putea fi ales integral de client. Acum cere recotare, iar verdictul poarta cauza, ca mesajul sa nu minta. Masurat inainte: **0 din 129** de magazine aveau tarif implicit NULL, deci inchiderea fail-closed n-a atins niciun drum viu | `4cffd635` |
 
 ### Confirmate, inca deschise
 
 | ID | verdict | nota |
 |---|---|---|
-| SYS-P1-05 | CONFIRMAT, CU INSTANTA MASURATA | plafonul de 25s semneaza optiuni la tariful zonei pentru curierii care n-au raspuns. ⚠ **E codul meu, scris pe 13.09**, dar tiparul exista dinainte in **27 de situri**: fiecare dintre cei noua curieri are propriul `flat()`, chemat pe trei drumuri. Eu am adaugat al patrulea declansator. ⚠ **Raul concret, masurat:** `okxi` (VetDepo, 142 comenzi, activa azi) are zona Sameday pe tarif VIU cu `price: 0`, deci pleca semnat un „Sameday, 0,00 lei" pe care `verificaCotatia` il gasea valid. Celelalte doua magazine cad pe tarife reale (17, 18, 20), adica pe degradarea aleasa de comerciant |
 | SYS-P1-01 | CONFIRMAT | tokenul de cotare nu leaga serviciul, contractul/BYOC, punctul sau reteaua. Recunoscut si in comentariile fisierului |
 | SYS-P1-03 | CONFIRMAT | rambursul e semnat ca BOOLEAN, nu ca suma; `quote-token.ts:118-131` o spune pe fata |
-| SYS-P1-02 | CONFIRMAT, CU CORECTIE | fail-open-ul real e la `order.actions.ts:282` (tarif implicit NULL), nu peste tot. `esteGratuit` se decide server-side |
+| SYS-P1-02 (restul) | CONFIRMAT | ramura NULL s-a inchis in `4cffd635`. RAMANE deschis ce e mai sus de ea: `esteGratuit` scurtcircuiteaza inaintea oricarei validari de serviciu sau punct, iar `max(suma, tarif implicit)` nu apara un magazin cu tariful zonei 0 |
 | SYS-P1-06 | CONFIRMAT | cheia registrului include furnizorul, deci doi curieri pot rezerva aceeasi comanda |
 | SYS-P1-09 / PLAT-P1-04 | CONFIRMAT | `deleteOrder` citeste o singura coloana de AWB din 17 si curata din R2 doar cheile GLS |
-| PLAT-P2-12 (a doua jumatate) | CONFIRMAT, INCHIS in `e5293e3e` | rezultatul incert arata identic cu lipsa refuzurilor, pe PATRU drumuri: citirea cazuta din baza, lipsa dreptului pe magazin, `.catch(() => {})` din interfata, si iesirea cu `null` cand ambele liste sunt goale. `refuzuriPeComanda` intoarce acum un verdict, iar panoul are a treia stare. ⚠ O proba existenta cerea explicit vechea purtare si a fost rescrisa, nu stearsa |
 
 ### Coborate de masuratoare
 
 | ID | de ce |
 |---|---|
 | SYS-P1-04 | regulile de transport nu sunt legate de cotatie, dar **0 din 129** de magazine au vreo regula sau clasa |
-| SYS-P1-02 (ramura NULL) | **0 din 129** au `default_shipping_cost` NULL sau zero |
 | PLAT-P2-12 (prima jumatate) | gruparea doar dupa `fel` ar ascunde refuzul unui curier cand altul a reusit. Masurat: 172 de operatii AWB, 164 reusite, 8 esuate, si **ZERO** comenzi cu refuz ascuns de ALT furnizor. Cele 6 potriviri gasite sunt pe ACELASI furnizor, adica exact cazul tratat dinadins: reusita stinge alarma dupa ce problema s-a reparat |
 
 ### Infirmate pe codul curent

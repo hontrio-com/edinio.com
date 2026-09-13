@@ -98,16 +98,17 @@ export default function WootConfigClient({
       toast.error("Introdu Public Key si Secret Key inainte de testare.");
       return;
     }
-    // Save first so server action can read config
-    await new Promise<void>(resolve => {
-      startSave(async () => {
-        await saveWootConfig(businessId, cfg);
-        resolve();
-      });
-    });
+    /*
+     * ⚠ PROBA NU MAI SALVEAZA INAINTE (14.09.2026).
+     *
+     * Pana azi aici se chema `saveWootConfig` ca actiunea de pe server sa aiba ce citi din
+     * baza. Deci o cheie tastata gresit o STERGEA pe cea care mergea, tocmai in clipa in
+     * care omul voia doar sa afle daca e buna. Acum configul pleaca odata cu proba, ca la
+     * toti ceilalti curieri. Vezi nota din `testWootConnection`.
+     */
     setTesting(true);
     setTestResult(null);
-    const result = await testWootConnection(businessId);
+    const result = await testWootConnection(businessId, cfg);
     setTesting(false);
     if (result.success) {
       setTestResult({ ok: true, name: result.name, email: result.email, credit: result.credit });

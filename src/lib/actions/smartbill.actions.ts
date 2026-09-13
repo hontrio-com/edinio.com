@@ -28,6 +28,7 @@ import {
   type MerchantInvoiceProduct,
   type MerchantInvoiceParams,
 } from "@/lib/smartbill";
+import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 // ─── Shared helpers ────────────────────────────────────────────────────────
 
@@ -679,10 +680,56 @@ async function trySendDocEmail(
 
 // ─── Public actions ────────────────────────────────────────────────────────
 
+/**
+ * Configul venit din FORMULAR, cu tokenul mascat rezolvat pe server.
+ *
+ * ⚠ EXISTA CA PROBA SA NU MAI CEARA O SALVARE INAINTE. Vezi nota din
+ * `testSmartbillConnection`.
+ *
+ * ⚠ NU cere `enabled`, spre deosebire de `getConfigForBiz`. Acolo e corect: acela
+ * alimenteaza emiterea de facturi, si o integrare stinsa nu are ce emite. Aici e pe dos:
+ * omul testeaza tocmai ca sa afle daca poate porni integrarea, deci un `enabled` cerut ar
+ * face butonul de verificare inutil exact la prima configurare.
+ *
+ * Proprietatea magazinului se dovedeste inauntrul lui `secretDinConfig`, cu clientul
+ * utilizatorului, inainte de orice citire cu service role.
+ */
+async function configDinFormular(
+  businessId: string,
+  config: SmartbillConfig,
+): Promise<SmartbillConfig | { error: string }> {
+  const token = await secretDinConfig(businessId, "smartbill_config", "token", config.token);
+  if (!token || !config.email?.trim() || !config.company_vat_code?.trim()) {
+    return { error: "Completeaza email-ul, tokenul si CUI-ul inainte de a testa." };
+  }
+  return { ...config, token };
+}
+
+/**
+ * Proba de conexiune SmartBill.
+ *
+ * ═══ ⚠ NU MAI CERE O SALVARE INAINTE (14.09.2026) ═══
+ *
+ * Pana azi functia citea configul DIN BAZA, deci formularul era silit sa salveze intai
+ * („Save first so the server action can read the config"). Asta facea proba DISTRUCTIVA:
+ * `pastreazaSecretele` pastreaza doar campurile venite GOALE, deci un token tastat gresit
+ * il suprascria pe cel care mergea. Omul apasa „Testeaza" ca sa afle daca e bun, si cu
+ * asta il pierdea pe cel bun, iar facturarea se oprea.
+ *
+ * ⚠ MASURAT pe 14.09.2026: 7 magazine au token SmartBill, toate 7 cu integrarea pornita.
+ * E mai mult decat la Woot (3), unde am gasit intai acelasi defect.
+ *
+ * ⚠ SI NU ERA O CIUDATENIE A LUI WOOT. Proba `proba-conexiune-nu-scrie.test.ts` se uita la
+ * TOATE panourile de integrare tocmai fiindca regula e despre tipar; ea a gasit SmartBill,
+ * pe care niciunul din cele doua audituri nu-l numeste.
+ */
 export async function testSmartbillConnection(
-  businessId: string
+  businessId: string,
+  dinFormular?: SmartbillConfig,
 ): Promise<{ series: { name: string; type: string; nextNumber?: string }[]; taxes: string[] } | { error: string }> {
-  const config = await getConfigForBiz(businessId);
+  const config = dinFormular
+    ? await configDinFormular(businessId, dinFormular)
+    : await getConfigForBiz(businessId);
   if ("error" in config) return config;
 
   const [seriesResult, taxResult] = await Promise.all([

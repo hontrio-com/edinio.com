@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { createClient } from "@/lib/supabase/client";
-import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateSmsoConfig, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCodDiscount, updateCodFee, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
+import { updateStorePolicies, updateGeneralSettings, updateVatSettings, updateNotificationsSettings, updateShippingConfig, updateProfileName, updatePaymentMethods, updateCardDiscount, updateCodDiscount, updateCodFee, updateCookieBannerConfig, updatePageContent } from "@/lib/actions/store.actions";
 import { type CookieBannerConfig, type CookieBannerPosition, type ConsentCategory } from "@/lib/cookie-consent";
 import { PAYMENT_METHOD_DEFAULT_LABELS, codFeeInStoreMode, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { formatPrice } from "@/lib/utils/format";
@@ -204,12 +204,6 @@ interface NotificationsConfig {
   new_order: boolean;
 }
 
-interface SmsoConfig {
-  enabled: boolean;
-  api_key: string;
-  sender_id: string;
-}
-
 interface ShippingMethodConfig {
   enabled: boolean;
   price: number;
@@ -325,7 +319,6 @@ interface Props {
   orderNumberFormat: string;
   vatSettings: VatSettings;
   notificationsConfig: NotificationsConfig;
-  smsoConfig: SmsoConfig;
   shippingConfig: ShippingConfig;
   activeCourierIds: string[];
   paymentMethods: PaymentMethodEntry[];
@@ -362,7 +355,7 @@ function ComingSoon({ title }: { title: string }) {
   );
 }
 
-export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, smsoConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta }: Props) {
+export function SettingsClient({ profile, email, businessId, businessData, storePolicies, orderNumberFormat, vatSettings, notificationsConfig, shippingConfig, activeCourierIds, paymentMethods, paymentReadiness, cardDiscount, codDiscount, codFee, cookieBanner, cookieCategories, storeSeo, seoDefaults, seoPreviewUrl, emailInitial, storeMode, oneProductId, products, shippingCategories, mfaEmailEnabled, planSuccess, domainSuccess, sectiuneCeruta }: Props) {
   /*
     ⚠ `sectiuneCeruta` se verifică față de lista adevărată, nu se turnă orbește.
     Un `?sectiune=orice` din bara de adrese ar fi pus o filă care nu există, iar
@@ -511,12 +504,9 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   const [opsProductId, setOpsProductId] = useState(oneProductId ?? "");
   const [savingOps, startOpsTransition] = useTransition();
 
-  // SMSO
-  const [smso, setSmso] = useState<SmsoConfig>(smsoConfig);
-  const [savingSmso, startSmsoTransition] = useTransition();
-  const [testSmsLoading, setTestSmsLoading] = useState(false);
-  const [testSmsPhone, setTestSmsPhone] = useState("");
-  const [testSmsResult, setTestSmsResult] = useState<{ ok: boolean; message: string; details?: string } | null>(null);
+  /* ⚠ Starea SMSO a fost SCOASA pe 14.09.2026 impreuna cu `saveSmso` si `sendTestSms`:
+     erau definite si nu le chema nimic, iar propul lor tarazte cheia SMSO decriptata pana
+     in browser. Panoul viu si corect e `SmsoConfigClient`. Vezi nota din settings/page.tsx. */
   const [savingNotif, startNotifTransition] = useTransition();
   const [testEmailLoading, setTestEmailLoading] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<{ ok: boolean; message: string; details?: string } | null>(null);
@@ -873,40 +863,6 @@ export function SettingsClient({ profile, email, businessId, businessData, store
         ? "Magazinul afiseaza acum un singur produs."
         : "Magazinul afiseaza catalogul cu toate produsele.");
     });
-  }
-
-  function saveSmso() {
-    if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
-    if (smso.enabled && !smso.api_key.trim()) { toast.error("Cheia API SMSO este obligatorie."); return; }
-    if (smso.enabled && !smso.sender_id.trim()) { toast.error("Sender ID este obligatoriu."); return; }
-    startSmsoTransition(async () => {
-      const result = await updateSmsoConfig(businessId, smso);
-      if ("error" in result) toast.error(result.error);
-      else toast.success("Integrarea SMSO a fost salvata.");
-    });
-  }
-
-  async function sendTestSms() {
-    if (!testSmsPhone.trim()) { toast.error("Introdu un numar de telefon pentru test."); return; }
-    setTestSmsLoading(true);
-    setTestSmsResult(null);
-    try {
-      const res = await fetch("/api/sms/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: smso.api_key, sender_id: smso.sender_id, phone: testSmsPhone }),
-      });
-      const data = await res.json() as { success?: boolean; responseToken?: string; transaction_cost?: number; to?: string; error?: string };
-      if (data.success) {
-        setTestSmsResult({ ok: true, message: `SMS trimis cu succes catre ${data.to}`, details: `Cost: ${data.transaction_cost ?? "-"} | Token: ${data.responseToken}` });
-      } else {
-        setTestSmsResult({ ok: false, message: data.error ?? "Eroare necunoscuta" });
-      }
-    } catch (err) {
-      setTestSmsResult({ ok: false, message: `Eroare retea: ${String(err)}` });
-    } finally {
-      setTestSmsLoading(false);
-    }
   }
 
   async function changePassword() {

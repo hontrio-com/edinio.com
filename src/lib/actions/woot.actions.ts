@@ -2,6 +2,7 @@
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
+import { secretDinConfig } from "@/lib/integrari/secret-server";
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -113,7 +114,34 @@ export async function disconnectWoot(
   return { success: true };
 }
 
-export async function testWootConnection(businessId: string): Promise<{
+/**
+ * Proba de conexiune Woot.
+ *
+ * ═══ ⚠ NU MAI CERE O SALVARE INAINTE (14.09.2026) ═══
+ *
+ * Pana azi functia asta citea configul DIN BAZA, deci formularul era silit sa salveze
+ * intai ca sa aiba ce citi (`WootConfigClient`: „Save first so server action can read
+ * config"). Asta facea proba DISTRUCTIVA: `pastreazaSecretele` pastreaza doar campurile
+ * venite GOALE, deci o cheie tastata gresit o suprascria pe cea care mergea. Omul apasa
+ * „Testeaza" ca sa afle daca e buna, si cu asta o pierdea pe cea buna.
+ *
+ * ⚠ CONTA, si s-a masurat: 5 magazine au Woot configurat, 3 il au pornit, iar Woot e
+ * SINGURUL curier cu trafic real in productie (211 AWB-uri). O integrare cazuta aici
+ * nu e o neplacere, e livrarea oprita.
+ *
+ * ⚠ SI ERA SINGURUL ASA DIN 17. Toti ceilalti trimit configul la proba:
+ * `testGlsConnectionAction(businessId, construieste())`, la fel eColet, Pall-Ex, Posta,
+ * Innoship, FGO. Acum si Woot.
+ *
+ * `secretDinConfig` e ajutorul casei pentru exact cazul asta: valoarea din formular are
+ * intaietate, iar cand vine goala (campul e mascat, fiindca cheia e deja salvata) cade
+ * pe cea din baza, citita cu service role dupa ce dovedeste proprietatea. Deci merge si
+ * la prima configurare, si la o reprobare fara retastare.
+ *
+ * `config` ramane OPTIONAL ca sa nu se rupa nimic daca vreodata cineva cheama proba fara
+ * formular: atunci se comporta exact ca inainte, doar ca fara scrierea distructiva.
+ */
+export async function testWootConnection(businessId: string, config?: WootConfig): Promise<{
   success: boolean;
   error?: string;
   name?: string;
@@ -122,11 +150,12 @@ export async function testWootConnection(businessId: string): Promise<{
 }> {
   if (!(await checkAccess(businessId))) return { success: false, error: "Neautorizat" };
 
-  const config = await loadConfig(businessId);
-  if (!config?.public_key || !config?.secret_key) return { success: false, error: "Chei API lipsa" };
+  const publicKey = await secretDinConfig(businessId, "woot_config", "public_key", config?.public_key);
+  const secretKey = await secretDinConfig(businessId, "woot_config", "secret_key", config?.secret_key);
+  if (!publicKey || !secretKey) return { success: false, error: "Chei API lipsa" };
 
   try {
-    const token = await getWootToken(config.public_key, config.secret_key);
+    const token = await getWootToken(publicKey, secretKey);
     const [info, credit] = await Promise.all([getAccountInfo(token), getCredit(token)]);
     return { success: true, name: `${info.first_name} ${info.last_name}`, email: info.email, credit: credit.total };
   } catch (err) {

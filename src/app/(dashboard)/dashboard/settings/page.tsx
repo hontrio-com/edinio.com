@@ -142,41 +142,24 @@ async function ContinutSetari({
   const storeSettings = Array.isArray(rawSettings) ? rawSettings[0] ?? null : rawSettings ?? null;
 
   /*
-   * Cheia SMSO se citeste separat, cu service role.
+   * ═══ ⚠ CHEIA SMSO NU SE MAI CITESTE AICI, SI NU MAI PLEACA IN BROWSER (14.09.2026) ═══
    *
-   * Din 2026-08-05 `privat.decripteaza_config` nu mai decripteaza pentru
-   * `anon`/`authenticated`, deci pe clientul comerciantului campul ar sosi
-   * `enc.v1.…`. Aici nu e doar afisare: fila SMS din SettingsClient trimite
-   * cheia mai departe catre SMSO pentru SMS-ul de test (`/api/sms/test`, cu
-   * `api_key` in corp). Cu textul cifrat in mana, furnizorul raspunde „cheie
-   * invalida" pe o cheie care e, de fapt, corecta in baza — si comerciantul
-   * ajunge sa o schimbe degeaba.
+   * Pagina citea `smso_config` cu service role, deci DECRIPTAT, si dadea `api_key` mai
+   * departe ca prop catre `SettingsClient`. De acolo credentiala ajungea in payloadul RSC,
+   * apoi in starea React. Era singurul loc din platforma unde o credentiala de integrare
+   * cobora in clar la client.
    *
-   * CE NU SE INTAMPLA, ca sa nu se caute o paguba care nu exista: valoarea
-   * intoarsa in formular NU se pierde la salvare. `privat.cripteaza` sare peste
-   * orice sir care incepe deja cu `enc.v1.` (vezi 2026-08-04-criptare-
-   * credentiale.sql, „marcajul `enc.v1.` face totul IDEMPOTENT"), deci un
-   * dus-intors ar rescrie exact acelasi text cifrat. Se strica APELUL catre
-   * furnizor, nu randul din baza.
+   * ⚠ SI NU ERA NEVOIE DE EA NICI MACAR PENTRU CE O JUSTIFICA. Nota de aici sustinea ca
+   * „fila SMS din SettingsClient trimite cheia mai departe catre SMSO pentru SMS-ul de
+   * test". Verificat pe 14.09.2026, cu o cautare netaiata: in `SettingsClient` nu exista
+   * niciun camp si niciun buton de SMS. `saveSmso` si `sendTestSms` erau definite si nu
+   * le chema NIMIC. Era a doua copie, moarta, a unei integrari care are deja panoul ei
+   * viu si corect (`SmsoConfigClient`), unde cheia vine mascata, validarea foloseste
+   * `secretulEsteSalvat` si proba trimite `businessId` ca ruta sa ia cheia din baza.
    *
-   * Restul configuratiilor de pe pagina raman pe clientul comerciantului: din
-   * ele se citesc doar steaguri („e configurat?"), iar `enc.v1.…` e un sir
-   * negol, deci raspunsul ramane acelasi.
-   *
-   * PROPRIETATEA, fiindca service role ocoleste RLS: `bizRow` a fost adus mai
-   * sus cu clientul comerciantului, filtrat pe `user_id = userId`, iar `userId`
-   * e chiar sesiunea (`getCachedUser` in parinte). Citirea de mai jos e legata
-   * de `bizRow.id`, deci de un magazin despre care s-a dovedit deja ca e al lui.
+   * Justificarea ramasese in urma codului pe care il descria. Asa se nasc scurgerile care
+   * par intemeiate.
    */
-  let smsoSettings: Record<string, unknown> | null = null;
-  if (bizRow?.id) {
-    const { data: randSmso } = await createAdminClient()
-      .from("store_settings")
-      .select("smso_config")
-      .eq("business_id", bizRow.id)
-      .single();
-    smsoSettings = (randSmso?.smso_config as Record<string, unknown> | null) ?? null;
-  }
 
   // One Product Store (Settings > Tip magazin): current mode + active products picker.
   const storeMode = parseStoreMode(storeSettings?.page_content ?? null);
@@ -398,11 +381,6 @@ async function ContinutSetari({
       notificationsConfig={{
         notification_email: (storeSettings?.notifications_config as Record<string, unknown>)?.notification_email as string ?? "",
         new_order: (storeSettings?.notifications_config as Record<string, unknown>)?.new_order !== false,
-      }}
-      smsoConfig={{
-        enabled: smsoSettings?.enabled === true,
-        api_key: smsoSettings?.api_key as string ?? "",
-        sender_id: smsoSettings?.sender_id as string ?? "",
       }}
       shippingConfig={{
         shipping_enabled: storeSettings?.shipping_enabled ?? false,

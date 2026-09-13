@@ -114,14 +114,18 @@ export function SmartbillConfigClient({
       toast.error("Completeaza email-ul, tokenul si CUI-ul inainte de a testa.");
       return;
     }
-    // Save first so the server action can read the config
-    const saveResult = await updateSmartbillConfig(businessId, cfg);
-    if ("error" in saveResult) { toast.error(saveResult.error); return; }
-
+    /*
+     * ⚠ PROBA NU MAI SALVEAZA INAINTE (14.09.2026).
+     *
+     * Aici se chema `updateSmartbillConfig` ca actiunea de pe server sa aiba ce citi din
+     * baza. Deci un token tastat gresit il STERGEA pe cel care mergea, tocmai cand omul
+     * voia doar sa afle daca e bun, si facturarea se oprea. Acum configul pleaca odata cu
+     * proba; tokenul mascat se rezolva pe server. Vezi nota din `testSmartbillConnection`.
+     */
     setTesting(true);
     setTestResult(null);
     try {
-      const result = await testSmartbillConnection(businessId);
+      const result = await testSmartbillConnection(businessId, cfg);
       if ("error" in result) {
         setTestResult({ ok: false, message: result.error });
       } else {

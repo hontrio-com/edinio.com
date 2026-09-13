@@ -96,7 +96,29 @@ const MARJA_MS = 5_000;
  * si la rularea urmatoare, unde se repeta acelasi 401 lent. (Defectul a fost prins la
  * Packeta, in forma lui simpla.)
  */
-const BUGET_MS = maxDuration * 1000 - ASTEPTARE_MS * 2 - 15_000 - MARJA_MS;
+/*
+ * ═══ ⚠ BUGETUL ERA EXACT ZERO, SI CRONUL NU VERIFICA NIMIC (13.09.2026) ═══
+ *
+ * Forma de dinainte scadea, pe langa cele doua asteptari si marja, inca `15_000` care nu
+ * sunt explicati in niciun comentariu. Cu `maxDuration = 60` si `ASTEPTARE_MS = 20_000`:
+ *
+ *     60.000 − 20.000×2 − 15.000 − 5.000 = 0
+ *
+ * `termen = Date.now() + 0`, iar verificarea din bucla sta INAINTEA primei comenzi, deci
+ * `Date.now() >= termen` era adevarat imediat: toate expedierile intrau in `sarite` si ruta
+ * raspundea `ok: true`. Esec functional total, raportat ca succes, si invizibil pentru orice
+ * monitorizare care se uita la codul HTTP.
+ *
+ * ⚠ CE S-A SCOS SI CE S-A PASTRAT. Cei 15.000 au plecat, fiindca nimeni nu mai stie ce
+ * rezervau. Rezerva DUBLA de asteptare ramane: e documentata mai sus si e reala, fiindca
+ * `apel()` reincearca o data pe 401, adica un token PLUS a doua cerere de urmarire. Cei opt
+ * frati (FedEx, DHL, Packeta, Posta, Shipo, SmartShip, Innoship, GLS) rezerva o singura
+ * asteptare; UPS ramane cu doua, si tot iese 15 secunde de lucru.
+ *
+ * ⚠ Regula, nu cifra, e aparata de `bugetul-cronurilor-nu-poate-fi-zero.test.ts`: niciun
+ * cron de urmarire nu are voie sa porneasca cu buget nepozitiv.
+ */
+const BUGET_MS = maxDuration * 1000 - ASTEPTARE_MS * 2 - MARJA_MS;
 
 /** ⚠ Cate esecuri pe magazin inainte de alarma. Un AWB proaspat pe care ei inca nu-l
     cunosc e purtare normala; chei rotite sunt altceva. */

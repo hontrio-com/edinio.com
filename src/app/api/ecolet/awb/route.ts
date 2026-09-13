@@ -129,7 +129,11 @@ export async function GET(req: NextRequest) {
 
     /* Se pune in CDN. Esecul nu opreste raspunsul: omul are deja fisierul. */
     try {
-      await uploadToR2(octeti, cheie, tip);
+      /* ⚠ `private, no-store` EXPLICIT. Implicitul lui `uploadToR2` e
+         `public, max-age=31536000, immutable`, iar eticheta poarta numele, adresa si
+         telefonul cumparatorului. Randul 142 de mai jos o serveste deja `private, no-store`:
+         depozitata public, contradictia facea antetul acela degeaba. */
+      await uploadToR2(octeti, cheie, tip, "private, no-store");
     } catch {
       /* Ramane doar mai lent data viitoare. */
     }

@@ -111,7 +111,12 @@ export async function GET(req: NextRequest) {
      * degeaba inapoi cu o eroare despre o copie de rezerva.
      */
     try {
-      await uploadToR2(pdf, cheie, "application/pdf");
+      /* ⚠ `private, no-store` EXPLICIT. Implicitul lui `uploadToR2` e
+         `public, max-age=31536000, immutable`, bun pentru o poza de produs si gresit aici:
+         documentul poarta numele, adresa si telefonul cumparatorului, iar ruta de mai jos se
+         straduieste sa-l serveasca `private, no-store`. Depozitat public, antetul acela nu
+         mai apara nimic. Aceeasi forma ca la GLS. */
+      await uploadToR2(pdf, cheie, "application/pdf", "private, no-store");
     } catch {
       /* Ramane doar mai lent data viitoare. */
     }

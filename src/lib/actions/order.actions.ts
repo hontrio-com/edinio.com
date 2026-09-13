@@ -41,7 +41,12 @@ import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleRelease, expandBundleStock } from "@/lib/bundles";
 import { stocRezervat } from "@/lib/orders/stoc-rezervat";
 import { cheiEticheta } from "@/lib/gls/eticheta";
-import { deleteFromR2 } from "@/lib/r2";
+import { cheieDocument as cheieDocumentPallex } from "@/lib/pallex/documente";
+import { cheieEticheta as cheieEtichetaEcolet } from "@/lib/ecolet/documente";
+import { cheieEticheta as cheieEtichetaPepita } from "@/lib/pepita/eticheta";
+import { awburiDinRand } from "@/lib/orders/awb-propriu";
+import { deCeNuSeStergeComanda } from "@/lib/orders/stergerea-comenzii";
+import { deleteFromR2, stergeIncarcarea } from "@/lib/r2";
 import { interpreteazaRevendicarea, type Revendicare } from "@/lib/orders/verdict-stoc";
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
 import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
@@ -3534,7 +3539,18 @@ export async function deleteOrder(orderId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
 
-  const { data: order } = await supabase.from("orders").select("business_id, discount_code, gls_awb_number, order_source").eq("id", orderId).single();
+  /*
+   * ⚠ TOATE CELE 17 COLOANE DE AWB, NU UNA.
+   *
+   * Pana pe 14.09.2026 se citea `gls_awb_number` si atat, adica exact curierul cu ZERO
+   * expedieri in productie. Cele 211 de AWB-uri Woot si cele 5 DPD treceau nevazute, si
+   * pe langa paza de mai jos, si pe langa curatarea etichetei din depozit.
+   *
+   * ⚠ Lista se tine la zi de proba `stergerea-comenzii.test.ts`, care o cere pe fiecare
+   * din `coloanelePortii()`. Un curier nou adaugat in `COLOANA_AWB` si uitat aici pica
+   * suita, nu productia.
+   */
+  const { data: order } = await supabase.from("orders").select("business_id, discount_code, order_source, status, cargus_awb_number, colete_awb_number, dhl_awb_number, dpd_awb_number, ecolet_awb_number, fan_courier_awb_number, fedex_awb_number, gls_awb_number, innoship_awb_number, packeta_packet_id, pallex_awb_number, posta_awb_number, sameday_awb_number, shipo_awb_number, smartship_awb_number, ups_awb_number, woot_awb_number, ecolet_order_to_send_id").eq("id", orderId).single();
   if (!order) return { error: "Comanda negasita" };
 
   const { data: biz } = await supabase.from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
@@ -3563,6 +3579,24 @@ export async function deleteOrder(orderId: string) {
    */
   const tineEl = marketplaceCareTineComanda(order.order_source);
   if (tineEl) return { error: deCeNuDeAici(tineEl, "stergerea") };
+
+  /*
+   * ═══ ⚠ SI NICI O COMANDA CU COLETUL PE DRUM (14.09.2026) ═══
+   *
+   * Regula sta in `stergerea-comenzii.ts`, unde e si socoteala care a ales-o. Pe scurt:
+   * stergerea nu e o ascundere din liste, e disparitia randului. Facuta peste o expediere
+   * vie, coletul pleaca mai departe la client cu rambursul lui, iar comerciantul ramane
+   * fara numar, fara eticheta si fara urmarire.
+   *
+   * ⚠ ACEEASI FUNCTIE O CHEAMA SI ECRANUL, ca sa nu arate o carte de stergere care oricum
+   * ar fi refuzata. Doua copii ale regulii ar fi insemnat doua adevaruri despre aceeasi
+   * comanda, si cel de pe ecran ar fi fost crezut.
+   */
+  const opresteStergerea = deCeNuSeStergeComanda({
+    status: order.status,
+    awburi: awburiDinRand(order as unknown as Record<string, unknown>),
+  });
+  if (opresteStergerea) return { error: opresteStergerea };
 
   /*
    * CUPONUL, STOCUL SI STERGEREA — ORI TOT, ORI NIMIC.
@@ -3611,20 +3645,80 @@ export async function deleteOrder(orderId: string) {
    * loguri, unde e treaba platformei.
    */
   try {
-    /* ⚠ Doar cand a existat un AWB GLS. Altfel fiecare stergere de comanda ar fi
-       asteptat trei drumuri catre R2 care in majoritatea cazurilor n-au ce sterge. */
-    if (order.gls_awb_number) {
-      await Promise.all(cheiEticheta(order.business_id, orderId).map((k) => deleteFromR2(k)));
+    /*
+     * ⚠ TREI CURIERI DEPOZITEAZA ETICHETE, NU UNUL.
+     *
+     * Pana azi se curatau doar cheile GLS. Pall-Ex isi scrie DOUA documente (eticheta si
+     * avizul), iar eColet unul, cu extensia in cheie, fiindca poate intoarce ZPL in loc de
+     * PDF. Toate poarta numele, adresa si telefonul cumparatorului, si toate au chei
+     * derivate din `(business, comanda)`: dupa stergerea randului nu le mai compune nimeni,
+     * deci ar fi ramas in depozit pentru totdeauna.
+     *
+     * ⚠ Fiecare se cere numai cand exista chiar coloana lui. Altfel fiecare stergere de
+     * comanda ar fi asteptat sapte drumuri catre depozit care in majoritatea cazurilor
+     * n-au ce sterge.
+     *
+     * ⚠ Masurat pe 14.09.2026: ZERO etichete GLS, Pall-Ex sau eColet in productie. Deci
+     * randurile astea nu curata nimic azi. Se pun fiindca gaura se deschide la primul AWB
+     * emis de oricare din cei trei, si atunci nu mai e nimeni s-o observe.
+     */
+    const chei: string[] = [];
+    if (order.gls_awb_number) chei.push(...cheiEticheta(order.business_id, orderId));
+    if (order.pallex_awb_number) {
+      chei.push(
+        cheieDocumentPallex(order.business_id, orderId, "label"),
+        cheieDocumentPallex(order.business_id, orderId, "note"),
+      );
     }
+    if (order.ecolet_awb_number) {
+      chei.push(
+        cheieEtichetaEcolet(order.business_id, orderId, "pdf"),
+        cheieEtichetaEcolet(order.business_id, orderId, "zpl"),
+      );
+    }
+    if (chei.length) await Promise.all(chei.map((k) => deleteFromR2(k)));
   } catch (e) {
     await logError({
       action: "deleteOrder",
-      message: `Comanda a fost stearsa, dar eticheta GLS NU s-a putut sterge din CDN: ${(e as Error).message}. Contine datele cumparatorului.`,
+      message: `Comanda a fost stearsa, dar eticheta de curier NU s-a putut sterge din CDN: ${(e as Error).message}. Contine datele cumparatorului.`,
       details: { orderId },
       businessId: order.business_id,
       userId: user.id,
       severity: "warning",
     });
+  }
+
+  /*
+   * ⚠ SI ETICHETA PEPITA, CARE STA IN ALTA GALEATA.
+   *
+   * Ea nu e in depozitul public: se scrie cu `incarcaPrivat` in galeata incarcarilor, deci
+   * se sterge cu `stergeIncarcarea`, nu cu `deleteFromR2`. Un `deleteFromR2` pe cheia ei ar
+   * fi cautat-o in galeata gresita si ar fi raportat linistit reusita.
+   *
+   * ⚠ SI COMENZILE PEPITA CHIAR SE STERG DE AICI: `pepita` NU e in
+   * `MARKETPLACE_CU_CICLU_PROPRIU` (acolo sunt doar eMAG si Trendyol), deci paza de mai sus
+   * nu le atinge. Eticheta lor ramanea orfana la fiecare stergere.
+   *
+   * ⚠ Are try-ul lui fiindca `cheieEtichetaPepita` ARUNCA daca lipseste secretul, iar
+   * `galeataIncarcarilor()` arunca daca lipseste galeata privata. Amandoua sunt probleme de
+   * platforma, nu ale comerciantului care tocmai a sters o comanda.
+   *
+   * ⚠ Masurat pe 14.09.2026: ZERO comenzi Pepita in baza. Ca si mai sus, se pune inainte sa
+   * fie nevoie.
+   */
+  if ((order.order_source as { marketplace?: unknown } | null)?.marketplace === "pepita") {
+    try {
+      await stergeIncarcarea(cheieEtichetaPepita(order.business_id, orderId));
+    } catch (e) {
+      await logError({
+        action: "deleteOrder",
+        message: `Comanda a fost stearsa, dar eticheta Pepita NU s-a putut sterge: ${(e as Error).message}. Contine datele cumparatorului.`,
+        details: { orderId },
+        businessId: order.business_id,
+        userId: user.id,
+        severity: "warning",
+      });
+    }
   }
 
   revalidatePath("/dashboard/orders");

@@ -114,7 +114,7 @@ test("⚠ stergerea unei comenzi de marketplace se refuza de tot", () => {
   const cod = faraComentarii(fisier("src/lib/actions/order.actions.ts"));
   assert.match(cod, /if \(tineEl\) return \{ error: deCeNuDeAici\(tineEl, "stergerea"\) \};/);
   /* ⚠ Si `order_source` chiar se citeste, altfel paza s-ar uita la `undefined`. */
-  assert.match(cod, /select\("business_id, discount_code, gls_awb_number, order_source"\)/);
+  assert.match(cod, /select\("business_id, discount_code, order_source, status, /);
 });
 
 test("⚠ lotul le SARE si spune cate", () => {

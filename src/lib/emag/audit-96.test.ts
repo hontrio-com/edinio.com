@@ -141,5 +141,7 @@ test("cartea de stergere nu se arata la o comanda tinuta de ei", () => {
   const iButon = ui.indexOf("Sterge definitiv");
   assert.ok(iButon > 0, "butonul exista");
   const inainte = ui.slice(Math.max(0, iButon - 700), iButon);
-  assert.match(inainte, /\{!tinutaDeEi && \(/, "cartea de stergere sta sub paza");
+  assert.match(inainte, /\{!tinutaDeEi &&/, "cartea de stergere sta sub paza de marketplace");
+  /* ⚠ Si sub a doua paza, de pe 14.09.2026: o comanda cu coletul pe drum nu se sterge. */
+  assert.match(inainte, /!refuzStergere/, "si sub paza expedierii active");
 });

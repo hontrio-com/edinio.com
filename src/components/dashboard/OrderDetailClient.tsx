@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { marketplaceCareTineComanda, cineTineComanda, mementoulMarketplace } from "@/lib/orders/origin";
 import { awburiDinRand, deCeNuSePoateAwbPropriu, numarDeUrmarire } from "@/lib/orders/awb-propriu";
+import { deCeNuSeStergeComanda } from "@/lib/orders/stergerea-comenzii";
 import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
@@ -626,6 +627,15 @@ export function OrderDetailClient({
   const refuzAwbPropriu = deCeNuSePoateAwbPropriu({
     order_source: ord["order_source"] ?? null,
     payment_status: (order.payment_status as string | null) ?? null,
+    status: (order.status as string | null) ?? null,
+    awburi: awburiComenzii,
+  });
+  /*
+   * ⚠ ACEEASI REGULA CA PE SERVER, DIN ACELASI LOC. `deleteOrder` refuza oricum, dar un
+   * buton rosu care arata apasabil si da eroare abia dupa apasare e o cursa. Vezi nota de
+   * la cartea de stergere.
+   */
+  const refuzStergere = deCeNuSeStergeComanda({
     status: (order.status as string | null) ?? null,
     awburi: awburiComenzii,
   });
@@ -1781,7 +1791,13 @@ export function OrderDetailClient({
         ⚠ Se ascunde CARTEA intreaga, nu doar butonul: un titlu „Sterge comanda” deasupra
         unui buton mort ar fi fost la fel de mincinos.
       */}
-      {!tinutaDeEi && (
+      {!tinutaDeEi && refuzStergere && (
+        <div className={`${CARD} border-amber-200 bg-amber-50 p-5 mt-5 dark:border-amber-900/40 dark:bg-amber-950/30`}>
+          <h2 className="text-sm font-semibold text-amber-900 dark:text-amber-200">Stergerea e oprita</h2>
+          <p className="text-xs text-amber-900/80 dark:text-amber-200/80 mt-1">{refuzStergere}</p>
+        </div>
+      )}
+      {!tinutaDeEi && !refuzStergere && (
       <div className={`${CARD} border-destructive/30 p-5 flex items-center justify-between gap-3 mt-5`}>
         <div>
           <h2 className="text-sm font-semibold text-foreground">Sterge comanda</h2>

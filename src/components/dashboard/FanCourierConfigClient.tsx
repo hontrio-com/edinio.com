@@ -39,6 +39,8 @@ export function FanCourierConfigClient({
   const [selectedClientId, setSelectedClientId] = useState<number>(initialConfig?.client_id ?? 0);
   const [selectedClientName, setSelectedClientName] = useState(initialConfig?.client_name ?? "");
   const [epod, setEpod] = useState(initialConfig?.epod ?? false);
+  /* ⚠ Implicit STINS: asigurarea costa, deci nu se porneste in locul comerciantului. */
+  const [asigurare, setAsigurare] = useState(initialConfig?.declared_value_enabled ?? false);
   // Coletul obisnuit, in centimetri. Text, nu numar: un camp gol trebuie sa
   // ramana gol, iar `useState(0)` ar arata un zero pe care nimeni nu l-a scris.
   const [coletL, setColetL] = useState(String(initialConfig?.colet_implicit?.length ?? ""));
@@ -106,6 +108,7 @@ export function FanCourierConfigClient({
       client_id: selectedClientId,
       client_name: selectedClientName,
       epod,
+      declared_value_enabled: asigurare,
       colet_implicit: coletDinFormular(),
       /*
        * ⚠ EVIDENTA RIDICARII NU SE MAI CARA PRIN BROWSER.
@@ -254,6 +257,24 @@ export function FanCourierConfigClient({
               <span className="block text-xs text-muted-foreground mt-0.5">
                 Printezi tu eticheta AWB (A6) in loc de AWB-ul A5 pretiparit adus de curier.
                 Activeaza doar daca printezi etichetele inainte de predare.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 p-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={asigurare}
+              onChange={e => setAsigurare(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-primary"
+            />
+            <span>
+              <span className="block text-sm font-medium text-foreground">Asigura coletele la valoarea marfii</span>
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                Pana acum coletele plecau declarate cu valoarea zero, deci un colet pierdut sau
+                stricat nu se despagubea. Activat, FAN il asigura la valoarea produselor din
+                comanda (fara transport si fara taxa de ramburs) si taxeaza asigurarea pe fiecare
+                AWB. Lasa stins daca preferi sa nu platesti asigurarea.
               </span>
             </span>
           </label>

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils/cn";
 import { createCargusAwbAction, deleteCargusAwbAction } from "@/lib/actions/cargus.actions";
 import { getCargusServiceId } from "@/lib/cargus";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
+import { useDialogAccesibil } from "./useDialogAccesibil";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import type { Database } from "@/types/database.types";
@@ -194,10 +195,20 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     }
   }
 
+  /* ⚠ Vezi `useDialogAccesibil`: Escape inchide, focusul ramane inauntru si se intoarce de
+     unde a plecat. `true`, nu un prop: fereastra e montata doar cat timp e deschisa. */
+  const cutiaDialogului = useDialogAccesibil(true, onClose);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl border border-border shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div
+        ref={cutiaDialogului}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Generare AWB Cargus"
+        tabIndex={-1}
+        className="relative bg-background rounded-2xl border border-border shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto focus:outline-none">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-background z-10">
           <div className="flex items-center gap-2.5">

@@ -9,6 +9,7 @@ import {
 } from "@/lib/actions/emag.actions";
 import { coleteDeTrimis } from "@/lib/emag/colete";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
+import { useDialogAccesibil } from "./useDialogAccesibil";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -194,9 +195,19 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
 
   const gata = pregatire && !pregatire.piedica && !pregatire.awbExistent;
 
+  /* ⚠ Vezi `useDialogAccesibil`: Escape inchide, focusul ramane inauntru si se intoarce de
+     unde a plecat. `true`, nu un prop: pe asta o monteaza parintele doar cat e deschisa. */
+  const cutiaDialogului = useDialogAccesibil(true, onClose);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-xl">
+      <div
+        ref={cutiaDialogului}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Generare AWB eMAG"
+        tabIndex={-1}
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-xl focus:outline-none">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="flex items-center gap-2 text-base font-semibold">

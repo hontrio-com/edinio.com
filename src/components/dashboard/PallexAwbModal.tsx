@@ -14,6 +14,7 @@ import { adaugaZileLucratoare, ziuaInRomania } from "@/lib/pallex/expediere";
 import { BORDEROU_VALIDAT_DE_CLIENT } from "@/lib/pallex/client";
 import { JUDETE, potrivesteJudet } from "@/lib/ro/judete";
 import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutateaAwb";
+import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 import { stradaCuNumar } from "@/lib/orders/adresa";
@@ -317,9 +318,19 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
 
   const nota = notaGreutate(dinCatalog, liniiFaraGreutate);
 
+  /* ⚠ Vezi `useDialogAccesibil`: Escape inchide, focusul ramane inauntru si se intoarce de
+     unde a plecat. `true`, nu un prop: fereastra e montata doar cat timp e deschisa. */
+  const cutiaDialogului = useDialogAccesibil(true, onClose);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-background p-5 shadow-xl">
+      <div
+        ref={cutiaDialogului}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Generare AWB Pall-Ex"
+        tabIndex={-1}
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-background p-5 shadow-xl focus:outline-none">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-lg font-semibold">
             <Package className="h-5 w-5" />

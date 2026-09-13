@@ -10,6 +10,7 @@ import {
   type StareAfisata,
 } from "@/lib/actions/packeta.actions";
 import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutateaAwb";
+import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 
@@ -188,9 +189,19 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     onSuccess();
   }
 
+  /* ⚠ Vezi `useDialogAccesibil`: Escape inchide, focusul ramane inauntru si se intoarce de
+     unde a plecat. `true`, nu un prop: fereastra e montata doar cat timp e deschisa. */
+  const cutiaDialogului = useDialogAccesibil(true, onClose);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-surface p-5 shadow-xl">
+      <div
+        ref={cutiaDialogului}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Generare AWB Packeta"
+        tabIndex={-1}
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-surface p-5 shadow-xl focus:outline-none">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h3 className="flex items-center gap-2 text-base font-semibold text-foreground">

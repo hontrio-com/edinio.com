@@ -680,6 +680,12 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
                         >
                           <p className="text-sm font-medium text-foreground leading-tight">{locker.name}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">{locker.address}</p>
+                          {/* ⚠ Programul se arata doar cand curierul il da SI se poate spune fara
+                              ghiceala. Vezi `rezumaProgram`: zilele cu intervale diferite nu se
+                              traduc, fiindca nu se stie care indice e care zi. */}
+                          {locker.program && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{locker.program}</p>
+                          )}
                         </button>
                       ))
                     )}

@@ -53,6 +53,15 @@ export interface BulkResult {
   skipped: number;
   failed: number;
   errors: { order: string; message: string }[];
+  /**
+   * ⚠ LOTUL S-A OPRIT DIN TIMP, si nu le-a atins pe toate (13.09.2026).
+   *
+   * Fara steagul asta, `done + skipped + failed < total` arata ca un defect: ecranul spune
+   * „12 reusite" dintr-o selectie de 50 si nimeni nu stie ce s-a intamplat cu celelalte 38.
+   * Cu el, se poate spune limpede ca restul n-au fost NICI MACAR incercate, deci se pot relua
+   * in siguranta.
+   */
+  oprit?: true;
 }
 
 // The Orders page shows at most one page (ORDERS_PAGE_SIZE = 50), so selection is
@@ -117,12 +126,40 @@ function cleanIds(orderIds: string[]): { ids: string[] } | { error: string } {
   return { ids: unice };
 }
 
-// Concurrency-limited runner. JS is single-threaded, so the shared result object
-// is mutated safely between awaits (no locks needed).
+/**
+ * ⚠ BUGETUL DE TIMP AL UNUI LOT (13.09.2026).
+ *
+ * Ruta are `maxDuration = 300` (`dashboard/orders/page.tsx:27`), iar facturile se emit UNA
+ * CATE UNA, fiindca furnizorii dau numere de document pe o serie comuna. Cincizeci de comenzi
+ * pe un furnizor lent depasesc fereastra, si atunci platforma taie functia: actiunea nu mai
+ * intoarce NIMIC, desi stia exact ce reusise.
+ *
+ * ⚠ Ecranul trata deja cazul cinstit („nu stim cate s-au facut", `OrdersClient`), dar „nu
+ * stim" e cel mai prost raspuns posibil cand serverul chiar stia. Cu un termen propriu sub
+ * `maxDuration`, lotul se opreste singur si intoarce rezultatul PARTIAL: ce s-a facut, ce nu.
+ *
+ * Marja de 30s nu e rotunjire: dupa bazin mai urmeaza scrierile de jurnal si `revalidatePath`.
+ */
+const BUGET_LOT_MS = 270_000;
+
+/**
+ * Bazin cu concurenta marginita SI cu termen.
+ *
+ * JS e cu un singur fir, deci obiectul de rezultat se muteaza in siguranta intre `await`-uri.
+ *
+ * ⚠ TERMENUL SE SOCOTESTE AICI, la pornirea bazinului, nu la intrarea in actiune: asa fiecare
+ * lot il primeste fara ca vreun apelant sa trebuiasca sa si-l aminteasca. Un apelant care uita
+ * un parametru e exact felul de scapare care se descopera in productie.
+ *
+ * ⚠ Nu se INTRERUPE o lucrare pornita: un AWB pe drum spre curier trebuie dus pana la capat,
+ * altfel am avea un colet emis pe care nu l-am scris nicaieri. Se opreste doar PORNIREA altora.
+ */
 async function runPool<T>(items: T[], worker: (item: T) => Promise<void>, size: number): Promise<void> {
+  const termen = Date.now() + BUGET_LOT_MS;
   let cursor = 0;
   const runners = Array.from({ length: Math.min(size, items.length) }, async () => {
     while (cursor < items.length) {
+      if (Date.now() >= termen) return;
       const idx = cursor++;
       await worker(items[idx]);
     }
@@ -246,6 +283,13 @@ export async function bulkGenerateInvoices(
 
   logError({ action: "bulkGenerateInvoices", message: `provider=${pick} done=${result.done} skipped=${result.skipped} failed=${result.failed}`, details: { businessId }, businessId, userId: g.userId, severity: "info" });
   revalidatePath("/dashboard/orders");
+  /*
+   * ⚠ Cand bazinul s-a oprit la termen, comenzile ramase n-au fost NICI MACAR incercate.
+   * Se spune, ca sa nu para ca au disparut, si ca omul sa stie ca le poate relua in siguranta.
+   * Se DEDUCE din numere, nu se cara printr-un parametru: asa nu poate ramane nesetat pe
+   * vreun drum de iesire.
+   */
+  if (result.done + result.skipped + result.failed < result.total) result.oprit = true;
   return result;
 }
 
@@ -488,6 +532,13 @@ export async function bulkGenerateAwbs(
   }
   logError({ action: "bulkGenerateAwbs", message: `courier=${courier} done=${result.done} skipped=${result.skipped} failed=${result.failed}`, details: { businessId }, businessId, userId: g.userId, severity: "info" });
   revalidatePath("/dashboard/orders");
+  /*
+   * ⚠ Cand bazinul s-a oprit la termen, comenzile ramase n-au fost NICI MACAR incercate.
+   * Se spune, ca sa nu para ca au disparut, si ca omul sa stie ca le poate relua in siguranta.
+   * Se DEDUCE din numere, nu se cara printr-un parametru: asa nu poate ramane nesetat pe
+   * vreun drum de iesire.
+   */
+  if (result.done + result.skipped + result.failed < result.total) result.oprit = true;
   return result;
 }
 

@@ -7,7 +7,7 @@ import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { logError } from "@/lib/error-logger";
 import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday/client";
-import { coletImplicit, estimateFanCourierCost, FAN_MAX_COD, FANBOX_MAX_WEIGHT_KG, getFanCourierPickupPoints, incapeInFanbox, incapeInPayPoint, optiuneaPunctuluiFan, PAYPOINT_MAX_WEIGHT_KG, serviciulPunctuluiFan, tipPunctFan, type FanCourierConfig, type FanCourierPickupPoint, type TarifFan, type TipPunctFan } from "@/lib/fancourier";
+import { coletImplicit, estimateFanCourierCost, FAN_MAX_COD, FANBOX_MAX_WEIGHT_KG, getFanCourierPickupPoints, incapeInFanbox, incapeInPayPoint, optiuneaPunctuluiFan, PAYPOINT_MAX_WEIGHT_KG, rezumaProgram, serviciulPunctuluiFan, tipPunctFan, type FanCourierConfig, type FanCourierPickupPoint, type TarifFan, type TipPunctFan } from "@/lib/fancourier";
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig, type WootPriceResult } from "@/lib/woot";
 import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type DpdConfig } from "@/lib/dpd";
 import { calculateCargusPrice, getCargusPudoPoints, type CargusConfig } from "@/lib/cargus";
@@ -284,6 +284,14 @@ export type LockerItem = {
   postCode?: string;
   lat: number;
   lng: number;
+  /**
+   * ⚠ Programul punctului, in cuvinte, cand curierul il da SI se poate spune fara ghiceala.
+   *
+   * Azi il trimite doar FAN (`schedule`, sapte intervale). Vezi `rezumaProgram`: cand zilele
+   * au intervale diferite se intoarce `null`, fiindca nu se stie care indice e care zi, iar un
+   * orar gresit trimite omul la un punct inchis.
+   */
+  program?: string;
 };
 
 // ─── Courier labels ─────────────────────────────────────────────────────────
@@ -3161,6 +3169,9 @@ export async function getLockers(
             county: p.address.county,
             lat: Number(p.latitude),
             lng: Number(p.longitude),
+            /* ⚠ FAN chiar trimite programul, iar pana azi il aruncam. `?? undefined` fiindca
+               `rezumaProgram` intoarce `null` cand n-ar putea fi spus fara ghiceala. */
+            program: rezumaProgram(p.schedule) ?? undefined,
           })),
         (v) => v.length === 0,
         60_000,

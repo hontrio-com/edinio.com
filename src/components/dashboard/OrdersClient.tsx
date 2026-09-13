@@ -257,7 +257,23 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     const parts = [`${res.done} reușite`];
     if (res.skipped) parts.push(`${res.skipped} sărite`);
     if (res.failed) parts.push(`${res.failed} eșuate`);
-    if (res.failed > 0) toast.error(`${title}: ${parts.join(", ")}`);
+    /*
+     * ⚠ LOTUL OPRIT LA TIMP NU E UN ESEC, SI NICI UN SUCCES (13.09.2026).
+     *
+     * Serverul are acum un buget propriu sub `maxDuration` si se opreste singur in loc sa fie
+     * taiat fara raspuns. Comenzile ramase n-au fost NICI MACAR incercate, deci se pot relua in
+     * siguranta, dar asta trebuie SPUS. Fara randul de fata, o selectie de 50 din care s-au
+     * apucat 12 ar fi aratat „12 reușite" si atât, iar omul ar fi crezut ca celelalte 38 au
+     * disparut sau, mai rau, ca s-au facut.
+     */
+    if (res.oprit) {
+      const ramase = res.total - res.done - res.skipped - res.failed;
+      toast.warning(
+        `${title}: ${parts.join(", ")}. Lotul s-a oprit la timp, iar ${ramase} `
+        + `${ramase === 1 ? "comandă nu a fost încercată" : "comenzi nu au fost încercate"}. `
+        + "Selectează-le din nou si reia: nimic nu s-a trimis de două ori.",
+      );
+    } else if (res.failed > 0) toast.error(`${title}: ${parts.join(", ")}`);
     else toast.success(`${title}: ${parts.join(", ")}`);
     router.refresh();
   }

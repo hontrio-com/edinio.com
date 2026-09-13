@@ -181,6 +181,19 @@ export type FanCourierConfig = {
    * Cand lipseste, emiterea cere dimensiuni in loc sa le inventeze.
    */
   colet_implicit?: { length: number; width: number; height: number } | null;
+  /**
+   * ⚠ ASIGURAREA COLETULUI, SI E OPT-IN FIINDCA ARE COST (13.09.2026).
+   *
+   * Pana azi `declaredValue` pleca mereu 0, deci un colet pierdut sau stricat nu se despagubea
+   * la valoarea marfii. Nu era un defect tacut: era purtarea unui magazin care n-a cerut
+   * asigurare. Ce lipsea era chiar comutatorul, pe care Cargus il are de mult
+   * (`declared_value_enabled`, `cargus.ts:21`).
+   *
+   * ⚠ Implicit STINS. Aprins, FAN taxeaza asigurarea, deci pretul coletelor creste: nu se poate
+   * porni in locul comerciantului. Stins, se trimite `undefined`, nu zero, ca sa nu declaram
+   * explicit ca marfa nu valoreaza nimic.
+   */
+  declared_value_enabled?: boolean;
   /** Last courier pickup order placed from the dashboard (duplicate-warning UI). */
   last_pickup_date?: string | null;
   last_pickup_id?: string | null;
@@ -387,6 +400,13 @@ export type FanCourierAwbInput = {
    * enumera pe amandoi. Acelasi rationament ca la `weightKg` din `bulk-orders.actions.ts`.
    */
   pickupPointType?: TipPunctFan;
+  /**
+   * Valoarea asigurata (lei), cand comerciantul a cerut asigurare.
+   *
+   * ⚠ `undefined` inseamna „fara asigurare" si pleaca la FAN ca 0. Se calculeaza din SUBTOTALUL
+   * marfii, nu din total: transportul si taxa de ramburs n-au ce cauta intr-o despagubire.
+   */
+  declaredValue?: number;
 };
 
 // ─── Token cache ──────────────────────────────────────────────────────────────
@@ -934,7 +954,11 @@ export async function createFanCourierAwb(
           },
           weight: input.weightKg,
           cod: input.cod,
-          declaredValue: 0,
+          /* ⚠ Zero cand comerciantul n-a cerut asigurare: asa a plecat dintotdeauna, si asa
+             ramane implicit. Vezi `declared_value_enabled`. */
+          declaredValue: input.declaredValue && input.declaredValue > 0
+            ? Math.round(input.declaredValue * 100) / 100
+            : 0,
           payment: "sender",
           refund: null,
           returnPayment: null,
@@ -1308,7 +1332,55 @@ export type FanCourierPickupPoint = {
   latitude: string;
   longitude: string;
   type: "fanbox" | "paypoint" | "office";
+  /**
+   * Programul punctului, asa cum il da FAN: SAPTE intervale, cate unul pe zi.
+   *
+   * ⚠ CARE INDICE E CARE ZI NU E DOCUMENTAT. Raspunsul lor da un sir de sapte
+   * `{firstHour, secondHour}`, fara nume de zile si fara sa spuna daca incepe luni sau
+   * duminica. De aia se pastreaza BRUT aici, iar `rezumaProgram` refuza sa traduca in zile.
+   */
+  schedule?: { firstHour?: unknown; secondHour?: unknown }[];
 };
+
+/**
+ * Programul unui punct, spus in cuvinte, SAU `null` cand nu se poate spune fara sa ghicim.
+ *
+ * ⚠ DE CE NU SCRIE „LUNI-VINERI" (13.09.2026).
+ *
+ * FAN trimite sapte intervale, dar NU documenteaza care indice e care zi: nu se stie nici
+ * macar daca sirul incepe luni sau duminica. Orice eticheta pe zile ar fi inventata de mine,
+ * iar un cumparator care merge sambata la un punct inchis fiindca noi am scris „L-S" plateste
+ * o greseala pe care nimeni n-ar putea-o explica.
+ *
+ * Ce se poate spune FARA nicio presupunere: cand toate zilele au ACELASI interval, programul
+ * e acelasi indiferent care zi e care. Aia acopera tocmai cazul obisnuit al lockerelor
+ * (`00:00-23:59`, adica non-stop). Cand difera, se intoarce `null` si interfata nu arata nimic:
+ * mai bine tacere decat un orar posibil gresit.
+ */
+export function rezumaProgram(schedule: FanCourierPickupPoint["schedule"]): string | null {
+  if (!Array.isArray(schedule) || schedule.length === 0) return null;
+
+  const ora = (v: unknown): string | null => {
+    const t = typeof v === "string" ? v.trim() : "";
+    return /^\d{2}:\d{2}$/.test(t) ? t : null;
+  };
+
+  const intervale = schedule.map((z) => {
+    const de = ora(z?.firstHour);
+    const pana = ora(z?.secondHour);
+    return de && pana ? `${de}-${pana}` : null;
+  });
+
+  /* Un singur interval necitibil face intreg programul nesigur: nu se arata nimic. */
+  if (intervale.some((i) => i === null)) return null;
+  const unice = new Set(intervale);
+  if (unice.size !== 1) return null;
+
+  const interval = intervale[0]!;
+  /* Non-stop se spune pe nume: „00:00-23:59" nu-i spune nimic cumparatorului. */
+  if (interval === "00:00-23:59" || interval === "00:00-00:00") return "Non-stop";
+  return `Zilnic ${interval}`;
+}
 
 function mapPickupPoint(p: Record<string, unknown>, type: "fanbox" | "paypoint" | "office"): FanCourierPickupPoint {
   return {
@@ -1325,6 +1397,8 @@ function mapPickupPoint(p: Record<string, unknown>, type: "fanbox" | "paypoint" 
     latitude: (p.latitude ?? "0") as string,
     longitude: (p.longitude ?? "0") as string,
     type,
+    /* ⚠ Se pastreaza BRUT, netradus in zile: vezi nota de la `rezumaProgram`. */
+    schedule: Array.isArray(p.schedule) ? (p.schedule as FanCourierPickupPoint["schedule"]) : undefined,
   };
 }
 

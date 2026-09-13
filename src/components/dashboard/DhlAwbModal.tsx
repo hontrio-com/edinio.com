@@ -9,6 +9,7 @@ import {
   type DateAwbDhl,
 } from "@/lib/actions/dhl.actions";
 import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutateaAwb";
+import { useDialogAccesibil } from "@/components/dashboard/useDialogAccesibil";
 import { cheiaOfertei, etichetaOferta, explicatieTva } from "@/lib/dhl/preturi";
 import { avertismenteColet, DIMENSIUNI_IMPLICITE } from "@/lib/dhl/expediere";
 import type { OfertaDhl } from "@/lib/dhl/client";
@@ -410,9 +411,19 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     descarca(r.base64, r.nume, tipulFisierului(r.nume));
   }
 
+  /* ⚠ Vezi `useDialogAccesibil`: Escape inchide, focusul ramane inauntru si se intoarce de
+     unde a plecat. `true`, nu un prop: fereastra e montata doar cat timp e deschisa. */
+  const cutiaDialogului = useDialogAccesibil(true, onClose);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-surface p-5 space-y-4">
+      <div
+        ref={cutiaDialogului}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Generare AWB DHL"
+        tabIndex={-1}
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-surface p-5 space-y-4 focus:outline-none">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold flex items-center gap-2">
             <Truck className="h-4 w-4" /> Expediere DHL Express

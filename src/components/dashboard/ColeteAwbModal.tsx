@@ -7,6 +7,7 @@ import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { getCOPrices, createCOAwb } from "@/lib/actions/colete.actions";
 import type { COReceiver, COParcel } from "@/lib/colete";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
+import { useDialogAccesibil } from "./useDialogAccesibil";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 import { stradaDestinatarului } from "@/lib/orders/adresa";
@@ -216,10 +217,20 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     window.open(url, "_blank");
   }
 
+  /* ⚠ Vezi `useDialogAccesibil`: Escape inchide, focusul ramane inauntru si se intoarce de
+     unde a plecat. `true`, nu un prop: fereastra e montata doar cat timp e deschisa. */
+  const cutiaDialogului = useDialogAccesibil(true, onClose);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-surface rounded-2xl shadow-2xl border border-border">
+      <div
+        ref={cutiaDialogului}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Generare AWB Colete Online"
+        tabIndex={-1}
+        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-surface rounded-2xl shadow-2xl border border-border focus:outline-none">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-border sticky top-0 bg-surface z-10">
           <div className="flex items-center gap-3">

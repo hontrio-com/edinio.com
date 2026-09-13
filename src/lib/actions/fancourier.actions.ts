@@ -289,6 +289,22 @@ export async function createFanCourierAwbAction(
     return { error: "FAN Courier: tipul punctului de ridicare nu e recunoscut (FANbox, PayPoint sau oficiu)." };
   }
 
+  /*
+   * ⚠ VALOAREA ASIGURATA SE CALCULEAZA PE SERVER, nu se ia din browser.
+   *
+   * Vine din SUBTOTALUL marfii, nu din total: transportul si taxa de ramburs n-au ce cauta
+   * intr-o despagubire. Si doar cand comerciantul a cerut asigurare; altfel `undefined`, adica
+   * exact purtarea de pana azi.
+   *
+   * ⚠ Nu se accepta de la apelant nici daca ar trimite-o: e un camp de BANI care schimba ce
+   * factureaza curierul, iar fereastra din panou ruleaza in browserul comerciantului. Aceeasi
+   * hotarare ca la Cargus (`cargus.actions.ts:164`).
+   */
+  const inputImbogatit: FanCourierAwbInput = {
+    ...input,
+    declaredValue: config.declared_value_enabled ? (Number(order.subtotal) || undefined) : undefined,
+  };
+
   const adresa = (orderData.shipping_address ?? {}) as { country?: string | null };
   const tara = (adresa.country ?? "RO").trim().toUpperCase();
   if (tara && tara !== "RO" && tara !== "ROU" && tara !== "ROMANIA" && tara !== "ROMÂNIA") {
@@ -313,7 +329,7 @@ export async function createFanCourierAwbAction(
     createAdminClient(),
     { businessId, orderId, fel: "awb", furnizor: "fancourier", cheie: cheieOperatie("awb", "fancourier", orderId) },
     async () => {
-      const creata = await createFanCourierAwb(config, input);
+      const creata = await createFanCourierAwb(config, inputImbogatit);
       /*
        * ⚠ IN `detalii`, NU IN `valoare`.
        *

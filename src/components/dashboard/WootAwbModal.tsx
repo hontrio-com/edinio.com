@@ -34,6 +34,7 @@ function potrivesteLocalitate<T extends { id: number; name: string }>(
       ?? lista.find((x) => norm(x.name).startsWith(cautat) || cautat.startsWith(norm(x.name)));
 }
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
+import { useDialogAccesibil } from "./useDialogAccesibil";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
 import { liniaAdresei } from "@/lib/orders/adresa";
@@ -178,13 +179,14 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   /* ⚠ Efectul de „reset la inchidere" A DISPARUT: inchiderea DEMONTEAZA acum formularul,
      deci starea se duce cu el. Pastrat, ar fi golit preturile chiar in clipa montarii. */
 
-  // Escape key
+  /* ⚠ ESCAPE A PLECAT DE AICI, in `useDialogAccesibil`. Lasat pe loc, ar fi fost al DOILEA
+     ascultator: `onClose()` chemat de doua ori la o singura apasare. Ce ramane e blocarea
+     derularii paginii de dedesubt, pe care hook-ul n-o face si pe care Woot o avea singura
+     dintre ferestre. Stearsa cu totul, pagina ar fi inceput sa se deruleze sub fereastra. */
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", handler);
     document.body.style.overflow = "hidden";
-    return () => { document.removeEventListener("keydown", handler); document.body.style.overflow = ""; };
-  }, [onClose]);
+    return () => { document.body.style.overflow = ""; };
+  }, []);
 
   function buildParcels(): WootParcel[] {
     return [{
@@ -323,11 +325,21 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     window.open(`/api/woot/awb?orderId=${order.id}&businessId=${businessId}&format=${format}`, "_blank");
   }
 
+  /* ⚠ Vezi `useDialogAccesibil`: Escape inchide, focusul ramane inauntru si se intoarce de
+     unde a plecat. `true`, nu un prop: fereastra e montata doar cat timp e deschisa. */
+  const cutiaDialogului = useDialogAccesibil(true, onClose);
+
   return (
     <>
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-background rounded-2xl border border-border shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
+        <div
+          ref={cutiaDialogului}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Generare AWB Woot"
+          tabIndex={-1}
+          className="bg-background rounded-2xl border border-border shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto focus:outline-none">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-background z-10">
             <div className="flex items-center gap-3">

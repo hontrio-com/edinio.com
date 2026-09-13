@@ -63,7 +63,7 @@ Alte masuratori care schimba gravitatea unor constatari:
 | SYS-P1-02 | CONFIRMAT, CU CORECTIE | fail-open-ul real e la `order.actions.ts:282` (tarif implicit NULL), nu peste tot. `esteGratuit` se decide server-side |
 | SYS-P1-06 | CONFIRMAT | cheia registrului include furnizorul, deci doi curieri pot rezerva aceeasi comanda |
 | SYS-P1-09 / PLAT-P1-04 | CONFIRMAT | `deleteOrder` citeste o singura coloana de AWB din 17 si curata din R2 doar cheile GLS |
-| PLAT-P2-12 (a doua jumatate) | CONFIRMAT | „n-am putut afla" arata ca „niciun refuz", pe TREI drumuri: citirea cazuta din baza (`registru.ts:601-604`), lipsa dreptului pe magazin (`operatii.actions.ts:51`) si `.catch(() => {})` din interfata (`OperatiiAtarnate.tsx:71`). Aceeasi clasa cu [[zero-randuri-nu-e-succes]], traind in produs |
+| PLAT-P2-12 (a doua jumatate) | CONFIRMAT, INCHIS in `e5293e3e` | rezultatul incert arata identic cu lipsa refuzurilor, pe PATRU drumuri: citirea cazuta din baza, lipsa dreptului pe magazin, `.catch(() => {})` din interfata, si iesirea cu `null` cand ambele liste sunt goale. `refuzuriPeComanda` intoarce acum un verdict, iar panoul are a treia stare. ⚠ O proba existenta cerea explicit vechea purtare si a fost rescrisa, nu stearsa |
 
 ### Coborate de masuratoare
 

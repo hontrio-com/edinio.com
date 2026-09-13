@@ -243,7 +243,7 @@ function autoritativeShipping(
    * ⚠ `null` inseamna „n-am de unde sti", si atunci greutatea nu se judeca. Vezi `verificaCotatia`.
    */
   grameComandate: number | null,
-): { shipping: number } | { recotare: true } {
+): { shipping: number } | { recotare: true; motiv: "greutate" | "fara-tarif" } {
   if (esteGratuit) return { shipping: 0 };
 
   const claimed = Math.max(0, round2(Number(cerut) || 0));
@@ -267,7 +267,7 @@ function autoritativeShipping(
    * Greutatea, in schimb, nu se pierde din intamplare. Ea nu bate doar cand cosul comandat e mai
    * GREU decat cel cotat, si atunci singurul raspuns cinstit e sa se ceara o cotatie noua.
    */
-  if (verdict.motiv === "greutate") return { recotare: true };
+  if (verdict.motiv === "greutate") return { recotare: true, motiv: "greutate" };
 
   /*
    * REZERVA e tariful implicit al magazinului, si NIMIC ales de client.
@@ -279,7 +279,23 @@ function autoritativeShipping(
    * macar nu e o optiune ofertabila. Rezerva trebuie sa fie un numar pe care
    * l-a scris comerciantul si pe care clientul nu-l poate misca.
    */
-  if (tarifImplicit == null) return { shipping: claimed };
+  /*
+   * ═══ ⚠ FARA NICIUN TARIF DECLARAT, SUMA DIN BROWSER NU SE ACCEPTA (13.09.2026) ═══
+   *
+   * Aici se ajunge doar cand semnatura NU bate. Pana azi se intorcea `claimed`, adica exact
+   * numarul trimis de browser, neverificat de nimic: `max`-ul de mai jos nu se mai executa,
+   * fiindca n-are fata de ce sa compare. Era singura ramura din functie in care transportul
+   * putea fi ales integral de client.
+   *
+   * ⚠ MASURAT INAINTE DE SCHIMBARE: 0 din 129 de magazine au `default_shipping_cost` NULL,
+   * deci ramura asta nu e atinsa azi de nimeni. Inchiderea e preventiva, si tocmai de aceea
+   * se poate face fail-closed fara sa rupa vreun drum viu.
+   *
+   * ⚠ DE CE `recotare` SI NU 0. Zero ar fi fost livrare gratuita pe care n-a aprobat-o
+   * nimeni; `claimed` e numarul clientului. Singurul raspuns cinstit cand nu exista NICIUN
+   * numar declarat de comerciant e sa ceri o cotatie noua.
+   */
+  if (tarifImplicit == null) return { recotare: true, motiv: "fara-tarif" };
 
   /*
    * Magazin fara niciun curier de ales, care cere exact tariful implicit: e
@@ -1449,13 +1465,22 @@ export async function placeOrder(data: {
      * Nu se cade pe tariful implicit: pe „Ridicare personala" la 0,00 lei, o cadere ar face-o 18
      * pana la 45 de lei fara ca omul sa fi vazut vreodata suma. Vezi `autoritativeShipping`.
      */
+    /* ⚠ MESAJUL URMEAZA CAUZA. Trimise amandoua prin acelasi text, un magazin fara tarif
+       declarat i-ar fi spus clientului ca „s-a schimbat cosul", ceea ce nu s-a intamplat. */
+    const faraTarif = verdictTransport.motiv === "fara-tarif";
     logError({
       action: "placeOrder.shippingRequote",
-      message: "Ordered cart is heavier than the quoted one",
-      details: { businessId: data.business_id, productId: data.product_id, courier: data.selected_courier },
+      message: faraTarif
+        ? "Quote signature failed and the store declares no default shipping cost"
+        : "Ordered cart is heavier than the quoted one",
+      details: { businessId: data.business_id, productId: data.product_id, courier: data.selected_courier, motiv: verdictTransport.motiv },
       severity: "warning",
     });
-    return { error: "Cosul s-a schimbat de cand am calculat transportul. Reincarca pagina ca sa afli costul livrarii." };
+    return {
+      error: faraTarif
+        ? "Nu am putut confirma costul livrarii. Reincarca pagina si incearca din nou."
+        : "Cosul s-a schimbat de cand am calculat transportul. Reincarca pagina ca sa afli costul livrarii.",
+    };
   }
   const shipping = verdictTransport.shipping;
 
@@ -4160,13 +4185,21 @@ export async function placeCartOrder(data: {
   );
   if ("recotare" in verdictTransport) {
     /* ⚠ Se cere recotare, nu se cade pe tarif. Vezi `autoritativeShipping` si comanda directa. */
+    /* ⚠ Acelasi mesaj legat de cauza ca la comanda directa. Vezi nota de acolo. */
+    const faraTarif = verdictTransport.motiv === "fara-tarif";
     logError({
       action: "placeCartOrder.shippingRequote",
-      message: "Ordered cart is heavier than the quoted one",
-      details: { businessId: data.business_id, courier: data.selected_courier },
+      message: faraTarif
+        ? "Quote signature failed and the store declares no default shipping cost"
+        : "Ordered cart is heavier than the quoted one",
+      details: { businessId: data.business_id, courier: data.selected_courier, motiv: verdictTransport.motiv },
       severity: "warning",
     });
-    return { error: "Cosul s-a schimbat de cand am calculat transportul. Reincarca pagina ca sa afli costul livrarii." };
+    return {
+      error: faraTarif
+        ? "Nu am putut confirma costul livrarii. Reincarca pagina si incearca din nou."
+        : "Cosul s-a schimbat de cand am calculat transportul. Reincarca pagina ca sa afli costul livrarii.",
+    };
   }
   const shipping = verdictTransport.shipping;
 

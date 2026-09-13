@@ -111,8 +111,19 @@ test("⚠ GREUTATEA DEPASITA REFUZA COMANDA, nu cade pe tariful implicit", () =>
    * publicate au ridicare personala langa curieri platiti.
    */
   const s = sursa(COMANDA);
-  assert.match(s, /if \(verdict\.motiv === "greutate"\) return \{ recotare: true \};/,
+  assert.match(s, /if \(verdict\.motiv === "greutate"\) return \{ recotare: true, motiv: "greutate" \};/,
     "greutatea depasita nu mai refuza comanda");
+
+  /*
+   * ⚠ SI VERDICTUL POARTA CAUZA (13.09.2026). De cand exista o a doua cale catre recotare
+   * (magazin fara niciun tarif declarat), un `recotare` fara motiv ar fi facut ambele
+   * checkouturi sa-i spuna clientului ca „s-a schimbat cosul", ceea ce nu s-a intamplat.
+   */
+  assert.match(s, /motiv: "greutate" \| "fara-tarif"/,
+    "verdictul de recotare nu mai spune DIN CE cauza, deci mesajul catre client poate minti");
+  const dupaCauza = (s.match(/const faraTarif = verdictTransport\.motiv === "fara-tarif";/g) ?? []).length;
+  assert.equal(dupaCauza, 2,
+    `doar ${dupaCauza} din cele doua checkouturi isi aleg mesajul dupa cauza`);
 
   /* ⚠ Si amandoua drumurile chiar opresc comanda, nu doar primesc verdictul. */
   const opriri = s.match(/if \("recotare" in verdictTransport\) \{/g) ?? [];
@@ -131,6 +142,20 @@ test("⚠ SEMNATURA cazuta cade mai departe pe tarif, nu refuza", () => {
   const corp = s.slice(i, s.indexOf("\nfunction ", i + 10));
   assert.match(corp, /return \{ shipping: Math\.max\(claimed, Math\.max\(0, round2\(tarifImplicit\)\)\) \};/,
     "rezerva pe tariful implicit a disparut cu totul");
+
+  /*
+   * ⚠⚠ DAR FARA NICIUN TARIF DECLARAT NU EXISTA REZERVA, DECI NICI CADERE PE EA.
+   *
+   * Ramura asta intorcea `claimed`, adica suma trimisa de browser, neverificata de nimic:
+   * `max`-ul de mai sus nu se executa, fiindca n-are fata de ce sa compare. Era singurul loc
+   * din functie in care transportul putea fi ales integral de client.
+   *
+   * ⚠ Masurat inainte de schimbare: 0 din 129 de magazine au `default_shipping_cost` NULL.
+   */
+  assert.match(corp, /if \(tarifImplicit == null\) return \{ recotare: true, motiv: "fara-tarif" \};/,
+    "un magazin fara tarif declarat accepta iar suma trimisa de browser");
+  assert.doesNotMatch(corp, /if \(tarifImplicit == null\) return \{ shipping: claimed \};/,
+    "s-a intors ramura care accepta transportul ales de client");
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════

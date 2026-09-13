@@ -18,6 +18,7 @@ import { corpExpediere as corpEcolet } from "@/lib/ecolet/expediere";
 import { etichetaOferta as etichetaEcolet, ofertePosibile as oferteEcolet } from "@/lib/ecolet/preturi";
 import { rezolvaLocalitatea as rezolvaLocalitateEcolet } from "@/lib/ecolet/cautare";
 import { puncteGls } from "@/lib/gls/puncte";
+import { FARA_API_DE_TARIF, rezervaEDeIncredere } from "@/lib/shipping/optiuni-de-rezerva";
 import { postaGata, unitatiLivrare, type PostaConfig } from "@/lib/posta/client";
 import { packetaGata, type PacketaConfig } from "@/lib/packeta/client";
 import { puncteRomania } from "@/lib/packeta/puncte-flux";
@@ -340,11 +341,11 @@ const COURIER_LABELS: Record<string, string> = {
  * doua nomenclatoare) si NICIUNA nu coteaza. Tariful vine din contractul postal.
  */
 /*
- * ⚠ Packeta e aici pentru ca API-ul lor nu are NICIO metoda de tarif: preturile
- * vin din contract, la fel ca la Posta. Lista lor de 24 de metode e completa si
- * n-are nimic de cotare.
+ * ⚠ `FARA_API_DE_TARIF` s-a mutat in `@/lib/shipping/optiuni-de-rezerva`, impreuna cu regula
+ * care o foloseste. Aici e „use server": fiecare export devine o actiune apelabila din
+ * browser, deci o regula scoasa in fisierul asta doar ca sa poata fi probata ar fi o usa
+ * noua. Lista si motivul pentru fiecare curier din ea sunt acolo.
  */
-const FARA_API_DE_TARIF = new Set(["pickup", "own", "gls", "pallex", "posta", "packeta"]);
 
 /** Merchant's custom checkout label (shipping_zones[id].label) or the branded default. */
 function addrLabel(custom: string | undefined, fallback: string): string {
@@ -648,7 +649,15 @@ export async function getShippingOptions(
     subtotalMaximDinCatalog(destination.cart, produseCotate, istoric),
   );
 
-  const options: ShippingOption[] = [];
+  /*
+   * ⚠ `let`, nu `const`: lista se REASEAZA o data, la filtrul de rezerve de dinaintea
+   * semnarii (vezi „o rezerva la 0 lei nu pleaca semnata", mai jos).
+   *
+   * Reasezarea e sigura tocmai aici: `.then()`/`.catch()`-urile curierilor lenti mai pot
+   * face `options.push` DUPA plafonul de timp, dar ele scriu atunci in vechiul tablou, pe
+   * care nu-l mai citeste nimeni. Comportarea aia e deja descrisa la plafon si nu se schimba.
+   */
+  let options: ShippingOption[] = [];
 
   // International (EU): only DPD international applies. Short-circuit here so the
   // domestic courier loop below stays completely unchanged for RO orders.
@@ -1807,6 +1816,44 @@ export async function getShippingOptions(
    */
   if (fanRambursPestePlafon) {
     for (const o of options) if (o.courier === "fan-courier") o.rambursIndisponibil = true;
+  }
+
+  /*
+   * ═══ ⚠ O REZERVA LA 0 LEI NU PLEACA SEMNATA (13.09.2026) ═══
+   *
+   * Filtrul sta AICI, intr-un singur loc, fiindca rezervele se nasc in douazeci si opt:
+   * fiecare dintre cei noua curieri are propriul `flat()`, chemat pe trei drumuri (zero
+   * oferte, eroare, si neconfigurat), plus plafonul de timp de mai sus. Pus in fiecare, s-ar
+   * fi dezbinat la primul curier nou; pus dupa semnare, ar fi fost prea tarziu.
+   *
+   * ⚠ CE TAIE, MASURAT: `okxi` (VetDepo, 142 de comenzi, activa azi) are zona Sameday
+   * pornita pe tarif VIU cu `price: 0`. Cand Sameday nu raspunde, pleca semnat un „Sameday,
+   * 0,00 lei", iar la comanda `verificaCotatia` il gasea valid, fiindca noi il semnasem.
+   * Rezerva `max(suma, tarif implicit)` nu se aprinde pe o semnatura care bate.
+   *
+   * ⚠ CE NU TAIE: tarifele de rezerva REALE (17, 18, 20 la celelalte magazine) si preturile
+   * curierilor fara API de tarif, unde `price` E pretul, nu o rezerva. Vezi
+   * `optiuni-de-rezerva.ts` pentru de ce nu se taie toate rezervele.
+   */
+  const zonaCurierului = new Map(enabledZones);
+  const taiate: string[] = [];
+  options = options.filter((o) => {
+    const z = o.courier ? zonaCurierului.get(o.courier) : undefined;
+    const coteazaLive = !doarTarifeFixe && z?.auto_price !== false;
+    if (rezervaEDeIncredere(o.courier ?? "", o.price, coteazaLive)) return true;
+    taiate.push(o.courier ?? "?");
+    return false;
+  });
+  if (taiate.length > 0) {
+    /*
+     * ⚠ SE STRIGA, nu se taie in tacere. Un curier care dispare din checkout fara nicio urma
+     * arata comerciantului ca o integrare care „nu merge"; randul asta ii spune de ce si ii
+     * arata ca tariful lui de rezerva e zero.
+     */
+    console.error(
+      `[shipping] rezerva la 0 lei taiata pentru ${taiate.join(", ")} (magazin ${businessId}): `
+      + "curierul cota live si n-a raspuns, iar tariful de rezerva din Setari e 0.",
+    );
   }
 
   if (options.length === 0) return [];

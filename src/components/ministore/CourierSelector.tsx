@@ -38,7 +38,14 @@ function optionKey(o: ShippingOption) {
    * termene diferite. Pierdut aici, produsul nu ajunge pe comanda si DHL REFUZA cererea
    * de AWB — nu factureaza tacit cel mai scump, cum ar face UPS.
    */
-  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}::${o.shipoRateId ?? ""}::${o.fedexServiceType ?? ""}::${o.upsServiceCode ?? ""}::${o.dhlProductCode ?? ""}`;
+  /*
+   * ⚠ La FAN deosebirea e RETEAUA PUNCTULUI, si e cazul cel mai strans din toate:
+   * FANbox, PayPoint si oficiul vin toate sub `courier: "fan-courier"` SI sub acelasi
+   * `deliveryType: "locker"`. Fara ea, cele trei s-ar prabusi intr-o singura cheie:
+   * cumparatorul ar vedea o singura optiune in loc de trei, iar lista de puncte i-ar
+   * veni din reteaua gresita.
+   */
+  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}::${o.fanPointType ?? ""}::${o.shipoRateId ?? ""}::${o.fedexServiceType ?? ""}::${o.upsServiceCode ?? ""}::${o.dhlProductCode ?? ""}`;
 }
 
 export interface CourierSelection {
@@ -55,6 +62,15 @@ export interface CourierSelection {
   lockerCounty?: string;
   /** Codul postal al punctului; GLS il cere obligatoriu pe adresa de livrare. */
   lockerPostCode?: string;
+  /**
+   * ⚠ CARE RETEA FAN, cand punctul e al lor: FANbox, PayPoint sau oficiu.
+   *
+   * Acelasi rol ca `smartshipLockerNet`, si din acelasi motiv: cele trei sunt
+   * nomenclatoare diferite SI se emit cu servicii si optiuni diferite (FANbox/V,
+   * CollectPoint/F, Standard/D). Pierdut aici, emiterea ar cadea pe FANbox si coletul
+   * ar pleca in alta retea decat cea aleasa de cumparator.
+   */
+  fanPointType?: "fanbox" | "paypoint" | "office";
   wootServiceId?: number;
   wootCourierName?: string;
   wootServiceName?: string;
@@ -314,9 +330,13 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
          `Locator` cere combinatia „City + State/Province" SAU codul postal, iar
          checkout-ul intern nu cere cod postal — deci judetul e singurul al doilea
          semnal pe care il avem. Se ingusteaza tot acolo, la primire. */
+      /* ⚠ La FAN al cincilea parametru poarta RETEAUA punctului (fanbox / paypoint /
+         office): cele trei sunt nomenclatoare separate, cerute prin acelasi endpoint cu
+         `type=`. Se ingusteaza tot acolo, la primire, fiindca intra si in cheia de cache. */
       opt.courier === "shipo" ? String(opt.shipoRateId ?? "")
         : opt.courier === "ups" ? county
-          : opt.smartshipLockerNet,
+          : opt.courier === "fan-courier" ? opt.fanPointType
+            : opt.smartshipLockerNet,
     )
       .then((puncte) => { if (cerereaMea === reqLockere.current) setLockers(puncte); })
       .catch(() => { if (cerereaMea === reqLockere.current) setLockers([]); })
@@ -392,6 +412,9 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         smartshipCourierName: opt.smartshipCourierName,
         smartshipOwnContract: opt.smartshipOwnContract,
         smartshipLockerNet: opt.smartshipLockerNet,
+        /* ⚠ Reteaua FAN a punctului ales. Fara ea, emiterea nu stie daca id-ul e un
+           FANbox, un PayPoint sau un oficiu, si cade pe FANbox. */
+        fanPointType: opt.fanPointType,
         shipoRateId: opt.shipoRateId,
         shipoCourierSlug: opt.shipoCourierSlug,
         shipoCourierName: opt.shipoCourierName,
@@ -458,9 +481,25 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
    * Se schimba DOAR substantivul, si doar pentru Posta: ceilalti curieri raman
    * exact cum erau.
    */
+  /*
+   * ⚠ SI LA FAN, DIN 13.09.2026, PUNCTUL NU E MEREU UN LOCKER.
+   *
+   * FANbox e un dulap, dar PayPoint e un magazin de cartier si „oficiu" e un ghiseu.
+   * „Selecteaza un locker" pentru un PayPoint il pune pe om sa caute un dulap care nu
+   * exista acolo, exact greseala inchisa mai sus pentru Posta.
+   */
   const laOficiuPostal = selectedOpt?.courier === "posta";
-  const punctul = laOficiuPostal ? "oficiu poștal" : "locker";
-  const punctele = laOficiuPostal ? "oficii poștale" : "lockere";
+  const reteaFan = selectedOpt?.courier === "fan-courier" ? selectedOpt.fanPointType : undefined;
+  const punctul =
+    laOficiuPostal ? "oficiu poștal"
+    : reteaFan === "paypoint" ? "punct PayPoint"
+    : reteaFan === "office" ? "oficiu FAN Courier"
+    : "locker";
+  const punctele =
+    laOficiuPostal ? "oficii poștale"
+    : reteaFan === "paypoint" ? "puncte PayPoint"
+    : reteaFan === "office" ? "oficii FAN Courier"
+    : "lockere";
 
   return (
     <div className="space-y-2">

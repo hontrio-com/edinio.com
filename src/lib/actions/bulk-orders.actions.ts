@@ -24,7 +24,7 @@ import type { OblioConfig } from "@/lib/oblio";
 import type { FgoConfig } from "@/lib/fgo";
 import type { CargusConfig } from "@/lib/cargus";
 import type { SamedayConfig } from "@/lib/sameday/client";
-import type { FanCourierConfig } from "@/lib/fancourier";
+import { tipPunctFan, type FanCourierConfig } from "@/lib/fancourier";
 import type { DpdConfig } from "@/lib/dpd";
 import type { GlsConfig } from "@/lib/gls/client";
 import { pallexGata, type PallExConfig } from "@/lib/pallex/client";
@@ -75,6 +75,9 @@ interface ShippingAddr {
   /* Localitatea, judetul si codul postal ALE PUNCTULUI de ridicare. La livrarea
      in punct adresa de livrare e a lui, nu a clientului. */
   locker_city?: string; locker_county?: string; locker_post_code?: string;
+  /* ⚠ Care retea FAN, cand punctul e al lor: FANbox, PayPoint sau oficiu. Decide
+     serviciul si optiunea de pe AWB, deci nu se poate deduce din id. */
+  fan_point_type?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────────
@@ -557,7 +560,16 @@ async function createAwbForOrder(
         observation: "", clientInternalReference: o.order_number,
       });
     case "fancourier": {
-      const isFanbox = (addr.courier ?? "").toLowerCase().includes("fan") && addr.delivery_type === "locker" && !!addr.locker_id;
+      const laPunctFan = (addr.courier ?? "").toLowerCase().includes("fan") && addr.delivery_type === "locker" && !!addr.locker_id;
+      /*
+       * ⚠ LIPSA TIPULUI INSEAMNA „FANbox", SI NUMAI DIN MOTIV DE VECHIME.
+       *
+       * Comenzile puse inainte de 13.09.2026 au `locker_id` fara `fan_point_type`, fiindca
+       * atunci FANbox era singura retea oferita. Citite ca „nu stim", ar fi devenit brusc
+       * livrari la domiciliu catre adresa unui locker. Deci vechiul inteles se pastreaza
+       * explicit, nu prin tacere.
+       */
+      const tipPunct = laPunctFan ? (tipPunctFan(addr.fan_point_type) ?? "fanbox") : undefined;
       return createFanCourierAwbAction(businessId, o.id, {
         recipientName: o.customer_name, recipientPhone: o.customer_phone, recipientEmail: email,
         recipientCounty: county, recipientLocality: city, recipientStreet: street, recipientStreetNo: streetNo,
@@ -570,7 +582,8 @@ async function createAwbForOrder(
          * ori pe acelasi drum. Lotul nu are nicio cutie PROPRIE de trimis: el nu stie coletul
          * fiecarei comenzi, iar cel obisnuit al magazinului il stie deja serverul.
          */
-        fanboxId: isFanbox ? addr.locker_id : undefined,
+        pickupPointId: laPunctFan ? addr.locker_id : undefined,
+        pickupPointType: tipPunct,
       });
     }
     case "dpd":

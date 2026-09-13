@@ -897,6 +897,8 @@ export async function placeOrder(data: {
   locker_post_code?: string;
   locker_city?: string;
   locker_county?: string;
+  /** ⚠ Care retea FAN a punctului ales: `fanbox`, `paypoint` sau `office`. Vezi `TipPunctFan`. */
+  fan_point_type?: string;
   woot_service_id?: number;
   woot_courier_name?: string;
   woot_service_name?: string;
@@ -1684,6 +1686,11 @@ export async function placeOrder(data: {
         locker_post_code: data.locker_post_code,
         locker_city: data.locker_city,
         locker_county: data.locker_county,
+        /* ⚠ RETEAUA punctului, nu doar id-ul lui. La FAN acelasi camp `locker_id` poate fi
+           un FANbox, un PayPoint sau un oficiu, iar cele trei se emit cu servicii si optiuni
+           DIFERITE. Pierduta aici, emiterea ar cadea inapoi pe FANbox si coletul ar pleca in
+           alta retea decat cea aleasa de cumparator. */
+        fan_point_type: data.fan_point_type,
       }),
       ...(data.woot_service_id && {
         woot_service_id: data.woot_service_id,
@@ -3782,6 +3789,8 @@ export async function placeCartOrder(data: {
   locker_post_code?: string;
   locker_city?: string;
   locker_county?: string;
+  /** ⚠ Care retea FAN a punctului ales: `fanbox`, `paypoint` sau `office`. Vezi `TipPunctFan`. */
+  fan_point_type?: string;
   woot_service_id?: number;
   woot_courier_name?: string;
   woot_service_name?: string;
@@ -4339,6 +4348,11 @@ export async function placeCartOrder(data: {
         locker_post_code: data.locker_post_code,
         locker_city: data.locker_city,
         locker_county: data.locker_county,
+        /* ⚠ RETEAUA punctului, nu doar id-ul lui. La FAN acelasi camp `locker_id` poate fi
+           un FANbox, un PayPoint sau un oficiu, iar cele trei se emit cu servicii si optiuni
+           DIFERITE. Pierduta aici, emiterea ar cadea inapoi pe FANbox si coletul ar pleca in
+           alta retea decat cea aleasa de cumparator. */
+        fan_point_type: data.fan_point_type,
       }),
       ...(data.woot_service_id && {
         woot_service_id: data.woot_service_id,

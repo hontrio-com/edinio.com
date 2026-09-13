@@ -14,6 +14,8 @@ import {
   getFanCourierAwbLabel,
   getFanCourierBranches,
   uitaTokenurileFan,
+  PAYPOINT_MAX_WEIGHT_KG,
+  PAYPOINT_LATURI_CM,
 } from "@/lib/fancourier";
 
 /*
@@ -473,6 +475,25 @@ test("⚠ copiile din fereastra de AWB nu au voie sa se departeze de server", ()
     compartiment![1].split(",").map((x) => Number(x.trim())),
     [...FANBOX_COMPARTMENT_CM],
     "compartimentul FANbox din fereastra s-a departat de cel de pe server",
+  );
+
+  /*
+   * ⚠ PAYPOINT, DIN 13.09.2026, SI AICI MIZA E MAI MARE.
+   *
+   * Limitele lui sunt mai STRANSE decat ale FANbox-ului (10 kg fata de 30), deci o copie
+   * ramasa in urma nu doar ca ar deranja: fereastra ar lasa comerciantul sa trimita un
+   * colet de 20 kg la PayPoint, iar refuzul ar veni de la FAN, dupa ce clientul a platit.
+   */
+  const greutatePayPoint = /const PAYPOINT_MAX_WEIGHT_KG = ([\d.]+);/.exec(sursa);
+  assert.ok(greutatePayPoint, "fereastra nu mai declara `PAYPOINT_MAX_WEIGHT_KG`: reciteste nota de mai sus");
+  assert.equal(Number(greutatePayPoint![1]), PAYPOINT_MAX_WEIGHT_KG, "greutatea maxima PayPoint s-a departat de server");
+
+  const laturiPayPoint = /const PAYPOINT_LATURI_CM = \[([^\]]+)\]/.exec(sursa);
+  assert.ok(laturiPayPoint, "fereastra nu mai declara `PAYPOINT_LATURI_CM`");
+  assert.deepEqual(
+    laturiPayPoint![1].split(",").map((x) => Number(x.trim())),
+    [...PAYPOINT_LATURI_CM],
+    "laturile maxime PayPoint din fereastra s-au departat de cele de pe server",
   );
 });
 

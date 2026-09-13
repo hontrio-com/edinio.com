@@ -47,6 +47,112 @@ export function incapeInFanbox(colet: { length: number; width: number; height: n
 // info.cod is capped at 10.000 by the API (schema: "cod: numeric – 10000 max").
 export const FAN_MAX_COD = 10000;
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   CELE TREI RETELE DE PUNCTE ALE FAN (13.09.2026)
+   ═══════════════════════════════════════════════════════════════════════════
+
+   `reports/pickup-points?type=` da trei nomenclatoare: `fanbox`, `paypoint` si
+   `office`. Pana azi se cerea doar `fanbox`; celelalte doua erau tiparite in
+   semnatura si nechemate de nimeni.
+
+   ⚠ NU SUNT INTERSCHIMBABILE. Fiecare are ALT serviciu si ALTA optiune, iar o
+   pereche gresita nu da o eroare de compilare, da un colet plecat aiurea:
+
+     retea      serviciu                                optiune  limite
+     fanbox     FANbox / FANbox Cont Colector           V        30 kg, 1 colet, compartiment
+     paypoint   CollectPoint / CollectPoint Cont Col.   F        10 kg, 60x90x60 cm
+     office     Standard / Cont Colector                D        cele obisnuite
+
+   ⚠ OFICIUL NU E CollectPoint, desi asa ar parea dupa nume. Documentatia e
+   limpede (pag. 29, „FAN OFFICE PARTICULARITIES"): serviciul e Standard sau Cont
+   Colector, exact ca la domiciliu, si doar optiunea `D` schimba destinatia.
+   CollectPoint (19/20) e al PayPoint-ului.
+
+   ⚠ Id-ul punctului pleaca la toate trei prin `pickupLocationId`. Schema generala
+   (pag. 12) il adnoteaza „only for FANbox", dar sectiunile de particularitati si
+   exemplele reale de cerere (pag. 25-30) il folosesc pentru toate trei. Adnotarea
+   e invechita; exemplele sunt autoritatea.
+
+   ⚠ Judetul si localitatea din cerere trebuie sa fie ALE PUNCTULUI, la toate
+   trei, nu ale cumparatorului. Scris in dreptul fiecarei retele. */
+
+/** Care dintre cele trei nomenclatoare de puncte. */
+export type TipPunctFan = "fanbox" | "paypoint" | "office";
+
+/**
+ * ⚠ PayPoint are limite PROPRII, mai stranse decat FANbox (pag. 28).
+ *
+ * 10 kg, nu 30. Un colet de 20 kg incape in FANbox si NU incape la PayPoint, deci
+ * limita nu se poate imprumuta intre retele. Serviciul e descris pentru plicuri si
+ * colete mici, la punctele din reteaua PayPoint.
+ */
+export const PAYPOINT_MAX_WEIGHT_KG = 10;
+/** Laturile maxime la PayPoint, sortate crescator: documentat „60x90x60 cm". */
+export const PAYPOINT_LATURI_CM = [60, 60, 90] as const;
+
+/**
+ * Incape coletul la un PayPoint?
+ *
+ * Aceeasi regula ca `incapeInFanbox` si scrisa la fel dinadins: se sorteaza cele trei
+ * laturi crescator si fiecare trebuie sa intre sub perechea ei. Doua reguli de gabarit
+ * scrise altfel s-ar desparti la prima corectura.
+ */
+export function incapeInPayPoint(colet: { length: number; width: number; height: number }): boolean {
+  const sortate = [colet.length, colet.width, colet.height].sort((a, b) => a - b);
+  return !sortate.some((d, i) => d > PAYPOINT_LATURI_CM[i]);
+}
+
+/**
+ * ⚠ POARTA PENTRU O VALOARE VENITA DIN BROWSER.
+ *
+ * Tipul punctului calatoreste prin `shipping_address` si prin incarcatura actiunii de
+ * server, deci ajunge aici ca text liber. Nefiltrat, ar intra si in cheia de cache a
+ * punctelor (vezi `getLockers`) si in numele serviciului trimis la FAN.
+ */
+export function esteTipPunctFan(v: unknown): v is TipPunctFan {
+  return v === "fanbox" || v === "paypoint" || v === "office";
+}
+
+/** Tipul punctului, ingustat la cele trei valori cunoscute. Orice altceva devine `null`. */
+export function tipPunctFan(v: unknown): TipPunctFan | null {
+  return esteTipPunctFan(v) ? v : null;
+}
+
+/**
+ * Numele serviciului FAN pentru o retea, in varianta cu sau fara ramburs.
+ *
+ * ⚠ Varianta „Cont Colector" NU e un amanunt: ea e cea prin care FAN incaseaza banii
+ * si ii vireaza comerciantului. Trimis serviciul simplu pe o comanda cu ramburs,
+ * coletul pleaca fara incasare, iar cumparatorul primeste marfa pe gratis.
+ */
+export function serviciulPunctuluiFan(tip: TipPunctFan, cuRamburs: boolean): string {
+  if (tip === "fanbox") return cuRamburs ? "FANbox Cont Colector" : "FANbox";
+  if (tip === "paypoint") return cuRamburs ? "CollectPoint Cont Colector" : "CollectPoint";
+  /* office: acelasi serviciu ca la domiciliu; doar optiunea `D` muta destinatia. */
+  return cuRamburs ? "Cont Colector" : "Standard";
+}
+
+/**
+ * Litera optiunii care spune FAN-ului UNDE se ridica coletul.
+ *
+ * ⚠ Obligatorie la toate trei. Fara ea, serviciul singur nu e de ajuns: la FANbox
+ * documentatia o cere explicit, iar la oficiu serviciul e chiar cel de domiciliu,
+ * deci `D` e SINGURUL lucru care deosebeste un colet trimis la oficiu de unul trimis
+ * acasa. Uitata acolo, coletul pleaca la adresa punctului ca si cum ar fi o casa.
+ */
+export function optiuneaPunctuluiFan(tip: TipPunctFan): "V" | "F" | "D" {
+  if (tip === "fanbox") return "V";
+  if (tip === "paypoint") return "F";
+  return "D";
+}
+
+/** Cum se numeste reteaua in mesajele catre comerciant. */
+export const NUME_RETEA: Record<TipPunctFan, string> = {
+  fanbox: "FANbox",
+  paypoint: "PayPoint",
+  office: "oficii FAN Courier",
+};
+
 export type FanCourierConfig = {
   enabled: boolean;
   username: string;
@@ -230,12 +336,26 @@ export type FanCourierAwbInput = {
   content: string;
   observation: string;
   /**
-   * FANbox locker ID (e.g. "F1011137"). Presence switches the AWB to the
-   * FANbox service: the locker is looked up via reports/pickup-points?id= and
-   * its own county/locality are sent (the API requires they match the locker),
-   * with the ID in address.pickupLocationId per the FANbox request examples.
+   * Id-ul punctului de ridicare (ex. „F1011137" la FANbox, „P252518" la PayPoint).
+   *
+   * Prezenta lui muta AWB-ul de la domiciliu la punct: punctul se cauta prin
+   * `reports/pickup-points?id=` si i se trimit judetul si localitatea LUI (API-ul
+   * cere sa se potriveasca), cu id-ul in `address.pickupLocationId`.
+   *
+   * ⚠ SE CERE IMPREUNA CU `pickupPointType`. Cele doua nu se pot deduce unul din
+   * altul: id-urile nu au un prefix pe care sa ne putem sprijini, iar reteaua decide
+   * si serviciul, si optiunea, si limitele.
    */
-  fanboxId?: string;
+  pickupPointId?: string;
+  /**
+   * Care dintre cele trei retele. Vezi `TipPunctFan`.
+   *
+   * ⚠ REDENUMIT DIN `fanboxId` PE 13.09.2026, SI DINADINS. Un camp nou pus langa cel
+   * vechi i-ar fi lasat pe cei doi apelanti (lotul si fereastra din panou) sa compileze
+   * neschimbati si sa trimita mai departe numai FANbox, tacut. Redenumit, `tsc` ii
+   * enumera pe amandoi. Acelasi rationament ca la `weightKg` din `bulk-orders.actions.ts`.
+   */
+  pickupPointType?: TipPunctFan;
 };
 
 // ─── Token cache ──────────────────────────────────────────────────────────────
@@ -617,7 +737,23 @@ export async function createFanCourierAwb(
   config: FanCourierConfig,
   input: FanCourierAwbInput,
 ): Promise<ExpediereFanCreata> {
-  const isFanbox = !!input.fanboxId;
+  /*
+   * ⚠ CELE DOUA CAMPURI SE CER IMPREUNA, SI SE REFUZA CAND NU SUNT.
+   *
+   * Un id fara tip nu se poate rezolva: reteaua decide serviciul, optiunea si limitele,
+   * iar id-urile lor n-au un prefix pe care sa ne putem sprijini. Cazut tacut pe „fanbox",
+   * un PayPoint ar fi plecat pe serviciul FANbox cu optiunea V, si FAN l-ar fi refuzat
+   * sau, mai rau, l-ar fi dus in alta retea.
+   *
+   * Un tip fara id e tot un refuz: n-avem care punct.
+   */
+  const tipPunct = tipPunctFan(input.pickupPointType);
+  if (input.pickupPointId && !tipPunct) {
+    throw eroareRefuz("FAN Courier: s-a cerut livrarea intr-un punct, dar tipul retelei lipseste sau nu e recunoscut (FANbox, PayPoint sau oficiu).");
+  }
+  if (tipPunct && !input.pickupPointId?.trim()) {
+    throw eroareRefuz(`FAN Courier: s-a cerut livrarea la ${NUME_RETEA[tipPunct]}, dar lipseste id-ul punctului ales.`);
+  }
 
   verificaNumerele(input);
 
@@ -662,11 +798,11 @@ export async function createFanCourierAwb(
     );
   }
 
-  // API hard limits — fail here with a clear message instead of a cryptic FAN error.
+  // Plafoanele API, refuzate aici cu un mesaj limpede in loc de o eroare criptica de la FAN.
   if (input.cod > FAN_MAX_COD) {
     throw eroareRefuz(`FAN Courier: rambursul maxim acceptat este ${FAN_MAX_COD.toLocaleString("ro-RO")} lei. Imparte comanda sau incaseaza online.`);
   }
-  if (isFanbox) {
+  if (tipPunct === "fanbox") {
     if (input.weightKg > FANBOX_MAX_WEIGHT_KG) {
       throw eroareRefuz(`FAN Courier: greutatea maxima pentru FANbox este ${FANBOX_MAX_WEIGHT_KG} kg.`);
     }
@@ -676,10 +812,25 @@ export async function createFanCourierAwb(
     if (!input.recipientEmail?.trim()) {
       throw eroareRefuz("FAN Courier: emailul destinatarului este obligatoriu pentru livrarea la FANbox.");
     }
-    // Docs: "The package sizes ... are mandatory fields" for FANbox — the size
-    // also decides the locker compartment, so refuse guessed dimensions.
+    /* Documentatia: „The package sizes ... are mandatory fields" la FANbox. Marimea
+       alege si compartimentul, deci nu se accepta dimensiuni ghicite. */
     if (!incapeInFanbox(dimensiuni)) {
       throw eroareRefuz(`FAN Courier: coletul depaseste compartimentul FANbox (max ${FANBOX_COMPARTMENT_CM.join(" x ")} cm).`);
+    }
+  }
+  /*
+   * ⚠ PAYPOINT ARE ALTE LIMITE, SI SUNT MAI STRANSE (pag. 28): 10 kg si 60x90x60 cm.
+   *
+   * Nu se pot imprumuta de la FANbox: un colet de 20 kg trece de FANbox si NU trece pe
+   * aici. Verificat la emitere, nu doar in checkout, fiindca lotul si fereastra din panou
+   * ajung direct aici, fara sa treaca prin cotare.
+   */
+  if (tipPunct === "paypoint") {
+    if (input.weightKg > PAYPOINT_MAX_WEIGHT_KG) {
+      throw eroareRefuz(`FAN Courier: greutatea maxima pentru livrarea la PayPoint este ${PAYPOINT_MAX_WEIGHT_KG} kg.`);
+    }
+    if (!incapeInPayPoint(dimensiuni)) {
+      throw eroareRefuz(`FAN Courier: coletul depaseste limitele PayPoint (max ${PAYPOINT_LATURI_CM.join(" x ")} cm).`);
     }
   }
 
@@ -698,31 +849,31 @@ export async function createFanCourierAwb(
    *
    * FANbox nu trece pe aici: acolo adresa vine de la locker.
    */
-  if (!isFanbox && !input.recipientStreet?.trim()) {
+  if (!tipPunct && !input.recipientStreet?.trim()) {
     throw eroareRefuz("FAN Courier: adresa destinatarului (strada) este obligatorie. Completeaza-o pe comanda sau in fereastra de AWB.");
   }
 
   const sender = await getSenderBranch(config);
 
-  // FANbox: the API requires the request's county/locality to match the
-  // locker's, so resolve the locker by ID and use FAN's own values verbatim.
-  let fanboxPoint: FanCourierPickupPoint | null = null;
-  if (isFanbox) {
-    fanboxPoint = await getFanCourierPickupPointById(config.username, config.password, input.fanboxId!);
-    if (!fanboxPoint) {
-      throw eroareRefuz(`FAN Courier: lockerul ${input.fanboxId} nu a fost gasit in lista FANbox. Verifica selectia clientului.`);
+  /* La toate trei retelele API-ul cere ca judetul si localitatea din cerere sa fie ALE
+     PUNCTULUI, deci punctul se cauta dupa id si i se folosesc valorile lui, verbatim. */
+  let punct: FanCourierPickupPoint | null = null;
+  if (tipPunct) {
+    punct = await getFanCourierPickupPointById(config.username, config.password, input.pickupPointId!, tipPunct);
+    if (!punct) {
+      throw eroareRefuz(`FAN Courier: punctul ${input.pickupPointId} nu a fost gasit in nomenclatorul ${NUME_RETEA[tipPunct]}. Verifica selectia clientului.`);
     }
   }
 
-  // Determine service: FANbox for locker, Cont Colector for COD, Standard otherwise
-  const service = isFanbox
-    ? (input.cod > 0 ? "FANbox Cont Colector" : "FANbox")
+  /* Serviciul si optiunea vin din aceeasi pereche de reguli pe care le foloseste si
+     cotarea din checkout, ca pretul aratat si coletul emis sa nu se desparta. */
+  const service = tipPunct
+    ? serviciulPunctuluiFan(tipPunct, input.cod > 0)
     : (input.cod > 0 ? "Cont Colector" : "Standard");
 
-  // FANbox: option V (pickup from locker) is mandatory. For home delivery,
-  // ePOD (X) only when the merchant opted in — with X active FAN no longer
-  // brings the pre-printed A5 AWB, so it must be a conscious choice.
-  const options = isFanbox ? ["V"] : (config.epod ? ["X"] : []);
+  /* Optiunea punctului e obligatorie. La domiciliu, ePOD (X) doar daca comerciantul a
+     cerut-o: cu X activ FAN nu mai aduce AWB-ul A5 tiparit, deci e o alegere constienta. */
+  const options = tipPunct ? [optiuneaPunctuluiFan(tipPunct)] : (config.epod ? ["X"] : []);
 
   // Sender belongs INSIDE each shipment (verified against the live API — the
   // published PDF schema omits it entirely). Built from the account's branch.
@@ -784,15 +935,15 @@ export async function createFanCourierAwb(
           // API reads the one it knows and ignores the other. Home delivery
           // goes through the nomenclature normalizers (diacritics, "Sector X"
           // → Bucuresti).
-          address: isFanbox
+          address: tipPunct
             ? {
-                county: fanboxPoint!.address.county,
-                locality: fanboxPoint!.address.locality,
-                street: fanboxPoint!.address.street || fanboxPoint!.name,
-                streetNo: fanboxPoint!.address.streetNo || undefined,
-                zipCode: fanboxPoint!.address.zipCode || undefined,
-                pickupLocationId: fanboxPoint!.id,
-                pickupLocation: fanboxPoint!.id,
+                county: punct!.address.county,
+                locality: punct!.address.locality,
+                street: punct!.address.street || punct!.name,
+                streetNo: punct!.address.streetNo || undefined,
+                zipCode: punct!.address.zipCode || undefined,
+                pickupLocationId: punct!.id,
+                pickupLocation: punct!.id,
               }
             : {
                 county: taie(normalizeCountyName(input.recipientCounty), 50) ?? "",
@@ -1156,18 +1307,24 @@ export async function getFanCourierPickupPoints(
 }
 
 /**
- * Single pickup point by ID (reports/pickup-points?id=). Used at AWB time as
- * the authoritative source for the locker's county/locality, which the API
- * requires to match the FANbox.
+ * Un singur punct, dupa id (reports/pickup-points?id=). Chemat la emitere ca sursa
+ * autoritara pentru judetul si localitatea punctului, pe care API-ul le cere sa se
+ * potriveasca cu el.
+ *
+ * ⚠ `tip` NU MAI E „fanbox" SCRIS DE MANA (13.09.2026). Raspunsul lor nu spune din ce
+ * nomenclator vine punctul, deci tipul il stie doar apelantul. Fixat pe „fanbox", un
+ * PayPoint sau un oficiu se intorcea etichetat gresit, iar eticheta aia decide mai
+ * departe serviciul si optiunea de pe AWB.
  */
 export async function getFanCourierPickupPointById(
   username: string,
   password: string,
   id: string,
+  tip: TipPunctFan,
 ): Promise<FanCourierPickupPoint | null> {
   const data = await fanGet<Record<string, unknown>[]>(username, password, `reports/pickup-points?id=${encodeURIComponent(id)}`);
   const first = Array.isArray(data) ? data[0] : undefined;
-  return first ? mapPickupPoint(first, "fanbox") : null;
+  return first ? mapPickupPoint(first, tip) : null;
 }
 
 // ─── AWB Label (PDF) ──────────────────────────────────────────────────────────

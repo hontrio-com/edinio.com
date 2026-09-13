@@ -564,6 +564,10 @@ export function useCheckoutOrder({
         locker_address: courierSelection?.lockerAddress,
         locker_city: courierSelection?.lockerCity,
         locker_county: courierSelection?.lockerCounty,
+        /* ⚠ Reteaua punctului FAN, la fel ca in `OrderModal`: cele DOUA checkout-uri
+           trebuie sa trimita acelasi lucru, altfel PayPoint merge pe unul si cade pe
+           celalalt, tacut. Proba cere amandoua. */
+        fan_point_type: courierSelection?.fanPointType,
         /* ⚠ La livrarea in punct, adresa de livrare E a punctului, iar GLS cere
            obligatoriu codul postal — pe care comenzile romanesti nu-l primesc din
            checkout. Acolo unde curierul il da, ajunge asa pe comanda. */

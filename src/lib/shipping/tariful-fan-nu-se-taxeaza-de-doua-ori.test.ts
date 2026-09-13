@@ -124,13 +124,41 @@ test("⚠ cotarea citeste regimul de TVA al magazinului", () => {
 
 test("⚠ nicio optiune FAN nu se mai construieste direct din `r.total`", () => {
   const s = sursa(COTARE);
-  const ramuraFan = s.slice(s.indexOf('courierId === "fan-courier"'));
-  const pana = ramuraFan.slice(0, ramuraFan.indexOf("} else if (courierId ==="));
+  /* ⚠ Ancorele se cer GASITE inainte de taiere: `slice(-1)` pe un `indexOf` ratat intoarce
+     ultimul caracter din fisier, nu o eroare, si proba ar cadea acuzand altceva. */
+  const de_la = s.indexOf('courierId === "fan-courier"');
+  assert.ok(de_la > 0, "nu mai exista o ramura `fan-courier` in cotare: proba n-are pe ce cadea");
+  const ramuraFan = s.slice(de_la);
+  const pana_la = ramuraFan.indexOf("} else if (courierId ===");
+  assert.ok(pana_la > 0, "ramura FAN nu se mai incheie cu alt curier: taierea ar lua tot fisierul");
+  const pana = ramuraFan.slice(0, pana_la);
 
-  assert.equal((pana.match(/price: pretFan\(r\)/g) ?? []).length, 2,
-    "amandoua optiunile FAN (domiciliu si FANbox) trebuie sa treaca prin `pretFan`");
+  /*
+   * ⚠ SE CERE REGULA, NU FORMA (13.09.2026).
+   *
+   * Forma dintai cerea exact doua aparitii ale literalului `price: pretFan(r)`: una pentru
+   * domiciliu, una pentru FANbox. In ziua in care optiunile de punct s-au strans intr-o
+   * bucla peste cele TREI retele FAN (FANbox, PayPoint, oficiu), a doua a devenit
+   * `optiunePunctFan(tip, pretFan(r))` si numarul a picat la unu. Proba a cazut, desi
+   * regula era neatinsa si chiar mai bine respectata: prin `pretFan` trec acum PATRU
+   * optiuni, nu doua.
+   *
+   * Cele doua locuri care raman sunt cele doua FELURI de a produce un pret din tarif:
+   * optiunea la domiciliu, si bucla care le face pe cele de punct. O retea noua nu mai
+   * adauga un al treilea, deci numarul e stabil si merita cerut exact.
+   */
+  assert.equal((pana.match(/pretFan\(r\)/g) ?? []).length, 2,
+    "pretul optiunilor FAN nu mai trece prin `pretFan`: domiciliul si bucla punctelor");
+
   assert.doesNotMatch(pana, /price: Math\.round\(r\.total \* 100\) \/ 100/,
     "tariful CU TVA ajunge din nou direct in pretul optiunii");
+  /*
+   * ⚠ SI NICIO ALTA CITIRE A TARIFULUI BRUT. `pretFan` insusi citeste `t.total`, dar el isi
+   * numeste parametrul `t`; `r` e raspunsul din `.then(...)`. Deci orice `r.total` in felia
+   * asta inseamna un pret nascut pe langa regula de TVA.
+   */
+  assert.doesNotMatch(pana, /\br\.total\b/,
+    "tariful brut se citeste din nou direct in ramura FAN, ocolind `pretFan`");
 });
 
 test("⚠ pe regim NET, lipsa lui `costNoVAT` cade pe rezerva, nu pe un net dedus", () => {

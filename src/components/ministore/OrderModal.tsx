@@ -874,6 +874,9 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         locker_address: courierSelection?.lockerAddress,
         locker_city: courierSelection?.lockerCity,
         locker_county: courierSelection?.lockerCounty,
+        /* ⚠ Reteaua punctului FAN. Vezi nota din `order.actions.ts`: acelasi `locker_id`
+           poate fi FANbox, PayPoint sau oficiu, si se emit diferit. */
+        fan_point_type: courierSelection?.fanPointType,
         /* ⚠ La livrarea in punct, adresa de livrare E a punctului, iar GLS cere
            obligatoriu codul postal — pe care comenzile romanesti nu-l primesc din
            checkout. Acolo unde curierul il da, ajunge asa pe comanda. */

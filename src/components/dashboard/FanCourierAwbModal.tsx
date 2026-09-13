@@ -27,12 +27,20 @@ type ShippingAddress = {
   locker_address?: string;
   locker_city?: string;
   locker_county?: string;
+  /* ⚠ Care retea FAN: `fanbox`, `paypoint` sau `office`. Lipsa inseamna FANbox, fiindca
+     pana pe 13.09.2026 aia era singura oferita. */
+  fan_point_type?: string;
 };
 
 // FANbox limits from the FAN Courier API docs ("FANbox particularities").
 const FANBOX_MAX_WEIGHT_KG = 30;
 const FANBOX_COMPARTMENT_CM = [40.4, 44.3, 45]; // sorted min→max
 const FAN_MAX_COD = 10000;
+/* Limitele PayPoint, din „PAYPOINT PARTICULARITIES" (pag. 28): mai STRANSE decat cele
+   FANbox, deci nu se imprumuta. Tinute in sincron cu serverul de o proba, vezi
+   `fancourier.test.ts`. */
+const PAYPOINT_MAX_WEIGHT_KG = 10;
+const PAYPOINT_LATURI_CM = [60, 60, 90]; // sorted min→max
 
 type Props = {
   open: boolean;
@@ -76,12 +84,22 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const hasAwb = !!orderData.fan_courier_awb_number;
   const addr = order.shipping_address as ShippingAddress | null;
 
-  // FANbox delivery needs the locker ID: the AWB carries pickupLocationId and
-  // the locker's own county/locality (resolved server-side from the ID).
-  const isFanboxDelivery =
+  /*
+   * Livrarea intr-un punct FAN cere id-ul punctului: AWB-ul poarta `pickupLocationId` si
+   * judetul/localitatea PUNCTULUI, rezolvate pe server dupa id.
+   *
+   * ⚠ SI CARE RETEA, din 13.09.2026. Acelasi `locker_id` poate fi un FANbox, un PayPoint
+   * sau un oficiu, iar cele trei se emit cu servicii si optiuni diferite si au limite
+   * diferite. Lipsa tipului inseamna `fanbox`: comenzile de dinainte n-au campul, si
+   * atunci FANbox era singura retea oferita.
+   */
+  const punctFan: "fanbox" | "paypoint" | "office" | null =
     (addr?.courier === "fan-courier" || addr?.courier === "fancourier") &&
     addr?.delivery_type === "locker" &&
-    !!addr?.locker_id;
+    !!addr?.locker_id
+      ? (addr.fan_point_type === "paypoint" || addr.fan_point_type === "office" ? addr.fan_point_type : "fanbox")
+      : null;
+  const laPunctFan = punctFan !== null;
 
   // Greutatea vine din produsele comenzii, nu de la un kilogram fix. Vezi
   // `useGreutateaAwb`.
@@ -104,10 +122,10 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [recipientPhone, setRecipientPhone] = useState(order.customer_phone);
   const [recipientEmail, setRecipientEmail] = useState(order.customer_email ?? "");
   const [recipientCounty, setRecipientCounty] = useState(
-    isFanboxDelivery ? (addr?.locker_county ?? addr?.county ?? "") : (addr?.county ?? ""),
+    laPunctFan ? (addr?.locker_county ?? addr?.county ?? "") : (addr?.county ?? ""),
   );
   const [recipientLocality, setRecipientLocality] = useState(
-    isFanboxDelivery ? (addr?.locker_city ?? addr?.city ?? "") : (addr?.city ?? ""),
+    laPunctFan ? (addr?.locker_city ?? addr?.city ?? "") : (addr?.city ?? ""),
   );
   const [recipientStreet, setRecipientStreet] = useState(stradaDestinatarului(addr));
   const [recipientStreetNo, setRecipientStreetNo] = useState(addr?.street_no ?? "");
@@ -118,8 +136,15 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [downloading, setDownloading] = useState(false);
 
   const codNum = parseFloat(cod) || 0;
-  const autoService = isFanboxDelivery
-    ? (codNum > 0 ? "FANbox Cont Colector" : "FANbox")
+  /*
+   * ⚠ DOAR PENTRU MESAJUL DE PE ECRAN. Serviciul adevarat il alege serverul, in
+   * `serviciulPunctuluiFan`, din aceeasi pereche de reguli pe care le foloseste si
+   * cotarea. Aici se scrie de mana fiindca fereastra e componenta de client si nu poate
+   * importa biblioteca (ar trage `node:crypto` in pachetul din browser).
+   */
+  const autoService =
+    punctFan === "fanbox" ? (codNum > 0 ? "FANbox Cont Colector" : "FANbox")
+    : punctFan === "paypoint" ? (codNum > 0 ? "CollectPoint Cont Colector" : "CollectPoint")
     : (codNum > 0 ? "Cont Colector" : "Standard");
 
   /*
@@ -135,7 +160,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
     if (!recipientPhone.trim()) return toast.error("Telefonul destinatarului este obligatoriu");
-    if (!isFanboxDelivery) {
+    if (!laPunctFan) {
       if (!recipientCounty.trim()) return toast.error("Judetul destinatarului este obligatoriu");
       if (!recipientLocality.trim()) return toast.error("Localitatea destinatarului este obligatorie");
       /* ⚠ Si strada. Serverul o cere de pe 09.09.2026, pana atunci o adresa goala
@@ -161,7 +186,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       return toast.error("Completeaza toate trei dimensiunile (L x l x H), sau lasa-le goale");
     }
 
-    if (isFanboxDelivery) {
+    if (punctFan === "fanbox") {
       if (!recipientEmail.trim()) return toast.error("Emailul destinatarului este obligatoriu pentru livrarea la FANbox");
       if (weightNum > FANBOX_MAX_WEIGHT_KG) return toast.error(`Greutatea maxima pentru FANbox este ${FANBOX_MAX_WEIGHT_KG} kg`);
       if ((parseInt(parcels) || 1) > 1) return toast.error("FANbox accepta un singur colet per AWB");
@@ -172,6 +197,26 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       const sorted = [...dims].sort((a, b) => a - b);
       if (sorted.some((d, i) => d > FANBOX_COMPARTMENT_CM[i])) {
         return toast.error(`Coletul depaseste compartimentul FANbox (max ${FANBOX_COMPARTMENT_CM.join(" x ")} cm)`);
+      }
+    }
+    /*
+     * ⚠ PAYPOINT ARE ALTE LIMITE: 10 kg si 60x90x60 cm. Nu sunt ale FANbox-ului.
+     *
+     * ⚠ Dimensiunile NU se cer aici, spre deosebire de FANbox: documentatia le face
+     * obligatorii doar acolo, fiindca ele aleg compartimentul dulapului. Lasate goale,
+     * serverul cade pe coletul obisnuit al magazinului si-l verifica tot el. Deci se
+     * masoara doar ce a completat omul.
+     */
+    if (punctFan === "paypoint") {
+      if (weightNum > PAYPOINT_MAX_WEIGHT_KG) {
+        return toast.error(`Greutatea maxima pentru livrarea la PayPoint este ${PAYPOINT_MAX_WEIGHT_KG} kg`);
+      }
+      const dims = [length, width, height].map(v => parseFloat(v.replace(",", ".")));
+      if (dims.every(d => d > 0)) {
+        const sorted = [...dims].sort((a, b) => a - b);
+        if (sorted.some((d, i) => d > PAYPOINT_LATURI_CM[i])) {
+          return toast.error(`Coletul depaseste limitele PayPoint (max ${PAYPOINT_LATURI_CM.join(" x ")} cm)`);
+        }
       }
     }
 
@@ -195,7 +240,9 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       recipientStreet: recipientStreet.trim(),
       recipientStreetNo: recipientStreetNo.trim(),
       recipientZipCode: recipientZipCode.trim(),
-      parcels: isFanboxDelivery ? 1 : (parseInt(parcels) || 1),
+      /* ⚠ Un singur colet e regula FANbox, nu a punctelor in general: PayPoint si oficiul
+         primesc mai multe, ca livrarea la domiciliu. */
+      parcels: punctFan === "fanbox" ? 1 : (parseInt(parcels) || 1),
       weightKg: weightNum,
       /*
        * ⚠ `parseFloat`, ca la VALIDARE (mai sus, unde se verifica incadrarea in
@@ -210,7 +257,10 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       cod: codNum,
       content: content.trim() || order.order_number,
       observation: observation.trim(),
-      fanboxId: isFanboxDelivery ? addr!.locker_id : undefined,
+      pickupPointId: laPunctFan ? addr!.locker_id : undefined,
+      /* ⚠ Amandoua, sau niciunul: serverul refuza un id fara retea, fiindca reteaua
+         decide serviciul, optiunea si limitele, si nu se poate ghici din id. */
+      pickupPointType: punctFan ?? undefined,
     });
 
     if ("error" in result) {
@@ -338,9 +388,13 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Destinatar</p>
                 <div className="space-y-3">
-                  {isFanboxDelivery && (
+                  {laPunctFan && (
                     <div className="p-3 rounded-xl bg-info/5 border border-info/20">
-                      <p className="text-xs font-semibold text-info mb-0.5">Livrare la FANbox</p>
+                      <p className="text-xs font-semibold text-info mb-0.5">
+                        {punctFan === "paypoint" ? "Livrare la PayPoint"
+                          : punctFan === "office" ? "Ridicare din oficiu FAN Courier"
+                          : "Livrare la FANbox"}
+                      </p>
                       <p className="text-sm font-medium text-foreground">{addr?.locker_name}</p>
                       {(addr?.locker_address || addr?.locker_city) && (
                         <p className="text-xs text-muted-foreground mt-0.5">
@@ -373,18 +427,18 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">{isFanboxDelivery ? "Email *" : "Email"}</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">{punctFan === "fanbox" ? "Email *" : "Email"}</label>
                     <input
                       type="email"
                       value={recipientEmail}
                       onChange={e => setRecipientEmail(e.target.value)}
                       className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
                     />
-                    {isFanboxDelivery && (
+                    {punctFan === "fanbox" && (
                       <p className="text-[11px] text-muted-foreground mt-1">FAN Courier trimite codul de ridicare pe email.</p>
                     )}
                   </div>
-                  {!isFanboxDelivery && (<>
+                  {!laPunctFan && (<>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Judet *</label>
@@ -462,23 +516,29 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                       <input
                         type="number"
                         min="1"
-                        max={isFanboxDelivery ? 1 : undefined}
-                        value={isFanboxDelivery ? "1" : parcels}
+                        max={punctFan === "fanbox" ? 1 : undefined}
+                        value={punctFan === "fanbox" ? "1" : parcels}
                         onChange={e => setParcels(e.target.value)}
-                        disabled={isFanboxDelivery}
+                        disabled={punctFan === "fanbox"}
                         className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors disabled:opacity-60"
                       />
-                      {isFanboxDelivery && (
+                      {punctFan === "fanbox" && (
                         <p className="text-[11px] text-muted-foreground mt-1">FANbox: un singur colet, max {FANBOX_MAX_WEIGHT_KG} kg</p>
+                      )}
+                      {/* ⚠ PayPoint primeste mai multe colete, dar are limita de greutate a lui. */}
+                      {punctFan === "paypoint" && (
+                        <p className="text-[11px] text-muted-foreground mt-1">PayPoint: max {PAYPOINT_MAX_WEIGHT_KG} kg</p>
                       )}
                     </div>
                   </div>
 
                   <div>
                     <p className="text-[11px] text-muted-foreground mb-2">
-                      {isFanboxDelivery
+                      {punctFan === "fanbox"
                         ? "Dimensiuni cm (obligatoriu la FANbox: determina compartimentul)"
-                        : "Dimensiuni cm (toate trei, sau niciuna si pleaca coletul obisnuit din Setari)"}
+                        : punctFan === "paypoint"
+                          ? `Dimensiuni cm (la PayPoint, cel mult ${PAYPOINT_LATURI_CM.join(" x ")})`
+                          : "Dimensiuni cm (toate trei, sau niciuna si pleaca coletul obisnuit din Setari)"}
                     </p>
                     <div className="grid grid-cols-3 gap-2">
                       {[

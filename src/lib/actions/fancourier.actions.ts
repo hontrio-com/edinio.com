@@ -19,6 +19,7 @@ import {
   createFanCourierPickupOrder,
   deleteFanCourierPickupOrder,
   loadFanCourierAccount,
+  tipPunctFan,
   type FanCourierConfig,
   type FanCourierAwbInput,
   type FanCourierPickupInput,
@@ -273,6 +274,21 @@ export async function createFanCourierAwbAction(
    *
    * Se refuza aici, cu numele tarii in mesaj, nu cu „localitate invalida".
    */
+  /*
+   * ⚠ TIPUL PUNCTULUI SE INGUSTEAZA AICI, FIINDCA VINE DIN BROWSER.
+   *
+   * `createFanCourierAwbAction` primeste `FanCourierAwbInput` de-a dreptul de la client
+   * (fereastra din panou il construieste), iar tipurile TypeScript nu sunt o validare la
+   * rulare: un `pickupPointType` inventat ar ajunge nefiltrat pana la numele serviciului
+   * trimis catre FAN. Acelasi rationament ca la `retea` in `getLockers`.
+   *
+   * Un tip nerecunoscut NU se corecteaza tacut la „fanbox": ar insemna un colet plecat in
+   * alta retea decat cea aleasa. Se refuza.
+   */
+  if (input.pickupPointType !== undefined && tipPunctFan(input.pickupPointType) === null) {
+    return { error: "FAN Courier: tipul punctului de ridicare nu e recunoscut (FANbox, PayPoint sau oficiu)." };
+  }
+
   const adresa = (orderData.shipping_address ?? {}) as { country?: string | null };
   const tara = (adresa.country ?? "RO").trim().toUpperCase();
   if (tara && tara !== "RO" && tara !== "ROU" && tara !== "ROMANIA" && tara !== "ROMÂNIA") {

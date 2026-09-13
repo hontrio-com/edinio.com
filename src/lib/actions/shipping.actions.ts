@@ -7,7 +7,7 @@ import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { logError } from "@/lib/error-logger";
 import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday/client";
-import { coletImplicit, estimateFanCourierCost, FAN_MAX_COD, FANBOX_MAX_WEIGHT_KG, getFanCourierPickupPoints, incapeInFanbox, type FanCourierConfig, type FanCourierPickupPoint, type TarifFan } from "@/lib/fancourier";
+import { coletImplicit, estimateFanCourierCost, FAN_MAX_COD, FANBOX_MAX_WEIGHT_KG, getFanCourierPickupPoints, incapeInFanbox, incapeInPayPoint, optiuneaPunctuluiFan, PAYPOINT_MAX_WEIGHT_KG, serviciulPunctuluiFan, tipPunctFan, type FanCourierConfig, type FanCourierPickupPoint, type TarifFan, type TipPunctFan } from "@/lib/fancourier";
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig, type WootPriceResult } from "@/lib/woot";
 import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type DpdConfig } from "@/lib/dpd";
 import { calculateCargusPrice, getCargusPudoPoints, type CargusConfig } from "@/lib/cargus";
@@ -186,6 +186,15 @@ export type ShippingOption = {
    * easybox ar cadea cu 806 sau — mai rau — ar nimeri alt locker.
    */
   smartshipLockerNet?: "easybox" | "fanbox";
+  /**
+   * ⚠ CARE RETEA DE PUNCTE FAN: FANbox, PayPoint sau oficiu.
+   *
+   * Cele trei vin toate sub `courier: "fan-courier"` SI sub acelasi `deliveryType:
+   * "locker"`, deci fara campul asta nu se pot deosebi nici in cheia optiunii, nici la
+   * cererea listei de puncte, nici la emitere. Si nu sunt schimbabile intre ele: alt
+   * serviciu, alta optiune si alte limite (30 kg la FANbox, 10 la PayPoint).
+   */
+  fanPointType?: TipPunctFan;
   /**
    * ⚠ CHEIA unei oferte Shipo, si singura parte a ei.
    *
@@ -893,6 +902,65 @@ export async function getShippingOptions(
         && weight <= FANBOX_MAX_WEIGHT_KG
         && (!coletul || incapeInFanbox(coletul));
 
+      /*
+       * ⚠ PAYPOINT ARE LIMITE PROPRII, MAI STRANSE: 10 kg si 60x90x60 cm (pag. 28).
+       *
+       * Nu se imprumuta de la FANbox. Un colet de 20 kg trece de FANbox si NU trece pe
+       * aici, iar oferit totusi, cumparatorul ar alege PayPoint, ar PLATI, si abia
+       * emiterea l-ar refuza. Aceeasi lectie ca la compartimentul FANbox, cu aceleasi
+       * functii chemate din acelasi loc, ca sa nu existe doua reguli de gabarit.
+       */
+      const paypointAllowed = hasApi
+        && weight <= PAYPOINT_MAX_WEIGHT_KG
+        && (!coletul || incapeInPayPoint(coletul));
+
+      /*
+       * ⚠ OFICIUL FAN N-ARE LIMITE PROPRII, si asta nu e o scapare.
+       *
+       * Documentatia (pag. 29) ii da serviciul Standard/Cont Colector, adica exact cel de
+       * la domiciliu, si nicio restrictie de gabarit sau greutate. Singura deosebire e
+       * optiunea `D`, care muta destinatia. Deci orice colet care poate pleca acasa poate
+       * pleca si la oficiu.
+       */
+      const reteleDePuncte: TipPunctFan[] = hasApi
+        ? [
+            ...(fanboxAllowed ? (["fanbox"] as const) : []),
+            ...(paypointAllowed ? (["paypoint"] as const) : []),
+            "office" as const,
+          ]
+        : [];
+
+      /** Numele implicit al optiunii, cand comerciantul n-a pus unul al lui pe zona. */
+      const ETICHETA_RETEA: Record<TipPunctFan, string> = {
+        fanbox: "FAN Courier FANbox (locker)",
+        paypoint: "FAN Courier PayPoint",
+        office: "Ridicare din oficiu FAN Courier",
+      };
+      /*
+       * ⚠ Sufixul urmeaza RETEAUA, nu cuvantul „locker".
+       *
+       * `lockerLabel` adauga mereu „(locker)" peste eticheta comerciantului, si pentru un
+       * PayPoint sau un ghiseu aia e pur si simplu neadevarat: omul ar cauta un dulap.
+       * Aceeasi hotarare ca substantivele din `CourierSelector`.
+       */
+      const SUFIX_RETEA: Record<TipPunctFan, string> = {
+        fanbox: "locker",
+        paypoint: "PayPoint",
+        office: "oficiu FAN",
+      };
+      const optiunePunctFan = (tip: TipPunctFan, price: number): ShippingOption => {
+        const custom = (zone.label ?? "").trim();
+        return {
+          courier: "fan-courier",
+          courierLabel: custom ? `${custom} (${SUFIX_RETEA[tip]})` : ETICHETA_RETEA[tip],
+          deliveryType: "locker",
+          price,
+          /* ⚠ Fara asta, cele trei optiuni au aceeasi cheie in `CourierSelector` si se
+             prabusesc una peste alta: cumparatorul ar vedea una singura. */
+          fanPointType: tip,
+        };
+      };
+
       /* ⚠ `tvaPeDeasupra` s-a mutat deasupra buclei: acum il folosesc sapte curieri, nu doar
          FAN. Vezi nota de acolo. */
       const pretFan = (t: TarifFan): number => {
@@ -934,33 +1002,36 @@ export async function getShippingOptions(
               });
             }),
         );
-        if (fanboxAllowed) {
+        /*
+         * ⚠ CELE TREI RETELE PE ACELASI DRUM, NU TREI BLOCURI COPIATE.
+         *
+         * Fiecare e un SERVICIU DIFERIT la FAN, cu tarif propriu, deci fiecare isi cere
+         * propria cotatie: FANbox (27/28), CollectPoint pentru PayPoint (19/20) si
+         * Standard cu optiunea `D` pentru oficiu.
+         *
+         * ⚠ Serviciul si optiunea vin din `serviciulPunctuluiFan` si `optiuneaPunctuluiFan`,
+         * ACELEASI functii pe care le cheama si emiterea. Scrise de mana si aici, si acolo,
+         * s-ar desparti la prima corectura, iar atunci pretul aratat si coletul emis ar fi
+         * ale unor servicii diferite. E chiar lectia inchisa mai sus la dimensiuni.
+         */
+        for (const tip of reteleDePuncte) {
           promises.push(
             estimateFanCourierCost(fanConfig!, {
               recipientCounty: destination.county,
               recipientLocality: destination.city,
               weightKg: weight,
-              service: codAmount > 0 ? "FANbox Cont Colector" : "FANbox",
+              service: serviciulPunctuluiFan(tip, codAmount > 0),
               ...dimensiuni,
-              // ⚠ La FANbox optiunea V e OBLIGATORIE, exact ca la emitere.
-              options: ["V"],
+              /* ⚠ Optiunea e OBLIGATORIE si la cotare, nu doar la emitere: are cost propriu
+                 (`optionsCost`, pag. 31), deci fara ea cele doua cereri pornesc diferit. */
+              options: [optiuneaPunctuluiFan(tip)],
             })
               .then((r) => {
-                options.push({
-                  courier: "fan-courier",
-                  courierLabel: lockerLabel(zone.label, "FAN Courier FANbox (locker)"),
-                  deliveryType: "locker",
-                  price: pretFan(r),
-                });
+                options.push(optiunePunctFan(tip, pretFan(r)));
               })
               .catch((err) => {
-                console.error("[shipping] FanCourier FANbox estimate failed:", err.message);
-                options.push({
-                  courier: "fan-courier",
-                  courierLabel: lockerLabel(zone.label, "FAN Courier FANbox (locker)"),
-                  deliveryType: "locker",
-                  price: zone.price,
-                });
+                console.error(`[shipping] FanCourier ${tip} estimate failed:`, err.message);
+                options.push(optiunePunctFan(tip, zone.price));
               }),
           );
         }
@@ -979,13 +1050,10 @@ export async function getShippingOptions(
           deliveryType: "address",
           price: zone.price,
         });
-        if (fanboxAllowed) {
-          options.push({
-            courier: "fan-courier",
-            courierLabel: lockerLabel(zone.label, "FAN Courier FANbox (locker)"),
-            deliveryType: "locker",
-            price: zone.price,
-          });
+        /* Aceleasi trei retele, pe tariful fix al zonei. Lista trebuie sa arate la fel
+           indiferent daca cotarea automata e pornita sau nu. */
+        for (const tip of reteleDePuncte) {
+          options.push(optiunePunctFan(tip, zone.price));
         }
       }
     } else if (courierId === "pickup") {
@@ -2882,8 +2950,28 @@ export async function getLockers(
    * la client si intra in cheia de cache.
    */
   const rateIdShipo = /^\d{1,9}$/.test(retea ?? "") ? Number(retea) : 0;
+  /*
+   * ⚠ La FAN, `retea` poarta TIPUL PUNCTULUI: `fanbox`, `paypoint` sau `office`.
+   *
+   * Sunt trei nomenclatoare diferite, cerute prin acelasi endpoint cu alt `type=`. Se
+   * ingusteaza aici, ca `reteaLockere` si `rateIdShipo`, si din acelasi motiv: valoarea
+   * vine de la client si intra in cheia de cache.
+   *
+   * ⚠ Lipsa inseamna `fanbox`, nu „nicio retea": pana pe 13.09.2026 aia era singura
+   * oferita, iar optiunile vechi din browserul unui cumparator nu poarta inca tipul.
+   */
+  const tipPunctCerut = tipPunctFan(retea) ?? "fanbox";
   const discriminant =
     courier === "smartship" ? `:${reteaLockere}`
+    /*
+     * ⚠ FARA ASTA, CELE TREI RETELE FAN AR IMPARTI O SINGURA INTRARE DE CACHE.
+     *
+     * Primul cumparator care deschide lista de FANbox-uri ar umple cache-ul, iar
+     * urmatorul, care a ales PayPoint, ar primi tot dulapurile: ar alege un punct
+     * care nu e in reteaua lui, si emiterea l-ar refuza. Acelasi rationament ca la
+     * Shipo si UPS mai jos.
+     */
+    : courier === "fan-courier" ? `:${tipPunctCerut}`
     /*
      * ⚠ La Shipo intra SI localitatea, fiindca lista din cache e a UNUI oras si
      * nimic n-o mai taie la iesire (vezi `filtreaza`). Fara ea, primul cumparator
@@ -3065,7 +3153,7 @@ export async function getLockers(
       const toate = await CACHE_LOCKERE.iaSau(
         cheieCache,
         async () =>
-          (await getFanCourierPickupPoints(config.username, config.password, "fanbox")).map((p) => ({
+          (await getFanCourierPickupPoints(config.username, config.password, tipPunctCerut)).map((p) => ({
             id: p.id,
             name: p.name,
             address: `${p.address.street} ${p.address.streetNo}, ${p.address.locality}`,
@@ -3079,7 +3167,7 @@ export async function getLockers(
       );
       return filtreazaOras(toate, city);
     } catch (e) {
-      console.error("[shipping] FanCourier pickup points failed:", (e as Error).message);
+      console.error(`[shipping] FanCourier pickup points (${tipPunctCerut}) failed:`, (e as Error).message);
       return [];
     }
   }

@@ -23,10 +23,19 @@ import { useEffect, useRef } from "react";
    copiaza fisierul de langa, si daca acela e cel fara, lipsa se propaga tacut.
    Exact motivul pentru care `poarta-awb.ts` e o poarta singura.
 
-   ⚠ CAT E PUS, MASURAT (13.09.2026): in `src/components/dashboard` sunt 36 de fisiere
-   cu `fixed inset-0`, adica tot atatea care arata a dialog, si DOUA au `role="dialog"`,
-   chiar cele doua care cheama hook-ul. Deci treaba NU e facuta; randurile astea spun
-   unde s-a ajuns, ca urmatorul cititor sa nu creada ca panoul e deja accesibil.
+   ⚠ CAT E PUS, MASURAT DIN NOU (13.09.2026, dupa `3716a489`): in `src/components/dashboard`
+   sunt 36 de fisiere cu `fixed inset-0`, iar NOUASPREZECE au `role="dialog"`: exact cele
+   nouasprezece care cheama hook-ul, adica toate cele 18 ferestre de AWB plus fereastra de
+   ridicare FAN. Dimineata erau DOUA.
+
+   ⚠ SI CELE 17 RAMASE NU SUNT TOATE FERESTRE. `fixed inset-0` e si o clasa de asezare
+   obisnuita: bara de sus si dunga de stare o folosesc pentru cu totul altceva. Deci cate
+   mai sunt de reparat se MASOARA din nou inainte de urmatorul val, nu se scade din 36.
+   Randul de mai sus a fost scris odata ca „36 arata a dialog, doua sunt", si semnul acela
+   de egal era gresit chiar cand s-a scris.
+
+   Ce se stie sigur: ferestrele de AWB sunt gata, si `ferestrele-sunt-dialoguri-adevarate.test.ts`
+   le tine asa, inclusiv cerinta ca ref-ul, rolul si numele sa stea pe ACEEASI eticheta.
 
    ⚠ SI DE CE NU FOLOSESTE `@/components/ui/dialog`. Ar fi fost mai curat, dar e o
    primitiva cu alt model de compunere (portal, backdrop, popup): mutarea modalelor

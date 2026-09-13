@@ -13,6 +13,7 @@ import { ETICHETE_COLET, potrivesteTipul } from "@/lib/sameday/colete";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
+import { liniaAdresei } from "@/lib/orders/adresa";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 type ShippingAddress = {
@@ -107,9 +108,10 @@ export function SamedayAwbModal({
   const [recipientPhone, setRecipientPhone] = useState(order.customer_phone);
   const [recipientCounty, setRecipientCounty] = useState(addr?.county ?? "");
   const [recipientCity, setRecipientCity] = useState(addr?.city ?? "");
-  const [recipientAddress, setRecipientAddress] = useState(
-    [addr?.street ?? addr?.address, addr?.street_no].filter(Boolean).join(" nr. ") ?? ""
-  );
+  /* ⚠ UN SINGUR camp de adresa, deci linia intreaga. Lipirea cu „ nr. " de dinainte nu
+     se aprindea niciodata: `street_no` nu e scris de nimeni in `shipping_address` (zero
+     randuri din cele 425 din productie), deci ramanea doar strada fara numar. */
+  const [recipientAddress, setRecipientAddress] = useState(liniaAdresei(addr));
   const [recipientPostalCode, setRecipientPostalCode] = useState(addr?.postal_code ?? "");
   const [labelFormat, setLabelFormat] = useState<"A6" | "A4">("A6");
 

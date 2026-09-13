@@ -5,6 +5,7 @@ import { getFromR2, uploadToR2 } from "@/lib/r2";
 import { cheieEticheta, felulEtichetei, numeFisier } from "@/lib/ecolet/documente";
 import { citesteExpedierea, ecoletGata, eticheta, type EcoletConfig } from "@/lib/ecolet/client";
 import { logError } from "@/lib/error-logger";
+import { poartaEtichetei } from "@/lib/orders/poarta-eticheta";
 
 /**
  * Eticheta eColet.
@@ -49,6 +50,10 @@ export async function GET(req: NextRequest) {
   const { data: biz } = await supabase
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return NextResponse.json({ error: "Acces interzis" }, { status: 403 });
+
+  /* ⚠ SI STAREA CONTULUI, dupa dovedirea proprietatii. Vezi `poarta-eticheta.ts`. */
+  const oprit = await poartaEtichetei(businessId);
+  if (oprit) return oprit;
 
   const { data: order } = await supabase
     .from("orders")

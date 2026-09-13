@@ -39,6 +39,11 @@ export function FanCourierConfigClient({
   const [selectedClientId, setSelectedClientId] = useState<number>(initialConfig?.client_id ?? 0);
   const [selectedClientName, setSelectedClientName] = useState(initialConfig?.client_name ?? "");
   const [epod, setEpod] = useState(initialConfig?.epod ?? false);
+  // Coletul obisnuit, in centimetri. Text, nu numar: un camp gol trebuie sa
+  // ramana gol, iar `useState(0)` ar arata un zero pe care nimeni nu l-a scris.
+  const [coletL, setColetL] = useState(String(initialConfig?.colet_implicit?.length ?? ""));
+  const [coletl, setColetl] = useState(String(initialConfig?.colet_implicit?.width ?? ""));
+  const [coletH, setColetH] = useState(String(initialConfig?.colet_implicit?.height ?? ""));
 
   const isActive = !!(initialConfig?.enabled && initialConfig?.username && initialConfig?.client_id);
 
@@ -66,8 +71,33 @@ export function FanCourierConfigClient({
     setStep("settings");
   }
 
+  /**
+   * Coletul implicit din formular, sau `null` cand toate trei sunt goale.
+   *
+   * ⚠ `parseFloat`, nu `parseInt`: cutiile reale au zecimale, iar compartimentul
+   * mare FANbox e 44,3 cm. Taiat la 44, un colet de 44,3 ar fi trecut validarea
+   * si ar fi fost refuzat la locker, chiar defectul gasit in modal.
+   */
+  function coletDinFormular(): { length: number; width: number; height: number } | null {
+    const v = [coletL, coletl, coletH].map(x => x.trim());
+    if (v.every(x => !x)) return null;
+    const [length, width, height] = v.map(x => parseFloat(x.replace(",", ".")));
+    return { length, width, height };
+  }
+
   async function handleSave() {
     if (!selectedClientId) return toast.error("Selecteaza un branch");
+    /* ⚠ Aceeasi conditie ca pe server, doar ca aici se afla INAINTE de drum:
+       o configurare activa fara parola arata verde pe trei ecrane si e refuzata
+       de fiecare actiune. Serverul ramane poarta adevarata. */
+    if (!password.trim() && !secretulEsteSalvat(initialConfig, "password")) {
+      return toast.error("Completeaza parola selfAWB inainte de a salva");
+    }
+
+    const colet = coletDinFormular();
+    if (colet && !Object.values(colet).every(n => Number.isFinite(n) && n > 0 && n <= 999)) {
+      return toast.error("Dimensiunile coletului trebuie completate toate trei, intre 0,1 si 999 cm");
+    }
 
     const config: FanCourierConfig = {
       enabled: true,
@@ -76,9 +106,16 @@ export function FanCourierConfigClient({
       client_id: selectedClientId,
       client_name: selectedClientName,
       epod,
-      // Keep the pickup bookkeeping across re-saves.
-      last_pickup_date: initialConfig?.last_pickup_date ?? null,
-      last_pickup_id: initialConfig?.last_pickup_id ?? null,
+      colet_implicit: coletDinFormular(),
+      /*
+       * ⚠ EVIDENTA RIDICARII NU SE MAI CARA PRIN BROWSER.
+       *
+       * Se trimiteau inapoi `last_pickup_date`/`last_pickup_id` dintr-o fotografie luata la
+       * randarea paginii. O fila de Setari deschisa inaintea programarii stergea ridicarea la
+       * prima salvare; una deschisa inaintea anularii invia un id mort. Acum le pastreaza
+       * SERVERUL, din configul salvat (vezi `saveFanCourierConfig`), fiindca el e singurul
+       * care le vede proaspete.
+       */
     };
 
     setSaving(true);
@@ -195,6 +232,14 @@ export function FanCourierConfigClient({
                   : "Conecteaza contul pentru a incarca branch-urile"}
               </div>
             )}
+          </Field>
+
+          <Field label="Coletul tau obisnuit (cm)" hint="Lungime x latime x inaltime. FAN cere dimensiunile la fiecare AWB, iar ele intra in greutatea volumetrica: fara ele coletul pleaca subdeclarat si curierul refactureaza diferenta. Obligatoriu pentru generarea in MASA, care nu are de unde sa le stie; la emiterea din fereastra comenzii le poti scrie de fiecare data.">
+            <div className="grid grid-cols-3 gap-2">
+              <Input inputMode="decimal" placeholder="Lungime" value={coletL} onChange={e => setColetL(e.target.value)} />
+              <Input inputMode="decimal" placeholder="Latime" value={coletl} onChange={e => setColetl(e.target.value)} />
+              <Input inputMode="decimal" placeholder="Inaltime" value={coletH} onChange={e => setColetH(e.target.value)} />
+            </div>
           </Field>
 
           <label className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 p-3 cursor-pointer">

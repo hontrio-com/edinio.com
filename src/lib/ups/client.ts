@@ -1,4 +1,5 @@
 import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { cheieToken as cheieTokenFurnizor } from "@/lib/integrari/cheie-token";
 import { normalizeLocalityName, stripDiacritics } from "@/lib/utils/ro-address";
 
 /**
@@ -714,8 +715,16 @@ export function uitaTokenurile(): void {
   tokenuriInZbor.clear();
 }
 
-function cheieToken(baza: string, clientId: string): string {
-  return `${baza}|${clientId}`;
+/*
+ * ⚠ SI SECRETUL, hasuit. Cheiata doar pe gazda plus `client_id`, harta intorcea
+ * tokenul valid si pentru un Client Secret GRESIT: „Testeaza conexiunea" raspundea
+ * verde peste o credentiala invalida, iar defectul iesea abia la expirarea tokenului,
+ * adica la primul AWB. Si, fiindca harta e a MODULULUI, un magazin care trimitea
+ * `client_id`-ul altuia primea tokenul aceluia. UPS a fost sarit cand s-au reparat
+ * FAN, Colete, FedEx si Cargus. Vezi `@/lib/integrari/cheie-token`.
+ */
+function cheieToken(baza: string, clientId: string, clientSecret: string): string {
+  return cheieTokenFurnizor([baza, clientId], [clientSecret]);
 }
 
 async function ceriToken(
@@ -821,7 +830,7 @@ async function token(
   const secret = (config.client_secret ?? "").trim();
   if (!id || !secret) throw eroareRefuz("Lipsesc Client ID si Client Secret din configurarea UPS.");
 
-  const cheie = cheieToken(gazda(config), id);
+  const cheie = cheieToken(gazda(config), id, secret);
   if (!forteaza) {
     const viu = tokenuri.get(cheie);
     if (viu && viu.expiraLa > Date.now()) return viu.token;

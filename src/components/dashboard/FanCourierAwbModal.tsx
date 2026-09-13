@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { useDialogAccesibil } from "./useDialogAccesibil";
+import { stradaDestinatarului } from "@/lib/orders/adresa";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { X, Package, Loader2, Download, Trash2, MapPin } from "lucide-react";
 import { createFanCourierAwbAction, deleteFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
@@ -79,7 +81,7 @@ export function FanCourierAwbModal({
   const [recipientLocality, setRecipientLocality] = useState(
     isFanboxDelivery ? (addr?.locker_city ?? addr?.city ?? "") : (addr?.city ?? ""),
   );
-  const [recipientStreet, setRecipientStreet] = useState(addr?.street ?? addr?.address ?? "");
+  const [recipientStreet, setRecipientStreet] = useState(stradaDestinatarului(addr));
   const [recipientStreetNo, setRecipientStreetNo] = useState(addr?.street_no ?? "");
   const [recipientZipCode, setRecipientZipCode] = useState(addr?.postal_code ?? "");
 
@@ -98,22 +100,81 @@ export function FanCourierAwbModal({
     if (open && !hasAwb) setCod(rambursDeIncasat({ payment_status: order.payment_status, total: order.total, order_source: order.order_source }).toFixed(2));
   }, [open, hasAwb, order.payment_status, order.total]);
 
+  /*
+   * ⚠ DESTINATARUL SE RECITESTE CAND SE SCHIMBA COMANDA.
+   *
+   * Campurile de mai sus sunt `useState(order....)`, adica se umplu O SINGURA
+   * DATA. Iar modalul e montat PERMANENT in pagina comenzii, se randeaza cand
+   * FAN e activ, nu cand e deschis (`OrderDetailClient.tsx`, unde `open` e doar
+   * un prop). Deci starea supravietuia si peste `router.refresh()`.
+   *
+   * Ce costa: comerciantul corecteaza adresa gresita a unui client, pagina se
+   * reincarca, aplicatia ii spune „poti genera acum AWB-ul cu datele noi", si
+   * modalul trimite mai departe ADRESA VECHE. Un colet fizic, cu ramburs, plecat
+   * la destinatia gresita, fara ca nimic sa para stricat.
+   *
+   * ⚠ Se face la RANDARE, nu intr-un `useEffect`: asta e tiparul recomandat de
+   * React pentru „reseteaza starea cand se schimba un prop", si singurul care nu
+   * lasa sa se vada o randare cu datele vechi. Un efect ar fi si a doua
+   * incalcare a `react-hooks/set-state-in-effect` in acelasi fisier.
+   *
+   * Se resincronizeaza doar cat timp nu exista inca AWB: dupa emitere campurile
+   * arata ce s-a trimis, si nu au voie sa se miste sub ochii omului.
+   */
+  const amprentaDestinatarului = JSON.stringify([
+    order.customer_name, order.customer_phone, order.customer_email,
+    addr?.county, addr?.city, addr?.street, addr?.address, addr?.street_no, addr?.postal_code,
+    addr?.locker_county, addr?.locker_city, isFanboxDelivery,
+  ]);
+  const [amprentaAratata, setAmprentaAratata] = useState(amprentaDestinatarului);
+  if (amprentaAratata !== amprentaDestinatarului) {
+    setAmprentaAratata(amprentaDestinatarului);
+    if (!hasAwb) {
+      setRecipientName(order.customer_name);
+      setRecipientPhone(order.customer_phone);
+      setRecipientEmail(order.customer_email ?? "");
+      setRecipientCounty(isFanboxDelivery ? (addr?.locker_county ?? addr?.county ?? "") : (addr?.county ?? ""));
+      setRecipientLocality(isFanboxDelivery ? (addr?.locker_city ?? addr?.city ?? "") : (addr?.city ?? ""));
+      setRecipientStreet(stradaDestinatarului(addr));
+      setRecipientStreetNo(addr?.street_no ?? "");
+      setRecipientZipCode(addr?.postal_code ?? "");
+    }
+  }
+
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
     if (!recipientPhone.trim()) return toast.error("Telefonul destinatarului este obligatoriu");
     if (!isFanboxDelivery) {
       if (!recipientCounty.trim()) return toast.error("Judetul destinatarului este obligatoriu");
       if (!recipientLocality.trim()) return toast.error("Localitatea destinatarului este obligatorie");
+      /* ⚠ Si strada. Serverul o cere de pe 09.09.2026, pana atunci o adresa goala
+         pleca la FAN ca sirul „Strada", iar coletul se plimba si se intorcea. Aici
+         omul o poate completa; codul ar putea doar sa o inventeze. */
+      if (!recipientStreet.trim()) return toast.error("Adresa destinatarului (strada) este obligatorie");
     }
     const weightNum = parseFloat(weight) || 0;
     if (weightNum <= 0) return toast.error("Greutatea trebuie sa fie mai mare decat 0");
     if (codNum > FAN_MAX_COD) return toast.error("Rambursul maxim acceptat de FAN Courier este 10.000 lei");
 
+    /*
+     * ⚠ ORI TOATE TREI, ORI NICIUNA, si la livrarea la domiciliu, nu doar la FANbox.
+     *
+     * Cele trei campuri pleaca separat (`length ? parseFloat(...) : undefined`), iar
+     * serverul cere toate trei deodata. Cu doua completate, a treia lipsa arunca TACUT
+     * si pe celelalte doua si trimite coletul obisnuit din Setari: 30x20x10 declarat
+     * pentru un colet de 120x80, si diferenta o refactureaza FAN pe factura lunara.
+     * Aici se vede si se spune; pe server se si refuza.
+     */
+    const completate = [length, width, height].filter(v => v.trim() !== "");
+    if (completate.length > 0 && completate.length < 3) {
+      return toast.error("Completeaza toate trei dimensiunile (L x l x H), sau lasa-le goale");
+    }
+
     if (isFanboxDelivery) {
       if (!recipientEmail.trim()) return toast.error("Emailul destinatarului este obligatoriu pentru livrarea la FANbox");
       if (weightNum > FANBOX_MAX_WEIGHT_KG) return toast.error(`Greutatea maxima pentru FANbox este ${FANBOX_MAX_WEIGHT_KG} kg`);
       if ((parseInt(parcels) || 1) > 1) return toast.error("FANbox accepta un singur colet per AWB");
-      const dims = [length, width, height].map(v => parseFloat(v));
+      const dims = [length, width, height].map(v => parseFloat(v.replace(",", ".")));
       if (!dims.every(d => d > 0)) {
         return toast.error("Dimensiunile coletului (L x l x H) sunt obligatorii pentru FANbox");
       }
@@ -123,7 +184,17 @@ export function FanCourierAwbModal({
       }
     }
 
+    /*
+     * ⚠ `try/finally`, nu doar doua apeluri in sir.
+     *
+     * O actiune de server nu esueaza doar prin `{ error }`: poate ARUNCA, retea
+     * cazuta, desfasurare in curs, termen depasit. Atunci `setCreating(false)` de
+     * mai jos nu se mai executa niciodata, iar butonul ramane invartindu-se pana
+     * la reincarcarea paginii. Inchiderea modalului nu il deblocheaza, fiindca
+     * modalul e montat permanent si isi pastreaza starea.
+     */
     setCreating(true);
+    try {
     const result = await createFanCourierAwbAction(businessId, order.id, {
       recipientName: recipientName.trim(),
       recipientPhone: recipientPhone.trim(),
@@ -135,15 +206,21 @@ export function FanCourierAwbModal({
       recipientZipCode: recipientZipCode.trim(),
       parcels: isFanboxDelivery ? 1 : (parseInt(parcels) || 1),
       weightKg: weightNum,
-      length: length ? parseInt(length) : undefined,
-      width: width ? parseInt(width) : undefined,
-      height: height ? parseInt(height) : undefined,
+      /*
+       * ⚠ `parseFloat`, ca la VALIDARE (mai sus, unde se verifica incadrarea in
+       * compartimentul FANbox). Cu `parseInt` la trimitere, cele doua nu mai
+       * priveau acelasi colet: 44,3 trecea validarea si pleca 44, iar un 0,5
+       * trecea ca subunitar si pleca ZERO, la domiciliu chiar asa, fiindca
+       * `?? 1` nu prinde zeroul.
+       */
+      length: length ? parseFloat(length.replace(",", ".")) : undefined,
+      width: width ? parseFloat(width.replace(",", ".")) : undefined,
+      height: height ? parseFloat(height.replace(",", ".")) : undefined,
       cod: codNum,
       content: content.trim() || order.order_number,
       observation: observation.trim(),
       fanboxId: isFanboxDelivery ? addr!.locker_id : undefined,
     });
-    setCreating(false);
 
     if ("error" in result) {
       toast.error(result.error);
@@ -151,18 +228,27 @@ export function FanCourierAwbModal({
       toast.success(`AWB FAN Courier ${result.awbNumber} creat (${autoService})`);
       onSuccess();
     }
+    } catch (e) {
+      toast.error(`Nu am putut trimite cererea catre server: ${(e as Error).message}`);
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function handleDelete() {
     setDeleting(true);
-    const result = await deleteFanCourierAwbAction(businessId, order.id);
-    setDeleting(false);
-
-    if ("error" in result) {
-      toast.error(result.error);
-    } else {
-      toast.success("AWB FAN Courier sters");
-      onSuccess();
+    try {
+      const result = await deleteFanCourierAwbAction(businessId, order.id);
+      if ("error" in result) {
+        toast.error(result.error);
+      } else {
+        toast.success("AWB FAN Courier sters");
+        onSuccess();
+      }
+    } catch (e) {
+      toast.error(`Nu am putut trimite cererea catre server: ${(e as Error).message}`);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -189,18 +275,29 @@ export function FanCourierAwbModal({
     }
   }
 
+  const cutiaDialogului = useDialogAccesibil(open, onClose);
+
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl border border-border shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div
+        ref={cutiaDialogului}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titlu-awb-fan"
+        /* ⚠ `tabIndex={-1}` ca sa poata primi focusul la deschidere fara sa intre in
+           ordinea de Tab; `focus:outline-none` ca sa nu apara un inel in jurul intregii
+           cutii. Vezi `useDialogAccesibil`. */
+        tabIndex={-1}
+        className="relative bg-background rounded-2xl border border-border shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto focus:outline-none">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-background z-10">
           <div className="flex items-center gap-2.5">
             <img src="/integrations/fan-courier.svg" alt="FAN Courier" className="h-5 w-auto" />
             <div>
-              <p className="text-sm font-semibold text-foreground">AWB FAN Courier</p>
+              <p id="titlu-awb-fan" className="text-sm font-semibold text-foreground">AWB FAN Courier</p>
               <p className="text-xs text-muted-foreground">Comanda {order.order_number}</p>
             </div>
           </div>
@@ -388,7 +485,9 @@ export function FanCourierAwbModal({
 
                   <div>
                     <p className="text-[11px] text-muted-foreground mb-2">
-                      {isFanboxDelivery ? "Dimensiuni cm (obligatoriu la FANbox — determina compartimentul)" : "Dimensiuni cm (optional)"}
+                      {isFanboxDelivery
+                        ? "Dimensiuni cm (obligatoriu la FANbox: determina compartimentul)"
+                        : "Dimensiuni cm (toate trei, sau niciuna si pleaca coletul obisnuit din Setari)"}
                     </p>
                     <div className="grid grid-cols-3 gap-2">
                       {[

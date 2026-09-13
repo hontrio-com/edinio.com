@@ -7,7 +7,7 @@ import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { logError } from "@/lib/error-logger";
 import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday/client";
-import { estimateFanCourierCost, getFanCourierPickupPoints, type FanCourierConfig, type FanCourierPickupPoint } from "@/lib/fancourier";
+import { coletImplicit, estimateFanCourierCost, FAN_MAX_COD, FANBOX_MAX_WEIGHT_KG, getFanCourierPickupPoints, incapeInFanbox, type FanCourierConfig, type FanCourierPickupPoint, type TarifFan } from "@/lib/fancourier";
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig } from "@/lib/woot";
 import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type DpdConfig } from "@/lib/dpd";
 import { calculateCargusPrice, getCargusPudoPoints, type CargusConfig } from "@/lib/cargus";
@@ -129,6 +129,16 @@ export type ShippingOption = {
   deliveryType: "address" | "locker";
   price: number;
   estimatedDays?: string;
+  /**
+   * Curierul asta nu poate incasa rambursul cosului de fata.
+   *
+   * ⚠ E DOAR PENTRU AFISARE, si de aceea nu e legat de semnatura cotatiei: poarta
+   * adevarata sta la emitere (`createFanCourierAwb` refuza peste `FAN_MAX_COD`), iar
+   * un steag venit din browser n-ar avea ce apara. Rostul lui e ca omul sa afle
+   * INAINTE sa plateasca, nu dupa, cand comanda nu mai poate fi expediata cu
+   * curierul promis.
+   */
+  rambursIndisponibil?: true;
   // Woot is a broker — each option is a specific courier offer; carry its ids so
   // the customer's choice flows through to AWB creation.
   wootServiceId?: number;
@@ -400,7 +410,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, default_shipping_cost, shipping_zones, shipping_rules")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, default_shipping_cost, shipping_zones, shipping_rules, vat_enabled, prices_include_vat")
     .eq("business_id", businessId)
     .single();
 
@@ -684,6 +694,12 @@ export async function getShippingOptions(
   }
 
   const promises: Promise<void>[] = [];
+  /*
+   * ⚠ Se declara AICI, nu in ramura FAN: patru din cele sase optiuni FAN se imping din
+   * `.then()`/`.catch()`, deci nu exista in lista cand ramura se incheie. Marcarea se
+   * face dupa `Promise.all`, unde sunt toate.
+   */
+  let fanRambursPestePlafon = false;
 
   for (const [courierId, zone] of enabledZones) {
     // `doarTarifeFixe` trece fiecare curier pe ramura de pret manual de mai jos,
@@ -778,8 +794,88 @@ export async function getShippingOptions(
       const fanConfig = settings.fan_courier_config as FanCourierConfig | null;
       const hasApi = !!(fanConfig?.enabled && fanConfig.username && fanConfig.client_id);
       const codAmount = destination.cod ?? 0;
-      // FANbox hard limit is 30 kg — don't offer the locker option beyond it.
-      const fanboxAllowed = hasApi && weight <= 30;
+      /*
+       * ⚠ PLAFONUL DE RAMBURS NU SCOATE OPTIUNEA DIN LISTA. Se SPUNE, nu se ascunde.
+       *
+       * `info.cod` are maximum 10.000 la FAN (pag. 12), iar `createFanCourierAwb`
+       * refuza peste. Pus insa ca POARTA pe optiune, inchidea amandoua ramurile de mai
+       * jos deodata, si atunci pe un magazin care are FAN ca singura zona activa
+       * `options` iesea GOL: `getShippingOptions` intoarce `[]`, `CourierSelector`
+       * intoarce `null`, iar sectiunea de livrare DISPARE din pagina, fara niciun mesaj.
+       * Cumparatorul nu mai putea trimite comanda deloc, si nu avea de unde sa afle de ce.
+       *
+       * ⚠ E chiar capcana consemnata mai sus, la plafonul durabil: „la depasire se
+       * raspundea cu lista GOALA ... cumparatorul REAL nu mai primea nicio metoda de
+       * livrare". Acolo s-a reparat prin cadere pe tarifele fixe; aici reintrase pe alt drum.
+       *
+       * ⚠ SI NU SE FILTREAZA METODELE DE PLATA, desi ar parea leacul evident: masurat pe
+       * productie, toate cele TREI magazine cu FAN au rambursul ca SINGURA metoda, deci
+       * scoaterea lui le-ar lasa cu zero metode, adica exact aceeasi fundatura mutata.
+       */
+      fanRambursPestePlafon = hasApi && codAmount > FAN_MAX_COD;
+
+      /*
+       * ⚠ TARIFUL FAN VINE CU TVA. Pretul optiunii trebuie sa fie in ACELASI
+       * regim ca preturile magazinului, fiindca pleaca mai departe in `vatBase`.
+       *
+       * Raspunsul FAN e explicit (pag. 31): `costNoVAT: 26.19` + `vat: 4.98` =
+       * `total: 31.17`. Codul lua doar `total`. Intr-un magazin care afiseaza
+       * preturi FARA TVA, transportul intra apoi in baza de TVA si `computeVat`
+       * mai adauga o cota peste una deja platita: cumparatorul platea 37,09 in
+       * loc de 31,17, la fiecare comanda, si nu se vedea nicaieri.
+       *
+       * Magazinele cu preturi CU TVA nu erau atinse (`vatAddOn` e 0 acolo), deci
+       * regula e strict pe regim, nu peste tot.
+       *
+       * Cand magazinul e pe regim NET si FAN nu trimite `costNoVAT`, nu se
+       * deduce nimic: se arunca, si abia atunci rezerva pe pretul fix al zonei
+       * isi face treaba. Un net inventat ar fi tot o suma gresita, doar tacuta.
+       */
+      /*
+       * ⚠ ACELEASI DATE LA COTARE SI LA EMITERE.
+       *
+       * Cotarea cerea pretul pentru un colet fara dimensiuni si fara optiuni,
+       * iar AWB-ul pleca apoi cu dimensiunile coletului si cu V (FANbox) sau X
+       * (ePOD). Amandoua intra in tarif, dimensiunile prin greutatea volumetrica,
+       * optiunile prin `optionsCost`, deci clientul vedea un pret si curierul
+       * factura altul. Acum se trimit de aici, din aceeasi configurare din care
+       * le ia si emiterea.
+       */
+      const coletul = coletImplicit(fanConfig ?? ({} as FanCourierConfig));
+      const dimensiuni = coletul
+        ? { lengthCm: coletul.length, widthCm: coletul.width, heightCm: coletul.height }
+        : {};
+
+      /*
+       * ⚠ FANBOX SE OFERA DOAR PENTRU UN COLET CARE CHIAR INCAPE.
+       *
+       * Pana azi se verifica doar greutatea, iar comparatia cu compartimentul traia numai
+       * la emitere. De cand dimensiunile sunt obligatorii, comerciantul isi seteaza cutia
+       * obisnuita in Setari; daca aceea e 60x40x40, cotarea impingea mai departe optiunea
+       * „FANbox (locker)", clientul o alegea si PLATEA, iar emiterea o refuza apoi cu
+       * „coletul depaseste compartimentul". Comanda platita, curierul promis imposibil.
+       *
+       * ⚠ Aceeasi comparatie ca la emitere, chemata din acelasi loc (`incapeInFanbox`):
+       * doua copii ale unei reguli de gabarit se despart la prima corectura.
+       *
+       * ⚠ Cand magazinul NU are colet configurat, optiunea ramane ca pana acum: nu stim
+       * cutia, deci n-avem ce masura, si nu se inventeaza un refuz.
+       *
+       * ⚠ Se calculeaza AICI, sub `coletul`, nu sus langa `hasApi`: altfel ar citi o
+       * variabila nedeclarata inca. Se foloseste abia in cele doua ramuri de mai jos.
+       */
+      const fanboxAllowed = hasApi
+        && weight <= FANBOX_MAX_WEIGHT_KG
+        && (!coletul || incapeInFanbox(coletul));
+
+      const tvaPeDeasupra = !!settings.vat_enabled && settings.prices_include_vat === false;
+      const pretFan = (t: TarifFan): number => {
+        if (!tvaPeDeasupra) return Math.round(t.total * 100) / 100;
+        if (t.costNoVAT === null) {
+          throw new Error("FAN Courier tariff: lipseste `costNoVAT`, iar magazinul adauga TVA peste preturi");
+        }
+        return Math.round(t.costNoVAT * 100) / 100;
+      };
 
       if (hasApi && useAutoPrice) {
         // Address and FANbox are different FAN services with different tariffs,
@@ -791,13 +887,15 @@ export async function getShippingOptions(
             recipientLocality: destination.city,
             weightKg: weight,
             service: codAmount > 0 ? "Cont Colector" : "Standard",
+            ...dimensiuni,
+            options: fanConfig?.epod ? ["X"] : [],
           })
             .then((r) => {
               options.push({
                 courier: "fan-courier",
                 courierLabel: addrLabel(zone.label, "Livrare prin FAN Courier"),
                 deliveryType: "address",
-                price: Math.round(r.total * 100) / 100,
+                price: pretFan(r),
               });
             })
             .catch((err) => {
@@ -817,13 +915,16 @@ export async function getShippingOptions(
               recipientLocality: destination.city,
               weightKg: weight,
               service: codAmount > 0 ? "FANbox Cont Colector" : "FANbox",
+              ...dimensiuni,
+              // ⚠ La FANbox optiunea V e OBLIGATORIE, exact ca la emitere.
+              options: ["V"],
             })
               .then((r) => {
                 options.push({
                   courier: "fan-courier",
                   courierLabel: lockerLabel(zone.label, "FAN Courier FANbox (locker)"),
                   deliveryType: "locker",
-                  price: Math.round(r.total * 100) / 100,
+                  price: pretFan(r),
                 });
               })
               .catch((err) => {
@@ -838,6 +939,14 @@ export async function getShippingOptions(
           );
         }
       } else {
+        /*
+         * ⚠ REZERVA PE TARIFUL ZONEI E NECONDITIONATA, ca inainte de plafon.
+         *
+         * Aici ajung si magazinele fara cotare automata, si cele cu integrarea stinsa,
+         * si cosurile peste plafonul de ramburs. Niciunul nu are voie sa ramana fara
+         * nicio optiune: peste plafon optiunea pleaca marcata `rambursIndisponibil`,
+         * iar cumparatorul citeste de ce, in loc sa vada sectiunea disparuta.
+         */
         options.push({
           courier: "fan-courier",
           courierLabel: addrLabel(zone.label, "Livrare prin FAN Courier"),
@@ -1524,6 +1633,15 @@ export async function getShippingOptions(
   }
 
   await Promise.all(promises);
+
+  /*
+   * ⚠ ABIA ACUM sunt in lista si optiunile cotate asincron. Marcate la fiecare
+   * `options.push`, cele patru din `.then()`/`.catch()` ar fi cerut sase locuri diferite,
+   * adica sase sanse ca urmatorul curier asincron sa fie uitat.
+   */
+  if (fanRambursPestePlafon) {
+    for (const o of options) if (o.courier === "fan-courier") o.rambursIndisponibil = true;
+  }
 
   if (options.length === 0) return [];
 

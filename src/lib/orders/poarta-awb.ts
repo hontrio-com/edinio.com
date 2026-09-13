@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
-import { deCeNuSePoateAwbPropriu } from "./awb-propriu";
+import { motivContInactiv } from "@/lib/subscription-server";
+import { awburiDinRand, deCeNuSePoateAwbPropriu, type CurierPropriu } from "./awb-propriu";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    POARTA CARE REFUZA CU ADEVARAT AWB-UL PROPRIU
@@ -27,9 +28,60 @@ import { deCeNuSePoateAwbPropriu } from "./awb-propriu";
  * ghicitul ei gresit costa un al doilea transport. Oricum, actiunea care ne-a chemat isi
  * citeste si ea comanda imediat dupa, deci o baza cazuta o oprea si pe ea.
  */
-export async function poartaAwbPropriu(businessId: string, orderId: string): Promise<string | null> {
-  return poartaCuBaza(createAdminClient(), businessId, orderId);
+/**
+ * ⚠ `curier` E OPTIONAL, si nu din comoditate.
+ *
+ * Cei saptesprezece curieri proprii se prezinta cu cheia lor, ca poarta sa nu-i
+ * blocheze pe propriul lor AWB (altfel anularea si reemiterea ar fi imposibile).
+ * Dar exista si emitatori care NU au coloana pe `orders`: eMAG isi tine AWB-ul in
+ * tabelul lui (`emag_awb`) si scrie pe comanda doar `tracking_number`, camp comun
+ * tuturor curierilor, deci nefolosibil ca identitate.
+ *
+ * Un asemenea emitator nu se poate recunoaste pe sine, si nici nu are nevoie: ce
+ * trebuie oprit e sa NU plece al doilea colet peste unul deja expediat de altcineva.
+ * Fara curier, bucla refuza pe AWB-ul oricarui curier propriu, ceea ce e exact regula
+ * care ii lipsea.
+ */
+export async function poartaAwbPropriu(
+  businessId: string, orderId: string, curier?: CurierPropriu,
+): Promise<string | null> {
+  /*
+   * ⚠ INTAI CONTUL, apoi comanda. Blocarea din layout-ul de dashboard e o
+   * redirectionare de PAGINA, deci nu atinge actiunile de server: un magazin cu
+   * abonamentul neplatit putea emite mai departe AWB-uri reale, facturate prin
+   * integrarea platformei, dintr-o fila ramasa deschisa. Vezi `subscription-server.ts`.
+   */
+  const contInactiv = await motivContInactiv(businessId);
+  if (contInactiv) return contInactiv;
+
+  return poartaCuBaza(createAdminClient(), businessId, orderId, curier);
 }
+
+/*
+ * ⚠ LISTA SE SCRIE PE FATA, CA S-O POATA CITI `verifica:coloane` (13.09.2026).
+ *
+ * Pana azi selectul se compunea cu sablon: `.select(`… ${coloanelePortii().join(", ")}`)`.
+ * Corect la rulare, dar INVIZIBIL pentru `scripts/tests/coloane-cerute-exista.mjs`: prima
+ * lui trecere cere ghilimele imediat dupa `.select(` (`:157`), a doua cere un nume de
+ * constanta (`:174`), si un sablon cu accente grave nu e niciuna. Deci tocmai selectul cu
+ * pedeapsa cea mai mare nu era aparat de nimic.
+ *
+ * ⚠ CE COSTA O COLOANA GRESITA AICI. PostgREST nu ignora un nume necunoscut: pica INTREAGA
+ * interogare, cu `42703`. Poarta cade inchis dinadins, deci raspunsul devine „Comanda nu
+ * s-a putut verifica acum" la TOTI cei saptesprezece curieri deodata, nu doar la cel nou.
+ * Exact incidentul din 03.09.2026 pentru care s-a scris unealta.
+ *
+ * ⚠ SI NU E O A DOUA SURSA DE ADEVAR. `poarta-awb.test.ts` compara lista de aici cu
+ * `coloanelePortii()`, adica exact cu harta curierilor: daca cineva adauga al optsprezecelea
+ * curier si uita randul de aici, proba cade inainte de push.
+ */
+const COLOANE_POARTA =
+  "order_source, payment_status, status, "
+  + "cargus_awb_number, colete_awb_number, dhl_awb_number, dpd_awb_number, "
+  + "ecolet_awb_number, fan_courier_awb_number, fedex_awb_number, gls_awb_number, "
+  + "innoship_awb_number, packeta_packet_id, pallex_awb_number, posta_awb_number, "
+  + "sameday_awb_number, shipo_awb_number, smartship_awb_number, ups_awb_number, "
+  + "woot_awb_number, ecolet_order_to_send_id";
 
 /**
  * Chiar poarta, cu baza data din afara.
@@ -40,11 +92,15 @@ export async function poartaAwbPropriu(businessId: string, orderId: string): Pro
  * poate scrie daca clientul e ferecat inauntru.
  */
 export async function poartaCuBaza(
-  admin: ReturnType<typeof createAdminClient>, businessId: string, orderId: string,
+  admin: ReturnType<typeof createAdminClient>, businessId: string, orderId: string, curier?: CurierPropriu,
 ): Promise<string | null> {
   const { data, error } = await admin
     .from("orders")
-    .select("order_source, payment_status")
+    /* ⚠ Coloanele de AWB ale TUTUROR curierilor, PLUS martorii expedierilor pornite si
+       neconfirmate inca (vezi `COLOANE_MARTOR`): poarta trebuie sa poata spune si
+       „coletul asta e deja dus de altcineva", nu doar „e al marketplace-ului".
+       Scrisa pe fata, si tinuta in pas cu harta de proba. Vezi `COLOANE_POARTA`. */
+    .select(COLOANE_POARTA)
     /* ⚠ SI PE MAGAZIN, nu doar pe `id`: citim cu cheia de serviciu, deci RLS nu ne mai apara,
        iar `orderId` vine din browser. Fara filtru, poarta ar raspunde despre comanda altcuiva. */
     .eq("id", orderId)
@@ -67,6 +123,13 @@ export async function poartaCuBaza(
    */
   if (!data) return null;
 
-  const rand = data as unknown as { order_source: unknown; payment_status: string | null };
-  return deCeNuSePoateAwbPropriu(rand);
+  const rand = data as unknown as Record<string, unknown>;
+  const awburi = awburiDinRand(rand);
+
+  return deCeNuSePoateAwbPropriu({
+    order_source: rand.order_source,
+    payment_status: (rand.payment_status ?? null) as string | null,
+    status: (rand.status ?? null) as string | null,
+    awburi,
+  }, curier);
 }

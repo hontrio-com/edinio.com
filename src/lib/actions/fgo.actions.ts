@@ -18,6 +18,7 @@ import { fetchSkuMap, type SursaCoduri } from "@/lib/billing/sku-map";
 import { liniiFgo, mesajRefuz, pretDeDocument, reconciliazaComanda } from "@/lib/billing/reconcile";
 
 import { autoInvoiceTriggerMatches } from "@/lib/invoicing";
+import { liniaAdresei } from "@/lib/orders/adresa";
 import {
   createFgoInvoice,
   stornoFgoInvoice,
@@ -496,7 +497,7 @@ export async function generateFgoInvoice(
 
     // fGO avea de la inceput `tip` si `codUnic` in tip; doar nu i se trimitea
     // nimic pe ele.
-    const parte = invoiceParty(order, { ...addr, address: addr?.address ?? addr?.street ?? null });
+    const parte = invoiceParty(order, { ...addr, address: liniaAdresei(addr) || null });
 
     /*
      * fGO are `IdExtern` -> 409, deci duplicatul e blocat LA FURNIZOR — dar exact

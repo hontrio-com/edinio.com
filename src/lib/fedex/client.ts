@@ -1,4 +1,5 @@
 import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { cheieToken as cheieTokenFurnizor } from "@/lib/integrari/cheie-token";
 
 /**
  * Clientul FedEx.
@@ -588,8 +589,13 @@ export function uitaTokenurile(): void {
   tokenuri.clear();
 }
 
-function cheieToken(baza: string, clientId: string): string {
-  return `${baza}|${clientId}`;
+/*
+ * ⚠ SI SECRETUL, hasuit. Cu cheia doar pe gazda plus `client_id`, o configurare
+ * cu Secret Key GRESIT primea tokenul valid din cache si raspundea „conectat",
+ * fara sa atinga FedEx. Vezi `@/lib/integrari/cheie-token`.
+ */
+function cheieToken(baza: string, clientId: string, clientSecret: string): string {
+  return cheieTokenFurnizor([baza, clientId], [clientSecret]);
 }
 
 async function token(config: Pick<FedexConfig, "client_id" | "client_secret" | "mediu">, forteaza = false): Promise<string> {
@@ -598,7 +604,7 @@ async function token(config: Pick<FedexConfig, "client_id" | "client_secret" | "
   const secret = (config.client_secret ?? "").trim();
   if (!id || !secret) throw eroareRefuz("Lipsesc API Key si Secret Key din configurarea FedEx.");
 
-  const cheie = cheieToken(baza, id);
+  const cheie = cheieToken(baza, id, secret);
   const viu = tokenuri.get(cheie);
   if (!forteaza && viu && viu.expiraLa > Date.now()) return viu.token;
 

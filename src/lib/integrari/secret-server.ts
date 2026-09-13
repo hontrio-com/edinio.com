@@ -17,6 +17,26 @@ import { CAMPURI_SECRETE } from "@/lib/integrari/secrete";
  * Regula: ce vine de la client are intaietate (asa se poate TESTA o credentiala
  * noua inainte de a o salva); cand vine gol, cadem pe cea din baza.
  *
+ * ⚠ DAR INTAIETATEA VINE A DOUA, DUPA IDENTITATE, si nu din estetica.
+ *
+ * Pana pe 09.09.2026, `if (dinFormular) return dinFormular` sta INAINTEA lui
+ * `getUser`. Toti cei 19 apelanti ai functiei, „testeaza conexiunea" si
+ * „incarca datele contului", in 17 fisiere de actiuni, se bazau pe ea ca pe o
+ * poarta si nu mai verificau nimic ei insisi. Cu scurtatura prima, oricine
+ * trimitea o parola NEVIDA sarea peste tot blocul de mai jos: `businessId`
+ * devenea decorativ, sesiunea nu se cerea deloc (poarta MFA lasa sa treaca
+ * cererile fara cookie), iar platforma raspundea la `api.fancourier.ro/login`
+ * pentru oricine, de cate ori voia.
+ *
+ * Ce a costat, probat pe FAN: compusa cu un cache de token cheiat fara secret,
+ * o singura cerere neautentificata scotea contul altui comerciant, denumire,
+ * persoana de contact, ambele telefoane, emailul si IBAN-ul din
+ * `reports/branches`. Vezi proba din `fancourier.token.test.ts`.
+ *
+ * Reordonarea de mai jos nu ia nimic din functionalitate: proprietarul
+ * autentificat isi testeaza mai departe credentiala noua inainte de a o salva.
+ * Doar ca acum trebuie sa fie el.
+ *
  * Proprietatea se verifica de fiecare data cu clientul utilizatorului, deci
  * nimeni nu poate citi secretul altui magazin trimitand alt `businessId`.
  * Intoarce sirul gol la orice esec — apelantul trateaza asta ca „lipseste".
@@ -34,8 +54,6 @@ export async function secretDinConfig(
   camp: string,
   primitDeLaClient?: string,
 ): Promise<string> {
-  const dinFormular = (primitDeLaClient ?? "").trim();
-  if (dinFormular) return dinFormular;
   if (!businessId) return "";
 
   const supabase = await createClient();
@@ -45,6 +63,10 @@ export async function secretDinConfig(
   const { data: biz } = await supabase
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return "";
+
+  // Abia AICI, cu proprietarul dovedit: credentiala din formular are intaietate.
+  const dinFormular = (primitDeLaClient ?? "").trim();
+  if (dinFormular) return dinFormular;
 
   const { data, error } = await createAdminClient()
     .from("store_settings").select(cheieConfig).eq("business_id", businessId).single();

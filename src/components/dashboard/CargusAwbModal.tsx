@@ -11,6 +11,7 @@ import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import type { Database } from "@/types/database.types";
+import { liniaAdresei } from "@/lib/orders/adresa";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 type ShippingAddress = {
@@ -78,7 +79,7 @@ export function CargusAwbModal({
   const [recipientEmail, setRecipientEmail] = useState(order.customer_email ?? "");
   const [recipientCounty, setRecipientCounty] = useState(addr?.county ?? "");
   const [recipientCity, setRecipientCity] = useState(addr?.city ?? "");
-  const [recipientAddress, setRecipientAddress] = useState(addr?.address ?? addr?.street ?? "");
+  const [recipientAddress, setRecipientAddress] = useState(liniaAdresei(addr));
   const [recipientPostalCode, setRecipientPostalCode] = useState(addr?.postal_code ?? "");
 
   const [creating, setCreating] = useState(false);

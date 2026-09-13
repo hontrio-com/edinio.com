@@ -12,7 +12,7 @@ import {
   ExternalLink, Pencil, Compass, Building2,
 } from "lucide-react";
 import { marketplaceCareTineComanda, cineTineComanda, mementoulMarketplace } from "@/lib/orders/origin";
-import { deCeNuSePoateAwbPropriu } from "@/lib/orders/awb-propriu";
+import { awburiDinRand, deCeNuSePoateAwbPropriu, numarDeUrmarire } from "@/lib/orders/awb-propriu";
 import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
@@ -601,15 +601,54 @@ export function OrderDetailClient({
    * inainte de a salva — iar serverul, care citeste din baza, l-ar fi refuzat oricum. Doua
    * adevaruri despre aceeasi comanda, si cel de pe ecran ar fi fost crezut.
    */
+  /*
+   * ⚠ SI COLOANELE DE AWB ALE TUTUROR CURIERILOR.
+   *
+   * Fara ele, ecranul ar fi spus „se poate" pe o comanda care are deja un colet
+   * la alt curier, iar serverul ar fi refuzat-o, adica exact cele doua adevaruri
+   * pe care nota de mai sus le tine despartite. `awburiDinRand` e chiar functia pe
+   * care o cheama si poarta de pe server, deci un curier nou nu poate fi uitat
+   * intr-un loc, si nici martorii expedierilor pornite si neconfirmate inca.
+   */
+  const awburiComenzii = awburiDinRand(ord);
+
+  /**
+   * Prima expediere activa de pe comanda, pentru notificarea catre cumparator.
+   *
+   * ⚠ ALTA HARTA DECAT A PORTII, dinadins. Poarta intreaba „exista deja un colet pe
+   * comanda asta?" si vrea identitatea care apare PRIMA, la Packeta `packeta_packet_id`.
+   * Emailul intreaba „ce numar ii dau omului?" si vrea numarul cu care se cauta la
+   * curierul care chiar livreaza, adica `packeta_external_tracking`. Citite din aceeasi
+   * harta, cumparatorul ar fi primit id-ul intern al Packetei si n-ar fi gasit nimic.
+   */
+  const expedierePeComanda = numarDeUrmarire(ord);
+
   const refuzAwbPropriu = deCeNuSePoateAwbPropriu({
     order_source: ord["order_source"] ?? null,
     payment_status: (order.payment_status as string | null) ?? null,
+    status: (order.status as string | null) ?? null,
+    awburi: awburiComenzii,
   });
   const deliveryInfo = address.delivery_type === "locker" && address.locker_name ? address.locker_name : null;
 
   const NOTIF_TEMPLATES: Record<string, { label: string; subject: string; body: string }> = {
     confirmed: { label: "Comanda confirmata", subject: `Comanda ${orderNumber} a fost confirmata`, body: `Buna ${customerName},\n\nComanda ta ${orderNumber} a fost confirmata si intra in pregatire. Te anuntam imediat ce este expediata.\n\nMultumim pentru comanda!` },
-    shipped: { label: "Comanda expediata", subject: `Comanda ${orderNumber} a fost expediata`, body: `Buna ${customerName},\n\nComanda ta ${orderNumber} a fost predata curierului si este pe drum. O vei primi in cel mai scurt timp.\n\nMultumim!` },
+    /*
+     * ⚠ CU NUMARUL AWB, cand comanda are unul.
+     *
+     * Sablonul spunea doar „a fost predata curierului si este pe drum". Numarul
+     * de urmarire exista pe comanda in clipa aceea, e chiar ce tocmai a emis
+     * comerciantul, dar nu ajungea niciodata la cumparator, care ramanea sa-l
+     * ceara inapoi pe email. `expedierePeComanda` il ia din aceeasi harta pe care
+     * o citeste si poarta, deci un curier nou nu poate fi uitat aici.
+     */
+    shipped: {
+      label: "Comanda expediata",
+      subject: `Comanda ${orderNumber} a fost expediata`,
+      body: `Buna ${customerName},\n\nComanda ta ${orderNumber} a fost predata curierului si este pe drum. O vei primi in cel mai scurt timp.`
+        + (expedierePeComanda ? `\n\nCurier: ${expedierePeComanda.curier}\nNumar AWB: ${expedierePeComanda.awb}` : "")
+        + `\n\nMultumim!`,
+    },
     delivered: { label: "Comanda livrata", subject: `Comanda ${orderNumber} a fost livrata`, body: `Buna ${customerName},\n\nComanda ta ${orderNumber} a fost livrata. Speram sa te bucuri de produse!\n\nDaca ai intrebari, suntem aici pentru tine.` },
     delay: { label: "Intarziere livrare", subject: `Update despre comanda ${orderNumber}`, body: `Buna ${customerName},\n\nIti scriem in legatura cu comanda ${orderNumber}. Din pacate intampinam o mica intarziere, dar lucram sa o expediem cat mai repede. Iti multumim pentru rabdare!` },
     info: { label: "Solicitare informatii", subject: `Avem nevoie de cateva detalii pentru comanda ${orderNumber}`, body: `Buna ${customerName},\n\nPentru a procesa comanda ${orderNumber} avem nevoie de cateva informatii suplimentare. Te rugam sa ne raspunzi la acest email.\n\nMultumim!` },

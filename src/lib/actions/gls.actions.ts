@@ -200,7 +200,7 @@ export async function createGlsAwbAction(
 
   /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
      colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
-  const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+  const refuzAwb = await poartaAwbPropriu(businessId, orderId, "gls");
   if (refuzAwb) return { error: refuzAwb };
 
   const { supabase, config, order, firma } = ctx;

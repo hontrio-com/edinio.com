@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useDialogAccesibil } from "./useDialogAccesibil";
 import { X, Truck, Loader2, CalendarClock, Trash2 } from "lucide-react";
 import { createFanCourierPickupAction, cancelFanCourierPickupAction } from "@/lib/actions/fancourier.actions";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,26 @@ export function FanCourierPickupModal({
     return list;
   }, [firstHour, lastHour]);
 
+  /*
+   * ⚠ ORA DE SFARSIT SE ASEAZA IN LISTA EI, cand se schimba ziua.
+   *
+   * Starea porneste de la „17:00", iar sambata ultima ora e 14:00. Deschisa
+   * VINERI, fereastra propune implicit ziua de maine, adica sambata, si ramane
+   * cu 17:00 selectat, o ora care nu exista in lista. La trimitere pica pe
+   * `endHours.includes(...)`, iar mesajul spunea „intervalul trebuie sa fie de
+   * minim 2 ore", ceea ce e FALS: intervalul 09:00-17:00 are opt. Omul cauta o
+   * problema care nu exista, in loc sa fie mutat pe o ora buna.
+   *
+   * Se corecteaza la RANDARE, nu intr-un efect: asa nu se vede nicio clipa o
+   * valoare imposibila in casuta.
+   */
+  if (!endHours.includes(secondHour) && endHours.length > 0) {
+    setSecondHour(endHours[endHours.length - 1]);
+  }
+  if (!startHours.includes(firstHour) && startHours.length > 0) {
+    setFirstHour(startHours[0]);
+  }
+
   const hasActivePickup = !!lastPickupDate && lastPickupDate >= toLocalDateString(new Date());
 
   async function handleSubmit() {
@@ -83,56 +104,104 @@ export function FanCourierPickupModal({
     if (parcelsNum < 1) return toast.error("Numarul de colete trebuie sa fie minim 1");
     const weightNum = parseFloat(weight) || 0;
     if (weightNum <= 0) return toast.error("Greutatea totala trebuie sa fie mai mare decat 0");
-    if (!endHours.includes(secondHour)) return toast.error("Intervalul de ridicare trebuie sa fie de minim 2 ore");
-
-    setSubmitting(true);
-    const result = await createFanCourierPickupAction(businessId, {
-      pickupDate,
-      firstHour,
-      secondHour,
-      parcels: parcelsNum,
-      weightKg: weightNum,
-      observations: observations.trim() || undefined,
-    });
-    setSubmitting(false);
-
-    if ("error" in result) {
-      toast.error(result.error);
-    } else {
-      toast.success(
-        result.orderId
-          ? `Ridicare programata (comanda #${result.orderId})`
-          : "Ridicare programata cu succes",
+    /* ⚠ Motivul ADEVARAT, nu „minim 2 ore": ora poate fi in afara programului zilei
+       (sambata se inchide la 14:00), si atunci mesajul de dinainte trimitea omul sa
+       caute un interval prea scurt care nu exista. */
+    if (!endHours.includes(secondHour)) {
+      return toast.error(
+        isSaturday
+          ? "Sambata ridicarile se fac intre 09:00 si 14:00. Alege o ora de sfarsit din lista."
+          : "Intervalul de ridicare trebuie sa fie de minim 2 ore, in programul zilei.",
       );
-      onChanged();
-      onClose();
+    }
+
+    /*
+     * ⚠ `finally`, NU o stingere pe randul de dupa apel.
+     *
+     * Actiunea de server nu raspunde intotdeauna cu `{ error }`: o desfasurare in curs
+     * sau o retea cazuta o fac sa ARUNCE. Atunci randul de dupa nu se mai executa, nu
+     * apare niciun mesaj, iar butonul ramane invartindu-se pe „Se programeaza…" la
+     * nesfarsit. Fereastra de AWB a primit leacul asta in acelasi val; asta a ramas pe
+     * forma veche.
+     */
+    setSubmitting(true);
+    try {
+      const result = await createFanCourierPickupAction(businessId, {
+        pickupDate,
+        firstHour,
+        secondHour,
+        parcels: parcelsNum,
+        weightKg: weightNum,
+        observations: observations.trim() || undefined,
+      });
+
+      if ("error" in result) {
+        toast.error(result.error);
+      } else {
+        toast.success(
+          result.orderId
+            ? `Ridicare programata (comanda #${result.orderId})`
+            : "Ridicare programata cu succes",
+        );
+        onChanged();
+        onClose();
+      }
+    } catch (e) {
+      /* ⚠ Mesajul spune ca NU STIM, fiindca chiar nu stim: cererea poate sa fi ajuns la
+         FAN. Verificarea in contul lor e singurul raspuns onest. */
+      toast.error(
+        `Nu stim daca ridicarea a fost programata: ${e instanceof Error ? e.message : "cererea nu a ajuns la capat"}. `
+        + "Verifica in contul FAN inainte de a incerca din nou.",
+      );
+    } finally {
+      setSubmitting(false);
     }
   }
 
   async function handleCancelPickup() {
+    /* ⚠ Acelasi `finally` ca la programare, si din acelasi motiv: o actiune care ARUNCA
+       lasa altfel butonul invartindu-se pentru totdeauna, fara niciun mesaj. */
     setCancelling(true);
-    const result = await cancelFanCourierPickupAction(businessId);
-    setCancelling(false);
-    if ("error" in result) {
-      toast.error(result.error);
-    } else {
-      toast.success("Ridicarea programata a fost anulata");
-      onChanged();
+    try {
+      const result = await cancelFanCourierPickupAction(businessId);
+      if ("error" in result) {
+        toast.error(result.error);
+      } else {
+        toast.success("Ridicarea programata a fost anulata");
+        onChanged();
+      }
+    } catch (e) {
+      toast.error(
+        `Nu stim daca anularea a ajuns la FAN: ${e instanceof Error ? e.message : "cererea nu a ajuns la capat"}. `
+        + "Verifica in contul FAN inainte de a incerca din nou.",
+      );
+    } finally {
+      setCancelling(false);
     }
   }
+
+  const cutiaDialogului = useDialogAccesibil(open, onClose);
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl border border-border shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div
+        ref={cutiaDialogului}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titlu-ridicare-fan"
+        /* ⚠ Vezi `useDialogAccesibil`: cutia primeste focusul la deschidere, deci ii
+           trebuie `tabIndex={-1}`, si nu vrem inel de focus pe tot dialogul. */
+        tabIndex={-1}
+        className="relative bg-background rounded-2xl border border-border shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto focus:outline-none">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-background z-10">
           <div className="flex items-center gap-2.5">
             <img src="/integrations/fan-courier.svg" alt="FAN Courier" className="h-5 w-auto" />
             <div>
-              <p className="text-sm font-semibold text-foreground">Cheama curierul</p>
+              <p id="titlu-ridicare-fan" className="text-sm font-semibold text-foreground">Cheama curierul</p>
               <p className="text-xs text-muted-foreground">Programare ridicare colete</p>
             </div>
           </div>
@@ -264,10 +333,24 @@ export function FanCourierPickupModal({
             />
           </div>
 
-          <Button onClick={handleSubmit} disabled={submitting || isSunday} size="lg" className="w-full">
+          {/* ⚠ Butonul se stinge cand exista deja o ridicare in fata, pentru ALTA zi: serverul
+              o refuza oricum, fiindca panoul tine minte o singura ridicare. Chenarul de mai sus
+              ramane, cu butonul lui de anulare, deci omul are ce apasa. Pentru aceeasi zi
+              butonul ramane viu: acolo registrul prinde duplicatul, fara sa piarda nimic. */}
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting || isSunday || (hasActivePickup && lastPickupDate !== pickupDate)}
+            size="lg"
+            className="w-full"
+          >
             {submitting ? <Loader2 className="animate-spin" /> : <Truck />}
             {submitting ? "Se programeaza..." : "Programeaza ridicarea"}
           </Button>
+          {hasActivePickup && lastPickupDate !== pickupDate && (
+            <p className="text-[11px] text-warning -mt-2">
+              Anuleaza intai ridicarea din {lastPickupDate}: panoul tine minte una singura.
+            </p>
+          )}
         </div>
       </div>
     </div>

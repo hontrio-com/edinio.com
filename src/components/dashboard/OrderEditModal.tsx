@@ -13,10 +13,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { updateOrderDetails, searchOrderProducts, getOrderEditContext } from "@/lib/actions/order.actions";
 import { getShippingOptions } from "@/lib/actions/shipping.actions";
+import { liniaAdresei } from "@/lib/orders/adresa";
 import { deleteSamedayAwbAction } from "@/lib/actions/sameday.actions";
 import { deleteCargusAwbAction } from "@/lib/actions/cargus.actions";
 import { cancelDpdShipmentAction } from "@/lib/actions/dpd.actions";
-import { deleteFanCourierAwbAction } from "@/lib/actions/fancourier.actions";
+import { dezleagaFanAwbAction } from "@/lib/actions/fancourier.actions";
 import { cancelWootAwb } from "@/lib/actions/woot.actions";
 import { deleteGlsAwbAction } from "@/lib/actions/gls.actions";
 import { deletePallexAwbAction } from "@/lib/actions/pallex.actions";
@@ -260,7 +261,11 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     setName(order.customer_name ?? "");
     setPhone(order.customer_phone ?? "");
     setEmail(order.customer_email ?? "");
-    setAddress(addr.address ?? "");
+    /* ⚠ `liniaAdresei`, nu `addr.address`: pe cele 102 comenzi eMAG, care au numai
+       `street`, campul se deschidea GOL, iar butonul „Salveaza" ramane stins pana cand
+       omul scrie ceva acolo. Deci orice editare, chiar si numai a telefonului, il obliga
+       sa retasteze adresa pe care nimeni n-o schimbase. */
+    setAddress(liniaAdresei(addr));
     setCity(addr.city ?? "");
     setCounty(addr.county ?? "");
     setPostal(addr.postal_code ?? "");
@@ -308,7 +313,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
     || name !== (order.customer_name ?? "")
     || phone !== (order.customer_phone ?? "")
     || email !== (order.customer_email ?? "")
-    || address !== (addr.address ?? "")
+    || address !== liniaAdresei(addr)
     || city !== (addr.city ?? "")
     || county !== (addr.county ?? "")
     || postal !== (addr.postal_code ?? "");
@@ -707,7 +712,13 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       else if (key === "sameday") res = await deleteSamedayAwbAction(businessId, order.id);
       else if (key === "cargus") res = await deleteCargusAwbAction(businessId, order.id);
       else if (key === "dpd") res = await cancelDpdShipmentAction(businessId, order.id);
-      else if (key === "fan_courier") res = await deleteFanCourierAwbAction(businessId, order.id);
+      /* ⚠ DEZLEGARE, nu doar anulare. Anularea la FAN merge doar pana la preluarea
+         coletului; dupa aceea DELETE-ul raspunde constant „nu", iar comanda ramanea
+         inghetata pentru totdeauna, needitabila si fara drept la alt curier.
+         `dezleagaFanAwbAction` incearca intai anularea si dezleaga doar la un refuz
+         DOVEDIT; la „nu stim" se opreste si spune asta, ca sa nu ramana un colet in
+         aer despre care nimeni nu mai stie nimic. */
+      else if (key === "fan_courier") res = await dezleagaFanAwbAction(businessId, order.id);
       else if (key === "gls") res = await deleteGlsAwbAction(businessId, order.id);
       else if (key === "pallex") res = await deletePallexAwbAction(businessId, order.id);
       else if (key === "ecolet") res = await deleteEcoletAwbAction(businessId, order.id);

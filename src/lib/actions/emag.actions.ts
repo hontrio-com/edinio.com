@@ -55,6 +55,8 @@ import { pretPentruSmartDeals, propuneOferte } from "@/lib/emag/campanii";
 /* ⚠ Regula casei pentru „cat incaseaza curierul”, scrisa dupa comanda #0033:
    105,50 lei plecati fara nicio cale de incasare. Vezi `orders/ramburs.ts`. */
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
+/* ⚠ Aceeasi poarta ca la cei saptesprezece curieri proprii. Vezi `emiteAwbEmag`. */
+import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
 import { stareaPlatiiPentruRamburs } from "@/lib/emag/plata";
 import {
   adunaPeCategorii, facturileLorPentruEcran, numeleCategoriilor,
@@ -1415,6 +1417,27 @@ export async function emiteAwbEmag(
 ): Promise<{ numar: string | null; deja: boolean } | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return { error: g.error };
+
+  /*
+   * ⚠ SI POARTA AWB-ULUI, ca la ceilalti emitatori.
+   *
+   * Aici pleaca un AWB ADEVARAT, cu coletul ridicat de curierul lor, dar pana acum
+   * butonul asta nu trecea prin nicio poarta comuna. Pe o comanda care avea deja AWB
+   * la un curier propriu se putea apasa mai departe: doua etichete pe acelasi pachet,
+   * doua transporturi platite, si rambursul cerut de doua ori la usa. Tot ea acopera
+   * si comanda anulata sau restituita, si contul cu abonamentul expirat, care pana
+   * acum se opreau doar din redirectionarea de PAGINA, adica deloc pentru o actiune
+   * de server chemata dintr-o fila ramasa deschisa.
+   *
+   * ⚠ FARA CURIER, dinadins. eMAG nu are coloana pe `orders`: AWB-ul lui sta in
+   * `emag_awb`, iar pe comanda scrie doar `tracking_number`, camp comun tuturor
+   * curierilor, deci nefolosibil ca identitate. Neavand cheie in `COLOANA_AWB`, nu se
+   * poate prezenta cu una, si nici nu are nevoie: fara curier, poarta refuza pe AWB-ul
+   * ORICARUI curier propriu, ceea ce e exact regula care lipsea. Vezi nota de la
+   * `poartaAwbPropriu` si `FARA_CURIER` din `poarta-awb.test.ts`.
+   */
+  const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+  if (refuzAwb) return { error: refuzAwb };
 
   const iesire = iesireEmag();
   if (iesire.eroare) return { error: iesire.eroare };

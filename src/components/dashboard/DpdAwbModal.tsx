@@ -9,6 +9,7 @@ import { euCountryByIso2 } from "@/lib/eu-countries";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
+import { stradaDestinatarului } from "@/lib/orders/adresa";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 type ShippingAddress = {
@@ -77,7 +78,7 @@ export function DpdAwbModal({
   const [recipientEmail, setRecipientEmail] = useState(order.customer_email ?? "");
   const [recipientCity, setRecipientCity] = useState(addr?.city ?? "");
   const [recipientCounty, setRecipientCounty] = useState(addr?.county ?? "");
-  const [recipientStreet, setRecipientStreet] = useState(addr?.street ?? addr?.address ?? "");
+  const [recipientStreet, setRecipientStreet] = useState(stradaDestinatarului(addr));
   const [recipientStreetNo, setRecipientStreetNo] = useState(addr?.street_no ?? "");
   const [recipientAddressNote, setRecipientAddressNote] = useState("");
 

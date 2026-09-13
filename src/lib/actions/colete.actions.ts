@@ -183,7 +183,7 @@ export async function createCOAwb(
 
     /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
        colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
-    const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+    const refuzAwb = await poartaAwbPropriu(businessId, orderId, "colete");
     if (refuzAwb) return { error: refuzAwb };
 
     const admin = adminClient();

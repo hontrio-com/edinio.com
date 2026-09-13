@@ -3267,11 +3267,29 @@ export async function updateOrderDetails(orderId: string, data: {
 
   // Merge the address into shipping_address WITHOUT touching courier/locker/
   // service keys — those belong to the checkout choice and the AWB flow.
+  /*
+   * ⚠ SI FAMILIA VECHE SE STINGE, altfel comanda ramane cu DOUA adrese care se contrazic.
+   *
+   * Editarea scrie doar `address`. Pe cele 102 comenzi eMAG din productie, care au numai
+   * `street`, corectura ajungea langa linia veche, iar fiecare fereastra de AWB care
+   * prefera `street` (FAN, DPD, eColet, GLS, Pall-Ex) trimitea mai departe adresa
+   * DINAINTE de corectura. Un colet cu ramburs, la adresa pe care omul tocmai o schimbase,
+   * si nimic nu parea stricat, fiindca doar un camp din cinci era vechi.
+   *
+   * ⚠ Se scrie sirul GOL, nu se sterge cheia: `stradaDestinatarului` cade si pe sirul gol
+   * (vezi `adresa.ts`), deci toate ferestrele ajung singure la `address`.
+   *
+   * ⚠ Nu atinge AWB-ul eMAG: acela isi ia destinatarul din incarcatura LOR
+   * (`emag.actions.ts`, `cl.shipping_street`) si lockerul din `brut.details.locker_id`,
+   * nu din `shipping_address`. Verificat inainte de a scrie randurile astea.
+   */
   const newShip = {
     ...prevShip,
     county,
     city,
     address,
+    ...(prevShip.street !== undefined ? { street: "" } : {}),
+    ...(prevShip.street_no !== undefined ? { street_no: "" } : {}),
     ...(data.postal_code?.trim() ? { postal_code: data.postal_code.trim() } : {}),
     ...(etichetaNoua ? { courier_label: etichetaNoua } : {}),
   };

@@ -5,6 +5,8 @@ import { signNetopiaIpn } from "@/lib/netopia-ipn";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { logError } from "@/lib/error-logger";
+/* ⚠ Adresa are DOUA familii de campuri. Vezi `src/lib/orders/adresa.ts`. */
+import { liniaAdresei } from "@/lib/orders/adresa";
 
 export async function POST(request: NextRequest) {
   try {
@@ -76,7 +78,24 @@ export async function POST(request: NextRequest) {
     const firstName = nameParts[0] || "-";
     const lastName = nameParts.slice(1).join(" ") || "-";
 
-    const addr = (order.shipping_address as { address?: string; city?: string; county?: string } | null) ?? {};
+    /*
+     * ⚠ ADRESA SE CITEA DINTR-O SINGURA FAMILIE DE CAMPURI (13.09.2026).
+     *
+     * `shipping_address` are `street` + `street_no` (checkout-ul propriu) SI `address`
+     * (marketplace-uri si formulare vechi). Aici se lua doar `addr.address`, iar mai jos
+     * se trimitea `addr.address || "-"`. Deci pe o comanda din checkout-ul propriu banca
+     * primea litera „-" DREPT ADRESA: nu un camp lipsa, ci o valoare care pare valida,
+     * folosita la scorul de frauda al platii cu cardul.
+     *
+     * Masurat in productie: din 425 de comenzi, 102 au numai `street`, 304 au numai
+     * `address`, zero le au pe amandoua. Adica 24% plecau cu adresa falsa.
+     *
+     * Acelasi defect statea si in ruta iPay, reparat in aceeasi zi.
+     */
+    const addr = (order.shipping_address as {
+      address?: string; street?: string; street_no?: string; city?: string; county?: string;
+    } | null) ?? {};
+    const linieAdresa = liniaAdresei(addr);
 
     const notifyUrl = `${baseUrl}/api/netopia/notify?t=${signNetopiaIpn(orderId)}`;
     const redirectUrl = `${baseUrl}/${slug}/confirm?orderId=${encodeURIComponent(orderId)}&name=${encodeURIComponent(customerName)}&total=${order.total}`;
@@ -92,7 +111,7 @@ export async function POST(request: NextRequest) {
         lastName,
         email: (order.customer_email as string) || "client@edinio.com",
         phone: (order.customer_phone as string) || "-",
-        address: addr.address || "-",
+        address: linieAdresa || "-",
         city: addr.city || "-",
         county: addr.county || "-",
         notifyUrl,

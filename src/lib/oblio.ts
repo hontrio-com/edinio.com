@@ -1,4 +1,5 @@
 import { eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { cheieToken } from "@/lib/integrari/cheie-token";
 
 const OBLIO_BASE = "https://www.oblio.eu";
 
@@ -207,12 +208,26 @@ export type OblioInvoiceData = {
 };
 
 // ─── Token cache ──────────────────────────────────────────────────────────────
-// Key = client_id; value = { access_token, expiresAt (unix seconds) }
+// Cheia: `client_id` plus secretul hasuit; valoarea: { access_token, expiresAt (secunde unix) }
 
 const tokenCache = new Map<string, { access_token: string; expiresAt: number }>();
 
+/** Pentru probe: goleste tokenurile pastrate. */
+export function uitaTokenurileOblio(): void {
+  tokenCache.clear();
+}
+
 export async function getOblioToken(clientId: string, clientSecret: string): Promise<string> {
-  const cached = tokenCache.get(clientId);
+  /*
+   * ⚠ SI SECRETUL, hasuit. Cheiata doar pe `client_id`, harta intorcea tokenul valid si
+   * pentru un client secret GRESIT. Si e chiar drumul pe care `secret-server.ts` tocmai
+   * l-a aparat: `loadOblioAccountData` ia `client_id` din FORMULAR si il duce neverificat
+   * pana aici, deci un comerciant putea trimite id-ul magazinului LUI si `client_id`-ul
+   * Oblio al altuia, iar cache-ul modulului ii intorcea tokenul aceluia: denumirea firmei,
+   * CIF-ul, seriile de facturare si cotele de TVA. Vezi `@/lib/integrari/cheie-token`.
+   */
+  const cheie = cheieToken([clientId], [clientSecret]);
+  const cached = tokenCache.get(cheie);
   const nowSeconds = Math.floor(Date.now() / 1000);
   if (cached && cached.expiresAt > nowSeconds + 60) return cached.access_token;
 
@@ -245,7 +260,7 @@ export async function getOblioToken(clientId: string, clientSecret: string): Pro
   if (!data.access_token) throw new Error("Autentificare Oblio esuata: token lipsa");
 
   const expiresAt = Number(data.request_time) + Number(data.expires_in);
-  tokenCache.set(clientId, { access_token: data.access_token, expiresAt });
+  tokenCache.set(cheie, { access_token: data.access_token, expiresAt });
   return data.access_token;
 }
 

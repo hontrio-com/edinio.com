@@ -20,6 +20,7 @@ import {
   getSamedayServices,
 } from "@/lib/sameday/client";
 import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
+import { stradaDestinatarului, type AdresaLivrare } from "@/lib/orders/adresa";
 
 // ─── Config actions ───────────────────────────────────────────────────────────
 
@@ -86,10 +87,37 @@ export async function loadSamedayAccountAction(
   pickupPoints: SamedayPickupPoint[];
   services: SamedayService[];
 } | { error: string }> {
+  /*
+   * ⚠ POARTA PROPRIE, nu doar cea imprumutata de la `secretDinConfig`.
+   *
+   * Actiunea nu avea `getUser` al ei: toata autorizarea venea din `secretDinConfig`,
+   * care intoarce SIRUL GOL la orice esec, iar apelantul traducea golul intr-un singur
+   * mesaj, despre parola. Cu sesiunea expirata peste noapte, omul primea „Completeaza
+   * parola Sameday" oricat de corect ar fi completat-o, si nimic nu-i spunea sa se
+   * autentifice din nou. Fara lista de puncte nu putea nici salva, deci ramanea in bucla.
+   *
+   * ⚠ USERNAME-UL RAMANE CEL DIN FORMULAR, dinadins, si asta a fost masurat, nu presupus:
+   * `SamedayConfigClient.tsx:59` cheama conectarea INAINTE de salvare, iar campul de
+   * username e chiar locul in care comerciantul isi muta magazinul pe alt cont Sameday.
+   * Luat din configul salvat, cu parola veche inca in baza, butonul ar fi reconectat
+   * TACUT contul vechi si i-ar fi aratat punctele lui de ridicare.
+   *
+   * Scurgerea intre magazine se inchide in `sameday/client.ts`, unde cheia de cache
+   * contine acum si parola hasuita: un username strain cu parola gresita nu mai
+   * nimereste intrarea nimanui, ajunge la Sameday, si Sameday il refuza.
+   */
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Sesiunea a expirat. Autentifica-te din nou." };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Business negasit" };
+
   try {
     const parola = await secretDinConfig(businessId, "sameday_config", "password", password);
     if (!parola) return { error: "Completeaza parola Sameday." };
-    return await loadSamedayAccount(username, parola, sandbox);
+    return await loadSamedayAccount(username.trim(), parola, sandbox);
   } catch (e) {
     console.error("[sameday] loadSamedayAccountAction error:", e);
     return { error: (e as Error).message ?? "Eroare necunoscuta" };
@@ -151,7 +179,7 @@ export async function createSamedayAwbAction(
 
   /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
      colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
-  const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+  const refuzAwb = await poartaAwbPropriu(businessId, orderId, "sameday");
   if (refuzAwb) return { error: refuzAwb };
 
   const { supabase, config, order } = ctx;
@@ -398,7 +426,7 @@ export async function createSamedayReturnAwbAction(
   }
 
   const adr = (order.shipping_address ?? {}) as Record<string, unknown>;
-  const strada = [adr.street ?? adr.address, adr.street_no].filter(Boolean).join(" nr. ");
+  const strada = [stradaDestinatarului(adr as AdresaLivrare), String(adr.street_no ?? "").trim()].filter(Boolean).join(" nr. ");
 
   const r = await cuRegistru(
     createAdminClient(),

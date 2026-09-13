@@ -377,13 +377,62 @@ export function mesajBlocat(
   stareBlocanta?: string,
 ): string {
   const nume = numeOperatie(cerere.fel);
+
+  /*
+   * ⚠ O OPERATIE FARA COMANDA NU ARE „PAGINA COMENZII".
+   *
+   * Supapa comerciantului (`operatiiAtarnate`) filtreaza pe `order_id`, deci
+   * randurile cu `order_id: null`, ridicarile de la curier si facturarea de
+   * platforma, nu apar NICIODATA acolo. Textul care il trimitea in pagina
+   * comenzii il trimitea intr-un loc unde nu avea ce gasi, iar singura miscare
+   * care ii ramanea era sa reincerce; reincercarea e insa refuzata la infinit,
+   * fiindca exact asta face randul blocant.
+   *
+   * Ruta de administrare `/api/admin/operatii` exista tocmai pentru randurile
+   * astea si isi scrie motivul in nota ei. Deci mesajul spune adevarul: ce sa
+   * verifice, si pe cine sa ceara ca sa se deblocheze.
+   */
+  /*
+   * ⚠ DAR OLX ARE SUPAPA LUI, si trimiterea la suport peste ea e neadevarata.
+   *
+   * `platiNelamurite` (`olx/plati.ts`) citeste exact randurile de aici, `furnizor = olx`
+   * si `fel = plata`, in starile `in_curs` si `necunoscut`; `getOlxSanatate` le numara,
+   * iar panoul le arata cu doua butoane: „Verifică la OLX”, care poate inchide cazul
+   * singura, si „Am verificat, deblochează”, care e a omului. Textul generic il trimitea
+   * sa ne scrie noua pentru ceva ce poate face el, pe loc.
+   *
+   * ⚠ Pragul de trei minute al lui `eAtarnata` ascunde din panou un rand `in_curs`
+   * proaspat, deci in primele clipe sfatul ar trimite intr-un panou gol. Nu schimba
+   * indrumarea: mesajul pentru `in_curs` incepe cu „daca a ramas asa", adica vorbeste
+   * tocmai despre randul care a trecut de prag. Pentru `necunoscut` nu exista prag,
+   * randul se vede pe loc.
+   */
+  const ePlataOlx = cerere.furnizor === "olx" && cerere.fel === "plata";
+
+  /*
+   * ⚠ SI CAPUL FRAZEI URMEAZA ACEEASI CONDITIE CA SI COADA.
+   *
+   * Pe o ridicare de la curier (`orderId` null) textul iesea asa, cuvant cu cuvant:
+   * „Comanda de ridicare PENTRU ACEASTA COMANDA este deja in lucru la fancourier …
+   * scrie-ne ca sa deblocam noi randul: operatia asta NU E LEGATA DE O COMANDA".
+   * Capul afirma o comanda, coada o neaga, si omul o citeste de doua ori ca sa
+   * priceapa care dintre ele minte. Valul dinainte rescrisese doar coada.
+   */
+  const peComanda = cerere.orderId ? " pentru aceasta comanda" : "";
+
+  const undeSeDeblocheaza = cerere.orderId
+    ? "deblocheaza operatia din pagina comenzii"
+    : ePlataOlx
+      ? "lamureste-o din panoul de sanatate OLX, de la „Plăți de verificat”"
+      : "scrie-ne ca sa deblocam noi randul: operatia asta nu e legata de o comanda, deci nu apare in panoul comenzii";
+
   switch (motiv) {
     case "in_curs":
-      return `${nume} pentru aceasta comanda este deja in lucru la ${cerere.furnizor}${
+      return `${nume}${peComanda} este deja in lucru la ${cerere.furnizor}${
         incercari && incercari > 2 ? ` (a ${incercari}-a incercare)` : ""
-      }. Nu trimitem a doua oara ca sa nu se creeze un duplicat. Daca a ramas asa, verifica in contul ${cerere.furnizor} dupa comanda si deblocheaza operatia din pagina comenzii.`;
+      }. Nu trimitem a doua oara ca sa nu se creeze un duplicat. Daca a ramas asa, verifica in contul ${cerere.furnizor} si ${undeSeDeblocheaza}.`;
     case "necunoscut":
-      return `${nume} a fost trimisa catre ${cerere.furnizor}, dar raspunsul nu a ajuns, deci nu stim daca s-a facut. Verifica in contul ${cerere.furnizor} inainte de a incerca din nou: daca exista deja, o a doua incercare ar produce un duplicat.`;
+      return `${nume} a fost trimisa catre ${cerere.furnizor}, dar raspunsul nu a ajuns, deci nu stim daca s-a facut. Verifica in contul ${cerere.furnizor} inainte de a incerca din nou: daca exista deja, o a doua incercare ar produce un duplicat. Daca nu exista, ${undeSeDeblocheaza}.`;
     case "alt magazin":
     case "comanda negasita":
       return "Comanda nu apartine acestui magazin.";

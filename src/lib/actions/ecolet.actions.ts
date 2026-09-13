@@ -30,6 +30,7 @@ import { ofertePosibile, etichetaOferta, numeServiciuEcolet, type OfertaEcolet }
 import { rezolvaLocalitatea } from "@/lib/ecolet/cautare";
 import type { Json } from "@/types/database.types";
 import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
+import { stradaDestinatarului, type AdresaLivrare } from "@/lib/orders/adresa";
 
 /**
  * Actiunile eColet.
@@ -325,7 +326,7 @@ export async function coteazaEcoletAction(
   const addr = (order.shipping_address ?? {}) as Record<string, unknown>;
   const destinatar: AdresaComanda = {
     nume: String(order.customer_name ?? ""),
-    strada: String(addr.street ?? addr.address ?? ""),
+    strada: stradaDestinatarului(addr),
     numar: String(addr.street_no ?? ""),
     oras: date.oras,
     judet: date.judet,
@@ -391,7 +392,7 @@ export async function createEcoletAwbAction(
 
   /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
      colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
-  const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+  const refuzAwb = await poartaAwbPropriu(businessId, orderId, "ecolet");
   if (refuzAwb) return { error: refuzAwb };
 
   const { supabase, config, order } = ctx;
@@ -426,7 +427,7 @@ export async function createEcoletAwbAction(
   const destinatarBrut = (order.shipping_address ?? {}) as Record<string, unknown>;
   const destinatar: AdresaComanda = {
     nume: String(order.customer_name ?? ""),
-    strada: String(destinatarBrut.street ?? destinatarBrut.address ?? ""),
+    strada: stradaDestinatarului(destinatarBrut as AdresaLivrare),
     numar: String(destinatarBrut.street_no ?? ""),
     oras: date.oras,
     judet: date.judet,

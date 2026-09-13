@@ -36,6 +36,7 @@ function potrivesteLocalitate<T extends { id: number; name: string }>(
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
+import { liniaAdresei } from "@/lib/orders/adresa";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -43,6 +44,10 @@ interface ShippingAddress {
   county?: string;
   city?: string;
   address?: string;
+  /* ⚠ Declarate fiindca `liniaAdresei` chiar le citeste: comenzile eMAG au numai
+     `street`, iar tipul trebuie sa spuna ce citeste codul. */
+  street?: string;
+  street_no?: string;
   woot_service_id?: number;
   woot_courier_name?: string;
   woot_service_name?: string;
@@ -70,7 +75,11 @@ export function WootAwbModal({ open, onClose, order, businessId, onSuccess }: Pr
   const [loadingCities, setLoadingCities] = useState(false);
   const [countyId, setCountyId] = useState(0);
   const [cityId, setCityId] = useState(0);
-  const [receiverAddress, setReceiverAddress] = useState(addr.address ?? "");
+  /* ⚠ `liniaAdresei`, nu `stradaDestinatarului`: Woot are UN SINGUR camp de adresa
+     („Strada, nr."), iar el pleaca INTREG la curier (`address: receiverAddress`). Deci
+     trebuie linia completa, cu numarul in ea, nu strada fara numar. Aceeasi alegere ca
+     la Cargus, care are exact aceeasi forma de camp. */
+  const [receiverAddress, setReceiverAddress] = useState(liniaAdresei(addr));
   const [receiverPhone, setReceiverPhone] = useState(order.customer_phone ?? "");
   const [receiverEmail, setReceiverEmail] = useState(order.customer_email ?? "");
 

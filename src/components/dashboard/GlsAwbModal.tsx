@@ -8,6 +8,7 @@ import { createGlsAwbAction, type DateAwbGls } from "@/lib/actions/gls.actions";
 import { MAX_COLETE } from "@/lib/gls/expediere";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
+import { stradaCuNumar } from "@/lib/orders/adresa";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -97,7 +98,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [email, setEmail] = useState(order.customer_email ?? "");
   const [oras, setOras] = useState((laPunct ? addr.locker_city : "") || addr.city || "");
   const [strada, setStrada] = useState(
-    [addr.street ?? addr.address ?? "", addr.street_no ?? ""].filter(Boolean).join(" ").trim(),
+    stradaCuNumar(addr),
   );
   const [codPostal, setCodPostal] = useState((laPunct ? addr.locker_post_code : "") || addr.postal_code || "");
   const [numarColete, setNumarColete] = useState("1");

@@ -140,6 +140,12 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
   const [lockerDropdownOpen, setLockerDropdownOpen] = useState(false);
   const prevKey = useRef("");
   const reqId = useRef(0);
+  /*
+   * ⚠ Contor SEPARAT pentru lockere. Cel de sus numara cotatiile; lockerele se
+   * cer pe alt drum, la alta apasare, si un raspuns intarziat de la un curier
+   * putea suprascrie lista altuia. Vezi nota de la efectul lor.
+   */
+  const reqLockere = useRef(0);
 
   const isIntl = !!country && country.toUpperCase() !== "RO";
   // Domestic needs county+city; international needs country+postCode+city.
@@ -261,6 +267,21 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
       setSelectedLocker(null);
       return;
     }
+    /*
+     * ⚠ RASPUNSUL INTARZIAT NU MAI SCRIE PESTE LISTA ALTUI CURIER.
+     *
+     * Efectul asta n-avea nicio garda, spre deosebire de cel al cotatiilor de
+     * mai sus, care numara cererile de mult. Cine schimba repede curierul,
+     * FANbox, apoi easybox, putea primi lista CELUI DINTAI peste selectia
+     * curenta, fiindca raspunsurile nu se intorc in ordinea cererilor.
+     *
+     * Ce costa: lockerul ales pleaca prin `onSelect` in `shipping_address.locker_id`
+     * pe o comanda PLATITA. Perechea gresita curier/locker inseamna un colet
+     * trimis la un punct care nu e al curierului care il duce; la emitere,
+     * `getFanCourierPickupPointById` nu gaseste un id easybox si refuza, iar la
+     * Sameday un id FANbox devine `NaN` si livrarea la locker se stinge tacut.
+     */
+    const cerereaMea = ++reqLockere.current;
     setLockersLoading(true);
     setSelectedLocker(null);
     setLockerSearch("");
@@ -283,9 +304,9 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         : opt.courier === "ups" ? county
           : opt.smartshipLockerNet,
     )
-      .then(setLockers)
-      .catch(() => setLockers([]))
-      .finally(() => setLockersLoading(false));
+      .then((puncte) => { if (cerereaMea === reqLockere.current) setLockers(puncte); })
+      .catch(() => { if (cerereaMea === reqLockere.current) setLockers([]); })
+      .finally(() => { if (cerereaMea === reqLockere.current) setLockersLoading(false); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedKey]);
 
@@ -454,6 +475,13 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
               {opt.estimatedDays && (
                 <p className="text-xs text-muted-foreground">{opt.estimatedDays}</p>
               )}
+              {/* ⚠ Se SPUNE, nu se ascunde: optiunea scoasa din lista lasa cumparatorul
+                  fara nicio metoda de livrare, si fara sa afle de ce. */}
+              {opt.rambursIndisponibil && (
+                <p className="text-xs text-warning">
+                  Nu incaseaza ramburs peste 10.000 lei: alege plata online.
+                </p>
+              )}
             </div>
             <div className="text-right shrink-0">
               <p className="text-sm font-bold" style={{ color: selected ? color : "var(--color-foreground)" }}>
@@ -502,6 +530,11 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
               <p className="text-xs text-muted-foreground">
                 {opt.courier === "posta" ? "Ridicare de la oficiu poștal" : "Ridicare din locker"}
               </p>
+              {opt.rambursIndisponibil && (
+                <p className="text-xs text-warning">
+                  Nu incaseaza ramburs peste 10.000 lei: alege plata online.
+                </p>
+              )}
             </div>
             <div className="text-right shrink-0">
               <p className="text-sm font-bold" style={{ color: selected ? color : "var(--color-foreground)" }}>

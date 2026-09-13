@@ -75,6 +75,39 @@ export function eroareCuStatus(mesaj: string, status: number): Error {
 }
 
 /**
+ * Termenul depasit. „NU STIU" pe o SCRIERE, refuz DOVEDIT pe o CITIRE.
+ *
+ * ═══ DE CE CELE DOUA RASPUNSURI SUNT OPUSE ═══
+ *
+ * Pe o SCRIERE (emitere, anulare, ridicare) cererea poate sa fi ajuns si sa fi fost
+ * executata inainte ca noi sa renuntam sa asteptam. Marcata refuz, reincercarea ar fi
+ * libera si ar emite AL DOILEA colet real, facturat. Deci `necunoscut`: randul din
+ * registru blocheaza si iese la om.
+ *
+ * Pe o CITIRE de pe drumul emiterii (tokenul, sucursala expeditoare, nomenclatoare)
+ * raspunsul corect e pe dos. Citirea se face INAINTE de scriere, in aceeasi functie:
+ * daca ea a expirat, cererea care creeaza nici n-a plecat. Lasat `necunoscut`, un
+ * asemenea termen blocheaza comanda pentru un AWB pe care furnizorul nu l-a vazut
+ * niciodata, iar comerciantul trebuie sa deblocheze de mana un rand despre nimic.
+ *
+ * ⚠ MUTATA AICI DIN `fancourier.ts` PE 13.09.2026. Era buna, dar era a unui singur
+ * curier, si chiar in ziua in care s-au pus termene la Sameday, Woot, DPD, Cargus si
+ * Colete ar fi ramas acolo: cinci clienti noi ar fi blocat comenzi pe citiri expirate.
+ * O regula care se aplica la sase furnizori nu are voie sa stea in fisierul unuia.
+ *
+ * ⚠ CE NU E TERMEN, NU SE ATINGE: orice alta eroare se intoarce neschimbata, deci
+ * clasificarea de dedesubt (`eroareRefuz`, `eroareCuStatus`) ramane stapana pe ea.
+ */
+export function eroareDeTermen(e: unknown, scriere: boolean, ce: string, furnizor: string): Error {
+  const abort = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+  if (!abort) return e as Error;
+  const mesaj = `${furnizor} nu a raspuns la timp (${ce}).`;
+  return scriere
+    ? eroareNesigura(`${mesaj} Verifica in contul ${furnizor} inainte de a reincerca.`)
+    : eroareRefuz(mesaj);
+}
+
+/**
  * Verdictul unei erori prinse.
  *
  * ⚠ Implicitul e `necunoscut`, si nu din prudenta decorativa: o eroare care n-a

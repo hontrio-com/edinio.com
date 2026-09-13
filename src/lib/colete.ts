@@ -1,10 +1,24 @@
 import { normalizePhone } from "@/lib/utils/phone";
 import { normalizeLocalityName } from "@/lib/utils/ro-address";
-import { eroareCuStatus, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { eroareCuStatus, eroareDeTermen, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { cheieToken } from "@/lib/integrari/cheie-token";
 
 const CO_AUTH = "https://auth.colete-online.ro/token";
 const CO_BASE_PROD = "https://api.colete-online.ro/v1";
 const CO_BASE_STAGING = "https://api.colete-online.ro/v1/staging";
+
+/* ⚠ TERMEN PE CERERE. Fara el `fetch` asteapta la nesfarsit, iar cotatia din checkout
+   cheama treisprezece curieri deodata (`Promise.all` in `shipping.actions.ts`): unul
+   singur care nu raspunde tine cumparatorul pe ecranul de livrare pana renunta el.
+   ⚠ Termenul depasit iese `necunoscut` din `verdictFurnizor`, fiindca eroarea nu trece
+   prin niciun constructor din `eroare-furnizor.ts`. Adica exact ce trebuie: un AWB care
+   POATE sa fi fost creat ramane blocat, nu se reincearca. */
+const ASTEPTARE_MS = 20_000;
+
+/* ⚠ Eticheta e un FISIER, nu un raspuns JSON, deci i se da mai mult. Dar tot i se da:
+   fara termen, o descarcare care nu mai vine tine ruta de eticheta ocupata pana cand
+   platforma taie functia, iar comerciantul vede o fila care nu se deschide niciodata. */
+const ASTEPTARE_ETICHETA_MS = 30_000;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -88,20 +102,32 @@ export type COParcel = {
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
 export async function getCOToken(clientId: string, clientSecret: string): Promise<string> {
-  const cacheKey = clientId;
+  /*
+   * ⚠ SI SECRETUL, hasuit. Cheiat doar pe `client_id`, cache-ul intorcea tokenul
+   * valid si pentru un Client Secret GRESIT, deci „testeaza conexiunea" raspundea
+   * verde peste o credentiala invalida. Vezi `@/lib/integrari/cheie-token`.
+   */
+  const cacheKey = cheieToken([clientId], [clientSecret]);
   const cached = tokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
-  const res = await fetch(CO_AUTH, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${credentials}`,
-    },
-    body: "grant_type=client_credentials",
-    cache: "no-store",
-  });
+  /* ⚠ E POST, dar e CITIRE: tokenul nu creeaza niciun colet. Vezi `eroareDeTermen`. */
+  let res: Response;
+  try {
+    res = await fetch(CO_AUTH, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${credentials}`,
+      },
+      body: "grant_type=client_credentials",
+      cache: "no-store",
+      signal: AbortSignal.timeout(ASTEPTARE_MS),
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, false, "autentificarea", "Colete Online");
+  }
 
   if (!res.ok) throw eroareRefuz("Autentificare Colete Online esuata. Verifica credentialele API.");
   const data = await res.json() as { access_token?: string; token_type?: string; expires_in?: number; error?: string };
@@ -122,15 +148,23 @@ function getBase(sandbox: boolean) {
 }
 
 async function coReq<T>(token: string, sandbox: boolean, method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${getBase(sandbox)}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  });
+  /* ⚠ Verdictul se alege pe METODA: un GET expirat n-a creat nimic (refuz dovedit), un
+     POST expirat poate sa fi creat coletul inainte sa renuntam noi sa asteptam. */
+  let res: Response;
+  try {
+    res = await fetch(`${getBase(sandbox)}${path}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+      signal: AbortSignal.timeout(ASTEPTARE_MS),
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, method.toUpperCase() !== "GET", `cererea ${path}`, "Colete Online");
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { message?: string; errors?: { message: string }[] };
@@ -274,6 +308,7 @@ export async function getCOOrderAwb(
     method: "GET",
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
+    signal: AbortSignal.timeout(ASTEPTARE_ETICHETA_MS),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { message?: string };

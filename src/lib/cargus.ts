@@ -1,6 +1,7 @@
 import { normalizePhone } from "@/lib/utils/phone";
 import { stripDiacritics, normalizeCountyName, normalizeLocalityName } from "@/lib/utils/ro-address";
-import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { eroareCuStatus, eroareDeTermen, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { cheieToken } from "@/lib/integrari/cheie-token";
 
 export type CargusConfig = {
   enabled: boolean;
@@ -60,14 +61,27 @@ export type CargusAwbInput = {
 
 const BASE_URL = "https://urgentcargus.azure-api.net/api";
 
+/* ⚠ TERMEN PE CERERE. Fara el `fetch` asteapta la nesfarsit, iar cotatia din checkout
+   cheama treisprezece curieri deodata (`Promise.all` in `shipping.actions.ts`): unul
+   singur care nu raspunde tine cumparatorul pe ecranul de livrare pana renunta el.
+   ⚠ Termenul depasit iese `necunoscut` din `verdictFurnizor`, fiindca eroarea nu trece
+   prin niciun constructor din `eroare-furnizor.ts`. Adica exact ce trebuie: un AWB care
+   POATE sa fi fost creat ramane blocat, nu se reincearca. */
+const ASTEPTARE_MS = 20_000;
+
 // ─── Token cache ──────────────────────────────────────────────────────────────
 
 type TokenEntry = { token: string; expiresAt: number };
 const tokenCache = new Map<string, TokenEntry>();
 const TOKEN_TTL_MS = 23 * 60 * 60 * 1000; // 23h (token valid 24h, buffer 1h)
 
-function cacheKey(username: string, subscriptionKey: string) {
-  return `${username}::${subscriptionKey}`;
+/*
+ * ⚠ SI PAROLA, hasuita. Cu cheia doar pe username plus cheia de abonament, o
+ * parola WebExpress gresita primea tokenul valid din cache si trecea fara sa
+ * atinga Cargus. Vezi `@/lib/integrari/cheie-token`.
+ */
+function cacheKey(username: string, password: string, subscriptionKey: string) {
+  return cheieToken([username], [password, subscriptionKey]);
 }
 
 async function getCargusToken(
@@ -75,19 +89,26 @@ async function getCargusToken(
   password: string,
   subscriptionKey: string,
 ): Promise<string> {
-  const key = cacheKey(username, subscriptionKey);
+  const key = cacheKey(username, password, subscriptionKey);
   const cached = tokenCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.token;
 
-  const res = await fetch(`${BASE_URL}/LoginUser`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Ocp-Apim-Subscription-Key": subscriptionKey,
-      "Ocp-Apim-Trace": "true",
-    },
-    body: JSON.stringify({ UserName: username, Password: password }),
-  });
+  /* ⚠ E POST, dar e CITIRE: autentificarea nu creeaza niciun colet. Vezi `eroareDeTermen`. */
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/LoginUser`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Ocp-Apim-Subscription-Key": subscriptionKey,
+        "Ocp-Apim-Trace": "true",
+      },
+      body: JSON.stringify({ UserName: username, Password: password }),
+      signal: AbortSignal.timeout(ASTEPTARE_MS),
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, false, "autentificarea", "Cargus");
+  }
 
   if (!res.ok) {
     const detail = (await res.text().catch(() => "")).trim();
@@ -118,14 +139,20 @@ async function cargusGet<T>(
   token: string,
   subscriptionKey: string,
 ): Promise<T> {
-  const res = await fetch(`${BASE_URL}/${path}`, {
-    method: "GET",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Ocp-Apim-Subscription-Key": subscriptionKey,
-      "Ocp-Apim-Trace": "true",
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/${path}`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Ocp-Apim-Subscription-Key": subscriptionKey,
+        "Ocp-Apim-Trace": "true",
+      },
+      signal: AbortSignal.timeout(ASTEPTARE_MS),
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, false, `citirea ${path}`, "Cargus");
+  }
   // Citire pura — vezi nota din fancourier.ts.
   if (!res.ok) throw eroareRefuz(`Cargus GET ${path}: ${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
@@ -166,6 +193,7 @@ async function cargusPost<T>(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(ASTEPTARE_MS),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
@@ -187,6 +215,7 @@ async function cargusPut(
       "Ocp-Apim-Trace": "true",
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(ASTEPTARE_MS),
   });
   const text = await res.text().catch(() => "");
   if (!res.ok) {
@@ -213,6 +242,7 @@ async function cargusDelete(
       "Ocp-Apim-Subscription-Key": subscriptionKey,
       "Ocp-Apim-Trace": "true",
     },
+    signal: AbortSignal.timeout(ASTEPTARE_MS),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);

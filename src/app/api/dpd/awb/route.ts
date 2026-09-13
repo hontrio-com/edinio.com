@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDpdAwbPdf, type DpdConfig } from "@/lib/dpd";
+import { poartaEtichetei } from "@/lib/orders/poarta-eticheta";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -20,6 +21,10 @@ export async function GET(req: NextRequest) {
   const { data: biz } = await supabase
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return NextResponse.json({ error: "Acces interzis" }, { status: 403 });
+
+  /* ⚠ SI STAREA CONTULUI, dupa dovedirea proprietatii. Vezi `poarta-eticheta.ts`. */
+  const oprit = await poartaEtichetei(businessId);
+  if (oprit) return oprit;
 
   // Configul se citeste cu service role: vederea public.store_settings nu mai
   // decripteaza pentru `authenticated`, iar cu parola `enc.v1.…` DPD nu ar mai da

@@ -1,8 +1,19 @@
 import { normalizePhone } from "@/lib/utils/phone";
 import { stripDiacritics, normalizeCountyName, normalizeLocalityName } from "@/lib/utils/ro-address";
-import { eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { eroareDeTermen, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 
 const BASE_URL = "https://api.dpd.ro/v1";
+
+/* ⚠ TERMEN PE CERERE. Fara el `fetch` asteapta la nesfarsit, iar cotatia din checkout
+   cheama treisprezece curieri deodata (`Promise.all` in `shipping.actions.ts`): unul
+   singur care nu raspunde tine cumparatorul pe ecranul de livrare pana renunta el.
+   ⚠ Aici acopera SI cotatia internationala, care se asteapta in afara acelui
+   `Promise.all`, cu un `await` singur, deci acolo nici macar ceilalti nu apuca sa
+   raspunda.
+   ⚠ Termenul depasit iese `necunoscut` din `verdictFurnizor`, fiindca eroarea nu trece
+   prin niciun constructor din `eroare-furnizor.ts`: un AWB care POATE sa fi fost creat
+   ramane blocat, nu se reincearca. */
+const ASTEPTARE_MS = 20_000;
 
 // Domestic service preference when services/destination returns several:
 // 2505 (DPD STANDARD) is the current mainline service, the CLASIC ones are
@@ -76,12 +87,31 @@ export type DpdShipmentResult = {
 
 // ─── HTTP helper ──────────────────────────────────────────────────────────────
 
+/*
+ * ⚠ CARE CAI CHIAR CREEAZA CEVA LA DPD.
+ *
+ * Toate cererile lor sunt POST, si trec toate prin acelasi invelis: si cotatia din
+ * checkout, si emiterea coletului. Deci „scriere" nu se poate citi din metoda, ci din
+ * CALE. Lista e scurta dinadins, si orice cale nouA e citire pana se scrie aici.
+ *
+ * Conteaza la un termen depasit: pe `shipment` coletul poate sa fi fost creat inainte
+ * sa renuntam noi sa asteptam, deci verdictul e „nu stim"; pe `calculate` nu s-a creat
+ * nimic, si un „nu stim" ar bloca o comanda pentru un AWB inexistent.
+ */
+const CAI_DE_SCRIERE = new Set(["shipment", "pickup", "shipment/cancel"]);
+
 async function dpdPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE_URL}/${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(ASTEPTARE_MS),
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, CAI_DE_SCRIERE.has(path), `cererea ${path}`, "DPD");
+  }
   // DPD returns a non-JSON body (e.g. "Cannot deserialize ...") when the request
   // is malformed; read as text first so we surface the real message instead of a
   // bare "Unexpected token ... is not valid JSON".

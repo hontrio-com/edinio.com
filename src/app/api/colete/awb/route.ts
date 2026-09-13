@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { getCOToken, getCOOrderAwb, type COConfig } from "@/lib/colete";
+import { poartaEtichetei } from "@/lib/orders/poarta-eticheta";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -24,6 +25,10 @@ export async function GET(request: NextRequest) {
     .eq("user_id", user.id)
     .single();
   if (!biz) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  /* ⚠ SI STAREA CONTULUI, dupa dovedirea proprietatii. Vezi `poarta-eticheta.ts`. */
+  const oprit = await poartaEtichetei(businessId);
+  if (oprit) return oprit;
 
   const admin = createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

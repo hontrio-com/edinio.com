@@ -449,7 +449,7 @@ export async function createSmartshipAwbAction(
 
   /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
      colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
-  const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+  const refuzAwb = await poartaAwbPropriu(businessId, orderId, "smartship");
   if (refuzAwb) return { error: refuzAwb };
 
   const { supabase, admin, config, order } = ctx;

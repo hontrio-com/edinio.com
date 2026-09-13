@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { claseSursa, deriveOrigin, monedaComenzii, MARKETPLACE_ORIGINI } from "@/lib/orders/origin";
+import { awburiDinRand, deCeNuSePoateAwbPropriu } from "@/lib/orders/awb-propriu";
 import {
   bulkGenerateInvoices, bulkGenerateAwbs, bulkUpdateOrderStatus,
   type BulkResult, type InvoiceProvider, type BulkCourier,
@@ -33,6 +34,33 @@ import { readBillingCompany } from "@/lib/billing/company";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
+
+/**
+ * Apasarea pe „Creeaza AWB" cand serverul ar refuza oricum.
+ *
+ * ⚠ BUTONUL NU MAI E STINS, si e o hotarare luata pe 13.09.2026, nu o scapare.
+ *
+ * Stins, singura explicatie era atributul nativ `title`, iar pe un element `disabled`
+ * nu se poate conta pe el: pe telefon si pe tableta nu exista hover deloc, deci acolo
+ * motivul nu aparea NICIODATA. Masurat in baza: 101 comenzi anulate si 20 restituite.
+ * Omul vedea un rand de butoane gri, fara niciun cuvant, si deschidea comenzile una
+ * cate una ca sa afle ce-i lipseste.
+ *
+ * `refuz` e deja o propozitie intreaga, si e CHIAR cea pe care o da poarta de pe server
+ * (`deCeNuSePoateAwbPropriu`, acelasi modul). Pagina comenzii o arata de mult intr-un
+ * panou; lista o arata acum la apasare. Doua ecrane, acelasi adevar, si niciunul nu-si
+ * face copia lui.
+ *
+ * ⚠ `aria-disabled`, nu `disabled`: cititorul de ecran afla ca butonul e refuzat, dar
+ * apasarea tot ajunge la noi, ca sa avem unde spune de ce.
+ */
+function apasaAwb(refuz: string | null, deschide: () => void): void {
+  if (refuz) {
+    toast.error(refuz);
+    return;
+  }
+  deschide();
+}
 
 const STATUS_TABS = [
   { key: "all",        label: "Toate" },
@@ -832,6 +860,26 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     const status = orderStatus(order.status);
                     const origine = deriveOrigin(order.order_source);
                     const moneda = monedaComenzii(order.order_source);
+                    /*
+                     * ⚠ ACELASI ADEVAR CA PE PAGINA COMENZII.
+                     *
+                     * Lista arata „Creeaza AWB" pe orice comanda fara numar, deci si pe
+                     * cele pe care serverul le refuza INTOTDEAUNA: livrare dusa de
+                     * marketplace, plata in avans neconfirmata, comanda anulata, sau un
+                     * colet dus deja de alt curier. Omul apasa, primeste eroare, si nu
+                     * intelege de ce, mai ales in lot, unde apasa pe multe deodata.
+                     *
+                     * Se cheama chiar functia pe care o cheama si poarta de pe server,
+                     * cu aceeasi harta de coloane: doua adevaruri despre aceeasi comanda
+                     * s-ar fi despartit la primul curier nou.
+                     */
+                    const randComanda = order as unknown as Record<string, unknown>;
+                    const refuzAwbLista = deCeNuSePoateAwbPropriu({
+                      order_source: randComanda["order_source"] ?? null,
+                      payment_status: (order.payment_status as string | null) ?? null,
+                      status: (order.status as string | null) ?? null,
+                      awburi: awburiDinRand(randComanda),
+                    });
                     return (
                       <tr
                         key={order.id}
@@ -913,8 +961,14 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                             ) : (
                               <button
                                 type="button"
-                                onClick={e => { e.stopPropagation(); setWootModalOrder(order); }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setWootModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
                               >
                                 <Package className="h-3 w-3" />
                                 Creeaza AWB
@@ -936,8 +990,14 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                             ) : (
                               <button
                                 type="button"
-                                onClick={e => { e.stopPropagation(); setCargusModalOrder(order); }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setCargusModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
                               >
                                 <Package className="h-3 w-3" />
                                 Creeaza AWB
@@ -959,8 +1019,14 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                             ) : (
                               <button
                                 type="button"
-                                onClick={e => { e.stopPropagation(); setDpdModalOrder(order); }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setDpdModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
                               >
                                 <Package className="h-3 w-3" />
                                 Creeaza AWB
@@ -982,8 +1048,14 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                             ) : (
                               <button
                                 type="button"
-                                onClick={e => { e.stopPropagation(); setGlsModalOrder(order); }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setGlsModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
                               >
                                 <Package className="h-3 w-3" />
                                 Creeaza AWB
@@ -1005,8 +1077,14 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                             ) : (
                               <button
                                 type="button"
-                                onClick={e => { e.stopPropagation(); setPallexModalOrder(order); }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setPallexModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
                               >
                                 <Package className="h-3 w-3" />
                                 Creeaza partida
@@ -1040,8 +1118,14 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                             ) : (
                               <button
                                 type="button"
-                                onClick={e => { e.stopPropagation(); setEcoletModalOrder(order); }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setEcoletModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
                               >
                                 <Package className="h-3 w-3" />
                                 Creeaza AWB
@@ -1063,8 +1147,14 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                             ) : (
                               <button
                                 type="button"
-                                onClick={e => { e.stopPropagation(); setFanCourierModalOrder(order); }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setFanCourierModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
                               >
                                 <Package className="h-3 w-3" />
                                 Creeaza AWB
@@ -1086,8 +1176,14 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                             ) : (
                               <button
                                 type="button"
-                                onClick={e => { e.stopPropagation(); setSamedayModalOrder(order); }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setSamedayModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
                               >
                                 <Package className="h-3 w-3" />
                                 Creeaza AWB
@@ -1109,8 +1205,14 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                             ) : (
                               <button
                                 type="button"
-                                onClick={e => { e.stopPropagation(); setColeteModalOrder(order); }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-border bg-muted/40 hover:bg-muted text-foreground transition-colors"
+                                onClick={e => { e.stopPropagation(); apasaAwb(refuzAwbLista, () => setColeteModalOrder(order)); }}
+                                aria-disabled={!!refuzAwbLista}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
+                                  refuzAwbLista
+                                    ? "border-border/60 bg-muted/20 text-muted-foreground cursor-pointer"
+                                    : "border-border bg-muted/40 hover:bg-muted text-foreground",
+                                )}
                               >
                                 <Package className="h-3 w-3" />
                                 Creeaza AWB

@@ -44,6 +44,7 @@ import { upsGata, type UpsConfig } from "@/lib/ups/client";
 import { createDhlAwbAction } from "@/lib/actions/dhl.actions";
 import { dhlGata, type DhlConfig } from "@/lib/dhl/client";
 import { ORDER_STATUS } from "@/lib/orders/status";
+import { liniaAdresei, stradaDestinatarului } from "@/lib/orders/adresa";
 
 // Uniform result shape for every bulk operation, so the UI reports consistently.
 export interface BulkResult {
@@ -188,10 +189,16 @@ export async function bulkGenerateInvoices(
       : (enabled.smartbill ? "smartbill" : enabled.oblio ? "oblio" : enabled.fgo ? "fgo" : null);
   if (!pick) return { error: "Niciun furnizor de facturare activ pentru optiunea aleasa." };
 
-  const { data: orders } = await admin
+  /* ⚠ SI EROAREA, nu doar randurile. Fara ea, o citire picata dadea `orders` null, iar
+     lotul iesea `{total:0, done:0, failed:0}`, adica fara cheia `error`, deci ecranul
+     alegea ramura de succes si arata un toast VERDE „0 reusite". Comerciantul pleca
+     crezand ca s-a facut, si nicio alarma nu se aprindea nicaieri. `bulkUpdateOrderStatus`
+     din acelasi fisier isi verifica citirea de mult; astea doua ramasesera in urma. */
+  const { data: orders, error: eCitire } = await admin
     .from("orders")
     .select("id, order_number, smartbill_invoice_number, oblio_invoice_number, fgo_invoice_number")
     .eq("business_id", businessId).in("id", ids);
+  if (eCitire) return { error: `Nu am putut citi comenzile selectate: ${eCitire.message}` };
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
 
@@ -312,7 +319,10 @@ export async function bulkGenerateAwbs(
     return { error: "Niciun curier compatibil cu generarea in masa nu este conectat." };
   }
 
-  const { data: orders } = await admin
+  /* ⚠ SI EROAREA, ca la facturi. O citire picata (un 5xx de o clipa, sau cache-ul
+     PostgREST ramas in urma imediat dupa o migratie care adauga coloane pe `orders`)
+     raporta VERDE „AWB-uri: 0 reusite", peste 50 de comenzi neatinse. */
+  const { data: orders, error: eCitireComenzi } = await admin
     .from("orders")
     /* ⚠ Coloana de AWB trebuie CERUTA aici, nu doar tratata in `existing` mai jos:
        ce nu se selecteaza vine `undefined`, iar verificarea de idempotenta ar trece
@@ -322,6 +332,7 @@ export async function bulkGenerateAwbs(
        Aceeasi lectie ca la `COURIER_FIELDS` din aboutyou/sync.ts. */
     .select("id, order_number, customer_name, customer_phone, customer_email, total, subtotal, payment_method, payment_status, order_source, shipping_address, items, cargus_awb_number, sameday_awb_number, fan_courier_awb_number, dpd_shipment_id, gls_awb_number, pallex_awb_number, posta_awb_number, innoship_awb_number, packeta_packet_id, smartship_awb_number, shipo_awb_number, fedex_awb_number, ups_awb_number, dhl_awb_number")
     .eq("business_id", businessId).in("id", ids);
+  if (eCitireComenzi) return { error: `Nu am putut citi comenzile selectate: ${eCitireComenzi.message}` };
 
   const result: BulkResult = { total: orders?.length ?? 0, done: 0, skipped: 0, failed: 0, errors: [] };
 
@@ -491,9 +502,12 @@ async function createAwbForOrder(
 
   const county = (addr.county ?? "").trim();
   const city = (addr.city ?? "").trim();
-  const street = (addr.street ?? addr.address ?? "").trim();
+  /* ⚠ Prin ajutorul comun, nu prin `??`: acela nu cade pe SIRUL GOL, deci o comanda
+     cu `street: ""` si `address` completat iesea fara strada, iar de cand strada e
+     obligatorie la emitere, aia ar fi fost un refuz pe o comanda buna. */
+  const street = stradaDestinatarului(addr);
   const streetNo = (addr.street_no ?? "").trim();
-  const addressLine = (addr.address ?? addr.street ?? "").trim();
+  const addressLine = liniaAdresei(addr);
   const zip = (addr.postal_code ?? "").trim();
   const email = o.customer_email ?? "";
   // Greutatea calculata din produsele comenzii (`greutateaColetului`). Pana la
@@ -523,6 +537,14 @@ async function createAwbForOrder(
         recipientName: o.customer_name, recipientPhone: o.customer_phone, recipientEmail: email,
         recipientCounty: county, recipientLocality: city, recipientStreet: street, recipientStreetNo: streetNo,
         recipientZipCode: zip, parcels: 1, weightKg: weight, cod, content, observation: "",
+        /*
+         * ⚠ Dimensiunile NU se paseaza de aici, si nu din uitare: `createFanCourierAwbAction`
+         * isi citeste singur configul magazinului (`getConfigAndOrder`), din aceeasi coloana
+         * `fan_courier_config`, iar `createFanCourierAwb` cade pe `coletImplicit(config)` cand
+         * apelantul nu trimite nimic. Pasate si de aici, ar fi aceeasi cutie rezolvata de doua
+         * ori pe acelasi drum. Lotul nu are nicio cutie PROPRIE de trimis: el nu stie coletul
+         * fiecarei comenzi, iar cel obisnuit al magazinului il stie deja serverul.
+         */
         fanboxId: isFanbox ? addr.locker_id : undefined,
       });
     }

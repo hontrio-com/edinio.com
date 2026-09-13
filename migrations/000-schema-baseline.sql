@@ -7111,7 +7111,10 @@ create table if not exists public.orders (
   sameday_status_checked_at timestamp with time zone,
   sameday_return_awb_number text,
   sameday_return_awb_at timestamp with time zone,
-  prices_include_vat boolean);
+  prices_include_vat boolean,
+  fan_courier_awb_client_id bigint,
+  fan_courier_cost numeric,
+  fan_courier_vat numeric);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,

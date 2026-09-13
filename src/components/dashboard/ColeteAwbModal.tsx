@@ -9,6 +9,7 @@ import type { COReceiver, COParcel } from "@/lib/colete";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
+import { stradaDestinatarului } from "@/lib/orders/adresa";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -16,6 +17,10 @@ interface ShippingAddress {
   county?: string;
   city?: string;
   address?: string;
+  /* ⚠ Declarate fiindca formularul le citeste: `stradaDestinatarului` se uita la
+     `street`, iar numarul se seamana din `street_no`. */
+  street?: string;
+  street_no?: string;
   postal_code?: string;
   // The service the customer picked from the live checkout offers.
   colete_service_id?: number;
@@ -57,8 +62,11 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
   const [receiverEmail, setReceiverEmail] = useState(order.customer_email ?? "");
   const [receiverCounty, setReceiverCounty] = useState(addr.county ?? "");
   const [receiverCity, setReceiverCity] = useState(addr.city ?? "");
-  const [receiverStreet, setReceiverStreet] = useState(addr.address ?? "");
-  const [receiverStreetNumber, setReceiverStreetNumber] = useState("");
+  /* ⚠ Aici `stradaDestinatarului` e ajutorul POTRIVIT, si ramane: Colete are DOUA
+     campuri, „Strada" si „Numar", duse separat la curier. `liniaAdresei` ar fi pus
+     numarul de doua ori. Ce lipsea era semanarea numarului, mai jos. */
+  const [receiverStreet, setReceiverStreet] = useState(stradaDestinatarului(addr));
+  const [receiverStreetNumber, setReceiverStreetNumber] = useState((addr.street_no ?? "").trim());
   const [receiverPostalCode, setReceiverPostalCode] = useState(addr.postal_code ?? "");
 
   // Parcel state
@@ -104,8 +112,13 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
       county: receiverCounty,
       city: receiverCity,
       postal_code: receiverPostalCode,
-      street: receiverStreet || "Adresa",
-      street_number: receiverStreetNumber || "1",
+      /* ⚠ FARA REZERVE INVENTATE. Aici statea `receiverStreet || "Adresa"` si
+         `receiverStreetNumber || "1"`: pe o comanda fara numar pleca „Str. Lunga 4, nr. 1",
+         adica o adresa REALA, dar a altcuiva. Curierul o gaseste, suna la usa gresita, si
+         abia rambursul nerecuperat scoate la iveala greseala. O adresa gresita care pare
+         buna e mai scumpa decat una evident goala. Se refuza in formular, mai jos. */
+      street: receiverStreet.trim(),
+      street_number: receiverStreetNumber.trim(),
     };
   }
 
@@ -123,6 +136,10 @@ export function ColeteAwbModal({ open, onClose, order, businessId, onSuccess }: 
   function handleCalculate() {
     if (!receiverCounty || !receiverCity) { toast.error("Completeaza judetul si orasul destinatarului"); return; }
     if (!receiverPostalCode) { toast.error("Codul postal al destinatarului este obligatoriu"); return; }
+    /* ⚠ Se cer de la OM, fiindca el le poate completa; codul ar putea doar sa le inventeze.
+       Vezi nota din `buildReceiver`. */
+    if (!receiverStreet.trim()) { toast.error("Completeaza strada destinatarului"); return; }
+    if (!receiverStreetNumber.trim()) { toast.error("Completeaza numarul de la adresa destinatarului"); return; }
     setPriceError("");
     setPrices([]);
     setSelectedServiceId(null);

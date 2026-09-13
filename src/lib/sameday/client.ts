@@ -1,9 +1,24 @@
 import { normalizePhone } from "@/lib/utils/phone";
 import { normalizeCountyName, localitateSameday } from "@/lib/utils/ro-address";
-import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { eroareCuStatus, eroareDeTermen, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { cheieToken } from "@/lib/integrari/cheie-token";
 
 const PROD_URL = "https://api.sameday.ro";
 const SANDBOX_URL = "https://sameday-api.demo.zitec.com";
+
+/* ⚠ TERMEN PE CERERE. Fara el `fetch` asteapta la nesfarsit, iar cotatia din checkout
+   cheama treisprezece curieri deodata (`Promise.all` in `shipping.actions.ts`): unul
+   singur care nu raspunde tine cumparatorul pe ecranul de livrare pana renunta el.
+   ⚠ Termenul depasit iese `necunoscut` din `verdictFurnizor`, fiindca eroarea nu trece
+   prin niciun constructor din `eroare-furnizor.ts`. Adica exact ce trebuie: un AWB care
+   POATE sa fi fost creat ramane blocat, nu se reincearca.
+   Aceeasi conventie ca la FAN, eColet, Innoship, SmartShip, Shipo, FedEx, UPS si DHL. */
+const ASTEPTARE_MS = 20_000;
+
+/* ⚠ Eticheta e un FISIER, nu un raspuns JSON, deci i se da mai mult. Dar tot i se da:
+   fara termen, o descarcare care nu mai vine tine ruta de eticheta ocupata pana cand
+   platforma taie functia, iar comerciantul vede o fila care nu se deschide niciodata. */
+const ASTEPTARE_ETICHETA_MS = 30_000;
 
 export type SamedayConfig = {
   enabled: boolean;
@@ -155,6 +170,11 @@ export type SamedayAwbCreat = {
 type TokenEntry = { token: string; expiresAt: number };
 const tokenCache = new Map<string, TokenEntry>();
 
+/** Pentru probe: goleste tokenurile pastrate. */
+export function uitaTokenurileSameday(): void {
+  tokenCache.clear();
+}
+
 function baseUrl(sandbox: boolean) {
   return sandbox ? SANDBOX_URL : PROD_URL;
 }
@@ -164,17 +184,38 @@ async function getSamedayToken(
   password: string,
   sandbox: boolean,
 ): Promise<string> {
-  const key = `${username}::${sandbox}`;
+  /*
+   * ⚠ SI PAROLA, hasuita. Cheia era `${username}::${sandbox}`, deci ORICE cerere cu
+   * acelasi username si o parola gresita primea tokenul valid din cache si trecea,
+   * fara sa atinga Sameday. Iar harta e a MODULULUI, comuna tuturor magazinelor din
+   * proces, si `loadSamedayAccountAction` lua username-ul din FORMULAR: un comerciant
+   * putea cere contul altuia cu orice parola si primea punctele lui de ridicare, cu
+   * adrese si persoane de contact. Sameday a fost sarit cand s-au reparat FAN, Colete,
+   * FedEx si Cargus. Vezi `@/lib/integrari/cheie-token`.
+   *
+   * ⚠ CHEIA E DE AJUNS, si de aceea username-ul din formular a ramas neatins: cu parola
+   * in cheie, un username strain plus o parola gresita nu mai nimereste intrarea nimanui
+   * si ajunge la Sameday, care il refuza. Legarea username-ului de configul salvat ar fi
+   * inchis pe deasupra si mutarea legitima pe alt cont, care se face din chiar campul acela.
+   */
+  const key = cheieToken([username, String(sandbox)], [password]);
   const cached = tokenCache.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.token;
 
-  const res = await fetch(`${baseUrl(sandbox)}/api/authenticate`, {
-    method: "POST",
-    headers: {
-      "X-AUTH-USERNAME": username,
-      "X-AUTH-PASSWORD": password,
-    },
-  });
+  /* ⚠ E POST, dar e CITIRE: autentificarea nu creeaza niciun colet. Vezi `eroareDeTermen`. */
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl(sandbox)}/api/authenticate`, {
+      method: "POST",
+      headers: {
+        "X-AUTH-USERNAME": username,
+        "X-AUTH-PASSWORD": password,
+      },
+      signal: AbortSignal.timeout(ASTEPTARE_MS),
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, false, "autentificarea", "Sameday");
+  }
 
   if (!res.ok) throw eroareRefuz(`Sameday autentificare esuata: ${res.status} ${res.statusText}`);
 
@@ -203,9 +244,15 @@ async function samedayGet<T>(
   const url = new URL(`${baseUrl(sandbox)}/${path}`);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
 
-  const res = await fetch(url.toString(), {
-    headers: { "X-AUTH-TOKEN": token },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url.toString(), {
+      headers: { "X-AUTH-TOKEN": token },
+      signal: AbortSignal.timeout(ASTEPTARE_MS),
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, false, `citirea ${path}`, "Sameday");
+  }
   // Citire pura — vezi nota din fancourier.ts.
   if (!res.ok) throw eroareRefuz(`Sameday GET ${path}: ${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
@@ -217,14 +264,21 @@ async function samedayPost<T>(
   sandbox: boolean,
   bodyParts: string[],
 ): Promise<T> {
-  const res = await fetch(`${baseUrl(sandbox)}/${path}`, {
-    method: "POST",
-    headers: {
-      "X-AUTH-TOKEN": token,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: bodyParts.join("&"),
-  });
+  /* ⚠ SCRIERE: coletul poate sa fi fost creat inainte sa renuntam noi sa asteptam. */
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl(sandbox)}/${path}`, {
+      method: "POST",
+      headers: {
+        "X-AUTH-TOKEN": token,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: bodyParts.join("&"),
+      signal: AbortSignal.timeout(ASTEPTARE_MS),
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, true, `cererea ${path}`, "Sameday");
+  }
 
   const text = await res.text();
   if (!res.ok) throw eroareCuStatus(`Sameday POST ${path}: ${res.status} — ${text}`, res.status);
@@ -237,10 +291,16 @@ async function samedayDelete(
   token: string,
   sandbox: boolean,
 ): Promise<void> {
-  const res = await fetch(`${baseUrl(sandbox)}/${path}`, {
-    method: "DELETE",
-    headers: { "X-AUTH-TOKEN": token },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl(sandbox)}/${path}`, {
+      method: "DELETE",
+      headers: { "X-AUTH-TOKEN": token },
+      signal: AbortSignal.timeout(ASTEPTARE_MS),
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, true, `anularea ${path}`, "Sameday");
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw eroareCuStatus(`Sameday DELETE ${path}: ${res.status} — ${text}`, res.status);
@@ -727,6 +787,7 @@ export async function getSamedayAwbLabel(
 
   const res = await fetch(url, {
     headers: { "X-AUTH-TOKEN": token },
+    signal: AbortSignal.timeout(ASTEPTARE_ETICHETA_MS),
   });
 
   if (!res.ok) {
@@ -778,7 +839,10 @@ export async function statusAwbSameday(
 ): Promise<SamedayStareAwb | null> {
   const token = await getSamedayToken(config.username, config.password, config.sandbox);
   const url = `${baseUrl(config.sandbox)}/api/client/awb/${encodeURIComponent(awbNumber)}/status`;
-  const res = await fetch(url, { headers: { "X-AUTH-TOKEN": token } });
+  const res = await fetch(url, {
+    headers: { "X-AUTH-TOKEN": token },
+    signal: AbortSignal.timeout(ASTEPTARE_MS),
+  });
 
   /* ⚠ 404 inseamna „nu-l am", nu „am cazut". Aruncat ca eroare, cronul l-ar fi reincercat
      la nesfarsit pentru un AWB sters din contul lor. */

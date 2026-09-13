@@ -265,7 +265,7 @@ export async function createPallexAwbAction(
 
   /* ⚠ POARTA E PRIMA, INAINTE de orice apel la curier: un refuz de dupa emitere ar fi un
      colet deja platit si o eticheta deja tiparita. Vezi `src/lib/orders/poarta-awb.ts`. */
-  const refuzAwb = await poartaAwbPropriu(businessId, orderId);
+  const refuzAwb = await poartaAwbPropriu(businessId, orderId, "pallex");
   if (refuzAwb) return { error: refuzAwb };
 
   const { supabase, config, order, firma } = ctx;

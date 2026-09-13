@@ -1,7 +1,16 @@
 import { normalizePhone } from "@/lib/utils/phone";
-import { eroareCuStatus, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { eroareCuStatus, eroareDeTermen, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { cheieToken } from "@/lib/integrari/cheie-token";
 
 const WOOT_BASE = "https://ws.woot.ro/latest";
+
+/* ⚠ TERMEN PE CERERE. Fara el `fetch` asteapta la nesfarsit, iar cotatia din checkout
+   cheama treisprezece curieri deodata (`Promise.all` in `shipping.actions.ts`): unul
+   singur care nu raspunde tine cumparatorul pe ecranul de livrare pana renunta el.
+   ⚠ Termenul depasit iese `necunoscut` din `verdictFurnizor`, fiindca eroarea nu trece
+   prin niciun constructor din `eroare-furnizor.ts`. Adica exact ce trebuie: un AWB care
+   POATE sa fi fost creat ramane blocat, nu se reincearca. */
+const ASTEPTARE_MS = 20_000;
 
 /**
  * Woot documents phone numbers in INTERNATIONAL format ("+40721234567") — the
@@ -102,16 +111,38 @@ export type WootCity = {
 
 const tokenCache = new Map<string, { token: string; expiresAt: number }>();
 
+/** Pentru probe: goleste tokenurile pastrate. */
+export function uitaTokenurileWoot(): void {
+  tokenCache.clear();
+}
+
 export async function getWootToken(public_key: string, secret_key: string): Promise<string> {
-  const cached = tokenCache.get(public_key);
+  /*
+   * ⚠ SI SECRETUL, hasuit. Cheiata doar pe `public_key`, harta intorcea tokenul valid
+   * si pentru un `secret_key` GRESIT. Concret: comerciantul isi roteste cheile la Woot,
+   * `public_key` ramane acelasi, lipeste gresit noul secret si apasa „Testeaza
+   * conexiunea"; intrarea pusa la conectarea de dinainte e inca vie (expirarea lor e de
+   * o zi), deci ecranul scrie „conectat" si defectul iese abia a doua zi, la prima
+   * emitere. Woot a fost sarit cand s-au reparat FAN, Colete, FedEx si Cargus.
+   * Vezi `@/lib/integrari/cheie-token`.
+   */
+  const cacheKey = cheieToken([public_key], [secret_key]);
+  const cached = tokenCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
 
-  const res = await fetch(`${WOOT_BASE}/account/authorize`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ public_key, secret_key }),
-    cache: "no-store",
-  });
+  /* ⚠ E POST, dar e CITIRE: autentificarea nu creeaza niciun colet. Vezi `eroareDeTermen`. */
+  let res: Response;
+  try {
+    res = await fetch(`${WOOT_BASE}/account/authorize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ public_key, secret_key }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(ASTEPTARE_MS),
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, false, "autentificarea", "Woot");
+  }
 
   // `eroareRefuz`, nu `Error` simplu: autentificarea se face INAINTE de orice
   // POST /orders, deci un esec aici dovedeste ca la Woot NU s-a creat nimic si
@@ -121,22 +152,31 @@ export async function getWootToken(public_key: string, secret_key: string): Prom
   const data = await res.json() as { success: boolean; token: string; expire: number };
   if (!data.success || !data.token) throw eroareRefuz("Autentificare Woot esuata.");
 
-  tokenCache.set(public_key, { token: data.token, expiresAt: Date.now() + data.expire * 1000 });
+  tokenCache.set(cacheKey, { token: data.token, expiresAt: Date.now() + data.expire * 1000 });
   return data.token;
 }
 
 // ─── Generic request ─────────────────────────────────────────────────────────
 
 async function wootReq<T>(token: string, method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${WOOT_BASE}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    cache: "no-store",
-  });
+  /* ⚠ Acelasi invelis duce si citirile, si emiterea, deci verdictul se alege pe METODA:
+     un GET expirat n-a creat nimic (refuz dovedit), un POST expirat poate sa fi creat
+     coletul inainte sa renuntam noi sa asteptam („nu stim"). */
+  let res: Response;
+  try {
+    res = await fetch(`${WOOT_BASE}${path}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      cache: "no-store",
+      signal: AbortSignal.timeout(ASTEPTARE_MS),
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, method.toUpperCase() !== "GET", `cererea ${path}`, "Woot");
+  }
 
   if (!res.ok) {
     // Surface Woot's actual reason (it returns various shapes: { message }, { error },
@@ -202,13 +242,17 @@ export async function fetchCounties(): Promise<WootCounty[]> {
   // no-store intentionat: cu force-cache (Vercel Data Cache) fetch-ul dadea 500
   // constant la runtime pe Vercel (2026-07-17) desi upstream-ul raspundea normal;
   // fetchCities cu no-store nu a fost afectat. Lista e mica, nu merita cache.
-  const res = await fetch(`${WOOT_BASE}/general/counties?country_id=189`, { cache: "no-store" });
+  const res = await fetch(`${WOOT_BASE}/general/counties?country_id=189`, {
+    cache: "no-store", signal: AbortSignal.timeout(ASTEPTARE_MS),
+  });
   if (!res.ok) throw new Error("Nu s-au putut incarca judetele");
   return res.json() as Promise<WootCounty[]>;
 }
 
 export async function fetchCities(county_id: number): Promise<WootCity[]> {
-  const res = await fetch(`${WOOT_BASE}/general/cities?county_id=${county_id}&country_id=189`, { cache: "no-store" });
+  const res = await fetch(`${WOOT_BASE}/general/cities?county_id=${county_id}&country_id=189`, {
+    cache: "no-store", signal: AbortSignal.timeout(ASTEPTARE_MS),
+  });
   if (!res.ok) throw new Error("Nu s-au putut incarca orasele");
   return res.json() as Promise<WootCity[]>;
 }

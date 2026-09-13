@@ -8,6 +8,8 @@ import {
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { logError } from "@/lib/error-logger";
+/* ⚠ Adresa are DOUA familii de campuri. Vezi `src/lib/orders/adresa.ts`. */
+import { liniaAdresei } from "@/lib/orders/adresa";
 
 export async function POST(request: NextRequest) {
   /*
@@ -101,12 +103,31 @@ export async function POST(request: NextRequest) {
   }
   const returnUrl = `${baseUrl}/api/ipay/return?orderId=${encodeURIComponent(orderId)}&businessId=${encodeURIComponent(businessId)}`;
 
-  const addr = (order.shipping_address ?? {}) as { address?: string; city?: string; county?: string };
+  const addr = (order.shipping_address ?? {}) as {
+    address?: string; street?: string; street_no?: string; city?: string; county?: string;
+  };
   const email = (order.customer_email as string | null) ?? undefined;
   const phone = (order.customer_phone as string | null) ?? "";
+
+  /*
+   * ⚠ ADRESA SE CITEA DINTR-O SINGURA FAMILIE DE CAMPURI (13.09.2026).
+   *
+   * `shipping_address` are `street` + `street_no` (checkout-ul propriu) SI `address`
+   * (marketplace-uri si formulare vechi). Aici se cerea doar `addr.address`, deci pe o
+   * comanda venita din checkout-ul propriu conditia era falsa si `orderBundle` NU pleca
+   * deloc: banca nu primea nici email, nici telefon, nici oras, nici adresa pentru scorul
+   * de frauda al platii cu cardul, fiindca `buildOrderBundle` le impacheteaza pe toate
+   * intr-un singur sir.
+   *
+   * Masurat in productie: din 425 de comenzi, 102 au numai `street`, 304 au numai
+   * `address`, zero le au pe amandoua. Adica 24% plecau cu pachetul gol.
+   *
+   * `liniaAdresei` compune linia intreaga din oricare familie, si cade si pe sirul gol.
+   */
+  const linieAdresa = liniaAdresei(addr);
   // orderBundle is only sent when we have complete, real customer data (per iPay docs).
-  const orderBundle = email && phone && addr.city && addr.address
-    ? buildOrderBundle({ email, phone, city: addr.city, address: addr.address })
+  const orderBundle = email && phone && addr.city && linieAdresa
+    ? buildOrderBundle({ email, phone, city: addr.city, address: linieAdresa })
     : undefined;
 
   const result = await ipayRegister(cfg!, {

@@ -185,6 +185,53 @@ test("⚠ sfatul se potriveste cu STAREA randului blocant, nu doar cu varsta lui
     "deblocarea trebuie sa cantareasca la fel ca panoul, altfel butonul refuza randuri pe care ecranul le arata");
 });
 
+test("⚠ o plata OLX blocata trimite in panoul ei, nu la suport", () => {
+  /*
+   * ═══ MESAJUL NUMEA IESIREA GRESITA (13.09.2026) ═══
+   *
+   * Randurile fara comanda sunt de trei feluri, masurat in baza: facturarea de platforma,
+   * ridicarile de la curier si platile OLX. Supapa comerciantului (`operatiiAtarnate`)
+   * filtreaza pe `order_id`, deci niciunul nu apare in pagina comenzii, si de aceea textul
+   * generic spunea „scrie-ne ca sa deblocam noi randul".
+   *
+   * ⚠ Pentru OLX era insa NEADEVARAT. `platiNelamurite` din `olx/plati.ts` citeste exact
+   * randurile astea (`furnizor = olx`, `fel = plata`, starile `in_curs` si `necunoscut`),
+   * `getOlxSanatate` le numara, iar panoul le arata cu doua butoane: „Verifică la OLX”,
+   * care poate inchide cazul singura, si „Am verificat, deblochează”. Omul era trimis la
+   * noi pentru ceva ce avea sub deget, si astepta un raspuns de la om in loc sa apese.
+   */
+  const dinainteDePrag = new Date(Date.now() - 10 * 60_000).toISOString();
+  const plataOlx = {
+    businessId: "b", orderId: null, fel: "plata" as const, furnizor: "olx" as const,
+    cheie: "plata:olx:x", tinta: "x",
+  };
+
+  for (const motiv of ["in_curs", "necunoscut"]) {
+    const m = mesajBlocat(motiv, plataOlx, 1, dinainteDePrag, motiv);
+    assert.match(m, /panoul de sanatate OLX/, `${motiv}: sfatul nu numeste panoul`);
+    assert.doesNotMatch(m, /scrie-ne/, `${motiv}: inca il trimite la suport peste propriul buton`);
+  }
+
+  /*
+   * ⚠ SI NUMAI PENTRU OLX, altfel reparatia ar fi o minciuna mutata in alta parte.
+   * Ridicarea de la curier chiar n-are niciun panou al ei: acolo textul generic e adevarat,
+   * si singura cale ramane ruta de administrare.
+   */
+  const ridicare = {
+    businessId: "b", orderId: null, fel: "ridicare" as const, furnizor: "fancourier" as const,
+    cheie: "ridicare:fancourier:2026-09-13",
+  };
+  const mRidicare = mesajBlocat("necunoscut", ridicare, 1, dinainteDePrag, "necunoscut");
+  assert.match(mRidicare, /scrie-ne/, "ridicarea n-are panou propriu: textul generic trebuie sa ramana");
+  assert.doesNotMatch(mRidicare, /panoul de sanatate OLX/);
+
+  /* ⚠ Si o operatie CU comanda ramane la pagina comenzii, unde chiar se vede. */
+  const cuComanda = { ...plataOlx, orderId: "o1" };
+  const mComanda = mesajBlocat("necunoscut", cuComanda, 1, dinainteDePrag, "necunoscut");
+  assert.match(mComanda, /pagina comenzii/);
+  assert.doesNotMatch(mComanda, /panoul de sanatate OLX/);
+});
+
 test("⚠ toate cele trei cumparari trimit tinta, si e ALTA decat cheia", () => {
   /*
    * ⚠ Daca tinta ar fi identica cu cheia, a doua incuietoare n-ar incuia nimic: s-ar suprapune

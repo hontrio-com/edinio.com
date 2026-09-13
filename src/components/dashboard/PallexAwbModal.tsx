@@ -16,6 +16,7 @@ import { JUDETE, potrivesteJudet } from "@/lib/ro/judete";
 import { useGreutateaAwb, notaGreutate } from "@/components/dashboard/useGreutateaAwb";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/types/database.types";
+import { stradaCuNumar } from "@/lib/orders/adresa";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
 
@@ -117,7 +118,7 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
   const [judet, setJudet] = useState(potrivesteJudet(addr.county) ?? "");
   const [codPostal, setCodPostal] = useState(addr.postal_code ?? "");
   const [strada, setStrada] = useState(
-    [addr.street ?? addr.address ?? "", addr.street_no ?? ""].filter(Boolean).join(" ").trim(),
+    stradaCuNumar(addr),
   );
 
   const [numarPaleti, setNumarPaleti] = useState("1");

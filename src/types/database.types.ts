@@ -3545,7 +3545,10 @@ export type Database = {
           ecolet_service_slug: string | null
           ecolet_status_checked_at: string | null
           ecolet_status_code: string | null
+          fan_courier_awb_client_id: number | null
           fan_courier_awb_number: string | null
+          fan_courier_cost: number | null
+          fan_courier_vat: number | null
           fedex_awb_at: string | null
           fedex_awb_number: string | null
           fedex_cost: number | null
@@ -3737,7 +3740,10 @@ export type Database = {
           ecolet_service_slug?: string | null
           ecolet_status_checked_at?: string | null
           ecolet_status_code?: string | null
+          fan_courier_awb_client_id?: number | null
           fan_courier_awb_number?: string | null
+          fan_courier_cost?: number | null
+          fan_courier_vat?: number | null
           fedex_awb_at?: string | null
           fedex_awb_number?: string | null
           fedex_cost?: number | null
@@ -3929,7 +3935,10 @@ export type Database = {
           ecolet_service_slug?: string | null
           ecolet_status_checked_at?: string | null
           ecolet_status_code?: string | null
+          fan_courier_awb_client_id?: number | null
           fan_courier_awb_number?: string | null
+          fan_courier_cost?: number | null
+          fan_courier_vat?: number | null
           fedex_awb_at?: string | null
           fedex_awb_number?: string | null
           fedex_cost?: number | null

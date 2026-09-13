@@ -313,7 +313,9 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   function handleCancel() {
     if (!order.woot_order_id) return;
     startCancel(async () => {
-      const result = await cancelWootAwb(businessId, order.id, order.woot_order_id!);
+      /* ⚠ Identificatorul expedierii NU se mai trimite: serverul il citeste din comanda
+         autorizata. Vezi nota din `cancelWootAwb`. */
+      const result = await cancelWootAwb(businessId, order.id);
       if (!result.success) { toast.error(result.error ?? "Eroare la anulare."); return; }
       toast.success("AWB anulat.");
       onSuccess();

@@ -1,6 +1,6 @@
 import { normalizePhone } from "@/lib/utils/phone";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
-import { eroareCuStatus, eroareDeTermen, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { eroareCuStatus, eroareDeTermen, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 import { cheieToken } from "@/lib/integrari/cheie-token";
 
 const WOOT_BASE = "https://ws.woot.ro/latest";
@@ -361,21 +361,127 @@ export async function createOrder(
     payment_method?: "credit" | "card" | "term";
     options?: { opd?: boolean; sat?: boolean; rdc?: boolean; pxc?: boolean };
   }
-): Promise<{ success: boolean; order_id: number; awb_number: string | null }> {
-  return wootReq(token, "POST", "/orders", { payment_method: "credit", ...params });
+): Promise<{ success: true; order_id: number; awb_number: string | null }> {
+  const r = await wootReq<{ success?: unknown; order_id?: unknown; awb_number?: unknown }>(
+    token, "POST", "/orders", { payment_method: "credit", ...params },
+  );
+
+  /*
+   * ⚠ PLICUL DE SUCCES SE CITESTE, CA LA `getWootToken` (mai sus, randul 154).
+   *
+   * Woot raspunde HTTP 200 si pentru „am creat" si pentru „n-am creat": adevarul sta in
+   * corp. Tipul de dinainte spunea `order_id: number` fara sa verifice NIMIC, deci era o
+   * minciuna pe care `tsc` o credea: un corp `{success:true}` fara `order_id` ajungea
+   * `String(undefined)`, adica sirul literal „undefined" scris in registru si in comanda,
+   * si de acolo nu se mai putea anula nimic niciodata.
+   *
+   * ⚠ `eroareRefuz`, nu `eroareNesigura`: un raspuns complet, citit, care spune „nu" e un
+   * refuz DOVEDIT, deci reincercarea dupa corectarea datelor ramane libera. Un corp fara
+   * `order_id` e insa ALTCEVA, vezi mai jos.
+   */
+  if (r.success !== true) throw eroareRefuz("Woot a refuzat crearea expedierii.");
+
+  /*
+   * ⚠ AICI VERDICTUL E „NU STIM", SI E TOT CE CONTEAZA.
+   *
+   * `success:true` fara `order_id` inseamna ca Woot spune ca A CREAT ceva, dar nu ne da
+   * cheia. Coletul poate exista si poate fi facturat. Marcat refuz, registrul ar elibera
+   * reincercarea si al doilea colet ar pleca REAL, platit din creditul contului. Deci
+   * ramane blocat si iese la om, prin supapa de operatii atarnate.
+   */
+  const id = typeof r.order_id === "number" ? r.order_id : Number(r.order_id);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw eroareNesigura(
+      "Woot a raspuns ca expedierea s-a creat, dar fara identificator. "
+      + "Verifica in contul Woot inainte de a incerca din nou: un al doilea AWB s-ar plati inca o data.",
+    );
+  }
+
+  return {
+    success: true,
+    order_id: id,
+    awb_number: typeof r.awb_number === "string" && r.awb_number.trim() ? r.awb_number.trim() : null,
+  };
 }
 
 export async function getOrderAwb(
   token: string,
   wootOrderId: number,
   format: "A4" | "A6" = "A4"
-): Promise<{ success: boolean; pdf: string }> {
-  return wootReq(token, "GET", `/orders/${wootOrderId}/awb?format=${format}`);
+): Promise<{ success: true; pdf: string }> {
+  const r = await wootReq<{ success?: unknown; pdf?: unknown }>(
+    token, "GET", `/orders/${wootOrderId}/awb?format=${format}`,
+  );
+
+  /*
+   * ⚠ Si eticheta isi are plicul. Fara verificare, un corp `{success:false}` ajungea la
+   * `Buffer.from(undefined, "base64")`, adica un PDF de zero octeti trimis catre browser cu
+   * `Content-Type: application/pdf`, adica o fereastra goala, fara niciun mesaj.
+   *
+   * ⚠ E o CITIRE, deci refuzul e dovedit: nu s-a creat nimic, reincercarea e libera.
+   */
+  if (r.success !== true || typeof r.pdf !== "string" || !r.pdf) {
+    throw eroareRefuz("Woot nu a returnat eticheta pentru aceasta expediere.");
+  }
+  return { success: true, pdf: r.pdf };
 }
 
 export async function cancelWootOrder(
   token: string,
   wootOrderId: number
-): Promise<{ success: boolean }> {
-  return wootReq(token, "DELETE", `/orders/${wootOrderId}`, { reason_id: 1, refund_method: "credit" });
+): Promise<{ success: true }> {
+  const r = await wootReq<{ success?: unknown }>(
+    token, "DELETE", `/orders/${wootOrderId}`, { reason_id: 1, refund_method: "credit" },
+  );
+
+  /*
+   * ═══ ⚠ CEL MAI SCUMP RAND DIN FISIER ═══
+   *
+   * Pana azi rezultatul asta se arunca: apelantul scria `await cancelWootOrder(...)` si
+   * mergea mai departe. Woot raspunde insa HTTP 200 cu `{success:false}` cand NU poate
+   * anula, tipic dupa ce coletul a fost deja preluat. Efectul era:
+   *
+   *   1. coloanele comenzii se goleau, inclusiv `woot_order_id`;
+   *   2. slotul din registru se elibera;
+   *   3. comerciantul citea „AWB anulat".
+   *
+   * Coletul ramanea viu la Woot, pleca la client si incasa rambursul, iar noi tocmai
+   * stersesem singura cheie prin care mai putea fi anulat sau prin care i se mai putea
+   * scoate eticheta. Pe un magazin cu 186 de comenzi cu ramburs, asta nu e o scapare de
+   * formă.
+   *
+   * ⚠ Refuz DOVEDIT: raspunsul e complet si spune „nu". Ce face apelantul cu el e insa
+   * opusul reincercarii libere de la emitere: vezi `cancelWootAwb`.
+   */
+  if (r.success !== true) {
+    throw eroareRefuz(
+      "Woot a refuzat anularea. De regula inseamna ca expedierea a fost deja preluata, "
+      + "deci coletul ramane viu la ei.",
+    );
+  }
+  return { success: true };
+}
+
+/**
+ * Ce se goleste pe comanda dupa o anulare CONFIRMATA de Woot.
+ *
+ * ⚠ STA AICI, nu in `woot.actions.ts`, ca sa poata fi PROBATA: fisierul acela e
+ * „use server", deci fiecare export al lui devine o actiune apelabila din browser, iar o
+ * regula scoasa acolo doar ca s-o pot testa ar fi o usa noua. Aceeasi asezare ca la sora
+ * ei, `campuriDezlegareFan`.
+ *
+ * ⚠ SE CHEAMA DOAR PE SUCCES. La un refuz dovedit NU se goleste nimic: spre deosebire de
+ * FAN, unde raman tariful si sucursala ca urma pentru factura, la Woot `woot_order_id` e
+ * singura cheie de anulare si de eticheta. Stearsa pe un colet inca viu, expedierea ar
+ * ramane in aer, fara ca cineva sa o mai poata opri.
+ */
+export function campuriAnulareWoot(trackingEsteAlAcestuiAwb: boolean): Record<string, null> {
+  return {
+    woot_order_id: null,
+    woot_awb_number: null,
+    woot_service_name: null,
+    /* `tracking_number` e comun tuturor curierilor: se goleste DOAR daca e chiar al
+       acestui AWB, altfel anularea unei expedieri ar sterge urmarirea alteia. */
+    ...(trackingEsteAlAcestuiAwb ? { tracking_number: null } : {}),
+  };
 }

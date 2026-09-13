@@ -708,7 +708,7 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
          slotul din registru n-a putut fi eliberat („apasa Verifica inainte sa
          emiti din nou"). Inghitit, blocajul ar parea inexplicabil. */
       let res: { success?: boolean; error?: string; mesaj?: string };
-      if (key === "woot") res = await cancelWootAwb(businessId, order.id, String(order.woot_order_id ?? ""));
+      if (key === "woot") res = await cancelWootAwb(businessId, order.id);
       else if (key === "sameday") res = await deleteSamedayAwbAction(businessId, order.id);
       else if (key === "cargus") res = await deleteCargusAwbAction(businessId, order.id);
       else if (key === "dpd") res = await cancelDpdShipmentAction(businessId, order.id);

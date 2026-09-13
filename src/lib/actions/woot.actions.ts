@@ -12,7 +12,7 @@ import { eroareRefuz, verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { stripDiacritics } from "@/lib/utils/ro-address";
 import { greutatePentruCurier } from "@/lib/shipping/awb-weight";
 import {
-  getWootToken, getPrices, createOrder, cancelWootOrder,
+  getWootToken, getPrices, createOrder, cancelWootOrder, campuriAnulareWoot,
   getAccountInfo, getCredit, getLocations, wootPhone,
   type WootConfig, type WootParcel, type WootPriceResult, type WootLocation,
 } from "@/lib/woot";
@@ -390,31 +390,63 @@ export async function createWootAwb(
   return { success: true, awbNumber: awbNumber || undefined, wootOrderId };
 }
 
+/**
+ * ═══ ⚠ IDENTITATEA EXPEDIERII SE CITESTE, NU SE PRIMESTE (13.09.2026) ═══
+ *
+ * `wootOrderId` era al TREILEA parametru, trimis de browser, si pleca neatins catre
+ * `DELETE /orders/{id}`. Cine trecea de `checkAccess` putea deci sa ceara anularea comenzii
+ * locale A trimitand identificatorul expedierii B: se anula B la curier si se dezlega A in
+ * Edinio. Doua comenzi stricate dintr-o singura apasare, si niciun rand de jurnal care sa
+ * arate de ce.
+ *
+ * Acum identificatorul vine din comanda deja autorizata. Parametrul a DISPARUT din
+ * semnatura, nu a devenit optional: optional, apelantii vechi ar fi continuat sa-l trimita
+ * si nimeni n-ar fi observat ca nu mai e citit. Asa cade compilarea, si se vede.
+ */
 export async function cancelWootAwb(
   businessId: string,
   orderId: string,
-  wootOrderId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; mesaj?: string }> {
   if (!(await checkAccess(businessId))) return { success: false, error: "Neautorizat" };
 
   const config = await loadConfig(businessId);
   if (!config?.public_key || !config?.secret_key) return { success: false, error: "Woot nu este configurat" };
 
+  const admin = adminClient();
+  const { data: comanda } = await admin
+    .from("orders")
+    .select("woot_order_id, woot_awb_number, tracking_number")
+    .eq("id", orderId).eq("business_id", businessId).maybeSingle();
+
+  const wootOrderId = (comanda?.woot_order_id ?? "").trim();
+  if (!wootOrderId) return { success: false, error: "Comanda nu are o expediere Woot de anulat." };
+
+  const awb = (comanda?.woot_awb_number ?? "").trim();
+
   try {
     const token = await getWootToken(config.public_key, config.secret_key);
+    /*
+     * ⚠ `cancelWootOrder` ARUNCA acum la `{success:false}` (vezi woot.ts). Inainte
+     * rezultatul se arunca la gunoi, deci un refuz al curierului golea comanda si raporta
+     * „anulat": coletul pleca oricum, cu rambursul lui, si cheia de anulare disparea.
+     */
     await cancelWootOrder(token, Number(wootOrderId));
 
-    const admin = adminClient();
     const { data: randuri, error: eScriere } = await admin
       .from("orders")
       .update({
-        woot_order_id: null,
-        woot_awb_number: null,
-        woot_service_name: null,
+        ...campuriAnulareWoot(!!awb && comanda?.tracking_number === awb),
         updated_at: new Date().toISOString(),
       })
       .eq("id", orderId)
       .eq("business_id", businessId)
+      /*
+       * ⚠ SI PE AWB-UL CITIT, ca la FAN. Intre citire si scriere sta un apel la Woot; daca
+       * in rastimp comanda a primit ALT numar, dintr-o reemitere pornita in alta fila, un
+       * update nefiltrat l-ar fi sters pe cel NOU, pe care nu l-a anulat nimeni.
+       * ⚠ Comenzile fara numar (emitere cu AWB intarziat) se filtreaza pe identificator.
+       */
+      .eq(awb ? "woot_awb_number" : "woot_order_id", awb || wootOrderId)
       .select("id");
 
     /*
@@ -455,7 +487,27 @@ export async function cancelWootAwb(
     revalidatePath("/dashboard/orders");
     return { success: true };
   } catch (err) {
-    return { success: false, error: (err as Error).message };
+    /*
+     * ⚠ CELE DOUA ESECURI CER RASPUNSURI DIFERITE, SI NICIUNUL NU GOLESTE COMANDA.
+     *
+     * Refuz DOVEDIT: coletul e viu la Woot (de regula fiindca a fost deja preluat). Nu
+     * stergem nimic, fiindca `woot_order_id` e singura cheie prin care mai poate fi anulat sau
+     * prin care i se mai poate scoate eticheta. Omul afla ca are de lucru in contul Woot.
+     *
+     * NU STIM: poate s-a anulat, poate nu. Cu atat mai putin avem voie sa golim ceva.
+     *
+     * ⚠ Nici slotul din registru NU se elibereaza pe niciuna din ramuri: eliberat, o
+     * emitere urmatoare ar scrie peste `woot_order_id` si ar ingropa coletul ramas viu.
+     */
+    const necunoscut = verdictFurnizor(err) === "necunoscut";
+    return {
+      success: false,
+      error: necunoscut
+        ? `Nu stim daca expedierea Woot ${wootOrderId} s-a anulat: ${(err as Error).message} `
+          + "Verifica in contul Woot. Nimic nu a fost sters de pe comanda, ca sa nu ramana un colet in aer."
+        : `${(err as Error).message} Anuleaza expedierea ${wootOrderId} din contul Woot; `
+          + "numarul ramane pe comanda pentru ca expedierea sa poata fi urmarita mai departe.",
+    };
   }
 }
 

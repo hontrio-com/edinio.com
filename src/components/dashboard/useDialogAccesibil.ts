@@ -66,7 +66,26 @@ export function useDialogAccesibil(deschis: boolean, inchide: () => void) {
    * locuri se dezbina la al patrulea.
    */
   const inchideRef = useRef(inchide);
-  inchideRef.current = inchide;
+
+  /*
+   * ⚠ SCRIEREA IN REF SE FACE INTR-UN EFECT, nu in corpul randarii.
+   *
+   * Prima forma era `inchideRef.current = inchide;` scris pe loc, iar `react-hooks/refs`
+   * o refuza pe buna dreptate: „Cannot access refs during render". Un ref citit sau scris
+   * in timpul randarii face randarea sa depinda de ceva ce React nu urmareste, si sub
+   * compilator asta se poate vedea ca randare pastrata cu o valoare veche.
+   *
+   * ⚠ EFECT FARA LISTA DE DEPENDINTE, dinadins: ruleaza dupa FIECARE randare, deci
+   * `inchideRef.current` e mereu ultima sageata primita, fara ca `inchide` sa intre in
+   * dependintele efectului cel mare de mai jos. Aia era toata miza: apelantii trimit
+   * `onClose={() => setX(false)}`, adica alt obiect la fiecare randare a paginii.
+   *
+   * ⚠ A cazut in CI, nu la mine: poarta se cheama `npm run lint:prag` si numara erorile
+   * de lint cu prag (90). Nu era in lista mea de porti dinainte de push. Acum e.
+   */
+  useEffect(() => {
+    inchideRef.current = inchide;
+  });
 
   useEffect(() => {
     if (!deschis) return;

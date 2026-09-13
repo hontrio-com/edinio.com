@@ -15,6 +15,19 @@ mecanism, ori fara nicio instanta vie. Asta nu inseamna ca auditurile gresesc: a
 dreptate. Inseamna ca ordinea de lucru nu se poate lua din gravitatea declarata, ci din ce
 atinge productia.
 
+**`SHIPPING_QUOTE_SECRET` e PUSA, 14.09.2026, ora 01:47.** Proprietarul a adaugat-o in Vercel pe
+toate cele trei medii si a redesfasurat `3127db32`; desfasurarea a trecut pe READY. De acum
+cotatiile nu mai sunt semnate cu cheia de service role, deci o rotire a acesteia nu le mai
+atinge. Costul rotirii, masurat: singura comanda din fereastra a venit cu 37 de minute INAINTE
+de redeploy si era oricum una Trendyol, adusa prin ingest, care nu trece prin cotare. Iar
+`placeOrder.shippingRejected` are ZERO aparitii in sapte zile, deci nu exista fond de zgomot in
+care sa se ascunda un efect.
+
+⚠ Simbolurile vechi traiesc 24 de ore. Un cos abandonat recuperat maine poate inca purta unul
+semnat cu cheia veche; atunci comanda cade pe `max(suma ceruta, tarif implicit)` si se
+jurnalizeaza ca `placeOrder.shippingRejected`. Acela e steagul de urmarit, si e prima data cand
+ar avea vreo aparitie.
+
 ## Cum se citeste
 
 Un audit facut de alt model nu e adevar, e o **ipoteza de verificat**. Fiecare rand de mai
@@ -149,14 +162,7 @@ periculoasa decat lipsa ei.
 
 ## Hotarari care nu-mi apartin
 
-1. **`SHIPPING_QUOTE_SECRET` lipseste din `.env.local`**, deci cotatiile se semneaza cu cheia
-   de service role. Verificat pe 14.09.2026: o rotire **NU** strica facturile deja urcate,
-   fiindca adresa lor se compune o singura data, la urcare, si nu se recompune niciodata ca
-   sa le citim (`factura-comenzii.ts:81-83`). Singurul cost e ca simbolurile aflate in
-   circulatie (24h) cad cateva minute pe `max(suma ceruta, tarif implicit)`, adica pe pretul
-   de pe ecran sau pe tariful magazinului, niciodata mai putin. Nu e in `CHEI_OBLIGATORII`,
-   deci nu opreste nicio desfasurare.
-2. **Dezlegarea unui AWB Woot refuzat la anulare.** Azi nu se dezleaga nimic la refuz dovedit,
+1. **Dezlegarea unui AWB Woot refuzat la anulare.** Azi nu se dezleaga nimic la refuz dovedit,
    dinadins: `woot_order_id` e singura cheie de anulare si de eticheta.
 
 ## Ce nu s-a putut verifica

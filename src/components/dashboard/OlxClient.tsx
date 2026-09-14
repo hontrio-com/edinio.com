@@ -88,7 +88,18 @@ export function OlxClient({ businessId, status, adverts, advertsError, categorie
           size="lg"
           className="mt-6"
           onClick={() => startBusy(async () => {
-            const res = await startOlxOAuth(businessId);
+            let res: Awaited<ReturnType<typeof startOlxOAuth>>;
+            try {
+              res = await startOlxOAuth(businessId);
+            } catch {
+              /* ⚠ Doar cere adresa de autorizare. Nu se schimba nimic, nici la noi, nici la OLX. */
+              toast.error(
+                "Nu am primit raspuns de la server, deci nu s-a putut deschide conectarea la OLX. "
+                + "Nu s-a schimbat nimic, deci poti incerca din nou linistit.",
+                { duration: 12000 },
+              );
+              return;
+            }
             if ("error" in res) { toast.error(res.error); return; }
             window.location.href = res.url;
           })}
@@ -136,7 +147,18 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
       {status.needsReconnect && (
         <Callout variant="warning" icon={AlertTriangle}>
           Sesiunea OLX a expirat. <button className="font-medium underline" onClick={() => startSync(async () => {
-            const res = await startOlxOAuth(businessId);
+            let res: Awaited<ReturnType<typeof startOlxOAuth>>;
+            try {
+              res = await startOlxOAuth(businessId);
+            } catch {
+              /* ⚠ Aceeasi actiune ca la conectare, din bannerul de sesiune expirata. */
+              toast.error(
+                "Nu am primit raspuns de la server, deci nu s-a putut deschide conectarea la OLX. "
+                + "Nu s-a schimbat nimic, deci poti incerca din nou linistit.",
+                { duration: 12000 },
+              );
+              return;
+            }
             if ("error" in res) { toast.error(res.error); return; }
             window.location.href = res.url;
           })}>Reconectează contul OLX</button> pentru a relua sincronizarea.
@@ -158,7 +180,19 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
           </Button>
           <Button
             onClick={() => startSync(async () => {
-              const res = await publishAllOlx(businessId);
+              let res: Awaited<ReturnType<typeof publishAllOlx>>;
+              try {
+                res = await publishAllOlx(businessId);
+              } catch {
+                /* ⚠ Baga produsele mapate in coada de publicare spre OLX. Nu stim cate au apucat sa intre. */
+                toast.error(
+                  "Nu am primit raspuns de la server, deci nu stim cate produse au intrat la publicare. "
+                  + "Pagina se reincarca: uita-te la coada inainte sa apesi din nou.",
+                  { duration: 12000 },
+                );
+                router.refresh();
+                return;
+              }
               if ("error" in res) { toast.error(res.error); return; }
               /*
                * ⚠ CE S-A SARIT SE SPUNE, nu se tace. „Publică tot" nu invie anunturile pe care
@@ -260,7 +294,19 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
               Modificările de preț și stoc din ele nu au ajuns la OLX.
             </span>
             <Button variant="outline" size="sm" disabled={syncing} onClick={() => startSync(async () => {
-              const res = await reincearcaOlxOprite(businessId);
+              let res: Awaited<ReturnType<typeof reincearcaOlxOprite>>;
+              try {
+                res = await reincearcaOlxOprite(businessId);
+              } catch {
+                /* ⚠ Repune la lucru ce s-a oprit. Nu stim cate s-au reluat. */
+                toast.error(
+                  "Nu am primit raspuns de la server, deci nu stim daca lucrarile oprite s-au reluat. "
+                  + "Pagina se reincarca: uita-te la panoul de sanatate inainte sa apesi din nou.",
+                  { duration: 12000 },
+                );
+                router.refresh();
+                return;
+              }
               if ("error" in res) { toast.error(res.error); return; }
               toast.success(res.reluate > 0
                 ? `${res.reluate} ${res.reluate === 1 ? "lucrare reluată" : "lucrări reluate"}. Se procesează în câteva minute.`
@@ -544,13 +590,24 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
             if (!contactName.trim()) { toast.error("Completează numele de contact."); return; }
             if (!contactPhone.trim()) { toast.error("Completează telefonul de contact."); return; }
             const district = districts.find((d) => d.id === districtId);
-            const res = await saveOlxSettings(businessId, {
-              advertiser_type: advertiserType,
-              city_id: cityId, city_name: cityName,
-              district_id: districtId ?? null, district_name: district?.name ?? null,
-              contact_name: contactName, contact_phone: contactPhone,
-              courier_enabled: courier, auto_sync: autoSync, auto_extend: autoExtend,
-            });
+            let res: Awaited<ReturnType<typeof saveOlxSettings>>;
+            try {
+              res = await saveOlxSettings(businessId, {
+                advertiser_type: advertiserType,
+                city_id: cityId, city_name: cityName,
+                district_id: districtId ?? null, district_name: district?.name ?? null,
+                contact_name: contactName, contact_phone: contactPhone,
+                courier_enabled: courier, auto_sync: autoSync, auto_extend: autoExtend,
+              });
+            } catch {
+              /* ⚠ Scrie setarile la noi. */
+              toast.error(
+                "Nu am primit raspuns de la server, deci nu stim daca setarile s-au salvat. "
+                + "Reimprospateaza si uita-te la ele inainte sa salvezi din nou.",
+                { duration: 12000 },
+              );
+              return;
+            }
             if ("error" in res) { toast.error(res.error); return; }
             toast.success("Setări salvate.");
             onSaved();
@@ -770,7 +827,18 @@ function LogoAnunt({ businessId, advertId, nume, onClose }: {
                   <button
                     type="button" disabled={lucreaza} aria-label="Scoate logo-ul"
                     onClick={() => startLucru(async () => {
-                      const r = await stergeOlxLogoAnunt(businessId, advertId, l.id as number);
+                      let r: Awaited<ReturnType<typeof stergeOlxLogoAnunt>>;
+                      try {
+                        r = await stergeOlxLogoAnunt(businessId, advertId, l.id as number);
+                      } catch {
+                        /* ⚠ Scoate logoul de pe anunt, LA OLX. */
+                        toast.error(
+                          "Nu am primit raspuns de la server, deci nu stim daca logoul s-a scos de pe anunt. "
+                          + "Uita-te la anunt in contul OLX inainte sa incerci din nou.",
+                          { duration: 12000 },
+                        );
+                        return;
+                      }
                       if ("error" in r) { toast.error(r.error); return; }
                       toast.success("Logo scos.");
                       reincarca();
@@ -802,7 +870,18 @@ function LogoAnunt({ businessId, advertId, nume, onClose }: {
             const url = urls[0];
             if (!url) return;
             startLucru(async () => {
-              const r = await puneOlxLogoAnunt(businessId, advertId, url);
+              let r: Awaited<ReturnType<typeof puneOlxLogoAnunt>>;
+              try {
+                r = await puneOlxLogoAnunt(businessId, advertId, url);
+              } catch {
+                /* ⚠ Trimite logoul LA OLX. */
+                toast.error(
+                  "Nu am primit raspuns de la server, deci nu stim daca logoul a ajuns la OLX. "
+                  + "Uita-te la anunt in contul OLX inainte sa trimiti din nou.",
+                  { duration: 12000 },
+                );
+                return;
+              }
               if ("error" in r) { toast.error(r.error); return; }
               toast.success("Logo trimis la OLX.");
               reincarca();

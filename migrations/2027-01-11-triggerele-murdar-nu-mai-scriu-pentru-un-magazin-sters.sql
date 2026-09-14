@@ -17,8 +17,8 @@
 --
 -- Urmarea: stergerea de cont pica pentru ORICE cont care are macar o categorie.
 -- Si nu cadea la inceput, ci la mijloc: in `deleteAccount` abonamentul Stripe se
--- anuleaza INAINTE (auth.actions.ts:657-672), iar caderea vine abia la
--- `admin.auth.admin.deleteUser` (:681). Deci comerciantul ramanea FARA ABONAMENT
+-- anuleaza INAINTE (in blocul `stripe.subscriptions.cancel`), iar caderea vine abia
+-- la `admin.auth.admin.deleteUser`. Deci comerciantul ramanea FARA ABONAMENT
 -- si CU CONTUL VIU, si primea un mesaj generic care il invita sa mai apese o data.
 -- Butonul din admin (`/api/admin/users/[id]/delete`) cadea la fel, cu 500.
 --

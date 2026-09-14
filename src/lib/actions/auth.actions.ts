@@ -681,15 +681,49 @@ export async function deleteAccount(parola?: string) {
     }
   }
 
-  // Delete user data from public schema (cascade handles related tables)
-  await supabase.from("users_profile").delete().eq("id", user.id);
+  /*
+   * ⚠ AICI ERA O STERGERE CARE NU FACEA NIMIC, SI A FOST SCOASA. Nu o pune la loc.
+   *
+   * Randul era `await supabase.from("users_profile").delete().eq("id", user.id)`, cu clientul
+   * cu RLS. `users_profile` are RLS pornit si NICIO politica de DELETE, deci atingea zero
+   * randuri si nu dadea eroare. Rezultatul nici nu era citit. Comentariul de deasupra spunea
+   * ca restul pleaca in cascada de aici, si era fals: nimic nu refera `users_profile`.
+   *
+   * ⚠ SI NU TREBUIE FACUT SA MEARGA, desi asta pare reparatia. Doua motive:
+   *   1. e de prisos: `users_profile` e COPILUL lui `auth.users` (`on delete cascade`), deci
+   *      stergerea utilizatorului de mai jos il ia oricum;
+   *   2. ar fi PAGUBITOR: ar sterge profilul INAINTE de `deleteUser`, iar daca acela cade
+   *      dupa, ramane login viu si profil sters. Exact starea despicata de care ne temeam,
+   *      si care azi nu se poate produce tocmai fiindca randul nu exista.
+   *
+   * Cascada adevarata incepe la `admin.auth.admin.deleteUser` de mai jos, unde eroarea CHIAR
+   * se verifica.
+   */
 
   // Delete auth user via admin client
   const admin = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
   const { error } = await admin.auth.admin.deleteUser(user.id);
-  if (error) return { error: "Eroare la stergerea contului. Incearca din nou." };
+  /*
+   * ⚠ MESAJUL SPUNE SI CE S-A INTAMPLAT DEJA, nu doar ca n-a mers.
+   *
+   * Cand se ajunge aici, abonamentul Stripe a fost DEJA anulat mai sus, in blocul care cheama
+   * `stripe.subscriptions.cancel`. Ordinea aceea ramane dinadins: mutata dupa stergere, ar
+   * deschide capcana inversa, adica stergerea trece, anularea cade, si omul ramane taxat fara
+   * cont si fara sa mai existe de unde afla `stripe_customer_id`.
+   *
+   * ⚠ Si nu mai invita la reapasare: `consumaLimita` pe cheia `sterge-cont`, de la intrarea in
+   * functie, da trei incercari la 900 de secunde si se consuma inaintea parolei. Textul e scurt
+   * fiindca se arata cu durata implicita a toastului; unul de cinci randuri ar disparea necitit.
+   *
+   * ⚠ Aici scrisesem intai numere de rand, `(:657-672)` si `:622`. Au fost scoase, nu inlocuite:
+   * primul se invechise CHIAR IN SESIUNEA in care l-am scris, fiindca tot eu inserasem zece
+   * randuri deasupra. Un numar nou ar putrezi la fel; numele lucrului, nu.
+   */
+  if (error) {
+    return { error: "Contul NU a fost sters, dar abonamentul a fost deja anulat. Nu reincerca: scrie-ne la suport si ducem noi stergerea la capat." };
+  }
 
   await supabase.auth.signOut();
   const cs = await cookies();

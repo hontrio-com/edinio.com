@@ -37,7 +37,9 @@ type Campaign = {
   recipient_count: number;
   sent_count: number;
   failed_count: number;
-  status: "sent" | "partial" | "failed";
+  /* ⚠ `in_curs` inseamna ca trimiterea a inceput si nu si-a scris incheierea. Nu e o eroare:
+     e urma unei campanii care poate inca merge, sau care a fost taiata la mijloc. */
+  status: "in_curs" | "sent" | "partial" | "failed";
   created_at: string;
 };
 
@@ -74,6 +76,10 @@ function Toggle({ label, desc, checked, onChange }: { label: string; desc?: stri
 }
 
 function StatusBadge({ status }: { status: Campaign["status"] }) {
+  /* ⚠ Ramura asta trebuie sa existe INAINTEA celei implicite. Ultima linie a functiei scrie
+     `Esuat` pentru orice stare nerecunoscuta, deci fara ea o campanie care CHIAR merge ar fi
+     fost aratata ca esuata. */
+  if (status === "in_curs")  return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-info/10 text-info"><Loader2 className="h-3 w-3 animate-spin" />In curs</span>;
   if (status === "sent")    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-success/10 text-success"><CheckCircle className="h-3 w-3" />Trimis</span>;
   if (status === "partial") return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-warning/10 text-warning"><AlertCircle className="h-3 w-3" />Partial</span>;
   return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-destructive/10 text-destructive"><XCircle className="h-3 w-3" />Esuat</span>;
@@ -229,9 +235,9 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
         toast.error(
           "Nu am primit raspuns de la server, iar campania se trimite pe rand, mesaj cu mesaj, "
           + "deci o parte dintre SMS-uri pot sa fi plecat deja. Nu apasa din nou: trimiterea "
-          + "reincepe de la primul numar, si cine a primit deja primeste inca unul. Uita-te in "
-          + "contul SMSO ca sa vezi ce a plecat, fiindca la noi campania nu s-a inregistrat: "
-          + "randul ei se scrie abia dupa ce se termina trimiterea.",
+          + "reincepe de la primul numar, si cine a primit deja primeste inca unul. Campania e "
+          + "inregistrata la noi ca neterminata: o vezi mai jos in lista, cu numarul de "
+          + "destinatari pe care ii avea. Ce a plecat cu adevarat se vede in contul SMSO.",
           /* ⚠ 30 de secunde, nu 12 ca restul arcului: mesajul are cinci randuri si singurul lui
              rost e sa-l opreasca pe om sa apese din nou. Daca dispare inainte sa fie citit,
              omul apasa, adica exact paguba pe care incerc s-o previn. Durata face parte din

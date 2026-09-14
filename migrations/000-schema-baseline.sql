@@ -7805,7 +7805,7 @@ alter table public.posta_plaja add constraint posta_plaja_cifre_check CHECK (((c
 alter table public.posta_plaja add constraint posta_plaja_interval_check CHECK ((de_la <= pana_la));
 alter table public.posta_plaja add constraint posta_plaja_urmator_check CHECK ((urmator >= de_la));
 alter table public.site_analytics add constraint site_analytics_device_check CHECK ((device = ANY (ARRAY['mobile'::text, 'tablet'::text, 'desktop'::text])));
-alter table public.sms_campaigns add constraint sms_campaigns_status_check CHECK ((status = ANY (ARRAY['sent'::text, 'partial'::text, 'failed'::text])));
+alter table public.sms_campaigns add constraint sms_campaigns_status_check CHECK ((status = ANY (ARRAY['in_curs'::text, 'sent'::text, 'partial'::text, 'failed'::text])));
 alter table public.stock_feed_sources add constraint stock_feed_sources_frequency_check CHECK ((frequency = ANY (ARRAY['hourly'::text, 'daily'::text])));
 alter table public.stock_feed_sources add constraint stock_feed_sources_last_status_check CHECK ((last_status = ANY (ARRAY['ok'::text, 'error'::text])));
 alter table public.stock_feed_sources add constraint stock_feed_sources_run_hour_check CHECK (((run_hour >= 0) AND (run_hour <= 23)));

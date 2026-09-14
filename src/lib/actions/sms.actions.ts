@@ -124,6 +124,38 @@ export async function sendSmsCampaign(
   const uniquePhones = [...new Set(phones)];
   if (uniquePhones.length === 0) return { error: "Nu exista destinatari pentru filtrele selectate." };
 
+  /*
+   * ⚠⚠ RANDUL CAMPANIEI SE SCRIE INAINTE DE BUCLA, NU DUPA.
+   *
+   * Mesajele pleaca PE RAND, unul cate unul. Pana acum randul se scria abia dupa ce bucla se
+   * termina, deci intre primul si ultimul SMS nu exista nicio scriere in baza. La o oprire
+   * brutala (termen depasit, redesfasurare, instanta taiata), o parte din mesaje plecasera
+   * deja catre oameni reali si consumasera credit adevarat, iar la noi nu ramanea NICIO urma
+   * ca ar fi existat campania. A doua apasare relua de la primul numar.
+   *
+   * ⚠ SI DACA RANDUL NU SE POATE SCRIE, NU SE TRIMITE NIMIC. E o schimbare de comportament,
+   * dinadins: mai bine nicio campanie decat una pe care n-o putem urmari. Pana acum insertul
+   * era dupa bucla si `error` nici nu se citea, deci banii se cheltuiau oricum.
+   */
+  const supabase = await createClient();
+  const { data: campanie, error: eroareInregistrare } = await supabase
+    .from("sms_campaigns")
+    .insert({
+      business_id: businessId,
+      message,
+      recipient_count: uniquePhones.length,
+      sent_count: 0,
+      failed_count: 0,
+      status: "in_curs",
+      filters: filters as never,
+    })
+    .select("id")
+    .single();
+
+  if (eroareInregistrare || !campanie) {
+    return { error: "Nu am putut inregistra campania, deci nu am trimis niciun mesaj. Incearca din nou." };
+  }
+
   let sentCount = 0;
   let failedCount = 0;
 
@@ -141,22 +173,21 @@ export async function sendSmsCampaign(
 
   const status = failedCount === 0 ? "sent" : sentCount === 0 ? "failed" : "partial";
 
-  const supabase = await createClient();
-  const { data: campaign } = await supabase
+  /*
+   * ⚠ Daca ACTUALIZAREA pica, randul ramane `in_curs` cu numarul adevarat de destinatari.
+   * Nu e o paguba: aia e chiar urma, si spune mai mult decat spunea tacerea de pana acum.
+   * Eroarea se citeste ca sa poata fi vazuta in loguri, nu ca sa opreasca ceva: mesajele au
+   * plecat deja, si nu se poate lua nimic inapoi.
+   */
+  const { error: eroareIncheiere } = await supabase
     .from("sms_campaigns")
-    .insert({
-      business_id: businessId,
-      message,
-      recipient_count: uniquePhones.length,
-      sent_count: sentCount,
-      failed_count: failedCount,
-      status,
-      filters: filters as never,
-    })
-    .select("id")
-    .single();
+    .update({ sent_count: sentCount, failed_count: failedCount, status })
+    .eq("id", campanie.id);
+  if (eroareIncheiere) {
+    console.error("[sendSmsCampaign] campania a ramas in_curs", { campaignId: campanie.id });
+  }
 
-  return { sent: sentCount, failed: failedCount, campaignId: campaign?.id ?? "" };
+  return { sent: sentCount, failed: failedCount, campaignId: campanie.id };
 }
 
 export async function getSmsCampaigns(businessId: string) {

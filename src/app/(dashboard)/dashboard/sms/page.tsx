@@ -6,6 +6,14 @@ import { SMSMarketingClient } from "@/components/dashboard/SMSMarketingClient";
 import type { SmsoConfig } from "@/lib/smso";
 import { getSmsTemplates } from "@/lib/actions/sms.actions";
 
+/*
+ * ⚠ Pe pagina asta sta cel mai lung buton din panou: campania trimite mesajele PE RAND, deci
+ * durata creste cu numarul de destinatari. Pana acum nu declara nimic, deci ramanea pe
+ * implicitul platformei, iar o taiere la mijloc era chiar cauza campaniilor fara urma.
+ * Aceeasi portita e folosita deja la eMAG si la comenzi.
+ */
+export const maxDuration = 300;
+
 export default async function SmsMarketingPage() {
   const supabase = await createClient();
   const user = await getCachedUser();
@@ -50,7 +58,7 @@ export default async function SmsMarketingPage() {
     <SMSMarketingClient
       businessId={bizRow.id}
       smsoConfig={smsoConfig}
-      initialCampaigns={(campaigns ?? []).map(c => ({ ...c, status: c.status as "sent" | "partial" | "failed" }))}
+      initialCampaigns={(campaigns ?? []).map(c => ({ ...c, status: c.status as "in_curs" | "sent" | "partial" | "failed" }))}
       initialTemplates={initialTemplates}
     />
   );

@@ -586,7 +586,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   function saveMethods() {
     if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
     startMethodsTransition(async () => {
-      const result = await updatePaymentMethods(businessId, methods);
+      let result: Awaited<ReturnType<typeof updatePaymentMethods>>;
+      try {
+        result = await updatePaymentMethods(businessId, methods);
+      } catch {
+        /* ⚠ `updatePaymentMethods` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
+           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
+           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca metodele de plata s-au salvat. "
+          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
+          + "din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Metodele de plata au fost salvate.");
     });
@@ -606,7 +620,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       return;
     }
     startCardDiscTransition(async () => {
-      const result = await updateCardDiscount(businessId, cardDisc);
+      let result: Awaited<ReturnType<typeof updateCardDiscount>>;
+      try {
+        result = await updateCardDiscount(businessId, cardDisc);
+      } catch {
+        /* ⚠ `updateCardDiscount` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
+           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
+           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca discountul la plata cu cardul s-a salvat. "
+          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
+          + "din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Discountul la plata cu cardul a fost salvat.");
     });
@@ -626,7 +654,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       return;
     }
     startCodDiscTransition(async () => {
-      const result = await updateCodDiscount(businessId, codDisc);
+      let result: Awaited<ReturnType<typeof updateCodDiscount>>;
+      try {
+        result = await updateCodDiscount(businessId, codDisc);
+      } catch {
+        /* ⚠ `updateCodDiscount` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
+           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
+           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca discountul la plata ramburs s-a salvat. "
+          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
+          + "din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Discountul la plata ramburs a fost salvat.");
     });
@@ -646,7 +688,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       return;
     }
     startCodTaxaTransition(async () => {
-      const result = await updateCodFee(businessId, codTaxa);
+      let result: Awaited<ReturnType<typeof updateCodFee>>;
+      try {
+        result = await updateCodFee(businessId, codTaxa);
+      } catch {
+        /* ⚠ `updateCodFee` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
+           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
+           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca taxa la plata ramburs s-a salvat. "
+          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
+          + "din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Taxa la plata ramburs a fost salvata.");
     });
@@ -659,7 +715,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   function saveCookieBanner() {
     if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
     startCookieTransition(async () => {
-      const result = await updateCookieBannerConfig(businessId, cookieCfg);
+      let result: Awaited<ReturnType<typeof updateCookieBannerConfig>>;
+      try {
+        result = await updateCookieBannerConfig(businessId, cookieCfg);
+      } catch {
+        /* ⚠ `updateCookieBannerConfig` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
+           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
+           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca bannerul de cookie-uri s-a salvat. "
+          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
+          + "din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Bannerul de cookie-uri a fost salvat.");
     });
@@ -707,7 +777,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
     if (!biz.business_name.trim()) { toast.error("Denumirea firmei este obligatorie."); return; }
     startGeneralTransition(async () => {
-      const result = await updateGeneralSettings(businessId, biz, orderFormat);
+      let result: Awaited<ReturnType<typeof updateGeneralSettings>>;
+      try {
+        result = await updateGeneralSettings(businessId, biz, orderFormat);
+      } catch {
+        /* ⚠ `updateGeneralSettings` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
+           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
+           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca setarile generale s-au salvat. "
+          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
+          + "din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile au fost salvate.");
     });
@@ -720,7 +804,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     const settings = { ...vat, vat_rate: rate };
     setVat(settings);
     startVatTransition(async () => {
-      const result = await updateVatSettings(businessId, settings);
+      let result: Awaited<ReturnType<typeof updateVatSettings>>;
+      try {
+        result = await updateVatSettings(businessId, settings);
+      } catch {
+        /* ⚠ `updateVatSettings` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
+           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
+           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca setarile TVA s-au salvat. "
+          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
+          + "din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile TVA au fost salvate.");
     });
@@ -753,15 +851,29 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       return;
     }
     startShippingTransition(async () => {
-      const result = await updateShippingConfig(businessId, {
-        shipping_enabled: shippingEnabled,
-        free_shipping_threshold: threshold,
-        min_order_amount: minOrderValue,
-        shipping_zones: shippingZones,
-        shipping_classes: shippingClasses,
-        shipping_rules: shippingRules,
-        delivery_time: timpDeLivrare,
-      });
+      let result: Awaited<ReturnType<typeof updateShippingConfig>>;
+      try {
+        result = await updateShippingConfig(businessId, {
+          shipping_enabled: shippingEnabled,
+          free_shipping_threshold: threshold,
+          min_order_amount: minOrderValue,
+          shipping_zones: shippingZones,
+          shipping_classes: shippingClasses,
+          shipping_rules: shippingRules,
+          delivery_time: timpDeLivrare,
+        });
+      } catch {
+        /* ⚠ `updateShippingConfig` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
+           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
+           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca setarile de livrare s-au salvat. "
+          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
+          + "din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile de livrare au fost salvate.");
     });
@@ -809,7 +921,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       return;
     }
     startNotifTransition(async () => {
-      const result = await updateNotificationsSettings(businessId, notif);
+      let result: Awaited<ReturnType<typeof updateNotificationsSettings>>;
+      try {
+        result = await updateNotificationsSettings(businessId, notif);
+      } catch {
+        /* ⚠ `updateNotificationsSettings` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
+           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
+           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca setarile de notificari s-au salvat. "
+          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
+          + "din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile de notificari au fost salvate.");
     });
@@ -839,7 +965,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
       if (token) cleaned.googleVerification = token;
     }
     startSeoTransition(async () => {
-      const result = await updatePageContent(businessId, { seo: cleaned });
+      let result: Awaited<ReturnType<typeof updatePageContent>>;
+      try {
+        result = await updatePageContent(businessId, { seo: cleaned });
+      } catch {
+        /* ⚠ `updatePageContent` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
+           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
+           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca setarile SEO s-au salvat. "
+          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
+          + "din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Setarile SEO au fost salvate.");
     });
@@ -854,10 +994,24 @@ export function SettingsClient({ profile, email, businessId, businessData, store
     startOpsTransition(async () => {
       // updatePageContent merges, so we keep one_product_id even in catalog mode
       // (remembers the choice); parseStoreMode ignores it unless store_mode says so.
-      const result = await updatePageContent(businessId, {
-        store_mode: opsEnabled ? "one_product" : "catalog",
-        one_product_id: opsProductId || null,
-      });
+      let result: Awaited<ReturnType<typeof updatePageContent>>;
+      try {
+        result = await updatePageContent(businessId, {
+          store_mode: opsEnabled ? "one_product" : "catalog",
+          one_product_id: opsProductId || null,
+        });
+      } catch {
+        /* ⚠ `updatePageContent` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
+           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
+           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca modul magazinului s-a salvat. "
+          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
+          + "din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success(opsEnabled
         ? "Magazinul afiseaza acum un singur produs."
@@ -921,7 +1075,21 @@ export function SettingsClient({ profile, email, businessId, businessData, store
   function savePolicies() {
     if (!businessId) { toast.error("Nu exista un magazin asociat."); return; }
     startPoliciesTransition(async () => {
-      const result = await updateStorePolicies(businessId, policies);
+      let result: Awaited<ReturnType<typeof updateStorePolicies>>;
+      try {
+        result = await updateStorePolicies(businessId, policies);
+      } catch {
+        /* ⚠ `updateStorePolicies` scrie la noi. Mesajul nu pretinde nimic despre ce s-ar intampla in
+           alta parte: spune doar ce nu stim, adica daca salvarea a apucat sa se scrie.
+           ⚠ Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca politicile magazinului s-au salvat. "
+          + "Reimprospateaza pagina si uita-te la valorile de pe ecran inainte sa salvezi "
+          + "din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Politicile au fost salvate.");
     });

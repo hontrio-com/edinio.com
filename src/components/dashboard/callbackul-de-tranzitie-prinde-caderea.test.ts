@@ -130,7 +130,7 @@ const INCA_DESCOPERITE: Record<string, number> = {
   "dashboard/RevolutConfigClient.tsx": 1,
   "dashboard/SMSMarketingClient.tsx": 4,
   "dashboard/SelectorProduseFeed.tsx": 1,
-  "dashboard/SettingsClient.tsx": 13,
+  "dashboard/SettingsClient.tsx": 1,
   "dashboard/SmartbillConfigClient.tsx": 1,
   "dashboard/SmsoConfigClient.tsx": 1,
   "dashboard/TrendyolAutoMap.tsx": 2,

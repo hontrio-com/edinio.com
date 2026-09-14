@@ -36,12 +36,21 @@ test("⚠ fara ramburs se cere ZERO, oricat ar trimite browserul", () => {
 test("⚠ CUMPARATORUL CINSTIT NU E ATINS: se intoarce chiar numarul lui", () => {
   /*
    * ⚠ ASTA E JUMATATEA CARE FACE REPARATIA SIGURA, si de aceea e proba cea mai importanta
-   * de aici. Formularul trimite la ramburs TOTALUL comenzii (marfa plus transport), iar
-   * `valoareMarfii` e doar marfa. Deci pentru orice comanda reala totalul e mai mare si
-   * pragul nu se vede: pretul cotat nu se schimba la niciuna din cele 234 de comenzi cu
-   * ramburs din productie.
+   * de aici: un `max` nu poate cobori niciodata suma ceruta, deci nicio comanda cinstita nu-si
+   * schimba pretul. Masurat pe comenzi reale: niciuna din cele 234 de comenzi cu ramburs din
+   * productie nu e atinsa.
+   *
+   * ⚠⚠ INDREPTAT PE 14.09.2026. Aici scria ca „formularul trimite TOTALUL comenzii (marfa plus
+   * transport), iar `valoareMarfii` e doar marfa, deci pentru orice comanda reala totalul e mai
+   * mare". E FALS, si neadevarata venea din comentariul lui `pragulRambursului`: amandoua
+   * formularele trimit MARFA (`CheckoutForm.tsx:278` cu `total` din `useCart()`, care e
+   * `CartProvider.tsx:356` = suma subtotalurilor de linie; `OrderModal.tsx:1335` cu `subtotal`).
+   *
+   * Deci cele doua marimi sunt ACEEASI marime, si pragul nu se vede fiindca sunt egale, nu
+   * fiindca una ar fi mai mare. Afirmatiile de mai jos raman aceleasi si trec la fel; se
+   * schimba numai temeiul lor, care era gresit.
    */
-  assert.equal(pragulRambursului(518, 500, true), 518, "marfa 500 + transport 18");
+  assert.equal(pragulRambursului(518, 500, true), 518, "cerut peste cat sustine catalogul: al lui");
   assert.equal(pragulRambursului(500, 500, true), 500, "exact cat marfa: tot al lui");
   assert.equal(pragulRambursului(1200, 500, true), 1200, "mai mult decat sustine catalogul");
 });

@@ -73,13 +73,23 @@ export function rezervaEDeIncredere(courierId: string, pret: number, coteazaLive
  * era numit pe fata in `quote-token.ts`: `cod: 0.01` pastreaza steagul si scapa de partea
  * PROCENTUALA a comisionului.
  *
- * ⚠ DE CE UN PRAG, SI NU O INLOCUIRE. Formularul trimite la ramburs TOTALUL comenzii (marfa
- * plus transport), iar `valoareMarfii` e doar marfa, plafonata cu ce sustine catalogul. Pusa
- * IN LOCUL sumei, ar fi coborat rambursul cotat sub cel real ori de cate ori transportul intra
- * in el, si diferenta de comision ar fi platit-o comerciantul. Un prag nu poate cobori nimic:
- * pentru orice cumparator cinstit totalul e deja mai mare, deci se intoarce chiar numarul lui
- * si nicio comanda reala nu-si schimba pretul. Masurat pe 14.09.2026: 234 de comenzi cu
- * ramburs, 17 magazine, 214 in ultimele 90 de zile, niciuna atinsa.
+ * ⚠ DE CE UN PRAG, SI NU O INLOCUIRE. Un `max` nu poate cobori NIMIC, orice ar trimite
+ * formularul, si tocmai de aceea e sigur fara sa atarne de ce trimite el azi. O inlocuire ar
+ * fi legat suma cotata de catalog si ar fi coborat-o ori de cate ori cumparatorul declara
+ * CORECT mai mult decat sustine catalogul, iar diferenta de comision ar fi platit-o
+ * comerciantul. Masurat pe 14.09.2026: 234 de comenzi cu ramburs, 17 magazine, 214 in ultimele
+ * 90 de zile, niciuna atinsa.
+ *
+ * ⚠⚠ AICI AM SCRIS O NEADEVARATA SI AM RASPANDIT-O (indreptat 14.09.2026). Randurile de mai sus
+ * spuneau ca „formularul trimite la ramburs TOTALUL comenzii (marfa plus transport)". E FALS in
+ * amandoua formularele: `CheckoutForm.tsx:278` trimite `total` din `useCart()`, iar acela e
+ * `CartProvider.tsx:356` = `items.reduce((s, i) => s + linie(i).subtotal, 0)`, adica MARFA;
+ * `OrderModal.tsx:1335` trimite `subtotal`, tot marfa.
+ *
+ * Codul nu se schimba, dar motivul da: pragul nu se vede la comenzile cinstite fiindca cele
+ * doua marimi sunt ACEEASI marime, nu fiindca una ar fi mai mare. Masuratoarea de mai sus
+ * ramane buna, fiindca a fost facuta pe comenzi reale, nu dedusa din premisa gresita.
+ * Neadevarata plecase de aici si in `pragul-rambursului.test.ts` si in registru.
  *
  * ⚠ SI DE CE NU E O INCHIDERE DEPLINA. Plafonul din catalog nu cunoaste transportul, deci cine
  * subdeclara ramane dator cu comisionul aferent transportului, nu cu tot. Inchiderea deplina

@@ -239,9 +239,34 @@ export type RaspunsStari = {
  */
 const ASTEPTARE_MS = 60_000;
 
+/**
+ * Tara, dar numai una dintre cele pe care MyGLS chiar le are.
+ *
+ * ═══ ⚠ ENUMUL EXISTA DE MULT, DAR NU ERA CERUT LA RULARE (14.09.2026) ═══
+ *
+ * `config.tara` e tipat `TaraMyGls`, insa tipurile nu exista la rulare, iar `gls_config` se scrie
+ * printr-o actiune de server care poate fi chemata direct. Interpolata neverificata, tara alege
+ * chiar GAZDA catre care pleaca `Username` si `Password`:
+ *
+ *   `ro@atacator.tld` -> `https://api.mygls.ro@atacator.tld`, unde tot ce sta inaintea lui `@` e
+ *   nume de utilizator, iar gazda adevarata e a atacatorului.
+ *
+ * `TARI_MYGLS` era folosit doar la umplerea listei din interfata si in probe. Interfata nu e o
+ * paza: o chemare directa n-o vede.
+ *
+ * ⚠ CADEREA E PE „RO", NU O EXCEPTIE, si asta s-a masurat inainte: in toata platforma exista o
+ * singura valoare, `RO`, pe doua magazine cu GLS pornit. Deci niciun comerciant de azi nu-si
+ * schimba purtarea, iar un rand stricat se intoarce la purtarea corecta in loc sa opreasca
+ * emiterea.
+ */
+function taraPermisa(tara: unknown): string {
+  const t = String(tara ?? "").trim().toUpperCase();
+  return (TARI_MYGLS as readonly string[]).includes(t) ? t : "RO";
+}
+
 function urlBaza(config: Pick<GlsConfig, "tara" | "sandbox">): string {
   const gazda = config.sandbox ? "api.test.mygls." : "api.mygls.";
-  return `https://${gazda}${config.tara.toLowerCase()}`;
+  return `https://${gazda}${taraPermisa(config.tara).toLowerCase()}`;
 }
 
 /** Adresa completa a unei metode MyGLS. */
@@ -292,6 +317,13 @@ async function apelMyGls<T>(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cuAcces),
       signal: AbortSignal.timeout(asteptareMs),
+      /*
+       * ⚠ Urmat, un 3xx ar RE-TRIMITE corpul, cu `Username` si `Password` in el, catre gazda din
+       * `Location`. Aceeasi hotarare ca la Posta si Packeta. MyGLS nu redirecteaza niciodata pe
+       * drumul asta, deci un 3xx aici nu e o purtare normala pe care o stricam, ci una despre care
+       * vrem sa aflam.
+       */
+      redirect: "manual",
     });
   } catch (e) {
     /* Retea cazuta sau timeout: nu stim daca a ajuns. */

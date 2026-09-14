@@ -1,5 +1,6 @@
 import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
+import { gazdaConfigurabila } from "@/lib/integrari/gazda-configurabila";
 import { cerereXml, citesteXml, copii, gaseste, text, type ElementXml, type NodXml } from "./xml";
 
 /**
@@ -203,8 +204,24 @@ export async function apel(
   const parola = (cfg.api_password ?? "").trim();
   if (!parola) throw eroareRefuz("Lipseste parola API Packeta (api_password) din configurare.");
 
-  const corp = cerereXml(metoda, { api_password: parola, ...argumente });
-  const baza = (cfg.bazaRest ?? "").trim() || BAZA_REST;
+  /*
+   * ⚠ NUMELE ELEMENTULUI E `apiPassword`, NU `api_password` (14.09.2026).
+   *
+   * `api_password` e numele CAMPULUI DIN CONFIGURAREA NOASTRA si acolo ramane. Pe cablu insa,
+   * metodele lor cer `apiPassword`, si asa il scrie si exemplul literal din documentatia lor,
+   * inghetat in `xml.test.ts`. Randul asta era singurul loc unde parola intra in document, deci
+   * TOATE metodele XML plecau cu numele gresit, nu doar unele.
+   *
+   * ⚠ Cele doua probe care scriau `apiPassword` treceau verzi peste defect: ele chemau
+   * constructorul `cerereXml` cu argumentul scris de mana, deci apara constructorul, nu apelantul.
+   * Chiar tiparul „proba apara regula, nu cablarea".
+   *
+   * ⚠ CE NU STIU, SI SE SCRIE: n-avem cont Packeta, deci nimeni n-a vazut vreodata un raspuns
+   * adevarat de la ei. Masurat pe productie (14.09.2026): ZERO magazine vii pe Packeta, deci
+   * schimbarea nu poate strica nimic care merge azi, dar nici nu e confirmata de pe cablu.
+   */
+  const corp = cerereXml(metoda, { apiPassword: parola, ...argumente });
+  const baza = gazdaConfigurabila(cfg.bazaRest, BAZA_REST);
 
   const ctrl = new AbortController();
   const timp = setTimeout(() => ctrl.abort(), optiuni?.asteptareMs ?? ASTEPTARE_MS);
@@ -221,6 +238,11 @@ export async function apel(
       body: corp,
       signal: ctrl.signal,
       cache: "no-store",
+      /*
+       * ⚠ Urmat, un 3xx ar RE-TRIMITE corpul, cu parola API in el, catre gazda din `Location`.
+       * Aceeasi hotarare ca la Posta, cu aceeasi lectie a eColet-ului in spate.
+       */
+      redirect: "manual",
     });
   } catch (e) {
     /* Retea cazuta sau termen depasit: NU stim daca au primit cererea. */

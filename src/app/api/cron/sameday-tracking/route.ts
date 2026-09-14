@@ -190,7 +190,15 @@ export async function GET(req: NextRequest) {
         petic.sameday_status_id = stare.statusId ?? o.sameday_status_id;
         if (stare.eticheta) petic.sameday_status_label = stare.eticheta;
       }
-      await admin.from("orders").update(petic as never).eq("id", o.id);
+      /*
+       * ⚠ `business_id` NU E UN FILTRU DE PRISOS, E AUTORIZARE (14.09.2026).
+       *
+       * Randul asta era singurul scriitor de urmarire de pe platforma care scria dupa `id` gol.
+       * Ceilalti doisprezece frati ai lui il au, iar cronul Pall-Ex are chiar propozitia asta
+       * scrisa deasupra. Aici lipsea, si turnarea `as never` a incarcaturii face ca `tsc` sa nu
+       * se uite deloc la ce se scrie: adica nici compilatorul n-avea cum sa intrebe.
+       */
+      await admin.from("orders").update(petic as never).eq("id", o.id).eq("business_id", o.business_id);
     }
 
     if (!config) {

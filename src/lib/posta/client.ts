@@ -1,4 +1,5 @@
 import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { gazdaConfigurabila } from "@/lib/integrari/gazda-configurabila";
 
 /**
  * Clientul Poșta Română.
@@ -164,9 +165,16 @@ export function postaGata(c: PostaConfig | null | undefined): c is PostaConfig {
   return !!(c?.enabled && c.username && c.password && c.cod_trimitere);
 }
 
+/*
+ * ⚠ SUPRASCRIEREA NU POATE PARASI DOMENIUL POSTEI (14.09.2026).
+ *
+ * `config.baza` vine din randul de setari, iar tipul lui nu exista la rulare: o chemare directa
+ * catre `savePostaConfig` putea pune acolo orice gazda. Iar spre gazda aia pleaca antetul
+ * `Authorization: Basic` cu numele si parola comerciantului, la fiecare apel. Regula si motivele
+ * intregi stau in `gazda-configurabila.ts`; aici e doar chemarea ei.
+ */
 function baza(config: Pick<PostaConfig, "baza">): string {
-  const b = (config.baza ?? "").trim().replace(/\/+$/, "");
-  return b || BAZA_IMPLICITA;
+  return gazdaConfigurabila(config.baza, BAZA_IMPLICITA);
 }
 
 function antetAutorizare(config: Pick<PostaConfig, "username" | "password">): string {

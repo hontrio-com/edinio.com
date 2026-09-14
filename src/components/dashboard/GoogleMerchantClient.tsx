@@ -92,7 +92,19 @@ export function GoogleMerchantClient({ businessId, status, products, categories,
           size="lg"
           className="mt-6"
           onClick={() => startBusy(async () => {
-            const res = await startGoogleMerchantOAuth(businessId);
+            let res: Awaited<ReturnType<typeof startGoogleMerchantOAuth>>;
+            try {
+              res = await startGoogleMerchantOAuth(businessId);
+            } catch {
+              /* ⚠ Daca pica, pagina de autorizare nici nu s-a deschis: nimic nu s-a conectat,
+                 si o a doua apasare e nevinovata. */
+              toast.error(
+                "Nu am primit raspuns de la server, deci pagina de autorizare Google nu s-a deschis. "
+                + "Nu s-a conectat nimic. Incearca din nou.",
+                { duration: 12000 },
+              );
+              return;
+            }
             if ("error" in res) { toast.error(res.error); return; }
             window.location.href = res.url;
           })}
@@ -136,7 +148,19 @@ function AccountPicker({ businessId }: { businessId: string }) {
 
   function pick(accountId: string, name?: string) {
     startSave(async () => {
-      const res = await selectMerchantAccount(businessId, accountId.trim(), name);
+      let res: Awaited<ReturnType<typeof selectMerchantAccount>>;
+      try {
+        res = await selectMerchantAccount(businessId, accountId.trim(), name);
+      } catch {
+        /* ⚠ Scrie la noi contul Merchant Center ales. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-a legat contul Merchant Center. "
+          + "Reimprospateaza pagina: daca vezi contul conectat, s-a facut.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Cont Merchant Center conectat.");
       router.refresh();
@@ -173,7 +197,19 @@ function AccountPicker({ businessId }: { businessId: string }) {
             <Button
               variant="outline" size="sm" className="w-full" disabled={saving}
               onClick={() => startSave(async () => {
-                const res = await startGoogleMerchantOAuth(businessId);
+                let res: Awaited<ReturnType<typeof startGoogleMerchantOAuth>>;
+                try {
+                  res = await startGoogleMerchantOAuth(businessId);
+                } catch {
+                  /* ⚠ Daca pica, pagina de autorizare nici nu s-a deschis: nimic nu s-a conectat,
+                     si o a doua apasare e nevinovata. */
+                  toast.error(
+                    "Nu am primit raspuns de la server, deci pagina de autorizare Google nu s-a deschis. "
+                    + "Nu s-a conectat nimic. Incearca din nou.",
+                    { duration: 12000 },
+                  );
+                  return;
+                }
                 if ("error" in res) { toast.error(res.error); return; }
                 window.location.href = res.url;
               })}
@@ -258,7 +294,20 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
           </Button>
           <Button
             onClick={() => startSync(async () => {
-              const res = await queueSyncAll(businessId);
+              let res: Awaited<ReturnType<typeof queueSyncAll>>;
+              try {
+                res = await queueSyncAll(businessId);
+              } catch {
+                /* ⚠ Pune produsele in coada de sincronizare, la noi. Cronul o goleste dupa aceea, iar
+                   panoul numara singur cate mai sunt in coada. */
+                toast.error(
+                  "Nu am primit raspuns de la server, deci nu stim daca produsele au intrat in coada de sincronizare. "
+                  + "Reimprospateaza pagina: daca vezi produse in coada, s-a facut.",
+                  { duration: 12000 },
+                );
+                router.refresh();
+                return;
+              }
               if ("error" in res) { toast.error(res.error); return; }
               toast.success(res.queued > 0 ? `${res.queued} produse adăugate la sincronizare.` : "Niciun produs activ de sincronizat.");
               router.refresh();
@@ -323,7 +372,19 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
             <Button
               size="lg"
               onClick={() => startSettings(async () => {
-                const res = await setMerchantSettings(businessId, { feed_label: feedLabel, content_language: language, country, brand_default: brand, condition_default: condition as "new" | "refurbished" | "used", auto_sync: autoSync });
+                let res: Awaited<ReturnType<typeof setMerchantSettings>>;
+                try {
+                  res = await setMerchantSettings(businessId, { feed_label: feedLabel, content_language: language, country, brand_default: brand, condition_default: condition as "new" | "refurbished" | "used", auto_sync: autoSync });
+                } catch {
+                  /* ⚠ Scrie setarile feedului, la noi. */
+                  toast.error(
+                    "Nu am primit raspuns de la server, deci nu stim daca setarile feedului s-au salvat. "
+                    + "Reimprospateaza pagina ca sa vezi cum au ramas, inainte sa salvezi din nou.",
+                    { duration: 12000 },
+                  );
+                  router.refresh();
+                  return;
+                }
                 if ("error" in res) { toast.error(res.error); return; }
                 toast.success("Setări salvate.");
                 router.refresh();
@@ -515,7 +576,19 @@ function CategoryMapping({ businessId, categories, initialMap }: {
         <Button
           size="lg"
           onClick={() => startSave(async () => {
-            const res = await setCategoryMap(businessId, map);
+            let res: Awaited<ReturnType<typeof setCategoryMap>>;
+            try {
+              res = await setCategoryMap(businessId, map);
+            } catch {
+              /* ⚠ Scrie maparea categoriilor, la noi. */
+              toast.error(
+                "Nu am primit raspuns de la server, deci nu stim daca maparea categoriilor s-a salvat. "
+                + "Reimprospateaza pagina ca sa vezi cum a ramas, inainte sa salvezi din nou.",
+                { duration: 12000 },
+              );
+              router.refresh();
+              return;
+            }
             if ("error" in res) { toast.error(res.error); return; }
             toast.success("Mapare salvată. Re-sincronizează pentru a aplica.");
             router.refresh();

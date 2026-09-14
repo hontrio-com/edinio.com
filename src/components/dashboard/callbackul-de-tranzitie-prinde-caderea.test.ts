@@ -95,8 +95,6 @@ const INCA_DESCOPERITE: Record<string, number> = {
   "dashboard/DiscountsClient.tsx": 3,
   "dashboard/FacebookFeeduriClient.tsx": 1,
   "dashboard/FeaturesClient.tsx": 1,
-  "dashboard/GoogleAnalyticsClient.tsx": 10,
-  "dashboard/GoogleMerchantClient.tsx": 6,
   "dashboard/GpsrSettings.tsx": 1,
   "dashboard/OfferForm.tsx": 1,
   "dashboard/OffersClient.tsx": 2,

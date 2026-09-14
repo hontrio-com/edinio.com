@@ -168,7 +168,19 @@ function ConnectCard({ businessId, oauthAvailable }: { businessId: string; oauth
             size="lg"
             className="mt-6"
             onClick={() => startBusy(async () => {
-              const res = await startGoogleAnalyticsOAuth(businessId);
+              let res: Awaited<ReturnType<typeof startGoogleAnalyticsOAuth>>;
+              try {
+                res = await startGoogleAnalyticsOAuth(businessId);
+              } catch {
+                /* ⚠ Daca pica, pagina de autorizare nici nu s-a deschis: nimic nu s-a conectat,
+                   si o a doua apasare e nevinovata. */
+                toast.error(
+                  "Nu am primit raspuns de la server, deci pagina de autorizare Google nu s-a deschis. "
+                  + "Nu s-a conectat nimic. Incearca din nou.",
+                  { duration: 12000 },
+                );
+                return;
+              }
               if ("error" in res) { toast.error(res.error); return; }
               window.location.href = res.url;
             })}
@@ -203,7 +215,19 @@ function ManualConnectForm({ businessId }: { businessId: string }) {
   function submit() {
     if (!id) return;
     startSave(async () => {
-      const res = await connectGaManual(businessId, id);
+      let res: Awaited<ReturnType<typeof connectGaManual>>;
+      try {
+        res = await connectGaManual(businessId, id);
+      } catch {
+        /* ⚠ Scrie ID-ul de masurare, la noi. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca ID-ul de masurare s-a salvat. "
+          + "Reimprospateaza pagina: daca apare conectat, s-a facut.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Măsurarea Google Analytics este activă pe magazin.");
       router.refresh();
@@ -254,14 +278,39 @@ function ServerTrackingCard({ businessId, hasApiSecret }: { businessId: string; 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder={hasApiSecret ? "•••••••• (înlocuiește)" : "API secret"} className="min-w-0 flex-1 font-mono" />
         <Button size="sm" disabled={saving || !value.trim()} onClick={() => startSaving(async () => {
-          const res = await setGaApiSecret(businessId, value.trim());
+          let res: Awaited<ReturnType<typeof setGaApiSecret>>;
+          try {
+            res = await setGaApiSecret(businessId, value.trim());
+          } catch {
+            /* ⚠ Scrie secretul Measurement Protocol. Golirea campului sta DUPA `try`, dinadins: daca
+               nu stim ce s-a intamplat, omul trebuie sa ramana cu ce a lipit, nu cu campul gol. */
+            toast.error(
+              "Nu am primit raspuns de la server, deci nu stim daca secretul s-a salvat. "
+              + "Reimprospateaza pagina: daca scrie Activ, s-a facut.",
+              { duration: 12000 },
+            );
+            router.refresh();
+            return;
+          }
           if ("error" in res) { toast.error(res.error); return; }
           toast.success("Măsurare server-side activată."); setValue(""); router.refresh();
         })}>Salvează</Button>
         {hasApiSecret && (
           <button type="button" className="text-xs text-muted-foreground underline disabled:opacity-50" disabled={saving}
             onClick={() => startSaving(async () => {
-              const res = await setGaApiSecret(businessId, "");
+              let res: Awaited<ReturnType<typeof setGaApiSecret>>;
+              try {
+                res = await setGaApiSecret(businessId, "");
+              } catch {
+                /* ⚠ Sterge secretul Measurement Protocol. */
+                toast.error(
+                  "Nu am primit raspuns de la server, deci nu stim daca masurarea server-side s-a oprit. "
+                  + "Reimprospateaza pagina: daca nu mai scrie Activ, s-a facut.",
+                  { duration: 12000 },
+                );
+                router.refresh();
+                return;
+              }
               if ("error" in res) { toast.error(res.error); return; }
               toast.success("Măsurare server-side dezactivată."); router.refresh();
             })}>Dezactivează</button>
@@ -318,7 +367,24 @@ function ManualConnected({ businessId, status, oauthAvailable }: {
             disabled={togglingTracking}
             onCheckedChange={(v) => startTracking(async () => {
               aplicaMasurare(v);
-              const res = await setGaTracking(businessId, v);
+              let res: Awaited<ReturnType<typeof setGaTracking>>;
+              try {
+                res = await setGaTracking(businessId, v);
+              } catch {
+                /* ⚠ AICI DAM `router.refresh()`, desi randul de mai jos spune sa nu dam. Nu e o scapare.
+                   Randul acela vorbeste despre `"error" in res`: serverul a raspuns si a REFUZAT, deci
+                   starea dinainte chiar e cea adevarata, iar revenirea optimista arata adevarul.
+                   O cadere e altceva: nu stim daca s-a scris. `useOptimistic` duce comutatorul inapoi
+                   oricum, deci daca serverul apucase sa scrie, comutatorul minte la loc, doar ca in
+                   cealalta directie. De aceea cerem starea adevarata de la server. */
+                toast.error(
+                  "Nu am primit raspuns de la server, deci nu stim daca masurarea s-a schimbat. "
+                  + "Comutatorul a revenit unde era, iar pagina se reincarca si arata starea adevarata.",
+                  { duration: 12000 },
+                );
+                router.refresh();
+                return;
+              }
               // La eroare NU dam refresh: React face singur revenirea la starea reala.
               if ("error" in res) { toast.error(res.error); return; }
               toast.success(v ? "Măsurarea pe magazin este activă." : "Măsurarea pe magazin a fost oprită.");
@@ -346,7 +412,19 @@ function ManualConnected({ businessId, status, oauthAvailable }: {
           <Button
             size="sm"
             onClick={() => startBusy(async () => {
-              const res = await startGoogleAnalyticsOAuth(businessId);
+              let res: Awaited<ReturnType<typeof startGoogleAnalyticsOAuth>>;
+              try {
+                res = await startGoogleAnalyticsOAuth(businessId);
+              } catch {
+                /* ⚠ Daca pica, pagina de autorizare nici nu s-a deschis: nimic nu s-a conectat,
+                   si o a doua apasare e nevinovata. */
+                toast.error(
+                  "Nu am primit raspuns de la server, deci pagina de autorizare Google nu s-a deschis. "
+                  + "Nu s-a conectat nimic. Incearca din nou.",
+                  { duration: 12000 },
+                );
+                return;
+              }
               if ("error" in res) { toast.error(res.error); return; }
               window.location.href = res.url;
             })}
@@ -418,7 +496,19 @@ function PropertyPicker({ businessId }: { businessId: string }) {
 
   function pick(propertyId: string, name?: string, account?: string) {
     startSave(async () => {
-      const res = await selectGaProperty(businessId, propertyId, name, account);
+      let res: Awaited<ReturnType<typeof selectGaProperty>>;
+      try {
+        res = await selectGaProperty(businessId, propertyId, name, account);
+      } catch {
+        /* ⚠ Leaga proprietatea aleasa. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca proprietatea s-a legat. "
+          + "Reimprospateaza pagina: daca apare conectata, s-a facut.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       if (res.measurementId) toast.success("Proprietate conectată. Măsurarea este activă.");
       else toast.message("Proprietate conectată, dar fără flux de date web. Vezi indicațiile de pe pagină.");
@@ -489,7 +579,19 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
 
   function loadDashboard(days: 7 | 28 | 90, force = false) {
     startDash(async () => {
-      const res = await getGaDashboard(businessId, days, force);
+      let res: Awaited<ReturnType<typeof getGaDashboard>>;
+      try {
+        res = await getGaDashboard(businessId, days, force);
+      } catch {
+        /* ⚠ Doar citeste statisticile: nu schimba nimic, nici la noi, nici la Google. De aceea
+           mesajul cere o noua apasare, nu reincarcarea paginii: n-ar aduce nimic in plus. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci statisticile nu s-au putut aduce. "
+          + "Apasa din nou pe Actualizeaza.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setDash(res.data);
     });
@@ -548,7 +650,24 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
               disabled={togglingTracking}
               onCheckedChange={(v) => startTracking(async () => {
                 aplicaMasurare(v);
-                const res = await setGaTracking(businessId, v);
+                let res: Awaited<ReturnType<typeof setGaTracking>>;
+                try {
+                  res = await setGaTracking(businessId, v);
+                } catch {
+                  /* ⚠ AICI DAM `router.refresh()`, desi randul de mai jos spune sa nu dam. Nu e o scapare.
+                     Randul acela vorbeste despre `"error" in res`: serverul a raspuns si a REFUZAT, deci
+                     starea dinainte chiar e cea adevarata, iar revenirea optimista arata adevarul.
+                     O cadere e altceva: nu stim daca s-a scris. `useOptimistic` duce comutatorul inapoi
+                     oricum, deci daca serverul apucase sa scrie, comutatorul minte la loc, doar ca in
+                     cealalta directie. De aceea cerem starea adevarata de la server. */
+                  toast.error(
+                    "Nu am primit raspuns de la server, deci nu stim daca masurarea s-a schimbat. "
+                    + "Comutatorul a revenit unde era, iar pagina se reincarca si arata starea adevarata.",
+                    { duration: 12000 },
+                  );
+                  router.refresh();
+                  return;
+                }
                 // La eroare NU dam refresh: React face singur revenirea la starea reala.
                 if ("error" in res) { toast.error(res.error); return; }
                 toast.success(v ? "Măsurarea pe magazin este activă." : "Măsurarea pe magazin a fost oprită.");
@@ -565,7 +684,19 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
             className="font-medium underline disabled:opacity-50"
             disabled={rescanning}
             onClick={() => startRescan(async () => {
-              const res = await selectGaProperty(businessId, status.propertyId ?? "");
+              let res: Awaited<ReturnType<typeof selectGaProperty>>;
+              try {
+                res = await selectGaProperty(businessId, status.propertyId ?? "");
+              } catch {
+                /* ⚠ Cere din nou fluxul de date al proprietatii. */
+                toast.error(
+                  "Nu am primit raspuns de la server, deci nu stim daca s-a gasit un flux de date. "
+                  + "Reimprospateaza pagina si incearca din nou.",
+                  { duration: 12000 },
+                );
+                router.refresh();
+                return;
+              }
               if ("error" in res) { toast.error(res.error); return; }
               if (res.measurementId) { toast.success("Flux de date găsit. Măsurarea este activă."); router.refresh(); }
               else toast.message("Încă nu am găsit un flux de date web.");

@@ -11,6 +11,19 @@ export interface ShippingClass {
   name: string;
 }
 
+/**
+ * O zona de livrare: un curier pornit sau stins, cu pretul lui.
+ *
+ * ⚠ `auto_price` LIPSA inseamna ADEVARAT, nu fals: cotarea citeste `zone.auto_price !== false`.
+ * De aceea campul e optional si se scrie numai cand chiar e un boolean. Vezi `parseShippingZones`.
+ */
+export interface ShippingZone {
+  enabled: boolean;
+  price: number;
+  auto_price?: boolean;
+  label?: string;
+}
+
 export type ShippingCondition =
   | { type: "weight"; min?: number; max?: number }   // kg (min inclusiv, max exclusiv)
   | { type: "subtotal"; min?: number; max?: number } // lei, valoarea marfii dupa promo
@@ -207,6 +220,83 @@ function parseAction(raw: unknown): ShippingAction | null {
   if (t === "free")      return { type: "free" };
   if (t === "hide")      return { type: "hide" };
   return null;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ZONELE, CURATATE LA SCRIERE CA SI CLASELE SI REGULILE      (14.09.2026)
+   ═══════════════════════════════════════════════════════════════════════════
+
+   `updateShippingConfig` re-parsa clasele si regulile prin parserele de mai sus, „ca sa
+   garanteze forma jsonb valida", dar ZONELE se scriau brut: `shipping_zones: config.
+   shipping_zones as never`. Lipsea exact al treilea frate.
+
+   ⚠ CE TRECEA PE ACOLO. `min="0"` din formular e doar o sugestie a navigatorului, iar
+   serverul nu se uita deloc la pret. Iar in ecran casuta golita devine `parseFloat("") || 0`,
+   deci un pret sters ca sa fie retastat se salveaza ca ZERO fara nicio vorba.
+
+   ⚠ SI UNDE AJUNGE NUMARUL. Din prima zona pornita se deduce `default_shipping_cost`
+   (`store.actions.ts`), adica pretul pe care il vad toti cumparatorii pe pagina de produs, in
+   cos, la finalizare, si pe care il citeste Google din datele structurate. Un `NaN` sau un
+   negativ ajuns acolo nu se vede in panou si nu cade nicaieri.
+
+   ⚠ CE NU FACE, DINADINS. Nu stinge un curier pe baza pretului: asta ar fi o hotarare de
+   produs, nu o curatare. Si nu preface un negativ in „gratuit" ca pe un lucru normal, ci il
+   plafoneaza la 0 asa cum face deja `parseAction` pentru sumele regulilor, fiindca un pret
+   negativ nu se poate incasa in niciun fel.
+
+   ⚠ MASURAT PE 14.09.2026, inainte de schimbare: din 25 de zone pornite, ZERO preturi
+   negative si ZERO tarife implicite nule sau lipsa (toate intre 10 si 45 de lei). Deci
+   curatarea nu misca nicio valoare din productie: e pusa inainte sa fie nevoie.
+*/
+export function parseShippingZones(raw: unknown): Record<string, ShippingZone> {
+  const iesire: Record<string, ShippingZone> = {};
+  /* ⚠ Forma de ARRAY o au 110 magazine din 129, si ea nu declara nicio zona. `typeof [] e
+     "object"`, deci fara verificarea asta un array ar fi intrat in bucla si ar fi produs chei
+     numerice („0", „1") care nu sunt curieri. */
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return iesire;
+
+  for (const [cheie, valoare] of Object.entries(raw as Record<string, unknown>)) {
+    /*
+     * ═══ ⚠ `__proto__` NU SE POATE PUNE INTR-UN OBIECT PRIN ATRIBUIRE ═══
+     *
+     * `iesire["__proto__"] = zona` nu creeaza o cheie: cheama setterul mostenit si SCHIMBA
+     * PROTOTIPUL obiectului. Iar `JSON.parse` chiar creeaza o insusire proprie cu numele asta,
+     * deci o configuratie venita din corpul cererii ajungea aici cu ea.
+     *
+     * ⚠ CE AR FI URMAT. Obiectul intors, dat mai departe si scris in baza, ar fi avut un
+     * prototip ales din afara: orice `zone["curier-care-nu-exista"]?.enabled` ar fi raspuns
+     * „da", cu pretul venit tot de acolo.
+     *
+     * ⚠ PAZA DE DINAINTE, `hasOwnProperty`, NU PRINDEA NIMIC, si asta a aratat-o o sonda, nu
+     * rationamentul meu: `Object.entries` intoarce oricum doar insusiri proprii, iar pentru un
+     * obiect din `JSON.parse` ea raspunde `true` chiar pentru `__proto__`. Proba trecea, dar din
+     * alt motiv: atribuirea se pierdea tacut in prototip.
+     *
+     * Celelalte nume mostenite (`constructor`, `toString`) se atribuie cuminte ca insusiri
+     * proprii, deci ies cel mult „zone" cu nume ciudat, pe care nicio cheie de curier nu le
+     * potriveste. Numai `__proto__` e altfel.
+     */
+    if (cheie === "__proto__") continue;
+    if (!cheie.trim() || !valoare || typeof valoare !== "object") continue;
+
+    const z = valoare as Record<string, unknown>;
+    const zona: ShippingZone = {
+      /* ⚠ Strict boolean: un „false" ca SIR ar fi fost adevarat, deci un curier stins ar fi
+         reaparut in checkout. */
+      enabled: z.enabled === true,
+      /* ⚠ Plafonat si rotunjit: `toNum` face 0 din orice nu e numar (inclusiv `NaN` si sirul
+         gol), iar `Math.max` opreste negativul. Acelasi tipar ca la sumele regulilor. */
+      price: round2(Math.max(0, toNum(z.price))),
+    };
+    /* ⚠ Numai cand chiar sunt: un `auto_price: undefined` scris in jsonb ar schimba intelesul
+       implicit, care e ADEVARAT (vezi `zone.auto_price !== false` din cotare). */
+    if (typeof z.auto_price === "boolean") zona.auto_price = z.auto_price;
+    const eticheta = toStr(z.label).trim();
+    if (eticheta) zona.label = eticheta;
+
+    iesire[cheie] = zona;
+  }
+  return iesire;
 }
 
 export function parseShippingRules(raw: unknown): ShippingRule[] {

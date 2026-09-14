@@ -10,7 +10,7 @@ import { logError } from "@/lib/error-logger";
 import type { Json } from "@/types/database.types";
 import { checkoutPaymentMethods, processorReadiness, sanitizePaymentMethods, parseCardDiscountConfig, sanitizeCardDiscountConfig, parseCodFeeConfig, sanitizeCodFeeConfig, type PaymentMethodEntry, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { parseCookieBannerConfig, type CookieBannerConfig } from "@/lib/cookie-consent";
-import { parseShippingClasses, parseShippingRules, type ShippingClass, type ShippingRule } from "@/lib/shipping/rules";
+import { parseShippingClasses, parseShippingRules, parseShippingZones, type ShippingClass, type ShippingRule } from "@/lib/shipping/rules";
 import { normalizeazaTimpDeLivrare } from "@/lib/shipping/delivery-time";
 
 /**
@@ -599,8 +599,21 @@ export async function updateShippingConfig(
     .from("businesses").select("id, slug").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
-  // Compute default_shipping_cost from the first enabled courier
-  const enabledZone = Object.values(config.shipping_zones).find(z => z.enabled);
+  /*
+   * ⚠ ZONELE SE CURATA INAINTE DE ORICE ALTCEVA (14.09.2026).
+   *
+   * Clasele si regulile treceau de mult prin parserele lor, „ca sa garanteze forma jsonb
+   * valida"; zonele se scriau brut. Iar `min="0"` din formular e doar o sugestie a
+   * navigatorului: serverul nu se uita deloc la pret, iar in ecran o casuta golita devine
+   * `parseFloat("") || 0`, deci un pret sters ca sa fie retastat se salveaza ca ZERO.
+   *
+   * ⚠ SI ORDINEA E CHIAR REGULA. `default_shipping_cost` se deduce din prima zona pornita, iar
+   * el e pretul pe care il vad toti cumparatorii pe pagina de produs, in cos, la finalizare, si
+   * pe care il citeste Google din datele structurate. Socotit din zonele BRUTE, un `NaN` sau un
+   * negativ ar fi ajuns acolo chiar cu parserul pus alaturi: curatarea ar fi fost decorativa.
+   */
+  const zonesRow = parseShippingZones(config.shipping_zones);
+  const enabledZone = Object.values(zonesRow).find((z) => z.enabled);
   const defaultShippingCost = enabledZone ? enabledZone.price : 20;
 
   // Re-parse clasele/regulile prin parserele partajate — garanteaza forma jsonb valida.
@@ -634,7 +647,7 @@ export async function updateShippingConfig(
         shipping_enabled: config.shipping_enabled,
         free_shipping_threshold: config.free_shipping_threshold,
         min_order_amount: config.min_order_amount,
-        shipping_zones: config.shipping_zones as never,
+        shipping_zones: zonesRow as never,
         shipping_classes: classesRow as never,
         shipping_rules: rulesRow as never,
         default_shipping_cost: defaultShippingCost,
@@ -649,7 +662,7 @@ export async function updateShippingConfig(
         shipping_enabled: config.shipping_enabled,
         free_shipping_threshold: config.free_shipping_threshold,
         min_order_amount: config.min_order_amount,
-        shipping_zones: config.shipping_zones as never,
+        shipping_zones: zonesRow as never,
         shipping_classes: classesRow as never,
         shipping_rules: rulesRow as never,
         default_shipping_cost: defaultShippingCost,

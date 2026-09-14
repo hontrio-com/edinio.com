@@ -632,7 +632,18 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
   function handlePublishTrendyol() {
     if (!product) return;
     startTyPublish(async () => {
-      const res = await publishTrendyolProduct(businessId, product.id);
+      let res: Awaited<ReturnType<typeof publishTrendyolProduct>>;
+      try {
+        res = await publishTrendyolProduct(businessId, product.id);
+      } catch {
+        /* ⚠ Vorbeste cu Trendyol. Nu pretindem nimic despre ce s-a intamplat acolo. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca produsul a plecat spre Trendyol. "
+          + "Uita-te in panoul Trendyol inainte sa trimiti din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(
         res.creatAcum
@@ -650,7 +661,18 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
   function handlePublishEmag() {
     if (!product) return;
     startEmagPublish(async () => {
-      const res = await trimiteAcumPeEmag(businessId, product.id, "oferta");
+      let res: Awaited<ReturnType<typeof trimiteAcumPeEmag>>;
+      try {
+        res = await trimiteAcumPeEmag(businessId, product.id, "oferta");
+      } catch {
+        /* ⚠ Vorbeste cu eMAG. Nu pretindem nimic despre ce s-a intamplat acolo. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca produsul a plecat spre eMAG. "
+          + "Uita-te in panoul eMAG inainte sa trimiti din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       /* ⚠ eMAG raspunde 200 si la lucruri care n-au mers: „reusit cu observatii"
          inseamna ca oferta e salvata DAR au ceva de spus despre ea. Aratat ca reusita
@@ -665,7 +687,18 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
   function handlePublishOlx() {
     if (!product) return;
     startOlxPublish(async () => {
-      const res = await publishOlxProduct(businessId, product.id);
+      let res: Awaited<ReturnType<typeof publishOlxProduct>>;
+      try {
+        res = await publishOlxProduct(businessId, product.id);
+      } catch {
+        /* ⚠ Vorbeste cu OLX. Nu pretindem nimic despre ce s-a intamplat acolo. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca produsul a plecat spre OLX. "
+          + "Uita-te in Integrari > OLX inainte sa trimiti din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(
         res.status === "active" ? "Anunț activ pe OLX."
@@ -742,7 +775,18 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
   function creeazaCategoriaOrfana() {
     if (!categorieOrfana) return;
     startCatTransition(async () => {
-      const result = await createCategory({ name: categorieOrfana });
+      let result: Awaited<ReturnType<typeof createCategory>>;
+      try {
+        result = await createCategory({ name: categorieOrfana });
+      } catch {
+        /* ⚠ Se poate sa fi fost creata si totusi sa nu stim. A doua apasare ar face a doua. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca categoria s-a creat. Uita-te in lista de categorii inainte sa incerci "
+          + "din nou, ca sa nu iasa doua.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       setLocalCategories(prev => [...prev, { id: result.id, name: categorieOrfana, parent_id: null }]);
       toast.success("Categorie creata!");
@@ -874,7 +918,19 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
   function handleCreateCategory() {
     if (!newCatName.trim()) return;
     startCatTransition(async () => {
-      const result = await createCategory({ name: newCatName.trim(), parent_id: newCatParentId });
+      let result: Awaited<ReturnType<typeof createCategory>>;
+      try {
+        result = await createCategory({ name: newCatName.trim(), parent_id: newCatParentId });
+      } catch {
+        /* ⚠ Golirea campului si inchiderea formularului stau DUPA `try`, dinadins: daca nu stim ce
+           s-a intamplat, omul ramane cu ce a scris, nu cu un formular gol si o intrebare. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca categoria s-a creat. Uita-te in lista de categorii inainte sa incerci "
+          + "din nou, ca sa nu iasa doua.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       const newCat: CategoryOption = { id: result.id, name: newCatName.trim(), parent_id: newCatParentId };
       setLocalCategories(prev => [...prev, newCat]);
@@ -1033,9 +1089,26 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
     };
 
     startTransition(async () => {
-      const result = isEditing
-        ? await updateProduct(product.id, businessId, payload)
-        : await createProduct(businessId, payload);
+      let result: Awaited<ReturnType<typeof updateProduct>> | Awaited<ReturnType<typeof createProduct>>;
+      try {
+        result = isEditing
+          ? await updateProduct(product.id, businessId, payload)
+          : await createProduct(businessId, payload);
+      } catch {
+        /* ⚠ ASTEPTAREA STA IN DOUA RAMURI DE TERNAR, de aceea si tipul e o reuniune.
+           ⚠ Si mesajul se desparte, fiindca unul singur ar fi fals intr-una din directii: la
+           editare se trimite tot produsul, deci a doua apasare nu strica nimic; la creare, a
+           doua apasare poate scoate AL DOILEA produs. */
+        toast.error(
+          isEditing
+            ? "Nu am primit raspuns de la server, deci nu stim daca modificarile s-au salvat. Apasa din nou pe salvare: "
+              + "trimitem tot produsul, deci a doua apasare nu strica nimic."
+            : "Nu am primit raspuns de la server, deci nu stim daca produsul s-a creat. Uita-te intai in lista de produse, "
+              + "ca sa nu iasa doua.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if (result.error) { toast.error(result.error); return; }
       toast.success(isEditing ? "Produs actualizat!" : "Produs adaugat!");
       router.push(backHref);
@@ -1044,7 +1117,18 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
 
   function handleDelete() {
     startDeleteTransition(async () => {
-      const result = await deleteProduct(product!.id, businessId);
+      let result: Awaited<ReturnType<typeof deleteProduct>>;
+      try {
+        result = await deleteProduct(product!.id, businessId);
+      } catch {
+        /* ⚠ Stergere: nestiuta e doar scrierea la noi. Nu cerem reincarcarea paginii, fiindca
+           pagina asta e chiar formularul produsului; adevarul se vede in lista. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca produsul s-a sters. Uita-te in lista de produse ca sa vezi daca mai e.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if (result.error) { toast.error(result.error); return; }
       toast.success("Produs sters!");
       router.push(backHref);

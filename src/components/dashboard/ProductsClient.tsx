@@ -269,7 +269,24 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
       if (action.kind === "active" || action.kind === "featured" || action.kind === "category") {
         aplicaOptimist({ ...action, ids });
       }
-      const res = await bulkProductAction(businessId, ids, action);
+      let res: Awaited<ReturnType<typeof bulkProductAction>>;
+      try {
+        res = await bulkProductAction(businessId, ids, action);
+      } catch {
+        /* ⚠ `setBulkBusy(false)` se stinge AICI, inaintea mesajului: el sta sub asteptare, deci o
+           cadere l-ar sari si bara de loturi ar ramane blocata.
+           ⚠ Schimbarea optimista se face DOAR pentru stare, evidentiere si categorie; la pret nu
+           se atinge niciun rand. De aceea mesajul nu pretinde ca randurile au revenit: ar fi fost
+           fals la pret. Cerem in schimb starea adevarata de la server, care e adevarata mereu. */
+        setBulkBusy(false);
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca schimbarea s-a aplicat pe produsele alese. "
+          + "Pagina se reincarca si arata starea adevarata.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       setBulkBusy(false);
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(successMsg.replace("{n}", String(res.count)));
@@ -652,7 +669,22 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
                       onClick={() => {
                         setDuplicatingId(product.id);
                         startDupTransition(async () => {
-                          const res = await duplicateProduct(product.id, businessId);
+                          let res: Awaited<ReturnType<typeof duplicateProduct>>;
+                          try {
+                            res = await duplicateProduct(product.id, businessId);
+                          } catch {
+                            /* ⚠ `setDuplicatingId(null)` se stinge AICI, inaintea mesajului: el sta sub asteptare, deci
+                               o cadere l-ar sari si rotita de pe buton ar invarti la nesfarsit.
+                               ⚠ Si se poate sa fi fost duplicat totusi: a doua apasare ar scoate a doua copie. */
+                            setDuplicatingId(null);
+                            toast.error(
+                              "Nu am primit raspuns de la server, deci nu stim daca produsul s-a duplicat. Lista se reincarca: uita-te acolo inainte sa "
+                              + "apesi din nou, ca sa nu iasa doua copii.",
+                              { duration: 12000 },
+                            );
+                            router.refresh();
+                            return;
+                          }
                           setDuplicatingId(null);
                           if ("error" in res) { toast.error(res.error); }
                           else { toast.success("Produs duplicat"); router.push(editHref(res.id)); }
@@ -761,7 +793,22 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
                           onClick={() => {
                             setDuplicatingId(product.id);
                             startDupTransition(async () => {
-                              const res = await duplicateProduct(product.id, businessId);
+                              let res: Awaited<ReturnType<typeof duplicateProduct>>;
+                              try {
+                                res = await duplicateProduct(product.id, businessId);
+                              } catch {
+                                /* ⚠ `setDuplicatingId(null)` se stinge AICI, inaintea mesajului: el sta sub asteptare, deci
+                                   o cadere l-ar sari si rotita de pe buton ar invarti la nesfarsit.
+                                   ⚠ Si se poate sa fi fost duplicat totusi: a doua apasare ar scoate a doua copie. */
+                                setDuplicatingId(null);
+                                toast.error(
+                                  "Nu am primit raspuns de la server, deci nu stim daca produsul s-a duplicat. Lista se reincarca: uita-te acolo inainte sa "
+                                  + "apesi din nou, ca sa nu iasa doua copii.",
+                                  { duration: 12000 },
+                                );
+                                router.refresh();
+                                return;
+                              }
                               setDuplicatingId(null);
                               if ("error" in res) { toast.error(res.error); }
                               else { toast.success("Produs duplicat"); router.push(editHref(res.id)); }

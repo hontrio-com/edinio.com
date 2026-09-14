@@ -43,7 +43,21 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
       + "De acum valorile din Edinio le vor rescrie pe cele puse de tine în panoul Trendyol.",
     )) return;
     startTransition(async () => {
-      const r = await pornesteSincronizareaAdoptatelor(businessId);
+      let r: Awaited<ReturnType<typeof pornesteSincronizareaAdoptatelor>>;
+      try {
+        r = await pornesteSincronizareaAdoptatelor(businessId);
+      } catch {
+        /* ⚠ Porneste trimiterea pretului si stocului catre Trendyol pentru produsele adoptate.
+           Mesajul nu pretinde cate au apucat sa plece: nu am masurat, si nu e nevoie sa stiu ca
+           sa spun ce nu stiu. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca pornirea a apucat sa se inregistreze. "
+          + "Pagina se reincarca: uita-te la starea produselor inainte sa apesi din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in r) { toast.error(r.error); return; }
       toast.success(
         r.cate === 0
@@ -112,9 +126,21 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
     }
     setActiune("conectare");
     startTransition(async () => {
-      const res = await connectTrendyol(businessId, {
-        supplierId: supplierId.trim(), apiKey, apiSecret, environment, storefront,
-      });
+      let res: Awaited<ReturnType<typeof connectTrendyol>>;
+      try {
+        res = await connectTrendyol(businessId, {
+          supplierId: supplierId.trim(), apiKey, apiSecret, environment, storefront,
+        });
+      } catch {
+        /* ⚠ Cheile pleaca la Trendyol ca sa fie validate. Nestiut: daca s-a legat contul. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-a conectat contul Trendyol. "
+          + "Pagina se reincarca: uita-te daca apare conectat inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Cont Trendyol conectat.");
       setApiKey(""); setApiSecret("");
@@ -126,7 +152,20 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
     if (!window.confirm("Sigur deconectezi Trendyol? Listările locale se șterg (produsele rămân pe Trendyol).")) return;
     setActiune("deconectare");
     startTransition(async () => {
-      const res = await disconnectTrendyol(businessId);
+      let res: Awaited<ReturnType<typeof disconnectTrendyol>>;
+      try {
+        res = await disconnectTrendyol(businessId);
+      } catch {
+        /* ⚠ Confirmarea de pe ecran spune ca listarile LOCALE se sterg si produsele raman pe
+           Trendyol. Mesajul nu pretinde mai mult decat atat: n-am masurat ce face actiunea la ei. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca deconectarea s-a salvat. "
+          + "Pagina se reincarca: uita-te daca mai apare conectat inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Cont deconectat.");
       router.refresh();
@@ -142,30 +181,42 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
     }
     setActiune("setari");
     startTransition(async () => {
-      const res = await saveTrendyolSettings(businessId, {
-        shipment_address_id: ship, returning_address_id: ret,
-        /* „" inseamna „las cum e in contul Trendyol", nu zero. Vezi eticheta campului. */
-        delivery_duration: termenExpediere === "" ? null : Number(termenExpediere),
-        default_carrier_code: carrierCode.trim() === "" ? null : carrierCode,
-        auto_sync: autoSync,
-        /*
-         * ⚠ SE TRIMITE CE A BIFAT OMUL (26.08.2026).
-         *
-         * Era `autoSync && autoPublish`, cu explicatia ca „publicarea automata n-are sens fara
-         * sincronizare". A fost adevarat, si a incetat sa fie: coada lasa acum sa treaca un
-         * produs NOU cand `auto_publish` e aprins, chiar cu `auto_sync` stins (`queue.ts`).
-         *
-         * ⚠ Deci ecranul mintea: omul bifa „Publicare automata", vedea bifa ramasa bifata dupa
-         * salvare, si in baza se scria `false`. Comentariul de aici a supravietuit codului pe
-         * care il descria — chiar felul de defect care nu da nicio eroare.
-         *
-         * Cele doua comutatoare sunt acum ce par: unul pentru schimbarile la produsele DEJA
-         * publicate, altul pentru produsele NOI.
-         */
-        auto_publish: autoPublish,
-        default_country_of_origin: taraOrigine,
-        factureaza_clientul: facturam,
-      });
+      let res: Awaited<ReturnType<typeof saveTrendyolSettings>>;
+      try {
+        res = await saveTrendyolSettings(businessId, {
+          shipment_address_id: ship, returning_address_id: ret,
+          /* „" inseamna „las cum e in contul Trendyol", nu zero. Vezi eticheta campului. */
+          delivery_duration: termenExpediere === "" ? null : Number(termenExpediere),
+          default_carrier_code: carrierCode.trim() === "" ? null : carrierCode,
+          auto_sync: autoSync,
+          /*
+           * ⚠ SE TRIMITE CE A BIFAT OMUL (26.08.2026).
+           *
+           * Era `autoSync && autoPublish`, cu explicatia ca „publicarea automata n-are sens fara
+           * sincronizare". A fost adevarat, si a incetat sa fie: coada lasa acum sa treaca un
+           * produs NOU cand `auto_publish` e aprins, chiar cu `auto_sync` stins (`queue.ts`).
+           *
+           * ⚠ Deci ecranul mintea: omul bifa „Publicare automata", vedea bifa ramasa bifata dupa
+           * salvare, si in baza se scria `false`. Comentariul de aici a supravietuit codului pe
+           * care il descria — chiar felul de defect care nu da nicio eroare.
+           *
+           * Cele doua comutatoare sunt acum ce par: unul pentru schimbarile la produsele DEJA
+           * publicate, altul pentru produsele NOI.
+           */
+          auto_publish: autoPublish,
+          default_country_of_origin: taraOrigine,
+          factureaza_clientul: facturam,
+        });
+      } catch {
+        /* ⚠ Scrie la noi. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca setarile s-au salvat. "
+          + "Pagina se reincarca: uita-te la comutatoare inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Setări salvate.");
       router.refresh();
@@ -176,7 +227,20 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
     setActiune("webhook");
     startTransition(async () => {
       aplicaWebhook(true);
-      const res = await subscribeTrendyolWebhook(businessId);
+      let res: Awaited<ReturnType<typeof subscribeTrendyolWebhook>>;
+      try {
+        res = await subscribeTrendyolWebhook(businessId);
+      } catch {
+        /* ⚠ FARA `router.refresh()`, ca si pe calea de eroare de mai jos: eticheta s-a schimbat
+           optimist, iar `useOptimistic` o retrage singur cand tranzitia se incheie. Hotararea e a
+           casei si ramane adevarata si cu `catch` pus. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca webhookul s-a activat la Trendyol. "
+          + "Uita-te la eticheta dupa ce se reincarca pagina inainte sa apesi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       // La eroare NU dam refresh: React face singur revenirea la starea reala.
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Webhook comenzi activat.");
@@ -188,7 +252,18 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
     setActiune("webhook");
     startTransition(async () => {
       aplicaWebhook(false);
-      const res = await unsubscribeTrendyolWebhook(businessId);
+      let res: Awaited<ReturnType<typeof unsubscribeTrendyolWebhook>>;
+      try {
+        res = await unsubscribeTrendyolWebhook(businessId);
+      } catch {
+        /* ⚠ Acelasi lucru ca la abonare, in cealalta directie. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca webhookul s-a dezactivat la Trendyol. "
+          + "Uita-te la eticheta dupa ce se reincarca pagina inainte sa apesi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       // La eroare NU dam refresh: React face singur revenirea la starea reala.
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Webhook dezactivat.");

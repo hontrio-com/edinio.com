@@ -129,7 +129,6 @@ const INCA_DESCOPERITE: Record<string, number> = {
   "dashboard/SmsoConfigClient.tsx": 1,
   "dashboard/TrendyolAutoMap.tsx": 2,
   "dashboard/TrendyolCategoryMapping.tsx": 2,
-  "dashboard/TrendyolClient.tsx": 6,
   "dashboard/TrendyolFulfillmentPanel.tsx": 2,
   "dashboard/TrendyolListingEditor.tsx": 3,
   "dashboard/TrendyolListings.tsx": 4,

@@ -52,7 +52,18 @@ export default function NetopiaConfigClient({
       return;
     }
     startSave(async () => {
-      const result = await saveNetopiaConfig(businessId, cfg);
+      let result: Awaited<ReturnType<typeof saveNetopiaConfig>>;
+      try {
+        result = await saveNetopiaConfig(businessId, cfg);
+      } catch {
+        /* ⚠ Scrie configurarea Netopia. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca configurarea Netopia s-a salvat. "
+          + "Reimprospateaza pagina ca sa vezi cum a ramas, inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if (!result.success) { toast.error(result.error ?? "Eroare la salvare"); return; }
       toast.success("Configuratia Netopia a fost salvata.");
       router.refresh();

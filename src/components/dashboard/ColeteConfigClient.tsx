@@ -57,7 +57,19 @@ export default function ColeteConfigClient({
     if (!clientId || (!clientSecret && !secretulEsteSalvat(initialConfig, "client_secret"))) { toast.error("Introdu Client ID si Client Secret"); return; }
     startTestTransition(async () => {
       setTestResult(null);
-      const result = await testCOConnection(businessId, clientId, clientSecret, sandbox);
+      let result: Awaited<ReturnType<typeof testCOConnection>>;
+      try {
+        result = await testCOConnection(businessId, clientId, clientSecret, sandbox);
+      } catch {
+        /* ⚠ Mesajul nu pretinde nimic despre ce s-a intamplat la Colete Online: n-am masurat ce
+           face proba acolo, deci spun doar ca nu stim daca a ajuns la capat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca proba de conexiune a ajuns la capat. "
+          + "Reimprospateaza si incearca din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) {
         setTestResult({ error: result.error });
         toast.error(result.error);
@@ -85,7 +97,18 @@ export default function ColeteConfigClient({
       repayment_holder: repaymentHolder.trim() || undefined,
     };
     startSaveTransition(async () => {
-      const result = await saveCOConfig(businessId, config);
+      let result: Awaited<ReturnType<typeof saveCOConfig>>;
+      try {
+        result = await saveCOConfig(businessId, config);
+      } catch {
+        /* ⚠ Scrie configurarea Colete Online. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca configurarea Colete Online s-a salvat. "
+          + "Reimprospateaza pagina ca sa vezi cum a ramas, inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Configuratie salvata");
     });

@@ -102,7 +102,18 @@ export function SmartbillConfigClient({
       if (!cfg.series_name.trim()) { toast.error("Seria facturilor este obligatorie."); return; }
     }
     startSave(async () => {
-      const result = await updateSmartbillConfig(businessId, cfg);
+      let result: Awaited<ReturnType<typeof updateSmartbillConfig>>;
+      try {
+        result = await updateSmartbillConfig(businessId, cfg);
+      } catch {
+        /* ⚠ Scrie configurarea SmartBill. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca configurarea SmartBill s-a salvat. "
+          + "Reimprospateaza pagina ca sa vezi cum a ramas, inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       toast.success("Integrarea SmartBill a fost salvata.");
       router.refresh();

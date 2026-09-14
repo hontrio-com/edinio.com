@@ -29,7 +29,18 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
     if (smso.enabled && (!smso.api_key.trim() && !secretulEsteSalvat(initialConfig, "api_key"))) { toast.error("Cheia API este obligatorie."); return; }
     if (smso.enabled && !smso.sender_id.trim()) { toast.error("Sender ID este obligatoriu."); return; }
     startSave(async () => {
-      const result = await updateSmsoConfig(businessId, smso);
+      let result: Awaited<ReturnType<typeof updateSmsoConfig>>;
+      try {
+        result = await updateSmsoConfig(businessId, smso);
+      } catch {
+        /* ⚠ Scrie configurarea SMSO. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca configurarea SMSO s-a salvat. "
+          + "Reimprospateaza pagina ca sa vezi cum a ramas, inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) {
         toast.error(result.error);
       } else {

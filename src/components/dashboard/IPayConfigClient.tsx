@@ -43,7 +43,18 @@ export default function IPayConfigClient({
     if (!cfg.username.trim()) { toast.error("Utilizatorul API este obligatoriu."); return; }
     if ((!cfg.password.trim() && !secretulEsteSalvat(initialConfig, "password"))) { toast.error("Parola API este obligatorie."); return; }
     startSave(async () => {
-      const result = await saveIpayConfig(businessId, { ...cfg, username: cfg.username.trim(), password: cfg.password, title: cfg.title.trim() || DEFAULT_CONFIG.title });
+      let result: Awaited<ReturnType<typeof saveIpayConfig>>;
+      try {
+        result = await saveIpayConfig(businessId, { ...cfg, username: cfg.username.trim(), password: cfg.password, title: cfg.title.trim() || DEFAULT_CONFIG.title });
+      } catch {
+        /* ⚠ Scrie configurarea BT iPay. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca configurarea BT iPay s-a salvat. "
+          + "Reimprospateaza pagina ca sa vezi cum a ramas, inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if (!result.success) { toast.error(result.error ?? "Eroare la salvare"); return; }
       toast.success("Configuratia BT iPay a fost salvata.");
       router.refresh();

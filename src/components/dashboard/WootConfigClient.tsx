@@ -133,7 +133,18 @@ export default function WootConfigClient({
       }
     }
     startSave(async () => {
-      const result = await saveWootConfig(businessId, cfg);
+      let result: Awaited<ReturnType<typeof saveWootConfig>>;
+      try {
+        result = await saveWootConfig(businessId, cfg);
+      } catch {
+        /* ⚠ Scrie configurarea Woot. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca configurarea Woot s-a salvat. "
+          + "Reimprospateaza pagina ca sa vezi cum a ramas, inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if (!result.success) { toast.error(result.error ?? "Eroare la salvare"); return; }
       toast.success("Configuratia Woot a fost salvata.");
       router.refresh();

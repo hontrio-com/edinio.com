@@ -41,11 +41,22 @@ export default function RevolutConfigClient({
   function save() {
     if ((!cfg.secret_key.trim() && !secretulEsteSalvat(initialConfig, "secret_key"))) { toast.error("Cheia secreta API este obligatorie."); return; }
     startSave(async () => {
-      const result = await saveRevolutConfig(businessId, {
-        ...cfg,
-        secret_key: cfg.secret_key.trim(),
-        title: cfg.title.trim() || DEFAULT_CONFIG.title,
-      });
+      let result: Awaited<ReturnType<typeof saveRevolutConfig>>;
+      try {
+        result = await saveRevolutConfig(businessId, {
+          ...cfg,
+          secret_key: cfg.secret_key.trim(),
+          title: cfg.title.trim() || DEFAULT_CONFIG.title,
+        });
+      } catch {
+        /* ⚠ Scrie configurarea Revolut. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca configurarea Revolut s-a salvat. "
+          + "Reimprospateaza pagina ca sa vezi cum a ramas, inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if (!result.success) { toast.error(result.error ?? "Eroare la salvare"); return; }
       if (result.warning) toast.warning(result.warning);
       else toast.success("Configuratia Revolut a fost salvata.");

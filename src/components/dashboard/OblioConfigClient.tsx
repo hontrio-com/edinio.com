@@ -116,9 +116,20 @@ export default function OblioConfigClient({
     if (pornit.current || !isConnected || !initialConfig?.cif) return;
     pornit.current = true;
     startLoadCifTransition(async () => {
-      const r = await loadOblioSeriesForCif(
-        businessId, initialConfig.client_id, PLACEHOLDER_SECRET_SALVAT, initialConfig.cif,
-      );
+      let r: Awaited<ReturnType<typeof loadOblioSeriesForCif>>;
+      try {
+        r = await loadOblioSeriesForCif(
+          businessId, initialConfig.client_id, PLACEHOLDER_SECRET_SALVAT, initialConfig.cif,
+        );
+      } catch {
+        /* ⚠ TACE DINADINS, si nu din scapare.
+           Asta nu e un buton: efectul porneste singur la deschiderea paginii. Casa a scris mai
+           sus, cu masuratoare, ca un esec aici nu strica nimic, iar doua randuri mai jos trece
+           sub tacere chiar eroarea intoarsa de server. Un mesaj rosu la simpla deschidere a
+           paginii ar contrazice amandoua hotararile. Catchul sta aici ca pagina sa nu moara,
+           nu ca omul sa fie anuntat. */
+        return;
+      }
       if ("error" in r) return; // tacut: pagina ramane exact cum era
       setAccountData(prev => ({
         companies: prev?.companies ?? [{ cif: initialConfig.cif, name: initialConfig.company_name ?? "" }],
@@ -135,7 +146,18 @@ export default function OblioConfigClient({
     setLoadError("");
     setAccountData(null);
     startLoadTransition(async () => {
-      const result = await loadOblioAccountData(businessId, clientId, clientSecret);
+      let result: Awaited<ReturnType<typeof loadOblioAccountData>>;
+      try {
+        result = await loadOblioAccountData(businessId, clientId, clientSecret);
+      } catch {
+        /* ⚠ Cere datele contului Oblio. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-au putut citi datele contului Oblio. "
+          + "Reimprospateaza si incearca din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) {
         setLoadError(result.error);
         toast.error(result.error);
@@ -169,7 +191,18 @@ export default function OblioConfigClient({
     setCompanyName(company?.name ?? "");
     // Reload series + VAT for this CIF
     startLoadCifTransition(async () => {
-      const result = await loadOblioSeriesForCif(businessId, clientId, clientSecret, newCif);
+      let result: Awaited<ReturnType<typeof loadOblioSeriesForCif>>;
+      try {
+        result = await loadOblioSeriesForCif(businessId, clientId, clientSecret, newCif);
+      } catch {
+        /* ⚠ Aceeasi cerere de serii, pentru un CIF nou. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-au putut citi seriile pentru CIF-ul nou. "
+          + "Reimprospateaza si incearca din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       setAccountData(prev => prev ? { ...prev, series: result.series, vatRates: result.vatRates, management: result.management } : prev);
       /*
@@ -243,7 +276,18 @@ export default function OblioConfigClient({
     };
 
     startSaveTransition(async () => {
-      const result = await saveOblioConfig(businessId, config);
+      let result: Awaited<ReturnType<typeof saveOblioConfig>>;
+      try {
+        result = await saveOblioConfig(businessId, config);
+      } catch {
+        /* ⚠ Scrie configurarea Oblio. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca configurarea Oblio s-a salvat. "
+          + "Reimprospateaza pagina ca sa vezi cum a ramas, inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else toast.success("Configuratie Oblio salvata");
     });

@@ -153,7 +153,18 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
   function save() {
     if (config.enabled && (!config.api_token.trim() && !secretulEsteSalvat(initialConfig, "api_token"))) { toast.error("Tokenul API este obligatoriu."); return; }
     startSave(async () => {
-      const res = await updateNoticeConfig(businessId, config);
+      let res: Awaited<ReturnType<typeof updateNoticeConfig>>;
+      try {
+        res = await updateNoticeConfig(businessId, config);
+      } catch {
+        /* ⚠ Scrie configurarea notice.ro. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca configurarea notice.ro s-a salvat. "
+          + "Reimprospateaza pagina ca sa vezi cum a ramas, inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) toast.error(res.error);
       else { setConfig(res.config); toast.success("Integrarea notice.ro a fost salvata."); router.refresh(); }
     });

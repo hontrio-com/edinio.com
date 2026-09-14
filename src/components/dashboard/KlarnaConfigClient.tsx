@@ -43,12 +43,23 @@ export default function KlarnaConfigClient({
     if (!cfg.username.trim()) { toast.error("Utilizatorul API este obligatoriu."); return; }
     if ((!cfg.password.trim() && !secretulEsteSalvat(initialConfig, "password"))) { toast.error("Parola API este obligatorie."); return; }
     startSave(async () => {
-      const result = await saveKlarnaConfig(businessId, {
-        ...cfg,
-        username: cfg.username.trim(),
-        password: cfg.password.trim(),
-        title: cfg.title.trim() || DEFAULT_CONFIG.title,
-      });
+      let result: Awaited<ReturnType<typeof saveKlarnaConfig>>;
+      try {
+        result = await saveKlarnaConfig(businessId, {
+          ...cfg,
+          username: cfg.username.trim(),
+          password: cfg.password.trim(),
+          title: cfg.title.trim() || DEFAULT_CONFIG.title,
+        });
+      } catch {
+        /* ⚠ Scrie configurarea Klarna. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca configurarea Klarna s-a salvat. "
+          + "Reimprospateaza pagina ca sa vezi cum a ramas, inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if (!result.success) { toast.error(result.error ?? "Eroare la salvare"); return; }
       toast.success("Configuratia Klarna a fost salvata.");
       router.refresh();

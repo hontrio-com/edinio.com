@@ -155,6 +155,59 @@ test("⚠⚠ 200 cu corp NECITIBIL care spune „not found” tot NU sterge AWB-
     });
 });
 
+/* ── 2b. Statusul 200 spune CINE raspunde, nu DESPRE CE ───────────────────── */
+
+test("⚠⚠ 200 cu „Courier service not found for this account” NU sterge AWB-ul", () => {
+  /*
+   * ⚠ REPRODUCEREA EXACTA A UNUI AUDIT EXTERN, si a doua mea scapare pe acelasi drum.
+   *
+   * Statusul 200 dovedeste ca raspunsul e un refuz de AFACERI al lor, dar nu spune despre CE.
+   * Aici subiectul lui „not found" e CONTUL, nu expedierea, iar tiparul larg o lua drept absenta si
+   * stergea AWB-ul de pe un colet viu.
+   */
+  return anulareaCu({
+    status: 200,
+    corp: JSON.stringify({ success: false, message: "Courier service not found for this account" }),
+  }).then(({ rod, aruncat }) => {
+    assert.equal(rod, null, "un refuz despre CONT a fost citit drept expediere absenta");
+    assert.ok(aruncat instanceof Error);
+  });
+});
+
+test("⚠ 200 cu „Sender address does not exist” la fel", () => {
+  return anulareaCu({
+    status: 200,
+    corp: JSON.stringify({ success: false, message: "Sender address does not exist" }),
+  }).then(({ rod, aruncat }) => {
+    assert.equal(rod, null, "un refuz despre ADRESA a fost citit drept expediere absenta");
+    assert.ok(aruncat instanceof Error);
+  });
+});
+
+test("⚠⚠ „Shipment could not be canceled” e un ESEC, nu o absenta", () => {
+  /*
+   * A doua forma documentata pe HTTP 200. Tiparul vechi o lasa afara din intamplare (nu continea
+   * „not found"), nu din regula. Acum e afara fiindca subiectul nu e o absenta dovedita.
+   */
+  return anulareaCu({
+    status: 200,
+    corp: JSON.stringify({ success: false, message: "Shipment could not be canceled." }),
+  }).then(({ rod, aruncat }) => {
+    assert.equal(rod, null, "un esec de anulare a fost citit drept anulare reusita");
+    assert.ok(aruncat instanceof Error);
+  });
+});
+
+test("⚠ si forma DOCUMENTATA a absentei trece mai departe", () => {
+  /* Fara jumatatea asta, reparatia ar lasa comerciantul cu AWB mort la fiecare a doua apasare. */
+  return anulareaCu({
+    status: 200,
+    corp: JSON.stringify({ success: false, message: "Shipment not found." }),
+  }).then(({ rod }) => {
+    assert.deepEqual(rod, { anulat: true, eraDejaAnulat: true });
+  });
+});
+
 test("⚠ anularea care chiar reuseste ramane o anulare, nu o «era deja»", () => {
   return anulareaCu({ status: 200, corp: JSON.stringify({ success: true }) }).then(({ rod }) => {
     assert.deepEqual(rod, { anulat: true, eraDejaAnulat: false });

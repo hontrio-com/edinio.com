@@ -142,9 +142,15 @@ valoarea REALA a comenzii, iar DHL factureaza dupa ea. Diferenta o plateste come
 instante vii azi (zero configuratii DHL, zero zone DHL pornite).
 
 **4.2. Plafonul de cereri era parghia atacatorului**, nu doar plafonul de 25 de secunde pe care il
-numeste auditul. 61 de cotatii dintr-un singur IP treceau tot magazinul pe tarife fixe, adica pe
-tokene fara plan: starea vulnerabila se putea **provoca**, nu doar astepta. Regula noua o inchide;
-plafonul insusi nu s-a atins, fiindca e o paza adevarata impotriva abuzului.
+numeste auditul. Starea vulnerabila se putea **provoca**, nu doar astepta. Regula noua inchide
+injectarea planului peste tokenul fara plan; plafonul insusi nu s-a atins, fiindca e o paza
+adevarata impotriva abuzului.
+
+> ⚠ **INDREPTARE LA PROPRIA NOASTRA FORMULARE.** In prima versiune a documentului scria ca 61 de
+> cereri dintr-un IP trec „tot magazinul" pe tarife fixe. E prea lat, si auditul are dreptate sa ne
+> corecteze: pragul pe IP e 60 la 10 minute si trece drumul ACELUI IP, iar pragul pe magazin e 600.
+> Atacul ramane, fiindca atacatorului ii ajunge propria sesiune; paguba declarata de noi era insa
+> mai mare decat cea masurabila.
 
 **4.3. Paza de retea a lockerului, promisa de comentariul nostru si inexistenta.** `quote-token.ts`
 explica de ce punctul nu se poate semna la cotare si spune ca verificarea se face „la emitere". Nu

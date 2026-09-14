@@ -1011,7 +1011,30 @@ export async function anuleaza(config: ShipoConfig, awb: string): Promise<Rezult
      * mort pe comanda, fara niciun buton care sa-l scoata. Aia e chiar defectul trait la Packeta.
      */
     const mesaj = statusEroare(e) === 200 && corpAFostJson(e) ? ((e as Error).message ?? "") : "";
-    if (/not found|nu exista|already cancel|deja anulat/i.test(mesaj)) {
+    /*
+     * ⚠ LISTA INGUSTA, NU UN TIPAR LARG.  (15.09.2026, al treilea val)
+     *
+     * Tiparul de pana acum era `/not found|nu exista|already cancel|deja anulat/`. Statusul 200
+     * dovedeste ca raspunsul e un refuz de AFACERI al endpointului, dar nu spune despre CE anume.
+     * Un audit extern a aratat pe clientul real ca
+     * `{"success":false,"message":"Courier service not found for this account"}` trecea drept
+     * expediere absenta, iar urmarea e stergerea AWB-ului de pe o expediere VIE.
+     *
+     * Subiectul trebuie sa fie EXPEDIEREA. Documentatia lor publica arata trei forme pe HTTP 200:
+     * „Shipment canceled successfully.", „Shipment could not be canceled." si „Shipment not found.".
+     * Doar a treia inseamna absenta; a doua e un ESEC, nu o absenta, si tiparul vechi o lasa afara
+     * din intamplare, nu din regula.
+     *
+     * ⚠ SI AM SCOS `nu exista`, `already cancel` si `deja anulat`: erau nascocirea mea, nu
+     * contractul lor. O a doua apasare pe buton primeste tot „Shipment not found.".
+     *
+     * ⚠ CE SE INTAMPLA CU UN MESAJ 200 NECUNOSCUT: se arunca, deci AWB-ul RAMANE pe comanda si
+     * omul mai poate incerca. Runda trecuta am respins lista ingusta pe o dilema falsa („ori accept
+     * larg, ori blochez omul cu un AWB mort"). A treia varianta e chiar asta: nu sterg din
+     * presupunere, si las urma vizibila. Directia conteaza: refuzand, ramane un AWB de curatat;
+     * acceptand gresit, pleaca un colet pe care nu-l mai stie nimeni.
+     */
+    if (/\bshipment not found\b/i.test(mesaj)) {
       return { anulat: true, eraDejaAnulat: true };
     }
     throw e;

@@ -89,7 +89,6 @@ const INCA_DESCOPERITE: Record<string, number> = {
   "dashboard/AbandonedAutomationsTab.tsx": 1,
   "dashboard/BundleForm.tsx": 1,
   "dashboard/BundlesClient.tsx": 1,
-  "dashboard/CategoriesClient.tsx": 8,
   "dashboard/CustomersClient.tsx": 1,
   "dashboard/DashboardTopbar.tsx": 2,
   "dashboard/DiscountsClient.tsx": 3,

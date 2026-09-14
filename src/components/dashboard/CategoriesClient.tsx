@@ -195,7 +195,19 @@ export function CategoriesClient({ initialCategories, descrieriInitiale, descrie
     });
 
     startTransition(async () => {
-      const result = await reorderCategories(items);
+      let result: Awaited<ReturnType<typeof reorderCategories>>;
+      try {
+        result = await reorderCategories(items);
+      } catch {
+        /* ⚠ Ordinea de pe ecran s-a schimbat deja. `inainte` e lista dinainte, pastrata tocmai
+           pentru asta, si o punem la loc exact ca ramura de eroare de mai jos. */
+        setCategories(inainte);
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca noua ordine s-a salvat. Am pus lista inapoi cum era: reincarca pagina ca sa vezi cum e pe server.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) {
         setCategories(inainte);
         toast.error(result.error);
@@ -210,7 +222,18 @@ export function CategoriesClient({ initialCategories, descrieriInitiale, descrie
     const nou = !cat.is_active;
     setCategories(prev => prev.map(c => (c.id === cat.id ? { ...c, is_active: nou } : c)));
     startTransition(async () => {
-      const result = await updateCategory(cat.id, { is_active: nou });
+      let result: Awaited<ReturnType<typeof updateCategory>>;
+      try {
+        result = await updateCategory(cat.id, { is_active: nou });
+      } catch {
+        /* ⚠ Ochiul s-a schimbat deja pe ecran. Se intoarce. */
+        setCategories(prev => prev.map(c => (c.id === cat.id ? { ...c, is_active: !nou } : c)));
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca categoria si-a schimbat starea. Am pus ochiul inapoi cum era: reincarca pagina ca sa vezi cum e pe server.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) {
         setCategories(prev => prev.map(c => (c.id === cat.id ? { ...c, is_active: !nou } : c)));
         toast.error(result.error);
@@ -228,7 +251,20 @@ export function CategoriesClient({ initialCategories, descrieriInitiale, descrie
     setEditing(null);
     toast.success("Categorie adaugata.");
     startTransition(async () => {
-      const result = await createCategory({ name, sort_order });
+      let result: Awaited<ReturnType<typeof createCategory>>;
+      try {
+        result = await createCategory({ name, sort_order });
+      } catch {
+        /* ⚠ Randul temporar e deja pe ecran, SI mesajul de izbanda a plecat INAINTE de tranzitie.
+           Lauda aceea e falsa acum, deci mesajul de eroare o dezice pe fata. */
+        setCategories(prev => prev.filter(c => c.id !== tempId));
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca categoria s-a creat. Am scos-o din lista, iar mesajul de dinainte a plecat "
+          + "prea devreme: reincarca pagina ca sa vezi cum e pe server.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); setCategories(prev => prev.filter(c => c.id !== tempId)); return; }
       setCategories(prev => prev.map(c => c.id === tempId ? { ...c, id: result.id } : c));
     });
@@ -242,7 +278,20 @@ export function CategoriesClient({ initialCategories, descrieriInitiale, descrie
     setEditing(null);
     toast.success("Subcategorie adaugata.");
     startTransition(async () => {
-      const result = await createCategory({ name, parent_id: parentId, sort_order });
+      let result: Awaited<ReturnType<typeof createCategory>>;
+      try {
+        result = await createCategory({ name, parent_id: parentId, sort_order });
+      } catch {
+        /* ⚠ La fel ca la categoria de nivel principal: randul temporar e pe ecran si lauda a
+           plecat inainte de raspuns. */
+        setCategories(prev => prev.filter(c => c.id !== tempId));
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca subcategoria s-a creat. Am scos-o din lista, iar mesajul de dinainte a plecat "
+          + "prea devreme: reincarca pagina ca sa vezi cum e pe server.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); setCategories(prev => prev.filter(c => c.id !== tempId)); return; }
       setCategories(prev => prev.map(c => c.id === tempId ? { ...c, id: result.id } : c));
     });
@@ -254,7 +303,21 @@ export function CategoriesClient({ initialCategories, descrieriInitiale, descrie
     setCategories(prev => prev.map(c => c.id === id ? { ...c, name } : c));
     setEditing(null);
     startTransition(async () => {
-      const result = await updateCategory(id, { name });
+      let result: Awaited<ReturnType<typeof updateCategory>>;
+      try {
+        result = await updateCategory(id, { name });
+      } catch {
+        /* ⚠ Numele nou e deja pe ecran. `previousName` poate lipsi daca randul n-a fost gasit,
+           deci se pune la loc doar cand chiar avem ce pune, exact ca ramura de eroare. */
+        if (previousName !== undefined) {
+          setCategories(prev => prev.map(c => c.id === id ? { ...c, name: previousName } : c));
+        }
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca numele s-a salvat. Am pus numele vechi inapoi: reincarca pagina ca sa vezi cum e pe server.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) {
         toast.error(result.error);
         if (previousName !== undefined) {
@@ -284,7 +347,19 @@ export function CategoriesClient({ initialCategories, descrieriInitiale, descrie
     if (newParentId) setExpanded(prev => new Set([...prev, newParentId]));
 
     startTransition(async () => {
-      const result = await moveCategory(id, newParentId);
+      let result: Awaited<ReturnType<typeof moveCategory>>;
+      try {
+        result = await moveCategory(id, newParentId);
+      } catch {
+        /* ⚠ Randul a sarit deja sub noul parinte, cu tot ce are sub el. Se intoarce de unde a
+           plecat, din lista pastrata in `inainte`. */
+        setCategories(inainte);
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca mutarea s-a salvat. Am adus categoria inapoi unde era: reincarca pagina ca sa vezi cum e pe server.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) {
         setCategories(inainte);
         toast.error(result.error);
@@ -303,7 +378,23 @@ export function CategoriesClient({ initialCategories, descrieriInitiale, descrie
     setCategories(prev => prev.filter(c => !subtree.has(c.id)));
     setConfirmDelete(null);
     startTransition(async () => {
-      const result = await deleteCategory(id);
+      let result: Awaited<ReturnType<typeof deleteCategory>>;
+      try {
+        result = await deleteCategory(id);
+      } catch {
+        /* ⚠ Ramura intreaga a disparut deja de pe ecran. `backup` tine fiecare rand cu indicele
+           lui, ca sa se aseze la loc unde era, nu la coada. */
+        setCategories(prev => {
+          const next = [...prev];
+          for (const { c, index } of backup) next.splice(Math.min(index, next.length), 0, c);
+          return next;
+        });
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca stergerea s-a facut. Am pus categoria inapoi in lista: reincarca pagina ca sa vezi cum e pe server.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) {
         toast.error(result.error);
         setCategories(prev => {
@@ -347,7 +438,18 @@ export function CategoriesClient({ initialCategories, descrieriInitiale, descrie
 
   async function handleRemoveImage(categoryId: string) {
     startTransition(async () => {
-      const result = await updateCategory(categoryId, { image_url: null });
+      let result: Awaited<ReturnType<typeof updateCategory>>;
+      try {
+        result = await updateCategory(categoryId, { image_url: null });
+      } catch {
+        /* ⚠ Singurul din fisier care NU e optimist: imaginea se scoate de pe ecran abia dupa ce
+           raspunde serverul. Deci n-am ce da inapoi, si ecranul nu minte nici asa. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca imaginea s-a sters. Imaginea se vede in continuare pe ecran: reincarca pagina ca sa vezi cum e pe server.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, image_url: null } : c));
       toast.success("Imagine stearsa");

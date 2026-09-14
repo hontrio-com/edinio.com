@@ -154,7 +154,36 @@ export function campuriDeCurier(
   eticheta: unknown,
   tip: unknown,
   zone: ZoneleMagazinului,
+  /**
+   * Comerciantul are livrarea PORNITA?
+   *
+   * ═══ ⚠ OBLIGATORIU, SI ULTIMUL, SI NU DIN INTAMPLARE ═══
+   *
+   * Obligatoriu fiindca optional la coada e exact ce se uita: un apelant nou l-ar fi sarit si ar
+   * fi capatat tacut purtarea veche, permisiva. Casa a ales de doua ori tiparul asta cu motivul
+   * scris, la `ramburs` si la `grame` din `semneazaOptiuni`. Asa `tsc` enumera apelantii in loc
+   * sa-i lase.
+   *
+   * Ultimul fiindca proba acestei reguli numara chemarile dupa argumentul cu zonele
+   * (`curierul-declarat.test.ts`); strecurat inaintea lui, ar fi rupt o cusatura buna.
+   *
+   * ⚠ SE DA CU `=== true`, NU PE INCREDERE. `updateShippingConfig` e `"use server"`, iar tipul
+   * ei nu exista la rulare: o chemare HTTP directa poate trimite orice in campul asta. Aceeasi
+   * clasa ca gazdele configurabile care primesc credentiale.
+   */
+  livrareaEPornita: boolean,
 ): { courier: string; courier_label?: string; delivery_type?: string } | Record<string, never> {
+  /*
+   * ⚠ LIVRAREA STINSA INSEAMNA FARA CURIERI, hotarare a proprietarului (14.09.2026).
+   *
+   * Pana azi comutatorul „Livrare activata" se salva, se reincarca in formular si se arata in
+   * admin, dar NU-l citea nimeni: nici cotarea, nici configul public, nici vreunul din cele doua
+   * checkout-uri. Stins, optiunile curgeau mai departe.
+   *
+   * Cotarea intoarce acum lista goala, deci un cumparator cinstit nici n-are ce alege. Randul
+   * asta inchide cealalta usa: cine trimite oricum un curier in cerere nu-l mai scrie pe comanda.
+   */
+  if (livrareaEPornita !== true) return {};
   if (!curierulEDeclaratDeMagazin(curier, zone)) return {};
   return {
     courier: curier as string,

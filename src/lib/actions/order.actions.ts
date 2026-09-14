@@ -1074,7 +1074,7 @@ export async function placeOrder(data: {
       .eq("business_id", data.business_id)
       .single(),
     admin.from("store_settings")
-      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, cod_fee_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost, shipping_zones")
+      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, card_discount_config, cod_discount_config, cod_fee_config, vat_enabled, vat_rate, prices_include_vat, default_shipping_cost, shipping_zones, shipping_enabled")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -1805,6 +1805,8 @@ export async function placeOrder(data: {
         data.courier_label,
         data.delivery_type,
         (cfgRow?.shipping_zones ?? null) as ZoneleMagazinului,
+        /* ⚠ Stins, nu se scrie niciun curier. Vezi `campuriDeCurier`. */
+        cfgRow?.shipping_enabled === true,
       ),
       ...(data.locker_id && {
         locker_id: data.locker_id,
@@ -4104,7 +4106,7 @@ export async function placeCartOrder(data: {
       .in("id", productIds)
       .eq("business_id", data.business_id),
     admin.from("store_settings")
-      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, cod_fee_config, default_shipping_cost, shipping_zones")
+      .select("payment_methods, stripe_config, netopia_config, ipay_config, klarna_config, revolut_config, page_content, free_shipping_threshold, min_order_amount, vat_enabled, vat_rate, prices_include_vat, card_discount_config, cod_discount_config, cod_fee_config, default_shipping_cost, shipping_zones, shipping_enabled")
       .eq("business_id", data.business_id)
       .single(),
   ]);
@@ -4602,6 +4604,8 @@ export async function placeCartOrder(data: {
         data.courier_label,
         data.delivery_type,
         (cfgRow?.shipping_zones ?? null) as ZoneleMagazinului,
+        /* ⚠ Stins, nu se scrie niciun curier. Vezi `campuriDeCurier`. */
+        cfgRow?.shipping_enabled === true,
       ),
       ...(data.locker_id && {
         locker_id: data.locker_id,

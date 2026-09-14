@@ -428,7 +428,7 @@ export async function getShippingOptions(
   const supabase = createAdminClient();
   const { data: settings, error: eSettings } = await supabase
     .from("store_settings")
-    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, default_shipping_cost, shipping_zones, shipping_rules, vat_enabled, prices_include_vat")
+    .select("sameday_config, fan_courier_config, woot_config, dpd_config, cargus_config, colete_config, gls_config, pallex_config, ecolet_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, default_shipping_cost, shipping_zones, shipping_rules, vat_enabled, prices_include_vat, shipping_enabled")
     .eq("business_id", businessId)
     .single();
 
@@ -455,6 +455,21 @@ export async function getShippingOptions(
   }
 
   if (!settings) return [];
+
+  /*
+   * ═══ ⚠ LIVRAREA STINSA INSEAMNA FARA CURIERI (14.09.2026) ═══
+   *
+   * Comutatorul „Livrare activata" din Setari se salva si se reincarca in formular, dar nu-l citea
+   * NIMENI: nici cotarea asta, nici configul public, nici vreunul din cele doua checkout-uri.
+   * Comerciantul il stingea, ecranul ii confirma ca e stins, si livrarea mergea mai departe.
+   *
+   * Hotararea proprietarului: stins inseamna chiar ce promite eticheta lui de pe ecran.
+   *
+   * ⚠ `=== true`, nu pe incredere. Coloana e `not null default true` in baza (masurat), deci
+   * niciun magazin din cele existente nu se atinge; dar `updateShippingConfig` e „use server" si
+   * tipul ei nu exista la rulare, deci in camp poate ajunge orice printr-o chemare directa.
+   */
+  if (settings.shipping_enabled !== true) return [];
 
   const zones = (settings.shipping_zones ?? {}) as Record<string, { enabled: boolean; price: number; auto_price?: boolean; label?: string }>;
   const enabledZones = Object.entries(zones).filter(([, z]) => z.enabled);

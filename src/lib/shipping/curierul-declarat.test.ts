@@ -25,6 +25,7 @@ import {
 */
 
 const COMANDA = "src/lib/actions/order.actions.ts";
+const COTARE = "src/lib/actions/shipping.actions.ts";
 const fisier = (p: string) => readFileSync(p, "utf8");
 const faraComentarii = (s: string) =>
   s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*$/gm, "");
@@ -102,7 +103,7 @@ test("tipul de livrare e unul din cele doua produse de noi", () => {
 
 test("un curier adevarat isi duce eticheta si tipul cu el", () => {
   assert.deepEqual(
-    campuriDeCurier("woot", "Livrare prin Woot", "address", ZONE),
+    campuriDeCurier("woot", "Livrare prin Woot", "address", ZONE, true),
     { courier: "woot", courier_label: "Livrare prin Woot", delivery_type: "address" },
   );
 });
@@ -112,20 +113,46 @@ test("⚠ un curier fabricat nu scrie NIMIC, nici eticheta", () => {
    * Eticheta pleaca odata cu curierul sau deloc. Altfel „Livrare prin Cargus" ar fi ajuns pe
    * factura si in emailul cumparatorului fara niciun curier sub ea.
    */
-  assert.deepEqual(campuriDeCurier("cargus", "Livrare prin Cargus", "address", ZONE), {});
-  assert.deepEqual(campuriDeCurier("__proto__", "orice", "address", ZONE), {});
+  assert.deepEqual(campuriDeCurier("cargus", "Livrare prin Cargus", "address", ZONE, true), {});
+  assert.deepEqual(campuriDeCurier("__proto__", "orice", "address", ZONE, true), {});
 });
 
 test("⚠ un tip de livrare inventat se arunca, dar comanda ramane buna", () => {
   /* Un curier adevarat cu un camp de aruncat nu e o comanda de refuzat. */
   assert.deepEqual(
-    campuriDeCurier("woot", "Livrare prin Woot", "teleportare", ZONE),
+    campuriDeCurier("woot", "Livrare prin Woot", "teleportare", ZONE, true),
     { courier: "woot", courier_label: "Livrare prin Woot" },
   );
 });
 
 test("o eticheta goala nu se scrie", () => {
-  assert.deepEqual(campuriDeCurier("woot", "   ", "locker", ZONE), { courier: "woot", delivery_type: "locker" });
+  assert.deepEqual(campuriDeCurier("woot", "   ", "locker", ZONE, true), { courier: "woot", delivery_type: "locker" });
+});
+
+/* ── Comutatorul de livrare ───────────────────────────────────────────────── */
+
+test("⚠⚠ LIVRAREA STINSA NU SCRIE NICIUN CURIER, nici pe unul adevarat", () => {
+  /*
+   * Hotararea proprietarului (14.09.2026): „stins" inseamna chiar ce promite eticheta de pe ecran.
+   *
+   * Cotarea intoarce lista goala, deci un cumparator cinstit n-are ce alege. Regula asta inchide
+   * cealalta usa: cine trimite oricum un curier in cerere nu-l mai scrie pe comanda.
+   */
+  assert.deepEqual(campuriDeCurier("woot", "Livrare prin Woot", "address", ZONE, false), {});
+});
+
+test("⚠ si orice altceva decat `true` inseamna stins", () => {
+  /*
+   * `updateShippingConfig` e „use server": tipul ei nu exista la rulare, deci in campul asta poate
+   * ajunge orice printr-o chemare HTTP directa. Paza e `!== true`, nu „daca e fals".
+   */
+  for (const valoare of [undefined, null, 0, "", "true", 1]) {
+    assert.deepEqual(
+      campuriDeCurier("woot", "Livrare prin Woot", "address", ZONE, valoare as unknown as boolean),
+      {},
+      `„${String(valoare)}" a trecut drept livrare pornita`,
+    );
+  }
 });
 
 /* ── Cusatura: AMANDOUA checkout-urile ────────────────────────────────────── */
@@ -156,6 +183,66 @@ test("⚠⚠ REGULA E IN AMANDOUA CHECKOUT-URILE, nu doar in cel gasit primul", 
     /\.\.\.\(data\.selected_courier && \{/,
     "un checkout inca scrie curierul neverificat",
   );
+});
+
+test("⚠⚠ SI CHIAR PRIMESC COMUTATORUL, pe amandoua drumurile", () => {
+  /*
+   * Fara randul asta in checkout, paza din `campuriDeCurier` ar exista si n-ar fi chemata niciodata
+   * cu valoarea adevarata.
+   */
+  const cod = faraComentarii(fisier(COMANDA));
+  const cuSteag = cod.match(/cfgRow\?\.shipping_enabled === true,/g) ?? [];
+  assert.equal(cuSteag.length, 2, `comutatorul ajunge la ${cuSteag.length} apeluri; trebuie la doua`);
+});
+
+test("⚠⚠ SI COLOANA CHIAR SE CERE DIN BAZA, altfel paza sterge curierul de pe TOATE comenzile", () => {
+  /*
+   * ═══ ⚠ CATASTROFA PE CARE O APARA AFIRMATIA ASTA ═══
+   *
+   * Paza citeste `cfgRow?.shipping_enabled === true`. Daca `select`-ul NU cere coloana, valoarea e
+   * `undefined`, conditia e falsa, si atunci curierul, eticheta si tipul de livrare dispar de pe
+   * FIECARE comanda, la toate magazinele. O reparatie care pare pusa si care sterge date reale pe
+   * tot traficul, fara nicio eroare si fara nicio urma.
+   *
+   * ⚠ Si celalalt capat al aceleiasi capcane: o coloana ceruta dar inexistenta rupe TOATA
+   * interogarea, nu doar campul, deci setarile magazinului nu s-ar mai citi deloc. Masurat inainte
+   * de a o adauga: `shipping_enabled boolean default true not null` in baseline, expusa in vederea
+   * publica, si tipata `boolean` in tipurile generate.
+   */
+  const cod = fisier(COMANDA);
+  const cerute = cod.match(/shipping_zones, shipping_enabled"/g) ?? [];
+  assert.equal(cerute.length, 2, `coloana se cere in ${cerute.length} interogari; trebuie in doua`);
+});
+
+test("⚠⚠ SI CEALALTA JUMATATE: cotarea nu mai OFERA nimic cand livrarea e stinsa", () => {
+  /*
+   * ═══ ⚠ REGULA ARE DOUA JUMATATI, SI PRIMA FORMA A PROBEI O ACOPEREA DOAR PE A DOUA ═══
+   *
+   * „Nu se SCRIE curierul" (mai sus) si „nu se OFERA curieri" (aici). Probata doar a doua,
+   * cineva putea sterge poarta din cotare si niciun test n-ar fi cazut: comutatorul ar fi ramas
+   * decorativ exact pe drumul pe care il vede cumparatorul, iar comerciantul ar fi citit pe ecran
+   * ca livrarea e oprita in timp ce optiunile curgeau mai departe.
+   *
+   * ⚠ Si ordinea conteaza: poarta trebuie sa fie INAINTEA citirii zonelor. Pusa dupa, ar fi
+   * ramas sub ea toata munca pe care tocmai o ocoleste.
+   */
+  const cod = faraComentarii(fisier(COTARE));
+
+  assert.match(
+    cod,
+    /prices_include_vat, shipping_enabled"/,
+    "cotarea nu mai cere coloana din baza, deci poarta ar citi `undefined`",
+  );
+  assert.match(
+    cod,
+    /if \(settings\.shipping_enabled !== true\) return \[\];/,
+    "cotarea nu mai are poarta pe comutator",
+  );
+
+  const iPoarta = cod.indexOf("if (settings.shipping_enabled !== true) return [];");
+  const iZone = cod.indexOf("const zones = (settings.shipping_zones");
+  assert.ok(iPoarta > 0 && iZone > 0, "nu mai gasesc poarta sau citirea zonelor");
+  assert.ok(iPoarta < iZone, "poarta pe comutator a ajuns DUPA citirea zonelor");
 });
 
 test("⚠ si chiar primesc zonele magazinului, nu `null`", () => {

@@ -228,15 +228,27 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     setSelectedService(null);
 
     const rep = Number(repayment);
-    const result = await getWootPrices(
-      businessId,
-      buildReceiver(),
-      buildParcels(),
-      rep > 0 ? rep : undefined,
-      order.id
-    );
+    /* ⚠ `finally`, si in `try` DOAR apelul. Vezi `steagul-se-stinge-in-finally`. */
+    let result: Awaited<ReturnType<typeof getWootPrices>>;
+    try {
+      result = await getWootPrices(
+        businessId,
+        buildReceiver(),
+        buildParcels(),
+        rep > 0 ? rep : undefined,
+        order.id
+      );
+    } catch (e) {
+      /* ⚠ O CITIRE: nimic nu s-a schimbat la Woot, deci nu se trimite nimeni sa verifice. */
+      const mesaj = "Woot nu a raspuns: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat");
+      setPricesError(mesaj);
+      toast.error(mesaj);
+      return;
+    } finally {
+      setCalculatingPrices(false);
+    }
 
-    setCalculatingPrices(false);
     if (!result.success) {
       setPricesError(result.error ?? "Eroare la calculul preturilor.");
       return;
@@ -263,8 +275,20 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     if (p.service_pickup && p.service_pickup !== "door") {
       setLoadingSenderLocations(true);
       void (async () => {
-        const res = await getWootSenderLocations(businessId, p.courier_id);
-        setLoadingSenderLocations(false);
+        /* ⚠ `finally` INAUNTRUL functiei scrise pe loc, nu in jurul lui `handleSelectService`,
+           care nici macar nu e `async`. Aici sunt DOUA asteptari cu steaguri deosebite, si
+           tocmai a doua era nevazuta cand proba numara pe functie, nu pe aprindere. */
+        let res: Awaited<ReturnType<typeof getWootSenderLocations>>;
+        try {
+          res = await getWootSenderLocations(businessId, p.courier_id);
+        } catch (e) {
+          /* ⚠ O CITIRE: doar lista locatiilor de predare. */
+          toast.error("Woot nu a raspuns la locatiile de predare: "
+            + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"));
+          return;
+        } finally {
+          setLoadingSenderLocations(false);
+        }
         if (res.success && res.locations) setSenderLocations(res.locations);
         else if (res.error) toast.error(res.error);
       })();
@@ -274,8 +298,18 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     if (p.service_delivery && p.service_delivery !== "door") {
       setLoadingReceiverLocations(true);
       void (async () => {
-        const res = await getWootReceiverLocations(businessId, p.courier_id, cityId);
-        setLoadingReceiverLocations(false);
+        /* ⚠ A DOUA asteptare din aceeasi functie, cu alt steag. Vezi nota de mai sus. */
+        let res: Awaited<ReturnType<typeof getWootReceiverLocations>>;
+        try {
+          res = await getWootReceiverLocations(businessId, p.courier_id, cityId);
+        } catch (e) {
+          /* ⚠ O CITIRE: doar punctele de livrare din localitatea destinatarului. */
+          toast.error("Woot nu a raspuns la punctele de livrare: "
+            + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"));
+          return;
+        } finally {
+          setLoadingReceiverLocations(false);
+        }
         if (res.success && res.locations) setReceiverLocations(res.locations);
         else if (res.error) toast.error(res.error);
       })();

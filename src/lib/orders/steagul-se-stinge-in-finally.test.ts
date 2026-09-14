@@ -98,7 +98,6 @@ const INCA_NEREPARATE: Record<string, number> = {
   "DhlAwbModal.tsx": 5,
   "ShipoAwbModal.tsx": 5,
   "SmartshipAwbModal.tsx": 10,
-  "WootAwbModal.tsx": 2,
 };
 
 /**
@@ -147,7 +146,7 @@ function ferestreleDeCurier(): string[] {
 
 /* ── Manerele ─────────────────────────────────────────────────────────────── */
 
-type Maner = { fisier: string; nume: string; steag: string; corp: string };
+type Maner = { fisier: string; nume: string; steag: string; corp: string; asteapta: boolean };
 
 /* Antetul unei functii din corpul componentei, si acolada care o inchide la acelasi nivel. */
 const ANTET = /^ {2}(?:const [A-Za-z_$][\w$]*\s*=|async function |function )/;
@@ -174,7 +173,7 @@ const SFARSIT = /^ {2}\}[;)]*\s*$|^ {2}\}, \[/;
 function manere(fisier: string, s: string): Maner[] {
   const linii = s.split("\n");
   const gasite: Maner[] = [];
-  const vazute = new Set<number>();
+  const vazute = new Set<string>();
 
   for (let i = 0; i < linii.length; i++) {
     const m = /\bset([A-Za-z][A-Za-z0-9]*)\(true\)/.exec(linii[i]);
@@ -184,17 +183,34 @@ function manere(fisier: string, s: string): Maner[] {
     for (let j = i; j >= 0; j--) {
       if (ANTET.test(linii[j])) { start = j; break; }
     }
-    if (vazute.has(start)) continue;
-    vazute.add(start);
+    /*
+     * ⚠ UN RAND PE (FUNCTIE, STEAG), nu pe functie (14.09.2026).
+     *
+     * `handleSelectService` de la Woot porneste DOUA functii asincrone scrise pe loc, fiecare
+     * cu steagul ei. Legand un singur steag de functie, a doua asteptare ramanea nevazuta. Mai
+     * rau: reparand-o doar pe prima, corpul capata `finally`, numarul scade, si a doua ar fi
+     * ramas stricata pentru totdeauna, fara ca nimic sa para lipsa.
+     */
+    if (vazute.has(`${start}·${m[1]}`)) continue;
+    vazute.add(`${start}·${m[1]}`);
 
     let sfarsit = linii.length;
     for (let j = i; j < linii.length; j++) {
       if (SFARSIT.test(linii[j])) { sfarsit = j + 1; break; }
     }
 
+    /*
+     * ⚠ SI ASTEPTAREA TREBUIE SA VINA DUPA APRINDERE, altfel nu e steag de incarcare.
+     *
+     * `setPricesFetched(true)` la Woot si `setBorderouCerut(true)` din `handleCreate` la Pall-Ex
+     * se aprind DUPA apel, ca semn ca raspunsul a venit. Cerute cu `finally`, ar fi umplut lista
+     * de scutiri cu zgomot, iar o lista de scutiri plina de zgomot nu mai apara nimic.
+     */
+    const asteapta = linii.slice(i + 1, sfarsit).join("\n").includes("await ");
+
     const antet = linii[start].trim();
     const nume = antet.replace(/^(?:const |async function |function )/, "").split(/\s*=|\(/)[0].trim();
-    gasite.push({ fisier, nume, steag: m[1], corp: linii.slice(start, sfarsit).join("\n") });
+    gasite.push({ fisier, nume, steag: m[1], corp: linii.slice(start, sfarsit).join("\n"), asteapta });
   }
 
   return gasite;
@@ -213,9 +229,10 @@ test("⚠⚠ steagul de incarcare se stinge in `finally`, nu pe randul de dupa a
    * ⚠ SE NUMARA. Fara randul asta, o schimbare de asezare care nu mai potriveste `ANTET`
    * ar face proba sa treaca peste ZERO manere si sa iasa verde. Masurat: 69.
    */
-  assert.ok(toate.length >= 69, `gasite doar ${toate.length} manere cu steag: plasa n-are pe cine cadea`);
+  /* ⚠ 72, nu 69: se numara APRINDERILE, nu functiile. Vezi nota din `manere()`. */
+  assert.ok(toate.length >= 72, `gasite doar ${toate.length} aprinderi de steag: plasa n-are pe cine cadea`);
 
-  const cuAsteptare = toate.filter((m) => m.corp.includes("await "));
+  const cuAsteptare = toate.filter((m) => m.asteapta);
   assert.ok(cuAsteptare.length >= 65,
     `doar ${cuAsteptare.length} manere asteapta ceva: plasa s-a ingustat pe nesimtite`);
 
@@ -251,14 +268,19 @@ test("⚠⚠ si acolo unde E pus, `finally` stinge CHIAR steagul aprins", () => 
   const gresite: string[] = [];
 
   for (const m of toateManerele()) {
-    if (!m.corp.includes("await ") || !m.corp.includes("finally")) continue;
+    if (!m.asteapta || !m.corp.includes("finally")) continue;
 
-    const i = m.corp.indexOf("finally");
-    const dupa = m.corp.slice(i);
-    const inchidere = dupa.indexOf("}");
-    const bloc = inchidere === -1 ? dupa : dupa.slice(0, inchidere);
+    /*
+     * ⚠ VREUN `finally` CARE STINGE CHIAR STEAGUL ASTA, nu primul din corp (14.09.2026).
+     *
+     * De cand se numara pe APRINDERE, o functie cu doua steaguri da doua randuri care impart
+     * acelasi corp. `handleSelectService` de la Woot are doua asteptari, fiecare cu `finally`-ul
+     * ei; uitandu-ma doar la primul, randul celui de-al doilea steag cadea desi era reparat.
+     * Afirmatia fusese scrisa cand un rand insemna o functie.
+     */
+    const tipar = new RegExp(`finally\\s*\\{[^}]*set${m.steag}\\(false\\)`);
 
-    if (!bloc.includes(`set${m.steag}(false)`)) {
+    if (!tipar.test(m.corp)) {
       gresite.push(`${m.fisier} · ${m.nume}: \`finally\` nu stinge \`set${m.steag}\``);
     }
   }
@@ -282,7 +304,7 @@ test("⚠ ferestrele deja reparate raman reparate, si sunt numite", () => {
   }
 
   const cateReparate = toateManerele()
-    .filter((m) => reparate.includes(m.fisier) && m.corp.includes("await "))
+    .filter((m) => reparate.includes(m.fisier) && m.asteapta)
     .length;
   assert.ok(cateReparate >= 9,
     `doar ${cateReparate} manere reparate gasite in FAN si eColet, asteptam macar 9`);

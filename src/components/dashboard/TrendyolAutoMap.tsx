@@ -46,7 +46,18 @@ export function TrendyolAutoMap({
 
   const analizeaza = () => {
     startTransition(async () => {
-      const res = await suggestTrendyolCategoryMap(businessId, categories);
+      let res: Awaited<ReturnType<typeof suggestTrendyolCategoryMap>>;
+      try {
+        res = await suggestTrendyolCategoryMap(businessId, categories);
+      } catch {
+        /* ⚠ O CITIRE: cere sugestii, nu schimba nimic. Deci reincercarea e sigura, si se spune. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-au putut cere sugestiile. "
+          + "Nu s-a schimbat nimic, deci poti incerca din nou linistit.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       const initiale: Record<string, Alegere> = {};
       for (const s of res.sugestii) {
@@ -75,7 +86,19 @@ export function TrendyolAutoMap({
 
     if (intrari.length === 0) { toast.error("Bifează cel puțin o mapare."); return; }
     startTransition(async () => {
-      const res = await applyTrendyolCategoryMap(businessId, intrari);
+      let res: Awaited<ReturnType<typeof applyTrendyolCategoryMap>>;
+      try {
+        res = await applyTrendyolCategoryMap(businessId, intrari);
+      } catch {
+        /* ⚠ Scrie maparile bifate, la noi. Nu stim cate au apucat sa intre. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim cate mapari s-au aplicat. "
+          + "Pagina se reincarca: uita-te la lista inainte sa apesi din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(`${res.aplicate} ${res.aplicate === 1 ? "categorie mapată" : "categorii mapate"}.`);
       setFaza("inchis"); setSugestii([]); setAlegeri({});

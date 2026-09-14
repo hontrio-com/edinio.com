@@ -184,7 +184,18 @@ export function TrendyolListingEditor({
   const completeazaAutomat = (doarGoale: boolean) => {
     if (!categoryId) return;
     startCompletare(async () => {
-      const res = await suggestTrendyolAttributes(businessId, productId, categoryId);
+      let res: Awaited<ReturnType<typeof suggestTrendyolAttributes>>;
+      try {
+        res = await suggestTrendyolAttributes(businessId, productId, categoryId);
+      } catch {
+        /* ⚠ O CITIRE: cere sugestii de completare. Nu schimba nimic, nici la noi, nici la ei. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-au putut cere sugestiile. "
+          + "Nu s-a schimbat nimic, deci poti incerca din nou linistit.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { if (!doarGoale) toast.error(res.error); return; }
       if (res.sugestii.length === 0) { if (!doarGoale) toast.info("Nu am găsit ce completa automat."); return; }
 
@@ -329,7 +340,22 @@ export function TrendyolListingEditor({
     setBrandQuery(q);
     if (q.trim().length < 2) { setBrandResults([]); return; }
     startTransition(async () => {
-      const res = await searchTrendyolBrands(businessId, q);
+      let res: Awaited<ReturnType<typeof searchTrendyolBrands>>;
+      try {
+        res = await searchTrendyolBrands(businessId, q);
+      } catch {
+        /*
+         * ⚠ `catch` TACUT, dinadins, si asta e singurul din tot arcul.
+         *
+         * Cautarea asta ruleaza in timp ce omul SCRIE si nu arata azi nicio eroare: ramificatia
+         * de mai jos e `if (!("error" in res))` si atat. Un toast la fiecare sughit de retea ar
+         * umple ecranul in timpul tastarii.
+         *
+         * Reparatia se potriveste cu felul functiei: aruncarea nu mai ia pagina, lista de marci
+         * ramane cum era, si omul mai tasteaza o litera.
+         */
+        return;
+      }
       if (!("error" in res)) setBrandResults(res.brands);
     });
   };

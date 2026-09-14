@@ -65,7 +65,20 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
     okMsg: string,
   ) {
     startTransition(async () => {
-      const res = await fn();
+      let res: Awaited<ReturnType<typeof fn>>;
+      try {
+        res = await fn();
+      } catch {
+        /* ⚠ `fn` muta starea comenzii LA TRENDYOL. Tipul vine din semnatura lui `advance`.
+           Actiunea insasi spune, pe calea cu avertisment, ca o reincercare ar fi respinsa de ei;
+           deci aici nu se invita la reapasare, se cere o privire. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca pasul a ajuns la Trendyol. "
+          + "Reimprospateaza si uita-te la starea comenzii acolo inainte sa apesi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       // Trendyol a preluat schimbarea, dar comanda din Edinio nu: nu e o eroare
       // (o reincercare ar fi respinsa de Trendyol), dar nici un succes curat.
@@ -97,7 +110,19 @@ export default function TrendyolFulfillmentPanel({ businessId, orderId }: { busi
     if (!curier) { toast.error("Alege curierul cu care ai făcut AWB-ul."); return; }
     if (!awb.trim()) { toast.error("Completează numărul AWB."); return; }
     startTransition(async () => {
-      const res = await sendTrendyolTracking(businessId, orderId, { trackingNumber: awb.trim(), providerCode: curier });
+      let res: Awaited<ReturnType<typeof sendTrendyolTracking>>;
+      try {
+        res = await sendTrendyolTracking(businessId, orderId, { trackingNumber: awb.trim(), providerCode: curier });
+      } catch {
+        /* ⚠ AWB-ul pleaca LA TRENDYOL. O a doua trimitere pe aceeasi comanda nu e o simpla
+           repetare: numarul poate fi deja inregistrat la ei. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca AWB-ul a ajuns la Trendyol. "
+          + "Uita-te la comanda in contul Trendyol inainte sa trimiti din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       if (res.avertisment) toast.warning(res.avertisment);
       else toast.success("AWB trimis către Trendyol.");

@@ -42,7 +42,19 @@ export function TrendyolCategoryMapping({
     startTransition(async () => {
       const prev = mapped[cat];
       const entry: TrendyolCategoryMapEntry = { category_id: ty.id, label: ty.label, brand_id: prev?.brand_id, attributes: prev?.attributes };
-      const res = await saveTrendyolCategoryMapEntry(businessId, cat, entry);
+      let res: Awaited<ReturnType<typeof saveTrendyolCategoryMapEntry>>;
+      try {
+        res = await saveTrendyolCategoryMapEntry(businessId, cat, entry);
+      } catch {
+        /* ⚠ Scrie maparea la noi. Trendyol afla de ea abia la urmatoarea trimitere. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca maparea s-a salvat. "
+          + "Pagina se reincarca: uita-te la categorie inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Categorie mapată.");
       setOpenFor(null); reseteaza();
@@ -52,7 +64,19 @@ export function TrendyolCategoryMapping({
 
   const unmap = (cat: string) => {
     startTransition(async () => {
-      const res = await saveTrendyolCategoryMapEntry(businessId, cat, null);
+      let res: Awaited<ReturnType<typeof saveTrendyolCategoryMapEntry>>;
+      try {
+        res = await saveTrendyolCategoryMapEntry(businessId, cat, null);
+      } catch {
+        /* ⚠ Aceeasi actiune, cu `null`: scoate maparea. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca maparea s-a eliminat. "
+          + "Pagina se reincarca: uita-te la categorie inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Mapare eliminată.");
       router.refresh();

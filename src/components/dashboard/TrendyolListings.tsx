@@ -153,7 +153,18 @@ export function TrendyolListings({
   });
 
   const selecteazaTot = () => startTransition(async () => {
-    const res = await getTrendyolProductIds(businessId, { q: cautare, category: categorie, status });
+    let res: Awaited<ReturnType<typeof getTrendyolProductIds>>;
+    try {
+      res = await getTrendyolProductIds(businessId, { q: cautare, category: categorie, status });
+    } catch {
+      /* ⚠ O CITIRE: aduce identificatorii pentru filtrele alese. Nu schimba nimic. */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca s-a putut face selectia. "
+        + "Nu s-a schimbat nimic, deci poti incerca din nou linistit.",
+        { duration: 12000 },
+      );
+      return;
+    }
     if ("error" in res) { toast.error(res.error); return; }
     setSelectate(new Set(res.ids));
     if (res.truncat) toast.info(`Am selectat primele ${res.ids.length}. Restrânge filtrele pentru restul.`);

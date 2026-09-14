@@ -69,7 +69,15 @@ test("⚠ forma veche intoarce `rambursBani: null`, nu zero", () => {
 
 test("suma de ramburs se semneaza si se intoarce la verificare", () => {
   const t = signShippingQuote(BIZ, DEST, 18, CARGUS, 1000, EXPIRA, 50_000);
-  assert.equal(t.split(".").length, 5, "forma cu suma n-a aparut");
+  /*
+   * ⚠ SASE, NU CINCI (indreptat 14.09.2026, odata cu pretul purtat).
+   *
+   * Numarul s-a schimbat fiindca forma noua poarta si pretul cotat, in clar si sub MAC, ca sa se
+   * poata verifica planul pe drumul livrarii GRATUITE, unde browserul trimite zero. Proprietatea
+   * aparata de afirmatia asta nu s-a clintit: cotatia cu ceva nou de legat pleaca in forma noua,
+   * iar cea fara ramane in cea veche (vezi prima proba din fisier).
+   */
+  assert.equal(t.split(".").length, 6, "forma cu suma si pretul purtat n-a aparut");
   const v = verificaCotatia(BIZ, DEST, 18, t, CARGUS);
   assert.equal(v.ok, true);
   assert.equal(v.ok && v.rambursBani, 50_000, "suma semnata nu se intoarce apelantului");
@@ -81,8 +89,9 @@ test("⚠ suma purtata e ACOPERITA de semnatura: rescrisa, tokenul cade", () => 
    * MAC. Neacoperit, cine subdeclara ar rescrie pur si simplu cifra din token.
    */
   const t = signShippingQuote(BIZ, DEST, 18, CARGUS, 1000, EXPIRA, 50_000);
-  const [exp, g, , amp, mac] = t.split(".");
-  const rescris = `${exp}.${g}.1.${amp}.${mac}`;
+  /* ⚠ SASE BUCATI de cand pretul calatoreste si el: `[expira, grame, bani, plan, pret, mac]`. */
+  const [exp, g, , amp, pret, mac] = t.split(".");
+  const rescris = `${exp}.${g}.1.${amp}.${pret}.${mac}`;
   const v = verificaCotatia(BIZ, DEST, 18, rescris, CARGUS);
   assert.equal(v.ok, false, "o suma rescrisa a trecut");
   assert.equal(v.ok === false && v.motiv, "semnatura");
@@ -192,7 +201,7 @@ test("⚠ `semneazaOptiuni` ia planul DIN OPTIUNE, nu de la apelant", () => {
     price: 18, courier: "shipo", deliveryType: "address", courierLabel: "Shipo (Sameday)",
     shipoRateId: 101,
   }], 50_000);
-  assert.equal(o.token.split(".").length, 5, "optiunea cu serviciu a plecat in forma veche");
+  assert.equal(o.token.split(".").length, 6, "optiunea cu serviciu a plecat in forma veche");
 
   const opt = { courier: "shipo", deliveryType: "address", courierLabel: "Shipo (Sameday)", ramburs: true };
   assert.equal(verificaCotatia(BIZ, DEST, 18, o.token, opt, null, { shipoRateId: 101 }).ok, true);
@@ -342,11 +351,17 @@ test("⚠ cotarea semneaza suma pe AMANDOUA iesirile", () => {
   }
 });
 
-test("⚠ formele acceptate sunt EXACT trei, si orice alta cade", () => {
+test("⚠ formele acceptate sunt EXACT patru, si orice alta cade", () => {
   /*
-   * ⚠ Proba din `quote-token.test.ts` se numea „un token cu mai mult de trei bucati nu trece", si
-   * de azi numele acela e FALS: unul valid de cinci chiar trece. Mutantul ei tot cadea, deci ar fi
-   * ramas verde cu numele mincinos. Aici se scrie regula adevarata.
+   * ⚠ NUMELE S-A SCHIMBAT A DOUA OARA, si merita spus de ce.
+   *
+   * Se numea „EXACT trei" cat timp formele erau doua, trei si cinci bucati. De cand exista si cea
+   * de SASE, cu pretul purtat, numarul acela ar fi devenit fals, iar mutantii de mai jos ar fi
+   * cazut mai departe din alte motive: proba ar fi ramas VERDE cu numele mincinos. Aceeasi lectie
+   * pe care o poarta si nota de mai jos, despre proba din `quote-token.test.ts`.
+   *
+   * Regula, neschimbata: lungimile se citesc STRICT, iar orice numar de bucati din afara celor
+   * patru cunoscute cade. Se sting singure formele vechi in 24 de ore, dar pana atunci sunt primite.
    */
   const t = signShippingQuote(BIZ, DEST, 18, CARGUS, 1000, EXPIRA, 50_000, PLAN_SHIPO);
   for (const stricat of [`${t}.inca-ceva`, t.split(".").slice(0, 4).join("."), "fara-nimic", ""]) {

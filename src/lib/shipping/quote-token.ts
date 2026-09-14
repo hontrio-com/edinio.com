@@ -331,10 +331,45 @@ export function signShippingQuote(
     return `${expira}.${g}.${mac}`;
   }
 
+  /*
+   * ═══ ⚠ SI PRETUL COTAT CALATORESTE IN CLAR (14.09.2026) ═══
+   *
+   * Pretul era doar in AMPRENTA, deci verificarea avea nevoie de el ca sa refaca MAC-ul. Pe drumul
+   * LIVRARII GRATUITE insa browserul trimite zero, iar pretul cotat al curierului nu mai exista
+   * nicaieri la plasarea comenzii: nicio semnatura n-avea cum sa bata, si de aceea ramura aceea
+   * taia scurt FARA sa judece nimic. Cine schimba atunci un singur camp de serviciu primea coletul
+   * pe serviciul scump, iar diferenta o platea comerciantul.
+   *
+   * Purtat in clar SI acoperit de MAC, pretul se poate da inapoi verificarii, exact ca gramele si
+   * ca suma rambursului. Rescris de mana, MAC-ul nu mai bate.
+   *
+   * ⚠ NU CERE NIMIC DE LA APELANTI: `signShippingQuote` avea deja `price` ca parametru, iar
+   * `semneazaOptiuni` il trimite pe amandoua iesirile. Deci niciun camp nou prin browser, care s-ar
+   * putea uita.
+   *
+   * ⚠ Si forma de TREI bucati ramane neatinsa cand nu e nimic nou de legat: cotatiile fara plan si
+   * fara ramburs ies octet cu octet ca ieri.
+   */
+  /*
+   * ⚠ CE LEAGA DE FAPT PRETUL PURTAT, MASURAT CU UN MUTANT, NU PRESUPUS.
+   *
+   * Scos pretul din coada MAC-ului la AMANDOUA capetele deodata, semnare si verificare, fiecare
+   * afirmatie a ramas verde. Si pe drept: `amprenta()` cuprinde deja `Math.round(pret * 100)`, iar
+   * pe drumul permisiv pretul dat ei E chiar `pret6 / 100`. Acelasi numar intra sub MAC pe alta
+   * usa, deci pe drumul GRATUIT coada nu apara nimic in plus.
+   *
+   * ⚠ RAMANE TOTUSI, si nu din simetrie. Pe drumul STRICT `amprenta()` foloseste pretul PRETINS de
+   * apelant, deci coada e SINGURUL lucru care leaga acolo pretul purtat. Azi nimeni nu-l citeste pe
+   * drumul acela; in ziua in care cineva il va citi, coada e ce face citirea sigura.
+   *
+   * Scris aici fiindca altfel urmatorul om vede doua legari ale aceluiasi numar, o crede pe una de
+   * prisos si o scoate pe cea gresita.
+   */
+  const pretBani = Math.max(0, Math.round((Number(price) || 0) * 100));
   const macNou = createHmac("sha256", secret())
-    .update(`${amprenta(businessId, dest, price, optiune)}|${g}|${bani ?? 0}|${ampPlan}|${expira}`)
+    .update(`${amprenta(businessId, dest, price, optiune)}|${g}|${bani ?? 0}|${ampPlan}|${pretBani}|${expira}`)
     .digest("base64url");
-  return `${expira}.${g}.${bani ?? 0}.${ampPlan || "-"}.${macNou}`;
+  return `${expira}.${g}.${bani ?? 0}.${ampPlan || "-"}.${pretBani}.${macNou}`;
 }
 
 /**
@@ -453,6 +488,31 @@ export function verificaCotatia(
    * CHIAR il stiu il trimit, si acolo poarta lucreaza.
    */
   planPretins?: PlanExpedierii | null,
+  /**
+   * Apelantul PRETINDE un pret, sau il ia pe cel purtat de token?
+   *
+   * ═══ ⚠ DE CE E UN MOD EXPLICIT, SI NU O CADERE TACUTA ═══
+   *
+   * Pe drumul livrarii gratuite browserul trimite zero, iar pretul cotat al curierului nu mai
+   * exista nicaieri la plasarea comenzii. Acolo, si NUMAI acolo, verificarea trebuie sa ia pretul
+   * din token ca sa poata judeca planul si greutatea.
+   *
+   * ⚠ DACA AR FI FOST O CADERE TACUTA (de pilda „cand `price` e zero, ia-l pe cel purtat"), atunci
+   * oricine ar fi trimis `shipping_cost: 0` pe drumul PLATIT ar fi ocolit verificarea pretului cu
+   * totul. Modul se cere deci pe fata, cu un sir care nu se poate nimeri din intamplare.
+   *
+   * ⚠ SI DE CE E OPTIONAL, DESI CASA CERE DE OBICEI PARAMETRI OBLIGATORII AICI.
+   *
+   * La `ramburs` si `grame` din `semneazaOptiuni` obligativitatea apara fiindca UITAREA DESCHIDE O
+   * GAURA: un apelant nou care nu le da semneaza fara ele si nimeni nu afla. Aici e pe dos. Omis,
+   * parametrul iese `undefined`, care nu e `"ia-l-pe-cel-purtat"`, deci se cade pe drumul STRICT,
+   * unde pretul pretins trebuie sa bata. Purtarea permisiva nu se poate capata din uitare: cere un
+   * sir exact, scris dinadins.
+   *
+   * Cerut, ar fi adaugat zgomot in vreo treizeci de chemari din probe al caror subiect e cu totul
+   * altul (greutatea, planul, rambursul), fara niciun castig de siguranta.
+   */
+  pretPurtat?: "pretind-pretul" | "ia-l-pe-cel-purtat",
 ): { ok: true; rambursBani: number | null } | { ok: false; motiv: "semnatura" | "greutate" | "plan" } {
   const nu = (motiv: "semnatura" | "greutate" | "plan") => ({ ok: false as const, motiv });
   if (!token || !businessId) return nu("semnatura");
@@ -466,7 +526,9 @@ export function verificaCotatia(
    * fiecare pagina de finalizare deschisa poarta unul vechi. Refuzate, ar cadea comenzi CINSTITE,
    * in curs. Se sting singure intr-o zi.
    */
-  if (bucati.length !== 2 && bucati.length !== 3 && bucati.length !== 5) return nu("semnatura");
+  if (bucati.length !== 2 && bucati.length !== 3 && bucati.length !== 5 && bucati.length !== 6) {
+    return nu("semnatura");
+  }
 
   const expira = Number(bucati[0]);
   if (!Number.isFinite(expira) || expira < Date.now()) return nu("semnatura");
@@ -507,6 +569,57 @@ export function verificaCotatia(
    * si ar fi iesit `semnatura`, adica drumul care cade pe tariful implicit si LASA comanda sa
    * intre. Exact pe dos fata de ce trebuie.
    */
+  /*
+   * ═══ FORMA CU PRETUL PURTAT (14.09.2026) ═══
+   *
+   * Aceeasi ca cea de cinci bucati, plus pretul cotat in bani, in clar si sub MAC. Singurul lucru
+   * pe care il deschide e drumul LIVRARII GRATUITE: acolo apelantul nu poate pretinde niciun pret,
+   * fiindca browserul trimite zero, si atunci se ia cel purtat.
+   *
+   * ⚠ ORDINEA VERIFICARILOR E ACEEASI SI DIN ACELASI MOTIV ca la forma de cinci: MAC-ul se reface
+   * cu ce POARTA tokenul, nu cu ce pretinde apelantul, ca un plan falsificat sa cada pe `plan`
+   * (care REFUZA comanda), nu pe `semnatura` (care o lasa sa intre pe tarif).
+   */
+  if (bucati.length === 6) {
+    const g6 = Number(bucati[1]);
+    const bani6 = Number(bucati[2]);
+    const pret6 = Number(bucati[4]);
+    if (!Number.isFinite(g6) || g6 < 0) return nu("semnatura");
+    if (!Number.isFinite(bani6) || bani6 < 0) return nu("semnatura");
+    if (!Number.isFinite(pret6) || pret6 < 0) return nu("semnatura");
+    const ampPurtata6 = bucati[3] === "-" ? "" : bucati[3];
+
+    /*
+     * ⚠ PRETUL FOLOSIT LA MAC E CEL PURTAT, cand apelantul spune ca nu pretinde niciunul.
+     *
+     * Asa se poate verifica o cotatie pe drumul gratuit, unde `price` primit e zero. Iar pe drumul
+     * platit se foloseste pretul PRETINS, deci o suma schimbata strica MAC-ul, ca pana acum.
+     */
+    const pretPentruMac = pretPurtat === "ia-l-pe-cel-purtat" ? pret6 / 100 : price;
+
+    const macAsteptat6 = createHmac("sha256", secret())
+      .update(`${amprenta(businessId, dest, pretPentruMac, optiune)}|${g6}|${bani6}|${ampPurtata6}|${pret6}|${expira}`)
+      .digest("base64url");
+    const a6 = Buffer.from(`${expira}.${g6}.${bani6}.${bucati[3]}.${pret6}.${macAsteptat6}`);
+    const p6 = Buffer.from(token);
+    if (a6.length !== p6.length) return nu("semnatura");
+    try {
+      if (!timingSafeEqual(a6, p6)) return nu("semnatura");
+    } catch {
+      return nu("semnatura");
+    }
+
+    if (planPretins !== undefined && ampPurtata6 !== "" && amprentaPlanului(planPretins) !== ampPurtata6) {
+      return nu("plan");
+    }
+
+    if (grameComandate != null && Number.isFinite(grameComandate)
+        && Math.round(grameComandate) > g6 + TOLERANTA_GRAME) {
+      return nu("greutate");
+    }
+    return { ok: true, rambursBani: bani6 };
+  }
+
   if (bucati.length === 5) {
     const g5 = Number(bucati[1]);
     const bani5 = Number(bucati[2]);

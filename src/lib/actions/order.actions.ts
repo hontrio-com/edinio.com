@@ -276,7 +276,34 @@ function autoritativeShipping(
    * ora peste fiecare cotatie de pe platforma, cu proba rescrisa in graba. Se numeste aici ca sa
    * nu para inchisa.
    */
-  if (esteGratuit) return { shipping: 0, rambursBaniSemnat: null };
+  if (esteGratuit) {
+    /*
+     * ═══ ⚠ GRATUIT NU MAI INSEAMNA NEVERIFICAT (14.09.2026) ═══
+     *
+     * Transportul ramane zero, dar PLANUL se judeca. Pana azi ramura asta taia scurt, si cu ea
+     * cadea singura poarta care apara identitatea serviciului: cine primea cotatiile cinstit, isi
+     * pastra tokenul si schimba un singur camp (`shipo_rate_id`, `ups_service_code`) comanda un
+     * serviciu express la pretul celui ieftin. Cumparatorul platea zero oricum; diferenta o platea
+     * COMERCIANTUL, la emitere.
+     *
+     * Se poate judeca abia de cand tokenul poarta pretul cotat in clar: aici `shipping_cost` e zero
+     * si pretul curierului nu mai exista nicaieri, deci verificarea il ia pe cel purtat.
+     *
+     * ⚠ SI REFUZA DOAR PE `plan`, NIMIC ALTCEVA.
+     *
+     * O semnatura care nu bate pe drumul asta inseamna aproape sigur un token de forma VECHE, fara
+     * pret purtat: ele mai traiesc 24 de ore dupa desfasurare. Refuzate, ar cadea fiecare comanda
+     * gratuita aflata in curs, la zece din cincisprezece magazine cu prag. Aceeasi regula ca peste
+     * tot in fisierul asta: o cotatie pierduta n-are voie sa coste o vanzare.
+     */
+    const verdictGratuit = verificaCotatia(
+      businessId, dest, 0, token, optiune, grameComandate, planPretins, "ia-l-pe-cel-purtat",
+    );
+    if (verdictGratuit.ok === false && verdictGratuit.motiv === "plan") {
+      return { recotare: true, motiv: "plan" };
+    }
+    return { shipping: 0, rambursBaniSemnat: null };
+  }
 
   const claimed = Math.max(0, round2(Number(cerut) || 0));
   const verdict = verificaCotatia(businessId, dest, claimed, token, optiune, grameComandate, planPretins);

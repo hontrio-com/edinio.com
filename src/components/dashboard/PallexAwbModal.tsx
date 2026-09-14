@@ -193,8 +193,28 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
    * CATE partide porneste.
    */
   async function vezBorderoul() {
+    /*
+     * ⚠ AICI NU SE PUNE `finally`, SI E O HOTARARE, NU O SCAPARE.
+     *
+     * `borderouCerut` nu e steag de incarcare: inseamna „omul a cerut sa vada borderoul”, si
+     * pe calea de REUSITA ramane dinadins aprins, ca panoul sa stea deschis. Un `finally`
+     * l-ar stinge exact in clipa in care panoul se umple, adica ar strica pasul fara de care
+     * marfa nu pleaca, fara ca `tsc`, suita sau buildul sa clipeasca.
+     *
+     * Deci steagul se stinge DOAR pe caderi, aici si pe cele doua cai de eroare de mai jos.
+     * `steagul-se-stinge-in-finally` are pentru asta o scutire numita, cu motivul scris, si o
+     * proba care o tine cinstita.
+     */
     setBorderouCerut(true);
-    const r = await stareBorderouAction(businessId, order.id);
+    let r: Awaited<ReturnType<typeof stareBorderouAction>>;
+    try {
+      r = await stareBorderouAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ O CITIRE: nimic nu s-a schimbat la Pall-Ex, deci nu se trimite nimeni sa verifice. */
+      toast.error("Pall-Ex nu a raspuns: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"));
+      setBorderouCerut(false);
+      return;
+    }
     if ("error" in r) {
       toast.error(r.error);
       setBorderouCerut(false);
@@ -218,8 +238,21 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
 
   async function valideaza() {
     setValidand(true);
-    const r = await valideazaBorderouAction(businessId, order.id);
-    setValidand(false);
+    let r: Awaited<ReturnType<typeof valideazaBorderouAction>>;
+    try {
+      r = await valideazaBorderouAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Validarea SCHIMBA la Pall-Ex: inchide borderoul cu partidele de atunci. Deci nu se
+         spune „a esuat", ci se trimite omul sa se uite inainte de a incerca iar. */
+      toast.error(
+        "Pall-Ex nu a raspuns. Verifica in contul Pall-Ex daca borderoul s-a validat: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setValidand(false);
+    }
     if ("error" in r) {
       toast.error(r.error);
       return;
@@ -293,8 +326,21 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
     };
 
     setCreating(true);
-    const r = await createPallexAwbAction(businessId, order.id, date);
-    setCreating(false);
+    let r: Awaited<ReturnType<typeof createPallexAwbAction>>;
+    try {
+      r = await createPallexAwbAction(businessId, order.id, date);
+    } catch (e) {
+      /* ⚠ Emiterea SCHIMBA la Pall-Ex, deci NU se spune „a esuat": partida poate sa fi plecat,
+         iar a doua apasare ar face a doua expediere de paleti. */
+      toast.error(
+        "Pall-Ex nu a raspuns. Verifica in contul Pall-Ex inainte sa incerci din nou: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setCreating(false);
+    }
 
     if ("error" in r) {
       toast.error(r.error);

@@ -74,6 +74,18 @@ import { readdirSync, readFileSync } from "node:fs";
    si cade proba, iar orice reparatie il scade si cere ca harta sa fie adusa la zi in acelasi
    commit. Cele 9 manere deja corecte (FAN 3 + ridicarea FAN 2, eColet 4) sunt aparate din
    prima zi: fisierele lor nu apar in harta, deci numarul lor asteptat e ZERO.
+
+   ═══ ⚠⚠ SI NU ORICE `setX(true)` E UN STEAG DE INCARCARE (14.09.2026) ═══
+
+   `vezBorderoul` din `PallexAwbModal` a fost numarat de scaner ca al 56-lea, fiindca arata
+   exact ca celelalte. Nu era: `borderouCerut` inseamna „omul a cerut sa vada borderoul”, si pe
+   calea de REUSITA ramane dinadins aprins, ca panoul sa stea deschis; se stinge doar pe cele
+   doua cai de eroare. Un `finally` l-ar fi inchis chiar in clipa in care se umplea, la un
+   curier viu, pe pasul fara de care marfa nu pleaca. Si ar fi trecut de `tsc`, de suita si de
+   build fara ca nimic sa para stricat.
+
+   De aceea exista `NU_SUNT_STEAGURI`: scutire de `finally`, NU de reparatie. Acolo steagul se
+   stinge in `catch`, si proba de mai jos cere ca scutirea sa ramana cinstita.
 */
 
 const DIR = "src/components/dashboard";
@@ -85,12 +97,27 @@ const DIR = "src/components/dashboard";
 const INCA_NEREPARATE: Record<string, number> = {
   "DhlAwbModal.tsx": 5,
   "InnoshipAwbModal.tsx": 4,
-  "PallexAwbModal.tsx": 3,
   "SamedayAwbModal.tsx": 4,
   "ShipoAwbModal.tsx": 5,
   "SmartshipAwbModal.tsx": 10,
   "UpsAwbModal.tsx": 5,
   "WootAwbModal.tsx": 2,
+};
+
+/**
+ * Manere unde `setX(true)` NU e steag de incarcare, cu motivul scris. Lista e scurta dinadins.
+ *
+ * ⚠ SCANERUL POTRIVESTE FORMA, NU INTELESUL. Aici un `finally` ar STRICA o functionalitate, nu
+ * ar repara una, si nici `tsc`, nici suita, nici buildul n-ar clipi. Reparatia lor e
+ * `try/catch` care stinge steagul DOAR pe caderi, fara `finally`.
+ *
+ * ⚠ Scutirea se verifica PE DOS, mai jos, ca sa nu devina o portita.
+ */
+const NU_SUNT_STEAGURI: Record<string, string> = {
+  "PallexAwbModal.tsx · vezBorderoul":
+    "`borderouCerut` inseamna „omul a cerut sa vada borderoul”, nu „se incarca”: pe calea de "
+    + "reusita ramane dinadins aprins, ca panoul sa stea deschis. Un `finally` l-ar inchide "
+    + "exact cand se umple, pe pasul fara de care marfa nu pleaca.",
 };
 
 /* ── Citirea surselor ─────────────────────────────────────────────────────── */
@@ -170,7 +197,11 @@ test("⚠⚠ steagul de incarcare se stinge in `finally`, nu pe randul de dupa a
   assert.ok(cuAsteptare.length >= 65,
     `doar ${cuAsteptare.length} manere asteapta ceva: plasa s-a ingustat pe nesimtite`);
 
-  const stricate = cuAsteptare.filter((m) => !m.corp.includes("finally"));
+  /* ⚠ Scutitele nu se numara aici: la ele `finally` ar fi chiar defectul. Vezi
+     `NU_SUNT_STEAGURI` si proba care le tine cinstite, mai jos. */
+  const stricate = cuAsteptare.filter(
+    (m) => !m.corp.includes("finally") && !NU_SUNT_STEAGURI[`${m.fisier} · ${m.nume}`],
+  );
 
   const masurat: Record<string, number> = {};
   for (const m of stricate) masurat[m.fisier] = (masurat[m.fisier] ?? 0) + 1;
@@ -233,4 +264,43 @@ test("⚠ ferestrele deja reparate raman reparate, si sunt numite", () => {
     .length;
   assert.ok(cateReparate >= 9,
     `doar ${cateReparate} manere reparate gasite in FAN si eColet, asteptam macar 9`);
+});
+
+test("⚠⚠ scutirile raman cinstite: exista, sunt reparate ALTFEL, si n-au voie sa capete `finally`", () => {
+  /*
+   * ⚠ O scutire nesupravegheata e o portita. Trei lucruri se cer de la fiecare:
+   *
+   *   1. manerul CHIAR exista. Redenumit sau sters, scutirea ar acoperi neantul, iar un maner
+   *      nou cu acelasi nume ar mosteni-o fara sa fi cerut-o nimeni;
+   *   2. e scutit de `finally`, NU de reparatie: steagul tot trebuie stins pe CADERI, deci
+   *      trebuie sa existe o prindere a caderii;
+   *   3. si nu are `finally`. Daca ajunge sa aiba, ori cineva l-a pus din obisnuinta si a
+   *      stricat panoul, ori intelesul steagului s-a schimbat si scutirea trebuie SCOASA.
+   */
+  const toate = toateManerele();
+
+  for (const [cheie, motiv] of Object.entries(NU_SUNT_STEAGURI)) {
+    const [fisier, nume] = cheie.split(" · ");
+    const m = toate.find((x) => x.fisier === fisier && x.nume === nume);
+
+    if (!m) {
+      assert.fail(
+        `scutirea \`${cheie}\` nu mai potriveste niciun maner: redenumit sau sters. `
+        + `Scoate-o, altfel acopera neantul. Motivul ei era: ${motiv}`,
+      );
+    }
+
+    assert.match(
+      m.corp, /catch \(|\.catch\(/,
+      `${cheie}: e scutit de \`finally\`, dar nu prinde caderea nicaieri, deci steagul ramane `
+      + "aprins cand apelul arunca. Scutirea e de la FORMA reparatiei, nu de la reparatie.",
+    );
+
+    assert.ok(
+      !m.corp.includes("finally"),
+      `${cheie}: are acum \`finally\`. Ori l-a pus cineva din obisnuinta si a stricat purtarea `
+      + `descrisa in scutire, ori intelesul steagului s-a schimbat si scutirea trebuie scoasa `
+      + `din NU_SUNT_STEAGURI. Motivul scutirii: ${motiv}`,
+    );
+  }
 });

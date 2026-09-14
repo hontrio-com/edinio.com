@@ -78,8 +78,20 @@ export function InnoshipConfigClient({
    * El se naste la prima salvare, iar aratat inainte ar fi un link mort pe care
    * omul l-ar lipi in portalul Innoship si ar astepta degeaba.
    */
+  /*
+   * ⚠ SI CU SELECTORUL DE MAGAZIN (14.09.2026), care NU e secret.
+   *
+   * Fara el, ruta cauta magazinul filtrand pe valoarea DECRIPTATA a secretului, adica
+   * pe o coloana calculata a vederii: niciun index nu o poate servi, deci fiecare
+   * cerere venita de oriunde decripteaza configul fiecarui magazin. Cu `business`,
+   * se citeste un singur rand si secretul se compara in timp constant.
+   *
+   * ⚠ Adresele VECHI raman valabile, si ruta le primeste mai departe: cine a lipit deja
+   * forma fara `business` nu pierde urmarirea. Se sting singure, pe masura ce
+   * comerciantii copiaza adresa de aici.
+   */
   const urlWebhook = initialConfig?.webhook_secret
-    ? `${baseUrl}/api/innoship/track?secret=${initialConfig.webhook_secret}`
+    ? `${baseUrl}/api/innoship/track?business=${businessId}&secret=${initialConfig.webhook_secret}`
     : null;
 
   /* Varianta B: se calculeaza din catalogul VIU, deci apare dupa proba de conexiune. */

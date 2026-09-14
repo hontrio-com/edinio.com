@@ -43,7 +43,18 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
   function connect() {
     if (!apiKey.trim()) { toast.error("Introdu cheia API Mailchimp."); return; }
     startConnect(async () => {
-      const res = await connectMailchimp(businessId, apiKey.trim());
+      let res: Awaited<ReturnType<typeof connectMailchimp>>;
+      try {
+        res = await connectMailchimp(businessId, apiKey.trim());
+      } catch {
+        /* ⚠ Cheia pleaca la Mailchimp ca sa fie validata. Nestiut: daca s-a legat contul. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-a conectat contul Mailchimp. "
+          + "Reimprospateaza pagina si uita-te daca apare conectat inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setConfig(res.config);
       setAudiences(res.audiences);
@@ -55,7 +66,19 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
 
   function reloadAudiences() {
     startAudiences(async () => {
-      const res = await getMailchimpAudiences(businessId);
+      let res: Awaited<ReturnType<typeof getMailchimpAudiences>>;
+      try {
+        res = await getMailchimpAudiences(businessId);
+      } catch {
+        /* ⚠ O CITIRE: nu se schimba nimic, nici la noi, nici la ei. Singurul loc din arc unde
+           reincercarea chiar e raspunsul corect, si se spune. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca audientele s-au putut citi. "
+          + "Nu s-a schimbat nimic, deci poti incerca din nou linistit.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setAudiences(res.audiences);
       setAudiencesLoaded(true);
@@ -67,14 +90,25 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
     startSave(async () => {
       const default_tags = tagsInput.split(",").map((t) => t.trim()).filter(Boolean);
       const selected = audiences.find((a) => a.id === audienceId);
-      const res = await saveMailchimpSettings(businessId, {
-        audience_id: audienceId || undefined,
-        audience_name: selected?.name ?? config.audience_name,
-        double_optin: doubleOptin,
-        default_tags,
-        sources: { checkout: checkoutSource },
-        ecommerce_sync: ecommerceSync,
-      });
+      let res: Awaited<ReturnType<typeof saveMailchimpSettings>>;
+      try {
+        res = await saveMailchimpSettings(businessId, {
+          audience_id: audienceId || undefined,
+          audience_name: selected?.name ?? config.audience_name,
+          double_optin: doubleOptin,
+          default_tags,
+          sources: { checkout: checkoutSource },
+          ecommerce_sync: ecommerceSync,
+        });
+      } catch {
+        /* ⚠ Scrie setarile. Mesajul nu pretinde nimic despre contul de la furnizor. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca setarile s-au salvat. "
+          + "Reimprospateaza pagina si uita-te la ce apare pe ecran inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setConfig(res.config);
       toast.success("Setari salvate.");
@@ -83,7 +117,19 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
 
   function disconnect() {
     startSave(async () => {
-      const res = await disconnectMailchimp(businessId);
+      let res: Awaited<ReturnType<typeof disconnectMailchimp>>;
+      try {
+        res = await disconnectMailchimp(businessId);
+      } catch {
+        /* ⚠ Mesajul NU pretinde nimic despre contul de la furnizor: n-am masurat ce face
+           `disconnect` acolo, deci nu spun. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca deconectarea s-a salvat. "
+          + "Reimprospateaza pagina si uita-te daca mai apare conectat inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setConfig({ ...config, enabled: false, connected: false, account_name: undefined, audience_id: undefined, audience_name: undefined });
       setAudiences([]);
@@ -95,7 +141,23 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
 
   function syncCustomers() {
     startSync(async () => {
-      const res = await syncExistingCustomers(businessId);
+      let res: Awaited<ReturnType<typeof syncExistingCustomers>>;
+      try {
+        res = await syncExistingCustomers(businessId);
+      } catch {
+        /* ⚠⚠ Cel mai scump buton din panou: impinge toti clientii catre contul de marketing.
+           ⚠ NU se pretinde aici ca o a doua apasare nu dubleaza nimic: ar fi o deducere din
+           numele functiei care trimite, nu o masuratoare. Ce E masurat: `last_sync_at` se
+           scrie ABIA DUPA ce raspunde furnizorul, deci data de pe ecran poate ramane in urma. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca sincronizarea a pornit. "
+          + "Uita-te in audienta din contul Mailchimp inainte sa apesi din nou: data ultimei "
+          + "sincronizari de pe ecran se scrie abia dupa ce raspunde furnizorul, deci poate "
+          + "ramane in urma.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       if (res.total === 0) { toast.info("Nu exista clienti cu email de sincronizat."); return; }
       toast.success(`Sincronizat: ${res.created} adaugati, ${res.updated} actualizati${res.errors ? `, ${res.errors} esuate` : ""} (din ${res.total}).`);

@@ -41,7 +41,18 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
   function connect() {
     if (!apiKey.trim()) { toast.error("Introdu cheia API Brevo."); return; }
     startConnect(async () => {
-      const res = await connectBrevo(businessId, apiKey.trim());
+      let res: Awaited<ReturnType<typeof connectBrevo>>;
+      try {
+        res = await connectBrevo(businessId, apiKey.trim());
+      } catch {
+        /* ⚠ Cheia pleaca la Brevo ca sa fie validata. Nestiut: daca s-a legat contul. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-a conectat contul Brevo. "
+          + "Reimprospateaza pagina si uita-te daca apare conectat inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setConfig(res.config);
       setLists(res.lists);
@@ -53,7 +64,19 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
 
   function reloadLists() {
     startLists(async () => {
-      const res = await getBrevoLists(businessId);
+      let res: Awaited<ReturnType<typeof getBrevoLists>>;
+      try {
+        res = await getBrevoLists(businessId);
+      } catch {
+        /* ⚠ O CITIRE: nu se schimba nimic, nici la noi, nici la ei. Singurul loc din arc unde
+           reincercarea chiar e raspunsul corect, si se spune. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca listele s-au putut citi. "
+          + "Nu s-a schimbat nimic, deci poti incerca din nou linistit.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setLists(res.lists);
       setListsLoaded(true);
@@ -64,12 +87,23 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
   function save() {
     startSave(async () => {
       const selected = lists.find((l) => String(l.id) === listId);
-      const res = await saveBrevoSettings(businessId, {
-        list_id: listId ? Number(listId) : undefined,
-        list_name: selected?.name ?? config.list_name,
-        sources: { checkout: checkoutSource },
-        ecommerce_sync: ecommerceSync,
-      });
+      let res: Awaited<ReturnType<typeof saveBrevoSettings>>;
+      try {
+        res = await saveBrevoSettings(businessId, {
+          list_id: listId ? Number(listId) : undefined,
+          list_name: selected?.name ?? config.list_name,
+          sources: { checkout: checkoutSource },
+          ecommerce_sync: ecommerceSync,
+        });
+      } catch {
+        /* ⚠ Scrie setarile. Mesajul nu pretinde nimic despre contul de la furnizor. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca setarile s-au salvat. "
+          + "Reimprospateaza pagina si uita-te la ce apare pe ecran inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setConfig(res.config);
       toast.success("Setari salvate.");
@@ -78,7 +112,19 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
 
   function disconnect() {
     startSave(async () => {
-      const res = await disconnectBrevo(businessId);
+      let res: Awaited<ReturnType<typeof disconnectBrevo>>;
+      try {
+        res = await disconnectBrevo(businessId);
+      } catch {
+        /* ⚠ Mesajul NU pretinde nimic despre contul de la furnizor: n-am masurat ce face
+           `disconnect` acolo, deci nu spun. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca deconectarea s-a salvat. "
+          + "Reimprospateaza pagina si uita-te daca mai apare conectat inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setConfig({ ...config, enabled: false, connected: false, account_name: undefined, account_email: undefined, list_id: undefined, list_name: undefined });
       setLists([]);
@@ -90,7 +136,23 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
 
   function syncCustomers() {
     startSync(async () => {
-      const res = await syncExistingCustomers(businessId);
+      let res: Awaited<ReturnType<typeof syncExistingCustomers>>;
+      try {
+        res = await syncExistingCustomers(businessId);
+      } catch {
+        /* ⚠⚠ Cel mai scump buton din panou: impinge toti clientii catre contul de marketing.
+           ⚠ NU se pretinde aici ca o a doua apasare nu dubleaza nimic: ar fi o deducere din
+           numele functiei care trimite, nu o masuratoare. Ce E masurat: `last_sync_at` se
+           scrie ABIA DUPA ce raspunde furnizorul, deci data de pe ecran poate ramane in urma. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca sincronizarea a pornit. "
+          + "Uita-te in lista din contul Brevo inainte sa apesi din nou: data ultimei "
+          + "sincronizari de pe ecran se scrie abia dupa ce raspunde furnizorul, deci poate "
+          + "ramane in urma.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       if (res.total === 0) { toast.info("Nu exista clienti cu email de sincronizat."); return; }
       toast.success(`Sincronizare pornita pentru ${res.total} contacte. Apar in lista dupa procesarea in Brevo.`);

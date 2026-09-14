@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { useDialogAccesibil } from "./useDialogAccesibil";
 import { X, Truck, Loader2, CalendarClock } from "lucide-react";
 import { requestDpdPickupAction } from "@/lib/actions/dpd.actions";
 import { Button } from "@/components/ui/button";
@@ -34,17 +35,28 @@ export function DpdPickupModal({
     }
   }
 
+  /* ⚠ `open`, NU `true`: argumentul e chiar conditia sub care fereastra se randeaza. Azi
+     parintele o monteaza abia la deschidere, deci cele doua se poarta la fel; regula apara
+     forma, pentru ziua in care cineva o randeaza neconditionat. Pe larg, la Cargus. */
+  const cutiaDialogului = useDialogAccesibil(open, onClose);
+
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl border border-border shadow-xl w-full max-w-md">
+      <div
+        ref={cutiaDialogului}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titlu-ridicare-dpd"
+        tabIndex={-1}
+        className="relative bg-background rounded-2xl border border-border shadow-xl w-full max-w-md focus:outline-none">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2.5">
             <img src="/integrations/dpd.svg" alt="DPD" className="h-5 w-auto" />
             <div>
-              <p className="text-sm font-semibold text-foreground">Cheama curierul DPD</p>
+              <p id="titlu-ridicare-dpd" className="text-sm font-semibold text-foreground">Cheama curierul DPD</p>
               <p className="text-xs text-muted-foreground">Programare ridicare colete</p>
             </div>
           </div>

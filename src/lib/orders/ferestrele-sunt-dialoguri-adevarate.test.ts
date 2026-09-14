@@ -21,6 +21,28 @@ import { readdirSync, readFileSync } from "node:fs";
    ⚠ MASURAT LA SCRIEREA PROBEI: 18 ferestre de AWB, toate legate. Inainte erau DOUA
    (FAN si fereastra de ridicare), asa cum scrie si in capul hook-ului.
 
+   ⚠⚠ SI PLASA ERA CROITA PE NUMELE FISIERULUI, NU PE CE FACE FEREASTRA (14.09.2026).
+   Cerea `/AwbModal\.tsx$/`, deci cele TREI ferestre de ridicare au stat pe dinafara:
+   numele lor pur si simplu nu se termina asa. `CargusPickupModal` si `DpdPickupModal`
+   n-aveau nici rol, nici `aria-modal`, nici Escape, nici capcana de focus, si nimic nu se
+   vedea, fiindca proba era verde tocmai din pricina ca nu se uita la ele. Nu scapasera:
+   nu fusesera niciodata cuprinse. Plasa e acum `(Awb|Pickup)Modal`, adica 21 de ferestre.
+
+   ⚠ ARGUMENTUL CARLIGULUI SE DEDUCE DIN INVELIS, nu se insiruie de mana. Ferestrele de
+   AWB au invelisul `if (!props.open) return null;` (vezi `ferestrele-se-monteaza-la-deschidere`),
+   deci `Formular` exista doar cat e fereastra deschisa si primeste `true`. Ferestrele de
+   ridicare n-au invelis, ci o garda in chiar componenta care cheama carligul, deci primesc
+   `open`. Litera `true` nu era regula; regula e ca argumentul sa fie chiar conditia sub
+   care fereastra se randeaza.
+
+   ⚠ SI CAT E PRIMEJDIA, MASURAT, ca sa nu pretinda nimeni mai mult: azi `OrdersClient`
+   randeaza fiecare fereastra de ridicare sub `{xPickupOpen && businessId && …}`, deci
+   parintele o monteaza abia la deschidere si `true` s-ar purta la fel. Regula apara FORMA,
+   nu repara un defect viu. Garda dinauntru e insa tocmai invitatia ca maine cineva sa
+   randeze fereastra neconditionat, si atunci `true` ar porni efectul cu fereastra INCHISA:
+   `cutia.current` nul, capcana de focus fara ce sa prinda, si ascultatorul de Escape agatat
+   pe document, deci o apasare oriunde in pagina de comenzi ar chema `onClose`.
+
    ⚠ MUTANTUL SE PUNE PE APELANT. Mutand `ref={cutiaDialogului}` pe fundal, scotand
    `role="dialog"` dintr-o fereastra, taind chemarea hook-ului, sau readucand un
    ascultator propriu de Escape, probele de mai jos cad. Nu se probeaza hook-ul, ci
@@ -28,6 +50,19 @@ import { readdirSync, readFileSync } from "node:fs";
 */
 
 const DIR = "src/components/dashboard";
+
+/**
+ * Ferestrele pe care le monteaza PARINTELE, si de ce. Lista e scurta dinadins.
+ *
+ * ⚠ Scutirea e de la felul cum se deduce argumentul carligului, nu de la regula. La ele
+ * `true` e chiar adevarul, fiindca nu exista niciun `open` de dat. Aceeasi scutire, cu
+ * acelasi motiv, e in `ferestrele-se-monteaza-la-deschidere`: daca vreodata primesc prop
+ * `open`, ies din lista si intra sub regula generala.
+ */
+const MONTATE_DE_PARINTE: Record<string, string> = {
+  "EmagAwbModal.tsx":
+    "n-are prop `open` deloc: o monteaza `EmagFulfillmentPanel` doar cat timp e deschisa.",
+};
 
 /**
  * ⚠ Comentariile se taie. Fara asta, o fereastra care doar POMENESTE `role="dialog"`
@@ -41,8 +76,8 @@ function sursa(nume: string): string {
     .replace(/^[ \t]*\/\/.*$/gm, "");
 }
 
-function ferestreleDeAwb(): string[] {
-  return readdirSync(DIR).filter((f) => /AwbModal\.tsx$/.test(f));
+function ferestreleDeCurier(): string[] {
+  return readdirSync(DIR).filter((f) => /(Awb|Pickup)Modal\.tsx$/.test(f));
 }
 
 /**
@@ -57,15 +92,15 @@ function eticheteDiv(s: string): string[] {
   return s.match(/<div[^>]*>/g) ?? [];
 }
 
-test("⚠⚠ fiecare fereastra de AWB e un dialog adevarat, nu doar o cutie care seamana", () => {
-  const ferestre = ferestreleDeAwb();
+test("⚠⚠ fiecare fereastra de curier e un dialog adevarat, nu doar o cutie care seamana", () => {
+  const ferestre = ferestreleDeCurier();
 
   /*
    * ⚠ SE NUMARA. Fara randul asta, o redenumire a fisierelor ar face proba sa treaca
    * peste ZERO ferestre si sa iasa verde. Vezi memoria `o-plasa-care-cere-macar-una-nu-cade`.
    */
-  assert.ok(ferestre.length >= 18,
-    `gasite doar ${ferestre.length} ferestre de AWB: plasa n-are pe cine cadea`);
+  assert.ok(ferestre.length >= 21,
+    `gasite doar ${ferestre.length} ferestre de curier: plasa n-are pe cine cadea`);
 
   const lipsuri: string[] = [];
 
@@ -73,13 +108,18 @@ test("⚠⚠ fiecare fereastra de AWB e un dialog adevarat, nu doar o cutie care
     const s = sursa(nume);
     const are: string[] = [];
 
-    if (!/const cutiaDialogului = useDialogAccesibil\(true, onClose\);/.test(s)) {
-      /*
-       * ⚠ `true`, nu un prop. Toate ferestrele astea se monteaza la deschidere (vezi
-       * `ferestrele-se-monteaza-la-deschidere`), deci cat exista, sunt deschise. Un
-       * `open` variabil aici ar insemna ca invelisul s-a pierdut pe drum.
-       */
-      are.push("nu cheama `useDialogAccesibil(true, onClose)`");
+    /*
+     * ⚠ ARGUMENTUL SE DEDUCE, si de aceea regula cuprinde si ferestrele de ridicare fara
+     * ca cineva sa le insiruie. Cu invelis, `Formular` exista doar cat e deschis, deci
+     * `true`. Fara invelis, garda sta chiar in componenta care cheama carligul, si atunci
+     * argumentul trebuie sa fie `open`. Cat e primejdia astazi, masurat, sta scris in cap:
+     * parintele monteaza la deschidere, deci regula apara forma, nu repara ceva viu.
+     */
+    const areInvelis = /if \(!props\.open\) return null;/.test(s) || !!MONTATE_DE_PARINTE[nume];
+    const asteptat = areInvelis ? "true" : "open";
+
+    if (!new RegExp(`const cutiaDialogului = useDialogAccesibil\\(${asteptat}, onClose\\);`).test(s)) {
+      are.push(`nu cheama \`useDialogAccesibil(${asteptat}, onClose)\``);
     }
     if (!/role="dialog"/.test(s)) are.push('fara `role="dialog"`');
     if (!/aria-modal="true"/.test(s)) are.push('fara `aria-modal="true"`');
@@ -108,7 +148,7 @@ test("⚠⚠ ref-ul, rolul si numele stau pe ACEEASI cutie, si cutia are un nume
    * Deci se verifica PE ETICHETA, nu pe fisier: eticheta care poarta ref-ul trebuie sa
    * poarte si rolul, si `aria-modal`, si `tabIndex`, si numele.
    */
-  const ferestre = ferestreleDeAwb();
+  const ferestre = ferestreleDeCurier();
   const gresite: string[] = [];
 
   for (const nume of ferestre) {
@@ -127,10 +167,12 @@ test("⚠⚠ ref-ul, rolul si numele stau pe ACEEASI cutie, si cutia are un nume
     if (!cutia.includes("tabIndex={-1}")) lipsa.push("`tabIndex={-1}` e pe ALT element");
 
     /*
-     * ⚠ NUMELE, IN AMANDOUA FORMELE LEGITIME. Saptesprezece ferestre poarta `aria-label`
-     * scris pe loc; FAN poarta `aria-labelledby`, fiindca a fost legata inaintea celorlalte
-     * si isi are titlul intr-un element cu `id`. Amandoua dau un nume; ce nu da un nume e
-     * o cutie fara niciuna, si atunci cititorul de ecran anunta doar „dialog".
+     * ⚠ NUMELE, IN AMANDOUA FORMELE LEGITIME. Remasurat pe 14.09.2026, in acelasi val cu
+     * largirea plasei, fiindca tocmai largirea facea numarul vechi fals: SAPTESPREZECE
+     * ferestre poarta `aria-label` scris pe loc, si PATRU poarta `aria-labelledby` (AWB-ul
+     * FAN si cele trei ferestre de ridicare), fiindca isi au titlul intr-un element cu
+     * `id`. Amandoua dau un nume; ce nu da un nume e o cutie fara niciuna, si atunci
+     * cititorul de ecran anunta doar „dialog".
      */
     const label = /aria-label="([^"]+)"/.exec(cutia);
     const labelledby = /aria-labelledby="([^"]+)"/.exec(cutia);
@@ -167,7 +209,7 @@ test("⚠ si nicio fereastra nu-si mai tine propriul Escape, peste cel al hook-u
    * ⚠ Ce a RAMAS la Woot e blocarea derularii paginii de dedesubt, pe care hook-ul n-o
    * face. Stearsa odata cu Escape, pagina ar fi inceput sa se deruleze sub fereastra.
    */
-  const ferestre = ferestreleDeAwb();
+  const ferestre = ferestreleDeCurier();
   const cuEscapePropriu = ferestre.filter((nume) => /e\.key === "Escape"/.test(sursa(nume)));
 
   assert.deepEqual(cuEscapePropriu, [],

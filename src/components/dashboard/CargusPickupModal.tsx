@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useDialogAccesibil } from "./useDialogAccesibil";
 import { X, Truck, Loader2, CalendarClock } from "lucide-react";
 import { requestCargusPickupAction } from "@/lib/actions/cargus.actions";
 import { Button } from "@/components/ui/button";
@@ -75,17 +76,40 @@ export function CargusPickupModal({
     }
   }
 
+  /*
+   * ⚠ `open`, NU `true`, si e o cerinta de FORMA, nu o reparatie.
+   *
+   * Masurat, ca sa nu pretind mai mult decat e: `OrdersClient` randeaza fereastra sub
+   * `{cargusPickupOpen && businessId && …}`, deci parintele o monteaza abia la deschidere,
+   * iar `open` e mereu adevarat cat componenta exista. Azi `true` s-ar purta la fel.
+   *
+   * Regula e ca argumentul sa fie chiar conditia sub care fereastra se randeaza, iar garda
+   * de mai jos e tocmai invitatia ca maine cineva s-o randeze neconditionat. Atunci `true`
+   * ar porni efectul cu fereastra INCHISA: `cutia.current` nul, capcana de focus fara ce sa
+   * prinda, si ascultatorul de Escape agatat pe document, deci o apasare oriunde in pagina
+   * de comenzi ar chema `onClose`.
+   */
+  const cutiaDialogului = useDialogAccesibil(open, onClose);
+
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-background rounded-2xl border border-border shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div
+        ref={cutiaDialogului}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titlu-ridicare-cargus"
+        /* ⚠ Cutia primeste focusul la deschidere, deci ii trebuie `tabIndex={-1}`, si nu
+           vrem inel de focus pe tot dialogul. Vezi `useDialogAccesibil`. */
+        tabIndex={-1}
+        className="relative bg-background rounded-2xl border border-border shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto focus:outline-none">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2.5">
             <img src="/integrations/cargus.svg" alt="Cargus" className="h-5 w-auto" />
             <div>
-              <p className="text-sm font-semibold text-foreground">Cheama curierul Cargus</p>
+              <p id="titlu-ridicare-cargus" className="text-sm font-semibold text-foreground">Cheama curierul Cargus</p>
               <p className="text-xs text-muted-foreground">Validare comanda de ridicare</p>
             </div>
           </div>

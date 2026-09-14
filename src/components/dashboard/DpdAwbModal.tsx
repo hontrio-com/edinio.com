@@ -117,8 +117,9 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     const weightNum = parseFloat(weight) || 0;
     if (weightNum <= 0) return toast.error("Greutatea trebuie sa fie mai mare decat 0");
 
-    setCreating(true);
-    const result = await createDpdShipmentAction(businessId, order.id, {
+    /* ⚠ Incarcatura intr-un `const`, ca `try` sa cuprinda DOAR apelul. Vezi
+       `steagul-se-stinge-in-finally`. */
+    const dateDpd = {
       recipientName: recipientName.trim(),
       recipientPhone: recipientPhone.trim(),
       recipientEmail: recipientEmail.trim(),
@@ -135,8 +136,24 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       ref1: order.order_number,
       shipmentNote: shipmentNote.trim(),
       content: content.trim(),
-    });
-    setCreating(false);
+    };
+
+    setCreating(true);
+    let result: Awaited<ReturnType<typeof createDpdShipmentAction>>;
+    try {
+      result = await createDpdShipmentAction(businessId, order.id, dateDpd);
+    } catch (e) {
+      /* ⚠ Emiterea SCHIMBA la DPD, deci NU se spune „a esuat": expeditia poate sa fi plecat,
+         iar a doua apasare ar face al doilea AWB, taxabil. */
+      toast.error(
+        "DPD nu a raspuns. Verifica in contul DPD inainte sa incerci din nou: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setCreating(false);
+    }
 
     if ("error" in result) {
       toast.error(result.error);
@@ -148,8 +165,21 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleCancel() {
     setCancelling(true);
-    const result = await cancelDpdShipmentAction(businessId, order.id);
-    setCancelling(false);
+    let result: Awaited<ReturnType<typeof cancelDpdShipmentAction>>;
+    try {
+      result = await cancelDpdShipmentAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Anularea SCHIMBA la DPD: poate sa fi ajuns, si atunci expeditia chiar e anulata
+         desi ecranul inca o arata. */
+      toast.error(
+        "DPD nu a raspuns. Verifica in contul DPD daca expeditia mai e valida: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setCancelling(false);
+    }
 
     if ("error" in result) {
       toast.error(result.error);

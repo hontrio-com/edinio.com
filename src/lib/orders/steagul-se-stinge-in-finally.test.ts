@@ -83,10 +83,8 @@ const DIR = "src/components/dashboard";
  * merge in acelasi commit cu reparatia lui. O fereastra reparata de tot IESE din harta.
  */
 const INCA_NEREPARATE: Record<string, number> = {
-  "CargusAwbModal.tsx": 2,
   "ColeteAwbModal.tsx": 2,
   "DhlAwbModal.tsx": 5,
-  "DpdAwbModal.tsx": 2,
   "FedexAwbModal.tsx": 4,
   "InnoshipAwbModal.tsx": 4,
   "PacketaAwbModal.tsx": 3,

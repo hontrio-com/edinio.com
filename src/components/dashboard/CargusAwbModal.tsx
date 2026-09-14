@@ -122,8 +122,9 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       if (countNum > 9) return toast.error("Maxim 9 plicuri per AWB");
     }
 
-    setCreating(true);
-    const result = await createCargusAwbAction(businessId, order.id, {
+    /* ⚠ Incarcatura se scoate intr-un `const` ca `try` sa cuprinda DOAR apelul, si ca
+       ramificarea de dupa sa ramana afara din bloc. Vezi `steagul-se-stinge-in-finally`. */
+    const dateCargus = {
       recipientName: recipientName.trim(),
       recipientPhone: recipientPhone.trim(),
       recipientEmail: recipientEmail.trim(),
@@ -146,8 +147,24 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
         width: width ? parseInt(width) : undefined,
         height: height ? parseInt(height) : undefined,
       }],
-    });
-    setCreating(false);
+    };
+
+    setCreating(true);
+    let result: Awaited<ReturnType<typeof createCargusAwbAction>>;
+    try {
+      result = await createCargusAwbAction(businessId, order.id, dateCargus);
+    } catch (e) {
+      /* ⚠ Emiterea SCHIMBA la Cargus, deci NU se spune „a esuat": cererea poate sa fi ajuns,
+         iar a doua apasare ar face al doilea AWB, taxabil. */
+      toast.error(
+        "Cargus nu a raspuns. Verifica in WebExpress inainte sa incerci din nou: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setCreating(false);
+    }
 
     if ("error" in result) {
       toast.error(result.error);
@@ -159,8 +176,21 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleDelete() {
     setDeleting(true);
-    const result = await deleteCargusAwbAction(businessId, order.id);
-    setDeleting(false);
+    let result: Awaited<ReturnType<typeof deleteCargusAwbAction>>;
+    try {
+      result = await deleteCargusAwbAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Stergerea SCHIMBA la Cargus: poate sa fi ajuns, si atunci AWB-ul chiar e anulat
+         desi ecranul inca il arata. Se spune ce stim, nu „a esuat". */
+      toast.error(
+        "Cargus nu a raspuns. Verifica in WebExpress daca AWB-ul mai e valid: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setDeleting(false);
+    }
 
     if ("error" in result) {
       toast.error(result.error);

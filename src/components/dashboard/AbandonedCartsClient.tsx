@@ -69,7 +69,19 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
 
         <button
           onClick={() => startActivate(async () => {
-            const res = await setAbandonedCartEnabled(businessId, true);
+            let res: Awaited<ReturnType<typeof setAbandonedCartEnabled>>;
+            try {
+              res = await setAbandonedCartEnabled(businessId, true);
+            } catch {
+              /* ⚠ Scrie la noi: doar comutatorul functiei. */
+              toast.error(
+                "Nu am primit raspuns de la server, deci nu stim daca functia s-a activat. "
+                + "Pagina se reincarca: uita-te la ecran inainte sa apesi din nou.",
+                { duration: 12000 },
+              );
+              router.refresh();
+              return;
+            }
             if ("error" in res) { toast.error(res.error); return; }
             toast.success("Functia a fost activata. Coșurile vor apărea pe măsură ce clienții le abandonează.");
             router.refresh();
@@ -158,9 +170,33 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
     const { cart, channel } = recover;
     const code = discountCode.trim() || undefined;
     startSend(async () => {
-      const res = channel === "email"
-        ? await sendAbandonedCartEmail(businessId, cart.id, message.trim() || undefined, code)
-        : await sendAbandonedCartSms(businessId, cart.id, message.trim() || undefined, code);
+      let res:
+        | Awaited<ReturnType<typeof sendAbandonedCartEmail>>
+        | Awaited<ReturnType<typeof sendAbandonedCartSms>>;
+      try {
+        res = channel === "email"
+          ? await sendAbandonedCartEmail(businessId, cart.id, message.trim() || undefined, code)
+          : await sendAbandonedCartSms(businessId, cart.id, message.trim() || undefined, code);
+      } catch {
+        /*
+         * ⚠⚠ PLEACA SPRE UN CUMPARATOR ADEVARAT, cu tot cu un cod de reducere.
+         *
+         * Nu exista nicio cheie de idempotenta si nimic nu opreste o a doua trimitere: singurele
+         * porti din actiune sunt fereastra de sase luni si cosul gol. Deci daca omul apasa iar,
+         * acelasi cumparator primeste inca un mesaj, iar la SMS mai si costa.
+         *
+         * ⚠ Nu se pretinde nimic despre `recovery_count`: n-am masurat daca se scrie inainte sau
+         * dupa plecarea mesajului. Aia schimba doar daca CONTORUL spune adevarul, nu ce trebuie
+         * sa stie omul.
+         */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca mesajul a plecat spre client. "
+          + "Nimic nu opreste o a doua trimitere: daca apesi din nou si primul chiar a plecat, "
+          + "acelasi om primeste inca unul. Uita-te intai in contul de email sau SMS.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(channel === "email" ? "Email trimis." : "SMS trimis.");
       setRecover(null);
@@ -171,7 +207,23 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
   function remove(cart: AbandonedCartRow) {
     startSend(async () => {
       aplicaOptimistSterge(cart.id);
-      const res = await deleteAbandonedCart(businessId, cart.id);
+      let res: Awaited<ReturnType<typeof deleteAbandonedCart>>;
+      try {
+        res = await deleteAbandonedCart(businessId, cart.id);
+      } catch {
+        /*
+         * ⚠ Randul a fost DEJA scos de pe ecran de `aplicaOptimistSterge`, iar `useOptimistic` il
+         * aduce inapoi cand tranzitia se incheie. Si asta poate minti: daca serverul CHIAR a sters
+         * si s-a pierdut raspunsul, randul reapare fals. Adevarul se cere de pe server.
+         */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca cosul s-a sters. "
+          + "Lista se reincarca: uita-te daca mai apare inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       router.refresh();
     });
@@ -187,7 +239,19 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
         </div>
         <button
           onClick={() => startToggleOff(async () => {
-            const res = await setAbandonedCartEnabled(businessId, false);
+            let res: Awaited<ReturnType<typeof setAbandonedCartEnabled>>;
+            try {
+              res = await setAbandonedCartEnabled(businessId, false);
+            } catch {
+              /* ⚠ Scrie la noi: doar comutatorul functiei. */
+              toast.error(
+                "Nu am primit raspuns de la server, deci nu stim daca functia s-a dezactivat. "
+                + "Pagina se reincarca: uita-te la ecran inainte sa apesi din nou.",
+                { duration: 12000 },
+              );
+              router.refresh();
+              return;
+            }
             if ("error" in res) { toast.error(res.error); return; }
             toast.success("Functia a fost dezactivata.");
             router.refresh();

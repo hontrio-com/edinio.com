@@ -87,7 +87,6 @@ const PREFIX = "src/components/";
 const INCA_DESCOPERITE: Record<string, number> = {
   "admin/AdminAnnouncementsClient.tsx": 1,
   "dashboard/AbandonedAutomationsTab.tsx": 1,
-  "dashboard/AbandonedCartsClient.tsx": 4,
   "dashboard/AboutYouCarrierMapping.tsx": 2,
   "dashboard/AboutYouCategoryMapping.tsx": 4,
   "dashboard/AboutYouClient.tsx": 5,

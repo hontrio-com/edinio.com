@@ -111,9 +111,22 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   }
 
   async function handleCoteaza() {
+    /* ⚠ `finally`, si in `try` DOAR apelul; ramificarea ramane afara. Vezi
+       `steagul-se-stinge-in-finally`. */
     setCotand(true);
-    const r = await coteazaInnoshipAction(businessId, order.id, dateComune());
-    setCotand(false);
+    let r: Awaited<ReturnType<typeof coteazaInnoshipAction>>;
+    try {
+      r = await coteazaInnoshipAction(businessId, order.id, dateComune());
+    } catch (e) {
+      /* ⚠ O CITIRE: nimic nu s-a schimbat la Innoship, deci nu e nimic de verificat la ei. */
+      toast.error(
+        "Innoship nu a raspuns: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 10000 },
+      );
+      return;
+    } finally {
+      setCotand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 10000 });
 
     const lista = ofertePosibile(r.oferte);
@@ -128,8 +141,9 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleEmite() {
     if (!aleasa) return toast.error("Alege o oferta");
-    setEmitand(true);
-    const r = await createInnoshipAwbAction(businessId, order.id, {
+    /* ⚠ Incarcatura intr-un `const`, ca `try` sa cuprinda DOAR apelul si ramificarea sa
+       ramana afara din bloc. Vezi `steagul-se-stinge-in-finally`. */
+    const dateInnoship = {
       ...dateComune(),
       courierId: aleasa.courierId,
       serviceId: aleasa.serviceId,
@@ -137,8 +151,26 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       optionId: aleasa.optionId,
       courierName: aleasa.courier,
       serviceName: aleasa.serviciu,
-    });
-    setEmitand(false);
+    };
+
+    setEmitand(true);
+    let r: Awaited<ReturnType<typeof createInnoshipAwbAction>>;
+    try {
+      r = await createInnoshipAwbAction(businessId, order.id, dateInnoship);
+    } catch (e) {
+      /* ⚠ Emiterea SCHIMBA la Innoship, deci NU se spune „a esuat": AWB-ul poate sa fi plecat.
+         Nu pretind ca n-ar avea idempotenta, fiindca n-am dovada; spun doar ce e sigur, ca
+         butonul de verificare de mai jos CITESTE si se apasa inaintea unei a doua emiteri. */
+      toast.error(
+        "Innoship nu a raspuns, si nu stim daca AWB-ul s-a creat. Apasa „Verifica la Innoship” "
+        + "inainte sa emiti din nou: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 18000 },
+      );
+      return;
+    } finally {
+      setEmitand(false);
+    }
     if ("error" in r) return toast.error(r.error, { duration: 12000 });
     for (const av of r.avertismente) toast.warning(av, { duration: 10000 });
     toast.success(`AWB emis: ${r.awb}`);
@@ -147,8 +179,21 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleVerifica() {
     setVerificand(true);
-    const r = await verificaInnoshipAwbAction(businessId, order.id);
-    setVerificand(false);
+    let r: Awaited<ReturnType<typeof verificaInnoshipAwbAction>>;
+    try {
+      r = await verificaInnoshipAwbAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Tocmai butonul asta nu are voie sa ramana blocat: el e iesirea din „am trimis si
+         n-am primit raspuns". E o CITIRE, deci se poate reincerca linistit. */
+      toast.error(
+        "Innoship nu a raspuns la verificare. Incearca din nou peste putin, e doar o citire: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 12000 },
+      );
+      return;
+    } finally {
+      setVerificand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 12000 });
     toast[r.gasit ? "success" : "info"](r.mesaj, { duration: 12000 });
     if (r.gasit) onSuccess();
@@ -156,8 +201,16 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleStari() {
     setIncarcStari(true);
-    const r = await getInnoshipTraceAction(businessId, order.id);
-    setIncarcStari(false);
+    let r: Awaited<ReturnType<typeof getInnoshipTraceAction>>;
+    try {
+      r = await getInnoshipTraceAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Tot o CITIRE. */
+      toast.error("Innoship nu a raspuns: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"));
+      return;
+    } finally {
+      setIncarcStari(false);
+    }
     if (!r.ok) return toast.error(r.error);
     setStari({ stari: r.stari, ramburs: r.ramburs });
   }

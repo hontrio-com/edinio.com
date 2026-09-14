@@ -19,9 +19,24 @@ export function DpdPickupModal({
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit() {
+    /* ⚠ `finally`, si in `try` DOAR apelul. Vezi `steagul-se-stinge-in-finally`: altfel o
+       actiune care ARUNCA lasa butonul invartindu-se pe „Se programeaza…" la nesfarsit. */
     setSubmitting(true);
-    const result = await requestDpdPickupAction(businessId);
-    setSubmitting(false);
+    let result: Awaited<ReturnType<typeof requestDpdPickupAction>>;
+    try {
+      result = await requestDpdPickupAction(businessId);
+    } catch (e) {
+      /* ⚠ Programarea SCHIMBA la DPD: cere ridicarea pentru toate AWB-urile din ultimele 24
+         de ore. Deci nu se spune „a esuat", fiindca cererea poate sa fi ajuns. */
+      toast.error(
+        "DPD nu a raspuns. Verifica in contul DPD inainte sa incerci din nou: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setSubmitting(false);
+    }
 
     if ("error" in result) {
       toast.error(result.error);

@@ -84,11 +84,9 @@ const DIR = "src/components/dashboard";
  */
 const INCA_NEREPARATE: Record<string, number> = {
   "CargusAwbModal.tsx": 2,
-  "CargusPickupModal.tsx": 1,
   "ColeteAwbModal.tsx": 2,
   "DhlAwbModal.tsx": 5,
   "DpdAwbModal.tsx": 2,
-  "DpdPickupModal.tsx": 1,
   "FedexAwbModal.tsx": 4,
   "InnoshipAwbModal.tsx": 4,
   "PacketaAwbModal.tsx": 3,

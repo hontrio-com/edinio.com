@@ -57,12 +57,28 @@ export function CargusPickupModal({
     if (isSunday) return toast.error("Cargus nu face ridicari duminica");
     if (!endHours.includes(secondHour)) return toast.error("Ora de sfarsit trebuie sa fie dupa ora de inceput");
 
+    /* ⚠ `finally`, si in `try` DOAR apelul; ramificarea ramane afara. Vezi
+       `steagul-se-stinge-in-finally`: o actiune de server care ARUNCA lasa altfel butonul
+       invartindu-se pe „Se valideaza…" pana la reincarcarea paginii, fara niciun mesaj. */
     setSubmitting(true);
-    const result = await requestCargusPickupAction(businessId, {
-      pickupStart: `${pickupDate}T${firstHour}`,
-      pickupEnd: `${pickupDate}T${secondHour}`,
-    });
-    setSubmitting(false);
+    let result: Awaited<ReturnType<typeof requestCargusPickupAction>>;
+    try {
+      result = await requestCargusPickupAction(businessId, {
+        pickupStart: `${pickupDate}T${firstHour}`,
+        pickupEnd: `${pickupDate}T${secondHour}`,
+      });
+    } catch (e) {
+      /* ⚠ Validarea SCHIMBA la Cargus: inchide comanda deschisa de pe punctul de ridicare.
+         Deci nu se spune „a esuat", ci ce stim si ce nu stim. */
+      toast.error(
+        "Cargus nu a raspuns. Verifica in WebExpress inainte sa incerci din nou: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setSubmitting(false);
+    }
 
     if ("error" in result) {
       toast.error(result.error);

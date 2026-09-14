@@ -785,7 +785,29 @@ export function OrderDetailClient({
 
   function handleGenerateInvoice() {
     startInvoiceTransition(async () => {
-      const result = await generateOrderInvoice(businessId, order.id);
+      let result: Awaited<ReturnType<typeof generateOrderInvoice>>;
+      try {
+        result = await generateOrderInvoice(businessId, order.id);
+      } catch {
+        /*
+         * ⚠⚠ MESAJUL NU ARE VOIE SA INVITE LA REINCERCARE.
+         *
+         * Factura fiscala, emisa la SmartBill.
+         *
+         * `slotFacturare` refuza a doua emitere, dar citeste numarul scris pe comanda
+         * DUPA ce raspunde furnizorul. Cand actiunea arunca, documentul poate sa existe
+         * la ei fara ca numarul sa fi ajuns la noi: slotul e liber, si o reincercare
+         * emite inca unul.
+         */
+        toast.error(
+          "Nu am primit raspuns de la SmartBill, deci nu stim daca factura s-a emis. "
+          + "Verifica in contul SmartBill INAINTE sa incerci din nou: daca documentul e acolo, "
+          + "dar numarul nu s-a scris pe comanda, o a doua apasare emite inca unul.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       setInvoiceNumber(result.number);
       setInvoiceSeries(result.series);
@@ -796,7 +818,29 @@ export function OrderDetailClient({
 
   function handleGenerateEstimate() {
     startEstimateTransition(async () => {
-      const result = await generateOrderEstimate(businessId, order.id);
+      let result: Awaited<ReturnType<typeof generateOrderEstimate>>;
+      try {
+        result = await generateOrderEstimate(businessId, order.id);
+      } catch {
+        /*
+         * ⚠⚠ MESAJUL NU ARE VOIE SA INVITE LA REINCERCARE.
+         *
+         * Proforma, emisa la SmartBill pe seria ei proprie.
+         *
+         * `slotFacturare` refuza a doua emitere, dar citeste numarul scris pe comanda
+         * DUPA ce raspunde furnizorul. Cand actiunea arunca, documentul poate sa existe
+         * la ei fara ca numarul sa fi ajuns la noi: slotul e liber, si o reincercare
+         * emite inca unul.
+         */
+        toast.error(
+          "Nu am primit raspuns de la SmartBill, deci nu stim daca proforma s-a emis. "
+          + "Verifica in contul SmartBill INAINTE sa incerci din nou: daca documentul e acolo, "
+          + "dar numarul nu s-a scris pe comanda, o a doua apasare emite inca unul.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       setEstimateNumber(result.number);
       setEstimateSeries(result.series);
@@ -807,7 +851,30 @@ export function OrderDetailClient({
 
   function handleConvert() {
     startConvertTransition(async () => {
-      const result = await convertEstimateToInvoice(businessId, order.id);
+      let result: Awaited<ReturnType<typeof convertEstimateToInvoice>>;
+      try {
+        result = await convertEstimateToInvoice(businessId, order.id);
+      } catch {
+        /*
+         * ⚠⚠ MESAJUL NU ARE VOIE SA INVITE LA REINCERCARE.
+         *
+         * Proforma devine factura fiscala. Emiterea e reala, chiar daca pleaca de la
+         * un document care exista deja.
+         *
+         * `slotFacturare` refuza a doua emitere, dar citeste numarul scris pe comanda
+         * DUPA ce raspunde furnizorul. Cand actiunea arunca, documentul poate sa existe
+         * la ei fara ca numarul sa fi ajuns la noi: slotul e liber, si o reincercare
+         * emite inca unul.
+         */
+        toast.error(
+          "Nu am primit raspuns de la SmartBill, deci nu stim daca factura s-a emis. "
+          + "Verifica in contul SmartBill INAINTE sa incerci din nou: daca documentul e acolo, "
+          + "dar numarul nu s-a scris pe comanda, o a doua apasare emite inca unul.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       setInvoiceNumber(result.number);
       setInvoiceSeries(result.series);
@@ -819,7 +886,29 @@ export function OrderDetailClient({
   function handleStorno() {
     setShowStornoConfirm(false);
     startStornoTransition(async () => {
-      const result = await stornoOrderInvoice(businessId, order.id);
+      let result: Awaited<ReturnType<typeof stornoOrderInvoice>>;
+      try {
+        result = await stornoOrderInvoice(businessId, order.id);
+      } catch {
+        /*
+         * ⚠⚠ MESAJUL NU ARE VOIE SA INVITE LA REINCERCARE.
+         *
+         * Stornarea e tot un document fiscal, nu o stergere.
+         *
+         * `slotFacturare` refuza a doua emitere, dar citeste numarul scris pe comanda
+         * DUPA ce raspunde furnizorul. Cand actiunea arunca, documentul poate sa existe
+         * la ei fara ca numarul sa fi ajuns la noi: slotul e liber, si o reincercare
+         * emite inca unul.
+         */
+        toast.error(
+          "Nu am primit raspuns de la SmartBill, deci nu stim daca stornarea s-a emis. "
+          + "Verifica in contul SmartBill INAINTE sa incerci din nou: daca documentul e acolo, "
+          + "dar numarul nu s-a scris pe comanda, o a doua apasare emite inca unul.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       setStornoNumber(result.stornoNumber ?? invoiceNumber);
       setStornoSeries(result.stornoSeries ?? invoiceSeries);
@@ -896,10 +985,25 @@ export function OrderDetailClient({
     setOblioAction(action);
     startOblioTransition(async () => {
       let result: { error: string } | { number: string; series: string } | { success: true };
-      if (action === "invoice") result = await generateOblioInvoice(businessId, order.id);
-      else if (action === "proforma") result = await generateOblioProforma(businessId, order.id);
-      else result = await stornoOblioInvoice(businessId, order.id);
-      setOblioAction(null);
+      try {
+        if (action === "invoice") result = await generateOblioInvoice(businessId, order.id);
+        else if (action === "proforma") result = await generateOblioProforma(businessId, order.id);
+        else result = await stornoOblioInvoice(businessId, order.id);
+      } catch {
+        /* ⚠⚠ Aceeasi fereastra ca la SmartBill, cu `orders.oblio_invoice_number`:
+           slotul se ocupa abia dupa ce raspunde Oblio, deci o reincercare oarba poate
+           emite un al doilea document real. */
+        const ce = action === "invoice" ? "factura" : action === "proforma" ? "proforma" : "stornarea";
+        toast.error(
+          `Nu am primit raspuns de la Oblio, deci nu stim daca ${ce} s-a emis. Verifica in contul Oblio INAINTE sa incerci din nou: daca documentul e acolo, dar numarul nu s-a scris pe comanda, o a doua apasare emite inca unul.`,
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      } finally {
+        /* ⚠ Mutat aici din mijlocul callbackului: acopera si calea de cadere. */
+        setOblioAction(null);
+      }
       if ("error" in result) { toast.error(result.error); return; }
       if ("number" in result) {
         const labels = { invoice: "Factura", proforma: "Proforma", storno: "Storno" };
@@ -912,10 +1016,25 @@ export function OrderDetailClient({
   function handleFgoAction(action: "invoice" | "storno") {
     setFgoAction(action);
     startFgoTransition(async () => {
-      const result = action === "invoice"
-        ? await generateFgoInvoice(businessId, order.id)
-        : await stornoFgoInvoiceAction(businessId, order.id);
-      setFgoAction(null);
+      let result:
+        | Awaited<ReturnType<typeof generateFgoInvoice>>
+        | Awaited<ReturnType<typeof stornoFgoInvoiceAction>>;
+      try {
+        result = action === "invoice"
+          ? await generateFgoInvoice(businessId, order.id)
+          : await stornoFgoInvoiceAction(businessId, order.id);
+      } catch {
+        /* ⚠⚠ Aceeasi fereastra, cu `orders.fgo_invoice_number`. */
+        const ce = action === "invoice" ? "factura" : "stornarea";
+        toast.error(
+          `Nu am primit raspuns de la fGO, deci nu stim daca ${ce} s-a emis. Verifica in contul fGO INAINTE sa incerci din nou: daca documentul e acolo, dar numarul nu s-a scris pe comanda, o a doua apasare emite inca unul.`,
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      } finally {
+        setFgoAction(null);
+      }
       if ("error" in result) { toast.error(result.error); return; }
       if ("number" in result) {
         const label = action === "invoice" ? "Factura fGO" : "Storno fGO";

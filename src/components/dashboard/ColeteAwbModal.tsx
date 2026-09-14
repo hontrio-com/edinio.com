@@ -321,7 +321,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                   <Truck className="h-3.5 w-3.5" />Destinatar
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
                     <label className="block text-xs text-muted-foreground mb-1">Nume *</label>
                     <input type="text" value={receiverName} onChange={e => setReceiverName(e.target.value)} className={inputCls} />
@@ -335,7 +335,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                   <label className="block text-xs text-muted-foreground mb-1">Email</label>
                   <input type="email" value={receiverEmail} onChange={e => setReceiverEmail(e.target.value)} className={inputCls} />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
                     <label className="block text-xs text-muted-foreground mb-1">Judet *</label>
                     <input type="text" value={receiverCounty} onChange={e => setReceiverCounty(e.target.value)} placeholder="Cluj" className={inputCls} />
@@ -378,7 +378,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                     </button>
                   ))}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>
                     <label className="block text-xs text-muted-foreground mb-1">Greutate (kg) *</label>
                     <input type="number" min="0.1" step="0.1" value={weight} onChange={e => setWeight(e.target.value)} className={inputCls} />
@@ -387,7 +387,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                     <label className="block text-xs text-muted-foreground mb-1">Continut *</label>
                     <input type="text" value={content} onChange={e => setContent(e.target.value)} className={inputCls} />
                   </div>
-                  {notaGreutate(dinCatalog, liniiFaraGreutate) && <p className="col-span-2 text-[11px] leading-snug text-muted-foreground">{notaGreutate(dinCatalog, liniiFaraGreutate)}</p>}
+                  {notaGreutate(dinCatalog, liniiFaraGreutate) && <p className="sm:col-span-2 text-[11px] leading-snug text-muted-foreground">{notaGreutate(dinCatalog, liniiFaraGreutate)}</p>}
                 </div>
                 {parcelType === "package" && (
                   <div className="grid grid-cols-3 gap-2">

@@ -311,7 +311,7 @@ export default function WootConfigClient({
               placeholder="Prenume Nume" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <Phone className="h-3.5 w-3.5 text-muted-foreground" />Telefon
@@ -328,7 +328,7 @@ export default function WootConfigClient({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
                 <MapPin className="h-3.5 w-3.5 text-muted-foreground" />Judet

@@ -479,7 +479,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 {/* Receiver section */}
                 <section className="space-y-3">
                   <p className="text-sm font-semibold text-foreground">Destinatar</p>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Judet</label>
                       <select value={countyId || ""} onChange={e => { setCountyId(Number(e.target.value)); setCityId(0); }} className={inputCls}>
@@ -499,7 +499,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                     <label className="block text-xs font-medium text-muted-foreground mb-1">Adresa</label>
                     <input value={receiverAddress} onChange={e => setReceiverAddress(e.target.value)} className={inputCls} placeholder="Strada, nr." />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Telefon</label>
                       <input value={receiverPhone} onChange={e => setReceiverPhone(e.target.value)} className={inputCls} placeholder="+40721000000" />
@@ -526,7 +526,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                   </div>
 
                   {parcelType === "package" && (
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                       {[
                         { label: "Greutate (kg)", value: weight, set: setWeight },
                         { label: "Lungime (cm)", value: length, set: setLength },
@@ -539,7 +539,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                             onChange={e => setter(e.target.value)} className={inputCls} />
                         </div>
                       ))}
-                      {notaGreutate(dinCatalog, liniiFaraGreutate) && <p className="col-span-4 text-[11px] leading-snug text-muted-foreground">{notaGreutate(dinCatalog, liniiFaraGreutate)}</p>}
+                      {notaGreutate(dinCatalog, liniiFaraGreutate) && <p className="col-span-2 sm:col-span-4 text-[11px] leading-snug text-muted-foreground">{notaGreutate(dinCatalog, liniiFaraGreutate)}</p>}
                     </div>
                   )}
 
@@ -548,7 +548,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                     <input value={content} onChange={e => setContent(e.target.value)} className={inputCls} placeholder="Produse comerciale" />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">
                         Ramburs (RON) {ramburs === 0 && <span className="text-muted-foreground/60">— comanda platita</span>}

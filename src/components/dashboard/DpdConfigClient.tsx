@@ -225,7 +225,7 @@ export function DpdConfigClient({
             <p className="text-[11px] text-muted-foreground mb-2">
               Destinatarul poate deschide sau testa coletul inainte de plata. Se aplica doar livrarilor la adresa (nu la punctele de ridicare).
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <select
                 aria-label="Optiune OBPD"
                 value={obpd}

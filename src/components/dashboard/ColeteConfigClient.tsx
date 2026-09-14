@@ -270,7 +270,7 @@ export default function ColeteConfigClient({
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Strada" required className="col-span-2">
+            <Field label="Strada" required className="sm:col-span-2">
               <Input type="text" value={sender.street} onChange={e => updateSender("street", e.target.value)} placeholder="Strada Eroilor" />
             </Field>
             <Field label="Numar" required>

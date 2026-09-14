@@ -406,7 +406,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                       </p>
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Nume *</label>
                       <input
@@ -439,7 +439,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                     )}
                   </div>
                   {!laPunctFan && (<>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Judet *</label>
                       <input
@@ -461,7 +461,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                       />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Strada</label>
                       <input
@@ -498,7 +498,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Detalii colet</p>
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">Greutate (kg) *</label>
                       <input

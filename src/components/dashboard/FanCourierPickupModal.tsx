@@ -265,7 +265,7 @@ export function FanCourierPickupModal({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">De la ora *</label>
               <select
@@ -298,7 +298,7 @@ export function FanCourierPickupModal({
             Interval de minim 2 ore. Program ridicari: luni-vineri pana la 19:00 in Bucuresti, pana la 17:00 in provincie.
           </p>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-medium text-muted-foreground mb-1">Nr. colete *</label>
               <input

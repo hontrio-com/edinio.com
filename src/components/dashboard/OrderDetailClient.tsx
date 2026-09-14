@@ -334,6 +334,7 @@ export function OrderDetailClient({
   businessId,
   areEtichetaPepita = false,
   stareEtichetaPepita = null,
+  expediere = null,
   setariTva,
   smartbillEnabled,
   hasEstimateSeries,
@@ -372,6 +373,16 @@ export function OrderDetailClient({
   areEtichetaPepita?: boolean;
   /** `lipsa` | `salvata` | `nevalida` | `depozit-cazut` | null (comanda veche). */
   stareEtichetaPepita?: string | null;
+  /**
+   * Ce spune REGISTRUL despre expedierea comenzii. Se afla pe server (vezi pagina).
+   *
+   * ⚠ Componenta asta e de CLIENT, deci n-are cum sa citeasca `operatii_externe`. Fara valoarea
+   * coborata de pe server, cartea de stergere ar fi aratat „se poate" pe o comanda pe care
+   * serverul o refuza: doua adevaruri despre aceeasi comanda, si cel de pe ecran ar fi fost crezut.
+   *
+   * Implicit `null`, ca paginile si probele care randeaza componenta sa nu trebuiasca sa stie de el.
+   */
+  expediere?: "in_zbor" | "reusita" | null;
   /*
    * OBLIGATORIU, nu optional cu implicit: fara el, caseta de totaluri nu poate
    * sti daca `orders.vat_amount` e o suma de adunat sau una deja continuta in
@@ -638,6 +649,8 @@ export function OrderDetailClient({
   const refuzStergere = deCeNuSeStergeComanda({
     status: (order.status as string | null) ?? null,
     awburi: awburiComenzii,
+    /* ⚠ Martorul din registru, coborat de pe server: aici nu se poate socoti. Vezi `expediere`. */
+    expediere,
   });
   const deliveryInfo = address.delivery_type === "locker" && address.locker_name ? address.locker_name : null;
 

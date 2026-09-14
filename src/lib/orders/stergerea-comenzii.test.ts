@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { deCeNuSeStergeComanda, sePoateStergeComanda } from "./stergerea-comenzii";
 import { COLOANA_AWB, coloanelePortii, NUME_CURIER, type CurierPropriu } from "./awb-propriu";
+import { expediereInRegistru } from "@/lib/operatii/registru";
 
 /* ══════════════════════════════════════════════════════════════════════════
    O COMANDA CU COLETUL PE DRUM NU SE STERGE (14.09.2026)
@@ -100,6 +101,169 @@ test("celula goala nu e colet", () => {
   /* `null`, sirul gol si `undefined` nu opresc nimic: altfel nicio comanda nu s-ar sterge. */
   assert.equal(deCeNuSeStergeComanda({ status: "shipped", awburi: { woot: null } }), null);
   assert.equal(deCeNuSeStergeComanda({ status: "shipped", awburi: { woot: "" } }), null);
+});
+
+/* ── Starea comenzii NU e martor: registrul e ─────────────────────────────── */
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * „ANULATA" INSEAMNA DOAR CA AM ZIS NOI                          (14.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Starea comenzii se schimba dintr-un selector: `updateOrder` valideaza doar ca eticheta de status
+ * exista, iar `aplica_tranzitia_comenzii` nu pomeneste niciun AWB. Nimeni nu intreaba curierul.
+ * Deci comerciantul marca „anulata", stergea, si coletul pleca mai departe cu rambursul lui.
+ *
+ * ⚠ REGISTRUL E SINGURUL MARTOR CARE NU SE POATE SCRIE DE PE ECRAN, si de aceea regula il cere.
+ */
+
+const cuRegistru = (
+  curier: CurierPropriu, numar: string, status: string | null,
+  expediere: "in_zbor" | "reusita" | null | undefined,
+) => ({ ...cu(curier, numar, status), expediere });
+
+test("⚠⚠ «anulata» la noi, dar emisa la curier: NU se sterge", () => {
+  for (const stare of ["cancelled", "refunded"]) {
+    const motiv = deCeNuSeStergeComanda(cuRegistru("dpd", "AWB-9", stare, "reusita"));
+    assert.ok(motiv, `starea „${stare}" cu expediere emisa ar trebui sa opreasca stergerea`);
+    assert.match(motiv, /DPD/, "mesajul nu spune care curier");
+    assert.match(motiv, /AWB-9/, "mesajul nu da numarul");
+    assert.match(motiv, /Detașează AWB/, "mesajul nu arata iesirea");
+  }
+});
+
+test("⚠⚠ DAR «livrata» cu aceeasi expediere emisa SE STERGE, si asta e dinadins", () => {
+  /*
+   * ⚠ AFIRMATIA CARE APARA CELE 26. Un AWB emis cu succes lasa randul `reusit` cat traieste
+   * comanda, deci „rand reusit" NU inseamna „colet pe drum". La o comanda livrata transportul chiar
+   * s-a incheiat. Cine ar „face curat" tratand toate cele trei stari la fel ar bloca exact
+   * comenzile pe care masuratoarea le-a aparat.
+   */
+  assert.equal(deCeNuSeStergeComanda(cuRegistru("dpd", "AWB-9", "delivered", "reusita")), null,
+    "o comanda livrata nu mai are ce pierde: stergerea e curatenie curata");
+});
+
+test("⚠ o expediere IN ZBOR opreste stergerea in orice stare incheiata", () => {
+  for (const stare of ["delivered", "cancelled", "refunded"]) {
+    const motiv = deCeNuSeStergeComanda(cuRegistru("woot", "W-1", stare, "in_zbor"));
+    assert.ok(motiv, `starea „${stare}" cu expediere in zbor ar trebui sa opreasca stergerea`);
+    assert.match(motiv, /încă nu știm cum s-a terminat/, "mesajul nu descrie chiar starea in zbor");
+  }
+});
+
+test("⚠⚠ apelantul care NU poate socoti registrul nu schimba nimic", () => {
+  /*
+   * `undefined` inseamna „n-am de unde sti", ca la `grameComandate` din `verificaCotatia`. Nu e o
+   * portita: cine nu-l poate socoti n-are nici cu ce sa minta. Fara regula asta, orice pagina sau
+   * proba care randeaza componenta ar fi inceput sa refuze stergeri care mergeau ieri.
+   */
+  for (const stare of ["delivered", "cancelled", "refunded"]) {
+    assert.equal(deCeNuSeStergeComanda(cuRegistru("woot", "W-1", stare, undefined)), null,
+      `fara martor, starea „${stare}" se poarta ca pana acum`);
+  }
+});
+
+test("⚠ fara colet pe comanda, martorul nu schimba nimic", () => {
+  /* Un rand ramas in registru fara AWB pe comanda nu e un colet de pierdut. */
+  assert.equal(
+    deCeNuSeStergeComanda({ status: "cancelled", awburi: {}, expediere: "reusita" }),
+    null,
+  );
+});
+
+test("⚠ si pe o stare NEINCHEIATA mesajul ramane cel dinainte", () => {
+  /* Drumul vechi nu se atinge: acolo AWB-ul singur opreste, si textul e cel probat mai sus. */
+  const motiv = deCeNuSeStergeComanda(cuRegistru("woot", "W-2", "shipped", "reusita"))!;
+  assert.match(motiv, /nu e încă livrată sau închisă/, "textul drumului vechi s-a schimbat");
+});
+
+/* ── Cititorul din registru, pe purtare ───────────────────────────────────── */
+
+type RandRegistru = { stare: string; cheie: string };
+
+/** Client fals, doar cat ii trebuie lui `expediereInRegistru`. */
+function bazaFalsa(randuri: RandRegistru[] | null, eroare?: string) {
+  const lant: Record<string, unknown> = {};
+  lant.select = () => lant;
+  lant.eq = () => lant;
+  lant.in = async () => ({ data: randuri, error: eroare ? { message: eroare } : null });
+  return { from: () => lant } as unknown as Parameters<typeof expediereInRegistru>[0];
+}
+
+test("⚠ registrul gol inseamna «nu stiu nimic», deci se poate sterge", async () => {
+  assert.equal(await expediereInRegistru(bazaFalsa([]), "b", "o"), null);
+});
+
+test("⚠ un AWB emis si neanulat iese «reusita»", async () => {
+  assert.equal(
+    await expediereInRegistru(bazaFalsa([{ stare: "reusit", cheie: "awb:dpd:o" }]), "b", "o"),
+    "reusita",
+  );
+});
+
+test("⚠ o emitere pornita sau nelamurita iese «in_zbor»", async () => {
+  for (const stare of ["in_curs", "necunoscut"]) {
+    assert.equal(
+      await expediereInRegistru(bazaFalsa([{ stare, cheie: "awb:dpd:o" }]), "b", "o"),
+      "in_zbor",
+      `starea „${stare}" nu e citita ca expediere in zbor`,
+    );
+  }
+  /* Amestecate, cea nelamurita cantareste mai greu. */
+  assert.equal(
+    await expediereInRegistru(bazaFalsa([
+      { stare: "reusit", cheie: "awb:dpd:o" },
+      { stare: "in_curs", cheie: "awb:sameday:o" },
+    ]), "b", "o"),
+    "in_zbor",
+  );
+});
+
+test("⚠⚠ RANDURILE DE RETUR NU SE PUN LA SOCOTEALA", () => {
+  /*
+   * AWB-ul de retur Sameday se inregistreaza tot cu `fel: "awb"`, deosebit doar prin prefixul
+   * `retur:` din cheie. Numarat aici, o comanda careia i s-a emis retur n-ar mai fi putut fi
+   * stearsa niciodata. Aceeasi excludere ca in `operatii_externe_awb_viu_pe_comanda_idx`.
+   */
+  return expediereInRegistru(bazaFalsa([{ stare: "reusit", cheie: "retur:awb:sameday:o" }]), "b", "o")
+    .then((r) => assert.equal(r, null, "randul de retur a fost luat drept expediere a comenzii"));
+});
+
+test("⚠⚠ o citire PICATA da «nu stiu», nu refuz", async () => {
+  /*
+   * ⚠ DIRECTIA CONTEAZA. Refuzul pe o eroare de retea ar face stergerea ostatica unei pene de
+   * baza, iar stergerea e si calea prin care se sterg datele personale la cerere. Lipsa dovezii
+   * inseamna „se poate", nu „se refuza".
+   */
+  assert.equal(await expediereInRegistru(bazaFalsa(null, "retea cazuta"), "b", "o"), null);
+});
+
+/* ── Cusatura: martorul chiar ajunge la regula ────────────────────────────── */
+
+test("⚠⚠ serverul citeste registrul SI il trece regulii", () => {
+  const cod = faraComentarii(fisier("src/lib/actions/order.actions.ts"));
+  const iCitire = cod.indexOf("const expediere = await expediereInRegistru(");
+  const iRegula = cod.indexOf("deCeNuSeStergeComanda({");
+  assert.ok(iCitire > 0, "serverul nu mai citeste registrul");
+  assert.ok(iCitire < iRegula, "citirea trebuie sa fie inaintea regulii");
+  assert.match(cod.slice(iRegula, iRegula + 260), /expediere,/, "martorul nu ajunge la regula");
+});
+
+test("⚠⚠ si ECRANUL primeste acelasi martor, de pe server", () => {
+  /*
+   * Componenta e de CLIENT, deci nu poate citi `operatii_externe`. Fara valoarea coborata din
+   * pagina, cartea de stergere ar fi aratat „se poate" pe o comanda pe care serverul o refuza:
+   * doua adevaruri despre aceeasi comanda, si cel de pe ecran ar fi fost crezut.
+   */
+  const pagina = faraComentarii(fisier("src/app/(dashboard)/dashboard/orders/[orderId]/page.tsx"));
+  assert.match(pagina, /await expediereInRegistru\(createAdminClient\(\), biz\.id, order\.id as string\)/,
+    "pagina nu mai socoteste martorul");
+  assert.match(pagina, /expediere=\{expediereComenzii\}/, "pagina nu-l mai coboara pe ecran");
+
+  const ui = faraComentarii(fisier("src/components/dashboard/OrderDetailClient.tsx"));
+  const i = ui.indexOf("const refuzStergere = deCeNuSeStergeComanda({");
+  assert.ok(i > 0, "ecranul nu mai cheama regula");
+  assert.match(ui.slice(i, i + 220), /expediere,/, "ecranul cheama regula fara martor");
 });
 
 /* ── Cusatura: serverul chiar o cheama, si LA TIMP ────────────────────────── */

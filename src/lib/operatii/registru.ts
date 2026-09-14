@@ -759,6 +759,59 @@ export async function operatiiAtarnate(
 }
 
 /**
+ * Starea expedierii asa cum o stie REGISTRUL, nu comanda.
+ *
+ * `"in_zbor"` rezervata si neincheiata (`in_curs`) sau incheiata neinteligibil (`necunoscut`).
+ * `"reusita"` AWB emis si confirmat, si niciodata anulat de atunci.
+ * `null`      nimic: comanda n-a avut niciodata AWB prin registru, sau a fost anulat.
+ */
+export type ExpediereInRegistru = "in_zbor" | "reusita" | null;
+
+/**
+ * Mai exista o expediere a comenzii asteia in registru?
+ *
+ * ═══ ⚠ DE CE E NEVOIE DE EA LA STERGERE ═══
+ *
+ * `deCeNuSeStergeComanda` se uita la starea LOCALA a comenzii, iar aceea se schimba dintr-un
+ * selector, fara sa intrebe nimeni curierul. Comerciantul marcheaza „anulata", sterge, si coletul
+ * pleaca mai departe cu rambursul lui. Registrul e singurul martor care nu se poate scrie din
+ * ecran.
+ *
+ * ⚠ ACELASI PREDICAT CA `operatii_externe_awb_viu_pe_comanda_idx` (migratia din 2027-01-13):
+ * `fel = 'awb'`, fara cheile de retur, si aceleasi trei stari blocante. Doua intrebari despre
+ * acelasi lucru n-au voie sa raspunda diferit; daca una se schimba, se schimba amandoua.
+ *
+ * ⚠ SI LA O CITIRE PICATA SE INTOARCE `null`, adica „nu stiu nimic", nu „exista colet".
+ * Refuzul pe o eroare de retea ar face stergerea ostatica unei pene de baza, iar stergerea e si
+ * calea prin care se sterg datele personale la cerere. Regula de deasupra e construita ca lipsa
+ * dovezii sa insemne „se poate", nu „se refuza".
+ */
+export async function expediereInRegistru(
+  admin: SupabaseClient<Database>,
+  businessId: string,
+  orderId: string,
+): Promise<ExpediereInRegistru> {
+  const { data, error } = await admin
+    .from("operatii_externe")
+    .select("stare, cheie")
+    .eq("business_id", businessId)
+    .eq("order_id", orderId)
+    .eq("fel", "awb")
+    .in("stare", ["in_curs", "reusit", "necunoscut"]);
+
+  if (error) {
+    console.error("[registru] nu am putut citi expedierea comenzii:", error.message);
+    return null;
+  }
+
+  /* ⚠ Returul se sare AICI, nu in interogare: `not.like` prin PostgREST e usor de scris gresit,
+     iar o gresala de sintaxa nu da eroare, da lista goala. Vezi nota de la `operatiiAtarnate`. */
+  const alTurului = (data ?? []).filter((r) => !String(r.cheie ?? "").startsWith("retur:"));
+  if (alTurului.length === 0) return null;
+  return alTurului.some((r) => r.stare !== "reusit") ? "in_zbor" : "reusita";
+}
+
+/**
  * „Am verificat la furnizor, operatia nu exista acolo. Da-mi voie sa reincerc."
  *
  * Marcheaza randul `esuat`, deci nu mai blocheaza. Apelantul TREBUIE sa fi

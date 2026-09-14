@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { expediereInRegistru } from "@/lib/operatii/registru";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { OrderDetailClient } from "@/components/dashboard/OrderDetailClient";
 import { areEticheta } from "@/lib/pepita/eticheta";
@@ -221,10 +222,28 @@ export default async function OrderDetailPage({ params }: Props) {
     }
   }
 
+  /*
+   * ⚠ CE SPUNE REGISTRUL DESPRE EXPEDIERE, socotit AICI si coborat pe ecran.
+   *
+   * Cartea de stergere se hotaraste cu `deCeNuSeStergeComanda`, iar de azi regula aceea cere si
+   * martorul din registru: starea comenzii se schimba dintr-un selector si nu intreaba curierul.
+   * Ecranul e componenta de CLIENT, deci n-are cum sa citeasca `operatii_externe`. Lasat sa se
+   * descurce singur, ar fi aratat „se poate sterge" pe o comanda pe care serverul o refuza, adica
+   * exact cele doua adevaruri pe care `stergerea-comenzii.test.ts` le tine despartite.
+   *
+   * ⚠ Pretul, pe fata: o interogare in plus la fiecare deschidere a paginii. E o citire indexata
+   * pe `(order_id)`, iar alternativa e un buton rosu care da eroare abia dupa apasare.
+   *
+   * ⚠ Si NU cade pagina pentru ea: la o citire picata, `expediereInRegistru` intoarce `null`,
+   * adica „nu stiu nimic", si regula se poarta exact ca pana acum.
+   */
+  const expediereComenzii = await expediereInRegistru(createAdminClient(), biz.id, order.id as string);
+
   return (
     <OrderDetailClient
       order={order}
       businessId={biz.id}
+      expediere={expediereComenzii}
       areEtichetaPepita={areEtichetaPepita}
       stareEtichetaPepita={stareEtichetaPepita}
       setariTva={setariTva}

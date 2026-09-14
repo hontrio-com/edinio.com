@@ -79,6 +79,17 @@ export interface ComandaLaStergere {
   status: string | null;
   /** Numerele de AWB de pe comanda, pe curier. Se ia din `awburiDinRand`. */
   awburi: Partial<Record<CurierPropriu, string | null>>;
+  /**
+   * Ce spune REGISTRUL despre expediere, cand apelantul poate afla. Vezi `expediereInRegistru`.
+   *
+   * ⚠ OPTIONALA SI CONSERVATOARE, dinadins. Nedata, regula se poarta exact ca pana acum: nicio
+   * comanda care se stergea ieri nu inceteaza sa se stearga din pricina unui apelant care n-o
+   * poate socoti. Data, ea poate doar sa REFUZE mai mult, niciodata sa permita mai mult.
+   *
+   * ⚠ Si `undefined` nu e o portita: apelantul care n-o poate socoti n-are nici cu ce sa minta.
+   * Aceeasi hotarare ca la `grameComandate` si `planPretins` din `verificaCotatia`.
+   */
+  expediere?: "in_zbor" | "reusita" | null;
 }
 
 /**
@@ -93,7 +104,22 @@ export interface ComandaLaStergere {
  * Cei 211 AWB-uri Woot si cele 5 DPD treceau nevazute.
  */
 export function deCeNuSeStergeComanda(o: ComandaLaStergere): string | null {
-  if (o.status && STARI_CU_TRANSPORTUL_INCHEIAT.has(o.status)) return null;
+  if (o.status && STARI_CU_TRANSPORTUL_INCHEIAT.has(o.status)) {
+    /*
+     * ═══ ⚠ STAREA E A NOASTRA, NU A CURIERULUI (14.09.2026) ═══
+     *
+     * Starea locala se schimba dintr-un selector si nu intreaba pe nimeni: `updateOrder` valideaza
+     * doar ca eticheta exista, iar `aplica_tranzitia_comenzii` nu pomeneste niciun AWB. Deci
+     * „anulata" nu inseamna ca expedierea a fost anulata la curier. Comerciantul marca „anulata",
+     * stergea, si coletul pleca mai departe cu rambursul lui de incasat.
+     *
+     * Registrul e singurul martor care nu se poate scrie de pe ecran, si abia el deosebeste
+     * „s-a incheiat" de „am zis eu ca s-a incheiat".
+     */
+    const neinchisa = expediereaNuS_aInchis(o);
+    if (!neinchisa) return null;
+    return mesajPeStareIncheiata(o, neinchisa);
+  }
 
   /*
    * ⚠ Se intoarce la PRIMUL colet gasit, in ordinea din `COLOANA_AWB`. O comanda cu
@@ -112,6 +138,53 @@ export function deCeNuSeStergeComanda(o: ComandaLaStergere): string | null {
   }
 
   return null;
+}
+
+/** Primul colet de pe comanda, in ordinea din `COLOANA_AWB`, sau `null`. */
+function primulColet(o: ComandaLaStergere): { curier: CurierPropriu; numar: string } | null {
+  for (const [curier, numar] of Object.entries(o.awburi) as [CurierPropriu, string | null | undefined][]) {
+    if (numar) return { curier, numar };
+  }
+  return null;
+}
+
+/**
+ * Pe o stare INCHEIATA: mai e ceva ce dovedeste ca expedierea n-a fost inchisa?
+ *
+ * ⚠ CELE 26 DE COMENZI INCHEIATE TREBUIE SA RAMANA STERGIBILE, si de aceea lipsa dovezii
+ * inseamna „se poate". Fara AWB pe comanda, sau fara nimic in registru, raspunsul e `null`.
+ *
+ * ⚠ `delivered` E EXCEPTIA, SI NU DIN NEGLIJENTA. Un AWB emis cu succes lasa randul `reusit` cat
+ * traieste comanda, deci „rand reusit" NU inseamna „colet pe drum". La o comanda livrata
+ * transportul chiar s-a incheiat, si un zid acolo ar fi blocat exact comenzile pe care masuratoarea
+ * le-a aparat. La `cancelled` si `refunded` insa, un rand `reusit` si neanulat inseamna ca
+ * expedierea a fost inchisa DOAR la noi.
+ */
+function expediereaNuS_aInchis(o: ComandaLaStergere): "in_zbor" | "doar_local" | null {
+  if (!primulColet(o)) return null;
+  /* ⚠ Apelantul care nu poate socoti registrul nu schimba nimic: vezi `expediere`. */
+  if (o.expediere === "in_zbor") return "in_zbor";
+  if (o.expediere === "reusita" && (o.status === "cancelled" || o.status === "refunded")) return "doar_local";
+  return null;
+}
+
+/** Textul pentru comanda „incheiata" a carei expediere nu s-a inchis nicaieri in afara ecranului. */
+function mesajPeStareIncheiata(o: ComandaLaStergere, fel: "in_zbor" | "doar_local"): string {
+  const colet = primulColet(o)!;
+  const cine = `${NUME_CURIER[colet.curier]} (${colet.numar})`;
+
+  if (fel === "in_zbor") {
+    return `Comanda are o expediere pornită la ${cine}, despre care încă nu știm cum s-a terminat. `
+      + "Ștearsă acum, coletul poate pleca la client fără ca tu să mai ai numărul sau urmărirea lui. "
+      + "Verifică expedierea în contul curierului, apoi lămurește operația din pagina comenzii; "
+      + "dacă nu mai există acolo, folosește „Detașează AWB” și după aceea se poate șterge.";
+  }
+
+  return `Comanda e marcată ${o.status === "refunded" ? "restituită" : "anulată"}, dar expedierea la `
+    + `${cine} nu a fost anulată la curier: în registru figurează încă emisă. Starea de pe comandă `
+    + "se schimbă dintr-un selector și nu întreabă curierul, deci ștearsă acum, coletul pleacă mai "
+    + "departe cu rambursul lui de încasat. Anulează AWB-ul din fereastra de editare a comenzii; "
+    + "dacă acel curier refuză anularea, fiindcă a preluat deja coletul, folosește „Detașează AWB”.";
 }
 
 /** Se poate sterge comanda asta? Forma scurta, pentru ecrane. */

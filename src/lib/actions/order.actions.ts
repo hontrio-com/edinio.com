@@ -50,6 +50,7 @@ import { cheieEticheta as cheieEtichetaPepita } from "@/lib/pepita/eticheta";
 import { awburiDinRand } from "@/lib/orders/awb-propriu";
 import { campuriDeCurier, planulPretins, type ZoneleMagazinului } from "@/lib/shipping/curierul-declarat";
 import { deCeNuSeStergeComanda } from "@/lib/orders/stergerea-comenzii";
+import { expediereInRegistru } from "@/lib/operatii/registru";
 import { deleteFromR2, stergeIncarcarea } from "@/lib/r2";
 import { interpreteazaRevendicarea, type Revendicare } from "@/lib/orders/verdict-stoc";
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
@@ -3694,9 +3695,22 @@ export async function deleteOrder(orderId: string) {
    * ar fi refuzata. Doua copii ale regulii ar fi insemnat doua adevaruri despre aceeasi
    * comanda, si cel de pe ecran ar fi fost crezut.
    */
+  /*
+   * ⚠ SI STAREA COMENZII NU E MARTOR, fiindca se scrie dintr-un selector.
+   *
+   * `updateOrder` valideaza doar ca eticheta de status exista, iar `aplica_tranzitia_comenzii` nu
+   * pomeneste niciun AWB: nimeni nu intreaba curierul. Deci „anulata" putea insemna doar „am zis
+   * eu". Registrul e singurul martor care nu se poate scrie de pe ecran.
+   *
+   * ⚠ Cu ADMIN: `operatii_externe` n-are politica de citire pentru comerciant. Proprietatea
+   * magazinului e deja dovedita mai sus, deci ocolirea RLS de aici nu deschide alta comanda.
+   */
+  const expediere = await expediereInRegistru(createAdminClient(), order.business_id, orderId);
+
   const opresteStergerea = deCeNuSeStergeComanda({
     status: order.status,
     awburi: awburiDinRand(order as unknown as Record<string, unknown>),
+    expediere,
   });
   if (opresteStergerea) return { error: opresteStergerea };
 

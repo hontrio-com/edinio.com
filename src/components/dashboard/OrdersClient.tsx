@@ -284,6 +284,25 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     void runBulk("Facturi", () => bulkGenerateInvoices(businessId!, [...selected], invoiceProvider));
   }
   function runBulkAwbs() {
+    /*
+     * ⚠ SE CERE CONFIRMARE, CA LA FACTURI (14.09.2026).
+     *
+     * O singura apasare emitea pana la 50 de expedieri REALE, platite la curier, fara nicio
+     * intrebare, in timp ce butonul de alaturi cere confirmare pentru facturi. Iar aici
+     * greseala e mai greu de desfacut decat o factura: o factura se storneaza, un colet emis
+     * la Packeta sau DHL NU se poate anula prin API. Vezi `bulk-orders.actions.ts` la Packeta
+     * („API-ul lor nu are anulare, deci fiecare colet creat din greseala trebuie sters de mana
+     * din contul lor") si `dhl.actions.ts` („DHL nu are anulare de expediere").
+     *
+     * ⚠ Textul spune CE se intampla, nu doar „esti sigur?": numarul de expedieri, ca sunt
+     * platite, si care sunt curierii fara drum inapoi.
+     */
+    const n = selected.size;
+    if (!window.confirm(
+      `Emiti AWB-uri pentru ${n} ${n === 1 ? "comandă" : "comenzi"}? `
+      + "Sunt expedieri REALE, plătite la curier. La Packeta și DHL nu există anulare prin API: "
+      + "un colet emis din greșeală se șterge doar de mână din contul lor, sau deloc.",
+    )) return;
     // With a single connected courier, target it directly; otherwise honor the
     // dropdown ("după client" = each order's checkout courier).
     const courier: BulkCourier = awbCouriers.length === 1 ? awbCouriers[0].key : awbCourier;
@@ -829,10 +848,30 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                   )}
                 </ul>
               )}
-              {bulkResult.result.skipped > 0 && bulkResult.title === "AWB-uri" && (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Comenzile Woot / Colete sau cele fără curier potrivit se generează individual din tabel.
-                </p>
+              {/*
+                ⚠ „SARITE" SE DESFACE PE MOTIVE (14.09.2026).
+                Randul de dinainte spunea o singura propozitie peste trei motive care cer
+                miscari OPUSE, si numea doi curieri anume („Woot / Colete") desi lista era mai
+                lunga. Comerciantul citea „7 sărite" si nu avea cum sa stie daca mai are ceva de
+                facut. Acum fiecare motiv isi spune numarul, iar cel care CERE o miscare e
+                singurul scris apasat.
+              */}
+              {bulkResult.result.motiveSarite && bulkResult.result.skipped > 0 && (
+                <ul className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                  {bulkResult.result.motiveSarite.dejaAreAwb > 0 && (
+                    <li>{bulkResult.result.motiveSarite.dejaAreAwb} aveau deja AWB la acest curier. Nimic de făcut.</li>
+                  )}
+                  {bulkResult.result.motiveSarite.duseDeMarketplace > 0 && (
+                    <li>{bulkResult.result.motiveSarite.duseDeMarketplace} au transportul în fluxul marketplace-ului. Eticheta o face el.</li>
+                  )}
+                  {bulkResult.result.motiveSarite.faraCurierPotrivit > 0 && (
+                    <li className="text-foreground">
+                      <span className="font-semibold">{bulkResult.result.motiveSarite.faraCurierPotrivit}</span>
+                      {" "}au un curier care nu intră în generarea în masă sau nu e conectat:
+                      {" "}acelea cer emitere individuală, din rândul comenzii. Numerele lor sunt în lista de mai sus.
+                    </li>
+                  )}
+                </ul>
               )}
             </div>
           )}

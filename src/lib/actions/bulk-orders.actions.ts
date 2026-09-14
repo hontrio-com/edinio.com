@@ -62,6 +62,26 @@ export interface BulkResult {
    * in siguranta.
    */
   oprit?: true;
+  /**
+   * ⚠ DE CE SE DESFACE „SARITE" (14.09.2026).
+   *
+   * `skipped` era un singur numar peste trei motive care cer miscari OPUSE:
+   *
+   *   - `dejaAreAwb`         comanda are deja AWB la curierul cerut. Nu cere NIMIC.
+   *   - `faraCurierPotrivit` in modul „dupa client", cumparatorul a ales un curier care nu
+   *                          e in lotul de fata (Woot, Colete, eColet) sau nu e conectat.
+   *                          Comanda asta NU va primi AWB niciodata dintr-un lot: cere
+   *                          emitere pe bucata, din tabel.
+   *   - `duseDeMarketplace`  transportul e in fluxul lor. Nu se emite nimic, niciodata.
+   *
+   * Contopite, comerciantul citea „7 sărite" si nu avea cum sa stie daca mai are ceva de
+   * facut. Reluand lotul, cele „deja facute" se sar la fel, deci numarul nu scade niciodata
+   * si arata ca un esec care nu se repara.
+   *
+   * ⚠ CAMPUL E OPTIONAL, iar `skipped` ramane SUMA. Asa loturile de facturi si de status,
+   * care folosesc aceeasi forma, nu se clintesc: ele nu au de unde da desfacerea.
+   */
+  motiveSarite?: { dejaAreAwb: number; faraCurierPotrivit: number; duseDeMarketplace: number };
 }
 
 // The Orders page shows at most one page (ORDERS_PAGE_SIZE = 50), so selection is
@@ -442,6 +462,14 @@ export async function bulkGenerateAwbs(
   const peRezerva: string[] = [];
   /** Comenzile sarite fiindca transportul lor e in fluxul marketplace-ului. Se spun la sfarsit. */
   const duseDeEi: string[] = [];
+  /**
+   * Comenzile sarite fiindca lotul de fata nu le poate emite: curierul ales de cumparator nu
+   * e intre cei din lot, sau nu e conectat. ⚠ ELE SUNT SINGURELE CARE CER O MISCARE, deci se
+   * numesc, ca si cele duse de marketplace. Vezi `motiveSarite`.
+   */
+  const faraCurier: string[] = [];
+  /** Comenzile care aveau deja AWB la curierul cerut. Nu cer nimic, deci se numara, nu se numesc. */
+  let dejaAreAwb = 0;
 
   // Map a stored checkout courier value to our supported set.
   const COURIER_ALIASES: Record<string, Exclude<BulkCourier, "auto">> = {
@@ -470,7 +498,7 @@ export async function bulkGenerateAwbs(
     let target: Exclude<BulkCourier, "auto"> | null;
     if (courier === "auto") {
       target = COURIER_ALIASES[(addr.courier ?? "").toLowerCase().trim()] ?? null;
-      if (!target || !enabled[target]) { result.skipped++; return; }
+      if (!target || !enabled[target]) { result.skipped++; faraCurier.push(o.order_number); return; }
     } else {
       target = courier;
     }
@@ -505,7 +533,7 @@ export async function bulkGenerateAwbs(
          care nimeni nu-l mai poate sterge. */
       : target === "dhl" ? row.dhl_awb_number
       : row.dpd_shipment_id;
-    if (existing) { result.skipped++; return; }
+    if (existing) { result.skipped++; dejaAreAwb++; return; }
 
     /*
      * ⚠ COLETUL DUS DE MARKETPLACE NU PRIMESTE AWB PROPRIU.
@@ -551,6 +579,33 @@ export async function bulkGenerateAwbs(
       message: "Transportul e în fluxul marketplace-ului (Pepita Delivery): eticheta o face el, nu se emite AWB propriu.",
     });
   }
+
+  /*
+   * ⚠ SI COMENZILE PE CARE LOTUL NU LE POATE EMITE SE NUMESC, nu doar se numara.
+   *
+   * Ele sunt singurele din cele trei feluri de „sarite" care cer o miscare: curierul ales de
+   * cumparator nu e in lotul de fata, deci comanda NU va primi AWB din nicio reluare. Fara
+   * numerele lor, comerciantul stie doar ca „ceva" a ramas si trebuie sa caute prin tabel.
+   */
+  if (faraCurier.length > 0) {
+    result.errors.push({
+      order: faraCurier.join(", "),
+      message: "Curierul ales de cumpărător nu intră în generarea în masă sau nu e conectat: "
+        + "emite AWB-ul individual, din rândul comenzii.",
+    });
+  }
+
+  /*
+   * ⚠ DESFACEREA LUI `skipped`, care ramane SUMA celor trei.
+   *
+   * Se pune mereu, nu doar cand e nenula: ecranul are nevoie sa deosebeasca „lot fara sarite"
+   * de „lot care n-a stiut sa spuna de ce". Un camp lipsa ar insemna al doilea lucru.
+   */
+  result.motiveSarite = {
+    dejaAreAwb,
+    faraCurierPotrivit: faraCurier.length,
+    duseDeMarketplace: duseDeEi.length,
+  };
 
   if (peRezerva.length > 0) {
     logError({ action: "bulkGenerateAwbs", message: `${peRezerva.length} colete au plecat pe greutatea de rezerva (produse fara weight_grams): ${peRezerva.join(", ")}`, details: { businessId }, businessId, userId: g.userId, severity: "warning" });

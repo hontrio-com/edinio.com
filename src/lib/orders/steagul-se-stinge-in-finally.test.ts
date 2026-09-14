@@ -96,7 +96,6 @@ const DIR = "src/components/dashboard";
  */
 const INCA_NEREPARATE: Record<string, number> = {
   "DhlAwbModal.tsx": 5,
-  "SamedayAwbModal.tsx": 4,
   "ShipoAwbModal.tsx": 5,
   "SmartshipAwbModal.tsx": 10,
   "UpsAwbModal.tsx": 5,
@@ -117,6 +116,20 @@ const NU_SUNT_STEAGURI: Record<string, string> = {
     "`borderouCerut` inseamna „omul a cerut sa vada borderoul”, nu „se incarca”: pe calea de "
     + "reusita ramane dinadins aprins, ca panoul sa stea deschis. Un `finally` l-ar inchide "
     + "exact cand se umple, pe pasul fara de care marfa nu pleaca.",
+
+  /*
+   * ⚠ AL DOILEA CAZ, CU ALT MECANISM. Aici steagul CHIAR e de incarcare, deci motivul de sus
+   * nu-l acopera: ce difera e DRUMUL DE IESIRE.
+   *
+   * ⚠ Numele e al `const`-ului dinaintea efectului, fiindca asa taie `manere()` corpul, nu al
+   * efectului insusi. Daca se muta ceva intre ele, cheia nu mai potriveste si proba de mai jos
+   * o spune, in loc sa ingroape scutirea.
+   */
+  "SamedayAwbModal.tsx · isEasyboxDelivery":
+    "steagul sta intr-un efect cu anulare, iar `if (anulat) return` sare peste stingere "
+    + "dinadins: ori componenta s-a demontat, ori a pornit o rulare mai noua care si-a aprins "
+    + "ea steagul. Un `finally` ar stinge rotirea aceleia. Stingerea se face in `catch`, sub "
+    + "`if (!anulat)`.",
 };
 
 /* ── Citirea surselor ─────────────────────────────────────────────────────── */
@@ -139,7 +152,18 @@ type Maner = { fisier: string; nume: string; steag: string; corp: string };
 
 /* Antetul unei functii din corpul componentei, si acolada care o inchide la acelasi nivel. */
 const ANTET = /^ {2}(?:const [A-Za-z_$][\w$]*\s*=|async function |function )/;
-const SFARSIT = /^ {2}\}[;)]*\s*$/;
+/*
+ * ⚠ SI INCHIDEREA UNUI EFECT, nu doar a unei functii (14.09.2026).
+ *
+ * `useEffect(() => { … }, [deps]);` se termina cu `  }, [`, care NU potrivea tiparul de sus.
+ * Slice-ul mergea atunci mai departe, pana la acolada urmatoare, si inghitea manerul VECIN cu
+ * tot cu `finally`-ul lui. Cat timp vecinul era nereparat nu se vedea nimic; reparandu-l,
+ * `isEasyboxDelivery` de la Sameday a aparut dintr-odata ca avand `finally`.
+ *
+ * ⚠ L-a aratat proba, nu eu, si tocmai fiindca afirmatia despre scutiri cere lucrul ingust:
+ * „scutitul NU are voie sa capete `finally`".
+ */
+const SFARSIT = /^ {2}\}[;)]*\s*$|^ {2}\}, \[/;
 
 /**
  * Fiecare functie care APRINDE un steag, cu corpul ei.
@@ -289,8 +313,11 @@ test("⚠⚠ scutirile raman cinstite: exista, sunt reparate ALTFEL, si n-au voi
       );
     }
 
+    /* ⚠ SI `catch {`, nu doar `catch (e)`. Legatura e optionala in limbaj si se foloseste chiar
+       in fisierele astea (vezi `handleDownload` la Sameday). Tiparul dintai cerea paranteza si
+       cadea pe cod BUN, adica plasa era prea ingusta, nu codul gresit. */
     assert.match(
-      m.corp, /catch \(|\.catch\(/,
+      m.corp, /catch\s*[({]/,
       `${cheie}: e scutit de \`finally\`, dar nu prinde caderea nicaieri, deci steagul ramane `
       + "aprins cand apelul arunca. Scutirea e de la FORMA reparatiei, nu de la reparatie.",
     );

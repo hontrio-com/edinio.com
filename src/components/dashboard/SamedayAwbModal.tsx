@@ -168,7 +168,29 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
          sincron intr-un efect porneste o a doua randare inainte ca prima sa se aseze, si
          regula casei il opreste ca eroare. */
       setLockereIncarca(true);
-      const l = await getLockers(businessId, "sameday");
+      /*
+       * ⚠ AICI NU SE PUNE `finally`, SI E O HOTARARE, NU O SCAPARE.
+       *
+       * `if (anulat) return` de mai jos sare peste stingere DINADINS: ori componenta s-a
+       * demontat, ori a pornit intre timp o rulare mai noua, care si-a aprins ea steagul. Un
+       * `finally` ar stinge rotirea aprinsa de rularea aceea, adica ar opri semnul ca se
+       * incarca tocmai cand chiar se incarca.
+       *
+       * Deci steagul se stinge doar cat timp rularea asta mai e cea buna. Vezi scutirea din
+       * `steagul-se-stinge-in-finally`.
+       */
+      let l: Awaited<ReturnType<typeof getLockers>>;
+      try {
+        l = await getLockers(businessId, "sameday");
+      } catch {
+        /* ⚠ O CITIRE, deci nu e nimic de verificat la Sameday. Si daca rularea a fost
+           depasita, nu se atinge nimic: mesajul si stingerea sunt ale rularii curente. */
+        if (!anulat) {
+          toast.error("Nu am putut citi lista de easybox-uri Sameday. Incearca din nou.");
+          setLockereIncarca(false);
+        }
+        return;
+      }
       if (anulat) return;
       setLockere(l.map((x) => ({
         id: String(x.id), name: x.name, address: x.address ?? "",
@@ -200,9 +222,10 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     const potrivit = potrivesteTipul(weightNum, packageType);
     if (potrivit) return toast.error(potrivit);
 
-    setCreating(true);
     // The locker id + its locality are derived server-side from the order.
-    const result = await createSamedayAwbAction(businessId, order.id, {
+    /* ⚠ Incarcatura intr-un `const`, ca `try` sa cuprinda DOAR apelul si ramificarea sa
+       ramana afara din bloc. Vezi `steagul-se-stinge-in-finally`. */
+    const dateSameday = {
       recipientName: recipientName.trim(),
       recipientPhone: recipientPhone.trim(),
       recipientCounty: recipientCounty.trim(),
@@ -227,8 +250,24 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
           }
         : null,
       extraOptiuni: extraAlese.length ? extraAlese : undefined,
-    });
-    setCreating(false);
+    };
+
+    setCreating(true);
+    let result: Awaited<ReturnType<typeof createSamedayAwbAction>>;
+    try {
+      result = await createSamedayAwbAction(businessId, order.id, dateSameday);
+    } catch (e) {
+      /* ⚠ Emiterea SCHIMBA la Sameday, deci NU se spune „a esuat": AWB-ul poate sa fi plecat,
+         iar a doua apasare ar face al doilea, taxabil. */
+      toast.error(
+        "Sameday nu a raspuns. Verifica in contul Sameday inainte sa incerci din nou: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setCreating(false);
+    }
 
     if ("error" in result) {
       toast.error(result.error);
@@ -254,8 +293,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     const weightNum = parseFloat(weight) || 0;
     if (weightNum <= 0) return toast.error("Greutatea trebuie sa fie mai mare decat 0");
 
-    setCreeazaRetur(true);
-    const r = await createSamedayReturnAwbAction(businessId, order.id, {
+    /* ⚠ Incarcatura intr-un `const`, ca la emitere. */
+    const dateRetur = {
       fel: felRetur,
       weightKg: weightNum,
       packageType,
@@ -263,8 +302,25 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       /* ⚠ Sfarsitul zilei, nu miezul noptii de la inceput: altfel omul pierde chiar ziua
          pe care crede ca o are. Formatul e al lor. */
       eligibilityDate: dataLimita ? `${dataLimita} 23:59:59` : undefined,
-    });
-    setCreeazaRetur(false);
+    };
+
+    setCreeazaRetur(true);
+    let r: Awaited<ReturnType<typeof createSamedayReturnAwbAction>>;
+    try {
+      r = await createSamedayReturnAwbAction(businessId, order.id, dateRetur);
+    } catch (e) {
+      /* ⚠ Si returul SCHIMBA la Sameday, si are ceva in plus: codul de incarcare in easybox se
+         da o SINGURA data (vezi nota de la emitere). Un al doilea retur emis degeaba il incurca
+         pe cumparator, deci se cere verificarea, nu reapasarea. */
+      toast.error(
+        "Sameday nu a raspuns. Verifica in contul Sameday daca AWB-ul de retur s-a creat: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setCreeazaRetur(false);
+    }
 
     if ("error" in r) return toast.error(r.error);
     toast.success(`AWB de retur ${r.awbNumber} creat`);
@@ -274,8 +330,21 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleDelete() {
     setDeleting(true);
-    const result = await deleteSamedayAwbAction(businessId, order.id);
-    setDeleting(false);
+    let result: Awaited<ReturnType<typeof deleteSamedayAwbAction>>;
+    try {
+      result = await deleteSamedayAwbAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Stergerea SCHIMBA la Sameday: poate sa fi ajuns, si atunci AWB-ul chiar e anulat
+         desi ecranul inca il arata. Se spune ce stim, nu „a esuat". */
+      toast.error(
+        "Sameday nu a raspuns. Verifica in contul Sameday daca AWB-ul mai e valid: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setDeleting(false);
+    }
 
     if ("error" in result) {
       toast.error(result.error);

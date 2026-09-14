@@ -98,7 +98,19 @@ function TemplateCard({ businessId, def, initial, branding, onEditLogo }: {
   function save() {
     if (!businessId) return;
     startSave(async () => {
-      const res = await updateEmailTemplate(businessId, def.kind, overridePayload());
+      let res: Awaited<ReturnType<typeof updateEmailTemplate>>;
+      try {
+        res = await updateEmailTemplate(businessId, def.kind, overridePayload());
+      } catch {
+        /* ⚠ Scrie la noi. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca sablonul s-a salvat. "
+          + "Pagina se reincarca: uita-te la text inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Sablon salvat."); router.refresh();
     });
@@ -107,7 +119,19 @@ function TemplateCard({ businessId, def, initial, branding, onEditLogo }: {
   function reset() {
     if (!businessId) return;
     startSave(async () => {
-      const res = await updateEmailTemplate(businessId, def.kind, {});
+      let res: Awaited<ReturnType<typeof updateEmailTemplate>>;
+      try {
+        res = await updateEmailTemplate(businessId, def.kind, {});
+      } catch {
+        /* ⚠ Scrie la noi: goleste personalizarea sablonului. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-a revenit la sablonul standard. "
+          + "Pagina se reincarca: uita-te la text inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setSubject(def.defaultSubject); setHeading(def.defaultHeading ?? ""); setIntro(def.defaultIntro); setButton(def.defaultButton ?? "");
       setRev((r) => r + 1);
@@ -186,10 +210,23 @@ export function EmailSettingsClient({ businessId, initial }: { businessId: strin
   function save() {
     if (!businessId) return;
     startSave(async () => {
-      const res = await updateSmtpConfig(businessId, {
-        enabled: form.enabled, host: form.host, port: form.port, secure: form.secure,
-        user: form.user, pass: form.pass, from_email: form.from_email, from_name: form.from_name, reply_to: form.reply_to,
-      });
+      let res: Awaited<ReturnType<typeof updateSmtpConfig>>;
+      try {
+        res = await updateSmtpConfig(businessId, {
+          enabled: form.enabled, host: form.host, port: form.port, secure: form.secure,
+          user: form.user, pass: form.pass, from_email: form.from_email, from_name: form.from_name, reply_to: form.reply_to,
+        });
+      } catch {
+        /* ⚠ Mesajul nu pretinde nimic despre serverul de email: n-am masurat daca actiunea il
+           incearca. Spune doar ce nu stim, adica daca s-a scris configurarea. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca setarile de email s-au salvat. "
+          + "Pagina se reincarca: uita-te daca apare conectat inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(form.enabled ? "Email propriu conectat." : "Setari salvate.");
       setForm((f) => ({ ...f, pass: "" }));
@@ -200,7 +237,19 @@ export function EmailSettingsClient({ businessId, initial }: { businessId: strin
   function test() {
     if (!businessId) return;
     startTest(async () => {
-      const res = await sendTestEmail(businessId);
+      let res: Awaited<ReturnType<typeof sendTestEmail>>;
+      try {
+        res = await sendTestEmail(businessId);
+      } catch {
+        /* ⚠ Pleaca un email adevarat, dar catre comerciantul insusi, deci un al doilea nu
+           supara pe nimeni altcineva. De aceea aici nu se interzice reapasarea. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca emailul de test a plecat. "
+          + "Uita-te intai in inbox: daca a ajuns, nu mai e nevoie sa apesi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Email de test trimis. Verifica-ti inboxul.");
     });
@@ -223,7 +272,19 @@ export function EmailSettingsClient({ businessId, initial }: { businessId: strin
   function persistBranding(next: { logo?: string | null; color?: string }) {
     if (!businessId) return;
     startBrand(async () => {
-      const res = await updateEmailBranding(businessId, next);
+      let res: Awaited<ReturnType<typeof updateEmailBranding>>;
+      try {
+        res = await updateEmailBranding(businessId, next);
+      } catch {
+        /* ⚠ Scrie la noi. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca brandingul s-a salvat. "
+          + "Pagina se reincarca: uita-te la previzualizare inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Branding email salvat."); router.refresh();
     });

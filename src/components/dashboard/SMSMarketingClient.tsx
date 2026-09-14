@@ -131,7 +131,18 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
     if (!templateName.trim()) { toast.error("Introdu un nume pentru sablon."); return; }
     if (!templateFormMessage.trim()) { toast.error("Mesajul sablonului nu poate fi gol."); return; }
     startTemplateSaving(async () => {
-      const result = await saveSmsTemplate(businessId, templateName, templateFormMessage);
+      let result: Awaited<ReturnType<typeof saveSmsTemplate>>;
+      try {
+        result = await saveSmsTemplate(businessId, templateName, templateFormMessage);
+      } catch {
+        /* ⚠ Scrie la noi. Fara `router.refresh()`: panoul asta nu are `useRouter`, verificat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca sablonul s-a salvat. "
+          + "Reimprospateaza pagina si uita-te in lista de sabloane inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       setTemplates(prev => [{
         id: result.id,
@@ -149,7 +160,18 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
   function handleDeleteTemplate(id: string) {
     setConfirmDeleteId(null);
     startTemplateSaving(async () => {
-      const result = await deleteSmsTemplate(businessId, id);
+      let result: Awaited<ReturnType<typeof deleteSmsTemplate>>;
+      try {
+        result = await deleteSmsTemplate(businessId, id);
+      } catch {
+        /* ⚠ Scrie la noi. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca sablonul s-a sters. "
+          + "Reimprospateaza pagina si uita-te in lista inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       setTemplates(prev => prev.filter(t => t.id !== id));
     });
@@ -163,7 +185,19 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
 
   function handlePreview() {
     startPreviewTransition(async () => {
-      const result = await previewSmsRecipients(businessId, filters);
+      let result: Awaited<ReturnType<typeof previewSmsRecipients>>;
+      try {
+        result = await previewSmsRecipients(businessId, filters);
+      } catch {
+        /* ⚠ O CITIRE: doar numara destinatarii, nu trimite nimic si nu scrie nimic. Al doilea loc
+           din arc unde reincercarea chiar e raspunsul corect, si se spune. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim cati destinatari sunt. "
+          + "Nu s-a trimis si nu s-a schimbat nimic, deci poti incerca din nou linistit.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       setPreview(result);
     });
@@ -178,7 +212,34 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
   function confirmSend() {
     setConfirmOpen(false);
     startSendTransition(async () => {
-      const result = await sendSmsCampaign(businessId, message, filters);
+      let result: Awaited<ReturnType<typeof sendSmsCampaign>>;
+      try {
+        result = await sendSmsCampaign(businessId, message, filters);
+      } catch {
+        /*
+         * ⚠⚠ CEL MAI SCUMP BUTON DIN PANOU, si mesajul lui e croit pe masuratoare, nu pe tipar.
+         *
+         * `sendSmsCampaign` nu are nicio paza de idempotenta. Trimite SMS-urile PE RAND, unul
+         * cate unul, iar randul campaniei se scrie in baza ABIA DUPA ce se termina toata bucla.
+         *
+         * Deci la o aruncare la mijloc: o parte din mesaje au plecat deja catre oameni reali, la
+         * noi NU ramane nicio urma ca ar fi existat campania, iar o a doua apasare reia de la
+         * primul numar. Mesajul spune toate trei si CERE sa nu se reapese.
+         */
+        toast.error(
+          "Nu am primit raspuns de la server, iar campania se trimite pe rand, mesaj cu mesaj, "
+          + "deci o parte dintre SMS-uri pot sa fi plecat deja. Nu apasa din nou: trimiterea "
+          + "reincepe de la primul numar, si cine a primit deja primeste inca unul. Uita-te in "
+          + "contul SMSO ca sa vezi ce a plecat, fiindca la noi campania nu s-a inregistrat: "
+          + "randul ei se scrie abia dupa ce se termina trimiterea.",
+          /* ⚠ 30 de secunde, nu 12 ca restul arcului: mesajul are cinci randuri si singurul lui
+             rost e sa-l opreasca pe om sa apese din nou. Daca dispare inainte sa fie citit,
+             omul apasa, adica exact paguba pe care incerc s-o previn. Durata face parte din
+             reparatie aici, nu e infrumusetare. */
+          { duration: 30000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       toast.success(`Campanie trimisa: ${result.sent} SMS-uri trimise${result.failed > 0 ? `, ${result.failed} esuate` : ""}.`);
       setMessage("");

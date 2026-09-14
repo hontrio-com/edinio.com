@@ -212,9 +212,32 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       servicii: laPunct ? { parcelShopId: addr.locker_id } : undefined,
     };
 
+    /*
+     * ⚠ `finally`, si in `try` DOAR apelul.
+     *
+     * O actiune de server nu raspunde intotdeauna cu `{ error }`: la o desfasurare in curs
+     * sau o retea cazuta, ea ARUNCA. Atunci stingerea de pe randul urmator nu mai ruleaza,
+     * nu apare niciun mesaj, si butonul ramane invartindu-se pe „Se genereaza…" pana la
+     * reincarcarea paginii.
+     *
+     * ⚠ Ramificarea sta AFARA din bloc, ca la eColet. Tinuta inauntru, un `toast` sau un
+     * `descarca` care arunca ar fi scos mesajul de mai jos pentru un AWB care CHIAR plecase.
+     */
     setCreating(true);
-    const r = await createGlsAwbAction(businessId, order.id, date);
-    setCreating(false);
+    let r: Awaited<ReturnType<typeof createGlsAwbAction>>;
+    try {
+      r = await createGlsAwbAction(businessId, order.id, date);
+    } catch (e) {
+      /* ⚠ Nu stim daca expedierea a plecat, deci NU se spune „a esuat". */
+      toast.error(
+        "GLS nu a raspuns. Verifica in contul GLS inainte sa incerci din nou: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setCreating(false);
+    }
 
     if ("error" in r) {
       toast.error(r.error);

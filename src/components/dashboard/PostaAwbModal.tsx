@@ -101,8 +101,10 @@ function Formular({ onClose, order, businessId, zilePrezentare, onSuccess }: Pro
   const ramburs = rambursDeIncasat(order);
 
   async function handleEmite() {
-    setEmitere(true);
-    const r = await createPostaAwbAction(businessId, order.id, {
+    /* ⚠ Incarcatura se scoate intr-un `const` ca `try` sa cuprinda DOAR apelul: asa
+       ramificarea de dupa ramane afara din bloc, si un `toast` care arunca nu mai poate
+       scoate mesajul de nesiguranta pentru un AWB care chiar a plecat. */
+    const datePosta = {
       destinatar: {
         nume: order.customer_name,
         strada: addr.street || addr.address || "",
@@ -123,8 +125,23 @@ function Formular({ onClose, order, businessId, zilePrezentare, onSuccess }: Pro
       postRestant: laOficiu,
       idOficiuPR: laOficiu ? addr.locker_id : null,
       dataPrezentare,
-    });
-    setEmitere(false);
+    };
+
+    setEmitere(true);
+    let r: Awaited<ReturnType<typeof createPostaAwbAction>>;
+    try {
+      r = await createPostaAwbAction(businessId, order.id, datePosta);
+    } catch (e) {
+      /* ⚠ Nu stim daca trimiterea a plecat, deci NU se spune „a esuat". */
+      toast.error(
+        "Posta Romana nu a raspuns. Verifica in contul lor inainte sa incerci din nou: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setEmitere(false);
+    }
 
     if ("error" in r) return toast.error(r.error, { duration: 10000 });
 
@@ -135,8 +152,17 @@ function Formular({ onClose, order, businessId, zilePrezentare, onSuccess }: Pro
 
   async function handleStari() {
     setIncarcStari(true);
-    const r = await getPostaTraceAction(businessId, order.id);
-    setIncarcStari(false);
+    let r: Awaited<ReturnType<typeof getPostaTraceAction>>;
+    try {
+      r = await getPostaTraceAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Asta CITESTE, deci mesajul e altul: nu s-a schimbat nimic la Posta, si n-are ce
+         verifica omul in contul lor. Nesiguranta se marturiseste doar unde chiar exista. */
+      toast.error("Posta Romana nu a raspuns: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"));
+      return;
+    } finally {
+      setIncarcStari(false);
+    }
     if (!r.ok) return toast.error(r.error);
     setStari(r.stari);
     if (r.stari.length === 0) {

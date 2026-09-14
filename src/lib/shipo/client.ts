@@ -138,6 +138,19 @@ function idExpedierii(date: unknown): number | null {
  * Deosebirea adevarata e daca textul vine dintr-un corp JSON PARSAT al lor. Atat se marcheaza
  * aici, cu acelasi tipar ca `statusHttp` si `expedierePartialaShipo`: cheie lunga, cititor
  * exportat, si nimic cautat in textul erorii.
+ *
+ * ⚠ CE ANUME APARA AZI, MASURAT CU MUTANTI SI NU PRESUPUS (15.09.2026, al doilea val).
+ *
+ * De cand `anuleaza` cere si statusul 200, marcajul nu mai are ce omori pe drumurile de azi:
+ * statusul 200 se ataseaza DOAR pe ramura `esteRefuz`, unde corpul e parsat prin constructie, iar
+ * un 2xx cu corp necitibil arunca mai devreme, fara `insemneaza`, deci fara niciun status. Deci
+ * `statusEroare(e) === 200` implica astazi `corpAFostJson(e)`. Trei mutanti pe marcaj au scapat, si
+ * asta e explicatia lor.
+ *
+ * ⚠ NU E INSA COD MORT, si de aceea ramane: daca cineva ataseaza vreodata un status pe aruncarea
+ * cu corp necitibil, marcajul e singurul lucru care mai tine o pagina de intermediar servita cu 200
+ * afara din hotararea de anulare. Plasa e pusa: proba „200 cu corp NECITIBIL" din
+ * `anularea-se-citeste-din-raspunsul-lor.test.ts` cade daca amandoua se pierd deodata.
  */
 const CHEIE_CORP = "corpJsonShipo" as const;
 
@@ -977,12 +990,27 @@ export async function anuleaza(config: ShipoConfig, awb: string): Promise<Rezult
      * ramanea libera sa emita a doua. Acelasi defect a fost trait si reparat la Pall-Ex, unde a
      * ramas si proba care il prinde (`pallex/client.test.ts`).
      *
-     * ⚠ Nu se cere `verdictFurnizor === "esuat"` si nu se cere un status anume, desi amandoua par
-     * potrivite: un „Shipment not found" adevarat soseste cu HTTP 200 si `success:false` fara lista
-     * de erori, adica `necunoscut` pe o scriere, iar un 404 cu HTML e `esuat`. Amandoua ar fi dat
-     * raspunsul pe dos. Ce conteaza e daca textul vine din JSON-ul LOR.
+     * ⚠ Nu se cere `verdictFurnizor === "esuat"`, desi pare potrivit: un „Shipment not found"
+     * adevarat soseste cu HTTP 200 si `success:false` FARA lista de erori, adica `necunoscut` pe o
+     * scriere. Cerut, s-ar fi refuzat tocmai cazul cinstit.
+     *
+     * ⚠ SE CERE INSA STATUSUL 200, SI NUMAI EL.  (15.09.2026, al doilea val)
+     *
+     * Prima reparatie cerea doar ca textul sa vina dintr-un corp JSON parsat. Un audit extern a
+     * aratat ca nu ajunge, cu un exemplu care chiar trece: HTTP 502 cu corp JSON valid
+     * `{"success":false,"message":"502 Bad Gateway: shipment not found"}`. Un gateway, un WAF sau
+     * un balansor pot raspunde JSON; parsarea reusita nu dovedeste nici originea, nici forma.
+     *
+     * 200 e partea care se poate DOVEDI din codul de deasupra: `apel` arunca pe un 2xx numai cand
+     * `esteRefuz(date)` e adevarat, adica numai cand corpul lor poarta `success: false`. Deci
+     * „status 200 + eroare aruncata" inseamna deja raspunsul de afaceri al lor, nu o presupunere.
+     * Orice 4xx sau 5xx, cu orice fel de corp, ramane eroare: expedierea poate fi vie.
+     *
+     * ⚠ SI NU SE BATE IN CUIE SIRUL EXACT al mesajului, desi auditul o cere. N-am sandbox pe care
+     * sa-l verific, iar un sir gresit ar refuza anularea cinstita si ar lasa comerciantul cu un AWB
+     * mort pe comanda, fara niciun buton care sa-l scoata. Aia e chiar defectul trait la Packeta.
      */
-    const mesaj = corpAFostJson(e) ? ((e as Error).message ?? "") : "";
+    const mesaj = statusEroare(e) === 200 && corpAFostJson(e) ? ((e as Error).message ?? "") : "";
     if (/not found|nu exista|already cancel|deja anulat/i.test(mesaj)) {
       return { anulat: true, eraDejaAnulat: true };
     }

@@ -86,12 +86,40 @@ test("⚠⚠ si 404 cu pagina HTML, la fel: statusul singur nu e dovada", () => 
   });
 });
 
-test("⚠ 404 cu raspunsul LOR in JSON chiar inseamna anulata", () => {
+test("⚠⚠ 502 cu JSON VALID care spune „shipment not found” NU sterge AWB-ul", () => {
+  /*
+   * ⚠ EXEMPLUL UNUI AUDIT EXTERN, SI PRIMA MEA REPARATIE IL LASA SA TREACA.
+   *
+   * Marcajul „corpul a fost JSON" deosebea raspunsul lor de o pagina HTML, dar un gateway, un WAF
+   * sau un balansor pot raspunde JSON. Parsarea reusita nu dovedeste nici originea, nici forma.
+   * De aceea se cere acum si statusul 200.
+   */
+  return anulareaCu({
+    status: 502,
+    corp: JSON.stringify({ success: false, message: "502 Bad Gateway: shipment not found" }),
+  }).then(({ rod, aruncat }) => {
+    assert.equal(rod, null, "un 502 cu corp JSON a fost citit drept anulare reusita");
+    assert.ok(aruncat instanceof Error);
+  });
+});
+
+test("⚠ 404 cu JSON NU mai inseamna anulata, si asta e o retragere a mea", () => {
+  /*
+   * ⚠ PROBA ASTA CEREA, PANA ACUM, EXACT PE DOS.
+   *
+   * Scrisesem ca un 404 cu corpul lor in JSON inseamna „nu mai e acolo, deci anulata". Am adaugat
+   * cazul pe rationamentul meu, nu pe documentatie, si asa am LARGIT contractul dincolo de ce pot
+   * dovedi. Documentatia lor arata raspunsurile de afaceri ale anularii ca HTTP 200.
+   *
+   * Directia contează: refuzand, ramane un AWB pe comanda si omul mai apasa o data. Acceptand
+   * gresit, se detaseaza AWB-ul unei expedieri VII, aflate pe drum, si comanda poate emite a doua.
+   */
   return anulareaCu({
     status: 404,
     corp: JSON.stringify({ success: false, message: "Shipment not found" }),
-  }).then(({ rod }) => {
-    assert.deepEqual(rod, { anulat: true, eraDejaAnulat: true });
+  }).then(({ rod, aruncat }) => {
+    assert.equal(rod, null, "un 404 a fost citit drept anulare reusita");
+    assert.ok(aruncat instanceof Error);
   });
 });
 
@@ -109,6 +137,22 @@ test("⚠⚠ 200 cu `success:false` si „Shipment not found” inseamna ANULATA
   }).then(({ rod }) => {
     assert.deepEqual(rod, { anulat: true, eraDejaAnulat: true });
   });
+});
+
+test("⚠⚠ 200 cu corp NECITIBIL care spune „not found” tot NU sterge AWB-ul", () => {
+  /*
+   * ⚠ PLASA CARE TINE MARCAJUL VIU.
+   *
+   * Masurat cu mutanti: de cand se cere statusul 200, marcajul „corpul a fost JSON" nu mai are ce
+   * omori pe drumurile de azi, fiindca 200 se ataseaza numai acolo unde corpul E parsat. Dar daca
+   * cineva ataseaza vreodata un status si pe aruncarea cu corp necitibil, o pagina de intermediar
+   * servita cu 200 ar intra drept „deja anulata". Afirmatia asta cade in clipa aia.
+   */
+  return anulareaCu({ status: 200, corp: "<html>shipment not found</html>", tip: "text/html" })
+    .then(({ rod, aruncat }) => {
+      assert.equal(rod, null, "un corp necitibil servit cu 200 a fost citit drept anulare reusita");
+      assert.ok(aruncat instanceof Error);
+    });
 });
 
 test("⚠ anularea care chiar reuseste ramane o anulare, nu o «era deja»", () => {

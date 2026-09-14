@@ -77,6 +77,70 @@ test("⚠ token de DOUA bucati, cel mai vechi, la fel", () => {
   assert.equal(v.ok === false && v.motiv, "plan", "forma cea mai veche a ramas jocher");
 });
 
+/* ── 1b. MATRICEA: toate cele PATRU forme acceptate, nu doar cele emise azi ─ */
+
+/**
+ * Compune de mana un token de CINCI bucati, forma pe care `signShippingQuote` nu o mai emite.
+ *
+ * ⚠ DE CE E NEVOIE DE EL, si de ce lipsa lui a fost o gaura adevarata: `verificaCotatia` accepta
+ * patru forme, dar probele acopereau trei. Un audit extern a rulat toate patru si a gasit ca 5
+ * accepta planul injectat. Comentariul probei mele spunea „patru forme"; afirmatiile ei spuneau trei.
+ */
+function tokenDeCinci(ampPlan: string): string {
+  const amprentaVeche = [
+    BIZ, "cluj", "cluj-napoca", "ro", "", "1800", "cargus", "address", "livrare prin cargus", "platit",
+  ].join("|");
+  const cheie = process.env.SHIPPING_QUOTE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const mac = createHmac("sha256", cheie)
+    .update(`${amprentaVeche}|1000|7700|${ampPlan}|${EXPIRA}`)
+    .digest("base64url");
+  return `${EXPIRA}.1000.7700.${ampPlan || "-"}.${mac}`;
+}
+
+test("⚠⚠ MATRICEA celor patru forme: niciuna nu mai e jocher", () => {
+  /*
+   * ⚠ AFIRMATIA CARE INCHIDE CONSTATAREA, si care lipsea. Fiecare forma acceptata de validator,
+   * cu acelasi plan injectat peste o cotatie fara serviciu. Toate patru trebuie sa refuze cu `plan`.
+   */
+  const doua = (() => {
+    const amprentaVeche = [
+      BIZ, "cluj", "cluj-napoca", "ro", "", "1800", "cargus", "address", "livrare prin cargus", "platit",
+    ].join("|");
+    const cheie = process.env.SHIPPING_QUOTE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+    const mac = createHmac("sha256", cheie).update(`${amprentaVeche}|${EXPIRA}`).digest("base64url");
+    return `${EXPIRA}.${mac}`;
+  })();
+
+  const forme: Array<[string, string]> = [
+    ["doua bucati", doua],
+    ["trei bucati", signShippingQuote(BIZ, DEST, 18, CARGUS, 1000, EXPIRA)],
+    ["cinci bucati", tokenDeCinci("")],
+    ["sase bucati", signShippingQuote(BIZ, DEST, 18, CARGUS, 1000, EXPIRA, 7_700)],
+  ];
+
+  for (const [nume, t] of forme) {
+    const bucati = t.split(".").length;
+    /* Intai premisa: tokenul chiar e valid in forma lui, altfel proba ar trece degeaba. */
+    assert.equal(verificaCotatia(BIZ, DEST, 18, t, CARGUS, null, {}).ok, true,
+      `${nume}: tokenul compus nu e valid, deci afirmatia de dedesubt n-ar dovedi nimic`);
+
+    const v = verificaCotatia(BIZ, DEST, 18, t, CARGUS, null, PLAN_INJECTAT);
+    assert.equal(v.ok, false, `${nume} (${bucati} bucati): serviciul injectat a trecut`);
+    assert.equal(v.ok === false && v.motiv, "plan",
+      `${nume} (${bucati} bucati): a cazut pe alt motiv decat \`plan\`, deci comanda nu se refuza`);
+  }
+});
+
+test("⚠ si forma de cinci bucati care CHIAR a cotat un serviciu se poarta ca celelalte", () => {
+  /* Planul potrivit trece, planul schimbat cade: poarta lucreaza, nu refuza la nimereala. */
+  const amp = amprentaPlanului({ shipoRateId: 101 });
+  const t = tokenDeCinci(amp);
+  assert.equal(verificaCotatia(BIZ, DEST, 18, t, CARGUS, null, { shipoRateId: 101 }).ok, true,
+    "cinci bucati: serviciul cotat a fost refuzat");
+  const v = verificaCotatia(BIZ, DEST, 18, t, CARGUS, null, { shipoRateId: 205 });
+  assert.equal(v.ok === false && v.motiv, "plan", "cinci bucati: serviciul schimbat a trecut");
+});
+
 /* ── 2. Usile prin care se ajunge la un token fara plan ───────────────────── */
 
 test("⚠⚠ optiunea de REZERVA de dupa plafonul de timp nu mai e o portita", () => {

@@ -662,10 +662,21 @@ export function verificaCotatia(
 
     /*
      * ⚠ Planul se judeca DOAR cand apelantul poate spune care e. `undefined` nu e o portita:
-     * vezi `planPretins`. Iar cand tokenul n-a legat niciun plan (curier simplu, la adresa),
-     * amprenta purtata e goala si nu e nimic de comparat.
+     * vezi `planPretins`.
+     *
+     * ⚠ SI AICI AMPRENTA GOALA INSEAMNA „AM COTAT FARA SERVICIU".  (15.09.2026, al doilea val)
+     *
+     * Pe 15.09 am inasprit formele de 2, 3 si 6 bucati si am lasat-o pe asta permisiva, socotind-o
+     * o forma pe moarte: `signShippingQuote` nu mai emite cinci bucati, iar cele aflate in
+     * circulatie se sting in 24 de ore. Rationamentul era slab si a fost prins de un audit extern
+     * care a rulat toate cele patru forme: 2, 3 si 6 refuzau planul injectat, iar 5 il accepta.
+     *
+     * Slab din doua pricini. Intai, comparatia stricta nu costa NIMIC aici (gol cu gol trece), deci
+     * lasasem un jocher deschis fara niciun castig. Al doilea, „nu se mai emite" nu e o garantie:
+     * la o desfasurare in valuri sau la o intoarcere la versiunea veche, forma asta poate fi emisa
+     * din nou, iar validatorul nu are nici versiune, nici termen dupa care s-o refuze.
      */
-    if (planPretins !== undefined && ampPurtata !== "" && amprentaPlanului(planPretins) !== ampPurtata) {
+    if (planPretins !== undefined && amprentaPlanului(planPretins) !== ampPurtata) {
       return nu("plan");
     }
 

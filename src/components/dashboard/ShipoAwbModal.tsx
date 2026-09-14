@@ -163,9 +163,22 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   }
 
   async function handleCoteaza() {
+    /* ⚠ `finally`, si in `try` DOAR apelul; ramificarea ramane afara. Vezi
+       `steagul-se-stinge-in-finally`. */
     setCotand(true);
-    const r = await coteazaShipoAction(businessId, order.id, dateComune());
-    setCotand(false);
+    let r: Awaited<ReturnType<typeof coteazaShipoAction>>;
+    try {
+      r = await coteazaShipoAction(businessId, order.id, dateComune());
+    } catch (e) {
+      /* ⚠ O CITIRE: nimic nu s-a schimbat la Shipo. */
+      toast.error(
+        "Shipo nu a raspuns: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 12000 },
+      );
+      return;
+    } finally {
+      setCotand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 12000 });
     setOferte(r.oferte);
     if (r.oferte.length === 0) {
@@ -183,8 +196,17 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handlePuncte(oferta: OfertaShipo) {
     setIncarcPuncte(true);
-    const r = await getShipoPuncteAction(businessId, oferta.rateId, addr.city || "", addr.county || null);
-    setIncarcPuncte(false);
+    let r: Awaited<ReturnType<typeof getShipoPuncteAction>>;
+    try {
+      r = await getShipoPuncteAction(businessId, oferta.rateId, addr.city || "", addr.county || null);
+    } catch (e) {
+      /* ⚠ O CITIRE: doar lista punctelor de ridicare. */
+      toast.error("Shipo nu a raspuns la punctele de ridicare: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"));
+      return;
+    } finally {
+      setIncarcPuncte(false);
+    }
     if (!r.ok) return toast.error(r.error);
     setPuncte(r.puncte);
     if (r.puncte.length === 0) toast.warning("Nu s-au gasit puncte de ridicare pentru localitatea asta.");
@@ -192,16 +214,50 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleValideaza() {
     setValidand(true);
-    const r = await validesteShipoAction(businessId, order.id, dateComune());
-    setValidand(false);
+    let r: Awaited<ReturnType<typeof validesteShipoAction>>;
+    try {
+      r = await validesteShipoAction(businessId, order.id, dateComune());
+    } catch (e) {
+      /* ⚠ O CITIRE, desi numele suna a schimbare: clientul marcheaza singur
+         `efect: "citire"` la `POST /shipment/validate`, care nu creeaza nimic. Deci nu se
+         trimite nimeni sa verifice in contul lor. */
+      toast.error(
+        "Shipo nu a raspuns la validare: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 12000 },
+      );
+      return;
+    } finally {
+      setValidand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 12000 });
     toast.success("Datele trec validarea Shipo. Poti emite.");
   }
 
   async function handleEmite() {
     setEmitand(true);
-    const r = await createShipoAwbAction(businessId, order.id, dateComune());
-    setEmitand(false);
+    let r: Awaited<ReturnType<typeof createShipoAwbAction>>;
+    try {
+      r = await createShipoAwbAction(businessId, order.id, dateComune());
+    } catch (e) {
+      /*
+       * ⚠ AICI NU AM CE BUTON SA NUMESC, si de aceea mesajul arata altfel decat la DHL sau UPS.
+       *
+       * Fereastra asta n-are anulare si n-are verificare de AWB: singurul „Verifica datele" e
+       * validarea de DINAINTE de emitere, care nu spune nimic despre un AWB deja nascut. Iar
+       * emiterea e reala si facturata din prima, fiindca Shipo n-are mediu de proba (vezi nota
+       * de sub butoane). Deci singurul loc unde se poate afla adevarul e contul lor.
+       */
+      toast.error(
+        "Shipo nu a raspuns, si nu stim daca AWB-ul s-a creat. NU emite din nou: la Shipo "
+        + "emiterea e facturata din prima. Verifica in contul Shipo. "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 25000 },
+      );
+      return;
+    } finally {
+      setEmitand(false);
+    }
     if ("error" in r) return toast.error(r.error, { duration: 15000 });
     toast.success(`AWB Shipo creat: ${r.awb}`);
     onSuccess();
@@ -210,8 +266,17 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleEticheta() {
     setDescarcand(true);
-    const r = await getShipoEtichetaAction(businessId, order.id);
-    setDescarcand(false);
+    let r: Awaited<ReturnType<typeof getShipoEtichetaAction>>;
+    try {
+      r = await getShipoEtichetaAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ O CITIRE: eticheta se cere, nu se creeaza. */
+      toast.error("Eticheta nu s-a putut citi de la Shipo: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"));
+      return;
+    } finally {
+      setDescarcand(false);
+    }
     if (!r.ok) return toast.error(r.error);
     /*
      * ⚠ Eticheta vine ca base64, prin serverul nostru, si NU ca link direct catre

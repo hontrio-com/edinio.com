@@ -4,6 +4,9 @@ import { adresaPublica } from "@/lib/storefront/identitate-publica";
 import { useState, useTransition, useEffect } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
+/* ⚠ `unstable_rethrow` rearunca erorile interne ale lui Next (redirectarea, not-found) si se
+   intoarce linistit pentru orice altceva. Vezi de ce e nevoie de el la butonul de stergere. */
+import { unstable_rethrow } from "next/navigation";
 import {
   Loader2, Save, FileText, Settings, Zap, Receipt,
   Truck, Percent, Globe, Bell, Lock, Clock, Hash, Shuffle, Eye, EyeOff,
@@ -2986,7 +2989,35 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           disabled={deletingAccount || deleteConfirmEmail !== email || !deleteConfirmPassword}
                           onClick={() => {
                             startDeleteTransition(async () => {
-                              const result = await deleteAccount(deleteConfirmPassword);
+                              let result: Awaited<ReturnType<typeof deleteAccount>>;
+                              try {
+                                result = await deleteAccount(deleteConfirmPassword);
+                              } catch (e) {
+                                /*
+                                 * ⚠⚠ `unstable_rethrow` PRIMUL, si nu din prudenta generala.
+                                 *
+                                 * `deleteAccount` se incheie cu `redirect("/login")`, iar redirectarea ARUNCA prin
+                                 * proiectare. Masurat in Next 16.3.3: `server-action-reducer.js` face `reject` pe
+                                 * ramura de redirectare, deci fara randul asta catchul ar prinde chiar REUSITA si
+                                 * i-ar spune omului ca n-a mers dupa ce contul i s-a sters. Navigarea n-ar fi
+                                 * pierduta (o duce routerul, `handled = true`), dar mesajul ar fi o minciuna.
+                                 *
+                                 * ⚠ Ce ramane sub el e o cadere ADEVARATA, si atunci nu stim ce s-a apucat sa se
+                                 * faca: stergerea poate sa fi trecut si sa fi cazut abia la iesirea din cont.
+                                 * De aceea mesajul nu spune ca n-a mers, ci cum se afla adevarul.
+                                 *
+                                 * ⚠ Si nu invita la reapasare: limita e de trei incercari la 900 de secunde si se
+                                 * consuma INAINTE de verificarea parolei.
+                                 */
+                                unstable_rethrow(e);
+                                toast.error(
+                                  "Nu am primit raspuns de la server, deci nu stim daca s-a sters contul. "
+                                  + "Reincarca pagina: daca mai esti conectat, contul nu s-a sters. "
+                                  + "Nu apasa din nou fara sa te uiti: dupa trei incercari butonul se blocheaza 15 minute.",
+                                  { duration: 20000 },
+                                );
+                                return;
+                              }
                               if (result && "error" in result) toast.error(result.error);
                             });
                           }}

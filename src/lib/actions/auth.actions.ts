@@ -648,6 +648,16 @@ export async function deleteAccount(parola?: string) {
   });
   if (eroareParola) return { error: "Parola este incorecta." };
 
+  /*
+   * ⚠ Limita se consuma la :622, INAINTE de MFA si INAINTE de parola, si pe drumul asta nu se
+   * reseteaza nicaieri, spre deosebire de `schimbaParola` (:589) si de login (:186-187). Deci
+   * trei apasari, fie ele si nevinovate dupa o cadere, inchideau butonul 15 minute.
+   *
+   * ⚠ Se reseteaza DOAR dupa ce parola s-a dovedit corecta, deci nu se da nimic pe gratis: cine
+   * a dovedit parola poate sterge contul oricum.
+   */
+  await reseteazaLimita(`sterge-cont:${user.id}`);
+
   const admin0 = createAdminClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });

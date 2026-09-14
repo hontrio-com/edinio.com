@@ -35,9 +35,13 @@ import { readdirSync, readFileSync } from "node:fs";
 
    ═══ DE CE O HARTA CU NUMERE, SI NU O REPARATIE INTR-UN SINGUR VAL ═══
 
-   ⚠ MASURAT (14.09.2026): 219 callbackuri de tranzitie cu corp-bloc in `src`, TOATE asteapta
-   ceva, 9 prind caderea si 210 nu, raspandite in 64 de fisiere. Sunt panouri vii, folosite
-   chiar acum. Nu le ating intr-un singur val, si nici nu le las sa se inmulteasca.
+   ⚠ LA PORNIREA ARCULUI (14.09.2026): 219 callbackuri de tranzitie cu corp-bloc in `src`, toate
+   asteptand ceva, 9 prindeau caderea si 210 nu, raspandite in 64 de fisiere. Erau panouri vii,
+   folosite chiar atunci, deci nu le-am atins intr-un singur val.
+
+   ⚠ ARCUL S-A INCHEIAT in aceeasi zi, si harta e acum GOALA. Cifrele de mai sus sunt istorie
+   DATATA, nu starea de acum; le las tocmai ca sa se vada de ce a fost nevoie de harta. De aici
+   incolo ea nu mai masoara o datorie, ci prinde REGRESIILE.
 
    Harta de mai jos spune cate sunt INCA descoperite in fiecare fisier, iar afirmatia cere
    EGALITATE cu masuratoarea. Deci: o reparatie care nu coboara numarul cade, si un callback
@@ -88,9 +92,10 @@ const PREFIX = "src/components/";
  * fals fara sa-l atinga nimeni, si tocmai proba asta le-a numarat. Cifra a fost scoasa, nu
  * inlocuita: una noua s-ar invechi la fel, iar propozitia isi spune adevarul si fara ea.
  */
-const INCA_DESCOPERITE: Record<string, number> = {
-  "dashboard/SettingsClient.tsx": 1,
-};
+/* ⚠ GOALA. Nu mai exista in `src` niciun callback de tranzitie care asteapta fara sa prinda.
+   Un rand nou aici inseamna o regresie, si fiindca proba cere EGALITATE, el nu poate aparea
+   tacut: ori cade proba, ori cineva scrie de ce. */
+const INCA_DESCOPERITE: Record<string, number> = {};
 
 /**
  * Cele care prind deja, cu numele manerului. Ele NU sunt in harta, deci numarul lor asteptat e

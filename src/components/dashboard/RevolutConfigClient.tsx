@@ -55,7 +55,23 @@ export default function RevolutConfigClient({
 
   function disconnect() {
     startDisconnect(async () => {
-      const result = await disconnectRevolut(businessId);
+      let result: Awaited<ReturnType<typeof disconnectRevolut>>;
+      try {
+        result = await disconnectRevolut(businessId);
+      } catch {
+        /* ⚠ Actiunea CHEAMA afara, `deleteWebhook` la Revolut, dar cu `.catch(() => {})`:
+           esecul lui e inghitit dinadins, ca sa nu opreasca deconectarea, deci nu el
+           poate fi cauza unei aruncari. Ce ramane nestiut e doar daca stergerea de la
+           noi a apucat sa se scrie. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-a sters configurarea "
+          + "Revolut. Reimprospateaza pagina si uita-te daca mai apare conectat inainte "
+          + "sa incerci din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if (!result.success) { toast.error(result.error ?? "Eroare la stergere"); return; }
       toast.success("Revolut deconectat.");
       setCfg(DEFAULT_CONFIG);

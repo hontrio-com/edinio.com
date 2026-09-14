@@ -316,7 +316,28 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
         <button
           onClick={() => startDisconnect(async () => {
             if (!window.confirm("Sigur deconectezi OLX? Anunțurile rămân pe OLX, dar Edinio nu le mai gestionează.")) return;
-            const res = await disconnectOlx(businessId);
+            let res: Awaited<ReturnType<typeof disconnectOlx>>;
+            try {
+              res = await disconnectOlx(businessId);
+            } catch {
+              /*
+               * ⚠ AICI REINCERCAREA CHIAR E SIGURA, si se spune, tocmai fiindca la
+               * celelalte deconectari nu e.
+               *
+               * `disconnectOlx` nu vorbeste deloc cu OLX: anunturile raman la ei, cum
+               * scrie si in confirmarea de mai sus. Iar ordinea ei e aleasa anume: intai
+               * SCRIE ca e deconectat, si abia daca asta intra sterge coada si anunturile.
+               * Cel mai rau caz ramane deci un cont ramas conectat, nu unul pe jumatate.
+               */
+              toast.error(
+                "Nu am primit raspuns de la server, deci nu stim daca deconectarea s-a "
+                + "salvat. Reimprospateaza pagina: daca inca arata conectat, poti apasa "
+                + "din nou fara grija, iar la OLX nu s-a atins nimic.",
+                { duration: 12000 },
+              );
+              router.refresh();
+              return;
+            }
             if ("error" in res) { toast.error(res.error); return; }
             toast.success("OLX deconectat.");
             router.refresh();

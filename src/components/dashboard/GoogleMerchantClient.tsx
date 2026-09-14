@@ -380,7 +380,36 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
       <div className="flex justify-end">
         <button
           onClick={() => startDisconnect(async () => {
-            const res = await disconnectMerchant(businessId);
+            let res: Awaited<ReturnType<typeof disconnectMerchant>>;
+            try {
+              res = await disconnectMerchant(businessId);
+            } catch {
+              /*
+               * ⚠⚠ SINGURA DECONECTARE CU DOUA FETE, masurata in actiune.
+               *
+               * `disconnectMerchant` cere un token si stinge abonamentul de notificari
+               * CHIAR LA GOOGLE (`deleteNotificationSubscription`), fara plasa, INAINTE
+               * sa-si goleasca propria configurare. O cadere la mijloc poate lasa
+               * abonamentul stins acolo si randul viu la noi: panoul ar arata conectat,
+               * dar notificarile n-ar mai veni.
+               *
+               * ⚠ SI E SINGURA CALE PROASTA, tocmai din cauza ORDINII: stergerea la Google
+               * se face INAINTE de golirea configurarii, deci daca golirea s-a scris,
+               * stergerea rulase deja. Nu ramane un abonament orfan la ei.
+               *
+               * De aceea mesajul are exact DOUA ramuri, nu trei: ori inca arata conectat si
+               * mai apesi o data, ori arata deconectat si chiar s-a facut. Daca vine cineva
+               * sa adauge a treia, sa se uite intai la ordinea din actiune.
+               */
+              toast.error(
+                "Nu am primit raspuns de la server, deci nu stim unde s-a oprit "
+                + "deconectarea. Reimprospateaza pagina: daca inca arata conectat, apasa "
+                + "din nou; daca arata deconectat, s-a facut.",
+                { duration: 12000 },
+              );
+              router.refresh();
+              return;
+            }
             if ("error" in res) { toast.error(res.error); return; }
             toast.success("Google Merchant deconectat.");
             router.refresh();

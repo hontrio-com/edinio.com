@@ -52,6 +52,7 @@ import { interpreteazaRevendicarea, type Revendicare } from "@/lib/orders/verdic
 import { applyOfferPricing, type RezultatOferte } from "@/lib/offers/offers";
 import { cantitateCeruta, mesajCantitate } from "@/lib/orders/quantity";
 import { esteIdExtra } from "@/lib/orders/extras";
+import { diferentaDeRamburs } from "@/lib/orders/diferenta-ramburs";
 import { eroareVarianta, pretulLiniei } from "@/lib/orders/variant-guard";
 import { inchideSesiuneaStripeVeche } from "@/lib/stripe-sesiune";
 import { invoiceVat } from "@/lib/billing/invoice-vat";
@@ -1523,22 +1524,36 @@ export async function placeOrder(data: {
    * costa cu adevarat inainte de a alege o garda mai dura.
    */
   /*
-   * Se compara MARFA cu MARFA, nu marfa cu totalul.
+   * ⚠ SE JURNALIZEAZA DOAR PARTEA NELAMURITA, nu toata diferenta.
    *
-   * Amandoua formularele cer cotatia cu suma marfii, nu cu totalul: `OrderModal`
-   * trimite subtotalul, iar checkout-ul totalul cosului, care nu contine
-   * transportul. Comparat cu totalul final, pragul s-ar fi aprins pe aproape orice
-   * comanda cu transport platit — 49 din 51 de comenzi ramburs din ultimele 30 de
-   * zile — si jurnalul ar fi masurat propria noastra nepotrivire de unitati in loc
-   * de subdeclarare.
+   * Pana pe 14.09.2026 se compara `marfaIncasata` cu `cod_declarat` si se scria la orice
+   * diferenta peste un leu. Comentariul de aici se apara chiar de capcana unitatilor,
+   * spunand `se compara MARFA cu MARFA`, si tot in ea cadea: niciunul din cele 17 randuri
+   * scrise intre 05.08 si 10.09 nu era subdeclarare. Erau extraoptiuni si bump-uri care nu
+   * intra in suma cotata, prin proiectare.
+   *
+   * ⚠ Felia explicabila NU se ascunde: se scrie in detalii ori de cate ori randul chiar se
+   * scrie. Ea e constatarea SYS-P1-03 din auditul curierilor, inca deschisa. Ce s-a mutat e
+   * PRAGUL, ca semnalul sa nu mai fie inecat de propria noastra nepotrivire.
    */
   const marfaIncasata = round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount);
+  /*
+   * ⚠ ZERO, si nu din lene: aici `cod_declarat` e chiar `subtotal`-ul din browser, care
+   * CONTINE deja bump-urile. Scazute si aici, o subdeclarare de exact cat bumpul ar trece
+   * nevazuta. Vezi proba pe apelanti din `diferenta-ramburs.test.ts`.
+   *
+   * ⚠ Si de aceea suma lor nici NU se socoteste aici, desi `oferte.venitPeOferta` e la
+   * indemana. Calculata si aruncata, ar fi fost o capcana pentru cine citeste: suma chiar
+   * deasupra si `0` dedesubt arata a scapare, iar cine o „indreapta" strica masuratoarea in
+   * tacere. In `placeCartOrder`, unde chiar e nevoie de ea, se socoteste acolo.
+   */
+  const difRamburs = diferentaDeRamburs({ marfaIncasata, declarat: Number(data.cod_declarat), extrasTotal, venitBumpuri: 0 });
   if (isCodPaymentMethod(metodaPlata) && Number(data.cod_declarat) > 0
-      && marfaIncasata - round2(Number(data.cod_declarat)) > 1) {
+      && difRamburs.nelamurit > 1) {
     logError({
       action: "placeOrder.rambursSubdeclarat",
-      message: `Cotatie ceruta pentru ${round2(Number(data.cod_declarat)).toFixed(2)} lei ramburs, marfa comenzii e ${marfaIncasata.toFixed(2)}`,
-      details: { businessId: data.business_id, declarat: round2(Number(data.cod_declarat)), marfa: marfaIncasata, total: round2(total) },
+      message: `Cotatie ceruta pentru ${round2(Number(data.cod_declarat)).toFixed(2)} lei ramburs, marfa comenzii e ${marfaIncasata.toFixed(2)}; din diferenta, ${difRamburs.explicabil.toFixed(2)} lei sunt in afara sumei cotate prin proiectare, iar ${difRamburs.nelamurit.toFixed(2)} raman nelamuriti`,
+      details: { businessId: data.business_id, declarat: round2(Number(data.cod_declarat)), marfa: marfaIncasata, explicabil: difRamburs.explicabil, nelamurit: difRamburs.nelamurit, total: round2(total) },
       severity: "warning",
     });
   }
@@ -4336,22 +4351,32 @@ export async function placeCartOrder(data: {
    * costa cu adevarat inainte de a alege o garda mai dura.
    */
   /*
-   * Se compara MARFA cu MARFA, nu marfa cu totalul.
+   * ⚠ SE JURNALIZEAZA DOAR PARTEA NELAMURITA, nu toata diferenta.
    *
-   * Amandoua formularele cer cotatia cu suma marfii, nu cu totalul: `OrderModal`
-   * trimite subtotalul, iar checkout-ul totalul cosului, care nu contine
-   * transportul. Comparat cu totalul final, pragul s-ar fi aprins pe aproape orice
-   * comanda cu transport platit — 49 din 51 de comenzi ramburs din ultimele 30 de
-   * zile — si jurnalul ar fi masurat propria noastra nepotrivire de unitati in loc
-   * de subdeclarare.
+   * Pana pe 14.09.2026 se compara `marfaIncasata` cu `cod_declarat` si se scria la orice
+   * diferenta peste un leu. Comentariul de aici se apara chiar de capcana unitatilor,
+   * spunand `se compara MARFA cu MARFA`, si tot in ea cadea: niciunul din cele 17 randuri
+   * scrise intre 05.08 si 10.09 nu era subdeclarare. Erau extraoptiuni si bump-uri care nu
+   * intra in suma cotata, prin proiectare.
+   *
+   * ⚠ Felia explicabila NU se ascunde: se scrie in detalii ori de cate ori randul chiar se
+   * scrie. Ea e constatarea SYS-P1-03 din auditul curierilor, inca deschisa. Ce s-a mutat e
+   * PRAGUL, ca semnalul sa nu mai fie inecat de propria noastra nepotrivire.
    */
+  const venitBumpuri = round2(Object.values(oferte.venitPeOferta).reduce((s, v) => s + (Number(v) || 0), 0));
   const marfaIncasata = round2(subtotal + extrasTotal - discountAmount - cardDiscount - codDiscount);
+  /*
+   * ⚠ Suma adevarata: aici `cod_declarat` e totalul cosului, care NU contine bump-urile,
+   * desi serverul le are in `subtotal`. Cu zero aici, fiecare bump acceptat ar fi raportat
+   * drept subdeclarare, adica exact defectul reparat.
+   */
+  const difRamburs = diferentaDeRamburs({ marfaIncasata, declarat: Number(data.cod_declarat), extrasTotal, venitBumpuri: venitBumpuri });
   if (isCodPaymentMethod(metodaPlata) && Number(data.cod_declarat) > 0
-      && marfaIncasata - round2(Number(data.cod_declarat)) > 1) {
+      && difRamburs.nelamurit > 1) {
     logError({
       action: "placeCartOrder.rambursSubdeclarat",
-      message: `Cotatie ceruta pentru ${round2(Number(data.cod_declarat)).toFixed(2)} lei ramburs, marfa comenzii e ${marfaIncasata.toFixed(2)}`,
-      details: { businessId: data.business_id, declarat: round2(Number(data.cod_declarat)), marfa: marfaIncasata, total: round2(total) },
+      message: `Cotatie ceruta pentru ${round2(Number(data.cod_declarat)).toFixed(2)} lei ramburs, marfa comenzii e ${marfaIncasata.toFixed(2)}; din diferenta, ${difRamburs.explicabil.toFixed(2)} lei sunt in afara sumei cotate prin proiectare, iar ${difRamburs.nelamurit.toFixed(2)} raman nelamuriti`,
+      details: { businessId: data.business_id, declarat: round2(Number(data.cod_declarat)), marfa: marfaIncasata, explicabil: difRamburs.explicabil, nelamurit: difRamburs.nelamurit, total: round2(total) },
       severity: "warning",
     });
   }

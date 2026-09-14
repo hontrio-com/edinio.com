@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
@@ -358,6 +359,29 @@ function lockerLabel(custom: string | undefined, fallback: string): string {
   return c ? `${c} (locker)` : fallback;
 }
 
+/**
+ * Omul care cere cotarea detine chiar magazinul asta?
+ *
+ * ⚠ NU E EXPORTATA, si nici nu are voie sa fie: fisierul e `"use server"`, unde fiecare export
+ * devine o usa chemabila din browser.
+ *
+ * ⚠ SE CITESTE CU CLIENTUL DE SESIUNE, nu cu cel de serviciu: tocmai RLS-ul si `user_id` sunt
+ * dovada. Cu `createAdminClient` interogarea ar raspunde „da" pentru oricine.
+ *
+ * ⚠ Tiparul asta e scris pe loc in zeci de actiuni (`cargus.actions.ts` il are de patru ori,
+ * `operatii.actions.ts` il numeste `detineMagazinul`, `aboutyou-retururi.actions.ts` il numeste
+ * `guard`). Un ajutor comun pentru toate ar fi o lucrare de sine statatoare; aici se urmeaza
+ * idiomul casei, si se scrie ca e repetat, ca urmatorul sa stie ce mosteneste.
+ */
+async function esteProprietarulMagazinului(businessId: string): Promise<boolean> {
+  const sesiune = await createClient();
+  const { data: { user } } = await sesiune.auth.getUser();
+  if (!user) return false;
+  const { data } = await sesiune
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).maybeSingle();
+  return !!data;
+}
+
 // ─── Get shipping options ────────────────────────────────────────────────────
 
 export async function getShippingOptions(
@@ -641,8 +665,49 @@ export async function getShippingOptions(
    * si nota lunga din `subtotalMaximDinCatalog`: fara ea, o comanda personalizata isi pierde
    * valoarea la recotare — si la reguli, si la asigurare.
    */
+  /*
+   * ═══ ⚠ `comanda` CERE DOVADA DE PROPRIETAR, RESTUL COTARII NU ═══
+   *
+   * Cotarea e publica si anonima dinadins: cumparatorul trebuie sa vada preturile. Dar ramura de
+   * mai jos face altceva decat toate celelalte: citeste `orders.items` cu ROL DE SERVICIU, adica
+   * ocolind RLS, pentru un id de comanda venit de la apelant. Filtrul pe `business_id` opreste
+   * traversarea intre magazine, dar nu si citirea unei comenzi a ACELUIASI magazin.
+   *
+   * ⚠ CE SE PUTEA AFLA, exact: pentru un produs pe care atacatorul il numeste in `cart` si care
+   * mai exista in catalog, pretul unitar cel mai mare din acea comanda, si doar cand el DEPASESTE
+   * plafonul din catalog (`Math.max(dinCatalog, dovedit)` ascunde restul). Nu nume, nu adresa, nu
+   * totaluri. Se citeste indirect, prin pretul cotat si prin steagul de ramburs peste plafonul FAN.
+   *
+   * ⚠ SI DE CE E GRATUITA PENTRU CUMPARATORI. Masurat: `getShippingOptions` are DOI apelanti.
+   * `CourierSelector` (randat de amandoua checkouturile) NU trimite `comanda` deloc; singurul care
+   * il trimite e `OrderEditModal`, din panou, unde exista sesiune. Deci poarta asta nu atinge
+   * niciun drum de cumparator.
+   *
+   * ⚠ SI NICI ADMINII NU PATIMESC: pagina comenzii isi rezolva magazinul cu `user_id = user.id` si
+   * face `notFound()` altfel, fara exceptie de admin. Un administrator nici nu poate deschide
+   * comanda altui comerciant, deci fluxul acela nu exista.
+   */
+  const potCitiComanda = destination.comanda ? await esteProprietarulMagazinului(businessId) : false;
+  if (destination.comanda && !potCitiComanda) {
+    /*
+     * ⚠ NU SE OPRESTE COTAREA, SI NU SE TACE.
+     *
+     * O lista goala aici ar fi chiar capcana scrisa de doua ori in fisierul asta: selectorul isi
+     * ascunde sectiunea cand lista e goala, deci cumparatorul ar ramane fara nicio metoda de
+     * livrare si fara niciun mesaj. Se sare doar peste istoric, exact ca atunci cand `comanda` nu
+     * e trimis deloc, si ramane o urma in jurnal.
+     */
+    await logError({
+      action: "getShippingOptions.comandaFaraDrept",
+      message: "Cotare cu `comanda` de la cineva care nu detine magazinul; istoricul comenzii NU se citeste.",
+      details: { businessId, comanda: destination.comanda },
+      businessId,
+      severity: "warning",
+    });
+  }
+
   let istoric: Map<string, number> | undefined;
-  if (destination.comanda) {
+  if (destination.comanda && potCitiComanda) {
     const { data: veche } = await supabase
       .from("orders")
       .select("items")

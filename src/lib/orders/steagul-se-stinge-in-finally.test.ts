@@ -310,6 +310,52 @@ test("⚠ ferestrele deja reparate raman reparate, si sunt numite", () => {
     `doar ${cateReparate} manere reparate gasite in FAN si eColet, asteptam macar 9`);
 });
 
+test("⚠⚠ un callback de tranzitie care asteapta trebuie sa PRINDA caderea", () => {
+  /*
+   * ⚠ ALT DEFECT DECAT STEAGURILE, si de aceea nu e in harta.
+   *
+   * `startCreate(async () => …)` nu aprinde niciun steag de mana: butonul se stinge dupa
+   * `isPending`. Dar o actiune care ARUNCA acolo nu e prinsa de nimeni IN FEREASTRA. Singurele
+   * granite de erori din proiect sunt `app/error.tsx` si `app/global-error.tsx`, amandoua la
+   * radacina, iar cea dintai inlocuieste TOT panoul cu o pagina de 500: comerciantul pierde
+   * formularul completat si tot nu afla daca AWB-ul a plecat.
+   *
+   * ⚠ Documentatia React NU spune ce se intampla cu `isPending` la o respingere; spune doar ca
+   * ramane `true` pana cand Actiunile „se incheie", si trimite la o granita de erori. Deci nu se
+   * pretinde aici nimic despre butonul care ramane rotind: se cere doar ca omul sa primeasca un
+   * mesaj in loc de o pagina de 500.
+   *
+   * ⚠ MASURAT: 4 callbackuri de tranzitie in ferestrele de curier, Colete doua si Woot doua.
+   */
+  const DESCHIDE = /^ {4}start[A-Z][A-Za-z]*\(async \(\) => \{$/;
+  const INCHIDE = /^ {4}\}\);$/;
+
+  let cate = 0;
+  const fara: string[] = [];
+
+  for (const nume of ferestreleDeCurier()) {
+    const linii = sursa(nume).split("\n");
+    for (let i = 0; i < linii.length; i++) {
+      if (!DESCHIDE.test(linii[i])) continue;
+      let j = i + 1;
+      while (j < linii.length && !INCHIDE.test(linii[j])) j++;
+      const corp = linii.slice(i, j).join("\n");
+      cate++;
+      if (corp.includes("await ") && !/catch\s*[({]/.test(corp)) {
+        fara.push(`${nume} · callbackul de la randul ${i + 1}`);
+      }
+    }
+  }
+
+  assert.ok(cate >= 4,
+    `gasite doar ${cate} callbackuri de tranzitie: plasa n-are pe cine cadea`);
+
+  assert.deepEqual(fara, [],
+    "callbackurile astea asteapta o actiune de server fara sa prinda caderea, deci o aruncare "
+    + "inlocuieste tot panoul cu pagina de 500 de la radacina, si omul pierde formularul "
+    + `completat fara sa afle daca expedierea a plecat:\n${fara.join("\n")}`);
+});
+
 test("⚠⚠ scutirile raman cinstite: exista, sunt reparate ALTFEL, si n-au voie sa capete `finally`", () => {
   /*
    * ⚠ O scutire nesupravegheata e o portita. Trei lucruri se cer de la fiecare:

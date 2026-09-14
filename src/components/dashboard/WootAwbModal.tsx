@@ -322,7 +322,21 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     if (needsReceiverLocation && !receiverLocationId) { toast.error("Selecteaza punctul de livrare (locker) pentru destinatar."); return; }
     startCreate(async () => {
       const rep = Number(repayment);
-      const result = await createWootAwb(
+      /*
+       * ⚠ O ACTIUNE CARE ARUNCA INAUNTRUL UNEI TRANZITII NU E PRINSA DE NIMENI AICI.
+       *
+       * Fereastra n-are granita de erori; singurele din proiect sunt `app/error.tsx` si
+       * `app/global-error.tsx`, amandoua la radacina. Deci o aruncare inlocuieste TOT panoul cu
+       * pagina de 500: comerciantul pierde formularul completat si tot nu stie daca AWB-ul a
+       * plecat. La Woot, singurul curier cu trafic adevarat masurat, asta e pretul cel mai mare.
+       *
+       * ⚠ ARGUMENTELE NU SE REINDENTEAZA, DINADINS. Mutate cu un nivel, ar aparea in diff ca
+       * randuri noi, iar unul dintre ele poarta un emdash vechi. Ori as fi parut ca-l scriu eu
+       * acum, ori ar fi trebuit sa-l schimb, adica scop lipit pe alta treaba.
+       */
+      let result: Awaited<ReturnType<typeof createWootAwb>>;
+      try {
+      result = await createWootAwb(
         businessId,
         order.id,
         selectedService.service_id,
@@ -334,6 +348,16 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
         needsSenderLocation ? senderLocationId ?? undefined : undefined,
         needsReceiverLocation ? receiverLocationId ?? undefined : undefined
       );
+      } catch (e) {
+        /* ⚠ Emiterea SCHIMBA la Woot, deci NU se spune „a esuat": AWB-ul poate sa fi plecat, iar
+           a doua apasare ar face al doilea, taxabil. */
+        toast.error(
+          "Woot nu a raspuns. Verifica in contul Woot inainte sa incerci din nou: "
+          + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+          { duration: 16000 },
+        );
+        return;
+      }
       if (!result.success) {
         toast.error(result.error ?? "Eroare la crearea AWB.");
         return;
@@ -349,7 +373,21 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     startCancel(async () => {
       /* ⚠ Identificatorul expedierii NU se mai trimite: serverul il citeste din comanda
          autorizata. Vezi nota din `cancelWootAwb`. */
-      const result = await cancelWootAwb(businessId, order.id);
+      /* ⚠ Acelasi motiv ca la emitere: fara prindere, o aruncare inlocuieste tot panoul cu
+         pagina de 500 de la radacina. Vezi nota din `handleCreate`. */
+      let result: Awaited<ReturnType<typeof cancelWootAwb>>;
+      try {
+        result = await cancelWootAwb(businessId, order.id);
+      } catch (e) {
+        /* ⚠ Anularea SCHIMBA la Woot: poate sa fi ajuns, si atunci AWB-ul chiar e anulat desi
+           ecranul inca il arata. */
+        toast.error(
+          "Woot nu a raspuns. Verifica in contul Woot daca AWB-ul mai e valid: "
+          + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+          { duration: 16000 },
+        );
+        return;
+      }
       if (!result.success) { toast.error(result.error ?? "Eroare la anulare."); return; }
       toast.success("AWB anulat.");
       onSuccess();

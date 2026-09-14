@@ -5614,7 +5614,8 @@ begin
     return new;
   end if;
   insert into public.catalog_cuvinte_murdar (business_id, marcat_la)
-  values (coalesce(new.business_id, old.business_id), now())
+  select b.id, now() from public.businesses b
+   where b.id = coalesce(new.business_id, old.business_id)
   on conflict (business_id) do update set marcat_la = now();
   return coalesce(new, old);
 end;
@@ -5722,7 +5723,8 @@ CREATE OR REPLACE FUNCTION public.trg_catalog_rezumat_murdar()
 AS $function$
 begin
   insert into public.catalog_rezumat_murdar (business_id, marcat_la)
-  values (coalesce(new.business_id, old.business_id), now())
+  select b.id, now() from public.businesses b
+   where b.id = coalesce(new.business_id, old.business_id)
   on conflict (business_id) do update set marcat_la = now();
   return coalesce(new, old);
 end;
@@ -5737,7 +5739,8 @@ CREATE OR REPLACE FUNCTION public.trg_categorii_rezumat_murdar()
 AS $function$
 begin
   insert into public.catalog_rezumat_murdar (business_id, marcat_la)
-  values (coalesce(new.business_id, old.business_id), now())
+  select b.id, now() from public.businesses b
+   where b.id = coalesce(new.business_id, old.business_id)
   on conflict (business_id) do update set marcat_la = now();
   return coalesce(new, old);
 end;

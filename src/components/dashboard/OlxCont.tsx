@@ -160,7 +160,18 @@ function FormularProfil({ businessId, initial, onSalvat }: {
     if (Object.keys(patch).length === 0) { toast.error("Nu ai modificat nimic în profil."); return; }
 
     startSave(async () => {
-      const res = await salveazaOlxProfilFirma(businessId, patch);
+      let res: Awaited<ReturnType<typeof salveazaOlxProfilFirma>>;
+      try {
+        res = await salveazaOlxProfilFirma(businessId, patch);
+      } catch {
+        /* ⚠ Scrie profilul firmei. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca profilul s-a salvat. "
+          + "Reimprospateaza si uita-te la el inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       /* Se afiseaza ce a ramas la ei: subdomeniul si descrierea le pot veni normalizate. */
       aplica(res.profil);
@@ -358,11 +369,23 @@ function ImaginiFirma({ businessId }: { businessId: string }) {
    */
   function pune(fel: "logo" | "banner", url: string, vechiId?: number) {
     startLucru(async () => {
-      const r = vechiId != null
-        ? await inlocuiesteOlxImagineFirma(businessId, fel, url, vechiId)
-        : fel === "logo"
-          ? await puneOlxLogoFirma(businessId, url)
-          : await puneOlxBannerFirma(businessId, url);
+      let r: Awaited<ReturnType<typeof puneOlxLogoFirma>>;
+      try {
+        r = vechiId != null
+          ? await inlocuiesteOlxImagineFirma(businessId, fel, url, vechiId)
+          : fel === "logo"
+            ? await puneOlxLogoFirma(businessId, url)
+            : await puneOlxBannerFirma(businessId, url);
+      } catch {
+        /* ⚠ Imaginea pleaca LA OLX. Ordinea din functie e aleasa anume (pune, apoi scoate), ca o
+           cadere sa lase doua imagini, nu niciuna. Vezi comentariul de deasupra. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca imaginea a ajuns la OLX. "
+          + "Uita-te in contul OLX inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in r) { toast.error(r.error); return; }
       toast.success(fel === "logo" ? "Logo trimis la OLX." : "Banner trimis la OLX.");
       reincarca();
@@ -371,7 +394,18 @@ function ImaginiFirma({ businessId }: { businessId: string }) {
 
   function scoate(fel: "logo" | "banner", id: number) {
     startLucru(async () => {
-      const r = await stergeOlxImagineFirma(businessId, fel, id);
+      let r: Awaited<ReturnType<typeof stergeOlxImagineFirma>>;
+      try {
+        r = await stergeOlxImagineFirma(businessId, fel, id);
+      } catch {
+        /* ⚠ Scoate imaginea LA OLX. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca imaginea s-a scos de la OLX. "
+          + "Uita-te in contul OLX inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in r) { toast.error(r.error); return; }
       toast.success("Scos de la OLX.");
       reincarca();

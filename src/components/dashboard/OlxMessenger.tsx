@@ -54,7 +54,19 @@ export function OlxMessenger({ businessId, adverts }: { businessId: string; adve
 
   const incarcaMaiMulte = useCallback(() => {
     startIncarcare(async () => {
-      const r = await getOlxThreadsPage(businessId, offset);
+      let r: Awaited<ReturnType<typeof getOlxThreadsPage>>;
+      try {
+        r = await getOlxThreadsPage(businessId, offset);
+      } catch {
+        /* ⚠ O CITIRE: aduce pagina urmatoare de conversatii si atat. Masurat in corp, nu dedus
+           din nume: nu scrie nimic, doar adauga in lista. Deci reincercarea e sigura. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-a putut incarca pagina urmatoare. "
+          + "Nu s-a schimbat nimic, deci poti incerca din nou linistit.",
+          { duration: 12000 },
+        );
+        return;
+      }
       /* Aici omul A APASAT, deci raspunsul i se spune. */
       if ("error" in r) { toast.error(r.error); return; }
       setThreads((prev) => {
@@ -476,11 +488,32 @@ function ConversationView({ businessId, thread, fallbackTitle, onLoaded, onBack 
     */
     if (!text) return;
     startSend(async () => {
-      const res = await replyOlxThread(businessId, thread.id, text, deTrimis.length ? deTrimis : undefined);
+      let res: Awaited<ReturnType<typeof replyOlxThread>>;
+      try {
+        res = await replyOlxThread(businessId, thread.id, text, deTrimis.length ? deTrimis : undefined);
+      } catch {
+        /* ⚠ Raspunsul pleaca spre un CUMPARATOR, pe firul lui de la OLX. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca raspunsul a ajuns la OLX. "
+          + "Uita-te in fir inainte sa trimiti din nou: nimic nu opreste un al doilea mesaj.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setReply("");
       setDeTrimis([]);
-      await reincarca();
+      try {
+        await reincarca();
+      } catch {
+        /* ⚠ ALT ADEVAR: mesajul a plecat deja, doar firul n-a putut fi adus la zi. */
+        toast.error(
+          "Raspunsul a plecat, dar conversatia nu s-a putut reincarca. "
+          + "Reimprospateaza pagina ca sa vezi firul la zi.",
+          { duration: 12000 },
+        );
+        return;
+      }
     });
   }
 

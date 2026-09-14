@@ -76,7 +76,18 @@ export function OlxImport({ businessId, onImportat }: { businessId: string; onIm
   const [lucreaza, startLucru] = useTransition();
 
   const scaneaza = () => startCautare(async () => {
-    const r = await scaneazaAnunturileOlx(businessId);
+    let r: Awaited<ReturnType<typeof scaneazaAnunturileOlx>>;
+    try {
+      r = await scaneazaAnunturileOlx(businessId);
+    } catch {
+      /* ⚠ Porneste scanarea anunturilor. */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca scanarea a pornit. "
+        + "Reimprospateaza si uita-te la lista inainte sa apesi din nou.",
+        { duration: 12000 },
+      );
+      return;
+    }
     if ("error" in r) { toast.error(r.error); return; }
     setScanare(r);
     setRanduri(r.anunturi);
@@ -175,7 +186,18 @@ export function OlxImport({ businessId, onImportat }: { businessId: string; onIm
                     }}
                     onConecteaza={() => startLucru(async () => {
                       if (!a.propunere) return;
-                      const r = await conecteazaAnuntOlx(businessId, a.advertId, a.propunere.productId);
+                      let r: Awaited<ReturnType<typeof conecteazaAnuntOlx>>;
+                      try {
+                        r = await conecteazaAnuntOlx(businessId, a.advertId, a.propunere.productId);
+                      } catch {
+                        /* ⚠ Leaga anuntul de produs. */
+                        toast.error(
+                          "Nu am primit raspuns de la server, deci nu stim daca anuntul s-a legat de produs. "
+                          + "Reimprospateaza si uita-te la lista inainte sa incerci din nou.",
+                          { duration: 12000 },
+                        );
+                        return;
+                      }
                       if ("error" in r) { toast.error(r.error); return; }
                       toast.success(`„${a.propunere.numeProdus}” e legat de anunțul ${a.advertId}.`);
                       scoate(a.advertId);

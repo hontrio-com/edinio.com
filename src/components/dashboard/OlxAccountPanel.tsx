@@ -290,9 +290,28 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
                 */
                 const premium = Boolean(chosen.is_premium);
                 const ce = cePachetCategorie(group.categoryId, chosen.size, tip, premium);
-                const res = await buyOlxCategoryPacket(
-                  businessId, group.categoryId, chosen.size, method,
-                  intentiaPentru(businessId, ce), tip, premium);
+                let res: Awaited<ReturnType<typeof buyOlxCategoryPacket>>;
+                try {
+                  res = await buyOlxCategoryPacket(
+                    businessId, group.categoryId, chosen.size, method,
+                    intentiaPentru(businessId, ce), tip, premium);
+                } catch {
+                  /*
+                   * ⚠⚠ AICI ADEVARUL E PE DOS FATA DE TOT RESTUL ARCULUI, si de aceea mesajul nu spune
+                   * `nu apasa din nou`.
+                   *
+                   * `intentiaPentru` scrie o intentie in `localStorage`, sub numele lucrului cumparat, iar
+                   * `incheieIntentia` o sterge abia dupa un raspuns bun. La o aruncare ea RAMANE scrisa, deci
+                   * o a doua apasare nu plateste de doua ori: serverul raspunde ca era deja facuta.
+                   */
+                  toast.error(
+                    "Nu am primit raspuns de la server, deci nu stim daca plata pentru pachet s-a facut. "
+                    + "Intentia a ramas scrisa, deci daca apesi din nou NU se plateste a doua oara: ori se "
+                    + "face acum, ori primesti raspunsul ca era deja facuta.",
+                    { duration: 12000 },
+                  );
+                  return;
+                }
                 if ("error" in res) { toast.error(res.error); return; }
                 /*
                   ⚠ SE ARUNCA INTENȚIA ȘI CÂND RĂSPUNSUL E „era deja făcută". Altfel intenția veche
@@ -303,7 +322,12 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
                 incheieIntentia(businessId, ce);
                 if (res.nou) toast.success("Pachet cumpărat.");
                 else toast.info("Cumpărarea asta era deja făcută; nu s-a plătit a doua oară. Apasă din nou dacă vrei încă un pachet.");
-                await onCumparat?.();
+                try {
+                  await onCumparat?.();
+                } catch {
+                  /* ⚠ `onCumparat` e reimprospatarea PARINTELUI: daca pica, nu s-a schimbat nimic
+                     nici la noi, nici la OLX. Se inghite, ca sa nu para o eroare de plata. */
+                }
                 router.refresh();
                 });
               }}>
@@ -375,13 +399,37 @@ function PromoteAdvert({ businessId, adverts, features, methods, eroare, onCumpa
               if (!confirmaPlata(`Cumperi promovarea „${numeProm}" pe „${numeAnunt}"?`, null)) return;
               startSave(async () => {
               const ce = cePromovare(Number(advertId), code);
-              const res = await buyOlxPaidFeature(
-                businessId, Number(advertId), code, method, intentiaPentru(businessId, ce));
+              let res: Awaited<ReturnType<typeof buyOlxPaidFeature>>;
+              try {
+                res = await buyOlxPaidFeature(
+                  businessId, Number(advertId), code, method, intentiaPentru(businessId, ce));
+              } catch {
+                /*
+                 * ⚠⚠ AICI ADEVARUL E PE DOS FATA DE TOT RESTUL ARCULUI, si de aceea mesajul nu spune
+                 * `nu apasa din nou`.
+                 *
+                 * `intentiaPentru` scrie o intentie in `localStorage`, sub numele lucrului cumparat, iar
+                 * `incheieIntentia` o sterge abia dupa un raspuns bun. La o aruncare ea RAMANE scrisa, deci
+                 * o a doua apasare nu plateste de doua ori: serverul raspunde ca era deja facuta.
+                 */
+                toast.error(
+                  "Nu am primit raspuns de la server, deci nu stim daca plata pentru promovare s-a facut. "
+                  + "Intentia a ramas scrisa, deci daca apesi din nou NU se plateste a doua oara: ori se "
+                  + "face acum, ori primesti raspunsul ca era deja cumparata.",
+                  { duration: 12000 },
+                );
+                return;
+              }
               if ("error" in res) { toast.error(res.error); return; }
               incheieIntentia(businessId, ce);
               if (res.nou) toast.success("Promovare activată.");
               else toast.info("Promovarea asta era deja cumpărată; nu s-a plătit a doua oară.");
-              await onCumparat?.();
+              try {
+                await onCumparat?.();
+              } catch {
+                /* ⚠ `onCumparat` e reimprospatarea PARINTELUI: daca pica, nu s-a schimbat nimic
+                   nici la noi, nici la OLX. Se inghite, ca sa nu para o eroare de plata. */
+              }
               router.refresh();
               });
             }}>

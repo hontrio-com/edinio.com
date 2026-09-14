@@ -676,8 +676,21 @@ export `, i + 10)));
   for (const [nume, sursa] of [["OlxAccountPanel", panouCont], ["OlxClient", ecran]] as const) {
     const apeluri = [...sursa.matchAll(/await buyOlx[A-Za-z]+\(/g)];
     assert.ok(apeluri.length > 0, `${nume} nu mai cumpara nimic`);
-    for (const m of apeluri) {
-      const dupa = sursa.slice(m.index ?? 0, (m.index ?? 0) + 1200);
+    for (const [k, m] of apeluri.entries()) {
+      /*
+       * ⚠ FEREASTRA SE OPRESTE LA URMATOAREA CUMPARARE, nu dupa un numar de caractere (14.09.2026).
+       *
+       * Era `+ 1200`, si a cazut cand callbackul a primit `try/catch`: textul cerut a fost impins
+       * dincolo de capat, desi codul era neatins si `incheieIntentia` statea la locul lui. Un prag
+       * in caractere ramane in urma la FIECARE reparatie care lungeste corpul, iar cine il vede
+       * cazand e ispitit sa-l lateasca pana trece, ceea ce ascunde exact ce trebuia aparat.
+       *
+       * ⚠ Legatura pe FIECARE apel se pastreaza, si ea era tot rostul ferestrei: taiata aici,
+       * drumul unui buton nu se poate sprijini pe `incheieIntentia` al celuilalt. Vezi nota de
+       * mai sus, despre proba care trecea verde cu apelul scos de la unul din doua.
+       */
+      const urmator = apeluri[k + 1]?.index ?? sursa.length;
+      const dupa = sursa.slice(m.index ?? 0, urmator);
       assert.match(dupa, /intentiaPentru\(businessId,/,
         `${nume}: o cumparare fara intentie trimisa`);
       assert.match(dupa, /incheieIntentia\(businessId,/,

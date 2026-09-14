@@ -76,7 +76,18 @@ export default function OlxConflicte({
                   variant="outline"
                   disabled={lucreaza}
                   onClick={() => startLucru(async () => {
-                    const r = await rezolvaConflictOlx(businessId, c.offerId, id);
+                    let r: Awaited<ReturnType<typeof rezolvaConflictOlx>>;
+                    try {
+                      r = await rezolvaConflictOlx(businessId, c.offerId, id);
+                    } catch {
+                      /* ⚠ Rezolva un conflict intre anunt si produs. */
+                      toast.error(
+                        "Nu am primit raspuns de la server, deci nu stim daca conflictul s-a rezolvat. "
+                        + "Reimprospateaza lista de conflicte inainte sa incerci din nou.",
+                        { duration: 12000 },
+                      );
+                      return;
+                    }
                     if ("error" in r) { toast.error(r.error); return; }
                     toast.success(`Se păstrează anunțul ${id}. Restul se retrag.`);
                     setConflicte((v) => (v ?? []).filter((x) => x.offerId !== c.offerId));

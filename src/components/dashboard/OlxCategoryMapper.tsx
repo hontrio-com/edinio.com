@@ -156,7 +156,18 @@ function CategoryModal({ businessId, edinioCategory, initial, onClose, onSaved }
     }
     const entry: OlxCategoryMapEntry = { category_id: leaf.id, label: leaf.label, photos_limit: leaf.photos_limit, attributes: clean };
     startSave(async () => {
-      const res = await saveOlxCategoryMapEntry(businessId, edinioCategory, entry);
+      let res: Awaited<ReturnType<typeof saveOlxCategoryMapEntry>>;
+      try {
+        res = await saveOlxCategoryMapEntry(businessId, edinioCategory, entry);
+      } catch {
+        /* ⚠ Scrie maparea. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca maparea s-a salvat. "
+          + "Reimprospateaza si uita-te la categorie inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Mapare salvată.");
       router.refresh();
@@ -180,7 +191,18 @@ function CategoryModal({ businessId, edinioCategory, initial, onClose, onSaved }
 
   function removeMapping(politica?: "pastreaza" | "dezactiveaza") {
     startSave(async () => {
-      const res = await saveOlxCategoryMapEntry(businessId, edinioCategory, null, politica);
+      let res: Awaited<ReturnType<typeof saveOlxCategoryMapEntry>>;
+      try {
+        res = await saveOlxCategoryMapEntry(businessId, edinioCategory, null, politica);
+      } catch {
+        /* ⚠ Aceeasi actiune cu `null`: scoate maparea, dupa politica aleasa. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca maparea s-a eliminat. "
+          + "Reimprospateaza si uita-te la categorie inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("intreaba" in res) { setIntrebare(res.intreaba.cate); return; }
       if ("error" in res) { toast.error(res.error); return; }
       setIntrebare(null);

@@ -280,8 +280,17 @@ test("⚠ o cumparare reusita lasa ecranul in lumea de DUPA ea", () => {
 
   /* 2. Panoul de cont incarca o singura data, la deschidere; `router.refresh()` nu atinge starea
         unei componente de client. Soldul si „Pachete active" ramaneau inghetate. */
-  for (const m of panouCont.matchAll(/await buyOlx[A-Za-z]+\(/g)) {
-    const dupa = panouCont.slice(m.index ?? 0, (m.index ?? 0) + 1400);
+  /*
+   * ⚠ FEREASTRA SE OPRESTE LA URMATOAREA CUMPARARE, nu dupa un numar de caractere (14.09.2026).
+   *
+   * Era `+ 1400` si a cazut cand callbackul a primit `try/catch`, desi `await onCumparat?.()`
+   * statea la locul lui. Legatura pe fiecare apel ramane, si ea era rostul ferestrei; pragul in
+   * caractere era doar felul in care se tinea, si ramanea in urma la orice corp mai lung.
+   */
+  const cumparari = [...panouCont.matchAll(/await buyOlx[A-Za-z]+\(/g)];
+  for (const [k, m] of cumparari.entries()) {
+    const urmator = cumparari[k + 1]?.index ?? panouCont.length;
+    const dupa = panouCont.slice(m.index ?? 0, urmator);
     assert.match(dupa, /await onCumparat\?\.\(\)/,
       "dupa o cumparare, soldul si pachetele trebuie recitite, nu doar `router.refresh()`");
   }

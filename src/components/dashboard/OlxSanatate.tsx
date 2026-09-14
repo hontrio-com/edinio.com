@@ -185,7 +185,18 @@ function PlatiDeVerificat({ businessId }: { businessId: string }) {
             <Button
               size="sm" variant="outline" disabled={lucreaza}
               onClick={() => startLucru(async () => {
-                const r = await lamuresteOlxPlata(businessId, p.id);
+                let r: Awaited<ReturnType<typeof lamuresteOlxPlata>>;
+                try {
+                  r = await lamuresteOlxPlata(businessId, p.id);
+                } catch {
+                  /* ⚠ Lamureste o plata ramasa in aer. */
+                  toast.error(
+                    "Nu am primit raspuns de la server, deci nu stim daca lamurirea s-a inregistrat. "
+                    + "Reimprospateaza panoul de sanatate inainte sa incerci din nou.",
+                    { duration: 12000 },
+                  );
+                  return;
+                }
                 if ("error" in r) { toast.error(r.error); return; }
                 if (r.stare === "intrat") toast.success(r.mesaj);
                 else toast.info(r.mesaj);
@@ -202,7 +213,18 @@ function PlatiDeVerificat({ businessId }: { businessId: string }) {
                   + "Dacă plata a intrat totuși, următoarea apăsare o face a doua oară, cu bani.",
                 )) return;
                 startLucru(async () => {
-                  const r = await renuntaLaOlxPlata(businessId, p.id);
+                  let r: Awaited<ReturnType<typeof renuntaLaOlxPlata>>;
+                  try {
+                    r = await renuntaLaOlxPlata(businessId, p.id);
+                  } catch {
+                    /* ⚠ Renunta la o plata ramasa in aer. */
+                    toast.error(
+                      "Nu am primit raspuns de la server, deci nu stim daca renuntarea s-a inregistrat. "
+                      + "Reimprospateaza panoul de sanatate inainte sa incerci din nou.",
+                      { duration: 12000 },
+                    );
+                    return;
+                  }
                   if ("error" in r) { toast.error(r.error); return; }
                   toast.success(r.mesaj);
                   reincarca();

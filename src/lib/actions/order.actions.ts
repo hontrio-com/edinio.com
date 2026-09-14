@@ -35,7 +35,10 @@ import {
   type ModificareLinie,
   type VarianteSlim,
 } from "@/lib/orders/edit-pricing";
-import { verificaCotatia } from "@/lib/shipping/quote-token";
+import { verificaCotatia, type PlanExpedierii } from "@/lib/shipping/quote-token";
+/* ⚠ Stau in modul propriu, nu aici: `"use server"` nu ingaduie exporturi de VALOARE care sa nu fie
+   functii async. Vezi antetul din `recotarea.ts`, si buildul de 19 erori care a iesit din asta. */
+import { mesajulRecotarii, TOLERANTA_RAMBURS_LEI } from "@/lib/shipping/recotarea";
 import { parseBillingCompany, type BillingCompany, type BillingCompanyInput } from "@/lib/billing/company";
 import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleRelease, expandBundleStock } from "@/lib/bundles";
@@ -45,7 +48,7 @@ import { cheieDocument as cheieDocumentPallex } from "@/lib/pallex/documente";
 import { cheieEticheta as cheieEtichetaEcolet } from "@/lib/ecolet/documente";
 import { cheieEticheta as cheieEtichetaPepita } from "@/lib/pepita/eticheta";
 import { awburiDinRand } from "@/lib/orders/awb-propriu";
-import { campuriDeCurier, type ZoneleMagazinului } from "@/lib/shipping/curierul-declarat";
+import { campuriDeCurier, planulPretins, type ZoneleMagazinului } from "@/lib/shipping/curierul-declarat";
 import { deCeNuSeStergeComanda } from "@/lib/orders/stergerea-comenzii";
 import { deleteFromR2, stergeIncarcarea } from "@/lib/r2";
 import { interpreteazaRevendicarea, type Revendicare } from "@/lib/orders/verdict-stoc";
@@ -250,12 +253,47 @@ function autoritativeShipping(
    * ⚠ `null` inseamna „n-am de unde sti", si atunci greutatea nu se judeca. Vezi `verificaCotatia`.
    */
   grameComandate: number | null,
-): { shipping: number } | { recotare: true; motiv: "greutate" | "fara-tarif" } {
-  if (esteGratuit) return { shipping: 0 };
+  /**
+   * Planul pretins de comanda: serviciul, contractul, reteaua punctului.
+   *
+   * ⚠ `undefined` inseamna „apelantul nu-l poate spune", si atunci nu se judeca. Vezi
+   * `verificaCotatia`.
+   */
+  planPretins: PlanExpedierii | undefined,
+): { shipping: number; rambursBaniSemnat: number | null }
+  | { recotare: true; motiv: "greutate" | "fara-tarif" | "plan" } {
+  /*
+   * ⚠ RAMANE DESCHISA RAMURA GRATUITA, si se scrie de ce (14.09.2026).
+   *
+   * Aici browserul trimite zero, iar tokenul e semnat pe pretul COTAT al curierului. Pretul sta
+   * in amprenta, nu calatoreste in clar, deci la comanda nu mai exista fata de ce sa verificam:
+   * nicio semnatura n-ar bate, si fiecare comanda care tocmai a trecut pragul de livrare gratuita
+   * ar fi refuzata. Zece din cincisprezece magazine cu curieri au prag.
+   *
+   * Inchiderea cere ca tokenul sa poarte SI pretul cotat, in clar, ca gramele si ca suma. Nu s-a
+   * facut in acelasi val cu semnarea planului: ar fi insemnat a doua schimbare de format intr-o
+   * ora peste fiecare cotatie de pe platforma, cu proba rescrisa in graba. Se numeste aici ca sa
+   * nu para inchisa.
+   */
+  if (esteGratuit) return { shipping: 0, rambursBaniSemnat: null };
 
   const claimed = Math.max(0, round2(Number(cerut) || 0));
-  const verdict = verificaCotatia(businessId, dest, claimed, token, optiune, grameComandate);
-  if (verdict.ok) return { shipping: claimed };
+  const verdict = verificaCotatia(businessId, dest, claimed, token, optiune, grameComandate, planPretins);
+  if (verdict.ok) return { shipping: claimed, rambursBaniSemnat: verdict.rambursBani };
+
+  /*
+   * ═══ ⚠ PLANUL SCHIMBAT REFUZA COMANDA, NU CADE PE TARIF ═══
+   *
+   * Aceeasi purtare ca la greutate, si din acelasi motiv. Cele doua esecuri duc in directii
+   * OPUSE: o semnatura care nu bate poate fi un token pierdut sau o desfasurare la mijloc, si
+   * atunci comanda intra pe tariful comerciantului. Un plan schimbat nu se intampla din
+   * intamplare: cineva a primit pretul unui serviciu si trimite altul.
+   *
+   * ⚠ Ramura asta trebuie sa stea INAINTEA caderii pe tarif, si tocmai de aceea e scrisa explicit:
+   * `tsc` NU obliga la nimic cand o uniune se largeste, deci un motiv nou lasat netratat ar fi
+   * alunecat tacut pe ramura blanda, adica in favoarea celui care a schimbat serviciul.
+   */
+  if (verdict.motiv === "plan") return { recotare: true, motiv: "plan" };
 
   /*
    * ═══ ⚠ GREUTATEA DEPASITA REFUZA COMANDA, NU CADE PE TARIF ═══
@@ -324,7 +362,9 @@ function autoritativeShipping(
    * foloseste niciun magazin din 131.
    */
   const areCurieri = Object.values(zone ?? {}).some((z) => z?.enabled);
-  if (!areCurieri && claimed === round2(tarifImplicit)) return { shipping: claimed };
+  /* ⚠ `null`, nu zero: semnatura n-a batut, deci nu exista nicio suma de incredere. Zero ar fi
+     insemnat „s-a cotat fara ramburs" si ar fi refuzat comenzi cinstite. */
+  if (!areCurieri && claimed === round2(tarifImplicit)) return { shipping: claimed, rambursBaniSemnat: null };
 
   logError({
     action: "placeOrder.shippingRejected",
@@ -349,7 +389,8 @@ function autoritativeShipping(
    * plateste ce a vazut pe ecran, nu un tarif mai mic — asa comerciantul nu mai
    * ramane dator, cum ramanea cand se cadea sec pe tariful implicit.
    */
-  return { shipping: Math.max(claimed, Math.max(0, round2(tarifImplicit))) };
+  /* ⚠ Tot `null`: aici se ajunge DOAR cand semnatura n-a batut. Vezi nota de mai sus. */
+  return { shipping: Math.max(claimed, Math.max(0, round2(tarifImplicit))), rambursBaniSemnat: null };
 }
 
 /**
@@ -1464,6 +1505,8 @@ export async function placeOrder(data: {
       ],
       greutatiPeProdus,
     ),
+    /* Planul pretins: serviciul, contractul, reteaua punctului. Vezi `planulPretins`. */
+    planulPretins(data),
   );
   if ("recotare" in verdictTransport) {
     /*
@@ -1472,24 +1515,55 @@ export async function placeOrder(data: {
      * Nu se cade pe tariful implicit: pe „Ridicare personala" la 0,00 lei, o cadere ar face-o 18
      * pana la 45 de lei fara ca omul sa fi vazut vreodata suma. Vezi `autoritativeShipping`.
      */
-    /* ⚠ MESAJUL URMEAZA CAUZA. Trimise amandoua prin acelasi text, un magazin fara tarif
-       declarat i-ar fi spus clientului ca „s-a schimbat cosul", ceea ce nu s-a intamplat. */
-    const faraTarif = verdictTransport.motiv === "fara-tarif";
+    /* ⚠ MESAJUL URMEAZA CAUZA, si de azi sunt TREI cauze, nu doua. Vezi `mesajulRecotarii`. */
+    const mesaj = mesajulRecotarii(verdictTransport.motiv);
     logError({
       action: "placeOrder.shippingRequote",
-      message: faraTarif
-        ? "Quote signature failed and the store declares no default shipping cost"
-        : "Ordered cart is heavier than the quoted one",
+      message: mesaj.jurnal,
       details: { businessId: data.business_id, productId: data.product_id, courier: data.selected_courier, motiv: verdictTransport.motiv },
       severity: "warning",
     });
-    return {
-      error: faraTarif
-        ? "Nu am putut confirma costul livrarii. Reincarca pagina si incearca din nou."
-        : "Cosul s-a schimbat de cand am calculat transportul. Reincarca pagina ca sa afli costul livrarii.",
-    };
+    return { error: mesaj.catreClient };
   }
   const shipping = verdictTransport.shipping;
+
+  /*
+   * ═══ ⚠ SUMA DE RAMBURS SEMNATA SE CONFRUNTA CU MARFA ADEVARATA (14.09.2026) ═══
+   *
+   * La cotare, podeaua sumei se socoteste din liniile DECLARATE de browser, deci se putea cobori
+   * omitand `cart`. Aici serverul stie marfa adevarata, pretuita de el, si abia acum comparatia
+   * inseamna ceva.
+   *
+   * ⚠ SE COMPARA CU MARFA, NU CU TOTALUL, si asta e chiar greseala de unitati reparata azi in
+   * jurnalul rambursului. Cotatia a fost ceruta pe marfa (amandoua formularele trimit marfa);
+   * curierul incaseaza la usa totalul, care e mereu mai mare. Comparate cu totalul, FIECARE
+   * comanda cinstita ar iesi „subdeclarata".
+   *
+   * ⚠ SI NUMAI PE COMENZILE CU RAMBURS. Una platita in avans poarta zero semnat si marfa de mii
+   * de lei; fara poarta asta, fiecare plata cu cardul ar fi fost refuzata.
+   *
+   * ⚠ `null` inseamna „semnatura n-a batut, deci n-am nicio suma de incredere", si atunci nu se
+   * judeca nimic. Tokenele de forma veche, inca in circulatie 24 de ore, sunt tocmai acest caz.
+   */
+  if (
+    isCodPaymentMethod(metodaPlata)
+    && verdictTransport.rambursBaniSemnat != null
+    && round2(subtotal + extrasTotal - discountAmount) - verdictTransport.rambursBaniSemnat / 100
+       > TOLERANTA_RAMBURS_LEI
+  ) {
+    const mesajRamburs = mesajulRecotarii("ramburs");
+    logError({
+      action: "placeOrder.shippingRequote",
+      message: mesajRamburs.jurnal,
+      details: {
+        businessId: data.business_id,
+        semnat: verdictTransport.rambursBaniSemnat / 100,
+        marfa: round2(subtotal + extrasTotal - discountAmount),
+      },
+      severity: "warning",
+    });
+    return { error: mesajRamburs.catreClient };
+  }
 
   // VAT: recomputed server-side (mirrors placeCartOrder + the storefront) so single-
   // product / One-Product-Store orders collect VAT too. Only VAT-exclusive pricing
@@ -4302,26 +4376,44 @@ export async function placeCartOrder(data: {
       validatedItems.map((i) => ({ product_id: i.product_id, quantity: i.quantity })),
       greutatiPeProdus,
     ),
+    /* Planul pretins, ca la comanda directa. Vezi `planulPretins`. */
+    planulPretins(data),
   );
   if ("recotare" in verdictTransport) {
     /* ⚠ Se cere recotare, nu se cade pe tarif. Vezi `autoritativeShipping` si comanda directa. */
-    /* ⚠ Acelasi mesaj legat de cauza ca la comanda directa. Vezi nota de acolo. */
-    const faraTarif = verdictTransport.motiv === "fara-tarif";
+    /* ⚠ Acelasi ajutor de mesaje ca la comanda directa: un text scris aici s-ar fi departat. */
+    const mesaj = mesajulRecotarii(verdictTransport.motiv);
     logError({
       action: "placeCartOrder.shippingRequote",
-      message: faraTarif
-        ? "Quote signature failed and the store declares no default shipping cost"
-        : "Ordered cart is heavier than the quoted one",
+      message: mesaj.jurnal,
       details: { businessId: data.business_id, courier: data.selected_courier, motiv: verdictTransport.motiv },
       severity: "warning",
     });
-    return {
-      error: faraTarif
-        ? "Nu am putut confirma costul livrarii. Reincarca pagina si incearca din nou."
-        : "Cosul s-a schimbat de cand am calculat transportul. Reincarca pagina ca sa afli costul livrarii.",
-    };
+    return { error: mesaj.catreClient };
   }
   const shipping = verdictTransport.shipping;
+
+  /* ⚠ Aceeasi confruntare ca la comanda directa, cu aceleasi doua porti: numai pe ramburs, si
+     numai cand exista o suma semnata de incredere. Vezi nota lunga de acolo. */
+  if (
+    isCodPaymentMethod(metodaPlata)
+    && verdictTransport.rambursBaniSemnat != null
+    && round2(subtotal + extrasTotal - discountAmount) - verdictTransport.rambursBaniSemnat / 100
+       > TOLERANTA_RAMBURS_LEI
+  ) {
+    const mesajRamburs = mesajulRecotarii("ramburs");
+    logError({
+      action: "placeCartOrder.shippingRequote",
+      message: mesajRamburs.jurnal,
+      details: {
+        businessId: data.business_id,
+        semnat: verdictTransport.rambursBaniSemnat / 100,
+        marfa: round2(subtotal + extrasTotal - discountAmount),
+      },
+      severity: "warning",
+    });
+    return { error: mesajRamburs.catreClient };
+  }
 
   // Aceeasi baza ca la comanda directa si ca in magazin: marfa, extraoptiunile si
   // TRANSPORTUL, dupa toate reducerile, plus taxa de ramburs. Vezi `vatBase`.

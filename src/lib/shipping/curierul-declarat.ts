@@ -50,6 +50,8 @@
  * e optional in `OrderInput`).
  */
 
+import type { PlanExpedierii } from "./quote-token";
+
 /**
  * Tipurile de livrare pe care le produce chiar cotarea noastra.
  *
@@ -97,6 +99,56 @@ export function tipDeLivrareCunoscut(tip: unknown): boolean {
  * ⚠ Tipul de livrare se curata SEPARAT: un curier adevarat cu un tip inventat
  * ramane o comanda buna cu un camp de aruncat, nu o comanda de refuzat.
  */
+/**
+ * Planul de expediere PRETINS de comanda care se plaseaza acum.
+ *
+ * ═══ ⚠ DE CE E UN AJUTOR, SI NU CINCISPREZECE RANDURI LA FIECARE APELANT ═══
+ *
+ * Campurile astea sunt declarate de DOUA ori in `order.actions.ts` (`:924-985` pentru comanda
+ * directa, `:3938-3993` pentru cea din cos) si scrise pe comanda tot de doua ori, in blocuri
+ * identice caracter cu caracter. Scris pe loc, ajutorul ar fi fost a treia copie, iar prima
+ * schimbare ar fi departat-o de celelalte in tacere.
+ *
+ * ⚠ SI NU SE VALIDEAZA NIMIC AICI, dinadins. Rostul lui e doar sa ADUNE ce sustine browserul,
+ * intr-o forma pe care `verificaCotatia` o poate confrunta cu ce am semnat noi la cotare. Cine
+ * hotaraste daca planul e bun e semnatura, nu o lista de valori permise scrisa de mana.
+ */
+export function planulPretins(d: {
+  woot_service_id?: number;
+  colete_service_id?: number;
+  ecolet_service_slug?: string;
+  innoship_courier_id?: number;
+  innoship_service_id?: number;
+  innoship_option_id?: string;
+  smartship_courier_id?: number;
+  smartship_own_contract?: boolean;
+  smartship_locker_net?: "easybox" | "fanbox";
+  shipo_rate_id?: number;
+  fedex_service_type?: string;
+  ups_service_code?: string;
+  dhl_product_code?: string;
+  dhl_local_product_code?: string;
+  fan_point_type?: string;
+}): PlanExpedierii {
+  return {
+    wootServiceId: d.woot_service_id,
+    coleteServiceId: d.colete_service_id,
+    ecoletServiceSlug: d.ecolet_service_slug,
+    innoshipCourierId: d.innoship_courier_id,
+    innoshipServiceId: d.innoship_service_id,
+    innoshipOptionId: d.innoship_option_id,
+    smartshipCourierId: d.smartship_courier_id,
+    smartshipOwnContract: d.smartship_own_contract,
+    smartshipLockerNet: d.smartship_locker_net,
+    shipoRateId: d.shipo_rate_id,
+    fedexServiceType: d.fedex_service_type,
+    upsServiceCode: d.ups_service_code,
+    dhlProductCode: d.dhl_product_code,
+    dhlLocalProductCode: d.dhl_local_product_code,
+    fanPointType: d.fan_point_type,
+  };
+}
+
 export function campuriDeCurier(
   curier: unknown,
   eticheta: unknown,

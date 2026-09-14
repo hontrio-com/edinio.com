@@ -96,12 +96,61 @@ test("nu iese niciodata un numar negativ", () => {
 
 /* ── Cusatura: cotarea chiar il foloseste, si nimeni nu-l ocoleste ────────── */
 
-test("⚠ cotarea cheama pragul, cu marfa socotita de server", () => {
+test("⚠⚠ PODEAUA PRAGULUI NU MAI VINE DIN BROWSER, si asta era chiar gaura", () => {
+  /*
+   * ═══ ⚠ AICI A FOST SCRISA O AFIRMATIE FALSA, SI EA A LINISTIT PE TOATA LUMEA ═══
+   *
+   * Pana pe 14.09.2026 testul asta cerea `pragulRambursului(destination.cod, valoareMarfii, ...)`
+   * cu mesajul „nu cu marfa socotita de server". Mesajul era FALS, si era fals INAINTE de orice
+   * schimbare: `valoareMarfii` nu e socotita de server, e
+   *
+   *     min( Number(destination.subtotal) || 0 , plafonul din catalog )
+   *
+   * adica un numar DIN BROWSER, plafonat. Un `max` peste o podea pe care clientul o poate cobori
+   * nu ridica nimic: `subtotal: 0.01` o duce la un ban, iar `cart` omis o duce la ZERO, fiindca
+   * plafonul din catalog se socoteste chiar din liniile declarate.
+   *
+   * Proba avea cusatura pe apelant, cum cere regula casei. Dar ea afirma FORMA chemarii, nu
+   * PROVENIENTA argumentului, si tocmai acolo statea defectul. De aceea a trecut verde peste el.
+   */
   const cod = faraComentarii(fisier(COTARE));
   assert.match(
     cod,
-    /const rambursDeCotat = pragulRambursului\(destination\.cod, valoareMarfii, esteRamburs\);/,
-    "pragul nu mai e chemat, sau nu cu marfa socotita de server",
+    /const rambursDeCotat = pragulRambursului\(destination\.cod, podeaDinCatalog, esteRamburs\);/,
+    "pragul nu mai primeste drept podea plafonul din catalog",
+  );
+  assert.match(
+    cod,
+    /const podeaDinCatalog = subtotalMaximDinCatalog\(/,
+    "podeaua nu mai e socotita direct din catalog",
+  );
+  assert.doesNotMatch(
+    cod,
+    /pragulRambursului\(destination\.cod, valoareMarfii/,
+    "podeaua s-a intors la `min(browser, catalog)`, deci se poate cobori din browser",
+  );
+});
+
+test("⚠ PERECHEA CARE LIPSEA: suma din browser nu atinge podeaua", () => {
+  /*
+   * ⚠ ASIMETRIA A FOST CHIAR GAURA. Exista o proba care numara riguros aparitiile lui
+   * `destination.cod` si cere exact doua, ca nicio ramura de curier sa nu ocoleasca pragul. Nu
+   * exista NICIUNA pereche pentru `destination.subtotal`, desi el hotara chiar podeaua pragului.
+   *
+   * `destination.subtotal` are voie sa apara o singura data: acolo unde se socoteste VALOAREA
+   * DECLARATA curierului (asigurarea), unde plafonarea e corecta fiindca pericolul e umflarea.
+   * Orice a doua aparitie inseamna ca a reintrat pe drumul rambursului, unde pericolul e invers.
+   */
+  const cod = faraComentarii(fisier(COTARE));
+  const aparitii = cod.match(/destination\.subtotal\b/g) ?? [];
+  assert.equal(
+    aparitii.length, 1,
+    `suma din browser se citeste in ${aparitii.length} locuri; are voie intr-unul singur`,
+  );
+  assert.match(
+    cod,
+    /const valoareMarfii = Math\.min\(/,
+    "valoarea declarata curierului nu mai e plafonata cu ce sustine catalogul",
   );
 });
 

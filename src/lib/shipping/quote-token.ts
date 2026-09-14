@@ -133,6 +133,96 @@ export interface QuoteOption {
   ramburs: boolean;
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * PLANUL EXPEDIERII, SEMNAT SI EL                              (14.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Pana azi amprenta lega pretul, destinatia, curierul, tipul de livrare, eticheta si regimul
+ * de ramburs. Nu lega SERVICIUL. Iar `ShippingOption` il poarta de mult, cu motivul scris pe
+ * fiecare camp: `shipoRateId`, `upsServiceCode`, `dhlProductCode` plus `dhlLocalProductCode`,
+ * `smartshipOwnContract`, `smartshipLockerNet`, `fanPointType`, `innoshipOptionId`,
+ * `ecoletServiceSlug` si restul.
+ *
+ * ⚠ ATACUL, in forma lui cea mai ieftina: cumparatorul cere cotatiile cinstit si primeste doua
+ * oferte ale ACELUIASI curier: `rate_id 101` la 18 lei si `rate_id 205`, express, la 42. Alege
+ * pe cea de 18 si primeste tokenul ei. La trimiterea comenzii schimba UN SINGUR camp,
+ * `shipo_rate_id`, si lasa neatinse pretul, tokenul, curierul, eticheta si destinatia. Totul
+ * bate, fiindca nimic din ce bate nu cuprinde serviciul. Comanda intra la 18 lei pe un serviciu
+ * de 42, iar diferenta o plateste comerciantul la emitere.
+ *
+ * Aceeasi forma la UPS (unde codul lipsa face furnizorul sa factureze TACIT cel mai scump
+ * produs), la SmartShip (acelasi curier pe doua contracte, la preturi diferite) si la punctul de
+ * ridicare, unde `locker_id` hotaraste UNDE ajunge coletul.
+ */
+export interface PlanExpedierii {
+  /** Brokeri: cheia ofertei, cum o poarta chiar optiunea cotata. */
+  wootServiceId?: number | null;
+  coleteServiceId?: number | null;
+  ecoletServiceSlug?: string | null;
+  innoshipCourierId?: number | null;
+  innoshipServiceId?: number | null;
+  innoshipOptionId?: string | null;
+  /** ⚠ Contractul intra in plan: acelasi curier apare de doua ori, la preturi diferite. */
+  smartshipCourierId?: number | null;
+  smartshipOwnContract?: boolean | null;
+  smartshipLockerNet?: string | null;
+  shipoRateId?: number | null;
+  /** Transportatori: serviciul lor ales. */
+  fedexServiceType?: string | null;
+  upsServiceCode?: string | null;
+  dhlProductCode?: string | null;
+  dhlLocalProductCode?: string | null;
+  /** ⚠ Reteaua punctului FAN: FANbox, PayPoint si oficiu vin toate sub acelasi `deliveryType`. */
+  fanPointType?: string | null;
+}
+
+/*
+ * ⚠ DE CE NU E AICI SI PUNCTUL DE RIDICARE, desi el hotaraste UNDE ajunge coletul.
+ *
+ * `locker_id` nu se poate semna la cotare fiindca la cotare NU EXISTA: lista de puncte se cere
+ * separat, cu `getLockers`, dupa ce cumparatorul a ales curierul. `ShippingOption` nici nu are
+ * un asemenea camp.
+ *
+ * Legat aici, amprenta semnata ar fi fost mereu fara punct, iar cea pretinsa la comanda ar fi
+ * avut unul: FIECARE comanda cinstita la locker ar fi cazut cu motivul `plan`, adica ar fi fost
+ * refuzata. Chiar capcana despre care antetul acestui fisier avertizeaza: „nu lega ce nu se poate
+ * reconstrui exact la plasarea comenzii".
+ *
+ * Punctul cere alta paza, si ea e alta lucrare: ca id-ul ales sa apartina RETELEI semnate
+ * (`fanPointType`, `smartshipLockerNet`), verificat la emitere, unde reteaua chiar se cunoaste.
+ */
+
+/**
+ * Planul, normalizat la un sir stabil.
+ *
+ * ⚠ ORDINEA E FIXA SI SCRISA DE MANA, nu din `Object.keys`: ordinea cheilor unui obiect literal
+ * depinde de cine l-a construit, iar doua obiecte cu aceleasi valori ar fi dat amprente diferite.
+ * Atunci fiecare comanda cinstita ar fi cazut pe „plan schimbat", adica exact pe drumul care
+ * REFUZA comanda.
+ *
+ * ⚠ Campul lipsa si campul gol se scriu la fel, fiindca si sunt la fel: browserul trimite cand
+ * `undefined`, cand `""`, cand `null` pentru acelasi „n-am ales nimic".
+ */
+export function amprentaPlanului(plan: PlanExpedierii | null | undefined): string {
+  if (!plan) return "";
+  const p = (v: unknown): string => {
+    if (v === null || v === undefined) return "";
+    if (typeof v === "boolean") return v ? "1" : "0";
+    return String(v).trim().toLowerCase();
+  };
+  const parti = [
+    p(plan.wootServiceId), p(plan.coleteServiceId), p(plan.ecoletServiceSlug),
+    p(plan.innoshipCourierId), p(plan.innoshipServiceId), p(plan.innoshipOptionId),
+    p(plan.smartshipCourierId), p(plan.smartshipOwnContract), p(plan.smartshipLockerNet),
+    p(plan.shipoRateId), p(plan.fedexServiceType), p(plan.upsServiceCode),
+    p(plan.dhlProductCode), p(plan.dhlLocalProductCode), p(plan.fanPointType),
+  ];
+  /* Toate goale inseamna „fara plan de serviciu": un curier simplu, la adresa. */
+  if (parti.every((x) => x === "")) return "";
+  return createHmac("sha256", secret()).update(parti.join("~")).digest("base64url").slice(0, 16);
+}
+
 /** Cotatia, normalizata, ca sa semneze la fel si la cotare, si la comanda. */
 function amprenta(businessId: string, dest: QuoteDestination, price: number, optiune: QuoteOption): string {
   const parte = (v: string | null | undefined) => (v ?? "").trim().toLowerCase();
@@ -187,7 +277,30 @@ function amprenta(businessId: string, dest: QuoteDestination, price: number, opt
  */
 export const TOLERANTA_GRAME = 5;
 
-/** Semneaza o optiune de transport. Rezultatul calatoreste pana la comanda. */
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * SUMA RAMBURSULUI, SEMNATA CA SI GREUTATEA                    (14.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `pragulRambursului` primea drept podea `min(subtotal din browser, plafonul din catalog)`.
+ * Amandoi termenii veneau de la client, deci podeaua se putea COBORI: `subtotal: 0.01` o duce
+ * la un ban, iar `cart` omis o duce la ZERO, fiindca plafonul din catalog se socoteste chiar
+ * din liniile declarate. Un `max` peste o podea coborata nu ridica nimic.
+ *
+ * ⚠ SI DE CE NU E DE AJUNS SA SE SCOATA `min`-ul. Plafonul din catalog ramane socotit din
+ * `destination.cart`, tot de la client. Reparatia care se opreste acolo muta gaura cu un rand
+ * mai jos si trece toate portile.
+ *
+ * Inchiderea are aceeasi forma ca la greutate, oglindita: suma socotita de server calatoreste
+ * IN CLAR in token, acoperita de semnatura, iar la comanda se compara cu marfa adevarata, pe
+ * care serverul o stie abia atunci. La greutate cade cosul mai GREU; aici cade suma semnata
+ * mai MICA decat marfa reala. In amandoua, esecul e in favoarea cumparatorului: se cere
+ * recotare, nu se schimba tacit pretul.
+ *
+ * ⚠ `amprenta()` NU se atinge, si asta e conditia intregii lucrari. Orice schimbare in ea ar
+ * rescrie semnatura formelor vechi, iar cele 24 de ore de cotatii aflate in circulatie ar cadea
+ * deodata, pe `max(suma ceruta, tarif implicit)`. Campurile noi intra DOAR in forma noua.
+ */
 export function signShippingQuote(
   businessId: string,
   dest: QuoteDestination,
@@ -196,13 +309,32 @@ export function signShippingQuote(
   /** Gramele pe care le-a socotit SERVERUL pentru cosul cotat. Vezi nota de mai sus. */
   grame: number,
   expiraLa?: number,
+  /** Suma de ramburs cu care s-a cerut pretul, in BANI. `null` la cotatiile fara ramburs. */
+  rambursBani?: number | null,
+  /** Serviciul ales, cum il poarta chiar optiunea cotata. */
+  plan?: PlanExpedierii | null,
 ): string {
   const expira = expiraLa ?? Date.now() + VALABILITATE_MS;
   const g = Math.max(0, Math.round(Number(grame) || 0));
-  const mac = createHmac("sha256", secret())
-    .update(`${amprenta(businessId, dest, price, optiune)}|${g}|${expira}`)
+
+  /*
+   * ⚠ FORMA VECHE RAMANE FORMA IMPLICITA cat timp nu se cere nimic nou, ca sa nu se schimbe
+   * niciun token din cele care circula azi. Forma noua apare doar cand apelantul chiar are ce
+   * lega in plus.
+   */
+  const ampPlan = amprentaPlanului(plan);
+  const bani = Number.isFinite(Number(rambursBani)) ? Math.max(0, Math.round(Number(rambursBani))) : null;
+  if (bani === null && ampPlan === "") {
+    const mac = createHmac("sha256", secret())
+      .update(`${amprenta(businessId, dest, price, optiune)}|${g}|${expira}`)
+      .digest("base64url");
+    return `${expira}.${g}.${mac}`;
+  }
+
+  const macNou = createHmac("sha256", secret())
+    .update(`${amprenta(businessId, dest, price, optiune)}|${g}|${bani ?? 0}|${ampPlan}|${expira}`)
     .digest("base64url");
-  return `${expira}.${g}.${mac}`;
+  return `${expira}.${g}.${bani ?? 0}.${ampPlan || "-"}.${macNou}`;
 }
 
 /**
@@ -222,7 +354,12 @@ export function signShippingQuote(
  * `tsc` sa spuna in ce regim a cotat. Optional, exact asta se uita — si o
  * cotatie semnata „platit" folosita la o comanda ramburs e chiar defectul.
  */
-export function semneazaOptiuni<T extends { price: number; courier?: string; deliveryType?: string; courierLabel?: string }>(
+export function semneazaOptiuni<T extends {
+  price: number;
+  courier?: string;
+  deliveryType?: string;
+  courierLabel?: string;
+} & PlanExpedierii>(
   businessId: string,
   dest: QuoteDestination,
   ramburs: boolean,
@@ -236,12 +373,46 @@ export function semneazaOptiuni<T extends { price: number; courier?: string; del
    */
   grame: number,
   optiuni: T[],
+  /**
+   * Suma de ramburs cu care s-a cerut tot lotul de preturi, in BANI, socotita de SERVER.
+   *
+   * ⚠ Ultima in lista, si nu din intamplare. Proba din `greutatea-cotata-se-leaga-de-comanda`
+   * taie fiecare chemare si cere in ea subsirul literal `esteRamburs, grameCotate`. Un argument
+   * strecurat INTRE cele doua ar fi rupt o proba buna, si atunci tentatia ar fi fost s-o slabesc
+   * ca sa treaca, in loc s-o pastrez.
+   *
+   * ⚠ `undefined` inseamna „apelantul inca nu leaga suma", si atunci tokenul iese in forma VECHE,
+   * octet cu octet. Asa nicio cotatie aflata in circulatie nu se clinteste si nicio proba veche
+   * nu se misca: forma noua apare doar acolo unde chiar e ceva nou de legat.
+   */
+  rambursBani?: number | null,
 ): (T & { token: string })[] {
   return optiuni.map((o) => ({
     ...o,
+    /*
+     * ⚠ PLANUL SE IA DIN OPTIUNEA INSASI, nu de la apelant. Serverul il produce deja, cu motivul
+     * scris pe fiecare camp din `ShippingOption`; ce lipsea era doar SEMNAREA lui. Luat de la
+     * apelant, ar fi fost inca un loc unde cineva poate trimite altceva decat s-a cotat.
+     */
     token: signShippingQuote(businessId, dest, o.price, {
       courier: o.courier, deliveryType: o.deliveryType, courierLabel: o.courierLabel, ramburs,
-    }, grame),
+    }, grame, undefined, rambursBani, {
+      wootServiceId: o.wootServiceId,
+      coleteServiceId: o.coleteServiceId,
+      ecoletServiceSlug: o.ecoletServiceSlug,
+      innoshipCourierId: o.innoshipCourierId,
+      innoshipServiceId: o.innoshipServiceId,
+      innoshipOptionId: o.innoshipOptionId,
+      smartshipCourierId: o.smartshipCourierId,
+      smartshipOwnContract: o.smartshipOwnContract,
+      smartshipLockerNet: o.smartshipLockerNet,
+      shipoRateId: o.shipoRateId,
+      fedexServiceType: o.fedexServiceType,
+      upsServiceCode: o.upsServiceCode,
+      dhlProductCode: o.dhlProductCode,
+      dhlLocalProductCode: o.dhlLocalProductCode,
+      fanPointType: o.fanPointType,
+    }),
   }));
 }
 
@@ -274,11 +445,28 @@ export function verificaCotatia(
    * socoti o trimit, si acolo poarta lucreaza.
    */
   grameComandate?: number | null,
-): { ok: true } | { ok: false; motiv: "semnatura" | "greutate" } {
-  const nu = (motiv: "semnatura" | "greutate") => ({ ok: false as const, motiv });
+  /**
+   * Planul PRETINS de comanda care se plaseaza acum.
+   *
+   * ⚠ `undefined` inseamna „apelantul nu poate spune", si atunci planul nu se judeca, exact ca
+   * greutatea. Nu e o portita: cine nu-l poate socoti n-are nici cu ce sa minta. Drumurile care
+   * CHIAR il stiu il trimit, si acolo poarta lucreaza.
+   */
+  planPretins?: PlanExpedierii | null,
+): { ok: true; rambursBani: number | null } | { ok: false; motiv: "semnatura" | "greutate" | "plan" } {
+  const nu = (motiv: "semnatura" | "greutate" | "plan") => ({ ok: false as const, motiv });
   if (!token || !businessId) return nu("semnatura");
   const bucati = token.split(".");
-  if (bucati.length !== 2 && bucati.length !== 3) return nu("semnatura");
+  /*
+   * ⚠ FORMELE ACCEPTATE, si de ce sunt trei. Doua bucati e forma de dinainte de 08.09.2026,
+   * trei e cea cu greutatea, cinci e cea cu suma rambursului si planul. Toate trei se citesc
+   * STRICT: orice alta lungime cade, deci o bucata lipita la coada nu poate trece.
+   *
+   * ⚠ Cele vechi raman acceptate DINADINS. Un token traieste 24 de ore, si in clipa desfasurarii
+   * fiecare pagina de finalizare deschisa poarta unul vechi. Refuzate, ar cadea comenzi CINSTITE,
+   * in curs. Se sting singure intr-o zi.
+   */
+  if (bucati.length !== 2 && bucati.length !== 3 && bucati.length !== 5) return nu("semnatura");
 
   const expira = Number(bucati[0]);
   if (!Number.isFinite(expira) || expira < Date.now()) return nu("semnatura");
@@ -301,10 +489,57 @@ export function verificaCotatia(
     const primitVechi = Buffer.from(token);
     if (asteptatVechi.length !== primitVechi.length) return nu("semnatura");
     try {
-      return timingSafeEqual(asteptatVechi, primitVechi) ? { ok: true } : nu("semnatura");
+      /* ⚠ `rambursBani: null` inseamna „tokenul asta nu poarta suma", nu „suma e zero". */
+      return timingSafeEqual(asteptatVechi, primitVechi) ? { ok: true, rambursBani: null } : nu("semnatura");
     } catch {
       return nu("semnatura");
     }
+  }
+
+  /*
+   * ═══ FORMA CU SUMA RAMBURSULUI SI CU PLANUL (14.09.2026) ═══
+   *
+   * ⚠ ORDINEA CELOR DOUA VERIFICARI E CHIAR REGULA, si inversata ar apara atacatorul.
+   *
+   * MAC-ul se reface cu amprenta planului PURTATA in token, nu cu cea socotita din planul
+   * pretins. Asa, un plan falsificat trece de MAC si cade abia la comparatia de dupa, cu motivul
+   * `plan`, care REFUZA comanda. Refacut cu planul pretins, orice falsificare ar fi stricat MAC-ul
+   * si ar fi iesit `semnatura`, adica drumul care cade pe tariful implicit si LASA comanda sa
+   * intre. Exact pe dos fata de ce trebuie.
+   */
+  if (bucati.length === 5) {
+    const g5 = Number(bucati[1]);
+    const bani5 = Number(bucati[2]);
+    if (!Number.isFinite(g5) || g5 < 0) return nu("semnatura");
+    if (!Number.isFinite(bani5) || bani5 < 0) return nu("semnatura");
+    const ampPurtata = bucati[3] === "-" ? "" : bucati[3];
+
+    const macAsteptat = createHmac("sha256", secret())
+      .update(`${amprenta(businessId, dest, price, optiune)}|${g5}|${bani5}|${ampPurtata}|${expira}`)
+      .digest("base64url");
+    const a5 = Buffer.from(`${expira}.${g5}.${bani5}.${bucati[3]}.${macAsteptat}`);
+    const p5 = Buffer.from(token);
+    if (a5.length !== p5.length) return nu("semnatura");
+    try {
+      if (!timingSafeEqual(a5, p5)) return nu("semnatura");
+    } catch {
+      return nu("semnatura");
+    }
+
+    /*
+     * ⚠ Planul se judeca DOAR cand apelantul poate spune care e. `undefined` nu e o portita:
+     * vezi `planPretins`. Iar cand tokenul n-a legat niciun plan (curier simplu, la adresa),
+     * amprenta purtata e goala si nu e nimic de comparat.
+     */
+    if (planPretins !== undefined && ampPurtata !== "" && amprentaPlanului(planPretins) !== ampPurtata) {
+      return nu("plan");
+    }
+
+    if (grameComandate != null && Number.isFinite(grameComandate)
+        && Math.round(grameComandate) > g5 + TOLERANTA_GRAME) {
+      return nu("greutate");
+    }
+    return { ok: true, rambursBani: bani5 };
   }
 
   const grameSemnate = Number(bucati[1]);
@@ -333,5 +568,6 @@ export function verificaCotatia(
       && Math.round(grameComandate) > grameSemnate + TOLERANTA_GRAME) {
     return nu("greutate");
   }
-  return { ok: true };
+  /* ⚠ Forma de trei bucati nu poarta suma: `null` inseamna „n-am de unde sti", nu „zero". */
+  return { ok: true, rambursBani: null };
 }

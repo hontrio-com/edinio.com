@@ -119,11 +119,19 @@ test("⚠ GREUTATEA DEPASITA REFUZA COMANDA, nu cade pe tariful implicit", () =>
    * (magazin fara niciun tarif declarat), un `recotare` fara motiv ar fi facut ambele
    * checkouturi sa-i spuna clientului ca „s-a schimbat cosul", ceea ce nu s-a intamplat.
    */
-  assert.match(s, /motiv: "greutate" \| "fara-tarif"/,
+  assert.match(s, /motiv: "greutate" \| "fara-tarif" \| "plan"/,
     "verdictul de recotare nu mai spune DIN CE cauza, deci mesajul catre client poate minti");
-  const dupaCauza = (s.match(/const faraTarif = verdictTransport\.motiv === "fara-tarif";/g) ?? []).length;
+  /*
+   * ⚠ ANCORA S-A MUTAT, REGULA NU (14.09.2026). Textele erau doua ternare copiate in cele doua
+   * checkouturi, si deosebeau o singura cauza. De cand cauzele sunt patru, ele stau intr-un ajutor
+   * comun: scrise pe loc, s-ar fi departat unul de altul la prima cauza noua, si atunci un
+   * checkout i-ar fi spus adevarul cumparatorului iar celalalt nu.
+   */
+  const dupaCauza = (s.match(/mesajulRecotarii\(verdictTransport\.motiv\)/g) ?? []).length;
   assert.equal(dupaCauza, 2,
     `doar ${dupaCauza} din cele doua checkouturi isi aleg mesajul dupa cauza`);
+  assert.doesNotMatch(s, /const faraTarif = verdictTransport\.motiv === "fara-tarif";/,
+    "s-a intors ternarul care deosebea o singura cauza, deci cauzele noi primesc mesaj gresit");
 
   /* ⚠ Si amandoua drumurile chiar opresc comanda, nu doar primesc verdictul. */
   const opriri = s.match(/if \("recotare" in verdictTransport\) \{/g) ?? [];
@@ -139,9 +147,27 @@ test("⚠ SEMNATURA cazuta cade mai departe pe tarif, nu refuza", () => {
    */
   const s = sursa(COMANDA);
   const i = s.indexOf("function autoritativeShipping");
-  const corp = s.slice(i, s.indexOf("\nfunction ", i + 10));
-  assert.match(corp, /return \{ shipping: Math\.max\(claimed, Math\.max\(0, round2\(tarifImplicit\)\)\) \};/,
+  /*
+   * ⚠ FELIA SE OPRESTE LA PRIMUL VECIN, ORICUM AR FI DECLARAT (indreptat 14.09.2026).
+   *
+   * Taia pana la `\nfunction `, iar alaturi a aparut un `export function`: felia a inghitit si
+   * vecinul, deci afirmatiile de mai jos cautau in corpul altcuiva. O proba care imprumuta de la
+   * vecin poate cadea pe cod BUN sau, mai rau, poate trece peste cod stricat.
+   */
+  const capete = ["\nfunction ", "\nexport function ", "\nexport const ", "\nconst "]
+    .map((m) => s.indexOf(m, i + 10))
+    .filter((p) => p > 0);
+  assert.ok(capete.length > 0, "nu se mai gaseste sfarsitul functiei: felia ar merge pana la capatul fisierului");
+  const corp = s.slice(i, Math.min(...capete));
+  assert.match(corp, /return \{ shipping: Math\.max\(claimed, Math\.max\(0, round2\(tarifImplicit\)\)\), rambursBaniSemnat: null \};/,
     "rezerva pe tariful implicit a disparut cu totul");
+  /*
+   * ⚠ SI SUMA SEMNATA IESE `null` PE RAMURA ASTA, dinadins: aici semnatura NU a batut, deci nu
+   * exista nicio suma de incredere. Zero ar fi insemnat „s-a cotat fara ramburs", si apelantul ar
+   * fi refuzat comenzi cinstite tocmai acolo unde cotatia se pierduse dintr-un motiv nevinovat.
+   */
+  assert.doesNotMatch(corp, /rambursBaniSemnat: 0\b/,
+    "o ramura fara semnatura valida intoarce suma zero in loc de `null`");
 
   /*
    * ⚠⚠ DAR FARA NICIUN TARIF DECLARAT NU EXISTA REZERVA, DECI NICI CADERE PE EA.

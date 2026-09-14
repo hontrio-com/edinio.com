@@ -634,8 +634,18 @@ test("⚠ TOKENELE DE FORMA VECHE se mai citesc, cat le tine viata", () => {
   assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, vechi, OPT_CARGUS, 15000).ok, true);
 });
 
-test("⚠ un token cu mai mult de trei bucati nu trece", () => {
-  /* Forma se citeste strict: doua bucati (vechi) sau trei (nou), nimic altceva. */
+test("⚠ un token cu un numar NERECUNOSCUT de bucati nu trece", () => {
+  /*
+   * ⚠ NUMELE ASTA A FOST INDREPTAT (14.09.2026), si merita spus de ce.
+   *
+   * Se numea „un token cu mai mult de trei bucati nu trece". De cand exista forma cu suma
+   * rambursului si planul, un token valid de CINCI bucati chiar trece, deci numele devenise fals.
+   * Mutantul de mai jos cadea insa mai departe (a patra bucata e gunoi, nu un numar), asa ca
+   * proba ar fi ramas VERDE cu numele mincinos, adica verde din alt motiv decat cel scris.
+   *
+   * Regula adevarata: formele se citesc strict, iar orice lungime din afara celor trei cunoscute
+   * (doua vechi, trei cu greutatea, cinci cu suma si planul) cade.
+   */
   const t = signShippingQuote(BIZ, DEST_CJ, 18, OPT_CARGUS, 1000);
   assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, `${t}.inca-ceva`, OPT_CARGUS, 0).ok, false);
   assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, "fara-nimic", OPT_CARGUS, 0).ok, false);

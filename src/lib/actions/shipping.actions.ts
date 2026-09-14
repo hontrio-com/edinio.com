@@ -644,9 +644,28 @@ export async function getShippingOptions(
     }
   }
 
+  /*
+   * ⚠ DOUA MARIMI, FIINDCA CELE DOUA SIGURANTE MERG IN DIRECTII OPUSE (14.09.2026).
+   *
+   * Pana azi exista una singura, si servea trei consumatori cu nevoi care se bat cap in cap:
+   *
+   *   * VALOAREA DECLARATA la curier (asigurarea, `valoareComanda` la DHL) si REGULILE de
+   *     transport: acolo pericolul e UMFLAREA, deci plafonul din catalog e corect si ramane;
+   *   * PODEAUA SUMEI DE RAMBURS: acolo pericolul e COBORAREA, si un plafon nu apara nimic.
+   *
+   * `min(ce zice browserul, ce sustine catalogul)` dat drept podea se lasa coborat de chiar
+   * numarul din browser: `subtotal: 0.01` il duce la un ban. Iar plafonul din catalog se
+   * socoteste din `destination.cart`, tot de la client, deci `cart` omis il duce la ZERO.
+   *
+   * ⚠ SI DE ACEEA DESPARTIREA ASTA NU E, SINGURA, O REPARATIE. Podeaua din catalog ramane
+   * socotita din liniile declarate de client. Ce inchide gaura e semnarea sumei in token si
+   * confruntarea ei, la comanda, cu marfa adevarata pe care serverul o stie abia atunci. Vezi
+   * `signShippingQuote` si nota despre ramburs din `quote-token.ts`.
+   */
+  const podeaDinCatalog = subtotalMaximDinCatalog(destination.cart, produseCotate, istoric);
   const valoareMarfii = Math.min(
     Math.max(0, Number(destination.subtotal) || 0),
-    subtotalMaximDinCatalog(destination.cart, produseCotate, istoric),
+    podeaDinCatalog,
   );
 
   /*
@@ -661,7 +680,14 @@ export async function getShippingOptions(
    * `pragulRambursului`. Nu se repeta aici: aici e "use server", deci o regula scoasa in
    * fisierul asta doar ca sa poata fi probata ar fi o usa noua catre browser.
    */
-  const rambursDeCotat = pragulRambursului(destination.cod, valoareMarfii, esteRamburs);
+  const rambursDeCotat = pragulRambursului(destination.cod, podeaDinCatalog, esteRamburs);
+
+  /*
+   * ⚠ SUMA PLEACA SI SEMNATA, in bani, ca la comanda sa se poata confrunta cu marfa adevarata.
+   *
+   * In bani intregi, nu in lei cu virgula mobila: acelasi motiv ca la pretul din amprenta.
+   */
+  const rambursCotatBani = Math.max(0, Math.round(rambursDeCotat * 100));
 
   /*
    * ⚠ `let`, nu `const`: lista se REASEAZA o data, la filtrul de rezerve de dinaintea
@@ -721,13 +747,15 @@ export async function getShippingOptions(
       // functie inainte de pasul de la final, si tocmai de aceea pleca fara
       // token. Cu `semneazaOptiuni` in amandoua iesirile, o optiune nesemnata
       // nu mai poate scapa dintr-un `return` nou.
+      /* ⚠ Si aici suma semnata, ca la iesirea de la final: ramura asta a mai plecat o data fara
+         token deloc, deci e chiar locul unde o scapare se repeta cel mai usor. */
       return semneazaOptiuni(businessId, destination, esteRamburs, grameCotate, [{
         courier: "dpd",
         courierLabel: `DPD International (${eu!.name})`,
         deliveryType: "address" as const,
         price: quote.price,
         estimatedDays: "3-6 zile",
-      }]);
+      }], rambursCotatBani);
     } catch {
       return [];
     }
@@ -1934,7 +1962,7 @@ export async function getShippingOptions(
   // Fiecare optiune pleaca semnata. Tokenul se intoarce cu comanda si e singurul
   // fel in care serverul poate sti ca pretul livrarii chiar a fost cotat de el.
   // Vezi `quote-token.ts`.
-  const semnate = semneazaOptiuni(businessId, destination, esteRamburs, grameCotate, finalOptions);
+  const semnate = semneazaOptiuni(businessId, destination, esteRamburs, grameCotate, finalOptions, rambursCotatBani);
 
   // Sort: address first, then lockers, by price
   return semnate.sort((a, b) => {

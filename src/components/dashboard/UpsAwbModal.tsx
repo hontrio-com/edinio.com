@@ -177,9 +177,22 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   }
 
   async function handleCoteaza() {
+    /* ⚠ `finally`, si in `try` DOAR apelul; ramificarea ramane afara. Vezi
+       `steagul-se-stinge-in-finally`. */
     setCotand(true);
-    const r = await coteazaUpsAction(businessId, order.id, dateComune());
-    setCotand(false);
+    let r: Awaited<ReturnType<typeof coteazaUpsAction>>;
+    try {
+      r = await coteazaUpsAction(businessId, order.id, dateComune());
+    } catch (e) {
+      /* ⚠ O CITIRE: nimic nu s-a schimbat la UPS, deci nu e nimic de verificat la ei. */
+      toast.error(
+        "UPS nu a raspuns: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 15000 },
+      );
+      return;
+    } finally {
+      setCotand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 15000 });
 
     setOferte(r.oferte);
@@ -207,12 +220,24 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleCautaPuncte() {
     setCautandPuncte(true);
-    const r = await getUpsPuncteAction(businessId, {
-      oras: addr.city || "",
-      judet: addr.county || "",
-      codPostal: addr.postal_code || "",
-    });
-    setCautandPuncte(false);
+    let r: Awaited<ReturnType<typeof getUpsPuncteAction>>;
+    try {
+      r = await getUpsPuncteAction(businessId, {
+        oras: addr.city || "",
+        judet: addr.county || "",
+        codPostal: addr.postal_code || "",
+      });
+    } catch (e) {
+      /* ⚠ O CITIRE: cautarea punctelor nu schimba nimic la UPS. */
+      toast.error(
+        "UPS nu a raspuns la cautarea punctelor: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 15000 },
+      );
+      return;
+    } finally {
+      setCautandPuncte(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 15000 });
     setPuncte(r.puncte);
     if (r.puncte.length === 0) toast.warning("UPS n-a gasit niciun punct in localitatea asta.");
@@ -220,8 +245,23 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleEmite() {
     setEmitand(true);
-    const r = await createUpsAwbAction(businessId, order.id, dateComune());
-    setEmitand(false);
+    let r: Awaited<ReturnType<typeof createUpsAwbAction>>;
+    try {
+      r = await createUpsAwbAction(businessId, order.id, dateComune());
+    } catch (e) {
+      /* ⚠ AICI NU SE APASA A DOUA OARA. UPS n-are idempotenta, si o scrie chiar nota de la
+         `handleVerifica` de mai jos: o reemitere ar face al doilea AWB, taxabil. Butonul de
+         verificare exista tocmai pentru clipa asta, si mesajul il numeste. */
+      toast.error(
+        "UPS nu a raspuns, si nu stim daca AWB-ul s-a creat. NU emite din nou: apasa "
+        + "„Verifica la UPS”, care citeste dupa referinta noastra. "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 20000 },
+      );
+      return;
+    } finally {
+      setEmitand(false);
+    }
     if ("error" in r) return toast.error(r.error, { duration: 15000 });
     toast.success(`AWB UPS creat: ${r.awb}`);
     onSuccess();
@@ -238,8 +278,21 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
    */
   async function handleVerifica() {
     setVerificand(true);
-    const r = await verificaUpsAwbAction(businessId, order.id);
-    setVerificand(false);
+    let r: Awaited<ReturnType<typeof verificaUpsAwbAction>>;
+    try {
+      r = await verificaUpsAwbAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Tocmai butonul asta nu are voie sa ramana blocat: el e iesirea din „am trimis si
+         n-am primit raspuns". E o CITIRE, deci se poate reincerca linistit. */
+      toast.error(
+        "UPS nu a raspuns la verificare. Incearca din nou peste putin, e doar o citire: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 20000 },
+      );
+      return;
+    } finally {
+      setVerificand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 20000 });
     if (r.gasit) {
       toast.success(r.mesaj, { duration: 12000 });
@@ -252,8 +305,20 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleEticheta() {
     setDescarcand(true);
-    const r = await getUpsEtichetaAction(businessId, order.id);
-    setDescarcand(false);
+    let r: Awaited<ReturnType<typeof getUpsEtichetaAction>>;
+    try {
+      r = await getUpsEtichetaAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ O CITIRE (reimprimare dupa AWB), deci nu se schimba nimic la UPS. */
+      toast.error(
+        "Eticheta nu s-a putut citi de la UPS: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 15000 },
+      );
+      return;
+    } finally {
+      setDescarcand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 15000 });
 
     descarca(r.base64, r.nume, tipulFisierului(r.nume));

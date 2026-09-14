@@ -98,7 +98,6 @@ const INCA_NEREPARATE: Record<string, number> = {
   "DhlAwbModal.tsx": 5,
   "ShipoAwbModal.tsx": 5,
   "SmartshipAwbModal.tsx": 10,
-  "UpsAwbModal.tsx": 5,
   "WootAwbModal.tsx": 2,
 };
 

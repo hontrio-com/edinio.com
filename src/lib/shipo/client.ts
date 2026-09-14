@@ -116,10 +116,46 @@ function idExpedierii(date: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function insemneaza(e: Error, status: number | null, expeditie: number | null = null): Error {
-  const cu = e as Error & { [CHEIE_STATUS]?: number; [CHEIE_EXPEDIERE]?: number };
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * A RASPUNS CHIAR EI, SAU UN INTERMEDIAR?                       (15.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `anuleaza` citea „not found" din TEXTUL erorii si il lua drept „expedierea nu mai e acolo, deci
+ * e ca si anulata". Numai ca textul erorii nu vine intotdeauna de la Shipo: cand corpul nu se
+ * poate parsa, `descrieEroarea` cade pe textul BRUT. O pagina de eroare a unui intermediar
+ * (Cloudflare, un proxy, un balansor) servita cu 500 si cu „404 Not Found" in titlu era citita
+ * astfel ca anulare reusita, iar AWB-ul se stergea de pe o expediere VIE, aflata pe drum.
+ *
+ * ⚠ SI NU E DE AJUNS NICI VERDICTUL, NICI STATUSUL, si amandoua par sa fie.
+ *   `verdictFurnizor` nu ajunge: un „Shipment not found" adevarat soseste cu HTTP 200 si
+ *   `success:false` FARA lista de erori, iar aia e clasificata `necunoscut` pe o scriere. Cerut
+ *   `esuat`, s-ar fi refuzat tocmai cazul cinstit, si comerciantul ar fi ramas cu un AWB mort pe
+ *   comanda si fara niciun buton care sa-l scoata. (Defectul a fost trait la Packeta.)
+ *   Statusul nu ajunge nici el: un 404 cu HTML de intermediar e tot `esuat`, si poarta chiar
+ *   cuvintele „404 Not Found" in mesaj.
+ *
+ * Deosebirea adevarata e daca textul vine dintr-un corp JSON PARSAT al lor. Atat se marcheaza
+ * aici, cu acelasi tipar ca `statusHttp` si `expedierePartialaShipo`: cheie lunga, cititor
+ * exportat, si nimic cautat in textul erorii.
+ */
+const CHEIE_CORP = "corpJsonShipo" as const;
+
+export function corpAFostJson(e: unknown): boolean {
+  return (e as { [CHEIE_CORP]?: unknown } | null)?.[CHEIE_CORP] === true;
+}
+
+function insemneaza(
+  e: Error,
+  status: number | null,
+  expeditie: number | null = null,
+  /** A fost corpul raspunsului un JSON parsat al lor? `false` acopera si HTML, si raspuns gol. */
+  corpJson = false,
+): Error {
+  const cu = e as Error & { [CHEIE_STATUS]?: number; [CHEIE_EXPEDIERE]?: number; [CHEIE_CORP]?: boolean };
   if (status !== null) cu[CHEIE_STATUS] = status;
   if (expeditie !== null) cu[CHEIE_EXPEDIERE] = expeditie;
+  if (corpJson) cu[CHEIE_CORP] = true;
   return e;
 }
 
@@ -513,6 +549,8 @@ async function apel<T>(
       throw insemneaza(
         eroareRefuz("Shipo a respins cheia de API. Verific-o in configurare."),
         res.status,
+        null,
+        date !== null,
       );
     }
     /* 5xx si 408: serverul lor a cazut DUPA ce a primit cererea. */
@@ -528,7 +566,9 @@ async function apel<T>(
      *
      * ⚠ Si numai pe SCRIERI: pe o citire, un `expedition` din corp ar fi al altcuiva.
      */
-    throw insemneaza(e, res.status, efect === "scriere" ? idExpedierii(date) : null);
+    /* ⚠ `date !== null`: cu corpul neparsabil, mesajul de mai sus poarta text BRUT, deci nimeni
+       n-are voie sa citeasca din el o hotarare. Vezi `corpAFostJson`. */
+    throw insemneaza(e, res.status, efect === "scriere" ? idExpedierii(date) : null, date !== null);
   }
 
   /*
@@ -553,7 +593,8 @@ async function apel<T>(
      * referinta noastra, singurul raspuns cinstit e „nu stim".
      */
     const areDetalii = listaErorilor((date as { errors?: unknown }).errors).length > 0;
-    throw insemneaza(areDetalii ? eroareRefuz(mesaj) : ambiguu(mesaj), res.status);
+    /* ⚠ Aici corpul E parsat prin constructie: un 2xx necitibil a aruncat deja mai sus. */
+    throw insemneaza(areDetalii ? eroareRefuz(mesaj) : ambiguu(mesaj), res.status, null, true);
   }
 
   return date as T;
@@ -927,7 +968,21 @@ export async function anuleaza(config: ShipoConfig, awb: string): Promise<Rezult
     await apel<unknown>(config, "GET", `/shipment/cancel/${encodeURIComponent(awb)}`, { efect: "scriere" });
     return { anulat: true, eraDejaAnulat: false };
   } catch (e) {
-    const mesaj = (e as Error).message ?? "";
+    /*
+     * ⚠ SE CITESTE DOAR DIN RASPUNSUL LOR, NICIODATA DIN TEXT BRUT.  (15.09.2026)
+     *
+     * Pana azi tiparul se cauta in mesajul ORICAREI erori. O pagina de eroare a unui intermediar,
+     * servita cu 500 si cu „404 Not Found" in titlu, era citita astfel drept anulare reusita: AWB-ul
+     * se stergea de pe o expediere VIE, aflata pe drum, pe care nu o mai stia nimeni, iar comanda
+     * ramanea libera sa emita a doua. Acelasi defect a fost trait si reparat la Pall-Ex, unde a
+     * ramas si proba care il prinde (`pallex/client.test.ts`).
+     *
+     * ⚠ Nu se cere `verdictFurnizor === "esuat"` si nu se cere un status anume, desi amandoua par
+     * potrivite: un „Shipment not found" adevarat soseste cu HTTP 200 si `success:false` fara lista
+     * de erori, adica `necunoscut` pe o scriere, iar un 404 cu HTML e `esuat`. Amandoua ar fi dat
+     * raspunsul pe dos. Ce conteaza e daca textul vine din JSON-ul LOR.
+     */
+    const mesaj = corpAFostJson(e) ? ((e as Error).message ?? "") : "";
     if (/not found|nu exista|already cancel|deja anulat/i.test(mesaj)) {
       return { anulat: true, eraDejaAnulat: true };
     }

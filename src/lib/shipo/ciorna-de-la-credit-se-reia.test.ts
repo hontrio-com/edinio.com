@@ -185,7 +185,20 @@ test("⚠ corpul se citeste INAINTE de ramura de eroare", () => {
 
 test("⚠ agatarea se face doar pe SCRIERI, si nu schimba verdictul", () => {
   const s = sursa(CLIENT);
-  assert.match(s, /throw insemneaza\(e, res\.status, efect === "scriere" \? idExpedierii\(date\) : null\);/,
+  /*
+   * ⚠ LEGATA DE PREFIXUL CHEMARII, NU DE PARANTEZA EI.  (15.09.2026)
+   *
+   * Pana azi tiparul cerea si `\);` la coada, deci se rupea la orice argument nou adaugat lui
+   * `insemneaza`, si chiar asta s-a intamplat cand marcajul „corpul a fost JSON" a primit locul
+   * al patrulea. Afirmatia nu apara insa paranteza, ci DOUA lucruri scrise chiar in mesajul ei:
+   * ca id-ul se agata, si ca se agata numai pe SCRIERI. Amandoua traiesc in ternar.
+   *
+   * ⚠ Terminatorul `[,)]` e partea care o tine stransa: argumentul al treilea trebuie sa fie exact
+   * ternarul, si sa se INCHEIE acolo. Fara el, un `idExpedierii(date)` agatat si pe citiri ar fi
+   * trecut. Relegarea a fost dovedita cu patru mutanti (agatat si pe citiri, niciodata agatat,
+   * ramuri inversate, conditia mutata pe „citire"), toti prinsi.
+   */
+  assert.match(s, /throw insemneaza\(e, res\.status, efect === "scriere" \? idExpedierii\(date\) : null[,)]/,
     "id-ul nu se mai agata, ori se agata si pe citiri");
   assert.match(s, /export function expedierePeEroare\(/, "cititorul id-ului a disparut");
 });

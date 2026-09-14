@@ -260,9 +260,13 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            echo "Fara SUPABASE_SERVICE_ROLE_KEY in secretele repo-ului — verificarea de schema se sare."
-            echo "Adauga secretele SUPABASE_URL si SUPABASE_SERVICE_ROLE_KEY ca sa fie pornita."
-            exit 0
+            echo "Lipseste SUPABASE_SERVICE_ROLE_KEY din secretele repo-ului, deci deriva de schema NU s-a verificat."
+            echo "Adauga secretele SUPABASE_URL si SUPABASE_SERVICE_ROLE_KEY."
+            echo ""
+            echo "⚠ Pana pe 15.09.2026 aici era 'exit 0': jobul iesea VERDE fara sa fi comparat nimic,"
+            echo "   iar tabloul de CI arata la fel si cand schema fusese verificata, si cand fusese sarita."
+            echo "   O poarta care se poate sari in tacere nu e o poarta; ea nu apara deriva, doar o ascunde."
+            exit 1
           fi
           bash scripts/schema-baseline.sh --check
 

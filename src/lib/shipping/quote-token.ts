@@ -551,11 +551,13 @@ export function verificaCotatia(
     const primitVechi = Buffer.from(token);
     if (asteptatVechi.length !== primitVechi.length) return nu("semnatura");
     try {
-      /* ⚠ `rambursBani: null` inseamna „tokenul asta nu poarta suma", nu „suma e zero". */
-      return timingSafeEqual(asteptatVechi, primitVechi) ? { ok: true, rambursBani: null } : nu("semnatura");
+      if (!timingSafeEqual(asteptatVechi, primitVechi)) return nu("semnatura");
     } catch {
       return nu("semnatura");
     }
+    if (planPretins !== undefined && amprentaPlanului(planPretins) !== "") return nu("plan");
+    /* ⚠ `rambursBani: null` inseamna „tokenul asta nu poarta suma", nu „suma e zero". */
+    return { ok: true, rambursBani: null };
   }
 
   /*
@@ -609,7 +611,26 @@ export function verificaCotatia(
       return nu("semnatura");
     }
 
-    if (planPretins !== undefined && ampPurtata6 !== "" && amprentaPlanului(planPretins) !== ampPurtata6) {
+    /*
+     * ⚠ AMPRENTA GOALA INSEAMNA „AM COTAT FARA SERVICIU", NU „NU JUDECA".  (15.09.2026)
+     *
+     * Pana azi conditia purta si `ampPurtata6 !== ""`, si aia era o portita larga: cotatiile fara
+     * plan sunt REGULA, nu exceptia (tariful fix de zona, curierul care n-a raspuns, plafonul de
+     * 25 de secunde, plafonul de cereri), iar pe ele oricine putea adauga la comanda un singur
+     * camp, `shipo_rate_id` sau `ups_service_code`, si trecea. Adica exact atacul descris in
+     * antetul lui `PlanExpedierii`, pe drumul cel mai obisnuit.
+     *
+     * ⚠ DE CE E SIGURA COMPARATIA STRICTA, masurat, nu presupus: `planulPretins` intoarce
+     * INTOTDEAUNA un obiect, iar cand browserul n-a primit niciun serviciu toate campurile lui ies
+     * `undefined`, deci amprenta pretinsa e tot `""`. Gol cu gol trece. Cade doar cazul in care
+     * comanda declara un serviciu pe care cotatia nu l-a purtat, si acela nu e un client cinstit.
+     * In productie: zero din 456 de comenzi poarta vreun camp de plan.
+     *
+     * ⚠ Si proba care apara regula asta a fost, pana azi, o proba care apara GAURA: cerea negru pe
+     * alb ca o cotatie fara plan sa accepte un plan declarat, cu motivul „altfel ar cadea fiecare
+     * asemenea comanda". Nu exista nicio asemenea comanda. Premisa nu fusese masurata niciodata.
+     */
+    if (planPretins !== undefined && amprentaPlanului(planPretins) !== ampPurtata6) {
       return nu("plan");
     }
 
@@ -666,6 +687,19 @@ export function verificaCotatia(
   } catch {
     return nu("semnatura");
   }
+
+  /*
+   * ⚠ UN TOKEN CARE NU POARTA NICIUN PLAN CONTRAZICE O COMANDA CARE DECLARA UNUL.  (15.09.2026)
+   *
+   * Formele de doua si de trei bucati nici macar nu au loc de plan: forma de trei e cea IMPLICITA
+   * pentru orice cotatie fara serviciu si fara ramburs (vezi `signShippingQuote`). Inasprind doar
+   * forma de sase, atacatorul lua un token de trei bucati si trecea nestingherit pe langa poarta.
+   * Gaura acoperea trei din cele patru forme acceptate, nu una.
+   *
+   * ⚠ Garda sta DUPA verificarea MAC-ului, nu inaintea ei, ca un token stricat sa iasa `semnatura`,
+   * nu `plan`: amandoua refuza aici, dar un motiv mincinos strica diagnosticul de maine.
+   */
+  if (planPretins !== undefined && amprentaPlanului(planPretins) !== "") return nu("plan");
 
   /*
    * ⚠ „MAI USOR TRECE", si numai mai greu cade.

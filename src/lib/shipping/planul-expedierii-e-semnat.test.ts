@@ -136,13 +136,39 @@ test("⚠ apelantul care NU poate spune planul nu e judecat pe el", () => {
   assert.equal(verificaCotatia(BIZ, DEST, 18, t, CARGUS).ok, true);
 });
 
-test("⚠ o cotatie FARA plan nu refuza o comanda care declara unul", () => {
+test("⚠⚠ o cotatie FARA plan REFUZA o comanda care declara unul", () => {
   /*
-   * Curierul simplu la adresa nu leaga niciun serviciu, deci amprenta purtata e goala. Comparata
-   * cu una nevida, fiecare asemenea comanda ar fi fost refuzata fara motiv.
+   * ═══ ⚠ PROBA ASTA CEREA, PANA PE 15.09.2026, EXACT PE DOS ═══
+   *
+   * Scria ca o cotatie fara plan trebuie sa ACCEPTE un plan declarat, cu motivul: „curierul simplu
+   * la adresa nu leaga niciun serviciu, deci comparata cu una nevida, fiecare asemenea comanda ar
+   * fi fost refuzata fara motiv". Premisa aia nu fusese masurata NICIODATA. Masurata: zero din 456
+   * de comenzi din productie poarta vreun camp de plan. Nu exista nicio asemenea comanda.
+   *
+   * Deci proba nu apara o comanda cinstita; inghetase chiar gaura: cotatiile fara plan sunt REGULA
+   * (tarif fix de zona, curier care n-a raspuns, plafonul de 25 de secunde, plafonul de cereri),
+   * iar pe fiecare din ele se putea adauga la comanda un `shipo_rate_id` si trecea.
+   *
+   * ⚠ O proba verde care apara o gaura e mai rea decat gaura: gaura se vede, proba o ascunde.
    */
   const t = signShippingQuote(BIZ, DEST, 18, CARGUS, 1000, EXPIRA, 7_700);
-  assert.equal(verificaCotatia(BIZ, DEST, 18, t, CARGUS, null, PLAN_SHIPO).ok, true);
+  const v = verificaCotatia(BIZ, DEST, 18, t, CARGUS, null, PLAN_SHIPO);
+  assert.equal(v.ok, false, "un serviciu declarat peste o cotatie fara serviciu a trecut");
+  assert.equal(v.ok === false && v.motiv, "plan",
+    "a cazut ca `semnatura`, deci comanda ar fi intrat pe tarif in loc sa fie refuzata");
+});
+
+test("⚠ si comanda CINSTITA fara serviciu trece mai departe", () => {
+  /*
+   * Cealalta jumatate, si ea e motivul pentru care comparatia stricta e sigura: `planulPretins`
+   * intoarce mereu un obiect, iar cand browserul n-a primit niciun serviciu toate campurile lui ies
+   * `undefined`, deci amprenta pretinsa e tot goala. Gol cu gol trece.
+   */
+  const t = signShippingQuote(BIZ, DEST, 18, CARGUS, 1000, EXPIRA, 7_700);
+  assert.equal(verificaCotatia(BIZ, DEST, 18, t, CARGUS, null, {}).ok, true,
+    "o comanda fara niciun serviciu declarat a fost refuzata");
+  assert.equal(verificaCotatia(BIZ, DEST, 18, t, CARGUS, null, { shipoRateId: null }).ok, true,
+    "`null` de la browser nu mai inseamna „n-am ales nimic”");
 });
 
 /* ── 4. Amprenta planului: stabila, si nu se lasa pacalita ────────────────── */

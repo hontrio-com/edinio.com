@@ -216,7 +216,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleDezleaga() {
     if (!confirm(
-      "Scoti coletul de pe comanda?\n\nATENTIE: la Packeta coletul RAMANE — API-ul lor nu are anulare. "
+      "Scoti coletul de pe comanda?\n\nATENTIE: la Packeta coletul RAMANE, API-ul lor nu are anulare. "
       + "Trebuie sa-l anulezi de mana din contul Packeta, altfel ramane facturabil.",
     )) return;
     const r = await dezleagaPacketaAction(businessId, order.id);
@@ -394,7 +394,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
               <p>
                 Verificam datele la Packeta inainte de a crea coletul. Odata creat,
-                <strong> nu se mai poate anula prin API</strong> — doar de mana, din contul lor.
+                <strong> nu se mai poate anula prin API</strong>, doar de mana, din contul lor.
               </p>
             </div>
 

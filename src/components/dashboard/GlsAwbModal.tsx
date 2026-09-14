@@ -249,7 +249,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       setEticheta(r.etichetaBase64);
       /* Descarcare automata: comerciantul o are pe loc, fara inca un clic. */
       descarca(r.etichetaBase64, r.awb);
-      toast.success(`AWB GLS ${r.awb} creat — eticheta s-a descarcat`);
+      toast.success(`AWB GLS ${r.awb} creat, eticheta s-a descarcat`);
     } else {
       toast.warning(
         `AWB GLS ${r.awb} exista deja. Foloseste butonul de descarcare pentru eticheta.`,

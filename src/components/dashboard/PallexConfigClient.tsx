@@ -175,7 +175,7 @@ export function PallexConfigClient({
         </div>
         <p className="text-xs text-muted-foreground">
           Sunt datele cu care intri in ClientPlus. Pall-Ex recomanda un utilizator
-          separat pentru integrari, diferit de cel folosit in interfata web —
+          separat pentru integrari, diferit de cel folosit in interfata web,
           cere-l la <span className="font-medium">it@pallex.ro</span>.
         </p>
 
@@ -363,7 +363,7 @@ export function PallexConfigClient({
           </Field>
         </div>
         <p className="text-xs text-muted-foreground">
-          Sunt doar valorile implicite din formularul de partida — le poti schimba la
+          Sunt doar valorile implicite din formularul de partida, le poti schimba la
           fiecare comanda. Pall-Ex are Premium 24h si Economy 48h; regimul il
           stabilesc ei din datele trimise. Sarbatorile legale nu sunt luate in calcul,
           doar sambetele si duminicile.
@@ -388,7 +388,7 @@ export function PallexConfigClient({
             */}
             <p className="text-xs text-muted-foreground">
               Marfa nu pleaca pana cand borderoul nu e validat. Cu comutatorul pornit,
-              validarea se face imediat dupa emitere — dar un borderou contine si
+              validarea se face imediat dupa emitere, dar un borderou contine si
               partidele altor comenzi facute in aceeasi zi, iar dupa validare
               <span className="font-medium"> niciuna dintre ele nu se mai poate anula</span>.
               Lasat oprit, validezi tu, din comanda, cand esti gata.

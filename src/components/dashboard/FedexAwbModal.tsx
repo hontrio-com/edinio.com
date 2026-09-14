@@ -166,7 +166,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     if (r.oferte.length === 0) {
       toast.warning(
         r.valuteRefuzate.length > 0
-          ? `FedEx a cotat in ${r.valuteRefuzate.join(", ")}, nu in lei. Nu convertim noi sumele — cere-i reprezentantului FedEx tarife in RON.`
+          ? `FedEx a cotat in ${r.valuteRefuzate.join(", ")}, nu in lei. Nu convertim noi sumele, cere-i reprezentantului FedEx tarife in RON.`
           : "FedEx n-a intors niciun serviciu pentru adresa asta.",
         { duration: 15000 },
       );
@@ -359,7 +359,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               <p className="text-[11px] text-warning flex items-start gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                 Contul FedEx coteaza in {valuteRefuzate.join(", ")}, iar magazinul lucreaza in lei.
-                Nu convertim noi sumele — un pret in euro scris ca lei ar subfactura transportul de cinci ori.
+                Nu convertim noi sumele, un pret in euro scris ca lei ar subfactura transportul de cinci ori.
               </p>
             )}
 
@@ -379,7 +379,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 {alesDeClient && !oferte.some((o) => o.serviceType === alesDeClient) && (
                   <p className="text-[11px] text-warning flex items-start gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                    Serviciul ales de client la comanda nu mai e disponibil. Alege altul — pretul poate diferi.
+                    Serviciul ales de client la comanda nu mai e disponibil. Alege altul, pretul poate diferi.
                   </p>
                 )}
                 {oferte.map((o) => (

@@ -277,7 +277,7 @@ export function GlsConfigClient({
           <div>
             <p className="text-sm font-medium text-foreground">Mediu de test</p>
             <p className="text-xs text-muted-foreground">
-              Trimite catre api.test.mygls.{tara.toLowerCase()} — coletele NU sunt reale si nu se factureaza.
+              Trimite catre api.test.mygls.{tara.toLowerCase()}, coletele NU sunt reale si nu se factureaza.
             </p>
           </div>
           <Switch checked={sandbox} onCheckedChange={(v) => { setSandbox(v); setTestat(false); }} />

@@ -260,7 +260,7 @@ export default function WootConfigClient({
                   {testResult.ok ? (
                     <div className="space-y-0.5">
                       <p className="font-semibold">Conexiune reusita!</p>
-                      <p>{testResult.name} — {testResult.email}</p>
+                      <p>{testResult.name} · {testResult.email}</p>
                       <p>Credit disponibil: <strong>{testResult.credit?.toFixed(2)} RON</strong></p>
                     </div>
                   ) : (

@@ -206,7 +206,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     }
 
     setEmisa(r);
-    if (r.awb) toast.success(`Expediere eColet creata — AWB ${r.awb}`);
+    if (r.awb) toast.success(`Expediere eColet creata · AWB ${r.awb}`);
     else if (r.stare === "error") toast.error(r.eroare ?? "eColet a refuzat expedierea");
     else toast.success("Expediere trimisa la eColet. AWB-ul apare in scurt timp.");
   }
@@ -312,7 +312,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               Expedierea e trimisa si se prelucreaza la eColet.
             </p>
             <p className="text-xs text-muted-foreground">
-              AWB-ul apare de obicei in cateva zeci de secunde. NU emite din nou —
+              AWB-ul apare de obicei in cateva zeci de secunde. NU emite din nou,
               ar fi a doua expediere, facturata. Daca dureaza mult, verifica aici.
             </p>
             <Button size="sm" onClick={reverifica} disabled={verifica}>
@@ -328,7 +328,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
             <p className="text-sm font-medium text-foreground">eColet a refuzat expedierea</p>
             <p className="mt-1 text-xs text-muted-foreground">{eroareCurenta}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Corecteaza si incearca din nou — nu s-a creat niciun transport.
+              Corecteaza si incearca din nou, nu s-a creat niciun transport.
             </p>
           </div>
         )}

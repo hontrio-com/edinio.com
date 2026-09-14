@@ -257,14 +257,14 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
       toast.error(r.error);
       return;
     }
-    toast.success("Borderou validat — marfa poate pleca");
+    toast.success("Borderou validat, marfa poate pleca");
     setBorderou((b) => (b ? { ...b, validat: BORDEROU_VALIDAT_DE_CLIENT } : b));
   }
 
   async function handleCreate() {
     if (!nume.trim()) return toast.error("Numele destinatarului este obligatoriu");
     if (!oras.trim()) return toast.error("Localitatea destinatarului este obligatorie");
-    if (!judet) return toast.error("Judetul destinatarului este obligatoriu — Pall-Ex il cere ca ISO auto");
+    if (!judet) return toast.error("Judetul destinatarului este obligatoriu, Pall-Ex il cere ca ISO auto");
     if (!codPostal.trim()) return toast.error("Codul postal al destinatarului este obligatoriu la Pall-Ex");
     if (!strada.trim()) return toast.error("Adresa destinatarului este obligatorie");
 
@@ -354,7 +354,7 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
       setBorderou(r.bordereauId
         ? { id: r.bordereauId, validat: BORDEROU_VALIDAT_DE_CLIENT, partide: 0 }
         : null);
-      toast.success(`Partida Pall-Ex ${r.awb} creata si borderoul validat — marfa poate pleca`);
+      toast.success(`Partida Pall-Ex ${r.awb} creata si borderoul validat, marfa poate pleca`);
     } else {
       toast.success(
         `Partida Pall-Ex ${r.awb} creata. Marfa NU pleaca pana cand nu validezi borderoul.`,
@@ -557,7 +557,7 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
                   value={inaltime} onChange={(e) => setInaltime(e.target.value)} />
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                Se trimit doar completate toate trei — Pall-Ex refuza o masuratoare
+                Se trimit doar completate toate trei, Pall-Ex refuza o masuratoare
                 partiala. Greutatea se imparte egal intre paleti.
               </p>
             </div>
@@ -586,7 +586,7 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
             </div>
             <p className="text-xs text-muted-foreground">
               Orele lasate goale se iau din configurarea Pall-Ex. Sarbatorile legale nu
-              sunt luate in calcul la datele propuse — doar sambetele si duminicile.
+              sunt luate in calcul la datele propuse, doar sambetele si duminicile.
             </p>
 
             <div className="rounded-lg border border-border p-3">

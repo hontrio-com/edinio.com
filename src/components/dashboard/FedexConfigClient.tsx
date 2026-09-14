@@ -45,8 +45,8 @@ import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/s
  */
 
 const MEDII: { valoare: MediuFedex; eticheta: string }[] = [
-  { valoare: "productie", eticheta: "Productie (apis.fedex.com) — expedieri reale" },
-  { valoare: "test", eticheta: "Test / sandbox (apis-sandbox.fedex.com) — raspunsuri simulate" },
+  { valoare: "productie", eticheta: "Productie (apis.fedex.com) · expedieri reale" },
+  { valoare: "test", eticheta: "Test / sandbox (apis-sandbox.fedex.com) · raspunsuri simulate" },
 ];
 
 const FORMATE: { valoare: FormatEticheta; eticheta: string }[] = [
@@ -205,7 +205,7 @@ export function FedexConfigClient({
       */}
       <Callout variant="warning" icon={Ban}>
         <strong>FedEx nu ofera plata la livrare.</strong> {RAMBURS_INDISPONIBIL} In checkout, FedEx nu apare
-        deloc la comenzile cu ramburs — restul curierilor raman.
+        deloc la comenzile cu ramburs, restul curierilor raman.
       </Callout>
 
       <Panel step={1} title="Conectare">
@@ -279,7 +279,7 @@ export function FedexConfigClient({
                 Valuta cotarii: <strong>{proba.valuta}</strong>
                 {proba.valuta.includes("RON")
                   ? ""
-                  : " — ⚠ magazinul lucreaza in lei. Nu convertim noi sumele, deci FedEx va aparea in checkout la tariful fix. Cere-i reprezentantului FedEx tarife in RON."}
+                  : ". ⚠ Magazinul lucreaza in lei. Nu convertim noi sumele, deci FedEx va aparea in checkout la tariful fix. Cere-i reprezentantului FedEx tarife in RON."}
               </span>
             )}
             {/*
@@ -337,7 +337,7 @@ export function FedexConfigClient({
         <p className="text-xs font-semibold">Serviciile pe care le arati clientilor</p>
         <p className="text-[11px] text-muted-foreground">
           Nimic bifat = toate serviciile pe care le intoarce cotarea. Serviciile de marfa grea nu se ofera
-          cumparatorilor cu colete sub {GREUTATE_MAXIMA_EXPRESS_KG} kg, oricum ar fi bifate — raman disponibile la
+          cumparatorilor cu colete sub {GREUTATE_MAXIMA_EXPRESS_KG} kg, oricum ar fi bifate, raman disponibile la
           emiterea din pagina comenzii.
         </p>
         <div className="flex flex-wrap gap-2">
@@ -354,7 +354,7 @@ export function FedexConfigClient({
                 className={`px-2.5 py-1 rounded-lg border text-xs transition-colors ${
                   bifat ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
                 }`}
-                title={s.marfaGrea ? "Marfa grea — nu se ofera in checkout la colete usoare" : undefined}
+                title={s.marfaGrea ? "Marfa grea, nu se ofera in checkout la colete usoare" : undefined}
               >
                 {s.nume}
               </button>
@@ -417,7 +417,7 @@ export function FedexConfigClient({
           </span>
           <span className="block mt-1 text-xs">
             Motivul: FedEx cere codul postal al destinatarului ca sa calculeze un pret, iar formularul de
-            comanda il cere doar la livrarile in strainatate. Pretul real — cu toate serviciile si termenele —
+            comanda il cere doar la livrarile in strainatate. Pretul real, cu toate serviciile si termenele,
             il vezi cand emiti AWB-ul din pagina comenzii, unde poti completa codul postal.
           </span>
           <span className="block mt-1 text-xs">
@@ -481,7 +481,7 @@ export function FedexConfigClient({
         </div>
         {config.enabled && !areExpeditor && (
           <Callout variant="warning" icon={AlertTriangle}>
-            Fara oras si cod postal de expeditie, FedEx nu poate cota nimic — clientii vor vedea tariful fix.
+            Fara oras si cod postal de expeditie, FedEx nu poate cota nimic, clientii vor vedea tariful fix.
           </Callout>
         )}
         {config.mediu === "test" && (
@@ -492,7 +492,7 @@ export function FedexConfigClient({
         )}
         {esteActiv && config.mediu !== "test" && (
           <Callout variant="info" icon={Info}>
-            Fiecare AWB emis e real si facturat — FedEx nu are protectie contra dublurilor, deci daca emiterea pare
+            Fiecare AWB emis e real si facturat, FedEx nu are protectie contra dublurilor, deci daca emiterea pare
             ca a esuat foloseste „Verifica la FedEx” din pagina comenzii in loc sa incerci din nou.
           </Callout>
         )}

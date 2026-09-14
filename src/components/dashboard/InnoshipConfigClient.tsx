@@ -111,7 +111,7 @@ export function InnoshipConfigClient({
     setTesting(false);
     if (!r.ok) { setCurieri(null); return toast.error(`Innoship: ${r.error}`); }
     setCurieri(r.curieri);
-    toast.success(`Conexiune reusita — ${r.curieri.length} curieri disponibili`);
+    toast.success(`Conexiune reusita · ${r.curieri.length} curieri disponibili`);
   }
 
   async function handleDiagnostic() {
@@ -248,7 +248,7 @@ export function InnoshipConfigClient({
         */}
         <p className="text-xs text-muted-foreground">
           Bifeaza curierii pe care vrei sa-i vada cumparatorul. Nimic bifat inseamna toti
-          cei pe care ii da contul tau — ceea ce, la un cont larg, poate umple checkout-ul.
+          cei pe care ii da contul tau, ceea ce, la un cont larg, poate umple checkout-ul.
         </p>
 
         {curieri === null ? (
@@ -282,7 +282,7 @@ export function InnoshipConfigClient({
         </div>
         <Callout variant="info" icon={Info} title="Pune adresa asta in portalul Innoship">
           La „Track push”. Innoship o sa trimita acolo fiecare schimbare de status, iar
-          comenzile se misca singure. Fara ea, urmarirea merge tot — dar dintr-o
+          comenzile se misca singure. Fara ea, urmarirea merge tot, dar dintr-o
           verificare periodica, deci mai rar.
         </Callout>
 

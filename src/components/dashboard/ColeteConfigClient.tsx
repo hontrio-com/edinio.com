@@ -228,7 +228,7 @@ export default function ColeteConfigClient({
                 {testResult.error ? testResult.error : (
                   <>
                     <CheckCircle className="h-3.5 w-3.5" />
-                    Conexiune reusita — Sold: {testResult.balance?.toFixed(2)} RON
+                    Conexiune reusita · Sold: {testResult.balance?.toFixed(2)} RON
                     {(testResult.bonus ?? 0) > 0 && ` + ${testResult.bonus?.toFixed(2)} RON bonus`}
                   </>
                 )}

@@ -81,7 +81,7 @@ export function notaGreutate(dinCatalog: boolean | null, liniiFaraGreutate = 0):
   // Cazul PARTIAL isi spune pe fata cate produse lipsesc: altfel un numar
   // incomplet („0,4 kg" pentru un colet cu umbrela) arata ca unul masurat.
   if (liniiFaraGreutate > 0) {
-    return `${liniiFaraGreutate === 1 ? "Un produs din comanda n-are" : `${liniiFaraGreutate} produse din comanda n-au`} greutate in catalog, deci cifra de mai sus e incompleta. Curierul factureaza cat arata cantarul — scrie greutatea reala.`;
+    return `${liniiFaraGreutate === 1 ? "Un produs din comanda n-are" : `${liniiFaraGreutate} produse din comanda n-au`} greutate in catalog, deci cifra de mai sus e incompleta. Curierul factureaza cat arata cantarul, scrie greutatea reala.`;
   }
-  return "Produsele comenzii n-au greutate in catalog, asa ca aici e o valoare de rezerva. Curierul cantareste coletul si factureaza cat arata cantarul — scrie greutatea reala.";
+  return "Produsele comenzii n-au greutate in catalog, asa ca aici e o valoare de rezerva. Curierul cantareste coletul si factureaza cat arata cantarul, scrie greutatea reala.";
 }

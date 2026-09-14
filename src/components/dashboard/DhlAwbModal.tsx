@@ -288,9 +288,9 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       setAleasa(null);
       toast.warning(
         r.valuteRefuzate.length > 0
-          ? `DHL a cotat in ${r.valuteRefuzate.join(", ")}, nu in lei. Nu convertim noi sumele — cere-i reprezentantului DHL tarife in RON.`
+          ? `DHL a cotat in ${r.valuteRefuzate.join(", ")}, nu in lei. Nu convertim noi sumele, cere-i reprezentantului DHL tarife in RON.`
           : r.lipsesteCodulPostal
-            ? "DHL n-a intors niciun pret, iar comanda n-are cod postal — ei cer sase cifre pentru Romania si le verifica. Completeaza-l pe comanda si incearca din nou."
+            ? "DHL n-a intors niciun pret, iar comanda n-are cod postal, ei cer sase cifre pentru Romania si le verifica. Completeaza-l pe comanda si incearca din nou."
             : "DHL n-a intors niciun produs pentru adresa asta.",
         { duration: 20000 },
       );
@@ -519,7 +519,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
             )}
             {comanda.dhl_reference && (
               <p className="text-muted-foreground">
-                Referinta noastra la DHL: <strong>{comanda.dhl_reference}</strong> — dupa ea o cauti in MyDHL.
+                Referinta noastra la DHL: <strong>{comanda.dhl_reference}</strong>, dupa ea o cauti in MyDHL.
               </p>
             )}
             {comanda.dhl_tracking_url && (
@@ -546,7 +546,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
             </p>
             <p className="text-[11px] text-muted-foreground">
               „Dovada livrarii” intoarce PDF-ul lor cu semnatura, si DHL il pregateste abia a doua zi dupa
-              livrare — pana atunci lipsa lui e normala, nu o defectiune.
+              livrare, pana atunci lipsa lui e normala, nu o defectiune.
             </p>
 
             {/*
@@ -565,7 +565,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 DHL nu permite anularea expedierii prin API. „Detaseaza AWB” din fereastra de editare doar
                 scoate numerele de pe comanda
                 {comanda.dhl_dispatch_confirmation ? " si anuleaza ridicarea programata" : ""}
-                {" "}— la DHL expedierea RAMANE emisa.
+                . La DHL expedierea RAMANE emisa.
                 <strong className="mx-1">Distruge eticheta tiparita</strong>
                 daca renunti: intrata in reteaua lor, ea trimite coletul a doua oara si transportul se
                 factureaza. Ce nu se poate face din aplicatie se rezolva in MyDHL sau la reprezentantul tau.
@@ -574,7 +574,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
             {comanda.dhl_dispatch_confirmation && (
               <p className="text-[11px] text-muted-foreground">
                 Ridicare programata: <strong>{comanda.dhl_dispatch_confirmation}</strong>. E singurul lucru
-                care se mai poate anula la DHL — lasata pe loc, soferul vine dupa un colet care nu pleaca.
+                care se mai poate anula la DHL, lasata pe loc, soferul vine dupa un colet care nu pleaca.
               </p>
             )}
           </div>
@@ -599,7 +599,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 </p>
                 <p className="text-[11px] text-muted-foreground">
                   DHL Express nu vinde plata la livrare cu expediere din Romania. Emis totusi, AWB-ul ar fi
-                  valid si coletul s-ar livra <strong>fara sa se incaseze banii</strong> — marfa plecata gratis,
+                  valid si coletul s-ar livra <strong>fara sa se incaseze banii</strong>, marfa plecata gratis,
                   cu comanda aratand expediata. De aia „Emite AWB” e stins.
                 </p>
                 <p className="text-[11px] text-muted-foreground">
@@ -667,7 +667,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 </p>
                 <p className="text-[11px] text-muted-foreground">
                   Pentru Romania DHL vrea sase cifre si le verifica. Preturile de mai sus, daca au aparut, vin
-                  dintr-o locatie aleasa de ei — emiterea valideaza strict si ar fi refuzata. Completeaza codul
+                  dintr-o locatie aleasa de ei, emiterea valideaza strict si ar fi refuzata. Completeaza codul
                   postal in datele de livrare ale comenzii si calculeaza din nou.
                 </p>
               </div>
@@ -688,7 +688,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 <p className="text-[11px] text-muted-foreground">
                   Declaratia vamala cere codul HS si tara de fabricatie pentru fiecare produs, iar catalogul
                   nu le are. Fara ele coletul se opreste in vama, si DHL nu are anulare de expediere cu care
-                  sa se repare — de aia emiterea e oprita aici, nu dupa. Expediaza comanda cu un curier care
+                  sa se repare, de aia emiterea e oprita aici, nu dupa. Expediaza comanda cu un curier care
                   intocmeste el documentele, sau cere-i reprezentantului DHL o expediere de mana din MyDHL.
                 </p>
               </div>
@@ -698,7 +698,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               <p className="text-[11px] text-warning flex items-start gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                 Contul DHL coteaza in {valuteRefuzate.join(", ")}, iar magazinul lucreaza in lei. Nu convertim
-                noi sumele — un pret in euro scris ca lei ar subfactura transportul de cinci ori. Valuta de
+                noi sumele, un pret in euro scris ca lei ar subfactura transportul de cinci ori. Valuta de
                 facturare a contului se schimba la reprezentantul DHL, nu de aici.
               </p>
             )}
@@ -706,7 +706,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
             {cerContract.length > 0 && (
               <p className="text-[11px] text-muted-foreground">
                 ⚠ Produsele {cerContract.join(", ")} sunt marcate de DHL ca „numai cu acord prealabil”. Le poti
-                alege — ei le-au intors — dar fara acordul din contract emiterea cade cu „Account not allowed
+                alege, ei le-au intors, dar fara acordul din contract emiterea cade cu „Account not allowed
                 for this service”.
               </p>
             )}
@@ -714,7 +714,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
             {neVandute.length > 0 && (
               <p className="text-[11px] text-muted-foreground">
                 ⚠ DHL a cotat si produsele {neVandute.join(", ")}, pe care documentele lor comerciale romanesti
-                nu le dau pe ruta asta. Le poti folosi — ei le-au intors pe contul tau — dar merita verificat cu
+                nu le dau pe ruta asta. Le poti folosi, ei le-au intors pe contul tau, dar merita verificat cu
                 reprezentantul.
               </p>
             )}
@@ -741,7 +741,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 {alesDeClient && !oferte.some((o) => o.productCode.toUpperCase() === alesDeClient) && (
                   <p className="text-[11px] text-warning flex items-start gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                    Produsul ales de client la comanda nu mai e disponibil. Alege altul — pretul poate diferi.
+                    Produsul ales de client la comanda nu mai e disponibil. Alege altul, pretul poate diferi.
                   </p>
                 )}
                 {oferte.map((o) => {

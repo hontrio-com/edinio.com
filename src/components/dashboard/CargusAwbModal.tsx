@@ -169,7 +169,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     if ("error" in result) {
       toast.error(result.error);
     } else {
-      toast.success(`AWB Cargus ${result.barCode} creat — ${result.serviceName}`);
+      toast.success(`AWB Cargus ${result.barCode} creat · ${result.serviceName}`);
       onSuccess();
     }
   }

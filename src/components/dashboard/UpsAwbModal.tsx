@@ -205,7 +205,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     if (r.oferte.length === 0) {
       toast.warning(
         r.valuteRefuzate.length > 0
-          ? `UPS a cotat in ${r.valuteRefuzate.join(", ")}, nu in lei. UPS n-are camp prin care sa ceri valuta — cere-i reprezentantului tarife in RON.`
+          ? `UPS a cotat in ${r.valuteRefuzate.join(", ")}, nu in lei. UPS n-are camp prin care sa ceri valuta, cere-i reprezentantului tarife in RON.`
           : r.aceeasiLocalitate
             ? "UPS nu presteaza servicii in aceeasi localitate pe teritoriul Romaniei. Foloseste alt curier."
             : "UPS n-a intors niciun serviciu pentru adresa asta.",
@@ -337,7 +337,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
      */
     if (r.documentRamburs) {
       descarca(r.documentRamburs, r.nume.replace(/\.[^.]+$/, "-ramburs.html"), "text/html");
-      toast.info("S-au descarcat si caseta de semnatura si documentul de ramburs — tipareste-le pe amandoua.");
+      toast.info("S-au descarcat si caseta de semnatura si documentul de ramburs, tipareste-le pe amandoua.");
     } else if (r.semnatura) {
       toast.info("S-a descarcat si caseta de semnatura (o cere UPS la expedierile din afara SUA).");
     }
@@ -386,7 +386,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
             <p className="text-[11px] text-muted-foreground">
               ⚠ Eticheta o pastram noi de la emitere: documentatia UPS se contrazice daca reimprimarea merge
               si pentru expedierile normale, nu doar pentru retururi. Daca s-a pierdut, o cerem totusi de la
-              ei — si atunci vine ca PDF.
+              ei, si atunci vine ca PDF.
             </p>
           </div>
         ) : (
@@ -476,7 +476,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               <p className="text-[11px] text-warning flex items-start gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                 Comanda pleaca si ajunge in aceeasi localitate. Ghidul UPS spune ca ei nu presteaza servicii
-                in aceeasi localitate pe teritoriul Romaniei — daca nu apare niciun pret, asta e motivul.
+                in aceeasi localitate pe teritoriul Romaniei, daca nu apare niciun pret, asta e motivul.
               </p>
             )}
 
@@ -484,7 +484,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               <p className="text-[11px] text-warning flex items-start gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                 Contul UPS coteaza in {valuteRefuzate.join(", ")}, iar magazinul lucreaza in lei. UPS nu are
-                niciun camp prin care sa ceri valuta raspunsului, si nu convertim noi sumele — un pret in euro
+                niciun camp prin care sa ceri valuta raspunsului, si nu convertim noi sumele, un pret in euro
                 scris ca lei ar subfactura transportul de cinci ori.
               </p>
             )}
@@ -492,7 +492,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
             {doarLista && (
               <p className="text-[11px] text-muted-foreground">
                 UPS a intors doar preturi de LISTA, nu tarifele contractului. Cel mai des inseamna ca aplicatia
-                si numarul de cont nu sunt legate de acelasi contract — sau ca lipseste codul de judet pe care
+                si numarul de cont nu sunt legate de acelasi contract, sau ca lipseste codul de judet pe care
                 ei il cer pentru tarife negociate.
               </p>
             )}
@@ -500,7 +500,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
             {neVandute.length > 0 && (
               <p className="text-[11px] text-muted-foreground">
                 ⚠ UPS a cotat si serviciile {neVandute.join(", ")}, pe care ghidul lor romanesc le da ca
-                indisponibile pe ruta asta. Le poti folosi — ei le-au intors — dar merita verificat cu
+                indisponibile pe ruta asta. Le poti folosi, ei le-au intors, dar merita verificat cu
                 reprezentantul.
               </p>
             )}
@@ -514,7 +514,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 {alesDeClient && !oferte.some((o) => o.serviceCode === alesDeClient) && (
                   <p className="text-[11px] text-warning flex items-start gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                    Serviciul ales de client la comanda nu mai e disponibil. Alege altul — pretul poate diferi.
+                    Serviciul ales de client la comanda nu mai e disponibil. Alege altul, pretul poate diferi.
                   </p>
                 )}
                 {oferte.map((o) => {
@@ -564,7 +564,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
             {cerePunct && !punct && (
               <p className="text-[11px] text-warning flex items-start gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                Comanda cere ridicare dintr-un punct UPS, dar niciun punct nu e ales. Alege unul mai sus —
+                Comanda cere ridicare dintr-un punct UPS, dar niciun punct nu e ales. Alege unul mai sus,
                 altfel coletul ar pleca la adresa de acasa a cumparatorului, fara ca nimic sa semnaleze asta.
               </p>
             )}

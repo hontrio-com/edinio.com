@@ -205,7 +205,7 @@ export function PostaConfigClient({
     setTesting(false);
 
     if (r.fel === "autentificat") {
-      toast.success(`Conexiune reusita — ${r.unitati} oficii de livrare`);
+      toast.success(`Conexiune reusita · ${r.unitati} oficii de livrare`);
       return;
     }
     if (r.fel === "raspunde_dar_public") {
@@ -217,7 +217,7 @@ export function PostaConfigClient({
        */
       toast.warning(
         `Serverul Postei raspunde (${r.unitati} oficii), dar aceeasi lista se obtine si fara `
-        + "date de acces — deci proba NU dovedeste ca utilizatorul si parola sunt bune. "
+        + "date de acces, deci proba NU dovedeste ca utilizatorul si parola sunt bune. "
         + "Asta se vede sigur abia la prima trimitere.",
         { duration: 12000 },
       );
@@ -238,7 +238,7 @@ export function PostaConfigClient({
     if (!username.trim()) return toast.error("Completeaza utilizatorul");
     if (!areParola) return toast.error("Completeaza parola");
     if (!codTrimitere.trim()) {
-      return toast.error("Completeaza codul de trimitere din contract — fara el nu se poate emite niciun AWB");
+      return toast.error("Completeaza codul de trimitere din contract, fara el nu se poate emite niciun AWB");
     }
     if (expeditorPropriu && (!exNume.trim() || !exStrada.trim() || !exOras.trim())) {
       return toast.error("Adresa de ridicare are nevoie de nume, strada si localitate");
@@ -425,7 +425,7 @@ export function PostaConfigClient({
 
         <Field
           label="Tip mandat"
-          hint="Se trimite doar la trimiterile cu ramburs si mandat postal. Lasa gol daca nu ai in contract — necompletat, campul nu pleaca deloc."
+          hint="Se trimite doar la trimiterile cu ramburs si mandat postal. Lasa gol daca nu ai in contract. Necompletat, campul nu pleaca deloc."
         >
           <Input value={tipMandat} onChange={(ev) => setTipMandat(ev.target.value)} placeholder="POSTAL" />
         </Field>
@@ -481,7 +481,7 @@ export function PostaConfigClient({
             )}
             <p className="col-span-2 text-xs text-muted-foreground">
               ⚠ Schimbarea intervalului porneste consumul de la capatul lui. Nu-l schimba
-              decat cand primesti o plaja noua — altfel se pot reda coduri deja folosite.
+              decat cand primesti o plaja noua, altfel se pot reda coduri deja folosite.
             </p>
           </div>
         )}
@@ -561,7 +561,7 @@ export function PostaConfigClient({
         <Callout variant="warning" icon={AlertTriangle} title="Aprinde doar ce ai in contract">
           Documentatia Postei spune ca aceste optiuni sunt valide „doar dacă în contract
           vor fi permise”. Una aprinsa fara acoperire in contract face ca Posta sa
-          respinga trimiterea — si mesajul de refuz nu spune intotdeauna care bifa e de vina.
+          respinga trimiterea, si mesajul de refuz nu spune intotdeauna care bifa e de vina.
         </Callout>
 
         {SERVICII.map((s) => (
@@ -590,7 +590,7 @@ export function PostaConfigClient({
           potriveasca.
         */}
         <p className="text-xs text-muted-foreground">
-          Implicit, Posta completeaza expeditorul din datele contului tau — cele din
+          Implicit, Posta completeaza expeditorul din datele contului tau, cele din
           contract. Completeaza mai jos doar daca expediezi de la alta adresa.
         </p>
 

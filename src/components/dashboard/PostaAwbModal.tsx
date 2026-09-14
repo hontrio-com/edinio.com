@@ -218,7 +218,7 @@ function Formular({ onClose, order, businessId, zilePrezentare, onSuccess }: Pro
             <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
               <p className="mb-1 font-semibold text-foreground">Ce faci mai departe</p>
               <p>
-                <strong>Eticheta o tiparesti din aplicatia Postei</strong> — API-ul lor nu
+                <strong>Eticheta o tiparesti din aplicatia Postei</strong>, API-ul lor nu
                 are metoda de tiparire, deci nu o putem aduce aici.
               </p>
               <p className="mt-1">
@@ -292,7 +292,7 @@ function Formular({ onClose, order, businessId, zilePrezentare, onSuccess }: Pro
                 className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Cel mult 64 de caractere — atat accepta Posta pe acest camp.
+                Cel mult 64 de caractere, atat accepta Posta pe acest camp.
               </p>
             </div>
 

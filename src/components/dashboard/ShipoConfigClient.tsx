@@ -153,7 +153,7 @@ export function ShipoConfigClient({
     if (!r.ok) { toast.error(r.error); return; }
 
     setAdrese(r.adrese);
-    setContInfo(`${r.cont.name || "cont Shipo"} · ${r.cont.billing_type || "—"} · ${r.cont.status || "—"}`);
+    setContInfo(`${r.cont.name || "cont Shipo"} · ${r.cont.billing_type || "-"} · ${r.cont.status || "-"}`);
     if (r.adrese.length === 0) {
       toast.warning("Conexiunea merge, dar contul n-are nicio adresa de ridicare. Adauga una in contul Shipo.");
       return;
@@ -220,7 +220,7 @@ export function ShipoConfigClient({
       <Panel step={2} title="Adresa de ridicare">
         <Callout variant="info" icon={Info}>
           Shipo nu primeste un <strong>nume de oras</strong> pentru ridicare, ci id-ul unei adrese salvate in contul
-          tau — si tot el pleaca la cotare. De aceea se alege din lista, nu se scrie de mana: un id gresit ar cota si
+          tau, si tot el pleaca la cotare. De aceea se alege din lista, nu se scrie de mana: un id gresit ar cota si
           ar expedia dintr-un alt depozit, fara nicio eroare.
         </Callout>
         {/*
@@ -256,7 +256,7 @@ export function ShipoConfigClient({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">Ofera si livrare in locker sau punct de ridicare</p>
-            <p className="text-xs text-muted-foreground">Shipo coteaza si serviciile la locker, cu pret real — spre deosebire de SmartShip, unde lockerul primeste tariful fix. Punctul se alege de client, dupa ce a ales oferta.</p>
+            <p className="text-xs text-muted-foreground">Shipo coteaza si serviciile la locker, cu pret real, spre deosebire de SmartShip, unde lockerul primeste tariful fix. Punctul se alege de client, dupa ce a ales oferta.</p>
           </div>
           <Switch checked={!!config.foloseste_lockere} onCheckedChange={(v) => setConfig({ ...config, foloseste_lockere: v })} />
         </div>
@@ -294,7 +294,7 @@ export function ShipoConfigClient({
         {suprapuse.length > 0 && (
           <Callout variant="warning" icon={AlertTriangle}>
             {suprapuse.join(", ")} {suprapuse.length === 1 ? "apare" : "apar"} si pe contractul tau direct, si prin
-            Shipo. Cumparatorul o sa vada ambele variante, la preturi diferite — poate fi exact ce vrei (alegi
+            Shipo. Cumparatorul o sa vada ambele variante, la preturi diferite, poate fi exact ce vrei (alegi
             contractul mai ieftin), dar poate parea si o dublura.
           </Callout>
         )}
@@ -360,7 +360,7 @@ export function ShipoConfigClient({
         </div>
         <Field
           label="Textul de pe AWB"
-          hint="Maxim 40 de caractere, doar litere si cifre — asa cere Shipo. Diacriticele si semnele se curata automat."
+          hint="Maxim 40 de caractere, doar litere si cifre, asa cere Shipo. Diacriticele si semnele se curata automat."
         >
           <Input
             value={config.continut_implicit ?? ""}
@@ -389,7 +389,7 @@ export function ShipoConfigClient({
         </div>
         {config.enabled && !areAdresa && (
           <Callout variant="warning" icon={AlertTriangle}>
-            Fara o adresa de ridicare aleasa, Shipo nu poate cota nimic — clientii vor vedea tariful fix.
+            Fara o adresa de ridicare aleasa, Shipo nu poate cota nimic, clientii vor vedea tariful fix.
           </Callout>
         )}
         <Callout variant="info" icon={Info}>

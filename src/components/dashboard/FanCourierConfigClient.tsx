@@ -224,7 +224,7 @@ export function FanCourierConfigClient({
               >
                 {branches.map(b => (
                   <option key={b.id} value={b.id}>
-                    {b.name} (ID: {b.id}) — {b.address?.locality}, {b.address?.county}
+                    {b.name} (ID: {b.id}) · {b.address?.locality}, {b.address?.county}
                   </option>
                 ))}
               </select>

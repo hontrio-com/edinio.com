@@ -352,7 +352,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
             {nota && <p className="text-[11px] text-muted-foreground">{nota}</p>}
 
             <label className="text-xs block">
-              Continut (max 40 caractere, doar litere si cifre — asa cere Shipo)
+              Continut (max 40 caractere, doar litere si cifre, asa cere Shipo)
               <input
                 className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
                 value={continut} onChange={(e) => setContinut(e.target.value)}
@@ -369,7 +369,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 {alesDeClient && !oferte.some((o) => o.rateId === alesDeClient) && (
                   <p className="text-[11px] text-warning flex items-start gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                    Serviciul ales de client la comanda nu mai e disponibil. Alege altul — pretul poate diferi.
+                    Serviciul ales de client la comanda nu mai e disponibil. Alege altul, pretul poate diferi.
                   </p>
                 )}
                 {oferte.map((o) => (
@@ -402,9 +402,9 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                       Clientul a ales <strong>{punctClient.nume}</strong>
                       {punctClient.adresa ? ` · ${punctClient.adresa}` : ""}.
                       {aleasa.rateId !== alesDeClient
-                        ? " ⚠ Ai schimbat serviciul — punctul lui nu mai e valabil aici, alege altul."
+                        ? " ⚠ Ai schimbat serviciul, punctul lui nu mai e valabil aici, alege altul."
                         : punctAles && punctAles.id !== punctClient.id
-                          ? " ⚠ Ai schimbat punctul — coletul pleaca in alta parte decat a cerut."
+                          ? " ⚠ Ai schimbat punctul, coletul pleaca in alta parte decat a cerut."
                           : ""}
                     </span>
                   </p>
@@ -435,7 +435,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 )}
                 {!punctAles && (
                   <p className="text-[11px] text-muted-foreground">
-                    Alege un punct: fara el, emiterea cade — acolo se livreaza coletul.
+                    Alege un punct: fara el, emiterea cade. Acolo se livreaza coletul.
                   </p>
                 )}
               </div>
@@ -452,7 +452,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Emiterea e reala si facturata din prima — Shipo n-are mediu de proba. „Verifica datele” foloseste
+              Emiterea e reala si facturata din prima, Shipo n-are mediu de proba. „Verifica datele” foloseste
               validarea lor, care nu creeaza nimic.
             </p>
           </div>

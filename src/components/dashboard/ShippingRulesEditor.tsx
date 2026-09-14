@@ -375,7 +375,7 @@ export function ShippingRulesEditor({
                   <span className="text-muted-foreground">Daca cosul contine clasa</span>
                   <select className={inp} value={rule.conditions[0].classIds[0] ?? ""}
                     onChange={(e) => updateCond(rule.id, "class", { classIds: e.target.value ? [e.target.value] : [] })}>
-                    <option value="">— alege —</option>
+                    <option value="">Alege clasa</option>
                     {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                   <span className="text-muted-foreground">&rarr; supliment +</span>

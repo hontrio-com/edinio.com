@@ -58,7 +58,7 @@ export function DpdConfigClient({
 
     setClientId(result.clientId);
     setClientName(result.name);
-    toast.success(`Cont DPD conectat — Client ID: ${result.clientId}`);
+    toast.success(`Cont DPD conectat · Client ID: ${result.clientId}`);
   }
 
   async function handleSave() {
@@ -168,7 +168,7 @@ export function DpdConfigClient({
         <Panel className="space-y-3 p-4">
           <div>
             <p className="text-sm font-semibold text-foreground">Cont bancar (ramburs)</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">Necesar pentru comenzile cu plata la livrare — DPD returneaza aici banii incasati de la clienti.</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Necesar pentru comenzile cu plata la livrare, DPD returneaza aici banii incasati de la clienti.</p>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="IBAN">

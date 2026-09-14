@@ -48,8 +48,8 @@ import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/s
  */
 
 const MEDII: { valoare: MediuUps; eticheta: string }[] = [
-  { valoare: "productie", eticheta: "Productie (onlinetools.ups.com) — expedieri reale" },
-  { valoare: "test", eticheta: "Test / CIE (wwwcie.ups.com) — etichete cu filigran „Sample”" },
+  { valoare: "productie", eticheta: "Productie (onlinetools.ups.com) · expedieri reale" },
+  { valoare: "test", eticheta: "Test / CIE (wwwcie.ups.com) · etichete cu filigran „Sample”" },
 ];
 
 const FORMATE: { valoare: FormatEticheta; eticheta: string }[] = [
@@ -224,7 +224,7 @@ export function UpsConfigClient({
 
         <Field
           label="Numar de cont UPS (Shipper Number)"
-          hint="⚠ EXACT sase caractere alfanumerice — asa il cere UPS („six digit alphanumeric account number”). Il gasesti pe factura UPS."
+          hint="⚠ EXACT sase caractere alfanumerice, asa il cere UPS („six digit alphanumeric account number”). Il gasesti pe factura UPS."
         >
           <Input
             value={config.account_number}
@@ -282,7 +282,7 @@ export function UpsConfigClient({
                 Valuta cotarii: <strong>{proba.valuta}</strong>
                 {proba.valuta.includes("RON")
                   ? ""
-                  : " — ⚠ magazinul lucreaza in lei. UPS nu are niciun camp prin care sa ceri valuta raspunsului, iar noi nu convertim sumele, deci UPS va aparea in checkout la tariful fix. Cere-i reprezentantului UPS tarife in RON."}
+                  : ". ⚠ Magazinul lucreaza in lei. UPS nu are niciun camp prin care sa ceri valuta raspunsului, iar noi nu convertim sumele, deci UPS va aparea in checkout la tariful fix. Cere-i reprezentantului UPS tarife in RON."}
               </span>
             )}
             {proba.ok && (
@@ -316,7 +316,7 @@ export function UpsConfigClient({
         <Callout variant="info" icon={Info}>
           De aici pleaca fiecare colet, si tot de aici se calculeaza tariful. Codul postal e obligatoriu in
           practica: UPS nu are nomenclator de judete romanesti, iar cotarea lor cere un cod de judet de exact
-          doua caractere — deci codul postal ramane singurul semnal dupa care pot zona ruta.
+          doua caractere, deci codul postal ramane singurul semnal dupa care pot zona ruta.
         </Callout>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Nume persoana de contact">
@@ -341,7 +341,7 @@ export function UpsConfigClient({
           </Field>
           <Field
             label="Judet"
-            hint="⚠ Se trimite DOAR daca are exact doua caractere. UPS cere un cod de judet pentru tarifele negociate, dar nu publica niciunul pentru Romania — pune-l doar daca ti l-au dat ei."
+            hint="⚠ Se trimite DOAR daca are exact doua caractere. UPS cere un cod de judet pentru tarifele negociate, dar nu publica niciunul pentru Romania, pune-l doar daca ti l-au dat ei."
           >
             <Input maxLength={2} value={expeditor.judet ?? ""} onChange={(e) => setExpeditor({ judet: e.target.value })} />
           </Field>
@@ -358,7 +358,7 @@ export function UpsConfigClient({
         <p className="text-xs font-semibold">Serviciile pe care le arati clientilor</p>
         <p className="text-[11px] text-muted-foreground">
           Nimic bifat = toate serviciile pe care le intoarce cotarea. „Intern” arata care dintre ele se pot
-          folosi si pentru livrari in Romania, dupa ghidul comercial al UPS — dar filtrul real e al lor: ce
+          folosi si pentru livrari in Romania, dupa ghidul comercial al UPS, dar filtrul real e al lor: ce
           intoarce cotarea, aia se poate expedia.
         </p>
         <div className="flex flex-wrap gap-2">
@@ -401,7 +401,7 @@ export function UpsConfigClient({
             <p className="text-sm font-medium">Ofera livrare in puncte UPS Access Point</p>
             <p className="text-xs text-muted-foreground">
               Cel mult {GREUTATE_MAXIMA_PUNCT_KG} kg si {LUNGIME_MAXIMA_PUNCT_CM} cm lungime, dupa regulile lor
-              din Romania. Punctele se ofera la tariful fix — UPS nu poate cota un punct anume inainte ca el sa
+              din Romania. Punctele se ofera la tariful fix, UPS nu poate cota un punct anume inainte ca el sa
               fie ales.
             </p>
           </div>
@@ -415,7 +415,7 @@ export function UpsConfigClient({
       <Panel step={4} title="Plata la livrare (ramburs)">
         <Callout variant="info" icon={Info}>
           <span className="block">
-            UPS <strong>ofera</strong> ramburs pentru expedierile care pleaca din Uniunea Europeana — spre
+            UPS <strong>ofera</strong> ramburs pentru expedierile care pleaca din Uniunea Europeana, spre
             deosebire de FedEx, care l-a retras.
           </span>
           <span className="block mt-1 text-xs">
@@ -430,7 +430,7 @@ export function UpsConfigClient({
           <div>
             <p className="text-sm font-medium">Accepta comenzi cu plata la livrare</p>
             <p className="text-xs text-muted-foreground">
-              Stins, UPS dispare din checkout la comenzile cu ramburs — nu apare la tarif fix.
+              Stins, UPS dispare din checkout la comenzile cu ramburs, nu apare la tarif fix.
             </p>
           </div>
           <Switch
@@ -458,7 +458,7 @@ export function UpsConfigClient({
       <Panel step={5} title="Eticheta">
         <Field
           label="Formatul etichetei"
-          hint="⚠ UPS NU da PDF la emitere — enumerarea lor e GIF, ZPL, EPL si SPL. PDF-ul exista doar la reimprimare, si il cerem de acolo cand copia noastra lipseste."
+          hint="⚠ UPS NU da PDF la emitere, enumerarea lor e GIF, ZPL, EPL si SPL. PDF-ul exista doar la reimprimare, si il cerem de acolo cand copia noastra lipseste."
         >
           <select
             className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
@@ -471,7 +471,7 @@ export function UpsConfigClient({
 
         <Callout variant="info" icon={Info}>
           <span className="block">
-            La fiecare AWB se descarca si <strong>caseta de semnatura</strong> — UPS o intoarce la toate
+            La fiecare AWB se descarca si <strong>caseta de semnatura</strong>, UPS o intoarce la toate
             expedierile din afara Statelor Unite, si trebuie tiparita odata cu eticheta.
           </span>
           <span className="block mt-1 text-xs">
@@ -536,7 +536,7 @@ export function UpsConfigClient({
         </div>
         {config.enabled && !areExpeditor && (
           <Callout variant="warning" icon={AlertTriangle}>
-            Fara oras si cod postal de expeditie, UPS nu poate cota nimic — clientii vor vedea tariful fix.
+            Fara oras si cod postal de expeditie, UPS nu poate cota nimic, clientii vor vedea tariful fix.
           </Callout>
         )}
         {config.mediu === "test" && (
@@ -547,7 +547,7 @@ export function UpsConfigClient({
         )}
         {esteActiv && config.mediu !== "test" && (
           <Callout variant="info" icon={Info}>
-            Fiecare AWB emis e real si facturat — UPS nu are protectie contra dublurilor, deci daca emiterea pare
+            Fiecare AWB emis e real si facturat, UPS nu are protectie contra dublurilor, deci daca emiterea pare
             ca a esuat foloseste „Verifica la UPS” din pagina comenzii in loc sa incerci din nou.
           </Callout>
         )}

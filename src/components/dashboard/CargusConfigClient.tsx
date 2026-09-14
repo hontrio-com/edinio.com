@@ -76,7 +76,7 @@ export function CargusConfigClient({
       setSelectedPriceTableName(result.priceTables[0].Name);
     }
 
-    toast.success(`Cont Cargus conectat — ${result.locations.length} puncte de ridicare, ${result.priceTables.length} tarife`);
+    toast.success(`Cont Cargus conectat · ${result.locations.length} puncte de ridicare, ${result.priceTables.length} tarife`);
     setStep("settings");
   }
 
@@ -219,7 +219,7 @@ export function CargusConfigClient({
               >
                 {locations.map(loc => (
                   <option key={loc.LocationId} value={loc.LocationId}>
-                    {loc.Name} — {loc.LocalityName}, {loc.CountyName}
+                    {loc.Name} · {loc.LocalityName}, {loc.CountyName}
                   </option>
                 ))}
               </select>

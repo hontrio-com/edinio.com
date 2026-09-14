@@ -127,7 +127,7 @@ export function SmartshipConfigClient({
   async function handleSave() {
     if (!areCheie) return toast.error("Completeaza cheia de API");
     if (!expeditorGata) {
-      return toast.error("Alege adresa de ridicare — apasa „Verifica si incarca expeditorii”");
+      return toast.error("Alege adresa de ridicare, apasa „Verifica si incarca expeditorii”");
     }
     if (ibanGresit) return toast.error("IBAN-ul nu e valid. Verifica cifrele de control.");
 
@@ -152,7 +152,7 @@ export function SmartshipConfigClient({
     }
     /* Un singur expeditor: il alegem noi, ca omul sa nu mai apese inca o data. */
     if (r.expeditori.length === 1 && !expeditorGata) alegeExpeditorul(r.expeditori[0]);
-    toast.success(`Conexiune reusita — ${r.expeditori.length} adrese de ridicare`);
+    toast.success(`Conexiune reusita · ${r.expeditori.length} adrese de ridicare`);
   }
 
   function alegeExpeditorul(e: ExpeditorSalvat) {
@@ -277,7 +277,7 @@ export function SmartshipConfigClient({
           */}
         <Callout variant="info" icon={Info}>
           SmartShip identifica localitatile prin <strong>id numeric</strong>, nu prin nume. De
-          aceea adresa de ridicare se alege din cele salvate in contul tau — nu se scrie de mana.
+          aceea adresa de ridicare se alege din cele salvate in contul tau, nu se scrie de mana.
         </Callout>
 
         {expeditori.length > 0 && (
@@ -303,7 +303,7 @@ export function SmartshipConfigClient({
 
         {expeditorGata ? (
           <p className="text-xs text-muted-foreground">
-            Ales: <strong>{expeditor!.name}</strong> — {expeditor!.address}
+            Ales: <strong>{expeditor!.name}</strong> · {expeditor!.address}
             {expeditor!.sector ? `, sector ${expeditor!.sector}` : ""} (id localitate {expeditor!.city})
           </p>
         ) : (
@@ -320,7 +320,7 @@ export function SmartshipConfigClient({
           */}
         <Field
           label="IBAN pentru virarea rambursului"
-          hint="Obligatoriu la orice comanda cu plata la livrare. SmartShip il verifica la fiecare cerere — gresit, comenzile cu ramburs raman fara pret real."
+          hint="Obligatoriu la orice comanda cu plata la livrare. SmartShip il verifica la fiecare cerere. Gresit, comenzile cu ramburs raman fara pret real."
         >
           <Input
             value={iban}
@@ -373,7 +373,7 @@ export function SmartshipConfigClient({
               <p className="text-xs text-muted-foreground">
                 Fara niciunul bifat, apar toti curierii pe care ii da contul. SmartShip n-are
                 lista de curieri in API, deci se afla dintr-o cotare de proba
-                (Bucuresti {"->"} Cluj-Napoca, 1 kg) — pe alte rute pot aparea si altii.
+                (Bucuresti {"->"} Cluj-Napoca, 1 kg). Pe alte rute pot aparea si altii.
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={incarcaCurieri} disabled={incarcCurieri || !isActive}>
@@ -433,7 +433,7 @@ export function SmartshipConfigClient({
               * eticheta ofertei spune „(contractul tau)".
               */}
             <p className="text-xs text-muted-foreground">
-              Acelasi curier poate aparea de doua ori — o data pe contractul tau, o data pe cel
+              Acelasi curier poate aparea de doua ori, o data pe contractul tau, o data pe cel
               SmartShip. In lista se vede care e care.
             </p>
           </div>
@@ -475,7 +475,7 @@ export function SmartshipConfigClient({
           <div>
             <p className="text-sm font-medium">Deschidere la livrare</p>
             <p className="text-xs text-muted-foreground">
-              Unde curierul o suporta. La locker nu se aplica — nu e nimeni acolo care sa deschida coletul.
+              Unde curierul o suporta. La locker nu se aplica, nu e nimeni acolo care sa deschida coletul.
             </p>
           </div>
           <Switch checked={deschidere} onCheckedChange={setDeschidere} />
@@ -575,7 +575,7 @@ export function SmartshipConfigClient({
             */}
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
-              Verifica listele de lockere si arata cum se numesc campurile in raspunsul lor —
+              Verifica listele de lockere si arata cum se numesc campurile in raspunsul lor,
               singurele doua endpointuri fara exemplu in documentatie.
             </p>
             <Button variant="outline" size="sm" onClick={ruleazaDiagnostic} disabled={rulezDiagnostic}>

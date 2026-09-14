@@ -97,7 +97,7 @@ export function PacketaConfigClient({
   async function handleSave() {
     if (!areParola) return toast.error("Completeaza parola API (api_password)");
     if (!eshop.trim()) {
-      return toast.error("Completeaza eticheta de expeditor — fara ea nu pleaca niciun colet");
+      return toast.error("Completeaza eticheta de expeditor, fara ea nu pleaca niciun colet");
     }
     setSalveaza(true);
     const r = await savePacketaConfig(businessId, construieste());
@@ -151,7 +151,7 @@ export function PacketaConfigClient({
       <Callout variant="warning" icon={AlertTriangle}>
         <strong>Packeta nu permite anularea coletelor prin API.</strong> Un colet creat gresit
         ramane la ei si trebuie anulat de mana din contul Packeta. De aceea verificam datele
-        inainte de fiecare emitere — dar merita sa te uiti peste adresa inainte sa apesi.
+        inainte de fiecare emitere, dar merita sa te uiti peste adresa inainte sa apesi.
       </Callout>
 
       <Panel step={1} title="Credentiale">
@@ -181,7 +181,7 @@ export function PacketaConfigClient({
 
         <Field
           label="Eticheta de expeditor (eshop)"
-          hint="Numele expeditorului din contul Packeta. ⚠ Scris gresit, ei CREEAZA un expeditor nou si facturarea se incurca — copiaza-l exact."
+          hint="Numele expeditorului din contul Packeta. ⚠ Scris gresit, ei CREEAZA un expeditor nou si facturarea se incurca, copiaza-l exact."
         >
           <Input value={eshop} onChange={(e) => setEshop(e.target.value)} placeholder="MagazinulMeu" />
         </Field>
@@ -228,7 +228,7 @@ export function PacketaConfigClient({
             <div>
               <p className="text-sm font-medium">Livrare la adresa</p>
               <p className="text-xs text-muted-foreground">
-                Packeta livreaza la adresa prin curieri locali. Alege pe care ii oferi — fara
+                Packeta livreaza la adresa prin curieri locali. Alege pe care ii oferi, fara
                 niciunul, optiunea nu apare in checkout.
               </p>
             </div>
@@ -253,7 +253,7 @@ export function PacketaConfigClient({
                   {/* Curierii cu retea proprie de puncte cer si codul punctului: nu-i putem
                       oferi ca simpla livrare la adresa. */}
                   {c.arePuncte && (
-                    <span className="text-[10px] text-muted-foreground">(are puncte proprii — livrare la adresa indisponibila)</span>
+                    <span className="text-[10px] text-muted-foreground">(are puncte proprii, livrare la adresa indisponibila)</span>
                   )}
                   {c.faraRamburs && <span className="text-[10px] text-amber-600">(fara ramburs)</span>}
                 </label>

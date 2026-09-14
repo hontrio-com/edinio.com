@@ -340,7 +340,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
         businessId,
         order.id,
         selectedService.service_id,
-        `${selectedService.courier_name} — ${selectedService.service_name}`,
+        `${selectedService.courier_name} · ${selectedService.service_name}`,
         buildReceiver(),
         buildParcels(),
         rep > 0 ? rep : undefined,
@@ -362,7 +362,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
         toast.error(result.error ?? "Eroare la crearea AWB.");
         return;
       }
-      toast.success(`AWB creat: ${result.awbNumber ?? "—"}`);
+      toast.success(`AWB creat: ${result.awbNumber ?? "-"}`);
       onSuccess();
       onClose();
     });
@@ -424,7 +424,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 <p className="text-sm font-semibold text-foreground">
                   {hasAwb ? "AWB Woot" : "Creeaza AWB"}
                 </p>
-                <p className="text-xs text-muted-foreground">{order.order_number} — {order.customer_name}</p>
+                <p className="text-xs text-muted-foreground">{order.order_number} · {order.customer_name}</p>
               </div>
             </div>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
@@ -470,7 +470,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                     <Truck className="h-4 w-4 text-info mt-0.5 flex-shrink-0" />
                     <p className="text-xs text-info">
                       Clientul a ales la comanda: <strong>{addr.woot_courier_name}</strong>
-                      {addr.woot_service_name ? ` — ${addr.woot_service_name}` : ""}. Apasa
+                      {addr.woot_service_name ? ` · ${addr.woot_service_name}` : ""}. Apasa
                       &nbsp;„Calculeaza preturi" ca sa se preselecteze automat.
                     </p>
                   </div>
@@ -551,7 +551,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1">
-                        Ramburs (RON) {ramburs === 0 && <span className="text-muted-foreground/60">— comanda platita</span>}
+                        Ramburs (RON) {ramburs === 0 && <span className="text-muted-foreground/60">· comanda platita</span>}
                       </label>
                       <input type="number" min="0" step="0.01" value={repayment}
                         onChange={e => setRepayment(e.target.value)} className={inputCls} />
@@ -633,7 +633,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                           <select value={senderLocationId ?? ""} onChange={e => setSenderLocationId(e.target.value ? Number(e.target.value) : null)} className={inputCls}>
                             <option value="">Alege locatia de predare...</option>
                             {senderLocations.map(loc => (
-                              <option key={loc.id} value={loc.id}>{loc.name} — {loc.address}, {loc.city_name}</option>
+                              <option key={loc.id} value={loc.id}>{loc.name} · {loc.address}, {loc.city_name}</option>
                             ))}
                           </select>
                         ) : (
@@ -658,7 +658,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                           <select value={receiverLocationId ?? ""} onChange={e => setReceiverLocationId(e.target.value ? Number(e.target.value) : null)} className={inputCls}>
                             <option value="">Alege punctul de livrare...</option>
                             {receiverLocations.map(loc => (
-                              <option key={loc.id} value={loc.id}>{loc.name} — {loc.address}, {loc.city_name}</option>
+                              <option key={loc.id} value={loc.id}>{loc.name} · {loc.address}, {loc.city_name}</option>
                             ))}
                           </select>
                         ) : (
@@ -674,7 +674,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                         {creating ? <Loader2 className="animate-spin" /> : <ChevronRight />}
                         {creating
                           ? "Se creeaza AWB..."
-                          : `Creeaza AWB — ${selectedService.courier_name} — ${selectedService.final_total.toFixed(2)} RON`}
+                          : `Creeaza AWB · ${selectedService.courier_name} · ${selectedService.final_total.toFixed(2)} RON`}
                       </Button>
                     )}
                   </section>

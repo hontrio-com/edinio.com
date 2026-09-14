@@ -352,7 +352,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   async function handleCereOferta() {
     if (!confirm(
       "Trimiti o solicitare de oferta pentru marfa grea?\n\n"
-      + "Raspunsul vine de la echipa SmartShip, nu automat — poate dura ore sau zile. "
+      + "Raspunsul vine de la echipa SmartShip, nu automat, poate dura ore sau zile. "
       + "Comanda ramane fara AWB pana accepti oferta.",
     )) return;
     /* ⚠ Incarcatura intr-un `const`, ca `try` sa cuprinda DOAR apelul. */

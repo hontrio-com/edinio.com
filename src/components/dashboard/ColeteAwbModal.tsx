@@ -205,7 +205,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
           const chosen = sorted.find((p) => p.serviceId === addr.colete_service_id);
           if (chosen) {
             setSelectedServiceId(chosen.serviceId);
-            setSelectedServiceName(`${chosen.courierName} — ${chosen.serviceName}`);
+            setSelectedServiceName(`${chosen.courierName} · ${chosen.serviceName}`);
           }
         }
       }
@@ -270,7 +270,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
             <img src="/integrations/colete-online.svg" alt="Colete Online" className="h-5 w-auto" />
             <div>
               <p className="text-sm font-semibold text-foreground">
-                {hasAwb ? "Detalii AWB" : "Creeaza AWB"} — {order.order_number}
+                {hasAwb ? "Detalii AWB" : "Creeaza AWB"} · {order.order_number}
               </p>
               <p className="text-xs text-muted-foreground">{order.customer_name} · {order.customer_phone}</p>
             </div>

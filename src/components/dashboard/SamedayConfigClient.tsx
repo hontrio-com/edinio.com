@@ -91,7 +91,7 @@ export function SamedayConfigClient({
     if (result.pickupPoints.length === 0) {
       toast.warning("Cont conectat, dar nu exista puncte de ridicare. Adauga un punct de ridicare in panoul Sameday.");
     } else {
-      toast.success(`Cont Sameday conectat — ${result.pickupPoints.length} punct(e) de ridicare`);
+      toast.success(`Cont Sameday conectat · ${result.pickupPoints.length} punct(e) de ridicare`);
     }
     setStep("settings");
   }
@@ -238,7 +238,7 @@ export function SamedayConfigClient({
               >
                 {pickupPoints.map(pp => (
                   <option key={pp.id} value={pp.id}>
-                    {pp.alias} — {pp.address?.city?.name ?? ""}{pp.address?.county?.name ? `, ${pp.address.county.name}` : ""}
+                    {pp.alias} · {pp.address?.city?.name ?? ""}{pp.address?.county?.name ? `, ${pp.address.county.name}` : ""}
                   </option>
                 ))}
               </select>

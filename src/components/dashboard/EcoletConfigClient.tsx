@@ -111,7 +111,7 @@ export function EcoletConfigClient({
       return;
     }
     setServicii(r.servicii);
-    toast.success(`Conexiune eColet reusita — ${r.servicii.length} servicii`);
+    toast.success(`Conexiune eColet reusita · ${r.servicii.length} servicii`);
   }
 
   async function handleSave() {
@@ -182,7 +182,7 @@ export function EcoletConfigClient({
         eColet nu are mediu de test: orice expediere trimisa din panou e un transport
         adevarat, care intra pe factura.
         <br />
-        Emiterea nu e instantanee — eColet prelucreaza expedierea si abia apoi apare
+        Emiterea nu e instantanee, eColet prelucreaza expedierea si abia apoi apare
         AWB-ul. Fereastra din comanda iti arata cand e gata; nu trimite de doua ori.
       </Callout>
 
@@ -265,7 +265,7 @@ export function EcoletConfigClient({
         */}
         <p className="text-xs text-muted-foreground">
           eColet are nevoie de localitatea din nomenclatorul lui, nu doar de numele
-          orasului — de aceea adresa de ridicare se completeaza aici, o singura data.
+          orasului, de aceea adresa de ridicare se completeaza aici, o singura data.
         </p>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -315,7 +315,7 @@ export function EcoletConfigClient({
         </div>
         <p className="text-xs text-muted-foreground">
           Se aplica la fiecare expediere si se tarifeaza separat de eColet. Nu toate
-          serviciile le accepta — cele care nu pot, le ignora.
+          serviciile le accepta, cele care nu pot, le ignora.
         </p>
 
         {([

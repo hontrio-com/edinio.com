@@ -125,7 +125,6 @@ const INCA_DESCOPERITE: Record<string, number> = {
   "dashboard/OlxMessenger.tsx": 2,
   "dashboard/OlxSanatate.tsx": 2,
   "dashboard/OrderDetailClient.tsx": 12,
-  "dashboard/OrdersClient.tsx": 4,
   "dashboard/ProductForm.tsx": 7,
   "dashboard/ProductsClient.tsx": 3,
   "dashboard/ReturnsClient.tsx": 3,

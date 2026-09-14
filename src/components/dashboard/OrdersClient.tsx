@@ -316,8 +316,28 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     setBulkResult(null);
     startStatusTransition(async () => {
       aplicaOptimistStatus({ ids, status: bulkStatus });
-      const res = await bulkUpdateOrderStatus(businessId!, ids, bulkStatus);
-      setBulkBusy(false);
+      /* ⚠ In `try` DOAR apelul; ramificarea si mesajele raman afara. Vezi
+         `callbackul-de-tranzitie-prinde-caderea`. */
+      let res: Awaited<ReturnType<typeof bulkUpdateOrderStatus>>;
+      try {
+        res = await bulkUpdateOrderStatus(businessId!, ids, bulkStatus);
+      } catch {
+        /*
+         * ⚠ Aici nu ajunge sa spunem „nu stim”. Randurile sunt DEJA colorate de
+         * `aplicaOptimistStatus`, iar `useOptimistic` da starea aceea inapoi cand
+         * tranzitia se incheie, deci ar arata statusul VECHI. Amandoua mint, doar
+         * in directii opuse: una spune ca s-a mutat, cealalta ca nu s-a mutat, si
+         * nici una nu stie. Adevarul se cere de pe server.
+         */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim cate comenzi s-au mutat. "
+          + "Lista se reincarca: uita-te la statusuri inainte sa incerci din nou.",
+        );
+        router.refresh();
+        return;
+      } finally {
+        setBulkBusy(false);
+      }
       if ("error" in res) { toast.error(res.error); return; }
       /*
        * Cate au picat se SPUNE, nu se tace.
@@ -425,11 +445,32 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     setOblioAction(action);
     startOblioTransition(async () => {
       let result: { error: string } | { number: string; series: string } | { success: true };
-      if (action === "invoice") result = await generateOblioInvoice(businessId, orderId);
-      else if (action === "proforma") result = await generateOblioProforma(businessId, orderId);
-      else result = await stornoOblioInvoice(businessId, orderId);
-      setOblioActionOrderId(null);
-      setOblioAction(null);
+      try {
+        if (action === "invoice") result = await generateOblioInvoice(businessId, orderId);
+        else if (action === "proforma") result = await generateOblioProforma(businessId, orderId);
+        else result = await stornoOblioInvoice(businessId, orderId);
+      } catch {
+        /*
+         * ⚠⚠ AICI MESAJUL NU ARE VOIE SA INVITE LA REINCERCARE.
+         *
+         * `generateOblioInvoice` trece prin `slotFacturare`, care tine slotul ocupat
+         * cat timp exista o factura FARA storno, deci o a doua apasare dupa o emitere
+         * REUSITA e refuzata. Dar garda aceea citeste `orders.oblio_invoice_number`,
+         * scris DUPA ce raspunde Oblio. Cand actiunea arunca, documentul poate sa
+         * existe la ei fara ca numarul sa fi ajuns la noi: slotul e liber, si o
+         * reincercare emite un AL DOILEA document fiscal real.
+         */
+        const ce = action === "invoice" ? "factura" : action === "proforma" ? "proforma" : "stornarea";
+        toast.error(
+          `Nu am primit raspuns de la Oblio, deci nu stim daca ${ce} s-a emis. Verifica in contul Oblio INAINTE sa incerci din nou: daca documentul e acolo, dar numarul nu s-a scris pe comanda, o a doua apasare emite inca unul.`,
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      } finally {
+        setOblioActionOrderId(null);
+        setOblioAction(null);
+      }
       if ("error" in result) {
         toast.error(result.error);
       } else if ("number" in result) {
@@ -446,11 +487,28 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     setFgoActionOrderId(orderId);
     setFgoAction(action);
     startFgoTransition(async () => {
-      const result = action === "invoice"
-        ? await generateFgoInvoice(businessId, orderId)
-        : await stornoFgoInvoiceAction(businessId, orderId);
-      setFgoActionOrderId(null);
-      setFgoAction(null);
+      let result:
+        | Awaited<ReturnType<typeof generateFgoInvoice>>
+        | Awaited<ReturnType<typeof stornoFgoInvoiceAction>>;
+      try {
+        result = action === "invoice"
+          ? await generateFgoInvoice(businessId, orderId)
+          : await stornoFgoInvoiceAction(businessId, orderId);
+      } catch {
+        /* ⚠⚠ Aceeasi fereastra ca la Oblio, cu `orders.fgo_invoice_number`: slotul
+           se ocupa abia dupa ce raspunde fGO, deci o reincercare oarba poate emite
+           un al doilea document fiscal real. */
+        const ce = action === "invoice" ? "factura" : "stornarea";
+        toast.error(
+          `Nu am primit raspuns de la fGO, deci nu stim daca ${ce} s-a emis. Verifica in contul fGO INAINTE sa incerci din nou: daca documentul e acolo, dar numarul nu s-a scris pe comanda, o a doua apasare emite inca unul.`,
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      } finally {
+        setFgoActionOrderId(null);
+        setFgoAction(null);
+      }
       if ("error" in result) {
         toast.error(result.error);
       } else if ("number" in result) {
@@ -466,8 +524,23 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     if (!businessId) return;
     setGeneratingOrderId(orderId);
     startGenerateTransition(async () => {
-      const result = await generateOrderInvoice(businessId, orderId);
-      setGeneratingOrderId(null);
+      let result: Awaited<ReturnType<typeof generateOrderInvoice>>;
+      try {
+        result = await generateOrderInvoice(businessId, orderId);
+      } catch {
+        /* ⚠⚠ `generateOrderInvoice` sta in `smartbill.actions.ts` si isi ia slotul cu
+           `casa: "SmartBill"`. Aceeasi fereastra ca la Oblio si fGO. */
+        toast.error(
+          "Nu am primit raspuns de la SmartBill, deci nu stim daca factura s-a emis. "
+          + "Verifica in contul SmartBill INAINTE sa incerci din nou: daca documentul e "
+          + "acolo, dar numarul nu s-a scris pe comanda, o a doua apasare emite inca una.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      } finally {
+        setGeneratingOrderId(null);
+      }
       if ("error" in result) {
         toast.error(result.error);
       } else {

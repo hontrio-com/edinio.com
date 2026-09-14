@@ -258,9 +258,22 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   }
 
   async function handleCoteaza() {
+    /* ⚠ `finally`, si in `try` DOAR apelul; ramificarea ramane afara. Vezi
+       `steagul-se-stinge-in-finally`. */
     setCotand(true);
-    const r = await coteazaDhlAction(businessId, order.id, dateCotare());
-    setCotand(false);
+    let r: Awaited<ReturnType<typeof coteazaDhlAction>>;
+    try {
+      r = await coteazaDhlAction(businessId, order.id, dateCotare());
+    } catch (e) {
+      /* ⚠ O CITIRE: nimic nu s-a schimbat la DHL, deci nu e nimic de verificat la ei. */
+      toast.error(
+        "DHL nu a raspuns: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 20000 },
+      );
+      return;
+    } finally {
+      setCotand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 20000 });
 
     setOferte(r.oferte);
@@ -298,8 +311,29 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleEmite() {
     setEmitand(true);
-    const r = await createDhlAwbAction(businessId, order.id, dateEmitere());
-    setEmitand(false);
+    let r: Awaited<ReturnType<typeof createDhlAwbAction>>;
+    try {
+      r = await createDhlAwbAction(businessId, order.id, dateEmitere());
+    } catch (e) {
+      /*
+       * ⚠⚠ CEL MAI APASAT MESAJ DIN TOT ARCUL, si nu din prudenta, ci din ce scrie fisierul.
+       *
+       * Vezi nota de la `handleVerifica`: DHL n-are idempotenta, n-are cod de „duplicate
+       * shipment" si nici ANULARE. Al doilea AWB nascut dintr-o a doua apasare nu se mai poate
+       * desface deloc, si prin conditiile lor poate fi si facturat. Deci nu se spune „incearca
+       * din nou", ci NU emite din nou, si se numeste singura cale inapoi.
+       */
+      toast.error(
+        "DHL nu a raspuns, si nu stim daca expedierea s-a creat. NU emite din nou: la DHL un al "
+        + "doilea AWB nu se mai poate anula si poate fi facturat. Apasa „Verifica la DHL”, care "
+        + "doar citeste. "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 30000 },
+      );
+      return;
+    } finally {
+      setEmitand(false);
+    }
     if ("error" in r) return toast.error(r.error, { duration: 20000 });
     /*
      * ⚠ AVERTISMENTELE EMITERII SE ARATA, NU SE INGROAPA. Pana la reparatia asta fereastra
@@ -331,8 +365,22 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
    */
   async function handleVerifica() {
     setVerificand(true);
-    const r = await verificaDhlAwbAction(businessId, order.id);
-    setVerificand(false);
+    let r: Awaited<ReturnType<typeof verificaDhlAwbAction>>;
+    try {
+      r = await verificaDhlAwbAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Butonul asta e SINGURA cale inapoi la DHL, deci cu atat mai putin are voie sa ramana
+         blocat. E o citire, si mesajul o spune, ca omul sa reincerce aici, nu la „Emite". */
+      toast.error(
+        "DHL nu a raspuns la verificare. Incearca din nou peste putin, e doar o citire, si NU "
+        + "emite din nou intre timp: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 25000 },
+      );
+      return;
+    } finally {
+      setVerificand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 25000 });
     if (r.gasit) {
       toast.success(r.mesaj, { duration: 20000 });
@@ -345,8 +393,21 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleEticheta() {
     setDescarcand(true);
-    const r = await getDhlEtichetaAction(businessId, order.id);
-    setDescarcand(false);
+    let r: Awaited<ReturnType<typeof getDhlEtichetaAction>>;
+    try {
+      r = await getDhlEtichetaAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ O CITIRE, si din TABELUL NOSTRU: eticheta nu se poate recupera de la DHL (vezi nota
+         de mai jos). Deci nu se trimite nimeni sa caute in contul lor ceva ce nu e acolo. */
+      toast.error(
+        "Eticheta nu s-a putut citi: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 20000 },
+      );
+      return;
+    } finally {
+      setDescarcand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 20000 });
 
     /*
@@ -405,8 +466,22 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
    */
   async function handleDovada() {
     setDescarcandDovada(true);
-    const r = await getDhlDovadaAction(businessId, order.id);
-    setDescarcandDovada(false);
+    let r: Awaited<ReturnType<typeof getDhlDovadaAction>>;
+    try {
+      r = await getDhlDovadaAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ `info`, NU `error`, si asta nu e inertie: vezi nota de deasupra. Aici cazul cel mai
+         des e „inca n-a trecut o zi de la livrare", adica starea normala, iar un semnal rosu
+         pe o stare normala il invata pe om sa nu mai creada semnalele. */
+      toast.info(
+        "DHL nu a raspuns pentru dovada de livrare: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 20000 },
+      );
+      return;
+    } finally {
+      setDescarcandDovada(false);
+    }
     if (!r.ok) return toast.info(r.error, { duration: 20000 });
     descarca(r.base64, r.nume, tipulFisierului(r.nume));
   }

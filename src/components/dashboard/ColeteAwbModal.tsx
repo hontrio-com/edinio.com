@@ -167,12 +167,31 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     setLoadingPrices(true);
     startPriceTransition(async () => {
       const rep = parseFloat(repayment) || 0;
-      const result = await getCOPrices(businessId, buildReceiver(), buildParcels(), rep, {
-        openAtDelivery,
-        saturday,
-        orderId: order.id,
-      });
-      setLoadingPrices(false);
+      /*
+       * ⚠ `finally`, si in `try` DOAR apelul. Vezi `steagul-se-stinge-in-finally`.
+       *
+       * ⚠ Aici steagul se stinge INAUNTRUL callbackului de tranzitie, nu in functia din
+       * afara, care nici macar nu e `async`. O actiune care ARUNCA lasa altfel butonul pe
+       * „Se calculeaza…" pana la reincarcarea paginii.
+       */
+      let result: Awaited<ReturnType<typeof getCOPrices>>;
+      try {
+        result = await getCOPrices(businessId, buildReceiver(), buildParcels(), rep, {
+          openAtDelivery,
+          saturday,
+          orderId: order.id,
+        });
+      } catch (e) {
+        /* ⚠ O CITIRE: nimic nu s-a schimbat la Colete Online, deci nu se trimite nimeni sa
+           verifice in contul lor. Nesiguranta se marturiseste doar unde chiar exista. */
+        const mesaj = "Colete Online nu a raspuns: "
+          + (e instanceof Error ? e.message : "cererea nu a ajuns la capat");
+        setPriceError(mesaj);
+        toast.error(mesaj);
+        return;
+      } finally {
+        setLoadingPrices(false);
+      }
       if ("error" in result) {
         setPriceError(result.error);
         toast.error(result.error);
@@ -198,11 +217,25 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     setCreating(true);
     startCreateTransition(async () => {
       const rep = parseFloat(repayment) || 0;
-      const result = await createCOAwb(businessId, order.id, selectedServiceId, selectedServiceName, buildReceiver(), buildParcels(), rep, {
-        openAtDelivery,
-        saturday,
-      });
-      setCreating(false);
+      /* ⚠ Acelasi `finally` ca la cotare, si tot inauntrul callbackului de tranzitie. */
+      let result: Awaited<ReturnType<typeof createCOAwb>>;
+      try {
+        result = await createCOAwb(businessId, order.id, selectedServiceId, selectedServiceName, buildReceiver(), buildParcels(), rep, {
+          openAtDelivery,
+          saturday,
+        });
+      } catch (e) {
+        /* ⚠ Emiterea SCHIMBA la Colete Online, deci NU se spune „a esuat": cererea poate sa
+           fi ajuns, iar a doua apasare ar face al doilea AWB, taxabil. */
+        toast.error(
+          "Colete Online nu a raspuns. Verifica in contul lor inainte sa incerci din nou: "
+          + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+          { duration: 14000 },
+        );
+        return;
+      } finally {
+        setCreating(false);
+      }
       if ("error" in result) {
         toast.error(result.error);
       } else {

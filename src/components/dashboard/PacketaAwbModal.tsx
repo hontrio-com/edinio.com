@@ -123,9 +123,10 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     if (!addressId.trim()) {
       return toast.error("Alege destinatia: un punct Packeta sau un curier de livrare la adresa.");
     }
-    setEmitere(true);
     setCampuri([]);
-    const r = await createPacketaAwbAction(businessId, order.id, {
+    /* ⚠ Incarcatura intr-un `const`, ca `try` sa cuprinda DOAR apelul si ramificarea sa
+       ramana afara din bloc. Vezi `steagul-se-stinge-in-finally`. */
+    const datePacketa = {
       destinatar: {
         nume: order.customer_name,
         strada: addr.street || addr.address || "",
@@ -144,8 +145,27 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       ramburs,
       addressId: addressId.trim(),
       nota: nota_.trim() || null,
-    });
-    setEmitere(false);
+    };
+
+    setEmitere(true);
+    let r: Awaited<ReturnType<typeof createPacketaAwbAction>>;
+    try {
+      r = await createPacketaAwbAction(businessId, order.id, datePacketa);
+    } catch (e) {
+      /* ⚠ AICI NESIGURANTA ATARNA CEL MAI GREU. Emiterea schimba la Packeta, iar API-ul lor
+         NU are anulare (vezi confirmarea din `handleDezleaga`): un colet creat din greseala
+         ramane facturabil pana e anulat de mana din contul lor. Deci cu atat mai putin se
+         spune „a esuat", si cu atat mai mult se cere o verificare inainte de a incerca iar. */
+      toast.error(
+        "Packeta nu a raspuns. Verifica in contul Packeta inainte sa incerci din nou, fiindca "
+        + "un colet creat ramane facturabil: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 16000 },
+      );
+      return;
+    } finally {
+      setEmitere(false);
+    }
 
     if ("error" in r) {
       if (r.campuri?.length) setCampuri(r.campuri);
@@ -157,8 +177,16 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleEticheta() {
     setEticheta(true);
-    const r = await getPacketaLabelAction(businessId, order.id);
-    setEticheta(false);
+    let r: Awaited<ReturnType<typeof getPacketaLabelAction>>;
+    try {
+      r = await getPacketaLabelAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ O CITIRE: eticheta se cere, nu se creeaza, deci nu s-a schimbat nimic la Packeta. */
+      toast.error("Packeta nu a raspuns: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"));
+      return;
+    } finally {
+      setEticheta(false);
+    }
     if ("error" in r) return toast.error(r.error, { duration: 10000 });
     if (r.avertisment) toast.warning(r.avertisment, { duration: 12000 });
 
@@ -171,8 +199,16 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleStari() {
     setIncarcStari(true);
-    const r = await getPacketaTrackingAction(businessId, order.id);
-    setIncarcStari(false);
+    let r: Awaited<ReturnType<typeof getPacketaTrackingAction>>;
+    try {
+      r = await getPacketaTrackingAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Tot o CITIRE. */
+      toast.error("Packeta nu a raspuns: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"));
+      return;
+    } finally {
+      setIncarcStari(false);
+    }
     if ("error" in r) return toast.error(r.error);
     setStari(r.stari);
     if (r.stari.length === 0) toast.info("Packeta nu are inca niciun eveniment pentru coletul asta.");

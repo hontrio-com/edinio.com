@@ -699,6 +699,21 @@ export async function getShippingOptions(
    */
   let options: ShippingOption[] = [];
 
+  /*
+   * ═══ ⚠ CURIERII CARE AU IESIT DINADINS DIN LISTA (14.09.2026) ═══
+   *
+   * FedEx, UPS si DHL fac `continue` pe comenzile cu ramburs, fiecare cu motivul lui scris pe larg
+   * mai jos. Toti trei spun acelasi lucru: o optiune la tarif fix ar fi ALEASA de cumparator
+   * (tariful fix e adesea cel mai mic din lista), comanda s-ar bloca in checkout ca „livrata prin
+   * X", iar comerciantul ar afla abia la EMITERE ca AWB-ul nu se poate face deloc.
+   *
+   * ⚠ Dar bucla de rezerva de la plafonul de 25 de secunde parcurge `enabledZones` ORB si ii pune
+   * inapoi, la pretul zonei, SEMNATI. Adica exact paguba de care se ferea autorul, produsa de
+   * propria lui plasa de siguranta. Un `continue` nu lasa nicio urma in urma lui, deci iesirea
+   * trebuie RETINUTA in clipa in care se intampla.
+   */
+  const iesitiDinLista = new Set<string>();
+
   // International (EU): only DPD international applies. Short-circuit here so the
   // domestic courier loop below stays completely unchanged for RO orders.
   if (esteIntl) {
@@ -1635,8 +1650,11 @@ export async function getShippingOptions(
        * si nimeni n-ar sti de ce.
        *
        * Deci pe ramburs FedEx dispare din lista, curat. Restul curierilor raman.
+       *
+       * ⚠ Si se RETINE ca a iesit, altfel bucla de rezerva de la plafonul de timp il pune inapoi
+       * la tarif fix, adica exact optiunea descrisa mai sus.
        */
-      if (esteRamburs) continue;
+      if (esteRamburs) { iesitiDinLista.add(courierId); continue; }
 
       const fxCfg = settings.fedex_config as FedexConfig | null;
       const flat = (): ShippingOption => ({
@@ -1678,7 +1696,8 @@ export async function getShippingOptions(
        * tarif fix ar fi aleasa de cumparator si ar bloca o comanda pe care comerciantul
        * n-o poate expedia deloc.
        */
-      if (esteRamburs && upsCfg?.ramburs_activ === false) continue;
+      /* ⚠ Se retine iesirea, ca bucla de rezerva sa nu-l puna inapoi la tarif fix. */
+      if (esteRamburs && upsCfg?.ramburs_activ === false) { iesitiDinLista.add(courierId); continue; }
 
       const flat = (): ShippingOption => ({
         courier: "ups",
@@ -1751,8 +1770,12 @@ export async function getShippingOptions(
        * mers: DHL e singurul curier din cei saisprezece care NU are anulare de expediere.
        *
        * Deci pe ramburs DHL dispare din lista, curat. Ceilalti curieri raman.
+       *
+       * ⚠ Si se RETINE ca a iesit, ca bucla de rezerva sa nu-l puna inapoi la tarif fix. La DHL
+       * asta cantareste mai greu decat oriunde: e singurul curier din cei saisprezece care nu are
+       * anulare de expediere, deci greseala nu se poate repara din mers.
        */
-      if (esteRamburs) continue;
+      if (esteRamburs) { iesitiDinLista.add(courierId); continue; }
 
       const dhlCfg = settings.dhl_config as DhlConfig | null;
 
@@ -1846,6 +1869,14 @@ export async function getShippingOptions(
     const intarziati: string[] = [];
     for (const [courierId, zone] of enabledZones) {
       if (options.some((o) => o.courier === courierId)) continue;
+      /*
+       * ⚠ CINE A IESIT DINADINS NU SE PUNE INAPOI.
+       *
+       * Fara randul asta, FedEx, UPS si DHL reapar aici la pretul zonei pe comenzile cu ramburs,
+       * si pleaca SEMNATI: cumparatorul alege cea mai ieftina optiune, comanda intra, si AWB-ul nu
+       * se poate face deloc. Motivele stau scrise in fiecare ramura in parte.
+       */
+      if (iesitiDinLista.has(courierId)) continue;
       intarziati.push(courierId);
       options.push({
         courier: courierId,

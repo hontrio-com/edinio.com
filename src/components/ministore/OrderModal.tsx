@@ -927,7 +927,27 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       const payloadKey = JSON.stringify(payload);
       let orderId = placedRef.current?.payloadKey === payloadKey ? placedRef.current.orderId : null;
       if (!orderId) {
-        const result = await placeOrder(payload);
+        /*
+         * ⚠ PRINDEREA, fiindca o aruncare de aici nu e prinsa de NIMENI in fereastra.
+         *
+         * React re-arunca respingerea unei actiuni de tranzitie la randare (vezi sursa
+         * `react-dom` 19.2.4, `trackUsedThenable`, ramura `rejected`), iar singurele bariere
+         * de erori din proiect sunt `app/error.tsx` si `app/global-error.tsx`, amandoua la
+         * radacina. Cumparatorul ar primi deci o pagina de 500 peste formularul de comanda si
+         * ar pierde tot ce a completat.
+         *
+         * ⚠ MESAJUL SPUNE CE STIM SI CE NU. Comanda poate sa fi fost inregistrata, cu
+         * raspunsul pierdut pe drum, iar `placedRef` de mai jos nu apuca sa fie pus. Prinderea
+         * nu inrautateste nimic: azi pagina cade cu totul, deci `placedRef` se pierde oricum,
+         * impreuna cu formularul.
+         */
+        let result: Awaited<ReturnType<typeof placeOrder>>;
+        try {
+          result = await placeOrder(payload);
+        } catch {
+          setErrors({ _: "Nu am primit raspuns de la server si nu stim daca s-a inregistrat comanda. Verifica-ti emailul sau scrie-ne inainte sa trimiti din nou." });
+          return;
+        }
         if (result.error || !result.orderId) { setErrors({ _: result.error ?? "Eroare la plasarea comenzii." }); return; }
         orderId = result.orderId;
         placedRef.current = { payloadKey, orderId };
@@ -939,11 +959,21 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
           : paymentMethod === "klarna" ? "/api/klarna/start"
           : paymentMethod === "revolut" ? "/api/revolut/start"
           : "/api/ipay/start";
-        const res = await fetch(endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orderId, businessId: business.id }),
-        });
+        /* ⚠ Aceeasi prindere, dar cu ALT mesaj, fiindca omul stie alt lucru in clipa asta:
+           comanda EXISTA deja, iar `placedRef` e pus, deci o reincercare NU creeaza a doua
+           comanda. Vezi si nota de mai jos, de la golirea cosului, care amana anume stergerea
+           tocmai ca o plata nepornita sa lase formularul intreg. */
+        let res: Response;
+        try {
+          res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orderId, businessId: business.id }),
+          });
+        } catch {
+          setErrors({ _: "Comanda s-a inregistrat, dar plata nu a pornit. Incearca din nou: nu se va crea o a doua comanda." });
+          return;
+        }
         let data: { url?: string; redirectUrl?: string; error?: string } = {};
         try { data = await res.json(); } catch { /* non-JSON response (e.g. error page) — show generic error below */ }
         const redirect = data.url ?? data.redirectUrl;

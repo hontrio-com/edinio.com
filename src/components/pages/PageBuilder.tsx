@@ -136,7 +136,21 @@ export function PageBuilder({
 
   function save() {
     startSave(async () => {
-      const res = await updatePage(pageId, { title, slug, blocks, page_css: css, seo, is_published: published });
+      let res: Awaited<ReturnType<typeof updatePage>>;
+      try {
+        res = await updatePage(pageId, { title, slug, blocks, page_css: css, seo, is_published: published });
+      } catch {
+        /* ⚠ MESAJUL NU CERE REINCARCAREA PAGINII: in editor sunt modificari nesalvate, iar o
+           reincarcare le-ar sterge. `setSlug` si `setDirty(false)` au ramas DUPA `try`, deci
+           pagina ramane marcata ca nesalvata. Salvarea trimite tot continutul, deci o a doua
+           apasare nu strica nimic. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca pagina s-a salvat. A ramas marcata ca nesalvata: apasa din nou pe "
+          + "salvare si nu inchide editorul pana nu reuseste.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setSlug(res.slug);
       setDirty(false);

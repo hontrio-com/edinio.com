@@ -113,9 +113,22 @@ export function ContactFormBlockView({ block, form, businessId, pageId, color, d
       value: f.type === "checkbox" ? (values[f.id] === "da" ? "Da" : "Nu") : (values[f.id] ?? "").trim(),
     }));
     startTransition(async () => {
-      const res = await submitPageForm({
-        businessId, formId: form?.id ?? null, pageId, blockId: block.id, fields: payload, honeypot: hp,
-      });
+      let res: Awaited<ReturnType<typeof submitPageForm>>;
+      try {
+        res = await submitPageForm({
+          businessId, formId: form?.id ?? null, pageId, blockId: block.id, fields: payload, honeypot: hp,
+        });
+      } catch {
+        /* ⚠ SINGURUL MANER DIN ARC CARE VORBESTE CU UN CUMPARATOR, nu cu comerciantul. Aici nu
+           exista nici `toast`, nici `router`: greseala se arata in pagina, sub buton, exact ca
+           raspunsul de eroare al serverului de mai jos. `setDone(true)` a ramas DUPA `try`, deci
+           nu i se spune ca a trimis cand nu stim asta. */
+        setServerError(
+          "Nu am primit raspuns de la server, asa ca nu stim daca mesajul a ajuns. "
+          + "Incearca din nou peste putin timp; daca ajunsese deja, se poate sa fie primit de doua ori.",
+        );
+        return;
+      }
       if ("error" in res) { setServerError(res.error); return; }
       setDone(true);
     });

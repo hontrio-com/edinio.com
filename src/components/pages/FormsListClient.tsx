@@ -20,7 +20,19 @@ export function FormsListClient({ businessId, forms }: { businessId: string; for
   function handleCreate() {
     if (name.trim().length < 2) { toast.error("Numele formularului e prea scurt."); return; }
     startTransition(async () => {
-      const res = await createForm(businessId, name.trim());
+      let res: Awaited<ReturnType<typeof createForm>>;
+      try {
+        res = await createForm(businessId, name.trim());
+      } catch {
+        /* ⚠ Se poate sa fi fost creat si totusi sa nu stim. A doua apasare ar face al doilea. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca formularul s-a creat. Lista se reincarca: daca apare acolo, s-a facut. "
+          + "Uita-te intai, ca sa nu iasa doua.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       router.push(`/dashboard/pages/forms/${res.formId}`);
     });
@@ -29,7 +41,18 @@ export function FormsListClient({ businessId, forms }: { businessId: string; for
   function handleDelete(f: FormRow) {
     if (!confirm(`Stergi formularul "${f.name}"? Paginile care il folosesc vor reveni la contactul simplu.`)) return;
     startTransition(async () => {
-      const res = await deleteForm(f.id);
+      let res: Awaited<ReturnType<typeof deleteForm>>;
+      try {
+        res = await deleteForm(f.id);
+      } catch {
+        /* ⚠ Stergere: nestiuta e doar scrierea la noi. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca formularul s-a sters. Lista se reincarca: daca mai apare, nu s-a sters.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Formular sters.");
       router.refresh();
@@ -38,7 +61,19 @@ export function FormsListClient({ businessId, forms }: { businessId: string; for
 
   function handleDuplicate(f: FormRow) {
     startTransition(async () => {
-      const res = await duplicateForm(f.id);
+      let res: Awaited<ReturnType<typeof duplicateForm>>;
+      try {
+        res = await duplicateForm(f.id);
+      } catch {
+        /* ⚠ Se poate sa fi fost duplicat si totusi sa nu stim. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca duplicatul s-a facut. Lista se reincarca: uita-te acolo inainte sa apesi "
+          + "din nou, ca sa nu iasa doua copii.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Formular duplicat.");
       router.refresh();

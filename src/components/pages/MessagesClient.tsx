@@ -17,7 +17,18 @@ export function MessagesClient({ submissions }: { submissions: Submission[] }) {
   function handleDelete(s: Submission) {
     if (!confirm("Stergi acest mesaj definitiv?")) return;
     startTransition(async () => {
-      const res = await deleteSubmission(s.id);
+      let res: Awaited<ReturnType<typeof deleteSubmission>>;
+      try {
+        res = await deleteSubmission(s.id);
+      } catch {
+        /* ⚠ Stergere: nestiuta e doar scrierea la noi. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca mesajul s-a sters. Lista se reincarca: daca mai apare, nu s-a sters.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Mesaj sters.");
       router.refresh();
@@ -26,7 +37,18 @@ export function MessagesClient({ submissions }: { submissions: Submission[] }) {
 
   function toggleRead(s: Submission) {
     startTransition(async () => {
-      const res = await toggleSubmissionRead(s.id, !s.isRead);
+      let res: Awaited<ReturnType<typeof toggleSubmissionRead>>;
+      try {
+        res = await toggleSubmissionRead(s.id, !s.isRead);
+      } catch {
+        /* ⚠ Schimba doar semnul de citit. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca semnul de citit s-a schimbat. Lista se reincarca si arata starea adevarata.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       router.refresh();
     });

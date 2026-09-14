@@ -60,7 +60,21 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
     setMenu(next);
     setFaraAcasa(faraAcasaNou);
     startTransition(async () => {
-      const res = await updateStoreMenu(business.id, next, faraAcasaNou);
+      let res: Awaited<ReturnType<typeof updateStoreMenu>>;
+      try {
+        res = await updateStoreMenu(business.id, next, faraAcasaNou);
+      } catch {
+        /* ⚠ Meniul de pe ecran s-a schimbat DEJA, inainte de salvare (`setMenu` de mai sus), si
+           la cadere ramane asa. `router.refresh()` n-ar indrepta nimic: el reaminteste serverul,
+           dar starea locala a componentei ramane cea noua. Doar o reincarcare adevarata a paginii
+           o reaseaza, si mesajul cere exact asta. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca meniul s-a salvat. Meniul de pe ecran arata cum l-ai lasat tu, "
+          + "nu neaparat cum il vad clientii: reincarca pagina ca sa vezi meniul adevarat.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) toast.error(res.error);
     });
   }
@@ -75,7 +89,19 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
   function handleCreate() {
     if (title.trim().length < 2) { toast.error("Titlul paginii e prea scurt."); return; }
     startTransition(async () => {
-      const res = await createPage({ businessId: business.id, title: title.trim(), slug: slug.trim() || undefined });
+      let res: Awaited<ReturnType<typeof createPage>>;
+      try {
+        res = await createPage({ businessId: business.id, title: title.trim(), slug: slug.trim() || undefined });
+      } catch {
+        /* ⚠ Se poate sa fi fost creata si totusi sa nu stim. A doua apasare ar face a doua pagina. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca pagina s-a creat. Lista se reincarca: daca apare acolo, s-a facut. "
+          + "Uita-te intai, ca sa nu iasa doua.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       router.push(`/dashboard/pages/${res.pageId}/edit`);
     });
@@ -84,7 +110,18 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
   function handleDelete(p: PageRow) {
     if (!confirm(`Stergi pagina "${p.title}"? Aceasta actiune nu poate fi anulata.`)) return;
     startTransition(async () => {
-      const res = await deletePage(p.id);
+      let res: Awaited<ReturnType<typeof deletePage>>;
+      try {
+        res = await deletePage(p.id);
+      } catch {
+        /* ⚠ Stergere: nestiuta e doar scrierea la noi. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca pagina s-a sters. Lista se reincarca: daca mai apare, nu s-a sters.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       if (isInMenu(p.slug)) persistMenu(menu.filter((m) => !(m.type === "page" && m.target === p.slug)));
       toast.success("Pagina a fost stearsa.");
@@ -94,7 +131,19 @@ export function PagesListClient({ business, pages, initialMenu, faraAcasaInitial
 
   function handleDuplicate(p: PageRow) {
     startTransition(async () => {
-      const res = await duplicatePage(p.id);
+      let res: Awaited<ReturnType<typeof duplicatePage>>;
+      try {
+        res = await duplicatePage(p.id);
+      } catch {
+        /* ⚠ Se poate sa fi fost duplicata si totusi sa nu stim. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca duplicatul s-a facut. Lista se reincarca: uita-te acolo inainte sa apesi "
+          + "din nou, ca sa nu iasa doua copii.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Pagina a fost duplicata.");
       router.refresh();

@@ -103,12 +103,6 @@ const INCA_DESCOPERITE: Record<string, number> = {
   "dashboard/ReturnsClient.tsx": 3,
   "dashboard/SelectorProduseFeed.tsx": 1,
   "dashboard/SettingsClient.tsx": 1,
-  "pages/FormBuilderClient.tsx": 1,
-  "pages/FormsListClient.tsx": 3,
-  "pages/MessagesClient.tsx": 2,
-  "pages/PageBuilder.tsx": 1,
-  "pages/PagesListClient.tsx": 4,
-  "pages/blocks/ContactFormBlock.tsx": 1,
 };
 
 /**

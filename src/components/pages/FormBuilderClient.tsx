@@ -69,10 +69,24 @@ export function FormBuilderClient({
     if (name.trim().length < 2) { toast.error("Numele formularului e prea scurt."); return; }
     if (fields.some((f) => !f.label.trim())) { toast.error("Toate campurile trebuie sa aiba o eticheta."); return; }
     startSave(async () => {
-      const res = await updateForm(formId, {
-        name, fields, submit_label: submitLabel, success_message: successMessage,
-        email_enabled: emailEnabled, email_to: emailTo, mailchimp_enabled: mailchimpEnabled, brevo_enabled: brevoEnabled, klaviyo_enabled: klaviyoEnabled,
-      });
+      let res: Awaited<ReturnType<typeof updateForm>>;
+      try {
+        res = await updateForm(formId, {
+          name, fields, submit_label: submitLabel, success_message: successMessage,
+          email_enabled: emailEnabled, email_to: emailTo, mailchimp_enabled: mailchimpEnabled, brevo_enabled: brevoEnabled, klaviyo_enabled: klaviyoEnabled,
+        });
+      } catch {
+        /* ⚠ MESAJUL NU CERE REINCARCAREA PAGINII, si nu din scapare: omul are aici modificari
+           nesalvate, iar o reincarcare i le-ar sterge pe toate. `setDirty(false)` a ramas DUPA
+           `try`, deci formularul ramane marcat ca nesalvat, iar salvarea trimite tot continutul,
+           deci o a doua apasare nu strica nimic. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca formularul s-a salvat. A ramas marcat ca nesalvat: apasa din nou "
+          + "pe salvare si nu inchide pagina pana nu reuseste.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       setDirty(false);
       toast.success("Formular salvat.");

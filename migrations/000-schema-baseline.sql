@@ -5133,6 +5133,37 @@ begin
     );
   end if;
 
+  -- ⚠ ALT CURIER TINE DEJA COMANDA ASTA.
+  --
+  -- Se ajunge aici cand insertul a fost respins de `operatii_externe_awb_viu_pe_comanda_idx`
+  -- iar cheia noastra nu exista: adica randul blocant e al ALTUI furnizor. Acelasi furnizor
+  -- ar fi fost prins mai sus, pe cheie, fiindca `cheieOperatie` e determinista.
+  --
+  -- ⚠ Ramura e ingradita la `fel = 'awb'` si sare peste cheile de retur, ca sa nu schimbe
+  -- nimic pentru facturi, plati, ridicari sau pentru AWB-ul de retur.
+  if p_fel = 'awb' and p_order_id is not null and p_cheie not like 'retur:%' then
+    select * into v_ex
+      from public.operatii_externe o
+     where o.order_id = p_order_id
+       and o.fel = 'awb'
+       and o.cheie not like 'retur:%'
+       and o.stare in ('in_curs', 'reusit', 'necunoscut')
+     limit 1;
+
+    if found then
+      return jsonb_build_object(
+        'rezervat',          false,
+        'motiv',             'alt_curier',
+        'id',                v_ex.id,
+        'stare',             v_ex.stare,
+        'furnizor',          v_ex.furnizor,
+        'referinta_externa', v_ex.referinta_externa,
+        'creat_la',          v_ex.creat_la,
+        'ultima_eroare',     v_ex.ultima_eroare
+      );
+    end if;
+  end if;
+
   if v_tinta is not null then
     select * into v_ex
       from public.operatii_externe o
@@ -8211,6 +8242,7 @@ CREATE INDEX olx_statistici_zilnice_zi_idx ON public.olx_statistici_zilnice USIN
 CREATE INDEX olx_sync_queue_ordine_idx ON public.olx_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX olx_sync_queue_product_id_idx ON public.olx_sync_queue USING btree (product_id) WHERE (product_id IS NOT NULL);
 CREATE INDEX operatii_externe_atarnate_idx ON public.operatii_externe USING btree (creat_la) WHERE (stare = ANY (ARRAY['in_curs'::text, 'necunoscut'::text]));
+CREATE UNIQUE INDEX operatii_externe_awb_viu_pe_comanda_idx ON public.operatii_externe USING btree (order_id) WHERE ((fel = 'awb'::text) AND (order_id IS NOT NULL) AND (cheie !~~ 'retur:%'::text) AND (stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'necunoscut'::text])));
 CREATE UNIQUE INDEX operatii_externe_cheie_activa_idx ON public.operatii_externe USING btree (COALESCE(business_id, '00000000-0000-0000-0000-000000000000'::uuid), cheie) WHERE (stare = ANY (ARRAY['in_curs'::text, 'reusit'::text, 'necunoscut'::text]));
 CREATE INDEX operatii_externe_order_id_idx ON public.operatii_externe USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX operatii_externe_order_idx ON public.operatii_externe USING btree (order_id, creat_la DESC);

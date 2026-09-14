@@ -137,7 +137,20 @@ test("⚠ registrul duce tinta pana la baza, si stie sa spuna ce s-a intamplat",
     "mesajul trebuie sa spuna ce e de facut, nu sa trimita la o reincarcare fara rost");
   assert.match(ram, /lamureste-o din panoul/, "mesajul trebuie sa numeasca iesirea adevarata");
 
-  assert.match(faraComentarii(registru), /mesajBlocat\(r\.motiv, cerere, r\.incercari, r\.creat_la, r\.stare\)/,
+  /*
+   * ⚠ SE CERE PREFIXUL APELULUI, NU LISTA LUI INTREAGA (indreptat 14.09.2026).
+   *
+   * Afirmatia cerea pana azi lista completa de argumente, si a cazut cand apelul a primit inca
+   * doi parametri la coada (`furnizor` si `referinta_externa`, pentru motivul `alt_curier`).
+   * Cazuse pe cod BUN: proprietatea pe care o apara, ca `creat_la` si `stare` ajung la mesaj,
+   * ramasese neatinsa.
+   *
+   * ⚠ Si n-am dus-o pur si simplu la lista noua: asa s-ar fi rupt iar la urmatoarea adaugare, iar
+   * atunci tentatia ar fi sa se slabeasca de tot. Legata de prefix, urmat de virgula sau
+   * paranteza, cade mai departe daca cineva scoate `stare` ori schimba ordinea, si nu mai cade
+   * pentru o adaugare nevinovata. Aceeasi lectie ca la proba de mai jos, care cerea o FORMA.
+   */
+  assert.match(faraComentarii(registru), /mesajBlocat\(r\.motiv, cerere, r\.incercari, r\.creat_la, r\.stare[,)]/,
     "fara `creat_la` si `stare`, mesajul nu poate alege sfatul potrivit");
 });
 

@@ -13,6 +13,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
+/*
+ * ⚠ NUMELE CURIERULUI SE IA DIN SINGURA LUI SURSA, nu se rescrie aici. Verificat inainte de
+ * import ca nu naste ciclu: `awb-propriu` importa doar `./origin`, iar acela doar un TIP din
+ * `storefront/attribution`. Un ciclu n-ar cadea la `tsc`, s-ar arata la rulare ca `undefined`.
+ */
+import { NUME_CURIER, type CurierPropriu } from "@/lib/orders/awb-propriu";
 
 /**
  * Registrul operatiilor externe: intentia se scrie INAINTE de apel, rezultatul DUPA.
@@ -239,6 +245,8 @@ async function incearca<T>(
     incercari?: number; creat_la?: string;
     /** Starea randului BLOCANT, la `alta_intentie`. Vezi nota din `mesajBlocat`. */
     stare?: string;
+    /** Furnizorul randului BLOCANT, la `alt_curier`: alt curier tine deja comanda. */
+    furnizor?: string;
   } | null;
 
   /*
@@ -278,7 +286,7 @@ async function incearca<T>(
       fel: "blocat",
       cheie: cerere.cheie,
       operatieId: r.id ?? null,
-      mesaj: mesajBlocat(r.motiv, cerere, r.incercari, r.creat_la, r.stare),
+      mesaj: mesajBlocat(r.motiv, cerere, r.incercari, r.creat_la, r.stare, r.furnizor, r.referinta_externa),
     };
   }
 
@@ -375,6 +383,10 @@ export function mesajBlocat(
   creatLa?: string,
   /** Starea randului BLOCANT. `in_curs` si `necunoscut` cer sfaturi DIFERITE. */
   stareBlocanta?: string,
+  /** Furnizorul randului BLOCANT, la `alt_curier`. Fara el mesajul n-ar putea spune CINE tine comanda. */
+  furnizorBlocant?: string,
+  /** AWB-ul randului blocant, ca omul sa-l poata cauta fara sa-l mai vaneze prin panou. */
+  referintaBlocanta?: string | null,
 ): string {
   const nume = numeOperatie(cerere.fel);
 
@@ -461,6 +473,27 @@ export function mesajBlocat(
       if (creatLa && !eAtarnata({ stare: stareBlocanta === "necunoscut" ? "necunoscut" : "in_curs", creatLa }))
         return `${nume} pentru acelasi lucru tocmai a plecat catre ${cerere.furnizor} si asteapta raspuns. Nu trimitem a doua oara. Asteapta un minut si incearca din nou.`;
       return `${nume} pentru acelasi lucru a fost deja trimisa la ${cerere.furnizor} si inca nu stim cum s-a terminat. Nu trimitem a doua oara. Verifica in contul ${cerere.furnizor}, apoi lamureste-o din panoul de sanatate.`;
+    case "alt_curier": {
+      /*
+       * ⚠ ALT CURIER TINE DEJA COMANDA ASTA (14.09.2026).
+       *
+       * Motivul exista de cand un index unic pe comanda opreste a doua emitere la ORICE furnizor.
+       * Pana atunci cele doua rezervari aveau chei diferite (`awb:cargus:<id>` fata de
+       * `awb:dpd:<id>`), deci treceau amandoua, si ieseau doua colete reale, platite amandoua.
+       *
+       * ⚠ FARA CAZUL ASTA, mesajul ar fi cazut pe ramura `cursa`: „Operatia tocmai s-a incheiat pe
+       * alt drum. Reincarca pagina." Neadevarat, si fara nicio miscare de facut. Reincarcarea nu
+       * schimba nimic, fiindca randul blocant ramane acolo.
+       *
+       * ⚠ Si indrumarea e catre supapa care CHIAR exista: la doisprezece curieri din saptesprezece
+       * anularea cade pe un colet deja preluat, iar atunci „Detaseaza AWB" e singura iesire. De
+       * aceea textul le numeste pe amandoua, nu doar anularea.
+       */
+      const altul = NUME_CURIER[furnizorBlocant as CurierPropriu] || furnizorBlocant || "alt curier";
+      const alNostru = NUME_CURIER[cerere.furnizor as CurierPropriu] || cerere.furnizor;
+      const numar = referintaBlocanta ? ` (AWB ${referintaBlocanta})` : "";
+      return `Comanda are deja o expediere la ${altul}${numar}. Nu emitem a doua, ca sa nu plece doua colete platite amandoua. Ca sa o trimiti prin ${alNostru}, anuleaza sau detaseaza intai AWB-ul de la ${altul}, din pagina comenzii.`;
+    }
     case "cursa":
       return "Operatia tocmai s-a incheiat pe alt drum. Reincarca pagina.";
     default:

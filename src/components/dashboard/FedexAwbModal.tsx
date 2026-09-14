@@ -138,9 +138,22 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   }
 
   async function handleCoteaza() {
+    /* ⚠ `finally`, si in `try` DOAR apelul; ramificarea ramane afara. Vezi
+       `steagul-se-stinge-in-finally`. */
     setCotand(true);
-    const r = await coteazaFedexAction(businessId, order.id, dateComune());
-    setCotand(false);
+    let r: Awaited<ReturnType<typeof coteazaFedexAction>>;
+    try {
+      r = await coteazaFedexAction(businessId, order.id, dateComune());
+    } catch (e) {
+      /* ⚠ O CITIRE: nimic nu s-a schimbat la FedEx, deci nu e nimic de verificat la ei. */
+      toast.error(
+        "FedEx nu a raspuns: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 15000 },
+      );
+      return;
+    } finally {
+      setCotand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 15000 });
 
     setOferte(r.oferte);
@@ -166,8 +179,23 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleEmite() {
     setEmitand(true);
-    const r = await createFedexAwbAction(businessId, order.id, dateComune());
-    setEmitand(false);
+    let r: Awaited<ReturnType<typeof createFedexAwbAction>>;
+    try {
+      r = await createFedexAwbAction(businessId, order.id, dateComune());
+    } catch (e) {
+      /* ⚠ AICI NU SE APASA A DOUA OARA. FedEx n-are idempotenta (vezi nota de la
+         `handleVerifica`), deci o reemitere ar face al doilea AWB, taxabil. Butonul de
+         verificare exista tocmai pentru clipa asta, si mesajul il numeste. */
+      toast.error(
+        "FedEx nu a raspuns, si nu stim daca AWB-ul s-a creat. NU emite din nou: apasa "
+        + "„Verifica la FedEx”, care citeste dupa referinta noastra. "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 20000 },
+      );
+      return;
+    } finally {
+      setEmitand(false);
+    }
     if ("error" in r) return toast.error(r.error, { duration: 15000 });
     toast.success(`AWB FedEx creat: ${r.awb}`);
     onSuccess();
@@ -183,8 +211,21 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
    */
   async function handleVerifica() {
     setVerificand(true);
-    const r = await verificaFedexAwbAction(businessId, order.id);
-    setVerificand(false);
+    let r: Awaited<ReturnType<typeof verificaFedexAwbAction>>;
+    try {
+      r = await verificaFedexAwbAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Tocmai butonul asta nu are voie sa ramana blocat: el e iesirea din „am trimis si
+         n-am primit raspuns". E o CITIRE, deci se poate reincerca linistit. */
+      toast.error(
+        "FedEx nu a raspuns la verificare. Incearca din nou peste putin, e doar o citire: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 15000 },
+      );
+      return;
+    } finally {
+      setVerificand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 15000 });
     if (r.gasit) {
       toast.success(r.mesaj, { duration: 12000 });
@@ -197,8 +238,20 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleEticheta() {
     setDescarcand(true);
-    const r = await getFedexEtichetaAction(businessId, order.id);
-    setDescarcand(false);
+    let r: Awaited<ReturnType<typeof getFedexEtichetaAction>>;
+    try {
+      r = await getFedexEtichetaAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ O CITIRE, si din TABELUL NOSTRU, nu de la FedEx (vezi nota de mai jos). Deci nu se
+         trimite nimeni sa caute in contul lor. */
+      toast.error(
+        "Eticheta nu s-a putut citi: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 15000 },
+      );
+      return;
+    } finally {
+      setDescarcand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 15000 });
     /*
      * ⚠ Eticheta vine din TABELUL NOSTRU, nu de la FedEx: ei nu au reimprimare, iar

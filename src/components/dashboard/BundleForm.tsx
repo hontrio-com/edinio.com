@@ -178,9 +178,25 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
     };
 
     startSave(async () => {
-      const res = bundle
-        ? await updateBundle(bundle.id, businessId, payload)
-        : await createBundle(businessId, payload);
+      let res: Awaited<ReturnType<typeof updateBundle>> | Awaited<ReturnType<typeof createBundle>>;
+      try {
+        res = bundle
+          ? await updateBundle(bundle.id, businessId, payload)
+          : await createBundle(businessId, payload);
+      } catch {
+        /* ⚠ Asteptarea sta in doua ramuri de ternar, de aceea tipul e o reuniune si mesajul se
+           desparte: la editare se trimite tot pachetul, la creare a doua apasare poate scoate AL
+           DOILEA pachet. */
+        toast.error(
+          bundle
+            ? "Nu am primit raspuns de la server, deci nu stim daca modificarile pachetului s-au salvat. Apasa din nou pe "
+              + "salvare: trimitem tot pachetul, deci a doua apasare nu strica nimic."
+            : "Nu am primit raspuns de la server, deci nu stim daca pachetul s-a creat. Uita-te intai in lista de pachete, "
+              + "ca sa nu iasa doua.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(bundle ? "Pachet actualizat." : "Pachet creat.");
       router.push(backHref);

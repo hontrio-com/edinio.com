@@ -37,7 +37,16 @@ export function SelectorProduseFeed({
     /* Cu intarziere: altfel fiecare litera e o cerere la server. */
     const t = setTimeout(() => {
       startIncarcare(async () => {
-        const r = await cautaProduseFeed(q, alese);
+        let r: Awaited<ReturnType<typeof cautaProduseFeed>>;
+        try {
+          r = await cautaProduseFeed(q, alese);
+        } catch {
+          /* ⚠ TACE DINADINS, ca si randul de mai jos. Cautarea porneste singura, la 250 ms dupa ce
+             omul se opreste din scris, iar casa a scris acolo `if ("error" in r) return;`: lista
+             ramane cum era. Un strigat la fiecare tastare cazuta ar fi mai rau decat tacerea.
+             Catchul sta aici ca pagina sa nu moara, nu ca omul sa fie anuntat. */
+          return;
+        }
         if ("error" in r) return;
         setProduse(r.produse);
         setTotal(r.total);

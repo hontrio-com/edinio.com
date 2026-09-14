@@ -55,7 +55,21 @@ export function FeaturesClient({ business }: { business: Business }) {
     const newVal = !features[key];
     setFeatures((prev) => ({ ...prev, [key]: newVal }));
     startTransition(async () => {
-      const result = await updateBusiness(business.id, { features: { ...features, [key]: newVal } });
+      let result: Awaited<ReturnType<typeof updateBusiness>>;
+      try {
+        result = await updateBusiness(business.id, { features: { ...features, [key]: newVal } });
+      } catch {
+        /* ⚠ Comutatorul s-a mutat deja pe ecran (`setFeatures` de mai sus), si nu prin
+           `useOptimistic`, deci nu se intoarce singur. Se pune la loc de mana, exact ca in ramura
+           de eroare de mai jos. */
+        setFeatures((prev) => ({ ...prev, [key]: !newVal }));
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca functia si-a schimbat starea. Am pus comutatorul inapoi cum era: "
+          + "reincarca pagina ca sa vezi cum e pe server.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if (result.error) { setFeatures((prev) => ({ ...prev, [key]: !newVal })); toast.error(result.error); }
     });
   }

@@ -81,24 +81,14 @@ const PREFIX = "src/components/";
  * Cate callbackuri de tranzitie mai asteapta reparatia, pe fisier.
  *
  * ⚠ LISTA SCADE, si fiecare numar coborat merge in ACELASI commit cu reparatia lui. Un fisier
- * reparat de tot IESE din harta. Scrisa de scaner, nu de mana: un numar din 64 transcris gresit
- * ar cere o masuratoare care n-a existat niciodata.
+ * reparat de tot IESE din harta. Scrisa de scaner, nu de mana: un numar transcris gresit ar cere
+ * o masuratoare care n-a existat niciodata.
+ *
+ * ⚠ Aici a scris „un numar din 64", adica numarul de randuri de atunci. Reparatiile l-au facut
+ * fals fara sa-l atinga nimeni, si tocmai proba asta le-a numarat. Cifra a fost scoasa, nu
+ * inlocuita: una noua s-ar invechi la fel, iar propozitia isi spune adevarul si fara ea.
  */
 const INCA_DESCOPERITE: Record<string, number> = {
-  "admin/AdminAnnouncementsClient.tsx": 1,
-  "dashboard/AbandonedAutomationsTab.tsx": 1,
-  "dashboard/BundleForm.tsx": 1,
-  "dashboard/BundlesClient.tsx": 1,
-  "dashboard/CustomersClient.tsx": 1,
-  "dashboard/DashboardTopbar.tsx": 2,
-  "dashboard/DiscountsClient.tsx": 3,
-  "dashboard/FacebookFeeduriClient.tsx": 1,
-  "dashboard/FeaturesClient.tsx": 1,
-  "dashboard/GpsrSettings.tsx": 1,
-  "dashboard/OfferForm.tsx": 1,
-  "dashboard/OffersClient.tsx": 2,
-  "dashboard/ReturnsClient.tsx": 3,
-  "dashboard/SelectorProduseFeed.tsx": 1,
   "dashboard/SettingsClient.tsx": 1,
 };
 

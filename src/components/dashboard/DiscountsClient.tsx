@@ -101,9 +101,22 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
     toast.success(editing ? "Discount actualizat." : "Discount creat.");
     onClose();
     startTransition(async () => {
-      const result = editing
-        ? await updateDiscount(editing.id, businessId, payload)
-        : await createDiscount(businessId, payload);
+      let result: Awaited<ReturnType<typeof updateDiscount>> | Awaited<ReturnType<typeof createDiscount>>;
+      try {
+        result = editing
+          ? await updateDiscount(editing.id, businessId, payload)
+          : await createDiscount(businessId, payload);
+      } catch {
+        /* ⚠ MESAJUL DE IZBANDA SI INCHIDEREA FERESTREI AU PLECAT INAINTE de tranzitie (randurile
+           101 si 102). La o cadere, omul a fost deja felicitat si formularul s-a inchis cu tot ce
+           scrisese in el. Nu mut nimic, asa e scrisa casa; dar mesajul dezice lauda pe fata. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca discountul s-a salvat. Mesajul de dinainte a plecat prea "
+          + "devreme: reincarca pagina si uita-te in lista de coduri.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); }
     });
   }
@@ -292,7 +305,18 @@ function DeleteDialog({ discount, businessId, onClose }: DeleteDialogProps) {
 
   function handleDelete() {
     startTransition(async () => {
-      const result = await deleteDiscount(discount.id, businessId);
+      let result: Awaited<ReturnType<typeof deleteDiscount>>;
+      try {
+        result = await deleteDiscount(discount.id, businessId);
+      } catch {
+        /* ⚠ `onClose()` sta dupa `try`, deci fereastra ramane deschisa si omul vede ca nu s-a
+           terminat. In fisierul asta nu exista `router`, deci mesajul cere reincarcarea. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca discountul s-a sters. Reincarca pagina si uita-te in lista de coduri.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       toast.success("Discount sters.");
       onClose();
@@ -344,7 +368,17 @@ export function DiscountsClient({ discounts, businessId }: {
 
   function handleToggle(d: Discount) {
     startToggle(async () => {
-      const result = await toggleDiscount(d.id, businessId, !d.is_active);
+      let result: Awaited<ReturnType<typeof toggleDiscount>>;
+      try {
+        result = await toggleDiscount(d.id, businessId, !d.is_active);
+      } catch {
+        /* ⚠ Nu se schimba nimic local: comutatorul se aseaza din datele venite de la server. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca starea codului s-a schimbat. Reincarca pagina ca sa vezi cum a ramas.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
     });
   }

@@ -281,7 +281,19 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
 
   const fetchHistory = useCallback((offset: number) => {
     startLoadTransition(async () => {
-      const res = await getCustomerOrders(businessId, customer.key, offset);
+      let res: Awaited<ReturnType<typeof getCustomerOrders>>;
+      try {
+        res = await getCustomerOrders(businessId, customer.key, offset);
+      } catch {
+        /* ⚠ Aici nu exista `toast`: casa arata greseala in panou, prin `setHistoryError`, si asa
+           ramane. Manerul porneste singur cand se deschide fisa clientului, deci un strigat peste
+           ecran ar fi fost si nepoftit, si intr-un loc unde nimeni nu-l asteapta. */
+        setHistoryError(
+          "Nu am primit raspuns de la server, deci istoricul comenzilor nu s-a putut incarca. "
+          + "Incearca din nou.",
+        );
+        return;
+      }
       if ("error" in res) {
         setHistoryError(res.error);
         return;

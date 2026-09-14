@@ -147,7 +147,19 @@ export function GpsrSettings({ businessId }: { businessId: string }) {
               size="lg"
               disabled={salveaza}
               onClick={() => startSave(async () => {
-                const res = await saveGpsrConfig(businessId, config);
+                let res: Awaited<ReturnType<typeof saveGpsrConfig>>;
+                try {
+                  res = await saveGpsrConfig(businessId, config);
+                } catch {
+                  /* ⚠ Nu cerem reincarcare: e un formular cu munca nesalvata pe ecran. Salvarea trimite tot
+                     ce e in el, deci a doua apasare nu strica nimic. */
+                  toast.error(
+                    "Nu am primit raspuns de la server, deci nu stim daca datele de siguranta s-au salvat. "
+                    + "Apasa din nou pe salvare: trimitem tot, deci a doua apasare nu strica nimic.",
+                    { duration: 12000 },
+                  );
+                  return;
+                }
                 if ("error" in res) { toast.error(res.error); return; }
                 setLipsuri(res.lipsuri);
                 toast.success(res.lipsuri.length === 0

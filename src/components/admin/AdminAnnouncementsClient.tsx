@@ -102,9 +102,24 @@ export function AdminAnnouncementsClient({ initial }: { initial: Announcement[] 
         title: editing.title, excerpt: editing.excerpt, blocks: editing.blocks,
         cover_url: editing.cover_url, is_pinned: editing.is_pinned, is_published: editing.is_published,
       };
-      const res = editing.id
-        ? await updateAnnouncement(editing.id, payload)
-        : await createAnnouncement(payload);
+      let res: Awaited<ReturnType<typeof updateAnnouncement>> | Awaited<ReturnType<typeof createAnnouncement>>;
+      try {
+        res = editing.id
+          ? await updateAnnouncement(editing.id, payload)
+          : await createAnnouncement(payload);
+      } catch {
+        /* ⚠ `setEditing(null)` sta DUPA `try`, deci editorul ramane deschis cu tot ce s-a scris in
+           el. Asteptarea sta in doua ramuri de ternar, de aceea tipul e o reuniune. */
+        toast.error(
+          editing.id
+            ? "Nu am primit raspuns de la server, deci nu stim daca modificarile anuntului s-au salvat. Apasa din nou pe "
+              + "salvare: trimitem tot anuntul."
+            : "Nu am primit raspuns de la server, deci nu stim daca anuntul s-a creat. Uita-te intai in lista de anunturi, "
+              + "ca sa nu iasa doua.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(editing.id ? "Anunt actualizat." : "Anunt creat.");
       setEditing(null);

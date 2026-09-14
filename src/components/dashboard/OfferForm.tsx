@@ -140,7 +140,21 @@ export function OfferForm({ businessId, products, categories, offer }: {
     };
 
     startSave(async () => {
-      const res = offer ? await updateOffer(offer.id, businessId, payload) : await createOffer(businessId, payload);
+      let res: Awaited<ReturnType<typeof updateOffer>> | Awaited<ReturnType<typeof createOffer>>;
+      try {
+        res = offer ? await updateOffer(offer.id, businessId, payload) : await createOffer(businessId, payload);
+      } catch {
+        /* ⚠ Acelasi ternar, dar scris pe un singur rand. Mesajul se desparte la fel. */
+        toast.error(
+          offer
+            ? "Nu am primit raspuns de la server, deci nu stim daca modificarile ofertei s-au salvat. Apasa din nou pe "
+              + "salvare: trimitem toata oferta, deci a doua apasare nu strica nimic."
+            : "Nu am primit raspuns de la server, deci nu stim daca oferta s-a creat. Uita-te intai in lista de oferte, "
+              + "ca sa nu iasa doua.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(offer ? "Oferta actualizata." : "Oferta creata.");
       router.push("/dashboard/offers");

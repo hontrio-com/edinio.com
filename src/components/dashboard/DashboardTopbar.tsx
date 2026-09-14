@@ -222,9 +222,25 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
     startMarkRead(async () => {
       // Si anunturile isi sting bulina instant (setter-ul optimist cere tranzitie).
       marcheazaCititeOptimist(unreadPlatformIds);
-      await markOrderNotificationsSeen();
+      try {
+        await markOrderNotificationsSeen();
+      } catch {
+        /* ⚠ PRIMA DIN DOUA ASTEPTARI, si nici macar atribuita, de aceea blocul n-are `let`.
+           ⚠ TACE, ca si ramura de eroare de mai jos: in tot fisierul nu exista `toast`, iar casa a
+           ales sa nu spuna nimic cand marcarea ca citit nu reuseste. Bulinele stinse optimist revin
+           singure la urmatoarea incarcare adevarata. Catchul sta aici ca pagina sa nu moara. */
+        return;
+      }
       if (unreadPlatformIds.length > 0) {
-        const rezultat = await markNotificationsRead(unreadPlatformIds);
+        let rezultat: Awaited<ReturnType<typeof markNotificationsRead>>;
+        try {
+          rezultat = await markNotificationsRead(unreadPlatformIds);
+        } catch {
+          /* ⚠ A DOUA ASTEPTARE din acelasi maner, si de aceea are blocul ei. Invelita doar prima, a
+             doua ar fi ramas descoperita, iar clichetul n-ar fi prins diferenta: el cere doar un
+             `catch` oriunde in corp. Tace din acelasi motiv ca prima. */
+          return;
+        }
         if ("error" in rezultat) return; // fara refresh: React repune bulinele
         router.refresh();
       }
@@ -366,7 +382,13 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
                           if (notif.isUnread && notif.notifData) {
                             startMarkRead(async () => {
                               marcheazaCititeOptimist([notif.id]); // bulina dispare la clic
-                              const rezultat = await markNotificationsRead([notif.id]);
+                              let rezultat: Awaited<ReturnType<typeof markNotificationsRead>>;
+                              try {
+                                rezultat = await markNotificationsRead([notif.id]);
+                              } catch {
+                                /* ⚠ Tace, ca si ramura de eroare de sub el: bulina stinsa optimist revine singura. */
+                                return;
+                              }
                               if ("error" in rezultat) return; // fara refresh: React repune bulina
                               router.refresh();
                             });

@@ -63,7 +63,21 @@ export function ReturnsClient({ returns }: { returns: ReturnRow[] }) {
   function changeStatus(r: ReturnRow, status: string) {
     startTransition(async () => {
       aplicaOptimist({ tip: "status", id: r.id, status });
-      const res = await updateReturnStatus(r.id, status);
+      let res: Awaited<ReturnType<typeof updateReturnStatus>>;
+      try {
+        res = await updateReturnStatus(r.id, status);
+      } catch {
+        /* ⚠ Randul s-a schimbat deja pe ecran. `useOptimistic` il duce inapoi cand tranzitia se
+           incheie, dar daca serverul apucase sa scrie, atunci el minte in cealalta directie. De
+           aceea cerem si starea adevarata de la server. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca statusul cererii s-a schimbat. "
+          + "Pagina se reincarca si arata starea adevarata.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Status actualizat.");
       router.refresh();
@@ -73,7 +87,21 @@ export function ReturnsClient({ returns }: { returns: ReturnRow[] }) {
   function toggleRead(r: ReturnRow) {
     startTransition(async () => {
       aplicaOptimist({ tip: "citit", id: r.id, isRead: !r.isRead });
-      const res = await toggleReturnRead(r.id, !r.isRead);
+      let res: Awaited<ReturnType<typeof toggleReturnRead>>;
+      try {
+        res = await toggleReturnRead(r.id, !r.isRead);
+      } catch {
+        /* ⚠ Randul s-a schimbat deja pe ecran. `useOptimistic` il duce inapoi cand tranzitia se
+           incheie, dar daca serverul apucase sa scrie, atunci el minte in cealalta directie. De
+           aceea cerem si starea adevarata de la server. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca semnul de citit s-a schimbat. "
+          + "Pagina se reincarca si arata starea adevarata.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       router.refresh();
     });
@@ -83,7 +111,21 @@ export function ReturnsClient({ returns }: { returns: ReturnRow[] }) {
     if (!confirm("Stergi aceasta cerere de retur definitiv?")) return;
     startTransition(async () => {
       aplicaOptimist({ tip: "sterge", id: r.id });
-      const res = await deleteReturnRequest(r.id);
+      let res: Awaited<ReturnType<typeof deleteReturnRequest>>;
+      try {
+        res = await deleteReturnRequest(r.id);
+      } catch {
+        /* ⚠ Randul s-a schimbat deja pe ecran. `useOptimistic` il duce inapoi cand tranzitia se
+           incheie, dar daca serverul apucase sa scrie, atunci el minte in cealalta directie. De
+           aceea cerem si starea adevarata de la server. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca cererea de retur s-a sters. "
+          + "Pagina se reincarca si arata starea adevarata.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Cerere stearsa.");
       router.refresh();

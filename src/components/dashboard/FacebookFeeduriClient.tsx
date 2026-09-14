@@ -70,7 +70,19 @@ export function FacebookFeeduriClient({
       return;
     }
     startSalvare(async () => {
-      const r = await salveazaFeeduriFacebook(feeduri);
+      let r: Awaited<ReturnType<typeof salveazaFeeduriFacebook>>;
+      try {
+        r = await salveazaFeeduriFacebook(feeduri);
+      } catch {
+        /* ⚠ Cheile feedurilor vin inapoi DE LA SERVER (`setFeeduri(r.feeduri)`), deci la o cadere
+           lista de pe ecran ramane cea dinainte. Nu cerem reincarcare: ar sterge ce a scris omul. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca feedurile s-au salvat. Apasa din nou pe salvare: trimitem toata "
+          + "lista, deci a doua apasare nu strica nimic.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in r) { toast.error(r.error); return; }
       /* Cheile vin inapoi de la server: acolo se genereaza si se dezambiguizeaza. */
       setFeeduri(r.feeduri);

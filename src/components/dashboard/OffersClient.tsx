@@ -53,7 +53,19 @@ export function OffersClient({ businessId, offers }: { businessId: string; offer
 
   function toggle(o: OfferRow) {
     startTransition(async () => {
-      const res = await toggleOffer(o.id, businessId, !o.is_active);
+      let res: Awaited<ReturnType<typeof toggleOffer>>;
+      try {
+        res = await toggleOffer(o.id, businessId, !o.is_active);
+      } catch {
+        /* ⚠ Nu se schimba nimic local: randul se aseaza din datele venite de la server. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca oferta si-a schimbat starea. "
+          + "Pagina se reincarca si arata starea adevarata.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       router.refresh();
     });
@@ -61,7 +73,18 @@ export function OffersClient({ businessId, offers }: { businessId: string; offer
 
   function remove(id: string) {
     startTransition(async () => {
-      const res = await deleteOffer(id, businessId);
+      let res: Awaited<ReturnType<typeof deleteOffer>>;
+      try {
+        res = await deleteOffer(id, businessId);
+      } catch {
+        /* ⚠ `setConfirmId(null)` sta dupa `try`, deci fereastra de confirmare ramane deschisa. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca oferta s-a sters. Lista se reincarca: daca mai apare, nu s-a sters.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Oferta stearsa.");
       setConfirmId(null);

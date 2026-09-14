@@ -63,7 +63,19 @@ export function BundlesClient({ businessId, bundles, initialPage = 1 }: { busine
 
   function remove(id: string) {
     startDelete(async () => {
-      const res = await deleteProduct(id, businessId);
+      let res: Awaited<ReturnType<typeof deleteProduct>>;
+      try {
+        res = await deleteProduct(id, businessId);
+      } catch {
+        /* ⚠ Fereastra de confirmare NU se inchide aici: `setConfirmId(null)` sta dupa `try`, deci
+           omul ramane in fata ei si vede ca nu s-a terminat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca pachetul s-a sters. Lista se reincarca: daca mai apare, nu s-a sters.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Pachet șters.");
       setConfirmId(null);

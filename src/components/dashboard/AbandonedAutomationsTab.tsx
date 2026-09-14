@@ -60,18 +60,30 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
 
   function save() {
     startSave(async () => {
-      const res = await saveAbandonedCartAutomation(businessId, {
-        enabled,
-        min_cart_value: minCart.trim() ? Number(minCart) : null,
-        quiet_hours: quietOn ? { start: Number(quietStart) || 0, end: Number(quietEnd) || 0 } : null,
-        steps: steps.map((s) => ({
-          id: s.id,
-          delay_hours: Number(s.delay_hours) || 0,
-          channel: s.channel,
-          message: s.message?.trim() || undefined,
-          discount_code: s.discount_code?.trim() || undefined,
-        })),
-      });
+      let res: Awaited<ReturnType<typeof saveAbandonedCartAutomation>>;
+      try {
+        res = await saveAbandonedCartAutomation(businessId, {
+          enabled,
+          min_cart_value: minCart.trim() ? Number(minCart) : null,
+          quiet_hours: quietOn ? { start: Number(quietStart) || 0, end: Number(quietEnd) || 0 } : null,
+          steps: steps.map((s) => ({
+            id: s.id,
+            delay_hours: Number(s.delay_hours) || 0,
+            channel: s.channel,
+            message: s.message?.trim() || undefined,
+            discount_code: s.discount_code?.trim() || undefined,
+          })),
+        });
+      } catch {
+        /* ⚠ Nu cerem reincarcarea paginii: aici e un formular cu munca nesalvata pe ecran, iar o
+           reincarcare ar sterge-o. Salvarea trimite tot, deci a doua apasare nu strica nimic. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca automatizarea s-a salvat. "
+          + "Apasa din nou pe salvare: trimitem tot, deci a doua apasare nu strica nimic.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Automatizarea a fost salvată.");
       router.refresh();

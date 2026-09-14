@@ -13,6 +13,7 @@ import {
   type StareCitita,
 } from "@/lib/gls/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import type { Database } from "@/types/database.types";
 
@@ -543,7 +544,28 @@ export async function GET(req: NextRequest) {
        * `null` pastreaza codul vechi si muta doar marcajul de verificare: rotatia
        * inainteaza, iar tura urmatoare reia coletul de unde a ramas.
        */
-      await marcheazaVerificat(prelucrat ? codNou : null, pastrate);
+      /*
+       * ⚠ SI SE SCRIE PE COLETUL PE CARE L-AM CITIT (14.09.2026). Intre citire si randul asta a
+       * trecut un apel extern; daca intre timp comanda a primit alt AWB, codul de aici e al
+       * coletului VECHI, iar unul TERMINAL l-ar scoate pe cel NOU din urmarire pentru totdeauna.
+       *
+       * ⚠ `pastrate` intra tot in STARE, nu in marcaj: lista evenimentelor deja spuse e a
+       * coletului citit. Scrisa peste unul nou, semnalarile lui ar fi fost socotite spuse si
+       * comerciantul n-ar mai fi aflat de ele.
+       */
+      if (prelucrat && codNou !== null) {
+        await scrieUrmarirea(admin, {
+          orderId: o.id,
+          businessId: o.business_id,
+          identitate: { coloana: "gls_awb_number", valoare: o.gls_awb_number },
+          stare: { gls_status_code: codNou, gls_evenimente_semnalate: pastrate },
+          marcaj: { gls_status_checked_at: new Date().toISOString() },
+          actiune: "gls-tracking",
+          orderNumber: o.order_number,
+        });
+      } else {
+        await marcheazaVerificat(null, pastrate);
+      }
     }));
   }
 

@@ -7,6 +7,7 @@ import {
 } from "@/lib/sameday/client";
 import { cereOmul, eStareFinala, statusUrmator } from "@/lib/sameday/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import type { Database } from "@/types/database.types";
 
@@ -185,20 +186,52 @@ export async function GET(req: NextRequest) {
     const config = configuri.get(o.business_id);
 
     async function marcheazaVerificat(stare: SamedayStareAwb | null) {
-      const petic: Record<string, unknown> = { sameday_status_checked_at: new Date().toISOString() };
-      if (stare) {
-        petic.sameday_status_id = stare.statusId ?? o.sameday_status_id;
-        if (stare.eticheta) petic.sameday_status_label = stare.eticheta;
-      }
+      const marcaj = { sameday_status_checked_at: new Date().toISOString() };
+
       /*
+       * ⚠ FARA STARE NOUA, SE SCRIE DOAR MARCAJUL, NECONDITIONAT.
+       *
+       * Aici se ajunge de pe drumurile care nu ating furnizorul sau nu afla nimic: magazin fara
+       * config, AWB nemiscat, apel picat, 404. Ele nu aduc nicio stare, deci n-au ce ateriza
+       * gresit pe alta expediere, iar o conditie ar putea doar sa impiedice marcajul, adica sa
+       * infometeze coada. Vezi `scrieUrmarirea`.
+       *
        * ⚠ `business_id` NU E UN FILTRU DE PRISOS, E AUTORIZARE (14.09.2026).
        *
        * Randul asta era singurul scriitor de urmarire de pe platforma care scria dupa `id` gol.
        * Ceilalti doisprezece frati ai lui il au, iar cronul Pall-Ex are chiar propozitia asta
-       * scrisa deasupra. Aici lipsea, si turnarea `as never` a incarcaturii face ca `tsc` sa nu
-       * se uite deloc la ce se scrie: adica nici compilatorul n-avea cum sa intrebe.
+       * scrisa deasupra.
        */
-      await admin.from("orders").update(petic as never).eq("id", o.id).eq("business_id", o.business_id);
+      if (!stare) {
+        await admin.from("orders").update(marcaj).eq("id", o.id).eq("business_id", o.business_id);
+        return;
+      }
+
+      /*
+       * ⚠ SI CU STARE, SE SCRIE PE EXPEDIEREA PE CARE AM CITIT-O (14.09.2026).
+       *
+       * Intre citirea lotului si randul asta a trecut un apel la Sameday, iar tura are 120 de
+       * comenzi. Daca intre timp comerciantul a detasat AWB-ul si a emis din nou, starea de aici
+       * e a expedierii VECHI: scrisa orbeste, un status FINAL ar scoate expedierea NOUA din
+       * urmarire pentru totdeauna, tacut.
+       *
+       * ⚠ Ordinea din fisierul asta NU se schimba: la Sameday marcajul se scrie INAINTEA
+       * tranzitiei, spre deosebire de ceilalti. Se desparte doar starea de marcaj, nu si sirul.
+       */
+      const stareNoua: Database["public"]["Tables"]["orders"]["Update"] = {
+        sameday_status_id: stare.statusId ?? o.sameday_status_id,
+        ...(stare.eticheta ? { sameday_status_label: stare.eticheta } : {}),
+      };
+
+      await scrieUrmarirea(admin, {
+        orderId: o.id,
+        businessId: o.business_id,
+        identitate: { coloana: "sameday_awb_number", valoare: o.sameday_awb_number },
+        stare: stareNoua,
+        marcaj,
+        actiune: "sameday-tracking",
+        orderNumber: o.order_number,
+      });
     }
 
     if (!config) {

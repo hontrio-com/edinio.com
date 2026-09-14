@@ -19,6 +19,7 @@ import {
   trebuieSemnalat,
 } from "@/lib/ecolet/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import { enqueueAboutYouShip } from "@/lib/aboutyou/queue";
 import type { Database } from "@/types/database.types";
@@ -430,8 +431,31 @@ export async function GET(req: NextRequest) {
             });
           }
 
-          /* ⚠ Statusul se retine ABIA dupa ce tranzitia a reusit. */
-          await marcheaza([o.id], prelucrat ? cod : undefined);
+          /*
+           * ⚠ Statusul se retine ABIA dupa ce tranzitia a reusit.
+           *
+           * ⚠ SI SE SCRIE PE AWB-UL PE CARE L-AM CITIT (14.09.2026). Intre citirea lotului si
+           * randul asta a trecut un apel la eColet, iar tura are 600 de comenzi. Daca intre timp
+           * comanda a primit alt AWB, statusul de aici e al expedierii VECHI: scris orbeste, unul
+           * FINAL ar scoate expedierea NOUA din urmarire pentru totdeauna, tacut.
+           *
+           * ⚠ Marcajele in LOT de mai sus si de mai jos raman neatinse: acolo nu exista o singura
+           * identitate de pus in conditie, iar ele sunt tocmai cele care apara coada. eColet omite
+           * din raspuns AWB-urile pe care nu le cunoaste, deci `neintoarse` TREBUIE marcate.
+           */
+          if (prelucrat && cod !== null) {
+            await scrieUrmarirea(admin, {
+              orderId: o.id,
+              businessId,
+              identitate: { coloana: "ecolet_awb_number", valoare: o.ecolet_awb_number },
+              stare: { ecolet_status_code: cod },
+              marcaj: { ecolet_status_checked_at: new Date().toISOString() },
+              actiune: "ecolet-tracking",
+              orderNumber: o.order_number,
+            });
+          } else {
+            await marcheaza([o.id]);
+          }
         }
 
         necunoscute += neintoarse.length;

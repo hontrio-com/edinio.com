@@ -13,6 +13,7 @@ import {
   ultimaStare,
 } from "@/lib/posta/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import type { Database } from "@/types/database.types";
 
@@ -406,7 +407,27 @@ export async function GET(req: NextRequest) {
        * trimiterea din urmarire, deci comanda ar fi ramas „expediata" PENTRU
        * TOTDEAUNA, fara ca nimic sa semnaleze.
        */
-      await marcheazaVerificat(prelucrat ? codNou : null);
+      /*
+       * ⚠ SI SE SCRIE PE EXPEDIEREA PE CARE AM CITIT-O (14.09.2026). Intre citire si randul asta
+       * a trecut un apel extern; daca intre timp comanda a primit alt AWB, codul de aici e al
+       * expedierii VECHI, iar unul FINAL ar scoate-o pe cea NOUA din urmarire pentru totdeauna.
+       *
+       * ⚠ Doar aici: celelalte chemari trec `null`, deci pastreaza codul vechi. O conditie acolo
+       * ar impiedica marcajul, adica ar infometa coada. Vezi `scrieUrmarirea`.
+       */
+      if (prelucrat && codNou !== null) {
+        await scrieUrmarirea(admin, {
+          orderId: o.id,
+          businessId: o.business_id,
+          identitate: { coloana: "posta_awb_number", valoare: o.posta_awb_number },
+          stare: { posta_status_code: codNou },
+          marcaj: { posta_status_checked_at: new Date().toISOString() },
+          actiune: "posta-tracking",
+          orderNumber: o.order_number,
+        });
+      } else {
+        await marcheazaVerificat(null);
+      }
     }));
   }
 

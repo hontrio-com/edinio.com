@@ -11,6 +11,7 @@ import {
   ultimulEveniment,
 } from "@/lib/fancourier/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import type { Database } from "@/types/database.types";
 
@@ -275,8 +276,30 @@ export async function GET(req: NextRequest) {
             });
           }
 
-          /* ⚠ Codul se retine ABIA dupa ce tranzitia a reusit. */
-          await marcheaza([o.id], prelucrat ? cod : undefined);
+          /*
+           * ⚠ Codul se retine ABIA dupa ce tranzitia a reusit.
+           *
+           * ⚠ SI SE SCRIE PE AWB-UL PE CARE L-AM CITIT (14.09.2026). Intre citirea lotului si
+           * randul asta a trecut un apel la FAN, iar tura are 400 de comenzi. Daca intre timp
+           * comanda a primit alt AWB, codul de aici e al expedierii VECHI: scris orbeste, unul
+           * FINAL ar scoate expedierea NOUA din urmarire pentru totdeauna, tacut.
+           *
+           * ⚠ Marcajul in LOT de mai sus ramane neatins: acolo nu exista o singura identitate de
+           * pus in conditie, si tocmai el apara coada. Vezi `scrieUrmarirea`.
+           */
+          if (prelucrat && cod !== null) {
+            await scrieUrmarirea(admin, {
+              orderId: o.id,
+              businessId,
+              identitate: { coloana: "fan_courier_awb_number", valoare: o.fan_courier_awb_number },
+              stare: { fan_courier_status_code: cod },
+              marcaj: { fan_courier_status_checked_at: new Date().toISOString() },
+              actiune: "fancourier-tracking",
+              orderNumber: o.order_number,
+            });
+          } else {
+            await marcheaza([o.id]);
+          }
         }
 
         necunoscute += neintoarse.length;

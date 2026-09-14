@@ -11,6 +11,7 @@ import {
   statusUrmator, trebuieSemnalat,
 } from "@/lib/dhl/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import type { Database } from "@/types/database.types";
 
@@ -452,7 +453,31 @@ export async function GET(req: NextRequest) {
          * fi ramas pe comanda chiar daca tranzitia a picat, iar `eStareFinala` ar fi scos
          * expedierea din urmarire pentru totdeauna.
          */
-        await marcheazaVerificat(o, prelucrat ? codNou : null);
+        /*
+         * ⚠ SI SE SCRIE PE EXPEDIEREA PE CARE AM CITIT-O (14.09.2026).
+         *
+         * Intre citirea lotului si randul asta a trecut un apel extern, iar bugetul rularii e de
+         * zeci de secunde. Daca intre timp comerciantul a detasat AWB-ul si a emis din nou, codul
+         * de aici e al expedierii VECHI: scris orbeste, un cod FINAL ar scoate expedierea NOUA din
+         * urmarire pentru totdeauna, tacut.
+         *
+         * ⚠ Doar AICI, nu si pe celelalte cinci chemari: acelea trec `null`, deci pastreaza codul
+         * vechi si n-au ce ateriza gresit. O conditie acolo ar putea doar sa impiedice marcajul,
+         * adica sa infometeze coada. Vezi `scrieUrmarirea`.
+         */
+        if (prelucrat && codNou !== null) {
+          await scrieUrmarirea(admin, {
+            orderId: o.id,
+            businessId: o.business_id,
+            identitate: { coloana: "dhl_awb_number", valoare: o.dhl_awb_number },
+            stare: { dhl_status_code: codNou },
+            marcaj: { dhl_status_checked_at: new Date().toISOString() },
+            actiune: "dhl-tracking",
+            orderNumber: o.order_number,
+          });
+        } else {
+          await marcheazaVerificat(o, null);
+        }
       }
     }
   }

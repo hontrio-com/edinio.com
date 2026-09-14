@@ -7,6 +7,7 @@ import {
   descriereStatus, eStareFinala, esteRetur, statusFinalDinStari, trebuieSemnalat, ultimaStare,
 } from "@/lib/packeta/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import type { Database } from "@/types/database.types";
 
@@ -290,7 +291,28 @@ export async function GET(req: NextRequest) {
        * FINAL ar fi ramas pe comanda chiar daca tranzitia a picat, iar
        * `eStareFinala` ar fi scos coletul din urmarire pentru totdeauna.
        */
-      await marcheazaVerificat(prelucrat ? codNou : null);
+      /*
+       * ⚠ SI SE SCRIE PE COLETUL PE CARE L-AM CITIT (14.09.2026). Intre citire si randul asta a
+       * trecut un apel extern; daca intre timp comanda a primit alt colet, codul de aici e al
+       * celui VECHI, iar unul FINAL l-ar scoate pe cel NOU din urmarire pentru totdeauna.
+       *
+       * ⚠ IDENTITATEA E `packeta_packet_id`, NU un AWB: la ei coletul se citeste pe id-ul lor
+       * intern, iar `packeta_external_tracking` e numarul curierului care livreaza, scris mai
+       * tarziu. O conditie pe acela ar fi fost mereu goala la prima trecere.
+       */
+      if (prelucrat && codNou !== null) {
+        await scrieUrmarirea(admin, {
+          orderId: o.id,
+          businessId: o.business_id,
+          identitate: { coloana: "packeta_packet_id", valoare: o.packeta_packet_id },
+          stare: { packeta_status_code: codNou },
+          marcaj: { packeta_status_checked_at: new Date().toISOString() },
+          actiune: "packeta-tracking",
+          orderNumber: o.order_number,
+        });
+      } else {
+        await marcheazaVerificat(null);
+      }
     }));
   }
 

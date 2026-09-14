@@ -8,6 +8,7 @@ import {
   tipStatus, trebuieSemnalat,
 } from "@/lib/ups/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import type { Database } from "@/types/database.types";
 
@@ -400,7 +401,31 @@ export async function GET(req: NextRequest) {
        * ar fi ramas pe comanda chiar daca tranzitia a picat, iar `eStareFinala` ar fi
        * scos expedierea din urmarire pentru totdeauna.
        */
-      await marcheazaVerificat(o, prelucrat ? tipNou : null, prelucrat ? codNou : null);
+      /*
+       * ⚠ SI SE SCRIE PE EXPEDIEREA PE CARE AM CITIT-O (14.09.2026). Intre citire si randul asta
+       * a trecut un apel extern; daca intre timp comanda a primit alt AWB, starea de aici e a
+       * expedierii VECHI, iar una FINALA ar scoate-o pe cea NOUA din urmarire pentru totdeauna.
+       *
+       * ⚠ AMANDOUA coloanele intra in STARE. La UPS starea e o pereche (tip, cod): scrisa doar
+       * una, expedierea ar ramane cu jumatate din stare veche si jumatate noua, iar `eStareFinala`
+       * citeste perechea.
+       */
+      if (prelucrat && (tipNou !== null || codNou !== null)) {
+        await scrieUrmarirea(admin, {
+          orderId: o.id,
+          businessId: o.business_id,
+          identitate: { coloana: "ups_awb_number", valoare: o.ups_awb_number },
+          stare: {
+            ups_status_type: tipNou ?? o.ups_status_type,
+            ups_status_code: codNou ?? o.ups_status_code,
+          },
+          marcaj: { ups_status_checked_at: new Date().toISOString() },
+          actiune: "ups-tracking",
+          orderNumber: o.order_number,
+        });
+      } else {
+        await marcheazaVerificat(o, null, null);
+      }
     }
   }
 

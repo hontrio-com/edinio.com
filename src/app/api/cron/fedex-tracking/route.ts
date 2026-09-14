@@ -10,6 +10,7 @@ import {
   codStatus, descriereStatus, eStareFinala, esteRetur, statusUrmator, trebuieSemnalat,
 } from "@/lib/fedex/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import type { Database } from "@/types/database.types";
 
@@ -93,6 +94,7 @@ type Comanda = {
   status: string;
   order_number: string | null;
   payment_status: string | null;
+  /** ⚠ Identitatea pe care s-a CITIT expedierea. Vezi `scrieUrmarirea`. */
   fedex_awb_number: string | null;
   fedex_awb_at: string | null;
   fedex_status_code: string | null;
@@ -366,8 +368,31 @@ export async function GET(req: NextRequest) {
          * ⚠ Codul se retine ABIA dupa ce tranzitia a reusit: scris inainte, un cod
          * FINAL ar fi ramas pe comanda chiar daca tranzitia a picat, iar
          * `eStareFinala` ar fi scos expedierea din urmarire pentru totdeauna.
+         *
+         * ⚠ SI SE SCRIE PE EXPEDIEREA PE CARE AM CITIT-O (14.09.2026).
+         *
+         * Intre citirea lotului si randul asta a trecut un apel extern, iar bugetul rularii e de
+         * zeci de secunde. Daca intre timp comerciantul a detasat AWB-ul si a emis din nou, codul
+         * de aici e al expedierii VECHI: scris orbeste, un cod FINAL ar scoate expedierea NOUA din
+         * urmarire pentru totdeauna, tacut.
+         *
+         * ⚠ Doar AICI, nu si pe celelalte cinci chemari de mai sus: acelea trec `null`, deci
+         * pastreaza codul vechi si n-au ce ateriza gresit. O conditie acolo ar putea doar sa
+         * impiedice marcajul, adica sa infometeze coada. Vezi `scrieUrmarirea`.
          */
-        await marcheazaVerificat(o, prelucrat ? codNou : null);
+        if (prelucrat && codNou !== null) {
+          await scrieUrmarirea(admin, {
+            orderId: o.id,
+            businessId: o.business_id,
+            identitate: { coloana: "fedex_awb_number", valoare: o.fedex_awb_number },
+            stare: { fedex_status_code: codNou },
+            marcaj: { fedex_status_checked_at: new Date().toISOString() },
+            actiune: "fedex-tracking",
+            orderNumber: o.order_number,
+          });
+        } else {
+          await marcheazaVerificat(o, null);
+        }
       }
     }
   }

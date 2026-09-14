@@ -7,6 +7,7 @@ import {
   descriereStatus, eStareFinala, esteRetur, statusUrmator, trebuieSemnalat,
 } from "@/lib/shipo/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import type { Database } from "@/types/database.types";
 
@@ -295,7 +296,27 @@ export async function GET(req: NextRequest) {
        * FINAL ar fi ramas pe comanda chiar daca tranzitia a picat, iar
        * `eStareFinala` ar fi scos expedierea din urmarire pentru totdeauna.
        */
-      await marcheazaVerificat(prelucrat ? codNou : null);
+      /*
+       * ⚠ SI SE SCRIE PE EXPEDIEREA PE CARE AM CITIT-O (14.09.2026). Intre citire si randul asta
+       * a trecut un apel extern; daca intre timp comanda a primit alt AWB, codul de aici e al
+       * expedierii VECHI, iar unul FINAL ar scoate-o pe cea NOUA din urmarire pentru totdeauna.
+       *
+       * ⚠ Doar aici: celelalte chemari trec `null`, deci pastreaza codul vechi. O conditie acolo
+       * ar impiedica marcajul, adica ar infometa coada. Vezi `scrieUrmarirea`.
+       */
+      if (prelucrat && codNou !== null) {
+        await scrieUrmarirea(admin, {
+          orderId: o.id,
+          businessId: o.business_id,
+          identitate: { coloana: "shipo_awb_number", valoare: o.shipo_awb_number },
+          stare: { shipo_status_code: codNou },
+          marcaj: { shipo_status_checked_at: new Date().toISOString() },
+          actiune: "shipo-tracking",
+          orderNumber: o.order_number,
+        });
+      } else {
+        await marcheazaVerificat(null);
+      }
     }));
   }
 

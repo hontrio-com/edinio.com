@@ -13,6 +13,7 @@ import {
   trebuieSemnalat,
 } from "@/lib/pallex/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import type { Database } from "@/types/database.types";
 
@@ -525,7 +526,37 @@ export async function GET(req: NextRequest) {
         ? scrieMemoria(idStatus, seSchimba && !avertizatAcum ? false : avertizat)
         : scrieMemoria(memorie.id, avertizat);
 
-      await marcheazaVerificat(memorieNoua, awbNou);
+      /*
+       * ⚠ SI SE SCRIE PE PARTIDA PE CARE AM CITIT-O (14.09.2026).
+       *
+       * Intre citirea lotului si randul asta a trecut un apel la ClientPlus, iar tura are 120 de
+       * partide. Daca intre timp comerciantul a detasat partida si a creat alta, memoria de aici e
+       * a partidei VECHI: scrisa orbeste, un status TERMINAL ar scoate partida NOUA din urmarire
+       * pentru totdeauna, tacut.
+       *
+       * ⚠ IDENTITATEA E `pallex_consignment_id`, NICIODATA `pallex_awb_number`. Codul Pall-Ex e
+       * chiar ce SCRIE cronul asta cand il afla (vezi `awbNou`), deci o conditie pe el ar fi
+       * comparat cu o valoare pe care tot noi tocmai o schimbam.
+       *
+       * ⚠ SI SEMNUL DE AVERTISMENT INTRA IN STARE, nu in marcaj: el spune „i-am zis deja ca marfa
+       * n-a plecat" si e al partidei citite. Scris peste una noua, avertismentul ei s-ar socoti
+       * dat, iar comerciantul n-ar mai afla ca marfa ii sta in depozit.
+       *
+       * ⚠ `pallex_status_checked_at` ramane NECONDITIONAT, cum cere chiar nota de mai sus:
+       * rotatia trebuie sa inainteze oricum.
+       */
+      await scrieUrmarirea(admin, {
+        orderId: o.id,
+        businessId: o.business_id,
+        identitate: { coloana: "pallex_consignment_id", valoare: o.pallex_consignment_id },
+        stare: {
+          pallex_status_id: memorieNoua === undefined ? o.pallex_status_id : memorieNoua,
+          ...(awbNou ? { pallex_awb_number: awbNou } : {}),
+        },
+        marcaj: { pallex_status_checked_at: new Date().toISOString() },
+        actiune: "pallex-tracking",
+        orderNumber: o.order_number,
+      });
     }));
   }
 

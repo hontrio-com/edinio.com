@@ -11,6 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import {
   codNumeric,
@@ -192,28 +193,43 @@ export async function aplicaUrmarire(
    * ⚠ Si marcajul de verificare se scrie SI de webhook: o comanda care primeste
    * push nu mai are de ce sa consume un loc in cron.
    */
-  const { error } = await admin
-    .from("orders")
-    .update({
+  /*
+   * ⚠ SI SE SCRIE PE EXPEDIEREA PE CARE AM CITIT-O (14.09.2026).
+   *
+   * Drumul asta e comun cronului si webhookului. La cron, intre citirea lotului si randul de aici
+   * a trecut un apel extern, iar tura are 600 de comenzi; la webhook, lotul se prelucreaza serial.
+   * Daca intre timp comanda a primit alt AWB, starea de aici e a expedierii VECHI: scrisa orbeste,
+   * un cod FINAL ar scoate expedierea NOUA din urmarire pentru totdeauna, tacut.
+   *
+   * ⚠ Marcajul ramane NECONDITIONAT: el e singurul lucru care face rotatia cronului sa inainteze,
+   * si se scrie si de webhook, ca o comanda care primeste push sa nu mai consume un loc in cron.
+   * Vezi `scrieUrmarirea`.
+   */
+  const { scris } = await scrieUrmarirea(admin, {
+    orderId: comanda.id,
+    businessId: comanda.business_id,
+    identitate: { coloana: "innoship_awb_number", valoare: comanda.innoship_awb_number },
+    stare: {
       innoship_status_code: prelucrat ? (codNou ?? comanda.innoship_status_code) : comanda.innoship_status_code,
       innoship_cod_status_code: codRamburs ?? comanda.innoship_cod_status_code,
-      innoship_status_checked_at: new Date().toISOString(),
       ...(urmarire.trackUrl ? { innoship_track_url: urmarire.trackUrl } : {}),
-    })
-    .eq("id", comanda.id)
-    .eq("business_id", comanda.business_id);
-
-  if (error) {
-    await logError({
-      action: actiune,
-      message: `marcajul de urmarire nu s-a scris pentru comanda ${comanda.order_number ?? comanda.id}: ${error.message}. Expedierea ramane in capul cozii cronului.`,
-      details: { orderId: comanda.id, awb: comanda.innoship_awb_number, code: error.code },
-      businessId: comanda.business_id,
-      severity: "warning",
-    });
-  }
-
-  return { mutata, semnalata, codNou: prelucrat ? codNou : null };
+    },
+    marcaj: { innoship_status_checked_at: new Date().toISOString() },
+    actiune,
+    orderNumber: comanda.order_number,
+  });
+  /*
+   * ⚠ CODUL RAPORTAT E CEL CARE A AJUNS CHIAR PE COMANDA.
+   *
+   * `scris: false` inseamna ca expedierea s-a schimbat sub noi si starea NU s-a scris. Raportat
+   * oricum, apelantul ar socoti codul retinut: cronul l-ar numara drept prelucrat, iar webhookul
+   * l-ar trece drept aplicat. La rularea urmatoare `seSchimba` ar iesi fals fata de ce crede el ca
+   * a scris, si un retur ar putea fi inghitit in tacere.
+   *
+   * ⚠ Jurnalul nu se mai scrie aici: `scrieUrmarirea` isi lasa singura urma, si pe eroarea de
+   * scriere, si pe expedierea schimbata. Doua locuri care scriu aceeasi grija s-ar departa.
+   */
+  return { mutata, semnalata, codNou: prelucrat && scris ? codNou : null };
 }
 
 /**

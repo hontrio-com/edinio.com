@@ -87,9 +87,39 @@ export function statusEroare(e: unknown): number | null {
   return typeof v === "number" ? v : null;
 }
 
-function insemneaza(e: Error, status: number | null): Error {
-  const cu = e as Error & { [CHEIE_STATUS]?: number };
+/**
+ * Id-ul expedierii SALVATE de ei, pastrat tot pe eroare.
+ *
+ * ═══ ⚠ DE CE E NEVOIE DE EL PE DRUMUL DE ESEC ═══
+ *
+ * La credit insuficient Shipo raspunde HTTP 402 cu `success:false`, dar SI cu id-ul unei expedieri
+ * pe care a salvat-o ca ciorna. Ciorna aia se reia prin `POST /shipment/send/{id}`; recreata, iese
+ * a doua ciorna orfana, si tot asa la fiecare apasare.
+ *
+ * ⚠ Corpul se citeste oricum inainte de aruncare (vezi `apel`), deci id-ul nu era NECITIT, ci
+ * ARUNCAT: `descrieEroarea` scoate din raspuns doar `message`, `error` si `errors`. Aici se
+ * agata de eroare, ca apelantul sa-l poata pastra.
+ *
+ * ⚠ Acelasi tipar ca la `statusHttp` de mai sus si ca la `codFedex`: cheie lunga, cititor
+ * exportat, iar numarul nu se cauta niciodata in textul erorii.
+ */
+const CHEIE_EXPEDIERE = "expedierePartialaShipo" as const;
+
+export function expedierePeEroare(e: unknown): number | null {
+  const v = (e as { [CHEIE_EXPEDIERE]?: unknown } | null)?.[CHEIE_EXPEDIERE];
+  return typeof v === "number" && v > 0 ? v : null;
+}
+
+/** `expedition` dintr-un corp de raspuns, oricat de stricat ar fi restul. */
+function idExpedierii(date: unknown): number | null {
+  const n = Number((date as { expedition?: unknown } | null)?.expedition);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function insemneaza(e: Error, status: number | null, expeditie: number | null = null): Error {
+  const cu = e as Error & { [CHEIE_STATUS]?: number; [CHEIE_EXPEDIERE]?: number };
   if (status !== null) cu[CHEIE_STATUS] = status;
+  if (expeditie !== null) cu[CHEIE_EXPEDIERE] = expeditie;
   return e;
 }
 
@@ -490,7 +520,15 @@ async function apel<T>(
     const e = res.status >= 500 || res.status === 408
       ? ambiguu(mesaj)
       : eroareCuStatus(mesaj, res.status);
-    throw insemneaza(e, res.status);
+    /*
+     * ⚠ VERDICTUL NU SE SCHIMBA, SE PASTREAZA DOAR ID-UL. Un 402 ramane `esuat`, adica „nu s-a
+     * creat nimic la ei, reincercarea e libera". Daca ar deveni o intoarcere normala, registrul
+     * ar inchide randul ca `reusit` cu referinta goala, slotul s-ar bloca pentru totdeauna, si
+     * comerciantul n-ar mai putea emite DELOC. Vezi nota de la `expedierePeEroare`.
+     *
+     * ⚠ Si numai pe SCRIERI: pe o citire, un `expedition` din corp ar fi al altcuiva.
+     */
+    throw insemneaza(e, res.status, efect === "scriere" ? idExpedierii(date) : null);
   }
 
   /*

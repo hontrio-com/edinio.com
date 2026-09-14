@@ -11,7 +11,8 @@ import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/regi
 import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import {
   adreseExpeditor, anuleaza, cautaOrase, coordPentruPuncte, creeazaExpediere, curieri, eticheta,
-  probaConexiune, puncte, servicii, shipoGata, tarife, validesteExpediere,
+  expedierePeEroare, probaConexiune, puncte, servicii, shipoGata, tarife, trimiteExpediere,
+  validesteExpediere,
   type AdresaExpeditor, type ContShipo, type CurierShipo, type FormatEticheta,
   type ServiciuShipo, type ShipoConfig,
 } from "@/lib/shipo/client";
@@ -421,7 +422,11 @@ export async function createShipoAwbAction(
 
   const { supabase, admin, config, order } = ctx;
 
-  const comanda = order as typeof order & { shipo_awb_number?: string | null };
+  const comanda = order as typeof order & {
+    shipo_awb_number?: string | null;
+    /** Ciorna salvata de ei la o incercare care a picat pe credit. Vezi callbackul registrului. */
+    shipo_expedition_id?: number | null;
+  };
   if (comanda.shipo_awb_number) {
     return { error: "AWB-ul Shipo a fost deja creat pentru comanda asta." };
   }
@@ -451,7 +456,41 @@ export async function createShipoAwbAction(
     admin,
     { businessId, orderId, fel: "awb", furnizor: "shipo", cheie: cheieOperatie("awb", "shipo", orderId) },
     async () => {
-      const raspuns = await creeazaExpediere(config, corp);
+      /*
+       * ═══ ⚠ CIORNA SALVATA LA CREDIT INSUFICIENT SE RELUA, NU SE RECREEAZA (14.09.2026) ═══
+       *
+       * La credit insuficient Shipo raspunde HTTP 402 cu `success:false`, dar SI cu id-ul unei
+       * expedieri pe care a salvat-o ca ciorna. Pana azi id-ul ala se pierdea: corpul se citea
+       * inainte de aruncare, insa `descrieEroarea` scoate din el doar mesajele. Comerciantul
+       * incarca creditul, apasa din nou, si se crea A DOUA ciorna, orfana, si tot asa.
+       *
+       * Drumul de reluare exista de mult (`trimiteExpediere`, adica `POST /shipment/send/{id}`),
+       * si coloana la fel; erau legate doar de raspunsul cu HTTP 200.
+       *
+       * ⚠ RELUAREA STA SUB REZERVAREA DIN REGISTRU, nu inaintea ei: altfel doua apasari deodata
+       * ar trimite aceeasi ciorna de doua ori la curier.
+       *
+       * ⚠ SI EROAREA SE ARUNCA MAI DEPARTE NESCHIMBATA. Verdictul ramane `esuat`, adica randul
+       * NU blocheaza si reincercarea e libera, ceea ce e adevarat: creditul se incarca si se reia.
+       * Transformata intr-o intoarcere normala, ar fi iesit `reusit` cu referinta goala, iar
+       * slotul s-ar fi inchis pentru totdeauna.
+       */
+      const ciorna = Number(comanda.shipo_expedition_id) > 0 ? Number(comanda.shipo_expedition_id) : null;
+
+      const raspuns = await (ciorna === null
+        ? creeazaExpediere(config, corp)
+        : trimiteExpediere(config, ciorna)
+      ).catch(async (e: unknown) => {
+        const idNou = expedierePeEroare(e);
+        if (ciorna === null && idNou !== null) {
+          /* ⚠ Scrierea nu poate schimba rezultatul: daca pica, se pierde doar reluarea, nu banii. */
+          await supabase.from("orders")
+            .update({ shipo_expedition_id: idNou, updated_at: new Date().toISOString() })
+            .eq("id", orderId).eq("business_id", businessId);
+        }
+        throw e;
+      });
+
       return {
         referinta: raspuns.awb ?? "",
         detalii: {

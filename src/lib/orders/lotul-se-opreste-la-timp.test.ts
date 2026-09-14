@@ -53,8 +53,46 @@ test("⚠⚠ bugetul lotului sta SUB `maxDuration`, cu marja de scriere", () => 
   const maxMs = Number(max![1]) * 1000;
 
   assert.ok(bugetMs < maxMs, `bugetul lotului (${bugetMs} ms) nu mai e sub \`maxDuration\` (${maxMs} ms)`);
-  assert.ok(maxMs - bugetMs >= 20_000,
-    `marja dintre buget si \`maxDuration\` a scazut la ${maxMs - bugetMs} ms: nu mai incap scrierile de la final`);
+
+  /*
+   * ═══ ⚠ MARJA SE MASOARA DUPA CEL MAI LUNG APEL, NU DUPA SCRIERILE DE LA FINAL ═══
+   *
+   * Prima forma a probei cerea doar `maxMs - bugetMs >= 20_000`, adica exact cat trebuie
+   * jurnalului si lui `revalidatePath`. Trecea verde peste un defect REAL, si l-a lasat sa
+   * traiasca: bazinul NU intrerupe o lucrare pornita, deci un AWB pornit cu o clipa inainte de
+   * termen isi duce apelul pana la capat. Cu 60s la GLS, functia ajungea la ~340s din 300.
+   *
+   * ⚠ SI DE ACEEA PRAGUL SE CALCULEAZA, NU SE SCRIE. Numarul citit din capul meu a fost chiar
+   * greseala; termenele le stiu doar sursele curierilor. Un curier nou cu termen mai lung
+   * strica proba automat, fara sa-si mai aminteasca nimeni de randurile astea.
+   */
+  const SURSE_CURIERI = [
+    "src/lib/gls/client.ts", "src/lib/gls/puncte.ts", "src/lib/packeta/client.ts",
+    "src/lib/dhl/client.ts", "src/lib/fedex/client.ts", "src/lib/ecolet/client.ts",
+    "src/lib/innoship/client.ts", "src/lib/smartship/client.ts", "src/lib/shipo/client.ts",
+    "src/lib/posta/client.ts", "src/lib/pallex/client.ts", "src/lib/sameday/client.ts",
+    "src/lib/cargus.ts", "src/lib/dpd.ts", "src/lib/colete.ts",
+  ];
+  let celMaiLungApelMs = 0;
+  let deLa = "";
+  for (const cale of SURSE_CURIERI) {
+    const s = sursa(cale);
+    for (const m of s.matchAll(/const ASTEPTARE\w*_MS = ([\d_]+);/g)) {
+      const ms = Number(m[1].replace(/_/g, ""));
+      if (ms > celMaiLungApelMs) { celMaiLungApelMs = ms; deLa = cale; }
+    }
+  }
+  /* ⚠ Prag pe cautarea insasi: daca regexul sau lista se strica, proba ar cere zero si ar trece
+     verde pe orice buget. Masurat pe 14.09.2026: cel mai lung e 60_000, la GLS. */
+  assert.ok(celMaiLungApelMs >= 45_000,
+    `cautarea termenelor s-a stricat: cel mai lung apel gasit e ${celMaiLungApelMs} ms`);
+
+  /* ⚠ Plus scrierile de dupa bazin, care raman parte din socoteala. */
+  const NECESAR = celMaiLungApelMs + 15_000;
+  assert.ok(maxMs - bugetMs >= NECESAR,
+    `marja e ${maxMs - bugetMs} ms, dar cel mai lung apel (${celMaiLungApelMs} ms, ${deLa}) `
+    + `plus scrierile cer ${NECESAR} ms: un AWB pornit in ultima clipa duce functia peste `
+    + "`maxDuration`, si atunci actiunea nu mai intoarce NIMIC");
 });
 
 test("⚠ bazinul chiar verifica termenul, si nu intrerupe o lucrare pornita", () => {

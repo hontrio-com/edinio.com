@@ -138,9 +138,34 @@ function cleanIds(orderIds: string[]): { ids: string[] } | { error: string } {
  * stim" e cel mai prost raspuns posibil cand serverul chiar stia. Cu un termen propriu sub
  * `maxDuration`, lotul se opreste singur si intoarce rezultatul PARTIAL: ce s-a facut, ce nu.
  *
- * Marja de 30s nu e rotunjire: dupa bazin mai urmeaza scrierile de jurnal si `revalidatePath`.
+ * ═══ ⚠ MARJA SE MASOARA DUPA CEL MAI LUNG APEL, NU DUPA SCRIERILE DE LA FINAL (14.09.2026) ═══
+ *
+ * Pana azi bugetul era 270_000, cu o marja de 30s socotita pentru jurnal si `revalidatePath`.
+ * Era gresita din radacina, fiindca bazinul NU intrerupe o lucrare pornita (vezi `runPool`):
+ * verifica termenul doar inainte sa porneasca alta. Deci un AWB pornit la 269,9s isi duce
+ * apelul pana la capat, si abia apoi iese.
+ *
+ * ⚠ CAT DUREAZA CEL MAI LUNG APEL, citit din chiar sursele curierilor:
+ *
+ *     GLS        60s emiterea (`gls/client.ts`) + 10s cautarea codului postal (`gls/puncte.ts`)
+ *     Packeta    60s pe flux (`packeta/client.ts`)
+ *     restul     45s la emitere (DHL, FedEx, eColet, Innoship, SmartShip, Shipo, Posta, Pall-Ex)
+ *
+ * Deci un lucrator pornit in ultima clipa ducea functia pana pe la 340s, peste `maxDuration`
+ * de 300. Atunci platforma o taie si actiunea nu mai intoarce NIMIC, desi serverul stia exact
+ * ce reusise: exact defectul pe care bugetul fusese pus sa-l inchida.
+ *
+ * Cu 210_000 raman 90 de secunde: cele 70 ale celui mai lung drum, plus scrierile de dupa.
+ *
+ * ⚠ Aceeasi clasa cu bugetul cronului UPS, care iesea exact 0 (`9003b35a`). Si acolo formula
+ * arata cuminte si nu acoperea apelul.
+ *
+ * ⚠ CE COSTA COBORAREA: un lot mare se opreste mai devreme si cere reluare. Masurat pe
+ * 14.09.2026, loturile reale au intre 3 si 8 operatii pe minut (Woot si SmartBill), deci
+ * niciunul n-a ajuns vreodata nici macar aproape de fereastra. Se pierde nimic, si se castiga
+ * un raspuns in locul unei taieri mute.
  */
-const BUGET_LOT_MS = 270_000;
+const BUGET_LOT_MS = 210_000;
 
 /**
  * Bazin cu concurenta marginita SI cu termen.

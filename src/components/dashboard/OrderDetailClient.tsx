@@ -687,7 +687,29 @@ export function OrderDetailClient({
   function confirmSave() {
     setShowSaveConfirm(false);
     startTransition(async () => {
-      const result = await updateOrder(order.id, { status, payment_status: paymentStatus });
+      /* ⚠ In `try` DOAR apelul. Vezi `callbackul-de-tranzitie-prinde-caderea`. */
+      let result: Awaited<ReturnType<typeof updateOrder>>;
+      try {
+        result = await updateOrder(order.id, { status, payment_status: paymentStatus });
+      } catch {
+        /*
+         * ⚠⚠ ASTA NU E O SCRIERE LINISTITA LA NOI. `updateOrder` cheama
+         * `aplica_tranzitia_comenzii`, care muta intr-o singura tranzactie statusul,
+         * cuponul si stocul, iar mai jos trimite email si SMS catre cumparator.
+         * Actiunea insasi se opreste la un raspuns ciudat tocmai ca sa nu plece
+         * instiintari despre o schimbare care poate n-a avut loc. Cand arunca, noi
+         * nu stim de care parte a acelei linii am ramas.
+         */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca schimbarea s-a aplicat. "
+          + "Daca s-a aplicat, clientul poate sa fi primit deja instiintarea, iar stocul si "
+          + "cuponul s-au miscat odata cu ea. Reimprospateaza pagina si uita-te la stare "
+          + "inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in result) { toast.error(result.error); } else {
         toast.success("Comanda actualizata.");
         router.refresh();
@@ -697,7 +719,21 @@ export function OrderDetailClient({
 
   function handleDelete() {
     startDeleteTransition(async () => {
-      const result = await deleteOrder(order.id);
+      let result: Awaited<ReturnType<typeof deleteOrder>>;
+      try {
+        result = await deleteOrder(order.id);
+      } catch {
+        /* ⚠ `deleteOrder` e curat inauntru: doua paze care refuza stergerea, apoi o
+           singura tranzactie pentru cupon, stoc si rand, apoi eticheta AWB din
+           depozit. Nimic catre curier, nimic catre client. Deci nu se pomeneste
+           nimeni din afara: singurul lucru nestiut e daca randul mai exista. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-a sters comanda. "
+          + "Deschide lista de comenzi si verifica acolo inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if (result.error) { toast.error(result.error); return; }
       toast.success("Comanda a fost stearsa.");
       router.push("/dashboard/orders");
@@ -706,7 +742,21 @@ export function OrderDetailClient({
 
   function handleSendNotification() {
     startNotifTransition(async () => {
-      const result = await sendCustomerNotification(order.id, notifSubject, notifMessage);
+      let result: Awaited<ReturnType<typeof sendCustomerNotification>>;
+      try {
+        result = await sendCustomerNotification(order.id, notifSubject, notifMessage);
+      } catch {
+        /* ⚠⚠ Singura paza a actiunii e `rateLimit` pe cont, un limitator din MEMORIE,
+           nu o paza impotriva dublarii. Mesajul pleaca spre un om adevarat, deci aici
+           nu se spune „incearca din nou”. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca emailul a plecat spre "
+          + "client. Nu exista o paza impotriva dublarii: o a doua apasare poate trimite "
+          + "inca un mesaj aceluiasi om.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if (result.error) { toast.error(result.error); return; }
       toast.success("Notificarea a fost trimisa clientului.");
     });
@@ -714,7 +764,20 @@ export function OrderDetailClient({
 
   function handleSendSms() {
     startSmsTransition(async () => {
-      const result = await sendCustomerSms(order.id, smsMessage);
+      let result: Awaited<ReturnType<typeof sendCustomerSms>>;
+      try {
+        result = await sendCustomerSms(order.id, smsMessage);
+      } catch {
+        /* ⚠⚠ Ca la email, plus ca fiecare SMS se plateste din creditul magazinului, pe
+           cheia lui SMSO. Dublarea costa, nu doar incurca. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca SMS-ul a plecat spre "
+          + "client. Nu exista o paza impotriva dublarii, iar fiecare SMS se plateste din "
+          + "creditul magazinului: o a doua apasare poate trimite inca unul.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       toast.success("SMS trimis clientului.");
     });
@@ -766,7 +829,18 @@ export function OrderDetailClient({
 
   function handleResendInvoice(email: string) {
     startResendInvoiceTransition(async () => {
-      const result = await resendSmartbillEmail(businessId, order.id, email, "invoice");
+      let result: Awaited<ReturnType<typeof resendSmartbillEmail>>;
+      try {
+        result = await resendSmartbillEmail(businessId, order.id, email, "invoice");
+      } catch {
+        /* ⚠ Pleaca un email cu documentul catre destinatarul scris in casuta. */
+        toast.error(
+          "Nu am primit raspuns de la SmartBill, deci nu stim daca factura a fost "
+          + "retrimisa. O a doua apasare poate trimite inca un email aceluiasi destinatar.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       toast.success("Factura retrimisa pe email.");
       setShowResendInvoice(false);
@@ -775,7 +849,18 @@ export function OrderDetailClient({
 
   function handleResendEstimate(email: string) {
     startResendEstimateTransition(async () => {
-      const result = await resendSmartbillEmail(businessId, order.id, email, "estimate");
+      let result: Awaited<ReturnType<typeof resendSmartbillEmail>>;
+      try {
+        result = await resendSmartbillEmail(businessId, order.id, email, "estimate");
+      } catch {
+        /* ⚠ Acelasi drum ca la factura, cu alt document. */
+        toast.error(
+          "Nu am primit raspuns de la SmartBill, deci nu stim daca proforma a fost "
+          + "retrimisa. O a doua apasare poate trimite inca un email aceluiasi destinatar.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) { toast.error(result.error); return; }
       toast.success("Proforma retrimisa pe email.");
       setShowResendEstimate(false);

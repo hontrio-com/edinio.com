@@ -112,18 +112,63 @@ export function TrendyolListings({
     if (!window.confirm("Elimini această listare de pe Trendyol?")) return;
     startTransition(async () => {
       aplicaOptimistElimina(productId);
-      const res = await removeTrendyolListing(businessId, productId);
+      let res: Awaited<ReturnType<typeof removeTrendyolListing>>;
+      try {
+        res = await removeTrendyolListing(businessId, productId);
+      } catch {
+        /* ⚠ Eliminarea pleaca spre Trendyol. Randul a fost deja scos optimist de pe ecran, iar
+           `useOptimistic` il aduce inapoi cand tranzitia se incheie. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca listarea s-a eliminat de pe Trendyol. "
+          + "Reimprospateaza si uita-te in lista inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Listare eliminată.");
-      await incarcaPagina();
+      try {
+        await incarcaPagina();
+      } catch {
+        /* ⚠ ALT ADEVAR: fapta s-a facut deja, doar lista n-a putut fi reincarcata. */
+        toast.error(
+          "Listarea s-a eliminat, dar lista de pe ecran nu s-a putut reincarca. "
+          + "Reimprospateaza pagina ca sa vezi starea adevarata.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       router.refresh();
     });
   };
   const retry = (productId: string) => startTransition(async () => {
-    const res = await syncTrendyolProduct(businessId, productId);
+    let res: Awaited<ReturnType<typeof syncTrendyolProduct>>;
+    try {
+      res = await syncTrendyolProduct(businessId, productId);
+    } catch {
+      /* ⚠ Retrimite produsul catre Trendyol. */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca produsul a plecat spre Trendyol. "
+        + "Uita-te in contul Trendyol inainte sa retrimiti.",
+        { duration: 12000 },
+      );
+      return;
+    }
     if ("error" in res) { toast.error(res.error); return; }
     toast.success("Retrimis pe Trendyol.");
-    await incarcaPagina();
+    try {
+      await incarcaPagina();
+    } catch {
+      /* ⚠ ALT ADEVAR: fapta s-a facut deja, doar lista n-a putut fi reincarcata. */
+      toast.error(
+        "Produsul a plecat, dar lista de pe ecran nu s-a putut reincarca. "
+        + "Reimprospateaza pagina ca sa vezi starea adevarata.",
+        { duration: 12000 },
+      );
+      router.refresh();
+      return;
+    }
     router.refresh();
   });
   /*
@@ -133,12 +178,34 @@ export function TrendyolListings({
    * ala — deci merita spus, nu doar facut.
    */
   const impingeStocul = (productId: string) => startTransition(async () => {
-    const res = await pushTrendyolInventory(businessId, productId);
+    let res: Awaited<ReturnType<typeof pushTrendyolInventory>>;
+    try {
+      res = await pushTrendyolInventory(businessId, productId);
+    } catch {
+      /* ⚠ Din clipa asta Edinio impinge stocul si pretul si pentru produsul asta. */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca stocul si pretul au plecat spre "
+        + "Trendyol. Uita-te in contul Trendyol inainte sa apesi din nou.",
+        { duration: 12000 },
+      );
+      return;
+    }
     if ("error" in res) { toast.error(res.error); return; }
     toast.success(res.trimis
       ? "Stocul și prețul au plecat spre Trendyol."
       : "Nu era nimic de trimis: produsul nu e (încă) listat pe Trendyol.");
-    await incarcaPagina();
+    try {
+      await incarcaPagina();
+    } catch {
+      /* ⚠ ALT ADEVAR: fapta s-a facut deja, doar lista n-a putut fi reincarcata. */
+      toast.error(
+        "Stocul si pretul au plecat, dar lista de pe ecran nu s-a putut reincarca. "
+        + "Reimprospateaza pagina ca sa vezi starea adevarata.",
+        { duration: 12000 },
+      );
+      router.refresh();
+      return;
+    }
     router.refresh();
   });
 

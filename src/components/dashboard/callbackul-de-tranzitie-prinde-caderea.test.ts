@@ -127,8 +127,6 @@ const INCA_DESCOPERITE: Record<string, number> = {
   "dashboard/SettingsClient.tsx": 1,
   "dashboard/SmartbillConfigClient.tsx": 1,
   "dashboard/SmsoConfigClient.tsx": 1,
-  "dashboard/TrendyolListingEditor.tsx": 1,
-  "dashboard/TrendyolListings.tsx": 3,
   "dashboard/WootConfigClient.tsx": 1,
   "pages/FormBuilderClient.tsx": 1,
   "pages/FormsListClient.tsx": 3,

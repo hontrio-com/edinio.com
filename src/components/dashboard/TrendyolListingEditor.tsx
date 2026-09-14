@@ -451,17 +451,47 @@ export function TrendyolListingEditor({
       return;
     }
     startTransition(async () => {
-      const res = await saveTrendyolListing(businessId, productId, buildInput());
+      let res: Awaited<ReturnType<typeof saveTrendyolListing>>;
+      try {
+        res = await saveTrendyolListing(businessId, productId, buildInput());
+      } catch {
+        /* ⚠ Salvarea listarii se face la NOI. Trendyol nu afla nimic din pasul asta. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca listarea s-a salvat. "
+          + "Reimprospateaza si uita-te la listare inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       if (then === "sync") {
-        const s = await syncTrendyolProduct(businessId, productId);
+        let s: Awaited<ReturnType<typeof syncTrendyolProduct>>;
+        try {
+          s = await syncTrendyolProduct(businessId, productId);
+        } catch {
+          /*
+           * ⚠⚠ ALT ADEVAR DECAT CEL DE SUS, si de aceea sunt doua blocuri, nu unul larg.
+           *
+           * Aici listarea S-A SALVAT deja la noi; nestiut e doar daca a plecat spre Trendyol.
+           * Un singur `catch` peste tot corpul ar fi spus ca nu stim daca s-a salvat, adica un
+           * mesaj FALS exact cand omul are nevoie de unul adevarat.
+           */
+          toast.error(
+            "Listarea s-a salvat, dar nu stim daca a plecat spre Trendyol. "
+            + "Uita-te in contul Trendyol inainte sa trimiti din nou.",
+            { duration: 12000 },
+          );
+          return;
+        }
         if ("error" in s) { toast.error(s.error); return; }
         toast.success("Trimis pe Trendyol.");
-        await onSaved?.();
+        /* ⚠ `onSaved` e al parintelui: daca reimprospatarea lui pica, nu s-a schimbat nimic nici
+           la noi, nici la Trendyol. Se inghite dinadins, ca sa nu para o eroare de trimitere. */
+        try { await onSaved?.(); } catch { /* nimic de spus omului */ }
         router.refresh(); onClose(); return;
       }
       toast.success("Listare salvată.");
-      await onSaved?.();
+      try { await onSaved?.(); } catch { /* ca mai sus: doar parintele, nu si fapta */ }
       router.refresh();
     });
   };

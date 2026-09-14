@@ -708,47 +708,80 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
          slotul din registru n-a putut fi eliberat („apasa Verifica inainte sa
          emiti din nou"). Inghitit, blocajul ar parea inexplicabil. */
       let res: { success?: boolean; error?: string; mesaj?: string };
-      if (key === "woot") res = await cancelWootAwb(businessId, order.id);
-      else if (key === "sameday") res = await deleteSamedayAwbAction(businessId, order.id);
-      else if (key === "cargus") res = await deleteCargusAwbAction(businessId, order.id);
-      else if (key === "dpd") res = await cancelDpdShipmentAction(businessId, order.id);
-      /* ⚠ DEZLEGARE, nu doar anulare. Anularea la FAN merge doar pana la preluarea
-         coletului; dupa aceea DELETE-ul raspunde constant „nu", iar comanda ramanea
-         inghetata pentru totdeauna, needitabila si fara drept la alt curier.
-         `dezleagaFanAwbAction` incearca intai anularea si dezleaga doar la un refuz
-         DOVEDIT; la „nu stim" se opreste si spune asta, ca sa nu ramana un colet in
-         aer despre care nimeni nu mai stie nimic. */
-      else if (key === "fan_courier") res = await dezleagaFanAwbAction(businessId, order.id);
-      else if (key === "gls") res = await deleteGlsAwbAction(businessId, order.id);
-      else if (key === "pallex") res = await deletePallexAwbAction(businessId, order.id);
-      else if (key === "ecolet") res = await deleteEcoletAwbAction(businessId, order.id);
-      else if (key === "posta") res = await dezleagaPostaAwbAction(businessId, order.id, true);
-      else if (key === "innoship") res = await deleteInnoshipAwbAction(businessId, order.id);
-      else if (key === "smartship") res = await deleteSmartshipAwbAction(businessId, order.id);
-      /* ⚠ Ramura ASTA nu poate lipsi: `else` final e DETASAREA de Colete Online, nu o
-         eroare. Fara ea, „Anuleaza” pe un AWB Shipo ar fi chemat detasarea altui
-         curier — si ar fi raportat succes. */
-      else if (key === "shipo") res = await deleteShipoAwbAction(businessId, order.id);
-      else if (key === "fedex") res = await deleteFedexAwbAction(businessId, order.id);
-      else if (key === "ups") res = await deleteUpsAwbAction(businessId, order.id);
-      /* ⚠ DHL NU are anulare de expediere in API — doar de ridicare. Actiunea anuleaza
-         ridicarea daca exista, apoi dezleaga comanda; `mesaj` spune ce a mers si ce a
-         ramas de facut de mana, deci NU se inghite. */
-      else if (key === "dhl") res = await dezleagaDhlAwbAction(businessId, order.id);
-      /* ⚠⚠ REPARATIE. Ramura asta LIPSEA, exact defectul descris mai sus la Shipo: fara
-         ea, „Detaseaza AWB" pe o comanda Packeta cadea pe `else`-ul final si chema
-         detasarea de COLETE ONLINE. Pe o comanda Packeta acolo nu e nimic de detasat,
-         deci raporta SUCCES, iar `packeta_packet_id` ramanea pe comanda — si cu el pe
-         comanda garda „anuleaza AWB-ul intai" nu se mai stingea niciodata, deci comanda
-         nu mai putea fi editata deloc.
-         `avertisment` se muta in `mesaj` fiindca el e singurul loc care ii spune omului ca
-         pachetul RAMANE viu in contul Packeta si trebuie anulat de mana acolo. */
-      else if (key === "packeta") {
-        const p = await dezleagaPacketaAction(businessId, order.id);
-        res = "error" in p ? p : { success: true, mesaj: p.avertisment };
+      /*
+       * ⚠ In `try` DOAR lantul de apeluri, ramificarea AFARA. Vezi
+       * `callbackul-de-tranzitie-prinde-caderea`: un `toast` sau un `router.refresh()`
+       * care ar arunca n-are voie sa fie confundat cu o retea cazuta, altfel mesajul
+       * „nu stim daca a ajuns la curier” ar aparea pentru o anulare care CHIAR reusise.
+       */
+      try {
+        if (key === "woot") res = await cancelWootAwb(businessId, order.id);
+        else if (key === "sameday") res = await deleteSamedayAwbAction(businessId, order.id);
+        else if (key === "cargus") res = await deleteCargusAwbAction(businessId, order.id);
+        else if (key === "dpd") res = await cancelDpdShipmentAction(businessId, order.id);
+        /* ⚠ DEZLEGARE, nu doar anulare. Anularea la FAN merge doar pana la preluarea
+           coletului; dupa aceea DELETE-ul raspunde constant „nu", iar comanda ramanea
+           inghetata pentru totdeauna, needitabila si fara drept la alt curier.
+           `dezleagaFanAwbAction` incearca intai anularea si dezleaga doar la un refuz
+           DOVEDIT; la „nu stim" se opreste si spune asta, ca sa nu ramana un colet in
+           aer despre care nimeni nu mai stie nimic. */
+        else if (key === "fan_courier") res = await dezleagaFanAwbAction(businessId, order.id);
+        else if (key === "gls") res = await deleteGlsAwbAction(businessId, order.id);
+        else if (key === "pallex") res = await deletePallexAwbAction(businessId, order.id);
+        else if (key === "ecolet") res = await deleteEcoletAwbAction(businessId, order.id);
+        else if (key === "posta") res = await dezleagaPostaAwbAction(businessId, order.id, true);
+        else if (key === "innoship") res = await deleteInnoshipAwbAction(businessId, order.id);
+        else if (key === "smartship") res = await deleteSmartshipAwbAction(businessId, order.id);
+        /* ⚠ Ramura ASTA nu poate lipsi: `else` final e DETASAREA de Colete Online, nu o
+           eroare. Fara ea, „Anuleaza” pe un AWB Shipo ar fi chemat detasarea altui
+           curier — si ar fi raportat succes. */
+        else if (key === "shipo") res = await deleteShipoAwbAction(businessId, order.id);
+        else if (key === "fedex") res = await deleteFedexAwbAction(businessId, order.id);
+        else if (key === "ups") res = await deleteUpsAwbAction(businessId, order.id);
+        /* ⚠ DHL NU are anulare de expediere in API — doar de ridicare. Actiunea anuleaza
+           ridicarea daca exista, apoi dezleaga comanda; `mesaj` spune ce a mers si ce a
+           ramas de facut de mana, deci NU se inghite. */
+        else if (key === "dhl") res = await dezleagaDhlAwbAction(businessId, order.id);
+        /* ⚠⚠ REPARATIE. Ramura asta LIPSEA, exact defectul descris mai sus la Shipo: fara
+           ea, „Detaseaza AWB" pe o comanda Packeta cadea pe `else`-ul final si chema
+           detasarea de COLETE ONLINE. Pe o comanda Packeta acolo nu e nimic de detasat,
+           deci raporta SUCCES, iar `packeta_packet_id` ramanea pe comanda — si cu el pe
+           comanda garda „anuleaza AWB-ul intai" nu se mai stingea niciodata, deci comanda
+           nu mai putea fi editata deloc.
+           `avertisment` se muta in `mesaj` fiindca el e singurul loc care ii spune omului ca
+           pachetul RAMANE viu in contul Packeta si trebuie anulat de mana acolo. */
+        else if (key === "packeta") {
+          const p = await dezleagaPacketaAction(businessId, order.id);
+          res = "error" in p ? p : { success: true, mesaj: p.avertisment };
+        }
+        else res = await detachCOAwb(businessId, order.id);
+      } catch {
+        /*
+         * ⚠ CINE SCHIMBA CE, masurat pe fiecare actiune, nu dedus din `manualOnly`.
+         *
+         * Ar fi fost la indemana: campul acela spune deja care curieri se anuleaza de
+         * mana. Dar DHL il poarta, si totusi `dezleagaDhlAwbAction` CHIAR vorbeste cu
+         * DHL, fiindca anuleaza RIDICAREA. Luandu-ma dupa el, i-as fi spus unui om cu
+         * colet DHL ca la curier nu s-a atins nimic.
+         *
+         * Cele trei de mai jos scriu doar la noi: `detachCOAwb` (baza si registrul),
+         * `dezleagaPacketaAction` (nu vorbeste deloc cu Packeta) si
+         * `dezleagaPostaAwbAction`, care CHIAR intreaba la Posta daca trimiterea mai
+         * figureaza, dar nu anuleaza nimic acolo.
+         */
+        const scrieDoarLaNoi = key === "posta" || key === "packeta" || key === "colete";
+        const eticheta = activeAwbs.find((a) => a.key === key)?.label ?? "curier";
+        toast.error(
+          scrieDoarLaNoi
+            ? `Nu am primit raspuns de la server, deci nu stim daca numarul a fost scos de pe comanda. Reimprospateaza comanda inainte sa incerci din nou: la ${eticheta} nu s-a schimbat nimic.`
+            : `Nu am primit raspuns de la server, deci nu stim daca anularea a ajuns la ${eticheta}. Verifica in contul lor si reimprospateaza comanda inainte sa incerci din nou.`,
+          { duration: 12000 },
+        );
+        return;
+      } finally {
+        /* ⚠ Mutat aici din mijlocul lantului: acopera si calea de cadere, nu doar reusita. */
+        setCancellingKey(null);
       }
-      else res = await detachCOAwb(businessId, order.id);
-      setCancellingKey(null);
       if (res.error) { toast.error(res.error); return; }
       toast.success(
         res.mesaj
@@ -763,25 +796,36 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
 
   function handleSave() {
     startSave(async () => {
-      const res = await updateOrderDetails(order.id, {
-        customer_name: name,
-        customer_phone: phone,
-        customer_email: email,
-        address,
-        city,
-        county,
-        postal_code: postal,
-        added_items: added.map((l) => ({ product_id: l.id, variant_title: l.variantTitle, quantity: l.quantity })),
-        linii_modificate: modificariCerute,
-        // Amprenta liniilor pe care le-a VAZUT fereastra. Fara ea, indexul cerut
-        // ar putea arata spre alt produs decat cel apasat.
-        ...(modificariCerute.length > 0 ? { amprenta_items: amprentaLinii(prevItems) } : {}),
-        // Eticheta pleaca odata cu pretul si cu tokenul: e semnata, deci fara ea
-        // verificarea de pe server nu are cum sa bata.
-        ...(cotatieAplicata && quote
-          ? { shipping_cost: quote.price, shipping_token: quote.token, courier_label: quote.label }
-          : {}),
-      });
+      /* ⚠ Aceeasi forma ingusta ca la anulare: in `try` doar apelul. */
+      let res: Awaited<ReturnType<typeof updateOrderDetails>>;
+      try {
+        res = await updateOrderDetails(order.id, {
+          customer_name: name,
+          customer_phone: phone,
+          customer_email: email,
+          address,
+          city,
+          county,
+          postal_code: postal,
+          added_items: added.map((l) => ({ product_id: l.id, variant_title: l.variantTitle, quantity: l.quantity })),
+          linii_modificate: modificariCerute,
+          // Amprenta liniilor pe care le-a VAZUT fereastra. Fara ea, indexul cerut
+          // ar putea arata spre alt produs decat cel apasat.
+          ...(modificariCerute.length > 0 ? { amprenta_items: amprentaLinii(prevItems) } : {}),
+          // Eticheta pleaca odata cu pretul si cu tokenul: e semnata, deci fara ea
+          // verificarea de pe server nu are cum sa bata.
+          ...(cotatieAplicata && quote
+            ? { shipping_cost: quote.price, shipping_token: quote.token, courier_label: quote.label }
+            : {}),
+        });
+      } catch {
+        /* ⚠ `updateOrderDetails` scrie la NOI, deci nu se pomeneste niciun curier: */
+        toast.error(
+          "Nu am primit raspuns de la server si nu stim daca modificarile s-au salvat. "
+          + "Reimprospateaza comanda inainte sa incerci din nou.",
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Comanda a fost actualizata.");
       if (res.faraStoc > 0) {

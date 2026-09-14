@@ -95,7 +95,15 @@ const DIR = "src/components/dashboard";
  * merge in acelasi commit cu reparatia lui. O fereastra reparata de tot IESE din harta.
  */
 const INCA_NEREPARATE: Record<string, number> = {
-  "SmartshipAwbModal.tsx": 10,
+  /*
+   * ⚠ GOALA, si asta e chiar sfarsitul arcului (14.09.2026). Toate cele 56 de aprinderi de steag
+   * din ferestrele de curier au acum stingere in `finally`, sau o scutire numita cu motivul
+   * scris in `NU_SUNT_STEAGURI`.
+   *
+   * ⚠ CLICHETUL NU DISPARE ODATA CU LISTA. Dimpotriva: de acum orice aprindere noua fara
+   * stingere face masuratoarea sa nu mai fie goala, si proba cade cu numele fisierului in mesaj.
+   * O lista goala e cea mai stransa forma a ei, nu sfarsitul ei.
+   */
 };
 
 /**

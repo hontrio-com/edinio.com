@@ -195,9 +195,22 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   }
 
   async function handleCoteaza() {
+    /* ⚠ `finally`, si in `try` DOAR apelul; ramificarea ramane afara. Vezi
+       `steagul-se-stinge-in-finally`. */
     setCotand(true);
-    const r = await coteazaSmartshipAction(businessId, order.id, dateComune());
-    setCotand(false);
+    let r: Awaited<ReturnType<typeof coteazaSmartshipAction>>;
+    try {
+      r = await coteazaSmartshipAction(businessId, order.id, dateComune());
+    } catch (e) {
+      /* ⚠ O CITIRE: nimic nu s-a schimbat la SmartShip. */
+      toast.error(
+        "SmartShip nu a raspuns: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 12000 },
+      );
+      return;
+    } finally {
+      setCotand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 12000 });
 
     setOferte(r.oferte);
@@ -217,14 +230,32 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       ? { courierId: aleasa.courierId, contractPropriu: aleasa.contractPropriu, nume: aleasa.numeCurier }
       : curierImpus;
     if (!ales) return toast.error("Alege o oferta");
-    setEmitand(true);
-    const r = await createSmartshipAwbAction(businessId, order.id, {
+    /* ⚠ Incarcatura intr-un `const`, ca `try` sa cuprinda DOAR apelul. */
+    const dateSmartship = {
       ...dateComune(),
       courierId: ales.courierId,
       contractPropriu: ales.contractPropriu,
       courierName: ales.nume,
-    });
-    setEmitand(false);
+    };
+
+    setEmitand(true);
+    let r: Awaited<ReturnType<typeof createSmartshipAwbAction>>;
+    try {
+      r = await createSmartshipAwbAction(businessId, order.id, dateSmartship);
+    } catch (e) {
+      /* ⚠ Emiterea SCHIMBA la SmartShip, deci NU se spune „a esuat": AWB-ul poate sa fi plecat,
+         iar a doua apasare ar face al doilea, taxabil. Butonul de verificare de mai jos citeste,
+         deci el se apasa intai. */
+      toast.error(
+        "SmartShip nu a raspuns, si nu stim daca AWB-ul s-a creat. NU emite din nou: apasa "
+        + "verificarea, care doar citeste. "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 18000 },
+      );
+      return;
+    } finally {
+      setEmitand(false);
+    }
     if ("error" in r) return toast.error(r.error, { duration: 14000 });
     for (const av of r.avertismente) toast.warning(av, { duration: 12000 });
     toast.success(`AWB emis: ${r.awb}`);
@@ -233,8 +264,21 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleVerifica() {
     setVerificand(true);
-    const r = await verificaSmartshipAwbAction(businessId, order.id);
-    setVerificand(false);
+    let r: Awaited<ReturnType<typeof verificaSmartshipAwbAction>>;
+    try {
+      r = await verificaSmartshipAwbAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Butonul asta e iesirea din „am trimis si n-am primit raspuns", deci n-are voie sa
+         ramana blocat. E o citire, si mesajul o spune. */
+      toast.error(
+        "SmartShip nu a raspuns la verificare. Incearca din nou peste putin, e doar o citire: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setVerificand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 14000 });
     toast[r.gasit ? "success" : "info"](r.mesaj, { duration: 14000 });
     if (r.gasit) onSuccess();
@@ -242,8 +286,17 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleStari() {
     setIncarcStari(true);
-    const r = await getSmartshipTraceAction(businessId, order.id);
-    setIncarcStari(false);
+    let r: Awaited<ReturnType<typeof getSmartshipTraceAction>>;
+    try {
+      r = await getSmartshipTraceAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ Tot o CITIRE. */
+      toast.error("SmartShip nu a raspuns: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"));
+      return;
+    } finally {
+      setIncarcStari(false);
+    }
     if (!r.ok) return toast.error(r.error);
     setStari({ status: r.descriere, lista: r.stari });
   }
@@ -258,8 +311,20 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
    */
   async function handleEticheta() {
     setDescarcand(true);
-    const r = await getSmartshipLabelAction(businessId, order.id);
-    setDescarcand(false);
+    let r: Awaited<ReturnType<typeof getSmartshipLabelAction>>;
+    try {
+      r = await getSmartshipLabelAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ O CITIRE: eticheta se cere prin serverul nostru, dinadins (vezi nota de deasupra). */
+      toast.error(
+        "Eticheta nu s-a putut citi de la SmartShip: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 12000 },
+      );
+      return;
+    } finally {
+      setDescarcand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 12000 });
 
     const octeti = Uint8Array.from(atob(r.pdfBase64), (c) => c.charCodeAt(0));
@@ -290,8 +355,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       + "Raspunsul vine de la echipa SmartShip, nu automat — poate dura ore sau zile. "
       + "Comanda ramane fara AWB pana accepti oferta.",
     )) return;
-    setLucrezOferta(true);
-    const r = await cereOfertaTransportAction(businessId, order.id, {
+    /* ⚠ Incarcatura intr-un `const`, ca `try` sa cuprinda DOAR apelul. */
+    const dateOferta = {
       ...dateComune(),
       truckType: tipCamion || null,
       grupaj,
@@ -299,8 +364,27 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       temperaturaControlata: temperatura,
       buget: Number(buget) || null,
       mesaj: mesajOferta.trim() || null,
-    });
-    setLucrezOferta(false);
+    };
+
+    setLucrezOferta(true);
+    let r: Awaited<ReturnType<typeof cereOfertaTransportAction>>;
+    try {
+      r = await cereOfertaTransportAction(businessId, order.id, dateOferta);
+    } catch (e) {
+      /* ⚠ ALTA NESIGURANTA DECAT LA EMITERE. Aici nu se naste niciun AWB: solicitarea pleaca
+         spre oameni si raspunsul poate dura ore sau zile (vezi confirmarea de mai sus). Deci
+         intrebarea nu e „s-a emis?", ci „a intrat solicitarea?", si o a doua cerere trimisa
+         degeaba inseamna doua solicitari pentru aceeasi marfa. */
+      toast.error(
+        "SmartShip nu a raspuns, si nu stim daca solicitarea a intrat. Verifica in contul "
+        + "SmartShip inainte sa ceri din nou, ca sa nu ajunga doua cereri pentru aceeasi marfa. "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 18000 },
+      );
+      return;
+    } finally {
+      setLucrezOferta(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 14000 });
     toast.success(`Solicitare inregistrata: ${r.ref}`);
     onSuccess();
@@ -308,8 +392,19 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   async function handleVerificaOferta() {
     setLucrezOferta(true);
-    const r = await getOfertaTransportAction(businessId, order.id);
-    setLucrezOferta(false);
+    let r: Awaited<ReturnType<typeof getOfertaTransportAction>>;
+    try {
+      r = await getOfertaTransportAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠ O CITIRE: se intreaba daca a venit oferta, nu se schimba nimic. */
+      toast.error(
+        "SmartShip nu a raspuns: " + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 12000 },
+      );
+      return;
+    } finally {
+      setLucrezOferta(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 12000 });
     setOferta(r.oferta);
     if (!r.oferta.offer) toast.info(`Inca nu exista oferta (${r.oferta.request_status ?? "in lucru"}).`);
@@ -321,8 +416,24 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       + "se scade din creditul contului.",
     )) return;
     setLucrezOferta(true);
-    const r = await acceptaOfertaTransportAction(businessId, order.id);
-    setLucrezOferta(false);
+    let r: Awaited<ReturnType<typeof acceptaOfertaTransportAction>>;
+    try {
+      r = await acceptaOfertaTransportAction(businessId, order.id);
+    } catch (e) {
+      /* ⚠⚠ NU E O SIMPLA ACCEPTARE. Confirmarea de mai sus o spune: se emite pe loc un AWB REAL
+         si pretul ofertei se scade din creditul contului. Deci nesiguranta de aici costa bani,
+         si o a doua apasare ar putea emite al doilea AWB pe aceeasi marfa. */
+      toast.error(
+        "SmartShip nu a raspuns, si nu stim daca oferta a fost acceptata. NU accepta din nou: "
+        + "acceptarea emite un AWB real si scade din creditul contului. Verifica in contul "
+        + "SmartShip. "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 25000 },
+      );
+      return;
+    } finally {
+      setLucrezOferta(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 14000 });
     toast.success(`Oferta acceptata. AWB: ${r.awb}`);
     onSuccess();
@@ -331,8 +442,21 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   async function handleRefuzaOferta() {
     const motiv = prompt("Motivul refuzului (optional):") ?? undefined;
     setLucrezOferta(true);
-    const r = await refuzaOfertaTransportAction(businessId, order.id, motiv);
-    setLucrezOferta(false);
+    let r: Awaited<ReturnType<typeof refuzaOfertaTransportAction>>;
+    try {
+      r = await refuzaOfertaTransportAction(businessId, order.id, motiv);
+    } catch (e) {
+      /* ⚠ Refuzul SCHIMBA la SmartShip: poate sa fi ajuns, si atunci oferta chiar e refuzata
+         desi ecranul inca o arata. */
+      toast.error(
+        "SmartShip nu a raspuns. Verifica in contul SmartShip daca refuzul a ajuns: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setLucrezOferta(false);
+    }
     if (!r.ok) return toast.error(r.error);
     toast.success("Oferta a fost refuzata.");
     onSuccess();
@@ -358,10 +482,23 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   async function handleRidicare() {
     if (!ziRidicare || !deLa || !panaLa) return toast.error("Alege ziua si intervalul");
     setRidicand(true);
-    const r = await programeazaSmartshipPickupAction(businessId, order.id, {
-      pickup_date: ziRidicare, ready_time: deLa, latest_time: panaLa,
-    });
-    setRidicand(false);
+    let r: Awaited<ReturnType<typeof programeazaSmartshipPickupAction>>;
+    try {
+      r = await programeazaSmartshipPickupAction(businessId, order.id, {
+        pickup_date: ziRidicare, ready_time: deLa, latest_time: panaLa,
+      });
+    } catch (e) {
+      /* ⚠ Programarea SCHIMBA la SmartShip: poate sa fi ajuns, si atunci soferul chiar vine. */
+      toast.error(
+        "SmartShip nu a raspuns. Verifica in contul SmartShip daca ridicarea s-a programat, "
+        + "inainte sa programezi din nou: "
+        + (e instanceof Error ? e.message : "cererea nu a ajuns la capat"),
+        { duration: 14000 },
+      );
+      return;
+    } finally {
+      setRidicand(false);
+    }
     if (!r.ok) return toast.error(r.error, { duration: 12000 });
     toast.success(r.mesaj);
     onSuccess();

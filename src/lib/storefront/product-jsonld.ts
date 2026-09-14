@@ -327,7 +327,7 @@ export function buildProductJsonLd(
         "@type": "Product",
         /* Numele combinatiei, nu al produsului: „Husa … — Gri" se citeste ca
            articol, iar sapte randuri cu acelasi nume nu s-ar deosebi. */
-        name: `${product.name} — ${combo.title}`,
+        name: `${product.name} - ${combo.title}`,
         /*
          * ═══ CAMPURILE COMUNE SE SCRIU PE FIECARE VARIANTA, NU SE MOSTENESC ═══ (30.08.2026)
          *

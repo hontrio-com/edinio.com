@@ -911,7 +911,7 @@ export function ProductPageDetailed({
               <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
                 <p className="font-medium text-amber-700 dark:text-amber-400">Linia nu mai e in cos</p>
                 <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-0.5">
-                  A fost stearsa intre timp. Ce ai completat aici se pastreaza — apasa
+                  A fost stearsa intre timp. Ce ai completat aici se pastreaza: apasa
                   „Adauga in cos” ca sa o pui din nou.
                 </p>
               </div>

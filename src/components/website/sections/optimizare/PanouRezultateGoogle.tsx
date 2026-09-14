@@ -60,7 +60,7 @@ export function PanouRezultateGoogle() {
       <p className="sr-only">
         Exemplu de rezultate Google: două magazine cu titluri și descrieri
         nelucrate, iar la mijloc unul cu titlu și descriere scrise pentru
-        căutare&nbsp;— „{alNostru?.titlu}&rdquo;.
+        căutare:&nbsp;„{alNostru?.titlu}&rdquo;.
       </p>
 
       <div

@@ -437,7 +437,7 @@ export async function sendMfaOtpEmail(to: string, otp: string) {
   await getResend().emails.send({
     from: FROM,
     to,
-    subject: `${otp} — Codul tau de verificare Edinio`,
+    subject: `${otp}: Codul tau de verificare Edinio`,
     html: baseTemplate(content),
   });
 }
@@ -844,7 +844,7 @@ export async function sendBrokenDomainsToAdmin(
 
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">${titlu}</h2>
-    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Reconcilierea automata face doar reparatii care adauga. Ce e marcat „AL NOSTRU" inseamna ca domeniul e deja indreptat catre Vercel si asteapta o interventie de la noi — pana atunci e cazut complet, si site, si email.</p>
+    <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Reconcilierea automata face doar reparatii care adauga. Ce e marcat „AL NOSTRU" inseamna ca domeniul e deja indreptat catre Vercel si asteapta o interventie de la noi, iar pana atunci e cazut complet, si site, si email.</p>
     ${rows
       ? `<table width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;border:1px solid #e4e4e7;border-radius:12px;overflow:hidden;">${rows}</table>`
       : ""}
@@ -1010,7 +1010,7 @@ export async function sendNewSupportTicketToAdmin(data: {
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Suport] ${subiectSigur(data.subject)} — ${data.userEmail}`,
+    subject: `[Suport] ${subiectSigur(data.subject)} - ${data.userEmail}`,
     html: baseTemplate(content),
   });
 }
@@ -1037,7 +1037,7 @@ export async function sendSupportReplyToAdmin(data: {
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: `[Suport] RE: ${subiectSigur(data.subject)} — ${data.userEmail}`,
+    subject: `[Suport] RE: ${subiectSigur(data.subject)} - ${data.userEmail}`,
     html: baseTemplate(emailContent),
   });
 }
@@ -1147,7 +1147,7 @@ export async function sendDomainOrderToAdmin(data: {
   await getResend().emails.send({
     from: FROM,
     to: SUPPORT_ADMIN_EMAIL,
-    subject: subiectSigur(`[Domeniu] Comanda noua: ${data.domain} — ${data.customerName}`),
+    subject: subiectSigur(`[Domeniu] Comanda noua: ${data.domain} - ${data.customerName}`),
     html: baseTemplate(content),
   });
 }
@@ -1285,7 +1285,7 @@ export async function sendNewOrderEmail(
 
   const pmLabel = order.payment_method
     ? PAYMENT_METHOD_LABELS[order.payment_method] ?? esc(order.payment_method)
-    : "—";
+    : "-";
   const pmStatus = order.payment_method === "cash_on_delivery"
     ? "Se incaseaza la livrare"
     : "In asteptarea confirmarii platii";
@@ -1436,7 +1436,7 @@ export async function sendOrderStatusToCustomer(
     : "";
 
   const { subject, intro } = renderTemplate(sender, "order_status", {
-    subject: `${cfg.subject} — ${order.order_number}`,
+    subject: `${cfg.subject} - ${order.order_number}`,
     intro: `<p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Buna, <strong>${esc(order.customer_name)}</strong>! Iti trimitem un update despre comanda ta la <strong>${esc(order.business_name)}</strong>.</p>`,
   }, {
     nume_client: order.customer_name,

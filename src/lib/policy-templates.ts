@@ -92,14 +92,14 @@ function termsTemplate(
 <p>Vânzătorul nu răspunde pentru daune indirecte, incidentale sau consecvente rezultate din utilizarea produselor achiziționate. Răspunderea totală a Vânzătorului față de Cumpărător, indiferent de cauza acțiunii, nu va depăși valoarea produsului achiziționat. Aceste limitări nu se aplică în cazul vătămărilor corporale sau decesului cauzate de neglijența Vânzătorului, sau în alte situații în care răspunderea nu poate fi limitată prin lege.</p>
 
 <h3>11. Forță Majoră</h3>
-<p>Niciuna dintre părți nu va fi considerată răspunzătoare pentru neexecutarea sau executarea cu întârziere a obligațiilor contractuale dacă aceasta este cauzată de un eveniment de forță majoră — orice eveniment extern, imprevizibil, absolut invincibil și inevitabil (calamități naturale, conflicte armate, pandemii, acte ale autorităților publice, pene generalizate de curent, atacuri cibernetice la scară națională etc.). Partea care invocă forța majoră are obligația de a notifica cealaltă parte în termen de 5 zile lucrătoare de la producerea evenimentului.</p>
+<p>Niciuna dintre părți nu va fi considerată răspunzătoare pentru neexecutarea sau executarea cu întârziere a obligațiilor contractuale dacă aceasta este cauzată de un eveniment de forță majoră: orice eveniment extern, imprevizibil, absolut invincibil și inevitabil (calamități naturale, conflicte armate, pandemii, acte ale autorităților publice, pene generalizate de curent, atacuri cibernetice la scară națională etc.). Partea care invocă forța majoră are obligația de a notifica cealaltă parte în termen de 5 zile lucrătoare de la producerea evenimentului.</p>
 
 <h3>12. Soluționarea Litigiilor</h3>
 <p>Orice neînțelegere apărută între Vânzător și Cumpărător va fi soluționată, în primă instanță, pe cale amiabilă. În cazul în care nu se ajunge la o soluție amiabilă, litigiile vor fi supuse instanțelor judecătorești competente de pe raza județului în care Vânzătorul își are sediul social, aplicându-se legislația română.</p>
 <p>Consumatorii pot apela și la soluționarea alternativă a litigiilor (SAL) prin:</p>
 <ul>
-<li><strong>ANPC</strong> (Autoritatea Națională pentru Protecția Consumatorilor) — <em>www.anpc.ro</em>, Centrul SAL: <em>https://reclamatii.anpc.ro</em></li>
-<li><strong>Platforma ODR</strong> a Comisiei Europene (pentru litigii online) — <em>https://ec.europa.eu/consumers/odr</em></li>
+<li><strong>ANPC</strong> (Autoritatea Națională pentru Protecția Consumatorilor): <em>www.anpc.ro</em>, Centrul SAL: <em>https://reclamatii.anpc.ro</em></li>
+<li><strong>Platforma ODR</strong> a Comisiei Europene (pentru litigii online): <em>https://ec.europa.eu/consumers/odr</em></li>
 </ul>
 
 <h3>13. Legea Aplicabilă</h3>
@@ -236,7 +236,7 @@ function privacyTemplate(
 <li>Ne contactezi: conținutul mesajului și datele de identificare;</li>
 <li>Te abonezi la newsletter: adresă de e-mail.</li>
 </ul>
-<p>Colectăm, de asemenea, automat date tehnice privind navigarea pe site: adresa IP, tipul de browser, paginile vizitate, data și ora accesului (prin cookies și tehnologii similare — a se vedea Secțiunea 8).</p>
+<p>Colectăm, de asemenea, automat date tehnice privind navigarea pe site: adresa IP, tipul de browser, paginile vizitate, data și ora accesului (prin cookies și tehnologii similare, a se vedea Secțiunea 8).</p>
 
 <h3>3. Scopurile și Temeiul Juridic al Prelucrării</h3>
 <p>Prelucrăm datele tale cu caracter personal în baza următoarelor temeiuri juridice prevăzute de art. 6 din GDPR:</p>
@@ -250,11 +250,11 @@ function privacyTemplate(
 <h3>4. Destinatarii Datelor</h3>
 <p>Datele tale pot fi transmise, în condițiile legii, următoarelor categorii de destinatari:</p>
 <ul>
-<li><strong>Firme de curierat</strong> — pentru efectuarea livrărilor;</li>
-<li><strong>Procesatori de plăți</strong> — pentru procesarea tranzacțiilor financiare;</li>
-<li><strong>Furnizori de servicii IT</strong> — pentru găzduire web, e-mail tranzacțional, analiză web;</li>
-<li><strong>Contabili și auditori</strong> — pentru îndeplinirea obligațiilor legale;</li>
-<li><strong>Autorități publice</strong> — la solicitarea expresă și în temeiul obligațiilor legale (ANAF, Poliție, ANPC etc.).</li>
+<li><strong>Firme de curierat</strong>: pentru efectuarea livrărilor;</li>
+<li><strong>Procesatori de plăți</strong>: pentru procesarea tranzacțiilor financiare;</li>
+<li><strong>Furnizori de servicii IT</strong>: pentru găzduire web, e-mail tranzacțional, analiză web;</li>
+<li><strong>Contabili și auditori</strong>: pentru îndeplinirea obligațiilor legale;</li>
+<li><strong>Autorități publice</strong>: la solicitarea expresă și în temeiul obligațiilor legale (ANAF, Poliție, ANPC etc.).</li>
 </ul>
 <p>Nu vindem, nu închiriem și nu cedăm datele tale cu caracter personal unor terțe părți în scop comercial.</p>
 
@@ -272,7 +272,7 @@ function privacyTemplate(
 </ul>
 
 <h3>7. Drepturile Persoanei Vizate</h3>
-<p>Conform GDPR, ai dreptul la: acces, rectificare, ștergere, restricționarea prelucrării, portabilitate și opoziție. Detaliile complete privind aceste drepturi și modalitățile de exercitare sunt disponibile în <strong>Secțiunea GDPR — Drepturile Tale</strong>.</p>
+<p>Conform GDPR, ai dreptul la: acces, rectificare, ștergere, restricționarea prelucrării, portabilitate și opoziție. Detaliile complete privind aceste drepturi și modalitățile de exercitare sunt disponibile în <strong>Secțiunea GDPR: Drepturile Tale</strong>.</p>
 
 <h3>8. Cookie-uri</h3>
 <p>Site-ul utilizează cookie-uri și tehnologii similare. Cookie-urile esențiale (necesare funcționării site-ului) sunt active implicit. Cookie-urile de analiză și marketing necesită consimțământul tău explicit, acordat prin intermediul bannerului de cookie-uri afișat la prima vizită.</p>
@@ -296,7 +296,7 @@ function privacyTemplate(
 
 function gdprTemplate(name: string, email: string): string {
   return `
-<h2>GDPR — Drepturile Tale ca Persoană Vizată</h2>
+<h2>GDPR: Drepturile Tale ca Persoană Vizată</h2>
 
 <p>Conform Regulamentului (UE) 2016/679 (GDPR), ai o serie de drepturi cu privire la datele tale cu caracter personal prelucrate de <strong>${name}</strong>. Mai jos găsești o descriere detaliată a fiecărui drept și a modului în care îl poți exercita.</p>
 
@@ -307,7 +307,7 @@ function gdprTemplate(name: string, email: string): string {
 <h3>2. Dreptul la Rectificare (Art. 16 GDPR)</h3>
 <p>Ai dreptul de a obține rectificarea datelor inexacte care te privesc, fără întârzieri nejustificate. Ținând cont de scopurile prelucrării, ai dreptul de a completa datele incomplete.</p>
 
-<h3>3. Dreptul la Ștergere — „Dreptul de a fi Uitat" (Art. 17 GDPR)</h3>
+<h3>3. Dreptul la Ștergere: „Dreptul de a fi Uitat" (Art. 17 GDPR)</h3>
 <p>Ai dreptul de a obține ștergerea datelor tale personale, fără întârzieri nejustificate, în unul din următoarele cazuri:</p>
 <ul>
 <li>Datele nu mai sunt necesare pentru scopul pentru care au fost colectate;</li>

@@ -56,8 +56,8 @@ export function PanouSitemap() {
       */}
       <p className="sr-only">
         Exemplu de sitemap generat de Edinio: un fișier XML cu {SITEMAP_EXEMPLU.length}{" "}
-        adrese ale magazinului&nbsp;— pagina de start, o categorie și {produse}{" "}
-        produs&nbsp;— fiecare cu data ultimei modificări.
+        adrese ale magazinului:&nbsp;pagina de start, o categorie și {produse}{" "}
+        produs:&nbsp;fiecare cu data ultimei modificări.
       </p>
 
       <div

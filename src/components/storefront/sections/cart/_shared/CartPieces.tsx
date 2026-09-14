@@ -234,8 +234,8 @@ export function CartLine({
               singurul adevarat.
             */}
             {adresaDeEditare(basePath, item)
-              ? "Necesita actualizare — apasa „Editeaza” si alege din nou"
-              : "Necesita actualizare — deschide produsul si alege din nou"}
+              ? "Necesita actualizare: apasa „Editeaza” si alege din nou"
+              : "Necesita actualizare: deschide produsul si alege din nou"}
           </p>
         )}
         {nesigur

@@ -28,7 +28,7 @@ export function SetariCookieClient() {
             {c.stare.statistici ? "statistici pornite" : "statistici oprite"},{" "}
             {c.stare.marketing ? "marketing pornit" : "marketing oprit"}
           </span>
-          {c.stare.cand > 0 ? <> — făcută pe {DATA.format(new Date(c.stare.cand * 1000))}</> : null}
+          {c.stare.cand > 0 ? <>, făcută pe {DATA.format(new Date(c.stare.cand * 1000))}</> : null}
         </p>
       ) : (
         <p className="text-[13px] text-ink-3">

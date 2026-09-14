@@ -140,7 +140,7 @@ export function Footer() {
             <a href="https://anpc.ro/ce-este-sal/" target="_blank" rel="noopener noreferrer">
               <Image
                 src="/anpc-sal.avif"
-                alt="ANPC — Soluționarea Alternativă a Litigiilor"
+                alt="ANPC: Soluționarea Alternativă a Litigiilor"
                 width={180}
                 height={50}
                 unoptimized
@@ -150,7 +150,7 @@ export function Footer() {
             <a href="https://ec.europa.eu/consumers/odr" target="_blank" rel="noopener noreferrer">
               <Image
                 src="/anpc-sol.avif"
-                alt="ANPC — Soluționarea Online a Litigiilor"
+                alt="ANPC: Soluționarea Online a Litigiilor"
                 width={180}
                 height={50}
                 unoptimized

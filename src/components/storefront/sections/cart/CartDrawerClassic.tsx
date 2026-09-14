@@ -246,8 +246,8 @@ export function CartDrawerClassic({
                       <p className="text-xs mt-1 font-medium text-amber-600 dark:text-amber-500">
                         {/* ⚠ Aceeasi indicatie ca pe paginile de cos, si tot dupa ce se vede pe rand. */}
                         {adresaDeEditare(basePath, item)
-                          ? "Necesita actualizare — apasa „Editeaza” si alege din nou"
-                          : "Necesita actualizare — deschide produsul si alege din nou"}
+                          ? "Necesita actualizare: apasa „Editeaza” si alege din nou"
+                          : "Necesita actualizare: deschide produsul si alege din nou"}
                       </p>
                     )}
                     {/* Peste o bucata, un singur numar scris in accent se

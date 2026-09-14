@@ -114,10 +114,33 @@ export function AboutYouListings({
     if (!window.confirm("Elimini această listare de pe About You?")) return;
     startTransition(async () => {
       aplicaOptimistElimina(productId);
-      const res = await removeAboutYouListing(businessId, productId);
+      let res: Awaited<ReturnType<typeof removeAboutYouListing>>;
+      try {
+        res = await removeAboutYouListing(businessId, productId);
+      } catch {
+        /* ⚠ Eliminarea pleaca spre About You. Randul a fost deja scos optimist de pe ecran, iar
+           `useOptimistic` il aduce inapoi cand tranzitia se incheie. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca listarea s-a eliminat de pe About You. "
+          + "Reimprospateaza si uita-te in lista inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Listare eliminată.");
-      await incarca(stare.page, cautare);
+      try {
+        await incarca(stare.page, cautare);
+      } catch {
+        /* ⚠ ALT ADEVAR: fapta s-a facut deja, doar lista n-a putut fi reincarcata. */
+        toast.error(
+          "Listarea s-a eliminat, dar lista de pe ecran nu s-a putut reincarca. "
+          + "Reimprospateaza pagina ca sa vezi starea adevarata.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       router.refresh();
     });
   };
@@ -136,31 +159,91 @@ export function AboutYouListings({
    * ⚠ Un text care ramane in urma codului MINTE, si minte cu incredere. E a patra oara luna asta.
    */
   const syncAll = () => startTransition(async () => {
-    const res = await syncAllAboutYou(businessId);
+    let res: Awaited<ReturnType<typeof syncAllAboutYou>>;
+    try {
+      res = await syncAllAboutYou(businessId);
+    } catch {
+      /* ⚠ Baga catalogul in coada de trimitere. Lucrarea se tine minte intr-un rand si cronul o
+         duce la capat, deci nu stim cate au apucat sa intre, dar nici nu se pierde. */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca trimiterea a pornit. "
+        + "Reimprospateaza si uita-te la lista inainte sa apesi din nou.",
+        { duration: 12000 },
+      );
+      return;
+    }
     if ("error" in res) { toast.error(res.error); return; }
     if (res.incomplet) {
       toast.success(`${res.queued} produse trimise în coadă. Restul catalogului continuă automat, în fundal.`);
     } else {
       toast.success(res.queued > 0 ? `${res.queued} produse trimise în coadă.` : "Nu există listări de trimis.");
     }
-    await incarca(stare.page, cautare);
+    try {
+      await incarca(stare.page, cautare);
+    } catch {
+      /* ⚠ ALT ADEVAR: fapta s-a facut deja, doar lista n-a putut fi reincarcata. */
+      toast.error(
+        "Trimiterea a pornit, dar lista de pe ecran nu s-a putut reincarca. "
+        + "Reimprospateaza pagina ca sa vezi starea adevarata.",
+        { duration: 12000 },
+      );
+      router.refresh();
+      return;
+    }
     router.refresh();
   });
 
   const publishAll = () => startTransition(async () => {
-    const res = await publishAllAboutYou(businessId);
+    let res: Awaited<ReturnType<typeof publishAllAboutYou>>;
+    try {
+      res = await publishAllAboutYou(businessId);
+    } catch {
+      /* ⚠ Programeaza ciornele pentru publicare, pe acelasi drum cu coada de mai sus. */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca publicarea a pornit. "
+        + "Reimprospateaza si uita-te la lista inainte sa apesi din nou.",
+        { duration: 12000 },
+      );
+      return;
+    }
     if ("error" in res) { toast.error(res.error); return; }
     if (res.incomplet) {
       toast.success(`${res.queued} produse programate pentru publicare. Restul continuă automat, în fundal.`);
     } else {
       toast.success(res.queued > 0 ? `${res.queued} produse programate pentru publicare.` : "Nu există ciorne de publicat.");
     }
-    await incarca(stare.page, cautare);
+    try {
+      await incarca(stare.page, cautare);
+    } catch {
+      /* ⚠ ALT ADEVAR: fapta s-a facut deja, doar lista n-a putut fi reincarcata. */
+      toast.error(
+        "Publicarea a pornit, dar lista de pe ecran nu s-a putut reincarca. "
+        + "Reimprospateaza pagina ca sa vezi starea adevarata.",
+        { duration: 12000 },
+      );
+      router.refresh();
+      return;
+    }
     router.refresh();
   });
 
   const retry = (productId: string, respins: boolean) => startTransition(async () => {
-    const res = await syncAboutYouProduct(businessId, productId);
+    let res: Awaited<ReturnType<typeof syncAboutYouProduct>>;
+    try {
+      res = await syncAboutYouProduct(businessId, productId);
+    } catch {
+      /*
+       * ⚠ PRIMA DIN TREI ASTEPTARI, si fiecare are alt adevar. De aceea manerul asta s-a facut
+       * de mana, nu cu generatorul: acela stie sa inveleasca doua, iar a treia ar fi ramas goala,
+       * cu harta coborata peste ea.
+       */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca datele au plecat spre About You. "
+        + "Uita-te la produs in contul lor inainte sa incerci din nou.",
+        { duration: 12000 },
+      );
+      return;
+    }
     if ("error" in res) { toast.error(res.error); return; }
     if (!respins) {
       toast.success("Retrimis pe About You.");
@@ -173,22 +256,81 @@ export function AboutYouListings({
        * Fara al doilea pas, comerciantul apasa „Reîncearcă", vede un mesaj de
        * succes, si produsul rămâne respins — o bucla din care nu se iese.
        */
-      const p = await publishAboutYouProduct(businessId, productId);
+      let p: Awaited<ReturnType<typeof publishAboutYouProduct>>;
+      try {
+        p = await publishAboutYouProduct(businessId, productId);
+      } catch {
+        /*
+         * ⚠ A DOUA DIN TREI, si adevarul ei e ALTUL decat al primei: datele AU PLECAT deja,
+         * fiindca apelul de deasupra a reusit. Nestiut ramane doar daca cererea de reevaluare a
+         * ajuns la ei. Codul de mai jos spune acelasi lucru pe calea de eroare cunoscuta.
+         *
+         * ⚠ Si se cheama `router.refresh()` inainte de iesire: calea obisnuita se incheie cu
+         * `incarca` si o reimprospatare, iar iesind pe scurtatura as lasa ecranul neatins.
+         */
+        toast.warning(
+          "Datele au plecat, dar nu stim daca cererea de reevaluare a ajuns la About You. "
+          + "Uita-te la produs in contul lor inainte sa apesi din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in p) {
         toast.warning(`Datele au plecat, dar cererea de reevaluare nu: ${p.error}`);
       } else {
         toast.success("Retrimis, iar About You a fost rugat să reevalueze produsul.");
       }
     }
-    await incarca(stare.page, cautare);
+    try {
+      await incarca(stare.page, cautare);
+    } catch {
+      /*
+       * ⚠ A TREIA SI ULTIMA. Aici fapta S-A FACUT deja, pe oricare dintre cele doua drumuri de
+       * mai sus: nestiut ramane doar daca lista de pe ecran a putut fi adusa la zi.
+       *
+       * ⚠ Cele trei asteptari au trei adevaruri diferite, si de aceea manerul asta nu a intrat in
+       * generator: acela stie sa inveleasca doua, iar a treia ar fi ramas goala. Clichetul nu m-ar
+       * fi prins, fiindca el cere doar un `catch` ORIUNDE in corp.
+       */
+      toast.error(
+        "Retrimiterea s-a facut, dar lista de pe ecran nu s-a putut reincarca. "
+        + "Reimprospateaza pagina ca sa vezi starea adevarata.",
+        { duration: 12000 },
+      );
+      router.refresh();
+      return;
+    }
     router.refresh();
   });
 
   const retrage = (productId: string) => startTransition(async () => {
-    const res = await unpublishAboutYouProduct(businessId, productId);
+    let res: Awaited<ReturnType<typeof unpublishAboutYouProduct>>;
+    try {
+      res = await unpublishAboutYouProduct(businessId, productId);
+    } catch {
+      /* ⚠ Retrage produsul DE PE About You. */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca produsul s-a retras de pe About You. "
+        + "Uita-te in contul About You inainte sa incerci din nou.",
+        { duration: 12000 },
+      );
+      return;
+    }
     if ("error" in res) { toast.error(res.error); return; }
     toast.success("Produsul a fost retras de pe About You.");
-    await incarca(stare.page, cautare);
+    try {
+      await incarca(stare.page, cautare);
+    } catch {
+      /* ⚠ ALT ADEVAR: fapta s-a facut deja, doar lista n-a putut fi reincarcata. */
+      toast.error(
+        "Produsul s-a retras, dar lista de pe ecran nu s-a putut reincarca. "
+        + "Reimprospateaza pagina ca sa vezi starea adevarata.",
+        { duration: 12000 },
+      );
+      router.refresh();
+      return;
+    }
     router.refresh();
   });
 

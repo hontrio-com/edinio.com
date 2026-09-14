@@ -19,6 +19,7 @@ import { etichetaOferta as etichetaEcolet, ofertePosibile as oferteEcolet } from
 import { rezolvaLocalitatea as rezolvaLocalitateEcolet } from "@/lib/ecolet/cautare";
 import { puncteGls } from "@/lib/gls/puncte";
 import { FARA_API_DE_TARIF, pragulRambursului, rezervaEDeIncredere } from "@/lib/shipping/optiuni-de-rezerva";
+import { cheiaLockerelor } from "@/lib/shipping/cheia-lockerelor";
 import { postaGata, unitatiLivrare, type PostaConfig } from "@/lib/posta/client";
 import { packetaGata, type PacketaConfig } from "@/lib/packeta/client";
 import { puncteRomania } from "@/lib/packeta/puncte-flux";
@@ -3059,6 +3060,43 @@ async function buildColeteOptions(
  */
 const CACHE_LOCKERE = new CacheScurt<LockerItem[]>(10 * 60_000, 40);
 
+/**
+ * Setarile de curier ale magazinului, cat ii trebuie listei de lockere.
+ *
+ * ⚠ NU E EXPORTATA, si nici nu are voie sa fie: fisierul e `"use server"`, unde
+ * fiecare export devine o usa chemabila din browser. Randul asta citeste credentiale.
+ */
+async function citesteSetarileLockerelor(businessId: string) {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("store_settings")
+    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, ups_config")
+    .eq("business_id", businessId)
+    .single();
+  return data;
+}
+
+type SetariLockere = NonNullable<Awaited<ReturnType<typeof citesteSetarileLockerelor>>>;
+
+/*
+ * ⚠ DE CE UN AL DOILEA CACHE, SI NU O CITIRE DIRECTA.
+ *
+ * Amprenta configului intra in cheia listei de lockere, deci setarile trebuie citite
+ * INAINTE de cache. Citite direct, fiecare cerere ar fi ajuns in baza, si tocmai pe
+ * drumul unde azi un raspuns din cache nu costa nimic: plafonul durabil sta MAI JOS
+ * dinadins, ca sa nu-l consume cumparatorii cinstiti, deci n-ar fi oprit pe nimeni.
+ * Adica o amplificare fara plafon pe baza noastra, platita ca sa reparam altceva.
+ *
+ * Asa, baza e atinsa cel mult o data la treizeci de secunde pe magazin si pe instanta.
+ * Acelasi tipar si acelasi pret ca la `motivContInactiv` (`subscription-server.ts:55`),
+ * care sta pe drumul fiecarui AWB.
+ *
+ * ⚠ COMPROMISUL, pe fata: un cont de curier tocmai schimbat se vede in cel mult
+ * treizeci de secunde, nu pe loc. Fata de cele zece minute de lista veche pe care le
+ * repara, e un schimb bun.
+ */
+const CACHE_SETARI_LOCKERE = new CacheScurt<SetariLockere | null>(30_000, 200);
+
 /** Filtrarea pe oras se face DUPA cache: cache-ul tine lista intreaga a magazinului. */
 function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
   return city ? lockere.filter((l) => cityMatches(l.city, city)) : lockere;
@@ -3157,7 +3195,6 @@ export async function getLockers(
      */
     : courier === "ups" ? `:${orasUps(city ?? "", retea ?? null).toLowerCase()}`
     : "";
-  const cheieCache = `${businessId}:${courier}:${codAmount && codAmount > 0 ? "cod" : "-"}${discriminant}`;
 
   /*
    * Cache-ul se consulta INAINTE de plafon, si asta e jumatate din reparatie: un
@@ -3188,12 +3225,38 @@ export async function getLockers(
    */
   const filtreaza = courier !== "shipo" && courier !== "ups";
 
+  /*
+   * ⚠ CURIERUL NECUNOSCUT SE REFUZA INAINTEA ORICAREI CITIRI, si de azi chiar
+   * inaintea cache-ului: `courier` vine de la client si e liber, deci un nume
+   * inventat nu trebuie sa coste nici macar interogarea de setari de mai jos.
+   */
+  if (!CURIERI_CU_LOCKERE.has(courier)) return [];
+
+  /*
+   * ⚠ SETARILE SE CITESC INAINTEA CACHE-ULUI, FIINDCA CHEIA LUI LE CUPRINDE.
+   *
+   * Pana azi cheia era `magazin:curier:ramburs` plus discriminantul de retea, si
+   * nimic din config. Comerciantul care isi schimba contul de curier (parola rotita,
+   * alt contract, alta retea) primea zece minute lista veche, adusa cu creditele
+   * contului vechi, si n-avea nicio cale s-o grabeasca: `CacheScurt` e PER INSTANTA,
+   * deci o stergere la salvare ar fi golit o singura instanta din cate sunt calde.
+   *
+   * De aceea leacul sta in CHEIE, nu in stergere: cu amprenta configului in ea,
+   * contul nou citeste de la alta cheie, iar intrarea veche se stinge singura.
+   */
+  const settings = await CACHE_SETARI_LOCKERE.iaSau(businessId, () => citesteSetarileLockerelor(businessId));
+  if (!settings) return [];
+
+  const cheieCache = cheiaLockerelor({
+    businessId,
+    curier: courier,
+    esteRamburs: !!(codAmount && codAmount > 0),
+    discriminant,
+    config: settings,
+  });
+
   const dinCache = CACHE_LOCKERE.get(cheieCache);
   if (dinCache) return filtreaza ? filtreazaOras(dinCache, city) : dinCache;
-
-  // Un nume de curier necunoscut nu ajunge la niciun API mai jos, deci nu trebuie
-  // sa consume bugetul magazinului: `courier` vine de la client si e liber.
-  if (!CURIERI_CU_LOCKERE.has(courier)) return [];
 
   const [limIp, limBiz] = await Promise.all([
     consumaLimita(`lockers:ip:${ip}`, 30, 600),
@@ -3212,15 +3275,6 @@ export async function getLockers(
     }
     return [];
   }
-
-  const supabase = createAdminClient();
-  const { data: settings } = await supabase
-    .from("store_settings")
-    .select("sameday_config, fan_courier_config, dpd_config, cargus_config, gls_config, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, ups_config")
-    .eq("business_id", businessId)
-    .single();
-
-  if (!settings) return [];
 
   if (courier === "ups") {
     /*

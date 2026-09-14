@@ -206,7 +206,7 @@ export default function ColeteConfigClient({
           <p className="text-sm font-semibold text-foreground">Adresa expeditor (sender)</p>
           <p className="text-xs text-muted-foreground">Aceasta adresa va fi folosita ca punct de ridicare pentru toate coletele.</p>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Nume contact" required>
               <Input type="text" value={sender.name} onChange={e => updateSender("name", e.target.value)} placeholder="Ion Popescu" />
             </Field>
@@ -215,7 +215,7 @@ export default function ColeteConfigClient({
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Email">
               <Input type="email" value={sender.email ?? ""} onChange={e => updateSender("email", e.target.value)} placeholder="contact@firma.ro" />
             </Field>
@@ -224,7 +224,7 @@ export default function ColeteConfigClient({
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Judet" required>
               <Input type="text" value={sender.county} onChange={e => updateSender("county", e.target.value)} placeholder="Cluj" />
             </Field>
@@ -233,7 +233,7 @@ export default function ColeteConfigClient({
             </Field>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="Strada" required className="col-span-2">
               <Input type="text" value={sender.street} onChange={e => updateSender("street", e.target.value)} placeholder="Strada Eroilor" />
             </Field>
@@ -285,7 +285,7 @@ export default function ColeteConfigClient({
           </Field>
 
           {repaymentType === "bank" && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="IBAN" required>
                 <Input type="text" value={repaymentIban} onChange={e => setRepaymentIban(e.target.value)} placeholder="RO49AAAA1B31007593840000" />
               </Field>

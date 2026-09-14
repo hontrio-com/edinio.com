@@ -974,7 +974,9 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           ))}
         </div>
 
-        <div className="max-w-2xl px-8 py-8">
+        {/* ⚠ `px-8` la orice latime lua 64px din 360, adica 17,8% din ecranul unui telefon, si
+            inaspreste tot ce e inauntru. Pe ecran mare ramane neschimbat. */}
+        <div className="max-w-2xl px-4 py-6 sm:px-8 sm:py-8">
           {/* Section heading */}
           <div className="flex items-center gap-2.5 mb-6">
             <current.icon className="h-5 w-5 text-foreground" />
@@ -1487,7 +1489,11 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                         {/* Price mode selector — only for real API couriers (contract auto-price) */}
                         {zone.enabled && canToggle && supportsAutoPrice && (
                           <div className="px-3.5 pb-3 space-y-2">
-                            <div className="flex items-center gap-4">
+                            {/* ⚠ `flex-wrap`: continutul cere ~380px, iar cardul are 268px pe un
+                                ecran de 360. Fara el nimic nu coboara pe randul urmator, deci cele
+                                doua etichete se rup in coloane de text strivit, exact acolo unde
+                                se alege de unde vine pretul livrarii. */}
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                               <label className="flex items-center gap-1.5 cursor-pointer">
                                 <input
                                   type="radio"

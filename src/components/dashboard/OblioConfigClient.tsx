@@ -251,7 +251,20 @@ export default function OblioConfigClient({
 
   function handleDisconnect() {
     startDisconnectTransition(async () => {
-      const result = await disconnectOblio(businessId);
+      let result: Awaited<ReturnType<typeof disconnectOblio>>;
+      try {
+        result = await disconnectOblio(businessId);
+      } catch {
+        /* ⚠ `disconnectOblio` scrie DOAR la noi: nu vorbeste cu Oblio. Deci singurul lucru
+           nestiut e daca stergerea a apucat sa se scrie, iar contul de la ei e neatins. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca deconectarea s-a salvat. "
+          + "Reimprospateaza pagina si uita-te daca mai apare conectat inainte sa incerci "
+          + "din nou: la Oblio nu s-a atins nimic.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else {
         toast.success("Oblio deconectat");

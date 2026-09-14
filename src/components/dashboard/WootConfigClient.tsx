@@ -142,7 +142,21 @@ export default function WootConfigClient({
 
   function handleDisconnect() {
     startDisconnect(async () => {
-      const result = await disconnectWoot(businessId);
+      let result: Awaited<ReturnType<typeof disconnectWoot>>;
+      try {
+        result = await disconnectWoot(businessId);
+      } catch {
+        /* ⚠ `disconnectWoot` scrie DOAR la noi: nu vorbeste cu Woot. Deci singurul lucru
+           nestiut e daca stergerea a apucat sa se scrie, iar contul de la ei e neatins. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca deconectarea s-a salvat. "
+          + "Pagina se reincarca: uita-te daca mai apare conectat inainte sa incerci "
+          + "din nou: la Woot nu s-a atins nimic.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if (!result.success) { toast.error(result.error ?? "Eroare"); return; }
       toast.success("Woot deconectat.");
       setCfg(DEFAULT_CONFIG);

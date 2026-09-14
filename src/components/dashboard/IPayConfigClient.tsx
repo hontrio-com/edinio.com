@@ -52,7 +52,21 @@ export default function IPayConfigClient({
 
   function disconnect() {
     startDisconnect(async () => {
-      const result = await disconnectIpay(businessId);
+      let result: Awaited<ReturnType<typeof disconnectIpay>>;
+      try {
+        result = await disconnectIpay(businessId);
+      } catch {
+        /* ⚠ `disconnectIpay` scrie DOAR la noi: nu vorbeste cu BT iPay. Deci singurul lucru
+           nestiut e daca stergerea a apucat sa se scrie, iar contul de la ei e neatins. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca deconectarea s-a salvat. "
+          + "Pagina se reincarca: uita-te daca mai apare conectat inainte sa incerci "
+          + "din nou: la BT iPay nu s-a atins nimic.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if (!result.success) { toast.error(result.error ?? "Eroare la stergere"); return; }
       toast.success("BT iPay deconectat.");
       setCfg(DEFAULT_CONFIG);

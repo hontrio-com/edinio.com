@@ -93,7 +93,20 @@ export default function ColeteConfigClient({
 
   function handleDisconnect() {
     startDisconnectTransition(async () => {
-      const result = await disconnectCO(businessId);
+      let result: Awaited<ReturnType<typeof disconnectCO>>;
+      try {
+        result = await disconnectCO(businessId);
+      } catch {
+        /* ⚠ `disconnectCO` scrie DOAR la noi: nu vorbeste cu Colete Online. Deci singurul lucru
+           nestiut e daca stergerea a apucat sa se scrie, iar contul de la ei e neatins. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca deconectarea s-a salvat. "
+          + "Reimprospateaza pagina si uita-te daca mai apare conectat inainte sa incerci "
+          + "din nou: la Colete Online nu s-a atins nimic.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in result) toast.error(result.error);
       else {
         toast.success("Colete Online deconectat");

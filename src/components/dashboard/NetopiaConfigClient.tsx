@@ -61,7 +61,21 @@ export default function NetopiaConfigClient({
 
   function disconnect() {
     startDisconnect(async () => {
-      const result = await disconnectNetopia(businessId);
+      let result: Awaited<ReturnType<typeof disconnectNetopia>>;
+      try {
+        result = await disconnectNetopia(businessId);
+      } catch {
+        /* ⚠ `disconnectNetopia` scrie DOAR la noi: nu vorbeste cu Netopia. Deci singurul lucru
+           nestiut e daca stergerea a apucat sa se scrie, iar contul de la ei e neatins. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca deconectarea s-a salvat. "
+          + "Pagina se reincarca: uita-te daca mai apare conectat inainte sa incerci "
+          + "din nou: la Netopia nu s-a atins nimic.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if (!result.success) { toast.error(result.error ?? "Eroare la stergere"); return; }
       toast.success("Netopia deconectat.");
       setCfg(DEFAULT_CONFIG);

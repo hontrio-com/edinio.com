@@ -62,7 +62,18 @@ export function AboutYouCarrierMapping({
 
   const setRetur = (courierCode: string, valoare: boolean) => {
     startTransition(async () => {
-      const res = await saveAboutYouReturBidirectional(businessId, courierCode, valoare);
+      let res: Awaited<ReturnType<typeof saveAboutYouReturBidirectional>>;
+      try {
+        res = await saveAboutYouReturBidirectional(businessId, courierCode, valoare);
+      } catch {
+        /* ⚠ Scrie setarea de retur pentru curier. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca setarea de retur s-a salvat. "
+          + "Reimprospateaza si uita-te la curier inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(valoare
         ? "Am notat: la acest curier AWB-ul e valabil și la retur."
@@ -73,7 +84,18 @@ export function AboutYouCarrierMapping({
 
   const setMapping = (courierCode: string, carrierKey: string) => {
     startTransition(async () => {
-      const res = await saveAboutYouCarrierMap(businessId, courierCode, carrierKey || null);
+      let res: Awaited<ReturnType<typeof saveAboutYouCarrierMap>>;
+      try {
+        res = await saveAboutYouCarrierMap(businessId, courierCode, carrierKey || null);
+      } catch {
+        /* ⚠ Scrie maparea curierului. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca maparea curierului s-a salvat. "
+          + "Reimprospateaza si uita-te la curier inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Curier mapat.");
       router.refresh();

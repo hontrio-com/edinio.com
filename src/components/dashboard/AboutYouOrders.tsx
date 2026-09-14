@@ -62,7 +62,18 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
   const cuProbleme = comenzi.filter((c) => c.status.endsWith("_failed")).length;
 
   const descarca = (orderId: string, fel: "invoices" | "delivery-document") => startTransition(async () => {
-    const res = await getAboutYouOrderDocument(businessId, orderId, fel);
+    let res: Awaited<ReturnType<typeof getAboutYouOrderDocument>>;
+    try {
+      res = await getAboutYouOrderDocument(businessId, orderId, fel);
+    } catch {
+      /* ⚠ Cere documentul comenzii. */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca s-a putut aduce documentul. "
+        + "Incearca din nou peste putin timp.",
+        { duration: 12000 },
+      );
+      return;
+    }
     if ("error" in res) { toast.error(res.error); return; }
     /*
      * PDF-ul vine base64 (o actiune de server nu poate trece un `ArrayBuffer` peste
@@ -79,7 +90,18 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
   });
 
   const reia = (orderId: string) => startTransition(async () => {
-    const res = await reincearcaExpediereaAboutYou(businessId, orderId);
+    let res: Awaited<ReturnType<typeof reincearcaExpediereaAboutYou>>;
+    try {
+      res = await reincearcaExpediereaAboutYou(businessId, orderId);
+    } catch {
+      /* ⚠ Reia expedierea LA About You. */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca expedierea s-a reluat. "
+        + "Uita-te la comanda in contul About You inainte sa incerci din nou.",
+        { duration: 12000 },
+      );
+      return;
+    }
     if ("error" in res) { toast.error(res.error); return; }
     toast.success("Expedierea a fost repusă la coadă.");
     router.refresh();
@@ -96,7 +118,18 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
    * pot lua inapoi. Se deschide un rand sub comanda, cu ce se intampla scris pe fata.
    */
   const anuleaza = (orderId: string) => startTransition(async () => {
-    const res = await anuleazaComandaAboutYou(businessId, orderId);
+    let res: Awaited<ReturnType<typeof anuleazaComandaAboutYou>>;
+    try {
+      res = await anuleazaComandaAboutYou(businessId, orderId);
+    } catch {
+      /* ⚠ Anuleaza comanda LA About You. */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca anularea a ajuns la About You. "
+        + "Uita-te la comanda in contul lor inainte sa incerci din nou.",
+        { duration: 12000 },
+      );
+      return;
+    }
     if ("error" in res) { toast.error(res.error); return; }
     setDeschis(null);
     toast.success("Anularea a plecat la About You. Se confirmă în câteva minute.");
@@ -104,7 +137,18 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
   });
 
   const returneaza = (orderId: string) => startTransition(async () => {
-    const res = await returneazaComandaAboutYou(businessId, orderId, awb);
+    let res: Awaited<ReturnType<typeof returneazaComandaAboutYou>>;
+    try {
+      res = await returneazaComandaAboutYou(businessId, orderId, awb);
+    } catch {
+      /* ⚠ Inregistreaza returul LA About You. */
+      toast.error(
+        "Nu am primit raspuns de la server, deci nu stim daca returul a ajuns la About You. "
+        + "Uita-te la comanda in contul lor inainte sa incerci din nou.",
+        { duration: 12000 },
+      );
+      return;
+    }
     if ("error" in res) { toast.error(res.error); return; }
     setDeschis(null);
     setAwb("");

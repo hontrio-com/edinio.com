@@ -97,7 +97,19 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
   const handleConnect = () => {
     if (apiKey.trim().length < 8) { toast.error("Introdu cheia API din Seller Center."); return; }
     startTransition(async () => {
-      const res = await connectAboutYou(businessId, apiKey, environment);
+      let res: Awaited<ReturnType<typeof connectAboutYou>>;
+      try {
+        res = await connectAboutYou(businessId, apiKey, environment);
+      } catch {
+        /* ⚠ Cheia pleaca la About You ca sa fie validata. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-a conectat contul About You. "
+          + "Reimprospateaza si uita-te daca apare conectat inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Cont About You conectat.");
       setApiKey("");
@@ -108,7 +120,19 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
   const handleDisconnect = () => {
     if (!window.confirm("Sigur deconectezi About You? Listările locale se șterg (produsele rămân pe About You).")) return;
     startTransition(async () => {
-      const res = await disconnectAboutYou(businessId);
+      let res: Awaited<ReturnType<typeof disconnectAboutYou>>;
+      try {
+        res = await disconnectAboutYou(businessId);
+      } catch {
+        /* ⚠ Mesajul nu pretinde nimic despre contul de la ei: n-am masurat ce face acolo. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca deconectarea s-a salvat. "
+          + "Reimprospateaza si uita-te daca mai apare conectat inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Cont deconectat.");
       /*
@@ -130,16 +154,28 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
     if (bId != null && !Number.isInteger(bId)) { toast.error("Alege un brand din listă."); return; }
 
     startTransition(async () => {
-      const res = await saveAboutYouSettings(businessId, {
-        fx_rate: rate,
-        fx_margin_pct: margin,
-        brand_id: bId,
-        brand_name: bId == null ? null : (brands?.find((b) => b.id === bId)?.name ?? null),
-        ship_countries: shipCountries,
-        default_country_of_origin: countryOfOrigin.trim().toUpperCase() || "RO",
-        auto_sync: autoSync,
-        target_audience: targetAudience,
-      });
+      let res: Awaited<ReturnType<typeof saveAboutYouSettings>>;
+      try {
+        res = await saveAboutYouSettings(businessId, {
+          fx_rate: rate,
+          fx_margin_pct: margin,
+          brand_id: bId,
+          brand_name: bId == null ? null : (brands?.find((b) => b.id === bId)?.name ?? null),
+          ship_countries: shipCountries,
+          default_country_of_origin: countryOfOrigin.trim().toUpperCase() || "RO",
+          auto_sync: autoSync,
+          target_audience: targetAudience,
+        });
+      } catch {
+        /* ⚠ Scrie setarile la noi. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca setarile s-au salvat. "
+          + "Reimprospateaza si uita-te la ele inainte sa salvezi din nou.",
+          { duration: 12000 },
+        );
+        router.refresh();
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Setări salvate.");
       router.refresh();
@@ -153,9 +189,22 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
     const noua = !notificariActive;
     startTransition(async () => {
       aplicaNotificari(noua);
-      const res = noua
-        ? await subscribeAboutYouWebhook(businessId)
-        : await unsubscribeAboutYouWebhook(businessId);
+      let res: Awaited<ReturnType<typeof subscribeAboutYouWebhook>>;
+      try {
+        res = noua
+          ? await subscribeAboutYouWebhook(businessId)
+          : await unsubscribeAboutYouWebhook(businessId);
+      } catch {
+        /* ⚠ FARA `router.refresh()`, ca si pe calea de eroare de mai jos: eticheta s-a schimbat
+           optimist, iar React o readuce singur cand tranzitia se incheie. Hotararea e a casei si
+           ramane adevarata si cu `catch` pus. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca notificarile s-au schimbat la About You. "
+          + "Uita-te la eticheta dupa ce se reincarca pagina inainte sa apesi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       // La eroare NU dam refresh: React face singur revenirea la starea reala.
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(noua ? "Notificări activate." : "Notificări dezactivate.");
@@ -172,7 +221,15 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
    * nimic nu semnaleaza asta.
    */
   const verificaWebhook = () => startTransition(async () => {
-    const d = await getAboutYouWebhookDiagnoza(businessId);
+    let d: Awaited<ReturnType<typeof getAboutYouWebhookDiagnoza>>;
+    try {
+      d = await getAboutYouWebhookDiagnoza(businessId);
+    } catch {
+      /* ⚠ Aici raspunsul se scrie in cutia de diagnoza, nu in `toast`: asa vorbeste functia cu
+         omul, si un toast ar fi lasat cutia goala exact cand el se uita la ea. */
+      setDiagnoza({ ok: false, text: "Nu am primit raspuns de la server. Incearca din nou." });
+      return;
+    }
     if ("error" in d) { setDiagnoza({ ok: false, text: d.error }); return; }
     if (!d.abonamentLocal) {
       setDiagnoza({ ok: false, text: "Nu avem niciun abonament salvat. Activează notificările." });

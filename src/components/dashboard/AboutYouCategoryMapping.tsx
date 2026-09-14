@@ -53,7 +53,18 @@ export function AboutYouCategoryMapping({
   const potrivesteAutomat = () => {
     setSePotriveste(true);
     startTransition(async () => {
-      const res = await suggestAboutYouCategoryMap(businessId, edinioCategories);
+      let res: Awaited<ReturnType<typeof suggestAboutYouCategoryMap>>;
+      try {
+        res = await suggestAboutYouCategoryMap(businessId, edinioCategories);
+      } catch {
+        /* ⚠ Cere sugestii de mapare. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-au putut cere sugestiile. "
+          + "Reimprospateaza si incearca din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       setSePotriveste(false);
       if ("error" in res) { toast.error(res.error); return; }
       const dupaCategorie: Record<string, SugestieMapare> = {};
@@ -75,7 +86,18 @@ export function AboutYouCategoryMapping({
 
   const aplicaSigure = () => {
     startTransition(async () => {
-      const res = await applyAboutYouCategoryMap(businessId, edinioCategories);
+      let res: Awaited<ReturnType<typeof applyAboutYouCategoryMap>>;
+      try {
+        res = await applyAboutYouCategoryMap(businessId, edinioCategories);
+      } catch {
+        /* ⚠ Scrie maparile propuse. Nu stim cate au intrat. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca maparile s-au aplicat. "
+          + "Reimprospateaza si uita-te la lista inainte sa apesi din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       if (res.aplicate === 0) {
         toast.info("Nicio potrivire suficient de sigură. Alege manual din propuneri.");
@@ -88,7 +110,18 @@ export function AboutYouCategoryMapping({
 
   const alege = (cat: string, entry: AboutYouCategoryMapEntry) => {
     startTransition(async () => {
-      const res = await saveAboutYouCategoryMapEntry(businessId, cat, entry);
+      let res: Awaited<ReturnType<typeof saveAboutYouCategoryMapEntry>>;
+      try {
+        res = await saveAboutYouCategoryMapEntry(businessId, cat, entry);
+      } catch {
+        /* ⚠ Scrie o mapare de categorie. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca maparea s-a salvat. "
+          + "Reimprospateaza si uita-te la categorie inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Categorie mapată.");
       setOpenFor(null); reseteaza();
@@ -104,7 +137,18 @@ export function AboutYouCategoryMapping({
 
   const unmap = (cat: string) => {
     startTransition(async () => {
-      const res = await saveAboutYouCategoryMapEntry(businessId, cat, null);
+      let res: Awaited<ReturnType<typeof saveAboutYouCategoryMapEntry>>;
+      try {
+        res = await saveAboutYouCategoryMapEntry(businessId, cat, null);
+      } catch {
+        /* ⚠ Aceeasi actiune cu `null`: scoate maparea. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca maparea s-a eliminat. "
+          + "Reimprospateaza si uita-te la categorie inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        return;
+      }
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Mapare eliminată.");
       router.refresh();

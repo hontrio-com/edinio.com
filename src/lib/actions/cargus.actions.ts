@@ -213,6 +213,10 @@ export async function createCargusAwbAction(
   const { error: eScriere, data: randuri } = await supabase.from("orders").update({
     cargus_awb_number: barCode,
     cargus_service_name: serviceName,
+    /* ⚠ Ceasul urmaririi: de aici isi masoara cronul fereastra de 21 de zile, nu din
+       `created_at`. O comanda veche careia i se emite AWB abia azi ar fi altfel din start in
+       afara ferestrei, deci n-ar fi intrebata NICIODATA. Vezi migratia `2027-01-19`. */
+    cargus_awb_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   /* ⚠ `business_id` e AUTORIZARE, nu podoaba: e a DOUA incuietoare, cea care tine daca RLS
      se slabeste vreodata pe `orders`. Aceeasi propozitie sta deasupra scriitorilor din
@@ -307,6 +311,15 @@ export async function deleteCargusAwbAction(
     const { data: randuri, error: eScriere } = await supabase.from("orders").update({
       cargus_awb_number: null,
       cargus_service_name: null,
+      /* ⚠ Si ancora urmaririi, plus ce am aflat pe AWB-ul sters. Lasate in urma, panoul ar
+         arata starea unui colet care nu mai exista, iar cronul ar intreba Cargus despre el
+         pana se inchide fereastra de 21 de zile. Cheile expedierii se sterg TOATE. */
+      cargus_awb_at: null,
+      cargus_status: null,
+      cargus_status_at: null,
+      cargus_status_checked_at: null,
+      cargus_confirmat_la: null,
+      cargus_confirmat_de: null,
       updated_at: new Date().toISOString(),
     }).eq("id", orderId).eq("business_id", businessId).select("id");
     /*

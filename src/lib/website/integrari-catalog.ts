@@ -589,7 +589,7 @@ export const SINONIME: Partial<Record<LogoKey, string[]>> = {
      `urmarire` rămâne: acela nu e nicăieri în text. */
   fanCourier: ["ramburs", "fanbox", "paypoint", "oficiu", "locker", "punct", "ridicare", "urmarire"],
   dpd: ["ramburs", "locker", "punct", "ridicare", "urmarire", "tracking"],
-  cargus: ["ramburs", "locker", "punct", "ridicare"],
+  cargus: ["ramburs", "locker", "punct", "ridicare", "urmarire", "tracking"],
   sameday: ["ramburs", "awb", "urmarire", "tracking", "punct", "ridicare"],
   gls: ["ramburs", "locker", "parcelshop", "punct", "ridicare", "urmarire", "tracking"],
   woot: ["ramburs", "awb", "urmarire", "tracking"],

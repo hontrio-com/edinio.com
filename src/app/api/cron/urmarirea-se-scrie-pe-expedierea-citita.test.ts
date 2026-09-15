@@ -41,10 +41,10 @@ const faraComentarii = (cale: string) =>
 /* ── 1. Acoperirea, cu numerele MASURATE ──────────────────────────────────── */
 
 test("⚠ lista de rute nu se poate goli in tacere", () => {
-  assert.ok(ruteDeUrmarire().length >= 15, "nu mai gasesc toate cronurile de urmarire");
+  assert.ok(ruteDeUrmarire().length >= 16, "nu mai gasesc toate cronurile de urmarire");
 });
 
-test("⚠⚠ PAISPREZECE cronuri scriu starea prin ajutor, si `innoship` ZERO dinadins", () => {
+test("⚠⚠ CINCISPREZECE cronuri scriu starea prin ajutor, si `innoship` ZERO dinadins", () => {
   /*
    * ⚠ NUMERELE SUNT MASURATE, NU ROTUNJITE. Tentatia era sa cer cate cronuri sunt, dar
    * `innoship-tracking` nu scrie starea el insusi: o scrie prin `aplica-urmarire.ts`, drumul comun
@@ -56,7 +56,9 @@ test("⚠⚠ PAISPREZECE cronuri scriu starea prin ajutor, si `innoship` ZERO di
   for (const cale of ruteDeUrmarire()) {
     (faraComentarii(cale).includes("scrieUrmarirea(admin, {") ? cu : fara).push(cale);
   }
-  assert.equal(cu.length, 14, `scriu prin ajutor ${cu.length} cronuri, nu paisprezece`);
+  /* ⚠ Numarul URCA odata cu fiecare curier care isi capata urmarirea: 14 pana pe 15.09.2026,
+     15 de cand Cargus si-a capatat-o pe a lui. Se urca, nu se slabeste in „cel putin". */
+  assert.equal(cu.length, 15, `scriu prin ajutor ${cu.length} cronuri, nu cincisprezece`);
   assert.deepEqual(fara.map((c) => c.split("/")[4]), ["innoship-tracking"],
     "alt cron decat `innoship` a ramas fara ajutor, ori `innoship` a inceput sa scrie singur");
 
@@ -86,6 +88,7 @@ test("⚠⚠ IDENTITATEA E CEA ADEVARATA, nu un tipar copiat", () => {
     /* ⚠ Sameday are DOUA cozi din 15.09.2026: coletul dus si cel care se intoarce. Sunt doua
        identitati adevarate, nu un tipar copiat, si ORDINEA lor conteaza: dusul intai. */
     "sameday-tracking": ["sameday_awb_number", "sameday_return_awb_number"],
+    "cargus-tracking": "cargus_awb_number",
     "shipo-tracking": "shipo_awb_number",
     "smartship-tracking": "smartship_awb_number",
     "ups-tracking": "ups_awb_number",

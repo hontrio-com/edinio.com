@@ -3577,8 +3577,14 @@ export type Database = {
           billing_company: Json | null
           business_id: string
           card_discount_amount: number
+          cargus_awb_at: string | null
           cargus_awb_number: string | null
+          cargus_confirmat_de: string | null
+          cargus_confirmat_la: string | null
           cargus_service_name: string | null
+          cargus_status: string | null
+          cargus_status_at: string | null
+          cargus_status_checked_at: string | null
           cod_discount_amount: number
           cod_fee_amount: number
           colete_awb_number: string | null
@@ -3790,8 +3796,14 @@ export type Database = {
           billing_company?: Json | null
           business_id: string
           card_discount_amount?: number
+          cargus_awb_at?: string | null
           cargus_awb_number?: string | null
+          cargus_confirmat_de?: string | null
+          cargus_confirmat_la?: string | null
           cargus_service_name?: string | null
+          cargus_status?: string | null
+          cargus_status_at?: string | null
+          cargus_status_checked_at?: string | null
           cod_discount_amount?: number
           cod_fee_amount?: number
           colete_awb_number?: string | null
@@ -4003,8 +4015,14 @@ export type Database = {
           billing_company?: Json | null
           business_id?: string
           card_discount_amount?: number
+          cargus_awb_at?: string | null
           cargus_awb_number?: string | null
+          cargus_confirmat_de?: string | null
+          cargus_confirmat_la?: string | null
           cargus_service_name?: string | null
+          cargus_status?: string | null
+          cargus_status_at?: string | null
+          cargus_status_checked_at?: string | null
           cod_discount_amount?: number
           cod_fee_amount?: number
           colete_awb_number?: string | null

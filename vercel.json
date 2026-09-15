@@ -132,6 +132,10 @@
       "schedule": "11 */2 * * *"
     },
     {
+      "path": "/api/cron/cargus-tracking",
+      "schedule": "27 */2 * * *"
+    },
+    {
       "path": "/api/cron/dpd-tracking",
       "schedule": "19 */2 * * *"
     },
@@ -146,6 +150,10 @@
     {
       "path": "/api/cron/fancourier-settlements",
       "schedule": "27 5 * * *"
+    },
+    {
+      "path": "/api/cron/cargus-repayments",
+      "schedule": "51 5 * * *"
     },
     {
       "path": "/api/cron/woot-repayments",

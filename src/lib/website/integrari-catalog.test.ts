@@ -407,6 +407,12 @@ test("urmărirea iese exact la curierii care au cron de urmărire", () => {
     are urmărire dacă și numai dacă are cron. Așa, când se livrează urmărirea
     pentru al treisprezecelea, proba cade și cere cuvântul, în loc să tacă.
 
+    ⚠ Cargus A INTRAT tot pe 15.09.2026, al cincisprezecelea, și proba a căzut iarăși, cum
+    își promite. Şi la el urmărirea e mai puțină decât la ceilalți, din același motiv ca la Woot,
+    dar pe dos ca dovadă: Cargus nu publică NICIO enumerare de stări în toată documentația V3,
+    singurul exemplu din ea fiind „Tiparit". Deci cronul scrie ce spun ei și strânge vocabularul,
+    dar nu mută comanda.
+
     ⚠ Woot A INTRAT pe 15.09.2026, al paisprezecelea, și proba asta a căzut din nou, cum
     își promitea. La el urmărirea e însă mai puțin decât la ceilalți, și merită spus: cronul
     scrie pe comandă starea pe care o spune curierul, dar NU mută singur comanda pe „Livrat",
@@ -422,6 +428,7 @@ test("urmărirea iese exact la curierii care au cron de urmărire", () => {
     dhl: "dhl", ecolet: "ecolet", fancourier: "fanCourier", fedex: "fedex", gls: "gls",
     innoship: "innoship", packeta: "packeta", pallex: "pallex", posta: "postaRomana",
     dpd: "dpd", sameday: "sameday", shipo: "shipo", smartship: "smartship", ups: "ups", woot: "woot",
+    cargus: "cargus",
   };
   const vercel = readFileSync(join(AICI, "..", "..", "..", "vercel.json"), "utf8");
   const cuCron = new Set(

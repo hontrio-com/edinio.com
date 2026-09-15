@@ -4,6 +4,7 @@ import { eroareCuStatus, eroareDeTermen, eroareNesigura, eroareRefuz } from "@/l
 import { cheieToken } from "@/lib/integrari/cheie-token";
 import { codulAwbCargus } from "@/lib/shipping/raspunsul-awb-cargus";
 import { coleteleCargus } from "@/lib/shipping/coletele-cargus";
+import { dataEvenimentelorCargus, dataRambursurilorCargus, ziuaLorCargus } from "@/lib/shipping/datele-cargus";
 
 export type CargusConfig = {
   enabled: boolean;
@@ -653,4 +654,167 @@ export async function loadCargusAccount(
   } catch (e) {
     return { error: (e as Error).message };
   }
+}
+
+// ─── Urmarirea coletului ──────────────────────────────────────────────────────
+
+/**
+ * Ce spun ei despre o expediere, adus in forma noastra.
+ *
+ * ⚠ `stare` e TEXT LIBER, nu un cod. Cargus nu publica nicio enumerare in toata documentatia
+ * V3: singurul exemplu de status din ea e „Tiparit". De aceea campul se pastreaza ca sa fie
+ * ARATAT si ca sa se adune vocabularul, si NU se compara in cod. Vezi migratia `2027-01-19`.
+ */
+export type StareCargus = {
+  awb: string;
+  /** Textul lor. Gol cand nu l-au dat. */
+  stare: string;
+  /** Data ultimului eveniment pe care ni l-au spus EI, nu cand am citit noi. */
+  ultimulEvenimentLa: string | null;
+  /** Ultima descriere de eveniment, cand exista. */
+  ultimulEveniment: string | null;
+  /** ⚠ Singurul semnal STRUCTURAT din raspunsul lor. */
+  confirmatLa: string | null;
+  confirmatDe: string | null;
+  /** ⚠ Raspunsul intreg: vezi nota despre pastrarea raspunsului brut. */
+  brut: Record<string, unknown>;
+};
+
+function sirSauNull(x: unknown): string | null {
+  return typeof x === "string" && x.trim() ? x.trim() : null;
+}
+
+/** O expeditie din raspunsul lor, oricare din cele doua rute ar fi intors-o. */
+function stareaDinRand(r: Record<string, unknown>): StareCargus | null {
+  const awb = sirSauNull(r.BarCode) ?? sirSauNull(r.Barcode) ?? sirSauNull(r.Code);
+  if (!awb) return null;
+
+  /*
+   * ⚠ Evenimentele stau pe COLET (`Packages[].Events[]`), nu pe expediere, iar o expediere
+   * poate avea mai multe colete. Se ia cel mai NOU eveniment din toate, nu primul gasit:
+   * ordinea in care ni le dau ei nu e promisa nicaieri.
+   */
+  const colete = Array.isArray(r.Packages) ? r.Packages as Record<string, unknown>[] : [];
+  let ultimLa: string | null = null;
+  let ultimText: string | null = null;
+  for (const c of colete) {
+    const ev = Array.isArray(c?.Events) ? c.Events as Record<string, unknown>[] : [];
+    for (const e of ev) {
+      const cand = sirSauNull(e.Date);
+      if (!cand) continue;
+      if (ultimLa === null || cand > ultimLa) {
+        ultimLa = cand;
+        ultimText = sirSauNull(e.Description);
+      }
+    }
+  }
+
+  return {
+    awb,
+    stare: sirSauNull(r.StatusExpression) ?? sirSauNull(r.Status) ?? "",
+    ultimulEvenimentLa: ultimLa,
+    ultimulEveniment: ultimText,
+    confirmatLa: sirSauNull(r.ConfirmationDate),
+    confirmatDe: sirSauNull(r.ConfirmationPersonaName) ?? sirSauNull(r.ConfirmationName),
+    brut: r,
+  };
+}
+
+/**
+ * Tot ce s-a miscat in contul lor intre doua date, dintr-o singura cerere.
+ *
+ * ⚠ `AwbTrace/GetDeltaEvents` cere datele in `mm-dd-yyyy`, AMERICAN, spre deosebire de
+ * `CashAccount/GetByDate`, care le cere ISO. Vezi `shipping/datele-cargus.ts`.
+ */
+export async function evenimenteCargus(
+  config: CargusConfig,
+  deLa: Date,
+  panaLa: Date,
+): Promise<StareCargus[]> {
+  const token = await getCargusToken(config.username, config.password, config.subscription_key);
+  const cale = `AwbTrace/GetDeltaEvents?FromDate=${dataEvenimentelorCargus(deLa)}`
+    + `&ToDate=${dataEvenimentelorCargus(panaLa)}`;
+  const data = await cargusGet<unknown>(cale, token, config.subscription_key);
+  const randuri = Array.isArray(data) ? data as Record<string, unknown>[] : [];
+  return randuri.map(stareaDinRand).filter((x): x is StareCargus => x !== null);
+}
+
+/**
+ * Starea unor AWB-uri anume.
+ *
+ * ⚠ `barCode` e o LISTA JSON, nu un singur cod: asa o cere documentatia lor
+ * (`$jsonAwb=json_encode($awbList)`), si asa se intreaba zece colete intr-o cerere.
+ */
+export async function urmarireCargus(
+  config: CargusConfig,
+  awburi: string[],
+): Promise<StareCargus[]> {
+  if (awburi.length === 0) return [];
+  const token = await getCargusToken(config.username, config.password, config.subscription_key);
+  const cale = `AwbTrace/WithRedirect?barCode=${encodeURIComponent(JSON.stringify(awburi))}`;
+  const data = await cargusGet<unknown>(cale, token, config.subscription_key);
+  const randuri = Array.isArray(data) ? data as Record<string, unknown>[] : [];
+  return randuri.map(stareaDinRand).filter((x): x is StareCargus => x !== null);
+}
+
+// ─── Rambursul incasat ────────────────────────────────────────────────────────
+
+/**
+ * Un ramburs, asa cum il tin ei in contul colector.
+ *
+ * ⚠ DOUA DATE, SI NU INSEAMNA ACELASI LUCRU. `RepaymentDate` e cand s-a INCASAT banul de la
+ * cumparator; `DeductionDate` e cand a plecat ordinul de plata catre comerciant. Un ramburs
+ * incasat dar nevirat inca are prima si n-o are pe a doua.
+ */
+export type RambursCargus = {
+  awb: string;
+  /** Data emiterii expedierii. */
+  ziuaAwb: string | null;
+  /** Cand s-a incasat de la cumparator. */
+  ziuaIncasarii: string | null;
+  /** Cand a plecat ordinul de plata catre comerciant. `null` = inca nevirat. */
+  ziuaVirarii: string | null;
+  /** Numarul ordinului de plata. */
+  ordinDePlata: string | null;
+  suma: number;
+  destinatar: string | null;
+  localitate: string | null;
+  referinta: string | null;
+  brut: Record<string, unknown>;
+};
+
+/**
+ * Rambursurile din contul colector, pe un interval.
+ *
+ * ⚠ `CashAccount/GetByDate` cere datele ISO (`yyyy-mm-dd`), spre deosebire de
+ * `AwbTrace/GetDeltaEvents`, care le cere americane. Vezi `shipping/datele-cargus.ts`.
+ */
+export async function rambursuriCargus(
+  config: CargusConfig,
+  deLa: Date,
+  panaLa: Date,
+): Promise<RambursCargus[]> {
+  const token = await getCargusToken(config.username, config.password, config.subscription_key);
+  const cale = `CashAccount/GetByDate?FromDate=${dataRambursurilorCargus(deLa)}`
+    + `&ToDate=${dataRambursurilorCargus(panaLa)}`;
+  const data = await cargusGet<unknown>(cale, token, config.subscription_key);
+  const randuri = Array.isArray(data) ? data as Record<string, unknown>[] : [];
+
+  return randuri.flatMap((r) => {
+    const awb = sirSauNull(r.BarCode) ?? sirSauNull(r.Barcode);
+    if (!awb) return [];
+    const suma = Number(r.RepaymentValue ?? 0);
+    return [{
+      awb,
+      ziuaAwb: ziuaLorCargus(r.Date),
+      ziuaIncasarii: ziuaLorCargus(r.RepaymentDate),
+      ziuaVirarii: ziuaLorCargus(r.DeductionDate),
+      ordinDePlata: sirSauNull(r.DeductionId) ?? (r.DeductionId != null ? String(r.DeductionId) : null),
+      suma: Number.isFinite(suma) ? suma : 0,
+      destinatar: sirSauNull(r.Receiver),
+      localitate: sirSauNull(r.ToLocality),
+      referinta: sirSauNull(r.CustomString),
+      brut: r,
+    }];
+  });
 }

@@ -26,7 +26,32 @@ import { createHmac } from "node:crypto";
  * daca exista, altfel cheia de service role, care oricum nu paraseste serverul.
  */
 function secret(): string {
-  return process.env.SHIPPING_QUOTE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const s = process.env.SHIPPING_QUOTE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  /*
+   * ⚠ ARUNCA. Nu mai cade pe sirul gol. (15.09.2026)
+   *
+   * Cu `""`, `createHmac` merge mai departe si scoate tot 24 de caractere hexazecimale, deci
+   * nimic nu deosebeste o cheie neghicibila de una pe care o poate calcula oricine stie cele
+   * doua UUID-uri. Iar fisierul de sub cheia aia e o eticheta AWB: NUMELE, ADRESA si TELEFONUL
+   * cumparatorului, intr-un bucket servit public prin CDN cu `max-age` de un an. Chiar promisiunea
+   * scrisa in capul fisierului, „de aceea cheia nu se poate ghici", ar fi fost falsa.
+   *
+   * ⚠ SI NICIO PROBA N-AR FI PRINS-O: incarcatorul de probe nu aduce niciun `.env`, deci in
+   * procesul de test amandoua variabilele au lungimea zero si semnarea trecea oricum. Vezi
+   * `quote-token.ts`, unde e scrisa masuratoarea.
+   *
+   * O degradare tacuta de securitate e mai rea decat o eroare zgomotoasa: aici emiterea se
+   * opreste, comerciantul vede un mesaj, si cineva pune variabila. Acelasi tipar ca la
+   * `gls/eticheta.ts` si `utils/cheie-neghicibila.ts`.
+   */
+  if (!s) {
+    throw new Error(
+      "Lipseste secretul de semnare a etichetelor eColet (SHIPPING_QUOTE_SECRET sau "
+      + "SUPABASE_SERVICE_ROLE_KEY). Fara el, cheia din CDN a etichetei, care contine datele "
+      + "cumparatorului, ar fi ghicibila de oricine stie identificatorii magazinului si ai comenzii.",
+    );
+  }
+  return s;
 }
 
 /**

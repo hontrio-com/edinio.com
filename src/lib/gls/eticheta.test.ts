@@ -116,3 +116,30 @@ test("⚠ stergerea acopera si cheia VECHE, nesemnata cu extensia", () => {
   assert.equal(new Set(chei).size, 3, "cele trei chei trebuie sa fie DIFERITE");
   for (const k of chei) assert.ok(k.startsWith(`awb/gls/${BIZ}/`), k);
 });
+
+
+test("⚠⚠ fara secret DELOC nu se semneaza cu cheie goala: se ARUNCA", () => {
+  /*
+   * ⚠ ADAUGATA 15.09.2026, dupa un banc de mutanti pe SUITA INTREAGA.
+   *
+   * Proba de mai sus („secretul CHIAR intra in cheie") dovedeste ca o cheie SCHIMBATA schimba
+   * semnatura. Nu dovedeste insa nimic despre LIPSA ei: scoasa aruncarea din `secret()`, adica pusa
+   * la loc caderea pe sirul gol, TOATA suita ramanea verde, toate cele 7.865 de afirmatii. Doua
+   * intrebari diferite, si numai una avea raspuns.
+   *
+   * ⚠ SE STERG AMANDOUA VARIABILELE din lant, nu doar prima: altfel afirmatia ar trece si peste un
+   * cod nereparat, pe orice masina care se intampla sa aiba cheia de serviciu in mediu.
+   */
+  const a = process.env.SHIPPING_QUOTE_SECRET;
+  const b = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.SHIPPING_QUOTE_SECRET;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  try {
+    assert.throws(() => cheieEticheta(BIZ, CMD), /secretul de semnare a etichetelor/i);
+    assert.throws(() => cheiEticheta(BIZ, CMD), /secretul de semnare a etichetelor/i);
+  } finally {
+    /* ⚠ Puse la loc, altfel probele de dupa din acelasi fisier ar rula fara cheie. */
+    if (a !== undefined) process.env.SHIPPING_QUOTE_SECRET = a;
+    if (b !== undefined) process.env.SUPABASE_SERVICE_ROLE_KEY = b;
+  }
+});

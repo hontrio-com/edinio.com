@@ -72,3 +72,28 @@ test("⚠ numele fisierului nu poate fi stricat de continutul comenzii", () => {
   assert.equal(numeFisier("label", ""), "eticheta-pallex-partida.pdf");
   assert.ok(!numeFisier("label", "../../etc/passwd").includes("/"));
 });
+
+
+test("⚠⚠ fara secret NU se semneaza cu cheie goala: se ARUNCA", () => {
+  /*
+   * ⚠ ADAUGATA 15.09.2026, dupa ce un banc de mutanti a aratat ca lipsea.
+   *
+   * `secret()` a fost adus la fail-closed in acelasi lot, dar NIMIC nu apara reparatia: pusa gaura
+   * inapoi, adica `return ... || ""`, toate cele sapte afirmatii de mai sus ramaneau VERZI. Se
+   * semna cu cheia goala si cheia iesea tot lunga, tot determinista, tot „neghicibila" dupa forma.
+   *
+   * ⚠ SE STERG AMANDOUA VARIABILELE din lant: stearsa doar prima, afirmatia ar trece si peste un
+   * cod nereparat, pe orice masina care se intampla sa aiba cheia de serviciu in mediu.
+   */
+  const a = process.env.SHIPPING_QUOTE_SECRET;
+  const b = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.SHIPPING_QUOTE_SECRET;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  try {
+    assert.throws(() => cheieDocument(BIZ, CMD, "label"), /secretul de semnare a documentelor Pall-Ex/i);
+  } finally {
+    /* ⚠ Puse la loc, altfel probele de dupa din acelasi fisier ar rula fara cheie. */
+    if (a !== undefined) process.env.SHIPPING_QUOTE_SECRET = a;
+    if (b !== undefined) process.env.SUPABASE_SERVICE_ROLE_KEY = b;
+  }
+});

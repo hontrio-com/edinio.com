@@ -41,7 +41,29 @@ import type { FelDocument } from "./client";
  * de service role, care oricum nu paraseste serverul.
  */
 function secret(): string {
-  return process.env.SHIPPING_QUOTE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const s = process.env.SHIPPING_QUOTE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  /*
+   * ⚠ ARUNCA. Nu mai cade pe sirul gol. (15.09.2026)
+   *
+   * Cu `""`, semnatura iese tot lunga si tot determinista, deci nimic nu deosebeste o cheie
+   * neghicibila de una pe care o poate calcula oricine stie identificatorii. Iar documentul de sub
+   * ea poarta datele cumparatorului, intr-un bucket servit public prin CDN. Cele doua paze
+   * descrise mai sus, adresa neghicibila si ruta care cere sesiune, sunt DINADINS independente:
+   * cu cheia goala ramanea doar una.
+   *
+   * ⚠ SI NICIO PROBA N-AR FI PRINS-O: incarcatorul de probe nu aduce niciun `.env`, deci in
+   * procesul de test amandoua variabilele au lungimea zero. Vezi `quote-token.ts`.
+   *
+   * Acelasi tipar ca la `gls/eticheta.ts`, `ecolet/documente.ts` si `utils/cheie-neghicibila.ts`.
+   */
+  if (!s) {
+    throw new Error(
+      "Lipseste secretul de semnare a documentelor Pall-Ex (SHIPPING_QUOTE_SECRET sau "
+      + "SUPABASE_SERVICE_ROLE_KEY). Fara el, adresa documentului din CDN, care contine datele "
+      + "cumparatorului, ar fi ghicibila de oricine stie identificatorii magazinului si ai comenzii.",
+    );
+  }
+  return s;
 }
 
 /**

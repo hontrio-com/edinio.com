@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
-import { eroareRefuz, verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
+import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { stripDiacritics } from "@/lib/utils/ro-address";
 import { greutatePentruCurier } from "@/lib/shipping/awb-weight";
 import {
@@ -330,15 +330,30 @@ export async function createWootAwb(
         repayment: repayment && repayment > 0 ? repayment : undefined,
         insurance,
         options,
+        /*
+         * ⚠ Regimul de plata al contului, cand comerciantul l-a ales. Lipsa lui inseamna `credit`,
+         * care e si implicitul LOR, deci pentru magazinele de azi nu se schimba nimic. Vezi nota
+         * lunga din `WootConfig.payment_method`, inclusiv de ce „card" nu se ofera.
+         */
+        payment_method: config.payment_method,
       });
 
       /*
-       * `success: false` pe un raspuns HTTP reusit = Woot a primit cererea si a
-       * spus explicit „nu". Nu vine cu `order_id`, deci nu exista niciun colet de
-       * lamurit. `eroareRefuz` tine reincercarea libera; fara marcaj, registrul ar
-       * fi presupus „poate s-a facut" si ar fi blocat comanda definitiv.
+       * ⚠ GARDA DE AICI A FOST SCOASA (15.09.2026), fiindca era MOARTA si minte pe cine o citeste.
+       *
+       * Statea scris `if (!result.success) throw eroareRefuz("Creare AWB esuata")`, iar comentariul
+       * ei spunea ca ea e cea care tine reincercarea libera. Dar `createOrder` arunca de mult chiar
+       * el cand plicul nu spune `success: true`, deci tipul lui intoarce `success: true` si ramura
+       * asta era nereachabila: o constanta pe care `tsc` n-o semnaleaza.
+       *
+       * ⚠ Paguba nu era codul mort, ci NOTA: cine venea sa imbunatateasca mesajul de refuz l-ar fi
+       * schimbat AICI, unde nu se executa nimic, si ar fi crezut ca a facut ceva. Exact asa s-ar fi
+       * pierdut a doua oara motivul lui Woot.
+       *
+       * Clasificarea adevarata sta in `createOrder` (`lib/woot.ts`): `eroareRefuz` cu motivul LOR
+       * la coada pe `success:false`, si `eroareNesigura` cand spun ca au creat dar nu dau
+       * identificatorul. Acolo se schimba, daca e de schimbat.
        */
-      if (!result.success) throw eroareRefuz("Creare AWB esuata");
 
       return {
         // `order_id` e referinta care conteaza: fara ea AWB-ul nu se poate anula.

@@ -7,6 +7,7 @@ import {
   cancelWootOrder,
   createOrder,
   getOrderAwb,
+  motivulWoot,
   uitaTokenurileWoot,
 } from "@/lib/woot";
 import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
@@ -269,4 +270,169 @@ test("⚠ si niciun apelant nu mai trimite un al treilea argument", () => {
     }
   }
   assert.ok(apeluriTotale >= 2, `gasite doar ${apeluriTotale} apeluri de anulare Woot; erau doua`);
+});
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   4. MOTIVUL LOR NU SE MAI PIERDE PE RAMURA DE 200            (15.09.2026)
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ⚠ MASURAT IN PRODUCTIE, NU PRESUPUS. Toate cele SAPTE esecuri de AWB Woot din viata
+   platformei poarta chiar mesajul lor: „Nu aveti suficient credit pentru a finaliza comanda".
+   Un mesaj din care comerciantul stie ce sa faca: isi alimenteaza contul si reia.
+
+   ⚠ Extragerea motivului exista de mult, dar traia INGROPATA in ramura de raspuns nereusit a
+   lui `wootReq`, deci se aplica numai la 4xx si 5xx. Pe ramura de 200 cu `success:false`, cele
+   trei plicuri aruncau propozitia noastra si ARUNCAU motivul lor. Comerciantul citea „Woot a
+   refuzat crearea expedierii" si nu avea ce sa faca mai departe.
+
+   ⚠ Si e chiar lectia pe care fisierul `woot.ts` o poarta scrisa: „exact asa s-a ascuns o zi
+   cauza reala". Se invatase doar pentru 4xx.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("motivul se scoate din toate formele in care il dau", () => {
+  assert.equal(motivulWoot({ message: "credit insuficient" }), "credit insuficient");
+  assert.equal(motivulWoot({ error: "cont blocat" }), "cont blocat");
+  /* ⚠ `error` ca OBIECT camp catre motiv: forma care a ascuns o zi cauza reala. */
+  assert.equal(motivulWoot({ error: { "parcels.0.weight": "must be >= 1" } }), "parcels.0.weight: must be >= 1");
+  /* Stil Laravel, ca lista si ca obiect catre lista. */
+  assert.equal(motivulWoot({ errors: ["a", "b"] }), "a; b");
+  assert.equal(motivulWoot({ errors: { camp: ["prea scurt"] } }), "prea scurt");
+});
+
+test("⚠ si tace cand chiar n-au spus nimic", () => {
+  /* Un motiv inventat din nimic ar fi mai rau decat propozitia noastra: ar parea al lor. */
+  for (const corp of [null, undefined, 42, "text", {}, { success: false }]) {
+    assert.equal(motivulWoot(corp), "");
+  }
+});
+
+test("⚠⚠ CAZUL REAL: creditul insuficient ajunge la comerciant, pe ramura de 200", async () => {
+  /*
+   * ⚠ Chiar corpul masurat in productie. Pana azi mesajul asta se pierdea aici, iar omul citea
+   * o propozitie din care nu reiese ca trebuie sa-si alimenteze contul.
+   */
+  raspunde({ success: false, message: "Nu aveti suficient credit pentru a finaliza comanda" });
+  await assert.rejects(
+    () => createOrder(TOKEN, { service_id: 1, sender: {}, receiver: {}, parcels: [] }),
+    (e: Error) => {
+      assert.match(e.message, /Nu aveti suficient credit/,
+        "motivul lui Woot s-a pierdut: comerciantul nu afla ca trebuie sa alimenteze contul");
+      /* ⚠ Si propozitia NOASTRA ramane: ea spune ce s-a intamplat la noi, motivul spune de ce la ei. */
+      assert.match(e.message, /Woot a refuzat crearea expedierii/);
+      /* ... iar verdictul nu s-a clintit: refuz dovedit, deci reincercarea ramane libera. */
+      assert.equal(verdictFurnizor(e), "esuat");
+      return true;
+    },
+  );
+});
+
+test("⚠ eticheta refuzata spune si ea de ce", async () => {
+  raspunde({ success: false, error: "expedierea nu exista" });
+  await assert.rejects(
+    () => getOrderAwb(TOKEN, 123),
+    (e: Error) => {
+      assert.match(e.message, /expedierea nu exista/, "motivul lui Woot s-a pierdut la eticheta");
+      assert.match(e.message, /Woot nu a returnat eticheta/);
+      return true;
+    },
+  );
+});
+
+test("⚠⚠ si anularea refuzata, unde motivul valoreaza cel mai mult", async () => {
+  /*
+   * ⚠ Aici comerciantul are un colet VIU la ei si trebuie sa stie de ce nu se opreste. „De regula
+   * inseamna ca a fost deja preluata" e o ghiceala a noastra; motivul lor e adevarul.
+   */
+  raspunde({ success: false, message: "Expedierea a fost deja ridicata de curier" });
+  await assert.rejects(
+    () => cancelWootOrder(TOKEN, 123),
+    (e: Error) => {
+      assert.match(e.message, /deja ridicata de curier/, "motivul lui Woot s-a pierdut la anulare");
+      assert.match(e.message, /Woot a refuzat anularea/);
+      assert.equal(verdictFurnizor(e), "esuat");
+      return true;
+    },
+  );
+});
+
+test("⚠ cand ei tac, ramane propozitia noastra INTREAGA, fara doua puncte in coada", async () => {
+  /* Un mesaj care se termina cu doua puncte arata ca s-a pierdut ceva pe drum. */
+  raspunde({ success: false });
+  await assert.rejects(
+    () => createOrder(TOKEN, { service_id: 1, sender: {}, receiver: {}, parcels: [] }),
+    (e: Error) => {
+      assert.equal(e.message, "Woot a refuzat crearea expedierii.");
+      return true;
+    },
+  );
+});
+
+test("⚠ si pe 4xx motivul trece mai departe ca inainte, prin acelasi ajutor", async () => {
+  /*
+   * Ramura veche nu s-a schimbat ca purtare, dar acum trece prin functia comuna. Scrisa a doua
+   * oara de mana, cele doua ar fi inceput sa citeasca forme diferite ale aceluiasi raspuns.
+   */
+  raspunde({ error: { "parcels.0.weight": "must be >= 1" } }, 400);
+  await assert.rejects(
+    () => createOrder(TOKEN, { service_id: 1, sender: {}, receiver: {}, parcels: [] }),
+    (e: Error) => {
+      assert.match(e.message, /parcels\.0\.weight: must be >= 1/);
+      return true;
+    },
+  );
+});
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   5. REGIMUL DE PLATA AL CONTULUI                             (15.09.2026)
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ⚠ Pana azi nimeni nu trimitea `payment_method`, deci TOATE magazinele plecau pe `credit`.
+   Masurat: toate cele SAPTE esecuri de AWB Woot din viata platformei sunt „Nu aveti suficient
+   credit". Un magazin cu cont pe termen ar fi esuat asa la nesfarsit.
+
+   ⚠ Si „card" NU se ofera, pe documentatia LOR: la POST /orders, `awb_number` e „for credit/term
+   payments", iar `payment_id` e „for card payments". Pe card nu intorc niciun AWB.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ regimul ales de comerciant chiar pleaca la Woot", async () => {
+  let trimis: Record<string, unknown> | null = null;
+  globalThis.fetch = (async (_u: unknown, init?: { body?: string }) => {
+    trimis = init?.body ? JSON.parse(init.body) as Record<string, unknown> : null;
+    return new Response(JSON.stringify({ success: true, order_id: 7, awb_number: "W1" }),
+      { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+
+  await createOrder(TOKEN, { service_id: 1, sender: {}, receiver: {}, parcels: [], payment_method: "term" });
+  assert.equal((trimis as unknown as { payment_method?: string })?.payment_method, "term",
+    "regimul ales de comerciant nu ajunge la Woot: contul pe termen ar esua la nesfarsit pe credit");
+});
+
+test("⚠ si lipsa lui inseamna `credit`, care e si implicitul LOR", async () => {
+  /* Asa nu se clinteste nimic pentru magazinele care merg azi. */
+  let trimis: Record<string, unknown> | null = null;
+  globalThis.fetch = (async (_u: unknown, init?: { body?: string }) => {
+    trimis = init?.body ? JSON.parse(init.body) as Record<string, unknown> : null;
+    return new Response(JSON.stringify({ success: true, order_id: 7, awb_number: "W1" }),
+      { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+
+  await createOrder(TOKEN, { service_id: 1, sender: {}, receiver: {}, parcels: [] });
+  assert.equal((trimis as unknown as { payment_method?: string })?.payment_method, "credit");
+});
+
+test("⚠⚠ panoul NU ofera `card`, fiindca acolo nu vine niciun AWB", () => {
+  /*
+   * ⚠ Regula asta nu se poate proba pe valori: e o alegere dintr-o lista din panou. Iar daca ar
+   * ajunge acolo, comerciantul ar emite o expediere fara eticheta si fara numar, si ar afla abia
+   * cand s-ar duce sa tipareasca. Se cere deci pe SURSA.
+   */
+  const panou = readFileSync(
+    path.join(process.cwd(), "src/components/dashboard/WootConfigClient.tsx"), "utf8");
+  const optiuni = [...panou.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(optiuni.includes("credit"), "panoul nu mai ofera creditul");
+  assert.ok(optiuni.includes("term"), "panoul nu mai ofera termenul");
+  assert.equal(optiuni.includes("card"), false,
+    "panoul ofera `card`, unde Woot intoarce `payment_id` in loc de `awb_number`: expediere fara eticheta");
 });

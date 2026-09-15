@@ -398,6 +398,31 @@ export default function WootConfigClient({
             </span>
           </label>
 
+          {/*
+            ⚠ Doua valori, nu trei. Woot accepta si `card`, dar acolo raspunsul lor NU poarta AWB,
+            ci un identificator de plata (documentat la POST /orders: `awb_number` e „for
+            credit/term payments", `payment_id` e „for card payments"). Oferit aici, comerciantul ar
+            fi ales o expediere fara eticheta si fara numar. Vezi nota din `WootConfig`.
+          */}
+          <div className="border-t border-border pt-4">
+            <label htmlFor="woot-plata" className="mb-1.5 block text-xs font-medium text-foreground">
+              Cum se plateste expedierea
+            </label>
+            <select
+              id="woot-plata"
+              value={cfg.payment_method ?? "credit"}
+              onChange={e => setCfg(c => ({ ...c, payment_method: e.target.value as "credit" | "term" }))}
+              className="h-9 max-w-64 rounded-md border border-border bg-background px-2 text-sm"
+            >
+              <option value="credit">Din creditul contului</option>
+              <option value="term">La termen (pe factura)</option>
+            </select>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Alege cum e configurat contul tau la Woot. Pe credit, emiterea se opreste cand contul
+              ramane fara sold, iar AWB-ul nu se creeaza.
+            </p>
+          </div>
+
         </Panel>
 
         {/* Actions */}

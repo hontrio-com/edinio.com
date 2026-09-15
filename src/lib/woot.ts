@@ -46,6 +46,25 @@ export type WootConfig = {
   sender: WootSender;
   /** Opt-in: insure shipments for the order's product value (insurance param). */
   insurance_enabled?: boolean;
+  /**
+   * Cum se plateste expedierea la Woot. (15.09.2026)
+   *
+   * ═══ ⚠ DE CE EXISTA, SI DE CE „card" NU E PRINTRE VALORI ═══
+   *
+   * Pana azi nimeni nu trimitea `payment_method`, deci TOATE magazinele plecau pe `credit`, care e
+   * si implicitul LOR. Masurat in productie pe 15.09.2026: toate cele SAPTE esecuri de AWB Woot din
+   * viata platformei sunt „Nu aveti suficient credit pentru a finaliza comanda". Un magazin cu cont
+   * pe termen ar fi esuat asa la nesfarsit, fara nicio cale sa aleaga altfel.
+   *
+   * ⚠ „card" LIPSESTE DINADINS, si asta nu e o precautie de-a noastra, e scris in documentatia lor
+   * (`ws.woot.ro/latest`, POST /orders): `awb_number` e „for credit/term payments", iar `payment_id`
+   * e „for card payments". Adica pe card NU intorc niciun AWB, ci un identificator de plata care
+   * cere un drum de plata pe care platforma nu-l are. Oferit in panou, comerciantul ar fi ales o
+   * valoare care produce o expediere fara eticheta si fara numar.
+   *
+   * Lipsa inseamna `credit`, ca sa nu se clinteasca nimic pentru magazinele care merg azi.
+   */
+  payment_method?: "credit" | "term";
 };
 
 export type WootParcel = {
@@ -159,6 +178,70 @@ export async function getWootToken(public_key: string, secret_key: string): Prom
 
 // ─── Generic request ─────────────────────────────────────────────────────────
 
+/**
+ * Motivul pe care il da Woot, din oricare din formele in care il da.
+ *
+ * ═══ ⚠ DE CE E O FUNCTIE, SI NU UN BLOC INAUNTRUL LUI `wootReq` (15.09.2026) ═══
+ *
+ * Extragerea asta exista de mult, dar traia INGROPATA in ramura de raspuns NEREUSIT a lui
+ * `wootReq`, deci se folosea numai la 4xx si 5xx. Iar Woot raspunde HTTP 200 si pentru „am
+ * creat", si pentru „n-am creat": adevarul sta in corp. Pe drumul acela, cele trei plicuri de
+ * mai jos aruncau un mesaj scris de noi si ARUNCAU motivul lui.
+ *
+ * ⚠ Nu e o presupunere ca forma asta apare: masurat in productie pe 15.09.2026, TOATE cele sapte
+ * esecuri de AWB Woot din viata platformei poarta chiar mesajul lor, „Nu aveti suficient credit
+ * pentru a finaliza comanda". Pe ramura de 200 acelasi mesaj s-ar fi pierdut, iar comerciantul ar
+ * fi citit „Woot a refuzat crearea expedierii" si n-ar fi avut ce sa faca mai departe.
+ *
+ * ⚠ Si e chiar lectia pe care fisierul asta a invatat-o o data: comentariul de mai jos spune
+ * „exact asa s-a ascuns o zi cauza reala", despre forma `error` ca OBIECT. Lectia s-a aplicat
+ * atunci doar ramurii de 4xx.
+ *
+ * Formele cunoscute, toate vazute de la ei: `{message}`, `{error}` ca sir, `{error}` ca obiect
+ * camp catre motiv (`{"error":{"parcels.0.weight":"...must be >= 1"}}`), si `{errors}` in stil
+ * Laravel, ca lista sau ca obiect camp catre lista.
+ */
+export function motivulWoot(corp: unknown): string {
+  if (!corp || typeof corp !== "object") return "";
+  const p = corp as { message?: unknown; error?: unknown; errors?: unknown };
+
+  let detail = "";
+  if (typeof p.message === "string") detail = p.message;
+  else if (typeof p.error === "string") detail = p.error;
+  else if (p.error && typeof p.error === "object") {
+    detail = Object.entries(p.error as Record<string, unknown>)
+      .map(([camp, motiv]) => `${camp}: ${Array.isArray(motiv) ? motiv.join(", ") : String(motiv)}`)
+      .join("; ");
+  }
+
+  if (p.errors) {
+    const msgs: string[] = [];
+    if (Array.isArray(p.errors)) {
+      for (const e of p.errors) msgs.push(typeof e === "string" ? e : JSON.stringify(e));
+    } else if (typeof p.errors === "object") {
+      for (const v of Object.values(p.errors as Record<string, unknown>)) {
+        if (Array.isArray(v)) msgs.push(...v.map(String));
+        else if (v != null) msgs.push(String(v));
+      }
+    }
+    if (msgs.length) detail = detail ? `${detail}: ${msgs.join("; ")}` : msgs.join("; ");
+  }
+
+  return detail.trim();
+}
+
+/**
+ * Mesajul catre comerciant: al LOR cand il dau, al nostru cand tac.
+ *
+ * ⚠ Motivul lor se pune la coada, nu inlocuieste propozitia noastra: „Woot a refuzat anularea"
+ * spune ce s-a intamplat la noi, iar coada spune de ce, la ei. Inlocuita cu totul, un mesaj scurt
+ * ca „Forbidden" ar fi lasat comerciantul fara context.
+ */
+function cuMotiv(propriu: string, corp: unknown): string {
+  const motiv = motivulWoot(corp);
+  return motiv ? `${propriu.replace(/\.$/, "")}: ${motiv}` : propriu;
+}
+
 async function wootReq<T>(token: string, method: string, path: string, body?: unknown): Promise<T> {
   /* ⚠ Acelasi invelis duce si citirile, si emiterea, deci verdictul se alege pe METODA:
      un GET expirat n-a creat nimic (refuz dovedit), un POST expirat poate sa fi creat
@@ -185,33 +268,7 @@ async function wootReq<T>(token: string, method: string, path: string, body?: un
     const raw = await res.text().catch(() => "");
     let detail = "";
     try {
-      const parsed = JSON.parse(raw) as { message?: string; error?: unknown; errors?: unknown };
-      if (typeof parsed.message === "string") detail = parsed.message;
-      else if (typeof parsed.error === "string") detail = parsed.error;
-      else if (parsed.error && typeof parsed.error === "object") {
-        /*
-         * Woot mai raspunde si cu `error` ca OBIECT camp -> motiv, nu ca sir:
-         *   {"error":{"parcels.0.weight":"...must be >= 1"}}
-         * Varianta de dinainte verifica doar `typeof error === "string"`, deci
-         * pe forma asta `detail` ramanea gol si comerciantul vedea un sec
-         * „Woot API error 400". Exact asa s-a ascuns o zi cauza reala.
-         */
-        detail = Object.entries(parsed.error as Record<string, unknown>)
-          .map(([camp, motiv]) => `${camp}: ${Array.isArray(motiv) ? motiv.join(", ") : String(motiv)}`)
-          .join("; ");
-      }
-      if (parsed.errors) {
-        const msgs: string[] = [];
-        if (Array.isArray(parsed.errors)) {
-          for (const e of parsed.errors) msgs.push(typeof e === "string" ? e : JSON.stringify(e));
-        } else if (typeof parsed.errors === "object") {
-          for (const v of Object.values(parsed.errors as Record<string, unknown>)) {
-            if (Array.isArray(v)) msgs.push(...v.map(String));
-            else if (v != null) msgs.push(String(v));
-          }
-        }
-        if (msgs.length) detail = detail ? `${detail}: ${msgs.join("; ")}` : msgs.join("; ");
-      }
+      detail = motivulWoot(JSON.parse(raw));
     } catch {
       // Non-JSON body (e.g. HTML error page) — keep a short snippet, skip markup.
       if (raw && !raw.trimStart().startsWith("<")) detail = raw.slice(0, 300);
@@ -379,7 +436,7 @@ export async function createOrder(
    * refuz DOVEDIT, deci reincercarea dupa corectarea datelor ramane libera. Un corp fara
    * `order_id` e insa ALTCEVA, vezi mai jos.
    */
-  if (r.success !== true) throw eroareRefuz("Woot a refuzat crearea expedierii.");
+  if (r.success !== true) throw eroareRefuz(cuMotiv("Woot a refuzat crearea expedierii.", r));
 
   /*
    * ⚠ AICI VERDICTUL E „NU STIM", SI E TOT CE CONTEAZA.
@@ -421,7 +478,7 @@ export async function getOrderAwb(
    * ⚠ E o CITIRE, deci refuzul e dovedit: nu s-a creat nimic, reincercarea e libera.
    */
   if (r.success !== true || typeof r.pdf !== "string" || !r.pdf) {
-    throw eroareRefuz("Woot nu a returnat eticheta pentru aceasta expediere.");
+    throw eroareRefuz(cuMotiv("Woot nu a returnat eticheta pentru aceasta expediere.", r));
   }
   return { success: true, pdf: r.pdf };
 }
@@ -454,10 +511,11 @@ export async function cancelWootOrder(
    * opusul reincercarii libere de la emitere: vezi `cancelWootAwb`.
    */
   if (r.success !== true) {
-    throw eroareRefuz(
+    throw eroareRefuz(cuMotiv(
       "Woot a refuzat anularea. De regula inseamna ca expedierea a fost deja preluata, "
       + "deci coletul ramane viu la ei.",
-    );
+      r,
+    ));
   }
   return { success: true };
 }

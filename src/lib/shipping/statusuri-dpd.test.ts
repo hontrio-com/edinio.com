@@ -207,3 +207,28 @@ test("harta chiar are toate codurile documentate", () => {
   assert.ok(Object.keys(OPERATII_DPD).length >= 30, `harta are doar ${Object.keys(OPERATII_DPD).length} coduri`);
   assert.ok("-14" in OPERATII_DPD, "codul de livrare a disparut din harta");
 });
+
+test("⚠⚠ fereastra sta INTREAGA in interogare, nu pe jumatate in memorie", () => {
+  /*
+   * ⚠ GASIT PE PRIMA RULARE ADEVARATA, 15.09.2026. Forma de dinainte cerea doi termeni simpli
+   * (`awb_at.gte.X` sau `awb_at.is.null`), iar restul conditiei statea in memorie. Cum
+   * `dpd_awb_at` e NULL pe toate expedierile dinainte de migratie, termenul `is.null` lasa sa
+   * treaca si comenzile vechi: din 120 de randuri cerute, doar DOUASPREZECE treceau de filtrul din
+   * memorie. Lotul se dilua, iar ordonarea dupa un ceas NULL peste tot nu putea prefera pe nimeni.
+   *
+   * ⚠ Forma imbricata a fost INCERCATA pe PostgREST-ul adevarat inainte de a fi scrisa: intoarce
+   * 92 de randuri, toate in fereastra. Aia e si regula pentru cine o schimba, fiindca un
+   * `and(...)` gresit in `or(...)` NU da eroare, da LISTA GOALA.
+   */
+  const s = sursa("src/app/api/cron/dpd-tracking/route.ts");
+  /* ⚠ Potrivire pe SIR, nu pe tipar: sirul cautat e plin de `.`, `(` si `${…}`, iar un tipar
+     scris gresit ar fi trecut peste orice. Aici se cere exact textul. */
+  assert.ok(
+    s.includes("`dpd_awb_at.gte.${since},and(dpd_awb_at.is.null,created_at.gte.${since})`"),
+    "fereastra nu mai e intreaga in interogare: lotul se dilueaza cu comenzi vechi",
+  );
+  assert.ok(
+    !s.includes("`dpd_awb_at.gte.${since},dpd_awb_at.is.null`"),
+    "s-a intors forma cu doi termeni simpli, cea care aducea 120 de randuri din care 12 bune",
+  );
+});

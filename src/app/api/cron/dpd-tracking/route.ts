@@ -105,7 +105,22 @@ export async function GET(req: NextRequest) {
      * termeni simpli: un `and(...)` imbricat gresit in `or(...)` NU da eroare, da LISTA GOALA, adica
      * urmarirea moare complet raportand vesel `ok: true`.
      */
-    .or(`dpd_awb_at.gte.${since},dpd_awb_at.is.null`)
+    /*
+     * ⚠ FEREASTRA INTREAGA, INTR-UN SINGUR LOC (15.09.2026, dupa prima rulare adevarata).
+     *
+     * Forma de dinainte avea doi termeni simpli, iar restul conditiei („fara ceas de emitere,
+     * dar comanda e proaspata") statea in memorie, dupa citire. Masurat pe prima rulare: din
+     * cele 120 de randuri cerute, doar DOUASPREZECE treceau de filtrul din memorie, fiindca
+     * `dpd_awb_at` e NULL pe toate expedierile dinainte de migratie, deci termenul
+     * `is.null` lasa sa treaca si cele 111 comenzi vechi. Lotul se dilua, iar ordonarea dupa un
+     * ceas care e NULL peste tot nu putea prefera pe nimeni.
+     *
+     * ⚠ SI DE CE E SIGUR SA FIE IMBRICAT, desi comentariul surorilor lui spune ca un `and(...)`
+     * in `or(...)` scris gresit NU da eroare, ci LISTA GOALA: fiindca forma asta a fost
+     * INCERCATA pe PostgREST-ul adevarat inainte de a fi scrisa aici. Intoarce 92 de randuri,
+     * toate in fereastra, fata de 120 din care 12 erau bune. Cine o schimba, o incearca la fel.
+     */
+    .or(`dpd_awb_at.gte.${since},and(dpd_awb_at.is.null,created_at.gte.${since})`)
     .order("dpd_status_checked_at", { ascending: true, nullsFirst: true })
     .limit(MAX_COMENZI);
 
@@ -120,7 +135,20 @@ export async function GET(req: NextRequest) {
   }
 
   const toate = (comenzi ?? []) as unknown as Comanda[];
+  /*
+   * ⚠ ACELASI FILTRU, DAR ACUM E O PLASA, NU O PARTE A REGULII.
+   *
+   * De cand fereastra intreaga sta in interogare, randul asta n-ar trebui sa mai scoata NIMIC.
+   * Ramane fiindca e ieftin si fiindca, daca cineva slabeste candva conditia de mai sus, coletele
+   * din afara ferestrei ar fi altfel intrebate in tacere. Diferenta se si NUMARA, mai jos.
+   */
   const inFereastra = toate.filter((o) => o.dpd_awb_at !== null || (o.created_at ?? "") >= since);
+  if (inFereastra.length !== toate.length) {
+    console.warn(
+      `[dpd-tracking] interogarea a adus ${toate.length} randuri, dar ${toate.length - inFereastra.length} `
+      + "erau in afara ferestrei: conditia din interogare nu mai acopera tot.",
+    );
+  }
   if (inFereastra.length === 0) {
     return NextResponse.json({ ok: true, verificate: 0, mutate: 0 });
   }

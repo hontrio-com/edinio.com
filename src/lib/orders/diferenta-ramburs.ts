@@ -36,6 +36,30 @@
  * Cat costa felia explicabila pe tot magazinul se afla printr-o interogare peste comenzi, nu
  * printr-un rand pe fiecare comanda: jurnalul asta e scris dintr-un capat public anonim, si
  * fiecare rand in plus e un rand pe care il poate cere oricine.
+ *
+ * ═══ ⚠ CAT COSTA FELIA EXPLICABILA, MASURAT PE 15.09.2026 ═══
+ *
+ * Randul de mai sus spune ca suma se afla printr-o interogare peste comenzi, nu printr-un rand pe
+ * fiecare comanda. S-a facut interogarea, si raspunsul schimba ordinea de lucru:
+ *
+ *     extraoptiunile sunt liniile cu `product_id` care incepe cu `extra_`
+ *     21 de comenzi le poarta, din 09.07 pana in 10.09.2026; 16 sunt cu ramburs
+ *     105 lei in total, din care 80 pe comenzi cu ramburs
+ *
+ * ⚠ Deci felia care iese din suma cotata e de **80 de lei pe doua luni**, iar ce pierde
+ * comerciantul din ea nu e suma, ci COMISIONUL de ramburs pe ea: cateva procente, adica ordinul
+ * catorva lei pe toata viata platformei.
+ *
+ * Inchiderea ei ar cere ca amandoua formularele de checkout sa trimita la cotare o suma care
+ * cuprinde extraoptiunile, adica o schimbare pe drumul cel mai circulat al platformei, acolo unde
+ * se vad preturile cumparatorilor. Nu se justifica la cifra asta. Se remasoara, nu se copiaza:
+ * interogarea e scrisa mai sus, iar daca magazinele incep sa vanda extraoptiuni scumpe, raspunsul
+ * se schimba.
+ *
+ * ⚠ SI JURNALUL REPARAT A FOST REMASURAT, tot pe 15.09.2026: ZERO randuri
+ * `rambursSubdeclarat` de la reparatia din 14.09 incoace, pe 27 de comenzi din care 9 cu ramburs.
+ * Zeroul nu e un zero de scriere: jurnalul a scris in aceeasi fereastra 10 randuri, de trei feluri.
+ * E un esantion mic, deci nu inchide SYS-P1-03; e doar prima masuratoare facuta cu termometrul bun.
  */
 
 function round2(n: number): number {

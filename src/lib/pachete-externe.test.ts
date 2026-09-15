@@ -44,6 +44,26 @@ import { createRequire } from "node:module";
   versiune cade și de ce. Cu `^2.17.5`, un `npm update` sau un robot de
   actualizări ar readuce tăcut 2.17.7 — exact versiunea pe care documentația
   proiectului spune că am scos-o din producție.
+
+  ⚠ SI CE SE INTAMPLA CAND CINEVA RULEAZA `npm audit`, MASURAT PE 15.09.2026
+
+  Depozitul avea 36 de vulnerabilitati (4 mari). Urcarea intregului grup `@tiptap` de la 3.23.6 la
+  3.31.3, plus reparatiile de lockfile, le-a dus la UNA singura. Aceea una e chiar pachetul de
+  aici, si ramane:
+
+      sanitize-html <=2.17.6  (moderate)  „fix available via npm audit fix --force"
+
+  ⚠ SFATUL ACELA E GRESIT PENTRU NOI, si costa: `--force` urca la 2.17.7, adica exact versiunea
+  care a doborat platforma pe 30.08.2026, cu build VERDE. Incidentul e scris in antetul fisierului.
+
+  Iar cele doua avertismente pe care le poarta 2.17.6 NU ne ating, si nici asta nu e o presupunere:
+  amandoua cer ca `svg`/SMIL sau `textarea` sa fie PERMISE in configuratie, iar niciuna din
+  configuratiile noastre nu le permite. `src/lib/blog/curata.test.ts` le hraneste chiar sarcinile
+  („<svg><textarea><img src=x onerror=alert(1)>…", „<textarea></textarea/><img src=x onerror=…>")
+  si cere ca ele sa nu treaca.
+
+  Deci randul rosu din `npm audit` ramane acolo dinadins. Cine il vede a doua oara: raspunsul e
+  aici, si el nu se schimba pana cand `htmlparser2` nu redevine incarcabil pe drumul extern.
 */
 
 const cere = createRequire(import.meta.url);

@@ -13,7 +13,12 @@ fiecarei cereri JSON, nu in antet.
 (LT/LV/EE): alte cai (`/shipments`), alt fel de autentificare (bearer). Cine porneste de la el scrie
 cod care nu merge niciodata, si nu afla din mesaje de eroare de ce.
 
-⚠⚠ **REFERINTA AUTORITARA NU MAI E PE DISC.** Auditul din 05.07.2026 s-a facut pe modulul oficial de
+⚠ **REFERINTA AUTORITARA E ACUM CEA OFICIALA, adusa pe 15.09.2026:** documentatia lor de Web API,
+<https://api.dpd.ro/web-api.html>, cu „Appendix 1 - Track And Trace Operation Codes" si cu toate
+lungimile de camp. E mai buna decat modulul de WooCommerce pe care se sprijinea auditul din iulie,
+si care intre timp a disparut de pe disc.
+
+⚠ **Ce ramane mostenit, si se spune pe fata:** Auditul din 05.07.2026 s-a facut pe modulul oficial de
 WooCommerce (`dpdro` v3), din `Desktop/modul_woocommerce_dpd`. **Dosarul acela nu mai exista azi**
 (verificat 15.09.2026). Deci orice afirmatie NOUA de conformitate cere intai readucerea modulului;
 ce scrie mai jos despre „conform" e mostenit din auditul de atunci, nu reverificat acum. Vezi
@@ -104,6 +109,30 @@ lipseste din raspuns, iar marcat doar ce s-a intors, restul ar bloca permanent c
 
 ---
 
+### I-2. ⚠ Lungimile de camp sunt ale LOR, si una era pe dos
+
+Trecere de conformitate pe documentatia lor oficiala, 15.09.2026. Patru neconformitati, toate pe
+drumul emiterii:
+
+| campul lor | cat ingaduie ei | ce faceam |
+| --- | --- | --- |
+| `content.contents` | 100 | ⚠ taiam la **50**: jumatate din descrierea marfii se pierdea degeaba, si tocmai ea conteaza la vama |
+| `shipmentNote` | 200 | ⚠ **nemarginit**, iar campul „Observatii" din panou n-avea nicio limita |
+| `ref1` | 30 | ⚠ nemarginit (numarul comenzii vine dintr-un format ales de comerciant) |
+| `recipient.clientName` | 3 pana la 60 | ⚠ nemarginit |
+
+⚠ **Ce costa:** DPD refuza la EMITERE, cu comerciantul pe fereastra si clientul pe fir. Iar taierea
+prea stransa nu e „prudenta", e tot neconformitate.
+
+⚠ **Numele scurt NU se umple.** Ei cer minimum 3 caractere; un nume mai scurt e o problema de DATE,
+iar umplut de noi ar trimite coletul pe un nume care nu exista. Se taie maximul, atat, si refuzul
+lor spune adevarul. O proba cade daca cineva incepe sa-l umple.
+
+Panoul arata acum si numaratoarea („0/200 de caractere, cat accepta DPD"), ca omul sa vada limita
+inainte, nu s-o afle din refuz. **7 probe, banc de mutanti 6 din 6.**
+
+---
+
 ## Deschis
 
 ### D-1. Validarea adresei inainte de emitere
@@ -111,12 +140,7 @@ lipseste din raspuns, iar marcat doar ce s-a intors, restul ar bloca permanent c
 `validation/address` spune daca adresa e livrabila INAINTE sa se emita. Azi aflam abia din refuzul
 emiterii, cand comerciantul e deja pe fereastra de AWB.
 
-### D-2. Referinta autoritara trebuie readusa
-
-Modulul oficial nu mai e pe disc. Pana nu e readus, nicio afirmatie noua de conformitate nu se poate
-sprijini pe altceva decat pe codul nostru si pe raspunsurile lor.
-
-### D-3. Nedovedit live
+### D-2. Nedovedit live
 
 Trei AWB-uri reusite si doua esuate in toata viata platformei. Ce se poate spune despre drumurile
 neumblate e „respecta ce stim din modul", nu „merge".
@@ -125,10 +149,21 @@ neumblate e „respecta ce stim din modul", nu „merge".
 
 ## Nota, cinstit
 
-Emiterea, anularea, eticheta, cotarea si chemarea curierului au trecut auditul din iulie, iar de la
-15.09.2026 platforma stie si ce se intampla cu coletul dupa ce pleaca: comanda se muta singura si
-factura pleaca la livrare, pe harta PUBLICATA de ei.
+**9,5/10.** Emiterea, anularea, eticheta, cotarea si chemarea curierului au trecut auditul din
+iulie; de la 15.09.2026 platforma stie si ce se intampla cu coletul dupa ce pleaca, pe harta
+PUBLICATA de ei, deci comanda se muta singura si factura pleaca la livrare; iar lungimile de camp
+respecta acum chiar documentatia lor, dupa o trecere care a gasit patru neconformitati.
 
-Nota onesta: **8,5/10**. Ce lipseste nu mai e functionalitate, ci dovada: trei AWB-uri reusite in
-toata viata platformei, si ⚠ referinta autoritara (modulul lor oficial) nu mai e pe disc, deci orice
-afirmatie NOUA de conformitate cere intai readucerea ei.
+⚠ **Ce lipseste, si de ce nu e 10:**
+
+1. **`validation/address`** (D-1): adresa s-ar putea verifica INAINTE de emitere. Azi se afla din
+   refuz. ⚠ Masurat insa: din cele cinci operatii DPD din viata platformei, o singura emitere a
+   esuat, si a reusit la reluare un minut mai tarziu, plus o cerere de curier picata. Nu e un tipar
+   de adrese gresite, deci nu justifica un apel in plus pe drumul emiterii.
+2. **Nedovedit live** (D-2): trei AWB-uri reusite in toata viata platformei, dintre care unul
+   international. Ce se poate spune despre drumurile neumblate e „respecta documentatia lor", nu
+   „merge".
+
+⚠ Si o nuanta care se uita usor: **Bucurestiul la DPD e UN SINGUR `siteId`**, fara sectoare, deci
+acolo „Sector X" se plieaza in „Bucuresti". E pe dos fata de Woot si Sameday. Vezi tabelul celor
+trei forme din `sameday-audit-2026-07`.

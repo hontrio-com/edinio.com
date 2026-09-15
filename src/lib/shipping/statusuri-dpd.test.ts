@@ -232,3 +232,56 @@ test("⚠⚠ fereastra sta INTREAGA in interogare, nu pe jumatate in memorie", (
     "s-a intors forma cu doi termeni simpli, cea care aducea 120 de randuri din care 12 bune",
   );
 });
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LUNGIMILE CERUTE DE DPD, CITATE DIN DOCUMENTATIA LOR         (15.09.2026)
+   ══════════════════════════════════════════════════════════════════════════
+
+   Din `api.dpd.ro/web-api.html`, sectiunile `CreateShipmentRequest`, `ShipmentContent` si
+   `ShipmentRecipient`:
+
+       shipmentNote  200      ref1  30      contents  100      clientName  3..60
+
+   ⚠ CE COSTA LIPSA LOR: DPD refuza la EMITERE, cu comerciantul pe fereastra si clientul pe fir.
+   Campul „Observatii" din panou n-avea nicio margine.
+
+   ⚠ SI O TAIERE PREA STRANSA E TOT NECONFORMITATE: `contents` era taiat la 50 desi ei ingaduie
+   100, deci jumatate din descrierea marfii se pierdea degeaba, tocmai cea care conteaza la vama.
+*/
+
+const SURSA_DPD = "src/lib/dpd.ts";
+
+test("⚠⚠ campurile se taie la lungimile LOR, nu la altele", () => {
+  const s = sursa(SURSA_DPD);
+  assert.match(s, /contents: taieDpd\(input\.content, 100\)/,
+    "descrierea marfii nu mai foloseste cele 100 de caractere pe care DPD le ingaduie");
+  assert.match(s, /clientName: taieDpd\(input\.recipientName, 60\)/,
+    "numele destinatarului poate depasi cele 60 de caractere ale lor");
+  assert.match(s, /ref1: taieDpd\(input\.ref1, 30\)/,
+    "referinta comenzii poate depasi cele 30 de caractere ale lor");
+  assert.match(s, /shipmentNote: taieDpd\(input\.shipmentNote, 200\)/,
+    "observatiile pot depasi cele 200 de caractere ale lor, si atunci DPD refuza la emitere");
+
+  /* ⚠ Si taierea veche, prea stransa, nu are voie sa se intoarca. */
+  assert.doesNotMatch(s, /slice\(0, 50\) \|\| "Produse"/,
+    "s-a intors taierea la 50 a descrierii, desi DPD ingaduie 100");
+});
+
+test("⚠ numele scurt NU se umple cu litere inventate", () => {
+  /*
+   * Ei cer minimum 3 caractere. Un nume mai scurt e o problema de DATE; umplut de noi, coletul ar
+   * pleca pe un nume care nu exista, iar refuzul lor, care spune adevarul, n-ar mai veni niciodata.
+   */
+  const s = sursa(SURSA_DPD);
+  assert.doesNotMatch(s, /padEnd\(3|padStart\(3|recipientName.*\|\| "N\/A"/,
+    "numele destinatarului a inceput sa fie umplut ca sa treaca de minimul lor");
+});
+
+test("⚠ si panoul nu mai lasa sa se scrie peste limita", () => {
+  /* Taierea din client nu inlocuieste pe cea din constructorul de corp: ea doar face ca omul sa
+     VADA limita inainte, in loc s-o afle din refuzul curierului. */
+  const m = sursa("src/components/dashboard/DpdAwbModal.tsx");
+  assert.match(m, /maxLength=\{200\}/, "campul de observatii si-a pierdut marginea");
+  assert.match(m, /setShipmentNote\(e\.target\.value\.slice\(0, 200\)\)/,
+    "un text lipit in camp poate depasi iar limita");
+});

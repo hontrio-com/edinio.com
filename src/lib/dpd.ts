@@ -323,12 +323,44 @@ function buildDpdShipmentBody(
 
   // Parcel dimensions (cm) feed the volumetric weight — sent per parcel, with
   // the module's mapping: depth = length.
+
+/**
+ * Taie un camp la lungimea pe care o cere DPD.
+ *
+ * ═══ ⚠ LUNGIMILE SUNT ALE LOR, CITATE (15.09.2026) ═══
+ *
+ * Din documentatia lor oficiala de Web API (`api.dpd.ro/web-api.html`), sectiunile
+ * `CreateShipmentRequest`, `ShipmentContent` si `ShipmentRecipient`:
+ *
+ *     shipmentNote  200      ref1 / ref2  30      contents  100      package  50
+ *     clientName    minimum 3, maximum 60        phone1    max 20, doar cifre si „+"
+ *
+ * ⚠ CE SE INTAMPLA FARA TAIERE: DPD refuza expedierea la EMITERE, cu comerciantul pe fereastra si
+ * clientul pe fir. Campul „Observatii" din panou n-avea nicio margine, deci un text lung era un
+ * refuz care se afla abia atunci.
+ *
+ * ⚠ SI O TAIERE PREA STRANSA E TOT O NECONFORMITATE: `contents` era taiat la 50, iar ei ingaduie
+ * 100. Jumatate din descrierea marfii se pierdea degeaba, si tocmai ea conteaza la vama, pe
+ * expedierile internationale (platforma a emis deja una).
+ *
+ * ⚠ NUMELE NU SE UMPLE. Ei cer minimum 3 caractere; un nume mai scurt e o problema de DATE, nu una
+ * pe care s-o rezolvam inventand litere. Se taie maximul, si atat: refuzul lor, daca vine, spune
+ * adevarul.
+ */
+function taieDpd(v: string | undefined | null, max: number): string | undefined {
+  const t = (v ?? "").trim();
+  if (!t) return undefined;
+  return t.length > max ? t.slice(0, max).trim() : t;
+}
+
   const hasDims = !!(input.length && input.width && input.height);
   const content: Record<string, unknown> = {
     parcelsCount: 1,
     totalWeight: input.weightKg,
     // `contents` is required by DPD (customs description on international).
-    contents: (input.content ?? "").trim().slice(0, 50) || "Produse",
+    /* ⚠ 100, cat ingaduie EI, nu 50 cat taiam noi: jumatate din descriere se pierdea degeaba,
+       si tocmai ea conteaza la vama. */
+    contents: taieDpd(input.content, 100) ?? "Produse",
     package: "BOX",
   };
   if (hasDims) {
@@ -344,7 +376,9 @@ function buildDpdShipmentBody(
   const recipient: Record<string, unknown> = {
     phone1: { number: normalizePhone(input.recipientPhone) },
     privatePerson: true,
-    clientName: input.recipientName,
+    /* ⚠ 60 la ei. Minimul lor de 3 NU se umple cu litere inventate: un nume prea scurt e o
+       problema de date, iar refuzul lor spune adevarul. */
+    clientName: taieDpd(input.recipientName, 60),
     email: input.recipientEmail || undefined,
     ...(input.pickupOfficeId
       ? { pickupOfficeId: input.pickupOfficeId }
@@ -360,8 +394,8 @@ function buildDpdShipmentBody(
     service,
     content,
     payment,
-    ref1: input.ref1,
-    shipmentNote: input.shipmentNote || undefined,
+    ref1: taieDpd(input.ref1, 30),
+    shipmentNote: taieDpd(input.shipmentNote, 200),
   };
 }
 

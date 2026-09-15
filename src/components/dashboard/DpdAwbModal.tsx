@@ -472,13 +472,20 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1">Observatii</label>
+                    {/* ⚠ 200 e limita LOR (`shipmentNote` din documentatia de Web API), nu o preferinta
+                        de-a noastra. Fara ea, un text lung se afla abia la emitere, cand DPD refuza. */}
                     <textarea
                       value={shipmentNote}
-                      onChange={e => setShipmentNote(e.target.value)}
+                      onChange={e => setShipmentNote(e.target.value.slice(0, 200))}
+                      maxLength={200}
                       rows={2}
                       placeholder="Observatii pentru curier..."
+                      aria-describedby="dpd-nota-limita"
                       className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors resize-none"
                     />
+                    <p id="dpd-nota-limita" className="text-[11px] text-muted-foreground mt-1">
+                      {shipmentNote.length}/200 de caractere, cat accepta DPD.
+                    </p>
                   </div>
                 </div>
               </div>

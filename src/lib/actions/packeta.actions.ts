@@ -614,16 +614,23 @@ export async function getPacketaTrackingAction(
 }
 
 /**
- * O trecere de urmarire pentru o comanda. Folosita si de cron.
+ * O trecere de urmarire pentru o comanda.
  *
  * ⚠ Se ia treapta cea mai INALTA din tot istoricul, nu ultima stare: intre doua
  * treceri pot intra mai multe evenimente, iar ultimul poate fi unul administrativ.
  * Lectie platita la GLS.
+ *
+ * ⚠ NU O CHEAMA NIMENI (masurat 15.09.2026, o singura potrivire in tot `src/`: chiar
+ * definitia asta). Randul de deasupra spunea „Folosita si de cron", si nu era adevarat:
+ * `api/cron/packeta-tracking` isi scrie singur urmarirea. Se pastreaza scrisa corect, nu
+ * lasata sa putrezeasca: `business_id` E AUTORIZARE, iar aici clientul e cel de SERVICIU,
+ * deci RLS nu opreste nimic. Fara filtru, un `order.id` gresit ar fi scris,
+ * inclusiv `status`, pe randul altui comerciant.
  */
 export async function actualizeazaUrmarirePacketa(
   admin: ReturnType<typeof createAdminClient>,
   config: PacketaConfig,
-  order: { id: string; status: string; packeta_packet_id: string | null },
+  order: { id: string; business_id: string; status: string; packeta_packet_id: string | null },
 ): Promise<{ schimbat: boolean }> {
   const packetId = (order.packeta_packet_id ?? "").trim();
   if (!packetId) return { schimbat: false };
@@ -634,7 +641,8 @@ export async function actualizeazaUrmarirePacketa(
     istoric = await istoricColet(config, packetId);
   } catch (e) {
     /* Marcam ca am incercat, altfel comanda ramane in capul cozii si blocheaza restul. */
-    await admin.from("orders").update({ packeta_status_checked_at: acum }).eq("id", order.id);
+    await admin.from("orders").update({ packeta_status_checked_at: acum })
+      .eq("id", order.id).eq("business_id", order.business_id);
     await logError({
       action: "packeta.urmarire",
       message: e instanceof Error ? e.message : "esec",
@@ -654,6 +662,6 @@ export async function actualizeazaUrmarirePacketa(
     packeta_status_code: ultima?.cod ?? null,
     ...(codExtern ? { packeta_external_tracking: codExtern } : {}),
     ...(nou && nou !== order.status ? { status: nou } : {}),
-  }).eq("id", order.id);
+  }).eq("id", order.id).eq("business_id", order.business_id);
   return { schimbat: !!nou && nou !== order.status };
 }

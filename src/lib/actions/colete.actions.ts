@@ -307,8 +307,11 @@ export async function detachCOAwb(businessId: string, orderId: string): Promise<
     colete_service_name: null,
     // tracking_number is shared across couriers — clear it only if it belongs to this AWB.
     ...(order.tracking_number === order.colete_awb_number ? { tracking_number: null } : {}),
+  /* ⚠ `business_id` e AUTORIZARE, nu podoaba: e a DOUA incuietoare, cea care tine daca RLS
+     se slabeste vreodata pe `orders`. Aceeasi propozitie sta deasupra scriitorilor din
+     cronurile de urmarire. Vezi `scrierile-din-actiuni-poarta-magazinul.test.ts`. */
     updated_at: new Date().toISOString(),
-  }).eq("id", orderId);
+  }).eq("id", orderId).eq("business_id", businessId);
   if (error) return { error: "Eroare la actualizare." };
 
   /*

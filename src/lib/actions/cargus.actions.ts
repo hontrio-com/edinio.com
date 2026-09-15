@@ -214,7 +214,10 @@ export async function createCargusAwbAction(
     cargus_awb_number: barCode,
     cargus_service_name: serviceName,
     updated_at: new Date().toISOString(),
-  }).eq("id", orderId).select("id");
+  /* ⚠ `business_id` e AUTORIZARE, nu podoaba: e a DOUA incuietoare, cea care tine daca RLS
+     se slabeste vreodata pe `orders`. Aceeasi propozitie sta deasupra scriitorilor din
+     cronurile de urmarire. Vezi `scrierile-din-actiuni-poarta-magazinul.test.ts`. */
+  }).eq("id", orderId).eq("business_id", businessId).select("id");
 
   // AWB-ul exista si e platit: o eroare intoarsa acum l-ar trimite pe om sa apese
   // din nou. Registrul l-a inregistrat, deci a doua apasare il adopta.

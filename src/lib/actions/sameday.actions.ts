@@ -345,13 +345,23 @@ export async function createSamedayAwbAction(
      * asta chiar poarta trafic.
      */
     const { data: proaspat } = await supabase
-      .from("orders").select("shipping_address").eq("id", orderId).maybeSingle();
+      .from("orders").select("shipping_address")
+      .eq("id", orderId).eq("business_id", businessId).maybeSingle();
     const adresaAcum = (proaspat?.shipping_address ?? order.shipping_address ?? {}) as Record<string, unknown>;
     petic.shipping_address = adresaDupaEmitereSameday(adresaAcum, areLocker ? locker! : null);
   }
 
+  /*
+   * ⚠ `business_id` NU E UN FILTRU DE PRISOS, E AUTORIZARE.
+   *
+   * Aceeasi propozitie e scrisa deasupra scriitorului din cronul de urmarire, iar stergerea
+   * de mai jos il are de mult. Cele doua scrieri de AWB erau singurele din fisier fara el:
+   * proprietatea e dovedita in `getConfigAndOrder`, deci filtrul nu schimba nimic azi, dar
+   * el e a DOUA incuietoare, cea care tine daca RLS se slabeste vreodata pe `orders`. S-a
+   * mai slabit o data.
+   */
   const { error: eScriere, data: randuri } = await supabase.from("orders")
-    .update(petic as never).eq("id", orderId).select("id");
+    .update(petic as never).eq("id", orderId).eq("business_id", businessId).select("id");
 
   // AWB-ul exista. O eroare acum l-ar trimite pe om sa apese din nou; registrul
   // l-a inregistrat, deci a doua apasare il adopta si reface scrierea.
@@ -553,8 +563,9 @@ export async function createSamedayReturnAwbAction(
      poate preda coletul niciodata. */
   if (creat?.lockerReturnChargeCode) petic.sameday_locker_charge_code = creat.lockerReturnChargeCode;
 
+  /* ⚠ `business_id` e AUTORIZARE, nu podoaba: vezi nota de la AWB-ul de tur. */
   const { error: eScriere } = await supabase.from("orders")
-    .update(petic as never).eq("id", orderId);
+    .update(petic as never).eq("id", orderId).eq("business_id", businessId);
 
   if (eScriere) {
     await logError({

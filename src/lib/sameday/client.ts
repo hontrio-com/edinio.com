@@ -1,4 +1,6 @@
 import { normalizePhone } from "@/lib/utils/phone";
+import { mesajulDeValidareSameday } from "./mesajul-de-validare";
+import { campulUltimeiMile, CODURI_EASYBOX } from "./ultima-mila";
 import { normalizeCountyName, localitateSameday } from "@/lib/utils/ro-address";
 import { eroareCuStatus, eroareDeTermen, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 import { cheieToken } from "@/lib/integrari/cheie-token";
@@ -258,6 +260,11 @@ async function samedayGet<T>(
   return res.json() as Promise<T>;
 }
 
+/** Raspunsul lor, cand chiar e JSON. `null` cand nu e: un refuz poate veni si ca HTML. */
+function jsonSauNimic(text: string): unknown {
+  try { return JSON.parse(text); } catch { return null; }
+}
+
 async function samedayPost<T>(
   path: string,
   token: string,
@@ -281,7 +288,22 @@ async function samedayPost<T>(
   }
 
   const text = await res.text();
-  if (!res.ok) throw eroareCuStatus(`Sameday POST ${path}: ${res.status} — ${text}`, res.status);
+  if (!res.ok) {
+    /*
+     * ⚠ MESAJUL CITIBIL PLEACA PRIMUL, iar blocul lor brut ramane in spatele lui.
+     *
+     * Un refuz de validare al lor e un ARBORE, nu o propozitie: adevarul sta pe frunza,
+     * sub doua-trei niveluri de `children`. Pana acum comerciantul primea blocul intreg de
+     * JSON pus in fereastra ca text, din care nu se putea afla NICIODATA care camp e de
+     * vina. Vezi `mesajul-de-validare.ts`.
+     *
+     * ⚠ Brutul NU se arunca: cand arborele are o forma pe care n-o stim, el e tot ce
+     * avem. Ordinea conteaza fiindca fereastra taie textul lung.
+     */
+    const citibil = mesajulDeValidareSameday(jsonSauNimic(text));
+    const coada = citibil ? `${citibil} (${text})` : text;
+    throw eroareCuStatus(`Sameday POST ${path}: ${res.status}: ${coada}`, res.status);
+  }
 
   return JSON.parse(text) as T;
 }
@@ -321,7 +343,14 @@ export function mesajulLor(data: unknown): string | null {
   const e = d.error as Record<string, unknown> | undefined;
   if (e && typeof e.message === "string" && e.message) return e.message;
   if (typeof d.message === "string" && d.message) return d.message;
-  return null;
+  /*
+   * ⚠ ULTIMA INCERCARE: arborele de validare.
+   *
+   * Sta la urma, nu la inceput, fiindca o propozitie scrisa de ei anume e mai buna decat una
+   * cusuta de noi din frunze. Dar cand nu exista niciuna,
+   * si la un refuz de nomenclator chiar nu exista, alternativa era `null`, adica un mesaj inventat de apelant.
+   */
+  return mesajulDeValidareSameday(data);
 }
 
 /**
@@ -438,14 +467,35 @@ export async function getSamedayLockerServiceId(config: SamedayConfig): Promise<
     const res = await samedayGet<{ data?: Record<string, unknown>[] }>(
       "api/client/services", token, config.sandbox,
     );
-    const ln = (res.data ?? []).find(
-      (s) => String(s.serviceCode ?? s.code ?? "").toUpperCase() === "LN",
-    );
-    const id = typeof ln?.id === "number" ? ln.id : null;
-    lockerServiceCache.set(key, id);
+    /*
+     * ⚠ NU DOAR `LN`. Contul poate avea dulapurile pe `XL` (Locker Crossborder) si nu pe
+     * `LN`: amandoua sunt servicii de dulap in chiar modulul lor oficial. Cautate doar
+     * dupa `LN`, un asemenea cont intorcea `null`, iar apelantul cadea tacut pe serviciul de
+     * livrare la domiciliu. Ordinea din `CODURI_EASYBOX` e ordinea preferintei.
+     */
+    const lista = res.data ?? [];
+    let gasit: Record<string, unknown> | undefined;
+    for (const cod of CODURI_EASYBOX) {
+      gasit = lista.find((s) => String(s.serviceCode ?? s.code ?? "").toUpperCase() === cod);
+      if (gasit) break;
+    }
+    const id = typeof gasit?.id === "number" ? gasit.id : null;
+    /*
+     * ⚠ NU SE TINE MINTE „NU ARE" (15.09.2026).
+     *
+     * Randul era `lockerServiceCache.set(key, id)`, cu `id` putand fi `null`. Iar de azi
+     * `null` inseamna REFUZ la emitere si easybox ASCUNS la checkout, deci un cont caruia
+     * Sameday tocmai i-a activat serviciul ar fi ramas refuzat pana la urmatoarea pornire a
+     * procesului, fara ca nimeni sa poata face ceva.
+     *
+     * Costul e o citire de servicii pe emitere, si numai la conturile fara dulapuri, adica
+     * exact cele care oricum n-au ce emite acolo.
+     */
+    if (id !== null) lockerServiceCache.set(key, id);
     return id;
   } catch {
-    return null; // best-effort: caller falls back to the configured service
+    /* ⚠ Nici caderea nu se tine minte: e o retea proasta, nu un cont fara serviciu. */
+    return null;
   }
 }
 
@@ -497,7 +547,26 @@ export async function createSamedayAwb(
    */
   let serviceId = input.serviceId ?? config.service_id;
   if (!input.serviceId && input.lockerId) {
-    serviceId = (await getSamedayLockerServiceId(config)) ?? config.service_id;
+    const idEasybox = await getSamedayLockerServiceId(config);
+    /*
+     * ⚠ FARA SERVICIU DE DULAP SE REFUZA, NU SE CADE PE CEL DE ACASA (15.09.2026).
+     *
+     * Randul asta era `?? config.service_id`. Adica: un cont care NU are serviciul de
+     * easybox primea id-ul dulapului scris pe un serviciu de livrare la domiciliu, o
+     * expediere pe care nimeni n-o poate duce unde scrie pe ea, plecata tacut.
+     *
+     * ⚠ Refuzul nu poate strica nimic ce merge azi: masurat, ZERO AWB-uri cu dulap in
+     * toata viata platformei, iar cele cinci comenzi la easybox care asteapta sunt toate la
+     * un singur magazin. Iar drumul de RETUR refuza deja exact asa, cu exact mesajul asta:
+     * „Cere-l departamentului comercial Sameday."
+     */
+    if (!idEasybox) {
+      throw eroareNesigura(
+        "Contul tau Sameday nu are niciun serviciu de livrare in easybox."
+        + " Cere-l departamentului comercial Sameday, apoi emite AWB-ul din nou.",
+      );
+    }
+    serviceId = idEasybox;
   }
 
   const enc = encodeURIComponent;
@@ -522,11 +591,17 @@ export async function createSamedayAwb(
     /*
      * ⚠ Judetul si orasul se NORMALIZEAZA, nu se trimit cum le-a scris omul.
      *
-     * Sameday valideaza ambele campuri si respinge tot AWB-ul daca nu recunoaste
-     * unul. Selectorul nostru ofera „Municipiul Bucuresti", pe care ei nu-l stiu,
-     * iar la oras primeam „Bucuresti", „București", „Sec 5" — din zece comenzi
-     * bucurestene ADEVARATE, una singura era scrisa „Sector 1", singura forma
-     * pe care o accepta.
+     * ⚠ JUDETUL E VALIDAT, ORASUL NU, si asta o scriu ei, in documentatie
+     * („daca se trimit doar string-uri, la Judet se va valida ca string-ul trimis
+     * sa faca parte din nomenclatorul Sameday; la oras nu se va valida"). Deci
+     * `countyString` gresit inseamna AWB respins, pe cand `cityString` gresit
+     * inseamna ceva mai rau fiindca e tacut: AWB acceptat, rutat dupa textul
+     * adresei. Selectorul nostru ofera „Municipiul Bucuresti", pe care ei nu-l
+     * stiu, si tocmai de aceea judetul se normalizeaza aici, nu la vedere.
+     *
+     * La oras primeam „Bucuresti", „București", „Sec 5", adica din zece comenzi
+     * bucurestene ADEVARATE, una singura era scrisa „Sector 1". Pentru Sameday
+     * sectoarele SUNT orase, deci aia e forma buna, chiar daca refuzul nu vine.
      *
      * ⚠ `localitateSameday`, nu `normalizeLocalityName`: pentru Sameday
      * sectoarele SUNT orase, deci plierea lor in „Bucuresti" ar strica exact
@@ -562,7 +637,24 @@ export async function createSamedayAwb(
     parts.push(`clientInternalReference=${enc(input.clientInternalReference)}`);
   }
   if (input.lockerId) {
-    parts.push(`lockerLastMile=${input.lockerId}`);
+    /*
+     * ⚠ CAMPUL ATARNA DE SERVICIU, NU DE LISTA DIN CARE A VENIT PUNCTUL.
+     *
+     * Sameday are doua retele de ridicare si doua campuri: `lockerLastMile` pentru dulapuri
+     * (`LN`, `XL`) si `oohLastMile` pentru punctele PUDO (`PP`). Modulul lor oficial alege
+     * dupa CODUL serviciului; noi trimiteam mereu primul. Vezi `ultima-mila.ts`.
+     *
+     * ⚠ Daca lista de servicii nu se poate citi, ramane `lockerLastMile`, purtarea de
+     * pana acum. O citire picata n-are voie sa schimbe drumul coletelor care merg azi.
+     */
+    let codServiciu: string | null = null;
+    try {
+      const servicii = await getSamedayServices(config);
+      codServiciu = servicii.find((x) => x.id === serviceId)?.code ?? null;
+    } catch {
+      codServiciu = null;
+    }
+    parts.push(`${campulUltimeiMile(codServiciu)}=${input.lockerId}`);
   }
 
   /*

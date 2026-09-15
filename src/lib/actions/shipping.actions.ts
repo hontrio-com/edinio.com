@@ -7,7 +7,7 @@ import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { logError } from "@/lib/error-logger";
-import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday/client";
+import { estimateSamedayCost, getSamedayLockers, getSamedayLockerServiceId, type SamedayConfig, type SamedayLocker } from "@/lib/sameday/client";
 import { coletImplicit, estimateFanCourierCost, FAN_MAX_COD, FANBOX_MAX_WEIGHT_KG, getFanCourierPickupPoints, incapeInFanbox, incapeInPayPoint, optiuneaPunctuluiFan, PAYPOINT_MAX_WEIGHT_KG, rezumaProgram, serviciulPunctuluiFan, type FanCourierConfig, type FanCourierPickupPoint, type TarifFan, type TipPunctFan } from "@/lib/fancourier";
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig, type WootPriceResult } from "@/lib/woot";
 import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type DpdConfig } from "@/lib/dpd";
@@ -947,33 +947,56 @@ export async function getShippingOptions(
               });
             }),
         );
+        /*
+         * ═══ ⚠ EASYBOX-UL SE OFERA DOAR DACA CONTUL CHIAR IL ARE (15.09.2026) ═══
+         *
+         * Pana azi optiunea „Sameday EasyBox" se punea in lista neconditionat, iar daca
+         * cotarea pica se cadea pe tariful fix al zonei. Deci un cont FARA serviciu de dulap
+         * ii arata cumparatorului o livrare in easybox pe care comerciantul n-o poate emite:
+         * omul alegea, platea, si abia la fereastra de AWB se afla ca nu se poate. De azi
+         * emiterea chiar refuza in cazul asta, deci lista TREBUIE sa nu mai promita.
+         *
+         * ⚠ VERIFICAREA STA IN LANT, NU INAINTEA LUI. Scrisa ca `await` in bucla, ar fi
+         * intarziat cotarea TUTUROR curierilor cu un drum dus-intors la Sameday, o data pe
+         * proces. Asa, ramane paralela cu restul.
+         *
+         * ⚠ Si nu costa o cerere in plus: `getSamedayLockerServiceId` se tine minte pe
+         * proces, iar cotarea la dulap il chema oricum, doar mai tarziu.
+         */
         promises.push(
-          estimateSamedayCost(samedayConfig!, {
-            recipientCounty: destination.county,
-            recipientCity: destination.city,
-            weightKg: weight,
-            cashOnDelivery: rambursDeCotat,
-            useLockerService: true,
-          })
-            .then((r) => {
-              const price = Math.round(r.amount * 100) / 100;
-              const days = r.time <= 24 ? "1 zi lucratoare" : `${Math.ceil(r.time / 24)} zile lucratoare`;
-              options.push({
-                courier: "sameday",
-                courierLabel: lockerLabel(zone.label, "Sameday EasyBox (locker)"),
-                deliveryType: "locker",
-                price,
-                estimatedDays: days,
-              });
-            })
-            .catch((err) => {
-              console.error("[shipping] Sameday easybox estimate failed:", err.message);
-              options.push({
-                courier: "sameday",
-                courierLabel: lockerLabel(zone.label, "Sameday EasyBox (locker)"),
-                deliveryType: "locker",
-                price: zone.price,
-              });
+          getSamedayLockerServiceId(samedayConfig!)
+            .catch(() => null)
+            .then((idEasybox) => {
+              /* Contul nu are dulapuri: nu se pune NIMIC in lista, nici macar tariful fix. */
+              if (idEasybox === null) return undefined;
+              return estimateSamedayCost(samedayConfig!, {
+                recipientCounty: destination.county,
+                recipientCity: destination.city,
+                weightKg: weight,
+                cashOnDelivery: rambursDeCotat,
+                useLockerService: true,
+              })
+                .then((r) => {
+                  const price = Math.round(r.amount * 100) / 100;
+                  const days = r.time <= 24 ? "1 zi lucratoare" : `${Math.ceil(r.time / 24)} zile lucratoare`;
+                  options.push({
+                    courier: "sameday",
+                    courierLabel: lockerLabel(zone.label, "Sameday EasyBox (locker)"),
+                    deliveryType: "locker",
+                    price,
+                    estimatedDays: days,
+                  });
+                })
+                .catch((err) => {
+                  /* Contul ARE dulapuri, dar cotarea a picat: aici tariful fix e cinstit. */
+                  console.error("[shipping] Sameday easybox estimate failed:", err.message);
+                  options.push({
+                    courier: "sameday",
+                    courierLabel: lockerLabel(zone.label, "Sameday EasyBox (locker)"),
+                    deliveryType: "locker",
+                    price: zone.price,
+                  });
+                });
             }),
         );
       } else {

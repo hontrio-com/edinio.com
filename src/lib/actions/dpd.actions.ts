@@ -250,8 +250,11 @@ export async function createDpdShipmentAction(
        `created_at`. O comanda veche careia i se emite AWB abia azi ar fi altfel din start
        in afara ferestrei, deci n-ar fi intrebata NICIODATA. */
     dpd_awb_at: new Date().toISOString(),
+  /* ⚠ `business_id` e AUTORIZARE, nu podoaba: e a DOUA incuietoare, cea care tine daca RLS
+     se slabeste vreodata pe `orders`. Aceeasi propozitie sta deasupra scriitorilor din
+     cronurile de urmarire. Vezi `scrierile-din-actiuni-poarta-magazinul.test.ts`. */
     updated_at: new Date().toISOString(),
-  }).eq("id", orderId).select("id");
+  }).eq("id", orderId).eq("business_id", businessId).select("id");
 
   /*
    * Coletul EXISTA la DPD. Un esec de scriere nu mai are voie sa se intoarca la om

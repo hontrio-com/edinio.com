@@ -881,6 +881,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
            obligatoriu codul postal — pe care comenzile romanesti nu-l primesc din
            checkout. Acolo unde curierul il da, ajunge asa pe comanda. */
         locker_post_code: courierSelection?.lockerPostCode,
+        /* ⚠ FISA SEMNATA a punctului. Cele sase campuri de mai sus ajungeau pe comanda exact cum
+           le trimitea browserul, iar la emitere `locker_city` si `locker_county` INLOCUIESC
+           destinatarul de pe AWB (Sameday), respectiv `recipientCity` (DPD). Serverul scrie de
+           azi campurile din TOKEN si le arunca pe cele de mai sus. Amandoua checkout-urile
+           trebuie sa-l trimita: lipsa lui pe unul singur inseamna jumatate din cumparatori
+           refuzati la punct. */
+        locker_token: courierSelection?.lockerToken,
         woot_service_id: courierSelection?.wootServiceId,
         woot_courier_name: courierSelection?.wootCourierName,
         woot_service_name: courierSelection?.wootServiceName,

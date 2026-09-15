@@ -16,6 +16,13 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * Deci cumparatorul putea cota o localitate si emite cu metadatele altui punct, din alt oras, sau
  * cu un id care nu apartine deloc retelei curierului ales.
  *
+ * ⚠ INDREPTARE (15.09.2026, la cablare): din cele TREI de mai sus, tokenul asta inchide DOUA.
+ * Metadatele inventate si punctul din alta retea nu mai trec. Punctul REAL DIN ALT ORAS trece in
+ * continuare, fiindca identitatea semnata nu cuprinde localitatea cotata: un easybox clujean semnat
+ * cinstit se poate folosi pe o comanda cotata pentru Bucuresti. Randul de mai sus promitea, asa cum
+ * era scris, ca sunt inchise toate trei. Motivul pentru care a treia a ramas deschisa dinadins, si
+ * ce ar costa inchiderea ei, sunt scrise in `punctul-de-pe-comanda.ts`.
+ *
  * ═══ ⚠ DE CE NU SE VERIFICA LA EMITERE, CUM PARE FIRESC ═══
  *
  * Fiindca acolo lista canonica nu e la indemana, si costa. Masurat in clientul Sameday: contul de

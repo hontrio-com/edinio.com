@@ -31,6 +31,28 @@ import path from "node:path";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { recalculeazaTotal } from "@/lib/orders/edit-pricing";
 
+/*
+ * ⚠ CHEIA DE PROBA, SI E O DESCOPERIRE, NU O FORMALITATE. (15.09.2026)
+ *
+ * Incarcatorul probelor (`scripts/tests/register.mjs`) nu aduce niciun `.env`. Masurat: in procesul
+ * de test `SHIPPING_QUOTE_SECRET` si `SUPABASE_SERVICE_ROLE_KEY` aveau amandoua lungimea ZERO, deci
+ * pana azi TOATE probele de cotatie din depozit semnau si verificau cu CHEIA GOALA.
+ *
+ * ⚠ CE NU INSEAMNA: ca ele nu dovedeau nimic. HMAC cu cheie goala e tot o functie determinista,
+ * si amandoua capetele o foloseau pe aceeasi, deci regulile probate aici raman dovedite.
+ *
+ * ⚠ CE INSEAMNA: ca nicio proba nu putea deosebi „semnat cu secretul adevarat" de „semnat cu
+ * sirul gol". Daca `secret()` ar fi inceput sa intoarca mereu `""`, totul ar fi ramas verde. Exact
+ * gaura pe care o numea auditul extern. De azi `secret()` ARUNCA fara cheie, deci fisierul isi
+ * aduce cheia lui: o proba a unei reguli de semnare nu se bizuie pe masina pe care ruleaza.
+ *
+ * ⚠ SI IN FIECARE FISIER, nu o data pentru toate. Masurat: `node --test` ruleaza fiecare FISIER
+ * in alt proces, deci o cheie pusa intr-unul nu se vede in celelalte. Iar pusa CENTRAL, in
+ * incarcator, ar fi astupat chiar gaura care se deschide aici: niciun fisier n-ar mai fi putut
+ * vreodata sa dovedeasca purtarea fara cheie.
+ */
+process.env.SHIPPING_QUOTE_SECRET = "cheie-de-proba-quote-token";
+
 /** Optiunea folosita de testele care nu se ocupa chiar ele de legarea optiunii. */
 const OPT = { courier: "sameday", deliveryType: "address", courierLabel: "Sameday Courier", ramburs: false };
 
@@ -649,4 +671,41 @@ test("⚠ un token cu un numar NERECUNOSCUT de bucati nu trece", () => {
   const t = signShippingQuote(BIZ, DEST_CJ, 18, OPT_CARGUS, 1000);
   assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, `${t}.inca-ceva`, OPT_CARGUS, 0).ok, false);
   assert.equal(verificaCotatia(BIZ, DEST_CJ, 18, "fara-nimic", OPT_CARGUS, 0).ok, false);
+});
+
+
+test("⚠⚠ fara secret NU se semneaza cu cheie goala: se ARUNCA", () => {
+  /*
+   * ⚠ AFIRMATIA CARE APARA REPARATIA DIN 15.09.2026, si pana azi nu exista niciuna.
+   *
+   * Cu `""`, `createHmac` merge mai departe si scoate o semnatura pe care o poate calcula oricine:
+   * un pret de transport inventat ar trece drept unul cotat de noi. O degradare tacuta de
+   * securitate e mai rea decat o eroare zgomotoasa. Acelasi tipar ca la `semnaturaCheii`.
+   *
+   * ⚠ TOKENUL SE SEMNEAZA CAT TIMP CHEIA MAI EXISTA, si abia apoi se sterge.
+   *
+   * Depozitul a cazut deja o data in capcana asta, la proba punctului de ridicare: un token cu ora
+   * mica iese pe `expirat` INAINTE sa ajunga vreodata la `secret()`, deci n-are de ce sa arunce si
+   * afirmatia cade. Aici garda de expirare sta inaintea TUTUROR celor patru drumuri de verificare,
+   * deci capcana e chiar pe calea umblata. Cu un token valid si neexpirat, verificarea ajunge la
+   * cheie si se dovedeste ce trebuie: fara secret nu se compara nimic, se opreste.
+   *
+   * ⚠ SE STERG AMANDOUA VARIABILELE. Lantul e `SHIPPING_QUOTE_SECRET || SUPABASE_SERVICE_ROLE_KEY`:
+   * stearsa doar prima, proba ar trece si peste un cod nereparat, pe orice masina care se intampla
+   * sa aiba cheia de serviciu in mediu.
+   */
+  const tokenValid = signShippingQuote(BIZ, DEST_CJ, 18, OPT_CARGUS, 0);
+
+  const a = process.env.SHIPPING_QUOTE_SECRET;
+  const b = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  delete process.env.SHIPPING_QUOTE_SECRET;
+  delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  try {
+    assert.throws(() => signShippingQuote(BIZ, DEST_CJ, 18, OPT_CARGUS, 0), /secretul de semnare a cotatiilor/i);
+    assert.throws(() => verificaCotatia(BIZ, DEST_CJ, 18, tokenValid, OPT_CARGUS, 0), /secretul de semnare a cotatiilor/i);
+  } finally {
+    /* ⚠ Puse la loc, altfel probele de dupa din acelasi fisier ar rula fara cheie. */
+    if (a !== undefined) process.env.SHIPPING_QUOTE_SECRET = a;
+    if (b !== undefined) process.env.SUPABASE_SERVICE_ROLE_KEY = b;
+  }
 });

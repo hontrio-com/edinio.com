@@ -15,10 +15,23 @@ mecanism, ori fara nicio instanta vie. Asta nu inseamna ca auditurile gresesc: a
 dreptate. Inseamna ca ordinea de lucru nu se poate lua din gravitatea declarata, ci din ce
 atinge productia.
 
-**`SHIPPING_QUOTE_SECRET` e PUSA, 14.09.2026, ora 01:47.** Proprietarul a adaugat-o in Vercel pe
-toate cele trei medii si a redesfasurat `3127db32`; desfasurarea a trecut pe READY. De acum
-cotatiile nu mai sunt semnate cu cheia de service role, deci o rotire a acesteia nu le mai
-atinge. Costul rotirii, masurat: singura comanda din fereastra a venit cu 37 de minute INAINTE
+**`SHIPPING_QUOTE_SECRET` e PUSA, 14.09.2026, ora 01:47.** Proprietarul a adaugat-o in Vercel si a
+redesfasurat `3127db32`; desfasurarea a trecut pe READY.
+
+> ⚠ **INDREPTARE, 15.09.2026.** Randul de aici spunea „pe toate cele trei medii". E FALS, si a
+> fost fals de la inceput. Citit din `vercel env ls`: `SHIPPING_QUOTE_SECRET` exista DOAR pe
+> **Production**. Preview si Development n-o au, iar Preview cade pe lantul de rezerva,
+> `SUPABASE_SERVICE_ROLE_KEY` (care e pe Preview si Production). Urmarea care conteaza: concluzia
+> de mai jos, ca „o rotire a cheii de service role nu mai atinge cotatiile", e adevarata NUMAI in
+> productie. Pe preview, o rotire a cheii de serviciu invalideaza in continuare cotatiile.
+> Nu e o scapare de reparat neaparat: previzualizarile n-au nevoie de simboluri stabile. Dar cine
+> planifica rotirea trebuie sa citeasca randul asta, nu pe cel dinainte.
+>
+> ⚠ Si de aici o hotarare masurata: `SHIPPING_QUOTE_SECRET` NU se adauga in `CHEI_OBLIGATORII`
+> din `next.config.ts`. Ar opri exact desfasurarile de PREVIEW, singurele care n-o au.
+
+De acum cotatiile de productie nu mai sunt semnate cu cheia de service role, deci o rotire a
+acesteia nu le mai atinge acolo. Costul rotirii, masurat: singura comanda din fereastra a venit cu 37 de minute INAINTE
 de redeploy si era oricum una Trendyol, adusa prin ingest, care nu trece prin cotare. Iar
 `placeOrder.shippingRejected` are ZERO aparitii in sapte zile, deci nu exista fond de zgomot in
 care sa se ascunda un efect.

@@ -5,6 +5,14 @@ import { createHmac } from "node:crypto";
 import { signShippingQuote, verificaCotatia } from "./quote-token";
 
 /*
+ * ⚠ Cheia proprie a fisierului. `secret()` din `quote-token.ts` ARUNCA fara cheie de pe
+ * 15.09.2026, iar incarcatorul probelor nu aduce niciun `.env`. Fiecare fisier si-o pune pe a lui,
+ * fiindca `node --test` ruleaza fiecare fisier in alt proces. Motivul intreg, masurat, e scris o
+ * singura data, in `quote-token.test.ts`.
+ */
+process.env.SHIPPING_QUOTE_SECRET = "cheie-de-proba-gratuit-verificat";
+
+/*
  * ═══════════════════════════════════════════════════════════════════════════
  * GRATUIT NU INSEAMNA NEVERIFICAT                               (14.09.2026)
  * ═══════════════════════════════════════════════════════════════════════════

@@ -190,10 +190,53 @@ test("⚠ si pe AMANDOUA drumurile de scriere in `shipping_address`", () => {
   const laScriere = (s.match(/fan_point_type: data\.fan_point_type,/g) ?? []).length;
   assert.equal(laScriere, 2, `reteaua se scrie in ${laScriere} din 2 drumuri`);
 
-  /* Perechea: daca vreodata cele doua drumuri se unifica intr-unul, numarul de mai sus
-     devine 1 si proba trebuie RECITITA, nu coborata. */
-  const ancora = (s.match(/locker_county: data\.locker_county,/g) ?? []).length;
+  /*
+   * ⚠ ANCORA PERECHE S-A SCHIMBAT PE 15.09.2026, SI ASTA E CHIAR RECITIREA PE CARE O CEREA NOTA
+   * DE AICI, nu o coborare a ei.
+   *
+   * Pana azi se numarau doua aparitii ale lui `locker_county: data.locker_county,`, adica ale
+   * campului scris DIN CERERE. De azi cele sase campuri ale punctului se scriu din fisa semnata de
+   * noi, iar `data.locker_county` nu se mai citeste nicaieri. Perechea se numara deci pe scrierea
+   * canonica, care e noua forma a aceluiasi lucru: tot doua drumuri, tot numarate, nu cautate.
+   */
+  const ancora = (s.match(/\.\.\.\(punctAles\.campuri \?\? \{\}\),/g) ?? []).length;
   assert.equal(ancora, 2, "nu mai sunt doua drumuri de scriere: reciteste de ce cerem doua");
+
+  /*
+   * ⚠⚠ SI CAMPURILE DIN CERERE N-AU VOIE SA SE INTOARCA.
+   *
+   * Asta nu e o afirmatie de stil. Rescris fie si unul singur din `data`, poarta punctului ar fi
+   * ocolita fara ca nimic altceva sa cada: tokenul s-ar verifica in continuare, verdictul ar fi
+   * bun, si tot sirul browserului ar ajunge pe AWB. La Sameday `locker_city` si `locker_county`
+   * INLOCUIESC destinatarul, deci exact acolo se pierde adresa de livrare.
+   *
+   * Zero, nu „mai putine": o plasa care cere „macar unul mai putin" nu cade cand se intoarce unul.
+   */
+  /*
+   * ⚠ SI NU PE FORMA `camp: data.camp,` CU VIRGULA LIPITA, cum era scrisa prima oara. Masurat cu
+   * mutant: regresia cea mai probabila nu e scrierea goala, ci REZERVA BLANDA,
+   * `locker_city: data.locker_city ?? punctAles.campuri?.locker_city,`. Ea nu potriveste tiparul
+   * acela, deci trecea nevazuta, iar cheia din urma castiga: campul redevine sirul browserului si
+   * ajunge iar sa inlocuiasca destinatarul pe AWB-ul Sameday. Proba unitara nu poate acoperi gaura,
+   * fiindca `punctulDePeComanda` nici nu primeste campurile din cerere ca argumente: scanarea asta e
+   * singura plasa care exista.
+   *
+   * Se cere deci ca `data.<camp>` sa nu fie CITIT nicaieri, in nicio forma.
+   */
+  for (const camp of ["locker_name", "locker_address", "locker_city", "locker_county", "locker_post_code"]) {
+    const cate = (s.match(new RegExp(`data\\.${camp}\\b`, "g")) ?? []).length;
+    assert.equal(cate, 0,
+      `${camp} se citeste din nou din cerere, in ${cate} locuri: punctul de pe comanda poate redeveni cel trimis de browser`);
+  }
+
+  /*
+   * ⚠ `locker_id` e SINGURUL care ramane citit, si numai in doua roluri care nu scriu nimic pe
+   * comanda: garda „e comanda asta la punct?" si jurnalul refuzului. Se numara, ca sa nu se
+   * strecoare un al treilea rol care sa-l duca inapoi pe comanda.
+   */
+  const idCitit = (s.match(/data\.locker_id\b/g) ?? []).length;
+  assert.equal(idCitit, 4,
+    `locker_id se citeste in ${idCitit} locuri, asteptam 4: garda si jurnalul, pe fiecare din cele doua drumuri`);
 });
 
 test("⚠ selectorul deosebeste cele trei optiuni si duce reteaua mai departe", () => {
@@ -243,7 +286,18 @@ test("⚠ cotarea cere serviciul si optiunea din REGULA, nu scrise de mana", () 
 test("⚠ lista de puncte se cere pe retea, SI reteaua intra in cheia de cache", () => {
   const s = sursa(COTARE);
 
-  assert.match(s, /const tipPunctCerut = tipPunctFan\(retea\) \?\? "fanbox";/,
+  /*
+   * ⚠ INGUSTAREA S-A MUTAT IN `reteaua-punctului.ts`, pe 15.09.2026, si afirmatia o urmeaza acolo.
+   *
+   * Pana azi randul era scris pe loc: `tipPunctFan(retea) ?? "fanbox"`. De azi aceeasi regula o cere
+   * si celalalt capat, verificarea punctului semnat la plasarea comenzii. Scrisa in doua locuri,
+   * cele doua copii s-ar fi despartit la prima corectura, si despartirea n-ar fi aratat ca o eroare:
+   * ar fi aratat ca fiecare comanda cinstita la PayPoint cade cu motivul „semnatura".
+   *
+   * Ce se cere aici ramane acelasi lucru: tipul venit din browser NU se foloseste brut. Ca ajutorul
+   * chiar ingusteaza se probeaza pe valori, in `punctul-de-pe-comanda.test.ts`, nu pe text.
+   */
+  assert.match(s, /const tipPunctCerut = tipPunctFanCuImplicit\(retea\);/,
     "tipul punctului nu se mai ingusteaza la primire, desi vine din browser");
   assert.match(s, /getFanCourierPickupPoints\(config\.username, config\.password, tipPunctCerut\)/,
     "punctele se cer din nou doar din nomenclatorul FANbox");

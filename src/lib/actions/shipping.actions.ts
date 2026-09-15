@@ -8,7 +8,7 @@ import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { logError } from "@/lib/error-logger";
 import { estimateSamedayCost, getSamedayLockers, type SamedayConfig, type SamedayLocker } from "@/lib/sameday/client";
-import { coletImplicit, estimateFanCourierCost, FAN_MAX_COD, FANBOX_MAX_WEIGHT_KG, getFanCourierPickupPoints, incapeInFanbox, incapeInPayPoint, optiuneaPunctuluiFan, PAYPOINT_MAX_WEIGHT_KG, rezumaProgram, serviciulPunctuluiFan, tipPunctFan, type FanCourierConfig, type FanCourierPickupPoint, type TarifFan, type TipPunctFan } from "@/lib/fancourier";
+import { coletImplicit, estimateFanCourierCost, FAN_MAX_COD, FANBOX_MAX_WEIGHT_KG, getFanCourierPickupPoints, incapeInFanbox, incapeInPayPoint, optiuneaPunctuluiFan, PAYPOINT_MAX_WEIGHT_KG, rezumaProgram, serviciulPunctuluiFan, type FanCourierConfig, type FanCourierPickupPoint, type TarifFan, type TipPunctFan } from "@/lib/fancourier";
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig, type WootPriceResult } from "@/lib/woot";
 import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type DpdConfig } from "@/lib/dpd";
 import { calculateCargusPrice, getCargusPudoPoints, type CargusConfig } from "@/lib/cargus";
@@ -84,6 +84,8 @@ import { euCountryByIso2 } from "@/lib/eu-countries";
 import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
 import { semneazaOptiuni } from "@/lib/shipping/quote-token";
+import { semneazaPunctul } from "@/lib/shipping/punctul-ales-e-semnat";
+import { reteaSmartship, reteauaPunctului, serviciulShipo, tipPunctFanCuImplicit } from "@/lib/shipping/reteaua-punctului";
 import { contextulCosului , subtotalMaximDinCatalog } from "@/lib/shipping/cart-weight";
 import { GREUTATE_REZERVA_KG } from "@/lib/shipping/awb-weight";
 
@@ -3170,7 +3172,73 @@ function filtreazaOras(lockere: LockerItem[], city?: string): LockerItem[] {
 /** Singurii curieri care au ramuri mai jos. Orice altceva iesea oricum cu []. */
 const CURIERI_CU_LOCKERE = new Set(["sameday", "fan-courier", "dpd", "cargus", "gls", "posta", "innoship", "packeta", "smartship", "shipo", "ups"]);
 
+/**
+ * Un punct de ridicare, cu fisa lui semnata de server.
+ *
+ * Acelasi tipar ca `ShippingOptionSemnata` de mai sus, si din acelasi motiv: ce serveste serverul
+ * poarta dovada ca el l-a servit.
+ */
+export type PunctSemnat = LockerItem & { token: string };
+
+/**
+ * Lista de puncte de ridicare, fiecare SEMNAT.
+ *
+ * ═══ ⚠ DE CE E UN INVELIS SUBTIRE, SI NU SE SEMNEAZA IN RAMURI ═══
+ *
+ * Fiindca `puncteleDeLaCurier` are PATRUZECI de puncte de iesire, din care DOUASPREZECE pot duce
+ * puncte: unsprezece ramuri de curier plus iesirea din cache, care nu apartine niciunei ramuri si
+ * care serveste marea majoritate a cererilor. Numarate una cate una, nu estimate.
+ *
+ * ⚠ Cablata ramura cu ramura, ar fi fost douasprezece copii ale aceleiasi chemari, iar prima iesire
+ * noua scrisa de altcineva ar fi plecat NESEMNATA. Exact defectul consemnat mai sus la cotatii,
+ * pentru care s-a scris `semneazaOptiuni`, si care acolo chiar se intamplase o data.
+ *
+ * ⚠ SI DE CE NU IN `filtreazaOras`, care pare palnia. Fiindca nu e: steagul `filtreaza` il sare la
+ * UPS si la Shipo, deci ar fi ratat trei din cele douasprezece drumuri. Si nu oricare trei, ci
+ * tocmai curierii la care punctul bucurestean isi scrie orasul cum vrea, adica singurii la care
+ * verificarea de la comanda n-ar avea nici macar potrivirea de oras drept plasa de rezerva.
+ *
+ * ⚠ SI DE CE NU INAUNTRUL LUI `iaSau`. Acolo tokenul ar intra in `CACHE_LOCKERE` si ar fi servit
+ * imbatranit vreme de zece minute, iar intelesul cache-ului s-ar fi schimbat pe tacute. Semnat la
+ * iesire, cache-ul ramane o lista curata si fiecare cumparator primeste un token proaspat.
+ *
+ * ⚠ SI DE CE AICI, IN AFARA TUTUROR LUI `try`. `secret()` ARUNCA fara cheie, dinadins. Pusa
+ * inauntrul unei ramuri, aruncarea ar fi fost inghitita de `catch`-ul de acolo (sunt unsprezece) si
+ * s-ar fi facut `return []`, adica un raspuns care arata exact ca „magazinul asta n-are puncte".
+ *
+ * ⚠ SI CE NU SE SCHIMBA, ca sa nu promita randul de mai sus mai mult decat face: CUMPARATORUL vede
+ * „nu sunt puncte" in amandoua cazurile, fiindca `CourierSelector` incheie cererea cu
+ * `.catch(() => setLockers([]))`. Deosebirea e la celalalt capat si tot acolo conteaza: din invelis
+ * aruncarea iese din actiunea de server si e jurnalizata ca esec, iar in panoul comerciantului
+ * `SamedayAwbModal` o arata ca „nu am putut citi lista". Inghitita de un `catch` de ramura, ar fi
+ * ramas un `console.error` si o lista goala care nu se deosebeste de un magazin neconfigurat, deci
+ * nimeni n-ar fi cautat cheia lipsa.
+ */
 export async function getLockers(
+  businessId: string,
+  courier: string,
+  city?: string,
+  codAmount?: number,
+  retea?: string,
+): Promise<PunctSemnat[]> {
+  const puncte = await puncteleDeLaCurier(businessId, courier, city, codAmount, retea);
+  /*
+   * ⚠ Lista goala iese INAINTE de `secret()`. Altfel un magazin fara niciun curier configurat ar
+   * fi cerut cheia de semnare ca sa nu semneze nimic, si ar fi cazut zgomotos pe drumul cel mai
+   * nevinovat din toate.
+   */
+  if (puncte.length === 0) return [];
+  /*
+   * ⚠ RETEAUA E HOTARATA DE SERVER, prin regula tinuta intr-un singur loc. Al cincilea argument
+   * poarta patru lucruri diferite dupa curier, iar la UPS poarta chiar JUDETUL cumparatorului:
+   * semnat asa cum vine, fiecare comanda UPS la punct ar fi cazut la verificare. Vezi
+   * `reteaua-punctului.ts`, unde e scris si de ce regula nu poate trai in fisierul asta.
+   */
+  const ident = { businessId, curier: courier, retea: reteauaPunctului(courier, retea) };
+  return puncte.map((p) => ({ ...p, token: semneazaPunctul(ident, p) }));
+}
+
+async function puncteleDeLaCurier(
   businessId: string,
   courier: string,
   city?: string,
@@ -3207,7 +3275,13 @@ export async function getLockers(
    * intra si in cheia de cache. Nefiltrata, cineva ar putea umple cache-ul cu
    * chei inventate — acelasi rationament ca la plafonul din `CacheScurt`.
    */
-  const reteaLockere = retea === "fanbox" ? "fanbox" : "easybox";
+  /*
+   * ⚠ INGUSTAREA STA IN `reteaua-punctului.ts`, NU AICI, de pe 15.09.2026. Aceeasi regula o cere si
+   * plasarea comenzii, cand verifica semnatura punctului. Scrisa in doua locuri, cele doua copii
+   * s-ar fi despartit la prima corectura, si despartirea lor nu arata ca o eroare: arata ca fiecare
+   * comanda cinstita la punct cade cu motivul „semnatura".
+   */
+  const reteaLockere = reteaSmartship(retea);
   /*
    * ⚠ La Shipo, `retea` poarta altceva: `rate_id`-ul serviciului ales.
    *
@@ -3219,7 +3293,7 @@ export async function getLockers(
    * Se ingusteaza la cifre din acelasi motiv ca `reteaLockere`: valoarea vine de
    * la client si intra in cheia de cache.
    */
-  const rateIdShipo = /^\d{1,9}$/.test(retea ?? "") ? Number(retea) : 0;
+  const rateIdShipo = serviciulShipo(retea);
   /*
    * ⚠ La FAN, `retea` poarta TIPUL PUNCTULUI: `fanbox`, `paypoint` sau `office`.
    *
@@ -3230,7 +3304,7 @@ export async function getLockers(
    * ⚠ Lipsa inseamna `fanbox`, nu „nicio retea": pana pe 13.09.2026 aia era singura
    * oferita, iar optiunile vechi din browserul unui cumparator nu poarta inca tipul.
    */
-  const tipPunctCerut = tipPunctFan(retea) ?? "fanbox";
+  const tipPunctCerut = tipPunctFanCuImplicit(retea);
   const discriminant =
     courier === "smartship" ? `:${reteaLockere}`
     /*

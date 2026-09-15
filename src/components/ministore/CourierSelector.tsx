@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Truck, MapPin, Package, Loader2, Search, X, ChevronDown } from "lucide-react";
-import { getShippingOptions, getLockers, type ShippingOption, type LockerItem } from "@/lib/actions/shipping.actions";
+import { getShippingOptions, getLockers, type ShippingOption, type PunctSemnat } from "@/lib/actions/shipping.actions";
 
 /**
  * Brokers (Woot, Colete Online) return several offers under one courier id —
@@ -62,6 +62,19 @@ export interface CourierSelection {
   lockerCounty?: string;
   /** Codul postal al punctului; GLS il cere obligatoriu pe adresa de livrare. */
   lockerPostCode?: string;
+  /**
+   * ⚠ FISA PUNCTULUI, SEMNATA DE SERVER cand ne-a servit lista.
+   *
+   * Campurile de mai sus ajungeau pe comanda exact cum le trimitea browserul, iar la emitere ele nu
+   * sunt decorative: la Sameday `lockerCity` si `lockerCounty` INLOCUIESC destinatarul de pe AWB,
+   * la DPD `pickupOfficeId` vine din `lockerId` si localitatea se suprascrie din aceleasi siruri.
+   * Deci adresa de livrare era scrisa de client.
+   *
+   * ⚠ Tokenul POARTA fisa, nu doar o semneaza: la plasarea comenzii se scriu campurile din EL, iar
+   * cele de mai sus se arunca. Ele raman aici doar ca sa se vada punctul pe ecran pana atunci.
+   * Vezi `lib/shipping/punctul-ales-e-semnat.ts`.
+   */
+  lockerToken?: string;
   /**
    * ⚠ CARE RETEA FAN, cand punctul e al lor: FANbox, PayPoint sau oficiu.
    *
@@ -149,10 +162,10 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [selectedKey, setSelectedKey] = useState<string | null>(optiuniDemo?.[0] ? optionKey(optiuniDemo[0]) : null);
-  const [lockers, setLockers] = useState<LockerItem[]>([]);
+  const [lockers, setLockers] = useState<PunctSemnat[]>([]);
   const [lockersLoading, setLockersLoading] = useState(false);
   const [lockerSearch, setLockerSearch] = useState("");
-  const [selectedLocker, setSelectedLocker] = useState<LockerItem | null>(null);
+  const [selectedLocker, setSelectedLocker] = useState<PunctSemnat | null>(null);
   const [lockerDropdownOpen, setLockerDropdownOpen] = useState(false);
   const prevKey = useRef("");
   const reqId = useRef(0);
@@ -389,7 +402,7 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
     }
   }
 
-  function handleLockerPick(locker: LockerItem) {
+  function handleLockerPick(locker: PunctSemnat) {
     setSelectedLocker(locker);
     setLockerDropdownOpen(false);
     const opt = options.find((o) => optionKey(o) === selectedKey);
@@ -405,6 +418,9 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         lockerCity: locker.city,
         lockerCounty: locker.county,
         lockerPostCode: locker.postCode,
+        /* ⚠ Fisa semnata de server, luata de pe CHIAR punctul ales. Pierduta aici, plasarea
+           comenzii n-ar avea ce verifica si punctul ar ramane ce trimite browserul. */
+        lockerToken: locker.token,
         /* ⚠ La SmartShip optiunea de locker POARTA curierul (12 easybox / 3
            FANbox) si reteaua. Pierdute aici, emiterea n-ar mai sti cu ce curier
            sa trimita coletul in punctul ales de client. */

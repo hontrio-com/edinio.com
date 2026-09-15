@@ -115,22 +115,55 @@ test("⚠ magazinul, curierul, rambursul si discriminantul raman fiecare in chei
 const COTARE = "src/lib/actions/shipping.actions.ts";
 
 /*
- * ⚠ CRLF SCOS, COMENTARIILE TAIATE SI CORPUL FELIAT. Toate trei obligatorii, masurate pe fisier.
+ * ⚠ CRLF SCOS, COMENTARIILE TAIATE SI CORPUL FELIAT. Toate trei obligatorii, dar nu din motivele
+ * scrise aici pana azi.
  *
- * Depozitul e 100% CRLF, deci un tipar pe mai multe randuri scris cu `\n` nu potriveste.
+ * ⚠ INDREPTARE (15.09.2026): randul de aici spunea „depozitul e 100% CRLF". E FALS, si era fals si
+ * cand s-a scris. Numarat pe octeti: 2.119 fisiere LF fata de 12 CRLF in `src/**\/*.ts(x)`, iar
+ * `shipping.actions.ts`, chiar fisierul feliat mai jos, e LF curat. Scoaterea CRLF-ului nu apara
+ * nimic AZI, fiindca niciun tipar de mai jos nu trece peste un rand. Ramane totusi, fiindca nu costa
+ * nimic si fiindca `order.actions.ts` chiar E unul din cele 12: primul tipar pe doua randuri scris
+ * de cineva care copiaza de aici ar fi cazut tacut. Vezi lectia despre numerele din comentarii, care
+ * raman in urma muncii.
+ *
  * `CURIERI_CU_LOCKERE` apare in TREI comentarii din alte functii, deci fara taiere ordinea s-ar
  * masura pe proza. Iar `consumaLimita` apare de trei ori INAINTEA lui `getLockers`, in alte functii:
  * fara feliere, `indexOf` l-ar gasi pe cel al vecinului si afirmatia ar cadea pe cod bun.
  */
-function corpulLuiGetLockers(): string {
+/**
+ * Corpul functiei care CHIAR aduna punctele.
+ *
+ * ⚠ ANCORA S-A MUTAT DE PE `getLockers` PE `puncteleDeLaCurier`, pe 15.09.2026, si nu de stil.
+ * `getLockers` a devenit un invelis de cateva randuri care semneaza lista la iesire; toata ordinea
+ * aparata mai jos (paza inaintea citirii, setarile inaintea cheii, cache-ul inaintea plafonului) a
+ * ramas in miez. Lasata pe invelis, felia n-ar mai fi cuprins nicio ancora si toate cele cinci
+ * afirmatii ar fi cazut deodata pe cod bun.
+ */
+function corpulAdunariiPunctelor(): string {
   const s = readFileSync(COTARE, "utf8")
     .replace(/\r\n/g, "\n")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^[ \t]*\/\/.*$/gm, "");
-  const start = s.indexOf("export async function getLockers(");
-  assert.ok(start > 0, "nu mai gasesc getLockers in cotare");
-  const dupa = s.indexOf("\nexport ", start + 1);
-  return s.slice(start, dupa === -1 ? s.length : dupa);
+  const start = s.indexOf("async function puncteleDeLaCurier(");
+  assert.ok(start > 0, "nu mai gasesc adunarea punctelor in cotare");
+  /*
+   * ⚠ FELIA SE TAIE PE ACOLADA DE LA MARGINE, NU PANA LA URMATORUL `export`.
+   *
+   * Pana azi felia mergea de la antet pana la urmatorul `export `, iar functia era ULTIMA din
+   * fisier: `indexOf` intorcea -1 si felia se intindea pana la capatul fisierului. Coincidenta
+   * tinea doar cat timp nimeni nu scria nimic dedesubt. Masurat cu un ajutor cinstit lipit sub
+   * functie: afirmatia „cheia se compune INTR-UN SINGUR loc" cadea pe cod bun.
+   *
+   * Acolada de la marginea randului inchide exact functia: tot ce e inauntru sta indentat. Asa,
+   * felia ramane corpul ei oricine ar scrie mai jos. Aceeasi familie cu „slice-ul de corp imprumuta
+   * de la vecin", numai ca aici vecinul era tot restul fisierului.
+   */
+  const sfarsit = s.indexOf("\n}", start);
+  assert.ok(
+    sfarsit > start,
+    "adunarea punctelor nu se mai inchide cu o acolada la marginea randului: felia ar inghiti tot ce urmeaza",
+  );
+  return s.slice(start, sfarsit + 2);
 }
 
 test("⚠ curierul necunoscut se refuza INAINTEA citirii setarilor", () => {
@@ -139,7 +172,7 @@ test("⚠ curierul necunoscut se refuza INAINTEA citirii setarilor", () => {
    * inventat costa o interogare in baza, la nesfarsit, pe un drum unde plafonul durabil sta mai jos
    * dinadins: o amplificare fara plafon pe baza noastra, platita ca sa reparam altceva.
    */
-  const c = corpulLuiGetLockers();
+  const c = corpulAdunariiPunctelor();
   const iPaza = c.indexOf("CURIERI_CU_LOCKERE.has(courier)");
   const iSetari = c.indexOf("CACHE_SETARI_LOCKERE.iaSau");
   assert.ok(iPaza > 0, "paza de curier necunoscut a disparut din getLockers");
@@ -148,28 +181,116 @@ test("⚠ curierul necunoscut se refuza INAINTEA citirii setarilor", () => {
 });
 
 test("⚠ setarile se citesc INAINTEA compunerii cheii", () => {
-  const c = corpulLuiGetLockers();
+  const c = corpulAdunariiPunctelor();
   const iSetari = c.indexOf("CACHE_SETARI_LOCKERE.iaSau");
   const iCheie = c.indexOf("cheiaLockerelor({");
   assert.ok(iCheie > 0, "cheia nu se mai compune prin regula probata aici");
+  /*
+   * ⚠ ANCORA A DOUA SE PAZESTE SI EA, SI ASTA LIPSEA.
+   *
+   * `indexOf` intoarce -1 cand nu gaseste, iar `-1 < iCheie` e ADEVARAT. Cu citirea setarilor
+   * scoasa cu totul (adica exact regresia pe care afirmatia o apara), comparatia de ordine ramanea
+   * verde. Masurat: scos `CACHE_SETARI_LOCKERE`, afirmatia a trecut. Nu se vedea doar fiindca
+   * vecina de deasupra pazeste aceeasi ancora; stearsa ea, aici n-ar mai fi observat nimeni.
+   * „Ancora negasita nu da eroare".
+   */
+  assert.ok(iSetari > 0, "nu mai gasesc citirea setarilor: proba n-are fata de ce compara ordinea");
   assert.ok(iSetari < iCheie, "cheia se compune inainte sa existe configul din care isi ia amprenta");
 });
 
-test("⚠ cheia se compune INTR-UN SINGUR loc", () => {
+test("⚠⚠ cache-ul de lockere se atinge DOAR cu cheia care poarta amprenta", () => {
   /*
-   * Egalitate, nu „macar unul". O a doua compunere scrisa de mana ar fi putut sari amprenta, si
-   * atunci o parte din citiri ar fi ramas pe cheia veche fara ca nimic sa cada.
+   * ⚠ REFACUTA 15.09.2026. Pana azi afirmatia numara aparitiile lui `cheiaLockerelor({` si cerea
+   * EXACT una. Suna a „o singura compunere", dar masura cu totul altceva, si gresea in amandoua
+   * directiile. Amandoua masurate, cu mutanti rulati peste o copie in memorie a sursei:
+   *
+   *   ⚠ TRECEA DEGEABA pe chiar amenintarea scrisa in vechiul ei comentariu. O cheie compusa DE
+   *     MANA nu contine textul `cheiaLockerelor({`: lipita ca `${businessId}:${courier}:...` si
+   *     data lui `CACHE_LOCKERE.get`, numaratoarea a ramas 1 si afirmatia a ramas verde, cu
+   *     amprenta sarita si citirile pe cheia veche. Numararea apelurilor la ajutorul SIGUR nu
+   *     poate detecta decat siguranta repetata.
+   *
+   *   ⚠ CADEA PE COD BUN la orice a doua compunere cinstita, de pilda un ajutor nou care ar cere
+   *     tot prin `cheiaLockerelor({`. Egalitatea pe numar transforma o adaugare corecta in rosu.
+   *
+   * Regula adevarata nu e „se compune o data", ci „nicio citire si nicio scriere din cache nu se
+   * face cu alta cheie decat cea care poarta amprenta configului". Aia se si masoara acum: se
+   * strang TOATE atingerile cache-ului si se cere ca fiecare sa primeasca `cheieCache`. Asa, cheia
+   * scrisa de mana cade (e alta variabila la apel), iar a doua compunere cinstita trece.
    */
-  const cate = (corpulLuiGetLockers().match(/cheiaLockerelor\(\{/g) ?? []).length;
-  assert.equal(cate, 1, `cheia se compune in ${cate} locuri`);
+  const c = corpulAdunariiPunctelor();
+
+  /*
+   * ⚠ DOUA AFIRMATII, SI A DOUA A FOST ADAUGATA DUPA CE UN MUTANT A TRECUT DE PRIMA.
+   *
+   * Nu ajunge ca `cheiaLockerelor` sa fie chemata undeva in functie: mutantul care pastreaza
+   * chemarea, ii da rezultatul unei variabile NEFOLOSITE, si compune `cheieCache` de mana din
+   * `businessId` si `courier` trece si de existenta, si de numaratoarea de mai jos (numele e tot
+   * `cheieCache`), si de afirmatia vecina despre `config: settings`. Amprenta configului n-ar mai
+   * ajunge NICIODATA in cache, adica exact regresia pe care tot fisierul o apara.
+   *
+   * Se cere deci LEGATURA: variabila care ajunge la cache sa fie CHIAR cea produsa de ajutor.
+   */
+  assert.match(
+    c,
+    /const cheieCache = cheiaLockerelor\(\{/,
+    "cheia de cache nu mai iese din ajutorul cu amprenta: compusa de mana, rotatia contului n-ar mai schimba nimic",
+  );
+
+  /*
+   * ⚠ TIPARUL PRINDE ORICE, NU DOAR UN IDENTIFICATOR, si asta a fost tot o indreptare dupa mutant.
+   *
+   * Scris `([A-Za-z_$][\w$]*)`, o cheie compusa INLINE ca sablon nu era nici macar STRANSA ca
+   * atingere: nu se potrivea, deci nu intra in lista, iar celelalte atingeri cinstite tineau
+   * numaratoarea peste zero si lista de gresite goala. Adica mutantul scris chiar in comentariul
+   * afirmatiei trecea. Acum se strange ce e intre paranteze ORICE ar fi, si un sablon cade.
+   */
+  const atingeri = c.match(/CACHE_LOCKERE\.(?:get|iaSau)\(\s*([^,\s)]+)/g) ?? [];
+  /* ⚠ Fara asta, o stergere a cache-ului ar lasa lista goala si afirmatia verde. */
+  assert.ok(atingeri.length > 0, "nu mai gasesc nicio atingere a cache-ului de lockere: proba n-are ce apara");
+  const gresite = atingeri
+    .filter((a) => !/\bcheieCache$/.test(a))
+    .map((a) => a.replace(/\s+/g, " "));
+  assert.deepEqual(
+    gresite,
+    [],
+    `cache-ul de lockere se atinge cu alta cheie decat cea cu amprenta: ${gresite.join(" | ")}`,
+  );
 });
 
 test("⚠ cheia primeste configul ADEVARAT, nu un obiect gol", () => {
-  const c = corpulLuiGetLockers();
+  /*
+   * ⚠ REFACUTA 15.09.2026. Pana azi afirmatia cerea subsirul `config: settings,` ORIUNDE in felia
+   * de douasprezece mii de caractere. Doua masuratori au aratat ca nu apara regula:
+   *
+   *   ⚠ TRECEA DEGEABA: pus `config: {}` CHIAR in apelul lui `cheiaLockerelor`, si lasat sirul
+   *     `config: settings,` intr-un obiect fara nicio legatura din aceeasi functie, afirmatia a
+   *     ramas verde cu reparatia moarta. „Proba pe FISIER trece, proba pe ELEMENT prinde".
+   *
+   *   ⚠ CADEA PE COD BUN la doua refactorizari fara nicio schimbare de purtare: redenumirea
+   *     variabilei locale `settings`, si scoaterea virgulei de la coada daca `config` ajunge
+   *     ultimul camp al obiectului. Adica proba cerea o VIRGULA DE FORMATARE.
+   *
+   * Acum se taie chiar APELUL, si nu se mai cere un nume scris de mana: se citeste din sursa in ce
+   * variabila intra setarile, si se cere ca TOCMAI EA sa ajunga la `config`. O redenumire cinstita
+   * muta amandoua capetele deodata si trece; un obiect gol, sau alta variabila, cade.
+   */
+  const c = corpulAdunariiPunctelor();
+
+  const numeSetari = /const\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+CACHE_SETARI_LOCKERE\.iaSau/.exec(c)?.[1];
+  assert.ok(numeSetari, "nu mai gasesc variabila in care intra setarile citite: proba n-are ce urmari");
+
+  const i = c.indexOf("cheiaLockerelor({");
+  assert.ok(i > 0, "cheia nu se mai compune prin regula probata aici");
+  const j = c.indexOf("});", i);
+  assert.ok(j > i, "apelul lui cheiaLockerelor nu se mai inchide: felia de apel ar inghiti restul functiei");
+  const apel = c.slice(i, j + 3);
+
+  assert.doesNotMatch(apel, /config:\s*\{\s*\}/, "amprenta se ia pe un obiect GOL: rotatia contului n-ar mai schimba cheia");
   assert.match(
-    c,
-    /config: settings,/,
-    "amprenta se ia pe altceva decat setarile citite: rotatia contului n-ar mai schimba cheia",
+    apel,
+    new RegExp(`config:\\s*${numeSetari.replace(/\$/g, "\\$")}\\b`),
+    `amprenta se ia pe altceva decat setarile citite (asteptam config: ${numeSetari}): rotatia contului n-ar mai schimba cheia`,
   );
 });
 
@@ -180,7 +301,7 @@ test("⚠⚠ plafonul durabil ramane SUB cache", () => {
    * sa consume; altfel cumparatorii cinstiti epuizeaza chiar ei contorul care apara apelul, si apoi
    * raman fara niciun locker de ales, tacut.
    */
-  const c = corpulLuiGetLockers();
+  const c = corpulAdunariiPunctelor();
   const iCache = c.indexOf("CACHE_LOCKERE.get(cheieCache)");
   const iPlafon = c.indexOf("consumaLimita(");
   assert.ok(iCache > 0, "cache-ul nu mai e consultat in getLockers");

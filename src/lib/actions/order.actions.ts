@@ -39,6 +39,7 @@ import { verificaCotatia, type PlanExpedierii } from "@/lib/shipping/quote-token
 /* ⚠ Stau in modul propriu, nu aici: `"use server"` nu ingaduie exporturi de VALOARE care sa nu fie
    functii async. Vezi antetul din `recotarea.ts`, si buildul de 19 erori care a iesit din asta. */
 import { mesajulRecotarii, TOLERANTA_RAMBURS_LEI } from "@/lib/shipping/recotarea";
+import { punctulDePeComanda } from "@/lib/shipping/punctul-de-pe-comanda";
 import { parseBillingCompany, type BillingCompany, type BillingCompanyInput } from "@/lib/billing/company";
 import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleRelease, expandBundleStock } from "@/lib/bundles";
@@ -989,6 +990,13 @@ export async function placeOrder(data: {
   locker_post_code?: string;
   locker_city?: string;
   locker_county?: string;
+  /**
+   * ⚠ FISA PUNCTULUI, SEMNATA DE SERVER cand a servit lista de puncte.
+   *
+   * Din EA se scriu campurile de mai sus. Ele raman declarate fiindca formularele le trimit inca,
+   * dar pe drumul asta nu mai sunt citite deloc. Vezi `punctul-de-pe-comanda.ts`.
+   */
+  locker_token?: string;
   /** ⚠ Care retea FAN a punctului ales: `fanbox`, `paypoint` sau `office`. Vezi `TipPunctFan`. */
   fan_point_type?: string;
   woot_service_id?: number;
@@ -1503,6 +1511,12 @@ export async function placeOrder(data: {
   // Livrarea gratuita se hotaraste INAINTE de verificare: browserul trimite zero,
   // dar tokenul lui e semnat pe pretul cotat al curierului, deci n-are cum sa bata.
   const esteGratuit = isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold);
+  /*
+   * ⚠ SOCOTIT O DATA PE DRUM, si pastrat. Il cer doua porti: cotatia, care il confrunta cu ce
+   * am semnat la cotare, si punctul de ridicare, care scoate din el reteaua sub care a fost servit.
+   * Chemat de doua ori, ar fi fost doua socoteli ale aceluiasi lucru, care se pot desparti.
+   */
+  const planPretins = planulPretins(data);
   const verdictTransport = autoritativeShipping(
     data.business_id,
     data.shipping_cost,
@@ -1534,7 +1548,7 @@ export async function placeOrder(data: {
       greutatiPeProdus,
     ),
     /* Planul pretins: serviciul, contractul, reteaua punctului. Vezi `planulPretins`. */
-    planulPretins(data),
+    planPretins,
   );
   if ("recotare" in verdictTransport) {
     /*
@@ -1554,6 +1568,36 @@ export async function placeOrder(data: {
     return { error: mesaj.catreClient };
   }
   const shipping = verdictTransport.shipping;
+
+  /*
+   * ═══ ⚠ PUNCTUL DE RIDICARE SE CONFRUNTA CU FISA SEMNATA DE NOI (15.09.2026) ═══
+   *
+   * Pana azi cele sase campuri ale punctului se scriau EXACT cum le trimitea browserul, iar la
+   * emitere ele nu sunt decorative: la Sameday `locker_city` si `locker_county` INLOCUIESC
+   * destinatarul de pe AWB, la DPD `pickupOfficeId` vine din `Number(locker_id)` cu `recipientCity`
+   * suprascris. Deci adresa de livrare era scrisa de cumparator.
+   *
+   * ⚠ Reteaua iese din PLANUL pretins, nu din cerere: `fanPointType`, `smartshipLockerNet` si
+   * `shipoRateId` intra toate in `amprentaPlanului`, deci sunt chiar campurile pe care cotatia
+   * tocmai le-a confruntat. Vezi `punctul-de-pe-comanda.ts`, unde e scris si de ce un token lipsa
+   * se refuza aici in loc sa cada bland ca la cotatie.
+   */
+  const punctAles = punctulDePeComanda({
+    businessId: data.business_id,
+    curier: data.selected_courier,
+    lockerId: data.locker_id,
+    token: data.locker_token,
+    plan: planPretins,
+  });
+  if (!punctAles.ok) {
+    logError({
+      action: "placeOrder.punctNeconfirmat",
+      message: `Punctul de ridicare nu a trecut verificarea: ${punctAles.motiv}`,
+      details: { businessId: data.business_id, courier: data.selected_courier, lockerId: data.locker_id, motiv: punctAles.motiv },
+      severity: "warning",
+    });
+    return { error: punctAles.mesaj };
+  }
 
   /*
    * ═══ ⚠ SUMA DE RAMBURS SEMNATA SE CONFRUNTA CU MARFA ADEVARATA (14.09.2026) ═══
@@ -1836,20 +1880,27 @@ export async function placeOrder(data: {
         /* ⚠ Stins, nu se scrie niciun curier. Vezi `campuriDeCurier`. */
         cfgRow?.shipping_enabled === true,
       ),
-      ...(data.locker_id && {
-        locker_id: data.locker_id,
-        locker_name: data.locker_name,
-        locker_address: data.locker_address,
-        /* Codul postal AL PUNCTULUI. GLS il cere pe adresa de livrare, care la
-           livrarea in punct e chiar a punctului. Nu se amesteca cu `postal_code`,
-           care descrie destinatarul si e citit de toti ceilalti curieri. */
-        locker_post_code: data.locker_post_code,
-        locker_city: data.locker_city,
-        locker_county: data.locker_county,
+      /*
+       * ⚠ CELE SASE CAMPURI VIN DIN TOKEN, NU DIN CERERE (15.09.2026).
+       *
+       * `punctAles` le-a scos din fisa pe care am semnat-o chiar noi cand am servit lista de
+       * puncte. Ce a trimis browserul pe langa token nu se mai citeste aici DELOC: `locker_name`,
+       * `locker_address`, `locker_city`, `locker_county` si `locker_post_code` raman in
+       * incarcatura doar fiindca formularele le trimit inca, si se arunca.
+       *
+       * ⚠ Codul postal LIPSESTE cu totul cand punctul n-are unul, in loc sa fie prezent si gol:
+       * Sameday, FAN, DPD si Cargus nu-l dau niciodata. Cine citeste comanda la emitere (GLS il
+       * cere) trebuie sa suporte lipsa cheii. Vezi `punctul-de-pe-comanda.ts`.
+       */
+      ...(punctAles.campuri ?? {}),
+      ...(punctAles.campuri && {
         /* ⚠ RETEAUA punctului, nu doar id-ul lui. La FAN acelasi camp `locker_id` poate fi
            un FANbox, un PayPoint sau un oficiu, iar cele trei se emit cu servicii si optiuni
            DIFERITE. Pierduta aici, emiterea ar cadea inapoi pe FANbox si coletul ar pleca in
-           alta retea decat cea aleasa de cumparator. */
+           alta retea decat cea aleasa de cumparator.
+           ⚠ Ea NU vine din token, ci din planul semnat al COTATIEI, unde `fanPointType` intra in
+           amprenta. Tokenul punctului o leaga inca o data, prin retea: un punct dintr-o retea nu
+           poate fi trecut drept punct din alta. */
         fan_point_type: data.fan_point_type,
       }),
       ...(data.woot_service_id && {
@@ -2126,7 +2177,10 @@ export async function placeOrder(data: {
         county: data.customer_county,
         courier_label: data.courier_label,
         delivery_type: data.delivery_type,
-        locker_name: data.locker_name,
+        /* ⚠ NUMELE CANONIC, nu cel trimis de browser (15.09.2026). Comanda poarta de azi
+           numele din fisa semnata; lasat pe `data`, emailul ar fi numit alt punct decat cel
+           catre care pleaca de fapt coletul, si nimeni n-ar fi avut de unde sti care minte. */
+        locker_name: punctAles.campuri?.locker_name,
         custom_fields: data.custom_fields,
         billing_company: billingCompany,
       };
@@ -4051,6 +4105,13 @@ export async function placeCartOrder(data: {
   locker_post_code?: string;
   locker_city?: string;
   locker_county?: string;
+  /**
+   * ⚠ FISA PUNCTULUI, SEMNATA DE SERVER cand a servit lista de puncte.
+   *
+   * Din EA se scriu campurile de mai sus. Ele raman declarate fiindca formularele le trimit inca,
+   * dar pe drumul asta nu mai sunt citite deloc. Vezi `punctul-de-pe-comanda.ts`.
+   */
+  locker_token?: string;
   /** ⚠ Care retea FAN a punctului ales: `fanbox`, `paypoint` sau `office`. Vezi `TipPunctFan`. */
   fan_point_type?: string;
   woot_service_id?: number;
@@ -4395,6 +4456,12 @@ export async function placeCartOrder(data: {
   // Livrarea gratuita se hotaraste INAINTE de verificare: browserul trimite zero,
   // dar tokenul lui e semnat pe pretul cotat al curierului, deci n-are cum sa bata.
   const esteGratuit = isFreeShipping || (freeThreshold !== null && subtotal >= freeThreshold);
+  /*
+   * ⚠ SOCOTIT O DATA PE DRUM, si pastrat. Il cer doua porti: cotatia, care il confrunta cu ce
+   * am semnat la cotare, si punctul de ridicare, care scoate din el reteaua sub care a fost servit.
+   * Chemat de doua ori, ar fi fost doua socoteli ale aceluiasi lucru, care se pot desparti.
+   */
+  const planPretins = planulPretins(data);
   const verdictTransport = autoritativeShipping(
     data.business_id,
     data.shipping_cost,
@@ -4420,7 +4487,7 @@ export async function placeCartOrder(data: {
       greutatiPeProdus,
     ),
     /* Planul pretins, ca la comanda directa. Vezi `planulPretins`. */
-    planulPretins(data),
+    planPretins,
   );
   if ("recotare" in verdictTransport) {
     /* ⚠ Se cere recotare, nu se cade pe tarif. Vezi `autoritativeShipping` si comanda directa. */
@@ -4435,6 +4502,36 @@ export async function placeCartOrder(data: {
     return { error: mesaj.catreClient };
   }
   const shipping = verdictTransport.shipping;
+
+  /*
+   * ═══ ⚠ PUNCTUL DE RIDICARE SE CONFRUNTA CU FISA SEMNATA DE NOI (15.09.2026) ═══
+   *
+   * Pana azi cele sase campuri ale punctului se scriau EXACT cum le trimitea browserul, iar la
+   * emitere ele nu sunt decorative: la Sameday `locker_city` si `locker_county` INLOCUIESC
+   * destinatarul de pe AWB, la DPD `pickupOfficeId` vine din `Number(locker_id)` cu `recipientCity`
+   * suprascris. Deci adresa de livrare era scrisa de cumparator.
+   *
+   * ⚠ Reteaua iese din PLANUL pretins, nu din cerere: `fanPointType`, `smartshipLockerNet` si
+   * `shipoRateId` intra toate in `amprentaPlanului`, deci sunt chiar campurile pe care cotatia
+   * tocmai le-a confruntat. Vezi `punctul-de-pe-comanda.ts`, unde e scris si de ce un token lipsa
+   * se refuza aici in loc sa cada bland ca la cotatie.
+   */
+  const punctAles = punctulDePeComanda({
+    businessId: data.business_id,
+    curier: data.selected_courier,
+    lockerId: data.locker_id,
+    token: data.locker_token,
+    plan: planPretins,
+  });
+  if (!punctAles.ok) {
+    logError({
+      action: "placeCartOrder.punctNeconfirmat",
+      message: `Punctul de ridicare nu a trecut verificarea: ${punctAles.motiv}`,
+      details: { businessId: data.business_id, courier: data.selected_courier, lockerId: data.locker_id, motiv: punctAles.motiv },
+      severity: "warning",
+    });
+    return { error: punctAles.mesaj };
+  }
 
   /* ⚠ Aceeasi confruntare ca la comanda directa, cu aceleasi doua porti: numai pe ramburs, si
      numai cand exista o suma semnata de incredere. Vezi nota lunga de acolo. */
@@ -4648,20 +4745,27 @@ export async function placeCartOrder(data: {
         /* ⚠ Stins, nu se scrie niciun curier. Vezi `campuriDeCurier`. */
         cfgRow?.shipping_enabled === true,
       ),
-      ...(data.locker_id && {
-        locker_id: data.locker_id,
-        locker_name: data.locker_name,
-        locker_address: data.locker_address,
-        /* Codul postal AL PUNCTULUI. GLS il cere pe adresa de livrare, care la
-           livrarea in punct e chiar a punctului. Nu se amesteca cu `postal_code`,
-           care descrie destinatarul si e citit de toti ceilalti curieri. */
-        locker_post_code: data.locker_post_code,
-        locker_city: data.locker_city,
-        locker_county: data.locker_county,
+      /*
+       * ⚠ CELE SASE CAMPURI VIN DIN TOKEN, NU DIN CERERE (15.09.2026).
+       *
+       * `punctAles` le-a scos din fisa pe care am semnat-o chiar noi cand am servit lista de
+       * puncte. Ce a trimis browserul pe langa token nu se mai citeste aici DELOC: `locker_name`,
+       * `locker_address`, `locker_city`, `locker_county` si `locker_post_code` raman in
+       * incarcatura doar fiindca formularele le trimit inca, si se arunca.
+       *
+       * ⚠ Codul postal LIPSESTE cu totul cand punctul n-are unul, in loc sa fie prezent si gol:
+       * Sameday, FAN, DPD si Cargus nu-l dau niciodata. Cine citeste comanda la emitere (GLS il
+       * cere) trebuie sa suporte lipsa cheii. Vezi `punctul-de-pe-comanda.ts`.
+       */
+      ...(punctAles.campuri ?? {}),
+      ...(punctAles.campuri && {
         /* ⚠ RETEAUA punctului, nu doar id-ul lui. La FAN acelasi camp `locker_id` poate fi
            un FANbox, un PayPoint sau un oficiu, iar cele trei se emit cu servicii si optiuni
            DIFERITE. Pierduta aici, emiterea ar cadea inapoi pe FANbox si coletul ar pleca in
-           alta retea decat cea aleasa de cumparator. */
+           alta retea decat cea aleasa de cumparator.
+           ⚠ Ea NU vine din token, ci din planul semnat al COTATIEI, unde `fanPointType` intra in
+           amprenta. Tokenul punctului o leaga inca o data, prin retea: un punct dintr-o retea nu
+           poate fi trecut drept punct din alta. */
         fan_point_type: data.fan_point_type,
       }),
       ...(data.woot_service_id && {
@@ -4930,7 +5034,10 @@ export async function placeCartOrder(data: {
         county: data.customer_county,
         courier_label: data.courier_label,
         delivery_type: data.delivery_type,
-        locker_name: data.locker_name,
+        /* ⚠ NUMELE CANONIC, nu cel trimis de browser (15.09.2026). Comanda poarta de azi
+           numele din fisa semnata; lasat pe `data`, emailul ar fi numit alt punct decat cel
+           catre care pleaca de fapt coletul, si nimeni n-ar fi avut de unde sti care minte. */
+        locker_name: punctAles.campuri?.locker_name,
         custom_fields: data.custom_fields,
         billing_company: billingCompany,
       };

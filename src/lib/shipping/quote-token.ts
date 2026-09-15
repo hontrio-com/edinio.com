@@ -50,7 +50,38 @@ import { createHmac, timingSafeEqual } from "crypto";
  * netestat se plateste din buzunarul cumparatorului.
  */
 function secret(): string {
-  return process.env.SHIPPING_QUOTE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const s = process.env.SHIPPING_QUOTE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  /*
+   * ⚠ ARUNCA. Nu mai cade pe sirul gol. (15.09.2026)
+   *
+   * Pana azi randul asta era `... || ""`, si de aici venea gaura pe care auditul extern o numea
+   * „secretul nu e fail-closed". Cu `""`, `createHmac` merge mai departe si scoate o semnatura pe
+   * care o poate calcula ORICINE: un pret de transport inventat ar fi trecut drept unul cotat de
+   * noi, si nimic nu l-ar fi deosebit.
+   *
+   * ⚠ SI NICIO PROBA DIN DEPOZIT N-AR FI PRINS-O, fiindca probele insele rulau pe cheia goala.
+   * Masurat pe 15.09.2026: incarcatorul (`scripts/tests/register.mjs`) nu aduce niciun `.env`, deci
+   * in procesul de test `SHIPPING_QUOTE_SECRET` si `SUPABASE_SERVICE_ROLE_KEY` aveau amandoua
+   * lungimea ZERO. HMAC cu cheie goala e tot determinist si amandoua capetele foloseau aceeasi
+   * cheie, deci totul era verde. Daca maine functia asta ar fi intors iar `""`, ar fi ramas verde
+   * la fel. De aceea cele patru fisiere care semneaza cotatii isi aduc de azi cheia lor.
+   *
+   * ⚠ CE SE SCHIMBA IN PURTARE, pe fata: `verificaCotatia` nu arunca niciodata azi, intoarce un
+   * verdict cu motiv, iar cei trei apelanti de productie nu o infasoara in `try`. Fara cheie, ei
+   * vor cadea zgomotos in loc sa alunece pe `max(suma ceruta, tarif implicit)`. Asta E purtarea
+   * ceruta: o cadere pe tarif fara cheie ar insemna ca poarta preturilor e deschisa si tace.
+   *
+   * Acelasi tipar si acelasi motiv ca la `semnaturaCheii` (`lib/utils/cheie-neghicibila.ts`) si la
+   * `punctul-ales-e-semnat.ts`.
+   */
+  if (!s) {
+    throw new Error(
+      "Lipseste secretul de semnare a cotatiilor de transport (SHIPPING_QUOTE_SECRET sau "
+      + "SUPABASE_SERVICE_ROLE_KEY). Fara el, orice pret de transport trimis de browser ar putea "
+      + "fi semnat de oricine si ar trece drept unul cotat de noi.",
+    );
+  }
+  return s;
 }
 
 /** Cat timp ramane valabila o cotatie. Acopera lejer o sesiune de cumparaturi. */

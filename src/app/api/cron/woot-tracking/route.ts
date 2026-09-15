@@ -263,7 +263,17 @@ export async function GET(req: NextRequest) {
     if (r.scris) scrise++;
   }
 
+  /*
+   * ⚠ NUMERELE IN JURNALUL PLATFORMEI, nu doar in corpul raspunsului. Vercel pastreaza statusul
+   * cererii, nu si ce a intors ea, deci fara randul asta o rulare care atinge 12 comenzi din 120
+   * arata identic cu una care le-a atins pe toate. Prima rulare adevarata a facut chiar asta, si
+   * n-am avut de unde afla de ce. Acelasi leac ca la `fancourier-settlements`.
+   */
+  console.log(
+    `[woot-tracking] candidati ${inFereastra.length}, verificate ${verificate}, scrise ${scrise}, `
+    + `fara config ${faraConfig}, fara stare ${faraStare}, esuate ${esuate}, ramase ${ramase}`,
+  );
   return NextResponse.json({
-    ok: true, verificate, scrise, faraConfig, faraStare, esuate, ramase,
+    ok: true, candidati: inFereastra.length, verificate, scrise, faraConfig, faraStare, esuate, ramase,
   });
 }

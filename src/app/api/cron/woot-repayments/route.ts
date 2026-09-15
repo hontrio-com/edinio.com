@@ -127,6 +127,10 @@ export async function GET(req: NextRequest) {
     peComenzi += r.peComenzi;
   }
 
+  console.log(
+    `[woot-repayments] magazine ${magazine}, rambursuri ${rambursuri}, virate ${virate}, `
+    + `pe comenzi ${peComenzi}, esuate ${esuate}, ramase ${ramase}`,
+  );
   return NextResponse.json({ ok: true, magazine, rambursuri, virate, peComenzi, esuate, ramase });
 }
 

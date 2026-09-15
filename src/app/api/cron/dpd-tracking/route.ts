@@ -257,7 +257,12 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  /* ⚠ Si aici numerele in jurnal: o rulare partiala arata altfel doar daca o scrie cineva. */
+  console.log(
+    `[dpd-tracking] candidati ${inFereastra.length}, verificate ${verificate}, mutate ${mutate}, `
+    + `semnalate ${semnalate}, incheiate ${incheiate}, esuate ${esuate}, necunoscute ${necunoscute}, ramase ${ramase}`,
+  );
   return NextResponse.json({
-    ok: true, verificate, mutate, semnalate, incheiate, esuate, necunoscute, ramase,
+    ok: true, candidati: inFereastra.length, verificate, mutate, semnalate, incheiate, esuate, necunoscute, ramase,
   });
 }

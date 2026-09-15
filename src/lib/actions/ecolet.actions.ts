@@ -27,6 +27,7 @@ import {
   type AdresaComanda,
 } from "@/lib/ecolet/expediere";
 import { ofertePosibile, etichetaOferta, numeServiciuEcolet, type OfertaEcolet } from "@/lib/ecolet/preturi";
+import { extraPentruServiciu, numeExtra } from "@/lib/ecolet/extraoptiuni";
 import { rezolvaLocalitatea } from "@/lib/ecolet/cautare";
 import type { Json } from "@/types/database.types";
 import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
@@ -459,7 +460,8 @@ export async function createEcoletAwbAction(
     return { error: "Alege un serviciu inainte de a emite." };
   }
 
-  const corp = corpExpediere({
+  /* Argumentele se tin deoparte: corpul se reface dupa validare, cu extraoptiunile taiate. */
+  const argumente = {
     expeditor,
     destinatar,
     greutateKg: date.greutateKg,
@@ -468,7 +470,8 @@ export async function createEcoletAwbAction(
     continut: date.continut,
     observatii: date.observatii,
     servicii: serviciiDin(config),
-  });
+  };
+  let corp = corpExpediere(argumente);
 
   /*
    * ⚠ SE VALIDEAZA INAINTE DE A CREA, cu chiar endpointul lor pentru asta.
@@ -506,6 +509,68 @@ export async function createEcoletAwbAction(
         error: `${aleasa.numeServiciu} nu incaseaza la livrare pentru comanda asta, iar comanda are `
           + `${deIncasat.toFixed(2)} lei neincasati. Alege alt serviciu sau incaseaza banii inainte.`,
       };
+    }
+
+    /*
+     * ═══ ⚠ EXTRAOPTIUNILE SE TAIE LA CE POATE SERVICIUL ALES (15.09.2026) ═══
+     *
+     * Pana azi din `form.additional_services[slug]` se citea NUMAI `cod`. Restul veneau din
+     * configul magazinului, o data pentru toate expedierile, si plecau cu `status: true`
+     * oricare ar fi fost serviciul. Iar chiar exemplul din specificatia lor arata
+     * `dpd_standard` cu `open_package: false`.
+     *
+     * Ori emiterea cade cu un mesaj pe care omul nu-l poate lega de nimic, ori eColet o
+     * ignora in tacere: comerciantul crede ca i-a dat cumparatorului dreptul sa deschida
+     * coletul, si nu i l-a dat.
+     *
+     * ⚠ Se foloseste ACELASI raspuns cerut pentru validare: nu costa niciun apel in plus.
+     */
+    const { deTrimis, taiate } = extraPentruServiciu(
+      serviciiDin(config), raspuns?.form?.additional_services, aleasa.slug,
+    );
+
+    /*
+     * ═══ ⚠ SI FORMA COLETULUI, TOT DIN RASPUNSUL LOR (15.09.2026) ═══
+     *
+     * `parcel.shape` trimitea mereu „standard", scris fix in cod. Dar cotarea lor intoarce
+     * `form.is_standard`, indexat pe slug, care spune pentru care servicii comanda ASTA are
+     * dimensiuni standard, iar `form.info` chiar explica („Parcel length is non standard (75)").
+     *
+     * Declarat „standard" pentru un colet pe care EI il socotesc nestandard, coletul se
+     * retarifeaza la depozit si diferenta o plateste comerciantul.
+     *
+     * ⚠ Se schimba DOAR cand ei spun limpede `false`. Cheia lipsa nu inseamna „nestandard":
+     * ar fi trecut fiecare colet pe tariful scump. Aceeasi cumpana ca la extraoptiuni.
+     */
+    const forma = raspuns?.form?.is_standard?.[aleasa.slug] === false
+      ? ("nonstandard" as const)
+      : undefined;
+
+    if (taiate.length > 0 || forma) {
+      corp = corpExpediere({ ...argumente, servicii: deTrimis, forma });
+    }
+
+    /* ⚠ Taierea NU se face in tacere: comerciantul a cerut ceva si n-a primit. */
+    if (taiate.length > 0) {
+      await logError({
+        action: "ecolet.extraoptiuni",
+        message: `${aleasa.numeServiciu} nu poate ${taiate.map(numeExtra).join(" si ")} `
+          + `pentru comanda ${orderId}. Expedierea pleaca fara ${taiate.length > 1 ? "ele" : "ea"}.`,
+        details: { orderId, serviciu: aleasa.slug, taiate },
+        businessId, severity: "warning",
+      });
+    }
+
+    /* ⚠ Si forma schimbata se spune: acolo se schimba PRETUL, deci omul trebuie sa stie. */
+    if (forma) {
+      await logError({
+        action: "ecolet.forma",
+        message: `${aleasa.numeServiciu} socoteste coletul comenzii ${orderId} NESTANDARD`
+          + `${(raspuns?.form?.info ?? []).length ? `: ${(raspuns?.form?.info ?? []).join("; ")}` : ""}.`
+          + " Expedierea pleaca declarata nestandard, ca sa nu se retarifeze la depozit.",
+        details: { orderId, serviciu: aleasa.slug, info: raspuns?.form?.info ?? [] },
+        businessId, severity: "warning",
+      });
     }
   } catch (e) {
     /* Nu stim: nu blocam. Log, ca sa se vada daca devine un tipar. */

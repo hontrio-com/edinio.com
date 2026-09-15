@@ -45,6 +45,13 @@ export type AdresaComanda = {
   persoanaContact?: string | null;
 };
 
+/**
+ * Cate colete incap pe o expediere.
+ *
+ * ⚠ Numarul e al LOR, scris in specificatie pe `parcel.amount`: `minimum: 1, maximum: 10`.
+ */
+export const MAX_COLETE_ECOLET = 10;
+
 export type DateExpediere = {
   expeditor: AdresaComanda;
   destinatar: AdresaComanda;
@@ -57,6 +64,17 @@ export type DateExpediere = {
   continut?: string | null;
   observatii?: string | null;
   numarColete?: number;
+  /**
+   * Forma coletului, cum o numesc ei: `standard` sau `nonstandard`.
+   *
+   * ⚠ NU E O PODOABA. Cotarea lor intoarce `form.is_standard`, indexat pe slug, care spune
+   * pentru care servicii comanda ASTA are dimensiuni standard. Declarat „standard" pentru un
+   * colet pe care ei il socotesc nestandard, coletul se retarifeaza la depozit, iar diferenta
+   * o plateste comerciantul. Vezi `ecolet.actions.ts`, unde se ia din raspunsul cotarii.
+   *
+   * Lipsa inseamna `standard`, purtarea de pana la 15.09.2026.
+   */
+  forma?: "standard" | "nonstandard";
   dimensiuni?: { lungime: number; latime: number; inaltime: number };
   servicii?: {
     deschidereLaLivrare?: boolean;
@@ -209,8 +227,10 @@ export function corpExpediere(d: DateExpediere): CorpExpediere {
         width: Math.max(1, Math.floor(d.dimensiuni?.latime ?? 15)),
         height: Math.max(1, Math.floor(d.dimensiuni?.inaltime ?? 10)),
       },
-      shape: "standard",
-      amount: Math.max(1, Math.floor(Number(d.numarColete) || 1)),
+      shape: d.forma ?? "standard",
+      /* ⚠ Plafonul e al LOR: `parcel.amount` are `minimum: 1, maximum: 10` in specificatie.
+         Netaiat, un numar mai mare pleca si cadea la ei cu un mesaj de nelegat de nimic. */
+      amount: Math.min(MAX_COLETE_ECOLET, Math.max(1, Math.floor(Number(d.numarColete) || 1))),
       content: curata(d.continut) || "Produse",
     },
     additional_services: {

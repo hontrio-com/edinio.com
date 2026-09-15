@@ -2,6 +2,8 @@ import { normalizePhone } from "@/lib/utils/phone";
 import { stripDiacritics, normalizeCountyName, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { eroareCuStatus, eroareDeTermen, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 import { cheieToken } from "@/lib/integrari/cheie-token";
+import { codulAwbCargus } from "@/lib/shipping/raspunsul-awb-cargus";
+import { coleteleCargus } from "@/lib/shipping/coletele-cargus";
 
 export type CargusConfig = {
   enabled: boolean;
@@ -295,10 +297,25 @@ export async function createCargusAwb(
 ): Promise<string> {
   const token = await getCargusToken(config.username, config.password, config.subscription_key);
 
+  /*
+   * ⚠ BUCATILE SE VERIFICA INAINTE DE ORICE APEL, si abia apoi se descriu.
+   *
+   * Pana azi fereastra trimitea `parcels: 3` cu o SINGURA fisa de colet, care cantarea tot.
+   * Corpul spunea deodata doua lucruri care nu se potrivesc, iar o eticheta tiparita pentru
+   * trei colete inseamna doua colete plecate fara eticheta. Vezi `shipping/coletele-cargus.ts`.
+   */
+  const verdictColete = coleteleCargus({
+    parcels: input.parcels,
+    envelopes: input.envelopes,
+    totalWeightKg: input.totalWeightKg,
+    parcelsDetails: input.parcelsDetails ?? [],
+  });
+  if (!verdictColete.ok) throw eroareRefuz(verdictColete.motiv);
+  const colete = verdictColete.colete;
+
   const isEnvelope = (input.envelopes ?? 0) > 0;
-  const envelopes = Math.min(input.envelopes ?? 0, 9); // docs: max 9 envelopes
-  // Docs/official module: an envelope shipment weighs at most 1 kg.
-  const totalWeight = isEnvelope ? Math.min(input.totalWeightKg, 1) : input.totalWeightKg;
+  const envelopes = isEnvelope ? colete.bucati : 0;
+  const totalWeight = colete.greutateTotala;
 
   // Ship & Go delivery runs on its own service (38); otherwise pick by weight.
   const service = input.pudoPointId ? { id: 38, name: "Ship & Go" } : getCargusServiceId(totalWeight);
@@ -310,28 +327,18 @@ export async function createCargusAwb(
   const cashRepayment = config.repayment_type === "bank" ? 0 : codAmount;
 
   const parcelType = isEnvelope ? 0 : 1; // ParcelCodes.Type: 0 = envelope, 1 = parcel
-  const parcelCodes = input.parcelsDetails.map((p, i) => ({
+  /* ⚠ Cate o fisa de FIECARE bucata, cu greutatile insumand exact totalul. Ramura de
+     rezerva de dinainte („daca lista e goala, pune una") a disparut: `coleteleCargus` nu
+     intoarce niciodata o lista goala, iar cand intorcea, tocmai aia era gaura. */
+  const parcelCodes = colete.fise.map((p, i) => ({
     Code: String(i),
     Type: parcelType,
-    Weight: isEnvelope ? Math.min(p.weight, 1) : p.weight,
+    Weight: p.weight,
     Length: p.length ?? 0,
     Width: p.width ?? 0,
     Height: p.height ?? 0,
     ParcelContent: input.packageContent || "",
   }));
-
-  // If no parcel details provided, create one from totals
-  if (parcelCodes.length === 0) {
-    parcelCodes.push({
-      Code: "0",
-      Type: parcelType,
-      Weight: totalWeight,
-      Length: 0,
-      Width: 0,
-      Height: 0,
-      ParcelContent: input.packageContent || "",
-    });
-  }
 
   const body: Record<string, unknown> = {
     SenderClientId: null,
@@ -355,7 +362,7 @@ export async function createCargusAwb(
       CodPostal: input.recipientPostalCode,
       CountryId: 0,
     },
-    Parcels: isEnvelope ? 0 : input.parcels,
+    Parcels: isEnvelope ? 0 : colete.bucati,
     Envelopes: envelopes,
     TotalWeight: totalWeight,
     ServiceId: service.id,
@@ -388,11 +395,28 @@ export async function createCargusAwb(
     body.DeliveryPudoPoint = input.pudoPointId;
   }
 
-  // The barcode may arrive as a JSON string or a bare number — coerce it.
-  const barCode = await cargusPost<string | number>("Awbs", token, config.subscription_key, body);
-  const code = String(barCode ?? "").trim();
-  if (!code || code === "null") throw eroareNesigura("AWB Cargus nu a fost returnat");
-  return code;
+  /*
+   * ⚠ RASPUNSUL SE CERCETEAZA, NU SE TOARNA IN `String()`.
+   *
+   * Asa era scris, cu paza doar pe sirul gol si pe „null". Dar `String({})` da
+   * „[object Object]", care nu e niciuna din ele: trecea si se scria pe comanda ca numar de
+   * expediere. Iar modulul lor oficial arata ca obiectul chiar vine, cu HTTP 200, si ca
+   * inseamna EROARE. Vezi `shipping/raspunsul-awb-cargus.ts`.
+   */
+  const raspuns = await cargusPost<unknown>("Awbs", token, config.subscription_key, body);
+  const verdict = codulAwbCargus(raspuns);
+
+  /*
+   * ⚠ „Eroare" si „necunoscut" NU se arunca la fel, si deosebirea costa bani.
+   *
+   * La eroare ei ne-au spus limpede ca expedierea nu s-a facut, deci slotul din registru se
+   * poate elibera si omul poate incerca din nou. La necunoscut nu stim daca a plecat sau nu,
+   * si atunci `eroareNesigura` tine slotul blocat: un colet care POATE a plecat nu are voie
+   * sa fie reincercat de la sine.
+   */
+  if (verdict.fel === "eroare") throw eroareRefuz(`Cargus: ${verdict.mesaj}`);
+  if (verdict.fel === "necunoscut") throw eroareNesigura(verdict.mesaj);
+  return verdict.cod;
 }
 
 // ─── Shipping price calculation (checkout) ───────────────────────────────────
@@ -442,14 +466,31 @@ async function resolveCargusSenderLocation(
  */
 export async function calculateCargusPrice(
   config: CargusConfig,
-  input: { county: string; city: string; weightKg: number; cod?: number },
+  input: {
+    county: string;
+    city: string;
+    weightKg: number;
+    cod?: number;
+    /**
+     * Cotare pentru livrare in punct Ship & Go.
+     *
+     * ⚠ EXISTA FIINDCA ALTFEL COTA NU DESCRIA EXPEDIEREA. Livrarea in punct pleaca pe
+     * serviciul 38 (PUDO Delivery), un serviciu cu tariful LUI. Pana azi checkoutul cerea un
+     * singur pret, pe serviciul ales dupa greutate (34/35/50), si il punea pe amandoua
+     * optiunile. Deci cumparatorul platea un transport, si comerciantului i se factura altul.
+     */
+    pudo?: boolean;
+  },
 ): Promise<{ price: number; priceNoVat: number | null; serviceId: number } | null> {
   const sender = await resolveCargusSenderLocation(config);
   if (!sender) return null;
 
   const token = await getCargusToken(config.username, config.password, config.subscription_key);
   const weight = Math.max(1, Math.ceil(input.weightKg));
-  const service = getCargusServiceId(weight);
+  /* Aceeasi alegere ca la emitere (`createCargusAwb`): punctul are serviciul lui. */
+  const service = input.pudo
+    ? { id: 38, name: "Ship & Go" }
+    : getCargusServiceId(weight);
   const codAmount = input.cod && input.cod > 0 ? input.cod : 0;
 
   const body = {
@@ -508,6 +549,14 @@ export type CargusPudoPoint = {
   address: string;
   postalCode: string;
   serviceCod: boolean; // whether the point accepts cash-on-delivery
+  /**
+   * Forma de plata acceptata la ghiseu: 1 nimic, 2 doar card, 3 numerar sau card, 4 doar
+   * numerar. `null` cand contul lor nu-l trimite.
+   *
+   * ⚠ NU E ACELASI LUCRU CU `serviceCod`. Un punct poate primi ramburs si totusi sa nu
+   * primeasca NUMERAR. Vezi `shipping/plata-in-punct-cargus.ts`.
+   */
+  paymentType: number | null;
   lat: number;
   lng: number;
 };
@@ -525,6 +574,9 @@ export async function getCargusPudoPoints(config: CargusConfig): Promise<CargusP
       address: [p.StreetName, p.StreetNo].filter(Boolean).join(" ") || String(p.AdditionalAddressInfo ?? ""),
       postalCode: String(p.PostalCode ?? ""),
       serviceCod: p.ServiceCOD === true,
+      /* ⚠ SI FORMA DE PLATA, nu doar steagul de ramburs: un punct poate primi ramburs
+         NUMAI PE CARD. Vezi `shipping/plata-in-punct-cargus.ts`. */
+      paymentType: typeof p.PaymentType === "number" ? p.PaymentType : null,
       lat: Number(p.Latitude ?? 0),
       lng: Number(p.Longitude ?? 0),
     }))

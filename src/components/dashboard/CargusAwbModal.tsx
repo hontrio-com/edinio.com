@@ -6,6 +6,7 @@ import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { X, Package, Loader2, Download, Trash2, ExternalLink, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { createCargusAwbAction, deleteCargusAwbAction } from "@/lib/actions/cargus.actions";
+import { MAX_COLETE, MAX_PLICURI } from "@/lib/shipping/coletele-cargus";
 import { getCargusServiceId } from "@/lib/cargus";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { useDialogAccesibil } from "./useDialogAccesibil";
@@ -119,7 +120,11 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     const countNum = parseInt(parcels) || 1;
     if (isEnvelope) {
       if (weightNum > 1) return toast.error("Un plic cantareste maxim 1 kg. Alege tip Colet pentru greutati mai mari.");
-      if (countNum > 9) return toast.error("Maxim 9 plicuri per AWB");
+      if (countNum > MAX_PLICURI) return toast.error(`Maxim ${MAX_PLICURI} plicuri per AWB`);
+    } else if (countNum > MAX_COLETE) {
+      /* ⚠ Plafonul e al LOR (anexa: „more than 15 pieces per shipment"), iar serverul il
+         refuza oricum. Aici se spune INAINTE de apasare, ca omul sa nu afle din refuz. */
+      return toast.error(`Cargus accepta maxim ${MAX_COLETE} colete pe un AWB`);
     }
 
     /* ⚠ Incarcatura se scoate intr-un `const` ca `try` sa cuprinda DOAR apelul, si ca

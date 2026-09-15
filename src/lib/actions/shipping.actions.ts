@@ -86,6 +86,7 @@ import { applyShippingRules, parseShippingRules, type ShippingCartContext } from
 import { semneazaOptiuni } from "@/lib/shipping/quote-token";
 import { semneazaPunctul } from "@/lib/shipping/punctul-ales-e-semnat";
 import { reteaSameday, reteaSmartship, reteauaPunctului, serviciulShipo, tipPunctFanCuImplicit } from "@/lib/shipping/reteaua-punctului";
+import { punctulPoateIncasa } from "@/lib/shipping/plata-in-punct-cargus";
 import { potrivesteJudetulWoot, potrivesteLocalitateaWoot } from "@/lib/shipping/localitatea-woot";
 import { contextulCosului , subtotalMaximDinCatalog } from "@/lib/shipping/cart-weight";
 import { GREUTATE_REZERVA_KG } from "@/lib/shipping/awb-weight";
@@ -1405,24 +1406,29 @@ export async function getShippingOptions(
     } else if (courierId === "cargus") {
       const cargusCfg = settings.cargus_config as CargusConfig | null;
       const hasApi = !!(cargusCfg?.enabled && cargusCfg.username && cargusCfg.subscription_key && cargusCfg.location_id);
-      const pushBoth = (price: number) => {
+      const laAdresa = (price: number): void => {
         options.push({
           courier: "cargus",
           courierLabel: addrLabel(zone.label, "Livrare prin Cargus"),
           deliveryType: "address",
           price,
         });
-        if (hasApi) {
-          options.push({
-            courier: "cargus",
-            courierLabel: lockerLabel(zone.label, "Cargus Ship & Go (punct)"),
-            deliveryType: "locker",
-            price,
-          });
-        }
+      };
+      const laPunct = (price: number): void => {
+        options.push({
+          courier: "cargus",
+          courierLabel: lockerLabel(zone.label, "Cargus Ship & Go (punct)"),
+          deliveryType: "locker",
+          price,
+        });
       };
 
       if (hasApi && useAutoPrice) {
+        /* ⚠ Pe regim net se cere `priceNoVat` (`Subtotal`, verificat cu `Tax`); lipsa lui
+           inseamna „nu stim netul", deci tariful fix al zonei. */
+        const dinCota = (q: { price: number; priceNoVat: number | null } | null) =>
+          (q ? (tvaPeDeasupra ? q.priceNoVat : q.price) : null) ?? zone.price;
+
         // Live quote with the COD fee baked in when the order is ramburs.
         promises.push(
           calculateCargusPrice(cargusCfg!, {
@@ -1431,19 +1437,42 @@ export async function getShippingOptions(
             weightKg: weight,
             cod: rambursDeCotat,
           })
-            .then((q) => {
-              /* ⚠ Pe regim net se cere `priceNoVat` (`Subtotal`, verificat cu `Tax`); lipsa
-                 lui inseamna „nu stim netul", deci tariful fix al zonei. */
-              const cotat = q ? (tvaPeDeasupra ? q.priceNoVat : q.price) : null;
-              pushBoth(cotat ?? zone.price);
-            })
+            .then((q) => laAdresa(dinCota(q)))
             .catch((err) => {
               console.error("[shipping] Cargus estimate failed:", err.message);
-              pushBoth(zone.price);
+              laAdresa(zone.price);
+            }),
+        );
+
+        /*
+         * ═══ ⚠ SHIP & GO SE COTEAZA PE SERVICIUL LUI, NU PE AL LIVRARII LA ADRESA ═══
+         *
+         * Pana azi amandoua optiunile primeau ACELASI pret, cotat pe serviciul ales dupa
+         * greutate (34/35/50). Dar livrarea in punct pleaca pe serviciul 38, care are tariful
+         * LUI: aceeasi comanda cota 34 si emitea 38. Deci cumparatorul platea un transport,
+         * iar comerciantului i se factura altul, si diferenta o ducea el.
+         *
+         * ⚠ E a doua cerere catre ei pe cotare, si asta se plateste. Dar alternativa nu e
+         * „o cerere mai putin", ci „un pret care nu e al expedierii", si aia costa mai mult.
+         */
+        promises.push(
+          calculateCargusPrice(cargusCfg!, {
+            county: destination.county,
+            city: destination.city,
+            weightKg: weight,
+            cod: rambursDeCotat,
+            pudo: true,
+          })
+            .then((q) => laPunct(dinCota(q)))
+            .catch((err) => {
+              console.error("[shipping] Cargus Ship & Go estimate failed:", err.message);
+              laPunct(zone.price);
             }),
         );
       } else {
-        pushBoth(zone.price);
+        laAdresa(zone.price);
+        /* Fara API nu se pot alege puncte, deci nici oferi. */
+        if (hasApi) laPunct(zone.price);
       }
     } else if (courierId === "colete") {
       const coConfig = settings.colete_config as COConfig | null;
@@ -3696,9 +3725,20 @@ async function puncteleDeLaCurier(
         cheieCache,
         async () => {
           const points = await getCargusPudoPoints(config);
-          // Ramburs orders can only go to Ship & Go points that accept COD.
-          // Filtrat INAINTE de cache — de aici si `cod` in cheia de cache.
-          const acceptate = codAmount && codAmount > 0 ? points.filter((p) => p.serviceCod) : points;
+          /*
+           * ⚠ DOUA INTREBARI, NU UNA. Pana azi se cerea doar `ServiceCOD`, adica „punctul
+           * primeste ramburs". Dar documentatia lor mai da un camp, `PaymentType`, si el
+           * hotaraste ce se poate plati LA GHISEU: un punct poate primi ramburs NUMAI PE
+           * CARD. Trecea filtrul, iar coletul pleca acolo cu `CashRepayment`, adica un
+           * cumparator cu banii in mana si nicio cale sa-i dea. Vezi
+           * `shipping/plata-in-punct-cargus.ts`.
+           *
+           * Filtrat INAINTE de cache, de aici si `cod` in cheia de cache.
+           */
+          const formaRambursului = config.repayment_type === "bank" ? "bank" : "cash";
+          const acceptate = points.filter(
+            (p) => punctulPoateIncasa(p, codAmount ?? 0, formaRambursului),
+          );
           return acceptate.map((p) => ({
             id: String(p.id),
             name: p.name,

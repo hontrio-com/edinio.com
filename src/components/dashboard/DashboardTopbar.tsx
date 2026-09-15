@@ -7,7 +7,7 @@ import {
   Search, Bell, LogOut, ChevronDown, X, Menu,
   LayoutDashboard, Pencil, Package, ShoppingCart, Settings,
   BarChart2, Zap, Ticket, Megaphone, FileText, Users,
-  ShoppingBag, LifeBuoy, ShieldCheck, MessageSquare, Banknote,
+  ShoppingBag, LifeBuoy, ShieldCheck, MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { markNotificationsRead, markOrderNotificationsSeen } from "@/lib/actions/notification.actions";
@@ -69,9 +69,16 @@ const NAV_ITEMS: MobileNavItem[] = [
       { href: "/dashboard/products/bundles", label: "Pachete" },
     ],
   },
-  { href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi" },
-  /* ⚠ Si in `Sidebar`, care tine cealalta copie a meniului. Vezi nota de acolo. */
-  { href: "/dashboard/settlements", icon: Banknote, label: "Decontari" },
+  {
+    href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi",
+    /* ⚠ Si in `Sidebar`, care tine cealalta copie a meniului. Vezi nota de acolo.
+       Retururile lipseau de aici: cine lucreaza de pe telefon n-avea cum sa ajunga la ele. */
+    children: [
+      { href: "/dashboard/orders", label: "Toate comenzile" },
+      { href: "/dashboard/returns", label: "Retururi" },
+      { href: "/dashboard/settlements", label: "Decontari" },
+    ],
+  },
   { href: "/dashboard/customers", icon: Users, label: "Clienti" },
   { href: "/dashboard/abandoned", icon: ShoppingBag, label: "Cosuri abandonate" },
   { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },
@@ -162,7 +169,11 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
   // Submenu expansion: defaults to the section the user is currently in; once they
   // tap a section header, their choice takes over. Derived (no effect) so it can't
   // trigger cascading renders. "__none__" = user collapsed everything.
-  const activeParentHref = NAV_ITEMS.find((it) => it.children && pathname.startsWith(it.href))?.href ?? null;
+  /* Un grup e cel curent si cand pagina sta sub unul din COPII: Retururile si Decontarile
+     traiesc in afara lui `/dashboard/orders`, deci pe ele meniul nu s-ar fi deschis. */
+  const activeParentHref = NAV_ITEMS.find(
+    (it) => it.children && (pathname.startsWith(it.href) || it.children.some((c) => pathname.startsWith(c.href))),
+  )?.href ?? null;
   const expandedHref = navOverride ?? activeParentHref;
 
   // Sync search input with URL param
@@ -503,7 +514,10 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
         <nav className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const active = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
+            const subCopil = item.children?.some((c) => pathname.startsWith(c.href)) ?? false;
+            const active = item.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname.startsWith(item.href) || subCopil;
 
             if (item.children) {
               const expanded = expandedHref === item.href;

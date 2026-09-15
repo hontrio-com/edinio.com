@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Pencil, BarChart2, Settings,
   Package, ShoppingCart, ShoppingBag, Zap, Ticket, MessageSquare, LifeBuoy, ShieldCheck, FileText, Users, Sparkles,
-  Banknote,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { Logo } from "@/components/ui/Logo";
@@ -42,14 +41,15 @@ const NAV_ITEMS = [
   },
   {
     href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi",
+    /* ⚠ Si in `DashboardTopbar`, care tine A DOUA copie a meniului. O intrare pusa intr-unul
+       singur apare doar pe jumatate din ecrane, iar `navigatia-nu-divergeaza` apara acum si
+       grupul asta, nu doar Produse. */
     children: [
       { href: "/dashboard/orders", label: "Toate comenzile" },
       { href: "/dashboard/returns", label: "Retururi" },
+      { href: "/dashboard/settlements", label: "Decontari" },
     ],
   },
-  /* ⚠ Si in `DashboardTopbar`, care tine A DOUA copie a meniului. O intrare pusa intr-unul
-     singur apare doar pe jumatate din ecrane. */
-  { href: "/dashboard/settlements", icon: Banknote, label: "Decontari" },
   { href: "/dashboard/customers", icon: Users, label: "Clienti" },
   { href: "/dashboard/abandoned", icon: ShoppingBag, label: "Cosuri abandonate" },
   { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },

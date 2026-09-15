@@ -412,6 +412,7 @@ export async function GET(req: NextRequest) {
           if (tinta) {
             const rez = await tranzitieComandaMarketplace(admin, {
               orderId: o.id, businessId, status: tinta, sursa: "ecolet",
+              expediere: { coloana: "ecolet_awb_number", valoare: o.ecolet_awb_number },
             });
             if (rez === "ok") {
               mutate++;

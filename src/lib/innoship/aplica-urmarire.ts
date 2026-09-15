@@ -102,6 +102,7 @@ export async function aplicaUrmarire(
       businessId: comanda.business_id,
       status: tinta,
       sursa: "innoship",
+      expediere: { coloana: "innoship_awb_number", valoare: comanda.innoship_awb_number },
     });
     if (rez === "ok") {
       mutata = true;

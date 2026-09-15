@@ -333,6 +333,7 @@ export async function GET(req: NextRequest) {
           businessId: o.business_id,
           status: tinta,
           sursa: "posta",
+          expediere: { coloana: "posta_awb_number", valoare: o.posta_awb_number },
         });
         if (rez === "ok") {
           mutate++;

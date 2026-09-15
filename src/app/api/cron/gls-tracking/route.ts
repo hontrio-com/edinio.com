@@ -403,6 +403,7 @@ export async function GET(req: NextRequest) {
           businessId: o.business_id,
           status: tinta,
           sursa: "gls",
+          expediere: { coloana: "gls_awb_number", valoare: o.gls_awb_number },
         });
         if (rez === "ok") {
           mutate++;

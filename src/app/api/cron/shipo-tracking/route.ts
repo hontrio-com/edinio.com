@@ -242,6 +242,7 @@ export async function GET(req: NextRequest) {
           businessId: o.business_id,
           status: tinta,
           sursa: "shipo",
+          expediere: { coloana: "shipo_awb_number", valoare: o.shipo_awb_number },
         });
         if (rez === "ok") {
           mutate++;

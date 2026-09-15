@@ -318,6 +318,7 @@ export async function GET(req: NextRequest) {
             businessId: o.business_id,
             status: tinta,
             sursa: "fedex",
+            expediere: { coloana: "fedex_awb_number", valoare: o.fedex_awb_number },
           });
           if (rez === "ok") {
             mutate++;

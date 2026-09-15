@@ -283,6 +283,7 @@ export async function GET(req: NextRequest) {
         businessId: o.business_id,
         status: tinta,
         sursa: "sameday",
+        expediere: { coloana: "sameday_awb_number", valoare: o.sameday_awb_number },
       });
       /* ⚠ `RezultatTranzitie` e un SIR (`ok` | `reincearca` | `definitiv`), nu un obiect cu
          `.ok`. Scris ca obiect, conditia ar fi fost mereu adevarata si am fi numarat drept

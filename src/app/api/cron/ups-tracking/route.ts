@@ -339,6 +339,7 @@ export async function GET(req: NextRequest) {
           businessId: o.business_id,
           status: tinta,
           sursa: "ups",
+          expediere: { coloana: "ups_awb_number", valoare: o.ups_awb_number },
         });
         if (rez === "ok") {
           mutate++;

@@ -396,6 +396,7 @@ export async function GET(req: NextRequest) {
             businessId: o.business_id,
             status: tinta,
             sursa: "dhl",
+            expediere: { coloana: "dhl_awb_number", valoare: o.dhl_awb_number },
           });
           if (rez === "ok") {
             mutate++;

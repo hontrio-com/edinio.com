@@ -390,6 +390,7 @@ export async function GET(req: NextRequest) {
           businessId: o.business_id,
           status: tinta,
           sursa: "pallex",
+          expediere: { coloana: "pallex_consignment_id", valoare: o.pallex_consignment_id },
         });
         if (rez === "ok") {
           mutate++;

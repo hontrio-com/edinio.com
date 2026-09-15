@@ -245,6 +245,7 @@ export async function GET(req: NextRequest) {
           businessId: o.business_id,
           status: tinta,
           sursa: "packeta",
+          expediere: { coloana: "packeta_packet_id", valoare: o.packeta_packet_id },
         });
         if (rez === "ok") {
           mutate++;

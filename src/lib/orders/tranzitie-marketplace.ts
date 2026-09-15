@@ -86,8 +86,77 @@ export async function tranzitieComandaMarketplace(
      * un singur drum de retur.
      */
     elibereazaStoc?: boolean;
+    /**
+     * Expedierea pe care s-a CITIT starea, cand tranzitia vine dintr-un cron de urmarire.
+     *
+     * ═══════════════════════════════════════════════════════════════════════════
+     * ⚠⚠ GAURA PE CARE O INCHIDE, NUMITA PE FATA DIN 14.09.2026    (15.09.2026)
+     * ═══════════════════════════════════════════════════════════════════════════
+     *
+     * `scrieUrmarirea` isi scrie de atunci starea SUB conditia identitatii, tocmai ca o stare
+     * veche sa nu ajunga pe expedierea noua. Antetul lui spune insa, negru pe alb, ce ramane
+     * descoperit: „TRANZITIA DE STATUS nu trece pe aici. Ea merge prin `aplica_tranzitia_comenzii`,
+     * care nu are niciun parametru de AWB. O stare veche `delivered` care ajunge acolo muta comanda
+     * si declanseaza facturarea automata."
+     *
+     * Masurat pe 15.09.2026: **treisprezece** cronuri de urmarire cheama tranzitia, si NICIUNUL nu
+     * verifica daca expedierea mai e a lui. Intre citirea lotului si randul asta sta un apel la
+     * furnizor, iar o tura are pana la 400 de comenzi: daca in fereastra aia comerciantul a detasat
+     * AWB-ul si a emis din nou, starea citita e a expedierii MOARTE. Scrisa orbeste, muta comanda pe
+     * „Livrat" si emite FACTURA.
+     *
+     * ⚠ SI SE INCHIDE FARA MIGRATIE. Planul vechi cerea un `shipment_generation_id` pe `orders`,
+     * adica o migratie pe un tabel viu si o atingere a tuturor celor 17 curieri. Nu e nevoie:
+     * identitatea expedierii e deja o coloana, iar aici se cere doar sa mai fie acolo.
+     *
+     * ⚠ LIPSA INSEAMNA „ca pana acum": marketplace-urile n-au expediere de confruntat, iar o
+     * verificare impusa lor ar fi oprit fiecare tranzitie de eMAG si Trendyol.
+     */
+    expediere?: { coloana: string; valoare: string | number | null };
   },
 ): Promise<RezultatTranzitie> {
+  /*
+   * ⚠ CONFRUNTAREA E PRIMA, INAINTEA CAMPURILOR AUXILIARE. Si ele sunt ale expedierii (numarul de
+   * urmarire pleaca prin `campuriSuplimentare`), deci scrise pe o expediere care nu mai e a noastra
+   * ar fi aceeasi greseala, doar mai mica.
+   */
+  if (p.expediere && p.expediere.valoare !== null && p.expediere.valoare !== "") {
+    const { data, error } = await admin
+      .from("orders")
+      .select("id")
+      .eq("id", p.orderId)
+      .eq("business_id", p.businessId)
+      .eq(p.expediere.coloana, p.expediere.valoare)
+      .maybeSingle();
+
+    /*
+     * ⚠ „N-AM PUTUT AFLA" NU E „E IN REGULA". O citire picata nu dovedeste ca expedierea mai e a
+     * noastra, iar dincolo de randul asta stau mutarea comenzii si facturarea automata. Se cere
+     * reincercarea, care e ieftina: tura urmatoare o ia de la capat.
+     */
+    if (error) {
+      await logError({
+        action: `${p.sursa}/tranzitie`,
+        message: `nu s-a putut afla daca expedierea mai e a comenzii (${p.expediere.coloana}): ${error.message}. `
+          + "Tranzitia NU s-a aplicat; se reincearca.",
+        details: { orderId: p.orderId }, businessId: p.businessId, severity: "warning",
+      });
+      return "reincearca";
+    }
+
+    if (!data) {
+      await logError({
+        action: `${p.sursa}/tranzitie`,
+        message: `expedierea comenzii s-a schimbat in timpul urmaririi (${p.expediere.coloana}); `
+          + "tranzitia citita NU s-a aplicat, ca sa nu mute comanda si sa nu emita factura pe o expediere moarta.",
+        details: { orderId: p.orderId, identitate: p.expediere.coloana },
+        businessId: p.businessId, severity: "warning",
+      });
+      /* ⚠ `definitiv`, nu `reincearca`: expedierea veche nu se mai intoarce niciodata. */
+      return "definitiv";
+    }
+  }
+
   /*
    * Campurile care nu tin de ciclu se scriu INAINTE si separat.
    *

@@ -407,7 +407,12 @@ test("urmărirea iese exact la curierii care au cron de urmărire", () => {
     are urmărire dacă și numai dacă are cron. Așa, când se livrează urmărirea
     pentru al treisprezecelea, proba cade și cere cuvântul, în loc să tacă.
 
-    ⚠ FAN Courier A INTRAT pe 13.09.2026, al treisprezecelea, și proba asta a căzut
+    ⚠ Woot A INTRAT pe 15.09.2026, al paisprezecelea, și proba asta a căzut din nou, cum
+    își promitea. La el urmărirea e însă mai puțin decât la ceilalți, și merită spus: cronul
+    scrie pe comandă starea pe care o spune curierul, dar NU mută singur comanda pe „Livrat",
+    fiindcă Woot nu documentează nicăieri ce înseamnă numerele lui de stare.
+
+    ⚠ FAN Courier intrase pe 13.09.2026, al treisprezecelea, și proba asta a căzut
     chiar atunci: exact ce își promitea rândul de mai sus, a cerut cuvântul în loc să
     tacă. Până atunci, „tracking" se găsea doar PRIN DESCRIEREA clientului („de la AWB
     până la tracking"), o promisiune pe care platforma încă n-o ținea; acum o ținem, și
@@ -416,7 +421,7 @@ test("urmărirea iese exact la curierii care au cron de urmărire", () => {
   const CRON_LA_CHEIE: Record<string, LogoKey> = {
     dhl: "dhl", ecolet: "ecolet", fancourier: "fanCourier", fedex: "fedex", gls: "gls",
     innoship: "innoship", packeta: "packeta", pallex: "pallex", posta: "postaRomana",
-    sameday: "sameday", shipo: "shipo", smartship: "smartship", ups: "ups",
+    sameday: "sameday", shipo: "shipo", smartship: "smartship", ups: "ups", woot: "woot",
   };
   const vercel = readFileSync(join(AICI, "..", "..", "..", "vercel.json"), "utf8");
   const cuCron = new Set(

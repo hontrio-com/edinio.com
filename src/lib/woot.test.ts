@@ -7,6 +7,7 @@ import {
   cancelWootOrder,
   createOrder,
   getOrderAwb,
+  getOrderHistory,
   motivulWoot,
   uitaTokenurileWoot,
 } from "@/lib/woot";
@@ -167,6 +168,15 @@ test("⚠⚠ urmarirea comuna se goleste DOAR daca e chiar a acestui AWB", async
     woot_order_id: null,
     woot_awb_number: null,
     woot_service_name: null,
+    /*
+     * ⚠ SI URMAREA EXPEDIERII ANULATE, de la 15.09.2026. Lasate pe loc, comanda ar fi aratat mai
+     * departe ultima stare a coletului MORT, iar dupa o reemitere ceasul de rotatie ar fi tinut
+     * expedierea NOUA la coada, fiindca randul ar fi parut proaspat intrebat.
+     */
+    woot_awb_at: null,
+    woot_status_id: null,
+    woot_status_label: null,
+    woot_status_checked_at: null,
     tracking_number: null,
   });
 
@@ -191,6 +201,34 @@ test("⚠ eticheta fara `pdf` e eroare, nu o fereastra goala", async () => {
 
   raspunde({ success: true, pdf: "JVBERi0=" });
   assert.deepEqual(await getOrderAwb(TOKEN, 71), { success: true, pdf: "JVBERi0=" });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   4b. ISTORICUL EXPEDIERII
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ istoricul care nu e lista e eroare, nu „expedierea n-are nicio stare”", async () => {
+  /*
+   * ⚠ A CINCEA OARA ACEEASI LECTIE. Ei raspund 200 si cand nu dau ce am cerut. Fara citirea
+   * plicului, corpul de mai jos ajungea o lista goala, iar cronul ar fi scris marcajul si ar fi
+   * trecut linistit mai departe: o cadere care arata exact ca un colet fara evenimente.
+   */
+  raspunde({ success: false, message: "Comanda nu va apartine" });
+  await assert.rejects(
+    () => getOrderHistory(TOKEN, 71),
+    (e: Error) => {
+      assert.match(e.message, /Comanda nu va apartine/, "motivul LOR nu ajunge la noi");
+      return true;
+    },
+  );
+});
+
+test("iar o lista GOALA e legitima: expedierea abia creata n-are evenimente", async () => {
+  raspunde([]);
+  assert.deepEqual(await getOrderHistory(TOKEN, 71), []);
+
+  raspunde([{ id: 1, status_id: 3, comment: "Ridicat de curier", added: "2026-09-15T14:30:00" }]);
+  assert.equal((await getOrderHistory(TOKEN, 71))[0].comment, "Ridicat de curier");
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════

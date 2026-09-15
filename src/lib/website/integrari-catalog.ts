@@ -580,9 +580,9 @@ export const SINONIME: Partial<Record<LogoKey, string[]>> = {
      `locker`/`punct`/`ridicare`: numai cei din `CURIERI_CU_LOCKERE`
      (`shipping.actions.ts`), adică acolo unde CUMPĂRĂTORUL alege punctul la
      checkout. Woot are puncte, dar le alege comerciantul după comandă, deci nu.
-     `urmarire`/`tracking`: numai cei TREISPREZECE cu cron de tracking. FAN s-a adăugat
-     pe 13.09.2026 (`api/cron/fancourier-tracking`), iar proba de mai jos a cerut
-     cuvântul chiar atunci, cum își promisese. */
+     `urmarire`/`tracking`: numai cei PAISPREZECE cu cron de tracking. FAN s-a adăugat
+     pe 13.09.2026 (`api/cron/fancourier-tracking`) și Woot pe 15.09.2026, iar proba de mai
+     jos a cerut cuvântul de fiecare dată, cum își promisese. */
   /* ⚠ FĂRĂ `tracking`, și e singurul curier căruia îi lipsește: descrierea LUI conține deja
      cuvântul („de la AWB până la tracking"), deci sinonimul s-ar găsi și fără el. Proba
      „niciun sinonim nu repetă ce se găsește deja" l-a și prins, în ziua în care l-am pus.
@@ -592,7 +592,7 @@ export const SINONIME: Partial<Record<LogoKey, string[]>> = {
   cargus: ["ramburs", "locker", "punct", "ridicare"],
   sameday: ["ramburs", "awb", "urmarire", "tracking", "punct", "ridicare"],
   gls: ["ramburs", "locker", "parcelshop", "punct", "ridicare", "urmarire", "tracking"],
-  woot: ["ramburs", "awb"],
+  woot: ["ramburs", "awb", "urmarire", "tracking"],
   coleteOnline: ["ramburs", "awb"],
   ecolet: ["ramburs", "awb", "urmarire", "tracking"],
   /* Fără `ramburs` și fără `awb`: aici unitatea e PARTIDA, iar documentul e

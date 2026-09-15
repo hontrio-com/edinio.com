@@ -483,6 +483,39 @@ export async function getOrderAwb(
   return { success: true, pdf: r.pdf };
 }
 
+/** Un eveniment din `GET /orders/{id}/history`. Toate campurile sunt facultative: raspunsul lor
+ *  nu e validat de nimeni, iar lipsa unuia nu e o eroare, ci o stire mai saraca. */
+export type WootEveniment = {
+  id?: number;
+  status_id?: number;
+  comment?: string;
+  added?: string;
+};
+
+/**
+ * Istoricul de stari al unei expedieri.
+ *
+ * ⚠ SINGURA CALE PRIN CARE AFLAM CE S-A INTAMPLAT CU COLETUL. Woot duce 96% din expedierile
+ * platformei si a fost pana azi singurul curier cu trafic adevarat pe care nu-l intreba nimeni
+ * niciodata nimic dupa emitere.
+ *
+ * ⚠ SI AICI SE CITESTE PLICUL, ca la celelalte patru. Ei raspund 200 si cand nu dau ce am cerut,
+ * iar un corp care nu e lista ar fi ajuns `[].length === 0`, adica „expedierea n-are nicio stare"
+ * scris pe o cadere. Asta e chiar lectia lui `motivulWoot`, aplicata a cincea oara.
+ *
+ * ⚠ O lista GOALA e insa legitima: expedierea abia creata n-are inca niciun eveniment.
+ */
+export async function getOrderHistory(
+  token: string,
+  wootOrderId: number,
+): Promise<WootEveniment[]> {
+  const r = await wootReq<unknown>(token, "GET", `/orders/${wootOrderId}/history`);
+  if (!Array.isArray(r)) {
+    throw eroareRefuz(cuMotiv("Woot nu a returnat istoricul acestei expedieri.", r));
+  }
+  return r as WootEveniment[];
+}
+
 export async function cancelWootOrder(
   token: string,
   wootOrderId: number
@@ -538,6 +571,16 @@ export function campuriAnulareWoot(trackingEsteAlAcestuiAwb: boolean): Record<st
     woot_order_id: null,
     woot_awb_number: null,
     woot_service_name: null,
+    /*
+     * ⚠ SI URMAREA EXPEDIERII ANULATE, toata patru. Lasate pe loc, comanda ar fi aratat mai
+     * departe ultima stare a coletului MORT („Ridicat de curier"), iar dupa o reemitere
+     * `woot_status_checked_at` ar fi tinut expedierea NOUA la coada rotatiei, fiindca randul ar
+     * fi parut proaspat intrebat. Ceasul se sterge odata cu expedierea pe care il masura.
+     */
+    woot_awb_at: null,
+    woot_status_id: null,
+    woot_status_label: null,
+    woot_status_checked_at: null,
     /* `tracking_number` e comun tuturor curierilor: se goleste DOAR daca e chiar al
        acestui AWB, altfel anularea unei expedieri ar sterge urmarirea alteia. */
     ...(trackingEsteAlAcestuiAwb ? { tracking_number: null } : {}),

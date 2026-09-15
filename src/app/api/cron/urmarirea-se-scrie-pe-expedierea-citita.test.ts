@@ -41,12 +41,12 @@ const faraComentarii = (cale: string) =>
 /* ── 1. Acoperirea, cu numerele MASURATE ──────────────────────────────────── */
 
 test("⚠ lista de rute nu se poate goli in tacere", () => {
-  assert.ok(ruteDeUrmarire().length >= 13, "nu mai gasesc toate cronurile de urmarire");
+  assert.ok(ruteDeUrmarire().length >= 14, "nu mai gasesc toate cronurile de urmarire");
 });
 
-test("⚠⚠ DOISPREZECE cronuri scriu starea prin ajutor, si `innoship` ZERO dinadins", () => {
+test("⚠⚠ TREISPREZECE cronuri scriu starea prin ajutor, si `innoship` ZERO dinadins", () => {
   /*
-   * ⚠ NUMERELE SUNT MASURATE, NU ROTUNJITE. Tentatia era sa cer „treisprezece", dar
+   * ⚠ NUMERELE SUNT MASURATE, NU ROTUNJITE. Tentatia era sa cer cate cronuri sunt, dar
    * `innoship-tracking` nu scrie starea el insusi: o scrie prin `aplica-urmarire.ts`, drumul comun
    * cronului si webhookului. O afirmatie rotunjita ar fi cazut pe cod BUN si m-ar fi impins s-o
    * slabesc, adica exact felul in care o plasa devine decor.
@@ -56,7 +56,7 @@ test("⚠⚠ DOISPREZECE cronuri scriu starea prin ajutor, si `innoship` ZERO di
   for (const cale of ruteDeUrmarire()) {
     (faraComentarii(cale).includes("scrieUrmarirea(admin, {") ? cu : fara).push(cale);
   }
-  assert.equal(cu.length, 12, `scriu prin ajutor ${cu.length} cronuri, nu doisprezece`);
+  assert.equal(cu.length, 13, `scriu prin ajutor ${cu.length} cronuri, nu treisprezece`);
   assert.deepEqual(fara.map((c) => c.split("/")[4]), ["innoship-tracking"],
     "alt cron decat `innoship` a ramas fara ajutor, ori `innoship` a inceput sa scrie singur");
 
@@ -86,6 +86,9 @@ test("⚠⚠ IDENTITATEA E CEA ADEVARATA, nu un tipar copiat", () => {
     "shipo-tracking": "shipo_awb_number",
     "smartship-tracking": "smartship_awb_number",
     "ups-tracking": "ups_awb_number",
+    /* ⚠ Woot pe `woot_order_id`, nu pe numarul AWB: acela lipseste la platile cu cardul,
+       iar identificatorul lor e cheia cu care se cere istoricul, eticheta si anularea. */
+    "woot-tracking": "woot_order_id",
   };
 
   for (const [dosar, coloana] of Object.entries(asteptat)) {

@@ -554,7 +554,22 @@ export function OrderDetailClient({
   const activeProviderMeta = invoicingProviders.find(p => p.id === activeProvider) ?? invoicingProviders[0];
 
   // ── Couriers (Expediere card) ──
-  const couriers = [
+  /*
+   * ⚠ `stare` E OPTIONALA, si azi o poarta UN SINGUR curier.
+   *
+   * Cele paisprezece cronuri de urmarire scriu de mult coloane de stare pe comanda, dar niciuna
+   * n-a fost VREODATA aratata comerciantului: ele hranesc doar tranzitia comenzii si semnalele
+   * din jurnal. La Woot nu se poate face tranzitie, fiindca ei nu documenteaza nicaieri ce
+   * inseamna numerele lor de stare (vezi `@/lib/shipping/statusuri-woot`), iar eticheta lor e
+   * scrisa in romana. Deci aici se arata chiar propozitia LOR, fara sa-i dam vreun inteles.
+   *
+   * Tipul e scris pe fata, nu dedus: fara el, un singur camp pus la o singura intrare ar face
+   * din lista o reuniune de forme, iar `shippedCourier.stare` n-ar mai exista pentru `tsc`.
+   */
+  const couriers: {
+    id: string; name: string; logo: string; enabled: boolean;
+    awb: string | null; stare?: string | null; open: () => void;
+  }[] = [
     { id: "sameday", name: "Sameday", logo: "/integrations/sameday.webp", enabled: !!samedayEnabled, awb: (order.sameday_awb_number as string | null) ?? null, open: () => setSamedayModalOpen(true) },
     { id: "fan-courier", name: "FAN Courier", logo: "/integrations/fan-courier.svg", enabled: !!fanCourierEnabled, awb: (order.fan_courier_awb_number as string | null) ?? null, open: () => setFanCourierModalOpen(true) },
     { id: "cargus", name: "Cargus", logo: "/integrations/cargus.svg", enabled: !!cargusEnabled, awb: (order.cargus_awb_number as string | null) ?? null, open: () => setCargusModalOpen(true) },
@@ -593,7 +608,7 @@ export function OrderDetailClient({
        pentru `chosenCourier`. */
     { id: "dhl", name: "DHL Express", logo: "/integrations/dhl.svg", enabled: !!dhlEnabled, awb: (order.dhl_awb_number as string | null) ?? null, open: () => setDhlModalOpen(true) },
     { id: "colete", name: "Colete Online", logo: "/integrations/colete-online.svg", enabled: !!coleteEnabled, awb: (order.colete_awb_number as string | null) ?? null, open: () => setColeteModalOpen(true) },
-    { id: "woot", name: "Woot", logo: "/integrations/woot.webp", enabled: !!wootEnabled, awb: (order.woot_awb_number as string | null) ?? null, open: () => setWootModalOpen(true) },
+    { id: "woot", name: "Woot", logo: "/integrations/woot.webp", enabled: !!wootEnabled, awb: (order.woot_awb_number as string | null) ?? null, stare: (order.woot_status_label as string | null) ?? null, open: () => setWootModalOpen(true) },
   ];
   const enabledCouriers = couriers.filter(c => c.enabled);
   const shippedCourier = enabledCouriers.find(c => c.awb);
@@ -1821,6 +1836,13 @@ export function OrderDetailClient({
                       <div className="min-w-0 flex-1">
                         <p className="text-xs text-success">Expediat cu {shippedCourier.name}</p>
                         <p className="text-sm font-mono font-bold text-success truncate">AWB: {shippedCourier.awb}</p>
+                        {/*
+                          ⚠ CHIAR PROPOZITIA CURIERULUI, nu o talmacire de-a noastra. Vine din
+                          cronul de urmarire si se arata doar cand el chiar a aflat ceva.
+                        */}
+                        {shippedCourier.stare && (
+                          <p className="text-[11px] text-success/80 truncate">Stare la curier: {shippedCourier.stare}</p>
+                        )}
                       </div>
                     </div>
                     <button type="button" onClick={shippedCourier.open}

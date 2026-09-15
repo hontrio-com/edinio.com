@@ -52,7 +52,7 @@ nu pe cotatie live (`auto_price` e pornit la trei perechi magazin-curier in toat
 | `/orders` | POST | **da** | `createOrder` (emitere) |
 | `/orders/{id}/awb` | GET | **da** | `getOrderAwb` (eticheta) |
 | `/orders/{id}` | DELETE | **da** | `cancelWootOrder` (anulare) |
-| `/orders/{id}/history` | GET | **NU** | ⚠ urmarirea coletului. Vezi D-1. |
+| `/orders/{id}/history` | GET | **da** | `getOrderHistory`, prin cronul `woot-tracking` |
 | `/repayments` | GET | **NU** | ⚠ rambursurile incasate. Vezi D-2. |
 | `/repayments/reports` | GET | **NU** | rapoarte de decont. Vezi D-2. |
 | `/orders` | GET | nu | lista cu filtre; ar ajuta la reconciliere |
@@ -158,17 +158,54 @@ reparatie facuta intr-un singur loc sa nu treaca drept intreaga.
 
 ---
 
+### I-8. ⚠ Coletul se urmareste, si se vede
+
+Woot era **singurul curier cu trafic adevarat fara nicio bucla de urmarire**: paisprezece cronuri in
+platforma, niciunul pentru el, inclusiv pentru curieri care n-au emis in viata lor niciun AWB.
+Comerciantul afla de un retur cand coletul ajungea inapoi.
+
+Inchis cu: patru coloane pe comanda (`woot_awb_at`, `woot_status_id`, `woot_status_label`,
+`woot_status_checked_at`) plus index partial, migratia `2027-01-14`, aplicata in productie;
+`getOrderHistory` peste `GET /orders/{id}/history`; ruta `/api/cron/woot-tracking`, la fiecare doua
+ore, cu rotatia „cele neintrebate de cel mai mult timp intai"; si ceasul expedierii scris la emitere.
+
+⚠ **Si starea se si VEDE**, ceea ce la ceilalti paisprezece nu se intampla: coloanele lor de stare
+n-au fost niciodata aratate comerciantului, fiindca la ei starea se traduce in miscarea comenzii. La
+Woot se arata chiar propozitia LOR, in romana, sub numarul AWB din fisa comenzii („Stare la curier:
+Ridicat de curier"), fiindca noi nu avem dreptul sa-i dam un inteles.
+
+⚠ **Ce NU face, si e miezul lotului:** nu muta comanda si nu factureaza. Vezi D-1. Granita e aparata
+de o proba care cade daca cineva cableaza `tranzitieComandaMarketplace` sau `maybeAutoInvoice` in
+cronul asta.
+
+⚠ **Identitatea expedierii e `woot_order_id`, nu numarul AWB**: acela lipseste la platile cu cardul,
+iar identificatorul lor e cheia cu care se cere istoricul, eticheta si anularea. Aceeasi lectie ca la
+Packeta si Pall-Ex.
+
+⚠ **Anularea sterge acum si urmarirea**: lasata pe loc, comanda ar fi aratat starea coletului MORT,
+iar dupa o reemitere ceasul de rotatie ar fi tinut expedierea NOUA la coada.
+
+**9 probe noi, banc de mutanti 10 din 10** (⚠ unul a scapat la prima trecere: proba departajarii pe
+`id` trecea din intamplarea ordinii din lista, si a fost intoarsa ca sa ceara chiar regula).
+
+---
+
 ## Deschis
 
-### D-1. ⚠ Urmarirea coletului NU exista deloc: CEL MAI MARE GOL
+### D-1. ⚠ Harta de stari: ce inseamna numerele lor
 
-Woot ofera `GET /orders/{order_id}/history`, cu istoricul de stari (`status_id`, `comment`,
-`added`). **Nu-l chemam niciodata.** Nu exista nicio ruta de cron pentru Woot, desi FAN si Sameday
-au. Adica pentru 96% din expedierile platformei nu stim niciodata unde e coletul, iar cumparatorul
-nu primeste nicio instiintare.
+Coletul se urmareste de la 15.09.2026 (vezi I-8), dar starea doar SE ARATA: comanda nu se muta
+singura pe „Livrat" si nu se emite nicio factura automata, fiindca **nu se stie ce inseamna numerele
+lor**. Cautat, nu presupus: in specificatia lor (22 de cai) nu exista nicio enumerare a starilor unei
+comenzi; singura lista documentata e a rambursurilor; modulul lor oficial de WooCommerce nu atinge
+deloc `status_id`; din exemplele lor se vede doar capatul de jos (1 „Comanda primita", 2 „AWB
+generat", 3 „Ridicat de curier").
 
-De facut: ruta de cron, harta de stari catre starile noastre, intrare in `vercel.json`, si rotatia
-„cele neintrebate de cel mai mult timp intai", dupa tiparul lui `sameday-tracking`.
+**Cum se inchide, si de ce nu azi:** cronul strange chiar acum perechi (numar, eticheta) de pe
+expedieri adevarate, in `woot_status_id` si `woot_status_label`. Peste cateva zile lista iese
+dintr-o interogare in baza noastra. ⚠ Pana atunci, orice harta ar fi ghicita, iar un numar ghicit
+drept „livrat" emite facturi pe colete inca in masina. Alternativa mai scurta: intrebarea directa
+catre ei, un email cu tabelul de stari.
 
 ### D-2. Rambursurile incasate nu se reconciliaza
 
@@ -211,6 +248,9 @@ Verificat pe specificatia OpenAPI pe 15.09.2026.
 | `location_id` pentru servicii la punct | ✔ |
 | telefon in format international | ✔ `wootPhone` pliaza `07…` la `+407…` |
 | eroarea sta in `error` sau `message`, iar 200 poate insemna esec | ✔ de la I-1 |
+| istoricul da evenimente cu `status_id`, `comment`, `added` | ✔ citit, si ordonat dupa timp, nu dupa locul din lista |
+| ⚠ ce INSEAMNA fiecare `status_id` | **nedocumentat la ei, nicaieri.** Vezi D-1 |
+| localitatile capitalei sunt „Sectorul 1”…„Sectorul 6” | ✔ de la I-7; nicio localitate „Bucuresti” la ei |
 
 ---
 
@@ -218,19 +258,23 @@ Verificat pe specificatia OpenAPI pe 15.09.2026.
 
 | Poarta | Rezultat |
 | --- | --- |
-| Suita de probe | 7910 din 7910 |
+| Suita de probe | 7921 din 7921 |
 | TypeScript | curat |
 | Build | curat |
 | Clichet de lint | neschimbat: 83 erori, 129 avertismente |
-| Tipuri DB si baseline de schema | curate, neatinse |
+| Tipuri DB si baseline de schema | curate, regenerate dupa migratie |
 | Banc de mutanti, motivul lui Woot | 3 din 3 |
 | Banc de mutanti, localitatea din capitala | 7 din 7 |
+| Banc de mutanti, urmarirea coletului | 10 din 10 |
 
 ---
 
 ## Nota, cinstit
 
-**Nu e 10/10 azi.** Securitatea si corectitudinea drumului umblat sunt bune si probate; ce lipseste e
-**functionalitate**: urmarirea (D-1) si reconcilierea rambursurilor (D-2). Pana la ele, nota onesta e
-**7/10**: integrarea emite, anuleaza si tipareste corect, dar dupa ce coletul pleaca platforma nu mai
-stie nimic despre el.
+**Nu e 10/10 azi.** Securitatea si corectitudinea drumului umblat sunt bune si probate. De la
+15.09.2026 platforma stie si ce se intampla cu coletul dupa ce pleaca, si i-o spune comerciantului
+cu vorbele curierului. Ce lipseste: **harta de stari** (D-1), fara de care comanda nu se muta singura
+si factura nu pleaca la livrare, si **reconcilierea rambursurilor** (D-2), care e bani.
+
+Nota onesta: **8/10**. ⚠ Si ⚠ D-1 nu atarna de noi, ci de o lista pe care ei n-o publica: ori se
+strange din datele noastre in cateva zile, ori se cere de la ei.

@@ -399,6 +399,19 @@ export async function createWootAwb(
       woot_order_id: r.fel === "facut" ? String(detalii?.order_id ?? "") : String(r.referinta ?? ""),
       woot_awb_number: awbNumber,
       woot_service_name: serviceName,
+      /*
+       * ⚠ CEASUL URMARIRII, si numai cand expedierea s-a facut CHIAR ACUM.
+       *
+       * De aici isi masoara cronul fereastra de 21 de zile, nu din `created_at`: o comanda veche
+       * careia comerciantul ii emite AWB abia azi ar fi altfel din start in afara ferestrei.
+       *
+       * ⚠ Pe ramura „deja" NU se scrie, dinadins: acolo expedierea exista de dinainte (o scriere
+       * pierduta, pe care randul asta o recupereaza), iar `new Date()` ar fi o data INVENTATA a
+       * emiterii, care intra apoi in fereastra si in orice raport ca si cum ar fi masurata. Fara
+       * ea, expedierea ramane oricum urmarita cat timp COMANDA e in fereastra. Aceeasi hotarare
+       * ca in migratia FAN, care nu umple `awb_at` din `created_at`.
+       */
+      ...(r.fel === "facut" ? { woot_awb_at: new Date().toISOString() } : {}),
       tracking_number: awbNumber || undefined,
       status: "processing",
       updated_at: new Date().toISOString(),

@@ -3767,9 +3767,13 @@ export type Database = {
           ups_tracking_url: string | null
           vat_amount: number
           vat_rate: number
+          woot_awb_at: string | null
           woot_awb_number: string | null
           woot_order_id: string | null
           woot_service_name: string | null
+          woot_status_checked_at: string | null
+          woot_status_id: number | null
+          woot_status_label: string | null
         }
         Insert: {
           billing_company?: Json | null
@@ -3965,9 +3969,13 @@ export type Database = {
           ups_tracking_url?: string | null
           vat_amount?: number
           vat_rate?: number
+          woot_awb_at?: string | null
           woot_awb_number?: string | null
           woot_order_id?: string | null
           woot_service_name?: string | null
+          woot_status_checked_at?: string | null
+          woot_status_id?: number | null
+          woot_status_label?: string | null
         }
         Update: {
           billing_company?: Json | null
@@ -4163,9 +4171,13 @@ export type Database = {
           ups_tracking_url?: string | null
           vat_amount?: number
           vat_rate?: number
+          woot_awb_at?: string | null
           woot_awb_number?: string | null
           woot_order_id?: string | null
           woot_service_name?: string | null
+          woot_status_checked_at?: string | null
+          woot_status_id?: number | null
+          woot_status_label?: string | null
         }
         Relationships: [
           {

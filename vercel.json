@@ -124,6 +124,10 @@
       "schedule": "23 */2 * * *"
     },
     {
+      "path": "/api/cron/woot-tracking",
+      "schedule": "59 */2 * * *"
+    },
+    {
       "path": "/api/cron/sameday-tracking",
       "schedule": "11 */2 * * *"
     },

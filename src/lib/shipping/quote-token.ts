@@ -206,6 +206,13 @@ export interface PlanExpedierii {
   dhlLocalProductCode?: string | null;
   /** ⚠ Reteaua punctului FAN: FANbox, PayPoint si oficiu vin toate sub acelasi `deliveryType`. */
   fanPointType?: string | null;
+  /**
+   * ⚠ Reteaua punctului Sameday: easybox si PUDO vin si ele sub acelasi `deliveryType: "locker"`.
+   *
+   * ⚠ SE PUNE DOAR PE OPTIUNEA PUDO, niciodata pe cea de easybox. Vezi nota din
+   * `amprentaPlanului` despre de ce ordinea conteaza aici mai mult decat pare.
+   */
+  samedayPointNet?: string | null;
 }
 
 /*
@@ -249,6 +256,28 @@ export function amprentaPlanului(plan: PlanExpedierii | null | undefined): strin
     p(plan.shipoRateId), p(plan.fedexServiceType), p(plan.upsServiceCode),
     p(plan.dhlProductCode), p(plan.dhlLocalProductCode), p(plan.fanPointType),
   ];
+
+  /*
+   * ═══ ⚠ CAMPUL NOU SE ADAUGA LA COADA, SI NUMAI CAND ARE VALOARE ═══
+   *
+   * Un `p(plan.samedayPointNet)` pus necontitionat in lista de mai sus ar fi adaugat inca un `~`
+   * la FIECARE plan, deci ar fi schimbat amprenta TUTUROR cotatiilor deja semnate. Ele traiesc
+   * 24 de ore. Adica, timp de o zi de la desfasurare, fiecare comanda cinstita cu plan (brokeri,
+   * transportatori, puncte FAN) ar fi fost REFUZATA cu motivul „plan schimbat".
+   *
+   * ⚠ Adaugat conditionat, invarianta se pastreaza acolo unde conteaza: acelasi plan da acelasi
+   * sir, mereu. Planurile de pana acum ies bit cu bit la fel, iar cele PUDO isi leaga reteaua.
+   *
+   * ⚠ SI DE CE TREBUIE LEGATA DELOC: fara ea, cineva putea lua tokenul optiunii de easybox
+   * (ieftina) si sa plaseze comanda cu un punct PUDO semnat cinstit. Reteaua fisei nu s-ar fi
+   * confruntat cu nimic, iar diferenta de tarif ar fi platit-o comerciantul la emitere.
+   *
+   * ⚠ De-aia optiunea de easybox NU poarta campul: lasat gol acolo, ramane identica cu ce se
+   * semna ieri, deci nici macar cele doua ore de fereastra ale fisei punctului nu se ating.
+   */
+  const retSameday = p(plan.samedayPointNet);
+  if (retSameday !== "") parti.push(retSameday);
+
   /* Toate goale inseamna „fara plan de serviciu": un curier simplu, la adresa. */
   if (parti.every((x) => x === "")) return "";
   return createHmac("sha256", secret()).update(parti.join("~")).digest("base64url").slice(0, 16);
@@ -478,6 +507,7 @@ export function semneazaOptiuni<T extends {
       dhlProductCode: o.dhlProductCode,
       dhlLocalProductCode: o.dhlLocalProductCode,
       fanPointType: o.fanPointType,
+      samedayPointNet: o.samedayPointNet,
     }),
   }));
 }

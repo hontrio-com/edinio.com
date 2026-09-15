@@ -251,7 +251,10 @@ test("⚠ comerciantul poate alege easybox-ul la emitere, nu doar cumparatorul l
     "comutatorul stins nu mai stinge nimic: se cade inapoi pe lockerul cumparatorului");
   const m = viu("src/components/dashboard/SamedayAwbModal.tsx");
   assert.match(m, /setLaEasybox\(e\.target\.checked\)/, "si exista un comutator");
-  assert.match(m, /getLockers\(businessId, "sameday"\)/, "si un selector care chiar cere lista");
+  /* ⚠ Cu RETEAUA la al cincilea argument, de pe 15.09.2026: Sameday are doua nomenclatoare de
+     puncte, iar fereastra le comuta. Vezi `reteaua-punctului-calatoreste.test.ts`. */
+  assert.match(m, /getLockers\(businessId, "sameday", undefined, undefined, reteaPunct\)/,
+    "si un selector care chiar cere lista, pe reteaua aleasa");
 });
 
 test("⚠ cronul de urmarire exista si e programat", () => {
@@ -296,12 +299,34 @@ test("⚠ returul are CHEIE proprie in registru", () => {
 });
 
 test("⚠ returul se scrie in coloana LUI, nu peste AWB-ul de tur", () => {
-  /* O comanda poate avea in acelasi timp un colet dus, livrat, si unul care se intoarce.
-     Scrise in aceeasi coloana, urmarirea ar raporta drumul returului drept drumul comenzii. */
+  /*
+   * O comanda poate avea in acelasi timp un colet dus, livrat, si unul care se intoarce. Scrise in
+   * aceeasi coloana, urmarirea ar raporta drumul returului drept drumul comenzii.
+   *
+   * ⚠ PLASA S-A INGUSTAT PE 15.09.2026, si merita spus de ce. Pana atunci cerea ca CRONUL sa nu
+   * pomeneasca deloc `sameday_return_awb_number`, ceea ce era adevarat doar cat timp returul nu se
+   * urmarea. De cand se urmareste, afirmatia aia cadea pe cod BUN. Regula insa e neschimbata, doar
+   * ca acum se cere pe fiecare bucla in parte: cea a DUSULUI nu are voie sa atinga coloanele
+   * returului, si nici invers.
+   */
   const a = viu("src/lib/actions/sameday.actions.ts");
   assert.match(a, /sameday_return_awb_number: awbNumber/);
+
   const cron = viu("src/app/api/cron/sameday-tracking/route.ts");
-  assert.doesNotMatch(cron, /sameday_return_awb_number/, "urmarirea se uita la coletul DUS");
+  const iRetur = cron.indexOf("for (const r of retururi)");
+  assert.notEqual(iRetur, -1, "bucla returului trebuie sa existe, altfel feliile de mai jos mint");
+  const bucaDus = cron.slice(cron.indexOf("for (const o of inFereastra)"), iRetur);
+  const bucaRetur = cron.slice(iRetur);
+
+  assert.ok(bucaDus.length > 500 && bucaRetur.length > 500, "feliile nu pot fi goale");
+  assert.ok(
+    !bucaDus.includes("sameday_return_"),
+    "bucla coletului dus nu are voie sa scrie pe coloanele returului",
+  );
+  assert.ok(
+    !/sameday_status_|sameday_awb_number/.test(bucaRetur),
+    "bucla returului nu are voie sa scrie pe coloanele coletului dus",
+  );
 });
 
 test("⚠ destinatarul returului e PUNCTUL DE RIDICARE, nu datele firmei", () => {

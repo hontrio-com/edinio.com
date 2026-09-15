@@ -3712,6 +3712,10 @@ export type Database = {
           sameday_locker_charge_code: string | null
           sameday_return_awb_at: string | null
           sameday_return_awb_number: string | null
+          sameday_return_incheiat_la: string | null
+          sameday_return_status_checked_at: string | null
+          sameday_return_status_id: number | null
+          sameday_return_status_label: string | null
           sameday_status_checked_at: string | null
           sameday_status_id: number | null
           sameday_status_label: string | null
@@ -3921,6 +3925,10 @@ export type Database = {
           sameday_locker_charge_code?: string | null
           sameday_return_awb_at?: string | null
           sameday_return_awb_number?: string | null
+          sameday_return_incheiat_la?: string | null
+          sameday_return_status_checked_at?: string | null
+          sameday_return_status_id?: number | null
+          sameday_return_status_label?: string | null
           sameday_status_checked_at?: string | null
           sameday_status_id?: number | null
           sameday_status_label?: string | null
@@ -4130,6 +4138,10 @@ export type Database = {
           sameday_locker_charge_code?: string | null
           sameday_return_awb_at?: string | null
           sameday_return_awb_number?: string | null
+          sameday_return_incheiat_la?: string | null
+          sameday_return_status_checked_at?: string | null
+          sameday_return_status_id?: number | null
+          sameday_return_status_label?: string | null
           sameday_status_checked_at?: string | null
           sameday_status_id?: number | null
           sameday_status_label?: string | null

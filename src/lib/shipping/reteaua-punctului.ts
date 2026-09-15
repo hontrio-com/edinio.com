@@ -57,6 +57,29 @@ export function serviciulShipo(semnal: string | null | undefined): number {
 }
 
 /**
+ * Reteaua de puncte Sameday: dulapurile lor, sau punctele PUDO.
+ *
+ * Sameday are DOUA nomenclatoare, si nu se suprapun: `api/client/lockers` da 7.021 de dulapuri,
+ * `api/client/ooh-locations` da 6.706 puncte PUDO (tejghele in magazine partenere). Id-urile vin
+ * din spatii diferite, iar AWB-ul le cere pe campuri diferite (`lockerLastMile` fata de
+ * `oohLastMile`) si pe servicii diferite (`LN` fata de `PP`). Vezi `sameday/ultima-mila.ts`.
+ *
+ * Lipsa inseamna `easybox`, exact ca la FAN si din acelasi motiv: pana azi aia era singura retea
+ * oferita, iar optiunile ramase deschise in browserul unui cumparator nu poarta inca semnalul.
+ * Tratata ca lipsa, fiecare comanda pornita inainte de schimbare ar fi cazut.
+ *
+ * ⚠ FEREASTRA DE DOUA ORE DE LA DESFASURARE, spusa pe fata. Pana azi Sameday cadea pe ramura
+ * implicita a lui `reteauaPunctului`, deci punctele lui erau semnate sub `unica`. De acum sunt
+ * semnate sub `easybox`, iar un token emis INAINTE de desfasurare nu mai verifica. Fisa punctului
+ * traieste doua ore, deci fereastra se inchide singura; iar ce se intampla in ea e o comanda
+ * REFUZATA cu motiv clar, nu un colet trimis aiurea. Masurat: cinci comenzi la easybox Sameday in
+ * toata viata platformei. Aceeasi cumpana s-a luat la FAN pe 13.09.2026.
+ */
+export function reteaSameday(semnal: string | null | undefined): "easybox" | "pudo" {
+  return semnal === "pudo" ? "pudo" : "easybox";
+}
+
+/**
  * Tipul punctului FAN, cu lipsa insemnand `fanbox`.
  *
  * ⚠ Lipsa NU inseamna „nicio retea": pana pe 13.09.2026 FANbox era singura oferita, iar optiunile
@@ -82,6 +105,8 @@ export function reteauaPunctului(curier: string, semnal: string | null | undefin
       return tipPunctFanCuImplicit(semnal);
     case "shipo":
       return String(serviciulShipo(semnal));
+    case "sameday":
+      return reteaSameday(semnal);
     /*
      * ⚠ UPS INTRA AICI DINADINS, si e singurul caz in care aruncarea semnalului chiar apara ceva:
      * acolo semnalul e judetul cumparatorului. Vezi capul fisierului.
@@ -112,6 +137,8 @@ export function semnalulRetelei(curier: string, plan: PlanExpedierii | null | un
       return plan.fanPointType ?? null;
     case "shipo":
       return plan.shipoRateId == null ? null : String(plan.shipoRateId);
+    case "sameday":
+      return plan.samedayPointNet ?? null;
     default:
       return null;
   }

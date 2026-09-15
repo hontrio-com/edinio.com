@@ -47,9 +47,19 @@ const PUNCT = {
 
 const PLAN_GOL: PlanExpedierii = {};
 
-function tokenSameday(peste: Partial<typeof PUNCT> = {}, expira = EXPIRA): string {
+/*
+ * ⚠ RETEAUA NU MAI E `RETEA_UNICA` DE PE 15.09.2026, cand Sameday a capatat a doua retea de
+ * puncte (PUDO). Se ia de la `reteauaPunctului`, adica de la aceeasi regula pe care o foloseste
+ * serverul cand semneaza: scrisa de mana aici, proba ar fi putut ramane verde peste o despartire
+ * intre cele doua capete, si tocmai aia e catastrofa pe care fisierul asta o apara.
+ */
+function tokenSameday(
+  peste: Partial<typeof PUNCT> = {},
+  expira = EXPIRA,
+  semnal?: string,
+): string {
   return semneazaPunctul(
-    { businessId: MAGAZIN, curier: "sameday", retea: RETEA_UNICA },
+    { businessId: MAGAZIN, curier: "sameday", retea: reteauaPunctului("sameday", semnal) },
     { ...PUNCT, ...peste },
     expira,
   );
@@ -194,6 +204,28 @@ test("⚠⚠ un punct al altui CURIER nu trece", () => {
   assert.equal(motivul(punctulDePeComanda({
     businessId: MAGAZIN, curier: "dpd", lockerId: "4242", token: tokenSameday(), plan: PLAN_GOL,
   })), "semnatura");
+});
+
+test("⚠⚠ un punct SAMEDAY dintr-o RETEA nu trece drept punct din alta", () => {
+  /*
+   * ⚠ Acelasi rost ca la FAN, si de la 15.09.2026 acelasi pericol: easybox si PUDO vin sub
+   * acelasi `courier: "sameday"` SI sub acelasi `deliveryType: "locker"`, dar sunt nomenclatoare
+   * separate, emise pe servicii diferite. Fara paza asta, cineva putea lua tokenul optiunii de
+   * easybox (mai ieftina) si plasa comanda cu un punct PUDO semnat cinstit, iar diferenta de tarif
+   * ar fi platit-o comerciantul la emitere.
+   */
+  const dinPudo = tokenSameday({}, EXPIRA, "pudo");
+  const caEasybox = punctulDePeComanda({
+    businessId: MAGAZIN, curier: "sameday", lockerId: "4242", token: dinPudo, plan: PLAN_GOL,
+  });
+  assert.equal(caEasybox.ok, false, "un punct PUDO nu are voie sa treaca drept easybox");
+
+  /* Si pe dos: cu planul care poarta reteaua, acelasi token trece. */
+  const cuPlanul = punctulDePeComanda({
+    businessId: MAGAZIN, curier: "sameday", lockerId: "4242", token: dinPudo,
+    plan: { ...PLAN_GOL, samedayPointNet: "pudo" },
+  });
+  assert.equal(cuPlanul.ok, true, "cu reteaua din planul semnat, punctul PUDO trebuie sa treaca");
 });
 
 test("⚠⚠ un punct FAN dintr-o RETEA nu trece drept punct din alta", () => {

@@ -214,6 +214,8 @@ export async function createSamedayAwbAction(
     locker_address?: string;
     locker_city?: string;
     locker_county?: string;
+    /** ⚠ Din ce nomenclator vine `locker_id`: dulap (lipsa) sau punct PUDO (`pudo`). */
+    sameday_point_net?: string;
   };
 
   const lockerDinComanda =
@@ -224,6 +226,14 @@ export async function createSamedayAwbAction(
           address: shipping.locker_address,
           city: shipping.locker_city,
           county: shipping.locker_county,
+          /*
+           * ⚠ RETEAUA VINE DE PE COMANDA, unde a ajuns din PLANUL SEMNAT al cotatiei, nu din
+           * cererea browserului. Vezi `shipping/reteaua-punctului.ts`.
+           *
+           * ⚠ Lipsa inseamna `easybox`, purtarea de pana la 15.09.2026: comenzile de dinainte
+           * nu poarta campul, iar tratate altfel ar pleca deodata pe alt serviciu.
+           */
+          retea: shipping.sameday_point_net === "pudo" ? ("pudo" as const) : ("easybox" as const),
         }
       : null;
 
@@ -252,6 +262,9 @@ export async function createSamedayAwbAction(
     ? {
         ...input,
         lockerId: locker!.id,
+        /* ⚠ Si RETEAUA din care a venit punctul: pe ea atarna si serviciul, si campul de pe
+           AWB. Pierduta aici, un punct PUDO ar pleca pe serviciul de dulap. */
+        retea: locker!.retea ?? "easybox",
         recipientCity: locker!.city || input.recipientCity,
         recipientCounty: locker!.county || input.recipientCounty,
         recipientAddress:

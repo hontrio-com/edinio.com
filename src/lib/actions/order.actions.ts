@@ -1000,6 +1000,8 @@ export async function placeOrder(data: {
   locker_token?: string;
   /** ⚠ Care retea FAN a punctului ales: `fanbox`, `paypoint` sau `office`. Vezi `TipPunctFan`. */
   fan_point_type?: string;
+  /** ⚠ Care retea Sameday a punctului ales: dulap (lipsa) sau punct PUDO (`pudo`). */
+  sameday_point_net?: string;
   woot_service_id?: number;
   woot_courier_name?: string;
   woot_service_name?: string;
@@ -1942,6 +1944,10 @@ export async function placeOrder(data: {
            amprenta. Tokenul punctului o leaga inca o data, prin retea: un punct dintr-o retea nu
            poate fi trecut drept punct din alta. */
         fan_point_type: data.fan_point_type,
+        /* ⚠ Si reteaua Sameday, din acelasi motiv: easybox si punct PUDO vin sub acelasi
+           `deliveryType`, dar se emit pe servicii diferite si pe campuri diferite de pe AWB.
+           Pierduta aici, emiterea ar cadea pe easybox si coletul ar pleca in alta retea. */
+        sameday_point_net: data.sameday_point_net,
       }),
       ...(data.woot_service_id && {
         woot_service_id: data.woot_service_id,
@@ -4154,6 +4160,8 @@ export async function placeCartOrder(data: {
   locker_token?: string;
   /** ⚠ Care retea FAN a punctului ales: `fanbox`, `paypoint` sau `office`. Vezi `TipPunctFan`. */
   fan_point_type?: string;
+  /** ⚠ Care retea Sameday a punctului ales: dulap (lipsa) sau punct PUDO (`pudo`). */
+  sameday_point_net?: string;
   woot_service_id?: number;
   woot_courier_name?: string;
   woot_service_name?: string;
@@ -4846,6 +4854,10 @@ export async function placeCartOrder(data: {
            amprenta. Tokenul punctului o leaga inca o data, prin retea: un punct dintr-o retea nu
            poate fi trecut drept punct din alta. */
         fan_point_type: data.fan_point_type,
+        /* ⚠ Si reteaua Sameday, din acelasi motiv: easybox si punct PUDO vin sub acelasi
+           `deliveryType`, dar se emit pe servicii diferite si pe campuri diferite de pe AWB.
+           Pierduta aici, emiterea ar cadea pe easybox si coletul ar pleca in alta retea. */
+        sameday_point_net: data.sameday_point_net,
       }),
       ...(data.woot_service_id && {
         woot_service_id: data.woot_service_id,

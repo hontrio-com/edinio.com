@@ -568,6 +568,7 @@ export function useCheckoutOrder({
            trebuie sa trimita acelasi lucru, altfel PayPoint merge pe unul si cade pe
            celalalt, tacut. Proba cere amandoua. */
         fan_point_type: courierSelection?.fanPointType,
+        sameday_point_net: courierSelection?.samedayPointNet,
         /* ⚠ La livrarea in punct, adresa de livrare E a punctului, iar GLS cere
            obligatoriu codul postal — pe care comenzile romanesti nu-l primesc din
            checkout. Acolo unde curierul il da, ajunge asa pe comanda. */

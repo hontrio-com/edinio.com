@@ -129,6 +129,7 @@ export function planulPretins(d: {
   dhl_product_code?: string;
   dhl_local_product_code?: string;
   fan_point_type?: string;
+  sameday_point_net?: string;
 }): PlanExpedierii {
   return {
     wootServiceId: d.woot_service_id,
@@ -146,6 +147,7 @@ export function planulPretins(d: {
     dhlProductCode: d.dhl_product_code,
     dhlLocalProductCode: d.dhl_local_product_code,
     fanPointType: d.fan_point_type,
+    samedayPointNet: d.sameday_point_net,
   };
 }
 

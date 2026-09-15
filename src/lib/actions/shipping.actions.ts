@@ -7,7 +7,7 @@ import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { CacheScurt } from "@/lib/utils/cache-scurt";
 import { logError } from "@/lib/error-logger";
-import { estimateSamedayCost, getSamedayLockers, getSamedayLockerServiceId, type SamedayConfig, type SamedayLocker } from "@/lib/sameday/client";
+import { estimateSamedayCost, getSamedayLockers, getSamedayLockerServiceId, getSamedayPudoServiceId, puncteOohSameday, type SamedayConfig, type SamedayLocker } from "@/lib/sameday/client";
 import { coletImplicit, estimateFanCourierCost, FAN_MAX_COD, FANBOX_MAX_WEIGHT_KG, getFanCourierPickupPoints, incapeInFanbox, incapeInPayPoint, optiuneaPunctuluiFan, PAYPOINT_MAX_WEIGHT_KG, rezumaProgram, serviciulPunctuluiFan, type FanCourierConfig, type FanCourierPickupPoint, type TarifFan, type TipPunctFan } from "@/lib/fancourier";
 import { getWootToken, getPrices as fetchWootPrices, fetchCounties as fetchWootCounties, fetchCities as fetchWootCities, type WootConfig, type WootPriceResult } from "@/lib/woot";
 import { calculateDpdIntlPrice, calculateDpdDomesticPrice, getDpdOffices, type DpdConfig } from "@/lib/dpd";
@@ -85,7 +85,7 @@ import { stripDiacritics, normalizeLocalityName } from "@/lib/utils/ro-address";
 import { applyShippingRules, parseShippingRules, type ShippingCartContext } from "@/lib/shipping/rules";
 import { semneazaOptiuni } from "@/lib/shipping/quote-token";
 import { semneazaPunctul } from "@/lib/shipping/punctul-ales-e-semnat";
-import { reteaSmartship, reteauaPunctului, serviciulShipo, tipPunctFanCuImplicit } from "@/lib/shipping/reteaua-punctului";
+import { reteaSameday, reteaSmartship, reteauaPunctului, serviciulShipo, tipPunctFanCuImplicit } from "@/lib/shipping/reteaua-punctului";
 import { potrivesteJudetulWoot, potrivesteLocalitateaWoot } from "@/lib/shipping/localitatea-woot";
 import { contextulCosului , subtotalMaximDinCatalog } from "@/lib/shipping/cart-weight";
 import { GREUTATE_REZERVA_KG } from "@/lib/shipping/awb-weight";
@@ -201,6 +201,20 @@ export type ShippingOption = {
    * serviciu, alta optiune si alte limite (30 kg la FANbox, 10 la PayPoint).
    */
   fanPointType?: TipPunctFan;
+  /**
+   * ⚠ CARE RETEA DE PUNCTE SAMEDAY: easybox sau punct PUDO (Sameday Point).
+   *
+   * Aceeasi forma ca la FAN, si din acelasi motiv: amandoua vin sub `courier: "sameday"` SI sub
+   * acelasi `deliveryType: "locker"`, deci fara campul asta nu se pot deosebi nici in cheia
+   * optiunii, nici la cererea listei de puncte, nici la emitere. Nomenclatoarele sunt diferite
+   * (7.021 de dulapuri fata de 6.706 puncte, masurat pe contul de productie), campul de pe AWB e
+   * altul (`lockerLastMile` fata de `oohLastMile`), si serviciul e altul (`LN` fata de `PP`).
+   *
+   * ⚠ SE PUNE DOAR PE OPTIUNEA PUDO. Lasat gol pe cea de easybox, amprenta ei ramane identica
+   * cu ce se semna inainte de 15.09.2026, deci cotatiile deja emise nu cad. Vezi nota din
+   * `amprentaPlanului`.
+   */
+  samedayPointNet?: "pudo";
   /**
    * ⚠ CHEIA unei oferte Shipo, si singura parte a ei.
    *
@@ -995,6 +1009,59 @@ export async function getShippingOptions(
                     courierLabel: lockerLabel(zone.label, "Sameday EasyBox (locker)"),
                     deliveryType: "locker",
                     price: zone.price,
+                  });
+                });
+            }),
+        );
+
+        /*
+         * ═══ A DOUA RETEA DE PUNCTE: PUDO (Sameday Point) ═══
+         *
+         * Tejghele in magazine partenere, nu dulapuri: alt nomenclator (6.706 puncte fata de
+         * 7.021 lockere, masurat pe contul de productie), alt camp pe AWB (`oohLastMile`) si ALT
+         * SERVICIU (`PP`), cerut separat la Sameday pe contract.
+         *
+         * ⚠ Aceeasi paza ca la easybox, si din acelasi motiv: nu se ofera ce emiterea refuza.
+         *
+         * ⚠ SI POARTA `samedayPointNet`, care intra in planul SEMNAT. Fara el, cineva putea lua
+         * tokenul optiunii de easybox si plasa comanda cu un punct PUDO semnat cinstit; reteaua
+         * fisei nu s-ar fi confruntat cu nimic, iar diferenta de tarif ar fi platit-o
+         * comerciantul. ⚠ Optiunea de easybox NU poarta campul, si asta nu e o scapare: lasat
+         * gol acolo, amprenta ei ramane identica cu ce se semna ieri. Vezi `amprentaPlanului`.
+         */
+        promises.push(
+          getSamedayPudoServiceId(samedayConfig!)
+            .catch(() => null)
+            .then((idPudo) => {
+              if (idPudo === null) return undefined;
+              return estimateSamedayCost(samedayConfig!, {
+                recipientCounty: destination.county,
+                recipientCity: destination.city,
+                weightKg: weight,
+                cashOnDelivery: rambursDeCotat,
+                retea: "pudo",
+                useLockerService: true,
+              })
+                .then((r) => {
+                  const price = Math.round(r.amount * 100) / 100;
+                  const days = r.time <= 24 ? "1 zi lucratoare" : `${Math.ceil(r.time / 24)} zile lucratoare`;
+                  options.push({
+                    courier: "sameday",
+                    courierLabel: lockerLabel(zone.label, "Sameday Point (ridicare din magazin)"),
+                    deliveryType: "locker",
+                    price,
+                    estimatedDays: days,
+                    samedayPointNet: "pudo",
+                  });
+                })
+                .catch((err) => {
+                  console.error("[shipping] Sameday PUDO estimate failed:", err.message);
+                  options.push({
+                    courier: "sameday",
+                    courierLabel: lockerLabel(zone.label, "Sameday Point (ridicare din magazin)"),
+                    deliveryType: "locker",
+                    price: zone.price,
+                    samedayPointNet: "pudo",
                   });
                 });
             }),
@@ -3341,6 +3408,13 @@ async function puncteleDeLaCurier(
    * oferita, iar optiunile vechi din browserul unui cumparator nu poarta inca tipul.
    */
   const tipPunctCerut = tipPunctFanCuImplicit(retea);
+  /*
+   * ⚠ La Sameday, `retea` poarta nomenclatorul cerut: `easybox` sau `pudo`.
+   *
+   * Se ingusteaza AICI, ca `reteaLockere` si `rateIdShipo`, si din acelasi motiv: valoarea vine de
+   * la client si intra si in cheia de cache. Lipsa inseamna `easybox`, purtarea de pana acum.
+   */
+  const reteaSamedayCeruta = reteaSameday(retea);
   const discriminant =
     courier === "smartship" ? `:${reteaLockere}`
     /*
@@ -3369,6 +3443,14 @@ async function puncteleDeLaCurier(
      * aceeasi intrare in loc sa faca sase.
      */
     : courier === "ups" ? `:${orasUps(city ?? "", retea ?? null).toLowerCase()}`
+    /*
+     * ⚠ ACELASI MOTIV CA LA FAN: Sameday are DOUA nomenclatoare sub acelasi `deliveryType`.
+     *
+     * Primul cumparator care deschide lista de easybox-uri ar umple cache-ul, iar urmatorul, care
+     * a ales un punct Sameday, ar primi tot dulapurile: ar alege un punct care nu e in reteaua
+     * lui, si emiterea l-ar refuza.
+     */
+    : courier === "sameday" ? `:${reteaSamedayCeruta}`
     : "";
 
   /*
@@ -3522,8 +3604,16 @@ async function puncteleDeLaCurier(
       // tocmai reparata, nu adevarul despre magazin.
       const toate = await CACHE_LOCKERE.iaSau(
         cheieCache,
-        async () =>
-          (await getSamedayLockers(config)).map((l) => ({
+        async () => {
+          /*
+           * ⚠ DOUA RETELE, DOUA NOMENCLATOARE, si nu se suprapun: 7.021 de dulapuri fata de
+           * 6.706 puncte PUDO, masurat pe contul de productie. Id-urile vin din spatii diferite,
+           * iar AWB-ul le cere pe campuri si pe servicii diferite. Vezi `sameday/ultima-mila.ts`.
+           */
+          const brute = reteaSamedayCeruta === "pudo"
+            ? await puncteOohSameday(config)
+            : await getSamedayLockers(config);
+          return brute.map((l) => ({
             id: String(l.lockerId),
             name: l.name,
             address: l.address,
@@ -3531,7 +3621,8 @@ async function puncteleDeLaCurier(
             county: l.county,
             lat: l.lat,
             lng: l.lng,
-          })),
+          }));
+        },
         (v) => v.length === 0,
         60_000,
       );

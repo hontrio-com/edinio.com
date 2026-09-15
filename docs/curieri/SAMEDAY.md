@@ -66,9 +66,9 @@ Din cele **18 cai** pe care le cheama SDK-ul lor oficial, folosim **13**.
 | `api/client/services` | **da** | serviciile contului si extraoptiunile lor |
 | `api/client/pickup-points` | **da** | punctele de ridicare (citire SI scriere) |
 | `api/client/lockers` | **da** | cele 7.021 de dulapuri, 500 pe pagina |
-| `api/client/ooh-locations` | **scris, necablat** | `puncteOohSameday`; vezi D-1 |
-| `api/geolocation/county` | **scris, necablat** | `judeteSameday`; vezi D-3 |
-| `api/geolocation/city` | **scris, necablat** | `localitatiSameday`; vezi D-3 |
+| `api/client/ooh-locations` | **da** | `puncteOohSameday`, cele 6.706 puncte PUDO |
+| `api/geolocation/county` | **scris, necablat** | `judeteSameday`; vezi D-1 |
+| `api/geolocation/city` | **scris, necablat** | `localitatiSameday`; vezi D-1 |
 | `api/awb/{awb}/update-cod` | nu | schimbarea rambursului pe un AWB emis |
 | `api/awb/{awb}/parcel` | nu | adaugarea unui colet pe o expeditie emisa |
 | `api/client/parcel/{id}/size` | nu | schimbarea dimensiunilor unui colet |
@@ -235,7 +235,64 @@ e tot ce ramane.
 ⚠ **Ramase in afara acestei treceri, fiindca nu tin de expediere:** patru scrieri de storno in
 `fgo.actions.ts` (doua), `oblio.actions.ts` si `smartbill.actions.ts`. Sunt de hotarat separat.
 
-**Total pentru I-2 … I-5: 23 de probe noi, banc de mutanti 12 din 12.**
+### I-6. Coletul care se INTOARCE e si el urmarit
+
+Platforma stia de mult sa emita retururi Sameday, pe amandoua serviciile lor. Dar cronul se uita
+numai la `sameday_awb_number`: un retur emis nu era intrebat NICIODATA, deci comerciantul nu afla
+din Edinio ca marfa s-a intors la el.
+
+A doua coada sta in acelasi cron si imparte cu prima si configurarile, si apelul `status-sync`.
+Doua deosebiri, amandoua dinadins:
+
+1. ⚠ **NU se filtreaza pe `status`-ul comenzii.** Returul traieste taman pe comenzile INCHEIATE
+   (`delivered`, uneori `refunded`); copiat orbeste filtrul fratelui lui, n-ar fi vazut nimic.
+2. ⚠ **Iesirea din coada e `sameday_return_incheiat_la`**, o coloana noua. Fara ea, semnalul catre
+   om s-ar fi repetat la fiecare doua ore, la nesfarsit, pentru fiecare retur ajuns.
+
+⚠ **RETURUL NU MUTA COMANDA, si nu din prudenta.** Pe drumul dus „livrat" inseamna incheiat cu
+bine; pe drumul de intors inseamna EXACT PE DOS: marfa a ajuns inapoi. Ce urmeaza e o hotarare de
+BANI (se returneaza plata? se reexpediaza? se refuza returul?), iar aia nu se ia de la un
+transportator. Se inregistreaza si se SEMNALEAZA, atat.
+
+Migratia `2027-01-18-sameday-isi-urmareste-returul.sql`, aplicata. ⚠ Forma interogarii a fost
+PROBATA pe PostgREST inainte de a fi scrisa: identica pe coloanele drumului dus intoarce randul
+adevarat, deci sintaxa, `.or()`-ul si ordonarea merg; pe coloanele returului intoarce zero fiindca
+zero retururi s-au emis vreodata. Vezi `zero-randuri-nu-e-succes`.
+
+### I-7. ⚠ A doua retea de puncte: Sameday Point (PUDO)
+
+Cele 6.706 de puncte PUDO erau de neatins: functia care le aduce exista, dar nu o chema nimeni, si
+cablata fara campul potrivit ar fi **misdirijat colete**. De aceea I-4 s-a facut inaintea ei.
+
+Reteaua calatoreste acum prin sase maini, si fiecare veriga are proba ei:
+cotare, optiune SEMNATA, selectorul din checkout, comanda, `shipping_address`, emitere. Pierduta la
+oricare din ele, coletul pleaca in cealalta retea, si nimeni nu afla pana nu suna clientul.
+
+⚠⚠ **PARTEA CEA MAI DELICATA A FOST AMPRENTA, si merita spusa intreaga.** `amprentaPlanului` leaga
+serviciul ales de cotatia semnata, dintr-o lista de campuri scrisa de mana si imbinata cu `~`. Un
+camp nou pus in lista, **chiar gol**, adauga inca un `~` la FIECARE plan, deci schimba amprenta
+TUTUROR cotatiilor deja semnate. Ele traiesc 24 de ore. Adica, timp de o zi de la desfasurare,
+fiecare comanda cinstita cu plan (brokeri, transportatori, puncte FAN) ar fi fost REFUZATA cu
+motivul „plan schimbat". Nu una: toate.
+
+De aceea campul se adauga **conditionat**, la coada, si numai cand are valoare. Planurile de pana
+acum ies bit cu bit la fel; optiunea de easybox nici nu poarta campul. Proba fixeaza amprenta veche
+ca numar scris de mana, nu recalculat din aceeasi functie, altfel ar fi trecut si peste greseala.
+
+⚠ **Si de ce reteaua trebuie legata deloc:** fara ea, cineva putea lua tokenul optiunii de easybox
+(mai ieftina) si plasa comanda cu un punct PUDO semnat cinstit. Reteaua fisei nu s-ar fi confruntat
+cu nimic, iar diferenta de tarif ar fi platit-o comerciantul la emitere.
+
+⚠ **O fereastra de doua ore, spusa pe fata.** Pana azi Sameday cadea pe ramura implicita a lui
+`reteauaPunctului`, deci punctele lui erau semnate sub `unica`; de acum sub `easybox`. Un token emis
+INAINTE de desfasurare nu mai verifica. Fisa punctului traieste doua ore, deci fereastra se inchide
+singura, iar ce se intampla in ea e o comanda refuzata cu motiv clar, nu un colet trimis aiurea.
+Aceeasi cumpana s-a luat la FAN pe 13.09.2026.
+
+Comerciantul comuta intre cele doua retele si din fereastra de AWB. ⚠ Comutarea SCOATE alegerea
+veche: un id ramas din cealalta lista ar pleca pe serviciul gresit.
+
+**Total pentru I-2 … I-7: 42 de probe noi (41 in fisiere proprii, plus una in `punctul-de-pe-comanda.test.ts`), banc de mutanti 18 din 18.**
 
 ---
 
@@ -269,34 +326,18 @@ e tot ce ramane.
 
 ## Deschis
 
-### D-1. Punctele PUDO (Sameday Point) nu se pot alege
-
-`puncteOohSameday` exista si aduce cele 6.706 de puncte, iar `campulUltimeiMile` stie de azi sa le
-trimita pe `oohLastMile`. Ce lipseste e restul drumului: a doua retea in selectorul din checkout si
-in fereastra de AWB, plus alegerea serviciului `PP`. ⚠ Cablata fara campul potrivit, ar fi
-**misdirijat colete**. De-aia I-4 s-a facut inaintea ei.
-
-**Cat valoreaza:** easybox-ul e deja drumul cel mai incarcat al Sameday (5 din 8 comenzi), iar
-punctele PUDO sunt tejghele in magazine, deschise si seara. E o functionalitate lipsa, nu un defect.
-
-### D-2. Coletul de RETUR nu se urmareste
-
-Cronul se uita numai la `sameday_awb_number`. Un retur emis nu e intrebat niciodata, deci
-comerciantul nu afla din Edinio ca marfa s-a intors. ⚠ Cere si coloane noi
-(`sameday_return_status_*`), deci o migratie. **Masurat: zero retururi emise vreodata.**
-
-### D-3. Trei functii scrise care nu sunt chemate de nicaieri
+### D-1. Trei functii scrise care nu sunt chemate de nicaieri
 
 `judeteSameday`, `localitatiSameday` si `adaugaPunctDeRidicareSameday` sunt exportate si necablate
 (verificat numarand si folosirile dinauntrul clientului). Prima ar putea verifica judetul **inainte**
 de emitere, singurul camp pe care ei chiar il valideaza; a treia ar scuti un comerciant care isi
 deschide un depozit nou de un telefon la suportul lor. Nu sunt defecte, sunt drumuri incepute.
 
-### D-4. `update-cod`: rambursul nu se poate schimba pe un AWB emis
+### D-2. `update-cod`: rambursul nu se poate schimba pe un AWB emis
 
 Ei au ruta. Azi, o comanda editata dupa emitere cere AWB nou.
 
-### D-5. Nedovedit pe drumurile grele
+### D-3. Nedovedit pe drumurile grele
 
 Un singur AWB in toata viata platformei, si acela la adresa. **Zero** AWB-uri la easybox, zero
 retururi, zero comenzi de persoana juridica. Ce se poate spune despre drumurile neumblate e
@@ -315,14 +356,17 @@ domiciliu, un checkout care promitea o livrare pe care emiterea o refuza, un ref
 comerciantul nu-l putea citi, si cinci scrieri fara filtru de autorizare, dintre care doua cu rol
 de serviciu, adica fara nicio plasa sub ele.
 
+Iar de la I-6 si I-7, platforma stie si cand marfa s-a intors, si stie sa livreze in **amandoua**
+retelele lor de puncte, nu doar in dulapuri.
+
 ⚠ **Ce lipseste, si de ce nu e 10:**
 
-1. **Nedovedit pe drumurile grele** (D-5). Drumul cu cea mai mare expunere, easybox, **inca n-a
+1. **Nedovedit pe drumurile grele** (D-3). Drumul cu cea mai mare expunere, easybox, **inca n-a
    fost umblat**: cele 5 comenzi asteapta AWB la un singur magazin. Reparatia de la I-3 il face
    sigur, dar sigur nu e acelasi lucru cu dovedit. Asta e singurul punct pe care **nu-l pot inchide
    eu**: se inchide cand acel magazin emite primul AWB la dulap.
-2. **PUDO** (D-1) si **urmarirea returului** (D-2) sunt functionalitati lipsa, nu greseli, si
-   amandoua masoara zero azi. A doua cere si o migratie.
+2. **Trei functii scrise si necablate** (D-1) si **`update-cod`** (D-2): drumuri incepute si o
+   ruta neatinsa, amandoua fara expunere masurata azi.
 
 ⚠ Si nuanta care se uita usor: **judetul e validat de ei, orasul nu**. Un oras gresit nu se intoarce
 ca eroare, ci ca un colet rutat dupa textul adresei.

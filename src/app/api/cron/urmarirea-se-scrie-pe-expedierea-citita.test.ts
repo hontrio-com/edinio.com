@@ -73,7 +73,7 @@ test("⚠⚠ IDENTITATEA E CEA ADEVARATA, nu un tipar copiat", () => {
    *   * Pall-Ex pe partida, fiindca `pallex_awb_number` e chiar campul pe care il SCRIE cronul
    *     cand afla codul.
    */
-  const asteptat: Record<string, string> = {
+  const asteptat: Record<string, string | string[]> = {
     "dhl-tracking": "dhl_awb_number",
     "dpd-tracking": "dpd_awb_number",
     "ecolet-tracking": "ecolet_awb_number",
@@ -83,7 +83,9 @@ test("⚠⚠ IDENTITATEA E CEA ADEVARATA, nu un tipar copiat", () => {
     "packeta-tracking": "packeta_packet_id",
     "pallex-tracking": "pallex_consignment_id",
     "posta-tracking": "posta_awb_number",
-    "sameday-tracking": "sameday_awb_number",
+    /* ⚠ Sameday are DOUA cozi din 15.09.2026: coletul dus si cel care se intoarce. Sunt doua
+       identitati adevarate, nu un tipar copiat, si ORDINEA lor conteaza: dusul intai. */
+    "sameday-tracking": ["sameday_awb_number", "sameday_return_awb_number"],
     "shipo-tracking": "shipo_awb_number",
     "smartship-tracking": "smartship_awb_number",
     "ups-tracking": "ups_awb_number",
@@ -95,7 +97,8 @@ test("⚠⚠ IDENTITATEA E CEA ADEVARATA, nu un tipar copiat", () => {
   for (const [dosar, coloana] of Object.entries(asteptat)) {
     const s = faraComentarii(`${RADACINA}/${dosar}/route.ts`);
     const gasite = [...s.matchAll(/identitate: \{ coloana: "(\w+)"/g)].map((m) => m[1]);
-    assert.deepEqual(gasite, [coloana], `${dosar} nu se mai conditioneaza pe ${coloana}`);
+    const cerute = Array.isArray(coloana) ? coloana : [coloana];
+    assert.deepEqual(gasite, cerute, `${dosar} nu se mai conditioneaza pe ${cerute.join(" si ")}`);
   }
 
   assert.match(faraComentarii("src/lib/innoship/aplica-urmarire.ts"),

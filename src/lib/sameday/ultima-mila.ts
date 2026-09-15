@@ -27,7 +27,8 @@
 export type CampUltimaMila = "lockerLastMile" | "oohLastMile";
 
 /** Codurile PUDO. Singurele care cer `oohLastMile`. */
-const PUDO = new Set(["PP"]);
+export const CODURI_PUDO: readonly string[] = ["PP"];
+const PUDO = new Set(CODURI_PUDO);
 
 /**
  * Codurile de dulap, scrise doar ca sa se vada ca sunt CUNOSCUTE, nu doar nimerite pe

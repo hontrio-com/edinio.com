@@ -18,11 +18,23 @@ export type LockerAles = {
   county?: string;
   /** ⚠ Dus pana la capat desi Sameday nu-l da: `getLockers` il are la alti curieri, iar GLS il CERE. */
   postCode?: string;
+  /**
+   * Din ce nomenclator vine `id`: dulapurile lor, sau punctele PUDO.
+   *
+   * ⚠ Lipsa inseamna `easybox`, purtarea de pana la 15.09.2026. Pe drumul cumparatorului vine
+   * din planul SEMNAT al cotatiei; pe drumul comerciantului, din reteaua pe care a deschis-o el
+   * in fereastra de AWB.
+   */
+  retea?: "easybox" | "pudo";
 };
 
 /** Cheile punctului din `shipping_address`. Intr-un singur loc, ca sa nu se uite una la curatare. */
 const CHEI_PUNCT = [
   "locker_id", "locker_name", "locker_address", "locker_city", "locker_county", "locker_post_code",
+  /* ⚠ SI RETEAUA. Lasata in urma, o comanda mutata de comerciant din punct PUDO in easybox si-ar
+     fi pastrat `sameday_point_net: "pudo"`, iar urmatoarea emitere ar fi cerut serviciul PUDO
+     pentru un id de dulap. Cheile punctului se sterg TOATE sau niciuna. */
+  "sameday_point_net",
 ] as const;
 
 /**
@@ -65,5 +77,8 @@ export function adresaDupaEmitereSameday(
     locker_city: punct.city ?? "",
     locker_county: punct.county ?? "",
     ...(punct.postCode ? { locker_post_code: punct.postCode } : {}),
+    /* ⚠ Numai cand chiar e PUDO: lipsa inseamna easybox peste tot pe drumul asta, iar scrisa
+       explicit ca „easybox" ar fi o a doua forma de spus acelasi lucru. */
+    ...(punct.retea === "pudo" ? { sameday_point_net: "pudo" } : {}),
   };
 }

@@ -45,7 +45,7 @@ function optionKey(o: ShippingOption) {
    * cumparatorul ar vedea o singura optiune in loc de trei, iar lista de puncte i-ar
    * veni din reteaua gresita.
    */
-  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}::${o.fanPointType ?? ""}::${o.shipoRateId ?? ""}::${o.fedexServiceType ?? ""}::${o.upsServiceCode ?? ""}::${o.dhlProductCode ?? ""}`;
+  return `${o.courier}::${o.deliveryType}::${o.wootServiceId ?? ""}::${o.coleteServiceId ?? ""}::${o.ecoletServiceSlug ?? ""}::${o.innoshipCourierId ?? ""}::${o.innoshipServiceId ?? ""}::${o.innoshipOptionId ?? ""}::${o.smartshipCourierId ?? ""}::${o.smartshipOwnContract ? "byoc" : ""}::${o.smartshipLockerNet ?? ""}::${o.fanPointType ?? ""}::${o.samedayPointNet ?? ""}::${o.shipoRateId ?? ""}::${o.fedexServiceType ?? ""}::${o.upsServiceCode ?? ""}::${o.dhlProductCode ?? ""}`;
 }
 
 export interface CourierSelection {
@@ -84,6 +84,15 @@ export interface CourierSelection {
    * ar pleca in alta retea decat cea aleasa de cumparator.
    */
   fanPointType?: "fanbox" | "paypoint" | "office";
+  /**
+   * ⚠ Reteaua punctului Sameday: dulap (lipsa) sau punct PUDO (`pudo`).
+   *
+   * Acelasi rol ca `fanPointType`: amandoua vin sub `courier: "sameday"` si sub acelasi
+   * `deliveryType: "locker"`, dar sunt nomenclatoare diferite, emise cu servicii diferite
+   * (`LN` fata de `PP`) si pe campuri diferite de pe AWB. Pierduta aici, emiterea ar cadea
+   * pe easybox si coletul ar pleca in alta retea decat cea aleasa de cumparator.
+   */
+  samedayPointNet?: "pudo";
   wootServiceId?: number;
   wootCourierName?: string;
   wootServiceName?: string;
@@ -349,7 +358,11 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
       opt.courier === "shipo" ? String(opt.shipoRateId ?? "")
         : opt.courier === "ups" ? county
           : opt.courier === "fan-courier" ? opt.fanPointType
-            : opt.smartshipLockerNet,
+            /* ⚠ La Sameday al cincilea parametru poarta NOMENCLATORUL cerut: dulapurile
+               (`api/client/lockers`) sau punctele PUDO (`api/client/ooh-locations`). Se
+               ingusteaza tot la primire, fiindca intra si in cheia de cache. */
+            : opt.courier === "sameday" ? (opt.samedayPointNet ?? "easybox")
+              : opt.smartshipLockerNet,
     )
       .then((puncte) => { if (cerereaMea === reqLockere.current) setLockers(puncte); })
       .catch(() => { if (cerereaMea === reqLockere.current) setLockers([]); })
@@ -431,6 +444,9 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
         /* ⚠ Reteaua FAN a punctului ales. Fara ea, emiterea nu stie daca id-ul e un
            FANbox, un PayPoint sau un oficiu, si cade pe FANbox. */
         fanPointType: opt.fanPointType,
+        /* ⚠ Reteaua Sameday a punctului ales. Fara ea, emiterea nu stie daca id-ul e un
+           easybox sau un punct PUDO, si cade pe easybox. */
+        samedayPointNet: opt.samedayPointNet,
         shipoRateId: opt.shipoRateId,
         shipoCourierSlug: opt.shipoCourierSlug,
         shipoCourierName: opt.shipoCourierName,
@@ -506,13 +522,18 @@ export function CourierSelector({ businessId, county, city, cod, color, country,
    */
   const laOficiuPostal = selectedOpt?.courier === "posta";
   const reteaFan = selectedOpt?.courier === "fan-courier" ? selectedOpt.fanPointType : undefined;
+  /* ⚠ Si la Sameday, din 15.09.2026: un Sameday Point e o tejghea intr-un magazin partener, nu
+     un dulap. „Selecteaza un locker" l-ar pune pe om sa caute acolo un dulap care nu exista. */
+  const laPunctSameday = selectedOpt?.courier === "sameday" && selectedOpt.samedayPointNet === "pudo";
   const punctul =
     laOficiuPostal ? "oficiu poștal"
+    : laPunctSameday ? "punct Sameday"
     : reteaFan === "paypoint" ? "punct PayPoint"
     : reteaFan === "office" ? "oficiu FAN Courier"
     : "locker";
   const punctele =
     laOficiuPostal ? "oficii poștale"
+    : laPunctSameday ? "puncte Sameday"
     : reteaFan === "paypoint" ? "puncte PayPoint"
     : reteaFan === "office" ? "oficii FAN Courier"
     : "lockere";

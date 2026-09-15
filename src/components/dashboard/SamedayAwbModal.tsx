@@ -81,6 +81,16 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
    */
   const [laEasybox, setLaEasybox] = useState(lockerDinComanda);
   const [lockere, setLockere] = useState<{ id: string; name: string; address: string; city: string; county: string; postCode?: string }[]>([]);
+  /*
+   * Din ce retea Sameday isi alege comerciantul punctul.
+   *
+   * ⚠ Sunt DOUA nomenclatoare, nu unul: dulapurile (`api/client/lockers`, 7.021) si punctele
+   * PUDO (`api/client/ooh-locations`, 6.706, tejghele in magazine partenere). Se emit pe servicii
+   * diferite (`LN` fata de `PP`) si pe campuri diferite de pe AWB. Vezi `sameday/ultima-mila.ts`.
+   *
+   * ⚠ Porneste pe `easybox`, purtarea de pana la 15.09.2026.
+   */
+  const [reteaPunct, setReteaPunct] = useState<"easybox" | "pudo">("easybox");
   const [lockereIncarca, setLockereIncarca] = useState(false);
   const [cautare, setCautare] = useState("");
   const [lockerAles, setLockerAles] = useState<{ id: string; name: string; address: string; city: string; county: string; postCode?: string } | null>(null);
@@ -181,12 +191,15 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
        */
       let l: Awaited<ReturnType<typeof getLockers>>;
       try {
-        l = await getLockers(businessId, "sameday");
+        /* ⚠ Al cincilea argument poarta NOMENCLATORUL la Sameday. Se ingusteaza pe server. */
+        l = await getLockers(businessId, "sameday", undefined, undefined, reteaPunct);
       } catch {
         /* ⚠ O CITIRE, deci nu e nimic de verificat la Sameday. Si daca rularea a fost
            depasita, nu se atinge nimic: mesajul si stingerea sunt ale rularii curente. */
         if (!anulat) {
-          toast.error("Nu am putut citi lista de easybox-uri Sameday. Incearca din nou.");
+          toast.error(reteaPunct === "pudo"
+            ? "Nu am putut citi lista de puncte Sameday. Incearca din nou."
+            : "Nu am putut citi lista de easybox-uri Sameday. Incearca din nou.");
           setLockereIncarca(false);
         }
         return;
@@ -203,7 +216,9 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       setLockereIncarca(false);
     })();
     return () => { anulat = true; };
-  }, [laEasybox, lockerDinComanda, felRetur, lockere.length, businessId]);
+    /* ⚠ `reteaPunct` e in lista: fara el, comutarea pe puncte PUDO ar lasa pe ecran lista
+       veche de dulapuri, iar comerciantul ar alege un id din reteaua gresita. */
+  }, [laEasybox, lockerDinComanda, felRetur, lockere.length, businessId, reteaPunct]);
 
   async function handleCreate() {
     if (!recipientName.trim()) return toast.error("Numele destinatarului este obligatoriu");
@@ -251,6 +266,9 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
         ? {
             id: Number(lockerAles.id), name: lockerAles.name, address: lockerAles.address,
             city: lockerAles.city, county: lockerAles.county, postCode: lockerAles.postCode,
+            /* ⚠ SI RETEAUA din care a fost ales. Pierduta aici, un punct PUDO ar pleca pe
+               serviciul de dulap si pe campul dulapurilor, adica in alta parte. */
+            retea: reteaPunct,
           }
         : null,
       /* ⚠ STAREA COMUTATORULUI, trimisa pe fata. `lockerAles: null` nu deosebea „am stins
@@ -664,6 +682,32 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
                   {laEasybox && !lockerDinComanda && (
                     <div className="rounded-xl border border-border p-3 space-y-2">
+                      {/*
+                        CELE DOUA RETELE DE PUNCTE ALE LOR.
+                        Dulapurile si punctele Sameday (tejghele in magazine partenere) sunt
+                        nomenclatoare separate, emise pe servicii diferite. Comutarea intre ele
+                        SCOATE alegerea veche: un id ramas din cealalta lista ar pleca pe
+                        serviciul gresit.
+                      */}
+                      <div className="flex gap-1 rounded-lg bg-muted p-1">
+                        {([
+                          ["easybox", "Easybox"],
+                          ["pudo", "Puncte Sameday"],
+                        ] as const).map(([val, eticheta]) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => { setReteaPunct(val); setLockerAles(null); setCautare(""); }}
+                            className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                              reteaPunct === val
+                                ? "bg-background text-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {eticheta}
+                          </button>
+                        ))}
+                      </div>
                       {lockerAles ? (
                         <div className="flex items-start justify-between gap-3">
                           <div>
@@ -682,7 +726,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                         </div>
                       ) : lockereIncarca ? (
                         <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Loader2 className="h-4 w-4 animate-spin" /> Se incarca easybox-urile...
+                          <Loader2 className="h-4 w-4 animate-spin" />{" "}
+                          {reteaPunct === "pudo" ? "Se incarca punctele Sameday..." : "Se incarca easybox-urile..."}
                         </p>
                       ) : (
                         <>
@@ -700,7 +745,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                           */}
                           {cautare.trim().length < 2 ? (
                             <p className="text-xs text-muted-foreground">
-                              Scrie cel putin doua litere ca sa cauti printre cele {lockere.length} easybox-uri.
+                              Scrie cel putin doua litere ca sa cauti printre cele {lockere.length}{" "}
+                              {reteaPunct === "pudo" ? "puncte Sameday" : "easybox-uri"}.
                             </p>
                           ) : (
                             <div className="max-h-56 overflow-y-auto -mx-1 px-1 space-y-1">

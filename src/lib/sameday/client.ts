@@ -1,6 +1,6 @@
 import { normalizePhone } from "@/lib/utils/phone";
 import { mesajulDeValidareSameday } from "./mesajul-de-validare";
-import { campulUltimeiMile, CODURI_EASYBOX } from "./ultima-mila";
+import { campulUltimeiMile, CODURI_EASYBOX, CODURI_PUDO } from "./ultima-mila";
 import { normalizeCountyName, localitateSameday } from "@/lib/utils/ro-address";
 import { eroareCuStatus, eroareDeTermen, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 import { cheieToken } from "@/lib/integrari/cheie-token";
@@ -124,8 +124,15 @@ export type SamedayAwbInput = {
   priceObservation?: string;
   clientObservation?: string;
   clientInternalReference: string;
-  /** Easybox-ul in care se LIVREAZA coletul (`lockerLastMile`). */
+  /** Punctul in care se LIVREAZA coletul: easybox sau punct Sameday, dupa `retea`. */
   lockerId?: number;
+  /**
+   * Din ce nomenclator vine `lockerId`.
+   *
+   * ⚠ Lipsa inseamna `easybox`, purtarea de pana acum. Vine din PLANUL SEMNAT al cotatiei, nu
+   * din cererea browserului: vezi `shipping/reteaua-punctului.ts`.
+   */
+  retea?: "easybox" | "pudo";
   /** Easybox-ul din care se RIDICA un retur (`lockerFirstMile`). */
   lockerRetur?: number;
   /**
@@ -457,8 +464,26 @@ export async function loadSamedayAccount(
 // official module. Resolved from the account's service list and cached.
 const lockerServiceCache = new Map<string, number | null>();
 
-export async function getSamedayLockerServiceId(config: SamedayConfig): Promise<number | null> {
-  const key = `${config.username}::${config.sandbox}`;
+/**
+ * Id-ul serviciului contului care poarta unul dintre codurile cerute, in ordinea preferintei.
+ *
+ * ⚠ DUPA COD, NU DUPA ID. Id-ul 15 din documentatia lor nu e garantat pe niciun cont: masurat,
+ * un magazin al platformei are serviciul implicit 57 si altele 7.
+ *
+ * ⚠ NU SE TINE MINTE „NU ARE" (15.09.2026). Randul era `set(cheie, id)` cu `id` putand fi
+ * `null`, iar de azi `null` inseamna REFUZ la emitere si retea ASCUNSA la checkout. Un cont caruia
+ * Sameday tocmai i-a activat serviciul ar fi ramas refuzat pana la urmatoarea pornire a procesului,
+ * fara ca nimeni sa poata face ceva. Costul e o citire de servicii pe emitere, si numai la
+ * conturile care oricum n-au ce emite acolo.
+ *
+ * ⚠ Nici caderea nu se tine minte: e o retea proasta, nu un cont fara serviciu.
+ */
+async function idServiciuDupaCod(
+  config: SamedayConfig,
+  coduri: readonly string[],
+  prefix: string,
+): Promise<number | null> {
+  const key = `${prefix}::${config.username}::${config.sandbox}`;
   const cached = lockerServiceCache.get(key);
   if (cached !== undefined) return cached;
 
@@ -467,37 +492,41 @@ export async function getSamedayLockerServiceId(config: SamedayConfig): Promise<
     const res = await samedayGet<{ data?: Record<string, unknown>[] }>(
       "api/client/services", token, config.sandbox,
     );
-    /*
-     * ⚠ NU DOAR `LN`. Contul poate avea dulapurile pe `XL` (Locker Crossborder) si nu pe
-     * `LN`: amandoua sunt servicii de dulap in chiar modulul lor oficial. Cautate doar
-     * dupa `LN`, un asemenea cont intorcea `null`, iar apelantul cadea tacut pe serviciul de
-     * livrare la domiciliu. Ordinea din `CODURI_EASYBOX` e ordinea preferintei.
-     */
     const lista = res.data ?? [];
     let gasit: Record<string, unknown> | undefined;
-    for (const cod of CODURI_EASYBOX) {
-      gasit = lista.find((s) => String(s.serviceCode ?? s.code ?? "").toUpperCase() === cod);
+    for (const cod of coduri) {
+      gasit = lista.find((x) => String(x.serviceCode ?? x.code ?? "").toUpperCase() === cod);
       if (gasit) break;
     }
     const id = typeof gasit?.id === "number" ? gasit.id : null;
-    /*
-     * ⚠ NU SE TINE MINTE „NU ARE" (15.09.2026).
-     *
-     * Randul era `lockerServiceCache.set(key, id)`, cu `id` putand fi `null`. Iar de azi
-     * `null` inseamna REFUZ la emitere si easybox ASCUNS la checkout, deci un cont caruia
-     * Sameday tocmai i-a activat serviciul ar fi ramas refuzat pana la urmatoarea pornire a
-     * procesului, fara ca nimeni sa poata face ceva.
-     *
-     * Costul e o citire de servicii pe emitere, si numai la conturile fara dulapuri, adica
-     * exact cele care oricum n-au ce emite acolo.
-     */
     if (id !== null) lockerServiceCache.set(key, id);
     return id;
   } catch {
-    /* ⚠ Nici caderea nu se tine minte: e o retea proasta, nu un cont fara serviciu. */
     return null;
   }
 }
+
+/**
+ * Serviciul de EASYBOX al contului (`LN`, sau `XL` la crossborder).
+ *
+ * ⚠ Nu doar `LN`: contul poate avea dulapurile pe `XL` (Locker Crossborder), si amandoua sunt
+ * servicii de dulap in chiar modulul lor oficial. Cautat doar dupa `LN`, un asemenea cont intorcea
+ * `null`, iar apelantul cadea tacut pe serviciul de livrare la domiciliu.
+ */
+export async function getSamedayLockerServiceId(config: SamedayConfig): Promise<number | null> {
+  return idServiciuDupaCod(config, CODURI_EASYBOX, "easybox");
+}
+
+/**
+ * Serviciul de PUNCT SAMEDAY (PUDO) al contului, codul `PP`.
+ *
+ * ⚠ E ALT SERVICIU decat cel de dulap, si se cere separat la Sameday, pe contract. Un cont il
+ * poate avea pe unul si nu pe celalalt, de-aia nu se poate deduce unul din altul.
+ */
+export async function getSamedayPudoServiceId(config: SamedayConfig): Promise<number | null> {
+  return idServiciuDupaCod(config, CODURI_PUDO, "pudo");
+}
+
 
 // ─── AWB creation ─────────────────────────────────────────────────────────────
 
@@ -547,7 +576,16 @@ export async function createSamedayAwb(
    */
   let serviceId = input.serviceId ?? config.service_id;
   if (!input.serviceId && input.lockerId) {
-    const idEasybox = await getSamedayLockerServiceId(config);
+    /*
+     * ⚠ DOUA RETELE, DOUA SERVICII. Punctul ales poate veni din nomenclatorul dulapurilor
+     * (`api/client/lockers`) sau din cel PUDO (`api/client/ooh-locations`), iar ele se emit pe
+     * servicii diferite. `retea` spune din care a venit, si vine din PLANUL SEMNAT al cotatiei,
+     * nu din cererea browserului. Vezi `shipping/reteaua-punctului.ts`.
+     */
+    const ePudo = input.retea === "pudo";
+    const idEasybox = ePudo
+      ? await getSamedayPudoServiceId(config)
+      : await getSamedayLockerServiceId(config);
     /*
      * ⚠ FARA SERVICIU DE DULAP SE REFUZA, NU SE CADE PE CEL DE ACASA (15.09.2026).
      *
@@ -562,8 +600,11 @@ export async function createSamedayAwb(
      */
     if (!idEasybox) {
       throw eroareNesigura(
-        "Contul tau Sameday nu are niciun serviciu de livrare in easybox."
-        + " Cere-l departamentului comercial Sameday, apoi emite AWB-ul din nou.",
+        ePudo
+          ? "Contul tau Sameday nu are serviciul de livrare in punct Sameday (PUDO)."
+            + " Cere-l departamentului comercial Sameday, apoi emite AWB-ul din nou."
+          : "Contul tau Sameday nu are niciun serviciu de livrare in easybox."
+            + " Cere-l departamentului comercial Sameday, apoi emite AWB-ul din nou.",
       );
     }
     serviceId = idEasybox;
@@ -750,13 +791,26 @@ export async function estimateSamedayCost(
     lockerId?: number;
     /** Quote the easybox (LN) service instead of the configured home-delivery one. */
     useLockerService?: boolean;
+    /** Ce retea de puncte se coteaza. Lipsa inseamna `easybox`. */
+    retea?: "easybox" | "pudo";
   },
 ): Promise<{ amount: number; currency: string; time: number }> {
   const token = await getSamedayToken(config.username, config.password, config.sandbox);
 
   let serviceId = config.service_id;
   if (input.lockerId || input.useLockerService) {
-    serviceId = (await getSamedayLockerServiceId(config)) ?? config.service_id;
+    /*
+     * ⚠ Aceeasi despartire ca la emitere: PUDO e ALT serviciu, cerut separat pe contract.
+     *
+     * ⚠ Si aici se cade inapoi pe serviciul configurat, spre deosebire de emitere, unde se
+     * REFUZA. Cotarea nu trimite niciun colet nicaieri: un pret aproximativ e mai bun decat o
+     * lista fara optiuni. Iar optiunea nici nu se OFERA daca serviciul lipseste, fiindca ramura
+     * din `shipping.actions.ts` intreaba inainte.
+     */
+    const idPunct = input.retea === "pudo"
+      ? await getSamedayPudoServiceId(config)
+      : await getSamedayLockerServiceId(config);
+    serviceId = idPunct ?? config.service_id;
   }
 
   const enc = encodeURIComponent;
@@ -787,7 +841,8 @@ export async function estimateSamedayCost(
   ];
 
   if (input.lockerId) {
-    parts.push(`lockerLastMile=${input.lockerId}`);
+    /* ⚠ Acelasi camp ca la emitere, altfel pretul s-ar cere pentru alta retea decat coletul. */
+    parts.push(`${campulUltimeiMile(input.retea === "pudo" ? "PP" : "LN")}=${input.lockerId}`);
   }
 
   for (let i = 0; i < pkgNum; i++) {

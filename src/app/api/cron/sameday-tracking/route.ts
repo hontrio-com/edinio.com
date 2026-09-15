@@ -64,6 +64,26 @@ const MAX_COMENZI = 120;
  */
 const FEREASTRA_SYNC_MS = 6 * 60 * 60 * 1000;
 
+/**
+ * Cate retururi se intreaba pe rulare.
+ *
+ * Mult mai mic decat plafonul drumului dus, si dinadins: masurat pe 15.09.2026, ZERO AWB-uri de
+ * retur emise in toata viata platformei. Un plafon mare aici ar fi doar timp luat din cele 60 de
+ * secunde ale rutei, pe o coada care azi e goala.
+ */
+const MAX_RETURURI = 40;
+
+type Retur = {
+  id: string;
+  business_id: string;
+  order_number: string | null;
+  created_at: string | null;
+  sameday_return_awb_number: string | null;
+  sameday_return_awb_at: string | null;
+  sameday_return_status_id: number | null;
+  sameday_return_status_checked_at: string | null;
+};
+
 type Comanda = {
   id: string;
   business_id: string;
@@ -134,11 +154,53 @@ export async function GET(req: NextRequest) {
   /* Perechea conditiei de mai sus: comenzile fara ancora raman in urmarire doar cat timp
      COMANDA e in fereastra. */
   const inFereastra = toate.filter((o) => o.sameday_awb_at !== null || (o.created_at ?? "") >= since);
-  if (inFereastra.length === 0) {
-    return NextResponse.json({ ok: true, verificate: 0, mutate: 0, semnalate: 0 });
+
+  /*
+   * COLETELE CARE SE INTORC, citite AICI ca sa imparta configurarile si `status-sync`.
+   *
+   * Doua deosebiri fata de drumul dus, amandoua dinadins:
+   *
+   *   1. NU se filtreaza pe `status`-ul comenzii. Returul traieste taman pe comenzile INCHEIATE
+   *      (`delivered`, uneori `refunded`); copiat orbeste filtrul fratelui lui, n-ar vedea nimic.
+   *   2. Conditia de iesire e `sameday_return_incheiat_la is null`, nu starea comenzii: un retur
+   *      ajuns nu mai are ce spune, iar marcajul opreste si semnalul de a doua oara.
+   */
+  const { data: retururiBrute, error: eRetur } = await admin
+    .from("orders")
+    .select(
+      "id, business_id, order_number, created_at, sameday_return_awb_number,"
+      + " sameday_return_awb_at, sameday_return_status_id, sameday_return_status_checked_at",
+    )
+    .not("sameday_return_awb_number", "is", null)
+    .neq("sameday_return_awb_number", "")
+    .is("sameday_return_incheiat_la", null)
+    .or(`sameday_return_awb_at.gte.${since},sameday_return_awb_at.is.null`)
+    .order("sameday_return_status_checked_at", { ascending: true, nullsFirst: true })
+    .limit(MAX_RETURURI);
+
+  /* Ca la fratele de deasupra: o citire picata NU are voie sa raporteze „zero de verificat". */
+  if (eRetur) {
+    await logError({
+      action: "sameday-tracking",
+      message: `retururile Sameday nu s-au putut citi: ${eRetur.message}`,
+      severity: "critical",
+    });
+    return NextResponse.json({ ok: false, error: "citire esuata" }, { status: 503 });
   }
 
-  const bizIds = [...new Set(inFereastra.map((o) => o.business_id))];
+  const retururi = ((retururiBrute ?? []) as unknown as Retur[])
+    .filter((r) => r.sameday_return_awb_at !== null || (r.created_at ?? "") >= since);
+
+  /* Nimic de facut pe niciuna din cozi: nu se mai cer nici configurarile. */
+  if (inFereastra.length === 0 && retururi.length === 0) {
+    return NextResponse.json({ ok: true, verificate: 0, mutate: 0, semnalate: 0, retururi: 0 });
+  }
+
+  /* Configurarile se incarca O SINGURA DATA, pentru amandoua cozile. */
+  const bizIds = [...new Set([
+    ...inFereastra.map((o) => o.business_id),
+    ...retururi.map((r) => r.business_id),
+  ])];
 
   const { data: setari, error: eCfg } = await admin
     .from("store_settings").select("business_id, sameday_config").in("business_id", bizIds);
@@ -326,7 +388,107 @@ export async function GET(req: NextRequest) {
     if (eStareFinala(stare)) incheiate++;
   }
 
+  /*
+   * ═══ COLETELE CARE SE INTORC ═══
+   *
+   * ⚠ RETURUL NU MUTA COMANDA, SI NU DIN PRUDENTA.
+   *
+   * Pe drumul dus, „livrat" inseamna ca s-a incheiat cu bine. Pe drumul de intors inseamna EXACT
+   * PE DOS: marfa a ajuns inapoi la comerciant. Ce urmeaza e o hotarare de BANI (se returneaza
+   * plata? se reexpediaza? se refuza returul?), iar aia nu se ia de la un transportator. Aici se
+   * inregistreaza si se SEMNALEAZA, si atat.
+   */
+  let returVerificate = 0, returIncheiate = 0, returEsuate = 0;
+
+  for (const r of retururi) {
+    const config = configuri.get(r.business_id);
+    const acumIso = new Date().toISOString();
+
+    /* Ca la drumul dus: marcajul se scrie NECONDITIONAT, altfel coada se infometeaza. */
+    async function marcheazaReturul(petic: Record<string, unknown>) {
+      await admin.from("orders").update(petic as never)
+        .eq("id", r.id).eq("business_id", r.business_id);
+    }
+
+    if (!config) {
+      await marcheazaReturul({ sameday_return_status_checked_at: acumIso });
+      continue;
+    }
+
+    /*
+     * ⚠ Acelasi ocol ieftin ca la drumul dus, cu aceeasi paza: un retur neintrebat vreodata
+     * primeste apelul oricum, altfel ar ramane nevazut pentru totdeauna.
+     */
+    const setMiscate = miscate.get(r.business_id);
+    const nicicandIntrebat = r.sameday_return_status_checked_at === null;
+    if (setMiscate && !nicicandIntrebat && !setMiscate.has(r.sameday_return_awb_number!)) {
+      await marcheazaReturul({ sameday_return_status_checked_at: acumIso });
+      continue;
+    }
+
+    let stare: SamedayStareAwb | null;
+    try {
+      stare = await statusAwbSameday(config, r.sameday_return_awb_number!);
+    } catch (e) {
+      returEsuate++;
+      console.error("[sameday-tracking] retur", r.sameday_return_awb_number, (e as Error).message);
+      await marcheazaReturul({ sameday_return_status_checked_at: acumIso });
+      continue;
+    }
+
+    if (!stare) {
+      /* 404: nu-l cunosc. Nu e o cadere de retea si nu se reincearca la nesfarsit. */
+      await marcheazaReturul({ sameday_return_status_checked_at: acumIso });
+      continue;
+    }
+
+    returVerificate++;
+
+    /*
+     * ⚠ Starea se scrie pe RETURUL pe care l-am citit, nu orbeste pe comanda.
+     *
+     * Intre citirea lotului si randul asta a trecut un apel la Sameday. Daca intre timp
+     * comerciantul a detasat returul si a emis altul, starea de aici e a celui VECHI: scrisa
+     * orbeste, un marcaj de incheiere ar scoate returul NOU din urmarire pentru totdeauna.
+     */
+    await scrieUrmarirea(admin, {
+      orderId: r.id,
+      businessId: r.business_id,
+      identitate: { coloana: "sameday_return_awb_number", valoare: r.sameday_return_awb_number },
+      stare: {
+        sameday_return_status_id: stare.statusId ?? r.sameday_return_status_id,
+        ...(stare.eticheta ? { sameday_return_status_label: stare.eticheta } : {}),
+        /* ⚠ Marcajul de incheiere pleaca ODATA cu starea, pe aceeasi conditie de identitate:
+           scris separat, ar fi putut ateriza pe returul nou. */
+        ...(eStareFinala(stare) ? { sameday_return_incheiat_la: acumIso } : {}),
+      } as Database["public"]["Tables"]["orders"]["Update"],
+      marcaj: { sameday_return_status_checked_at: acumIso },
+      actiune: "sameday-tracking-retur",
+      orderNumber: r.order_number,
+    });
+
+    /*
+     * ⚠ SEMNALUL PLEACA O SINGURA DATA, si de-aia exista `sameday_return_incheiat_la`.
+     *
+     * Fara marcaj, randul asta s-ar fi repetat la fiecare doua ore, la nesfarsit, pentru fiecare
+     * retur ajuns, adica exact zgomotul care ineaca jurnalul.
+     */
+    if (eStareFinala(stare)) {
+      returIncheiate++;
+      await logError({
+        action: "sameday-tracking-retur",
+        message: stare.livrat
+          ? `${r.order_number ?? r.id}: coletul de retur a ajuns inapoi la tine. Hotaraste ce se intampla cu plata.`
+          : `${r.order_number ?? r.id}: Sameday a anulat returul${stare.motiv ? `: ${stare.motiv}` : ""}. Verifica daca trebuie reemis.`,
+        details: { awbRetur: r.sameday_return_awb_number, livrat: stare.livrat },
+        businessId: r.business_id,
+        severity: "warning",
+      });
+    }
+  }
+
   return NextResponse.json({
     ok: true, verificate, mutate, semnalate, incheiate, faraConfig, esuate, sarite,
+    returVerificate, returIncheiate, returEsuate,
   });
 }

@@ -520,38 +520,25 @@ export default async function IntegrationsPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         {/*
-                          ⚠ ETICHETA „NOU" COSTA 38,6px DIN NUME (32,6 ea + 6 spatiu), si
-                          aia sunt MASURATI in Geist, nu aproximati: zona numelui are 122px
-                          pe cardul real de la trei coloane (274 card − 32 padding − 64 locas
-                          sigla − 14 − 14 − 28 sageata). De acolo si locasul de 64px al
-                          siglei, ales tot pe masuratoare.
+                          ⚠ ETICHETA „NOU” A FOST SCOASA (16.09.2026), la cererea proprietarului,
+                          de pe toate cele douazeci de integrari care o purtau. Nu e o
+                          curatenie de cod: era o hotarare despre ce vede comerciantul, iar
+                          integrarile nu mai sunt noi.
 
-                          Din cei unsprezece curieri cu eticheta, ZECE incap pe un rand:
-                          GLS 27,1 · UPS 28,5 · DHL 28,3 · FedEx 41,6 · eColet 44,6 ·
-                          Pall-Ex 48,0 · Packeta 54,7 · Shipo.ro 55,4 · Innoship 57,4 ·
-                          SmartShip 71,3. Singurul care nu incape e „Poșta Română": 94,5px
-                          singur, 133,1 cu eticheta.
+                          Se pastreaza aici masuratoarea care a costat-o, fiindca cine o pune
+                          inapoi are nevoie de ea: eticheta lua 38,6px din nume (32,6 ea + 6
+                          spatiu), masurati in Geist, iar zona numelui are 122px pe cardul de
+                          la trei coloane (274 card - 32 padding - 64 locas sigla - 14 - 14 -
+                          28 sageata). Dintre cei unsprezece curieri care o purtau, ZECE
+                          incapeau pe un rand; singurul care nu incapea era „Poșta Română”,
+                          94,5px singur si 133,1 cu eticheta.
 
-                          De aia randul e `flex-wrap`, nu `flex`: cand cele doua nu incap
-                          impreuna, eticheta coboara INTREAGA pe randul al doilea. Fara
-                          wrap, singurele iesiri erau sa TAIEM numele („Poșta Rom…") sau
-                          sa-l lasam sa dea peste sageata — si numele taiat e mai rau decat
-                          un card cu doua randuri, fiindca omul nu mai stie ce curier e.
-                          Randurile grilei se intind oricum dupa cel mai inalt card, deci
-                          rubrica ramane aliniata; creste cu ~18px doar randul lui.
-
-                          Nu se poate stramta eticheta ca sa incapa: chiar cu `px-0.5` si
-                          spatiu de 4px ajunge la 28,6, peste cei 27,5 ramasi — si ar fi
-                          inghesuita pe toate celelalte zece carduri, ca sa se salveze unul.
-
-                          `whitespace-nowrap` pe eticheta o tine intreaga: fara el, „Nou"
-                          insusi s-ar putea rupe intre litere pe cardul ingust.
+                          ⚠ De aia randul RAMANE `flex-wrap`, desi azi are un singur copil:
+                          numele lungi tot trebuie sa poata cobori intreg pe randul al doilea,
+                          iar un nume taiat („Poșta Rom”…) nu mai spune omului ce curier e.
                         */}
                         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                           <p className="text-sm font-semibold text-foreground">{integration.name}</p>
-                          {["gls", "posta", "pallex", "fedex", "ups", "dhl", "ecolet", "smartship", "shipo", "packeta", "innoship", "klarna", "mailchimp", "brevo", "klaviyo", "revolut", "olx", "aboutyou", "trendyol", "facebook-catalog"].includes(integration.id ?? "") && (
-                            <span className="whitespace-nowrap text-[9px] font-bold uppercase tracking-wide bg-primary text-white px-1.5 py-0.5 rounded-full leading-none">Nou</span>
-                          )}
                         </div>
                         {isActive ? (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded mt-0.5">

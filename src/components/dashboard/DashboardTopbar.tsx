@@ -565,9 +565,8 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
                 )}>
                 <Icon className="h-4 w-4 flex-shrink-0" />
                 <span className="flex-1">{item.label}</span>
-                {item.href === "/dashboard/features" && (
-                  <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-primary text-white">Nou</span>
-                )}
+                {/* ⚠ Eticheta „Nou” a fost scoasa si de aici (16.09.2026): cele doua meniuri
+                    spun acelasi lucru, deci scoasa dintr-unul singur ar fi ramas pe telefon. */}
               </Link>
             );
           })}

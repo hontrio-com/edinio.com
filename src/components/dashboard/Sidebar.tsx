@@ -192,7 +192,10 @@ export function Sidebar({ currentBusiness, plan, smsoEnabled, unreadSupportCount
 
           return (
             <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} active={isActive}
-              beta={item.href === "/dashboard/offers"} nou={item.href === "/dashboard/features"} />
+              /* ⚠ `nou` nu se mai da nimanui (16.09.2026, cererea proprietarului).
+                 Prop-ul ramane pe `NavItem`: e o insusire a componentei, nu o hotarare,
+                 iar readucerea etichetei e atunci un singur cuvant. */
+              beta={item.href === "/dashboard/offers"} />
           );
         })}
 

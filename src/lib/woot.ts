@@ -516,6 +516,62 @@ export async function getOrderHistory(
   return r as WootEveniment[];
 }
 
+/**
+ * Un ramburs, asa cum il tin ei: banii incasati de curier de la cumparator.
+ *
+ * ⚠ NU ARE `awb_number`. Identitatea expedierii aici e `order_id`, al LOR. Cine vrea numarul
+ * tiparit pe colet il ia din comanda noastra, sau din `GET /orders/{id}`.
+ */
+export type WootRamburs = {
+  id?: number;
+  order_id?: number;
+  /** ⚠ Documentat la ei: 0=Cancelled, 1=Unpicked, 2=Picked up, 3=Paid, 4=External. */
+  status_id?: number;
+  courier_name?: string;
+  service_name?: string;
+  value?: number;
+  holder?: string;
+  iban?: string;
+  history?: { status_id?: number; added?: string }[];
+  updated?: string;
+  added?: string;
+};
+
+/**
+ * Rambursurile contului, pagina cu pagina.
+ *
+ * ⚠ SPRE DEOSEBIRE DE STARILE COMENZII, AICI STARILE SUNT DOCUMENTATE, chiar in specificatia lor,
+ * pe campul `status_id` al schemei `Repayment`. De aceea pe drumul asta se poate hotari (banii au
+ * fost virati sau nu), iar pe celalalt nu. Vezi `@/lib/shipping/ramburs-woot`.
+ *
+ * ⚠ SI AICI SE CITESTE PLICUL: un corp fara `list` ar fi iesit lista goala, adica „magazinul n-are
+ * niciun ramburs" scris pe o cadere, exact pe drumul unde asta inseamna bani nevazuti.
+ */
+export async function getRepayments(
+  token: string,
+  params: { page?: number; limit?: number; date_from?: string; date_to?: string; order_id?: number } = {},
+): Promise<{ list: WootRamburs[]; total: number }> {
+  const qs = new URLSearchParams();
+  if (params.page) qs.set("page", String(params.page));
+  if (params.limit) qs.set("limit", String(params.limit));
+  if (params.date_from) qs.set("date_from", params.date_from);
+  if (params.date_to) qs.set("date_to", params.date_to);
+  if (params.order_id) qs.set("order_id", String(params.order_id));
+
+  const cale = qs.toString() ? `/repayments?${qs.toString()}` : "/repayments";
+  const r = await wootReq<{ list?: unknown; total?: unknown }>(token, "GET", cale);
+
+  if (!r || typeof r !== "object" || !Array.isArray(r.list)) {
+    throw eroareRefuz(cuMotiv("Woot nu a returnat lista de rambursuri.", r));
+  }
+  const total = Number(r.total);
+  return {
+    list: r.list as WootRamburs[],
+    /* Fara `total` credibil, lista primita e tot ce stim: paginarea se opreste dupa ea. */
+    total: Number.isFinite(total) && total >= 0 ? total : r.list.length,
+  };
+}
+
 export async function cancelWootOrder(
   token: string,
   wootOrderId: number

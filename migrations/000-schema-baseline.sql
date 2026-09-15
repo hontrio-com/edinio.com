@@ -7173,7 +7173,10 @@ create table if not exists public.orders (
   woot_awb_at timestamp with time zone,
   woot_status_id integer,
   woot_status_label text,
-  woot_status_checked_at timestamp with time zone);
+  woot_status_checked_at timestamp with time zone,
+  woot_cod_status_id integer,
+  woot_cod_value numeric,
+  woot_cod_updated_at timestamp with time zone);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -8266,6 +8269,7 @@ CREATE INDEX orders_sameday_de_urmarit_idx ON public.orders USING btree (sameday
 CREATE INDEX orders_shipo_urmarire_idx ON public.orders USING btree (shipo_status_checked_at NULLS FIRST) WHERE ((shipo_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_smartship_urmarire_idx ON public.orders USING btree (smartship_status_checked_at NULLS FIRST) WHERE ((smartship_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_ups_urmarire_idx ON public.orders USING btree (ups_status_checked_at NULLS FIRST) WHERE ((ups_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
+CREATE INDEX orders_woot_cod_idx ON public.orders USING btree (business_id, woot_cod_status_id) WHERE (woot_cod_status_id IS NOT NULL);
 CREATE INDEX orders_woot_urmarire_idx ON public.orders USING btree (woot_status_checked_at NULLS FIRST) WHERE ((woot_order_id IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX page_form_submissions_business_idx ON public.page_form_submissions USING btree (business_id, created_at DESC);
 CREATE INDEX pepita_articole_produs_idx ON public.pepita_articole USING btree (product_id);

@@ -56,6 +56,7 @@ import { OperatiiAtarnate } from "@/components/dashboard/OperatiiAtarnate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { etichetaRambursWoot } from "@/lib/shipping/ramburs-woot";
 import type { Database } from "@/types/database.types";
 
 type Order = Database["public"]["Tables"]["orders"]["Row"];
@@ -309,6 +310,20 @@ function ResendEmailForm({
       </Button>
     </div>
   );
+}
+
+/**
+ * Rambursul Woot, asa cum il tin EI: „Incasat de curier · 150 lei".
+ *
+ * ⚠ Eticheta vine din lista LOR documentata (`0=Cancelled … 4=External`), nu dintr-o talmacire de-a
+ * noastra, si `null` inseamna ca nu stim inca nimic, deci nu se arata niciun rand. Suma e a lor,
+ * pusa langa: cand difera de ce asteptam noi, tocmai diferenta e intrebarea.
+ */
+function rambursulWoot(order: Order): string | null {
+  const eticheta = etichetaRambursWoot(order.woot_cod_status_id as number | null);
+  if (!eticheta) return null;
+  const suma = Number(order.woot_cod_value);
+  return Number.isFinite(suma) && suma > 0 ? `${eticheta} · ${formatPrice(suma)}` : eticheta;
 }
 
 // A compact courier option (logo + name + AWB state) used in the "alt curier" list and fallback grid.
@@ -568,7 +583,7 @@ export function OrderDetailClient({
    */
   const couriers: {
     id: string; name: string; logo: string; enabled: boolean;
-    awb: string | null; stare?: string | null; open: () => void;
+    awb: string | null; stare?: string | null; ramburs?: string | null; open: () => void;
   }[] = [
     { id: "sameday", name: "Sameday", logo: "/integrations/sameday.webp", enabled: !!samedayEnabled, awb: (order.sameday_awb_number as string | null) ?? null, open: () => setSamedayModalOpen(true) },
     { id: "fan-courier", name: "FAN Courier", logo: "/integrations/fan-courier.svg", enabled: !!fanCourierEnabled, awb: (order.fan_courier_awb_number as string | null) ?? null, open: () => setFanCourierModalOpen(true) },
@@ -608,7 +623,7 @@ export function OrderDetailClient({
        pentru `chosenCourier`. */
     { id: "dhl", name: "DHL Express", logo: "/integrations/dhl.svg", enabled: !!dhlEnabled, awb: (order.dhl_awb_number as string | null) ?? null, open: () => setDhlModalOpen(true) },
     { id: "colete", name: "Colete Online", logo: "/integrations/colete-online.svg", enabled: !!coleteEnabled, awb: (order.colete_awb_number as string | null) ?? null, open: () => setColeteModalOpen(true) },
-    { id: "woot", name: "Woot", logo: "/integrations/woot.webp", enabled: !!wootEnabled, awb: (order.woot_awb_number as string | null) ?? null, stare: (order.woot_status_label as string | null) ?? null, open: () => setWootModalOpen(true) },
+    { id: "woot", name: "Woot", logo: "/integrations/woot.webp", enabled: !!wootEnabled, awb: (order.woot_awb_number as string | null) ?? null, stare: (order.woot_status_label as string | null) ?? null, ramburs: rambursulWoot(order), open: () => setWootModalOpen(true) },
   ];
   const enabledCouriers = couriers.filter(c => c.enabled);
   const shippedCourier = enabledCouriers.find(c => c.awb);
@@ -1842,6 +1857,13 @@ export function OrderDetailClient({
                         */}
                         {shippedCourier.stare && (
                           <p className="text-[11px] text-success/80 truncate">Stare la curier: {shippedCourier.stare}</p>
+                        )}
+                        {/*
+                          ⚠ Banii de ramburs, tot cu vorbele lor. Aici eticheta CHIAR e a unei liste
+                          documentate de furnizor, spre deosebire de starea coletului de deasupra.
+                        */}
+                        {shippedCourier.ramburs && (
+                          <p className="text-[11px] text-success/80 truncate">Ramburs: {shippedCourier.ramburs}</p>
                         )}
                       </div>
                     </div>

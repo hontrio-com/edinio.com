@@ -3769,6 +3769,9 @@ export type Database = {
           vat_rate: number
           woot_awb_at: string | null
           woot_awb_number: string | null
+          woot_cod_status_id: number | null
+          woot_cod_updated_at: string | null
+          woot_cod_value: number | null
           woot_order_id: string | null
           woot_service_name: string | null
           woot_status_checked_at: string | null
@@ -3971,6 +3974,9 @@ export type Database = {
           vat_rate?: number
           woot_awb_at?: string | null
           woot_awb_number?: string | null
+          woot_cod_status_id?: number | null
+          woot_cod_updated_at?: string | null
+          woot_cod_value?: number | null
           woot_order_id?: string | null
           woot_service_name?: string | null
           woot_status_checked_at?: string | null
@@ -4173,6 +4179,9 @@ export type Database = {
           vat_rate?: number
           woot_awb_at?: string | null
           woot_awb_number?: string | null
+          woot_cod_status_id?: number | null
+          woot_cod_updated_at?: string | null
+          woot_cod_value?: number | null
           woot_order_id?: string | null
           woot_service_name?: string | null
           woot_status_checked_at?: string | null

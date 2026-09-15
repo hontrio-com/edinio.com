@@ -144,6 +144,10 @@
       "schedule": "27 5 * * *"
     },
     {
+      "path": "/api/cron/woot-repayments",
+      "schedule": "43 5 * * *"
+    },
+    {
       "path": "/api/cron/conversii",
       "schedule": "* * * * *"
     },

@@ -97,6 +97,10 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [calculatingPrices, setCalculatingPrices] = useState(false);
   const [pricesError, setPricesError] = useState("");
   const [pricesFetched, setPricesFetched] = useState(false);
+  /* ⚠ Creditul contului, adus odata cu preturile. Se ARATA, nu opreste nimic: vezi nota din
+     `getWootPrices`. `null` inseamna ori cont pe termen, ori o citire care n-a reusit, si in
+     amandoua cazurile fereastra se poarta exact ca pana acum. */
+  const [credit, setCredit] = useState<number | null>(null);
 
   // Sender drop-off location (for "predare la locker" services)
   const [senderLocations, setSenderLocations] = useState<WootLocation[]>([]);
@@ -212,6 +216,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     setPricesFetched(false);
     setSelectedServiceId(null);
     setSelectedService(null);
+    setCredit(null);
 
     const rep = Number(repayment);
     /* ⚠ `finally`, si in `try` DOAR apelul. Vezi `steagul-se-stinge-in-finally`. */
@@ -239,6 +244,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       setPricesError(result.error ?? "Eroare la calculul preturilor.");
       return;
     }
+    setCredit(result.credit ?? null);
     const sorted = (result.prices ?? []).sort((a, b) => a.final_total - b.final_total);
     setPrices(sorted);
     setPricesFetched(true);
@@ -579,7 +585,17 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 {/* Price results */}
                 {pricesFetched && prices.length > 0 && (
                   <section className="space-y-2 pt-1 border-t border-border">
-                    <p className="text-sm font-semibold text-foreground">Alege curier</p>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className="text-sm font-semibold text-foreground">Alege curier</p>
+                      {/*
+                        ⚠ TOATE cele sapte esecuri de AWB Woot din viata platformei sunt „Nu aveti
+                        suficient credit". Pana azi comerciantul afla asta abia DUPA ce apasa, cu
+                        clientul pe fir. Acum vede cifra inainte, si atat: nu se blocheaza nimic.
+                      */}
+                      {credit !== null && (
+                        <p className="text-xs text-muted-foreground">Credit in cont: <strong className="text-foreground">{credit.toFixed(2)} RON</strong></p>
+                      )}
+                    </div>
                     <div className="space-y-2">
                       {prices.map(p => {
                         const selected = selectedServiceId === p.service_id;
@@ -655,6 +671,19 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                       </div>
                     )}
 
+                    {/* ⚠ Doar un avertisment, nu o oprire: butonul ramane apasabil, fiindca un
+                        credit invechit n-are voie sa tina pe loc o expediere care s-ar face. */}
+                    {selectedService && credit !== null && credit < selectedService.final_total && (
+                      <div className="flex items-start gap-2 p-3 mt-2 bg-destructive/5 border border-destructive/20 rounded-lg">
+                        <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-destructive">
+                          Creditul din contul Woot ({credit.toFixed(2)} RON) e sub pretul expedierii
+                          ({selectedService.final_total.toFixed(2)} RON). Mai lipsesc{" "}
+                          <strong>{(selectedService.final_total - credit).toFixed(2)} RON</strong>; incarca
+                          creditul in contul Woot, altfel emiterea va fi refuzata de ei.
+                        </p>
+                      </div>
+                    )}
                     {selectedService && (
                       <Button onClick={handleCreate} disabled={creating || (needsSenderLocation && !senderLocationId) || (needsReceiverLocation && !receiverLocationId)} size="lg" className="w-full mt-3">
                         {creating ? <Loader2 className="animate-spin" /> : <ChevronRight />}

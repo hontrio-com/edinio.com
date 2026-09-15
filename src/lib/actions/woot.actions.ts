@@ -62,6 +62,26 @@ async function loadConfig(businessId: string): Promise<WootConfig | null> {
   return (data?.woot_config as WootConfig | null) ?? null;
 }
 
+/**
+ * Creditul contului, sau nimic.
+ *
+ * ⚠ NU E EXPORTATA, si nu din intamplare: fisierul e „use server", deci fiecare export al lui
+ * devine o actiune apelabila din browser. O functie scoasa afara doar fiindca e „un ajutor" ar fi
+ * o usa noua catre soldul contului altcuiva.
+ *
+ * ⚠ SI NU ARUNCA NICIODATA. Cifra asta doar se arata langa preturi; o citire picata n-are voie sa
+ * strice cotatia, care e drumul adevarat.
+ */
+async function creditulSauNimic(token: string): Promise<number | null> {
+  try {
+    const c = await getCredit(token);
+    const total = Number(c?.total);
+    return Number.isFinite(total) ? Math.round(total * 100) / 100 : null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 export async function saveWootConfig(
@@ -179,7 +199,7 @@ export async function getWootPrices(
   repayment?: number,
   /** When set and the merchant opted into insurance, the order's product value is insured. */
   orderId?: string
-): Promise<{ success: boolean; error?: string; prices?: WootPriceResult[] }> {
+): Promise<{ success: boolean; error?: string; prices?: WootPriceResult[]; credit?: number | null }> {
   if (!(await checkAccess(businessId))) return { success: false, error: "Neautorizat" };
 
   const config = await loadConfig(businessId);
@@ -191,15 +211,35 @@ export async function getWootPrices(
     const token = await getWootToken(config.public_key, config.secret_key);
     const sender = buildSender(config);
     const insurance = orderId ? await resolveInsurance(config, businessId, orderId) : undefined;
-    const prices = await getPrices(token, {
-      sender,
-      receiver: { company: 0, ...receiverPentruWoot(receiver), phone: wootPhone(receiver.phone) },
-      parcels: coletePentruWoot(parcels),
-      repayment: repayment && repayment > 0 ? repayment : undefined,
-      insurance,
-    });
+    /*
+     * ═══ ⚠ SI CREDITUL CONTULUI, LANGA PRETURI (15.09.2026) ═══
+     *
+     * Masurat in productie: TOATE cele sapte esecuri de AWB Woot din viata platformei sunt „Nu
+     * aveti suficient credit pentru a finaliza comanda". Comerciantul afla asta abia DUPA ce apasa
+     * „Creeaza AWB", cu clientul pe fir.
+     *
+     * ⚠ NU E O POARTA, si nici n-are voie sa devina una: un credit citit gresit sau invechit ar
+     * opri o expediere care s-ar fi facut. Se ARATA, atat. De aceea si esecul lui e tacut aici:
+     * fara credit, fereastra se poarta exact ca pana acum.
+     *
+     * ⚠ Si merge IN PARALEL cu preturile, ca sa nu adauge nicio asteptare pe drumul omului.
+     *
+     * ⚠ NUMAI PE REGIM DE CREDIT: la un cont pe termen nu se consuma niciun credit, deci cifra
+     * aia n-ar spune nimic despre ce se poate emite. Vezi `payment_method` din `WootConfig`.
+     */
+    const peCredit = (config.payment_method ?? "credit") === "credit";
+    const [prices, credit] = await Promise.all([
+      getPrices(token, {
+        sender,
+        receiver: { company: 0, ...receiverPentruWoot(receiver), phone: wootPhone(receiver.phone) },
+        parcels: coletePentruWoot(parcels),
+        repayment: repayment && repayment > 0 ? repayment : undefined,
+        insurance,
+      }),
+      peCredit ? creditulSauNimic(token) : Promise.resolve(null),
+    ]);
     const valid = prices.filter(p => p.errors.length === 0);
-    return { success: true, prices: valid };
+    return { success: true, prices: valid, credit };
   } catch (err) {
     return { success: false, error: (err as Error).message };
   }

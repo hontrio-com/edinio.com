@@ -44,7 +44,7 @@ nu pe cotatie live (`auto_price` e pornit la trei perechi magazin-curier in toat
 | --- | --- | --- | --- |
 | `/account/authorize` | POST | **da** | `getWootToken` |
 | `/account/info` | GET | **da** | `getAccountInfo`, doar la testul de conexiune |
-| `/account/credit` | GET | **da** | `getCredit`, doar la testul de conexiune |
+| `/account/credit` | GET | **da** | `getCredit`, la testul de conexiune si la cotarea din fereastra |
 | `/general/counties` | GET | **da** | `fetchCounties`, cu cache in memorie 6h |
 | `/general/cities` | GET | **da** | `fetchCities`, cu cache in memorie 6h |
 | `/general/locations` | GET | **da** | `getLocations` (lockere si puncte) |
@@ -53,8 +53,8 @@ nu pe cotatie live (`auto_price` e pornit la trei perechi magazin-curier in toat
 | `/orders/{id}/awb` | GET | **da** | `getOrderAwb` (eticheta) |
 | `/orders/{id}` | DELETE | **da** | `cancelWootOrder` (anulare) |
 | `/orders/{id}/history` | GET | **da** | `getOrderHistory`, prin cronul `woot-tracking` |
-| `/repayments` | GET | **NU** | ⚠ rambursurile incasate. Vezi D-2. |
-| `/repayments/reports` | GET | **NU** | rapoarte de decont. Vezi D-2. |
+| `/repayments` | GET | **da** | `getRepayments`, prin cronul `woot-repayments` |
+| `/repayments/reports` | GET | **NU** | rapoartele de decont, pe loturi. Vezi D-2. |
 | `/orders` | GET | nu | lista cu filtre; ar ajuta la reconciliere |
 | `/orders/{id}` | GET | nu | starea unei comenzi |
 | `/general/services` | GET | nu | catalogul de servicii |
@@ -188,6 +188,61 @@ iar dupa o reemitere ceasul de rotatie ar fi tinut expedierea NOUA la coada.
 **9 probe noi, banc de mutanti 10 din 10** (⚠ unul a scapat la prima trecere: proba departajarii pe
 `id` trecea din intamplarea ordinii din lista, si a fost intoarsa ca sa ceara chiar regula).
 
+### I-9. ⚠ Rambursul: 15.600 de lei despre care platforma nu stia nimic
+
+Masurat in productie: prin Woot au plecat **199 de comenzi cu ramburs**, aproape **15.600 lei**, si
+nimic nu spunea vreodata daca banii au fost virati inapoi. **192 dintre ele stau si azi pe
+`payment_status = "unpaid"`**, fiindca nimeni nu le-a spus altceva niciodata.
+
+⚠ **Si aici, spre deosebire de starile coletului, EI DOCUMENTEAZA STARILE**, chiar in specificatie,
+pe campul `status_id` al schemei `Repayment`: `0=Cancelled, 1=Unpicked, 2=Picked up, 3=Paid,
+4=External`. De aceea pe drumul asta se poate HOTARI, iar pe celalalt nu. Aceeasi integrare, doua
+purtari, si deosebirea nu e de gust: e a documentatiei lor.
+
+Cronul zilnic `woot-repayments` scrie doua lucruri, fiindca sunt doua intrebari:
+
+1. **„Mi-au virat banii?"** → un rand in `courier_settlements`, tabelul deschis de FAN, care se vede
+   in `/dashboard/settlements` **fara nicio schimbare de interfata**: e generic pe `courier`.
+2. **„Unde sunt banii de pe comanda asta?"** → starea si suma LOR pe comanda, inclusiv „incasat de
+   curier, inca nevirat", care in tabelul de decontari n-ar avea ce cauta (`transfer_date` e acolo
+   NOT NULL, si pe buna dreptate).
+
+⚠ **Numai starea 3 produce un rand de decontare, si NU si 4.** „External" e singura din cele cinci
+al carei inteles nu e limpede din nume; socotita drept virare, ar pune bani in pagina de bani fara
+ca ei sa fi intrat vreodata in cont.
+
+⚠ **Ziua virarii se ia din `history`, nu din `updated`**, si daca nu se poate afla, randul nu se
+scrie deloc: `transfer_date` e cheie, deci o zi inventata face un al doilea rand pentru aceiasi bani.
+
+⚠ **Ce NU face: nu atinge `payment_status`.** Tentatia e mare, cele 192 ar deveni „platite" dintr-o
+scriere. Dar `payment_status` declanseaza si facturarea automata: o interpretare gresita ar emite
+facturi in lant. Trecerea aia merita lotul ei, cu hotararea proprietarului.
+
+**11 probe, banc de mutanti 10 din 10.**
+
+### I-10. Creditul se vede INAINTE de emitere, si nu opreste nimic
+
+Toate cele sapte esecuri reale de AWB Woot sunt „Nu aveti suficient credit". Comerciantul afla asta
+abia DUPA ce apasa „Creeaza AWB", cu clientul pe fir. Acum, la „Calculeaza preturi", vede „Credit in
+cont: X RON", iar daca serviciul ales costa mai mult, un rand ii spune cat mai lipseste.
+
+⚠ **NU e o poarta, si nici n-are voie sa devina**: un credit citit gresit sau invechit ar opri o
+expediere care s-ar fi facut. Butonul ramane apasabil, si o proba cade daca cineva il stinge.
+⚠ Cifra se cere **in paralel** cu preturile, deci nu adauga nicio asteptare, si esecul ei e tacut.
+⚠ **Numai pe regim de credit**: la un cont pe termen nu se consuma credit, deci cifra n-ar spune
+nimic. ⚠ Si ajutorul NU e exportat: fisierul e „use server", unde fiecare export devine o usa.
+
+### I-11. `declared_value`: nu lipsea, nu se aplica
+
+Specificatia lor are `parcels[].declared_value`, „for customs (international)". Verificat: **fiecare
+drum care construieste o cerere Woot fixeaza tara la 189 (Romania)**, iar nomenclatorul se cere tot
+pentru 189. Vama nu exista pe drumul asta, deci campul n-are ce purta.
+
+⚠ In loc de cod, un **clichet**: in ziua in care cineva trimite alta tara, proba cade si cere
+cuvantul, fiindca atunci vin dintr-o data TREI lucruri, nu unul: `declared_value`, `city` ca TEXT
+(tarile fara nomenclator n-au `city_id`) si `county_name`. Livrat doar primul, coletul ar pleca
+oricum stricat.
+
 ---
 
 ## Deschis
@@ -207,25 +262,14 @@ dintr-o interogare in baza noastra. ⚠ Pana atunci, orice harta ar fi ghicita, 
 drept „livrat" emite facturi pe colete inca in masina. Alternativa mai scurta: intrebarea directa
 catre ei, un email cu tabelul de stari.
 
-### D-2. Rambursurile incasate nu se reconciliaza
+### D-2. Rapoartele de decont, pe loturi
 
-`GET /repayments` si `/repayments/reports` dau banii de ramburs pe care Woot i-a incasat si
-virat. Nu le chemam. Pe un magazin cu sute de comenzi cu ramburs, nimic din platforma nu spune daca
-banii au fost chiar virati. E bani, nu comoditate.
+`GET /repayments/reports` da LOTURILE de plata (`WR…`), cu totalul, IBAN-ul si daca raportul a fost
+descarcat. Rambursul pe comanda si virarea lui sunt acoperite de I-9; ce lipseste e documentul de
+decont in sine, adica hartia cu care se potriveste extrasul de banca. Mai mic decat suna, si util
+doar magazinelor cu volum.
 
-### D-3. `declared_value` pe colet nu se trimite
-
-Specificatia are `parcels[].declared_value` („Declared value for customs (international)"). Noi
-trimitem `insurance` la nivel de comanda, dar nu `declared_value` pe colet. De verificat daca conteaza
-pentru expedierile internationale prin ei.
-
-### D-4. Creditul nu se verifica inainte de emitere
-
-`getCredit` se cheama doar la testul de conexiune. Toate cele sapte esecuri ar fi putut fi prinse
-INAINTE de a chema emiterea, cu un mesaj care spune si cat mai lipseste. ⚠ Costa un apel in plus pe
-fiecare AWB, deci e un schimb, nu o imbunatatire evidenta: de cantarit.
-
-### D-5. Nedovedit in sandbox
+### D-3. Nedovedit in sandbox
 
 Nu avem credentiale de sandbox Woot. Tot ce se poate spune despre drumurile neumblate e „respecta
 documentatia", nu „merge". Vezi `AUDIT-CURIERI-RASPUNS-2026-09-15.md`, sectiunea 6.
@@ -248,6 +292,8 @@ Verificat pe specificatia OpenAPI pe 15.09.2026.
 | `location_id` pentru servicii la punct | ✔ |
 | telefon in format international | ✔ `wootPhone` pliaza `07…` la `+407…` |
 | eroarea sta in `error` sau `message`, iar 200 poate insemna esec | ✔ de la I-1 |
+| rambursul: `0=Cancelled, 1=Unpicked, 2=Picked up, 3=Paid, 4=External` | ✔ singura lista de stari pe care o documenteaza; folosita ca atare |
+| `parcels[].declared_value`, pentru vama internationala | ✔ neaplicabil: toate drumurile fixeaza tara 189. Vezi I-11 |
 | istoricul da evenimente cu `status_id`, `comment`, `added` | ✔ citit, si ordonat dupa timp, nu dupa locul din lista |
 | ⚠ ce INSEAMNA fiecare `status_id` | **nedocumentat la ei, nicaieri.** Vezi D-1 |
 | localitatile capitalei sunt „Sectorul 1”…„Sectorul 6” | ✔ de la I-7; nicio localitate „Bucuresti” la ei |
@@ -258,7 +304,7 @@ Verificat pe specificatia OpenAPI pe 15.09.2026.
 
 | Poarta | Rezultat |
 | --- | --- |
-| Suita de probe | 7921 din 7921 |
+| Suita de probe | 7937 din 7937 |
 | TypeScript | curat |
 | Build | curat |
 | Clichet de lint | neschimbat: 83 erori, 129 avertismente |
@@ -266,15 +312,18 @@ Verificat pe specificatia OpenAPI pe 15.09.2026.
 | Banc de mutanti, motivul lui Woot | 3 din 3 |
 | Banc de mutanti, localitatea din capitala | 7 din 7 |
 | Banc de mutanti, urmarirea coletului | 10 din 10 |
+| Banc de mutanti, rambursul | 10 din 10 |
+| Banc de mutanti, creditul si tara | 4 din 4 |
 
 ---
 
 ## Nota, cinstit
 
-**Nu e 10/10 azi.** Securitatea si corectitudinea drumului umblat sunt bune si probate. De la
-15.09.2026 platforma stie si ce se intampla cu coletul dupa ce pleaca, si i-o spune comerciantului
-cu vorbele curierului. Ce lipseste: **harta de stari** (D-1), fara de care comanda nu se muta singura
-si factura nu pleaca la livrare, si **reconcilierea rambursurilor** (D-2), care e bani.
+**Nu e 10/10 azi, dar e aproape.** Securitatea si corectitudinea drumului umblat sunt bune si
+probate. De la 15.09.2026 platforma stie ce se intampla cu coletul dupa ce pleaca, stie unde sunt
+banii de ramburs si le spune pe amandoua comerciantului cu vorbele curierului.
 
-Nota onesta: **8/10**. ⚠ Si ⚠ D-1 nu atarna de noi, ci de o lista pe care ei n-o publica: ori se
-strange din datele noastre in cateva zile, ori se cere de la ei.
+Nota onesta: **9/10**. Ce lipseste e un singur lucru, si ⚠ **el nu atarna de noi**: harta de stari a
+coletului (D-1), fara de care comanda nu se muta singura pe „Livrat" si factura nu pleaca la livrare.
+Woot nu publica lista aceea nicaieri. Ori se strange din datele noastre in cateva zile, ori se cere
+de la ei printr-un email. Restul, D-2 si D-3, sunt marunte si numite ca atare.

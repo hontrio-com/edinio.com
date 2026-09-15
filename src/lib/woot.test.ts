@@ -8,6 +8,7 @@ import {
   createOrder,
   getOrderAwb,
   getOrderHistory,
+  getRepayments,
   motivulWoot,
   uitaTokenurileWoot,
 } from "@/lib/woot";
@@ -232,6 +233,37 @@ test("iar o lista GOALA e legitima: expedierea abia creata n-are evenimente", as
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   4c. RAMBURSURILE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠ o lista de rambursuri care nu e lista e eroare, nu „magazinul n-are rambursuri”", async () => {
+  /*
+   * ⚠ Pe drumul asta tacerea inseamna BANI NEVAZUTI: 199 de comenzi cu ramburs si aproape 15.600
+   * lei. Un corp fara `list` ar fi iesit lista goala, iar cronul ar fi raportat vesel zero.
+   */
+  raspunde({ success: false, message: "Cont fara drept de decontare" });
+  await assert.rejects(
+    () => getRepayments(TOKEN),
+    (e: Error) => {
+      assert.match(e.message, /Cont fara drept de decontare/, "motivul LOR nu ajunge la noi");
+      return true;
+    },
+  );
+});
+
+test("iar lista buna trece, cu `total` luat de la ei", async () => {
+  raspunde({ list: [{ id: 789, order_id: 123456, status_id: 3, value: 150 }], total: 1, empty: false });
+  const r = await getRepayments(TOKEN, { page: 1, limit: 250, date_from: "2026-07-17" });
+  assert.equal(r.total, 1);
+  assert.equal(r.list[0].order_id, 123456);
+
+  /* ⚠ Un `total` de nefolosit nu opreste citirea: ramane cat am primit, deci paginarea se
+     opreste dupa lista, nu invarte la nesfarsit. */
+  raspunde({ list: [{ id: 1 }, { id: 2 }], total: "cine stie" });
+  assert.equal((await getRepayments(TOKEN)).total, 2);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
    5. IDENTITATEA EXPEDIERII SE CITESTE, NU SE PRIMESTE
    ═══════════════════════════════════════════════════════════════════════════
 
@@ -327,6 +359,68 @@ test("⚠ si niciun apelant nu mai trimite un al treilea argument", () => {
    ⚠ Si e chiar lectia pe care fisierul `woot.ts` o poarta scrisa: „exact asa s-a ascuns o zi
    cauza reala". Se invatase doar pentru 4xx.
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   5b. CREDITUL SE ARATA, NU OPRESTE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠⚠ creditul NU e o poarta la emitere", () => {
+  /*
+   * ⚠ Toate cele sapte esecuri reale de AWB Woot sunt „Nu aveti suficient credit", deci tentatia
+   * de a bloca emiterea e mare. Dar un credit citit gresit sau invechit ar opri o expediere care
+   * s-ar fi facut, cu clientul pe fir. Se arata la cotare, si atat.
+   */
+  const s = sursa(ACTIUNI);
+  const emiterea = s.slice(s.indexOf("export async function createWootAwb"));
+  assert.doesNotMatch(emiterea.slice(0, 4000), /getCredit|creditulSauNimic/,
+    "emiterea a inceput sa ceara creditul: o citire invechita ar opri o expediere buna");
+
+  /* Si in fereastra, avertismentul nu are voie sa stinga butonul. */
+  const buton = sursa(MODAL).match(/<Button onClick=\{handleCreate\} disabled=\{[^}]*\}/)?.[0] ?? "";
+  assert.ok(buton, "n-am mai gasit butonul de creare in fereastra Woot");
+  assert.doesNotMatch(buton, /credit/i, "avertismentul de credit a devenit o oprire");
+});
+
+test("⚠⚠ ajutorul de credit NU e exportat dintr-un fisier „use server”", () => {
+  /*
+   * ⚠ Fiecare export dintr-un fisier „use server" devine o actiune apelabila din browser. Un
+   * ajutor scos afara „doar ca sa fie ajutor" ar fi o usa noua catre soldul contului altcuiva,
+   * fara `checkAccess` in fata.
+   */
+  const s = sursa(ACTIUNI);
+  assert.match(s, /async function creditulSauNimic/, "ajutorul de credit a disparut");
+  assert.doesNotMatch(s, /export async function creditulSauNimic/,
+    "ajutorul de credit a ajuns actiune de server: se poate chema din browser");
+});
+
+test("⚠⚠ toate drumurile Woot trimit ROMANIA, si de aia nu se trimite `declared_value`", () => {
+  /*
+   * ═══ ⚠ ASA S-A INCHIS D-3, SI NU PRIN COD ═══
+   *
+   * Specificatia lor are `parcels[].declared_value`, documentat „Declared value for customs
+   * (international)". Noi nu-l trimitem, si pana azi asta figura drept lipsa. Nu e: fiecare drum
+   * care construieste o cerere Woot fixeaza tara la 189 (Romania), iar nomenclatorul de judete si
+   * localitati se cere tot pentru 189. Vama nu exista pe drumul asta.
+   *
+   * ⚠ CLICHETUL E TOCMAI ASTA: in ziua in care cineva trimite alta tara, proba de mai jos cade si
+   * cere cuvantul, fiindca atunci vin dintr-o data trei lucruri, nu unul: `declared_value` pe
+   * colet, `city` ca TEXT (tarile fara nomenclator n-au `city_id`), si `county_name`. Livrat doar
+   * primul, coletul ar plecat oricum stricat.
+   */
+  const COTARE = "src/lib/actions/shipping.actions.ts";
+  for (const f of [ACTIUNI, MODAL]) {
+    const tari = [...sursa(f).matchAll(/country_id: (\d+)/g)].map((m) => m[1]);
+    assert.ok(tari.length > 0, `${f} nu mai fixeaza nicio tara pentru Woot`);
+    assert.deepEqual([...new Set(tari)], ["189"], `${f} trimite si alta tara decat Romania catre Woot`);
+  }
+  /* In cotare traiesc toti curierii, deci se citeste doar ramura Woot. */
+  const cotare = sursa(COTARE);
+  const ramura = cotare.slice(cotare.indexOf("async function buildWootOptions"));
+  assert.deepEqual(
+    [...new Set([...ramura.slice(0, 3000).matchAll(/country_id: (\d+)/g)].map((m) => m[1]))], ["189"],
+    "cotarea Woot trimite si alta tara decat Romania",
+  );
+});
 
 test("motivul se scoate din toate formele in care il dau", () => {
   assert.equal(motivulWoot({ message: "credit insuficient" }), "credit insuficient");

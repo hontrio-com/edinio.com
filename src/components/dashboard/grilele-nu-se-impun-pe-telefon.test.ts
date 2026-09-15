@@ -135,6 +135,81 @@ test("nicio grila de doua coloane fara prag in panourile de curier, in afara cel
   );
 });
 
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * SI GRILELE DE TREI COLOANE                                     (15.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠ PLASA DE MAI SUS NU LE VEDEA, prin constructie: ea cauta `grid grid-cols-2 gap`. Cand
+ * lotul din 14.09 a numarat „49 de grile fara prag", tiparul lui era `grid-cols-[23]`, iar
+ * reparatia a atins doar perechile. Grilele de TREI au ramas nevazute de plasa, adica exact
+ * felul in care o plasa devine decor pentru jumatate din populatie.
+ *
+ * ═══ CE S-A MASURAT ACUM, CITIND FIECARE UNA CATE UNA ═══
+ *
+ * 13 grile de trei coloane fara prag, in 12 panouri de curier. **Niciuna nu e defect**, si
+ * asta e o hotarare, nu o scapare:
+ *
+ *   * douasprezece sunt TRIPLETE DE DIMENSIUNI (Lungime/Latime/Inaltime). La 360px fiecare
+ *     celula are ~90px, iar eticheta e ori de doua caractere („L (cm)"), ori `text-xs` de
+ *     ~76px, deci incape pe un rand. Stivuite, ar face din trei numere scurte un formular de
+ *     trei ecrane;
+ *   * una e „Strada / Numar" din `ColeteAwbModal`, unde strada ia doua treimi si numarul una,
+ *     tocmai ca sa NU fie egale. Locul e deja numit in harta de copii de mai sus.
+ *
+ * ⚠ DEFECTUL PE CARE PLASA IL APARA E ALTUL, si el chiar exista in alta parte a casei: o
+ * grila de trei cu CAMPURI CU ETICHETA LUNGA, unde la 360px eticheta se rupe pe doua randuri
+ * si campul ramane sub 70px. In ziua in care cineva scrie una intr-un panou de curier, harta
+ * de mai jos difera si proba cade numind fisierul.
+ */
+const GRILE_DE_TREI_CARE_RAMAN: Record<string, number> = {
+  "CargusAwbModal.tsx": 1,         // L / l / H, etichete de doua caractere
+  "ColeteAwbModal.tsx": 2,         // Strada pe doua treimi + Numar, si Lung./Lat./Inalt.
+  "DhlConfigClient.tsx": 1,        // Lungime/Latime/Inaltime implicite, `text-xs`
+  "DpdAwbModal.tsx": 1,            // L / l / H
+  "FanCourierAwbModal.tsx": 1,     // L / l / H
+  "FanCourierConfigClient.tsx": 1, // trei campuri fara eticheta, doar cu sugestie in camp
+  "FedexConfigClient.tsx": 1,      // Lungime/Latime/Inaltime implicite
+  "PallexAwbModal.tsx": 1,         // trei campuri cu sugestie in camp
+  "SamedayAwbModal.tsx": 1,        // L / l / H
+  "ShipoConfigClient.tsx": 1,      // Lungime/Latime/Inaltime implicite
+  "SmartshipConfigClient.tsx": 1,  // Lungime/Latime/Inaltime implicite
+  "UpsConfigClient.tsx": 1,        // Lungime/Latime/Inaltime implicite
+};
+
+function grileDeTreiFaraPrag(text: string): number {
+  return text
+    .split("\n")
+    .filter((r) => r.includes("grid grid-cols-3 gap") && !r.includes("sm:grid-cols"))
+    .length;
+}
+
+test("nicio grila de TREI coloane fara prag in afara celor treisprezece numite", () => {
+  assert.deepEqual(
+    harta(grileDeTreiFaraPrag),
+    GRILE_DE_TREI_CARE_RAMAN,
+    "O grila de trei coloane cu campuri cu eticheta lunga rupe eticheta la 360px."
+      + " Daca ai adaugat una, scrie `grid grid-cols-1 gap-N sm:grid-cols-3`."
+      + " Daca e un triplet de dimensiuni cu eticheta scurta, adaug-o in harta CU MOTIVUL.",
+  );
+});
+
+/*
+ * ⚠ SI GRILELE DE PATRU, care azi sunt ZERO fara prag.
+ *
+ * Nu e o harta goala de forma: `WootAwbModal` a avut una (patru dimensiuni la ~75px bucata),
+ * reparata pe 14.09 si aparata separat mai jos. Afirmatia asta tine poarta inchisa pentru
+ * urmatoarea, care altfel s-ar strecura la fel de tacut.
+ */
+test("nicio grila de PATRU coloane fara prag intr-un panou de curier", () => {
+  assert.deepEqual(
+    harta((t) => t.split("\n").filter((r) => r.includes("grid grid-cols-4 gap") && !r.includes("sm:grid-cols")).length),
+    {},
+    "Patru coloane la 360px lasa ~75px de camp. Scrie `grid-cols-2 gap-2 sm:grid-cols-4`,"
+      + " ca la cele patru dimensiuni din WootAwbModal.",
+  );
+});
+
 test("niciun `col-span-` fara prag sub o grila care are o singura coloana pe telefon", () => {
   assert.deepEqual(
     harta(copiiFaraPrag),

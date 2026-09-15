@@ -26,7 +26,7 @@ import type { CargusConfig } from "@/lib/cargus";
 import type { SamedayConfig } from "@/lib/sameday/client";
 import { tipPunctFan, type FanCourierConfig } from "@/lib/fancourier";
 import type { DpdConfig } from "@/lib/dpd";
-import type { GlsConfig } from "@/lib/gls/client";
+import { glsGata, type GlsConfig } from "@/lib/gls/client";
 import { pallexGata, type PallExConfig } from "@/lib/pallex/client";
 import { postaGata, type PostaConfig } from "@/lib/posta/client";
 import { innoshipGata, type InnoshipConfig } from "@/lib/innoship/client";
@@ -385,13 +385,11 @@ export async function bulkGenerateAwbs(
     sameday: !!(sg?.enabled && sg?.username && sg?.pickup_point_id),
     fancourier: !!(fc?.enabled && fc?.username && fc?.client_id),
     dpd: !!(dg?.enabled && dg?.username && dg?.client_id),
-    /*
-     * ⚠ Aceeasi lista de campuri ca in `configSiComanda` din gls.actions.ts. Daca
-     * aici ar lipsi `client_number`, lotul ar porni pe comenzi pe care actiunea
-     * per comanda le refuza oricum — adica 50 de esecuri raportate una cate una,
-     * in loc de un singur mesaj limpede „GLS nu e configurat".
-     */
-    gls: !!(gl?.enabled && gl?.username && gl?.password && gl?.client_number),
+    /* Aceeasi regula ca in `configSiComanda` din gls.actions.ts, scrisa o singura
+       data in `glsGata` — vezi comentariul de acolo. Lotul trebuie sa ceara EXACT
+       ce cere actiunea per comanda, altfel porneste pe comenzi pe care aceea le
+       refuza oricum: 50 de esecuri raportate unul cate unul, in loc de un mesaj. */
+    gls: glsGata(gl),
     /* Aceeasi regula ca in `configSiComanda` din pallex.actions.ts, scrisa o
        singura data in `pallexGata` — vezi comentariul de acolo. */
     pallex: pallexGata(pe),

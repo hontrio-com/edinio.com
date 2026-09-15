@@ -9,6 +9,7 @@ import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import { logError } from "@/lib/error-logger";
 import { raporteazaCumparareaDupaIncasare } from "./ga4-comanda";
+import { stingeRambursulGlsDupaPlata } from "@/lib/gls/rambursul-se-stinge-la-plata";
 
 /**
  * „Comanda asta e platita" — un singur loc, pentru toate procesatoarele.
@@ -152,5 +153,22 @@ function dupaPlata(comanda: ComandaDePlatit, status: string): RezultatPlata {
     asteapta nimeni dupa ea.
   */
   void raporteazaCumparareaDupaIncasare(comanda.id);
+  /*
+    ⚠ SI RAMBURSUL DE PE COLETUL DEJA EMIS.
+
+    Cand AWB-ul a plecat inaintea platii, coletul poarta suma veche si curierul
+    o mai incaseaza o data la usa: cumparatorul plateste de doua ori. GLS are
+    metoda pentru asta (`ModifyCOD`) si pana azi n-o chema nimeni.
+
+    ⚠ Doar GLS, si nu din partinire: dintre curierii platformei, el e singurul
+    care documenteaza schimbarea sumei dupa emitere. Cand va mai aparea unul, aici e
+    locul, si asta e si motivul pentru care apelul sta in `dupaPlata` si nu in
+    integrare: e o regula despre PLATA, nu despre curier.
+
+    ⚠ Se aprinde doar pe drumul „platita-acum”, ca toate celelalte de mai sus, deci o
+    re-livrare de webhook nu o mai cheama. Si nu poate strica plata: isi inghite
+    singura greselile si nu se asteapta nimeni dupa ea.
+  */
+  stingeRambursulGlsDupaPlata(comanda.businessId, comanda.id);
   return { fel: "platita-acum" };
 }

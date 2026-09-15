@@ -269,6 +269,24 @@ function urlBaza(config: Pick<GlsConfig, "tara" | "sandbox">): string {
   return `https://${gazda}${taraPermisa(config.tara).toLowerCase()}`;
 }
 
+/**
+ * ⚠ „GLS e configurat complet?”, intr-un SINGUR loc.
+ *
+ * Regula traia in patru copii: `gls.actions.ts`, cronul de urmarire (care scria
+ * chiar deasupra ei „aceeasi regula ca in gls.actions.ts”), lotul de comenzi si
+ * acum si stingerea rambursului. Patru copii ale aceleiasi propozitii inseamna ca
+ * un camp nou devenit obligatoriu se adauga in trei din patru, iar a patra cale
+ * cheama GLS cu o configurare incompleta si primeste un refuz pe care nimeni nu-l
+ * leaga de cauza. Vezi [[acelasi-lucru-in-doua-copii]].
+ *
+ * ⚠ `client_number` intra in regula, nu doar datele de acces: e camp CERUT in
+ * clasa `Parcel` (pagina 9), deci fara el nu se poate emite nimic, oricat de bune
+ * ar fi utilizatorul si parola.
+ */
+export function glsGata(c: GlsConfig | null | undefined): c is GlsConfig {
+  return !!(c?.enabled && c.username && c.password && c.client_number);
+}
+
 /** Adresa completa a unei metode MyGLS. */
 export function urlMetoda(
   config: Pick<GlsConfig, "tara" | "sandbox">,
@@ -847,6 +865,84 @@ export async function stariColet(
   return r.ParcelStatusList ?? [];
 }
 
+/**
+ * Raspunsul lui `ModifyCOD`.
+ *
+ * ⚠ N-are `ErrorCode` la nivelul principal, ca celelalte: are un STEAG
+ * (`Successful`) si o lista proprie. Deci `apelMyGls` nu poate prinde refuzul,
+ * si trebuie citit aici. Aceeasi forma ca la `PrintLabels`, unde erorile stau in
+ * `PrintLabelsErrorList`.
+ */
+export type RaspunsModificareRamburs = {
+  Successful?: boolean;
+  ModifyCODError?: EroareColet[];
+};
+
+/**
+ * Schimba suma de ramburs a unui colet DEJA EMIS.
+ *
+ * ⚠ EXISTA PENTRU O SINGURA INTAMPLARE, SI EA COSTA BANII CUMPARATORULUI.
+ *
+ * Comanda pleaca cu ramburs, comerciantul emite AWB-ul, si abia dupa aceea
+ * clientul plateste online (link de plata, reincercare la procesator, un
+ * transfer). Coletul e deja la GLS cu suma veche pe el, deci curierul incaseaza
+ * inca o data la livrare bani pe care magazinul ii are. Si nu e o scapare a
+ * documentatiei lor: metoda asta e scrisa acolo anume pentru asa ceva.
+ *
+ * ⚠ `CODAmount` primeste ZERO sau pozitiv (Appendix A, codul 8: „COD amount has to
+ * be >= 0”). Zero inseamna „nu mai incasa nimic”, si e chiar ce se trimite dupa o
+ * plata online.
+ *
+ * ⚠ `ParcelNumber` SAU `ParcelId`, unul din doua (pagina 29). Se trimite numarul,
+ * fiindca el e cel scris pe comanda; `ParcelId` sta doar in registru.
+ */
+export async function modificaRamburs(
+  config: GlsConfig,
+  numarColet: string | number,
+  suma: number,
+): Promise<void> {
+  const numar = typeof numarColet === "number" ? numarColet : Number(numarColet);
+  if (!Number.isFinite(numar) || numar <= 0) {
+    throw eroareRefuz(`GLS: numar de colet invalid „${numarColet}”`);
+  }
+  /*
+   * ⚠ Suma negativa se opreste AICI, nu la ei: trimisa, ar fi primit codul 8 si
+   * ar fi ars un apel pe o greseala pe care o putem numi noi.
+   */
+  if (!Number.isFinite(suma) || suma < 0) {
+    throw eroareRefuz(`GLS: suma de ramburs invalida „${suma}”`);
+  }
+
+  const r = await apelMyGls<RaspunsModificareRamburs>(config, "ModifyCOD", {
+    ParcelNumber: numar,
+    /* Doi zecimali, ca la emitere: o suma cu erori de virgula mobila e exact
+       genul de lucru pe care un sistem de incasari il rotunjeste altfel. */
+    CODAmount: Math.round(suma * 100) / 100,
+  });
+
+  if (r.ModifyCODError?.length) {
+    throw Object.assign(
+      eroareRefuz(`GLS modificare ramburs: ${descrieErori(r.ModifyCODError)}`),
+      { cauze: r.ModifyCODError.map((e) => e.ErrorCode).filter((c): c is number => typeof c === "number") },
+    );
+  }
+
+  /*
+   * ⚠ `Successful` trebuie sa fie CHIAR `true`.
+   *
+   * Un `false` cu lista de erori goala nu e succes, e o tacere: nu stim daca
+   * suma s-a schimbat sau nu. Citit ca reusita, am fi raportat „rambursul e
+   * stins” pentru un colet care pleaca mai departe cu suma veche, iar nimeni
+   * n-ar mai fi verificat. Aceeasi regula ca la `cancelCOOrder` de la Colete
+   * Online, unde tocmai tacerea era raspunsul periculos.
+   */
+  if (r.Successful !== true) {
+    throw eroareNesigura(
+      "GLS n-a confirmat modificarea rambursului. Verifica suma in contul MyGLS: "
+      + "coletul poate pleca mai departe cu rambursul vechi.",
+    );
+  }
+}
 /** Erorile unei metode, ca text scurt si citibil. */
 function descrieErori(erori: EroareColet[]): string {
   return erori

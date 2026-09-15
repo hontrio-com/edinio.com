@@ -13,6 +13,7 @@ import {
   areEtichete,
   eroriPeColet,
   felulEtichetei,
+  glsGata,
   idColete,
   numereColet,
   pdfDinEtichete,
@@ -165,7 +166,8 @@ async function configSiComanda(businessId: string, orderId: string) {
   if (!order) return { error: "Comanda negasita" as const };
 
   const config = settings?.gls_config as GlsConfig | null;
-  if (!config?.enabled || !config.username || !config.password || !config.client_number) {
+  /* ⚠ Regula sta in `client.ts`, una singura pentru toate cele patru cai. */
+  if (!glsGata(config)) {
     return { error: "GLS nu este configurat complet" as const };
   }
 
@@ -454,6 +456,17 @@ export async function createGlsAwbAction(
         detalii: {
           numere,
           parcelIds: ids,
+          /*
+           * ⚠ SUMA DE RAMBURS, pastrata ca sa poata fi STINSA mai tarziu.
+           *
+           * Cand comanda se plateste online DUPA emitere, coletul pleaca mai
+           * departe cu suma veche si curierul mai incaseaza o data la usa.
+           * `ModifyCOD` o poate schimba, dar numai daca stim ca a existat:
+           * fara randul asta, singurul raspuns ar fi fost „nu stiu”, iar un
+           * apel trimis in orb pe fiecare plata ar fi fost zgomot curat. Vezi
+           * `rambursul-se-stinge-la-plata.ts`.
+           */
+          ramburs: dateColet.ramburs ?? 0,
           avertismente: [
             ...erori,
             ...avertismenteColet(dateColet),

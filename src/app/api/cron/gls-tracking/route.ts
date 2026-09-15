@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
-import { stariColet, CODURI_COLET_NEGASIT as CODURI_COLET_NECUNOSCUT, type GlsConfig } from "@/lib/gls/client";
+import { glsGata, stariColet, CODURI_COLET_NEGASIT as CODURI_COLET_NECUNOSCUT, type GlsConfig } from "@/lib/gls/client";
 import { dataDinNet } from "@/lib/gls/data-net";
 import {
   eStareFinala,
@@ -108,10 +108,6 @@ const BUGET_MS = maxDuration * 1000 - ASTEPTARE_COLET_MS - MARJA_MS;
 /** Cate apeluri deodata. Secvential, 120 de colete n-ar incapea in buget. */
 const DEODATA = 4;
 
-/** Aceeasi regula de „configurat complet" ca in gls.actions.ts. */
-function glsGata(c: GlsConfig | null | undefined): c is GlsConfig {
-  return !!(c?.enabled && c.username && c.password && c.client_number);
-}
 
 export async function GET(req: NextRequest) {
   if (!verificaCron(req)) {

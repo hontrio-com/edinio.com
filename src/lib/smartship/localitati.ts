@@ -148,8 +148,29 @@ export function esteInBucuresti(oras: string | null | undefined, judet?: string 
  * valoare pe care ei o cer pentru „restul localitatilor" — deci o minciuna despre
  * o adresa bucuresteana, si un colet plimbat prin oras.
  */
-export function sectorSmartship(oras: string | null | undefined, judet?: string | null): number | null {
+export function sectorSmartship(
+  oras: string | null | undefined,
+  judet?: string | null,
+  restulAdresei?: string | null,
+): number | null {
   if (!esteInBucuresti(oras, judet)) return 0;
-  /* Sectorul poate fi scris si in oras („Sector 3"), si in restul adresei. */
-  return sectorBucuresti(oras);
+  /*
+   * ⚠ SE CAUTA IN TREI LOCURI, SI NU E O COMODITATE.
+   *
+   * Comanda venita din checkout-ul nostru poarta sectorul chiar in oras
+   * („Sector 3”), fiindca formularul il impune acolo din 15.08.2026. Dar
+   * comenzile care NU trec prin formular vin altfel: eMAG, Trendyol si About You
+   * dau „Bucuresti” la oras si scriu sectorul in strada, iar la fel face si
+   * comerciantul care isi scrie comanda de mana in panou.
+   *
+   * Citit doar din oras, sectorul lipsea pentru toate acelea, iar
+   * `lipsuriExpediere` oprea nu doar cotarea, ci si EMITEREA: comanda nu putea
+   * primi AWB deloc, in cea mai mare piata din tara, si mesajul ii cerea omului
+   * sa completeze ceva ce clientul scrisese deja.
+   *
+   * Aceeasi cautare o fac Shipo (`sectorShipo`), Woot, DHL, UPS si FedEx. Si tot
+   * nu se ghiceste nimic: cand sectorul nu scrie nicaieri, raspunsul ramane
+   * `null` si expedierea se opreste, ca pana acum.
+   */
+  return sectorBucuresti(oras) ?? sectorBucuresti(judet) ?? sectorBucuresti(restulAdresei);
 }

@@ -18,7 +18,7 @@ import {
   type LinieDecont, type OfertaTransport, type RidicareFedex, type SmartshipConfig, type SoldSmartship,
 } from "@/lib/smartship/client";
 import {
-  avertismenteExpediere, corpCotare, corpEmitere, lipsuriExpediere, referintaComenzii,
+  adresaPeRand, avertismenteExpediere, corpCotare, corpEmitere, lipsuriExpediere, referintaComenzii,
   type AdresaComanda, type DateExpediere, type FelLivrare,
 } from "@/lib/smartship/expediere";
 import { rezolvaLocalitatea } from "@/lib/smartship/geo";
@@ -360,7 +360,9 @@ async function pregatesteExpedierea(
   const d = date.destinatar;
   let loc;
   try {
-    loc = await rezolvaLocalitatea(config, d.oras, d.judet);
+    /* ⚠ Strada pleaca odata cu orasul: la Bucuresti sectorul e adesea scris acolo,
+       iar fara el expedierea se opreste. Vezi `sectorSmartship`. */
+    loc = await rezolvaLocalitatea(config, d.oras, d.judet, { adresa: adresaPeRand(d) });
   } catch (e) {
     return {
       ok: false,
@@ -429,7 +431,9 @@ export async function coteazaSmartshipAction(
     const r = await coteaza(config, corpCotare(pregatita.date, config));
     return {
       ok: true,
-      oferte: ofertePosibile(r.costs, config),
+      /* ⚠ La locker filtrul de curieri NU se aplica: easybox nu poate fi bifat in
+         panou, fiindca nu apare in cotarea de proba. Vezi `ofertePosibile`. */
+      oferte: ofertePosibile(r.costs, config, { laLocker: date.felLivrare === "locker" }),
       greutateFacturata: r.greutateCalculata,
     };
   } catch (e) {

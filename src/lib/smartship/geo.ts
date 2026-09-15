@@ -93,13 +93,20 @@ export type LocalitateRezolvata = {
  *
  * ⚠ Esecul de RETEA e altceva si se propaga ca exceptie: acolo chiar nu stim, iar
  * apelantul are propria lui cadere pe tarif fix, cu log.
+ *
+ * ⚠ `optiuni.adresa` e strada comenzii, si e acolo pentru SECTOR.
+ *
+ * Bucurestenii care nu trec prin checkout-ul nostru au sectorul scris in strada,
+ * nu in oras. Fara randul asta, `sectorSmartship` n-avea unde sa-l caute si
+ * comanda ramanea fara AWB. Vezi antetul lui.
  */
 export async function rezolvaLocalitatea(
   config: SmartshipConfig,
   oras: string,
   judet?: string | null,
-  tara = "RO",
+  optiuni?: { adresa?: string | null; tara?: string },
 ): Promise<LocalitateRezolvata | null> {
+  const tara = optiuni?.tara ?? "RO";
   const numeOras = localitateSmartship(oras, judet);
   if (!numeOras) return null;
 
@@ -147,6 +154,6 @@ export async function rezolvaLocalitatea(
     nume,
     judetId: judetGasit.id,
     judetNume: judetGasit.county,
-    sector: sectorSmartship(oras, judet),
+    sector: sectorSmartship(oras, judet, optiuni?.adresa),
   };
 }

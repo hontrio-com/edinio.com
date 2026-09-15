@@ -92,7 +92,24 @@ export function cheiaOfertei(o: Pick<OfertaAratata, "courierId" | "contractPropr
  * Ofertele care se pot arata, filtrate si asezate.
  *
  * ⚠ Filtrul pe curieri e alegerea comerciantului; lista goala inseamna „toti cei
- * pe care ii da contul", nu „niciunul".
+ * pe care ii da contul”, nu „niciunul”.
+ *
+ * ⚠ DAR FILTRUL NU SE APLICA LA LOCKER, SI ASTA NU E O INGADUINTA.
+ *
+ * Casutele din panou se umplu dintr-o COTARE DE PROBA (Bucuresti spre
+ * Cluj-Napoca, 1 kg, fara locker). Iar documentatia lor spune limpede ca
+ * „fara locker_id, easybox nu apare la estimare”. Deci curierul 12 nu poate
+ * ajunge NICIODATA in acea lista, si nici in `curieri_permisi`.
+ *
+ * Cu filtrul pornit peste o cotare la locker, unde SmartShip intoarce DOAR
+ * randul lockerului, singura oferta cadea si ea. Comerciantul care bifase fie
+ * si un singur curier isi pierdea tacut easybox-ul: comanda venita din checkout
+ * cu punct de ridicare nu mai putea primi AWB din panou, iar mesajul dadea vina
+ * pe SmartShip („n-a intors nicio oferta”).
+ *
+ * Lockerele au deja comutatoarele lor (`foloseste_easybox`, `foloseste_fanbox`),
+ * iar la locker ei intorc UN SINGUR rand. Filtrul asta e despre livrarea LA
+ * ADRESA, si acolo ramane.
  *
  * ⚠ Ordinea e dupa PRET, ca in tot checkout-ul. SmartShip intoarce lista deja
  * sortata crescator, dar cu `show_byoc` cele doua contracte se intercaleaza, iar
@@ -102,8 +119,11 @@ export function cheiaOfertei(o: Pick<OfertaAratata, "courierId" | "contractPropr
 export function ofertePosibile(
   costs: OfertaSmartship[],
   config?: Pick<SmartshipConfig, "curieri_permisi">,
+  optiuni?: { laLocker?: boolean },
 ): OfertaAratata[] {
-  const permisi = new Set((config?.curieri_permisi ?? []).filter((x) => Number.isInteger(x) && x > 0));
+  const permisi = optiuni?.laLocker
+    ? new Set<number>()
+    : new Set((config?.curieri_permisi ?? []).filter((x) => Number.isInteger(x) && x > 0));
 
   const iesire: OfertaAratata[] = [];
   const vazute = new Set<string>();

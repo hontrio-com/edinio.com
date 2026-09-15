@@ -132,6 +132,54 @@ export const CODURI: Record<number, string> = {
 const COD_OK = 200;
 
 /**
+ * ⚠ ACELASI NUMAR, ALT INTELES, PE ALTA CALE.
+ *
+ * `601` e „courier_id invalid” la `/awb/new` si „credite insuficiente pentru
+ * pretul ofertei” la `/transport-offer/{ref}/accept`. Amandoua scrise in
+ * documentatia lor, la doua endpointuri diferite.
+ *
+ * Citit din tabelul general, un comerciant fara credit care accepta o oferta de
+ * marfa grea ar fi aflat ca „curierul ales nu e in lista celor acceptate”: o
+ * propozitie care n-are legatura cu ce s-a intamplat si care il trimite sa caute
+ * in alta parte, in loc sa-si alimenteze contul. E aceeasi capcana ca la `301`
+ * („cheie gresita” SI „AWB inexistent”), doar ca acolo se vede in cod, iar aici
+ * se vedea doar in text, deci nicio proba de tip n-ar fi cazut.
+ *
+ * Tabelul de mai jos are PRECEDENTA fata de `CODURI`, si numai pe calea lui.
+ */
+const CODURI_PE_CALE: { cale: RegExp; coduri: Record<number, string> }[] = [
+  {
+    cale: /^\/transport-offer\/[^/?]+\/accept(?:\?|$)/,
+    coduri: {
+      601: "Credit insuficient pentru pretul ofertei. Alimenteaza contul SmartShip si accepta din nou.",
+      409: "Nu exista o oferta activa de acceptat.",
+      410: "Oferta a expirat. Cere una noua.",
+    },
+  },
+  {
+    cale: /^\/transport-offer\/[^/?]+\/reject(?:\?|$)/,
+    coduri: { 409: "Oferta nu mai poate fi refuzata." },
+  },
+];
+
+/**
+ * Mesajul unui cod, pe calea pe care a venit.
+ *
+ * ⚠ `undefined` inseamna „nu-l recunoastem”, si e chiar temeiul verdictului;
+ * vezi `verdictCod`. Nu se intoarce niciodata un text de umplutura.
+ */
+export function mesajCod(cod: number, cale?: string): string | undefined {
+  if (cale) {
+    for (const r of CODURI_PE_CALE) {
+      if (!r.cale.test(cale)) continue;
+      const anume = r.coduri[cod];
+      if (anume !== undefined) return anume;
+    }
+  }
+  return CODURI[cod];
+}
+
+/**
  * Verdictul pentru un cod din CORPUL raspunsului.
  *
  * ⚠ Regula: un cod pe care il RECUNOASTEM e un refuz dovedit — ei au raspuns si
@@ -143,9 +191,9 @@ const COD_OK = 200;
  * Nu e o prudenta scumpa: `cautaDupaComanda()` lamureste cazul cu o CITIRE, deci
  * blocajul are iesire fara ca omul sa presupuna nimic.
  */
-export function verdictCod(cod: number | null): "esuat" | "necunoscut" {
+export function verdictCod(cod: number | null, cale?: string): "esuat" | "necunoscut" {
   if (cod === null) return "necunoscut";
-  return CODURI[cod] !== undefined ? "esuat" : "necunoscut";
+  return mesajCod(cod, cale) !== undefined ? "esuat" : "necunoscut";
 }
 
 // ─── Configurarea ─────────────────────────────────────────────────────────────
@@ -462,14 +510,17 @@ export function codDinCorp(corp: unknown): number | null {
  * API-ul il spunea de la inceput — se pierdea, si ramanea „400", sec. Vezi
  * [[praguri-api-curieri]].
  */
-export function descrieEroarea(corp: unknown, brut: string): string {
+export function descrieEroarea(corp: unknown, brut: string, cale?: string): string {
   const bucati: string[] = [];
 
   if (corp && typeof corp === "object") {
     const o = corp as Record<string, unknown>;
 
     const cod = codDinCorp(corp);
-    if (cod !== null && cod !== COD_OK && CODURI[cod]) bucati.push(CODURI[cod]);
+    if (cod !== null && cod !== COD_OK) {
+      const anume = mesajCod(cod, cale);
+      if (anume) bucati.push(anume);
+    }
 
     bucati.push(...listaErorilor(o.erori));
     bucati.push(...listaErorilor(o.errors));
@@ -590,7 +641,7 @@ async function apel<T>(
       );
     }
     throw insemneaza(
-      eroareCuStatus(`SmartShip ${metoda} ${cale}: ${res.status} — ${descrieEroarea(date, text)}`, res.status),
+      eroareCuStatus(`SmartShip ${metoda} ${cale}: ${res.status} — ${descrieEroarea(date, text, cale)}`, res.status),
       res.status, cod,
     );
   }
@@ -611,8 +662,8 @@ async function apel<T>(
    * fi trecut mai departe drept AWB creat, daca ne-am fi oprit la `res.ok`.
    */
   if (cod !== null && cod !== COD_OK) {
-    const mesaj = `SmartShip ${metoda} ${cale}: ${descrieEroarea(date, text)}`;
-    const e = verdictCod(cod) === "esuat" ? eroareRefuz(mesaj) : eroareNesigura(mesaj);
+    const mesaj = `SmartShip ${metoda} ${cale}: ${descrieEroarea(date, text, cale)}`;
+    const e = verdictCod(cod, cale) === "esuat" ? eroareRefuz(mesaj) : eroareNesigura(mesaj);
     throw insemneaza(e, res.status, cod);
   }
 

@@ -2,7 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { ultimulEvenimentWoot } from "@/lib/shipping/statusuri-woot";
+import {
+  clasificaStareaWoot, eStareFinalaWoot, eStareNecunoscutaWoot, esteReturWoot,
+  statusUrmatorWoot, trebuieSemnalatWoot, ultimulEvenimentWoot,
+} from "@/lib/shipping/statusuri-woot";
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
@@ -106,24 +109,82 @@ const CRON = "src/app/api/cron/woot-tracking/route.ts";
 const REGULA = "src/lib/shipping/statusuri-woot.ts";
 const ACTIUNI = "src/lib/actions/woot.actions.ts";
 
-test("⚠⚠ cronul NU muta comanda si NU factureaza, cat timp numerele lor n-au inteles", () => {
+test("⚠⚠ harta e SCRISA DIN DATE, si numai din ele", () => {
   /*
-   * ⚠ CEA MAI IMPORTANTA DIN FISIER, si e o plasa pusa pe VIITOR. Ceilalti paisprezece cronuri
-   * de urmarire cheama `tranzitieComandaMarketplace`, iar la livrare si `maybeAutoInvoice`.
-   * Copiat mecanic si aici, tiparul ar cere o harta de stari, iar singura harta care se poate
-   * scrie azi e ghicita: in specificatia lor nu exista nicio enumerare a starilor unei comenzi.
-   * Un numar ghicit drept „livrat" emite facturi pe colete inca in masina.
+   * ═══ ⚠ AICI STATEA PLASA CARE CEREA SA NU EXISTE NICIO HARTA ═══
+   *
+   * Ea spunea, si pe buna dreptate: „un numar ghicit drept livrat emite facturi pe colete inca in
+   * masina", si se incheia cu „daca e masurata, sterge probele astea ANUME, cu masuratoarea langa
+   * ele". Asta se intampla acum, si masuratoarea e mai jos.
+   *
+   * Prima rulare a cronului, 15.09.2026, 12 expedieri adevarate:
+   *
+   *     10 „Expedierea ta a fost livrata cu success."                          7 expedieri
+   *      4 „Expedierea ta a fost receptionata in depozitul DPD."               3 expedieri
+   *      5 „Expedierea ta a fost preluata spre livrare de catre curierul DPD." 1 expediere
+   *      9 „Returnare comanda 5173400"                                        1 expediere
+   *
+   * Plus 1, 2 si 3 din exemplele documentatiei lor.
+   *
+   * ⚠ SI FACTURA: masurat INAINTE de cablare, singurul magazin cu expedieri Woot are facturarea
+   * automata pe `confirmed`, nu pe `delivered`. Deci mutarea pe „Livrat" NU emite nicio factura
+   * pentru el. Randul din cron ramane pentru orice magazin viitor care alege `delivered`.
    */
+  assert.equal(clasificaStareaWoot(10), "livrat", "10 e chiar livrarea, masurata pe 7 expedieri");
+  assert.equal(eStareFinalaWoot(10), true);
+  assert.equal(statusUrmatorWoot("shipped", 10), "delivered");
+
+  for (const cod of [3, 4, 5]) {
+    assert.equal(statusUrmatorWoot("processing", cod), "shipped", `codul ${cod} nu mai duce coletul in retea`);
+  }
+  for (const cod of [1, 2]) {
+    assert.equal(statusUrmatorWoot("pending", cod), "processing", `codul ${cod} nu mai e „la comerciant”`);
+  }
+
+  /* ⚠ Returul NU muta singur comanda si NU e final: coletul inca se misca. */
+  assert.equal(statusUrmatorWoot("shipped", 9), null, "returul a mutat singur comanda");
+  assert.equal(trebuieSemnalatWoot(9), true, "returul nu mai cheama omul");
+  assert.equal(esteReturWoot(9), true);
+  assert.equal(eStareFinalaWoot(9), false, "returul a fost socotit capat de drum");
+});
+
+test("⚠⚠ ce nu s-a VAZUT inca nu misca nimic", () => {
+  /*
+   * ⚠ MIEZUL HOTARARII. Numerele 6, 7, 8 si orice peste 10 nu s-au vazut inca in trafic, deci nu
+   * primesc niciun inteles. Un „probabil inseamna livrat" ar fi exact greseala pe care plasa
+   * veche o apara, doar mutata cu o zi mai tarziu.
+   */
+  for (const cod of [6, 7, 8, 11, 99, 0, -1]) {
+    assert.equal(clasificaStareaWoot(cod), "necunoscut", `codul ${cod} a capatat un inteles nemasurat`);
+    assert.equal(statusUrmatorWoot("shipped", cod), null, `codul ${cod} muta comanda`);
+    assert.equal(eStareNecunoscutaWoot(cod), true, `codul ${cod} nu mai e numarat ca necunoscut`);
+  }
+  assert.equal(eStareNecunoscutaWoot(10), false, "un cod stiut a fost numarat drept necunoscut");
+  assert.equal(clasificaStareaWoot(null), "necunoscut");
+  assert.equal(clasificaStareaWoot(4.5), "necunoscut", "un numar care nu e intreg a trecut drept cod");
+});
+
+test("⚠ starea nu COBOARA, si o comanda anulata nu se mai misca", () => {
+  assert.equal(statusUrmatorWoot("delivered", 4), null, "un eveniment vechi a coborat comanda");
+  assert.equal(statusUrmatorWoot("shipped", 4), null, "aceeasi treapta se rescrie degeaba");
+  for (const stare of ["cancelled", "refunded"]) {
+    assert.equal(statusUrmatorWoot(stare, 10), null, `o comanda ${stare} a fost mutata pe livrat`);
+  }
+});
+
+test("⚠⚠ cronul muta comanda DOAR pe expedierea citita, si numara ce nu stie", () => {
   const s = sursa(CRON);
 
-  assert.doesNotMatch(s, /tranzitieComandaMarketplace/,
-    "cronul Woot a inceput sa mute starea comenzii pe o harta de stari care nu exista");
-  assert.doesNotMatch(s, /maybeAutoInvoice/,
-    "cronul Woot a inceput sa emita facturi dupa un numar de stare fara inteles documentat");
-
-  /* Si regula insasi nu are voie sa capete o harta pe furis. */
-  assert.doesNotMatch(sursa(REGULA), /statusUrmator|eStareFinala/,
-    "a aparut o harta de stari Woot; daca e masurata, sterge probele astea ANUME, cu masuratoarea langa ele");
+  assert.match(s, /expediere: \{ coloana: "woot_order_id", valoare: o\.woot_order_id \}/,
+    "tranzitia nu mai poarta expedierea citita: o stare veche ar muta comanda noua");
+  assert.match(s, /if \(!r\.scris\) continue;/,
+    "tranzitia pleaca si cand starea n-a ajuns pe comanda");
+  assert.match(s, /if \(eStareNecunoscutaWoot\(stare\.statusId\)\) \{/,
+    "cronul nu mai desparte numerele nestiute de cele stiute");
+  assert.match(s, /necunoscute\.add\(String\(stare\.statusId\)\)/,
+    "numerele nestiute nu se mai strang, deci harta nu mai poate creste din trafic");
+  assert.match(s, /stari NECUNOSCUTE/,
+    "numerele nestiute nu mai ajung in jurnal, deci nu le vede nimeni");
 });
 
 test("⚠⚠ urmarirea se scrie pe `woot_order_id`, nu pe numarul AWB", () => {

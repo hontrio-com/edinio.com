@@ -89,3 +89,107 @@ function eMaiNou(candidat: WootEveniment, fataDe: WootEveniment): boolean {
   if (a !== b) return a > b;
   return (Number(candidat.id) || 0) > (Number(fataDe.id) || 0);
 }
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * HARTA DE STARI, SCRISA DIN DATE ADEVARATE                      (15.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠ ANTETUL DE MAI SUS SPUNEA CA AICI NU EXISTA NICIO HARTA, si avea dreptate atunci: Woot nu
+ * publica nicaieri ce inseamna `status_id`-urile lui. Ce s-a schimbat nu e documentatia lor, ci
+ * faptul ca avem acum MASURATOARE: cronul a strans perechi (numar, eticheta) de pe expedieri
+ * adevarate, exact cum promitea randul care spunea „harta se va citi din baza noastra".
+ *
+ * ⚠ FIECARE NUMAR DE MAI JOS VINE CU DE CATE ORI A FOST VAZUT, si cu eticheta scrisa de EI. Cine
+ * schimba ceva aici remasoara intai, cu interogarea din `docs/curieri/WOOT.md`.
+ *
+ * Masurat pe 15.09.2026, prima rulare a cronului, 12 expedieri:
+ *
+ *     10  „Expedierea ta a fost livrata cu success."                        7 expedieri
+ *      4  „Expedierea ta a fost receptionata in depozitul DPD."             3 expedieri
+ *      5  „Expedierea ta a fost preluata spre livrare de catre curierul DPD." 1 expediere
+ *      9  „Returnare comanda 5173400"                                       1 expediere
+ *
+ * Si trei din exemplele documentatiei lor, nevazute inca in trafic:
+ *
+ *      1  „Comanda primita"        2  „AWB generat"        3  „Ridicat de curier"
+ *
+ * ⚠ ETICHETA NU E ENUM: la `9` ea poarta chiar numarul comenzii lor („Returnare comanda 5173400"),
+ * deci se schimba de la o comanda la alta. Harta se face pe NUMAR; textul ramane pentru om.
+ *
+ * ⚠ CE NU E IN HARTA NU MISCA NIMIC. Numerele 6, 7, 8 si orice peste 10 nu s-au vazut inca, deci
+ * nu primesc niciun inteles: comanda nu se muta, si cronul le NUMARA separat, ca harta sa poata
+ * creste din trafic in loc sa creasca din presupuneri.
+ */
+
+type OperatieWoot = {
+  clasa: "livrat" | "la_comerciant" | "in_retea" | "problema" | "necunoscut";
+  final?: true;
+  retur?: true;
+};
+
+export const STARI_WOOT: Readonly<Record<string, OperatieWoot>> = {
+  "1": { clasa: "la_comerciant" },  // Comanda primita (din exemplele lor)
+  "2": { clasa: "la_comerciant" },  // AWB generat (din exemplele lor)
+  "3": { clasa: "in_retea" },       // Ridicat de curier (din exemplele lor)
+  "4": { clasa: "in_retea" },       // receptionata in depozitul curierului
+  "5": { clasa: "in_retea" },       // preluata spre livrare de catre curier
+  /* ⚠ Returul NU e final: coletul inca se misca, si abia cand ajunge inapoi se incheie ceva. */
+  "9": { clasa: "problema", retur: true }, // Returnare comanda
+  "10": { clasa: "livrat", final: true },  // livrata cu success
+};
+
+/** Ce inseamna numarul asta. Unul nevazut inca ramane `necunoscut`, nu o ghicitura. */
+export function clasificaStareaWoot(statusId: number | null | undefined): OperatieWoot["clasa"] {
+  if (statusId === null || statusId === undefined || !Number.isInteger(statusId)) return "necunoscut";
+  return STARI_WOOT[String(statusId)]?.clasa ?? "necunoscut";
+}
+
+/** Treptele pe care o comanda le urca, niciodata invers. */
+const TREAPTA: Record<string, number> = {
+  pending: 0, confirmed: 1, processing: 2, shipped: 3, delivered: 4,
+};
+
+/**
+ * Starea urmatoare, sau `null` cand nu e nimic de schimbat.
+ *
+ * ⚠ NU COBOARA NICIODATA, si ⚠ `problema` intoarce `null`: un retur nu are voie sa anuleze singur
+ * comanda. Comerciantul primeste o instiintare si hotaraste el.
+ */
+export function statusUrmatorWoot(
+  statusCurent: string,
+  statusId: number | null | undefined,
+): "processing" | "shipped" | "delivered" | null {
+  const clasa = clasificaStareaWoot(statusId);
+  const tinta = clasa === "livrat" ? "delivered"
+    : clasa === "in_retea" ? "shipped"
+    : clasa === "la_comerciant" ? "processing"
+    : null;
+  if (!tinta) return null;
+  if (statusCurent === "cancelled" || statusCurent === "refunded") return null;
+
+  const acum = TREAPTA[statusCurent];
+  const nou = TREAPTA[tinta];
+  if (acum === undefined || nou === undefined) return tinta === statusCurent ? null : tinta;
+  return nou > acum ? tinta : null;
+}
+
+/** Merita o instiintare catre comerciant? */
+export function trebuieSemnalatWoot(statusId: number | null | undefined): boolean {
+  return clasificaStareaWoot(statusId) === "problema";
+}
+
+/** Coletul se intoarce? Schimba doar formularea instiintarii. */
+export function esteReturWoot(statusId: number | null | undefined): boolean {
+  return statusId !== null && statusId !== undefined && STARI_WOOT[String(statusId)]?.retur === true;
+}
+
+/** Capat de drum ADEVARAT: cronul poate inceta sa intrebe. */
+export function eStareFinalaWoot(statusId: number | null | undefined): boolean {
+  return statusId !== null && statusId !== undefined && STARI_WOOT[String(statusId)]?.final === true;
+}
+
+/** Numarul asta e inca fara inteles pentru noi? Cronul le strange ca sa creasca harta. */
+export function eStareNecunoscutaWoot(statusId: number | null | undefined): boolean {
+  return statusId !== null && statusId !== undefined && !(String(statusId) in STARI_WOOT);
+}

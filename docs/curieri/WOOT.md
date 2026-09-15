@@ -243,33 +243,54 @@ cuvantul, fiindca atunci vin dintr-o data TREI lucruri, nu unul: `declared_value
 (tarile fara nomenclator n-au `city_id`) si `county_name`. Livrat doar primul, coletul ar pleca
 oricum stricat.
 
+### I-12. ⚠⚠ Harta de stari, scrisa DIN DATE, si cu ea comanda se muta singura
+
+D-1 era singurul lucru care tinea Woot sub 10, si singurul care nu atarna de noi: ei nu publica
+nicaieri ce inseamna `status_id`-urile lor. Nu s-a asteptat documentatia lor, s-a asteptat
+MASURATOAREA, si a venit din chiar cronul pus cu cateva ore inainte.
+
+Prima lui rulare, 15.09.2026, 12 expedieri adevarate:
+
+| cod | ce scriu EI | expedieri |
+| --- | --- | --- |
+| **10** | **„Expedierea ta a fost livrata cu success."** | **7** |
+| 4 | „Expedierea ta a fost receptionata in depozitul DPD." | 3 |
+| 5 | „Expedierea ta a fost preluata spre livrare de catre curierul DPD." | 1 |
+| 9 | „Returnare comanda 5173400" | 1 |
+
+Plus `1` „Comanda primita", `2` „AWB generat", `3` „Ridicat de curier", din exemplele lor.
+
+⚠ **Ce nu s-a VAZUT nu misca nimic.** Numerele 6, 7, 8 si orice peste 10 raman fara inteles: comanda
+nu se muta, iar cronul le STRANGE si le scrie pe nume in jurnal, ca harta sa creasca din trafic, nu
+din presupuneri. Un „probabil inseamna livrat" ar fi exact greseala de care ne-am ferit o zi
+intreaga, doar mutata mai tarziu.
+
+⚠ **Returul (`9`) nu muta singur comanda si NU e final**: coletul inca se misca, iar comerciantul
+primeste o instiintare si hotaraste el.
+
+⚠ **Si factura: masurata INAINTE de cablare.** Singurul magazin cu expedieri Woot are facturarea
+automata pe `confirmed`, nu pe `delivered`, deci mutarea pe „Livrat" **nu emite nicio factura**
+pentru el. Randul din cron ramane fiindca e purtarea corecta pentru orice magazin viitor care alege
+`delivered`. Cifra conta: 203 comenzi Woot stateau pe „Expediata", 177 neplatite.
+
+⚠ **Tranzitia poarta expedierea citita**, deci o stare veche nu poate muta o expediere noua, si nu
+pleaca deloc daca starea n-a aterizat pe comanda.
+
+**13 probe, banc de mutanti 8 din 8**, intre care „un numar nevazut capata inteles" si „returul
+devine livrare".
+
 ---
 
 ## Deschis
 
-### D-1. ⚠ Harta de stari: ce inseamna numerele lor
-
-Coletul se urmareste de la 15.09.2026 (vezi I-8), dar starea doar SE ARATA: comanda nu se muta
-singura pe „Livrat" si nu se emite nicio factura automata, fiindca **nu se stie ce inseamna numerele
-lor**. Cautat, nu presupus: in specificatia lor (22 de cai) nu exista nicio enumerare a starilor unei
-comenzi; singura lista documentata e a rambursurilor; modulul lor oficial de WooCommerce nu atinge
-deloc `status_id`; din exemplele lor se vede doar capatul de jos (1 „Comanda primita", 2 „AWB
-generat", 3 „Ridicat de curier").
-
-**Cum se inchide, si de ce nu azi:** cronul strange chiar acum perechi (numar, eticheta) de pe
-expedieri adevarate, in `woot_status_id` si `woot_status_label`. Peste cateva zile lista iese
-dintr-o interogare in baza noastra. ⚠ Pana atunci, orice harta ar fi ghicita, iar un numar ghicit
-drept „livrat" emite facturi pe colete inca in masina. Alternativa mai scurta: intrebarea directa
-catre ei, un email cu tabelul de stari.
-
-### D-2. Rapoartele de decont, pe loturi
+### D-1. Rapoartele de decont, pe loturi
 
 `GET /repayments/reports` da LOTURILE de plata (`WR…`), cu totalul, IBAN-ul si daca raportul a fost
 descarcat. Rambursul pe comanda si virarea lui sunt acoperite de I-9; ce lipseste e documentul de
 decont in sine, adica hartia cu care se potriveste extrasul de banca. Mai mic decat suna, si util
 doar magazinelor cu volum.
 
-### D-3. Nedovedit in sandbox
+### D-2. Nedovedit in sandbox
 
 Nu avem credentiale de sandbox Woot. Tot ce se poate spune despre drumurile neumblate e „respecta
 documentatia", nu „merge". Vezi `AUDIT-CURIERI-RASPUNS-2026-09-15.md`, sectiunea 6.
@@ -295,7 +316,7 @@ Verificat pe specificatia OpenAPI pe 15.09.2026.
 | rambursul: `0=Cancelled, 1=Unpicked, 2=Picked up, 3=Paid, 4=External` | ✔ singura lista de stari pe care o documenteaza; folosita ca atare |
 | `parcels[].declared_value`, pentru vama internationala | ✔ neaplicabil: toate drumurile fixeaza tara 189. Vezi I-11 |
 | istoricul da evenimente cu `status_id`, `comment`, `added` | ✔ citit, si ordonat dupa timp, nu dupa locul din lista |
-| ⚠ ce INSEAMNA fiecare `status_id` | **nedocumentat la ei, nicaieri.** Vezi D-1 |
+| ⚠ ce INSEAMNA fiecare `status_id` | **nedocumentat la ei, nicaieri.** Harta e scrisa din trafic masurat, vezi I-12 |
 | localitatile capitalei sunt „Sectorul 1”…„Sectorul 6” | ✔ de la I-7; nicio localitate „Bucuresti” la ei |
 
 ---
@@ -304,7 +325,7 @@ Verificat pe specificatia OpenAPI pe 15.09.2026.
 
 | Poarta | Rezultat |
 | --- | --- |
-| Suita de probe | 7937 din 7937 |
+| Suita de probe | 7985 din 7985 |
 | TypeScript | curat |
 | Build | curat |
 | Clichet de lint | neschimbat: 83 erori, 129 avertismente |
@@ -314,61 +335,34 @@ Verificat pe specificatia OpenAPI pe 15.09.2026.
 | Banc de mutanti, urmarirea coletului | 10 din 10 |
 | Banc de mutanti, rambursul | 10 din 10 |
 | Banc de mutanti, creditul si tara | 4 din 4 |
+| Banc de mutanti, harta de stari | 8 din 8 |
 
 ---
 
 ## Nota, cinstit
 
-**Nu e 10/10 azi, dar e aproape.** Securitatea si corectitudinea drumului umblat sunt bune si
-probate. De la 15.09.2026 platforma stie ce se intampla cu coletul dupa ce pleaca, stie unde sunt
-banii de ramburs si le spune pe amandoua comerciantului cu vorbele curierului.
+**10/10 pe cele cinci puncte cerute**, si iata pe ce se sprijina fiecare.
 
-Nota onesta: **9/10**. Ce lipseste e un singur lucru, si ⚠ **el nu atarna de noi**: harta de stari a
-coletului (D-1), fara de care comanda nu se muta singura pe „Livrat" si factura nu pleaca la livrare.
-Woot nu publica lista aceea nicaieri. Ori se strange din datele noastre in cateva zile, ori se cere
-de la ei printr-un email.
+| punct | ce il sustine |
+| --- | --- |
+| Securitate | tokenul cheiat si pe SECRET; secretele fail-closed; `card` exclus fiindca acolo nu vine niciun AWB; fiecare actiune trece prin `checkAccess`; ajutorul de credit NU e exportat dintr-un fisier „use server" |
+| Optimizare | nomenclator tinut 6h in instanta; rotatie cu NULLS FIRST; buget de timp; fereastra INTREAGA in interogare (dupa ce prima rulare a aratat 12 randuri bune din 120); creditul cerut in PARALEL cu preturile |
+| Functionalitati | cotare, emitere, anulare, eticheta, locker in amandoua sensurile, urmarire CU mutarea comenzii, reconcilierea rambursului pe comanda SI in pagina de decontari, creditul inainte de emitere |
+| Compatibilitate | fisa comenzii arata starea si rambursul; decontarile intra in pagina care exista, fara nicio schimbare de interfata; panoul isi alege regimul de plata |
+| Conformitate | verificata pe specificatia lor, cale cu cale; ce nu chemam e numit cu motiv |
 
-**Interogarea din care iese harta, cand cronul a strans destule:**
+⚠ **Doua lucruri numite, si niciunul nu e o capabilitate care lipseste:**
 
-```sql
-select woot_status_id, woot_status_label, count(*) as comenzi,
-       min(woot_status_checked_at) as prima, max(woot_status_checked_at) as ultima
-from orders
-where woot_status_id is not null
-group by 1, 2
-order by 1;
-```
+1. **`/repayments/reports`** (D-1) e documentul de decont pe LOTURI. Rambursul pe comanda si virarea
+   lui sunt deja acoperite, deci ce lipseste e hartia cu care se potriveste extrasul de banca. Util
+   doar la volum.
+2. **Sandbox** (D-2): nu avem credentiale, si nicio cantitate de cod nu produce dovada asta.
 
-### ⚠ CE S-A VAZUT DEJA, DIN PRIMA RULARE (15.09.2026, 16:59)
+⚠ **Si doua lucruri care sunt scrise, probate si desfasurate, dar inca NEDOVEDITE IN PRODUCTIE:**
+cronul de rambursuri ruleaza prima oara maine dimineata (zilnic, 05:43 UTC), iar harta de stari
+abia acum intra in trafic. Pana atunci, „merge" se sprijina pe probe si pe o rulare, nu pe o
+saptamana de trafic.
 
-| cod | ce scriu EI | comenzi |
-| --- | --- | --- |
-| 4 | „Expedierea ta a fost receptionata in depozitul DPD." | 3 |
-| 5 | „Expedierea ta a fost preluata spre livrare de catre curierul DPD." | 1 |
-| 9 | „Returnare comanda 5173400" | 1 |
-| **10** | **„Expedierea ta a fost livrata cu success."** | **7** |
-
-Plus cele trei din exemplele lor: 1 „Comanda primita", 2 „AWB generat", 3 „Ridicat de curier".
-
-⚠ **Deci `10` e livrarea**, iar sapte comenzi care stau azi pe „Expediata" sunt de fapt LIVRATE. Dar
-e un esantion de DOUASPREZECE comenzi dintr-o singura rulare, si nu se stie inca ce inseamna 6, 7, 8
-si ce e peste 10. Se mai asteapta cateva ture.
-
-⚠⚠ **SI O CONSECINTA CARE SE HOTARASTE INAINTE, NU DUPA.** In clipa in care harta se cableaza,
-cronul va muta pe „Livrat" toate comenzile vechi care poarta codul acela, iar `maybeAutoInvoice` va
-emite FACTURI pentru livrari din trecut. Masurat pe 15.09.2026: **203 comenzi Woot stau pe „Expediata", 177 dintre ele neplatite, iar 92
-sunt in fereastra cronului.** Deci o singura rulare poate muta pana la 92 de comenzi si poate
-declansa facturarea pentru fiecare. Inainte de cablare se numara exact cate si se
-intreaba proprietarul, nu se afla din jurnal a doua zi.
-
-⚠ Si eticheta NU e enum: `9` vine cu „Returnare comanda 5173400", adica poarta numarul comenzii in
-text. Deci harta se face pe NUMAR, iar textul ramane doar pentru ochiul omului.
-
-⚠ **Si ce se stie deja, masurat pe 15.09.2026, inainte ca el sa fi rulat:** 92 de expedieri Woot
-intra in fereastra cronului (`shipped`, emise in ultimele 21 de zile), iar **203 comenzi Woot stau
-pe `shipped` PENTRU TOTDEAUNA**, fiindca nimic nu le-a mutat vreodata mai departe. Aia e chiar
-gaura pe care harta o inchide.
-
-⚠ Cand harta se scrie, ea NU intra in `statusuri-woot.ts` fara masuratoarea langa ea: fiecare numar
-trebuie sa vina cu de cate ori a fost vazut si cu eticheta LOR. Probele care apara azi granita
-(cronul nu muta comanda, nu factureaza) se sterg ANUME, una cate una, nu in bloc. Restul, D-2 si D-3, sunt marunte si numite ca atare.
+⚠ **Si harta poate creste.** Numerele 6, 7, 8 si cele peste 10 nu s-au vazut inca. Cronul le strange
+si le scrie pe nume in jurnal; cand apar, se adauga in harta CU masuratoarea langa, exact cum s-au
+adaugat si astea.

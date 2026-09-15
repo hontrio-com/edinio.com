@@ -3,7 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
 import { getOrderHistory, getWootToken, type WootConfig } from "@/lib/woot";
-import { ultimulEvenimentWoot, type StareWoot } from "@/lib/shipping/statusuri-woot";
+import {
+  eStareFinalaWoot, eStareNecunoscutaWoot, esteReturWoot, statusUrmatorWoot, trebuieSemnalatWoot,
+  ultimulEvenimentWoot, type StareWoot,
+} from "@/lib/shipping/statusuri-woot";
+import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
+import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import type { Database } from "@/types/database.types";
 
@@ -64,6 +69,7 @@ type Comanda = {
   business_id: string;
   status: string;
   order_number: string | null;
+  payment_status: string | null;
   created_at: string | null;
   woot_order_id: string | null;
   woot_awb_at: string | null;
@@ -86,7 +92,7 @@ export async function GET(req: NextRequest) {
   const { data: comenzi, error: eComenzi } = await admin
     .from("orders")
     .select(
-      "id, business_id, status, order_number, created_at,"
+      "id, business_id, status, order_number, payment_status, created_at,"
       + " woot_order_id, woot_awb_at, woot_status_id, woot_status_checked_at",
     )
     /* ⚠ IDENTITATEA E `woot_order_id`, nu numarul AWB: el e cheia cu care se cere istoricul, se
@@ -210,6 +216,9 @@ export async function GET(req: NextRequest) {
   }
 
   let verificate = 0, scrise = 0, faraConfig = 0, esuate = 0, faraStare = 0, ramase = 0;
+  let mutate = 0, semnalate = 0, incheiate = 0;
+  /* ⚠ Numerele pe care harta nu le stie inca: se strang ca sa poata creste din trafic. */
+  const necunoscute = new Set<string>();
 
   for (const o of inFereastra) {
     /*
@@ -287,6 +296,75 @@ export async function GET(req: NextRequest) {
       orderNumber: o.order_number,
     });
     if (r.scris) scrise++;
+
+    /*
+     * ═══ ⚠ DE AZI CRONUL SI HOTARASTE, NU DOAR INREGISTREAZA (15.09.2026) ═══
+     *
+     * Antetul acestui fisier spunea, pe buna dreptate, ca nu muta nimic: Woot nu publica nicaieri
+     * ce inseamna numerele lui de stare. Ce s-a schimbat nu e documentatia lor, ci faptul ca avem
+     * MASURATOARE: cronul insusi a strans perechile (numar, eticheta) de pe expedieri adevarate, si
+     * `10` vine cu „Expedierea ta a fost livrata cu success". Harta, cu numarul de aparitii langa
+     * fiecare cod, sta in `@/lib/shipping/statusuri-woot`.
+     *
+     * ⚠ CE NU E IN HARTA NU MISCA NIMIC: un numar nevazut inca lasa comanda pe loc si se NUMARA
+     * mai jos, ca harta sa creasca din trafic, nu din presupuneri.
+     *
+     * ⚠ SI STAREA N-A ATERIZAT INSEAMNA CA NICI TRANZITIA N-ARE CE CAUTA: `r.scris` e fals cand
+     * expedierea s-a schimbat sub noi, iar atunci starea citita e a coletului VECHI.
+     */
+    if (!r.scris) continue;
+
+    if (eStareNecunoscutaWoot(stare.statusId)) {
+      necunoscute.add(String(stare.statusId));
+      continue;
+    }
+
+    const tinta = statusUrmatorWoot(o.status, stare.statusId);
+    if (tinta) {
+      const rez = await tranzitieComandaMarketplace(admin, {
+        orderId: o.id,
+        businessId: o.business_id,
+        status: tinta,
+        sursa: "woot",
+        expediere: { coloana: "woot_order_id", valoare: o.woot_order_id },
+      });
+      if (rez === "ok") {
+        mutate++;
+        if (tinta === "delivered") {
+          /*
+           * ⚠ MASURAT INAINTE DE A FI CABLAT: singurul magazin cu expedieri Woot are facturarea
+           * automata pe `confirmed`, nu pe `delivered`, deci randul asta NU emite nicio factura
+           * pentru el. Ramane fiindca e purtarea corecta pentru orice magazin viitor care alege
+           * `delivered`, si fiindca asa fac toti ceilalti cronuri.
+           *
+           * ⚠ Nu se lasa sa arunce: o facturare picata n-are voie sa opreasca urmarirea celorlalte
+           * colete, dar nici sa treaca tacut.
+           */
+          try {
+            await maybeAutoInvoice(o.business_id, o.id, tinta, o.payment_status ?? "", admin as never);
+          } catch (e) {
+            await logError({
+              action: "woot-tracking",
+              message: `comanda ${o.order_number ?? o.id} a trecut pe livrat, dar facturarea automata a esuat: ${(e as Error).message}`,
+              details: { orderId: o.id }, businessId: o.business_id, severity: "warning",
+            });
+          }
+        }
+      }
+    }
+
+    if (trebuieSemnalatWoot(stare.statusId)) {
+      semnalate++;
+      await logError({
+        action: "woot-tracking",
+        message: `${o.order_number ?? o.id}: ${stare.eticheta || `stare Woot ${stare.statusId}`}`
+          + (esteReturWoot(stare.statusId) ? " (coletul se intoarce la tine)" : ""),
+        details: { woot_order_id: o.woot_order_id, stare: stare.statusId },
+        businessId: o.business_id, severity: "warning",
+      });
+    }
+
+    if (eStareFinalaWoot(stare.statusId)) incheiate++;
   }
 
   /*
@@ -297,9 +375,13 @@ export async function GET(req: NextRequest) {
    */
   console.log(
     `[woot-tracking] candidati ${inFereastra.length}, verificate ${verificate}, scrise ${scrise}, `
-    + `fara config ${faraConfig}, fara stare ${faraStare}, esuate ${esuate}, ramase ${ramase}`,
+    + `mutate ${mutate}, semnalate ${semnalate}, incheiate ${incheiate}, `
+    + `fara config ${faraConfig}, fara stare ${faraStare}, esuate ${esuate}, ramase ${ramase}`
+    /* ⚠ Numerele pe care harta nu le stie inca: din ele creste ea, deci se scriu pe nume. */
+    + (necunoscute.size ? `, stari NECUNOSCUTE: ${[...necunoscute].sort().join(", ")}` : ""),
   );
   return NextResponse.json({
-    ok: true, candidati: inFereastra.length, verificate, scrise, faraConfig, faraStare, esuate, ramase,
+    ok: true, candidati: inFereastra.length, verificate, scrise, mutate, semnalate, incheiate,
+    faraConfig, faraStare, esuate, ramase, necunoscute: [...necunoscute].sort(),
   });
 }

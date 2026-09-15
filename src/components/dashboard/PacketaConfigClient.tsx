@@ -65,6 +65,12 @@ export function PacketaConfigClient({
   const [format, setFormat] = useState<FormatEticheta>(initialConfig?.eticheta_format ?? "A6 on A6");
   const [valoareImplicita, setValoareImplicita] = useState(String(initialConfig?.valoare_implicita ?? 100));
   const [curieriPermisi, setCurieriPermisi] = useState<string[]>(initialConfig?.curieri_permisi ?? []);
+  /* ⚠ MILIMETRI, nu centimetri: singurul curier din platforma care ii cere asa. */
+  const [dimL, setDimL] = useState(String(initialConfig?.dimensiuni_implicite?.lungime ?? ""));
+  const [dimW, setDimW] = useState(String(initialConfig?.dimensiuni_implicite?.latime ?? ""));
+  const [dimH, setDimH] = useState(String(initialConfig?.dimensiuni_implicite?.inaltime ?? ""));
+  const [taxaRo, setTaxaRo] = useState(initialConfig?.taxa_ro_supusa === true);
+  const [taraOrigine, setTaraOrigine] = useState(initialConfig?.taxa_ro_tara_origine ?? "");
 
   const [curieri, setCurieri] = useState<{ id: string; nume: string; arePuncte: boolean; faraRamburs: boolean }[]>([]);
   const [seIncarcaCurieri, setSeIncarcaCurieri] = useState(false);
@@ -91,6 +97,16 @@ export function PacketaConfigClient({
       eticheta_format: format,
       valoare_implicita: Number(valoareImplicita) || 0,
       curieri_permisi: curieriPermisi,
+      /*
+       * ⚠ Se scriu abia cand toate trei au valoare: doua laturi din trei nu sunt dimensiuni,
+       * iar o valoare partiala ar trece de garda si ar fi refuzata de ei.
+       */
+      dimensiuni_implicite:
+        Number(dimL) > 0 && Number(dimW) > 0 && Number(dimH) > 0
+          ? { lungime: Number(dimL), latime: Number(dimW), inaltime: Number(dimH) }
+          : null,
+      taxa_ro_supusa: taxaRo,
+      taxa_ro_tara_origine: taxaRo ? taraOrigine.trim().toUpperCase() : null,
     };
   }
 
@@ -98,6 +114,10 @@ export function PacketaConfigClient({
     if (!areParola) return toast.error("Completeaza parola API (api_password)");
     if (!eshop.trim()) {
       return toast.error("Completeaza eticheta de expeditor, fara ea nu pleaca niciun colet");
+    }
+    /* ⚠ O declaratie de taxa pe jumatate e mai rea decat niciuna: ei o refuza la emitere. */
+    if (taxaRo && !/^[A-Za-z]{2}$/.test(taraOrigine.trim())) {
+      return toast.error("Completeaza tara de origine a marfii, din doua litere (de exemplu CN)");
     }
     setSalveaza(true);
     const r = await savePacketaConfig(businessId, construieste());
@@ -323,6 +343,54 @@ export function PacketaConfigClient({
             value={valoareImplicita}
             onChange={(e) => setValoareImplicita(e.target.value)}
           />
+        </Field>
+
+        <Field
+          label="Dimensiuni implicite (milimetri)"
+          hint="Unii curieri le CER si refuza coletul fara ele. Se folosesc cand comanda n-are dimensiuni. Milimetri, nu centimetri."
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {([
+              ["Lungime", dimL, setDimL],
+              ["Latime", dimW, setDimW],
+              ["Inaltime", dimH, setDimH],
+            ] as const).map(([eticheta, valoare, pune]) => (
+              <Input
+                key={eticheta}
+                type="number"
+                min={0}
+                placeholder={eticheta}
+                aria-label={`${eticheta} (mm)`}
+                value={valoare}
+                onChange={(e) => pune(e.target.value)}
+              />
+            ))}
+          </div>
+        </Field>
+
+        <Field
+          label="Taxa logistica din Romania"
+          hint="Din 1 ianuarie 2026, coletele cu marfa din AFARA UE, sub 150 EUR, sunt supuse unei taxe fixe. Bifeaza doar daca marfa ta intra sub ea: declaratia pleaca in numele tau."
+        >
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={taxaRo}
+              onChange={(e) => setTaxaRo(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Marfa mea e supusa taxei logistice din Romania
+          </label>
+          {taxaRo && (
+            <Input
+              className="mt-2"
+              maxLength={2}
+              placeholder="Tara de origine a marfii (ex. CN)"
+              aria-label="Tara de origine a marfii"
+              value={taraOrigine}
+              onChange={(e) => setTaraOrigine(e.target.value.toUpperCase())}
+            />
+          )}
         </Field>
       </Panel>
 

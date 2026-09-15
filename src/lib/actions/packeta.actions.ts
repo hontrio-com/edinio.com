@@ -318,15 +318,36 @@ export async function createPacketaAwbAction(
      * ⚠ MILIMETRI. Ceilalti curieri din platforma cer centimetri.
      */
     dimensiuniMm: date.dimensiuniMm ?? (cereDimensiuni ? (config.dimensiuni_implicite ?? null) : null),
+    /* ⚠ Declaratia de taxa logistica romaneasca, luata din configurarea magazinului: e o
+       judecata despre MARFA, pe care platforma n-o poate face. Vezi `taxa-logistica-ro.ts`. */
+    taxaLogisticaRo: {
+      supusa: config.taxa_ro_supusa,
+      taraOrigine: config.taxa_ro_tara_origine,
+    },
     nota: date.nota,
     laAdresa,
     numarSeparat,
+    /* ⚠ Ca `lipsuriExpediere` sa poata opri inainte de emitere cand curierul cere dimensiuni
+       si nu le avem de nicaieri. Pana azi comentariul de mai sus promitea asta, dar nu se
+       intampla: coletul pleca fara `size` si il refuzau EI. */
+    cereDimensiuni,
   };
 
   const lipsuri = lipsuriExpediere(dateExpediere);
   if (lipsuri.length) return { error: `Nu se poate crea coletul: ${lipsuri.join("; ")}.` };
 
-  const atribute = construiesteAtribute(dateExpediere);
+  /*
+   * ⚠ CONSTRUIREA POATE ARUNCA, si asta e dinadins: `nodulTaxeiRo` refuza o declaratie de taxa
+   * incompleta in loc s-o omita tacut. `lipsuriExpediere` de mai sus prinde cazul obisnuit, dar
+   * aruncarea ramane ultima plasa, si atunci mesajul ei trebuie sa ajunga la om, nu sa devina o
+   * cadere fara explicatie a actiunii.
+   */
+  let atribute: ReturnType<typeof construiesteAtribute>;
+  try {
+    atribute = construiesteAtribute(dateExpediere);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 
   /*
    * ⚠ VALIDAREA, INAINTE DE REGISTRU.

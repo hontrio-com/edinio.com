@@ -1,5 +1,6 @@
 import { normalizePhone } from "@/lib/utils/phone";
 import { normalizeLocalityName } from "@/lib/utils/ro-address";
+import { nodulTaxeiRo, taraOrigineValida, type TaxaLogisticaRo } from "./taxa-logistica-ro";
 import type { NodXml } from "./xml";
 
 /**
@@ -233,6 +234,20 @@ export type DateExpediere = {
   punctCurier?: string | null;
   /** Doar cand curierul cere marimea. ⚠ In MILIMETRI. */
   dimensiuniMm?: { lungime: number; latime: number; inaltime: number } | null;
+  /**
+   * Declaratia de taxa logistica romaneasca, ceruta de ei de la 1.01.2026.
+   *
+   * ⚠ Vine din configurarea magazinului, fiindca e o judecata despre MARFA: platforma nu poate
+   * sti originea produselor. Lipsa inseamna „nu declaram nimic", si blocul nici nu pleaca.
+   * Vezi `taxa-logistica-ro.ts`.
+   */
+  taxaLogisticaRo?: TaxaLogisticaRo | null;
+  /**
+   * Curierul ales CERE dimensiunile (`requiresSize` din fluxul lor de curieri).
+   *
+   * ⚠ Exista ca `lipsuriExpediere` sa poata opri INAINTE de emitere. Vezi nota de acolo.
+   */
+  cereDimensiuni?: boolean;
   nota?: string | null;
   /** `true` doar la punctele Packeta din CZ/SK/HU/RO; la curieri nu functioneaza. */
   doarMajori?: boolean;
@@ -252,6 +267,14 @@ export type DateExpediere = {
  *
  * La Packeta miza e in plus: coletul creat nu se mai poate sterge.
  */
+/** Trei laturi pozitive. Zero sau lipsa nu sunt dimensiuni, sunt un camp necompletat. */
+export function dimensiuniBune(
+  x: { lungime: number; latime: number; inaltime: number } | null | undefined,
+): boolean {
+  if (!x) return false;
+  return [x.lungime, x.latime, x.inaltime].every((v) => Number.isFinite(Number(v)) && Number(v) > 0);
+}
+
 export function lipsuriExpediere(d: DateExpediere): string[] {
   const lipsuri: string[] = [];
   const dest = d.destinatar;
@@ -273,6 +296,36 @@ export function lipsuriExpediere(d: DateExpediere): string[] {
   if (curata(dest.telefon) && !tel) lipsuri.push("un telefon valid (Packeta cere prefixul de tara)");
 
   if (!(Number(d.valoare) > 0)) lipsuri.push("valoarea coletului (Packeta o cere pentru asigurare)");
+
+  /*
+   * ⚠ Declaratia de taxa logistica romaneasca, cand comerciantul a spus ca marfa e supusa.
+   * Ei cer tara de origine tocmai in acel caz, iar o declaratie pe jumatate ar fi refuzata de ei
+   * dupa ce am ajuns la emitere. Mai bine se spune aici. Vezi `taxa-logistica-ro.ts`.
+   */
+  if (d.taxaLogisticaRo?.supusa && !taraOrigineValida(d.taxaLogisticaRo.taraOrigine)) {
+    lipsuri.push(
+      "tara de origine a marfii, din doua litere (ai declarat marfa supusa taxei logistice din Romania)",
+    );
+  }
+
+  /*
+   * ═══ ⚠ DIMENSIUNILE, CAND CURIERUL LE CERE (16.09.2026) ═══
+   *
+   * Unii curieri le CER (`requiresSize` in fluxul lor) si refuza coletul fara ele.
+   *
+   * ⚠ Verificarea asta LIPSEA, desi un comentariu din `packeta.actions.ts` promitea ca
+   * „`lipsuriExpediere` opreste aici". Nu oprea: `construiesteAtribute` doar omitea `size`, iar
+   * coletul pleca la Packeta fara dimensiuni si era refuzat de EI, cu mesajul lor.
+   *
+   * ⚠ Si a doua jumatate a gaurii: `dimensiuni_implicite` era citita la emitere, dar nu putea
+   * fi SCRISA din nicaieri, fiindca ecranul de configurare n-o avea. Deci pentru curierii care
+   * cer dimensiuni emiterea era imposibila, oricat ar fi incercat comerciantul.
+   */
+  if (d.cereDimensiuni && !dimensiuniBune(d.dimensiuniMm)) {
+    lipsuri.push(
+      "dimensiunile coletului in milimetri (curierul ales le cere; le poti pune si ca implicite in Setari)",
+    );
+  }
 
   if (d.laAdresa) {
     const { street, houseNumber } = despartuStrada(dest.strada, dest.numar);
@@ -339,6 +392,16 @@ export function construiesteAtribute(d: DateExpediere): NodXml {
     atribute.zip = curata(dest.codPostal);
     atribute.province = taie(dest.judet, LIMITE.province) || undefined;
   }
+
+  /*
+   * ⚠ DECLARATIA DE TAXA LOGISTICA ROMANEASCA, ceruta de ei de la 1 ianuarie 2026.
+   *
+   * Se trimite DOAR cand comerciantul a declarat-o: blocul e optional in tabelul lor de
+   * structuri, iar o declaratie „nu e supus" pusa de noi ar fi o afirmatie juridica facuta in
+   * numele lui, despre marfa lui. Vezi `taxa-logistica-ro.ts`.
+   */
+  const taxaRo = nodulTaxeiRo(d.taxaLogisticaRo);
+  if (taxaRo) atribute.roLogisticsTaxDeclaration = taxaRo;
 
   if (d.dimensiuniMm) {
     /* ⚠ MILIMETRI, intregi. Vezi antetul: ceilalti curieri cer centimetri. */

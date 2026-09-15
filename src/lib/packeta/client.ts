@@ -102,6 +102,23 @@ export interface PacketaConfig extends ConfigPacketa {
    * Comanda nu le are, deci vin din configurare. Milimetri, nu centimetri.
    */
   dimensiuni_implicite?: { lungime: number; latime: number; inaltime: number } | null;
+  /**
+   * ⚠ TAXA LOGISTICA ROMANEASCA, ceruta de ei de la 1 ianuarie 2026.
+   *
+   * Legea romaneasca pune o taxa fixa pe coletele cu marfa din AFARA UE, sub 150 EUR, iar
+   * documentatia lor spune ca omiterea campului „may result in non-compliance with Romanian
+   * regulations".
+   *
+   * ⚠ STA IN CONFIGURARE, NU SE DEDUCE, si nu din comoditate: taxa atarna de ORIGINEA marfii
+   * (nu de tara expeditorului, un magazin din Bucuresti poate vinde marfa chinezeasca) si de
+   * pretul ei sub 150 EUR. Primul lucru platforma nu-l stie, iar o declaratie pusa de noi ar fi
+   * o afirmatie juridica facuta in numele comerciantului. Vezi `taxa-logistica-ro.ts`.
+   *
+   * Lipsa inseamna „nu declaram nimic": blocul e optional in tabelul lor de structuri.
+   */
+  taxa_ro_supusa?: boolean | null;
+  /** Tara de origine a marfii, ISO 3166-1 alpha-2. Ceruta de ei cand `taxa_ro_supusa` e adevarat. */
+  taxa_ro_tara_origine?: string | null;
 }
 
 /**

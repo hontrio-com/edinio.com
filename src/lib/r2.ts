@@ -402,7 +402,6 @@ export async function listeazaIncarcari(
 ): Promise<{ obiecte: (ObiectListat & { bucket: string })[]; trunchiat: boolean }> {
   const galeti = incarcarileSuntPrivate() ? [galeataIncarcarilor(), BUCKET] : [BUCKET];
   const obiecte: (ObiectListat & { bucket: string })[] = [];
-  let trunchiat = false;
 
   for (const bucket of galeti) {
     let cursor: string | undefined;
@@ -419,7 +418,10 @@ export async function listeazaIncarcari(
     } while (cursor);
   }
 
-  return { obiecte, trunchiat };
+  /* ⚠ `false` scris pe fata, ca la sora ei de mai sus: iesirea prin trunchiere se face DEJA
+     din bucla, cu `return { obiecte, trunchiat: true }`, deci un steag purtat pana aici n-ar
+     putea fi niciodata altceva decat fals. */
+  return { obiecte, trunchiat: false };
 }
 
 /**

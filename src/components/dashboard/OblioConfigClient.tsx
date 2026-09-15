@@ -548,7 +548,7 @@ export default function OblioConfigClient({
                 ))}
               </select>
               <p className="mt-1 text-xs text-muted-foreground">
-                Tipul liniilor de produs pe factura. Pentru magazine cu produse fizice, alege „Marfa". Transportul ramane „Serviciu".
+                Tipul liniilor de produs pe factura. Pentru magazine cu produse fizice, alege „Marfa&quot;. Transportul ramane „Serviciu&quot;.
               </p>
             </div>
 

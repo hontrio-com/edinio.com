@@ -81,7 +81,9 @@ export async function updateSession(request: NextRequest) {
     const res = NextResponse.redirect(url);
     // Copy refreshed auth cookies so the next request has valid tokens
     supabaseResponse.cookies.getAll().forEach((cookie) => {
-      res.cookies.set(cookie.name, cookie.value, cookie as any);
+      /* ⚠ Obiectul INTREG, nu numele plus valoarea plus un cast: `set` primeste si forma asta,
+         si atunci `maxAge`, `path` si `sameSite` pleaca fara sa fie nevoie de `any`. */
+      res.cookies.set(cookie);
     });
     return res;
   }
@@ -121,7 +123,9 @@ export async function updateSession(request: NextRequest) {
     if (isDashboard) url.searchParams.set("redirect", pathname);
     const res = NextResponse.redirect(url);
     supabaseResponse.cookies.getAll().forEach((cookie) => {
-      res.cookies.set(cookie.name, cookie.value, cookie as any);
+      /* ⚠ Obiectul INTREG, nu numele plus valoarea plus un cast: `set` primeste si forma asta,
+         si atunci `maxAge`, `path` si `sameSite` pleaca fara sa fie nevoie de `any`. */
+      res.cookies.set(cookie);
     });
     return res;
   }

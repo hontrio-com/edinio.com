@@ -463,7 +463,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                     <p className="text-xs text-info">
                       Clientul a ales la comanda: <strong>{addr.woot_courier_name}</strong>
                       {addr.woot_service_name ? ` · ${addr.woot_service_name}` : ""}. Apasa
-                      &nbsp;„Calculeaza preturi" ca sa se preselecteze automat.
+                      &nbsp;„Calculeaza preturi&quot; ca sa se preselecteze automat.
                     </p>
                   </div>
                 )}

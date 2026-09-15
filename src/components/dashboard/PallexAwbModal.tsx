@@ -428,7 +428,7 @@ function Formular({ onClose, order, businessId, onSuccess, zile }: Props) {
                 <p className="text-xs text-muted-foreground">
                   Marfa NU pleaca pana cand borderoul nu e validat, iar validarea nu se
                   poate face de aici fara numarul lui. Valideaza-l din contul ClientPlus,
-                  sau anuleaza partida din „Editeaza comanda" si emite din nou.
+                  sau anuleaza partida din „Editeaza comanda&quot; si emite din nou.
                 </p>
               </div>
             )}

@@ -1642,10 +1642,12 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                           {/* Label + not configured hint */}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-foreground">{method.label}</p>
+                            {/* ⚠ `Link`, nu `<a>`: o legatura simpla catre o pagina a panoului
+                                reincarca TOT panoul, iar comerciantul pierde ce avea deschis. */}
                             {needsIntegration && !isIntegrated && (
-                              <a href="/dashboard/features" className="text-[10px] text-primary hover:underline whitespace-nowrap">
+                              <Link href="/dashboard/features" className="text-[10px] text-primary hover:underline whitespace-nowrap">
                                 Configureaza integrarea
-                              </a>
+                              </Link>
                             )}
                           </div>
 
@@ -1783,7 +1785,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Cat dureaza de la comanda pana la client. Se publica in datele structurate ale paginilor de produs
                       (<span className="font-mono text-[11px]">offers.shippingDetails.deliveryTime</span>), de unde Google
-                      il ia pentru Merchant Listings. Daca ai pornit „Estimare livrare" in editorul de magazin, casuta de
+                      il ia pentru Merchant Listings. Daca ai pornit „Estimare livrare&quot; in editorul de magazin, casuta de
                       pe pagina produsului arata aceleasi zile.
                     </p>
                   </div>

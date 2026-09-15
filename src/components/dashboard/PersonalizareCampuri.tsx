@@ -306,7 +306,7 @@ function Reglaje({ camp, idx, schimba }: RegProps) {
           {camp.type === "fisier" && (
             <p className="col-span-2 text-[11px] text-muted-foreground">
               {/* ⚠ Comerciantul trebuie sa afle DE CE exista doua tipuri, altfel alege gresit. */}
-              Clientul poate incarca PDF sau imagini. Alege „Imagine (upload)" cand vrei doar poze —
+              Clientul poate incarca PDF sau imagini. Alege „Imagine (upload)&quot; cand vrei doar poze —
               acolo se vede miniatura, aici doar numele fisierului.
             </p>
           )}

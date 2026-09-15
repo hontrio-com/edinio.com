@@ -1356,7 +1356,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
 
           {/* Efect buton comanda */}
           <div>
-            <label className="text-xs font-semibold text-foreground block mb-1">Efect buton "Comanda acum"</label>
+            <label className="text-xs font-semibold text-foreground block mb-1">Efect buton &quot;Comanda acum&quot;</label>
             <p className="text-[11px] text-muted-foreground mb-2">Animatie aplicata pe butonul principal de pe pagina produsului.</p>
             <div className="grid grid-cols-3 gap-2">
               {[
@@ -1463,7 +1463,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
           <div className="flex items-center justify-between">
             <div>
               <label className="text-xs font-semibold text-foreground">Sortare pe prima pagina</label>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Lista „Cele mai noi / Pret crescator...". Pagina Magazin nu e afectata.</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Lista „Cele mai noi / Pret crescator...&quot;. Pagina Magazin nu e afectata.</p>
             </div>
             <button type="button"
               onClick={() => setPageContent(p => ({ ...p, sort_options: { ...p.sort_options, enabled: !(p.sort_options?.enabled !== false) } }))}
@@ -1478,7 +1478,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
           <div className="flex items-center justify-between">
             <div>
               <label className="text-xs font-semibold text-foreground">Filtre pe prima pagina</label>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Butonul „Filtre" si panoul lui. Pagina Magazin nu e afectata.</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Butonul „Filtre&quot; si panoul lui. Pagina Magazin nu e afectata.</p>
             </div>
             <button type="button"
               onClick={() => setPageContent(p => ({ ...p, filter_options: { enabled: !(p.filter_options?.enabled !== false) } }))}
@@ -1747,7 +1747,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             <div className="flex items-center justify-between">
               <div>
                 <label className="text-xs font-semibold text-foreground">Sectiunea produse recomandate</label>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Produsele marcate "Popular" apar separat</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Produsele marcate &quot;Popular&quot; apar separat</p>
               </div>
               <button type="button"
                 onClick={() => setPageContent(p => ({ ...p, show_featured_section: !p.show_featured_section }))}
@@ -1905,7 +1905,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div>
-                <label className="text-xs font-semibold text-foreground">Badge "Nou" pe produse</label>
+                <label className="text-xs font-semibold text-foreground">Badge &quot;Nou&quot; pe produse</label>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Afiseaza automat badge pe produsele adaugate recent</p>
               </div>
               <button type="button"
@@ -1916,7 +1916,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
             </div>
             {pageContent.new_badge?.enabled && (
               <div>
-                <label className="text-[10px] text-muted-foreground mb-1 block">Numarul de zile considerate "nou"</label>
+                <label className="text-[10px] text-muted-foreground mb-1 block">Numarul de zile considerate &quot;nou&quot;</label>
                 <input type="number" min={1} max={90} value={pageContent.new_badge.days ?? 7} className={inputCls + " !py-1.5 !text-xs"}
                   onChange={e => setPageContent(p => ({ ...p, new_badge: { ...p.new_badge!, days: parseInt(e.target.value) || 7 } }))} />
               </div>

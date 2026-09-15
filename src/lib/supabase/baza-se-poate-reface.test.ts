@@ -124,7 +124,7 @@ test("⚠ nicio functie nu numeste un tip de TABELA in semnatura", () => {
     assert.match(retur, /^RETURNS /, `functia ${antet[1]} n-are RETURNS pe linia urmatoare`);
 
     const bucati = imparteLaVirgule(antet[2]).map(tipulDin);
-    let r = retur.replace(/^RETURNS\s+/, "").replace(/^SETOF\s+/, "");
+    const r = retur.replace(/^RETURNS\s+/, "").replace(/^SETOF\s+/, "");
     if (r.toUpperCase().startsWith("TABLE(")) {
       bucati.push(...imparteLaVirgule(r.slice("TABLE(".length, -1)).map(tipulDin));
     } else {

@@ -339,6 +339,31 @@ group by 1, 2
 order by 1;
 ```
 
+### ⚠ CE S-A VAZUT DEJA, DIN PRIMA RULARE (15.09.2026, 16:59)
+
+| cod | ce scriu EI | comenzi |
+| --- | --- | --- |
+| 4 | „Expedierea ta a fost receptionata in depozitul DPD." | 3 |
+| 5 | „Expedierea ta a fost preluata spre livrare de catre curierul DPD." | 1 |
+| 9 | „Returnare comanda 5173400" | 1 |
+| **10** | **„Expedierea ta a fost livrata cu success."** | **7** |
+
+Plus cele trei din exemplele lor: 1 „Comanda primita", 2 „AWB generat", 3 „Ridicat de curier".
+
+⚠ **Deci `10` e livrarea**, iar sapte comenzi care stau azi pe „Expediata" sunt de fapt LIVRATE. Dar
+e un esantion de DOUASPREZECE comenzi dintr-o singura rulare, si nu se stie inca ce inseamna 6, 7, 8
+si ce e peste 10. Se mai asteapta cateva ture.
+
+⚠⚠ **SI O CONSECINTA CARE SE HOTARASTE INAINTE, NU DUPA.** In clipa in care harta se cableaza,
+cronul va muta pe „Livrat" toate comenzile vechi care poarta codul acela, iar `maybeAutoInvoice` va
+emite FACTURI pentru livrari din trecut. Masurat pe 15.09.2026: **203 comenzi Woot stau pe „Expediata", 177 dintre ele neplatite, iar 92
+sunt in fereastra cronului.** Deci o singura rulare poate muta pana la 92 de comenzi si poate
+declansa facturarea pentru fiecare. Inainte de cablare se numara exact cate si se
+intreaba proprietarul, nu se afla din jurnal a doua zi.
+
+⚠ Si eticheta NU e enum: `9` vine cu „Returnare comanda 5173400", adica poarta numarul comenzii in
+text. Deci harta se face pe NUMAR, iar textul ramane doar pentru ochiul omului.
+
 ⚠ **Si ce se stie deja, masurat pe 15.09.2026, inainte ca el sa fi rulat:** 92 de expedieri Woot
 intra in fereastra cronului (`shipped`, emise in ultimele 21 de zile), iar **203 comenzi Woot stau
 pe `shipped` PENTRU TOTDEAUNA**, fiindca nimic nu le-a mutat vreodata mai departe. Aia e chiar

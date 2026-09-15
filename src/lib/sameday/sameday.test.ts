@@ -233,8 +233,22 @@ test("⚠ comerciantul poate alege easybox-ul la emitere, nu doar cumparatorul l
    * coletul la Locker?". Pana azi nu putea — lockerul se citea DOAR din comanda.
    */
   const a = viu("src/lib/actions/sameday.actions.ts");
-  assert.match(a, /const locker = input\.lockerAles \?\? lockerDinComanda;/,
+  /*
+   * ⚠ RESCRISA 15.09.2026, si merita spus de ce, ca sa nu para o coborare.
+   *
+   * Afirmatia pironea TEXTUL randului `const locker = input.lockerAles ?? lockerDinComanda;`.
+   * Randul s-a schimbat fiindca purtarea lui era pe JUMATATE: fereastra trimite `lockerAles: null`
+   * si cand comerciantul a STINS comutatorul, si cand nu l-a atins deloc, iar serverul cadea in
+   * amandoua cazurile inapoi pe lockerul cumparatorului. Adica stingerea nu facea nimic, si
+   * coletul pleca tot in dulap desi butonul spunea altceva.
+   *
+   * Regula aparata aici ramane ACEEASI: alegerea comerciantului bate comanda. I s-a adaugat doar
+   * perechea care lipsea, si care e chiar reparatia: stins, comutatorul chiar stinge.
+   */
+  assert.match(a, /input\.lockerAles \?\? lockerDinComanda/,
     "alegerea comerciantului bate comanda");
+  assert.match(a, /vreaEasybox \? \(input\.lockerAles \?\? lockerDinComanda\) : null/,
+    "comutatorul stins nu mai stinge nimic: se cade inapoi pe lockerul cumparatorului");
   const m = viu("src/components/dashboard/SamedayAwbModal.tsx");
   assert.match(m, /setLaEasybox\(e\.target\.checked\)/, "si exista un comutator");
   assert.match(m, /getLockers\(businessId, "sameday"\)/, "si un selector care chiar cere lista");

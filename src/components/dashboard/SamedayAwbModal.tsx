@@ -80,10 +80,10 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
    * Aprinderea lui e o fapta a comerciantului, nu o implicire a noastra.
    */
   const [laEasybox, setLaEasybox] = useState(lockerDinComanda);
-  const [lockere, setLockere] = useState<{ id: string; name: string; address: string; city: string; county: string }[]>([]);
+  const [lockere, setLockere] = useState<{ id: string; name: string; address: string; city: string; county: string; postCode?: string }[]>([]);
   const [lockereIncarca, setLockereIncarca] = useState(false);
   const [cautare, setCautare] = useState("");
-  const [lockerAles, setLockerAles] = useState<{ id: string; name: string; address: string; city: string; county: string } | null>(null);
+  const [lockerAles, setLockerAles] = useState<{ id: string; name: string; address: string; city: string; county: string; postCode?: string } | null>(null);
 
   /* Extraoptiunile CONTULUI, nu o lista scrisa de noi: vezi `optiuniSamedayAction`. */
   const [coduriCont, setCoduriCont] = useState<string[]>([]);
@@ -195,6 +195,10 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       setLockere(l.map((x) => ({
         id: String(x.id), name: x.name, address: x.address ?? "",
         city: x.city ?? "", county: x.county ?? "",
+        /* ⚠ Nu se mai arunca: Sameday nu-l da, dar `getLockers` il are la alti curieri si GLS il
+           CERE pe adresa de livrare. Aruncat aici, punctul scris inapoi pe comanda ar fi mai sarac
+           decat cel ales de cumparator. */
+        postCode: x.postCode,
       })));
       setLockereIncarca(false);
     })();
@@ -246,9 +250,13 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       lockerAles: laEasybox && lockerAles
         ? {
             id: Number(lockerAles.id), name: lockerAles.name, address: lockerAles.address,
-            city: lockerAles.city, county: lockerAles.county,
+            city: lockerAles.city, county: lockerAles.county, postCode: lockerAles.postCode,
           }
         : null,
+      /* ⚠ STAREA COMUTATORULUI, trimisa pe fata. `lockerAles: null` nu deosebea „am stins
+         easybox-ul" de „nu l-am atins", deci serverul cadea inapoi pe lockerul cumparatorului si
+         coletul pleca TOT in dulap: butonul arata ca se poate muta coletul acasa, si nu se putea. */
+      laEasybox,
       extraOptiuni: extraAlese.length ? extraAlese : undefined,
     };
 

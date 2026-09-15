@@ -21,6 +21,10 @@ import {
 } from "@/lib/sameday/client";
 import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
 import { stradaDestinatarului, type AdresaLivrare } from "@/lib/orders/adresa";
+import { adresaDupaEmitereSameday, type LockerAles } from "@/lib/sameday/punctul-de-pe-awb";
+
+/** Reexportata ca fereastra sa n-o caute in doua locuri. Tipurile nu devin usi chemabile. */
+export type { LockerAles };
 
 // ─── Config actions ───────────────────────────────────────────────────────────
 
@@ -157,19 +161,20 @@ async function getConfigAndOrder(businessId: string, orderId: string) {
   return { supabase, config, order };
 }
 
-/** Ce alege comerciantul in fereastra de AWB, peste ce a ales cumparatorul la checkout. */
-export type LockerAles = {
-  id: number;
-  name?: string;
-  address?: string;
-  city?: string;
-  county?: string;
-};
-
 export async function createSamedayAwbAction(
   businessId: string,
   orderId: string,
-  input: SamedayAwbInput & { lockerAles?: LockerAles | null },
+  input: SamedayAwbInput & {
+    lockerAles?: LockerAles | null;
+    /**
+     * Starea comutatorului „livrare in easybox", asa cum a lasat-o comerciantul.
+     *
+     * ⚠ Exista fiindca `lockerAles: null` NU deosebea „a stins comutatorul" de „nu l-a atins".
+     * Lipsa campului inseamna purtarea de dinainte, ca sa nu se schimbe nimic pentru un browser
+     * cu pagina deschisa dinainte de desfasurare.
+     */
+    laEasybox?: boolean;
+  },
 ): Promise<
   | { awbNumber: string; awbCost: number | null; lockerReturnChargeCode: string | null }
   | { error: string }
@@ -222,7 +227,20 @@ export async function createSamedayAwbAction(
         }
       : null;
 
-  const locker = input.lockerAles ?? lockerDinComanda;
+  /*
+   * ═══ ⚠ COMUTATORUL STINS CHIAR STINGE EASYBOX-UL (15.09.2026) ═══
+   *
+   * Pana azi randul era `input.lockerAles ?? lockerDinComanda`, iar fereastra trimite `null` si
+   * cand comerciantul a STINS comutatorul, si cand nu l-a atins deloc. Cele doua nu se deosebeau,
+   * deci serverul cadea inapoi pe lockerul cumparatorului si coletul pleca TOT in dulap. Butonul
+   * arata ca se poate muta coletul acasa, si nu se putea: controlul mintea.
+   *
+   * ⚠ `laEasybox` LIPSA inseamna purtarea de pana azi, nu „stins". Un browser cu pagina deschisa
+   * dinainte de desfasurare nu trimite campul; tratat ca „stins", fiecare AWB emis din el ar fi
+   * plecat brusc acasa in loc de dulap, adica exact defectul, pe dos si mai scump.
+   */
+  const vreaEasybox = input.laEasybox ?? (input.lockerAles ? true : !!lockerDinComanda);
+  const locker = vreaEasybox ? (input.lockerAles ?? lockerDinComanda) : null;
   const areLocker = !!locker && Number.isFinite(locker.id) && locker.id > 0;
 
   /*
@@ -296,6 +314,41 @@ export async function createSamedayAwbAction(
   };
   if (creat?.awbCost != null) petic.sameday_awb_cost = creat.awbCost;
   if (creat?.lockerReturnChargeCode) petic.sameday_locker_charge_code = creat.lockerReturnChargeCode;
+
+  /*
+   * ═══ ⚠ SI UNDE A PLECAT CU ADEVARAT COLETUL (15.09.2026) ═══
+   *
+   * Comerciantul poate muta coletul in amandoua directiile, iar pana azi alegerea lui nu se scria
+   * nicaieri inapoi. Comanda ramanea cu ce alesese cumparatorul, deci panoul, emailurile catre
+   * cumparator si orice sincronizare aratau ALT dulap decat cel in care chiar a ajuns coletul.
+   *
+   * Se scrie DOAR cand chiar s-a schimbat ceva: daca omul n-a atins nimic, lockerul de pe comanda
+   * si cel folosit sunt acelasi, si atunci nu se atinge adresa degeaba.
+   */
+  const punctSchimbat = areLocker
+    ? String(locker!.id) !== (shipping.locker_id ?? "")
+      || (shipping.courier !== "sameday" || shipping.delivery_type !== "locker")
+    : !!lockerDinComanda;
+
+  if (punctSchimbat) {
+    /*
+     * ⚠ CITIRE PROASPATA, nu instantaneul de la inceputul actiunii.
+     *
+     * `shipping_address` e o coloana JSON, deci scrierea inlocuieste INTREG obiectul: cu
+     * instantaneul vechi as fi sters o editare de adresa facuta intre timp de comerciant, in alta
+     * fila. Recitit chiar inainte, fereastra se ingusteaza la un drum dus-intors.
+     *
+     * ⚠ Ce ramane, pe fata: nu e o tranzactie. O editare petrecuta CHIAR in fereastra asta s-ar
+     * pierde pe cheile punctului. Am ales sa nu cer o migratie pentru atat: masurat in productie,
+     * exista UN singur AWB Sameday in toata viata platformei, si sase comenzi la punct prin
+     * checkoutul nostru. O tranzactie adevarata cere o functie in baza, si aia se face cand drumul
+     * asta chiar poarta trafic.
+     */
+    const { data: proaspat } = await supabase
+      .from("orders").select("shipping_address").eq("id", orderId).maybeSingle();
+    const adresaAcum = (proaspat?.shipping_address ?? order.shipping_address ?? {}) as Record<string, unknown>;
+    petic.shipping_address = adresaDupaEmitereSameday(adresaAcum, areLocker ? locker! : null);
+  }
 
   const { error: eScriere, data: randuri } = await supabase.from("orders")
     .update(petic as never).eq("id", orderId).select("id");
@@ -400,7 +453,13 @@ export async function createSamedayReturnAwbAction(
   const orderData = order as typeof order & { sameday_return_awb_number?: string | null };
   if (orderData.sameday_return_awb_number) return { error: "AWB de retur a fost deja creat" };
 
-  if (input.fel === "locker" && !input.lockerId) {
+  /*
+   * ⚠ ACEEASI PAZA CA PE DRUMUL DUS, si pana azi nu era. `!input.lockerId` refuza doar lipsa si
+   * zeroul: un numar NEGATIV, unul fractionar sau `Infinity` treceau si plecau asa catre Sameday,
+   * care le respinge cu un cod pe care comerciantul nu-l poate lega de nimic. Drumul dus cere de
+   * mult `Number.isFinite(id) && id > 0`; returul cerea mai putin, fara niciun motiv.
+   */
+  if (input.fel === "locker" && !(Number.isFinite(input.lockerId) && (input.lockerId ?? 0) > 0)) {
     return { error: "Alege easybox-ul in care preda cumparatorul" };
   }
 

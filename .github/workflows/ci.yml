@@ -446,6 +446,23 @@ jobs:
           verifica "politici RLS"  "select count(*) from pg_policies where schemaname in ('public','privat')" 70
           verifica "indexuri"      "select count(*) from pg_indexes where schemaname in ('public','privat')" 100
           verifica "chei straine"  "select count(*) from pg_constraint c join pg_class r on r.oid=c.conrelid join pg_namespace n on n.oid=r.relnamespace where n.nspname='public' and c.contype='f'" 30
+          # ⚠ SI DREPTURILE, nu doar obiectele. Pasii 11 si 12 aplica granturile si revocarile, iar
+          # `ON_ERROR_STOP=1` prinde o eroare de sintaxa. Ce NU prindea nimeni pana acum e o sectiune
+          # care „reuseste" fara sa schimbe nimic: o baza refacuta cu toate tabelele la locul lor,
+          # dar cu FIECARE functie executabila de oricine.
+          #
+          # ⚠ In Postgres `EXECUTE` e al lui `PUBLIC` din oficiu, deci fara revocari numarul de mai
+          # jos ar fi numarul INTREG de functii (peste 160). Cu ele aplicate, in productie sunt 40.
+          # Pragul de 60 desparte limpede cele doua lumi, fara sa scartaie la fiecare functie noua.
+          cel_mult() {
+            local nume="$1" sql="$2" maxim="$3"
+            local n
+            n=$(psql -h localhost -U postgres -d postgres -tAc "$sql")
+            echo "  $nume: $n (cel mult $maxim)"
+            [ "$n" -le "$maxim" ] || { echo "PICAT: $nume - revocarile nu au prins, functiile raman deschise tuturor"; exit 1; }
+          }
+          verifica "granturi de executie" "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace, lateral aclexplode(p.proacl) a where n.nspname in ('public','privat') and a.privilege_type='EXECUTE'" 200
+          cel_mult "functii deschise lui PUBLIC" "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','privat') and (p.proacl is null or exists (select 1 from aclexplode(p.proacl) a where a.grantee=0 and a.privilege_type='EXECUTE'))" 60
           # Piesele fara de care platforma nu merge, verificate PE NUME.
           verifica "revendica_stoc_complet"    "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='revendica_stoc_complet'" 1
           verifica "aplica_tranzitia_comenzii" "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='aplica_tranzitia_comenzii'" 1

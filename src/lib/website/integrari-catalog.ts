@@ -593,7 +593,7 @@ export const SINONIME: Partial<Record<LogoKey, string[]>> = {
   sameday: ["ramburs", "awb", "urmarire", "tracking", "punct", "ridicare"],
   gls: ["ramburs", "locker", "parcelshop", "punct", "ridicare", "urmarire", "tracking"],
   woot: ["ramburs", "awb", "urmarire", "tracking"],
-  coleteOnline: ["ramburs", "awb"],
+  coleteOnline: ["ramburs", "awb", "urmarire", "tracking"],
   ecolet: ["ramburs", "awb", "urmarire", "tracking"],
   /* Fără `ramburs` și fără `awb`: aici unitatea e PARTIDA, iar documentul e
      borderou de paleți. Vezi `pallex/client.ts`. */

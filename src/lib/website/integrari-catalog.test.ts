@@ -407,6 +407,11 @@ test("urmărirea iese exact la curierii care au cron de urmărire", () => {
     are urmărire dacă și numai dacă are cron. Așa, când se livrează urmărirea
     pentru al treisprezecelea, proba cade și cere cuvântul, în loc să tacă.
 
+    ⚠ Colete Online a intrat tot pe 15.09.2026, al saisprezecelea, si proba a cazut a treia
+    oara in aceeasi zi. La el codurile CHIAR exista (un `code` numeric plus numele in romana pe
+    fiecare eveniment), deci comanda se si muta; dar tabelul lor nu e publicat nicaieri, asa ca
+    harta are doar codurile vazute in singurul exemplu din specificatia lor.
+
     ⚠ Cargus A INTRAT tot pe 15.09.2026, al cincisprezecelea, și proba a căzut iarăși, cum
     își promite. Şi la el urmărirea e mai puțină decât la ceilalți, din același motiv ca la Woot,
     dar pe dos ca dovadă: Cargus nu publică NICIO enumerare de stări în toată documentația V3,
@@ -428,7 +433,7 @@ test("urmărirea iese exact la curierii care au cron de urmărire", () => {
     dhl: "dhl", ecolet: "ecolet", fancourier: "fanCourier", fedex: "fedex", gls: "gls",
     innoship: "innoship", packeta: "packeta", pallex: "pallex", posta: "postaRomana",
     dpd: "dpd", sameday: "sameday", shipo: "shipo", smartship: "smartship", ups: "ups", woot: "woot",
-    cargus: "cargus",
+    cargus: "cargus", colete: "coleteOnline",
   };
   const vercel = readFileSync(join(AICI, "..", "..", "..", "vercel.json"), "utf8");
   const cuCron = new Set(

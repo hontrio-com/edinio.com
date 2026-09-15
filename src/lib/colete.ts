@@ -1,5 +1,6 @@
 import { normalizePhone } from "@/lib/utils/phone";
-import { normalizeLocalityName } from "@/lib/utils/ro-address";
+import { judetulColete, localitateaColete } from "@/lib/shipping/adresa-colete";
+import type { EvenimentColete } from "@/lib/shipping/statusuri-colete";
 import { eroareCuStatus, eroareDeTermen, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 import { cheieToken } from "@/lib/integrari/cheie-token";
 
@@ -230,8 +231,11 @@ function buildOrderBody(
       },
       address: {
         countryCode: "RO",
-        city: sender.city,
-        county: sender.county,
+        /* ⚠ ACEEASI REGULA CA LA DESTINATAR, si asta era jumatate din defect: pana azi
+           expeditorul isi pastra diacriticele si destinatarul si le pierdea, in ACELASI corp.
+           Vezi `shipping/adresa-colete.ts`. */
+        city: localitateaColete(sender.city, sender.county),
+        county: judetulColete(sender.county),
         postalCode: sender.postal_code,
         street: sender.street,
         number: sender.street_number,
@@ -247,10 +251,18 @@ function buildOrderBody(
       },
       address: {
         countryCode: "RO",
-        /* ⚠ Bucurestiul se plieaza la „Bucuresti”: checkout-ul cere acum sectorul.
-           Vezi nota din `ro-address.ts`. */
-        city: normalizeLocalityName(receiver.city, receiver.county),
-        county: receiver.county,
+        /*
+         * ⚠ AICI DIACRITICELE SE PASTREAZA, PE DOS FATA DE CEILALTI CURIERI.
+         *
+         * Pana azi orasul trecea prin `normalizeLocalityName`, care le SCOATE, iar judetul
+         * pleca neatins: aceeasi cerere purta „Timisoara” langa „Timiș”. Colectia lor
+         * Postman si modulul lor de WordPress le pastreaza pe amandoua.
+         *
+         * Singura interventie ramane plierea sectorului in capitala, fiindca ei sunt BROKER:
+         * dau mai departe la Cargus, DPD si ceilalti, unde Bucurestiul e o singura localitate.
+         */
+        city: localitateaColete(receiver.city, receiver.county),
+        county: judetulColete(receiver.county),
         postalCode: receiver.postal_code,
         street: receiver.street,
         number: receiver.street_number,
@@ -315,4 +327,117 @@ export async function getCOOrderAwb(
     throw new Error(err.message ?? `Eroare la descarcarea AWB (HTTP ${res.status})`);
   }
   return res.arrayBuffer();
+}
+
+// ─── Anularea expedierii ──────────────────────────────────────────────────────
+
+/**
+ * Motivul anularii, exact cum il enumera ei.
+ *
+ * ⚠ `NU_A_VENIT_CURIERUL` e valid DOAR dupa ce a trecut data estimata de ridicare, si o spun
+ * ei in documentatie. Trimis mai devreme, cererea cade.
+ */
+export const MOTIV_ANULARE_COLETE = {
+  NU_MAI_DORESC: 1,
+  AM_GRESIT: 2,
+  MAI_IEFTIN_IN_ALTA_PARTE: 3,
+  NU_A_VENIT_CURIERUL: 4,
+} as const;
+
+export type AnulareColete =
+  | { fel: "anulat" }
+  | { fel: "refuzat"; motiv: string };
+
+/**
+ * Anuleaza expedierea la Colete Online.
+ *
+ * ═══ ⚠ EI CHIAR AU ANULARE, SI NOI SCRIAM CA NU ═══
+ *
+ * Codul spunea, negru pe alb, ca „Colete Online e cel mai prost caz din toti sase: NU are
+ * endpoint de anulare". Era adevarat despre COLECTIA LOR POSTMAN, care n-are o asemenea
+ * cerere. Nu era adevarat despre API: specificatia lor OpenAPI, cea care sta chiar in spatele
+ * `docs.api.colete-online.ro`, documenteaza `DELETE /order/{uniqueId}` cu titlul „Cancel an
+ * existing expedition".
+ *
+ * Pana azi comerciantul trebuia sa intre in contul lor si sa anuleze de mana.
+ *
+ * ═══ ⚠⚠ `200` NU INSEAMNA „ANULAT" ═══
+ *
+ * Raspunsul e `{ success: boolean }`, iar documentatia lor spune limpede: „Cancellation may
+ * not be possible depending on the current status of the expedition (for example, after the
+ * package has already been picked up by the courier). In such cases the response field
+ * `success` will be `false`".
+ *
+ * Deci un `200` cu `success: false` inseamna EXACT PE DOS fata de cum arata. Citit ca reusita,
+ * comanda ar ramane fara AWB in panou in timp ce coletul chiar pleaca, iar comerciantul ar
+ * afla din factura. Aceeasi forma ca la Cargus, unde un `200` putea purta un obiect de eroare.
+ */
+export async function cancelCOOrder(
+  token: string,
+  sandbox: boolean,
+  uniqueId: string,
+  motiv?: number,
+): Promise<AnulareColete> {
+  const cale = `/order/${encodeURIComponent(uniqueId)}`
+    + (motiv ? `?cancelReason=${encodeURIComponent(String(motiv))}` : "");
+
+  const raspuns = await coReq<unknown>(token, sandbox, "DELETE", cale);
+
+  /*
+   * ⚠ Se cere `success === true` ANUME, nu „adevarat-ish". Un raspuns fara campul lor, sau cu
+   * altceva in el, NU e o anulare: e un raspuns pe care nu-l intelegem, si coletul poate fi
+   * inca in drum.
+   */
+  const ok = typeof raspuns === "object" && raspuns !== null
+    && (raspuns as Record<string, unknown>).success === true;
+
+  if (ok) return { fel: "anulat" };
+
+  const mesaj = typeof raspuns === "object" && raspuns !== null
+    && typeof (raspuns as Record<string, unknown>).message === "string"
+    ? String((raspuns as Record<string, unknown>).message)
+    : "Colete Online nu a putut anula expedierea. Se intampla cand coletul a fost deja ridicat de curier.";
+
+  return { fel: "refuzat", motiv: mesaj };
+}
+
+// ─── Urmarirea coletului ──────────────────────────────────────────────────────
+
+/** Ce ne-au spus ei despre o expediere, adus in forma noastra. */
+export type StareColete = {
+  uniqueId: string;
+  awb: string;
+  /** Istoricul lor, cu codurile si numele lor cu tot. */
+  istoric: EvenimentColete[];
+};
+
+/**
+ * Istoricul unei expedieri.
+ *
+ * ⚠ CERERILE SUNT LIMITATE LA UNA PE ORA pentru fiecare colet, si o spun ei in documentatie:
+ * „The requests to this endpoint are limited to once every hour for each uniqueId/awb. If you
+ * want to update the status in real time use the order status change notify extra option."
+ *
+ * De aceea cronul merge la doua ore, nu mai des. Un `429` de la ei poarta si `Retry-After`.
+ *
+ * ⚠ Se poate cere si dupa AWB, nu doar dupa `uniqueId`, dar numai `uniqueId` merge mereu:
+ * „If the order has no awb, only searching by the uniqueId will work."
+ */
+export async function statusCOOrder(
+  token: string,
+  sandbox: boolean,
+  uniqueId: string,
+): Promise<StareColete | null> {
+  const raspuns = await coReq<unknown>(
+    token, sandbox, "GET", `/order/status/${encodeURIComponent(uniqueId)}`,
+  );
+  if (typeof raspuns !== "object" || raspuns === null) return null;
+
+  const r = raspuns as Record<string, unknown>;
+  const sumar = (r.summary ?? {}) as Record<string, unknown>;
+  return {
+    uniqueId: typeof sumar.uniqueId === "string" ? sumar.uniqueId : uniqueId,
+    awb: typeof sumar.awb === "string" ? sumar.awb : "",
+    istoric: Array.isArray(r.history) ? r.history as EvenimentColete[] : [],
+  };
 }

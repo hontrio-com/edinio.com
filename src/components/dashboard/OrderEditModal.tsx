@@ -769,7 +769,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
          * `dezleagaPostaAwbAction`, care CHIAR intreaba la Posta daca trimiterea mai
          * figureaza, dar nu anuleaza nimic acolo.
          */
-        const scrieDoarLaNoi = key === "posta" || key === "packeta" || key === "colete";
+        /* ⚠ „colete" A IESIT DE AICI pe 15.09.2026: de cand `detachCOAwb` cheama
+           `DELETE /order/{uniqueId}`, el CHIAR vorbeste cu furnizorul. Lasat in lista, i-am
+           fi spus omului ca la Colete Online nu s-a atins nimic, exact cand se atinsese. */
+        const scrieDoarLaNoi = key === "posta" || key === "packeta";
         const eticheta = activeAwbs.find((a) => a.key === key)?.label ?? "curier";
         toast.error(
           scrieDoarLaNoi
@@ -785,7 +788,10 @@ export function OrderEditModal({ open, onClose, order, businessId, onSaved }: {
       if (res.error) { toast.error(res.error); return; }
       toast.success(
         res.mesaj
-        ?? (key === "colete" ? "AWB detasat. Nu uita sa anulezi expedierea si in contul Colete Online."
+        /* ⚠ Colete Online isi spune singur ce s-a intamplat, prin `mesaj`: anularea la ei
+           poate fi REFUZATA (colet deja ridicat), iar un text fix ar minti intr-un sens sau
+           altul. Ramura de mai jos e doar plasa pentru un raspuns fara `mesaj`. */
+        ?? (key === "colete" ? "AWB scos de pe comanda. Verifica in contul Colete Online daca expedierea mai figureaza."
         : key === "posta" ? "Numarul a fost scos de pe comanda. Anularea la Posta se face separat, la ei."
         : "AWB anulat."),
         res.mesaj ? { duration: 12000 } : undefined,

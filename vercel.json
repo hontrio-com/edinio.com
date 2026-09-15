@@ -132,6 +132,10 @@
       "schedule": "11 */2 * * *"
     },
     {
+      "path": "/api/cron/colete-tracking",
+      "schedule": "35 */2 * * *"
+    },
+    {
       "path": "/api/cron/cargus-tracking",
       "schedule": "27 */2 * * *"
     },

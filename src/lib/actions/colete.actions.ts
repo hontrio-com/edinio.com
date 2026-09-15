@@ -15,6 +15,7 @@ import {
   getBalance,
   getPrices,
   createCOOrder,
+  cancelCOOrder,
   type COConfig,
   type COOrderExtras,
   type COReceiver,
@@ -197,14 +198,19 @@ export async function createCOAwb(
     if (!config?.client_id || !config?.client_secret) return { error: "Colete Online nu este configurat" };
 
     /*
-     * ⚠ Colete Online e cel mai prost caz din toti sase, si de aceea garda locala
-     * conteaza cel mai mult aici: NU are endpoint de anulare (vezi `detachCOAwb`,
-     * care doar dezleaga local), si nu se poate interoga dupa `clientReference`.
-     * Un al doilea AWB nu s-ar putea sterge din cod, ci doar de mana din contul lor.
+     * ⚠ GARDA LOCALA CONTEAZA MULT AICI, fiindca un al doilea AWB e greu de intors.
+     *
+     * ⚠ INDREPTARE (15.09.2026): randul de aici spunea ca „Colete Online NU are endpoint de
+     * anulare". Era adevarat despre colectia lor Postman; NU e adevarat despre API-ul lor,
+     * care documenteaza `DELETE /order/{uniqueId}`. De azi `detachCOAwb` chiar il cheama.
+     *
+     * Dar anularea POATE FI REFUZATA dupa ce curierul a ridicat coletul, si tot nu se poate
+     * interoga dupa `clientReference`. Deci un al doilea AWB ramane scump: poate insemna doua
+     * colete ridicate, din care unul se anuleaza doar de mana, din contul lor.
      *
      * Pe deasupra, actiunea asta nici nu citea `colete_awb_number` inainte (citirea
      * de mai sus aduce doar id, order_number, payment_method, payment_status,
-     * subtotal), deci pe server nu exista NICIO oprire — doar `hasAwb` din modal.
+     * subtotal), deci pe server nu exista NICIO oprire in afara registrului.
      */
     const r = await cuRegistru(
       admin,
@@ -252,7 +258,22 @@ export async function createCOAwb(
 
     const { error: eScriere, data: randuri } = await admin.from("orders").update({
       colete_order_id: uniqueId,
+      /*
+       * ⚠ SI IN COLOANA CU NUMELE EI ADEVARAT (15.09.2026).
+       *
+       * `colete_unique_id` exista in schema din prima zi, dezlegarea o STERGE, dar nimic n-o
+       * scria vreodata: era goala pe fiecare comanda. Iar `uniqueId`-ul lor statea, sub alt
+       * nume, in `colete_order_id`.
+       *
+       * Nu se poate sterge niciuna: `colete_order_id` e citita de ruta de eticheta, de
+       * fereastra si de `legaturaVie` din registru. Deci se scriu amandoua, iar cititorii noi
+       * o prefera pe cea cu numele adevarat.
+       */
+      colete_unique_id: uniqueId,
       colete_awb_number: awb,
+      /* ⚠ Ceasul urmaririi: de aici isi masoara cronul fereastra de 21 de zile, nu din
+         `created_at`. Vezi migratia `2027-01-20`. */
+      colete_awb_at: new Date().toISOString(),
       colete_service_name: serviceName,
       tracking_number: awb,
       status: "processing",
@@ -285,7 +306,10 @@ export async function createCOAwb(
 // in their Colete Online account, then detaches the AWB here so the order can
 // get a fresh one (e.g. after editing a wrong address).
 
-export async function detachCOAwb(businessId: string, orderId: string): Promise<{ success: true } | { error: string }> {
+export async function detachCOAwb(
+  businessId: string,
+  orderId: string,
+): Promise<{ success: true; mesaj: string } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
@@ -295,15 +319,70 @@ export async function detachCOAwb(businessId: string, orderId: string): Promise<
 
   const admin = adminClient();
   const { data: order } = await admin.from("orders")
-    .select("id, colete_awb_number, tracking_number")
+    .select("id, colete_awb_number, colete_unique_id, colete_order_id, tracking_number")
     .eq("id", orderId).eq("business_id", businessId).single();
   if (!order) return { error: "Comanda negasita" };
   if (!order.colete_awb_number) return { error: "Comanda nu are AWB Colete Online." };
+
+  /*
+   * ═══ ⚠⚠ SE INCEARCA MAI INTAI ANULAREA LA EI (15.09.2026) ═══
+   *
+   * Codul de aici spunea, negru pe alb, ca „Colete Online n-are endpoint de anulare", si de
+   * aceea butonul doar dezlega local, iar omul trebuia sa intre in contul lor si sa anuleze de
+   * mana. Era adevarat despre COLECTIA LOR POSTMAN; nu era adevarat despre API. Specificatia
+   * lor OpenAPI documenteaza `DELETE /order/{uniqueId}`, „Cancel an existing expedition".
+   *
+   * ⚠ ANULAREA POATE FI REFUZATA, si atunci `200` inseamna EXACT PE DOS: raspunsul e
+   * `{ success: false }`. Un colet deja ridicat de curier nu se mai poate opri. Vezi
+   * `cancelCOOrder`.
+   *
+   * ⚠ SI TOTUSI DEZLEGAREA LOCALA SE FACE ORICUM. Butonul asta a insemnat mereu „scoate
+   * numarul de pe comanda", iar comerciantul poate sa fi anulat deja de mana in contul lor.
+   * Refuzul nu se inghite insa: iese in `mesaj`, care ajunge pe ecran.
+   */
+  let laEi: string;
+  const { data: setari } = await admin
+    .from("store_settings").select("colete_config").eq("business_id", businessId).single();
+  const config = setari?.colete_config as COConfig | null;
+  /*
+   * ⚠ `colete_unique_id` INTAI, `colete_order_id` pe urma, si numarul de AWB la sfarsit.
+   *
+   * Cele doua coloane poarta acelasi lucru: `uniqueId`-ul lor. Pana azi numai a doua era
+   * scrisa, desi prima are numele potrivit, deci comenzile de dinainte de 15.09.2026 o au
+   * goala. Documentatia lor spune ca se poate cere si dupa AWB, dar ca numai `uniqueId`
+   * merge MEREU („If the order has no awb, only searching by the uniqueId will work").
+   */
+  const uniqueId = (order.colete_unique_id ?? "").trim()
+    || (order.colete_order_id ?? "").trim()
+    || (order.colete_awb_number ?? "").trim();
+
+  if (!config?.client_id || !config?.client_secret) {
+    laEi = "Colete Online nu mai e configurat, deci expedierea NU a fost anulata la ei.";
+  } else {
+    try {
+      const token = await getCOToken(config.client_id, config.client_secret);
+      const r = await cancelCOOrder(token, config.sandbox ?? false, uniqueId);
+      laEi = r.fel === "anulat"
+        ? "Expedierea a fost anulata si la Colete Online."
+        : `Colete Online NU a anulat expedierea: ${r.motiv} Verifica in contul lor.`;
+    } catch (e) {
+      /* ⚠ O cadere aici nu opreste dezlegarea, dar nici nu se ascunde: omul trebuie sa stie
+         ca la ei poate sa fi ramas o expediere vie. */
+      laEi = `Anularea la Colete Online nu a raspuns (${(e as Error).message}). Verifica in contul lor.`;
+    }
+  }
 
   const { error } = await admin.from("orders").update({
     colete_awb_number: null,
     colete_order_id: null,
     colete_unique_id: null,
+    /* ⚠ Si tot ce a aflat urmarirea: lasate in urma, panoul ar arata drumul unui colet care
+       nu mai e pe comanda, iar cronul l-ar intreba pana se inchide fereastra. */
+    colete_awb_at: null,
+    colete_status_code: null,
+    colete_status_label: null,
+    colete_status_at: null,
+    colete_status_checked_at: null,
     colete_service_name: null,
     // tracking_number is shared across couriers — clear it only if it belongs to this AWB.
     ...(order.tracking_number === order.colete_awb_number ? { tracking_number: null } : {}),
@@ -315,10 +394,12 @@ export async function detachCOAwb(businessId: string, orderId: string): Promise<
   if (error) return { error: "Eroare la actualizare." };
 
   /*
-   * Dezlegarea E anularea, la Colete: furnizorul n-are endpoint de anulare, deci
-   * omul o face din contul lui si apoi apasa aici. Pentru registru inseamna acelasi
-   * lucru — slotul se elibereaza, altfel AWB-ul urmator ar fi refuzat, sau mai rau,
-   * ar fi „adoptat" chiar cel dezlegat.
+   * Slotul se elibereaza oricum: altfel AWB-ul urmator pe comanda asta ar fi refuzat, sau mai
+   * rau, ar fi „adoptat" chiar cel dezlegat.
+   *
+   * ⚠ Se elibereaza SI cand ei au refuzat anularea, si asta e o hotarare: numarul nu mai e
+   * pe comanda, deci registrul n-are ce identitate sa mai apere. Ce ramane viu la ei se spune
+   * omului in `mesaj`.
    */
   const eliberat = await marcheazaAnulata(admin, businessId, cheieOperatie("awb", "colete", orderId));
   if (!eliberat) {
@@ -332,5 +413,5 @@ export async function detachCOAwb(businessId: string, orderId: string): Promise<
   }
 
   revalidatePath(`/dashboard/orders/${orderId}`);
-  return { success: true };
+  return { success: true, mesaj: `AWB scos de pe comanda. ${laEi}` };
 }

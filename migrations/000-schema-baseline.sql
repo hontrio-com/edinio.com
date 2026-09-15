@@ -7190,7 +7190,12 @@ create table if not exists public.orders (
   cargus_status_at timestamp with time zone,
   cargus_status_checked_at timestamp with time zone,
   cargus_confirmat_la timestamp with time zone,
-  cargus_confirmat_de text);
+  cargus_confirmat_de text,
+  colete_awb_at timestamp with time zone,
+  colete_status_code integer,
+  colete_status_label text,
+  colete_status_at timestamp with time zone,
+  colete_status_checked_at timestamp with time zone);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -8269,6 +8274,7 @@ CREATE INDEX operatii_externe_order_id_idx ON public.operatii_externe USING btre
 CREATE INDEX operatii_externe_order_idx ON public.operatii_externe USING btree (order_id, creat_la DESC);
 CREATE UNIQUE INDEX operatii_externe_tinta_deschisa_idx ON public.operatii_externe USING btree (COALESCE(business_id, '00000000-0000-0000-0000-000000000000'::uuid), furnizor, fel, tinta_idempotenta) WHERE ((tinta_idempotenta IS NOT NULL) AND (stare = ANY (ARRAY['in_curs'::text, 'necunoscut'::text])));
 CREATE INDEX orders_cargus_urmarire_idx ON public.orders USING btree (cargus_status_checked_at NULLS FIRST) WHERE ((cargus_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
+CREATE INDEX orders_colete_urmarire_idx ON public.orders USING btree (colete_status_checked_at NULLS FIRST) WHERE ((colete_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_cupon_neplatit_idx ON public.orders USING btree (payment_status, status, created_at) WHERE (discount_code IS NOT NULL);
 CREATE INDEX orders_dhl_urmarire_idx ON public.orders USING btree (dhl_status_checked_at NULLS FIRST) WHERE ((dhl_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_dpd_urmarire_idx ON public.orders USING btree (dpd_status_checked_at NULLS FIRST) WHERE ((dpd_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));

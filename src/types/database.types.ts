@@ -3587,8 +3587,13 @@ export type Database = {
           cargus_status_checked_at: string | null
           cod_discount_amount: number
           cod_fee_amount: number
+          colete_awb_at: string | null
           colete_awb_number: string | null
           colete_order_id: string | null
+          colete_status_at: string | null
+          colete_status_checked_at: string | null
+          colete_status_code: number | null
+          colete_status_label: string | null
           colete_service_name: string | null
           colete_unique_id: string | null
           created_at: string
@@ -3806,8 +3811,13 @@ export type Database = {
           cargus_status_checked_at?: string | null
           cod_discount_amount?: number
           cod_fee_amount?: number
+          colete_awb_at?: string | null
           colete_awb_number?: string | null
           colete_order_id?: string | null
+          colete_status_at?: string | null
+          colete_status_checked_at?: string | null
+          colete_status_code?: number | null
+          colete_status_label?: string | null
           colete_service_name?: string | null
           colete_unique_id?: string | null
           created_at?: string
@@ -4025,8 +4035,13 @@ export type Database = {
           cargus_status_checked_at?: string | null
           cod_discount_amount?: number
           cod_fee_amount?: number
+          colete_awb_at?: string | null
           colete_awb_number?: string | null
           colete_order_id?: string | null
+          colete_status_at?: string | null
+          colete_status_checked_at?: string | null
+          colete_status_code?: number | null
+          colete_status_label?: string | null
           colete_service_name?: string | null
           colete_unique_id?: string | null
           created_at?: string

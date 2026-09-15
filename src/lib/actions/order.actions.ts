@@ -40,6 +40,7 @@ import { verificaCotatia, type PlanExpedierii } from "@/lib/shipping/quote-token
    functii async. Vezi antetul din `recotarea.ts`, si buildul de 19 erori care a iesit din asta. */
 import { mesajulRecotarii, TOLERANTA_RAMBURS_LEI } from "@/lib/shipping/recotarea";
 import { punctulDePeComanda } from "@/lib/shipping/punctul-de-pe-comanda";
+import { punctulFataDeAdresa } from "@/lib/shipping/punctul-si-localitatea";
 import { parseBillingCompany, type BillingCompany, type BillingCompanyInput } from "@/lib/billing/company";
 import { verifyBillingCompany } from "@/lib/billing/verify";
 import { expandBundleRelease, expandBundleStock } from "@/lib/bundles";
@@ -1599,6 +1600,45 @@ export async function placeOrder(data: {
     return { error: punctAles.mesaj };
   }
 
+  /*
+   * ═══ ⚠ PUNCTUL DIN ALTA PARTE: SE MASOARA, NU SE REFUZA (15.09.2026) ═══
+   *
+   * Fisa se semneaza pe `{magazin, curier, retea}`, fara localitate, iar `getLockers` intoarce
+   * lista intreaga cand nu i se cere un oras. Deci se poate cota pentru Bucuresti si plasa cu
+   * tokenul unui easybox din Cluj, iar la emitere Sameday si DPD inlocuiesc destinatarul: coletul
+   * pleaca la Cluj pe tariful Bucurestiului, si diferenta o plateste comerciantul.
+   *
+   * ⚠ NU se refuza, si e o hotarare: „judetul punctului = judetul cotat" ar respinge un caz cinstit
+   * si des (cineva din Voluntari care alege un easybox bucurestean), iar leacul corect se face pe
+   * ZONA de livrare, care e o regula de PRET. Expunerea masurata: SASE comenzi prin selectorul
+   * nostru in toata viata platformei. Deci intai se masoara daca se intampla.
+   *
+   * ⚠ Randul se scrie DOAR cand chiar difera: jurnalul e scris de pe un capat public si anonim.
+   * Pliul capitalei sta in regula, altfel s-ar fi aprins pe toate comenzile din Bucuresti si n-ar
+   * fi masurat nimic. Vezi `punctulFataDeAdresa`.
+   */
+  const punctulEInAltaParte = punctulFataDeAdresa(
+    punctAles.campuri && { city: punctAles.campuri.locker_city, county: punctAles.campuri.locker_county },
+    { city: data.customer_city, county: data.customer_county },
+  );
+  if (punctulEInAltaParte) {
+    logError({
+      action: "placeOrder.punctInAltaParte",
+      message: `Punct de ridicare in alt ${punctulEInAltaParte} decat adresa cotata: punctul in `
+        + `${punctAles.campuri?.locker_city}, ${punctAles.campuri?.locker_county}; `
+        + `adresa in ${data.customer_city}, ${data.customer_county}`,
+      details: {
+        businessId: data.business_id,
+        courier: data.selected_courier,
+        fel: punctulEInAltaParte,
+        punctOras: punctAles.campuri?.locker_city,
+        punctJudet: punctAles.campuri?.locker_county,
+        adresaOras: data.customer_city,
+        adresaJudet: data.customer_county,
+      },
+      severity: "warning",
+    });
+  }
   /*
    * ═══ ⚠ SUMA DE RAMBURS SEMNATA SE CONFRUNTA CU MARFA ADEVARATA (14.09.2026) ═══
    *
@@ -4533,6 +4573,45 @@ export async function placeCartOrder(data: {
     return { error: punctAles.mesaj };
   }
 
+  /*
+   * ═══ ⚠ PUNCTUL DIN ALTA PARTE: SE MASOARA, NU SE REFUZA (15.09.2026) ═══
+   *
+   * Fisa se semneaza pe `{magazin, curier, retea}`, fara localitate, iar `getLockers` intoarce
+   * lista intreaga cand nu i se cere un oras. Deci se poate cota pentru Bucuresti si plasa cu
+   * tokenul unui easybox din Cluj, iar la emitere Sameday si DPD inlocuiesc destinatarul: coletul
+   * pleaca la Cluj pe tariful Bucurestiului, si diferenta o plateste comerciantul.
+   *
+   * ⚠ NU se refuza, si e o hotarare: „judetul punctului = judetul cotat" ar respinge un caz cinstit
+   * si des (cineva din Voluntari care alege un easybox bucurestean), iar leacul corect se face pe
+   * ZONA de livrare, care e o regula de PRET. Expunerea masurata: SASE comenzi prin selectorul
+   * nostru in toata viata platformei. Deci intai se masoara daca se intampla.
+   *
+   * ⚠ Randul se scrie DOAR cand chiar difera: jurnalul e scris de pe un capat public si anonim.
+   * Pliul capitalei sta in regula, altfel s-ar fi aprins pe toate comenzile din Bucuresti si n-ar
+   * fi masurat nimic. Vezi `punctulFataDeAdresa`.
+   */
+  const punctulEInAltaParte = punctulFataDeAdresa(
+    punctAles.campuri && { city: punctAles.campuri.locker_city, county: punctAles.campuri.locker_county },
+    { city: data.customer_city, county: data.customer_county },
+  );
+  if (punctulEInAltaParte) {
+    logError({
+      action: "placeCartOrder.punctInAltaParte",
+      message: `Punct de ridicare in alt ${punctulEInAltaParte} decat adresa cotata: punctul in `
+        + `${punctAles.campuri?.locker_city}, ${punctAles.campuri?.locker_county}; `
+        + `adresa in ${data.customer_city}, ${data.customer_county}`,
+      details: {
+        businessId: data.business_id,
+        courier: data.selected_courier,
+        fel: punctulEInAltaParte,
+        punctOras: punctAles.campuri?.locker_city,
+        punctJudet: punctAles.campuri?.locker_county,
+        adresaOras: data.customer_city,
+        adresaJudet: data.customer_county,
+      },
+      severity: "warning",
+    });
+  }
   /* ⚠ Aceeasi confruntare ca la comanda directa, cu aceleasi doua porti: numai pe ramburs, si
      numai cand exista o suma semnata de incredere. Vezi nota lunga de acolo. */
   if (

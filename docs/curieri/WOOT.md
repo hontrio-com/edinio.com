@@ -326,4 +326,24 @@ banii de ramburs si le spune pe amandoua comerciantului cu vorbele curierului.
 Nota onesta: **9/10**. Ce lipseste e un singur lucru, si ⚠ **el nu atarna de noi**: harta de stari a
 coletului (D-1), fara de care comanda nu se muta singura pe „Livrat" si factura nu pleaca la livrare.
 Woot nu publica lista aceea nicaieri. Ori se strange din datele noastre in cateva zile, ori se cere
-de la ei printr-un email. Restul, D-2 si D-3, sunt marunte si numite ca atare.
+de la ei printr-un email.
+
+**Interogarea din care iese harta, cand cronul a strans destule:**
+
+```sql
+select woot_status_id, woot_status_label, count(*) as comenzi,
+       min(woot_status_checked_at) as prima, max(woot_status_checked_at) as ultima
+from orders
+where woot_status_id is not null
+group by 1, 2
+order by 1;
+```
+
+⚠ **Si ce se stie deja, masurat pe 15.09.2026, inainte ca el sa fi rulat:** 92 de expedieri Woot
+intra in fereastra cronului (`shipped`, emise in ultimele 21 de zile), iar **203 comenzi Woot stau
+pe `shipped` PENTRU TOTDEAUNA**, fiindca nimic nu le-a mutat vreodata mai departe. Aia e chiar
+gaura pe care harta o inchide.
+
+⚠ Cand harta se scrie, ea NU intra in `statusuri-woot.ts` fara masuratoarea langa ea: fiecare numar
+trebuie sa vina cu de cate ori a fost vazut si cu eticheta LOR. Probele care apara azi granita
+(cronul nu muta comanda, nu factureaza) se sterg ANUME, una cate una, nu in bloc. Restul, D-2 si D-3, sunt marunte si numite ca atare.

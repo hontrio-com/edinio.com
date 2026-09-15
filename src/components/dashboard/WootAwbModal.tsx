@@ -6,33 +6,16 @@ import { toast } from "sonner";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { getWootPrices, createWootAwb, cancelWootAwb, getWootSenderLocations, getWootReceiverLocations } from "@/lib/actions/woot.actions";
 import type { WootPriceResult, WootParcel, WootCounty, WootCity, WootLocation } from "@/lib/woot";
-import { stripDiacritics } from "@/lib/utils/ro-address";
-
 /**
- * Potrivire de localitate intre comanda si nomenclatorul Woot.
+ * ⚠ POTRIVIREA NU MAI STA AICI, si nu din cochetarie: aceeasi regula ii trebuie si cotarii
+ * din checkout (`buildWootOptions`), iar tinuta in fereastra a ramas reparata pe jumatate.
  *
- * Compararea de dinainte era `a.toLowerCase().includes(b.toLowerCase())` pe text
- * BRUT, si pica pe doua lucruri deodata:
- *
- *  1. diacriticele — comanda are "Comanesti" scris cu ș U+0219 (virgula
- *     dedesubt), iar nomenclatoarele romanesti folosesc adesea ş U+015F
- *     (sedila). Sunt caractere DIFERITE, deci `includes` da false in ambele
- *     sensuri si orasul nu se preselecta;
- *  2. `includes` in sine — "Bacau" se potrivea si cu "Bacau Nou".
- *
- * Acum: fara diacritice (helperul trateaza si ș, si ş), potrivire EXACTA intai,
- * si abia daca nu exista una exacta acceptam un prefix.
+ * Forma de dinainte cerea egalitate sau prefix pe textul fara diacritice, deci cadea pe DOUA
+ * lucruri masurate in comenzi adevarate: judetul „Municipiul Bucuresti" (cum il scrie chiar
+ * checkoutul nostru, la 25 de comenzi din care 23 cu AWB Woot) si orasul „Sector 5", care nu
+ * e prefixul lui „Sectorul 5", cum isi numeste Woot sectoarele. Vezi fisierul de mai jos.
  */
-function potrivesteLocalitate<T extends { id: number; name: string }>(
-  lista: T[],
-  numeDinComanda: string,
-): T | undefined {
-  const cautat = stripDiacritics(numeDinComanda).trim().toLowerCase();
-  if (!cautat) return undefined;
-  const norm = (v: string) => stripDiacritics(v).trim().toLowerCase();
-  return lista.find((x) => norm(x.name) === cautat)
-      ?? lista.find((x) => norm(x.name).startsWith(cautat) || cautat.startsWith(norm(x.name)));
-}
+import { potrivesteJudetulWoot, potrivesteLocalitateaWoot } from "@/lib/shipping/localitatea-woot";
 import { useGreutateaAwb, notaGreutate } from "./useGreutateaAwb";
 import { useDialogAccesibil } from "./useDialogAccesibil";
 import { Button } from "@/components/ui/button";
@@ -154,7 +137,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       .then((data: WootCounty[]) => {
         setCounties(data);
         // Auto-match county by name
-        const match = potrivesteLocalitate(data, addr.county ?? "");
+        const match = potrivesteJudetulWoot(data, addr.county ?? "");
         if (match) setCountyId(match.id);
       })
       .catch(() => {});
@@ -169,8 +152,11 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
       .then((data: WootCity[]) => {
         setCities(data);
         setLoadingCities(false);
-        // Auto-match city
-        const match = potrivesteLocalitate(data, addr.city ?? "");
+        /* ⚠ Si LINIA DE ADRESA, nu doar orasul: „Bucuresti" simplu nu spune sectorul, dar
+           „Constantin Ghercu nr 1 sector 6" il spune, si e o comanda adevarata. Sectorul se
+           CITESTE de acolo, nu se ghiceste: fara el in niciunul din doua, selectul ramane
+           gol si alege comerciantul. */
+        const match = potrivesteLocalitateaWoot(data, addr.city ?? "", receiverAddress);
         if (match) setCityId(match.id);
       })
       .catch(() => setLoadingCities(false));

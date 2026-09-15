@@ -13,8 +13,9 @@ continutul din JavaScript: citita cu un simplu `fetch`, iese GOALA. Se ia fisier
 
 **Cod:** `src/lib/woot.ts`, `src/lib/actions/woot.actions.ts`, ramurile Woot din
 `src/lib/actions/shipping.actions.ts` si `src/lib/actions/bulk-orders.actions.ts`,
-`src/components/dashboard/WootConfigClient.tsx` si `WootAwbModal.tsx`.
-**Probe:** `src/lib/woot.test.ts`.
+`src/lib/shipping/localitatea-woot.ts` (potrivirea judet/localitate, folosita de amandoua
+drumurile), `src/components/dashboard/WootConfigClient.tsx` si `WootAwbModal.tsx`.
+**Probe:** `src/lib/woot.test.ts`, `src/lib/shipping/localitatea-woot.test.ts`.
 
 ---
 
@@ -117,6 +118,44 @@ cadere ramane libera. De aceea cele sapte esecuri apar ca sapte randuri pe cinci
 Cheiat doar pe `public_key`, cache-ul intorcea tokenul valid si pentru un `secret_key` GRESIT: dupa
 o rotire de chei, ecranul scria „conectat" si defectul iesea a doua zi, la prima emitere.
 
+### I-7. ⚠ Bucurestiul nu se completa singur in fereastra de AWB
+
+**Reclamatie de la un comerciant**, si adevarata: la o comanda din Bucuresti fereastra de AWB nu
+completa automat nimic, deci alegea judetul si sectorul de mana de fiecare data.
+
+Nu era despre diacritice, cum ar fi parut. Adus de la ei si masurat in productie pe 15.09.2026:
+
+* judetul capitalei la ei e `{ id: 42, name: "Bucuresti" }`, iar localitatile lui sunt **exact
+  sase**, „Sectorul 1" pana la „Sectorul 6". **Nu exista nicio localitate numita „Bucuresti"**:
+  Woot e pe partea Sameday a lumii, nu pe partea Cargus/DPD/FAN;
+* **checkoutul NOSTRU scrie judetul „Municipiul Bucuresti"** (25 de comenzi, dintre care **23 chiar
+  cu AWB Woot**), iar eMAG scrie „Bucuresti". Potrivirea cerea egalitate sau prefix, si „municipiul
+  bucuresti" nu e niciuna fata de „bucuresti": **selectul de judet ramanea gol, deci lista de orase
+  nici nu se cerea, deci fereastra ramanea intreaga goala**;
+* localitatea „Sector 5" (asa o scrie checkoutul nostru) nu e nici egala, nici prefix al lui
+  „Sectorul 5": dupa „sector" la ei urmeaza „u", la noi spatiul.
+
+⚠ **Si era in DOUA copii.** `buildWootOptions` din `shipping.actions.ts` avea propria potrivire:
+trecea de judet (avea o incluziune de subsir), dar cadea la fel pe „Sector 5", deci pentru toata
+capitala cotatia live Woot nu pornea si se cadea tacut pe tariful fix. Regula sta acum intr-un
+singur loc, `src/lib/shipping/localitatea-woot.ts`, si amandoua drumurile trec prin ea.
+
+⚠ **Ce NU face:** nu ghiceste sectorul. „Bucuresti" simplu, fara sector scris nici in localitate
+nici in linia de adresa, ramane fara potrivire si alege omul. Sectorul se CITESTE si din adresa
+(„Constantin Ghercu nr 1 sector 6" e o comanda adevarata), niciodata nu se inventeaza.
+
+⚠ **Si o capcana gasita in nomenclatorul lor, nu banuita:** in Cluj stau si „Aghiresu" (66) si
+„Aghiresu-Fabrici (Aghiresu)" (67). Cu o singura trecere de prefix, cautarea „Aghiresu-Fabrici"
+cadea pe satul mai SCURT, si forma veche il si scria in select. Prefixul e acum in doua trepte, iar
+cand raman mai multe potriviri nu se alege niciuna.
+
+⚠ **Cotarea din checkout nu se schimba pentru nimeni azi:** remasurat pe 15.09.2026, `auto_price`
+e pornit pe **zero** zone Woot din toata platforma (doar sameday 1 si fan-courier 1). Leacul scoate
+un zid pentru cine porneste cotarea live, nu misca niciun pret viu.
+
+**15 probe, 7 mutanti prinsi din 7**, doi dintre ei chiar pe apelanti (fereastra si cotarea), ca o
+reparatie facuta intr-un singur loc sa nu treaca drept intreaga.
+
 ---
 
 ## Deschis
@@ -179,11 +218,13 @@ Verificat pe specificatia OpenAPI pe 15.09.2026.
 
 | Poarta | Rezultat |
 | --- | --- |
-| Suita de probe | 7892 din 7892 |
+| Suita de probe | 7910 din 7910 |
 | TypeScript | curat |
 | Build | curat |
 | Clichet de lint | neschimbat: 83 erori, 129 avertismente |
+| Tipuri DB si baseline de schema | curate, neatinse |
 | Banc de mutanti, motivul lui Woot | 3 din 3 |
+| Banc de mutanti, localitatea din capitala | 7 din 7 |
 
 ---
 

@@ -86,6 +86,7 @@ import { applyShippingRules, parseShippingRules, type ShippingCartContext } from
 import { semneazaOptiuni } from "@/lib/shipping/quote-token";
 import { semneazaPunctul } from "@/lib/shipping/punctul-ales-e-semnat";
 import { reteaSmartship, reteauaPunctului, serviciulShipo, tipPunctFanCuImplicit } from "@/lib/shipping/reteaua-punctului";
+import { potrivesteJudetulWoot, potrivesteLocalitateaWoot } from "@/lib/shipping/localitatea-woot";
 import { contextulCosului , subtotalMaximDinCatalog } from "@/lib/shipping/cart-weight";
 import { GREUTATE_REZERVA_KG } from "@/lib/shipping/awb-weight";
 
@@ -2087,20 +2088,18 @@ export async function getShippingOptions(
 
 // ─── Woot live courier offers ────────────────────────────────────────────────
 
-function matchByName<T extends { name: string }>(list: T[], name: string): T | undefined {
-  // Diacritics-insensitive: the customer types "București"/"Târgu Mureș", the
-  // Woot nomenclature stores plain ASCII names.
-  const norm = (s: string) => stripDiacritics(s || "").trim().toLowerCase();
-  const n = norm(name);
-  if (!n) return undefined;
-  const exact = list.find((x) => norm(x.name) === n);
-  if (exact) return exact;
-  const partial = list.find((x) => norm(x.name).includes(n) || n.includes(norm(x.name)));
-  if (partial) return partial;
-  // Last resort: fold "Sector X" → Bucuresti for Bucharest lookups.
-  const folded = normalizeLocalityName(name).toLowerCase();
-  return folded !== n ? list.find((x) => norm(x.name) === folded) : undefined;
-}
+/*
+ * ⚠ `matchByName` A PLECAT DE AICI, in `@/lib/shipping/localitatea-woot`, fiindca fereastra de
+ * AWB avea propria copie a aceleiasi reguli si amandoua cadeau pe capitala, fiecare altfel.
+ *
+ * Ce facea el si nu mai face nimeni: ultima incercare plia „Sector X" in „Bucuresti" si cauta
+ * o localitate cu numele asta. La Woot regula aia era MOARTA prin constructie, fiindca judetul
+ * capitalei are exact sase localitati si toate se cheama „Sectorul N": niciuna „Bucuresti".
+ * Deci pentru toata capitala cotatia live nu pornea, si se cadea tacut pe tariful fix al zonei.
+ *
+ * Si incluziunea lui de subsir nu s-a mutat ca atare: acolo era ingaduita oricarui judet, iar
+ * intre cele 42 exista perechea `mures ⊂ maramures`. Vezi fisierul nou.
+ */
 
 /**
  * Resolve the destination locality to Woot ids and fetch the live courier offers.
@@ -2249,10 +2248,12 @@ async function buildWootOptions(
   tvaPeDeasupra = false,
 ): Promise<ShippingOption[]> {
   const counties = await fetchWootCounties();
-  const county = matchByName(counties, destination.county);
+  const county = potrivesteJudetulWoot(counties, destination.county);
   if (!county) return [];
   const cities = await fetchWootCities(county.id);
-  const city = matchByName(cities, destination.city);
+  /* ⚠ Fara linia de adresa: la cotare ea nici nu ajunge pana aici (vezi tipul lui
+     `destination`), iar sectorul scris in oras e de ajuns pentru toate formele masurate. */
+  const city = potrivesteLocalitateaWoot(cities, destination.city);
   if (!city) return [];
 
   const token = await getWootToken(config.public_key, config.secret_key);

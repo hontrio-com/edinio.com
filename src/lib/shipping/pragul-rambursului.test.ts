@@ -131,26 +131,44 @@ test("⚠⚠ PODEAUA PRAGULUI NU MAI VINE DIN BROWSER, si asta era chiar gaura",
   );
 });
 
-test("⚠ PERECHEA CARE LIPSEA: suma din browser nu atinge podeaua", () => {
+test("⚠ PERECHEA CARE LIPSEA: suma din browser se citeste in exact DOUA locuri, si opuse", () => {
   /*
    * ⚠ ASIMETRIA A FOST CHIAR GAURA. Exista o proba care numara riguros aparitiile lui
    * `destination.cod` si cere exact doua, ca nicio ramura de curier sa nu ocoleasca pragul. Nu
    * exista NICIUNA pereche pentru `destination.subtotal`, desi el hotara chiar podeaua pragului.
    *
-   * `destination.subtotal` are voie sa apara o singura data: acolo unde se socoteste VALOAREA
-   * DECLARATA curierului (asigurarea), unde plafonarea e corecta fiindca pericolul e umflarea.
-   * Orice a doua aparitie inseamna ca a reintrat pe drumul rambursului, unde pericolul e invers.
+   * ═══ ⚠ SI TEMEIUL SCRIS AICI PE 14.09 ERA GRESIT, INDREPTAT PE 15.09.2026 ═══
+   *
+   * Randul de atunci spunea ca singura aparitie ingaduita e „acolo unde se socoteste VALOAREA
+   * DECLARATA curierului (asigurarea), unde plafonarea e corecta fiindca pericolul e umflarea".
+   * Nu e. Pe acelasi numar stau DOUA pericole OPUSE, dupa cine il consuma:
+   *
+   *   * REGULILE de transport (`subtotal: valoareMarfii`): pericolul e UMFLAREA, fiindca o suma
+   *     umflata cere livrare gratuita pentru un cos ieftin. Acolo PLAFONUL din catalog e corect;
+   *   * VALOAREA DECLARATA la DHL: pericolul e COBORAREA. Din ea iese tariful (asigurarea lor e
+   *     „55 lei sau 1% din valoarea asigurata, care e mai mare"), iar `subtotal: 0.01` scotea un
+   *     tarif mai mic, care pleca SEMNAT si se accepta. La emitere pleaca insa valoarea ADEVARATA,
+   *     si DHL factureaza dupa ea: diferenta o platea comerciantul, pe fiecare colet.
+   *
+   * De aceea cifra s-a despartit in doua, iar proba cere de acum exact doua aparitii, fiecare in
+   * locul ei. O a TREIA inseamna tot ce insemna si inainte: suma din browser a reintrat pe un drum
+   * unde nu e pazita.
    */
   const cod = faraComentarii(fisier(COTARE));
   const aparitii = cod.match(/destination\.subtotal\b/g) ?? [];
   assert.equal(
-    aparitii.length, 1,
-    `suma din browser se citeste in ${aparitii.length} locuri; are voie intr-unul singur`,
+    aparitii.length, 2,
+    `suma din browser se citeste in ${aparitii.length} locuri; are voie in exact doua, numite mai jos`,
   );
   assert.match(
     cod,
     /const valoareMarfii = Math\.min\(/,
-    "valoarea declarata curierului nu mai e plafonata cu ce sustine catalogul",
+    "suma folosita de REGULILE de transport nu mai e plafonata cu ce sustine catalogul",
+  );
+  assert.match(
+    cod,
+    /const valoareDeclarata = valoareaDeclarataLaCurier\(destination\.subtotal, podeaDinCatalog\)/,
+    "valoarea declarata curierului nu mai are podea: `subtotal: 0.01` ar cobori iar tariful DHL",
   );
 });
 

@@ -19,7 +19,7 @@ import { corpExpediere as corpEcolet } from "@/lib/ecolet/expediere";
 import { etichetaOferta as etichetaEcolet, ofertePosibile as oferteEcolet } from "@/lib/ecolet/preturi";
 import { rezolvaLocalitatea as rezolvaLocalitateEcolet } from "@/lib/ecolet/cautare";
 import { puncteGls } from "@/lib/gls/puncte";
-import { FARA_API_DE_TARIF, pragulRambursului, rezervaEDeIncredere } from "@/lib/shipping/optiuni-de-rezerva";
+import { FARA_API_DE_TARIF, pragulRambursului, rezervaEDeIncredere, valoareaDeclarataLaCurier } from "@/lib/shipping/optiuni-de-rezerva";
 import { cheiaLockerelor } from "@/lib/shipping/cheia-lockerelor";
 import { postaGata, unitatiLivrare, type PostaConfig } from "@/lib/posta/client";
 import { packetaGata, type PacketaConfig } from "@/lib/packeta/client";
@@ -765,6 +765,18 @@ export async function getShippingOptions(
    * fisierul asta doar ca sa poata fi probata ar fi o usa noua catre browser.
    */
   const rambursDeCotat = pragulRambursului(destination.cod, podeaDinCatalog, esteRamburs);
+
+  /*
+   * ⚠ VALOAREA DECLARATA CURIERULUI ARE PODEA, NU PLAFON, si e chiar pe DOS fata de randul de
+   * mai sus al lui `valoareMarfii`.
+   *
+   * La regulile de transport pericolul e UMFLAREA, deci acolo plafonul din catalog ramane. La
+   * valoarea declarata la DHL pericolul e COBORAREA: din ea iese tariful (asigurarea lor e „55
+   * lei sau 1% din valoarea asigurata, care e mai mare"), iar `subtotal: 0.01` scotea un tarif
+   * mai mic, care pleca SEMNAT. La emitere insa pleaca valoarea adevarata, si DHL factureaza
+   * dupa ea. Vezi `valoareaDeclarataLaCurier`.
+   */
+  const valoareDeclarata = valoareaDeclarataLaCurier(destination.subtotal, podeaDinCatalog);
 
   /*
    * ⚠ SUMA PLEACA SI SEMNATA, in bani, ca la comanda sa se poata confrunta cu marfa adevarata.
@@ -1872,7 +1884,7 @@ export async function getShippingOptions(
 
       if (dhlGata(dhlCfg) && useAutoPrice) {
         promises.push(
-          buildDhlOptions(dhlCfg, destination, weight, valoareMarfii, zone.label, businessId)
+          buildDhlOptions(dhlCfg, destination, weight, valoareDeclarata, zone.label, businessId)
             .then((opts) => {
               if (opts.length > 0) options.push(...opts);
               /* Zero oferte inseamna destinatie neacoperita sau adresa fara cod postal, nu

@@ -119,3 +119,47 @@ export function pragulRambursului(
     Number.isFinite(marfa) ? marfa : 0,
   );
 }
+
+/**
+ * Valoarea declarata curierului la COTARE, cu podeaua pusa de server.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ⚠ ULTIMUL DRUM PRIN CARE COSUL MISCA BANI FARA POARTA         (15.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * La DHL, valoarea marfii intra CHIAR IN TARIF: catalogul lor romanesc taxeaza asigurarea cu
+ * „55.00 LEI or 1% of insured value, if higher", iar suprataxele de valoare se trag tot din ea.
+ * Cotarea si emiterea pleaca dinadins din acelasi obiect, ca sa nu se poata departa.
+ *
+ * ⚠ SI TOCMAI DE ACEEA `min(ce zice browserul, ce sustine catalogul)` era gresit ACOLO. Plafonul
+ * apara de UMFLARE, care e pericolul la regulile de transport (livrare gratuita semnata pentru un
+ * cos ieftin). La valoarea declarata pericolul e pe DOS, e COBORAREA: `subtotal: 0.01` scotea un
+ * tarif mai mic, tariful pleca SEMNAT si se accepta la comanda, iar la emitere pleaca valoarea
+ * ADEVARATA, pe care DHL o si factureaza. Diferenta o platea comerciantul, pe fiecare colet.
+ *
+ * ⚠ ACEEASI FORMA CA LA RAMBURS, SI DIN ACELASI MOTIV: o PODEA, nu o inlocuire. Pusa in locul
+ * sumei, plafonul din catalog ar fi coborat valoarea sub cea reala ori de cate ori cosul poarta
+ * ceva ce catalogul de azi nu mai stie sa repretuiasca, si atunci coletul ar pleca asigurat sub
+ * valoarea lui. Un `max` nu poate cobori niciodata ce a cerut cumparatorul cinstit.
+ *
+ * ⚠ CE NU ACOPERA, si se scrie pe fata: un cos declarat GOL duce plafonul din catalog la zero,
+ * deci podeaua nu mai apara nimic. Drumul acela e insa inchis in alta parte: greutatea e semnata
+ * in token si confruntata la comanda, iar un cos gol n-are cum sa poarte greutatea celui adevarat.
+ *
+ * ⚠ ZERO INSTANTE VII cand s-a scris asta: nicio configurare DHL si nicio zona DHL pornita in
+ * toata platforma. Se inchide INAINTE ca cineva sa porneasca DHL, nu ca urgenta.
+ */
+export function valoareaDeclarataLaCurier(
+  cerutDeBrowser: unknown,
+  plafonDinCatalog: number,
+): number {
+  const cerut = Number(cerutDeBrowser);
+  const catalog = Number(plafonDinCatalog);
+  /* ⚠ `Number.isFinite` la amandoua: `Number(undefined)` e `NaN`, iar `Math.max` cu un `NaN`
+     intoarce `NaN`, care ar fi plecat ca atare in cererea de tarif. */
+  return Math.max(
+    0,
+    Number.isFinite(cerut) ? cerut : 0,
+    Number.isFinite(catalog) ? catalog : 0,
+  );
+}

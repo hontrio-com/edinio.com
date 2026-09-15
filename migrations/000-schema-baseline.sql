@@ -7176,7 +7176,11 @@ create table if not exists public.orders (
   woot_status_checked_at timestamp with time zone,
   woot_cod_status_id integer,
   woot_cod_value numeric,
-  woot_cod_updated_at timestamp with time zone);
+  woot_cod_updated_at timestamp with time zone,
+  dpd_awb_at timestamp with time zone,
+  dpd_status_code integer,
+  dpd_status_label text,
+  dpd_status_checked_at timestamp with time zone);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -8256,6 +8260,7 @@ CREATE INDEX operatii_externe_order_idx ON public.operatii_externe USING btree (
 CREATE UNIQUE INDEX operatii_externe_tinta_deschisa_idx ON public.operatii_externe USING btree (COALESCE(business_id, '00000000-0000-0000-0000-000000000000'::uuid), furnizor, fel, tinta_idempotenta) WHERE ((tinta_idempotenta IS NOT NULL) AND (stare = ANY (ARRAY['in_curs'::text, 'necunoscut'::text])));
 CREATE INDEX orders_cupon_neplatit_idx ON public.orders USING btree (payment_status, status, created_at) WHERE (discount_code IS NOT NULL);
 CREATE INDEX orders_dhl_urmarire_idx ON public.orders USING btree (dhl_status_checked_at NULLS FIRST) WHERE ((dhl_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
+CREATE INDEX orders_dpd_urmarire_idx ON public.orders USING btree (dpd_status_checked_at NULLS FIRST) WHERE ((dpd_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_ecolet_emitere_idx ON public.orders USING btree (ecolet_status_checked_at NULLS FIRST) WHERE ((ecolet_order_to_send_id IS NOT NULL) AND (ecolet_awb_number IS NULL));
 CREATE INDEX orders_ecolet_urmarire_idx ON public.orders USING btree (ecolet_status_checked_at NULLS FIRST) WHERE ((ecolet_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));
 CREATE INDEX orders_fan_courier_urmarire_idx ON public.orders USING btree (fan_courier_status_checked_at NULLS FIRST) WHERE ((fan_courier_awb_number IS NOT NULL) AND (status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'processing'::text, 'shipped'::text])));

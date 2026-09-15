@@ -246,6 +246,10 @@ export async function createDpdShipmentAction(
   const { error: eScriere, data: randuri } = await supabase.from("orders").update({
     dpd_shipment_id: result.shipmentId,
     dpd_awb_number: result.barcode,
+    /* ⚠ Ceasul urmaririi: de aici isi masoara cronul fereastra de 21 de zile, nu din
+       `created_at`. O comanda veche careia i se emite AWB abia azi ar fi altfel din start
+       in afara ferestrei, deci n-ar fi intrebata NICIODATA. */
+    dpd_awb_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }).eq("id", orderId).select("id");
 

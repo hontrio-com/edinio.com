@@ -580,7 +580,7 @@ export const SINONIME: Partial<Record<LogoKey, string[]>> = {
      `locker`/`punct`/`ridicare`: numai cei din `CURIERI_CU_LOCKERE`
      (`shipping.actions.ts`), adică acolo unde CUMPĂRĂTORUL alege punctul la
      checkout. Woot are puncte, dar le alege comerciantul după comandă, deci nu.
-     `urmarire`/`tracking`: numai cei PAISPREZECE cu cron de tracking. FAN s-a adăugat
+     `urmarire`/`tracking`: numai cei CINCISPREZECE cu cron de tracking. FAN s-a adăugat
      pe 13.09.2026 (`api/cron/fancourier-tracking`) și Woot pe 15.09.2026, iar proba de mai
      jos a cerut cuvântul de fiecare dată, cum își promisese. */
   /* ⚠ FĂRĂ `tracking`, și e singurul curier căruia îi lipsește: descrierea LUI conține deja
@@ -588,7 +588,7 @@ export const SINONIME: Partial<Record<LogoKey, string[]>> = {
      „niciun sinonim nu repetă ce se găsește deja" l-a și prins, în ziua în care l-am pus.
      `urmarire` rămâne: acela nu e nicăieri în text. */
   fanCourier: ["ramburs", "fanbox", "paypoint", "oficiu", "locker", "punct", "ridicare", "urmarire"],
-  dpd: ["ramburs", "locker", "punct", "ridicare"],
+  dpd: ["ramburs", "locker", "punct", "ridicare", "urmarire", "tracking"],
   cargus: ["ramburs", "locker", "punct", "ridicare"],
   sameday: ["ramburs", "awb", "urmarire", "tracking", "punct", "ridicare"],
   gls: ["ramburs", "locker", "parcelshop", "punct", "ridicare", "urmarire", "tracking"],

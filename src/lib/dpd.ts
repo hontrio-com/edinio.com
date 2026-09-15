@@ -679,3 +679,51 @@ export async function getDpdAwbPdf(
   if (!res.data) throw new Error("PDF lipsa din raspuns DPD");
   return Buffer.from(res.data, "base64");
 }
+
+/**
+ * Starea coletelor, din `BASE_URL/track`.
+ *
+ * ═══ ⚠ DE CE LOTUL E DE ZECE, SI NU MAI MARE ═══
+ *
+ * Nu e o prudenta de-a noastra: documentatia lor scrie „Allowed are up to 10 parcels". Un lot mai
+ * mare nu da o eroare limpede, ci un raspuns pe care nu-l intelegi. Plafonul e al LOR.
+ *
+ * ⚠ `lastOperationOnly` e cerut ANUME. Fara el, raspunsul aduce tot istoricul fiecarui colet, adica
+ * zeci de operatii pe care oricum nu le pastram, iar cronul ar carauzi de zeci de ori mai multi
+ * octeti pentru aceeasi informatie.
+ *
+ * ⚠ SI EROAREA E PE DOUA NIVELURI. Raspunsul are un `error` al cererii INTREGI, dar fiecare colet
+ * are si el `error`-ul lui: un numar necunoscut contului nu strica lotul, doar randul lui. Cine
+ * citeste doar nivelul de sus arunca un lot bun pentru un singur colet strain.
+ */
+export async function getDpdTracking(
+  config: DpdConfig,
+  numereAwb: readonly string[],
+): Promise<{ parcelId: string; operations: DpdOperatie[]; error?: { message?: string } }[]> {
+  if (numereAwb.length === 0) return [];
+
+  const r = await dpdPost<{ parcels?: unknown }>("track", {
+    userName: config.username,
+    password: config.password,
+    language: "RO",
+    parcels: numereAwb.map((id) => ({ id: String(id) })),
+    lastOperationOnly: true,
+  });
+
+  if (!Array.isArray(r?.parcels)) return [];
+  return (r.parcels as { parcelId?: unknown; operations?: unknown; error?: { message?: string } }[])
+    .map((p) => ({
+      parcelId: String(p?.parcelId ?? "").trim(),
+      operations: Array.isArray(p?.operations) ? (p.operations as DpdOperatie[]) : [],
+      ...(p?.error ? { error: p.error } : {}),
+    }))
+    .filter((p) => p.parcelId !== "");
+}
+
+/** O operatie din `track`, cat ne trebuie noua. Restul campurilor lor nu se citesc. */
+export type DpdOperatie = {
+  dateTime?: string;
+  operationCode?: number;
+  description?: string;
+  exceptionCodes?: string[];
+};

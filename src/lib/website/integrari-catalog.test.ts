@@ -421,7 +421,7 @@ test("urmărirea iese exact la curierii care au cron de urmărire", () => {
   const CRON_LA_CHEIE: Record<string, LogoKey> = {
     dhl: "dhl", ecolet: "ecolet", fancourier: "fanCourier", fedex: "fedex", gls: "gls",
     innoship: "innoship", packeta: "packeta", pallex: "pallex", posta: "postaRomana",
-    sameday: "sameday", shipo: "shipo", smartship: "smartship", ups: "ups", woot: "woot",
+    dpd: "dpd", sameday: "sameday", shipo: "shipo", smartship: "smartship", ups: "ups", woot: "woot",
   };
   const vercel = readFileSync(join(AICI, "..", "..", "..", "vercel.json"), "utf8");
   const cuCron = new Set(

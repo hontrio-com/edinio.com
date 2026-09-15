@@ -3605,8 +3605,12 @@ export type Database = {
           discount_code: string | null
           discount_id: string | null
           discount_released_at: string | null
+          dpd_awb_at: string | null
           dpd_awb_number: string | null
           dpd_shipment_id: number | null
+          dpd_status_checked_at: string | null
+          dpd_status_code: number | null
+          dpd_status_label: string | null
           ecolet_awb_at: string | null
           ecolet_awb_number: string | null
           ecolet_order_id: number | null
@@ -3810,8 +3814,12 @@ export type Database = {
           discount_code?: string | null
           discount_id?: string | null
           discount_released_at?: string | null
+          dpd_awb_at?: string | null
           dpd_awb_number?: string | null
           dpd_shipment_id?: number | null
+          dpd_status_checked_at?: string | null
+          dpd_status_code?: number | null
+          dpd_status_label?: string | null
           ecolet_awb_at?: string | null
           ecolet_awb_number?: string | null
           ecolet_order_id?: number | null
@@ -4015,8 +4023,12 @@ export type Database = {
           discount_code?: string | null
           discount_id?: string | null
           discount_released_at?: string | null
+          dpd_awb_at?: string | null
           dpd_awb_number?: string | null
           dpd_shipment_id?: number | null
+          dpd_status_checked_at?: string | null
+          dpd_status_code?: number | null
+          dpd_status_label?: string | null
           ecolet_awb_at?: string | null
           ecolet_awb_number?: string | null
           ecolet_order_id?: number | null

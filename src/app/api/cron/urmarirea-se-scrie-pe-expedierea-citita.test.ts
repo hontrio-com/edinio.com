@@ -41,10 +41,10 @@ const faraComentarii = (cale: string) =>
 /* ── 1. Acoperirea, cu numerele MASURATE ──────────────────────────────────── */
 
 test("⚠ lista de rute nu se poate goli in tacere", () => {
-  assert.ok(ruteDeUrmarire().length >= 14, "nu mai gasesc toate cronurile de urmarire");
+  assert.ok(ruteDeUrmarire().length >= 15, "nu mai gasesc toate cronurile de urmarire");
 });
 
-test("⚠⚠ TREISPREZECE cronuri scriu starea prin ajutor, si `innoship` ZERO dinadins", () => {
+test("⚠⚠ PAISPREZECE cronuri scriu starea prin ajutor, si `innoship` ZERO dinadins", () => {
   /*
    * ⚠ NUMERELE SUNT MASURATE, NU ROTUNJITE. Tentatia era sa cer cate cronuri sunt, dar
    * `innoship-tracking` nu scrie starea el insusi: o scrie prin `aplica-urmarire.ts`, drumul comun
@@ -56,7 +56,7 @@ test("⚠⚠ TREISPREZECE cronuri scriu starea prin ajutor, si `innoship` ZERO d
   for (const cale of ruteDeUrmarire()) {
     (faraComentarii(cale).includes("scrieUrmarirea(admin, {") ? cu : fara).push(cale);
   }
-  assert.equal(cu.length, 13, `scriu prin ajutor ${cu.length} cronuri, nu treisprezece`);
+  assert.equal(cu.length, 14, `scriu prin ajutor ${cu.length} cronuri, nu paisprezece`);
   assert.deepEqual(fara.map((c) => c.split("/")[4]), ["innoship-tracking"],
     "alt cron decat `innoship` a ramas fara ajutor, ori `innoship` a inceput sa scrie singur");
 
@@ -75,6 +75,7 @@ test("⚠⚠ IDENTITATEA E CEA ADEVARATA, nu un tipar copiat", () => {
    */
   const asteptat: Record<string, string> = {
     "dhl-tracking": "dhl_awb_number",
+    "dpd-tracking": "dpd_awb_number",
     "ecolet-tracking": "ecolet_awb_number",
     "fancourier-tracking": "fan_courier_awb_number",
     "fedex-tracking": "fedex_awb_number",

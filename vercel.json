@@ -132,6 +132,10 @@
       "schedule": "11 */2 * * *"
     },
     {
+      "path": "/api/cron/dpd-tracking",
+      "schedule": "19 */2 * * *"
+    },
+    {
       "path": "/api/cron/dhl-tracking",
       "schedule": "11 */3 * * *"
     },

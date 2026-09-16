@@ -1103,8 +1103,16 @@ export function OrderDetailClient({
   function renderSmartbill() {
     // Link privat spre documentul din SmartBill Cloud (returnat la emitere);
     // editare -> vizualizare, ca in modulul oficial.
-    const sbViewLink = (raw: unknown) =>
-      typeof raw === "string" && raw ? raw.replace("editare", "vizualizare") : null;
+    /*
+     * ⚠ Aici se facea `raw.replace("editare", "vizualizare")`, adica se incerca traducerea
+     * adresei de EDITARE din SmartBill Cloud intr-una de vizualizare, prin potrivire de text pe o
+     * adresa al carei format nu e documentat nicaieri.
+     *
+     * Nu mai e nevoie, si nici corect: de la 16.09.2026 coloana pastreaza chiar `documentViewUrl`,
+     * adresa PUBLICA pe care o dau ei, iar adresa de editare nu se mai salveaza deloc. Vezi
+     * `adresaPublica` din `smartbill.actions.ts`.
+     */
+    const sbViewLink = (raw: unknown) => (typeof raw === "string" && raw ? raw : null);
     const invoiceUrl = sbViewLink(ord["smartbill_invoice_url"]);
     const estimateUrl = sbViewLink(ord["smartbill_estimate_url"]);
     const sbLinkBtn = (href: string) => (

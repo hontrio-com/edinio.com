@@ -238,6 +238,31 @@ export interface MerchantInvoiceProduct {
   discountValue?: number;
 }
 
+/**
+ * Ce intoarce SmartBill dupa ce a creat un document.
+ *
+ * ⚠ `documentViewUrl` si `documentUrl` NU sunt interschimbabile: prima e publica, a doua cere
+ * autentificare. Vezi nota mare de la `createMerchantInvoice`: confuzia dintre ele ar urca la
+ * marketplace o pagina de login in loc de factura.
+ */
+export type DocumentCreat = {
+  number: string;
+  series: string;
+  /** Adresa PUBLICA a documentului. Singura buna de pastrat si de dat mai departe. */
+  documentViewUrl?: string;
+  /** Adresa de editare in SmartBill Cloud. Cere autentificare, deci nu se da nimanui. */
+  documentUrl?: string;
+};
+
+type RaspunsDocument = {
+  errorText?: string;
+  message?: string;
+  number?: string;
+  series?: string;
+  documentViewUrl?: string;
+  documentUrl?: string;
+};
+
 export interface MerchantInvoiceParams {
   companyVatCode: string;
   // client si products lipsesc la emiterea pe baza de proforma (useEstimateDetails)
@@ -283,24 +308,45 @@ export interface MerchantInvoiceParams {
   };
 }
 
+/*
+ * ═══ ⚠⚠ DE CE `/invoice/v2` SI `documentViewUrl` (16.09.2026) ═══
+ *
+ * MASURAT IN PRODUCTIE, nu banuit: din 181 de emiteri reusite care au ajuns in registru cu cheia
+ * `url`, valoarea e NULL la TOATE 181. La fel pe comenzi: `smartbill_invoice_url` e gol la toate
+ * cele 240 de facturi emise vreodata, 184 dintre ele DUPA ce campul a fost cablat. Adica drumul
+ * de scriere merge; `POST /invoice` pur si simplu nu intoarce adresa documentului.
+ *
+ * Specificatia lor oficiala (OpenAPI 3.1, 16.09.2026) nu mai documenteaza deloc `POST /invoice`:
+ * are numai `POST /invoice/v2`, cu ACELASI corp de cerere (`InvoiceRequest`), si raspunsul lui
+ * declara `documentUrl`, `documentId` si `documentViewUrl`.
+ *
+ * ⚠⚠ SI NU SE PASTREAZA ORICARE DINTRE ELE. Sunt doua adrese cu regimuri OPUSE:
+ *
+ *   * `documentUrl` = editare in SmartBill Cloud, si documentatia spune limpede „cere
+ *     autentificare";
+ *   * `documentViewUrl` = adresa PUBLICA, partajabila cu clientul, care deschide PDF-ul fara
+ *     autentificare.
+ *
+ * Coloana `smartbill_invoice_url` hraneste `facturaComenzii`, iar de acolo urcarea facturii la
+ * eMAG si Trendyol o aduce cu `fetch(f.url)` FARA nicio acreditare. Pusa acolo, adresa de editare
+ * ar aduce pagina de autentificare, iar `uploadToR2(..., "application/pdf")` ar urca acel HTML la
+ * marketplace ca document fiscal. Adica NU golul de azi e pericolul, ci „reparatia" grabita.
+ *
+ * Deci: se pastreaza DOAR adresa publica. Fara ea, coloana ramane goala, exact ca pana acum, si
+ * se scrie un avertisment ca sa se vada de la prima factura in ce caz suntem.
+ */
 export async function createMerchantInvoice(
   config: Pick<SmartbillConfig, "email" | "token">,
   params: MerchantInvoiceParams
-): Promise<{ number: string; series: string; documentUrl?: string } | { error: string }> {
+): Promise<DocumentCreat | { error: string }> {
   try {
-    const res = await fetch(`${SMARTBILL_BASE}/invoice`, {
+    const res = await fetch(`${SMARTBILL_BASE}/invoice/v2`, {
       method: "POST",
       headers: merchantHeaders(config.email, config.token),
       body: JSON.stringify(params),
       cache: "no-store",
     });
-    const data = await res.json() as {
-      errorText?: string;
-      message?: string;
-      number?: string;
-      series?: string;
-      documentUrl?: string;
-    };
+    const data = await res.json() as RaspunsDocument;
     // If SmartBill returned a number, the document WAS created — record it even if a
     // non-fatal warning (e.g. email server not configured) is present, so we never
     // discard a real document, which would cause a duplicate on retry.
@@ -308,6 +354,7 @@ export async function createMerchantInvoice(
       return {
         number: data.number,
         series: data.series ?? "",
+        ...(data.documentViewUrl ? { documentViewUrl: data.documentViewUrl } : {}),
         ...(data.documentUrl ? { documentUrl: data.documentUrl } : {}),
       };
     }
@@ -341,21 +388,15 @@ export function getMerchantEstimatePdfUrl(
 export async function createMerchantEstimate(
   config: Pick<SmartbillConfig, "email" | "token">,
   params: MerchantInvoiceParams
-): Promise<{ number: string; series: string; documentUrl?: string } | { error: string }> {
+): Promise<DocumentCreat | { error: string }> {
   try {
-    const res = await fetch(`${SMARTBILL_BASE}/estimate`, {
+    const res = await fetch(`${SMARTBILL_BASE}/estimate/v2`, {
       method: "POST",
       headers: merchantHeaders(config.email, config.token),
       body: JSON.stringify(params),
       cache: "no-store",
     });
-    const data = await res.json() as {
-      errorText?: string;
-      message?: string;
-      number?: string;
-      series?: string;
-      documentUrl?: string;
-    };
+    const data = await res.json() as RaspunsDocument;
     // If SmartBill returned a number, the document WAS created — record it even if a
     // non-fatal warning (e.g. email server not configured) is present, so we never
     // discard a real document, which would cause a duplicate on retry.
@@ -363,6 +404,7 @@ export async function createMerchantEstimate(
       return {
         number: data.number,
         series: data.series ?? "",
+        ...(data.documentViewUrl ? { documentViewUrl: data.documentViewUrl } : {}),
         ...(data.documentUrl ? { documentUrl: data.documentUrl } : {}),
       };
     }
@@ -375,10 +417,22 @@ export async function createMerchantEstimate(
   }
 }
 
-// Stornare (factura inversa) — POST /invoice/reverse cu body JSON. Diferit de
-// anulare (PUT /invoice/cancel): stornarea creeaza un document nou cu minus si e
-// singura cale corecta pentru facturi deja transmise in e-Factura. Raspunsul
-// poate veni FARA numarul stornoului (exemplul oficial il are gol).
+/*
+ * Stornare (factura inversa): POST /invoice/reverse cu body JSON. Diferit de anulare
+ * (PUT /invoice/cancel): stornarea creeaza un document nou cu minus si e singura cale corecta
+ * pentru facturi deja transmise in e-Factura.
+ *
+ * ⚠ AICI SCRIA „raspunsul poate veni FARA numarul stornoului (exemplul oficial il are gol)".
+ * Masurat pe 16.09.2026, si nu mai e adevarat:
+ *
+ *   * specificatia lor oficiala (OpenAPI 3.1) declara `number` pe raspunsul de 200, cu descrierea
+ *     „Numarul facturii";
+ *   * in productie, toate cele 21 de stornouri emise au numar PROPRIU, diferit de al facturii
+ *     stornate. Rezerva din apelant n-a fost folosita niciodata.
+ *
+ * Rezerva ramane, fiindca fara ea o stornare reala ar putea ramane neinregistrata si omul ar
+ * storna a doua oara. Dar nu mai e tacuta: vezi avertismentul din `stornoOrderInvoice`.
+ */
 export async function reverseMerchantInvoice(
   config: Pick<SmartbillConfig, "email" | "token">,
   params: { cif: string; seriesName: string; number: string }

@@ -27,6 +27,7 @@ import {
   type SmartbillConfig,
   type MerchantInvoiceProduct,
   type MerchantInvoiceParams,
+  type DocumentCreat,
 } from "@/lib/smartbill";
 import { secretDinConfig } from "@/lib/integrari/secret-server";
 
@@ -574,7 +575,7 @@ async function emiteFacturaSubRegistru(
   slot: SlotFacturare,
   config: SmartbillConfig,
   params: MerchantInvoiceParams,
-): Promise<{ number: string; series: string; documentUrl?: string } | { error: string }> {
+): Promise<DocumentCreat | { error: string }> {
   const r = await cuRegistru(
     createAdminClient(),
     {
@@ -586,13 +587,19 @@ async function emiteFacturaSubRegistru(
     },
     async () => {
       const rezultat = await createMerchantInvoice(config, params);
+      if (!("error" in rezultat)) await spuneDacaLipsesteAdresa(businessId, orderId, "factura", rezultat);
       // `createMerchantInvoice` nu arunca, intoarce `{error}`. Registrul lucreaza
       // cu exceptii, deci convertim aici — si tot aici se pastreaza textul exact
       // pe care il citeste `verdictEmitereSmartbill`.
       if ("error" in rezultat) throw new Error(rezultat.error);
       return {
         referinta: rezultat.number,
-        detalii: { serie: rezultat.series, url: rezultat.documentUrl ?? null },
+        /*
+         * ⚠ `url` din registru e adresa PUBLICA (`documentViewUrl`), nu cea de editare. Registrul
+         * e si sursa de rehidratare cand scrierea locala s-a pierdut, deci ce intra aici ajunge
+         * pe comanda, si de acolo la marketplace, adus cu `fetch` fara acreditari.
+         */
+        detalii: { serie: rezultat.series, url: rezultat.documentViewUrl ?? null },
         valoare: rezultat,
       };
     },
@@ -610,7 +617,7 @@ async function emiteFacturaSubRegistru(
       return {
         number: r.referinta ?? "",
         series: d.serie ?? "",
-        ...(d.url ? { documentUrl: d.url } : {}),
+        ...(d.url ? { documentViewUrl: d.url } : {}),
       };
     }
     case "blocat":
@@ -618,6 +625,55 @@ async function emiteFacturaSubRegistru(
     case "eroare":
       return { error: r.mesaj };
   }
+}
+
+/**
+ * Adresa care se scrie pe comanda: numai cea PUBLICA.
+ *
+ * ═══ ⚠⚠ DE CE NU SE CADE PE `documentUrl` ═══
+ *
+ * Ar fi tentant, fiindca o coloana plina pare mai buna decat una goala. Nu e. Coloana asta
+ * hraneste `facturaComenzii`, iar urcarea facturii la eMAG si Trendyol aduce documentul cu
+ * `fetch(f.url)` FARA nicio acreditare. `documentUrl` cere autentificare, deci ar aduce pagina de
+ * login, iar `uploadToR2(..., "application/pdf")` ar urca acel HTML la marketplace drept document
+ * fiscal. Comerciantul ar afla cand i-l cere cineva.
+ *
+ * Gol e o lipsa vizibila; plin cu adresa gresita e o factura falsa care arata ca merge.
+ *
+ * ⚠ Si lipsa nu se ingroapa: cand SmartBill chiar a creat documentul dar n-a dat adresa
+ * publica, se scrie un avertisment. Asa prima factura emisa dupa trecerea pe `/invoice/v2` spune
+ * singura daca adresa vine sau nu, in loc sa ramanem cu presupunerea.
+ */
+function adresaPublica(d: DocumentCreat): string | null {
+  return d.documentViewUrl ?? null;
+}
+
+/**
+ * Documentul s-a creat, dar n-a venit adresa publica.
+ *
+ * ⚠ NU e o eroare si nu opreste nimic: factura exista, are numar, si comanda merge mai departe.
+ * E o masuratoare. Pana la 16.09.2026 am emis prin `POST /invoice`, care nu intorcea nicio adresa
+ * (masurat: NULL la toate cele 181 de emiteri din registru). Trecerea pe `/invoice/v2` ar trebui
+ * s-o aduca; randul asta face ca PRIMA factura emisa de acum sa spuna singura daca vine, in loc sa
+ * ramanem cu presupunerea si cu o coloana goala pe care n-o mai verifica nimeni.
+ */
+async function spuneDacaLipsesteAdresa(
+  businessId: string,
+  orderId: string,
+  fel: "factura" | "proforma",
+  d: DocumentCreat,
+): Promise<void> {
+  if (d.documentViewUrl) return;
+  await logError({
+    action: "smartbill.faraAdresaPublica",
+    message:
+      `SmartBill a creat ${fel} ${d.series}${d.number} fara \`documentViewUrl\`. Documentul e bun, `
+      + "dar comanda ramane fara adresa publica: butonul SmartBill nu apare, iar factura nu se poate "
+      + "urca la eMAG sau Trendyol. Daca se repeta, raspunsul lor chiar nu poarta adresa.",
+    details: { orderId, fel, serie: d.series, numar: d.number, areAdresaDeEditare: !!d.documentUrl },
+    businessId,
+    severity: "warning",
+  });
 }
 
 /** Urma locala a perechii desfiintate, cand emiterea a fost o reemitere. */
@@ -821,7 +877,7 @@ export async function generateOrderInvoice(
     const { data: randuri, error: eScriere } = await supabase.from("orders").update({
       smartbill_invoice_number: result.number,
       smartbill_invoice_series: result.series,
-      smartbill_invoice_url: result.documentUrl ?? null,
+      smartbill_invoice_url: adresaPublica(result),
       ...campuriStornoGolite,
     }).eq("id", orderId).eq("business_id", businessId).select("id");
     await verificaLegaturaDocumentului({
@@ -869,10 +925,16 @@ export async function generateOrderEstimate(
     { businessId, orderId, fel: "proforma", furnizor: "smartbill", cheie: cheieOperatie("proforma", "smartbill", orderId) },
     async () => {
       const rezultat = await createMerchantEstimate(config, params);
+      if (!("error" in rezultat)) await spuneDacaLipsesteAdresa(businessId, orderId, "proforma", rezultat);
       if ("error" in rezultat) throw new Error(rezultat.error);
       return {
         referinta: rezultat.number,
-        detalii: { serie: rezultat.series, url: rezultat.documentUrl ?? null },
+        /*
+         * ⚠ `url` din registru e adresa PUBLICA (`documentViewUrl`), nu cea de editare. Registrul
+         * e si sursa de rehidratare cand scrierea locala s-a pierdut, deci ce intra aici ajunge
+         * pe comanda, si de acolo la marketplace, adus cu `fetch` fara acreditari.
+         */
+        detalii: { serie: rezultat.series, url: rezultat.documentViewUrl ?? null },
         valoare: rezultat,
       };
     },
@@ -883,13 +945,13 @@ export async function generateOrderEstimate(
   const dP = r.fel === "deja" ? (r.detalii as { serie?: string; url?: string | null } | null) : null;
   const result = r.fel === "facut"
     ? r.valoare
-    : { number: r.referinta ?? "", series: dP?.serie ?? "", documentUrl: dP?.url ?? undefined };
+    : { number: r.referinta ?? "", series: dP?.serie ?? "", documentViewUrl: dP?.url ?? undefined };
 
   {
     const { data: randuri, error: eScriere } = await supabase.from("orders").update({
       smartbill_estimate_number: result.number,
       smartbill_estimate_series: result.series,
-      smartbill_estimate_url: result.documentUrl ?? null,
+      smartbill_estimate_url: adresaPublica(result),
     }).eq("id", orderId).eq("business_id", businessId).select("id");
     /*
      * Aici consecinta e scrisa chiar in fisier, mai sus: proforma emisa ramane
@@ -1006,7 +1068,7 @@ export async function convertEstimateToInvoice(
     const { data: randuri, error: eScriere } = await supabase.from("orders").update({
       smartbill_invoice_number: result.number,
       smartbill_invoice_series: result.series,
-      smartbill_invoice_url: result.documentUrl ?? null,
+      smartbill_invoice_url: adresaPublica(result),
       ...campuriStornoGolite,
     }).eq("id", orderId).eq("business_id", businessId).select("id");
     await verificaLegaturaDocumentului({
@@ -1082,10 +1144,43 @@ export async function stornoOrderInvoice(
   const stornoNumber = r.fel === "facut" ? r.valoare.stornoNumber : (d?.numar ?? undefined);
   const stornoSeries = r.fel === "facut" ? r.valoare.stornoSeries : (d?.serie ?? undefined);
 
+  /*
+   * ⚠⚠ REZERVA SCRIE NUMARUL FACTURII STORNATE, SI ASTA TREBUIE SA SE VADA (16.09.2026).
+   *
+   * Fara niciun numar, comanda n-ar arata nicio stornare si omul ar storna a doua oara o factura
+   * deja desfiintata. Deci rezerva ramane. Dar ce scrie ea e numarul documentului VECHI pus in
+   * dreptul notei de credit: ecranul spune „stornata cu EDN123", iar EDN123 e chiar factura
+   * stornata, si butonul de PDF aduce originalul.
+   *
+   * ⚠ Masurat pe 16.09.2026: toate cele 21 de stornouri din productie au numar PROPRIU, deci
+   * rezerva n-a fost folosita niciodata, iar specificatia lor declara acum `number` pe raspuns.
+   * Daca totusi se aprinde, se afla din jurnal, nu peste luni, de la un contabil.
+   */
+  if (!stornoNumber) {
+    await logError({
+      action: "smartbill.stornoFaraNumar",
+      message:
+        `SmartBill a stornat factura ${order.smartbill_invoice_series}${order.smartbill_invoice_number} `
+        + "dar n-a intors numarul notei de credit. Pe comanda s-a scris numarul facturii STORNATE, "
+        + "ca sa nu se storneze a doua oara; numarul adevarat al stornoului se ia din contul SmartBill.",
+      details: { orderId, factura: `${order.smartbill_invoice_series}${order.smartbill_invoice_number}` },
+      businessId,
+      severity: "warning",
+    });
+  }
+
+  /*
+   * ⚠ SI MAGAZINUL IN FILTRU, ca la celelalte cinci scrieri din fisier (16.09.2026).
+   *
+   * Randul asta era singurul din sase care filtra doar pe `id`. Nu era o gaura: `orderId` fusese
+   * deja legat de magazin la citirea de mai sus, iar clientul e cel al utilizatorului, deci RLS
+   * statea oricum in fata. Dar filtrele de aici sunt AUTORIZARE, nu cautare, iar o singura
+   * scriere care se bizuie pe altceva e cea care supravietuieste unui refactor.
+   */
   const { error: eScriere, data: randuri } = await supabase.from("orders").update({
     smartbill_storno_number: stornoNumber ?? order.smartbill_invoice_number,
     smartbill_storno_series: stornoSeries ?? order.smartbill_invoice_series,
-  }).eq("id", orderId).select("id");
+  }).eq("id", orderId).eq("business_id", businessId).select("id");
 
   // Nota de credit EXISTA la SmartBill. O eroare intoarsa acum l-ar trimite pe om
   // sa apese din nou, iar registrul tocmai a inregistrat operatia, deci a doua
@@ -1243,12 +1338,38 @@ export async function maybeAutoGenerateInvoice(
       return false;
     }
     const result = await emiteFacturaSubRegistru(businessId, orderId, slot, config, params);
-    if ("error" in result) return false;
+    /*
+     * ═══ ⚠⚠ REFUZUL LOR NU MAI IESE TACUT (16.09.2026) ═══
+     *
+     * `return false` ramane, si e corect: dispecerul nu are voie sa rupa actualizarea comenzii
+     * fiindca nu s-a putut emite o factura. Dar pana acum ATAT se intampla, iar calea asta n-are
+     * niciun om in fata: comenzile intrau, starile se mutau, si facturile pur si simplu incetau
+     * sa mai apara.
+     *
+     * ⚠ Masurat pe 16.09.2026: 240 de facturi emise, un esec inregistrat in registru pe 15.09
+     * („Autentificare esuata"), si ZERO randuri in `error_logs` de la oricare dintre cele trei case
+     * de facturare. Adica exact situatia de mai sus s-a si petrecut, si nimeni n-a aflat.
+     *
+     * Eroarea din `params` era deja strigata mai sus; ce lipsea era tocmai refuzul VENIT DE LA EI,
+     * adica cel pe care comerciantul chiar il poate repara (token, serie, plafon de abonament).
+     */
+    if ("error" in result) {
+      await logError({
+        action: "smartbill.facturaAutomataRefuzata",
+        message:
+          `Factura automata nu s-a emis pentru comanda ${order.order_number ?? orderId}: ${result.error}. `
+          + "Comanda a mers mai departe. Emite factura din pagina comenzii dupa ce repari cauza.",
+        details: { orderId, serie: config.series_name },
+        businessId,
+        severity: "critical",
+      });
+      return false;
+    }
 
     const { data: randuriAuto, error: eAuto } = await supabase.from("orders").update({
       smartbill_invoice_number: result.number,
       smartbill_invoice_series: result.series,
-      smartbill_invoice_url: result.documentUrl ?? null,
+      smartbill_invoice_url: adresaPublica(result),
       ...campuriStornoGolite,
     }).eq("id", orderId).eq("business_id", businessId).select("id");
     /*
@@ -1261,11 +1382,36 @@ export async function maybeAutoGenerateInvoice(
       orderId, businessId, eroare: eAuto, randuri: randuriAuto,
     });
     await jurnalRefacturare(businessId, orderId, order.order_number, slot, result);
-    // Best-effort email — never affects the already-created invoice.
-    await trySendDocEmail(config, order.customer_email, "invoice", result.series, result.number);
+    /*
+     * ⚠ Emailul ramane best-effort si nu atinge factura deja creata. Dar pe calea MANUALA
+     * avertismentul ajunge in interfata, iar aici era pur si simplu aruncat: cu `send_email`
+     * pornit, un server de email neconfigurat la ei insemna ca niciun cumparator nu primea
+     * factura, si nimeni nu afla niciodata.
+     */
+    const avertismentEmail = await trySendDocEmail(config, order.customer_email, "invoice", result.series, result.number);
+    if (avertismentEmail) {
+      await logError({
+        action: "smartbill.emailAutomatNetrimis",
+        message: avertismentEmail,
+        details: { orderId, document: `${result.series}${result.number}` },
+        businessId,
+        severity: "warning",
+      });
+    }
     return true;
-  } catch {
-    // Fire-and-forget: never throw, never block order update
+  } catch (e) {
+    /*
+     * ⚠ Fire-and-forget ramane: nu se arunca niciodata, ca actualizarea comenzii sa nu cada din
+     * cauza facturarii. Dar `catch {}` gol inghitea si defectele NOASTRE (o coloana lipsa, un tip
+     * gresit), iar simptomul era acelasi ca la un magazin fara facturare automata: nimic.
+     */
+    await logError({
+      action: "smartbill.facturaAutomataCazuta",
+      message: `Facturarea automata a picat pentru comanda ${orderId}: ${e instanceof Error ? e.message : String(e)}`,
+      details: { orderId },
+      businessId,
+      severity: "critical",
+    }).catch(() => {});
     return false;
   }
 }

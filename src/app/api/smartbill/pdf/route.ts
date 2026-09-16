@@ -96,10 +96,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: pdf.error }, { status: 502 });
   }
 
+  /*
+   * ⚠ Numele fisierului se curata inainte sa intre intr-un ANTET.
+   *
+   * Seria vine din nomenclatorul SmartBill al comerciantului, aleasa dintr-un dropdown, deci azi
+   * nu poate purta ghilimele sau rand nou. Dar un antet compus prin interpolare nu are voie sa se
+   * bizuie pe asta: intre sursa valorii si antetul asta stau baza noastra si un formular, iar cine
+   * schimba candva dropdown-ul intr-un camp liber n-o sa se uite aici.
+   *
+   * Se pastreaza doar ce are ce cauta intr-un nume de fisier; restul devine `_`.
+   */
+  const numeSigur = filename.replace(/[^A-Za-z0-9._-]/g, "_");
+
   return new NextResponse(pdf, {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": `attachment; filename="${numeSigur}"`,
       "Cache-Control": "no-store",
     },
   });

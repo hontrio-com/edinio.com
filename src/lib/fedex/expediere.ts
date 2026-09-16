@@ -621,7 +621,26 @@ export function corpExpediere(config: FedexConfig, date: DateExpediere): Record<
    * din oficiu — la fel ca `asigura_coletul` la Shipo.
    */
   if (config.valoare_declarata && Number(date.valoareComanda) > 0) {
-    expediere.totalDeclaredValue = { amount: Number(Number(date.valoareComanda).toFixed(2)), currency: "RON" };
+    const suma = { amount: Number(Number(date.valoareComanda).toFixed(2)), currency: "RON" };
+    expediere.totalDeclaredValue = suma;
+
+    /*
+     * ⚠⚠ SI PE COLET, ALTFEL TOTALUL NU CORESPUNDE NIMANUI.
+     *
+     * Verbatim din schema lor, la `totalDeclaredValue`: „The amount of totalDeclaredValue must
+     * be equal to the sum of all the individual declaredValues in the shipment.”
+     *
+     * Trimis singur, totalul se compara cu o suma de ZERO valori declarate. Fie ei refuza
+     * expedierea, fie o accepta si raspunderea lor nu se leaga de niciun colet — adica
+     * comerciantul plateste asigurarea si n-o are. A doua varianta e cea scumpa, fiindca se
+     * afla abia cand se pierde un colet.
+     *
+     * ⚠ Expedierea are UN SINGUR `requestedPackageLineItems`, deci aceeasi suma pe colet face
+     * egalitatea exacta. Daca vreodata se trimit mai multe colete, suma lor TREBUIE impartita
+     * astfel incat totalul sa iasa la fix — nu copiata pe fiecare.
+     */
+    const colete = (expediere.requestedPackageLineItems ?? []) as Record<string, unknown>[];
+    if (colete.length === 1) colete[0].declaredValue = suma;
   }
 
   return cerere;

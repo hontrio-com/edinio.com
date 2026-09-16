@@ -165,17 +165,25 @@ test("⚠ regimul se calculeaza DEASUPRA buclei de curieri, nu intr-o ramura", (
     "`tvaPeDeasupra` a recazut in interiorul buclei: ceilalti curieri nu-l mai vad");
 });
 
-test("⚠ toti cei cinci constructori de oferte PRIMESC regimul", () => {
+test("⚠ toti cei SASE constructori de oferte PRIMESC regimul", () => {
   const s = sursa(COTARE);
 
   /*
-   * Woot, Colete, eColet, Innoship, SmartShip. Se numara APELURILE, nu declaratiile: un
-   * parametru cu implicit `false` declarat si nepasat e exact defectul dinainte, doar ca
-   * scris mai frumos.
+   * Woot, Colete, eColet, Innoship, SmartShip — si de pe 16.09.2026 FedEx. Se numara
+   * APELURILE, nu declaratiile: un parametru cu implicit `false` declarat si nepasat e exact
+   * defectul dinainte, doar ca scris mai frumos.
+   *
+   * ⚠⚠ FEDEX A FOST AL SASELEA, SI PROBA ASTA L-A GASIT. Pana atunci `buildFedexOptions`
+   * impingea `price: o.pret` — brutul, asa cum vine de la ei — desi `ofertePosibile` ii
+   * calculeaza si `verdictTva`, si `pretFaraTva`. Pe un magazin cu preturi afisate FARA TVA,
+   * cota se adauga peste un pret care o continea deja: cumparatorul o platea de DOUA ori.
+   *
+   * Numarul de aici NU e o formalitate: cand creste, cineva a legat un curier nou, si atunci
+   * se verifica si CE face cu regimul, nu doar ca l-a primit.
    */
   const apeluri = s.match(/build[A-Za-z]+Options\(.*tvaPeDeasupra\)/g) ?? [];
-  assert.equal(apeluri.length, 5,
-    `doar ${apeluri.length} din 5 constructori mai primesc regimul: ${apeluri.join(" | ")}`);
+  assert.equal(apeluri.length, 6,
+    `doar ${apeluri.length} din 6 constructori mai primesc regimul: ${apeluri.join(" | ")}`);
 
   /* Si fiecare il declara, altfel apelul de mai sus n-ar avea unde sa ajunga. */
   const declaratii = s.match(/tvaPeDeasupra = false,/g) ?? [];

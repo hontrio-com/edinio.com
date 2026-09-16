@@ -1881,7 +1881,7 @@ export async function getShippingOptions(
 
       if (fedexGata(fxCfg) && useAutoPrice) {
         promises.push(
-          buildFedexOptions(fxCfg, destination, weight, zone.label, businessId)
+          buildFedexOptions(fxCfg, destination, weight, zone.label, businessId, tvaPeDeasupra)
             .then((opts) => {
               if (opts.length > 0) options.push(...opts);
               /* Zero oferte inseamna destinatie neacoperita, nu defect: cade pe
@@ -2604,6 +2604,8 @@ async function buildFedexOptions(
   weightKg: number,
   labelCustom: string | undefined,
   businessId: string,
+  /** Magazinul afiseaza preturi FARA TVA, deci si pretul transportului trebuie sa fie net. */
+  tvaPeDeasupra: boolean,
 ): Promise<ShippingOption[]> {
   const date = {
     destinatar: {
@@ -2707,13 +2709,31 @@ async function buildFedexOptions(
     return [];
   }
 
+  /*
+   * ⚠⚠ PRETUL TREBUIE SA FIE IN REGIMUL MAGAZINULUI, ca la ceilalti sapte curieri.
+   *
+   * `o.pret` e `totalNetCharge`, asa cum vine de la ei. Pe un magazin cu preturi AFISATE FARA
+   * TVA, `computeVat` adauga cota peste pretul livrarii — iar daca acela include deja TVA-ul
+   * FedEx, cumparatorul il plateste de DOUA ori. Exact defectul reparat la Cargus, unde randul
+   * e `tvaPeDeasupra ? q.priceNoVat : q.price`.
+   *
+   * ⚠ Se coboara la net DOAR cand verdictul e limpede „include” si netul chiar exista.
+   * `verdictTva` are trei valori tocmai fiindca raspunsul lor nu e intotdeauna lamurit: pe
+   * „exclude” pretul e deja net, iar pe „necunoscut” nu se ghiceste — se lasa brutul, care
+   * greseste in favoarea cumparatorului, nu a comerciantului.
+   */
+  const inRegimulMagazinului = (o: (typeof r.oferte)[number]): number =>
+    (tvaPeDeasupra && o.verdictTva === "include" && typeof o.pretFaraTva === "number"
+      ? o.pretFaraTva
+      : o.pret);
+
   return r.oferte.map((o): ShippingOption => ({
     courier: "fedex",
     /* Eticheta comerciantului, cand exista, ramane deasupra numelui serviciului:
        unii isi vand livrarea sub marca proprie. */
     courierLabel: labelCustom ? `${labelCustom} · ${etichetaFedex(o)}` : etichetaFedex(o),
     deliveryType: "address",
-    price: o.pret,
+    price: inRegimulMagazinului(o),
     estimatedDays: o.tranzit ?? undefined,
     fedexServiceType: o.serviceType,
     fedexServiceName: o.serviceName,

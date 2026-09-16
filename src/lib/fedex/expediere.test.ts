@@ -427,6 +427,39 @@ describe("FedEx: corpul emiterii", () => {
     assert.deepEqual(cu.requestedShipment.totalDeclaredValue, { amount: 400, currency: "RON" });
   });
 
+  test("⚠⚠ si TOTALUL are pereche pe colet, altfel nu corespunde nimanui", () => {
+    /*
+     * Verbatim din schema lor, la `totalDeclaredValue`: „The amount of totalDeclaredValue must
+     * be equal to the sum of all the individual declaredValues in the shipment.”
+     *
+     * Trimis singur, totalul se compara cu o suma de ZERO valori declarate. Fie ei refuza
+     * expedierea, fie o accepta si raspunderea lor nu se leaga de niciun colet — adica
+     * comerciantul plateste asigurarea si n-o are. A doua varianta e cea scumpa: se afla abia
+     * cand se pierde un colet.
+     *
+     * ⚠ Proba asta lipsea, si bancul de mutanti a raportat GRESIT ca defectul e prins. Scoasa
+     * linia, suita trecea verde. Un banc care minte e mai rau decat niciun banc.
+     */
+    const cu = corpExpediere(
+      { ...CONFIG, valoare_declarata: true },
+      { ...DATE, valoareComanda: 400 },
+    ) as { requestedShipment: { totalDeclaredValue?: unknown; requestedPackageLineItems: Record<string, unknown>[] } };
+
+    const colete = cu.requestedShipment.requestedPackageLineItems;
+    assert.equal(colete.length, 1, "expedierea are un singur colet, deci suma se potriveste exact");
+    assert.deepEqual(colete[0].declaredValue, { amount: 400, currency: "RON" });
+    assert.deepEqual(
+      cu.requestedShipment.totalDeclaredValue, colete[0].declaredValue,
+      "totalul si valoarea de pe colet trebuie sa fie aceeasi suma",
+    );
+  });
+
+  test("⚠ fara valoare declarata, coletul nu primeste niciun `declaredValue`", () => {
+    type CuColete = { requestedShipment: { requestedPackageLineItems: Record<string, unknown>[] } };
+    const fara = corpExpediere(CONFIG, { ...DATE, valoareComanda: 400 }) as CuColete;
+    assert.equal(fara.requestedShipment.requestedPackageLineItems[0].declaredValue, undefined);
+  });
+
   /*
    * ⚠ REGRESIE PROPRIE, gasita la a doua trecere.
    *

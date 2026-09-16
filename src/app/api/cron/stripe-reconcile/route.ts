@@ -268,6 +268,15 @@ export async function GET(req: NextRequest) {
    * mai jos scuteste si apelul catre ei.
    */
   let intoarse = 0;
+  /*
+   * ⚠ SE NUMARA SI CATE AU FOST CHIAR INTREBATE, nu doar cate s-au dovedit rambursate.
+   *
+   * Fara numarul asta, „bani intorsi 0" nu deosebeste „am intrebat si n-a fost nimic" de „n-am
+   * intrebat pe nimeni". Prima rulare pe productie a tiparit chiar zero, si doar dupa ce m-am uitat
+   * in baza am vazut de ce: ambele comenzi platite erau mai vechi decat fereastra de atunci. O
+   * masuratoare care nu poate cadea nu masoara nimic.
+   */
+  let platiteIntrebate = 0;
   const { data: platite, error: ePlatite } = await admin
     .from("orders")
     .select("id, business_id, order_number, status, payment_status, total, stripe_session_id")
@@ -322,6 +331,7 @@ export async function GET(req: NextRequest) {
         moneda: charge.currency ?? "ron",
         referinta: charge.id,
       }, "reconciliere");
+      platiteIntrebate++;
       if (v.fel === "integral" || v.fel === "partial") intoarse++;
     } catch (e) {
       /* O interogare picata NU inseamna „nu s-a rambursat". Se reia la rularea urmatoare. */
@@ -329,6 +339,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log(`[stripe-reconcile] checked ${checked}, marked paid ${paid}, recuperate ${recuperate}, bani intorsi ${intoarse}`);
-  return NextResponse.json({ ok: true, checked, paid, recuperate, intoarse });
+  console.log(`[stripe-reconcile] checked ${checked}, marked paid ${paid}, recuperate ${recuperate}, platite intrebate ${platiteIntrebate}, bani intorsi ${intoarse}`);
+  return NextResponse.json({ ok: true, checked, paid, recuperate, platiteIntrebate, intoarse });
 }

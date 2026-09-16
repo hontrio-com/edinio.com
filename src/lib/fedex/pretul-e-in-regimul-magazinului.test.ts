@@ -46,7 +46,13 @@ describe("FedEx: pretul cotat respecta regimul de TVA al magazinului", () => {
   });
 
   test("⚠ regimul chiar ajunge in functie, nu se presupune acolo", () => {
-    assert.match(s, /buildFedexOptions\(fxCfg, destination, weight, zone\.label, businessId, tvaPeDeasupra\)/);
+    /*
+     * ⚠ Sirul a fost largit la 16.09.2026, cand intre `weight` si `zone.label` a intrat
+     * `valoareDeclarata`: fara ea, cotarea pleca fara `totalDeclaredValue`, iar emiterea cu el.
+     * Proba masoara ca REGIMUL ajunge acolo, nu ca lista de argumente ramane inghetata — deci
+     * se potriveste pe capete, nu pe forma intreaga.
+     */
+    assert.match(s, /buildFedexOptions\(fxCfg, destination, weight, .*, zone\.label, businessId, tvaPeDeasupra\)/);
     assert.match(s, /\n  tvaPeDeasupra: boolean,\n\): Promise<ShippingOption\[\]> \{/);
   });
 });

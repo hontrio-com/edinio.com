@@ -391,6 +391,13 @@ export type RaspunsExpediere = {
   serviceName: string | null;
   /** Eticheta, base64, exact cum vine de la ei. */
   eticheta: string | null;
+  /**
+   * Formatul PE CARE L-AU TRIMIS (`docType`: PDF, ZPLII, PNG…), nu cel cerut.
+   *
+   * ⚠ `null` cand raspunsul nu-l spune. Atunci se cade pe formatul cerut in configurare —
+   * vezi `etichetaDin`.
+   */
+  etichetaFormat: string | null;
   /** Costul, cand raspunsul de emitere il aduce (`pieceResponses[].netChargeAmount`). */
   cost: number | null;
   valuta: string | null;
@@ -1014,13 +1021,31 @@ export async function tarife(config: FedexConfig, corp: unknown): Promise<{ deta
 
 // ─── Emiterea ────────────────────────────────────────────────────────────────
 
-/** Prima eticheta dintr-un raspuns de emitere, oriunde ar sta ea. */
-function etichetaDin(tranzactie: Record<string, unknown>): string | null {
-  const dinLista = (v: unknown): string | null => {
+/**
+ * Prima eticheta dintr-un raspuns de emitere, oriunde ar sta ea — SI IN CE FORMAT E.
+ *
+ * ═══ ⚠⚠ DE CE SE IA FORMATUL DIN RASPUNS, NU DIN CONFIGURARE ═══
+ *
+ * Eticheta se salva cu `format: specificatieEticheta(config).imageType`, adica cu ce am CERUT
+ * noi. Numai ca `imageType` si `labelStockType` nu sunt independente la ei: cererea de PDF pe
+ * o coala termica, sau un cont pe care proiectul de API nu are formatul cerut, intorc alt
+ * `docType` decat cel cerut — si o fac fara nicio alerta, fiindca eticheta CHIAR a fost
+ * produsa.
+ *
+ * Pretul greselii e la descarcare: numele fisierului si tipul MIME se aleg din coloana
+ * `format`, deci un ZPL ajunge la om ca `.pdf` si nu se deschide cu nimic. Iar FedEx nu are
+ * reimprimare: nu exista „mai cere-o o data".
+ *
+ * ⚠ `docType` ramane optional in raspunsul lor. Lipsa lui NU e o eroare — se cade pe ce am
+ * cerut, care e cea mai buna presupunere pe care o avem.
+ */
+function etichetaDin(tranzactie: Record<string, unknown>): { continut: string; format: string | null } | null {
+  const dinLista = (v: unknown): { continut: string; format: string | null } | null => {
     if (!Array.isArray(v)) return null;
     for (const d of v) {
-      const codata = text((d as Record<string, unknown> | null)?.encodedLabel);
-      if (codata) return codata;
+      const doc = d as Record<string, unknown> | null;
+      const codata = text(doc?.encodedLabel);
+      if (codata) return { continut: codata, format: text(doc?.docType)?.toUpperCase() || null };
     }
     return null;
   };
@@ -1088,13 +1113,15 @@ export async function creeazaExpediere(
   }
 
   const primaPiesa = (piese[0] ?? {}) as Record<string, unknown>;
+  const eticheta = etichetaDin(t);
 
   return {
     awb: master,
     awbColete: awbColete.length > 0 ? awbColete : [master],
     serviceType: text(t.serviceType) || null,
     serviceName: text(t.serviceName) || null,
-    eticheta: etichetaDin(t),
+    eticheta: eticheta?.continut ?? null,
+    etichetaFormat: eticheta?.format ?? null,
     cost: numarSauNull(primaPiesa.netChargeAmount),
     valuta: text(primaPiesa.currency) || null,
     alerte: alerteleDin(r),
@@ -1216,6 +1243,33 @@ function citesteUrmarire(rezultat: Record<string, unknown>, awbCerut: string): U
     }
   }
 
+  /*
+   * ═══ ⚠⚠ MOTIVUL, NU DOAR STAREA ═══
+   *
+   * `statusByLocale` la o exceptie de livrare spune „Delivery exception" si atat. Motivul —
+   * „Customer not available or business closed", „Incorrect address", „Customs delay" — sta in
+   * `latestStatusDetail.ancillaryDetails[]`, pe care nu le citea nimeni.
+   *
+   * Fara el, notificarea catre comerciant e un anunt fara continut: stie ca s-a intamplat
+   * ceva, nu stie ce, si nici ce sa faca. Cu el, aceeasi notificare ii spune ca omul n-a fost
+   * acasa sau ca adresa e gresita — adica exact lucrul pe care il poate repara.
+   *
+   * ⚠ Sunt TEXT TRADUS dupa `x-locale`, ca si `statusByLocale`: se ARATA, nu se compara
+   * niciodata. Nicio hotarare nu se ia din ele; codul ramane singura autoritate.
+   */
+  const motive: string[] = [];
+  const amanunte = stare.ancillaryDetails;
+  if (Array.isArray(amanunte)) {
+    for (const a of amanunte) {
+      const o = (a ?? {}) as Record<string, unknown>;
+      for (const t of [text(o.reasonDescription), text(o.actionDescription)]) {
+        if (t && !motive.includes(t)) motive.push(t);
+      }
+    }
+  }
+
+  const stareaSpusa = text(stare.statusByLocale) || text(stare.description) || null;
+
   return {
     awb: text(info.trackingNumber) || awbCerut,
     /*
@@ -1225,7 +1279,9 @@ function citesteUrmarire(rezultat: Record<string, unknown>, awbCerut: string): U
      */
     cod: text(stare.derivedCode) || text(stare.code) || null,
     /* ⚠ `statusByLocale` e TEXT TRADUS dupa `x-locale`, nu enumerare. Se arata, nu se compara. */
-    descriere: text(stare.statusByLocale) || text(stare.description) || null,
+    descriere: motive.length > 0
+      ? `${stareaSpusa ? `${stareaSpusa}: ` : ""}${motive.join(". ")}`
+      : stareaSpusa,
     livratLa,
     seIntoarce,
     eroare,

@@ -103,6 +103,22 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [valuteRefuzate, setValuteRefuzate] = useState<string[]>([]);
   const [doarLista, setDoarLista] = useState(false);
   const [explicatieTva, setExplicatieTva] = useState<string | null>(null);
+  /*
+   * ⚠ Avertismentele de vama se arata DUPA cotare si INAINTE de emitere — adica in singura
+   * clipa in care omul mai poate schimba ce scrie in casuta de continut. Intoarse din raspunsul
+   * de emitere, n-ar mai folosi la nimic: coletul a plecat.
+   */
+  const [avertismente, setAvertismente] = useState<string[]>([]);
+  /*
+   * ⚠⚠ Serviciul ales CU MANA, cand cotarea n-a intors nicio oferta folosibila.
+   *
+   * Butonul de emitere cerea `aleasa`, iar `aleasa` venea doar dintr-o oferta cotata. Insa
+   * `ofertePosibile` arunca toate ofertele cand contul coteaza in euro — ceea ce conturile
+   * FedEx din Romania fac des. Comerciantul ramanea cu un avertisment limpede despre valuta si
+   * un buton pe care nu-l putea apasa niciodata, desi coletul se putea expedia perfect.
+   */
+  const [serviciiDeMana, setServiciiDeMana] = useState<{ cod: string; nume: string; marfaGrea: boolean }[]>([]);
+  const [serviciuManual, setServiciuManual] = useState("");
   const [cotand, setCotand] = useState(false);
   const [emitand, setEmitand] = useState(false);
   const [verificand, setVerificand] = useState(false);
@@ -124,14 +140,23 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
 
   /** ⚠ UN SINGUR loc care compune datele: cotarea si emiterea le impart. */
   function dateComune() {
+    /*
+     * ⚠ Oferta cotata are intaietate. Serviciul ales cu mana intra doar cand nu exista
+     * niciuna — si atunci pretul ramane NECUNOSCUT, nu zero: `cost: null` inseamna „n-avem cu
+     * ce compara factura FedEx", iar un 0 scris acolo ar fi o minciuna care se vede la
+     * reconciliere ca transport gratuit.
+     */
+    const manual = !aleasa && serviciuManual
+      ? serviciiDeMana.find((s) => s.cod === serviciuManual) ?? null
+      : null;
     return {
       destinatar: destinatar(),
       greutateKg: Number(weight) || 0,
       continut: continut.trim() || "Produse",
       ramburs,
       valoareComanda: Number(order.total) || 0,
-      serviceType: aleasa?.serviceType ?? null,
-      serviceName: aleasa?.serviceName ?? null,
+      serviceType: aleasa?.serviceType ?? manual?.cod ?? null,
+      serviceName: aleasa?.serviceName ?? manual?.nume ?? null,
       cost: aleasa?.pret ?? null,
       valuta: aleasa?.valuta ?? null,
     };
@@ -162,6 +187,8 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     /* ⚠ Se arata o singura data, deasupra listei: e o proprietate a CONTULUI, nu a
        fiecarei oferte. Repetat pe fiecare rand ar fi zgomot. */
     setExplicatieTva(r.oferte.length > 0 ? EXPLICATIE_TVA[r.tva] : null);
+    setAvertismente(r.avertismente);
+    setServiciiDeMana(r.serviciiDeMana);
 
     if (r.oferte.length === 0) {
       toast.warning(
@@ -359,6 +386,13 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               />
             </label>
 
+            {avertismente.map((a) => (
+              <p key={a} className="text-[11px] text-warning flex items-start gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                {a}
+              </p>
+            ))}
+
             <Button onClick={handleCoteaza} disabled={cotand}>
               {cotand ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4" />}
               Calculeaza preturi
@@ -419,8 +453,31 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               </div>
             )}
 
+            {oferte !== null && oferte.length === 0 && serviciiDeMana.length > 0 && (
+              <div className="space-y-1.5 rounded-lg border border-warning/40 bg-warning/5 p-2.5">
+                <p className="text-[11px] text-warning flex items-start gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  Cotarea n-a intors niciun pret pe care sa-l putem arata in lei. Coletul se poate
+                  expedia oricum: alege serviciul, iar pretul il vezi pe factura FedEx.
+                </p>
+                <label className="text-xs block">
+                  Serviciu FedEx
+                  <select
+                    className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+                    value={serviciuManual}
+                    onChange={(e) => setServiciuManual(e.target.value)}
+                  >
+                    <option value="">Alege serviciul…</option>
+                    {serviciiDeMana.map((s) => (
+                      <option key={s.cod} value={s.cod}>{s.nume}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2 pt-1">
-              <Button onClick={handleEmite} disabled={emitand || !aleasa}>
+              <Button onClick={handleEmite} disabled={emitand || (!aleasa && !serviciuManual)}>
                 {emitand ? <Loader2 className="h-4 w-4 animate-spin" /> : <Truck className="h-4 w-4" />}
                 Emite AWB
               </Button>

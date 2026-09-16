@@ -17,7 +17,7 @@ import {
   type FedexConfig, type OfertaFedex, type ProbaFedex,
 } from "@/lib/fedex/client";
 import {
-  corpExpediere, corpTarife, lipsuriExpediere, referintaComenzii,
+  avertismenteExpediere, corpExpediere, corpTarife, lipsuriExpediere, referintaComenzii,
   type AdresaComanda, type DateExpediere,
 } from "@/lib/fedex/expediere";
 import { ofertePosibile, type VerdictTva } from "@/lib/fedex/preturi";
@@ -273,6 +273,31 @@ export type RezultatCotare = {
    * fara taxe), si `totalVatCharge`. Relatia dintre ele o inchide. Vezi `verdictTva`.
    */
   tva: VerdictTva;
+  /**
+   * Ce nu opreste, dar trebuie spus INAINTE de emitere.
+   *
+   * ⚠ Aici, nu in raspunsul de emitere: o descriere de marfa prea generala pentru vama nu
+   * mai foloseste la nimic spusa dupa ce coletul a plecat. Cotarea e ultimul moment in care
+   * omul mai poate schimba ce scrie in casuta.
+   */
+  avertismente: string[];
+  /**
+   * Nomenclatorul de servicii, ca sa se poata alege UNUL CU MANA cand cotarea n-a intors nimic.
+   *
+   * ═══ ⚠⚠ DE CE EXISTA ═══
+   *
+   * Butonul de emitere era `disabled={emitand || !aleasa}`, iar `aleasa` se putea umple doar
+   * dintr-o oferta cotata. Numai ca `ofertePosibile` arunca TOATE ofertele cand contul coteaza
+   * in alta valuta decat leul — si conturile FedEx din Romania coteaza adesea in euro.
+   *
+   * Rezultatul: comerciantul vedea un avertisment limpede despre valuta si un buton pe care nu-l
+   * putea apasa NICIODATA. Coletul se putea expedia perfect; noi refuzam sa AFISAM un pret in
+   * euro, si din asta faceam o imposibilitate de a emite.
+   *
+   * Pretul ramane nearatat — aia a fost hotararea buna, si nu se schimba. Se desparte doar
+   * afisarea pretului de emiterea coletului.
+   */
+  serviciiDeMana: { cod: string; nume: string; marfaGrea: boolean }[];
 };
 
 /**
@@ -300,9 +325,15 @@ export async function coteazaFedexAction(
   }
 
   try {
-    const { detalii } = await tarife(config, corpTarife(config, dateExpediere(date, null)));
+    const d = dateExpediere(date, null);
+    const { detalii } = await tarife(config, corpTarife(config, d));
     const r = ofertePosibile(detalii, config, { greutateKg: date.greutateKg });
-    return { ok: true, ...r };
+    return {
+      ok: true,
+      ...r,
+      avertismente: avertismenteExpediere(config, d),
+      serviciiDeMana: serviciiPropuse(config?.expeditor?.tara ?? "RO"),
+    };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
@@ -327,13 +358,30 @@ async function pastreazaEticheta(
   awb: string,
   continut: string,
   config: FedexConfig,
+  /**
+   * Formatul PE CARE L-AU TRIMIS (`docType` din raspuns), cand il spun.
+   *
+   * ═══ ⚠⚠ DE CE NU CEL CERUT ═══
+   *
+   * Aici se scria `spec.imageType`, adica formatul CERUT de noi. Numai ca `imageType` si
+   * `labelStockType` nu sunt independente la ei, iar un proiect de API fara formatul cerut
+   * intoarce alt `docType` — fara nicio alerta, fiindca eticheta CHIAR a fost produsa.
+   *
+   * Coloana `format` e apoi singura sursa pentru numele fisierului si tipul MIME la
+   * descarcare (`extensiaEtichetei`, `tipulFisierului`). Gresita, un ZPL ajunge la om ca
+   * `.pdf` si nu se deschide cu nimic — iar FedEx nu are reimprimare, deci nu exista „mai
+   * cere-o o data".
+   *
+   * ⚠ `null` cade pe ce am cerut: cea mai buna presupunere pe care o avem.
+   */
+  formatDinRaspuns: string | null,
 ): Promise<void> {
   const spec = specificatieEticheta(config);
   const { error } = await admin.from("fedex_etichete").upsert({
     order_id: orderId,
     business_id: businessId,
     awb_number: awb,
-    format: spec.imageType,
+    format: formatDinRaspuns ?? spec.imageType,
     stoc: spec.labelStockType,
     continut,
   }, { onConflict: "order_id" });
@@ -445,7 +493,7 @@ export async function createFedexAwbAction(
    */
   const avertismente: string[] = [];
   if (raspuns?.eticheta) {
-    await pastreazaEticheta(admin, businessId, orderId, awb, raspuns.eticheta, config);
+    await pastreazaEticheta(admin, businessId, orderId, awb, raspuns.eticheta, config, raspuns.etichetaFormat);
   } else {
     avertismente.push(
       `AWB-ul ${awb} s-a creat, dar eticheta NU a putut fi pastrata de noi. FedEx nu are `

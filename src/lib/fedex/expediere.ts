@@ -350,6 +350,38 @@ export function lipsuriExpediere(config: FedexConfig | null | undefined, date: D
   if (!(Number(date.greutateKg) > 0)) comanda.push("greutatea coletului");
 
   /*
+   * ═══ ⚠⚠ LA INTERNATIONAL, VALOAREA MARFII E OBLIGATORIE ═══
+   *
+   * `corpExpediere` pune `customsValue`, `unitPrice` si `totalCustomsValue` numai cand
+   * `valoareComanda > 0`. Sub zero lei — o comanda de inlocuire, un cadou, o linie cu pret
+   * zero — `customsClearanceDetail` pleca cu o marfa fara nicio valoare declarata.
+   *
+   * ⚠ Nu e o chichita de schema: factura comerciala pe care FedEx o intocmeste din campurile
+   * astea merge la vama. Fara valoare, ori ei refuza cererea (si atunci omul vede o eroare pe
+   * care n-o poate lega de nimic), ori coletul pleaca si e OPRIT la vama, unde se descurca
+   * cumparatorul. A doua varianta e cea scumpa, si nu se afla decat de la el.
+   *
+   * ⚠ „Zero lei" nu se poate corecta din cod. Marfa are o valoare in vama chiar si cand
+   * clientul n-a platit nimic, iar aia o stie numai comerciantul. Deci se cere, nu se ghiceste.
+   */
+  /*
+   * ⚠ Se cere doar cand tara destinatarului e SCRISA si chiar difera de a expeditorului.
+   *
+   * Lista asta e si poarta de dinaintea COTARII din checkout (`buildFedexOptions`), iar acolo
+   * destinatarul se compune fara tara si fara valoarea cosului. O conditie care ar socoti
+   * „lipsa tarii" drept international ar taia cotarea FedEx pentru orice magazin al carui
+   * expeditor nu e in Romania — adica pretul fix in loc de cel adevarat, tacut.
+   */
+  const taraExpeditorului = (curata(config?.expeditor?.tara) || "RO").toUpperCase();
+  const taraScrisa = curata(d.tara).toUpperCase();
+  if (taraScrisa && taraScrisa !== taraExpeditorului && !(Number(date.valoareComanda) > 0)) {
+    comanda.push(
+      `valoarea marfii pentru vama (coletul pleaca din ${taraExpeditorului} in ${taraScrisa}, `
+      + "iar FedEx intocmeste factura comerciala din ea)",
+    );
+  }
+
+  /*
    * ⚠ AICI SE OPRESTE RAMBURSUL, si e singurul loc din integrare care il pomeneste.
    * Nu e o limitare de configurare — e o imposibilitate la ei. Vezi `RAMBURS_INDISPONIBIL`.
    */
@@ -380,6 +412,51 @@ export function lipsuriExpediere(config: FedexConfig | null | undefined, date: D
   }
 
   return { configurare, comanda };
+}
+
+/**
+ * Descrieri de marfa prea generale ca sa treaca o vama.
+ *
+ * ⚠ Nu e o lista de cuvinte interzise: e lista IMPLICITELOR noastre. „Produse" e ce pune
+ * modalul in casuta, „Bunuri de consum" e ce pune `corpExpediere` cand casuta e goala. Amandoua
+ * pleaca fara ca omul sa fi ales ceva, si tocmai de aia trebuie spuse.
+ */
+const DESCRIERI_PREA_GENERALE = new Set(["produse", "bunuri de consum", "marfa", "goods", "merchandise"]);
+
+/**
+ * Ce nu OPRESTE expedierea, dar trebuie spus inainte de ea.
+ *
+ * ═══ ⚠ DESCRIEREA MARFII, LA INTERNATIONAL ═══
+ *
+ * `Commodity.description` e singurul camp obligatoriu din schema lor, deci „Produse" trece.
+ * Trece la FEDEX. Nu trece la VAMA: factura comerciala se intocmeste din campul asta, iar o
+ * descriere generica e motivul obisnuit pentru care un colet e retinut si cerut lamurit.
+ *
+ * ⚠ De aia e AVERTISMENT, nu lipsa. „Produse" poate fi chiar descrierea potrivita pentru
+ * un colet cu de toate, iar noi nu avem cum sa stim ce e inauntru. Refuzat, comerciantul n-ar
+ * mai putea expedia; nespus, afla de la cumparatorul lui.
+ */
+export function avertismenteExpediere(
+  config: FedexConfig | null | undefined,
+  date: DateExpediere,
+): string[] {
+  const av: string[] = [];
+
+  const taraExpeditorului = (curata(config?.expeditor?.tara) || "RO").toUpperCase();
+  const taraScrisa = curata(date.destinatar?.tara).toUpperCase();
+  if (!taraScrisa || taraScrisa === taraExpeditorului) return av;
+
+  const descriere = (curata(date.continut) || curata(config?.continut_implicit)).toLowerCase();
+  if (!descriere || DESCRIERI_PREA_GENERALE.has(descriere)) {
+    av.push(
+      `Coletul pleaca in ${taraScrisa}, iar descrierea marfii („${curata(date.continut) || curata(config?.continut_implicit) || "Bunuri de consum"}”) `
+      + "e prea generala pentru vama. FedEx o accepta, dar factura comerciala se intocmeste din ea "
+      + "si un colet cu descriere generica e retinut ca sa fie lamurit. Scrie ce e inauntru "
+      + "(de exemplu „tricouri bumbac” sau „piese auto — filtre ulei”).",
+    );
+  }
+
+  return av;
 }
 
 // ─── Adresa, in forma lor ────────────────────────────────────────────────────
@@ -549,7 +626,7 @@ export function corpTarife(config: FedexConfig, date: DateExpediere): Record<str
   const expeditor = parteFedex(expeditorCaAdresa(config));
   const destinatar = parteFedex(date.destinatar);
 
-  return {
+  const cerere = {
     accountNumber: { value: taie(config.account_number, LUNGIMI.contNumar) },
     /*
      * ⚠⚠ STA LA RADACINA, NU IN `requestedShipment`.
@@ -575,6 +652,14 @@ export function corpTarife(config: FedexConfig, date: DateExpediere): Record<str
       ...(date.serviceType ? { serviceType: date.serviceType } : {}),
     },
   };
+
+  /*
+   * ⚠⚠ SI LA COTARE, nu doar la emitere. Vezi `puneValoareaDeclarata`: pana acum pretul
+   * cotat nu continea suprataxa de valoare declarata, iar factura o continea.
+   */
+  puneValoareaDeclarata(cerere.requestedShipment as unknown as Record<string, unknown>, config, date);
+
+  return cerere;
 }
 
 // ─── Corpul emiterii ─────────────────────────────────────────────────────────
@@ -667,32 +752,49 @@ export function corpExpediere(config: FedexConfig, date: DateExpediere): Record<
     };
   }
 
-  /*
-   * Valoarea declarata la transport, cand comerciantul o cere. Costa, deci e stinsa
-   * din oficiu — la fel ca `asigura_coletul` la Shipo.
-   */
-  if (config.valoare_declarata && Number(date.valoareComanda) > 0) {
-    const suma = { amount: Number(Number(date.valoareComanda).toFixed(2)), currency: "RON" };
-    expediere.totalDeclaredValue = suma;
-
-    /*
-     * ⚠⚠ SI PE COLET, ALTFEL TOTALUL NU CORESPUNDE NIMANUI.
-     *
-     * Verbatim din schema lor, la `totalDeclaredValue`: „The amount of totalDeclaredValue must
-     * be equal to the sum of all the individual declaredValues in the shipment.”
-     *
-     * Trimis singur, totalul se compara cu o suma de ZERO valori declarate. Fie ei refuza
-     * expedierea, fie o accepta si raspunderea lor nu se leaga de niciun colet — adica
-     * comerciantul plateste asigurarea si n-o are. A doua varianta e cea scumpa, fiindca se
-     * afla abia cand se pierde un colet.
-     *
-     * ⚠ Expedierea are UN SINGUR `requestedPackageLineItems`, deci aceeasi suma pe colet face
-     * egalitatea exacta. Daca vreodata se trimit mai multe colete, suma lor TREBUIE impartita
-     * astfel incat totalul sa iasa la fix — nu copiata pe fiecare.
-     */
-    const colete = (expediere.requestedPackageLineItems ?? []) as Record<string, unknown>[];
-    if (colete.length === 1) colete[0].declaredValue = suma;
-  }
+  puneValoareaDeclarata(expediere, config, date);
 
   return cerere;
+}
+
+/**
+ * Valoarea declarata la transport, cand comerciantul o cere. Costa, deci e stinsa din oficiu —
+ * la fel ca `asigura_coletul` la Shipo.
+ *
+ * ═══ ⚠⚠ SE PUNE SI LA COTARE, NU DOAR LA EMITERE ═══
+ *
+ * Blocul asta traia numai in `corpExpediere`. Cotarea pleca fara el, deci pretul aratat
+ * cumparatorului si comerciantului NU continea suprataxa de valoare declarata — iar
+ * emiterea, care o trimitea, o primea pe factura. Diferenta o suporta comerciantul, tacut, la
+ * fiecare colet asigurat.
+ *
+ * ⚠ Acelasi defect era la DHL si s-a reparat la 14.09 (`valoareaDeclarataLaCurier`,
+ * `buildDhlOptions`). Cand acelasi lucru sta in doua copii, a doua se cauta INAINTE.
+ *
+ * ⚠⚠ SI PE COLET, ALTFEL TOTALUL NU CORESPUNDE NIMANUI.
+ *
+ * Verbatim din schema lor, la `totalDeclaredValue`: „The amount of totalDeclaredValue must be
+ * equal to the sum of all the individual declaredValues in the shipment.”
+ *
+ * Trimis singur, totalul se compara cu o suma de ZERO valori declarate. Fie ei refuza
+ * expedierea, fie o accepta si raspunderea lor nu se leaga de niciun colet — adica
+ * comerciantul plateste asigurarea si n-o are. A doua varianta e cea scumpa, fiindca se afla
+ * abia cand se pierde un colet.
+ *
+ * ⚠ Trimiterea are UN SINGUR `requestedPackageLineItems`, deci aceeasi suma pe colet face
+ * egalitatea exacta. Daca vreodata se trimit mai multe colete, suma lor TREBUIE impartita
+ * astfel incat totalul sa iasa la fix — nu copiata pe fiecare.
+ */
+function puneValoareaDeclarata(
+  expediere: Record<string, unknown>,
+  config: FedexConfig,
+  date: DateExpediere,
+): void {
+  if (!config.valoare_declarata || !(Number(date.valoareComanda) > 0)) return;
+
+  const suma = { amount: Number(Number(date.valoareComanda).toFixed(2)), currency: "RON" };
+  expediere.totalDeclaredValue = suma;
+
+  const colete = (expediere.requestedPackageLineItems ?? []) as Record<string, unknown>[];
+  if (colete.length === 1) colete[0].declaredValue = suma;
 }

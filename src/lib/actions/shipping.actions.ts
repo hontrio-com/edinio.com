@@ -1881,7 +1881,7 @@ export async function getShippingOptions(
 
       if (fedexGata(fxCfg) && useAutoPrice) {
         promises.push(
-          buildFedexOptions(fxCfg, destination, weight, zone.label, businessId, tvaPeDeasupra)
+          buildFedexOptions(fxCfg, destination, weight, valoareDeclarata, zone.label, businessId, tvaPeDeasupra)
             .then((opts) => {
               if (opts.length > 0) options.push(...opts);
               /* Zero oferte inseamna destinatie neacoperita, nu defect: cade pe
@@ -2602,6 +2602,18 @@ async function buildFedexOptions(
   config: FedexConfig,
   destination: { county: string; city: string; postCode?: string },
   weightKg: number,
+  /**
+   * Valoarea MARFII, cu podeaua din catalog (`valoareDeclarata` din apelant).
+   *
+   * ⚠⚠ Fara ea, cotarea si emiterea trimiteau doua corpuri diferite: `corpExpediere` punea
+   * `totalDeclaredValue` cand comerciantul are asigurarea pornita, iar `corpTarife` nu — deci
+   * pretul aratat cumparatorului nu continea suprataxa de valoare, iar factura FedEx o
+   * continea. Exact defectul reparat la DHL pe 14.09; aici statea a doua copie.
+   *
+   * ⚠ Podea, nu plafon: la valoarea declarata pericolul e COBORAREA (un `subtotal: 0.01` din
+   * browser ar scoate un tarif mai mic, care pleaca SEMNAT). Vezi `valoareaDeclarataLaCurier`.
+   */
+  valoareMarfa: number,
   labelCustom: string | undefined,
   businessId: string,
   /** Magazinul afiseaza preturi FARA TVA, deci si pretul transportului trebuie sa fie net. */
@@ -2619,6 +2631,7 @@ async function buildFedexOptions(
       email: "client@exemplu.ro",
     },
     greutateKg: weightKg,
+    valoareComanda: valoareMarfa,
   };
 
   /*

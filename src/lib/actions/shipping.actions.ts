@@ -2606,7 +2606,7 @@ async function buildFedexOptions(
    * Valoarea MARFII, cu podeaua din catalog (`valoareDeclarata` din apelant).
    *
    * ⚠⚠ Fara ea, cotarea si emiterea trimiteau doua corpuri diferite: `corpExpediere` punea
-   * `totalDeclaredValue` cand comerciantul are asigurarea pornita, iar `corpTarife` nu — deci
+   * `totalDeclaredValue` cand comerciantul are asigurarea pornita, iar `corpTarife` nu, deci
    * pretul aratat cumparatorului nu continea suprataxa de valoare, iar factura FedEx o
    * continea. Exact defectul reparat la DHL pe 14.09; aici statea a doua copie.
    *

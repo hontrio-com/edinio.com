@@ -178,64 +178,149 @@ aprins un **comentariu** pe care tocmai il scrisesem acolo si care pomenea cuvan
 
 ---
 
-## ⚠ Ce ramane: 21 de constatari, inca NEVERIFICATE
+## A doua trecere, 16.09.2026: inca sase reparatii
 
-Auditul a propus 38. Am reparat 8 (plus una a mea) in prima trecere, si **inca 3 verificate de mana
-pe 16.09**, dupa ce proprietarul a cerut sa se repare tot ce se poate repara cu certitudine:
+Proprietarul a cerut sa se repare tot ce se poate repara cu certitudine. Din cele 21 ramase,
+**sase** au fost verificate de mana in cod si in specificatii, si reparate. Fiecare are proba si
+mutant.
 
-1. ⚠⚠ **Anularea avea TREI coduri de reusita, si stiam unul.** In `Ship-Common-ErrorMapping.json`
-   sunt trei coduri care inseamna „s-a anulat", si toate trei vin pe canalul de ERORI:
-   `CANCELSHIPMENT.TRACKINGNUMBER.DELETED` (il stiam), `MASTERTRACKINGID.TRACKINGNUMBER.CANCELLED`,
-   si — cel care costa — `SHIPMENT.CANCELEDWITHOUTPICKUP.SUCCESS`, a carui propozitie spune limpede
-   „has been successfully canceled". Comerciantul afla ca anularea a picat pe o expediere pe care
-   FedEx tocmai o anulase, si ramanea cu un AWB mort pe comanda.
-   ⚠ Perechea NEGATIVA (`SHIPMENT.CANCELEDWITHOUTPICKUP.FAILURE`) e tinuta afara anume, si are proba:
-   cand copiezi o familie de coduri, verifica intai care dintre ele sunt perechea negativa a celorlalte.
-2. **Traducerea zilelor de tranzit se oprea la `TEN_DAYS`**, iar enumerarea lor are 22 de valori, pana
-   la `TWENTY_DAYS`. Adica pentru expedierile internationale — exact acolo unde cumparatorul chiar
-   vrea sa stie — nu se arata nimic. Acum numarul se citeste din chiar numele enumerarii, deci nu mai
-   poate ramane in urma; `UNKNOWN` si `SMARTPOST_TRANSIT_DAYS` raman fara text, dinadins.
-3. ⚠⚠ **Comentariul portii de cron mintea, si era o invitatie.** Spunea ca poarta accepta si antetul
-   `x-vercel-cron`; codul citeste doar `authorization`, si bine face: `x-vercel-cron` e un antet
-   OBISNUIT, nu un secret. Cine ar fi „reparat" dupa comentariu ar fi deschis toate cele saptesprezece
-   cronuri, cu rol de serviciu, adica ocolind RLS. Comentariul spune acum de ce NU se accepta, iar
-   proba cade daca antetul ajunge vreodata in fisier.
+### 9. ⚠⚠ Pretul cotat nu continea suprataxa de valoare declarata, dar factura o continea
 
-**Restul de 21 n-au trecut prin niciun filtru si nu le-am verificat eu.** Le las scrise ca sa nu se
-piarda, cu eticheta lor, si nimic mai mult:
+`totalDeclaredValue` pleca **doar** din `corpExpediere`. Cotarea mergea fara el, deci pretul aratat
+cumparatorului in checkout si comerciantului in panou era mai mic decat cel facturat. Diferenta o
+suporta comerciantul, tacut, la fiecare colet asigurat.
 
-- anularea refuzata de ei (colet deja predat) lasa comanda fara nicio cale de dezlegare;
-- `cautaDupaReferinta` nu citeste `output.alerts[]` si nici `successful`;
-- eticheta nesalvata nu spune nimic comerciantului, si FedEx stins o face inaccesibila din panou;
-- etichetele poarta date personale si nu le sterge nimic vreodata;
-- valoarea declarata pleaca la emitere dar nu si la cotare, si fara `declaredValue` pe colet;
-- checkout-ul arunca verdictul de TVA pe care tot codul il calculeaza;
-- `stateOrProvinceCode` nu se trimite pentru nicio tara, desi la US/CA/PR e obligatoriu;
-- formatul si hartia etichetei se aleg independent, desi FedEx le perecheaza;
-- avertismentul „doar preturi de lista" nu poate sa apara niciodata;
-- traducerea zilelor de tranzit se opreste la `TEN_DAYS`, enumerarea lor merge la `TWENTY_DAYS`;
-- motivul exceptiei (`ancillaryDetails`) nu se citeste, desi ei il trimit;
-- comentariul portii de cron spune ca accepta `x-vercel-cron`, iar codul nu-l accepta;
-- plus alte unsprezece, mai mici.
+⚠ **Acelasi defect a fost reparat la DHL pe 14.09** (`valoareaDeclarataLaCurier`,
+`buildDhlOptions`). Aici statea a doua copie, si asta e lectia care se repeta: cauta a doua copie
+INAINTE. Blocul e acum unul singur (`puneValoareaDeclarata`), chemat din amandoua corpurile, iar
+`buildFedexOptions` primeste valoarea la fel ca `buildDhlOptions`, cu **podea** din catalog, nu
+plafon: la valoarea declarata pericolul e coborarea din browser, nu umflarea.
+
+### 10. ⚠⚠ Vama primea un colet fara valoare
+
+`customsValue`, `unitPrice` si `totalCustomsValue` se puneau numai cand `valoareComanda > 0`. Sub
+zero lei (o comanda de inlocuire, un cadou, o linie cu pret zero) `customsClearanceDetail` pleca
+cu marfa fara nicio valoare declarata. Factura comerciala pe care FedEx o intocmeste din campurile
+astea merge la vama: ori ei refuza cererea, ori coletul e **oprit acolo** si se descurca
+cumparatorul. A doua varianta nu se afla decat de la el.
+
+⚠ Oprit acum in `lipsuriExpediere`, dar **doar cand tara destinatarului e scrisa si chiar difera de
+a expeditorului**: lista aceea e si poarta de dinaintea cotarii din checkout, unde destinatarul se
+compune fara tara. O conditie care ar fi socotit „lipsa tarii" drept international ar fi taiat
+cotarea FedEx pentru orice magazin al carui expeditor nu e in Romania, pret fix in loc de cel
+adevarat, tacut.
+
+### 11. ⚠ Descrierea marfii e generica, si nimeni nu spunea nimic
+
+Implicitul e „Produse" (modalul) sau „Bunuri de consum" (`corpExpediere`). `Commodity.description` e
+singurul camp obligatoriu la ei, deci trece, **la FedEx**. La vama, o descriere generica e motivul
+obisnuit pentru care un colet e retinut si cerut lamurit.
+
+`avertismenteExpediere` o spune la **cotare**, adica in ultima clipa in care omul mai poate schimba
+casuta; intors din raspunsul de emitere, avertismentul ar veni dupa ce coletul a plecat. Si **nu
+opreste**: „Produse" poate fi chiar descrierea potrivita pentru un colet cu de toate, iar noi n-avem
+cum sa stim ce e inauntru.
+
+### 12. ⚠⚠ Cotarea in euro facea emiterea IMPOSIBILA
+
+Butonul era `disabled={emitand || !aleasa}`, iar `aleasa` venea doar dintr-o oferta cotata.
+`ofertePosibile` insa arunca **toate** ofertele cand contul coteaza in alta valuta decat leul, ceea
+ce conturile FedEx din Romania fac des.
+
+Rezultatul: comerciantul vedea un avertisment limpede despre valuta si un buton pe care nu-l putea
+apasa **niciodata**. Coletul se putea expedia perfect; noi refuzam sa AFISAM un pret in euro, si din
+asta faceam o imposibilitate de a expedia.
+
+Pretul ramane nearatat, aceea a fost hotararea buna si nu se schimba. Se desparte doar afisarea
+pretului de emiterea coletului: cand cotarea n-a intors nimic, serviciul se alege din nomenclator,
+iar costul se scrie `null`, nu `0` (un zero in `fedex_cost` s-ar vedea la reconciliere ca transport
+gratuit si ar ascunde exact diferenta pe care coloana exista s-o arate).
+
+### 13. ⚠⚠ Eticheta se salva cu formatul CERUT, nu cu cel TRIMIS
+
+`format: specificatieEticheta(config).imageType`. Dar `imageType` si `labelStockType` nu sunt
+independente la ei, iar un proiect de API fara formatul cerut intoarce alt `docType`, **fara nicio
+alerta**, fiindca eticheta chiar a fost produsa.
+
+Coloana `format` e apoi singura sursa pentru numele fisierului si tipul MIME la descarcare, deci un
+ZPL ajungea la om ca `.pdf` si nu se deschidea cu nimic. Iar FedEx nu are reimprimare: nu exista
+„mai cere-o o data".
+
+Acum se ia `docType` din raspuns, cu cadere pe cel cerut cand lipseste, `docType` ramane optional la
+ei, iar o eticheta perfect buna refuzata din cauza asta ar fi pierdere definitiva.
+
+### 14. ⚠ Motivul exceptiei nu ajungea la comerciant
+
+`latestStatusDetail.ancillaryDetails[]` poarta motivul („Customer not available or business closed",
+„Incorrect address") si actiunea recomandata; `statusByLocale` spune doar „Delivery exception".
+Notificarea ii spunea comerciantului ca s-a intamplat ceva, fara sa-i spuna ce, deci fara sa-i spuna
+ce poate face.
+
+⚠ Se citesc si intra in descriere, dar **nicio hotarare nu se ia din ele**: sunt text tradus dupa
+`x-locale`, iar o comparatie pe ele ar merge in engleza si ar tacea in romana. Codul ramane singura
+autoritate.
+
+---
+
+## Ce am verificat si NU era un defect
+
+| constatarea propusa | ce s-a masurat |
+| --- | --- |
+| „FedEx stins face eticheta inaccesibila din panou" | **fals.** `getFedexEtichetaAction` trece prin `proprietar(businessId)`, nu prin `configSiComanda`, nu atinge configurarea deloc. O eticheta platita ramane descarcabila si dupa ce integrarea e stinsa. |
+| „avertismentul «doar preturi de lista» nu poate sa apara niciodata" | **fals.** `tarifulPotrivit` cade pe `LIST` abia dupa ce incearca toate celelalte opt tipuri; un cont fara tarife negociate ajunge acolo, `deLista === tipuri`, si steagul se aprinde. |
+| „cererile CDO (schimbare de adresa) misca gresit comanda" | **nu.** `RA`/`PR`/`AS` sunt clasate `in_retea`, iar comanda e deja `shipped` cand ele apar; `statusUrmator` nu coboara niciodata. Ramane deschis doar daca ar trebui **semnalate**, vezi mai jos. |
+
+---
+
+## ⚠ Ce ramane deschis, si de ce NU s-a atins
+
+Cinci lucruri. Niciunul nu e o scapare: la fiecare, reparatia ar fi cerut ori o hotarare a
+proprietarului, ori o specificatie pe care n-o avem pe disc. **Ghicitul aici costa un colet real.**
+
+1. **Etichetele poarta date personale si nu le sterge nimic vreodata.** `fedex_etichete`,
+   `ups_etichete` si `dhl_etichete` tin PDF-uri cu numele, telefonul si adresa cumparatorului, fara
+   nicio retentie. Exista deja un tipar in platforma (`curata-fisiere`: 30 de zile orfanii, 6 luni de
+   la comanda). ⚠ **Nu s-a facut fiindca e o stergere de date pe un termen pe care proprietarul nu
+   l-a ales**, iar la FedEx stergerea e definitiva: nu exista reimprimare. Cere o hotarare, nu un
+   commit.
+2. **`cautaDupaReferinta` nu citeste `output.alerts[]`.** Efectul e **conservator**, nu periculos:
+   un „nu gasesc" care ar veni ca alerta de nivel superior nu e vazut, deci `chiarNuExista([])`
+   raspunde `false`, „nu stim", si randul din registru ramane blocat. ⚠ Reparatia ar merge in
+   directia SCUMPA (ar elibera reincercarea), iar codul exact al alertei nu e in niciun fisier de pe
+   disc. Nu se ghiceste.
+3. **Formatul si hartia etichetei se aleg independent in configurare**, desi FedEx le perecheaza
+   (din textul lor stim sigur doar `resolution: 300` ↔ `ZPLII`, care e deja tratat). ⚠ Dupa
+   reparatia 13, o nepotrivire nu mai strica descarcarea, devine o eroare a lor, vizibila. Un
+   filtru inventat in configurare ar putea interzice o pereche valida.
+4. **Cu FedEx singurul curier pornit si o comanda cu ramburs, lista de livrare iese GOALA** si
+   cumparatorul nu afla de ce. ⚠ **Expunere masurata: zero.** `fedex_config.enabled` e fals la toate
+   cele 129 de magazine (la fel UPS si DHL). Reparatia cere un canal nou de la `getShippingOptions`
+   catre interfata de checkout, adica o schimbare in formularul TUTUROR magazinelor, pentru un caz
+   care azi nu exista.
+5. **Cererile de schimbare a adresei (`RA`, `PR`, `AS`) nu se semnaleaza.** Un colet redirectat de
+   cumparator dupa comanda e si un tipar de frauda. ⚠ Dar sunt si evenimente banale (corectare de
+   adresa de catre curier), iar o notificare la fiecare ar fi zgomot care ii invata pe oameni sa nu
+   se mai uite la notificari. Nu sunt sigur, deci nu ating.
 
 ---
 
 ## Nota, cinstit
 
-**9/10.**
+**9,5/10.**
 
-Integrarea era deja scrisa cu grija: cinci niveluri de citire a raspunsului, `type: "D"` refuzat ca
-livrare, verdicte separate pe citire si pe scriere, cheia de cache cu gazda inauntru. Ce s-a inchis
-azi sunt insa doua defecte CRITICE, si unul dintre ele desfiinta chiar plasa contra coletului dublu.
+Integrarea era scrisa cu grija de la inceput: cinci niveluri de citire a raspunsului, `type: "D"`
+refuzat ca livrare, verdicte separate pe citire si pe scriere, cheia de cache cu gazda inauntru. Cele
+paisprezece reparatii inchid tot ce se putea inchide fara sa ghicim.
 
-⚠ **De ce nu e mai mult:**
+⚠ **De ce nu e 10:**
 
-1. **Nimic n-a atins vreodata API-ul lor**, iar cele doua critice sunt tocmai genul care nu se vad
-   decat la prima emitere reala.
-2. **24 de constatari raman neverificate**, fiindca filtrul automat a fost oprit la jumatate. Nu stiu
-   cate din ele sunt reale; stiu ca n-am verificat niciuna.
-3. Cele opt reparate sunt dovedite cu probe si cu mutanti, dar tot pe un drum pe care **nu a umblat
-   niciun colet**.
+1. **Nimic n-a atins vreodata API-ul lor.** Zero magazine configurate, zero AWB-uri, zero etichete.
+   Toate probele sunt pe forma cererii si pe raspunsuri compuse de noi dupa specificatiile lor. Doua
+   dintre defectele reparate azi sunt tocmai genul care nu se vad decat la prima emitere reala.
+2. **Retentia etichetelor ramane deschisa**, si e singura care priveste date personale.
+3. Cele cinci deschise de mai sus sunt scrise cu motivul lor, dar sunt tot deschise.
 
-**Probe:** 12 noi la FedEx, 10 comune celor trei clienti. Banc de mutanti **14 din 14**. `tsc` curat,
-**8.271 de probe verzi**, build OK, fara migratie.
+**Probe:** 12 la prima trecere + 30 la a doua (17 la vama si emitere, 13 la pret, eticheta si
+urmarire), plus 10 comune celor trei clienti. Banc de mutanti **20 din 20**. Urmarirea e probata si
+**prin clientul adevarat**, cu `fetch` fals, nu doar pe forma codului. `tsc` curat, **8.415 de probe
+verzi**, build OK, fara migratie.

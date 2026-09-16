@@ -244,7 +244,7 @@ export async function GET(req: NextRequest) {
              * Randul era `X_status_code: codNou ?? o.X_status_code`, adica pe toate drumurile
              * care trec `null` (fara config, apel picat, fara stare) se scria inapoi codul CITIT
              * la inceputul rularii. Intre citire si scriere sta insa un apel extern, iar daca in
-             * rastimp comerciantul a dezlegat AWB-ul si a emis altul, coloana fusese golita —
+             * rastimp comerciantul a dezlegat AWB-ul si a emis altul, coloana fusese golita,
              * si randul asta o INVIA. Un cod FINAL inviat astfel scoate expedierea NOUA din
              * urmarire pentru totdeauna, tacut.
              *
@@ -255,8 +255,8 @@ export async function GET(req: NextRequest) {
             ...(codNou !== null ? { posta_status_code: codNou } : {}),
             /*
              * ⚠ Lista celor deja spuse se scrie SI pe drumurile fara cod nou. Altfel, la o
-             * trimitere care raspunde dar nu are inca nicio stare, coloana ar ramane `null` —
-             * adica „prima vedere" — pentru totdeauna, si primul teanc de evenimente sosit
+             * trimitere care raspunde dar nu are inca nicio stare, coloana ar ramane `null`,
+             * adica „prima vedere", pentru totdeauna, si primul teanc de evenimente sosit
              * dupa aceea ar fi taiat la una singura, mereu.
              */
             ...(spuse ? { posta_evenimente_semnalate: spuse } : {}),
@@ -331,7 +331,7 @@ export async function GET(req: NextRequest) {
          * Comentariul de deasupra spunea deja „o cadere de autentificare (401/403)”, dar
          * `else` prindea TOT: un timeout, o retea cazuta, un 500 la ei. Trei astfel de esecuri
          * intr-o rulare ridicau o alarma CRITICA prin care comerciantului i se spunea sa-si
-         * verifice utilizatorul si parola — cand, de fapt, Posta era cazuta.
+         * verifice utilizatorul si parola, cand, de fapt, Posta era cazuta.
          *
          * ⚠ O alarma care numeste cauza gresita e mai rea decat niciuna: omul schimba parola
          * buna, nu se repara nimic, si data viitoare nu mai crede alarma.
@@ -419,8 +419,8 @@ export async function GET(req: NextRequest) {
        *
        * Comentariul de atunci spunea ca se pierde „al doilea din doua evenimente care cer
        * atentie". Masurat, pierderea era alta si mai mare: daca in fereastra de doua ore intra
-       * „Refuz destinatar" (21) si DUPA el unul administrativ — „Redirectionat" (35),
-       * „Reexpediat" (36), o scanare de tranzit — atunci ultima stare NU cere atentie si
+       * „Refuz destinatar" (21) si DUPA el unul administrativ („Redirectionat" 35,
+       * „Reexpediat" 36, o scanare de tranzit), atunci ultima stare NU cere atentie si
        * refuzul nu se striga NICIODATA. Nu „al doilea": NIMIC.
        *
        * Si nu e un caz rar. Refuzul la usa si redirectarea catre oficiu se inregistreaza in
@@ -449,7 +449,7 @@ export async function GET(req: NextRequest) {
        *
        * ⚠ Se citeste COLOANA, nu marcajul de rotatie. Migratia adauga coloana GOALA pe toate
        * comenzile existente: acelea AU `posta_status_checked_at`, deci n-ar fi fost „prima
-       * vedere", iar `dejaSpuse` gol nu filtreaza nimic — la prima rulare de dupa migratie
+       * vedere", iar `dejaSpuse` gol nu filtreaza nimic, la prima rulare de dupa migratie
        * fiecare trimitere urmarita si-ar fi strigat TOT istoricul deodata. `null` raspunde
        * exact la intrebarea pusa: „am inregistrat vreodata ce am spus despre trimiterea asta?"
        */
@@ -461,7 +461,7 @@ export async function GET(req: NextRequest) {
        *
        * Scris intai marcajul, o cadere a functiei intre cele doua (Vercel taie la
        * `maxDuration`) ar lasa trimiterea cu evenimentul trecut ca „spus" si fara nicio
-       * notificare — iar daca acel cod e final, trimiterea iese pe loc din urmarire si nicio
+       * notificare, iar daca acel cod e final, trimiterea iese pe loc din urmarire si nicio
        * rulare viitoare nu mai repara nimic. Returul ar disparea definitiv.
        *
        * Invers, cel mai rau caz e o notificare repetata. Alegerea e limpede.

@@ -394,7 +394,7 @@ export type RaspunsExpediere = {
   /**
    * Formatul PE CARE L-AU TRIMIS (`docType`: PDF, ZPLII, PNG…), nu cel cerut.
    *
-   * ⚠ `null` cand raspunsul nu-l spune. Atunci se cade pe formatul cerut in configurare —
+   * ⚠ `null` cand raspunsul nu-l spune. Atunci se cade pe formatul cerut in configurare,
    * vezi `etichetaDin`.
    */
   etichetaFormat: string | null;
@@ -1022,21 +1022,21 @@ export async function tarife(config: FedexConfig, corp: unknown): Promise<{ deta
 // ─── Emiterea ────────────────────────────────────────────────────────────────
 
 /**
- * Prima eticheta dintr-un raspuns de emitere, oriunde ar sta ea — SI IN CE FORMAT E.
+ * Prima eticheta dintr-un raspuns de emitere, oriunde ar sta ea, SI IN CE FORMAT E.
  *
  * ═══ ⚠⚠ DE CE SE IA FORMATUL DIN RASPUNS, NU DIN CONFIGURARE ═══
  *
  * Eticheta se salva cu `format: specificatieEticheta(config).imageType`, adica cu ce am CERUT
  * noi. Numai ca `imageType` si `labelStockType` nu sunt independente la ei: cererea de PDF pe
  * o coala termica, sau un cont pe care proiectul de API nu are formatul cerut, intorc alt
- * `docType` decat cel cerut — si o fac fara nicio alerta, fiindca eticheta CHIAR a fost
+ * `docType` decat cel cerut, si o fac fara nicio alerta, fiindca eticheta CHIAR a fost
  * produsa.
  *
  * Pretul greselii e la descarcare: numele fisierului si tipul MIME se aleg din coloana
  * `format`, deci un ZPL ajunge la om ca `.pdf` si nu se deschide cu nimic. Iar FedEx nu are
  * reimprimare: nu exista „mai cere-o o data".
  *
- * ⚠ `docType` ramane optional in raspunsul lor. Lipsa lui NU e o eroare — se cade pe ce am
+ * ⚠ `docType` ramane optional in raspunsul lor. Lipsa lui NU e o eroare, se cade pe ce am
  * cerut, care e cea mai buna presupunere pe care o avem.
  */
 function etichetaDin(tranzactie: Record<string, unknown>): { continut: string; format: string | null } | null {
@@ -1246,13 +1246,13 @@ function citesteUrmarire(rezultat: Record<string, unknown>, awbCerut: string): U
   /*
    * ═══ ⚠⚠ MOTIVUL, NU DOAR STAREA ═══
    *
-   * `statusByLocale` la o exceptie de livrare spune „Delivery exception" si atat. Motivul —
-   * „Customer not available or business closed", „Incorrect address", „Customs delay" — sta in
+   * `statusByLocale` la o exceptie de livrare spune „Delivery exception" si atat. Motivul
+   * („Customer not available or business closed", „Incorrect address", „Customs delay") sta in
    * `latestStatusDetail.ancillaryDetails[]`, pe care nu le citea nimeni.
    *
    * Fara el, notificarea catre comerciant e un anunt fara continut: stie ca s-a intamplat
    * ceva, nu stie ce, si nici ce sa faca. Cu el, aceeasi notificare ii spune ca omul n-a fost
-   * acasa sau ca adresa e gresita — adica exact lucrul pe care il poate repara.
+   * acasa sau ca adresa e gresita, adica exact lucrul pe care il poate repara.
    *
    * ⚠ Sunt TEXT TRADUS dupa `x-locale`, ca si `statusByLocale`: se ARATA, nu se compara
    * niciodata. Nicio hotarare nu se ia din ele; codul ramane singura autoritate.

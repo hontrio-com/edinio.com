@@ -16,11 +16,11 @@ import type { FedexConfig } from "./client";
  * raspunde FedEx.
  *
  * 1. ⚠⚠ `corpExpediere` punea `customsValue`, `unitPrice` si `totalCustomsValue` numai cand
- *    `valoareComanda > 0`. Sub zero lei — o comanda de inlocuire, un cadou, o linie cu pret
- *    zero — `customsClearanceDetail` pleca cu o marfa fara nicio valoare declarata. Nu e o
+ *    `valoareComanda > 0`. Sub zero lei, o comanda de inlocuire, un cadou, o linie cu pret
+ *    zero, `customsClearanceDetail` pleca cu o marfa fara nicio valoare declarata. Nu e o
  *    chichita de schema: factura comerciala pe care FedEx o intocmeste din campurile astea
  *    merge la vama. Ori ei refuza cererea, ori coletul e OPRIT acolo si se descurca
- *    cumparatorul — si a doua varianta nu se afla decat de la el.
+ *    cumparatorul, si a doua varianta nu se afla decat de la el.
  *
  * 2. ⚠ Descrierea implicita e „Produse” (modalul) sau „Bunuri de consum” (`corpExpediere`).
  *    `Commodity.description` e singurul camp obligatoriu din schema lor, deci trece. Trece la
@@ -28,7 +28,7 @@ import type { FedexConfig } from "./client";
  *
  * 3. ⚠⚠ Butonul de emitere era `disabled={emitand || !aleasa}`, iar `aleasa` venea doar dintr-o
  *    oferta cotata. `ofertePosibile` insa arunca TOATE ofertele cand contul coteaza in alta
- *    valuta decat leul — ceea ce conturile FedEx din Romania fac des. Comerciantul vedea un
+ *    valuta decat leul, ceea ce conturile FedEx din Romania fac des. Comerciantul vedea un
  *    avertisment limpede despre valuta si un buton pe care nu-l putea apasa NICIODATA, desi
  *    coletul se putea expedia perfect. Refuzul de a AFISA un pret in euro devenise o
  *    imposibilitate de a expedia.
@@ -103,7 +103,7 @@ describe("Valoarea marfii la international", () => {
     assert.deepEqual(lipsuriExpediere(CONFIG, date({ valoareComanda: 0 })).comanda, []);
   });
 
-  test("⚠⚠ fara tara SCRISA nu se presupune international — pe acolo trece COTAREA din checkout", () => {
+  test("⚠⚠ fara tara SCRISA nu se presupune international, pe acolo trece COTAREA din checkout", () => {
     /*
      * `buildFedexOptions` compune destinatarul fara tara si fara valoarea cosului. O conditie
      * care ar socoti „lipsa tarii” drept international ar taia cotarea FedEx pentru orice
@@ -142,7 +142,7 @@ describe("Descrierea marfii pentru vama", () => {
   });
 
   test("⚠ dar NU OPRESTE: „Produse” poate fi chiar descrierea potrivita", () => {
-    /* Refuzat, comerciantul n-ar mai putea expedia deloc — si noi n-avem cum sa stim ce e
+    /* Refuzat, comerciantul n-ar mai putea expedia deloc, si noi n-avem cum sa stim ce e
        inauntru. De aia e avertisment, nu lipsa. */
     assert.deepEqual(
       lipsuriExpediere(CONFIG, date({ destinatar: IN_GERMANIA, continut: "Produse" })).comanda, [],

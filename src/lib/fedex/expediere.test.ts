@@ -500,7 +500,7 @@ describe("⚠⚠ FedEx: codul de stat la SUA, Canada si Puerto Rico", () => {
   /*
    * Verbatim din schema lor, de trei ori: „State code is required for US, CA, PR and not required
    * for other countries.” Campul lipsea CU TOTUL din tipul adresei, deci orice colet catre cele
-   * trei tari pleca fara el — si era refuzat, dupa ce se consumase o cerere.
+   * trei tari pleca fara el, si era refuzat, dupa ce se consumase o cerere.
    */
   const SUA: AdresaComanda = {
     nume: "John Doe", strada: "5th Avenue", numar: "10",
@@ -515,7 +515,7 @@ describe("⚠⚠ FedEx: codul de stat la SUA, Canada si Puerto Rico", () => {
   });
 
   test("⚠ dar la restul tarilor campul NU apare deloc", () => {
-    /* Trimis unde nu se cere, ar fi cel putin zgomot — si la ei nimic nu e inofensiv. */
+    /* Trimis unde nu se cere, ar fi cel putin zgomot, si la ei nimic nu e inofensiv. */
     assert.equal(parteFedex(DESTINATAR).address.stateOrProvinceCode, undefined);
     assert.equal(parteFedex({ ...SUA, tara: "DE", judet: "BY" }).address.stateOrProvinceCode, undefined);
   });

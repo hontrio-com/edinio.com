@@ -288,13 +288,13 @@ export type RezultatCotare = {
    *
    * Butonul de emitere era `disabled={emitand || !aleasa}`, iar `aleasa` se putea umple doar
    * dintr-o oferta cotata. Numai ca `ofertePosibile` arunca TOATE ofertele cand contul coteaza
-   * in alta valuta decat leul — si conturile FedEx din Romania coteaza adesea in euro.
+   * in alta valuta decat leul, si conturile FedEx din Romania coteaza adesea in euro.
    *
    * Rezultatul: comerciantul vedea un avertisment limpede despre valuta si un buton pe care nu-l
    * putea apasa NICIODATA. Coletul se putea expedia perfect; noi refuzam sa AFISAM un pret in
    * euro, si din asta faceam o imposibilitate de a emite.
    *
-   * Pretul ramane nearatat — aia a fost hotararea buna, si nu se schimba. Se desparte doar
+   * Pretul ramane nearatat, aia a fost hotararea buna, si nu se schimba. Se desparte doar
    * afisarea pretului de emiterea coletului.
    */
   serviciiDeMana: { cod: string; nume: string; marfaGrea: boolean }[];
@@ -365,11 +365,11 @@ async function pastreazaEticheta(
    *
    * Aici se scria `spec.imageType`, adica formatul CERUT de noi. Numai ca `imageType` si
    * `labelStockType` nu sunt independente la ei, iar un proiect de API fara formatul cerut
-   * intoarce alt `docType` — fara nicio alerta, fiindca eticheta CHIAR a fost produsa.
+   * intoarce alt `docType`, fara nicio alerta, fiindca eticheta CHIAR a fost produsa.
    *
    * Coloana `format` e apoi singura sursa pentru numele fisierului si tipul MIME la
    * descarcare (`extensiaEtichetei`, `tipulFisierului`). Gresita, un ZPL ajunge la om ca
-   * `.pdf` si nu se deschide cu nimic — iar FedEx nu are reimprimare, deci nu exista „mai
+   * `.pdf` si nu se deschide cu nimic, iar FedEx nu are reimprimare, deci nu exista „mai
    * cere-o o data".
    *
    * ⚠ `null` cade pe ce am cerut: cea mai buna presupunere pe care o avem.
@@ -486,7 +486,7 @@ export async function createFedexAwbAction(
    * Pana azi randul de mai jos n-avea `else`. Cand raspunsul venea fara `encodedLabel`, sau
    * cand registrul intorcea „deja” (si atunci `raspuns` e `null` prin constructie), eticheta
    * nu se salva, nu se cerea din nou, si nimeni nu spunea nimic. Comerciantul afla abia cand
-   * apasa „Descarca eticheta” si nu primea nimic — cand coletul era deja plecat.
+   * apasa „Descarca eticheta” si nu primea nimic, cand coletul era deja plecat.
    *
    * ⚠ Nu e o eroare: AWB-ul EXISTA si comanda merge mai departe. E un avertisment, iar
    * singurul lucru care il mai poate salva e sa tipareasca din portalul FedEx, ACUM.
@@ -844,7 +844,7 @@ export async function verificaFedexAwbAction(
    * ⚠⚠ SI SE SPUNE CA ETICHETA NU VINE PE DRUMUL ASTA.
    *
    * Recuperarea gaseste expedierea prin `POST /track/v1/referencenumbers`, iar urmarirea NU
-   * intoarce `encodedLabel` — nici n-ar avea de unde. Emiterea nu se mai repeta (ar face al
+   * intoarce `encodedLabel`, nici n-ar avea de unde. Emiterea nu se mai repeta (ar face al
    * doilea colet), deci eticheta acelei expedieri nu mai ajunge niciodata la noi.
    *
    * La orice alt curier asta n-ar fi grav: se cere din nou. La FedEx **nu exista reimprimare**,

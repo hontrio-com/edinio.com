@@ -87,3 +87,24 @@ schimbat azi e o singura constanta — dar una de care atarna fiecare cerere.
 
 **Probe:** proba versiunii, mutata impreuna cu constanta. Banc de mutanti: **1 dintre cei 14 loveste
 anume DHL**, prins. `tsc` curat, **8.271 de probe verzi**, build OK, fara migratie.
+
+---
+
+## Adaugat pe 16.09.2026, gasit pe drumul altui curier
+
+### ⚠ Marcajul cronului rescria codul de status vechi
+
+`dhl-tracking` era unul dintre cele OPT cronuri cu tiparul `dhl_status_code: codNou ?? o....` in
+`marcheazaVerificat`. Fara cod nou se scria inapoi codul citit la inceputul rularii; daca intre timp
+AWB-ul fusese dezlegat si reemis, coloana golita era INVIATA, iar un cod final scotea expedierea noua
+din urmarire pentru totdeauna. Reparat la toate opt, cu proba comuna care enumera dosarul de cronuri.
+
+### ⚠ Valoarea declarata la cotare: DHL era exemplul corect
+
+Reparatia de la 14.09 (`valoareaDeclarataLaCurier` plus `buildDhlOptions`) s-a dovedit a fi lipsa la
+FedEx, unde `totalDeclaredValue` pleca doar la emitere. Blocul FedEx e acum scris dupa modelul de
+aici, inclusiv podeaua din catalog. DHL nu s-a atins.
+
+### Expunerea, remasurata
+
+`dhl_config.enabled` este fals la toate cele 129 de magazine. Zero AWB-uri. Nota ramane 9/10.

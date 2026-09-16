@@ -333,7 +333,7 @@ export function lipsuriExpediere(config: FedexConfig | null | undefined, date: D
    * ⚠⚠ CODUL DE STAT, la SUA / Canada / Puerto Rico.
    *
    * Verbatim din schema lor: „State code is required for US, CA, PR and not required for other
-   * countries.” Trimis fara el, coletul e refuzat de ei — iar refuzul vine dupa ce s-a
+   * countries.” Trimis fara el, coletul e refuzat de ei, iar refuzul vine dupa ce s-a
    * consumat o cerere si dupa ce comerciantul a completat tot formularul.
    *
    * ⚠ Se cere codul de DOUA litere, fiindca atat accepta ei. Un nume intreg nu se traduce
@@ -353,8 +353,8 @@ export function lipsuriExpediere(config: FedexConfig | null | undefined, date: D
    * ═══ ⚠⚠ LA INTERNATIONAL, VALOAREA MARFII E OBLIGATORIE ═══
    *
    * `corpExpediere` pune `customsValue`, `unitPrice` si `totalCustomsValue` numai cand
-   * `valoareComanda > 0`. Sub zero lei — o comanda de inlocuire, un cadou, o linie cu pret
-   * zero — `customsClearanceDetail` pleca cu o marfa fara nicio valoare declarata.
+   * `valoareComanda > 0`. Sub zero lei, o comanda de inlocuire, un cadou, o linie cu pret
+   * zero, `customsClearanceDetail` pleca cu o marfa fara nicio valoare declarata.
    *
    * ⚠ Nu e o chichita de schema: factura comerciala pe care FedEx o intocmeste din campurile
    * astea merge la vama. Fara valoare, ori ei refuza cererea (si atunci omul vede o eroare pe
@@ -370,7 +370,7 @@ export function lipsuriExpediere(config: FedexConfig | null | undefined, date: D
    * Lista asta e si poarta de dinaintea COTARII din checkout (`buildFedexOptions`), iar acolo
    * destinatarul se compune fara tara si fara valoarea cosului. O conditie care ar socoti
    * „lipsa tarii" drept international ar taia cotarea FedEx pentru orice magazin al carui
-   * expeditor nu e in Romania — adica pretul fix in loc de cel adevarat, tacut.
+   * expeditor nu e in Romania, adica pretul fix in loc de cel adevarat, tacut.
    */
   const taraExpeditorului = (curata(config?.expeditor?.tara) || "RO").toUpperCase();
   const taraScrisa = curata(d.tara).toUpperCase();
@@ -452,7 +452,7 @@ export function avertismenteExpediere(
       `Coletul pleaca in ${taraScrisa}, iar descrierea marfii („${curata(date.continut) || curata(config?.continut_implicit) || "Bunuri de consum"}”) `
       + "e prea generala pentru vama. FedEx o accepta, dar factura comerciala se intocmeste din ea "
       + "si un colet cu descriere generica e retinut ca sa fie lamurit. Scrie ce e inauntru "
-      + "(de exemplu „tricouri bumbac” sau „piese auto — filtre ulei”).",
+      + "(de exemplu „tricouri bumbac” sau „piese auto, filtre ulei”).",
     );
   }
 
@@ -470,7 +470,7 @@ type AdresaFedex = {
    *
    * Verbatim din schema lor, de trei ori: „State code is required for US, CA, PR and not
    * required for other countries.” Campul lipsea CU TOTUL din tipul asta, deci orice colet
-   * catre cele trei tari pleca fara el — si era refuzat de ei.
+   * catre cele trei tari pleca fara el, si era refuzat de ei.
    *
    * ⚠ Se trimite doar codul de DOUA litere, care e ce cer ei. Un nume intreg
    * („California”) nu se traduce aici: n-avem nomenclatorul lor de state, iar o ghicitura
@@ -758,13 +758,13 @@ export function corpExpediere(config: FedexConfig, date: DateExpediere): Record<
 }
 
 /**
- * Valoarea declarata la transport, cand comerciantul o cere. Costa, deci e stinsa din oficiu —
+ * Valoarea declarata la transport, cand comerciantul o cere. Costa, deci e stinsa din oficiu,
  * la fel ca `asigura_coletul` la Shipo.
  *
  * ═══ ⚠⚠ SE PUNE SI LA COTARE, NU DOAR LA EMITERE ═══
  *
  * Blocul asta traia numai in `corpExpediere`. Cotarea pleca fara el, deci pretul aratat
- * cumparatorului si comerciantului NU continea suprataxa de valoare declarata — iar
+ * cumparatorului si comerciantului NU continea suprataxa de valoare declarata, iar
  * emiterea, care o trimitea, o primea pe factura. Diferenta o suporta comerciantul, tacut, la
  * fiecare colet asigurat.
  *
@@ -777,13 +777,13 @@ export function corpExpediere(config: FedexConfig, date: DateExpediere): Record<
  * equal to the sum of all the individual declaredValues in the shipment.”
  *
  * Trimis singur, totalul se compara cu o suma de ZERO valori declarate. Fie ei refuza
- * expedierea, fie o accepta si raspunderea lor nu se leaga de niciun colet — adica
+ * expedierea, fie o accepta si raspunderea lor nu se leaga de niciun colet, adica
  * comerciantul plateste asigurarea si n-o are. A doua varianta e cea scumpa, fiindca se afla
  * abia cand se pierde un colet.
  *
  * ⚠ Trimiterea are UN SINGUR `requestedPackageLineItems`, deci aceeasi suma pe colet face
  * egalitatea exacta. Daca vreodata se trimit mai multe colete, suma lor TREBUIE impartita
- * astfel incat totalul sa iasa la fix — nu copiata pe fiecare.
+ * astfel incat totalul sa iasa la fix, nu copiata pe fiecare.
  */
 function puneValoareaDeclarata(
   expediere: Record<string, unknown>,

@@ -25,7 +25,7 @@ import type { StarePosta } from "./client";
  * cer atentie", si ca la ritmul postei cazul e rar.
  *
  * ⚠⚠ Masurat, pierderea era ALTA si mai mare: daca dupa „Refuz destinatar" (21) intra un
- * eveniment administrativ — „Redirectionat" (35), „Reexpediat" (36), o scanare de tranzit —
+ * eveniment administrativ („Redirectionat" 35, „Reexpediat" 36, o scanare de tranzit),
  * atunci ultima stare NU cere atentie, iar refuzul nu se striga NICIODATA. Nu „al doilea":
  * NIMIC.
  *
@@ -77,7 +77,7 @@ test("⚠ acelasi cod la alta ora e ALT eveniment", () => {
 test("⚠⚠ la PRIMA vedere nu se striga tot istoricul, ci doar starea curenta", () => {
   /*
    * Migratia adauga coloana goala pe comenzi urmarite de saptamani. Fara garda asta, prima
-   * rulare de dupa deploy ar fi trimis cate o notificare pentru fiecare eveniment vechi —
+   * rulare de dupa deploy ar fi trimis cate o notificare pentru fiecare eveniment vechi,
    * toate despre lucruri de mult incheiate.
    */
   const stari = [stare(21, "01.09.2026 08:00"), stare(22, "01.09.2026 09:00"), stare(23, "01.09.2026 10:00")];
@@ -137,7 +137,7 @@ test("⚠ si lista intra in STARE, ca sa fie filtrata pe expedierea citita", () 
   assert.match(s, /stare: \{ posta_status_code: codNou, posta_evenimente_semnalate: pastrate \}/);
 });
 
-test("⚠⚠ iar la dezlegarea AWB-ului memoria se goleste — la Posta SI la GLS", () => {
+test("⚠⚠ iar la dezlegarea AWB-ului memoria se goleste, la Posta SI la GLS", () => {
   /*
    * Lasata pe comanda, coletul urmator porneste cu lista celui vechi: un eveniment al lui cu
    * acelasi cod si aceeasi data e socotit „deja spus" si nu mai ajunge la om.
@@ -158,7 +158,7 @@ test("⚠⚠ istoricul se aseaza de la NOU la vechi dupa datele lor, nu prin `.r
   /*
    * Panoul facea `stari.map(…).reverse()`, adica presupunea ca API-ul da evenimentele de la
    * vechi la nou. Nimic din documentatie nu spune asta. Daca raspunsul vine deja de la nou la
-   * vechi, intors pe dos, comerciantul citeste ultima stare a coletului ca pe prima — si la un
+   * vechi, intors pe dos, comerciantul citeste ultima stare a coletului ca pe prima, si la un
    * refuz sau un retur trage concluzia opusa.
    */
   const deLaNouLaVechi = [stare(21, "03.09.2026 10:00"), stare(14, "02.09.2026 10:00"), stare(1, "01.09.2026 10:00")];

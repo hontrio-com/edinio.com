@@ -3,8 +3,8 @@
 --
 -- ═══ ⚠ CE REPARA: UN EVENIMENT CARE CERE O DECIZIE SE PIERDE DE TOT ═══
 --
---   Cronul Postei tinea minte UN SINGUR cod — `posta_status_code`, starea ultimului
---   eveniment vazut — si semnala numai daca ULTIMA stare cerea atentie SI codul ei
+--   Cronul Postei tinea minte UN SINGUR cod, `posta_status_code`, starea ultimului
+--   eveniment vazut, si semnala numai daca ULTIMA stare cerea atentie SI codul ei
 --   era altul decat cel retinut:
 --
 --       const schimbat = codNou !== null && codNou !== (o.posta_status_code ?? null);
@@ -12,8 +12,8 @@
 --
 --   Comentariul de deasupra spunea ca se pierde „al doilea din doua evenimente care
 --   cer atentie". Masurat, pierderea e alta si mai mare: daca in fereastra de doua
---   ore intra „Refuz destinatar" (cod 21) si DUPA el un eveniment obisnuit —
---   „Redirectionat" (35), „Reexpediat" (36), o simpla scanare de tranzit — atunci
+--   ore intra „Refuz destinatar" (cod 21) si DUPA el un eveniment obisnuit,
+--   („Redirectionat" 35, „Reexpediat" 36, o simpla scanare de tranzit), atunci
 --   ultima stare NU cere atentie, iar refuzul nu se striga NICIODATA. Nu se striga
 --   „al doilea": nu se striga nimic.
 --
@@ -33,7 +33,7 @@
 --   ceasuri diferite, iar Posta publica scanarile in loturi. Gaura aceea a fost deja
 --   platita la GLS si e descrisa in migratia 2026-08-31.
 --
---   `posta_status_code` RAMANE — el duce starea comenzii si raspunde la
+--   `posta_status_code` RAMANE, el duce starea comenzii si raspunde la
 --   `eStareFinala`, deci are treaba lui. `posta_status_checked_at` ramane si el,
 --   pentru rotatie, unde chiar despre ceasul nostru e vorba.
 --
@@ -62,6 +62,6 @@ comment on column public.orders.posta_evenimente_semnalate is
 -- PostgREST trebuie sa afle de coloana noua
 --
 -- ⚠ Fara asta, cronul primeste „column does not exist" pana la urmatoarea
--- repornire a PostgREST — care poate veni peste ore.
+-- repornire a PostgREST, care poate veni peste ore.
 -- ---------------------------------------------------------------------------
 notify pgrst, 'reload schema';

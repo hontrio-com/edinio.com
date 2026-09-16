@@ -11,13 +11,13 @@ import { join } from "node:path";
  * Fiecare cron de urmarire are un `marcheazaVerificat` care scrie marcajul de rotatie chiar si
  * pe drumurile care n-au aflat nimic (fara configurare, apel picat, fara stare). Fara marcaj,
  * o expediere care pica mereu ar ramane cu `*_status_checked_at` NULL si ar iesi PRIMA la
- * fiecare rulare, la nesfarsit — deci marcajul necondiționat e corect si ramane.
+ * fiecare rulare, la nesfarsit, deci marcajul necondiționat e corect si ramane.
  *
  * ⚠⚠ Dar randul scria SI starea: `X_status_code: codNou ?? o.X_status_code`. Adica, fara cod
  * nou, se scria inapoi codul CITIT la inceputul rularii.
  *
  * Intre citire si scriere sta un apel extern, iar tura are zeci de comenzi. Daca in rastimp
- * comerciantul a dezlegat AWB-ul si a emis altul, coloana fusese GOLITA — si randul acela o
+ * comerciantul a dezlegat AWB-ul si a emis altul, coloana fusese GOLITA, si randul acela o
  * invia. Un cod FINAL inviat astfel (livrat, returnat, anulat) scoate expedierea NOUA din
  * urmarire pentru totdeauna, tacut.
  *
@@ -49,7 +49,7 @@ describe("Marcajul de rotatie nu resuscita starea veche", () => {
   test("⚠⚠ niciun cron nu mai scrie `status_code: codNou ?? o.…` in marcaj", () => {
     /*
      * ⚠ Se cauta DOAR in `marcheazaVerificat`, nu in tot fisierul: `scrieUrmarirea` foloseste
-     * acelasi tipar, dar acolo e SIGUR — scrierea e filtrata pe identitatea expedierii citite,
+     * acelasi tipar, dar acolo e SIGUR, scrierea e filtrata pe identitatea expedierii citite,
      * deci nu poate ateriza pe alta. O cautare pe fisier ar fi acuzat pe nedrept, exact cum
      * mi s-a intamplat azi cu censul de anulari.
      */

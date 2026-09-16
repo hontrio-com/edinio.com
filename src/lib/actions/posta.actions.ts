@@ -863,7 +863,7 @@ export async function getPostaTraceAction(
      * de la vechi la nou. Documentatia nu spune asta nicaieri, iar chiar codul nostru nu-i da
      * crezare: `ultimaStare` sorteaza dupa data lor tocmai fiindca ordinea nu e garantata.
      * Daca raspunsul vine deja de la nou la vechi, intors pe dos, comerciantul citeste ultima
-     * stare a coletului ca pe prima — si la un refuz sau un retur trage concluzia opusa.
+     * stare a coletului ca pe prima, si la un refuz sau un retur trage concluzia opusa.
      */
     return { ok: true, stari: istoricDeLaNouLaVechi(stari).map(laStareAfisata) };
   } catch (e) {

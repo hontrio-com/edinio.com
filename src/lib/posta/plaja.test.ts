@@ -79,7 +79,7 @@ test("o plaja gresita nu mai avertizeaza pe deasupra: intai se repara problemele
 test("⚠⚠ un cod care nu incape in campul lor de 30 de caractere se OPRESTE la configurare", () => {
   /*
    * `codAwb` e `nvarchar(30)` la Posta. Codul din plaja se compune ca `prefix + cifre`, iar
-   * `lipsuriExpediere` — singurul loc care masura lungimea — ruleaza INAINTE de alocare, deci
+   * `lipsuriExpediere`, singurul loc care masura lungimea, ruleaza INAINTE de alocare, deci
    * nu vedea niciodata codul alocat. Singura poarta e aici, inainte sa fie ars vreun cod.
    */
   const prefixLung = "A".repeat(20);

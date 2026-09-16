@@ -451,8 +451,8 @@ export async function probaConexiune(config: PostaConfig): Promise<RezultatProba
        * ⚠⚠ Se judeca CU ACEEASI MASURA ca drumul autentificat.
        *
        * Aici scria `Array.isArray(JSON.parse(text))`, in timp ce `unitatiLivrare` accepta si
-       * `{data: […]}` prin `listaDinRaspuns`. Daca Posta chiar impacheteaza asa — si nu stim,
-       * formatul nu e documentat — sonda spunea „nu e public” despre exact raspunsul pe care
+       * `{data: […]}` prin `listaDinRaspuns`. Daca Posta chiar impacheteaza asa, si nu stim,
+       * formatul nu e documentat, sonda spunea „nu e public” despre exact raspunsul pe care
        * celalalt drum il citeste ca lista. Verdictul iesea „autentificat", adica bifa verde
        * care spune ca userul si parola sunt bune, cand de fapt nu se dovedise nimic.
        *
@@ -494,11 +494,11 @@ export function listaDinRaspuns(r: unknown): unknown[] {
 }
 
 /**
- * Raspunsul POARTA o lista — chiar si goala.
+ * Raspunsul POARTA o lista, chiar si goala.
  *
  * ⚠ Nu se poate raspunde la intrebarea asta cu `listaDinRaspuns(r).length`: functia aceea
  * intoarce `[]` si cand raspunsul nu e o lista, si cand e o lista goala. Pentru sonda publica
- * cele doua inseamna lucruri opuse — „resursa e aparata" fata de „resursa e deschisa si n-are
+ * cele doua inseamna lucruri opuse, „resursa e aparata" fata de „resursa e deschisa si n-are
  * niciun oficiu azi".
  *
  * Imparte aceleasi chei cu `listaDinRaspuns`, dintr-un singur loc: daca s-ar rupe in doua,

@@ -13,13 +13,13 @@ import { urmareste, type FedexConfig } from "./client";
  *
  * 1. ⚠⚠ `totalDeclaredValue` pleca DOAR la emitere. Cotarea mergea fara el, deci pretul aratat
  *    cumparatorului in checkout si comerciantului in panou NU continea suprataxa de valoare
- *    declarata — iar factura FedEx o continea. Diferenta o suporta comerciantul, tacut, la
+ *    declarata, iar factura FedEx o continea. Diferenta o suporta comerciantul, tacut, la
  *    fiecare colet asigurat. ⚠ Exact acelasi defect a fost reparat la DHL pe 14.09; aici statea
  *    a doua copie, si asta e lectia care se repeta: cauta a doua copie INAINTE.
  *
  * 2. ⚠⚠ Eticheta se salva cu formatul CERUT (`specificatieEticheta(config).imageType`), nu cu
  *    cel TRIMIS (`docType` din raspuns). `imageType` si `labelStockType` nu sunt independente
- *    la ei, iar un proiect de API fara formatul cerut intoarce altceva — fara alerta, fiindca
+ *    la ei, iar un proiect de API fara formatul cerut intoarce altceva, fara alerta, fiindca
  *    eticheta chiar a fost produsa. Coloana `format` e apoi singura sursa pentru numele
  *    fisierului si tipul MIME, deci un ZPL ajunge la om ca `.pdf` si nu se deschide cu nimic.
  *    Iar FedEx nu are reimprimare: nu exista „mai cere-o o data".
@@ -96,7 +96,7 @@ describe("Valoarea declarata pleaca la AMANDOUA cererile", () => {
   });
 
   test("⚠ cele doua cereri trimit EXACT aceeasi suma", () => {
-    /* Diferite, pretul cotat ar fi tot altul decat cel facturat — doar cu alt numar. */
+    /* Diferite, pretul cotat ar fi tot altul decat cel facturat, doar cu alt numar. */
     assert.deepEqual(
       expedierea(corpTarife(cuAsigurare, DATE)).totalDeclaredValue,
       expedierea(corpExpediere(cuAsigurare, DATE)).totalDeclaredValue,
@@ -140,7 +140,7 @@ describe("Formatul etichetei se ia din RASPUNS", () => {
   });
 
   test("⚠ lipsa lui NU e o eroare: se cade pe ce am cerut", () => {
-    /* `docType` ramane optional la ei. Refuzata, o eticheta perfect buna s-ar pierde — si
+    /* `docType` ramane optional la ei. Refuzata, o eticheta perfect buna s-ar pierde, si
        FedEx nu are reimprimare. */
     assert.match(actiuni, /formatDinRaspuns \?\? spec\.imageType/);
     assert.ok(!/formatDinRaspuns!/.test(actiuni), "s-a presupus ca formatul vine mereu");

@@ -101,3 +101,26 @@ vechi raman nereparate.
 
 **Probe:** 10 comune celor trei clienti (FedEx, UPS, Shipo). Banc de mutanti: **3 dintre cei 14
 lovesc anume UPS**, toti prinsi. `tsc` curat, **8.271 de probe verzi**, build OK, fara migratie.
+
+---
+
+## Adaugat pe 16.09.2026, gasit pe drumul altui curier
+
+### ⚠ Marcajul cronului rescria codul de status vechi
+
+`ups-tracking` era unul dintre cele OPT cronuri in care `marcheazaVerificat` scria
+`ups_status_code: codNou ?? o.ups_status_code`. Pe fiecare drum fara cod nou (fara configurare, apel
+picat, fara stare) se scria inapoi codul CITIT la inceputul rularii. Intre citire si scriere sta un
+apel extern: daca in rastimp comerciantul a dezlegat AWB-ul si a emis altul, coloana fusese golita,
+iar randul o invia. Un cod FINAL inviat astfel scoate expedierea NOUA din urmarire pentru totdeauna,
+tacut.
+
+Acum starea se scrie doar cand exista un cod nou. Marcajul de rotatie ramane NECONDITIONAT, si asta
+e la fel de important: sarit, o expediere care pica mereu ar sta in capul cozii la fiecare rulare si
+ar infometa urmarirea intregii platforme. Proba comuna `codul-vechi-nu-invie.test.ts` apara amandoua
+regulile si enumera dosarul de cronuri, deci cade si daca apare un cron nou scris la fel.
+
+### Expunerea, remasurata
+
+`ups_config.enabled` este fals la toate cele 129 de magazine, la fel `fedex_config` si `dhl_config`.
+Zero AWB-uri emise vreodata. Nota ramane 9/10 din acelasi motiv de dinainte: nimic nu e dovedit live.

@@ -17,11 +17,11 @@ import { readFileSync } from "node:fs";
  *  1. La emitere, `if (raspuns?.eticheta) { ... }` n-avea `else`. Cand raspunsul venea fara
  *     `encodedLabel`, sau cand registrul intorcea „deja" (si atunci `raspuns` e `null` prin
  *     constructie), eticheta nu se salva si nimeni nu spunea nimic.
- *  2. La recuperarea dupa un raspuns pierdut, expedierea se gaseste prin urmarire — care NU
+ *  2. La recuperarea dupa un raspuns pierdut, expedierea se gaseste prin urmarire, care NU
  *     intoarce `encodedLabel`. Mesajul spunea doar „a fost scrisa pe comanda".
  *
  * ⚠ In amandoua cazurile AWB-ul EXISTA si comanda merge mai departe. Nu sunt erori. Sunt
- * ultima clipa in care omul mai poate tipari din portalul lor — si tocmai aia se pierdea.
+ * ultima clipa in care omul mai poate tipari din portalul lor, si tocmai aia se pierdea.
  */
 
 const viu = (cale: string) =>
@@ -42,7 +42,7 @@ describe("FedEx: eticheta nesalvata se spune, nu se tace", () => {
   });
 
   test("⚠ si AWB-ul tot se intoarce: nu e o eroare, e un avertisment", () => {
-    /* Intors ca eroare, comanda ar fi ramas fara numar desi coletul exista — adica exact
+    /* Intors ca eroare, comanda ar fi ramas fara numar desi coletul exista, adica exact
        situatia pe care tot codul asta o evita. */
     assert.match(s, /return avertismente\.length > 0 \? \{ awb, avertismente \} : \{ awb \};/);
     assert.match(s, /awb: string; avertismente\?: string\[\]/, "forma raspunsului nu mai poarta avertismente");

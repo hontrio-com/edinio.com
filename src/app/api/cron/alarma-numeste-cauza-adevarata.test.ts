@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
  * Cronul Postei imparte esecurile pe galeti, ca un magazin sanatos sa nu ascunda unul cazut.
  * Comentariul de deasupra spunea, corect, ca galeata de autentificare e pentru „401/403".
  *
- * Dar codul era `if (status === 404) ... else { g.autentificare++ }` — iar `else` prindea TOT:
+ * Dar codul era `if (status === 404) ... else { g.autentificare++ }`, iar `else` prindea TOT:
  * un timeout, o retea cazuta, un 500 la ei. Trei astfel de esecuri intr-o rulare ridicau o
  * alarma CRITICA prin care comerciantului i se spunea sa-si verifice utilizatorul si parola,
  * cand de fapt Posta era cazuta.

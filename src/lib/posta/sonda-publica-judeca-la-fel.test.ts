@@ -7,7 +7,7 @@ import { probaConexiune, poartaLista, CHEI_LISTA, type PostaConfig } from "./cli
  * SONDA PUBLICA TREBUIE SA JUDECE CU ACEEASI MASURA           (16.09.2026)
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * `probaConexiune` intoarce TREI verdicte, nu doua. Al treilea — `raspunde_dar_public` —
+ * `probaConexiune` intoarce TREI verdicte, nu doua. Al treilea, `raspunde_dar_public`,
  * exista fiindca o bifa verde n-ar dovedi nimic despre user si parola daca nomenclatorul
  * s-ar dovedi deschis oricui. E lectia platita la eColet.
  *
@@ -15,7 +15,7 @@ import { probaConexiune, poartaLista, CHEI_LISTA, type PostaConfig } from "./cli
  *   - cel autentificat, prin `listaDinRaspuns`, accepta si `{data: […]}`;
  *   - sonda publica cerea `Array.isArray(JSON.parse(text))`, adica lista GOALA.
  *
- * Daca Posta impacheteaza — si nu stim, formatul nu e documentat pentru niciun nomenclator —
+ * Daca Posta impacheteaza, si nu stim, formatul nu e documentat pentru niciun nomenclator,
  * sonda spunea „nu e public" despre exact raspunsul pe care celalalt drum il citeste ca lista.
  * Verdictul iesea `autentificat`: bifa verde care spune ca datele de acces sunt bune, cand de
  * fapt nu se dovedise nimic despre ele.

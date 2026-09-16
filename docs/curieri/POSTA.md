@@ -132,18 +132,103 @@ folosite.
 
 ---
 
+## A doua trecere, 16.09.2026: cele sapte confirmate sunt inchise
+
+Proprietarul a cerut sa se repare tot ce se poate repara cu certitudine. Cele sapte constatari
+confirmate si nereparate de la prima trecere sunt acum toate inchise. Fiecare are proba si mutant.
+
+### 1. Plafonul de 30 de caractere nu se aplica NICIODATA codului din plaja
+
+`codAwb` e `nvarchar(30)` la ei. Verificarea de lungime din `lipsuriExpediere` masoara corect, dar nu
+vede niciodata codul alocat: ea ruleaza INAINTE de alocare, iar codul se injecteaza in corp abia
+dupa. Cu un prefix lung, `prefix + cifre` trece de 30.
+
+Si nu e o chichita de schema: Posta ori refuza trimiterea (si atunci codul e pierdut din plaja), ori
+TAIE campul, si atunci coletul pleaca sub ALT numar decat cel pe care il avem noi scris pe comanda. A
+doua varianta e cea scumpa, fiindca nimic nu se plange.
+
+Oprit acum la CONFIGURARE, in `problemePlaja`, adica inainte ca vreun cod sa fie ars. La emitere ar fi
+fost prea tarziu.
+
+### 2. Sonda de conexiune putea da bifa verde pe o resursa PUBLICA
+
+`probaConexiune` intoarce trei verdicte, nu doua, tocmai ca o bifa verde sa nu insemne nimic daca
+nomenclatorul e deschis oricui. Dar cele doua drumuri citeau raspunsul cu masuri diferite: cel
+autentificat, prin `listaDinRaspuns`, accepta si `{data: […]}`; sonda publica cerea
+`Array.isArray(JSON.parse(text))`, adica lista goala.
+
+Daca Posta impacheteaza, si nu stim, formatul nu e documentat pentru niciun nomenclator, sonda spunea
+„nu e public" despre exact raspunsul pe care celalalt drum il citeste ca lista. Verdictul iesea
+`autentificat`: bifa verde care spune ca utilizatorul si parola sunt bune, cand de fapt nu se
+dovedise nimic despre ele. Exact capcana platita la eColet.
+
+⚠ `poartaLista` raspunde acum la intrebarea SONDEI („poarta o lista?"), separat de `listaDinRaspuns`
+(„care e lista?"): pentru sonda, o lista GOALA si un raspuns care nu e lista inseamna lucruri opuse,
+iar `listaDinRaspuns(r).length` le confunda. Cheile sunt intr-un singur loc, `CHEI_LISTA`, ca sa nu
+divergeze iar la prima cheie noua.
+
+### 3. ⚠⚠ Refuzul se pierdea sub un eveniment administrativ
+
+Cronul tinea minte UN SINGUR cod si striga numai daca ULTIMA stare cerea atentie si era alta decat
+cea retinuta. Comentariul de atunci spunea, linistit, ca se pierde „al doilea din doua evenimente
+care cer atentie", si ca la ritmul postei cazul e rar.
+
+Masurat, pierderea era alta si mai mare: daca dupa „Refuz destinatar" (21) intra un eveniment
+administrativ („Redirectionat" 35, „Reexpediat" 36, o scanare de tranzit), atunci ultima stare NU
+cere atentie si refuzul nu se striga NICIODATA. Nu „al doilea": nimic.
+
+Si nu e un caz rar. Refuzul la usa si redirectarea catre oficiu se inregistreaza in aceeasi tura a
+factorului, deci ajung impreuna in acelasi raspuns. Tocmai evenimentul care cere o decizie omeneasca
+e cel mai probabil urmat de unul administrativ.
+
+Leacul e cel de la GLS, din 31.08: se tine minte CE am spus, nu CE am vazut ultima data. Coloana noua
+`posta_evenimente_semnalate` (migratia `2027-01-21`, aplicata), cheia `<cod>|<data>` in forma lor.
+`NULL` inseamna „prima vedere", si atunci se striga doar starea curenta, ca sa nu iasa zeci de
+notificari despre lucruri incheiate la prima rulare de dupa migratie.
+
+⚠ Regula e scoasa in `evenimenteDeSemnalat` si `spuseleDeTinutMinte`, ca sa poata fi probata direct;
+cronul o cheama, si proba cade daca isi face iar una a lui.
+
+### 4. Memoria semnalarilor nu se golea la dezlegarea AWB-ului, la Posta SI la GLS
+
+Lista ramanea pe comanda, deci coletul urmator pornea cu ea: `primaVedere` iesea fals si un eveniment
+al lui cu acelasi cod si aceeasi data era socotit „deja spus". Un retur pierdut asa nu lasa nicio
+urma. Acum se pune `null` pe amandoua, adica exact starea in care comanda chiar se afla.
+
+### 5. Istoricul din panou se rastoarna mecanic
+
+`stari.map(…).reverse()` presupunea ca API-ul da evenimentele de la vechi la nou. Documentatia nu
+spune asta nicaieri, iar codul nostru nu-i da crezare in alta parte: `ultimaStare` sorteaza dupa
+datele lor tocmai fiindca ordinea nu e garantata. Venit deja de la nou la vechi, istoricul se arata
+pe dos si ultima stare a coletului se citea ca prima; la un refuz sau un retur, comerciantul se uita
+la ecran si trage concluzia opusa.
+
+`istoricDeLaNouLaVechi` aseaza dupa date, cu cadere pe `.reverse()` cand fie si o singura data nu se
+poate citi. Nu fiindca ar fi buna, ci fiindca e aceeasi presupunere pe care o face si `ultimaStare`,
+iar doua presupuneri opuse in acelasi modul ar fi mai rele decat una singura, scrisa pe fata.
+
+### 6 si 7. Reparate mai devreme, in aceeasi zi
+
+- **Marcajul cronului rescria codul vechi peste un AWB reemis intre timp.** Tiparul era in noua
+  locuri, la OPT cronuri; un defect copiat de opt ori nu se repara intr-un fisier. Acum starea se
+  scrie doar cand exista un cod nou, iar marcajul de rotatie ramane neconditionat (sarit, o trimitere
+  care pica mereu ar ramane in capul cozii la fiecare rulare si ar infometa restul platformei).
+- **Galeata „autentificare" aduna si timeout-urile.** `if (status === 404) … else { autentificare++ }`
+  prindea tot: retea cazuta, 500 la ei. Trei astfel de esecuri ridicau o alarma CRITICA prin care
+  comerciantului i se spunea sa-si verifice utilizatorul si parola, cand de fapt Posta era cazuta. Omul
+  schimba atunci o parola BUNA, nu se repara nimic, si data viitoare nu mai crede alarma. Doua galeti
+  acum, doua mesaje diferite, si severitati diferite.
+
+---
+
 ## Ce ramane deschis, si de ce
 
-1. **Nedovedit live (D-5).** Zero magazine, zero AWB-uri, si niciun cont pe care sa probam. Butonul
+1. **Nedovedit live.** Zero magazine, zero AWB-uri, si niciun cont pe care sa probam. Butonul
    Diagnostic e scris tocmai ca prima cheie de cont sa scurteze presupunerile la adevar in cateva
    secunde.
-2. ⚠ **Sapte constatari confirmate, nereparate**, toate mici sau medii, si toate scrise aici ca sa
-   nu se piarda: plafonul de 30 de caractere pentru `codAwb` nu se aplica codului din plaja (care se
-   injecteaza dupa validare); proba de conexiune poate iesi verde daca nomenclatorul public vine
-   impachetat in `{data: […]}`; marcajul cronului poate rescrie codul vechi peste un AWB reemis intre
-   timp; semnalarea citeste doar ultimul eveniment, desi statusul se ia din tot istoricul; galeata
-   „autentificare" din cron aduna si timeout-urile; istoricul din panou se rastoarna mecanic. Niciuna
-   nu poate produce un colet in plus; toate merita facute cand integrarea are trafic.
+2. **Doua lucruri nu se pot inchide fara date reale**: ce nume au campurile nomenclatorului de
+   unitati, si in ce ordine vine istoricul de statusuri. Amandoua sunt tratate acum cu purtare
+   definita in ambele cazuri, nu cu o presupunere tacuta.
 3. **Nu exista, la ei:** eticheta tiparibila, anularea AWB, prezentarea borderoului, tarif, mediu de
    test, formatul erorilor. Fiecare lipsa e tratata pe fata in interfata, nu ascunsa.
 
@@ -158,19 +243,20 @@ steagul lor de status refuzat in trei locuri anume; alocarea codului **inauntrul
 apasare respinsa sa nu arda un cod; si regula „unde documentatia tace, codul nu ghiceste" scrisa
 peste tot.
 
-Ce s-a inchis azi sunt cinci locuri in care chiar acea regula era incalcata. Trei dintre ele n-ar fi
-iesit la iveala decat la prima emitere reala, si atunci ar fi costat un colet.
+Cele douasprezece reparatii ale zilei inchid tot ce se putea inchide fara date reale, inclusiv toate
+cele sapte care ramasesera scrise si nefacute.
 
-⚠ **Ce lipseste, si de ce nu e 10:**
+⚠ **De ce tot nu e 10:**
 
-1. **Nimic n-a atins vreodata API-ul lor.** Aici asta nu e o formalitate: sase din sapte
-   endpointuri au raspunsul nedocumentat, deci forma adevarata ramane o presupunere pana la prima
-   cheie de cont.
-2. **Sapte constatari confirmate raman nereparate**, enumerate mai sus. Le las scrise, nu tacute.
-3. **Doua dintre ele nu se pot inchide fara date reale**: ce nume au campurile nomenclatorului, si
-   in ce ordine vine istoricul de statusuri.
+1. **Nimic n-a atins vreodata API-ul lor.** Aici asta nu e o formalitate: sase din sapte endpointuri
+   au raspunsul nedocumentat, deci forma adevarata ramane o presupunere pana la prima cheie de cont.
+   Nota nu poate urca peste asta, oricat de curat ar fi codul.
+2. Purtarea la ordinea necunoscuta a istoricului si la numele campurilor nomenclatorului e ALEASA si
+   scrisa, dar tot o alegere ramane, nu o masuratoare.
 
-**Probe:** 13 noi. Banc de mutanti **14 din 14**. `tsc` curat, **8.248 de probe verzi**, build OK,
-fara migratie.
+**Probe:** 13 la prima trecere + 26 la a doua. Banc de mutanti **18 din 18**. `tsc` curat, **8.415 de
+probe verzi**, build OK, **o migratie** (`2027-01-21-posta-tine-minte-ce-a-semnalat.sql`, aplicata in
+productie, aditiva si nullabila, deci se putea aplica inainte de deploy).
 
-**Auditul:** 57 de agenti, sase dimensiuni de cautare si trei sceptici per constatare.
+**Auditul:** 57 de agenti la prima trecere. A doua s-a facut de mana, in cod si in documentatie, la
+cererea proprietarului.

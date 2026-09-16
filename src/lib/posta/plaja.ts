@@ -104,10 +104,10 @@ export function problemePlaja(p: Partial<PlajaConfig>): string[] {
    *
    * ⚠ Verificarea de lungime din `lipsuriExpediere` NU-l vede niciodata: ea ruleaza
    * INAINTE de alocare, iar codul se injecteaza in corp abia dupa. Deci singurul loc
-   * unde se poate opri e AICI, la configurare — inainte ca vreun cod sa fie ars.
+   * unde se poate opri e AICI, la configurare, inainte ca vreun cod sa fie ars.
    *
    * ⚠ Si de ce conteaza: Posta ori refuza trimiterea (si codul e pierdut din plaja),
-   * ori taie campul — si atunci coletul pleaca sub ALT numar decat cel pe care il
+   * ori taie campul, si atunci coletul pleaca sub ALT numar decat cel pe care il
    * avem noi scris pe comanda. A doua varianta e cea scumpa: nimic nu se plange.
    */
   const lungimeCod = prefix.length + cifre;

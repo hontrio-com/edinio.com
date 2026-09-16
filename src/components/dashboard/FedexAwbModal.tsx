@@ -104,7 +104,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   const [doarLista, setDoarLista] = useState(false);
   const [explicatieTva, setExplicatieTva] = useState<string | null>(null);
   /*
-   * ⚠ Avertismentele de vama se arata DUPA cotare si INAINTE de emitere — adica in singura
+   * ⚠ Avertismentele de vama se arata DUPA cotare si INAINTE de emitere, adica in singura
    * clipa in care omul mai poate schimba ce scrie in casuta de continut. Intoarse din raspunsul
    * de emitere, n-ar mai folosi la nimic: coletul a plecat.
    */
@@ -113,7 +113,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
    * ⚠⚠ Serviciul ales CU MANA, cand cotarea n-a intors nicio oferta folosibila.
    *
    * Butonul de emitere cerea `aleasa`, iar `aleasa` venea doar dintr-o oferta cotata. Insa
-   * `ofertePosibile` arunca toate ofertele cand contul coteaza in euro — ceea ce conturile
+   * `ofertePosibile` arunca toate ofertele cand contul coteaza in euro, ceea ce conturile
    * FedEx din Romania fac des. Comerciantul ramanea cu un avertisment limpede despre valuta si
    * un buton pe care nu-l putea apasa niciodata, desi coletul se putea expedia perfect.
    */
@@ -142,7 +142,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
   function dateComune() {
     /*
      * ⚠ Oferta cotata are intaietate. Serviciul ales cu mana intra doar cand nu exista
-     * niciuna — si atunci pretul ramane NECUNOSCUT, nu zero: `cost: null` inseamna „n-avem cu
+     * niciuna, si atunci pretul ramane NECUNOSCUT, nu zero: `cost: null` inseamna „n-avem cu
      * ce compara factura FedEx", iar un 0 scris acolo ar fi o minciuna care se vede la
      * reconciliere ca transport gratuit.
      */

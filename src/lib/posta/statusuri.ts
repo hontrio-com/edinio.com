@@ -368,8 +368,8 @@ export function cheieEveniment(st: StarePosta | null | undefined): string {
  * Cronul tinea minte UN SINGUR cod si striga numai daca ULTIMA stare cerea atentie si era
  * alta decat cea retinuta. Comentariul de atunci spunea ca se pierde „al doilea din doua
  * evenimente care cer atentie". Masurat, pierderea era alta si mai mare: daca in fereastra
- * intra „Refuz destinatar" (21) si DUPA el unul administrativ — „Redirectionat" (35),
- * „Reexpediat" (36), o scanare de tranzit — ultima stare nu cere atentie, deci refuzul nu se
+ * intra „Refuz destinatar" (21) si DUPA el unul administrativ („Redirectionat" 35,
+ * „Reexpediat" 36, o scanare de tranzit), ultima stare nu cere atentie, deci refuzul nu se
  * striga NICIODATA. Nu „al doilea": nimic.
  *
  * Si nu e un caz rar: refuzul la usa si redirectarea catre oficiu se inregistreaza in aceeasi
@@ -400,7 +400,7 @@ export function evenimenteDeSemnalat(
  * Lista care se scrie inapoi: TOATE starile vazute acum, nu doar cele semnalate.
  *
  * ⚠ Altfel un eveniment care azi nu e „de semnalat" ar deveni unul nou daca maine il
- * adaugam in tabel — si comerciantul ar primi o avizare despre ceva petrecut demult.
+ * adaugam in tabel, si comerciantul ar primi o avizare despre ceva petrecut demult.
  *
  * Taiata la 200, cu cele mai recente pastrate: istoricul unei trimiteri are cateva zeci de
  * linii, iar fereastra de urmarire e oricum marginita.
@@ -410,7 +410,7 @@ export function spuseleDeTinutMinte(dejaSpuse: Set<string>, stari: StarePosta[])
 }
 
 /**
- * Istoricul, de la cel mai NOU la cel mai vechi — pentru ochiul omului.
+ * Istoricul, de la cel mai NOU la cel mai vechi, pentru ochiul omului.
  *
  * ═══ ⚠ DE CE NU `.reverse()` ═══
  *
@@ -422,7 +422,7 @@ export function spuseleDeTinutMinte(dejaSpuse: Set<string>, stari: StarePosta[])
  * comerciantul citeste ultima stare a coletului ca pe prima. La un retur sau un refuz, asta
  * inseamna ca se uita la ecran si trage concluzia opusa.
  *
- * ⚠ Cand fie si o singura data NU se poate citi, se cade pe `.reverse()` — exact purtarea
+ * ⚠ Cand fie si o singura data NU se poate citi, se cade pe `.reverse()`, exact purtarea
  * de dinainte. Nu fiindca ar fi buna, ci fiindca e aceeasi presupunere pe care o face si
  * `ultimaStare` cand nu poate citi datele (ia ultimul element ca fiind cel mai nou), si doua
  * presupuneri opuse in acelasi modul ar fi mai rele decat una singura, scrisa pe fata.

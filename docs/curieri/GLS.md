@@ -225,3 +225,27 @@ Ce s-a inchis azi sunt doua lucruri pe care documentatia le stia si codul nu:
 **Probe:** 10 noi. Banc de mutanti **10 din 10**, cu mutantul pe APELANT la amandoua reparatiile
 (`dupaPlata` pentru stingerea rambursului, lotul de comenzi pentru regula de configurare).
 `tsc` curat, **8.194 de probe verzi**, build OK, fara migratie.
+
+---
+
+## Adaugat pe 16.09.2026, gasit pe drumul altui curier
+
+### ⚠ Memoria semnalarilor nu se golea la dezlegarea AWB-ului
+
+`gls_evenimente_semnalate` (coloana adaugata pe 31.08, cea care tine minte CE i-am spus
+comerciantului) ramanea pe comanda cand AWB-ul era dezlegat. Coletul urmator pornea deci cu lista
+celui vechi: `primaVedere` iesea fals, iar un eveniment al lui care se nimereste sa aiba acelasi cod
+si aceeasi data cu unul vechi era socotit „deja spus" si nu mai ajungea la om. Un retur pierdut asa
+nu lasa nicio urma.
+
+Acum se pune `null`, nu `[]`: `null` inseamna „n-am inregistrat niciodata nimic despre coletul de pe
+comanda asta", adica exact starea in care comanda chiar se afla dupa dezlegare.
+
+⚠ Gasit citind Posta, unde aceeasi coloana tocmai se adauga dupa tiparul GLS. Cand acelasi lucru
+sta in doua copii, a doua se cauta INAINTE, si aici a doua copie a fost chiar originalul.
+
+### Marcajul cronului nu mai rescrie codul vechi
+
+`gls-tracking` nu avea defectul (era printre cele noua locuri masurate, dar nu printre cele opt cu
+tiparul gresit). Proba comuna `codul-vechi-nu-invie.test.ts` il acopera acum si pe el, si cade daca
+apare vreodata.

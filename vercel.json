@@ -80,6 +80,10 @@
       "schedule": "30 7 * * *"
     },
     {
+      "path": "/api/cron/netopia-reconciliere",
+      "schedule": "20 * * * *"
+    },
+    {
       "path": "/api/cron/pepita-stoc",
       "schedule": "*/10 * * * *"
     },

@@ -5,6 +5,12 @@
  * v2 uses API keys (no more XML/certificate encryption).
  * Auth: Authorization header with the API key.
  */
+/*
+ * ⚠ Verificat inainte de import ca nu naste ciclu: `eroare-furnizor` nu importa nimic din
+ * platforma in afara de tipuri proprii. Un ciclu n-ar cadea la `tsc`, s-ar arata la rulare ca
+ * `undefined`, adica exact acolo unde se hotaraste daca banii mai pot pleca o data.
+ */
+import { eroareRefuz, eroareNesigura, eroareCuStatus } from "@/lib/operatii/eroare-furnizor";
 
 export type NetopiaConfig = {
   enabled: boolean;
@@ -253,9 +259,38 @@ export interface NetopiaIpnPayload {
  *
  * Deci 12 nu misca nimic. Se intoarce `refuzat`, ca ruta sa lase o urma pentru comerciant.
  *
- * ⚠ 15 (rambursare) NU apare in specificatia v2. E cunostinta mostenita din v1, pastrata fiindca
- * maparea ei e in directia sigura (o comanda marcata gresit „rambursata" nu trimite marfa si nu
- * incaseaza nimic in plus) si fiindca alternativa ar fi sa nu recunoastem deloc o rambursare.
+ * ═══ ⚠⚠ 15 NU E RAMBURSARE. RAMBURSAREA E 8 (16.09.2026, dupa fluxul cap-coada) ═══
+ *
+ * Aici scria ca „15 (rambursare) nu apare in specificatia v2, e cunostinta mostenita din v1", si
+ * ca maparea ei e „in directia sigura". AMANDOUA erau gresite, si le-am scris chiar eu, in
+ * dimineata aceleiasi zile.
+ *
+ * ⚠ APARE in v2, si scrie altceva. Schema `Payment` din specificatia lor (liniile 1724 si 2391 ale
+ * `https://secure.sandbox.netopia-payments.com/spec`) da lista intreaga:
+ *
+ *     3 - paid | 5 - confirmed | 12 - rejected | 15 - **3-D Secure authentication required**
+ *
+ * Citisem doar schema `PaymentNotify`, care enumera trei coduri, si am tras concluzia ca al
+ * patrulea nu exista nicaieri. Exista, in schema de alaturi.
+ *
+ * ⚠ SI NU E IN DIRECTIA SIGURA. `refunded` face parte din `BANII_S_AU_INTORS`
+ * (`src/lib/orders/marfa-a-plecat-fara-bani.ts`), deci o comanda marcata gresit „rambursata" e
+ * SCOASA din semnalul de marfa plecata fara bani. Adica maparea nu doar eticheta gresit: amutea
+ * chiar plasa intinsa in aceeasi zi pentru cazul in care banii nu intra.
+ *
+ * ⚠ CE E DE FAPT RAMBURSAREA: **8**, masurat. `POST /operation/credit` pe sandbox-ul magazinului
+ * `itp-blk`, cu `ntpID` 3022507 (o plata de 1 leu dusa pana la capat prin pagina lor), a raspuns
+ * `status: 8`, `code: "00"`, `message: "[TEST P] Approved"`, iar IPN-ul sosit la
+ * `/api/netopia/notify` la 19:31:57 purta tot `status: 8`.
+ *
+ * Codul 8 l-a prins colectorul de statusuri nerecunoscute scris tot azi, la mai putin de o ora
+ * dupa ce a fost pus. Exact pentru asta a fost pus.
+ *
+ * ⚠ CATE IPN-URI TRIMIT: UNUL SINGUR, la deznodamant. Masurat pe plata cu 3-D Secure (cardul
+ * `9900009184214768` din chiar exemplele lor): pornirea a raspuns `status 1` cu pagina de plata,
+ * pagina de autentificare a fost trecuta, si abia atunci a venit un IPN, cu `status 3`. La etapa
+ * „3-D Secure cerut" nu vine NICIO notificare. Deci 15 si 1 nu ajung in IPN pe drumul obisnuit,
+ * dar daca ajung vreodata, nu misca nimic si se scriu in jurnal.
  *
  * ⚠ Orice alt cod NU misca nimic, si asta ramane: tacerea pe necunoscut e purtarea corecta cand
  * de partea cealalta sunt bani.
@@ -287,16 +322,182 @@ export function resolveNetopiaStatus(status: number): {
   paymentStatus?: string;
   /** Plata a fost refuzata de ei. Comanda NU se misca; se scrie doar o urma pentru comerciant. */
   refuzat?: true;
+  /**
+   * Stare INTERMEDIARA pe care o cunoastem: plata nu s-a incheiat nici bine, nici rau. Comanda NU
+   * se misca, la fel ca la un cod necunoscut, dar ruta o spune pe nume in loc sa scrie
+   * „NERECUNOSCUT" despre ceva ce stim. Un jurnal care minte se repara gresit mai tarziu.
+   */
+  intermediar?: true;
 } {
   switch (status) {
     case 3: // paid
     case 5: // confirmed
       return { orderStatus: "confirmed", paymentStatus: "paid" };
+    case 8: // credit: rambursare incuviintata. Masurat pe `/operation/credit`, vezi antetul.
+      return { paymentStatus: "refunded" };
     case 12: // invalid account / rejected: plata REFUZATA, nu anulata
       return { refuzat: true };
-    case 15: // credit/refund (din v1; nedocumentat in v2)
-      return { paymentStatus: "refunded" };
+    case 1: // plata pornita, se asteapta cumparatorul (raspunsul purta si pagina de plata)
+    case 15: // 3-D Secure authentication required
+      return { intermediar: true };
     default:
       return {};
   }
+}
+
+/**
+ * ═══ RAMBURSAREA, `POST /operation/credit` (16.09.2026) ═══
+ *
+ * ⚠ SPECIFICATIA LOR SPUNE CA NU E GATA. La toate capetele `OperationService` (`capture`, `void`,
+ * `credit`, `status`, `expire`, `fail`) scrie `will be available at a future date`. E fals, si
+ * s-a masurat: pe sandbox-ul magazinului `itp-blk`, cu `ntpID` 3022507 (o plata de 1 leu dusa
+ * pana la capat prin pagina lor gazduita), `POST /operation/credit` a raspuns HTTP 200 cu
+ * `payment.status: 8`, `error.code: "00"`, `error.message: "[TEST P] Approved"`, iar la
+ * `/api/netopia/notify` a sosit un IPN cu chiar `status: 8`. Banii s-au intors.
+ *
+ * A doua oara in aceeasi zi cand proza lor spune altceva decat capetele lor. Prima a fost campul
+ * `amount`, descris in unitati minore si folosit in unitati majore.
+ *
+ * ⚠ SUMA E IN UNITATI MAJORE, ca peste tot la ei: 1 inseamna un leu. Dovedit de aceeasi proba,
+ * unde cererea a plecat cu `amount: 1` pe o plata de 1,00 lei si a fost incuviintata.
+ *
+ * ⚠ ARUNCA, nu intoarce `{error}`, si asta e dinadins: apelantul o ruleaza sub `cuRegistru`, iar
+ * acolo deosebirea dintre un REFUZ dovedit si un NECUNOSCUT hotaraste daca a doua apasare mai are
+ * voie sa trimita bani. Un refuz al lor elibereaza reincercarea; o cadere de retea o BLOCHEAZA,
+ * fiindca rambursarea poate sa fi plecat.
+ */
+export async function rambourseazaNetopia(
+  params: { ntpID: string; amount: number },
+  apiKey: string,
+  sandbox: boolean,
+): Promise<{ ntpID: string; status: number | null; mesaj: string | null }> {
+  const url = `${getBaseUrl(sandbox)}/operation/credit`;
+
+  let res: Response;
+  let brut: string;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: apiKey.trim() },
+      body: JSON.stringify({ ntpID: params.ntpID, amount: params.amount }),
+    });
+    brut = await res.text();
+  } catch (err) {
+    /* Reteaua a cazut. NU stim daca cererea a ajuns la ei, deci nu se deblocheaza nimic. */
+    throw eroareNesigura(
+      `Nu s-a putut ajunge la Netopia pentru rambursare: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  let date: NetopiaStartResponse;
+  try {
+    date = JSON.parse(brut) as NetopiaStartResponse;
+  } catch {
+    /*
+     * Un corp neinteligibil nu dovedeste un refuz. Poate fi o pagina de intretinere pusa DUPA ce
+     * rambursarea a fost inregistrata, deci se trateaza ca necunoscut.
+     */
+    throw eroareCuStatus(
+      `Netopia a raspuns neasteptat la rambursare (HTTP ${res.status}): ${brut.slice(0, 200)}`,
+      res.status,
+    );
+  }
+
+  const cod = date.error?.code ?? date.code ?? null;
+  const mesaj = date.error?.message ?? date.message ?? null;
+
+  if (res.status === 401 || res.status === 403) {
+    /* Autentificarea lor a picat: dovedit ca nu s-a intamplat nimic acolo. */
+    throw eroareRefuz("Netopia a refuzat autentificarea la rambursare: API Key invalid sau nepotrivit cu modul (Sandbox/Live).");
+  }
+  if (!res.ok) {
+    throw eroareCuStatus(mesaj ?? `Netopia a refuzat rambursarea (HTTP ${res.status}).`, res.status);
+  }
+  /*
+   * ⚠ `"00"` e singurul cod de incuviintare, si se cere EXPLICIT. Un cod lipsa nu se citeste ca
+   * succes: la o operatie care mata bani, tacerea nu inseamna „s-a facut".
+   */
+  if (cod !== "00") {
+    throw eroareRefuz(mesaj ? `Netopia a refuzat rambursarea: ${mesaj} (cod ${cod ?? "lipsa"})` : `Netopia a refuzat rambursarea (cod ${cod ?? "lipsa"}).`);
+  }
+
+  return {
+    ntpID: date.payment?.ntpID ?? params.ntpID,
+    status: typeof date.payment?.status === "number" ? date.payment.status : null,
+    mesaj,
+  };
+}
+
+/**
+ * ═══ INTREBAM NOI, CAND EI NU NE-AU SPUS: `POST /operation/status` (16.09.2026) ═══
+ *
+ * ⚠⚠ ASTA INCHIDE SINGURA GAURA PE CARE O SCRISESEM CA FIIND A LOR. In `docs/plati/NETOPIA.md`
+ * statea, la „ce ramane deschis": „Netopia nu are plasa, si ei o spun. `/operation/status` exista in
+ * specificatie cu descrierea «will be available at a future date». Deci nu se poate interoga starea
+ * unei plati: daca IPN-ul nu ajunge, plata se pierde tacut si nimic n-o mai gaseste."
+ *
+ * ⚠ E FALS, si s-a aflat chemandu-l. Pe sandbox-ul magazinului `itp-blk`, pentru `ntpID` 3022507,
+ * a raspuns HTTP 200 cu `payment.status: 5`, `error.code: "00"`, `error.message: "Approved"`, si cu
+ * intreaga configurare a platii, inclusiv `notifyUrl`-ul nostru semnat.
+ *
+ * A doua oara in aceeasi zi cand proza lor spune altceva decat capetele lor. Concluzia, scrisa ca sa
+ * nu se piarda: la Netopia, o propozitie din specificatie NU e o masuratoare.
+ *
+ * ⚠ ARUNCA, la fel ca rambursarea, si din acelasi motiv: cronul care o cheama trebuie sa deosebeasca
+ * „ei zic ca nu stiu de tranzactia asta" de „n-am putut ajunge la ei".
+ */
+export async function stareaPlatiiNetopia(
+  params: { ntpID: string; posSignature: string; orderId?: string },
+  apiKey: string,
+  sandbox: boolean,
+): Promise<{ status: number | null; codLor: string | null; mesajLor: string | null; incasat: number | null }> {
+  const url = `${getBaseUrl(sandbox)}/operation/status`;
+
+  let res: Response;
+  let brut: string;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: apiKey.trim() },
+      body: JSON.stringify({ posID: params.posSignature, ntpID: params.ntpID, orderID: params.orderId ?? "" }),
+    });
+    brut = await res.text();
+  } catch (err) {
+    throw eroareNesigura(
+      `Nu s-a putut ajunge la Netopia pentru starea platii: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  let date: NetopiaStartResponse & { payment?: { amount?: number } };
+  try {
+    date = JSON.parse(brut) as NetopiaStartResponse;
+  } catch {
+    throw eroareCuStatus(`Netopia a raspuns neasteptat la interogarea starii (HTTP ${res.status}).`, res.status);
+  }
+
+  if (res.status === 401 || res.status === 403) {
+    throw eroareRefuz("Netopia a refuzat autentificarea la interogarea starii: API Key invalid sau nepotrivit cu modul (Sandbox/Live).");
+  }
+  if (!res.ok) {
+    throw eroareCuStatus(
+      date.error?.message ?? `Netopia a refuzat interogarea starii (HTTP ${res.status}).`,
+      res.status,
+    );
+  }
+
+  /*
+   * ⚠ AICI NU SE CERE `code === "00"`, SI E PE DOS FATA DE RAMBURSARE, DINADINS.
+   *
+   * La rambursare, `"00"` inseamna „am facut ce ai cerut", deci lipsa lui inseamna ca banii n-au
+   * plecat. Aici cererea e o INTREBARE: raspunsul util e `payment.status`, iar codul descrie starea
+   * tranzactiei, nu izbanda intrebarii. Cerut si aici, o plata refuzata (cod 21, CVV gresit) ar fi
+   * fost citita ca o eroare de comunicare si reconcilierea n-ar fi aflat niciodata de ea.
+   */
+  const s = date.payment?.status;
+  return {
+    status: typeof s === "number" ? s : null,
+    codLor: date.error?.code ?? date.code ?? null,
+    mesajLor: date.error?.message ?? date.message ?? null,
+    incasat: typeof date.payment?.amount === "number" ? date.payment.amount : null,
+  };
 }

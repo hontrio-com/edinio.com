@@ -31,6 +31,7 @@ import {
 } from "@/lib/actions/smartbill.actions";
 import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from "@/lib/actions/oblio.actions";
 import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
+import { rambourseazaPrinNetopia } from "@/lib/actions/netopia.actions";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
@@ -506,6 +507,8 @@ export function OrderDetailClient({
   const [showStornoConfirm, setShowStornoConfirm] = useState(false);
   const [showResendInvoice, setShowResendInvoice] = useState(false);
   const [showResendEstimate, setShowResendEstimate] = useState(false);
+  const [showNetopiaRefund, setShowNetopiaRefund] = useState(false);
+  const [refundingNetopia, startNetopiaRefundTransition] = useTransition();
 
   // Status/payment change confirmation + delete + customer notifications
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
@@ -956,6 +959,40 @@ export function OrderDetailClient({
       setStornoNumber(result.stornoNumber ?? invoiceNumber);
       setStornoSeries(result.stornoSeries ?? invoiceSeries);
       toast.success("Factura a fost stornata cu succes.");
+    });
+  }
+
+  /**
+   * ⚠ ASTA TRIMITE BANI INAPOI, si e singurul buton din panou care o face.
+   *
+   * Selectorul de status de alaturi ramane ce a fost mereu: o eticheta pusa de om dupa ce a dat
+   * banii de mana. Doua carti care par sa faca acelasi lucru ar fi fost o capcana, de aceea
+   * butonul asta isi spune pe fata ca miscarea e a banilor, nu a etichetei.
+   */
+  function handleNetopiaRefund() {
+    setShowNetopiaRefund(false);
+    startNetopiaRefundTransition(async () => {
+      let result: Awaited<ReturnType<typeof rambourseazaPrinNetopia>>;
+      try {
+        result = await rambourseazaPrinNetopia(order.id);
+      } catch {
+        /*
+         * ⚠ Aceeasi asimetrie ca la storno, dar cu bani: actiunea a plecat, raspunsul nu s-a
+         * intors, deci NU stim daca rambursarea s-a inregistrat la ei. Registrul tine randul
+         * blocat, deci a doua apasare nu poate trimite banii inca o data, dar omul trebuie sa
+         * afle de ce, altfel crede ca n-a mers nimic.
+         */
+        toast.error(
+          "Nu am primit raspuns, deci nu stim daca rambursarea a plecat. Verifica in contul "
+          + "Netopia inainte de a incerca din nou. O a doua apasare va fi oprita pana se lamureste.",
+          { duration: 14000 },
+        );
+        router.refresh();
+        return;
+      }
+      if (!result.success) { toast.error(result.error ?? "Rambursarea nu a putut fi trimisa."); return; }
+      toast.success(result.mesaj ?? "Rambursarea a fost trimisa la Netopia.", { duration: 9000 });
+      router.refresh();
     });
   }
 
@@ -1487,6 +1524,39 @@ export function OrderDetailClient({
                   {order.payment_method === "cash_on_delivery" ? "Plata la livrare" : order.payment_method}
                 </span>
               </div>
+              {/*
+                ⚠ SINGURUL LOC DIN PANOU CARE MISCA BANI INAPOI.
+                Se arata doar cand chiar e ceva de rambursat: plata a intrat prin Netopia, e
+                marcata platita, si avem identificatorul lor de tranzactie. Fara oricare dintre
+                cele trei, butonul ar fi o promisiune pe care actiunea o refuza oricum.
+              */}
+              {order.payment_method === "netopia"
+                && order.payment_status === "paid"
+                && Boolean(order.netopia_ntp_id) && (
+                showNetopiaRefund ? (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
+                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
+                    <p className="text-xs text-destructive flex-1">
+                      Se trimit {Number(order.total).toFixed(2)} lei inapoi cumparatorului, prin Netopia.
+                      Banii pleaca acum si nu pot fi rechemati.
+                    </p>
+                    <Button type="button" size="sm" onClick={handleNetopiaRefund} disabled={refundingNetopia}
+                      className="bg-destructive text-white hover:bg-destructive/90">
+                      {refundingNetopia ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+                      Confirma rambursarea
+                    </Button>
+                    <button type="button" onClick={() => setShowNetopiaRefund(false)}
+                      className="p-1.5 text-destructive/60 hover:text-destructive transition-colors">
+                      <XCircle className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setShowNetopiaRefund(true)} disabled={refundingNetopia}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
+                    <RotateCcw className="h-4 w-4" />Ramburseaza banii prin Netopia
+                  </button>
+                )
+              )}
               {(() => {
                 const origin = deriveOrigin(order.order_source);
                 return (

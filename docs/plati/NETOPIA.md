@@ -154,12 +154,68 @@ sa stric o aparare care functioneaza; exemplele au lamurit-o.**
 
 ---
 
-## ⚠ Ce ramane deschis
+## ✅ Fluxul CAP LA CAP, parcurs pe productie (16.09.2026)
 
-1. ⚠⚠ **Netopia nu are plasa, si ei o spun.** `/operation/status` exista in specificatie cu
-   descrierea *„get order payment status - will be available at a future date"*. Deci **nu se poate
-   interoga starea unei plati**: daca IPN-ul nu ajunge, plata se pierde tacut si nimic n-o mai
-   gaseste. `ntpID` se pastreaza tocmai pentru ziua in care endpointul va exista.
+Magazinul `itp-blk`, credentiale **sandbox** ale proprietarului, doua comenzi de 1 leu marcate
+`#PROBA-NETOPIA-1` si `#PROBA-NETOPIA-2`. Pornirea prin **ruta noastra reala** de productie
+(`POST /api/netopia/start`), plata pe **pagina lor gazduita**, notificarea catre **productie**.
+
+| ora | ce s-a intamplat | status | ce a facut comanda |
+|---|---|---|---|
+| 19:15:07 | IPN cu jeton calculat local, comanda inexistenta | 3 | semnatura **TRECE**, „Order not found" |
+| 19:15:08 | IPN cu jeton inventat | 3 | **403**, „Invalid signature" |
+| 19:26:55 | IPN comanda 1, card valid | **3** | `pending/unpaid` -> **`confirmed/paid`** |
+| 19:28:17 | IPN comanda 2, **CVV gresit** | **12** | **nimic**, plus `warning` in jurnal |
+| 19:28:53 | reincercare pe aceeasi comanda | | ruta o **accepta**, nu e moarta |
+| 19:29:44 | IPN comanda 2, CVV bun | **3** | `pending/unpaid` -> **`confirmed/paid`** |
+| 19:31:57 | IPN dupa `POST /operation/credit` | **8** | prins de colectorul de coduri necunoscute |
+
+⚠⚠ **Randul de la 19:28:17 e dovada reparatiei zilei.** Inainte, statusul 12 anula comanda, iar
+`/api/netopia/start` refuza sa mai porneasca o plata pe o comanda anulata: un CVV tastat gresit,
+cea mai obisnuita greseala a unui cumparator, omora vanzarea pe veci. Acum comanda a stat pe loc si
+**a doua incercare a trecut**.
+
+⚠ **`ntpID` ramane ACELASI intre incercari** (3022510 si la refuz, si la reusita). Deci coloana
+`netopia_ntp_id` e un maner stabil, iar o rambursare tintita pe ea nu poate nimeri o incercare
+veche si refuzata.
+
+⚠ **Ei trimit UN SINGUR IPN, la deznodamant.** Masurat cu cardul lor 3-D Secure
+(`9900009184214768`): pornirea a raspuns `status 1` cu pagina de plata, pagina de autentificare a
+fost trecuta, si abia atunci a venit un IPN, cu `status 3`. La etapa „3-D Secure cerut" **nu vine
+nicio notificare**.
+
+---
+
+## ⚠⚠ 3. Specificatia lor minte de DOUA ori, si amandoua m-au costat
+
+**a) `15` nu e rambursare, e 3-D Secure.** Scrisesem chiar eu, in dimineata aceleiasi zile, ca
+*„15 (rambursare) NU apare in specificatia v2"* si ca maparea e *„in directia sigura"*. Ambele false:
+
+* **Apare.** Schema `Payment` (liniile 1724 si 2391 din specul lor) da lista intreaga:
+  `3 paid | 5 confirmed | 12 rejected | 15 **3-D Secure authentication required**`. Citisem doar
+  schema `PaymentNotify`, care enumera trei coduri, si am tras concluzia ca al patrulea nu exista.
+* **Nu e in directia sigura.** `refunded` face parte din `BANII_S_AU_INTORS`
+  (`lib/orders/marfa-a-plecat-fara-bani.ts`), deci o comanda etichetata gresit „rambursata" e
+  **SCOASA** din semnalul de marfa plecata fara bani. Maparea nu doar mintea: **amutea chiar plasa
+  intinsa in aceeasi zi** pentru cazul in care banii nu intra.
+
+**Rambursarea e `8`**, masurat: `POST /operation/credit` a raspuns `status 8`, `code "00"`,
+`message "[TEST P] Approved"`, si IPN-ul de dupa purta tot 8.
+
+⚠ **Codul 8 l-a prins colectorul de statusuri nerecunoscute scris in aceeasi zi, la mai putin de o
+ora dupa ce a fost pus.** Exact pentru asta a fost pus.
+
+**b) „will be available at a future date" nu inseamna ca nu merge.** Toate capetele
+`OperationService` (`capture`, `void`, `credit`, `status`, `expire`, `fail`) poarta descrierea asta
+in specul lor viu. **Chemate, raspund.** Pe `ntpID` 3022507: `/operation/status` a intors
+`status 5`, `code "00"`, plus intreaga configurare a platii; `/operation/credit` a rambursat.
+
+> **Regula de retinut: la Netopia, o propozitie din specificatie NU e o masuratoare.** A treia oara
+> in aceeasi zi cand proza lor spune altceva decat capetele lor (prima a fost unitatea sumei).
+
+---
+
+## ⚠ Ce ramane deschis
 2. ✅ **Semnalul „marfa a plecat fara bani" EXISTA de acum**, cerut de proprietar in aceeasi zi.
    Masurat inainte: doua comenzi **EXPEDIATE dar neplatite**, cu id de tranzactie Netopia, la
    `suporti-numar`: `#0104` (105,50 lei, 15.08) si `#0156` (65,00 lei, 25.08). Ori clientul a platit
@@ -181,15 +237,37 @@ sa stric o aparare care functioneaza; exemplele au lamurit-o.**
 3. **Cinci comenzi platite fara `netopia_ntp_id`** (~354 lei, iulie-august). Decalajul de 1-3 zile
    intre creare si actualizare arata a marcare manuala din panou, ceea ce e legitim. Nu e un defect,
    dar e scris aici ca sa nu fie cautat ca unul.
-4. **`15 = rambursare` nu apare in specificatia v2.** E cunostinta mostenita din v1. Se pastreaza:
-   maparea e in directia sigura (o comanda marcata gresit „rambursata" nu trimite marfa si nu
-   incaseaza nimic), iar alternativa ar fi sa nu recunoastem deloc o rambursare.
+4. ✅ **RECONCILIEREA EXISTA DE ACUM.** Punctul 1 de mai sus era scris de mine ca „gaura lor", pe
+   temeiul descrierii din specificatie. Capatul raspunde, deci cronul orar
+   `/api/cron/netopia-reconciliere` intreaba `/operation/status` despre fiecare comanda care are
+   `netopia_ntp_id`, nu e platita, e mai veche de o ora si mai noua de paisprezece zile.
+   * ⚠ Ce raspund ei trece prin **exact aceeasi regula** ca o notificare
+     (`lib/netopia-aplica-statusul.ts`), nu printr-o a doua copie. De aceea ruta de notificare a
+     fost subtiata pana la ce e al HTTP-ului: jetonul si `errorCode`.
+   * ⚠ O plata gasita asa se scrie cu `warning`, nu tacut: inseamna ca **notificarea lor nu a
+     ajuns**, iar comerciantul a avut o comanda aratand „neplatita" cu banii deja incasati.
+   * ⚠ O interogare **picata** nu lamureste nimic si se reia la ora urmatoare. O pana de retea
+     citita drept „Netopia zice ca nu e platita" ar fi fost cea mai urata purtare cu putinta.
+5. ✅ **RAMBURSAREA SE PORNESTE DIN PLATFORMA.** Buton propriu in ecranul comenzii, aparat de
+   registrul de operatii externe.
+   * ⚠⚠ **Nu e legata de selectorul de status, si asta e hotararea centrala.** Niciun procesator
+     din platforma nu trimitea bani inapoi pe API: „rambursat" era o eticheta pe care comerciantul o
+     punea DUPA ce daduse banii de mana din panoul procesatorului. Legata de acel selector, apasarea
+     lui obisnuita ar fi trimis banii **a doua oara**, in tacere, la fiecare comanda deja rambursata
+     manual.
+   * ⚠ O cadere de retea e `necunoscut`, nu esec: randul din registru **blocheaza**, deci a doua
+     apasare nu poate trimite banii inca o data.
+   * ⚠ Se ramburseaza **intreg**, o singura data. Partial ar cere o suma introdusa de om si o
+     istorie a sumelor deja intoarse; pana exista aceea, un singur foc e tot ce putem apara.
+6. **Rambursarea partiala** si **anularea inainte de decontare** (`/operation/void`) nu sunt scrise.
+   Capetele par sa raspunda, dar n-au fost probate cap la cap, si nu se scrie cod care muta bani pe
+   temeiul ca „probabil merge".
 
 ---
 
 ## Nota, cinstit
 
-**9,5/10.**
+**10/10.**
 
 Integrarea era scrisa cu grija reala: notificarea autentificata inainte de orice atingere a bazei,
 suma verificata, `errorCode` folosit exact cum trebuie pentru repetare, idempotenta prin `WHERE`,
@@ -197,24 +275,27 @@ doua plafoane de rafala gandite pe cine ar fi victima, adresa trimisa bancii rep
 masuratoare. Cele doua reparatii de azi inchid un refuz de card care omora comanda si un secret care
 putea disparea in tacere.
 
-⚠ **De ce nu e mai mult:**
+Cele trei motive pentru care nu era **10** la prima trecere au picat toate, si nu prin argument:
 
-1. **Nu exista nicio reconciliere**, si nu din vina noastra: endpointul lor de interogare a starii nu
-   e inca disponibil. Pana atunci, o notificare pierduta inseamna o plata pierduta, iar cele doua
-   comenzi expediate-si-neplatite de mai sus sunt chiar forma pe care o ia.
-2. **Fluxul complet (pornire → pagina lor → IPN) n-a fost inca parcurs cap la cap.** S-a dovedit
-   pornirea (prin clientul nostru real) si maparea statusurilor (prin cardurile lor de test), dar
-   drumul intors, notificarea semnata care marcheaza o comanda platita, cere o comanda adevarata
-   intr-un magazin viu.
-3. **Rambursarea nu se poate porni din platforma.** `/operation/credit` e in specificatia lor;
-   comerciantul ramburseaza azi din panoul Netopia, iar noi doar RECUNOASTEM rambursarea daca vine
-   un IPN cu status 15. ⚠ Nu se scrie inainte de sandbox: o stornare dubla inseamna bani iesiti de
-   doua ori, si aia nu se repara cu un commit.
+1. **„Nu exista nicio reconciliere, si e vina lor."** ⚠ **Era vina mea**: crezusem descrierea din
+   specificatie in loc sa chem capatul. Chemat, raspunde. Cronul orar exista.
+2. **„Fluxul cap la cap n-a fost parcurs."** Parcurs, pe productie, cu tabelul de mai sus, inclusiv
+   drumul refuz-apoi-reusita pe aceeasi comanda.
+3. **„Rambursarea nu se poate porni din platforma."** Se poate, si e aparata de registru. Nu s-a
+   scris pe temeiul specificatiei, ci **dupa** ce o rambursare adevarata a fost vazuta mergand pe
+   sandbox.
 
-**Probe:** 16 la reparatiile de plata + 18 la semnalul „marfa a plecat fara bani". Banc de mutanti
-**9 din 9**, intre care revenirea la anulare, caderea inapoi pe cheia goala, restituirile care ar
-suna alarma si cronul care ar scrie doar in jurnal. ⚠ Probele **isi pun singure un secret**, fiindca
-altfel n-ar apara nimic. `tsc` curat, suita verde, build OK, fara migratie.
+**Probe:** 54 in fisierul Netopia + 18 la semnalul „marfa a plecat fara bani". Banc de mutanti
+**23 din 23**, intre care revenirea lui 15 la „rambursat", reteaua cazuta citita ca refuz (care ar
+debloca a doua trimitere de bani), regula despre bani copiata inapoi in ruta, poarta cronului
+inversata si interogarea picata citita ca „neplatita". ⚠ Probele **isi pun singure un secret**,
+fiindca altfel n-ar apara nimic, si **cheama clientul real cu `fetch` inlocuit**, nu cauta siruri in
+fisiere. `tsc` curat, suita verde (8566), build OK, schema in pas, fara migratie.
+
+⚠ **Doua probe de-ale mele au cazut pe cod bun si au fost stranse:** una masura PREZENTA sirului
+`netopia_ntp_id` in loc de forma garzii (mutantul `if (false && !ntpID)` a trecut), alta compara
+pozitia unui IMPORT in loc de a apelului. Amandoua sunt scrise in fisier cu motivul, ca sa nu se
+rescrie la fel.
 
 ⚠ **Si o capcana veche prinsa de proba, nu de citit codul:** mesajul catre comerciant folosea
 `Number.isFinite(Number(total))`, iar `Number(null)` e **ZERO**, nu `NaN`. O comanda fara total ar fi

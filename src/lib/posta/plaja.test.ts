@@ -6,6 +6,7 @@ import {
   formeazaCod,
   problemePlaja,
   LUNGIME_COD_ASTEPTATA,
+  LUNGIME_MAXIMA_COD,
   type PlajaConfig,
 } from "./plaja";
 
@@ -73,4 +74,37 @@ test("o plaja buna nu avertizeaza nimic", () => {
 
 test("o plaja gresita nu mai avertizeaza pe deasupra: intai se repara problemele", () => {
   assert.deepEqual(avertismentePlaja({ ...PLAJA, deLa: 100, panaLa: 10 }), []);
+});
+
+test("⚠⚠ un cod care nu incape in campul lor de 30 de caractere se OPRESTE la configurare", () => {
+  /*
+   * `codAwb` e `nvarchar(30)` la Posta. Codul din plaja se compune ca `prefix + cifre`, iar
+   * `lipsuriExpediere` — singurul loc care masura lungimea — ruleaza INAINTE de alocare, deci
+   * nu vedea niciodata codul alocat. Singura poarta e aici, inainte sa fie ars vreun cod.
+   */
+  const prefixLung = "A".repeat(20);
+  const p = problemePlaja({ prefix: prefixLung, deLa: 1, panaLa: 999, cifre: 11 });
+  assert.ok(
+    p.some((x) => x.includes(String(LUNGIME_MAXIMA_COD))),
+    `nu se opreste un cod de ${prefixLung.length + 11} caractere: ${p.join(" | ")}`,
+  );
+});
+
+test("⚠ si exact 30 TRECE: plafonul e inclusiv, nu se refuza o plaja buna", () => {
+  /* Refuzat pe granita, un comerciant cu plaja legitima n-ar mai putea salva deloc. */
+  assert.deepEqual(problemePlaja({ prefix: "A".repeat(19), deLa: 1, panaLa: 999, cifre: 11 }), []);
+  assert.deepEqual(problemePlaja({ prefix: "", deLa: 1, panaLa: 999, cifre: 28 }), []);
+});
+
+test("⚠ masura se ia pe prefixul CURATAT, ca si restul verificarilor", () => {
+  /* Cu spatii la capete, `prefix.trim()` e cel care ajunge in cod; masurat brut, un prefix
+     de 19 caractere scris cu spatii ar fi parut de 21 si ar fi fost refuzat pe nedrept. */
+  assert.deepEqual(problemePlaja({ prefix: `  ${"A".repeat(19)}  `, deLa: 1, panaLa: 999, cifre: 11 }), []);
+});
+
+test("⚠ si `formeazaCod` chiar scoate lungimea pe care o masoara verificarea", () => {
+  /* Daca cele doua ar socoti diferit, poarta ar apara un numar care nu exista. */
+  const prefix = "A".repeat(19);
+  assert.equal(formeazaCod(prefix, 1, 11).length, prefix.length + 11);
+  assert.equal(formeazaCod(prefix, 1, 11).length, LUNGIME_MAXIMA_COD);
 });

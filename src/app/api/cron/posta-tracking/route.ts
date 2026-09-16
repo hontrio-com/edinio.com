@@ -8,8 +8,9 @@ import {
   descriereStatus,
   eStareFinala,
   esteRetur,
+  evenimenteDeSemnalat,
+  spuseleDeTinutMinte,
   statusFinalDinStari,
-  trebuieSemnalat,
   ultimaStare,
 } from "@/lib/posta/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
@@ -108,7 +109,7 @@ export async function GET(req: NextRequest) {
 
   const { data: orders, error: eOrders } = await admin
     .from("orders")
-    .select("id, business_id, status, order_number, payment_status, created_at, posta_awb_number, posta_awb_at, posta_status_code, posta_status_checked_at")
+    .select("id, business_id, status, order_number, payment_status, created_at, posta_awb_number, posta_awb_at, posta_status_code, posta_status_checked_at, posta_evenimente_semnalate")
     .not("posta_awb_number", "is", null)
     .neq("posta_awb_number", "")
     /*
@@ -233,7 +234,7 @@ export async function GET(req: NextRequest) {
        * nesfarsit. O suta douazeci de astfel de comenzi blocheaza urmarirea
        * intregii platforme, fara sa dea vreo eroare.
        */
-      const marcheazaVerificat = async (codNou: string | null) => {
+      const marcheazaVerificat = async (codNou: string | null, spuse?: string[]) => {
         const { error } = await admin
           .from("orders")
           .update({
@@ -252,6 +253,13 @@ export async function GET(req: NextRequest) {
              * scrisa deloc.
              */
             ...(codNou !== null ? { posta_status_code: codNou } : {}),
+            /*
+             * ⚠ Lista celor deja spuse se scrie SI pe drumurile fara cod nou. Altfel, la o
+             * trimitere care raspunde dar nu are inca nicio stare, coloana ar ramane `null` —
+             * adica „prima vedere" — pentru totdeauna, si primul teanc de evenimente sosit
+             * dupa aceea ar fi taiat la una singura, mereu.
+             */
+            ...(spuse ? { posta_evenimente_semnalate: spuse } : {}),
             posta_status_checked_at: new Date().toISOString(),
           })
           .eq("id", o.id)
@@ -402,25 +410,65 @@ export async function GET(req: NextRequest) {
       }
 
       /*
-       * ═══ ⚠ SE SEMNALEAZA DOAR SCHIMBAREA ═══
+       * ═══ ⚠⚠ SE SEMNALEAZA CE N-AM SPUS INCA, NU DOAR ULTIMA STARE (16.09.2026) ═══
        *
-       * Memoria e un singur cod, nu o lista de evenimente ca la GLS. Deci regula e
-       * simpla: se striga numai daca ULTIMUL cod cere atentie SI e altul decat cel
-       * retinut. Asa aceeasi avizare nu se repeta la fiecare doua ore.
+       * Aici era o memorie de UN SINGUR cod, si regula suna asa:
        *
-       * ⚠ Ce se pierde, si de ce e acceptabil: daca intre doua treceri intra DOUA
-       * evenimente care cer atentie, se striga numai al doilea. La o fereastra de
-       * doua ore si la ritmul postei, cazul e rar — iar comanda ramane oricum
-       * deschisa in panou, cu tot istoricul cerut live.
+       *     const schimbat = codNou !== null && codNou !== (o.posta_status_code ?? null);
+       *     if (schimbat && trebuieSemnalat(codNou)) { … }
        *
-       * ⚠ SEMNALAREA SE FACE INAINTE DE MARCAJ. Scris intai marcajul, o cadere a
-       * functiei intre cele doua (Vercel taie la `maxDuration`) ar lasa comanda cu
-       * codul retinut si fara nicio notificare — iar daca acel cod e final,
-       * trimiterea iese pe loc din urmarire si nicio rulare viitoare nu mai repara
-       * nimic. Returul ar disparea definitiv.
+       * Comentariul de atunci spunea ca se pierde „al doilea din doua evenimente care cer
+       * atentie". Masurat, pierderea era alta si mai mare: daca in fereastra de doua ore intra
+       * „Refuz destinatar" (21) si DUPA el unul administrativ — „Redirectionat" (35),
+       * „Reexpediat" (36), o scanare de tranzit — atunci ultima stare NU cere atentie si
+       * refuzul nu se striga NICIODATA. Nu „al doilea": NIMIC.
+       *
+       * Si nu e un caz rar. Refuzul la usa si redirectarea catre oficiu se inregistreaza in
+       * aceeasi tura a factorului, deci ajung impreuna in acelasi raspuns. Tocmai evenimentul
+       * care cere o decizie omeneasca e cel mai probabil urmat de unul administrativ.
+       *
+       * Acum se tine minte CE am spus, ca la GLS din 31.08: cheia e `<cod>|<data>`, cu data in
+       * forma LOR, fiindca aia e valoarea pe care ne-o dau si singura care deosebeste doua
+       * scanari cu acelasi cod.
+       *
+       * ⚠ NU se compara data evenimentului cu `posta_status_checked_at`: sunt doua ceasuri
+       * diferite, iar Posta publica scanarile in loturi. Gaura aceea a fost platita la GLS.
        */
-      const schimbat = codNou !== null && codNou !== (o.posta_status_code ?? null);
-      if (schimbat && trebuieSemnalat(codNou)) {
+      const dejaSpuse = new Set(
+        Array.isArray(o.posta_evenimente_semnalate)
+          ? (o.posta_evenimente_semnalate as unknown[]).map(String)
+          : [],
+      );
+
+      /*
+       * ⚠ La PRIMA vedere a trimiterii nu se scoate tot istoricul.
+       *
+       * Un AWB emis acum doua saptamani, ajuns abia acum in cron, are un teanc de evenimente
+       * demult rezolvate. Se semnaleaza doar starea CURENTA, iar restul se trec ca „spuse"
+       * fara sa fie strigate.
+       *
+       * ⚠ Se citeste COLOANA, nu marcajul de rotatie. Migratia adauga coloana GOALA pe toate
+       * comenzile existente: acelea AU `posta_status_checked_at`, deci n-ar fi fost „prima
+       * vedere", iar `dejaSpuse` gol nu filtreaza nimic — la prima rulare de dupa migratie
+       * fiecare trimitere urmarita si-ar fi strigat TOT istoricul deodata. `null` raspunde
+       * exact la intrebarea pusa: „am inregistrat vreodata ce am spus despre trimiterea asta?"
+       */
+      const primaVedere = o.posta_evenimente_semnalate == null;
+      const deSemnalat = evenimenteDeSemnalat(stari, dejaSpuse, primaVedere);
+
+      /*
+       * ⚠ SEMNALAREA SE FACE INAINTE DE MARCAJ. Ordinea, nu detaliul.
+       *
+       * Scris intai marcajul, o cadere a functiei intre cele doua (Vercel taie la
+       * `maxDuration`) ar lasa trimiterea cu evenimentul trecut ca „spus" si fara nicio
+       * notificare — iar daca acel cod e final, trimiterea iese pe loc din urmarire si nicio
+       * rulare viitoare nu mai repara nimic. Returul ar disparea definitiv.
+       *
+       * Invers, cel mai rau caz e o notificare repetata. Alegerea e limpede.
+       */
+      for (const st of deSemnalat) {
+        const c = codNumeric(st?.idStatus);
+        if (c === null) continue;
         semnalate++;
         await semnaleaza(admin, {
           userId: proprietari.get(o.business_id) ?? null,
@@ -428,10 +476,12 @@ export async function GET(req: NextRequest) {
           orderId: o.id,
           orderNumber: o.order_number,
           awb: o.posta_awb_number!,
-          cod: codNou,
-          descriere: descriereStatus(codNou, ultima?.statusWeb ?? ultima?.status ?? null),
+          cod: String(c),
+          descriere: descriereStatus(String(c), st?.statusWeb ?? st?.status ?? null),
         });
       }
+
+      const pastrate = spuseleDeTinutMinte(dejaSpuse, stari);
 
       /*
        * ⚠ CODUL SE RETINE ABIA DUPA CE TRANZITIA A REUSIT.
@@ -454,13 +504,18 @@ export async function GET(req: NextRequest) {
           orderId: o.id,
           businessId: o.business_id,
           identitate: { coloana: "posta_awb_number", valoare: o.posta_awb_number },
-          stare: { posta_status_code: codNou },
+          /*
+           * ⚠ `pastrate` intra tot in STARE, nu in marcaj: lista evenimentelor deja spuse e a
+           * trimiterii CITITE. Scrisa peste una noua, semnalarile ei ar fi socotite spuse si
+           * comerciantul n-ar mai afla de ele.
+           */
+          stare: { posta_status_code: codNou, posta_evenimente_semnalate: pastrate },
           marcaj: { posta_status_checked_at: new Date().toISOString() },
           actiune: "posta-tracking",
           orderNumber: o.order_number,
         });
       } else {
-        await marcheazaVerificat(null);
+        await marcheazaVerificat(null, pastrate);
       }
     }));
   }

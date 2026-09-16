@@ -29,7 +29,7 @@ import {
   type AdresaPosta,
   type DateExpediere,
 } from "@/lib/posta/expediere";
-import { codutiNecunoscute, descriereStatus } from "@/lib/posta/statusuri";
+import { codutiNecunoscute, descriereStatus, istoricDeLaNouLaVechi } from "@/lib/posta/statusuri";
 import { avertismentePlaja, codurileRamase, problemePlaja, type PlajaConfig } from "@/lib/posta/plaja";
 import { cheileNomenclatorului, unitatiFaraLocalitate, unitatiIncomplete } from "@/lib/posta/unitati";
 import { adaugaZileLucratoare, ziuaInRomania } from "@/lib/utils/zile-lucratoare";
@@ -795,6 +795,18 @@ export async function dezleagaPostaAwbAction(
     posta_awb_at: null,
     posta_status_code: null,
     posta_status_checked_at: null,
+    /*
+     * ⚠ SI MEMORIA SEMNALARILOR SE GOLESTE (16.09.2026).
+     *
+     * Lista `<cod>|<data>` e a coletului DEZLEGAT. Lasata pe comanda, coletul urmator
+     * porneste cu ea: `primaVedere` iese fals, iar un eveniment al lui care se nimereste sa
+     * aiba acelasi cod si aceeasi data cu unul vechi e socotit „deja spus" si nu mai ajunge
+     * la comerciant. Un retur pierdut asa nu lasa nicio urma.
+     *
+     * `null`, nu `[]`: `null` inseamna „n-am inregistrat niciodata nimic despre coletul de pe
+     * comanda asta", exact starea in care comanda chiar se afla dupa dezlegare.
+     */
+    posta_evenimente_semnalate: null,
     updated_at: new Date().toISOString(),
   }).eq("id", orderId).eq("business_id", businessId).select("id");
 
@@ -846,7 +858,14 @@ export async function getPostaTraceAction(
 
   try {
     const stari = await istoricStatusuri(config, awb);
-    return { ok: true, stari: stari.map(laStareAfisata).reverse() };
+    /*
+     * ⚠⚠ NU `.reverse()` (16.09.2026). Randul asta presupunea ca API-ul da evenimentele
+     * de la vechi la nou. Documentatia nu spune asta nicaieri, iar chiar codul nostru nu-i da
+     * crezare: `ultimaStare` sorteaza dupa data lor tocmai fiindca ordinea nu e garantata.
+     * Daca raspunsul vine deja de la nou la vechi, intors pe dos, comerciantul citeste ultima
+     * stare a coletului ca pe prima — si la un refuz sau un retur trage concluzia opusa.
+     */
+    return { ok: true, stari: istoricDeLaNouLaVechi(stari).map(laStareAfisata) };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }

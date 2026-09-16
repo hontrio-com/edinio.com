@@ -447,7 +447,19 @@ export async function probaConexiune(config: PostaConfig): Promise<RezultatProba
     });
     if (res.ok) {
       const text = await res.text();
-      try { publicAccesibil = Array.isArray(JSON.parse(text)); } catch { publicAccesibil = false; }
+      /*
+       * ⚠⚠ Se judeca CU ACEEASI MASURA ca drumul autentificat.
+       *
+       * Aici scria `Array.isArray(JSON.parse(text))`, in timp ce `unitatiLivrare` accepta si
+       * `{data: […]}` prin `listaDinRaspuns`. Daca Posta chiar impacheteaza asa — si nu stim,
+       * formatul nu e documentat — sonda spunea „nu e public” despre exact raspunsul pe care
+       * celalalt drum il citeste ca lista. Verdictul iesea „autentificat", adica bifa verde
+       * care spune ca userul si parola sunt bune, cand de fapt nu se dovedise nimic.
+       *
+       * Asta e chiar capcana platita la eColet, si o proba de conexiune care minte in verde
+       * e mai rea decat una care lipseste.
+       */
+      try { publicAccesibil = poartaLista(JSON.parse(text)); } catch { publicAccesibil = false; }
     }
   } catch {
     publicAccesibil = false;
@@ -468,15 +480,36 @@ export async function probaConexiune(config: PostaConfig): Promise<RezultatProba
  * Impachetarea intr-un `{data: […]}` sau `{items: […]}` e destul de raspandita cat
  * sa nu merite un esec daca se dovedeste ca asa vine.
  */
+export const CHEI_LISTA = ["data", "items", "rezultat", "result", "list", "unitati", "statusuri"] as const;
+
 export function listaDinRaspuns(r: unknown): unknown[] {
   if (Array.isArray(r)) return r;
   if (r && typeof r === "object") {
-    for (const cheie of ["data", "items", "rezultat", "result", "list", "unitati", "statusuri"]) {
+    for (const cheie of CHEI_LISTA) {
       const v = (r as Record<string, unknown>)[cheie];
       if (Array.isArray(v)) return v;
     }
   }
   return [];
+}
+
+/**
+ * Raspunsul POARTA o lista — chiar si goala.
+ *
+ * ⚠ Nu se poate raspunde la intrebarea asta cu `listaDinRaspuns(r).length`: functia aceea
+ * intoarce `[]` si cand raspunsul nu e o lista, si cand e o lista goala. Pentru sonda publica
+ * cele doua inseamna lucruri opuse — „resursa e aparata" fata de „resursa e deschisa si n-are
+ * niciun oficiu azi".
+ *
+ * Imparte aceleasi chei cu `listaDinRaspuns`, dintr-un singur loc: daca s-ar rupe in doua,
+ * sonda ar judeca iar altfel decat drumul adevarat.
+ */
+export function poartaLista(r: unknown): boolean {
+  if (Array.isArray(r)) return true;
+  if (r && typeof r === "object") {
+    return CHEI_LISTA.some((cheie) => Array.isArray((r as Record<string, unknown>)[cheie]));
+  }
+  return false;
 }
 
 /** Nomenclatorul de statusuri (2.6). Citire pura. */

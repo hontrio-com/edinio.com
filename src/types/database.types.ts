@@ -3702,6 +3702,7 @@ export type Database = {
           payment_status: string
           prices_include_vat: boolean | null
           posta_awb_at: string | null
+          posta_evenimente_semnalate: Json | null
           packeta_address_id: string | null
           packeta_awb_at: string | null
           packeta_barcode: string | null
@@ -3926,6 +3927,7 @@ export type Database = {
           payment_status?: string
           prices_include_vat?: boolean | null
           posta_awb_at?: string | null
+          posta_evenimente_semnalate?: Json | null
           packeta_address_id?: string | null
           packeta_awb_at?: string | null
           packeta_barcode?: string | null
@@ -4150,6 +4152,7 @@ export type Database = {
           payment_status?: string
           prices_include_vat?: boolean | null
           posta_awb_at?: string | null
+          posta_evenimente_semnalate?: Json | null
           packeta_address_id?: string | null
           packeta_awb_at?: string | null
           packeta_barcode?: string | null

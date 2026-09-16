@@ -345,3 +345,96 @@ export const EXPLICATIE_CLASIFICARE: Record<Clasificare, string> = {
   problema: "Comanda NU se misca, dar primesti o notificare",
   necunoscut: "Nerecunoscut — comanda nu se misca si nu se semnaleaza nimic",
 };
+
+// ─── Ce i s-a spus deja comerciantului ────────────────────────────────
+
+/**
+ * Cheia unui eveniment, ca sa se poata tine minte CA a fost spus.
+ *
+ * `<cod>|<data>`, cu data in forma LOR („ZZ.LL.AAAA HH:mm"): aia e valoarea pe care ne-o dau,
+ * si singura care deosebeste doua scanari cu acelasi cod. Neconvertita, fiindca o conversie
+ * care ar esua pe un format neasteptat ar face doua evenimente diferite sa aiba aceeasi cheie.
+ */
+export function cheieEveniment(st: StarePosta | null | undefined): string {
+  const c = codNumeric(st?.idStatus);
+  return `${c === null ? "" : c}|${st?.data ?? st?.dataInregistrare ?? ""}`;
+}
+
+/**
+ * Evenimentele care cer o decizie si NU i-au fost inca spuse comerciantului.
+ *
+ * ═══ ⚠⚠ DE CE NU „ULTIMA STARE" ═══
+ *
+ * Cronul tinea minte UN SINGUR cod si striga numai daca ULTIMA stare cerea atentie si era
+ * alta decat cea retinuta. Comentariul de atunci spunea ca se pierde „al doilea din doua
+ * evenimente care cer atentie". Masurat, pierderea era alta si mai mare: daca in fereastra
+ * intra „Refuz destinatar" (21) si DUPA el unul administrativ — „Redirectionat" (35),
+ * „Reexpediat" (36), o scanare de tranzit — ultima stare nu cere atentie, deci refuzul nu se
+ * striga NICIODATA. Nu „al doilea": nimic.
+ *
+ * Si nu e un caz rar: refuzul la usa si redirectarea catre oficiu se inregistreaza in aceeasi
+ * tura a factorului, deci ajung impreuna in acelasi raspuns.
+ *
+ * ⚠ Nu se compara data evenimentului cu momentul ultimei verificari: sunt doua ceasuri
+ * diferite, iar Posta publica scanarile in loturi. Gaura aceea a fost platita la GLS.
+ *
+ * ⚠ `primaVedere` taie istoricul la starea CURENTA. Un AWB emis acum doua saptamani, ajuns
+ * abia acum in cron, are un teanc de evenimente demult rezolvate; strigate toate deodata, ar
+ * fi zeci de notificari despre lucruri incheiate. Se hotaraste din COLOANA fiind `null`, nu
+ * din marcajul de rotatie: migratia adauga coloana goala pe comenzi care sunt urmarite de
+ * saptamani, iar acelea AU marcaj.
+ */
+export function evenimenteDeSemnalat(
+  stari: StarePosta[],
+  dejaSpuse: Set<string>,
+  primaVedere: boolean,
+): StarePosta[] {
+  if (primaVedere) {
+    const ultima = ultimaStare(stari);
+    return ultima && trebuieSemnalat(ultima.idStatus) ? [ultima] : [];
+  }
+  return stari.filter((st) => trebuieSemnalat(st?.idStatus) && !dejaSpuse.has(cheieEveniment(st)));
+}
+
+/**
+ * Lista care se scrie inapoi: TOATE starile vazute acum, nu doar cele semnalate.
+ *
+ * ⚠ Altfel un eveniment care azi nu e „de semnalat" ar deveni unul nou daca maine il
+ * adaugam in tabel — si comerciantul ar primi o avizare despre ceva petrecut demult.
+ *
+ * Taiata la 200, cu cele mai recente pastrate: istoricul unei trimiteri are cateva zeci de
+ * linii, iar fereastra de urmarire e oricum marginita.
+ */
+export function spuseleDeTinutMinte(dejaSpuse: Set<string>, stari: StarePosta[]): string[] {
+  return [...new Set([...dejaSpuse, ...stari.map(cheieEveniment)])].slice(-200);
+}
+
+/**
+ * Istoricul, de la cel mai NOU la cel mai vechi — pentru ochiul omului.
+ *
+ * ═══ ⚠ DE CE NU `.reverse()` ═══
+ *
+ * Panoul facea `stari.map(…).reverse()`, adica presupunea ca API-ul da evenimentele de la
+ * vechi la nou. Documentatia NU spune asta nicaieri, si chiar codul nostru nu-i da crezare:
+ * `ultimaStare` sorteaza dupa data lor tocmai fiindca ordinea nu e garantata.
+ *
+ * ⚠ Daca raspunsul vine deja de la nou la vechi, `.reverse()` il intoarce pe dos si
+ * comerciantul citeste ultima stare a coletului ca pe prima. La un retur sau un refuz, asta
+ * inseamna ca se uita la ecran si trage concluzia opusa.
+ *
+ * ⚠ Cand fie si o singura data NU se poate citi, se cade pe `.reverse()` — exact purtarea
+ * de dinainte. Nu fiindca ar fi buna, ci fiindca e aceeasi presupunere pe care o face si
+ * `ultimaStare` cand nu poate citi datele (ia ultimul element ca fiind cel mai nou), si doua
+ * presupuneri opuse in acelasi modul ar fi mai rele decat una singura, scrisa pe fata.
+ *
+ * ⚠ Se cade la PRIMA data necitita, nu se sorteaza ce se poate: o sortare partiala ar
+ * amesteca randurile fara sa spuna nimanui, iar rezultatul n-ar mai fi nici cronologic, nici
+ * in ordinea lor.
+ */
+export function istoricDeLaNouLaVechi<T extends StarePosta>(stari: T[]): T[] {
+  const cuData = stari.map((s, i) => ({ s, i, t: laMomentUtc(s?.data ?? s?.dataInregistrare) }));
+  if (cuData.some((x) => x.t === null)) return [...stari].reverse();
+  return cuData
+    .sort((a, b) => (b.t as number) - (a.t as number) || b.i - a.i)
+    .map((x) => x.s);
+}

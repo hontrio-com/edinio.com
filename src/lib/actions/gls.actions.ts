@@ -1023,6 +1023,18 @@ export async function deleteGlsAwbAction(
     gls_awb_number: null,
     gls_status_code: null,
     gls_status_checked_at: null,
+    /*
+     * ⚠ SI MEMORIA SEMNALARILOR SE GOLESTE (16.09.2026).
+     *
+     * Lista `<cod>|<data>` e a coletului DEZLEGAT. Lasata pe comanda, coletul urmator
+     * porneste cu ea: `primaVedere` iese fals, iar un eveniment al lui care se nimereste sa
+     * aiba acelasi cod si aceeasi data cu unul vechi e socotit „deja spus" si nu mai ajunge
+     * la comerciant. Un retur pierdut asa nu lasa nicio urma.
+     *
+     * `null`, nu `[]`: `null` inseamna „n-am inregistrat niciodata nimic despre coletul de pe
+     * comanda asta", exact starea in care comanda chiar se afla dupa dezlegare.
+     */
+    gls_evenimente_semnalate: null,
     gls_awb_at: null,
     updated_at: new Date().toISOString(),
   }).eq("id", orderId).eq("business_id", businessId).select("id");

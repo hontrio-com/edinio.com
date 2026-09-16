@@ -42,6 +42,14 @@ export type PlajaConfig = {
 export const LUNGIME_COD_ASTEPTATA = 13;
 
 /**
+ * ⚠ Cat incape in `codAwb` la ei: `nvarchar(30)`, masurat in documentatia lor.
+ *
+ * Se tine langa `formeazaCod`, fiindca de ea atarna: codul e `prefix + cifre`, iar suma lor
+ * nu are voie sa treaca de plafon. Vezi `problemePlaja`.
+ */
+export const LUNGIME_MAXIMA_COD = 30;
+
+/**
  * Numar → cod, ca in SQL.
  *
  * ⚠ Numarul mai lung decat `cifre` NU se taie: taiat, ar iesi un cod din alta
@@ -85,6 +93,28 @@ export function problemePlaja(p: Partial<PlajaConfig>): string[] {
   if (String(panaLa).length > cifre) {
     probleme.push(
       `ultimul numar (${panaLa}) are ${String(panaLa).length} cifre, mai multe decat cele ${cifre} configurate`,
+    );
+  }
+
+  /*
+   * ⚠⚠ SI CODUL INTREG TREBUIE SA INCAPA IN CAMPUL LOR, de 30 de caractere.
+   *
+   * `codAwb` e `nvarchar(30)` la Posta, iar codul din plaja se compune ca
+   * `prefix + numar completat cu zerouri`. Cu un prefix lung, suma poate depasi 30.
+   *
+   * ⚠ Verificarea de lungime din `lipsuriExpediere` NU-l vede niciodata: ea ruleaza
+   * INAINTE de alocare, iar codul se injecteaza in corp abia dupa. Deci singurul loc
+   * unde se poate opri e AICI, la configurare — inainte ca vreun cod sa fie ars.
+   *
+   * ⚠ Si de ce conteaza: Posta ori refuza trimiterea (si codul e pierdut din plaja),
+   * ori taie campul — si atunci coletul pleaca sub ALT numar decat cel pe care il
+   * avem noi scris pe comanda. A doua varianta e cea scumpa: nimic nu se plange.
+   */
+  const lungimeCod = prefix.length + cifre;
+  if (lungimeCod > LUNGIME_MAXIMA_COD) {
+    probleme.push(
+      `prefixul (${prefix.length} caractere) si cele ${cifre} cifre dau un cod de ${lungimeCod} caractere, `
+      + `iar Posta accepta cel mult ${LUNGIME_MAXIMA_COD}`,
     );
   }
 

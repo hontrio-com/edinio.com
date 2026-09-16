@@ -7195,7 +7195,8 @@ create table if not exists public.orders (
   colete_status_code integer,
   colete_status_label text,
   colete_status_at timestamp with time zone,
-  colete_status_checked_at timestamp with time zone);
+  colete_status_checked_at timestamp with time zone,
+  posta_evenimente_semnalate jsonb);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,

@@ -25,8 +25,18 @@ function verifyCron(req: NextRequest): boolean {
 
 /** Fereastra implicita de reconciliere, in zile. */
 const ZILE_IMPLICIT = 7;
-/** Cat timp se mai intreaba despre o comanda PLATITA, doar ca sa se prinda o rambursare pierduta. */
-const ZILE_RAMBURSARE = 30;
+/**
+ * Cat timp se mai intreaba despre o comanda PLATITA, ca sa se prinda o rambursare sau o contestatie
+ * despre care nu ni s-a spus.
+ *
+ * ⚠ 120 DE ZILE, SI CIFRA NU E ALEASA DE MINE: retelele de carduri lasa cumparatorului pana la 120 de
+ * zile de la plata ca sa deschida o contestatie. O fereastra de 30 de zile ar fi parut prudenta si ar
+ * fi ratat tocmai cazurile tarzii, care sunt si cele mai scumpe: acolo marfa a plecat demult.
+ *
+ * ⚠ Nu costa pe masura: se interogheaza doar comenzi PLATITE prin Stripe, adica la masuratoarea din
+ * 16.09.2026 SAPTE in toata platforma. Plafonul de mai jos tine socoteala inchisa si daca cresc.
+ */
+const ZILE_RAMBURSARE = 120;
 /** ⚠ Plafon mic dinadins: paza rambursarilor n-are voie sa infometeze plasa despre bani neincasati. */
 const MAX_PLATITE = 120;
 

@@ -8,6 +8,32 @@ import { baniiSAuIntors, comandaPlatiiStripe } from "@/lib/stripe-banii-s-au-int
 import type { Database } from "@/types/database.types";
 import type Stripe from "stripe";
 
+/*
+ * ═══ ⚠⚠ EVENIMENTELE INTRA IN FORMA VECHE, DESI NOI CEREM UNA NOUA (16.09.2026) ═══
+ *
+ * Capatul Connect din panoul lor („Endpoint Connect") are versiune de API FIXATA la **2023-08-16**,
+ * in timp ce `lib/stripe.ts` cere SDK-ului `2026-04-22.dahlia`. Deci:
+ *
+ *   INTRA  evenimentele serializate ca in 2023-08-16
+ *   IESE   fiecare apel al nostru catre ei (`charges.retrieve`, `sessions.retrieve`) pe 2026-04-22
+ *
+ * Si nu se aliniaza singure. Documentatia lor o spune limpede: „if an endpoint has an explicit
+ * version set, **it always uses that version**". Adica nici macar o ridicare a versiunii contului
+ * nu schimba ce ajunge aici.
+ *
+ * ⚠ AZI NU STRICA NIMIC, verificat camp cu camp: tot ce citim din evenimente (`charge.amount`,
+ * `charge.amount_refunded`, `charge.currency`, `charge.payment_intent`, `dispute.amount`,
+ * `dispute.charge`, `session.metadata`, `session.payment_status`) exista neschimbat din 2023.
+ *
+ * ⚠ DAR TIPURILE MINT. `Stripe.Charge` si `Stripe.Dispute` din SDK descriu forma din 2026, deci
+ * `tsc` va accepta bucuros un camp aparut dupa 2023 care la rulare va fi `undefined`. Cine adauga
+ * aici un camp nou trebuie sa-l caute intai in versiunea 2023-08-16, nu in tipuri.
+ *
+ * ⚠ SI DE CE NU SE RIDICA VERSIUNEA CAPATULUI: ar schimba si forma evenimentelor pe care le trateaza
+ * deja bine (`account.updated`, `checkout.session.*`), adica un drum de bani care merge. Nu se
+ * umbla la el fara o trecere anume, cu probe.
+ */
+
 /**
  * Evenimentul a mai fost vazut?
  *

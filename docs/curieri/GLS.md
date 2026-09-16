@@ -170,9 +170,25 @@ Changelog-ul PDF-ului merge pana la 30.03.2026. Verificat fiecare intrare fata d
    (formularul nu o cere cand se alege un punct) si niciodata pentru comenzile de marketplace.
    Masurat pe 16.09: din 106 comenzi cu punct, 100 vin de pe eMAG si n-au nicio strada. Pentru
    comenzile de dinainte de 16.09 nu se poate compune deloc: strada nu mai exista nicaieri.
-3. **Ridicarea de la comerciant** (`CreatePickupRequest`, `PickupService.svc`) si **anularea in
-   lot** (`DeleteLabels` primeste pana la 50 deodata): amandoua reale si nefacute. La zero AWB-uri,
-   n-au cui sa foloseasca inca.
+3. ⚠⚠ **DOUA AFIRMATII DIN FISA ASTA ERAU FALSE, si au stat aici pana pe 16.09.2026.**
+   Randul spunea: „Ridicarea de la comerciant (`CreatePickupRequest`, `PickupService.svc`) si anularea
+   in lot (`DeleteLabels` primeste pana la 50 deodata): amandoua reale si nefacute." Verificate in
+   documentatia lor, descarcata si citita la sursa:
+
+   * **`CreatePickupRequest` NU EXISTA.** Cautat in amandoua PDF-urile (`MyGLS_API.pdf`,
+     `MyGLS API XXL.pdf`): cuvantul „pickup” apare de 36 de ori, si niciodata ca metoda de API.
+     Exista `PickupDate` si `PickupAddress` — CAMPURI pe colet (pagina 9); `PickupDateFrom`/`To`
+     — filtre de listare (pagina 30); si texte de status despre „Pickup-Service” (pagina 46).
+     Ridicarea e un PRODUS al lor, comandat din contul MyGLS, nu o metoda pe care s-o chemam.
+   * **Anularea in lot E DEJA FACUTA**, de la inceput: `stergeEtichete` taie lista in bucati de
+     `MAX_STERGERI_PE_CERERE = 50`, citeste `DeleteLabelsErrorList` si deosebeste „sters” de
+     „nu exista” si de „nu stiu”. Ce nu exista e un buton de anulare in MASA, peste mai multe
+     comenzi — si acela nu exista pentru NICIUN curier din cei 17 (`bulk-orders.actions.ts` are
+     doar generare de AWB si schimbare de status). Deci GLS nu e in urma nimanui.
+
+   ⚠ Lectia, a treia oara in doua zile: o afirmatie scrisa intr-o fisa de evidenta e la fel de
+   scumpa ca una scrisa intr-un comentariu — opreste cautarea. Aici m-a trimis sa construiesc doua
+   lucruri, dintre care unul nu se poate si celalalt era gata.
 4. **`HidePhoneNumberOnLabels`**: vezi tabelul de mai sus. Comutator in panou, cand se cere.
 5. ⚠ **Punctele nu spun daca incaseaza ramburs.** `acceptsCash`/`acceptsCard` apar doar in fisierul
    UNGURESC, iar `CodHandler`/`CardPaymentAllowed` doar in metoda de API care nu raspunde. Deci un

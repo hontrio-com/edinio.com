@@ -168,3 +168,20 @@ mutare de trei randuri o desfacea in tacere, pe 19 apelanti deodata.
 **Probe:** 13 noi, intr-un fisier care pana azi era doar citat. Banc de mutanti **9 din 9**, printre
 care chiar defectul din 09.09 reintrodus in amandoua formele lui. `tsc` curat, **8.216 de probe
 verzi**, build OK, fara migratie.
+
+---
+
+## ✅ A doua trecere, 16.09.2026: nimic de reparat
+
+Dupa ce trei defecte au fost gasite in aceeasi zi la FedEx, UPS si Shipo, am cautat aceleasi
+tipare si la FAN — care are **3 magazine configurate si ZERO AWB-uri**, deci e printre cei la care
+cade urmatorul colet real. **N-am gasit niciunul**, si merita spus de ce.
+
+| tiparul cautat | ce am gasit la FAN |
+| --- | --- |
+| refuzul autentificarii rescris ca „nu stim” pe o scriere | **curat.** `eroareDeTermen` s-a NASCUT aici, si intoarce neatinsa orice eroare care nu e termen (`if (!abort) return e as Error`). Deci `eroareRefuz` de la login supravietuieste intact prin drumul de emitere. |
+| localitatea punctului suprascrie gol localitatea omului | **nu e cazul.** `pickupPointId` hotaraste destinatia, ca la DPD, iar localitatea ramane a cumparatorului. Iar lotul foloseste deja ajutorul comun pentru strada, cu nota scrisa: „prin ajutorul comun, nu prin `??`: acela nu cade pe SIRUL GOL”. |
+| coduri de status lipsa din harta | **34 in documentatie, 34 in cod, zero lipsa, zero in plus.** ⚠ Comparatia a scos intai un `S92` „lipsa”; e un fals pozitiv al regexului meu: in `EN_FANCourier_API_130825-1.pdf`, pagina 30, `S92` e o valoare `pickupLocationId` dintr-un exemplu JSON, nu un cod de status. |
+
+⚠ Un rezultat de „nimic de reparat” se scrie la fel de apasat ca unul cu reparatii: altfel
+urmatoarea trecere reface aceleasi trei verificari fara sa stie ca s-au facut.

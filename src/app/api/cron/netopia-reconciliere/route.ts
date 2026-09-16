@@ -42,6 +42,9 @@ const ORE_MINIME = 1;
 /** Cat de departe in urma se uita. `?zile=` largeste pentru o trecere peste istoric. */
 const ZILE_IMPLICIT = 14;
 const MAX_COMENZI = 200;
+/** Cat timp se mai intreaba despre o comanda PLATITA, doar ca sa se prinda o rambursare pierduta. */
+const ZILE_RAMBURSARE = 7;
+const MAX_PLATITE = 100;
 
 export async function GET(req: NextRequest) {
   /*
@@ -63,17 +66,34 @@ export async function GET(req: NextRequest) {
   const pana = new Date(Date.now() - ORE_MINIME * 3600_000).toISOString();
   const de = new Date(Date.now() - zile * 24 * 3600_000).toISOString();
 
-  const { data: comenzi, error: eComenzi } = await admin
+  const CAMPURI = "id, business_id, status, payment_status, total, order_number, netopia_ntp_id";
+  const deBaza = () => admin
     .from("orders")
-    .select("id, business_id, status, payment_status, total, order_number, netopia_ntp_id")
+    .select(CAMPURI)
     .eq("payment_method", "netopia")
     .not("netopia_ntp_id", "is", null)
-    /* ⚠ Nu se re-intreaba despre o plata incheiata: nici platita, nici rambursata. */
-    .not("payment_status", "in", "(paid,refunded)")
-    .gte("created_at", de)
     .lte("created_at", pana)
-    .order("created_at", { ascending: true })
-    .limit(MAX_COMENZI);
+    .order("created_at", { ascending: true });
+
+  /*
+   * ═══ DOUA INTREBARI DIFERITE, SI DE ACEEA DOUA CITIRI ═══
+   *
+   * 1. NEDECISE: plata a fost pornita si nu stim ce s-a ales de ea. Astea sunt urgente, fiindca
+   *    acolo se pierd banii, si iau plafonul intreg.
+   * 2. PLATITE: stim ca banii au intrat, dar intrebam daca nu cumva s-au si intors. Comerciantul
+   *    ramburseaza de ani de zile din panoul LOR, iar daca notificarea de rambursare se pierde,
+   *    comanda ramane „platita" la noi pentru totdeauna. ⚠ Masurat pe 16.09: `/operation/status`
+   *    chiar raporteaza `8` pentru o tranzactie rambursata.
+   *
+   *    ⚠ Fereastra e mai scurta si plafonul mai mic: o rambursare vine de obicei repede dupa plata,
+   *    iar intrebarile astea n-au voie sa infometeze citirea de mai sus, care e despre bani pierduti.
+   */
+  const [{ data: nedecise, error: eComenzi }, { data: platite }] = await Promise.all([
+    deBaza().not("payment_status", "in", "(paid,refunded)").gte("created_at", de).limit(MAX_COMENZI),
+    deBaza().eq("payment_status", "paid")
+      .gte("created_at", new Date(Date.now() - ZILE_RAMBURSARE * 24 * 3600_000).toISOString())
+      .limit(MAX_PLATITE),
+  ]);
 
   if (eComenzi) {
     await logError({
@@ -83,7 +103,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Nu s-au putut citi comenzile" }, { status: 500 });
   }
 
-  const randuri = comenzi ?? [];
+  const randuri = [...(nedecise ?? []), ...(platite ?? [])];
   if (randuri.length === 0) {
     return NextResponse.json({ ok: true, verificate: 0, lamurite: 0 });
   }
@@ -142,6 +162,21 @@ export async function GET(req: NextRequest) {
     }
 
     if (spuse.status === null) { nelamurite++; continue; }
+
+    /*
+     * ═══ ⚠⚠ O COMANDA DEJA PLATITA SE MISCA DOAR LA RAMBURSARE ═══
+     *
+     * Pe ea o intrebam pentru UN singur lucru: nu cumva banii s-au intors. Lasata sa treaca prin
+     * regula intreaga, un raspuns `3`/`5` (adica „da, e platita", ce stiam deja) ar fi chemat
+     * `aplica_tranzitia_comenzii` cu `confirmed` si ar fi dat inapoi la „confirmata" o comanda deja
+     * EXPEDIATA. Adica marfa plecata ar fi aparut ca nelivrata, la fiecare ora, pentru sapte zile.
+     *
+     * ⚠ E chiar defectul pe care `finalizeazaPlataComenzii` il descrie si il evita prin `WHERE`:
+     * Revolut si Klarna scriau `confirmed` neconditionat si o re-livrare de webhook intorcea
+     * comanda. Aici nu exista `WHERE` care sa apere, fiindca intrebarea e a noastra, deci garda
+     * trebuie sa fie tot a noastra.
+     */
+    if (c.payment_status === "paid" && spuse.status !== 8) continue;
 
     const verdict = await aplicaStatusulNetopia(
       admin,

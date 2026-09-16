@@ -613,10 +613,41 @@ describe("Cronul de reconciliere", () => {
     assert.ok(c.indexOf("verificaCron") < c.indexOf("createClient<Database>"), "baza se deschide inaintea portii");
   });
 
-  test("⚠⚠ nu se re-intreaba despre o plata deja incheiata", () => {
-    /* O comanda platita sau rambursata nu mai are ce lamuri, iar o re-intrebare ar reface degeaba
-       efectele de dupa plata. */
+  test("⚠⚠ nu se re-intreaba despre o comanda deja RAMBURSATA", () => {
+    /* Acolo nu mai e nimic de lamurit: si banii, si eticheta sunt la locul lor. */
     assert.match(c, /\.not\("payment_status", "in", "\(paid,refunded\)"\)/, "se interogheaza si platile incheiate");
+    assert.ok(!/\.eq\("payment_status", "refunded"\)/.test(c), "se intreaba despre comenzi rambursate");
+  });
+
+  test("⚠⚠ o comanda DEJA PLATITA se misca DOAR la rambursare", () => {
+    /*
+     * ═══ CEA MAI USOR DE RATAT GARDA DIN CRON ═══
+     *
+     * Comenzile platite se intreaba pentru UN singur lucru: nu cumva banii s-au intors (comerciantul
+     * ramburseaza de ani de zile din panoul LOR, si notificarea aceea se poate pierde). Lasate sa
+     * treaca prin regula intreaga, un raspuns `3`/`5` ar chema `aplica_tranzitia_comenzii` cu
+     * `confirmed` si ar da inapoi la „confirmata" o comanda deja EXPEDIATA, la fiecare ora, sapte
+     * zile la rand.
+     *
+     * Acelasi defect pe care `finalizeazaPlataComenzii` il evita prin `WHERE`, dar aici nu exista
+     * niciun `WHERE` care sa apere: intrebarea e a noastra, deci garda trebuie sa fie tot a noastra.
+     */
+    assert.match(c, /if \(c\.payment_status === "paid" && spuse\.status !== 8\) continue;/,
+      "o comanda expediata poate fi data inapoi la «confirmata»");
+    assert.ok(
+      c.indexOf('c.payment_status === "paid" && spuse.status !== 8') < c.indexOf("aplicaStatusulNetopia("),
+      "garda a ajuns dupa aplicarea regulii",
+    );
+  });
+
+  test("⚠ si intrebarea despre rambursari nu infometeaza pe cea despre bani pierduti", () => {
+    /* Nedecisele iau plafonul intreg; platitele au fereastra mai scurta si plafon mai mic. */
+    assert.match(c, /const MAX_PLATITE = 100;/);
+    assert.match(c, /const ZILE_RAMBURSARE = 7;/);
+    assert.ok(
+      c.indexOf("MAX_PLATITE") > c.indexOf("MAX_COMENZI = 200"),
+      "plafoanele s-au amestecat",
+    );
   });
 
   test("⚠⚠ se intreaba DOAR despre platile pornite prin noi", () => {

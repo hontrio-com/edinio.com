@@ -76,6 +76,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/cron/plati-neconfirmate",
+      "schedule": "30 7 * * *"
+    },
+    {
       "path": "/api/cron/pepita-stoc",
       "schedule": "*/10 * * * *"
     },

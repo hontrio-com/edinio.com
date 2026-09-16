@@ -139,13 +139,24 @@ sa stric o aparare care functioneaza; exemplele au lamurit-o.**
    descrierea *„get order payment status - will be available at a future date"*. Deci **nu se poate
    interoga starea unei plati**: daca IPN-ul nu ajunge, plata se pierde tacut si nimic n-o mai
    gaseste. `ntpID` se pastreaza tocmai pentru ziua in care endpointul va exista.
-2. ⚠⚠ **Masurat azi, si merita uitat pe el:** doua comenzi **EXPEDIATE dar neplatite**, cu id de
-   tranzactie Netopia, la `suporti-numar`: `#0104` (105,50 lei, 15.08) si `#0156` (65,00 lei, 25.08).
-   Ori clientul a platit si notificarea nu a ajuns (banii sunt la Netopia, noi nu stim), ori nu a
-   platit si marfa a plecat oricum. **Nu se poate lamuri din platforma**, tocmai din cauza punctului
-   1; se lamureste din contul Netopia al comerciantului.
-   ⚠ Nu exista niciun semnal care sa-i spuna comerciantului „ai expediat o comanda a carei plata nu
-   e confirmata". E o lucrare de produs, nu un defect de integrare, si nu s-a facut fara cerere.
+2. ✅ **Semnalul „marfa a plecat fara bani" EXISTA de acum**, cerut de proprietar in aceeasi zi.
+   Masurat inainte: doua comenzi **EXPEDIATE dar neplatite**, cu id de tranzactie Netopia, la
+   `suporti-numar`: `#0104` (105,50 lei, 15.08) si `#0156` (65,00 lei, 25.08). Ori clientul a platit
+   si notificarea nu a ajuns (banii sunt la Netopia, noi nu stim), ori nu a platit si marfa a plecat
+   oricum. **Nu se poate lamuri din platforma**, tocmai din cauza punctului 1; se lamureste din contul
+   Netopia al comerciantului.
+   * Regula e pura si probata (`lib/orders/marfa-a-plecat-fara-bani.ts`), iar cronul zilnic
+     `plati-neconfirmate` o cheama. ⚠ Nu e pusa la momentul expedierii fiindca o comanda ajunge
+     „expediata" pe **peste douazeci de drumuri** (fiecare cron de urmarire o muta cand coletul intra
+     in retea, plus panoul, loturile si ingestia din marketplace): ar fi fost „acelasi lucru in
+     douazeci de copii", iar a douazeci si una ar fi aparut fara ea.
+   * ⚠ Merge la **toate** procesatoarele, nu doar la Netopia, si taie anume rambursul (acolo
+     „neplatit" e starea normala a unei comenzi vii) si restituirile (banii au intrat si au iesit
+     deliberat).
+   * ⚠ Si ajunge **la clopotelul comerciantului**, nu doar in jurnal. Fereastra de 26 de ore tine
+     loc de memorie, deci fiecare comanda se striga o data; `?ore=` largeste pentru o trecere peste
+     istoric, cum se face prima data pentru cele doua cazuri vechi.
+   ⚠ Nu repara cauza (punctul 1 ramane al lor). Face ca paguba sa nu mai fie TACUTA.
 3. **Cinci comenzi platite fara `netopia_ntp_id`** (~354 lei, iulie-august). Decalajul de 1-3 zile
    intre creare si actualizare arata a marcare manuala din panou, ceea ce e legitim. Nu e un defect,
    dar e scris aici ca sa nu fie cautat ca unul.
@@ -172,8 +183,17 @@ putea disparea in tacere.
    comenzi expediate-si-neplatite de mai sus sunt chiar forma pe care o ia.
 2. **Reparatia statusului 12 e argumentata din specificatie, nu probata pe traficul lor.** Un card
    refuzat nu se poate produce la comanda intr-un mediu real fara un cont de test.
-3. **Nimeni nu e avertizat** cand expediaza o comanda cu plata neconfirmata (punctul 2 de mai sus).
+3. **Rambursarea nu se poate porni din platforma.** `/operation/credit` e in specificatia lor;
+   comerciantul ramburseaza azi din panoul Netopia, iar noi doar RECUNOASTEM rambursarea daca vine
+   un IPN cu status 15. ⚠ Nu se scrie inainte de sandbox: o stornare dubla inseamna bani iesiti de
+   doua ori, si aia nu se repara cu un commit.
 
-**Probe:** 16 noi. Banc de mutanti **4 din 4**, intre care revenirea la anulare si caderea inapoi pe
-cheia goala. ⚠ Probele **isi pun singure un secret**, fiindca altfel n-ar apara nimic. `tsc` curat,
-suita verde, build OK, fara migratie.
+**Probe:** 16 la reparatiile de plata + 18 la semnalul „marfa a plecat fara bani". Banc de mutanti
+**9 din 9**, intre care revenirea la anulare, caderea inapoi pe cheia goala, restituirile care ar
+suna alarma si cronul care ar scrie doar in jurnal. ⚠ Probele **isi pun singure un secret**, fiindca
+altfel n-ar apara nimic. `tsc` curat, suita verde, build OK, fara migratie.
+
+⚠ **Si o capcana veche prinsa de proba, nu de citit codul:** mesajul catre comerciant folosea
+`Number.isFinite(Number(total))`, iar `Number(null)` e **ZERO**, nu `NaN`. O comanda fara total ar fi
+aparut in notificare drept „0.00 lei", adica marfa plecata pe gratis. Aceeasi capcana golise
+feedurile Facebook.

@@ -547,6 +547,20 @@ export function useCheckoutOrder({
         customer_address: courierSelection?.deliveryType === "locker" && courierSelection.lockerAddress
           ? courierSelection.lockerAddress
           : form.address,
+        /*
+         * ⚠⚠ STRADA LUI NU SE MAI PIERDE ODATA CU INLOCUIREA DE DEASUPRA.
+         *
+         * `customer_address` devine adresa PUNCTULUI, si asa trebuie: acolo pleaca coletul.
+         * Dar pana azi strada pe care si-o scrisese cumparatorul disparea odata cu ea.
+         * Masurat: la toate cele sase comenzi cu punct din checkout-ul nostru, `address` era
+         * identic cu `locker_address`.
+         *
+         * ⚠ Serverul o scrie doar daca e nevida SI diferita de adresa de livrare, deci pe o
+         * livrare obisnuita nu se dubleaza nimic. Si NU e obligatorie: la punct formularul nici
+         * n-o cere. Foloseste la `FinalDeliveryAddress` al GLS, adresa de rezerva de cand
+         * punctul devine indisponibil.
+         */
+        customer_home_address: form.address,
         // Datele de pe factura, cand clientul a ales persoana juridica. `undefined`
         // altfel — comanda ramane exact ce era. NU atinge adresa de livrare de mai
         // sus: pretul transportului e semnat pe destinatia aceea.

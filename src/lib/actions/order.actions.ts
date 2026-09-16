@@ -938,6 +938,26 @@ export async function placeOrder(data: {
   customer_county: string;
   customer_city: string;
   customer_address: string;
+  /**
+   * ⚠⚠ ADRESA LUI DE ACASA, cand livrarea merge intr-un PUNCT.
+   *
+   * La livrarea in punct, `customer_address` E adresa punctului: amandoua checkout-urile o
+   * inlocuiesc, fiindca tot ce citeste comanda mai departe (eticheta, emailul, factura,
+   * cererea catre curier) trebuie sa vada unde pleaca de fapt coletul. Asta e bine si ramane.
+   *
+   * Ce NU era bine: strada lui se pierdea odata cu inlocuirea. Masurat pe 16.09.2026, la toate
+   * cele SASE comenzi cu punct venite din checkout-ul nostru `address` era identic cu
+   * `locker_address` — deci nu se pierdea „uneori”, se pierdea de fiecare data.
+   *
+   * ⚠ La ce foloseste: GLS are `FinalDeliveryAddress`, adresa de rezerva pe care o incearca
+   * daca punctul devine indisponibil. Fara ea, un punct inchis inseamna colet intors — iar la
+   * ramburs, si marfa intoarsa, si bani neincasati.
+   *
+   * ⚠ NU e obligatorie, si nici nu poate fi: la livrarea in punct formularul nu o cere (vezi
+   * `checkout-core.ts`), iar comenzile de pe marketplace n-o au deloc — masurat, cele 100 de
+   * comenzi eMAG cu easybox n-au nicio strada. Se pastreaza cand exista, atat.
+   */
+  customer_home_address?: string;
   customer_country?: string;
   customer_postal_code?: string;
   /** Date de facturare pe firma. Serverul le recitesc si le reverifica; vezi `resolveBillingCompany`. */
@@ -1881,6 +1901,16 @@ export async function placeOrder(data: {
       county: data.customer_county,
       city: data.customer_city.trim(),
       address: data.customer_address.trim(),
+      /*
+       * ⚠ Strada LUI, pastrata separat cand adresa de livrare e a unui PUNCT.
+       *
+       * Se scrie doar cand chiar aduce ceva: nevida SI diferita de adresa de livrare. Pe o
+       * livrare obisnuita cele doua sunt acelasi lucru, iar o copie in plus n-ar fi decat un
+       * al doilea adevar care poate ramane in urma.
+       */
+      ...(data.customer_home_address?.trim()
+        && data.customer_home_address.trim() !== data.customer_address.trim()
+        && { home_address: data.customer_home_address.trim() }),
       ...(data.customer_country && data.customer_country !== "RO" && {
         country: data.customer_country,
         postal_code: data.customer_postal_code?.trim() || "",
@@ -4116,6 +4146,26 @@ export async function placeCartOrder(data: {
   customer_county: string;
   customer_city: string;
   customer_address: string;
+  /**
+   * ⚠⚠ ADRESA LUI DE ACASA, cand livrarea merge intr-un PUNCT.
+   *
+   * La livrarea in punct, `customer_address` E adresa punctului: amandoua checkout-urile o
+   * inlocuiesc, fiindca tot ce citeste comanda mai departe (eticheta, emailul, factura,
+   * cererea catre curier) trebuie sa vada unde pleaca de fapt coletul. Asta e bine si ramane.
+   *
+   * Ce NU era bine: strada lui se pierdea odata cu inlocuirea. Masurat pe 16.09.2026, la toate
+   * cele SASE comenzi cu punct venite din checkout-ul nostru `address` era identic cu
+   * `locker_address` — deci nu se pierdea „uneori”, se pierdea de fiecare data.
+   *
+   * ⚠ La ce foloseste: GLS are `FinalDeliveryAddress`, adresa de rezerva pe care o incearca
+   * daca punctul devine indisponibil. Fara ea, un punct inchis inseamna colet intors — iar la
+   * ramburs, si marfa intoarsa, si bani neincasati.
+   *
+   * ⚠ NU e obligatorie, si nici nu poate fi: la livrarea in punct formularul nu o cere (vezi
+   * `checkout-core.ts`), iar comenzile de pe marketplace n-o au deloc — masurat, cele 100 de
+   * comenzi eMAG cu easybox n-au nicio strada. Se pastreaza cand exista, atat.
+   */
+  customer_home_address?: string;
   customer_country?: string;
   customer_postal_code?: string;
   /** Date de facturare pe firma. Serverul le recitesc si le reverifica; vezi `resolveBillingCompany`. */
@@ -4791,6 +4841,16 @@ export async function placeCartOrder(data: {
       county: data.customer_county,
       city: data.customer_city.trim(),
       address: data.customer_address.trim(),
+      /*
+       * ⚠ Strada LUI, pastrata separat cand adresa de livrare e a unui PUNCT.
+       *
+       * Se scrie doar cand chiar aduce ceva: nevida SI diferita de adresa de livrare. Pe o
+       * livrare obisnuita cele doua sunt acelasi lucru, iar o copie in plus n-ar fi decat un
+       * al doilea adevar care poate ramane in urma.
+       */
+      ...(data.customer_home_address?.trim()
+        && data.customer_home_address.trim() !== data.customer_address.trim()
+        && { home_address: data.customer_home_address.trim() }),
       ...(data.customer_country && data.customer_country !== "RO" && {
         country: data.customer_country,
         postal_code: data.customer_postal_code?.trim() || "",

@@ -854,6 +854,12 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
         customer_address: courierSelection?.deliveryType === "locker" && courierSelection.lockerAddress
           ? courierSelection.lockerAddress
           : form.address,
+        /*
+         * ⚠ Strada LUI, pastrata separat — vezi nota din `checkout-core.ts`. Cele DOUA
+         * checkout-uri trebuie sa trimita acelasi lucru: altfel adresa de rezerva a GLS ar
+         * exista pe comenzile din magazin si ar lipsi pe cele scrise de comerciant, tacut.
+         */
+        customer_home_address: form.address,
         // Datele de pe factura pentru comenzile pe firma. Separate de adresa de
         // livrare de mai sus, care ramane cea pe care s-a cotat transportul.
         billing_company: companyBilling.billingPayload() ?? undefined,

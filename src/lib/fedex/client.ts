@@ -485,6 +485,9 @@ const CODURI: Record<string, string> = {
   "SHIPMENT.CURRENCYCODE.INVALID": "Valuta nu e acceptata de contul FedEx. Lista valutelor permise depinde de cont si de tara.",
   // Anulare
   "CANCELSHIPMENT.TRACKINGNUMBER.DELETED": "Expedierea era deja anulata la FedEx.",
+  "MASTERTRACKINGID.TRACKINGNUMBER.CANCELLED": "Expedierea era deja anulata la FedEx.",
+  "SHIPMENT.CANCELEDWITHOUTPICKUP.SUCCESS": "Expedierea a fost anulata la FedEx (nu fusese ridicata).",
+  "SHIPMENT.CANCELEDWITHOUTPICKUP.FAILURE": "FedEx nu poate anula expedierea.",
   "TRACKINGIDS.TRACKINGNUMBER.CLOSED": "Coletul nu mai poate fi anulat: ziua de expeditie a fost inchisa la FedEx.",
   // Urmarire
   "TRACKING.TRACKINGNUMBER.NOTFOUND": "FedEx nu gaseste numarul AWB. Poate dura pana la 24 de ore pana apare in sistemul lor.",
@@ -1103,11 +1106,36 @@ export async function creeazaExpediere(
 export type RezultatAnulare = { anulat: boolean; mesaj: string; eraDejaAnulat: boolean };
 
 /**
+ * ⚠⚠ CODURILE LOR CARE INSEAMNA „S-A ANULAT”, NU „A ESUAT”.
+ *
+ * Sunt trei, si toate trei vin pe canalul de ERORI, adica prin `catch`:
+ *
+ *   `CANCELSHIPMENT.TRACKINGNUMBER.DELETED`      starea dorita exista deja;
+ *   `MASTERTRACKINGID.TRACKINGNUMBER.CANCELLED`  la fel, spus altfel („already cancelled”);
+ *   `SHIPMENT.CANCELEDWITHOUTPICKUP.SUCCESS`     „has been successfully canceled”.
+ *
+ * ⚠ Al treilea e cel care costa. Propozitia lor spune LIMPEDE ca anularea a REUSIT, dar
+ * codul soseste in `errors[]`, iar `apel()` trateaza orice `errors[]` dintr-un 200 ca refuz
+ * dovedit — pe buna dreptate, in general. Aici insa comerciantul afla ca anularea a picat,
+ * pe o expediere pe care FedEx tocmai o anulase: comanda ramane cu un AWB mort si cu un buton
+ * care nu mai are ce face.
+ *
+ * ⚠ Si perechea lui NEGATIVA nu are voie sa intre aici:
+ * `SHIPMENT.CANCELEDWITHOUTPICKUP.FAILURE` („The shipment can't be canceled”) e un esec
+ * adevarat. Cand copiezi o familie de coduri, verifica intai care dintre ele sunt perechea
+ * NEGATIVA a celorlalte.
+ */
+const COD_ANULARE_IMPLINITA = new Map<string, { mesaj: string; eraDeja: boolean }>([
+  ["CANCELSHIPMENT.TRACKINGNUMBER.DELETED", { mesaj: "Expedierea era deja anulata la FedEx.", eraDeja: true }],
+  ["MASTERTRACKINGID.TRACKINGNUMBER.CANCELLED", { mesaj: "Expedierea era deja anulata la FedEx.", eraDeja: true }],
+  ["SHIPMENT.CANCELEDWITHOUTPICKUP.SUCCESS", { mesaj: "Expedierea a fost anulata la FedEx (nu fusese ridicata).", eraDeja: false }],
+]);
+
+/**
  * `PUT /ship/v1/shipments/cancel` — atentie, **PUT**, nu DELETE.
  *
- * ⚠ „Deja anulat" NU e un esec. `CANCELSHIPMENT.TRACKINGNUMBER.DELETED` inseamna ca
- * starea dorita exista deja, iar apelantul trebuie sa poata elibera slotul din
- * registru — altfel comanda ramane blocata pe un AWB care nu mai exista la ei.
+ * ⚠ Apelantul trebuie sa poata elibera slotul din registru si cand starea dorita exista
+ * deja — altfel comanda ramane blocata pe un AWB care nu mai exista la ei.
  */
 export async function anuleaza(config: FedexConfig, awb: string): Promise<RezultatAnulare> {
   const corp = {
@@ -1131,8 +1159,9 @@ export async function anuleaza(config: FedexConfig, awb: string): Promise<Rezult
     return { anulat: true, mesaj, eraDejaAnulat: false };
   } catch (e) {
     const cod = codEroare(e);
-    if (cod === "CANCELSHIPMENT.TRACKINGNUMBER.DELETED") {
-      return { anulat: true, mesaj: "Expedierea era deja anulata la FedEx.", eraDejaAnulat: true };
+    const implinita = cod ? COD_ANULARE_IMPLINITA.get(cod) : undefined;
+    if (implinita) {
+      return { anulat: true, mesaj: implinita.mesaj, eraDejaAnulat: implinita.eraDeja };
     }
     throw e;
   }

@@ -178,14 +178,33 @@ aprins un **comentariu** pe care tocmai il scrisesem acolo si care pomenea cuvan
 
 ---
 
-## ⚠ Ce ramane: 24 de constatari propuse si NEVERIFICATE
+## ⚠ Ce ramane: 21 de constatari, inca NEVERIFICATE
 
-Auditul a propus 38. Am reparat 8 (plus una a mea), si am verificat de mana ca alte doua sunt deja
-rezolvate in cod. **Restul de 24 n-au trecut prin niciun filtru si nu le-am verificat eu** — filtrul
-automat a fost oprit. Le las scrise ca sa nu se piarda, cu eticheta lor, si nimic mai mult:
+Auditul a propus 38. Am reparat 8 (plus una a mea) in prima trecere, si **inca 3 verificate de mana
+pe 16.09**, dupa ce proprietarul a cerut sa se repare tot ce se poate repara cu certitudine:
+
+1. ⚠⚠ **Anularea avea TREI coduri de reusita, si stiam unul.** In `Ship-Common-ErrorMapping.json`
+   sunt trei coduri care inseamna „s-a anulat", si toate trei vin pe canalul de ERORI:
+   `CANCELSHIPMENT.TRACKINGNUMBER.DELETED` (il stiam), `MASTERTRACKINGID.TRACKINGNUMBER.CANCELLED`,
+   si — cel care costa — `SHIPMENT.CANCELEDWITHOUTPICKUP.SUCCESS`, a carui propozitie spune limpede
+   „has been successfully canceled". Comerciantul afla ca anularea a picat pe o expediere pe care
+   FedEx tocmai o anulase, si ramanea cu un AWB mort pe comanda.
+   ⚠ Perechea NEGATIVA (`SHIPMENT.CANCELEDWITHOUTPICKUP.FAILURE`) e tinuta afara anume, si are proba:
+   cand copiezi o familie de coduri, verifica intai care dintre ele sunt perechea negativa a celorlalte.
+2. **Traducerea zilelor de tranzit se oprea la `TEN_DAYS`**, iar enumerarea lor are 22 de valori, pana
+   la `TWENTY_DAYS`. Adica pentru expedierile internationale — exact acolo unde cumparatorul chiar
+   vrea sa stie — nu se arata nimic. Acum numarul se citeste din chiar numele enumerarii, deci nu mai
+   poate ramane in urma; `UNKNOWN` si `SMARTPOST_TRANSIT_DAYS` raman fara text, dinadins.
+3. ⚠⚠ **Comentariul portii de cron mintea, si era o invitatie.** Spunea ca poarta accepta si antetul
+   `x-vercel-cron`; codul citeste doar `authorization`, si bine face: `x-vercel-cron` e un antet
+   OBISNUIT, nu un secret. Cine ar fi „reparat" dupa comentariu ar fi deschis toate cele saptesprezece
+   cronuri, cu rol de serviciu, adica ocolind RLS. Comentariul spune acum de ce NU se accepta, iar
+   proba cade daca antetul ajunge vreodata in fisier.
+
+**Restul de 21 n-au trecut prin niciun filtru si nu le-am verificat eu.** Le las scrise ca sa nu se
+piarda, cu eticheta lor, si nimic mai mult:
 
 - anularea refuzata de ei (colet deja predat) lasa comanda fara nicio cale de dezlegare;
-- „deja anulata" se recunoaste dupa un singur cod, desi ei au doua;
 - `cautaDupaReferinta` nu citeste `output.alerts[]` si nici `successful`;
 - eticheta nesalvata nu spune nimic comerciantului, si FedEx stins o face inaccesibila din panou;
 - etichetele poarta date personale si nu le sterge nimic vreodata;

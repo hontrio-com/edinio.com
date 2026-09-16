@@ -10,6 +10,9 @@ import {
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
+import {
+  proprietariiMagazinelor, semnaleazaExpedierea, stareaSaSchimbat,
+} from "@/lib/orders/semnalarea-ajunge-la-om";
 import type { Database } from "@/types/database.types";
 
 /**
@@ -215,6 +218,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  /* ⚠ Proprietarii, o singura data pe rulare: fara `user_id` notificarea n-are unde sa mearga. */
+  const proprietari = await proprietariiMagazinelor(admin, inFereastra.map((o) => o.business_id));
+
   let verificate = 0, scrise = 0, faraConfig = 0, esuate = 0, faraStare = 0, ramase = 0;
   let mutate = 0, semnalate = 0, incheiate = 0;
   /* ⚠ Numerele pe care harta nu le stie inca: se strang ca sa poata creste din trafic. */
@@ -353,14 +359,32 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (trebuieSemnalatWoot(stare.statusId)) {
+    /*
+     * ⚠⚠ SE SEMNALEAZA DOAR SCHIMBAREA, SI SEMNALUL AJUNGE LA OM.
+     *
+     * Pana azi randurile astea scriau numai in `error_logs`, pe care comerciantul nu-l vede,
+     * si o faceau la FIECARE rulare: jurnalul are aceleasi patru retururi la 02:59, 04:59 si
+     * 06:59. Adica Woot — singurul transportator cu trafic adevarat — decidea ca ceva merita
+     * spus, si nu spunea nimanui. Vezi `semnalarea-ajunge-la-om`.
+     */
+    const retur = esteReturWoot(stare.statusId);
+    if (trebuieSemnalatWoot(stare.statusId) && stareaSaSchimbat(o.woot_status_id, stare.statusId)) {
       semnalate++;
-      await logError({
-        action: "woot-tracking",
-        message: `${o.order_number ?? o.id}: ${stare.eticheta || `stare Woot ${stare.statusId}`}`
-          + (esteReturWoot(stare.statusId) ? " (coletul se intoarce la tine)" : ""),
-        details: { woot_order_id: o.woot_order_id, stare: stare.statusId },
-        businessId: o.business_id, severity: "warning",
+      const spune = stare.eticheta || `stare Woot ${stare.statusId}`;
+      const comanda = o.order_number ? `Comanda ${o.order_number}` : "O comanda";
+      await semnaleazaExpedierea(admin, {
+        userId: proprietari.get(o.business_id) ?? null,
+        businessId: o.business_id,
+        orderId: o.id,
+        orderNumber: o.order_number,
+        awb: o.woot_order_id,
+        tip: "woot",
+        titlu: retur ? "Colet Woot returnat" : "Expediere Woot care cere atentie",
+        mesaj: retur
+          ? `${comanda}: coletul ${o.woot_order_id} se intoarce la tine (${spune}). Rambursul nu se mai incaseaza, iar anularea comenzii si returul banilor raman decizia ta.`
+          : `${comanda}: expedierea ${o.woot_order_id} are un eveniment care cere o decizie: ${spune}. Deschide comanda pentru istoricul complet.`,
+        actiune: "woot-tracking",
+        detalii: { woot_order_id: o.woot_order_id, stare: stare.statusId },
       });
     }
 

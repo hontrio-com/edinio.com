@@ -8,6 +8,9 @@ import {
 import { cereOmul, eStareFinala, statusUrmator } from "@/lib/sameday/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
 import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
+import {
+  proprietariiMagazinelor, semnaleazaExpedierea, stareaSaSchimbat,
+} from "@/lib/orders/semnalarea-ajunge-la-om";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import type { Database } from "@/types/database.types";
 
@@ -242,6 +245,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  /* ⚠ Proprietarii, o singura data pe rulare: fara `user_id` notificarea n-are unde sa mearga. */
+  const proprietari = await proprietariiMagazinelor(admin, inFereastra.map((o) => o.business_id));
+
   let verificate = 0, mutate = 0, semnalate = 0, incheiate = 0, faraConfig = 0, esuate = 0, sarite = 0;
 
   for (const o of inFereastra) {
@@ -373,15 +379,28 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    /*
+     * ⚠⚠ SE SEMNALEAZA DOAR SCHIMBAREA, SI SEMNALUL AJUNGE LA OM.
+     *
+     * Pana azi randurile astea scriau numai in `error_logs`, pe care comerciantul nu-l vede,
+     * si o faceau la fiecare rulare. Sameday e unul dintre cele trei transportatoare care au
+     * miscat vreodata un colet. Vezi `semnalarea-ajunge-la-om`.
+     */
     const deSpus = cereOmul(stare);
-    if (deSpus) {
+    if (deSpus && stareaSaSchimbat(o.sameday_status_id, stare.statusId)) {
       semnalate++;
-      await logError({
-        action: "sameday-tracking",
-        message: `${o.order_number ?? o.id}: ${deSpus}`,
-        details: { awb: o.sameday_awb_number, incercari: stare.incercariDeLivrare },
+      const comanda = o.order_number ? `Comanda ${o.order_number}` : "O comanda";
+      await semnaleazaExpedierea(admin, {
+        userId: proprietari.get(o.business_id) ?? null,
         businessId: o.business_id,
-        severity: "warning",
+        orderId: o.id,
+        orderNumber: o.order_number,
+        awb: o.sameday_awb_number,
+        tip: "sameday",
+        titlu: "Expediere Sameday care cere atentie",
+        mesaj: `${comanda}: expedierea ${o.sameday_awb_number} cere o decizie: ${deSpus} Deschide comanda pentru istoricul complet.`,
+        actiune: "sameday-tracking",
+        detalii: { incercari: stare.incercariDeLivrare, stare: stare.statusId },
       });
     }
 

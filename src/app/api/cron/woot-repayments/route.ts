@@ -141,15 +141,69 @@ export async function GET(req: NextRequest) {
  * de pagini: un `total` stricat de la ei ar invarti altfel bucla pana cade cronul, iar noi am
  * raporta o eroare de retea in loc de un raspuns ciudat.
  */
+/**
+ * Refuzul lor numeste chiar filtrul de data?
+ *
+ * ⚠ Se cauta numele CAMPULUI, nu o propozitie: mesajele lor sunt de la un cadru care le poate
+ * schimba oricand, iar `date_from` e singura parte care nu se poate schimba fara ca endpointul
+ * insusi sa se schimbe. Vezi regula lor de la FedEx: se codifica dupa cod, nu dupa mesaj.
+ */
+function refuzaFiltrulDeData(e: unknown): boolean {
+  return e instanceof Error && /date_from/i.test(e.message);
+}
+
+/** Ziua rambursului, `YYYY-MM-DD`, din campurile lor de data. `null` daca n-are niciunul. */
+function dataRambursului(r: WootRamburs): string | null {
+  const brut = (r.updated ?? r.added ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}/.test(brut) ? brut.slice(0, 10) : null;
+}
+
 async function toateRambursurile(config: WootConfig, deLa: string): Promise<WootRamburs[]> {
   const token = await getWootToken(config.public_key, config.secret_key);
   const toate: WootRamburs[] = [];
 
-  for (let pagina = 1; pagina <= MAX_PAGINI; pagina++) {
-    const { list, total } = await getRepayments(token, { page: pagina, limit: PER_PAGINA, date_from: deLa });
-    if (list.length === 0) break;
-    toate.push(...list);
-    if (toate.length >= total) break;
+  /*
+   * ⚠⚠ FILTRUL LOR DE DATA E REFUZAT, SI ATUNCI NE DESCURCAM FARA EL.
+   *
+   * Masurat pe 16.09.2026, in jurnalul platformei: la FIECARE rulare, pentru FIECARE din cele
+   * trei magazine cu Woot, raspunsul era
+   *   „date_from: The date_from field must contain a valid date.”
+   * Adica reconcilierea rambursurilor n-a mers niciodata, de cand exista.
+   *
+   * ⚠ Si nu din vina formatului nostru: specificatia lor declara `date_from` ca
+   * `{type: string, format: date}`, iar noi trimitem exact `YYYY-MM-DD`. Deci contractul scris
+   * si serverul lor nu spun acelasi lucru, si NU putem sti din documente ce vrea serverul.
+   *
+   * Ce se poate sti sigur: `date_from` e un filtru OPTIONAL. Deci in loc sa ghicim un al doilea
+   * format (si un al treilea), cerem o data cu filtru; daca refuzul le numeste chiar pe el,
+   * reluam FARA filtru si taiem noi dupa data. Se citeste mai mult de la ei, dar se citeste —
+   * ceea ce e infinit mai bine decat zero.
+   *
+   * ⚠ Reluarea se face O SINGURA DATA si numai pentru refuzul care numeste `date_from`: un
+   * 401 sau o cadere de retea nu se reincearca fara filtru, fiindca n-ar repara nimic.
+   */
+  const adunaPagini = async (cuFiltru: boolean) => {
+    toate.length = 0;
+    for (let pagina = 1; pagina <= MAX_PAGINI; pagina++) {
+      const { list, total } = await getRepayments(token, {
+        page: pagina,
+        limit: PER_PAGINA,
+        ...(cuFiltru ? { date_from: deLa } : {}),
+      });
+      if (list.length === 0) break;
+      toate.push(...list);
+      if (toate.length >= total) break;
+    }
+  };
+
+  try {
+    await adunaPagini(true);
+  } catch (e) {
+    if (!refuzaFiltrulDeData(e)) throw e;
+    console.warn("[woot-repayments] Woot refuza `date_from`; se reia fara filtru si se taie local");
+    await adunaPagini(false);
+    /* Taierea locala: tot ce e mai vechi decat fereastra nu ne mai intereseaza. */
+    return toate.filter((r) => !dataRambursului(r) || dataRambursului(r)! >= deLa);
   }
   return toate;
 }

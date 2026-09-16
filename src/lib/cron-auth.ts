@@ -14,8 +14,23 @@ import type { NextRequest } from "next/server";
  * cronurile deveneau publice — cu service role, adica ocolind RLS. Un preview
  * fara variabila e deosebit de periculos: scrie in baza de PRODUCTIE.
  *
- * Aici: secretul lipsa inseamna REFUZ (fail-closed), comparatia e in timp
- * constant si acceptam si antetul `x-vercel-cron` pe care il pune Vercel.
+ * Aici: secretul lipsa inseamna REFUZ (fail-closed), iar comparatia e in timp constant.
+ *
+ * ⚠⚠ SE CITESTE NUMAI `authorization`, SI ASTA E DINADINS.
+ *
+ * Randul de mai sus spunea, pana la 16.09.2026, ca „acceptam si antetul `x-vercel-cron` pe
+ * care il pune Vercel". Codul nu l-a acceptat niciodata — si bine a facut. `x-vercel-cron`
+ * e un antet OBISNUIT, nu un secret: oricine il poate pune pe o cerere, de oriunde. Acceptat
+ * ca dovada de identitate, ar deschide toate cele saptesprezece cronuri catre internet, cu
+ * rol de serviciu, adica ocolind RLS.
+ *
+ * ⚠ Afirmatia falsa era mai periculoasa decat o lipsa, fiindca era o INVITATIE: cine venea
+ * sa se lamureasca de ce nu merge un cron gasea comentariul, vedea ca implementarea „nu-l
+ * face", si o „repara". Proba din `poarta-cronului-nu-se-deschide.test.ts` cade daca antetul
+ * ajunge vreodata in fisierul asta.
+ *
+ * Vercel trimite `Authorization: Bearer $CRON_SECRET` la cronurile configurate in
+ * `vercel.json`, deci nu e nevoie de nimic altceva.
  */
 export function verificaCron(req: NextRequest): boolean {
   const asteptat = process.env.CRON_SECRET;

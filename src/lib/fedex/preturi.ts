@@ -88,14 +88,32 @@ function tranzitul(serviciu: Record<string, unknown>): string | null {
   const descriere = text(zile?.description);
   if (descriere) return descriere;
 
+  /*
+   * ⚠⚠ SE CITESTE NUMARUL DIN CHIAR NUMELE ENUMERARII, NU DINTR-UN TABEL.
+   *
+   * Tabelul scris de mana se oprea la `TEN_DAYS`, iar enumerarea lor
+   * (`CommitDetail.daysInTransit`) are **22 de valori**, pana la `TWENTY_DAYS`. Deci pentru
+   * orice expediere cu tranzit de peste zece zile — adica exact cele internationale, unde
+   * cumparatorul chiar vrea sa stie — nu se arata nimic, cand `description` lipseste.
+   *
+   * Un tabel de 22 de randuri ar fi doar mai lung, si ar ramane in urma la fel: numele lor
+   * sunt regulate, deci se citesc. Asa nu mai poate ramane in urma nimic.
+   *
+   * ⚠ Doua valori NU sunt numere de zile si nu se inventeaza: `UNKNOWN` (ei spun ca nu
+   * stiu) si `SMARTPOST_TRANSIT_DAYS` (un serviciu american, fara origine RO). Amandoua ies
+   * `null`, adica „nu afisam nimic” — ce si trebuie cand nu stim.
+   */
+  const NUMERE: Record<string, number> = {
+    ONE: 1, TWO: 2, THREE: 3, FOUR: 4, FIVE: 5, SIX: 6, SEVEN: 7, EIGHT: 8, NINE: 9, TEN: 10,
+    ELEVEN: 11, TWELVE: 12, THIRTEEN: 13, FOURTEEN: 14, FIFTEEN: 15, SIXTEEN: 16,
+    SEVENTEEN: 17, EIGHTEEN: 18, NINETEEN: 19, TWENTY: 20,
+  };
+
   const traducere = (enumerare: string): string | null => {
-    const cuvinte: Record<string, string> = {
-      ONE_DAY: "o zi lucratoare", TWO_DAYS: "2 zile lucratoare", THREE_DAYS: "3 zile lucratoare",
-      FOUR_DAYS: "4 zile lucratoare", FIVE_DAYS: "5 zile lucratoare", SIX_DAYS: "6 zile lucratoare",
-      SEVEN_DAYS: "7 zile lucratoare", EIGHT_DAYS: "8 zile lucratoare", NINE_DAYS: "9 zile lucratoare",
-      TEN_DAYS: "10 zile lucratoare",
-    };
-    return cuvinte[enumerare] ?? null;
+    const m = /^([A-Z]+)_DAYS?$/.exec(enumerare.trim().toUpperCase());
+    const n = m ? NUMERE[m[1]] : undefined;
+    if (n === undefined) return null;
+    return n === 1 ? "o zi lucratoare" : `${n} zile lucratoare`;
   };
 
   const dinCommit = text(angajament?.daysInTransit);

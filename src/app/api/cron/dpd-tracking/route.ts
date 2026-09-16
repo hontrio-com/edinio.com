@@ -8,6 +8,9 @@ import {
 } from "@/lib/shipping/statusuri-dpd";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
 import { marcheazaLotul, scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
+import {
+  proprietariiMagazinelor, semnaleazaExpedierea, stareaSaSchimbat,
+} from "@/lib/orders/semnalarea-ajunge-la-om";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
 import type { Database } from "@/types/database.types";
 
@@ -182,6 +185,9 @@ export async function GET(req: NextRequest) {
     peMagazin.set(o.business_id, lista);
   }
 
+  /* ⚠ Proprietarii, o singura data pe rulare: fara `user_id` notificarea n-are unde sa mearga. */
+  const proprietari = await proprietariiMagazinelor(admin, inFereastra.map((o) => o.business_id));
+
   let verificate = 0, mutate = 0, semnalate = 0, incheiate = 0, esuate = 0, necunoscute = 0, ramase = 0;
 
   for (const [businessId, lista] of peMagazin) {
@@ -269,14 +275,31 @@ export async function GET(req: NextRequest) {
           }
         }
 
-        if (trebuieSemnalatDpd(cod)) {
+        /*
+         * ⚠⚠ SE SEMNALEAZA DOAR SCHIMBAREA, SI SEMNALUL AJUNGE LA OM.
+         *
+         * Pana azi randurile astea scriau numai in `error_logs`, pe care comerciantul nu-l vede,
+         * si o faceau la fiecare rulare. DPD e unul dintre cele trei transportatoare care au
+         * miscat vreodata un colet. Vezi `semnalarea-ajunge-la-om`.
+         */
+        if (trebuieSemnalatDpd(cod) && stareaSaSchimbat(o.dpd_status_code, cod)) {
           semnalate++;
-          await logError({
-            action: "dpd-tracking",
-            message: `${o.order_number ?? o.id}: ${eticheta || `operatie DPD ${cod}`}`
-              + (esteReturDpd(cod) ? " (coletul se intoarce la tine)" : ""),
-            details: { awb: o.dpd_awb_number, cod, exceptii: op?.exceptionCodes ?? [] },
-            businessId, severity: "warning",
+          const retur = esteReturDpd(cod);
+          const spune = eticheta || `operatie DPD ${cod}`;
+          const comanda = o.order_number ? `Comanda ${o.order_number}` : "O comanda";
+          await semnaleazaExpedierea(admin, {
+            userId: proprietari.get(businessId) ?? null,
+            businessId,
+            orderId: o.id,
+            orderNumber: o.order_number,
+            awb: o.dpd_awb_number,
+            tip: "dpd",
+            titlu: retur ? "Colet DPD returnat" : "Expediere DPD care cere atentie",
+            mesaj: retur
+              ? `${comanda}: coletul ${o.dpd_awb_number} se intoarce la tine (${spune}). Rambursul nu se mai incaseaza, iar anularea comenzii si returul banilor raman decizia ta.`
+              : `${comanda}: expedierea ${o.dpd_awb_number} are un eveniment care cere o decizie: ${spune}. Deschide comanda pentru istoricul complet.`,
+            actiune: "dpd-tracking",
+            detalii: { cod, exceptii: op?.exceptionCodes ?? [] },
           });
         }
 

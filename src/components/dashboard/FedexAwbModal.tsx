@@ -198,6 +198,15 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
     }
     if ("error" in r) return toast.error(r.error, { duration: 15000 });
     toast.success(`AWB FedEx creat: ${r.awb}`);
+    /*
+     * ⚠⚠ Avertismentele se arata SEPARAT si LUNG, nu se topesc in mesajul de succes.
+     *
+     * Singurul de acum e cel care conteaza cel mai mult la FedEx: eticheta n-a putut fi
+     * pastrata. Ei nu au reimprimare, deci e ultima clipa in care omul o mai poate tipari
+     * din portalul lor. Un toast de succes inghitit dupa doua secunde ar fi fost ca si cum
+     * nu i-am fi spus.
+     */
+    for (const a of r.avertismente ?? []) toast.warning(a, { duration: 30000 });
     onSuccess();
     onClose();
   }

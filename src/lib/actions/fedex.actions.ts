@@ -355,7 +355,7 @@ export async function createFedexAwbAction(
   businessId: string,
   orderId: string,
   date: DateAwbFedex,
-): Promise<{ awb: string } | { error: string }> {
+): Promise<{ awb: string; avertismente?: string[] } | { error: string }> {
   const ctx = await configSiComanda(businessId, orderId);
   if ("error" in ctx) return { error: ctx.error as string };
 
@@ -428,8 +428,29 @@ export async function createFedexAwbAction(
     };
   }
 
+  /*
+   * ⚠⚠ O ETICHETA NESALVATA E PIERDUTA DEFINITIV, SI OMUL TREBUIE SA AFLE ACUM.
+   *
+   * FedEx **nu are reimprimare**: documentatia lor spune sa retrimiti bufferul ORIGINAL la
+   * imprimanta, iar `URL_ONLY` da un link care expira. Singurul curier din cei saptesprezece
+   * la care o pierdere de-a NOASTRA e definitiva.
+   *
+   * Pana azi randul de mai jos n-avea `else`. Cand raspunsul venea fara `encodedLabel`, sau
+   * cand registrul intorcea „deja” (si atunci `raspuns` e `null` prin constructie), eticheta
+   * nu se salva, nu se cerea din nou, si nimeni nu spunea nimic. Comerciantul afla abia cand
+   * apasa „Descarca eticheta” si nu primea nimic — cand coletul era deja plecat.
+   *
+   * ⚠ Nu e o eroare: AWB-ul EXISTA si comanda merge mai departe. E un avertisment, iar
+   * singurul lucru care il mai poate salva e sa tipareasca din portalul FedEx, ACUM.
+   */
+  const avertismente: string[] = [];
   if (raspuns?.eticheta) {
     await pastreazaEticheta(admin, businessId, orderId, awb, raspuns.eticheta, config);
+  } else {
+    avertismente.push(
+      `AWB-ul ${awb} s-a creat, dar eticheta NU a putut fi pastrata de noi. FedEx nu are `
+      + "reimprimare, deci nu o mai putem aduce: tipareste-o ACUM din portalul FedEx."
+    );
   }
 
   const numarDin = (v: unknown): number | null => {
@@ -474,7 +495,7 @@ export async function createFedexAwbAction(
   /* `void`, ca la ceilalti treisprezece: coada About You e best-effort si nu are
      voie sa tina raspunsul catre comerciant sau sa rupa emiterea daca pica. */
   dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
-  return { awb };
+  return avertismente.length > 0 ? { awb, avertismente } : { awb };
 }
 
 /** Sterge AWB-ul de pe comanda, dupa ce l-a anulat la ei. */
@@ -771,11 +792,25 @@ export async function verificaFedexAwbAction(
   /* Aceeasi coada ca la emitere: calea de recuperare pune tot un AWB pe comanda. */
   dupaRaspuns(() => enqueueAboutYouShip(businessId, orderId), "enqueueAboutYouShip", businessId);
 
+  /*
+   * ⚠⚠ SI SE SPUNE CA ETICHETA NU VINE PE DRUMUL ASTA.
+   *
+   * Recuperarea gaseste expedierea prin `POST /track/v1/referencenumbers`, iar urmarirea NU
+   * intoarce `encodedLabel` — nici n-ar avea de unde. Emiterea nu se mai repeta (ar face al
+   * doilea colet), deci eticheta acelei expedieri nu mai ajunge niciodata la noi.
+   *
+   * La orice alt curier asta n-ar fi grav: se cere din nou. La FedEx **nu exista reimprimare**,
+   * deci singurul loc din care mai poate fi scoasa e portalul lor. Un mesaj care spune doar
+   * „a fost scrisa pe comanda” l-ar lasa pe comerciant sa creada ca are tot ce-i trebuie.
+   */
   return {
     ok: true,
     gasit: true,
     awb: viu.awb,
-    mesaj: `Expedierea exista la FedEx (AWB ${viu.awb}) si a fost scrisa pe comanda.`,
+    mesaj:
+      `Expedierea exista la FedEx (AWB ${viu.awb}) si a fost scrisa pe comanda. `
+      + "⚠ Eticheta NU se poate aduce pe drumul asta, iar FedEx nu are reimprimare: "
+      + "tipareste-o din portalul FedEx.",
   };
 }
 

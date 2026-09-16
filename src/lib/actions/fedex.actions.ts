@@ -481,7 +481,12 @@ export async function createFedexAwbAction(
 export async function deleteFedexAwbAction(
   businessId: string,
   orderId: string,
-): Promise<{ success: true; eraDejaAnulat: boolean } | { error: string }> {
+): Promise<
+  /* ⚠ `anulatLaFedex: false` inseamna ca a fost un refuz DOVEDIT: comanda s-a dezlegat, dar
+     coletul merge mai departe la ei. `mesaj` spune exact asta, si se arata omului. */
+  | { success: true; eraDejaAnulat: boolean; anulatLaFedex: boolean; mesaj: string }
+  | { error: string }
+> {
   const ctx = await configSiComanda(businessId, orderId);
   if ("error" in ctx) return { error: ctx.error as string };
   const { supabase, admin, config, order } = ctx;
@@ -489,11 +494,44 @@ export async function deleteFedexAwbAction(
   const awb = (order as { fedex_awb_number?: string | null }).fedex_awb_number ?? "";
   if (!awb) return { error: "Comanda n-are AWB FedEx." };
 
-  let rezultat;
+  /*
+   * ⚠⚠ UN REFUZ DOVEDIT NU ARE VOIE SA INGHETE COMANDA PENTRU TOTDEAUNA.
+   *
+   * Pana azi, orice esec al anularii iesea ca `{ error }` si nu schimba nimic. Dar FedEx refuza
+   * anularea din clipa in care coletul a fost preluat — si pe buna dreptate. Din acel moment
+   * comanda ramanea cu un AWB de care nu se mai putea desprinde NICIODATA: needitabila, fara
+   * drept la alt curier, si fara niciun buton care sa repare ceva. La fel si cand comerciantul
+   * isi stersese configurarea, sau anulase expedierea direct in portalul lor.
+   *
+   * ⚠ Colete Online, DHL, FAN, Packeta si Posta au iesirea asta de mult; FedEx era singurul
+   * dintre ele fara ea. Tiparul e copiat de la FAN, care e cel corect:
+   *
+   *   anulare REUSITA   — coletul s-a oprit, se dezleaga;
+   *   refuz DOVEDIT     — coletul ramane VIU la ei, dar comanda se dezleaga oricum, si i se spune
+   *                       limpede ca expedierea merge mai departe si va aparea pe factura;
+   *   „nu stim”          — NU se dezleaga nimic. Un colet in aer despre care nimeni nu mai stie
+   *                       nimic e mai rau decat o comanda blocata, care macar se vede.
+   */
+  let anulatLaFedex = false;
+  let eraDejaAnulat = false;
+  let despreCurier: string;
   try {
-    rezultat = await anuleaza(config, awb);
+    const rezultat = await anuleaza(config, awb);
+    anulatLaFedex = true;
+    eraDejaAnulat = rezultat.eraDejaAnulat;
+    despreCurier = rezultat.mesaj;
   } catch (e) {
-    return { error: (e as Error).message };
+    if (verdictFurnizor(e) === "necunoscut") {
+      return {
+        error:
+          `Nu stim daca expedierea ${awb} s-a anulat la FedEx: ${(e as Error).message} `
+          + "Verifica in contul FedEx si incearca din nou. Numarul NU a fost scos de pe comanda, "
+          + "ca sa nu ramana un colet in aer despre care nimeni nu mai stie.",
+      };
+    }
+    despreCurier =
+      `FedEx a refuzat anularea (${(e as Error).message}) deci expedierea ${awb} ramane VIE la ei `
+      + "si va aparea pe factura. Numarul a fost scos de pe comanda, ca sa o poti duce mai departe.";
   }
 
   /*
@@ -516,7 +554,12 @@ export async function deleteFedexAwbAction(
     fedex_status_code: null,
     fedex_status_checked_at: null,
     updated_at: new Date().toISOString(),
-  }).eq("id", orderId).eq("business_id", businessId).select("id");
+  }).eq("id", orderId).eq("business_id", businessId)
+    /* ⚠ SI PE AWB-UL CITIT: intre citire si randul asta sta un apel la FedEx, iar daca in
+       rastimp comanda a primit ALT numar dintr-o reemitere pornita in alta fila, un update
+       nefiltrat l-ar sterge pe cel NOU, pe care nu l-a anulat nimeni. Lectia e de la FAN. */
+    .eq("fedex_awb_number", awb)
+    .select("id");
 
   if (eScriere) return { error: eScriere.message };
 
@@ -554,7 +597,7 @@ export async function deleteFedexAwbAction(
     });
   }
 
-  return { success: true, eraDejaAnulat: rezultat.eraDejaAnulat };
+  return { success: true, eraDejaAnulat, anulatLaFedex, mesaj: despreCurier };
 }
 
 /**

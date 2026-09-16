@@ -1311,8 +1311,22 @@ const COD_NEGASIT = new Set([
   "TRACKING.DATA.NOTFOUND",
 ]);
 
-/** Toate erorile intalnite chiar inseamna „nu exista"? Lista goala inseamna DA. */
+/**
+ * ⚠⚠ TOATE ERORILE INTALNITE INSEAMNA „NU EXISTA”? SI CHIAR AM VAZUT VREUNA?
+ *
+ * Pana azi lista GOALA raspundea `true`, fiindca `every` pe nimic e adevarat. Suna inofensiv si
+ * nu era: apelantul o citeste drept „FedEx a spus limpede ca expedierea nu exista” si ELIBEREAZA
+ * reincercarea. Iar o lista goala nu inseamna asta — inseamna ca n-am vazut nimic.
+ *
+ * Cazul concret: FedEx raspunde 200 cu `completeTrackResults` gol si pune motivul in
+ * `output.alerts[]`. Nici expediere gasita, nici cod de eroare citit. Cu vechea purtare, butonul
+ * „Verifica la FedEx” deschidea emiterea, iar a doua apasare facea al doilea AWB, taxabil —
+ * exact ce plasa asta exista ca sa impiedice.
+ *
+ * ⚠ Tacerea nu e dovada. O lista goala raspunde acum `false`.
+ */
 export function chiarNuExista(coduriEroare: readonly string[]): boolean {
+  if (coduriEroare.length === 0) return false;
   return coduriEroare.every((c) => COD_NEGASIT.has(c));
 }
 

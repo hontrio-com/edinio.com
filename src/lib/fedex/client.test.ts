@@ -209,7 +209,18 @@ describe("FedEx: „nu am gasit nimic” vs „nu ti-am putut spune”", () => {
    * expediere care CHIAR exista: al doilea AWB, taxabil.
    */
   test("codurile de „nu exista” chiar inseamna ca nu exista", () => {
-    assert.equal(chiarNuExista([]), true);
+    /*
+     * ⚠⚠ RANDUL DE MAI JOS ERA `true`, SI ASTA ERA DEFECTUL (16.09.2026).
+     *
+     * `every` pe o lista goala raspunde adevarat, deci „n-am vazut nicio eroare" iesea ca
+     * „FedEx a spus limpede ca expedierea nu exista" — iar apelantul ELIBEREAZA reincercarea
+     * pe raspunsul acela. Cazul concret: 200 cu `completeTrackResults` gol si motivul pus in
+     * `output.alerts[]`. Nici expediere gasita, nici cod citit; a doua apasare pe „Emite AWB"
+     * facea al doilea colet, taxabil — exact ce plasa asta exista ca sa impiedice.
+     *
+     * Tacerea nu e dovada.
+     */
+    assert.equal(chiarNuExista([]), false);
     assert.equal(chiarNuExista(["TRACKING.REFERENCENUMBER.NOTFOUND"]), true);
     assert.equal(chiarNuExista(["TRACKING.REFERENCENUMBER.NOTFOUND", "TRACKING.DATA.NOTFOUND"]), true);
   });

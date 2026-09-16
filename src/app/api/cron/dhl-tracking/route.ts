@@ -252,7 +252,21 @@ export async function GET(req: NextRequest) {
     const { error } = await admin
       .from("orders")
       .update({
-        dhl_status_code: codNou ?? o.dhl_status_code,
+        /*
+         * ⚠⚠ CODUL VECHI NU SE MAI RESCRIE CAND N-AVEM UNUL NOU (16.09.2026).
+         *
+         * Randul era `X_status_code: codNou ?? o.X_status_code`, adica pe toate drumurile
+         * care trec `null` (fara config, apel picat, fara stare) se scria inapoi codul CITIT
+         * la inceputul rularii. Intre citire si scriere sta insa un apel extern, iar daca in
+         * rastimp comerciantul a dezlegat AWB-ul si a emis altul, coloana fusese golita —
+         * si randul asta o INVIA. Un cod FINAL inviat astfel scoate expedierea NOUA din
+         * urmarire pentru totdeauna, tacut.
+         *
+         * Acum, fara cod nou, se scrie DOAR marcajul. Nu exista nimic de pierdut: valoarea
+         * era oricum aceeasi cu cea din baza, in afara de cazul in care nu mai trebuia
+         * scrisa deloc.
+         */
+        ...(codNou !== null ? { dhl_status_code: codNou } : {}),
         dhl_status_checked_at: new Date().toISOString(),
       })
       .eq("id", o.id)

@@ -281,7 +281,19 @@ export async function GET(req: NextRequest) {
         const { error } = await admin
           .from("orders")
           .update({
-            gls_status_code: codNou ?? o.gls_status_code,
+            /*
+             * ⚠⚠ CODUL VECHI NU SE MAI RESCRIE CAND N-AVEM UNUL NOU (16.09.2026).
+             *
+             * Randul era `X_status_code: codNou ?? o.X_status_code`, deci pe drumurile care trec
+             * `null` se scria inapoi codul CITIT la inceputul rularii. Intre citire si scriere sta
+             * insa un apel extern, iar daca in rastimp comerciantul a dezlegat AWB-ul si a emis
+             * altul, coloana fusese golita — si randul asta o INVIA. Un cod FINAL inviat astfel
+             * scoate expedierea NOUA din urmarire pentru totdeauna, tacut.
+             *
+             * Fara cod nou se scrie DOAR marcajul. Nu se pierde nimic: valoarea era oricum aceeasi
+             * cu cea din baza, in afara de cazul in care nu mai trebuia scrisa deloc.
+             */
+            ...(codNou !== null ? { gls_status_code: codNou } : {}),
             gls_status_checked_at: new Date().toISOString(),
             ...(semnalate ? { gls_evenimente_semnalate: semnalate } : {}),
           })

@@ -201,10 +201,17 @@ export async function GET(req: NextRequest) {
   let sarite = 0;
   let incheiate = 0;
 
-  const galeti = new Map<string, { necunoscute: number; autentificare: number; reusite: number; exemplu: string }>();
+  const galeti = new Map<string, {
+    necunoscute: number;
+    autentificare: number;
+    /** ⚠ Tot ce nu e nici 404, nici 401/403: timeout, retea cazuta, 5xx la ei. */
+    altele: number;
+    reusite: number;
+    exemplu: string;
+  }>();
   const galeata = (bizId: string) => {
     let g = galeti.get(bizId);
-    if (!g) { g = { necunoscute: 0, autentificare: 0, reusite: 0, exemplu: "" }; galeti.set(bizId, g); }
+    if (!g) { g = { necunoscute: 0, autentificare: 0, altele: 0, reusite: 0, exemplu: "" }; galeti.set(bizId, g); }
     return g;
   };
 
@@ -230,7 +237,21 @@ export async function GET(req: NextRequest) {
         const { error } = await admin
           .from("orders")
           .update({
-            posta_status_code: codNou ?? o.posta_status_code,
+            /*
+             * ⚠⚠ CODUL VECHI NU SE MAI RESCRIE CAND N-AVEM UNUL NOU (16.09.2026).
+             *
+             * Randul era `X_status_code: codNou ?? o.X_status_code`, adica pe toate drumurile
+             * care trec `null` (fara config, apel picat, fara stare) se scria inapoi codul CITIT
+             * la inceputul rularii. Intre citire si scriere sta insa un apel extern, iar daca in
+             * rastimp comerciantul a dezlegat AWB-ul si a emis altul, coloana fusese golita —
+             * si randul asta o INVIA. Un cod FINAL inviat astfel scoate expedierea NOUA din
+             * urmarire pentru totdeauna, tacut.
+             *
+             * Acum, fara cod nou, se scrie DOAR marcajul. Nu exista nimic de pierdut: valoarea
+             * era oricum aceeasi cu cea din baza, in afara de cazul in care nu mai trebuia
+             * scrisa deloc.
+             */
+            ...(codNou !== null ? { posta_status_code: codNou } : {}),
             posta_status_checked_at: new Date().toISOString(),
           })
           .eq("id", o.id)
@@ -296,8 +317,20 @@ export async function GET(req: NextRequest) {
         esuate++;
         const status = statusEroare(e);
         const g = galeata(o.business_id);
+        /*
+         * ⚠⚠ GALEATA DE AUTENTIFICARE ADUNA DOAR 401 SI 403.
+         *
+         * Comentariul de deasupra spunea deja „o cadere de autentificare (401/403)”, dar
+         * `else` prindea TOT: un timeout, o retea cazuta, un 500 la ei. Trei astfel de esecuri
+         * intr-o rulare ridicau o alarma CRITICA prin care comerciantului i se spunea sa-si
+         * verifice utilizatorul si parola — cand, de fapt, Posta era cazuta.
+         *
+         * ⚠ O alarma care numeste cauza gresita e mai rea decat niciuna: omul schimba parola
+         * buna, nu se repara nimic, si data viitoare nu mai crede alarma.
+         */
         if (status === 404) g.necunoscute++;
-        else { g.autentificare++; g.exemplu ||= (e as Error).message; }
+        else if (status === 401 || status === 403) { g.autentificare++; g.exemplu ||= (e as Error).message; }
+        else { g.altele++; g.exemplu ||= (e as Error).message; }
         console.error("[posta-tracking] trimiterea", o.posta_awb_number, (e as Error).message);
         await marcheazaVerificat(null);
         return;
@@ -441,13 +474,28 @@ export async function GET(req: NextRequest) {
    * inca indexate, ar fi produs o alarma CRITICA falsa.
    */
   for (const [bizId, g] of galeti) {
-    if (g.autentificare >= MIN_ESECURI_ALARMA && g.reusite === 0) {
+    if (g.reusite > 0) continue;
+
+    /* ⚠ Cauza numita se alege dupa galeata care a umplut-o, nu dupa numarul total. */
+    if (g.autentificare >= MIN_ESECURI_ALARMA) {
       await logError({
         action: "posta-tracking",
-        message: `urmarirea Posta a esuat pentru toate cele ${g.autentificare} trimiteri verificate ale magazinului: ${g.exemplu}. Verifica utilizatorul si parola din configurare.`,
-        details: { businessId: bizId, esecuri: g.autentificare },
+        message: `urmarirea Posta a esuat pentru toate cele ${g.autentificare} trimiteri verificate ale magazinului, iar Posta a respins autentificarea: ${g.exemplu}. Verifica utilizatorul si parola din configurare.`,
+        details: { businessId: bizId, esecuri: g.autentificare, fel: "autentificare" },
         businessId: bizId,
         severity: "critical",
+      });
+    } else if (g.altele >= MIN_ESECURI_ALARMA) {
+      /*
+       * ⚠ Alta severitate SI alt sfat: aici nu e nimic de reparat in configurare, iar
+       * „verifica parola” l-ar trimite pe om sa strice o credentiala buna.
+       */
+      await logError({
+        action: "posta-tracking",
+        message: `urmarirea Posta a esuat pentru toate cele ${g.altele} trimiteri verificate ale magazinului, dar NU din cauza autentificarii: ${g.exemplu}. Cel mai probabil Posta nu raspunde; nu schimba datele de acces.`,
+        details: { businessId: bizId, esecuri: g.altele, fel: "indisponibil" },
+        businessId: bizId,
+        severity: "warning",
       });
     }
   }

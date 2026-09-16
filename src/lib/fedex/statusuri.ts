@@ -85,6 +85,10 @@ export const STATUSURI: Record<string, Intrare> = {
   TR: { denumire: "In transfer catre livrare", clasa: "in_retea" },
   PM: { denumire: "In lucru", clasa: "in_retea" },
   MD: { denumire: "Date de manifest inregistrate", clasa: "in_retea" },
+  /* Ground Economy, deci America de Nord: nu pot aparea cu origine RO, dar sunt in
+     tabelele lor si un cod cu nume citibil nu strica nimanui. */
+  AC: { denumire: "La un centru Canada Post", clasa: "in_retea" },
+  OX: { denumire: "Datele au plecat catre USPS", clasa: "in_retea" },
   CH: { denumire: "Locatie schimbata", clasa: "in_retea" },
   IN: { denumire: "Interventie incheiata", clasa: "in_retea" },
 
@@ -139,6 +143,9 @@ export const STATUSURI: Record<string, Intrare> = {
   /* Cereri de schimbare a livrarii, pornite de destinatar. Nu misca nimic. */
   RR: { denumire: "Destinatarul a cerut o optiune de livrare", clasa: "in_retea" },
   RM: { denumire: "Optiunea de livrare a fost schimbata", clasa: "in_retea" },
+  /* ⚠ Membrul care lipsea din familie. Cand copiezi un tabel, verifica si perechile
+     negative: aveam cererea (`RR`) si schimbarea (`RM`), dar nu si anularea cererii. */
+  RC: { denumire: "Cererea de optiune de livrare a fost anulata", clasa: "in_retea" },
   HA: { denumire: "Retinerea la un punct FedEx a fost acceptata", clasa: "in_retea" },
   RA: { denumire: "S-a cerut schimbarea adresei", clasa: "in_retea" },
   PR: { denumire: "Adresa a fost schimbata", clasa: "in_retea" },
@@ -156,6 +163,17 @@ export const STATUSURI: Record<string, Intrare> = {
   ED: { denumire: "In drum spre livrare", clasa: "in_retea" },
   FD: { denumire: "La centrul FedEx de destinatie", clasa: "in_retea" },
 };
+
+/*
+ * ⚠ PATRU CODURI PUBLICATE DE EI CARE NU SUNT INADINS IN TABELUL DE MAI SUS.
+ *
+ * `LC`, `RD`, `RG` si `RP` din tabelul lor de webhook privesc ETICHETA DE RETUR
+ * trimisa pe email (link anulat, expirat, care expira, trimis). Noi nu cream
+ * niciodata astfel de etichete, deci codurile nu pot aparea pe expedierile
+ * noastre. Puse aici cu o clasa inventata, ar fi miscat comenzi pe un drum pe
+ * care nimic nu umbla; lasate afara, un cod necunoscut se pastreaza BRUT si nu
+ * misca nimic — care e exact purtarea corecta.
+ */
 
 /** Statusurile dupa care marfa se intoarce la comerciant. */
 const RETUR = new Set(["RS", "RT"]);
@@ -218,7 +236,25 @@ export function eLivrat(cod: unknown, livratLa: string | null | undefined): bool
   return clasificaStatus(cod) === "livrat" || !!(livratLa ?? "").trim();
 }
 
-export function statusComandaDinCod(cod: unknown, livratLa?: string | null): OrderStatus | null {
+export function statusComandaDinCod(
+  cod: unknown,
+  livratLa?: string | null,
+  seIntoarce?: boolean,
+): OrderStatus | null {
+  /*
+   * ⚠⚠ O LIVRARE PE UN COLET CARE SE INTOARCE NU E O VANZARE.
+   *
+   * FedEx nu deschide alt numar pentru retur: acelasi AWB primeste `RS`, se
+   * intoarce si se incheie cu `DL` plus `ACTUAL_DELIVERY` — la adresa
+   * EXPEDITORULUI. Amandoua semnalele pe care le citeste `eLivrat` spun deci
+   * „livrat” pentru un colet care tocmai s-a intors la comerciant.
+   *
+   * Costul, daca l-am crede: comanda trece pe „Livrata”, iar de acolo pleaca
+   * FACTURA AUTOMATA pentru o vanzare care nu s-a facut. De aia intoarcerea taie
+   * inaintea oricarei alte hotarari, iar comanda NU se misca deloc: ce se face cu
+   * ea (anulare, rambursare) ramane decizia comerciantului, ca peste tot.
+   */
+  if (seIntoarce) return null;
   if (eLivrat(cod, livratLa)) return "delivered";
   switch (clasificaStatus(cod)) {
     case "in_retea": return "shipped";
@@ -241,8 +277,13 @@ const TREAPTA: Record<string, number> = {
  * Nu se coboara niciodata (evenimentele pot sosi in alta ordine — FedEx o spune el
  * insusi), si o comanda anulata sau rambursata nu se misca de la un transportator.
  */
-export function statusUrmator(statusCurent: string, cod: unknown, livratLa?: string | null): OrderStatus | null {
-  const tinta = statusComandaDinCod(cod, livratLa);
+export function statusUrmator(
+  statusCurent: string,
+  cod: unknown,
+  livratLa?: string | null,
+  seIntoarce?: boolean,
+): OrderStatus | null {
+  const tinta = statusComandaDinCod(cod, livratLa, seIntoarce);
   if (!tinta) return null;
   if (statusCurent === "cancelled" || statusCurent === "refunded") return null;
 

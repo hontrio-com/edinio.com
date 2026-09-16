@@ -634,8 +634,14 @@ describe("DHL: dovada livrarii se citeste DOAR de pe evenimentul de livrare", ()
 
 describe("DHL: nomenclatoarele de configurare", () => {
   test("⚠ antetul `x-version` e obligatoriu, si o valoare gresita da `9001`", () => {
-    /* Se schimba IMPREUNA cu schemele citite in `client.ts`, niciodata singur. */
-    assert.equal(VERSIUNE_API, "3.3.1");
+    /*
+     * Se schimba IMPREUNA cu schemele citite in `client.ts`, niciodata singur.
+     *
+     * ⚠ 16.09.2026: DHL a publicat 3.3.2 (`x-release-date: 2026-09-06`). Diferenta
+     * fata de 3.3.1 a fost citita intreaga si nu atinge niciun camp pe care il
+     * trimitem noi — vezi antetul constantei din `client.ts`.
+     */
+    assert.equal(VERSIUNE_API, "3.3.2");
   });
 
   test("⚠ cel mult 200 de AWB-uri pe cerere — `maxItems: 200` la ei", () => {

@@ -1,4 +1,4 @@
-import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { eroareCuStatus, eroareNesigura, eroareRefuz, verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { cheieToken as cheieTokenFurnizor } from "@/lib/integrari/cheie-token";
 import { normalizeLocalityName, stripDiacritics } from "@/lib/utils/ro-address";
 
@@ -709,10 +709,27 @@ const tokenuri = new Map<string, { token: string; expiraLa: number }>();
  */
 const tokenuriInZbor = new Map<string, Promise<string>>();
 
+/**
+ * ⚠⚠ SI REFUZURILE SE TIN MINTE, SCURT.
+ *
+ * Single-flight opreste ploaia de tokenuri cerute IN ACEEASI clipa, dar nu si sirul
+ * de cereri una dupa alta: un magazin cu chei gresite cerea un token nou la FIECARE
+ * cotare, adica la fiecare deschidere de checkout. Iar `/security/v1/oauth/token` are
+ * `429` in chiar schema lor („Quota Limit Exceeded”), si cota e a contului, nu a
+ * cererii: bataia in ea strica autentificarea si pentru cererile bune.
+ *
+ * ⚠ Se tine minte doar refuzul DOVEDIT (chei respinse, cont blocat, cota depasita),
+ * nu si caderile de retea: acelea nu spun nimic despre chei. Si se tine SCURT, cat sa
+ * rupa sirul — o cheie corectata trebuie sa mearga fara ca omul sa astepte.
+ */
+const REFUZ_TINUT_MS = 60_000;
+const refuzuri = new Map<string, { mesaj: string; panaLa: number }>();
+
 /** Pentru probe: goleste tokenurile pastrate. */
 export function uitaTokenurile(): void {
   tokenuri.clear();
   tokenuriInZbor.clear();
+  refuzuri.clear();
 }
 
 /*
@@ -834,12 +851,24 @@ async function token(
   if (!forteaza) {
     const viu = tokenuri.get(cheie);
     if (viu && viu.expiraLa > Date.now()) return viu.token;
+    /* ⚠ Un refuz proaspat se repeta din memorie, ca sa nu batem in cota lor. */
+    const refuz = refuzuri.get(cheie);
+    if (refuz && refuz.panaLa > Date.now()) throw eroareRefuz(refuz.mesaj);
+
     const inZbor = tokenuriInZbor.get(cheie);
     if (inZbor) return inZbor;
   }
 
   const promisiune = ceriToken(config)
-    .then((t) => { tokenuri.set(cheie, t); return t.token; })
+    .then((t) => { refuzuri.delete(cheie); tokenuri.set(cheie, t); return t.token; })
+    /* ⚠ Se tine minte DOAR refuzul dovedit: `eroareCuStatus` da `esuat` numai pe 4xx
+       fara 408, deci o cadere la ei (5xx) sau un timeout nu inchide poarta degeaba. */
+    .catch((e: unknown) => {
+      if (verdictFurnizor(e) === "esuat") {
+        refuzuri.set(cheie, { mesaj: (e as Error).message, panaLa: Date.now() + REFUZ_TINUT_MS });
+      }
+      throw e;
+    })
     .finally(() => { tokenuriInZbor.delete(cheie); });
 
   tokenuriInZbor.set(cheie, promisiune);
@@ -930,32 +959,60 @@ async function apel<T>(
     return { t, d };
   };
 
+  /*
+   * ⚠⚠ TOKENUL SE IA IN AFARA LUI `try`, CA VERDICTUL LUI SA NU FIE RESCRIS.
+   *
+   * `token()` arunca verdicte GANDITE: chei lipsa, chei respinse si contul fara acces la produsul cerut sunt `eroareRefuz`, adica
+   * refuz DOVEDIT — si pe buna dreptate, fiindca in cazurile alea cererea noastra
+   * nu a plecat catre ei.
+   *
+   * Luat INAUNTRUL lui `try`, orice astfel de refuz trecea prin `catch` si iesea
+   * rescris ca `ambiguu`, adica `necunoscut` pe o scriere. Consecinta: un
+   * comerciant cu o cheie gresita apasa pe emitere, nu pleaca nimic nicaieri, si
+   * totusi comanda ii ramane BLOCATA in registru, de unde nu iese decat cu mana.
+   *
+   * ⚠ Acelasi defect era in trei clienti deodata (FedEx, UPS, Shipo): sunt
+   * scrisi dupa acelasi sablon. Cand repari un tipar, cauta-i copiile.
+   *
+   * `catch`-ul de mai jos ramane pentru ce e cu adevarat ambiguu: reteaua si
+   * timeout-ul pe CEREREA propriu-zisa, unde chiar nu putem sti daca a ajuns.
+   */
+  let acces = await token(config);
+
   try {
-    res = await trimite(await token(config));
+    res = await trimite(acces);
     ({ t: brut, d: date } = await citeste(res));
 
-    /*
-     * ⚠ O SINGURA reincercare, si numai cand UPS SPUNE ca tokenul a expirat.
-     *
-     * `251004` („Bearer Token expired (oauth)") vine ca HTTP 401 — la fel ca
-     * `UJ0001` („Invalid token or token is not present") si `250002` („Invalid
-     * authentication information"). Un client care ar reincerca la orice 401 ar
-     * bate cota de token cu niste chei care oricum nu merg; unul care n-ar reincerca
-     * deloc ar raporta „credentiale gresite" pentru un token imbatranit cu o
-     * secunda, chiar in mijlocul unei emiteri.
-     *
-     * Reincercarea e sigura si pentru scrieri: un 401 inseamna ca cererea NU a fost
-     * autorizata, deci nu s-a creat nimic.
-     */
-    if (res.status === 401) {
-      const cod = primulCod(date);
-      if (!cod || COD_TOKEN_EXPIRAT.has(cod)) {
-        res = await trimite(await token(config, true));
-        ({ t: brut, d: date } = await citeste(res));
-      }
-    }
   } catch (e) {
     throw ambiguu(`UPS ${metoda} ${cale}: ${(e as Error).message}`);
+  }
+
+  /*
+   * ⚠ O SINGURA reincercare, si numai cand UPS SPUNE ca tokenul a expirat.
+   *
+   * `251004` („Bearer Token expired (oauth)”) vine ca HTTP 401 — la fel ca
+   * `UJ0001` („Invalid token or token is not present”) si `250002` („Invalid
+   * authentication information”). Un client care ar reincerca la orice 401 ar
+   * bate cota de token cu niste chei care oricum nu merg; unul care n-ar reincerca
+   * deloc ar raporta „credentiale gresite” pentru un token imbatranit cu o
+   * secunda, chiar in mijlocul unei emiteri.
+   *
+   * Reincercarea e sigura si pentru scrieri: un 401 inseamna ca cererea NU a fost
+   * autorizata, deci nu s-a creat nimic.
+   *
+   * ⚠ Si aici tokenul se ia in afara lui `try`, din acelasi motiv ca mai sus.
+   */
+  if (res.status === 401) {
+    const codVechi = primulCod(date);
+    if (!codVechi || COD_TOKEN_EXPIRAT.has(codVechi)) {
+      acces = await token(config, true);
+      try {
+        res = await trimite(acces);
+        ({ t: brut, d: date } = await citeste(res));
+      } catch (e) {
+        throw ambiguu(`UPS ${metoda} ${cale}: ${(e as Error).message}`);
+      }
+    }
   }
 
   const cod = primulCod(date);

@@ -3,11 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
 import {
-  ASTEPTARE_MS, fedexGata, MAX_AWB_PE_CERERE, urmareste,
+  ASTEPTARE_MS, chiarNuExista, fedexGata, MAX_AWB_PE_CERERE, urmareste,
   type FedexConfig, type UrmarireFedex,
 } from "@/lib/fedex/client";
 import {
-  codStatus, descriereStatus, eStareFinala, esteRetur, statusUrmator, trebuieSemnalat,
+  codStatus, descriereStatus, eLivrat, eStareFinala, esteRetur, statusUrmator, trebuieSemnalat,
 } from "@/lib/fedex/statusuri";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
 import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
@@ -285,6 +285,24 @@ export async function GET(req: NextRequest) {
         }
 
         if (u.eroare) {
+          /*
+           * ⚠⚠ „NU GASESC NUMARUL” NU E UN ESEC, E RASPUNSUL LOR PENTRU „PREA NOU”.
+           *
+           * Chiar textul lor, pastrat in `CODURI`: „Poate dura pana la 24 de ore pana
+           * apare in sistemul lor.” Cronul intreaba din prima ora dupa emitere, deci
+           * asta e purtarea OBISNUITA pentru un AWB proaspat, nu o defectiune.
+           *
+           * Numarat ca esec, umplea galeata de erori a magazinului si-i trimitea
+           * comerciantului o alarma — care arata a chei gresite — la fiecare lot de
+           * AWB-uri nou emise. Cazul „n-au intors nimic” de mai sus era deja tratat
+           * asa; ala e acelasi lucru, spus de ei cu un cod in loc de tacere.
+           */
+          /* ⚠ Fara cod nu stim ce a fost, deci ramane esec: `chiarNuExista([])` ar fi zis „da”. */
+          if (u.codEroare !== null && chiarNuExista([u.codEroare])) {
+            faraRaspuns++;
+            await marcheazaVerificat(o, null);
+            continue;
+          }
           esuate++;
           const g = galeata(bizId);
           g.esecuri++;
@@ -310,7 +328,7 @@ export async function GET(req: NextRequest) {
         /* Un AWB inregistrat, dar fara stare inca: nu e defect. */
         if (codNou === null && !u.livratLa) { await marcheazaVerificat(o, null); continue; }
 
-        const tinta = statusUrmator(o.status, codNou, u.livratLa);
+        const tinta = statusUrmator(o.status, codNou, u.livratLa, u.seIntoarce);
         let prelucrat = true;
         if (tinta) {
           const rez = await tranzitieComandaMarketplace(admin, {
@@ -352,7 +370,15 @@ export async function GET(req: NextRequest) {
          * aceeasi stare s-ar resemnala la fiecare rulare.
          */
         const vechi = codStatus(o.fedex_status_code);
-        if (codNou !== null && codNou !== vechi && trebuieSemnalat(codNou)) {
+        /*
+         * ⚠ Returul AJUNS se semnaleaza, desi `DL` nu e un cod de semnalat.
+         *
+         * Textul de la `RS` ii promitea comerciantului „urmareste-l pana ajunge”,
+         * fiindca FedEx n-are cod pentru „retur incheiat”. Are, insa, istoricul: `RS`
+         * in `scanEvents[]` plus livrare acum inseamna ca marfa e inapoi la el.
+         */
+        const returAjuns = u.seIntoarce && eLivrat(codNou, u.livratLa);
+        if (codNou !== null && codNou !== vechi && (trebuieSemnalat(codNou) || returAjuns)) {
           semnalate++;
           await semnaleaza(admin, {
             userId: proprietari.get(o.business_id) ?? null,
@@ -362,6 +388,7 @@ export async function GET(req: NextRequest) {
             awb: o.fedex_awb_number!,
             cod: codNou,
             descriere: descriereStatus(codNou, u.descriere),
+            returAjuns,
           });
         }
 
@@ -437,15 +464,24 @@ async function semnaleaza(
     awb: string;
     cod: string;
     descriere: string;
+    /** Istoricul arata o intoarcere SI coletul tocmai a fost livrat: marfa e inapoi la el. */
+    returAjuns?: boolean;
   },
 ): Promise<void> {
-  const retur = esteRetur(p.cod);
+  const returAjuns = p.returAjuns === true;
+  const retur = esteRetur(p.cod) || returAjuns;
   const anulat = p.cod === "CA";
   const comanda = p.orderNumber ? `Comanda ${p.orderNumber}` : "O comanda";
-  const titlu = retur ? "Colet FedEx returnat" : anulat ? "AWB FedEx anulat" : "Expediere FedEx care cere atentie";
+  const titlu = returAjuns
+    ? "Coletul FedEx returnat a ajuns la tine"
+    : retur ? "Colet FedEx returnat" : anulat ? "AWB FedEx anulat" : "Expediere FedEx care cere atentie";
   const spune = p.descriere || `status FedEx ${p.cod}`;
 
-  const mesaj = retur
+  const mesaj = returAjuns
+    /* ⚠ Aici se inchide promisiunea facuta la `RS`: „urmareste-l pana ajunge”. FedEx
+       n-are cod pentru „retur incheiat”, dar are istoricul, si el spune ca a ajuns. */
+    ? `${comanda}: coletul ${p.awb} s-a intors si a ajuns inapoi la tine. Comanda NU a fost trecuta pe „Livrata”, fiindca marfa nu a ajuns la cumparator — ce faci cu ea ramane decizia ta.`
+    : retur
     /* ⚠ La FedEx nu exista ramburs, deci nu exista nici bani de intors — spre
        deosebire de textul de la Shipo si SmartShip. Marfa e singurul lucru in joc. */
     ? `${comanda}: coletul ${p.awb} se intoarce la tine (${spune}). FedEx nu are cod pentru „retur incheiat", deci urmareste-l pana ajunge; anularea comenzii si returul banilor raman decizia ta.`

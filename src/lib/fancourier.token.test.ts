@@ -142,8 +142,9 @@ describe("niciun client nu-si cheiaza tokenul doar dupa partea publica", () => {
    * care apare maine e cea care il va cheia iar dupa partea publica.
    */
   const PRIN_AJUTORUL_COMUN = [
-    "lib/cargus.ts", "lib/colete.ts", "lib/fancourier.ts", "lib/oblio.ts",
-    "lib/sameday/client.ts", "lib/woot.ts",
+    "lib/cargus.ts", "lib/colete.ts", "lib/fancourier.ts", "lib/fedex/client.ts",
+    "lib/oblio.ts", "lib/sameday/client.ts", "lib/shipo/client.ts", "lib/ups/client.ts",
+    "lib/woot.ts",
   ];
   /* ⚠ Aici secretul e chiar jetonul de reimprospatare, pus in cheie NEHASUIT. Merge
      (cheia se schimba odata cu el), dar e mai slab decat ajutorul comun: cheia poate
@@ -153,18 +154,45 @@ describe("niciun client nu-si cheiaza tokenul doar dupa partea publica", () => {
     { fisier: "lib/google-merchant/oauth.ts", secret: "refreshToken" },
   ];
 
+  /*
+   * ⚠⚠ CENSUL SE FACE PE FORMA, NU PE NUMELE VARIABILEI.
+   *
+   * Pana azi cititorul cauta sirurile `tokenCache`, `TOKEN_CACHE` si `cacheToken`.
+   * Adica gasea exact cache-urile botezate in engleza, si NICIUNUL dintre cele
+   * botezate `tokenuri` — FedEx, UPS si Shipo. Masurat: vedea 8 din 11, si trecea
+   * verde spunand ca le-a vazut pe toate.
+   *
+   * ⚠ Iar cel pe care nu-l vedea era chiar cel pe care ar fi trebuit sa-l prinda:
+   * Shipo tinea cheia de API in CLAR, drept cheie de `Map`. Un filtru care nu poate
+   * sa vada un caz nu poate nici sa-l apere, oricat de verde ar fi.
+   *
+   * Forma cautata acum e declaratia insasi: o harta de proces al carei tip de
+   * valoare poarta un token. Numele variabilei nu mai conteaza, si nici limba in
+   * care e scris. Un comentariu care POMENESTE `tokenCache` nu mai aprinde nimic
+   * — asa a cazut prima oara censul asta, pe propriul lui cuvant.
+   */
+  /* Fara margini de cuvant dinadins: valoarea poate fi un tip cu nume (`TokenEntry`),
+     un camp (`token:`) sau unul cu underscore (`access_token`). Toate trei sunt cache-uri. */
+  const HARTA_DE_TOKEN = /new Map<[^>]*(?:token|jeton)[^>]*>/i;
+
   function tinTokenInProces(): string[] {
     const gasite: string[] = [];
     for (const cale of surse()) {
       const text = readFileSync(cale, "utf8");
-      if (!/tokenCache|TOKEN_CACHE|cacheToken/.test(text)) continue;
+      if (!HARTA_DE_TOKEN.test(text)) continue;
       gasite.push(cale.slice(SRC.length + 1).split("\\").join("/"));
     }
     return gasite.sort();
   }
 
   test("censul chiar gaseste cache-urile", () => {
-    assert.ok(tinTokenInProces().length >= 8, "cititorul de cache-uri s-a rupt");
+    const gasite = tinTokenInProces();
+    assert.ok(gasite.length >= 11, `cititorul de cache-uri s-a rupt: doar ${gasite.length}`);
+    /* ⚠ Cele trei pe care numele nu le tradau. Enumerate anume: daca detectorul
+       se strica iar, proba trebuie sa cada pe ELE, nu pe un numar. */
+    for (const f of ["lib/fedex/client.ts", "lib/ups/client.ts", "lib/shipo/client.ts"]) {
+      assert.ok(gasite.includes(f), `${f} a iesit iar din cens`);
+    }
   });
 
   test("fiecare cache de token e pe una din cele doua cai, si pe niciuna alta", () => {
@@ -179,7 +207,9 @@ describe("niciun client nu-si cheiaza tokenul doar dupa partea publica", () => {
   test("cele care merg prin ajutorul comun chiar il cheama", () => {
     for (const f of PRIN_AJUTORUL_COMUN) {
       const text = readFileSync(join(SRC, f), "utf8");
-      assert.match(text, /cheieToken\(/, `${f} nu mai trece prin ajutorul comun`);
+      /* ⚠ Si sub alias: FedEx, UPS si Shipo il importa ca `cheieTokenFurnizor`, ca sa-si
+         poata pastra o functie locala cu numele scurt. */
+      assert.match(text, /cheieToken(?:Furnizor)?\(/, `${f} nu mai trece prin ajutorul comun`);
     }
   });
 

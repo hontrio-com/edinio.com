@@ -125,8 +125,22 @@ export const DIMENSIUNI_IMPLICITE = { lungime: 30, latime: 20, inaltime: 10 } as
 /** ⚠ „Maximum value: 999" pe fiecare latura, si fara zecimale. */
 const DIMENSIUNE_MAXIMA = 999;
 
+/**
+ * Taie la lungimea maxima — si scoate diacriticele.
+ *
+ * ⚠⚠ DIACRITICELE SE SCOT AICI, NU NUMAI DIN STRADA.
+ *
+ * Erau scoase intr-un singur loc, in `liniiAdresa`, desi motivul (eticheta se
+ * imprima pe hartie termica in reteaua lor globala, iar la Woot un singur
+ * caracter cu diacritice a dus la un 400) nu are nimic de-a face cu strada in
+ * mod deosebit. Asa plecau cu diacritice `personName` si `companyName` — adica
+ * chiar numele cumparatorului, care e pe fiecare eticheta romaneasca.
+ *
+ * ⚠ Fratele lui, DHL, face exact asta de la inceput: scoaterea traieste in
+ * functia de taiere, deci acopera orice camp care pleaca. Vezi `dhl/expediere.ts`.
+ */
 function taie(text: string | null | undefined, max: number): string {
-  return curata(text).slice(0, max).trim();
+  return stripDiacritics(curata(text)).slice(0, max).trim();
 }
 
 /**
@@ -369,8 +383,8 @@ export function parteFedex(a: AdresaComanda): { address: AdresaFedex; contact: C
 
   const linii = liniiAdresa(a);
   /*
-   * ⚠ Sectorul intra pe adresa, nu in oras — vezi `orasFedex`. Se pune la INCEPUT
-   * doar daca mai e loc: peste 3 linii, FedEx le ignora, iar strada si numarul
+   * ⚠ Sectorul intra pe adresa, nu in oras — vezi `orasFedex`. Se pune la SFARSIT
+   * si doar daca mai e loc: peste 3 linii FedEx le ignora, iar strada si numarul
    * conteaza mai mult decat sectorul (pe care il da si codul postal).
    */
   const cuSector = sector && linii.length < LUNGIMI.liniiAdresa ? [...linii, sector] : linii;
@@ -486,6 +500,18 @@ export function corpTarife(config: FedexConfig, date: DateExpediere): Record<str
 
   return {
     accountNumber: { value: taie(config.account_number, LUNGIMI.contNumar) },
+    /*
+     * ⚠⚠ STA LA RADACINA, NU IN `requestedShipment`.
+     *
+     * In schema lor `Full_Schema_Quote_Rate` campul e frate cu `accountNumber` si
+     * `requestedShipment`; lista de proprietati a lui `RequestedShipment` nu-l
+     * contine deloc. Pus inauntru, e pur si simplu ignorat — fara eroare, fara
+     * avertisment — iar timpii de tranzit nu vin niciodata, desi tot codul de
+     * dedesubt ii traduce si ii arata cumparatorului.
+     *
+     * Timpii trebuie ceruti anume: „Default value is false.”
+     */
+    rateRequestControlParameters: { returnTransitTimes: true },
     requestedShipment: {
       shipper: { address: expeditor.address },
       recipient: { address: destinatar.address },
@@ -494,8 +520,6 @@ export function corpTarife(config: FedexConfig, date: DateExpediere): Record<str
       rateRequestType: ["ACCOUNT", "PREFERRED"],
       preferredCurrency: "RON",
       packagingType: "YOUR_PACKAGING",
-      /* Timpii de tranzit trebuie ceruti: „Default value is false." */
-      rateRequestControlParameters: { returnTransitTimes: true },
       requestedPackageLineItems: [coletFedex(config, date, null)],
       ...(date.serviceType ? { serviceType: date.serviceType } : {}),
     },

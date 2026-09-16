@@ -2,7 +2,7 @@ import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroa
 import { COD_RAMBURS, numeProdus, numeServiciu } from "./servicii";
 
 /**
- * Clientul DHL Express (MyDHL API 3.3.1).
+ * Clientul DHL Express (MyDHL API 3.3.2).
  *
  * ═══ CE E ═══
  *
@@ -11,7 +11,7 @@ import { COD_RAMBURS, numeProdus, numeServiciu } from "./servicii";
  * Spre deosebire de UPS (unde apendicele cu codurile nu e publicat nicaieri) si de
  * FedEx (unde schemele stau ascunse in atribute HTML), DHL publica trei surse care se
  * verifica una pe alta, toate fara autentificare: OpenAPI 3.0 oficial (`info.version:
- * 3.3.1`, `x-release-date: 2026-06-28`, 1,2 MB), nomenclatoarele
+ * 3.3.2`, `x-release-date: 2026-09-06`, 1,2 MB), nomenclatoarele
  * (`ExpressReferenceData_3.3.1.zip`, 19 foi, intre care `returnStatusMessage` cu 1830
  * de coduri de eroare SI severitatea lor) si „MyDHL API — SOAP Developer Guide v2.37"
  * (473 de pagini), singurul document in proza care descrie SEMANTICA campurilor.
@@ -125,13 +125,29 @@ const ASTEPTARE_EMITERE_MS = 45_000;
  * bazeaza pe el nu trimite antetul si cade cu 9001. Se trimite mereu, explicit.
  *
  * ⚠ Si „do not change this field value" se contrazice cu realitatea: valoarea a crescut
- * 2.9.0 → 3.3.1 in trei ani. Cand DHL publica 3.4.x, constanta asta si schemele citite
- * mai jos se schimba IMPREUNA.
+ * 2.9.0 → 3.3.1 → 3.3.2 in trei ani. Constanta asta si schemele citite mai jos se
+ * schimba IMPREUNA, niciodata una singura.
+ *
+ * ⚠⚠ 16.09.2026: 3.3.1 → 3.3.2 (`x-release-date: 2026-09-06`).
+ *
+ * Specificatia noua a fost citita fata de cea veche pe toata lungimea ei (86 de randuri
+ * de diferenta, toate). NIMIC din ce trimitem NOI nu s-a schimbat:
+ *   — `packageTypeCode`: enumerarea si-a schimbat patru valori (`WB1`, `WB2`, `WB3`,
+ *     `WB6` scoase; `BB1`, `BB2`, `BB3`, `BB6` puse). Noi nu trimitem campul deloc;
+ *   — `registrationNumbers.typeCode`: s-a adaugat `FSR` (Food Safety Registration);
+ *   — nota „customerReference cu typeCode CU e obligatorie" a fost scoasa de la nivel de
+ *     FACTURA. Noi o punem la nivel de EXPEDIERE, care n-a fost atins;
+ *   — o lista a crescut de la 3.000 la 5.000 de elemente;
+ *   — schema raspunsului OAuth a fost stearsa — MyDHL API e pe Basic, n-am folosit-o.
+ *
+ * ⚠ Ce NU se poate dovedi fara un cont la ei: daca serverul lor mai primeste si 3.3.1.
+ * De aia se trimite versiunea PUBLICATA azi, nu cea de acum doua luni: aia e singura
+ * despre care stim sigur ca e in vigoare.
  *
  * ⚠ Doua din cele 21 de operatii (`GET /servicepoints`, `POST /early-shipment-screening`)
  * nu-l declara. E o inconsistenta a specificatiei lor, nu o regula — se trimite peste tot.
  */
-export const VERSIUNE_API = "3.3.1";
+export const VERSIUNE_API = "3.3.2";
 
 /**
  * ⚠ `GET /tracking` accepta pana la 200 de numere pe cerere.

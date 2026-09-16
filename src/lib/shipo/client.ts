@@ -1,4 +1,5 @@
 import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
+import { cheieToken as cheieTokenFurnizor } from "@/lib/integrari/cheie-token";
 
 /**
  * Clientul Shipo.ro.
@@ -423,7 +424,21 @@ export function uitaTokenurile(): void {
 }
 
 async function token(cheieApi: string, forteaza = false): Promise<string> {
-  const viu = tokenuri.get(cheieApi);
+  /*
+   * ⚠⚠ CHEIA HARTII E HASUITA, nu chiar cheia de API.
+   *
+   * Cheia de API e o CREDENTIALA. Pusa drept cheie de `Map`, traieste in memoria
+   * procesului si poate ajunge oriunde ajunge harta: un diagnostic, o aruncatura
+   * de memorie, un mesaj de eroare care enumera cheile. Ajutorul comun
+   * (`@/lib/integrari/cheie-token`) face exact ce trebuie: hasuieste secretele cu
+   * SHA-256 si le desparte cu NUL, deci doua conturi tot nu se pot amesteca.
+   *
+   * ⚠ Shipo era singurul curier ramas pe dinafara, si nu din alegere: plasa care
+   * numara cache-urile de token il cauta dupa NUMELE variabilei (`tokenCache`), iar
+   * aici harta se cheama `tokenuri`. Vezi `fancourier.token.test.ts`.
+   */
+  const cheieHarta = cheieTokenFurnizor([], [cheieApi]);
+  const viu = tokenuri.get(cheieHarta);
   if (!forteaza && viu && viu.expiraLa > Date.now()) return viu.token;
 
   let res: Response;
@@ -469,7 +484,7 @@ async function token(cheieApi: string, forteaza = false): Promise<string> {
 
   const secunde = Number((date as { expires_in?: unknown }).expires_in);
   const viata = Number.isFinite(secunde) && secunde > 0 ? secunde * 1000 : 3_600_000;
-  tokenuri.set(cheieApi, { token: acces, expiraLa: Date.now() + Math.max(0, viata - MARJA_TOKEN_MS) });
+  tokenuri.set(cheieHarta, { token: acces, expiraLa: Date.now() + Math.max(0, viata - MARJA_TOKEN_MS) });
   return acces;
 }
 
@@ -533,24 +548,52 @@ async function apel<T>(
     redirect: "manual",
   });
 
+  /*
+   * ⚠⚠ TOKENUL SE IA IN AFARA LUI `try`, CA VERDICTUL LUI SA NU FIE RESCRIS.
+   *
+   * `token()` arunca verdicte GANDITE: cheia de API respinsa de ei sunt `eroareRefuz`, adica
+   * refuz DOVEDIT — si pe buna dreptate, fiindca in cazurile alea cererea noastra
+   * nu a plecat catre ei.
+   *
+   * Luat INAUNTRUL lui `try`, orice astfel de refuz trecea prin `catch` si iesea
+   * rescris ca `ambiguu`, adica `necunoscut` pe o scriere. Consecinta: un
+   * comerciant cu o cheie gresita apasa pe emitere, nu pleaca nimic nicaieri, si
+   * totusi comanda ii ramane BLOCATA in registru, de unde nu iese decat cu mana.
+   *
+   * ⚠ Acelasi defect era in trei clienti deodata (FedEx, UPS, Shipo): sunt
+   * scrisi dupa acelasi sablon. Cand repari un tipar, cauta-i copiile.
+   *
+   * `catch`-ul de mai jos ramane pentru ce e cu adevarat ambiguu: reteaua si
+   * timeout-ul pe CEREREA propriu-zisa, unde chiar nu putem sti daca a ajuns.
+   */
+  let acces = await token(cheie);
+
   let res: Response;
   try {
-    res = await trimite(await token(cheie));
-    /*
-     * ⚠ O SINGURA reincercare, si numai pe 401.
-     *
-     * Tokenul lor traieste o ora, iar noi il pastram intr-o harta care poate
-     * supravietui expirarii daca ceasul instantei si al lor nu bat exact. Un 401
-     * pe o cerere obisnuita inseamna aproape sigur „token expirat", nu „cheie
-     * gresita" — cheia gresita cade mai devreme, chiar la `/auth`.
-     *
-     * Reincercarea e sigura si pentru scrieri: un 401 inseamna ca cererea NU a
-     * fost autorizata, deci nu s-a creat nimic. Mai mult de o data insa nu se
-     * reincearca — o bucla pe un cont suspendat ar consuma bugetul cronului.
-     */
-    if (res.status === 401) res = await trimite(await token(cheie, true));
+    res = await trimite(acces);
   } catch (e) {
     throw ambiguu(`Shipo ${metoda} ${cale}: ${(e as Error).message}`);
+  }
+
+  /*
+   * ⚠ O SINGURA reincercare, si numai pe 401.
+   *
+   * Tokenul lor traieste o ora, iar noi il pastram intr-o harta care poate
+   * supravietui expirarii daca ceasul instantei si al lor nu bat exact. Un 401
+   * pe o cerere obisnuita inseamna aproape sigur „token expirat”, nu „cheie
+   * gresita” — cheia gresita cade mai devreme, chiar la `/auth`.
+   *
+   * Reincercarea e sigura si pentru scrieri: un 401 inseamna ca cererea NU a
+   * fost autorizata, deci nu s-a creat nimic. Mai mult de o data insa nu se
+   * reincearca — o bucla pe un cont suspendat ar consuma bugetul cronului.
+   */
+  if (res.status === 401) {
+    acces = await token(cheie, true);
+    try {
+      res = await trimite(acces);
+    } catch (e) {
+      throw ambiguu(`Shipo ${metoda} ${cale}: ${(e as Error).message}`);
+    }
   }
 
   const text = await res.text();

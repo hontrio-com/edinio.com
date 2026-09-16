@@ -319,8 +319,25 @@ describe("FedEx: corpul cotarii", () => {
   });
 
   test("timpii de tranzit se cer explicit — implicitul lor e `false`", () => {
-    const corp = corpTarife(CONFIG, DATE) as { requestedShipment: Record<string, Record<string, unknown>> };
-    assert.equal(corp.requestedShipment.rateRequestControlParameters.returnTransitTimes, true);
+    const corp = corpTarife(CONFIG, DATE) as Record<string, Record<string, unknown>>;
+    assert.equal(corp.rateRequestControlParameters.returnTransitTimes, true);
+  });
+
+  /*
+   * ⚠ PROBA ASTA A PRINS CA CEALALTA APARA CABLAREA, NU REGULA.
+   *
+   * Pana azi `rateRequestControlParameters` statea in `requestedShipment`, iar proba
+   * de mai sus il citea de acolo: amandoua gresite, deci verzi. In schema lor
+   * (`Full_Schema_Quote_Rate`) campul e frate cu `accountNumber` si cu
+   * `requestedShipment`, iar lista de proprietati a lui `RequestedShipment` nu-l
+   * contine. Pus inauntru, FedEx il ignora in tacere si timpii de tranzit nu vin
+   * niciodata — desi tot codul de traducere a lor exista si ii asteapta.
+   *
+   * De aia se verifica si ABSENTA din locul gresit: altfel o mutare inapoi ar trece.
+   */
+  test("si NU in `requestedShipment` — acolo e ignorat tacut", () => {
+    const corp = corpTarife(CONFIG, DATE) as { requestedShipment: Record<string, unknown> };
+    assert.equal(corp.requestedShipment.rateRequestControlParameters, undefined);
   });
 
   test("la cotare destinatarul e `recipient` SINGULAR, nu `recipients`", () => {

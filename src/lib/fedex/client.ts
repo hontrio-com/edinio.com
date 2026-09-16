@@ -1,5 +1,7 @@
 import { eroareCuStatus, eroareNesigura, eroareRefuz } from "@/lib/operatii/eroare-furnizor";
 import { cheieToken as cheieTokenFurnizor } from "@/lib/integrari/cheie-token";
+/* Un singur adevar despre ce inseamna „coletul se intoarce": tabelul din `statusuri.ts`. */
+import { esteRetur as esteCodDeRetur } from "./statusuri";
 
 /**
  * Clientul FedEx.
@@ -402,6 +404,16 @@ export type UrmarireFedex = {
   descriere: string | null;
   /** `dateAndTimes[type=ACTUAL_DELIVERY]`, cand exista. Cel mai curat semnal de livrare. */
   livratLa: string | null;
+  /**
+   * ⚠⚠ Istoricul contine o intoarcere la expeditor (`RS` sau `RT`).
+   *
+   * Se citeste din `scanEvents[]`, pe care oricum le cerem (`includeDetailedScans:
+   * true`) si pe care nu le citea nimeni. E singurul lucru pentru care ne uitam in
+   * istoric: `latestStatusDetail` ramane sursa starii curente.
+   *
+   * Fara el, un retur incheiat e citit ca LIVRARE. Vezi `statusComandaDinCod`.
+   */
+  seIntoarce: boolean;
   /** Eroarea PE NUMAR, dintr-un raspuns 200 care a reusit la nivel HTTP. */
   eroare: string | null;
   /**
@@ -584,9 +596,27 @@ export function eRaspunsVirtual(alerte: AlertaFedex[]): boolean {
 const MARJA_TOKEN_MS = 60_000;
 const tokenuri = new Map<string, { token: string; expiraLa: number }>();
 
+/**
+ * ⚠⚠ SI REFUZURILE SE TIN MINTE, SCURT.
+ *
+ * Harta de mai sus pastra doar REUSITELE, deci o configurare cu cheie gresita
+ * cerea un token nou la FIECARE cotare. Iar `/oauth/token` are prag de rata PE IP:
+ * 3 cereri/s timp de 5s (sau 1/s timp de 2 minute) — apoi 403 timp de zece
+ * minute. Pe Vercel IP-ul e partajat, deci un singur magazin prost configurat
+ * putea sa stinga cotarea FedEx pentru TOATE magazinele.
+ *
+ * ⚠ Se tine minte doar refuzul DOVEDIT (chei respinse), nu si caderile de retea:
+ * acelea nu spun nimic despre chei si s-ar putea rezolva singure in secunda
+ * urmatoare. Si se tine SCURT, cat sa rupa ploaia: cheia corectata trebuie sa
+ * mearga fara ca omul sa astepte.
+ */
+const REFUZ_TINUT_MS = 60_000;
+const refuzuri = new Map<string, { mesaj: string; panaLa: number }>();
+
 /** Pentru probe: goleste tokenurile pastrate. */
 export function uitaTokenurile(): void {
   tokenuri.clear();
+  refuzuri.clear();
 }
 
 /*
@@ -607,6 +637,10 @@ async function token(config: Pick<FedexConfig, "client_id" | "client_secret" | "
   const cheie = cheieToken(baza, id, secret);
   const viu = tokenuri.get(cheie);
   if (!forteaza && viu && viu.expiraLa > Date.now()) return viu.token;
+
+  /* ⚠ Un refuz proaspat se repeta din memorie, ca sa nu batem in pragul lor pe IP. */
+  const refuz = refuzuri.get(cheie);
+  if (refuz && refuz.panaLa > Date.now()) throw eroareRefuz(refuz.mesaj);
 
   /*
    * ⚠ `application/x-www-form-urlencoded`, NU JSON. Sonda din 16.08.2026: acelasi
@@ -638,13 +672,11 @@ async function token(config: Pick<FedexConfig, "client_id" | "client_secret" | "
 
   if (!res.ok) {
     if (res.status === 401) {
-      throw insemneaza(
-        eroareRefuz(
-          "FedEx a respins credentialele. Verifica API Key si Secret Key din portalul FedEx si asigura-te "
-          + "ca proiectul e pe mediul ales (cheile de test NU merg in productie si invers).",
-        ),
-        res.status, primulCod(date),
-      );
+      const mesaj = "FedEx a respins credentialele. Verifica API Key si Secret Key din portalul FedEx si asigura-te "
+        + "ca proiectul e pe mediul ales (cheile de test NU merg in productie si invers).";
+      /* ⚠ Refuz DOVEDIT: se tine minte scurt, ca urmatoarele cotari sa nu mai bata in ei. */
+      refuzuri.set(cheie, { mesaj, panaLa: Date.now() + REFUZ_TINUT_MS });
+      throw insemneaza(eroareRefuz(mesaj), res.status, primulCod(date));
     }
     /*
      * ⚠ 403 pe `/oauth/token` inseamna aproape sigur pragul de rata pe IP, nu
@@ -652,13 +684,12 @@ async function token(config: Pick<FedexConfig, "client_id" | "client_secret" | "
      * schimba cheile bune degeaba.
      */
     if (res.status === 403) {
-      throw insemneaza(
-        eroareRefuz(
-          "FedEx a blocat temporar cererile de autentificare venite de la noi (limita lor pe adresa IP, "
-          + "in jur de 10 minute). Nu schimba cheile — incearca din nou peste cateva minute.",
-        ),
-        res.status, primulCod(date),
-      );
+      const mesaj = "FedEx a blocat temporar cererile de autentificare venite de la noi (limita lor pe adresa IP, "
+        + "in jur de 10 minute). Nu schimba cheile — incearca din nou peste cateva minute.";
+      /* ⚠⚠ Aici tinutul minte chiar REPARA cauza: fara el, fiecare cotare mai adauga
+         o cerere peste pragul care tocmai ne-a blocat, si blocarea se prelungeste. */
+      refuzuri.set(cheie, { mesaj, panaLa: Date.now() + REFUZ_TINUT_MS });
+      throw insemneaza(eroareRefuz(mesaj), res.status, primulCod(date));
     }
     throw insemneaza(
       eroareCuStatus(`FedEx POST /oauth/token: ${res.status} — ${descrieEroarea(date, brut)}`, res.status),
@@ -673,6 +704,8 @@ async function token(config: Pick<FedexConfig, "client_id" | "client_secret" | "
 
   const secunde = Number((date as { expires_in?: unknown }).expires_in);
   const viata = Number.isFinite(secunde) && secunde > 0 ? secunde * 1000 : 3_600_000;
+  /* Cheia merge: daca fusese refuzata inainte, uitam refuzul pe loc. */
+  refuzuri.delete(cheie);
   tokenuri.set(cheie, { token: acces, expiraLa: Date.now() + Math.max(0, viata - MARJA_TOKEN_MS) });
   return acces;
 }
@@ -741,24 +774,53 @@ async function apel<T>(
     redirect: "manual",
   });
 
+  /*
+   * ⚠⚠ TOKENUL SE IA IN AFARA LUI `try`, CA VERDICTUL LUI SA NU FIE RESCRIS.
+   *
+   * `token()` arunca verdicte GANDITE: chei lipsa, 401 „credentiale respinse” si 403
+   * „prag de rata pe IP” sunt toate `eroareRefuz`, adica refuz DOVEDIT — si pe bun
+   * temei, fiindca in niciunul dintre cazuri cererea nu a plecat catre ei.
+   *
+   * Luat INAUNTRUL lui `try`, orice astfel de refuz trecea prin `catch` si iesea
+   * rescris ca `ambiguu`, adica `necunoscut` pe o scriere. Consecinta: comerciantul
+   * care si-a gresit o cheie apasa „Emite AWB”, nu pleaca nimic nicaieri, si
+   * totusi comanda ii ramane BLOCATA in registru, de unde nu iese decat cu mana.
+   * Exact pe dos fata de ce trebuie: aici stim ca nu s-a intamplat nimic.
+   *
+   * `catch`-ul de mai jos ramane pentru ce e cu adevarat ambiguu: reteaua si
+   * timeout-ul pe CEREREA propriu-zisa, unde chiar nu putem sti daca a ajuns.
+   */
+  let acces = await token(config);
+
   let res: Response;
   try {
-    res = await trimite(await token(config));
-    /*
-     * ⚠ O SINGURA reincercare, si numai pe 401.
-     *
-     * Tokenul lor traieste o ora, iar noi il pastram intr-o harta care poate
-     * supravietui expirarii daca ceasul instantei si al lor nu bat exact. Un 401 pe
-     * o cerere obisnuita inseamna aproape sigur „token expirat", nu „chei gresite" —
-     * cheile gresite cad mai devreme, chiar la `/oauth/token`.
-     *
-     * Reincercarea e sigura si pentru scrieri: un 401 inseamna ca cererea NU a fost
-     * autorizata, deci nu s-a creat nimic. Mai mult de o data insa nu se reincearca
-     * — pe `/oauth/token` exista prag de rata pe IP, si o bucla l-ar atinge.
-     */
-    if (res.status === 401) res = await trimite(await token(config, true));
+    res = await trimite(acces);
   } catch (e) {
     throw ambiguu(`FedEx ${metoda} ${cale}: ${(e as Error).message}`);
+  }
+
+  /*
+   * ⚠ O SINGURA reincercare, si numai pe 401.
+   *
+   * Tokenul lor traieste o ora, iar noi il pastram intr-o harta care poate
+   * supravietui expirarii daca ceasul instantei si al lor nu bat exact. Un 401 pe
+   * o cerere obisnuita inseamna aproape sigur „token expirat”, nu „chei gresite” —
+   * cheile gresite cad mai devreme, chiar la `/oauth/token`.
+   *
+   * Reincercarea e sigura si pentru scrieri: un 401 inseamna ca cererea NU a fost
+   * autorizata, deci nu s-a creat nimic. Mai mult de o data insa nu se reincearca
+   * — pe `/oauth/token` exista prag de rata pe IP, si o bucla l-ar atinge.
+   *
+   * ⚠ Si aici tokenul se ia in afara lui `try`, din acelasi motiv ca mai sus:
+   * un refuz al lui e refuz DOVEDIT, nu o nesiguranta.
+   */
+  if (res.status === 401) {
+    acces = await token(config, true);
+    try {
+      res = await trimite(acces);
+    } catch (e) {
+      throw ambiguu(`FedEx ${metoda} ${cale}: ${(e as Error).message}`);
+    }
   }
 
   const brut = await res.text();
@@ -1103,6 +1165,28 @@ function citesteUrmarire(rezultat: Record<string, unknown>, awbCerut: string): U
     }
   }
 
+  /*
+   * ⚠⚠ SINGURUL LUCRU PENTRU CARE SE CITESTE ISTORICUL: INTOARCEREA.
+   *
+   * Cand coletul se intoarce, FedEx NU deschide alt numar: acelasi AWB primeste
+   * `RS`, calatoreste inapoi si se incheie cu `DL` plus
+   * `dateAndTimes[type=ACTUAL_DELIVERY]` — la adresa EXPEDITORULUI. Citind doar
+   * starea curenta, un retur ajuns inapoi la comerciant e de nedeosebit de o
+   * livrare catre cumparator: comanda ar trece pe „Livrata” si ar putea declansa
+   * factura automata pentru o vanzare care nu s-a facut.
+   *
+   * `scanEvents[]` le cerem deja la fiecare apel; pana acum nu le citea nimeni.
+   */
+  let seIntoarce = false;
+  const evenimente = rezultat.scanEvents;
+  if (Array.isArray(evenimente)) {
+    for (const ev of evenimente) {
+      const e = (ev ?? {}) as Record<string, unknown>;
+      const codEv = (text(e.eventType) || text(e.derivedStatusCode)).toUpperCase();
+      if (codEv && esteCodDeRetur(codEv)) { seIntoarce = true; break; }
+    }
+  }
+
   return {
     awb: text(info.trackingNumber) || awbCerut,
     /*
@@ -1114,6 +1198,7 @@ function citesteUrmarire(rezultat: Record<string, unknown>, awbCerut: string): U
     /* ⚠ `statusByLocale` e TEXT TRADUS dupa `x-locale`, nu enumerare. Se arata, nu se compara. */
     descriere: text(stare.statusByLocale) || text(stare.description) || null,
     livratLa,
+    seIntoarce,
     eroare,
     codEroare,
   };
@@ -1221,7 +1306,25 @@ export async function cautaDupaReferinta(
    * `shipDateEnd` la orice ora. 15 zile raman mult sub plafonul lor de 30.
    */
   const inceput = ziuaAzi(deLa);
-  const sfarsit = ziuaAzi(new Date(panaLa.getTime() + 24 * 3600 * 1000));
+
+  /*
+   * ⚠⚠ CAPATUL DE SUS NU POATE FI IN VIITOR — EI AU COD ANUME PENTRU ASTA.
+   *
+   * `Track-Common-ErrorMapping.json`, codul `TRACKING.SHIPDATEEND.FUTURE`:
+   * „Invalid ship date range. End date must not be in the future.”
+   *
+   * Ziua de rezerva de mai sus il impingea pe MAINE la fiecare apel, deci cautarea
+   * asta — singura plasa care inchide fereastra „am trimis si n-am primit raspuns”
+   * — ar fi fost respinsa de fiecare data, si tocmai cand e nevoie de ea.
+   *
+   * ⚠ Ce se pierde, si se spune pe fata: o expediere datata in VIITOR
+   * (`dataExpedierii` ales de comerciant, FedEx accepta pana la 10 zile inainte) nu
+   * poate fi gasita pe drumul asta, fiindca fereastra nu are voie sa ajunga pana la
+   * ea. Nu e o alegere de-a noastra, e plafonul lor.
+   */
+  const azi = ziuaAzi();
+  const cuRezerva = ziuaAzi(new Date(panaLa.getTime() + 24 * 3600 * 1000));
+  const sfarsit = cuRezerva > azi ? azi : cuRezerva;
 
   const r = await apel<Record<string, unknown>>(config, "POST", "/track/v1/referencenumbers", {
     efect: "citire",

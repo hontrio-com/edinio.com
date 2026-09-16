@@ -32,7 +32,7 @@ import {
   type DateExpediere,
   type FelLivrare,
 } from "@/lib/innoship/expediere";
-import { cheileRaspunsului, puncteIncomplete } from "@/lib/innoship/puncte";
+import { cheileRaspunsului, puncteDoarCuIdDeCurier, puncteIncomplete } from "@/lib/innoship/puncte";
 import { descriereRamburs, descriereStatus } from "@/lib/innoship/statusuri";
 import { ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import type { Json } from "@/types/database.types";
@@ -173,7 +173,10 @@ export async function testInnoshipConnectionAction(
 export async function diagnosticInnoshipAction(
   businessId: string,
 ): Promise<
-  | { ok: true; curieri: number; puncte: number; puncteFaraNume: number; cheiPuncte: { cheie: string; exemplu: string }[] }
+  | {
+      ok: true; curieri: number; puncte: number; puncteFaraNume: number; puncteDoarCurier: number;
+      cheiPuncte: { cheie: string; exemplu: string }[];
+    }
   | { ok: false; error: string }
 > {
   const ctx = await proprietar(businessId);
@@ -192,6 +195,9 @@ export async function diagnosticInnoshipAction(
       curieri: curieri.length,
       puncte: puncte.length,
       puncteFaraNume: puncteIncomplete(puncte),
+      /* ⚠ Randuri pe care le lasam afara fiindca au doar id de curier. Vezi
+         `puncteDoarCuIdDeCurier`: zero inseamna ca excluderea nu costa nimic. */
+      puncteDoarCurier: puncteDoarCuIdDeCurier(puncte),
       cheiPuncte: cheileRaspunsului(puncte),
     };
   } catch (e) {

@@ -59,8 +59,30 @@ function numarDin(rand: PunctFix, chei: readonly string[]): number {
  * `fixedLocationId` sta primul dinadins: el e chiar numele campului pe care
  * `OrderRequest.addressTo` il asteapta inapoi, deci daca exista in raspuns e
  * sigur cel corect.
+ *
+ * ⚠ SI TOT DIN ACELASI MOTIV, `courierFixedLocationId` A IESIT DIN LISTA.
+ *
+ * Argumentul care il pune primul pe `fixedLocationId` il exclude pe celalalt:
+ * `OrderRequest.addressTo` are AMANDOUA campurile, separat si cu nume diferite
+ * (`fixedLocationId` si `courierFixedLocationId`). Deci specificatia lor
+ * DOVEDESTE ca sunt doua lucruri diferite, nu doua nume pentru acelasi lucru.
+ *
+ * Folosit ca rezerva, id-ul de la CURIER ajungea in campul lui Innoship. Ce
+ * urmeaza e ori un refuz (vizibil, si atunci e bine), ori o expediere catre alt
+ * punct decat cel ales de cumparator, cu HTTP 200 si cu omul trimis sa ridice de
+ * unde nu e nimic. Aceeasi clasa cu „acelasi camp, doua feluri de id” de la Shipo
+ * si SmartShip.
+ *
+ * Un rand care are DOAR id de curier nu poate fi folosit, deci se lasa afara.
+ * Lipsa lui din lista se vede (puncte mai putine), pe cand un punct gresit nu se
+ * vede deloc. Cate sunt se masoara in `puncteDoarCuIdDeCurier` si se arata in
+ * Diagnostic: daca numarul e mare, raspunsul lor arata altfel decat credem, si
+ * atunci se cere lui Innoship ce inseamna campul, nu se ghiceste.
  */
-const CHEI_ID = ["fixedLocationId", "id", "locationId", "externalLocationId", "courierFixedLocationId"] as const;
+const CHEI_ID = ["fixedLocationId", "id", "locationId", "externalLocationId"] as const;
+
+/** Numele campului de la CURIER. Nu e id de Innoship: vezi nota de mai sus. */
+const CHEIE_ID_CURIER = "courierFixedLocationId";
 const CHEI_NUME = ["name", "fixedLocationName", "locationName", "displayName", "title", "denumire"] as const;
 const CHEI_ADRESA = ["address", "addressText", "streetName", "street", "adresa"] as const;
 const CHEI_LOCALITATE = ["localityName", "locality", "city", "town", "localitate"] as const;
@@ -132,6 +154,24 @@ export function puncteIncomplete(brute: PunctFix[]): number {
     if (!textDin(rand, CHEI_NUME)) fara++;
   }
   return fara;
+}
+
+/**
+ * Cate randuri au DOAR id-ul de la curier, deci nu pot fi folosite.
+ *
+ * ⚠ Zero inseamna ca excluderea nu costa nimic. Un numar mare inseamna ca
+ * nomenclatorul lor arata altfel decat presupunem, si atunci raspunsul nu e sa
+ * punem la loc campul gresit, ci sa intrebam ce inseamna. Se arata in Diagnostic,
+ * langa cheile reale.
+ */
+export function puncteDoarCuIdDeCurier(brute: PunctFix[]): number {
+  let cate = 0;
+  for (const rand of brute ?? []) {
+    if (!rand || typeof rand !== "object") continue;
+    if (textDin(rand, CHEI_ID)) continue;
+    if (textDin(rand, [CHEIE_ID_CURIER])) cate++;
+  }
+  return cate;
 }
 
 /**

@@ -235,6 +235,14 @@ export function InnoshipConfigClient({
                 de campuri de mai jos si o reparam.
               </p>
             )}
+            {diagnostic.puncteDoarCurier > 0 && (
+              <p className="text-warning">
+                {diagnostic.puncteDoarCurier} puncte au doar id-ul de la curier, nu si pe cel
+                Innoship, deci nu apar in checkout. Sunt doua campuri diferite in API-ul lor, iar
+                trimis in locul celuilalt, id-ul de curier ar duce coletul in alt punct decat cel
+                ales de client. Trimite-ne lista de campuri de mai jos.
+              </p>
+            )}
             {diagnostic.cheiPuncte.length > 0 && (
               <details>
                 <summary className="cursor-pointer">Campurile nomenclatorului de puncte</summary>

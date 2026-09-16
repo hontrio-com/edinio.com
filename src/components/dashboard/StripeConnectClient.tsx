@@ -35,7 +35,13 @@ export function StripeConnectClient({ config, businessId }: { config: StripeConf
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/stripe/connect/create", { method: "POST" });
+      /* ⚠ Magazinul se TRIMITE. Ruta il ghicea, luand primul al omului, deci cu mai multe magazine
+         contul se lega de altul decat cel din care s-a apasat. */
+      const res = await fetch("/api/stripe/connect/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId }),
+      });
       const data = await res.json() as { url?: string; error?: string };
       if (data.url) {
         window.location.href = data.url;

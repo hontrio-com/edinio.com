@@ -250,6 +250,56 @@ describe("Cine cheama regula", () => {
     }
   });
 
+  test("⚠⚠ conectarea Stripe se leaga de magazinul CERUT, nu de primul al omului", () => {
+    /*
+     * ═══ DEFECT ADORMIT, INCHIS INAINTE SA SE TREZEASCA (16.09.2026) ═══
+     *
+     * `connect/create` lua PRIMUL magazin al omului (`order("created_at").limit(1)`), nu pe cel din
+     * care a apasat. Cu mai multe magazine pe un cont, cineva conecta Stripe din magazinul B si
+     * contul se lega de magazinul A.
+     *
+     * ⚠ MASURAT: la 16.09.2026 toti cei 130 de utilizatori aveau exact UN magazin, deci nu musca
+     * inca. Se inchide fiindca ziua in care platforma da mai multe magazine ar trezi defectul in
+     * tacere, si nimeni n-ar cauta cauza in ruta de conectare.
+     *
+     * ⚠ Tiparul corect exista deja la DOUA fisiere distanta: `refresh` si `return` cer `business_id`
+     * si verifica proprietarul. `create` era singura care ghicea.
+     */
+    const cr = viu("src/app/api/stripe/connect/create/route.ts");
+    assert.match(cr, /corp\?\.businessId/, "magazinul nu se mai citeste din cerere");
+    assert.match(cr, /\.eq\("id", cerut\)/, "magazinul cerut nu se mai foloseste");
+    /* ⚠ Si `eq("user_id")` ramane, fiindca ELE e autorizarea: fara el, un id strain ar trece. */
+    assert.match(cr, /\.eq\("user_id", user\.id\)/, "un businessId strain ar fi acceptat");
+    assert.ok(
+      cr.indexOf('.eq("user_id", user.id)') < cr.indexOf('.eq("id", cerut)'),
+      "apartenenta se verifica dupa ce s-a ales magazinul",
+    );
+    /* ⚠ Si panoul chiar il trimite, altfel reparatia e pe jumatate. */
+    assert.match(
+      viu("src/components/dashboard/StripeConnectClient.tsx"),
+      /body: JSON\.stringify\(\{ businessId \}\)/,
+      "panoul nu trimite magazinul, deci ruta cade tot pe ghicit",
+    );
+  });
+
+  test("⚠ si toate rutele Connect se leaga de magazinul omului, nu de unul ghicit", () => {
+    /* Recensamant: o a patra ruta adaugata fara regula asta cade aici. */
+    const rute = ["create", "refresh", "return", "disconnect"];
+    for (const r of rute) {
+      const s = viu(`src/app/api/stripe/connect/${r}/route.ts`);
+      assert.match(s, /\.eq\("user_id", user\.id\)/, `ruta ${r} nu verifica proprietarul magazinului`);
+    }
+  });
+
+  test("⚠ reconectarea nu sterge restul configurarii", () => {
+    /* Scrierea de dinainte inlocuia obiectul intreg, deci orice cheie pusa de alta cale disparea. */
+    assert.match(
+      viu("src/app/api/stripe/connect/create/route.ts"),
+      /stripe_config: \{ \.\.\.stripeConfig, account_id: accountId/,
+      "configurarea se rescrie intreaga la reconectare",
+    );
+  });
+
   test("⚠ si aduce configuratiile magazinelor care au DOAR comenzi platite", () => {
     /*
      * `cfgMap` se compune din magazinele cu comenzi NEPLATITE. Fara aducerea in plus, tocmai

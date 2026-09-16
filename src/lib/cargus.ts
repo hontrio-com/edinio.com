@@ -181,23 +181,45 @@ function cargusErrorDetail(raw: string): string {
   return raw;
 }
 
+/**
+ * ⚠⚠ CE FACE CEREREA LA EI, si de asta depinde ce vede omul cand ea nu raspunde.
+ *
+ * Pana azi, `cargusPost`, `cargusPut` si `cargusDelete` n-aveau niciun `try` pe `fetch`. Un
+ * termen depasit iesea ca `TimeoutError` BRUT, netrecut prin niciun constructor de verdict.
+ *
+ * ⚠ Verdictul era totusi cel bun, din intamplare fericita: `verdictFurnizor` da `necunoscut`
+ * implicit, iar pe o SCRIERE aia e purtarea corecta. Ce lipsea era PROPOZITIA. Comerciantul
+ * primea „The operation was aborted due to timeout” si nu afla lucrul care conteaza: sa se uite
+ * in contul Cargus INAINTE de a apasa din nou. La ceilalti saisprezece curieri, propozitia aia
+ * exista de pe 13.09.2026.
+ *
+ * ⚠ Campul e OBLIGATORIU in semnatura, ca la FedEx: asa `tsc` enumera apelantii si nimeni nu
+ * poate adauga o cerere noua fara sa se gandeasca daca ea lasa sau nu ceva in urma.
+ */
+type EfectCargus = { efect: "citire" | "scriere"; ce: string };
 async function cargusPost<T>(
   path: string,
   token: string,
   subscriptionKey: string,
   body: unknown,
+  efect: EfectCargus,
 ): Promise<T> {
-  const res = await fetch(`${BASE_URL}/${path}`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Ocp-Apim-Subscription-Key": subscriptionKey,
-      "Ocp-Apim-Trace": "true",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(ASTEPTARE_MS),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/${path}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Ocp-Apim-Subscription-Key": subscriptionKey,
+        "Ocp-Apim-Trace": "true",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(ASTEPTARE_MS),
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, efect.efect === "scriere", efect.ce, "Cargus");
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw eroareCuStatus(`Cargus: ${cargusErrorDetail(text).slice(0, 300) || `${res.status} ${res.statusText}`}`, res.status);
@@ -209,8 +231,11 @@ async function cargusPut(
   path: string,
   token: string,
   subscriptionKey: string,
+  efect: EfectCargus,
 ): Promise<string> {
-  const res = await fetch(`${BASE_URL}/${path}`, {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/${path}`, {
     method: "PUT",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -219,7 +244,10 @@ async function cargusPut(
       "Content-Type": "application/json",
     },
     signal: AbortSignal.timeout(ASTEPTARE_MS),
-  });
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, efect.efect === "scriere", efect.ce, "Cargus");
+  }
   const text = await res.text().catch(() => "");
   if (!res.ok) {
     throw eroareCuStatus(`Cargus: ${cargusErrorDetail(text).slice(0, 300) || `${res.status} ${res.statusText}`}`, res.status);
@@ -237,8 +265,11 @@ async function cargusDelete(
   path: string,
   token: string,
   subscriptionKey: string,
+  efect: EfectCargus,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/${path}`, {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/${path}`, {
     method: "DELETE",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -246,7 +277,10 @@ async function cargusDelete(
       "Ocp-Apim-Trace": "true",
     },
     signal: AbortSignal.timeout(ASTEPTARE_MS),
-  });
+    });
+  } catch (e) {
+    throw eroareDeTermen(e, efect.efect === "scriere", efect.ce, "Cargus");
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     throw eroareCuStatus(`Cargus DELETE ${path}: ${res.status} — ${text}`, res.status);
@@ -404,7 +438,9 @@ export async function createCargusAwb(
    * expediere. Iar modulul lor oficial arata ca obiectul chiar vine, cu HTTP 200, si ca
    * inseamna EROARE. Vezi `shipping/raspunsul-awb-cargus.ts`.
    */
-  const raspuns = await cargusPost<unknown>("Awbs", token, config.subscription_key, body);
+  /* Scriere: un termen depasit poate insemna ca AWB-ul s-a creat totusi. */
+  const raspuns = await cargusPost<unknown>("Awbs", token, config.subscription_key, body,
+    { efect: "scriere", ce: "emiterea AWB-ului" });
   const verdict = codulAwbCargus(raspuns);
 
   /*
@@ -517,6 +553,9 @@ export async function calculateCargusPrice(
     token,
     config.subscription_key,
     body,
+    /* ⚠ CITIRE, desi e POST: o cotare de tarif nu creeaza nimic la ei. Deci un termen
+       depasit e refuz DOVEDIT, iar cotarea urmatoare ramane libera. */
+    { efect: "citire", ce: "cotarea de tarif" },
   );
   const gross = result?.GrandTotal ?? null;
   if (typeof gross !== "number") return null;
@@ -603,7 +642,9 @@ export async function validateCargusPickupOrder(
     PickupStartDate: input.pickupStart,
     PickupEndDate: input.pickupEnd,
   });
-  return cargusPut(`Orders?${params.toString()}`, token, config.subscription_key);
+  /* Scriere: valideaza (adica INCHIDE) o comanda de ridicare la ei. */
+  return cargusPut(`Orders?${params.toString()}`, token, config.subscription_key,
+    { efect: "scriere", ce: "validarea comenzii de ridicare" });
 }
 
 // ─── AWB Deletion ─────────────────────────────────────────────────────────────
@@ -613,7 +654,9 @@ export async function deleteCargusAwb(
   barCode: string,
 ): Promise<void> {
   const token = await getCargusToken(config.username, config.password, config.subscription_key);
-  await cargusDelete(`Awbs?barCode=${encodeURIComponent(barCode)}`, token, config.subscription_key);
+  /* Scriere: anularea poate sa fi ajuns chiar daca raspunsul nu. */
+  await cargusDelete(`Awbs?barCode=${encodeURIComponent(barCode)}`, token, config.subscription_key,
+    { efect: "scriere", ce: "anularea AWB-ului" });
 }
 
 // ─── AWB PDF (base64) ─────────────────────────────────────────────────────────

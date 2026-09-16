@@ -310,3 +310,43 @@ care nu putea incasa forma de ramburs trimisa acolo, si o cota care nu era a exp
 3. **Harta de stari** nu exista, si nu din lene: **ei nu publica niciuna**. Cronul strange
    vocabularul din trafic, exact ca la Woot, si abia pe el se va putea cabla mutarea comenzii.
    Pana atunci comanda nu se misca singura, si asta e o alegere, nu o scapare.
+
+---
+
+## A doua trecere, 16.09.2026: un termen depasit care nu spunea nimic
+
+Cargus are **2 magazine configurate si ZERO AWB-uri**, deci e printre cei la care cade urmatorul
+colet real. Am cautat tiparele gasite in aceeasi zi la FedEx, UPS si Shipo.
+
+### ✅ Ce era deja bine
+
+| tiparul cautat | ce am gasit |
+| --- | --- |
+| refuzul autentificarii rescris ca „nu stim” | **curat**: tokenul se ia in AFARA oricarui `try`, deci `eroareRefuz` de la login ajunge neatins la apelant |
+| localitatea punctului suprascrie gol localitatea omului | **nu e cazul**: Ship & Go trimite doar `pudoPointId`, nu inlocuieste nimic din adresa |
+| o cotare picata rupe checkout-ul | **nu**: amandoua cotarile au `.catch()` care cade pe tariful fix al zonei |
+
+### ⚠ Ce s-a reparat
+
+`cargusPost`, `cargusPut` si `cargusDelete` **n-aveau niciun `try` pe `fetch`**. Un termen depasit
+iesea ca `TimeoutError` BRUT, netrecut prin niciun constructor de verdict.
+
+* Pe **scriere**, verdictul era totusi cel bun, din intamplare fericita: `verdictFurnizor` da
+  `necunoscut` implicit. Ce lipsea era PROPOZITIA — comerciantul primea „The operation was
+  aborted due to timeout” in loc de „Cargus nu a raspuns la timp (emiterea AWB-ului). Verifica in
+  contul Cargus inainte de a reincerca.”, pe care ceilalti saisprezece o dau de pe 13.09.2026.
+* ⚠⚠ Pe **citire**, verdictul era CHIAR GRESIT. `ShippingCalculation` e un POST, dar nu creeaza
+  nimic: e o cotare de tarif. Ramas `necunoscut`, un termen depasit acolo ar fi blocat degeaba o
+  reincercare despre care se stie sigur ca n-a lasat nimic in urma. Aceeasi lectie ca la FAN, unde
+  `reports/branches` bloca o comanda pe o citire expirata.
+
+⚠ Efectul e **obligatoriu in semnatura**, ca la FedEx: asa `tsc` enumera apelantii — si chiar i-a
+enumerat, toti patru, la compilare. Nimeni nu mai poate adauga o cerere fara sa se gandeasca daca
+ea lasa sau nu ceva in urma.
+
+⚠ Si doua incercari ratate ale probei, pastrate in ea fiindca explica drumul: cotarea cheama INTAI
+`PickupLocations`, iar fara `CountyName`/`LocalityName` in raspuns se opreste cinstit inainte de
+tarif. Prima data am crezut ca masor tariful si masuram altceva.
+
+**Probe:** 5 noi. Banc de mutanti **4 din 4**, intre care emiterea data drept citire (de unde s-ar
+putea face al doilea colet) si cotarea data drept scriere.

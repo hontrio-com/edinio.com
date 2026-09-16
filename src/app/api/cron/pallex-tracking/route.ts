@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verificaCron } from "@/lib/cron-auth";
 import { logError } from "@/lib/error-logger";
-import { citestePartida, pallexGata, tipuriDeStatus, type PallExConfig } from "@/lib/pallex/client";
+import { citesteBorderou, citestePartida, pallexGata, tipuriDeStatus, type PallExConfig } from "@/lib/pallex/client";
 import {
   citesteMemoria,
   clasificaStatus,
@@ -12,6 +12,7 @@ import {
   statusUrmator,
   trebuieSemnalat,
 } from "@/lib/pallex/statusuri";
+import { sfatPentruMarfaOprita } from "@/lib/pallex/sfatul-pentru-marfa-oprita";
 import { tranzitieComandaMarketplace } from "@/lib/orders/tranzitie-marketplace";
 import { scrieUrmarirea } from "@/lib/orders/urmarirea-se-scrie-pe-identitate";
 import { maybeAutoInvoice } from "@/lib/actions/invoice-auto.actions";
@@ -116,7 +117,7 @@ export async function GET(req: NextRequest) {
 
   const { data: orders, error: eOrders } = await admin
     .from("orders")
-    .select("id, business_id, status, order_number, payment_status, created_at, pallex_awb_number, pallex_consignment_id, pallex_awb_at, pallex_status_id, pallex_status_checked_at")
+    .select("id, business_id, status, order_number, payment_status, created_at, pallex_awb_number, pallex_consignment_id, pallex_bordereau_id, pallex_awb_at, pallex_status_id, pallex_status_checked_at")
     /*
      * ⚠ Se filtreaza pe ID-ul ClientPlus, nu pe numarul de partida: acela e
      * singurul pe care il primeste `GET /consignments/{id}`. Predicatul indexului
@@ -457,6 +458,31 @@ export async function GET(req: NextRequest) {
       if (avertizatAcum) {
         neplecate++;
         avertizat = true;
+        /*
+         * ⚠ SE INTREABA BORDEROUL, nu se presupune ce scrie in el.
+         *
+         * Mesajul spunea intotdeauna „cel mai des inseamna ca borderoul nu a fost
+         * validat”. Dar starile lor sunt TREI (nevalidat, validat de client, validat
+         * de transportator), iar un comerciant care si-a facut partea acum doua zile
+         * era trimis sa valideze ce validase deja: gaseste butonul stins si a doua
+         * oara nu mai crede avertismentul. E chiar urmarea numita in comentariul de
+         * mai sus, doar ca pe cealalta cauza.
+         *
+         * ⚠ O SINGURA citire in plus, si numai pentru partida care CHIAR primeste
+         * avertismentul: semnul din memorie il da o singura data, deci nu se repeta
+         * la fiecare rulare. Citire pura, deci o cadere nu strica nimic.
+         */
+        let stareBorderou: number | null = null;
+        if (Number.isInteger(o.pallex_bordereau_id)) {
+          try {
+            const b = await citesteBorderou(config, o.pallex_bordereau_id as number);
+            stareBorderou = Number.isInteger(b?.validated) ? (b!.validated as number) : null;
+          } catch {
+            /* ⚠ Necitit inseamna NECUNOSCUT, nu „nevalidat”: sfatul cade atunci pe
+               „uita-te”, nu pe un indemn inventat. Vezi `sfatPentruMarfaOprita`. */
+            stareBorderou = null;
+          }
+        }
         await semnaleaza(admin, {
           userId: proprietari.get(o.business_id) ?? null,
           businessId: o.business_id,
@@ -468,8 +494,7 @@ export async function GET(req: NextRequest) {
             `${o.order_number ? `Comanda ${o.order_number}` : "O comanda"}: partida `
             + `${o.pallex_awb_number ?? o.pallex_consignment_id} a fost creata acum peste o zi si `
             + `inca nu e in reteaua Pall-Ex${nume ? ` (status: ${nume})` : ""}. `
-            + "Cel mai des inseamna ca borderoul nu a fost validat — deschide comanda si valideaza-l, "
-            + "altfel marfa ramane in depozitul tau.",
+            + sfatPentruMarfaOprita(stareBorderou),
           severity: "warning",
         });
         semnalate++;

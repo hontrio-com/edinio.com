@@ -167,7 +167,15 @@ export function partidaPallEx(d: DatePartida): PartidaPallEx {
 
     consignor_name: curata(d.expeditor.companie || d.expeditor.nume),
     consignor_county: codAutoAlJudetului(d.expeditor.judet) ?? "",
-    consignor_locality: curata(d.expeditor.oras),
+    /* ⚠ Se plieaza si aici, nu doar la destinatar.
+
+       Era singura adresa din cele doua care nu trecea prin ajutorul comun, si
+       asimetria nu avea niciun motiv scris: comerciantul isi scrie orasul de mana
+       in setari, deci un depozit bucurestean putea pleca drept localitatea
+       „Sector 3”, pe care reteaua lor de hub-uri n-o cunoaste ca oras. In afara
+       Bucurestiului ajutorul nu schimba nimic in afara de diacritice, la fel ca la
+       destinatar. */
+    consignor_locality: normalizeLocalityName(curata(d.expeditor.oras), d.expeditor.judet ?? undefined),
     consignor_address: strada(d.expeditor),
     consignor_postcode: curata(d.expeditor.codPostal),
 

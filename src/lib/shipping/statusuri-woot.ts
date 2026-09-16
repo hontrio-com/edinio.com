@@ -117,9 +117,26 @@ function eMaiNou(candidat: WootEveniment, fataDe: WootEveniment): boolean {
  * ⚠ ETICHETA NU E ENUM: la `9` ea poarta chiar numarul comenzii lor („Returnare comanda 5173400"),
  * deci se schimba de la o comanda la alta. Harta se face pe NUMAR; textul ramane pentru om.
  *
- * ⚠ CE NU E IN HARTA NU MISCA NIMIC. Numerele 6, 7, 8 si orice peste 10 nu s-au vazut inca, deci
- * nu primesc niciun inteles: comanda nu se muta, si cronul le NUMARA separat, ca harta sa poata
- * creste din trafic in loc sa creasca din presupuneri.
+ * ⚠ CE NU E IN HARTA NU MISCA NIMIC: comanda nu se muta, si cronul le NUMARA separat, ca harta
+ * sa poata creste din trafic in loc sa creasca din presupuneri.
+ *
+ * ⚠⚠ SI CHIAR A CRESCUT, PE 16.09.2026. Jurnalul cronului raporta `stari NECUNOSCUTE: 100, 8`.
+ * Masurate in baza, cu etichetele scrise de EI:
+ *
+ *      8  „Redirectionare comanda 5129780 / 5136953 / 5176172”        3 expedieri
+ *    100  „Expedierea ta este pregatita pentru a fi ridicata din oficiul DPD.”  1 expediere
+ *
+ * ⚠ `8` e perechea lui `9`: amandoua poarta numarul comenzii LOR in eticheta, si amandoua spun
+ * ca livrarea nu se intampla asa cum s-a plecat. De aia primeste aceeasi clasa, `problema` — ca
+ * sa afle comerciantul — dar **fara** `retur`: coletul merge in ALTA parte, nu inapoi la el. Un
+ * `retur` pus aici i-ar fi spus ca-i vine marfa acasa, ceea ce nu e adevarat.
+ *
+ * ⚠ `100` e un numar de alta forma decat celelalte (toate erau sub 11), deci vocabularul lor NU
+ * e o secventa — cu atat mai putin se poate ghici. E `in_retea`: coletul e la oficiu si asteapta
+ * cumparatorul, deci nici livrat, nici oprit. Nu se semnaleaza: la livrarea in punct asta e chiar
+ * pasul normal, iar o notificare la fiecare colet ajuns ar fi zgomot.
+ *
+ * Raman nevazute: 6, 7, si orice altceva.
  */
 
 type OperatieWoot = {
@@ -134,9 +151,14 @@ export const STARI_WOOT: Readonly<Record<string, OperatieWoot>> = {
   "3": { clasa: "in_retea" },       // Ridicat de curier (din exemplele lor)
   "4": { clasa: "in_retea" },       // receptionata in depozitul curierului
   "5": { clasa: "in_retea" },       // preluata spre livrare de catre curier
+  /* ⚠ Redirectionare: livrarea nu se intampla unde s-a plecat, dar coletul NU vine inapoi la
+     comerciant. Se semnaleaza (clasa `problema`), fara `retur`. Vezi nota de mai sus. */
+  "8": { clasa: "problema" },       // Redirectionare comanda
   /* ⚠ Returul NU e final: coletul inca se misca, si abia cand ajunge inapoi se incheie ceva. */
   "9": { clasa: "problema", retur: true }, // Returnare comanda
   "10": { clasa: "livrat", final: true },  // livrata cu success
+  /* ⚠ Pregatit de ridicare din oficiu: nici livrat, nici oprit. Coletul asteapta omul. */
+  "100": { clasa: "in_retea" },     // pregatita pentru ridicare din oficiul curierului
 };
 
 /** Ce inseamna numarul asta. Unul nevazut inca ramane `necunoscut`, nu o ghicitura. */

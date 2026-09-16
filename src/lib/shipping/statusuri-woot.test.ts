@@ -150,11 +150,19 @@ test("⚠⚠ harta e SCRISA DIN DATE, si numai din ele", () => {
 
 test("⚠⚠ ce nu s-a VAZUT inca nu misca nimic", () => {
   /*
-   * ⚠ MIEZUL HOTARARII. Numerele 6, 7, 8 si orice peste 10 nu s-au vazut inca in trafic, deci nu
-   * primesc niciun inteles. Un „probabil inseamna livrat" ar fi exact greseala pe care plasa
-   * veche o apara, doar mutata cu o zi mai tarziu.
+   * ⚠ MIEZUL HOTARARII, si el ramane: un numar nevazut nu primeste niciun inteles. Un
+   * „probabil inseamna livrat" ar fi exact greseala pe care plasa asta o apara.
+   *
+   * ⚠⚠ LISTA S-A SCURTAT PE 16.09.2026, SI ASA TREBUIE SA SE INTAMPLE. `8` si `100` erau aici;
+   * cronul le-a raportat in jurnal (`stari NECUNOSCUTE: 100, 8`), s-au masurat in baza cu
+   * etichetele scrise de EI, si abia atunci au intrat in harta. Proba asta a si cazut cand
+   * le-am adaugat, cu mesajul „codul 8 a capatat un inteles nemasurat" — adica si-a facut
+   * treaba: m-a oprit si m-a trimis la masuratoare.
+   *
+   * Cine mai adauga un numar aici il scoate din lista de mai jos SI scrie eticheta masurata in
+   * `statusuri-woot.ts`. Fara masuratoare, nu.
    */
-  for (const cod of [6, 7, 8, 11, 99, 0, -1]) {
+  for (const cod of [6, 7, 11, 99, 0, -1]) {
     assert.equal(clasificaStareaWoot(cod), "necunoscut", `codul ${cod} a capatat un inteles nemasurat`);
     assert.equal(statusUrmatorWoot("shipped", cod), null, `codul ${cod} muta comanda`);
     assert.equal(eStareNecunoscutaWoot(cod), true, `codul ${cod} nu mai e numarat ca necunoscut`);
@@ -162,6 +170,36 @@ test("⚠⚠ ce nu s-a VAZUT inca nu misca nimic", () => {
   assert.equal(eStareNecunoscutaWoot(10), false, "un cod stiut a fost numarat drept necunoscut");
   assert.equal(clasificaStareaWoot(null), "necunoscut");
   assert.equal(clasificaStareaWoot(4.5), "necunoscut", "un numar care nu e intreg a trecut drept cod");
+});
+
+test("⚠⚠ cele doua stari masurate pe 16.09: redirectionarea si asteptarea la oficiu", () => {
+  /*
+   * `8` = „Redirectionare comanda {nr}", 3 expedieri. Perechea lui `9`: amandoua poarta
+   * numarul comenzii LOR in eticheta si amandoua spun ca livrarea nu se intampla cum s-a plecat.
+   *
+   * ⚠⚠ DAR FARA `retur`, si asta e toata deosebirea: la redirectionare coletul merge in ALTA
+   * parte, nu inapoi la comerciant. Un `retur` aici i-ar fi spus ca-i vine marfa acasa.
+   */
+  assert.equal(clasificaStareaWoot(8), "problema");
+  assert.equal(trebuieSemnalatWoot(8), true, "redirectionarea nu-i mai spune nimic comerciantului");
+  assert.equal(esteReturWoot(8), false, "redirectionarea NU e retur: coletul nu vine inapoi la el");
+  assert.equal(statusUrmatorWoot("shipped", 8), null, "o redirectionare a miscat comanda");
+
+  /*
+   * `100` = „pregatita pentru a fi ridicata din oficiul DPD", 1 expediere. Nici livrat, nici
+   * oprit: coletul asteapta omul. ⚠ Si e un numar de ALTA forma (toate celelalte erau sub 11),
+   * deci vocabularul lor nu e o secventa si nu se poate ghici.
+   */
+  assert.equal(clasificaStareaWoot(100), "in_retea");
+  assert.equal(trebuieSemnalatWoot(100), false, "asteptarea la oficiu e pasul normal, nu o alarma");
+  assert.equal(esteReturWoot(100), false);
+  assert.equal(eStareFinalaWoot(100), false, "coletul inca n-a fost ridicat");
+  assert.equal(statusUrmatorWoot("confirmed", 100), "shipped", "coletul e in retea, comanda e expediata");
+
+  /* ⚠ Si niciunul nu mai e numarat ca necunoscut: altfel jurnalul ar cere la nesfarsit o
+     masuratoare deja facuta. */
+  assert.equal(eStareNecunoscutaWoot(8), false);
+  assert.equal(eStareNecunoscutaWoot(100), false);
 });
 
 test("⚠ starea nu COBOARA, si o comanda anulata nu se mai misca", () => {

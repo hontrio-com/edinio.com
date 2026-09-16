@@ -15,7 +15,7 @@ HTML) si de acolo s-a citit. A doua oara intr-o zi, dupa Klarna. Vezi
 Nu chiar zero, si asta conteaza:
 
 * **un magazin configurat** (`okxi`), acum cu `enabled: false`, dar avand `secret_key`, `webhook_id`
-  **si `signing_secret`** — deci un webhook chiar a fost inregistrat la ei candva;
+  **si `signing_secret`**, deci un webhook chiar a fost inregistrat la ei candva;
 * **o singura comanda reala**: `ORD-MSKFBSOC-730`, 24,13 lei, din 08.08.2026, cu `revolut_order_id`
   scris (deci plata **a fost pornita**), ramasa `cancelled/unpaid`;
 * zero randuri in registru, zero in jurnal.

@@ -74,7 +74,7 @@ intreaba in loc sa astepte.
 ## ⚠⚠ Rambursarea partiala NU se poate scrie, si nu se minte
 
 `orders_payment_status_check` ingaduie exact trei valori: `unpaid`, `paid`, `refunded`. Nu exista
-`partially_refunded`, **desi `lib/orders/marfa-a-plecat-fara-bani.ts` il numara intr-un set** — acolo
+`partially_refunded`, **desi `lib/orders/marfa-a-plecat-fara-bani.ts` il numara intr-un set**. Acolo
 e valoare MOARTA, fiindca baza nu o poate tine.
 
 Deci la o rambursare partiala nu se scrie `refunded`: ar spune ca s-au intors TOTI banii, ceea ce e
@@ -135,7 +135,7 @@ Integrarea asta e scrisa cu grija reala, si mai multa decat Netopia. Verificat a
 2. **Nu s-a putut masura daca gaura a muscat deja.** `STRIPE_SECRET_KEY` e gol in `.env.local` (cheia
    traieste doar in Vercel, ceea ce e corect), deci nu s-au putut interoga conturile conectate pentru
    rambursari si contestatii existente. ⚠ Prima incercare a raportat „0 rambursari" pentru fiecare
-   cont — si era o MINCIUNE a masuratorii, fiindca Stripe raspundea „nu ai dat nicio cheie". Vezi
+   cont, si era o MINCIUNE a masuratorii, fiindca Stripe raspundea „nu ai dat nicio cheie". Vezi
    memoria `zero-randuri-nu-e-succes`. Numarul real se poate afla din panoul Stripe.
 3. **Fluxul cap la cap nu a fost parcurs**, spre deosebire de Netopia: ar cere o plata adevarata pe
    contul conectat al unui comerciant, adica banii LUI, nu ai nostri. Sandbox-ul Stripe cere chei de

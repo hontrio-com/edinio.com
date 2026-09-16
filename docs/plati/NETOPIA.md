@@ -62,10 +62,31 @@ Acum 12 nu misca nimic, iar ruta scrie un avertisment (`warning`, nu `critical`:
 intamplare obisnuita intr-un magazin, iar o alarma tocita nu mai e citita cand chiar conteaza) si
 raspunde `errorCode: 0`, ca Netopia sa nu repete notificarea la nesfarsit.
 
-⚠ **Nu pot dovedi din date ca s-a si intamplat.** Cele 14 comenzi Netopia anulate au, cele mai multe,
-acelasi `updated_at` la milisecunda: sunt anulari in lot facute de comerciant. Doua au marcaj propriu
-si ar putea fi IPN, dar nu se poate deosebi. Defectul e dovedit din **specificatie si din codul
-nostru**, nu din trafic, si asa il scriu.
+### ✅ DOVEDIT PE SANDBOX-UL LOR, in aceeasi zi
+
+Proprietarul a conectat un cont de sandbox pe magazinul `itp-blk`. Cu cardurile de test din **chiar
+specificatia lor**, `POST /payment/card/start` a raspuns:
+
+| card | status | mesajul lor |
+| --- | --- | --- |
+| valid, fara 3-D Secure | **3** | `00 Approved` |
+| **CVV gresit** | **12** | `21 Invalid CVV` |
+| numar de card inexistent | **12** | `17 Invalid card number` |
+| card expirat | **1** | `19 Expired card` |
+
+⚠⚠ **Deci 12 e refuz de card, confirmat de doua ori, si nu e un cod rar: e chiar ce produce un CVV
+tastat gresit.** Adica cea mai obisnuita greseala a unui cumparator ii omora comanda, definitiv.
+Defectul nu era teoretic; asteptase doar un client care greseste trei cifre.
+
+⚠ **Si s-a vazut un cod NOU, `1` (card expirat), care nu apare nicaieri in specificatia lor.** Codul
+nostru il lasa sa nu miste nimic, ceea ce e purtarea corecta, si nu se mapeaza: nu stim daca `1`
+inseamna intotdeauna refuz sau e o stare intermediara (raspunsul purta si o pagina de plata). De
+acum, codurile nerecunoscute se scriu in jurnal cu tot cu mesajul lor, ca harta sa creasca din
+**trafic**, nu din presupuneri. Acelasi drum ca la Woot si Cargus.
+
+⚠ Ce NU s-a putut proba asa: cele 14 comenzi Netopia anulate din productie au, cele mai multe,
+acelasi `updated_at` la milisecunda, deci sunt anulari in lot facute de comerciant. Nu se poate
+arata ca un IPN cu 12 a anulat vreuna; se poate arata doar ca ar fi facut-o.
 
 ---
 
@@ -168,7 +189,7 @@ sa stric o aparare care functioneaza; exemplele au lamurit-o.**
 
 ## Nota, cinstit
 
-**9/10.**
+**9,5/10.**
 
 Integrarea era scrisa cu grija reala: notificarea autentificata inainte de orice atingere a bazei,
 suma verificata, `errorCode` folosit exact cum trebuie pentru repetare, idempotenta prin `WHERE`,
@@ -181,8 +202,10 @@ putea disparea in tacere.
 1. **Nu exista nicio reconciliere**, si nu din vina noastra: endpointul lor de interogare a starii nu
    e inca disponibil. Pana atunci, o notificare pierduta inseamna o plata pierduta, iar cele doua
    comenzi expediate-si-neplatite de mai sus sunt chiar forma pe care o ia.
-2. **Reparatia statusului 12 e argumentata din specificatie, nu probata pe traficul lor.** Un card
-   refuzat nu se poate produce la comanda intr-un mediu real fara un cont de test.
+2. **Fluxul complet (pornire → pagina lor → IPN) n-a fost inca parcurs cap la cap.** S-a dovedit
+   pornirea (prin clientul nostru real) si maparea statusurilor (prin cardurile lor de test), dar
+   drumul intors, notificarea semnata care marcheaza o comanda platita, cere o comanda adevarata
+   intr-un magazin viu.
 3. **Rambursarea nu se poate porni din platforma.** `/operation/credit` e in specificatia lor;
    comerciantul ramburseaza azi din panoul Netopia, iar noi doar RECUNOASTEM rambursarea daca vine
    un IPN cu status 15. ⚠ Nu se scrie inainte de sandbox: o stornare dubla inseamna bani iesiti de

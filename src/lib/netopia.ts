@@ -208,6 +208,14 @@ export interface NetopiaIpnPayload {
     amount?: number;
     currency?: string;
     data?: Record<string, unknown>;
+    /*
+     * ⚠ `code` si `message` sunt in schema lor `PaymentNotify` si lipseau de aici, deci motivul
+     * REAL al unui refuz nu se putea citi. Masurat pe sandbox: la un CVV gresit vine
+     * `code: "21", message: "Invalid CVV"`, la un numar inexistent `"17" / "Invalid card number"`.
+     * Fara ele, un status necunoscut ar fi ajuns in jurnal ca o cifra goala.
+     */
+    code?: string;
+    message?: string;
     error?: { code: string; message: string };
   };
   order?: {
@@ -251,6 +259,28 @@ export interface NetopiaIpnPayload {
  *
  * ⚠ Orice alt cod NU misca nimic, si asta ramane: tacerea pe necunoscut e purtarea corecta cand
  * de partea cealalta sunt bani.
+ *
+ * ═══ ✅ DOVEDIT PE SANDBOX-UL LOR, 16.09.2026 ═══
+ *
+ * Nu mai e o citire de specificatie. Cu cardurile de test din chiar specificatia lor, pe contul de
+ * sandbox al magazinului `itp-blk`, `POST /payment/card/start` a raspuns:
+ *
+ *   | card               | status | mesajul lor            |
+ *   |--------------------|--------|------------------------|
+ *   | valid, fara 3-D-S  |   3    | `00 Approved`          |
+ *   | CVV gresit         | **12** | `21 Invalid CVV`       |
+ *   | numar inexistent   | **12** | `17 Invalid card number` |
+ *   | card expirat       |   1    | `19 Expired card`      |
+ *
+ * ⚠⚠ Deci 12 e REFUZ DE CARD, confirmat de doua ori, si nu e un cod rar: e chiar ce produce un
+ * CVV tastat gresit, cea mai obisnuita greseala a unui cumparator. Pana la reparatia de azi, cine
+ * gresea codul de pe card ramanea cu comanda ANULATA si nu o mai putea plati niciodata.
+ *
+ * ⚠ SI S-A VAZUT UN COD NOU: `1`, la cardul expirat. Nu se mapeaza, si nu din lene: nu stim daca
+ * `1` inseamna intotdeauna un refuz sau e o stare intermediara (raspunsul purta si o pagina de
+ * plata, deci cumparatorul poate relua acolo). Tacerea pe necunoscut ramane, iar ruta scrie de
+ * acum codurile nerecunoscute in jurnal, ca harta sa creasca din TRAFIC, nu din presupuneri
+ * (acelasi drum ca la Woot si Cargus).
  */
 export function resolveNetopiaStatus(status: number): {
   orderStatus?: string;

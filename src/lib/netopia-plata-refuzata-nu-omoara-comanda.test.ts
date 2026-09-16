@@ -76,6 +76,34 @@ describe("Statusul 12: plata REFUZATA, nu anulare", () => {
     assert.deepEqual(resolveNetopiaStatus(15), { paymentStatus: "refunded" });
   });
 
+  test("✅ DOVEDIT pe sandbox: 12 vine de la un CVV gresit si de la un numar inexistent", () => {
+    /*
+     * Nu mai e o citire de specificatie. Cu cardurile de test din chiar specificatia lor, pe contul
+     * de sandbox al magazinului `itp-blk`, `POST /payment/card/start` a raspuns pe 16.09.2026:
+     *
+     *   card valid           -> status 3,  „00 Approved"
+     *   CVV gresit           -> status 12, „21 Invalid CVV"
+     *   numar inexistent     -> status 12, „17 Invalid card number"
+     *   card expirat         -> status 1,  „19 Expired card"
+     *
+     * ⚠⚠ Deci 12 e refuz de card, si nu e un cod rar: e chiar ce produce un CVV tastat gresit.
+     * Pana la reparatie, cine gresea codul de pe card ramanea cu comanda ANULATA si nu o mai putea
+     * plati niciodata.
+     */
+    assert.equal(resolveNetopiaStatus(12).refuzat, true);
+    assert.equal(resolveNetopiaStatus(12).orderStatus, undefined);
+    assert.deepEqual(resolveNetopiaStatus(3), { orderStatus: "confirmed", paymentStatus: "paid" });
+  });
+
+  test("⚠⚠ statusul 1 (card expirat), vazut pe sandbox, NU misca nimic", () => {
+    /*
+     * Cod nedocumentat nicaieri in specificatia lor, gasit doar probind. Nu se mapeaza: nu stim
+     * daca `1` inseamna intotdeauna refuz sau e o stare intermediara (raspunsul purta si o pagina
+     * de plata, deci cumparatorul poate relua acolo). Tacerea pe necunoscut ramane.
+     */
+    assert.deepEqual(resolveNetopiaStatus(1), {});
+  });
+
   test("⚠⚠ si orice cod necunoscut NU misca nimic", () => {
     /* Tacerea pe necunoscut e purtarea corecta cand de partea cealalta sunt bani. */
     for (const s of [0, 1, 2, 4, 6, 7, 10, 13, 14, 16, 99, -1]) {
@@ -163,6 +191,21 @@ describe("Ruta de notificare", () => {
   test("⚠ verificarea semnaturii ramane INAINTEA oricarei scrieri", () => {
     /* O notificare neautentificata n-are voie sa ajunga nici macar la citirea comenzii. */
     assert.ok(s.indexOf("verifyNetopiaIpn") < s.indexOf('from("orders")'), "semnatura se verifica prea tarziu");
+  });
+
+  test("⚠⚠ codurile NERECUNOSCUTE se strang din trafic", () => {
+    /*
+     * Harta creste din trafic, nu din presupuneri, ca la Woot si Cargus. Specificatia lor
+     * documenteaza doar 3, 5 si 12; proba pe sandbox a scos si `1`. Cate altele mai vin, nu stim,
+     * si pana acum nici nu s-ar fi aflat.
+     */
+    assert.match(s, /status Netopia NERECUNOSCUT/, "codurile necunoscute trec fara urma");
+    assert.match(s, /severity: "info"/, "un cod nou nu e o alarma, e o masuratoare");
+    assert.match(s, /codLor: payload\.payment\?\.code/, "nu se strange si motivul lor");
+    /* ⚠ Si tot NU misca nimic: strangerea n-are voie sa devina o mapare pe furis. */
+    const ramura = /\} else \{[\s\S]*?severity: "info",[\s\S]*?\n  \}/.exec(s)?.[0] ?? "";
+    assert.ok(ramura, "ramura de cod necunoscut a disparut");
+    assert.ok(!/aplica_tranzitia_comenzii|payment_status/.test(ramura), "codul necunoscut misca acum comanda");
   });
 
   test("⚠⚠ si garda de SUMA ramane pe loc", () => {

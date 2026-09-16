@@ -185,6 +185,36 @@ export async function POST(request: NextRequest) {
 
   if (orderStatus || newPaymentStatus) {
     console.log("[netopia/notify] Order updated:", { orderId, orderStatus, newPaymentStatus });
+  } else {
+    /*
+     * ═══ ⚠ HARTA DE STATUSURI CRESTE DIN TRAFIC, NU DIN PRESUPUNERI (16.09.2026) ═══
+     *
+     * Ajungem aici cand codul lor nu inseamna nimic pentru noi, iar comanda ramane neatinsa. Aia
+     * e purtarea corecta si nu se schimba: cand de partea cealalta sunt bani, tacerea pe
+     * necunoscut e mai buna decat o ghicitura.
+     *
+     * Dar pana acum nici nu se AFLA. Specificatia lor documenteaza doar 3, 5 si 12, iar proba pe
+     * sandbox din 16.09 a scos la iveala si `1` (card expirat), care nu e nicaieri scris. Cate
+     * altele mai vin, nu stim.
+     *
+     * Randul asta le strange, cu tot cu mesajul lor, exact cum s-a facut harta Woot si cum se
+     * strange vocabularul Cargus. Cand un cod apare de destule ori, se mapeaza din date.
+     *
+     * ⚠ `info`, nu alarma: nu s-a intamplat nimic rau, doar am vazut ceva ce nu stim.
+     */
+    await logError({
+      action: "netopia/notify",
+      message: `status Netopia NERECUNOSCUT: ${paymentStatus}. Comanda nu s-a miscat.`,
+      details: {
+        orderId,
+        status: paymentStatus,
+        ntpID: payload.payment?.ntpID,
+        codLor: payload.payment?.code ?? null,
+        mesajLor: payload.payment?.message ?? null,
+      },
+      businessId: order.business_id,
+      severity: "info",
+    });
   }
 
   // Netopia v2 expects { errorCode: 0 } for success

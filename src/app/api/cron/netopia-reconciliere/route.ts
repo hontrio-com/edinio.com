@@ -201,12 +201,26 @@ export async function GET(req: NextRequest) {
      * comerciantul a avut o comanda aratand „neplatita" cu banii deja incasati. Se scrie, ca sa se
      * poata masura cat de des se intampla.
      */
+    /*
+     * ⚠ MESAJUL SPUNE CE ERA DE FAPT, fiindca cele doua cazuri sunt lucruri diferite.
+     *
+     * Aici a fost un singur text pentru amandoua: „Comanda X era neplatita la noi, dar Netopia o are
+     * ca ...". La paza rambursarilor comanda era chiar PLATITA, deci mesajul spunea o neadevarare
+     * despre starea ei. S-a vazut la prima rulare adevarata, pe `#PROBA-NETOPIA-1`.
+     *
+     * Un jurnal care descrie gresit starea de dinainte trimite pe cine il citeste sa caute alt
+     * defect decat cel intamplat. Aceeasi lectie ca la statusul „NERECUNOSCUT" spus despre un cod
+     * documentat.
+     */
+    const eraPlatita = (c.payment_status ?? "").trim() === "paid";
     await logError({
       action: "netopia/reconciliere",
-      message:
-        `Comanda ${c.order_number ?? c.id} era neplatita la noi, dar Netopia o are ca ${verdict.fel} `
-        + `(status ${spuse.status}). Am lamurit-o intrebandu-i: notificarea lor nu ajunsese.`,
-      details: { orderId: c.id, ntpID: c.netopia_ntp_id, status: spuse.status, codLor: spuse.codLor },
+      message: eraPlatita
+        ? `Comanda ${c.order_number ?? c.id} era platita la noi, dar la Netopia banii s-au intors `
+          + `(status ${spuse.status}). Am marcat-o rambursata intrebandu-i: notificarea lor nu ajunsese.`
+        : `Comanda ${c.order_number ?? c.id} era neplatita la noi, dar Netopia o are ca ${verdict.fel} `
+          + `(status ${spuse.status}). Am lamurit-o intrebandu-i: notificarea lor nu ajunsese.`,
+      details: { orderId: c.id, ntpID: c.netopia_ntp_id, status: spuse.status, codLor: spuse.codLor, eraPlatita },
       businessId: c.business_id,
       severity: "warning",
     });

@@ -32,6 +32,7 @@ import {
 import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from "@/lib/actions/oblio.actions";
 import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
 import { rambourseazaPrinNetopia } from "@/lib/actions/netopia.actions";
+import { rambourseazaPrinIpay } from "@/lib/actions/ipay.actions";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
@@ -508,6 +509,8 @@ export function OrderDetailClient({
   const [showResendInvoice, setShowResendInvoice] = useState(false);
   const [showResendEstimate, setShowResendEstimate] = useState(false);
   const [showNetopiaRefund, setShowNetopiaRefund] = useState(false);
+  const [showIpayRefund, setShowIpayRefund] = useState(false);
+  const [refundingIpay, startIpayRefundTransition] = useTransition();
   const [refundingNetopia, startNetopiaRefundTransition] = useTransition();
 
   // Status/payment change confirmation + delete + customer notifications
@@ -992,6 +995,30 @@ export function OrderDetailClient({
       }
       if (!result.success) { toast.error(result.error ?? "Rambursarea nu a putut fi trimisa."); return; }
       toast.success(result.mesaj ?? "Rambursarea a fost trimisa la Netopia.", { duration: 9000 });
+      router.refresh();
+    });
+  }
+
+  /** ⚠ Ca la Netopia: butonul asta muta BANI, selectorul de status de alaturi doar eticheta. */
+  function handleIpayRefund() {
+    setShowIpayRefund(false);
+    startIpayRefundTransition(async () => {
+      let result: Awaited<ReturnType<typeof rambourseazaPrinIpay>>;
+      try {
+        result = await rambourseazaPrinIpay(order.id);
+      } catch {
+        /* Registrul tine randul blocat, deci a doua apasare nu poate trimite banii inca o data, dar
+           omul trebuie sa afle de ce, altfel crede ca n-a mers nimic. */
+        toast.error(
+          "Nu am primit raspuns, deci nu stim daca rambursarea a plecat. Verifica in consola iPay "
+          + "inainte de a incerca din nou. O a doua apasare va fi oprita pana se lamureste.",
+          { duration: 14000 },
+        );
+        router.refresh();
+        return;
+      }
+      if (!result.success) { toast.error(result.error ?? "Rambursarea nu a putut fi trimisa."); return; }
+      toast.success(result.mesaj ?? "Rambursarea a fost trimisa la iPay.", { duration: 12000 });
       router.refresh();
     });
   }
@@ -1554,6 +1581,38 @@ export function OrderDetailClient({
                   <button type="button" onClick={() => setShowNetopiaRefund(true)} disabled={refundingNetopia}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
                     <RotateCcw className="h-4 w-4" />Ramburseaza banii prin Netopia
+                  </button>
+                )
+              )}
+              {/*
+                ⚠ Acelasi buton, pentru iPay. Se arata doar cand chiar e ceva de rambursat: plata a
+                intrat prin iPay, e marcata platita, si avem identificatorul LOR de tranzactie
+                (`refund.do` il cere). Fara oricare dintre cele trei, actiunea refuza oricum.
+              */}
+              {order.payment_method === "ipay"
+                && order.payment_status === "paid"
+                && Boolean(order.ipay_order_id) && (
+                showIpayRefund ? (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
+                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
+                    <p className="text-xs text-destructive flex-1">
+                      Se trimit {Number(order.total).toFixed(2)} lei inapoi cumparatorului, prin iPay.
+                      Banii pleaca acum si nu pot fi rechemati.
+                    </p>
+                    <Button type="button" size="sm" onClick={handleIpayRefund} disabled={refundingIpay}
+                      className="bg-destructive text-white hover:bg-destructive/90">
+                      {refundingIpay ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+                      Confirma rambursarea
+                    </Button>
+                    <button type="button" onClick={() => setShowIpayRefund(false)}
+                      className="p-1.5 text-destructive/60 hover:text-destructive transition-colors">
+                      <XCircle className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setShowIpayRefund(true)} disabled={refundingIpay}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
+                    <RotateCcw className="h-4 w-4" />Ramburseaza banii prin iPay
                   </button>
                 )
               )}

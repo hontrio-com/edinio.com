@@ -177,8 +177,26 @@ export type IPayStatus = {
   actionCodeDescription?: string;
   amount?: number;
   currency?: string;
+  /**
+   * Cat s-a intors, in subunitati, din `paymentAmountInfo.refundedAmount` (doc 6.7, pagina 44).
+   *
+   * ⚠ NU se foloseste `depositedAmount` ca sa se afle cat se incasase: in CHIAR exemplul lor
+   * (pagina 50), dupa o rambursare totala `depositedAmount` ajunge **0** si numai `approvedAmount`
+   * ramane 2600. Comparatia se face cu `amount`, suma comenzii, care nu se misca.
+   */
+  rambursat?: number;
+  /** `chargeback` din raspunsul lor: tranzactia e marcata contestata. */
+  contestat?: boolean;
   raw: IPayResponse;
 };
+
+/** Moneda lor e numerica (ISO 4217). Pentru mesajele catre oameni o vrem in litere. */
+export function ipayMonedaInLitere(cod: string | undefined): string {
+  for (const [nume, numar] of Object.entries(IPAY_CURRENCY)) {
+    if (numar === String(cod ?? "")) return nume;
+  }
+  return "RON";
+}
 
 /** getOrderStatusExtended.do — authoritative transaction result. */
 export async function ipayGetOrderStatus(
@@ -199,8 +217,35 @@ export async function ipayGetOrderStatus(
       typeof r.actionCodeDescription === "string" ? r.actionCodeDescription : undefined,
     amount: r.amount != null ? Number(r.amount) : undefined,
     currency: r.currency != null ? String(r.currency) : undefined,
+    rambursat: sumaRambursata(r),
+    contestat: r.chargeback === true,
     raw: r,
   };
+}
+
+/**
+ * Cat s-a intors, din `paymentAmountInfo.refundedAmount`.
+ *
+ * ⚠ Se citeste si lista `refunds[]` ca REZERVA, nu din belsug: `refundedAmount` e campul limpede,
+ * dar daca lipseste dintr-un raspuns mai vechi, suma tot se poate aduna din rambursarile insirate.
+ * Fara rezerva, o rambursare adevarata ar trece drept „zero intors", adica exact tacerea de care ne
+ * ferim.
+ */
+function sumaRambursata(r: IPayResponse): number | undefined {
+  const info = (r as { paymentAmountInfo?: { refundedAmount?: unknown } }).paymentAmountInfo;
+  const direct = Number(info?.refundedAmount);
+  if (Number.isFinite(direct) && direct > 0) return direct;
+
+  const lista = (r as { refunds?: { amount?: unknown }[] }).refunds;
+  if (Array.isArray(lista) && lista.length > 0) {
+    const suma = lista.reduce((a, x) => {
+      const n = Number(x?.amount);
+      return a + (Number.isFinite(n) ? n : 0);
+    }, 0);
+    if (suma > 0) return suma;
+  }
+  /* ⚠ `0` se intoarce doar cand ei CHIAR au spus zero; altfel `undefined` („nu stim"). */
+  return Number.isFinite(direct) ? direct : undefined;
 }
 
 export type IPayMutationResult = {
@@ -226,27 +271,73 @@ export async function ipayRefund(
   };
 }
 
-/** orderStatus enum (doc 6.7): 0 not paid, 1 preauth held, 2 deposited, 3 reversed,
- *  4 refunded, 5 3DS in progress, 6 declined, 7 partially refunded. */
+/**
+ * Ce inseamna `orderStatus`, din TABELUL LOR (doc 6.7, pagina 46, citit 17.09.2026):
+ *
+ *   0  Order registered, but not paid off
+ *   1  Pre-authorization amount was held (for two-phase payment)
+ *   2  The amount was deposited successfully
+ *   3  Authorization reversed
+ *   4  Transaction was fully refunded
+ *   5  Authorization through the issuer's ACS initiated
+ *   6  Authorization declined
+ *   7  Transaction was partially refunded
+ *
+ * ═══ ⚠⚠ CE ERA GRESIT AICI, SI DE CE NU SE VEDEA (17.09.2026) ═══
+ *
+ * Functia intorcea si `orderStatus: "cancelled"` / `paymentStatus`, campuri pe care **niciun apelant
+ * nu le citea**: si `/api/ipay/return`, si cronul se uita DOAR la `paid`. Masurat, nu presupus.
+ *
+ * Deci nimic din ce urmeaza nu a pagubit pe cineva, fiindca integrarea n-a rulat niciodata pentru
+ * nimeni (zero magazine configurate, zero comenzi). Dar erau patru capcane armate, care se descarcau
+ * in ziua in care cineva lega campurile:
+ *
+ *   ⚠⚠ 6 (DECLINED) -> „cancelled". Exact defectul reparat la Netopia pe 16.09: un card refuzat
+ *      (blocat, fonduri insuficiente, CVV gresit) ar fi ANULAT comanda, iar `/api/ipay/start` refuza
+ *      comenzile anulate, deci cumparatorul nu mai putea reincerca NICIODATA.
+ *   ⚠  1 (PRE-AUTHORIZATION HELD) -> „paid" + „confirmed". Banii sunt doar BLOCATI, nu incasati;
+ *      incasarea cere `deposit.do`. Marcata platita, comanda ar fi declansat facturarea automata pe
+ *      bani care nu sunt ai comerciantului. Chiar documentatia lor cere reversare in 24 de ore daca
+ *      nu onorezi comanda.
+ *   ⚠  7 (PARTIALLY REFUNDED) -> „refunded". Supra-declara: baza ingaduie doar `unpaid`/`paid`/
+ *      `refunded` (`orders_payment_status_check`), deci un partial scris „rambursat" ar fi spus ca
+ *      s-au intors TOTI banii si ar fi scos comanda din semnalul de marfa plecata fara bani.
+ *   ⚠  3 (REVERSED) -> „cancelled", desi e o stare de 2-phase pe care noi n-o folosim.
+ *
+ * ⚠ NOI FOLOSIM DOAR 1-PHASE: nicaieri in `src/` nu se cheama `registerPreAuth.do`. Deci 1 si 3 nu
+ * pot aparea pe drumul obisnuit. Se numesc totusi pe fata, ca jurnalul sa nu spuna „necunoscut"
+ * despre ceva documentat, si ca ziua in care cineva porneste 2-phase sa nu le gaseasca mapate gresit.
+ */
 export type IPayResolved = {
-  /** terminal result reached (stop polling) */
+  /** Deznodamant atins: nu mai are rost interogat. */
   final: boolean;
+  /** Banii sunt INCASATI. Doar asta marcheaza o comanda platita. */
   paid: boolean;
-  paymentStatus?: "paid" | "refunded";
-  orderStatus?: "confirmed" | "cancelled";
+  /** Banii s-au intors, integral sau in parte. */
+  rambursat?: "integral" | "partial";
+  /**
+   * Plata a fost REFUZATA de banca. Comanda NU se misca: e un refuz, nu o hotarare a cumparatorului,
+   * iar el trebuie sa poata reincerca. Aceeasi regula ca la Netopia.
+   */
+  refuzat?: true;
+  /** Stare de 2-phase, pe care nu o folosim. Nu se misca nimic, dar se stie ce e. */
+  doiPasi?: "blocat" | "anulat";
 };
 
 export function resolveIpayStatus(orderStatus: number | undefined): IPayResolved {
   switch (orderStatus) {
-    case 2: // deposited (1-phase success)
-    case 1: // preauth held (2-phase; treated as success if ever enabled)
-      return { final: true, paid: true, paymentStatus: "paid", orderStatus: "confirmed" };
+    case 2: // the amount was deposited successfully
+      return { final: true, paid: true };
     case 4: // fully refunded
+      return { final: true, paid: false, rambursat: "integral" };
     case 7: // partially refunded
-      return { final: true, paid: false, paymentStatus: "refunded" };
-    case 3: // reversed
-    case 6: // declined
-      return { final: true, paid: false, orderStatus: "cancelled" };
+      return { final: true, paid: false, rambursat: "partial" };
+    case 6: // authorization declined
+      return { final: true, paid: false, refuzat: true };
+    case 1: // pre-authorization held (2-phase): bani BLOCATI, nu incasati
+      return { final: false, paid: false, doiPasi: "blocat" };
+    case 3: // authorization reversed (2-phase)
+      return { final: true, paid: false, doiPasi: "anulat" };
     case 5: // 3DS in progress
     case 0: // registered, not paid yet
     default:

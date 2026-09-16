@@ -4,7 +4,8 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { finalizeStripeOrder, stripeAccountId } from "@/lib/stripe-finalize";
 import { citireCazuta } from "@/lib/supabase/citire";
 import { logError } from "@/lib/error-logger";
-import { baniiSAuIntors, comandaPlatiiStripe } from "@/lib/stripe-banii-s-au-intors";
+import { baniiSAuIntors } from "@/lib/plati/banii-s-au-intors";
+import { comandaPlatiiStripe } from "@/lib/stripe-banii-s-au-intors";
 import type { Database } from "@/types/database.types";
 import type Stripe from "stripe";
 
@@ -240,7 +241,7 @@ export async function POST(request: NextRequest) {
             moneda: charge.currency ?? "ron",
             contestatie,
             referinta: dispute ? dispute.id : chargeId,
-          }, "webhook");
+          }, { actiune: "stripe/connect/webhook", furnizor: "Stripe" });
           /* ⚠ Un esec de scriere cere RELIVRARE: altfel banii raman intorsi si comanda platita. */
           if (v.fel === "esec") return NextResponse.json({ received: false, error: v.mesaj }, { status: 503 });
         }

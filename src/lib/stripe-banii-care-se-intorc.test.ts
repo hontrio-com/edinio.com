@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test, describe } from "node:test";
 import { readFileSync } from "node:fs";
-import { baniiSAuIntors, type ComandaAtinsa } from "./stripe-banii-s-au-intors";
+import { baniiSAuIntors, type ComandaAtinsa } from "./plati/banii-s-au-intors";
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
@@ -63,7 +63,7 @@ describe("Rambursarea INTEGRALA", () => {
      * doua lucruri diferite dupa cum a fost aflat. Acelasi drum ca la panou si ca la Netopia.
      */
     const { admin, scrieri } = bazaFalsa();
-    const v = await baniiSAuIntors(admin, COMANDA, { intors: 50401, incasat: 50401, moneda: "ron" }, "webhook");
+    const v = await baniiSAuIntors(admin, COMANDA, { intors: 50401, incasat: 50401, moneda: "ron" }, { actiune: "stripe/connect/webhook", furnizor: "Stripe" });
     assert.deepEqual(v, { fel: "integral" });
     const t = tranzitii(scrieri);
     assert.equal(t.length, 1, "rambursarea nu a trecut prin tranzitia comenzii");
@@ -72,7 +72,7 @@ describe("Rambursarea INTEGRALA", () => {
 
   test("⚠ dar statusul comenzii NU se schimba: banii intorsi nu inseamna marfa intoarsa", async () => {
     const { admin, scrieri } = bazaFalsa();
-    await baniiSAuIntors(admin, COMANDA, { intors: 50401, incasat: 50401, moneda: "ron" }, "webhook");
+    await baniiSAuIntors(admin, COMANDA, { intors: 50401, incasat: 50401, moneda: "ron" }, { actiune: "stripe/connect/webhook", furnizor: "Stripe" });
     assert.equal((tranzitii(scrieri)[0].argumente as { p_status: string }).p_status, "delivered");
   });
 
@@ -82,7 +82,7 @@ describe("Rambursarea INTEGRALA", () => {
      * merita spus si o scriau intr-un jurnal pe care comerciantul nu-l deschide niciodata.
      */
     const { admin, scrieri } = bazaFalsa();
-    await baniiSAuIntors(admin, COMANDA, { intors: 50401, incasat: 50401, moneda: "ron" }, "webhook");
+    await baniiSAuIntors(admin, COMANDA, { intors: 50401, incasat: 50401, moneda: "ron" }, { actiune: "stripe/connect/webhook", furnizor: "Stripe" });
     const n = notificari(scrieri);
     assert.equal(n.length, 1, "comerciantul nu primeste nimic in clopotel");
     assert.match(String((n[0].rand as { message: string }).message), /504\.01 RON/);
@@ -92,7 +92,7 @@ describe("Rambursarea INTEGRALA", () => {
   test("⚠⚠ iar daca tranzitia pica, NU se raporteaza succes", async () => {
     /* Banii intorsi si comanda aratand „platita" e cea mai urata stare cu putinta. */
     const { admin, scrieri } = bazaFalsa({ tranzitieCade: true });
-    const v = await baniiSAuIntors(admin, COMANDA, { intors: 50401, incasat: 50401, moneda: "ron" }, "webhook");
+    const v = await baniiSAuIntors(admin, COMANDA, { intors: 50401, incasat: 50401, moneda: "ron" }, { actiune: "stripe/connect/webhook", furnizor: "Stripe" });
     assert.equal(v.fel, "esec");
     assert.equal(notificari(scrieri).length, 0, "s-a anuntat o rambursare care nu s-a scris");
   });
@@ -102,7 +102,7 @@ describe("Rambursarea INTEGRALA", () => {
     const { admin, scrieri } = bazaFalsa();
     const v = await baniiSAuIntors(
       admin, { ...COMANDA, payment_status: "refunded" },
-      { intors: 50401, incasat: 50401, moneda: "ron" }, "reconciliere",
+      { intors: 50401, incasat: 50401, moneda: "ron" }, { actiune: "stripe/connect/webhook", furnizor: "Stripe" },
     );
     assert.deepEqual(v, { fel: "nimic" });
     assert.equal(tranzitii(scrieri).length, 0);
@@ -124,14 +124,14 @@ describe("Rambursarea PARTIALA: nu se minte in baza", () => {
      * (o parte din bani chiar au ramas), si se strica tacerea.
      */
     const { admin, scrieri } = bazaFalsa();
-    const v = await baniiSAuIntors(admin, COMANDA, { intors: 20000, incasat: 50401, moneda: "ron" }, "webhook");
+    const v = await baniiSAuIntors(admin, COMANDA, { intors: 20000, incasat: 50401, moneda: "ron" }, { actiune: "stripe/connect/webhook", furnizor: "Stripe" });
     assert.deepEqual(v, { fel: "partial" });
     assert.equal(tranzitii(scrieri).length, 0, "s-a scris «rambursat» pentru o rambursare partiala");
   });
 
   test("⚠⚠ dar se SPUNE, cu amandoua sumele", async () => {
     const { admin, scrieri } = bazaFalsa();
-    await baniiSAuIntors(admin, COMANDA, { intors: 20000, incasat: 50401, moneda: "ron" }, "webhook");
+    await baniiSAuIntors(admin, COMANDA, { intors: 20000, incasat: 50401, moneda: "ron" }, { actiune: "stripe/connect/webhook", furnizor: "Stripe" });
     const m = String((notificari(scrieri)[0].rand as { message: string }).message);
     assert.match(m, /200\.00 RON/, "nu se spune cat s-a intors");
     assert.match(m, /504\.01 RON/, "nu se spune cat se incasase");
@@ -144,7 +144,7 @@ describe("Contestatia NU e o rambursare", () => {
     const v = await baniiSAuIntors(
       admin, COMANDA,
       { intors: 50401, incasat: 50401, moneda: "ron", contestatie: true, referinta: "dp_1" },
-      "webhook",
+      { actiune: "stripe/connect/webhook", furnizor: "Stripe" },
     );
     assert.deepEqual(v, { fel: "contestata" });
     assert.equal(tranzitii(scrieri).length, 0, "o contestatie a schimbat starea comenzii");
@@ -154,7 +154,7 @@ describe("Contestatia NU e o rambursare", () => {
     const { admin, scrieri } = bazaFalsa();
     await baniiSAuIntors(
       admin, COMANDA,
-      { intors: 50401, incasat: 50401, moneda: "ron", contestatie: true }, "webhook",
+      { intors: 50401, incasat: 50401, moneda: "ron", contestatie: true }, { actiune: "stripe/connect/webhook", furnizor: "Stripe" },
     );
     const m = String((notificari(scrieri)[0].rand as { message: string }).message);
     assert.match(m, /termen/i, "nu i se spune ca are un termen de raspuns");
@@ -166,7 +166,7 @@ describe("Contestatia NU e o rambursare", () => {
     const { admin, scrieri } = bazaFalsa();
     const v = await baniiSAuIntors(
       admin, { ...COMANDA, payment_status: "refunded" },
-      { intors: 100, incasat: 50401, moneda: "ron", contestatie: true }, "webhook",
+      { intors: 100, incasat: 50401, moneda: "ron", contestatie: true }, { actiune: "stripe/connect/webhook", furnizor: "Stripe" },
     );
     assert.equal(v.fel, "contestata");
     assert.equal(notificari(scrieri).length, 1);
@@ -179,7 +179,7 @@ describe("Nimic de facut", () => {
        produce ceva, comerciantul ar primi o notificare la fiecare sfert de ora. */
     const { admin, scrieri } = bazaFalsa();
     assert.deepEqual(
-      await baniiSAuIntors(admin, COMANDA, { intors: 0, incasat: 50401, moneda: "ron" }, "reconciliere"),
+      await baniiSAuIntors(admin, COMANDA, { intors: 0, incasat: 50401, moneda: "ron" }, { actiune: "stripe-reconcile", furnizor: "Stripe" }),
       { fel: "nimic" },
     );
     assert.equal(scrieri.length, 0, "o comanda nerambursata a produs scrieri");

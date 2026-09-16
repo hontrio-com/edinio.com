@@ -4,7 +4,7 @@ import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { finalizeStripeOrder, stripeAccountId } from "@/lib/stripe-finalize";
 import { getStripe } from "@/lib/stripe";
-import { baniiSAuIntors, type ComandaAtinsa } from "@/lib/stripe-banii-s-au-intors";
+import { baniiSAuIntors, type ComandaAtinsa } from "@/lib/plati/banii-s-au-intors";
 import type Stripe from "stripe";
 
 /**
@@ -330,7 +330,7 @@ export async function GET(req: NextRequest) {
         incasat: charge.amount ?? 0,
         moneda: charge.currency ?? "ron",
         referinta: charge.id,
-      }, "reconciliere");
+      }, { actiune: "stripe-reconcile", furnizor: "Stripe" });
       platiteIntrebate++;
       if (v.fel === "integral" || v.fel === "partial") intoarse++;
     } catch (e) {

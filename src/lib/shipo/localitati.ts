@@ -93,6 +93,46 @@ export function localitateShipo(oras: string | null | undefined, judet?: string 
   return normalizeLocalityName(oras ?? "", judet ?? undefined);
 }
 
+/**
+ * Localitatea asa cum o cere campul `oras_sosire` al EXPEDIERII.
+ *
+ * ⚠ ACOLO SE TRIMITE „Oras, Judet”, INTR-UN SINGUR CAMP, iar noi trimiteam doar orasul.
+ *
+ * `oras_sosire` e una dintre denumirile vechi pe care Shipo le pastreaza pentru
+ * integrarile existente, iar documentatia lor spune limpede ce asteapta: „Ele
+ * asteapta localitatea intr-un singur camp, in formatul «Oras, Judet»”.
+ *
+ * Trimis fara judet, numele pleaca singur, iar regula lor de potrivire e scrisa
+ * tot acolo: „daca in acelasi judet exista mai multe localitati cu acelasi nume,
+ * adauga municipality sau foloseste ID-ul, altfel se ia PRIMA POTRIVIRE”. Fara
+ * judet, „prima potrivire” se cauta in toata tara.
+ *
+ * Si nu e o teama teoretica: chiar `/city` al lor intoarce omonime, iar
+ * „Victoria” exista in PATRU judete. Coletul ar fi plecat in alt judet cu HTTP
+ * 200, cu AWB valid si fara nicio urma, iar comerciantul ar fi aflat de la client.
+ *
+ * ⚠ BUCURESTIUL FACE EXCEPTIE, si tot ei o cer: „Pentru Bucuresti se trimite doar
+ * city: «Bucuresti», FARA judet, impreuna cu sector”. Deci acolo se intoarce
+ * numele singur, iar sectorul pleaca in campul lui.
+ *
+ * ⚠ Ramane deosebita de `localitateShipo`, care da NUMAI numele: aceea e folosita
+ * la cautarea punctelor si la `esteInBucuresti`, unde judetul lipit ar strica
+ * potrivirea.
+ */
+export function localitateaExpedierii(oras: string | null | undefined, judet?: string | null): string {
+  const nume = localitateShipo(oras, judet);
+  if (!nume || nume === "Bucuresti") return nume;
+
+  const j = normalizeCountyName(judet ?? "").trim();
+  /* Fara judet nu se inventeaza unul: mai bine ambiguitatea lor decat un judet
+     gresit pus de noi. Comanda fara judet e oprita oricum de `lipsuriExpediere`. */
+  if (!j) return nume;
+
+  /* Daca numele poarta deja judetul, nu se pune de doua ori. */
+  if (nume.toLowerCase().endsWith(`, ${j.toLowerCase()}`)) return nume;
+  return `${nume}, ${j}`;
+}
+
 export function esteInBucuresti(oras: string | null | undefined, judet?: string | null): boolean {
   return localitateShipo(oras, judet) === "Bucuresti";
 }

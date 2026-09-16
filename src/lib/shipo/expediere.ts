@@ -1,6 +1,6 @@
 import { normalizePhone } from "@/lib/utils/phone";
 import type { ColetShipo, CorpTarife, ServiciuShipo, ShipoConfig, TipAdresa } from "./client";
-import { continutShipo, localitateShipo, sectorShipo } from "./localitati";
+import { continutShipo, localitateaExpedierii, localitateShipo, sectorShipo } from "./localitati";
 
 /**
  * Construirea cererilor Shipo dintr-o comanda Edinio.
@@ -328,7 +328,10 @@ export function corpExpediere(
     return corp;
   }
 
-  corp.oras_sosire = localitateShipo(d.oras, d.judet);
+  /* ⚠ „Oras, Judet", intr-un singur camp: asa cere `oras_sosire`. Fara judet,
+     omonimele („Victoria" e in patru judete) se rezolva la prima potrivire din
+     toata tara. Vezi `localitateaExpedierii`. */
+  corp.oras_sosire = localitateaExpedierii(d.oras, d.judet);
   corp.strada_sosire = taie(d.strada, LUNGIMI.strada);
   corp.recipient_address_street_no = taie(numarDinAdresa(d.strada, d.numar), LUNGIMI.numarStrada);
 

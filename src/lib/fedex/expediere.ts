@@ -329,6 +329,24 @@ export function lipsuriExpediere(config: FedexConfig | null | undefined, date: D
    */
   if (tara === "RO" && !curata(d.codPostal)) comanda.push("codul postal al destinatarului (FedEx il cere pentru Romania)");
 
+  /*
+   * ⚠⚠ CODUL DE STAT, la SUA / Canada / Puerto Rico.
+   *
+   * Verbatim din schema lor: „State code is required for US, CA, PR and not required for other
+   * countries.” Trimis fara el, coletul e refuzat de ei — iar refuzul vine dupa ce s-a
+   * consumat o cerere si dupa ce comerciantul a completat tot formularul.
+   *
+   * ⚠ Se cere codul de DOUA litere, fiindca atat accepta ei. Un nume intreg nu se traduce
+   * aici: n-avem nomenclatorul lor de state, iar o ghicitura ar trimite coletul in alt stat.
+   * Mesajul spune exact ce trebuie scris, ca omul sa nu ghiceasca nici el.
+   */
+  if (TARI_CU_STAT.has(tara) && !codStatFedex(d.judet)) {
+    comanda.push(
+      `codul de stat din DOUA litere al destinatarului (FedEx il cere pentru ${tara}; `
+      + "de exemplu CA pentru California, ON pentru Ontario)",
+    );
+  }
+
   if (!(Number(date.greutateKg) > 0)) comanda.push("greutatea coletului");
 
   /*
@@ -366,7 +384,34 @@ export function lipsuriExpediere(config: FedexConfig | null | undefined, date: D
 
 // ─── Adresa, in forma lor ────────────────────────────────────────────────────
 
-type AdresaFedex = { streetLines: string[]; city: string; postalCode?: string; countryCode: string };
+type AdresaFedex = {
+  streetLines: string[];
+  city: string;
+  postalCode?: string;
+  /**
+   * ⚠⚠ OBLIGATORIU la SUA, Canada si Puerto Rico. Nu exista pentru restul.
+   *
+   * Verbatim din schema lor, de trei ori: „State code is required for US, CA, PR and not
+   * required for other countries.” Campul lipsea CU TOTUL din tipul asta, deci orice colet
+   * catre cele trei tari pleca fara el — si era refuzat de ei.
+   *
+   * ⚠ Se trimite doar codul de DOUA litere, care e ce cer ei. Un nume intreg
+   * („California”) nu se traduce aici: n-avem nomenclatorul lor de state, iar o ghicitura
+   * ar trimite coletul in alt stat. Cazul acela se opreste INAINTE de apel, in
+   * `lipsuriExpediere`, cu un mesaj care spune ce trebuie completat.
+   */
+  stateOrProvinceCode?: string;
+  countryCode: string;
+};
+
+/** Tarile pentru care FedEx cere codul de stat. Verbatim: „required for US, CA, PR”. */
+const TARI_CU_STAT = new Set(["US", "CA", "PR"]);
+
+/** Codul de stat, DOAR cand e chiar un cod de doua litere. Altfel `null`, si se refuza mai sus. */
+export function codStatFedex(judet: string | null | undefined): string | null {
+  const t = stripDiacritics(curata(judet)).toUpperCase().replace(/[^A-Z]/g, "");
+  return t.length === 2 ? t : null;
+}
 type ContactFedex = { personName?: string; companyName?: string; phoneNumber: string; emailAddress?: string };
 
 /**
@@ -410,6 +455,12 @@ export function parteFedex(a: AdresaComanda): { address: AdresaFedex; contact: C
   };
   const cod = taie(a.codPostal, LUNGIMI.codPostal).replace(/\s+/g, "");
   if (cod) address.postalCode = cod;
+
+  /* ⚠ Doar la cele trei tari care il cer, si doar cand chiar avem un cod de doua litere. */
+  if (TARI_CU_STAT.has(tara)) {
+    const stat = codStatFedex(a.judet);
+    if (stat) address.stateOrProvinceCode = stat;
+  }
 
   return { address, contact };
 }

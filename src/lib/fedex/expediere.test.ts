@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test, describe } from "node:test";
 import {
-  coletFedex, corpExpediere, corpTarife, liniiAdresa, lipsuriExpediere, orasFedex,
+  codStatFedex, coletFedex, corpExpediere, corpTarife, liniiAdresa, lipsuriExpediere, orasFedex,
   parteFedex, referintaComenzii, sectorPentruAdresa, telefonFedex, ziuaAzi,
   type AdresaComanda, type DateExpediere,
 } from "./expediere";
@@ -493,5 +493,53 @@ describe("FedEx: corpul emiterii", () => {
     const spec = corp.requestedShipment.labelSpecification;
     assert.ok(spec.imageType);
     assert.ok(spec.labelStockType);
+  });
+});
+
+describe("⚠⚠ FedEx: codul de stat la SUA, Canada si Puerto Rico", () => {
+  /*
+   * Verbatim din schema lor, de trei ori: „State code is required for US, CA, PR and not required
+   * for other countries.” Campul lipsea CU TOTUL din tipul adresei, deci orice colet catre cele
+   * trei tari pleca fara el — si era refuzat, dupa ce se consumase o cerere.
+   */
+  const SUA: AdresaComanda = {
+    nume: "John Doe", strada: "5th Avenue", numar: "10",
+    oras: "New York", judet: "NY", codPostal: "10001", tara: "US",
+    telefon: "0722333444", email: "john@example.com",
+  };
+
+  test("codul de doua litere pleaca in `stateOrProvinceCode`", () => {
+    const p = parteFedex(SUA);
+    assert.equal(p.address.stateOrProvinceCode, "NY");
+    assert.equal(p.address.countryCode, "US");
+  });
+
+  test("⚠ dar la restul tarilor campul NU apare deloc", () => {
+    /* Trimis unde nu se cere, ar fi cel putin zgomot — si la ei nimic nu e inofensiv. */
+    assert.equal(parteFedex(DESTINATAR).address.stateOrProvinceCode, undefined);
+    assert.equal(parteFedex({ ...SUA, tara: "DE", judet: "BY" }).address.stateOrProvinceCode, undefined);
+  });
+
+  test("⚠⚠ un nume INTREG de stat nu se ghiceste: se refuza inainte de apel", () => {
+    /*
+     * N-avem nomenclatorul lor de state, iar „California” → „CA” ar fi o ghicitura care,
+     * gresita, trimite coletul in alt stat. Mai bine un refuz care spune ce sa scrie.
+     */
+    const lipsuri = lipsuriExpediere(CONFIG, { ...DATE, destinatar: { ...SUA, judet: "California" } });
+    assert.ok(lipsuri.comanda.some((x) => x.includes("codul de stat")), JSON.stringify(lipsuri.comanda));
+  });
+
+  test("si cu codul bun nu se mai plange nimeni", () => {
+    const lipsuri = lipsuriExpediere(CONFIG, { ...DATE, destinatar: SUA });
+    assert.equal(lipsuri.comanda.some((x) => x.includes("codul de stat")), false);
+  });
+
+  test("`codStatFedex` cere exact doua litere, si curata diacriticele", () => {
+    assert.equal(codStatFedex("ny"), "NY");
+    assert.equal(codStatFedex(" ca "), "CA");
+    assert.equal(codStatFedex("California"), null);
+    assert.equal(codStatFedex(""), null);
+    assert.equal(codStatFedex(null), null);
+    assert.equal(codStatFedex("N.Y."), "NY", "punctuatia nu face codul invalid");
   });
 });

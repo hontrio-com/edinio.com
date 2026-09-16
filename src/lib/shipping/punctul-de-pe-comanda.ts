@@ -74,6 +74,39 @@ import type { PlanExpedierii } from "./quote-token";
  * Gaura e reala, dar nu arde.
  */
 
+/**
+ * ⚠⚠ LOCALITATEA PUNCTULUI POATE FI GOALA, SI ATUNCI NU ARE VOIE SA INLOCUIASCA NIMIC.
+ *
+ * La emitere, Sameday si DPD suprascriu destinatarul de pe AWB cu `locker_city` si
+ * `locker_county`. Cand punctul n-are judet, suprascrierea sterge judetul BUN al
+ * cumparatorului si pune un sir gol in locul lui.
+ *
+ * ⚠ MASURAT, SI NU E O IPOTEZA: comanda `#0011` (08.08.2026, punctul
+ * „PASCANI - STEFAN CEL MARE 2 (DPD SHOP)”) are `locker_county` gol — si e **singura**
+ * comanda cu punct de ridicare care a primit vreodata un AWB in toata platforma
+ * (DPD `81343890397`, livrata). Deci singura expediere reala la punct a plecat chiar asa.
+ * A ajuns fiindca `pickupOfficeId` hotaraste destinatia la DPD, nu adresa; la Sameday,
+ * unde judetul intra in adresa destinatarului, norocul acela nu exista.
+ *
+ * ⚠⚠ SI DE CE NU E DE AJUNS `??`, care parea sa fie plasa: DPD avea deja
+ * `shipping.locker_county ?? input.recipientCounty`, dar `??` prinde doar `null` si
+ * `undefined`. Valoarea masurata e SIRUL GOL, pe care `??` il lasa sa treaca intact.
+ * O plasa care nu prinde singurul caz real nu e o plasa.
+ *
+ * ⚠ Se intoarce mereu ceva: cand nici punctul, nici cumparatorul n-au judet, iese sirul gol
+ * — adica exact ce era inainte, nu mai rau. Aici nu se inventeaza nimic.
+ */
+export function destinatarulLaPunct(
+  punct: { oras?: string | null; judet?: string | null },
+  cumparator: { oras?: string | null; judet?: string | null },
+): { oras: string; judet: string } {
+  const curat = (v: string | null | undefined) => (v ?? "").trim();
+  return {
+    oras: curat(punct.oras) || curat(cumparator.oras),
+    judet: curat(punct.judet) || curat(cumparator.judet),
+  };
+}
+
 /** Campurile punctului, asa cum se scriu in `shipping_address`. */
 export type CampuriPunct = {
   locker_id: string;

@@ -20,6 +20,7 @@ import { logError } from "@/lib/error-logger";
 import { cheieOperatie, cuRegistru, marcheazaAnulata } from "@/lib/operatii/registru";
 import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
+import { destinatarulLaPunct } from "@/lib/shipping/punctul-de-pe-comanda";
 
 // ─── Config actions ───────────────────────────────────────────────────────────
 
@@ -159,12 +160,25 @@ export async function createDpdShipmentAction(
   // pickup deliveries the service discovery runs on the OFFICE's locality.
   const isDpdPickupDelivery =
     shipping.courier === "dpd" && shipping.delivery_type === "locker" && !!shipping.locker_id;
+  const destinatarPunct = destinatarulLaPunct(
+    { oras: shipping.locker_city, judet: shipping.locker_county },
+    { oras: input.recipientCity, judet: input.recipientCounty },
+  );
+
   const enriched: DpdShipmentInput = {
     ...input,
     declaredValue: config.declared_value_enabled ? (Number(order.subtotal) || undefined) : undefined,
     pickupOfficeId: isDpdPickupDelivery ? (Number(shipping.locker_id) || undefined) : input.pickupOfficeId,
+    /*
+     * ⚠⚠ Cand punctul n-are localitate, se pastreaza a CUMPARATORULUI.
+     *
+     * Randul de aici avea deja o plasa, `locker_county ?? input.recipientCounty`, si ea NU
+     * prindea nimic: `??` raspunde doar la `null` si `undefined`, iar valoarea masurata e
+     * SIRUL GOL. Comanda `#0011` — singura comanda cu punct care a primit vreodata un AWB
+     * (DPD `81343890397`) — are exact judetul gol, deci a trecut prin plasa.
+     */
     ...(isDpdPickupDelivery && shipping.locker_city
-      ? { recipientCity: shipping.locker_city, recipientCounty: shipping.locker_county ?? input.recipientCounty }
+      ? { recipientCity: destinatarPunct.oras, recipientCounty: destinatarPunct.judet }
       : {}),
   };
 

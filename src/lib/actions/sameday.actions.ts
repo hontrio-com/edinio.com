@@ -22,6 +22,7 @@ import {
 import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
 import { stradaDestinatarului, type AdresaLivrare } from "@/lib/orders/adresa";
 import { adresaDupaEmitereSameday, type LockerAles } from "@/lib/sameday/punctul-de-pe-awb";
+import { destinatarulLaPunct } from "@/lib/shipping/punctul-de-pe-comanda";
 
 /** Reexportata ca fereastra sa n-o caute in doua locuri. Tipurile nu devin usi chemabile. */
 export type { LockerAles };
@@ -209,6 +210,9 @@ export async function createSamedayAwbAction(
   const shipping = (order.shipping_address ?? {}) as {
     courier?: string;
     delivery_type?: string;
+    /* Ale CUMPARATORULUI, pentru cand punctul n-are localitate. Vezi `destinatarulLaPunct`. */
+    city?: string;
+    county?: string;
     locker_id?: string;
     locker_name?: string;
     locker_address?: string;
@@ -218,14 +222,27 @@ export async function createSamedayAwbAction(
     sameday_point_net?: string;
   };
 
+  const destinatarPunct = destinatarulLaPunct(
+    { oras: shipping.locker_city, judet: shipping.locker_county },
+    { oras: shipping.city, judet: shipping.county },
+  );
+
   const lockerDinComanda =
     shipping.courier === "sameday" && shipping.delivery_type === "locker" && shipping.locker_id
       ? {
           id: Number(shipping.locker_id),
           name: shipping.locker_name,
           address: shipping.locker_address,
-          city: shipping.locker_city,
-          county: shipping.locker_county,
+          /*
+           * ⚠⚠ Cand punctul n-are localitate, se pastreaza a CUMPARATORULUI.
+           *
+           * Campurile astea INLOCUIESC destinatarul de pe AWB. Un `locker_county` gol stergea
+           * judetul bun al omului si punea un sir gol — iar la Sameday judetul chiar intra in
+           * adresa, deci nu exista norocul de la DPD (unde `pickupOfficeId` hotaraste singur).
+           * Masurat: singura comanda cu punct care a primit vreodata un AWB avea judetul gol.
+           */
+          city: destinatarPunct.oras,
+          county: destinatarPunct.judet,
           /*
            * ⚠ RETEAUA VINE DE PE COMANDA, unde a ajuns din PLANUL SEMNAT al cotatiei, nu din
            * cererea browserului. Vezi `shipping/reteaua-punctului.ts`.

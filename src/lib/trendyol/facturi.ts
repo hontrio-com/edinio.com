@@ -49,7 +49,7 @@ import type { Database } from "@/types/database.types";
 import { uploadToR2 } from "@/lib/r2";
 import { cuRegistru } from "@/lib/operatii/registru";
 import { randCitit, EroareCitireBaza } from "@/lib/supabase/rand-citit";
-import { cheiaPdfFactura, facturaComenzii, type Factura } from "@/lib/billing/factura-comenzii";
+import { cheiaPdfFactura, esteChiarPdf, facturaComenzii, NU_E_PDF, type Factura } from "@/lib/billing/factura-comenzii";
 import { isTrendyolError, sendInvoiceLink } from "./client";
 import type { TrendyolSyncContext } from "./sync";
 
@@ -143,6 +143,9 @@ async function urcaCitit(
     async () => {
       const pdf = await aduPdf(factura);
       if ("error" in pdf) throw new Error(pdf.error);
+      /* ⚠ Ce a venit chiar e un document? Vezi `esteChiarPdf`: o adresa care cere autentificare
+         raspunde `200` cu pagina de login, iar aceea NU are ce cauta la marketplace ca factura. */
+      if (!esteChiarPdf(pdf)) throw new Error(NU_E_PDF);
 
       const url = await uploadToR2(
         Buffer.from(pdf),

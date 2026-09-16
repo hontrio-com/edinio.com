@@ -854,7 +854,23 @@ export async function maybeAutoGenerateInvoice(
       return false;
     }
     return true;
-  } catch {
+  } catch (e) {
+    /*
+     * ⚠ Fire-and-forget ramane: nu se arunca niciodata, ca actualizarea comenzii sa nu cada din
+     * cauza facturarii. Dar `catch {}` gol inghitea si defectele NOASTRE (o coloana lipsa, un tip
+     * gresit), iar simptomul era acelasi ca la un magazin fara facturare automata: nimic.
+     *
+     * ⚠ Acelasi defect era in TOATE TREI casele. La SmartBill s-a reparat in aceeasi zi; proba
+     * comuna `facturarea-automata-nu-inghite-defecte.test.ts` le apara pe toate si cade daca apare
+     * a patra casa scrisa la fel.
+     */
+    await logError({
+      action: "oblio.autoInvoiceCazut",
+      message: `Facturarea automata a picat pentru comanda ${orderId}: ${e instanceof Error ? e.message : String(e)}`,
+      details: { orderId },
+      businessId,
+      severity: "critical",
+    }).catch(() => {});
     return false;
   }
 }

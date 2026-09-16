@@ -33,7 +33,7 @@ import { EroareCitireBaza, randCitit } from "./citire";
 import { LIMITE_EMAG, taiat } from "./limite";
 import type { Database } from "@/types/database.types";
 import { uploadToR2 } from "@/lib/r2";
-import { cheiaPdfFactura, facturaComenzii, type Factura } from "@/lib/billing/factura-comenzii";
+import { cheiaPdfFactura, esteChiarPdf, facturaComenzii, NU_E_PDF, type Factura } from "@/lib/billing/factura-comenzii";
 import { cuRegistru } from "@/lib/operatii/registru";
 import { salveazaAtasamente, isEmagError } from "./client";
 import type { ContextEmag } from "./sync";
@@ -192,6 +192,9 @@ async function urcaFacturaCitita(
     async () => {
       const pdf = await aduPdf(factura);
       if ("error" in pdf) throw new Error(pdf.error);
+      /* ⚠ Ce a venit chiar e un document? Vezi `esteChiarPdf`: o adresa care cere autentificare
+         raspunde `200` cu pagina de login, iar aceea NU are ce cauta la marketplace ca factura. */
+      if (!esteChiarPdf(pdf)) throw new Error(NU_E_PDF);
 
       /* ⚠ `private, no-store`: documentul are numele si adresa cumparatorului. */
       const url = await uploadToR2(

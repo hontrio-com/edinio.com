@@ -165,11 +165,14 @@ produsele vor avea unitati.
 
 ## Ce ramane deschis, si de ce
 
-1. ⚠⚠ **Nimic din ce s-a schimbat azi n-a atins API-ul lor.** Trecerea pe `/invoice/v2` e sprijinita
-   pe specificatia oficiala (acelasi corp de cerere, `InvoiceRequest`) si pe modulul lor oficial de
-   WooCommerce, dar **prima factura adevarata e dovada**. Daca `/invoice/v2` ar raspunde altfel,
-   `verdictSmartbill` o clasifica `necunoscut`, deci randul se blocheaza si iese la om: se vede pe
-   loc, nu se emite in tacere un al doilea document.
+1. ✅ **CONFIRMAT LIVE la 16 minute dupa deploy (16.09.2026, 19:47 ora Romaniei).** Prima factura
+   emisa pe `/invoice/v2` a fost `SNR0426`, comanda `#0261`, magazinul `suporti-numar`. A venit cu
+   adresa publica, iar aceasta a ajuns pe comanda:
+   `https://cloud.smartbill.ro/documente/extern/fact…`. Cuvantul `extern` din adresa confirma ca e
+   cea PUBLICA, nu cea de editare. Deci bucla intreaga merge: raspunsul lor, registrul, coloana de
+   pe comanda, si de acolo butonul din panou si drumul catre marketplace.
+   ⚠ Asta inchide si intrebarea veche: `POST /invoice` chiar NU intorcea adresa (181 din 181 goale),
+   iar `POST /invoice/v2` o intoarce de la prima cerere.
 2. **`GET /invoice/paymentstatus` nu se foloseste.** Ar inchide bucla incasarilor (mai ales la
    ramburs, unde banii vin dupa livrare). E o lucrare de produs, nu un defect: azi nimic nu pretinde
    ca stie starea incasarii.
@@ -200,12 +203,20 @@ foarte atenta la documentul deja creat (nu se arunca niciodata, ca sa nu iasa al
 
 ⚠ **De ce nu e 10:**
 
-1. **Trecerea pe `/invoice/v2` asteapta prima factura reala.** E singura schimbare de azi care atinge
-   un drum cu bani pe el, si e argumentata, nu probata pe serverul lor.
-2. **Adresa publica e inca o presupunere.** Stim sigur ca vechea cale nu o dadea (181 din 181); ca
-   cea noua o da stim din specificatia lor. Avertismentul scris azi raspunde la intrebare de la prima
-   emitere.
-3. Punctele 2 si 3 de mai sus sunt lucrari de produs deschise, nu defecte.
+1. ⚠⚠ **Trimiterea facturii pe email n-a fost verificata NICIODATA, si e cel mai mare necunoscut.**
+   Masurat: `suporti-numar` are `send_email` PORNIT si 187 de facturi cu email de client, deci
+   aproximativ atatea trimiteri au fost incercate. Nu exista nicio dovada ca vreuna a ajuns.
+   Reparatia din 07.07 rescrisese corpul cererii (`/document/send`), dar nimeni n-a masurat de
+   atunci, iar raspunsul lor nu se scria nicaieri. **De azi se scrie** (`emailAutomatNetrimis`),
+   deci urmatoarea comanda de la magazinul acela raspunde. Pana atunci: nu stiu, si nu pretind ca
+   stiu.
+2. **Suprafata probata de realitate e ingusta.** Din 241 de documente: zero proforme, zero conversii
+   proforma-factura, zero facturi cu cote amestecate, zero reduceri promotionale, zero ramburs.
+   Codul le acopera pe toate si e scris cu grija, dar nimic din ele n-a fost umblat de un client.
+3. **Bucla incasarilor nu e inchisa** (`/invoice/paymentstatus` nefolosit), mai ales la ramburs,
+   unde banii vin dupa livrare.
+4. **Ochii sunt de o zi.** Alarmele care fac diferenta intre „merge" si „a incetat sa mearga" au
+   fost puse azi; pana ieri, trei luni de facturare n-au lasat niciun rand in `error_logs`.
 
 **Probe:** 17 noi, in doua fisiere. Banc de mutanti **7 din 7**, intre care caderea pe adresa de
 editare si intoarcerea la `POST /invoice`. Emiterea e probata **prin clientul adevarat**, cu `fetch`

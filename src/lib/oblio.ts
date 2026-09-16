@@ -292,19 +292,64 @@ async function oblioReq<T>(
 
   // Un corp necitibil arunca de aici NEMARCAT, deci registrul il ia drept
   // „nu stim" — ceea ce e corect: cererea a ajuns si nu stim ce a facut cu ea.
-  const json = await res.json() as { status: number; statusMessage: string; data: T };
+  const json = await res.json() as { status?: unknown; statusMessage?: string; data?: T };
 
-  if (json.status < 200 || json.status >= 300) {
-    const mesaj = json.statusMessage ?? `Eroare Oblio (status ${json.status})`;
+  /*
+   * ═══ ⚠⚠ STATUSUL DIN CORP, IAR CAND LIPSESTE, CEL HTTP (16.09.2026) ═══
+   *
+   * Oblio isi pune statusul in CORP, nu in HTTP: raspunsul e `200` si cand refuza. De aia se
+   * citeste de acolo, si asa a fost scris de la inceput.
+   *
+   * ⚠ DAR `json.status` era citit ca `number` fara sa se verifice ca CHIAR e unul. Lipsa lui
+   * facea amandoua comparatiile false (`undefined < 200` si `undefined >= 300` sunt FALSE), deci
+   * poarta nu se aprindea si se intorcea `json.data`, adica `undefined`, drept SUCCES. Apelantul
+   * il lua ca document creat si cadea abia la `rezultat.seriesName`, cu „Cannot read properties
+   * of undefined" in loc de motivul adevarat.
+   *
+   * Si nu e doar urat: un raspuns care nu vine de la ei (un proxy, o pagina de mentenanta care
+   * se nimereste JSON) sau un `429` de la limita lor de cereri putea trece exact pe acolo.
+   *
+   * Acum: status numeric in corp, il credem pe el. Altfel, cel HTTP. Iar succesul cere si `data`.
+   */
+  /*
+   * ⚠⚠ SI SIRUL „400" E UN STATUS, gasit de bancul de mutanti pe 16.09.2026.
+   *
+   * Prima varianta cerea `typeof json.status === "number"`. Numai ca Oblio isi stringifica
+   * numerele: chiar raspunsul lor de autentificare da `"expires_in": "3600"`, iar codul nostru il
+   * trece deja prin `Number()` de ani de zile. Daca statusul ar veni la fel, `typeof` l-ar fi
+   * refuzat, s-ar fi cazut pe statusul HTTP (care la ei e `200` si cand refuza), si un REFUZ ar fi
+   * iesit SUCCES. Adica exact defectul pe care randul asta il repara, doar pe alta usa.
+   *
+   * Deci se accepta si numarul, si sirul numeric; orice altceva cade pe statusul HTTP.
+   */
+  const brut = json.status;
+  const dinCorp = typeof brut === "number" || (typeof brut === "string" && brut.trim() !== "")
+    ? Number(brut)
+    : Number.NaN;
+  const status = Number.isFinite(dinCorp) ? dinCorp : res.status;
+
+  if (status < 200 || status >= 300) {
+    const mesaj = json.statusMessage ?? `Eroare Oblio (status ${status})`;
     /*
-     * ⚠ Oblio isi pune statusul in CORP, nu in HTTP (raspunsul e 200 si cand
-     * refuza). Un 4xx acolo inseamna ca a primit cererea, a inteles-o si a
-     * respins-o — nimic nu s-a emis, deci reincercarea dupa corectarea datelor e
-     * libera. Un 5xx e ambiguu: a picat la ei DUPA ce au primit-o, si documentul
-     * poate exista. Vezi src/lib/operatii/eroare-furnizor.ts.
+     * ⚠ Un 4xx inseamna ca a primit cererea, a inteles-o si a respins-o: nimic nu s-a emis, deci
+     * reincercarea dupa corectarea datelor e libera. Un 5xx e ambiguu: a picat la ei DUPA ce au
+     * primit-o, si documentul poate exista. Vezi src/lib/operatii/eroare-furnizor.ts.
      */
-    const refuzDovedit = json.status >= 400 && json.status < 500 && json.status !== 408;
+    const refuzDovedit = status >= 400 && status < 500 && status !== 408;
     throw refuzDovedit ? eroareRefuz(mesaj) : eroareNesigura(mesaj);
+  }
+
+  /*
+   * ⚠ Un 2xx FARA `data` nu e un succes, e un raspuns pe care nu-l intelegem. „Nu stim" tine
+   * randul blocat si scoate cazul la om; intors ca succes, ar fi scris un document gol pe comanda
+   * si ar fi dezarmat garda anti-duplicat.
+   */
+  if (json.data === undefined || json.data === null) {
+    throw eroareNesigura(
+      json.statusMessage
+        ?? "Oblio a raspuns fara continut. Verifica in contul Oblio daca documentul s-a creat, "
+           + "inainte de a incerca din nou.",
+    );
   }
 
   return json.data;

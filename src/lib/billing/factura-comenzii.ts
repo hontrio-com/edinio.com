@@ -60,6 +60,41 @@ export function facturaComenzii(o: {
 }
 
 /**
+ * Octetii adusi chiar SUNT un PDF?
+ *
+ * ═══ ⚠⚠ DE CE EXISTA, SI DE CE AICI ═══
+ *
+ * Adresa documentului vine de la casa de facturare si se aduce cu `fetch(f.url)` FARA nicio
+ * acreditare, fiindca marketplace-ul trebuie sa poata lua fisierul. Daca adresa aceea se dovedeste
+ * a fi una care CERE autentificare, raspunsul nu e o eroare: e `200` cu pagina de login. Iar
+ * `uploadToR2(..., "application/pdf")` o urca mai departe la eMAG sau Trendyol ca document fiscal.
+ *
+ * ⚠ Nu e o grija inchipuita. La SmartBill raspunsul are DOUA adrese: `documentViewUrl`, publica,
+ * si `documentUrl`, care „cere autentificare". Pe 16.09.2026 era gata sa se pastreze cea gresita.
+ * La Oblio, `link` are forma unei adrese cu jeton (`?it=<32 hex>`), deci pare publica, dar
+ * documentatia lor NU spune, iar zero facturi emise inseamna ca nimeni n-a probat-o vreodata.
+ *
+ * Deci nu se mai raspunde la intrebarea „e publica adresa?" pentru fiecare casa in parte. Se
+ * verifica CE A VENIT, la toate trei deodata: un PDF incepe cu `%PDF-`, si nimic altceva nu incepe
+ * asa. O pagina de login, un HTML de eroare sau un corp gol cad toate aici.
+ *
+ * ⚠ Se verifica DOAR antetul, nu tot fisierul: e singurul lucru pe care standardul il garanteaza,
+ * si nu vrem sa refuzam un PDF bun fiindca e neobisnuit inauntru.
+ */
+export function esteChiarPdf(octeti: ArrayBuffer): boolean {
+  if (octeti.byteLength < 5) return false;
+  const cap = new Uint8Array(octeti.slice(0, 5));
+  /* `%PDF-` */
+  return cap[0] === 0x25 && cap[1] === 0x50 && cap[2] === 0x44 && cap[3] === 0x46 && cap[4] === 0x2d;
+}
+
+/** Ce i se spune omului cand ce a venit nu e un document. */
+export const NU_E_PDF =
+  "Ce s-a descarcat de la casa de facturare nu e un PDF (probabil o pagina de autentificare sau o "
+  + "eroare). Factura NU s-a urcat la marketplace, ca sa nu ajunga acolo un fisier care nu e document "
+  + "fiscal. Verifica in panou ca linkul facturii se deschide fara sa fii logat.";
+
+/**
  * Cheia sub care sta PDF-ul rehostat.
  *
  * ⚠ DE NEGHICIT, SI STABILA. De neghicit fiindca adresa e singura paza a unui document cu

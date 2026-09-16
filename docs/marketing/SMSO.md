@@ -178,6 +178,27 @@ dezabonati si ar fi primit mesajul oricum.
 
 ---
 
+## Ce s-a verificat CHIAR pe productie (17.09.2026, dupa desfasurare)
+
+Trei cereri reale catre `www.edinio.com`, pe un magazin cu SMSO pornit. Amandoua raspunsurile sunt
+`200` din constructie, deci dovada nu e codul HTTP, ci ce a scris serverul in jurnal:
+
+| Ce s-a trimis | Ce a facut serverul |
+| --- | --- |
+| `POST /api/smso/webhook?b=<magazin>&s=000…0` | `adresa nu corespunde magazinului`. Oprit inainte de baza. |
+| `POST` cu semnatura CORECTA, `uuid` inventat | `raport pentru un mesaj necunoscut`. Semnatura ACCEPTATA, potrivirea pe `(magazin, smso, uuid)` a gasit zero randuri, nimic nu s-a schimbat. |
+| `GET /api/cron/smso-livrari` fara antet | `401 Unauthorized`. |
+
+⚠⚠ **A doua linie e cea care conteaza cel mai mult, si nu pentru ce pare.** Ea dovedeste ca
+`SHIPPING_QUOTE_SECRET` de pe Vercel produce ACEEASI semnatura ca cea calculata local. Daca ar fi
+diferit, fiecare adresa trimisa cu `webhook_status` ar fi fost respinsa de propria noastra garda, si
+n-am fi aflat niciodata: ei nu reincearca, iar noi raspundem `200` oricum. Un esec perfect tacut.
+
+⚠ **Cronul n-a fost pornit de mana**: `CRON_SECRET` sta doar in Vercel, nu in `.env.local`. S-a
+verificat ca REFUZA fara autorizare; ca ruleaza, o va arata prima pornire programata.
+
+---
+
 ## Nota
 
 **9,5 din 10.**
@@ -185,10 +206,11 @@ dezabonati si ar fi primit mesajul oricum.
 Toate cele 4 capete si amandoua webhook-urile sunt folosite, urma se scrie pe toate cele 6 cai de
 trimitere, dezabonarile se tin minte si se respecta, iar comerciantul vede si adresa si lista.
 
-⚠ **Ce lipseste pentru 10**: nimic din asta n-a fost inca vazut mergand **pe productie cu trafic
-real**. La Netopia si la Stripe fisele poarta masuratori de pe fluxuri adevarate; aici totul e probat
-pe mutanti si pe baza falsa. Prima campanie trimisa dupa desfasurare va scrie primele randuri cu
-`provider: "smso"`, si abia atunci se va putea spune ca merge, nu doar ca e scris.
+⚠ **Ce lipseste pentru 10**: lantul de GARZI e dovedit pe productie (tabelul de mai sus), dar niciun
+MESAJ REAL n-a parcurs inca drumul. La Netopia si la Stripe fisele poarta masuratori de pe fluxuri
+adevarate, cu bani care s-au miscat; aici s-a probat ca usa se deschide si se inchide cui trebuie,
+nu ca a trecut cineva prin ea. Prima campanie trimisa va scrie primele randuri cu `provider: "smso"`,
+si abia atunci se va putea spune ca merge, nu doar ca e scris.
 
 De verificat atunci, in ordine:
 

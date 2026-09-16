@@ -4,6 +4,8 @@ import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { finalizeStripeOrder, stripeAccountId } from "@/lib/stripe-finalize";
 import { getStripe } from "@/lib/stripe";
+import { baniiSAuIntors, type ComandaAtinsa } from "@/lib/stripe-banii-s-au-intors";
+import type Stripe from "stripe";
 
 /**
  * Plasa de siguranta pentru platile cu cardul prin Stripe: prinde comenzile in
@@ -23,6 +25,10 @@ function verifyCron(req: NextRequest): boolean {
 
 /** Fereastra implicita de reconciliere, in zile. */
 const ZILE_IMPLICIT = 7;
+/** Cat timp se mai intreaba despre o comanda PLATITA, doar ca sa se prinda o rambursare pierduta. */
+const ZILE_RAMBURSARE = 30;
+/** ⚠ Plafon mic dinadins: paza rambursarilor n-are voie sa infometeze plasa despre bani neincasati. */
+const MAX_PLATITE = 120;
 
 export async function GET(req: NextRequest) {
   if (!verifyCron(req)) {
@@ -91,25 +97,36 @@ export async function GET(req: NextRequest) {
 
   const listaOrdine = orders ?? [];
   const listaOrfane = orfane ?? [];
-  if (listaOrdine.length === 0 && listaOrfane.length === 0) {
-    return NextResponse.json({ ok: true, checked: 0, paid: 0, recuperate: 0 });
-  }
 
-  // `bizIds` cuprinde AMANDOUA listele: altfel `cfgMap` n-ar contine tocmai
-  // magazinele care au DOAR comenzi orfane, adica exact cele pentru care s-a scris
-  // a doua trecere.
+  /*
+   * ⚠⚠ AICI A FOST, A DOUA OARA, UN `return` CARE FACEA CODUL DE DUPA MORT.
+   *
+   * Statea scris `if (listaOrdine.length === 0 && listaOrfane.length === 0) return ...`, adica
+   * exact defectul pe care il descrie comentariul de mai sus, doar mutat mai jos. Cand nu exista
+   * nicio comanda neplatita (CAZUL NORMAL) functia iesea, si a treia trecere (paza
+   * rambursarilor) nu s-ar fi executat niciodata.
+   *
+   * ⚠ L-am pus chiar eu, adaugand trecerea noua la SFARSITUL fisierului, cu avertismentul scris
+   * cu zece randuri mai sus. Un `return` timpuriu nu e o optimizare, e o poarta: cine adauga ceva
+   * dupa el trebuie sa se intrebe intai daca poarta il lasa sa treaca.
+   *
+   * Acum nu se mai iese devreme: fiecare trecere isi verifica singura daca are de lucru.
+   */
   const bizIds = [...new Set([...listaOrdine, ...listaOrfane].map((o) => o.business_id))];
-  const { data: settingsRows, error: eCfg } = await admin
-    .from("store_settings")
-    .select("business_id, stripe_config")
-    .in("business_id", bizIds);
-  // Fara configuratii, TOATE comenzile ar fi sarite — adica exact zero munca,
-  // raportata ca reusita. Aceeasi tacere ca la citirea comenzilor.
-  if (eCfg) {
-    await logError({ action: "stripe-reconcile", message: `configuratiile nu s-au putut citi: ${eCfg.message}`, severity: "critical" });
-    return NextResponse.json({ ok: false, error: "citire esuata" }, { status: 503 });
+  const cfgMap = new Map<string, string | null>();
+  if (bizIds.length > 0) {
+    const { data: settingsRows, error: eCfg } = await admin
+      .from("store_settings")
+      .select("business_id, stripe_config")
+      .in("business_id", bizIds);
+    // Fara configuratii, TOATE comenzile ar fi sarite — adica exact zero munca,
+    // raportata ca reusita. Aceeasi tacere ca la citirea comenzilor.
+    if (eCfg) {
+      await logError({ action: "stripe-reconcile", message: `configuratiile nu s-au putut citi: ${eCfg.message}`, severity: "critical" });
+      return NextResponse.json({ ok: false, error: "citire esuata" }, { status: 503 });
+    }
+    for (const r of settingsRows ?? []) cfgMap.set(r.business_id, stripeAccountId(r.stripe_config));
   }
-  const cfgMap = new Map((settingsRows ?? []).map((r) => [r.business_id, stripeAccountId(r.stripe_config)]));
 
   let checked = 0;
   let paid = 0;
@@ -220,6 +237,88 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log(`[stripe-reconcile] checked ${checked}, marked paid ${paid}, recuperate ${recuperate}`);
-  return NextResponse.json({ ok: true, checked, paid, recuperate });
+  /*
+   * ═══ ⚠⚠ A TREIA TRECERE: BANII CARE S-AU INTORS (16.09.2026) ═══
+   *
+   * Cele doua treceri de mai sus se uita EXCLUSIV la comenzi `unpaid`: ele intreaba „au intrat
+   * banii?". Nimeni nu intreba vreodata „nu cumva au IESIT la loc?".
+   *
+   * Comerciantul ramburseaza din panoul Stripe, unde e cel mai la indemana. Daca evenimentul
+   * `charge.refunded` nu e bifat pe capatul Connect (si pana azi n-avea de ce sa fie, fiindca nu-l
+   * trata nimeni), comanda ramane `paid` la noi pentru totdeauna: banii dusi, marfa dusa, iar
+   * platforma arata o vanzare incheiata cu bine.
+   *
+   * ⚠ Trecerea asta INTREABA, deci merge si daca in panoul lor nu e bifat nimic.
+   *
+   * ⚠ FEREASTRA E MAI SCURTA SI PLAFONUL MAI MIC decat la trecerile despre bani neincasati, si nu
+   * din zgarcenie: acolo se pierd vanzari, aici se corecteaza o eticheta. Intrebarea asta n-are voie
+   * sa infometeze plasa principala.
+   *
+   * ⚠ O comanda deja `refunded` nu se reintreaba: `baniiSAuIntors` o lasa in pace, dar filtrul de
+   * mai jos scuteste si apelul catre ei.
+   */
+  let intoarse = 0;
+  const { data: platite, error: ePlatite } = await admin
+    .from("orders")
+    .select("id, business_id, order_number, status, payment_status, total, stripe_session_id")
+    .eq("payment_method", "stripe")
+    .eq("payment_status", "paid")
+    .not("stripe_session_id", "is", null)
+    .gte("created_at", new Date(Date.now() - ZILE_RAMBURSARE * 86400000).toISOString())
+    .order("created_at", { ascending: false })
+    .limit(MAX_PLATITE);
+
+  if (ePlatite) {
+    /* ⚠ Nu se raspunde 503: trecerile de mai sus si-au facut treaba, si ele sunt cele urgente. */
+    await logError({
+      action: "stripe-reconcile",
+      message: `comenzile platite nu s-au putut citi pentru paza rambursarilor: ${ePlatite.message}`,
+      severity: "warning",
+    });
+  }
+
+  /*
+   * ⚠ Configuratiile se aduc DIN NOU pentru magazinele de aici: `cfgMap` s-a compus din magazinele
+   * cu comenzi NEPLATITE, iar un magazin poate sa n-aiba niciuna si totusi sa aiba o rambursare. Fara
+   * randul asta, tocmai magazinele fara probleme de incasare ar fi ramas nepazite.
+   */
+  const bizPlatite = [...new Set((platite ?? []).map((o) => o.business_id))].filter((b) => !cfgMap.has(b));
+  if (bizPlatite.length > 0) {
+    const { data: inPlus } = await admin
+      .from("store_settings").select("business_id, stripe_config").in("business_id", bizPlatite);
+    for (const r of inPlus ?? []) cfgMap.set(r.business_id, stripeAccountId(r.stripe_config));
+  }
+
+  for (const o of platite ?? []) {
+    const accountId = cfgMap.get(o.business_id);
+    if (!accountId || !o.stripe_session_id) continue;
+    try {
+      /*
+       * O singura cerere: sesiunea, cu plata si incasarea ei desfasurate. Fara `expand` ar fi fost
+       * trei dus-intorsuri pentru fiecare comanda.
+       */
+      const s = await getStripe().checkout.sessions.retrieve(
+        o.stripe_session_id,
+        { expand: ["payment_intent.latest_charge"] },
+        { stripeAccount: accountId },
+      );
+      const pi = s.payment_intent as Stripe.PaymentIntent | null;
+      const charge = (pi?.latest_charge ?? null) as Stripe.Charge | null;
+      if (!charge) continue;
+
+      const v = await baniiSAuIntors(admin, o as unknown as ComandaAtinsa, {
+        intors: charge.amount_refunded ?? 0,
+        incasat: charge.amount ?? 0,
+        moneda: charge.currency ?? "ron",
+        referinta: charge.id,
+      }, "reconciliere");
+      if (v.fel === "integral" || v.fel === "partial") intoarse++;
+    } catch (e) {
+      /* O interogare picata NU inseamna „nu s-a rambursat". Se reia la rularea urmatoare. */
+      console.error("[stripe-reconcile] paza rambursarii a esuat pentru comanda", o.id, e);
+    }
+  }
+
+  console.log(`[stripe-reconcile] checked ${checked}, marked paid ${paid}, recuperate ${recuperate}, bani intorsi ${intoarse}`);
+  return NextResponse.json({ ok: true, checked, paid, recuperate, intoarse });
 }

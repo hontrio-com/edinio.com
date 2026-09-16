@@ -1,10 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { stripe, getStripe } from "@/lib/stripe";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { finalizeStripeOrder, stripeAccountId } from "@/lib/stripe-finalize";
 import { citireCazuta } from "@/lib/supabase/citire";
 import { logError } from "@/lib/error-logger";
+import { baniiSAuIntors, comandaPlatiiStripe } from "@/lib/stripe-banii-s-au-intors";
+import type { Database } from "@/types/database.types";
 import type Stripe from "stripe";
+
+/**
+ * Evenimentul a mai fost vazut?
+ *
+ * ⚠ Webhook-ul de PLATFORMA avea dedupe de la bun inceput; asta nu. Pana acum nu costa nimic:
+ * `finalizeStripeOrder` e idempotent prin `.neq("payment_status", "paid")`, iar `account.updated`
+ * scrie aceeasi valoare. Cu rambursarile de mai jos costa: o relivrare a aceluiasi
+ * `charge.refunded` ar striga a doua oara la comerciant pentru aceiasi bani, iar el ar cauta o a
+ * doua rambursare care nu exista.
+ *
+ * ⚠ Registrul indisponibil NU opreste procesarea: mai bine un strigat repetat decat o rambursare
+ * care nu ajunge niciodata. Acelasi rationament ca la platforma.
+ */
+async function evenimentNou(
+  admin: ReturnType<typeof createAdminClient<Database>>,
+  event: Stripe.Event,
+): Promise<boolean> {
+  const { error } = await admin.from("stripe_events").insert({ event_id: event.id, type: event.type });
+  if (!error) return true;
+  if (error.code === "23505") return false;
+  console.error("[stripe/connect/webhook] registrul de evenimente indisponibil:", error.message);
+  return true;
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -18,11 +43,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
-  const admin = createAdminClient(
+  const admin = createAdminClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
+
+  if (!(await evenimentNou(admin, event))) {
+    console.log("[stripe/connect/webhook] eveniment deja procesat, ignorat:", event.id, event.type);
+    return NextResponse.json({ received: true, duplicate: true });
+  }
 
   // account.updated — sync charges_enabled / payouts_enabled status
   if (event.type === "account.updated") {
@@ -115,6 +145,79 @@ export async function POST(request: NextRequest) {
         }
       } else {
         console.error("[stripe/webhook] comanda sau contul nu corespund:", { orderId, businessId, accountId });
+      }
+    }
+  }
+
+  /*
+   * ═══ ⚠⚠ BANII CARE SE INTORC (16.09.2026) ═══
+   *
+   * Pana azi, in TOT codul se tratau sase feluri de evenimente Stripe si niciunul nu era despre bani
+   * intorsi. Comerciantul ramburseaza din panoul Stripe (unde e cel mai la indemana, si unde a
+   * facut-o dintotdeauna) si comanda ramanea `paid` la noi pentru totdeauna.
+   *
+   * ⚠ CE TREBUIE SA FIE PORNIT LA EI: tipurile `charge.refunded` si `charge.dispute.created` pe
+   * capatul Connect din panoul Stripe. Codul de aici nu le poate cere singur; daca nu sunt bifate,
+   * plasa ramane cronul de reconciliere, care INTREABA si nu asteapta sa i se spuna.
+   *
+   * ⚠ Regula despre ce inseamna banii intorsi sta in `lib/stripe-banii-s-au-intors.ts`, fiindca are
+   * doi apelanti: ramura asta si cronul. Doua copii ale unei reguli despre bani se departeaza una de
+   * alta, si niciodata amandoua deodata.
+   */
+  if (event.type === "charge.refunded" || event.type === "charge.dispute.created") {
+    const accountId = event.account ?? null;
+    const contestatie = event.type === "charge.dispute.created";
+
+    /*
+     * Cele doua evenimente poarta obiecte DIFERITE: la rambursare vine chiar `Charge`, la
+     * contestatie vine `Dispute`, care doar arata catre plata. De aceea nu se intersecteaza
+     * tipurile (ar iesi `never`), ci se deosebesc aici, o data.
+     */
+    const dispute = contestatie ? (event.data.object as Stripe.Dispute) : null;
+    const chargeDinEveniment = contestatie ? null : (event.data.object as Stripe.Charge);
+    const chargeId = dispute
+      ? (typeof dispute.charge === "string" ? dispute.charge : dispute.charge?.id ?? null)
+      : chargeDinEveniment?.id ?? null;
+
+    if (accountId && chargeId) {
+      let charge = chargeDinEveniment;
+      if (!charge) {
+        try {
+          charge = await getStripe().charges.retrieve(chargeId, {}, { stripeAccount: accountId });
+        } catch (e) {
+          /*
+           * ⚠ 503, ca Stripe sa RELIVREZE. O contestatie pierduta fiindca n-am putut citi plata e o
+           * comanda despre care comerciantul nu afla ca i-a fost contestata, si un termen scapat.
+           */
+          await logError({
+            action: "stripe/connect/webhook",
+            message: `plata contestata nu s-a putut citi: ${e instanceof Error ? e.message : String(e)}`,
+            details: { chargeId, accountId }, severity: "critical",
+          });
+          return NextResponse.json({ received: false }, { status: 503 });
+        }
+      }
+
+      const piId = typeof charge.payment_intent === "string"
+        ? charge.payment_intent
+        : charge.payment_intent?.id ?? null;
+
+      if (piId) {
+        const order = await comandaPlatiiStripe(admin, piId, accountId);
+        if (!order) {
+          /* Plata nu e a unei comenzi de-ale noastre (sau e prea veche). Nu e o defectiune. */
+          console.log("[stripe/connect/webhook] bani intorsi fara comanda potrivita:", { chargeId, piId });
+        } else {
+          const v = await baniiSAuIntors(admin, order, {
+            intors: dispute ? dispute.amount : (charge.amount_refunded ?? 0),
+            incasat: charge.amount ?? 0,
+            moneda: charge.currency ?? "ron",
+            contestatie,
+            referinta: dispute ? dispute.id : chargeId,
+          }, "webhook");
+          /* ⚠ Un esec de scriere cere RELIVRARE: altfel banii raman intorsi si comanda platita. */
+          if (v.fel === "esec") return NextResponse.json({ received: false, error: v.mesaj }, { status: 503 });
+        }
       }
     }
   }

@@ -97,7 +97,25 @@ export async function finalizeStripeOrder(
   return { status: "paid" };
 }
 
-/** Contul Stripe conectat al magazinului, daca plata cu cardul e activa. */
+/**
+ * Contul Stripe conectat al magazinului.
+ *
+ * ⚠⚠ NU SE UITA LA `enabled`, SI E O DECIZIE, NU O SCAPARE.
+ *
+ * Randul de deasupra spunea, pana pe 16.09.2026, „contul conectat al magazinului, **daca plata cu
+ * cardul e activa**". Codul n-a facut niciodata asta, si bine a facut. Dar afirmatia falsa era o
+ * INVITATIE: cine venea sa se lamureasca gasea comentariul, vedea ca implementarea „nu-l face", si
+ * ar fi „reparat-o" adaugand verificarea.
+ *
+ * Ce s-ar fi stricat: functia asta e folosita pe drumul de CONFIRMARE (webhook Connect, intoarcerea
+ * din checkout, cronul de reconciliere, si de acum paza rambursarilor). Daca un comerciant stinge
+ * Stripe dupa ce un cumparator a inceput sa plateasca, sau daca `account.updated` il stinge singur
+ * (fiindca ramura de mai sus scrie `enabled: account.charges_enabled`), banii ar fi intrat la el si
+ * comanda ar fi ramas neplatita pe veci, iar rambursarile nu s-ar mai fi vazut deloc.
+ *
+ * Alegerea daca se POATE incepe o plata se face in alta parte (`stripe-sesiune.ts`, `order-checkout`),
+ * si acolo `enabled` chiar conteaza. Aici se raspunde la alta intrebare: „pe ce cont s-a intamplat?".
+ */
 export function stripeAccountId(config: unknown): string | null {
   const cfg = config as { account_id?: string; enabled?: boolean } | null;
   return cfg?.account_id ?? null;

@@ -929,9 +929,22 @@ async function proceseazaEveniment(admin: SupabaseClient, event: Stripe.Event): 
       // care devine true si in fereastra draft/finalizare a Stripe (inainte de orice
       // incercare de plata), producand un fals „plata esuata". Setat abia cand Stripe
       // chiar a incercat si a esuat plata; sters la urmatoarea plata reusita.
-      await admin.from("users_profile").update({
+      /*
+       * ⚠ RASPUNSUL SE CITESTE, si nu e o formalitate: scrierea asta e SINGURUL lucru pe care se
+       * leaga bannerul de plata restanta si badge-ul din Setari. Picata in tacere, comerciantul nu
+       * afla niciodata ca i-a esuat plata, iar cand Stripe termina reincercarile magazinul se
+       * suspenda fara nicio prevenire.
+       *
+       * ⚠ `500`, deci Stripe RELIVREAZA. Emailul si notificarea de mai jos nu s-au trimis inca, deci
+       * o reluare nu produce duplicate; iar daca s-ar produce, dedupe-ul de evenimente le opreste.
+       */
+      const { error: eSteag } = await admin.from("users_profile").update({
         payment_failed_at: new Date().toISOString(),
       }).eq("id", userId);
+      if (eSteag) {
+        console.error("[webhook] invoice.payment_failed: semnul de plata restanta nu s-a putut scrie:", eSteag);
+        return NextResponse.json({ error: "DB update failed" }, { status: 500 });
+      }
 
       const { data: failedAuthData } = await admin.auth.admin.getUserById(userId);
       const { data: failedProfile } = await admin.from("users_profile").select("full_name").eq("id", userId).maybeSingle();

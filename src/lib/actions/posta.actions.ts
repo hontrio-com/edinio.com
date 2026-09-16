@@ -31,7 +31,7 @@ import {
 } from "@/lib/posta/expediere";
 import { codutiNecunoscute, descriereStatus } from "@/lib/posta/statusuri";
 import { avertismentePlaja, codurileRamase, problemePlaja, type PlajaConfig } from "@/lib/posta/plaja";
-import { cheileNomenclatorului, unitatiIncomplete } from "@/lib/posta/unitati";
+import { cheileNomenclatorului, unitatiFaraLocalitate, unitatiIncomplete } from "@/lib/posta/unitati";
 import { adaugaZileLucratoare, ziuaInRomania } from "@/lib/utils/zile-lucratoare";
 import type { Json } from "@/types/database.types";
 import { poartaAwbPropriu } from "@/lib/orders/poarta-awb";
@@ -165,6 +165,7 @@ export async function diagnosticPostaAction(
       statusuriNoi: { cod: number; nume: string }[];
       unitati: number;
       unitatiFaraNume: number;
+      unitatiFaraLocalitate: number;
       cheiUnitati: { cheie: string; exemplu: string }[];
     }
   | { ok: false; error: string }
@@ -185,6 +186,9 @@ export async function diagnosticPostaAction(
       statusuriNoi: codutiNecunoscute(statusuri),
       unitati: unitati.length,
       unitatiFaraNume: unitatiIncomplete(unitati),
+      /* ⚠ Masura care chiar spune daca post-restantul merge: fara localitate,
+         oficiul nu trece de filtrul din checkout. Vezi `unitatiFaraLocalitate`. */
+      unitatiFaraLocalitate: unitatiFaraLocalitate(unitati),
       cheiUnitati: cheileNomenclatorului(unitati),
     };
   } catch (e) {
@@ -219,8 +223,21 @@ export async function getPostaPlajaAction(
   const ctx = await proprietar(businessId);
   if (!ctx.ok) return { ok: false, error: ctx.error };
 
-  const { data } = await createAdminClient()
+  const { data, error } = await createAdminClient()
     .from("posta_plaja").select("*").eq("business_id", businessId).maybeSingle();
+  /*
+   * ⚠⚠ O CITIRE PICATA NU E ACELASI LUCRU CU „MAGAZINUL N-ARE PLAJA".
+   *
+   * Erau amandoua `plaja: null`, iar pagina randa comutatorul stins si campurile
+   * goale. Comerciantul, venit pentru altceva, apasa „Salveaza" si stergea randul
+   * `posta_plaja` cu tot cu cursorul lui. Reintrodus apoi intervalul din contract,
+   * cursorul pornea de la capat si redadea coduri deja folosite: acelasi AWB de
+   * doua ori, la un furnizor care n-are metoda de anulare.
+   *
+   * Aceeasi lectie ca la `secretDinConfig` si la `citesteAwb`: cele trei raspunsuri
+   * („da", „nu", „n-am putut afla") nu se pot topi in doua.
+   */
+  if (error) return { ok: false, error: `Nu s-a putut citi plaja de coduri: ${error.message}` };
   if (!data) return { ok: true, plaja: null };
 
   const plaja: PlajaConfig = {
@@ -260,17 +277,38 @@ export async function savePostaPlajaAction(
     && veche.de_la === plaja.deLa && veche.pana_la === plaja.panaLa
     && veche.prefix === plaja.prefix && veche.cifre === plaja.cifre;
 
-  const urmator = acelasiInterval ? veche.urmator : plaja.deLa;
-
-  const { error } = await admin.from("posta_plaja").upsert({
-    business_id: businessId,
+  const comun = {
     prefix: plaja.prefix,
     de_la: plaja.deLa,
     pana_la: plaja.panaLa,
     cifre: plaja.cifre,
-    urmator,
     updated_at: new Date().toISOString(),
-  });
+  };
+
+  /*
+   * ⚠⚠ PE ACELASI INTERVAL, `urmator` NU SE SCRIE DELOC.
+   *
+   * Scris inapoi din `veche.urmator`, el venea dintr-o citire facuta cu cateva
+   * milisecunde mai devreme. Iar intre citire si scriere poate rula `posta_aloca_cod()`,
+   * care e un `update … returning` ATOMIC tocmai ca alocarea sa nu se poata pierde.
+   *
+   * Un lot de AWB-uri pornit din pagina de comenzi in timp ce proprietarul bifeaza
+   * un serviciu in configurare: RPC-ul muta cursorul pe 501, salvarea il pune la
+   * loc pe 500, iar urmatoarea comanda din lot primeste ACELASI cod. Doua trimiteri
+   * reale sub acelasi numar, la un furnizor care n-are metoda de anulare.
+   *
+   * Comentariul de deasupra functiei promitea deja regula („`urmator` NU se poate
+   * cobori dintr-o salvare obisnuita"); implementarea o incalca prin chiar rescrierea
+   * lui. Acum coloana ramane NEATINSA, iar cursorul il misca doar cine il aloca.
+   */
+  const { error } = acelasiInterval
+    ? await admin.from("posta_plaja").update(comun).eq("business_id", businessId)
+    : await admin.from("posta_plaja").upsert({
+        business_id: businessId,
+        ...comun,
+        /* Interval nou: cursorul porneste de la capatul LUI, nu de la cel vechi. */
+        urmator: plaja.deLa,
+      });
 
   if (error) return { error: error.message };
   return { success: true, avertismente: avertismentePlaja(plaja) };
@@ -464,7 +502,56 @@ export async function createPostaAwbAction(
         idBorderou,
       };
 
-      const rezultat = await salveazaAwb(config, corpFinal);
+      /*
+       * ⚠⚠ CAND STIM CODUL, O EMITERE NESIGURA SE LAMURESTE CU O CITIRE.
+       *
+       * In modul plaja numarul il alegem NOI inainte de apel, iar documentatia lor
+       * (2.3) da o citire pura pe chiar acel numar: `GET /api/awb/{cod}`. Asta era
+       * scris ca plan chiar mai sus, in comentariul alocarii, si nu se facea:
+       * `awbExista` exista in client si nu-l chema nimeni de pe drumul emiterii.
+       *
+       * Ce costa lipsa ei: un timeout la `POST /api/awb` iesea `necunoscut`, codul
+       * alocat ramanea intr-o variabila locala si se pierdea odata cu exceptia.
+       * Randul din registru nu primea nici referinta, nici detalii, comanda ramanea
+       * fara AWB, iar la Posta putea sa existe un colet real pe care nimic din
+       * aplicatie nu-l mai putea lega de comanda. Un cod ars, o comanda blocata, si
+       * un mesaj care ii cerea omului sa caute ceva ce nu stia cum se cheama.
+       *
+       * ⚠ Citirea are TREI raspunsuri, si toate trei conteaza:
+       *   exista  -> nu mai e nimic nesigur: e chiar AWB-ul comenzii;
+       *   nu      -> nu s-a creat nimic, deci refuz DOVEDIT, iar randul se elibereaza
+       *              si comerciantul poate reincerca (mai pierde un cod, nu un colet);
+       *   nu stim -> se propaga nesiguranta, dar cu CODUL in mesaj, ca omul sa aiba
+       *              ce cauta in aplicatia lor.
+       */
+      let rezultat;
+      try {
+        rezultat = await salveazaAwb(config, corpFinal);
+      } catch (e) {
+        if (!codAlocat || verdictFurnizor(e) !== "necunoscut") throw e;
+
+        const exista = await awbExista(config, codAlocat);
+        if (exista === true) {
+          avertismente.push(
+            `Raspunsul Postei nu a ajuns, dar trimiterea ${codAlocat} exista la ei: `
+            + "am citit-o inapoi si am legat-o de comanda.",
+          );
+          rezultat = { cod: codAlocat, brut: null as unknown };
+        } else if (exista === false) {
+          throw Object.assign(
+            new Error(
+              `Posta nu a raspuns, iar trimiterea ${codAlocat} NU exista la ei: nu s-a creat nimic. `
+              + "Poti incerca din nou.",
+            ),
+            { verdictFurnizor: "esuat" as const },
+          );
+        } else {
+          throw new Error(
+            `${(e as Error).message} ⚠ Codul alocat a fost ${codAlocat}: cauta-l in aplicatia `
+            + "Postei ca sa vezi daca trimiterea s-a creat.",
+          );
+        }
+      }
 
       /*
        * ⚠ AICI E LOCUL CEL MAI PERICULOS DIN TOATA INTEGRAREA.

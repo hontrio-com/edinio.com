@@ -270,11 +270,34 @@ async function apel<T>(
   }
 
   if (res.status >= 300 && res.status < 400) {
+    /*
+     * ⚠⚠ „DE OBICEI” NU E O DOVADA, SI PE O SCRIERE COSTA UN COLET.
+     *
+     * Un 3xx inseamna aproape sigur pagina de login, si pe o CITIRE e chiar ce
+     * trebuie sa-i spunem omului: verifica userul si parola. O citire reincercata
+     * nu strica nimic.
+     *
+     * Pe o SCRIERE insa, `eroareRefuz` inseamna pentru registru „dovedit ca nu s-a
+     * intamplat nimic acolo, reincercarea e LIBERA”. Iar documentatia lor nu
+     * descrie niciun raspuns la `POST /api/awb` si nu pomeneste nicaieri
+     * redirectari: un 3xx la emitere e exact cazul in care documentatia TACE.
+     * Daca cererea a ajuns si trimiterea s-a creat, urmatoarea apasare arde inca
+     * un cod din plaja si face al doilea colet REAL, facturat.
+     *
+     * Deci pe scriere iese `necunoscut`: blocheaza randul si scoate cazul la om,
+     * care e singurul verdict cinstit pentru o tacere. Mesajul ramane acelasi,
+     * fiindca sfatul (verifica datele de acces) e la fel de bun in amandoua
+     * cazurile; se schimba doar ce are voie registrul sa faca dupa el.
+     */
+    const mesaj = "Posta Romana: cererea a fost redirectata, ceea ce inseamna de obicei ca "
+      + "userul sau parola nu sunt bune. Verifica-le in configurare.";
     throw cuStatus(
-      eroareRefuz(
-        "Posta Romana: cererea a fost redirectata, ceea ce inseamna de obicei ca "
-        + "userul sau parola nu sunt bune. Verifica-le in configurare.",
-      ),
+      metoda === "GET"
+        ? eroareRefuz(mesaj)
+        : eroareNesigura(
+            `${mesaj} ⚠ Cererea a ajuns totusi la ei, deci verifica in aplicatia `
+            + "Postei daca trimiterea s-a creat, inainte de a incerca din nou.",
+          ),
       401,
     );
   }

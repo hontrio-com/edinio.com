@@ -141,6 +141,31 @@ export function unitatiIncomplete(brute: UnitateLivrare[]): number {
 }
 
 /**
+ * ⚠⚠ Cate randuri au ramas fara LOCALITATE, adica invizibile in checkout.
+ *
+ * Masura de deasupra apara DENUMIREA, iar denumirea are plasa: cand lipseste, se
+ * compune din localitate sau din id, deci oficiul se vede si tot poate fi ales.
+ *
+ * Localitatea n-are nicio plasa, si ea e cea dupa care checkout-ul TAIE lista:
+ * `filtreazaOras` cheama `cityMatches(l.city, city)`, iar pe un `city` gol toate
+ * cele trei ramuri fac `"".includes(ceva)`, adica FALS pentru orice localitate
+ * ceruta. Un nomenclator care numeste localitatea altfel decat ghicim noi lasa
+ * fiecare cumparator cu „nu s-au gasit oficii in localitatea ta”, iar
+ * Diagnosticul raspundea vesel „toate cu denumire”.
+ *
+ * ⚠ Nu se numara randurile fara id: alea nu ajung oricum in lista.
+ */
+export function unitatiFaraLocalitate(brute: UnitateLivrare[]): number {
+  let fara = 0;
+  for (const rand of brute ?? []) {
+    if (!rand || typeof rand !== "object") continue;
+    if (!textDin(rand, CHEI_ID)) continue;
+    if (!textDin(rand, CHEI_LOCALITATE)) fara++;
+  }
+  return fara;
+}
+
+/**
  * Toate cheile intalnite in nomenclator, cu cate un exemplu.
  *
  * Nu se cheama in fluxul normal. Exista pentru pagina de configurare si pentru

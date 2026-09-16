@@ -370,6 +370,13 @@ export function PostaConfigClient({
                 : ", toate cu denumire"}
               .
             </p>
+            {diagnostic.unitatiFaraLocalitate > 0 && (
+              <p className="text-warning">
+                {diagnostic.unitatiFaraLocalitate} oficii n-au localitate recunoscuta, deci NU apar
+                in checkout: lista de oficii se filtreaza dupa localitatea cumparatorului, iar un
+                oficiu fara ea nu se potriveste cu nimeni. Trimite-ne lista de campuri de mai jos.
+              </p>
+            )}
             {diagnostic.unitatiFaraNume > 0 && (
               <p className="text-warning">
                 Oficiile fara denumire apar in checkout doar cu localitatea. Trimite-ne

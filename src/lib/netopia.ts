@@ -219,24 +219,52 @@ export interface NetopiaIpnPayload {
 }
 
 /**
- * Netopia v2 payment statuses:
- * 3 = paid/confirmed
- * 5 = confirmed (captured)
- * 12 = cancelled
- * 15 = credit (refund)
- * Other codes: pending, error, etc.
+ * Statusurile de plata Netopia v2, din specificatia lor OFICIALA.
+ *
+ * ═══ ⚠⚠ 12 NU INSEAMNA „ANULAT" (16.09.2026) ═══
+ *
+ * Aici scria `12 = cancelled`, iar codul anula comanda. Afirmatia venea din migrarea v1 to v2 si
+ * NU e sustinuta de nimic din v2. Specificatia lor OpenAPI 3.0
+ * (`https://secure.sandbox.netopia-payments.com/spec`, citita pe 16.09.2026) o spune de DOUA ori,
+ * in doua scheme diferite:
+ *
+ *   * `NotifyRequest.payment.status` si `PaymentNotify.status`: „12 = **invalid account**";
+ *   * `Payment.status` (raspunsul de pornire): „12 - **rejected**".
+ *
+ * Adica plata a fost REFUZATA: card gresit, cont invalid, fonduri insuficiente. Nu e o hotarare a
+ * cumparatorului, e un refuz al bancii.
+ *
+ * ⚠⚠ SI CE COSTA ANULAREA: `/api/netopia/start` refuza sa porneasca o plata pe o comanda cu
+ * `status === "cancelled"`. Deci un card refuzat OMORA comanda: cumparatorul nu mai poate reincerca
+ * niciodata, iar stocul si cuponul se elibereaza. O vanzare pierduta tacut, dintr-o cifra.
+ *
+ * ⚠ Purtarea corecta e deja SCRISA in platforma, pentru exact aceeasi situatie. Cronul
+ * `discount-release`, despre plata online neterminata: „Ce NU face: nu anuleaza si nu atinge in
+ * niciun fel comanda. Comanda neplatita ramane a comerciantului, cu totul." Cine abandoneaza pe
+ * pagina bancii ramane cu comanda in asteptare; cine are cardul refuzat trebuie tratat la fel.
+ *
+ * Deci 12 nu misca nimic. Se intoarce `refuzat`, ca ruta sa lase o urma pentru comerciant.
+ *
+ * ⚠ 15 (rambursare) NU apare in specificatia v2. E cunostinta mostenita din v1, pastrata fiindca
+ * maparea ei e in directia sigura (o comanda marcata gresit „rambursata" nu trimite marfa si nu
+ * incaseaza nimic in plus) si fiindca alternativa ar fi sa nu recunoastem deloc o rambursare.
+ *
+ * ⚠ Orice alt cod NU misca nimic, si asta ramane: tacerea pe necunoscut e purtarea corecta cand
+ * de partea cealalta sunt bani.
  */
 export function resolveNetopiaStatus(status: number): {
   orderStatus?: string;
   paymentStatus?: string;
+  /** Plata a fost refuzata de ei. Comanda NU se misca; se scrie doar o urma pentru comerciant. */
+  refuzat?: true;
 } {
   switch (status) {
     case 3: // paid
     case 5: // confirmed
       return { orderStatus: "confirmed", paymentStatus: "paid" };
-    case 12: // cancelled
-      return { orderStatus: "cancelled" };
-    case 15: // credit/refund
+    case 12: // invalid account / rejected: plata REFUZATA, nu anulata
+      return { refuzat: true };
+    case 15: // credit/refund (din v1; nedocumentat in v2)
       return { paymentStatus: "refunded" };
     default:
       return {};

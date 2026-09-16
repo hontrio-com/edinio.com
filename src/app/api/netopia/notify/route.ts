@@ -50,7 +50,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ errorCode: 0x01, errorMessage: "Order not found" });
   }
 
-  const { orderStatus, paymentStatus: newPaymentStatus } = resolveNetopiaStatus(paymentStatus);
+  const { orderStatus, paymentStatus: newPaymentStatus, refuzat } = resolveNetopiaStatus(paymentStatus);
+
+  /*
+   * ═══ ⚠⚠ O PLATA REFUZATA NU ANULEAZA COMANDA (16.09.2026) ═══
+   *
+   * Statusul 12 e „invalid account" / „rejected" in specificatia lor oficiala, adica un refuz al
+   * bancii, nu o hotarare a cumparatorului. Pana azi il anulam, iar `/api/netopia/start` refuza sa
+   * porneasca o plata pe o comanda anulata: un card refuzat omora comanda pentru totdeauna.
+   *
+   * Acum nu se misca nimic, exact ca la abandonul pe pagina bancii. Dar nici nu se tace: un refuz
+   * e informatie pentru comerciant, mai ales daca se repeta pe aceeasi comanda.
+   *
+   * ⚠ `warning`, nu `critical`: un card refuzat e o intamplare obisnuita intr-un magazin, nu o
+   * defectiune. Ridicata la critical, alarma s-ar toci si n-ar mai fi citita cand chiar conteaza.
+   */
+  if (refuzat) {
+    await logError({
+      action: "netopia/notify",
+      message:
+        `Plata cu cardul a fost REFUZATA pentru comanda ${order.order_number ?? orderId} `
+        + `(status ${paymentStatus}: cont invalid / tranzactie respinsa). Comanda ramane in asteptare, `
+        + "iar clientul poate reincerca plata.",
+      details: { orderId, ntpID: payload.payment?.ntpID, status: paymentStatus },
+      businessId: order.business_id,
+      severity: "warning",
+    });
+    /* `errorCode: 0`: am primit si am inteles notificarea, deci Netopia nu trebuie s-o repete. */
+    return NextResponse.json({ errorCode: 0, errorMessage: "OK" });
+  }
 
   /*
    * SUMA. Semnatura dovedeste ca notificarea vine de la Netopia si e legata de

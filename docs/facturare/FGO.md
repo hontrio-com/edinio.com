@@ -99,8 +99,17 @@ durata lui), succesul pe cealalta. Cu asta, si mutantul conditiei, si cel al dur
    E scrisa, cu un comentariu care spune de ce e lasata asa. Nu se atinge fara o cerere.
 2. **Trei facturi, toate de test si toate stornate.** Nimic din integrarea asta n-a produs vreodata
    un document fiscal adevarat. Ca la Oblio, si spre deosebire de SmartBill.
-3. ⚠ **Nu exista o oprire a facturarii automate in sandbox**, si e deliberat (vezi mai sus). Daca
-   proprietarul o vrea, e o singura conditie.
+3. ⚠ **Nu exista o oprire a facturarii automate in sandbox**, si e deliberat: proprietarul a
+   confirmat hotararea pe 16.09.2026. Sandbox-ul trebuie sa ramana probabil, inclusiv pe drumul
+   automat; un refuz l-ar face de neprobat. In schimb **se vede acum in trei locuri**, fiindca un
+   rand in jurnal nu se citeste:
+   * un panou de avertizare in configurare, cat timp comutatorul e pornit, care spune CONSECINTA
+     („nu sunt documente fiscale"), nu doar ce server se foloseste;
+   * chiar sub comutator, in descrierea lui;
+   * **pe pagina comenzii**, langa fiecare factura emisa asa, fiindca avertismentul de la emitere
+     tine douazeci de secunde, iar documentul ramane luni. Pe calea automata nu exista niciun toast.
+   ⚠ Si acolo se citeste din LINK, nu din configurarea de acum: cine iese din modul de testare nu
+   preface retroactiv in documente fiscale facturile emise cat timp era in el.
 
 ---
 

@@ -537,6 +537,18 @@ async function buildInvoiceData(
     mentions: mentiuneRefacturare(`Comanda ${order.order_number}`, slot),
     internalNote: mentiuneRefacturare(`Comanda ${order.order_number}`, slot),
     ...(config.send_to_spv ? { spvExtern: 1 as const } : {}),
+    /*
+     * ⚠ Emailul catre cumparator: DOAR cand comerciantul l-a cerut, si DOAR cand avem unde.
+     *
+     * Fara adresa, `sendEmail: 1` i-ar cere lui Oblio sa trimita in gol. Iar absenta campului
+     * inseamna la ei „nu trimite", adica exact purtarea de pana acum, deci magazinele care n-au
+     * bifat nimic nu simt nicio schimbare.
+     *
+     * ⚠ Nu se poate sti daca a plecat: spre deosebire de `/document/send` de la SmartBill, aici
+     * nu vine niciun raspuns despre email. Daca sablonul din contul lor nu e configurat, nu se
+     * trimite nimic SI NOI NU AFLAM. De aia scrie si in interfata.
+     */
+    ...(config.send_email && order.customer_email ? { sendEmail: 1 as const } : {}),
     /* ⚠ Se trimite DOAR cand comerciantul a cerut-o. Absenta lui inseamna
        implicitul lor, adica exact ce se intampla azi. Vezi `OblioConfig.no_stock`. */
     ...(config.no_stock ? { useStock: 0 as const } : {}),
@@ -902,7 +914,9 @@ export async function generateOblioProforma(
     // O proforma gresita e sursa unei facturi gresite, deci trece prin aceeasi garda.
     if ("error" in data) return { error: data.error };
     // Proforma nu are incasare si nu se trimite in SPV (nu e document fiscal).
-    const { collect: _collect, spvExtern: _spv, ...proformaData } = data;
+    /* ⚠ Si `sendEmail` se scoate, ca si `spvExtern`: butonul din configurare spune „factura pe
+       email", iar o proforma trimisa in locul ei ar fi alt lucru decat a cerut omul. */
+    const { collect: _collect, spvExtern: _spv, sendEmail: _mail, ...proformaData } = data;
     // `idempotencyKey` din `buildInvoiceData` contine seria proformei, deci nu se
     // ciocneste cu factura. Registrul adauga oprirea inainte de apel si adoptarea.
     const r = await cuRegistru(

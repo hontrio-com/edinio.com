@@ -128,10 +128,17 @@ azi si la SmartBill. Proba comuna il cere acum de la toate trei.
    de 300s, ori un plafon per-furnizor intr-o functie generica, pentru o casa cu **zero** documente
    emise. Iar caderea e azi onesta: dupa reparatia 1, un `429` iese `esuat`, deci reincercarea e
    libera, si lotul spune per comanda ce n-a mers. Se construieste cand exista trafic.
-2. **Trimiterea pe email nu exista DELOC la Oblio.** Documentatia lor o da printr-un singur camp
-   (`sendEmail: 1`), iar SmartBill o are. ⚠ N-am adaugat-o: ar porni emailuri catre cumparatorii a
-   trei magazine care azi nu primesc niciunul, adica o schimbare de purtare vizibila clientilor lor,
-   nu o reparatie. **E de cerut, nu de presupus.**
+2. ✅ **Trimiterea pe email: FACUTA la cererea proprietarului**, si adaugata ca buton **OPRIT din
+   oficiu**, exact ca `send_email` la SmartBill. Pornit implicit, ar fi inceput sa trimita emailuri
+   cumparatorilor a trei magazine care azi nu primesc niciunul: o schimbare vizibila clientilor LOR,
+   nu o reparatie. Oprit, e strict in plus si nimeni nu simte nimic.
+   ⚠⚠ **Si e fire-and-forget, spre deosebire de SmartBill.** Oblio il ia ca pe un camp al cererii
+   de emitere si nu intoarce nimic despre el; SmartBill are `/document/send` cu `status.code`. Deci
+   daca sablonul din contul lor („Setari > E-mail-uri alarma > Document prin email") nu e configurat,
+   nu se trimite nimic SI NOI NU AFLAM. Scrie in interfata, cu indemnul „verifica primul email tu",
+   tocmai ca sa nu repetam situatia masurata la SmartBill: 187 de trimiteri incercate, zero dovezi.
+   ⚠ Se trimite doar cand exista si adresa cumparatorului, iar **proformele nu pleaca pe email**:
+   butonul spune „factura", si alta purtare ar fi altceva decat a cerut omul.
 3. **`link`-ul lor: public sau nu, nu stim.** Forma cu jeton sugereaza public, documentatia tace, si
    n-avem nicio factura pe care s-o probam. Reparatia 2 face intrebarea nedureroasa: daca nu e
    public, urcarea se opreste cu un mesaj limpede in loc sa trimita o pagina de login.
@@ -154,7 +161,9 @@ capcana care ar fi trimis o pagina de login la marketplace, si tacerea caii auto
 1. **Zero documente emise, din trei magazine configurate.** Nimic nu e dovedit live, si aici
    cantareste mai mult decat la curieri: un document fiscal gresit nu se retrage, se storneaza.
 2. **Limita lor de cereri e cunoscuta si neacoperita** in lot (punctul 1 de mai sus).
-3. **Emailul lipseste cu totul**, desi documentatia il da printr-un camp.
+3. **Emailul exista de azi, dar nu se poate CONFIRMA** ca a plecat: raspunsul lor nu spune nimic
+   despre el. Interfata o spune pe fata, dar o integrare care nu-si poate dovedi efectul nu poate
+   lua nota maxima.
 4. Spre deosebire de SmartBill, unde prima factura reala a confirmat reparatia in 16 minute, **aici
    nu exista nicio bucla de confirmare**: prima factura Oblio va fi si prima proba.
 

@@ -1315,6 +1315,25 @@ export function OrderDetailClient({
   }
 
   function renderFgo() {
+    /*
+     * ⚠⚠ DOCUMENTUL DE TEST SE VEDE SI DUPA CE TOASTUL A DISPARUT (16.09.2026).
+     *
+     * Avertismentul de la emitere dureaza douazeci de secunde; documentul ramane pe comanda luni de
+     * zile. Iar pe calea AUTOMATA nu exista niciun toast, fiindca nu e nimeni in fata.
+     *
+     * Se citeste din LINK, nu din configurarea de acum: configurarea spune ce e ACUM, iar
+     * documentul a fost emis candva. Cine iese din modul de testare nu preface retroactiv in
+     * documente fiscale facturile emise cat timp era in el.
+     */
+    const linkFgo = String(ord["fgo_invoice_link"] ?? "");
+    const eDeTest = linkFgo.toLowerCase().includes("testuat.fgo.ro");
+    const semnDeTest = eDeTest ? (
+      <p className="flex items-start gap-1.5 text-[11px] font-semibold text-warning">
+        <AlertTriangle className="h-3.5 w-3.5 mt-px shrink-0" />
+        Emisa in modul de TESTARE: nu e document fiscal si nu se trimite la marketplace.
+      </p>
+    ) : null;
+
     return (ord["fgo_storno_number"]) ? (
       <div className="flex items-center gap-2">
         <XCircle className="h-4 w-4 text-destructive flex-shrink-0" />
@@ -1323,9 +1342,10 @@ export function OrderDetailClient({
     ) : (ord["fgo_invoice_number"]) ? (
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <FileCheck className="h-4 w-4 text-success flex-shrink-0" />
+          <FileCheck className={`h-4 w-4 flex-shrink-0 ${eDeTest ? "text-warning" : "text-success"}`} />
           <p className="text-sm font-mono font-bold text-foreground">Factura {ord["fgo_invoice_series"] as string}{ord["fgo_invoice_number"] as string}</p>
         </div>
+        {semnDeTest}
         {!!(ord["fgo_invoice_link"]) && (
           <a href={ord["fgo_invoice_link"] as string} target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-muted/40 hover:bg-muted transition-colors">

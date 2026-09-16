@@ -49,6 +49,8 @@ export default function OblioConfigClient({
   const [dueDays, setDueDays] = useState(initialConfig?.due_days ?? 0);
   const [sendToSpv, setSendToSpv] = useState(initialConfig?.send_to_spv ?? false);
   const [noStock, setNoStock] = useState(initialConfig?.no_stock ?? false);
+  /* ⚠ `?? false`: oprit din oficiu, ca la SmartBill. Vezi comutatorul si motivul de mai jos. */
+  const [sendEmail, setSendEmail] = useState(initialConfig?.send_email ?? false);
 
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -273,6 +275,7 @@ export default function OblioConfigClient({
       due_days: dueDays,
       send_to_spv: sendToSpv,
       no_stock: noStock,
+      send_email: sendEmail,
     };
 
     startSaveTransition(async () => {
@@ -568,6 +571,27 @@ export default function OblioConfigClient({
                 </p>
               </div>
               <Switch checked={sendToSpv} onCheckedChange={setSendToSpv} />
+            </div>
+
+            {/*
+              ⚠ OPRIT DIN OFICIU. Pornit implicit, ar fi inceput sa trimita emailuri cumparatorilor
+              unor magazine care azi nu primesc niciunul. E un buton nou, nu o reparatie.
+
+              ⚠ SI SE SPUNE CA NU PUTEM CONFIRMA. Oblio ia emailul ca pe un camp al cererii de
+              emitere si nu intoarce nimic despre el, spre deosebire de SmartBill, care are
+              `/document/send` cu `status.code`. Fara randul asta am repeta exact situatia de la
+              SmartBill: 187 de trimiteri incercate si zero dovezi ca vreuna a ajuns.
+            */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Trimite factura pe email</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Oblio trimite folosind sablonul din contul tau (Setari &gt; E-mail-uri alarma &gt;
+                  Document prin email). Daca nu e configurat acolo, nu se trimite nimic, iar Oblio nu
+                  ne spune, deci nici noi nu-ti putem confirma. Verifica primul email tu.
+                </p>
+              </div>
+              <Switch checked={sendEmail} onCheckedChange={setSendEmail} />
             </div>
 
             {/*

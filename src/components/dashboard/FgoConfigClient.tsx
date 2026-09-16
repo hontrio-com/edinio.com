@@ -4,7 +4,7 @@ import { useState } from "react";
 import { secretulEsteSalvat, PLACEHOLDER_SECRET_SALVAT } from "@/lib/integrari/secrete";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle, Loader2, Unplug, ExternalLink } from "lucide-react";
+import { AlertTriangle, CheckCircle, Loader2, Unplug, ExternalLink } from "lucide-react";
 import { saveFgoConfig, disconnectFgo, testFgoConfig } from "@/lib/actions/fgo.actions";
 import type { FgoConfig } from "@/lib/fgo";
 import { AUTO_INVOICE_TRIGGERS, type AutoInvoiceTrigger } from "@/lib/invoicing";
@@ -120,12 +120,35 @@ export function FgoConfigClient({
         </Callout>
       )}
 
+      {/*
+        ⚠⚠ MODUL DE TESTARE SE VEDE CAT TIMP E PORNIT (16.09.2026).
+
+        Pana acum, singurul semn ca facturile nu sunt fiscale era numele comutatorului, si acela
+        spunea doar CE SERVER se foloseste, nu CE INSEAMNA. Documentele emise in sandbox au numar,
+        serie, link si PDF valid: pe pagina comenzii nu se deosebeau cu nimic de unele adevarate.
+
+        ⚠ Masurat: magazinul `itp-blk` are trei astfel de facturi, toate pe `testuat.fgo.ro`.
+
+        Scenariul de care ne aparam nu e cel manual, unde omul tocmai a apasat un buton, ci cel
+        automat: comutatorul pornit, facturarea automata pornita, si luni intregi de „facturi" de
+        test in urma. Un rand in jurnal nu se citeste; un panou rosu deasupra configurarii, da.
+      */}
+      {form.sandbox && (
+        <Callout variant="warning" icon={AlertTriangle} title="Esti in modul de testare">
+          Facturile emise acum pleaca pe serverul de test fGO si <strong>NU sunt documente
+          fiscale</strong>, desi au numar, serie si PDF. Nu se pot trimite la eMAG sau Trendyol, iar
+          la final de an nu tin loc de nimic. Opreste comutatorul de mai jos inainte de a factura
+          comenzi adevarate.
+        </Callout>
+      )}
+
       {/* Sandbox toggle */}
       <Panel className="flex items-center justify-between p-4">
         <div>
           <p className="text-sm font-semibold text-foreground">Mod testare (UAT)</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Foloseste serverul de test fGO (<span className="font-mono">api-testuat.fgo.ro</span>)
+            Foloseste serverul de test fGO (<span className="font-mono">api-testuat.fgo.ro</span>).
+            Documentele emise asa NU sunt fiscale.
           </p>
         </div>
         <Switch checked={form.sandbox} onCheckedChange={v => set("sandbox", v)} className="data-checked:bg-warning" />

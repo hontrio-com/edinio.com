@@ -25,6 +25,18 @@ export type OblioConfig = {
   // Trimite automat factura in SPV (e-Factura) daca contul Oblio e configurat.
   send_to_spv?: boolean;
   /*
+    ⚠⚠ TRIMITE FACTURA PE EMAIL CATRE CUMPARATOR. Oprit din oficiu, si asta conteaza:
+    adaugat pornit, ar fi inceput sa trimita emailuri cumparatorilor unor magazine care azi nu
+    primesc niciunul. E un buton, nu o reparatie. Acelasi tipar ca `send_email` la SmartBill.
+
+    ⚠ SI E FIRE-AND-FORGET, SPRE DEOSEBIRE DE SMARTBILL. Oblio il ia ca un camp al cererii de
+    emitere (`sendEmail: 1`) si nu intoarce nicio confirmare; SmartBill are `/document/send`, cu
+    `status.code` in raspuns. Deci daca sablonul din contul lor („Setari > E-mail-uri alarma >
+    Document prin email") nu e configurat, nu se trimite nimic SI NOI NU AFLAM. Se scrie in
+    interfata, ca sa nu repetam exact situatia de la SmartBill: 187 de incercari, zero dovezi.
+  */
+  send_email?: boolean;
+  /*
     ⚠ GESTIUNEA DIN CARE IES PRODUSELE. Obligatorie pentru conturile Oblio care au
     STOCURI pornite, si numai pentru liniile stocabile (`product_type` „Marfa").
 
@@ -177,6 +189,12 @@ export type OblioInvoiceData = {
   };
   mentions?: string;
   internalNote?: string;
+  /*
+    ⚠ `1` trimite emailul din sablonul contului lor; absenta lui inseamna „nu trimite".
+    Documentatia: „Daca are valoarea 1 se va trimite email-ul de la Setari > E-mail-uri alarma >
+    Document prin email". Nu exista raspuns despre reusita.
+  */
+  sendEmail?: 1;
   idempotencyKey?: string;
   // Trimite factura in SPV (e-Factura) daca trimiterea automata e activa in Oblio.
   spvExtern?: 0 | 1;

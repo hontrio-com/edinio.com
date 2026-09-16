@@ -3,7 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
-import { checkCredit, sendSms } from "@/lib/smso";
+import { checkCredit, sendSms, smsoOpresteTot } from "@/lib/smso";
+import { trimiteSiLasaUrma, dezabonatii, numarNormalizat, adresaWebhookSmso } from "@/lib/smso-urma";
 import type { SmsoConfig } from "@/lib/smso";
 
 export interface SmsFilters {
@@ -112,7 +113,7 @@ export async function sendSmsCampaign(
   businessId: string,
   message: string,
   filters: SmsFilters
-): Promise<{ sent: number; failed: number; campaignId: string } | { error: string }> {
+): Promise<{ sent: number; failed: number; campaignId: string; sariti: number } | { error: string }> {
   const cfgOrErr = await getSmsoConfigForBiz(businessId);
   if (cfgOrErr && "error" in cfgOrErr) return cfgOrErr;
   const config = cfgOrErr as SmsoConfig | null;
@@ -121,8 +122,47 @@ export async function sendSmsCampaign(
   }
 
   const phones = await fetchOrderPhones(businessId, filters);
-  const uniquePhones = [...new Set(phones)];
-  if (uniquePhones.length === 0) return { error: "Nu exista destinatari pentru filtrele selectate." };
+  const toate = [...new Set(phones)];
+  if (toate.length === 0) return { error: "Nu exista destinatari pentru filtrele selectate." };
+
+  const admin = createAdminClient();
+
+  /*
+   * ═══ ⚠⚠ CINE A CERUT SA NU MAI FIE SUNAT, NU E SUNAT ═══
+   *
+   * SMSO intoarce `405` cand numarul e dezabonat. Pana azi codul acela se numara ca un esec oarecare
+   * si se uita, deci aceeasi persoana primea si campania urmatoare. Acum se tine minte, si lista se
+   * citeste INAINTE de a cheltui vreun credit.
+   *
+   * ⚠ O citire picata OPRESTE campania (`dezabonatii` arunca), si e dinadins: cu lista goala am fi
+   * sunat exact oamenii care au cerut sa nu mai fie sunati. Mai bine nicio campanie decat aia.
+   */
+  let opriti: Set<string>;
+  try {
+    opriti = await dezabonatii(admin, businessId);
+  } catch {
+    return { error: "Nu am putut citi lista de dezabonati, deci nu am trimis nimic. Incearca din nou." };
+  }
+  const uniquePhones = toate.filter((p) => !opriti.has(numarNormalizat(p)));
+  const sariti = toate.length - uniquePhones.length;
+  if (uniquePhones.length === 0) {
+    return { error: `Toti cei ${toate.length} destinatari s-au dezabonat de la mesajele tale.` };
+  }
+
+  /*
+   * ═══ ⚠ CREDITUL SE INTREABA INAINTE, NU SE AFLA MESAJ CU MESAJ ═══
+   *
+   * `checkCredit` exista de mult si nu se chema niciodata aici. Fara el, o campanie pornita cu credit
+   * insuficient afla asta la primul mesaj si continua sa incerce inca o suta, esuand la fiecare:
+   * o suta de apeluri degeaba catre ei, si un raport care spune „100 esuate" fara sa spuna DE CE.
+   *
+   * ⚠ Nu se opreste pe o citire picata a creditului: aia nu dovedeste ca nu sunt bani, iar o
+   * campanie blocata de o pana de retea ar fi mai rau decat una care afla pe parcurs.
+   */
+  const credit = await checkCredit(config.api_key);
+  if ("credit" in credit && credit.credit <= 0) {
+    return { error: "Nu mai ai credit SMSO. Incarca contul si incearca din nou; nu am trimis niciun mesaj." };
+  }
 
   /*
    * ⚠⚠ RANDUL CAMPANIEI SE SCRIE INAINTE DE BUCLA, NU DUPA.
@@ -159,19 +199,35 @@ export async function sendSmsCampaign(
   let sentCount = 0;
   let failedCount = 0;
 
+  let oprita: string | null = null;
+
   for (const phone of uniquePhones) {
-    const result = await sendSms(config.api_key, {
-      to: phone,
+    const result = await trimiteSiLasaUrma(admin, config.api_key, {
+      businessId,
+      phone,
       sender: config.sender_id,
       body: message,
       type: "marketing",
-      remove_special_chars: true,
+      motiv: "campanie",
     });
     if (result.success) sentCount++;
     else failedCount++;
+
+    /*
+     * ⚠⚠ UNELE ESECURI INSEAMNA „OPRESTE-TE", NU „MERGI MAI DEPARTE".
+     *
+     * Fara randul asta, o campanie fara credit (`402`) sau cu cheia gresita (`401`) ardea toata
+     * lista esuand mesaj cu mesaj: sute de apeluri catre ei pentru un rezultat cunoscut de la primul.
+     *
+     * ⚠ `409` (limita de trimitere) NU opreste: aceea trece de la sine. Vezi `smsoOpresteTot`.
+     */
+    if (smsoOpresteTot(result.status)) {
+      oprita = result.error ?? "Trimiterea a fost oprita de SMSO.";
+      break;
+    }
   }
 
-  const status = failedCount === 0 ? "sent" : sentCount === 0 ? "failed" : "partial";
+  const status = oprita ? "oprita" : failedCount === 0 ? "sent" : sentCount === 0 ? "failed" : "partial";
 
   /*
    * ⚠ Daca ACTUALIZAREA pica, randul ramane `in_curs` cu numarul adevarat de destinatari.
@@ -187,7 +243,13 @@ export async function sendSmsCampaign(
     console.error("[sendSmsCampaign] campania a ramas in_curs", { campaignId: campanie.id });
   }
 
-  return { sent: sentCount, failed: failedCount, campaignId: campanie.id };
+  if (oprita) {
+    return {
+      error: `${oprita} Campania s-a oprit dupa ${sentCount} mesaje trimise`
+        + `${sariti > 0 ? `, ${sariti} destinatari fiind deja dezabonati` : ""}.`,
+    };
+  }
+  return { sent: sentCount, failed: failedCount, campaignId: campanie.id, sariti };
 }
 
 export async function getSmsCampaigns(businessId: string) {
@@ -261,4 +323,51 @@ export async function deleteSmsTemplate(
     .eq("business_id", businessId);
 
   return { success: true };
+}
+
+/**
+ * Adresa pe care comerciantul o pune in contul lui SMSO, la „Webhooks".
+ *
+ * ⚠ SMSO nu semneaza nimic („No authentifications is required" scrie in documentatia lor), deci
+ * adresa E singura paza. Se deriva din secretul serverului, ca la etichetele de curier: stabila
+ * intre apeluri, dar nereconstruibila din id-ul magazinului.
+ *
+ * ⚠ Se intoarce doar proprietarului magazinului: e o CAPABILITATE, cine o are o poate folosi.
+ */
+export async function getSmsoWebhookUrl(
+  businessId: string,
+): Promise<{ url: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Acces interzis" };
+
+  /* ⚠ ACELASI loc de compunere ca la trimitere. Vezi `adresaWebhookSmso`. */
+  const url = adresaWebhookSmso(businessId);
+  if (!url) return { error: "Adresa nu se poate compune: lipseste secretul de semnare de pe server." };
+  return { url };
+}
+
+/**
+ * Cine s-a dezabonat de la mesajele de marketing ale magazinului.
+ *
+ * ⚠ Exista ca sa se poata VEDEA. O lista de oameni pe care nu-i mai suni, ascunsa, e o lista in care
+ * nimeni nu are incredere: comerciantul ar crede ca mesajele lui nu pleaca fara sa stie de ce.
+ */
+export async function getSmsDezabonati(
+  businessId: string,
+): Promise<{ phone: string; sursa: string; creat_la: string }[]> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return [];
+
+  const { data } = await supabase
+    .from("sms_optout").select("phone, sursa, creat_la")
+    .eq("business_id", businessId).order("creat_la", { ascending: false }).limit(200);
+  return (data ?? []) as { phone: string; sursa: string; creat_la: string }[];
 }

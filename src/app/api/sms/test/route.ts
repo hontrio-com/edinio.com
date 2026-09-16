@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendSms } from "@/lib/smso";
+import { trimiteSiLasaUrma } from "@/lib/smso-urma";
 import { rateLimit, clientIp } from "@/lib/utils/rate-limit";
 import { consumaLimita, mesajLimita } from "@/lib/utils/limita-durabila";
 
@@ -51,6 +52,24 @@ export async function POST(req: NextRequest) {
    * verificand intai ca e chiar al lui.
    */
   let cheie = api_key?.trim() ?? "";
+  /*
+   * ⚠ Magazinul se confirma SEPARAT de cheie, si asta e o schimbare din 17.09.2026.
+   *
+   * Pana azi proprietatea se verifica doar pe drumul in care cheia lipsea, fiindca doar acolo era
+   * nevoie de ea ca sa citim configuratia. Dar SMS-ul de test e un SMS REAL, platit din creditul
+   * comerciantului, si de azi lasa urma in jurnal ca toate celelalte cinci cai. Ca sa scriem randul
+   * ne trebuie un `business_id` in care avem incredere, nu unul venit din browser.
+   *
+   * Ramane `null` cand omul testeaza cu o cheie tastata, inainte de a-si salva configuratia: acolo
+   * nu exista inca magazin de legat, deci mesajul pleaca fara urma. E singurul caz ramas, si e
+   * singurul in care nu avem ce scrie.
+   */
+  let magazinVerificat: string | null = null;
+  if (businessId) {
+    const { data: alLui } = await supabase
+      .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+    if (alLui) magazinVerificat = businessId;
+  }
   if (!cheie && businessId) {
     const { data: biz } = await supabase
       .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
@@ -76,13 +95,28 @@ export async function POST(req: NextRequest) {
     ? "+" + rawPhone
     : rawPhone;
 
-  const result = await sendSms(cheie, {
-    to: normalizedPhone,
-    sender: sender_id.trim(),
-    body: "Test SMS de la Edinio. Integrarea SMSO functioneaza corect!",
-    type: "transactional",
-    remove_special_chars: true,
-  });
+  const corp = "Test SMS de la Edinio. Integrarea SMSO functioneaza corect!";
+  /*
+   * ⚠ `transactional` DINADINS, desi e un test: comerciantul isi trimite mesajul catre propriul
+   * numar, iar daca acel numar e pe lista de dezabonati de la marketing, testul trebuie totusi sa
+   * plece. Altfel omul ar vedea „integrarea nu merge" pentru un motiv care n-are legatura cu ea.
+   */
+  const result = magazinVerificat
+    ? await trimiteSiLasaUrma(createAdminClient(), cheie, {
+        businessId: magazinVerificat,
+        phone: normalizedPhone,
+        sender: sender_id.trim(),
+        body: corp,
+        type: "transactional",
+        motiv: "test",
+      })
+    : await sendSms(cheie, {
+        to: normalizedPhone,
+        sender: sender_id.trim(),
+        body: corp,
+        type: "transactional",
+        remove_special_chars: true,
+      });
 
   if (!result.success) {
     return NextResponse.json({ error: result.error }, { status: 400 });

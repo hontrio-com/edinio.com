@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
-import { sendSms } from "@/lib/smso";
+import { trimiteSiLasaUrma } from "@/lib/smso-urma";
 import type { SmsoConfig } from "@/lib/smso";
 import { sendNoticeAbandonedSms } from "@/lib/notice-notify";
 import type { NoticeConfig } from "@/lib/notice";
@@ -590,8 +590,9 @@ export async function sendAbandonedCartSms(
     const r = await sendNoticeAbandonedSms(supabase, notice, { businessId, phone: cart.phone, body });
     if (!r.success) return { error: r.error ?? "SMS-ul nu a putut fi trimis." };
   } else {
-    const res = await sendSms(smso!.api_key, {
-      to: cart.phone, sender: smso!.sender_id, body, type: "marketing", remove_special_chars: true,
+    const res = await trimiteSiLasaUrma(supabase as never, smso!.api_key, {
+      businessId, phone: cart.phone, sender: smso!.sender_id,
+      body, type: "marketing", motiv: "cos_abandonat",
     });
     if (!res.success) return { error: res.error ?? "SMS-ul nu a putut fi trimis." };
   }

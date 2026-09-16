@@ -3174,6 +3174,7 @@ export type Database = {
           message: string | null
           order_id: string | null
           phone: string | null
+          provider: string
           provider_id: string | null
           success: boolean
           template_id: string | null
@@ -3190,6 +3191,7 @@ export type Database = {
           message?: string | null
           order_id?: string | null
           phone?: string | null
+          provider?: string
           provider_id?: string | null
           success?: boolean
           template_id?: string | null
@@ -3206,6 +3208,7 @@ export type Database = {
           message?: string | null
           order_id?: string | null
           phone?: string | null
+          provider?: string
           provider_id?: string | null
           success?: boolean
           template_id?: string | null
@@ -5002,6 +5005,38 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "sms_campaigns_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sms_optout: {
+        Row: {
+          business_id: string
+          creat_la: string
+          id: string
+          phone: string
+          sursa: string
+        }
+        Insert: {
+          business_id: string
+          creat_la?: string
+          id?: string
+          phone: string
+          sursa: string
+        }
+        Update: {
+          business_id?: string
+          creat_la?: string
+          id?: string
+          phone?: string
+          sursa?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_optout_business_id_fkey"
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"

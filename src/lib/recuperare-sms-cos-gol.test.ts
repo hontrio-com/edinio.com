@@ -66,7 +66,13 @@ test("⚠ in cron poarta sta INAINTEA ramificarii pe canal, deci apara si SMS-ul
     "cosul gol nu mai opreste trimiterea, sau opreste fara sa avanseze secventa",
   );
 
-  for (const chemare of ["sendAbandonedCartRecovery(", "sendSms(", "sendNoticeAbandonedSms("]) {
+  /*
+   * ⚠ NUMELE S-A SCHIMBAT PE 17.09.2026, PROPRIETATEA NU. Trimiterea prin SMSO trece acum prin
+   * `trimiteSiLasaUrma` (care pastreaza `responseToken`, scrie urma si respecta lista de dezabonati),
+   * nu mai direct prin `sendSms`. Proba ramane despre acelasi lucru: poarta de cos gol trebuie sa fie
+   * INAINTEA oricarei trimiteri.
+   */
+  for (const chemare of ["sendAbandonedCartRecovery(", "trimiteSiLasaUrma(", "sendNoticeAbandonedSms("]) {
     assert.ok(trimiteri.includes(chemare), `${chemare} nu mai e in partea aparata de poarta`);
     assert.equal(comun.includes(chemare), false, `${chemare} pleaca INAINTE de poarta`);
   }
@@ -131,7 +137,7 @@ test("⚠ trimiterea manuala de SMS din panou trece prin aceeasi poarta", () => 
   const refuz = corp.indexOf("if (proaspat.items.length === 0)");
   assert.ok(poarta > 0, "actiunea de SMS nu socoteste cosul proaspat");
   assert.ok(refuz > poarta, "cosul se socoteste, dar nimic nu se refuza");
-  for (const chemare of ["sendSms(", "sendNoticeAbandonedSms("]) {
+  for (const chemare of ["trimiteSiLasaUrma(", "sendNoticeAbandonedSms("]) {
     const trimite = corp.indexOf(chemare);
     assert.ok(trimite > 0 && trimite > refuz, `${chemare} pleaca inainte de refuz`);
   }

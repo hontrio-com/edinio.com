@@ -7,7 +7,7 @@ import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import { useRouter } from "next/navigation";
 import {
   Save, Loader2, MessageSquare, Phone,
-  ExternalLink, CheckCircle, XCircle,
+  ExternalLink, CheckCircle, XCircle, Copy, BellOff,
 } from "lucide-react";
 import { updateSmsoConfig } from "@/lib/actions/store.actions";
 import type { SmsoConfig } from "@/lib/smso";
@@ -17,7 +17,15 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 
-export function SmsoConfigClient({ businessId, initialConfig }: { businessId: string; initialConfig: SmsoConfig }) {
+export function SmsoConfigClient({
+  businessId, initialConfig, webhookUrl, dezabonati,
+}: {
+  businessId: string;
+  initialConfig: SmsoConfig;
+  /** Adresa de raportare, compusa pe server. `null` cand lipseste secretul de semnare din mediu. */
+  webhookUrl: string | null;
+  dezabonati: { phone: string; sursa: string; creat_la: string }[];
+}) {
   const router = useRouter();
   const [smso, setSmso] = useState<SmsoConfig>(initialConfig);
   const [saving, startSave] = useTransition();
@@ -250,6 +258,71 @@ export function SmsoConfigClient({ businessId, initialConfig }: { businessId: st
             </div>
           </Panel>
         )}
+
+        {/* Rapoarte de livrare si raspunsuri */}
+        <Panel className="space-y-4 p-5">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Rapoarte de livrare si raspunsuri</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+              Nu ai nimic de configurat: adresa de mai jos pleaca automat cu fiecare SMS, iar SMSO ne
+              raspunde pe ea cand mesajul ajunge la telefon sau cand cineva raspunde{" "}
+              <span className="font-semibold">STOP</span>. O poti lipsi si in contul tau SMSO, la
+              setarile de webhook, daca vrei sa primim rapoarte si pentru mesajele trimise de acolo.
+            </p>
+          </div>
+
+          {webhookUrl ? (
+            <div className="flex gap-2">
+              <code className="flex-1 truncate rounded-lg border border-input bg-muted/40 px-3 py-2 font-mono text-xs text-muted-foreground">
+                {webhookUrl}
+              </code>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(webhookUrl)
+                    .then(() => toast.success("Adresa a fost copiata."))
+                    .catch(() => toast.error("Nu am putut copia adresa. Selecteaz-o si copiaz-o manual."));
+                }}
+              >
+                <Copy /> Copiaza
+              </Button>
+            </div>
+          ) : (
+            <p className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive">
+              Adresa nu poate fi compusa acum. Rapoartele de livrare nu vor ajunge la noi, dar
+              SMS-urile pleaca in continuare. Scrie-ne ca sa ne uitam.
+            </p>
+          )}
+
+          <div className="border-t border-border pt-4">
+            <div className="flex items-center gap-2">
+              <BellOff className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm font-semibold text-foreground">
+                Dezabonati de la marketing ({dezabonati.length})
+              </p>
+            </div>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+              Numerele care au raspuns STOP sau pe care SMSO le-a marcat ca dezabonate. Nu mai
+              primesc campanii si nici mesaje de cos abandonat. Mesajele despre comenzile lor pleaca
+              in continuare: le-au platit, au dreptul sa le afle starea.
+            </p>
+            {dezabonati.length > 0 && (
+              <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto">
+                {dezabonati.map(d => (
+                  <li
+                    key={d.phone}
+                    className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-1.5 text-xs"
+                  >
+                    <span className="font-mono text-foreground">{d.phone}</span>
+                    <span className="text-muted-foreground">
+                      {d.sursa === "raspuns_stop" ? "a raspuns STOP" : "marcat de SMSO"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Panel>
       </div>
     </div>
   );

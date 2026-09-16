@@ -70,7 +70,7 @@ import { enqueueEmagStocMany } from "@/lib/emag/queue";
 import { computeCardDiscount, computeCodDiscount, computeCodFee, verificaMetodaPlata, isCodPaymentMethod, parseCardDiscountConfig, parseCodFeeConfig } from "@/lib/payment-methods";
 import { rambursDeIncasat } from "@/lib/orders/ramburs";
 import { ORDER_STATUS } from "@/lib/orders/status";
-import { sendSms } from "@/lib/smso";
+import { trimiteSiLasaUrma } from "@/lib/smso-urma";
 import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
 import { maybeSyncMailchimpSubscriber, maybeSyncMailchimpOrder, maybeMarkMailchimpOrderPaid, orderValueTag } from "@/lib/mailchimp-sync";
@@ -2647,8 +2647,15 @@ export async function updateOrder(orderId: string, data: { status: string; payme
       .single();
     const smso = st?.smso_config as (SmsoConfig & { notify_status_change?: boolean }) | null;
     if (smso?.enabled && smso.api_key && smso.sender_id && smso.notify_status_change) {
-      void sendSms(smso.api_key, {
-        to: order.customer_phone,
+      /*
+       * ⚠ Prin locul care lasa urma. ⚠⚠ SI NU SE OPRESTE DE LISTA DE DEZABONATI, dinadins:
+       * starea unei comenzi pe care omul a platit-o NU e marketing, iar el are dreptul s-o
+       * afle. De aceea `type: "transactional"`, si de aceea lista se citeste doar la campanii.
+       */
+      void trimiteSiLasaUrma(createAdminClient(), smso.api_key, {
+        businessId: order.business_id as string,
+        orderId,
+        phone: order.customer_phone,
         sender: smso.sender_id,
         body: defaultStatusSms(data.status, {
           orderNumber: order.order_number,
@@ -2656,6 +2663,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
           awb,
         }),
         type: "transactional",
+        motiv: "stare_comanda",
       });
     }
   }
@@ -4113,11 +4121,14 @@ export async function sendCustomerSms(orderId: string, message: string) {
     return { error: "Prea multe SMS-uri pe aceasta comanda. Incearca maine." };
   }
 
-  const res = await sendSms(smso.api_key, {
-    to: order.customer_phone,
+  const res = await trimiteSiLasaUrma(createAdminClient(), smso.api_key, {
+    businessId: order.business_id as string,
+    orderId,
+    phone: order.customer_phone,
     sender: smso.sender_id,
     body: message.trim(),
     type: "transactional",
+    motiv: "mesaj_manual",
   });
   if (!res.success) return { error: res.error ?? "Eroare la trimiterea SMS-ului." };
   return { success: true };

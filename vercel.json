@@ -80,6 +80,10 @@
       "schedule": "30 7 * * *"
     },
     {
+      "path": "/api/cron/smso-livrari",
+      "schedule": "38 * * * *"
+    },
+    {
       "path": "/api/cron/netopia-reconciliere",
       "schedule": "20 * * * *"
     },

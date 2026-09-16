@@ -6875,7 +6875,8 @@ create table if not exists public.notice_sms_log (
   channel text default 'sms'::text not null,
   provider_id text,
   delivery_status text,
-  delivered_at timestamp with time zone);
+  delivered_at timestamp with time zone,
+  provider text default 'notice'::text not null);
 
 create table if not exists public.notifications (
   id uuid default gen_random_uuid() not null,
@@ -7377,6 +7378,13 @@ create table if not exists public.sms_campaigns (
   filters jsonb,
   created_at timestamp with time zone default now() not null);
 
+create table if not exists public.sms_optout (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  phone text not null,
+  sursa text not null,
+  creat_la timestamp with time zone default now() not null);
+
 create table if not exists public.sms_templates (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -7761,6 +7769,7 @@ alter table public.recovery_optout add constraint recovery_optout_pkey PRIMARY K
 alter table public.return_requests add constraint return_requests_pkey PRIMARY KEY (id);
 alter table public.site_analytics add constraint site_analytics_pkey PRIMARY KEY (id);
 alter table public.sms_campaigns add constraint sms_campaigns_pkey PRIMARY KEY (id);
+alter table public.sms_optout add constraint sms_optout_pkey PRIMARY KEY (id);
 alter table public.sms_templates add constraint sms_templates_pkey PRIMARY KEY (id);
 alter table public.stock_feed_sources add constraint stock_feed_sources_pkey PRIMARY KEY (id);
 alter table public.stripe_events add constraint stripe_events_pkey PRIMARY KEY (event_id);
@@ -7814,6 +7823,7 @@ alter table public.pepita_articole add constraint pepita_articole_business_id_ar
 alter table public.pepita_articole add constraint pepita_articole_business_id_product_id_combinatie_key UNIQUE (business_id, product_id, combinatie);
 alter table public.pepita_comenzi add constraint pepita_comenzi_business_id_external_order_id_key UNIQUE (business_id, external_order_id);
 alter table public.pepita_listari add constraint pepita_listari_business_id_product_id_key UNIQUE (business_id, product_id);
+alter table public.sms_optout add constraint sms_optout_business_id_phone_key UNIQUE (business_id, phone);
 alter table public.trendyol_batches add constraint trendyol_batches_business_id_batch_request_id_key UNIQUE (business_id, batch_request_id);
 alter table public.trendyol_claim_items add constraint trendyol_claim_items_business_id_claim_item_id_key UNIQUE (business_id, claim_item_id);
 alter table public.trendyol_claims add constraint trendyol_claims_business_id_claim_id_key UNIQUE (business_id, claim_id);
@@ -7992,6 +8002,7 @@ alter table public.return_requests add constraint return_requests_business_id_fk
 alter table public.return_requests add constraint return_requests_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.site_analytics add constraint site_analytics_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.sms_campaigns add constraint sms_campaigns_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.sms_optout add constraint sms_optout_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.sms_templates add constraint sms_templates_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.stock_feed_sources add constraint stock_feed_sources_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.stock_feed_sources add constraint stock_feed_sources_last_import_id_fkey FOREIGN KEY (last_import_id) REFERENCES product_imports(id) ON DELETE SET NULL;
@@ -8258,6 +8269,7 @@ CREATE INDEX media_library_business_type_idx ON public.media_library USING btree
 CREATE INDEX notice_inbox_business_idx ON public.notice_inbox USING btree (business_id, received_at DESC);
 CREATE INDEX notice_inbox_order_id_idx ON public.notice_inbox USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX notice_sms_log_business_created_idx ON public.notice_sms_log USING btree (business_id, created_at DESC);
+CREATE INDEX notice_sms_log_livrare_idx ON public.notice_sms_log USING btree (business_id, provider, provider_id);
 CREATE INDEX notice_sms_log_order_id_idx ON public.notice_sms_log USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX notice_sms_log_provider_id_idx ON public.notice_sms_log USING btree (provider_id) WHERE (provider_id IS NOT NULL);
 CREATE INDEX offers_business_active_idx ON public.offers USING btree (business_id, is_active);
@@ -8320,6 +8332,7 @@ CREATE INDEX return_requests_business_created_idx ON public.return_requests USIN
 CREATE INDEX return_requests_business_unread_idx ON public.return_requests USING btree (business_id, is_read);
 CREATE INDEX return_requests_order_id_idx ON public.return_requests USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX return_requests_order_idx ON public.return_requests USING btree (order_id);
+CREATE INDEX sms_optout_cautare_idx ON public.sms_optout USING btree (business_id, phone);
 CREATE INDEX stock_feed_sources_business_idx ON public.stock_feed_sources USING btree (business_id);
 CREATE INDEX stock_feed_sources_due_idx ON public.stock_feed_sources USING btree (enabled, last_run_at NULLS FIRST);
 CREATE INDEX stripe_events_created_at_idx ON public.stripe_events USING btree (created_at);
@@ -8550,6 +8563,7 @@ alter table public.recovery_optout enable row level security;
 alter table public.return_requests enable row level security;
 alter table public.site_analytics enable row level security;
 alter table public.sms_campaigns enable row level security;
+alter table public.sms_optout enable row level security;
 alter table public.sms_templates enable row level security;
 alter table public.stock_feed_sources enable row level security;
 alter table public.stripe_events enable row level security;
@@ -8816,6 +8830,11 @@ create policy "Owners can view own analytics" on public.site_analytics as PERMIS
    FROM businesses b
   WHERE ((b.id = site_analytics.business_id) AND (b.user_id = auth.uid())))));
 create policy "Owner manages sms_campaigns" on public.sms_campaigns as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = auth.uid())))) with check ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = auth.uid()))));
+create policy "Owner manages sms_optout" on public.sms_optout as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid())))) with check ((business_id IN ( SELECT businesses.id
    FROM businesses
@@ -10464,6 +10483,27 @@ grant SELECT on table public.sms_campaigns to service_role;
 grant TRIGGER on table public.sms_campaigns to service_role;
 grant TRUNCATE on table public.sms_campaigns to service_role;
 grant UPDATE on table public.sms_campaigns to service_role;
+grant DELETE on table public.sms_optout to anon;
+grant INSERT on table public.sms_optout to anon;
+grant REFERENCES on table public.sms_optout to anon;
+grant SELECT on table public.sms_optout to anon;
+grant TRIGGER on table public.sms_optout to anon;
+grant TRUNCATE on table public.sms_optout to anon;
+grant UPDATE on table public.sms_optout to anon;
+grant DELETE on table public.sms_optout to authenticated;
+grant INSERT on table public.sms_optout to authenticated;
+grant REFERENCES on table public.sms_optout to authenticated;
+grant SELECT on table public.sms_optout to authenticated;
+grant TRIGGER on table public.sms_optout to authenticated;
+grant TRUNCATE on table public.sms_optout to authenticated;
+grant UPDATE on table public.sms_optout to authenticated;
+grant DELETE on table public.sms_optout to service_role;
+grant INSERT on table public.sms_optout to service_role;
+grant REFERENCES on table public.sms_optout to service_role;
+grant SELECT on table public.sms_optout to service_role;
+grant TRIGGER on table public.sms_optout to service_role;
+grant TRUNCATE on table public.sms_optout to service_role;
+grant UPDATE on table public.sms_optout to service_role;
 grant DELETE on table public.sms_templates to anon;
 grant INSERT on table public.sms_templates to anon;
 grant REFERENCES on table public.sms_templates to anon;

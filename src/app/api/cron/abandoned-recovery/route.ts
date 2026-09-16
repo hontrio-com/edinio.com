@@ -6,7 +6,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { sendAbandonedCartRecovery } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
-import { sendSms, type SmsoConfig } from "@/lib/smso";
+import { type SmsoConfig } from "@/lib/smso";
+import { trimiteSiLasaUrma } from "@/lib/smso-urma";
 import { sendNoticeAbandonedSms } from "@/lib/notice-notify";
 import type { NoticeConfig } from "@/lib/notice";
 import { storeBaseUrl, PLATFORM_ORIGIN } from "@/lib/seo";
@@ -336,8 +337,11 @@ export async function GET(req: NextRequest) {
           const r = await sendNoticeAbandonedSms(admin, store.notice, { businessId: store.businessId, phone: canal.phone, body });
           smsOk = r.success;
         } else {
-          const res = await sendSms(store.smso!.api_key, {
-            to: canal.phone, sender: store.smso!.sender_id, body, type: "marketing", remove_special_chars: true,
+          /* ⚠ Prin locul care lasa urma: altfel `responseToken` se pierde si nu se poate afla
+             niciodata daca mesajul a AJUNS. Si tot el tine minte un `405`. */
+          const res = await trimiteSiLasaUrma(admin, store.smso!.api_key, {
+            businessId: store.businessId, phone: canal.phone, sender: store.smso!.sender_id,
+            body, type: "marketing", motiv: "cos_abandonat",
           });
           smsOk = res.success;
         }

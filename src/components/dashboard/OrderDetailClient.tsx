@@ -1081,7 +1081,33 @@ export function OrderDetailClient({
       if ("error" in result) { toast.error(result.error); return; }
       if ("number" in result) {
         const label = action === "invoice" ? "Factura fGO" : "Storno fGO";
-        toast.success(`${label} ${result.series}${result.number} generata`);
+        /*
+         * ⚠⚠ UN DOCUMENT DE TEST SE SPUNE PE LOC (16.09.2026).
+         *
+         * Cu modul de testare pornit, fGO emite pe `api-testuat.fgo.ro` si intoarce un document
+         * care arata exact ca unul adevarat: numar, serie, link, PDF valid. Pana acum ecranul
+         * scria acelasi „generata" verde ca la o factura fiscala.
+         *
+         * ⚠ Masurat: magazinul `itp-blk` are trei astfel de facturi, toate cu link pe
+         * `testuat.fgo.ro`, si le-a stornat pe toate trei. Se vede din LINK, nu din configurare,
+         * fiindca configurarea spune ce e ACUM, iar documentul a fost emis candva.
+         */
+        /* ⚠ Stornarea nu intoarce link, factura da: se ia de unde exista, iar la storno se cade pe
+           linkul facturii de pe comanda, care e al aceluiasi mediu. */
+        const linkDoc = "link" in result && typeof result.link === "string"
+          ? result.link
+          : String(ord["fgo_invoice_link"] ?? "");
+        const eTest = linkDoc.toLowerCase().includes("testuat.fgo.ro");
+        if (eTest) {
+          toast.warning(
+            `${label} ${result.series}${result.number} a fost emisa in MODUL DE TESTARE, deci NU e `
+            + "un document fiscal si nu se poate trimite la marketplace. Opreste modul de testare "
+            + "din configurarea fGO si emite din nou.",
+            { duration: 20000 },
+          );
+        } else {
+          toast.success(`${label} ${result.series}${result.number} generata`);
+        }
       }
       router.refresh();
     });

@@ -33,7 +33,10 @@ import { EroareCitireBaza, randCitit } from "./citire";
 import { LIMITE_EMAG, taiat } from "./limite";
 import type { Database } from "@/types/database.types";
 import { uploadToR2 } from "@/lib/r2";
-import { cheiaPdfFactura, esteChiarPdf, facturaComenzii, NU_E_PDF, type Factura } from "@/lib/billing/factura-comenzii";
+import {
+  cheiaPdfFactura, DOCUMENT_DE_TEST, eDocumentDeTest, esteChiarPdf, facturaComenzii, NU_E_PDF,
+  type Factura,
+} from "@/lib/billing/factura-comenzii";
 import { cuRegistru } from "@/lib/operatii/registru";
 import { salveazaAtasamente, isEmagError } from "./client";
 import type { ContextEmag } from "./sync";
@@ -139,6 +142,19 @@ async function urcaFacturaCitita(
 
   const factura = facturaComenzii(o);
   if (!factura) return { fel: "fara_factura" };
+
+  /*
+   * ⚠⚠ UN DOCUMENT DE TEST NU PLEACA LA MARKETPLACE (16.09.2026).
+   *
+   * E un PDF valid, cu numar si serie, deci `esteChiarPdf` nu-l prinde si nimic din randul comenzii
+   * nu-l deosebeste de o factura adevarata. Dar nu e un document FISCAL, si la eMAG sau Trendyol ar
+   * ajunge exact ca unul. Vezi `eDocumentDeTest`: se citeste din LINK, nu din configurare, fiindca
+   * configurarea spune ce e acum, iar documentul a fost emis candva.
+   *
+   * ⚠ `esec`, nu `fara_factura`: a doua ar insemna „inca nu s-a emis" si cronul ar reincerca la
+   * nesfarsit, tacut. Asa, mesajul ajunge in jurnal si spune ce e de facut.
+   */
+  if (eDocumentDeTest(factura.url)) return { fel: "esec", mesaj: DOCUMENT_DE_TEST };
 
   const sursa = o.order_source as { emag_order_id?: number; tip?: number | null } | null;
   const emagOrderId = sursa?.emag_order_id;

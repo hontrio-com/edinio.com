@@ -424,6 +424,33 @@ export async function maybeAutoGenerateInvoice(
     if (!config?.enabled || !config.auto_invoice) return false;
     if (!autoInvoiceTriggerMatches(config.auto_invoice_trigger, newStatus, newPaymentStatus)) return false;
 
+    /*
+     * ═══ ⚠⚠ FACTURARE AUTOMATA CU MODUL DE TESTARE PORNIT (16.09.2026) ═══
+     *
+     * Nu se opreste: sandbox-ul exista tocmai ca sa se poata proba si drumul automat, iar un refuz
+     * de aici l-ar face de neprobat. Dar se SPUNE, si o singura data e prea putin: fiecare comanda
+     * primeste un document care arata a factura si nu e una fiscala.
+     *
+     * ⚠ Calea asta n-are niciun om in fata. Pe cea manuala, ecranul avertizeaza la fiecare
+     * apasare; aici, fara randul de mai jos, un magazin ar putea aduna luni intregi de „facturi"
+     * de test fara ca nimeni sa se uite vreodata.
+     *
+     * ⚠ Masurat pe 16.09.2026: `itp-blk` are `sandbox: true` si trei facturi emise pe
+     * `testuat.fgo.ro`, toate stornate. Acolo automatul era stins; la altul, n-ar fi.
+     */
+    if (config.sandbox) {
+      await logError({
+        action: "fgo.facturaAutomataInTestare",
+        message:
+          `Comanda ${orderId}: fGO factureaza automat cu MODUL DE TESTARE pornit, deci documentul `
+          + "emis NU e fiscal si nu se poate trimite la marketplace. Opreste modul de testare din "
+          + "configurarea fGO.",
+        details: { orderId },
+        businessId,
+        severity: "critical",
+      }).catch(() => {});
+    }
+
     const result = await generateFgoInvoice(businessId, orderId, sistem);
     /*
      * Pe calea automata esecul e MUT (dispecerul inghite `false`), deci o comanda

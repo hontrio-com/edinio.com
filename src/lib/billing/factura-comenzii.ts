@@ -95,6 +95,47 @@ export const NU_E_PDF =
   + "fiscal. Verifica in panou ca linkul facturii se deschide fara sa fii logat.";
 
 /**
+ * Gazdele de TEST ale caselor de facturare.
+ *
+ * ⚠ Lista contine DOAR ce am masurat sau ce scrie in codul nostru, nu ce am banui. Azi, una
+ * singura: fGO are `api-testuat.fgo.ro` drept `TEST_BASE` (`src/lib/fgo.ts`), iar documentele emise
+ * acolo intorc linkuri pe `testuat.fgo.ro`. SmartBill si Oblio n-au comutator de sandbox in
+ * configurarea noastra, deci n-au ce cauta aici; puse pe ghicite, ar taia documente bune.
+ */
+const GAZDE_DE_TEST = ["testuat.fgo.ro"];
+
+/**
+ * Documentul vine din mediul de TEST al casei de facturare?
+ *
+ * ═══ ⚠⚠ DE CE CONTEAZA, SI DE CE NU-L PRINDE `esteChiarPdf` ═══
+ *
+ * Un document de sandbox e un PDF perfect valid. Trece de orice verificare de format, arata ca o
+ * factura, si are numar si serie. Nu e insa un document FISCAL.
+ *
+ * ⚠ Masurat pe 16.09.2026: magazinul `itp-blk` are `fgo_config.sandbox = true` si a emis TREI
+ * facturi, toate cu link pe `testuat.fgo.ro`, apoi le-a stornat pe toate trei. Pe randul comenzii
+ * ele arata exact ca niste facturi adevarate: acelasi `fgo_invoice_number`, aceeasi serie, acelasi
+ * fel de link. Nimic, nicaieri, nu spunea ca sunt de test.
+ *
+ * Pericolul nu e ecranul, e urcarea la marketplace: `facturaComenzii` le-ar fi dat drept factura
+ * comenzii, iar la eMAG sau Trendyol ar fi ajuns un document de TEST pe post de document fiscal.
+ *
+ * ⚠ Se citeste din LINK, nu din configurare: configurarea spune ce e ACUM, iar documentul a fost
+ * emis candva. Un comerciant care iese din modul de testare nu preface retroactiv in documente
+ * fiscale facturile emise cat timp era in el.
+ */
+export function eDocumentDeTest(url: string): boolean {
+  const u = (url ?? "").toLowerCase();
+  return GAZDE_DE_TEST.some((g) => u.includes(g));
+}
+
+/** Ce i se spune omului cand documentul comenzii e unul de proba. */
+export const DOCUMENT_DE_TEST =
+  "Factura comenzii a fost emisa in modul de TESTARE al casei de facturare, deci nu e un document "
+  + "fiscal. NU s-a urcat la marketplace. Opreste modul de testare din configurare si emite factura "
+  + "din nou.";
+
+/**
  * Cheia sub care sta PDF-ul rehostat.
  *
  * ⚠ DE NEGHICIT, SI STABILA. De neghicit fiindca adresa e singura paza a unui document cu

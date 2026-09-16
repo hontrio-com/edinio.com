@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { pastreazaSecretele } from "@/lib/integrari/secrete";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createWebhook, deleteWebhook, type RevolutConfig, type RevolutConfigInput } from "@/lib/revolut";
+import { createWebhook, deleteWebhook, refundOrder, revolutReady, toMinor, type RevolutConfig, type RevolutConfigInput } from "@/lib/revolut";
+import { secretDinConfig } from "@/lib/integrari/secret-server";
+import { cheieOperatie, cuRegistru } from "@/lib/operatii/registru";
+import { eroareRefuz, verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 
 function appUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL ?? "https://www.edinio.com";
@@ -177,4 +180,94 @@ export async function disconnectRevolut(
   revalidatePath("/dashboard/settings");
   if (biz.slug) revalidatePath(`/${biz.slug}`);
   return { success: true };
+}
+
+/**
+ * ═══ RAMBURSAREA BANILOR PRIN REVOLUT (17.09.2026) ═══
+ *
+ * ⚠ `refundOrder` exista scrisa in `lib/revolut.ts` si NU O CHEMA NIMENI. A treia oara acelasi
+ * tipar (iPay, Klarna, Revolut): o unealta despre care nimeni n-ar fi aflat ca e stricata.
+ *
+ * ⚠⚠ ACTIUNE SEPARATA, nu legata de selectorul de status: acolo „rambursat" e o eticheta pusa dupa
+ * o rambursare facuta de mana in portalul lor. Legata, apasarea obisnuita ar trimite banii a doua oara.
+ *
+ * ⚠ SI STATUSUL NU SE SCRIE DE AICI: adevarul despre bani il da `refunded_amount` de pe comanda lor,
+ * iar cronul il citeste si trece comanda prin ACEEASI regula ca o rambursare facuta in portal. Un
+ * singur drum catre „rambursat".
+ */
+export async function rambourseazaPrinRevolut(
+  orderId: string,
+): Promise<{ success: boolean; error?: string; mesaj?: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Neautorizat" };
+
+  const admin = createAdminClient();
+  const { data: order } = await admin
+    .from("orders")
+    .select("id, business_id, order_number, payment_status, payment_method, total, revolut_order_id")
+    .eq("id", orderId)
+    .single();
+  if (!order) return { success: false, error: "Comanda nu exista" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", order.business_id).eq("user_id", user.id).single();
+  if (!biz) return { success: false, error: "Acces interzis" };
+
+  if (order.payment_method !== "revolut") {
+    return { success: false, error: "Comanda nu a fost platita prin Revolut." };
+  }
+  if (order.payment_status === "refunded") {
+    return { success: false, error: "Comanda e deja marcata rambursata." };
+  }
+  if (order.payment_status !== "paid") {
+    return { success: false, error: "Nu se poate rambursa o comanda care nu e platita." };
+  }
+  const revolutOrderId = (order.revolut_order_id as string | null)?.trim();
+  if (!revolutOrderId) {
+    return { success: false, error: "Comanda nu are un identificator de comanda Revolut, deci rambursarea trebuie facuta din portalul Revolut." };
+  }
+
+  const suma = Number(order.total);
+  if (!Number.isFinite(suma) || suma <= 0) {
+    return { success: false, error: "Totalul comenzii nu e o suma valida." };
+  }
+
+  const { data: st } = await admin
+    .from("store_settings").select("revolut_config").eq("business_id", order.business_id).maybeSingle();
+  const cfg = st?.revolut_config as RevolutConfig | null;
+  if (!revolutReady(cfg)) return { success: false, error: "Revolut nu e configurat pentru acest magazin." };
+
+  const cheie = await secretDinConfig(order.business_id, "revolut_config", "secret_key");
+  const cheamaCu: RevolutConfig = { ...cfg!, ...(cheie ? { secret_key: cheie } : {}) };
+
+  const r = await cuRegistru(
+    admin,
+    {
+      businessId: order.business_id,
+      orderId,
+      fel: "rambursare",
+      furnizor: "revolut",
+      cheie: cheieOperatie("rambursare", "revolut", orderId),
+    },
+    async () => {
+      const rod = await refundOrder(cheamaCu, revolutOrderId, toMinor(suma));
+      /* ⚠ Tacerea nu e incuviintare: un raspuns care nu e `ok` opreste totul. */
+      if (!rod.ok) throw eroareRefuz(rod.error || "Revolut a refuzat rambursarea.");
+      return { referinta: revolutOrderId, detalii: { suma } as never, valoare: rod };
+    },
+    verdictFurnizor,
+  );
+
+  if (r.fel === "blocat" || r.fel === "eroare") return { success: false, error: r.mesaj };
+  if (r.fel === "deja") {
+    return { success: true, mesaj: "Rambursarea fusese deja trimisa la Revolut pentru aceasta comanda." };
+  }
+
+  revalidatePath(`/dashboard/orders/${orderId}`);
+  return {
+    success: true,
+    mesaj: `Rambursarea de ${suma.toFixed(2)} lei a fost trimisa la Revolut. `
+      + "Comanda se marcheaza rambursata dupa ce ei confirma, in cel mult 15 minute.",
+  };
 }

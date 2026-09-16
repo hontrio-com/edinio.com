@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { logError } from "@/lib/error-logger";
 import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
-import { revolutReady, type RevolutConfig } from "@/lib/revolut";
+import { revolutReady, getOrder, toMinor, REVOLUT_CURRENCY, type RevolutConfig } from "@/lib/revolut";
 import { finalizeRevolutOrder } from "@/lib/revolut-finalize";
+import { baniiSAuIntors, type ComandaAtinsa } from "@/lib/plati/banii-s-au-intors";
+
+/** Cat timp se pazeste o comanda platita pentru o rambursare facuta in portalul lor. */
+const ZILE_RAMBURSARE = 120;
+/** ⚠ Plafon mic dinadins: paza rambursarilor n-are voie sa infometeze plasa despre bani neincasati. */
+const MAX_PLATITE = 120;
 
 /**
  * Plasa de siguranta pentru platile Revolut.
@@ -88,11 +94,39 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "citire esuata" }, { status: 503 });
   }
 
-  if (!orders || orders.length === 0) {
-    return NextResponse.json({ ok: true, checked: 0, paid: 0 });
+  /*
+   * ⚠⚠ AICI A FOST UN `return` CARE AR FI FACUT PAZA RAMBURSARILOR COD MORT.
+   *
+   * A PATRA OARA aceeasi capcana intr-o zi (`stripe-reconcile`, `ipay-reconcile`, `klarna-reconcile`,
+   * aici). Iesirea era pe cazul NORMAL: nicio comanda neplatita in fereastra. Un `return` timpuriu
+   * nu e o optimizare, e o poarta: cine adauga ceva dupa el trebuie sa se intrebe intai daca poarta
+   * il lasa sa treaca.
+   */
+  const neplatite = orders ?? [];
+
+  /*
+   * ═══ ⚠⚠ BANII CARE S-AU INTORS (17.09.2026) ═══
+   *
+   * Bucla de mai jos intreaba doar „au intrat banii?". Nimeni nu intreba „nu cumva au IESIT la loc?".
+   *
+   * ⚠ SI LA REVOLUT NU EXISTA ALTA CALE. Documentatia lor Merchant API (citita 17.09.2026) are DOAR
+   * TREI evenimente de webhook: `ORDER_AUTHORISED`, `ORDER_CANCELLED`, `ORDER_COMPLETED`. Niciunul
+   * despre rambursari. Deci o rambursare NU poate fi impinsa catre noi niciodata; singurul mod de a
+   * afla e sa citim `refunded_amount` de pe comanda lor.
+   */
+  const { data: platite, error: ePlatite } = await admin
+    .from("orders")
+    .select("id, business_id, order_number, status, payment_status, total, revolut_order_id")
+    .eq("payment_method", "revolut")
+    .eq("payment_status", "paid")
+    .not("revolut_order_id", "is", null)
+    .gte("created_at", new Date(Date.now() - ZILE_RAMBURSARE * 86400000).toISOString())
+    .limit(MAX_PLATITE);
+  if (ePlatite) {
+    await logError({ action: "revolut-reconcile", message: `comenzile platite nu s-au putut citi: ${ePlatite.message}`, severity: "warning" });
   }
 
-  const bizIds = [...new Set(orders.map((o) => o.business_id))];
+  const bizIds = [...new Set([...neplatite, ...(platite ?? [])].map((o) => o.business_id))];
   const { data: settingsRows, error: eCfg } = await admin
     .from("store_settings")
     .select("business_id, revolut_config")
@@ -107,7 +141,7 @@ export async function GET(req: NextRequest) {
   let checked = 0;
   let paid = 0;
 
-  for (const o of orders) {
+  for (const o of neplatite) {
     const cfg = cfgMap.get(o.business_id);
     const revolutOrderId = o.revolut_order_id as string | null;
     if (!revolutReady(cfg) || !revolutOrderId) continue;
@@ -133,6 +167,31 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  console.log(`[revolut-reconcile] checked ${checked}, marked paid ${paid}`);
-  return NextResponse.json({ ok: true, checked, paid });
+  /* ═══ A DOUA TRECERE: banii care s-au intors ═══ */
+  let intoarse = 0;
+  for (const o of platite ?? []) {
+    const cfg = cfgMap.get(o.business_id);
+    const revolutOrderId = o.revolut_order_id as string | null;
+    if (!revolutReady(cfg) || !revolutOrderId) continue;
+    try {
+      const rev = await getOrder(cfg!, revolutOrderId);
+      if (!rev.ok || !rev.data) continue;
+      const intors = Number(rev.data.refunded_amount ?? 0);
+      if (!(intors > 0)) continue;
+      const incasat = Number(rev.data.amount ?? toMinor(Number(o.total) || 0));
+      const v = await baniiSAuIntors(
+        admin as never,
+        o as unknown as ComandaAtinsa,
+        { intors, incasat, moneda: rev.data.currency || REVOLUT_CURRENCY, referinta: revolutOrderId },
+        { actiune: "revolut-reconcile", furnizor: "Revolut" },
+      );
+      if (v.fel === "integral" || v.fel === "partial") intoarse++;
+    } catch (e) {
+      /* O interogare picata NU inseamna „nu s-a rambursat". Se reia la rularea urmatoare. */
+      console.error("[revolut-reconcile] paza rambursarii a esuat pentru comanda", o.id, e);
+    }
+  }
+
+  console.log(`[revolut-reconcile] checked ${checked}, marked paid ${paid}, bani intorsi ${intoarse}`);
+  return NextResponse.json({ ok: true, checked, paid, intoarse });
 }

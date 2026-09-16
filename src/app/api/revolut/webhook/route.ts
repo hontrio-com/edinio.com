@@ -69,7 +69,30 @@ export async function POST(request: NextRequest) {
     rawBody,
   );
   if (!valid) {
-    console.error("[revolut/webhook] invalid signature", { businessId });
+    /*
+     * ⚠⚠ O SEMNATURA INVALIDA NU MAI DISPARE IN TACERE (17.09.2026).
+     *
+     * Aici era doar `console.error`, adica nicaieri: jurnalele de rulare se rotesc si nimeni nu le
+     * citeste. Iar raspunsul ramane `200`, ceea ce e corect pentru o cerere falsificata (n-are rost
+     * s-o punem pe Revolut s-o repete), dar are un al doilea inteles mult mai suparator:
+     *
+     *   daca `signing_secret` se roteste la EI si nu si la noi, FIECARE webhook legitim devine
+     *   „invalid", e aruncat cu 200 (deci nerepetat), si integrarea se opreste complet fara ca
+     *   cineva sa afle. Comenzile ar ramane neplatite, iar singura plasa ar fi cronul.
+     *
+     * Deci se scrie in jurnal, cu `business_id`, ca sa se vada in `/admin/logs`. `warning`, nu
+     * `critical`: o cerere falsificata izolata e zgomot de internet; ce conteaza e TIPARUL, adica
+     * multe la rand de la acelasi magazin.
+     */
+    await logError({
+      action: "revolut/webhook",
+      message: "Webhook Revolut cu semnatura INVALIDA, ignorat. Daca se repeta, `signing_secret` "
+        + "din configurarea magazinului nu mai corespunde cu cel de la Revolut, iar platile nu se "
+        + "mai confirma prin webhook.",
+      details: { businessId },
+      businessId,
+      severity: "warning",
+    });
     return ok();
   }
 

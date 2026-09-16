@@ -135,6 +135,16 @@ export type RevolutOrder = {
   /** Hosted checkout page URL — redirect the customer here. */
   checkout_url?: string;
   outstanding_amount?: number;
+  /**
+   * Cat s-a intors catre cumparator, in subunitati.
+   *
+   * ⚠ LIPSEA DIN TIPUL ASTA, desi e in raspunsul lor (documentatia Merchant API, citita 17.09.2026:
+   * obiectul comenzii are `amount`, `outstanding_amount`, `refunded_amount`). Iar Revolut are DOAR
+   * TREI evenimente de webhook (`ORDER_AUTHORISED`, `ORDER_CANCELLED`, `ORDER_COMPLETED`), niciunul
+   * despre rambursari. Deci campul asta e SINGURUL mod in care putem afla vreodata ca banii s-au
+   * intors, si nimeni nu-l citea.
+   */
+  refunded_amount?: number;
 };
 
 /**

@@ -33,6 +33,7 @@ import { generateOblioInvoice, generateOblioProforma, stornoOblioInvoice } from 
 import { generateFgoInvoice, stornoFgoInvoiceAction } from "@/lib/actions/fgo.actions";
 import { rambourseazaPrinNetopia } from "@/lib/actions/netopia.actions";
 import { rambourseazaPrinIpay } from "@/lib/actions/ipay.actions";
+import { rambourseazaPrinKlarna } from "@/lib/actions/klarna.actions";
 import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { CargusAwbModal } from "@/components/dashboard/CargusAwbModal";
 import { DpdAwbModal } from "@/components/dashboard/DpdAwbModal";
@@ -510,6 +511,8 @@ export function OrderDetailClient({
   const [showResendEstimate, setShowResendEstimate] = useState(false);
   const [showNetopiaRefund, setShowNetopiaRefund] = useState(false);
   const [showIpayRefund, setShowIpayRefund] = useState(false);
+  const [showKlarnaRefund, setShowKlarnaRefund] = useState(false);
+  const [refundingKlarna, startKlarnaRefundTransition] = useTransition();
   const [refundingIpay, startIpayRefundTransition] = useTransition();
   const [refundingNetopia, startNetopiaRefundTransition] = useTransition();
 
@@ -1019,6 +1022,28 @@ export function OrderDetailClient({
       }
       if (!result.success) { toast.error(result.error ?? "Rambursarea nu a putut fi trimisa."); return; }
       toast.success(result.mesaj ?? "Rambursarea a fost trimisa la iPay.", { duration: 12000 });
+      router.refresh();
+    });
+  }
+
+  /** ⚠ Al treilea buton de acelasi fel. Muta BANI; selectorul de status de alaturi doar eticheta. */
+  function handleKlarnaRefund() {
+    setShowKlarnaRefund(false);
+    startKlarnaRefundTransition(async () => {
+      let result: Awaited<ReturnType<typeof rambourseazaPrinKlarna>>;
+      try {
+        result = await rambourseazaPrinKlarna(order.id);
+      } catch {
+        toast.error(
+          "Nu am primit raspuns, deci nu stim daca rambursarea a plecat. Verifica in portalul Klarna "
+          + "inainte de a incerca din nou. O a doua apasare va fi oprita pana se lamureste.",
+          { duration: 14000 },
+        );
+        router.refresh();
+        return;
+      }
+      if (!result.success) { toast.error(result.error ?? "Rambursarea nu a putut fi trimisa."); return; }
+      toast.success(result.mesaj ?? "Rambursarea a fost trimisa la Klarna.", { duration: 12000 });
       router.refresh();
     });
   }
@@ -1613,6 +1638,33 @@ export function OrderDetailClient({
                   <button type="button" onClick={() => setShowIpayRefund(true)} disabled={refundingIpay}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
                     <RotateCcw className="h-4 w-4" />Ramburseaza banii prin iPay
+                  </button>
+                )
+              )}
+              {order.payment_method === "klarna"
+                && order.payment_status === "paid"
+                && Boolean(order.klarna_order_id) && (
+                showKlarnaRefund ? (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-destructive/5 border border-destructive/20">
+                    <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
+                    <p className="text-xs text-destructive flex-1">
+                      Se trimit {Number(order.total).toFixed(2)} lei inapoi cumparatorului, prin Klarna.
+                      Banii pleaca acum si nu pot fi rechemati.
+                    </p>
+                    <Button type="button" size="sm" onClick={handleKlarnaRefund} disabled={refundingKlarna}
+                      className="bg-destructive text-white hover:bg-destructive/90">
+                      {refundingKlarna ? <Loader2 className="animate-spin" /> : <RotateCcw />}
+                      Confirma rambursarea
+                    </Button>
+                    <button type="button" onClick={() => setShowKlarnaRefund(false)}
+                      className="p-1.5 text-destructive/60 hover:text-destructive transition-colors">
+                      <XCircle className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setShowKlarnaRefund(true)} disabled={refundingKlarna}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-destructive/20 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50">
+                    <RotateCcw className="h-4 w-4" />Ramburseaza banii prin Klarna
                   </button>
                 )
               )}

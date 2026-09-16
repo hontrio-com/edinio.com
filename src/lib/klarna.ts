@@ -377,9 +377,21 @@ export function placeOrder(c: KlarnaConfig, authorizationToken: string, order: K
 
 // ── Order Management API ──────────────────────────────────────────────────────
 
+/**
+ * Ce intoarce `GET /ordermanagement/v1/orders/{id}`, din specificatia lor (citita 17.09.2026).
+ *
+ * ⚠ `fraud_status` SI `expires_at` lipseau din tipul asta, desi sunt in raspunsul lor. Primul e
+ * singurul mod de a afla deznodamantul unei verificari antifrauda; al doilea spune cand expira
+ * autorizarea, adica pana cand mai pot fi luati banii.
+ */
 export type KlarnaOmOrder = {
   order_id?: string;
+  /** AUTHORIZED, PART_CAPTURED, CAPTURED, CANCELLED, EXPIRED. */
   status?: string;
+  /** ACCEPTED, PENDING, REJECTED. Se schimba dupa ce Klarna incheie verificarea. */
+  fraud_status?: string;
+  /** Cand expira autorizarea. Dupa ea, banii nu mai pot fi capturati. */
+  expires_at?: string;
   order_amount?: number;
   captured_amount?: number;
   refunded_amount?: number;

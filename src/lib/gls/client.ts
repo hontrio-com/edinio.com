@@ -176,6 +176,18 @@ export type ColetGls = {
   Count: number;
   PickupAddress: AdresaGls;
   DeliveryAddress: AdresaGls;
+  /**
+   * ⚠⚠ Adresa de REZERVA la livrarea in punct (serviciul PSD).
+   *
+   * Verbatim, pagina 9: „Backup delivery address (recipient's own address) when using PSD
+   * service. Used if ParcelShop becomes unavailable."
+   *
+   * Fara ea, un punct inchis inseamna colet intors — iar la ramburs, si marfa intoarsa, si
+   * bani neincasati. Se trimite doar cand avem o adresa ADEVARATA a cumparatorului: un
+   * `Address` incomplet e refuzat de ei (`Street`, `City`, `ZipCode` si `Name` sunt REQUIRED),
+   * si oricum n-ar livra nimanui nimic.
+   */
+  FinalDeliveryAddress?: AdresaGls;
   ServiceList: ServiciuGls[];
   /** ⚠ Ramburs. Se trimite DOAR daca plata e ramburs — vezi `expediere.ts`. */
   CODAmount?: number;

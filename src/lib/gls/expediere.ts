@@ -246,6 +246,13 @@ export type DateExpediere = {
   /** Valoarea declarata, pentru asigurare. */
   valoare?: number;
   continut?: string | null;
+  /**
+   * ⚠ Adresa de ACASA a cumparatorului, cand livrarea merge intr-un punct.
+   *
+   * Devine `FinalDeliveryAddress` la serviciul PSD. Lipsa ei nu e o eroare: formularul nu
+   * cere adresa cand se alege un punct, iar comenzile de marketplace n-o au deloc.
+   */
+  adresaDeAcasa?: AdresaComanda | null;
   servicii?: OptiuniServicii;
 };
 
@@ -397,6 +404,25 @@ export function coletGls(d: DateExpediere): ColetGls {
     DeliveryAddress: adresaGls(d.destinatar),
     ServiceList: serviciiGls(d),
   };
+
+  /*
+   * ⚠⚠ ADRESA DE REZERVA, SI NUMAI LA PUNCT.
+   *
+   * „Backup delivery address (recipient's own address) when using PSD service. Used if
+   * ParcelShop becomes unavailable." (pagina 9). Trimisa la o livrare obisnuita n-ar avea
+   * niciun inteles: acolo adresa de livrare E deja a omului.
+   *
+   * ⚠ Se trimite doar cand e INTREAGA. La ei `Name`, `Street`, `City` si `ZipCode` sunt toate
+   * REQUIRED intr-un `Address`; una incompleta ar fi refuzata cu totul, adica ar strica si
+   * expedierea care altfel pleca bine. Mai bine fara rezerva decat fara colet.
+   */
+  const acasa = d.adresaDeAcasa;
+  if (d.servicii?.parcelShopId && acasa) {
+    const rezerva = adresaGls(acasa);
+    if (rezerva.Name && rezerva.Street && rezerva.City && rezerva.ZipCode) {
+      colet.FinalDeliveryAddress = rezerva;
+    }
+  }
 
   /*
    * ⚠ `Content` se trimite INTOTDEAUNA.

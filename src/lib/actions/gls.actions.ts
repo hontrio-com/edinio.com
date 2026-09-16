@@ -27,6 +27,7 @@ import {
   avertismenteColet,
   coletGls,
   motivRefuzSerbia,
+  type AdresaComanda,
   type DateExpediere,
   type OptiuniServicii,
 } from "@/lib/gls/expediere";
@@ -361,6 +362,44 @@ export async function createGlsAwbAction(
     };
   }
 
+  /*
+   * ⚠⚠ ADRESA DE REZERVA A CUMPARATORULUI, la livrarea in punct.
+   *
+   * GLS, pagina 9: „Backup delivery address (recipient's own address) when using PSD service.
+   * Used if ParcelShop becomes unavailable." Fara ea, un punct inchis inseamna colet intors,
+   * iar la ramburs si marfa intoarsa, si bani neincasati.
+   *
+   * ⚠ Strada ei se pastreaza de pe 16.09.2026 in `shipping_address.home_address`: pana atunci
+   * era SUPRASCRISA cu adresa punctului si se pierdea. Deci pentru comenzile de dinainte
+   * rezerva nu se poate compune, si nu e nimic de facut — nu exista de unde.
+   *
+   * ⚠ Codul postal se rezolva pe localitatea LUI, nu pe a punctului: e alta adresa. Se
+   * foloseste aceeasi cadere ca pentru destinatie, ca sa nu existe doua reguli.
+   */
+  let adresaDeAcasa: AdresaComanda | null = null;
+  if (laPunct) {
+    const adr = (order.shipping_address ?? {}) as {
+      home_address?: string; city?: string; county?: string; postal_code?: string;
+    };
+    const strada = (adr.home_address ?? "").trim();
+    const orasAcasa = (adr.city ?? "").trim();
+    if (strada && orasAcasa) {
+      const codAcasa = (adr.postal_code ?? "").trim()
+        || (await codPostalOras(config.tara || "RO", orasAcasa, adr.county)) || "";
+      if (codAcasa) {
+        adresaDeAcasa = {
+          nume: date.destinatar?.nume ?? "",
+          strada,
+          oras: orasAcasa,
+          judet: (adr.county ?? "").trim() || null,
+          codPostal: codAcasa,
+          tara: date.destinatar?.tara || config.tara || "RO",
+          telefon: date.destinatar?.telefon ?? "",
+          email: date.destinatar?.email ?? "",
+        };
+      }
+    }
+  }
   const referinta = String(order.order_number ?? orderId).slice(0, 40);
 
   /* Se compune o singura data: si `coletGls`, si `avertismenteColet` lucreaza pe
@@ -375,6 +414,7 @@ export async function createGlsAwbAction(
     ramburs: date.ramburs,
     valoare: date.valoare,
     continut: date.continut,
+    adresaDeAcasa,
     servicii: date.servicii,
   };
 

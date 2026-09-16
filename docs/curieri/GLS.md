@@ -149,27 +149,27 @@ Changelog-ul PDF-ului merge pana la 30.03.2026. Verificat fiecare intrare fata d
 1. **Prima emitere reala de AWB (D-5).** Doi comercianti au GLS pornit si niciunul n-a emis inca
    nimic. Tot ce se poate proba fara fir e probat; codul postal al expeditorului, `ZipCode`-ul
    destinatarului si serviciul PSD se dovedesc doar cu un colet adevarat.
-2. ⚠ **`FinalDeliveryAddress` la PSD (D-2): blocajul s-a ridicat pe JUMATATE (16.09.2026).**
-   Documentatia lor il descrie limpede in clasa `Parcel`: „adresa de rezerva (adresa proprie a
-   destinatarului) la serviciul PSD, folosita daca ParcelShop-ul devine indisponibil”. Fara el, un
-   punct inchis inseamna colet intors, iar la ramburs si marfa intoarsa, si bani neincasati.
+2. ✅ **`FinalDeliveryAddress` la PSD: FACUT (16.09.2026).** Documentatia lor, pagina 9,
+   verbatim: „Backup delivery address (recipient's own address) when using PSD service. Used if
+   ParcelShop becomes unavailable." Fara ea, un punct inchis inseamna colet intors — iar la
+   ramburs, si marfa intoarsa, si bani neincasati.
 
-   **Ce era blocat:** la orice comanda cu punct de ridicare, `customer_address` se SUPRASCRIE cu
-   adresa punctului, deci strada proprie a cumparatorului se pierdea inainte sa ajunga pe comanda.
+   **Ce il bloca:** strada cumparatorului era SUPRASCRISA cu adresa punctului la plasarea comenzii,
+   deci se pierdea. Blocajul era in checkout, nu la GLS. S-a ridicat in aceeasi zi: se pastreaza
+   acum in `shipping_address.home_address`.
 
-   **Ce s-a facut:** strada lui se pastreaza acum separat, in `shipping_address.home_address`,
-   trimisa din amandoua checkout-urile si scrisa de server doar cand e nevida SI diferita de adresa
-   de livrare. Adresa de livrare RAMANE a punctului — nimic din reparatie n-o atinge.
+   **Cum se trimite:** doar la PSD (la o livrare obisnuita adresa de livrare E deja a omului), si
+   doar cand e INTREAGA. ⚠ La ei `Name`, `Street`, `City` si `ZipCode` sunt toate REQUIRED
+   intr-un `Address`; una incompleta ar fi refuzata cu totul, adica ar strica si expedierea care
+   altfel pleca bine. Mai bine fara rezerva decat fara colet.
 
-   ⚠ **Ce ramane blocat, si nu se poate desface din cod:**
-   * **codul postal.** GLS il cere obligatoriu (`Address.ZipCode`), iar checkout-ul romanesc nu-l
-     colecteaza. O adresa de rezerva fara cod postal nu trece de validarea lor;
-   * **adresa nu e obligatorie la punct.** Formularul n-o cere cand se alege un punct, deci exista
-     doar cand cumparatorul a completat-o oricum;
-   * **comenzile de marketplace n-o au deloc.** Masurat pe 16.09: din 106 comenzi cu punct, 100 vin
-     de pe eMAG si n-au nicio strada — marketplace-ul nu trimite adresa de acasa la easybox.
+   ⚠ Codul postal al rezervei se rezolva pe localitatea CUMPARATORULUI, prin aceeasi cadere in
+   trei trepte ca destinatia — nu se imprumuta codul punctului, care e alta adresa.
 
-   Deci cablarea propriu-zisa a lui `FinalDeliveryAddress` asteapta codul postal, nu strada.
+   ⚠ **Ce ramane adevarat:** rezerva exista doar cand cumparatorul chiar si-a scris adresa
+   (formularul nu o cere cand se alege un punct) si niciodata pentru comenzile de marketplace.
+   Masurat pe 16.09: din 106 comenzi cu punct, 100 vin de pe eMAG si n-au nicio strada. Pentru
+   comenzile de dinainte de 16.09 nu se poate compune deloc: strada nu mai exista nicaieri.
 3. **Ridicarea de la comerciant** (`CreatePickupRequest`, `PickupService.svc`) si **anularea in
    lot** (`DeleteLabels` primeste pana la 50 deodata): amandoua reale si nefacute. La zero AWB-uri,
    n-au cui sa foloseasca inca.

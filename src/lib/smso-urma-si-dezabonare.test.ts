@@ -512,8 +512,8 @@ describe("Webhook-ul de livrare", () => {
 
   test("⚠ „STOP” se cauta ca PRIM cuvant, nu oriunde in text", () => {
     /*
-     * ⚠ REGULA S-A MUTAT PE 17.09.2026, PROPRIETATEA NU. „” sta acum in
-     * `sms-dezabonare`, fiindca o imparte cu notice.ro: omul scrie acelasi „” indiferent prin ce
+     * ⚠ REGULA S-A MUTAT PE 17.09.2026, PROPRIETATEA NU. „A cerut omul sa fie oprit?” sta acum in
+     * `sms-dezabonare`, fiindca o imparte cu notice.ro: omul scrie acelasi „STOP” indiferent prin ce
      * furnizor i-a venit mesajul. Proba nu mai cauta forma ei in fisierul rutei, ci O CHEAMA,
      * ceea ce e si mai bine, fiindca o afirmatie pe sursa trecea verde daca regula se muta.
      */

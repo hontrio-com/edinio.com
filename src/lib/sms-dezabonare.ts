@@ -39,13 +39,13 @@ export function numarNormalizat(phone: string): string {
   return c;
 }
 
-/** Ce scrie omul cand vrea sa nu mai primeasca. „” e forma ceruta de lege in Romania. */
+/** Ce scrie omul cand vrea sa nu mai primeasca. „STOP” e forma ceruta de lege in Romania. */
 export const CUVINTE_DE_OPRIRE = ["stop", "unsubscribe", "dezabonare", "dezabonat"];
 
 /**
  * A cerut omul sa fie oprit?
  *
- * ⚠ SE UITA DOAR LA PRIMUL CUVANT, nu oriunde in text: „” n-ar trebui sa
+ * ⚠ SE UITA DOAR LA PRIMUL CUVANT, nu oriunde in text: „nu ma opri din cumparat” n-ar trebui sa
  * dezaboneze pe nimeni. Aceeasi regula pentru raspunsurile venite de la SMSO (pe webhook) si pentru
  * cele citite de la notice.ro (prin tragere), fiindca omul scrie acelasi lucru pe amandoua.
  */

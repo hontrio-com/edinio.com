@@ -3,7 +3,7 @@
 Trecerea din 17.09.2026. Documentatie oficiala: colectia Postman `documenter.getpostman.com/view/6644801/2sBY4VJcUg`
 (29 de capete). SDK oficial: `github.com/noticero/notice-sdk-php`.
 
-Intrebarea proprietarului: *„”*. Raspunsul masurat: **trimiterea
+Intrebarea proprietarului: *„La integrarea cu Notice e totul ok?”*. Raspunsul masurat: **trimiterea
 mergea, tot ce trebuia sa vina INAPOI nu mergea deloc.**
 
 ---
@@ -44,20 +44,20 @@ citata in cod (`2s9YyzbxNU`), a fost stearsa de ei (404). SDK-ul PHP doar decode
 | `/sms-out/resendsms`, `DELETE /sms-out` | nefolosite | nefolosite, nu e nevoie |
 | sabloane: adaugare, modificare, stergere | nefolosite | nefolosite, le tine comerciantul la ei |
 | `/login`, `/auth/sms-token` | nefolosite | nefolosite: comerciantul lipeste tokenul lung |
-| **WhatsApp Cloud (`/waba/*`, 7 capete)** | **nefolosit deloc** | nefolosit, vezi „” |
+| **WhatsApp Cloud (`/waba/*`, 7 capete)** | **nefolosit deloc** | nefolosit, vezi „Ce ofera si nu folosim” |
 
 ---
 
 ## Defectele gasite si reparate
 
-### 1. ⚠⚠ „” nu era auzit de nimeni
+### 1. ⚠⚠ „STOP” nu era auzit de nimeni
 
 `getNoticeInboundSms` era scrisa anume pentru `GET /sms-in` si **nu o chema niciun fisier**. Un
-cumparator care raspundea „” la un SMS de la notice.ro nu ajungea nicaieri.
+cumparator care raspundea „STOP” la un SMS de la notice.ro nu ajungea nicaieri.
 
 Reparat: `/api/cron/notice-raspunsuri`, orar la minutul 46. Pentru fiecare magazin cu notice.ro pornit
 cere lista, iar `asazaRaspunsurile` o aseaza: un rand o singura data (index unic pe magazin + id-ul lor),
-„” in `sms_optout`, **acelasi tabel pe care il citeste SMSO**, in aceeasi forma a numarului.
+„STOP” in `sms_optout`, **acelasi tabel pe care il citeste SMSO**, in aceeasi forma a numarului.
 
 ### 2. ⚠⚠ Garda de dezabonare de la SMSO era ocolita cu totul
 
@@ -86,9 +86,9 @@ Trei lucruri, fiecare de ajuns ca sa nu mearga nimic:
 
 * `cancelled` = **clientul a apasat tasta de anulare**. La un apel de confirmare a comenzii, asta
   inseamna ca **a anulat comanda**. Se scria `failed`, adica exact informatia pentru care exista apelul
-  se pierdea. Acum se scrie ca atare, iar panoul arata „”;
-* `delivered` = „”, **nu un rezultat al apelului**. Citit ca
-  rezultat, ar fi suprascris un „” cu „”. Acum nu scrie nimic.
+  se pierdea. Acum se scrie ca atare, iar panoul arata „clientul a anulat”;
+* `delivered` = „callback-ul a ajuns la serverul vostru”, **nu un rezultat al apelului**. Citit ca
+  rezultat, ar fi suprascris un „anulat” cu „livrat”. Acum nu scrie nimic.
 
 Si orice corp cu `audio_id` se opreste pe ramura de voce, inaintea celei de livrare SMS.
 
@@ -108,7 +108,7 @@ apex; expunere zero). Panoul spune acum: daca ai lipit candva alta adresa, inloc
 
 ### 5. Raspunsurile pe webhook ocoleau garda si s-ar fi dublat
 
-Ramura de raspuns a webhook-ului scria direct in `notice_inbox`: fara „”, fara id, deci dublat de
+Ramura de raspuns a webhook-ului scria direct in `notice_inbox`: fara „STOP”, fara id, deci dublat de
 cron daca vin pe ambele drumuri. Acum trece prin aceeasi `asazaRaspunsurile`, cu `sursa: "webhook"`
 (un mesaj fara id intra, o singura data) si cu corpul brut pastrat in `raw`.
 
@@ -117,7 +117,7 @@ cron daca vin pe ambele drumuri. Acum trece prin aceeasi `asazaRaspunsurile`, cu
 Nu stim daca `/sms-in` contine doar raspunsuri la mesajele noastre. Un numar caruia magazinul nu i-a
 scris niciodata prin notice.ro nu intra nici in inbox, nici pe lista de oprire. Aceeasi regula ca la
 webhook-ul SMSO, unde tine si loc de garda: adresa nu e semnata. O citire picata a listei de numere
-**arunca**; goala, fiecare „” ar fi parut strain.
+**arunca**; goala, fiecare „STOP” ar fi parut strain.
 
 ---
 
@@ -143,10 +143,10 @@ Reparat in `2027-01-24-notice-indexul-unic-fara-predicat.sql`, aplicat si verifi
 ⚠ Proba citeste acum forma indexului din `000-schema-baseline.sql`, **fotografia productiei**, nu din
 migratie; baza falsa nu poate prinde asa ceva.
 
-### B. „”: o concluzie fara date
+### B. „notice.ro nu impinge nimic”: o concluzie fara date
 
 Am scris in trei comentarii ca notice.ro nu are rapoarte de livrare si nici webhook de raspunsuri, din
-zero livrari confirmate. **Nedovedit.** Pagina lor de prezentare promite „” pentru
+zero livrari confirmate. **Nedovedit.** Pagina lor de prezentare promite „callback-uri HTTP” pentru
 notificarile trimise si pentru raspunsuri, iar panoul nostru trimitea comerciantul la „Integrare API ->
 Webhook URL". Si masurat pe magazine: **399 din 405 SMS-uri sunt ale unui magazin care n-a avut
 NICIODATA secret de webhook**, deci nicio adresa de lipit. Zero rapoarte se explica pe deplin prin asta.
@@ -159,7 +159,7 @@ raspuns raman.
 ## O lista pe care n-o intelegem nu e o lista goala
 
 Forma lui `/sms-in` nu e documentata nicaieri. Daca ei intorc mesaje si **niciunul** nu are un numar pe
-care sa-l recunoastem, un parser tolerant le-ar sari pe toate, iar cronul ar raporta „” din ora in ora.
+care sa-l recunoastem, un parser tolerant le-ar sari pe toate, iar cronul ar raporta „ok” din ora in ora.
 Exact felul in care `notice_inbox` a stat trei luni gol fara ca nimeni sa afle.
 
 Deci: `faraNumar` se numara, iar cand sunt TOATE asa, cronul scrie un `warning` cu **numele campurilor
@@ -216,7 +216,7 @@ scriere; drumul complet il va dovedi prima trecere a cronului.
 ## Ce ofera si nu folosim
 
 * **WhatsApp Cloud (`/waba/*`)**: mesaje prin API-ul oficial Meta, sabloane aprobate si, mai ales,
-  **confirmarea comenzii cu butoane** „”: `POST /waba/orders/notify` cu idempotenta pe
+  **confirmarea comenzii cu butoane** „Confirma / Anuleaza”: `POST /waba/orders/notify` cu idempotenta pe
   `order_id + event`, apoi `GET /waba/orders/{id}` pentru raspuns. E cea mai buna forma de confirmare pe
   care o au, si nu e integrata deloc. Functionalitate noua, nu defect.
 * `GET /audio`: ar putea reconcilia apelurile al caror callback s-a pierdut, ca `/status` la SMSO. La zero
@@ -234,7 +234,7 @@ scriere; drumul complet il va dovedi prima trecere a cronului.
    recunoastem, alarma spune ce campuri au venit.
 3. **Tokenul pentru dispozitivele WhatsApp.** Textul lor spune ca dispozitivele cer alt token decat
    trimiterea, dar numele variabilelor lipseste din documentatie. Expunere zero.
-4. **Limita de 130 de caractere la SMS.** Documentata ca „”. Patru mesaje mai lungi
+4. **Limita de 130 de caractere la SMS.** Documentata ca „Your 130 chars message”. Patru mesaje mai lungi
    (pana la 318) au fost acceptate pe 28.06; nu stim daca au fost taiate sau impartite. De atunci cel mai
    lung a avut 108.
 5. **Comerciantii care au lipit adresa de pe apex.** `bricosmart` si `itp-blk` au secret de webhook; nu
@@ -242,14 +242,37 @@ scriere; drumul complet il va dovedi prima trecere a cronului.
 
 ---
 
+## Verificat pe productie, dupa desfasurare (17.09.2026)
+
+Primele doua treceri programate ale cronului, cu tokenurile REALE ale celor 3 magazine:
+
+| Trecerea | Ce a scris in jurnalul Vercel | Ce e in baza |
+| --- | --- | --- |
+| 10:46 UTC | (prima trecere) | **4 raspunsuri reale** in `notice_inbox`, la `suporti-numar`, toate cu `provider_id` |
+| 11:46 UTC | `magazine_atinse: 3, citite: 30, scrise: 0, straini: 26, picate: 1, forma_necunoscuta: 0` | tot 4: **recitirea n-a dublat nimic** |
+
+Ce dovedesc, pe rand:
+
+* **forma lui `/sms-in` e cea pe care o citim**: 30 de mesaje, `forma_necunoscuta: 0`. Era cea mai mare
+  necunoscuta a trecerii, fiindca nu e documentata nicaieri;
+* **indexul reparat merge prin PostgREST-ul real**: randurile au intrat la 10:46 si nu s-au dublat la 11:46.
+  Proba cu scriere pe productie fusese refuzata; asta o inlocuieste, pe date adevarate;
+* **filtrul pe numerele carora le-am scris chiar era necesar**: 26 din 30 de mesaje veneau de la numere
+  carora magazinul nu le trimisese niciodata nimic prin notice.ro. Fara filtru, inbox-ul comerciantului
+  s-ar fi umplut cu mesaje care nu-l privesc;
+* **un magazin picat nu opreste restul**: `itp-blk` raspunde `Token API invalid sau expirat`, scris in
+  `error_logs` ca `warning`, iar celelalte doua au fost citite. Tokenul trebuie regenerat in contul notice.ro.
+
+---
+
 ## Nota
 
-**9 din 10.**
+**9,5 din 10** (era 9 la commit; urcata dupa verificarea de pe productie de mai sus).
 
 Trimiterea e dovedita de trafic real (402 SMS-uri reusite), iar tot ce trebuia sa vina inapoi e acum
 scris, probat si prins de mutanti: raspunsurile, oprirea, rezultatul apelurilor, adresa.
 
 ⚠ **De ce nu mai mult**: drumul intors n-a rulat inca niciodata pe date reale, iar doua dintre formele pe
 care le citeste nu sunt documentate de nimeni. La BT iPay aceeasi situatie a primit 9. Nota urca la 9,5
-cand prima trecere a cronului pe productie raporteaza `magazine_atinse: 3, picate: 0, forma_necunoscuta: 0`,
-si la 10 cand un raspuns real ajunge in `notice_inbox` sau cand se stie daca webhook-ul lor de SMS exista.
+cand prima trecere a cronului pe productie raporteaza `magazine_atinse: 3, forma_necunoscuta: 0` (FACUT, vezi mai
+sus; `picate: 1` e tokenul expirat al unui magazin, nu un defect), si la 10 cand un raspuns real ajunge in `notice_inbox` sau cand se stie daca webhook-ul lor de SMS exista.

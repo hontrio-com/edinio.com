@@ -168,7 +168,7 @@ function pickStr(o: Record<string, unknown>, keys: string[]): string | undefined
 // Best-effort provider message id from a send response (exact field is undocumented).
 //
 // ⚠ `preferate` se cauta INAINTEA numelor obisnuite. La `POST /audio` documentatia spune ca raspunsul
-// intoarce `audio_id`, iar callback-ul apelului poarta tot `audio_id` („”).
+// intoarce `audio_id`, iar callback-ul apelului poarta tot `audio_id` („the ID from send response”).
 // Lista de mai jos nu-l continea, deci randul unui apel de voce ramanea fara id si niciun callback nu-l
 // mai putea gasi. Iar daca raspunsul are SI un `id` (al randului lor), acela nu e cel din callback.
 function extractId(body: unknown, preferate: string[] = []): string | null {
@@ -405,7 +405,7 @@ export const getNoticeWaInbox = (token: string) => getNoticeWaMessages(token, "i
 export const getNoticeWaOutbox = (token: string) => getNoticeWaMessages(token, "outbox");
 
 // ── Voice / audio ──────────────────────────────────────────────────────────────
-/** Lungimea maxima a textului unui apel, dupa documentatia lui `POST /audio`: „”. */
+/** Lungimea maxima a textului unui apel, dupa documentatia lui `POST /audio`: „Max 900 characters”. */
 export const NOTICE_AUDIO_MAX = 900;
 
 // POST /audio — formdata number(07X) + text + type + callback_url.
@@ -419,7 +419,7 @@ export async function sendNoticeAudio(
   if (!text) return { success: false, error: "Text gol." };
   /*
    * ⚠ Se refuza AICI, cu un motiv pe care comerciantul il intelege, nu se taie. Un apel de confirmare
-   * taiat la jumatate poate pierde exact partea cu „”.
+   * taiat la jumatate poate pierde exact partea cu „apasa 9 ca sa anulezi”.
    */
   if (text.length > NOTICE_AUDIO_MAX) {
     return { success: false, error: `Textul apelului are ${text.length} caractere; notice.ro accepta cel mult ${NOTICE_AUDIO_MAX}.` };
@@ -438,7 +438,7 @@ export async function sendNoticeAudio(
 }
 
 // ── Inbound SMS (GET /sms-in) ──────────────────────────────────────────────────────
-// ⚠ Nu e o rezerva „”, cum scria aici: e SINGURUL drum catre raspunsuri pe care
+// ⚠ Nu e o rezerva „pentru cand nu e webhook”, cum scria aici: e SINGURUL drum catre raspunsuri pe care
 // documentatia API il garanteaza. Il cheama cronul `notice-raspunsuri`, din ora in ora.
 // ⚠ Forma raspunsului nu e documentata; cine citeste lista trebuie sa observe cand nu recunoaste nimic.
 export async function getNoticeInboundSms(token: string): Promise<NoticeMessage[] | { error: string }> {

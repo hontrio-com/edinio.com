@@ -227,7 +227,7 @@ export async function asazaRaspunsurile(
      * ═══ ⚠⚠ OPRIREA SE JUDECA INTAI, SI SE JUDECA CHIAR DACA MESAJUL N-ARE ID ═══
      *
      * Scrierea in `sms_optout` e cheiata pe (magazin, numar), deci o repetare nu strica nimic. Un
-     * „” pierdut fiindca furnizorul a uitat sa puna un id ar fi, in schimb, o reclama trimisa
+     * „STOP” pierdut fiindca furnizorul a uitat sa puna un id ar fi, in schimb, o reclama trimisa
      * cuiva care a cerut sa nu mai primeasca. Dintre cele doua greseli, doar una se poate repara.
      *
      * ⚠ `tineMinteDezabonarea` aduce numarul la forma COMUNA (`7XXXXXXXX`), cea pe care o cauta si

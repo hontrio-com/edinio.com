@@ -32,8 +32,8 @@ const ok = () => NextResponse.json({ received: true });
 
 /*
  * ⚠ Regula starilor sta in `smso-urma`, fiindca o imparte cu cronul de reconciliere, iar regula
- * „” sta in `sms-dezabonare`, fiindca o imparte cu notice.ro. Omul scrie
- * acelasi „” indiferent prin ce furnizor i-a venit mesajul.
+ * „a cerut omul sa fie oprit?” sta in `sms-dezabonare`, fiindca o imparte cu notice.ro. Omul scrie
+ * acelasi „STOP” indiferent prin ce furnizor i-a venit mesajul.
  */
 
 export async function POST(request: NextRequest) {

@@ -264,7 +264,7 @@ export async function sendNoticeAbandonedSms(
    *
    * ⚠ SE INTOARCE `handled: true` LA UN OM OPRIT, nu `false`. Cu `false`, apelantul ar fi socotit
    * ca notice.ro n-a vrut si ar fi incercat SMSO, adica exact mesajul pe care omul l-a refuzat, doar
-   * pe alt drum. „” trebuie sa opreasca lantul, nu sa-l mute mai departe.
+   * pe alt drum. „Nu-l suna” trebuie sa opreasca lantul, nu sa-l mute mai departe.
    *
    * ⚠ Si o citire picata opreste tot. Vezi `esteDezabonat`.
    */

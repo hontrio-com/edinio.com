@@ -25,7 +25,7 @@ const CANONICA = "https://www.edinio.com";
 /**
  * Radacina absoluta a platformei, potrivita pentru a fi data unui server strain.
  *
- * Fara „” la coada, mereu `https`, mereu pe gazda canonica.
+ * Fara „/” la coada, mereu `https`, mereu pe gazda canonica.
  */
 export function adresaPublica(): string {
   const brut = (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "").trim();

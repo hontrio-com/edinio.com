@@ -191,7 +191,27 @@ GA4 (`55302367`): tabelul `ga4_comenzi_raportate` nu intrase in `database.types.
 
 ## Verificat pe productie
 
-(se completeaza dupa desfasurare)
+* Migratia aplicata inainte de push. Tokenul scris prin vedere, intr-o tranzactie anulata: in tabelul privat
+  `enc.v1.…`, prin vedere in clar; `pixel_id` in clar. Baseline regenerat din productie, md5 identic cu cel
+  calculat in baza.
+* `a86c234a`, desfasurarea `dpl_HJN2zHNHXx1SNZB71v9nGEmDS42u`, live la 16:01 UTC. **CI: toate 4 joburile
+  verzi**, inclusiv „tipurile DB nu raman in urma schemei” (rosu de la `55302367`) si „schema din Git =
+  productie”. Niciun avertisment sau eroare in jurnalul desfasurarii.
+* 16:03 UTC, feedurile citite de pe domeniile magazinelor:
+  * `ralls.ro`: 1332 de articole, **113 grupuri de variante, toate cu acelasi titlu**, fiecare ID
+    `<grup>-<combinatie>`, fiecare link cu `?varianta=` si diferit in grup;
+  * `esafe.ro`: 37 025 de articole, 2455 de grupuri, aceleasi verificari fara nicio abatere; **0 imagini
+    WebP ramase**, 7536 trimise prin `/api/img?…&f=jpg`;
+  * `yvelle.ro`: toate cele 14 imagini prin JPEG.
+* JPEG-ul: `302` catre `…/_optim/w1024q85/….webp.jpg`, `image/jpeg`, semnatura JPEG, 701 x 861 (sursa mai
+  mica decat 1024, nemarita, peste pragul Meta de 500).
+* Capatul de evenimente: `204` pentru un magazin fara Conversions API, pe `www.edinio.com` si pe domeniul
+  propriu (`suporti-numar.ro`); `400` pentru un `Purchase` trimis din browser.
+* Pagina magazinului: HTML-ul poarta `{"pixelId":"…","magazin":"suporti-numar","capi":false}`; codul livrat
+  contine `fbq('init','…',window.__edinioAM||{})`, `window.__edinioMeta=…` si releul cu
+  `navigator.sendBeacon("/api/meta/eveniment", …)`.
+* ⚠ Nevazut inca: o achizitie reala trimisa de pe server (niciun comerciant n-are token) si o comanda
+  plasata dupa desfasurare (potrivirea avansata si ID-urile exacte pe pagina de confirmare).
 
 ## Ce tine de comercianti
 

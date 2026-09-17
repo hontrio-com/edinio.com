@@ -31,6 +31,8 @@ let laTrimitere: Record<string, { cod: number; reason?: string }> = {};
 let laCitire: Record<string, number> = {};
 let abonariExistente: Record<string, Rand[]> = {};
 let abonareRefuzata: Record<string, string> = {};
+/** Tarile fiecarei surse de date la Google, dupa nume. Lipsa inseamna sursa necunoscuta (404). */
+let surse: Record<string, string[] | undefined> = {};
 /** Se cheama la fiecare trimitere catre Google: aici „se razgandeste” comerciantul in timpul rularii. */
 let inTimpulTrimiterii: (() => void) | null = null;
 const laGoogle: { metoda: string; cale: string; corp: unknown }[] = [];
@@ -205,6 +207,16 @@ function googleFals(intrare: unknown, optiuni?: RequestInit): Response | null {
     if (abonareRefuzata[cont]) return raspuns(400, { error: { message: abonareRefuzata[cont], details: [{ metadata: { REASON: "invalid_argument" } }] } });
     return raspuns(200, { ...(corp as Rand), name: `accounts/${cont}/notificationsubscriptions/nou` });
   }
+  if (cale.includes("/dataSources/")) {
+    const nume = cale.replace("/datasources/v1/", "");
+    if (!(nume in surse)) return raspuns(404, { error: { message: "sursa necunoscuta" } });
+    if (metoda === "PATCH") {
+      if (u.searchParams.get("updateMask") !== "primaryProductDataSource.countries") return raspuns(400, { error: { message: "masca gresita" } });
+      surse[nume] = (corp as { primaryProductDataSource: { countries: string[] } }).primaryProductDataSource.countries;
+    }
+    const tari = surse[nume];
+    return raspuns(200, { name: nume, primaryProductDataSource: { feedLabel: "RO", contentLanguage: "ro", ...(tari ? { countries: tari } : {}) } });
+  }
   if (cale.endsWith("/programs")) {
     return raspuns(200, { programs: [
       { name: `accounts/${cont}/programs/free-listings`, state: "ELIGIBLE" },
@@ -239,7 +251,7 @@ after(async () => {
 
 beforeEach(() => {
   setari = []; gmc = []; coada = []; produse = []; jurnal = [];
-  laTrimitere = {}; laCitire = {}; abonariExistente = {}; abonareRefuzata = {};
+  laTrimitere = {}; laCitire = {}; abonariExistente = {}; abonareRefuzata = {}; surse = {};
   inTimpulTrimiterii = null;
   laGoogle.length = 0;
   delete process.env.GMC_WEBHOOK_SECRET;
@@ -256,6 +268,7 @@ function magazin(business_id: string, extra: Rand = {}): Rand {
       content_language: "ro", feed_label: "RO", auto_sync: true,
       notification_subscription_name: "accounts/111/notificationsubscriptions/1",
       programe_citite_la: new Date(ACUM).toISOString(),
+      sursa_tari_verificate_la: new Date(ACUM).toISOString(),
       ...extra,
     },
   };
@@ -515,6 +528,94 @@ describe("cronul: abonarile si programele magazinelor deja conectate", () => {
 
     assert.equal(laGoogle.filter((g) => g.cale.endsWith("/programs")).length, 0);
     assert.equal(r.programe, 0);
+  });
+});
+
+describe("cronul: tara pe sursa de date (cauza ofertelor fara destinatie)", () => {
+  const neverificat = (id: string, cont: string, extra: Rand = {}) => {
+    const m = magazin(id, { account_id: cont, data_source_name: `accounts/${cont}/dataSources/9`, ...extra });
+    delete (m.google_merchant_config as Rand).sursa_tari_verificate_la;
+    return m;
+  };
+  const oferta = (business_id: string, product_id: string, offer_id: string, status = "pending"): Rand =>
+    ({ id: `${business_id}-${offer_id}`, business_id, product_id, offer_id, status, last_synced_at: minuteInUrma(10), last_status_at: minuteInUrma(5) });
+
+  test("⚠ sursa fara tara primeste tara magazinului, dovada ramane in configurare, iar produsele pleaca din nou", async () => {
+    setari = [neverificat("b1", "601")];
+    surse = { "accounts/601/dataSources/9": undefined };
+    gmc = [oferta("b1", "p1", "p1"), oferta("b1", "p2", "p2-a"), oferta("b1", "p2", "p2-b"), oferta("b1", "p3", "p3", "exclus")];
+
+    const r = await (await GET(cerereCron())).json() as { surseReparate: number };
+
+    const patch = laGoogle.find((g) => g.metoda === "PATCH" && g.cale.includes("/dataSources/"));
+    assert.ok(patch, "sursa n-a fost reparata");
+    assert.deepEqual(patch.corp, { name: "accounts/601/dataSources/9", primaryProductDataSource: { countries: ["RO"] } });
+    assert.deepEqual(surse["accounts/601/dataSources/9"], ["RO"]);
+    assert.deepEqual(cfg("b1").sursa_tari, ["RO"]);
+    assert.deepEqual(cfg("b1").sursa_tari_inainte, [], "dovada cauzei nu s-a scris");
+    assert.ok(cfg("b1").sursa_tari_verificate_la);
+    const puse = coada.filter((q) => q.business_id === "b1");
+    assert.deepEqual(puse.map((q) => q.product_id).sort(), ["p1", "p2"], "produsele magazinului nu s-au retrimis (sau cel retras a intrat)");
+    assert.ok(puse.every((q) => q.prioritate === 9 && q.offer_id === q.product_id && q.op === "upsert"));
+    assert.equal(r.surseReparate, 1);
+  });
+
+  test("tara pusa de comerciant in Merchant Center NU se sterge: RO se adauga langa ea", async () => {
+    setari = [neverificat("b1", "602")];
+    surse = { "accounts/602/dataSources/9": ["BG"] };
+
+    await GET(cerereCron());
+
+    assert.deepEqual(surse["accounts/602/dataSources/9"], ["BG", "RO"]);
+    assert.deepEqual(cfg("b1").sursa_tari_inainte, ["BG"]);
+  });
+
+  test("sursa care are deja tara: nimic scris la Google, nimic in coada", async () => {
+    setari = [neverificat("b1", "603", { country: "ro" })];
+    surse = { "accounts/603/dataSources/9": ["RO"] };
+    gmc = [oferta("b1", "p1", "p1")];
+
+    const r = await (await GET(cerereCron())).json() as { surseReparate: number };
+
+    assert.equal(laGoogle.filter((g) => g.metoda === "PATCH").length, 0);
+    assert.equal(coada.length, 0);
+    assert.deepEqual(cfg("b1").sursa_tari, ["RO"]);
+    assert.equal(cfg("b1").sursa_tari_inainte, undefined);
+    assert.equal(r.surseReparate, 0);
+  });
+
+  test("cate 3 pe rulare, iar o sursa verificata azi nu se intreaba din nou", async () => {
+    setari = [
+      neverificat("b1", "611"), neverificat("b2", "612"), neverificat("b3", "613"), neverificat("b4", "614"),
+      magazin("b5", { account_id: "615", data_source_name: "accounts/615/dataSources/9", sursa_tari_verificate_la: minuteInUrma(60) }),
+    ];
+    surse = Object.fromEntries(["611", "612", "613", "614", "615"].map((c) => [`accounts/${c}/dataSources/9`, undefined]));
+
+    await GET(cerereCron());
+
+    const citite = laGoogle.filter((g) => g.metoda === "GET" && g.cale.includes("/dataSources/"));
+    assert.equal(citite.length, 3);
+    assert.ok(!citite.some((g) => g.cale.includes("615")), "sursa verificata acum o ora a fost intrebata din nou");
+  });
+
+  test("o sursa verificata in ultimele 24 de ore nu se intreaba, chiar cu loc liber in rulare", async () => {
+    /* ⚠ Singura, ca pragul sa nu fie ascuns de plafonul de 3 (aceeasi capcana ca la programe). */
+    setari = [magazin("b1", { account_id: "631", data_source_name: "accounts/631/dataSources/9", sursa_tari_verificate_la: minuteInUrma(23 * 60) })];
+    surse = { "accounts/631/dataSources/9": undefined };
+
+    await GET(cerereCron());
+
+    assert.equal(laGoogle.filter((g) => g.cale.includes("/dataSources/")).length, 0);
+  });
+
+  test("o sursa pe care Google n-o gaseste lasa motivul in configurare, fara nimic in coada", async () => {
+    setari = [neverificat("b1", "621")];
+    gmc = [oferta("b1", "p1", "p1")];
+
+    await GET(cerereCron());
+
+    assert.match(String(cfg("b1").sursa_tari_eroare), /sursa necunoscuta/);
+    assert.equal(coada.length, 0);
   });
 });
 

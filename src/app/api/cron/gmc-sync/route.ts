@@ -7,13 +7,14 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { obtineTokenul, type EroareToken } from "@/lib/google-merchant/oauth";
 import { asiguraAbonarea, secretulWebhookului } from "@/lib/google-merchant/abonare";
+import { asiguraTarileSursei } from "@/lib/google-merchant/tari-sursa";
 import {
   asteptareaUrmatoare, ASTEPTARE_DUPA_TOKEN_MS, EroareGoogle, caderePermanenta, limitaZilnicaAtinsa, dupaResetareaZilnica,
 } from "@/lib/google-merchant/asteptare";
 import { insertProductInput, deleteProductInput, getProduct, mapProductStatus, listPrograms } from "@/lib/google-merchant/client";
 import { expandProductOffers, type MappableBusiness, type MappableProduct } from "@/lib/google-merchant/mapping";
 import { MOTIV_PRET_CARE_MINTE, pretulDinCatalogMinte } from "@/lib/customization/pretul-din-catalog-minte";
-import { DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
+import { DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
 
 type Admin = SupabaseClient<Database>;
 const QUEUE_BATCH = 100;
@@ -90,6 +91,8 @@ export async function GET(req: NextRequest) {
   /* Abonarile la notificari care lipsesc (0 din 7 la 17.09.2026). Vezi `asiguraAbonarileLipsa`. */
   const abonari = await asiguraAbonarileLipsa(admin);
   const programeCitite = await citesteProgrameleContului(admin);
+  /* ⚠ Cauza celor 276 de oferte fara destinatie: sursa de date fara tara. Vezi `asiguraTarileSurselor`. */
+  const surseReparate = await asiguraTarileSurselor(admin);
 
   // ── 1) Process the sync queue, grouped by business ─────────────────────────────
   /*
@@ -372,8 +375,8 @@ export async function GET(req: NextRequest) {
     await admin.from("gmc_products").update({ status, issues: issues as never, destinations: destinations as never, last_status_at: now, updated_at: now }).eq("id", row.id);
   }
 
-  console.log(`[gmc-sync] synced=${synced} deleted=${deleted} failed=${failed} status=${statusChecked} improspatate=${improspatate} expirate=${expirate} amanate=${amanate} abonari=${abonari} programe=${programeCitite}`);
-  return NextResponse.json({ ok: true, synced, deleted, failed, statusChecked, improspatate, expirate, amanate, abonari, programe: programeCitite });
+  console.log(`[gmc-sync] synced=${synced} deleted=${deleted} failed=${failed} status=${statusChecked} improspatate=${improspatate} expirate=${expirate} amanate=${amanate} abonari=${abonari} programe=${programeCitite} surse_reparate=${surseReparate}`);
+  return NextResponse.json({ ok: true, synced, deleted, failed, statusChecked, improspatate, expirate, amanate, abonari, programe: programeCitite, surseReparate });
 }
 
 /**
@@ -604,4 +607,83 @@ async function citesteProgrameleContului(admin: Admin): Promise<number> {
     await patchConfig(admin, rand.business_id, { programe, programe_citite_la: acum, programe_eroare: undefined });
   }
   return deCitit.length;
+}
+
+/** Cate surse de date se verifica intr-o rulare, si la cate ore. */
+const SURSE_PE_RULARE = 3;
+const ORE_INTRE_VERIFICARI_SURSA = 24;
+
+/**
+ * Verifica tara pe sursa de date a fiecarui magazin conectat si o adauga unde lipseste.
+ *
+ * ═══ ⚠⚠ DE CE (17.09.2026) ═══
+ *
+ * 276 de oferte la 6 magazine n-aveau nicio destinatie: sursa de date se crease fara `countries`, iar
+ * „the data source feedLabel has no impact on targeted country”. Crearea e reparata (`createApiDataSource`),
+ * dar sursele DEJA create raman asa pana nu le repara cineva, iar comerciantii nu se reconecteaza singuri.
+ *
+ * ⚠ La o reparatie, produsele magazinului se pun inapoi in coada (dupa editari, `PRIORITATE_IMPROSPATARE`):
+ * nu se stie daca Google reevalueaza singur ofertele deja primite, iar o retrimitere costa cateva apeluri.
+ *
+ * ⚠ `sursa_tari_inainte` pastreaza ce gasise Google pe sursa: e dovada cauzei, citita din baza.
+ * O data la `ORE_INTRE_VERIFICARI_SURSA` ore, fiindca tara se poate schimba si din Merchant Center.
+ */
+async function asiguraTarileSurselor(admin: Admin): Promise<number> {
+  const { data, error } = await admin
+    .from("store_settings")
+    .select("business_id, google_merchant_config")
+    .eq("google_merchant_config->>connected", "true")
+    .limit(200);
+  if (error) {
+    await logError({ action: "gmc-sync.tari", message: `magazinele nu s-au putut citi: ${error.message}`, severity: "warning" });
+    return 0;
+  }
+  const prag = Date.now() - ORE_INTRE_VERIFICARI_SURSA * 3_600_000;
+  const deVerificat = ((data ?? []) as { business_id: string; google_merchant_config: GoogleMerchantConfig | null }[])
+    .filter((r) => r.google_merchant_config?.data_source_name && r.google_merchant_config.refresh_token)
+    .filter((r) => !r.google_merchant_config?.sursa_tari_verificate_la || Date.parse(r.google_merchant_config.sursa_tari_verificate_la) <= prag)
+    .sort((a, b) => String(a.google_merchant_config?.sursa_tari_verificate_la ?? "").localeCompare(String(b.google_merchant_config?.sursa_tari_verificate_la ?? "")))
+    .slice(0, SURSE_PE_RULARE);
+
+  let reparate = 0;
+  for (const rand of deVerificat) {
+    const cfg = rand.google_merchant_config!;
+    const acum = new Date().toISOString();
+    const t = await obtineTokenul(cfg.refresh_token!);
+    if ("eroare" in t) {
+      await patchConfig(admin, rand.business_id, { sursa_tari_verificate_la: acum, sursa_tari_eroare: `Tokenul Google nu a venit (${t.eroare}).` });
+      continue;
+    }
+    const r = await asiguraTarileSursei(t.token, cfg.data_source_name!, cfg.country || DEFAULT_COUNTRY);
+    if (r.stare === "eroare") {
+      await patchConfig(admin, rand.business_id, { sursa_tari_verificate_la: acum, sursa_tari_eroare: r.mesaj.slice(0, 300) });
+      await logError({
+        action: "gmc-sync.tari", severity: "warning", businessId: rand.business_id,
+        message: `tara sursei de date nu s-a putut verifica: ${r.mesaj}`, details: { reason: r.reason },
+      });
+      continue;
+    }
+    if (r.stare === "corecta") {
+      await patchConfig(admin, rand.business_id, { sursa_tari: r.tari, sursa_tari_verificate_la: acum, sursa_tari_eroare: undefined });
+      continue;
+    }
+    reparate++;
+    await patchConfig(admin, rand.business_id, { sursa_tari: r.tari, sursa_tari_inainte: r.inainte, sursa_tari_verificate_la: acum, sursa_tari_eroare: undefined });
+    const { data: oferte } = await admin.from("gmc_products")
+      .select("product_id").eq("business_id", rand.business_id)
+      .or(`status.is.null,status.neq.${STARE_EXCLUS}`)
+      .not("product_id", "is", null);
+    const randuri = new Map<string, { business_id: string; product_id: string; offer_id: string; op: string; prioritate: number }>();
+    for (const o of oferte ?? []) {
+      if (!o.product_id) continue;
+      randuri.set(o.product_id, { business_id: rand.business_id, product_id: o.product_id, offer_id: o.product_id, op: "upsert", prioritate: PRIORITATE_IMPROSPATARE });
+    }
+    if (randuri.size) {
+      const { error: eCoada } = await admin.from(COADA).upsert([...randuri.values()], { onConflict: "business_id,offer_id,op", ignoreDuplicates: true });
+      if (eCoada) {
+        await logError({ action: "gmc-sync.tari", severity: "warning", businessId: rand.business_id, message: `produsele nu s-au pus inapoi in coada: ${eCoada.message}` });
+      }
+    }
+  }
+  return reparate;
 }

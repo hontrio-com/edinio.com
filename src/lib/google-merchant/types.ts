@@ -27,6 +27,14 @@ export interface GoogleMerchantConfig {
   programe?: Record<string, string>;
   programe_citite_la?: string;
   programe_eroare?: string;
+  /**
+   * Tarile sursei de date (`primaryProductDataSource.countries`), verificate si reparate de cron. `inainte`
+   * se scrie doar la o reparatie: e urma a ceea ce gasise Google pe sursa. Vezi `tari-sursa.ts`.
+   */
+  sursa_tari?: string[];
+  sursa_tari_inainte?: string[];
+  sursa_tari_verificate_la?: string;
+  sursa_tari_eroare?: string;
 }
 
 // Public availability switch (kill-switch). Google OAuth verification approved

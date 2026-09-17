@@ -8,6 +8,7 @@ import { buildAuthUrl, signState, googleMerchantConfigured, obtineTokenul, type 
 import { listAccounts, registerGcp, listDataSources, createApiDataSource, deleteNotificationSubscription, listAccountIssues, listPrograms, enableProgram } from "@/lib/google-merchant/client";
 import type { ProblemaStocata } from "@/lib/google-merchant/probleme";
 import { asiguraAbonarea } from "@/lib/google-merchant/abonare";
+import { asiguraTarileSursei } from "@/lib/google-merchant/tari-sursa";
 import {
   DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig,
 } from "@/lib/google-merchant/types";
@@ -179,10 +180,10 @@ export async function getMerchantStatus(businessId: string): Promise<MerchantSta
    * ═══ ⚠⚠ „IN ASTEPTARE” CARE NU ASTEAPTA NIMIC (masurat 17.09.2026) ═══
    *
    * 276 de produse din 6 magazine stateau „In asteptare” de pana la 7 zile. Google le verificase (aveau
-   * `last_status_at`), dar le intorsese cu ZERO destinatii si zero probleme: contul n-avea pornit niciun
-   * program (listari gratuite, reclame Shopping), deci produsele n-aveau unde sa apara. Nu se aproba
-   * nimic, si nici nu se va aproba pana nu porneste comerciantul programul. Panoul le numara separat si
-   * spune de ce. Vezi `getMerchantPrograms`.
+   * `last_status_at`), dar le intorsese cu ZERO destinatii si zero probleme: n-aveau nicio tara in care sa
+   * apara. Cauza gasita atunci: sursa de date fara `countries` (reparata de cron, vezi `tari-sursa.ts`);
+   * programele erau pornite. Un program oprit da acelasi simptom, deci panoul le numara separat si arata
+   * si programele.
    */
   const [{ count: total }, { count: synced }, { count: activeCnt }, { count: pendingCnt }, { count: disapprovedCnt }, { count: queued }, { count: expiratCnt }, { count: laExpirareCnt }, { count: faraDestinatieCnt }] = await Promise.all([
     supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("is_active", true),
@@ -342,7 +343,7 @@ export async function selectMerchantAccount(
     if (existing) dataSourceName = existing.name;
   }
   if (!dataSourceName) {
-    const created = await createApiDataSource(token, accountId, "Edinio", feedLabel, lang);
+    const created = await createApiDataSource(token, accountId, "Edinio", feedLabel, lang, config.country || DEFAULT_COUNTRY);
     if ("error" in created) {
       logError({ action: "gmc.createDataSource", message: created.error, details: { businessId, accountId }, userId: user.id });
       // Fresh GCP registrations take ~5 minutes to propagate on Google's side.
@@ -373,6 +374,11 @@ export async function selectMerchantAccount(
   }
   const abonare = await asiguraAbonarea(token, accountId);
   const acum = new Date().toISOString();
+  /* ⚠ Tara sursei de date, si pentru o sursa refolosita: fara ea produsele n-apar nicaieri. Vezi `tari-sursa.ts`. */
+  const tari = await asiguraTarileSursei(token, dataSourceName, config.country || DEFAULT_COUNTRY);
+  if (tari.stare === "eroare") {
+    logError({ action: "gmc.tariSursa", message: tari.mesaj, details: { businessId, accountId, reason: tari.reason }, userId: user.id, severity: "warning" });
+  }
   if (abonare.stare === "eroare") {
     logError({ action: "gmc.abonare", message: abonare.mesaj, details: { businessId, accountId, reason: abonare.reason }, userId: user.id, severity: "warning" });
   }
@@ -386,6 +392,10 @@ export async function selectMerchantAccount(
     notification_subscription_name: abonare.stare === "activa" ? abonare.name : undefined,
     abonare_incercata_la: abonare.stare === "fara-secret" ? undefined : acum,
     abonare_eroare: abonare.stare === "eroare" ? abonare.mesaj.slice(0, 300) : undefined,
+    sursa_tari: tari.stare === "eroare" ? config.sursa_tari : tari.tari,
+    sursa_tari_inainte: tari.stare === "reparata" ? tari.inainte : config.sursa_tari_inainte,
+    sursa_tari_verificate_la: acum,
+    sursa_tari_eroare: tari.stare === "eroare" ? tari.mesaj.slice(0, 300) : undefined,
     feed_label: feedLabel,
     content_language: lang,
     country: config.country || DEFAULT_COUNTRY,
@@ -425,11 +435,14 @@ export async function setMerchantSettings(
   if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
 
   const config = await loadConfig(businessId);
+  const tara = settings.country?.trim() || config.country || DEFAULT_COUNTRY;
   const ok = await saveConfig(supabase, businessId, {
     ...config,
+    /* ⚠ Tara noua trebuie sa ajunga si pe sursa de date: golind verificarea, cronul o adauga la urmatoarea rulare. */
+    ...(tara !== (config.country || DEFAULT_COUNTRY) ? { sursa_tari_verificate_la: undefined } : {}),
     feed_label: settings.feed_label?.trim() || config.feed_label || DEFAULT_FEED_LABEL,
     content_language: settings.content_language?.trim() || config.content_language || DEFAULT_CONTENT_LANGUAGE,
-    country: settings.country?.trim() || config.country || DEFAULT_COUNTRY,
+    country: tara,
     brand_default: settings.brand_default?.trim() || undefined,
     condition_default: settings.condition_default || config.condition_default || "new",
     auto_sync: settings.auto_sync ?? config.auto_sync ?? true,

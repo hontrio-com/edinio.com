@@ -25,7 +25,8 @@ Citita din productie inainte de a deschide codul:
 * **7 magazine conectate**: `caian-textile`, `itp-blk`, `mokka`, `okxi`, `suporti-numar`, `teoshop`,
   `tonel-beauty`; **315 oferte** in `gmc_products`;
 * ⚠⚠ **la 6 din 7 magazine, TOATE ofertele (276) stateau „In asteptare”** cu zero destinatii si zero
-  probleme, desi Google le verificase (aveau `last_status_at`), unele de 7 zile;
+  probleme, desi Google le verificase (aveau `last_status_at`), unele de 7 zile. Cauza: sursa de date fara
+  tara (punctul 2), NU programele;
 * `mokka`: 38 de oferte aprobate, cu **228 de probleme stocate** = 38 × 6 suprafete. 31 de produse aveau
   „Missing unit pricing measure”, iar cele 7 mapate pe „Fragrances” aveau `google_category_unrecognized`;
 * **0 din 7 magazine aveau abonare la notificari**;
@@ -52,6 +53,8 @@ Citita din productie inainte de a deschide codul:
 | `productTypes` | lipsea | categoria magazinului |
 | `googleProductCategory` | cale de text, 5 din 77 inexistente | ID oficial |
 | `link` pe varianta | adresa produsului | adresa care preselecteaza varianta |
+| `primaryProductDataSource.countries` | **lipsea**: produsele n-aveau nicio tara | tara magazinului, si pe sursele deja create |
+| `dataSources.get` / `patch` | nefolosite | folosite: verificarea si repararea tarii |
 
 ---
 
@@ -71,15 +74,31 @@ nimic. Motivul unei caderi se scrie in `abonare_eroare`, cu momentul in `abonare
 ⚠ Pentru magazinele deja conectate, **cronul `gmc-sync` face abonarea singur** (3 magazine pe rulare, o
 incercare cazuta se reia dupa 6 ore): comerciantii nu se reconecteaza ca sa ajunga reparatia la ei.
 
-### 2. ⚠⚠ „In asteptare” la nesfarsit: produse fara nicio destinatie
+### 2. ⚠⚠ „In asteptare” la nesfarsit: produse fara nicio tara in care sa apara
 
-Un produs fara `destinationStatuses` nu e in verificare: contul n-are pornit niciun program in care sa apara.
-Panoul il arata „In asteptare” si comerciantul astepta o aprobare care nu vine.
+Un produs fara `destinationStatuses` nu e in verificare: Google nu stie unde sa-l arate. Panoul il arata
+„In asteptare” si comerciantul astepta o aprobare care nu vine.
 
-Reparat: `getMerchantStatus` numara separat ofertele verificate cu `destinations = []`, iar panoul spune
-de ce. `getMerchantPrograms` citeste `programs.list` (listari gratuite, reclame Shopping) cu cerintele
-neindeplinite si linkurile lor; cand `free-listings` e `ELIGIBLE`, un buton il porneste
-(`programs.enable`). Reclamele Shopping NU se pornesc de aici: cer cont Google Ads si buget.
+⚠⚠ **CAUZA, si cum s-a gasit.** S-a banuit intai ca programele (listari gratuite, reclame Shopping) sunt
+oprite, si asta s-a scris in prima versiune a acestui document. Fotografia `programs.list` luata din
+productie a dezmintit-o: **`free-listings` era `ENABLED` la toate 7 conturile**. Cauza reala e scrisa in
+ghidul „Data sources”: *„Note that the data source feedLabel has no impact on targeted country.”* Tarile
+vin fie din `countries` pe sursa de date, fie din `shipping` pe fiecare produs. Sursa noastra se crea doar
+cu `feedLabel: "RO"`, iar produsele nu trimit `shipping`, deci n-aveau nicio tara.
+
+Reparat:
+* `createApiDataSource` creeaza sursa cu `countries: [tara magazinului]`;
+* `asiguraTarileSursei` (`tari-sursa.ts`) citeste sursa si ADAUGA tara unde lipseste, cu
+  `PATCH ?updateMask=primaryProductDataSource.countries` (o tara pusa de comerciant nu se sterge); o cheama
+  callback-ul OAuth, alegerea contului si **cronul, pentru magazinele deja conectate** (3 surse pe rulare,
+  reverificate la 24 de ore), care la o reparatie pune produsele magazinului inapoi in coada;
+* `sursa_tari_inainte` pastreaza in configurare ce gasise Google pe sursa: dovada cauzei, citita din baza;
+* panoul numara ofertele verificate cu `destinations = []` si spune ca n-au primit nicio tara;
+* `getMerchantPrograms` ramane: un program oprit da acelasi simptom. Cand `free-listings` e `ELIGIBLE`, un
+  buton il porneste (`programs.enable`). Reclamele Shopping NU se pornesc de aici: cer Google Ads si buget.
+
+⚠ `shipping` pe produs n-a fost ales: ar fi putut suprascrie tarifele de livrare din contul comerciantului,
+iar ghidul recomanda `countries` pe sursa pentru un magazin care vinde intr-o singura tara.
 
 ### 3. ⚠ 5 din 77 de categorii nu existau in taxonomia Google
 
@@ -199,15 +218,18 @@ Suita intreaga, `tsc`, poarta de lint (57 de erori, niciuna noua) si buildul: ve
   desfasurarile NOI: cronul a raportat `abonari=0` pana la redeploy (`dpl_DyUXDpGka7C4X8Amhny1o6v5s3xx`).
 * 13:53-13:55 UTC, dupa redeploy: **toate cele 7 magazine abonate**, in trei rulari (3 + 3 + 1), fara nicio
   eroare scrisa in `abonare_eroare`.
+* 14:06-14:08 UTC: fotografia programelor, la toate 7: `free-listings` **ENABLED**; `shopping-ads` ENABLED la
+  6, ELIGIBLE la `itp-blk`. Asta a dezmintit ipoteza „program oprit” si a dus la cauza reala (punctul 2).
+* 14:08-14:14 UTC: retrimiterea tuturor ofertelor (294 de produse, cu prioritatea retrimiterii de
+  intretinere): **314 oferte trimise, 0 ramase in eroare**. O singura cadere, reluata singura dupa asteptarea
+  de un minut: prima vedere pe productie a reincercarii cu asteptare.
 
 ## Ce ramane
 
-1. ⚠ **Programele se pornesc de comercianti.** 276 de oferte nu apar nicaieri pana nu e pornit un program.
-   Panoul le spune acum de ce si, unde Google permite, le da butonul.
-2. **`registerGcp` ramane apelat pe contul fiecarui comerciant.** Ghidul il descrie ca pas facut o data, pe
+1. **`registerGcp` ramane apelat pe contul fiecarui comerciant.** Ghidul il descrie ca pas facut o data, pe
    contul principal al dezvoltatorului. Dar la depanarea live din 02.07.2026, fara inregistrare pe contul
    comerciantului chiar si `accounts.list` raspundea „not registered”, deci pasul ramane. Neschimbat.
-3. **Nevazut pe trafic real**: `programs.enable` (il apasa comerciantul) si prima notificare ajunsa pe
+2. **Nevazut pe trafic real**: `programs.enable` (il apasa comerciantul) si prima notificare ajunsa pe
    webhook (vine doar cand Google schimba starea unei oferte).
-4. Pretul pe unitate cere completare de mana, produs cu produs.
-5. `itp-blk` n-are domeniu propriu: Google nu aproba produse pe `edinio.com/itp-blk`.
+3. Pretul pe unitate cere completare de mana, produs cu produs.
+4. `itp-blk` n-are domeniu propriu: Google nu aproba produse pe `edinio.com/itp-blk`.

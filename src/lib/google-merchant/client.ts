@@ -87,12 +87,34 @@ export function listDataSources(accessToken: string, accountId: string) {
   );
 }
 
+/**
+ * ⚠ `countries` e OBLIGATORIU pentru noi, desi e optional in API: fara el produsele n-au nicio tara in care
+ * sa apara, fiindca „the data source feedLabel has no impact on targeted country”. Vezi `tari-sursa.ts`.
+ */
 export function createApiDataSource(
-  accessToken: string, accountId: string, displayName: string, feedLabel: string, contentLanguage: string,
+  accessToken: string, accountId: string, displayName: string, feedLabel: string, contentLanguage: string, country: string,
 ) {
   return call<{ name: string }>(
     accessToken, "POST", `/${V.datasources}/accounts/${accountId}/dataSources`,
-    { displayName, primaryProductDataSource: { contentLanguage, feedLabel } },
+    { displayName, primaryProductDataSource: { contentLanguage, feedLabel, countries: [country.trim().toUpperCase()] } },
+  );
+}
+
+export interface MerchantDataSource {
+  name?: string;
+  displayName?: string;
+  primaryProductDataSource?: { feedLabel?: string; contentLanguage?: string; countries?: string[] };
+}
+
+export function getDataSource(accessToken: string, dataSourceName: string) {
+  return call<MerchantDataSource>(accessToken, "GET", `/${V.datasources}/${dataSourceName}`);
+}
+
+/** ⚠ Masca numeste DOAR `countries`: un camp din masca lipsa din corp s-ar sterge din sursa. */
+export function setDataSourceCountries(accessToken: string, dataSourceName: string, countries: string[]) {
+  return call<MerchantDataSource>(
+    accessToken, "PATCH", `/${V.datasources}/${dataSourceName}?updateMask=primaryProductDataSource.countries`,
+    { name: dataSourceName, primaryProductDataSource: { countries } },
   );
 }
 
@@ -237,11 +259,10 @@ export interface MerchantProgram {
 }
 
 /**
- * Programele contului si ce le lipseste.
+ * Programele contului si ce le lipseste (listari gratuite, reclame Shopping).
  *
- * ⚠ DE CE (17.09.2026): la 6 din 7 magazine, Google intorcea produsele cu ZERO destinatii, deci
- * panoul le arata „In asteptare” la nesfarsit. Un produs fara destinatie nu e in verificare: nu are
- * unde sa apara, fiindca programul nu e pornit sau are cerinte neindeplinite. Numai `programs` spune asta.
+ * ⚠ Un program oprit e UNA dintre cauzele unui produs fara destinatie, nu singura. La 17.09.2026, cele 276
+ * de oferte fara destinatie aveau programele PORNITE; cauza era sursa de date fara tara (`tari-sursa.ts`).
  */
 export function listPrograms(accessToken: string, accountId: string) {
   return call<{ programs?: MerchantProgram[] }>(accessToken, "GET", `/${V.accounts}/accounts/${accountId}/programs`);

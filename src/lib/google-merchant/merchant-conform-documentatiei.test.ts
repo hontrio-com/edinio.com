@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { CATEGORII_GOOGLE, CAI_VECHI_GRESITE, categorieGooglePentruTrimitere, caleaDeAfisat } from "./taxonomy";
 import { corpAbonare, motivulErorii } from "./client";
 import { asiguraAbonarea } from "./abonare";
+import { asiguraTarileSursei } from "./tari-sursa";
+import { createApiDataSource } from "./client";
 import { obtineTokenul } from "./oauth";
 import { masuraPretPeUnitate, bazaPretPeUnitate } from "./pret-pe-unitate";
 import { expandProductOffers, offerIdVarianta, type MappableBusiness, type MappableProduct } from "./mapping";
@@ -32,7 +34,8 @@ import { buildProductJsonLd } from "../storefront/product-jsonld";
  *  5. `offerId` pe varianta se taia la 50 de caractere, iar variante diferite ajungeau pe acelasi id.
  *  6. Panoul citea `documentationUri` in loc de `documentation` si arata fiecare problema de sase ori.
  *  7. O cadere a tokenului STERGEA coada magazinului; reincercarile mergeau minut de minut, fara asteptare.
- *  8. Produsele fara destinatie (program oprit) pareau „In asteptare” la nesfarsit, fara explicatie.
+ *  8. ⚠⚠ 276 de oferte fara NICIO destinatie: sursa de date se crea fara `countries`, iar feedLabel nu da tara.
+ *     (Programele erau pornite la toate: s-a verificat pe productie, dupa ce s-a banuit intai contrariul.)
  *  9. Webhook-ul servea un singur magazin pe cont si cerea reverificarea intregului catalog la o stergere.
  * 10. Limita ZILNICA de apeluri era tratata ca o pana de minute: 5 incercari arse, produsul „Eroare”.
  *
@@ -155,6 +158,61 @@ describe("abonarea la notificari, dupa ghidul „product status changes”", () 
       ? { status: 200, json: {} }
       : { status: 400, json: { error: { message: "Invalid target", details: [{ metadata: { REASON: "invalid_argument" } }] } } });
     assert.deepEqual(await asiguraAbonarea("tok", "555"), { stare: "eroare", mesaj: "Invalid target", reason: "invalid_argument" });
+  });
+});
+
+// ── 2b. Tara pe sursa de date ─────────────────────────────────────────────────────
+describe("tara in care apar produsele, dupa ghidul „Data sources”", () => {
+  test("⚠ sursa noua se creeaza CU tara magazinului", async () => {
+    const apeluri = fetchFals(() => ({ status: 200, json: { name: "accounts/555/dataSources/1" } }));
+    await createApiDataSource("tok", "555", "Edinio", "RO", "ro", " ro ");
+    assert.deepEqual(apeluri[0].body, { displayName: "Edinio", primaryProductDataSource: { contentLanguage: "ro", feedLabel: "RO", countries: ["RO"] } });
+  });
+
+  test("⚠ sursa fara tara se repara cu PATCH, cu masca DOAR pe `countries`", async () => {
+    const apeluri = fetchFals((a) => a.method === "GET"
+      ? { status: 200, json: { name: "accounts/555/dataSources/1", primaryProductDataSource: { feedLabel: "RO", contentLanguage: "ro" } } }
+      : { status: 200, json: { name: "accounts/555/dataSources/1", primaryProductDataSource: { countries: ["RO"] } } });
+    assert.deepEqual(await asiguraTarileSursei("tok", "accounts/555/dataSources/1", "ro"), { stare: "reparata", inainte: [], tari: ["RO"] });
+    const patch = apeluri.find((a) => a.method === "PATCH")!;
+    assert.match(patch.url, /\/datasources\/v1\/accounts\/555\/dataSources\/1\?updateMask=primaryProductDataSource\.countries$/);
+    assert.deepEqual(patch.body, { name: "accounts/555/dataSources/1", primaryProductDataSource: { countries: ["RO"] } });
+  });
+
+  test("tara existenta nu atinge nimic; o alta tara a comerciantului ramane", async () => {
+    let apeluri = fetchFals(() => ({ status: 200, json: { primaryProductDataSource: { countries: ["RO"] } } }));
+    assert.deepEqual(await asiguraTarileSursei("tok", "accounts/555/dataSources/1", "RO"), { stare: "corecta", tari: ["RO"] });
+    assert.equal(apeluri.length, 1);
+
+    apeluri = fetchFals((a) => a.method === "GET"
+      ? { status: 200, json: { primaryProductDataSource: { countries: ["BG"] } } }
+      : { status: 200, json: { primaryProductDataSource: { countries: ["BG", "RO"] } } });
+    assert.deepEqual(await asiguraTarileSursei("tok", "accounts/555/dataSources/1", "RO"), { stare: "reparata", inainte: ["BG"], tari: ["BG", "RO"] });
+    assert.deepEqual((apeluri.find((a) => a.method === "PATCH")!.body as { primaryProductDataSource: { countries: string[] } }).primaryProductDataSource.countries, ["BG", "RO"]);
+  });
+
+  test("o sursa care nu e primara sau o citire cazuta nu se „repara” orbeste", async () => {
+    let apeluri = fetchFals(() => ({ status: 200, json: { name: "x", supplementalProductDataSource: {} } }));
+    assert.equal((await asiguraTarileSursei("tok", "x", "RO")).stare, "eroare");
+    assert.equal(apeluri.some((a) => a.method === "PATCH"), false);
+
+    apeluri = fetchFals(() => ({ status: 403, json: { error: { message: "fara drept", details: [{ metadata: { REASON: "permission_denied" } }] } } }));
+    assert.deepEqual(await asiguraTarileSursei("tok", "x", "RO"), { stare: "eroare", mesaj: "fara drept", reason: "permission_denied" });
+    assert.equal(apeluri.length, 1);
+  });
+
+  test("conectarea (callback si alegerea contului) trece prin aceeasi reparatie", () => {
+    for (const cale of ["src/app/api/google-merchant/oauth/callback/route.ts", "src/lib/actions/google-merchant.actions.ts"]) {
+      const sursa = viu(cale);
+      assert.match(sursa, /asiguraTarileSursei\(/, `${cale}: sursa refolosita ramane fara tara`);
+      assert.match(sursa, /createApiDataSource\([^)]*,\s*(config\.country|config\.country \|\| DEFAULT_COUNTRY)\)/, `${cale}: sursa noua se creeaza fara tara`);
+    }
+  });
+
+  test("panoul nu mai da „programul oprit” drept singura cauza a produselor fara destinatie", () => {
+    const panou = viu("src/components/dashboard/GoogleMerchantClient.tsx");
+    assert.doesNotMatch(panou, /nu are pornit niciun program/);
+    assert.match(panou, /nicio țară în care să apară/);
   });
 });
 

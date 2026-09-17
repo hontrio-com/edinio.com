@@ -259,9 +259,10 @@ const NUME_PROGRAM: Record<string, string> = { "free-listings": "Listări gratui
  * Unde pot aparea produsele: starea programelor contului Merchant.
  *
  * ⚠ DE CE (masurat 17.09.2026): la 6 din 7 magazine, Google verifica produsele si le intorcea cu ZERO
- * destinatii. Panoul le arata „In asteptare” la nesfarsit, iar comerciantul astepta o aprobare care nu
- * putea veni, fiindca programul nu era pornit. Aici se spune starea fiecarui program, ce cerinte lipsesc
- * si, cand Google permite, listarile gratuite se pornesc dintr-un buton.
+ * destinatii, iar panoul le arata „In asteptare” la nesfarsit. Atunci cauza a fost sursa de date fara tara
+ * (reparata automat, `tari-sursa.ts`), cu programele PORNITE. Un program oprit da insa acelasi simptom, deci
+ * aici se spune starea fiecarui program, ce cerinte lipsesc si, cand Google permite, listarile gratuite se
+ * pornesc dintr-un buton.
  */
 function ProgramePanel({ businessId, faraDestinatie }: { businessId: string; faraDestinatie: number }) {
   const router = useRouter();
@@ -281,8 +282,8 @@ function ProgramePanel({ businessId, faraDestinatie }: { businessId: string; far
     <Callout variant="warning" icon={AlertTriangle}>
       <p className="font-semibold">{pluralRo(faraDestinatie)} nu {faraDestinatie === 1 ? "are" : "au"} unde să apară în Google</p>
       <p className="mt-0.5 text-xs">
-        Google {faraDestinatie === 1 ? "l-a verificat" : "le-a verificat"}, dar contul Merchant Center nu are pornit niciun program în care {faraDestinatie === 1 ? "să fie afișat" : "să fie afișate"} (listări gratuite sau reclame Shopping).
-        Cât timp programul e oprit, {faraDestinatie === 1 ? "produsul rămâne" : "produsele rămân"} „În așteptare” și nu se aprobă singure.
+        Google {faraDestinatie === 1 ? "l-a verificat" : "le-a verificat"}, dar nu {faraDestinatie === 1 ? "i-a" : "le-a"} dat nicio țară în care să apară, așa că {faraDestinatie === 1 ? "rămâne" : "rămân"} „În așteptare”.
+        Țara magazinului o setăm automat pe sursa de date, iar Google reverifică produsele în câteva ore. Dacă mai jos un program apare oprit, pornește-l: și asta ține produsele pe loc.
       </p>
     </Callout>
   ) : null;

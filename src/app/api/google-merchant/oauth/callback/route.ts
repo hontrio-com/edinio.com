@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyState, exchangeCode, hasContentScope } from "@/lib/google-merchant/oauth";
 import { listAccounts, registerGcp, listDataSources, createApiDataSource, deleteNotificationSubscription } from "@/lib/google-merchant/client";
 import { asiguraAbonarea } from "@/lib/google-merchant/abonare";
+import { asiguraTarileSursei } from "@/lib/google-merchant/tari-sursa";
 import { logError } from "@/lib/error-logger";
 import { DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
 
@@ -79,10 +80,19 @@ export async function GET(req: NextRequest) {
       if (existing) dataSourceName = existing.name;
     }
     if (!dataSourceName) {
-      const created = await createApiDataSource(tok.accessToken, acc.id, "Edinio", config.feed_label, config.content_language);
+      const created = await createApiDataSource(tok.accessToken, acc.id, "Edinio", config.feed_label, config.content_language, config.country);
       if (!("error" in created)) dataSourceName = created.data.name;
     }
     if (dataSourceName) {
+      /* ⚠ Si o sursa refolosita trebuie sa aiba tara: fara ea produsele n-apar nicaieri. Vezi `tari-sursa.ts`. */
+      const tari = await asiguraTarileSursei(tok.accessToken, dataSourceName, config.country);
+      config.sursa_tari_verificate_la = new Date().toISOString();
+      if (tari.stare === "eroare") config.sursa_tari_eroare = tari.mesaj.slice(0, 300);
+      else {
+        config.sursa_tari = tari.tari;
+        config.sursa_tari_eroare = undefined;
+        if (tari.stare === "reparata") config.sursa_tari_inainte = tari.inainte;
+      }
       /*
        * ⚠ Mereu prin `asiguraAbonarea`, si la o reconectare: ea refoloseste abonarea existenta si ii
        * reface adresa daca secretul s-a schimbat. Forma de dinainte sarea pasul cand numele era salvat si

@@ -10,6 +10,7 @@ import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import { logError } from "@/lib/error-logger";
 import { raporteazaCumparareaDupaIncasare } from "./ga4-comanda";
 import { raporteazaCumparareaMetaDupaIncasare } from "./meta-comanda";
+import { raporteazaCumparareaTikTokDupaIncasare } from "./tiktok-comanda";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { stingeRambursulGlsDupaPlata } from "@/lib/gls/rambursul-se-stinge-la-plata";
 
@@ -159,6 +160,7 @@ function dupaPlata(comanda: ComandaDePlatit, status: string): RezultatPlata {
   dupaRaspuns(() => raporteazaCumparareaDupaIncasare(comanda.id), "ga4.cumparareDupaIncasare");
   /* Aceeasi clipa pentru Meta Conversions API, cu acelasi `event_id` ca pixelul: id-ul comenzii. */
   dupaRaspuns(() => raporteazaCumparareaMetaDupaIncasare(comanda.id), "meta.cumparareDupaIncasare");
+  dupaRaspuns(() => raporteazaCumparareaTikTokDupaIncasare(comanda.id), "tiktok.cumparareDupaIncasare");
   /*
     ⚠ SI RAMBURSUL DE PE COLETUL DEJA EMIS.
 

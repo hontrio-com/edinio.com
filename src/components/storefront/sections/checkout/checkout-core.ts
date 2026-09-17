@@ -8,8 +8,9 @@ import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
-import { gtagEvent, fbTrack } from "@/lib/marketing";
+import { gtagEvent, fbTrack, ttqTrack } from "@/lib/marketing";
 import { continutDinCos } from "@/lib/facebook/pixel-continut";
+import { continutTikTokDinCos } from "@/lib/tiktok/continut";
 import type { CourierSelection } from "@/components/ministore/CourierSelector";
 import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
@@ -667,6 +668,10 @@ export function useCheckoutOrder({
         fbTrack("AddPaymentInfo", {
           value: grandTotal, currency: "RON",
           ...continutDinCos(items.map((i) => ({ productId: i.productId, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
+        });
+        ttqTrack("AddPaymentInfo", {
+          value: grandTotal, currency: "RON",
+          ...continutTikTokDinCos(items.map((i) => ({ productId: i.productId, name: i.name, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
         });
         const result = await placeCartOrder(payload);
         if ("error" in result) { setErrors({ _: result.error as string }); return; }

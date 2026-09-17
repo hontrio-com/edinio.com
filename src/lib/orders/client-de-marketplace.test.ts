@@ -146,8 +146,10 @@ test("⚠ orice actiune care duce contacte la un furnizor de marketing trece pri
    Meta si TikTok. Pentru o comanda de marketplace `vanzareaEConfirmata` e adevarat, fiindca
    raspunde „da" pentru orice metoda de plata din afara listei de plati online.
 
-   ⚠ Propul trebuie sa fie `undefined`, nu un obiect cu campuri goale: componenta face
-   `customer && {...}`, iar un obiect e mereu adevarat.
+   ⚠ DE LA 18.09.2026 PAZA S-A MUTAT, dar regula e aceeasi. Propul `customer` nu mai exista:
+   potrivirea avansata se hash-uieste pe SERVER si pleaca prin `window.__edinioAM` (Meta) si
+   `window.__edinioTTAM` (TikTok). Deci se cere ca amandoua sa se calculeze NUMAI in blocul
+   trecut prin `clientDeMarketplace`, si sa porneasca de la `null`.
 */
 
 const CONFIRMARE = "src/app/(public)/[slug]/confirm/page.tsx";
@@ -155,7 +157,13 @@ const CONFIRMARE = "src/app/(public)/[slug]/confirm/page.tsx";
 test("⚠ pagina de confirmare nu da datele omului pixelilor, pe o comanda de marketplace", () => {
   const s = readFileSync(CONFIRMARE, "utf8");
   assert.match(s, /\.select\("[^"]*order_source[^"]*"\)/, "citirea comenzii nu cere originea");
-  assert.match(s, /customer=\{clientDeMarketplace\([^)]*\) \? undefined :/, "propul `customer` nu e trecut prin poarta, sau nu da `undefined`");
+  assert.match(s, /let potrivireMeta: DateNormalizate \| null = null;/, "potrivirea Meta nu porneste de la `null`");
+  assert.match(s, /let potrivireTikTok: \{ email\?: string; phone_number\?: string \} \| null = null;/, "potrivirea TikTok nu porneste de la `null`");
+  const garda = s.indexOf("&& !clientDeMarketplace(sursaComenzii)) {");
+  assert.ok(garda > 0, "blocul pixelilor nu mai trece prin `clientDeMarketplace`");
+  assert.ok(s.indexOf("potrivireMeta = potrivireaPentruPixel(") > garda, "datele Meta se calculeaza inaintea portii");
+  assert.ok(s.indexOf("potrivireTikTok = potrivireaPentruPixelTikTok(") > garda, "datele TikTok se calculeaza inaintea portii");
+  assert.doesNotMatch(s, /customer=\{/, "propul `customer` a revenit: datele omului pleaca iar in browser");
 });
 
 /* ══════════════════════════════════════════════════════════════════════════

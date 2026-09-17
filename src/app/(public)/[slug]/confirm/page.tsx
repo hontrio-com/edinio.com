@@ -20,6 +20,8 @@ import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
 import { vanzareaEConfirmata } from "@/lib/orders/vanzare-confirmata";
 import { potrivireaPentruPixel, dateDinAdresa, type DateNormalizate } from "@/lib/facebook/date-client";
 import { continutComanda, type ContinutPixel } from "@/lib/facebook/pixel-continut";
+import { potrivireaPentruPixelTikTok, dateDinAdresaTikTok } from "@/lib/tiktok/date-client";
+import { continutTikTokComanda, type ContinutTikTok } from "@/lib/tiktok/continut";
 import { randurileInstantaneului } from "@/lib/customization/comanda";
 
 // Order confirmation is personal + transient — keep it out of search.
@@ -175,18 +177,30 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
    */
   let potrivireMeta: DateNormalizate | null = null;
   let continutMeta: ContinutPixel | undefined;
-  if (orderId && vanzareConfirmata && marketingConfig?.facebook_pixel_id && !clientDeMarketplace(sursaComenzii)) {
-    potrivireMeta = potrivireaPentruPixel({
-      email: customerEmail, telefon: customerPhone, nume: customerName, ...dateDinAdresa(adresaLivrare),
-    });
+  /* ⚠ TikTok are ALTE reguli de normalizare (telefonul cu `+`, orasul nehashat): vezi `tiktok/date-client.ts`. */
+  let potrivireTikTok: { email?: string; phone_number?: string } | null = null;
+  let continutTikTok: ContinutTikTok | undefined;
+  const arePixel = !!marketingConfig?.facebook_pixel_id || !!marketingConfig?.tiktok_pixel_id;
+  if (orderId && vanzareConfirmata && arePixel && !clientDeMarketplace(sursaComenzii)) {
     const idsProduse = [...new Set(orderItems.map((i) => i.product_id).filter((x): x is string => !!x))];
     const sectiuni = new Map<string, unknown>();
     if (idsProduse.length) {
       const { data: produse } = await createAdminClient().from("products").select("id, page_sections").in("id", idsProduse);
       for (const p of (produse ?? []) as { id: string; page_sections: unknown }[]) sectiuni.set(p.id, p.page_sections);
     }
-    /* Aceeasi functie ca achizitia de pe server (`evenimentCumparare`): acelasi continut pe amandoua drumurile. */
-    continutMeta = continutComanda(orderItems, sectiuni);
+    if (marketingConfig?.facebook_pixel_id) {
+      potrivireMeta = potrivireaPentruPixel({
+        email: customerEmail, telefon: customerPhone, nume: customerName, ...dateDinAdresa(adresaLivrare),
+      });
+      /* Aceeasi functie ca achizitia de pe server (`evenimentCumparare`): acelasi continut pe amandoua drumurile. */
+      continutMeta = continutComanda(orderItems, sectiuni);
+    }
+    if (marketingConfig?.tiktok_pixel_id) {
+      potrivireTikTok = potrivireaPentruPixelTikTok({
+        email: customerEmail, telefon: customerPhone, nume: customerName, ...dateDinAdresaTikTok(adresaLivrare),
+      });
+      continutTikTok = continutTikTokComanda(orderItems, sectiuni);
+    }
   }
 
   // Acelasi header, footer si culori ca pe restul magazinului. Era singura pagina
@@ -294,9 +308,13 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
             /* Numai hash-uri hex: nimic din ce a scris omul nu ajunge in HTML in clar. */
             <script dangerouslySetInnerHTML={{ __html: `window.__edinioAM=${JSON.stringify(potrivireMeta)};` }} />
           )}
+          {potrivireTikTok && (
+            <script dangerouslySetInnerHTML={{ __html: `window.__edinioTTAM=${JSON.stringify(potrivireTikTok)};` }} />
+          )}
           {orderId && vanzareConfirmata && (
             <FbPurchaseEvent
               continutMeta={continutMeta}
+              continutTikTok={continutTikTok}
               orderId={orderId}
               total={displayTotal}
               numItems={numItems}
@@ -312,7 +330,6 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
                 s-ar chema oricum. Venitul pleaca mai departe (asta e hotarat in
                 `vanzare-confirmata.ts`); omul nu.
               */
-              customer={clientDeMarketplace(sursaComenzii) ? undefined : { name: customerName, email: customerEmail, phone: customerPhone }}
             />
           )}
 

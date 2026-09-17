@@ -81,6 +81,7 @@ import { formatPrice, formatDate } from "@/lib/utils/format";
 import type { Json } from "@/types/database.types";
 import { raporteazaCumparareaGa4, raporteazaRambursareaGa4 } from "@/lib/orders/ga4-comanda";
 import { raporteazaCumparareaMeta } from "@/lib/orders/meta-comanda";
+import { raporteazaCumparareaTikTok } from "@/lib/orders/tiktok-comanda";
 import { isIP } from "node:net";
 import { asteaptaIncasareOnline } from "@/lib/orders/vanzare-confirmata";
 
@@ -606,6 +607,8 @@ const CHEI_ATRIBUIRE = [
   "ga_sesiuni", "consimtamant_citit", "consimtamant_analiza", "consimtamant_marketing",
   /* Meta, din 17.09.2026: cookie-urile pixelului, pentru Conversions API. Tot atribuire, nu bani. */
   "fbp", "fbc",
+  /* TikTok, din 18.09.2026: cookie-ul `_ttp`, pentru Events API. `ttclid` e deja mai sus. */
+  "ttp",
 ] as const;
 
 // Merge client-captured attribution with the server-side user-agent into the
@@ -627,7 +630,7 @@ function buildOrderSource(source: OrderSource | undefined, userAgent: string | u
    * `fbclid` (a venit dintr-o reclama). Fara semn, IP-ul n-are la ce folosi, deci nu se pastreaza.
    * `client_ip` nu e in `CHEI_ATRIBUIRE`: din browser nu se poate trimite.
    */
-  if (ip && isIP(ip) && (curat.fbp || curat.fbc || curat.fbclid)) curat.client_ip = ip;
+  if (ip && isIP(ip) && (curat.fbp || curat.fbc || curat.fbclid || curat.ttp || curat.ttclid)) curat.client_ip = ip;
   return Object.keys(curat).length > 0 ? (curat as OrderSource) : null;
 }
 
@@ -2164,6 +2167,8 @@ export async function placeOrder(data: {
     dupaRaspuns(() => raporteazaCumparareaGa4(order.id), "ga4.cumparare", data.business_id);
     /* Aceeasi clipa pentru Meta Conversions API: vezi `meta-comanda.ts`. */
     dupaRaspuns(() => raporteazaCumparareaMeta(order.id), "meta.cumparare", data.business_id);
+    /* Si pentru TikTok Events API: vezi `tiktok-comanda.ts`. */
+    dupaRaspuns(() => raporteazaCumparareaTikTok(order.id), "tiktok.cumparare", data.business_id);
   }
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
@@ -2619,6 +2624,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
   if (paymentChanged && data.payment_status === "paid" && asteaptaIncasareOnline(order.payment_method as string | null)) {
     dupaRaspuns(() => raporteazaCumparareaGa4(orderId), "ga4.cumparareManuala", order.business_id);
     dupaRaspuns(() => raporteazaCumparareaMeta(orderId), "meta.cumparareManuala", order.business_id);
+    dupaRaspuns(() => raporteazaCumparareaTikTok(orderId), "tiktok.cumparareManuala", order.business_id);
   }
 
   const GA4_REVERSAL = new Set(["refunded", "cancelled"]);
@@ -5116,6 +5122,8 @@ export async function placeCartOrder(data: {
     dupaRaspuns(() => raporteazaCumparareaGa4(order.id), "ga4.cumparare", data.business_id);
     /* Aceeasi clipa pentru Meta Conversions API: vezi `meta-comanda.ts`. */
     dupaRaspuns(() => raporteazaCumparareaMeta(order.id), "meta.cumparare", data.business_id);
+    /* Si pentru TikTok Events API: vezi `tiktok-comanda.ts`. */
+    dupaRaspuns(() => raporteazaCumparareaTikTok(order.id), "tiktok.cumparare", data.business_id);
   }
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set

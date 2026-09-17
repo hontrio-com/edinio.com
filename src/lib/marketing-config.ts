@@ -36,6 +36,8 @@ export type MarketingConfig = {
    * ⚠ Il scrie NUMAI serverul (`saveMetaCapi`); `saveMarketingConfig` il pastreaza din baza.
    */
   facebook_capi_activ?: boolean;
+  /** Evenimentele pleaca si de pe server, prin TikTok Events API. Il scrie doar salvarea tokenului. */
+  tiktok_capi_activ?: boolean;
 };
 
 // ─────────────────────────────────────────────────────────────────────────

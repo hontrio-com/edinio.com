@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { fbTrack } from "@/lib/marketing";
+import { fbTrack, ttqTrack } from "@/lib/marketing";
 
 /**
  * Evenimentul standard Meta `Search`, pe pagina de cautare a magazinului.
@@ -26,12 +26,22 @@ export function UrmaCautarePixel({ termen, rezultate }: {
     const t = termen.trim();
     if (!t) return;
     const primele = rezultate.slice(0, 10);
+    const bani = (v: number) => Math.round((Number(v) || 0) * 100) / 100;
     fbTrack("Search", {
       search_string: t.slice(0, 200),
       currency: "RON",
       ...(primele.length ? {
         content_ids: primele.map((r) => r.id),
-        contents: primele.map((r) => ({ id: r.id, quantity: 1, item_price: Math.round((Number(r.pret) || 0) * 100) / 100 })),
+        contents: primele.map((r) => ({ id: r.id, quantity: 1, item_price: bani(r.pret) })),
+      } : {}),
+    });
+    /* ⚠ `Search` lipsea si la TikTok, desi e in lista lor („When a search is made”, `ON_WEB_SEARCH`). */
+    ttqTrack("Search", {
+      search_string: t.slice(0, 200),
+      currency: "RON",
+      ...(primele.length ? {
+        content_ids: primele.map((r) => r.id),
+        contents: primele.map((r) => ({ content_id: r.id, quantity: 1, price: bani(r.pret) })),
       } : {}),
     });
     // `semnatura` acopera termenul si rezultatele; enumerate, tabloul ar fi o dependinta noua la fiecare randare.

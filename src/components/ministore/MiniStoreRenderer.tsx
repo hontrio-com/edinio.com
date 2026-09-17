@@ -23,6 +23,7 @@ import { CartProvider, useCart } from "@/components/storefront/cart/CartProvider
 import { StickyCartTab } from "@/components/storefront/cart/StickyCartTab";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { comboIdDupaTitlu, continutDinCos } from "@/lib/facebook/pixel-continut";
+import { continutTikTokDinCos } from "@/lib/tiktok/continut";
 import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
 import { categoriiVizibile, numeCategoriiAscunse } from "@/lib/categories/vizibilitate";
 import {
@@ -1742,7 +1743,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
               value: total, currency: "RON", num_items: count,
               ...continutDinCos(cartItemsForTracking.map((i) => ({ productId: i.productId, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
             });
-            ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: cartItemsForTracking.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
+            ttqTrack("InitiateCheckout", {
+              value: total, currency: "RON", num_items: count,
+              ...continutTikTokDinCos(cartItemsForTracking.map((i) => ({ productId: i.productId, name: i.name, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
+            });
             gtagEvent("begin_checkout", { currency: "RON", value: total, items: cartItemsForTracking.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
           }}
           shippingCost={shippingCost}

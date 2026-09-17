@@ -5253,6 +5253,7 @@ export type Database = {
           fan_courier_config: Json | null
           facebook_feeds: Json | null
           meta_capi_config: Json | null
+          tiktok_capi_config: Json | null
           fedex_config: Json | null
           fgo_config: Json | null
           free_shipping_threshold: number | null
@@ -5330,6 +5331,7 @@ export type Database = {
           fan_courier_config?: Json | null
           facebook_feeds?: Json | null
           meta_capi_config?: Json | null
+          tiktok_capi_config?: Json | null
           fedex_config?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
@@ -5407,6 +5409,7 @@ export type Database = {
           fan_courier_config?: Json | null
           facebook_feeds?: Json | null
           meta_capi_config?: Json | null
+          tiktok_capi_config?: Json | null
           fedex_config?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
@@ -5567,6 +5570,39 @@ export type Database = {
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tiktok_comenzi_raportate: {
+        Row: {
+          business_id: string
+          order_id: string
+          trimisa_la: string
+        }
+        Insert: {
+          business_id: string
+          order_id: string
+          trimisa_la?: string
+        }
+        Update: {
+          business_id?: string
+          order_id?: string
+          trimisa_la?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_comenzi_raportate_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tiktok_comenzi_raportate_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]

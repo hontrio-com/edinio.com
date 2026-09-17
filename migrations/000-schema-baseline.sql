@@ -279,7 +279,7 @@ AS $function$
     begin
       j := privat.cripteaza_rand(to_jsonb(new));
       update privat.store_settings s
-         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config, gpsr_config, pepita_config, meta_capi_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
+         set (id, business_id, currency, shipping_enabled, free_shipping_threshold, default_shipping_cost, shipping_zones, payment_methods, min_order_amount, store_policies, created_at, updated_at, page_content, order_number_format, order_counter, vat_enabled, vat_rate, prices_include_vat, show_vat_breakdown, notifications_config, smso_config, smartbill_config, stripe_config, netopia_config, woot_config, colete_config, oblio_config, fgo_config, cargus_config, dpd_config, fan_courier_config, sameday_config, marketing_config, ipay_config, abandoned_cart_enabled, abandoned_cart_automation, google_merchant_config, card_discount_config, cookie_banner_config, notice_config, google_analytics_config, mailchimp_config, brevo_config, klaviyo_config, returns_config, klarna_config, revolut_config, olx_config, aboutyou_config, trendyol_config, email_config, cod_discount_config, shipping_classes, shipping_rules, storefront_design, storefront_design_draft, storefront_design_pub_at, cod_fee_config, show_vat_label, gls_config, pallex_config, ecolet_config, facebook_feeds, posta_config, innoship_config, packeta_config, smartship_config, shipo_config, fedex_config, ups_config, dhl_config, emag_config, gpsr_config, pepita_config, meta_capi_config, tiktok_capi_config) = (select r.* from jsonb_populate_record(null::privat.store_settings, j) r)
        where s.id = old.id;
       return new;
     end $function$
@@ -5991,7 +5991,8 @@ create table if not exists privat.store_settings (
   emag_config jsonb default '{}'::jsonb not null,
   gpsr_config jsonb default '{}'::jsonb not null,
   pepita_config jsonb default '{}'::jsonb not null,
-  meta_capi_config jsonb);
+  meta_capi_config jsonb,
+  tiktok_capi_config jsonb);
 
 create table if not exists privat.zz_repere_perf_20260804 (
   masurat_la timestamp with time zone default now(),
@@ -7451,6 +7452,11 @@ create table if not exists public.support_tickets (
   status text default 'open'::text not null,
   has_unread_reply boolean default false not null);
 
+create table if not exists public.tiktok_comenzi_raportate (
+  order_id uuid not null,
+  business_id uuid not null,
+  trimisa_la timestamp with time zone default now() not null);
+
 create table if not exists public.trendyol_batches (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -7791,6 +7797,7 @@ alter table public.stock_feed_sources add constraint stock_feed_sources_pkey PRI
 alter table public.stripe_events add constraint stripe_events_pkey PRIMARY KEY (event_id);
 alter table public.support_messages add constraint support_messages_pkey PRIMARY KEY (id);
 alter table public.support_tickets add constraint support_tickets_pkey PRIMARY KEY (id);
+alter table public.tiktok_comenzi_raportate add constraint tiktok_comenzi_raportate_pkey PRIMARY KEY (order_id);
 alter table public.trendyol_batches add constraint trendyol_batches_pkey PRIMARY KEY (id);
 alter table public.trendyol_claim_items add constraint trendyol_claim_items_pkey PRIMARY KEY (id);
 alter table public.trendyol_claims add constraint trendyol_claims_pkey PRIMARY KEY (id);
@@ -8030,6 +8037,8 @@ alter table public.stock_feed_sources add constraint stock_feed_sources_user_id_
 alter table public.support_messages add constraint support_messages_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES support_tickets(id) ON DELETE CASCADE;
 alter table public.support_tickets add constraint support_tickets_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE SET NULL;
 alter table public.support_tickets add constraint support_tickets_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+alter table public.tiktok_comenzi_raportate add constraint tiktok_comenzi_raportate_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.tiktok_comenzi_raportate add constraint tiktok_comenzi_raportate_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
 alter table public.trendyol_batches add constraint trendyol_batches_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.trendyol_claim_items add constraint trendyol_claim_items_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.trendyol_claim_items add constraint trendyol_claim_items_claim_row_id_fkey FOREIGN KEY (claim_row_id) REFERENCES trendyol_claims(id) ON DELETE CASCADE;
@@ -8100,6 +8109,7 @@ insert into privat.campuri_secrete (coloana, cale) values ('shipo_config', 'api_
 insert into privat.campuri_secrete (coloana, cale) values ('smartbill_config', 'token') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('smartship_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('smso_config', 'api_key') on conflict do nothing;
+insert into privat.campuri_secrete (coloana, cale) values ('tiktok_capi_config', 'access_token') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('trendyol_config', 'api_key') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('trendyol_config', 'api_secret') on conflict do nothing;
 insert into privat.campuri_secrete (coloana, cale) values ('trendyol_config', 'webhook_secret') on conflict do nothing;
@@ -8364,6 +8374,7 @@ CREATE INDEX support_messages_ticket_id_idx ON public.support_messages USING btr
 CREATE INDEX support_tickets_business_id_idx ON public.support_tickets USING btree (business_id);
 CREATE INDEX support_tickets_status_idx ON public.support_tickets USING btree (status);
 CREATE INDEX support_tickets_user_id_idx ON public.support_tickets USING btree (user_id);
+CREATE INDEX tiktok_comenzi_raportate_business_idx ON public.tiktok_comenzi_raportate USING btree (business_id);
 CREATE INDEX trendyol_batches_de_intrebat_idx ON public.trendyol_batches USING btree (business_id, submitted_at) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]));
 CREATE INDEX trendyol_claim_items_claim_idx ON public.trendyol_claim_items USING btree (claim_row_id);
 CREATE INDEX trendyol_claims_biz_idx ON public.trendyol_claims USING btree (business_id, claim_date DESC);
@@ -8455,7 +8466,8 @@ create or replace view public.store_settings with (security_invoker = true) as
     privat.decripteaza_config(emag_config, '{password}'::text[]) AS emag_config,
     gpsr_config,
     privat.decripteaza_config(pepita_config, '{feed_token,order_key}'::text[]) AS pepita_config,
-    privat.decripteaza_config(meta_capi_config, '{access_token}'::text[]) AS meta_capi_config
+    privat.decripteaza_config(meta_capi_config, '{access_token}'::text[]) AS meta_capi_config,
+    privat.decripteaza_config(tiktok_capi_config, '{access_token}'::text[]) AS tiktok_capi_config
    FROM privat.store_settings;
 
 -- ── DECLANSATOARE ─────────────────────────────────────────
@@ -8596,6 +8608,7 @@ alter table public.stock_feed_sources enable row level security;
 alter table public.stripe_events enable row level security;
 alter table public.support_messages enable row level security;
 alter table public.support_tickets enable row level security;
+alter table public.tiktok_comenzi_raportate enable row level security;
 alter table public.trendyol_batches enable row level security;
 alter table public.trendyol_claim_items enable row level security;
 alter table public.trendyol_claims enable row level security;
@@ -10695,6 +10708,27 @@ grant SELECT on table public.support_tickets to service_role;
 grant TRIGGER on table public.support_tickets to service_role;
 grant TRUNCATE on table public.support_tickets to service_role;
 grant UPDATE on table public.support_tickets to service_role;
+grant DELETE on table public.tiktok_comenzi_raportate to anon;
+grant INSERT on table public.tiktok_comenzi_raportate to anon;
+grant REFERENCES on table public.tiktok_comenzi_raportate to anon;
+grant SELECT on table public.tiktok_comenzi_raportate to anon;
+grant TRIGGER on table public.tiktok_comenzi_raportate to anon;
+grant TRUNCATE on table public.tiktok_comenzi_raportate to anon;
+grant UPDATE on table public.tiktok_comenzi_raportate to anon;
+grant DELETE on table public.tiktok_comenzi_raportate to authenticated;
+grant INSERT on table public.tiktok_comenzi_raportate to authenticated;
+grant REFERENCES on table public.tiktok_comenzi_raportate to authenticated;
+grant SELECT on table public.tiktok_comenzi_raportate to authenticated;
+grant TRIGGER on table public.tiktok_comenzi_raportate to authenticated;
+grant TRUNCATE on table public.tiktok_comenzi_raportate to authenticated;
+grant UPDATE on table public.tiktok_comenzi_raportate to authenticated;
+grant DELETE on table public.tiktok_comenzi_raportate to service_role;
+grant INSERT on table public.tiktok_comenzi_raportate to service_role;
+grant REFERENCES on table public.tiktok_comenzi_raportate to service_role;
+grant SELECT on table public.tiktok_comenzi_raportate to service_role;
+grant TRIGGER on table public.tiktok_comenzi_raportate to service_role;
+grant TRUNCATE on table public.tiktok_comenzi_raportate to service_role;
+grant UPDATE on table public.tiktok_comenzi_raportate to service_role;
 grant DELETE on table public.trendyol_batches to anon;
 grant INSERT on table public.trendyol_batches to anon;
 grant REFERENCES on table public.trendyol_batches to anon;

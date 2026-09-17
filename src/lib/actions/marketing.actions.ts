@@ -67,6 +67,10 @@ export async function saveMarketingConfig(
     && cleaned.value.facebook_pixel_id === parseMetaPixelId(vechi.facebook_pixel_id)) {
     cleaned.value.facebook_capi_activ = true;
   }
+  if (vechi?.tiktok_capi_activ === true && cleaned.value.tiktok_pixel_id
+    && cleaned.value.tiktok_pixel_id === parseTikTokPixelId(vechi.tiktok_pixel_id)) {
+    cleaned.value.tiktok_capi_activ = true;
+  }
 
   const { error } = await supabase.from("store_settings").update({
     marketing_config: cleaned.value as unknown as import("@/types/database.types").Json,

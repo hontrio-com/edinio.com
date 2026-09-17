@@ -1,5 +1,9 @@
 import { isIP } from "node:net";
 import { cookieMetaValid, type EvenimentCapi } from "./capi";
+/* ⚠ Regula e comuna cu TikTok: un singur loc hotaraste daca pagina e a magazinului. */
+import { adresaEAMagazinului } from "@/lib/pixeli/adresa-magazin";
+
+export { adresaEAMagazinului };
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -74,18 +78,6 @@ export function curataDateleEvenimentului(d: Record<string, unknown>): Record<st
   return out;
 }
 
-/**
- * Pagina e a acestui magazin? Pe domeniul propriu (si geamanul `www.`), sau pe platforma sub `/<slug>`.
- */
-export function adresaEAMagazinului(adresa: string, magazin: { slug: string; custom_domain: string | null }, gazdaPlatformei: string): boolean {
-  let u: URL;
-  try { u = new URL(adresa); } catch { return false; }
-  if (u.protocol !== "https:") return false;
-  const gazda = u.hostname.toLowerCase();
-  const domeniu = (magazin.custom_domain ?? "").toLowerCase().replace(/^www\./, "");
-  if (domeniu && (gazda === domeniu || gazda === `www.${domeniu}`)) return true;
-  return gazda === gazdaPlatformei && (u.pathname === `/${magazin.slug}` || u.pathname.startsWith(`/${magazin.slug}/`));
-}
 
 export function evenimentDinBrowser(
   cerere: CerereEveniment,

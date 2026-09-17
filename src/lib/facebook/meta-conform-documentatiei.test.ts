@@ -421,7 +421,7 @@ describe("cablarea care nu se poate rula fara browser", () => {
     const actiuni = viu("src/lib/actions/order.actions.ts");
     assert.match(actiuni, /"fbp", "fbc",/);
     assert.doesNotMatch(actiuni.slice(actiuni.indexOf("const CHEI_ATRIBUIRE"), actiuni.indexOf("] as const")), /client_ip/);
-    assert.match(actiuni, /if \(ip && isIP\(ip\) && \(curat\.fbp \|\| curat\.fbc \|\| curat\.fbclid\)\) curat\.client_ip = ip;/, "IP-ul se pastreaza si fara semn Meta");
+    assert.match(actiuni, /if \(ip && isIP\(ip\) && \(curat\.fbp \|\| curat\.fbc \|\| curat\.fbclid \|\| curat\.ttp \|\| curat\.ttclid\)\) curat\.client_ip = ip;/, "IP-ul se pastreaza si fara semn de pixel");
   });
 
   test("⚠ paginile trimit evenimentele de palnie prin regulile de continut (ID-uri de catalog, grupuri, cosuri)", () => {

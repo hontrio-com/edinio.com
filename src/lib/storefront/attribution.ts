@@ -75,7 +75,13 @@ export interface OrderSource {
    */
   fbp?: string;
   fbc?: string;
-  /** IP-ul clientului, scris DOAR de server la creare si doar cand vizita are un semn Meta. Vezi `buildOrderSource`. */
+  /**
+   * Cookie-ul pixelului TikTok (`_ttp`), fotografiat la checkout pentru Events API: „Pixel SDK automatically
+   * saves a unique identifier in the `_ttp` cookie ... You can extract the value of `_ttp` and attach the
+   * value here.” `ttclid` vine din adresa sau, cand pixelul l-a pus in cookie, de acolo.
+   */
+  ttp?: string;
+  /** IP-ul clientului, scris DOAR de server la creare si doar cand vizita are un semn de pixel. Vezi `buildOrderSource`. */
   client_ip?: string;
 }
 
@@ -156,6 +162,17 @@ export function captureAttribution(basePath: string): void {
     }
   } catch {
     // localStorage unavailable (private mode / disabled) — attribution is best-effort
+  }
+}
+
+/** Un cookie simplu, dupa nume. Intoarce valoarea decodata sau `undefined`. */
+function cookieSimplu(nume: string): string | undefined {
+  try {
+    const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${nume}=([^;]+)`));
+    const v = m ? decodeURIComponent(m[1]) : undefined;
+    return v && /^[\w.~-]{6,1000}$/.test(v) ? v : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -280,6 +297,12 @@ export function getAttribution(basePath: string): OrderSource | null {
       if (fbp) src.fbp = fbp;
       const fbc = cookieMeta("_fbc");
       if (fbc) src.fbc = fbc;
+      /* ⚠ TikTok: `_ttp` il pune pixelul lor, iar `ttclid` il pune tot el in cookie cand omul vine din
+         reclama. Cookie-ul castiga in fata adresei: tine cat tine sesiunea, nu doar prima pagina. */
+      const ttp = cookieSimplu("_ttp");
+      if (ttp) src.ttp = ttp;
+      const ttclid = cookieSimplu("ttclid");
+      if (ttclid) src.ttclid = ttclid;
     }
     const refuzat = acord !== null && acord.decis && !acord.analiza;
     if (!refuzat) {

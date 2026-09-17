@@ -31,6 +31,7 @@ import { optiunileDinAdresa, abonareCautare, citesteCautarea } from "@/lib/store
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { continutPixel } from "@/lib/facebook/pixel-continut";
+import { continutTikTok } from "@/lib/tiktok/continut";
 import { cosDupaComanda } from "@/lib/storefront/cart/consume";
 import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
 import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
@@ -277,7 +278,10 @@ export function ProductPageDetailed({
       content_name: productName, value: productPrice, currency: "RON",
       ...continutPixel([{ productId, areVariante: produsCuVariante, cantitate: 1, pret: productPrice }]),
     });
-    ttqTrack("ViewContent", { value: productPrice, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: productName, price: productPrice, quantity: 1 }] });
+    ttqTrack("ViewContent", {
+      value: productPrice, currency: "RON",
+      ...continutTikTok([{ productId, areVariante: produsCuVariante, cantitate: 1, pret: productPrice, nume: productName }]),
+    });
   }, [demo, productId, productName, productPrice, produsCuVariante]);
 
   // Afisarea ofertelor, in contorul lor — aceeasi judecata ca in

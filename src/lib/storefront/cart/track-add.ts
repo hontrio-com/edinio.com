@@ -1,5 +1,6 @@
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { continutPixel } from "@/lib/facebook/pixel-continut";
+import { continutTikTok } from "@/lib/tiktok/continut";
 
 /**
  * Cele trei evenimente de „adaugat in cos", intr-un singur loc.
@@ -31,6 +32,10 @@ export function trackAddToCart(
     value: valoare, currency: "RON", content_name: name,
     ...continutPixel([{ productId, comboId, areVariante, cantitate: n, pret: price }]),
   });
-  ttqTrack("AddToCart", { value: valoare, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: name, price, quantity: n }] });
+  /* ⚠ `content_type` LANGA eveniment (nu in `contents`), si ID-ul variantei, ca la Meta. Vezi `tiktok/continut.ts`. */
+  ttqTrack("AddToCart", {
+    value: valoare, currency: "RON", num_items: n,
+    ...continutTikTok([{ productId, comboId, areVariante, cantitate: n, pret: price, nume: name }]),
+  });
   gtagEvent("add_to_cart", { currency: "RON", value: valoare, items: [{ item_id: productId, item_name: name, price, quantity: n }] });
 }

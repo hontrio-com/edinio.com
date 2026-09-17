@@ -217,7 +217,7 @@ export default async function StoreLayout({ children, params }: Props) {
           <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><FacebookPixel pixelId={fbPixelId} magazin={slug} capi={mc?.facebook_capi_activ === true} /></ConsentGate>
         )}
         {ttPixelId && (
-          <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TikTokPixel pixelId={ttPixelId} /></ConsentGate>
+          <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TikTokPixel pixelId={ttPixelId} magazin={slug} capi={mc?.tiktok_capi_activ === true} /></ConsentGate>
         )}
         {googleTagIds.length > 0 && (
           <ConsentGate slug={slug} category="analytics" bypass={!requireConsent}><GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} /></ConsentGate>

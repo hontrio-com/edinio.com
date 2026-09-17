@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { splitName, type PixelUser } from "@/lib/marketing-config";
-import { fbTrack, ttqTrack, gtagEvent, gtagRaw, ttqIdentify } from "@/lib/marketing";
+import { fbTrack, ttqTrack, gtagEvent, gtagRaw } from "@/lib/marketing";
 import type { ContinutPixel } from "@/lib/facebook/pixel-continut";
+import type { ContinutTikTok } from "@/lib/tiktok/continut";
 
 interface Props {
   orderId: string;
@@ -12,7 +12,6 @@ interface Props {
   googleAdsConversionLabel?: string;
   fbPixelId?: string;
   ttPixelId?: string;
-  customer?: PixelUser & { name?: string | null };
   numItems?: number;
   items?: { item_id?: string; item_name: string; price: number; quantity: number }[];
   /** Valorile GA4 (fara transport si taxe, dupa documentatie). Lipsa lor = totalul, ca inainte. */
@@ -22,6 +21,8 @@ interface Props {
    * produselor, ca inainte.
    */
   continutMeta?: ContinutPixel;
+  /** Continutul pentru TikTok, cu aceleasi ID-uri de catalog. Lipsa lui = ID-urile produselor, ca inainte. */
+  continutTikTok?: ContinutTikTok;
 }
 
 /**
@@ -35,11 +36,12 @@ interface Props {
  *   when the merchant disabled the banner), which is the correct GDPR behaviour.
  * - `eventID = orderId` gives Pixel↔server (CAPI/Events API) deduplication and,
  *   with the localStorage guard below, prevents a refresh from double-counting.
- * - Advanced Matching (hashed email/phone/name) is sent right before the
- *   conversion to lift Event Match Quality.
+ * - Potrivirea avansata NU mai pleaca de aici: la amandoua pixelele, datele omului se hash-uiesc pe server
+ *   si intra in codul de baza (`window.__edinioAM` la Meta, `window.__edinioTTAM` la TikTok), inaintea
+ *   oricarui eveniment. Vezi `FacebookPixel` si `TikTokPixel`.
  */
 export function FbPurchaseEvent({
-  orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, customer, numItems, items, ga4, continutMeta,
+  orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, numItems, items, ga4, continutMeta, continutTikTok,
 }: Props) {
   useEffect(() => {
     if (!orderId) return;
@@ -62,17 +64,14 @@ export function FbPurchaseEvent({
     const fbContents = continutMeta?.contents ?? line.map((i) => ({ id: i.item_id, quantity: i.quantity, item_price: i.price }));
     /* ⚠ Fara `content_type` cand cosul amesteca variante cunoscute cu grupuri: vezi `continutPixel`. */
     const fbContentType = continutMeta ? continutMeta.content_type : "product";
-    const ttContents = line.map((i) => ({ content_id: i.item_id, content_type: "product", content_name: i.item_name, price: i.price, quantity: i.quantity }));
-
-    // Advanced Matching (only meaningful with PII; helpers no-op otherwise).
-    const user: PixelUser | undefined = customer && {
-      email: customer.email,
-      phone: customer.phone,
-      country: customer.country,
-      ...splitName(customer.name),
-    };
-    /* Meta: potrivirea avansata a plecat deja in `init`-ul codului de baza (vezi pagina de confirmare). */
-    if (ttPixelId && user) ttqIdentify(user);
+    /*
+     * ⚠ `content_type` STA LANGA EVENIMENT, nu in fiecare articol: asa arata exemplul lor. Inainte era pus
+     * inauntru, unde TikTok nu-l citeste. Vezi `lib/tiktok/continut.ts`.
+     */
+    const ttContents = continutTikTok?.contents
+      ?? line.flatMap((i) => (i.item_id ? [{ content_id: i.item_id, content_name: i.item_name, price: i.price, quantity: i.quantity }] : []));
+    const ttContentIds = continutTikTok?.content_ids ?? line.map((i) => i.item_id).filter((x): x is string => !!x);
+    const ttContentType = continutTikTok ? continutTikTok.content_type : "product";
 
     // Meta — Purchase (eventID = orderId for CAPI dedup).
     fbTrack("Purchase", {
@@ -80,11 +79,15 @@ export function FbPurchaseEvent({
       ...(fbContentIds.length ? { ...(fbContentType ? { content_type: fbContentType } : {}), content_ids: fbContentIds, contents: fbContents } : {}),
     }, { eventID: orderId });
 
-    // TikTok — on COD-heavy markets (RO) the confirmed order IS the conversion,
-    // so we fire both the order and the payment intent, sharing one event_id.
-    const ttData = { value, currency: "RON", ...(ttContents.length ? { contents: ttContents } : {}) };
-    ttqTrack("PlaceAnOrder", ttData, { eventID: orderId });
-    ttqTrack("CompletePayment", ttData, { eventID: orderId });
+    /*
+     * ⚠ TikTok: UN SINGUR `Purchase` (18.09.2026). Trimiteam `PlaceAnOrder` SI `CompletePayment`, adica doua
+     * conversii pe aceeasi comanda, iar lista lor de azi (18 evenimente web) n-are niciunul din cele doua
+     * nume: plata incheiata e `Purchase`, cu acelasi obiectiv de optimizare (`SHOPPING`).
+     */
+    ttqTrack("Purchase", {
+      value, currency: "RON", num_items: itemCount,
+      ...(ttContentIds.length ? { ...(ttContentType ? { content_type: ttContentType } : {}), content_ids: ttContentIds, contents: ttContents } : {}),
+    }, { eventID: orderId });
 
     // GA4 — purchase with items[] (item-level revenue + Monetization reports).
     /*
@@ -107,7 +110,7 @@ export function FbPurchaseEvent({
         transaction_id: orderId,
       });
     }
-  }, [orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, customer, numItems, items, ga4, continutMeta]);
+  }, [orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, numItems, items, ga4, continutMeta, continutTikTok]);
 
   return null;
 }

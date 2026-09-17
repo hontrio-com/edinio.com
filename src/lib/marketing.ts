@@ -139,13 +139,44 @@ export function fbTrack(event: string, data?: Record<string, unknown>, opts?: { 
   });
 }
 
-/** TikTok Pixel — window.ttq. `eventID` maps to TikTok's `event_id` for dedup. */
+/**
+ * Trimite evenimentul si catre server, prin TikTok Events API, cu ACELASI `event_id`.
+ *
+ * ⚠ ACEEASI REGULA CA LA META, si acelasi motiv: „we recommend advertisers set up both TikTok Pixel SDK
+ * and Events API to ensure maximum data coverage”. TikTok deduplica pe `event_source_id` + `event` +
+ * `event_id`.
+ *
+ * ⚠ SE CHEAMA DIN INTERIORUL `dispatch("tt")`, deci numai dupa ce pixelul s-a incarcat, adica numai cu
+ * acordul pentru marketing.
+ */
+function trimiteSiServeruluiTikTok(event: string, properties: Record<string, unknown>, eventId: string): void {
+  const w = window as unknown as { __edinioTikTok?: { magazin?: string; capi?: boolean } };
+  const tt = w.__edinioTikTok;
+  if (!tt?.capi || !tt.magazin || !EVENIMENTE_PRIN_SERVER.has(event)) return;
+  const corp = JSON.stringify({
+    magazin: tt.magazin, event, event_id: eventId,
+    url: window.location.href, referrer: document.referrer || undefined, properties,
+  });
+  try {
+    const trimis = typeof navigator.sendBeacon === "function"
+      && navigator.sendBeacon("/api/tiktok/eveniment", new Blob([corp], { type: "application/json" }));
+    if (!trimis) {
+      void fetch("/api/tiktok/eveniment", { method: "POST", body: corp, keepalive: true, headers: { "Content-Type": "application/json" } }).catch(() => {});
+    }
+  } catch { /* masurarea nu are voie sa strice pagina */ }
+}
+
+/**
+ * TikTok Pixel: window.ttq. Fiecare eveniment poarta un `event_id`: cel dat de apelant (achizitia, cu id-ul
+ * comenzii) sau unul nou, acelasi care pleaca si spre Events API.
+ */
 export function ttqTrack(event: string, data?: Record<string, unknown>, opts?: { eventID?: string }) {
+  const eventId = opts?.eventID ?? idEvenimentNou();
   dispatch("tt", () => {
     const ttq = (window as unknown as { ttq?: { track: (...a: unknown[]) => void } }).ttq;
     if (!ttq || typeof ttq.track !== "function") return;
-    if (opts?.eventID) ttq.track(event, data ?? {}, { event_id: opts.eventID });
-    else ttq.track(event, data ?? {});
+    ttq.track(event, data ?? {}, { event_id: eventId });
+    trimiteSiServeruluiTikTok(event, data ?? {}, eventId);
   });
 }
 
@@ -174,16 +205,9 @@ export function gtagRaw(...args: unknown[]) {
  * de baza: vezi `FacebookPixel` si `potrivireaPentruPixel`.
  */
 
-/** TikTok Advanced Matching — identify the visitor before firing events. */
-export function ttqIdentify(user: PixelUser) {
-  const email = normalizeEmail(user.email);
-  const phoneDigits = normalizePhone(user.phone, user.country ?? "RO");
-  const payload: Record<string, string> = {};
-  if (email) payload.email = email;
-  if (phoneDigits) payload.phone_number = "+" + phoneDigits; // TikTok wants E.164
-  if (Object.keys(payload).length === 0) return;
-  dispatch("tt", () => {
-    const ttq = (window as unknown as { ttq?: { identify: (...a: unknown[]) => void } }).ttq;
-    if (ttq && typeof ttq.identify === "function") ttq.identify(payload);
-  });
-}
+/*
+ * ⚠ `ttqIdentify` A FOST SCOS (18.09.2026), din acelasi motiv ca `fbAdvancedMatch`: trimitea emailul si
+ * telefonul in clar din browser, iar pentru asta trebuiau puse in clar in HTML-ul paginii de confirmare.
+ * Acum se hash-uiesc pe server (`lib/tiktok/date-client.ts`) si intra in `ttq.identify` din codul de baza,
+ * inaintea oricarui eveniment, prin `window.__edinioTTAM`. Vezi `TikTokPixel`.
+ */

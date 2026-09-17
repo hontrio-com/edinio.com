@@ -72,7 +72,13 @@ export async function trimiteTikTok(s: SarcinaPastrata): Promise<Rezultat> {
     mesaj stricat dau acelasi raspuns oricat s-ar reincerca — deci reincercarea ar
     fi doar zgomot pana la abandon. O limitare sau o pana de-a lor trec.
   */
-  const permanent = corp.code === 40001 || corp.code === 40002 || corp.code === 40100;
+  /*
+    ⚠ 40100 NU E PERMANENT (reparat 18.09.2026). Il aveam in lista de refuzuri definitive, crezand ca
+    inseamna „fara drept”. Lista lor oficiala („Appendix - Return codes”) spune altceva: 40100 si 40133
+    sunt „Requests made too frequently”, adica limitare, deci se REINCEARCA; tokenul rau e 40105.
+    Asa, o limitare pe o rafala de conversii arunca evenimentele in loc sa le astepte randul.
+  */
+  const permanent = corp.code === 40001 || corp.code === 40002 || corp.code === 40007 || corp.code === 40105;
   const motiv = `code ${corp.code}: ${corp.message ?? "fara mesaj"}`;
   return permanent ? { fel: "refuzat", motiv } : { fel: "esec", motiv };
 }

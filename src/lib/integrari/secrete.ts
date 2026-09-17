@@ -124,7 +124,8 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      secret (il citeste din Events Manager si trebuie sa-l vada in formular), iar starea ultimei trimiteri e
      pentru panou. Vezi `lib/actions/meta-capi.actions.ts`. */
   meta_capi_config: ["access_token"],
-  /* UPS: DOUA credentiale in portalul lor („Client ID" si „Client Secret"), dar numai
+  tiktok_capi_config: ["access_token"],
+  /* UPS: DOUA credentiale in portalul lor („Client ID” si „Client Secret”), dar numai
      una e secreta. `client_id` NU intra aici, desi la ei el pleaca chiar ca NUME DE
      UTILIZATOR intr-un antet `Authorization: Basic`: singur nu deschide nimic, iar
      comerciantul trebuie sa-l poata reciti ca sa stie CE APLICATIE din portalul UPS a

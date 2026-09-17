@@ -3120,6 +3120,7 @@ export type Database = {
           from_number: string | null
           id: string
           order_id: string | null
+          provider_id: string | null
           raw: Json | null
           received_at: string
         }
@@ -3131,6 +3132,7 @@ export type Database = {
           from_number?: string | null
           id?: string
           order_id?: string | null
+          provider_id?: string | null
           raw?: Json | null
           received_at?: string
         }
@@ -3142,6 +3144,7 @@ export type Database = {
           from_number?: string | null
           id?: string
           order_id?: string | null
+          provider_id?: string | null
           raw?: Json | null
           received_at?: string
         }

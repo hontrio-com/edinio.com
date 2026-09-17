@@ -1,7 +1,12 @@
 // notice.ro SMS API client.
-// Docs: https://documenter.getpostman.com/view/6644801/2s9YyzbxNU
+// Docs: https://documenter.getpostman.com/view/6644801/2sBY4VJcUg
+// (colectia veche, `2s9YyzbxNU`, citata aici pana pe 17.09.2026, a fost STEARSA de ei: 404.)
 // Auth: `Authorization: Bearer <token>` — a long-lived "sms-api" token the
 // merchant generates in their notice.ro account and pastes into the integration.
+//
+// ⚠ Colectia lor NU are niciun exemplu de raspuns, la niciunul dintre cele 29 de capete, iar SDK-ul
+// lor PHP (`noticero/notice-sdk-php`) doar decodeaza JSON-ul. Deci toate formele de raspuns de mai jos
+// sunt citite TOLERANT, peste mai multe nume de campuri, si nu sunt dovedite de documentatie.
 
 const NOTICE_BASE = "https://api.notice.ro/api/v1";
 
@@ -76,6 +81,11 @@ export interface NoticeMessage {
   message?: string | null;
   status?: string | null;
   created_at?: string | null;
+  /**
+   * Numele campurilor din obiectul primit (DOAR numele, fara valori). Forma lor nu e documentata, deci
+   * cand nu recunoastem nimic, singurul fel de a afla ce trimit e sa stim cum isi numesc campurile.
+   */
+  chei?: string[];
 }
 
 export interface NoticeTemplate {
@@ -156,8 +166,13 @@ function pickStr(o: Record<string, unknown>, keys: string[]): string | undefined
 }
 
 // Best-effort provider message id from a send response (exact field is undocumented).
-function extractId(body: unknown): string | null {
-  return pickStr(unwrap(body), ["id", "message_id", "sms_id", "uuid", "reference", "msg_id"]) ?? null;
+//
+// ⚠ `preferate` se cauta INAINTEA numelor obisnuite. La `POST /audio` documentatia spune ca raspunsul
+// intoarce `audio_id`, iar callback-ul apelului poarta tot `audio_id` („”).
+// Lista de mai jos nu-l continea, deci randul unui apel de voce ramanea fara id si niciun callback nu-l
+// mai putea gasi. Iar daca raspunsul are SI un `id` (al randului lor), acela nu e cel din callback.
+function extractId(body: unknown, preferate: string[] = []): string | null {
+  return pickStr(unwrap(body), [...preferate, "id", "message_id", "sms_id", "uuid", "reference", "msg_id"]) ?? null;
 }
 
 // Normalise an array payload that may sit at the root or under data/messages/devices/items.
@@ -390,6 +405,9 @@ export const getNoticeWaInbox = (token: string) => getNoticeWaMessages(token, "i
 export const getNoticeWaOutbox = (token: string) => getNoticeWaMessages(token, "outbox");
 
 // ── Voice / audio ──────────────────────────────────────────────────────────────
+/** Lungimea maxima a textului unui apel, dupa documentatia lui `POST /audio`: „”. */
+export const NOTICE_AUDIO_MAX = 900;
+
 // POST /audio — formdata number(07X) + text + type + callback_url.
 export async function sendNoticeAudio(
   token: string,
@@ -399,6 +417,13 @@ export async function sendNoticeAudio(
   if (!number) return { success: false, error: "Numar de telefon invalid." };
   const text = (params.text ?? "").trim();
   if (!text) return { success: false, error: "Text gol." };
+  /*
+   * ⚠ Se refuza AICI, cu un motiv pe care comerciantul il intelege, nu se taie. Un apel de confirmare
+   * taiat la jumatate poate pierde exact partea cu „”.
+   */
+  if (text.length > NOTICE_AUDIO_MAX) {
+    return { success: false, error: `Textul apelului are ${text.length} caractere; notice.ro accepta cel mult ${NOTICE_AUDIO_MAX}.` };
+  }
   const form = new FormData();
   form.set("number", number);
   form.set("text", text);
@@ -408,24 +433,28 @@ export async function sendNoticeAudio(
     const res = await fetch(`${NOTICE_BASE}/audio`, { method: "POST", headers: authHeaders(token), body: form, cache: "no-store" });
     const body = await readJson(res);
     if (!res.ok) return { success: false, error: mapHttpError(res.status, extractMessage(body)) };
-    return { success: true, providerId: extractId(body) };
+    return { success: true, providerId: extractId(body, ["audio_id"]) };
   } catch { return { success: false, error: "Eroare de retea catre notice.ro." }; }
 }
 
-// ── Inbound SMS (GET /sms-in) — poll fallback when no webhook is configured. ──────
+// ── Inbound SMS (GET /sms-in) ──────────────────────────────────────────────────────
+// ⚠ Nu e o rezerva „”, cum scria aici: e SINGURUL drum catre raspunsuri pe care
+// documentatia API il garanteaza. Il cheama cronul `notice-raspunsuri`, din ora in ora.
+// ⚠ Forma raspunsului nu e documentata; cine citeste lista trebuie sa observe cand nu recunoaste nimic.
 export async function getNoticeInboundSms(token: string): Promise<NoticeMessage[] | { error: string }> {
   try {
     const res = await fetch(`${NOTICE_BASE}/sms-in`, { headers: authHeaders(token), cache: "no-store" });
     const body = await readJson(res);
     if (!res.ok) return { error: mapHttpError(res.status, extractMessage(body)) };
     return asArray(body).map((m) => {
-      const o = (m ?? {}) as Record<string, unknown>;
+      const o = (m && typeof m === "object" ? m : {}) as Record<string, unknown>;
       return {
         id: pickStr(o, ["id", "uuid"]) ?? null,
         number: pickStr(o, ["number", "from", "phone", "sender"]) ?? null,
         message: pickStr(o, ["message", "text", "body"]) ?? null,
         status: null,
         created_at: pickStr(o, ["created_at", "date", "timestamp", "received_at"]) ?? null,
+        chei: Object.keys(o).slice(0, 20),
       };
     });
   } catch { return { error: "Eroare de retea catre notice.ro." }; }

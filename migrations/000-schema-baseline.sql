@@ -6859,7 +6859,8 @@ create table if not exists public.notice_inbox (
   order_id uuid,
   raw jsonb,
   received_at timestamp with time zone default now() not null,
-  created_at timestamp with time zone default now() not null);
+  created_at timestamp with time zone default now() not null,
+  provider_id text);
 
 create table if not exists public.notice_sms_log (
   id uuid default gen_random_uuid() not null,
@@ -8267,6 +8268,7 @@ CREATE INDEX media_library_business_created_idx ON public.media_library USING bt
 CREATE UNIQUE INDEX media_library_business_key_uidx ON public.media_library USING btree (business_id, r2_key);
 CREATE INDEX media_library_business_type_idx ON public.media_library USING btree (business_id, type);
 CREATE INDEX notice_inbox_business_idx ON public.notice_inbox USING btree (business_id, received_at DESC);
+CREATE UNIQUE INDEX notice_inbox_furnizor_unic_idx ON public.notice_inbox USING btree (business_id, provider_id);
 CREATE INDEX notice_inbox_order_id_idx ON public.notice_inbox USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX notice_sms_log_business_created_idx ON public.notice_sms_log USING btree (business_id, created_at DESC);
 CREATE INDEX notice_sms_log_livrare_idx ON public.notice_sms_log USING btree (business_id, provider, provider_id);

@@ -1,7 +1,8 @@
 import { strict as assert } from "node:assert";
 import { test, describe } from "node:test";
 import { readFileSync } from "node:fs";
-import { numarNormalizat, trimiteSiLasaUrma, adresaWebhookSmso, stareaLivrarii, type SmsDeTrimis } from "./smso-urma";
+import { trimiteSiLasaUrma, adresaWebhookSmso, stareaLivrarii, type SmsDeTrimis } from "./smso-urma";
+import { numarNormalizat, ceruOprirea } from "./sms-dezabonare";
 import { smsoOpresteTot, stareaSmsului, SMSO_DEZABONAT, SMSO_FARA_CREDIT } from "./smso";
 
 /*
@@ -510,13 +511,16 @@ describe("Webhook-ul de livrare", () => {
   });
 
   test("⚠ „STOP” se cauta ca PRIM cuvant, nu oriunde in text", () => {
-    /* „nu ma opri din cumparat" n-ar trebui sa dezaboneze pe nimeni. */
-    /* ⚠ Si aici: se prinde CE SE COMPARA, nu ca variabila exista. */
-    assert.match(
-      w,
-      /return CUVINTE_DE_OPRIRE\.includes\(primul\);/,
-      "cuvantul de oprire se cauta oriunde in mesaj, nu doar la inceput",
-    );
-    assert.ok(!/\.some\(\(w\) => t\.includes\(w\)\)/.test(w), "s-a revenit la cautarea oriunde in text");
+    /*
+     * ⚠ REGULA S-A MUTAT PE 17.09.2026, PROPRIETATEA NU. „” sta acum in
+     * `sms-dezabonare`, fiindca o imparte cu notice.ro: omul scrie acelasi „” indiferent prin ce
+     * furnizor i-a venit mesajul. Proba nu mai cauta forma ei in fisierul rutei, ci O CHEAMA,
+     * ceea ce e si mai bine, fiindca o afirmatie pe sursa trecea verde daca regula se muta.
+     */
+    assert.equal(ceruOprirea("STOP"), true);
+    /* CONTINE cuvantul, dar nu incepe cu el: singura forma care deosebeste regula de una stricata. */
+    assert.equal(ceruOprirea("nu vreau dezabonare, doar o intrebare"), false);
+    assert.match(w, /ceruOprirea\(/, "webhook-ul nu mai intreaba deloc daca s-a cerut oprirea");
+    assert.ok(!/const CUVINTE_DE_OPRIRE/.test(w), "webhook-ul si-a pastrat a doua copie a regulii");
   });
 });

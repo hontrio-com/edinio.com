@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { checkCredit, sendSms, smsoOpresteTot } from "@/lib/smso";
-import { trimiteSiLasaUrma, dezabonatii, numarNormalizat, adresaWebhookSmso } from "@/lib/smso-urma";
+import { trimiteSiLasaUrma, adresaWebhookSmso } from "@/lib/smso-urma";
+import { dezabonatii, numarNormalizat } from "@/lib/sms-dezabonare";
 import type { SmsoConfig } from "@/lib/smso";
 
 export interface SmsFilters {

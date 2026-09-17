@@ -18,6 +18,8 @@ import {
 import {
   type NoticeConfig, type NoticeTemplate, type NoticeTriggerKey, type NoticeTrigger,
 } from "@/lib/notice";
+import { adresaPublica } from "@/lib/adresa-publica";
+import { stareaVocii, ETICHETA_VOCE } from "@/lib/notice-raspunsuri";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -173,8 +175,17 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
   const hasToken = config.api_token.trim().length > 0 || secretulEsteSalvat(initialConfig, "api_token");
   const waEnabled = !!config.whatsapp?.enabled;
   const voiceEnabled = !!config.voice?.enabled;
+  /*
+   * ═══ ⚠⚠ ADRESA PE CARE O COPIAZA OMUL IN notice.ro ═══
+   *
+   * Scria `NEXT_PUBLIC_SITE_URL ?? "https://edinio.com"`. In productie variabila e APEXUL, iar apexul
+   * raspunde 308 catre `www` (masurat 17.09.2026). Deci fiecare comerciant copia o adresa pe care
+   * serverul lor trebuia sa urmeze o redirectare ca s-o gaseasca. In aceeasi zi am reparat adresa din
+   * `noticeWebhookUrl`, dar NU si pe asta, care e cea care conteaza: pe aceea n-o vede nimeni, pe asta
+   * o lipeste omul.
+   */
   const webhookUrl = config.webhook_secret
-    ? `${process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com"}/api/notice/webhook?secret=${config.webhook_secret}`
+    ? `${adresaPublica()}/api/notice/webhook?secret=${config.webhook_secret}`
     : null;
 
   // Rendered as a plain function (not <TriggerRow/>) so the <select> keeps focus
@@ -235,7 +246,8 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
           <p className="text-xs leading-relaxed text-muted-foreground">
             Conecteaza contul tau <strong>notice.ro</strong> ca sa trimiti automat notificari clientilor (SMS, WhatsApp
             si apel vocal) cand schimbi statusul comenzii sau al platii. Mesajele folosesc sabloanele create de tine in
-            notice.ro, iar rapoartele de livrare si raspunsurile vin inapoi prin webhook.
+            notice.ro. Raspunsurile clientilor se citesc automat din ora in ora, iar cine raspunde STOP nu mai
+            primeste mesaje de marketing.
           </p>
         </div>
 
@@ -426,6 +438,8 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
             </div>
             <p className="text-xs text-muted-foreground">
               Copiaza acest URL in notice.ro &rarr; Integrare API &rarr; Webhook URL ca sa primesti rapoartele de livrare si raspunsurile clientilor.
+              Daca in notice.ro ai lipit candva o adresa diferita de cea de mai jos (de exemplu fara &bdquo;www&rdquo;), inlocuieste-o.
+              Rezultatul apelurilor vocale vine singur, fara nicio setare.
             </p>
             <div className="flex gap-2">
               <input readOnly value={webhookUrl} className="min-w-0 flex-1 truncate rounded-lg border border-input bg-muted/30 px-3 py-2 text-xs text-muted-foreground focus:outline-none" />
@@ -484,6 +498,12 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
                         <span className="truncate text-foreground">{TRIGGER_LABELS[r.trigger_key] ?? r.trigger_key}</span>
                         {r.phone && <span className="text-muted-foreground">· {r.phone}</span>}
                         {r.delivery_status === "delivered" && <span className="text-success">· livrat</span>}
+                        {/* ⚠ La un apel se arata REZULTATUL: „clientul a anulat” e tocmai ce vrea sa afle comerciantul. */}
+                        {r.channel === "voice" && stareaVocii(r.delivery_status) && (
+                          <span className={stareaVocii(r.delivery_status) === "confirmed" ? "text-success" : "text-destructive"}>
+                            · {ETICHETA_VOCE[stareaVocii(r.delivery_status)!]}
+                          </span>
+                        )}
                       </span>
                       <span className="flex-shrink-0 text-muted-foreground">
                         {new Date(r.created_at).toLocaleString("ro-RO", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
@@ -496,7 +516,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
           </Panel>
         )}
 
-        {/* Inbox — inbound replies captured by the webhook */}
+        {/* Raspunsurile clientilor: trase de cronul `notice-raspunsuri` si, daca vin, primite pe webhook. */}
         {hasToken && inbox.length > 0 && (
           <Panel className="space-y-3 p-5">
             <div className="flex items-center gap-2">

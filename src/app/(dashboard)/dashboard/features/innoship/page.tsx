@@ -5,6 +5,7 @@ import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cac
 import { InnoshipConfigClient } from "@/components/dashboard/InnoshipConfigClient";
 import { IntegrationHeader } from "@/components/dashboard/IntegrationHeader";
 import type { InnoshipConfig } from "@/lib/innoship/client";
+import { adresaPublica } from "@/lib/adresa-publica";
 
 export default async function InnoshipPage() {
   const user = await getCachedUser();
@@ -46,8 +47,13 @@ export default async function InnoshipPage() {
         businessId={business.id}
         initialConfig={config}
         curieriActiviDirect={curieriActiviDirect}
-        /* Aceeasi cadere ca la notice.ro, care compune la fel URL-ul lui de webhook. */
-        baseUrl={process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com"}
+        /*
+         * ⚠ Scria `NEXT_PUBLIC_SITE_URL ?? "https://edinio.com"`, adica APEXUL in productie, care
+         * raspunde 308 catre `www` (masurat 17.09.2026, la trecerea notice.ro). Adresa de aici o lipeste
+         * comerciantul in Innoship, iar serverul lor ar fi trebuit sa urmeze redirectarea ca sa ne
+         * gaseasca. Expunere la reparare: zero magazine.
+         */
+        baseUrl={adresaPublica()}
       />
     </div>
   );

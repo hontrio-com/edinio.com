@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { semnaturaCheii } from "@/lib/utils/cheie-neghicibila";
-import { numarNormalizat, tineMinteDezabonarea, stareaLivrarii } from "@/lib/smso-urma";
+import { stareaLivrarii } from "@/lib/smso-urma";
+import { numarNormalizat, tineMinteDezabonarea, ceruOprirea } from "@/lib/sms-dezabonare";
 import { logError } from "@/lib/error-logger";
 
 /**
@@ -29,18 +30,11 @@ export const dynamic = "force-dynamic";
 
 const ok = () => NextResponse.json({ received: true });
 
-/** Ce scrie omul cand vrea sa nu mai primeasca. „STOP" e forma ceruta de lege in Romania. */
-const CUVINTE_DE_OPRIRE = ["stop", "unsubscribe", "dezabonare", "dezabonat"];
-
-function ceruOprirea(body: string | null): boolean {
-  const t = String(body ?? "").trim().toLowerCase();
-  if (!t) return false;
-  /* Primul cuvant, nu oriunde in text: „nu ma opri din cumparat" n-ar trebui sa dezaboneze pe nimeni. */
-  const primul = t.split(/\s+/)[0]?.replace(/[^\p{L}]/gu, "") ?? "";
-  return CUVINTE_DE_OPRIRE.includes(primul);
-}
-
-/* ⚠ Regula starilor sta in `smso-urma`, fiindca o imparte cu cronul de reconciliere. */
+/*
+ * ⚠ Regula starilor sta in `smso-urma`, fiindca o imparte cu cronul de reconciliere, iar regula
+ * „” sta in `sms-dezabonare`, fiindca o imparte cu notice.ro. Omul scrie
+ * acelasi „” indiferent prin ce furnizor i-a venit mesajul.
+ */
 
 export async function POST(request: NextRequest) {
   const url = request.nextUrl;

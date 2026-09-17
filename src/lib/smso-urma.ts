@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendSms, SMSO_DEZABONAT, type SmsoSendResult } from "@/lib/smso";
 import { semnaturaCheii } from "@/lib/utils/cheie-neghicibila";
+import { numarNormalizat, esteDezabonat, tineMinteDezabonarea } from "@/lib/sms-dezabonare";
+import { adresaPublica } from "@/lib/adresa-publica";
 
 /**
  * Trimite un SMS prin SMSO si LASA URMA. Un singur loc, pentru toate cele sase cai.
@@ -39,29 +41,6 @@ export interface SmsDeTrimis {
 }
 
 /**
- * Numarul, adus la o forma unica.
- *
- * ⚠ Acelasi tratament ca la notice.ro (`normalizeNoticePhone`), fiindca lista de dezabonati se
- * cauta dupa el: scris o data cu `+40` si o data cu `07`, acelasi om ar fi doua randuri diferite si
- * ar primi mesajul oricum.
- */
-export function numarNormalizat(phone: string): string {
-  let c = String(phone ?? "").replace(/\D/g, "");
-  /*
-   * ⚠ IN ORDINEA ASTA, si prima forma a functiei o gresea: taia un singur zero, deci
-   * `0040722334455` ajungea `040722334455` in loc de `722334455`. Acelasi om ar fi fost doua randuri
-   * in lista de dezabonati si ar fi primit mesajul oricum. Prins de proba, nu de citit codul.
-   *
-   * ⚠ Un numar romanesc normalizat are 9 cifre si incepe cu 7, deci nu se poate confunda niciodata
-   * cu prefixul de tara taiat mai sus.
-   */
-  if (c.startsWith("00")) c = c.slice(2);
-  if (c.startsWith("40")) c = c.slice(2);
-  if (c.startsWith("0")) c = c.slice(1);
-  return c;
-}
-
-/**
  * Adresa la care SMSO ne raporteaza, pentru magazinul asta.
  *
  * ═══ ⚠⚠ UN SINGUR LOC, SI E FOLOSIT DE DOUA ORI ═══
@@ -77,7 +56,7 @@ export function numarNormalizat(phone: string): string {
 export function adresaWebhookSmso(businessId: string): string | null {
   try {
     const semnatura = semnaturaCheii(`smso-webhook:${businessId}`);
-    const baza = process.env.NEXT_PUBLIC_APP_URL ?? "https://www.edinio.com";
+    const baza = adresaPublica();
     return `${baza}/api/smso/webhook?b=${businessId}&s=${semnatura}`;
   } catch {
     return null;
@@ -106,29 +85,6 @@ export function stareaLivrarii(status: string | null): "delivered" | "failed" | 
   return null;
 }
 
-/** Numerele care nu mai primesc MARKETING de la magazinul asta. */
-export async function dezabonatii(admin: Admin, businessId: string): Promise<Set<string>> {
-  const { data, error } = await admin
-    .from("sms_optout").select("phone").eq("business_id", businessId);
-  /*
-   * ⚠ O CITIRE PICATA NU DESCHIDE LISTA. Intoarsa goala, campania ar suna exact oamenii care au
-   * cerut sa nu mai fie sunati. Se arunca, iar apelantul opreste trimiterea.
-   */
-  if (error) throw new Error(`lista de dezabonati nu s-a putut citi: ${error.message}`);
-  return new Set((data ?? []).map((r) => numarNormalizat(String((r as { phone: string }).phone))));
-}
-
-/** Il trecem pe lista. Idempotent: a doua oara nu strica nimic. */
-export async function tineMinteDezabonarea(
-  admin: Admin, businessId: string, phone: string, sursa: string,
-): Promise<void> {
-  const { error } = await admin
-    .from("sms_optout")
-    .upsert({ business_id: businessId, phone: numarNormalizat(phone), sursa } as never,
-            { onConflict: "business_id,phone", ignoreDuplicates: true });
-  if (error) console.error("[smso] dezabonarea nu s-a putut scrie:", { businessId, error: error.message });
-}
-
 export async function trimiteSiLasaUrma(
   admin: Admin,
   apiKey: string,
@@ -149,18 +105,18 @@ export async function trimiteSiLasaUrma(
    * iar el are dreptul s-o afle chiar daca nu mai vrea reclame.
    */
   if (m.type === "marketing") {
-    const normalizat = numarNormalizat(m.phone);
-    const { data, error } = await admin
-      .from("sms_optout").select("id")
-      .eq("business_id", m.businessId).eq("phone", normalizat).limit(1);
     /*
-     * ⚠ O citire picata OPRESTE trimiterea, nu o lasa sa treaca. Citita pe dos, garda ar suna exact
-     * oamenii care au cerut sa nu mai fie sunati, si tocmai cand baza are o problema.
+     * ⚠ Intrebarea si normalizarea stau in `sms-dezabonare`, fiindca le imparte cu notice.ro. Scrise
+     * aici, numarul ar fi ajuns in tabel intr-o forma, iar celalalt furnizor l-ar fi cautat in alta.
+     *
+     * ⚠ O citire picata (`nesigur`) OPRESTE trimiterea, nu o lasa sa treaca. Citita pe dos, garda ar
+     * suna exact oamenii care au cerut sa nu mai fie sunati, si tocmai cand baza are o problema.
      */
-    if (error) {
+    const { oprit, nesigur } = await esteDezabonat(admin, m.businessId, m.phone);
+    if (nesigur) {
       return { success: false, error: "Nu am putut verifica lista de dezabonati, deci nu am trimis." };
     }
-    if (data && data.length > 0) {
+    if (oprit) {
       return { success: false, error: "Numarul s-a dezabonat de la mesajele de marketing." };
     }
   }

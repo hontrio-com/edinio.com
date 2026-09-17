@@ -5,18 +5,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/types/database.types";
+import { adresaPublica } from "@/lib/adresa-publica";
+import { esteDezabonat } from "@/lib/sms-dezabonare";
 import {
   sendNoticeSms, sendNoticeWhatsapp, sendNoticeAudio, normalizeNoticePhone,
   type NoticeConfig, type NoticeTriggerKey, type NoticeSendResult,
 } from "@/lib/notice";
 
-const NOTICE_BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
-
 // Public URL notice.ro calls back for delivery reports + inbound replies (and voice callbacks).
 // Carries the per-store secret so the webhook can identify the business. Null until a secret exists.
 export function noticeWebhookUrl(secret?: string | null): string | null {
   if (!secret) return null;
-  return `${NOTICE_BASE_URL}/api/notice/webhook?secret=${encodeURIComponent(secret)}`;
+  return `${adresaPublica()}/api/notice/webhook?secret=${encodeURIComponent(secret)}`;
 }
 
 export interface NoticeVars {
@@ -253,6 +253,29 @@ export async function sendNoticeAbandonedSms(
   if (!config?.enabled || !config.api_token || !config.abandoned?.enabled || !opts.phone) {
     return { handled: false, success: false };
   }
+
+  /*
+   * ═══ ⚠⚠ GARDA DE DEZABONARE, SI E ADAUGATA ABIA AZI (17.09.2026) ═══
+   *
+   * Recuperarea cosului abandonat E MARKETING. Garda scrisa ieri statea doar pe calea SMSO, iar
+   * masurat azi asta o facea aproape degeaba: **notice.ro se incearca PRIMUL**, si intoarce
+   * `handled: true`, deci calea SMSO nu se mai atingea niciodata. La orice magazin cu notice.ro
+   * pornit pentru cosuri abandonate, garda de ieri era ocolita in intregime.
+   *
+   * ⚠ SE INTOARCE `handled: true` LA UN OM OPRIT, nu `false`. Cu `false`, apelantul ar fi socotit
+   * ca notice.ro n-a vrut si ar fi incercat SMSO, adica exact mesajul pe care omul l-a refuzat, doar
+   * pe alt drum. „” trebuie sa opreasca lantul, nu sa-l mute mai departe.
+   *
+   * ⚠ Si o citire picata opreste tot. Vezi `esteDezabonat`.
+   */
+  const { oprit, nesigur } = await esteDezabonat(db, opts.businessId, opts.phone);
+  if (nesigur) {
+    return { handled: true, success: false, error: "Nu am putut verifica lista de dezabonati, deci nu am trimis." };
+  }
+  if (oprit) {
+    return { handled: true, success: false, error: "Numarul s-a dezabonat de la mesajele de marketing." };
+  }
+
   let message = opts.body.trim();
   if (config.strip_diacritics !== false) message = stripRoDiacritics(message);
 

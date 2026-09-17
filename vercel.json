@@ -80,6 +80,10 @@
       "schedule": "30 7 * * *"
     },
     {
+      "path": "/api/cron/notice-raspunsuri",
+      "schedule": "46 * * * *"
+    },
+    {
       "path": "/api/cron/smso-livrari",
       "schedule": "38 * * * *"
     },

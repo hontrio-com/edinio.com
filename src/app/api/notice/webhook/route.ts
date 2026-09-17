@@ -1,15 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeNoticePhone } from "@/lib/notice";
+import { asazaRaspunsurile, asazaApelul } from "@/lib/notice-raspunsuri";
 
 export const dynamic = "force-dynamic";
 
-// notice.ro calls this endpoint for INBOUND events: delivery reports (DLR) for the
-// SMS/WhatsApp we sent, customer replies, and voice callbacks. The merchant pastes
-// the URL (with their per-store ?secret=...) into notice.ro → "Integrare API".
-//
-// The payload shape is undocumented (the Postman collection is a skeleton), so we
-// parse defensively across JSON / form-encoded bodies and tolerate many field names.
+/**
+ * Ce ne cheama notice.ro inapoi.
+ *
+ * ═══ CE E DOVEDIT SI CE NU (17.09.2026) ═══
+ *
+ * Citita specificatia lor cap la cap (colectia Postman oficiala, 29 de capete):
+ *
+ *   - DOVEDIT: `callback_url` la `POST /audio`. Corpul e FORMULAR, cu `audio_id` si `status`.
+ *   - NEDOCUMENTAT: rapoarte de livrare si raspunsuri pentru SMS. Nu apar in API, dar pagina lor de
+ *     prezentare promite „callback-uri HTTP” pentru ambele, iar panoul nostru trimite comerciantul la
+ *     „Integrare API → Webhook URL”. Deci se pot primi, dar in ce forma, nu stie nimeni.
+ *
+ * ⚠ Masurat in productie: 405 SMS-uri, ZERO `delivered`. Nu dovedeste ca ei nu trimit: 399 dintre ele
+ * sunt ale unui magazin care n-a avut NICIODATA secret de webhook, iar adresa afisata celorlalti era pe
+ * apex, care raspunde 308. Pe 17.09 scrisesem aici ca vechiul comentariu „era fals”; era o concluzie
+ * trasa din aceeasi lipsa de date, doar in sens invers.
+ *
+ * De aceea ramurile SMS raman, citite tolerant, iar raspunsurile trec prin aceeasi regula ca a cronului
+ * care le TRAGE (`asazaRaspunsurile`), ca sa nu se dubleze intre ele si ca „STOP” sa fie auzit oricum.
+ *
+ * ⚠ SE RASPUNDE MEREU 200: o cerere falsificata nu merita reincercata, iar un callback repetat la
+ * nesfarsit n-ajuta pe nimeni.
+ */
 
 const DELIVERY_KEYWORDS = ["deliver", "fail", "sent", "undeliv", "expire", "reject", "dlr", "accept", "read", "queued", "sending"];
 
@@ -91,6 +109,13 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   const payload = await parseBody(req);
   if (!payload || Object.keys(payload).length === 0) return ok();
 
+  // ── Rezultatul unui APEL DE VOCE ───────────────────────────────────────────
+  /*
+   * ⚠⚠ SE JUDECA PRIMUL, si orice corp cu `audio_id` se opreste aici, oricare i-ar fi starea. Regula
+   * si cele doua capcane pe care le evita sunt in `asazaApelul`, unde se pot proba chemand-o.
+   */
+  if (await asazaApelul(admin, businessId, payload) !== "nu-e-apel") return ok();
+
   const providerId = pick(payload, ["id", "message_id", "sms_id", "reference", "msg_id", "uuid"]);
   const statusRaw = pick(payload, ["status", "dlr_status", "delivery_status", "event", "type", "state"]);
   const text = pick(payload, ["message", "text", "body", "content", "reply"]);
@@ -104,18 +129,19 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     const norm = normalizeDelivery(statusRaw);
     const patch = { delivery_status: norm, delivered_at: norm === "delivered" ? new Date().toISOString() : null } as never;
 
+    /* ⚠ Doar randurile notice.ro: jurnalul e impartit cu SMSO, iar un raport de-al lor nu atinge altceva. */
     let updated = false;
     if (providerId) {
       const { data } = await admin
         .from("notice_sms_log").update(patch)
-        .eq("business_id", businessId).eq("provider_id", providerId).select("id");
+        .eq("business_id", businessId).eq("provider", "notice").eq("provider_id", providerId).select("id");
       updated = !!(data && data.length);
     }
     if (!updated && from) {
       const phone = normalizeNoticePhone(from) ?? from;
       const { data: rows } = await admin
         .from("notice_sms_log").select("id")
-        .eq("business_id", businessId).eq("phone", phone)
+        .eq("business_id", businessId).eq("provider", "notice").eq("phone", phone)
         .order("created_at", { ascending: false }).limit(1);
       if (rows && rows.length) {
         await admin.from("notice_sms_log").update(patch).eq("id", (rows[0] as { id: string }).id);
@@ -124,16 +150,12 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     return ok();
   }
 
-  // 2. Inbound reply → store it so the merchant can see customer responses.
+  // 2. Raspuns primit → aceeasi regula ca la TRAGERE: doar de la numere carora le-am scris, „STOP”
+  //    tinut minte, si fara dubluri fata de ce aduce cronul.
   if (text && from) {
-    await admin.from("notice_inbox").insert({
-      business_id: businessId,
-      channel,
-      from_number: normalizeNoticePhone(from) ?? from,
-      body: text,
-      raw: payload as never,
-      received_at: new Date().toISOString(),
-    } as never);
+    await asazaRaspunsurile(admin, businessId, [
+      { id: providerId || null, number: from, message: text, created_at: null, status: null },
+    ], { sursa: "webhook", canal: channel, brut: payload });
   }
 
   return ok();

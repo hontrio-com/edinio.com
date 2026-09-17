@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildAuthUrl, signState, googleAnalyticsConfigured, getAccessToken } from "@/lib/google-analytics/oauth";
+import { buildAuthUrl, signState, googleAnalyticsConfigured, obtineTokenul, type EroareToken } from "@/lib/google-analytics/oauth";
 import {
-  listAccountSummaries, listDataStreams, batchRunReports, runRealtimeReport,
+  listAccountSummaries, listDataStreams, batchRunReports, runRealtimeReport, listMeasurementProtocolSecrets, totalTimpReal,
+  fluxulMagazinului,
   type GaReport, type GaReportRequest,
 } from "@/lib/google-analytics/client";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
@@ -15,6 +16,16 @@ type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
 const FEATURE_PATH = "/dashboard/features/google-analytics";
 const EXPIRED_MSG = "Sesiunea Google a expirat. Reconecteaza-te.";
+
+/*
+ * ⚠ Un mesaj pe MOTIV. Inainte, orice cadere a tokenului spunea „Sesiunea a expirat. Reconecteaza-te”,
+ * inclusiv cand Google era cazut cateva secunde: omul refacea tot dansul OAuth degeaba. Vezi `obtineTokenul`.
+ */
+const MESAJ_TOKEN: Record<EroareToken, string> = {
+  revocat: EXPIRED_MSG,
+  "fara-drept": "Contul Google conectat nu ne-a dat dreptul de a citi Google Analytics. Reconecteaza-te si lasa bifat accesul la Analytics.",
+  indisponibil: "Google nu a raspuns acum. Incearca din nou peste cateva minute.",
+};
 
 interface OwnBiz { id: string; slug: string; custom_domain: string | null }
 
@@ -96,6 +107,7 @@ export interface GaStatus {
   measurementId?: string;       // undefined = property has no web data stream
   trackingEnabled: boolean;
   hasApiSecret: boolean;        // server-side Measurement Protocol configured
+  apiSecretVerificat: boolean;  // gasit printre secretele fluxului legat (doar la OAuth)
 }
 
 export async function getGaStatus(businessId: string): Promise<GaStatus | { error: string }> {
@@ -117,6 +129,7 @@ export async function getGaStatus(businessId: string): Promise<GaStatus | { erro
     measurementId: config.measurement_id,
     trackingEnabled: config.tracking_enabled !== false,
     hasApiSecret: !!config.api_secret,
+    apiSecretVerificat: !!config.api_secret && !!config.api_secret_verificat_la,
   };
 }
 
@@ -180,8 +193,9 @@ export async function listGaProperties(businessId: string): Promise<{ groups: Ga
 
   const config = await loadConfig(businessId);
   if (!config.refresh_token) return { error: "Conecteaza-te mai intai cu Google." };
-  const token = await getAccessToken(config.refresh_token);
-  if (!token) return { error: EXPIRED_MSG };
+  const tok = await obtineTokenul(config.refresh_token);
+  if ("eroare" in tok) return { error: MESAJ_TOKEN[tok.eroare] };
+  const token = tok.token;
 
   const res = await listAccountSummaries(token);
   if ("error" in res) return { error: res.error };
@@ -216,8 +230,9 @@ export async function selectGaProperty(
 
   const config = await loadConfig(businessId);
   if (!config.refresh_token) return { error: "Conecteaza-te mai intai cu Google." };
-  const token = await getAccessToken(config.refresh_token);
-  if (!token) return { error: EXPIRED_MSG };
+  const tok = await obtineTokenul(config.refresh_token);
+  if ("eroare" in tok) return { error: MESAJ_TOKEN[tok.eroare] };
+  const token = tok.token;
 
   const streamsRes = await listDataStreams(token, cleanId);
   if ("error" in streamsRes) {
@@ -225,16 +240,8 @@ export async function selectGaProperty(
     return { error: `Nu am putut citi proprietatea: ${streamsRes.error}` };
   }
 
-  // Prefer the web stream that points at this store's domain; fall back to the
-  // first web stream (most properties have exactly one).
-  const webStreams = (streamsRes.data.dataStreams ?? []).filter(
-    (s) => s.type === "WEB_DATA_STREAM" && s.webStreamData?.measurementId,
-  );
-  const domainMatch = webStreams.find((s) => {
-    const uri = (s.webStreamData?.defaultUri ?? "").toLowerCase();
-    return !!(biz.custom_domain && uri.includes(biz.custom_domain.toLowerCase()));
-  });
-  const stream = domainMatch ?? webStreams[0];
+  // Fluxul magazinului: domeniul propriu, apoi `edinio.com/<slug>`, apoi primul. Vezi `fluxulMagazinului`.
+  const stream = fluxulMagazinului(streamsRes.data.dataStreams ?? [], { customDomain: biz.custom_domain, slug: biz.slug });
 
   const ok = await saveConfig(supabase, businessId, {
     ...config,
@@ -245,6 +252,8 @@ export async function selectGaProperty(
     account_name: accountName ?? config.account_name,
     measurement_id: stream?.webStreamData?.measurementId,
     stream_name: stream?.name,
+    /* ⚠ Alt flux, alt set de secrete: verificarea facuta pe fluxul vechi nu mai spune nimic. */
+    api_secret_verificat_la: stream?.name === config.stream_name ? config.api_secret_verificat_la : undefined,
     tracking_enabled: config.tracking_enabled ?? true,
     connected_at: config.connected_at ?? new Date().toISOString(),
   });
@@ -269,7 +278,29 @@ export async function setGaTracking(businessId: string, enabled: boolean): Promi
   return { success: true };
 }
 
-export async function setGaApiSecret(businessId: string, apiSecret: string): Promise<{ success: true } | { error: string }> {
+/**
+ * Secretul se cauta printre secretele CHIAR ale fluxului legat. `true` = gasit, `false` = sigur NU e al
+ * fluxului, `null` = nu se poate spune (conectare manuala, Google indisponibil).
+ */
+async function secretulEAlFluxului(config: GoogleAnalyticsConfig, secret: string): Promise<boolean | null> {
+  if (!config.refresh_token || !config.stream_name) return null;
+  const tok = await obtineTokenul(config.refresh_token);
+  if ("eroare" in tok) return null;
+  const res = await listMeasurementProtocolSecrets(tok.token, config.stream_name);
+  if ("error" in res) return null;
+  return res.data.secrete.some((x) => x.secretValue === secret);
+}
+
+/*
+ * ═══ ⚠⚠ DE CE SE VERIFICA (17.09.2026) ═══
+ *
+ * Measurement Protocol raspunde 2xx si la un `api_secret` GRESIT: evenimentele se arunca la Google, iar la
+ * noi nu ajunge nimic. Un secret copiat din alt flux, sau cu o litera lipsa, facea ca toate achizitiile si
+ * rambursarile de pe server sa dispara in tacere, cu eticheta „Activ” in panou.
+ */
+export async function setGaApiSecret(
+  businessId: string, apiSecret: string,
+): Promise<{ success: true; verificat: boolean | null } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
@@ -278,10 +309,47 @@ export async function setGaApiSecret(businessId: string, apiSecret: string): Pro
   const secret = (apiSecret ?? "").trim();
   const config = await loadConfig(businessId);
   if (!config.connected) return { error: "Conecteaza mai intai Google Analytics." };
-  const ok = await saveConfig(supabase, businessId, { ...config, api_secret: secret || undefined });
+
+  let verificat: boolean | null = null;
+  if (secret) {
+    verificat = await secretulEAlFluxului(config, secret);
+    if (verificat === false) {
+      return {
+        error: `Secretul nu apartine fluxului legat${config.measurement_id ? ` (${config.measurement_id})` : ""}. `
+          + "Copiaza-l din Administrare, Fluxuri de date, fluxul cu acest ID, Measurement Protocol API secrets.",
+      };
+    }
+  }
+  const ok = await saveConfig(supabase, businessId, {
+    ...config,
+    api_secret: secret || undefined,
+    api_secret_verificat_la: secret && verificat ? new Date().toISOString() : undefined,
+  });
   if (!ok) return { error: "Eroare la salvare." };
   revalidatePath(FEATURE_PATH);
-  return { success: true };
+  return { success: true, verificat };
+}
+
+/** Verifica secretul DEJA salvat, fara sa-l ceara din nou (pentru cele salvate inainte de verificare). */
+export async function verificaGaApiSecret(
+  businessId: string,
+): Promise<{ success: true; verificat: boolean | null } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+  if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+
+  const config = await loadConfig(businessId);
+  if (!config.api_secret) return { error: "Nu exista niciun secret salvat." };
+  const verificat = await secretulEAlFluxului(config, config.api_secret);
+  if (verificat === null) return { success: true, verificat };
+  const ok = await saveConfig(supabase, businessId, {
+    ...config,
+    api_secret_verificat_la: verificat ? new Date().toISOString() : undefined,
+  });
+  if (!ok) return { error: "Eroare la salvare." };
+  revalidatePath(FEATURE_PATH);
+  return { success: true, verificat };
 }
 
 export async function disconnectGoogleAnalytics(businessId: string): Promise<{ success: true } | { error: string }> {
@@ -305,6 +373,18 @@ export async function disconnectGoogleAnalytics(businessId: string): Promise<{ s
 const DASHBOARD_TTL_MS = 10 * 60_000;
 const dashboardCache = new Map<string, { data: GaDashboardData; exp: number }>();
 const realtimeCache = new Map<string, { data: GaRealtimeData; exp: number }>();
+
+/**
+ * ⚠ 403 NU INSEAMNA MEREU „RECONECTEAZA-TE”. Poate fi un drept lipsa pe token (atunci da), dar si un cont
+ * care nu mai are acces la proprietate, unde reconectarea cu acelasi cont nu repara nimic. Se spune
+ * ce a spus Google.
+ */
+function mesajEroareGoogle(e: { error: string; status: number }): string {
+  if (e.status === 401) return EXPIRED_MSG;
+  if (e.status === 403 && /scope/i.test(e.error)) return MESAJ_TOKEN["fara-drept"];
+  if (e.status === 403) return `Contul Google conectat nu are acces la aceasta proprietate Google Analytics (${e.error}).`;
+  return `Google Analytics: ${e.error}`;
+}
 
 function clearDashboardCache(propertyId: string) {
   for (const key of dashboardCache.keys()) if (key.startsWith(`${propertyId}:`)) dashboardCache.delete(key);
@@ -403,8 +483,9 @@ export async function getGaDashboard(
   const cached = dashboardCache.get(cacheKey);
   if (cached && cached.exp > Date.now() && !force) return { data: cached.data };
 
-  const token = await getAccessToken(config.refresh_token);
-  if (!token) return { error: EXPIRED_MSG };
+  const tok = await obtineTokenul(config.refresh_token);
+  if ("eroare" in tok) return { error: MESAJ_TOKEN[tok.eroare] };
+  const token = tok.token;
 
   const current = { startDate: `${days - 1}daysAgo`, endDate: "today" };
   const previous = { startDate: `${2 * days - 1}daysAgo`, endDate: `${days}daysAgo` };
@@ -452,8 +533,7 @@ export async function getGaDashboard(
   if ("error" in res1 || "error" in res2) {
     const err = "error" in res1 ? res1 : (res2 as { error: string; status: number });
     logError({ action: "ga.dashboard", message: err.error, details: { businessId, propertyId, status: err.status }, userId: user.id });
-    if (err.status === 401 || err.status === 403) return { error: EXPIRED_MSG };
-    return { error: `Google Analytics: ${err.error}` };
+    return { error: mesajEroareGoogle(err) };
   }
 
   const r1 = res1.data.reports ?? [];
@@ -508,22 +588,28 @@ export async function getGaRealtime(businessId: string): Promise<{ data: GaRealt
   const cached = realtimeCache.get(config.property_id);
   if (cached && cached.exp > Date.now()) return { data: cached.data };
 
-  const token = await getAccessToken(config.refresh_token);
-  if (!token) return { error: EXPIRED_MSG };
+  const tok = await obtineTokenul(config.refresh_token);
+  if ("eroare" in tok) return { error: MESAJ_TOKEN[tok.eroare] };
+  const token = tok.token;
 
   const res = await runRealtimeReport(token, config.property_id, {
     dimensions: [{ name: "country" }],
     metrics: [{ name: "activeUsers" }],
     limit: 10,
+    metricAggregations: ["TOTAL"],
   });
   if ("error" in res) {
-    if (res.status === 401 || res.status === 403) return { error: EXPIRED_MSG };
-    return { error: `Google Analytics: ${res.error}` };
+    return { error: mesajEroareGoogle(res) };
   }
 
   const countries = dimRows(res.data).map((r) => ({ name: r.dim, users: r.metrics[0] ?? 0 }));
   const data: GaRealtimeData = {
-    total: countries.reduce((s, c) => s + c.users, 0),
+    /*
+     * ⚠ Totalul din AGREGAREA lui Google, nu suma randurilor: cererea aduce doar primele 10 tari, deci
+     * suma lor numara mai putin cand vizitatorii vin din mai multe. Documentatia `runRealtimeReport`:
+     * `metricAggregations` -> `totals[]`. Suma ramane doar ca rezerva.
+     */
+    total: totalTimpReal(res.data, countries),
     countries,
     fetchedAt: new Date().toISOString(),
   };

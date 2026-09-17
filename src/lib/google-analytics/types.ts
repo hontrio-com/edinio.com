@@ -12,6 +12,11 @@ export interface GoogleAnalyticsConfig {
   stream_name?: string;         // full resource name properties/x/dataStreams/y
   tracking_enabled?: boolean;   // inject gtag on the storefront (default true)
   api_secret?: string;          // GA4 Measurement Protocol API secret (server-side purchase/refund)
+  /**
+   * Cand s-a gasit `api_secret` printre secretele CHIAR ale fluxului legat (Admin API). Lipseste la
+   * conectarea manuala (fara OAuth nu se poate verifica) si la secretele salvate inainte de 17.09.2026.
+   */
+  api_secret_verificat_la?: string;
   connected_at?: string;
 }
 

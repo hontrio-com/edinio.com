@@ -1,3 +1,5 @@
+import { CONSENT_VERSION } from "@/lib/cookie-consent";
+
 // First-party order attribution captured in the storefront (client-side) and
 // attached to the order at checkout, so the merchant sees where each order came
 // from. Stored in localStorage; no third-party cookies, no cross-site tracking.
@@ -60,6 +62,12 @@ export interface OrderSource {
   captured_at?: string;
   user_agent?: string; // filled server-side at order creation
   ga_client_id?: string; // GA4 client id from the _ga cookie, for server-side Measurement Protocol
+  /** Cookie-urile de sesiune `_ga_<ID>`, ca `ID=valoare;…`. Serverul il alege pe al fluxului magazinului. */
+  ga_sesiuni?: string;
+  /** „da” cand acordul de mai jos a fost CITIT pentru magazinul acesta (lipseste la comenzile vechi). */
+  consimtamant_citit?: string;
+  consimtamant_analiza?: string;
+  consimtamant_marketing?: string;
 }
 
 /*
@@ -152,6 +160,79 @@ function readGaClientId(): string | undefined {
   }
 }
 
+/**
+ * Cookie-urile de sesiune GA4 (`_ga_<ID>`), ca `ID=valoare;ID2=valoare`.
+ *
+ * ⚠ TOATE, nu doar al magazinului: aici nu se stie ID-ul fluxului, iar pe adresa comuna poate sta
+ * alaturi si cel al platformei. Serverul il alege pe cel potrivit (`sesiuneaPentru`). Valoarea se ia
+ * INTREAGA, fiindca asa o accepta documentatia ca `session_id`.
+ */
+function sesiunileGa(): string | undefined {
+  try {
+    const perechi: string[] = [];
+    let lungime = 0;
+    for (const bucata of document.cookie.split(/;\s*/)) {
+      const i = bucata.indexOf("=");
+      if (i <= 0) continue;
+      const nume = bucata.slice(0, i);
+      const valoare = bucata.slice(i + 1);
+      if (!/^_ga_[A-Za-z0-9]+$/.test(nume) || !/^GS\d\.\d\./.test(valoare)) continue;
+      const pereche = `${nume.slice(4)}=${valoare}`;
+      /* ⚠ Lista alba taie la 500; o pereche taiata la jumatate ar fi o sesiune falsa, deci se opreste inainte. */
+      if (lungime + pereche.length + 1 > 500) break;
+      perechi.push(pereche);
+      lungime += pereche.length + 1;
+    }
+    return perechi.length ? perechi.join(";") : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Ce a ales cumparatorul in bannerul de cookie-uri AL ACESTUI MAGAZIN.
+ *
+ * ═══ ⚠⚠ DE CE SE FOTOGRAFIAZA (17.09.2026) ═══
+ *
+ * Serverul trimite achizitia in GA4 si dupa ce omul a plecat din pagina. Pana acum nu stia ce a ales
+ * omul, iar un `_ga` prezent nu dovedea nimic: pe adresa comuna `edinio.com/<magazin>` cookie-ul sta pe
+ * domeniul `edinio.com`, unde il scrie si tag-ul platformei. Regula care foloseste asta e
+ * `verdictTrimitere`.
+ *
+ * ⚠ CARE MAGAZIN: pe adresa comuna `basePath` e chiar `/<slug>`. Pe domeniul propriu e gol, dar acolo
+ * originea are un singur magazin, deci cheia `edinio_cc_*` de pe origine e a lui; daca ar fi mai multe
+ * (un magazin redenumit), se ia decizia cea mai noua.
+ *
+ * ⚠ Nicio decizie salvata = niciun acord. Daca magazinul n-are banner, serverul stie asta singur si
+ * trimite oricum; nu se ghiceste aici.
+ */
+function acordulMagazinului(basePath: string): { analiza: boolean; marketing: boolean; decis: boolean } | null {
+  try {
+    const citeste = (cheie: string) => {
+      const raw = localStorage.getItem(cheie);
+      if (!raw) return null;
+      const p = JSON.parse(raw) as { v?: number; ts?: number; analytics?: unknown; marketing?: unknown };
+      if (p?.v !== CONSENT_VERSION) return null;
+      return { analiza: p.analytics === true, marketing: p.marketing === true, ts: Number(p.ts) || 0 };
+    };
+    if (basePath) {
+      const d = citeste(`edinio_cc_${basePath.replace(/^\/+/, "")}`);
+      return d ? { analiza: d.analiza, marketing: d.marketing, decis: true } : { analiza: false, marketing: false, decis: false };
+    }
+    let cea: { analiza: boolean; marketing: boolean; ts: number } | null = null;
+    for (let i = 0; i < localStorage.length; i++) {
+      const cheie = localStorage.key(i);
+      if (!cheie?.startsWith("edinio_cc_")) continue;
+      const d = citeste(cheie);
+      if (d && (!cea || d.ts > cea.ts)) cea = d;
+    }
+    return cea ? { analiza: cea.analiza, marketing: cea.marketing, decis: true } : { analiza: false, marketing: false, decis: false };
+  } catch {
+    /* Fara localStorage nu se poate citi nimic: comanda pleaca fara fotografie, ca una veche. */
+    return null;
+  }
+}
+
 /** Read the stored attribution (+ the live GA client id) to attach to an order at checkout. */
 export function getAttribution(basePath: string): OrderSource | null {
   if (typeof window === "undefined") return null;
@@ -159,8 +240,25 @@ export function getAttribution(basePath: string): OrderSource | null {
     const raw = localStorage.getItem(cheiaMagazinului(basePath));
     const parsed = raw ? (JSON.parse(raw) as OrderSource) : null;
     const src: OrderSource = parsed && typeof parsed === "object" ? { ...parsed } : {};
-    const gaClientId = readGaClientId();
-    if (gaClientId) src.ga_client_id = gaClientId;
+
+    const acord = acordulMagazinului(basePath);
+    if (acord) {
+      src.consimtamant_citit = "da";
+      src.consimtamant_analiza = acord.analiza ? "da" : "nu";
+      src.consimtamant_marketing = acord.marketing ? "da" : "nu";
+    }
+    /*
+     * ⚠ Cookie-urile GA nu se iau de la cine a REFUZAT analiza pentru magazinul acesta: cel de pe adresa
+     * comuna poate fi al platformei, iar n-avem ce face cu el. Fara decizie salvata se iau, fiindca
+     * magazinul poate sa n-aiba banner deloc; serverul hotaraste.
+     */
+    const refuzat = acord !== null && acord.decis && !acord.analiza;
+    if (!refuzat) {
+      const gaClientId = readGaClientId();
+      if (gaClientId) src.ga_client_id = gaClientId;
+      const sesiuni = sesiunileGa();
+      if (sesiuni) src.ga_sesiuni = sesiuni;
+    }
     return Object.keys(src).length > 0 ? src : null;
   } catch {
     return null;

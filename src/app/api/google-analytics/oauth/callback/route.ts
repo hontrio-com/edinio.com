@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { verifyState, exchangeCode } from "@/lib/google-analytics/oauth";
-import { listAccountSummaries, listDataStreams } from "@/lib/google-analytics/client";
+import { verifyState, exchangeCode, hasAnalyticsScope } from "@/lib/google-analytics/oauth";
+import { listAccountSummaries, listDataStreams, fluxulMagazinului } from "@/lib/google-analytics/client";
+import { logError } from "@/lib/error-logger";
 import type { GoogleAnalyticsConfig } from "@/lib/google-analytics/types";
 import { eStareDeAdmin } from "@/lib/admin-analytics/stare-oauth";
 import { aterizareAdminGa4 } from "@/lib/admin-analytics/aterizare-oauth";
@@ -43,12 +44,18 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return back(req, "ga=error");
   const { data: biz } = await supabase
-    .from("businesses").select("id, custom_domain").eq("id", businessId).eq("user_id", user.id).single();
+    .from("businesses").select("id, slug, custom_domain").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return back(req, "ga=error");
 
   const tok = await exchangeCode(url.searchParams.get("code")!);
   if ("error" in tok) return back(req, "ga=error");
   if (!tok.refreshToken) return back(req, "ga=norefresh");
+  /*
+   * ⚠⚠ Ecranul Google e GRANULAR: omul poate debifa accesul la Analytics si tot sa apese „Continua”.
+   * Documentatia cere verificarea dreptului acordat. Fara el, tokenul nu poate citi nimic, deci nu se
+   * salveaza: omul e trimis inapoi sa lase bifa. Acelasi tipar ca `gmc=noscope` la Google Merchant.
+   */
+  if (!hasAnalyticsScope(tok.scope)) return back(req, "ga=noscope");
 
   /*
    * Configul existent se citeste cu SERVICE ROLE, nu cu clientul utilizatorului.
@@ -73,7 +80,10 @@ export async function GET(req: NextRequest) {
   // Discover accessible GA4 properties; auto-connect when there's exactly one.
   const sumRes = await listAccountSummaries(tok.accessToken);
   const flat: { id: string; name: string; account: string }[] = [];
-  if (!("error" in sumRes)) {
+  /* ⚠ O lista cazuta se scrie; inainte se inghitea, iar omul ramanea pe „Alege proprietatea” fara proprietati. */
+  if ("error" in sumRes) {
+    await logError({ action: "ga.oauth.listAccountSummaries", message: sumRes.error, details: { businessId, status: sumRes.status }, businessId, userId: user.id, severity: "warning" });
+  } else {
     for (const acc of sumRes.data.accountSummaries ?? []) {
       for (const p of acc.propertySummaries ?? []) {
         const id = (p.property ?? "").split("/").pop() ?? "";
@@ -85,11 +95,9 @@ export async function GET(req: NextRequest) {
   if (flat.length === 1) {
     const prop = flat[0];
     const streamsRes = await listDataStreams(tok.accessToken, prop.id);
-    const webStreams = ("error" in streamsRes ? [] : streamsRes.data.dataStreams ?? []).filter(
-      (s) => s.type === "WEB_DATA_STREAM" && s.webStreamData?.measurementId,
-    );
-    const domain = (biz.custom_domain as string | null)?.toLowerCase();
-    const stream = webStreams.find((s) => !!(domain && (s.webStreamData?.defaultUri ?? "").toLowerCase().includes(domain))) ?? webStreams[0];
+    const stream = fluxulMagazinului("error" in streamsRes ? [] : streamsRes.data.dataStreams ?? [], {
+      customDomain: biz.custom_domain as string | null, slug: biz.slug as string | null,
+    });
 
     config.connected = true;
     config.manual = undefined; // OAuth path replaces a previous manual (tracking-only) connect
@@ -97,6 +105,8 @@ export async function GET(req: NextRequest) {
     config.property_name = prop.name;
     config.account_name = prop.account;
     config.measurement_id = stream?.webStreamData?.measurementId;
+    /* ⚠ Alt flux, alt set de secrete: verificarea facuta pe fluxul vechi nu mai spune nimic. */
+    if (stream?.name !== config.stream_name) config.api_secret_verificat_la = undefined;
     config.stream_name = stream?.name;
     config.tracking_enabled = config.tracking_enabled ?? true;
     config.connected_at = config.connected_at ?? new Date().toISOString();

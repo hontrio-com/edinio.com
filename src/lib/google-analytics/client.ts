@@ -80,6 +80,61 @@ export function listDataStreams(accessToken: string, propertyId: string) {
   );
 }
 
+/**
+ * Fluxul web al MAGAZINULUI dintr-o proprietate cu mai multe fluxuri.
+ *
+ * ⚠ Se potrivea doar pe domeniul propriu. Dar 58 din 71 de magazine stau pe `www.edinio.com/<slug>`, deci
+ * pentru ele se lua orbeste PRIMUL flux web, care poate fi al altui site al comerciantului: masuratorile
+ * magazinului plecau atunci in fluxul gresit. Acum se cauta intai domeniul propriu, apoi adresa
+ * `edinio.com/<slug>`, si abia apoi primul flux (cele mai multe proprietati au unul singur).
+ */
+export function fluxulMagazinului(
+  fluxuri: GaDataStream[],
+  magazin: { customDomain?: string | null; slug?: string | null },
+): GaDataStream | undefined {
+  const web = fluxuri.filter((s) => s.type === "WEB_DATA_STREAM" && s.webStreamData?.measurementId);
+  const adresa = (s: GaDataStream) => (s.webStreamData?.defaultUri ?? "").toLowerCase();
+  const domeniu = magazin.customDomain?.trim().toLowerCase();
+  const slug = magazin.slug?.trim().toLowerCase();
+  return (
+    (domeniu ? web.find((s) => adresa(s).includes(domeniu)) : undefined)
+    ?? (slug ? web.find((s) => new RegExp(`edinio\\.com/${slug.replace(/[^a-z0-9-]/g, "")}(?:[/?#]|$)`).test(adresa(s))) : undefined)
+    ?? web[0]
+  );
+}
+
+export interface GaMpSecret { name?: string; displayName?: string; secretValue?: string }
+
+/**
+ * Secretele Measurement Protocol ale unui flux (`properties/x/dataStreams/y`).
+ *
+ * ⚠ Merge cu `analytics.readonly` (documentatia `measurementProtocolSecrets.list`: „Requires one of
+ * analytics.readonly, analytics.edit") si intoarce `secretValue`. Deci un secret lipit de comerciant se
+ * poate VERIFICA, fara niciun drept in plus. Conteaza fiindca Measurement Protocol raspunde 2xx si la un
+ * `api_secret` gresit: evenimentele se arunca, iar nimic nu spune asta.
+ */
+export async function listMeasurementProtocolSecrets(
+  accessToken: string, streamName: string,
+): Promise<ApiResult<{ secrete: GaMpSecret[] }>> {
+  if (!/^properties\/\d+\/dataStreams\/\d+$/.test(streamName)) {
+    return { error: "Flux Google Analytics necunoscut.", status: 0 };
+  }
+  const toate: GaMpSecret[] = [];
+  let pageToken = "";
+  for (let i = 0; i < 5; i++) {
+    const qs = new URLSearchParams({ pageSize: "200" });
+    if (pageToken) qs.set("pageToken", pageToken);
+    const res = await call<{ measurementProtocolSecrets?: GaMpSecret[]; nextPageToken?: string }>(
+      accessToken, "GET", `${ADMIN_BASE}/${streamName}/measurementProtocolSecrets?${qs.toString()}`,
+    );
+    if ("error" in res) return res;
+    toate.push(...(res.data.measurementProtocolSecrets ?? []));
+    pageToken = res.data.nextPageToken ?? "";
+    if (!pageToken) break;
+  }
+  return { data: { secrete: toate } };
+}
+
 // ── Data API (reports) ─────────────────────────────────────────────────────────
 
 export interface GaDateRange { startDate: string; endDate: string }
@@ -110,6 +165,8 @@ export interface GaReport {
   dimensionHeaders?: { name?: string }[];
   metricHeaders?: { name?: string }[];
   rows?: GaReportRow[];
+  /** Doar cand cererea are `metricAggregations`. */
+  totals?: GaReportRow[];
   rowCount?: number;
 }
 
@@ -124,9 +181,21 @@ export function batchRunReports(accessToken: string, propertyId: string, request
   );
 }
 
+/**
+ * Totalul utilizatorilor activi dintr-un raport de timp real cerut cu `metricAggregations: ["TOTAL"]`.
+ *
+ * ⚠ Nu suma randurilor: cererea aduce primele N tari, deci suma numara mai putin cand vin din mai multe.
+ * Suma ramane doar ca rezerva, daca Google n-a intors agregarea.
+ */
+export function totalTimpReal(raport: GaReport, tari: { users: number }[]): number {
+  const brut = raport.totals?.[0]?.metricValues?.[0]?.value;
+  const n = Number(brut);
+  return brut !== undefined && Number.isFinite(n) ? n : tari.reduce((s, c) => s + c.users, 0);
+}
+
 export function runRealtimeReport(
   accessToken: string, propertyId: string,
-  request: { dimensions?: { name: string }[]; metrics: { name: string }[]; limit?: number },
+  request: { dimensions?: { name: string }[]; metrics: { name: string }[]; limit?: number; metricAggregations?: "TOTAL"[] },
 ) {
   return call<GaReport>(accessToken, "POST", `${DATA_BASE}/properties/${propertyId}:runRealtimeReport`, request);
 }

@@ -7,6 +7,7 @@ import { CheckCircle, Package, Phone, ArrowLeft, XCircle } from "lucide-react";
 import { formatPrice, unitarSeInchide } from "@/lib/utils/format";
 import { ConfettiEffect } from "@/components/ministore/ConfettiEffect";
 import { FbPurchaseEvent } from "@/components/public/FbPurchaseEvent";
+import { valoriGa4, type ValoriGa4 } from "@/lib/google-analytics/comanda-ga4";
 import { StorePageShell } from "@/components/storefront/StorePageShell";
 import { StorefrontThemeScope } from "@/components/storefront/StorefrontThemeScope";
 import { buildChromeData, loadSearchCategories } from "@/lib/storefront/chrome-value";
@@ -91,12 +92,17 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     `true`, orice cale pe care citirea cade ar fi trimis o conversie pe nestiute.
   */
   let vanzareConfirmata = false;
+  /*
+    ⚠ Valorile GA4 ale achizitiei, din ACEEASI functie ca serverul (`valoriGa4`). GA4 pastreaza un
+    singur `purchase` pe `transaction_id`; calculate diferit, venitul ar fi depins de care ajunge primul.
+  */
+  let valoriGa4Comanda: ValoriGa4 | undefined;
 
   if (orderId) {
     const adminClient = createAdminClient();
     const { data: order } = await adminClient
       .from("orders")
-      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_amount, vat_rate, subtotal, total, customer_name, customer_email, customer_phone, payment_method, payment_status, order_source")
+      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_amount, vat_rate, prices_include_vat, subtotal, total, customer_name, customer_email, customer_phone, payment_method, payment_status, order_source")
       .eq("id", orderId)
       .eq("business_id", business.id)
       .single();
@@ -128,6 +134,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       customerPhone = order.customer_phone ?? null;
       sursaComenzii = order.order_source ?? null;
       totalComanda = order.total != null ? Number(order.total) : null;
+      valoriGa4Comanda = valoriGa4(order);
     }
   }
 
@@ -257,6 +264,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
               total={displayTotal}
               numItems={numItems}
               items={purchaseItems}
+              ga4={valoriGa4Comanda}
               googleTagId={marketingConfig?.google_tag_id}
               googleAdsConversionLabel={marketingConfig?.google_ads_conversion_label}
               fbPixelId={marketingConfig?.facebook_pixel_id}

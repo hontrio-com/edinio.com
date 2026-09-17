@@ -9,6 +9,7 @@ import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import { logError } from "@/lib/error-logger";
 import { raporteazaCumparareaDupaIncasare } from "./ga4-comanda";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { stingeRambursulGlsDupaPlata } from "@/lib/gls/rambursul-se-stinge-la-plata";
 
 /**
@@ -152,7 +153,9 @@ function dupaPlata(comanda: ComandaDePlatit, status: string): RezultatPlata {
     ⚠ SI NU POATE STRICA PLATA: functia isi inghite singura greselile si nu se
     asteapta nimeni dupa ea.
   */
-  void raporteazaCumparareaDupaIncasare(comanda.id);
+  /* ⚠ Prin `dupaRaspuns`: chemata dintr-o ruta de notificare, o promisiune neasteptata poate fi inghetata
+     cu instanta inainte sa plece cererea catre Google (auditul din 24.08.2026, reluat la GA4 pe 17.09). */
+  dupaRaspuns(() => raporteazaCumparareaDupaIncasare(comanda.id), "ga4.cumparareDupaIncasare");
   /*
     ⚠ SI RAMBURSUL DE PE COLETUL DEJA EMIS.
 

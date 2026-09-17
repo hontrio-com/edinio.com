@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import {
   startGoogleAnalyticsOAuth, connectGaManual, listGaProperties, selectGaProperty,
-  disconnectGoogleAnalytics, setGaTracking, setGaApiSecret, getGaDashboard, getGaRealtime,
+  disconnectGoogleAnalytics, setGaTracking, setGaApiSecret, verificaGaApiSecret, getGaDashboard, getGaRealtime,
   type GaStatus, type GaPropertyGroup, type GaDashboardData, type GaRealtimeData, type GaTotals,
 } from "@/lib/actions/google-analytics.actions";
 import { cn } from "@/lib/utils/cn";
@@ -100,6 +100,8 @@ export function GoogleAnalyticsClient({ businessId, status, available = true, in
     if (p === "connected") toast.success("Google Analytics conectat.");
     else if (p === "choose") toast.message("Alege proprietatea Google Analytics.");
     else if (p === "norefresh") toast.error("Reconectează-te și acceptă accesul offline.");
+    /* ⚠ Ecranul Google e granular: omul poate debifa Analytics si tot sa continue. Fara bifa, nu salvam nimic. */
+    else if (p === "noscope") toast.error("Nu ai bifat accesul la Google Analytics pe ecranul Google. Conectează-te din nou și lasă bifa pusă.", { duration: 12000 });
     else if (p === "error") toast.error("Conectarea Google a eșuat. Încearcă din nou.");
     /*
      * ⚠ „S-a autorizat la Google, dar n-am putut salva" NU e acelasi lucru cu „autorizarea a
@@ -259,7 +261,9 @@ function ManualConnectForm({ businessId }: { businessId: string }) {
 
 /* ─── Manual mode (tracking only, no in-app reports) ──────────────────────── */
 
-function ServerTrackingCard({ businessId, hasApiSecret }: { businessId: string; hasApiSecret: boolean }) {
+function ServerTrackingCard({ businessId, hasApiSecret, verificat, poateVerifica }: {
+  businessId: string; hasApiSecret: boolean; verificat: boolean; poateVerifica: boolean;
+}) {
   const router = useRouter();
   const [value, setValue] = useState("");
   const [saving, startSaving] = useTransition();
@@ -269,11 +273,18 @@ function ServerTrackingCard({ businessId, hasApiSecret }: { businessId: string; 
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">Măsurare server-side (opțional)</p>
           <p className="text-xs text-muted-foreground">
-            Trimite achizițiile și rambursările direct de pe server (rezistent la ad-blockere; rambursările nu pot fi urmărite din browser).
+            Trimite achizițiile și rambursările direct de pe server: prinde plățile cu cardul la care clientul nu se mai întoarce pe pagina de confirmare, și rambursările, care nu se văd din browser.
+            Respectă alegerea din bannerul de cookie-uri: cine refuză analiza nu e trimis.
             Lipește un <span className="font-medium text-foreground">Measurement Protocol API secret</span> din GA4: Administrare → Fluxuri de date → alege fluxul → Measurement Protocol API secrets.
           </p>
         </div>
-        {hasApiSecret && <span className="shrink-0 text-xs font-medium text-success">Activ</span>}
+        {/*
+          ⚠ „Activ” singur minte: Google raspunde 2xx si la un secret GRESIT, deci un secret salvat nu
+          dovedeste ca achizitiile ajung. Se spune daca l-am gasit printre secretele fluxului.
+        */}
+        {hasApiSecret && (verificat
+          ? <span className="shrink-0 text-xs font-medium text-success">Activ, verificat la Google</span>
+          : <span className="shrink-0 text-xs font-medium text-warning">Activ, neverificat</span>)}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder={hasApiSecret ? "•••••••• (înlocuiește)" : "API secret"} className="min-w-0 flex-1 font-mono" />
@@ -293,8 +304,29 @@ function ServerTrackingCard({ businessId, hasApiSecret }: { businessId: string; 
             return;
           }
           if ("error" in res) { toast.error(res.error); return; }
-          toast.success("Măsurare server-side activată."); setValue(""); router.refresh();
+          toast.success(res.verificat
+            ? "Măsurare server-side activată. Secretul aparține fluxului legat."
+            : "Măsurare server-side activată. Nu am putut verifica secretul la Google.");
+          setValue(""); router.refresh();
         })}>Salvează</Button>
+        {hasApiSecret && poateVerifica && !verificat && (
+          <button type="button" className="text-xs text-muted-foreground underline disabled:opacity-50" disabled={saving}
+            onClick={() => startSaving(async () => {
+              let res: Awaited<ReturnType<typeof verificaGaApiSecret>>;
+              try {
+                res = await verificaGaApiSecret(businessId);
+              } catch {
+                /* ⚠ Verifica secretul salvat. Nu schimba nimic daca nu se poate spune. */
+                toast.error("Nu am primit raspuns de la server. Încearcă din nou.");
+                return;
+              }
+              if ("error" in res) { toast.error(res.error); return; }
+              if (res.verificat === true) toast.success("Secretul aparține fluxului legat.");
+              else if (res.verificat === false) toast.error("Secretul salvat NU aparține fluxului legat: achizițiile de pe server nu ajung în Google Analytics. Lipește secretul fluxului corect.", { duration: 12000 });
+              else toast.message("Google nu a putut fi întrebat acum. Încearcă din nou peste câteva minute.");
+              router.refresh();
+            })}>Verifică</button>
+        )}
         {hasApiSecret && (
           <button type="button" className="text-xs text-muted-foreground underline disabled:opacity-50" disabled={saving}
             onClick={() => startSaving(async () => {
@@ -394,7 +426,7 @@ function ManualConnected({ businessId, status, oauthAvailable }: {
         </label>
       </div>
 
-      <ServerTrackingCard businessId={businessId} hasApiSecret={status.hasApiSecret} />
+      <ServerTrackingCard businessId={businessId} hasApiSecret={status.hasApiSecret} verificat={status.apiSecretVerificat} poateVerifica={!status.manual} />
 
       {/* In-app reports pending */}
       <Callout variant="info" icon={Clock}>
@@ -707,7 +739,7 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
         </Callout>
       )}
 
-      <ServerTrackingCard businessId={businessId} hasApiSecret={status.hasApiSecret} />
+      <ServerTrackingCard businessId={businessId} hasApiSecret={status.hasApiSecret} verificat={status.apiSecretVerificat} poateVerifica={!status.manual} />
 
       {/* Realtime */}
       <RealtimeCard realtime={realtime} />

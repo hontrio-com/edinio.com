@@ -12,6 +12,23 @@ const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const ANALYTICS_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 
+/**
+ * A acordat omul CHIAR dreptul de citire Analytics?
+ *
+ * ═══ ⚠⚠ DE CE (17.09.2026) ═══
+ *
+ * Cerem `openid email` plus `analytics.readonly`, deci Google arata ecranul de permisiuni GRANULARE, unde
+ * omul poate debifa analiza. Documentatia („How to handle granular permissions”): „the application must
+ * check what scopes are granted by the users and can't assume users grant all requested scopes".
+ *
+ * Callback-ul nu verifica. Un token fara drept se salva, iar apoi lista de proprietati venea goala (eroarea
+ * se inghitea) si comerciantul ramanea blocat pe „Alege proprietatea”, fara sa afle de ce. Integrarea
+ * Google Merchant, pe ACELASI client OAuth, avea deja verificarea (`hasContentScope`); asta ramasese.
+ */
+export function hasAnalyticsScope(scope: string | null | undefined): boolean {
+  return !!scope && scope.split(/\s+/).includes(ANALYTICS_SCOPE);
+}
+
 function clientId(): string {
   return process.env.GOOGLE_ANALYTICS_CLIENT_ID ?? process.env.GOOGLE_MERCHANT_CLIENT_ID ?? "";
 }
@@ -138,6 +155,7 @@ interface TokenResponse {
   refresh_token?: string;
   id_token?: string;
   expires_in?: number;
+  scope?: string;
   error?: string;
   error_description?: string;
 }
@@ -145,7 +163,7 @@ interface TokenResponse {
 export async function exchangeCode(
   code: string,
   cred: Credentiale = credentialeComune(),
-): Promise<{ accessToken: string; refreshToken: string | null; email: string | null } | { error: string }> {
+): Promise<{ accessToken: string; refreshToken: string | null; email: string | null; scope: string } | { error: string }> {
   try {
     const res = await fetch(TOKEN_URL, {
       method: "POST",
@@ -166,6 +184,7 @@ export async function exchangeCode(
       accessToken: data.access_token,
       refreshToken: data.refresh_token ?? null,
       email: decodeEmail(data.id_token),
+      scope: data.scope ?? "",
     };
   } catch {
     return { error: "Eroare de retea la conectarea Google." };
@@ -205,6 +224,53 @@ export async function getAccessToken(
     return data.access_token;
   } catch {
     return null;
+  }
+}
+
+export type EroareToken = "revocat" | "fara-drept" | "indisponibil";
+
+/**
+ * Un token de acces pentru rapoartele COMERCIANTULUI, cu motivul exact cand nu se poate.
+ *
+ * ═══ ⚠ DE CE NU E DE AJUNS `getAccessToken` ═══
+ *
+ * Aceea intoarce `null` pentru orice: token revocat, drept lipsa, Google cazut, retea. Iar apelantii
+ * aratau pentru toate „Sesiunea Google a expirat. Reconecteaza-te.” O pana de cateva secunde la Google
+ * trimitea omul sa refaca tot dansul OAuth, degeaba.
+ *
+ * Documentatia: `invalid_grant` = „the token may have expired or has been invalidated. Authenticate the
+ * user again". Doar atunci reconectarea e raspunsul.
+ *
+ * ⚠ Si dreptul se verifica si aici, din `scope`-ul raspunsului: legaturile facute INAINTE de verificarea
+ * din callback pot avea un token fara analiza.
+ */
+export async function obtineTokenul(
+  refreshToken: string,
+  cred: Credentiale = credentialeComune(),
+): Promise<{ token: string } | { eroare: EroareToken }> {
+  const cheie = `${cred.id}:${refreshToken}`;
+  const cached = tokenCache.get(cheie);
+  if (cached && cached.exp > Date.now() + 60_000) return { token: cached.token };
+  try {
+    const res = await fetch(TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        refresh_token: refreshToken,
+        client_id: cred.id,
+        client_secret: cred.secret,
+        grant_type: "refresh_token",
+      }),
+    });
+    const data = (await res.json().catch(() => ({}))) as TokenResponse;
+    if (!res.ok || !data.access_token) {
+      return { eroare: data.error === "invalid_grant" ? "revocat" : "indisponibil" };
+    }
+    if (data.scope !== undefined && !hasAnalyticsScope(data.scope)) return { eroare: "fara-drept" };
+    tokenCache.set(cheie, { token: data.access_token, exp: Date.now() + (Number(data.expires_in) || 3600) * 1000 });
+    return { token: data.access_token };
+  } catch {
+    return { eroare: "indisponibil" };
   }
 }
 

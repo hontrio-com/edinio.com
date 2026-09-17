@@ -79,7 +79,7 @@ import { maybeSyncBrevoSubscriber, maybeSyncBrevoOrder, maybeMarkBrevoOrderPaid 
 import { maybeSyncKlaviyoSubscriber, maybeTrackKlaviyoOrder } from "@/lib/klaviyo-sync";
 import { formatPrice, formatDate } from "@/lib/utils/format";
 import type { Json } from "@/types/database.types";
-import { raporteazaComandaGa4 } from "@/lib/orders/ga4-comanda";
+import { raporteazaCumparareaGa4, raporteazaRambursareaGa4 } from "@/lib/orders/ga4-comanda";
 import { asteaptaIncasareOnline } from "@/lib/orders/vanzare-confirmata";
 
 // Base URL for building public store links used in notice.ro SMS templates ({store_url}/{url}).
@@ -599,6 +599,9 @@ async function buildOrderNumber(supabase: SupabaseClient, businessId: string): P
 const CHEI_ATRIBUIRE = [
   "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
   "gclid", "fbclid", "ttclid", "referrer", "landing", "captured_at", "ga_client_id",
+  /* GA4, din 17.09.2026: sesiunile `_ga_<ID>` si acordul dat MAGAZINULUI, fotografiate la checkout.
+     Nu hotarasc bani, doar daca si in ce sesiune pleaca masuratoarea. Vezi `verdictTrimitere`. */
+  "ga_sesiuni", "consimtamant_citit", "consimtamant_analiza", "consimtamant_marketing",
 ] as const;
 
 // Merge client-captured attribution with the server-side user-agent into the
@@ -2145,7 +2148,9 @@ export async function placeOrder(data: {
     `finalizeazaPlataComenzii` — unde converg toti cei cinci procesatori.
   */
   if (!asteaptaIncasareOnline(metodaPlata)) {
-    void raporteazaComandaGa4(data.business_id, "purchase", { transactionId: order.id, value: total, clientId: data.source?.ga_client_id, items: allItems });
+    /* ⚠ Prin `dupaRaspuns`, nu `void`: pe serverless o promisiune neasteptata poate fi inghetata cu instanta
+       inainte sa plece cererea catre Google. Aceeasi clasa de defect ca in auditul din 24.08.2026. */
+    dupaRaspuns(() => raporteazaCumparareaGa4(order.id), "ga4.cumparare", data.business_id);
   }
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
@@ -2599,16 +2604,18 @@ export async function updateOrder(orderId: string, data: { status: string; payme
     starea veche intoarsa de baza.
   */
   if (paymentChanged && data.payment_status === "paid" && asteaptaIncasareOnline(order.payment_method as string | null)) {
-    const articole = Array.isArray(order.items) ? (order.items as { product_id?: string; name: string; price: number; quantity: number }[]) : [];
-    const idGa = (order.order_source as { ga_client_id?: string } | null)?.ga_client_id;
-    void raporteazaComandaGa4(order.business_id, "purchase", { transactionId: orderId, value: order.total ?? 0, clientId: idGa, items: articole });
+    dupaRaspuns(() => raporteazaCumparareaGa4(orderId), "ga4.cumparareManuala", order.business_id);
   }
 
   const GA4_REVERSAL = new Set(["refunded", "cancelled"]);
   if (statusChanged && GA4_REVERSAL.has(data.status) && !GA4_REVERSAL.has(statusVechi)) {
-    const refundItems = Array.isArray(order.items) ? (order.items as { product_id?: string; name: string; price: number; quantity: number }[]) : [];
-    const gaClientId = (order.order_source as { ga_client_id?: string } | null)?.ga_client_id;
-    void raporteazaComandaGa4(order.business_id, "refund", { transactionId: orderId, value: order.total ?? 0, clientId: gaClientId, items: refundItems });
+    /*
+     * ⚠⚠ Pana pe 17.09.2026 rambursarea pleca la ORICE anulare. Dar achizitia nu pleaca pentru o plata
+     * online neincasata, o comanda de marketplace, una facuta de mana sau un cumparator care a refuzat
+     * analiza, deci rambursarea scadea din venitul GA bani care nu intrasera niciodata acolo. Regula
+     * „doar dupa o achizitie primita de Google” sta in `raporteazaRambursareaGa4`.
+     */
+    dupaRaspuns(() => raporteazaRambursareaGa4(orderId), "ga4.rambursare", order.business_id);
   }
 
   /*
@@ -5090,7 +5097,9 @@ export async function placeCartOrder(data: {
     `finalizeazaPlataComenzii` — unde converg toti cei cinci procesatori.
   */
   if (!asteaptaIncasareOnline(metodaPlata)) {
-    void raporteazaComandaGa4(data.business_id, "purchase", { transactionId: order.id, value: total, clientId: data.source?.ga_client_id, items: allItems });
+    /* ⚠ Prin `dupaRaspuns`, nu `void`: pe serverless o promisiune neasteptata poate fi inghetata cu instanta
+       inainte sa plece cererea catre Google. Aceeasi clasa de defect ca in auditul din 24.08.2026. */
+    dupaRaspuns(() => raporteazaCumparareaGa4(order.id), "ga4.cumparare", data.business_id);
   }
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set

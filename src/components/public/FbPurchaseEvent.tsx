@@ -14,6 +14,8 @@ interface Props {
   customer?: PixelUser & { name?: string | null };
   numItems?: number;
   items?: { item_id?: string; item_name: string; price: number; quantity: number }[];
+  /** Valorile GA4 (fara transport si taxe, dupa documentatie). Lipsa lor = totalul, ca inainte. */
+  ga4?: { value: number; shipping: number; tax: number };
 }
 
 /**
@@ -31,7 +33,7 @@ interface Props {
  *   conversion to lift Event Match Quality.
  */
 export function FbPurchaseEvent({
-  orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, customer, numItems, items,
+  orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, customer, numItems, items, ga4,
 }: Props) {
   useEffect(() => {
     if (!orderId) return;
@@ -77,8 +79,14 @@ export function FbPurchaseEvent({
     ttqTrack("CompletePayment", ttData, { eventID: orderId });
 
     // GA4 — purchase with items[] (item-level revenue + Monetization reports).
+    /*
+      ⚠ `value` FARA transport si taxe, `shipping` si `tax` separat: asa cere documentatia GA4 la
+      `purchase`, si asa trimite si serverul (`valoriGa4`). Meta, TikTok si Google Ads raman pe total:
+      hotararea din 17.09.2026 priveste doar GA4.
+    */
     gtagEvent("purchase", {
-      currency: "RON", value, transaction_id: orderId,
+      currency: "RON", transaction_id: orderId,
+      ...(ga4 ? { value: ga4.value, shipping: ga4.shipping, tax: ga4.tax } : { value }),
       ...(gaItems.length ? { items: gaItems } : {}),
     });
 
@@ -91,7 +99,7 @@ export function FbPurchaseEvent({
         transaction_id: orderId,
       });
     }
-  }, [orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, customer, numItems, items]);
+  }, [orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, customer, numItems, items, ga4]);
 
   return null;
 }

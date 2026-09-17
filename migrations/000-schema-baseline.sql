@@ -6761,6 +6761,13 @@ create table if not exists public.forms (
   brevo_enabled boolean,
   klaviyo_enabled boolean);
 
+create table if not exists public.ga4_comenzi_raportate (
+  order_id uuid not null,
+  business_id uuid not null,
+  cumparare_la timestamp with time zone,
+  rambursare_la timestamp with time zone,
+  creat_la timestamp with time zone default now() not null);
+
 create table if not exists public.gmc_products (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -7739,6 +7746,7 @@ alter table public.email_automations add constraint email_automations_pkey PRIMA
 alter table public.error_logs add constraint error_logs_pkey PRIMARY KEY (id);
 alter table public.fedex_etichete add constraint fedex_etichete_pkey PRIMARY KEY (order_id);
 alter table public.forms add constraint forms_pkey PRIMARY KEY (id);
+alter table public.ga4_comenzi_raportate add constraint ga4_comenzi_raportate_pkey PRIMARY KEY (order_id);
 alter table public.gmc_products add constraint gmc_products_pkey PRIMARY KEY (id);
 alter table public.gmc_sync_queue add constraint gmc_sync_queue_pkey PRIMARY KEY (id);
 alter table public.indexnow_trimise add constraint indexnow_trimise_pkey PRIMARY KEY (url);
@@ -7955,6 +7963,8 @@ alter table public.error_logs add constraint error_logs_user_id_fkey FOREIGN KEY
 alter table public.fedex_etichete add constraint fedex_etichete_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.fedex_etichete add constraint fedex_etichete_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
 alter table public.forms add constraint forms_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.ga4_comenzi_raportate add constraint ga4_comenzi_raportate_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.ga4_comenzi_raportate add constraint ga4_comenzi_raportate_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
 alter table public.gmc_products add constraint gmc_products_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.gmc_products add constraint gmc_products_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE;
 alter table public.gmc_sync_queue add constraint gmc_sync_queue_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -8184,6 +8194,7 @@ CREATE INDEX emag_sync_queue_revendicat_idx ON public.emag_sync_queue USING btre
 CREATE INDEX fedex_etichete_business_idx ON public.fedex_etichete USING btree (business_id, creat_la DESC);
 CREATE INDEX fedex_etichete_order_id_idx ON public.fedex_etichete USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX forms_business_idx ON public.forms USING btree (business_id);
+CREATE INDEX ga4_comenzi_raportate_business_idx ON public.ga4_comenzi_raportate USING btree (business_id);
 CREATE UNIQUE INDEX gmc_products_business_offer_uidx ON public.gmc_products USING btree (business_id, offer_id);
 CREATE INDEX gmc_products_business_product_idx ON public.gmc_products USING btree (business_id, product_id);
 CREATE INDEX gmc_products_business_status_idx ON public.gmc_products USING btree (business_id, status);
@@ -8534,6 +8545,7 @@ alter table public.email_automations enable row level security;
 alter table public.error_logs enable row level security;
 alter table public.fedex_etichete enable row level security;
 alter table public.forms enable row level security;
+alter table public.ga4_comenzi_raportate enable row level security;
 alter table public.gmc_products enable row level security;
 alter table public.gmc_sync_queue enable row level security;
 alter table public.indexnow_trimise enable row level security;
@@ -9904,6 +9916,27 @@ grant SELECT on table public.forms to service_role;
 grant TRIGGER on table public.forms to service_role;
 grant TRUNCATE on table public.forms to service_role;
 grant UPDATE on table public.forms to service_role;
+grant DELETE on table public.ga4_comenzi_raportate to anon;
+grant INSERT on table public.ga4_comenzi_raportate to anon;
+grant REFERENCES on table public.ga4_comenzi_raportate to anon;
+grant SELECT on table public.ga4_comenzi_raportate to anon;
+grant TRIGGER on table public.ga4_comenzi_raportate to anon;
+grant TRUNCATE on table public.ga4_comenzi_raportate to anon;
+grant UPDATE on table public.ga4_comenzi_raportate to anon;
+grant DELETE on table public.ga4_comenzi_raportate to authenticated;
+grant INSERT on table public.ga4_comenzi_raportate to authenticated;
+grant REFERENCES on table public.ga4_comenzi_raportate to authenticated;
+grant SELECT on table public.ga4_comenzi_raportate to authenticated;
+grant TRIGGER on table public.ga4_comenzi_raportate to authenticated;
+grant TRUNCATE on table public.ga4_comenzi_raportate to authenticated;
+grant UPDATE on table public.ga4_comenzi_raportate to authenticated;
+grant DELETE on table public.ga4_comenzi_raportate to service_role;
+grant INSERT on table public.ga4_comenzi_raportate to service_role;
+grant REFERENCES on table public.ga4_comenzi_raportate to service_role;
+grant SELECT on table public.ga4_comenzi_raportate to service_role;
+grant TRIGGER on table public.ga4_comenzi_raportate to service_role;
+grant TRUNCATE on table public.ga4_comenzi_raportate to service_role;
+grant UPDATE on table public.ga4_comenzi_raportate to service_role;
 grant DELETE on table public.gmc_products to anon;
 grant INSERT on table public.gmc_products to anon;
 grant REFERENCES on table public.gmc_products to anon;

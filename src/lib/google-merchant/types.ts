@@ -19,6 +19,14 @@ export interface GoogleMerchantConfig {
   /** Cand s-a incercat ultima oara abonarea la notificari, si ce a raspuns Google. Vezi `abonare.ts`. */
   abonare_incercata_la?: string;
   abonare_eroare?: string;
+  /**
+   * Starea programelor contului (`free-listings`, `shopping-ads`), citita de cron o data la cateva ore.
+   * Pentru supravegherea platformei: fara ea, „produse fara destinatie” nu se putea lega de o cauza decat
+   * cu tokenul comerciantului in mana. Vezi `citesteProgrameleContului` din cronul `gmc-sync`.
+   */
+  programe?: Record<string, string>;
+  programe_citite_la?: string;
+  programe_eroare?: string;
 }
 
 // Public availability switch (kill-switch). Google OAuth verification approved

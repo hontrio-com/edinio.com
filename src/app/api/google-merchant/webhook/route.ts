@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import { getAccessToken } from "@/lib/google-merchant/oauth";
+import { obtineTokenul } from "@/lib/google-merchant/oauth";
 import { getProduct, mapProductStatus } from "@/lib/google-merchant/client";
 import { DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
 
@@ -76,9 +76,9 @@ export async function POST(req: NextRequest) {
   const config = (magazine.find((m) => m.business_id === businessId)?.google_merchant_config as GoogleMerchantConfig | null) ?? {};
 
   if (config.refresh_token && config.account_id) {
-    const token = await getAccessToken(config.refresh_token);
-    if (token) {
-      const res = await getProduct(token, config.account_id, config.content_language || DEFAULT_CONTENT_LANGUAGE, config.feed_label || DEFAULT_FEED_LABEL, offerId);
+    const t = await obtineTokenul(config.refresh_token);
+    if ("token" in t) {
+      const res = await getProduct(t.token, config.account_id, config.content_language || DEFAULT_CONTENT_LANGUAGE, config.feed_label || DEFAULT_FEED_LABEL, offerId);
       if (!("error" in res)) {
         const { status, issues, destinations } = mapProductStatus(res.data);
         await admin.from("gmc_products")

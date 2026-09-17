@@ -53,3 +53,34 @@ export class EroareGoogle extends Error {
 export function caderePermanenta(e: unknown): boolean {
   return e instanceof EroareGoogle && e.status === 400;
 }
+
+/**
+ * Limita ZILNICA de apeluri a contului e atinsa.
+ *
+ * ═══ ⚠ DE CE SEPARAT DE ASTEPTAREA OBISNUITA ═══
+ *
+ * Ghidul „Quotas and limits” da doua erori 429 cu forme aproape identice: pe minut
+ * (`REASON: QUOTA_REQUEST_RATE_TOO_HIGH`), care trece in cateva minute, si pe zi
+ * (`REASON: QUOTA_TOO_MANY_REQUESTS`, „quota/daily_limit_exceeded”), care NU trece pana la resetare.
+ * Tratata ca prima, a doua ar fi consumat cele 5 incercari in jumatate de ora si ar fi aratat produsul
+ * „Eroare” in panou, desi nu era nimic gresit la el si ar fi plecat singur a doua zi.
+ *
+ * ⚠ Se deosebesc dupa `REASON`, nu dupa mesaj: ghidul erorilor cere asta anume.
+ */
+export const REASON_LIMITA_ZILNICA = "QUOTA_TOO_MANY_REQUESTS";
+
+export function limitaZilnicaAtinsa(e: unknown): boolean {
+  return e instanceof EroareGoogle && e.status === 429
+    && (e.reason === REASON_LIMITA_ZILNICA || e.reason === "quota/daily_limit_exceeded");
+}
+
+/**
+ * Cand se reia munca dupa limita zilnica: „The daily quota limits reset at 12:00 PM midday UTC”.
+ * Urmatoarea ora 12:00 UTC de dupa `acum`, plus cinci minute de rezerva pentru ceasul lor.
+ */
+export function dupaResetareaZilnica(acum: number = Date.now()): string {
+  const d = new Date(acum);
+  let reset = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0);
+  if (reset <= acum) reset += 86_400_000;
+  return new Date(reset + 5 * 60_000).toISOString();
+}

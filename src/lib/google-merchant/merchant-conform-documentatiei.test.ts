@@ -8,7 +8,7 @@ import { obtineTokenul } from "./oauth";
 import { masuraPretPeUnitate, bazaPretPeUnitate } from "./pret-pe-unitate";
 import { expandProductOffers, offerIdVarianta, type MappableBusiness, type MappableProduct } from "./mapping";
 import { problemeDeAfisat } from "./probleme";
-import { asteptareaUrmatoare, ASTEPTARE_DUPA_TOKEN_MS, EroareGoogle, caderePermanenta } from "./asteptare";
+import { asteptareaUrmatoare, ASTEPTARE_DUPA_TOKEN_MS, EroareGoogle, caderePermanenta, limitaZilnicaAtinsa, dupaResetareaZilnica } from "./asteptare";
 import type { GoogleMerchantConfig } from "./types";
 import { optiunileDinAdresa } from "../storefront/varianta-din-adresa";
 import { parseVariants } from "../storefront/variants";
@@ -29,11 +29,14 @@ import { buildProductJsonLd } from "../storefront/product-jsonld";
  *  2. 5 din 77 de categorii erau cai care nu exista in taxonomia Google (`google_category_unrecognized`).
  *  3. Lipsea pretul pe unitate, obligatoriu in UE la produsele vandute la masura (31 din 38 la `mokka`).
  *  4. Ofertele pe varianta plecau cu adresa produsului, iar pagina nu preselecta varianta.
- *  5. `offerId` pe varianta putea trece de 50 de caractere, limita din specificatie.
+ *  5. `offerId` pe varianta se taia la 50 de caractere, iar variante diferite ajungeau pe acelasi id.
  *  6. Panoul citea `documentationUri` in loc de `documentation` si arata fiecare problema de sase ori.
  *  7. O cadere a tokenului STERGEA coada magazinului; reincercarile mergeau minut de minut, fara asteptare.
  *  8. Produsele fara destinatie (program oprit) pareau „In asteptare” la nesfarsit, fara explicatie.
  *  9. Webhook-ul servea un singur magazin pe cont si cerea reverificarea intregului catalog la o stergere.
+ * 10. Limita ZILNICA de apeluri era tratata ca o pana de minute: 5 incercari arse, produsul „Eroare”.
+ *
+ * Punctele 7, 9 si 10 se probeaza ruland chiar rutele: `cron-si-webhook-ruta.test.ts`.
  */
 
 const viu = (cale: string) =>
@@ -175,6 +178,21 @@ describe("erorile dupa ghidul „Handle error responses”", () => {
     assert.equal(caderePermanenta(new Error("x")), false);
   });
 
+  test("limita zilnica se deosebeste de cea pe minut dupa REASON, nu dupa mesaj", () => {
+    assert.equal(limitaZilnicaAtinsa(new EroareGoogle("Daily request quota exceeded", 429, "QUOTA_TOO_MANY_REQUESTS")), true);
+    assert.equal(limitaZilnicaAtinsa(new EroareGoogle("x", 429, "quota/daily_limit_exceeded")), true);
+    assert.equal(limitaZilnicaAtinsa(new EroareGoogle("Daily request quota exceeded", 429, "QUOTA_REQUEST_RATE_TOO_HIGH")), false);
+    assert.equal(limitaZilnicaAtinsa(new EroareGoogle("x", 500, "QUOTA_TOO_MANY_REQUESTS")), false);
+    assert.equal(limitaZilnicaAtinsa(new Error("QUOTA_TOO_MANY_REQUESTS")), false);
+  });
+
+  test("dupa limita zilnica se reia la urmatoarea ora 12:00 UTC (plus 5 minute), si dimineata, si dupa-amiaza", () => {
+    assert.equal(dupaResetareaZilnica(Date.parse("2026-09-17T08:30:00Z")), "2026-09-17T12:05:00.000Z");
+    assert.equal(dupaResetareaZilnica(Date.parse("2026-09-17T13:55:00Z")), "2026-09-18T12:05:00.000Z");
+    assert.equal(dupaResetareaZilnica(Date.parse("2026-09-17T12:00:00Z")), "2026-09-18T12:05:00.000Z");
+    assert.equal(dupaResetareaZilnica(Date.parse("2026-12-31T23:59:00Z")), "2027-01-01T12:05:00.000Z");
+  });
+
   test("un token revocat asteapta mai mult decat o pana trecatoare", () => {
     assert.ok(ASTEPTARE_DUPA_TOKEN_MS.revocat > ASTEPTARE_DUPA_TOKEN_MS.indisponibil);
     assert.ok(ASTEPTARE_DUPA_TOKEN_MS["fara-drept"] > ASTEPTARE_DUPA_TOKEN_MS.indisponibil);
@@ -195,39 +213,8 @@ describe("erorile dupa ghidul „Handle error responses”", () => {
 });
 
 // ── 4. Cronul si webhook-ul ─────────────────────────────────────────────────────────
-describe("cronul nu arunca munca, webhook-ul nu uita magazine", () => {
-  const cron = viu("src/app/api/cron/gmc-sync/route.ts");
-
-  test("⚠ o cadere a tokenului AMANA coada magazinului, nu o sterge", () => {
-    const inceput = cron.indexOf('if ("eroareToken" in rez) {');
-    assert.ok(inceput > 0, "ramura pentru tokenul care n-a venit lipseste");
-    const ramura = cron.slice(inceput, cron.indexOf("continue;", inceput));
-    assert.match(ramura, /scrieDacaNeschimbat\(admin, COADA, it, \{ next_retry_at: pana \}\)/);
-    assert.doesNotMatch(ramura, /stergeDacaNeschimbat/);
-    assert.doesNotMatch(ramura, /attempts/);
-  });
-
-  test("reincercarea asteapta, iar 400 se opreste pe loc", () => {
-    assert.match(cron, /scrieDacaNeschimbat\(admin, COADA, item, \{ attempts, next_retry_at: asteptareaUrmatoare\(attempts\) \}\)/);
-    assert.match(cron, /if \(attempts >= MAX_ATTEMPTS \|\| caderePermanenta\(e\)\)/);
-    assert.doesNotMatch(cron, /throw new Error\(res\.error\)/, "o eroare Google si-a pierdut codul HTTP");
-  });
-
-  test("configurarea se scrie peste cea RECITITA, nu peste cea de la inceputul rularii", () => {
-    const patch = cron.slice(cron.indexOf("async function patchConfig("));
-    const corp = patch.slice(0, patch.indexOf("\n}\n"));
-    assert.match(corp, /\.select\("google_merchant_config"\)/);
-    assert.match(corp, /\{ \.\.\.proaspat, \.\.\.patch \}/);
-  });
-
-  test("webhook-ul cauta TOATE magazinele contului si reverifica doar oferta anuntata", () => {
-    const hook = viu("src/app/api/google-merchant/webhook/route.ts");
-    assert.doesNotMatch(hook, /\.limit\(1\)\s*\.maybeSingle\(\);\s*if \(!ss\)/);
-    assert.match(hook, /\.in\("business_id", businessIds\)\.eq\("offer_id", offerId\)/);
-    const final = hook.slice(hook.lastIndexOf("last_status_at: null"));
-    assert.match(final, /\.eq\("offer_id", offerId\)/);
-  });
-});
+/* ⚠ Se probeaza RULAND rutele, in `cron-si-webhook-ruta.test.ts`: token cazut, backoff, 400, limita zilnica,
+   configurarea recitita, abonarile si programele magazinelor conectate, webhook-ul cu doua magazine pe cont. */
 
 // ── 5. Pretul pe unitate ─────────────────────────────────────────────────────────────
 describe("pretul pe unitate, dupa specificatia `unit_pricing_measure`", () => {

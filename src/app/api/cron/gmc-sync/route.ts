@@ -7,8 +7,10 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { obtineTokenul, type EroareToken } from "@/lib/google-merchant/oauth";
 import { asiguraAbonarea, secretulWebhookului } from "@/lib/google-merchant/abonare";
-import { asteptareaUrmatoare, ASTEPTARE_DUPA_TOKEN_MS, EroareGoogle, caderePermanenta } from "@/lib/google-merchant/asteptare";
-import { insertProductInput, deleteProductInput, getProduct, mapProductStatus } from "@/lib/google-merchant/client";
+import {
+  asteptareaUrmatoare, ASTEPTARE_DUPA_TOKEN_MS, EroareGoogle, caderePermanenta, limitaZilnicaAtinsa, dupaResetareaZilnica,
+} from "@/lib/google-merchant/asteptare";
+import { insertProductInput, deleteProductInput, getProduct, mapProductStatus, listPrograms } from "@/lib/google-merchant/client";
 import { expandProductOffers, type MappableBusiness, type MappableProduct } from "@/lib/google-merchant/mapping";
 import { MOTIV_PRET_CARE_MINTE, pretulDinCatalogMinte } from "@/lib/customization/pretul-din-catalog-minte";
 import { DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
@@ -87,6 +89,7 @@ export async function GET(req: NextRequest) {
   const improspatate = await improspateazaOferteleVechi(admin);
   /* Abonarile la notificari care lipsesc (0 din 7 la 17.09.2026). Vezi `asiguraAbonarileLipsa`. */
   const abonari = await asiguraAbonarileLipsa(admin);
+  const programeCitite = await citesteProgrameleContului(admin);
 
   // ── 1) Process the sync queue, grouped by business ─────────────────────────────
   /*
@@ -158,7 +161,14 @@ export async function GET(req: NextRequest) {
       for (const p of prods ?? []) if (p.is_active) productMap.set(p.id, p as MappableProduct);
     }
 
+    /* Setat la prima limita zilnica atinsa: restul lucrarilor magazinului asteapta resetarea, fara apel. */
+    let limitaZilnicaPana: string | null = null;
     for (const item of items ?? []) {
+      if (limitaZilnicaPana) {
+        await scrieDacaNeschimbat(admin, COADA, item, { next_retry_at: limitaZilnicaPana });
+        amanate++;
+        continue;
+      }
       try {
         /*
          * ═══ ⚠ UN PRET CARE MINTE SE TRATEAZA CA O STERGERE, NU CA O TRIMITERE ═══
@@ -268,6 +278,21 @@ export async function GET(req: NextRequest) {
           await stergeDacaNeschimbat(admin, COADA, item);
         }
       } catch (e) {
+        /*
+         * ⚠ LIMITA ZILNICA NU E O CADERE A PRODUSULUI: nu consuma incercari, nu scrie „eroare”, iar
+         * restul lucrarilor magazinului nu mai lovesc degeaba in Google pana la resetare. Vezi
+         * `limitaZilnicaAtinsa`.
+         */
+        if (limitaZilnicaAtinsa(e)) {
+          limitaZilnicaPana = dupaResetareaZilnica();
+          await scrieDacaNeschimbat(admin, COADA, item, { next_retry_at: limitaZilnicaPana });
+          amanate++;
+          await logError({
+            action: "gmc-sync", severity: "warning", businessId,
+            message: `limita zilnica Merchant API atinsa; lucrarile magazinului asteapta pana la ${limitaZilnicaPana}`,
+          });
+          continue;
+        }
         failed++;
         const attempts = (item.attempts ?? 0) + 1;
         /* ⚠ Un produs respins cu 400 nu se reincearca: vezi `caderePermanenta`. */
@@ -347,8 +372,8 @@ export async function GET(req: NextRequest) {
     await admin.from("gmc_products").update({ status, issues: issues as never, destinations: destinations as never, last_status_at: now, updated_at: now }).eq("id", row.id);
   }
 
-  console.log(`[gmc-sync] synced=${synced} deleted=${deleted} failed=${failed} status=${statusChecked} improspatate=${improspatate} expirate=${expirate} amanate=${amanate} abonari=${abonari}`);
-  return NextResponse.json({ ok: true, synced, deleted, failed, statusChecked, improspatate, expirate, amanate, abonari });
+  console.log(`[gmc-sync] synced=${synced} deleted=${deleted} failed=${failed} status=${statusChecked} improspatate=${improspatate} expirate=${expirate} amanate=${amanate} abonari=${abonari} programe=${programeCitite}`);
+  return NextResponse.json({ ok: true, synced, deleted, failed, statusChecked, improspatate, expirate, amanate, abonari, programe: programeCitite });
 }
 
 /**
@@ -522,4 +547,61 @@ async function asiguraAbonarileLipsa(admin: Admin): Promise<number> {
     }
   }
   return incercate;
+}
+
+/** Cate conturi isi citesc programele intr-o rulare, si la cate ore. */
+const PROGRAME_PE_RULARE = 3;
+const ORE_INTRE_CITIRI_PROGRAME = 12;
+
+/**
+ * Fotografia programelor fiecarui cont conectat (`programs.list`), scrisa in configurare.
+ *
+ * ═══ ⚠ DE CE (17.09.2026) ═══
+ *
+ * 276 de oferte la 6 magazine stateau fara nicio destinatie, iar cauza (programul oprit) se putea afla
+ * DOAR cu tokenul comerciantului, adica numai cand omul deschidea panoul. Platforma nu vedea nimic. Cu
+ * fotografia asta, o citire din baza spune ce magazine au listarile gratuite oprite si de cand.
+ *
+ * ⚠ Doar citire la Google, cate `PROGRAME_PE_RULARE` conturi, o data la `ORE_INTRE_CITIRI_PROGRAME` ore:
+ * programele nu se schimba des, iar apelurile intra in cota contului.
+ */
+async function citesteProgrameleContului(admin: Admin): Promise<number> {
+  const { data, error } = await admin
+    .from("store_settings")
+    .select("business_id, google_merchant_config")
+    .eq("google_merchant_config->>connected", "true")
+    .limit(200);
+  if (error) {
+    await logError({ action: "gmc-sync.programe", message: `magazinele nu s-au putut citi: ${error.message}`, severity: "warning" });
+    return 0;
+  }
+  const prag = Date.now() - ORE_INTRE_CITIRI_PROGRAME * 3_600_000;
+  const deCitit = ((data ?? []) as { business_id: string; google_merchant_config: GoogleMerchantConfig | null }[])
+    .filter((r) => r.google_merchant_config?.account_id && r.google_merchant_config.refresh_token)
+    .filter((r) => !r.google_merchant_config?.programe_citite_la || Date.parse(r.google_merchant_config.programe_citite_la) <= prag)
+    /* Cele necitite niciodata intai, apoi cele mai vechi. */
+    .sort((a, b) => String(a.google_merchant_config?.programe_citite_la ?? "").localeCompare(String(b.google_merchant_config?.programe_citite_la ?? "")))
+    .slice(0, PROGRAME_PE_RULARE);
+
+  for (const rand of deCitit) {
+    const cfg = rand.google_merchant_config!;
+    const acum = new Date().toISOString();
+    const t = await obtineTokenul(cfg.refresh_token!);
+    if ("eroare" in t) {
+      await patchConfig(admin, rand.business_id, { programe_citite_la: acum, programe_eroare: `Tokenul Google nu a venit (${t.eroare}).` });
+      continue;
+    }
+    const r = await listPrograms(t.token, cfg.account_id!);
+    if ("error" in r) {
+      await patchConfig(admin, rand.business_id, { programe_citite_la: acum, programe_eroare: r.error.slice(0, 300) });
+      continue;
+    }
+    const programe: Record<string, string> = {};
+    for (const p of r.data.programs ?? []) {
+      const id = String(p.name ?? "").split("/").pop();
+      if (id) programe[id] = p.state ?? "NECUNOSCUT";
+    }
+    await patchConfig(admin, rand.business_id, { programe, programe_citite_la: acum, programe_eroare: undefined });
+  }
+  return deCitit.length;
 }

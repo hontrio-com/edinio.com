@@ -47,6 +47,7 @@ Citita din productie inainte de a deschide codul:
 | `developerRegistration.registerGcp` | folosit la fiecare cont | neschimbat (vezi „Ce ramane”) |
 | `details[].metadata.REASON` | ignorat, mesajul se parsa | citit si scris in jurnal |
 | backoff exponential (`quota`, `internal_error`) | nu | 1, 2, 4, 8, apoi 15 minute |
+| limita zilnica (`QUOTA_TOO_MANY_REQUESTS`) | tratata ca o pana de minute | asteapta resetarea de la 12:00 UTC, fara incercari arse |
 | `unitPricingMeasure` / `unitPricingBaseMeasure` | lipseau | trimise, validate dupa specificatie |
 | `productTypes` | lipsea | categoria magazinului |
 | `googleProductCategory` | cale de text, 5 din 77 inexistente | ID oficial |
@@ -151,8 +152,24 @@ Doua magazine legate de acelasi cont Merchant: notificarile ajungeau doar la pri
 un produs sters („If newValue is omitted, the product was deleted”), `getProduct` da 404 si ruta golea
 `last_status_at` pe TOT catalogul. Reparat: magazinul se alege dupa oferta, si se reverifica doar ea.
 
+### 12. Limita ZILNICA de apeluri tratata ca o pana de cateva minute
+
+Ghidul cotelor da doua erori 429 aproape identice: pe minut (`QUOTA_REQUEST_RATE_TOO_HIGH`) si pe zi
+(`QUOTA_TOO_MANY_REQUESTS`), care se reseteaza abia la 12:00 UTC. A doua ardea cele 5 incercari in jumatate
+de ora si lasa produsul „Eroare”, desi nu era nimic gresit la el. Reparat (`limitaZilnicaAtinsa`,
+`dupaResetareaZilnica`): lucrarea asteapta resetarea fara sa consume incercari, iar restul lucrarilor
+magazinului nu mai lovesc degeaba in Google in rularea aceea.
+
+### 13. Platforma nu vedea programele conturilor
+
+Cauza celor 276 de oferte fara destinatie se putea afla doar cu tokenul comerciantului, adica numai cand
+omul deschidea panoul. Acum cronul fotografiaza `programs.list` in configurare (`programe`,
+`programe_citite_la`, `programe_eroare`), cate 3 conturi pe rulare, o data la 12 ore. O citire din baza
+spune ce magazine au listarile gratuite oprite.
+
 ### Mai mici
 
+* webhook-ul foloseste acelasi `obtineTokenul` ca restul: un token cazut reverifica doar oferta anuntata;
 * mesajele de token spun motivul (revocat / fara dreptul Shopping / Google n-a raspuns), nu „sesiunea a
   expirat” la orice;
 * la schimbarea contului, sursa de date a contului vechi nu se mai refoloseste, iar abonarea lui se sterge;
@@ -162,24 +179,35 @@ un produs sters („If newValue is omitted, the product was deleted”), `getPro
 
 ## Probele
 
-`src/lib/google-merchant/merchant-conform-documentatiei.test.ts`: 34 de probe. Bancul de mutanti
-(52 de stricaciuni, cate una pe fiecare regula de mai sus) le prinde pe toate; initial scapa una, fiindca
-proba cauta `abonare_eroare` ca subsir, iar actiunile il si citesc. Proba a fost stransa pe atribuire.
+* `merchant-conform-documentatiei.test.ts`: taxonomia fata de fisierul oficial, abonarea, erorile, pretul pe
+  unitate, maparea, adresa variantei (pagina si JSON-LD), problemele din panou.
+* `cron-si-webhook-ruta.test.ts`: **ruleaza chiar `GET` din cron si `POST` din webhook**, cu o baza PostgREST
+  de proba care aplica filtrele (si `coloana->>cheie`) si un Google de proba cu raspunsurile din ghiduri:
+  token revocat si pana trecatoare, 500, 400, limita zilnica si cea pe minut, configurarea schimbata in
+  timpul rularii, abonarile si programele magazinelor conectate, doua magazine pe acelasi cont.
+* Bancul de mutanti: **72 de stricaciuni, toate prinse**. Doua au scapat pe drum si au intarit probele:
+  `abonare_eroare` cautat ca subsir (actiunile il si citesc), si pragul de 12 ore al programelor, pe care
+  proba nu-l atingea (contul proaspat cadea oricum sub plafonul de 3).
 
 Suita intreaga, `tsc`, poarta de lint (57 de erori, niciuna noua) si buildul: verzi.
 
 ---
 
+## Verificat pe productie
+
+* 17.09.2026, 13:47 UTC: `GMC_WEBHOOK_SECRET` adaugat in Vercel (Production). ⚠ O variabila intra doar in
+  desfasurarile NOI: cronul a raportat `abonari=0` pana la redeploy (`dpl_DyUXDpGka7C4X8Amhny1o6v5s3xx`).
+* 13:53-13:55 UTC, dupa redeploy: **toate cele 7 magazine abonate**, in trei rulari (3 + 3 + 1), fara nicio
+  eroare scrisa in `abonare_eroare`.
+
 ## Ce ramane
 
-1. ⚠⚠ **`GMC_WEBHOOK_SECRET` trebuie adaugat in Vercel.** Fara el nu se creeaza nicio abonare (dinadins), iar
-   statusurile vin din reverificarea de 30 de minute a cronului. Nu e o pana, e o intarziere. Dupa adaugare,
-   cronul aboneaza singur cele 7 magazine, cate 3 pe rulare.
-2. ⚠ **Programele se pornesc de comercianti.** 276 de oferte nu apar nicaieri pana nu e pornit un program.
+1. ⚠ **Programele se pornesc de comercianti.** 276 de oferte nu apar nicaieri pana nu e pornit un program.
    Panoul le spune acum de ce si, unde Google permite, le da butonul.
-3. **`registerGcp` ramane apelat pe contul fiecarui comerciant.** Ghidul il descrie ca pas facut o data, pe
+2. **`registerGcp` ramane apelat pe contul fiecarui comerciant.** Ghidul il descrie ca pas facut o data, pe
    contul principal al dezvoltatorului. Dar la depanarea live din 02.07.2026, fara inregistrare pe contul
    comerciantului chiar si `accounts.list` raspundea „not registered”, deci pasul ramane. Neschimbat.
-4. **Nevazut pe trafic real**: crearea abonarii, `programs.list`, `programs.enable`. Cer un token de
-   comerciant; au probe cu raspunsurile din documentatie, nu cu ale contului.
-5. Pretul pe unitate cere completare de mana, produs cu produs.
+3. **Nevazut pe trafic real**: `programs.enable` (il apasa comerciantul) si prima notificare ajunsa pe
+   webhook (vine doar cand Google schimba starea unei oferte).
+4. Pretul pe unitate cere completare de mana, produs cu produs.
+5. `itp-blk` n-are domeniu propriu: Google nu aproba produse pe `edinio.com/itp-blk`.

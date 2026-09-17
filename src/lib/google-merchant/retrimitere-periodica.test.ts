@@ -325,7 +325,8 @@ test("⚠ 404 pe o oferta trimisa de mult: „Expirat la Google”, si inapoi in
   assert.equal(gmc.find((x) => x.id === "e3")!.status, "active", "o eroare de server a schimbat statusul ofertei");
   assert.equal(r.expirate, 1);
   /* Perechea: Google chiar a fost intrebat de toate trei, deci statusurile de mai sus nu vin din tacere. */
-  assert.equal(laGoogle.filter((x) => x.startsWith("GET")).length, 3);
+  /* ⚠ Doar citirile de OFERTE: din 17.09.2026 cronul citeste si programele contului (tot GET). */
+  assert.equal(laGoogle.filter((x) => x.startsWith("GET") && x.includes("/products/")).length, 3);
 });
 
 test("cu sincronizarea stinsa, expirarea se spune, dar nu se retrimite nimic singur", async () => {

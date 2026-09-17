@@ -111,6 +111,46 @@ export async function getAccessToken(refreshToken: string): Promise<string | nul
   }
 }
 
+export type EroareToken = "revocat" | "fara-drept" | "indisponibil";
+
+/**
+ * Tokenul de acces, cu MOTIVUL cand nu se poate.
+ *
+ * ═══ ⚠⚠ DE CE NU E DE AJUNS `getAccessToken` (17.09.2026) ═══
+ *
+ * Aceea intoarce `null` pentru orice: token revocat, drept lipsa, Google cazut cateva secunde. Iar cronul
+ * `gmc-sync` trata `null` ca „magazin deconectat” si STERGEA toata coada magazinului. Deci o pana de o
+ * clipa la Google arunca schimbarile de pret si de stoc facute de comerciant; ele ajungeau la Google abia
+ * la retrimiterea de peste 7 zile, iar pana atunci pretul din feed nu mai era cel de pe pagina.
+ *
+ * Documentatia OAuth: doar `invalid_grant` inseamna „autentifica din nou utilizatorul”.
+ */
+export async function obtineTokenul(refreshToken: string): Promise<{ token: string } | { eroare: EroareToken }> {
+  const cached = tokenCache.get(refreshToken);
+  if (cached && cached.exp > Date.now() + 60_000) return { token: cached.token };
+  try {
+    const res = await fetch(TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        refresh_token: refreshToken,
+        client_id: clientId(),
+        client_secret: clientSecret(),
+        grant_type: "refresh_token",
+      }),
+    });
+    const data = (await res.json().catch(() => ({}))) as TokenResponse;
+    if (!res.ok || !data.access_token) {
+      return { eroare: data.error === "invalid_grant" ? "revocat" : "indisponibil" };
+    }
+    if (data.scope !== undefined && !hasContentScope(data.scope)) return { eroare: "fara-drept" };
+    tokenCache.set(refreshToken, { token: data.access_token, exp: Date.now() + (Number(data.expires_in) || 3600) * 1000 });
+    return { token: data.access_token };
+  } catch {
+    return { eroare: "indisponibil" };
+  }
+}
+
 // Signed OAuth `state` — ties the callback to a business + prevents forgery/CSRF.
 function stateSecret(): string {
   return process.env.GOOGLE_MERCHANT_CLIENT_SECRET || process.env.CRON_SECRET || "edinio-gmc-state";

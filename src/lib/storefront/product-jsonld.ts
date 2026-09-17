@@ -1,5 +1,6 @@
 import { isValidGtin, normalizeGtin } from "@/lib/gtin";
 import { textCurat } from "./date-structurate";
+import { adresaCuVarianta } from "./varianta-din-adresa";
 import { getProductPriceRange } from "@/lib/utils/product-price";
 import {
   combinatiiActiveUnice, comboEpuizat, comboUnitPrice, esteMarime, parseVariants,
@@ -372,10 +373,9 @@ export function buildProductJsonLd(
               : "https://schema.org/InStock",
           validFrom,
           priceValidUntil: PRICE_VALID_UNTIL,
-          /* Aceeasi adresa la toate: pagina nu stie inca sa preselecteze o
-             varianta din adresa. Google accepta, dar daca se adauga vreodata
-             un parametru de preselectare, aici e locul care il foloseste. */
-          url: productUrl,
+          /* Adresa VARIANTEI: pagina o preselecteaza din `?varianta=` (17.09.2026), iar oferta din
+             Google Merchant pleaca pe aceeasi adresa. Vezi `varianta-din-adresa.ts`. */
+          url: adresaCuVarianta(productUrl, combo),
           shippingDetails,
           hasMerchantReturnPolicy,
         },

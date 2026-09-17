@@ -16,6 +16,9 @@ export interface GoogleMerchantConfig {
   condition_default?: "new" | "refurbished" | "used";
   category_map?: Record<string, string>; // edinio category name -> Google product category id
   last_sync_at?: string;
+  /** Cand s-a incercat ultima oara abonarea la notificari, si ce a raspuns Google. Vezi `abonare.ts`. */
+  abonare_incercata_la?: string;
+  abonare_eroare?: string;
 }
 
 // Public availability switch (kill-switch). Google OAuth verification approved

@@ -71,6 +71,7 @@ interface ProductData {
       condition?: string; gender?: string; age_group?: string;
       color?: string; size?: string; material?: string;
       custom_label_0?: string; custom_label_1?: string; custom_label_2?: string; custom_label_3?: string; custom_label_4?: string;
+      unit_pricing_measure?: string; unit_pricing_base_measure?: string;
     };
   };
 }

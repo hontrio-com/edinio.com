@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
-import { buildAuthUrl, signState, googleMerchantConfigured, getAccessToken } from "@/lib/google-merchant/oauth";
-import { listAccounts, registerGcp, listDataSources, createApiDataSource, createNotificationSubscription, deleteNotificationSubscription, listAccountIssues } from "@/lib/google-merchant/client";
-import { PLATFORM_ORIGIN } from "@/lib/seo";
+import { buildAuthUrl, signState, googleMerchantConfigured, obtineTokenul, type EroareToken } from "@/lib/google-merchant/oauth";
+import { listAccounts, registerGcp, listDataSources, createApiDataSource, deleteNotificationSubscription, listAccountIssues, listPrograms, enableProgram } from "@/lib/google-merchant/client";
+import type { ProblemaStocata } from "@/lib/google-merchant/probleme";
+import { asiguraAbonarea } from "@/lib/google-merchant/abonare";
 import {
   DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig,
 } from "@/lib/google-merchant/types";
@@ -68,6 +69,19 @@ async function loadConfig(businessId: string): Promise<GoogleMerchantConfig> {
   return ((data?.google_merchant_config as GoogleMerchantConfig) ?? {}) || {};
 }
 
+/**
+ * Ce i se spune comerciantului cand tokenul Google nu vine.
+ *
+ * ⚠ Forma de dinainte spunea „Sesiunea Google a expirat. Reconecteaza-te.” la ORICE cadere, si la o pana
+ * de o clipa a serverului Google. Omul se reconecta degeaba, iar cand chiar lipsea dreptul Shopping,
+ * reconectarea fara bifa lui nu rezolva nimic. Vezi `obtineTokenul`.
+ */
+function mesajToken(e: EroareToken): string {
+  if (e === "revocat") return "Accesul la contul Google a fost retras sau a expirat. Reconecteaza contul Google.";
+  if (e === "fara-drept") return "Conexiunea Google nu include permisiunea pentru Google Shopping. Reconecteaza contul Google si lasa BIFATA permisiunea de gestionare a produselor Shopping.";
+  return "Google nu a raspuns acum. Incearca din nou peste cateva minute.";
+}
+
 async function saveConfig(supabase: ServerClient, businessId: string, config: GoogleMerchantConfig): Promise<boolean> {
   const { data: existing } = await supabase
     .from("store_settings").select("id").eq("business_id", businessId).single();
@@ -127,7 +141,12 @@ export interface MerchantStatus {
    * `expirat`: ofertele pe care Google nu le mai are. `laExpirare`: ofertele netrimise de peste
    * `ZILE_PANA_LA_AVERTISMENT` zile, pe care Google le scoate curand daca nu pleaca din nou.
    */
-  counts: { total: number; synced: number; active: number; pending: number; disapproved: number; queued: number; expirat: number; laExpirare: number };
+  counts: { total: number; synced: number; active: number; pending: number; disapproved: number; queued: number; expirat: number; laExpirare: number; faraDestinatie: number };
+  /**
+   * Notificarile de stare in timp real. Fara ele, statusurile se reverifica din 30 in 30 de minute, deci
+   * nu e o pana, doar o intarziere; panoul o spune ca atare.
+   */
+  abonare: { activa: boolean; eroare?: string };
 }
 
 export async function getMerchantStatus(businessId: string): Promise<MerchantStatus | { error: string }> {
@@ -156,7 +175,16 @@ export async function getMerchantStatus(businessId: string): Promise<MerchantSta
    */
   /* ⚠ Si randul EXPIRAT iese din „Produse active": n-are oferta la Google, exact ca `exclus`. */
   const pragAvertisment = new Date(Date.now() - ZILE_PANA_LA_AVERTISMENT * 86_400_000).toISOString();
-  const [{ count: total }, { count: synced }, { count: activeCnt }, { count: pendingCnt }, { count: disapprovedCnt }, { count: queued }, { count: expiratCnt }, { count: laExpirareCnt }] = await Promise.all([
+  /*
+   * ═══ ⚠⚠ „IN ASTEPTARE” CARE NU ASTEAPTA NIMIC (masurat 17.09.2026) ═══
+   *
+   * 276 de produse din 6 magazine stateau „In asteptare” de pana la 7 zile. Google le verificase (aveau
+   * `last_status_at`), dar le intorsese cu ZERO destinatii si zero probleme: contul n-avea pornit niciun
+   * program (listari gratuite, reclame Shopping), deci produsele n-aveau unde sa apara. Nu se aproba
+   * nimic, si nici nu se va aproba pana nu porneste comerciantul programul. Panoul le numara separat si
+   * spune de ce. Vezi `getMerchantPrograms`.
+   */
+  const [{ count: total }, { count: synced }, { count: activeCnt }, { count: pendingCnt }, { count: disapprovedCnt }, { count: queued }, { count: expiratCnt }, { count: laExpirareCnt }, { count: faraDestinatieCnt }] = await Promise.all([
     supabase.from("products").select("id", { count: "exact", head: true }).eq("business_id", businessId).eq("is_active", true),
     supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId)
       .not("status", "in", `(${STARE_EXCLUS},error,${STARE_EXPIRAT})`),
@@ -168,6 +196,8 @@ export async function getMerchantStatus(businessId: string): Promise<MerchantSta
     supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId)
       .lt("last_synced_at", pragAvertisment)
       .or(`status.is.null,status.not.in.(${STARE_EXCLUS},error,${STARE_EXPIRAT})`),
+    supabase.from("gmc_products").select("id", { count: "exact", head: true }).eq("business_id", businessId)
+      .eq("status", "pending").not("last_status_at", "is", null).eq("destinations", "[]"),
   ]);
   const counts = {
     total: total ?? 0,
@@ -178,6 +208,7 @@ export async function getMerchantStatus(businessId: string): Promise<MerchantSta
     queued: queued ?? 0,
     expirat: expiratCnt ?? 0,
     laExpirare: laExpirareCnt ?? 0,
+    faraDestinatie: faraDestinatieCnt ?? 0,
   };
 
   return {
@@ -197,6 +228,7 @@ export async function getMerchantStatus(businessId: string): Promise<MerchantSta
     lastSyncAt: config.last_sync_at,
     categoryMap: config.category_map ?? {},
     counts,
+    abonare: { activa: !!config.notification_subscription_name, eroare: config.abonare_eroare },
   };
 }
 
@@ -238,8 +270,9 @@ export async function listMerchantAccounts(businessId: string): Promise<{ accoun
 
   const config = await loadConfig(businessId);
   if (!config.refresh_token) return { error: "Conecteaza-te mai intai cu Google." };
-  const token = await getAccessToken(config.refresh_token);
-  if (!token) return { error: "Sesiunea Google a expirat. Reconecteaza-te." };
+  const t = await obtineTokenul(config.refresh_token);
+  if ("eroare" in t) return { error: mesajToken(t.eroare) };
+  const token = t.token;
 
   const res = await listAccounts(token);
   if ("error" in res) {
@@ -274,8 +307,9 @@ export async function selectMerchantAccount(
 
   const config = await loadConfig(businessId);
   if (!config.refresh_token) return { error: "Conecteaza-te mai intai cu Google." };
-  const token = await getAccessToken(config.refresh_token);
-  if (!token) return { error: "Sesiunea Google a expirat. Reconecteaza-te." };
+  const t = await obtineTokenul(config.refresh_token);
+  if ("eroare" in t) return { error: mesajToken(t.eroare) };
+  const token = t.token;
 
   const feedLabel = config.feed_label || DEFAULT_FEED_LABEL;
   const lang = config.content_language || DEFAULT_CONTENT_LANGUAGE;
@@ -299,7 +333,9 @@ export async function selectMerchantAccount(
   }
 
   // Ensure an API data source exists (reuse one named "Edinio" if present).
-  let dataSourceName = config.data_source_name;
+  /* ⚠ Sursa salvata se refoloseste DOAR daca e a contului ales: la schimbarea contului, numele vechi
+     (`accounts/<alt cont>/dataSources/...`) ar fi trimis produsele intr-un cont strain sau n-ar fi mers deloc. */
+  let dataSourceName = config.data_source_name?.startsWith(`accounts/${accountId}/`) ? config.data_source_name : undefined;
   const list = await listDataSources(token, accountId);
   if (!("error" in list)) {
     const existing = (list.data.dataSources ?? []).find((d) => (d.displayName ?? "").startsWith("Edinio"));
@@ -325,13 +361,20 @@ export async function selectMerchantAccount(
     dataSourceName = created.data.name;
   }
 
-  // Subscribe to product-status-change push notifications (real-time statuses).
-  let subscriptionName = config.notification_subscription_name;
-  if (!subscriptionName) {
-    const webhookSecret = process.env.GMC_WEBHOOK_SECRET;
-    const callbackUri = `${PLATFORM_ORIGIN}/api/google-merchant/webhook${webhookSecret ? `?token=${encodeURIComponent(webhookSecret)}` : ""}`;
-    const sub = await createNotificationSubscription(token, accountId, callbackUri);
-    if (!("error" in sub)) subscriptionName = sub.data.name;
+  /*
+   * Abonarea la notificarile de stare. ⚠ Nu se mai inghite nimic: motivul unei caderi se scrie in configurare
+   * si panoul il arata, iar cronul reia incercarea. Vezi `asiguraAbonarea`.
+   *
+   * ⚠ La schimbarea contului, abonarea contului VECHI se sterge: altfel Google ar tot trimite notificari
+   * despre produse care nu mai sunt ale magazinului.
+   */
+  if (config.account_id && config.account_id !== accountId && config.notification_subscription_name) {
+    await deleteNotificationSubscription(token, config.notification_subscription_name);
+  }
+  const abonare = await asiguraAbonarea(token, accountId);
+  const acum = new Date().toISOString();
+  if (abonare.stare === "eroare") {
+    logError({ action: "gmc.abonare", message: abonare.mesaj, details: { businessId, accountId, reason: abonare.reason }, userId: user.id, severity: "warning" });
   }
 
   const ok = await saveConfig(supabase, businessId, {
@@ -340,7 +383,9 @@ export async function selectMerchantAccount(
     account_id: accountId,
     account_name: accountName ?? config.account_name,
     data_source_name: dataSourceName,
-    notification_subscription_name: subscriptionName,
+    notification_subscription_name: abonare.stare === "activa" ? abonare.name : undefined,
+    abonare_incercata_la: abonare.stare === "fara-secret" ? undefined : acum,
+    abonare_eroare: abonare.stare === "eroare" ? abonare.mesaj.slice(0, 300) : undefined,
     feed_label: feedLabel,
     content_language: lang,
     country: config.country || DEFAULT_COUNTRY,
@@ -359,8 +404,8 @@ export async function disconnectMerchant(businessId: string): Promise<{ success:
 
   const config = await loadConfig(businessId);
   if (config.refresh_token && config.notification_subscription_name) {
-    const token = await getAccessToken(config.refresh_token);
-    if (token) await deleteNotificationSubscription(token, config.notification_subscription_name);
+    const t = await obtineTokenul(config.refresh_token);
+    if ("token" in t) await deleteNotificationSubscription(t.token, config.notification_subscription_name);
   }
   await saveConfig(supabase, businessId, {});
   const admin = createAdminClient();
@@ -425,7 +470,8 @@ export interface MerchantProductRow {
   name: string;
   offer_id: string;
   status: string;
-  issues: { code?: string; severity?: string; description?: string; detail?: string; documentationUri?: string; resolution?: string; attribute?: string }[];
+  /* ⚠ Forma bruta de la Google; panoul o strange prin `problemeDeAfisat` (o problema vine o data pe suprafata). */
+  issues: ProblemaStocata[];
   last_synced_at: string | null;
   error: string | null;
 }
@@ -523,12 +569,97 @@ export async function getMerchantAccountIssues(businessId: string): Promise<Merc
 
   const config = await loadConfig(businessId);
   if (!config.connected || !config.account_id || !config.refresh_token) return [];
-  const token = await getAccessToken(config.refresh_token);
-  if (!token) return [];
+  const t = await obtineTokenul(config.refresh_token);
+  if ("eroare" in t) return [];
 
-  const res = await listAccountIssues(token, config.account_id);
-  if ("error" in res) return [];
+  const res = await listAccountIssues(t.token, config.account_id);
+  if ("error" in res) {
+    /* ⚠ Panoul arata „nicio problema” si cand citirea a cazut; macar jurnalul trebuie sa stie. */
+    logError({ action: "gmc.listAccountIssues", message: res.error, details: { businessId, reason: res.reason }, userId: user.id, severity: "warning" });
+    return [];
+  }
   return (res.data.accountIssues ?? [])
     .map((i) => ({ title: i.title ?? "Problemă cont", severity: (i.severity ?? "").toUpperCase(), detail: i.detail, documentationUri: i.documentationUri }))
     .filter((i) => i.severity === "CRITICAL" || i.severity === "ERROR");
+}
+
+// ── Programs (listari gratuite, reclame Shopping) ───────────────────────────────────
+export interface MerchantProgramRow {
+  id: string;                    // free-listings | shopping-ads | ...
+  state: "NOT_ELIGIBLE" | "ELIGIBLE" | "ENABLED" | "NECUNOSCUT";
+  documentationUri?: string;
+  activeRegionCodes: string[];
+  unmetRequirements: { title: string; documentationUri?: string; affectedRegionCodes: string[] }[];
+}
+
+/** Doar programele care hotarasc daca produsele trimise de noi apar undeva. */
+const PROGRAME_AFISATE = ["free-listings", "shopping-ads"];
+
+/**
+ * Programele contului Merchant, cu cerintele neindeplinite.
+ *
+ * ⚠ DE CE: un produs fara destinatie ramane „In asteptare” pentru totdeauna, iar singurul loc care spune
+ * de ce e starea programelor (vezi numaratoarea `faraDestinatie` din `getMerchantStatus`).
+ */
+export async function getMerchantPrograms(businessId: string): Promise<{ programs: MerchantProgramRow[] } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+  if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+
+  const config = await loadConfig(businessId);
+  if (!config.connected || !config.account_id || !config.refresh_token) return { error: "Conecteaza mai intai Google Merchant." };
+  const t = await obtineTokenul(config.refresh_token);
+  if ("eroare" in t) return { error: mesajToken(t.eroare) };
+
+  const res = await listPrograms(t.token, config.account_id);
+  if ("error" in res) {
+    logError({ action: "gmc.listPrograms", message: res.error, details: { businessId, reason: res.reason }, userId: user.id, severity: "warning" });
+    return { error: `Google nu a trimis starea programelor: ${res.error}` };
+  }
+  const programs = (res.data.programs ?? [])
+    .map((p): MerchantProgramRow => {
+      const state = p.state === "NOT_ELIGIBLE" || p.state === "ELIGIBLE" || p.state === "ENABLED" ? p.state : "NECUNOSCUT";
+      return {
+        id: String(p.name ?? "").split("/").pop() ?? "",
+        state,
+        documentationUri: p.documentationUri,
+        activeRegionCodes: p.activeRegionCodes ?? [],
+        unmetRequirements: (p.unmetRequirements ?? []).map((r) => ({
+          title: r.title ?? "Cerință neîndeplinită",
+          documentationUri: r.documentationUri,
+          affectedRegionCodes: r.affectedRegionCodes ?? [],
+        })),
+      };
+    })
+    .filter((p) => PROGRAME_AFISATE.includes(p.id))
+    .sort((a, b) => PROGRAME_AFISATE.indexOf(a.id) - PROGRAME_AFISATE.indexOf(b.id));
+  return { programs };
+}
+
+/**
+ * Porneste listarile gratuite din panou.
+ *
+ * ⚠ Doar `free-listings`: reclamele Shopping cer un cont Google Ads legat si buget, adica o hotarare a
+ * comerciantului care nu se ia dintr-un buton de aici. Google refuza singur un program `NOT_ELIGIBLE`,
+ * iar mesajul lui ajunge la om neschimbat.
+ */
+export async function enableMerchantFreeListings(businessId: string): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+  if (!(await ownedBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+
+  const config = await loadConfig(businessId);
+  if (!config.connected || !config.account_id || !config.refresh_token) return { error: "Conecteaza mai intai Google Merchant." };
+  const t = await obtineTokenul(config.refresh_token);
+  if ("eroare" in t) return { error: mesajToken(t.eroare) };
+
+  const res = await enableProgram(t.token, config.account_id, "free-listings");
+  if ("error" in res) {
+    logError({ action: "gmc.enableProgram", message: res.error, details: { businessId, reason: res.reason }, userId: user.id, severity: "warning" });
+    return { error: `Google nu a pornit listarile gratuite: ${res.error}` };
+  }
+  revalidatePath("/dashboard/features/google-merchant");
+  return { success: true };
 }

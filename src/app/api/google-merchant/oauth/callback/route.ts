@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyState, exchangeCode, hasContentScope } from "@/lib/google-merchant/oauth";
-import { listAccounts, registerGcp, listDataSources, createApiDataSource, createNotificationSubscription } from "@/lib/google-merchant/client";
+import { listAccounts, registerGcp, listDataSources, createApiDataSource, deleteNotificationSubscription } from "@/lib/google-merchant/client";
+import { asiguraAbonarea } from "@/lib/google-merchant/abonare";
+import { logError } from "@/lib/error-logger";
 import { DEFAULT_FEED_LABEL, DEFAULT_CONTENT_LANGUAGE, DEFAULT_COUNTRY, type GoogleMerchantConfig } from "@/lib/google-merchant/types";
-import { PLATFORM_ORIGIN } from "@/lib/seo";
 
 const FEATURE = "/dashboard/features/google-merchant";
 
@@ -81,17 +82,23 @@ export async function GET(req: NextRequest) {
       const created = await createApiDataSource(tok.accessToken, acc.id, "Edinio", config.feed_label, config.content_language);
       if (!("error" in created)) dataSourceName = created.data.name;
     }
-    if (dataSourceName && !config.notification_subscription_name) {
-      // Tokenul TREBUIE sa fie in URL-ul de callback, la fel ca in
-      // connectMerchant (src/lib/actions/google-merchant.actions.ts):
-      // /api/google-merchant/webhook cere acum secretul si confirma-si-ignora
-      // orice notificare fara el. Inregistrat fara token, abonamentul creat aici
-      // ar fi mort pentru totdeauna — nu se mai recreeaza nimic, fiindca
-      // `notification_subscription_name` ramane setat.
-      const webhookSecret = process.env.GMC_WEBHOOK_SECRET;
-      const callbackUri = `${PLATFORM_ORIGIN}/api/google-merchant/webhook${webhookSecret ? `?token=${encodeURIComponent(webhookSecret)}` : ""}`;
-      const sub = await createNotificationSubscription(tok.accessToken, acc.id, callbackUri);
-      if (!("error" in sub)) config.notification_subscription_name = sub.data.name;
+    if (dataSourceName) {
+      /*
+       * ⚠ Mereu prin `asiguraAbonarea`, si la o reconectare: ea refoloseste abonarea existenta si ii
+       * reface adresa daca secretul s-a schimbat. Forma de dinainte sarea pasul cand numele era salvat si
+       * inghitea eroarea, iar la 17.09.2026 niciun magazin n-avea abonare. Motivul unei caderi ramane in
+       * configurare, pentru panou si pentru cron.
+       */
+      if (config.account_id && config.account_id !== acc.id && config.notification_subscription_name) {
+        await deleteNotificationSubscription(tok.accessToken, config.notification_subscription_name);
+      }
+      const abonare = await asiguraAbonarea(tok.accessToken, acc.id);
+      config.notification_subscription_name = abonare.stare === "activa" ? abonare.name : undefined;
+      if (abonare.stare !== "fara-secret") config.abonare_incercata_la = new Date().toISOString();
+      config.abonare_eroare = abonare.stare === "eroare" ? abonare.mesaj.slice(0, 300) : undefined;
+      if (abonare.stare === "eroare") {
+        await logError({ action: "gmc.abonare", message: abonare.mesaj, details: { businessId, accountId: acc.id, reason: abonare.reason }, severity: "warning" });
+      }
     }
     config.connected = !!dataSourceName;
     config.account_id = acc.id;

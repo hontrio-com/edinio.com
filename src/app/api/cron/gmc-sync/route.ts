@@ -5,7 +5,9 @@ import { verificaCron } from "@/lib/cron-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
-import { getAccessToken } from "@/lib/google-merchant/oauth";
+import { obtineTokenul, type EroareToken } from "@/lib/google-merchant/oauth";
+import { asiguraAbonarea, secretulWebhookului } from "@/lib/google-merchant/abonare";
+import { asteptareaUrmatoare, ASTEPTARE_DUPA_TOKEN_MS, EroareGoogle, caderePermanenta } from "@/lib/google-merchant/asteptare";
 import { insertProductInput, deleteProductInput, getProduct, mapProductStatus } from "@/lib/google-merchant/client";
 import { expandProductOffers, type MappableBusiness, type MappableProduct } from "@/lib/google-merchant/mapping";
 import { MOTIV_PRET_CARE_MINTE, pretulDinCatalogMinte } from "@/lib/customization/pretul-din-catalog-minte";
@@ -78,11 +80,13 @@ export async function GET(req: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
   const now = new Date().toISOString();
-  let synced = 0, deleted = 0, failed = 0, statusChecked = 0, expirate = 0;
+  let synced = 0, deleted = 0, failed = 0, statusChecked = 0, expirate = 0, amanate = 0;
 
   // ── 0) Retrimiterea de intretinere: ofertele netrimise de o saptamana ─────────────
   // Inaintea revendicarii, ca produsele puse acum sa poata pleca chiar in rularea asta.
   const improspatate = await improspateazaOferteleVechi(admin);
+  /* Abonarile la notificari care lipsesc (0 din 7 la 17.09.2026). Vezi `asiguraAbonarileLipsa`. */
+  const abonari = await asiguraAbonarileLipsa(admin);
 
   // ── 1) Process the sync queue, grouped by business ─────────────────────────────
   /*
@@ -118,13 +122,28 @@ export async function GET(req: NextRequest) {
   }
 
   for (const [businessId, items] of byBiz) {
-    const ctx = await loadBusinessContext(admin, businessId);
-    if (!ctx) {
-      // Not connected — drop its queue items.
+    const rez = await loadBusinessContext(admin, businessId);
+    if ("deconectat" in rez) {
+      // Magazinul chiar nu mai e conectat: lucrarile lui n-au unde pleca.
       for (const it of (items ?? [])) await stergeDacaNeschimbat(admin, COADA, it);
       continue;
     }
-    const { token, config, business } = ctx;
+    if ("eroareToken" in rez) {
+      /*
+       * ⚠⚠ TOKENUL N-A VENIT, DAR MAGAZINUL E CONECTAT: coada ASTEAPTA, nu se sterge. Pana pe 17.09.2026
+       * ramura asta nu exista, iar o pana de o clipa la Google arunca schimbarile de pret si de stoc ale
+       * comerciantului. `attempts` nu creste: caderea spune ceva despre clipa, nu despre produs.
+       */
+      const pana = new Date(Date.now() + ASTEPTARE_DUPA_TOKEN_MS[rez.eroareToken]).toISOString();
+      for (const it of (items ?? [])) await scrieDacaNeschimbat(admin, COADA, it, { next_retry_at: pana });
+      amanate += items.length;
+      await logError({
+        action: "gmc-sync", severity: "warning", businessId,
+        message: `tokenul Google nu a venit (${rez.eroareToken}); ${items.length} lucrari asteapta pana la ${pana}`,
+      });
+      continue;
+    }
+    const { token, config, business } = rez.ctx;
     const lang = config.content_language || DEFAULT_CONTENT_LANGUAGE;
     const feedLabel = config.feed_label || DEFAULT_FEED_LABEL;
 
@@ -172,7 +191,7 @@ export async function GET(req: NextRequest) {
           const offerIds = (rows ?? []).map((r) => r.offer_id);
           for (const oid of offerIds.length ? offerIds : [item.offer_id]) {
             const res = await deleteProductInput(token, config.account_id!, lang, feedLabel, oid, config.data_source_name!);
-            if ("error" in res && res.status !== 404) throw new Error(res.error);
+            if ("error" in res && res.status !== 404) throw new EroareGoogle(res.error, res.status, res.reason);
           }
           await admin.from("gmc_products").delete().eq("business_id", businessId)
             .or(`product_id.eq.${productKey},offer_id.eq.${item.offer_id}`);
@@ -231,7 +250,7 @@ export async function GET(req: NextRequest) {
           const desired = new Set(offers.map((o) => o.offerId));
           for (const offer of offers) {
             const res = await insertProductInput(token, config.account_id!, config.data_source_name!, offer.input);
-            if ("error" in res) throw new Error(res.error);
+            if ("error" in res) throw new EroareGoogle(res.error, res.status, res.reason);
             await admin.from("gmc_products").upsert(
               { business_id: businessId, product_id: product.id, offer_id: offer.offerId, status: "pending", last_synced_at: now, error: null, updated_at: now },
               { onConflict: "business_id,offer_id" },
@@ -251,7 +270,8 @@ export async function GET(req: NextRequest) {
       } catch (e) {
         failed++;
         const attempts = (item.attempts ?? 0) + 1;
-        if (attempts >= MAX_ATTEMPTS) {
+        /* ⚠ Un produs respins cu 400 nu se reincearca: vezi `caderePermanenta`. */
+        if (attempts >= MAX_ATTEMPTS || caderePermanenta(e)) {
           await stergeDacaNeschimbat(admin, COADA, item);
           if (item.product_id) {
             await admin.from("gmc_products").upsert(
@@ -260,12 +280,13 @@ export async function GET(req: NextRequest) {
             );
           }
         } else {
-          await scrieDacaNeschimbat(admin, COADA, item, { attempts });
+          /* ⚠ Cu asteptare crescatoare, nu minut de minut: vezi `asteptareaUrmatoare`. */
+          await scrieDacaNeschimbat(admin, COADA, item, { attempts, next_retry_at: asteptareaUrmatoare(attempts) });
         }
       }
     }
     // Persist last_sync_at on the config.
-    await patchConfig(admin, businessId, config, { last_sync_at: now });
+    await patchConfig(admin, businessId, { last_sync_at: now });
   }
 
   // ── 2) Refresh statuses for products not checked recently ──────────────────────
@@ -282,10 +303,10 @@ export async function GET(req: NextRequest) {
 
   const ctxCache = new Map<string, Awaited<ReturnType<typeof loadBusinessContext>>>();
   for (const row of stale ?? []) {
-    let ctx = ctxCache.get(row.business_id);
-    if (ctx === undefined) { ctx = await loadBusinessContext(admin, row.business_id); ctxCache.set(row.business_id, ctx); }
-    if (!ctx) continue;
-    const { token, config } = ctx;
+    let rez = ctxCache.get(row.business_id);
+    if (rez === undefined) { rez = await loadBusinessContext(admin, row.business_id); ctxCache.set(row.business_id, rez); }
+    if (!("ctx" in rez)) continue;
+    const { token, config } = rez.ctx;
     const res = await getProduct(token, config.account_id!, config.content_language || DEFAULT_CONTENT_LANGUAGE, config.feed_label || DEFAULT_FEED_LABEL, row.offer_id);
     statusChecked++;
     if ("error" in res) {
@@ -326,8 +347,8 @@ export async function GET(req: NextRequest) {
     await admin.from("gmc_products").update({ status, issues: issues as never, destinations: destinations as never, last_status_at: now, updated_at: now }).eq("id", row.id);
   }
 
-  console.log(`[gmc-sync] synced=${synced} deleted=${deleted} failed=${failed} status=${statusChecked} improspatate=${improspatate} expirate=${expirate}`);
-  return NextResponse.json({ ok: true, synced, deleted, failed, statusChecked, improspatate, expirate });
+  console.log(`[gmc-sync] synced=${synced} deleted=${deleted} failed=${failed} status=${statusChecked} improspatate=${improspatate} expirate=${expirate} amanate=${amanate} abonari=${abonari}`);
+  return NextResponse.json({ ok: true, synced, deleted, failed, statusChecked, improspatate, expirate, amanate, abonari });
 }
 
 /**
@@ -399,23 +420,106 @@ async function improspateazaOferteleVechi(admin: Admin): Promise<number> {
   return randuri.size;
 }
 
+type ContextMagazin = { token: string; config: GoogleMerchantConfig; business: MappableBusiness };
+
+/**
+ * Contextul unui magazin: tokenul, configurarea si datele pentru mapare.
+ *
+ * ⚠ TREI RASPUNSURI, NU DOUA. Forma de dinainte intorcea `null` si pentru „magazinul nu mai e conectat”,
+ * si pentru „Google n-a dat tokenul acum”, iar apelantul STERGEA coada in ambele cazuri. Acum:
+ *   - `deconectat`: configurarea nu mai e completa, lucrarile n-au unde pleca;
+ *   - `eroareToken`: magazinul e conectat, dar tokenul nu vine; coada asteapta;
+ *   - `ctx`: se poate lucra.
+ */
 async function loadBusinessContext(admin: Admin, businessId: string): Promise<
-  { token: string; config: GoogleMerchantConfig; business: MappableBusiness } | null
+  { ctx: ContextMagazin } | { deconectat: true } | { eroareToken: EroareToken }
 > {
   const { data: ss } = await admin
     .from("store_settings").select("google_merchant_config").eq("business_id", businessId).single();
   const config = (ss?.google_merchant_config as GoogleMerchantConfig) ?? {};
-  if (!config.connected || !config.refresh_token || !config.account_id || !config.data_source_name) return null;
-  const token = await getAccessToken(config.refresh_token);
-  if (!token) return null;
+  if (!config.connected || !config.refresh_token || !config.account_id || !config.data_source_name) return { deconectat: true };
+  const t = await obtineTokenul(config.refresh_token);
+  if ("eroare" in t) return { eroareToken: t.eroare };
   const { data: biz } = await admin
     .from("businesses").select("slug, custom_domain, store_name, business_name").eq("id", businessId).single();
-  if (!biz) return null;
-  return { token, config, business: biz as MappableBusiness };
+  if (!biz) return { deconectat: true };
+  return { ctx: { token: t.token, config, business: biz as MappableBusiness } };
 }
 
-async function patchConfig(admin: Admin, businessId: string, config: GoogleMerchantConfig, patch: Partial<GoogleMerchantConfig>) {
+/**
+ * Scrie in configurare DOAR campurile date, peste configurarea de ACUM.
+ *
+ * ═══ ⚠ DE CE SE RECITESTE (17.09.2026) ═══
+ *
+ * Forma de dinainte scria inapoi obiectul citit la inceputul rularii, cu `last_sync_at` peste. O rulare
+ * dureaza cat dureaza trimiterile catre Google; daca in timpul ei comerciantul oprea sincronizarea
+ * automata sau schimba maparea categoriilor, cronul ii scria peste configurarea veche si alegerea lui
+ * disparea fara urma. Recitita chiar inainte de scriere, fereastra scade de la o rulare la o clipa.
+ *
+ * ⚠ Si un magazin deconectat intre timp NU se reconecteaza pe dos: fara `connected`, nu se scrie nimic.
+ */
+async function patchConfig(admin: Admin, businessId: string, patch: Partial<GoogleMerchantConfig>) {
+  const { data, error } = await admin
+    .from("store_settings").select("google_merchant_config").eq("business_id", businessId).maybeSingle();
+  if (error || !data) return;
+  const proaspat = (data.google_merchant_config as GoogleMerchantConfig | null) ?? {};
+  if (!proaspat.connected) return;
   await admin.from("store_settings")
-    .update({ google_merchant_config: { ...config, ...patch } as never })
+    .update({ google_merchant_config: { ...proaspat, ...patch } as never })
     .eq("business_id", businessId);
+}
+
+/** Cate magazine incearca abonarea intr-o rulare, si la cate ore dupa o incercare cazuta. */
+const ABONARI_PE_RULARE = 3;
+const ORE_INTRE_INCERCARI_ABONARE = 6;
+
+/**
+ * Face abonarea la notificari pentru magazinele conectate care n-o au.
+ *
+ * ⚠ DE CE IN CRON, nu doar la conectare: la 17.09.2026 niciunul dintre cele 7 magazine conectate n-avea
+ * abonare (cererea era gresita, vezi `corpAbonare`), iar comerciantii nu se reconecteaza singuri. Fara pasul
+ * asta, reparatia n-ar fi ajuns la ei niciodata.
+ *
+ * ⚠ Fara `GMC_WEBHOOK_SECRET` nu se incearca nimic: webhook-ul ar refuza oricum toate notificarile.
+ * O incercare cazuta se scrie in configurare (panoul o arata) si se reia abia peste cateva ore, ca un
+ * cont cu o problema reala sa nu fie intrebat din minut in minut.
+ */
+async function asiguraAbonarileLipsa(admin: Admin): Promise<number> {
+  if (!secretulWebhookului()) return 0;
+  const { data, error } = await admin
+    .from("store_settings")
+    .select("business_id, google_merchant_config")
+    .eq("google_merchant_config->>connected", "true")
+    .is("google_merchant_config->>notification_subscription_name", null)
+    .limit(50);
+  if (error) {
+    await logError({ action: "gmc-sync.abonare", message: `magazinele nu s-au putut citi: ${error.message}`, severity: "warning" });
+    return 0;
+  }
+  const prag = Date.now() - ORE_INTRE_INCERCARI_ABONARE * 3_600_000;
+  let incercate = 0;
+  for (const rand of (data ?? []) as { business_id: string; google_merchant_config: GoogleMerchantConfig | null }[]) {
+    if (incercate >= ABONARI_PE_RULARE) break;
+    const cfg = rand.google_merchant_config;
+    if (!cfg?.account_id || !cfg.refresh_token) continue;
+    if (cfg.abonare_incercata_la && Date.parse(cfg.abonare_incercata_la) > prag) continue;
+    incercate++;
+    const acum = new Date().toISOString();
+    const t = await obtineTokenul(cfg.refresh_token);
+    if ("eroare" in t) {
+      await patchConfig(admin, rand.business_id, { abonare_incercata_la: acum, abonare_eroare: `Tokenul Google nu a venit (${t.eroare}).` });
+      continue;
+    }
+    const r = await asiguraAbonarea(t.token, cfg.account_id);
+    if (r.stare === "activa") {
+      await patchConfig(admin, rand.business_id, { notification_subscription_name: r.name, abonare_incercata_la: acum, abonare_eroare: undefined });
+    } else if (r.stare === "eroare") {
+      await patchConfig(admin, rand.business_id, { abonare_incercata_la: acum, abonare_eroare: r.mesaj.slice(0, 300) });
+      await logError({
+        action: "gmc-sync.abonare", severity: "warning", businessId: rand.business_id,
+        message: `abonarea la notificari a fost refuzata: ${r.mesaj}`, details: { reason: r.reason },
+      });
+    }
+  }
+  return incercate;
 }

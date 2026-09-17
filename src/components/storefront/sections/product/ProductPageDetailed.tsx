@@ -27,6 +27,7 @@ import { distributeFbtSavings } from "@/lib/offers/offer.types";
 import { useAfisariOferte } from "@/lib/offers/use-afisari-oferte";
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { useEditareLinie } from "./_shared/useEditareLinie";
+import { optiunileDinAdresa, abonareCautare, citesteCautarea } from "@/lib/storefront/varianta-din-adresa";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { cosDupaComanda } from "@/lib/storefront/cart/consume";
@@ -317,6 +318,23 @@ export function ProductPageDetailed({
       ? Object.fromEntries(variantsData.options.map((o) => [o.name, o.values[0] ?? ""]))
       : {},
   );
+  /*
+   * ⚠ VARIANTA CERUTA PRIN ADRESA (`?varianta=`), pentru ofertele trimise la Google Merchant: specificatia
+   * cere ca linkul unei variante sa deschida pagina pe ea, cu pretul ei, altfel Google gaseste alt pret
+   * decat in feed. Vezi `varianta-din-adresa.ts`.
+   *
+   * ⚠ Se ajusteaza starea IN RANDARE, cu garda, nu intr-un efect: serverul n-are adresa (instantaneul lui
+   * e gol), iar dupa hidratare cautarea reala vine o singura data. Se scrie numai peste o alegere goala,
+   * deci nu calca nici ce a ales omul, nici linia din cos adusa la editare (aceea vine mai tarziu si
+   * castiga oricum).
+   */
+  const cautareaAdresei = useSyncExternalStore(abonareCautare, citesteCautarea, () => "");
+  const [cautareaFolosita, setCautareaFolosita] = useState("");
+  if (!demo && cautareaAdresei !== cautareaFolosita) {
+    setCautareaFolosita(cautareaAdresei);
+    const optiuni = optiunileDinAdresa(variantsData, cautareaAdresei);
+    if (optiuni && Object.keys(selectedOptions).length === 0) setSelectedOptions(optiuni);
+  }
 
   const selectedComboTitle = useMemo(
     () => (variantsData ? comboTitle(variantsData.options, selectedOptions) : null),

@@ -48,19 +48,34 @@ export async function POST(req: NextRequest) {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  const { data: ss } = await admin
+  /*
+   * ⚠ TOATE magazinele legate de cont, nu primul. Un comerciant cu doua magazine le poate lega de acelasi
+   * cont Merchant; cu `.limit(1)`, notificarile ajungeau mereu la unul singur, iar produsele celuilalt
+   * nu-si primeau niciodata starea in timp real.
+   */
+  const { data: magazine } = await admin
     .from("store_settings")
     .select("business_id, google_merchant_config")
     .eq("google_merchant_config->>account_id", accountId)
-    .limit(1)
-    .maybeSingle();
-  if (!ss) return NextResponse.json({ ok: true });
-
-  const businessId = ss.business_id;
-  const config = (ss.google_merchant_config as GoogleMerchantConfig) ?? {};
+    .limit(20);
+  if (!magazine?.length) return NextResponse.json({ ok: true });
+  const businessIds = magazine.map((m) => m.business_id);
   const now = new Date().toISOString();
 
-  if (offerId && config.refresh_token && config.account_id) {
+  if (!offerId) {
+    // Nu se stie ce produs: reverificarea intregului catalog, la urmatoarea trecere a cronului.
+    await admin.from("gmc_products").update({ last_status_at: null }).in("business_id", businessIds);
+    return NextResponse.json({ ok: true });
+  }
+
+  /* Magazinul care chiar are oferta. Fara rand la noi, oferta nu e a noastra si nu e nimic de facut. */
+  const { data: rand } = await admin.from("gmc_products")
+    .select("business_id").in("business_id", businessIds).eq("offer_id", offerId).limit(1).maybeSingle();
+  if (!rand) return NextResponse.json({ ok: true });
+  const businessId = rand.business_id;
+  const config = (magazine.find((m) => m.business_id === businessId)?.google_merchant_config as GoogleMerchantConfig | null) ?? {};
+
+  if (config.refresh_token && config.account_id) {
     const token = await getAccessToken(config.refresh_token);
     if (token) {
       const res = await getProduct(token, config.account_id, config.content_language || DEFAULT_CONTENT_LANGUAGE, config.feed_label || DEFAULT_FEED_LABEL, offerId);
@@ -74,7 +89,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Couldn't pinpoint/refresh — force a re-check on the next cron pass.
-  await admin.from("gmc_products").update({ last_status_at: null }).eq("business_id", businessId);
+  /*
+   * N-am putut citi starea acum (token, pana, sau produsul sters: „If newValue is omitted, the product was
+   * deleted", iar atunci `getProduct` da 404). ⚠ Se reverifica DOAR oferta asta, nu tot catalogul: forma de
+   * dinainte stergea `last_status_at` pe toate produsele magazinului la fiecare astfel de notificare. Cronul
+   * trateaza singur o oferta pe care Google n-o mai are (vezi `STARE_EXPIRAT`).
+   */
+  await admin.from("gmc_products").update({ last_status_at: null }).eq("business_id", businessId).eq("offer_id", offerId);
   return NextResponse.json({ ok: true });
 }

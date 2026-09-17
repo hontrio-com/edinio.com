@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { GooglePreview, CharCounter } from "@/components/dashboard/SeoFields";
+import { masuraPretPeUnitate, bazaPretPeUnitate } from "@/lib/google-merchant/pret-pe-unitate";
 import { SEO_TITLE_IDEAL_MIN, SEO_TITLE_MAX, SEO_DESCRIPTION_IDEAL_MIN, SEO_DESCRIPTION_MAX } from "@/lib/seo";
 import { PersonalizareCampuri, type StareCustomizare } from "@/components/dashboard/PersonalizareCampuri";
 import type { CampPersonalizare } from "@/lib/customization/definitie";
@@ -157,6 +158,9 @@ interface GoogleShoppingState {
   custom_label_2: string;
   custom_label_3: string;
   custom_label_4: string;
+  /** Pretul pe unitate, ca pe eticheta („750ml”). Vezi `pret-pe-unitate.ts`. */
+  unit_pricing_measure: string;
+  unit_pricing_base_measure: string;
 }
 
 // True daca produsul are deja macar un atribut Google Shopping completat — folosit
@@ -262,7 +266,7 @@ const EMPTY_FORM: FormState = {
   seo_title: "", seo_description: "",
   variants: { enabled: false, options: [], combinations: [] },
   customization: { enabled: false, fields: [] },
-  google: { gtin: "", brand: "", mpn: "", google_product_category: "", condition: "", gender: "", age_group: "", color: "", size: "", material: "", custom_label_0: "", custom_label_1: "", custom_label_2: "", custom_label_3: "", custom_label_4: "" },
+  google: { gtin: "", brand: "", mpn: "", google_product_category: "", condition: "", gender: "", age_group: "", color: "", size: "", material: "", custom_label_0: "", custom_label_1: "", custom_label_2: "", custom_label_3: "", custom_label_4: "", unit_pricing_measure: "", unit_pricing_base_measure: "" },
   /*
    * ⚠ SUPRASCRIEREA GPSR, la nivel de PERSOANA intreaga. Gol inseamna „ia din setarile
    * magazinului". Imbinate camp cu camp, s-ar naste o adresa jumatate a unui producator si
@@ -298,6 +302,7 @@ type PageSections = {
     condition?: string; gender?: string; age_group?: string;
     color?: string; size?: string; material?: string;
     custom_label_0?: string; custom_label_1?: string; custom_label_2?: string; custom_label_3?: string; custom_label_4?: string;
+    unit_pricing_measure?: string; unit_pricing_base_measure?: string;
   };
 };
 
@@ -422,6 +427,8 @@ function productToForm(p: Product): FormState {
       custom_label_2: ps.google?.custom_label_2 ?? "",
       custom_label_3: ps.google?.custom_label_3 ?? "",
       custom_label_4: ps.google?.custom_label_4 ?? "",
+      unit_pricing_measure: ps.google?.unit_pricing_measure ?? "",
+      unit_pricing_base_measure: ps.google?.unit_pricing_base_measure ?? "",
     },
   };
 }
@@ -1084,6 +1091,8 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
           custom_label_2: form.google.custom_label_2.trim(),
           custom_label_3: form.google.custom_label_3.trim(),
           custom_label_4: form.google.custom_label_4.trim(),
+          unit_pricing_measure: form.google.unit_pricing_measure.trim(),
+          unit_pricing_base_measure: form.google.unit_pricing_base_measure.trim(),
         },
       },
     };
@@ -2053,6 +2062,32 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                       <option value="infant">Bebelusi</option>
                       <option value="newborn">Nou-nascuti</option>
                     </select>
+                  </div>
+                </div>
+
+                {/*
+                  ⚠ PRETUL PE UNITATE: in UE, Google il cere la produsele vandute la greutate, volum,
+                  lungime sau suprafata (la `mokka`, 31 din 38 de produse aveau „Missing unit pricing
+                  measure"). Ce nu respecta regulile oficiale NU pleaca; vezi `pret-pe-unitate.ts`.
+                */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">Cantitate neta (pret pe unitate)</label>
+                    <input type="text" value={form.google.unit_pricing_measure} onChange={e => set("google", { ...form.google, unit_pricing_measure: e.target.value })}
+                      placeholder="ex: 750ml, 2.5kg, 100g" className={inputCls} />
+                    {form.google.unit_pricing_measure.trim() !== "" && !masuraPretPeUnitate(form.google.unit_pricing_measure) && (
+                      <p className="text-xs text-destructive mt-1">Scrie un numar urmat de unitate: g, kg, mg, ml, cl, l, cm, m, sqm sau ct. Asa, Google nu il primeste.</p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">Obligatoriu in UE la produsele vandute la greutate, volum, lungime sau suprafata.</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">Unitate de baza (optional)</label>
+                    <input type="text" value={form.google.unit_pricing_base_measure} onChange={e => set("google", { ...form.google, unit_pricing_base_measure: e.target.value })}
+                      placeholder="ex: 100ml, 1kg" className={inputCls} />
+                    {form.google.unit_pricing_base_measure.trim() !== "" && !bazaPretPeUnitate(form.google.unit_pricing_base_measure, masuraPretPeUnitate(form.google.unit_pricing_measure)) && (
+                      <p className="text-xs text-destructive mt-1">Google accepta 1, 2, 4, 8, 10 sau 100 (plus 75cl, 750ml, 50kg, 1000kg), in aceeasi fel de unitate ca cantitatea neta.</p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">Pretul se arata pe aceasta unitate. Gol: Google alege singur.</p>
                   </div>
                 </div>
 

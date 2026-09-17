@@ -9,6 +9,10 @@ import { parseVariants, VARIANT_TITLE_SEP, comboUnitPrice, comboCompareAtPrice, 
 // poarta se pune pe feedul Meta: altfel minciuna doar se muta pe celalalt canal.
 import { pretulDinCatalogMinte } from "@/lib/customization/pretul-din-catalog-minte";
 import { CURRENCY, DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "./types";
+import { categorieGooglePentruTrimitere } from "./taxonomy";
+import { masuraPretPeUnitate, bazaPretPeUnitate, aceeasiDimensiune, type Masura } from "./pret-pe-unitate";
+import { identitateCombinatie } from "@/lib/storefront/variante-identitate";
+import { adresaCuVarianta } from "@/lib/storefront/varianta-din-adresa";
 
 export interface MappableBusiness {
   slug: string;
@@ -55,6 +59,10 @@ interface GoogleAttrs {
   custom_label_2?: string;
   custom_label_3?: string;
   custom_label_4?: string;
+  /** Cantitatea neta, ca pe eticheta: „750ml”, „2,5kg”. Vezi `pret-pe-unitate.ts`. */
+  unit_pricing_measure?: string;
+  /** Numitorul pretului pe unitate: „100ml”, „1kg”. */
+  unit_pricing_base_measure?: string;
 }
 
 function priceMicros(value: number) {
@@ -117,8 +125,26 @@ export function toGoogleProductInput(
   if (hasSale) attributes.salePrice = priceMicros(base);
   if (images[0]) attributes.imageLink = images[0];
   if (images.length > 1) attributes.additionalImageLinks = images.slice(1, 10);
-  const googleCat = g.google_product_category || (product.category ? config.category_map?.[product.category] : undefined);
+  /*
+   * ⚠ ID-ul oficial, nu calea: 5 din 77 de cai ale listei noastre nu existau in taxonomia Google, iar la
+   * `mokka` toate produsele mapate pe una dintre ele erau `google_category_unrecognized`. Caile vechi
+   * salvate se traduc aici, fara sa atingem ce a ales comerciantul. Vezi `taxonomy.ts`.
+   */
+  const googleCat = categorieGooglePentruTrimitere(
+    g.google_product_category || (product.category ? config.category_map?.[product.category] : undefined),
+  );
   if (googleCat) attributes.googleProductCategory = googleCat;
+  /*
+   * `product_type` e categoria MAGAZINULUI, pe care o avem deja. Specificatia o recomanda pentru a
+   * organiza campaniile Shopping; nu se amesteca cu `googleProductCategory`, care e a lui Google.
+   */
+  if (product.category?.trim()) attributes.productTypes = [product.category.trim().slice(0, 750)];
+  const masura = masuraPretPeUnitate(g.unit_pricing_measure);
+  if (masura) {
+    attributes.unitPricingMeasure = masura;
+    const baza = bazaPretPeUnitate(g.unit_pricing_base_measure, masura);
+    if (baza) attributes.unitPricingBaseMeasure = baza;
+  }
   // v1 renamed the single `gtin` attribute to a `gtins` array. Only valid GTINs
   // are submitted; an invalid one would disapprove the product.
   if (validGtin) attributes.gtins = [normalizeGtin(g.gtin)];
@@ -149,6 +175,29 @@ export function toGoogleProductInput(
     productAttributes: attributes,
   };
 }
+
+/**
+ * `offerId` al unei variante, UNIC si de cel mult 50 de caractere.
+ *
+ * ═══ ⚠⚠ CAPCANA ARMATA (masurata 17.09.2026) ═══
+ *
+ * Forma de dinainte era `${product.id}-${combo.id}`.slice(0, 50). Uuid-ul produsului ocupa 37 de caractere,
+ * deci din slugul combinatiei ramaneau 13: „180x200-cm-alb” si „180x200-cm-alb-mat” dadeau ACELASI id, iar a
+ * doua oferta o suprascria pe prima la Google, cu pretul ei. Pe toata platforma: 3.493 de combinatii active
+ * s-ar fi strans in 702 id-uri, la 3 magazine care inca n-au Google Merchant. La cele conectate, zero.
+ *
+ * ⚠ Id-ul care INCAPE ramane neschimbat (niciuna dintre ofertele deja trimise nu era taiata), deci nicio
+ * oferta existenta nu se muta. Doar unde ar fi fost taiat se foloseste identitatea stabila a combinatiei:
+ * 32 + 1 + 16 = 49 de caractere, fara cratimele uuid-ului, deci nu se poate intalni cu forma cealalta.
+ */
+export function offerIdVarianta(productId: string, combo: { id: string; title: string; uid?: string }): string {
+  const plin = `${productId}-${combo.id}`;
+  if (plin.length <= 50) return plin;
+  return `${productId.replace(/-/g, "")}-${identitateCombinatie(combo)}`;
+}
+
+/** Adresa paginii de produs cu varianta preselectata. ⚠ O singura forma, cu pagina si cu JSON-LD: `adresaCuVarianta`. */
+export const adresaVariantei = adresaCuVarianta;
 
 export interface OfferInput {
   offerId: string;
@@ -226,11 +275,24 @@ export function expandProductOffers(
   });
 
   return enabled.map((combo) => {
-    const offerId = `${product.id}-${combo.id}`.slice(0, 50);
+    const offerId = offerIdVarianta(product.id, combo);
     const parts = combo.title.split(VARIANT_TITLE_SEP);
     const attrs: Record<string, unknown> = { ...baseAttrs };
     attrs.title = `${product.name} - ${combo.title}`.slice(0, 150);
     attrs.itemGroupId = product.id;
+    /*
+     * ⚠ Cantitatea neta a VARIANTEI, cand valoarea ei chiar e una („250g” / „500g”): altfel toate variantele
+     * ar fi plecat cu cantitatea produsului, iar pretul pe unitate afisat de Google ar fi fost gresit pe
+     * toate, mai putin una.
+     *
+     * ⚠ NUMAI daca produsul are deja o cantitate neta de acelasi fel. O optiune „40cm” la o perna nu face
+     * perna vanduta la metru: fara alegerea comerciantului, o valoare care seamana cu o masura ramane text.
+     */
+    const masuraProdus = baseAttrs.unitPricingMeasure as Masura | undefined;
+    if (masuraProdus) {
+      const masuraVariantei = parts.map((p) => masuraPretPeUnitate(p)).find((m): m is Masura => !!m && aceeasiDimensiune(m, masuraProdus));
+      if (masuraVariantei) attrs.unitPricingMeasure = masuraVariantei;
+    }
     /*
      * Identificatorul acestei variante.
      *
@@ -267,6 +329,15 @@ export function expandProductOffers(
       if (slot && parts[i]) attrs[slot] = parts[i];
     });
     if (combo.image) attrs.imageLink = combo.image;
+    /*
+     * ⚠ ADRESA CARE PRESELECTEAZA VARIANTA. Specificatia (`link`): „When including a URL for a product
+     * with variants, ensure that the variant is automatically selected based on the URL”, iar pentru
+     * `item_group_id`: „have different landing page URLs submitted for each variant”. Toate variantele
+     * trimiteau la aceeasi pagina, unde se vedea pretul de baza: la caian-textile, 7 din 8 produse cu
+     * variante trimise la Google au variante cu alt pret decat baza, adica exact nepotrivirea de pret
+     * dintre feed si pagina pentru care Google respinge oferta. Pagina de produs citeste `varianta`.
+     */
+    attrs.link = adresaVariantei(String(baseAttrs.link), combo);
 
     return { offerId, input: { offerId, contentLanguage: lang, feedLabel, productAttributes: attrs } };
   });

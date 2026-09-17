@@ -11,9 +11,11 @@ import {
 import {
   startGoogleMerchantOAuth, listMerchantAccounts, selectMerchantAccount,
   disconnectMerchant, setMerchantSettings, queueSyncAll, setCategoryMap, getMerchantAccountIssues,
+  getMerchantPrograms, enableMerchantFreeListings,
   type MerchantStatus, type MerchantProductRow, type MerchantAccountIssueRow,
 } from "@/lib/actions/google-merchant.actions";
-import { GOOGLE_CATEGORIES } from "@/lib/google-merchant/taxonomy";
+import { problemeDeAfisat, numeleSuprafetei } from "@/lib/google-merchant/probleme";
+import { GOOGLE_CATEGORIES, caleaDeAfisat } from "@/lib/google-merchant/taxonomy";
 import { cn } from "@/lib/utils/cn";
 import { pluralRo } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
@@ -239,7 +241,7 @@ function AccountIssuesBanner({ businessId }: { businessId: string }) {
         {issues.map((i, idx) => (
           <li key={idx} className="text-xs">
             <span className="font-medium">{i.title}</span>
-            {i.detail ? ` — ${i.detail}` : ""}
+            {i.detail ? `: ${i.detail}` : ""}
             {i.documentationUri && (
               <> <a href={i.documentationUri} target="_blank" rel="noreferrer" className="font-medium underline">soluție</a></>
             )}
@@ -247,6 +249,114 @@ function AccountIssuesBanner({ businessId }: { businessId: string }) {
         ))}
       </ul>
     </Callout>
+  );
+}
+
+/** Numele programelor pe romaneste. */
+const NUME_PROGRAM: Record<string, string> = { "free-listings": "Listări gratuite", "shopping-ads": "Reclame Shopping" };
+
+/**
+ * Unde pot aparea produsele: starea programelor contului Merchant.
+ *
+ * ⚠ DE CE (masurat 17.09.2026): la 6 din 7 magazine, Google verifica produsele si le intorcea cu ZERO
+ * destinatii. Panoul le arata „In asteptare” la nesfarsit, iar comerciantul astepta o aprobare care nu
+ * putea veni, fiindca programul nu era pornit. Aici se spune starea fiecarui program, ce cerinte lipsesc
+ * si, cand Google permite, listarile gratuite se pornesc dintr-un buton.
+ */
+function ProgramePanel({ businessId, faraDestinatie }: { businessId: string; faraDestinatie: number }) {
+  const router = useRouter();
+  const [rez, setRez] = useState<Awaited<ReturnType<typeof getMerchantPrograms>> | null>(null);
+  const [reincarca, setReincarca] = useState(0);
+  const [pornire, startPornire] = useTransition();
+
+  useEffect(() => {
+    let alive = true;
+    getMerchantPrograms(businessId)
+      .then((r) => { if (alive) setRez(r); })
+      .catch(() => { if (alive) setRez({ error: "Nu am primit răspuns de la server." }); });
+    return () => { alive = false; };
+  }, [businessId, reincarca]);
+
+  const avertisment = faraDestinatie > 0 ? (
+    <Callout variant="warning" icon={AlertTriangle}>
+      <p className="font-semibold">{pluralRo(faraDestinatie)} nu {faraDestinatie === 1 ? "are" : "au"} unde să apară în Google</p>
+      <p className="mt-0.5 text-xs">
+        Google {faraDestinatie === 1 ? "l-a verificat" : "le-a verificat"}, dar contul Merchant Center nu are pornit niciun program în care {faraDestinatie === 1 ? "să fie afișat" : "să fie afișate"} (listări gratuite sau reclame Shopping).
+        Cât timp programul e oprit, {faraDestinatie === 1 ? "produsul rămâne" : "produsele rămân"} „În așteptare” și nu se aprobă singure.
+      </p>
+    </Callout>
+  ) : null;
+
+  if (!rez) return avertisment;
+  if ("error" in rez) {
+    return avertisment ? (
+      <div className="space-y-2">
+        {avertisment}
+        <p className="text-xs text-muted-foreground">Starea programelor nu s-a putut citi acum: {rez.error} Verifică în Merchant Center, la Creștere, Programe.</p>
+      </div>
+    ) : null;
+  }
+  if (rez.programs.length === 0) return avertisment;
+
+  return (
+    <div className="space-y-3">
+      {avertisment}
+      <div className="rounded-2xl border border-border bg-card p-5">
+        <h3 className="mb-3 text-sm font-semibold text-foreground">Unde pot apărea produsele</h3>
+        <ul className="space-y-3">
+          {rez.programs.map((p) => {
+            const eticheta = p.state === "ENABLED" ? { text: "Pornit", cls: "bg-success/10 text-success" }
+              : p.state === "ELIGIBLE" ? { text: "Oprit", cls: "bg-warning/10 text-warning" }
+              : p.state === "NOT_ELIGIBLE" ? { text: "Cerințe neîndeplinite", cls: "bg-destructive/10 text-destructive" }
+              : { text: "Necunoscut", cls: "bg-muted text-muted-foreground" };
+            return (
+              <li key={p.id} className="text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-foreground">{NUME_PROGRAM[p.id] ?? p.id}</span>
+                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", eticheta.cls)}>{eticheta.text}</span>
+                  {p.documentationUri && (
+                    <a href={p.documentationUri} target="_blank" rel="noreferrer" className="text-xs text-primary underline">despre program</a>
+                  )}
+                </div>
+                {p.unmetRequirements.length > 0 && (
+                  <ul className="mt-1 space-y-0.5">
+                    {p.unmetRequirements.map((r, i) => (
+                      <li key={i} className="text-xs text-muted-foreground">
+                        {r.title}
+                        {r.affectedRegionCodes.length > 0 ? ` (${r.affectedRegionCodes.join(", ")})` : ""}
+                        {r.documentationUri && <> <a href={r.documentationUri} target="_blank" rel="noreferrer" className="font-medium text-primary underline">cum rezolv</a></>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {p.id === "free-listings" && p.state === "ELIGIBLE" && (
+                  <Button
+                    size="sm" className="mt-2" disabled={pornire}
+                    onClick={() => startPornire(async () => {
+                      let r: Awaited<ReturnType<typeof enableMerchantFreeListings>>;
+                      try {
+                        r = await enableMerchantFreeListings(businessId);
+                      } catch {
+                        /* ⚠ Porneste programul CHIAR LA GOOGLE. Starea se reciteste, deci omul vede ce a ramas. */
+                        toast.error("Nu am primit răspuns de la server, deci nu știm dacă listările gratuite au pornit. Recitim starea programelor.", { duration: 12000 });
+                        setReincarca((n) => n + 1);
+                        return;
+                      }
+                      if ("error" in r) { toast.error(r.error, { duration: 12000 }); return; }
+                      toast.success("Listările gratuite au pornit. Google reverifică produsele în următoarele ore.");
+                      setReincarca((n) => n + 1);
+                      router.refresh();
+                    })}
+                  >
+                    {pornire ? <Loader2 className="animate-spin" /> : <Check />} Pornește listările gratuite
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
   );
 }
 
@@ -286,6 +396,10 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">Conectat la Merchant Center</p>
             <p className="truncate text-xs text-muted-foreground">{status.accountName || `Cont ${status.accountId}`} · {status.email}</p>
+            {/* ⚠ Fara abonare nu e o pana: statusurile se reverifica oricum din 30 in 30 de minute. */}
+            <p className="text-xs text-muted-foreground" title={status.abonare.eroare}>
+              {status.abonare.activa ? "Statusurile vin de la Google în timp real." : "Statusurile se actualizează la cel mult 30 de minute."}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -325,6 +439,7 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
         <Kpi label="În așteptare" value={c.pending} tone="warning" icon={Clock} />
         <Kpi label="Respinse" value={c.disapproved} tone="danger" icon={CircleX} />
       </div>
+      <ProgramePanel businessId={businessId} faraDestinatie={c.faraDestinatie} />
       {c.queued > 0 && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {c.queued} produse în coada de sincronizare (se procesează automat).</p>
       )}
@@ -522,17 +637,21 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold", s.cls)}><Icon className="h-3 w-3" /> {s.label}</span>;
 }
 
+/* ⚠ Problemele trec prin `problemeDeAfisat`: Google trimite aceeasi problema o data pe fiecare suprafata,
+   iar panoul le arata de sase ori. Tot acolo se citeste linkul din `documentation`. */
 function IssueList({ issues }: { issues: MerchantProductRow["issues"] }) {
   return (
     <ul className="mt-0.5 space-y-1">
-      {issues.map((iss, idx) => {
-        const sev = String(iss.severity ?? "").toUpperCase();
-        const cls = sev === "DISAPPROVED" ? "text-destructive" : sev === "DEMOTED" ? "text-warning" : "text-muted-foreground";
+      {problemeDeAfisat(issues).map((iss) => {
+        const cls = iss.severitate === "DISAPPROVED" ? "text-destructive" : iss.severitate === "DEMOTED" ? "text-warning" : "text-muted-foreground";
         return (
-          <li key={idx} className="text-xs leading-snug">
-            <span className={cn("font-medium", cls)}>{iss.description ?? iss.code ?? "Problemă"}</span>
-            {iss.detail ? <span className="text-muted-foreground"> — {iss.detail}</span> : null}
-            {iss.documentationUri ? <> <a href={iss.documentationUri} target="_blank" rel="noreferrer" className="font-medium text-primary underline">cum rezolv</a></> : null}
+          <li key={iss.cheie} className="text-xs leading-snug">
+            <span className={cn("font-medium", cls)}>{iss.titlu}</span>
+            {iss.detaliu ? <span className="text-muted-foreground">: {iss.detaliu}</span> : null}
+            {iss.link ? <> <a href={iss.link} target="_blank" rel="noreferrer" className="font-medium text-primary underline">cum rezolv</a></> : null}
+            {iss.suprafete.length > 0 && iss.severitate !== "NOT_IMPACTED" ? (
+              <span className="block text-[11px] text-muted-foreground">Afectează: {iss.suprafete.map(numeleSuprafetei).join(", ")}</span>
+            ) : null}
           </li>
         );
       })}
@@ -548,7 +667,10 @@ function CategoryMapping({ businessId, categories, initialMap }: {
   businessId: string; categories: string[]; initialMap: Record<string, string>;
 }) {
   const router = useRouter();
-  const [map, setMap] = useState<Record<string, string>>(initialMap);
+  /* ⚠ O cale veche GRESITA (din lista de dinainte de 17.09.2026) se arata ca cea corecta: altfel
+     selectorul n-ar gasi-o printre optiuni, ar arata „nemapat”, iar o salvare ar sterge alegerea. */
+  const [map, setMap] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(initialMap).map(([k, v]) => [k, caleaDeAfisat(v)])));
   const [saving, startSave] = useTransition();
   if (categories.length === 0) return null;
 

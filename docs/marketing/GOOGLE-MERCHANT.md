@@ -223,6 +223,32 @@ Suita intreaga, `tsc`, poarta de lint (57 de erori, niciuna noua) si buildul: ve
 * 14:08-14:14 UTC: retrimiterea tuturor ofertelor (294 de produse, cu prioritatea retrimiterii de
   intretinere): **314 oferte trimise, 0 ramase in eroare**. O singura cadere, reluata singura dupa asteptarea
   de un minut: prima vedere pe productie a reincercarii cu asteptare.
+* ⚠⚠ 14:25-14:27 UTC, dupa `6a15a66d`: **cauza confirmata**. Cronul a gasit sursele de date ale celor 6
+  magazine cu oferte fara destinatie **fara nicio tara** (`sursa_tari_inainte: []`) si le-a pus `RO`. Singura
+  sursa care avea deja `RO` era a lui `mokka`, **singurul magazin cu produse aprobate**. Produsele celor 6 au
+  plecat din nou automat.
+* 14:37 UTC, la zece minute dupa reparatie: ofertele au primit destinatii si verdict. `tonel-beauty` 52
+  aprobate, `caian-textile` 28, `teoshop` 18 (toate de la 0). Pe platforma: **161 aprobate** (dimineata: 38),
+  109 respinse, 44 in procesare.
+* 14:23-14:38 UTC: **145 de notificari primite pe webhook**, niciuna cu raspuns 4xx sau 5xx; 163 de oferte
+  si-au primit starea in 3 minute, peste plafonul cronului (120), deci si prin notificari. Nicio eroare sau
+  avertisment in jurnalul desfasurarii `dpl_AcyFRDsbYx29T8Dor5CjaBw9FsU3`.
+
+## Ce tine de comercianti (masurat 17.09.2026, 14:37 UTC)
+
+Respingerile ramase NU vin din feed, ci din conturile si datele lor. Panoul le arata fiecaruia, cu linkul
+„cum rezolv”:
+
+| Magazin | Respinse | Motivul Google | Ce are de facut |
+| --- | --- | --- | --- |
+| `okxi` (vetdepo.ro) | 44 | `homepage_not_claimed`, `policy_enforcement_account_disapproval` | verifica si revendica site-ul in Merchant Center |
+| `suporti-numar` | 20 | `misrepresentation` | datele firmei, contact, politica de retur pe site, apoi cerere de reanalizare |
+| `itp-blk` | 6 | produse FARA imagine, livrare nesetata in cont, reanaliza initiala | imagini pe produse, setari de livrare, domeniu propriu |
+| `teoshop` | 1 | imagine neconforma | alta imagine |
+| `tonel-beauty` | 2 | politici (arme si piese, restrictii legale) | produsele nu pot aparea in Google |
+
+Avertismente fara impact pe afisare: pretul pe unitate (mai ales `tonel-beauty` 55, `okxi` 34, `mokka` 31),
+imagini sub 500x500.
 
 ## Ce ramane
 

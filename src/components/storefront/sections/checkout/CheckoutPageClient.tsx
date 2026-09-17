@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { fbTrack, gtagEvent, ttqTrack } from "@/lib/marketing";
+import { continutDinCos } from "@/lib/facebook/pixel-continut";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { CheckoutPageSection } from "./CheckoutPageSection";
 
@@ -41,7 +42,10 @@ export function CheckoutPageClient({
     // altfel `value` (total de la server) si `items[].price` din acelasi eveniment
     // spun lucruri diferite despre aceeasi comanda.
     const linii = items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity }));
-    fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count, content_type: "product", content_ids: items.map((i) => i.productId) });
+    fbTrack("InitiateCheckout", {
+      value: total, currency: "RON", num_items: count,
+      ...continutDinCos(items.map((i) => ({ productId: i.productId, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
+    });
     ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: items.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
     gtagEvent("begin_checkout", { currency: "RON", value: total, items: linii });
   }, [items, total, count]);

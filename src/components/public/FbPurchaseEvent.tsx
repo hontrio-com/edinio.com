@@ -2,7 +2,8 @@
 
 import { useEffect } from "react";
 import { splitName, type PixelUser } from "@/lib/marketing-config";
-import { fbTrack, ttqTrack, gtagEvent, gtagRaw, fbAdvancedMatch, ttqIdentify } from "@/lib/marketing";
+import { fbTrack, ttqTrack, gtagEvent, gtagRaw, ttqIdentify } from "@/lib/marketing";
+import type { ContinutPixel } from "@/lib/facebook/pixel-continut";
 
 interface Props {
   orderId: string;
@@ -16,6 +17,11 @@ interface Props {
   items?: { item_id?: string; item_name: string; price: number; quantity: number }[];
   /** Valorile GA4 (fara transport si taxe, dupa documentatie). Lipsa lor = totalul, ca inainte. */
   ga4?: { value: number; shipping: number; tax: number };
+  /**
+   * Continutul pentru Meta, cu ID-urile din CATALOG (ale variantelor), rezolvate pe server. Lipsa lui = ID-urile
+   * produselor, ca inainte.
+   */
+  continutMeta?: ContinutPixel;
 }
 
 /**
@@ -33,7 +39,7 @@ interface Props {
  *   conversion to lift Event Match Quality.
  */
 export function FbPurchaseEvent({
-  orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, customer, numItems, items, ga4,
+  orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, customer, numItems, items, ga4, continutMeta,
 }: Props) {
   useEffect(() => {
     if (!orderId) return;
@@ -52,8 +58,10 @@ export function FbPurchaseEvent({
     // Per-item payloads (GA4 / Meta / TikTok shapes). Item-level revenue and the
     // product reports depend on these — without them GA4 Monetization stays empty.
     const gaItems = line.map((i) => ({ item_id: i.item_id, item_name: i.item_name, price: i.price, quantity: i.quantity }));
-    const fbContentIds = line.map((i) => i.item_id).filter((x): x is string => !!x);
-    const fbContents = line.map((i) => ({ id: i.item_id, quantity: i.quantity, item_price: i.price }));
+    const fbContentIds = continutMeta?.content_ids ?? line.map((i) => i.item_id).filter((x): x is string => !!x);
+    const fbContents = continutMeta?.contents ?? line.map((i) => ({ id: i.item_id, quantity: i.quantity, item_price: i.price }));
+    /* ⚠ Fara `content_type` cand cosul amesteca variante cunoscute cu grupuri: vezi `continutPixel`. */
+    const fbContentType = continutMeta ? continutMeta.content_type : "product";
     const ttContents = line.map((i) => ({ content_id: i.item_id, content_type: "product", content_name: i.item_name, price: i.price, quantity: i.quantity }));
 
     // Advanced Matching (only meaningful with PII; helpers no-op otherwise).
@@ -63,13 +71,13 @@ export function FbPurchaseEvent({
       country: customer.country,
       ...splitName(customer.name),
     };
-    if (fbPixelId && user) fbAdvancedMatch(fbPixelId, user);
+    /* Meta: potrivirea avansata a plecat deja in `init`-ul codului de baza (vezi pagina de confirmare). */
     if (ttPixelId && user) ttqIdentify(user);
 
     // Meta — Purchase (eventID = orderId for CAPI dedup).
     fbTrack("Purchase", {
       value, currency: "RON", num_items: itemCount,
-      ...(fbContentIds.length ? { content_type: "product", content_ids: fbContentIds, contents: fbContents } : {}),
+      ...(fbContentIds.length ? { ...(fbContentType ? { content_type: fbContentType } : {}), content_ids: fbContentIds, contents: fbContents } : {}),
     }, { eventID: orderId });
 
     // TikTok — on COD-heavy markets (RO) the confirmed order IS the conversion,
@@ -99,7 +107,7 @@ export function FbPurchaseEvent({
         transaction_id: orderId,
       });
     }
-  }, [orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, customer, numItems, items, ga4]);
+  }, [orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, customer, numItems, items, ga4, continutMeta]);
 
   return null;
 }

@@ -8,7 +8,8 @@ import { normalizeCountyName, sectorBucuresti } from "@/lib/utils/ro-address";
 import { getPublicStoreConfig } from "@/lib/actions/store.actions";
 import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { validateDiscount, type ValidatedDiscount } from "@/lib/actions/discount.actions";
-import { gtagEvent } from "@/lib/marketing";
+import { gtagEvent, fbTrack } from "@/lib/marketing";
+import { continutDinCos } from "@/lib/facebook/pixel-continut";
 import type { CourierSelection } from "@/components/ministore/CourierSelector";
 import { computeCardDiscount, computeCodDiscount, computeCodFee, DEFAULT_COD_FEE, type PaymentMethodType, type CardDiscountConfig, type CodFeeConfig } from "@/lib/payment-methods";
 import { getCheckoutBumps } from "@/lib/actions/offer.actions";
@@ -658,6 +659,15 @@ export function useCheckoutOrder({
         const gaItems = items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity }));
         gtagEvent("add_shipping_info", { currency: "RON", value: grandTotal, shipping_tier: courierSelection?.courierLabel, items: gaItems });
         gtagEvent("add_payment_info", { currency: "RON", value: grandTotal, payment_type: paymentMethod, items: gaItems });
+        /*
+         * ⚠ `AddPaymentInfo` LIPSEA la Meta (17.09.2026). Referinta pixelului: „When payment information is
+         * added in the checkout flow.” Checkout-ul e pe o singura pagina, deci clipa e cea in care omul trimite
+         * formularul cu metoda de plata aleasa: aceeasi ca `add_payment_info` din GA4, deasupra.
+         */
+        fbTrack("AddPaymentInfo", {
+          value: grandTotal, currency: "RON",
+          ...continutDinCos(items.map((i) => ({ productId: i.productId, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
+        });
         const result = await placeCartOrder(payload);
         if ("error" in result) { setErrors({ _: result.error as string }); return; }
         orderId = (result as { orderId: string }).orderId;

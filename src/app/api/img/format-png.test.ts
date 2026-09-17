@@ -205,7 +205,9 @@ test("⚠ POZITIV: fara `f`, ruta face ce facea (WebP), deci vitrinele nu se sch
 });
 
 test("⚠ orice alt `f` cade pe WebP: pe aici nu se naste alt fel de fisier", async () => {
-  for (const f of ["jpeg", "jpg", "svg", "gif", "avif", "PNG", " png", "png,webp", ""]) {
+  /* ⚠ `jpg` a iesit din lista pe 17.09.2026: e formatul feedului Meta, cu probele lui in `format-jpg-catalog.test.ts`.
+     Variantele lui stricate (`JPG`, ` jpg`) raman aici: lista alba cere valoarea exacta. */
+  for (const f of ["jpeg", "JPG", " jpg", "jpg,webp", "svg", "gif", "avif", "PNG", " png", "png,webp", ""]) {
     depozit = { [CHEIE_LOGO]: LOGO };
     scrieri = [];
     const r = await GET(cere(CHEIE_LOGO, { f }));

@@ -120,6 +120,10 @@ export const CAMPURI_SECRETE: Record<string, readonly string[]> = {
      nu e secret: e adresa lui de ridicare, si trebuie sa se vada in formular. */
   smartship_config: ["api_key"],
   smso_config: ["api_key"],
+  /* Meta Conversions API al comerciantului: tokenul generat de el in Events Manager. `test_event_code` NU e
+     secret (il citeste din Events Manager si trebuie sa-l vada in formular), iar starea ultimei trimiteri e
+     pentru panou. Vezi `lib/actions/meta-capi.actions.ts`. */
+  meta_capi_config: ["access_token"],
   /* UPS: DOUA credentiale in portalul lor („Client ID" si „Client Secret"), dar numai
      una e secreta. `client_id` NU intra aici, desi la ei el pleaca chiar ca NUME DE
      UTILIZATOR intr-un antet `Authorization: Basic`: singur nu deschide nimic, iar

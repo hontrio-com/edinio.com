@@ -53,6 +53,20 @@ export async function saveMarketingConfig(
 
   const cleaned = cleanMarketingConfig(config);
   if (!cleaned.ok) return { error: cleaned.error };
+  /*
+   * ⚠ `facebook_capi_activ` NU vine din formular: il scrie doar salvarea tokenului Conversions API. Se ia din
+   * baza, altfel orice salvare a unui ID de pixel l-ar fi stins, iar evenimentele n-ar mai fi plecat spre
+   * server fara ca cineva sa stie. Fara pixel Meta, nici semnalul nu mai are sens.
+   *
+   * ⚠ Nici cu ALT pixel: tokenul a fost verificat pe cel vechi. Semnalul se stinge, iar panoul cere verificarea
+   * tokenului pe pixelul nou (`saveMetaCapi`).
+   */
+  const { data: existent } = await supabase.from("store_settings").select("marketing_config").eq("business_id", businessId).maybeSingle();
+  const vechi = existent?.marketing_config as MarketingConfig | null;
+  if (vechi?.facebook_capi_activ === true && cleaned.value.facebook_pixel_id
+    && cleaned.value.facebook_pixel_id === parseMetaPixelId(vechi.facebook_pixel_id)) {
+    cleaned.value.facebook_capi_activ = true;
+  }
 
   const { error } = await supabase.from("store_settings").update({
     marketing_config: cleaned.value as unknown as import("@/types/database.types").Json,

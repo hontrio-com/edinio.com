@@ -97,7 +97,30 @@ export function cheieOptimizabila(cheie: string): boolean {
  * pixeli transparenti ai logoului (din 462.400) culoarea stocata e (0, 0, 0), deci tot ce era
  * transparent a iesit negru. PNG-ul isi pastreaza transparenta in toti clientii de email.
  */
-export type FormatVarianta = "webp" | "png";
+export type FormatVarianta = "webp" | "png" | "jpg";
+
+/**
+ * Latimea SINGURULUI JPEG pe care il face ruta: cel al imaginii din feedul Facebook Catalog.
+ *
+ * ═══ ⚠ DE CE EXISTA `jpg` (17.09.2026) ═══
+ *
+ * Specificatia catalogului Meta, la `image_link`: „Images must be in JPEG or PNG format, at least 500 x 500
+ * pixels”. Feedul trimitea WebP-ul din depozit: 1010 produse la esafe, 124 la tonel-beauty, toate cele 14
+ * de la yvelle. PNG-ul de email nu ajuta: are 640 de pixeli (o poza lata ar iesi sub 500 in inaltime) si
+ * cantareste de cateva ori cat un JPEG.
+ *
+ * ⚠ 1024 E PRIMA TREAPTA A SCARII PESTE 500 CARE LASA LOC UNEI POZE LATE, iar poza mai mica nu se mareste
+ * (ar ramane sub prag oricum, doar mai neclara). Una singura pe poza, ca la PNG.
+ */
+export const LATIME_JPG = 1024;
+
+/** Calitatea JPEG-ului de catalog: fixa, deci o singura varianta pe poza. */
+export const CALITATE_JPG = 85;
+
+/** Sursa pe care feedul Meta n-o poate trimite asa cum e (WebP, AVIF), deci pleaca prin JPEG. */
+export function sursaCereJpgInCatalog(cheie: string): boolean {
+  return /\.(webp|avif)$/i.test(cheie);
+}
 
 /**
  * Latimea SINGURULUI PNG pe care il face ruta, oricare ar fi `w` din cerere: cea a logoului din

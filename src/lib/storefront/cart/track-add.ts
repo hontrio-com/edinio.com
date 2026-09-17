@@ -1,4 +1,5 @@
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
+import { continutPixel } from "@/lib/facebook/pixel-continut";
 
 /**
  * Cele trei evenimente de „adaugat in cos", intr-un singur loc.
@@ -10,13 +11,26 @@ import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
  * bucati deodata.
  */
 export function trackAddToCart(
-  { productId, name, price, cantitate = 1 }:
-  { productId: string; name: string; price: number; cantitate?: number },
+  { productId, name, price, cantitate = 1, comboId, areVariante = false }:
+  {
+    productId: string; name: string; price: number; cantitate?: number;
+    /** Combinatia adaugata: cu ea, Meta primeste ID-ul VARIANTEI din catalog. */
+    comboId?: string | null;
+    /** Produsul are variante: fara `comboId`, se anunta grupul. Vezi `continutPixel`. */
+    areVariante?: boolean;
+  },
 ) {
   const n = Number.isFinite(cantitate) ? Math.max(1, Math.floor(cantitate)) : 1;
   const valoare = price * n;
 
-  fbTrack("AddToCart", { value: valoare, currency: "RON", content_name: name, content_ids: [productId], content_type: "product" });
+  /*
+   * ⚠ `contents`, nu doar `content_ids`: referinta pixelului, la `AddToCart`, „Required for Advantage+ catalog
+   * ads: `contents`”. Trimiteam doar ID-urile, deci evenimentul nu era folosit de reclamele de catalog.
+   */
+  fbTrack("AddToCart", {
+    value: valoare, currency: "RON", content_name: name,
+    ...continutPixel([{ productId, comboId, areVariante, cantitate: n, pret: price }]),
+  });
   ttqTrack("AddToCart", { value: valoare, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: name, price, quantity: n }] });
   gtagEvent("add_to_cart", { currency: "RON", value: valoare, items: [{ item_id: productId, item_name: name, price, quantity: n }] });
 }

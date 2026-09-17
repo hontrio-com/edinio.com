@@ -21,6 +21,7 @@ import type { StarePersonalizare } from "@/components/storefront/sections/produc
 import { pretPeTrepte, type QuantityTier } from "@/lib/storefront/quantity-tiers";
 import { lineKey, useCartOptional, type CartItem } from "@/components/storefront/cart/CartProvider";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
+import { continutPixel } from "@/lib/facebook/pixel-continut";
 import { CourierSelector, type CourierSelection } from "./CourierSelector";
 import { CompanyFields, useCompanyBilling } from "./CompanyFields";
 import { JUDETE } from "@/lib/ro/judete";
@@ -560,7 +561,10 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
     if (!open) return;
     const pePiesa = sumaPentruPalnie.current;
     const value = Math.round(pePiesa * quantityLaDeschidere.current * 100) / 100;
-    fbTrack("InitiateCheckout", { value, currency: "RON", content_ids: [product.id], content_name: product.name, content_type: "product", num_items: quantityLaDeschidere.current });
+    fbTrack("InitiateCheckout", {
+      value, currency: "RON", content_name: product.name, num_items: quantityLaDeschidere.current,
+      ...continutPixel([{ productId: product.id, areVariante: !!product.variantTitle, cantitate: quantityLaDeschidere.current, pret: pePiesa }]),
+    });
     ttqTrack("InitiateCheckout", { value, currency: "RON", contents: [{ content_id: product.id, content_type: "product", content_name: product.name, price: pePiesa, quantity: quantityLaDeschidere.current }] });
     gtagEvent("begin_checkout", { currency: "RON", value, items: [{ item_id: product.id, item_name: product.name, price: pePiesa, quantity: quantityLaDeschidere.current }] });
   }, [open, product.id, product.name]);
@@ -955,6 +959,11 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
          * nu inrautateste nimic: azi pagina cade cu totul, deci `placedRef` se pierde oricum,
          * impreuna cu formularul.
          */
+        /* Meta `AddPaymentInfo`: aceeasi clipa ca in checkout-ul pe pagina, trimiterea cu metoda de plata aleasa. */
+        fbTrack("AddPaymentInfo", {
+          value: Math.round((sumaPentruPalnie.current * Math.max(1, quantity)) * 100) / 100, currency: "RON",
+          ...continutPixel([{ productId: product.id, areVariante: !!product.variantTitle, cantitate: Math.max(1, quantity), pret: sumaPentruPalnie.current }]),
+        });
         let result: Awaited<ReturnType<typeof placeOrder>>;
         try {
           result = await placeOrder(payload);

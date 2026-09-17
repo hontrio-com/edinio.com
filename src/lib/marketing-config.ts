@@ -30,6 +30,12 @@ export type MarketingConfig = {
   tiktok_pixel_id?: string;
   google_tag_id?: string;
   google_ads_conversion_label?: string; // e.g. "abc123XYZ" — needed for Purchase conversion tracking in Google Ads
+  /**
+   * Magazinul are token de Conversions API (tokenul insusi sta criptat in `meta_capi_config`). Doar un
+   * semnal pentru runtime-ul din browser: cu el, evenimentele pleaca si spre `/api/meta/eveniment`.
+   * ⚠ Il scrie NUMAI serverul (`saveMetaCapi`); `saveMarketingConfig` il pastreaza din baza.
+   */
+  facebook_capi_activ?: boolean;
 };
 
 // ─────────────────────────────────────────────────────────────────────────

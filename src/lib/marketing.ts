@@ -17,7 +17,6 @@
 
 import {
   normalizeEmail,
-  normalizeName,
   normalizePhone,
   type PixelUser,
 } from "@/lib/marketing-config";
@@ -78,13 +77,65 @@ export function flushQueue(vendor: Vendor): void {
 
 // ── Safe trackers (fire now if ready, else queue) ─────────────────────────
 
-/** Facebook Pixel — window.fbq. `eventID` enables Pixel↔CAPI deduplication. */
+/**
+ * Evenimentele pe care browserul le trimite si serverului, pentru Conversions API.
+ *
+ * ⚠ `Purchase` NU e aici, dinadins: achizitia pleaca de pe server din comanda insasi (`meta-comanda.ts`),
+ * cu datele omului si cu banii din baza. Primita de la browser, ar fi fost o achizitie pe care oricine o
+ * poate inventa cu un `fetch`.
+ */
+const EVENIMENTE_PRIN_SERVER = new Set(["ViewContent", "AddToCart", "InitiateCheckout", "AddPaymentInfo", "Search"]);
+
+/** Un `eventID` nou. Browserele vechi fara `randomUUID` primesc unul din timp si intamplare. */
+function idEvenimentNou(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/**
+ * Trimite evenimentul si catre server, cu ACELASI `eventID`, cand magazinul are Conversions API.
+ *
+ * ═══ ⚠ DE CE (17.09.2026) ═══
+ *
+ * Documentatia Meta numeste asta „redundant setup” si il recomanda pentru orice pixel: „The Conversions API
+ * allows you to share website events that the Pixel may lose due to network connectivity issues or page
+ * loading errors.” Deduplicarea se face pe `event_name` + `eventID`, deci cele doua drumuri numara o data.
+ *
+ * ⚠ SE CHEAMA DIN INTERIORUL `dispatch("fb")`, adica numai dupa ce pixelul s-a incarcat. Pixelul se
+ * incarca doar cu acordul pentru marketing (sau cand magazinul n-are banner), deci serverul primeste
+ * exact ce ar fi primit si pixelul, nimic in plus.
+ *
+ * ⚠ `sendBeacon`: un `InitiateCheckout` urmat imediat de navigare n-ar fi apucat sa plece cu `fetch`.
+ */
+function trimiteSiServerului(event: string, data: Record<string, unknown>, eventID: string): void {
+  const w = window as unknown as { __edinioMeta?: { magazin?: string; capi?: boolean } };
+  const meta = w.__edinioMeta;
+  if (!meta?.capi || !meta.magazin || !EVENIMENTE_PRIN_SERVER.has(event)) return;
+  const corp = JSON.stringify({
+    magazin: meta.magazin, event_name: event, event_id: eventID,
+    event_source_url: window.location.href, custom_data: data,
+  });
+  try {
+    const trimis = typeof navigator.sendBeacon === "function"
+      && navigator.sendBeacon("/api/meta/eveniment", new Blob([corp], { type: "application/json" }));
+    if (!trimis) {
+      void fetch("/api/meta/eveniment", { method: "POST", body: corp, keepalive: true, headers: { "Content-Type": "application/json" } }).catch(() => {});
+    }
+  } catch { /* masurarea nu are voie sa strice pagina */ }
+}
+
+/**
+ * Facebook Pixel: window.fbq. Fiecare eveniment poarta un `eventID`: cel dat de apelant (achizitia, cu
+ * id-ul comenzii) sau unul nou, acelasi care pleaca si spre Conversions API.
+ */
 export function fbTrack(event: string, data?: Record<string, unknown>, opts?: { eventID?: string }) {
+  const eventID = opts?.eventID ?? idEvenimentNou();
   dispatch("fb", () => {
     const fbq = (window as unknown as { fbq?: (...a: unknown[]) => void }).fbq;
     if (typeof fbq !== "function") return;
-    if (opts?.eventID) fbq("track", event, data ?? {}, { eventID: opts.eventID });
-    else fbq("track", event, data ?? {});
+    fbq("track", event, data ?? {}, { eventID });
+    trimiteSiServerului(event, data ?? {}, eventID);
   });
 }
 
@@ -114,25 +165,14 @@ export function gtagRaw(...args: unknown[]) {
   });
 }
 
-// ── Advanced Matching (improves Event Match Quality; opt-in via consent) ──
-
-/** Re-init Meta pixel with hashed PII so later events carry Advanced Matching. */
-export function fbAdvancedMatch(pixelId: string, user: PixelUser) {
-  const em = normalizeEmail(user.email);
-  const ph = normalizePhone(user.phone, user.country ?? "RO");
-  const fn = normalizeName(user.firstName);
-  const ln = normalizeName(user.lastName);
-  const match: Record<string, string> = {};
-  if (em) match.em = em;
-  if (ph) match.ph = ph;
-  if (fn) match.fn = fn;
-  if (ln) match.ln = ln;
-  if (Object.keys(match).length === 0) return;
-  dispatch("fb", () => {
-    const fbq = (window as unknown as { fbq?: (...a: unknown[]) => void }).fbq;
-    if (typeof fbq === "function") fbq("init", pixelId, match);
-  });
-}
+// ── Advanced Matching ─────────────────────────────────────────────────────
+/*
+ * ⚠ META NU MAI ARE `fbAdvancedMatch` AICI (17.09.2026). Chema `fbq('init', pixel, datele omului)` a DOUA
+ * oara, pe pagina de confirmare, dupa ce codul de baza initializase deja pixelul fara ele. Documentatia:
+ * „Be sure to place advanced matching parameters in the pixel base code or the values will not be treated
+ * as manual advanced matching values.” Acum datele (hash-uite pe server) intra chiar in `init`-ul din codul
+ * de baza: vezi `FacebookPixel` si `potrivireaPentruPixel`.
+ */
 
 /** TikTok Advanced Matching — identify the visitor before firing events. */
 export function ttqIdentify(user: PixelUser) {

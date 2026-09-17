@@ -242,6 +242,12 @@ const API_FARA_POARTA = [
   "/api/aboutyou/webhook",
   "/api/ty/webhook",
   /*
+   * Meta Conversions API: evenimentele de palnie trimise din vitrina, de vizitatori. Pe `www.edinio.com/<slug>`
+   * un comerciant logat care isi rasfoieste magazinul are cookie de sesiune, iar poarta i-ar fi oprit
+   * evenimentele. Capatul nu atinge nimic al contului; vezi `app/api/meta/eveniment/route.ts`.
+   */
+  "/api/meta/eveniment",
+  /*
    * Pepita: cele doua feeduri pe care le CITESTE ea, si adresa pe care ne IMPINGE
    * comenzile. Toate trei sunt chemate de o masina, fara cookie, cu cheia proprie in
    * cale. `evalueazaCerere` ar iesi oricum pe prima linie la o cerere fara sesiune,

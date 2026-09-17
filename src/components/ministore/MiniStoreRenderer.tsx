@@ -22,6 +22,7 @@ import type { ResolvedStyle, StoreDesign } from "@/lib/storefront/design/types";
 import { CartProvider, useCart } from "@/components/storefront/cart/CartProvider";
 import { StickyCartTab } from "@/components/storefront/cart/StickyCartTab";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
+import { comboIdDupaTitlu, continutDinCos } from "@/lib/facebook/pixel-continut";
 import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
 import { categoriiVizibile, numeCategoriiAscunse } from "@/lib/categories/vizibilitate";
 import {
@@ -1425,8 +1426,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   // Fire the AddToCart pixels and flash the card's "Adaugat!" state for a line
   // that just entered the cart (shared by simple products and variant quick-add).
-  function trackAndFlash(productId: string, name: string, price: number) {
-    trackAddToCart({ productId, name, price });
+  function trackAndFlash(productId: string, name: string, price: number, comboId?: string | null, areVariante = false) {
+    trackAddToCart({ productId, name, price, comboId, areVariante });
     setAddedId(productId);
     setTimeout(() => setAddedId(null), 1500);
   }
@@ -1469,7 +1470,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   // Quick-add confirm: the fully resolved variant line from the picker sheet.
   function handleQuickAdd(line: QuickAddLine) {
     addItem(line);
-    trackAndFlash(line.productId, line.name, line.price);
+    /* Combinatia aleasa in fereastra: ID-ul ei vine din produsul deschis in fereastra. */
+    trackAndFlash(line.productId, line.name, line.price, comboIdDupaTitlu(quickAddProduct?.page_sections, line.variantTitle), true);
   }
 
   /**
@@ -1736,7 +1738,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
              * ⚠ SI NIMIC DIN PERSONALIZARE nu pleaca la furnizorii de reclame: nici valorile, nici
              * numele fisierelor. Doar sume si identificatori de produs.
              */
-            fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count, content_type: "product", content_ids: cartItemsForTracking.map((i) => i.productId) });
+            fbTrack("InitiateCheckout", {
+              value: total, currency: "RON", num_items: count,
+              ...continutDinCos(cartItemsForTracking.map((i) => ({ productId: i.productId, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
+            });
             ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: cartItemsForTracking.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
             gtagEvent("begin_checkout", { currency: "RON", value: total, items: cartItemsForTracking.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
           }}

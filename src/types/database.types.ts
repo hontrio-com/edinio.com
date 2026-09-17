@@ -2766,6 +2766,45 @@ export type Database = {
           },
         ]
       }
+      ga4_comenzi_raportate: {
+        Row: {
+          business_id: string
+          creat_la: string
+          cumparare_la: string | null
+          order_id: string
+          rambursare_la: string | null
+        }
+        Insert: {
+          business_id: string
+          creat_la?: string
+          cumparare_la?: string | null
+          order_id: string
+          rambursare_la?: string | null
+        }
+        Update: {
+          business_id?: string
+          creat_la?: string
+          cumparare_la?: string | null
+          order_id?: string
+          rambursare_la?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ga4_comenzi_raportate_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ga4_comenzi_raportate_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       gmc_products: {
         Row: {
           business_id: string
@@ -3107,6 +3146,39 @@ export type Database = {
             columns: ["business_id"]
             isOneToOne: false
             referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meta_comenzi_raportate: {
+        Row: {
+          business_id: string
+          order_id: string
+          trimisa_la: string
+        }
+        Insert: {
+          business_id: string
+          order_id: string
+          trimisa_la?: string
+        }
+        Update: {
+          business_id?: string
+          order_id?: string
+          trimisa_la?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_comenzi_raportate_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_comenzi_raportate_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -5180,6 +5252,7 @@ export type Database = {
           email_config: Json
           fan_courier_config: Json | null
           facebook_feeds: Json | null
+          meta_capi_config: Json | null
           fedex_config: Json | null
           fgo_config: Json | null
           free_shipping_threshold: number | null
@@ -5256,6 +5329,7 @@ export type Database = {
           email_config?: Json
           fan_courier_config?: Json | null
           facebook_feeds?: Json | null
+          meta_capi_config?: Json | null
           fedex_config?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null
@@ -5332,6 +5406,7 @@ export type Database = {
           email_config?: Json
           fan_courier_config?: Json | null
           facebook_feeds?: Json | null
+          meta_capi_config?: Json | null
           fedex_config?: Json | null
           fgo_config?: Json | null
           free_shipping_threshold?: number | null

@@ -69,6 +69,17 @@ async function construieste(req: Request, { params }: { params: Promise<{ slug: 
    * Se citesc doar cand chiar se cere unul: pentru feedul intreg n-are rost inca
    * o interogare la fiecare citire a lui Meta.
    */
+  /*
+   * Harta de categorii facuta in Google Merchant, ca sa nu fie facuta de doua ori: Meta primeste aceeasi
+   * taxonomie Google. Se cere DOAR cheia hartii, nu configurarea intreaga (care tine si tokenul).
+   */
+  const { data: gmc } = await admin
+    .from("store_settings")
+    .select("harta:google_merchant_config->category_map")
+    .eq("business_id", biz.id)
+    .maybeSingle();
+  const hartaCategorii = ((gmc as { harta?: unknown } | null)?.harta ?? null) as Record<string, string> | null;
+
   let regula: RegulaFeed | null = null;
   let numeCategorii = new Set<string>();
   if (cheieFeed) {
@@ -139,7 +150,7 @@ async function construieste(req: Request, { params }: { params: Promise<{ slug: 
       )
     : products.map((p) => ({ ...p, pachetDisponibil: disponibil(p) }));
 
-  const items = alese.flatMap((p) => buildCatalogItems(business, p as unknown as CatalogProduct));
+  const items = alese.flatMap((p) => buildCatalogItems(business, p as unknown as CatalogProduct, hartaCategorii));
   const xml = serializeCatalogFeed(business, items);
 
   return new Response(xml, {

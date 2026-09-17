@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
 import { MiniStoreRenderer } from "@/components/ministore/MiniStoreRenderer";
+import { UrmaCautarePixel } from "@/components/storefront/UrmaCautarePixel";
 import { SuspendedStorePage } from "@/components/ministore/SuspendedStorePage";
 import { construiesteFateteDinJetoane, jeton, type Fateta } from "@/lib/storefront/catalog/facets";
 import { alegePalier } from "@/lib/storefront/catalog/tier";
@@ -609,6 +610,13 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: 
     <>
       {dateStructurate ? (
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: dateStructurate }} />
+      ) : null}
+      {esteCautare && filtre.cautare.trim() ? (
+        /* Meta `Search`. Rezultatele numai cand serverul chiar le-a cautat: altfel `products` e catalogul intreg. */
+        <UrmaCautarePixel
+          termen={filtre.cautare}
+          rezultate={reusitPeServer ? products.slice(0, 10).map((p) => ({ id: p.id, pret: Number(p.price) || 0 })) : []}
+        />
       ) : null}
     <MiniStoreRenderer
       surface="shop"

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { gtagEvent, fbTrack, ttqTrack } from "@/lib/marketing";
+import { continutDinCos } from "@/lib/facebook/pixel-continut";
 import { useCart } from "@/components/storefront/cart/CartProvider";
 import { CheckoutClassic } from "@/components/storefront/sections/checkout/CheckoutClassic";
 import { checkoutHref } from "@/lib/storefront/design/commerce";
@@ -77,7 +78,10 @@ export function CartPageClient({
       window.location.href = checkoutHref(basePath);
       return;
     }
-    fbTrack("InitiateCheckout", { value: total, currency: "RON", num_items: count, content_type: "product", content_ids: items.map((i) => i.productId) });
+    fbTrack("InitiateCheckout", {
+      value: total, currency: "RON", num_items: count,
+      ...continutDinCos(items.map((i) => ({ productId: i.productId, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
+    });
     ttqTrack("InitiateCheckout", { value: total, currency: "RON", contents: items.map((i) => ({ content_id: i.productId, content_type: "product", content_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
     gtagEvent("begin_checkout", { currency: "RON", value: total, items: items.map((i) => ({ item_id: i.productId, item_name: i.name, price: lineUnit(i), quantity: i.quantity })) });
     setComandaDeschisa(true);

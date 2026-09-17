@@ -68,6 +68,15 @@ export interface OrderSource {
   consimtamant_citit?: string;
   consimtamant_analiza?: string;
   consimtamant_marketing?: string;
+  /**
+   * Cookie-urile pixelului Meta (`_fbp`, `_fbc`), fotografiate la checkout pentru Conversions API. Documentatia:
+   * „We recommend that you always send `_fbc` and `_fbp` browser cookie values in the `fbc` and `fbp` event
+   * parameters”. Se iau doar de la cine n-a refuzat marketingul.
+   */
+  fbp?: string;
+  fbc?: string;
+  /** IP-ul clientului, scris DOAR de server la creare si doar cand vizita are un semn Meta. Vezi `buildOrderSource`. */
+  client_ip?: string;
 }
 
 /*
@@ -147,6 +156,17 @@ export function captureAttribution(basePath: string): void {
     }
   } catch {
     // localStorage unavailable (private mode / disabled) — attribution is best-effort
+  }
+}
+
+/** Un cookie al pixelului Meta (`_fbp` / `_fbc`), numai daca are forma lor: `fb.<index>.<ms>.<valoare>`. */
+function cookieMeta(nume: "_fbp" | "_fbc"): string | undefined {
+  try {
+    const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${nume}=([^;]+)`));
+    const v = m ? decodeURIComponent(m[1]) : undefined;
+    return v && /^fb\.\d\.\d{10,13}\..{1,400}$/.test(v) ? v : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -252,6 +272,15 @@ export function getAttribution(basePath: string): OrderSource | null {
      * comuna poate fi al platformei, iar n-avem ce face cu el. Fara decizie salvata se iau, fiindca
      * magazinul poate sa n-aiba banner deloc; serverul hotaraste.
      */
+    /* ⚠ Cookie-urile Meta, cu aceeasi regula ca cele GA, dar pe MARKETING: pixelul Meta sta sub acordul
+       pentru marketing, nu sub cel pentru analiza. */
+    const refuzatMarketing = acord !== null && acord.decis && !acord.marketing;
+    if (!refuzatMarketing) {
+      const fbp = cookieMeta("_fbp");
+      if (fbp) src.fbp = fbp;
+      const fbc = cookieMeta("_fbc");
+      if (fbc) src.fbc = fbc;
+    }
     const refuzat = acord !== null && acord.decis && !acord.analiza;
     if (!refuzat) {
       const gaClientId = readGaClientId();

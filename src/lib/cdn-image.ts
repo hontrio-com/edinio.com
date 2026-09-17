@@ -9,7 +9,8 @@ import { CALITATE, latimeaDePeScara } from "./latimi-imagini";
 
 const CDN = process.env.NEXT_PUBLIC_CDN_URL?.replace(/\/+$/, "") || "";
 
-function extractR2Key(src: string): string | null {
+/** Cheia din depozit a unei adrese de imagine (CDN sau galeata bruta), sau `null`. O citeste si feedul Meta. */
+export function extractR2Key(src: string): string | null {
   const marker = ".r2.dev/";
   const i = src.indexOf(marker);
   if (i !== -1) return src.slice(i + marker.length);

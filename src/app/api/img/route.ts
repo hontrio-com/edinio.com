@@ -6,7 +6,8 @@ import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { MAX_PIXELI } from "@/lib/utils/file-signature";
 import { esteIncarcareDeCumparator } from "@/lib/customization/adresa";
 import {
-  CALITATE, LATIME_PNG, cheieOptimizabila, cheieVarianta, sursaCerePngInEmail, type FormatVarianta,
+  CALITATE, LATIME_PNG, LATIME_JPG, CALITATE_JPG, cheieOptimizabila, cheieVarianta, sursaCerePngInEmail, sursaCereJpgInCatalog,
+  type FormatVarianta,
 } from "@/lib/latimi-imagini";
 
 export const runtime = "nodejs";
@@ -153,10 +154,16 @@ export async function GET(req: NextRequest) {
    * exista cel mult un PNG pe poza. Iar `q` n-ar schimba niciun octet al unui PNG, doar ar naste
    * fisiere identice.
    */
-  const format: FormatVarianta = sp.get("f") === "png" && sursaCerePngInEmail(key) ? "png" : "webp";
-  const tipContinut = format === "png" ? "image/png" : "image/webp";
-  const latimeVarianta = format === "png" ? LATIME_PNG : width;
-  const calitateCheie = format === "png" ? CALITATE : quality;
+  /*
+   * ⚠ SI `jpg`, DOAR PENTRU FEEDUL META (17.09.2026), cu aceeasi lista alba: numai pe o sursa WebP sau AVIF,
+   * la latime si calitate fixe. Vezi `LATIME_JPG`: catalogul Meta primeste doar JPEG sau PNG.
+   */
+  const cerut = sp.get("f");
+  const format: FormatVarianta = cerut === "png" && sursaCerePngInEmail(key) ? "png"
+    : cerut === "jpg" && sursaCereJpgInCatalog(key) ? "jpg" : "webp";
+  const tipContinut = format === "png" ? "image/png" : format === "jpg" ? "image/jpeg" : "image/webp";
+  const latimeVarianta = format === "png" ? LATIME_PNG : format === "jpg" ? LATIME_JPG : width;
+  const calitateCheie = format === "png" ? CALITATE : format === "jpg" ? CALITATE_JPG : quality;
 
   /*
    * ⚠ CHEIA SE VALIDEAZA INAINTE de a se compune adresa de rezerva.
@@ -247,7 +254,7 @@ export async function GET(req: NextRequest) {
        * cateva ori octetii WebP-ului aceleiasi poze. Asa un IP scrie pe ora cam cat scria si inainte.
        * Emailurile nu simt nimic: fiecare logo se taie o singura data.
        */
-      if (!(await consumaLimita(`img-variante:ip:${ip}`, 600, 3600, 0, format === "png" ? 4 : 1)).permis) {
+      if (!(await consumaLimita(`img-variante:ip:${ip}`, 600, 3600, 0, format === "png" ? 4 : format === "jpg" ? 2 : 1)).permis) {
         return rezerva("plafonul de variante");
       }
 
@@ -269,9 +276,15 @@ export async function GET(req: NextRequest) {
        * cont de densitate ar mari logoul de aproape patru ori. 96 e valoarea neutra. Se hotaraste
        * acum, nu mai tarziu: varianta se face o data si ramane pe veci sub aceeasi cheie.
        */
+      /*
+       * ⚠ JPEG-UL N-ARE TRANSPARENTA: pixelii transparenti s-ar fi scris cu culoarea stocata sub ei, adesea
+       * neagra (exact defectul logoului din email). Se aseaza pe alb, fondul pe care Meta arata produsele.
+       */
       const out = await (format === "png"
         ? redimensionata.png({ compressionLevel: 9, adaptiveFiltering: true }).withDensity(96)
-        : redimensionata.webp({ quality })
+        : format === "jpg"
+          ? redimensionata.flatten({ background: "#ffffff" }).jpeg({ quality: CALITATE_JPG, mozjpeg: true })
+          : redimensionata.webp({ quality })
       ).toBuffer();
 
       /*

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { ShoppingCart, Check, Settings2 } from "lucide-react";
 import { cerePersonalizarea } from "@/lib/customization/definitie";
 import { parseVariants } from "@/lib/storefront/variants";
+import { trackAddToCart } from "@/lib/storefront/cart/track-add";
+import { comboIdDupaTitlu } from "@/lib/facebook/pixel-continut";
 import { VariantQuickAdd, type QuickAddLine } from "@/components/ministore/VariantQuickAdd";
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { lineKey, normalizeazaCos, type CartItem } from "@/lib/storefront/cart/normalize";
@@ -70,6 +72,15 @@ export function AddToCartButton({ product, storeSlug, color }: {
       }
       setAdded(true);
       setTimeout(() => setAdded(false), 1500);
+      /*
+       * ⚠ BLOCUL ASTA NU TRIMITEA NICIUN „ADAUGAT IN COS” (17.09.2026): nici la Meta, nici la TikTok, nici
+       * la GA4. Adaugarile din paginile construite in editor lipseau din palnia tuturor. Acum trec prin
+       * acelasi `trackAddToCart` ca restul magazinului.
+       */
+      trackAddToCart({
+        productId: line.productId, name: line.name, price: line.price,
+        comboId: comboIdDupaTitlu(product.pageSections, line.variantTitle), areVariante: !!variants,
+      });
     } catch {}
   }
 

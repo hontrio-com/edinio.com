@@ -18,6 +18,8 @@ import type { MarketingConfig } from "@/lib/marketing-config";
 import type { Metadata } from "next";
 import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
 import { vanzareaEConfirmata } from "@/lib/orders/vanzare-confirmata";
+import { potrivireaPentruPixel, dateDinAdresa, type DateNormalizate } from "@/lib/facebook/date-client";
+import { continutComanda, type ContinutPixel } from "@/lib/facebook/pixel-continut";
 import { randurileInstantaneului } from "@/lib/customization/comanda";
 
 // Order confirmation is personal + transient — keep it out of search.
@@ -85,6 +87,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     Vezi `clientDeMarketplace`.
   */
   let sursaComenzii: unknown = null;
+  let adresaLivrare: unknown = null;
   let totalComanda: number | null = null;
   /*
     ⚠ PORNESTE DE LA `false`, dinadins. Fara `orderId`, sau daca randul nu se
@@ -102,7 +105,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     const adminClient = createAdminClient();
     const { data: order } = await adminClient
       .from("orders")
-      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_amount, vat_rate, prices_include_vat, subtotal, total, customer_name, customer_email, customer_phone, payment_method, payment_status, order_source")
+      .select("order_number, items, shipping_cost, discount_amount, discount_code, card_discount_amount, cod_discount_amount, cod_fee_amount, vat_amount, vat_rate, prices_include_vat, subtotal, total, customer_name, customer_email, customer_phone, payment_method, payment_status, order_source, shipping_address")
       .eq("id", orderId)
       .eq("business_id", business.id)
       .single();
@@ -133,6 +136,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       customerEmail = order.customer_email ?? null;
       customerPhone = order.customer_phone ?? null;
       sursaComenzii = order.order_source ?? null;
+      adresaLivrare = (order as { shipping_address?: unknown }).shipping_address ?? null;
       totalComanda = order.total != null ? Number(order.total) : null;
       valoriGa4Comanda = valoriGa4(order);
     }
@@ -156,6 +160,34 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     .eq("business_id", business.id)
     .single();
   const marketingConfig = (storeSettings?.marketing_config as MarketingConfig | null) ?? null;
+
+  /*
+   * ═══ ⚠ PIXELUL META: POTRIVIREA IN `init` SI ID-URILE DIN CATALOG (17.09.2026) ═══
+   *
+   * 1. Datele omului pleaca in codul de BAZA al pixelului, nu intr-un `init` al doilea: altfel „the values
+   *    will not be treated as manual advanced matching values”. Se hash-uiesc AICI, pe server, ca numele si
+   *    telefonul sa nu stea in clar in HTML; scriptul de mai jos le pune in `window.__edinioAM` inainte sa
+   *    ruleze pixelul (vezi `FacebookPixel`).
+   * 2. `content_ids` sunt ID-urile articolelor din catalogul Meta: al variantei, rezolvat din titlul liniei.
+   *    Pixelul trimitea ID-ul produsului, pe care niciun articol cu variante nu-l poarta.
+   *
+   * ⚠ Doar pentru o vanzare confirmata, cu pixel, si nu pentru o comanda de marketplace.
+   */
+  let potrivireMeta: DateNormalizate | null = null;
+  let continutMeta: ContinutPixel | undefined;
+  if (orderId && vanzareConfirmata && marketingConfig?.facebook_pixel_id && !clientDeMarketplace(sursaComenzii)) {
+    potrivireMeta = potrivireaPentruPixel({
+      email: customerEmail, telefon: customerPhone, nume: customerName, ...dateDinAdresa(adresaLivrare),
+    });
+    const idsProduse = [...new Set(orderItems.map((i) => i.product_id).filter((x): x is string => !!x))];
+    const sectiuni = new Map<string, unknown>();
+    if (idsProduse.length) {
+      const { data: produse } = await createAdminClient().from("products").select("id, page_sections").in("id", idsProduse);
+      for (const p of (produse ?? []) as { id: string; page_sections: unknown }[]) sectiuni.set(p.id, p.page_sections);
+    }
+    /* Aceeasi functie ca achizitia de pe server (`evenimentCumparare`): acelasi continut pe amandoua drumurile. */
+    continutMeta = continutComanda(orderItems, sectiuni);
+  }
 
   // Acelasi header, footer si culori ca pe restul magazinului. Era singura pagina
   // publica fara invelis, deci clientul care tocmai platise nu avea pe ecran nici
@@ -258,8 +290,13 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
             cu acelasi `transaction_id`. Iar directia in care greseste e cea care se
             poate repara: o conversie lipsa se vede, una falsa intra in licitatie.
           */}
+          {potrivireMeta && (
+            /* Numai hash-uri hex: nimic din ce a scris omul nu ajunge in HTML in clar. */
+            <script dangerouslySetInnerHTML={{ __html: `window.__edinioAM=${JSON.stringify(potrivireMeta)};` }} />
+          )}
           {orderId && vanzareConfirmata && (
             <FbPurchaseEvent
+              continutMeta={continutMeta}
               orderId={orderId}
               total={displayTotal}
               numItems={numItems}

@@ -30,6 +30,7 @@ import { useEditareLinie } from "./_shared/useEditareLinie";
 import { optiunileDinAdresa, abonareCautare, citesteCautarea } from "@/lib/storefront/varianta-din-adresa";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
+import { continutPixel } from "@/lib/facebook/pixel-continut";
 import { cosDupaComanda } from "@/lib/storefront/cart/consume";
 import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
 import { useStoreChromeOptional } from "@/components/storefront/StorefrontProvider";
@@ -264,12 +265,20 @@ export function ProductPageDetailed({
   // produs variabil, pretul de baza poate sa nu existe ca oferta.
   const priceRange = getProductPriceRange(Number(product.price) || 0, product.page_sections);
   const productPrice = priceRange.min;
+  const produsCuVariante = !!parseVariants(product.page_sections);
   useEffect(() => {
     if (demo) return;
     gtagEvent("view_item", { currency: "RON", value: productPrice, items: [{ item_id: productId, item_name: productName, price: productPrice, quantity: 1 }] });
-    fbTrack("ViewContent", { content_ids: [productId], content_name: productName, content_type: "product", value: productPrice, currency: "RON" });
+    /*
+     * ⚠ Produsul cu variante se anunta ca GRUP: in catalog nicio varianta nu poarta ID-ul produsului, ci il
+     * au toate ca `item_group_id`. Cu `content_type: "product"`, Meta nu-l lega de nimic. Vezi `continutPixel`.
+     */
+    fbTrack("ViewContent", {
+      content_name: productName, value: productPrice, currency: "RON",
+      ...continutPixel([{ productId, areVariante: produsCuVariante, cantitate: 1, pret: productPrice }]),
+    });
     ttqTrack("ViewContent", { value: productPrice, currency: "RON", contents: [{ content_id: productId, content_type: "product", content_name: productName, price: productPrice, quantity: 1 }] });
-  }, [demo, productId, productName, productPrice]);
+  }, [demo, productId, productName, productPrice, produsCuVariante]);
 
   // Afisarea ofertelor, in contorul lor — aceeasi judecata ca in
   // `ProductPageClassic`, scrisa o singura data in `useAfisariOferte`.
@@ -651,7 +660,7 @@ export function ProductPageDetailed({
      * ⚠ SI NIMIC DIN VALORI. Ce a scris omul — gravura, numele copilului, fisierele — nu pleaca
      * la niciun furnizor de reclame. Se trimite doar suma.
      */
-    trackAddToCart({ productId: product.id, name: product.name, price: pers.pretPeBucata(displayPrice), cantitate });
+    trackAddToCart({ productId: product.id, name: product.name, price: pers.pretPeBucata(displayPrice), cantitate, comboId: selectedCombo?.id, areVariante: !!variantsData });
     setAdaugat(true);
     setTimeout(() => setAdaugat(false), 1800);
   }

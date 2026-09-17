@@ -80,6 +80,8 @@ import { maybeSyncKlaviyoSubscriber, maybeTrackKlaviyoOrder } from "@/lib/klaviy
 import { formatPrice, formatDate } from "@/lib/utils/format";
 import type { Json } from "@/types/database.types";
 import { raporteazaCumparareaGa4, raporteazaRambursareaGa4 } from "@/lib/orders/ga4-comanda";
+import { raporteazaCumparareaMeta } from "@/lib/orders/meta-comanda";
+import { isIP } from "node:net";
 import { asteaptaIncasareOnline } from "@/lib/orders/vanzare-confirmata";
 
 // Base URL for building public store links used in notice.ro SMS templates ({store_url}/{url}).
@@ -602,11 +604,13 @@ const CHEI_ATRIBUIRE = [
   /* GA4, din 17.09.2026: sesiunile `_ga_<ID>` si acordul dat MAGAZINULUI, fotografiate la checkout.
      Nu hotarasc bani, doar daca si in ce sesiune pleaca masuratoarea. Vezi `verdictTrimitere`. */
   "ga_sesiuni", "consimtamant_citit", "consimtamant_analiza", "consimtamant_marketing",
+  /* Meta, din 17.09.2026: cookie-urile pixelului, pentru Conversions API. Tot atribuire, nu bani. */
+  "fbp", "fbc",
 ] as const;
 
 // Merge client-captured attribution with the server-side user-agent into the
 // stored order_source (null when there's nothing to record).
-function buildOrderSource(source: OrderSource | undefined, userAgent: string | undefined): OrderSource | null {
+function buildOrderSource(source: OrderSource | undefined, userAgent: string | undefined, ip?: string): OrderSource | null {
   if (!source && !userAgent) return null;
   const curat: Record<string, unknown> = {};
   for (const cheie of CHEI_ATRIBUIRE) {
@@ -617,6 +621,13 @@ function buildOrderSource(source: OrderSource | undefined, userAgent: string | u
   /* `direct` e singurul boolean din atribuire, si se citeste ca boolean, nu ca „adevarat-ish". */
   if ((source as Record<string, unknown> | undefined)?.direct === true) curat.direct = true;
   if (userAgent) curat.user_agent = userAgent.slice(0, 500);
+  /*
+   * ⚠ IP-UL CLIENTULUI, pentru Conversions API („Always provide the real IP address”), SCRIS DE SERVER si
+   * numai cand vizita are un semn Meta: cookie-ul pixelului (deci pixelul rula, cu acordul lui) sau un
+   * `fbclid` (a venit dintr-o reclama). Fara semn, IP-ul n-are la ce folosi, deci nu se pastreaza.
+   * `client_ip` nu e in `CHEI_ATRIBUIRE`: din browser nu se poate trimite.
+   */
+  if (ip && isIP(ip) && (curat.fbp || curat.fbc || curat.fbclid)) curat.client_ip = ip;
   return Object.keys(curat).length > 0 ? (curat as OrderSource) : null;
 }
 
@@ -2076,7 +2087,7 @@ export async function placeOrder(data: {
     payment_method: metodaPlata,
     payment_status: "unpaid",
     status: "pending",
-    order_source: buildOrderSource(data.source, userAgent) as never,
+    order_source: buildOrderSource(data.source, userAgent, ip) as never,
     billing_company: (billingCompany ?? null) as never,
     /*
      * Id-ul cuponului revendicat, scris PE COMANDA — nu doar codul lui.
@@ -2151,6 +2162,8 @@ export async function placeOrder(data: {
     /* ⚠ Prin `dupaRaspuns`, nu `void`: pe serverless o promisiune neasteptata poate fi inghetata cu instanta
        inainte sa plece cererea catre Google. Aceeasi clasa de defect ca in auditul din 24.08.2026. */
     dupaRaspuns(() => raporteazaCumparareaGa4(order.id), "ga4.cumparare", data.business_id);
+    /* Aceeasi clipa pentru Meta Conversions API: vezi `meta-comanda.ts`. */
+    dupaRaspuns(() => raporteazaCumparareaMeta(order.id), "meta.cumparare", data.business_id);
   }
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
@@ -2605,6 +2618,7 @@ export async function updateOrder(orderId: string, data: { status: string; payme
   */
   if (paymentChanged && data.payment_status === "paid" && asteaptaIncasareOnline(order.payment_method as string | null)) {
     dupaRaspuns(() => raporteazaCumparareaGa4(orderId), "ga4.cumparareManuala", order.business_id);
+    dupaRaspuns(() => raporteazaCumparareaMeta(orderId), "meta.cumparareManuala", order.business_id);
   }
 
   const GA4_REVERSAL = new Set(["refunded", "cancelled"]);
@@ -5031,7 +5045,7 @@ export async function placeCartOrder(data: {
     payment_method: metodaPlata,
     payment_status: "unpaid",
     status: "pending",
-    order_source: buildOrderSource(data.source, userAgent) as never,
+    order_source: buildOrderSource(data.source, userAgent, ip) as never,
     billing_company: (billingCompany ?? null) as never,
     /* Vezi `placeOrder`: id-ul cuponului revendicat, ca utilizarea sa se poata da
      * inapoi cand comanda nu se mai face. `as never` din acelasi motiv. */
@@ -5100,6 +5114,8 @@ export async function placeCartOrder(data: {
     /* ⚠ Prin `dupaRaspuns`, nu `void`: pe serverless o promisiune neasteptata poate fi inghetata cu instanta
        inainte sa plece cererea catre Google. Aceeasi clasa de defect ca in auditul din 24.08.2026. */
     dupaRaspuns(() => raporteazaCumparareaGa4(order.id), "ga4.cumparare", data.business_id);
+    /* Aceeasi clipa pentru Meta Conversions API: vezi `meta-comanda.ts`. */
+    dupaRaspuns(() => raporteazaCumparareaMeta(order.id), "meta.cumparare", data.business_id);
   }
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set

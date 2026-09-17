@@ -6,7 +6,12 @@
 // matches the Facebook Pixel content_ids across the funnel — that alignment is
 // what makes Advantage+ dynamic ads work.
 
-import { storeBaseUrl } from "@/lib/seo";
+import { storeBaseUrl, PLATFORM_ORIGIN } from "@/lib/seo";
+import { extractR2Key } from "@/lib/cdn-image";
+import { LATIME_JPG, sursaCereJpgInCatalog } from "@/lib/latimi-imagini";
+import { adresaCuVarianta } from "@/lib/storefront/varianta-din-adresa";
+import { categorieGooglePentruTrimitere } from "@/lib/google-merchant/taxonomy";
+import { idArticolMeta } from "./pixel-continut";
 // GTIN invalid = produs respins, deci se lasa afara. Aceeasi verificare pe care
 // o folosesc feedul Google Merchant si datele structurate ale paginii.
 import { isValidGtin } from "@/lib/gtin";
@@ -76,6 +81,8 @@ export interface CatalogItem {
   ageGroup?: string;
   material?: string;
   pattern?: string;
+  /** Axele de varianta care nu sunt atribute de baza, ca „Aroma:Vanilie”. Vezi `VARIANT_SLOTS`. */
+  additionalVariantAttribute?: string;
   customLabels: (string | undefined)[]; // index 0..4
   itemGroupId?: string;
 }
@@ -84,9 +91,49 @@ function money(value: number): string {
   return `${(Math.round((Number(value) || 0) * 100) / 100).toFixed(2)} ${CURRENCY}`;
 }
 
+/** Entitatile HTML uzuale din descrieri. Una necunoscuta ramane spatiu, ca pana acum. */
+const ENTITATI: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", nbsp: " ",
+  acirc: "â", Acirc: "Â", icirc: "î", Icirc: "Î", abreve: "ă", Abreve: "Ă",
+  scedil: "ş", Scedil: "Ş", tcedil: "ţ", Tcedil: "Ţ",
+  ndash: "-", mdash: "-", hellip: "...", laquo: "«", raquo: "»", bdquo: "„", rdquo: "”", ldquo: "“",
+  rsquo: "'", lsquo: "'", deg: "°", times: "x", euro: "€",
+};
+
+/**
+ * Descrierea ca text simplu: „Use plain text (not HTML)”.
+ *
+ * ⚠ ENTITATILE SE DECODEAZA, nu se inlocuiesc cu spatiu (17.09.2026). Forma de dinainte facea din
+ * `c&acirc;ine` „c ine” si din `Negru &amp; Alb` „Negru Alb”: text stricat chiar in descrierea reclamei.
+ */
 function plainText(html: string | null, fallback: string): string {
-  const text = (html ?? "").replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim();
+  const text = (html ?? "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(\d{1,6});/g, (_m, n: string) => {
+      const c = Number(n);
+      return c > 0 && c < 0x110000 ? String.fromCodePoint(c) : " ";
+    })
+    .replace(/&#x([0-9a-f]{1,6});/gi, (_m, h: string) => {
+      const c = parseInt(h, 16);
+      return c > 0 && c < 0x110000 ? String.fromCodePoint(c) : " ";
+    })
+    .replace(/&([a-z]+);/gi, (_m, nume: string) => ENTITATI[nume] ?? " ")
+    .replace(/\s+/g, " ")
+    .trim();
   return (text || fallback).slice(0, 5000);
+}
+
+/**
+ * Adresa imaginii pe care o poate primi catalogul Meta.
+ *
+ * ⚠ „Images must be in JPEG or PNG format” (specificatia catalogului). WebP-ul si AVIF-ul din depozit pleaca
+ * prin `/api/img?…&f=jpg`, care face o singura data un JPEG de `LATIME_JPG` si trimite la el. Ce nu vine din
+ * depozitul nostru (o adresa straina) ramane neatins: n-avem de unde sa-l convertim.
+ */
+export function imagineCatalog(adresa: string): string {
+  const cheie = extractR2Key(adresa);
+  if (!cheie || !sursaCereJpgInCatalog(cheie)) return adresa;
+  return `${PLATFORM_ORIGIN}/api/img?p=${encodeURIComponent(cheie)}&w=${LATIME_JPG}&f=jpg`;
 }
 
 const CONDITIONS = new Set(["new", "refurbished", "used"]);
@@ -97,11 +144,18 @@ function oneOf(value: string | undefined, allowed: Set<string>): string | undefi
   return allowed.has(v) ? v : undefined;
 }
 
-// Variant option axes -> distinct Meta variant attributes (unique set per variant).
+/*
+ * Axele de varianta -> atributele Meta.
+ *
+ * ⚠ AXELE NERECUNOSCUTE MERG IN `additional_variant_attribute` (17.09.2026), nu in sloturile ramase libere.
+ * Forma de dinainte punea o axa „Aroma” in `material` sau `pattern`, adica o minciuna in fisa produsului din
+ * Shops. Ghidul variantelor Meta: „For custom variants, you can use the `additional_variant_attribute`
+ * field”, iar referinta: „Do not use a core attribute as an additional attribute.”
+ */
 const COLOR_RE = /cul|colou?r/i;
 const SIZE_RE = /m[aă]rim|size|talie|numar|număr/i;
 const MATERIAL_RE = /material|tesatur|țesătur|compozi/i;
-const VARIANT_SLOTS = ["color", "size", "material", "pattern"] as const;
+const PATTERN_RE = /model|imprimeu|pattern|desen/i;
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CINE NU AJUNGE IN CATALOG, SI DE CE
@@ -190,7 +244,12 @@ export function lasateAfaraDinCatalog<T extends RandDeCatalogMeta & { id: string
  * or a catalog price that lies — are decided by `motivulLipseiDinCatalog` above,
  * which is the same verdict the dashboard shows the merchant.
  */
-export function buildCatalogItems(business: CatalogBusiness, product: CatalogProduct): CatalogItem[] {
+export function buildCatalogItems(
+  business: CatalogBusiness,
+  product: CatalogProduct,
+  /** Harta categoriilor din Google Merchant (categoria magazinului -> categoria Google), daca exista. */
+  hartaCategorii?: Record<string, string> | null,
+): CatalogItem[] {
   if (motivulLipseiDinCatalog(product)) return [];
 
   const images = Array.isArray(product.images) ? product.images.map(String).filter(Boolean) : [];
@@ -219,7 +278,14 @@ export function buildCatalogItems(business: CatalogBusiness, product: CatalogPro
   const additional = images.slice(1, 11);
   const customLabels = [g.custom_label_0, g.custom_label_1, g.custom_label_2, g.custom_label_3, g.custom_label_4];
   const productType = product.category?.trim() || undefined;
-  const googleCat = g.google_product_category?.trim() || undefined;
+  /*
+   * Categoria Google: cea de pe produs, altfel cea din harta facuta in Google Merchant. ⚠ Prin
+   * `categorieGooglePentruTrimitere`, deci ID-ul oficial: 5 din caile vechi ale listei noastre nu existau
+   * in taxonomie, iar Meta citeste aceeasi taxonomie („Enter either the category name ... or its ID number”).
+   */
+  const googleCat = categorieGooglePentruTrimitere(
+    g.google_product_category?.trim() || (product.category ? hartaCategorii?.[product.category] : undefined),
+  );
 
   const basePrice = Number(product.price) || 0;
   const baseCompare = product.compare_at_price != null ? Number(product.compare_at_price) : null;
@@ -250,8 +316,8 @@ export function buildCatalogItems(business: CatalogBusiness, product: CatalogPro
       price: money(hasSale ? baseCompare! : basePrice),
       salePrice: hasSale ? money(basePrice) : undefined,
       link,
-      imageLink: primaryImage,
-      additionalImageLinks: additional,
+      imageLink: imagineCatalog(primaryImage),
+      additionalImageLinks: additional.map(imagineCatalog),
       brand,
       gtin: validGtin ? g.gtin!.replace(/\s/g, "") : undefined,
       mpn: g.mpn?.trim() || undefined,
@@ -267,18 +333,14 @@ export function buildCatalogItems(business: CatalogBusiness, product: CatalogPro
     }];
   }
 
-  // Assign each axis to a distinct slot (recognized first, rest fill remaining),
-  // so every variant has a unique attribute set.
+  // Fiecare axa recunoscuta primeste atributul ei de baza, o singura data; restul merg in
+  // `additional_variant_attribute`, ca „Nume:Valoare”.
   const usedSlots = new Set<string>();
   const slotFor: (string | undefined)[] = variants.options.map((o) => {
-    const named = COLOR_RE.test(o.name) ? "color" : SIZE_RE.test(o.name) ? "size" : MATERIAL_RE.test(o.name) ? "material" : undefined;
+    const named = COLOR_RE.test(o.name) ? "color" : SIZE_RE.test(o.name) ? "size"
+      : MATERIAL_RE.test(o.name) ? "material" : PATTERN_RE.test(o.name) ? "pattern" : undefined;
     if (named && !usedSlots.has(named)) { usedSlots.add(named); return named; }
     return undefined;
-  });
-  variants.options.forEach((_, i) => {
-    if (slotFor[i]) return;
-    const free = VARIANT_SLOTS.find((s) => !usedSlots.has(s));
-    if (free) { usedSlots.add(free); slotFor[i] = free; }
   });
 
   return enabled.map((combo) => {
@@ -289,21 +351,34 @@ export function buildCatalogItems(business: CatalogBusiness, product: CatalogPro
     const stock = combo.stock_quantity != null && String(combo.stock_quantity).trim() !== "" ? Number(combo.stock_quantity) : null;
     const comboInStock = product.track_inventory && stock != null && Number.isFinite(stock) ? stock > 0 : inStock;
     const slots: Record<string, string> = {};
-    variants.options.forEach((_, i) => {
+    const suplimentare: string[] = [];
+    variants.options.forEach((o, i) => {
       const slot = slotFor[i];
-      if (slot && parts[i]) slots[slot] = parts[i];
+      if (!parts[i]) return;
+      if (slot) slots[slot] = parts[i];
+      else suplimentare.push(`${o.name.replace(/[:,]/g, " ").trim()}:${parts[i].replace(/[:,]/g, " ").trim()}`);
     });
     return {
-      id: `${product.id}-${combo.id}`.slice(0, 100),
-      title: `${product.name} - ${combo.title}`.slice(0, 200),
+      /* ⚠ O singura definitie a ID-ului, aceeasi pe care o trimite pixelul: `idArticolMeta`. */
+      id: idArticolMeta(product.id, combo.id),
+      /*
+       * ⚠ NUMELE PRODUSULUI, fara combinatie (17.09.2026). Ghidul variantelor Meta, la exemplul corect: „The name
+       * of the product and the `item_group_id` fields match (so that the name does not change when variants are
+       * selected, but images do)”. Combinatia o spun atributele (culoare, marime, ...).
+       */
+      title: product.name.slice(0, 200),
       description,
       availability: comboInStock ? "in stock" : "out of stock",
       condition,
       price: money(hasSale ? compare! : unit),
       salePrice: hasSale ? money(unit) : undefined,
-      link,
-      imageLink: combo.image || primaryImage,
-      additionalImageLinks: additional,
+      /*
+       * ⚠ Adresa care deschide pagina PE VARIANTA („images and external links match the color of the item”).
+       * Pagina o preselecteaza din `?varianta=`; aceeasi adresa o trimit si Google Merchant si datele structurate.
+       */
+      link: adresaCuVarianta(link, combo),
+      imageLink: imagineCatalog(combo.image || primaryImage),
+      additionalImageLinks: additional.map(imagineCatalog),
       brand,
       // Codul de bare AL COMBINATIEI: fiecare culoare sau marime isi are codul
       // ei. Codul de pe produs NU se foloseste aici nici ca rezerva — pus pe mai
@@ -320,6 +395,7 @@ export function buildCatalogItems(business: CatalogBusiness, product: CatalogPro
       ageGroup,
       material: slots.material ?? (g.material?.trim() || undefined),
       pattern: slots.pattern,
+      additionalVariantAttribute: suplimentare.length ? suplimentare.join(", ") : undefined,
       customLabels,
       itemGroupId: product.id,
     };
@@ -360,6 +436,7 @@ export function serializeCatalogFeed(business: CatalogBusiness, items: CatalogIt
     gEl("age_group", it.ageGroup) +
     gEl("material", it.material) +
     gEl("pattern", it.pattern) +
+    gEl("additional_variant_attribute", it.additionalVariantAttribute) +
     gEl("item_group_id", it.itemGroupId) +
     it.customLabels.map((v, i) => gEl(`custom_label_${i}`, v)).join("") +
     "</item>",

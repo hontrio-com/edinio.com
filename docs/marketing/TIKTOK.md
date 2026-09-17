@@ -141,7 +141,18 @@ Suita intreaga (8933), `tsc`, poarta de lint (57 de erori, niciuna noua) si buil
 
 ## Verificat pe productie
 
-(se completeaza dupa desfasurare)
+* Migratia aplicata inainte de push. Tokenul scris prin vedere, intr-o tranzactie anulata: in tabelul privat
+  `enc.v1.…`, prin vedere in clar; `pixel_id` in clar. Baseline regenerat, md5 identic cu cel calculat in baza.
+* `afbbecf5`, desfasurarea `dpl_7g8uyxnw8ZwxFv1uf65KjZMmodgn`, live la 22:53 UTC. **CI: toate 4 joburile
+  verzi.** Niciun avertisment sau eroare in jurnalul desfasurarii.
+* Capatul `/api/tiktok/eveniment`, si pe `www.edinio.com`, si pe domeniul propriu (`suporti-numar.ro`):
+  `204` pentru un magazin fara Events API, `400` pentru `Purchase` trimis din browser si `400` pentru
+  `CompletePayment`, numele scos din lista lor.
+* Pagina magazinului poarta `{"pixelId":"D69ESQRC77U0KGAU8B90","magazin":"suporti-numar","capi":false}`, iar
+  codul livrat contine `ttq.identify(window.__edinioTTAM)`, `window.__edinioTikTok=…` si trimiterea catre
+  `/api/tiktok/eveniment`. **Niciun `PlaceAnOrder` sau `CompletePayment` nu mai exista in codul livrat.**
+* ⚠ Nevazut inca: o achizitie reala trimisa de pe server (niciun comerciant n-are token) si o comanda plasata
+  dupa desfasurare.
 
 ## Ce tine de comercianti
 

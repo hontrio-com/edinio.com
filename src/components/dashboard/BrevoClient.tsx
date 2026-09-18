@@ -5,10 +5,10 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, CheckCircle, Plug, RefreshCw, Users, ExternalLink } from "lucide-react";
 import {
-  connectBrevo, disconnectBrevo, getBrevoLists,
+  connectBrevo, disconnectBrevo, getBrevoLists, getBrevoTemplates,
   saveBrevoSettings, syncExistingCustomers,
 } from "@/lib/actions/brevo.actions";
-import type { BrevoPublicConfig, BrevoList } from "@/lib/brevo";
+import type { BrevoPublicConfig, BrevoList, BrevoTemplate } from "@/lib/brevo";
 
 const inputCls =
   "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors";
@@ -32,8 +32,13 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
   const [listId, setListId] = useState(initialConfig.list_id != null ? String(initialConfig.list_id) : "");
   const [checkoutSource, setCheckoutSource] = useState(initialConfig.sources.checkout);
   const [ecommerceSync, setEcommerceSync] = useState(initialConfig.ecommerce_sync);
+  const [doubleOptin, setDoubleOptin] = useState(initialConfig.double_optin);
+  const [doiTemplateId, setDoiTemplateId] = useState(initialConfig.doi_template_id != null ? String(initialConfig.doi_template_id) : "");
+  const [templates, setTemplates] = useState<BrevoTemplate[]>([]);
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
 
   const [connecting, startConnect] = useTransition();
+  const [loadingTemplates, startTemplates] = useTransition();
   const [saving, startSave] = useTransition();
   const [syncing, startSync] = useTransition();
   const [loadingLists, startLists] = useTransition();
@@ -84,6 +89,27 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
     });
   }
 
+  function reloadTemplates() {
+    startTemplates(async () => {
+      let res: Awaited<ReturnType<typeof getBrevoTemplates>>;
+      try {
+        res = await getBrevoTemplates(businessId);
+      } catch {
+        /* O CITIRE: nu se schimba nimic, deci reincercarea e raspunsul corect. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca sabloanele s-au putut citi. "
+          + "Nu s-a schimbat nimic, deci poti incerca din nou linistit.",
+          { duration: 12000 },
+        );
+        return;
+      }
+      if ("error" in res) { toast.error(res.error); return; }
+      setTemplates(res.templates);
+      setTemplatesLoaded(true);
+      if (res.templates.length === 0) toast.info("Contul nu are niciun sablon activ. Fa in Brevo unul de tip „Double opt-in confirmation”.");
+    });
+  }
+
   function save() {
     startSave(async () => {
       const selected = lists.find((l) => String(l.id) === listId);
@@ -94,6 +120,8 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
           list_name: selected?.name ?? config.list_name,
           sources: { checkout: checkoutSource },
           ecommerce_sync: ecommerceSync,
+          double_optin: doubleOptin,
+          doi_template_id: doiTemplateId ? Number(doiTemplateId) : null,
         });
       } catch {
         /* ⚠ Scrie setarile. Mesajul nu pretinde nimic despre contul de la furnizor. */
@@ -266,10 +294,49 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
               <Toggle checked={ecommerceSync} onChange={setEcommerceSync} />
             </div>
 
+            {/*
+              ⚠ Pana pe 18.09.2026 aici scria sa „activezi confirmarea dubla pe lista in Brevo”.
+              La Brevo asa ceva nu exista pentru contactele trimise prin API: intrau direct in
+              lista. Confirmarea se cere acum chiar de aici, cu un sablon DOI din contul lor.
+            */}
+            <div className="flex items-start justify-between gap-3 pt-3 border-t border-border">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">Confirmare dubla (double opt-in)</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Clientul primeste un email de confirmare din sablonul tau Brevo si intra in lista abia dupa ce da click. Dupa confirmare ajunge inapoi in magazinul tau.
+                </p>
+              </div>
+              <Toggle checked={doubleOptin} onChange={(v) => { setDoubleOptin(v); if (v && !templatesLoaded) reloadTemplates(); }} />
+            </div>
+
+            {doubleOptin && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground">Sablonul de confirmare</label>
+                  <button type="button" onClick={reloadTemplates} disabled={loadingTemplates}
+                    className="text-xs font-medium text-primary inline-flex items-center gap-1 disabled:opacity-50">
+                    {loadingTemplates ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                    {templatesLoaded ? "Reincarca" : "Incarca sabloanele"}
+                  </button>
+                </div>
+                <select value={doiTemplateId} onChange={(e) => setDoiTemplateId(e.target.value)} className={inputCls}>
+                  <option value="">Alege sablonul...</option>
+                  {doiTemplateId && !templates.some((t) => String(t.id) === doiTemplateId) && (
+                    <option value={doiTemplateId}>{config.doi_template_name ?? `Sablon ${doiTemplateId}`}</option>
+                  )}
+                  {templates.map((t) => (
+                    <option key={t.id} value={String(t.id)}>{t.name}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Il faci in Brevo, din sabloanele de tip „Double opt-in confirmation”. La salvare verificam in Brevo ca sablonul ales chiar e unul de confirmare.
+                </p>
+              </div>
+            )}
+
             <div className="pt-3 border-t border-border">
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Contactele se adauga direct in lista. Pentru <span className="font-medium text-foreground">confirmare dubla (double opt-in)</span> GDPR,
-                activeaz-o pe lista in contul tau Brevo. Adaugam automat atribute pentru segmentare: sursa, judet si valoarea comenzii.
+                Adaugam automat atribute pentru segmentare: sursa, judet si valoarea comenzii. Cine se dezaboneaza, are adresa respinsa definitiv sau marcheaza un email ca spam nu mai e adaugat din nou.
               </p>
             </div>
           </div>

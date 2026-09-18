@@ -6,12 +6,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { randomUUID } from "node:crypto";
 import {
   pingMailchimp, getAudiences, batchUpsert, splitName, toPublicMailchimpConfig,
-  mailchimpWebhookUrl, registerWebhook, getMarketingPermissionIds,
+  mailchimpWebhookUrl, registerWebhook, removeOurWebhooks, getMarketingPermissionIds,
   type MailchimpConfig, type MailchimpAudience, type MailchimpMemberInput, type MailchimpPublicConfig,
 } from "@/lib/mailchimp";
 import { ensureStore } from "@/lib/mailchimp-ecommerce";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
+import { logError } from "@/lib/error-logger";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
@@ -135,6 +136,18 @@ export async function saveMailchimpSettings(
     webhook_secret: current.webhook_secret || randomUUID(),
   };
 
+  /*
+   * ⚠ ALTA AUDIENTA = ALT MAGAZIN DE COMERT si webhookul mutat. Magazinul din Mailchimp nu-si
+   * poate schimba lista („The `list_id` for a specific store cannot change”), deci se face unul
+   * nou pentru audienta aleasa; webhookul de pe audienta veche se sterge, ca dezabonarile de
+   * acolo sa nu mai suprime oameni din lista noua.
+   */
+  const audientaSchimbata = !!current.audience_id && !!next.audience_id && current.audience_id !== next.audience_id;
+  if (audientaSchimbata) {
+    next.ecommerce_store_id = undefined;
+    await removeOurWebhooks(current, current.audience_id as string);
+  }
+
   // If e-commerce sync is on and no store exists yet, create it in Mailchimp (persist its id).
   if (next.ecommerce_sync && next.audience_id && !next.ecommerce_store_id) {
     const { data: biz } = await owned.supabase
@@ -146,6 +159,7 @@ export async function saveMailchimpSettings(
       email: biz?.email ?? undefined,
     });
     if (!("error" in store)) next.ecommerce_store_id = store.storeId;
+    else await logError({ action: "mailchimp.ecommerce.store", message: store.error, businessId, severity: "warning" });
   }
 
   // Discover GDPR marketing-permission IDs (best-effort) so consent is granted on every synced subscriber.
@@ -159,19 +173,28 @@ export async function saveMailchimpSettings(
   // Register the unsubscribe webhook (best-effort) once an audience is chosen.
   if (next.audience_id) {
     const hookUrl = mailchimpWebhookUrl(next.webhook_secret);
-    if (hookUrl) await registerWebhook(next, hookUrl);
+    if (hookUrl) {
+      const hook = await registerWebhook(next, hookUrl);
+      /* Fara webhook, dezabonarile din Mailchimp nu mai ajung la noi: se scrie, nu se inghite. */
+      if ("error" in hook) {
+        await logError({ action: "mailchimp.webhook.register", message: hook.error, businessId, severity: "warning" });
+      }
+    }
   }
 
   revalidate();
   return { config: toPublicMailchimpConfig(next) };
 }
 
-/** Clear the connection entirely. */
+/** Clear the connection entirely (removes our webhook from the audience, best-effort). */
 export async function disconnectMailchimp(
   businessId: string,
 ): Promise<{ success: true } | { error: string }> {
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
+  /* Webhookul ramas ar fi chemat la nesfarsit o adresa care nu mai stie de magazin. */
+  const current = await readConfig(businessId);
+  if (current?.api_key && current.audience_id) await removeOurWebhooks(current, current.audience_id);
   if (!(await writeConfig(owned.supabase, businessId, null))) return { error: "Eroare la salvare." };
   revalidate();
   return { success: true };

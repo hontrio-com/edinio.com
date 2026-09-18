@@ -68,32 +68,71 @@ test("⚠ toate cele trei module de marketing intreaba de origine", () => {
   }
 });
 
-test("⚠ cele doua functii care isi citesc singure comanda CER `order_source`", () => {
+/**
+ * Functia de nivel zero care contine pozitia `i`: de la randul ei de inceput (`async function`
+ * sau `export async function`, la coloana zero) pana la urmatoarea declaratie de nivel zero.
+ *
+ * ⚠ PE RANDURI DE NIVEL ZERO, nu pe acolade: o functie care intoarce `Promise<{ … } | null>`
+ * are prima acolada in TIPUL intors, iar potrivirea pe acolade ar fi taiat bucata acolo.
+ */
+function functiaDinJurul(s: string, i: number): string {
+  const linii = s.split(/\r?\n/);
+  let poz = 0;
+  let rand = 0;
+  for (; rand < linii.length; rand++) {
+    if (poz + linii[rand].length >= i) break;
+    poz += linii[rand].length + 1;
+  }
+  let start = rand;
+  while (start > 0 && !/^(export )?async function /.test(linii[start])) start--;
+  let stop = start + 1;
+  while (stop < linii.length && !/^(export |async function |function |type |const |interface )/.test(linii[stop])) stop++;
+  return linii.slice(start, stop).join("\n");
+}
+
+test("⚠ orice functie care isi citeste singura comanda CERE `order_source` si trece prin poarta", () => {
   /*
    * Ce nu se cere in `select` vine `undefined`, iar poarta ar fi citit `undefined` si ar fi
    * tacut exact pe comenzile pentru care exista. A patra oara in aceeasi zi cand tiparul asta
    * era gata sa treaca.
+   *
+   * ⚠ DE LA 18.09.2026 REGULA E GENERALA, nu pe doua nume. Marcarea platii si a intoarcerii
+   * (anulare, rambursare) citeste comanda prin cititori comuni (`trimiteStatusul` la Brevo,
+   * `comandaPentruMailchimp`, `comandaPentruKlaviyo`), iar un cititor nou adaugat maine intra
+   * singur in proba: e cautat dupa `.from("orders")`, nu dupa nume.
    */
-  for (const f of ["src/lib/brevo-sync.ts", "src/lib/mailchimp-sync.ts"]) {
+  let cititori = 0;
+  for (const f of MODULE) {
     const s = readFileSync(f, "utf8");
-    /*
-     * ⚠ BUCATA SE TAIE PE ACOLADE, nu pe un numar de caractere. Fereastra de 900 avea 68 de
-     * caractere de rezerva la Mailchimp: doua randuri de comentariu in plus si proba ar fi
-     * cazut pe cod corect. Iar in celalalt sens, o alta functie scurta strecurata intre `select`
-     * si poarta ar fi tinut-o verde chiar cu poarta stearsa.
-     */
-    const i = s.indexOf("OrderPaid");
-    assert.ok(i > 0, `${f}: nu s-a gasit functia de marcare`);
-    const inceput = s.lastIndexOf("export async function", i);
-    let adanc = 0;
-    let sfarsit = s.length;
-    for (let k = s.indexOf("{", i); k < s.length; k++) {
-      if (s[k] === "{") adanc++;
-      else if (s[k] === "}") { adanc--; if (adanc === 0) { sfarsit = k; break; } }
+    for (let de = s.indexOf('.from("orders")'); de >= 0; de = s.indexOf('.from("orders")', de + 1)) {
+      const bucata = functiaDinJurul(s, de);
+      assert.match(bucata, /^(export )?async function /, `${f}: citirea comenzii nu sta intr-o functie`);
+      assert.match(bucata, /\.select\("[^"]*order_source[^"]*"\)/, `${f}: citirea nu cere originea\n${bucata.slice(0, 200)}`);
+      assert.match(bucata, /clientDeMarketplace\(/, `${f}: poarta lipseste din functia care citeste comanda\n${bucata.slice(0, 200)}`);
+      cititori++;
     }
-    const bucata = s.slice(inceput, sfarsit);
-    assert.match(bucata, /\.select\("[^"]*order_source[^"]*"\)/, `${f}: citirea nu cere originea`);
-    assert.match(bucata, /clientDeMarketplace\(/, `${f}: poarta lipseste din functie`);
+  }
+  // Cate unul in fiecare modul (Brevo, Mailchimp, Klaviyo): o lista goala ar trece verde.
+  assert.ok(cititori >= 3, `gasiti doar ${cititori} cititori de comanda`);
+});
+
+test("⚠ marcarea platii si a intoarcerii trece prin cititorul pazit, la toti trei", () => {
+  /*
+   * Proba de sus apara CITIREA. Asta apara ca functiile chemate din `lib/email-marketing/comanda.ts`
+   * chiar citesc prin ea, si nu cumva primesc comanda de la apelant, nepazita.
+   */
+  const perechi: Array<[string, string, string[]]> = [
+    ["src/lib/mailchimp-sync.ts", "comandaPentruMailchimp(", ["maybeMarkMailchimpOrderPaid", "maybeMarkMailchimpOrderReturned"]],
+    ["src/lib/brevo-sync.ts", "trimiteStatusul(", ["maybeMarkBrevoOrderPaid", "maybeMarkBrevoOrderReturned"]],
+    ["src/lib/klaviyo-sync.ts", "comandaPentruKlaviyo(", ["maybeMarkKlaviyoOrderPaid", "maybeMarkKlaviyoOrderReturned"]],
+  ];
+  for (const [f, cititor, functii] of perechi) {
+    const s = readFileSync(f, "utf8");
+    for (const fn of functii) {
+      const i = s.indexOf(`export async function ${fn}(`);
+      assert.ok(i >= 0, `${f}: lipseste ${fn}`);
+      assert.ok(functiaDinJurul(s, i).includes(cititor), `${f}: ${fn} nu citeste prin ${cititor}`);
+    }
   }
 });
 
@@ -186,10 +225,11 @@ test("marcarea platit nu mai sta in blocul SMS-urilor", () => {
   const sfarsit = linii.findIndex((l, k) => k > start && l === "  }");
   assert.ok(sfarsit > start, "nu s-a gasit sfarsitul blocului SMS-urilor");
   const bloc = linii.slice(start, sfarsit).join(" ");
-  assert.ok(!bloc.includes("maybeMark"), "marcarea a intrat inapoi sub conditia telefonului");
+  assert.ok(!bloc.includes("maybeMark") && !bloc.includes("anuntaEmail"), "marcarea a intrat inapoi sub conditia telefonului");
   // Si chiar exista, undeva mai jos: altfel proba de sus ar trece si pe un fisier din care
-  // marcarea a disparut cu totul.
-  assert.ok(linii.slice(sfarsit).some((l) => l.includes("maybeMarkMailchimpOrderPaid(orderId)")),
+  // marcarea a disparut cu totul. De la 18.09.2026 trece prin `anuntaEmailPlata`, care o duce
+  // la Mailchimp, Brevo si Klaviyo deodata.
+  assert.ok(linii.slice(sfarsit).some((l) => l.includes("anuntaEmailPlata(orderId")),
     "marcarea nu se mai cheama deloc dupa blocul SMS-urilor");
 });
 

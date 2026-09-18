@@ -73,9 +73,11 @@ import { ORDER_STATUS } from "@/lib/orders/status";
 import { trimiteSiLasaUrma } from "@/lib/smso-urma";
 import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
-import { maybeSyncMailchimpSubscriber, maybeSyncMailchimpOrder, maybeMarkMailchimpOrderPaid, orderValueTag } from "@/lib/mailchimp-sync";
+import { maybeSyncMailchimpSubscriber, maybeSyncMailchimpOrder, orderValueTag } from "@/lib/mailchimp-sync";
+import { anuntaEmailPlata, anuntaEmailIntoarcere, intoarcereDinTranzitie } from "@/lib/email-marketing/comanda";
+import { storeBaseUrl } from "@/lib/seo";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
-import { maybeSyncBrevoSubscriber, maybeSyncBrevoOrder, maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
+import { maybeSyncBrevoSubscriber, maybeSyncBrevoOrder } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoSubscriber, maybeTrackKlaviyoOrder } from "@/lib/klaviyo-sync";
 import { formatPrice, formatDate } from "@/lib/utils/format";
 import type { Json } from "@/types/database.types";
@@ -2190,14 +2192,14 @@ export async function placeOrder(data: {
   try {
     const { data: settings } = await admin
       .from("store_settings")
-      .select("notifications_config, businesses(business_name, store_name, user_id, slug)")
+      .select("notifications_config, businesses(business_name, store_name, user_id, slug, custom_domain)")
       .eq("business_id", data.business_id)
       .single();
     if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
-      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null } | null;
+      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null; custom_domain: string | null } | null;
       // Customer-facing emails use the public store name, falling back to the legal/account name.
       const businessName = biz?.store_name || biz?.business_name || "";
 
@@ -2315,53 +2317,62 @@ export async function placeOrder(data: {
         },
       });
 
-      // Mailchimp — sync the customer as a subscriber when they opted in at checkout. Fire-and-forget.
+      /*
+       * EMAIL MARKETING (Mailchimp, Brevo, Klaviyo).
+       *
+       * ⚠ PRIN `dupaRaspuns`, NU `void`. Fiecare furnizor face cateva cereri HTTP una dupa
+       * alta, iar actiunea raspunde imediat: pornite si uitate, puteau fi taiate cand functia
+       * ingheata dupa raspuns, fara nicio urma. Toate celelalte integrari trec deja pe aici.
+       *
+       * Adresa magazinului e cea publica (`storeBaseUrl`): domeniul propriu cand exista. Pana
+       * pe 18.09.2026 se facea din apexul platformei, care raspunde 308.
+       */
+      const adresaMagazinului = biz?.slug ? storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain ?? null }) : undefined;
+      const liniiEmail = allItems
+        .filter((i) => !i.product_id.startsWith("extra_"))
+        .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity }));
+      /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
+         da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
+         Vezi `clientDeMarketplace`. */
+      const origineaComenzii = buildOrderSource(data.source, userAgent);
+
+      // Abonarea clientului care a bifat newsletterul la checkout.
       if (data.newsletter_opt_in && data.customer_email) {
-        void maybeSyncMailchimpSubscriber({
+        const emailAbonat = data.customer_email;
+        dupaRaspuns(() => maybeSyncMailchimpSubscriber({
           businessId: data.business_id,
           source: "checkout",
-          email: data.customer_email,
+          email: emailAbonat,
           name: numeClient,
           phone: data.customer_phone,
           tags: [data.customer_county, orderValueTag(total)].filter(Boolean),
-        });
-      }
-
-      // Brevo — sync the customer as a subscriber when they opted in at checkout. Fire-and-forget.
-      if (data.newsletter_opt_in && data.customer_email) {
-        void maybeSyncBrevoSubscriber({
+        }), "mailchimp.abonat", data.business_id);
+        dupaRaspuns(() => maybeSyncBrevoSubscriber({
           businessId: data.business_id,
           source: "checkout",
-          email: data.customer_email,
+          email: emailAbonat,
           name: numeClient,
           phone: data.customer_phone,
           county: data.customer_county,
           orderValue: total,
-        });
-      }
-
-      // Klaviyo — sync the customer as a subscriber when they opted in at checkout. Fire-and-forget.
-      if (data.newsletter_opt_in && data.customer_email) {
-        void maybeSyncKlaviyoSubscriber({
+        }), "brevo.abonat", data.business_id);
+        dupaRaspuns(() => maybeSyncKlaviyoSubscriber({
           businessId: data.business_id,
           source: "checkout",
-          email: data.customer_email,
+          email: emailAbonat,
           name: numeClient,
           phone: data.customer_phone,
           county: data.customer_county,
           orderValue: total,
-        });
+        }), "klaviyo.abonat", data.business_id);
       }
 
-      // Mailchimp e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
-      void maybeSyncMailchimpOrder({
+      // Comanda: venit atribuit, segmentare dupa cumparaturi, retargeting de produs.
+      dupaRaspuns(() => maybeSyncMailchimpOrder({
         businessId: data.business_id,
-        /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
-           da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
-           Vezi `clientDeMarketplace`. */
-        orderSource: buildOrderSource(data.source, userAgent),
+        orderSource: origineaComenzii,
         storeName: businessName,
-        storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        storeUrl: adresaMagazinului,
         order: {
           id: order.id,
           email: data.customer_email,
@@ -2369,49 +2380,36 @@ export async function placeOrder(data: {
           currency: "RON",
           total,
           financial_status: "pending",
-          items: allItems
-            .filter((i) => !i.product_id.startsWith("extra_"))
-            .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
+          items: liniiEmail,
         },
-      });
-
-      // Brevo e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
-      void maybeSyncBrevoOrder({
+      }), "mailchimp.comanda", data.business_id);
+      dupaRaspuns(() => maybeSyncBrevoOrder({
         businessId: data.business_id,
-        /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
-           da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
-           Vezi `clientDeMarketplace`. */
-        orderSource: buildOrderSource(data.source, userAgent),
-        storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        orderSource: origineaComenzii,
+        storeUrl: adresaMagazinului,
         order: {
           id: order.id,
           email: data.customer_email,
           total,
           status: "pending",
-          items: allItems
-            .filter((i) => !i.product_id.startsWith("extra_"))
-            .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
+          items: liniiEmail,
         },
-      });
-
-      // Klaviyo e-commerce — "Placed Order" event (revenue + purchase segmentation + flows). Fire-and-forget.
-      void maybeTrackKlaviyoOrder({
+      }), "brevo.comanda", data.business_id);
+      /* Klaviyo: „Placed Order” acum numai daca vanzarea e deja confirmata (ramburs, transfer).
+         La plata online pleaca din `anuntaEmailPlata`, cand banii chiar au intrat. */
+      dupaRaspuns(() => maybeTrackKlaviyoOrder({
         businessId: data.business_id,
-        /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
-           da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
-           Vezi `clientDeMarketplace`. */
-        orderSource: buildOrderSource(data.source, userAgent),
-        storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        orderSource: origineaComenzii,
+        paymentMethod: metodaPlata,
+        storeUrl: adresaMagazinului,
         order: {
           id: order.id,
           email: data.customer_email,
           name: numeClient,
           total,
-          items: allItems
-            .filter((i) => !i.product_id.startsWith("extra_"))
-            .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
+          items: liniiEmail,
         },
-      });
+      }), "klaviyo.comanda", data.business_id);
     }
   } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }
 
@@ -2739,21 +2737,25 @@ export async function updateOrder(orderId: string, data: { status: string; payme
   }
 
   /*
-   * MARCAREA „PLATIT" IN MAILCHIMP SI BREVO.
+   * PLATA SI INTOARCEREA, CATRE MAILCHIMP, BREVO SI KLAVIYO (`lib/email-marketing/comanda.ts`).
    *
    * ⚠ STA AFARA DIN BLOCUL DE SMS, dinadins. Pana acum era inauntrul lui
    * `if (order.customer_phone && …)`, deci pe o comanda fara telefon nu pleca NICIODATA,
    * tacut, iar comentariul de deasupra spunea ca „ramane neatinsa": adevarat fata de
    * `poateInstiinta`, fals fata de telefon.
    *
-   * ⚠ CUMPARATORII DE MARKETPLACE nu se opresc aici, ci INAUNTRUL celor doua functii, acolo
-   * unde se citeste comanda: sunt sase cai catre ele, si o poarta pusa la apelant le-ar fi
-   * pazit pe una. Vezi `clientDeMarketplace`.
+   * ⚠ CUMPARATORII DE MARKETPLACE nu se opresc aici, ci INAUNTRUL functiilor fiecarui
+   * furnizor, acolo unde se citeste comanda: sunt mai multe cai catre ele, si o poarta pusa
+   * la apelant le-ar fi pazit pe una. Vezi `clientDeMarketplace`.
    */
   if (paymentChanged && data.payment_status === "paid") {
-    void maybeMarkMailchimpOrderPaid(orderId);
-    void maybeMarkBrevoOrderPaid(orderId);
+    anuntaEmailPlata(orderId, order.business_id);
   }
+  const intoarsa = intoarcereDinTranzitie({
+    statusNou: data.status, statusSchimbat: statusChanged,
+    plataNoua: data.payment_status, plataSchimbata: paymentChanged,
+  });
+  if (intoarsa) anuntaEmailIntoarcere(orderId, intoarsa, order.business_id);
 
   revalidatePath("/dashboard/orders");
   revalidatePath(`/dashboard/orders/${orderId}`);
@@ -5139,14 +5141,14 @@ export async function placeCartOrder(data: {
   try {
     const { data: settings } = await admin
       .from("store_settings")
-      .select("notifications_config, businesses(business_name, store_name, user_id, slug)")
+      .select("notifications_config, businesses(business_name, store_name, user_id, slug, custom_domain)")
       .eq("business_id", data.business_id)
       .single();
     if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
-      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null } | null;
+      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null; custom_domain: string | null } | null;
       // Customer-facing emails use the public store name, falling back to the legal/account name.
       const businessName = biz?.store_name || biz?.business_name || "";
 
@@ -5268,53 +5270,62 @@ export async function placeCartOrder(data: {
         },
       });
 
-      // Mailchimp — sync the customer as a subscriber when they opted in at checkout. Fire-and-forget.
+      /*
+       * EMAIL MARKETING (Mailchimp, Brevo, Klaviyo).
+       *
+       * ⚠ PRIN `dupaRaspuns`, NU `void`. Fiecare furnizor face cateva cereri HTTP una dupa
+       * alta, iar actiunea raspunde imediat: pornite si uitate, puteau fi taiate cand functia
+       * ingheata dupa raspuns, fara nicio urma. Toate celelalte integrari trec deja pe aici.
+       *
+       * Adresa magazinului e cea publica (`storeBaseUrl`): domeniul propriu cand exista. Pana
+       * pe 18.09.2026 se facea din apexul platformei, care raspunde 308.
+       */
+      const adresaMagazinului = biz?.slug ? storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain ?? null }) : undefined;
+      const liniiEmail = allItems
+        .filter((i) => !i.product_id.startsWith("extra_"))
+        .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity }));
+      /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
+         da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
+         Vezi `clientDeMarketplace`. */
+      const origineaComenzii = buildOrderSource(data.source, userAgent);
+
+      // Abonarea clientului care a bifat newsletterul la checkout.
       if (data.newsletter_opt_in && data.customer_email) {
-        void maybeSyncMailchimpSubscriber({
+        const emailAbonat = data.customer_email;
+        dupaRaspuns(() => maybeSyncMailchimpSubscriber({
           businessId: data.business_id,
           source: "checkout",
-          email: data.customer_email,
+          email: emailAbonat,
           name: numeClient,
           phone: data.customer_phone,
           tags: [data.customer_county, orderValueTag(total)].filter(Boolean),
-        });
-      }
-
-      // Brevo — sync the customer as a subscriber when they opted in at checkout. Fire-and-forget.
-      if (data.newsletter_opt_in && data.customer_email) {
-        void maybeSyncBrevoSubscriber({
+        }), "mailchimp.abonat", data.business_id);
+        dupaRaspuns(() => maybeSyncBrevoSubscriber({
           businessId: data.business_id,
           source: "checkout",
-          email: data.customer_email,
+          email: emailAbonat,
           name: numeClient,
           phone: data.customer_phone,
           county: data.customer_county,
           orderValue: total,
-        });
-      }
-
-      // Klaviyo — sync the customer as a subscriber when they opted in at checkout. Fire-and-forget.
-      if (data.newsletter_opt_in && data.customer_email) {
-        void maybeSyncKlaviyoSubscriber({
+        }), "brevo.abonat", data.business_id);
+        dupaRaspuns(() => maybeSyncKlaviyoSubscriber({
           businessId: data.business_id,
           source: "checkout",
-          email: data.customer_email,
+          email: emailAbonat,
           name: numeClient,
           phone: data.customer_phone,
           county: data.customer_county,
           orderValue: total,
-        });
+        }), "klaviyo.abonat", data.business_id);
       }
 
-      // Mailchimp e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
-      void maybeSyncMailchimpOrder({
+      // Comanda: venit atribuit, segmentare dupa cumparaturi, retargeting de produs.
+      dupaRaspuns(() => maybeSyncMailchimpOrder({
         businessId: data.business_id,
-        /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
-           da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
-           Vezi `clientDeMarketplace`. */
-        orderSource: buildOrderSource(data.source, userAgent),
+        orderSource: origineaComenzii,
         storeName: businessName,
-        storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        storeUrl: adresaMagazinului,
         order: {
           id: order.id,
           email: data.customer_email,
@@ -5322,49 +5333,36 @@ export async function placeCartOrder(data: {
           currency: "RON",
           total,
           financial_status: "pending",
-          items: allItems
-            .filter((i) => !i.product_id.startsWith("extra_"))
-            .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
+          items: liniiEmail,
         },
-      });
-
-      // Brevo e-commerce — sync the order (revenue attribution + purchase segmentation + retargeting). Fire-and-forget.
-      void maybeSyncBrevoOrder({
+      }), "mailchimp.comanda", data.business_id);
+      dupaRaspuns(() => maybeSyncBrevoOrder({
         businessId: data.business_id,
-        /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
-           da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
-           Vezi `clientDeMarketplace`. */
-        orderSource: buildOrderSource(data.source, userAgent),
-        storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        orderSource: origineaComenzii,
+        storeUrl: adresaMagazinului,
         order: {
           id: order.id,
           email: data.customer_email,
           total,
           status: "pending",
-          items: allItems
-            .filter((i) => !i.product_id.startsWith("extra_"))
-            .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
+          items: liniiEmail,
         },
-      });
-
-      // Klaviyo e-commerce — "Placed Order" event (revenue + purchase segmentation + flows). Fire-and-forget.
-      void maybeTrackKlaviyoOrder({
+      }), "brevo.comanda", data.business_id);
+      /* Klaviyo: „Placed Order” acum numai daca vanzarea e deja confirmata (ramburs, transfer).
+         La plata online pleaca din `anuntaEmailPlata`, cand banii chiar au intrat. */
+      dupaRaspuns(() => maybeTrackKlaviyoOrder({
         businessId: data.business_id,
-        /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
-           da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
-           Vezi `clientDeMarketplace`. */
-        orderSource: buildOrderSource(data.source, userAgent),
-        storeUrl: biz?.slug ? `${STORE_BASE_URL}/${biz.slug}` : undefined,
+        orderSource: origineaComenzii,
+        paymentMethod: metodaPlata,
+        storeUrl: adresaMagazinului,
         order: {
           id: order.id,
           email: data.customer_email,
           name: numeClient,
           total,
-          items: allItems
-            .filter((i) => !i.product_id.startsWith("extra_"))
-            .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity })),
+          items: liniiEmail,
         },
-      });
+      }), "klaviyo.comanda", data.business_id);
     }
   } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }
 

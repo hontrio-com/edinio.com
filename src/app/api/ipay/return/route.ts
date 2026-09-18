@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { finalizeazaPlataComenzii } from "@/lib/orders/finalizare-plata";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
-import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
-import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import {
   ipayGetOrderStatus, resolveIpayStatus, ipayActionMessage, ipayReady, toBani, IPAY_CURRENCY, type IPayConfig,

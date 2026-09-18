@@ -6,11 +6,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { randomUUID } from "node:crypto";
 import {
   pingBrevo, getLists, ensureAttributes, importContacts, splitName, toPublicBrevoConfig,
-  brevoWebhookUrl, registerWebhook, deleteWebhook,
-  type BrevoConfig, type BrevoList, type BrevoContactInput, type BrevoPublicConfig,
+  brevoWebhookUrl, registerWebhook, deleteWebhook, getTemplates, verificaSablonDoi,
+  type BrevoConfig, type BrevoList, type BrevoContactInput, type BrevoPublicConfig, type BrevoTemplate,
 } from "@/lib/brevo";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
+import { logError } from "@/lib/error-logger";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
@@ -105,6 +106,19 @@ export async function getBrevoLists(
   return { lists: res };
 }
 
+/** Sabloanele active din contul Brevo, pentru alegerea sablonului de confirmare dubla. */
+export async function getBrevoTemplates(
+  businessId: string,
+): Promise<{ templates: BrevoTemplate[] } | { error: string }> {
+  const owned = await requireOwned(businessId);
+  if ("error" in owned) return owned;
+  const config = await readConfig(businessId);
+  if (!config?.api_key) return { error: "Conecteaza-ti contul Brevo intai." };
+  const res = await getTemplates(config);
+  if ("error" in res) return { error: res.error };
+  return { templates: res };
+}
+
 /** Persist list choice + sync options (never touches the stored API key). */
 export async function saveBrevoSettings(
   businessId: string,
@@ -113,6 +127,8 @@ export async function saveBrevoSettings(
     list_name?: string;
     sources?: { checkout?: boolean; popup?: boolean; forms?: boolean };
     ecommerce_sync?: boolean;
+    double_optin?: boolean;
+    doi_template_id?: number | null;
   },
 ): Promise<{ config: BrevoPublicConfig } | { error: string }> {
   const owned = await requireOwned(businessId);
@@ -120,6 +136,31 @@ export async function saveBrevoSettings(
 
   const current = await readConfig(businessId);
   if (!current?.api_key) return { error: "Conecteaza-ti contul Brevo intai." };
+
+  /*
+   * ⚠ CONFIRMAREA DUBLA SE PORNESTE NUMAI CU UN SABLON DOI ADEVARAT, verificat chiar in Brevo.
+   * Cu un sablon obisnuit, clientul ar fi primit un email fara linkul de confirmare, deci n-ar
+   * mai fi intrat nimeni in lista, si nimic nu s-ar fi vazut.
+   */
+  let doi: Pick<BrevoConfig, "double_optin" | "doi_template_id" | "doi_template_name"> = {
+    double_optin: current.double_optin,
+    doi_template_id: current.doi_template_id,
+    doi_template_name: current.doi_template_name,
+  };
+  if (settings.double_optin !== undefined || settings.doi_template_id !== undefined) {
+    const vrea = settings.double_optin ?? !!current.double_optin;
+    const sablon = settings.doi_template_id !== undefined ? settings.doi_template_id : current.doi_template_id;
+    if (vrea) {
+      if (!sablon || !Number.isInteger(sablon) || sablon <= 0) {
+        return { error: "Alege sablonul de confirmare dubla. Il faci in Brevo, din „Double opt-in confirmation”." };
+      }
+      const v = await verificaSablonDoi(current, sablon);
+      if ("error" in v) return { error: v.error };
+      doi = { double_optin: true, doi_template_id: sablon, doi_template_name: v.name };
+    } else {
+      doi = { ...doi, double_optin: false };
+    }
+  }
 
   // Make sure our segmentation attributes exist (retry point if connect could not create them).
   await ensureAttributes(current);
@@ -130,6 +171,7 @@ export async function saveBrevoSettings(
     list_name: settings.list_name ?? current.list_name,
     sources: { ...current.sources, ...settings.sources },
     ecommerce_sync: settings.ecommerce_sync ?? current.ecommerce_sync,
+    ...doi,
     // Ensure a webhook secret exists so we can receive unsubscribe events.
     webhook_secret: current.webhook_secret || randomUUID(),
   };
@@ -140,6 +182,10 @@ export async function saveBrevoSettings(
     if (hookUrl) {
       const hook = await registerWebhook(next, hookUrl);
       if (!("error" in hook) && hook.id) next.webhook_id = hook.id;
+      /* Fara webhook, dezabonarile din Brevo nu mai ajung la noi: se scrie, nu se inghite. */
+      if ("error" in hook) {
+        await logError({ action: "brevo.webhook.register", message: hook.error, businessId, severity: "warning" });
+      }
     }
   }
 
@@ -176,6 +222,14 @@ export async function syncExistingCustomers(
   const config = await readConfig(businessId);
   if (!config?.enabled || !config.api_key || !config.list_id) {
     return { error: "Conecteaza contul si alege o lista intai." };
+  }
+  /*
+   * ⚠ Importul (`/contacts/import`) pune contactele DIRECT in lista: Brevo n-are confirmare
+   * dubla pe import. Cu ea pornita, butonul ar fi ocolit tocmai regula pe care comerciantul a
+   * ales-o, pentru tot istoricul de clienti deodata.
+   */
+  if (config.double_optin && config.doi_template_id) {
+    return { error: "Ai pornita confirmarea dubla, iar importul ar pune clientii direct in lista, fara confirmare. Opreste-o pentru import doar daca ai deja acordul lor." };
   }
 
   // fetchAllRows: sync-ul trebuie sa acopere TOATE comenzile, nu doar primele

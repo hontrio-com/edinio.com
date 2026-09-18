@@ -3,8 +3,6 @@ import { finalizeazaPlataComenzii } from "@/lib/orders/finalizare-plata";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { poateAvansaLaConfirmat } from "@/lib/order-progress";
-import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
-import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import { logError } from "@/lib/error-logger";
 

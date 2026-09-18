@@ -5,8 +5,6 @@ import { verificaCron } from "@/lib/cron-auth";
 import { createClient } from "@supabase/supabase-js";
 import { ipayGetOrderStatus, resolveIpayStatus, ipayReady, toBani, ipayMonedaInLitere, IPAY_CURRENCY, type IPayConfig } from "@/lib/ipay";
 import { baniiSAuIntors, type ComandaAtinsa } from "@/lib/plati/banii-s-au-intors";
-import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
-import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 
 // iPay has no webhook — this reconciles orders where the customer paid but never

@@ -11,6 +11,7 @@ import { logError } from "@/lib/error-logger";
 import { maybeSyncMailchimpSubscriber } from "@/lib/mailchimp-sync";
 import { maybeSyncBrevoSubscriber } from "@/lib/brevo-sync";
 import { maybeSyncKlaviyoSubscriber } from "@/lib/klaviyo-sync";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { validatePageSlug } from "@/lib/pages/reserved-slugs";
 import type { Block, PageSeo } from "@/lib/pages/blocks.types";
 import { curataSeoPagina } from "@/lib/pages/pagina-seo";
@@ -424,7 +425,7 @@ export async function submitPageForm(input: {
     if (emailVal) {
       const nameVal = fields.find((f) => /nume|name/i.test(f.label))?.value;
       const phoneVal = fields.find((f) => /telefon|phone|mobil/i.test(f.label))?.value;
-      void maybeSyncMailchimpSubscriber({ businessId: biz.id, source: "forms", email: emailVal, name: nameVal, phone: phoneVal, tags: title ? [title] : undefined });
+      dupaRaspuns(() => maybeSyncMailchimpSubscriber({ businessId: biz.id, source: "forms", email: emailVal, name: nameVal, phone: phoneVal, tags: title ? [title] : undefined }), "maybeSyncMailchimpSubscriber", biz.id);
     }
   }
 
@@ -434,7 +435,7 @@ export async function submitPageForm(input: {
     if (emailVal) {
       const nameVal = fields.find((f) => /nume|name/i.test(f.label))?.value;
       const phoneVal = fields.find((f) => /telefon|phone|mobil/i.test(f.label))?.value;
-      void maybeSyncBrevoSubscriber({ businessId: biz.id, source: "forms", email: emailVal, name: nameVal, phone: phoneVal });
+      dupaRaspuns(() => maybeSyncBrevoSubscriber({ businessId: biz.id, source: "forms", email: emailVal, name: nameVal, phone: phoneVal }), "maybeSyncBrevoSubscriber", biz.id);
     }
   }
 
@@ -444,7 +445,7 @@ export async function submitPageForm(input: {
     if (emailVal) {
       const nameVal = fields.find((f) => /nume|name/i.test(f.label))?.value;
       const phoneVal = fields.find((f) => /telefon|phone|mobil/i.test(f.label))?.value;
-      void maybeSyncKlaviyoSubscriber({ businessId: biz.id, source: "forms", email: emailVal, name: nameVal, phone: phoneVal });
+      dupaRaspuns(() => maybeSyncKlaviyoSubscriber({ businessId: biz.id, source: "forms", email: emailVal, name: nameVal, phone: phoneVal }), "maybeSyncKlaviyoSubscriber", biz.id);
     }
   }
 

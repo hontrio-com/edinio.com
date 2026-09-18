@@ -9,6 +9,9 @@
 // Mailchimp source/county/order-value tags to the custom attributes SOURCE / COUNTY /
 // ORDER_VALUE (created idempotently at connect). FIRSTNAME / LASTNAME / SMS are built-in.
 
+import { cerereExterna } from "@/lib/email-marketing/transport";
+import { adresaPublica } from "@/lib/adresa-publica";
+
 const API_BASE = "https://api.brevo.com/v3";
 
 export interface BrevoSources {
@@ -30,6 +33,15 @@ export interface BrevoConfig {
   webhook_secret?: string;  // identifies the store on inbound unsubscribe webhooks
   webhook_id?: number;      // the marketing webhook we registered (to delete on disconnect)
   ecommerce_sync?: boolean; // also sync products + orders to Brevo
+  /*
+   * Confirmarea dubla (double opt-in). ⚠ La Brevo NU e o setare a listei: un contact trimis
+   * prin `POST /contacts` intra direct. Confirmarea se cere prin `POST /contacts/doubleOptinConfirmation`,
+   * cu un sablon DOI facut de comerciant in Brevo. Pana pe 18.09.2026 panoul ii spunea
+   * comerciantului sa o „activeze pe lista”, adica ceva ce nu exista.
+   */
+  double_optin?: boolean;
+  doi_template_id?: number;
+  doi_template_name?: string;
 }
 
 export interface BrevoList {
@@ -69,36 +81,28 @@ function brevoError(status: number, json: unknown): string {
 
 /**
  * Low-level Brevo API v3 call. Returns `{ data }` on 2xx (data is null on 204) or
- * `{ error }` otherwise. Exported for the e-commerce module.
+ * `{ error, status }` otherwise. Exported for the e-commerce module. Termen, fara
+ * redirectari si reluare la 429: vezi `lib/email-marketing/transport.ts`.
  */
 export async function brevoRequest<T = unknown>(
   creds: Creds,
   method: string,
   path: string,
   body?: unknown,
-): Promise<{ data: T } | { error: string }> {
+): Promise<{ data: T } | { error: string; status?: number }> {
   if (!creds.api_key) return { error: "Brevo nu este configurat." };
-  try {
-    const res = await fetch(`${API_BASE}${path}`, {
-      method,
-      headers: {
-        "api-key": creds.api_key,
-        accept: "application/json",
-        ...(body !== undefined ? { "content-type": "application/json" } : {}),
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      cache: "no-store",
-    });
-    const text = await res.text();
-    let json: unknown = null;
-    if (text) {
-      try { json = JSON.parse(text); } catch { json = null; }
-    }
-    if (!res.ok) return { error: brevoError(res.status, json) };
-    return { data: json as T };
-  } catch {
-    return { error: "Eroare de retea la conectarea cu Brevo." };
-  }
+  const r = await cerereExterna(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      "api-key": creds.api_key,
+      accept: "application/json",
+      ...(body !== undefined ? { "content-type": "application/json" } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if ("retea" in r) return { error: "Eroare de retea la conectarea cu Brevo." };
+  if (!r.raspuns.ok) return { error: brevoError(r.raspuns.status, r.raspuns.json), status: r.raspuns.status };
+  return { data: r.raspuns.json as T };
 }
 
 /** Validate an API key and return the account it belongs to (used on connect). */
@@ -230,6 +234,86 @@ export async function upsertContact(
 }
 
 /**
+ * Contact prin confirmare dubla (`POST /contacts/doubleOptinConfirmation`, campuri cerute:
+ * `email`, `includeListIds`, `templateId`, `redirectionUrl`). Brevo trimite emailul de
+ * confirmare din sablonul DOI al comerciantului, iar contactul intra in lista ABIA dupa click.
+ *
+ * Aceeasi reluare ca `upsertContact`: un telefon respins de atributul strict `SMS` sau un
+ * atribut necunoscut ar respinge tot contactul, deci se reincearca doar cu numele.
+ */
+export async function createDoiContact(
+  config: BrevoConfig,
+  member: BrevoContactInput,
+  redirectionUrl: string,
+): Promise<{ ok: true } | { error: string; status?: number }> {
+  if (!config.list_id) return { error: "Nicio lista selectata." };
+  if (!config.doi_template_id) return { error: "Niciun sablon de confirmare dubla ales." };
+  const email = member.email.trim();
+  if (!email) return { error: "Email lipsa." };
+
+  const corp = (attributes: Record<string, string>) => ({
+    email,
+    includeListIds: [config.list_id],
+    templateId: config.doi_template_id,
+    redirectionUrl,
+    ...(Object.keys(attributes).length ? { attributes } : {}),
+  });
+  const attributes = buildAttributes(member);
+  const res = await brevoRequest(config, "POST", "/contacts/doubleOptinConfirmation", corp(attributes));
+  if (!("error" in res)) return { ok: true };
+
+  const sentRisky = Object.keys(attributes).some((k) => k !== "FIRSTNAME" && k !== "LASTNAME");
+  if (!sentRisky) return res;
+  const safe: Record<string, string> = {};
+  if (attributes.FIRSTNAME) safe.FIRSTNAME = attributes.FIRSTNAME;
+  if (attributes.LASTNAME) safe.LASTNAME = attributes.LASTNAME;
+  const retry = await brevoRequest(config, "POST", "/contacts/doubleOptinConfirmation", corp(safe));
+  if ("error" in retry) return res;
+  return { ok: true };
+}
+
+export interface BrevoTemplate {
+  id: number;
+  name: string;
+}
+
+/** Sabloanele active ale contului, pentru alegerea sablonului de confirmare dubla. */
+export async function getTemplates(creds: Creds): Promise<BrevoTemplate[] | { error: string; status?: number }> {
+  const out: BrevoTemplate[] = [];
+  for (let offset = 0; offset <= 5000; offset += 1000) {
+    const res = await brevoRequest<{ templates?: Array<{ id: number; name?: string }>; count?: number }>(
+      creds, "GET", `/smtp/templates?templateStatus=true&limit=1000&offset=${offset}`,
+    );
+    if ("error" in res) return offset === 0 ? res : out;
+    const pagina = res.data?.templates ?? [];
+    for (const t of pagina) out.push({ id: t.id, name: t.name ?? `Sablon ${t.id}` });
+    if (pagina.length < 1000) break;
+  }
+  return out;
+}
+
+/**
+ * E sablonul asta unul de confirmare dubla? `doiTemplate` vine NUMAI la citirea unui singur
+ * sablon (spec: „available only in case of single template detail call”), nu in lista.
+ * Un sablon obisnuit ar fi trimis un email fara linkul de confirmare, deci nimeni n-ar mai
+ * fi intrat in lista.
+ */
+export async function verificaSablonDoi(
+  creds: Creds,
+  templateId: number,
+): Promise<{ ok: true; name: string } | { error: string; status?: number }> {
+  const res = await brevoRequest<{ id?: number; name?: string; doiTemplate?: boolean; isActive?: boolean }>(
+    creds, "GET", `/smtp/templates/${encodeURIComponent(String(templateId))}`,
+  );
+  if ("error" in res) return res;
+  if (res.data?.doiTemplate !== true) {
+    return { error: "Sablonul ales nu e unul de confirmare dubla. In Brevo, fa un sablon din „Double opt-in confirmation” (cu linkul de confirmare in el)." };
+  }
+  if (res.data?.isActive === false) return { error: "Sablonul de confirmare dubla e inactiv in Brevo." };
+  return { ok: true, name: res.data?.name ?? `Sablon ${templateId}` };
+}
+
+/**
  * Bulk import contacts into the list (POST /contacts/import — asynchronous). Updates
  * existing contacts' attributes; Brevo import never re-subscribes blacklisted contacts.
  * Chunked at 1000. We also pre-filter our own suppression list before calling this.
@@ -273,6 +357,9 @@ export interface BrevoPublicConfig {
   sources: { checkout: boolean; popup: boolean; forms: boolean };
   ecommerce_sync: boolean;
   last_sync_at?: string;
+  double_optin: boolean;
+  doi_template_id?: number;
+  doi_template_name?: string;
 }
 
 export function toPublicBrevoConfig(config: BrevoConfig | null): BrevoPublicConfig {
@@ -290,36 +377,77 @@ export function toPublicBrevoConfig(config: BrevoConfig | null): BrevoPublicConf
     },
     ecommerce_sync: !!config?.ecommerce_sync,
     last_sync_at: config?.last_sync_at,
+    double_optin: !!config?.double_optin && !!config?.doi_template_id,
+    doi_template_id: config?.doi_template_id,
+    doi_template_name: config?.doi_template_name,
   };
 }
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
-
-/** Public URL Brevo calls on unsubscribe; carries the per-store secret (Brevo does not sign). */
+/**
+ * Public URL Brevo calls on unsubscribe; carries the per-store secret (Brevo does not sign).
+ *
+ * ⚠⚠ PE GAZDA CANONICA (`adresaPublica`). Pana pe 18.09.2026 se facea din
+ * `NEXT_PUBLIC_SITE_URL`, adica apexul `https://edinio.com`, care raspunde 308 catre `www`
+ * (masurat: si la GET, si la POST). Un furnizor care nu urmeaza redirectarile nu ne mai gasea,
+ * deci dezabonarile se pierdeau fara nicio urma.
+ */
 export function brevoWebhookUrl(secret?: string | null): string | null {
   if (!secret) return null;
-  return `${SITE_URL}/api/brevo/webhook?secret=${encodeURIComponent(secret)}`;
+  return `${adresaPublica()}/api/brevo/webhook?secret=${encodeURIComponent(secret)}`;
 }
 
 /**
- * Register the account-level marketing "unsubscribed" webhook (idempotent by URL).
- * Brevo webhooks are per-account (not per-list), so one registration covers the store.
- * Returns the webhook id so we can delete it on disconnect.
+ * Evenimentele de marketing pe care le ascultam. Toate trei inseamna „nu-i mai trimite”:
+ * dezabonare, respingere definitiva, reclamatie de spam. In corpul webhookului vin scrise
+ * altfel (`unsubscribe`, `hard_bounce`, `spam`): vezi ruta.
+ */
+export const EVENIMENTE_WEBHOOK = ["unsubscribed", "hardBounce", "spam"] as const;
+
+/**
+ * Evenimentul primit inseamna „nu-i mai trimite nimic”? Numele din CORP difera de cele de la
+ * inregistrare (documentatia lor de webhookuri de marketing): `unsubscribe`, `hard_bounce`,
+ * `spam`. Se compara fara majuscule si fara separatori, ca `hardBounce` si `hard_bounce`
+ * sa insemne acelasi lucru. Intoarce motivul scris in `brevo_suppressions`, sau `null`.
+ */
+export function motivDeSuprimare(event: string): string | null {
+  const e = event.toLowerCase().replace(/[^a-z]/g, "");
+  if (e.startsWith("unsubscribe")) return "unsubscribed";
+  if (e === "hardbounce") return "hard_bounce";
+  if (e === "spam") return "spam";
+  return null;
+}
+
+/**
+ * Register the account-level marketing webhook (idempotent by URL). Brevo webhooks are
+ * per-account (not per-list), so one registration covers the store. Un webhook gasit dupa
+ * adresa, dar cu mai putine evenimente (inregistrat inainte de 18.09.2026, doar
+ * `unsubscribed`), se actualizeaza, nu se dubleaza. Returns the webhook id so we can delete
+ * it on disconnect.
  */
 export async function registerWebhook(
   config: BrevoConfig,
   url: string,
-): Promise<{ ok: true; id?: number } | { error: string }> {
-  const existing = await brevoRequest<{ webhooks?: Array<{ id: number; url?: string }> }>(config, "GET", "/webhooks?type=marketing");
+): Promise<{ ok: true; id?: number } | { error: string; status?: number }> {
+  const existing = await brevoRequest<{ webhooks?: Array<{ id: number; url?: string; events?: string[] }> }>(config, "GET", "/webhooks?type=marketing");
   if (!("error" in existing)) {
     const found = (existing.data?.webhooks ?? []).find((w) => w.url === url);
-    if (found) return { ok: true, id: found.id };
+    if (found) {
+      const are = new Set(found.events ?? []);
+      if (EVENIMENTE_WEBHOOK.every((e) => are.has(e))) return { ok: true, id: found.id };
+      const upd = await brevoRequest(config, "PUT", `/webhooks/${found.id}`, {
+        events: Array.from(new Set([...are, ...EVENIMENTE_WEBHOOK])),
+        url,
+        description: "Edinio: dezabonari, respingeri, spam",
+      });
+      if ("error" in upd) return upd;
+      return { ok: true, id: found.id };
+    }
   }
   const res = await brevoRequest<{ id?: number }>(config, "POST", "/webhooks", {
     type: "marketing",
-    events: ["unsubscribed"],
+    events: [...EVENIMENTE_WEBHOOK],
     url,
-    description: "Edinio unsubscribe sync",
+    description: "Edinio: dezabonari, respingeri, spam",
   });
   if ("error" in res) return res;
   return { ok: true, id: res.data?.id };

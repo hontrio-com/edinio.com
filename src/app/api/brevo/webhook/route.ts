@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { motivDeSuprimare } from "@/lib/brevo";
 
 export const dynamic = "force-dynamic";
 
-// Brevo calls this on the account-level marketing "unsubscribed" event we registered.
-// Payload is JSON: `{ "event": "unsubscribed", "email": "..." , ... }`. The per-store
-// secret in the query string identifies the business (Brevo does not sign webhooks).
-// We always answer 200 so Brevo never retry-storms us.
+// Brevo calls this on the account-level marketing events we registered (`registerWebhook`:
+// `unsubscribed`, `hardBounce`, `spam`). Payload is JSON: `{ "event": "unsubscribe",
+// "email": "...", ... }`. The per-store secret in the query string identifies the business
+// (Brevo does not sign webhooks). We always answer 200 so Brevo never retry-storms us.
 
 function ok() { return NextResponse.json({ ok: true }); }
 
@@ -42,15 +43,15 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     } catch { /* ignore */ }
   }
 
-  const event = String(payload["event"] ?? "").toLowerCase();
   const email = String(payload["email"] ?? "").trim().toLowerCase();
   if (!email) return ok();
 
-  if (event.includes("unsubscrib")) {
+  const motiv = motivDeSuprimare(String(payload["event"] ?? ""));
+  if (motiv) {
     // Record the suppression so we never re-add this contact (survives list changes).
     await admin
       .from("brevo_suppressions")
-      .upsert({ business_id: businessId, email, reason: event || "unsubscribed" }, { onConflict: "business_id,email" });
+      .upsert({ business_id: businessId, email, reason: motiv }, { onConflict: "business_id,email" });
   }
   return ok();
 }

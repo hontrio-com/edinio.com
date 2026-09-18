@@ -3,6 +3,7 @@ import type { Database } from "@/types/database.types";
 import { logError } from "@/lib/error-logger";
 import { finalizeazaPlataComenzii } from "@/lib/orders/finalizare-plata";
 import { resolveNetopiaStatus } from "@/lib/netopia";
+import { anuntaEmailIntoarcere, intoarcereDinTranzitie } from "@/lib/email-marketing/comanda";
 
 /**
  * „Netopia spune ca plata comenzii asta e in starea X." Un singur loc, pentru toate drumurile.
@@ -147,6 +148,9 @@ export async function aplicaStatusulNetopia(
         details: { orderId: order.id }, businessId: order.business_id, severity: "warning",
       });
     }
+    /* Anulata de la procesator: si din email marketing (`lib/email-marketing/comanda.ts`). */
+    const intoarsa = intoarcereDinTranzitie({ statusNou: orderStatus, statusSchimbat: true, plataSchimbata: false });
+    if (intoarsa) anuntaEmailIntoarcere(order.id, intoarsa, order.business_id);
   }
 
   if (nou === "paid") {
@@ -179,6 +183,8 @@ export async function aplicaStatusulNetopia(
       });
       return { fel: "esec", mesaj: "Payment update failed" };
     }
+    /* Ramura asta se atinge numai pentru rambursari (vezi mai sus). */
+    anuntaEmailIntoarcere(order.id, "rambursata", order.business_id);
     return { fel: "rambursata" };
   }
 

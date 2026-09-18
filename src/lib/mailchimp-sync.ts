@@ -1,13 +1,22 @@
 // Server-side dispatcher: sync one subscriber into the merchant's Mailchimp audience
-// when the integration is connected and the source is enabled. Always fire-and-forget
-// — it must never break the order/popup/form flow it is called from.
+// when the integration is connected and the source is enabled. Never throws: it must
+// never break the order/popup/form flow it is called from. Callers schedule it with
+// `dupaRaspuns`, so it runs after the response without being cut off.
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
 import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
+import { storeBaseUrl } from "@/lib/seo";
 import { upsertMember, splitName, type MailchimpConfig } from "@/lib/mailchimp";
-import { ensureStore, upsertProduct, deleteProduct, syncOrder, setOrderFinancialStatus, mailchimpStoreId, type EcomProduct } from "@/lib/mailchimp-ecommerce";
+import {
+  ensureStore, upsertProduct, deleteProduct, syncOrder, setOrderFinancialStatus, markOrderReturned,
+  mailchimpStoreId, type EcomProduct,
+} from "@/lib/mailchimp-ecommerce";
+
+/** Linkul produsului: `slug`, altfel id-ul, ca in feedul Merchant Center (vitrina le rezolva pe amandoua). */
+const linkProdus = (base: string | null | undefined, slug: string | null | undefined, id: string) =>
+  base ? `${base}/product/${slug || id}` : undefined;
 
 export type MailchimpSource = "checkout" | "popup" | "forms";
 
@@ -136,7 +145,7 @@ export async function maybeSyncMailchimpOrder(opts: {
     const config = settings?.mailchimp_config as MailchimpConfig | null;
     if (!config?.enabled || !config.api_key || !config.audience_id || !config.ecommerce_sync) return;
 
-    const storeId = config.ecommerce_store_id ?? mailchimpStoreId(opts.businessId);
+    const storeId = config.ecommerce_store_id ?? mailchimpStoreId(opts.businessId, config.audience_id);
     if (!config.ecommerce_store_id) {
       // Store not created yet (sync enabled without a save) — create it defensively.
       const s = await ensureStore(config, opts.businessId, { name: opts.storeName, currency: opts.order.currency, domain: opts.storeDomain, email: opts.storeEmail });
@@ -157,7 +166,7 @@ export async function maybeSyncMailchimpOrder(opts: {
         product: {
           id: it.product_id,
           title: it.name,
-          url: opts.storeUrl && it.slug ? `${opts.storeUrl}/product/${it.slug}` : undefined,
+          url: linkProdus(opts.storeUrl, it.slug, it.product_id),
           image_url: it.image ?? null,
           price: it.price,
         } as EcomProduct,
@@ -173,18 +182,34 @@ export async function maybeSyncMailchimpOrder(opts: {
   }
 }
 
-/** Sync a product create/update/delete to the Mailchimp store. No-op unless e-commerce sync is on. */
+async function readConfig(businessId: string): Promise<MailchimpConfig | null> {
+  const admin = createAdminClient();
+  const { data: settings } = await admin
+    .from("store_settings").select("mailchimp_config").eq("business_id", businessId).single();
+  return (settings?.mailchimp_config as MailchimpConfig | null) ?? null;
+}
+
+/** Adresa publica a magazinului: domeniul propriu cand exista (acolo ajunge clientul din email). */
+async function storeBaseFor(businessId: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data: biz } = await admin.from("businesses").select("slug, custom_domain").eq("id", businessId).single();
+  return biz?.slug ? storeBaseUrl(biz as { slug: string; custom_domain: string | null }) : null;
+}
+
+/**
+ * Sync a product create/update/delete to the Mailchimp store. No-op unless e-commerce sync is on.
+ *
+ * ⚠ Linkul produsului se calculeaza AICI. Pana pe 18.09.2026 se astepta un `storeUrl` de la
+ * apelant, pe care niciun apelant nu-l trimitea: produsele din Mailchimp n-aveau niciun link,
+ * deci blocurile de produs din emailuri nu duceau nicaieri.
+ */
 export async function maybeSyncMailchimpProduct(opts: {
   businessId: string;
   action: "upsert" | "delete";
   product: { id: string; name: string; price: number; slug?: string | null; image?: string | null };
-  storeUrl?: string;
 }): Promise<void> {
   try {
-    const admin = createAdminClient();
-    const { data: settings } = await admin
-      .from("store_settings").select("mailchimp_config").eq("business_id", opts.businessId).single();
-    const config = settings?.mailchimp_config as MailchimpConfig | null;
+    const config = await readConfig(opts.businessId);
     if (!config?.enabled || !config.api_key || !config.audience_id || !config.ecommerce_sync || !config.ecommerce_store_id) return;
     const storeId = config.ecommerce_store_id;
 
@@ -192,10 +217,11 @@ export async function maybeSyncMailchimpProduct(opts: {
       await deleteProduct(config, storeId, opts.product.id);
       return;
     }
+    const base = await storeBaseFor(opts.businessId);
     const res = await upsertProduct(config, storeId, {
       id: opts.product.id,
       title: opts.product.name,
-      url: opts.storeUrl && opts.product.slug ? `${opts.storeUrl}/product/${opts.product.slug}` : undefined,
+      url: linkProdus(base, opts.product.slug, opts.product.id),
       image_url: opts.product.image ?? null,
       price: opts.product.price,
     });
@@ -207,31 +233,61 @@ export async function maybeSyncMailchimpProduct(opts: {
   }
 }
 
-/** Mark a Mailchimp e-commerce order as paid (called when online payment confirms). Fetches its own business/config. */
+/**
+ * Citeste comanda si o trece prin poarta de marketplace. `null` = nu se trimite nimic.
+ *
+ * ⚠ `order_source` e CERUT anume: fara el poarta ar citi `undefined` si ar tacea exact pe
+ * comenzile pentru care exista.
+ */
+async function comandaPentruMailchimp(orderId: string): Promise<{ businessId: string; config: MailchimpConfig; storeId: string } | null> {
+  const admin = createAdminClient();
+  const { data: order } = await admin.from("orders").select("business_id, order_source").eq("id", orderId).single();
+  if (!order) return null;
+  /*
+   * ⚠ POARTA STA AICI, unde se citeste comanda, nu la apelant.
+   *
+   * Functiile de mai jos sunt chemate din `updateOrder` de fiecare data cand comerciantul
+   * trece o comanda pe „platit” sau o anuleaza, si de acolo nu se uita nimeni la origine.
+   * Deci prima apasare trimitea emailul unui cumparator de marketplace, cu tot cu comanda,
+   * intr-o lista de marketing. Vezi `clientDeMarketplace`.
+   */
+  if (clientDeMarketplace((order as { order_source?: unknown }).order_source)) return null;
+
+  const config = await readConfig(order.business_id);
+  if (!config?.enabled || !config.api_key || !config.audience_id || !config.ecommerce_sync || !config.ecommerce_store_id) return null;
+  return { businessId: order.business_id, config, storeId: config.ecommerce_store_id };
+}
+
+/** Mark a Mailchimp e-commerce order as paid (called when online payment confirms). Never throws. */
 export async function maybeMarkMailchimpOrderPaid(orderId: string): Promise<void> {
   try {
-    const admin = createAdminClient();
-    /* ⚠ `order_source` e CERUT anume: fara el poarta de mai jos ar citi `undefined` si ar
-       tacea exact pe comenzile pentru care exista. */
-    const { data: order } = await admin.from("orders").select("business_id, order_source").eq("id", orderId).single();
-    if (!order) return;
-    /*
-     * ⚠ POARTA STA AICI, unde se citeste comanda, nu la apelant.
-     *
-     * Functia asta e chemata din `updateOrder` de fiecare data cand comerciantul trece o
-     * comanda pe „platit", si de acolo nu se uita nimeni la origine. Deci prima apasare pe
-     * butonul de plata trimitea emailul unui cumparator de marketplace, cu tot cu comanda,
-     * intr-o lista de marketing. Vezi `clientDeMarketplace`.
-     */
-    if (clientDeMarketplace((order as { order_source?: unknown }).order_source)) return;
+    const c = await comandaPentruMailchimp(orderId);
+    if (!c) return;
+    const res = await setOrderFinancialStatus(c.config, c.storeId, orderId, "paid");
+    /* 404: comanda n-a ajuns niciodata in Mailchimp (sincronizarea pornita dupa ea). */
+    if ("error" in res && res.status !== 404) {
+      await logError({ action: "mailchimp.ecommerce.paid", message: res.error, businessId: c.businessId, details: { orderId }, severity: "warning" });
+    }
+  } catch (e) {
+    await logError({ action: "mailchimp.ecommerce.paid", message: (e as Error)?.message ?? "paid sync failed", details: { orderId }, severity: "warning" });
+  }
+}
 
-    const { data: settings } = await admin
-      .from("store_settings").select("mailchimp_config").eq("business_id", order.business_id).single();
-    const config = settings?.mailchimp_config as MailchimpConfig | null;
-    if (!config?.enabled || !config.api_key || !config.audience_id || !config.ecommerce_sync || !config.ecommerce_store_id) return;
-    await setOrderFinancialStatus(config, config.ecommerce_store_id, orderId, "paid");
-  } catch {
-    /* best-effort — never breaks the payment flow */
+/**
+ * Comanda anulata sau rambursata: fara asta, venitul atribuit emailului ramanea in Mailchimp
+ * si pentru coletele refuzate. Masurat pe 18.09.2026: ~18% din comenzile proprii din ultimele
+ * 90 de zile s-au terminat anulate sau rambursate. Never throws.
+ */
+export async function maybeMarkMailchimpOrderReturned(orderId: string, fel: "anulata" | "rambursata"): Promise<void> {
+  try {
+    const c = await comandaPentruMailchimp(orderId);
+    if (!c) return;
+    const res = await markOrderReturned(c.config, c.storeId, orderId, fel);
+    if ("error" in res) {
+      await logError({ action: "mailchimp.ecommerce.returned", message: res.error, businessId: c.businessId, details: { orderId, fel }, severity: "warning" });
+    }
+  } catch (e) {
+    await logError({ action: "mailchimp.ecommerce.returned", message: (e as Error)?.message ?? "returned sync failed", details: { orderId, fel }, severity: "warning" });
   }
 }
 
@@ -244,9 +300,7 @@ export async function maybeSyncMailchimpProductsBulk(opts: {
   try {
     if (opts.ids.length === 0) return;
     const admin = createAdminClient();
-    const { data: settings } = await admin
-      .from("store_settings").select("mailchimp_config").eq("business_id", opts.businessId).single();
-    const config = settings?.mailchimp_config as MailchimpConfig | null;
+    const config = await readConfig(opts.businessId);
     if (!config?.enabled || !config.api_key || !config.audience_id || !config.ecommerce_sync || !config.ecommerce_store_id) return;
     const storeId = config.ecommerce_store_id;
 
@@ -257,26 +311,42 @@ export async function maybeSyncMailchimpProductsBulk(opts: {
 
     /* Upsert: pull current product data for the affected ids.
        Pe bucati: `.in()` intra in ADRESA, iar peste ~650 de id-uri cererea e
-       respinsa la margine (masurat, vezi `supabase/id-chunks.ts`). Functia
-       asta e chemata cu `void` dintr-o actiune in masa, deci un esec aici n-ar
-       fi ajuns nici in interfata, nici in loguri: catalogul Mailchimp ar fi
-       ramas pur si simplu in urma, fara ca cineva sa afle. */
-    const products: { id: string; name: string; price: number; images: unknown }[] = [];
+       respinsa la margine (masurat, vezi `supabase/id-chunks.ts`). */
+    const products: { id: string; name: string; price: number; images: unknown; slug: string | null }[] = [];
     for (const bucata of bucatiDeIduri(opts.ids)) {
       const { data } = await admin
-        .from("products").select("id, name, price, images").eq("business_id", opts.businessId).in("id", bucata);
+        .from("products").select("id, name, price, images, slug").eq("business_id", opts.businessId).in("id", bucata);
       products.push(...((data ?? []) as typeof products));
     }
+    const base = await storeBaseFor(opts.businessId);
+    /*
+     * ⚠ Pana pe 18.09.2026 primul esec oprea TOT lotul (`break`), deci un singur produs respins
+     * lasa restul catalogului nesincronizat. Acum se opreste doar la cheie invalida sau
+     * permisiuni lipsa (s-ar repeta la fiecare produs); 429 il reia transportul.
+     */
+    let esuate = 0;
+    let prima = "";
     for (const p of products) {
       const img = Array.isArray(p.images) ? (p.images as unknown[])[0] : null;
       const res = await upsertProduct(config, storeId, {
         id: p.id, title: p.name, price: Number(p.price) || 0,
+        url: linkProdus(base, p.slug, p.id),
         image_url: typeof img === "string" ? img : null,
       });
       if ("error" in res) {
-        await logError({ action: "mailchimp.ecommerce.product.bulk", message: res.error, businessId: opts.businessId, severity: "warning" });
-        break; // an error here is usually a config/connection issue — stop hammering
+        esuate++;
+        if (!prima) prima = res.error;
+        const status = (res as { status?: number }).status;
+        if (status === 401 || status === 403) break;
       }
+    }
+    if (esuate > 0) {
+      await logError({
+        action: "mailchimp.ecommerce.product.bulk",
+        message: `${esuate} din ${products.length} produse nu s-au sincronizat in Mailchimp. Prima eroare: ${prima}`,
+        businessId: opts.businessId,
+        severity: "warning",
+      });
     }
   } catch (e) {
     await logError({ action: "mailchimp.ecommerce.product.bulk", message: (e as Error)?.message ?? "bulk product sync failed", businessId: opts.businessId, severity: "warning" });

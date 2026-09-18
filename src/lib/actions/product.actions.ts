@@ -199,9 +199,9 @@ export async function createProduct(businessId: string, data: ProductData) {
   if (created?.id) dupaRaspuns(() => enqueueAboutYouSync(businessId, created.id, created.id, "upsert"), "enqueueAboutYouSync", businessId);
   if (created?.id) dupaRaspuns(() => enqueueTrendyolSync(businessId, created.id, created.id, "upsert", true), "enqueueTrendyolSync", businessId);
   if (created?.id) dupaRaspuns(() => enqueueEmagSync(businessId, created.id, created.id, "oferta", true), "enqueueEmagSync", businessId);
-  if (created?.id) void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
-  if (created?.id) void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
-  if (created?.id) void maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
+  if (created?.id) dupaRaspuns(() => maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } }), "maybeSyncMailchimpProduct", businessId);
+  if (created?.id) dupaRaspuns(() => maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } }), "maybeSyncBrevoProduct", businessId);
+  if (created?.id) dupaRaspuns(() => maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: created.id, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } }), "maybeSyncKlaviyoProduct", businessId);
   // Proiectia catalogului se face SINCRON, inainte de revalidare: altfel
   // comerciantul salveaza si isi vede magazinul cu datele vechi pana trece
   // cronul. Nu arunca niciodata — randul e deja in coada.
@@ -325,9 +325,9 @@ export async function updateProduct(productId: string, businessId: string, data:
 
   dupaRaspuns(() => enqueueTrendyolSync(businessId, productId, productId, "upsert", tocmaiActivat), "enqueueTrendyolSync", businessId);
   dupaRaspuns(() => enqueueEmagSync(businessId, productId, productId, "oferta", tocmaiActivat), "enqueueEmagSync", businessId);
-  void maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
-  void maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
-  void maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } });
+  dupaRaspuns(() => maybeSyncMailchimpProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } }), "maybeSyncMailchimpProduct", businessId);
+  dupaRaspuns(() => maybeSyncBrevoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } }), "maybeSyncBrevoProduct", businessId);
+  dupaRaspuns(() => maybeSyncKlaviyoProduct({ businessId, action: "upsert", product: { id: productId, name: data.name, price: data.price, slug, image: (data.images?.[0] as string | undefined) ?? null } }), "maybeSyncKlaviyoProduct", businessId);
   // Proiectia catalogului se face SINCRON, inainte de revalidare: altfel
   // comerciantul salveaza si isi vede magazinul cu datele vechi pana trece
   // cronul. Nu arunca niciodata — randul e deja in coada.
@@ -569,9 +569,9 @@ export async function deleteProduct(productId: string, businessId: string) {
   dupaRaspuns(() => enqueueTrendyolSync(businessId, null, productId, "delete"), "enqueueTrendyolSync", businessId);
   /* ⚠ Retragerea eMAG s-a pus la coada MAI SUS, inainte de stergere: vezi nota de
      acolo. Pusa aici, ar fi citit o legatura deja rupta si n-ar fi trimis nimic. */
-  void maybeSyncMailchimpProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
-  void maybeSyncBrevoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
-  void maybeSyncKlaviyoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } });
+  dupaRaspuns(() => maybeSyncMailchimpProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } }), "maybeSyncMailchimpProduct", businessId);
+  dupaRaspuns(() => maybeSyncBrevoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } }), "maybeSyncBrevoProduct", businessId);
+  dupaRaspuns(() => maybeSyncKlaviyoProduct({ businessId, action: "delete", product: { id: productId, name: "", price: 0 } }), "maybeSyncKlaviyoProduct", businessId);
   // Proiectia catalogului se face SINCRON, inainte de revalidare: altfel
   // comerciantul salveaza si isi vede magazinul cu datele vechi pana trece
   // cronul. Nu arunca niciodata — randul e deja in coada.
@@ -655,12 +655,12 @@ export async function bulkProductAction(
        * din cele 3 cereri pe secunda ale magazinului fara sa schimbe nimic acolo.
        */
       if (action.kind === "active") dupaRaspuns(() => enqueueEmagPretMany(businessId, ids), "enqueueEmagPretMany", businessId);
-      if (action.kind === "active" && action.value === false) void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
-      else void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
-      if (action.kind === "active" && action.value === false) void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
-      else void maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" });
-      if (action.kind === "active" && action.value === false) void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "delete" });
-      else void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "upsert" });
+      if (action.kind === "active" && action.value === false) dupaRaspuns(() => maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" }), "maybeSyncMailchimpProductsBulk", businessId);
+      else dupaRaspuns(() => maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" }), "maybeSyncMailchimpProductsBulk", businessId);
+      if (action.kind === "active" && action.value === false) dupaRaspuns(() => maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" }), "maybeSyncBrevoProductsBulk", businessId);
+      else dupaRaspuns(() => maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" }), "maybeSyncBrevoProductsBulk", businessId);
+      if (action.kind === "active" && action.value === false) dupaRaspuns(() => maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "delete" }), "maybeSyncKlaviyoProductsBulk", businessId);
+      else dupaRaspuns(() => maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "upsert" }), "maybeSyncKlaviyoProductsBulk", businessId);
       await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
       return { success: true, count };
@@ -745,9 +745,9 @@ export async function bulkProductAction(
       dupaRaspuns(() => enqueueOlxStergereMany(businessId, ids), "enqueueOlxStergereMany", businessId);
       dupaRaspuns(() => enqueueAboutYouStergereMany(businessId, ids), "enqueueAboutYouStergereMany", businessId);
       dupaRaspuns(() => enqueueTrendyolStergereMany(businessId, ids), "enqueueTrendyolStergereMany", businessId);
-      void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" });
-      void maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" });
-      void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "delete" });
+      dupaRaspuns(() => maybeSyncMailchimpProductsBulk({ businessId, ids, action: "delete" }), "maybeSyncMailchimpProductsBulk", businessId);
+      dupaRaspuns(() => maybeSyncBrevoProductsBulk({ businessId, ids, action: "delete" }), "maybeSyncBrevoProductsBulk", businessId);
+      dupaRaspuns(() => maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "delete" }), "maybeSyncKlaviyoProductsBulk", businessId);
       await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
       return { success: true, count: (rows ?? []).length || ids.length };
@@ -808,9 +808,9 @@ export async function bulkProductAction(
        * grea". Mecanismul era bun; firul era legat gresit.
        */
       dupaRaspuns(() => enqueueEmagPretMany(businessId, ids), "enqueueEmagPretMany", businessId);
-      void maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" });
-      void maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" });
-      void maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "upsert" });
+      dupaRaspuns(() => maybeSyncMailchimpProductsBulk({ businessId, ids, action: "upsert" }), "maybeSyncMailchimpProductsBulk", businessId);
+      dupaRaspuns(() => maybeSyncBrevoProductsBulk({ businessId, ids, action: "upsert" }), "maybeSyncBrevoProductsBulk", businessId);
+      dupaRaspuns(() => maybeSyncKlaviyoProductsBulk({ businessId, ids, action: "upsert" }), "maybeSyncKlaviyoProductsBulk", businessId);
       await proiecteazaImediat(businessId);
       revalidatePath("/dashboard/products");
       return { success: true, count };

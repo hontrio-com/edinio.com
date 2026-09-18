@@ -1,13 +1,18 @@
 // Server-side dispatcher: sync one contact / order / product into the merchant's Brevo
-// account when the integration is connected and the source is enabled. Always
-// fire-and-forget — it must never break the order/popup/form flow it is called from.
+// account when the integration is connected and the source is enabled. Never throws: it
+// must never break the order/popup/form flow it is called from. Callers schedule it with
+// `dupaRaspuns`, so it runs after the response without being cut off.
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
-import { upsertContact, splitName, type BrevoConfig } from "@/lib/brevo";
-import { syncOrder, upsertProduct, deleteProduct, brevoStoreId, type BrevoEcomProduct } from "@/lib/brevo-ecommerce";
+import { storeBaseUrl } from "@/lib/seo";
+import { upsertContact, createDoiContact, splitName, type BrevoConfig, type BrevoContactInput } from "@/lib/brevo";
+import {
+  syncOrder, upsertProduct, deleteProduct, batchProducts, brevoStoreId,
+  type BrevoEcomProduct,
+} from "@/lib/brevo-ecommerce";
 
 export type BrevoSource = "checkout" | "popup" | "forms";
 
@@ -32,10 +37,25 @@ async function readConfig(businessId: string): Promise<BrevoConfig | null> {
   return (data?.brevo_config as BrevoConfig | null) ?? null;
 }
 
+/** Adresa publica a magazinului: domeniul propriu cand exista (acolo ajunge clientul din email). */
+async function storeBaseFor(businessId: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data: biz } = await admin.from("businesses").select("slug, custom_domain").eq("id", businessId).single();
+  return biz?.slug ? storeBaseUrl(biz as { slug: string; custom_domain: string | null }) : null;
+}
+
+/** Linkul produsului: `slug`, altfel id-ul, ca in feedul Merchant Center (vitrina le rezolva pe amandoua). */
+const linkProdus = (base: string | null | undefined, slug: string | null | undefined, id: string) =>
+  base ? `${base}/product/${slug || id}` : undefined;
+
 /**
  * Upsert a contact into Brevo for a given source. No-op (silent) unless the store
  * connected Brevo, selected a list, and left the source enabled. The caller is
  * responsible for consent (e.g. a checked opt-in box at checkout).
+ *
+ * Cu confirmarea dubla pornita (si un sablon DOI ales), contactul NU se adauga direct:
+ * Brevo ii trimite emailul de confirmare, iar dupa click il duce in lista si inapoi pe
+ * pagina magazinului.
  */
 export async function maybeSyncBrevoSubscriber(opts: {
   businessId: string;
@@ -54,14 +74,14 @@ export async function maybeSyncBrevoSubscriber(opts: {
     if (!config?.enabled || !config.api_key || !config.list_id) return;
     if (config.sources && config.sources[opts.source] === false) return;
 
-    // Skip contacts who unsubscribed (belt-and-suspenders on never sending emailBlacklisted:false).
+    // Skip contacts who unsubscribed, bounced or complained (belt-and-suspenders on never sending emailBlacklisted:false).
     const admin = createAdminClient();
     const { data: sup } = await admin
       .from("brevo_suppressions").select("id").eq("business_id", opts.businessId).eq("email", email.toLowerCase()).limit(1);
     if (sup && sup.length > 0) return;
 
     const { fname, lname } = splitName(opts.name);
-    const res = await upsertContact(config, {
+    const contact: BrevoContactInput = {
       email,
       fname,
       lname,
@@ -69,9 +89,21 @@ export async function maybeSyncBrevoSubscriber(opts: {
       source: SOURCE_LABEL[opts.source],
       county: opts.county ?? undefined,
       order_value: opts.orderValue != null ? orderValueBucket(opts.orderValue) : undefined,
-    });
+    };
+
+    let res: { ok: true } | { error: string; status?: number };
+    if (config.double_optin && config.doi_template_id) {
+      const base = await storeBaseFor(opts.businessId);
+      if (!base) {
+        await logError({ action: "brevo.sync.doi", message: "Magazinul nu are adresa publica, deci confirmarea dubla n-are unde intoarce clientul.", businessId: opts.businessId, severity: "warning" });
+        return;
+      }
+      res = await createDoiContact(config, contact, base);
+    } else {
+      res = await upsertContact(config, contact);
+    }
     if ("error" in res) {
-      await logError({ action: "brevo.sync", message: res.error, businessId: opts.businessId, details: { source: opts.source }, severity: "warning" });
+      await logError({ action: "brevo.sync", message: res.error, businessId: opts.businessId, details: { source: opts.source, doi: !!config.double_optin }, severity: "warning" });
     }
   } catch (e) {
     await logError({ action: "brevo.sync", message: (e as Error)?.message ?? "Brevo sync failed", businessId: opts.businessId, details: { source: opts.source }, severity: "warning" });
@@ -80,25 +112,25 @@ export async function maybeSyncBrevoSubscriber(opts: {
 
 type OrderItem = { product_id: string; name: string; price: number; quantity: number; slug?: string | null; image?: string | null };
 
-function toLines(items: OrderItem[], storeUrl?: string) {
+function toLines(items: OrderItem[], storeUrl?: string | null) {
   return items
     .filter((i) => !String(i.product_id).startsWith("extra_"))
     .map((i) => ({
       product: {
         id: i.product_id,
         name: i.name,
-        price: i.price,
-        url: storeUrl && i.slug ? `${storeUrl}/product/${i.slug}` : undefined,
+        price: Number(i.price) || 0,
+        url: linkProdus(storeUrl, i.slug, i.product_id),
         image_url: i.image ?? null,
       } as BrevoEcomProduct,
-      quantity: i.quantity,
-      price: i.price,
+      quantity: Number(i.quantity) || 0,
+      price: Number(i.price) || 0,
     }));
 }
 
 /**
  * Sync a placed order to Brevo (revenue attribution + purchase-based segmentation +
- * product retargeting). No-op unless e-commerce sync is on. Fire-and-forget.
+ * product retargeting). No-op unless e-commerce sync is on.
  */
 export async function maybeSyncBrevoOrder(opts: {
   businessId: string;
@@ -151,21 +183,22 @@ export async function maybeSyncBrevoProduct(opts: {
   businessId: string;
   action: "upsert" | "delete";
   product: { id: string; name: string; price: number; slug?: string | null; image?: string | null };
-  storeUrl?: string;
 }): Promise<void> {
   try {
     const config = await readConfig(opts.businessId);
     if (!config?.enabled || !config.api_key || !config.list_id || !config.ecommerce_sync) return;
 
     if (opts.action === "delete") {
-      await deleteProduct(config, opts.product.id);
+      const del = await deleteProduct(config, opts.product.id);
+      if ("error" in del) await logError({ action: "brevo.ecommerce.product", message: del.error, businessId: opts.businessId, severity: "warning" });
       return;
     }
+    const base = await storeBaseFor(opts.businessId);
     const res = await upsertProduct(config, {
       id: opts.product.id,
       name: opts.product.name,
       price: opts.product.price,
-      url: opts.storeUrl && opts.product.slug ? `${opts.storeUrl}/product/${opts.product.slug}` : undefined,
+      url: linkProdus(base, opts.product.slug, opts.product.id),
       image_url: opts.product.image ?? null,
     });
     if ("error" in res) {
@@ -176,16 +209,26 @@ export async function maybeSyncBrevoProduct(opts: {
   }
 }
 
+type ComandaCitita = {
+  business_id: string;
+  customer_email: string | null;
+  total: number | string | null;
+  items: unknown;
+  created_at: string | null;
+  order_source: unknown;
+  businesses: { slug: string; custom_domain: string | null } | null;
+};
+
 /**
- * Mark a Brevo order as paid when an online payment confirms. Brevo has no order PATCH,
- * so we re-post the order (upsert by id) with status "paid" — rebuilt from the DB row.
- * Fetches its own business/config. Best-effort — never breaks the payment flow.
+ * Re-posteaza comanda cu un status nou. Brevo n-are PATCH pe comanda, deci se trimite din nou
+ * (upsert dupa id), refacuta din randul din baza. Nu arunca niciodata.
  */
-export async function maybeMarkBrevoOrderPaid(orderId: string): Promise<void> {
+async function trimiteStatusul(orderId: string, status: "paid" | "cancelled" | "refunded", actiune: string): Promise<void> {
   try {
     const admin = createAdminClient();
-    const { data: order } = await admin
-      .from("orders").select("business_id, customer_email, total, items, created_at, order_source").eq("id", orderId).single();
+    const { data } = await admin
+      .from("orders").select("business_id, customer_email, total, items, created_at, order_source, businesses(slug, custom_domain)").eq("id", orderId).single();
+    const order = data as unknown as ComandaCitita | null;
     if (!order?.customer_email) return;
     /*
      * ⚠ POARTA STA AICI, unde se citeste comanda, nu la apelant.
@@ -195,26 +238,47 @@ export async function maybeMarkBrevoOrderPaid(orderId: string): Promise<void> {
      * butonul de plata trimitea emailul unui cumparator de marketplace, cu tot cu comanda,
      * intr-o lista de marketing. Vezi `clientDeMarketplace`.
      */
-    if (clientDeMarketplace((order as { order_source?: unknown }).order_source)) return;
-
+    if (clientDeMarketplace(order.order_source)) return;
 
     const config = await readConfig(order.business_id);
     if (!config?.enabled || !config.api_key || !config.list_id || !config.ecommerce_sync) return;
 
     const items = (Array.isArray(order.items) ? order.items : []) as OrderItem[];
     if (items.length === 0) return;
+    const base = order.businesses ? storeBaseUrl(order.businesses) : null;
 
-    await syncOrder(config, {
+    const res = await syncOrder(config, {
       id: orderId,
       email: order.customer_email,
-      status: "paid",
+      status,
       amount: Number(order.total) || 0,
       created_at: order.created_at ?? undefined,
-      lines: toLines(items),
+      lines: toLines(items, base),
     }, brevoStoreId(order.business_id));
-  } catch {
-    /* best-effort — never breaks the payment flow */
+    if ("error" in res) {
+      await logError({ action: actiune, message: res.error, businessId: order.business_id, details: { orderId, status }, severity: "warning" });
+    }
+  } catch (e) {
+    await logError({ action: actiune, message: (e as Error)?.message ?? "order status sync failed", details: { orderId, status }, severity: "warning" });
   }
+}
+
+/**
+ * Mark a Brevo order as paid when an online payment confirms. Brevo has no order PATCH,
+ * so we re-post the order (upsert by id) with status "paid", rebuilt from the DB row.
+ * Fetches its own business/config. Best-effort: never breaks the payment flow.
+ */
+export async function maybeMarkBrevoOrderPaid(orderId: string): Promise<void> {
+  await trimiteStatusul(orderId, "paid", "brevo.ecommerce.paid");
+}
+
+/**
+ * Comanda anulata sau rambursata: fara asta, venitul atribuit emailului ramanea in Brevo si
+ * pentru coletele refuzate. Masurat pe 18.09.2026: ~18% din comenzile proprii din ultimele 90
+ * de zile s-au terminat anulate sau rambursate.
+ */
+export async function maybeMarkBrevoOrderReturned(orderId: string, fel: "anulata" | "rambursata"): Promise<void> {
+  await trimiteStatusul(orderId, fel === "anulata" ? "cancelled" : "refunded", "brevo.ecommerce.returned");
 }
 
 /** Bulk product sync (upsert or delete a set of ids). No-op unless e-commerce sync is on. */
@@ -229,31 +293,49 @@ export async function maybeSyncBrevoProductsBulk(opts: {
     if (!config?.enabled || !config.api_key || !config.list_id || !config.ecommerce_sync) return;
 
     if (opts.action === "delete") {
-      for (const id of opts.ids) await deleteProduct(config, id);
+      let esuate = 0;
+      let prima = "";
+      for (const id of opts.ids) {
+        const del = await deleteProduct(config, id);
+        if ("error" in del) {
+          esuate++;
+          if (!prima) prima = del.error;
+          if (del.status === 401 || del.status === 403) break;
+        }
+      }
+      if (esuate > 0) {
+        await logError({ action: "brevo.ecommerce.product.bulk", message: `${esuate} din ${opts.ids.length} produse nu s-au sters din Brevo. Prima eroare: ${prima}`, businessId: opts.businessId, severity: "warning" });
+      }
       return;
     }
 
     const admin = createAdminClient();
     /* Pe bucati, acelasi motiv ca in `mailchimp-sync.ts` si `klaviyo-sync.ts`:
        `.in()` intra in adresa si peste ~650 de id-uri cererea e respinsa la
-       margine. Chemata cu `void`, o cadere aici ar fi lasat catalogul Brevo in
-       urma fara ca nimeni sa afle. */
-    const products: { id: string; name: string; price: number; images: unknown }[] = [];
+       margine. */
+    const products: { id: string; name: string; price: number; images: unknown; slug: string | null }[] = [];
     for (const bucata of bucatiDeIduri(opts.ids)) {
       const { data } = await admin
-        .from("products").select("id, name, price, images").eq("business_id", opts.businessId).in("id", bucata);
+        .from("products").select("id, name, price, images, slug").eq("business_id", opts.businessId).in("id", bucata);
       products.push(...((data ?? []) as typeof products));
     }
-    for (const p of products) {
+    const base = await storeBaseFor(opts.businessId);
+    /*
+     * ⚠ IN LOTURI DE 100 (`POST /products/batch`, cu `updateEnabled: true`). Pana pe 18.09.2026
+     * mergea produs cu produs fara `updateEnabled`: primul produs deja existent intorcea 400,
+     * iar bucla se oprea (`break`), deci catalogul ramanea neatins. In plus, pe planul gratuit
+     * Brevo primeste 2 cereri pe secunda la `POST /v3/products`.
+     */
+    const res = await batchProducts(config, products.map((p) => {
       const img = Array.isArray(p.images) ? (p.images as unknown[])[0] : null;
-      const res = await upsertProduct(config, {
+      return {
         id: p.id, name: p.name, price: Number(p.price) || 0,
+        url: linkProdus(base, p.slug, p.id),
         image_url: typeof img === "string" ? img : null,
-      });
-      if ("error" in res) {
-        await logError({ action: "brevo.ecommerce.product.bulk", message: res.error, businessId: opts.businessId, severity: "warning" });
-        break; // usually a config/connection issue — stop hammering
-      }
+      };
+    }));
+    if ("error" in res) {
+      await logError({ action: "brevo.ecommerce.product.bulk", message: res.error, businessId: opts.businessId, severity: "warning" });
     }
   } catch (e) {
     await logError({ action: "brevo.ecommerce.product.bulk", message: (e as Error)?.message ?? "bulk product sync failed", businessId: opts.businessId, severity: "warning" });

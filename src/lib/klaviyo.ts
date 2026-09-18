@@ -7,13 +7,25 @@
 // Docs: https://developers.klaviyo.com. Base host: https://a.klaviyo.com/api
 //
 // Klaviyo has no tags — segmentation is via LISTS + profile custom `properties` (auto-
-// created, no pre-registration). Unsubscribes are enforced server-side by Klaviyo (the
-// subscribe endpoint never resurrects an unsubscribed profile), so there is no local
-// suppression table like Mailchimp/Brevo.
+// created, no pre-registration).
+//
+// ⚠⚠ DEZABONARILE NU LE PAZESTE KLAVIYO, le pazim noi. Aici scria, pana pe 18.09.2026,
+// ca abonarea „nu invie niciodata un profil dezabonat” si ca de aceea nu e nevoie de
+// nicio plasa locala. Documentatia capatului spune EXACT pe dos: „This API will remove
+// any `UNSUBSCRIBE`, `SPAM_REPORT` or `USER_SUPPRESSED` suppressions from the provided
+// profiles.” Deci cine s-a dezabonat sau a raportat un email ca spam era readus in
+// lista la urmatoarea bifa. Acum `subscribeProfiles` intreaba intai starea fiecarui
+// profil (`profileSuprimate`) si ii sare pe cei suprimati.
+
+import { cerereExterna } from "@/lib/email-marketing/transport";
 
 const API_BASE = "https://a.klaviyo.com/api";
-// Dated API version. Matches Klaviyo's own current WooCommerce plugin (2026-04-15).
-const REVISION = "2026-04-15";
+/*
+ * Revizia datata a API-ului. `2026-07-15` e revizia specului stabil publicat de ei
+ * (github.com/klaviyo/openapi, `openapi/stable.json`, `info.version`), si corpurile de
+ * mai jos sunt verificate pe el. Klaviyo sustine o revizie doi ani.
+ */
+export const REVISION = "2026-07-15";
 
 export interface KlaviyoSources {
   checkout?: boolean;
@@ -72,37 +84,31 @@ function klaviyoError(status: number, json: unknown): string {
 
 /**
  * Low-level Klaviyo API v3 call (JSON:API). Returns `{ data }` on 2xx (null on 204) or
- * `{ error }` otherwise. Exported for the e-commerce module.
+ * `{ error, status }` otherwise. Exported for the e-commerce module.
+ *
+ * `content-type: application/json`, desi specul lor numeste `application/vnd.api+json`:
+ * SDK-ul lor oficial de Node (axios, fara antet pus de mana) trimite chiar `application/json`.
  */
 export async function klaviyoRequest<T = unknown>(
   creds: Creds,
   method: string,
   path: string,
   body?: unknown,
-): Promise<{ data: T } | { error: string }> {
+): Promise<{ data: T } | { error: string; status?: number }> {
   if (!creds.api_key) return { error: "Klaviyo nu este configurat." };
-  try {
-    const res = await fetch(`${API_BASE}${path}`, {
-      method,
-      headers: {
-        Authorization: `Klaviyo-API-Key ${creds.api_key}`,
-        revision: REVISION,
-        accept: "application/json",
-        ...(body !== undefined ? { "content-type": "application/json" } : {}),
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      cache: "no-store",
-    });
-    const text = await res.text();
-    let json: unknown = null;
-    if (text) {
-      try { json = JSON.parse(text); } catch { json = null; }
-    }
-    if (!res.ok) return { error: klaviyoError(res.status, json) };
-    return { data: json as T };
-  } catch {
-    return { error: "Eroare de retea la conectarea cu Klaviyo." };
-  }
+  const r = await cerereExterna(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      Authorization: `Klaviyo-API-Key ${creds.api_key}`,
+      revision: REVISION,
+      accept: "application/json",
+      ...(body !== undefined ? { "content-type": "application/json" } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if ("retea" in r) return { error: "Eroare de retea la conectarea cu Klaviyo." };
+  if (!r.raspuns.ok) return { error: klaviyoError(r.raspuns.status, r.raspuns.json), status: r.raspuns.status };
+  return { data: r.raspuns.json as T };
 }
 
 /** Validate a private API key and return the account it belongs to (used on connect). */
@@ -113,18 +119,29 @@ export async function pingKlaviyo(
   if (!key) return { error: "Introdu cheia API Klaviyo." };
   if (!key.startsWith("pk_")) return { error: "Foloseste cheia API privata Klaviyo (incepe cu pk_), nu cheia publica." };
   const res = await klaviyoRequest<{ data?: Array<{ attributes?: { contact_information?: { organization_name?: string } } }> }>(
-    { api_key: key }, "GET", "/accounts/",
+    { api_key: key }, "GET", "/accounts",
   );
   if ("error" in res) return res;
   const acct = res.data?.data?.[0];
   if (!acct) return { error: "Nu am putut valida contul Klaviyo." };
+  /*
+   * ⚠ Si citirea profilelor, fiindca de ea atarna garda de dezabonare (`profileSuprimate`):
+   * fara `profiles:read`, fiecare abonare ar fi refuzata. Mai bine aflat aici, la conectare,
+   * decat din jurnalul de erori, dupa luni de lista goala.
+   */
+  const profile = await klaviyoRequest({ api_key: key }, "GET", "/profiles?page[size]=1");
+  if ("error" in profile) {
+    return profile.status === 403
+      ? { error: "Cheia Klaviyo nu poate citi profilele (profiles:read). Fara ea nu putem verifica cine s-a dezabonat, deci nu putem abona pe nimeni." }
+      : profile;
+  }
   return { account_name: acct.attributes?.contact_information?.organization_name ?? "" };
 }
 
 /** List the account's lists (cursor-paginated) for the picker. */
 export async function getLists(creds: Creds): Promise<KlaviyoList[] | { error: string }> {
   const out: KlaviyoList[] = [];
-  let path: string = "/lists/";
+  let path: string = "/lists";
   let guard = 0;
   while (path && guard < 50) {
     const res = await klaviyoRequest<{ data?: Array<{ id: string; attributes?: { name?: string } }>; links?: { next?: string } }>(
@@ -204,28 +221,105 @@ export async function upsertProfile(
   return { ok: true };
 }
 
+/** Starea de email marketing a unui profil, asa cum o da `additional-fields[profile]=subscriptions`. */
+export interface KlaviyoEmailMarketing {
+  consent?: string | null;
+  can_receive_email_marketing?: boolean | null;
+  suppression?: Array<{ reason?: string | null }> | null;
+  list_suppressions?: Array<{ list_id?: string | null; reason?: string | null }> | null;
+}
+
+/**
+ * Profilul asta NU are voie sa fie abonat?
+ *
+ * Da, daca are o suprimare GLOBALA (`HARD_BOUNCE`, `INVALID_EMAIL`, `SPAM_COMPLAINT`,
+ * `UNSUBSCRIBE`, `USER_SUPPRESSED`), daca s-a dezabonat, sau daca e suprimat chiar pe lista
+ * noastra. Abonarea lor le-ar STERGE suprimarea (vezi capul fisierului).
+ */
+export function profilSuprimat(m: KlaviyoEmailMarketing | null | undefined, listId: string | undefined): boolean {
+  if (!m) return false;
+  if (m.can_receive_email_marketing === false) return true;
+  if ((m.suppression ?? []).length > 0) return true;
+  if ((m.consent ?? "").toUpperCase() === "UNSUBSCRIBED") return true;
+  return !!listId && (m.list_suppressions ?? []).some((s) => s?.list_id === listId);
+}
+
+/** Cate emailuri intra intr-un filtru `any(email, [...])`: cat o pagina (`page[size]` maxim 100). */
+const EMAILURI_PE_CITIRE = 100;
+
+/**
+ * Care dintre aceste emailuri sunt suprimate in contul Klaviyo al comerciantului.
+ *
+ * Un email fara profil nu e suprimat: e un contact nou. Intoarce `{ error }` cand starea nu
+ * s-a putut afla, iar atunci apelantul NU aboneaza: un abonat pierdut se recupereaza, un
+ * reclamant de spam readus in lista strica reputatia de expeditor a comerciantului.
+ */
+export async function profileSuprimate(
+  config: KlaviyoConfig,
+  emails: string[],
+): Promise<{ suprimate: Set<string> } | { error: string; status?: number }> {
+  const suprimate = new Set<string>();
+  for (let i = 0; i < emails.length; i += EMAILURI_PE_CITIRE) {
+    const bucata = emails.slice(i, i + EMAILURI_PE_CITIRE);
+    const qs = new URLSearchParams({
+      filter: `any(email,[${bucata.map((e) => JSON.stringify(e)).join(",")}])`,
+      "additional-fields[profile]": "subscriptions",
+      "page[size]": String(EMAILURI_PE_CITIRE),
+    });
+    let path: string | null = `/profiles?${qs.toString()}`;
+    for (let pagini = 0; path && pagini < 5; pagini++) {
+      const res: { data: unknown } | { error: string; status?: number } = await klaviyoRequest<unknown>(config, "GET", path);
+      if ("error" in res) return res;
+      const corp = res.data as {
+        data?: Array<{ attributes?: { email?: string | null; subscriptions?: { email?: { marketing?: KlaviyoEmailMarketing } } } }>;
+        links?: { next?: string | null };
+      } | null;
+      for (const p of corp?.data ?? []) {
+        const email = (p.attributes?.email ?? "").trim().toLowerCase();
+        if (email && profilSuprimat(p.attributes?.subscriptions?.email?.marketing, config.list_id)) suprimate.add(email);
+      }
+      const next = corp?.links?.next;
+      const idx = next ? next.indexOf("/api") : -1;
+      path = next && idx >= 0 ? next.slice(idx + 4) : null;
+    }
+  }
+  return { suprimate };
+}
+
 /**
  * Subscribe one or more emails to the configured list with email-marketing consent
- * (POST /profile-subscription-bulk-create-jobs — async job, ≤1000 profiles each). This
- * respects Klaviyo's server-side suppression: profiles that unsubscribed are NOT
- * resurrected. No `historical_import`, so the list's double opt-in setting is honored.
+ * (POST /profile-subscription-bulk-create-jobs: async job, ≤1000 profiles each).
+ * No `historical_import`, so the list's double opt-in setting is honored.
+ *
+ * ⚠ Intai se intreaba starea fiecarui profil si se sar cei suprimati: capatul asta le-ar
+ * sterge suprimarea. `custom_source` ramane pe inregistrarea de consimtamant din Klaviyo,
+ * ca sa se vada de unde a venit acordul.
  */
 export async function subscribeProfiles(
   config: KlaviyoConfig,
   emails: string[],
-): Promise<{ ok: true } | { error: string }> {
+  sursa?: string,
+): Promise<{ ok: true; sariti: number } | { error: string; status?: number }> {
   if (!config.list_id) return { error: "Nicio lista selectata." };
   const clean = Array.from(new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))));
-  if (clean.length === 0) return { ok: true };
+  if (clean.length === 0) return { ok: true, sariti: 0 };
+
+  const verificare = await profileSuprimate(config, clean);
+  if ("error" in verificare) {
+    return { error: `Nu am putut verifica dezabonarile in Klaviyo, deci nu am abonat pe nimeni: ${verificare.error}`, status: verificare.status };
+  }
+  const deAbonat = clean.filter((e) => !verificare.suprimate.has(e));
+  const sariti = clean.length - deAbonat.length;
 
   const CHUNK = 900; // Klaviyo max is 1000 per job
-  for (let i = 0; i < clean.length; i += CHUNK) {
+  for (let i = 0; i < deAbonat.length; i += CHUNK) {
     const body = {
       data: {
         type: "profile-subscription-bulk-create-job",
         attributes: {
+          ...(sursa ? { custom_source: sursa } : {}),
           profiles: {
-            data: clean.slice(i, i + CHUNK).map((email) => ({
+            data: deAbonat.slice(i, i + CHUNK).map((email) => ({
               type: "profile",
               attributes: {
                 email,
@@ -237,10 +331,10 @@ export async function subscribeProfiles(
         relationships: { list: { data: { type: "list", id: config.list_id } } },
       },
     };
-    const res = await klaviyoRequest(config, "POST", "/profile-subscription-bulk-create-jobs/", body);
+    const res = await klaviyoRequest(config, "POST", "/profile-subscription-bulk-create-jobs", body);
     if ("error" in res) return res;
   }
-  return { ok: true };
+  return { ok: true, sariti };
 }
 
 /** Split a full name into first / last parts. */

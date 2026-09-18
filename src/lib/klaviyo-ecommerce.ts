@@ -1,7 +1,8 @@
 // Klaviyo E-commerce sync (server-only). Klaviyo's e-commerce model is event-based:
 // a "Placed Order" event drives revenue attribution + purchase-based segmentation +
-// post-purchase flows. Products are pushed to the Klaviyo Catalog (for product
-// recommendations / retargeting). Carts stay on Edinio's abandoned-cart system.
+// post-purchase flows; one "Ordered Product" per line drives product-level flows and
+// segments. Products are pushed to the Klaviyo Catalog (for product recommendations /
+// retargeting). Carts stay on Edinio's abandoned-cart system.
 // All calls best-effort. Docs: https://developers.klaviyo.com
 import { klaviyoRequest, type KlaviyoConfig } from "@/lib/klaviyo";
 
@@ -21,9 +22,14 @@ export interface KlaviyoOrderInput {
   first_name?: string;
   last_name?: string;
   total: number;
+  /** ISO 4217. Fara ea, Klaviyo pune venitul in moneda implicita a CONTULUI, nu in lei. */
+  currency: string;
   time?: string;            // ISO 8601
   items: KlaviyoOrderItem[];
 }
+
+/** Metricile de comanda din ghidul lor de integrare pentru platforme fara integrare gata facuta. */
+export type KlaviyoOrderMetric = "Placed Order" | "Cancelled Order" | "Refunded Order";
 
 export interface KlaviyoCatalogProduct {
   id: string;
@@ -39,50 +45,94 @@ export function catalogItemId(externalId: string): string {
   return `$custom:::$default:::${externalId}`;
 }
 
-/**
- * Send a "Placed Order" event (POST /events, 202). Idempotent via `unique_id` = order id
- * (Klaviyo dedupes on profile+metric+unique_id). The `value` attribute becomes $value
- * (revenue). Creates/updates the profile from the event's profile object.
- */
-export async function trackPlacedOrder(
-  config: KlaviyoConfig,
-  order: KlaviyoOrderInput,
-): Promise<{ ok: true } | { error: string }> {
-  const items = order.items;
-  const properties: Record<string, unknown> = {
-    OrderId: order.id,
-    ItemNames: items.map((i) => i.name),
-    Categories: Array.from(new Set(items.map((i) => i.category).filter((c): c is string => !!c))),
-    Items: items.map((i) => ({
-      ProductID: i.product_id,
-      ProductName: i.name,
-      Quantity: i.quantity,
-      ItemPrice: i.price,
-      RowTotal: Math.round(i.price * i.quantity * 100) / 100,
-      ...(i.url ? { ProductURL: i.url } : {}),
-      ...(i.image_url ? { ImageURL: i.image_url } : {}),
-    })),
+const bani = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+
+function profilDin(order: KlaviyoOrderInput) {
+  const attrs: Record<string, unknown> = { email: order.email };
+  if (order.first_name) attrs.first_name = order.first_name;
+  if (order.last_name) attrs.last_name = order.last_name;
+  return { data: { type: "profile", attributes: attrs } };
+}
+
+function articol(i: KlaviyoOrderItem) {
+  return {
+    ProductID: i.product_id,
+    ProductName: i.name,
+    Quantity: i.quantity,
+    ItemPrice: bani(i.price),
+    RowTotal: bani(i.price * i.quantity),
+    ...(i.url ? { ProductURL: i.url } : {}),
+    ...(i.image_url ? { ImageURL: i.image_url } : {}),
+    ...(i.category ? { Categories: [i.category] } : {}),
   };
+}
 
-  const profileAttrs: Record<string, unknown> = { email: order.email };
-  if (order.first_name) profileAttrs.first_name = order.first_name;
-  if (order.last_name) profileAttrs.last_name = order.last_name;
-
-  const body = {
+/** Corpul unui eveniment de comanda (`POST /events`), pur, ca sa poata fi probat. */
+export function corpEvenimentComanda(metric: KlaviyoOrderMetric, order: KlaviyoOrderInput) {
+  const items = order.items;
+  return {
     data: {
       type: "event",
       attributes: {
-        metric: { data: { type: "metric", attributes: { name: "Placed Order" } } },
-        profile: { data: { type: "profile", attributes: profileAttrs } },
-        properties,
-        value: order.total,
+        metric: { data: { type: "metric", attributes: { name: metric } } },
+        profile: profilDin(order),
+        properties: {
+          OrderId: order.id,
+          ItemNames: items.map((i) => i.name),
+          Categories: Array.from(new Set(items.map((i) => i.category).filter((c): c is string => !!c))),
+          Items: items.map(articol),
+        },
+        value: bani(order.total),
+        value_currency: order.currency,
+        /*
+         * Klaviyo pastreaza DOAR primul eveniment cu acelasi `unique_id` pe acelasi profil si
+         * aceeasi metrica. De aceea „Placed Order” se poate trimite si la creare, si la plata:
+         * al doilea se arunca.
+         */
         unique_id: String(order.id),
         time: order.time ?? new Date().toISOString(),
       },
     },
   };
-  const res = await klaviyoRequest(config, "POST", "/events/", body);
+}
+
+/** Corpul unui „Ordered Product” pentru linia `k` a comenzii. */
+export function corpProdusComandat(order: KlaviyoOrderInput, k: number) {
+  const i = order.items[k];
+  return {
+    data: {
+      type: "event",
+      attributes: {
+        metric: { data: { type: "metric", attributes: { name: "Ordered Product" } } },
+        profile: profilDin(order),
+        properties: { OrderId: order.id, ...articol(i) },
+        value: bani(i.price * i.quantity),
+        value_currency: order.currency,
+        /* Pe LINIE, nu pe produs: acelasi produs poate aparea de doua ori, in doua variante. */
+        unique_id: `${order.id}:${k + 1}`,
+        time: order.time ?? new Date().toISOString(),
+      },
+    },
+  };
+}
+
+/**
+ * Trimite un eveniment de comanda. La „Placed Order” pleaca si cate un „Ordered Product”
+ * pe linie. Idempotent prin `unique_id`.
+ */
+export async function trackOrderEvent(
+  config: KlaviyoConfig,
+  metric: KlaviyoOrderMetric,
+  order: KlaviyoOrderInput,
+): Promise<{ ok: true } | { error: string; status?: number }> {
+  const res = await klaviyoRequest(config, "POST", "/events", corpEvenimentComanda(metric, order));
   if ("error" in res) return res;
+  if (metric === "Placed Order") {
+    for (let k = 0; k < order.items.length; k++) {
+      const linie = await klaviyoRequest(config, "POST", "/events", corpProdusComandat(order, k));
+      if ("error" in linie) return linie;
+    }
+  }
   return { ok: true };
 }
 
@@ -99,16 +149,29 @@ function updatableAttributes(p: KlaviyoCatalogProduct): Record<string, unknown> 
 }
 
 /**
- * Upsert a catalog item: POST to create; on 409 (already exists) PATCH by composite id.
- * Skips silently if we have no url (Klaviyo requires one).
+ * Upsert a catalog item: PATCH by composite id; POST to create ONLY when the item does not
+ * exist (404). Skips silently if we have no url (Klaviyo requires one).
+ *
+ * ⚠ ORDINEA E ASA DINADINS. Pana pe 18.09.2026 se facea POST si apoi PATCH dupa ORICE esec,
+ * deci si dupa o cheie invalida sau un 429: eroarea reala ramanea ascunsa sub a doua cerere.
+ * Invers, cu PATCH doar la „exista deja”, ar fi trebuit ghicit codul duplicatului, pe care
+ * specul lor nu-l da (scrie doar `4XX`). „Nu exista” e 404 pe orice resursa cautata dupa id,
+ * si e si cazul rar: produsul editat exista deja.
  */
 export async function upsertCatalogItem(
   config: KlaviyoConfig,
   p: KlaviyoCatalogProduct,
-): Promise<{ ok: true } | { error: string }> {
+): Promise<{ ok: true } | { error: string; status?: number }> {
   if (!p.url) return { ok: true };
 
-  const create = await klaviyoRequest(config, "POST", "/catalog-items/", {
+  const id = catalogItemId(String(p.id));
+  const patch = await klaviyoRequest(config, "PATCH", `/catalog-items/${encodeURIComponent(id)}`, {
+    data: { type: "catalog-item", id, attributes: updatableAttributes(p) },
+  });
+  if (!("error" in patch)) return { ok: true };
+  if (patch.status !== 404) return patch;
+
+  const create = await klaviyoRequest(config, "POST", "/catalog-items", {
     data: {
       type: "catalog-item",
       attributes: {
@@ -119,16 +182,13 @@ export async function upsertCatalogItem(
       },
     },
   });
-  if (!("error" in create)) return { ok: true };
-
-  const id = catalogItemId(String(p.id));
-  const patch = await klaviyoRequest(config, "PATCH", `/catalog-items/${encodeURIComponent(id)}`, {
-    data: { type: "catalog-item", id, attributes: updatableAttributes(p) },
-  });
-  if ("error" in patch) return create; // report the original create error
+  if ("error" in create) return create;
   return { ok: true };
 }
 
-export async function deleteCatalogItem(config: KlaviyoConfig, externalId: string): Promise<void> {
-  await klaviyoRequest(config, "DELETE", `/catalog-items/${encodeURIComponent(catalogItemId(String(externalId)))}`);
+export async function deleteCatalogItem(config: KlaviyoConfig, externalId: string): Promise<{ ok: true } | { error: string; status?: number }> {
+  const res = await klaviyoRequest(config, "DELETE", `/catalog-items/${encodeURIComponent(catalogItemId(String(externalId)))}`);
+  /* Sters deja = starea dorita. */
+  if ("error" in res && res.status !== 404) return res;
+  return { ok: true };
 }

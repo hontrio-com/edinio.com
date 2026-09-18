@@ -154,8 +154,9 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
         return;
       }
       if ("error" in res) { toast.error(res.error); return; }
-      if (res.total === 0) { toast.info("Nu exista clienti cu email de sincronizat."); return; }
-      toast.success(`Sincronizare pornita pentru ${res.total} contacte. Apar in lista dupa procesarea in Klaviyo.`);
+      const sariti = res.sariti > 0 ? ` ${res.sariti} sariti: s-au dezabonat, au reclamat spam sau au adresa respinsa in Klaviyo.` : "";
+      if (res.total === 0) { toast.info(`Nu exista clienti de abonat.${sariti}`); return; }
+      toast.success(`Sincronizare pornita pentru ${res.total} contacte. Apar in lista dupa procesarea in Klaviyo.${sariti}`);
       setConfig({ ...config, last_sync_at: new Date().toISOString() });
     });
   }
@@ -261,7 +262,7 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
             <div className="flex items-start justify-between gap-3 pt-3 border-t border-border">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-foreground">Sincronizare e-commerce (comenzi + produse)</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Trimite evenimentul de comanda plasata (venit + segmentare dupa cumparaturi + flows) si catalogul de produse in Klaviyo. Cosurile raman pe sistemul Edinio.</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Trimite comenzile (Placed Order si Ordered Product, pentru venit, segmentare si flows; plata cu cardul abia cand banii au intrat), anularile si rambursarile, si catalogul de produse in Klaviyo. Cosurile raman pe sistemul Edinio.</p>
               </div>
               <Toggle checked={ecommerceSync} onChange={setEcommerceSync} />
             </div>
@@ -269,7 +270,8 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
             <div className="pt-3 border-t border-border">
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 Contactele se adauga cu consimtamant de marketing. Pentru <span className="font-medium text-foreground">confirmare dubla (double opt-in)</span> GDPR,
-                activeaz-o pe lista in contul tau Klaviyo. Adaugam automat proprietati pentru segmentare: sursa, judet si valoarea comenzii.
+                activeaz-o pe lista in contul tau Klaviyo (abonarea noastra o respecta). Adaugam automat proprietati pentru segmentare: sursa, judet si valoarea comenzii.
+                Cine s-a dezabonat, a reclamat spam sau are adresa respinsa in Klaviyo nu mai e abonat din nou.
               </p>
             </div>
           </div>

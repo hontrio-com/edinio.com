@@ -139,12 +139,13 @@ export async function disconnectKlaviyo(
 
 /**
  * One-off bulk sync of existing customers (from orders): subscribe every unique email to
- * the list with marketing consent (async subscribe job, respects Klaviyo suppression).
- * The merchant confirms in the UI that they have consent to email these people.
+ * the list with marketing consent (async subscribe job). Profilele suprimate in Klaviyo
+ * (dezabonati, reclamatii de spam, respinse) se SAR: capatul de abonare le-ar sterge
+ * suprimarea. The merchant confirms in the UI that they have consent to email these people.
  */
 export async function syncExistingCustomers(
   businessId: string,
-): Promise<{ total: number } | { error: string }> {
+): Promise<{ total: number; sariti: number } | { error: string }> {
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
 
@@ -190,12 +191,12 @@ export async function syncExistingCustomers(
       .map((o) => (o.customer_email ?? "").trim().toLowerCase())
       .filter(Boolean),
   ));
-  if (emails.length === 0) return { total: 0 };
+  if (emails.length === 0) return { total: 0, sariti: 0 };
 
-  const res = await subscribeProfiles(config, emails);
-  if ("error" in res) return res;
+  const res = await subscribeProfiles(config, emails, "Edinio: clienti existenti");
+  if ("error" in res) return { error: res.error };
 
   await writeConfig(owned.supabase, businessId, { ...config, last_sync_at: new Date().toISOString() });
   revalidate();
-  return { total: emails.length };
+  return { total: emails.length - res.sariti, sariti: res.sariti };
 }

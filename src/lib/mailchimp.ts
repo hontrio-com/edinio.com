@@ -6,6 +6,8 @@
 // after the last dash is the server prefix and the base URL host. We send it as a
 // Bearer token. Docs: https://mailchimp.com/developer/marketing/docs/fundamentals/
 import { createHash } from "crypto";
+import { cerereExterna } from "@/lib/email-marketing/transport";
+import { adresaPublica } from "@/lib/adresa-publica";
 
 export interface MailchimpSources {
   checkout?: boolean;
@@ -116,7 +118,7 @@ export async function mcRequest<T = unknown>(
   method: string,
   path: string,
   body?: unknown,
-): Promise<{ data: T } | { error: string }> {
+): Promise<{ data: T } | { error: string; status?: number }> {
   if (!creds.api_key || !creds.server_prefix) return { error: "Mailchimp nu este configurat." };
   /*
    * A doua verificare, pe prefixul DEJA SALVAT. Prima (`serverPrefixFromKey`)
@@ -129,39 +131,26 @@ export async function mcRequest<T = unknown>(
     return { error: "Prefixul de server Mailchimp este invalid. Reconecteaza contul cu o cheie API valida." };
   }
   /*
-   * Termen si interzicerea redirectarilor, ca in `lib/import/ssrf.ts`.
+   * Termen si interzicerea redirectarilor, ca in `lib/import/ssrf.ts`. Stau acum in
+   * transportul comun al celor trei furnizori (`lib/email-marketing/transport.ts`), care
+   * mai stie si sa reia un 429.
    *
    * Fara `redirect: "error"`, o gazda care raspunde 302 catre
    * `http://127.0.0.1:6379/` era urmata de undici inclusiv la coborare de schema.
    * Fara termen, apelul putea atarna la nesfarsit — iar `pingMailchimp` ruleaza
    * pe calea sincrona a formularului de conectare.
    */
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15_000);
-  try {
-    const res = await fetch(`${baseUrl(creds.server_prefix)}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${creds.api_key}`,
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      cache: "no-store",
-      redirect: "error",
-      signal: controller.signal,
-    });
-    const text = await res.text();
-    let json: unknown = null;
-    if (text) {
-      try { json = JSON.parse(text); } catch { json = null; }
-    }
-    if (!res.ok) return { error: mcError(res.status, json) };
-    return { data: json as T };
-  } catch {
-    return { error: "Eroare de retea la conectarea cu Mailchimp." };
-  } finally {
-    clearTimeout(timer);
-  }
+  const r = await cerereExterna(`${baseUrl(creds.server_prefix)}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${creds.api_key}`,
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if ("retea" in r) return { error: "Eroare de retea la conectarea cu Mailchimp." };
+  if (!r.raspuns.ok) return { error: mcError(r.raspuns.status, r.raspuns.json), status: r.raspuns.status };
+  return { data: r.raspuns.json as T };
 }
 
 /** Validate an API key and return the account it belongs to (used on connect). */
@@ -370,16 +359,36 @@ export function toPublicMailchimpConfig(config: MailchimpConfig | null): Mailchi
   };
 }
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://edinio.com";
-
-/** Public URL Mailchimp calls on unsubscribe/cleaned; carries the per-store secret. */
+/**
+ * Public URL Mailchimp calls on unsubscribe/cleaned; carries the per-store secret.
+ *
+ * ⚠⚠ PE GAZDA CANONICA (`adresaPublica`). Pana pe 18.09.2026 se facea din
+ * `NEXT_PUBLIC_SITE_URL`, adica apexul `https://edinio.com`, care raspunde 308 catre `www`
+ * (masurat pe productie, si la GET, si la POST). Mailchimp VALIDEAZA adresa cu un GET cand se
+ * creeaza webhookul si asteapta 200; primea 308, deci inregistrarea cadea, iar salvarea
+ * setarilor inghitea eroarea. Dezabonarile din Mailchimp nu ajungeau niciodata la noi.
+ */
 export function mailchimpWebhookUrl(secret?: string | null): string | null {
   if (!secret) return null;
-  return `${SITE_URL}/api/mailchimp/webhook?secret=${encodeURIComponent(secret)}`;
+  return `${adresaPublica()}/api/mailchimp/webhook?secret=${encodeURIComponent(secret)}`;
+}
+
+/**
+ * Sterge webhookurile NOASTRE de pe o audienta (la deconectare, sau cand se alege alta
+ * audienta). Le recunoaste dupa ruta, nu dupa secret: si cele vechi, de pe apex, sunt ale noastre.
+ */
+export async function removeOurWebhooks(config: MailchimpConfig, audienceId: string): Promise<void> {
+  const existing = await mcRequest<{ webhooks?: Array<{ id?: string; url?: string }> }>(config, "GET", `/lists/${audienceId}/webhooks`);
+  if ("error" in existing) return;
+  for (const w of existing.data?.webhooks ?? []) {
+    if (w.id && (w.url ?? "").includes("/api/mailchimp/webhook?secret=")) {
+      await mcRequest(config, "DELETE", `/lists/${audienceId}/webhooks/${encodeURIComponent(w.id)}`);
+    }
+  }
 }
 
 /** Register the unsubscribe webhook on the audience (idempotent by URL). */
-export async function registerWebhook(config: MailchimpConfig, url: string): Promise<{ ok: true } | { error: string }> {
+export async function registerWebhook(config: MailchimpConfig, url: string): Promise<{ ok: true } | { error: string; status?: number }> {
   if (!config.audience_id) return { error: "Nicio audienta selectata." };
   // Skip if a webhook with this URL already exists (avoid duplicates on re-save).
   const existing = await mcRequest<{ webhooks?: Array<{ url?: string }> }>(config, "GET", `/lists/${config.audience_id}/webhooks`);

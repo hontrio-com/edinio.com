@@ -4,8 +4,7 @@ import type { Database } from "@/types/database.types";
 /** Forma unei modificari de comanda, asa cum o stie baza. */
 type PatchComanda = Database["public"]["Tables"]["orders"]["Update"];
 import { poateAvansaLaConfirmat } from "@/lib/order-progress";
-import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
-import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
+import { anuntaEmailPlata } from "@/lib/email-marketing/comanda";
 import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import { logError } from "@/lib/error-logger";
 import { raporteazaCumparareaDupaIncasare } from "./ga4-comanda";
@@ -137,8 +136,8 @@ async function raporteazaEsecul(
 
 /** Ce urmeaza dupa plata, o SINGURA data — randul chiar s-a schimbat acum. */
 function dupaPlata(comanda: ComandaDePlatit, status: string): RezultatPlata {
-  void maybeMarkMailchimpOrderPaid(comanda.id);
-  void maybeMarkBrevoOrderPaid(comanda.id);
+  /* Mailchimp, Brevo si Klaviyo (acesta din urma abia acum primeste „Placed Order” la card). */
+  anuntaEmailPlata(comanda.id, comanda.businessId);
   factureazaDupaPlata(comanda.businessId, comanda.id, status, "paid");
   /*
     ⚠ SI CONVERSIA DE SERVER A COMERCIANTULUI, pentru platile ONLINE.

@@ -1,7 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { finalizeazaPlataComenzii } from "@/lib/orders/finalizare-plata";
-import { maybeMarkMailchimpOrderPaid } from "@/lib/mailchimp-sync";
-import { maybeMarkBrevoOrderPaid } from "@/lib/brevo-sync";
 import { factureazaDupaPlata } from "@/lib/invoice-on-payment";
 import { getOrder, toMinor, type RevolutConfig } from "@/lib/revolut";
 

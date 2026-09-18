@@ -11,7 +11,10 @@ import { pretulDinCatalogMinte } from "@/lib/customization/pretul-din-catalog-mi
 import { CURRENCY, DEFAULT_CONTENT_LANGUAGE, DEFAULT_FEED_LABEL, type GoogleMerchantConfig } from "./types";
 import { categorieGooglePentruTrimitere } from "./taxonomy";
 import { masuraPretPeUnitate, bazaPretPeUnitate, aceeasiDimensiune, type Masura } from "./pret-pe-unitate";
-import { identitateCombinatie } from "@/lib/storefront/variante-identitate";
+/* ⚠ Acelasi ID il cere si remarketingul dinamic Google Ads, din vitrina: un singur loc il hotaraste. */
+import { offerIdVarianta } from "./id-oferta";
+
+export { offerIdVarianta };
 import { adresaCuVarianta } from "@/lib/storefront/varianta-din-adresa";
 
 export interface MappableBusiness {
@@ -176,25 +179,6 @@ export function toGoogleProductInput(
   };
 }
 
-/**
- * `offerId` al unei variante, UNIC si de cel mult 50 de caractere.
- *
- * ═══ ⚠⚠ CAPCANA ARMATA (masurata 17.09.2026) ═══
- *
- * Forma de dinainte era `${product.id}-${combo.id}`.slice(0, 50). Uuid-ul produsului ocupa 37 de caractere,
- * deci din slugul combinatiei ramaneau 13: „180x200-cm-alb” si „180x200-cm-alb-mat” dadeau ACELASI id, iar a
- * doua oferta o suprascria pe prima la Google, cu pretul ei. Pe toata platforma: 3.493 de combinatii active
- * s-ar fi strans in 702 id-uri, la 3 magazine care inca n-au Google Merchant. La cele conectate, zero.
- *
- * ⚠ Id-ul care INCAPE ramane neschimbat (niciuna dintre ofertele deja trimise nu era taiata), deci nicio
- * oferta existenta nu se muta. Doar unde ar fi fost taiat se foloseste identitatea stabila a combinatiei:
- * 32 + 1 + 16 = 49 de caractere, fara cratimele uuid-ului, deci nu se poate intalni cu forma cealalta.
- */
-export function offerIdVarianta(productId: string, combo: { id: string; title: string; uid?: string }): string {
-  const plin = `${productId}-${combo.id}`;
-  if (plin.length <= 50) return plin;
-  return `${productId.replace(/-/g, "")}-${identitateCombinatie(combo)}`;
-}
 
 /** Adresa paginii de produs cu varianta preselectata. ⚠ O singura forma, cu pagina si cu JSON-LD: `adresaCuVarianta`. */
 export const adresaVariantei = adresaCuVarianta;

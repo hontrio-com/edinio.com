@@ -428,10 +428,10 @@ describe("cablarea care nu se poate rula fara browser", () => {
     for (const pagina of ["ProductPageClassic", "ProductPageDetailed"]) {
       const cod = viu(`src/components/storefront/sections/product/${pagina}.tsx`);
       assert.match(cod, /fbTrack\("ViewContent", \{[^}]*\.\.\.continutPixel\(\[\{ productId, areVariante: produsCuVariante,/, `${pagina}: ViewContent`);
-      assert.match(cod, /trackAddToCart\(\{ productId: product\.id, [^}]*comboId: selectedCombo\?\.id, areVariante: !!variantsData \}\)/, `${pagina}: AddToCart fara combinatie`);
+      assert.match(cod, /trackAddToCart\(\{\s*productId: product\.id,[\s\S]{0,200}comboId: selectedCombo\?\.id,\s*\n\s*areVariante: !!variantsData,/, `${pagina}: AddToCart fara combinatie`);
     }
     assert.match(viu("src/components/ministore/MiniStoreRenderer.tsx"),
-      /trackAndFlash\(line\.productId, line\.name, line\.price, comboIdDupaTitlu\(quickAddProduct\?\.page_sections, line\.variantTitle\), true\)/);
+      /trackAndFlash\(\s*line\.productId, line\.name, line\.price,\s*comboIdDupaTitlu\(quickAddProduct\?\.page_sections, line\.variantTitle\), true,/);
     for (const f of ["src/components/storefront/sections/cart/CartPageClient.tsx", "src/components/storefront/sections/checkout/CheckoutPageClient.tsx"]) {
       assert.match(viu(f), /fbTrack\("InitiateCheckout", \{\s*value: total, currency: "RON", num_items: count,\s*\.\.\.continutDinCos\(/, f);
     }

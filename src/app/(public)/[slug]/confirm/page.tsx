@@ -19,9 +19,11 @@ import type { Metadata } from "next";
 import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
 import { vanzareaEConfirmata } from "@/lib/orders/vanzare-confirmata";
 import { potrivireaPentruPixel, dateDinAdresa, type DateNormalizate } from "@/lib/facebook/date-client";
-import { continutComanda, type ContinutPixel } from "@/lib/facebook/pixel-continut";
+import { continutComanda, titluDinNumeleLiniei, type ContinutPixel } from "@/lib/facebook/pixel-continut";
+import { idOfertaDupaTitlu } from "@/lib/google-merchant/id-oferta";
 import { potrivireaPentruPixelTikTok, dateDinAdresaTikTok } from "@/lib/tiktok/date-client";
 import { continutTikTokComanda, type ContinutTikTok } from "@/lib/tiktok/continut";
+import { utilizatorulPentruGoogle, type UtilizatorGoogle } from "@/lib/google-ads/date-client";
 import { randurileInstantaneului } from "@/lib/customization/comanda";
 
 // Order confirmation is personal + transient — keep it out of search.
@@ -145,8 +147,6 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   }
 
   const numItems = orderItems.reduce((s, i) => s + (i.quantity || 1), 0);
-  // GA4/Meta/TikTok item payloads for the purchase conversion (item-level revenue).
-  const purchaseItems = orderItems.map((i) => ({ item_id: i.product_id, item_name: i.name, price: i.price, quantity: i.quantity }));
 
   const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
   // Totalul SALVAT al comenzii, nu unul recalculat din linii: recalcularea nu
@@ -180,7 +180,12 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
   /* ⚠ TikTok are ALTE reguli de normalizare (telefonul cu `+`, orasul nehashat): vezi `tiktok/date-client.ts`. */
   let potrivireTikTok: { email?: string; phone_number?: string } | null = null;
   let continutTikTok: ContinutTikTok | undefined;
-  const arePixel = !!marketingConfig?.facebook_pixel_id || !!marketingConfig?.tiktok_pixel_id;
+  /* Enhanced conversions Google Ads: doar hash-uri, si numai cu ID de conversie. Vezi `google-ads/date-client.ts`. */
+  let utilizatorGoogle: UtilizatorGoogle | undefined;
+  /* ⚠ Pe INDEX, nu pe o cheie compusa: titlul se poate reface doar cu `page_sections`, care se citesc mai jos. */
+  let iduriOferta: (string | undefined)[] = [];
+  const arePixel = !!marketingConfig?.facebook_pixel_id || !!marketingConfig?.tiktok_pixel_id
+    || !!marketingConfig?.google_ads_conversion_id;
   if (orderId && vanzareConfirmata && arePixel && !clientDeMarketplace(sursaComenzii)) {
     const idsProduse = [...new Set(orderItems.map((i) => i.product_id).filter((x): x is string => !!x))];
     const sectiuni = new Map<string, unknown>();
@@ -201,7 +206,28 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
       });
       continutTikTok = continutTikTokComanda(orderItems, sectiuni);
     }
+    /*
+     * ⚠ `id` = oferta din Merchant Center, pentru remarketingul dinamic Google Ads. `item_id` ramane ID-ul
+     * produsului, adica exact ce trimite GA4 de la inceput: cele doua nu se amesteca.
+     */
+    iduriOferta = orderItems.map((i) => {
+      if (!i.product_id) return undefined;
+      const ps = sectiuni.get(i.product_id);
+      return idOfertaDupaTitlu(i.product_id, ps, i.variant_title || titluDinNumeleLiniei(i.name, ps));
+    });
+    if (marketingConfig?.google_ads_conversion_id) {
+      utilizatorGoogle = utilizatorulPentruGoogle({
+        email: customerEmail, telefon: customerPhone,
+        tara: (dateDinAdresaTikTok(adresaLivrare).tara ?? undefined),
+      }) ?? undefined;
+    }
   }
+
+  // GA4/Meta/TikTok item payloads for the purchase conversion (item-level revenue).
+  const purchaseItems = orderItems.map((i, k) => {
+    const idOferta = iduriOferta[k];
+    return { item_id: i.product_id, ...(idOferta ? { id: idOferta } : {}), item_name: i.name, price: i.price, quantity: i.quantity };
+  });
 
   // Acelasi header, footer si culori ca pe restul magazinului. Era singura pagina
   // publica fara invelis, deci clientul care tocmai platise nu avea pe ecran nici
@@ -321,7 +347,9 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
               items={purchaseItems}
               ga4={valoriGa4Comanda}
               googleTagId={marketingConfig?.google_tag_id}
+              googleAdsConversionId={marketingConfig?.google_ads_conversion_id}
               googleAdsConversionLabel={marketingConfig?.google_ads_conversion_label}
+              utilizatorGoogle={utilizatorGoogle}
               fbPixelId={marketingConfig?.facebook_pixel_id}
               ttPixelId={marketingConfig?.tiktok_pixel_id}
               /*

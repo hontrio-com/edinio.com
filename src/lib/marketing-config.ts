@@ -29,6 +29,13 @@ export type MarketingConfig = {
   facebook_pixel_id?: string;
   tiktok_pixel_id?: string;
   google_tag_id?: string;
+  /**
+   * ID-ul de conversie Google Ads (`AW-…`).
+   *
+   * ⚠ SEPARAT DE `google_tag_id` (18.09.2026). Acolo incape orice tag Google, inclusiv unul GA4 (`G-…`), iar
+   * `send_to` compus din el trimitea conversia nicaieri. Vezi `lib/google-ads/conversie.ts`.
+   */
+  google_ads_conversion_id?: string;
   google_ads_conversion_label?: string; // e.g. "abc123XYZ" — needed for Purchase conversion tracking in Google Ads
   /**
    * Magazinul are token de Conversions API (tokenul insusi sta criptat in `meta_capi_config`). Doar un

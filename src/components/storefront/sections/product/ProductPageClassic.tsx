@@ -38,6 +38,7 @@ import { cosDupaComanda } from "@/lib/storefront/cart/consume";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { continutPixel } from "@/lib/facebook/pixel-continut";
 import { continutTikTok } from "@/lib/tiktok/continut";
+import { offerIdVarianta } from "@/lib/google-merchant/id-oferta";
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { useEditareLinie } from "./_shared/useEditareLinie";
 import { optiunileDinAdresa, abonareCautare, citesteCautarea } from "@/lib/storefront/varianta-din-adresa";
@@ -203,7 +204,14 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   const produsCuVariante = !!parseVariants(product.page_sections);
   useEffect(() => {
     if (demo) return;
-    gtagEvent("view_item", { currency: "RON", value: productPrice, items: [{ item_id: productId, item_name: productName, price: productPrice, quantity: 1 }] });
+    /*
+      * ⚠ `id` (oferta din Merchant Center) NUMAI la produsul simplu: la unul cu variante, ID-ul produsului e
+      * `item_group_id` in feed, nu o oferta, iar remarketingul dinamic ar cauta un articol inexistent.
+      */
+    gtagEvent("view_item", {
+      currency: "RON", value: productPrice,
+      items: [{ item_id: productId, ...(produsCuVariante ? {} : { id: productId }), item_name: productName, price: productPrice, quantity: 1 }],
+    });
     /*
      * ⚠ Produsul cu variante se anunta ca GRUP: in catalog nicio varianta nu poarta ID-ul produsului, ci il
      * au toate ca `item_group_id`. Cu `content_type: "product"`, Meta nu-l lega de nimic. Vezi `continutPixel`.
@@ -636,7 +644,11 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
      * ⚠ SI NIMIC DIN VALORI. Ce a scris omul — gravura, numele copilului, fisierele — nu pleaca
      * la niciun furnizor de reclame. Se trimite doar suma.
      */
-    trackAddToCart({ productId: product.id, name: product.name, price: pers.pretPeBucata(displayPrice), comboId: selectedCombo?.id, areVariante: !!variantsData });
+    trackAddToCart({
+      productId: product.id, name: product.name, price: pers.pretPeBucata(displayPrice), comboId: selectedCombo?.id,
+      areVariante: !!variantsData,
+      idOferta: selectedCombo ? offerIdVarianta(product.id, selectedCombo) : (variantsData ? null : product.id),
+    });
     setAdaugatInCos(true);
     setTimeout(() => setAdaugatInCos(false), 1800);
   }

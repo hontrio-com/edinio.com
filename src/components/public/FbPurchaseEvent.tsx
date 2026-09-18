@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { fbTrack, ttqTrack, gtagEvent, gtagRaw } from "@/lib/marketing";
 import type { ContinutPixel } from "@/lib/facebook/pixel-continut";
 import type { ContinutTikTok } from "@/lib/tiktok/continut";
+import { conversieCumparare } from "@/lib/google-ads/conversie";
 
 interface Props {
   orderId: string;
@@ -23,6 +24,13 @@ interface Props {
   continutMeta?: ContinutPixel;
   /** Continutul pentru TikTok, cu aceleasi ID-uri de catalog. Lipsa lui = ID-urile produselor, ca inainte. */
   continutTikTok?: ContinutTikTok;
+  /** ID-ul de conversie Google Ads (`AW-…`). Fara el nu pleaca nicio conversie Ads. */
+  googleAdsConversionId?: string;
+  /**
+   * Datele omului pentru enhanced conversions, HASH-UITE pe server (`sha256_email_address`,
+   * `sha256_phone_number`). Se pun cu `gtag('set', 'user_data', …)` INAINTEA conversiei.
+   */
+  utilizatorGoogle?: { sha256_email_address?: string; sha256_phone_number?: string };
 }
 
 /**
@@ -41,7 +49,8 @@ interface Props {
  *   oricarui eveniment. Vezi `FacebookPixel` si `TikTokPixel`.
  */
 export function FbPurchaseEvent({
-  orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, numItems, items, ga4, continutMeta, continutTikTok,
+  orderId, total, googleTagId, googleAdsConversionId, googleAdsConversionLabel, utilizatorGoogle,
+  fbPixelId, ttPixelId, numItems, items, ga4, continutMeta, continutTikTok,
 }: Props) {
   useEffect(() => {
     if (!orderId) return;
@@ -101,16 +110,24 @@ export function FbPurchaseEvent({
       ...(gaItems.length ? { items: gaItems } : {}),
     });
 
-    // Google Ads — conversion event (needs the conversion label).
-    if (googleTagId && googleAdsConversionLabel) {
-      gtagRaw("event", "conversion", {
-        send_to: `${googleTagId}/${googleAdsConversionLabel}`,
-        value,
-        currency: "RON",
-        transaction_id: orderId,
-      });
+    /*
+     * ⚠ ENHANCED CONVERSIONS, INAINTEA CONVERSIEI. Documentatia: „Configure and add the following script on
+     * your conversion page where the Google Ads event snippet is installed”, iar `set` trebuie sa apuce sa
+     * ruleze inaintea evenimentului. Valorile sunt deja hash-uite pe server: vezi `lib/google-ads/date-client.ts`.
+     */
+    if (utilizatorGoogle && (utilizatorGoogle.sha256_email_address || utilizatorGoogle.sha256_phone_number)) {
+      gtagRaw("set", "user_data", utilizatorGoogle);
     }
-  }, [orderId, total, googleTagId, googleAdsConversionLabel, fbPixelId, ttPixelId, numItems, items, ga4, continutMeta, continutTikTok]);
+
+    /*
+     * ⚠ Conversia pleaca la ID-ul `AW-…`, nu la tagul Google al magazinului (care poate fi un GA4). Forma o
+     * hotaraste `conversieCumparare`, care intoarce `null` cand lipseste ceva: atunci nu se trimite nimic.
+     */
+    const conversie = conversieCumparare(googleAdsConversionId ?? googleTagId, googleAdsConversionLabel, {
+      orderId, valoare: value, moneda: "RON",
+    });
+    if (conversie) gtagRaw("event", "conversion", conversie);
+  }, [orderId, total, googleTagId, googleAdsConversionId, googleAdsConversionLabel, utilizatorGoogle, fbPixelId, ttPixelId, numItems, items, ga4, continutMeta, continutTikTok]);
 
   return null;
 }

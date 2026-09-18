@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { type MarketingConfig, parseMetaPixelId, parseTikTokPixelId, parseGoogleTagId, parseGoogleAdsLabel } from "@/lib/marketing-config";
+import { parseIdConversieAds } from "@/lib/google-ads/conversie";
 
 /**
  * Validate + clean the marketing config before persisting. IDs are interpolated
@@ -30,9 +31,22 @@ function cleanMarketingConfig(config: MarketingConfig): { ok: true; value: Marke
     out.google_tag_id = id;
   }
 
+  /*
+   * ⚠ ID-ul de conversie Ads si eticheta merg IMPREUNA. Eticheta singura n-are unde pleca, iar pana la
+   * 18.09.2026 se salva linistita langa un tag GA4, de unde nu ajungea nicio conversie in Google Ads.
+   */
+  const idAds = parseIdConversieAds(config.google_ads_conversion_id);
+  if (config.google_ads_conversion_id?.trim() && !idAds) {
+    return { ok: false, error: "ID-ul de conversie Google Ads are forma AW-123456789 (il gasesti in Google Ads > Obiective > Conversii)." };
+  }
+  if (idAds) out.google_ads_conversion_id = idAds;
+
   if (config.google_ads_conversion_label?.trim()) {
     const label = parseGoogleAdsLabel(config.google_ads_conversion_label);
     if (!label) return { ok: false, error: "Eticheta de conversie Google Ads invalida." };
+    if (!idAds) {
+      return { ok: false, error: "Eticheta de conversie are nevoie de ID-ul de conversie Google Ads (AW-…): fara el conversia nu ajunge nicaieri." };
+    }
     out.google_ads_conversion_label = label;
   }
 

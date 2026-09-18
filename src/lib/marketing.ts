@@ -180,11 +180,34 @@ export function ttqTrack(event: string, data?: Record<string, unknown>, opts?: {
   });
 }
 
+/**
+ * Articolele, imbogatite pentru REMARKETINGUL DINAMIC Google Ads.
+ *
+ * ⚠ Documentatia lor cere, pe evenimentele de comert, `items: [{ id, google_business_vertical: "retail" }]`,
+ * iar `id` trebuie sa fie cel din feedul Merchant Center. GA4 citeste `item_id` si nu se atinge de `id`, deci
+ * amandoua incap in acelasi articol.
+ *
+ * ⚠ Se adauga NUMAI cand magazinul are un ID de conversie Ads (`window.__edinioGoogleAds`): altfel ar fi
+ * campuri in plus trimise degeaba in GA4.
+ */
+function articolePentruAds(data: Record<string, unknown>): Record<string, unknown> {
+  const ads = (window as unknown as { __edinioGoogleAds?: { id?: string } }).__edinioGoogleAds;
+  if (!ads?.id || !Array.isArray(data.items) || data.items.length === 0) return data;
+  const items = data.items.map((brut) => {
+    const i = (brut && typeof brut === "object" ? brut : {}) as Record<string, unknown>;
+    const idOferta = typeof i.id === "string" && i.id ? i.id : i.item_id;
+    return typeof idOferta === "string" && idOferta
+      ? { ...i, id: idOferta, google_business_vertical: "retail" }
+      : i;
+  });
+  return { ...data, items };
+}
+
 /** Google Tag (gtag.js) — standard event. */
 export function gtagEvent(event: string, data?: Record<string, unknown>) {
   dispatch("ga", () => {
     const gtag = (window as unknown as { gtag?: (...a: unknown[]) => void }).gtag;
-    if (typeof gtag === "function") gtag("event", event, data ?? {});
+    if (typeof gtag === "function") gtag("event", event, articolePentruAds(data ?? {}));
   });
 }
 

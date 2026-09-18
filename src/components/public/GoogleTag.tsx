@@ -8,18 +8,25 @@ import { CONSENT_EVENT, CONSENT_VERSION, readConsent } from "@/lib/cookie-consen
  * Loads gtag.js and configures one or more Google tags (Google Ads AW-…,
  * GA4 G-…) with Consent Mode v2 signals.
  *
- * With `requireConsent` (the default), this is rendered behind ConsentGate
- * (category "analytics"), so by mount time the visitor HAS consented to
- * analytics; ad signals still follow the "marketing" choice and later banner
- * changes are pushed via `consent update`.
+ * Cu `requireConsent` (implicit), componenta e randata in spatele lui ConsentGate cu AMANDOUA categoriile
+ * (analiza SI marketing): ajunge oricare, fiindca tagul poarta si masuratoarea GA4, si conversiile Google
+ * Ads. Ce are voie sa faca hotarasc apoi semnalele de consimtamant, fiecare din categoria lui, iar
+ * schimbarile din banner se impinge prin `consent update`.
  *
  * When the merchant disabled the cookie banner (`requireConsent=false`), there
  * is no consent flow, so every signal defaults to granted.
  */
-export function GoogleTag({ tagIds, slug, requireConsent = true }: { tagIds: string[]; slug?: string; requireConsent?: boolean }) {
+export function GoogleTag({ tagIds, slug, requireConsent = true, adsId }: {
+  tagIds: string[];
+  slug?: string;
+  requireConsent?: boolean;
+  /** ID-ul de conversie Google Ads (`AW-…`), pentru remarketingul dinamic din `gtagEvent`. */
+  adsId?: string | null;
+}) {
   // Defense-in-depth: these values end up inside an inline script.
   const ids = [...new Set(tagIds.map((t) => (t ?? "").trim().replace(/[^A-Za-z0-9_-]/g, "")).filter(Boolean))];
   const safeSlug = (slug ?? "").replace(/[^a-zA-Z0-9-]/g, "");
+  const safeAds = (adsId ?? "").replace(/[^A-Za-z0-9_-]/g, "");
 
   // Push consent changes (from the cookie banner) into Google tags live.
   useEffect(() => {
@@ -41,9 +48,14 @@ export function GoogleTag({ tagIds, slug, requireConsent = true }: { tagIds: str
 
   if (ids.length === 0) return null;
 
-  // Consent defaults. Banner disabled → everything granted. Banner enabled →
-  // this component only mounts after analytics consent (so analytics granted);
-  // ad signals read the stored "marketing" choice.
+  /*
+   * Semnalele de consimtamant, pe CATEGORII (18.09.2026). Bannerul oprit -> totul acordat. Cu banner, tagul
+   * se incarca daca omul a acceptat ORICARE dintre analiza si marketing, iar apoi fiecare semnal citeste
+   * chiar categoria lui: `analytics_storage` din analiza, `ad_*` din marketing.
+   *
+   * ⚠ Inainte `analytics_storage` era scris mereu `granted`, fiindca tagul se incarca doar dupa acordul de
+   * analiza. Acum poate porni si fara el, deci minciuna aceea ar fi devenit adevarata scurgere.
+   */
   const consentDefault = !requireConsent
     ? `
         gtag('consent', 'default', {
@@ -54,13 +66,14 @@ export function GoogleTag({ tagIds, slug, requireConsent = true }: { tagIds: str
         });`
     : safeSlug
     ? `
-        var adGranted = false;
+        var adGranted = false, analyticsGranted = false;
         try {
           var c = JSON.parse(localStorage.getItem('edinio_cc_${safeSlug}') || 'null');
           adGranted = !!(c && c.v === ${CONSENT_VERSION} && c.marketing);
+          analyticsGranted = !!(c && c.v === ${CONSENT_VERSION} && c.analytics);
         } catch (e) {}
         gtag('consent', 'default', {
-          analytics_storage: 'granted',
+          analytics_storage: analyticsGranted ? 'granted' : 'denied',
           ad_storage: adGranted ? 'granted' : 'denied',
           ad_user_data: adGranted ? 'granted' : 'denied',
           ad_personalization: adGranted ? 'granted' : 'denied'
@@ -74,6 +87,7 @@ export function GoogleTag({ tagIds, slug, requireConsent = true }: { tagIds: str
         strategy="afterInteractive"
       />
       <Script id="google-tag" strategy="afterInteractive">{`
+        ${safeAds ? `window.__edinioGoogleAds={id:'${safeAds}'};` : ""}
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         ${consentDefault}

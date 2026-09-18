@@ -12,13 +12,20 @@ import { continutTikTok } from "@/lib/tiktok/continut";
  * bucati deodata.
  */
 export function trackAddToCart(
-  { productId, name, price, cantitate = 1, comboId, areVariante = false }:
+  { productId, name, price, cantitate = 1, comboId, areVariante = false, idOferta }:
   {
     productId: string; name: string; price: number; cantitate?: number;
     /** Combinatia adaugata: cu ea, Meta primeste ID-ul VARIANTEI din catalog. */
     comboId?: string | null;
     /** Produsul are variante: fara `comboId`, se anunta grupul. Vezi `continutPixel`. */
     areVariante?: boolean;
+    /**
+     * ID-ul ofertei din Merchant Center, pentru remarketingul dinamic Google Ads.
+     *
+     * ⚠ NU se poate deduce din `comboId`: cand ID-ul plin trece de 50 de caractere, Merchant Center
+     * primeste forma stabila a combinatiei. Vezi `offerIdVarianta`.
+     */
+    idOferta?: string | null;
   },
 ) {
   const n = Number.isFinite(cantitate) ? Math.max(1, Math.floor(cantitate)) : 1;
@@ -37,5 +44,8 @@ export function trackAddToCart(
     value: valoare, currency: "RON", num_items: n,
     ...continutTikTok([{ productId, comboId, areVariante, cantitate: n, pret: price, nume: name }]),
   });
-  gtagEvent("add_to_cart", { currency: "RON", value: valoare, items: [{ item_id: productId, item_name: name, price, quantity: n }] });
+  gtagEvent("add_to_cart", {
+    currency: "RON", value: valoare,
+    items: [{ item_id: productId, ...(idOferta ? { id: idOferta } : {}), item_name: name, price, quantity: n }],
+  });
 }

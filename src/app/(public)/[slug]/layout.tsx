@@ -4,6 +4,7 @@ import { incarcaAntetMagazin, setarileDin } from "@/lib/storefront/antet-magazin
 import { FacebookPixel } from "@/components/public/FacebookPixel";
 import { TikTokPixel } from "@/components/public/TikTokPixel";
 import { GoogleTag } from "@/components/public/GoogleTag";
+import { parseIdConversieAds } from "@/lib/google-ads/conversie";
 import { ConsentGate } from "@/components/public/ConsentGate";
 import { CookieConsent } from "@/components/public/CookieConsent";
 import { AttributionCapture } from "@/components/public/AttributionCapture";
@@ -180,8 +181,13 @@ export default async function StoreLayout({ children, params }: Props) {
     gaMeasurementId = ga?.connected && ga.tracking_enabled !== false ? ga.measurement_id?.trim() || null : null;
   }
 
+  /*
+   * ⚠ ID-ul de conversie Google Ads e un tag in sine: fara `config` pe el, conversia n-are unde ajunge.
+   * Pana la 18.09.2026 se incarca doar ce scria in `google_tag_id`, care putea fi un GA4.
+   */
+  const adsConversionId = parseIdConversieAds(mc?.google_ads_conversion_id) ?? parseIdConversieAds(googleTagId);
   // One gtag loader for all Google tags (Ads + GA4), deduplicated.
-  const googleTagIds = [...new Set([googleTagId, gaMeasurementId].filter((v): v is string => !!v))];
+  const googleTagIds = [...new Set([googleTagId, gaMeasurementId, adsConversionId].filter((v): v is string => !!v))];
 
   const cookieConfig = parseCookieBannerConfig(cookieRaw);
   const consentCategories = detectConsentCategories(mc, gaMeasurementId);
@@ -220,7 +226,7 @@ export default async function StoreLayout({ children, params }: Props) {
           <ConsentGate slug={slug} category="marketing" bypass={!requireConsent}><TikTokPixel pixelId={ttPixelId} magazin={slug} capi={mc?.tiktok_capi_activ === true} /></ConsentGate>
         )}
         {googleTagIds.length > 0 && (
-          <ConsentGate slug={slug} category="analytics" bypass={!requireConsent}><GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} /></ConsentGate>
+          <ConsentGate slug={slug} category={["analytics", "marketing"]} bypass={!requireConsent}><GoogleTag tagIds={googleTagIds} slug={slug} requireConsent={requireConsent} adsId={adsConversionId} /></ConsentGate>
         )}
       </DoarInMagazinReal>
       {children}

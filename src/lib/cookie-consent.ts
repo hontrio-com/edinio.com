@@ -75,6 +75,18 @@ function storageKey(slug: string): string {
   return `edinio_cc_${slug}`;
 }
 
+/**
+ * Se poate incarca un tracker care sta sub categoriile date?
+ *
+ * ⚠ ORICARE, nu toate (18.09.2026). Tagul Google poarta si masuratoarea GA4 (analiza), si conversiile Google
+ * Ads (marketing); cerandu-le pe amandoua, cine accepta doar marketingul nu trimitea nicio conversie. Ce are
+ * voie sa faca tagul dupa ce s-a incarcat hotarasc semnalele consent mode, fiecare din categoria lui.
+ */
+export function areAcordPentru(consent: ConsentState | null, categorii: readonly ConsentCategory[]): boolean {
+  if (!consent || categorii.length === 0) return false;
+  return categorii.some((c) => consent[c]);
+}
+
 /** Read the visitor's saved consent for a store, or null if not yet decided. */
 export function readConsent(slug: string): ConsentState | null {
   if (typeof window === "undefined") return null;

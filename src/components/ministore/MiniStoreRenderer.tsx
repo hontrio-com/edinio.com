@@ -24,6 +24,7 @@ import { StickyCartTab } from "@/components/storefront/cart/StickyCartTab";
 import { trackAddToCart } from "@/lib/storefront/cart/track-add";
 import { comboIdDupaTitlu, continutDinCos } from "@/lib/facebook/pixel-continut";
 import { continutTikTokDinCos } from "@/lib/tiktok/continut";
+import { idOfertaDupaTitlu } from "@/lib/google-merchant/id-oferta";
 import { hrefCategorie, radacinaMagazin } from "@/lib/storefront/category-href";
 import { categoriiVizibile, numeCategoriiAscunse } from "@/lib/categories/vizibilitate";
 import {
@@ -1427,8 +1428,8 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
 
   // Fire the AddToCart pixels and flash the card's "Adaugat!" state for a line
   // that just entered the cart (shared by simple products and variant quick-add).
-  function trackAndFlash(productId: string, name: string, price: number, comboId?: string | null, areVariante = false) {
-    trackAddToCart({ productId, name, price, comboId, areVariante });
+  function trackAndFlash(productId: string, name: string, price: number, comboId?: string | null, areVariante = false, idOferta?: string | null) {
+    trackAddToCart({ productId, name, price, comboId, areVariante, idOferta });
     setAddedId(productId);
     setTimeout(() => setAddedId(null), 1500);
   }
@@ -1472,7 +1473,11 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
   function handleQuickAdd(line: QuickAddLine) {
     addItem(line);
     /* Combinatia aleasa in fereastra: ID-ul ei vine din produsul deschis in fereastra. */
-    trackAndFlash(line.productId, line.name, line.price, comboIdDupaTitlu(quickAddProduct?.page_sections, line.variantTitle), true);
+    trackAndFlash(
+      line.productId, line.name, line.price,
+      comboIdDupaTitlu(quickAddProduct?.page_sections, line.variantTitle), true,
+      idOfertaDupaTitlu(line.productId, quickAddProduct?.page_sections, line.variantTitle),
+    );
   }
 
   /**

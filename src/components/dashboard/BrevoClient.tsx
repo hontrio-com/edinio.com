@@ -6,8 +6,9 @@ import { toast } from "sonner";
 import { ArrowLeft, Loader2, CheckCircle, Plug, RefreshCw, Users, ExternalLink } from "lucide-react";
 import {
   connectBrevo, disconnectBrevo, getBrevoLists, getBrevoTemplates,
-  saveBrevoSettings, syncExistingCustomers,
+  saveBrevoSettings, syncExistingCustomers, syncBrevoCatalog,
 } from "@/lib/actions/brevo.actions";
+import { SincronizareCatalogEmail } from "@/components/dashboard/SincronizareCatalogEmail";
 import type { BrevoPublicConfig, BrevoList, BrevoTemplate } from "@/lib/brevo";
 
 const inputCls =
@@ -135,6 +136,7 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
       if ("error" in res) { toast.error(res.error); return; }
       setConfig(res.config);
       toast.success("Setari salvate.");
+      if (res.aviz) toast.info(res.aviz, { duration: 12000 });
     });
   }
 
@@ -348,6 +350,9 @@ export function BrevoClient({ businessId, initialConfig }: { businessId: string;
               Salveaza
             </button>
           </div>
+
+          {/* Catalogul intreg (pleaca singur la pornirea sincronizarii e-commerce). */}
+          <SincronizareCatalogEmail furnizor="Brevo" pornita={config.ecommerce_sync} sincronizeaza={() => syncBrevoCatalog(businessId)} />
 
           {/* Bulk sync */}
           <div className="p-4 rounded-xl border border-border">

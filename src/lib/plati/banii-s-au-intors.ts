@@ -2,7 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { proprietariiMagazinelor, semnaleazaExpedierea } from "@/lib/orders/semnalarea-ajunge-la-om";
 import { logError } from "@/lib/error-logger";
-import { anuntaEmailIntoarcere } from "@/lib/email-marketing/comanda";
 
 type Admin = SupabaseClient<Database>;
 
@@ -167,9 +166,6 @@ export async function baniiSAuIntors(
     });
     return { fel: "esec", mesaj: eT?.message ?? "tranzitia comenzii n-a raspuns valid" };
   }
-
-  /* Si din venitul atribuit emailului (Mailchimp, Brevo, Klaviyo). */
-  anuntaEmailIntoarcere(order.id, "rambursata", order.business_id);
 
   await semnaleazaExpedierea(admin, {
     userId,

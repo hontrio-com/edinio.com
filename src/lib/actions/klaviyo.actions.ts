@@ -9,6 +9,9 @@ import {
 } from "@/lib/klaviyo";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { logError } from "@/lib/error-logger";
+import { sincronizeazaProduseleKlaviyo } from "@/lib/klaviyo-sync";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
@@ -122,8 +125,34 @@ export async function saveKlaviyoSettings(
   };
   if (!(await writeConfig(owned.supabase, businessId, next))) return { error: "Eroare la salvare." };
 
+  /*
+   * ⚠ LA PORNIREA SINCRONIZARII E-COMMERCE, TOT CATALOGUL. Pana pe 18.09.2026 produsele existente nu
+   * plecau nicaieri: in Klaviyo intrau doar cele editate de atunci incolo. Dupa raspuns, in joburi in lot.
+   */
+  if (!current.ecommerce_sync && next.ecommerce_sync) {
+    dupaRaspuns(async () => {
+      const r = await sincronizeazaProduseleKlaviyo(businessId);
+      if ("error" in r) await logError({ action: "klaviyo.catalog.initial", message: r.error, businessId, severity: "warning" });
+    }, "klaviyo.catalog.initial", businessId);
+  }
+
   revalidate();
   return { config: toPublicKlaviyoConfig(next) };
+}
+
+/** Tot catalogul, acum (butonul „Sincronizeaza catalogul” din panou). */
+export async function syncKlaviyoCatalog(
+  businessId: string,
+): Promise<{ active: number; inactive: number } | { error: string }> {
+  const owned = await requireOwned(businessId);
+  if ("error" in owned) return owned;
+  try {
+    const r = await sincronizeazaProduseleKlaviyo(businessId);
+    if ("error" in r) return { error: r.error };
+    return { active: r.active, inactive: r.inactive };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Sincronizarea catalogului a esuat." };
+  }
 }
 
 /** Clear the connection entirely. */

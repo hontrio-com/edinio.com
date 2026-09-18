@@ -49,9 +49,8 @@ ar fi trimis dezabonarile intr-o redirectare. Acum amandoua folosesc `adresaPubl
 aceeasi reparatie ca la SMSO si notice.ro pe 17.09), iar esecul inregistrarii se scrie in jurnal.
 
 **2. ⚠⚠ Anularea si rambursarea nu ajungeau la niciunul.** ~18% din comenzile proprii se termina asa, iar
-venitul lor ramanea atribuit emailului. Acum exista un singur punct, `lib/email-marketing/comanda.ts`,
-prin care trec toate caile: panoul (`updateOrder`), lotul, cei cinci procesatori (`dupaPlata`),
-rambursarile confirmate (`banii-s-au-intors.ts`) si Netopia (panou si IPN).
+venitul lor ramanea atribuit emailului. Acum le prinde triggerul de pe `orders` (vezi „A doua trecere”,
+mai jos), oricare ar fi calea: panoul, lotul, procesatorii, rambursarile confirmate, Netopia, curierii.
 
 * Mailchimp: `PATCH` cu `financial_status: "cancelled"` si `cancelled_at_foreign` (specul: *„passing a
   value for this parameter will cancel the order”*), sau `"refunded"`;
@@ -60,7 +59,8 @@ rambursarile confirmate (`banii-s-au-intors.ts`) si Netopia (panou si IPN).
 
 **3. ⚠ Nicio sincronizare de email nu trecea prin `dupaRaspuns`.** Erau singurele din platforma pornite
 cu `void` gol: fiecare face cateva cereri HTTP una dupa alta, iar actiunea raspunde imediat, deci puteau
-fi taiate cand functia ingheata. Acum toate trec prin `dupaRaspuns` (`after()` cu jurnal).
+fi taiate cand functia ingheata. Acum contactele si produsele trec prin `dupaRaspuns` (`after()` cu
+jurnal), iar comenzile prin coada (vezi „A doua trecere”).
 
 **4. Transport comun** (`lib/email-marketing/transport.ts`): termen de 15 s si `redirect: "error"` la
 toti trei (pana acum numai Mailchimp), plus reluare la **429** dupa `Retry-After` sau
@@ -84,7 +84,7 @@ aboneaza pe nimeni**; conectarea refuza o cheie fara `profiles:read`. Consimtama
 
 **7. ⚠ „Placed Order” pleca si pentru cardul inca neplatit**, contra regulii `vanzareaEConfirmata` pe
 care o respecta Meta, TikTok si GA4. Acum la creare pleaca numai la ramburs si transfer; la plata online,
-din `anuntaEmailPlata`, cand banii au intrat. Klaviyo pastreaza doar primul eveniment cu acelasi
+la evenimentul de plata din coada, cand banii au intrat. Klaviyo pastreaza doar primul eveniment cu acelasi
 `unique_id`, deci si trimiterea dubla e inofensiva.
 
 **8. Fara moneda.** `value_currency` lipsea, deci venitul intra in moneda implicita a CONTULUI. Acum `RON`.
@@ -146,22 +146,24 @@ vechi, de pe apex).
 
 ## Probele
 
-* `src/lib/email-marketing/email-conform-documentatiei.test.ts` (53): transportul, regulile de suprimare
-  Klaviyo pe toate cele cinci motive, corpurile verificate pe campurile cerute de spec, catalogul Klaviyo,
-  `updateEnabled` si loturile Brevo, confirmarea dubla, webhookurile pe gazda canonica, Mailchimp, si
-  **cablarea**: fiecare cale care incaseaza, anuleaza sau rambursează anunta emailul, si niciun apel catre
-  furnizori nu mai e `void` gol.
-* `src/lib/email-marketing/email-sync-runtime.test.ts` (24): dispecerii rulati chiar ei, cu un PostgREST de
-  proba si un `fetch` de proba; ruta webhookului Brevo rulata ea; `saveBrevoSettings` rulata ea.
-* `src/lib/orders/client-de-marketplace.test.ts`: poarta de marketplace ceruta acum in ORICE functie care
-  citeste comanda (cautata dupa `.from("orders")`, nu dupa nume), plus ca marcarea platii si a intoarcerii
-  trece prin cititorul pazit, la toti trei.
-* Bancul de mutanti: **70 de stricaciuni** (transport, suprimari, corpuri, catalog, confirmare dubla,
-  webhookuri, cablarea fiecarei cai), **toate prinse**. O rulare a atarnat pana la termen: PostgREST-ul de
-  proba arunca la un operator necunoscut in loc sa raspunda, deci proba ar fi „prins” din motivul gresit.
-  Reparat (raspunde 400) si reluat: prinsa de asertiune.
+* `src/lib/email-marketing/email-conform-documentatiei.test.ts` (58): transportul, regulile de suprimare
+  Klaviyo pe toate cele cinci motive, corpurile verificate pe campurile cerute de spec, catalogul in lot la
+  toti trei, `updateEnabled` si activarea comertului Brevo, confirmarea dubla, webhookurile pe gazda
+  canonica, regulile pure ale evenimentelor (metricile Klaviyo, starea Mailchimp, atribuirea campaniei),
+  captarea `mc_cid` rulata pe functia adevarata, si **coada**: triggerul prinde crearea si orice schimbare
+  de status sau de plata, nu poate opri o comanda, pastreaza ordinea, are arenda mai lunga decat cronul, iar
+  NICIO cale din aplicatie nu mai trimite comenzi pe langa ea.
+* `src/lib/email-marketing/email-sync-runtime.test.ts` (36): functiile de eveniment ale celor trei rulate
+  chiar ele, cu un PostgREST de proba si un `fetch` de proba; **ruta cronului rulata ea**, cu fiecare verdict
+  insemnat corect (trimis, sarit, esuat reprogramat, refuzat abandonat si scris in jurnal); catalogul dupa
+  starea din baza; ruta webhookului Brevo; `saveBrevoSettings` cu activarea comertului si moneda.
+* `src/lib/orders/client-de-marketplace.test.ts`: poarta de marketplace ceruta in ORICE functie care citeste
+  comanda (cautata dupa `.from("orders")`, nu dupa nume), si in fiecare functie de eveniment a cozii.
+* Bancuri de mutanti: la prima trecere **70 de stricaciuni, toate prinse**; la a doua **59, toate prinse**
+  dupa o intarire. Una scapase: o conditie strecurata la coada clauzei de ordine din revendicare
+  (`and false`), fiindca proba cauta doar inceputul clauzei. Acum o cere intreaga.
 
-Suita intreaga (9035), `tsc`, poarta de lint (57 de erori, niciuna noua) si buildul: verzi.
+Suita intreaga (9052), `tsc`, poarta de lint (57 de erori, niciuna noua) si buildul: verzi.
 
 ---
 
@@ -177,20 +179,89 @@ Suita intreaga (9035), `tsc`, poarta de lint (57 de erori, niciuna noua) si buil
 * Nicio eroare de rulare si nimic in `error_logs` dupa desfasurare.
 * ⚠ Nevazut: o sincronizare adevarata. Niciun magazin n-a conectat inca vreunul dintre cei trei.
 
+## A doua trecere (18.09.2026): „rezolva tot ce poti rezolva din cod”
+
+### 22. ⚠⚠ Coada de evenimente de comanda, scrisa de baza
+
+Pana acum fiecare cale din aplicatie anunta singura furnizorii, o singura data, dupa raspuns. Doua goluri:
+
+* **expedierea si livrarea nu ajungeau la niciunul**: statusul `shipped` / `delivered` il pun ~17 urmariri de
+  curier, fiecare in cronul ei; a le cabla una cate una ar fi ramas in urma la primul curier nou;
+* **un esec al furnizorului pierdea evenimentul**: un 503 sau un termen depasit insemna o comanda care nu mai
+  ajungea niciodata la ei.
+
+Acum (`migrations/2027-01-28-email-marketing-coada.sql`): un **trigger pe `orders`** scrie in
+`email_marketing_coada` cate un rand pe (comanda, furnizor, eveniment) la creare si la ORICE schimbare de status
+sau de plata, numai pentru furnizorii conectati cu e-commerce pornit. `/api/cron/email-marketing` o goleste din
+minut in minut, cu tiparul cozii de conversii: arenda de 5 minute (mai lunga decat `maxDuration`), ordinea
+pastrata pe (comanda, furnizor), esec reprogramat (1, 5, 20, 60, 240, 720 de minute), refuz abandonat pe loc si
+scris in jurnal. ⚠ Triggerul isi inghite orice eroare: o coada care cade nu poate strica o comanda.
+
+Ce primeste fiecare:
+
+| Eveniment | Mailchimp | Brevo | Klaviyo |
+| --- | --- | --- | --- |
+| creata | comanda intreaga, `PUT` (idempotent) | comanda intreaga, statusul de acum | „Placed Order” + „Ordered Product” (numai daca e vanzare) |
+| platita | `financial_status: paid` | comanda cu statusul de acum | „Placed Order” (Klaviyo il pastreaza doar pe primul) |
+| expediata | `fulfillment_status: shipped` | idem | „Fulfilled Order” |
+| livrata | nimic (Mailchimp n-are stare de livrare) | idem | „Delivered Order” (metrica noastra) |
+| anulata | `cancelled` + `cancelled_at_foreign` | idem | „Cancelled Order” |
+| rambursata | `refunded` | idem | „Refunded Order” |
+
+Brevo primeste la fiecare eveniment statusul din RANDUL de acum (`pending`, `processing`, `completed`,
+`cancelled`, `refunded`), nu din eveniment: la ramburs „platita” vine DUPA livrare.
+
+⚠ Probat pe productie inainte de livrare, intr-o tranzactie anulata: plata si expedierea scriu cate un rand pe
+furnizor, repetarea nu dubleaza, anularea castiga cand vine impreuna cu rambursarea, marketplace-ul nu scrie
+nimic, revendicarea ia doar cel mai vechi eveniment pe (comanda, furnizor).
+
+### 23. ⚠⚠ Brevo: aplicatia eCommerce nu era activata niciodata
+
+Documentatia lor: *„To use these endpoints, your account must have the Brevo eCommerce application enabled.”*
+Pe un cont nou, fiecare produs si fiecare comanda ar fi fost respinse. Acum, la pornirea e-commerce:
+`POST /ecommerce/activate`, apoi **moneda de afisare RON** (`/ecommerce/config/displayCurrency`; comenzile
+lor n-au camp de moneda, deci suma se citeste in moneda contului). Activarea dureaza cateva minute (403 pana
+atunci): panoul o spune, iar coada reia comenzile singura.
+
+Comanda Brevo poarta acum si `billing` (adresa, oras, judet, cod postal, tara, telefon, metoda de plata) si
+`coupons`.
+
+### 24. ⚠ Catalogul intreg nu pleca niciodata
+
+Cand comerciantul pornea e-commerce, produsele existente nu mergeau nicaieri: in catalog intrau doar cele
+editate dupa. Acum tot catalogul pleaca singur la pornire (si la schimbarea audientei Mailchimp), iar panoul
+are butonul **„Sincronizeaza catalogul”**. Cel mai mare catalog de pe platforma are **3351 de produse**, deci
+totul merge in loturi: Klaviyo, joburi de creare si actualizare cate 100 (68 de cereri); Mailchimp,
+`POST /batches` cate 500 de operatii (7); Brevo, `/products/batch` cate 100 (34).
+
+⚠ **Hotaraste baza, nu apelantul**: activ se publica, scos din vanzare se scoate din recomandari (Klaviyo
+`published: false`, Brevo `isDeleted`, Mailchimp sters), sters din baza se sterge si la ei. Pana acum un produs
+stins, editat, era republicat in emailuri.
+
+La Mailchimp produsul se pune intr-un singur `PUT` („Create or update product”), nu in pana la trei cereri.
+
+### 25. ⚠ Mailchimp nu putea atribui venitul campaniei
+
+Linkurile din campaniile lor poarta `mc_cid` (campania) si `mc_tc`. Nu le captam, deci Mailchimp nu stia carei
+campanii sa-i dea venitul. Acum se fotografiaza la aterizare, langa `utm_*` si `gclid`, si pleaca pe comanda
+drept `campaign_id`, `tracking_code` (numai `prec`, singura valoare permisa de spec) si `landing_site`.
+Comanda poarta si `shipping_total`, `discount_total`, `promos` si `shipping_address`.
+
+---
+
 ## Ce tine de comercianti
 
 1. **Klaviyo**: cheia privata (`pk_…`) cu permisiuni de citire a profilelor, pe langa scriere. Fara ele,
    conectarea e refuzata cu mesajul care spune de ce.
 2. **Brevo, confirmarea dubla**: un sablon de tip „Double opt-in confirmation” facut in Brevo, ales apoi in
-   panou.
-3. **Mailchimp**: notificarile de comanda (anulare, rambursare) pleaca numai daca comerciantul le-a facut
-   in Mailchimp; noi trimitem doar starea.
+   panou. **Brevo, comertul**: la prima pornire, cateva minute pana il activeaza ei.
+3. **Mailchimp**: notificarile de comanda (confirmare, expediere, anulare, rambursare) pleaca numai daca
+   comerciantul le-a facut in Mailchimp; noi trimitem doar starea.
 
 ## Ce ramane
 
-1. **Nevazut pe trafic real**: niciun magazin n-a conectat vreunul dintre cei trei.
-2. **„Fulfilled Order” (Klaviyo) si `fulfillment_status` (Mailchimp)** nu pleaca: expedierea are prea multe
-   cai (fiecare curier), iar fluxurile de dupa livrare se pot porni si din „Placed Order” cu intarziere.
-3. **Lotul de catalog Klaviyo** merge produs cu produs (cu reluare la 429); capetele lor in lot sunt
-   asincrone, cu stare de urmarit, si n-au meritat complexitatea la expunere zero.
-4. **Adresa de facturare** nu pleaca la Brevo (`billing`): nu e ceruta pentru venit sau segmentare.
+1. **Nevazut pe trafic real**: niciun magazin n-a conectat vreunul dintre cei trei. Tot ce se putea masura fara
+   un cont al lor s-a masurat (vezi mai sus); restul, dupa specurile si SDK-urile lor.
+2. **Urmarirea pe site** (klaviyo.js, Brevo Tracker, Mailchimp Connected Site) nu exista: cosurile abandonate
+   si produsele vazute raman pe sistemul Edinio, dinadins (un singur loc care trimite emailuri de recuperare).
+3. **Variantele** pleaca drept produsul lor de baza, cu o singura varianta; comenzile poarta pretul liniei.

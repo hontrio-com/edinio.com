@@ -13,6 +13,8 @@ import { ensureStore } from "@/lib/mailchimp-ecommerce";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
 import { logError } from "@/lib/error-logger";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { sincronizeazaProduseleMailchimp } from "@/lib/mailchimp-sync";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
@@ -182,8 +184,35 @@ export async function saveMailchimpSettings(
     }
   }
 
+  /*
+   * ⚠ TOT CATALOGUL, la pornirea sincronizarii e-commerce SI la schimbarea audientei (magazinul de
+   * comert e altul, deci porneste gol). Pana pe 18.09.2026 produsele existente nu plecau nicaieri.
+   * Dupa raspuns, prin loturi (`/batches`).
+   */
+  if (next.ecommerce_sync && next.audience_id && (!current.ecommerce_sync || audientaSchimbata)) {
+    dupaRaspuns(async () => {
+      const r = await sincronizeazaProduseleMailchimp(businessId);
+      if ("error" in r) await logError({ action: "mailchimp.catalog.initial", message: r.error, businessId, severity: "warning" });
+    }, "mailchimp.catalog.initial", businessId);
+  }
+
   revalidate();
   return { config: toPublicMailchimpConfig(next) };
+}
+
+/** Tot catalogul, acum (butonul „Sincronizeaza catalogul” din panou). */
+export async function syncMailchimpCatalog(
+  businessId: string,
+): Promise<{ active: number; inactive: number; loturi: number } | { error: string }> {
+  const owned = await requireOwned(businessId);
+  if ("error" in owned) return owned;
+  try {
+    const r = await sincronizeazaProduseleMailchimp(businessId);
+    if ("error" in r) return { error: r.error };
+    return { active: r.active, inactive: r.inactive, loturi: r.loturi.length };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Sincronizarea catalogului a esuat." };
+  }
 }
 
 /** Clear the connection entirely (removes our webhook from the audience, best-effort). */

@@ -10,7 +10,6 @@ import { secretDinConfig } from "@/lib/integrari/secret-server";
 import { cheieOperatie, cuRegistru } from "@/lib/operatii/registru";
 import { verdictFurnizor } from "@/lib/operatii/eroare-furnizor";
 import { logError } from "@/lib/error-logger";
-import { anuntaEmailIntoarcere } from "@/lib/email-marketing/comanda";
 
 export async function saveNetopiaConfig(
   businessId: string,
@@ -235,9 +234,6 @@ export async function rambourseazaPrinNetopia(
     });
     return { success: true, mesaj: "Banii au fost trimisi inapoi, dar comanda nu s-a putut marca rambursata. Verifica statusul comenzii." };
   }
-
-  /* Si din venitul atribuit emailului (Mailchimp, Brevo, Klaviyo). */
-  anuntaEmailIntoarcere(orderId, "rambursata", order.business_id);
 
   revalidatePath(`/dashboard/orders/${orderId}`);
   return { success: true, mesaj: `Rambursarea de ${suma.toFixed(2)} lei a fost trimisa la Netopia.` };

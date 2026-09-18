@@ -6,8 +6,9 @@ import { toast } from "sonner";
 import { ArrowLeft, Loader2, CheckCircle, Plug, RefreshCw, Users, ExternalLink } from "lucide-react";
 import {
   connectMailchimp, disconnectMailchimp, getMailchimpAudiences,
-  saveMailchimpSettings, syncExistingCustomers,
+  saveMailchimpSettings, syncExistingCustomers, syncMailchimpCatalog,
 } from "@/lib/actions/mailchimp.actions";
+import { SincronizareCatalogEmail } from "@/components/dashboard/SincronizareCatalogEmail";
 import type { MailchimpPublicConfig, MailchimpAudience } from "@/lib/mailchimp";
 
 const inputCls =
@@ -293,6 +294,9 @@ export function MailchimpClient({ businessId, initialConfig }: { businessId: str
               Salveaza
             </button>
           </div>
+
+          {/* Catalogul intreg (pleaca singur la pornirea sincronizarii e-commerce). */}
+          <SincronizareCatalogEmail furnizor="Mailchimp" pornita={config.ecommerce_sync} sincronizeaza={() => syncMailchimpCatalog(businessId)} />
 
           {/* Bulk sync */}
           <div className="p-4 rounded-xl border border-border">

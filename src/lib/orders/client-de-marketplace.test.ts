@@ -116,23 +116,22 @@ test("⚠ orice functie care isi citeste singura comanda CERE `order_source` si 
   assert.ok(cititori >= 3, `gasiti doar ${cititori} cititori de comanda`);
 });
 
-test("⚠ marcarea platii si a intoarcerii trece prin cititorul pazit, la toti trei", () => {
+test("⚠ evenimentele de comanda din coada trec prin poarta, la toti trei", () => {
   /*
-   * Proba de sus apara CITIREA. Asta apara ca functiile chemate din `lib/email-marketing/comanda.ts`
-   * chiar citesc prin ea, si nu cumva primesc comanda de la apelant, nepazita.
+   * Proba de sus apara CITIREA. Asta apara ca functiile chemate de coada (`lib/email-marketing/comanda.ts`)
+   * chiar trec prin poarta: direct, sau prin cititorul lor. De la 18.09.2026 ele sunt singura cale prin
+   * care o comanda ajunge la Mailchimp, Brevo sau Klaviyo.
    */
-  const perechi: Array<[string, string, string[]]> = [
-    ["src/lib/mailchimp-sync.ts", "comandaPentruMailchimp(", ["maybeMarkMailchimpOrderPaid", "maybeMarkMailchimpOrderReturned"]],
-    ["src/lib/brevo-sync.ts", "trimiteStatusul(", ["maybeMarkBrevoOrderPaid", "maybeMarkBrevoOrderReturned"]],
-    ["src/lib/klaviyo-sync.ts", "comandaPentruKlaviyo(", ["maybeMarkKlaviyoOrderPaid", "maybeMarkKlaviyoOrderReturned"]],
+  const perechi: Array<[string, string, string]> = [
+    ["src/lib/mailchimp-sync.ts", "evenimentMailchimp", "clientDeMarketplace("],
+    ["src/lib/brevo-sync.ts", "evenimentBrevo", "clientDeMarketplace("],
+    ["src/lib/klaviyo-sync.ts", "evenimentKlaviyo", "comandaPentruKlaviyo("],
   ];
-  for (const [f, cititor, functii] of perechi) {
+  for (const [f, fn, poarta] of perechi) {
     const s = readFileSync(f, "utf8");
-    for (const fn of functii) {
-      const i = s.indexOf(`export async function ${fn}(`);
-      assert.ok(i >= 0, `${f}: lipseste ${fn}`);
-      assert.ok(functiaDinJurul(s, i).includes(cititor), `${f}: ${fn} nu citeste prin ${cititor}`);
-    }
+    const i = s.indexOf(`export async function ${fn}(`);
+    assert.ok(i >= 0, `${f}: lipseste ${fn}`);
+    assert.ok(functiaDinJurul(s, i).includes(poarta), `${f}: ${fn} nu trece prin ${poarta}`);
   }
 });
 
@@ -214,23 +213,21 @@ test("⚠ pagina de confirmare nu da datele omului pixelilor, pe o comanda de ma
    chiar randurile astea, si o reparatie viitoare o poate pune la loc.
 */
 
-test("marcarea platit nu mai sta in blocul SMS-urilor", () => {
+test("marcarea platit nu mai atarna de nicio cale din aplicatie, deci nici de telefon", () => {
   /*
-   * ⚠ PE LINII, nu pe indici de caractere: un fisier cu CRLF ar fi rupt orice cautare de
-   * „salt de rand plus doua spatii", si proba ar fi cazut fara sa fie nimic stricat.
+   * ⚠ ISTORIC: marcarea „platit” catre Mailchimp si Brevo statea in `updateOrder`, inauntrul lui
+   * `if (order.customer_phone && …)`, deci pe o comanda fara telefon nu pleca niciodata, tacut.
+   *
+   * De la 18.09.2026 nicio cale din aplicatie nu mai anunta plata: o scrie in coada triggerul de pe
+   * `orders`, la orice schimbare a lui `payment_status`, oricine ar face-o. Deci proba cere doua
+   * lucruri: ca `updateOrder` nu mai are nicio marcare (care ar putea ajunge iar sub o conditie),
+   * si ca triggerul chiar prinde plata.
    */
-  const linii = readFileSync("src/lib/actions/order.actions.ts", "utf8").split(/\r?\n/);
-  const start = linii.findIndex((l) => l.includes("if (order.customer_phone &&"));
-  assert.ok(start >= 0, "nu s-a gasit blocul SMS-urilor");
-  const sfarsit = linii.findIndex((l, k) => k > start && l === "  }");
-  assert.ok(sfarsit > start, "nu s-a gasit sfarsitul blocului SMS-urilor");
-  const bloc = linii.slice(start, sfarsit).join(" ");
-  assert.ok(!bloc.includes("maybeMark") && !bloc.includes("anuntaEmail"), "marcarea a intrat inapoi sub conditia telefonului");
-  // Si chiar exista, undeva mai jos: altfel proba de sus ar trece si pe un fisier din care
-  // marcarea a disparut cu totul. De la 18.09.2026 trece prin `anuntaEmailPlata`, care o duce
-  // la Mailchimp, Brevo si Klaviyo deodata.
-  assert.ok(linii.slice(sfarsit).some((l) => l.includes("anuntaEmailPlata(orderId")),
-    "marcarea nu se mai cheama deloc dupa blocul SMS-urilor");
+  const s = readFileSync("src/lib/actions/order.actions.ts", "utf8");
+  assert.ok(!/maybeMark(Mailchimp|Brevo|Klaviyo)OrderPaid|anuntaEmailPlata\(/.test(s), "marcarea s-a intors in aplicatie, pe langa coada");
+  const migratia = readFileSync("migrations/2027-01-28-email-marketing-coada.sql", "utf8");
+  assert.match(migratia, /after update of status, payment_status on public\.orders/);
+  assert.match(migratia, /new\.payment_status = 'paid' then\s+v_feluri := v_feluri \|\| 'platita'/);
 });
 
 /* ══════════════════════════════════════════════════════════════════════════

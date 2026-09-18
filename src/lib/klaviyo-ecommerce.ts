@@ -28,8 +28,14 @@ export interface KlaviyoOrderInput {
   items: KlaviyoOrderItem[];
 }
 
-/** Metricile de comanda din ghidul lor de integrare pentru platforme fara integrare gata facuta. */
-export type KlaviyoOrderMetric = "Placed Order" | "Cancelled Order" | "Refunded Order";
+/**
+ * Metricile de comanda din ghidul lor de integrare pentru platforme fara integrare gata facuta
+ * („Placed Order”, „Ordered Product”, „Fulfilled Order”, „Cancelled Order”, „Refunded Order”), plus
+ * „Delivered Order”, metrica NOASTRA: la plata la livrare, livrarea e clipa in care clientul chiar are
+ * marfa (si a platit-o), deci clipa potrivita pentru fluxurile de recenzie.
+ */
+export type KlaviyoOrderMetric =
+  | "Placed Order" | "Fulfilled Order" | "Delivered Order" | "Cancelled Order" | "Refunded Order";
 
 export interface KlaviyoCatalogProduct {
   id: string;
@@ -38,6 +44,8 @@ export interface KlaviyoCatalogProduct {
   url: string;              // REQUIRED by Klaviyo
   image_url?: string | null;
   price: number;
+  /** `false` pentru un produs scos din vanzare: ramane in catalog, dar nu mai apare in recomandari. */
+  published?: boolean;
 }
 
 /** Klaviyo composite catalog-item id used in GET/PATCH/DELETE. */
@@ -144,7 +152,7 @@ function updatableAttributes(p: KlaviyoCatalogProduct): Record<string, unknown> 
     url: p.url,
     ...(p.image_url ? { image_full_url: p.image_url } : {}),
     price: p.price,
-    published: true,
+    published: p.published !== false,
   };
 }
 
@@ -184,6 +192,105 @@ export async function upsertCatalogItem(
   });
   if ("error" in create) return create;
   return { ok: true };
+}
+
+/** Cate produse intra intr-un job in lot: „Accepts up to 100 catalog items per request.” */
+export const PRODUSE_PE_JOB = 100;
+
+/**
+ * Tot catalogul, in joburi in lot (`catalog-item-bulk-create-jobs` si `-update-jobs`).
+ *
+ * ⚠ DE CE DOUA JOBURI PE ACEEASI BUCATA, fara sa aflam intai ce exista. Joburile sunt asincrone si
+ * se prelucreaza fiecare produs separat. Crearea reuseste pentru cele noi si e respinsa pentru cele
+ * existente; actualizarea invers. Oricare ar rula primul, la capat fiecare produs e acolo, cu datele
+ * de acum. Cu citirea intai ar fi fost inca 34 de cereri la 3351 de produse, si o intrecere intre
+ * citire si joburi.
+ *
+ * ⚠ DE CE IN LOT. Produs cu produs (PATCH, apoi POST la 404), cel mai mare catalog de pe platforma
+ * (3351 de produse) ar fi cerut peste 3300 de cereri, deci ar fi depasit limita unei functii.
+ * Aici sunt 68.
+ *
+ * Produsele scoase din vanzare pleaca doar in actualizare, cu `published: false`: raman in catalog
+ * (istoricul comenzilor le pomeneste), dar nu mai apar in recomandari.
+ */
+export async function catalogInLot(
+  config: KlaviyoConfig,
+  active: KlaviyoCatalogProduct[],
+  inactive: KlaviyoCatalogProduct[] = [],
+): Promise<{ ok: true; joburi: number } | { error: string; status?: number }> {
+  let joburi = 0;
+  const cuUrl = active.filter((p) => !!p.url);
+  for (let i = 0; i < cuUrl.length; i += PRODUSE_PE_JOB) {
+    const bucata = cuUrl.slice(i, i + PRODUSE_PE_JOB);
+    const creare = await klaviyoRequest(config, "POST", "/catalog-item-bulk-create-jobs", {
+      data: {
+        type: "catalog-item-bulk-create-job",
+        attributes: {
+          items: {
+            data: bucata.map((p) => ({
+              type: "catalog-item",
+              attributes: {
+                external_id: String(p.id),
+                integration_type: "$custom",
+                catalog_type: "$default",
+                ...updatableAttributes(p),
+              },
+            })),
+          },
+        },
+      },
+    });
+    if ("error" in creare) return creare;
+    joburi++;
+    const actualizare = await klaviyoRequest(config, "POST", "/catalog-item-bulk-update-jobs", corpActualizareInLot(bucata, true));
+    if ("error" in actualizare) return actualizare;
+    joburi++;
+  }
+  const stinse = inactive.filter((p) => !!p.url);
+  for (let i = 0; i < stinse.length; i += PRODUSE_PE_JOB) {
+    const r = await klaviyoRequest(config, "POST", "/catalog-item-bulk-update-jobs", corpActualizareInLot(stinse.slice(i, i + PRODUSE_PE_JOB), false));
+    if ("error" in r) return r;
+    joburi++;
+  }
+  return { ok: true, joburi };
+}
+
+function corpActualizareInLot(bucata: KlaviyoCatalogProduct[], publicat: boolean) {
+  return {
+    data: {
+      type: "catalog-item-bulk-update-job",
+      attributes: {
+        items: {
+          data: bucata.map((p) => ({
+            type: "catalog-item",
+            id: catalogItemId(String(p.id)),
+            attributes: { ...updatableAttributes(p), published: publicat },
+          })),
+        },
+      },
+    },
+  };
+}
+
+/** Sterge produse in lot (`catalog-item-bulk-delete-jobs`, cate 100). */
+export async function stergeInLot(
+  config: KlaviyoConfig,
+  ids: string[],
+): Promise<{ ok: true; joburi: number } | { error: string; status?: number }> {
+  let joburi = 0;
+  for (let i = 0; i < ids.length; i += PRODUSE_PE_JOB) {
+    const r = await klaviyoRequest(config, "POST", "/catalog-item-bulk-delete-jobs", {
+      data: {
+        type: "catalog-item-bulk-delete-job",
+        attributes: {
+          items: { data: ids.slice(i, i + PRODUSE_PE_JOB).map((id) => ({ type: "catalog-item", id: catalogItemId(String(id)) })) },
+        },
+      },
+    });
+    if ("error" in r) return r;
+    joburi++;
+  }
+  return { ok: true, joburi };
 }
 
 export async function deleteCatalogItem(config: KlaviyoConfig, externalId: string): Promise<{ ok: true } | { error: string; status?: number }> {

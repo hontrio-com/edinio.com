@@ -6,12 +6,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { randomUUID } from "node:crypto";
 import {
   pingBrevo, getLists, ensureAttributes, importContacts, splitName, toPublicBrevoConfig,
-  brevoWebhookUrl, registerWebhook, deleteWebhook, getTemplates, verificaSablonDoi,
+  brevoWebhookUrl, registerWebhook, deleteWebhook, getTemplates, verificaSablonDoi, asiguraComertul,
   type BrevoConfig, type BrevoList, type BrevoContactInput, type BrevoPublicConfig, type BrevoTemplate,
 } from "@/lib/brevo";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
 import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
 import { logError } from "@/lib/error-logger";
+import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { sincronizeazaProduseleBrevo } from "@/lib/brevo-sync";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
 
@@ -130,7 +132,7 @@ export async function saveBrevoSettings(
     double_optin?: boolean;
     doi_template_id?: number | null;
   },
-): Promise<{ config: BrevoPublicConfig } | { error: string }> {
+): Promise<{ config: BrevoPublicConfig; aviz?: string } | { error: string }> {
   const owned = await requireOwned(businessId);
   if ("error" in owned) return owned;
 
@@ -191,8 +193,53 @@ export async function saveBrevoSettings(
 
   if (!(await writeConfig(owned.supabase, businessId, next))) return { error: "Eroare la salvare." };
 
+  /*
+   * ⚠⚠ LA PORNIREA SINCRONIZARII E-COMMERCE: activarea aplicatiei eCommerce in contul lor si moneda
+   * de afisare (fara ele nimic din comert nu merge, sau venitul apare in alta moneda), apoi tot
+   * catalogul. Activarea dureaza cateva minute, deci catalogul poate fi respins pana atunci: se spune
+   * comerciantului, iar comenzile le reia coada singura.
+   */
+  let aviz: string | undefined;
+  if (next.ecommerce_sync) {
+    const com = await asiguraComertul(next);
+    if ("error" in com) {
+      await logError({ action: "brevo.ecommerce.activare", message: com.error, businessId, severity: "warning" });
+      aviz = `Nu am putut activa comertul in Brevo: ${com.error}`;
+    } else if (com.moneda === "in-activare") {
+      aviz = "Brevo activeaza comertul in contul tau (dureaza cateva minute). Apoi apasa „Sincronizeaza catalogul”.";
+    }
+    if (!current.ecommerce_sync && com && !("error" in com) && com.moneda !== "in-activare") {
+      dupaRaspuns(async () => {
+        const r = await sincronizeazaProduseleBrevo(businessId);
+        if ("error" in r) await logError({ action: "brevo.catalog.initial", message: r.error, businessId, severity: "warning" });
+      }, "brevo.catalog.initial", businessId);
+    }
+  }
+
   revalidate();
-  return { config: toPublicBrevoConfig(next) };
+  return { config: toPublicBrevoConfig(next), ...(aviz ? { aviz } : {}) };
+}
+
+/** Tot catalogul, acum (butonul „Sincronizeaza catalogul” din panou). */
+export async function syncBrevoCatalog(
+  businessId: string,
+): Promise<{ active: number; inactive: number } | { error: string }> {
+  const owned = await requireOwned(businessId);
+  if ("error" in owned) return owned;
+  const config = await readConfig(businessId);
+  if (!config?.api_key) return { error: "Conecteaza-ti contul Brevo intai." };
+  try {
+    const com = await asiguraComertul(config);
+    if ("error" in com) return { error: `Nu am putut activa comertul in Brevo: ${com.error}` };
+    if (com.moneda === "in-activare") {
+      return { error: "Brevo inca activeaza comertul in contul tau (dureaza cateva minute). Incearca din nou putin mai tarziu." };
+    }
+    const r = await sincronizeazaProduseleBrevo(businessId);
+    if ("error" in r) return { error: r.status === 403 ? "Brevo inca activeaza comertul in contul tau. Incearca din nou peste cateva minute." : r.error };
+    return { active: r.active, inactive: r.inactive };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Sincronizarea catalogului a esuat." };
+  }
 }
 
 /** Clear the connection entirely (removes the webhook best-effort). */

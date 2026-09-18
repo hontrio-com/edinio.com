@@ -50,8 +50,9 @@ const brevo = await import("@/lib/brevo");
 const brevoEcom = await import("@/lib/brevo-ecommerce");
 const mailchimp = await import("@/lib/mailchimp");
 const mailchimpEcom = await import("@/lib/mailchimp-ecommerce");
-const { intoarcereDinTranzitie } = await import("@/lib/email-marketing/comanda");
-const { aFostRaportataCaVanzare } = await import("@/lib/klaviyo-sync");
+const { aFostRaportataCaVanzare, metricaKlaviyo } = await import("@/lib/klaviyo-sync");
+const { stareFinanciaraMailchimp, atribuireMailchimp } = await import("@/lib/mailchimp-sync");
+const { verdictDinEroare } = await import("@/lib/email-marketing/coada");
 
 const fara = async () => {};
 
@@ -364,8 +365,9 @@ describe("Mailchimp", () => {
       id: "c1", email: "om@x.ro", currency_code: "RON", total: 35,
       lines: [{ product: { id: "p1", title: "Tricou (M)", price: 35 }, quantity: 1, price: 35 }],
     });
-    assert.deepEqual(apeluri.map((a) => a.metoda), ["GET", "POST"]);
-    assert.match(apeluri[1].url, /\/orders$/);
+    /* GET pe produs (exista, deci nu se atinge), apoi comanda prin PUT: „Add or update order”, idempotent. */
+    assert.deepEqual(apeluri.map((a) => a.metoda), ["GET", "PUT"]);
+    assert.match(apeluri[1].url, /\/orders\/c1$/);
   });
 
   test("produsul lipsa se creeaza din linie", async () => {
@@ -390,38 +392,53 @@ describe("Mailchimp", () => {
 });
 
 /* ══════════════════════════════════════════════════════════════════════════
-   CABLAREA: fiecare cale care incaseaza, anuleaza sau rambursează ANUNTA emailul
+   COADA: triggerul din baza, ruterul, cronul
    ══════════════════════════════════════════════════════════════════════════
 
-   ⚠ Proba citeste SURSA si stie ce poate: spune ca apelul exista pe fiecare cale, nu ca e
-   bine facut (purtarea e probata mai sus si in `email-sync-runtime.test.ts`). Apara ziua in
-   care o cale noua de rambursare, sau o reparatie, uita de email marketing.
+   ⚠ De la 18.09.2026 evenimentele de comanda nu mai pleaca din aplicatie: le scrie un trigger pe
+   `orders` (migratia `2027-01-28-email-marketing-coada.sql`), iar cronul le trimite. Probele de mai
+   jos citesc SURSA si stiu ce pot: spun ca legaturile exista. Purtarea triggerului a fost probata pe
+   productie intr-o tranzactie anulata (vezi `docs/marketing/EMAIL-MARKETING.md`); a functiilor de
+   trimitere, in `email-sync-runtime.test.ts`.
 */
-describe("cablarea", async () => {
+describe("coada", async () => {
   const { readFileSync, readdirSync, statSync } = await import("node:fs");
   const citeste = (f: string) => readFileSync(f, "utf8");
+  const MIGRATIA = citeste("migrations/2027-01-28-email-marketing-coada.sql");
 
-  const CAI: Array<[string, RegExp, string]> = [
-    ["src/lib/orders/finalizare-plata.ts", /anuntaEmailPlata\(comanda\.id/, "plata confirmata de procesator (toti cinci)"],
-    ["src/lib/actions/order.actions.ts", /anuntaEmailPlata\(orderId/, "plata marcata din panou"],
-    ["src/lib/actions/order.actions.ts", /if \(intoarsa\) anuntaEmailIntoarcere\(orderId, intoarsa/, "anularea sau rambursarea din panou"],
-    ["src/lib/actions/bulk-orders.actions.ts", /anuntaEmailIntoarcere\(row\.id, intoarsa/, "anularea in lot"],
-    ["src/lib/plati/banii-s-au-intors.ts", /anuntaEmailIntoarcere\(order\.id, "rambursata"/, "rambursarea confirmata de Stripe, iPay, Klarna, Revolut"],
-    ["src/lib/actions/netopia.actions.ts", /anuntaEmailIntoarcere\(orderId, "rambursata"/, "rambursarea Netopia din panou"],
-    ["src/lib/netopia-aplica-statusul.ts", /anuntaEmailIntoarcere\(order\.id, "rambursata"/, "rambursarea anuntata de IPN-ul Netopia"],
-    ["src/lib/netopia-aplica-statusul.ts", /if \(intoarsa\) anuntaEmailIntoarcere\(order\.id, intoarsa/, "anularea anuntata de IPN-ul Netopia"],
-  ];
-  for (const [f, tipar, cale] of CAI) {
-    test(`${cale}`, () => assert.match(citeste(f), tipar, `${f}: ${cale} nu mai anunta email marketingul`));
-  }
-
-  test("Klaviyo primeste metoda de plata la AMBELE creari de comanda (de ea atarna venitul)", () => {
-    const s = citeste("src/lib/actions/order.actions.ts");
-    assert.equal(s.match(/maybeTrackKlaviyoOrder\(\{/g)?.length, 2);
-    assert.equal(s.match(/paymentMethod: metodaPlata,/g)?.length, 2);
+  test("triggerul prinde crearea si ORICE schimbare de status sau de plata", () => {
+    assert.match(MIGRATIA, /after insert on public\.orders/);
+    assert.match(MIGRATIA, /after update of status, payment_status on public\.orders/);
+    for (const [status, fel] of [["shipped", "expediata"], ["delivered", "livrata"], ["cancelled", "anulata"], ["refunded", "rambursata"]]) {
+      assert.match(MIGRATIA, new RegExp(`new\\.status = '${status}' then v_feluri := v_feluri \\|\\| '${fel}'`), `${status} -> ${fel}`);
+    }
+    assert.match(MIGRATIA, /new\.payment_status = 'paid' then\s+v_feluri := v_feluri \|\| 'platita'/);
   });
 
-  test("⚠ niciun apel catre furnizorii de email nu mai e `void` gol (ar putea fi taiat dupa raspuns)", () => {
+  test("⚠ triggerul NU poate opri o comanda: orice eroare a lui se inghite", () => {
+    assert.match(MIGRATIA, /exception when others then[\s\S]*?return new;/);
+  });
+
+  test("⚠ revendicarea pastreaza ordinea pe (comanda, furnizor) si o arenda mai lunga decat cronul", () => {
+    /*
+     * ⚠ CLAUZA INTREAGA, pana la paranteza care o inchide. Cautata doar pe inceput, o conditie
+     * strecurata la coada (`and false`) o anula fara ca proba sa observe: bancul de mutanti a prins-o.
+     */
+    assert.match(MIGRATIA, /and not exists \(\s*select 1\s+from public\.email_marketing_coada p\s+where p\.order_id = c\.order_id\s+and p\.furnizor = c\.furnizor\s+and p\.id < c\.id\s+and p\.trimis_la is null\s+and p\.abandonat_la is null\s*\)/);
+    assert.match(MIGRATIA, /for update skip locked/);
+    const arendaMinute = Number(MIGRATIA.match(/now\(\) \+ interval '(\d+) minutes'/)?.[1]);
+    const ruta = citeste("src/app/api/cron/email-marketing/route.ts");
+    const maxDuration = Number(ruta.match(/export const maxDuration = (\d+);/)?.[1]);
+    assert.ok(arendaMinute * 60 > maxDuration, `arenda (${arendaMinute} min) nu depaseste maxDuration (${maxDuration} s)`);
+  });
+
+  test("cronul e programat din minut in minut si cere secretul", () => {
+    const v = JSON.parse(citeste("vercel.json")) as { crons: Array<{ path: string; schedule: string }> };
+    assert.deepEqual(v.crons.find((c) => c.path === "/api/cron/email-marketing")?.schedule, "* * * * *");
+    assert.match(citeste("src/app/api/cron/email-marketing/route.ts"), /if \(!verificaCron\(req\)\)/);
+  });
+
+  test("⚠ un singur loc trimite evenimentele de comanda: ruterul cozii", () => {
     const toate: string[] = [];
     const umbla = (d: string) => {
       for (const n of readdirSync(d)) {
@@ -431,20 +448,136 @@ describe("cablarea", async () => {
       }
     };
     umbla("src");
-    const goale = toate.filter((f) => /void maybe(Sync|Track|Mark)(Mailchimp|Brevo|Klaviyo)/.test(citeste(f)));
-    assert.deepEqual(goale, []);
     assert.ok(toate.length > 100, "plasa n-a gasit fisierele");
+    for (const f of toate) {
+      const s = citeste(f);
+      /* Definite in `*-sync.ts`, chemate NUMAI din ruter. */
+      if (/eveniment(Mailchimp|Brevo|Klaviyo)\(/.test(s) && !f.endsWith("-sync.ts") && !f.endsWith("email-marketing/comanda.ts")) {
+        assert.fail(`${f} trimite evenimente de comanda pe langa coada`);
+      }
+      assert.doesNotMatch(s, /void maybe(Sync|Track|Mark)(Mailchimp|Brevo|Klaviyo)/, `${f}: apel \`void\` gol catre un furnizor de email`);
+      assert.doesNotMatch(s, /anuntaEmail(Plata|Intoarcere)\(/, `${f}: cablarea veche, pe langa coada, s-a intors`);
+    }
   });
 });
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-describe("ce se anunta la o tranzitie", () => {
-  test("anulata, rambursata, sau nimic", () => {
-    assert.equal(intoarcereDinTranzitie({ statusNou: "cancelled", statusSchimbat: true, plataSchimbata: false }), "anulata");
-    assert.equal(intoarcereDinTranzitie({ statusNou: "refunded", statusSchimbat: true, plataSchimbata: false }), "rambursata");
-    assert.equal(intoarcereDinTranzitie({ statusNou: "shipped", statusSchimbat: true, plataNoua: "refunded", plataSchimbata: true }), "rambursata");
-    assert.equal(intoarcereDinTranzitie({ statusNou: "cancelled", statusSchimbat: false, plataSchimbata: false }), null, "statusul nu s-a schimbat");
-    assert.equal(intoarcereDinTranzitie({ statusNou: "delivered", statusSchimbat: true, plataNoua: "paid", plataSchimbata: true }), null);
-    assert.equal(intoarcereDinTranzitie({ statusNou: "cancelled", statusSchimbat: true, plataNoua: "refunded", plataSchimbata: true }), "anulata");
+describe("⚠ campania Mailchimp se fotografiaza la aterizare si ajunge pe comanda", async () => {
+  const { readFileSync } = await import("node:fs");
+
+  test("`captureAttribution` rulata ea: `mc_cid` si `mc_tc` din adresa intra in fotografie", async () => {
+    const memorie = new Map<string, string>();
+    const g = globalThis as unknown as Record<string, unknown>;
+    const inainte = { window: g.window, document: g.document, localStorage: g.localStorage };
+    g.window = { location: { href: "https://magazin.ro/produse/tricou?mc_cid=a1b2c3d4e5&mc_tc=prec&mc_eid=xyz" } };
+    g.document = { referrer: "", cookie: "" };
+    g.localStorage = {
+      getItem: (k: string) => memorie.get(k) ?? null,
+      setItem: (k: string, v: string) => { memorie.set(k, v); },
+      removeItem: (k: string) => { memorie.delete(k); },
+      key: () => null,
+      get length() { return memorie.size; },
+    };
+    try {
+      const { captureAttribution } = await import("@/lib/storefront/attribution");
+      captureAttribution("");
+      const scrisa = JSON.parse(memorie.get("edinio_attribution") ?? "{}") as Record<string, string>;
+      assert.equal(scrisa.mc_cid, "a1b2c3d4e5");
+      assert.equal(scrisa.mc_tc, "prec");
+      assert.equal(scrisa.landing, "/produse/tricou");
+    } finally {
+      g.window = inainte.window; g.document = inainte.document; g.localStorage = inainte.localStorage;
+    }
+  });
+
+  test("serverul le pastreaza (lista alba a atribuirii)", () => {
+    const s = readFileSync("src/lib/actions/order.actions.ts", "utf8");
+    const lista = s.slice(s.indexOf("const CHEI_ATRIBUIRE"), s.indexOf("] as const;", s.indexOf("const CHEI_ATRIBUIRE")));
+    assert.match(lista, /"mc_cid", "mc_tc"/);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+describe("reguli pure ale evenimentelor", () => {
+  test("verdictul unei erori: 5xx, 408, 409, 429 si reteaua se reiau; restul de 4xx e refuz", () => {
+    for (const s of [undefined, 500, 503, 408, 409, 429]) assert.equal(verdictDinEroare({ error: "x", status: s }).fel, "esuat", String(s));
+    for (const s of [400, 401, 403, 404, 422]) assert.equal(verdictDinEroare({ error: "x", status: s }).fel, "refuzat", String(s));
+  });
+
+  test("Klaviyo: metrica fiecarui eveniment, si cand nu pleaca nimic", () => {
+    assert.deepEqual(metricaKlaviyo("creata", "ramburs", "unpaid"), { metric: "Placed Order" });
+    assert.ok("sarit" in metricaKlaviyo("creata", "stripe", "unpaid"));
+    assert.deepEqual(metricaKlaviyo("creata", "stripe", "paid"), { metric: "Placed Order" });
+    assert.deepEqual(metricaKlaviyo("platita", "stripe", "paid"), { metric: "Placed Order" });
+    assert.deepEqual(metricaKlaviyo("expediata", "ramburs", "unpaid"), { metric: "Fulfilled Order" });
+    assert.deepEqual(metricaKlaviyo("livrata", "ramburs", "unpaid"), { metric: "Delivered Order" });
+    assert.deepEqual(metricaKlaviyo("anulata", "ramburs", "unpaid"), { metric: "Cancelled Order" });
+    assert.ok("sarit" in metricaKlaviyo("anulata", "stripe", "unpaid"));
+    assert.deepEqual(metricaKlaviyo("rambursata", "stripe", "refunded"), { metric: "Refunded Order" });
+  });
+
+  test("Mailchimp: starea financiara din randul de acum", () => {
+    assert.equal(stareFinanciaraMailchimp("pending", "unpaid"), "pending");
+    assert.equal(stareFinanciaraMailchimp("shipped", "paid"), "paid");
+    assert.equal(stareFinanciaraMailchimp("cancelled", "paid"), "cancelled");
+    assert.equal(stareFinanciaraMailchimp("delivered", "refunded"), "refunded");
+  });
+
+  test("⚠ Mailchimp: campania, codul de urmarire si aterizarea, curatate", () => {
+    assert.deepEqual(atribuireMailchimp({ mc_cid: "a1b2c3d4e5", mc_tc: "prec", landing: "/p/x" }, "https://magazin.ro"),
+      { campaign_id: "a1b2c3d4e5", tracking_code: "prec", landing_site: "https://magazin.ro/p/x" });
+    /* `prec` e SINGURA valoare permisa de spec; un id cu caractere ciudate nu pleaca. */
+    assert.deepEqual(atribuireMailchimp({ mc_cid: "a1b<script>", mc_tc: "click" }, null), {});
+    assert.deepEqual(atribuireMailchimp(null, "https://m.ro"), {});
+  });
+
+  test("Mailchimp: corpul comenzii duce reducerea, transportul, adresa si campania", () => {
+    const c = mailchimpEcom.corpComanda({
+      id: "c1", email: "Om@X.ro", currency_code: "RON", total: 90, financial_status: "pending",
+      campaign_id: "abc", landing_site: "https://m.ro/p", tracking_code: "prec", shipping_total: 15, discount_total: 10,
+      promos: [{ code: "T10", amount_discounted: 10, type: "fixed" }],
+      shipping_address: { city: "Brasov", country_code: "RO", address1: undefined },
+      lines: [{ product: { id: "p1", title: "A", price: 35 }, quantity: 2, price: 35 }],
+    });
+    for (const k of ["id", "customer", "currency_code", "order_total", "lines"]) assert.ok(k in c, `lipseste ${k}`);
+    assert.equal(c.campaign_id, "abc");
+    assert.deepEqual(c.shipping_address, { city: "Brasov", country_code: "RO" });
+    assert.equal((c.customer as Record<string, unknown>).opt_in_status, false);
+  });
+
+  test("Mailchimp: operatiile lotului de catalog", () => {
+    const ops = mailchimpEcom.operatiiCatalog("s1", [{ id: "p1", title: "A", price: 1, url: "https://m.ro/product/a" }], ["p9"]);
+    assert.deepEqual(ops.map((o) => [o.method, o.path]), [["PUT", "/ecommerce/stores/s1/products/p1"], ["DELETE", "/ecommerce/stores/s1/products/p9"]]);
+    assert.equal(JSON.parse((ops[0] as { body?: string }).body as string).variants[0].id, "p1");
+  });
+
+  test("Klaviyo: 250 de produse = 3 bucati, cate un job de creare si unul de actualizare", async () => {
+    raspunde = () => ({ status: 202 });
+    const produse = Array.from({ length: 250 }, (_, i) => ({ id: `p${i}`, title: `P${i}`, url: `https://m.ro/product/p${i}`, price: 1 }));
+    const r = await klaviyoEcom.catalogInLot({ enabled: true, api_key: "pk_x", list_id: "L" }, produse);
+    assert.deepEqual(r, { ok: true, joburi: 6 });
+    assert.deepEqual(apeluri.map((a) => new URL(a.url).pathname.split("/").pop()), [
+      "catalog-item-bulk-create-jobs", "catalog-item-bulk-update-jobs",
+      "catalog-item-bulk-create-jobs", "catalog-item-bulk-update-jobs",
+      "catalog-item-bulk-create-jobs", "catalog-item-bulk-update-jobs",
+    ]);
+    const n = (apeluri[4].corp as { data: { attributes: { items: { data: unknown[] } } } }).data.attributes.items.data.length;
+    assert.equal(n, 50);
+  });
+
+  test("⚠⚠ Brevo: comertul se activeaza; 403 inseamna „in activare”, nu esec", async () => {
+    raspunde = (a) => (new URL(a.url).pathname === "/v3/ecommerce/activate" ? { status: 200, corp: {} } : { status: 403, corp: { message: "eCommerce is not activated" } });
+    assert.deepEqual(await brevo.asiguraComertul({ api_key: "k" }), { ok: true, moneda: "in-activare" });
+    apeluri = [];
+    raspunde = (a) => (new URL(a.url).pathname === "/v3/ecommerce/activate" ? { status: 400, corp: { message: "already activated" } }
+      : a.metoda === "GET" ? { status: 200, corp: { code: "EUR" } } : { status: 200, corp: { code: "RON" } });
+    assert.deepEqual(await brevo.asiguraComertul({ api_key: "k" }), { ok: true, moneda: "setata" });
+    assert.deepEqual(apeluri.at(-1)?.corp, { code: "RON" });
+  });
+
+  test("Brevo: produsele scoase din vanzare pleaca in lot cu `isDeleted`", async () => {
+    raspunde = () => ({ status: 201, corp: {} });
+    await brevoEcom.batchProducts({ enabled: true, api_key: "k", list_id: 1 }, [{ id: "p3", name: "G", price: 9 }], true);
+    assert.deepEqual((apeluri[0].corp as { products: unknown[] }).products, [{ id: "p3", name: "G", price: 9, isDeleted: true }]);
   });
 });

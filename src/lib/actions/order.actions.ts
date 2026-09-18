@@ -73,12 +73,10 @@ import { ORDER_STATUS } from "@/lib/orders/status";
 import { trimiteSiLasaUrma } from "@/lib/smso-urma";
 import type { SmsoConfig } from "@/lib/smso";
 import { maybeSendNoticeNotification, noticeTriggerForStatus, noticeTriggerForPayment } from "@/lib/notice-notify";
-import { maybeSyncMailchimpSubscriber, maybeSyncMailchimpOrder, orderValueTag } from "@/lib/mailchimp-sync";
-import { anuntaEmailPlata, anuntaEmailIntoarcere, intoarcereDinTranzitie } from "@/lib/email-marketing/comanda";
-import { storeBaseUrl } from "@/lib/seo";
+import { maybeSyncMailchimpSubscriber, orderValueTag } from "@/lib/mailchimp-sync";
 import { pragTransportGratuit } from "@/lib/storefront/prag-transport-gratuit";
-import { maybeSyncBrevoSubscriber, maybeSyncBrevoOrder } from "@/lib/brevo-sync";
-import { maybeSyncKlaviyoSubscriber, maybeTrackKlaviyoOrder } from "@/lib/klaviyo-sync";
+import { maybeSyncBrevoSubscriber } from "@/lib/brevo-sync";
+import { maybeSyncKlaviyoSubscriber } from "@/lib/klaviyo-sync";
 import { formatPrice, formatDate } from "@/lib/utils/format";
 import type { Json } from "@/types/database.types";
 import { raporteazaCumparareaGa4, raporteazaRambursareaGa4 } from "@/lib/orders/ga4-comanda";
@@ -611,6 +609,8 @@ const CHEI_ATRIBUIRE = [
   "fbp", "fbc",
   /* TikTok, din 18.09.2026: cookie-ul `_ttp`, pentru Events API. `ttclid` e deja mai sus. */
   "ttp",
+  /* Mailchimp, din 18.09.2026: campania si codul de urmarire din link, pentru venitul atribuit campaniei. */
+  "mc_cid", "mc_tc",
 ] as const;
 
 // Merge client-captured attribution with the server-side user-agent into the
@@ -2192,14 +2192,14 @@ export async function placeOrder(data: {
   try {
     const { data: settings } = await admin
       .from("store_settings")
-      .select("notifications_config, businesses(business_name, store_name, user_id, slug, custom_domain)")
+      .select("notifications_config, businesses(business_name, store_name, user_id, slug)")
       .eq("business_id", data.business_id)
       .single();
     if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
-      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null; custom_domain: string | null } | null;
+      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null } | null;
       // Customer-facing emails use the public store name, falling back to the legal/account name.
       const businessName = biz?.store_name || biz?.business_name || "";
 
@@ -2318,25 +2318,15 @@ export async function placeOrder(data: {
       });
 
       /*
-       * EMAIL MARKETING (Mailchimp, Brevo, Klaviyo).
+       * EMAIL MARKETING (Mailchimp, Brevo, Klaviyo): abonarea clientului care a bifat newsletterul.
        *
-       * ⚠ PRIN `dupaRaspuns`, NU `void`. Fiecare furnizor face cateva cereri HTTP una dupa
-       * alta, iar actiunea raspunde imediat: pornite si uitate, puteau fi taiate cand functia
-       * ingheata dupa raspuns, fara nicio urma. Toate celelalte integrari trec deja pe aici.
+       * ⚠ COMANDA INSASI NU MAI PLEACA DE AICI. O scrie in coada triggerul de pe `orders`
+       * (`lib/email-marketing/coada.ts`), impreuna cu plata, expedierea, livrarea, anularea si
+       * rambursarea, iar `/api/cron/email-marketing` o trimite, cu reincercari.
        *
-       * Adresa magazinului e cea publica (`storeBaseUrl`): domeniul propriu cand exista. Pana
-       * pe 18.09.2026 se facea din apexul platformei, care raspunde 308.
+       * ⚠ PRIN `dupaRaspuns`, NU `void`: actiunea raspunde imediat, iar o abonare pornita si uitata
+       * putea fi taiata cand functia ingheata dupa raspuns, fara nicio urma.
        */
-      const adresaMagazinului = biz?.slug ? storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain ?? null }) : undefined;
-      const liniiEmail = allItems
-        .filter((i) => !i.product_id.startsWith("extra_"))
-        .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity }));
-      /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
-         da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
-         Vezi `clientDeMarketplace`. */
-      const origineaComenzii = buildOrderSource(data.source, userAgent);
-
-      // Abonarea clientului care a bifat newsletterul la checkout.
       if (data.newsletter_opt_in && data.customer_email) {
         const emailAbonat = data.customer_email;
         dupaRaspuns(() => maybeSyncMailchimpSubscriber({
@@ -2366,50 +2356,6 @@ export async function placeOrder(data: {
           orderValue: total,
         }), "klaviyo.abonat", data.business_id);
       }
-
-      // Comanda: venit atribuit, segmentare dupa cumparaturi, retargeting de produs.
-      dupaRaspuns(() => maybeSyncMailchimpOrder({
-        businessId: data.business_id,
-        orderSource: origineaComenzii,
-        storeName: businessName,
-        storeUrl: adresaMagazinului,
-        order: {
-          id: order.id,
-          email: data.customer_email,
-          name: numeClient,
-          currency: "RON",
-          total,
-          financial_status: "pending",
-          items: liniiEmail,
-        },
-      }), "mailchimp.comanda", data.business_id);
-      dupaRaspuns(() => maybeSyncBrevoOrder({
-        businessId: data.business_id,
-        orderSource: origineaComenzii,
-        storeUrl: adresaMagazinului,
-        order: {
-          id: order.id,
-          email: data.customer_email,
-          total,
-          status: "pending",
-          items: liniiEmail,
-        },
-      }), "brevo.comanda", data.business_id);
-      /* Klaviyo: „Placed Order” acum numai daca vanzarea e deja confirmata (ramburs, transfer).
-         La plata online pleaca din `anuntaEmailPlata`, cand banii chiar au intrat. */
-      dupaRaspuns(() => maybeTrackKlaviyoOrder({
-        businessId: data.business_id,
-        orderSource: origineaComenzii,
-        paymentMethod: metodaPlata,
-        storeUrl: adresaMagazinului,
-        order: {
-          id: order.id,
-          email: data.customer_email,
-          name: numeClient,
-          total,
-          items: liniiEmail,
-        },
-      }), "klaviyo.comanda", data.business_id);
     }
   } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }
 
@@ -2737,25 +2683,10 @@ export async function updateOrder(orderId: string, data: { status: string; payme
   }
 
   /*
-   * PLATA SI INTOARCEREA, CATRE MAILCHIMP, BREVO SI KLAVIYO (`lib/email-marketing/comanda.ts`).
-   *
-   * ⚠ STA AFARA DIN BLOCUL DE SMS, dinadins. Pana acum era inauntrul lui
-   * `if (order.customer_phone && …)`, deci pe o comanda fara telefon nu pleca NICIODATA,
-   * tacut, iar comentariul de deasupra spunea ca „ramane neatinsa": adevarat fata de
-   * `poateInstiinta`, fals fata de telefon.
-   *
-   * ⚠ CUMPARATORII DE MARKETPLACE nu se opresc aici, ci INAUNTRUL functiilor fiecarui
-   * furnizor, acolo unde se citeste comanda: sunt mai multe cai catre ele, si o poarta pusa
-   * la apelant le-ar fi pazit pe una. Vezi `clientDeMarketplace`.
+   * ⚠ PLATA, ANULAREA SI RAMBURSAREA NU SE MAI ANUNTA DE AICI catre Mailchimp, Brevo si Klaviyo:
+   * le scrie in coada triggerul de pe `orders` (`lib/email-marketing/coada.ts`), pe TOATE caile, cu
+   * reincercari. Poarta de marketplace sta in cititorul fiecarui furnizor (`clientDeMarketplace`).
    */
-  if (paymentChanged && data.payment_status === "paid") {
-    anuntaEmailPlata(orderId, order.business_id);
-  }
-  const intoarsa = intoarcereDinTranzitie({
-    statusNou: data.status, statusSchimbat: statusChanged,
-    plataNoua: data.payment_status, plataSchimbata: paymentChanged,
-  });
-  if (intoarsa) anuntaEmailIntoarcere(orderId, intoarsa, order.business_id);
 
   revalidatePath("/dashboard/orders");
   revalidatePath(`/dashboard/orders/${orderId}`);
@@ -5141,14 +5072,14 @@ export async function placeCartOrder(data: {
   try {
     const { data: settings } = await admin
       .from("store_settings")
-      .select("notifications_config, businesses(business_name, store_name, user_id, slug, custom_domain)")
+      .select("notifications_config, businesses(business_name, store_name, user_id, slug)")
       .eq("business_id", data.business_id)
       .single();
     if (settings) {
       const config = parseNotificationsConfig(
         (settings.notifications_config as Record<string, unknown>) ?? {}
       );
-      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null; custom_domain: string | null } | null;
+      const biz = settings.businesses as unknown as { business_name: string; store_name: string | null; user_id: string; slug: string | null } | null;
       // Customer-facing emails use the public store name, falling back to the legal/account name.
       const businessName = biz?.store_name || biz?.business_name || "";
 
@@ -5271,25 +5202,15 @@ export async function placeCartOrder(data: {
       });
 
       /*
-       * EMAIL MARKETING (Mailchimp, Brevo, Klaviyo).
+       * EMAIL MARKETING (Mailchimp, Brevo, Klaviyo): abonarea clientului care a bifat newsletterul.
        *
-       * ⚠ PRIN `dupaRaspuns`, NU `void`. Fiecare furnizor face cateva cereri HTTP una dupa
-       * alta, iar actiunea raspunde imediat: pornite si uitate, puteau fi taiate cand functia
-       * ingheata dupa raspuns, fara nicio urma. Toate celelalte integrari trec deja pe aici.
+       * ⚠ COMANDA INSASI NU MAI PLEACA DE AICI. O scrie in coada triggerul de pe `orders`
+       * (`lib/email-marketing/coada.ts`), impreuna cu plata, expedierea, livrarea, anularea si
+       * rambursarea, iar `/api/cron/email-marketing` o trimite, cu reincercari.
        *
-       * Adresa magazinului e cea publica (`storeBaseUrl`): domeniul propriu cand exista. Pana
-       * pe 18.09.2026 se facea din apexul platformei, care raspunde 308.
+       * ⚠ PRIN `dupaRaspuns`, NU `void`: actiunea raspunde imediat, iar o abonare pornita si uitata
+       * putea fi taiata cand functia ingheata dupa raspuns, fara nicio urma.
        */
-      const adresaMagazinului = biz?.slug ? storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain ?? null }) : undefined;
-      const liniiEmail = allItems
-        .filter((i) => !i.product_id.startsWith("extra_"))
-        .map((i) => ({ product_id: i.product_id, name: i.name, price: i.price, quantity: i.quantity }));
-      /* ⚠ Calea magazinului propriu: aici nu exista marketplace, deci `buildOrderSource`
-         da chiar originea vizitatorului. Campul e cerut ca sa nu se poata uita nicaieri.
-         Vezi `clientDeMarketplace`. */
-      const origineaComenzii = buildOrderSource(data.source, userAgent);
-
-      // Abonarea clientului care a bifat newsletterul la checkout.
       if (data.newsletter_opt_in && data.customer_email) {
         const emailAbonat = data.customer_email;
         dupaRaspuns(() => maybeSyncMailchimpSubscriber({
@@ -5319,50 +5240,6 @@ export async function placeCartOrder(data: {
           orderValue: total,
         }), "klaviyo.abonat", data.business_id);
       }
-
-      // Comanda: venit atribuit, segmentare dupa cumparaturi, retargeting de produs.
-      dupaRaspuns(() => maybeSyncMailchimpOrder({
-        businessId: data.business_id,
-        orderSource: origineaComenzii,
-        storeName: businessName,
-        storeUrl: adresaMagazinului,
-        order: {
-          id: order.id,
-          email: data.customer_email,
-          name: numeClient,
-          currency: "RON",
-          total,
-          financial_status: "pending",
-          items: liniiEmail,
-        },
-      }), "mailchimp.comanda", data.business_id);
-      dupaRaspuns(() => maybeSyncBrevoOrder({
-        businessId: data.business_id,
-        orderSource: origineaComenzii,
-        storeUrl: adresaMagazinului,
-        order: {
-          id: order.id,
-          email: data.customer_email,
-          total,
-          status: "pending",
-          items: liniiEmail,
-        },
-      }), "brevo.comanda", data.business_id);
-      /* Klaviyo: „Placed Order” acum numai daca vanzarea e deja confirmata (ramburs, transfer).
-         La plata online pleaca din `anuntaEmailPlata`, cand banii chiar au intrat. */
-      dupaRaspuns(() => maybeTrackKlaviyoOrder({
-        businessId: data.business_id,
-        orderSource: origineaComenzii,
-        paymentMethod: metodaPlata,
-        storeUrl: adresaMagazinului,
-        order: {
-          id: order.id,
-          email: data.customer_email,
-          name: numeClient,
-          total,
-          items: liniiEmail,
-        },
-      }), "klaviyo.comanda", data.business_id);
     }
   } catch (e) { logError({ action: "placeOrder.emails", message: (e as Error).message ?? "Email send failed", details: { businessId: data.business_id }, severity: "warning" }); }
 

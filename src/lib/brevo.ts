@@ -453,6 +453,38 @@ export async function registerWebhook(
   return { ok: true, id: res.data?.id };
 }
 
+/**
+ * Aplicatia eCommerce a contului si moneda in care Brevo citeste sumele.
+ *
+ * ⚠⚠ FARA ACTIVARE, NIMIC DIN COMERT NU MERGE. Documentatia lor („Import your orders”): „To use these
+ * endpoints, your account must have the Brevo eCommerce application enabled”. Pana pe 18.09.2026 n-o
+ * activam niciodata: pe un cont nou, fiecare produs si fiecare comanda ar fi fost respinse. Activarea
+ * dureaza („eCommerce activation is in process, please wait for 5 minutes”), iar pana atunci
+ * capetele raspund 403; coada de comenzi le reia singura.
+ *
+ * ⚠ MONEDA. Comenzile Brevo n-au camp de moneda: suma se citeste in moneda de AFISARE a contului.
+ * Trimitem lei, deci contul trebuie sa arate lei, altfel venitul apare in alta moneda.
+ */
+export const MONEDA_MAGAZIN = "RON";
+
+export async function asiguraComertul(
+  creds: Creds,
+): Promise<{ ok: true; moneda: "setata" | "era" | "in-activare" } | { error: string; status?: number }> {
+  const act = await brevoRequest(creds, "POST", "/ecommerce/activate");
+  /* Deja activ: unele conturi raspund cu o eroare de „already”, care e chiar starea dorita. */
+  if ("error" in act && act.status !== 400 && act.status !== 409) return act;
+
+  const cur = await brevoRequest<{ code?: string }>(creds, "GET", "/ecommerce/config/displayCurrency");
+  if ("error" in cur) {
+    /* 403 = „eCommerce is not activated” inca: moneda se pune la urmatoarea sincronizare. */
+    return cur.status === 403 ? { ok: true, moneda: "in-activare" } : cur;
+  }
+  if ((cur.data?.code ?? "").toUpperCase() === MONEDA_MAGAZIN) return { ok: true, moneda: "era" };
+  const set = await brevoRequest(creds, "POST", "/ecommerce/config/displayCurrency", { code: MONEDA_MAGAZIN });
+  if ("error" in set) return set.status === 403 ? { ok: true, moneda: "in-activare" } : set;
+  return { ok: true, moneda: "setata" };
+}
+
 /** Remove a previously registered webhook (best-effort, on disconnect). */
 export async function deleteWebhook(config: BrevoConfig, id?: number): Promise<void> {
   if (!id) return;

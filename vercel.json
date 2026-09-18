@@ -184,6 +184,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/email-marketing",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/curata-fisiere",
       "schedule": "37 4 * * *"
     }

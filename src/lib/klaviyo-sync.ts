@@ -1,7 +1,9 @@
 // Server-side dispatcher: sync one contact / order / product into the merchant's Klaviyo
 // account when the integration is connected and the source is enabled. Never throws: it
-// must never break the order/popup/form flow it is called from. Callers schedule it with
-// `dupaRaspuns`, so it runs after the response without being cut off.
+// must never break the order/popup/form flow it is called from. Contacts and products are
+// scheduled with `dupaRaspuns`; ORDER events come from the queue (`lib/email-marketing/coada.ts`,
+// filled by a trigger on `orders`), so every path that creates, pays, ships, cancels or refunds
+// an order reaches Klaviyo, with retries.
 //
 // Klaviyo specifics vs Brevo: a subscriber needs TWO calls (upsert profile for
 // properties + subscribe job for consent); e-commerce is order EVENTS + catalog items
@@ -9,15 +11,16 @@
 // which reads each profile's suppressions before subscribing.
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { logError } from "@/lib/error-logger";
 import { clientDeMarketplace } from "@/lib/orders/client-de-marketplace";
 import { asteaptaIncasareOnline } from "@/lib/orders/vanzare-confirmata";
 import { storeBaseUrl } from "@/lib/seo";
+import { verdictDinEroare, type FelEveniment, type Verdict } from "@/lib/email-marketing/coada";
+import { citesteCatalogul, linkProdus, type ProdusCatalog } from "@/lib/email-marketing/catalog";
 import { upsertProfile, subscribeProfiles, splitName, type KlaviyoConfig } from "@/lib/klaviyo";
 import {
-  trackOrderEvent, upsertCatalogItem, deleteCatalogItem,
-  type KlaviyoOrderItem, type KlaviyoOrderMetric,
+  trackOrderEvent, upsertCatalogItem, deleteCatalogItem, catalogInLot, stergeInLot,
+  type KlaviyoOrderItem, type KlaviyoOrderMetric, type KlaviyoCatalogProduct,
 } from "@/lib/klaviyo-ecommerce";
 
 export type KlaviyoSource = "checkout" | "popup" | "forms";
@@ -110,66 +113,6 @@ function liniiKlaviyo(items: OrderItem[], storeUrl?: string | null): KlaviyoOrde
     }));
 }
 
-/**
- * „Placed Order” la CREAREA comenzii, numai cand vanzarea e deja confirmata.
- *
- * ⚠ La plata online (card, Klarna, Revolut, iPay) comanda exista inainte ca banii sa intre,
- * iar pana pe 18.09.2026 pleca venit in Klaviyo si pentru platile refuzate sau abandonate.
- * Aceeasi regula ca la Meta, TikTok si GA4 (`vanzare-confirmata.ts`): la plata online
- * evenimentul pleaca din `maybeMarkKlaviyoOrderPaid`, cand banii chiar au intrat.
- */
-export async function maybeTrackKlaviyoOrder(opts: {
-  businessId: string;
-  storeUrl?: string;
-  /**
-   * ⚠ OBLIGATORIU, ca `tsc` sa numeasca fiecare apelant.
-   *
-   * De el atarna daca un cumparator de marketplace intra sau nu in marketingul
-   * comerciantului. Optional, apelantii care nu se gandesc la asta l-ar fi omis tacut, iar
-   * poarta ar fi existat degeaba. Vezi `clientDeMarketplace`.
-   */
-  orderSource: unknown;
-  /** ⚠ OBLIGATORIU, din acelasi motiv: de metoda atarna daca vanzarea e confirmata acum. */
-  paymentMethod: string | null | undefined;
-  order: {
-    id: string;
-    email: string | null | undefined;
-    name?: string | null;
-    total: number;
-    createdAt?: string;
-    items: OrderItem[];
-  };
-}): Promise<void> {
-  try {
-    /* ⚠ Cumparatorul unui marketplace nu e clientul comerciantului: vezi
-       `clientDeMarketplace`. Emailul poate fi chiar un alias al platformei. */
-    if (clientDeMarketplace(opts.orderSource)) return;
-    if (asteaptaIncasareOnline(opts.paymentMethod)) return;
-    const email = (opts.order.email ?? "").trim();
-    if (!email || opts.order.items.length === 0) return;
-
-    const config = await readConfig(opts.businessId);
-    if (!config?.enabled || !config.api_key || !config.list_id || !config.ecommerce_sync) return;
-
-    const { fname, lname } = splitName(opts.order.name);
-    const res = await trackOrderEvent(config, "Placed Order", {
-      id: opts.order.id,
-      email,
-      first_name: fname,
-      last_name: lname,
-      total: opts.order.total,
-      currency: MONEDA,
-      time: opts.order.createdAt,
-      items: liniiKlaviyo(opts.order.items, opts.storeUrl),
-    });
-    if ("error" in res) {
-      await logError({ action: "klaviyo.ecommerce.order", message: res.error, businessId: opts.businessId, severity: "warning" });
-    }
-  } catch (e) {
-    await logError({ action: "klaviyo.ecommerce.order", message: (e as Error)?.message ?? "order track failed", businessId: opts.businessId, severity: "warning" });
-  }
-}
-
 type ComandaCitita = {
   business_id: string;
   customer_email: string | null;
@@ -183,56 +126,27 @@ type ComandaCitita = {
   businesses: { slug: string; custom_domain: string | null } | null;
 };
 
-/** Citeste comanda si o trece prin poarta de marketplace. `null` = nu se trimite nimic. */
-async function comandaPentruKlaviyo(orderId: string): Promise<{ c: ComandaCitita; config: KlaviyoConfig } | null> {
+/**
+ * Citeste comanda si o trece prin poarta de marketplace. `{ sarit }` = nimic de trimis, cu motivul.
+ *
+ * ⚠ POARTA STA AICI, unde se citeste comanda, nu la apelant: vezi `clientDeMarketplace`. Triggerul
+ * din baza are si el una, dar aceea e doar o economie; asta e cea care conteaza.
+ */
+async function comandaPentruKlaviyo(orderId: string): Promise<{ c: ComandaCitita; config: KlaviyoConfig } | { sarit: string } | { eroare: string }> {
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("orders")
     .select("business_id, customer_email, customer_name, total, items, created_at, order_source, payment_method, payment_status, businesses(slug, custom_domain)")
     .eq("id", orderId)
-    .single();
+    .maybeSingle();
+  if (error) return { eroare: error.message };
   const c = data as unknown as ComandaCitita | null;
-  if (!c?.customer_email) return null;
-  /* ⚠ POARTA STA AICI, unde se citeste comanda: vezi `maybeMarkBrevoOrderPaid`. */
-  if (clientDeMarketplace(c.order_source)) return null;
+  if (!c) return { sarit: "comanda nu mai exista" };
+  if (clientDeMarketplace(c.order_source)) return { sarit: "comanda de marketplace" };
+  if (!(c.customer_email ?? "").trim()) return { sarit: "comanda fara email" };
   const config = await readConfig(c.business_id);
-  if (!config?.enabled || !config.api_key || !config.list_id || !config.ecommerce_sync) return null;
+  if (!config?.enabled || !config.api_key || !config.list_id || !config.ecommerce_sync) return { sarit: "integrarea e oprita" };
   return { c, config };
-}
-
-async function trimiteDinComanda(orderId: string, c: ComandaCitita, config: KlaviyoConfig, metric: KlaviyoOrderMetric): Promise<void> {
-  const items = (Array.isArray(c.items) ? c.items : []) as OrderItem[];
-  if (items.length === 0) return;
-  const base = c.businesses ? storeBaseUrl(c.businesses) : null;
-  const { fname, lname } = splitName(c.customer_name);
-  const res = await trackOrderEvent(config, metric, {
-    id: orderId,
-    email: (c.customer_email ?? "").trim(),
-    first_name: fname,
-    last_name: lname,
-    total: Number(c.total) || 0,
-    currency: MONEDA,
-    time: metric === "Placed Order" ? (c.created_at ?? undefined) : undefined,
-    items: liniiKlaviyo(items, base),
-  });
-  if ("error" in res) {
-    await logError({ action: "klaviyo.ecommerce.order", message: res.error, businessId: c.business_id, details: { orderId, metric }, severity: "warning" });
-  }
-}
-
-/**
- * „Placed Order” cand plata online s-a confirmat. Idempotent: daca evenimentul plecase deja
- * la creare (ramburs trecut de comerciant pe „platit”), Klaviyo il arunca pe al doilea
- * dupa `unique_id`. Nu arunca niciodata.
- */
-export async function maybeMarkKlaviyoOrderPaid(orderId: string): Promise<void> {
-  try {
-    const gasita = await comandaPentruKlaviyo(orderId);
-    if (!gasita) return;
-    await trimiteDinComanda(orderId, gasita.c, gasita.config, "Placed Order");
-  } catch (e) {
-    await logError({ action: "klaviyo.ecommerce.paid", message: (e as Error)?.message ?? "paid track failed", details: { orderId }, severity: "warning" });
-  }
 }
 
 /**
@@ -246,127 +160,151 @@ export function aFostRaportataCaVanzare(metoda: string | null | undefined, stare
 }
 
 /**
- * „Cancelled Order” / „Refunded Order”. Pleaca numai pentru comenzile care au intrat ca
- * vanzare: o plata cu cardul abandonata si anulata n-a fost niciodata „Placed Order”.
+ * Metrica Klaviyo pentru un eveniment al cozii, sau motivul pentru care nu pleaca nimic. Pura.
+ *
+ * ⚠ „PLACED ORDER” NUMAI PENTRU O VANZARE. La plata online comanda exista inainte ca banii sa intre,
+ * iar pana pe 18.09.2026 pleca venit in Klaviyo si pentru platile refuzate sau abandonate. Aceeasi
+ * regula ca la Meta, TikTok si GA4 (`vanzare-confirmata.ts`): la card, evenimentul pleaca la plata.
+ * Klaviyo pastreaza doar primul eveniment cu acelasi `unique_id`, deci „creata” si „platita” pe
+ * aceeasi comanda cu ramburs nu dubleaza nimic.
  */
-export async function maybeMarkKlaviyoOrderReturned(orderId: string, fel: "anulata" | "rambursata"): Promise<void> {
-  try {
-    const gasita = await comandaPentruKlaviyo(orderId);
-    if (!gasita) return;
-    if (!aFostRaportataCaVanzare(gasita.c.payment_method, gasita.c.payment_status)) return;
-    await trimiteDinComanda(orderId, gasita.c, gasita.config, fel === "anulata" ? "Cancelled Order" : "Refunded Order");
-  } catch (e) {
-    await logError({ action: "klaviyo.ecommerce.returned", message: (e as Error)?.message ?? "returned track failed", details: { orderId, fel }, severity: "warning" });
+export function metricaKlaviyo(
+  fel: FelEveniment,
+  metoda: string | null | undefined,
+  stareaPlatii: string | null | undefined,
+): { metric: KlaviyoOrderMetric } | { sarit: string } {
+  const vanzare = aFostRaportataCaVanzare(metoda, stareaPlatii);
+  switch (fel) {
+    case "creata":
+      return vanzare ? { metric: "Placed Order" } : { sarit: "plata online inca neincasata: pleaca la plata" };
+    case "platita":
+      return { metric: "Placed Order" };
+    case "expediata":
+      return vanzare ? { metric: "Fulfilled Order" } : { sarit: "n-a fost raportata ca vanzare" };
+    case "livrata":
+      return vanzare ? { metric: "Delivered Order" } : { sarit: "n-a fost raportata ca vanzare" };
+    case "anulata":
+      return vanzare ? { metric: "Cancelled Order" } : { sarit: "n-a fost raportata ca vanzare" };
+    case "rambursata":
+      return vanzare ? { metric: "Refunded Order" } : { sarit: "n-a fost raportata ca vanzare" };
   }
 }
 
-async function storeBaseFor(businessId: string): Promise<string | null> {
-  const admin = createAdminClient();
-  const { data: biz } = await admin.from("businesses").select("slug, custom_domain").eq("id", businessId).single();
-  /* Domeniul propriu cand exista: acolo ajunge clientul care da click in email. */
-  return biz?.slug ? storeBaseUrl(biz as { slug: string; custom_domain: string | null }) : null;
+/**
+ * Trimite un eveniment al cozii (`lib/email-marketing/coada.ts`) catre Klaviyo. Nu arunca.
+ */
+export async function evenimentKlaviyo(orderId: string, fel: FelEveniment): Promise<Verdict> {
+  try {
+    const gasita = await comandaPentruKlaviyo(orderId);
+    if ("eroare" in gasita) return { fel: "esuat", motiv: gasita.eroare };
+    if ("sarit" in gasita) return { fel: "sarit", motiv: gasita.sarit };
+    const { c, config } = gasita;
+
+    const m = metricaKlaviyo(fel, c.payment_method, c.payment_status);
+    if ("sarit" in m) return { fel: "sarit", motiv: m.sarit };
+
+    const items = (Array.isArray(c.items) ? c.items : []) as OrderItem[];
+    const linii = liniiKlaviyo(items, c.businesses ? storeBaseUrl(c.businesses) : null);
+    if (linii.length === 0) return { fel: "sarit", motiv: "comanda fara produse" };
+
+    const { fname, lname } = splitName(c.customer_name);
+    const res = await trackOrderEvent(config, m.metric, {
+      id: orderId,
+      email: (c.customer_email ?? "").trim(),
+      first_name: fname,
+      last_name: lname,
+      total: Number(c.total) || 0,
+      currency: MONEDA,
+      /* „Placed Order” poarta clipa comenzii; restul, clipa in care s-au intamplat. */
+      time: m.metric === "Placed Order" ? (c.created_at ?? undefined) : undefined,
+      items: linii,
+    });
+    if ("error" in res) return verdictDinEroare(res);
+    return { fel: "trimis" };
+  } catch (e) {
+    return { fel: "esuat", motiv: e instanceof Error ? e.message : "exceptie" };
+  }
+}
+
+/** Sub pragul asta se trimite produs cu produs (imediat); peste el, in joburi in lot. */
+const PRAG_DIRECT = 5;
+
+/**
+ * Pune produsele in catalogul Klaviyo DUPA STAREA DIN BAZA (vezi `lib/email-marketing/catalog.ts`):
+ * toate, cand `ids` lipseste (sincronizarea completa), sau doar cele cerute. Active: publicate;
+ * scoase din vanzare: `published: false`; sterse din baza: sterse si din catalog.
+ */
+export async function sincronizeazaProduseleKlaviyo(
+  businessId: string,
+  ids?: string[],
+): Promise<{ ok: true; active: number; inactive: number; sterse: number } | { error: string; status?: number }> {
+  const config = await readConfig(businessId);
+  if (!config?.enabled || !config.api_key || !config.list_id || !config.ecommerce_sync) {
+    return { error: "Klaviyo nu e conectat sau sincronizarea e-commerce e oprita." };
+  }
+  const cat = await citesteCatalogul(businessId, ids);
+  const conv = (p: ProdusCatalog, publicat: boolean): KlaviyoCatalogProduct => ({
+    id: p.id,
+    title: p.name,
+    description: p.description,
+    price: p.price,
+    url: linkProdus(cat.adresa, p.slug, p.id) ?? "",
+    image_url: p.image,
+    published: publicat,
+  });
+  const numar = { active: cat.active.length, inactive: cat.inactive.length, sterse: cat.sterse.length };
+
+  if (ids && numar.active + numar.inactive + numar.sterse <= PRAG_DIRECT) {
+    for (const p of cat.active) {
+      const r = await upsertCatalogItem(config, conv(p, true));
+      if ("error" in r) return r;
+    }
+    for (const p of cat.inactive) {
+      const r = await upsertCatalogItem(config, conv(p, false));
+      if ("error" in r) return r;
+    }
+    for (const id of cat.sterse) {
+      const r = await deleteCatalogItem(config, id);
+      if ("error" in r) return r;
+    }
+    return { ok: true, ...numar };
+  }
+
+  const lot = await catalogInLot(config, cat.active.map((p) => conv(p, true)), cat.inactive.map((p) => conv(p, false)));
+  if ("error" in lot) return lot;
+  if (cat.sterse.length > 0) {
+    const st = await stergeInLot(config, cat.sterse);
+    if ("error" in st) return st;
+  }
+  return { ok: true, ...numar };
 }
 
 /** Sync a product create/update/delete to the Klaviyo catalog. No-op unless e-commerce sync is on. */
 export async function maybeSyncKlaviyoProduct(opts: {
   businessId: string;
+  /** Doar informativ: hotaraste starea din baza (activ, stins, sters). */
   action: "upsert" | "delete";
   product: { id: string; name: string; price: number; slug?: string | null; image?: string | null; description?: string | null };
 }): Promise<void> {
-  try {
-    const config = await readConfig(opts.businessId);
-    if (!config?.enabled || !config.api_key || !config.list_id || !config.ecommerce_sync) return;
-
-    if (opts.action === "delete") {
-      const del = await deleteCatalogItem(config, opts.product.id);
-      if ("error" in del) await logError({ action: "klaviyo.ecommerce.product", message: del.error, businessId: opts.businessId, severity: "warning" });
-      return;
-    }
-    const base = await storeBaseFor(opts.businessId);
-    const res = await upsertCatalogItem(config, {
-      id: opts.product.id,
-      title: opts.product.name,
-      description: opts.product.description ?? null,
-      price: opts.product.price,
-      url: base ? `${base}/product/${opts.product.slug || opts.product.id}` : "",
-      image_url: opts.product.image ?? null,
-    });
-    if ("error" in res) {
-      await logError({ action: "klaviyo.ecommerce.product", message: res.error, businessId: opts.businessId, severity: "warning" });
-    }
-  } catch (e) {
-    await logError({ action: "klaviyo.ecommerce.product", message: (e as Error)?.message ?? "product sync failed", businessId: opts.businessId, severity: "warning" });
-  }
+  await maybeSyncKlaviyoProductsBulk({ businessId: opts.businessId, ids: [opts.product.id], action: opts.action });
 }
 
-/** Un esec de cheie sau de permisiuni se repeta la fiecare produs: acolo lotul se opreste. */
-const esteDeConfigurare = (status?: number) => status === 401 || status === 403;
-
-/** Bulk catalog sync (upsert or delete a set of ids). No-op unless e-commerce sync is on. */
+/** Bulk catalog sync (a set of ids). No-op unless e-commerce sync is on. Never throws. */
 export async function maybeSyncKlaviyoProductsBulk(opts: {
   businessId: string;
   ids: string[];
+  /** Doar informativ: hotaraste starea din baza (activ, stins, sters). */
   action: "upsert" | "delete";
 }): Promise<void> {
   try {
     if (opts.ids.length === 0) return;
     const config = await readConfig(opts.businessId);
     if (!config?.enabled || !config.api_key || !config.list_id || !config.ecommerce_sync) return;
-
-    /*
-     * ⚠ Pana pe 18.09.2026 primul esec oprea TOT lotul (`break`), orice ar fi fost, deci un
-     * singur produs respins lasa restul catalogului nesincronizat, fara urma. Acum se opreste
-     * doar la cheie invalida sau permisiuni lipsa (care s-ar repeta la fiecare produs); 429 il
-     * reia transportul; restul se numara si se scriu o data.
-     */
-    let esuate = 0;
-    let primaEroare = "";
-    const noteaza = (e: { error: string; status?: number }) => {
-      esuate++;
-      if (!primaEroare) primaEroare = e.error;
-      return esteDeConfigurare(e.status);
-    };
-
-    if (opts.action === "delete") {
-      for (const id of opts.ids) {
-        const del = await deleteCatalogItem(config, id);
-        if ("error" in del && noteaza(del)) break;
-      }
-    } else {
-      const admin = createAdminClient();
-      const base = await storeBaseFor(opts.businessId);
-      /* Pe bucati, acelasi motiv ca in `mailchimp-sync.ts`: `.in()` intra in
-         adresa si peste ~650 de id-uri cererea e respinsa la margine. */
-      const products: {
-        id: string; name: string; price: number; images: unknown; slug: string | null; description: string | null;
-      }[] = [];
-      for (const bucata of bucatiDeIduri(opts.ids)) {
-        const { data } = await admin
-          .from("products").select("id, name, price, images, slug, description").eq("business_id", opts.businessId).in("id", bucata);
-        products.push(...((data ?? []) as typeof products));
-      }
-      for (const p of products) {
-        const img = Array.isArray(p.images) ? (p.images as unknown[])[0] : null;
-        const res = await upsertCatalogItem(config, {
-          id: p.id,
-          title: p.name,
-          description: p.description ?? null,
-          price: Number(p.price) || 0,
-          url: base ? `${base}/product/${p.slug || p.id}` : "",
-          image_url: typeof img === "string" ? img : null,
-        });
-        if ("error" in res && noteaza(res)) break;
-      }
-    }
-    if (esuate > 0) {
-      await logError({
-        action: "klaviyo.ecommerce.product.bulk",
-        message: `${esuate} din ${opts.ids.length} produse nu s-au sincronizat in Klaviyo. Prima eroare: ${primaEroare}`,
-        businessId: opts.businessId,
-        severity: "warning",
-      });
+    const r = await sincronizeazaProduseleKlaviyo(opts.businessId, opts.ids);
+    if ("error" in r) {
+      await logError({ action: "klaviyo.ecommerce.product", message: r.error, businessId: opts.businessId, details: { produse: opts.ids.length }, severity: "warning" });
     }
   } catch (e) {
-    await logError({ action: "klaviyo.ecommerce.product.bulk", message: (e as Error)?.message ?? "bulk product sync failed", businessId: opts.businessId, severity: "warning" });
+    await logError({ action: "klaviyo.ecommerce.product", message: (e as Error)?.message ?? "product sync failed", businessId: opts.businessId, severity: "warning" });
   }
 }

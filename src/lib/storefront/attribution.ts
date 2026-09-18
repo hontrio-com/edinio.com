@@ -56,6 +56,12 @@ export interface OrderSource {
   gclid?: string;   // Google Ads click id
   fbclid?: string;  // Meta (Facebook/Instagram) click id
   ttclid?: string;  // TikTok click id
+  /**
+   * Mailchimp: `mc_cid` e campania din care a venit clickul, `mc_tc` codul lor de urmarire. Fara
+   * `mc_cid` pe comanda, Mailchimp nu stie carei campanii sa-i atribuie venitul.
+   */
+  mc_cid?: string;
+  mc_tc?: string;
   referrer?: string; // external referrer host only (never the store's own host)
   landing?: string;  // first landing path on this touch
   direct?: boolean;  // true when the visit had no source signal at all
@@ -140,6 +146,8 @@ export function captureAttribution(basePath: string): void {
       gclid: get("gclid"),
       fbclid: get("fbclid"),
       ttclid: get("ttclid"),
+      mc_cid: get("mc_cid"),
+      mc_tc: get("mc_tc"),
       referrer,
     };
     const hasSignal = Object.values(signal).some(Boolean);

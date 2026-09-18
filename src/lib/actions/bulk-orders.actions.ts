@@ -45,7 +45,6 @@ import { createDhlAwbAction } from "@/lib/actions/dhl.actions";
 import { dhlGata, type DhlConfig } from "@/lib/dhl/client";
 import { ORDER_STATUS } from "@/lib/orders/status";
 import { liniaAdresei, stradaDestinatarului } from "@/lib/orders/adresa";
-import { anuntaEmailIntoarcere, intoarcereDinTranzitie } from "@/lib/email-marketing/comanda";
 
 // Uniform result shape for every bulk operation, so the UI reports consistently.
 export interface BulkResult {
@@ -1332,11 +1331,6 @@ export async function bulkUpdateOrderStatus(
   for (const row of reusite) {
     void maybeAutoInvoice(businessId, row.id, status, row.payment_status);
   }
-
-  /* Anulate sau rambursate in lot: si Mailchimp, Brevo si Klaviyo le scot din venit
-     (`lib/email-marketing/comanda.ts`). Idempotent pe id, deci o comanda deja anulata nu strica. */
-  const intoarsa = intoarcereDinTranzitie({ statusNou: status, statusSchimbat: true, plataSchimbata: false });
-  if (intoarsa) for (const row of reusite) anuntaEmailIntoarcere(row.id, intoarsa, businessId);
 
   revalidatePath("/dashboard/orders");
   return {

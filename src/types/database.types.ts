@@ -2644,6 +2644,66 @@ export type Database = {
         }
         Relationships: []
       }
+      email_marketing_coada: {
+        Row: {
+          abandonat_la: string | null
+          business_id: string
+          creat_la: string
+          fel: string
+          furnizor: string
+          id: number
+          incercari: number
+          next_retry_at: string
+          order_id: string
+          rezultat: string | null
+          trimis_la: string | null
+          ultima_eroare: string | null
+        }
+        Insert: {
+          abandonat_la?: string | null
+          business_id: string
+          creat_la?: string
+          fel: string
+          furnizor: string
+          id?: never
+          incercari?: number
+          next_retry_at?: string
+          order_id: string
+          rezultat?: string | null
+          trimis_la?: string | null
+          ultima_eroare?: string | null
+        }
+        Update: {
+          abandonat_la?: string | null
+          business_id?: string
+          creat_la?: string
+          fel?: string
+          furnizor?: string
+          id?: never
+          incercari?: number
+          next_retry_at?: string
+          order_id?: string
+          rezultat?: string | null
+          trimis_la?: string | null
+          ultima_eroare?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_marketing_coada_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_marketing_coada_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       error_logs: {
         Row: {
           action: string
@@ -6359,6 +6419,17 @@ export type Database = {
           trimis_la: string | null
           ultima_eroare: string | null
           vizitator: string | null
+        }[]
+      }
+      email_marketing_revendica: {
+        Args: { limita: number }
+        Returns: {
+          business_id: string
+          fel: string
+          furnizor: string
+          id: number
+          incercari: number
+          order_id: string
         }[]
       }
       redactorii_blogului: {

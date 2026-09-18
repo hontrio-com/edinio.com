@@ -3,72 +3,30 @@
   CE AFLA FURNIZORII DE EMAIL DESPRE SOARTA UNEI COMENZI
   ═══════════════════════════════════════════════════════════════════════════════
 
-  Un singur loc prin care trec toate caile care schimba plata sau statusul unei comenzi
-  proprii: panoul (`updateOrder`), lotul (`bulkUpdateOrderStatus`), finalizarea platii
-  (toti cinci procesatorii trec prin `dupaPlata`), rambursarile confirmate de procesator
-  (`banii-s-au-intors.ts`, Netopia).
+  ⚠ DE LA 18.09.2026 NU MAI ANUNTA NIMENI DIN APLICATIE. Evenimentele (creata, platita, expediata,
+  livrata, anulata, rambursata) le scrie un trigger pe `orders`, in coada
+  `email_marketing_coada`, iar `/api/cron/email-marketing` le trimite de aici.
 
-  ⚠ PANA PE 18.09.2026, doua goluri:
-    - anularea si rambursarea NU ajungeau la niciunul dintre cei trei. Masurat: ~18% din
-      comenzile proprii din ultimele 90 de zile s-au terminat anulate sau rambursate, iar
-      venitul lor ramanea atribuit emailului in Mailchimp, Brevo si Klaviyo;
-    - Klaviyo nu afla deloc de plata, desi raporta „Placed Order” la creare si pentru
-      cardul inca neplatit.
+  De ce asa, si nu apeluri presarate prin cod:
+    - statusul de expediere si de livrare il pun ~17 urmariri de curier, fiecare in cronul ei; un
+      apel uitat intr-una singura ar fi fost un gol tacut. Triggerul le vede pe toate;
+    - un 503 al furnizorului pierdea evenimentul; din coada se reincearca.
 
-  ⚠ POARTA DE MARKETPLACE NU STA AICI, ci in fiecare functie a furnizorului, acolo unde se
-  citeste comanda (vezi `clientDeMarketplace`). Aici se hotaraste doar CE s-a intamplat.
-
-  Toate trei sunt idempotente pe id-ul comenzii (Mailchimp PATCH, Brevo upsert, Klaviyo
-  `unique_id`), deci doua cai care anunta aceeasi rambursare nu strica nimic.
+  ⚠ POARTA DE MARKETPLACE NU STA AICI, ci in fiecare functie a furnizorului, acolo unde se citeste
+  comanda (vezi `clientDeMarketplace`).
 */
 
-import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
-import { maybeMarkMailchimpOrderPaid, maybeMarkMailchimpOrderReturned } from "@/lib/mailchimp-sync";
-import { maybeMarkBrevoOrderPaid, maybeMarkBrevoOrderReturned } from "@/lib/brevo-sync";
-import { maybeMarkKlaviyoOrderPaid, maybeMarkKlaviyoOrderReturned } from "@/lib/klaviyo-sync";
+import type { Furnizor, FelEveniment, Verdict } from "./coada";
+import { evenimentMailchimp } from "@/lib/mailchimp-sync";
+import { evenimentBrevo } from "@/lib/brevo-sync";
+import { evenimentKlaviyo } from "@/lib/klaviyo-sync";
 
-export type FelIntoarcere = "anulata" | "rambursata";
-
-/**
- * Din tranzitia unei comenzi: s-a intors ceva ce trebuie scos din venitul atribuit emailului?
- *
- * Anularea castiga cand vin amandoua deodata (comanda anulata SI rambursata in aceeasi
- * salvare): e starea finala a comenzii, iar la Mailchimp `cancelled_at_foreign` o si inchide.
- */
-export function intoarcereDinTranzitie(t: {
-  statusNou?: string | null;
-  statusSchimbat: boolean;
-  plataNoua?: string | null;
-  plataSchimbata: boolean;
-}): FelIntoarcere | null {
-  if (t.statusSchimbat && t.statusNou === "cancelled") return "anulata";
-  if (t.statusSchimbat && t.statusNou === "refunded") return "rambursata";
-  if (t.plataSchimbata && t.plataNoua === "refunded") return "rambursata";
-  return null;
-}
-
-/** Plata s-a confirmat: Mailchimp si Brevo trec comanda pe „paid”, Klaviyo primeste „Placed Order”. */
-export function anuntaEmailPlata(orderId: string, businessId?: string): void {
-  dupaRaspuns(
-    () => Promise.all([
-      maybeMarkMailchimpOrderPaid(orderId),
-      maybeMarkBrevoOrderPaid(orderId),
-      maybeMarkKlaviyoOrderPaid(orderId),
-    ]),
-    "email.plata",
-    businessId,
-  );
-}
-
-/** Comanda s-a anulat sau s-a rambursat: toti trei o scot din venit. */
-export function anuntaEmailIntoarcere(orderId: string, fel: FelIntoarcere, businessId?: string): void {
-  dupaRaspuns(
-    () => Promise.all([
-      maybeMarkMailchimpOrderReturned(orderId, fel),
-      maybeMarkBrevoOrderReturned(orderId, fel),
-      maybeMarkKlaviyoOrderReturned(orderId, fel),
-    ]),
-    "email.intoarcere",
-    businessId,
-  );
+/** Trimite un rand al cozii la furnizorul lui. Nu arunca: fiecare functie isi prinde singura erorile. */
+export function trimiteEveniment(furnizor: Furnizor, orderId: string, fel: FelEveniment): Promise<Verdict> {
+  switch (furnizor) {
+    case "mailchimp": return evenimentMailchimp(orderId, fel);
+    case "brevo": return evenimentBrevo(orderId, fel);
+    case "klaviyo": return evenimentKlaviyo(orderId, fel);
+  }
+  return Promise.resolve({ fel: "refuzat", motiv: `furnizor necunoscut: ${String(furnizor)}` });
 }

@@ -6,8 +6,9 @@ import { toast } from "sonner";
 import { ArrowLeft, Loader2, CheckCircle, Plug, RefreshCw, Users, ExternalLink } from "lucide-react";
 import {
   connectKlaviyo, disconnectKlaviyo, getKlaviyoLists,
-  saveKlaviyoSettings, syncExistingCustomers,
+  saveKlaviyoSettings, syncExistingCustomers, syncKlaviyoCatalog,
 } from "@/lib/actions/klaviyo.actions";
+import { SincronizareCatalogEmail } from "@/components/dashboard/SincronizareCatalogEmail";
 import type { KlaviyoPublicConfig, KlaviyoList } from "@/lib/klaviyo";
 
 const inputCls =
@@ -283,6 +284,9 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
               Salveaza
             </button>
           </div>
+
+          {/* Catalogul intreg (pleaca singur la pornirea sincronizarii e-commerce). */}
+          <SincronizareCatalogEmail furnizor="Klaviyo" pornita={config.ecommerce_sync} sincronizeaza={() => syncKlaviyoCatalog(businessId)} />
 
           {/* Bulk sync */}
           <div className="p-4 rounded-xl border border-border">

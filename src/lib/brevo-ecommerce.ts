@@ -31,6 +31,11 @@ export interface BrevoEcomOrderInput {
   created_at?: string;       // ISO 8601
   updated_at?: string;       // ISO 8601
   coupons?: string[];
+  /** Blocul `billing` din documentatia lor (toate campurile optionale). */
+  billing?: {
+    address?: string; city?: string; region?: string; postCode?: string;
+    countryCode?: string; phone?: string; paymentMethod?: string;
+  };
   lines: Array<{ product: BrevoEcomProduct; quantity: number; price: number }>;
 }
 
@@ -79,10 +84,12 @@ export async function asiguraProdusul(config: BrevoConfig, p: BrevoEcomProduct):
  */
 export const PRODUSE_PE_LOT = 100;
 
-export async function batchProducts(config: BrevoConfig, products: BrevoEcomProduct[]): Promise<Rezultat> {
+export async function batchProducts(config: BrevoConfig, products: BrevoEcomProduct[], sterse = false): Promise<Rezultat> {
   for (let i = 0; i < products.length; i += PRODUSE_PE_LOT) {
     const res = await brevoRequest(config, "POST", "/products/batch", {
-      products: products.slice(i, i + PRODUSE_PE_LOT).map(productBody),
+      /* Scoase din vanzare: `isDeleted` (campul lor „product deleted from the shop's database”), in
+         acelasi lot, in loc de cate un DELETE pe produs la 2 cereri pe secunda. */
+      products: products.slice(i, i + PRODUSE_PE_LOT).map((p) => (sterse ? { ...productBody(p), isDeleted: true } : productBody(p))),
       updateEnabled: true,
     });
     if ("error" in res) return res;
@@ -122,6 +129,9 @@ export function corpComanda(order: BrevoEcomOrderInput, storeId: string | undefi
       ...cantitateBrevo(l.quantity),
     })),
     ...(order.coupons?.length ? { coupons: order.coupons } : {}),
+    ...(order.billing && Object.values(order.billing).some(Boolean)
+      ? { billing: Object.fromEntries(Object.entries(order.billing).filter(([, v]) => !!v)) }
+      : {}),
   };
 }
 

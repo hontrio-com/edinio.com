@@ -26,6 +26,7 @@ create type public.pricing_type as enum ('gratuit', 'freemium', 'platit');
 -- ── SECVENTE ──────────────────────────────────────────────
 create sequence if not exists public.emag_family_id_seq;
 create sequence if not exists public.emag_offers_emag_id_seq;
+create sequence if not exists public.email_marketing_coada_id_seq;
 create sequence if not exists public.order_number_seq;
 
 -- ── FUNCTII ───────────────────────────────────────────────
@@ -3460,6 +3461,120 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.email_marketing_pune_la_coada()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'privat', 'pg_temp'
+AS $function$
+declare
+  v_feluri text[] := '{}';
+  v_furnizori text[] := '{}';
+  v_mc jsonb;
+  v_br jsonb;
+  v_kl jsonb;
+  v_mp text;
+begin
+  -- Cumparatorul unui marketplace nu e clientul comerciantului (aceeasi regula ca `clientDeMarketplace`:
+  -- un sir nevid in `marketplace`).
+  if jsonb_typeof(new.order_source -> 'marketplace') = 'string' then
+    v_mp := regexp_replace(new.order_source ->> 'marketplace', '^\s+|\s+$', '', 'g');
+    if v_mp <> '' then
+      return new;
+    end if;
+  end if;
+
+  if tg_op = 'INSERT' then
+    v_feluri := array['creata'];
+  else
+    if new.payment_status is distinct from old.payment_status and new.payment_status = 'paid' then
+      v_feluri := v_feluri || 'platita'::text;
+    end if;
+    if new.status is distinct from old.status then
+      if new.status = 'shipped' then v_feluri := v_feluri || 'expediata'::text;
+      elsif new.status = 'delivered' then v_feluri := v_feluri || 'livrata'::text;
+      elsif new.status = 'cancelled' then v_feluri := v_feluri || 'anulata'::text;
+      elsif new.status = 'refunded' then v_feluri := v_feluri || 'rambursata'::text;
+      end if;
+    end if;
+    -- Rambursarea banilor fara schimbarea statusului (procesatorul a intors banii). Anularea castiga
+    -- cand vin amandoua: e starea finala a comenzii.
+    if new.payment_status is distinct from old.payment_status and new.payment_status = 'refunded'
+       and not ('rambursata' = any (v_feluri)) and not ('anulata' = any (v_feluri)) then
+      v_feluri := v_feluri || 'rambursata'::text;
+    end if;
+  end if;
+
+  if cardinality(v_feluri) = 0 then
+    return new;
+  end if;
+
+  select s.mailchimp_config, s.brevo_config, s.klaviyo_config
+    into v_mc, v_br, v_kl
+    from privat.store_settings s
+   where s.business_id = new.business_id;
+  if not found then
+    return new;
+  end if;
+
+  if coalesce(v_mc ->> 'enabled', '') = 'true' and coalesce(v_mc ->> 'ecommerce_sync', '') = 'true' then
+    v_furnizori := v_furnizori || 'mailchimp'::text;
+  end if;
+  if coalesce(v_br ->> 'enabled', '') = 'true' and coalesce(v_br ->> 'ecommerce_sync', '') = 'true' then
+    v_furnizori := v_furnizori || 'brevo'::text;
+  end if;
+  if coalesce(v_kl ->> 'enabled', '') = 'true' and coalesce(v_kl ->> 'ecommerce_sync', '') = 'true' then
+    v_furnizori := v_furnizori || 'klaviyo'::text;
+  end if;
+  if cardinality(v_furnizori) = 0 then
+    return new;
+  end if;
+
+  insert into public.email_marketing_coada (business_id, order_id, furnizor, fel)
+  select new.business_id, new.id, f.furnizor, e.fel
+    from unnest(v_furnizori) as f(furnizor)
+   cross join unnest(v_feluri) as e(fel)
+  on conflict (order_id, furnizor, fel) do nothing;
+
+  return new;
+exception when others then
+  -- ⚠ O coada care cade nu are voie sa strice o comanda.
+  raise warning 'email_marketing_pune_la_coada (comanda %): %', new.id, sqlerrm;
+  return new;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.email_marketing_revendica(limita integer)
+ RETURNS TABLE(id bigint, business_id uuid, order_id uuid, furnizor text, fel text, incercari integer)
+ LANGUAGE sql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  update public.email_marketing_coada o
+     set next_retry_at = now() + interval '5 minutes'
+   where o.id in (
+     select c.id
+       from public.email_marketing_coada c
+      where c.trimis_la is null
+        and c.abandonat_la is null
+        and c.next_retry_at <= now()
+        and not exists (
+          select 1
+            from public.email_marketing_coada p
+           where p.order_id = c.order_id
+             and p.furnizor = c.furnizor
+             and p.id < c.id
+             and p.trimis_la is null
+             and p.abandonat_la is null
+        )
+      order by c.id asc
+      limit greatest(1, least(limita, 200))
+      for update skip locked
+   )
+  returning o.id, o.business_id, o.order_id, o.furnizor, o.fel, o.incercari;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.fara_diacritice(t text)
  RETURNS text
  LANGUAGE sql
@@ -6728,6 +6843,20 @@ create table if not exists public.email_automations (
   email_key text not null,
   sent_at timestamp with time zone default now() not null);
 
+create table if not exists public.email_marketing_coada (
+  id bigint generated always as identity not null,
+  business_id uuid not null,
+  order_id uuid not null,
+  furnizor text not null,
+  fel text not null,
+  incercari integer default 0 not null,
+  next_retry_at timestamp with time zone default now() not null,
+  trimis_la timestamp with time zone,
+  abandonat_la timestamp with time zone,
+  ultima_eroare text,
+  rezultat text,
+  creat_la timestamp with time zone default now() not null);
+
 create table if not exists public.error_logs (
   id uuid default gen_random_uuid() not null,
   created_at timestamp with time zone default now() not null,
@@ -7755,6 +7884,7 @@ alter table public.emag_request_log add constraint emag_request_log_pkey PRIMARY
 alter table public.emag_rma add constraint emag_rma_pkey PRIMARY KEY (id);
 alter table public.emag_sync_queue add constraint emag_sync_queue_pkey PRIMARY KEY (id);
 alter table public.email_automations add constraint email_automations_pkey PRIMARY KEY (id);
+alter table public.email_marketing_coada add constraint email_marketing_coada_pkey PRIMARY KEY (id);
 alter table public.error_logs add constraint error_logs_pkey PRIMARY KEY (id);
 alter table public.fedex_etichete add constraint fedex_etichete_pkey PRIMARY KEY (order_id);
 alter table public.forms add constraint forms_pkey PRIMARY KEY (id);
@@ -7836,6 +7966,7 @@ alter table public.emag_orders add constraint emag_orders_business_order_key UNI
 alter table public.emag_rma add constraint emag_rma_business_rma_key UNIQUE (business_id, emag_rma_id);
 alter table public.emag_sync_queue add constraint emag_sync_queue_business_offer_op_key UNIQUE (business_id, offer_id, op);
 alter table public.email_automations add constraint email_automations_user_id_email_key_key UNIQUE (user_id, email_key);
+alter table public.email_marketing_coada add constraint email_marketing_coada_order_id_furnizor_fel_key UNIQUE (order_id, furnizor, fel);
 alter table public.intentii_publicare add constraint intentii_publicare_business_id_product_id_marketplace_key UNIQUE (business_id, product_id, marketplace);
 alter table public.invoices add constraint invoices_stripe_invoice_id_key UNIQUE (stripe_invoice_id);
 alter table public.mailchimp_suppressions add constraint mailchimp_suppressions_business_id_email_key UNIQUE (business_id, email);
@@ -7877,6 +8008,8 @@ alter table public.discounts add constraint discounts_type_check CHECK ((type = 
 alter table public.domain_orders add constraint domain_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'cancelled'::text, 'refunded'::text])));
 alter table public.edinio_conversion_outbox add constraint edinio_conversion_outbox_destinatie_check CHECK ((destinatie = ANY (ARRAY['meta'::text, 'tiktok'::text])));
 alter table public.emag_sync_queue add constraint emag_sync_queue_op_check CHECK ((op = ANY (ARRAY['oferta'::text, 'pret'::text, 'stoc'::text, 'retragere'::text, 'masuratori'::text])));
+alter table public.email_marketing_coada add constraint email_marketing_coada_fel_check CHECK ((fel = ANY (ARRAY['creata'::text, 'platita'::text, 'expediata'::text, 'livrata'::text, 'anulata'::text, 'rambursata'::text])));
+alter table public.email_marketing_coada add constraint email_marketing_coada_furnizor_check CHECK ((furnizor = ANY (ARRAY['mailchimp'::text, 'brevo'::text, 'klaviyo'::text])));
 alter table public.error_logs add constraint error_logs_severity_check CHECK ((severity = ANY (ARRAY['info'::text, 'warning'::text, 'error'::text, 'critical'::text])));
 alter table public.intentii_publicare add constraint intentii_publicare_marketplace_check CHECK ((marketplace = ANY (ARRAY['trendyol'::text, 'emag'::text, 'aboutyou'::text])));
 alter table public.intentii_publicare add constraint intentii_publicare_sursa_check CHECK ((sursa = ANY (ARRAY['auto_publish'::text, 'import'::text, 'manual'::text])));
@@ -7973,6 +8106,8 @@ alter table public.emag_rma add constraint emag_rma_business_id_fkey FOREIGN KEY
 alter table public.emag_rma add constraint emag_rma_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.emag_sync_queue add constraint emag_sync_queue_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.emag_sync_queue add constraint emag_sync_queue_product_id_fkey FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL;
+alter table public.email_marketing_coada add constraint email_marketing_coada_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.email_marketing_coada add constraint email_marketing_coada_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
 alter table public.error_logs add constraint error_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.fedex_etichete add constraint fedex_etichete_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.fedex_etichete add constraint fedex_etichete_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
@@ -8211,6 +8346,8 @@ CREATE INDEX emag_sync_queue_created_idx ON public.emag_sync_queue USING btree (
 CREATE INDEX emag_sync_queue_ordine_idx ON public.emag_sync_queue USING btree (prioritate, created_at);
 CREATE INDEX emag_sync_queue_product_idx ON public.emag_sync_queue USING btree (product_id);
 CREATE INDEX emag_sync_queue_revendicat_idx ON public.emag_sync_queue USING btree (revendicat_pana, created_at);
+CREATE INDEX email_marketing_coada_comanda_idx ON public.email_marketing_coada USING btree (order_id, furnizor, id);
+CREATE INDEX email_marketing_coada_scadente_idx ON public.email_marketing_coada USING btree (next_retry_at) WHERE ((trimis_la IS NULL) AND (abandonat_la IS NULL));
 CREATE INDEX fedex_etichete_business_idx ON public.fedex_etichete USING btree (business_id, creat_la DESC);
 CREATE INDEX fedex_etichete_order_id_idx ON public.fedex_etichete USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX forms_business_idx ON public.forms USING btree (business_id);
@@ -8494,6 +8631,8 @@ CREATE TRIGGER set_emag_rma_updated_at BEFORE UPDATE ON public.emag_rma FOR EACH
 CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.emag_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
 CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.gmc_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
 CREATE TRIGGER trg_generatie BEFORE UPDATE ON public.olx_sync_queue FOR EACH ROW EXECUTE FUNCTION trg_generatia_cozii();
+CREATE TRIGGER email_marketing_la_creare AFTER INSERT ON public.orders FOR EACH ROW EXECUTE FUNCTION email_marketing_pune_la_coada();
+CREATE TRIGGER email_marketing_la_schimbare AFTER UPDATE OF status, payment_status ON public.orders FOR EACH ROW EXECUTE FUNCTION email_marketing_pune_la_coada();
 CREATE TRIGGER set_orders_updated_at BEFORE UPDATE ON public.orders FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER pepita_listari_stampileaza_clipa BEFORE UPDATE ON public.pepita_listari FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION pepita_stampileaza_listarea();
 CREATE TRIGGER aboutyou_marcheaza_modificarea AFTER UPDATE OF name, description, price, compare_at_price, images, category, sku, weight_grams, page_sections, is_active, track_inventory, stock_quantity ON public.products FOR EACH ROW WHEN ((old.* IS DISTINCT FROM new.*)) EXECUTE FUNCTION aboutyou_marcheaza_modificarea();
@@ -8566,6 +8705,7 @@ alter table public.emag_request_log enable row level security;
 alter table public.emag_rma enable row level security;
 alter table public.emag_sync_queue enable row level security;
 alter table public.email_automations enable row level security;
+alter table public.email_marketing_coada enable row level security;
 alter table public.error_logs enable row level security;
 alter table public.fedex_etichete enable row level security;
 alter table public.forms enable row level security;
@@ -9895,6 +10035,27 @@ grant SELECT on table public.email_automations to service_role;
 grant TRIGGER on table public.email_automations to service_role;
 grant TRUNCATE on table public.email_automations to service_role;
 grant UPDATE on table public.email_automations to service_role;
+grant DELETE on table public.email_marketing_coada to anon;
+grant INSERT on table public.email_marketing_coada to anon;
+grant REFERENCES on table public.email_marketing_coada to anon;
+grant SELECT on table public.email_marketing_coada to anon;
+grant TRIGGER on table public.email_marketing_coada to anon;
+grant TRUNCATE on table public.email_marketing_coada to anon;
+grant UPDATE on table public.email_marketing_coada to anon;
+grant DELETE on table public.email_marketing_coada to authenticated;
+grant INSERT on table public.email_marketing_coada to authenticated;
+grant REFERENCES on table public.email_marketing_coada to authenticated;
+grant SELECT on table public.email_marketing_coada to authenticated;
+grant TRIGGER on table public.email_marketing_coada to authenticated;
+grant TRUNCATE on table public.email_marketing_coada to authenticated;
+grant UPDATE on table public.email_marketing_coada to authenticated;
+grant DELETE on table public.email_marketing_coada to service_role;
+grant INSERT on table public.email_marketing_coada to service_role;
+grant REFERENCES on table public.email_marketing_coada to service_role;
+grant SELECT on table public.email_marketing_coada to service_role;
+grant TRIGGER on table public.email_marketing_coada to service_role;
+grant TRUNCATE on table public.email_marketing_coada to service_role;
+grant UPDATE on table public.email_marketing_coada to service_role;
 grant DELETE on table public.error_logs to anon;
 grant REFERENCES on table public.error_logs to anon;
 grant SELECT on table public.error_logs to anon;
@@ -11267,6 +11428,8 @@ grant execute on function public.emag_oferte_legate_stramb(p_business_id uuid, p
 grant execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer, p_de_cand timestamp with time zone) to service_role;
 grant execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) to service_role;
 grant execute on function public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text) to service_role;
+grant execute on function public.email_marketing_pune_la_coada() to service_role;
+grant execute on function public.email_marketing_revendica(limita integer) to service_role;
 grant execute on function public.fara_diacritice(t text) to authenticated;
 grant execute on function public.fara_diacritice(t text) to service_role;
 grant execute on function public.genereaza_schema_baseline() to service_role;
@@ -11472,6 +11635,8 @@ revoke execute on function public.emag_oferte_legate_stramb(p_business_id uuid, 
 revoke execute on function public.emag_produse_noi_nepublicate(p_business_id uuid, p_ore integer, p_limita integer, p_de_cand timestamp with time zone) from public;
 revoke execute on function public.emag_ridica_sirurile(p_oferta bigint, p_familie bigint) from public;
 revoke execute on function public.emag_stinge_propagarea(p_business_id uuid, p_ceruta_la text) from public;
+revoke execute on function public.email_marketing_pune_la_coada() from public;
+revoke execute on function public.email_marketing_revendica(limita integer) from public;
 revoke execute on function public.fara_diacritice(t text) from public;
 revoke execute on function public.genereaza_schema_baseline() from public;
 revoke execute on function public.handle_new_user() from public;

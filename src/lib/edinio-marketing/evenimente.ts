@@ -289,7 +289,7 @@ export const NUME_TAXONOMIE = Object.keys(TOATE_EVENIMENTELE) as NumeEveniment[]
  * buton nu e o conversie; marcat asa, optimizarea campaniilor invata sa caute
  * clicuri in loc de clienti.
  *
- * ⚠ LISTA ASTA E CITITA, nu decorativa: `EDINIO_MARKETING_ANALYTICS_SETUP.md` o
+ * ⚠ LISTA ASTA E CITITA, nu decorativa: `docs/edinio-marketing/EDINIO_MARKETING_ANALYTICS_SETUP.md` o
  * foloseste drept lista de bifat in interfata GA4. Iar tipul `NumeEveniment` o
  * apara singur: un nume scos din taxonomie si ramas aici cade la compilare.
  */

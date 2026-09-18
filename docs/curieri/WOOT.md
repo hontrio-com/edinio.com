@@ -293,7 +293,7 @@ doar magazinelor cu volum.
 ### D-2. Nedovedit in sandbox
 
 Nu avem credentiale de sandbox Woot. Tot ce se poate spune despre drumurile neumblate e „respecta
-documentatia", nu „merge". Vezi `AUDIT-CURIERI-RASPUNS-2026-09-15.md`, sectiunea 6.
+documentatia", nu „merge". Vezi `docs/audituri/AUDIT-CURIERI-RASPUNS-2026-09-15.md`, sectiunea 6.
 
 ---
 

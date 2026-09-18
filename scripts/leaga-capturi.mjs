@@ -38,6 +38,8 @@ import sharp from "sharp";
 const RADACINA = path.resolve(import.meta.dirname, "..");
 const FOLDER = path.join(RADACINA, "public", "capturi", "ajutor");
 const CATEGORII_DIR = path.join(RADACINA, "src", "lib", "website", "ajutor-categorii");
+/* Listele de lucru pentru capturi stau langa ghidul lor, in `docs/ajutor/` (mutate din radacina pe 18.09.2026). */
+const DOCS_AJUTOR = path.join(RADACINA, "docs", "ajutor");
 
 /** Cat de departe de raportul cerut se accepta o poza. 0.5% inseamna cateva pixeli. */
 const TOLERANTA = 0.005;
@@ -105,7 +107,7 @@ if (process.argv.includes("--lista")) {
     });
   }
   // BOM la inceput: fara el, Excel pe Windows citeste diacriticele gresit.
-  writeFileSync(path.join(RADACINA, "CAPTURI-AJUTOR.csv"), "﻿" + linii.join("\r\n") + "\r\n", "utf8");
+  writeFileSync(path.join(DOCS_AJUTOR, "CAPTURI-AJUTOR.csv"), "﻿" + linii.join("\r\n") + "\r\n", "utf8");
 
   /*
     Si o lista de bifat, pentru cine face pozele. CSV-ul e bun de filtrat si de
@@ -152,9 +154,9 @@ if (process.argv.includes("--lista")) {
       md.push("");
     }
   }
-  writeFileSync(path.join(RADACINA, "CAPTURI-AJUTOR-LISTA.md"), md.join("\n") + "\n", "utf8");
+  writeFileSync(path.join(DOCS_AJUTOR, "CAPTURI-AJUTOR-LISTA.md"), md.join("\n") + "\n", "utf8");
 
-  console.log(`lista de lucru rescrisa (${n} capturi inca fara fisier):`);
+  console.log(`lista de lucru rescrisa (${n} capturi inca fara fisier), in docs/ajutor/:`);
   console.log("   CAPTURI-AJUTOR.csv        — de filtrat si sortat");
   console.log("   CAPTURI-AJUTOR-LISTA.md   — de bifat pe rand, grupata ca centrul de ajutor");
   process.exit(0);

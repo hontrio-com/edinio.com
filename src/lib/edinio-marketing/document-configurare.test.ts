@@ -9,7 +9,7 @@ import { CONVERSII } from "./evenimente";
   DOCUMENTUL DE CONFIGURARE NU ARE VOIE SA IMBATRANEASCA IN TACERE
   ═══════════════════════════════════════════════════════════════════════════════
 
-  ⚠ DE CE EXISTA PROBA ASTA. `EDINIO_MARKETING_ANALYTICS_SETUP.md` e citit de om
+  ⚠ DE CE EXISTA PROBA ASTA. `docs/edinio-marketing/EDINIO_MARKETING_ANALYTICS_SETUP.md` e citit de om
   cu interfata GA4 deschisa alaturi. El spune cate evenimente se trag si care sunt
   conversiile — adica exact ce bifeaza omul acolo.
 
@@ -22,7 +22,7 @@ import { CONVERSII } from "./evenimente";
 */
 
 const RAD = process.cwd();
-const DOC = readFileSync(join(RAD, "EDINIO_MARKETING_ANALYTICS_SETUP.md"), "utf8");
+const DOC = readFileSync(join(RAD, "docs", "edinio-marketing", "EDINIO_MARKETING_ANALYTICS_SETUP.md"), "utf8");
 
 /** Numele evenimentelor pe care le trage cineva, chiar, din cod. */
 function evenimenteTrase(): Set<string> {

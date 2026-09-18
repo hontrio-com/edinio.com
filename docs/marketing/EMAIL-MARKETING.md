@@ -179,6 +179,18 @@ Suita intreaga (9052), `tsc`, poarta de lint (57 de erori, niciuna noua) si buil
 * Nicio eroare de rulare si nimic in `error_logs` dupa desfasurare.
 * ⚠ Nevazut: o sincronizare adevarata. Niciun magazin n-a conectat inca vreunul dintre cei trei.
 
+A doua trecere (`a83c69b6`, desfasurarea `dpl_FZc9J9kNuX7p11SJDFRfuEk1YBbF`):
+
+* Migratia aplicata in productie INAINTE de desfasurare, baseline-ul regenerat din productie (numai adaugari:
+  tabelul, cele doua functii, cele doua triggere), in acelasi commit. CI: „schema din Git = productie” verde.
+* Triggerul probat pe productie intr-o tranzactie anulata (vezi punctul 22).
+* ⚠ **Coada rulata cap la cap pe productie**: am pus manual randuri in coada pentru comenzi reale ale unor
+  magazine fara email marketing. Cronul le-a revendicat in minutul urmator (arenda de 5 minute pusa), fiecare
+  dispecer a citit comanda fara eroare si a insemnat randul: „sarit: comanda fara email” pentru o comanda
+  fara email, „sarit: integrarea e oprita” pentru una cu email. Niciun apel catre vreun furnizor. Randurile de
+  proba sterse apoi (coada: zero randuri).
+* Ruta cronului raspunde 401 fara secret. Nicio eroare de rulare dupa desfasurare.
+
 ## A doua trecere (18.09.2026): „rezolva tot ce poti rezolva din cod”
 
 ### 22. ⚠⚠ Coada de evenimente de comanda, scrisa de baza

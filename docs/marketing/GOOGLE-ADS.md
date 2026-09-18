@@ -111,7 +111,18 @@ Suita intreaga (8957), `tsc`, poarta de lint (57 de erori, niciuna noua) si buil
 
 ## Verificat pe productie
 
-(se completeaza dupa desfasurare)
+* `f0a003ed`, desfasurarea `dpl_DNv5d62np83PsxiyncE8aKS94ewy`, gata la 07:44 UTC. Niciun avertisment sau
+  eroare in jurnalul desfasurarii.
+* ⚠ Pagina nu poate fi verificata din HTML: singurul magazin cu tag Google (`caian-textile`) are bannerul de
+  cookie-uri PORNIT, deci tagul se randeaza abia dupa consimtamant, in browser. Verificarea s-a facut pe
+  CODUL LIVRAT, in bucatile lui:
+  * semnalele pe categorii: `ad_user_data: e.marketing ? "granted" : "denied"`, alaturi de `analyticsGranted`;
+  * `window.__edinioGoogleAds`, pe pagina de magazin;
+  * `google_business_vertical`, in runtime-ul evenimentelor;
+  * pe pagina de confirmare: `gtagRaw("set","user_data", …)` INAINTEA conversiei, si
+    `send_to: \`${c}/${p}\`` (ID de conversie + eticheta).
+* Nicio schimbare de schema, deci nicio migratie: campul nou sta in `marketing_config`.
+* ⚠ Nevazut: o conversie adevarata. Niciun magazin n-are inca ID `AW-…`, deci nici nu putea pleca vreuna.
 
 ## Ce tine de comercianti
 

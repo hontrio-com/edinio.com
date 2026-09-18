@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig, type SentryBuildOptions } from "@sentry/nextjs/config";
 
 import { RE_GAZDA_PLATFORMA } from "./src/lib/platform-hosts";
 import { CALITATE, LATIMI_ECRAN, LATIMI_MICI } from "./src/lib/latimi-imagini";
@@ -423,5 +424,44 @@ const nextConfig: NextConfig = {
 */
 export default function config(faza: string): NextConfig {
   verificaCheileDeProductie(faza);
-  return nextConfig;
+  return withSentryConfig(nextConfig, OPTIUNI_SENTRY);
 }
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  SENTRY LA BUILD: DOAR SOURCE MAPS (18.09.2026)
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  Ce face `withSentryConfig` aici: urca source maps la Sentry, ca o eroare sa arate
+  randul din codul nostru, nu din pachetul minificat. Initializarea propriu-zisa
+  sta in `src/instrumentation.ts` si `src/instrumentation-client.ts`.
+
+  ⚠ URCAREA NU ARE VOIE SA OPREASCA DESFASURAREA. Implicit, pluginul ARUNCA daca
+  urcarea esueaza (token expirat, Sentry cazut), adica o problema la un furnizor
+  de monitorizare ar bloca o reparatie urgenta in productie. `errorHandler` o
+  coboara la un avertisment in jurnalul de build.
+
+  ⚠ FARA TOKEN, FARA SOURCE MAPS. Local si in CI `SENTRY_AUTH_TOKEN` lipseste; fara
+  `disable`, build-ul ar genera maps pe care nu le urca nimeni. In Vercel tokenul
+  exista (Production si Preview), iar dupa urcare maps se sterg din build, ca sa
+  nu fie servite public.
+
+  `routeManifestInjection: false`: altfel lista tuturor rutelor ajunge in pachetul
+  de client. Pe vitrine asta ar insemna octeti in plus pe fiecare pagina.
+*/
+const OPTIUNI_SENTRY: SentryBuildOptions = {
+  org: "sc-void-sft-games-srl-wg",
+  project: "javascript-nextjs",
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  telemetry: false,
+  widenClientFileUpload: true,
+  routeManifestInjection: false,
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+    deleteSourcemapsAfterUpload: true,
+  },
+  errorHandler: (eroare) => {
+    console.warn(`[sentry] urcarea source maps a esuat, desfasurarea continua: ${eroare.message}`);
+  },
+};

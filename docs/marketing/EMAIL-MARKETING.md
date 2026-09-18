@@ -165,6 +165,18 @@ Suita intreaga (9035), `tsc`, poarta de lint (57 de erori, niciuna noua) si buil
 
 ---
 
+## Verificat pe productie
+
+* `db5f2dd8`, desfasurarea `dpl_95pSuMPrMRNYsWosbcgdwfsdcQYj`, gata in 50 s, cu toate domeniile legate.
+  CI: toate patru verificarile verzi.
+* Rutele de webhook raspund **200** pe `www.edinio.com` (GET si POST); un secret strain nu scrie nimic.
+* ⚠ **Ruta Brevo rulata pe productie, cu un secret adevarat**: am pus temporar un secret pe un magazin fara
+  Brevo (`enabled: false`, fara cheie, deci nimic spre Brevo) si am trimis cinci evenimente. S-au scris
+  exact trei, cu motivul corect: `hard_bounce`, `spam`, `unsubscribed`; `opened` si `soft_bounce` nu.
+  Apoi randurile sterse si configurarea pusa inapoi la `null` (verificat: zero suprimari).
+* Nicio eroare de rulare si nimic in `error_logs` dupa desfasurare.
+* ⚠ Nevazut: o sincronizare adevarata. Niciun magazin n-a conectat inca vreunul dintre cei trei.
+
 ## Ce tine de comercianti
 
 1. **Klaviyo**: cheia privata (`pk_…`) cu permisiuni de citire a profilelor, pe langa scriere. Fara ele,

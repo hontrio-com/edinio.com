@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { aplicaPraguriCantitate } from "@/lib/offers/praguri-cantitate";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -80,6 +81,20 @@ function validateOffer(data: OfferFormData): string | null {
     const autoCat = data.type === "cross_sell" && cfg.autoByCategory;
     if (!hasProducts && !autoCat) return "Alege cel putin un produs pentru aceasta oferta.";
   }
+  /*
+    ⚠ Oferta de cantitate nu OFERA produse, ci ieftineste ce e deja in cos.
+    Deci nu i se cere lista de produse oferite, ci macar un prag - altfel ar fi
+    o oferta care nu face nimic, dar arata aprinsa in lista.
+  */
+  if (data.type === "volume") {
+    const cfg = parseOfferConfig(data.config);
+    if (!cfg.praguri || cfg.praguri.length === 0) {
+      return "Adauga cel putin un prag: de la cate bucati si cat la suta reducere.";
+    }
+    const tr = parseOfferTrigger(data.trigger);
+    if (tr.scope === "products" && tr.productIds.length === 0) return "Alege produsele pentru care se aplica.";
+    if (tr.scope === "categories" && tr.categories.length === 0) return "Alege categoriile pentru care se aplica.";
+  }
   return null;
 }
 
@@ -133,6 +148,49 @@ export async function getOffer(offerId: string, businessId: string): Promise<Off
   return data ? toOfferRow(data) : null;
 }
 
+
+/*
+  ⚠ ORICE ATINGERE A UNEI OFERTE DE CANTITATE DUCE PRAGURILE PE PRODUSE, si nu
+  doar salvarea. O oferta stinsa sau stearsa care ar lasa pragurile acolo ar
+  insemna o reducere pe care comerciantul crede ca a oprit-o si care se
+  incaseaza mai departe, in tacere.
+
+  Caderea aplicarii NU rupe salvarea ofertei: randul e deja scris si corect, iar
+  o eroare aruncata aici ar lasa comerciantul cu „n-a mers" in fata unei oferte
+  care exista. Se scrie in jurnal si se spune in raspuns cate produse s-au
+  atins, ca sa se vada cand cifra nu e cea asteptata.
+*/
+async function duPraguriLaProduse(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  businessId: string,
+  offerId: string,
+  type: OfferType,
+  data: { trigger: unknown; config: unknown; is_active?: boolean },
+  userId: string,
+  activa: boolean,
+): Promise<number | null> {
+  if (type !== "volume") return null;
+  try {
+    const rez = await aplicaPraguriCantitate(
+      supabase,
+      businessId,
+      offerId,
+      parseOfferTrigger(data.trigger),
+      parseOfferConfig(data.config).praguri ?? [],
+      activa,
+    );
+    return rez.scrise;
+  } catch (e) {
+    logError({
+      action: "aplicaPraguriCantitate",
+      message: e instanceof Error ? e.message : String(e),
+      details: { offerId, businessId },
+      userId,
+    });
+    return null;
+  }
+}
+
 export async function createOffer(
   businessId: string, data: OfferFormData,
 ): Promise<{ success: true; id: string } | { error: string }> {
@@ -164,8 +222,10 @@ export async function createOffer(
     logError({ action: "createOffer", message: error.message, details: { code: error.code, businessId }, userId: user.id });
     return { error: "Eroare la salvarea ofertei. Incearca din nou." };
   }
+  const idNou = (created as { id: string }).id;
+  await duPraguriLaProduse(supabase, businessId, idNou, data.type, data, user.id, w.is_active);
   revalidatePath("/dashboard/offers");
-  return { success: true, id: (created as { id: string }).id };
+  return { success: true, id: idNou };
 }
 
 export async function updateOffer(
@@ -199,6 +259,7 @@ export async function updateOffer(
     logError({ action: "updateOffer", message: error.message, details: { code: error.code, offerId, businessId }, userId: user.id });
     return { error: "Eroare la salvarea ofertei. Incearca din nou." };
   }
+  await duPraguriLaProduse(supabase, businessId, offerId, data.type, data, user.id, w.is_active);
   revalidatePath("/dashboard/offers");
   revalidatePath(`/dashboard/offers/${offerId}`);
   return { success: true };
@@ -219,6 +280,15 @@ export async function toggleOffer(
     logError({ action: "toggleOffer", message: error.message, details: { code: error.code, offerId, businessId }, userId: user.id });
     return { error: "Eroare la actualizarea ofertei." };
   }
+  /* La stingere se RETRAG pragurile; la reaprindere se pun la loc. */
+  const { data: o } = await supabase.from("offers")
+    .select("type, trigger, config").eq("id", offerId).eq("business_id", businessId).single();
+  if (o) {
+    const row = o as { type: string; trigger: unknown; config: unknown };
+    if (isOfferType(row.type)) {
+      await duPraguriLaProduse(supabase, businessId, offerId, row.type, row, user.id, isActive);
+    }
+  }
   revalidatePath("/dashboard/offers");
   return { success: true };
 }
@@ -230,6 +300,19 @@ export async function deleteOffer(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
   if (!(await ownsBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+
+  /* ⚠ Se retrag INAINTE de stergere. Dupa ce randul dispare nu se mai stie ce
+     tip a fost, iar pragurile ar fi ramas pe produse fara nimeni care sa le
+     mai poata scoate. */
+  const { data: inainte } = await supabase.from("offers")
+    .select("type, trigger, config").eq("id", offerId).eq("business_id", businessId).single();
+  if (inainte) {
+    const row = inainte as { type: string; trigger: unknown; config: unknown };
+    if (isOfferType(row.type)) {
+      await duPraguriLaProduse(supabase, businessId, offerId, row.type, row, user.id, false);
+    }
+  }
+
   const { error } = await supabase
     .from("offers").delete().eq("id", offerId).eq("business_id", businessId);
   if (error) {

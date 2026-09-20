@@ -570,3 +570,47 @@ test("o oferta refuzata nu apare in venit", () => {
   assert.deepEqual(rez.applied, []);
   assert.deepEqual(rez.venitPeOferta, {});
 });
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════════
+  PRAGURILE OFERTEI „REDUCERE CANTITATE" (20.09.2026)
+  ═══════════════════════════════════════════════════════════════════════════════
+
+  ⚠ Se curata la SCRIERE, nu la citire. O configuratie stricata trebuie sa nu
+  ajunga niciodata pe produse: de acolo o citeste chiar poarta comenzii.
+*/
+
+test("pragurile fara inteles nu se salveaza", () => {
+  const cfg = parseOfferConfig({
+    praguri: [
+      { min_qty: 1, percent: 50 },     // o bucata nu e o reducere de cantitate
+      { min_qty: 5, percent: 0 },      // zero la suta nu reduce nimic
+      { min_qty: 8, percent: 100 },    // 100% ar face produsul gratis
+      { min_qty: 12, percent: -5 },    // negativ ar SCUMPI
+      { min_qty: 10, percent: 10 },    // singurul bun
+    ],
+  });
+  assert.deepEqual(cfg.praguri, [{ min_qty: 10, percent: 10 }]);
+});
+
+test("pragurile se aseaza crescator, oricum ar veni", () => {
+  const cfg = parseOfferConfig({
+    praguri: [{ min_qty: 20, percent: 15 }, { min_qty: 5, percent: 3 }, { min_qty: 10, percent: 10 }],
+  });
+  assert.deepEqual(cfg.praguri?.map((p) => p.min_qty), [5, 10, 20]);
+});
+
+test("doua praguri pe aceeasi cantitate se reduc la unul", () => {
+  /* ⚠ Altfel ar fi hotarat ordinea din tablou cat reducere primeste clientul. */
+  const cfg = parseOfferConfig({
+    praguri: [{ min_qty: 5, percent: 3 }, { min_qty: 5, percent: 25 }],
+  });
+  assert.equal(cfg.praguri?.length, 1);
+  assert.equal(cfg.praguri?.[0].percent, 3, "ramane primul, nu cel mai darnic");
+});
+
+test("o oferta fara praguri nu poarta campul degeaba", () => {
+  assert.equal(parseOfferConfig({}).praguri, undefined);
+  assert.equal(parseOfferConfig({ praguri: [] }).praguri, undefined);
+  assert.equal(parseOfferConfig({ praguri: "nu e tablou" }).praguri, undefined);
+});

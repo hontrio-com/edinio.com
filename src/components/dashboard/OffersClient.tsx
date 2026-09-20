@@ -28,6 +28,21 @@ const TYPE_ICON: Record<string, typeof Layers> = {
 
 // Short "where it shows / what it offers" summary for the list row.
 function summarize(o: OfferRow): string {
+  /*
+    ⚠ Oferta de cantitate nu OFERA produse, le ieftineste. Randul comun scria
+    „ofera 0 produse", adica exact pe dos fata de ce face.
+  */
+  if (o.type === "volume") {
+    const unde = o.trigger.scope === "all"
+      ? "toate produsele"
+      : o.trigger.scope === "categories"
+        ? `${o.trigger.categories.length} categorii`
+        : `${o.trigger.productIds.length} produse`;
+    const praguri = o.config.praguri ?? [];
+    if (praguri.length === 0) return `Apare la ${unde} · niciun prag`;
+    return `Apare la ${unde} · ${praguri.map((p) => `de la ${p.min_qty} buc -${p.percent}%`).join(", ")}`;
+  }
+
   const scope = o.trigger.scope === "all"
     ? "toate produsele"
     : o.trigger.scope === "categories"

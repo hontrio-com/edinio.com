@@ -32,6 +32,15 @@ export const OFFER_TYPES: OfferType[] = [
 // store (schema is future-proof) but not yet evaluated by the storefront.
 export const PHASE1_OFFER_TYPES: OfferType[] = ["frequently_bought", "cross_sell", "order_bump"];
 
+/**
+ * Tipurile care chiar se aplica azi.
+ *
+ * `volume` s-a adaugat pe 20.09.2026 si NU se rezolva ca celelalte: nu se
+ * randeaza nimic la afisare, ci se scriu praguri pe produse. De-aia sta
+ * separat de `PHASE1_OFFER_TYPES`, care inseamna „se rezolva in vitrina".
+ */
+export const OFFER_TYPES_IMPLEMENTATE: OfferType[] = [...PHASE1_OFFER_TYPES, "volume"];
+
 export function isOfferType(v: unknown): v is OfferType {
   return typeof v === "string" && (OFFER_TYPES as string[]).includes(v);
 }
@@ -75,6 +84,17 @@ export interface OfferConfig {
   /** Optional copy overrides — fall back to per-type Romanian defaults. */
   title?: string;
   buttonLabel?: string;
+  /**
+   * `volume`: pragurile de cantitate. „De la 5 bucati, -3%."
+   *
+   * ⚠ NU SE CITESC LA AFISARE, ci se SCRIU pe produsele care se potrivesc, in
+   * `products.page_sections.quantity_tiers`. Configuratia bruta a treptelor e
+   * citita din 8 locuri de pe calea pretului (intre care poarta comenzii);
+   * regula „oferta bate produsul?" scrisa in 8 copii s-ar fi departat de ea
+   * insasi la prima retusare. Asa, fiecare loc citeste tot un singur camp, iar
+   * oferta e doar cine l-a scris. Vezi `aplicaPraguriCantitate`.
+   */
+  praguri?: { min_qty: number; percent: number }[];
 }
 
 /* ─── Display (surfaces + style) ──────────────────────────────────────────── */
@@ -167,6 +187,25 @@ export function parseOfferConfig(raw: unknown): OfferConfig {
   if (discountMode === "fixed_price") cfg.fixedPrice = Math.max(0, Number(r.fixedPrice) || 0);
   if (typeof r.title === "string" && r.title.trim()) cfg.title = r.title.trim();
   if (typeof r.buttonLabel === "string" && r.buttonLabel.trim()) cfg.buttonLabel = r.buttonLabel.trim();
+
+  /*
+    ⚠ Pragurile se curata aici, la SCRIERE, si se aseaza crescator. Ce n-are
+    inteles (sub 2 bucati, procent in afara lui 0-100) se arunca; doua praguri
+    cu aceeasi cantitate se reduc la unul, altfel ar fi hotarat ordinea din
+    tablou cat reducere primeste clientul.
+  */
+  if (Array.isArray(r.praguri)) {
+    const vazute = new Set<number>();
+    const praguri = (r.praguri as unknown[])
+      .map((x) => {
+        const o = (x ?? {}) as Record<string, unknown>;
+        return { min_qty: Math.floor(Number(o.min_qty) || 0), percent: Number(o.percent) || 0 };
+      })
+      .filter((x) => x.min_qty >= 2 && x.percent > 0 && x.percent < 100)
+      .filter((x) => (vazute.has(x.min_qty) ? false : (vazute.add(x.min_qty), true)))
+      .sort((a, b) => a.min_qty - b.min_qty);
+    if (praguri.length > 0) cfg.praguri = praguri;
+  }
   return cfg;
 }
 

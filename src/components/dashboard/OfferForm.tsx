@@ -4,9 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { toast } from "sonner";
-import {
-  ChevronLeft, Save, Loader2, Search, Plus, X, Package, Layers, ShoppingCart, Sparkles, Tag,
-} from "lucide-react";
+import { ChevronLeft, Layers, Loader2, Package, Plus, Save, Search, ShoppingCart, Sparkles, Tag, Trash2, X } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -41,6 +39,18 @@ const PHASE1 = [
     desc: "Un produs la pret special, adaugat cu o bifa in formularul de comanda.",
     offersLabel: "Produsul oferit",
     defaultDiscount: "percent" as OfferDiscountMode, hasDiscount: true, single: true,
+  },
+  {
+    /*
+      ⚠ TIPUL ASTA NU OFERA PRODUSE, ci ieftineste ce e deja in cos. De-aia are
+      `praguri: true`: formularul ii ascunde sectiunea de produse oferite si de
+      reducere, si arata in loc lista de praguri.
+    */
+    type: "volume" as const, icon: Layers,
+    label: "Reducere cantitate",
+    desc: "De la o cantitate in sus, pretul scade cu un procent. Se vede ca tabel pe pagina produsului.",
+    offersLabel: "",
+    defaultDiscount: "none" as OfferDiscountMode, hasDiscount: false, praguri: true,
   },
 ];
 type Phase1Meta = (typeof PHASE1)[number];
@@ -77,10 +87,46 @@ export function OfferForm({ businessId, products, categories, offer }: {
   const [discountAmount, setDiscountAmount] = useState(offer?.config.discountAmount != null ? String(offer.config.discountAmount) : "");
   const [fixedPrice, setFixedPrice] = useState(offer?.config.fixedPrice != null ? String(offer.config.fixedPrice) : "");
 
+  /* Pragurile de cantitate. Se tin ca text cat timp omul scrie: un `number`
+     ar fi facut campul sa sara la 0 la prima stergere a cifrei. */
+  const [praguri, setPraguri] = useState<{ min_qty: string; percent: string }[]>(
+    offer?.config.praguri?.map((x) => ({ min_qty: String(x.min_qty), percent: String(x.percent) }))
+      ?? [{ min_qty: "5", percent: "3" }, { min_qty: "10", percent: "10" }],
+  );
+
   const [title, setTitle] = useState(offer?.config.title ?? "");
   const [isActive, setIsActive] = useState(offer?.is_active ?? true);
 
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+
+  /*
+    ⚠ Configuratia stricata se ARATA, nu se corecteaza in tacere. Aceeasi
+    doctrina ca la upsell-ul de pe produs: serverul refuza oricum salvarea, dar
+    comerciantul trebuie sa vada DE CE, nu doar ca „n-a mers".
+  */
+  const problemaPraguri = useMemo(() => {
+    if (!metaFor(type).praguri) return null;
+    const curate = praguri
+      .map((x) => ({ q: Math.floor(Number(x.min_qty) || 0), p: Number(x.percent) || 0 }))
+      .filter((x) => x.q > 0 || x.p > 0);
+    if (curate.length === 0) return "Adauga cel putin un prag.";
+    for (const x of curate) {
+      if (x.q < 2) return "Pragul porneste de la cel putin 2 bucati: la una nu e o reducere de cantitate.";
+      if (x.p <= 0 || x.p >= 100) return "Reducerea trebuie sa fie intre 0 si 100 la suta.";
+    }
+    const dupaCantitate = [...curate].sort((a, b) => a.q - b.q);
+    if (new Set(dupaCantitate.map((x) => x.q)).size !== dupaCantitate.length) {
+      return "Doua praguri pornesc de la aceeasi cantitate. Sterge-l pe unul.";
+    }
+    for (let i = 1; i < dupaCantitate.length; i++) {
+      if (dupaCantitate[i].p < dupaCantitate[i - 1].p) {
+        return `Pragul de la ${dupaCantitate[i].q} bucati da ${dupaCantitate[i].p}%, mai putin decat `
+          + `cel de la ${dupaCantitate[i - 1].q} (${dupaCantitate[i - 1].p}%). Cine cumpara mai mult ar `
+          + "plati mai mult pe bucata.";
+      }
+    }
+    return null;
+  }, [type, praguri]);
 
   // Switch type (create mode only): reset the discount to the new type's default.
   function chooseType(t: OfferType) {
@@ -110,8 +156,14 @@ export function OfferForm({ businessId, products, categories, offer }: {
     if (!name.trim()) { toast.error("Oferta are nevoie de un nume."); return; }
     if (scope === "products" && triggerIds.length === 0) { toast.error("Alege cel putin un produs pe care sa apara oferta."); return; }
     if (scope === "categories" && triggerCats.length === 0) { toast.error("Alege cel putin o categorie."); return; }
-    const usesAuto = meta.allowAuto && autoByCategory;
-    if (!usesAuto && offeredIds.length === 0) { toast.error("Alege cel putin un produs de oferit."); return; }
+    /* ⚠ Oferta de cantitate nu OFERA produse: sare peste verificarea de mai
+       jos, altfel n-ar putea fi salvata niciodata. In schimb ii cere praguri. */
+    if (meta.praguri) {
+      if (problemaPraguri) { toast.error(problemaPraguri); return; }
+    } else {
+      const usesAuto = meta.allowAuto && autoByCategory;
+      if (!usesAuto && offeredIds.length === 0) { toast.error("Alege cel putin un produs de oferit."); return; }
+    }
     if (meta.hasDiscount && discountMode === "fixed_price" && !(Number(fixedPrice) > 0)) { toast.error("Seteaza un pret fix valid."); return; }
 
     const payload: OfferFormData = {
@@ -125,14 +177,19 @@ export function OfferForm({ businessId, products, categories, offer }: {
         categories: scope === "categories" ? triggerCats : [],
       },
       config: {
-        productIds: usesAuto ? [] : offeredIds,
-        autoByCategory: usesAuto,
+        productIds: meta.allowAuto && autoByCategory ? [] : offeredIds,
+        autoByCategory: meta.allowAuto && autoByCategory,
         maxProducts: OFFER_DEFAULT_MAX_PRODUCTS,
         discountMode: meta.hasDiscount ? discountMode : "none",
         discountPercent: meta.hasDiscount && discountMode === "percent" ? Number(discountPercent) || 0 : undefined,
         discountAmount: meta.hasDiscount && discountMode === "amount" ? Number(discountAmount) || 0 : undefined,
         fixedPrice: meta.hasDiscount && discountMode === "fixed_price" ? Number(fixedPrice) || 0 : undefined,
         title: title.trim() || undefined,
+        praguri: meta.praguri
+          ? praguri
+              .map((x) => ({ min_qty: Math.floor(Number(x.min_qty) || 0), percent: Number(x.percent) || 0 }))
+              .filter((x) => x.min_qty >= 2 && x.percent > 0 && x.percent < 100)
+          : undefined,
       },
       display: {},
       starts_at: null,
@@ -176,7 +233,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
 
       {/* Type picker (create only) */}
       {!isEdit && (
-        <div className="grid sm:grid-cols-3 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {PHASE1.map((t) => {
             const Icon = t.icon;
             const active = type === t.type;
@@ -254,7 +311,73 @@ export function OfferForm({ businessId, products, categories, offer }: {
         )}
       </div>
 
+      {/* PRAGURILE — doar la „Reducere cantitate" */}
+      {meta.praguri && (
+        <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
+          <div>
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <Sparkles className="h-4 w-4 text-primary" /> Pragurile de cantitate
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              De la cate bucati in sus scade pretul, si cu cat la suta. Reducerea se aplica pe
+              TOATA cantitatea, nu doar pe bucatile peste prag.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            {praguri.map((pr, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="w-12 shrink-0 text-xs text-muted-foreground">De la</span>
+                <input
+                  value={pr.min_qty} inputMode="numeric"
+                  onChange={(e) => setPraguri((v) => v.map((x, k) => (k === i ? { ...x, min_qty: e.target.value } : x)))}
+                  className={inputCls + " max-w-[90px]"} placeholder="5"
+                />
+                <span className="shrink-0 text-xs text-muted-foreground">buc &rarr;</span>
+                <input
+                  value={pr.percent} inputMode="decimal"
+                  onChange={(e) => setPraguri((v) => v.map((x, k) => (k === i ? { ...x, percent: e.target.value } : x)))}
+                  className={inputCls + " max-w-[90px]"} placeholder="3"
+                />
+                <span className="shrink-0 text-xs text-muted-foreground">% reducere</span>
+                <button
+                  type="button" aria-label="Sterge pragul"
+                  onClick={() => setPraguri((v) => v.filter((_, k) => k !== i))}
+                  className="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => setPraguri((v) => [...v, { min_qty: "", percent: "" }])}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> Mai adauga un prag
+            </button>
+          </div>
+
+          {problemaPraguri && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+              <p className="text-xs text-foreground">{problemaPraguri}</p>
+            </div>
+          )}
+
+          {/*
+            ⚠ Se spune pe fata ca pragurile se SCRIU pe produse. Altfel,
+            comerciantul care schimba un prag si nu vede nimic pe produsele
+            unde oferta nu mai ajunge ar crede ca ecranul minte.
+          */}
+          <p className="rounded-lg bg-muted/50 p-2.5 text-xs text-muted-foreground">
+            La salvare, pragurile se scriu pe produsele alese mai sus si apar ca tabel pe pagina
+            fiecaruia. Produsele care au deja un upsell pus de tine pe fisa lor NU se ating.
+          </p>
+        </div>
+      )}
+
       {/* CE OFER — products */}
+      {!meta.praguri && (
       <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Package className="h-4 w-4 text-primary" /> Ce ofer</h2>
@@ -275,6 +398,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
             placeholder={meta.single ? "Caută produsul oferit..." : "Caută produse de oferit..."} />
         )}
       </div>
+      )}
 
       {/* CÂT REDUC — discount (hidden for cross_sell) */}
       {meta.hasDiscount && (

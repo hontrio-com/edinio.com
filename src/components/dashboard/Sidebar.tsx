@@ -202,7 +202,7 @@ export function Sidebar({ currentBusiness, plan, smsoEnabled = false, unreadSupp
       style={{ width: "var(--sidebar-width)" }}
     >
       <div className="border-b border-sidebar-border px-4 py-4">
-        <Logo size="sm" href="/dashboard" eager />
+        <Logo size="sm" href="/dashboard" eager className="justify-center" />
       </div>
 
       <div className="border-b border-sidebar-border px-3 py-3">

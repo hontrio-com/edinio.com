@@ -287,6 +287,14 @@ export function AdminAnnouncementsClient({ initial }: { initial: Announcement[] 
             </label>
           </div>
 
+          {/* ⚠ Regula s-a schimbat pe 20.09: publicarea nu mai stinge celelalte
+              anunturi. Scris aici, ca sa nu ramana o purtare pe care o stie doar
+              codul. */}
+          <p className="text-xs text-zinc-500">
+            In panou se vad ultimele 5 anunturi publicate, cele fixate primele.
+            Publicarea unui anunt nou nu le mai retrage pe celelalte.
+          </p>
+
           <div className="flex flex-col sm:flex-row justify-between gap-2">
             <button type="button" onClick={() => setShowPreview(true)}
               className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium border border-zinc-300 rounded-lg hover:bg-zinc-50">

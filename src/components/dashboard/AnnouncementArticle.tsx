@@ -13,10 +13,24 @@ export type ArticleData = {
   published_at?: string | null;
 };
 
-function Blocks({ blocks }: { blocks: AnnouncementBlock[] }) {
+/**
+ * Blocurile anuntului, fara imaginea care repeta coperta.
+ *
+ * ⚠ ACEEASI POZA DE DOUA ORI, la un centimetru distanta.
+ * In panoul de administrare, coperta se incarca separat de continut, iar
+ * punerea aceleiasi imagini si ca prim bloc e miscarea cea mai fireasca din
+ * lume: asa au iesit doua din cele sase anunturi de proba, fara ca nimeni sa
+ * fi vrut asta. Repetarea nu spune nimic in plus, deci se taie la afisare, nu
+ * i se cere omului sa tina minte.
+ */
+function Blocks({ blocks, coperta }: { blocks: AnnouncementBlock[]; coperta?: string | null }) {
+  const deAratat = coperta
+    ? blocks.filter((b) => !(b.type === "image" && b.url === coperta))
+    : blocks;
+
   return (
     <div className="space-y-4">
-      {blocks.map((b, i) => {
+      {deAratat.map((b, i) => {
         switch (b.type) {
           case "heading":
             return <h3 key={i} className="text-lg font-bold text-foreground mt-2">{b.text}</h3>;
@@ -115,7 +129,7 @@ export function AnnouncementArticle({
             {data.excerpt && <p className="text-sm text-muted-foreground">{data.excerpt}</p>}
           </>
         )}
-        <Blocks blocks={Array.isArray(data.blocks) ? data.blocks : []} />
+        <Blocks blocks={Array.isArray(data.blocks) ? data.blocks : []} coperta={data.cover_url} />
       </div>
     </article>
   );

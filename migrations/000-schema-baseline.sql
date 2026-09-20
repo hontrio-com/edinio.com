@@ -2608,6 +2608,16 @@ END;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.combinatie_aprinsa(p_combinatie jsonb)
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'pg_catalog', 'pg_temp'
+AS $function$
+  select coalesce(nullif(p_combinatie ->> 'enabled', '') <> 'false', true)
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer DEFAULT 0, p_cost integer DEFAULT 1)
  RETURNS TABLE(permis boolean, blocat_pana timestamp with time zone)
  LANGUAGE plpgsql
@@ -4215,6 +4225,36 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.numar_produse_sub_prag(p_business uuid, p_prag integer DEFAULT 5)
+ RETURNS TABLE(sub_prag integer, epuizate integer)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with aprinse as (
+    select p.stock_quantity,
+           coalesce(
+             (select jsonb_agg(jsonb_build_object('stoc', public.stoc_combinatie(c)))
+                from jsonb_array_elements(coalesce(p.page_sections -> 'variants' -> 'combinations', '[]'::jsonb)) c
+               where public.combinatie_aprinsa(c) and nullif(c ->> 'id', '') is not null),
+             '[]'::jsonb) as combos
+      from public.products p
+     where p.business_id = p_business and p.is_active and p.track_inventory
+  ),
+  clasificate as (
+    select ((jsonb_array_length(a.combos) = 0 and coalesce(a.stock_quantity, 0) <= p_prag)
+             or exists (select 1 from jsonb_array_elements(a.combos) v where (v ->> 'stoc')::numeric <= p_prag)) as e_sub_prag,
+           ((jsonb_array_length(a.combos) = 0 and coalesce(a.stock_quantity, 0) <= 0)
+             or (jsonb_array_length(a.combos) > 0
+                 and not exists (select 1 from jsonb_array_elements(a.combos) v where (v ->> 'stoc')::numeric > 0))) as e_epuizat
+      from aprinse a
+  )
+  select count(*) filter (where e_sub_prag)::integer,
+         count(*) filter (where e_sub_prag and e_epuizat)::integer
+    from clasificate
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.numara_ofertele_emag(p_business_id uuid)
  RETURNS jsonb
  LANGUAGE sql
@@ -4624,6 +4664,40 @@ AS $function$
         where q.business_id = p_business_id and q.product_id = p.id)
    order by p.id
    limit greatest(1, least(coalesce(p_limita, 50), 500));
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.produse_sub_prag(p_business uuid, p_prag integer DEFAULT 5)
+ RETURNS TABLE(id uuid, nume text, imagine text, stoc integer, variante jsonb)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with aprinse as (
+    select p.id, p.name, p.images, p.stock_quantity,
+           coalesce(
+             (select jsonb_agg(
+                       jsonb_build_object(
+                         'id',   c ->> 'id',
+                         'sku',  nullif(c ->> 'sku', ''),
+                         'stoc', public.stoc_combinatie(c),
+                         'eticheta', coalesce(nullif(c ->> 'label', ''), nullif(c ->> 'title', ''),
+                                              nullif(c ->> 'name', ''), c ->> 'id'))
+                       order by public.stoc_combinatie(c))
+                from jsonb_array_elements(coalesce(p.page_sections -> 'variants' -> 'combinations', '[]'::jsonb)) c
+               where public.combinatie_aprinsa(c) and nullif(c ->> 'id', '') is not null),
+             '[]'::jsonb) as combos
+      from public.products p
+     where p.business_id = p_business and p.is_active and p.track_inventory
+  )
+  select a.id, a.name,
+         (case when jsonb_typeof(a.images) = 'array' then a.images ->> 0 end),
+         coalesce(a.stock_quantity, 0), a.combos
+    from aprinse a
+   where (jsonb_array_length(a.combos) = 0 and coalesce(a.stock_quantity, 0) <= p_prag)
+      or exists (select 1 from jsonb_array_elements(a.combos) v where (v ->> 'stoc')::numeric <= p_prag)
+   order by coalesce(a.stock_quantity, 0), a.name
+   limit 200
 $function$
 ;
 
@@ -5542,6 +5616,17 @@ begin
   delete from public.orders where id = p_order_id;
   return jsonb_build_object('gasit', true, 'stoc', v_stoc);
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.stoc_combinatie(p_combinatie jsonb)
+ RETURNS numeric
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'pg_catalog', 'pg_temp'
+AS $function$
+  select case when p_combinatie ->> 'stock_quantity' ~ '^-?[0-9]+(\.[0-9]+)?$'
+                then (p_combinatie ->> 'stock_quantity')::numeric else 0 end
 $function$
 ;
 
@@ -11397,6 +11482,8 @@ grant execute on function public.catalog_verifica(p_esantion integer) to service
 grant execute on function public.categorii_ascunse(p_business uuid) to service_role;
 grant execute on function public.ceasul_bazei() to service_role;
 grant execute on function public.claim_discount_use(p_discount_id uuid) to service_role;
+grant execute on function public.combinatie_aprinsa(p_combinatie jsonb) to authenticated;
+grant execute on function public.combinatie_aprinsa(p_combinatie jsonb) to service_role;
 grant execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer, p_cost integer) to service_role;
 grant execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) to service_role;
@@ -11459,6 +11546,8 @@ grant execute on function public.normalize_phone(raw text) to anon;
 grant execute on function public.normalize_phone(raw text) to authenticated;
 grant execute on function public.normalize_phone(raw text) to service_role;
 grant execute on function public.numar_produse_si_comenzi() to service_role;
+grant execute on function public.numar_produse_sub_prag(p_business uuid, p_prag integer) to authenticated;
+grant execute on function public.numar_produse_sub_prag(p_business uuid, p_prag integer) to service_role;
 grant execute on function public.numara_ofertele_emag(p_business_id uuid) to service_role;
 grant execute on function public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb) to service_role;
 grant execute on function public.olx_seteaza_categoria(p_business_id uuid, p_categorie text, p_intrare jsonb) to service_role;
@@ -11484,6 +11573,8 @@ grant execute on function public.pepita_stampileaza_listarea() to service_role;
 grant execute on function public.posta_aloca_cod(p_business_id uuid) to service_role;
 grant execute on function public.proba_stoc() to service_role;
 grant execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) to service_role;
+grant execute on function public.produse_sub_prag(p_business uuid, p_prag integer) to authenticated;
+grant execute on function public.produse_sub_prag(p_business uuid, p_prag integer) to service_role;
 grant execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) to service_role;
 grant execute on function public.reclaim_order_discount(p_order_id uuid) to service_role;
 grant execute on function public.redactorii_blogului() to service_role;
@@ -11514,6 +11605,8 @@ grant execute on function public.site_analytics_breakdown_zile(bid uuid, p_zile 
 grant execute on function public.site_analytics_breakdown_zile(bid uuid, p_zile integer) to authenticated;
 grant execute on function public.site_analytics_breakdown_zile(bid uuid, p_zile integer) to service_role;
 grant execute on function public.sterge_comanda(p_order_id uuid, p_business_id uuid) to service_role;
+grant execute on function public.stoc_combinatie(p_combinatie jsonb) to authenticated;
+grant execute on function public.stoc_combinatie(p_combinatie jsonb) to service_role;
 grant execute on function public.sync_product_stock_from_variants() to anon;
 grant execute on function public.sync_product_stock_from_variants() to authenticated;
 grant execute on function public.sync_product_stock_from_variants() to service_role;
@@ -11533,8 +11626,8 @@ grant execute on function public.trg_catalog_rezumat_murdar() to service_role;
 grant execute on function public.trg_categorii_rezumat_murdar() to service_role;
 grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
-grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(regdictionary, text) to anon;
+grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(regdictionary, text) to authenticated;
 grant execute on function public.unaccent(text) to service_role;
@@ -11613,6 +11706,7 @@ revoke execute on function public.catalog_verifica(p_esantion integer) from publ
 revoke execute on function public.categorii_ascunse(p_business uuid) from public;
 revoke execute on function public.ceasul_bazei() from public;
 revoke execute on function public.claim_discount_use(p_discount_id uuid) from public;
+revoke execute on function public.combinatie_aprinsa(p_combinatie jsonb) from public;
 revoke execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer, p_cost integer) from public;
 revoke execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) from public;
@@ -11653,6 +11747,7 @@ revoke execute on function public.marcheaza_operatie_anulata(p_business_id uuid,
 revoke execute on function public.mark_payout_complete(p_user_id uuid, p_amount integer) from public;
 revoke execute on function public.next_order_number(p_business_id uuid) from public;
 revoke execute on function public.numar_produse_si_comenzi() from public;
+revoke execute on function public.numar_produse_sub_prag(p_business uuid, p_prag integer) from public;
 revoke execute on function public.numara_ofertele_emag(p_business_id uuid) from public;
 revoke execute on function public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb) from public;
 revoke execute on function public.olx_seteaza_categoria(p_business_id uuid, p_categorie text, p_intrare jsonb) from public;
@@ -11660,6 +11755,7 @@ revoke execute on function public.pepita_stampileaza_listarea() from public;
 revoke execute on function public.posta_aloca_cod(p_business_id uuid) from public;
 revoke execute on function public.proba_stoc() from public;
 revoke execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) from public;
+revoke execute on function public.produse_sub_prag(p_business uuid, p_prag integer) from public;
 revoke execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) from public;
 revoke execute on function public.reclaim_order_discount(p_order_id uuid) from public;
 revoke execute on function public.redactorii_blogului() from public;
@@ -11678,6 +11774,7 @@ revoke execute on function public.scade_din_rezervat(p_rez jsonb, p_produse_minu
 revoke execute on function public.scade_variante_raportat(p_items jsonb) from public;
 revoke execute on function public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb) from public;
 revoke execute on function public.sterge_comanda(p_order_id uuid, p_business_id uuid) from public;
+revoke execute on function public.stoc_combinatie(p_combinatie jsonb) from public;
 revoke execute on function public.trendyol_comenzi_de_facturat(p_business_id uuid, p_limita integer, p_de_la integer) from public;
 revoke execute on function public.trendyol_magazine_cu_loturi_deschise() from public;
 revoke execute on function public.trendyol_magazine_de_reconciliat() from public;

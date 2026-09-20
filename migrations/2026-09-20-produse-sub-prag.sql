@@ -145,6 +145,13 @@ $$;
 -- ── Drepturi ────────────────────────────────────────────────────────────────
 -- Nimic pentru `public`/`anon`: sunt functii ale panoului. `authenticated` le
 -- cheama, iar RLS decide ce vede fiecare.
+--
+-- ⚠ `REVOKE ... FROM PUBLIC` NU E DE AJUNS, si s-a vazut chiar la aplicarea asta:
+-- privilegiile implicite ale proiectului dau fiecarei functii noi din `public`
+-- un grant PE NUME catre `anon` si `authenticated`. Masurat imediat dupa
+-- aplicarea in productie: `anon` avea EXECUTE pe toate patru, desi randurile de
+-- mai jos revocasera de la `public`. Fara revocarea pe nume, oricine cu cheia
+-- publica putea cere, in bloc, stocurile oricarui magazin publicat.
 revoke execute on function public.stoc_combinatie(jsonb) from public;
 revoke execute on function public.combinatie_aprinsa(jsonb) from public;
 revoke execute on function public.produse_sub_prag(uuid, integer) from public;
@@ -154,5 +161,11 @@ grant execute on function public.stoc_combinatie(jsonb) to authenticated, servic
 grant execute on function public.combinatie_aprinsa(jsonb) to authenticated, service_role;
 grant execute on function public.produse_sub_prag(uuid, integer) to authenticated, service_role;
 grant execute on function public.numar_produse_sub_prag(uuid, integer) to authenticated, service_role;
+
+-- Si de la `anon`, PE NUME. Vezi nota de mai sus: revocarea de la `public` nu-l atinge.
+revoke execute on function public.stoc_combinatie(jsonb) from anon;
+revoke execute on function public.combinatie_aprinsa(jsonb) from anon;
+revoke execute on function public.produse_sub_prag(uuid, integer) from anon;
+revoke execute on function public.numar_produse_sub_prag(uuid, integer) from anon;
 
 notify pgrst, 'reload schema';

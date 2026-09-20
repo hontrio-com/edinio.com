@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import {
-  ShoppingCart, Wallet, Package, Clock, AlertCircle, Megaphone,
+  ShoppingCart, Wallet, Package, Clock, Megaphone,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";

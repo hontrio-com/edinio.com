@@ -65,13 +65,13 @@
 
   /* shadcn compat */
   /*
-    ⚠ FUNDALUL E ALB CURAT din 20.09.2026 (cerut de proprietar). Inainte era
-    oklch(0.984 0.003 247.858), adica #F8FAFC, un gri rece: pe el, cardurile albe
-    se vedeau singure. Acum card = pagina, deci ce desparte suprafetele e
-    BORDURA (`--border`), nu diferenta de culoare. Cine adauga un card nou ii pune
-    `border border-border`; fara ea nu se mai vede nimic.
+    ⚠ ASTA E CULOAREA VITRINELOR, NU A PANOULUI. Masurat pe productie
+    (`edinio.com/itp-blk`, 20.09.2026): fundalul unui magazin E chiar `--background`,
+    sectiunile lui fiind transparente. Deci o schimbare aici se vede, instant, pe
+    magazinele celor peste 130 de comercianti. Panoul isi pune albul lui in
+    `.zona-aplicatie`, mai jos.
   */
-  --background: oklch(1 0 0);
+  --background: oklch(0.984 0.003 247.858);
   --foreground: oklch(0.141 0.005 285.823);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.141 0.005 285.823);
@@ -95,8 +95,7 @@
   --chart-4: oklch(0.848 0.070 150.069);
   --chart-5: oklch(0.928 0.040 150.069);
   --radius: 0.625rem;
-  /* Bara laterala: tot alba, ca pagina. O desparte `--sidebar-border`. */
-  --sidebar: oklch(1 0 0);
+  --sidebar: oklch(0.984 0.003 247.858);
   --sidebar-foreground: oklch(0.141 0.005 285.823);
   --sidebar-primary: oklch(0.527 0.154 150.069);
   --sidebar-primary-foreground: oklch(1 0 0);
@@ -1531,9 +1530,24 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  /*
+    ⚠ DE CE PRIN `--font-app`, cu rezerva (20.09.2026).
+
+    In Tailwind v4, `@theme inline` INLOCUIESTE valoarea in fiecare utilitar:
+    `.font-sans` iese scris `font-family: var(--font-geist-sans)`, nu
+    `var(--font-sans)`. Deci rescrierea lui `--font-sans` pe un invelis NU
+    schimba nimic pentru `font-sans`, `font-heading` si regula de titluri:
+    masurat pe 20.09, titlurile ramaneau pe Geist cat timp doar `--font-sans`
+    era rescris, desi textul obisnuit trecuse pe Inter.
+
+    Cu rezerva de mai jos, utilitarele ies `var(--font-app, var(--font-geist-sans))`,
+    deci raspund la `--font-app` oriunde in arbore. Implicit, `--font-app` nu
+    exista, deci totul ramane pe Geist: vitrinele comerciantilor nu se schimba.
+    Panoul si adminul il declara prin clasa `.font-aplicatie`.
+  */
+  --font-sans: var(--font-app, var(--font-geist-sans));
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  --font-heading: var(--font-app, var(--font-geist-sans));
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -1571,17 +1585,26 @@
 
 /* ─── Base styles ────────────────────────────────────────────────────────── */
 
-/* ─── Fontul aplicatiei: Inter, numai in panou si in admin ───────────────── */
+/* ─── Zona aplicatiei: panoul si adminul ─────────────────────────────────── */
 /*
-  De ce o clasa si nu `:root`: `--font-sans` din radacina duce la Geist, care e
-  fontul implicit al tuturor vitrinelor (vezi `src/app/fonturi.ts`). Clasa se pune
-  pe invelisul panoului si pe cel al adminului; variabilele se mostenesc in jos,
-  deci si utilitarele `font-sans` de pe elementele dinauntru ajung la Inter.
+  Tot ce e DOAR al panoului sta aici, nu in `:root`, fiindca `:root` e impartit cu
+  vitrinele celor peste 130 de comercianti:
+    - fontul: Inter in loc de Geist (vezi `src/app/fonturi.ts`);
+    - suprafetele: alb curat in loc de gri.
+
+  Variabilele se mostenesc in jos, iar utilitarele Tailwind (`bg-background`,
+  `bg-sidebar`, `font-sans`) sunt scrise ca `var(--…)`, deci le prind. Clasa se
+  pune pe invelisul din `(dashboard)/layout.tsx` si din `(admin)/layout.tsx`.
+
+  ⚠ Pe fundal alb, cardurile albe nu se mai vad prin culoare, ci prin BORDURA.
+  Cine adauga un card ii pune `border border-border`.
 */
-.font-aplicatie {
-  --font-sans: var(--font-inter);
-  --font-heading: var(--font-inter);
-  font-family: var(--font-inter), system-ui, sans-serif;
+.zona-aplicatie {
+  --font-app: var(--font-inter);
+  --background: oklch(1 0 0);
+  --sidebar: oklch(1 0 0);
+  font-family: var(--font-app), system-ui, sans-serif;
+  background-color: var(--background);
 }
 
 @layer base {

@@ -23,7 +23,7 @@ export default async function AdminRootLayout({ children }: { children: React.Re
     asezarea lor, neatinsa, iar variabilele CSS se mostenesc oricum in jos.
   */
   return (
-    <div className={`contents ${fontAplicatie.variable} font-aplicatie`}>
+    <div className={`contents ${fontAplicatie.variable} zona-aplicatie`}>
       {children}
       <NotificariToast />
     </div>

@@ -124,7 +124,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const showPastDueBanner = isPaidPlan && !suspendedBusiness && !!profile.payment_failed_at;
 
   return (
-    <div className={`${fontAplicatie.variable} font-aplicatie min-h-screen bg-background`}>
+    <div className={`${fontAplicatie.variable} zona-aplicatie min-h-screen bg-background`}>
       <ScrollToTop />
       {esteImpersonare && <ImpersonationBanner />}
       {/*

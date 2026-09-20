@@ -436,19 +436,16 @@ export function TrendyolListings({
                     `null` cand produsul apare aprobat, in ACEEASI trecere de cron.
                   */}
                   {p.probleme.length > 0 && (
-                    <span
-                      className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-                      title={p.probleme.join(" · ")}
-                    >
+                    <EtichetaStare ton="asteptare" marime="mic" title={p.probleme.join(" · ")}>
                       Nu se mai trimite
-                    </span>
+                    </EtichetaStare>
                   )}
                   {p.adoptata && (
                     <>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700"
+                      <EtichetaStare ton="info" marime="mic"
                         title="Produsul exista deja pe Trendyol, listat pe alta cale. Edinio l-a legat, dar nu-i schimba stocul si pretul.">
                         Preluat
-                      </span>
+                      </EtichetaStare>
                       <button onClick={() => impingeStocul(p.id)} disabled={pending}
                         className="text-xs text-primary hover:underline disabled:opacity-60"
                         title="Trimite acum stocul si pretul din Edinio catre Trendyol, pentru acest produs.">

@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser, getCachedBusinessWithSettings } from "@/lib/supabase/cached-queries";
 import { GOOGLE_MERCHANT_LIVE } from "@/lib/google-merchant/types";
-import { Lock, ArrowRight, CheckCircle } from "lucide-react";
+import { Lock, ArrowRight } from "lucide-react";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import type { SmsoConfig } from "@/lib/smso";
 import type { SmartbillConfig } from "@/lib/smartbill";
 import type { StripeConfig } from "@/components/dashboard/StripeConnectClient";
@@ -541,13 +542,14 @@ export default async function IntegrationsPage() {
                           <p className="text-sm font-semibold text-foreground">{integration.name}</p>
                         </div>
                         {isActive ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded mt-0.5">
-                            <CheckCircle className="h-2.5 w-2.5" />Activ
-                          </span>
+                          /* ⚠ Iconita a iesit: punctul colorat spune acelasi lucru, iar
+                             cartonasele de integrari stau unul langa altul - cu pastile
+                             pline de culoare, pagina intreaga tipa. */
+                          <EtichetaStare ton="bun" marime="mic" className="mt-0.5">Activ</EtichetaStare>
                         ) : (
-                          <span className="inline-block text-[10px] font-bold bg-primary/10 text-primary px-1.5 py-0.5 rounded mt-0.5">
+                          <EtichetaStare ton="neutru" marime="mic" className="mt-0.5">
                             Configureaza
-                          </span>
+                          </EtichetaStare>
                         )}
                       </div>
                       <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">

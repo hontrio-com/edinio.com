@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useOptimistic, useState, useTransition } from "react";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckCircle, AlertTriangle, Info } from "lucide-react";
@@ -647,9 +648,9 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                   {status.ordersSyncedAt ? ` · ultima sincronizare ${new Date(status.ordersSyncedAt).toLocaleString("ro-RO")}` : ""}
                 </p>
               </div>
-              <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded flex-shrink-0 ${webhookActiv ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+              <EtichetaStare ton={webhookActiv ? "bun" : "neutru"} marime="mic" className="flex-shrink-0">
                 {webhookActiv ? "Webhook activ" : "Webhook inactiv"}
-              </span>
+              </EtichetaStare>
             </div>
             <div className="mt-3">
               {webhookActiv ? (

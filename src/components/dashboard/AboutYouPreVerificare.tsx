@@ -1,4 +1,5 @@
 import { CheckCircle2, AlertTriangle } from "lucide-react";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import type { PreVerificareAboutYou } from "@/lib/actions/aboutyou.actions";
 
 /*
@@ -51,7 +52,7 @@ export function AboutYouPreVerificare({ date }: { date: PreVerificareAboutYou })
       <div className="flex items-center gap-2 mb-1">
         <h2 className="text-sm font-semibold text-foreground">Ce trebuie să ai pregătit</h2>
         {totulGata && (
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700">Gata</span>
+          <EtichetaStare ton="bun" marime="mic">Gata</EtichetaStare>
         )}
       </div>
       <p className="text-xs text-muted-foreground mb-3">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useCautareIntarziata } from "@/lib/hooks/cautare-intarziata";
@@ -236,13 +237,13 @@ export function AboutYouCategoryMapping({
                           <span className="block text-xs text-foreground truncate">{caleCitibila(o.label)}</span>
                           <span className="block text-[10px] text-muted-foreground">{o.motiv}</span>
                         </span>
-                        <span
-                          className={`flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                            i === 0 && s?.sigura ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                          }`}
+                        <EtichetaStare
+                          ton={i === 0 && s?.sigura ? "bun" : "asteptare"}
+                          marime="mic"
+                          className="flex-shrink-0"
                         >
                           {Math.round(o.scor * 100)}%
-                        </span>
+                        </EtichetaStare>
                       </button>
                     ))}
                   </div>

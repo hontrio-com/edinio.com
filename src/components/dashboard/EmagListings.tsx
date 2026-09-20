@@ -409,9 +409,9 @@ function RandOferta({
             {rand.imaginiLaEmag === 0 && (
               /* ⚠ Numai la ZERO, nu si la `null`. `null` inseamna „n-am citit inca", si
                   aratat ca lipsa, ar fi speriat omul pentru fiecare ofertă nouă. */
-              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-900">
+              <EtichetaStare ton="asteptare" marime="mic">
                 eMAG n-are nicio poză
-              </span>
+              </EtichetaStare>
             )}
             {rand.indrumare && (
               /* ⚠ Se arata si pe rand, nu doar in `title`: pe telefon nu exista hover, iar

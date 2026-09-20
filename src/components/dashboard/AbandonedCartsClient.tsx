@@ -13,6 +13,9 @@ import {
 import { formatPrice } from "@/lib/utils/format";
 import { AbandonedAutomationsTab } from "./AbandonedAutomationsTab";
 import { ExplicatieCard } from "./ExplicatieCard";
+import { EticheraStare } from "./cosuri/EticheteStare";
+import { SertarCos } from "./cosuri/SertarCos";
+import { FILTRE, cateInCos, trece, type FiltruStare } from "@/lib/abandoned/starea-cosului";
 import { NUMELE_RECUPERARII } from "@/lib/abandoned/atribuire";
 import {
   ETICHETE, PERIOADE, PE_PAGINA, catePagini,
@@ -240,6 +243,13 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
   */
   const [deHotarat, setDeHotarat] = useState<AbandonedCartRow | null>(null);
   const [fila, setFila] = useState<Fila>("prezentare");
+  const [sertar, setSertar] = useState<AbandonedCartRow | null>(null);
+  /*
+    ⚠ FILTRUL LUCREAZA PE PAGINA ADUSA, NU PE TOATA FEREASTRA, si de-aia
+    scrie sub el cate a prins din cate. Altfel „Contactate (0)" pe pagina a
+    doua ar fi parut ca magazinul n-a contactat pe nimeni.
+  */
+  const [filtru, setFiltru] = useState<FiltruStare>("toate");
 
   /*
     ⚠ SOCOTEALA SE FACE PE TEXTUL CARE PLEACA, NU PE CEL DIN CASUTA.
@@ -285,6 +295,9 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
     data.carts,
     (stare: AbandonedCartRow[], id: string) => stare.filter((c) => c.id !== id),
   );
+
+  /* Filtrul lucreaza pe pagina ADUSA, deci dupa randurile optimiste, nu inaintea lor. */
+  const aratate = cosuri.filter((c) => trece(c, filtru));
 
   function openRecover(cart: AbandonedCartRow, channel: "email" | "sms") {
     setRecover({ cart, channel });
@@ -618,7 +631,47 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
           </select>
         </div>
 
-        {cosuri.length === 0 ? (
+        {/*
+          ⚠ FILTRELE SE APLICA PE STAREA CALCULATA, nu pe coloane. Filtrate pe
+          „are data de email", „Contactate" ar fi prins si cosurile deschise, si
+          doua filtre ar fi aratat acelasi cos fara ca nimic sa spuna de ce.
+        */}
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-5 py-2.5">
+          {FILTRE.map((f) => {
+            const cate = f.cheie === "toate" ? cosuri.length : cosuri.filter((c) => trece(c, f.cheie)).length;
+            return (
+              <button
+                key={f.cheie}
+                onClick={() => setFiltru(f.cheie)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                  filtru === f.cheie ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {f.nume} <span className="tabular-nums opacity-70">{cate}</span>
+              </button>
+            );
+          })}
+          {filtru !== "toate" && (
+            <span className="ml-auto text-[11px] text-muted-foreground">
+              {/*
+                ⚠ SE SPUNE PE FATA CA FILTRUL E PE PAGINA. Altfel omul ar citi
+                cifra de langa filtru ca pe un total al magazinului.
+              */}
+              {aratate.length} din cele {cosuri.length} de pe pagina asta
+            </span>
+          )}
+        </div>
+
+        {cosuri.length > 0 && aratate.length === 0 ? (
+          <div className="px-5 py-12 text-center">
+            <p className="text-sm text-muted-foreground">
+              Niciun coș din pagina asta nu e în starea aleasă.
+            </p>
+            <button onClick={() => setFiltru("toate")} className="mt-2 text-xs text-primary underline underline-offset-2">
+              Arată-le pe toate
+            </button>
+          </div>
+        ) : cosuri.length === 0 ? (
           <div className="py-16 text-center px-4">
             <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
               <ShoppingBag className="h-6 w-6 text-muted-foreground" />
@@ -629,55 +682,132 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-border">
-            {cosuri.map((c) => (
-              <div key={c.id} className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold text-foreground truncate">{c.customer_name || "Client anonim"}</p>
-                    {c.source === "buy_now" && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Cumpără acum</span>}
-                    {c.recovery_email_sent_at && <span className="text-[10px] px-1.5 py-0.5 rounded bg-info/10 text-info font-medium">Mail trimis</span>}
-                    {c.recovery_sms_sent_at && <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/10 text-success font-medium">SMS trimis</span>}
-                    {c.ignorat_la && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Ignorat</span>}
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">
-                    {[c.phone, c.email].filter(Boolean).join(" · ") || "Fără contact"}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {c.item_count} {c.item_count === 1 ? "produs" : "produse"} · <span className="font-semibold text-foreground">{formatPrice(c.subtotal)}</span> · {timeAgo(c.last_activity_at)}
-                  </p>
-                </div>
+          <>
+            {/*
+              ⚠ PE ECRAN LAT E UN TABEL ADEVARAT, pe telefon raman cartonase.
+              Treizeci de randuri de cartonase cer treizeci de coborari ca sa
+              compari doua valori; un tabel le pune una sub alta. Invers, un
+              tabel de sase coloane pe un ecran de telefon fie se taie, fie
+              cere tras pe orizontala.
+            */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+                    <th className="px-5 py-2.5 font-medium">Client</th>
+                    <th className="px-3 py-2.5 font-medium">Coș</th>
+                    <th className="px-3 py-2.5 text-right font-medium">Valoare</th>
+                    <th className="px-3 py-2.5 font-medium">Ultima activitate</th>
+                    <th className="px-3 py-2.5 font-medium">Stare</th>
+                    <th className="px-5 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {aratate.map((c) => (
+                    <tr key={c.id} className="hover:bg-muted/40 transition-colors">
+                      <td className="px-5 py-3">
+                        <button onClick={() => setSertar(c)} className="text-left">
+                          <span className="block truncate font-medium text-foreground hover:underline">
+                            {c.customer_name || "Client anonim"}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {[c.phone, c.email].filter(Boolean).join(" · ") || "Fără contact"}
+                          </span>
+                        </button>
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap text-xs text-muted-foreground">
+                        {cateInCos(c.items, c.item_count)}
+                      </td>
+                      <td className="px-3 py-3 text-right font-semibold tabular-nums text-foreground whitespace-nowrap">
+                        {formatPrice(c.subtotal)}
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap text-xs text-muted-foreground">
+                        {timeAgo(c.last_activity_at)}
+                      </td>
+                      <td className="px-3 py-3"><EticheraStare cos={c} /></td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => openRecover(c, "email")}
+                            disabled={!c.email || !!c.ignorat_la}
+                            title={c.ignorat_la ? "Coșul e ignorat: nu mai primește mesaje" : c.email ? "Trimite email" : "Clientul nu a lăsat email"}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Mail className="h-3.5 w-3.5" />
+                          </button>
+                          {data.smsEnabled && (
+                            <button
+                              onClick={() => openRecover(c, "sms")}
+                              disabled={!c.phone || !!c.ignorat_la}
+                              title={c.ignorat_la ? "Coșul e ignorat: nu mai primește mesaje" : c.phone ? "Trimite SMS" : "Clientul nu a lăsat telefon"}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              <MessageSquare className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setDeHotarat(c)}
+                            title="Șterge sau ignoră"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => openRecover(c, "email")}
-                    disabled={!c.email || !!c.ignorat_la}
-                    title={c.ignorat_la ? "Coșul e ignorat: nu mai primește mesaje" : c.email ? "Trimite email" : "Clientul nu a lăsat email"}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <Mail className="h-3.5 w-3.5" /> Mail
+            <div className="divide-y divide-border md:hidden">
+              {aratate.map((c) => (
+                <div key={c.id} className="px-5 py-4">
+                  <button onClick={() => setSertar(c)} className="w-full text-left">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+                        {c.customer_name || "Client anonim"}
+                      </span>
+                      <EticheraStare cos={c} />
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {[c.phone, c.email].filter(Boolean).join(" · ") || "Fără contact"}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {cateInCos(c.items, c.item_count)} ·{" "}
+                      <span className="font-semibold text-foreground">{formatPrice(c.subtotal)}</span> ·{" "}
+                      {timeAgo(c.last_activity_at)}
+                    </p>
                   </button>
-                  {data.smsEnabled && (
+                  <div className="mt-3 flex items-center gap-2">
                     <button
-                      onClick={() => openRecover(c, "sms")}
-                      disabled={!c.phone || !!c.ignorat_la}
-                      title={c.ignorat_la ? "Coșul e ignorat: nu mai primește mesaje" : c.phone ? "Trimite SMS" : "Clientul nu a lăsat telefon"}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg text-white bg-primary transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => openRecover(c, "email")}
+                      disabled={!c.email || !!c.ignorat_la}
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      <MessageSquare className="h-3.5 w-3.5" /> SMS
+                      <Mail className="h-3.5 w-3.5" /> Mail
                     </button>
-                  )}
-                  <button
-                    onClick={() => setDeHotarat(c)}
-                    title="Șterge sau ignoră"
-                    className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                    {data.smsEnabled && (
+                      <button
+                        onClick={() => openRecover(c, "sms")}
+                        disabled={!c.phone || !!c.ignorat_la}
+                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" /> SMS
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setDeHotarat(c)}
+                      title="Șterge sau ignoră"
+                      className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </>
         )}
 
         {/*
@@ -721,6 +851,18 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
         </>
       )}
 
+      {sertar && (
+        <SertarCos
+          cos={sertar}
+          smsEnabled={data.smsEnabled}
+          seLucreaza={sending}
+          onInchide={() => setSertar(null)}
+          onTrimite={(canal) => { const c = sertar; setSertar(null); openRecover(c, canal); }}
+          onIgnora={(catre) => ignora(sertar, catre)}
+          onSterge={() => { const c = sertar; setSertar(null); setDeHotarat(c); }}
+        />
+      )}
+
       {/* ⚠ Stergere sau ignorare: doua iesiri care arata la fel si NU fac acelasi lucru. */}
       {deHotarat && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -735,7 +877,7 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
                   Coșul lui {deHotarat.customer_name || "client anonim"}
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {deHotarat.item_count} {deHotarat.item_count === 1 ? "produs" : "produse"} · {formatPrice(deHotarat.subtotal)}
+                  {cateInCos(deHotarat.items, deHotarat.item_count)} · {formatPrice(deHotarat.subtotal)}
                 </p>
               </div>
             </div>

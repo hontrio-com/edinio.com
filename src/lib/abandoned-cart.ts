@@ -62,6 +62,23 @@ export interface AbandonedCartRow {
   recovery_count: number;
   /** ⚠ Ramane in cifre, dar nu mai primeste niciun mesaj. */
   ignorat_la: string | null;
+  /**
+   * Cand a deschis clientul linkul dintr-un mesaj de recuperare.
+   *
+   * ⚠ Singurul semn care se poate DOVEDI. Datele de trimitere spun ce am facut
+   * noi; asta spune ce a facut el.
+   */
+  deschis_la: string | null;
+  /** Mesajele trimise catre cosul asta, pentru cronologia din sertar. */
+  mesaje: MesajCos[];
+}
+
+export interface MesajCos {
+  canal: "email" | "sms";
+  sursa: "manual" | "automatizare";
+  pas: number | null;
+  trimis_la: string;
+  deschis_la: string | null;
 }
 
 export interface AbandonedCartsData {

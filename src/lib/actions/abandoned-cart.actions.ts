@@ -26,7 +26,7 @@ import {
   fereastra, marginile, type CatePePagina, type NumePerioada,
 } from "@/lib/abandoned/perioade";
 import { isPremiumPlan } from "@/lib/plans";
-import { ABANDON_MINUTES, COS_PREA_VECHI, cosulMaiPoateFiRecuperat, cuPreturileDinCatalog, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
+import { ABANDON_MINUTES, COS_PREA_VECHI, cosulMaiPoateFiRecuperat, cuPreturileDinCatalog, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type MesajCos, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";
 import { pragulComenzilor } from "@/app/api/cron/curata-fisiere/reguli";
 
@@ -406,6 +406,28 @@ export async function getAbandonedCartsData(
   const randuri = (listaRes.data ?? []) as unknown as CartRow[];
   const totalCosuri = listaRes.count ?? randuri.length;
 
+  /*
+    ⚠ MESAJELE SE CER DOAR PENTRU PAGINA ARATATA, nu pentru toata fereastra:
+    cu 25 sau 50 de chei, interogarea e marginita oricat ar creste magazinul.
+    Ele dau starea randului („a deschis linkul") si cronologia din sertar.
+  */
+  const mesajePeCos = new Map<string, MesajCos[]>();
+  if (randuri.length > 0) {
+    const { data: trimise } = await supabase
+      .from("recovery_sends").select("cart_id, canal, sursa, pas, trimis_la, deschis_la")
+      .in("cart_id", randuri.map((r) => r.id))
+      .order("trimis_la", { ascending: true });
+    for (const m of trimise ?? []) {
+      const lista = mesajePeCos.get(m.cart_id) ?? [];
+      lista.push({
+        canal: m.canal === "sms" ? "sms" : "email",
+        sursa: m.sursa === "automatizare" ? "automatizare" : "manual",
+        pas: m.pas, trimis_la: m.trimis_la, deschis_la: m.deschis_la,
+      });
+      mesajePeCos.set(m.cart_id, lista);
+    }
+  }
+
   const nr = (v: unknown) => Math.round((Number(v) || 0) * 100) / 100;
 
   // Aggregate items across abandoned carts -> top abandoned products.
@@ -464,6 +486,11 @@ export async function getAbandonedCartsData(
       last_activity_at: r.last_activity_at,
       created_at: r.created_at,
       ignorat_la: r.ignorat_la,
+      /* ⚠ Cea mai RECENTA deschidere: starea randului spune „a deschis", nu „cand". */
+      deschis_la: (mesajePeCos.get(r.id) ?? [])
+        .map((m) => m.deschis_la).filter((d): d is string => !!d)
+        .sort().at(-1) ?? null,
+      mesaje: mesajePeCos.get(r.id) ?? [],
       recovery_email_sent_at: r.recovery_email_sent_at,
       recovery_sms_sent_at: r.recovery_sms_sent_at,
       recovery_count: r.recovery_count,

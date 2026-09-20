@@ -74,7 +74,22 @@ test("⚠ UN COS IGNORAT NU MAI ARE BUTOANE DE TRIMIS", () => {
     eroare la apasare e o minciuna de ecran.
   */
   const ecran = cale("../../components/dashboard/AbandonedCartsClient.tsx");
-  assert.match(ecran, /disabled=\{!c\.email \|\| !!c\.ignorat_la\}/);
-  assert.match(ecran, /disabled=\{!c\.phone \|\| !!c\.ignorat_la\}/);
-  assert.match(ecran, /Ignorat</, "randul nu arata ca e ignorat");
+  /* ⚠ Si in tabel, si in cartonasele de telefon: doua asezari, aceeasi regula. */
+  assert.equal(
+    (ecran.match(/disabled=\{!c\.email \|\| !!c\.ignorat_la\}/g) ?? []).length, 2,
+    "butonul de email ramane activ intr-una dintre cele doua asezari",
+  );
+  assert.equal(
+    (ecran.match(/disabled=\{!c\.phone \|\| !!c\.ignorat_la\}/g) ?? []).length, 2,
+    "butonul de SMS ramane activ intr-una dintre cele doua asezari",
+  );
+
+  /*
+    ⚠ Eticheta „Ignorat" NU mai e scrisa in rand: de pe 21.09.2026 randul are o
+    SINGURA stare, iar „ignorat" e treapta cea mai de sus a ei. Proba s-a mutat
+    odata cu regula - se uita ca randul arata starea, si ca starea o cunoaste.
+  */
+  assert.match(ecran, /<EticheraStare cos=\{c\} \/>/, "randul nu arata starea cosului");
+  const stari = cale("./starea-cosului.ts");
+  assert.match(stari, /if \(c\.ignorat_la\) return "ignorat";/, "starea nu mai stie de ignorare");
 });

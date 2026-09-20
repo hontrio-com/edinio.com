@@ -213,8 +213,27 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
       dintr-o fila in alta.
 - [ ] **D2.** Prezentare: cardurile cerute, grafic abandonate vs. recuperate cu comparatie,
       palnie, tabel de produse cu rata de abandon si de recuperare.
-- [ ] **D3.** Cosuri: tabel adevarat pe desktop, carduri pe telefon; filtre; un singur status
-      principal in loc de doua etichete; sertar lateral cu tot ce e in cos.
+- [x] **D3.** Tabel adevarat pe desktop, cartonase pe telefon, filtre, o singura stare, sertar.
+      ⚠ **O singura stare in loc de doua etichete.** Randul purta „Mail trimis" si „SMS trimis"
+      deodata (si de pe 21.09 si „Ignorat"), si niciuna nu spunea ce conteaza: ce s-a intamplat
+      DUPA. Starile sunt o SCARA - ignorat > a deschis linkul > contactat > necontactat - si se
+      citeste prima care se potriveste. Fara o ordine scrisa, eticheta unui cos cu toate cele
+      patru semne ar fi depins de ordinea verificarilor din cod.
+      ⚠ Canalele nu dispar: trec in sertar, unde e loc sa scrie si CAND, si daca linkul a fost
+      deschis. Pe eticheta ramane raspunsul la „ce fac cu cosul asta".
+      ⚠ Filtrele lucreaza pe starea CALCULATA, nu pe coloane: filtrate pe „are data de email",
+      „Contactate" ar fi prins si cosurile deschise, si doua filtre ar fi aratat acelasi cos.
+      Proba verifica tocmai asta: fiecare cos cade intr-un singur filtru.
+      ⚠ Filtrul lucreaza pe pagina ADUSA, si scrie sub el „x din cele y de pe pagina asta":
+      altfel cifra de langa filtru s-ar citi ca un total al magazinului.
+      ⚠ Sertarul arata CE e in cos. Randul spunea „3 produse · 577 lei" si atat, deci
+      comerciantul care voia sa scrie un mesaj cu sens - sau sa hotarasca daca merita un SMS
+      platit - n-avea de unde afla. Tot acolo sta si cronologia mesajelor.
+      ⚠ Sertarul spune ca valoarea e cea de la ABANDON: preturile se iau din catalog abia la
+      trimitere, deci pe un produs scumpit intre timp cifra e mai mica decat ce ar plati omul.
+      ⚠ **Prins pe ecran, nu in cod:** sertarul scria „În coș · 3 produse" peste o lista de
+      DOUA randuri. `item_count` e suma cantitatilor, nu numarul de produse, si textul o citea
+      gresit in trei locuri. Acum e o singura socoteala (`cateInCos`), cu proba.
 - [ ] **D4.** Automatizari: trei porniri (Simpla / Recomandata / Personalizata), cronologie
       vizuala, previzualizare si mesaj de test, cele unsprezece capcane de configurare.
 

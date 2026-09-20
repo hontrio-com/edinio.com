@@ -11,7 +11,8 @@ import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { getLatestAnnouncement } from "@/lib/actions/announcement.actions";
 import { formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
-import { Callout } from "@/components/ui/callout";
+import { StocScazutRand } from "@/components/dashboard/StocScazutRand";
+import { PRAG_STOC_SCAZUT } from "@/lib/stoc-prag";
 import { orderStatus } from "@/lib/orders/status";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { AnnouncementArticle } from "@/components/dashboard/AnnouncementArticle";
@@ -223,7 +224,8 @@ async function ContinutPanou({
     { count: pendingOrders },
     { data: recentOrders },
     { data: last7DaysRevenue },
-    { data: lowStockProducts },
+    { count: subPragTotal },
+    { count: epuizateTotal },
     { count: productsTotal },
     { count: ordersTotal },
     { data: dashProfile },
@@ -244,10 +246,18 @@ async function ContinutPanou({
     supabase.from("orders").select("id, order_number, customer_name, total, status, created_at")
       .eq("business_id", business.id).order("created_at", { ascending: false }).limit(5),
     supabase.rpc("orders_daily_revenue", { bid: business.id, t_from: sevenDaysAgo }),
-    supabase.from("products").select("id, name, stock_quantity")
+    /*
+      Cate sunt CU TOTUL sub prag si cate chiar s-au oprit din vanzare. Lista de
+      mai sus aduce doar primele cinci, deci fara numerele astea ecranul ar fi
+      spus „cinci produse" si cand erau douazeci. Sunt cereri `head`, deci aduc
+      numarul, nu randurile.
+    */
+    supabase.from("products").select("*", { count: "exact", head: true })
       .eq("business_id", business.id).eq("is_active", true)
-      .eq("track_inventory", true).lte("stock_quantity", 5)
-      .order("stock_quantity", { ascending: true }).limit(5),
+      .eq("track_inventory", true).lte("stock_quantity", PRAG_STOC_SCAZUT),
+    supabase.from("products").select("*", { count: "exact", head: true })
+      .eq("business_id", business.id).eq("is_active", true)
+      .eq("track_inventory", true).lte("stock_quantity", 0),
     // ── Semnale pentru checklist-ul de activare ──
     supabase.from("products").select("*", { count: "exact", head: true })
       .eq("business_id", business.id),
@@ -306,28 +316,11 @@ async function ContinutPanou({
         publicUrl={publicUrl}
       />
 
-      {/* Low stock alert */}
-      {(lowStockProducts ?? []).length > 0 && (
-        <Callout
-          variant="danger"
-          icon={AlertCircle}
-          title="Stoc scazut"
-          className="mt-4"
-          action={
-            <Link href="/dashboard/products" className="text-xs font-semibold text-destructive hover:underline">
-              Gestioneaza
-            </Link>
-          }
-        >
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-            {(lowStockProducts ?? []).map(p => (
-              <span key={p.id} className="text-xs">
-                {p.name} - <strong>{p.stock_quantity ?? 0} buc</strong>
-              </span>
-            ))}
-          </div>
-        </Callout>
-      )}
+      <StocScazutRand
+        businessId={business.id}
+        epuizate={epuizateTotal ?? 0}
+        subPrag={subPragTotal ?? 0}
+      />
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-4">

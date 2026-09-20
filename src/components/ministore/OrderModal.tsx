@@ -18,7 +18,7 @@ import { trackAbandonedCart } from "@/lib/actions/abandoned-cart.actions";
 import { getCartSessionId } from "@/lib/cart-session";
 import { getAttribution } from "@/lib/storefront/attribution";
 import type { StarePersonalizare } from "@/components/storefront/sections/product/_shared/usePersonalizare";
-import { pretPeTrepte, type QuantityTier } from "@/lib/storefront/quantity-tiers";
+import { pretPeTrepte, type QuantityTier, type Trepte } from "@/lib/storefront/quantity-tiers";
 import { lineKey, useCartOptional, type CartItem } from "@/components/storefront/cart/CartProvider";
 import { fbTrack, ttqTrack, gtagEvent } from "@/lib/marketing";
 import { continutPixel } from "@/lib/facebook/pixel-continut";
@@ -83,7 +83,15 @@ interface Props {
   shippingCost: number;
   freeShippingThreshold: number | null;
   minOrderAmount?: number | null;
-  tiers?: QuantityTier[];
+  /**
+   * Treptele produsului, in forma motorului.
+   *
+   * ⚠ FORMA INTREAGA, nu doar pachetele: daca ar primi numai pachetele,
+   * fereastra ar arata pretul fara pragurile de cantitate, iar serverul le-ar
+   * aplica oricum. Clientul ar vedea o suma si ar plati alta - mai mica, dar
+   * tot alta decat cea confirmata.
+   */
+  trepte?: Trepte;
   /**
    * Cate bucati a ales clientul INAINTE sa deschida formularul.
    *
@@ -155,7 +163,7 @@ function IconInput({ icon: Icon, error, children }: {
   );
 }
 
-export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, tiers, initialQuantity, personalizare, cartItems, onCartConsumed, onCartLineChange, fbtOffer }: Props) {
+export function OrderModal({ open, onClose, product, business, shippingCost, freeShippingThreshold, minOrderAmount, trepte, initialQuantity, personalizare, cartItems, onCartConsumed, onCartLineChange, fbtOffer }: Props) {
   const color = business.primary_color;
   // Cosul magazinului, cand exista: de acolo vin preturile autoritare ale liniilor
   // purtate. Lipseste in miniatura din catalogul de design-uri, care randeaza
@@ -164,6 +172,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Upsell-ul de cantitate se suprima in fluxul "Cumpara impreuna" (FBT): setul FBT
   // se vinde exact cum apare pe card (ancora la pret de baza, 1 buc + companion cu
   // discount FBT), fara ca discountul de cantitate sa se cumuleze peste cel de set.
+  const tiers = trepte?.pachete;
   const hasTiers = !!tiers && tiers.length > 0 && !fbtOffer;
   const hasCustomization = !!personalizare?.definitie;
   /*
@@ -308,7 +317,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // Cantitatea, totalul afisat si pretul unitar trimis serverului ies TOATE din
   // acelasi calcul, ca sa nu mai poata spune lucruri diferite (vezi
   // `pretPeTrepte`). Bifa de pe butonul de treapta citeste tot de acolo.
-  const treapta = pretPeTrepte(hasTiers ? tiers : undefined, quantity, product.price);
+  const treapta = pretPeTrepte(hasTiers ? trepte : undefined, quantity, product.price);
   /*
    * ⚠ SUPLIMENTUL PERSONALIZARII INTRA IN SUBTOTALUL AFISAT, ca omul sa vada aici acelasi numar
    * ca pe pagina si ca pe factura. Serverul il socoteste din nou, din valori — vezi

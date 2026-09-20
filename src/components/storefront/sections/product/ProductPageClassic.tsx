@@ -21,7 +21,8 @@ import { CampuriPersonalizare } from "./_shared/CampuriPersonalizare";
 import { usePersonalizare } from "./_shared/usePersonalizare";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
-import { construiesteTrepte } from "@/lib/storefront/quantity-tiers";
+import { construiesteTrepte, randuriPraguri } from "@/lib/storefront/quantity-tiers";
+import { TabelPraguri } from "@/components/storefront/sections/product/_shared/TabelPraguri";
 import { ProductOffers } from "@/components/ministore/ProductOffers";
 import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
@@ -486,10 +487,15 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
   // de trei ori — aici, in cealalta pagina de produs si in `construiesteTrepte` —
   // desi docstring-ul motorului sustinea deja ca exista un singur loc. Copiile
   // se pot desincroniza tacit de motorul care chiar incaseaza.
-  const quantityTiers: QuantityTier[] | undefined = construiesteTrepte(tierConfig, displayPrice);
+  const trepte = construiesteTrepte(tierConfig, displayPrice);
+  const quantityTiers: QuantityTier[] | undefined = trepte?.pachete;
+  /* Randurile tabelului de reduceri, scoase din CHIAR motorul care incaseaza. */
+  const randuriDePraguri = randuriPraguri(trepte, displayPrice);
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
+  /* Cantitatea ceruta din tabelul de reduceri. `undefined` = cea implicita. */
+  const [cantitateDinTabel, setCantitateDinTabel] = useState<number | undefined>(undefined);
   const [fbtOffer, setFbtOffer] = useState<{ id: string; items: { product_id: string; name: string; imageUrl: string | null; price: number; quantity: number }[] } | undefined>(undefined);
   /**
    * Cosul magazinului, citit LIVE din provider.
@@ -935,6 +941,21 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         */}
         {!editare.activ && <CTAButton color={color} isOutOfStock={isOutOfStock} isPreorder={isPreorder} needsVariant={needsVariant} hasCardPayment={hasCardPayment} effect={buttonEffect} onClick={() => { if (!pers.verifica()) return; setFbtOffer(undefined); setModalOpen(true); }} />}
 
+        {/* Reducerile de cantitate, sub butonul de comanda: acolo se uita omul
+            cand se intreaba „cat costa daca iau mai multe?". */}
+        {!editare.activ && (
+          <TabelPraguri
+            randuri={randuriDePraguri}
+            culoare={color}
+            laAlegere={(cantitate) => {
+              if (!pers.verifica()) return;
+              setFbtOffer(undefined);
+              setCantitateDinTabel(cantitate);
+              setModalOpen(true);
+            }}
+          />
+        )}
+
         {/* Comanda directa ramane actiunea principala; cosul e pentru cine mai
             vrea sa se uite prin magazin inainte sa cumpere. */}
         {(arataButonCos || editare.activ) && (
@@ -1306,7 +1327,8 @@ export function ProductPageClassic({ business, product, storeSettings, basePath:
         shippingCost={shippingCost}
         freeShippingThreshold={freeShippingThreshold}
         minOrderAmount={minOrderAmount}
-        tiers={quantityTiers}
+        trepte={trepte}
+        initialQuantity={cantitateDinTabel}
         personalizare={pers}
         cartItems={cartItems}
         onCartConsumed={(liniiComandate) => {

@@ -5,6 +5,29 @@ export interface QuantityTier {
   badge?: string;
 }
 
+/**
+ * Un PRAG: de la atatea bucati in sus, pretul scade cu atata la suta, pe TOATA
+ * cantitatea.
+ *
+ * ⚠ ALTA MECANICA DECAT PACHETELE, nu alta scriere a lor. Pachetul de 5 duce
+ * reducerea doar pe cele 5 bucati acoperite de el (7 bucati = pachet + 2
+ * intregi); pragul de 5 o duce pe toate 7. Cererea proprietarului, 20.09.2026:
+ * „peste 5 buc cumparate - 3% reducere", adica la tot.
+ */
+export interface Prag {
+  /** De la cate bucati se aplica, INCLUSIV. „De la 5" inseamna ca 5 primesc deja. */
+  minQty: number;
+  /** Cat la suta scade pretul. */
+  percent: number;
+  badge?: string;
+}
+
+/** Ce iese din configuratie: pachete de marime fixa si/sau praguri. */
+export interface Trepte {
+  pachete: QuantityTier[];
+  praguri: Prag[];
+}
+
 /** Configuratia bruta din `products.page_sections.quantity_tiers`. */
 export interface ConfigTrepte {
   enabled?: boolean;
@@ -15,6 +38,16 @@ export interface ConfigTrepte {
   tier3_percent?: number;
   tier2_badge?: string;
   tier3_badge?: string;
+  /**
+   * Pragurile, cand configuratia vine dintr-o oferta „Reducere cantitate".
+   *
+   * ⚠ Aceeasi forma bruta ca pachetele, si dinadins: tot ce stie sa citeasca
+   * `construiesteTrepte` curge mai departe prin acelasi motor, deci prin
+   * aceeasi socoteala pe care o face si poarta comenzii. O cale de pret
+   * scrisa separat pentru oferte ar fi fost a doua sursa de adevar, si asta
+   * s-a mai platit o data (vezi capul lui `cart/pret-linie.ts`).
+   */
+  praguri?: { min_qty?: number; percent?: number; badge?: string }[];
 }
 
 export interface PretLinie {
@@ -42,7 +75,7 @@ function round2(n: number): number {
  * Pretul unitar conteaza: la modul procentual treptele se calculeaza din el, deci
  * o varianta cu pret propriu isi primeste propriile pachete.
  */
-export function construiesteTrepte(raw: unknown, unitPrice: number): QuantityTier[] | undefined {
+export function construiesteTrepte(raw: unknown, unitPrice: number): Trepte | undefined {
   const cfg = (raw ?? null) as ConfigTrepte | null;
   if (!cfg?.enabled) return undefined;
 
@@ -52,11 +85,35 @@ export function construiesteTrepte(raw: unknown, unitPrice: number): QuantityTie
   const are2 = procent ? (cfg.tier2_percent ?? 0) > 0 : pret2 > 0;
   const are3 = procent ? (cfg.tier3_percent ?? 0) > 0 : pret3 > 0;
 
-  return [
+  /*
+    ⚠ Pragurile se curata AICI, nu la citire: se arunca ce n-are inteles (sub 2
+    bucati, procent in afara lui 0-100) si se aseaza descrescator, ca
+    `pragulPentru` sa poata lua primul care se potriveste. O configuratie
+    stricata ajunge sa nu reduca nimic, nu sa reduca gresit.
+  */
+  const praguri: Prag[] = (cfg.praguri ?? [])
+    .map((p) => ({
+      minQty: Math.floor(Number(p?.min_qty) || 0),
+      percent: Number(p?.percent) || 0,
+      badge: p?.badge,
+    }))
+    .filter((p) => p.minQty >= 2 && p.percent > 0 && p.percent < 100)
+    .sort((a, b) => b.minQty - a.minQty);
+
+  const pachete: QuantityTier[] = [
     { qty: 1, price: round2(unitPrice), badge: "" },
     ...(are2 ? [{ qty: 2, price: round2(pret2), badge: cfg.tier2_badge }] : []),
     ...(are3 ? [{ qty: 3, price: round2(pret3), badge: cfg.tier3_badge }] : []),
   ];
+
+  if (pachete.length === 1 && praguri.length === 0) return undefined;
+  return { pachete, praguri };
+}
+
+/** Pragul care se aplica la cantitatea asta, sau `null`. Cel mai mare care incape. */
+export function pragulPentru(trepte: Trepte | undefined, quantity: number): Prag | null {
+  const bucati = Math.max(0, Math.floor(Number(quantity) || 0));
+  return (trepte?.praguri ?? []).find((p) => bucati >= p.minQty) ?? null;
 }
 
 export interface ProblemaTrepte {
@@ -66,6 +123,8 @@ export interface ProblemaTrepte {
   pretPachet: number;
   /** Sub suma asta pachetul nu are voie sa coboare. */
   minimAcceptat: number;
+  /** Cand e vorba de un PRAG, cele doua numere de mai sus sunt procente. */
+  felPrag?: boolean;
 }
 
 /**
@@ -84,7 +143,26 @@ export interface ProblemaTrepte {
  * oricum nu l-ar fi salvat: dupa o clema, sase aspiratoare tot ar fi costat
  * 134 lei fata de 714 din catalog.
  */
-export function problemaMonotonie(tiers: QuantityTier[] | undefined): ProblemaTrepte | null {
+export function problemaMonotonie(trepte: Trepte | undefined): ProblemaTrepte | null {
+  /*
+    ⚠ SI PRAGURILE SE VERIFICA, nu doar pachetele. Un prag cu procent mai MIC
+    la o cantitate mai MARE („5 buc -10%, 10 buc -3%") nu rupe totalul, deci
+    plasa veche nu l-ar fi vazut; dar clientul care mai adauga o bucata vede
+    pretul pe bucata CRESCAND, si suna sa intrebe daca e o greseala. Este.
+  */
+  const praguri = [...(trepte?.praguri ?? [])].sort((a, b) => a.minQty - b.minQty);
+  for (let i = 1; i < praguri.length; i++) {
+    if (praguri[i].percent < praguri[i - 1].percent) {
+      return {
+        qty: praguri[i].minQty,
+        pretPachet: praguri[i].percent,
+        minimAcceptat: praguri[i - 1].percent,
+        felPrag: true,
+      };
+    }
+  }
+
+  const tiers = trepte?.pachete;
   if (!tiers || tiers.length === 0) return null;
   const unit = tiers.find((t) => t.qty === 1)?.price ?? 0;
   const pachete = new Map(tiers.filter((t) => t.qty > 1 && t.price > 0).map((t) => [t.qty, t.price]));
@@ -107,6 +185,11 @@ export function problemaMonotonie(tiers: QuantityTier[] | undefined): ProblemaTr
 
 /** Mesajul aratat comerciantului cand un pachet iese mai ieftin decat unul mic. */
 export function mesajProblemaTrepte(p: ProblemaTrepte): string {
+  if (p.felPrag) {
+    return `Pragul de la ${p.qty} bucati da ${p.pretPachet}% reducere, adica mai putin decat `
+      + `pragul de dinaintea lui (${p.minimAcceptat}%). Cine cumpara mai mult ar plati mai mult `
+      + "pe bucata. Reducerea trebuie sa creasca odata cu cantitatea.";
+  }
   return `Pachetul de ${p.qty} bucati costa ${p.pretPachet.toFixed(2)} lei, adica mai putin decat `
     + `${p.qty - 1} ${p.qty - 1 === 1 ? "bucata" : "bucati"} (${p.minimAcceptat.toFixed(2)} lei). `
     + `Scrie pretul TOTAL al pachetului, nu pretul unei bucati.`;
@@ -132,7 +215,7 @@ const MAX_CANTITATE_PACHETE = 500;
  *     facut „reducerea" sa coste mai mult decat lipsa ei.
  */
 export function pretPeTrepte(
-  tiers: QuantityTier[] | undefined,
+  trepte: Trepte | undefined,
   quantity: number,
   basePrice: number,
 ): PretLinie {
@@ -140,10 +223,25 @@ export function pretPeTrepte(
   const unitar = Number(basePrice) || 0;
   const intreg = round2(unitar * bucati);
 
+  const tiers = trepte?.pachete;
   const pachete = (tiers ?? []).filter((t) => t.qty > 1 && t.price > 0);
   const index = tiers && tiers.length > 0 ? tiers.findIndex((t) => t.qty === quantity) : -1;
 
+  /*
+    ⚠ PRAGUL SE SOCOTESTE INTAI, si NU e prins de plafonul de mai jos.
+
+    Plafonul de 500 exista fiindca impachetarea e o programare dinamica peste
+    fiecare bucata; pragul e o inmultire. Lasat sub acelasi `if`, o comanda de
+    600 de bucati ar fi pierdut tocmai reducerea de cantitate - adica exact
+    cazul pentru care a fost facuta.
+  */
+  const prag = pragulPentru(trepte, bucati);
+  const cuPrag = prag ? round2(intreg * (1 - prag.percent / 100)) : Infinity;
+
   if (bucati === 0 || pachete.length === 0 || bucati > MAX_CANTITATE_PACHETE) {
+    if (bucati > 0 && Number.isFinite(cuPrag) && cuPrag < intreg) {
+      return { index, subtotal: cuPrag, unitPrice: cuPrag / bucati, savings: round2(intreg - cuPrag) };
+    }
     return { index, subtotal: intreg, unitPrice: unitar, savings: 0 };
   }
 
@@ -157,11 +255,34 @@ export function pretPeTrepte(
     }
   }
 
-  const subtotal = Math.min(round2(cost[bucati]), intreg);
+  /* Cand exista si pachete, si praguri, castiga ce iese mai ieftin pentru
+     client. In practica nu se intalnesc (upsell-ul produsului are intaietate
+     fata de oferta magazinului), dar regula trebuie sa existe oricum: altfel
+     ordinea in care ajung configuratiile ar hotari pretul. */
+  const subtotal = Math.min(round2(cost[bucati]), cuPrag, intreg);
   return {
     index,
     subtotal,
     unitPrice: bucati > 0 ? subtotal / bucati : unitar,
     savings: round2(intreg - subtotal),
   };
+}
+
+/**
+ * Randurile tabelului „Reduceri de cantitate" de pe pagina produsului.
+ *
+ * ⚠ CIFRELE IES DIN `pretPeTrepte`, nu dintr-o inmultire scrisa langa tabel.
+ * Altfel tabelul ar fi fost a doua socoteala, si ar fi putut arata un pret pe
+ * bucata pe care cosul nu-l cere - exact defectul pe care `cart/pret-linie.ts`
+ * il povesteste in capul lui.
+ */
+export function randuriPraguri(
+  trepte: Trepte | undefined,
+  basePrice: number,
+): { prag: Prag; pretBucata: number; economie: number }[] {
+  const praguri = [...(trepte?.praguri ?? [])].sort((a, b) => a.minQty - b.minQty);
+  return praguri.map((prag) => {
+    const linie = pretPeTrepte(trepte, prag.minQty, basePrice);
+    return { prag, pretBucata: round2(linie.unitPrice), economie: linie.savings };
+  });
 }

@@ -20,7 +20,8 @@ import { CampuriPersonalizare } from "./_shared/CampuriPersonalizare";
 import { usePersonalizare } from "./_shared/usePersonalizare";
 import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
-import { construiesteTrepte } from "@/lib/storefront/quantity-tiers";
+import { construiesteTrepte, randuriPraguri } from "@/lib/storefront/quantity-tiers";
+import { TabelPraguri } from "@/components/storefront/sections/product/_shared/TabelPraguri";
 import { ProductOffers } from "@/components/ministore/ProductOffers";
 import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
@@ -495,7 +496,10 @@ export function ProductPageDetailed({
   // de trei ori — aici, in cealalta pagina de produs si in `construiesteTrepte` —
   // desi docstring-ul motorului sustinea deja ca exista un singur loc. Copiile
   // se pot desincroniza tacit de motorul care chiar incaseaza.
-  const quantityTiers: QuantityTier[] | undefined = construiesteTrepte(tierConfig, displayPrice);
+  const trepte = construiesteTrepte(tierConfig, displayPrice);
+  const quantityTiers: QuantityTier[] | undefined = trepte?.pachete;
+  /* Randurile tabelului de reduceri, scoase din CHIAR motorul care incaseaza. */
+  const randuriDePraguri = randuriPraguri(trepte, displayPrice);
 
   /* Atribute de marketplace: brandul si EAN-ul stau in `page_sections.google`,
      nu in coloane, si pana acum nu se vedeau nicaieri pe magazin. */
@@ -521,6 +525,8 @@ export function ProductPageDetailed({
     setActiveSlide(0);
   }
   const [modalOpen, setModalOpen] = useState(false);
+  /* Cantitatea ceruta din tabelul de reduceri. `undefined` = cea implicita. */
+  const [cantitateDinTabel, setCantitateDinTabel] = useState<number | undefined>(undefined);
   const [cantitate, setCantitate] = useState(1);
   /*
    * Cantitatea coboara singura cand treci pe o marime cu mai putine bucati.
@@ -996,6 +1002,20 @@ export function ProductPageDetailed({
                       : "Comanda acum"}
                   </>
                 } />}
+
+              {/* Reducerile de cantitate, sub butonul de comanda: acolo se uita
+                  omul cand se intreaba „cat costa daca iau mai multe?". */}
+              {!editare.activ && (
+                <TabelPraguri
+                  randuri={randuriDePraguri}
+                  laAlegere={(cantitate) => {
+                    if (!pers.verifica()) return;
+                    setFbtOffer(undefined);
+                    setCantitateDinTabel(cantitate);
+                    setModalOpen(true);
+                  }}
+                />
+              )}
               {/* ⚠ Anularea, la fel de la indemana ca salvarea — vezi nota din `ProductPageClassic`. */}
               {editare.activ && (
                 <a href={inapoiLaCos} onClick={() => editare.incheieEditarea()}
@@ -1306,7 +1326,7 @@ export function ProductPageDetailed({
             shippingCost={shippingCost}
             freeShippingThreshold={freeShippingThreshold}
             minOrderAmount={minOrderAmount}
-            tiers={quantityTiers}
+            trepte={trepte}
             initialQuantity={cantitate}
             personalizare={pers}
             cartItems={cartItems}

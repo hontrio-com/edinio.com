@@ -23,6 +23,11 @@ push si aplicarea migratiei, la toti comerciantii.
 
 1. **Intai migratiile** din tabelul B, in productie (`rtefdpioqmowkdiybwrr`), in ordinea din
    tabel.
+   ⚠ **Migratiile 11 si 3a sunt DEJA in productie** (aplicate cu acordul lui, fiecare pentru
+   un defect care lovea oameni adevarati). Nu se aplica a doua oara.
+   ⚠ **Ordinea dintre cele noi conteaza**: 12 (tabela `recovery_sends`) inaintea lui 14
+   (coloanele ei de atribuire), si amandoua inaintea lui 15 si 16, care le citesc. 13 e
+   independenta.
 2. **Verificarea drepturilor** dupa fiecare migratie: `anon` NU trebuie sa poata chema
    functiile noi (vezi nota din C).
 3. **Regenerarea schemei de referinta**: `bash scripts/schema-baseline.sh`, apoi
@@ -31,6 +36,12 @@ push si aplicarea migratiei, la toti comerciantii.
 5. **Verificarile** pe ramura: `npx tsc --noEmit`, `npm test`, `npm run build`, `eslint`.
 6. **Unirea si push-ul**, apoi verificat: productia raspunde, CI verde, Sentry fara erori noi.
 7. **Curatenia** din `demo-seed/LA-FINAL.md` (baza demo, cele 8 chei de ramura, dupa id).
+
+⚠ **Dupa push, de verificat pe productie ce nu se poate verifica pe demo**: cosurile
+abandonate au acolo TRAFIC REAL (393 de cosuri, 34 de emailuri si 21 de SMS-uri deja plecate
+catre clienti). Se urmareste ca `recovery_sends` chiar primeste randuri la prima trimitere de
+mana, si ca `deschis_la` se scrie cand cineva apasa linkul. Pana atunci, atribuirea e cod
+probat, nu cod vazut lucrand pe oameni.
 
 ---
 

@@ -84,11 +84,14 @@ export function AnnouncementArticle({
         <img
           src={data.cover_url}
           alt=""
-          /* ⚠ Deschis intr-un rand din lista, coperta nu mai are voie sa tina
-             16/9: pe toata latimea panoului ar fi inalta cat ecranul si ar
-             impinge textul anuntului sub marginea de jos. Ramane o fasie. */
+          /* ⚠ Deschisa dintr-un rand, coperta se vede INTREAGA si isi tine forma.
+             Taiata la 16/9 („object-cover"), din ea lipsea tocmai ce voia omul
+             sa vada cand a apasat sageata. Intinsa pe toata latimea, ramanea
+             intreaga, dar cu doua benzi albe in laturi. Aici cutia urmeaza chiar
+             imaginea: se micsoreaza cat sa incapa in latime si in ecran, si
+             atat. */
           className={faraRama
-            ? "mb-3 max-h-48 w-full rounded-lg object-cover"
+            ? "mx-auto mb-3 block h-auto max-h-[70vh] w-auto max-w-full rounded-lg"
             : "w-full aspect-[16/9] object-cover"}
         />
       )}

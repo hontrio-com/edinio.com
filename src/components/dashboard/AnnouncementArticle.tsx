@@ -65,26 +65,53 @@ function Blocks({ blocks }: { blocks: AnnouncementBlock[] }) {
   );
 }
 
-export function AnnouncementArticle({ data, dateLabel }: { data: ArticleData; dateLabel?: string }) {
+export function AnnouncementArticle({
+  data, dateLabel, faraRama = false,
+}: {
+  data: ArticleData;
+  dateLabel?: string;
+  /*
+    Desfasurat intr-un rand din lista de noutati, articolul nu-si mai poarta
+    propria rama: ar fi fost o cutie in cutie, si si-ar fi repetat titlul, care
+    e deja scris pe randul de deasupra.
+  */
+  faraRama?: boolean;
+}) {
   return (
-    <article className="bg-card ring-1 ring-foreground/10 rounded-2xl overflow-hidden">
+    <article className={faraRama ? "" : "bg-card ring-1 ring-foreground/10 rounded-2xl overflow-hidden"}>
       {data.cover_url && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={data.cover_url} alt="" className="w-full aspect-[16/9] object-cover" />
+        <img
+          src={data.cover_url}
+          alt=""
+          /* ⚠ Deschis intr-un rand din lista, coperta nu mai are voie sa tina
+             16/9: pe toata latimea panoului ar fi inalta cat ecranul si ar
+             impinge textul anuntului sub marginea de jos. Ramane o fasie. */
+          className={faraRama
+            ? "mb-3 max-h-48 w-full rounded-lg object-cover"
+            : "w-full aspect-[16/9] object-cover"}
+        />
       )}
-      <div className="p-5 sm:p-6 space-y-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          {data.is_pinned && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-warning bg-warning/10 border border-warning/20 px-2 py-0.5 rounded-full">
-              <Pin className="h-3 w-3" /> Important
-            </span>
-          )}
-          {(dateLabel || data.published_at) && (
-            <span className="text-xs text-muted-foreground">{dateLabel ?? formatDate(data.published_at!)}</span>
-          )}
-        </div>
-        <h2 className="text-xl font-bold text-foreground break-words">{data.title || "Titlu anunt"}</h2>
-        {data.excerpt && <p className="text-sm text-muted-foreground">{data.excerpt}</p>}
+      <div className={faraRama ? "space-y-3" : "p-5 sm:p-6 space-y-3"}>
+        {/* In lista de noutati, randul de deasupra poarta deja si „Important",
+            si data, si titlul, si rezumatul: repetate aici, ar fi fost acelasi
+            lucru scris de doua ori, la doi centimetri distanta. */}
+        {!faraRama && (
+          <>
+            <div className="flex items-center gap-2 flex-wrap">
+              {data.is_pinned && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-warning bg-warning/10 border border-warning/20 px-2 py-0.5 rounded-full">
+                  <Pin className="h-3 w-3" /> Important
+                </span>
+              )}
+              {(dateLabel || data.published_at) && (
+                <span className="text-xs text-muted-foreground">{dateLabel ?? formatDate(data.published_at!)}</span>
+              )}
+            </div>
+            <h2 className="text-xl font-bold text-foreground break-words">{data.title || "Titlu anunt"}</h2>
+            {data.excerpt && <p className="text-sm text-muted-foreground">{data.excerpt}</p>}
+          </>
+        )}
         <Blocks blocks={Array.isArray(data.blocks) ? data.blocks : []} />
       </div>
     </article>

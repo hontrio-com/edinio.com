@@ -100,6 +100,26 @@ oricarui magazin.
 
 ---
 
+## C2. Un pas de DATE in productie, de hotarat de el
+
+Nu e o migratie de schema, ci un `update` de o linie, si **nu s-a facut**.
+
+Pana acum, publicarea unui anunt le stingea pe toate celelalte (`unpublishOthers`),
+fiindca panoul arata un singur anunt. In productie sunt **7 anunturi, dintre care
+1 publicat**, desi toate sapte au data de publicare: celelalte sase au fost stinse
+automat, nu retrase de el.
+
+Cu lista noua, ele n-ar mai aparea, iar „ultimele cinci noutati" ar avea un singur rand:
+
+```sql
+-- Anunturile stinse de vechea regula „unul singur odata" se reaprind.
+-- ⚠ De rulat DOAR daca el confirma ca niciunul dintre cele sase nu a fost retras dinadins.
+update public.announcements set is_published = true where published_at is not null;
+select count(*) filter (where is_published) as publicate from public.announcements;  -- se astepta 7
+```
+
+In baza demo s-a facut deja (plus un al cincilea rand, ca sa se vada asezarea plina).
+
 ## D. Variabile de mediu noi
 
 Niciuna **ceruta** de cod. (Sentry a fost pus separat, in `main`, pe 18.09, cu `SENTRY_AUTH_TOKEN`
@@ -134,6 +154,7 @@ Lista e ca sa se stie **ce se uita la** dupa push, nu ca sa inlocuiasca istoricu
 | Etichete de stare | `src/components/ui/eticheta-stare.tsx` (nou), `src/lib/orders/status.ts`, `OrdersClient`, `OrderDetailClient`, `CustomersClient`, pagina panoului | Un singur fel de eticheta: punct colorat pe fundal neutru (varianta aleasa de el, 20.09). ⚠ **Acoperite doar STARILE DE COMANDA.** Raman scrise de mana, pentru trecerea urmatoare: sursa comenzii, statusurile de curier, integrarile, abonamentul si platile (~15 fisiere). Cerut asa de el: „toate, dar pe rand". |
 | Comenzi recente | pagina panoului, `src/lib/utils/format.ts` (`acumCatTimp`) | Fiecare rand spune cand a venit comanda („acum 12 minute") si de unde (eMAG, Google Ads, Direct). |
 | Fusul orar | `src/lib/utils/format.ts`, `src/lib/email.ts` (+ probe care pornesc un Node pe `TZ=UTC`) | Datele scrise de server erau pe UTC: o comanda de la 01:30 aparea „19 septembrie, 22:30". Acum toate trec prin ceasul romanesc. ⚠ RAMAS: componentele de client (tabele din panou, zona de admin) scriu pe ceasul VIZITATORULUI; pentru un comerciant din alt fus, orele difera de facturi. De facut in aceeasi trecere cu etichetele. |
+| Noutati | `src/components/dashboard/ListaNoutati.tsx` (nou), `AnnouncementArticle`, `src/lib/announcements.ts` (`rezumatScurt`), `src/lib/actions/announcement.actions.ts`, pagina panoului | Cinci randuri in loc de un articol desfasurat, fara iconita la titlu. ⚠ **Publicarea nu mai stinge celelalte anunturi** (`unpublishOthers`, scoasa): altfel lista ar fi avut mereu un singur rand. Vezi pasul de date de mai jos. |
 | Tipuri | `src/types/database.types.ts` | ⚠ Intrarile pentru functiile noi sunt **scrise de mana** (regenerarea completa rescrie `store_settings` din tabela in vedere si rupe zeci de locuri). Dupa aplicarea migratiilor, ele descriu in sfarsit ceva ce exista si in productie. |
 
 ---

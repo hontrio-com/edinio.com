@@ -3,12 +3,12 @@ import { redirect } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import {
-  ShoppingCart, Wallet, Receipt, Target, Megaphone,
+  ShoppingCart, Wallet, Receipt, Target,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
-import { getLatestAnnouncement } from "@/lib/actions/announcement.actions";
+import { getLatestAnnouncements } from "@/lib/actions/announcement.actions";
 import { acumCatTimp, formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import { StocScazutRand } from "@/components/dashboard/StocScazutRand";
@@ -17,8 +17,8 @@ import { orderStatus } from "@/lib/orders/status";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { deriveOrigin } from "@/lib/orders/origin";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
-import { AnnouncementArticle } from "@/components/dashboard/AnnouncementArticle";
-import type { Announcement } from "@/lib/announcements";
+import { ListaNoutati, type RandNoutate } from "@/components/dashboard/ListaNoutati";
+import { rezumatScurt, type Announcement } from "@/lib/announcements";
 
 // Sanitize text-block HTML before it reaches the client renderer.
 function announcementToArticle(a: Announcement) {
@@ -333,7 +333,19 @@ async function ContinutPanou({
 
   const dateVanzari = citesteDateVanzari(vanzariRpc);
 
-  const latestAnnouncement = await getLatestAnnouncement().catch(() => null);
+  /*
+    Ultimele cinci noutati, cate un rand fiecare. HTML-ul din blocurile de text
+    se curata AICI, pe server, inainte sa ajunga la componenta care il pune in
+    pagina (vezi `announcementToArticle`).
+  */
+  const noutati: RandNoutate[] = (await getLatestAnnouncements(5).catch(() => [])).map((a) => ({
+    id: a.id,
+    titlu: a.title,
+    rezumat: rezumatScurt(a),
+    data: a.published_at,
+    fixat: a.is_pinned,
+    articol: announcementToArticle(a),
+  }));
 
   // ── Checklist de activare: semnale calculate server-side ──
   // Pasul "customize" e bifat de logo (semnal server) SAU de vizitarea paginii de
@@ -484,13 +496,10 @@ async function ContinutPanou({
         </div>
       </div>
 
-      {latestAnnouncement && (
+      {noutati.length > 0 && (
         <div className="mt-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Megaphone className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Noutati</h2>
-          </div>
-          <AnnouncementArticle data={announcementToArticle(latestAnnouncement)} />
+          <h2 className="mb-3 text-sm font-semibold text-foreground">Noutati</h2>
+          <ListaNoutati noutati={noutati} />
         </div>
       )}
     </>

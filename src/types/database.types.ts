@@ -23,6 +23,7 @@ export type Database = {
           customer_name: string | null
           email: string | null
           id: string
+          ignorat_la: string | null
           item_count: number
           items: Json
           last_activity_at: string
@@ -46,6 +47,7 @@ export type Database = {
           customer_name?: string | null
           email?: string | null
           id?: string
+          ignorat_la?: string | null
           item_count?: number
           items?: Json
           last_activity_at?: string
@@ -69,6 +71,7 @@ export type Database = {
           customer_name?: string | null
           email?: string | null
           id?: string
+          ignorat_la?: string | null
           item_count?: number
           items?: Json
           last_activity_at?: string

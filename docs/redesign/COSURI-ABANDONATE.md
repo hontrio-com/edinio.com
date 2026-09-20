@@ -93,8 +93,24 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
 - [x] **A3.** Trimiterea manuala refuza cosurile deja convertite. A iesit din aceeasi poarta
       ca A1: cronul filtra `status = 'open'`, actiunea manuala nu, deci se putea trimite
       „ai uitat ceva in cos" cuiva care tocmai cumparase.
-- [ ] **A4.** Stergerea cere confirmare; se adauga „Ignora" (pastreaza cifrele, nu mai
-      contacteaza) langa stergerea definitiva.
+- [x] **A4.** Stergerea cere confirmare, si langa ea sta „Ignora". Coloana `ignorat_la` pe
+      `abandoned_carts`.
+      ⚠ Confirmarea nu e pusa fiindca „e bine sa intrebi", ci fiindca cele doua iesiri arata la
+      fel pentru om si fac lucruri diferite: randul sters iese SI din cifre, deci rata de
+      abandon si venitul potential se schimba in urma pentru o hotarare care n-avea nicio
+      legatura cu ele. Fereastra spune chiar asta, nu „esti sigur?".
+      ⚠ Promisiunea „nu mai contacteaza" are TREI drumuri pe care se poate rupe: emailul de
+      mana, SMS-ul de mana si cronul. Primele doua trec prin poarta comuna; cronul isi alege
+      singur cosurile, deci are filtrul lui (`ignorat_la is null`, cu index partial).
+      ⚠ Coloana trebuie si CERUTA in interogare: o poarta care citeste `cart.ignorat_la` dintr-un
+      rand care n-o contine primeste `undefined` si lasa totul sa treaca. Probele masoara
+      amandoua interogarile, nu doar poarta.
+      ⚠ Butoanele de trimis se sting pe randul ignorat: nu tine loc de poarta de pe server, dar
+      un buton care arata activ si da eroare la apasare e o minciuna de ecran.
+      Verificat pe baza demo cu chiar interogarile celor doua drumuri: cosul ignorat nu mai e
+      printre cele luate de cron, si poarta de mana ii vede steagul.
+      ⚠ Prinsa de o plasa mai veche: `ignora()` astepta actiunea fara `try`, iar o actiune care
+      arunca dintr-un callback de tranzitie inlocuieste TOT panoul cu pagina de 500.
 - [x] **A5.** Numararea SMS spune acum ce se plateste. Vechiul rand (`length` / 160) minte de
       trei ori deodata, si masurat pe un mesaj adevarat scris pentru VetDepo minte de TREI ORI:
       scria „1 SMS", pleaca 3.

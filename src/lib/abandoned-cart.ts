@@ -58,6 +58,8 @@ export interface AbandonedCartRow {
   recovery_email_sent_at: string | null;
   recovery_sms_sent_at: string | null;
   recovery_count: number;
+  /** ⚠ Ramane in cifre, dar nu mai primeste niciun mesaj. */
+  ignorat_la: string | null;
 }
 
 export interface AbandonedCartsData {

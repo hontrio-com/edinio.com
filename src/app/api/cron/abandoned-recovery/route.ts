@@ -242,6 +242,8 @@ export async function GET(req: NextRequest) {
       .select("id, customer_name, email, phone, items, subtotal, created_at, automation_step, recovery_count, last_recovery_at")
       .eq("business_id", store.businessId)
       .eq("status", "open")
+      /* ⚠ Cosurile ignorate raman in cifre, dar nu mai primesc niciun mesaj. */
+      .is("ignorat_la", null)
       .lt("last_activity_at", thresholdIso)
       .gte("last_activity_at", pragRecuperare)
       .limit(500);

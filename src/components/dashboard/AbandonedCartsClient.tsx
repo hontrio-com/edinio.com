@@ -8,11 +8,13 @@ import { toast } from "sonner";
 import {
   ShoppingBag, TrendingDown, Percent, RotateCcw, Mail, MessageSquare,
   Clock, Package, Trash2, X, Sparkles, Send, Banknote, ShieldCheck, Bell, Loader2, Lock,
+  BellOff, AlertTriangle,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { AbandonedAutomationsTab } from "./AbandonedAutomationsTab";
 import {
   setAbandonedCartEnabled, sendAbandonedCartEmail, sendAbandonedCartSms, deleteAbandonedCart,
+  ignoraCosAbandonat,
 } from "@/lib/actions/abandoned-cart.actions";
 import {
   standardRecoveryTemplate, interpolateRecoveryMessage, buildRecoverUrl, defaultRecoverySms,
@@ -157,6 +159,14 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
     deschisa din nou primeste cheie noua, fiindca e o intentie noua.
   */
   const [cheieCerere, setCheieCerere] = useState("");
+  /*
+    ⚠ Stergerea nu mai pleaca dintr-o singura apasare. Nu fiindca ar fi „bine sa
+    intrebi", ci fiindca stergerea si „nu-l mai contacta" arata la fel pentru
+    om si fac lucruri diferite: randul sters iese si din cifre, deci rata de
+    abandon si venitul potential se schimba retroactiv pentru o hotarare care
+    n-avea nicio legatura cu ele.
+  */
+  const [deHotarat, setDeHotarat] = useState<AbandonedCartRow | null>(null);
 
   /*
     ⚠ SOCOTEALA SE FACE PE TEXTUL CARE PLEACA, NU PE CEL DIN CASUTA.
@@ -250,8 +260,41 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
     });
   }
 
+  function ignora(cart: AbandonedCartRow, catre: boolean) {
+    startSend(async () => {
+      let res: Awaited<ReturnType<typeof ignoraCosAbandonat>>;
+      try {
+        res = await ignoraCosAbandonat(businessId, cart.id, catre);
+      } catch {
+        /*
+         * ⚠ O actiune care arunca dintr-un callback de tranzitie inlocuieste TOT
+         * panoul cu pagina de 500 de la radacina. Aici s-ar pierde si fereastra
+         * deschisa, si omul n-ar sti daca steagul s-a pus sau nu.
+         *
+         * Scrie doar un steag care nu contacteaza pe nimeni, deci reincercarea e
+         * fara urmari - dar adevarul se cere tot de pe server.
+         */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca s-a schimbat ceva. "
+          + "Lista se reincarca: uita-te la eticheta cosului inainte sa incerci din nou.",
+          { duration: 12000 },
+        );
+        setDeHotarat(null);
+        router.refresh();
+        return;
+      }
+      if ("error" in res) { toast.error(res.error); return; }
+      setDeHotarat(null);
+      toast.success(catre
+        ? "Cosul ramane in cifre, dar nu mai primeste mesaje."
+        : "Cosul poate primi iar mesaje.");
+      router.refresh();
+    });
+  }
+
   function remove(cart: AbandonedCartRow) {
     startSend(async () => {
+      setDeHotarat(null);
       aplicaOptimistSterge(cart.id);
       let res: Awaited<ReturnType<typeof deleteAbandonedCart>>;
       try {
@@ -415,6 +458,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
                     {c.source === "buy_now" && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Cumpără acum</span>}
                     {c.recovery_email_sent_at && <span className="text-[10px] px-1.5 py-0.5 rounded bg-info/10 text-info font-medium">Mail trimis</span>}
                     {c.recovery_sms_sent_at && <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/10 text-success font-medium">SMS trimis</span>}
+                    {c.ignorat_la && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Ignorat</span>}
                   </div>
                   <p className="text-xs text-muted-foreground truncate mt-0.5">
                     {[c.phone, c.email].filter(Boolean).join(" · ") || "Fără contact"}
@@ -427,8 +471,8 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => openRecover(c, "email")}
-                    disabled={!c.email}
-                    title={c.email ? "Trimite email" : "Clientul nu a lăsat email"}
+                    disabled={!c.email || !!c.ignorat_la}
+                    title={c.ignorat_la ? "Coșul e ignorat: nu mai primește mesaje" : c.email ? "Trimite email" : "Clientul nu a lăsat email"}
                     className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <Mail className="h-3.5 w-3.5" /> Mail
@@ -436,16 +480,16 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
                   {data.smsEnabled && (
                     <button
                       onClick={() => openRecover(c, "sms")}
-                      disabled={!c.phone}
-                      title={c.phone ? "Trimite SMS" : "Clientul nu a lăsat telefon"}
+                      disabled={!c.phone || !!c.ignorat_la}
+                      title={c.ignorat_la ? "Coșul e ignorat: nu mai primește mesaje" : c.phone ? "Trimite SMS" : "Clientul nu a lăsat telefon"}
                       className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg text-white bg-primary transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <MessageSquare className="h-3.5 w-3.5" /> SMS
                     </button>
                   )}
                   <button
-                    onClick={() => remove(c)}
-                    title="Șterge"
+                    onClick={() => setDeHotarat(c)}
+                    title="Șterge sau ignoră"
                     className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -461,6 +505,69 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
         <div className="flex items-start gap-2 text-xs text-muted-foreground rounded-xl border border-border bg-muted/40 p-3">
           <Bell className="h-4 w-4 shrink-0 mt-0.5" />
           <span>Activează SMSO sau notice.ro (coș abandonat) din Integrări ca să poți recupera coșurile și prin SMS, nu doar prin email.</span>
+        </div>
+      )}
+
+      {/* ⚠ Stergere sau ignorare: doua iesiri care arata la fel si NU fac acelasi lucru. */}
+      {deHotarat && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !sending && setDeHotarat(null)} />
+          <div className="relative bg-card rounded-2xl ring-1 ring-foreground/10 shadow-2xl w-full max-w-md p-5">
+            <div className="flex items-start gap-3 mb-4">
+              <span className="w-9 h-9 rounded-lg bg-warning/10 text-warning flex items-center justify-center shrink-0">
+                <AlertTriangle className="h-4.5 w-4.5" />
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-foreground">
+                  Coșul lui {deHotarat.customer_name || "client anonim"}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {deHotarat.item_count} {deHotarat.item_count === 1 ? "produs" : "produse"} · {formatPrice(deHotarat.subtotal)}
+                </p>
+              </div>
+            </div>
+
+            {deHotarat.ignorat_la ? (
+              <p className="text-sm text-muted-foreground mb-4">
+                Coșul e ignorat: rămâne în cifre, dar nu primește mesaje. Îl poți readuce între cele
+                care pot fi contactate, sau îl poți șterge definitiv.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground mb-4">
+                Dacă nu vrei să mai contactezi clientul, alege <span className="font-medium text-foreground">Ignoră</span>:
+                coșul rămâne în statistici, dar nu mai primește niciun mesaj.
+                <span className="block mt-2">
+                  <span className="font-medium text-foreground">Ștergerea e definitivă</span> și scoate coșul
+                  și din cifre: rata de abandon și venitul potențial se schimbă în urmă.
+                </span>
+              </p>
+            )}
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => ignora(deHotarat, !deHotarat.ignorat_la)}
+                disabled={sending}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-lg text-white bg-primary transition-all hover:opacity-90 disabled:opacity-60"
+              >
+                {deHotarat.ignorat_la
+                  ? <><Bell className="h-4 w-4" /> Scoate din ignorate</>
+                  : <><BellOff className="h-4 w-4" /> Ignoră (păstrează cifrele)</>}
+              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setDeHotarat(null)} disabled={sending}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-60">
+                  Renunță
+                </button>
+                <button
+                  onClick={() => remove(deHotarat)}
+                  disabled={sending}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-60"
+                >
+                  <Trash2 className="h-4 w-4" /> Șterge definitiv
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

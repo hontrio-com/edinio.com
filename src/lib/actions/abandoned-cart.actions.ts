@@ -304,7 +304,7 @@ export async function getAbandonedCartsData(
   const windowStart = new Date(Date.now() - 90 * 86400000).toISOString();
   const { data: rowsData } = await supabase
     .from("abandoned_carts")
-    .select("id, customer_name, email, phone, items, item_count, subtotal, source, status, created_at, last_activity_at, converted_at, recovery_email_sent_at, recovery_sms_sent_at, recovery_count")
+    .select("id, customer_name, email, phone, items, item_count, subtotal, source, status, created_at, last_activity_at, converted_at, ignorat_la, recovery_email_sent_at, recovery_sms_sent_at, recovery_count")
     .eq("business_id", businessId)
     .gte("created_at", windowStart)
     .order("last_activity_at", { ascending: false })
@@ -374,6 +374,7 @@ export async function getAbandonedCartsData(
       source: r.source,
       last_activity_at: r.last_activity_at,
       created_at: r.created_at,
+      ignorat_la: r.ignorat_la,
       recovery_email_sent_at: r.recovery_email_sent_at,
       recovery_sms_sent_at: r.recovery_sms_sent_at,
       recovery_count: r.recovery_count,
@@ -458,10 +459,17 @@ const COS_NERECUPERABIL =
 async function poateTrimiteCatre(
   admin: ReturnType<typeof createAdminClient>,
   businessId: string,
-  cart: { status?: string | null; email?: string | null; phone?: string | null },
+  cart: { status?: string | null; email?: string | null; phone?: string | null; ignorat_la?: string | null },
 ): Promise<string | null> {
   if (cart.status === "converted") {
     return "Cosul a fost deja finalizat: clientul a comandat. Nu i se mai trimite mesaj de recuperare.";
+  }
+  /*
+   * ⚠ „Ignorat" inseamna chiar asta: ramane in cifre, nu mai primeste mesaje.
+   * Daca poarta n-ar verifica-o, butonul ar fi doar o parere.
+   */
+  if (cart.ignorat_la) {
+    return "Cosul e marcat ca ignorat, deci nu i se mai trimit mesaje. Scoate-l din ignorate daca vrei sa-l contactezi.";
   }
 
   const { email, telefon } = cheileContactului(cart);
@@ -514,7 +522,7 @@ export async function sendAbandonedCartEmail(
 
   const { data: cart } = await supabase
     .from("abandoned_carts")
-    .select("id, customer_name, email, phone, status, items, subtotal, recovery_count, last_activity_at")
+    .select("id, customer_name, email, phone, status, ignorat_la, items, subtotal, recovery_count, last_activity_at")
     .eq("id", cartId).eq("business_id", businessId).single();
   if (!cart) return { error: "Cosul nu a fost gasit." };
   if (!cart.email) return { error: "Clientul nu a lasat un email." };
@@ -630,7 +638,7 @@ export async function sendAbandonedCartSms(
 
   const { data: cart } = await supabase
     .from("abandoned_carts")
-    .select("id, customer_name, email, phone, status, items, recovery_count, last_activity_at")
+    .select("id, customer_name, email, phone, status, ignorat_la, items, recovery_count, last_activity_at")
     .eq("id", cartId).eq("business_id", businessId).single();
   if (!cart) return { error: "Cosul nu a fost gasit." };
   if (!cart.phone) return { error: "Clientul nu a lasat un numar de telefon." };
@@ -712,6 +720,36 @@ export async function sendAbandonedCartSms(
       updated_at: new Date().toISOString(),
     })
     .eq("id", cartId).eq("business_id", businessId);
+
+  revalidatePath("/dashboard/abandoned");
+  return { success: true };
+}
+
+/**
+ * „Ignora": cosul ramane in cifre, dar nu mai primeste niciun mesaj.
+ *
+ * ⚠ EXISTA CA SA NU MAI FIE STERGEREA SINGURA IESIRE. Pana acum, comerciantul
+ * care voia doar sa scape de un cos (de proba, al lui, al unui client care a
+ * sunat si a comandat la telefon) apasa cosul de gunoi - si odata cu randul
+ * pleca si valoarea lui din rata de abandon si din venitul potential. Cifrele
+ * se schimbau retroactiv pentru o hotarare care n-avea nicio legatura cu ele.
+ */
+export async function ignoraCosAbandonat(
+  businessId: string, cartId: string, ignora: boolean,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Neautorizat" };
+
+  const { error } = await supabase
+    .from("abandoned_carts")
+    .update({ ignorat_la: ignora ? new Date().toISOString() : null, updated_at: new Date().toISOString() } as never)
+    .eq("id", cartId).eq("business_id", businessId);
+  if (error) return { error: "Nu am putut schimba starea cosului." };
 
   revalidatePath("/dashboard/abandoned");
   return { success: true };

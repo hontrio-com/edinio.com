@@ -150,6 +150,13 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
   const [recover, setRecover] = useState<{ cart: AbandonedCartRow; channel: "email" | "sms" } | null>(null);
   const [message, setMessage] = useState("");
   const [discountCode, setDiscountCode] = useState("");
+  /*
+    ⚠ Cheia unei APASARI, nu a unui cos. Se face o data, cand se deschide
+    fereastra, si insoteste fiecare incercare de trimitere din ea. Aceeasi
+    apasare retrimisa se loveste pe server de randul deja scris; o fereastra
+    deschisa din nou primeste cheie noua, fiindca e o intentie noua.
+  */
+  const [cheieCerere, setCheieCerere] = useState("");
 
   /*
     ⚠ SOCOTEALA SE FACE PE TEXTUL CARE PLEACA, NU PE CEL DIN CASUTA.
@@ -199,6 +206,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
   function openRecover(cart: AbandonedCartRow, channel: "email" | "sms") {
     setRecover({ cart, channel });
     setDiscountCode("");
+    setCheieCerere(crypto.randomUUID());
     // Pre-fill the actual standard message so the merchant sees exactly what's sent
     // (the restore link is appended by the server).
     setMessage(interpolateRecoveryMessage(standardRecoveryTemplate(channel), { name: cart.customer_name, store: data.storeName }));
@@ -214,15 +222,15 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
         | Awaited<ReturnType<typeof sendAbandonedCartSms>>;
       try {
         res = channel === "email"
-          ? await sendAbandonedCartEmail(businessId, cart.id, message.trim() || undefined, code)
-          : await sendAbandonedCartSms(businessId, cart.id, message.trim() || undefined, code);
+          ? await sendAbandonedCartEmail(businessId, cart.id, message.trim() || undefined, code, cheieCerere)
+          : await sendAbandonedCartSms(businessId, cart.id, message.trim() || undefined, code, cheieCerere);
       } catch {
         /*
-         * ⚠⚠ PLEACA SPRE UN CUMPARATOR ADEVARAT, cu tot cu un cod de reducere.
+         * ⚠ Cererea a picat pe retea, deci nu stim daca serverul apucase sa trimita.
          *
-         * Nu exista nicio cheie de idempotenta si nimic nu opreste o a doua trimitere: singurele
-         * porti din actiune sunt fereastra de sase luni si cosul gol. Deci daca omul apasa iar,
-         * acelasi cumparator primeste inca un mesaj, iar la SMS mai si costa.
+         * Pana pe 21.09.2026 aici se putea doar avertiza omul, fiindca nimic nu
+         * oprea a doua trimitere. Acum apasarea poarta o cheie: daca primul chiar
+         * a plecat, al doilea se loveste de randul scris si NU mai pleaca.
          *
          * ⚠ Nu se pretinde nimic despre `recovery_count`: n-am masurat daca se scrie inainte sau
          * dupa plecarea mesajului. Aia schimba doar daca CONTORUL spune adevarul, nu ce trebuie
@@ -230,8 +238,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
          */
         toast.error(
           "Nu am primit raspuns de la server, deci nu stim daca mesajul a plecat spre client. "
-          + "Nimic nu opreste o a doua trimitere: daca apesi din nou si primul chiar a plecat, "
-          + "acelasi om primeste inca unul. Uita-te intai in contul de email sau SMS.",
+          + "Poti apasa din nou fara grija: daca primul chiar a plecat, al doilea nu mai pleaca.",
           { duration: 12000 },
         );
         return;

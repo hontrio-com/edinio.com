@@ -68,9 +68,28 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
       deschide o portita de SMS.
       ⚠ Telefonul se compara NORMALIZAT: „0722 184 305" si „+40722184305" sunt acelasi om.
       ⚠ Cand lista nu se poate citi, NU se trimite - aceeasi hotarare ca in cron.
-- [ ] **A2.** Idempotenta: `cart_id + canal + cheie de cerere` pentru manual,
-      `cart_id + pas` pentru automatizari. Un `retry` de cron sau o a doua apasare nu mai
-      trimit al doilea mesaj.
+- [x] **A2.** Un mesaj pleaca o singura data. Tabela noua `recovery_sends`, cu index unic pe
+      `(cos, canal, cheie)`.
+      ⚠ **Automatizarile erau deja aparate**, si altfel decat cere lista: cronul ia pasul cu un
+      compare-and-swap pe `automation_step` INAINTE sa trimita, deci doua rulari suprapuse nu
+      pot trimite acelasi pas. Nu s-a inlocuit; s-a adaugat randul de jurnal (`pas:<n>`), care
+      prinde a doua incercare daca vreodata se pierde compare-and-swap-ul - si de care are
+      nevoie oricum atribuirea de la B1.
+      ⚠ Gaura adevarata era la trimiterea DE MANA: butonul e stins cat tine cererea, si atat.
+      O reincarcare, a doua fila, doi oameni din aceeasi echipa sau o cerere picata pe retea
+      DUPA ce serverul trimisese deja - toate duceau la un al doilea mesaj, platit la SMS.
+      ⚠ Cheia nu e „cos + canal": aia ar fi insemnat un singur email pe cos, vreodata. E
+      `cos + canal + cheia apasarii`, facuta cand se deschide fereastra. Aceeasi apasare
+      retrimisa se opreste; o fereastra deschisa din nou e o intentie noua si trece.
+      ⚠ Randul se scrie INAINTE de trimitere, ca revendicarea pasului din cron. Deci existenta
+      lui nu dovedeste ca mesajul a plecat: `confirmat` se pune abia dupa. Comerciantului i se
+      spun doua lucruri DIFERITE - „a plecat deja" si „s-a incercat si nu stim" - fiindca a
+      doua oara el trebuie sa se uite in contul de email, nu sa creada ca s-a rezolvat.
+      ⚠ Orice eroare care nu e dublura inseamna „nu stiu", si atunci NU se trimite: o baza
+      cazuta tratata ca „liber" ar deschide exact usa pe care tabela o inchide.
+      Verificat prin clientul Supabase adevarat pe baza demo, toate cele cinci cazuri: prima
+      apasare trece, a doua cu aceeasi cheie e oprita (si inainte, si dupa confirmare), o
+      apasare noua trece, si acelasi cos pe alt canal trece.
 - [x] **A3.** Trimiterea manuala refuza cosurile deja convertite. A iesit din aceeasi poarta
       ca A1: cronul filtra `status = 'open'`, actiunea manuala nu, deci se putea trimite
       „ai uitat ceva in cos" cuiva care tocmai cumparase.

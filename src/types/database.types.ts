@@ -4996,6 +4996,57 @@ export type Database = {
           },
         ]
       }
+      recovery_sends: {
+        Row: {
+          business_id: string
+          canal: string
+          cart_id: string
+          cheie: string
+          confirmat: boolean
+          id: string
+          pas: number | null
+          sursa: string
+          trimis_la: string
+        }
+        Insert: {
+          business_id: string
+          canal: string
+          cart_id: string
+          cheie: string
+          confirmat?: boolean
+          id?: string
+          pas?: number | null
+          sursa: string
+          trimis_la?: string
+        }
+        Update: {
+          business_id?: string
+          canal?: string
+          cart_id?: string
+          cheie?: string
+          confirmat?: boolean
+          id?: string
+          pas?: number | null
+          sursa?: string
+          trimis_la?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recovery_sends_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recovery_sends_cart_id_fkey"
+            columns: ["cart_id"]
+            isOneToOne: false
+            referencedRelation: "abandoned_carts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       return_requests: {
         Row: {
           business_id: string

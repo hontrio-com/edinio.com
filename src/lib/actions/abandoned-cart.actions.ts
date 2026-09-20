@@ -10,6 +10,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   cheileContactului, mesajContactSuprimat, motivulSuprimarii, type RandSuprimare,
 } from "@/lib/abandoned/suprimare";
+import {
+  confirmaTrimiterea, mesajRevendicare, revendicaTrimiterea,
+} from "@/lib/abandoned/o-singura-trimitere";
 import { logError } from "@/lib/error-logger";
 import { trimiteSiLasaUrma } from "@/lib/smso-urma";
 import type { SmsoConfig } from "@/lib/smso";
@@ -491,6 +494,13 @@ export async function sendAbandonedCartEmail(
   cartId: string,
   message?: string,
   discountCode?: string,
+  /*
+   * ⚠ Cheia unei APASARI, facuta cand se deschide fereastra. Aceeasi apasare
+   * retrimisa (reincarcare, a doua fila, o cerere picata pe retea dupa ce
+   * serverul trimisese deja) se loveste de randul existent si nu mai pleaca
+   * nimic. O apasare noua e o intentie noua si trece.
+   */
+  cheieCerere?: string,
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -533,6 +543,19 @@ export async function sendAbandonedCartEmail(
     return { error: COS_NERECUPERABIL };
   }
 
+  /*
+   * ⚠ DREPTUL DE A TRIMITE SE IA INAINTE DE TRIMITERE, nu dupa. Scris dupa,
+   * doua cereri paralele ar trece amandoua de verificare inainte ca vreuna sa
+   * apuce sa lase urma, si acelasi om ar primi doua mesaje.
+   */
+  const revendicare = cheieCerere
+    ? await revendicaTrimiterea(createAdminClient(), {
+        businessId, cartId, canal: "email", sursa: "manual", cheie: cheieCerere,
+      })
+    : ({ fel: "liber" } as const);
+  const opritDeDublura = mesajRevendicare(revendicare);
+  if (opritDeDublura) return { error: opritDeDublura };
+
   try {
     const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
     const emailSender = await getStoreEmailSender(supabase, businessId);
@@ -550,6 +573,11 @@ export async function sendAbandonedCartEmail(
     }, emailSender);
   } catch {
     return { error: "Emailul nu a putut fi trimis." };
+  }
+
+  /* Abia acum se stie ca a plecat: pana aici randul spunea doar „s-a incercat". */
+  if (cheieCerere) {
+    await confirmaTrimiterea(createAdminClient(), { cartId, canal: "email", cheie: cheieCerere });
   }
 
   await supabase.from("abandoned_carts")
@@ -570,6 +598,13 @@ export async function sendAbandonedCartSms(
   cartId: string,
   message?: string,
   discountCode?: string,
+  /*
+   * ⚠ Cheia unei APASARI, facuta cand se deschide fereastra. Aceeasi apasare
+   * retrimisa (reincarcare, a doua fila, o cerere picata pe retea dupa ce
+   * serverul trimisese deja) se loveste de randul existent si nu mai pleaca
+   * nimic. O apasare noua e o intentie noua si trece.
+   */
+  cheieCerere?: string,
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -634,6 +669,15 @@ export async function sendAbandonedCartSms(
     return { error: COS_NERECUPERABIL };
   }
 
+  /* ⚠ Aceeasi poarta ca la email, si cu atat mai mult: al doilea SMS se PLATESTE. */
+  const revendicareSms = cheieCerere
+    ? await revendicaTrimiterea(admin, {
+        businessId, cartId, canal: "sms", sursa: "manual", cheie: cheieCerere,
+      })
+    : ({ fel: "liber" } as const);
+  const opritSms = mesajRevendicare(revendicareSms);
+  if (opritSms) return { error: opritSms };
+
   const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
   const recoverUrl = buildRecoverUrl(storeUrl, cartId, discountCode?.trim() || null);
   const body = message?.trim()
@@ -655,6 +699,10 @@ export async function sendAbandonedCartSms(
       body, type: "marketing", motiv: "cos_abandonat",
     });
     if (!res.success) return { error: res.error ?? "SMS-ul nu a putut fi trimis." };
+  }
+
+  if (cheieCerere) {
+    await confirmaTrimiterea(admin, { cartId, canal: "sms", cheie: cheieCerere });
   }
 
   await supabase.from("abandoned_carts")

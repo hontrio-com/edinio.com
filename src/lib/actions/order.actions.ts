@@ -2198,6 +2198,9 @@ export async function placeOrder(data: {
       userAgent: anteturi.get("user-agent"),
       path: "/checkout",
       productId: data.product_id,
+      /* Cat a valorat comanda: fara ea, „venit pe sursa" ar fi putut spune cate
+         comenzi vin din Facebook, dar nu si cati lei. */
+      valoare: total,
     });
   }, "analitice.cumparare", data.business_id);
 

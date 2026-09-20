@@ -46,6 +46,7 @@ push si aplicarea migratiei, la toti comerciantii.
 | 5 | `migrations/2026-09-20-analitice-agregat-sesiuni.sql` | tabelele `analitice_zilnic` si `analitice_zilnic_sursa` (+ politici) si `agregeaza_analitice` care le umple | DA | **NU. De aplicat la final.** ⚠ Dupa aplicare, primele zile de sesiuni se strang la urmatoarea rulare a cronului `discount-release`; istoricul NU se poate reconstrui, fiindca randurile brute mai vechi de 8 zile nu mai exista. |
 | 6 | `migrations/2026-09-20-trafic-si-harta.sql` | `trafic_panou`, `trafic_pe_sursa`, `comenzi_pe_judet` | DA | **NU. De aplicat la final.** |
 | 7 | `migrations/2026-09-20-fereastra-azi-ieri.sql` | `fereastra_vanzari` capata „azi" si „ieri" | DA | **NU. De aplicat la final.** ⚠ Inlocuieste functia din migratia 2, deci se aplica DUPA ea. |
+| 8 | `migrations/2026-09-20-palnie-si-venit-pe-sursa.sql` | `site_analytics.valoare`; `analitice_zilnic.sesiuni_cu_produs/_cu_cos/_cu_checkout`; `analitice_zilnic_sursa.vanzari`; `agregeaza_analitice` rescrisa ca sa le umple; `palnia_panou`; `trafic_pe_sursa` refacuta cu venit | DA | **NU. De aplicat la final.** ⚠ Atinge o TABELA cu trafic real (`site_analytics`) si cele doua tabele de agregat; toate coloanele sunt optionale sau cu implicit. Se aplica DUPA migratiile 4 si 5. ⚠ `trafic_pe_sursa` se sterge si se recreeaza (semnatura de intoarcere se schimba), deci ordinea fata de migratia 6 conteaza. |
 
 ⚠ Migratiile 1-3 sunt **numai citire**: functii noi si o politica de SELECT, niciun `alter table`,
 niciun rand atins.

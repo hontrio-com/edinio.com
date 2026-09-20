@@ -5079,6 +5079,7 @@ export type Database = {
           visitor_id: string | null
           path: string | null
           product_id: string | null
+          valoare: number | null
         }
         Insert: {
           business_id: string
@@ -5094,6 +5095,7 @@ export type Database = {
           visitor_id?: string | null
           path?: string | null
           product_id?: string | null
+          valoare?: number | null
         }
         Update: {
           business_id?: string
@@ -6512,7 +6514,11 @@ export type Database = {
       }
       trafic_pe_sursa: {
         Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null }
-        Returns: { sursa: string; dispozitiv: string; sesiuni: number; sesiuni_cu_comanda: number }[]
+        Returns: { sursa: string; dispozitiv: string; sesiuni: number; sesiuni_cu_comanda: number; vanzari: number }[]
+      }
+      palnia_panou: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null }
+        Returns: { sesiuni: number; cu_produs: number; cu_cos: number; cu_checkout: number; cu_comanda: number }[]
       }
       comenzi_pe_judet: {
         Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null; p_canal?: string | null }

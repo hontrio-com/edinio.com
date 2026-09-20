@@ -24,7 +24,7 @@ import { identitateAnalitica } from "@/lib/analitice/identitate";
 export type FelEveniment = "visit" | "product_view" | "add_to_cart" | "begin_checkout" | "purchase";
 
 export async function scrieEvenimentAnalitic({
-  businessId, fel, ip, userAgent, device, source, referrer, country, path, productId,
+  businessId, fel, ip, userAgent, device, source, referrer, country, path, productId, valoare,
 }: {
   businessId: string;
   fel: FelEveniment;
@@ -36,6 +36,8 @@ export async function scrieEvenimentAnalitic({
   country?: string | null;
   path?: string | null;
   productId?: string | null;
+  /** Cat a valorat comanda. Numai pe `purchase`, pentru venitul pe sursa. */
+  valoare?: number | null;
 }): Promise<void> {
   const { permis } = await consumaLimita(`analytics:${ip ?? "necunoscut"}`, 120, 3600);
   if (!permis) return;
@@ -62,5 +64,6 @@ export async function scrieEvenimentAnalitic({
     visitor_id: visitorId,
     path: path ?? null,
     product_id: productId ?? null,
+    valoare: fel === "purchase" ? valoare ?? null : null,
   } as never);
 }

@@ -10,6 +10,7 @@ import { GraficVanzari } from "@/components/dashboard/GraficVanzari";
 import { HartaJudete } from "@/components/dashboard/HartaJudete";
 import { StatisticiFiltre } from "@/components/dashboard/StatisticiFiltre";
 import { StatisticiLive } from "@/components/dashboard/StatisticiLive";
+import { StatisticiTrafic, type Palnie, type RandSursa } from "@/components/dashboard/StatisticiTrafic";
 import {
   citesteDateVanzari, crestere, intervalScris, valoareTotal, type DateVanzari,
 } from "@/lib/vanzari";
@@ -72,12 +73,16 @@ export function StatisticiClient({
     vanzari: DateVanzari | null;
     trafic: DateTrafic | null;
     judete: RandJudet[];
+    surse: RandSursa[];
+    palnie: Palnie | null;
   } | null>(null);
 
   const seIncarca = capeteGata && date?.cheie !== cheie;
   const vanzari = date?.vanzari ?? null;
   const trafic = date?.trafic ?? null;
   const judete = date?.judete ?? [];
+  const surse = date?.surse ?? [];
+  const palnie = date?.palnie ?? null;
 
   useEffect(() => {
     if (!capeteGata) return;
@@ -92,10 +97,12 @@ export function StatisticiClient({
         p_pana_la: custom ? panaLa : null,
       };
 
-      const [v, t, j] = await Promise.all([
+      const [v, t, j, s, pl] = await Promise.all([
         supabase.rpc("vanzari_panou", { ...argPerioada, p_canal: canal || null }),
         supabase.rpc("trafic_panou", argPerioada),
         supabase.rpc("comenzi_pe_judet", { ...argPerioada, p_canal: canal || null }),
+        supabase.rpc("trafic_pe_sursa", argPerioada),
+        supabase.rpc("palnia_panou", argPerioada),
       ]);
 
       if (!valabil) return;
@@ -104,6 +111,8 @@ export function StatisticiClient({
         vanzari: citesteDateVanzari(v.data),
         trafic: citesteDateTrafic(t.data),
         judete: (j.data ?? []) as RandJudet[],
+        surse: (s.data ?? []) as RandSursa[],
+        palnie: (pl.data?.[0] ?? null) as Palnie | null,
       });
     })();
 
@@ -283,9 +292,9 @@ export function StatisticiClient({
           )}
 
           {fila === "trafic" && (
-            <p className="rounded-xl bg-card px-5 py-10 text-center text-sm text-muted-foreground ring-1 ring-foreground/10">
-              Surse, dispozitive si palnia se muta aici la pasul urmator.
-            </p>
+            seIncarca && surse.length === 0
+              ? <div className="h-64 animate-pulse rounded-xl bg-muted" />
+              : <StatisticiTrafic surse={surse} palnie={palnie} perioadaScrisa={perioadaScrisa} />
           )}
         </>
       )}

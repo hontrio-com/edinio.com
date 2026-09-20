@@ -74,7 +74,7 @@ scadea la zero in a noua zi - exact felul de defect care se vede abia peste doua
 
 - [x] **C1.** Antet si filtre comune: perioada (azi, ieri, 7, 30, 90, luna, an, personalizat),
       canal de vanzare, comparatie, export.
-- [~] **C2.** File: Prezentare (gata), Trafic (in lucru), Live (gata). „Vanzari" se adauga
+- [~] **C2.** File: Prezentare (gata), Trafic (gata), Live (gata). „Vanzari" se adauga
       odata cu tabelele ei; pana atunci n-ar fi decat un titlu gol.
 - [x] **C3.** Toate cardurile cu aceeasi forma: valoare, crestere, valoarea perioadei
       precedente, explicatie in tooltip.
@@ -85,7 +85,14 @@ scadea la zero in a noua zi - exact felul de defect care se vede abia peste doua
       produse vandute, rata de anulare.
 - [ ] **C5.** Grafic cu masura la alegere si granulatie dupa lungimea perioadei.
 - [ ] **C6.** Fila Vanzari: produse, categorii, canale, statusuri, vanzari brute/nete.
-- [ ] **C7.** Fila Trafic: surse cu venit, dispozitive cu conversie, palnie.
+- [x] **C7.** Fila Trafic: surse cu venit, dispozitive cu conversie, palnie.
+      ⚠ **Venitul se pune in dreptul PRIMEI surse a sesiunii**, nu a sursei evenimentului de
+      cumparare. Altfel, cine intra din Google si se intoarce din Facebook ca sa cumpere ar fi
+      dat intreaga comanda amandurora, iar suma coloanei „Vanzari" ar fi depasit vanzarile
+      magazinului - un tabel care se contrazice cu cardul de deasupra lui.
+      ⚠ **Pragurile palniei nu sunt neaparat in scadere** si scrie asta sub ele: in cos se
+      poate adauga si din grila magazinului, fara pagina produsului. Un „sub 100%" acolo nu e
+      un defect de masurare.
 - [x] **C8.** Fila Live: „vizitatori activi" numara acum OAMENI distincti, nu afisari; s-au
       adaugat cosuri, checkout-uri si comenzi din ultima jumatate de ora; fluxul spune ce s-a
       intamplat („Un produs a fost adaugat in cos"), nu doar „Vizita via Facebook"; harta a

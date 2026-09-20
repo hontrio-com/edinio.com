@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils/cn";
-import { formatPrice } from "@/lib/utils/format";
+import { Bani } from "@/components/dashboard/Bani";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════
@@ -85,7 +85,7 @@ export function StatisticiTrafic({ surse, palnie, perioadaScrisa }: {
               { eticheta: "Au comandat", valoare: palnie.cu_comanda },
             ].map((prag) => (
               <div key={prag.eticheta} className="flex items-center gap-3">
-                <span className="w-44 flex-shrink-0 text-xs text-muted-foreground">{prag.eticheta}</span>
+                <span className="w-24 flex-shrink-0 text-[11px] leading-tight text-muted-foreground sm:w-44 sm:text-xs">{prag.eticheta}</span>
                 <div className="h-7 flex-1 overflow-hidden rounded-lg bg-muted">
                   <div
                     className="flex h-full items-center rounded-lg bg-primary/80 px-2 text-[11px] font-semibold text-white transition-all"
@@ -94,7 +94,7 @@ export function StatisticiTrafic({ surse, palnie, perioadaScrisa }: {
                     {prag.valoare}
                   </div>
                 </div>
-                <span className="w-14 flex-shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                <span className="w-12 flex-shrink-0 text-right text-[11px] tabular-nums text-muted-foreground sm:w-14 sm:text-xs">
                   {procent(prag.valoare, palnie.sesiuni)}
                 </span>
               </div>
@@ -144,33 +144,33 @@ function Tabel({ titlu, perioadaScrisa, randuri, totalSesiuni, numeColoana }: {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-xs text-muted-foreground">
-              <th scope="col" className="px-5 py-2 font-medium">{numeColoana}</th>
-              <th scope="col" className="px-5 py-2 text-right font-medium">Sesiuni</th>
-              <th scope="col" className="px-5 py-2 text-right font-medium">Comenzi</th>
-              <th scope="col" className="px-5 py-2 text-right font-medium">Conversie</th>
-              <th scope="col" className="px-5 py-2 text-right font-medium">Vanzari</th>
+            <tr className="text-left text-[10px] text-muted-foreground sm:text-xs">
+              <th scope="col" className="px-3 py-2 font-medium sm:px-5">{numeColoana}</th>
+              <th scope="col" className="px-1.5 py-2 text-right font-medium sm:px-5">Sesiuni</th>
+              <th scope="col" className="px-1.5 py-2 text-right font-medium sm:px-5">Comenzi</th>
+              <th scope="col" className="px-1.5 py-2 text-right font-medium sm:px-5">Conversie</th>
+              <th scope="col" className="px-1.5 py-2 text-right font-medium sm:px-5">Vanzari</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {randuri.map((r) => (
               <tr key={r.nume}>
-                <th scope="row" className="px-5 py-2.5 text-left font-medium text-foreground">
+                <th scope="row" className="px-3 py-2.5 text-left font-medium text-foreground sm:px-5">
                   {r.nume}
-                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  <span className="block text-[11px] font-normal text-muted-foreground sm:ml-2 sm:inline sm:text-xs">
                     {procent(r.sesiuni, totalSesiuni)} din trafic
                   </span>
                 </th>
-                <td className="px-5 py-2.5 text-right tabular-nums text-muted-foreground">{r.sesiuni}</td>
-                <td className="px-5 py-2.5 text-right tabular-nums text-muted-foreground">{r.comenzi}</td>
+                <td className="px-1.5 py-2.5 text-right text-xs tabular-nums text-muted-foreground sm:px-5 sm:text-sm">{r.sesiuni}</td>
+                <td className="px-1.5 py-2.5 text-right text-xs tabular-nums text-muted-foreground sm:px-5 sm:text-sm">{r.comenzi}</td>
                 <td className={cn(
-                  "px-5 py-2.5 text-right tabular-nums",
+                  "px-1.5 py-2.5 text-right text-xs tabular-nums sm:px-5 sm:text-sm",
                   r.comenzi > 0 ? "font-medium text-foreground" : "text-muted-foreground",
                 )}>
                   {procent(r.comenzi, r.sesiuni)}
                 </td>
-                <td className="px-5 py-2.5 text-right tabular-nums text-muted-foreground">
-                  {r.vanzari > 0 ? formatPrice(r.vanzari) : "-"}
+                <td className="px-1.5 py-2.5 text-right text-xs tabular-nums text-muted-foreground sm:px-5 sm:text-sm">
+                  {r.vanzari > 0 ? <Bani valoare={r.vanzari} /> : "-"}
                 </td>
               </tr>
             ))}

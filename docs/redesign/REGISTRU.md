@@ -47,6 +47,7 @@ push si aplicarea migratiei, la toti comerciantii.
 | 6 | `migrations/2026-09-20-trafic-si-harta.sql` | `trafic_panou`, `trafic_pe_sursa`, `comenzi_pe_judet` | DA | **NU. De aplicat la final.** |
 | 7 | `migrations/2026-09-20-fereastra-azi-ieri.sql` | `fereastra_vanzari` capata „azi" si „ieri" | DA | **NU. De aplicat la final.** ⚠ Inlocuieste functia din migratia 2, deci se aplica DUPA ea. |
 | 8 | `migrations/2026-09-20-palnie-si-venit-pe-sursa.sql` | `site_analytics.valoare`; `analitice_zilnic.sesiuni_cu_produs/_cu_cos/_cu_checkout`; `analitice_zilnic_sursa.vanzari`; `agregeaza_analitice` rescrisa ca sa le umple; `palnia_panou`; `trafic_pe_sursa` refacuta cu venit | DA | **NU. De aplicat la final.** ⚠ Atinge o TABELA cu trafic real (`site_analytics`) si cele doua tabele de agregat; toate coloanele sunt optionale sau cu implicit. Se aplica DUPA migratiile 4 si 5. ⚠ `trafic_pe_sursa` se sterge si se recreeaza (semnatura de intoarcere se schimba), deci ordinea fata de migratia 6 conteaza. |
+| 9 | `migrations/2026-09-20-vanzari-detaliu.sql` | `vanzari_detaliu` (sumarul, produsele, categoriile, canalele si starile filei Vanzari) si `carduri_secundare` (clienti noi, clienti care revin, bucati, anulari - cu fereastra precedenta) | DA | **NU. De aplicat la final.** Numai functii noi; nu atinge nicio tabela. Se aplica DUPA migratia 2 (foloseste `fereastra_vanzari`). |
 
 ⚠ Migratiile 1-3 sunt **numai citire**: functii noi si o politica de SELECT, niciun `alter table`,
 niciun rand atins.
@@ -196,6 +197,13 @@ oricine cu cont ajunge la ea scriind adresa.
 - `RAPORT-POPULARE.json`: 39 de defecte de cod si 61 de lipsuri de ecran gasite la popularea
   bazei demo. Nu sunt atinse inca.
 - Cotele de TVA din Setari sunt inca 19 / 9 / 5, nu 21 / 11.
+- ⚠ **`subtotal` nu inseamna acelasi lucru pe toate canalele.** Masurat pe baza demo, la 26
+  din 95 de comenzi `subtotal + transport + ramburs - reduceri` nu da `total`. Comenzile de
+  marketplace isi scriu `subtotal` FARA TVA, pe cand `total` e cu TVA (comanda 7110:
+  270,25 x 1,21 = 327,00); unele comenzi din magazin poarta in total sume care n-au coloana
+  lor. Fila Vanzari nu mai asaza cifrele ca pe o adunare si spune de ce, dar defectul de
+  fond ramane in datele de la ingest. De hotarat daca se indreapta la ingest sau se lasa asa
+  si se scrie peste tot ca `subtotal` e o fotografie, nu o componenta a totalului.
 - `orders_daily_revenue` (grupare pe ziua **UTC**) nu mai e chemat din niciun loc de cod:
   verificat cu `git grep`, ramane doar in `migrations/`, in tipuri si in doua comentarii.
   De hotarat daca il stergem din baza sau il lasam. Cat timp exista, e o capcana: urmatorul

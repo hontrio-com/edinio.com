@@ -103,3 +103,122 @@ export const MASURI_HARTA: { masura: MasuraHarta; eticheta: string; bani: boolea
   { masura: "vanzari", eticheta: "Vanzari", bani: true },
   { masura: "medie", eticheta: "Valoare medie", bani: true },
 ];
+
+/* ── Fila Vanzari ─────────────────────────────────────────────────────────── */
+
+export type SumarVanzari = {
+  comenzi: number;
+  vanzari: number;
+  produse: number;
+  transport: number;
+  reduceri: number;
+  taxa_ramburs: number;
+  tva: number;
+  bucati: number;
+  anulate: number;
+  rambursate: number;
+  pierdute: number;
+};
+
+export type RandProdus = {
+  product_id: string | null;
+  nume: string;
+  bucati: number;
+  vanzari: number;
+  comenzi: number;
+};
+export type RandCategorie = { categorie: string; bucati: number; vanzari: number; comenzi: number };
+export type RandCanal = { canal: string; comenzi: number; vanzari: number };
+export type RandStatus = { status: string; comenzi: number; vanzari: number };
+
+export type DetaliuVanzari = {
+  sumar: SumarVanzari;
+  produse: RandProdus[];
+  categorii: RandCategorie[];
+  canale: RandCanal[];
+  statusuri: RandStatus[];
+};
+
+const SUMAR_GOL: SumarVanzari = {
+  comenzi: 0, vanzari: 0, produse: 0, transport: 0, reduceri: 0,
+  taxa_ramburs: 0, tva: 0, bucati: 0, anulate: 0, rambursate: 0, pierdute: 0,
+};
+
+/**
+ * Citeste raspunsul lui `vanzari_detaliu`, aparandu-se de orice alta forma.
+ *
+ * ⚠ Ca la celelalte doua: raspunsul vine ca `Json`, iar un `as` ar fi cazut
+ * abia in fata comerciantului, la primul `.map`.
+ */
+export function citesteDetaliuVanzari(brut: unknown): DetaliuVanzari | null {
+  const o = brut as Record<string, unknown> | null;
+  if (!o || typeof o !== "object") return null;
+
+  const n = (x: unknown) => Number(x ?? 0) || 0;
+  const s = (x: unknown) => String(x ?? "");
+  const lista = (x: unknown) => (Array.isArray(x) ? (x as Record<string, unknown>[]) : []);
+  const sumarBrut = (o.sumar ?? {}) as Record<string, unknown>;
+
+  return {
+    sumar: {
+      comenzi: n(sumarBrut.comenzi), vanzari: n(sumarBrut.vanzari), produse: n(sumarBrut.produse),
+      transport: n(sumarBrut.transport), reduceri: n(sumarBrut.reduceri),
+      taxa_ramburs: n(sumarBrut.taxa_ramburs), tva: n(sumarBrut.tva), bucati: n(sumarBrut.bucati),
+      anulate: n(sumarBrut.anulate), rambursate: n(sumarBrut.rambursate), pierdute: n(sumarBrut.pierdute),
+    },
+    produse: lista(o.produse).map((r) => ({
+      product_id: r.product_id ? s(r.product_id) : null,
+      nume: s(r.nume), bucati: n(r.bucati), vanzari: n(r.vanzari), comenzi: n(r.comenzi),
+    })),
+    categorii: lista(o.categorii).map((r) => ({
+      categorie: s(r.categorie), bucati: n(r.bucati), vanzari: n(r.vanzari), comenzi: n(r.comenzi),
+    })),
+    canale: lista(o.canale).map((r) => ({ canal: s(r.canal), comenzi: n(r.comenzi), vanzari: n(r.vanzari) })),
+    statusuri: lista(o.statusuri).map((r) => ({ status: s(r.status), comenzi: n(r.comenzi), vanzari: n(r.vanzari) })),
+  };
+}
+
+/** Sumarul gol, ca ecranul sa aiba ce arata pana sosesc datele. */
+export const DETALIU_GOL: DetaliuVanzari = {
+  sumar: SUMAR_GOL, produse: [], categorii: [], canale: [], statusuri: [],
+};
+
+/* ── Cardurile de jos ─────────────────────────────────────────────────────── */
+
+export type CarduriSecundare = {
+  clienti_noi: number;
+  clienti_recurenti: number;
+  bucati: number;
+  anulate: number;
+  comenzi_toate: number;
+};
+
+export type PerechiCarduri = { acum: CarduriSecundare; inainte: CarduriSecundare };
+
+export function citesteCarduriSecundare(brut: unknown): PerechiCarduri {
+  const o = (brut ?? {}) as Record<string, unknown>;
+  const una = (x: unknown): CarduriSecundare => {
+    const y = (x ?? {}) as Record<string, unknown>;
+    return {
+      clienti_noi: Number(y.clienti_noi ?? 0) || 0,
+      clienti_recurenti: Number(y.clienti_recurenti ?? 0) || 0,
+      bucati: Number(y.bucati ?? 0) || 0,
+      anulate: Number(y.anulate ?? 0) || 0,
+      comenzi_toate: Number(y.comenzi_toate ?? 0) || 0,
+    };
+  };
+  return { acum: una(o.acum), inainte: una(o.inainte) };
+}
+
+/**
+ * Cate din comenzile intrate au fost anulate, in procente.
+ *
+ * ⚠ SE IMPARTE LA TOATE COMENZILE, anulatele incluse. Impartit la cele bune,
+ * un magazin cu 10 comenzi din care 5 anulate ar fi aratat „100% anulari".
+ *
+ * `null` cand n-a intrat nicio comanda: „0%" ar spune ca au fost comenzi si
+ * n-a picat niciuna, ceea ce e altceva decat „n-a fost nicio comanda".
+ */
+export function rataAnulare(c: CarduriSecundare): number | null {
+  return c.comenzi_toate > 0 ? (c.anulate / c.comenzi_toate) * 100 : null;
+}

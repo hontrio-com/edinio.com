@@ -23,6 +23,15 @@ export type CardStatisticaProps = {
   delta?: string;
   deltaDir?: "up" | "down";
   deltaCaption?: string;
+  /**
+   * Daca o CRESTERE e o veste buna. Implicit da, fiindca asa e la aproape toate
+   * cifrele panoului.
+   *
+   * ⚠ EXISTA FIINDCA SAGEATA SI CULOAREA SPUN LUCRURI DIFERITE. Sageata arata
+   * incotro s-a miscat cifra, culoarea arata daca e bine. La „rata de anulare"
+   * erau legate, si o crestere a anularilor se scria cu verde: exact pe dos.
+   */
+  susEBine?: boolean;
   /** Unde duce cardul. Lipsa lui inseamna „nu duce nicaieri": pe pagina de
       statistici, unele cifre n-au alt ecran in spate, iar o legatura catre
       pagina pe care esti deja e o promisiune goala. */
@@ -40,6 +49,7 @@ export function CardStatistica({
   delta,
   deltaDir = "up",
   deltaCaption = "vs. ieri",
+  susEBine = true,
   href,
   icon: Icon,
   empty = false,
@@ -113,7 +123,7 @@ export function CardStatistica({
               <>
                 <span className={cn(
                   "font-medium tabular-nums",
-                  deltaDir === "down" ? "text-destructive" : "text-primary"
+                  (deltaDir === "up") === susEBine ? "text-primary" : "text-destructive"
                 )}>
                   {deltaDir === "up" ? "↑" : "↓"} {delta}
                 </span>

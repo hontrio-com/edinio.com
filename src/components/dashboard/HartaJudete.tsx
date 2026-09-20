@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils/cn";
 import { formatPrice } from "@/lib/utils/format";
+import { Bani } from "@/components/dashboard/Bani";
 import { COUNTY_CODE_MAP, RomaniaMap } from "@/components/dashboard/RomaniaMap";
 import { MASURI_HARTA, type MasuraHarta, type RandJudet } from "@/lib/statistici";
 
@@ -88,20 +89,20 @@ export function HartaJudete({
                 Aceleasi cifre ca pe harta, in tabel, pentru cine nu poate folosi desenul.
               </caption>
               <thead>
-                <tr className="text-left text-xs text-muted-foreground">
-                  <th scope="col" className="px-5 py-2 font-medium">Judet</th>
-                  <th scope="col" className="px-5 py-2 text-right font-medium">Comenzi</th>
-                  <th scope="col" className="px-5 py-2 text-right font-medium">Vanzari</th>
-                  <th scope="col" className="px-5 py-2 text-right font-medium">Valoare medie</th>
+                <tr className="text-left text-[10px] text-muted-foreground sm:text-xs">
+                  <th scope="col" className="px-3 py-2 font-medium sm:px-5">Judet</th>
+                  <th scope="col" className="px-1.5 py-2 text-right font-medium sm:px-5">Comenzi</th>
+                  <th scope="col" className="px-1.5 py-2 text-right font-medium sm:px-5">Vanzari</th>
+                  <th scope="col" className="px-1.5 py-2 text-right font-medium sm:px-5">Valoare medie</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {judete.slice(0, 10).map((j) => (
                   <tr key={j.judet}>
-                    <th scope="row" className="px-5 py-2 text-left font-medium text-foreground">{j.judet}</th>
-                    <td className="px-5 py-2 text-right tabular-nums text-muted-foreground">{j.comenzi}</td>
-                    <td className="px-5 py-2 text-right tabular-nums text-muted-foreground">{formatPrice(j.vanzari)}</td>
-                    <td className="px-5 py-2 text-right tabular-nums text-muted-foreground">{formatPrice(j.medie)}</td>
+                    <th scope="row" className="max-w-[7rem] truncate px-3 py-2 text-left font-medium text-foreground sm:max-w-none sm:px-5">{j.judet}</th>
+                    <td className="px-1.5 py-2 text-right text-xs tabular-nums text-muted-foreground sm:px-5 sm:text-sm">{j.comenzi}</td>
+                    <td className="px-1.5 py-2 text-right text-xs tabular-nums text-muted-foreground sm:px-5 sm:text-sm"><Bani valoare={j.vanzari} /></td>
+                    <td className="px-1.5 py-2 text-right text-xs tabular-nums text-muted-foreground sm:px-5 sm:text-sm"><Bani valoare={j.medie} /></td>
                   </tr>
                 ))}
               </tbody>

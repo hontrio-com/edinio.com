@@ -74,17 +74,23 @@ scadea la zero in a noua zi - exact felul de defect care se vede abia peste doua
 
 - [x] **C1.** Antet si filtre comune: perioada (azi, ieri, 7, 30, 90, luna, an, personalizat),
       canal de vanzare, comparatie, export.
-- [~] **C2.** File: Prezentare (gata), Trafic (gata), Live (gata). „Vanzari" se adauga
-      odata cu tabelele ei; pana atunci n-ar fi decat un titlu gol.
+- [x] **C2.** File: Prezentare, Vanzari, Trafic, Live - toate patru gata.
 - [x] **C3.** Toate cardurile cu aceeasi forma: valoare, crestere, valoarea perioadei
       precedente, explicatie in tooltip.
       ⚠ **Exact cardul de pe panoul principal** (cerere din 20.09.2026): se scoate `StatCard`
       din pagina panoului intr-o componenta comuna si se foloseste si aici. Doua carduri
       desenate separat ar fi divergit la prima retusare, exact ca cele doua meniuri.
-- [ ] **C4.** Randul duplicat de jos iese; in locul lui: clienti noi, clienti recurenti,
+- [x] **C4.** Randul duplicat de jos iese; in locul lui: clienti noi, clienti recurenti,
       produse vandute, rata de anulare.
+      ⚠ „Client nou" se judeca pe TOATA ISTORIA, nu pe fereastra: altfel, cu cat alegea o
+      perioada mai scurta, cu atat comerciantul ar fi vazut mai multi clienti noi.
+      ⚠ La rata de anulare, cardul a capatat `susEBine={false}`: pana atunci sageata si
+      culoarea erau acelasi lucru, si o crestere a anularilor se scria cu verde.
 - [ ] **C5.** Grafic cu masura la alegere si granulatie dupa lungimea perioadei.
-- [ ] **C6.** Fila Vanzari: produse, categorii, canale, statusuri, vanzari brute/nete.
+- [x] **C6.** Fila Vanzari: produse, categorii, canale, statusuri.
+      ⚠ „Brute / nete" NU s-au putut aseza ca o adunare, si de-aia sunt doua panouri, nu
+      unul: `subtotal + transport + ramburs - reduceri` nu da `total` la 26 din 95 de
+      comenzi (marketplace-ul scrie `subtotal` fara TVA). Vezi datoria din REGISTRU.
 - [x] **C7.** Fila Trafic: surse cu venit, dispozitive cu conversie, palnie.
       ⚠ **Venitul se pune in dreptul PRIMEI surse a sesiunii**, nu a sursei evenimentului de
       cumparare. Altfel, cine intra din Google si se intoarce din Facebook ca sa cumpere ar fi

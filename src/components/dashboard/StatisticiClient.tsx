@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BarChart2, Eye, Receipt, ShoppingCart, Target, Users, Wallet } from "lucide-react";
+import { BarChart2, Eye, Package, Receipt, ShoppingCart, Target, UserPlus, Users, UserCheck, Wallet, XCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils/cn";
 import { formatPrice } from "@/lib/utils/format";
@@ -11,12 +11,15 @@ import { HartaJudete } from "@/components/dashboard/HartaJudete";
 import { StatisticiFiltre } from "@/components/dashboard/StatisticiFiltre";
 import { StatisticiLive } from "@/components/dashboard/StatisticiLive";
 import { StatisticiTrafic, type Palnie, type RandSursa } from "@/components/dashboard/StatisticiTrafic";
+import { StatisticiVanzari } from "@/components/dashboard/StatisticiVanzari";
 import {
   citesteDateVanzari, crestere, intervalScris, valoareTotal, type DateVanzari,
 } from "@/lib/vanzari";
 import {
-  citesteDateTrafic, paginiPeSesiune, rataConversieSesiuni,
-  type DateTrafic, type FelPerioadaStatistici, type RandJudet,
+  citesteCarduriSecundare, citesteDetaliuVanzari, DETALIU_GOL, paginiPeSesiune,
+  rataAnulare, rataConversieSesiuni, citesteDateTrafic,
+  type DateTrafic, type DetaliuVanzari, type FelPerioadaStatistici,
+  type PerechiCarduri, type RandJudet,
 } from "@/lib/statistici";
 
 /*
@@ -33,10 +36,11 @@ import {
   si cumpara o data facea rata sa arate de patru ori mai mica decat e.
 */
 
-type Fila = "prezentare" | "trafic" | "live";
+type Fila = "prezentare" | "vanzari" | "trafic" | "live";
 
 const FILE: { fila: Fila; eticheta: string }[] = [
   { fila: "prezentare", eticheta: "Prezentare" },
+  { fila: "vanzari", eticheta: "Vanzari" },
   { fila: "trafic", eticheta: "Trafic" },
   { fila: "live", eticheta: "Live" },
 ];
@@ -75,6 +79,8 @@ export function StatisticiClient({
     judete: RandJudet[];
     surse: RandSursa[];
     palnie: Palnie | null;
+    detaliu: DetaliuVanzari;
+    secundare: PerechiCarduri;
   } | null>(null);
 
   const seIncarca = capeteGata && date?.cheie !== cheie;
@@ -83,6 +89,8 @@ export function StatisticiClient({
   const judete = date?.judete ?? [];
   const surse = date?.surse ?? [];
   const palnie = date?.palnie ?? null;
+  const detaliu = date?.detaliu ?? DETALIU_GOL;
+  const secundare = date?.secundare ?? null;
 
   useEffect(() => {
     if (!capeteGata) return;
@@ -97,12 +105,14 @@ export function StatisticiClient({
         p_pana_la: custom ? panaLa : null,
       };
 
-      const [v, t, j, s, pl] = await Promise.all([
+      const [v, t, j, s, pl, dv, cs] = await Promise.all([
         supabase.rpc("vanzari_panou", { ...argPerioada, p_canal: canal || null }),
         supabase.rpc("trafic_panou", argPerioada),
         supabase.rpc("comenzi_pe_judet", { ...argPerioada, p_canal: canal || null }),
         supabase.rpc("trafic_pe_sursa", argPerioada),
         supabase.rpc("palnia_panou", argPerioada),
+        supabase.rpc("vanzari_detaliu", { ...argPerioada, p_canal: canal || null }),
+        supabase.rpc("carduri_secundare", { ...argPerioada, p_canal: canal || null }),
       ]);
 
       if (!valabil) return;
@@ -113,6 +123,8 @@ export function StatisticiClient({
         judete: (j.data ?? []) as RandJudet[],
         surse: (s.data ?? []) as RandSursa[],
         palnie: (pl.data?.[0] ?? null) as Palnie | null,
+        detaliu: citesteDetaliuVanzari(dv.data) ?? DETALIU_GOL,
+        secundare: citesteCarduriSecundare(cs.data),
       });
     })();
 
@@ -132,6 +144,9 @@ export function StatisticiClient({
   const conversieAnt = trafic ? rataConversieSesiuni(trafic.total_anterior) : null;
   const pagini = trafic ? paginiPeSesiune(trafic.total) : null;
   const paginiAnt = trafic ? paginiPeSesiune(trafic.total_anterior) : null;
+
+  const anulare = secundare ? rataAnulare(secundare.acum) : null;
+  const anulareAnt = secundare ? rataAnulare(secundare.inainte) : null;
 
   const perioadaScrisa = vanzari ? intervalScris(vanzari.interval) : "";
   const anterioaraScrisa = vanzari ? intervalScris(vanzari.interval_anterior) : "";
@@ -262,6 +277,53 @@ export function StatisticiClient({
                 />
               </div>
 
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <CardStatistica
+                  label="Clienti noi"
+                  value={new Intl.NumberFormat("ro-RO").format(secundare?.acum.clienti_noi ?? 0)}
+                  icon={UserPlus}
+                  empty={(secundare?.acum.clienti_noi ?? 0) === 0}
+                  {...deltaProps(crestere(secundare?.acum.clienti_noi ?? 0, secundare?.inainte.clienti_noi ?? 0), comparatie, String(secundare?.inainte.clienti_noi ?? 0))}
+                  explicatie={"Cumparatori a caror PRIMA comanda din magazin cade in perioada aleasa. "
+                    + "Se judeca pe toata istoria, nu pe fereastra: altfel, cu cat alegeai o perioada mai scurta, "
+                    + "cu atat ti-ar fi aratat mai multi „clienti noi”."}
+                />
+                <CardStatistica
+                  label="Clienti care revin"
+                  value={new Intl.NumberFormat("ro-RO").format(secundare?.acum.clienti_recurenti ?? 0)}
+                  icon={UserCheck}
+                  empty={(secundare?.acum.clienti_recurenti ?? 0) === 0}
+                  {...deltaProps(crestere(secundare?.acum.clienti_recurenti ?? 0, secundare?.inainte.clienti_recurenti ?? 0), comparatie, String(secundare?.inainte.clienti_recurenti ?? 0))}
+                  explicatie="Cumparatori care mai comandasera si inainte de perioada asta. Clientul e adresa de email: comenzile fara email nu se numara la niciuna dintre cele doua cifre."
+                />
+                <CardStatistica
+                  label="Produse vandute"
+                  value={new Intl.NumberFormat("ro-RO").format(secundare?.acum.bucati ?? 0)}
+                  unit="buc."
+                  icon={Package}
+                  empty={(secundare?.acum.bucati ?? 0) === 0}
+                  {...deltaProps(crestere(secundare?.acum.bucati ?? 0, secundare?.inainte.bucati ?? 0), comparatie, String(secundare?.inainte.bucati ?? 0))}
+                  explicatie="Cate bucati au plecat, adunate din liniile comenzilor. O comanda cu trei perne se numara ca trei."
+                />
+                <CardStatistica
+                  label="Rata de anulare"
+                  value={anulare === null ? "-" : anulare.toLocaleString("ro-RO", { maximumFractionDigits: 2 })}
+                  unit={anulare === null ? undefined : "%"}
+                  icon={XCircle}
+                  empty={anulare === null}
+                  susEBine={false}
+                  {...deltaProps(
+                    anulare !== null && anulareAnt !== null ? crestere(anulare, anulareAnt) : null,
+                    comparatie,
+                    anulareAnt === null ? "-" : `${anulareAnt.toLocaleString("ro-RO", { maximumFractionDigits: 2 })}%`,
+                  )}
+                  explicatie={"Comenzi anulate / toate comenzile intrate x 100. "
+                    + "Numitorul le cuprinde si pe cele anulate: impartite la cele ramase, "
+                    + "un magazin cu 10 comenzi din care 5 anulate ar fi aratat „100%”. "
+                    + "⚠ Aici, o crestere e o veste proasta."}
+                />
+              </div>
+
               <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
                 <div className="border-b border-border px-5 py-4">
                   <h2 className="font-semibold text-foreground">Vanzari pe zile</h2>
@@ -289,6 +351,12 @@ export function StatisticiClient({
                 perioadaScrisa={perioadaScrisa}
               />
             </>
+          )}
+
+          {fila === "vanzari" && (
+            seIncarca && !date
+              ? <div className="h-64 animate-pulse rounded-xl bg-muted" />
+              : <StatisticiVanzari date={detaliu} perioadaScrisa={perioadaScrisa} />
           )}
 
           {fila === "trafic" && (

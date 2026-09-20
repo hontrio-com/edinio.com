@@ -6528,6 +6528,14 @@ export type Database = {
         Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null; p_canal?: string | null }
         Returns: Json
       }
+      vanzari_detaliu: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null; p_canal?: string | null }
+        Returns: Json
+      }
+      carduri_secundare: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null; p_canal?: string | null }
+        Returns: Json
+      }
       stoc_combinatie: { Args: { p_combinatie: Json }; Returns: number }
       combinatie_aprinsa: { Args: { p_combinatie: Json }; Returns: boolean }
       orders_venit_zilnic: { Args: { bid: string; p_zile: number; p_deplasare?: number }; Returns: unknown }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { motivulSuprimarii, type RandSuprimare } from "@/lib/abandoned/suprimare";
 import { logError } from "@/lib/error-logger";
 import { pragulComenzilor } from "@/app/api/cron/curata-fisiere/reguli";
 import { verificaCron } from "@/lib/cron-auth";
@@ -174,13 +175,13 @@ export async function GET(req: NextRequest) {
    * citi dezabonarile, cronul se opreste si nu pleaca NICIUN mesaj. Se reia peste
    * un sfert de ora.
    */
-  const optouts: { business_id: string; email: string }[] = [];
+  const optouts: ({ business_id: string } & RandSuprimare)[] = [];
   for (let i = 0; i < bizIds.length; i += 500) {
     const chunk = bizIds.slice(i, i + 500);
     for (let from = 0; ; from += 1000) {
       const { data, error } = await admin
-        .from("recovery_optout").select("business_id, email").in("business_id", chunk)
-        .order("business_id").order("email").range(from, from + 999);
+        .from("recovery_optout").select("business_id, email, phone, motiv").in("business_id", chunk)
+        .order("business_id").order("id").range(from, from + 999);
       if (error) {
         await logError({
           action: "abandoned-recovery",
@@ -193,7 +194,19 @@ export async function GET(req: NextRequest) {
       if (!data || data.length < 1000) break;
     }
   }
-  const optoutSet = new Set(optouts.map((o) => `${o.business_id}:${o.email.toLowerCase()}`));
+  /*
+    ⚠ SE STRANG PE MAGAZIN, nu intr-o singura multime de chei de email.
+    Suprimarea are acum si TELEFON, deci potrivirea nu mai e o simpla cheie:
+    un cos e oprit daca ORICARE dintre cele doua contacte ale lui e in lista.
+    Regula sta in `motivulSuprimarii`, aceeasi pe care o cheama si trimiterea
+    de mana din panou - ca sa nu existe iar doua raspunsuri la aceeasi intrebare.
+  */
+  const suprimatePeMagazin = new Map<string, RandSuprimare[]>();
+  for (const o of optouts) {
+    const lista = suprimatePeMagazin.get(o.business_id) ?? [];
+    lista.push({ email: o.email, phone: o.phone, motiv: o.motiv });
+    suprimatePeMagazin.set(o.business_id, lista);
+  }
 
   for (const store of active) {
     const biz = bizMap.get(store.businessId);
@@ -235,7 +248,7 @@ export async function GET(req: NextRequest) {
        * n-are de ce sa coste o interogare la fiecare rulare. Ce urmeaza dupa ele e
        * comun amandurora.
        */
-      const optedOut = !!(cart.email && optoutSet.has(`${store.businessId}:${cart.email.toLowerCase()}`));
+      const optedOut = motivulSuprimarii(suprimatePeMagazin.get(store.businessId) ?? [], cart) !== null;
       const canal = step.channel === "email"
         ? (cart.email && !optedOut ? ({ fel: "email", email: cart.email } as const) : null)
         : (cart.phone && (smsoReady || noticeReady) ? ({ fel: "sms", phone: cart.phone } as const) : null);

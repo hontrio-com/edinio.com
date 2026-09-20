@@ -7,6 +7,9 @@ import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeazaCantitate } from "@/lib/orders/quantity";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  cheileContactului, mesajContactSuprimat, motivulSuprimarii, type RandSuprimare,
+} from "@/lib/abandoned/suprimare";
 import { logError } from "@/lib/error-logger";
 import { trimiteSiLasaUrma } from "@/lib/smso-urma";
 import type { SmsoConfig } from "@/lib/smso";
@@ -432,6 +435,57 @@ const COS_NERECUPERABIL =
   "Produsele din acest cos nu se mai pot pune inapoi in cos: nu mai sunt in catalog, sunt dezactivate, au variante sau cer personalizare. Linkul de recuperare ar duce clientul la un cos gol, deci mesajul nu a plecat. Sterge cosul sau verifica produsele.";
 
 // ── Recovery: email (owner) ────────────────────────────────────────────────────
+
+/**
+ * Poarta comuna a trimiterilor de mana: cosul mai poate primi un mesaj?
+ *
+ * ⚠ EXISTA FIINDCA ERAU DOUA CAI SI O SINGURA VERIFICARE. Cronul citea lista de
+ * suprimari; trimiterea din panou nu o atingea deloc. Un om care ceruse sa nu
+ * mai fie contactat putea primi mesaje mai departe, apasate cu mana - si pe
+ * productie plecasera deja 34 de emailuri si 21 de SMS-uri catre clienti
+ * adevarati.
+ *
+ * Verifica DOUA lucruri, amandoua imposibil de luat inapoi:
+ *   1. contactul nu e suprimat (dezabonat, numar invalid, reclamatie de spam);
+ *   2. cosul nu s-a convertit deja - „ai uitat ceva in cos" trimis cuiva care
+ *      tocmai a cumparat e mai rau decat niciun mesaj.
+ *
+ * Cronul filtreaza deja `status = 'open'`; actiunea manuala n-o facea.
+ */
+async function poateTrimiteCatre(
+  admin: ReturnType<typeof createAdminClient>,
+  businessId: string,
+  cart: { status?: string | null; email?: string | null; phone?: string | null },
+): Promise<string | null> {
+  if (cart.status === "converted") {
+    return "Cosul a fost deja finalizat: clientul a comandat. Nu i se mai trimite mesaj de recuperare.";
+  }
+
+  const { email, telefon } = cheileContactului(cart);
+  if (!email && !telefon) return null;
+
+  let q = admin.from("recovery_optout").select("email, phone, motiv").eq("business_id", businessId);
+  /*
+    ⚠ Se cauta pe ORICARE dintre cele doua contacte: omul a cerut sa nu mai fie
+    contactat, nu „sa nu mai fie contactat pe email".
+  */
+  const conditii: string[] = [];
+  if (email) conditii.push(`email.eq.${email}`);
+  if (telefon) conditii.push(`phone.eq.${telefon}`);
+  q = q.or(conditii.join(","));
+
+  const { data, error } = await q;
+  /*
+    ⚠ CAND LISTA NU SE POATE CITI, NU SE TRIMITE. Aceeasi hotarare ca in cron:
+    o eroare de citire tratata ca „nu e nimeni suprimat" ar trimite tocmai catre
+    cei care au cerut sa nu mai primeasca.
+  */
+  if (error) return "Lista de dezabonari nu a putut fi citita, deci nu s-a trimis nimic. Incearca din nou.";
+
+  const motiv = motivulSuprimarii((data ?? []) as RandSuprimare[], cart);
+  return motiv ? mesajContactSuprimat(motiv) : null;
+}
+
 export async function sendAbandonedCartEmail(
   businessId: string,
   cartId: string,
@@ -450,10 +504,13 @@ export async function sendAbandonedCartEmail(
 
   const { data: cart } = await supabase
     .from("abandoned_carts")
-    .select("id, customer_name, email, items, subtotal, recovery_count, last_activity_at")
+    .select("id, customer_name, email, phone, status, items, subtotal, recovery_count, last_activity_at")
     .eq("id", cartId).eq("business_id", businessId).single();
   if (!cart) return { error: "Cosul nu a fost gasit." };
   if (!cart.email) return { error: "Clientul nu a lasat un email." };
+
+  const opreste = await poateTrimiteCatre(createAdminClient(), businessId, cart);
+  if (opreste) return { error: opreste };
   /*
    * ⚠ ACEEASI VARSTA CA LA LINK, si pana acum lipsea tocmai aici.
    *
@@ -538,10 +595,13 @@ export async function sendAbandonedCartSms(
 
   const { data: cart } = await supabase
     .from("abandoned_carts")
-    .select("id, customer_name, phone, items, recovery_count, last_activity_at")
+    .select("id, customer_name, email, phone, status, items, recovery_count, last_activity_at")
     .eq("id", cartId).eq("business_id", businessId).single();
   if (!cart) return { error: "Cosul nu a fost gasit." };
   if (!cart.phone) return { error: "Clientul nu a lasat un numar de telefon." };
+
+  const opresteSms = await poateTrimiteCatre(admin, businessId, cart);
+  if (opresteSms) return { error: opresteSms };
   /*
    * ⚠ SI AICI VARSTA, INAINTE DE ORICE. La SMS conteaza mai mult decat la email: mesajul e PLATIT
    * de comerciant, iar la capatul lui clientul gaseste un cos care nu mai exista. Se plateste ca

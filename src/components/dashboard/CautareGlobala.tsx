@@ -32,7 +32,7 @@ import { cautaInPanou, type RezultateCautare } from "@/lib/actions/cautare-globa
 */
 
 type Rand =
-  | { fel: "produs"; id: string; titlu: string; detaliu: string; href: string }
+  | { fel: "produs"; id: string; titlu: string; detaliu: string; href: string; imagine: string | null }
   | { fel: "comanda"; id: string; titlu: string; detaliu: string; href: string; status: string }
   | { fel: "client"; id: string; titlu: string; detaliu: string; href: string };
 
@@ -94,6 +94,7 @@ export function CautareGlobala({ businessId }: { businessId: string | null }) {
         titlu: p.nume,
         detaliu: [p.sku ? `SKU ${p.sku}` : null, formatPrice(p.pret)].filter(Boolean).join(" · "),
         href: `/dashboard/products/${p.id}/edit`,
+        imagine: p.imagine,
       });
     }
     for (const o of proaspete.comenzi) {
@@ -202,11 +203,30 @@ export function CautareGlobala({ businessId }: { businessId: string | null }) {
                         activ ? "bg-accent" : "hover:bg-accent/60",
                       )}
                     >
-                      <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-                        {r.fel === "produs" && <Package className="h-3.5 w-3.5" />}
-                        {r.fel === "comanda" && <ShoppingCart className="h-3.5 w-3.5" />}
-                        {r.fel === "client" && <User className="h-3.5 w-3.5" />}
-                      </span>
+                      {/*
+                        ⚠ La produs se arata POZA, nu o pictograma: intr-o lista
+                        de „Set 3 pendule conice" si „Set 3 pendule Loft",
+                        miniatura e singurul lucru care le deosebeste dintr-o
+                        privire. Cand produsul n-are poza, ramane pictograma.
+
+                        `<img>` simplu, nu `next/image`: pozele stau pe domenii
+                        de magazin care nu sunt in lista de gazde ingaduite, iar
+                        optimizatorul le-ar refuza. Sunt de 28 de pixeli.
+                      */}
+                      {r.fel === "produs" && r.imagine ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={r.imagine}
+                          alt=""
+                          className="h-7 w-7 flex-shrink-0 rounded-lg bg-muted object-cover ring-1 ring-foreground/10"
+                        />
+                      ) : (
+                        <span className="grid h-7 w-7 flex-shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                          {r.fel === "produs" && <Package className="h-3.5 w-3.5" />}
+                          {r.fel === "comanda" && <ShoppingCart className="h-3.5 w-3.5" />}
+                          {r.fel === "client" && <User className="h-3.5 w-3.5" />}
+                        </span>
+                      )}
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium text-foreground">{r.titlu}</span>
                         {r.detaliu && (

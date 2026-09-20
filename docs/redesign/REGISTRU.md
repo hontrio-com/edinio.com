@@ -44,6 +44,7 @@ push si aplicarea migratiei, la toti comerciantii.
 | 3b | `migrations/2026-09-20-panou-carduri.sql`, functia | `panou_carduri` (cele patru carduri din cap) | DA | **NU. De aplicat la final.** |
 | 4 | `migrations/2026-09-20-analitice-sesiuni.sql` | sesiuni si vizitatori in `site_analytics` (coloane + indexuri), tabela `analitice_sare` si functia `analitice_sarea_zilei` | DA | **NU. De aplicat la final.** ⚠ Prima migratie care schimba o TABELA, nu doar adauga functii: patru coloane noi, toate optionale. |
 | 5 | `migrations/2026-09-20-analitice-agregat-sesiuni.sql` | tabelele `analitice_zilnic` si `analitice_zilnic_sursa` (+ politici) si `agregeaza_analitice` care le umple | DA | **NU. De aplicat la final.** ⚠ Dupa aplicare, primele zile de sesiuni se strang la urmatoarea rulare a cronului `discount-release`; istoricul NU se poate reconstrui, fiindca randurile brute mai vechi de 8 zile nu mai exista. |
+| 6 | `migrations/2026-09-20-trafic-si-harta.sql` | `trafic_panou`, `trafic_pe_sursa`, `comenzi_pe_judet` | DA | **NU. De aplicat la final.** |
 
 ⚠ Migratiile 1-3 sunt **numai citire**: functii noi si o politica de SELECT, niciun `alter table`,
 niciun rand atins.

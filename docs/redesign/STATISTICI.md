@@ -57,12 +57,18 @@ scadea la zero in a noua zi - exact felul de defect care se vede abia peste doua
       `analitice_zilnic_sursa`, umplute din `agregeaza_analitice()`, deci ordinea „intai aduni,
       apoi stergi" ramane cea garantata de cronul de acum. Verificat pe demo cu o interogare de
       control scrisa altfel: 735 de sesiuni, 16 cu comanda, aceleasi cifre ca din randurile brute.
-- [ ] **B1.** Functii noi: vizitatori unici, sesiuni, pagini pe sesiune, rata de conversie
-      adevarata (sesiuni cu comanda / sesiuni), citind agregatul pentru zilele incheiate si
-      randurile brute pentru ziua de azi - aceeasi regula ca la vizitele de acum.
-- [ ] **B2.** Harta pe judete respecta perioada aleasa si stie sa arate comenzi, vanzari sau
-      valoare medie.
-- [ ] **B3.** Surse si dispozitive cu performanta: sesiuni, comenzi, conversie, vanzari.
+- [x] **B1.** `trafic_panou`: vizitatori, sesiuni, afisari, sesiuni cu comanda, plus perioada
+      precedenta si seria pe zile. Citeste agregatul pentru zilele incheiate si randurile brute
+      pentru ziua de azi. Verificat pe demo cu o interogare de control: 432 de sesiuni, aceleasi
+      ca din randurile brute; conversia adevarata iese 1,39%.
+      ⚠ „Vizitatori" inseamna vizitatori PE ZI, insumati: amprenta se schimba in fiecare noapte,
+      deci cine revine maine se numara din nou. E pretul masurarii fara cookie, si scrie in tooltip.
+- [x] **B2.** `comenzi_pe_judet`: aceeasi fereastra ca graficul de vanzari, filtru pe canal, si
+      trei masuri deodata (comenzi, vanzari, valoare medie). Verificat: 34 de judete pe 30 de zile
+      si 18 pe 7 zile, adica harta chiar raspunde la perioada - pana acum arata acelasi lucru mereu.
+- [x] **B3.** `trafic_pe_sursa`: sesiuni si sesiuni cu comanda, pe sursa si dispozitiv.
+      ⚠ Comenzile vin din sesiunile cu `purchase`, nu din `orders`: numarate din `orders`, fiecare
+      sursa ar fi primit toate comenzile, fiindca acolo nu scrie din ce sursa a venit omul.
 
 ### Etapa C - pagina
 

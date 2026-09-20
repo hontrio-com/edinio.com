@@ -5059,6 +5059,11 @@ export type Database = {
           },
         ]
       }
+      /* ⚠ `session_id`, `visitor_id`, `path` si `product_id` sunt adaugate de
+         `migrations/2026-09-20-analitice-sesiuni.sql` si scrise aici de mana, pana la
+         urmatoarea regenerare a tipurilor. Nota sta AFARA din blocul `Row`: inauntru,
+         ea rupe cititorul din `coloanele-scrise-exista.test.ts`, care cere randuri de
+         coloane fara intrerupere. */
       site_analytics: {
         Row: {
           business_id: string
@@ -5070,6 +5075,10 @@ export type Database = {
           metadata: Json
           referrer: string | null
           source: string | null
+          session_id: string | null
+          visitor_id: string | null
+          path: string | null
+          product_id: string | null
         }
         Insert: {
           business_id: string
@@ -5081,6 +5090,10 @@ export type Database = {
           metadata?: Json
           referrer?: string | null
           source?: string | null
+          session_id?: string | null
+          visitor_id?: string | null
+          path?: string | null
+          product_id?: string | null
         }
         Update: {
           business_id?: string

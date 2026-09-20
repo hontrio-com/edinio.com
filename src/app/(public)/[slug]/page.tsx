@@ -37,7 +37,7 @@ import type { Json } from "@/types/database.types";
 import { headers } from "next/headers";
 import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import { after } from "next/server";
-import { consumaLimita } from "@/lib/utils/limita-durabila";
+import { scrieEvenimentAnalitic } from "@/lib/analitice/scrie";
 import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { jsonLdSafe } from "@/lib/json-ld";
 import { clasificaSursa, taraDinAnteturi, referrerScurt, primaValoare } from "@/lib/storefront/sursa-vizita";
@@ -486,27 +486,18 @@ export default async function SlugPage({ params, searchParams }: Props) {
      * citeste AICI, in randare: antetele nu se pot citi din callback.
      */
     after(async () => {
-      const { permis } = await consumaLimita(`analytics:${ipVizitator}`, 120, 3600);
-      if (!permis) return;
-      await createAdminClient().from("site_analytics").insert({
-        business_id: business.id,
-        event_type: "visit",
+      /* ⚠ Un singur loc scrie evenimentele, ca sesiunea si vizitatorul sa nu
+         ajunga iar in doua copii: vezi `@/lib/analitice/scrie`. */
+      await scrieEvenimentAnalitic({
+        businessId: business.id,
+        fel: "visit",
+        ip: ipVizitator,
+        userAgent: headersList.get("user-agent"),
         device,
         source: sursaVizitei,
         referrer: referrerVizitei,
-        /*
-          ⚠ `null` CAND TARA NU SE STIE, si asta a cerut o migrare.
-
-          Coloana era `NOT NULL DEFAULT 'RO'`: schema INSASI afirma ca fiecare
-          vizitator din lume e din Romania. Chiar scos din cod, implicitul ar fi
-          pus aceeasi valoare — deci reparatia in cod singura ar fi fost teatru.
-
-          Migrarea `site_analytics_country_fara_implicit_ro` (02.09.2026) a scos
-          si `NOT NULL`, si implicitul. Randurile vechi raman 'RO' si nu se ating:
-          ele chiar n-au fost masurate, iar rescrierea lor ar inlocui o minciuna
-          veche cu una noua.
-        */
         country: taraVizitatorului,
+        path: "/",
       });
     });
   }

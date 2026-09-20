@@ -140,13 +140,36 @@ test("⚠ CADEREA INAPOI: cosurile de dinainte de jurnal nu devin peste noapte �
     `recovery_sends`, dar unele chiar au primit mesaje - se vede in
     `recovery_email_sent_at`. Socotite fara asta, tot istoricul ar fi trecut la
     „organic", si comerciantul ar fi vazut munca lui de pana acum stearsa.
+
+    ⚠ REGULA S-A MUTAT DIN TypeScript IN SQL cand socoteala a trecut in baza
+    (C1), si proba a cazut atunci - nu fiindca s-ar fi stricat ceva, ci fiindca
+    masura locul vechi. Acum se uita unde chiar sta regula.
   */
-  const sursa = readFileSync(
-    new URL("../actions/abandoned-cart.actions.ts", import.meta.url), "utf8",
+  const sql = readFileSync(
+    new URL("../../../migrations/2026-09-21-cosuri-sumar.sql", import.meta.url), "utf8",
   );
+  assert.match(sql, /or cv\.recovery_email_sent_at is not null/, "lipseste caderea inapoi pe email");
+  assert.match(sql, /or cv\.recovery_sms_sent_at is not null/, "lipseste caderea inapoi pe SMS");
+});
+
+test("⚠ CELE DOUA SCRIERI ALE REGULII TREBUIE SA SPUNA ACELASI LUCRU", () => {
+  /*
+    ⚠ Regula de atribuire e scrisa de DOUA ori: in `felulRecuperarii` (pentru
+    un cos anume) si in `cosuri_abandonate_sumar` (pentru cifrele de sus).
+    Doua copii se departeaza una de alta fara sa anunte, iar atunci cardul si
+    randul ar spune lucruri diferite despre acelasi cos.
+
+    Aici se masoara ca hotarele scrise in SQL sunt CHIAR cele probate mai sus:
+    fereastra de la deschidere, si nimic inaintea comenzii.
+  */
+  const sql = readFileSync(
+    new URL("../../../migrations/2026-09-21-cosuri-sumar.sql", import.meta.url), "utf8",
+  );
+  assert.match(sql, /cv\.converted_at >= s\.deschis_la/, "SQL-ul ar atribui o comanda de DINAINTEA clickului");
   assert.match(
-    sursa,
-    /mesaje\.length === 0\s*\n\s*\?\s*\(\(r\.recovery_email_sent_at \|\| r\.recovery_sms_sent_at\) \? "asistata" : "organica"\)/,
-    "lipseste caderea inapoi pe datele de dinainte de jurnal",
+    sql, /cv\.converted_at <= s\.deschis_la \+ make_interval\(days => p_zile\)/,
+    "SQL-ul nu masoara fereastra de la deschidere",
   );
+  assert.match(sql, /p_zile integer default 7/, "fereastra din SQL nu e cea de 7 zile");
+  assert.equal(ZILE_ATRIBUIRE, 7, "fereastra din cod s-a schimbat fara SQL");
 });

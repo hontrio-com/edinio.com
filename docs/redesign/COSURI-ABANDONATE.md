@@ -166,11 +166,41 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
 
 ### Etapa C - aceeasi perioada peste tot
 
-- [ ] **C1.** Selector global: 7 / 30 / 90 de zile, luna aceasta, personalizat. Toate cardurile,
-      produsele si lista asculta de el. Ce ramane „de cand exista magazinul" se eticheteaza.
-- [ ] **C2.** Paginare pe server, 25 sau 50 pe pagina, cu numarul adevarat. Acum interogarea
-      citeste 1.000 de randuri si ecranul arata 100, iar antetul scrie „(100)" langa un card
-      care spune 430.
+- [x] **C1.** Selector global: 7 / 30 / 90 de zile, luna aceasta, de cand exista magazinul.
+      Cardurile, bannerul, produsele si lista asculta toate de el.
+      ⚠ Selectorul sta DEASUPRA cardurilor, nu langa unul dintre ele: langa un card, ar fi parut
+      ca schimba doar cardul acela.
+      ⚠ „Luna aceasta" se taie pe ceasul ROMANESC. Pe UTC, luna ar incepe cu trei ore mai
+      tarziu, si un cos din noaptea de 1 ar cadea in luna trecuta - o cifra mai mica,
+      plauzibila, si gresita.
+      ⚠ Capatul de sus al ferestrei e MAINE, nu „acum": pe un ceas de baza care merge putin
+      inainte, tocmai cosul cel mai nou ar fi lipsit din numaratoare.
+      ⚠ **Defectul s-a intors de doua ori in aceeasi zi**, prin text scris de-a gata: bannerul
+      zicea „luna aceasta" cu perioada pe 7 zile, iar cardul ratei avea subtitlul fix. Cifra
+      corecta sub o eticheta gresita e mai rau decat o cifra gresita, fiindca nimic nu pare in
+      neregula. Exista acum o proba care cade la orice perioada scrisa de mana pe ecran, si e
+      verificat ca musca.
+- [x] **C2.** Paginare pe server, 25 sau 50 pe pagina, cu numarul adevarat.
+      ⚠ Antetul scria „(100)" - atatea randuri trimitea serverul - langa un card care spunea
+      altceva: aceeasi pagina se contrazicea singura. Acum vine din `count: "exact"`.
+      ⚠ Marginile sunt INCLUSIVE la amandoua capetele, ca la PostgREST. Scrise ca la `slice`,
+      ultimul rand al unei pagini ar fi fost si primul celei urmatoare - fara nicio eroare.
+      Verificat pe baza demo cu pagini de cate 5: niciun cos de doua ori, niciun gol, si
+      aceeasi ordine ca lista intreaga.
+      ⚠ Schimbarea perioadei sau a marimii paginii duce inapoi la pagina 1: altfel omul ar
+      ramane pe „pagina 7" a unei liste care acum are trei.
+      ⚠ **Cifrele nu se mai socotesc in TypeScript**, ci in baza (`cosuri_abandonate_sumar`).
+      Citirea veche lua cel mult 1.000 de randuri - pragul PostgREST - si aduna in memorie. Azi
+      cel mai mare magazin are 393 de cosuri in tot istoricul, deci nimeni nu lovea pragul; dar
+      cand il va lovi, cifrele NU dau eroare: scad in tacere si arata ca merge mai bine.
+      Functia e verificata fata de un control scris separat, pe datele demo: 29 abandonate,
+      13 convertite, 29.730,80 lei - aceleasi cifre pe amandoua drumurile.
+      ⚠ RAMAS: „Cele mai abandonate produse" citeste tot cel mult 1.000 de randuri, fiindca se
+      strange in memorie din `items`. Nu e gresit azi, dar e acelasi prag; de mutat in baza
+      cand se face fila Prezentare (D2).
+      ⚠ Reincarcarea NU mai e `router.refresh()`: datele stau in stare, iar un refresh de server
+      nu ajunge la ele. Dupa o stergere, lista ar fi parut ca se reincarca si ar fi ramas cea
+      veche.
 
 ### Etapa D - structura
 

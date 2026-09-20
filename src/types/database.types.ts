@@ -6835,6 +6835,28 @@ export type Database = {
         Returns: undefined
       }
       reseteaza_limita: { Args: { p_cheie: string }; Returns: undefined }
+      cosuri_abandonate_sumar: {
+        Args: {
+          p_business: string
+          p_de_la: string
+          p_pana: string
+          p_minute?: number
+          p_zile?: number
+        }
+        Returns: {
+          abandonate: number
+          valoare_abandonata: number
+          valoare_medie: number
+          convertite: number
+          rata_abandon: number
+          atribuite: number
+          valoare_atribuita: number
+          asistate: number
+          valoare_asistata: number
+          organice: number
+          valoare_organica: number
+        }[]
+      }
       site_analytics_breakdown: {
         Args: { bid: string; t_from: string }
         Returns: {

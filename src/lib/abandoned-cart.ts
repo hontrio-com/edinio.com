@@ -4,6 +4,7 @@
 
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import { mesajulCareAAdus } from "@/lib/abandoned/atribuire";
+import type { CatePePagina, NumePerioada } from "@/lib/abandoned/perioade";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { hasVariants, cerePersonalizare, parseVariants, findCombo, comboUnitPrice } from "@/lib/storefront/variants";
@@ -86,6 +87,12 @@ export interface AbandonedCartsData {
     organiceCount: number;
     organiceValue: number;
   };
+  /** Fereastra la care raspund TOATE cifrele de mai sus. */
+  perioada: NumePerioada;
+  pagina: number;
+  pePagina: CatePePagina;
+  /** ⚠ Cate cosuri sunt CU TOTUL, nu cate s-au trimis pe pagina asta. */
+  totalCosuri: number;
   potentialRevenueThisMonth: number;
   abandonedProducts: AbandonedProduct[];
   carts: AbandonedCartRow[];

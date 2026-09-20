@@ -8,15 +8,19 @@ import { toast } from "sonner";
 import {
   ShoppingBag, TrendingDown, Percent, RotateCcw, Mail, MessageSquare,
   Clock, Package, Trash2, X, Sparkles, Send, Banknote, ShieldCheck, Bell, Loader2, Lock,
-  BellOff, AlertTriangle,
+  BellOff, AlertTriangle, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { AbandonedAutomationsTab } from "./AbandonedAutomationsTab";
 import { ExplicatieCard } from "./ExplicatieCard";
 import { NUMELE_RECUPERARII } from "@/lib/abandoned/atribuire";
 import {
+  ETICHETE, PERIOADE, PE_PAGINA, catePagini,
+  type CatePePagina, type NumePerioada,
+} from "@/lib/abandoned/perioade";
+import {
   setAbandonedCartEnabled, sendAbandonedCartEmail, sendAbandonedCartSms, deleteAbandonedCart,
-  ignoraCosAbandonat,
+  ignoraCosAbandonat, cereCosuriAbandonate,
 } from "@/lib/actions/abandoned-cart.actions";
 import {
   standardRecoveryTemplate, interpolateRecoveryMessage, buildRecoverUrl, defaultRecoverySms,
@@ -36,6 +40,23 @@ const EXPLICATIA_RATEI = [
   "Din finalizările în care clientul și-a lăsat datele de contact luna aceasta, câte au rămas neterminate.",
   "Nu e procentul din toți vizitatorii magazinului și nici din toate coșurile: despre cine pleacă mai devreme, fără să lase nimic, pagina asta nu știe nimic.",
 ].join("\n\n");
+
+/**
+ * Perioada spusa in fraza, nu ca eticheta de buton.
+ *
+ * ⚠ „coșurile abandonate 7 zile" nu e romaneste. Eticheta de pe buton si
+ * bucata din propozitie sunt doua lucruri diferite, si numai una dintre ele
+ * poate fi scurta.
+ */
+function rastimpul(p: NumePerioada): string {
+  switch (p) {
+    case "7z": return "în ultimele 7 zile";
+    case "30z": return "în ultimele 30 de zile";
+    case "90z": return "în ultimele 90 de zile";
+    case "luna": return "luna aceasta";
+    case "tot": return "de când există magazinul";
+  }
+}
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -163,9 +184,46 @@ function KpiCard({ icon: Icon, label, value, sub, accent, explicatie }: {
   );
 }
 
-function ActiveDashboard({ businessId, data }: { businessId: string; data: AbandonedCartsData }) {
-  const router = useRouter();
+function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: string; data: AbandonedCartsData }) {
+  /*
+    ⚠ Datele stau in stare fiindca perioada si pagina le schimba pe TOATE
+    deodata: cardurile, produsele si lista. Daca s-ar reincarca numai lista,
+    pagina ar arata iar cifre din ferestre diferite - chiar defectul reparat.
+  */
+  const [data, setData] = useState(dateInitiale);
+  const [seIncarca, startIncarcare] = useTransition();
   const { kpis } = data;
+
+  function cere(schimbari: { perioada?: NumePerioada; pagina?: number; pePagina?: CatePePagina }) {
+    startIncarcare(async () => {
+      const urmatoare = {
+        perioada: schimbari.perioada ?? data.perioada,
+        /* ⚠ Schimbarea perioadei sau a marimii paginii duce inapoi la prima: altfel
+           omul ar ramane pe „pagina 7" a unei liste care acum are trei pagini. */
+        pagina: schimbari.pagina ?? ((schimbari.perioada || schimbari.pePagina) ? 1 : data.pagina),
+        pePagina: schimbari.pePagina ?? data.pePagina,
+      };
+      let res: Awaited<ReturnType<typeof cereCosuriAbandonate>>;
+      try {
+        res = await cereCosuriAbandonate(businessId, urmatoare);
+      } catch {
+        toast.error("Nu am putut incarca datele pentru perioada aleasa. Incearca din nou.");
+        return;
+      }
+      if ("error" in res) { toast.error(res.error); return; }
+      setData(res);
+    });
+  }
+
+  /*
+    ⚠ REINCARCAREA NU MAI E `router.refresh()`. Datele stau acum in stare, iar
+    un refresh al serverului re-randeaza componenta de pagina cu proprietati
+    noi - pe care starea NU le ia in seama. Dupa o stergere, lista ar fi parut
+    ca se reincarca si ar fi ramas cea veche.
+  */
+  function reincarca() { cere({}); }
+
+  const pagini = catePagini(data.totalCosuri, data.pePagina);
 
   const [recover, setRecover] = useState<{ cart: AbandonedCartRow; channel: "email" | "sms" } | null>(null);
   const [message, setMessage] = useState("");
@@ -274,7 +332,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(channel === "email" ? "Email trimis." : "SMS trimis.");
       setRecover(null);
-      router.refresh();
+      reincarca();
     });
   }
 
@@ -298,7 +356,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
           { duration: 12000 },
         );
         setDeHotarat(null);
-        router.refresh();
+        reincarca();
         return;
       }
       if ("error" in res) { toast.error(res.error); return; }
@@ -306,7 +364,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
       toast.success(catre
         ? "Cosul ramane in cifre, dar nu mai primeste mesaje."
         : "Cosul poate primi iar mesaje.");
-      router.refresh();
+      reincarca();
     });
   }
 
@@ -328,11 +386,11 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
           + "Lista se reincarca: uita-te daca mai apare inainte sa incerci din nou.",
           { duration: 12000 },
         );
-        router.refresh();
+        reincarca();
         return;
       }
       if ("error" in res) { toast.error(res.error); return; }
-      router.refresh();
+      reincarca();
     });
   }
 
@@ -356,12 +414,12 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
                 + "Pagina se reincarca: uita-te la ecran inainte sa apesi din nou.",
                 { duration: 12000 },
               );
-              router.refresh();
+              reincarca();
               return;
             }
             if ("error" in res) { toast.error(res.error); return; }
             toast.success("Functia a fost dezactivata.");
-            router.refresh();
+            reincarca();
           })}
           disabled={togglingOff}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline disabled:opacity-50 shrink-0"
@@ -376,13 +434,42 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
         <div className="absolute right-10 bottom-[-3rem] w-40 h-40 rounded-full bg-white/5" />
         <div className="relative">
           <div className="flex items-center gap-2 mb-2 text-white/80 text-sm font-medium">
-            <Sparkles className="h-4 w-4" /> Potențial de recuperat luna aceasta
+            {/*
+              ⚠ BANNERUL ASCULTA SI EL DE SELECTOR. Cifra lui e chiar valoarea
+              abandonata a ferestrei alese; scris „luna aceasta" cu perioada pe
+              „7 zile", ar fi fost exact defectul reparat pe restul paginii -
+              o eticheta care nu se potriveste cu numarul de sub ea.
+            */}
+            <Sparkles className="h-4 w-4" /> Potențial de recuperat · {ETICHETE[data.perioada].toLowerCase()}
           </div>
           <p className="text-lg sm:text-xl font-semibold leading-snug max-w-2xl">
-            Dacă ai fi recuperat toate coșurile abandonate luna aceasta, ai fi încasat încă{" "}
+            Dacă ai fi recuperat toate coșurile abandonate {rastimpul(data.perioada)}, ai fi încasat încă{" "}
             <span className="text-2xl sm:text-3xl font-extrabold whitespace-nowrap">{formatPrice(data.potentialRevenueThisMonth)}</span>.
           </p>
         </div>
+      </div>
+
+      {/*
+        ⚠ UN SINGUR SELECTOR PENTRU TOATA PAGINA. Cardurile, produsele si lista
+        asculta toate de el, si de-aia sta deasupra lor, nu langa unul dintre
+        ele: langa un card, ar fi parut ca schimba doar cardul acela.
+      */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="inline-flex rounded-lg border border-border overflow-hidden">
+          {PERIOADE.map((p) => (
+            <button
+              key={p}
+              onClick={() => cere({ perioada: p })}
+              disabled={seIncarca}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
+                data.perioada === p ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {ETICHETE[p]}
+            </button>
+          ))}
+        </div>
+        {seIncarca && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
       </div>
 
       {/* KPIs */}
@@ -391,7 +478,9 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
         <KpiCard icon={Banknote} label="Valoare abandonată" value={formatPrice(kpis.abandonedValue)} accent="#ef4444" />
         <KpiCard
           icon={Percent} label="Rată de abandon la finalizare" value={`${kpis.abandonRate}%`}
-          sub="luna aceasta" accent="#f59e0b"
+          /* ⚠ Subtitlul urmeaza selectorul. Scris „luna aceasta" de-a gata, spunea alta
+             perioada decat cifra de deasupra lui. */
+          sub={ETICHETE[data.perioada].toLowerCase()} accent="#f59e0b"
           explicatie={EXPLICATIA_RATEI}
         />
         <KpiCard
@@ -484,7 +573,21 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
         <div className="px-5 py-4 border-b border-border flex items-center gap-2">
           <ShoppingBag className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-foreground">Coșuri abandonate</h2>
-          <span className="text-xs text-muted-foreground">({cosuri.length})</span>
+          {/*
+            ⚠ NUMARUL ADEVARAT, NU CATE RANDURI S-AU TRIMIS. Pana acum scria
+            „(100)" - atatea trimitea serverul - langa un card care spunea 430.
+            Aceeasi pagina se contrazicea singura.
+          */}
+          <span className="text-xs text-muted-foreground">({data.totalCosuri})</span>
+          <select
+            value={data.pePagina}
+            onChange={(e) => cere({ pePagina: Number(e.target.value) as CatePePagina })}
+            disabled={seIncarca}
+            aria-label="Câte coșuri pe pagină"
+            className="ml-auto text-xs border border-border rounded-lg px-2 py-1 bg-background text-muted-foreground disabled:opacity-60"
+          >
+            {PE_PAGINA.map((n) => <option key={n} value={n}>{n} pe pagină</option>)}
+          </select>
         </div>
 
         {cosuri.length === 0 ? (
@@ -546,6 +649,36 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/*
+          ⚠ Paginarea se arata numai cand are ce pagina. O bara „1 din 1" pe
+          un magazin cu trei cosuri e zgomot.
+        */}
+        {pagini > 1 && (
+          <div className="px-5 py-3 border-t border-border flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground tabular-nums">
+              Pagina {data.pagina} din {pagini}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => cere({ pagina: data.pagina - 1 })}
+                disabled={seIncarca || data.pagina <= 1}
+                aria-label="Pagina anterioară"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => cere({ pagina: data.pagina + 1 })}
+                disabled={seIncarca || data.pagina >= pagini}
+                aria-label="Pagina următoare"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         )}
       </div>

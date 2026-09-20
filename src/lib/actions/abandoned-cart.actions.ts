@@ -21,7 +21,10 @@ import type { NoticeConfig } from "@/lib/notice";
 import { sendAbandonedCartRecovery } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { storeBaseUrl } from "@/lib/seo";
-import { felulRecuperarii } from "@/lib/abandoned/atribuire";
+import { ZILE_ATRIBUIRE } from "@/lib/abandoned/atribuire";
+import {
+  fereastra, marginile, type CatePePagina, type NumePerioada,
+} from "@/lib/abandoned/perioade";
 import { isPremiumPlan } from "@/lib/plans";
 import { ABANDON_MINUTES, COS_PREA_VECHI, cosulMaiPoateFiRecuperat, cuPreturileDinCatalog, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";
@@ -283,8 +286,31 @@ export async function setAbandonedCartEnabled(
 }
 
 // ── Dashboard data (owner) ─────────────────────────────────────────────────────
+/**
+ * Aceleasi date, cerute din ecran cand omul schimba perioada sau pagina.
+ *
+ * ⚠ E un invelis peste `getAbandonedCartsData`, NU o a doua socoteala: doua
+ * cai care raspund la aceeasi intrebare se departeaza una de alta, si atunci
+ * pagina 1 si pagina 2 ar putea spune lucruri diferite despre acelasi magazin.
+ */
+export async function cereCosuriAbandonate(
+  businessId: string,
+  cerere: { perioada?: NumePerioada; pagina?: number; pePagina?: CatePePagina },
+): Promise<AbandonedCartsData | { error: string }> {
+  return getAbandonedCartsData(businessId, cerere);
+}
+
+/** Randul intors de `cosuri_abandonate_sumar`. */
+type SumarCosuri = Database["public"]["Functions"]["cosuri_abandonate_sumar"]["Returns"][number];
+
 export async function getAbandonedCartsData(
   businessId: string,
+  /*
+   * ⚠ O SINGURA PERIOADA PENTRU TOATA PAGINA. Pana pe 21.09.2026 fiecare cifra
+   * avea rastimpul ei: cosurile pe 90 de zile, rata si recuperarile pe luna
+   * curenta. Trei cifre una langa alta despre trei ferestre diferite.
+   */
+  cerere: { perioada?: NumePerioada; pagina?: number; pePagina?: CatePePagina } = {},
 ): Promise<AbandonedCartsData | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -318,75 +344,73 @@ export async function getAbandonedCartsData(
   const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
   const primaryColor = biz.primary_color ?? "#07c527";
 
-  const windowStart = new Date(Date.now() - 90 * 86400000).toISOString();
-  const { data: rowsData } = await supabase
-    .from("abandoned_carts")
-    .select("id, customer_name, email, phone, items, item_count, subtotal, source, status, created_at, last_activity_at, converted_at, ignorat_la, recovery_email_sent_at, recovery_sms_sent_at, recovery_count")
-    .eq("business_id", businessId)
-    .gte("created_at", windowStart)
-    .order("last_activity_at", { ascending: false })
-    .limit(1000);
-
-  const all = (rowsData ?? []) as unknown as CartRow[];
-  const now = Date.now();
-  const threshold = now - ABANDON_MINUTES * 60_000;
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
-
-  const t = (s: string | null) => (s ? new Date(s).getTime() : 0);
-  const isAbandoned = (r: CartRow) => r.status === "open" && t(r.last_activity_at) < threshold;
-
-  const abandoned = all.filter(isAbandoned);
-  const abandonedMonth = abandoned.filter((r) => t(r.created_at) >= monthStart);
-  const convertedMonth = all.filter((r) => r.status === "converted" && t(r.converted_at) >= monthStart);
-
-  const sum = (arr: CartRow[]) => round2(arr.reduce((s, r) => s + Number(r.subtotal || 0), 0));
-  const abandonedValue = sum(abandoned);
-  const denom = abandonedMonth.length + convertedMonth.length;
-  const abandonRate = denom > 0 ? Math.round((abandonedMonth.length / denom) * 100) : 0;
+  const perioada = fereastra(cerere.perioada ?? "30z");
+  const pePagina: CatePePagina = cerere.pePagina ?? 25;
+  const pagina = Math.max(1, Math.floor(cerere.pagina ?? 1));
+  const { de, la } = marginile(pagina, pePagina);
 
   /*
-    ═══ ⚠ TREI CIFRE IN LOC DE UNA, SI DE CE ═══
-
-    Pana pe 21.09.2026 aici statea o singura linie: cosurile convertite care
-    aveau vreo data de trimitere. Aia numara si pe cei care s-ar fi intors
-    oricum, fiindca nimic nu arata ca mesajul a facut ceva - linkul nu lasa
-    urma ca a fost deschis.
-
-    ⚠ NU SE ADUNA INTR-UN „RECUPERAT" MAI MARE. Fiecare raspunde la alta
-    intrebare, si a doua e tocmai cea care nu se poate dovedi. Adunate, ar
-    face iar cifra veche, doar cu mai multa munca in spate.
+    ⚠ CIFRELE SE SOCOTESC IN BAZA, NU DIN RANDURILE INCARCATE. Pana acum se
+    citeau cel mult 1.000 de randuri (pragul PostgREST) si se aduna in
+    TypeScript. Azi cel mai mare magazin are 393 de cosuri in tot istoricul,
+    deci nimeni nu loveste pragul - dar cand il va lovi, cifrele NU vor da
+    eroare: vor scadea in tacere si vor arata ca merge mai bine.
   */
-  const mesajeleCosurilor = new Map<string, { trimis_la: string; deschis_la: string | null }[]>();
-  if (convertedMonth.length > 0) {
-    const { data: trimise } = await supabase
-      .from("recovery_sends").select("cart_id, trimis_la, deschis_la")
-      .in("cart_id", convertedMonth.map((r) => r.id));
-    for (const m of trimise ?? []) {
-      const lista = mesajeleCosurilor.get(m.cart_id) ?? [];
-      lista.push({ trimis_la: m.trimis_la, deschis_la: m.deschis_la });
-      mesajeleCosurilor.set(m.cart_id, lista);
-    }
-  }
-
-  const peFel = { atribuita: [] as CartRow[], asistata: [] as CartRow[], organica: [] as CartRow[] };
-  for (const r of convertedMonth) {
-    const mesaje = mesajeleCosurilor.get(r.id) ?? [];
+  const pragAbandon = new Date(Date.now() - ABANDON_MINUTES * 60_000).toISOString();
+  const [sumarRes, listaRes, produseRes] = await Promise.all([
+    supabase.rpc("cosuri_abandonate_sumar", {
+      p_business: businessId,
+      p_de_la: perioada.deLa.toISOString(),
+      p_pana: perioada.panaLa.toISOString(),
+      p_minute: ABANDON_MINUTES,
+      p_zile: ZILE_ATRIBUIRE,
+    }),
     /*
-      ⚠ CADEREA INAPOI PE DATELE VECHI. Cosurile de dinainte de jurnal n-au
-      niciun rand in `recovery_sends`, dar unele chiar au primit mesaje - se
-      vede in `recovery_email_sent_at`. Fara asta, tot istoricul ar fi trecut
-      peste noapte la „organic", si comerciantul ar fi vazut munca lui de
-      pana acum stearsa.
+      ⚠ PAGINA CERE SI NUMARUL ADEVARAT (`count: "exact"`). Pana acum antetul
+      scria „(100)" fiindca atatea randuri trimitea serverul, langa un card
+      care spunea 430: aceeasi pagina se contrazicea singura.
     */
-    const felul = mesaje.length === 0
-      ? ((r.recovery_email_sent_at || r.recovery_sms_sent_at) ? "asistata" : "organica")
-      : felulRecuperarii(mesaje, new Date(t(r.converted_at) || now));
-    peFel[felul].push(r);
-  }
+    supabase
+      .from("abandoned_carts")
+      .select(
+        "id, customer_name, email, phone, items, item_count, subtotal, source, status,"
+        + " created_at, last_activity_at, converted_at, ignorat_la, recovery_email_sent_at,"
+        + " recovery_sms_sent_at, recovery_count",
+        { count: "exact" },
+      )
+      .eq("business_id", businessId)
+      .eq("status", "open")
+      .lt("last_activity_at", pragAbandon)
+      .gte("created_at", perioada.deLa.toISOString())
+      .lt("created_at", perioada.panaLa.toISOString())
+      .order("last_activity_at", { ascending: false })
+      .range(de, la),
+    /*
+      ⚠ Produsele se strang peste TOATA fereastra, nu peste pagina aratata:
+      „ce se abandoneaza cel mai des" n-are nicio legatura cu ce randuri s-a
+      nimerit sa fie pe ecran. Citirea ramane marginita, si se spune mai jos.
+    */
+    supabase
+      .from("abandoned_carts")
+      .select("items")
+      .eq("business_id", businessId)
+      .eq("status", "open")
+      .lt("last_activity_at", pragAbandon)
+      .gte("created_at", perioada.deLa.toISOString())
+      .lt("created_at", perioada.panaLa.toISOString())
+      .order("last_activity_at", { ascending: false })
+      .limit(1000),
+  ]);
+
+  const sumar = (sumarRes.data ?? [])[0] as SumarCosuri | undefined;
+  const randuri = (listaRes.data ?? []) as unknown as CartRow[];
+  const totalCosuri = listaRes.count ?? randuri.length;
+
+  const nr = (v: unknown) => Math.round((Number(v) || 0) * 100) / 100;
 
   // Aggregate items across abandoned carts -> top abandoned products.
   const prodMap = new Map<string, { name: string; quantity: number; value: number; carts: number; image_url: string | null }>();
-  for (const r of abandoned) {
+  for (const r of (produseRes.data ?? [])) {
     const items = (Array.isArray(r.items) ? r.items : []) as unknown as AbandonedCartItem[];
     const seen = new Set<string>();
     for (const it of items) {
@@ -410,24 +434,25 @@ export async function getAbandonedCartsData(
     storeName: biz.store_name ?? biz.business_name,
     primaryColor,
     kpis: {
-      abandonedCount: abandoned.length,
-      abandonedValue,
-      avgCartValue: abandoned.length ? round2(abandonedValue / abandoned.length) : 0,
-      abandonRate,
-      /*
-        ⚠ „Recuperate" ramane, dar inseamna acum CEVA CE SE POATE DOVEDI: omul
-        a deschis linkul din mesaj si a comandat in fereastra de sapte zile.
-      */
-      recoveredCount: peFel.atribuita.length,
-      recoveredValue: sum(peFel.atribuita),
-      asistateCount: peFel.asistata.length,
-      asistateValue: sum(peFel.asistata),
-      organiceCount: peFel.organica.length,
-      organiceValue: sum(peFel.organica),
+      abandonedCount: sumar?.abandonate ?? 0,
+      abandonedValue: nr(sumar?.valoare_abandonata),
+      avgCartValue: nr(sumar?.valoare_medie),
+      abandonRate: sumar?.rata_abandon ?? 0,
+      /* ⚠ „Recuperate" inseamna acum ceva ce SE POATE DOVEDI: linkul deschis, apoi comanda. */
+      recoveredCount: sumar?.atribuite ?? 0,
+      recoveredValue: nr(sumar?.valoare_atribuita),
+      asistateCount: sumar?.asistate ?? 0,
+      asistateValue: nr(sumar?.valoare_asistata),
+      organiceCount: sumar?.organice ?? 0,
+      organiceValue: nr(sumar?.valoare_organica),
     },
-    potentialRevenueThisMonth: sum(abandonedMonth),
+    perioada: perioada.nume,
+    pagina,
+    pePagina,
+    totalCosuri,
+    potentialRevenueThisMonth: nr(sumar?.valoare_abandonata),
     abandonedProducts,
-    carts: abandoned.slice(0, 100).map((r) => ({
+    carts: randuri.map((r) => ({
       id: r.id,
       customer_name: r.customer_name,
       email: r.email,

@@ -44,7 +44,13 @@ const AJUTOARE = [
 const CITIRI_PUNCTUALE = [
   { fisier: "sms.actions.ts", coloana: "smso_config", cate: 2 },
   { fisier: "order.actions.ts", coloana: "smso_config", cate: 2 },
-  { fisier: "abandoned-cart.actions.ts", coloana: "smso_config, notice_config", cate: 1 },
+  /*
+    ⚠ Doua de pe 21.09.2026: trimiterea de mana si proba de automatizare
+    (`trimiteProbaAutomatizare`). Proba a fost scrisa intai cu clientul
+    utilizatorului si a fost prinsa CHIAR de plasa asta - cheile ar fi plecat
+    catre furnizor ca „enc.v1.…".
+  */
+  { fisier: "abandoned-cart.actions.ts", coloana: "smso_config, notice_config", cate: 2 },
 ];
 
 function corpulFunctiei(sursa: string, nume: string): string {

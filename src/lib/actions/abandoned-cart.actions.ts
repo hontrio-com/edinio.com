@@ -26,7 +26,7 @@ import {
   fereastra, marginile, type CatePePagina, type NumePerioada,
 } from "@/lib/abandoned/perioade";
 import { isPremiumPlan } from "@/lib/plans";
-import { ABANDON_MINUTES, COS_PREA_VECHI, cosulMaiPoateFiRecuperat, cuPreturileDinCatalog, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type MesajCos, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
+import { ABANDON_MINUTES, COS_PREA_VECHI, cosulMaiPoateFiRecuperat, cuPreturileDinCatalog, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, standardRecoveryTemplate, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type MesajCos, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";
 import { pragulComenzilor } from "@/app/api/cron/curata-fisiere/reguli";
 
@@ -513,6 +513,106 @@ export async function getAbandonedCartsData(
 }
 
 // ── Save automation config (owner) ─────────────────────────────────────────────
+/**
+ * Trimite un pas al automatizarii CATRE COMERCIANT, ca sa vada ce pleaca.
+ *
+ * ⚠⚠ DESTINATARUL NU VINE DIN CERERE. Actiunea asta trimite emailuri si
+ * SMS-uri pe banii magazinului; daca adresa ar veni din parametri, oricine cu
+ * un cont ar avea o portita de trimis mesaje oriunde. Se ia din contul
+ * proprietarului, si numai de acolo.
+ *
+ * ⚠ NU ATINGE NICIUN COS SI NICIUN CONTOR: nu scrie in `recovery_sends`, nu
+ * creste `recovery_count` si nu se numara nicaieri. Un mesaj de proba care ar
+ * intra in cifre ar face ca „7 contactate" sa insemne „6 clienti si o data eu".
+ */
+export async function trimiteProbaAutomatizare(
+  businessId: string,
+  pas: { channel: "email" | "sms"; message?: string; discount_code?: string },
+): Promise<{ success: true; catre: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses")
+    .select("id, slug, custom_domain, store_name, business_name, primary_color, phone")
+    .eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Neautorizat" };
+
+  const storeName = biz.store_name ?? biz.business_name;
+  const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
+  /*
+   * ⚠ Linkul de proba duce la magazin, FARA `?recover=`: cu el, ar incerca sa
+   * refaca un cos care nu exista si omul ar ajunge pe o vitrina goala,
+   * crezand ca asa patesc si clientii lui.
+   */
+  const text = pas.message?.trim()
+    ? interpolateRecoveryMessage(pas.message, { name: "Ion", store: storeName })
+    : standardRecoveryTemplate(pas.channel);
+
+  if (pas.channel === "email") {
+    const catre = user.email;
+    if (!catre) return { error: "Contul tău nu are o adresă de email." };
+    try {
+      const emailSender = await getStoreEmailSender(supabase, businessId);
+      await sendAbandonedCartRecovery(catre, {
+        storeName,
+        recoverUrl: storeUrl,
+        customerName: "Ion",
+        /* Doua linii inventate, ca sa se vada asezarea. Nu ating catalogul. */
+        items: [
+          { name: "Produs de probă", price: 149, quantity: 1, image_url: null },
+          { name: "Al doilea produs", price: 79.9, quantity: 2, image_url: null },
+        ],
+        total: 308.8,
+        preturiSigure: true,
+        color: biz.primary_color ?? "#07c527",
+        message: pas.message?.trim() ? text : undefined,
+        discountCode: pas.discount_code?.trim() || undefined,
+      }, emailSender);
+    } catch {
+      return { error: "Emailul de probă nu a putut fi trimis." };
+    }
+    return { success: true, catre };
+  }
+
+  /* ⚠ SMS-ul de proba se PLATESTE, ca oricare altul. Se spune pe ecran. */
+  const catre = biz.phone?.trim();
+  if (!catre) return { error: "Magazinul nu are un număr de telefon salvat, deci nu avem unde trimite proba." };
+
+  /*
+   * ⚠⚠ CU SERVICE ROLE, NU CU CLIENTUL UTILIZATORULUI. Cheile din
+   * `store_settings` sunt criptate in tabela si se decripteaza prin vedere
+   * numai pentru service role: citite cu clientul omului, ar veni ca
+   * „enc.v1.…" si ar pleca asa catre furnizor - adica proba n-ar merge, si
+   * nimeni n-ar sti de ce.
+   *
+   * Prima scriere folosea aici `supabase`, si a fost prinsa de plasa din
+   * `citire-secrete.test.ts`, nu de mine.
+   */
+  const admin = createAdminClient();
+  const { data: settings } = await admin
+    .from("store_settings").select("smso_config, notice_config").eq("business_id", businessId).single();
+  const smso = settings?.smso_config as SmsoConfig | null;
+  const notice = settings?.notice_config as NoticeConfig | null;
+  const noticeReady = !!(notice?.enabled && notice.api_token && notice.abandoned?.enabled);
+  const smsoReady = !!(smso?.enabled && smso.api_key && smso.sender_id);
+  if (!noticeReady && !smsoReady) return { error: "Nu ai niciun serviciu de SMS pornit." };
+
+  const body = `${text} ${storeUrl}`;
+  if (noticeReady) {
+    const r = await sendNoticeAbandonedSms(admin, notice!, { businessId, phone: catre, body });
+    if (!r.success) return { error: r.error ?? "SMS-ul de probă nu a putut fi trimis." };
+  } else {
+    const r = await trimiteSiLasaUrma(admin as never, smso!.api_key, {
+      businessId, phone: catre, sender: smso!.sender_id, body,
+      type: "marketing", motiv: "proba_automatizare",
+    });
+    if (!r.success) return { error: r.error ?? "SMS-ul de probă nu a putut fi trimis." };
+  }
+  return { success: true, catre };
+}
+
 export async function saveAbandonedCartAutomation(
   businessId: string,
   config: AbandonedAutomationConfig,

@@ -4,10 +4,18 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Plus, Trash2, Mail, MessageSquare, Loader2, Save, Clock, Sparkles, Zap, AlertTriangle, Lock, Tag } from "lucide-react";
-import { saveAbandonedCartAutomation } from "@/lib/actions/abandoned-cart.actions";
-import { standardRecoveryTemplate, STANDARD_EMAIL_TEMPLATE, STANDARD_SMS_TEMPLATE } from "@/lib/abandoned-cart";
+import { Plus, Trash2, Mail, MessageSquare, Loader2, Save, Send, Clock, Sparkles, Zap, AlertTriangle, Lock, Tag } from "lucide-react";
+import {
+  saveAbandonedCartAutomation, trimiteProbaAutomatizare,
+} from "@/lib/actions/abandoned-cart.actions";
+import {
+  standardRecoveryTemplate, STANDARD_EMAIL_TEMPLATE, STANDARD_SMS_TEMPLATE,
+  interpolateRecoveryMessage, buildRecoverUrl,
+} from "@/lib/abandoned-cart";
+import { scrieSocoteala, socotesteSms } from "@/lib/abandoned/sms-segmente";
 import type { AbandonedCartsData, AbandonedAutomationStep, RecoveryChannel } from "@/lib/abandoned-cart";
+import { capcaneleAutomatizarii, opresteTrimiterea } from "@/lib/abandoned/capcane-automatizare";
+import { CRONOLOGIE, PORNIRI } from "@/lib/abandoned/porniri-automatizare";
 
 function discountLabel(d: { type: string; value: number }): string {
   if (d.type === "percent") return ` (${d.value}%)`;
@@ -16,9 +24,26 @@ function discountLabel(d: { type: string; value: number }): string {
   return "";
 }
 
-const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
+/*
+  ⚠ FARA `w-full` AICI. Il avea, iar campurile inguste il incercau cu `w-20`
+  peste el - si `w-full` castiga, fiindca intre doua clase de aceeasi putere
+  hotaraste ordinea din FOAIA DE STIL, nu ordinea din sirul de clase. Asa,
+  „După [1] ore" se rupea pe trei randuri: numarul ocupa toata latimea.
+
+  Latimea o pune acum fiecare camp, si cine vrea tot randul scrie `w-full`.
+*/
+const inputCls = "px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors";
 
 function uid() { return Math.random().toString(36).slice(2, 10); }
+
+/*
+  ⚠ Linkul din previzualizare e cel ADEVARAT ca forma si ca lungime, cu un id
+  inventat: la SMS, lungimea lui chiar conteaza, si un „..." scurt ar fi
+  aratat un mesaj mai ieftin decat e.
+*/
+function linkDeProba(storeUrl: string, cod?: string | null): string {
+  return buildRecoverUrl(storeUrl, "00000000-0000-4000-8000-000000000000", cod?.trim() || null);
+}
 
 const RECOMMENDED: Omit<AbandonedAutomationStep, "id">[] = [
   { delay_hours: 1, channel: "email" },
@@ -57,6 +82,63 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
     }));
   }
   function removeStep(id: string) { setSteps((p) => p.filter((s) => s.id !== id)); }
+
+  const [probaPentru, setProbaPentru] = useState<string | null>(null);
+
+  /*
+    ⚠ PROBA SE TRIMITE CU CE E PE ECRAN, nu cu ce e salvat. Altfel omul ar
+    schimba textul, ar cere o proba si ar primi mesajul vechi - si ar crede ca
+    schimbarea lui n-a avut efect.
+  */
+  function trimiteProba(pasul: AbandonedAutomationStep) {
+    setProbaPentru(pasul.id);
+    void (async () => {
+      let res: Awaited<ReturnType<typeof trimiteProbaAutomatizare>>;
+      try {
+        res = await trimiteProbaAutomatizare(businessId, {
+          channel: pasul.channel,
+          message: pasul.message,
+          discount_code: pasul.discount_code,
+        });
+      } catch {
+        toast.error("Nu am primit raspuns de la server, deci nu stim daca proba a plecat.");
+        setProbaPentru(null);
+        return;
+      }
+      setProbaPentru(null);
+      if ("error" in res) { toast.error(res.error); return; }
+      toast.success(`Proba a plecat catre ${res.catre}.`);
+    })();
+  }
+
+  /* Cele trei porniri: fiecare pune o secventa gata facuta, de modificat dupa. */
+  function porneste(cheie: string) {
+    const p = PORNIRI.find((x) => x.cheie === cheie);
+    if (!p) return;
+    setSteps(p.pasi.map((x) => ({
+      id: uid(), ...x, message: x.message ?? standardRecoveryTemplate(x.channel),
+    })));
+    /*
+      ⚠ Pornirea NU aprinde automatizarea. Cine apasa „Recomandată" alege o
+      secventa, nu hotaraste sa inceapa sa trimita mesaje catre clienti - iar
+      pornirea singura, fara sa fi citit ce trimite, e tocmai lucrul care nu se
+      poate lua inapoi.
+    */
+  }
+
+  /*
+    ⚠ Se socotesc la fiecare randare, pe ce e ACUM pe ecran, nu la salvare:
+    un avertisment care apare abia dupa ce ai salvat vine prea tarziu.
+  */
+  const capcane = capcaneleAutomatizarii(
+    {
+      enabled,
+      steps: steps.map((s) => ({ ...s, delay_hours: Number(s.delay_hours) || 0 })),
+      min_cart_value: minCart.trim() ? Number(minCart) : null,
+      quiet_hours: quietOn ? { start: Number(quietStart) || 0, end: Number(quietEnd) || 0 } : null,
+    },
+    { smsPornit: data.smsEnabled, coduriActive: data.discounts.map((d) => d.code) },
+  );
 
   function save() {
     startSave(async () => {
@@ -122,6 +204,83 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
         <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="w-5 h-5 accent-[var(--primary)] shrink-0" />
       </label>
 
+      {/*
+        ⚠ TREI PORNIRI, NU UN CAMP GOL. Un formular gol cu un buton „adaugă pas"
+        cere comerciantului sa stie DINAINTE cate mesaje se trimit si la ce ore -
+        adica tocmai ce vrea sa afle de la noi. Fiecare pornire spune ce face si
+        cui i se potriveste, si toate raman de modificat dupa aceea.
+      */}
+      {steps.length === 0 && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {PORNIRI.map((p) => (
+            <button
+              key={p.cheie}
+              onClick={() => porneste(p.cheie)}
+              className="rounded-2xl ring-1 ring-foreground/10 bg-card p-4 text-left transition-colors hover:ring-primary/40"
+            >
+              <p className="text-sm font-semibold text-foreground">{p.nume}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{p.explicatie}</p>
+              <p className="mt-2 text-[11px] font-medium text-primary">{p.rezumat}</p>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/*
+        ⚠ CRONOLOGIA ARATA CE PATESTE UN CLIENT, nu ce scrie in formular.
+        Campurile spun „24", „48"; omul vrea sa vada ca al doilea mesaj vine la
+        o zi dupa primul, nu la doua zile dupa abandon.
+      */}
+      {steps.length > 0 && (
+        <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
+          <h3 className="mb-3 text-sm font-semibold text-foreground">Ce pățește un client</h3>
+          <ol className="space-y-0">
+            {CRONOLOGIE(steps).map((t, i) => (
+              <li key={t.id} className="flex gap-3">
+                <div className="flex flex-col items-center">
+                  <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${i === 0 ? "bg-muted-foreground/40" : t.canal === "sms" ? "bg-primary" : "bg-info"}`} />
+                  {i < CRONOLOGIE(steps).length - 1 && <span className="w-px flex-1 bg-border" />}
+                </div>
+                <div className="pb-4">
+                  <p className="text-xs font-medium text-foreground">{t.titlu}</p>
+                  <p className="text-[11px] text-muted-foreground">{t.detaliu}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {/*
+        ⚠ AVERTISMENTELE STAU DEASUPRA BUTONULUI DE SALVARE, nu intr-un colt.
+        Toate greselile pe care le prind se salveaza FARA nicio eroare, iar
+        urmarea se vede peste o saptamana.
+      */}
+      {capcane.length > 0 && (
+        <div className="space-y-2">
+          {capcane.map((c, i) => (
+            <div
+              key={`${c.cheie}-${c.pasId ?? ""}-${i}`}
+              className={`flex items-start gap-2 rounded-xl border p-3 text-xs ${
+                c.treapta === "opreste"
+                  ? "border-destructive/40 bg-destructive/5 text-destructive"
+                  : "border-warning/40 bg-warning/5 text-foreground"
+              }`}
+            >
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                {c.pasId && (
+                  <span className="font-semibold">
+                    Pasul {steps.findIndex((x) => x.id === c.pasId) + 1}:{" "}
+                  </span>
+                )}
+                {c.text}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Steps */}
       <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -172,12 +331,55 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
 
                 <div className="grid sm:grid-cols-2 gap-2">
                   <textarea value={s.message ?? ""} onChange={(e) => updateStep(s.id, { message: e.target.value })}
-                    rows={2} placeholder="Mesajul trimis. {nume} și {magazin} se completează automat." className={`${inputCls} resize-none`} />
+                    rows={2} placeholder="Mesajul trimis. {nume} și {magazin} se completează automat." className={`${inputCls} w-full resize-none`} />
                   <select value={s.discount_code ?? ""} onChange={(e) => updateStep(s.id, { discount_code: e.target.value || undefined })}
-                    className={`${inputCls} bg-background h-fit`}>
+                    className={`${inputCls} w-full bg-background h-fit`}>
                     <option value="">Fără cod reducere</option>
                     {data.discounts.map((d) => <option key={d.code} value={d.code}>{d.code}{discountLabel(d)}</option>)}
                   </select>
+                </div>
+
+                {/*
+                  ⚠ CE PLEACA, NU CE SCRIE IN CAMP. `{nume}` si `{magazin}` se
+                  inlocuiesc abia la trimitere, iar linkul se lipeste la sfarsit:
+                  comerciantul isi citea sablonul si credea ca a citit mesajul.
+                */}
+                <div className="rounded-lg bg-muted/50 p-2.5">
+                  <p className="text-[11px] font-medium text-muted-foreground">Așa ajunge la un client pe nume Ion:</p>
+                  <p className="mt-1 text-xs text-foreground">
+                    {interpolateRecoveryMessage(s.message?.trim() || standardRecoveryTemplate(s.channel), {
+                      name: "Ion", store: data.storeName,
+                    })}{" "}
+                    <span className="text-muted-foreground">{linkDeProba(data.storeUrl, s.discount_code)}</span>
+                  </p>
+                  {s.channel === "sms" && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {scrieSocoteala(
+                        socotesteSms(
+                          interpolateRecoveryMessage(s.message?.trim() || standardRecoveryTemplate(s.channel), {
+                            name: "Ion", store: data.storeName,
+                          }),
+                          ` ${linkDeProba(data.storeUrl, s.discount_code)}`,
+                        ),
+                        true,
+                      )}
+                      {" · la fiecare client"}
+                    </p>
+                  )}
+                  {/*
+                    ⚠ PROBA PLEACA LA COMERCIANT, niciodata la un client, si NU se
+                    numara nicaieri: un mesaj de proba intrat in cifre ar face ca
+                    „7 contactate" sa insemne „6 clienti si o data eu".
+                  */}
+                  <button
+                    onClick={() => trimiteProba(s)}
+                    disabled={probaPentru !== null}
+                    className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-primary hover:opacity-80 disabled:opacity-50"
+                  >
+                    {probaPentru === s.id
+                      ? <><Loader2 className="h-3 w-3 animate-spin" /> Se trimite proba...</>
+                      : <><Send className="h-3 w-3" /> Trimite-mi o probă{s.channel === "sms" ? " (SMS plătit)" : ""}</>}
+                  </button>
                 </div>
               </div>
             ))}
@@ -224,7 +426,17 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        {/*
+          ⚠ SE SPUNE LANGA BUTON, NU SE REFUZA SALVAREA. Comerciantul are
+          dreptul sa salveze o secventa pe jumatate scrisa si sa se intoarca
+          maine la ea. Ce n-are dreptul e sa creada ca trimite, cand nu trimite.
+        */}
+        {enabled && opresteTrimiterea(capcane) && (
+          <span className="text-xs text-destructive">
+            Așa cum e acum, automatizarea nu va trimite tot ce crezi. Vezi avertismentele de mai sus.
+          </span>
+        )}
         <button onClick={save} disabled={saving}
           className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg transition-all hover:opacity-90 disabled:opacity-60">
           {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Se salvează...</> : <><Save className="h-4 w-4" /> Salvează automatizarea</>}

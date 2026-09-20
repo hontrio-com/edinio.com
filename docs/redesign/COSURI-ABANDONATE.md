@@ -265,8 +265,40 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
       ⚠ **Prins pe ecran, nu in cod:** sertarul scria „În coș · 3 produse" peste o lista de
       DOUA randuri. `item_count` e suma cantitatilor, nu numarul de produse, si textul o citea
       gresit in trei locuri. Acum e o singura socoteala (`cateInCos`), cu proba.
-- [ ] **D4.** Automatizari: trei porniri (Simpla / Recomandata / Personalizata), cronologie
-      vizuala, previzualizare si mesaj de test, cele unsprezece capcane de configurare.
+- [x] **D4.** Trei porniri, cronologie, previzualizare, mesaj de proba si capcanele.
+      ⚠ Un formular gol cu un buton „adauga pas" cere comerciantului sa stie DINAINTE cate
+      mesaje se trimit si la ce ore - adica tocmai ce vrea sa afle de la noi.
+      ⚠ **Nicio pornire nu aprinde automatizarea.** Alegerea unei secvente e o alegere de TEXT;
+      hotararea de a incepe sa trimiti mesaje catre clienti adevarati se ia cu comutatorul, dupa
+      ce omul a citit ce pleaca - si aia e ce nu se ia inapoi. Exista proba.
+      ⚠ Cronologia spune distanta fata de mesajul DINAINTE, nu doar de la abandon: campurile
+      spun „24" si „48", dar omul vrea sa stie ca al doilea vine la o zi dupa primul.
+      ⚠ Previzualizarea arata CE PLEACA, nu ce scrie in camp: `{nume}` si `{magazin}` inlocuite,
+      si linkul lipit la sfarsit. Linkul aratat e adevarat ca forma si ca LUNGIME - la SMS
+      lungimea chiar conteaza, si un „..." scurt ar fi aratat un mesaj mai ieftin decat e.
+      ⚠ Proba pleaca la COMERCIANT si destinatarul nu vine din cerere: altfel actiunea ar fi
+      fost o portita de trimis mesaje oriunde, pe banii magazinului. Nu atinge niciun cos si nu
+      intra in jurnal - un mesaj de proba numarat ar face ca „7 contactate" sa insemne
+      „6 clienti si o data eu". Exista proba si pentru asta.
+      ⚠⚠ **Prinsa de o plasa mai veche:** proba de SMS citea intai cheile cu clientul
+      utilizatorului. Cheile sunt criptate in tabela si se decripteaza prin vedere numai pentru
+      service role, deci ar fi plecat catre furnizor ca „enc.v1.…" si nimeni n-ar fi stiut de ce
+      nu merge. Prinsa de `citire-secrete.test.ts`, nu de mine.
+      ⚠ Capcanele (13, nu 11) sunt in `lib/abandoned/capcane-automatizare.ts`, fiecare cu proba
+      ei. Toate se salveaza AZI fara nicio eroare, si urmarea se vede peste o saptamana:
+      ordinea pasilor e cea din LISTA (nu a orelor), „0 ore" nu inseamna „acum", un pas dincolo
+      de sase luni nu pleaca niciodata, ore de liniste cu acelasi inceput si sfarsit acopera
+      toata ziua, un cod inactiv promite o reducere care nu se aplica, un SMS lung se plateste
+      la fiecare client.
+      ⚠ Doua trepte, nu una: „opreste" si „atentie". „Eroare" langa o alegere legitima il invata
+      pe om sa nu mai citeasca avertismentele.
+      ⚠ Avertismentele NU refuza salvarea: comerciantul are dreptul sa salveze o secventa pe
+      jumatate scrisa. Ce n-are dreptul e sa creada ca trimite, cand nu trimite.
+      ⚠ Prins pe ecran: campul de ore se intindea pe tot randul. `inputCls` avea `w-full`, iar
+      `w-20` nu-l putea invinge - intre doua clase de aceeasi putere hotaraste ordinea din
+      FOAIA DE STIL, nu cea din sirul de clase.
+      Vazut in browser pe automatizarea adevarata a magazinului demo: capcana codului inactiv
+      chiar a prins un cod care nu mai exista.
 
 ### Etapa E - restul
 

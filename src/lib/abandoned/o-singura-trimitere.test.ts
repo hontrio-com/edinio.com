@@ -86,27 +86,49 @@ test("⚠ DREPTUL SE IA INAINTE DE TRIMITERE, pe amandoua canalele", () => {
     ⚠ Scris dupa trimitere, doua cereri paralele ar trece amandoua de
     verificare inainte ca vreuna sa apuce sa lase urma. Proba masoara ORDINEA
     in fisier: revendicarea vine inaintea plecarii mesajului, confirmarea dupa.
+
+    ⚠⚠ SE CAUTA IN CORPUL FUNCTIEI, NU IN TOT FISIERUL, si asta s-a invatat de
+    doua ori intr-o zi. Intai o ancora s-a potrivit pe `idulMesajului(...)`,
+    care are exact aceleasi argumente ca a confirmarii. Apoi
+    `trimiteProbaAutomatizare` a adus in fisier un al doilea
+    `trimiteSiLasaUrma(` si, fiind scrisa mai sus, `indexOf` il gasea pe al ei.
+    De fiecare data proba a cazut fara sa fie nimic stricat.
   */
   const sursa = readFileSync(
     new URL("../actions/abandoned-cart.actions.ts", import.meta.url), "utf8",
   );
-  /*
-    ⚠ ANCORELE SE PRIND DE CHEMARI, NU DE ARGUMENTE. Prima scriere cauta
-    `canal: "email", cheie: cheieCerere`, care parea al confirmarii - pana cand
-    B1 a adaugat `idulMesajului(...)` cu exact aceleasi argumente INAINTE de
-    trimitere. Proba a cazut fara sa fie nimic stricat: masura alt rand.
-  */
-  const iRevEmail = sursa.indexOf('canal: "email", sursa: "manual"');
-  const iTrimiteEmail = sursa.indexOf("await sendAbandonedCartRecovery(cart.email");
-  const iConfEmail = sursa.indexOf('confirmaTrimiterea(createAdminClient(), { cartId, canal: "email"');
-  assert.ok(iRevEmail > 0 && iTrimiteEmail > 0 && iConfEmail > 0, "nu s-au gasit toate cele trei");
-  assert.ok(iRevEmail < iTrimiteEmail, "emailul pleaca INAINTE sa se ia dreptul");
-  assert.ok(iTrimiteEmail < iConfEmail, "emailul e confirmat inainte sa plece");
 
-  const iRevSms = sursa.indexOf('canal: "sms", sursa: "manual"');
-  const iTrimiteSms = sursa.indexOf("await trimiteSiLasaUrma(");
-  const iConfSms = sursa.indexOf('confirmaTrimiterea(admin, { cartId, canal: "sms"');
-  assert.ok(iRevSms > 0 && iTrimiteSms > 0 && iConfSms > 0, "SMS-ul nu trece prin poarta");
-  assert.ok(iRevSms < iTrimiteSms, "SMS-ul pleaca INAINTE sa se ia dreptul");
-  assert.ok(iTrimiteSms < iConfSms, "SMS-ul e confirmat inainte sa plece");
+  /** Corpul unei functii exportate, pana la urmatoarea de acelasi fel. */
+  function corpul(nume: string): string {
+    const de = sursa.indexOf(`export async function ${nume}(`);
+    assert.ok(de >= 0, `nu s-a gasit ${nume}`);
+    const pana = sursa.indexOf("\nexport async function ", de + 1);
+    return sursa.slice(de, pana === -1 ? undefined : pana);
+  }
+
+  for (const [nume, canal, trimite] of [
+    ["sendAbandonedCartEmail", "email", "await sendAbandonedCartRecovery("],
+    ["sendAbandonedCartSms", "sms", "await trimiteSiLasaUrma("],
+  ] as const) {
+    const corp = corpul(nume);
+    const iRev = corp.indexOf(`canal: "${canal}", sursa: "manual"`);
+    const iTrimite = corp.indexOf(trimite);
+    const iConf = corp.indexOf("confirmaTrimiterea(");
+    assert.ok(iRev > 0, `${nume}: nu ia dreptul deloc`);
+    assert.ok(iTrimite > 0, `${nume}: nu s-a gasit trimiterea`);
+    assert.ok(iConf > 0, `${nume}: nu confirma niciodata`);
+    assert.ok(iRev < iTrimite, `${nume}: mesajul pleaca INAINTE sa se ia dreptul`);
+    assert.ok(iTrimite < iConf, `${nume}: mesajul e confirmat inainte sa plece`);
+  }
+
+  /*
+    ⚠ Si proba de automatizare NU are voie sa treaca prin jurnal: e un mesaj
+    catre comerciant, iar unul intrat in cifre ar face ca „7 contactate" sa
+    insemne „6 clienti si o data eu".
+  */
+  const proba = corpul("trimiteProbaAutomatizare");
+  assert.doesNotMatch(
+    proba, /revendicaTrimiterea|confirmaTrimiterea|recovery_sends/,
+    "proba de automatizare lasa urma in jurnalul mesajelor",
+  );
 });

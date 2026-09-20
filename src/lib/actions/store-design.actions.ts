@@ -58,7 +58,7 @@ async function loadOwnedStore(businessId: string): Promise<OwnedStore | { error:
     businessId: biz.id,
     slug: biz.slug,
     ctx: {
-      primaryColor: biz.primary_color ?? "#1AB554",
+      primaryColor: biz.primary_color ?? "#07c527",
       pageContent: (settings?.page_content as Record<string, unknown>) ?? {},
       features: (biz.features as Record<string, unknown>) ?? {},
       coverUrl: biz.cover_url,

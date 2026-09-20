@@ -159,7 +159,7 @@ export default async function PolicyPage({ params }: Props) {
     content = templates[meta.key] ?? "";
   }
 
-  const color = business.primary_color ?? "#1AB554";
+  const color = business.primary_color ?? "#07c527";
   const showContent = enabled && content.trim() !== "";
 
   /*

@@ -341,7 +341,7 @@ export async function metadataPaginiiPrincipale(a: {
   // sau de bannere.
   const designPtSeo = parseStoreDesign(
     settings?.storefront_design ?? null,
-    { primaryColor: "#1AB554", pageContent: {}, features: {} },
+    { primaryColor: "#07c527", pageContent: {}, features: {} },
   );
 
   const displayName = business.store_name ?? business.business_name;

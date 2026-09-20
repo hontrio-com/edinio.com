@@ -53,9 +53,9 @@ export const INK_3 = "#8A8A94";
  *
  * ⚠ AICI ERAU DOI VERZI. `#12874A` era scris de mână în nouă fișiere, cu cinci
  * declarații separate de `GREEN_TEXT` și același comentariu copiat lângă fiecare.
- * Motivul lui era corect — `--color-brand` (#1AB554) are 2,70:1 pe alb, sub prag
- * — dar `--primary` (#008236) era deja acolo și are 4,95:1, adică mai bine decât
- * cei 4,57:1 ai lui #12874A. Doi verzi închiși la 0,4 diferență, pe aceleași
+ * Motivul lui era corect — `--color-brand` (azi #07c527) are 2,33:1 pe alb, sub
+ * prag — dar `--primary` (#008215) era deja acolo și are 5,00:1, adică mai bine decât
+ * cei 4,57:1 ai lui #12874A. Doi verzi închiși la o jumătate de treaptă, pe aceleași
  * pagini, nu se văd ca decizie.
  *
  * Doctrina întreagă, cu ce rol are fiecare din cei doi verzi rămași, e scrisă în

@@ -12,7 +12,7 @@ import type { DesignContext, StoreDesign } from "@/lib/storefront/design/types";
  * pagini goale la coada.
  */
 
-const ctx: DesignContext = { primaryColor: "#1AB554", pageContent: {}, features: {} };
+const ctx: DesignContext = { primaryColor: "#07c527", pageContent: {}, features: {} };
 const cu = (variant: string, settings: Record<string, unknown> = {}): StoreDesign => {
   const d = buildClassicDesign(ctx);
   return { ...d, shop: { page: { ...d.shop.page, variant, settings } } };

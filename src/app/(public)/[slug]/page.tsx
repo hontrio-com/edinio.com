@@ -250,7 +250,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
    * nu se intampla nimic, fiindca serverul nu ceruse produsele.
    */
   const resolved = resolveDesign(designDeRandat, {
-    primaryColor: business.primary_color ?? "#1AB554",
+    primaryColor: business.primary_color ?? "#07c527",
     pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: business.cover_url,
@@ -537,7 +537,7 @@ export default async function SlugPage({ params, searchParams }: Props) {
       // Modul „un singur produs": nu exista catalog in spate, deci butonul de
       // cos din header n-are unde sa duca.
       const opsResolved = resolveDesign(designDeRandat, {
-        primaryColor: business.primary_color ?? "#1AB554",
+        primaryColor: business.primary_color ?? "#07c527",
         pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
         features: (business.features as Record<string, unknown>) ?? {},
         coverUrl: business.cover_url,

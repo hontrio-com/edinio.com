@@ -253,7 +253,7 @@ function PlanPageContent() {
         business_name: String(details.business_name ?? ""),
         phone: String(details.phone ?? ""),
         slug: String(details.slug ?? ""),
-        primary_color: "#1AB554",
+        primary_color: "#07c527",
         /*
           ⚠ ID-UL SESIUNII, ca serverul sa nu acorde un trial cuiva care a platit.
           Nu e un „am platit" pe cuvantul nostru: acolo se duce la Stripe si

@@ -13,11 +13,11 @@ const CONTACT_BLOCK = `
   <div style="margin-top:24px;padding:16px 18px;background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;">
     <p style="margin:0;font-size:13px;color:#71717a;">Ai nevoie de ajutor? Suntem aici 7 zile din 7:</p>
     <p style="margin:6px 0 0 0;font-size:13px;color:#71717a;">
-      <a href="mailto:contact@edinio.com" style="color:#1AB554;text-decoration:none;font-weight:600;">contact@edinio.com</a>
+      <a href="mailto:contact@edinio.com" style="color:#07c527;text-decoration:none;font-weight:600;">contact@edinio.com</a>
       &nbsp;&middot;&nbsp;
-      <a href="tel:+40750456809" style="color:#1AB554;text-decoration:none;font-weight:600;">0750 456 809</a>
+      <a href="tel:+40750456809" style="color:#07c527;text-decoration:none;font-weight:600;">0750 456 809</a>
       &nbsp;&middot;&nbsp;
-      <a href="https://wa.me/40750456809" style="color:#1AB554;text-decoration:none;font-weight:600;">WhatsApp</a>
+      <a href="https://wa.me/40750456809" style="color:#07c527;text-decoration:none;font-weight:600;">WhatsApp</a>
     </p>
   </div>
 `;
@@ -25,7 +25,7 @@ const CONTACT_BLOCK = `
 function btn(text: string, href: string): string {
   return `
     <div style="text-align:center;margin:24px 0 8px 0;">
-      <a href="${SITE}${href}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${SITE}${href}" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         ${text}
       </a>
     </div>
@@ -51,7 +51,7 @@ function wrap(content: string): string {
       <tr><td align="center" style="padding-top:20px;">
         <p style="margin:0;font-size:12px;color:#a1a1aa;">
           Edinio &mdash; Platforma ta de e-commerce &middot;
-          <a href="${SITE}" style="color:#1AB554;text-decoration:none;">edinio.com</a>
+          <a href="${SITE}" style="color:#07c527;text-decoration:none;">edinio.com</a>
         </p>
       </td></tr>
     </table>

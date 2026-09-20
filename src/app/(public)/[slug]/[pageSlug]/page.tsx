@@ -299,7 +299,7 @@ export default async function CustomPage({ params }: Props) {
   const dateStructurate = page.is_published
     ? await dateStructuratePagina(supabase, business, page, blocks)
     : null;
-  const color = business.primary_color ?? "#1AB554";
+  const color = business.primary_color ?? "#07c527";
   const social = (business.social ?? {}) as Record<string, string>;
   const pageCss = sanitizeCss(page.page_css);
 

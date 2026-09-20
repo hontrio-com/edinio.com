@@ -260,7 +260,7 @@ after(async () => {
   await new Promise<void>((r) => baza.close(() => r()));
 });
 
-const CTX = { primaryColor: "#1AB554", pageContent: {}, features: {} };
+const CTX = { primaryColor: "#07c527", pageContent: {}, features: {} };
 /**
  * Designul cu pagina de catalog aprinsa, cu reglajele ei (implicit: subtitlul caian);
  * `faraCatalog()` = designul clasic, fara pagina de catalog.

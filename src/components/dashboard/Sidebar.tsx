@@ -19,7 +19,7 @@ type Business = Database["public"]["Tables"]["businesses"]["Row"];
 */
 
 export function BusinessCard({ business }: { business: Business | null }) {
-  const color = business?.primary_color ?? "#1AB554";
+  const color = business?.primary_color ?? "#07c527";
   const name = business?.store_name ?? business?.business_name ?? "Magazinul tau";
   const initial = name[0]?.toUpperCase() ?? "M";
   const domain = business?.custom_domain

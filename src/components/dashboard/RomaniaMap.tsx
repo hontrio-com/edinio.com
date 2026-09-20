@@ -51,7 +51,7 @@ export function RomaniaMap({ svgContent, countyData, primaryColor }: {
   const maxOrders = Math.max(...countyData.map(d => d.orders), 1);
 
   // Build per-county color styles
-  const { r, g, b } = hexToRgb(primaryColor.startsWith("#") ? primaryColor : "#1AB554");
+  const { r, g, b } = hexToRgb(primaryColor.startsWith("#") ? primaryColor : "#07c527");
 
   const styleRules = countyData.map(({ code, orders }) => {
     if (orders === 0) return `#${code} { fill: #e5e7eb; }`;

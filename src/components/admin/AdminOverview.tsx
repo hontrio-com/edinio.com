@@ -309,15 +309,15 @@ export function AdminOverview({
             <AreaChart data={revenueChart} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="adminRevGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#1AB554" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="#1AB554" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#07c527" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#07c527" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#a1a1aa" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: "#a1a1aa" }} axisLine={false} tickLine={false} />
               <Tooltip formatter={(v: unknown) => [`${v} lei`, "Venituri"]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-              <Area type="monotone" dataKey="total" stroke="#1AB554" strokeWidth={2} fill="url(#adminRevGrad)" />
+              <Area type="monotone" dataKey="total" stroke="#07c527" strokeWidth={2} fill="url(#adminRevGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>

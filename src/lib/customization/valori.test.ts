@@ -227,7 +227,7 @@ test("⚠ plafonul NOSTRU sta peste cel al comerciantului", () => {
 
 test("⚠ culoarea trebuie sa fie chiar o culoare", () => {
   const d = def([{ id: "c", type: "color", label: "Culoare", required: true }]);
-  assert.equal(normalizeazaValorile(d, { c: "#1AB554" }).ok, true);
+  assert.equal(normalizeazaValorile(d, { c: "#07c527" }).ok, true);
   assert.equal(normalizeazaValorile(d, { c: "rosu" }).ok, false);
   assert.equal(normalizeazaValorile(d, { c: "javascript:alert(1)" }).ok, false);
 });

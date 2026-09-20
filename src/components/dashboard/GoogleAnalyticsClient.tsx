@@ -912,7 +912,7 @@ function KpiGrid({ totals, prev }: { totals: GaTotals; prev: GaTotals }) {
 
 /* ─── Timeseries chart ────────────────────────────────────────────────────── */
 
-const USERS_COLOR = "#1AB554";
+const USERS_COLOR = "#07c527";
 const SESSIONS_COLOR = "#F9AB00";
 
 function TimeseriesChart({ data }: { data: GaDashboardData["timeseries"] }) {

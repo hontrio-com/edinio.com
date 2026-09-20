@@ -22,7 +22,7 @@ interface Fixture {
 }
 
 const base = (over: Partial<DesignContext> = {}): DesignContext => ({
-  primaryColor: "#1AB554",
+  primaryColor: "#07c527",
   pageContent: {},
   features: {},
   ...over,
@@ -36,7 +36,7 @@ const FIXTURES: Fixture[] = [
       pageContent: {
         store_bg_color: "#FDF2F8",
         reviews_section: { items: [], title: "Ce spun clientii nostri", enabled: true },
-        announcement_bar: { text: "PLATA LA LIVRARE", enabled: true, bg_color: "#1AB554" },
+        announcement_bar: { text: "PLATA LA LIVRARE", enabled: true, bg_color: "#07c527" },
         show_featured_section: true,
         featured_section_title: "Recomandate",
         show_shipping_progress: true,

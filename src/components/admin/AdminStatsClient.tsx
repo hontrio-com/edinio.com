@@ -27,7 +27,7 @@ interface Props {
 
 // PLAN_COLORS and PLAN_LABELS imported from @/lib/plans
 
-const CHART_COLORS = ["#1AB554", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316", "#ec4899"];
+const CHART_COLORS = ["#07c527", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#f97316", "#ec4899"];
 
 function shortMonth(m: string) {
   const [year, month] = m.split("-");
@@ -161,7 +161,7 @@ export function AdminStatsClient({
             <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Bar dataKey="Utilizatori noi" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Comenzi" fill="#1AB554" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Comenzi" fill="#07c527" radius={[4, 4, 0, 0]} />
             <Bar dataKey="Tichete suport" fill="#f59e0b" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
@@ -174,8 +174,8 @@ export function AdminStatsClient({
           <AreaChart data={revenueMonthly}>
             <defs>
               <linearGradient id="gradOrders" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#1AB554" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#1AB554" stopOpacity={0} />
+                <stop offset="5%" stopColor="#07c527" stopOpacity={0.2} />
+                <stop offset="95%" stopColor="#07c527" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="gradInv" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2} />
@@ -187,7 +187,7 @@ export function AdminStatsClient({
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Area type="monotone" dataKey="Venituri comenzi (lei)" stroke="#1AB554" fill="url(#gradOrders)" strokeWidth={2} />
+            <Area type="monotone" dataKey="Venituri comenzi (lei)" stroke="#07c527" fill="url(#gradOrders)" strokeWidth={2} />
             <Area type="monotone" dataKey="Abonamente (lei)" stroke="#f59e0b" fill="url(#gradInv)" strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>

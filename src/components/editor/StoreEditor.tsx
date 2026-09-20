@@ -102,7 +102,7 @@ interface PageContent {
 const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors";
 
 const COLOR_PRESETS = [
-  "#1AB554", "#1E3A5F", "#8B1A1A", "#374151", "#D97706", "#6D28D9", "#E11D48", "#0891B2",
+  "#07c527", "#1E3A5F", "#8B1A1A", "#374151", "#D97706", "#6D28D9", "#E11D48", "#0891B2",
 ];
 
 // ─── Sub-components ───────────────────────────────────────────
@@ -1011,7 +1011,7 @@ export function StoreEditor({ business, storeSettings, plan = "free", categories
               <input type="color" value={customHex}
                 onChange={(e) => { setCustomHex(e.target.value); setPrimaryColor(e.target.value); }}
                 className="w-8 h-8 rounded border border-border cursor-pointer" />
-              <input type="text" value={customHex} maxLength={7} placeholder="#1AB554"
+              <input type="text" value={customHex} maxLength={7} placeholder="#07c527"
                 onChange={(e) => { setCustomHex(e.target.value); if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) setPrimaryColor(e.target.value); }}
                 className="w-28 px-2 py-1.5 text-xs border border-border rounded-lg bg-surface font-mono focus:outline-none focus:border-primary" />
             </div>

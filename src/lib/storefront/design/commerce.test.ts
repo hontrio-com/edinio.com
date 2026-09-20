@@ -9,7 +9,7 @@ import type { DesignContext, StoreDesign } from "./types";
  * deschide sau inchide o ruta publica pe toate magazinele deodata.
  */
 
-const ctx: DesignContext = { primaryColor: "#1AB554", pageContent: {}, features: {} };
+const ctx: DesignContext = { primaryColor: "#07c527", pageContent: {}, features: {} };
 const classic = () => buildClassicDesign(ctx);
 const cuVarianta = (
   variant: string,

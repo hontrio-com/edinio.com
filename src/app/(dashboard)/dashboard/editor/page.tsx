@@ -132,7 +132,7 @@ async function ContinutEditor({
    * suprafata care duce acolo pare ca merge si lasa cadrul gol.
    */
   const design = parseStoreDesign((storeSettings as { storefront_design?: unknown } | null)?.storefront_design, {
-    primaryColor: business.primary_color ?? "#1AB554",
+    primaryColor: business.primary_color ?? "#07c527",
     pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: business.cover_url,
@@ -149,7 +149,8 @@ async function ContinutEditor({
         produsSlug: produs?.slug ?? null,
         cosPePagina: cartOnPage(design),
         comandaPePagina: checkoutOnPage(design),
-        unSingurProdus: parseStoreMode(storeSettings?.page_content).mode === "one_product",
+        unSingurProdus: parseStoreMode(storeSettings?.page_content).mode === "one_product",
+
       }}
     />
   );

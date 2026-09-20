@@ -7,7 +7,7 @@ import { SECTION_REGISTRY } from "./registry";
 import type { StoreDesign } from "./types";
 
 function design(variant: string, enabled = true): StoreDesign {
-  const d = buildClassicDesign({ primaryColor: "#1AB554", pageContent: {}, features: {} });
+  const d = buildClassicDesign({ primaryColor: "#07c527", pageContent: {}, features: {} });
   d.chrome.header = { ...d.chrome.header, variant, enabled };
   d.chrome.announcement = {
     id: "announcement",

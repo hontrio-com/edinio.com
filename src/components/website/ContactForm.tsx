@@ -130,7 +130,7 @@ export function ContactForm() {
     return (
       <div className="placa rounded-[16px] px-6 py-10 text-center">
         <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
-          {/* `--primary`, nu verdele de marca: #1AB554 are pe alb 2,70:1. Doctrina
+          {/* `--primary`, nu verdele de marca: #07c527 are pe alb 2,33:1. Doctrina
               celor doi verzi e in capul lui `globals.css`. */}
           <Check className="h-5 w-5 text-primary" strokeWidth={2.5} aria-hidden="true" />
         </span>

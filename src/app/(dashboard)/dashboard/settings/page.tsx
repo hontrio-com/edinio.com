@@ -214,7 +214,7 @@ async function ContinutSetari({
     branding: {
       storeName: bizRow?.store_name || bizRow?.business_name || "Magazinul meu",
       logoUrl: bizRow?.logo_url ?? null,
-      color: bizRow?.primary_color || "#1AB554",
+      color: bizRow?.primary_color || "#07c527",
       storeUrl: seoPreviewUrl,
     },
     emailBranding: {

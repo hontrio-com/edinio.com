@@ -20,7 +20,7 @@ import { VERDE_CITIBIL } from "./linii";
   Fără rândurile de aici, primul om care „repară culoarea ca la brand" pune
   hexul brut, pagina arată bine pe ecranul lui, și numele devin ilizibile pentru
   cine nu vede perfect. E aceeași grijă pentru care verdele site-ului nu e
-  `#1AB554` — vezi nota din capul lui `globals.css`.
+  `#07c527` — vezi nota din capul lui `stil-comun.css`.
 */
 
 /** Luminanța relativă, după formula WCAG. */
@@ -59,7 +59,7 @@ test("nicio culoare nu coboară sub pragul de citire pe alb", () => {
     proba care exista ca să nu treacă nimic nemăsurat.
 
     Acum: hexurile se măsoară, iar restul trebuie să fie tokenul site-ului, a
-    cărui valoare e documentată (4,95:1, vezi capul lui `globals.css`). Orice
+    cărui valoare e documentată (5,00:1, vezi capul lui `stil-comun.css`). Orice
     altceva — o culoare CSS scrisă direct, un `rgb(...)`, un token necunoscut —
     pică, fiindcă nimeni nu i-a măsurat contrastul.
   */
@@ -92,9 +92,9 @@ test("martor: măsurătoarea chiar respinge un hex de marcă brut", () => {
   /*
     ⚠ Fără rândul ăsta, proba de deasupra ar fi verde și pe o funcție de contrast
     scrisă greșit care întoarce mereu un număr mare. Verdele de marcă al Edinio e
-    exemplul din depozit cu valoarea măsurată: 2,70:1.
+    exemplul din depozit cu valoarea măsurată: 2,33:1.
   */
-  assert.ok(contrastPeAlb("#1AB554") < 4.5, "verdele de marcă ar fi trebuit respins");
+  assert.ok(contrastPeAlb("#07c527") < 4.5, "verdele de marcă ar fi trebuit respins");
   assert.ok(contrastPeAlb("#95BF47") < 4.5, "verdele Shopify brut ar fi trebuit respins");
   assert.ok(contrastPeAlb("#000000") > 4.5, "negrul ar fi trebuit acceptat");
 });
@@ -106,7 +106,7 @@ test("Edinio poartă verdele site-ului, nu unul scris aici", () => {
 
     ⚠ SE COMPARĂ CU TOKENUL, NU CU UN HEX. Prima variantă a probei aștepta
     `#12874A` — verdele DE DINAINTE, pe care depozitul l-a înlocuit cu
-    `var(--primary)` (4,95:1 în loc de 4,54:1). Scrisă cu hexul, proba ar fi
+    `var(--primary)` (5,00:1 în loc de 4,51:1). Scrisă cu hexul, proba ar fi
     cerut întoarcerea la culoarea veche la prima rulare de după o schimbare de
     temă. A picat, și bine a făcut.
   */

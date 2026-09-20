@@ -253,7 +253,7 @@ export default async function ProductDetailPage({ params }: Props) {
   // Acelasi header si footer ca pe pagina de magazin, din aceeasi configuratie.
   const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
   const resolved = resolveDesign(storeSettings?.storefront_design, {
-    primaryColor: business.primary_color ?? "#1AB554",
+    primaryColor: business.primary_color ?? "#07c527",
     pageContent: pageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: business.cover_url,

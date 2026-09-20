@@ -126,7 +126,7 @@ export function buildChromeData({
     // din editor — ramane forma cu interogare, adica exact ce era inainte.
     categoriiPePagina: !!design && shopOnPage(design),
     isHome,
-    color: business.primary_color ?? "#1AB554",
+    color: business.primary_color ?? "#07c527",
     pageContent,
     features: (business.features as StoreFeatures) ?? {},
     social: (business.social as StoreSocial) ?? {},

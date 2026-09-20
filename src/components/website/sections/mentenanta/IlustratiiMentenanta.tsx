@@ -663,7 +663,7 @@ function Securitate() {
         mainCircleSize={PRIMUL_CERC}
         mainCircleOpacity={0.72}
         numCircles={7}
-        clasaCerc="border-[#5CC98A] bg-[#1AB554]/[0.045] shadow-none"
+        clasaCerc="border-[#5CC98A] bg-[#07c527]/[0.045] shadow-none"
         className="[mask-image:radial-gradient(120%_105%_at_50%_50%,#000_16%,rgba(0,0,0,0.5)_52%,transparent_86%)]"
       />
 

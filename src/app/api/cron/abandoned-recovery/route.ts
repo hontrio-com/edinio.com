@@ -311,7 +311,7 @@ export async function GET(req: NextRequest) {
             total: proaspat.total,
             /* ⚠ Vezi `preturiSigure`: o linie cazuta pe catalog nu are voie sa devina promisiune. */
             preturiSigure: proaspat.sigur,
-            color: biz.primary_color ?? "#1AB554",
+            color: biz.primary_color ?? "#07c527",
             message: step.message ? interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName }) : undefined,
             discountCode: step.discount_code ?? undefined,
             unsubscribeUrl: urlDezabonare(PLATFORM_ORIGIN, store.businessId, canal.email),

@@ -289,7 +289,7 @@ export async function metadataMagazin({ slug, sp, categorieSlug, esteCautare }: 
    */
   const setari = citesteSetariMagazin(parseStoreDesign(
     settings?.storefront_design ?? null,
-    { primaryColor: "#1AB554", pageContent: {}, features: {} },
+    { primaryColor: "#07c527", pageContent: {}, features: {} },
   ));
 
   /*

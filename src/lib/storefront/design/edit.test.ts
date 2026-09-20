@@ -21,7 +21,7 @@ import type { DesignContext } from "./types";
  * azi n-au configuratie salvata).
  */
 
-const ctx: DesignContext = { primaryColor: "#1AB554", pageContent: {}, features: {} };
+const ctx: DesignContext = { primaryColor: "#07c527", pageContent: {}, features: {} };
 const design = () => buildClassicDesign(ctx);
 const kinds = (d: ReturnType<typeof design>) => d.home.map((s) => s.kind);
 

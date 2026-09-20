@@ -99,7 +99,7 @@ export async function RandeazaMagazin({ slug, sp, categorieSlug, esteCautare }: 
   const esteEditorDesign = esteEditorDeDesign(sp as { preview?: string; editor?: string }, isOwner);
   const useDraft = esteEditorDesign && !!storeSettings?.storefront_design_draft;
   const resolved = resolveDesign(useDraft ? storeSettings?.storefront_design_draft : storeSettings?.storefront_design, {
-    primaryColor: business.primary_color ?? "#1AB554",
+    primaryColor: business.primary_color ?? "#07c527",
     pageContent: (storeSettings?.page_content as Record<string, unknown>) ?? {},
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: business.cover_url,

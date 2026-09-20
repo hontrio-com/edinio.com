@@ -293,7 +293,7 @@ export async function getAbandonedCartsData(
   const smsEnabled = smsoEnabled || !!(notice?.enabled && notice.api_token && notice.abandoned?.enabled);
 
   const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
-  const primaryColor = biz.primary_color ?? "#1AB554";
+  const primaryColor = biz.primary_color ?? "#07c527";
 
   const windowStart = new Date(Date.now() - 90 * 86400000).toISOString();
   const { data: rowsData } = await supabase
@@ -487,7 +487,7 @@ export async function sendAbandonedCartEmail(
       total: proaspat.total,
       /* ⚠ Vezi `preturiSigure`: o linie cazuta pe catalog nu are voie sa devina promisiune. */
       preturiSigure: proaspat.sigur,
-      color: biz.primary_color ?? "#1AB554",
+      color: biz.primary_color ?? "#07c527",
       message: message?.trim() ? interpolateRecoveryMessage(message, { name: cart.customer_name, store: biz.store_name ?? biz.business_name }) : undefined,
       discountCode: discountCode?.trim() || undefined,
     }, emailSender);

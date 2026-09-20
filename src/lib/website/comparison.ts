@@ -216,7 +216,7 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
  * Nu e nevoie de niciun `lg:` care să o stingă: rândurile astea sunt `lg:hidden`.
  *
  * ⚠ NU SUNT HEXURILE DE MARCĂ, ȘI DINADINS. Aceeași regulă ca la verdele
- * nostru, care nu e `#1AB554` fiindcă acela are 2,70:1 pe alb. Măsurat pentru
+ * nostru, care nu e `#07c527` fiindcă acela are 2,33:1 pe alb. Măsurat pentru
  * fiecare, pe alb, la 13px (prag 4,5:1):
  *
  *   Shopify      #95BF47 → 2,14:1  ✗   se întunecă la #627E2F → 4,62:1

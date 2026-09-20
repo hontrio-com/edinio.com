@@ -155,9 +155,9 @@ function BlocLegal({ bloc }: { bloc: Bloc }) {
       return (
         /*
           Rezervat propozițiilor prin care documentul se declară EL ÎNSUȘI
-          esențial. Verdele e `--primary`, nu verdele de marcă: #1AB554 are pe
-          alb 2,70:1, sub pragul pentru text — aceeași regulă ca peste tot pe
-          site. Doctrina celor doi verzi e în capul lui `globals.css`.
+          esențial. Verdele e `--primary`, nu verdele de marcă: #07c527 are pe
+          alb 2,33:1, sub pragul pentru text — aceeași regulă ca peste tot pe
+          site. Doctrina celor doi verzi e în capul lui `stil-comun.css`.
         */
         <p className="mt-5 rounded-r-[8px] border-l-2 border-l-primary bg-tint px-4 py-3.5 text-[15px] font-medium leading-[1.7] text-ink">
           {bloc.text}

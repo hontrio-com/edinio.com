@@ -145,7 +145,7 @@ export function buildStoreSender(emailConfig: EmailConfig, business: SenderBusin
       storeName: business.store_name || business.business_name,
       // Email-specific logo/color override, falling back to the store's own.
       logoUrl: bo?.logo ? bo.logo : business.logo_url,
-      color: bo?.color || business.primary_color || "#1AB554",
+      color: bo?.color || business.primary_color || "#07c527",
       storeUrl: storeBaseUrl({ slug: business.slug, custom_domain: business.custom_domain }),
     },
     templates: emailConfig.templates ?? {},

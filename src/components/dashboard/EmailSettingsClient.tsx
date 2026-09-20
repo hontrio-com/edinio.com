@@ -28,7 +28,7 @@ export interface EmailSettingsInitial {
 const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 function normalizeHex(c: string): string {
-  return /^#[0-9a-fA-F]{6}$/.test(c) ? c : "#1AB554";
+  return /^#[0-9a-fA-F]{6}$/.test(c) ? c : "#07c527";
 }
 
 function TemplateCard({ businessId, def, initial, branding, onEditLogo }: {

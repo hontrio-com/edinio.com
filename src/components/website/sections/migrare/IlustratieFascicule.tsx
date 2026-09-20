@@ -164,8 +164,8 @@ const CULORI = {
   pathColor: HAIRLINE_ON_WHITE,
   pathWidth: 1.5,
   pathOpacity: 1,
-  gradientStartColor: "#4fc87a",
-  gradientStopColor: "#1AB554",
+  gradientStartColor: "#4dcb50",
+  gradientStopColor: "#07c527",
   duration: 4,
 } as const;
 

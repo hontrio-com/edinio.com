@@ -99,7 +99,7 @@ function baseTemplate(content: string): string {
           <td align="center" style="padding-top:20px;">
             <p style="margin:0;font-size:12px;color:#a1a1aa;">
               Edinio &mdash; Platforma ta de e-commerce &middot;
-              <a href="${SITE_URL}" style="color:#1AB554;text-decoration:none;">edinio.com</a>
+              <a href="${SITE_URL}" style="color:#07c527;text-decoration:none;">edinio.com</a>
             </p>
           </td>
         </tr>
@@ -251,7 +251,7 @@ export async function sendOrderConfirmationToCustomer(
       ${totalsRows}
       <tr>
         <td style="padding-top:10px;font-size:16px;font-weight:700;color:#18181b;border-top:2px solid #e4e4e7;">Total de plata</td>
-        <td style="padding-top:10px;font-size:16px;font-weight:700;color:#1AB554;text-align:right;border-top:2px solid #e4e4e7;">${formatPrice(order.total)}</td>
+        <td style="padding-top:10px;font-size:16px;font-weight:700;color:#07c527;text-align:right;border-top:2px solid #e4e4e7;">${formatPrice(order.total)}</td>
       </tr>
     </table>
 
@@ -297,7 +297,7 @@ export async function sendAbandonedCartRecovery(
   // `primary_color` vine din setarile magazinului si intra intr-un atribut
   // `style`. Masurat 2026-08-04: toate cele 127 de magazine au azi un hex valid,
   // deci escaparea nu schimba nimic pe ecran, doar inchide iesirea din atribut.
-  const color = esc(data.color || "#1AB554");
+  const color = esc(data.color || "#07c527");
   const first = data.customerName?.trim().split(/\s+/)[0];
 
   /*
@@ -390,7 +390,7 @@ export async function sendAccountWelcomeEmail(
     </div>
 
     <div style="text-align:center;">
-      <a href="${dashboardUrl}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${dashboardUrl}" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Configureaza magazinul
       </a>
     </div>
@@ -424,7 +424,7 @@ export async function sendWelcomeEmail(
     <p style="margin:0 0 28px 0;font-size:14px;color:#71717a;">Urmatorul pas: adauga produse si configureaza-ti magazinul din panoul de control.</p>
 
     <div style="text-align:center;">
-      <a href="${dashboardUrl}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${dashboardUrl}" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Mergi la dashboard
       </a>
     </div>
@@ -443,7 +443,7 @@ export async function sendMfaOtpEmail(to: string, otp: string) {
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cod de verificare</h2>
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Foloseste codul de mai jos pentru a confirma autentificarea in contul tau Edinio.</p>
     <div style="text-align:center;margin:28px 0;padding:20px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;">
-      <span style="font-size:40px;font-weight:800;letter-spacing:10px;color:#1AB554;font-family:monospace;">${esc(otp)}</span>
+      <span style="font-size:40px;font-weight:800;letter-spacing:10px;color:#07c527;font-family:monospace;">${esc(otp)}</span>
     </div>
     <p style="margin:0;font-size:13px;color:#71717a;text-align:center;">Codul este valabil <strong>10 minute</strong>. Daca nu ai initiat tu aceasta autentificare, ignora acest email.</p>
   `;
@@ -534,7 +534,7 @@ export function buildContactAdminHtml(data: MesajDeContact): string {
       <p style="margin:0;font-size:14px;color:#18181b;line-height:1.65;white-space:pre-wrap;">${esc(data.mesaj)}</p>
     </div>
     <div style="text-align:center;margin-top:24px;">
-      <a href="mailto:${esc(data.email)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="mailto:${esc(data.email)}" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Raspunde clientului
       </a>
     </div>
@@ -650,7 +650,7 @@ export function buildMigrationLeadHtml(data: CerereDeMigrare): string {
     </table>
     ${mentiuni}
     <div style="text-align:center;margin-top:24px;">
-      <a href="tel:${esc(data.telefon.replace(/[\s.\-()]/g, ""))}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="tel:${esc(data.telefon.replace(/[\s.\-()]/g, ""))}" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Suna clientul
       </a>
     </div>
@@ -925,7 +925,7 @@ export async function sendBrokenDomainToOwner(to: string, items: DomeniuStricat[
     <p style="margin:0 0 24px 0;font-size:14px;color:#71717a;">Verificam din ora in ora domeniile conectate la Edinio. La ${unul ? "domeniul tau" : "domeniile tale"} am gasit o problema si vrem sa afli de la noi, nu de la un client care nu a putut intra in magazin.</p>
     ${blocuri}
     <div style="text-align:center;margin-top:24px;">
-      <a href="${SITE_URL}/dashboard/settings" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${SITE_URL}/dashboard/settings" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Deschide setarile de domeniu
       </a>
     </div>
@@ -1015,7 +1015,7 @@ export async function sendNewSupportTicketToAdmin(data: {
       <p style="margin:0;font-size:13px;color:#3f3f46;white-space:pre-wrap;">${esc(data.content)}</p>
     </div>
     <div style="text-align:center;">
-      <a href="${escapeUrl(`${SITE_URL}/dashboard/suport/${data.ticketId}`)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(`${SITE_URL}/dashboard/suport/${data.ticketId}`)}" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Vezi tichetul
       </a>
     </div>
@@ -1042,7 +1042,7 @@ export async function sendSupportReplyToAdmin(data: {
       <p style="margin:0;font-size:13px;color:#3f3f46;white-space:pre-wrap;">${esc(data.content)}</p>
     </div>
     <div style="text-align:center;">
-      <a href="${escapeUrl(`${SITE_URL}/dashboard/suport/${data.ticketId}`)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(`${SITE_URL}/dashboard/suport/${data.ticketId}`)}" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Raspunde
       </a>
     </div>
@@ -1070,7 +1070,7 @@ export async function sendAgentReplyToUser(data: {
       <p style="margin:0;font-size:13px;color:#15803d;white-space:pre-wrap;">${esc(data.content)}</p>
     </div>
     <div style="text-align:center;">
-      <a href="${escapeUrl(ticketUrl)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(ticketUrl)}" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Raspunde sau vezi conversatia
       </a>
     </div>
@@ -1143,7 +1143,7 @@ export async function sendDomainOrderToAdmin(data: {
               </td>
               <td style="width:33%;vertical-align:top;">
                 <span style="font-size:11px;font-weight:600;color:#a1a1aa;text-transform:uppercase;">Total</span>
-                <p style="margin:2px 0 0 0;font-size:13px;font-weight:700;color:#1AB554;">${data.totalPrice} lei</p>
+                <p style="margin:2px 0 0 0;font-size:13px;font-weight:700;color:#07c527;">${data.totalPrice} lei</p>
               </td>
             </tr>
           </table>
@@ -1152,7 +1152,7 @@ export async function sendDomainOrderToAdmin(data: {
     </table>
 
     <div style="text-align:center;">
-      <a href="${adminUrl}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${adminUrl}" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Gestioneaza comanda
       </a>
     </div>
@@ -1203,7 +1203,7 @@ export async function sendAdminNewStoreNotification(data: {
       <p style="margin:0;font-size:14px;color:#18181b;"><strong>${esc(data.businessName)}</strong></p>
       <p style="margin:4px 0 0 0;font-size:13px;color:#71717a;">${esc(data.ownerName)} (${esc(data.ownerEmail)})</p>
       <p style="margin:6px 0 0 0;font-size:13px;">
-        <a href="${escapeUrl(`${SITE_URL}/${data.slug}`)}" style="color:#1AB554;text-decoration:none;font-weight:600;">edinio.com/${esc(data.slug)}</a>
+        <a href="${escapeUrl(`${SITE_URL}/${data.slug}`)}" style="color:#07c527;text-decoration:none;font-weight:600;">edinio.com/${esc(data.slug)}</a>
       </p>
     </div>
   `;
@@ -1369,11 +1369,11 @@ export async function sendNewOrderEmail(
       </tr>
       ${itemsRows}
       ${totalsRows}
-      ${totalRow("Total", formatPrice(order.total), { bold: true, color: "#1AB554", border: true })}
+      ${totalRow("Total", formatPrice(order.total), { bold: true, color: "#07c527", border: true })}
     </table>
 
     <div style="text-align:center;margin-top:28px;">
-      <a href="${escapeUrl(dashboardUrl)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(dashboardUrl)}" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Vezi comanda in dashboard
       </a>
     </div>
@@ -1537,7 +1537,7 @@ export async function sendSubscriptionActivatedEmail(
     <p style="margin:0 0 28px 0;font-size:14px;color:#71717a;">Acum ai acces la toate functionalitatile incluse in planul tau. Succes cu vanzarile!</p>
 
     <div style="text-align:center;">
-      <a href="${SITE_URL}/dashboard" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${SITE_URL}/dashboard" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Mergi la dashboard
       </a>
     </div>
@@ -1577,7 +1577,7 @@ export async function sendPaymentRecoveredEmail(
     <p style="margin:0 0 28px 0;font-size:14px;color:#71717a;">Magazinul tau ramane activ si vizibil pentru clienti. Nu mai ai nimic de facut.</p>
 
     <div style="text-align:center;">
-      <a href="${SITE_URL}/dashboard" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${SITE_URL}/dashboard" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Mergi la dashboard
       </a>
     </div>
@@ -1611,7 +1611,7 @@ export async function sendPaymentFailedEmail(
     <p style="margin:0 0 28px 0;font-size:14px;color:#71717a;">Stripe va reincerca automat plata in urmatoarele zile. Daca problema persista, actualizeaza datele cardului din setari.</p>
 
     <div style="text-align:center;">
-      <a href="${SITE_URL}/dashboard/settings" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${SITE_URL}/dashboard/settings" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Actualizeaza metoda de plata
       </a>
     </div>
@@ -1649,7 +1649,7 @@ export async function sendStoreSuspendedEmail(
     <p style="margin:0 0 28px 0;font-size:14px;color:#71717a;">Pentru a reactiva magazinul, reaboneaza-te din panoul de control. Toate datele tale (produse, comenzi, setari) sunt pastrate.</p>
 
     <div style="text-align:center;">
-      <a href="${SITE_URL}/dashboard/settings" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${SITE_URL}/dashboard/settings" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Reaboneaza-te acum
       </a>
     </div>
@@ -1777,7 +1777,7 @@ export async function sendReturnRequestToMerchant(
     ${data.reason && data.reason.trim() ? `<div style="background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;padding:14px 18px;margin-top:16px;"><p style="margin:0;font-size:13px;color:#71717a;">Motiv: <span style="color:#18181b;">${esc(data.reason)}</span></p></div>` : ""}
 
     <div style="text-align:center;margin-top:28px;">
-      <a href="${SITE_URL}/dashboard/returns" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${SITE_URL}/dashboard/returns" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:13px 32px;border-radius:10px;text-decoration:none;">
         Vezi cererile de retur
       </a>
     </div>
@@ -1816,7 +1816,7 @@ export async function sendBlogSubscribeConfirmation(email: string, adresaConfirm
       Apasă butonul ca să confirmi. Dacă nu ai cerut tu, ignoră mesajul: fără apăsare nu se întâmplă nimic.
     </p>
     <div style="text-align:center;margin:28px 0;">
-      <a href="${escapeUrl(adresaConfirmare)}" style="display:inline-block;background:#1AB554;color:#ffffff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">
+      <a href="${escapeUrl(adresaConfirmare)}" style="display:inline-block;background:#07c527;color:#ffffff;font-weight:700;font-size:15px;padding:14px 32px;border-radius:10px;text-decoration:none;">
         Confirm abonarea
       </a>
     </div>

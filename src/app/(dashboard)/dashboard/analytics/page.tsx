@@ -34,7 +34,7 @@ export default async function AnalyticsPage() {
       <StatisticiClient
         businessId={business.id}
         svgContent={svgContent}
-        primaryColor={business.primary_color ?? "#1AB554"}
+        primaryColor={business.primary_color ?? "#07c527"}
         canale={(canale ?? []).map((c) => ({ canal: c.canal, comenzi: Number(c.comenzi) }))}
       />
     </div>

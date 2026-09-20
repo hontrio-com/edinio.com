@@ -69,7 +69,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
 
   const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
   const resolved = resolveDesign(storeSettings?.storefront_design, {
-    primaryColor: business.primary_color ?? "#1AB554",
+    primaryColor: business.primary_color ?? "#07c527",
     pageContent: pageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: business.cover_url,
@@ -138,7 +138,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
         <main className="flex-1">
           <CheckoutPageClient
             variant={resolved.design.commerce.checkout.variant}
-            color={business.primary_color ?? "#1AB554"}
+            color={business.primary_color ?? "#07c527"}
             basePath={basePath}
             businessId={business.id}
             shippingCost={Number(storeSettings?.default_shipping_cost ?? 20)}

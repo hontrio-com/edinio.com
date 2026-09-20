@@ -160,13 +160,14 @@ Lista e ca sa se stie **ce se uita la** dupa push, nu ca sa inlocuiasca istoricu
 
 ---
 
-## E2. ⚠ DE STERS INAINTE DE UNIRE
+## E2. Pagini de proba
 
-- `src/app/(dashboard)/dashboard/alerte/page.tsx` - pagina de proba cu toate
-  alertele de cont puse cap la cap (proba de trial, plata esuata, gratie, suspendare,
-  pasii de pornire). Facuta ca sa se poata vedea toate deodata, fiindca fiecare apare in
-  alta imprejurare. **Nu e legata din niciun meniu, dar e accesibila prin adresa oricui
-  are cont**, deci nu are ce cauta in productie.
+Niciuna. Cele doua pagini facute ca sa se vada dintr-o privire toate etichetele de stare
+(`dashboard/etichete-proba`) si toate alertele de cont (`dashboard/alerte`) au fost sterse dupa
+ce si-au facut treaba, la cererea lui. Nu mai e nimic de scos inainte de unire.
+
+⚠ Daca se mai face vreuna, se trece tot aici: nefiind legata din meniu, nu se vede in panou, dar
+oricine cu cont ajunge la ea scriind adresa.
 
 ## F. Datorii cunoscute, de hotarat inainte de final
 

@@ -71,7 +71,6 @@ function timeAgo(iso: string): string {
 export function AbandonedCartsClient({ businessId, data }: { businessId: string; data: AbandonedCartsData | null }) {
   const router = useRouter();
   const [activating, startActivate] = useTransition();
-  const [tab, setTab] = useState<"carts" | "automation">("carts");
 
   if (!data) {
     return (
@@ -139,24 +138,21 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-1 border-b border-border">
-        <button onClick={() => setTab("carts")}
-          className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors ${tab === "carts" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
-          Coșuri
-        </button>
-        <button onClick={() => setTab("automation")}
-          className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors inline-flex items-center gap-1.5 ${tab === "automation" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
-          Automatizări{!data.isPremium && <Lock className="h-3 w-3" />}
-        </button>
-      </div>
-      {tab === "carts"
-        ? <ActiveDashboard businessId={businessId} data={data} />
-        : <AbandonedAutomationsTab businessId={businessId} data={data} />}
-    </div>
-  );
+  return <ActiveDashboard businessId={businessId} data={data} />;
 }
+
+/*
+  ⚠ FILELE STAU SUB TITLU, NU DEASUPRA LUI. Asezate deasupra, pareau filele
+  panoului intreg, nu ale paginii: omul nu stia ca „Automatizări" e tot despre
+  cosuri abandonate.
+*/
+const FILE = [
+  { cheie: "prezentare", nume: "Prezentare" },
+  { cheie: "cosuri", nume: "Coșuri" },
+  { cheie: "automatizari", nume: "Automatizări" },
+] as const;
+
+type Fila = (typeof FILE)[number]["cheie"];
 
 function KpiCard({ icon: Icon, label, value, sub, accent, explicatie }: {
   icon: React.ElementType; label: string; value: string; sub?: string;
@@ -243,6 +239,7 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
     n-avea nicio legatura cu ele.
   */
   const [deHotarat, setDeHotarat] = useState<AbandonedCartRow | null>(null);
+  const [fila, setFila] = useState<Fila>("prezentare");
 
   /*
     ⚠ SOCOTEALA SE FACE PE TEXTUL CARE PLEACA, NU PE CEL DIN CASUTA.
@@ -428,6 +425,56 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
         </button>
       </div>
 
+      {/* ⚠ Filele vin DUPA titlu: ele impart pagina, nu panoul. */}
+      <div className="flex items-center gap-1 border-b border-border">
+        {FILE.map((f) => (
+          <button
+            key={f.cheie}
+            onClick={() => setFila(f.cheie)}
+            className={`px-4 py-2.5 text-sm font-medium -mb-px border-b-2 transition-colors inline-flex items-center gap-1.5 ${
+              fila === f.cheie ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {f.nume}
+            {f.cheie === "automatizari" && !data.isPremium && <Lock className="h-3 w-3" />}
+          </button>
+        ))}
+      </div>
+
+      {fila === "automatizari" && <AbandonedAutomationsTab businessId={businessId} data={data} />}
+
+      {/*
+        ⚠ SELECTORUL SE ARATA PE AMANDOUA FILELE CU CIFRE, si e acelasi: trecand
+        de la Prezentare la Coșuri, perioada NU se pierde. Altfel omul ar alege
+        „7 zile" sus si ar citi o lista de 30 dedesubt.
+      */}
+      {fila !== "automatizari" && (
+        <>
+      {/*
+        ⚠ UN SINGUR SELECTOR PENTRU AMANDOUA FILELE CU CIFRE. Cardurile,
+        produsele si lista asculta toate de el, si de-aia sta deasupra lor si
+        inaintea despartirii pe file: langa un card, ar fi parut ca schimba
+        doar cardul acela, iar pus in fiecare fila, ar fi fost doua selectoare
+        care se pot contrazice.
+      */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="inline-flex rounded-lg border border-border overflow-hidden">
+          {PERIOADE.map((p) => (
+            <button
+              key={p}
+              onClick={() => cere({ perioada: p })}
+              disabled={seIncarca}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
+                data.perioada === p ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {ETICHETE[p]}
+            </button>
+          ))}
+        </div>
+        {seIncarca && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+      </div>
+      {fila === "prezentare" && (<>
       {/* Motivational banner */}
       <div className="relative overflow-hidden rounded-2xl p-6 text-white bg-gradient-to-br from-primary to-primary/85">
         <div className="absolute -right-6 -top-6 w-32 h-32 rounded-full bg-white/10" />
@@ -449,28 +496,6 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
         </div>
       </div>
 
-      {/*
-        ⚠ UN SINGUR SELECTOR PENTRU TOATA PAGINA. Cardurile, produsele si lista
-        asculta toate de el, si de-aia sta deasupra lor, nu langa unul dintre
-        ele: langa un card, ar fi parut ca schimba doar cardul acela.
-      */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="inline-flex rounded-lg border border-border overflow-hidden">
-          {PERIOADE.map((p) => (
-            <button
-              key={p}
-              onClick={() => cere({ perioada: p })}
-              disabled={seIncarca}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
-                data.perioada === p ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {ETICHETE[p]}
-            </button>
-          ))}
-        </div>
-        {seIncarca && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-      </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -568,6 +593,9 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
         </div>
       </div>
 
+      </>)}
+
+      {fila === "cosuri" && (<>
       {/* Table */}
       <div className="rounded-2xl ring-1 ring-foreground/10 bg-card overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center gap-2">
@@ -688,6 +716,9 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
           <Bell className="h-4 w-4 shrink-0 mt-0.5" />
           <span>Activează SMSO sau notice.ro (coș abandonat) din Integrări ca să poți recupera coșurile și prin SMS, nu doar prin email.</span>
         </div>
+      )}
+      </>)}
+        </>
       )}
 
       {/* ⚠ Stergere sau ignorare: doua iesiri care arata la fel si NU fac acelasi lucru. */}

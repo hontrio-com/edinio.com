@@ -204,7 +204,13 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
 
 ### Etapa D - structura
 
-- [ ] **D1.** Trei file: Prezentare / Cosuri / Automatizari. Titlul INAINTEA filelor.
+- [x] **D1.** Trei file: Prezentare / Coșuri / Automatizări, cu titlul INAINTEA lor.
+      ⚠ Asezate deasupra titlului, filele pareau ale panoului intreg, nu ale paginii: omul nu
+      stia ca „Automatizări" e tot despre cosuri abandonate.
+      ⚠ Selectorul de perioada sta INAINTEA despartirii pe file, nu in fiecare: doua selectoare
+      s-ar putea contrazice, si trecand de la Prezentare la Coșuri perioada s-ar pierde - omul
+      ar alege „7 zile" sus si ar citi o lista de 30 dedesubt. Verificat in browser ca trece
+      dintr-o fila in alta.
 - [ ] **D2.** Prezentare: cardurile cerute, grafic abandonate vs. recuperate cu comparatie,
       palnie, tabel de produse cu rata de abandon si de recuperare.
 - [ ] **D3.** Cosuri: tabel adevarat pe desktop, carduri pe telefon; filtre; un singur status

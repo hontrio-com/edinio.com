@@ -33,8 +33,12 @@ De aici vin, in lant:
 - [x] **A3.** Datele demo capata sesiuni, ca ecranele sa poata fi judecate: 2.022 de randuri
       grupate in 734 de sesiuni (2,75 pagini pe sesiune), plus 39 de evenimente `purchase`
       legate de comenzile existente, ca rata de conversie sa aiba ce arata.
-- [ ] **A4.** Evenimente noi din vitrina: `product_view`, `add_to_cart`, `begin_checkout`,
-      `purchase`. (Fara ele nu exista palnie si nici conversie pe sursa.)
+- [x] **A4.** Evenimente noi din vitrina: `product_view` (pagina de produs), `begin_checkout`
+      (pagina de checkout), `purchase` (la plasarea comenzii, pe server) si `add_to_cart`
+      (singurul care nu se poate masura de pe server: cosul e stare de browser, deci trece
+      printr-o ruta proprie, `POST /api/analitice/eveniment`).
+      ⚠ Ruta primeste NUMAI `add_to_cart`: un `purchase` scris din browser ar fi insemnat ca
+      oricine isi poate desena rata de conversie pe care o vrea.
 
 ### Etapa B - cifrele
 
@@ -47,9 +51,12 @@ Deci, inainte de orice cifra pe 30 sau 90 de zile, sesiunile trebuie **stranse z
 `count(distinct session_id)`, in tabele noi. Altfel pagina ar arata corect o saptamana si ar
 scadea la zero in a noua zi - exact felul de defect care se vede abia peste doua luni.
 
-- [ ] **B0.** Tabele noi de agregat zilnic: pe magazin (vizitatori, sesiuni, afisari, sesiuni cu
+- [x] **B0.** Tabele noi de agregat zilnic: pe magazin (vizitatori, sesiuni, afisari, sesiuni cu
       comanda) si pe sursa/dispozitiv (sesiuni, sesiuni cu comanda). Umplute de acelasi cron
-      care strange zilele, INAINTE de stergerea randurilor brute.
+      care strange zilele, INAINTE de stergerea randurilor brute. Facut: `analitice_zilnic` si
+      `analitice_zilnic_sursa`, umplute din `agregeaza_analitice()`, deci ordinea „intai aduni,
+      apoi stergi" ramane cea garantata de cronul de acum. Verificat pe demo cu o interogare de
+      control scrisa altfel: 735 de sesiuni, 16 cu comanda, aceleasi cifre ca din randurile brute.
 - [ ] **B1.** Functii noi: vizitatori unici, sesiuni, pagini pe sesiune, rata de conversie
       adevarata (sesiuni cu comanda / sesiuni), citind agregatul pentru zilele incheiate si
       randurile brute pentru ziua de azi - aceeasi regula ca la vizitele de acum.

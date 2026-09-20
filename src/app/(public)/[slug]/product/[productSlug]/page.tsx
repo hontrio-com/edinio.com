@@ -3,6 +3,11 @@ import { textCurat } from "@/lib/storefront/date-structurate";
 import { disponibilitatePachet } from "@/lib/bundles";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
+import { after } from "next/server";
+import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
+import { scrieEvenimentAnalitic } from "@/lib/analitice/scrie";
+import { esteProprietarulMagazinului } from "@/lib/analitice/proprietar";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { esteDomeniulPropriu } from "@/lib/platform-hosts";
@@ -198,6 +203,34 @@ export default async function ProductDetailPage({ params }: Props) {
   // so it's resolved server-side with the service role — exactly like storeSettings above.
   const productOffers = await resolveProductOffers(createAdminClient(), business.id, {
     id: product.id, category: product.category, price: Number(product.price) || 0,
+  });
+
+  /*
+    ═══ PALNIA: „a vazut produsul" ═══
+
+    Fara evenimentul asta, pagina Statistici poate arata doar cati au intrat si
+    cati au comandat, si nimic intre. Se scrie dupa raspuns (`after`), cu
+    aceeasi regula ca vizitele: proprietarul, gazdele de test si santinela raman
+    afara, altfel comerciantul care isi verifica produsele dimineata ar aparea ca
+    zece oameni care s-au uitat si n-au cumparat.
+  */
+  after(async () => {
+    const ua = headersList.get("user-agent");
+    if (!seMasoaraVizita({
+      esteProprietar: await esteProprietarulMagazinului(business.user_id),
+      host: headersList.get("host")?.split(":")[0] ?? "",
+      userAgent: ua,
+    })) return;
+
+    await scrieEvenimentAnalitic({
+      businessId: business.id,
+      fel: "product_view",
+      ip: clientIpFromHeaders(headersList),
+      userAgent: ua,
+      device: /mobile/i.test(ua ?? "") ? "mobile" : /tablet/i.test(ua ?? "") ? "tablet" : "desktop",
+      path: `/product/${product.slug ?? productSlug}`,
+      productId: product.id,
+    });
   });
 
   const brand = business.store_name ?? business.business_name;

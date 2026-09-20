@@ -1,6 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
+import { after } from "next/server";
+import { clientIpFromHeaders } from "@/lib/utils/rate-limit";
+import { seMasoaraVizita } from "@/lib/storefront/vizita-de-masurat";
+import { scrieEvenimentAnalitic } from "@/lib/analitice/scrie";
 import { esteDomeniulPropriu } from "@/lib/platform-hosts";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -75,6 +79,28 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
   const host = (await headers()).get("host");
   const isCustomDomain = esteDomeniulPropriu(host, business.custom_domain);
   const basePath = isCustomDomain ? "" : `/${slug}`;
+
+  /*
+    ═══ PALNIA: „a inceput checkout-ul" ═══
+
+    Al treilea prag al palniei (dupa vizita si vederea produsului). Se scrie
+    dupa raspuns, cu aceeasi regula ca vizitele; proprietarul, gazdele de test
+    si santinela raman afara.
+  */
+  after(async () => {
+    const anteturi = await headers();
+    const ua = anteturi.get("user-agent");
+    if (!seMasoaraVizita({ esteProprietar: isOwner, host: host?.split(":")[0] ?? "", userAgent: ua })) return;
+
+    await scrieEvenimentAnalitic({
+      businessId: business.id,
+      fel: "begin_checkout",
+      ip: clientIpFromHeaders(anteturi),
+      userAgent: ua,
+      device: /mobile/i.test(ua ?? "") ? "mobile" : /tablet/i.test(ua ?? "") ? "tablet" : "desktop",
+      path: "/checkout",
+    });
+  });
 
   if (!checkoutOnPage(resolved.design)) redirect(cuSemnePastrate(radacinaMagazin(basePath), sirDinSp(sp)));
 

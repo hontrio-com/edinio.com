@@ -1,5 +1,7 @@
 "use client";
 
+import { semnaleazaAdaugareaInCos } from "@/lib/analitice/semnal";
+
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getCartSessionId } from "@/lib/cart-session";
 import { getCartPricing } from "@/lib/actions/store.actions";
@@ -215,6 +217,8 @@ export function CartProvider({ children, slug, businessId }: { children: ReactNo
    */
   function addItem(item: Omit<CartItem, "quantity">, cantitate = 1) {
     const n = normalizeazaCantitate(cantitate);
+    /* Palnia: "a adaugat in cos". Trimis si uitat, din `@/lib/analitice/semnal`. */
+    semnaleazaAdaugareaInCos(businessId, item.productId);
     save((prev) => {
       const key = lineKey(item);
       const exists = prev.find((i) => lineKey(i) === key);

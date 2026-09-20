@@ -43,6 +43,7 @@ push si aplicarea migratiei, la toti comerciantii.
 | 3a | `migrations/2026-09-20-panou-carduri.sql`, partea de jos | politica RLS lipsa de pe `business_daily_stats` | DA | **DA, 20.09.2026**, cu acordul lui: repara un defect care lovea cei 71 de comercianti cu statistici. ⚠ La final NU se mai aplica a doua oara (ar da `42710: policy already exists`): se sare peste ultima parte a fisierului. |
 | 3b | `migrations/2026-09-20-panou-carduri.sql`, functia | `panou_carduri` (cele patru carduri din cap) | DA | **NU. De aplicat la final.** |
 | 4 | `migrations/2026-09-20-analitice-sesiuni.sql` | sesiuni si vizitatori in `site_analytics` (coloane + indexuri), tabela `analitice_sare` si functia `analitice_sarea_zilei` | DA | **NU. De aplicat la final.** ⚠ Prima migratie care schimba o TABELA, nu doar adauga functii: patru coloane noi, toate optionale. |
+| 5 | `migrations/2026-09-20-analitice-agregat-sesiuni.sql` | tabelele `analitice_zilnic` si `analitice_zilnic_sursa` (+ politici) si `agregeaza_analitice` care le umple | DA | **NU. De aplicat la final.** ⚠ Dupa aplicare, primele zile de sesiuni se strang la urmatoarea rulare a cronului `discount-release`; istoricul NU se poate reconstrui, fiindca randurile brute mai vechi de 8 zile nu mai exista. |
 
 ⚠ Migratiile 1-3 sunt **numai citire**: functii noi si o politica de SELECT, niciun `alter table`,
 niciun rand atins.

@@ -3,6 +3,7 @@
 import { after } from "next/server";
 import { livrareaEDusaDeMarketplace, marketplaceCareTineComanda, deCeNuDeAici } from "@/lib/orders/origin";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
+import { scrieEvenimentAnalitic } from "@/lib/analitice/scrie";
 import { scrieStatisticiOferte } from "@/lib/offers/statistici";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
@@ -2172,6 +2173,33 @@ export async function placeOrder(data: {
     /* Si pentru TikTok Events API: vezi `tiktok-comanda.ts`. */
     dupaRaspuns(() => raporteazaCumparareaTikTok(order.id), "tiktok.cumparare", data.business_id);
   }
+
+  /*
+    ═══ PALNIA: „a cumparat" ═══
+
+    Ultimul prag al palniei si singurul care hotaraste rata de conversie
+    adevarata (sesiuni cu comanda / sesiuni).
+
+    ⚠ SE SCRIE AICI, PE SERVER, nu din browser: un eveniment de cumparare trimis
+    din pagina ar putea fi nascocit de oricine, iar rata de conversie a
+    comerciantului ar deveni o cifra pe care si-o poate desena singur oricine.
+
+    ⚠ Se scrie pentru ORICE metoda de plata, spre deosebire de conversiile
+    trimise la Google si Meta de mai sus: acelea inseamna bani incasati, asta
+    inseamna „comanda a fost plasata". Palnia masoara drumul cumparatorului,
+    nu incasarea.
+  */
+  dupaRaspuns(async () => {
+    const anteturi = await headers();
+    await scrieEvenimentAnalitic({
+      businessId: data.business_id,
+      fel: "purchase",
+      ip: clientIpFromHeaders(anteturi),
+      userAgent: anteturi.get("user-agent"),
+      path: "/checkout",
+      productId: data.product_id,
+    });
+  }, "analitice.cumparare", data.business_id);
 
   // Close the matching abandoned cart (if any) so it leaves the abandoned set
   // and counts as recovered when a recovery message had been sent.

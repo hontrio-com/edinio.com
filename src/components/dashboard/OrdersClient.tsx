@@ -29,6 +29,7 @@ import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { Button } from "@/components/ui/button";
 import { ORDER_STATUS, orderStatus, type OrderStatus } from "@/lib/orders/status";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { ORDERS_PAGE_SIZE } from "@/lib/orders/pagination";
 import { readBillingCompany } from "@/lib/billing/company";
 import type { Database } from "@/types/database.types";
@@ -1094,9 +1095,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                           {moneda ? `${Number(order.total).toFixed(2)} ${moneda}` : formatPrice(Number(order.total))}
                         </td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
-                          <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap", status.className)}>
-                            {status.label}
-                          </span>
+                          <EtichetaStare ton={status.ton}>{status.label}</EtichetaStare>
                         </td>
                         {arataSursa && (
                           <td className="px-5 py-3.5 hidden sm:table-cell">

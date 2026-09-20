@@ -9,11 +9,13 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { getLatestAnnouncement } from "@/lib/actions/announcement.actions";
-import { formatPrice } from "@/lib/utils/format";
+import { acumCatTimp, formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import { StocScazutRand } from "@/components/dashboard/StocScazutRand";
 import { PRAG_STOC_SCAZUT } from "@/lib/stoc-prag";
 import { orderStatus } from "@/lib/orders/status";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
+import { deriveOrigin } from "@/lib/orders/origin";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
 import { AnnouncementArticle } from "@/components/dashboard/AnnouncementArticle";
 import type { Announcement } from "@/lib/announcements";
@@ -269,7 +271,7 @@ async function ContinutPanou({
       la magazinele cu volum.
     */
     supabase.rpc("panou_carduri", { p_business: business.id }),
-    supabase.from("orders").select("id, order_number, customer_name, total, status, created_at")
+    supabase.from("orders").select("id, order_number, customer_name, total, status, created_at, order_source")
       .eq("business_id", business.id).order("created_at", { ascending: false }).limit(5),
     /*
       Prima fereastra a graficului de vanzari (ultimele 7 zile, toate canalele),
@@ -449,17 +451,25 @@ async function ContinutPanou({
                   <Link
                     key={order.id}
                     href={`/dashboard/orders/${order.id}`}
-                    className="flex items-center justify-between px-5 py-3 hover:bg-accent transition-colors"
+                    className="flex items-start justify-between gap-3 px-5 py-3 transition-colors hover:bg-accent"
                   >
                     <div className="min-w-0">
-                      <div className="text-sm font-medium text-foreground font-mono">{order.order_number}</div>
-                      <div className="text-xs text-muted-foreground truncate">{order.customer_name}</div>
+                      <div className="font-mono text-sm font-medium text-foreground">{order.order_number}</div>
+                      <div className="truncate text-xs text-muted-foreground">{order.customer_name}</div>
+                      {/*
+                        Cand a venit si de unde. `deriveOrigin` citeste
+                        `order_source`: pentru marketplace da numele lor, pentru
+                        magazinul propriu da sursa vizitei (Google, Facebook,
+                        Direct). Comenzile vechi, fara `order_source`, dau
+                        „Magazin online", deci randul nu ramane niciodata gol.
+                      */}
+                      <div className="mt-1 truncate text-[11px] text-muted-foreground/80">
+                        {acumCatTimp(order.created_at)} · {deriveOrigin(order.order_source).label}
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0 ml-3">
+                    <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
                       <span className="text-sm font-semibold text-foreground">{formatPrice(Number(order.total))}</span>
-                      <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold", status.className)}>
-                        {status.label}
-                      </span>
+                      <EtichetaStare ton={status.ton} marime="mic">{status.label}</EtichetaStare>
                     </div>
                   </Link>
                 );

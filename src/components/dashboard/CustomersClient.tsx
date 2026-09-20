@@ -13,6 +13,7 @@ import type { Customer, CustomerOrder, CustomersSummary } from "@/lib/customers"
 import { getCustomerOrders } from "@/lib/actions/customer.actions";
 import { CUSTOMERS_PAGE_SIZE } from "@/lib/orders/pagination";
 import { orderStatus } from "@/lib/orders/status";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { CustomerImportModal } from "./CustomerImportModal";
 
 type SortKey = "recent" | "spent" | "orders" | "name";
@@ -416,8 +417,13 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-foreground truncate">#{o.order_number}</p>
-                          <span className={cn("text-[10px] font-semibold rounded-full px-1.5 py-0.5", st.className)}>{st.label}</span>
+                          {/* ⚠ Fara „#" pus de noi: numarul comenzii il poarta deja
+                              („#1355"), iar al doilea ajungea pe ecran ca „##1355".
+                              Comenzile de marketplace n-au niciun „#" (Trendyol
+                              trimite „7016"), deci nici nu se poate adauga de-a
+                              valma: se scrie asa cum vine. */}
+                          <p className="text-sm font-semibold text-foreground truncate">{o.order_number}</p>
+                          <EtichetaStare ton={st.ton} marime="mic">{st.label}</EtichetaStare>
                         </div>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
                           {formatDate(o.created_at)} · {o.item_count} {o.item_count === 1 ? "produs" : "produse"}

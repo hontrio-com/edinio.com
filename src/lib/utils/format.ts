@@ -95,3 +95,40 @@ export function whatsappLink(phone: string): string {
   }
   return `https://wa.me/${cleaned}`;
 }
+
+/**
+ * Cat timp a trecut, scris pentru om: „acum 12 minute", „acum 3 ore".
+ *
+ * ⚠ „DE" LA SUTA DE MINUTE: in romana se spune „acum 12 minute", dar „acum 100
+ * DE minute". Regula sta deja in `pluralRo`, deci se foloseste ea; scrisa aici
+ * a doua oara, s-ar fi departat de prima la prima corectura.
+ *
+ * ⚠ DUPA O SAPTAMANA se scrie data. „acum 34 de zile" nu spune nimanui nimic,
+ * iar „acum 412 zile" e de-a dreptul comic pe o comanda veche.
+ *
+ * ⚠ `acum` E ARGUMENT, nu `Date.now()` ascuns inauntru: asa functia se poate
+ * proba pentru orice clipa. Randata pe SERVER, ora e cea a serverului si nu
+ * are cum sa nu se potriveasca cu browserul; intr-o componenta de client ar
+ * trebui asezata dupa montare, altfel hidratarea se plange.
+ */
+export function acumCatTimp(date: Date | string, acum: Date = new Date()): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "";
+
+  const secunde = Math.floor((acum.getTime() - d.getTime()) / 1000);
+  /* Un ceas cu cateva secunde in urma fata de celalalt nu are voie sa scrie
+     „acum -1 minute": orice clipa din viitorul apropiat inseamna „chiar acum". */
+  if (secunde < 60) return "chiar acum";
+
+  const minute = Math.floor(secunde / 60);
+  if (minute < 60) return `acum ${pluralRo(minute, "minut", "minute")}`;
+
+  const ore = Math.floor(minute / 60);
+  if (ore < 24) return `acum ${pluralRo(ore, "ora", "ore")}`;
+
+  const zile = Math.floor(ore / 24);
+  if (zile === 1) return "ieri";
+  if (zile < 7) return `acum ${pluralRo(zile, "zi", "zile")}`;
+
+  return formatDateShort(d);
+}

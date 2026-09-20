@@ -17,6 +17,8 @@ import { deCeNuSeStergeComanda } from "@/lib/orders/stergerea-comenzii";
 import { readBillingCompany } from "@/lib/billing/company";
 import { formatDate, formatPrice } from "@/lib/utils/format";
 import { deriveOrigin } from "@/lib/orders/origin";
+import { ORDER_STATUS, orderStatus, type OrderStatus } from "@/lib/orders/status";
+import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 import { totaluriComanda, type SetariTvaMagazin } from "@/lib/orders/totals-box";
 import {
   citesteDefalcarea, suprafataDeAratat, caM2, type DefalcareCitita,
@@ -94,20 +96,38 @@ interface ShippingAddress {
   locker_name?: string;
 }
 
-const STATUS_OPTIONS = [
-  { value: "pending",    label: "In asteptare",  cls: "bg-warning/10 text-warning border-warning/20" },
-  { value: "confirmed",  label: "Confirmat",     cls: "bg-info/10 text-info border-info/20" },
-  { value: "processing", label: "In procesare",  cls: "bg-purple-500/10 text-purple-600 border-purple-500/20" },
-  { value: "shipped",    label: "Expediat",      cls: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20" },
-  { value: "delivered",  label: "Livrat",        cls: "bg-success/10 text-success border-success/20" },
-  { value: "cancelled",  label: "Anulat",        cls: "bg-destructive/10 text-destructive border-destructive/20" },
-  { value: "refunded",   label: "Rambursat",     cls: "bg-muted text-muted-foreground border-border" },
-];
+/*
+  ⚠ NUMELE STARILOR NU SE MAI SCRIU AICI: vin din `ORDER_STATUS`.
 
-const PAYMENT_OPTIONS = [
-  { value: "unpaid",   label: "Neplatit",  cls: "bg-destructive/10 text-destructive border-destructive/20" },
-  { value: "paid",     label: "Platit",    cls: "bg-success/10 text-success border-success/20" },
-  { value: "refunded", label: "Rambursat", cls: "bg-muted text-muted-foreground border-border" },
+  Erau scrise a doua oara, cuvant cu cuvant, desi exista deja un singur loc
+  pentru ele. Doua copii inseamna ca o redenumire („In asteptare" -> „Neconfirmata")
+  se face intr-una si se uita in cealalta, iar aceeasi comanda ajunge sa se
+  numeasca altfel in lista si altfel cand o deschizi.
+
+  Culorile pline raman doar ale butoanelor de mai jos, unde ele arata ce ai ALES,
+  nu ce fel de stare e. Eticheta de langa titlu foloseste `EtichetaStare`.
+*/
+const CULOARE_BUTON: Record<OrderStatus, string> = {
+  pending:    "bg-warning/10 text-warning border-warning/20",
+  confirmed:  "bg-info/10 text-info border-info/20",
+  processing: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+  shipped:    "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+  delivered:  "bg-success/10 text-success border-success/20",
+  cancelled:  "bg-destructive/10 text-destructive border-destructive/20",
+  refunded:   "bg-muted text-muted-foreground border-border",
+};
+
+const STATUS_OPTIONS = (Object.keys(ORDER_STATUS) as OrderStatus[]).map((value) => ({
+  value,
+  label: ORDER_STATUS[value].label,
+  ton: ORDER_STATUS[value].ton,
+  cls: CULOARE_BUTON[value],
+}));
+
+const PAYMENT_OPTIONS: { value: string; label: string; ton: TonEticheta; cls: string }[] = [
+  { value: "unpaid",   label: "Neplatit",  ton: "rau",    cls: "bg-destructive/10 text-destructive border-destructive/20" },
+  { value: "paid",     label: "Platit",    ton: "bun",    cls: "bg-success/10 text-success border-success/20" },
+  { value: "refunded", label: "Rambursat", ton: "neutru", cls: "bg-muted text-muted-foreground border-border" },
 ];
 
 // Visible milestones for the fulfillment stepper. "processing" folds into "Confirmata".
@@ -117,14 +137,6 @@ const STEPPER = [
   { keys: ["shipped"], label: "Expediata" },
   { keys: ["delivered"], label: "Livrata" },
 ];
-
-function Badge({ cls, label }: { cls: string; label: string }) {
-  return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${cls}`}>
-      {label}
-    </span>
-  );
-}
 
 function StatusStepper({ status }: { status: string }) {
   if (status === "cancelled" || status === "refunded") {
@@ -1492,8 +1504,8 @@ export function OrderDetailClient({
         <div className="flex-1 min-w-0 space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-semibold text-foreground font-mono">{order.order_number}</h1>
-            <Badge cls={currentStatus.cls} label={currentStatus.label} />
-            <Badge cls={currentPayment.cls} label={currentPayment.label} />
+            <EtichetaStare ton={orderStatus(status).ton}>{currentStatus.label}</EtichetaStare>
+            <EtichetaStare ton={currentPayment.ton}>{currentPayment.label}</EtichetaStare>
             <span className="text-sm text-muted-foreground">{formatDate(new Date(order.created_at))}</span>
           </div>
           <StatusStepper status={status} />

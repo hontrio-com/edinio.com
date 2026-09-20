@@ -8,6 +8,7 @@ import { Sidebar } from "@/components/dashboard/Sidebar";
 import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
 import { BottomNav } from "@/components/dashboard/BottomNav";
 import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
+import { zileRamase } from "@/lib/abonament-timp";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { PaymentPastDueBanner } from "@/components/dashboard/PaymentPastDueBanner";
 import { getInactiveReason } from "@/lib/subscription";
@@ -182,10 +183,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
       />
       <div className="lg:pl-[var(--sidebar-width)]">
         {profile.plan === "free" && profile.plan_expires_at && (
-          <TrialBanner planExpiresAt={profile.plan_expires_at} />
+          <TrialBanner planExpiresAt={profile.plan_expires_at} zileRamase={zileRamase(profile.plan_expires_at)} />
         )}
         {suspendedBusiness?.suspended_until && (
-          <GracePeriodBanner suspendedUntil={suspendedBusiness.suspended_until} />
+          <GracePeriodBanner zileRamase={zileRamase(suspendedBusiness.suspended_until)} />
         )}
         {showPastDueBanner && <PaymentPastDueBanner />}
         <DashboardTopbar

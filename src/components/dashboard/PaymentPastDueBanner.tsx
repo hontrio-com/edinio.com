@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Loader2, CreditCard } from "lucide-react";
+import { CreditCard, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { BandaCont, clasaButonBanda } from "@/components/dashboard/BandaCont";
 
 // Afisat cand plata unui abonament PLATIT a esuat cu adevarat (webhook Stripe
 // invoice.payment_failed → users_profile.payment_failed_at), inca in fereastra de
@@ -11,11 +12,15 @@ import { toast } from "sonner";
 // Dupa stergere preia GracePeriodBanner (magazin suspendat). Butonul „Reia plata"
 // duce direct la factura restanta Stripe (`/api/stripe/retry-payment`), unde userul
 // plateste pe loc; plata reusita reactiveaza abonamentul automat.
+//
+// ⚠ TON DE ATENTIONARE, nu de urgenta: aici magazinul inca merge. Rosul e pastrat
+// pentru cand chiar se opreste (`GracePeriodBanner`), altfel cele doua vesti ar
+// arata la fel de grave si niciuna n-ar mai insemna nimic.
 export function PaymentPastDueBanner() {
-  const [loading, setLoading] = useState(false);
+  const [seIncarca, setSeIncarca] = useState(false);
 
-  async function openPortal() {
-    setLoading(true);
+  async function deschidePortalul() {
+    setSeIncarca(true);
     try {
       const res = await fetch("/api/stripe/retry-payment", { method: "POST" });
       const data = (await res.json()) as { url?: string; error?: string };
@@ -23,37 +28,26 @@ export function PaymentPastDueBanner() {
         window.location.href = data.url;
       } else {
         toast.error(data.error ?? "Eroare la deschiderea portalului de plata.");
-        setLoading(false);
+        setSeIncarca(false);
       }
     } catch {
       toast.error("Eroare de retea. Incearca din nou.");
-      setLoading(false);
+      setSeIncarca(false);
     }
   }
 
   return (
-    <div className="relative overflow-hidden bg-gradient-to-r from-destructive to-warning">
-      <div className="px-4 py-3 sm:py-4 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-white text-center">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5 flex-shrink-0" />
-          <p className="text-sm sm:text-base font-bold">
-            Plata abonamentului a esuat si abonamentul a expirat. Reia plata ca sa iti pastrezi magazinul activ.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={openPortal}
-          disabled={loading}
-          className="inline-flex items-center gap-2 px-5 py-2 bg-white text-destructive rounded-lg text-sm font-bold hover:bg-destructive/5 transition-colors flex-shrink-0 disabled:opacity-60"
-        >
-          {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <CreditCard className="h-4 w-4" />
-          )}
-          {loading ? "Se deschide..." : "Reia plata"}
+    <BandaCont
+      ton="atentie"
+      pictograma={CreditCard}
+      titlu="Plata abonamentului a esuat"
+      detaliu="Reia plata ca sa iti pastrezi magazinul activ. Pana atunci nu se schimba nimic pentru clientii tai."
+      actiune={
+        <button type="button" onClick={deschidePortalul} disabled={seIncarca} className={clasaButonBanda("atentie")}>
+          {seIncarca ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
+          {seIncarca ? "Se deschide..." : "Reia plata"}
         </button>
-      </div>
-    </div>
+      }
+    />
   );
 }

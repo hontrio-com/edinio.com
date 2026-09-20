@@ -7,6 +7,7 @@ import {
   Check, ChevronDown, ChevronUp, Rocket, Copy, ArrowRight, PartyPopper, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { BandaCont, clasaButonBanda } from "@/components/dashboard/BandaCont";
 import { EDITOR_VISITED_KEY } from "@/lib/activation";
 
 export interface ChecklistStep {
@@ -94,30 +95,27 @@ export function ActivationChecklist({ steps, plan, planExpiresAt, publicUrl }: P
     const expiresLabel = planExpiresAt
       ? new Date(planExpiresAt).toLocaleDateString("ro-RO", { day: "numeric", month: "long" })
       : null;
+    /*
+      ⚠ ACEEASI FORMA ca benzile de abonament (`BandaCont`), nu inca o cutie
+      verde scrisa de mana: e tot o veste despre cont, doar ca una buna.
+    */
     return (
-      <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 overflow-hidden">
-        <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-          <div className="flex items-start gap-3 flex-1 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center flex-shrink-0">
-              <PartyPopper className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-foreground">Felicitari, magazinul tau e complet configurat!</p>
-              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                {expiresLabel
-                  ? <>Alege un plan ca sa ramai online dupa {expiresLabel}. Anulezi oricand, pretul ramane fix pe viata.</>
-                  : <>Alege un plan ca sa deblochezi tot potentialul magazinului. Anulezi oricand, pretul ramane fix pe viata.</>}
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/dashboard/settings#abonament"
-            className="flex-shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors"
-          >
-            <Zap className="h-4 w-4" />
-            Alege un plan
-          </Link>
-        </div>
+      <div className="mt-4">
+        <BandaCont
+          ton="reusita"
+          forma="card"
+          pictograma={PartyPopper}
+          titlu="Magazinul tau e complet configurat"
+          detaliu={expiresLabel
+            ? <>Alege un plan ca sa ramai online dupa {expiresLabel}. Anulezi oricand, pretul ramane fix pe viata.</>
+            : <>Alege un plan ca sa deblochezi tot potentialul magazinului. Anulezi oricand, pretul ramane fix pe viata.</>}
+          actiune={
+            <Link href="/dashboard/settings#abonament" className={clasaButonBanda("reusita")}>
+              <Zap className="h-3.5 w-3.5" />
+              Alege un plan
+            </Link>
+          }
+        />
       </div>
     );
   }

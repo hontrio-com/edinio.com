@@ -155,13 +155,14 @@ Lista e ca sa se stie **ce se uita la** dupa push, nu ca sa inlocuiasca istoricu
 | Comenzi recente | pagina panoului, `src/lib/utils/format.ts` (`acumCatTimp`) | Fiecare rand spune cand a venit comanda („acum 12 minute") si de unde (eMAG, Google Ads, Direct). |
 | Fusul orar | `src/lib/utils/format.ts`, `src/lib/email.ts` (+ probe care pornesc un Node pe `TZ=UTC`) | Datele scrise de server erau pe UTC: o comanda de la 01:30 aparea „19 septembrie, 22:30". Acum toate trec prin ceasul romanesc. ⚠ RAMAS: componentele de client (tabele din panou, zona de admin) scriu pe ceasul VIZITATORULUI; pentru un comerciant din alt fus, orele difera de facturi. De facut in aceeasi trecere cu etichetele. |
 | Noutati | `src/components/dashboard/ListaNoutati.tsx` (nou), `AnnouncementArticle`, `src/lib/announcements.ts` (`rezumatScurt`), `src/lib/actions/announcement.actions.ts`, pagina panoului | Cinci randuri in loc de un articol desfasurat, fara iconita la titlu. ⚠ **Publicarea nu mai stinge celelalte anunturi** (`unpublishOthers`, scoasa): altfel lista ar fi avut mereu un singur rand. Vezi pasul de date de mai jos. |
+| Alertele de cont | `src/components/dashboard/BandaCont.tsx` (nou), `TrialBanner`, `PaymentPastDueBanner`, `GracePeriodBanner`, `ActivationChecklist`, `src/lib/abonament-timp.ts` (nou, + probe), `src/app/(dashboard)/layout.tsx` | O singura forma pentru toate vestile despre abonament, cu trei trepte (informare, atentie, urgent). ⚠ Zilele ramase se socotesc acum pe SERVER si se trimit ca prop: `GracePeriodBanner` e componenta de client si citea ceasul in randare, deci serverul si browserul puteau ajunge la doua numere diferite. |
 | Tipuri | `src/types/database.types.ts` | ⚠ Intrarile pentru functiile noi sunt **scrise de mana** (regenerarea completa rescrie `store_settings` din tabela in vedere si rupe zeci de locuri). Dupa aplicarea migratiilor, ele descriu in sfarsit ceva ce exista si in productie. |
 
 ---
 
 ## E2. ⚠ DE STERS INAINTE DE UNIRE
 
-- `src/app/(dashboard)/dashboard/alerte-proba/page.tsx` - pagina de proba cu toate
+- `src/app/(dashboard)/dashboard/alerte/page.tsx` - pagina de proba cu toate
   alertele de cont puse cap la cap (proba de trial, plata esuata, gratie, suspendare,
   pasii de pornire). Facuta ca sa se poata vedea toate deodata, fiindca fiecare apare in
   alta imprejurare. **Nu e legata din niciun meniu, dar e accesibila prin adresa oricui

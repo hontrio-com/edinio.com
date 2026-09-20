@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { centrulProblemelorEmag, type CentruProblemeEcran } from "@/lib/actions/emag.actions";
@@ -77,16 +78,16 @@ export function EmagProbleme({ businessId }: { businessId: string }) {
         {centru.grupuri.map((g) => (
           <li key={g.cheie} className="py-3">
             <div className="flex flex-wrap items-start gap-2">
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
-                g.sursa === "emag" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                  : g.sursa === "edinio" ? "bg-destructive/10 text-destructive"
-                    : "bg-muted text-muted-foreground"
-              }`}>
-                {/* ⚠ Se spune UNDE se repară, nu doar că e stricat. „eMAG a refuzat" și
-                    „n-am putut trimite" se repară în locuri complet diferite; fără
-                    eticheta asta, omul ar fi căutat în panoul greșit. */}
+              {/* ⚠ Se spune UNDE se repară, nu doar că e stricat. „eMAG a refuzat" și
+                  „n-am putut trimite" se repară în locuri complet diferite; fără
+                  eticheta asta, omul ar fi căutat în panoul greșit. */}
+              <EtichetaStare
+                ton={g.sursa === "emag" ? "asteptare" : g.sursa === "edinio" ? "rau" : "neutru"}
+                marime="mic"
+                className="shrink-0"
+              >
                 {g.sursa === "emag" ? "La eMAG" : g.sursa === "edinio" ? "La tine" : "Legătura"}
-              </span>
+              </EtichetaStare>
               <span className="min-w-0 flex-1 text-sm">{g.titlu}</span>
               <span className="shrink-0 text-sm font-semibold tabular-nums">
                 {g.cate}

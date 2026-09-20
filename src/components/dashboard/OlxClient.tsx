@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition, useRef } from "react";
+import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Archive,
@@ -922,25 +923,25 @@ function Kpi({ label, value, tone, icon: Icon }: { label: string; value: number;
 }
 
 export function AdvertStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string; icon: React.ElementType }> = {
-    active: { label: "Activ", cls: "bg-success/10 text-success", icon: CircleCheck },
-    new: { label: "În moderare", cls: "bg-warning/10 text-warning", icon: Clock },
-    unconfirmed: { label: "În moderare", cls: "bg-warning/10 text-warning", icon: Clock },
-    unpaid: { label: "Neplătit", cls: "bg-warning/10 text-warning", icon: Clock },
-    limited: { label: "Limită atinsă", cls: "bg-warning/10 text-warning", icon: ShoppingBag },
-    removed_by_user: { label: "Dezactivat", cls: "bg-muted text-muted-foreground", icon: Ban },
+  const map: Record<string, { label: string; ton: TonEticheta }> = {
+    active: { label: "Activ", ton: "bun" },
+    new: { label: "În moderare", ton: "asteptare" },
+    unconfirmed: { label: "În moderare", ton: "asteptare" },
+    unpaid: { label: "Neplătit", ton: "asteptare" },
+    limited: { label: "Limită atinsă", ton: "asteptare" },
+    removed_by_user: { label: "Dezactivat", ton: "neutru" },
     /* ⚠ Sters de om: randul ramane, ca sincronizarea sa nu recreeze anuntul. „Postează pe OLX" e iesirea. */
-    sters_de_om: { label: "Șters de tine", cls: "bg-muted text-muted-foreground", icon: Ban },
-    outdated: { label: "Expirat", cls: "bg-muted text-muted-foreground", icon: Clock },
-    moderated: { label: "Respins", cls: "bg-destructive/10 text-destructive", icon: CircleX },
-    blocked: { label: "Blocat", cls: "bg-destructive/10 text-destructive", icon: CircleX },
-    disabled: { label: "Dezactivat de OLX", cls: "bg-destructive/10 text-destructive", icon: CircleX },
-    removed_by_moderator: { label: "Șters de OLX", cls: "bg-destructive/10 text-destructive", icon: CircleX },
-    error: { label: "Eroare", cls: "bg-destructive/10 text-destructive", icon: AlertTriangle },
+    sters_de_om: { label: "Șters de tine", ton: "neutru" },
+    outdated: { label: "Expirat", ton: "neutru" },
+    moderated: { label: "Respins", ton: "rau" },
+    blocked: { label: "Blocat", ton: "rau" },
+    disabled: { label: "Dezactivat de OLX", ton: "rau" },
+    removed_by_moderator: { label: "Șters de OLX", ton: "rau" },
+    error: { label: "Eroare", ton: "rau" },
   };
   const s = map[status] ?? map.new;
-  const Icon = s.icon;
-  return <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold", s.cls)}><Icon className="h-3 w-3" /> {s.label}</span>;
+  /* ⚠ ICONITA A IESIT, punctul colorat spune acelasi lucru. Vezi `EtichetaStare`. */
+  return <EtichetaStare ton={s.ton} marime="mic">{s.label}</EtichetaStare>;
 }
 
 function SettingField({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {

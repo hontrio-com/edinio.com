@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FileText, RotateCcw, Truck, XCircle } from "lucide-react";
@@ -18,18 +19,19 @@ import { formatDate } from "@/lib/utils/format";
  * si fara cale de reluare. Iar facturile lor — About You detine checkout-ul si
  * emite factura catre cumparator — se puteau lua doar din Seller Center.
  */
-const ETICHETE: Record<string, { text: string; cls: string }> = {
-  open: { text: "Deschisă", cls: "bg-amber-100 text-amber-700" },
-  ship_pending: { text: "Expediere în curs", cls: "bg-amber-100 text-amber-700" },
-  shipped: { text: "Expediată", cls: "bg-green-100 text-green-700" },
-  ship_failed: { text: "Expediere respinsă", cls: "bg-red-100 text-red-700" },
-  cancel_pending: { text: "Anulare în curs", cls: "bg-amber-100 text-amber-700" },
-  cancelled: { text: "Anulată", cls: "bg-muted text-muted-foreground" },
-  cancel_failed: { text: "Anulare respinsă", cls: "bg-red-100 text-red-700" },
-  return_pending: { text: "Retur în curs", cls: "bg-amber-100 text-amber-700" },
-  returned: { text: "Returnată", cls: "bg-muted text-muted-foreground" },
-  return_failed: { text: "Retur respins", cls: "bg-red-100 text-red-700" },
-  mixed: { text: "Mixtă", cls: "bg-muted text-muted-foreground" },
+/* ⚠ TONURI, NU CLASE: cum se deseneaza eticheta hotaraste `EtichetaStare`. */
+const ETICHETE: Record<string, { text: string; ton: TonEticheta }> = {
+  open: { text: "Deschisă", ton: "asteptare" },
+  ship_pending: { text: "Expediere în curs", ton: "asteptare" },
+  shipped: { text: "Expediată", ton: "bun" },
+  ship_failed: { text: "Expediere respinsă", ton: "rau" },
+  cancel_pending: { text: "Anulare în curs", ton: "asteptare" },
+  cancelled: { text: "Anulată", ton: "neutru" },
+  cancel_failed: { text: "Anulare respinsă", ton: "rau" },
+  return_pending: { text: "Retur în curs", ton: "asteptare" },
+  returned: { text: "Returnată", ton: "neutru" },
+  return_failed: { text: "Retur respins", ton: "rau" },
+  mixed: { text: "Mixtă", ton: "neutru" },
   /*
    * ⚠ „NU STIM" NU E „A ESUAT", si de-aia are eticheta lui.
    *
@@ -38,9 +40,9 @@ const ETICHETE: Record<string, { text: string; cls: string }> = {
    * poate a fost primit inseamna doua expedieri raportate pe aceleasi linii. Deci: se arata, se
    * explica, si NU se ofera butonul.
    */
-  ship_necunoscut: { text: "Expediere neconfirmată", cls: "bg-amber-100 text-amber-700" },
-  cancel_necunoscut: { text: "Anulare neconfirmată", cls: "bg-amber-100 text-amber-700" },
-  return_necunoscut: { text: "Retur neconfirmat", cls: "bg-amber-100 text-amber-700" },
+  ship_necunoscut: { text: "Expediere neconfirmată", ton: "asteptare" },
+  cancel_necunoscut: { text: "Anulare neconfirmată", ton: "asteptare" },
+  return_necunoscut: { text: "Retur neconfirmat", ton: "asteptare" },
 };
 
 /** Starile in care nu stim ce s-a intamplat la ei: se cere un om, nu un buton. */
@@ -181,7 +183,7 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
       ) : (
         <div className="divide-y divide-border">
           {vizibile.map((c) => {
-            const et = ETICHETE[c.status] ?? { text: c.status, cls: "bg-muted text-muted-foreground" };
+            const et = ETICHETE[c.status] ?? { text: c.status, ton: "neutru" };
             return (
               <div key={c.numarAy} className="py-3 flex items-center justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
@@ -196,10 +198,15 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${et.cls}`}
+                  <EtichetaStare
+                    ton={et.ton}
+                    marime="mic"
                     title={NECONFIRMATE.has(c.status)
                       ? "Am trimis cererea la About You, dar nu am aflat ce a ieșit. Verifică în Seller Center înainte de a încerca din nou."
-                      : undefined}>{et.text}</span>
+                      : undefined}
+                  >
+                    {et.text}
+                  </EtichetaStare>
                   {c.orderId && (
                     <>
                       <button onClick={() => descarca(c.orderId!, "invoices")} disabled={pending}

@@ -112,9 +112,15 @@ oricarui magazin.
 
 ---
 
-## C2. Un pas de DATE in productie, de hotarat de el
+## C2. ✅ FACUT 20.09.2026: pasul de DATE din productie
 
-Nu e o migratie de schema, ci un `update` de o linie, si **nu s-a facut**.
+Nu e o migratie de schema, ci un `update` de o linie. **S-a facut pe 20.09.2026**, dupa push:
+cele sase anunturi stinse automat s-au reaprins, deci lista de Noutati are acum cinci randuri
+reale in loc de unul. Toate sase aveau `published_at` pus - adica fusesera publicate de el -
+si niciunul n-avea semn de retragere anume; regula veche „unul singur odata" explica de ce
+erau stinse.
+
+⚠ Se intoarce dintr-o comanda: randurile atinse sunt in `zz_backup_anunturi_stinse_20260920`.
 
 Pana acum, publicarea unui anunt le stingea pe toate celelalte (`unpublishOthers`),
 fiindca panoul arata un singur anunt. In productie sunt **7 anunturi, dintre care
@@ -146,17 +152,41 @@ cu `package.json`.
 Niciuna **ceruta** de cod. (Sentry a fost pus separat, in `main`, pe 18.09, cu `SENTRY_AUTH_TOKEN`
 deja in Vercel.)
 
-### Una propusa, de hotarat: `TZ = Europe/Bucharest`
+### ⚠ INCHIS: `TZ = Europe/Bucharest` NU SE POATE PUNE
 
-Verificat pe 20.09: proiectul **nu are nicio variabila `TZ`**, deci procesul Node de pe Vercel
-ruleaza pe **UTC**, in timp ce baza e tot pe UTC dar toate socotelile noastre convertesc explicit
-la ora Romaniei. Codul care scrie date a fost reparat sa nu mai depinda de ceasul masinii
-(`formatDate`/`formatDateShort`/`formatDateTime` si cele sase locuri din `email.ts`), deci
-variabila **nu mai e necesara**.
+Incercat pe 20.09.2026, dupa push. Vercel raspunde `env_key_reserved`: **`TZ` e nume
+rezervat** si refuza sa fie creat, pe orice mediu. Deci propunerea nu era doar
+de prisos, ci imposibila.
 
-Ramane de pus doar ca plasa pentru ce se scrie de acum incolo: cu ea, orice `toLocaleString`
-scris fara sa se gandeasca cineva la fus da tot ora Romaniei. Nu schimba nimic din ce e deja
-reparat, si nu atinge cronurile (Vercel le socoteste tot in UTC, oricum ar fi pusa).
+Nu se pierde nimic: analiza de mai devreme aratase deja ca variabila **nu e necesara**.
+Codul care scrie date nu mai depinde de ceasul masinii (`formatDate`, `formatDateShort`,
+`formatDateTime` si cele sase locuri din `email.ts` convertesc explicit la ora Romaniei),
+iar cronurile Vercel se socotesc oricum in UTC.
+
+⚠ Ce RAMANE de facut in locul ei: componentele de client (tabele din panou, zona de
+admin) scriu inca pe ceasul VIZITATORULUI. Pentru un comerciant aflat in alt fus, orele
+de acolo difera de cele de pe facturi. Se repara pe fiecare loc, nu dintr-o variabila.
+
+---
+
+## D3. Cele 8 chei de ramura din Vercel, dupa ID
+
+Citite pe 20.09.2026. Se sterg **dupa id**, nu dupa nume: aceleasi nume exista si fara
+ramura, pe Preview + Production, iar acelea sunt ale productiei si NU se ating.
+
+| ID | Cheie |
+|----|-------|
+| `De8WIMkdZRMilZWj` | SUPABASE_SERVICE_ROLE_KEY |
+| `FFSTvIfdQ8SxzDsy` | RESEND_API_KEY |
+| `hvaAavTqkMXJ48rK` | NEXT_PUBLIC_SUPABASE_URL |
+| `bhcSLqQSoDiKnQc5` | NEXT_PUBLIC_SUPABASE_ANON_KEY |
+| `CLCp1RHrL19GceZR` | RESELLER_API_KEY |
+| `3UcdKEMUf9Bs7YVt` | VERCEL_TOKEN |
+| `8AI8v5yonibhRM74` | STRIPE_SECRET_KEY |
+| `HuwGzKcjpUx4vO40` | SMARTBILL_TOKEN |
+
+⚠ **Nu se sterg cat timp se mai lucreaza local**: dezvoltarea locala merge pe baza demo
+prin `.env.development.local`. Sterse acum, lucrul local ar ajunge pe productie.
 
 ---
 

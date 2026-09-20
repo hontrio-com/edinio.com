@@ -6480,6 +6480,10 @@ export type Database = {
       }
       jsonb_merge_config: { Args: { p_business_id: string; p_column: string; p_patch: Json }; Returns: undefined }
       numar_produse_si_comenzi: { Args: Record<PropertyKey, never>; Returns: Json }
+      numar_produse_sub_prag: { Args: { p_business: string; p_prag?: number }; Returns: { sub_prag: number; epuizate: number }[] }
+      produse_sub_prag: { Args: { p_business: string; p_prag?: number }; Returns: { id: string; nume: string; imagine: string | null; stoc: number; variante: Json }[] }
+      stoc_combinatie: { Args: { p_combinatie: Json }; Returns: number }
+      combinatie_aprinsa: { Args: { p_combinatie: Json }; Returns: boolean }
       orders_venit_zilnic: { Args: { bid: string; p_zile: number; p_deplasare?: number }; Returns: unknown }
       proba_stoc: { Args: Record<PropertyKey, never>; Returns: Json }
       ajusteaza_stoc_comanda_marketplace: { Args: { p_order_id: string; p_business_id: string | null; p_produse: Json; p_variante: Json }; Returns: Json }

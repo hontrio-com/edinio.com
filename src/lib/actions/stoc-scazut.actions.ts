@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { dupaRaspuns } from "@/lib/marketplace/dupa-raspuns";
 import { enqueueTrendyolInventoryMany } from "@/lib/trendyol/queue";
 import { enqueueEmagStocMany } from "@/lib/emag/queue";
@@ -73,20 +74,6 @@ function numar(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Numele afisat al unei combinatii: ce gaseste primul, altfel optiunile lipite. */
-function etichetaCombinatie(c: Combinatie, i: number): string {
-  for (const camp of [c.label, c.title, c.name]) {
-    if (typeof camp === "string" && camp.trim()) return camp.trim();
-  }
-  if (c.options && typeof c.options === "object") {
-    const valori = Object.values(c.options as Record<string, unknown>)
-      .filter(v => typeof v === "string" && v.trim())
-      .map(v => String(v).trim());
-    if (valori.length > 0) return valori.join(" · ");
-  }
-  return `Varianta ${i + 1}`;
-}
-
 function combinatii(pageSections: unknown): Combinatie[] {
   if (!pageSections || typeof pageSections !== "object") return [];
   const v = (pageSections as Record<string, unknown>).variants;
@@ -112,41 +99,39 @@ export async function citesteProduseSubPrag(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
-  const { data, error } = await supabase
-    .from("products")
-    .select("id, name, images, stock_quantity, page_sections")
-    .eq("business_id", businessId)
-    .eq("is_active", true)
-    .eq("track_inventory", true)
-    .lte("stock_quantity", PRAG_STOC_SCAZUT)
-    .order("stock_quantity", { ascending: true })
-    .limit(200);
+  const { data, error } = await supabase.rpc("produse_sub_prag", {
+    p_business: businessId,
+    p_prag: PRAG_STOC_SCAZUT,
+  });
 
   if (error) return { error: "Nu am putut citi produsele. Incearca din nou." };
 
-  const produse: ProdusSubPrag[] = (data ?? []).map(p => {
-    const imagini = Array.isArray(p.images) ? p.images : [];
-    const variante = combinatii(p.page_sections)
-      .map((c, i) => ({ c, i }))
-      /* Fara id nu avem pe ce scrie inapoi, deci n-o aratam ca pe ceva editabil.
-         Combinatiile stinse nu se vand, deci nu intra nici la socoteala. */
-      .filter(({ c }) => typeof c.id === "string" && c.id.trim() !== "" && c.enabled !== false)
-      .map(({ c, i }) => ({
-        id: String(c.id),
-        eticheta: etichetaCombinatie(c, i),
-        sku: typeof c.sku === "string" && c.sku.trim() ? c.sku.trim() : null,
-        stoc: numar(c.stock_quantity),
-      }))
-      .sort((a, b) => a.stoc - b.stoc);
+  /*
+    ⚠ Lista vine din baza, nu dintr-un filtru pe `stock_quantity`.
 
-    return {
-      id: p.id,
-      nume: p.name,
-      imagine: typeof imagini[0] === "string" ? imagini[0] : null,
-      stoc: numar(p.stock_quantity),
-      variante,
-    };
-  });
+    Un produs cu variante poate avea 17 bucati in total si o varianta pe ZERO:
+    clientul care o vrea nu poate cumpara, iar produsul nu aparea nicaieri cat
+    timp filtrul se uita doar la total. Conditia „macar o varianta aprinsa e sub
+    prag" se pune pe elementele unui tablou JSON, iar PostgREST nu stie s-o
+    exprime: din aplicatie ar fi insemnat sa aducem tot catalogul si sa alegem in
+    JavaScript. De aceea e o functie in baza (`produse_sub_prag`), cu RLS in
+    vigoare, fiindca ruleaza cu drepturile celui care o cheama.
+  */
+  const produse: ProdusSubPrag[] = (data ?? []).map(r => ({
+    id: r.id,
+    nume: r.nume,
+    imagine: r.imagine,
+    stoc: r.stoc,
+    variante: (Array.isArray(r.variante) ? r.variante : []).map(v => {
+      const o = (v ?? {}) as Record<string, unknown>;
+      return {
+        id: String(o.id ?? ""),
+        eticheta: typeof o.eticheta === "string" && o.eticheta.trim() ? o.eticheta : String(o.id ?? ""),
+        sku: typeof o.sku === "string" && o.sku.trim() ? o.sku : null,
+        stoc: numar(o.stoc),
+      };
+    }).filter(v => v.id !== ""),
+  }));
 
   return { produse };
 }
@@ -220,6 +205,21 @@ export async function actualizeazaStocuri(
     peProdus.set(m.productId, lista);
   }
 
+  /*
+    ⚠ DE CE CLIENT DE SISTEM DOAR AICI, si de ce NU se largesc drepturile.
+
+    `scrie_variante_daca_neschimbat` e `security definer` si e data doar cheii de
+    serviciu. Motivul e in chiar corpul ei: primeste `p_business` de la apelant si
+    NU verifica cine e omul, deci un `grant ... to authenticated` ar fi insemnat
+    ca orice utilizator logat poate scrie in variantele oricarui magazin, daca ii
+    afla id-ul. (Masurat: prima varianta a codului asta a primit
+    „permission denied for function", si bine a facut.)
+
+    Poarta ramane deci in aplicatie, si e cea de mai sus: magazinul trebuie sa fie
+    al utilizatorului. Sub ea, fiecare scriere e legata de `businessId`.
+  */
+  const admin = peProdus.size > 0 ? createAdminClient() : null;
+
   for (const [productId, schimbari] of peProdus) {
     let scris = false;
     let mesaj = "Produsul a fost modificat in acelasi timp de altcineva";
@@ -256,7 +256,7 @@ export async function actualizeazaStocuri(
       variante.combinations = combosNoi;
       radacina.variants = variante;
 
-      const { data: fel, error: errRpc } = await supabase.rpc("scrie_variante_daca_neschimbat", {
+      const { data: fel, error: errRpc } = await admin!.rpc("scrie_variante_daca_neschimbat", {
         p_business: businessId,
         p_product: productId,
         p_asteptat: p.page_sections as never,

@@ -224,8 +224,7 @@ async function ContinutPanou({
     { count: pendingOrders },
     { data: recentOrders },
     { data: last7DaysRevenue },
-    { count: subPragTotal },
-    { count: epuizateTotal },
+    { data: numaratoareStoc },
     { count: productsTotal },
     { count: ordersTotal },
     { data: dashProfile },
@@ -247,17 +246,12 @@ async function ContinutPanou({
       .eq("business_id", business.id).order("created_at", { ascending: false }).limit(5),
     supabase.rpc("orders_daily_revenue", { bid: business.id, t_from: sevenDaysAgo }),
     /*
-      Cate sunt CU TOTUL sub prag si cate chiar s-au oprit din vanzare. Lista de
-      mai sus aduce doar primele cinci, deci fara numerele astea ecranul ar fi
-      spus „cinci produse" si cand erau douazeci. Sunt cereri `head`, deci aduc
-      numarul, nu randurile.
+      Cate produse sunt sub prag si cate s-au oprit din vanzare. Numaratoarea se
+      face IN BAZA, fiindca trebuie sa se uite si in variante: un produs cu 17
+      bucati in total poate avea o varianta pe zero (vezi `produse_sub_prag`).
+      Un filtru pe `stock_quantity` ar fi sarit exact peste acelea.
     */
-    supabase.from("products").select("*", { count: "exact", head: true })
-      .eq("business_id", business.id).eq("is_active", true)
-      .eq("track_inventory", true).lte("stock_quantity", PRAG_STOC_SCAZUT),
-    supabase.from("products").select("*", { count: "exact", head: true })
-      .eq("business_id", business.id).eq("is_active", true)
-      .eq("track_inventory", true).lte("stock_quantity", 0),
+    supabase.rpc("numar_produse_sub_prag", { p_business: business.id, p_prag: PRAG_STOC_SCAZUT }),
     // ── Semnale pentru checklist-ul de activare ──
     supabase.from("products").select("*", { count: "exact", head: true })
       .eq("business_id", business.id),
@@ -318,8 +312,8 @@ async function ContinutPanou({
 
       <StocScazutRand
         businessId={business.id}
-        epuizate={epuizateTotal ?? 0}
-        subPrag={subPragTotal ?? 0}
+        epuizate={numaratoareStoc?.[0]?.epuizate ?? 0}
+        subPrag={numaratoareStoc?.[0]?.sub_prag ?? 0}
       />
 
       {/* Stat cards */}

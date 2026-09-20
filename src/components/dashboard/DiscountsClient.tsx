@@ -1,5 +1,7 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import { useState, useTransition, useCallback } from "react";
 import { toast } from "sonner";
 import {
@@ -350,7 +352,14 @@ export function DiscountsClient({ discounts, businessId }: {
   discounts: Discount[];
   businessId: string;
 }) {
-  const [modalOpen, setModalOpen] = useState(false);
+  /*
+    ⚠ `?nou=1` deschide direct formularul, si se citeste LA PRIMA RANDARE, nu
+    intr-un efect: butonul „Adauga" din bara de sus trimite aici, iar omul
+    trebuie sa vada formularul din clipa in care pagina apare, nu dupa ce
+    aceasta se randeaza o data goala.
+  */
+  const parametri = useSearchParams();
+  const [modalOpen, setModalOpen] = useState(() => parametri.get("nou") !== null);
   const [editing, setEditing] = useState<Discount | null>(null);
   const [deleting, setDeleting] = useState<Discount | null>(null);
   const [, startToggle] = useTransition();

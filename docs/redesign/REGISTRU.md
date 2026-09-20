@@ -120,6 +120,15 @@ select count(*) filter (where is_published) as publicate from public.announcemen
 
 In baza demo s-a facut deja (plus un al cincilea rand, ca sa se vada asezarea plina).
 
+## D2. O biblioteca noua in `package.json`
+
+`blobatar@2.7.0` (https://github.com/Alain00/blobatar), ceruta de el pentru chipurile
+utilizatorilor. N-are nicio dependenta proprie, si **nu ajunge in pachetul browserului**: SVG-ul
+se deseneaza pe server, in `src/lib/avatar-blob.ts`, si se trimite ca text.
+
+⚠ La unire trebuie sa treaca si `npm ci` pe Vercel: `package-lock.json` intra in acelasi commit
+cu `package.json`.
+
 ## D. Variabile de mediu noi
 
 Niciuna **ceruta** de cod. (Sentry a fost pus separat, in `main`, pe 18.09, cu `SENTRY_AUTH_TOKEN`
@@ -156,6 +165,9 @@ Lista e ca sa se stie **ce se uita la** dupa push, nu ca sa inlocuiasca istoricu
 | Fusul orar | `src/lib/utils/format.ts`, `src/lib/email.ts` (+ probe care pornesc un Node pe `TZ=UTC`) | Datele scrise de server erau pe UTC: o comanda de la 01:30 aparea „19 septembrie, 22:30". Acum toate trec prin ceasul romanesc. ⚠ RAMAS: componentele de client (tabele din panou, zona de admin) scriu pe ceasul VIZITATORULUI; pentru un comerciant din alt fus, orele difera de facturi. De facut in aceeasi trecere cu etichetele. |
 | Noutati | `src/components/dashboard/ListaNoutati.tsx` (nou), `AnnouncementArticle`, `src/lib/announcements.ts` (`rezumatScurt`), `src/lib/actions/announcement.actions.ts`, pagina panoului | Cinci randuri in loc de un articol desfasurat, fara iconita la titlu. ⚠ **Publicarea nu mai stinge celelalte anunturi** (`unpublishOthers`, scoasa): altfel lista ar fi avut mereu un singur rand. Vezi pasul de date de mai jos. |
 | Alertele de cont | `src/components/dashboard/BandaCont.tsx` (nou), `TrialBanner`, `PaymentPastDueBanner`, `GracePeriodBanner`, `ActivationChecklist`, `src/lib/abonament-timp.ts` (nou, + probe), `src/app/(dashboard)/layout.tsx` | O singura forma pentru toate vestile despre abonament, cu trei trepte (informare, atentie, urgent). ⚠ Zilele ramase se socotesc acum pe SERVER si se trimit ca prop: `GracePeriodBanner` e componenta de client si citea ceasul in randare, deci serverul si browserul puteau ajunge la doua numere diferite. |
+| Navigatie | `src/lib/navigatie-panou.ts` (nou), `Sidebar`, `DashboardTopbar`, `BottomNav`, probele din `navigatia-nu-divergeaza.test.ts` si `decontarile-se-aduna-zi-cu-zi.test.ts` | Meniul e acum unul singur: erau doua copii, iar de pe telefon lipseau Oferte, SMS Marketing si Design sectiuni. Ordine noua, sageti la sectiunile cu submeniu, fara eticheta Beta la Oferte. Bara de jos: Acasa / Comenzi / Produse / Statistici. |
+| Bara de sus | `CautareGlobala`, `ButonAdauga` (noi), `src/lib/actions/cautare-globala.actions.ts`, `src/lib/cautare-termen.ts`, `src/lib/avatar-blob.ts`, `DiscountsClient` | Cautare in produse, comenzi si clienti, cu rezultate sub camp. Buton Adauga (produs, discount, oferta). Chip de utilizator desenat din id. Doar prenumele. Facturare si abonament in meniul contului. |
+| Sigla si starea magazinului | `src/lib/stare-magazin.ts` (nou, + probe), `Sidebar` | Sigla in locul initialei; bulina: verde publicat si domeniu bun, galben nepublicat, rosu domeniu cazut. |
 | Tipuri | `src/types/database.types.ts` | ⚠ Intrarile pentru functiile noi sunt **scrise de mana** (regenerarea completa rescrie `store_settings` din tabela in vedere si rupe zeci de locuri). Dupa aplicarea migratiilor, ele descriu in sfarsit ceva ce exista si in productie. |
 
 ---

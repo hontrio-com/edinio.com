@@ -3,22 +3,22 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { MENIU_PANOU, meniuPentru } from "../../lib/navigatie-panou";
+
 /**
- * Cele doua meniuri ale panoului spun acelasi lucru despre PRODUSE?
+ * Meniul panoului: UN SINGUR LOC, si nimeni nu-si mai face copie.
  *
- * ⚠ EXISTA DOUA, SI AU DIVERGIT DEJA.
+ * ⚠ ISTORIA, fiindca explica de ce proba arata asa.
  *
- * `Sidebar.tsx` e meniul de pe ecran lat; `DashboardTopbar.tsx` e cel de pe telefon. Al doilea
- * spune despre sine ca il oglindeste pe primul — si nu il oglindeste: ii lipsesc intrari intregi
- * din alte grupuri. Nimic nu paza asta.
+ * `Sidebar.tsx` (ecran lat) si `DashboardTopbar.tsx` (sertarul de pe telefon) isi tineau
+ * fiecare propria lista. Al doilea spunea despre sine ca il oglindeste pe primul si nu il
+ * oglindea: masurat pe 20.09.2026, lipseau „Oferte", „SMS Marketing" si „Design sectiuni".
+ * Adica functii intregi invizibile pentru cine lucreaza de pe telefon.
  *
- * Costul e mare tocmai fiindca e invizibil pe ecranul dezvoltatorului: o functie adaugata numai
- * in bara laterala nu exista pentru comerciantii care lucreaza de pe telefon, si nimeni nu afla,
- * fiindca panoul „merge".
- *
- * ⚠ Proba apara grupurile din `GRUPURI_APARATE`, nu tot meniul. Restul a divergit demult, iar o
- * proba care cade de la prima rulare pe o divergenta veche ar fi fost stinsa in aceeasi zi. Aici
- * apara ce se poate apara acum, si creste cand se repara restul: vezi nota de langa lista.
+ * Prima forma a probei compara cele doua liste intre ele, grup cu grup, si apara doar doua
+ * grupuri din unsprezece — restul divergisera demult. Acum lista e una singura
+ * (`@/lib/navigatie-panou`), deci nu mai e nimic de comparat: proba apara chiar REGULA,
+ * adica faptul ca nu s-a intors nimeni la doua copii.
  */
 
 const RADACINA = path.resolve(process.cwd(), "src/components/dashboard");
@@ -28,77 +28,76 @@ function sursa(fisier: string): string {
   return readFileSync(path.join(RADACINA, fisier), "utf8").replace(/\r\n/g, "\n");
 }
 
-/** Intrarile copil ale unui grup, in ordine. */
-function copiiiGrupului(fisier: string, eticheta: string): string[] {
-  const s = sursa(fisier);
-  const grup = s.indexOf(`label: "${eticheta}"`);
-  assert.ok(grup > 0, `nu am gasit grupul ${eticheta} in ${fisier}`);
-  const start = s.indexOf("children: [", grup);
-  const stop = s.indexOf("]", start);
-  assert.ok(start > 0 && stop > start, `nu am gasit lista de copii a grupului ${eticheta} in ${fisier}`);
-  const bucata = s.slice(start, stop);
-  const out: string[] = [];
-  for (const m of bucata.matchAll(/href:\s*"([^"]+)"\s*,\s*label:\s*"([^"]+)"/g)) {
-    out.push(`${m[1]} :: ${m[2]}`);
-  }
-  /*
-   * ⚠ GARDA DE NUMARATOARE. Fara ea, o schimbare de forma a fisierului — alt fel de a scrie
-   * obiectele, o virgula mutata — ar face expresia sa nu mai potriveasca nimic, iar proba ar
-   * trece pe gol comparand doua liste goale. Exact modul de esec pe care proiectul il are scris.
-   */
-  assert.ok(out.length >= 3, `am citit doar ${out.length} intrari din ${fisier} — cititorul s-a rupt`);
-  return out;
-}
+const MENIURI = ["Sidebar.tsx", "DashboardTopbar.tsx"] as const;
 
-/*
- * ⚠ GRUPURILE APARATE CRESC, NU SE INLOCUIESC.
- *
- * Proba s-a nascut aparand doar PRODUSE, fiindca restul meniului divergise demult si o proba
- * care cade de la prima rulare se stinge in aceeasi zi. COMENZI a intrat pe 16.09.2026, cand
- * „Decontari” s-a mutat din radacina in grupul comenzilor: cu prilejul ala s-a vazut ca
- * meniul de telefon nu avea deloc RETURURILE, deci cine lucreaza de pe telefon n-avea cum sa
- * ajunga la ele. Cele doua liste sunt acum identice, deci se pot apara.
- */
-const GRUPURI_APARATE = ["Produse", "Comenzi"] as const;
-
-for (const grup of GRUPURI_APARATE) {
-  test(`grupul ${grup} e IDENTIC in bara laterala si in meniul de telefon`, () => {
-    assert.deepEqual(
-      copiiiGrupului("DashboardTopbar.tsx", grup),
-      copiiiGrupului("Sidebar.tsx", grup),
-      "o intrare adaugata intr-un singur meniu nu exista pentru cine lucreaza de pe telefon",
+for (const fisier of MENIURI) {
+  test(`${fisier} citeste meniul comun, nu unul propriu`, () => {
+    const s = sursa(fisier);
+    assert.match(
+      s,
+      /from "@\/lib\/navigatie-panou"/,
+      "meniul trebuie sa vina din modulul comun",
+    );
+    /*
+     * ⚠ Semnul unei liste proprii e `children: [` sau un `label: "..."` langa un `href:`.
+     * Daca cineva scrie iar un meniu aici, proba cade inainte ca telefonul sa ramana fara
+     * jumatate din sectiuni.
+     */
+    assert.doesNotMatch(s, /children:\s*\[/, `${fisier} si-a facut din nou lista lui de submeniuri`);
+    assert.doesNotMatch(
+      s,
+      /href:\s*"\/dashboard[^"]*",\s*icon:/,
+      `${fisier} si-a facut din nou lista lui de sectiuni`,
     );
   });
 }
 
-/*
- * ⚠ Si nu se pierde pe drum: o intrare mutata sub un grup trebuie sa fie CHIAR acolo, nu
- * doar sa lipseasca din radacina. O proba care ar cere numai lipsa ar trece si daca cineva ar
- * sterge pagina cu totul.
- */
-test("Decontarile stau sub Comenzi in amandoua meniurile, si nu in radacina", () => {
-  for (const fisier of ["Sidebar.tsx", "DashboardTopbar.tsx"]) {
-    const copii = copiiiGrupului(fisier, "Comenzi");
-    assert.ok(
-      copii.some((c) => c.startsWith("/dashboard/settlements ::")),
-      `Decontarile nu mai sunt sub Comenzi in ${fisier}`,
-    );
-    assert.doesNotMatch(
-      sursa(fisier),
-      /icon:\s*Banknote/,
-      `${fisier} are inca o intrare de radacina pentru Decontari`,
-    );
-  }
+test("⚠ proba chiar citeste doua fisiere diferite", () => {
+  /* Perechea obligatorie: doua verificari identice trec si cand cititorul aduce, din
+     greseala, acelasi fisier de doua ori. */
+  assert.notEqual(sursa("Sidebar.tsx"), sursa("DashboardTopbar.tsx"));
 });
 
-test("⚠ probele CHIAR citesc doua fisiere diferite", () => {
+test("ordinea sectiunilor e cea ceruta de proprietar (20.09.2026)", () => {
+  const ceruta = [
+    "Panou principal", "Comenzi", "Clienti", "Produse", "Discounturi",
+    "Oferte", "Statistici", "Cosuri abandonate", "SMS Marketing", "Integrari",
+  ];
+  assert.deepEqual(MENIU_PANOU.map((i) => i.label).slice(0, ceruta.length), ceruta);
+});
+
+test("Decontarile si Retururile stau sub Comenzi, nu in radacina", () => {
+  const comenzi = MENIU_PANOU.find((i) => i.label === "Comenzi");
+  const cai = (comenzi?.children ?? []).map((c) => c.href);
+  assert.ok(cai.includes("/dashboard/returns"), "Retururile au disparut din grupul Comenzi");
+  assert.ok(cai.includes("/dashboard/settlements"), "Decontarile au disparut din grupul Comenzi");
+  assert.ok(
+    !MENIU_PANOU.some((i) => i.href === "/dashboard/settlements"),
+    "Decontarile s-au intors in radacina meniului",
+  );
+});
+
+test("SMS Marketing se arata doar cand comerciantul il are pornit", () => {
+  const cuSms = meniuPentru({ smsoEnabled: true }).map((i) => i.label);
+  const faraSms = meniuPentru({ smsoEnabled: false }).map((i) => i.label);
+  assert.ok(cuSms.includes("SMS Marketing"));
+  assert.ok(!faraSms.includes("SMS Marketing"));
+  /* ⚠ Si nu dispare altceva odata cu el. */
+  assert.equal(faraSms.length, cuSms.length - 1);
+});
+
+test("⚠ bara de jos de pe telefon nu trimite nicaieri in afara meniului", () => {
   /*
-   * ⚠ Perechea obligatorie a probei de deasupra. `deepEqual` pe doua liste identice trece si
-   * cand cititorul ar aduce, din greseala, ACELASI fisier de doua ori — de pilda dupa o
-   * redenumire, sau daca cineva ar face `sursa()` sa cada pe o cale implicita. Atunci proba ar
-   * ramane verde la nesfarsit, fara sa mai compare nimic.
+   * Bara de jos isi are lista ei, fiindca e o alegere de patru sectiuni, nu o oglinda. Dar o
+   * legatura catre o sectiune care nu exista in meniu ar fi o cale pe care nimeni n-o poate
+   * gasi altfel, si care s-ar rupe tacut la prima redenumire de pagina.
    */
-  const a = sursa("Sidebar.tsx");
-  const b = sursa("DashboardTopbar.tsx");
-  assert.notEqual(a, b, "cele doua meniuri se citesc din acelasi fisier");
+  const bara = sursa("BottomNav.tsx");
+  const caiBara = [...bara.matchAll(/href:\s*"(\/dashboard[^"]*)"/g)].map((m) => m[1]);
+  assert.ok(caiBara.length >= 4, `am citit doar ${caiBara.length} intrari — cititorul s-a rupt`);
+
+  const caiMeniu = new Set(MENIU_PANOU.flatMap((i) => [i.href, ...(i.children ?? []).map((c) => c.href)]));
+  for (const cale of caiBara) {
+    assert.ok(caiMeniu.has(cale), `bara de jos duce la ${cale}, care nu exista in meniu`);
+  }
 });

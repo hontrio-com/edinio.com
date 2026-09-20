@@ -32,8 +32,8 @@ function announcementToArticle(a: Announcement) {
   };
 }
 import { SiteStatusBar } from "@/components/dashboard/SiteStatusBar";
-import { RevenueChart } from "@/components/dashboard/RevenueChart";
-import type { ChartDay } from "@/components/dashboard/RevenueChart";
+import { PanouVanzari } from "@/components/dashboard/PanouVanzari";
+import { citesteDateVanzari } from "@/lib/vanzari";
 import { ActivationChecklist, type ChecklistStep } from "@/components/dashboard/ActivationChecklist";
 
 type StatCardProps = {
@@ -207,7 +207,6 @@ async function ContinutPanou({
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0];
   const lastMonthEnd   = thisMonthStart;
 
-  const sevenDaysAgo = new Date(now.getTime() - 6 * 86400000).toISOString().split("T")[0];
 
 
   // Vanzarile nu includ comenzile anulate/rambursate — aceeasi regula ca in
@@ -223,7 +222,8 @@ async function ContinutPanou({
     { count: activeProducts },
     { count: pendingOrders },
     { data: recentOrders },
-    { data: last7DaysRevenue },
+    { data: vanzariRpc },
+    { data: canaleVanzare },
     { data: numaratoareStoc },
     { count: productsTotal },
     { count: ordersTotal },
@@ -244,7 +244,17 @@ async function ContinutPanou({
       .eq("business_id", business.id).eq("status", "pending"),
     supabase.from("orders").select("id, order_number, customer_name, total, status, created_at")
       .eq("business_id", business.id).order("created_at", { ascending: false }).limit(5),
-    supabase.rpc("orders_daily_revenue", { bid: business.id, t_from: sevenDaysAgo }),
+    /*
+      Prima fereastra a graficului de vanzari (ultimele 7 zile, toate canalele),
+      adusa de pe server ca panoul sa nu porneasca gol. Restul perioadelor le
+      cere componenta, din browser.
+
+      ⚠ Ziua e cea ROMANEASCA, taiata in SQL. Graficul de pana acum folosea
+      `orders_daily_revenue`, care grupeaza pe ziua UTC: vara, o comanda de la
+      01:30 se vedea in ziua precedenta.
+    */
+    supabase.rpc("vanzari_panou", { p_business: business.id, p_fel: "7z" }),
+    supabase.rpc("canale_vanzare", { p_business: business.id }),
     /*
       Cate produse sunt sub prag si cate s-au oprit din vanzare. Numaratoarea se
       face IN BAZA, fiindca trebuie sa se uite si in variante: un produs cu 17
@@ -275,18 +285,7 @@ async function ContinutPanou({
     ? Math.round(((ordersTodayCount - ordersYesterdayCount) / ordersYesterdayCount) * 100)
     : null;
 
-  // Build 7-day chart data (bucketed per-day in SQL, UTC — same as toISOString)
-  const revenueByDay = new Map((last7DaysRevenue ?? []).map(r => [r.day, r]));
-  const chartData: ChartDay[] = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(now.getTime() - (6 - i) * 86400000);
-    const dateStr = d.toISOString().split("T")[0];
-    const dayRow = revenueByDay.get(dateStr);
-    return {
-      label: d.toLocaleDateString("ro-RO", { weekday: "short", day: "numeric" }),
-      revenue: Number(dayRow?.revenue ?? 0),
-      orders: Number(dayRow?.order_count ?? 0),
-    };
-  });
+  const dateVanzari = citesteDateVanzari(vanzariRpc);
 
   const latestAnnouncement = await getLatestAnnouncement().catch(() => null);
 
@@ -357,21 +356,20 @@ async function ContinutPanou({
 
       {/* Chart + recent orders */}
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Revenue chart */}
-        <div className="lg:col-span-2 bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold text-foreground">Vanzari - ultimele 7 zile</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(chartData.reduce((s, d) => s + d.revenue, 0))} total</p>
-            </div>
-            <span className="text-xs text-muted-foreground">
-              {chartData.reduce((s, d) => s + d.orders, 0)} comenzi
-            </span>
+        {/* Graficul de vanzari: perioade, canale, comparatie (vezi PanouVanzari) */}
+        {dateVanzari ? (
+          <PanouVanzari
+            businessId={business.id}
+            initial={dateVanzari}
+            canale={(canaleVanzare ?? []).map((c) => ({ canal: c.canal, comenzi: Number(c.comenzi) }))}
+          />
+        ) : (
+          /* Functia din baza n-a raspuns. Panoul nu cade pentru atat: locul
+             graficului ramane, cu un rand care spune ce s-a intamplat. */
+          <div className="lg:col-span-2 flex items-center justify-center rounded-xl bg-card px-5 py-16 text-sm text-muted-foreground ring-1 ring-foreground/10">
+            Graficul de vanzari nu a putut fi incarcat.
           </div>
-          <div className="px-5 py-5">
-            <RevenueChart data={chartData} />
-          </div>
-        </div>
+        )}
 
         {/* Recent orders */}
         <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">

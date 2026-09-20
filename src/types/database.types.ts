@@ -6482,6 +6482,18 @@ export type Database = {
       numar_produse_si_comenzi: { Args: Record<PropertyKey, never>; Returns: Json }
       numar_produse_sub_prag: { Args: { p_business: string; p_prag?: number }; Returns: { sub_prag: number; epuizate: number }[] }
       produse_sub_prag: { Args: { p_business: string; p_prag?: number }; Returns: { id: string; nume: string; imagine: string | null; stoc: number; variante: Json }[] }
+      /* Graficul de vanzari. `vanzari_panou` intoarce un singur JSON cu ambele
+         serii, totalurile si intervalele; forma lui e citita de
+         `citesteDateVanzari` din `@/lib/vanzari`. */
+      fereastra_vanzari: {
+        Args: { p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null }
+        Returns: { de_la: string; pana_la: string; de_la_ant: string; pana_la_ant: string; granulatie: string }[]
+      }
+      canale_vanzare: { Args: { p_business: string }; Returns: { canal: string; comenzi: number }[] }
+      vanzari_panou: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null; p_canal?: string | null }
+        Returns: Json
+      }
       stoc_combinatie: { Args: { p_combinatie: Json }; Returns: number }
       combinatie_aprinsa: { Args: { p_combinatie: Json }; Returns: boolean }
       orders_venit_zilnic: { Args: { bid: string; p_zile: number; p_deplasare?: number }; Returns: unknown }

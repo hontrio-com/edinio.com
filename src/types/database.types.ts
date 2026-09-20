@@ -5005,7 +5005,9 @@ export type Database = {
           canal: string
           cart_id: string
           cheie: string
+          comanda_id: string | null
           confirmat: boolean
+          deschis_la: string | null
           id: string
           pas: number | null
           sursa: string
@@ -5016,7 +5018,9 @@ export type Database = {
           canal: string
           cart_id: string
           cheie: string
+          comanda_id?: string | null
           confirmat?: boolean
+          deschis_la?: string | null
           id?: string
           pas?: number | null
           sursa: string
@@ -5027,13 +5031,22 @@ export type Database = {
           canal?: string
           cart_id?: string
           cheie?: string
+          comanda_id?: string | null
           confirmat?: boolean
+          deschis_la?: string | null
           id?: string
           pas?: number | null
           sursa?: string
           trimis_la?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "recovery_sends_comanda_id_fkey"
+            columns: ["comanda_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "recovery_sends_business_id_fkey"
             columns: ["business_id"]

@@ -3,6 +3,7 @@
 // with the admin client already in its scope.
 
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
+import { mesajulCareAAdus } from "@/lib/abandoned/atribuire";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { hasVariants, cerePersonalizare, parseVariants, findCombo, comboUnitPrice } from "@/lib/storefront/variants";
@@ -75,8 +76,15 @@ export interface AbandonedCartsData {
     abandonedValue: number;
     avgCartValue: number;
     abandonRate: number;
+    /** ⚠ Numai ce se poate DOVEDI: linkul deschis, apoi comanda in fereastra. */
     recoveredCount: number;
     recoveredValue: number;
+    /** ⚠ S-a trimis mesaj si a comandat, dar linkul n-a fost deschis: NEdemonstrabil. */
+    asistateCount: number;
+    asistateValue: number;
+    /** S-a intors singur, fara niciun mesaj. */
+    organiceCount: number;
+    organiceValue: number;
   };
   potentialRevenueThisMonth: number;
   abandonedProducts: AbandonedProduct[];
@@ -482,9 +490,49 @@ export async function markCartConverted(
     } else {
       return; // nothing to match on
     }
-    await q;
+    /*
+     * ⚠ SE CER INAPOI RANDURILE ATINSE. Fara `select`, nu s-ar sti CARE cos
+     * s-a convertit, iar atribuirea de mai jos n-ar avea pe ce sa se lege.
+     */
+    const { data: convertite } = await q.select("id");
+
+    await atribuieMesajelor(admin, (convertite ?? []).map((r) => r.id), match.orderId, new Date(now));
   } catch {
     // Recovery bookkeeping must never break an order.
+  }
+}
+
+/**
+ * Comanda asta a venit dintr-un mesaj de recuperare deschis?
+ *
+ * ⚠ SE SCRIE PE MESAJ, NU PE COMANDA. Atributul nu e o insusire a comenzii
+ * („comanda recuperata"), ci raspunsul la intrebarea „ce a facut mesajul ala".
+ * Un cos poate primi trei mesaje, si numai unul a adus omul inapoi.
+ *
+ * ⚠ TACE LA ORICE EROARE, ca tot ce e in jurul ei: o cifra de raportare n-are
+ * voie sa rupa o comanda platita.
+ */
+async function atribuieMesajelor(
+  admin: SupabaseClient<Database>,
+  cosuri: string[], orderId: string, comandaLa: Date,
+): Promise<void> {
+  if (cosuri.length === 0) return;
+  try {
+    const { data: mesaje } = await admin
+      .from("recovery_sends").select("id, cart_id, trimis_la, deschis_la")
+      .in("cart_id", cosuri).not("deschis_la", "is", null);
+    if (!mesaje?.length) return;
+
+    /* Fiecare cos isi primeste propriul castigator: doua cosuri, doua mesaje. */
+    for (const cartId of cosuri) {
+      const aleMele = mesaje.filter((m) => m.cart_id === cartId);
+      const ales = mesajulCareAAdus(aleMele, comandaLa);
+      if (ales) {
+        await admin.from("recovery_sends").update({ comanda_id: orderId } as never).eq("id", ales.id);
+      }
+    }
+  } catch {
+    // Vezi mai sus: raportarea nu rupe comanda.
   }
 }
 
@@ -571,14 +619,29 @@ export function isQuietHour(quiet: { start: number; end: number } | null, hour: 
 
 // Build the "restore cart" link: opening it rebuilds the customer's cart and
 // jumps to checkout (handled on the storefront), optionally pre-applying a code.
-export function buildRecoverUrl(storeUrl: string, cartId: string, discountCode?: string | null): string {
+export function buildRecoverUrl(
+  storeUrl: string, cartId: string, discountCode?: string | null,
+  /*
+   * ⚠ Cheia mesajului din care vine clickul. Fara ea nu se poate spune CARE
+   * mesaj a adus omul inapoi, ci doar ca a venit prin vreunul - iar cand sunt
+   * trei mesaje intr-o secventa, aia e tocmai intrebarea.
+   *
+   * ⚠ E OPTIONALA DINADINS: linkurile plecate inainte de 21.09.2026 nu o au,
+   * si trebuie sa functioneze mai departe. Fara ea, deschiderea se trece pe
+   * cel mai recent mesaj trimis inaintea clickului.
+   */
+  mesajId?: string | null,
+): string {
   try {
     const u = new URL(storeUrl);
     u.searchParams.set("recover", cartId);
     if (discountCode) u.searchParams.set("code", discountCode);
+    if (mesajId) u.searchParams.set("m", mesajId);
     return u.toString();
   } catch {
     const sep = storeUrl.includes("?") ? "&" : "?";
-    return `${storeUrl}${sep}recover=${encodeURIComponent(cartId)}${discountCode ? `&code=${encodeURIComponent(discountCode)}` : ""}`;
+    return `${storeUrl}${sep}recover=${encodeURIComponent(cartId)}`
+      + (discountCode ? `&code=${encodeURIComponent(discountCode)}` : "")
+      + (mesajId ? `&m=${encodeURIComponent(mesajId)}` : "");
   }
 }

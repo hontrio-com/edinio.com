@@ -115,3 +115,51 @@ export async function confirmaTrimiterea(
   await admin.from("recovery_sends").update({ confirmat: true } as never)
     .eq("cart_id", cerere.cartId).eq("canal", cerere.canal).eq("cheie", cerere.cheie);
 }
+
+/**
+ * Cheia mesajului, ca sa poata intra in link.
+ *
+ * ⚠ `revendicaTrimiterea` nu o intoarce fiindca la prima scriere nu o cere
+ * nimeni; linkul se face abia dupa. Se citeste inapoi cu aceeasi cheie de
+ * cerere, deci nu poate nimeri alt rand.
+ */
+export async function idulMesajului(
+  admin: Client, cerere: Pick<CereRevendicare, "cartId" | "canal" | "cheie">,
+): Promise<string | null> {
+  const { data } = await admin
+    .from("recovery_sends").select("id")
+    .eq("cart_id", cerere.cartId).eq("canal", cerere.canal).eq("cheie", cerere.cheie)
+    .maybeSingle();
+  return (data as { id?: string } | null)?.id ?? null;
+}
+
+/**
+ * Linkul din mesaj a fost deschis.
+ *
+ * ⚠ SE SCRIE O SINGURA DATA, la primul click. Altfel „deschis_la" ar tot urca
+ * la fiecare reincarcare a paginii, si fereastra de atribuire s-ar muta dupa
+ * el - o comanda de acum trei saptamani ar redeveni „recuperata" fiindca omul
+ * a mai deschis o data emailul.
+ *
+ * ⚠ Cand mesajul nu e cunoscut (linkurile plecate inainte de 21.09.2026 n-au
+ * cheia in ele), se insemneaza cel mai recent mesaj trimis catre cosul asta:
+ * e singurul care putea purta clickul.
+ */
+export async function insemneazaDeschiderea(
+  admin: Client, cartId: string, mesajId?: string | null,
+): Promise<void> {
+  const acum = new Date().toISOString();
+  if (mesajId) {
+    await admin.from("recovery_sends").update({ deschis_la: acum } as never)
+      .eq("id", mesajId).eq("cart_id", cartId).is("deschis_la", null);
+    return;
+  }
+  const { data } = await admin
+    .from("recovery_sends").select("id")
+    .eq("cart_id", cartId).is("deschis_la", null)
+    .order("trimis_la", { ascending: false }).limit(1).maybeSingle();
+  const id = (data as { id?: string } | null)?.id;
+  if (id) {
+    await admin.from("recovery_sends").update({ deschis_la: acum } as never).eq("id", id);
+  }
+}

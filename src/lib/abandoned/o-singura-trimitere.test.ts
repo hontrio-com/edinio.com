@@ -90,15 +90,23 @@ test("⚠ DREPTUL SE IA INAINTE DE TRIMITERE, pe amandoua canalele", () => {
   const sursa = readFileSync(
     new URL("../actions/abandoned-cart.actions.ts", import.meta.url), "utf8",
   );
+  /*
+    ⚠ ANCORELE SE PRIND DE CHEMARI, NU DE ARGUMENTE. Prima scriere cauta
+    `canal: "email", cheie: cheieCerere`, care parea al confirmarii - pana cand
+    B1 a adaugat `idulMesajului(...)` cu exact aceleasi argumente INAINTE de
+    trimitere. Proba a cazut fara sa fie nimic stricat: masura alt rand.
+  */
   const iRevEmail = sursa.indexOf('canal: "email", sursa: "manual"');
   const iTrimiteEmail = sursa.indexOf("await sendAbandonedCartRecovery(cart.email");
-  const iConfEmail = sursa.indexOf('canal: "email", cheie: cheieCerere');
+  const iConfEmail = sursa.indexOf('confirmaTrimiterea(createAdminClient(), { cartId, canal: "email"');
   assert.ok(iRevEmail > 0 && iTrimiteEmail > 0 && iConfEmail > 0, "nu s-au gasit toate cele trei");
   assert.ok(iRevEmail < iTrimiteEmail, "emailul pleaca INAINTE sa se ia dreptul");
   assert.ok(iTrimiteEmail < iConfEmail, "emailul e confirmat inainte sa plece");
 
   const iRevSms = sursa.indexOf('canal: "sms", sursa: "manual"');
-  const iConfSms = sursa.indexOf('canal: "sms", cheie: cheieCerere');
-  assert.ok(iRevSms > 0 && iConfSms > 0, "SMS-ul nu trece prin poarta");
-  assert.ok(iRevSms < iConfSms);
+  const iTrimiteSms = sursa.indexOf("await trimiteSiLasaUrma(");
+  const iConfSms = sursa.indexOf('confirmaTrimiterea(admin, { cartId, canal: "sms"');
+  assert.ok(iRevSms > 0 && iTrimiteSms > 0 && iConfSms > 0, "SMS-ul nu trece prin poarta");
+  assert.ok(iRevSms < iTrimiteSms, "SMS-ul pleaca INAINTE sa se ia dreptul");
+  assert.ok(iTrimiteSms < iConfSms, "SMS-ul e confirmat inainte sa plece");
 });

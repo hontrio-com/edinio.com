@@ -11,7 +11,7 @@ import {
   cheileContactului, mesajContactSuprimat, motivulSuprimarii, type RandSuprimare,
 } from "@/lib/abandoned/suprimare";
 import {
-  confirmaTrimiterea, mesajRevendicare, revendicaTrimiterea,
+  confirmaTrimiterea, idulMesajului, insemneazaDeschiderea, mesajRevendicare, revendicaTrimiterea,
 } from "@/lib/abandoned/o-singura-trimitere";
 import { logError } from "@/lib/error-logger";
 import { trimiteSiLasaUrma } from "@/lib/smso-urma";
@@ -21,6 +21,7 @@ import type { NoticeConfig } from "@/lib/notice";
 import { sendAbandonedCartRecovery } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { storeBaseUrl } from "@/lib/seo";
+import { felulRecuperarii } from "@/lib/abandoned/atribuire";
 import { isPremiumPlan } from "@/lib/plans";
 import { ABANDON_MINUTES, COS_PREA_VECHI, cosulMaiPoateFiRecuperat, cuPreturileDinCatalog, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";
@@ -192,13 +193,29 @@ export async function trackAbandonedCart(input: {
 // ── Restore cart (storefront, anonymous) ──────────────────────────────────────
 // Returns the cart's items refreshed against current products, for the "restore
 // cart" recovery link. No personal data exposed; cartId is an unguessable uuid.
-export async function getRecoverableCart(cartId: string): Promise<AbandonedCartItem[]> {
+export async function getRecoverableCart(
+  cartId: string,
+  /* Cheia mesajului din care vine clickul, cand linkul o poarta. */
+  mesajId?: string,
+): Promise<AbandonedCartItem[]> {
   try {
     if (!cartId) return [];
     const admin = createAdminClient();
     const { data: cart } = await admin
       .from("abandoned_carts").select("business_id, items, status, last_activity_at").eq("id", cartId).single();
     if (!cart || cart.status === "converted") return [];
+
+    /*
+     * ⚠ AICI SE NASTE SINGURA CIFRA CARE SE POATE DOVEDI. Pana acum linkul nu
+     * lasa nicio urma ca a fost deschis, deci „Recuperate" numara cosuri
+     * convertite care primisera candva un mesaj - adica si pe cele care s-ar
+     * fi intors oricum.
+     *
+     * ⚠ NU se asteapta si nu se lasa sa strice recuperarea: daca insemnarea
+     * pica, omul tot trebuie sa-si primeasca cosul inapoi. O cifra lipsa e
+     * mai putin rau decat un cos nerecuperat.
+     */
+    void insemneazaDeschiderea(admin, cartId, mesajId).catch(() => {});
 
     /*
      * ═══ ⚠ ACELASI TERMEN CA RETENTIA FISIERELOR ═══
@@ -321,12 +338,51 @@ export async function getAbandonedCartsData(
   const abandoned = all.filter(isAbandoned);
   const abandonedMonth = abandoned.filter((r) => t(r.created_at) >= monthStart);
   const convertedMonth = all.filter((r) => r.status === "converted" && t(r.converted_at) >= monthStart);
-  const recoveredMonth = convertedMonth.filter((r) => r.recovery_email_sent_at || r.recovery_sms_sent_at);
 
   const sum = (arr: CartRow[]) => round2(arr.reduce((s, r) => s + Number(r.subtotal || 0), 0));
   const abandonedValue = sum(abandoned);
   const denom = abandonedMonth.length + convertedMonth.length;
   const abandonRate = denom > 0 ? Math.round((abandonedMonth.length / denom) * 100) : 0;
+
+  /*
+    ═══ ⚠ TREI CIFRE IN LOC DE UNA, SI DE CE ═══
+
+    Pana pe 21.09.2026 aici statea o singura linie: cosurile convertite care
+    aveau vreo data de trimitere. Aia numara si pe cei care s-ar fi intors
+    oricum, fiindca nimic nu arata ca mesajul a facut ceva - linkul nu lasa
+    urma ca a fost deschis.
+
+    ⚠ NU SE ADUNA INTR-UN „RECUPERAT" MAI MARE. Fiecare raspunde la alta
+    intrebare, si a doua e tocmai cea care nu se poate dovedi. Adunate, ar
+    face iar cifra veche, doar cu mai multa munca in spate.
+  */
+  const mesajeleCosurilor = new Map<string, { trimis_la: string; deschis_la: string | null }[]>();
+  if (convertedMonth.length > 0) {
+    const { data: trimise } = await supabase
+      .from("recovery_sends").select("cart_id, trimis_la, deschis_la")
+      .in("cart_id", convertedMonth.map((r) => r.id));
+    for (const m of trimise ?? []) {
+      const lista = mesajeleCosurilor.get(m.cart_id) ?? [];
+      lista.push({ trimis_la: m.trimis_la, deschis_la: m.deschis_la });
+      mesajeleCosurilor.set(m.cart_id, lista);
+    }
+  }
+
+  const peFel = { atribuita: [] as CartRow[], asistata: [] as CartRow[], organica: [] as CartRow[] };
+  for (const r of convertedMonth) {
+    const mesaje = mesajeleCosurilor.get(r.id) ?? [];
+    /*
+      ⚠ CADEREA INAPOI PE DATELE VECHI. Cosurile de dinainte de jurnal n-au
+      niciun rand in `recovery_sends`, dar unele chiar au primit mesaje - se
+      vede in `recovery_email_sent_at`. Fara asta, tot istoricul ar fi trecut
+      peste noapte la „organic", si comerciantul ar fi vazut munca lui de
+      pana acum stearsa.
+    */
+    const felul = mesaje.length === 0
+      ? ((r.recovery_email_sent_at || r.recovery_sms_sent_at) ? "asistata" : "organica")
+      : felulRecuperarii(mesaje, new Date(t(r.converted_at) || now));
+    peFel[felul].push(r);
+  }
 
   // Aggregate items across abandoned carts -> top abandoned products.
   const prodMap = new Map<string, { name: string; quantity: number; value: number; carts: number; image_url: string | null }>();
@@ -358,8 +414,16 @@ export async function getAbandonedCartsData(
       abandonedValue,
       avgCartValue: abandoned.length ? round2(abandonedValue / abandoned.length) : 0,
       abandonRate,
-      recoveredCount: recoveredMonth.length,
-      recoveredValue: sum(recoveredMonth),
+      /*
+        ⚠ „Recuperate" ramane, dar inseamna acum CEVA CE SE POATE DOVEDI: omul
+        a deschis linkul din mesaj si a comandat in fereastra de sapte zile.
+      */
+      recoveredCount: peFel.atribuita.length,
+      recoveredValue: sum(peFel.atribuita),
+      asistateCount: peFel.asistata.length,
+      asistateValue: sum(peFel.asistata),
+      organiceCount: peFel.organica.length,
+      organiceValue: sum(peFel.organica),
     },
     potentialRevenueThisMonth: sum(abandonedMonth),
     abandonedProducts,
@@ -564,12 +628,17 @@ export async function sendAbandonedCartEmail(
   const opritDeDublura = mesajRevendicare(revendicare);
   if (opritDeDublura) return { error: opritDeDublura };
 
+  /* Ca sa se stie CARE mesaj a adus omul inapoi, nu doar ca a venit prin vreunul. */
+  const mesajId = cheieCerere
+    ? await idulMesajului(createAdminClient(), { cartId, canal: "email", cheie: cheieCerere })
+    : null;
+
   try {
     const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
     const emailSender = await getStoreEmailSender(supabase, businessId);
     await sendAbandonedCartRecovery(cart.email, {
       storeName: biz.store_name ?? biz.business_name,
-      recoverUrl: buildRecoverUrl(storeUrl, cartId, discountCode?.trim() || null),
+      recoverUrl: buildRecoverUrl(storeUrl, cartId, discountCode?.trim() || null, mesajId),
       customerName: cart.customer_name,
       items: proaspat.items,
       total: proaspat.total,
@@ -686,8 +755,12 @@ export async function sendAbandonedCartSms(
   const opritSms = mesajRevendicare(revendicareSms);
   if (opritSms) return { error: opritSms };
 
+  const mesajIdSms = cheieCerere
+    ? await idulMesajului(admin, { cartId, canal: "sms", cheie: cheieCerere })
+    : null;
+
   const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
-  const recoverUrl = buildRecoverUrl(storeUrl, cartId, discountCode?.trim() || null);
+  const recoverUrl = buildRecoverUrl(storeUrl, cartId, discountCode?.trim() || null, mesajIdSms);
   const body = message?.trim()
     ? `${interpolateRecoveryMessage(message, { name: cart.customer_name, store: biz.store_name ?? biz.business_name })} ${recoverUrl}`
     : defaultRecoverySms({

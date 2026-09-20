@@ -542,8 +542,10 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     const cartId = params.get("recover");
     if (!cartId) return;
     const code = params.get("code");
+    /* ⚠ Cheia mesajului: fara ea nu se poate spune CARE mesaj a adus omul inapoi. */
+    const mesajId = params.get("m") ?? undefined;
     let cancelled = false;
-    getRecoverableCart(cartId).then((items) => {
+    getRecoverableCart(cartId, mesajId).then((items) => {
       if (cancelled || items.length === 0) return;
       /*
        * ⚠ SI VARIANTA, SI PERSONALIZAREA. Fara ele, „recupereaza cosul" punea in cos aceeasi cana
@@ -580,6 +582,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     const url = new URL(window.location.href);
     url.searchParams.delete("recover");
     url.searchParams.delete("code");
+    url.searchParams.delete("m");
     window.history.replaceState({}, "", url.toString());
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { AbandonedAutomationsTab } from "./AbandonedAutomationsTab";
+import { ExplicatieCard } from "./ExplicatieCard";
+import { NUMELE_RECUPERARII } from "@/lib/abandoned/atribuire";
 import {
   setAbandonedCartEnabled, sendAbandonedCartEmail, sendAbandonedCartSms, deleteAbandonedCart,
   ignoraCosAbandonat,
@@ -21,6 +23,19 @@ import {
 } from "@/lib/abandoned-cart";
 import { avertismentSms, scrieSocoteala, socotesteSms } from "@/lib/abandoned/sms-segmente";
 import type { AbandonedCartsData, AbandonedCartRow } from "@/lib/abandoned-cart";
+
+/*
+  ⚠ NUMELE VECHI ERA „Rata abandon”, SI SE CITEA GRESIT. Arata ca procentul
+  vizitatorilor care nu cumpara. De fapt numitorul lui e mult mai mic: numai
+  finalizarile in care omul a apucat sa-si lase datele de contact, fiindca
+  numai atunci se salveaza un cos. Cine pleaca mai devreme nu apare nicaieri.
+
+  Scris pe randuri separate ca sa se citeasca in bula, nu ca un bloc.
+*/
+const EXPLICATIA_RATEI = [
+  "Din finalizările în care clientul și-a lăsat datele de contact luna aceasta, câte au rămas neterminate.",
+  "Nu e procentul din toți vizitatorii magazinului și nici din toate coșurile: despre cine pleacă mai devreme, fără să lase nimic, pagina asta nu știe nimic.",
+].join("\n\n");
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -122,9 +137,11 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
   );
 }
 
-function KpiCard({ icon: Icon, label, value, sub, accent }: {
+function KpiCard({ icon: Icon, label, value, sub, accent, explicatie }: {
   icon: React.ElementType; label: string; value: string; sub?: string;
   accent?: string; // hex for semantic colors, "primary" for the platform accent, omit for neutral
+  /* ⚠ Cifrele care se pot citi gresit isi spun singure ce masoara. */
+  explicatie?: string;
 }) {
   const isPrimary = accent === "primary";
   const isHex = !!accent && accent !== "primary";
@@ -138,6 +155,7 @@ function KpiCard({ icon: Icon, label, value, sub, accent }: {
           <Icon className="h-4 w-4" />
         </span>
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
+        {explicatie && <span className="ml-auto -mr-1"><ExplicatieCard text={explicatie} eticheta={label} /></span>}
       </div>
       <p className="text-2xl font-bold text-foreground tabular-nums">{value}</p>
       {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
@@ -371,9 +389,40 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <KpiCard icon={ShoppingBag} label="Coșuri abandonate" value={String(kpis.abandonedCount)} accent="primary" />
         <KpiCard icon={Banknote} label="Valoare abandonată" value={formatPrice(kpis.abandonedValue)} accent="#ef4444" />
-        <KpiCard icon={Percent} label="Rată abandon" value={`${kpis.abandonRate}%`} sub="luna aceasta" accent="#f59e0b" />
-        <KpiCard icon={RotateCcw} label="Recuperate" value={String(kpis.recoveredCount)} sub={formatPrice(kpis.recoveredValue)} accent="#16a34a" />
+        <KpiCard
+          icon={Percent} label="Rată de abandon la finalizare" value={`${kpis.abandonRate}%`}
+          sub="luna aceasta" accent="#f59e0b"
+          explicatie={EXPLICATIA_RATEI}
+        />
+        <KpiCard
+          icon={RotateCcw} label={NUMELE_RECUPERARII.atribuita.titlu} value={String(kpis.recoveredCount)}
+          sub={formatPrice(kpis.recoveredValue)} accent="#16a34a"
+          explicatie={NUMELE_RECUPERARII.atribuita.explicatie}
+        />
         <KpiCard icon={TrendingDown} label="Valoare medie coș" value={formatPrice(kpis.avgCartValue)} />
+      </div>
+
+      {/*
+        ⚠ CELELALTE DOUA STAU DEDESUBT, MAI MICI, SI NU SE ADUNA CU PRIMA.
+        Puse pe acelasi rand, ochiul le-ar aduna intr-un „recuperat" mai mare -
+        adica exact cifra veche, doar cu mai multa munca in spate. A doua e
+        tocmai cea care NU se poate dovedi, si asta trebuie sa se vada.
+      */}
+      <div className="grid sm:grid-cols-2 gap-3">
+        {([
+          ["asistata", kpis.asistateCount, kpis.asistateValue],
+          ["organica", kpis.organiceCount, kpis.organiceValue],
+        ] as const).map(([fel, nr, val]) => (
+          <div key={fel} className="rounded-2xl ring-1 ring-foreground/10 bg-card px-4 py-3 flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-muted-foreground">{NUMELE_RECUPERARII[fel].titlu}</p>
+              <p className="text-lg font-bold text-foreground tabular-nums">
+                {nr} <span className="text-xs font-normal text-muted-foreground">· {formatPrice(val)}</span>
+              </p>
+            </div>
+            <ExplicatieCard text={NUMELE_RECUPERARII[fel].explicatie} eticheta={NUMELE_RECUPERARII[fel].titlu} />
+          </div>
+        ))}
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">

@@ -129,14 +129,40 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
 
 ### Etapa B - cifre care se pot dovedi
 
-- [ ] **B1.** Linkul de recuperare lasa urma: se inregistreaza mesajul, canalul, pasul, data
-      accesarii si comanda rezultata, cu fereastra de atribuire de 7 zile.
-- [ ] **B2.** Trei cifre in loc de una:
-      **Recuperare atribuita** (comanda a venit prin link), **Recuperare asistata** (s-a trimis
-      mesaj, atribuirea nu se poate dovedi), **Conversie organica** (fara accesarea mesajului).
-- [ ] **B3.** „Rata de abandon" se redenumeste **„Rata de abandon la finalizare"**, cu tooltip
-      care spune ce masoara: sesiunile de finalizare IDENTIFICATE (adica cele in care omul a
-      lasat date de contact), nu toti vizitatorii si nici toate cosurile.
+- [x] **B1.** Linkul lasa urma. Doua coloane pe `recovery_sends`: `deschis_la` si `comanda_id`.
+      ⚠ Linkul poarta acum si cheia mesajului (`&m=`), ca sa se stie CARE mesaj a adus omul
+      inapoi - cand sunt trei intr-o secventa, aia e tocmai intrebarea. Cheia e OPTIONALA:
+      linkurile plecate inainte de 21.09.2026 n-o au, si atunci deschiderea se trece pe cel mai
+      recent mesaj netrimis-deschis al cosului, singurul care putea purta clickul.
+      ⚠ Deschiderea se scrie O SINGURA DATA, la primul click (`is("deschis_la", null)`). Altfel
+      ora ar urca la fiecare reincarcare, si fereastra de atribuire s-ar muta dupa ea: o comanda
+      de acum trei saptamani ar redeveni „recuperata" fiindca omul a mai deschis o data emailul.
+      ⚠ Insemnarea nu asteapta si nu poate strica recuperarea: daca pica, omul tot isi primeste
+      cosul. O cifra lipsa e mai putin rau decat un cos nerecuperat.
+      ⚠ La cron cheia se face INAINTE (`crypto.randomUUID()`) si se duce si in link, si in rand:
+      acolo randul de jurnal se scrie abia dupa trimitere, fiindca apararea automatizarilor e
+      compare-and-swap-ul, nu el.
+      Verificat cap-coada pe baza demo: cheia intra in link, clickul lasa urma, al doilea click
+      NU muta ora, si comanda se leaga de mesaj la conversie.
+- [x] **B2.** Trei cifre in loc de una.
+      ⚠ NU se aduna intr-un „recuperat" mai mare: suma lor e chiar cifra veche, adica exact cea
+      care nu spunea nimic. De-aia „Recuperare atribuita" sta sus, pe randul cardurilor mari, si
+      celelalte doua dedesubt, mai mici, fiecare cu explicatia ei.
+      ⚠ Fereastra se masoara DE LA DESCHIDERE, nu de la trimitere: un mesaj citit a treia zi si
+      urmat de comanda a patra zi e o recuperare. Masurata de la trimitere, fereastra ar fi
+      expirat tocmai pentru omul care chiar a venit prin link.
+      ⚠ O comanda plasata INAINTEA deschiderii e „asistata", nu „atribuita": un click de
+      curiozitate de seara n-are voie sa ia meritul unei comenzi de dimineata.
+      ⚠ Meritul merge la mesajul deschis CEL MAI RECENT. Pe primul, orice secventa ar fi aratat
+      ca merge doar prima trimitere si ca urmatoarele sunt bani aruncati.
+      ⚠ Cosurile de dinainte de jurnal cad inapoi pe `recovery_email_sent_at`: fara asta, tot
+      istoricul ar fi trecut peste noapte la „organic", si comerciantul ar fi vazut munca lui de
+      pana acum stearsa.
+- [x] **B3.** „Rata abandon" a devenit **„Rata de abandon la finalizare"**, cu explicatie la
+      semnul de intrebare (acelasi `ExplicatieCard` de la carduri, care se deschide si la deget,
+      nu doar la maus). Spune ce e in numitor: numai finalizarile in care omul a apucat sa-si
+      lase datele de contact, fiindca numai atunci se salveaza un cos. Cine pleaca mai devreme
+      nu apare nicaieri.
 
 ### Etapa C - aceeasi perioada peste tot
 

@@ -76,7 +76,7 @@ async function revendicaPasul(
 async function marcheazaTrimis(
   admin: Admin, cartId: string,
   cart: { recovery_count: number }, now: Date, channel: "email" | "sms",
-  urma?: { businessId: string; pas: number },
+  urma?: { businessId: string; pas: number; mesajId: string },
 ): Promise<void> {
   /*
    * ⚠ Randul din `recovery_sends` NU e apararea de aici - apararea e
@@ -90,6 +90,8 @@ async function marcheazaTrimis(
    */
   if (urma) {
     const { error } = await admin.from("recovery_sends").insert({
+      /* ⚠ Acelasi id care a intrat in link, ca deschiderea sa gaseasca randul. */
+      id: urma.mesajId,
       business_id: urma.businessId, cart_id: cartId, canal: channel,
       sursa: "automatizare", cheie: `pas:${urma.pas}`, pas: urma.pas, confirmat: true,
     } as never);
@@ -333,7 +335,14 @@ export async function GET(req: NextRequest) {
       // asa nu poate pleca acelasi mesaj de doua ori.
       if (!(await revendicaPasul(admin, cart.id, cart, now))) continue;
 
-      const recoverUrl = buildRecoverUrl(storeUrl, cart.id, step.discount_code ?? null);
+      /*
+       * ⚠ Randul de jurnal se scrie ABIA DUPA trimitere (vezi `marcheazaTrimis`),
+       * fiindca apararea automatizarilor e compare-and-swap-ul de pe pas, nu el.
+       * Deci cheia mesajului nu exista inca in clipa cand se face linkul: se
+       * face AICI, si se duce in amandoua locurile.
+       */
+      const mesajId = crypto.randomUUID();
+      const recoverUrl = buildRecoverUrl(storeUrl, cart.id, step.discount_code ?? null, mesajId);
 
       if (canal.fel === "email") {
         try {
@@ -351,7 +360,7 @@ export async function GET(req: NextRequest) {
             discountCode: step.discount_code ?? undefined,
             unsubscribeUrl: urlDezabonare(PLATFORM_ORIGIN, store.businessId, canal.email),
           }, emailSender);
-          await marcheazaTrimis(admin, cart.id, cart, now, "email", { businessId: store.businessId, pas: cart.automation_step });
+          await marcheazaTrimis(admin, cart.id, cart, now, "email", { businessId: store.businessId, pas: cart.automation_step, mesajId });
           sent++;
         } catch {
           /*
@@ -380,7 +389,7 @@ export async function GET(req: NextRequest) {
           });
           smsOk = res.success;
         }
-        if (smsOk) { await marcheazaTrimis(admin, cart.id, cart, now, "sms", { businessId: store.businessId, pas: cart.automation_step }); sent++; }
+        if (smsOk) { await marcheazaTrimis(admin, cart.id, cart, now, "sms", { businessId: store.businessId, pas: cart.automation_step, mesajId }); sent++; }
       }
     }
   }

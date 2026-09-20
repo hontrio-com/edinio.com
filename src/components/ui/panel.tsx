@@ -47,7 +47,7 @@ function Panel({
     <div
       data-slot="panel"
       className={cn(
-        "rounded-xl border border-border bg-surface",
+        "rounded-xl bg-card ring-1 ring-foreground/10",
         title != null && "space-y-4 p-4",
         className
       )}

@@ -63,7 +63,7 @@ export function OlxClient({ businessId, status, adverts, advertsError, categorie
   }, []);
 
   if (!status) {
-    return <div className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
+    return <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
   }
 
   if (!status.configured) {
@@ -116,7 +116,7 @@ export function OlxClient({ businessId, status, adverts, advertsError, categorie
 
 function EmptyState({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-8 text-center">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-8 text-center">
       <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Icon className="h-6 w-6" /></div>
       <h2 className="mb-2 text-lg font-bold text-foreground">{title}</h2>
       <div className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">{children}</div>
@@ -166,7 +166,7 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
       )}
 
       {/* Connection banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success"><CircleCheck className="h-5 w-5" /></span>
           <div className="min-w-0">
@@ -500,7 +500,7 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
   }
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
+    <div className="space-y-4 rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
       <h3 className="text-sm font-semibold text-foreground">Setări anunțuri OLX</h3>
       <div className="grid gap-3 sm:grid-cols-2">
         <SettingField label="Tip vânzător">
@@ -642,7 +642,7 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+    <div className="overflow-hidden rounded-2xl ring-1 ring-foreground/10 bg-card">
       <div className="flex items-center gap-2 border-b border-border px-5 py-4">
         <Tag className="h-4 w-4 text-muted-foreground" />
         <h3 className="text-sm font-semibold text-foreground">Anunțuri pe OLX</h3>
@@ -804,7 +804,7 @@ function LogoAnunt({ businessId, advertId, nume, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="w-full max-w-md space-y-3 rounded-2xl border border-border bg-card p-4" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md space-y-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-2">
           <div>
             <h4 className="text-sm font-semibold text-foreground">Logo pe anunț</h4>
@@ -909,7 +909,7 @@ function Kpi({ label, value, tone, icon: Icon }: { label: string; value: number;
     : tone === "danger" ? "bg-destructive/10 text-destructive"
     : "bg-muted text-muted-foreground";
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
       <div className="mb-2 flex items-center gap-2">
         <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", toneCls)}>
           {Icon ? <Icon className="h-4 w-4" /> : <Tag className="h-4 w-4" />}

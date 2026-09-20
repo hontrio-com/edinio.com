@@ -282,7 +282,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
           <h1 className="text-2xl font-bold text-foreground tracking-tight">SMS Marketing</h1>
           <p className="text-sm text-muted-foreground mt-1">Trimite campanii SMS catre clientii tai</p>
         </div>
-        <div className="flex items-center gap-2 bg-surface border border-border rounded-xl px-4 py-2.5">
+        <div className="flex items-center gap-2 bg-card ring-1 ring-foreground/10 rounded-xl px-4 py-2.5">
           <MessageSquare className="h-4 w-4 text-primary flex-shrink-0" />
           <div className="text-right">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Credit SMSO</p>
@@ -298,7 +298,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
       </div>
 
       {/* Filters card */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
         <button
           type="button"
           onClick={() => setFiltersOpen(o => !o)}
@@ -467,7 +467,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
       </div>
 
       {/* Templates */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
         <button
           type="button"
           onClick={() => setTemplatesOpen(o => !o)}
@@ -600,7 +600,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
       </div>
 
       {/* Message composer */}
-      <div className="bg-surface border border-border rounded-xl p-5 space-y-3">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-foreground">Compune mesajul</p>
           <div className="text-right">
@@ -692,7 +692,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
       )}
 
       {/* Campaign history */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
           <p className="text-sm font-semibold text-foreground">Istoric campanii</p>
         </div>

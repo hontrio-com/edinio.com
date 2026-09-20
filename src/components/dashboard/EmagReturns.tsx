@@ -61,7 +61,7 @@ export function EmagReturns({ businessId }: { businessId: string }) {
 
   if (randuri === null) {
     return (
-      <div className="rounded-xl border border-border bg-card p-5">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Se citesc retururile…
         </div>
@@ -73,7 +73,7 @@ export function EmagReturns({ businessId }: { businessId: string }) {
   if (randuri.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-semibold">

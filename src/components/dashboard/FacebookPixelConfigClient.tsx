@@ -255,7 +255,7 @@ export function FacebookPixelConfigClient({
         </p>
       </div>
 
-      <div className="rounded-xl border border-border bg-surface p-4">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-4">
         <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
           <Search className="h-4 w-4 text-primary" /> Cum verifici ca pixelul functioneaza
         </p>

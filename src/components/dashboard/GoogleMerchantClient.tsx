@@ -54,7 +54,7 @@ export function GoogleMerchantClient({ businessId, status, products, categories,
   }, []);
 
   if (!status) {
-    return <div className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
+    return <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
   }
 
   // Not yet live for the public (OAuth verification pending), or platform
@@ -125,7 +125,7 @@ export function GoogleMerchantClient({ businessId, status, products, categories,
 
 function EmptyState({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-8 text-center">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-8 text-center">
       <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Icon className="h-6 w-6" /></div>
       <h2 className="mb-2 text-lg font-bold text-foreground">{title}</h2>
       <div className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">{children}</div>
@@ -302,7 +302,7 @@ function ProgramePanel({ businessId, faraDestinatie }: { businessId: string; far
   return (
     <div className="space-y-3">
       {avertisment}
-      <div className="rounded-2xl border border-border bg-card p-5">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
         <h3 className="mb-3 text-sm font-semibold text-foreground">Unde pot apărea produsele</h3>
         <ul className="space-y-3">
           {rez.programs.map((p) => {
@@ -391,7 +391,7 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
     <div className="space-y-6">
       <AccountIssuesBanner businessId={businessId} />
       {/* Connection banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success"><CircleCheck className="h-5 w-5" /></span>
           <div className="min-w-0">
@@ -465,7 +465,7 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
 
       {/* Settings */}
       {showSettings && (
-        <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
+        <div className="space-y-4 rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
           <h3 className="text-sm font-semibold text-foreground">Setări feed</h3>
           <div className="grid gap-3 sm:grid-cols-3">
             <SettingField label="Feed label"><Input value={feedLabel} onChange={(e) => setFeedLabel(e.target.value)} /></SettingField>
@@ -516,7 +516,7 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
       <CategoryMapping businessId={businessId} categories={categories} initialMap={status.categoryMap} />
 
       {/* Product status table */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="overflow-hidden rounded-2xl ring-1 ring-foreground/10 bg-card">
         <div className="flex items-center gap-2 border-b border-border px-5 py-4">
           <ShoppingBag className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold text-foreground">Produse în Google</h3>
@@ -607,7 +607,7 @@ function Kpi({ label, value, tone, icon: Icon }: { label: string; value: number;
     : tone === "danger" ? "bg-destructive/10 text-destructive"
     : "bg-muted text-muted-foreground";
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
       <div className="mb-2 flex items-center gap-2">
         <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", toneCls)}>
           {Icon ? <Icon className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
@@ -678,7 +678,7 @@ function CategoryMapping({ businessId, categories, initialMap }: {
   const mapped = categories.filter((c) => map[c]).length;
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
+    <div className="space-y-4 rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
       <div>
         <h3 className="text-sm font-semibold text-foreground">Mapare categorii</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">Asociază categoriile tale cu cele Google pentru o listare corectă ({mapped}/{categories.length} mapate).</p>

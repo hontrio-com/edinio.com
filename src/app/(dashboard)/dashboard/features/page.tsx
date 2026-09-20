@@ -560,7 +560,7 @@ export default async function IntegrationsPage() {
                 return (
                   <div
                     key={integration.name}
-                    className="relative flex items-center gap-3.5 p-4 rounded-xl border border-border bg-surface opacity-60 cursor-not-allowed select-none"
+                    className="relative flex items-center gap-3.5 p-4 rounded-xl ring-1 ring-foreground/10 bg-card opacity-60 cursor-not-allowed select-none"
                   >
                     <div className="w-16 h-10 flex-shrink-0 flex items-center justify-center">
                       <img

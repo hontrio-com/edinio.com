@@ -123,7 +123,7 @@ function DiscountModal({ businessId, editing, onClose }: ModalProps) {
 
   return (
     <Overlay>
-      <div className="bg-surface rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto border border-border">
+      <div className="bg-card rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto ring-1 ring-foreground/10">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h2 className="text-base font-semibold text-foreground">
@@ -325,7 +325,7 @@ function DeleteDialog({ discount, businessId, onClose }: DeleteDialogProps) {
 
   return (
     <Overlay>
-      <div className="bg-surface rounded-2xl w-full max-w-sm shadow-2xl border border-border p-5">
+      <div className="bg-card rounded-2xl w-full max-w-sm shadow-2xl ring-1 ring-foreground/10 p-5">
         <h2 className="text-base font-semibold text-foreground mb-1">Sterge discount</h2>
         <p className="text-sm text-muted-foreground mb-4">
           Esti sigur ca vrei sa stergi codul{" "}
@@ -425,7 +425,7 @@ export function DiscountsClient({ discounts, businessId }: {
       ) : (
         <>
           {/* Table */}
-          <div className="bg-surface border border-border rounded-xl overflow-hidden">
+          <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -546,7 +546,7 @@ export function DiscountsClient({ discounts, businessId }: {
               { label: "Total utilizari", value: discounts.reduce((s, d) => s + d.uses_count, 0) },
               { label: "Expirate / Epuizate", value: discounts.filter(d => isExpired(d) || (d.max_uses !== null && d.uses_count >= d.max_uses)).length },
             ].map(stat => (
-              <div key={stat.label} className="bg-surface border border-border rounded-xl p-4">
+              <div key={stat.label} className="bg-card ring-1 ring-foreground/10 rounded-xl p-4">
                 <p className="text-xs text-muted-foreground">{stat.label}</p>
                 <p className="text-2xl font-bold text-foreground mt-1">{stat.value}</p>
               </div>

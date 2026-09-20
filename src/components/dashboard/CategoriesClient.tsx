@@ -634,7 +634,7 @@ export function CategoriesClient({ initialCategories, descrieriInitiale, descrie
           value={moveTarget}
           onChange={(e) => setMoveTarget(e.target.value)}
           aria-label={`Muta ${cat.name} in`}
-          className="flex-1 min-w-0 px-2 py-1 text-sm bg-surface border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="flex-1 min-w-0 px-2 py-1 text-sm bg-card ring-1 ring-foreground/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
         >
           <option value="" disabled={acasa}>
             {acasa ? "Este deja la nivelul principal" : "Nivel principal (fara parinte)"}

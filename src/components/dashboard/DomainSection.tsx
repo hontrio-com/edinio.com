@@ -1163,7 +1163,7 @@ export function DomainSection({
 
           {/* Pending orders */}
           {activeOrders.length > 0 && (
-            <div className="bg-surface border border-border rounded-xl overflow-hidden">
+            <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
               <div className="px-5 py-3.5 border-b border-border">
                 <p className="text-sm font-semibold text-foreground">Comenzi in curs</p>
               </div>
@@ -1206,7 +1206,7 @@ export function DomainSection({
 
           {/* Owned domains list */}
           {!loadingDomains && domains.length > 0 && (
-            <div className="bg-surface border border-border rounded-xl overflow-hidden">
+            <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
               <div className="px-5 py-3.5 border-b border-border">
                 <p className="text-sm font-semibold text-foreground">Domeniile tale</p>
               </div>
@@ -1243,7 +1243,7 @@ export function DomainSection({
 
           {/* Completed/cancelled orders history */}
           {orders.filter((o) => o.status !== "pending" && o.status !== "processing").length > 0 && (
-            <div className="bg-surface border border-border rounded-xl overflow-hidden">
+            <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
               <div className="px-5 py-3.5 border-b border-border">
                 <p className="text-sm font-semibold text-foreground">Istoric comenzi domenii</p>
               </div>
@@ -1420,7 +1420,7 @@ export function DomainSection({
 
           {/* DNS instructions */}
           {customDomain && (
-            <div className="bg-surface border border-border rounded-xl overflow-hidden">
+            <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
               <div className="px-5 py-4 border-b border-border">
                 <p className="text-sm font-semibold text-foreground">
                   Configureaza domeniul

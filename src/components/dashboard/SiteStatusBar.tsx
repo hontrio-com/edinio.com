@@ -89,7 +89,7 @@ export function SiteStatusBar({
             onClick={() => { if (!publishing) setShowConfirm(false); }}
           >
             <div
-              className="w-full max-w-sm bg-card rounded-2xl border border-border shadow-xl p-6"
+              className="w-full max-w-sm bg-card rounded-2xl ring-1 ring-foreground/10 shadow-xl p-6"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center mb-3">

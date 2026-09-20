@@ -154,7 +154,7 @@ export function GoogleAdsConfigClient({
         </p>
       </div>
 
-      <div className="rounded-xl border border-border bg-surface p-4">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-4">
         <p className="mb-2 text-sm font-semibold text-foreground">Enhanced conversions</p>
         <p className="text-xs text-muted-foreground">
           La comanda incheiata trimitem emailul si telefonul clientului <span className="font-medium text-foreground">hash-uite

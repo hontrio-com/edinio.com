@@ -72,7 +72,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
 
   if (!status) {
     return (
-      <div className="rounded-xl border border-border bg-card p-6">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-6">
         <p className="text-sm text-muted-foreground">
           Nu am putut citi starea integrării. Reîncarcă pagina.
         </p>
@@ -82,7 +82,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
 
   if (!status.globallyEnabled) {
     return (
-      <div className="rounded-xl border border-border bg-card p-6">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-6">
         <p className="text-sm text-muted-foreground">
           Integrarea eMAG este momentan indisponibilă. Revenim cu un anunț.
         </p>
@@ -179,7 +179,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
       <div className="space-y-4">
         <PanouIp ip={status.ipDeAlbit} />
 
-        <div className="rounded-xl border border-border bg-card p-6">
+        <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-6">
           <h2 className="text-base font-semibold">Conectează contul eMAG</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Ai nevoie de un utilizator cu drept de API, din contul tău de vânzător eMAG.
@@ -299,7 +299,7 @@ export function EmagClient({ businessId, status }: { businessId: string; status:
         </div>
       )}
 
-      <div className="rounded-xl border border-border bg-card p-6">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -907,7 +907,7 @@ function PanouSincronizare({ businessId }: { businessId: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <h3 className="text-sm font-semibold">Sincronizează acum</h3>
       <p className="mt-1 max-w-prose text-xs text-muted-foreground">
         Totul merge singur, din minut în minut. Butoanele de mai jos sunt pentru când nu
@@ -1000,7 +1000,7 @@ function PanouIstoric({ businessId }: { businessId: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <h3 className="text-sm font-semibold">Adu comenzile vechi</h3>
       <p className="mt-1 max-w-prose text-xs text-muted-foreground">
         Le vezi în Edinio la un loc cu restul. <strong>Nu se scade stoc și nu se emit
@@ -1052,7 +1052,7 @@ function PanouNotificari({
   const [copiat, setCopiat] = useState(false);
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <h3 className="text-sm font-semibold">Comenzi instant (optional)</h3>
       <p className="mt-1 max-w-prose text-xs text-muted-foreground">
         Comenzile intra oricum singure, la fiecare minut. Daca vrei sa vina{" "}
@@ -1211,7 +1211,7 @@ function PanouImport({ businessId }: { businessId: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">{BUTON_ADU_OFERTELE}</h3>

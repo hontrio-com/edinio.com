@@ -89,7 +89,7 @@ export function OlxMessenger({ businessId, adverts }: { businessId: string; adve
   }, [businessId, offset]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+    <div className="overflow-hidden rounded-2xl ring-1 ring-foreground/10 bg-card">
       <div className="flex items-center justify-between gap-2 px-5 py-4">
         <div className="flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-muted-foreground" />
@@ -228,7 +228,7 @@ function MessengerModal({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-0 sm:p-4" onClick={onClose}>
       <div
-        className="flex h-full w-full max-w-4xl flex-col overflow-hidden bg-card shadow-xl sm:h-[85vh] sm:rounded-2xl sm:border sm:border-border"
+        className="flex h-full w-full max-w-4xl flex-col overflow-hidden bg-card shadow-xl sm:h-[85vh] sm:rounded-2xl sm:ring-1 ring-foreground/10 sm:border-border"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top bar */}

@@ -48,7 +48,7 @@ export function EmagFacturiLor({ businessId }: { businessId: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card">
       <button
         type="button"
         onClick={comutaDeschis}

@@ -88,7 +88,7 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
 
   if (!status.globallyEnabled) {
     return (
-      <div className="rounded-xl border border-border bg-surface p-5 text-sm text-muted-foreground">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5 text-sm text-muted-foreground">
         Integrarea About You este momentan indisponibilă. Revino în curând.
       </div>
     );
@@ -267,7 +267,7 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
 
       {!status.connected ? (
         /* ── Connect form ── */
-        <div className="rounded-xl border border-border bg-surface p-5">
+        <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
           <h2 className="text-base font-semibold text-foreground mb-1">Conectează contul About You</h2>
           <p className="text-sm text-muted-foreground mb-4">
             Generează o cheie API în Seller Center: Settings {">"} API Keys {">"} + Add. Copiaz-o aici (se afișează o singură dată).
@@ -307,7 +307,7 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
       ) : (
         /* ── Connected ── */
         <>
-          <div className="rounded-xl border border-border bg-surface p-5">
+          <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -367,7 +367,7 @@ export function AboutYouClient({ businessId, status }: { businessId: string; sta
           </div>
 
           {/* Settings */}
-          <div className="rounded-xl border border-border bg-surface p-5">
+          <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
             <h2 className="text-base font-semibold text-foreground mb-4">Setări</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>

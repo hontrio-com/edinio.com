@@ -157,7 +157,7 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
   });
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="flex items-center justify-between gap-3 mb-1">
         <h2 className="text-base font-semibold text-foreground">Comenzi About You</h2>
         {cuProbleme > 0 && (
@@ -281,7 +281,7 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
                           value={awb}
                           onChange={(e) => setAwb(e.target.value)}
                           placeholder="ex. 2400012345678"
-                          className="w-full max-w-xs rounded-md border border-border bg-surface px-2 py-1 text-xs text-foreground"
+                          className="w-full max-w-xs rounded-md ring-1 ring-foreground/10 bg-card px-2 py-1 text-xs text-foreground"
                         />
                         <div className="flex items-center gap-2 mt-2">
                           <button onClick={() => returneaza(c.orderId!)} disabled={pending || !awb.trim()}

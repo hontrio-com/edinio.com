@@ -210,7 +210,7 @@ export function SupportClient({ tickets, businesses, userEmail }: {
           { label: "Rezolvate", value: resolved, icon: CheckCircle2, color: "text-success" },
           { label: "Raspunsuri noi", value: unread, icon: LifeBuoy, color: "text-primary" },
         ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-card border border-border rounded-xl p-4">
+          <div key={label} className="bg-card ring-1 ring-foreground/10 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-1">
               <Icon className={cn("h-4 w-4", color)} />
               <span className="text-xs text-muted-foreground font-medium">{label}</span>

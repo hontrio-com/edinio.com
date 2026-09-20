@@ -42,7 +42,7 @@ export function AboutYouCategoryMapping({
 
   if (edinioCategories.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-surface p-5 text-sm text-muted-foreground">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5 text-sm text-muted-foreground">
         Adaugă categorii produselor tale ca să le poți mapa la categoriile About You.
       </div>
     );
@@ -156,7 +156,7 @@ export function AboutYouCategoryMapping({
   };
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
         <h2 className="text-base font-semibold text-foreground">Mapare categorii</h2>
         <div className="flex items-center gap-2">

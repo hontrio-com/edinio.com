@@ -123,7 +123,7 @@ export function ActivationChecklist({ steps, plan, planExpiresAt, publicUrl }: P
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-border bg-surface overflow-hidden">
+    <div className="mt-4 rounded-xl ring-1 ring-foreground/10 bg-card overflow-hidden">
       {/* Header */}
       <div className="px-4 sm:px-5 py-4 flex items-center gap-3 border-b border-border">
         <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">

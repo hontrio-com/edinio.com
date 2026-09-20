@@ -28,7 +28,7 @@ function StatCard({ icon: Icon, label, value, tint }: {
   icon: typeof Users; label: string; value: string; tint: string;
 }) {
   return (
-    <div className="bg-surface border border-border rounded-xl p-4">
+    <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-4">
       <div className="flex items-center gap-2 mb-1.5">
         <span className={cn("w-7 h-7 rounded-lg flex items-center justify-center", tint)}>
           <Icon className="h-4 w-4" />
@@ -110,7 +110,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         </div>
         <button
           onClick={() => setImporting(true)}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-xl border border-border bg-surface text-foreground hover:bg-muted transition-colors flex-shrink-0"
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-xl ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors flex-shrink-0"
         >
           <Upload className="h-4 w-4" /> <span className="hidden sm:inline">Importa clienti</span>
         </button>

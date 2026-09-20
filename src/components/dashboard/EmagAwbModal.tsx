@@ -207,7 +207,7 @@ export function EmagAwbModal({ onClose, order, businessId, onSuccess }: Props) {
         aria-modal="true"
         aria-label="Generare AWB eMAG"
         tabIndex={-1}
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-card p-5 shadow-xl focus:outline-none">
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl ring-1 ring-foreground/10 bg-card p-5 shadow-xl focus:outline-none">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="flex items-center gap-2 text-base font-semibold">

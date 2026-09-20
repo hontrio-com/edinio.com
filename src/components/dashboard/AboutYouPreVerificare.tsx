@@ -47,7 +47,7 @@ export function AboutYouPreVerificare({ date }: { date: PreVerificareAboutYou })
     && d.cuVariante === 0;
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-4">
       <div className="flex items-center gap-2 mb-1">
         <h2 className="text-sm font-semibold text-foreground">Ce trebuie să ai pregătit</h2>
         {totulGata && (

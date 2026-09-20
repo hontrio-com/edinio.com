@@ -371,7 +371,7 @@ async function ContinutPanou({
       {/* Chart + recent orders */}
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Revenue chart */}
-        <div className="lg:col-span-2 bg-surface border border-border rounded-xl overflow-hidden">
+        <div className="lg:col-span-2 bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
             <div>
               <h2 className="font-semibold text-foreground">Vanzari - ultimele 7 zile</h2>
@@ -387,7 +387,7 @@ async function ContinutPanou({
         </div>
 
         {/* Recent orders */}
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
             <h2 className="font-semibold text-foreground">Comenzi recente</h2>
             <Link href="/dashboard/orders" className="text-xs text-primary hover:underline font-medium">

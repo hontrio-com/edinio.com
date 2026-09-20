@@ -114,7 +114,7 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
       </div>
 
       {/* Master toggle */}
-      <label className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-4 cursor-pointer">
+      <label className="flex items-center justify-between gap-4 rounded-2xl ring-1 ring-foreground/10 bg-card p-4 cursor-pointer">
         <div>
           <p className="text-sm font-semibold text-foreground">Activează automatizările</p>
           <p className="text-xs text-muted-foreground mt-0.5">Când e oprit, recuperarea rămâne doar manuală.</p>
@@ -123,7 +123,7 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
       </label>
 
       {/* Steps */}
-      <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h3 className="text-sm font-semibold text-foreground">Secvența de mesaje</h3>
@@ -195,7 +195,7 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
       </div>
 
       {/* Rules */}
-      <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
         <h3 className="text-sm font-semibold text-foreground">Reguli</h3>
 
         <div>

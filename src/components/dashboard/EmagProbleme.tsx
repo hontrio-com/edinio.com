@@ -51,7 +51,7 @@ export function EmagProbleme({ businessId }: { businessId: string }) {
   const total = centru.grupuri.reduce((s, g) => s + g.cate, 0);
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-semibold">

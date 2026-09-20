@@ -127,7 +127,7 @@ export function SettlementsClient({
 
           <div className="space-y-3">
             {randuri.map((r) => (
-              <div key={r.id} className="p-4 border border-border rounded-xl bg-surface">
+              <div key={r.id} className="p-4 ring-1 ring-foreground/10 rounded-xl bg-card">
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-foreground truncate">

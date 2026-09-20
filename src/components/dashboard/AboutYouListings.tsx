@@ -336,14 +336,14 @@ export function AboutYouListings({
 
   if (products.length === 0 && !cautare) {
     return (
-      <div className="rounded-xl border border-border bg-surface p-5 text-sm text-muted-foreground">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5 text-sm text-muted-foreground">
         Nu ai produse de listat încă.
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="flex items-start justify-between gap-3 mb-1">
         <h2 className="text-base font-semibold text-foreground">Produse</h2>
         <div className="flex gap-2 flex-shrink-0">

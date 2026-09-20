@@ -109,7 +109,7 @@ export function EmagCategoryMapping({ businessId }: { businessId: string }) {
 
   if (categorii === null) {
     return (
-      <div className="rounded-xl border border-border bg-card p-5">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Se citesc categoriile magazinului…
         </div>
@@ -120,7 +120,7 @@ export function EmagCategoryMapping({ businessId }: { businessId: string }) {
   const nemapate = categorii.filter((c) => !c.mapare).length;
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">Leagă categoriile de eMAG</h3>

@@ -264,7 +264,7 @@ export function SupportTicketClient({ ticket: initialTicket, initialMessages, us
       </button>
 
       {/* Ticket header */}
-      <div className="bg-card border border-border rounded-2xl p-5 mb-5">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-2xl p-5 mb-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-black text-foreground mb-2 leading-tight">{ticket.subject}</h1>
@@ -382,7 +382,7 @@ export function SupportTicketClient({ ticket: initialTicket, initialMessages, us
 
       {/* Reply box */}
       {!isClosed ? (
-        <div className="bg-card border border-border rounded-2xl p-4 sticky bottom-4">
+        <div className="bg-card ring-1 ring-foreground/10 rounded-2xl p-4 sticky bottom-4">
           {isResolved && (
             <p className="text-xs text-muted-foreground mb-3 flex items-center gap-1.5">
               <RotateCcw className="h-3.5 w-3.5" />

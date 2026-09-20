@@ -281,7 +281,7 @@ export function TrendyolListings({
   const totalPagini = date?.totalPages ?? 1;
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <h2 className="text-base font-semibold text-foreground mb-1">Produse</h2>
       <p className="text-sm text-muted-foreground mb-4">Completează detaliile de listare pentru fiecare produs, apoi trimite-l pe Trendyol.</p>
 

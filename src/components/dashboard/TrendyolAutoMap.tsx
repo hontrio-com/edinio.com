@@ -112,7 +112,7 @@ export function TrendyolAutoMap({
 
   if (faza === "inchis") {
     return (
-      <div className="rounded-xl border border-border bg-surface p-5">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-foreground mb-1 flex items-center gap-2">

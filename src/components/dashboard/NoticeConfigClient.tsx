@@ -464,7 +464,7 @@ export function NoticeConfigClient({ businessId, initialConfig }: { businessId: 
                 { label: "Total trimise", value: stats?.total ?? 0 },
                 { label: "Esuate", value: stats?.failed ?? 0 },
               ].map(s => (
-                <div key={s.label} className="rounded-xl border border-border bg-surface p-3 text-center">
+                <div key={s.label} className="rounded-xl ring-1 ring-foreground/10 bg-card p-3 text-center">
                   <p className="text-2xl font-semibold text-foreground tabular-nums">{s.value}</p>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">{s.label}</p>
                 </div>

@@ -87,7 +87,7 @@ export function GpsrSettings({ businessId }: { businessId: string }) {
   };
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
+    <div className="space-y-4 rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="flex items-start gap-2">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <div>

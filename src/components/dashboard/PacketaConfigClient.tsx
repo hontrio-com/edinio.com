@@ -327,7 +327,7 @@ export function PacketaConfigClient({
           <select
             value={format}
             onChange={(e) => setFormat(e.target.value as FormatEticheta)}
-            className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground"
+            className="w-full px-3 py-2 text-sm ring-1 ring-foreground/10 rounded-lg bg-card text-foreground"
           >
             {FORMATE.map((f) => <option key={f.valoare} value={f.valoare}>{f.eticheta}</option>)}
           </select>

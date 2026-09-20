@@ -171,7 +171,7 @@ export function KlaviyoClient({ businessId, initialConfig }: { businessId: strin
       </Link>
 
       <div className="flex items-center gap-3 mb-2">
-        <div className="w-11 h-11 rounded-xl border border-border bg-surface flex items-center justify-center p-2">
+        <div className="w-11 h-11 rounded-xl ring-1 ring-foreground/10 bg-card flex items-center justify-center p-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/integrations/klaviyo.svg" alt="Klaviyo" className="w-full h-full object-contain" />
         </div>

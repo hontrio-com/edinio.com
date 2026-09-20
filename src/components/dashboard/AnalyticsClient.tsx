@@ -64,7 +64,7 @@ function StatCard({
   icon: React.ComponentType<{ className?: string }>; color: string;
 }) {
   return (
-    <div className="bg-white border border-border rounded-xl p-5">
+    <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5">
       <div className="flex items-start justify-between mb-3">
         <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", color)}>
           <Icon className="h-4.5 w-4.5" />
@@ -93,7 +93,7 @@ function ChartTooltip({ active, payload, label }: {
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-surface border border-border rounded-xl px-3 py-2 shadow-lg text-sm">
+    <div className="bg-card ring-1 ring-foreground/10 rounded-xl px-3 py-2 shadow-lg text-sm">
       <p className="font-semibold text-foreground mb-1">{label}</p>
       <p className="text-muted-foreground">Vanzari: <span className="font-bold text-foreground">{formatPrice(payload[0]?.value ?? 0)}</span></p>
       {payload[1] && (
@@ -124,7 +124,7 @@ function ProgressRow({ label, count, total, color }: {
 
 function StatSkeleton() {
   return (
-    <div className="bg-white border border-border rounded-xl p-5 animate-pulse">
+    <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 animate-pulse">
       <div className="flex items-start justify-between mb-3">
         <div className="w-9 h-9 rounded-lg bg-muted" />
       </div>
@@ -169,7 +169,7 @@ function LiveTab({ businessId, ordersByCounty, svgContent, primaryColor }: {
   return (
     <div className="space-y-6">
       {/* Live counter */}
-      <div className="bg-surface border border-border rounded-xl p-6 flex items-center gap-5">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-6 flex items-center gap-5">
         <div className="relative">
           <div className="w-16 h-16 rounded-2xl bg-success/10 flex items-center justify-center">
             <Radio className="h-7 w-7 text-success" />
@@ -201,7 +201,7 @@ function LiveTab({ businessId, ordersByCounty, svgContent, primaryColor }: {
 
       {/* Recent events feed */}
       {liveEvents.length > 0 && (
-        <div className="bg-white border border-border rounded-xl overflow-hidden">
+        <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
           <div className="px-5 py-3 border-b border-border flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground">Activitate recenta</h3>
             <span className="text-xs text-muted-foreground">{liveEvents.length} eventi</span>
@@ -227,7 +227,7 @@ function LiveTab({ businessId, ordersByCounty, svgContent, primaryColor }: {
       )}
 
       {/* Romania map */}
-      <div className="bg-white border border-border rounded-xl overflow-hidden">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
         <div className="px-5 py-3 border-b border-border">
           <h3 className="text-sm font-semibold text-foreground">Comenzi pe judet</h3>
           <p className="text-xs text-muted-foreground mt-0.5">Total comenzi primite per regiune</p>
@@ -492,7 +492,7 @@ export function AnalyticsClient({ businessId, svgContent, primaryColor }: Props)
           )}
 
           {/* Sales chart */}
-          <div className="bg-white border border-border rounded-xl p-5">
+          <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5">
             <h2 className="text-sm font-semibold text-foreground mb-4">
               Vanzari zilnice - ultimele {period} zile
             </h2>
@@ -539,7 +539,7 @@ export function AnalyticsClient({ businessId, svgContent, primaryColor }: Props)
             </div>
           ) : (
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="bg-white border border-border rounded-xl p-5">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <Globe className="h-4 w-4 text-muted-foreground" />
                   <h2 className="text-sm font-semibold text-foreground">Surse de trafic</h2>
@@ -563,7 +563,7 @@ export function AnalyticsClient({ businessId, svgContent, primaryColor }: Props)
                 )}
               </div>
 
-              <div className="bg-white border border-border rounded-xl p-5">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <Users className="h-4 w-4 text-muted-foreground" />
                   <h2 className="text-sm font-semibold text-foreground">Dispozitive</h2>
@@ -597,15 +597,15 @@ export function AnalyticsClient({ businessId, svgContent, primaryColor }: Props)
           {/* AOV + Conversion details */}
           {!loading && data && hasOrders && (
             <div className="grid md:grid-cols-3 gap-4">
-              <div className="bg-white border border-border rounded-xl p-5">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5">
                 <p className="text-xs text-muted-foreground mb-1">Vanzari totale brute</p>
                 <p className="text-xl font-bold text-foreground">{formatPrice(data.metrics.totalRevenue)}</p>
               </div>
-              <div className="bg-white border border-border rounded-xl p-5">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5">
                 <p className="text-xs text-muted-foreground mb-1">Valoare medie comanda (AOV)</p>
                 <p className="text-xl font-bold text-foreground">{formatPrice(data.metrics.aov)}</p>
               </div>
-              <div className="bg-white border border-border rounded-xl p-5">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5">
                 <p className="text-xs text-muted-foreground mb-1">Rata conversie</p>
                 <p className="text-xl font-bold text-foreground">
                   {data.metrics.visitsCount > 0 ? `${data.metrics.conversionRate.toFixed(2)}%` : "N/A"}

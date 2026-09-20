@@ -24,7 +24,7 @@ export function OlxCategoryMapper({ businessId, categories, initialMap }: {
 
   if (categories.length === 0) {
     return (
-      <div className="rounded-2xl border border-border bg-card p-5">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
         <h3 className="text-sm font-semibold text-foreground">Mapare categorii</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">Adaugă categorii produselor tale ca să le poți mapa la categoriile OLX.</p>
       </div>
@@ -34,7 +34,7 @@ export function OlxCategoryMapper({ businessId, categories, initialMap }: {
   const mapped = categories.filter((c) => map[c]).length;
 
   return (
-    <div className="space-y-3 rounded-2xl border border-border bg-card p-5">
+    <div className="space-y-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
       <div>
         <h3 className="text-sm font-semibold text-foreground">Mapare categorii</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -218,7 +218,7 @@ function CategoryModal({ businessId, edinioCategory, initial, onClose, onSaved }
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl ring-1 ring-foreground/10 bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div className="min-w-0">
             <h3 className="truncate text-sm font-semibold text-foreground">Mapează „{edinioCategory}”</h3>

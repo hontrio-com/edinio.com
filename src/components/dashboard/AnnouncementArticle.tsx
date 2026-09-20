@@ -67,7 +67,7 @@ function Blocks({ blocks }: { blocks: AnnouncementBlock[] }) {
 
 export function AnnouncementArticle({ data, dateLabel }: { data: ArticleData; dateLabel?: string }) {
   return (
-    <article className="bg-surface border border-border rounded-2xl overflow-hidden">
+    <article className="bg-card ring-1 ring-foreground/10 rounded-2xl overflow-hidden">
       {data.cover_url && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={data.cover_url} alt="" className="w-full aspect-[16/9] object-cover" />

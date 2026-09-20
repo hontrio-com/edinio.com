@@ -74,7 +74,7 @@ export function EmagCampanii({ businessId }: { businessId: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <h3 className="flex items-center gap-2 text-sm font-semibold">
         <Megaphone className="h-4 w-4" /> Campanii eMAG
       </h3>

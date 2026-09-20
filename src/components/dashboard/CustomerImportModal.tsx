@@ -49,7 +49,7 @@ type Step =
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: string }) {
   return (
-    <div className="bg-surface border border-border rounded-xl p-3">
+    <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-3">
       <p className="text-[11px] text-muted-foreground">{label}</p>
       <p className={cn("text-lg font-bold tabular-nums", tone ?? "text-foreground")}>{value}</p>
     </div>

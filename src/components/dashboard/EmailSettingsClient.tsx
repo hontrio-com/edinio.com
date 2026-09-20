@@ -162,7 +162,7 @@ function TemplateCard({ businessId, def, initial, branding, onEditLogo }: {
             <p className="text-[11px] font-medium text-foreground mb-1.5">
               Editeaza direct pe email {hasButton ? "(apasa pe titlu, text, buton sau logo)" : "(apasa pe titlu, text sau logo)"}
             </p>
-            <div className="rounded-lg border border-border overflow-hidden bg-white">
+            <div className="rounded-lg ring-1 ring-foreground/10 overflow-hidden bg-card">
               <iframe ref={iframeRef} srcDoc={html} onLoad={attach} title="Editor email" className="w-full h-[460px] border-0 bg-white" />
             </div>
             <p className="text-[11px] text-muted-foreground mt-1.5">
@@ -309,7 +309,7 @@ export function EmailSettingsClient({ businessId, initial }: { businessId: strin
 
       {!businessId && <Callout variant="warning">Nu ai un magazin activ. Finalizeaza onboarding-ul mai intai.</Callout>}
 
-      <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-5">
         <label className="flex items-center justify-between gap-3 cursor-pointer">
           <span className="min-w-0">
             <span className="block text-sm font-semibold text-foreground">Trimite de pe emailul meu</span>
@@ -379,14 +379,14 @@ export function EmailSettingsClient({ businessId, initial }: { businessId: strin
         </div>
       </div>
 
-      <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-4">
         <div>
           <p className="text-sm font-semibold text-foreground">Brandingul emailurilor</p>
           <p className="text-xs text-muted-foreground mt-0.5">Logo-ul si culoarea din emailuri. Implicit sunt cele ale magazinului; schimba-le aici doar pentru emailuri (nu afecteaza magazinul online). Poti da click pe logo si direct in preview-ul de mai jos.</p>
         </div>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
           <div className="flex items-center gap-3">
-            <div className="h-14 w-14 rounded-lg border border-border bg-white flex items-center justify-center overflow-hidden shrink-0">
+            <div className="h-14 w-14 rounded-lg ring-1 ring-foreground/10 bg-card flex items-center justify-center overflow-hidden shrink-0">
               {effectiveBranding.logoUrl
                 ? <Image src={effectiveBranding.logoUrl} alt="Logo email" width={48} height={48} className="max-h-12 w-auto object-contain" unoptimized />
                 : <ImageIcon className="h-5 w-5 text-muted-foreground" />}
@@ -406,7 +406,7 @@ export function EmailSettingsClient({ businessId, initial }: { businessId: strin
         </div>
       </div>
 
-      <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-4">
         <div>
           <p className="text-sm font-semibold text-foreground">Sabloane de email</p>
           <p className="text-xs text-muted-foreground mt-0.5">Editeaza fiecare email direct pe preview: apasa pe titlu, text sau buton si scrie, ori pe logo ca sa il schimbi. Tabelul cu produse se genereaza automat.</p>

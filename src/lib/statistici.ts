@@ -104,6 +104,30 @@ export const MASURI_HARTA: { masura: MasuraHarta; eticheta: string; bani: boolea
   { masura: "medie", eticheta: "Valoare medie", bani: true },
 ];
 
+/* ── Fila Trafic ──────────────────────────────────────────────────────────── */
+
+/*
+  ⚠ Tipurile stau AICI, nu in componenta care le deseneaza. Cat au stat in
+  `StatisticiTrafic.tsx`, modulele curate care socotesc peste ele („concluzii")
+  ar fi trebuit sa importe dintr-o componenta: o legatura pe dos, care trage
+  React in module care n-au nevoie de el.
+*/
+export type RandSursa = {
+  sursa: string;
+  dispozitiv: string;
+  sesiuni: number;
+  sesiuni_cu_comanda: number;
+  vanzari: number;
+};
+
+export type Palnie = {
+  sesiuni: number;
+  cu_produs: number;
+  cu_cos: number;
+  cu_checkout: number;
+  cu_comanda: number;
+};
+
 /* ── Fila Vanzari ─────────────────────────────────────────────────────────── */
 
 export type SumarVanzari = {
@@ -221,4 +245,28 @@ export function citesteCarduriSecundare(brut: unknown): PerechiCarduri {
  */
 export function rataAnulare(c: CarduriSecundare): number | null {
   return c.comenzi_toate > 0 ? (c.anulate / c.comenzi_toate) * 100 : null;
+}
+
+/* ── Cand nu e nimic de aratat ────────────────────────────────────────────── */
+
+/**
+ * Ce se scrie cand fereastra aleasa e goala.
+ *
+ * ⚠ NU „Nu exista date", ci ce poate face omul mai departe, si asta DEPINDE DE
+ * CE A ALES. Un magazin care vinde bine, dar are pus filtrul pe „Trendyol", nu
+ * trebuie indemnat sa-si distribuie magazinul; trebuie sa afle ca filtrul lui
+ * taie totul. Iar cine se uita la „Astazi" la ora 9 dimineata n-are o problema,
+ * doar o fereastra prea scurta.
+ */
+export function sfatFaraDate({ canal, perioada, numeCanal }: {
+  canal: string;
+  perioada: FelPerioadaStatistici;
+  /** Numele canalului asa cum il stie comerciantul. */
+  numeCanal: (c: string) => string;
+}): string {
+  if (canal) return `Ai ales doar ${numeCanal(canal)}. Scoate filtrul de canal ca sa vezi tot magazinul.`;
+  if (perioada === "azi" || perioada === "ieri" || perioada === "7z") {
+    return "Perioada e scurta. Incearca 30 de zile sau luna aceasta.";
+  }
+  return "Distribuie magazinul si adauga produse: aici apar cifrele de indata ce intra prima comanda.";
 }

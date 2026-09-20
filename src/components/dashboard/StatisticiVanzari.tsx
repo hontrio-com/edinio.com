@@ -30,18 +30,19 @@ import type { DetaliuVanzari } from "@/lib/statistici";
   trebuie sa existe un loc unde se vede cat se pierde.
 */
 
-export function StatisticiVanzari({ date, perioadaScrisa }: {
+export function StatisticiVanzari({ date, perioadaScrisa, sfatGol }: {
   date: DetaliuVanzari;
   perioadaScrisa: string;
+  sfatGol: string;
 }) {
   const { sumar } = date;
 
   if (sumar.comenzi === 0 && sumar.anulate === 0 && sumar.rambursate === 0) {
     return (
-      <p className="rounded-xl bg-card px-5 py-12 text-center text-sm text-muted-foreground ring-1 ring-foreground/10">
-        Nu ai primit nicio comanda in perioada asta. Alege o perioada mai lunga sau scoate
-        filtrul de canal.
-      </p>
+      <div className="rounded-xl bg-card px-5 py-12 text-center ring-1 ring-foreground/10">
+        <p className="text-sm text-foreground">Nu ai primit nicio comanda in perioada asta.</p>
+        <p className="mt-1 text-xs text-muted-foreground">{sfatGol}</p>
+      </div>
     );
   }
 

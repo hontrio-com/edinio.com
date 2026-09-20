@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { numeCanal } from "@/lib/vanzari";
 import { PERIOADE_STATISTICI, type FelPerioadaStatistici } from "@/lib/statistici";
@@ -19,6 +19,7 @@ export function StatisticiFiltre({
   deLa, panaLa, setCapete,
   canal, setCanal, canale,
   comparatie, setComparatie,
+  descarca, poateDescarca,
 }: {
   perioada: FelPerioadaStatistici;
   setPerioada: (f: FelPerioadaStatistici) => void;
@@ -30,6 +31,9 @@ export function StatisticiFiltre({
   canale: { canal: string; comenzi: number }[];
   comparatie: boolean;
   setComparatie: (v: boolean) => void;
+  descarca: () => void;
+  /** Cat timp cifrele nu sunt inca aici, n-are ce descarca. */
+  poateDescarca: boolean;
 }) {
   return (
     <div className="space-y-3">
@@ -66,6 +70,16 @@ export function StatisticiFiltre({
           )}
         >
           Compara cu perioada precedenta
+        </button>
+
+        <button
+          type="button"
+          onClick={descarca}
+          disabled={!poateDescarca}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-muted-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Descarca CSV
         </button>
       </div>
 

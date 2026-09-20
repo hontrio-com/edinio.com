@@ -86,7 +86,11 @@ scadea la zero in a noua zi - exact felul de defect care se vede abia peste doua
       perioada mai scurta, cu atat comerciantul ar fi vazut mai multi clienti noi.
       ⚠ La rata de anulare, cardul a capatat `susEBine={false}`: pana atunci sageata si
       culoarea erau acelasi lucru, si o crestere a anularilor se scria cu verde.
-- [ ] **C5.** Grafic cu masura la alegere si granulatie dupa lungimea perioadei.
+- [x] **C5.** Grafic cu masura la alegere (vanzari / comenzi / valoare medie) si granulatia
+      scrisa sub titlu.
+      ⚠ Titlul zicea „Vanzari pe zile" ORICAT de lunga era perioada, dar baza trece la
+      saptamani peste 92 de zile si la luni peste 400: pe „Anul acesta", fiecare punct aduna
+      o saptamana intreaga si scria dedesubt ca ar fi o zi.
 - [x] **C6.** Fila Vanzari: produse, categorii, canale, statusuri.
       ⚠ „Brute / nete" NU s-au putut aseza ca o adunare, si de-aia sunt doua panouri, nu
       unul: `subtotal + transport + ramburs - reduceri` nu da `total` la 26 din 95 de
@@ -103,9 +107,21 @@ scadea la zero in a noua zi - exact felul de defect care se vede abia peste doua
       adaugat cosuri, checkout-uri si comenzi din ultima jumatate de ora; fluxul spune ce s-a
       intamplat („Un produs a fost adaugat in cos"), nu doar „Vizita via Facebook"; harta a
       plecat de aici in Prezentare, unde filtrul chiar o misca; scrie „12 evenimente".
-- [ ] **C9.** Export CSV.
-- [ ] **C10.** Stari fara date scrise pe intelesul omului; harta folosibila cu degetul si cu
-      tastatura.
+- [x] **C9.** Export CSV: tot ce arata pagina intr-un singur fisier, cu un glosar la sfarsit.
+      ⚠ Desparte cu `;` si scrie zecimala cu virgula: Excel pe setari romanesti citeste
+      virgula ca separator zecimal, deci cu „," randurile s-ar fi mutat cu o coloana.
+      ⚠ Are BOM. Fara el, Excel citeste ANSI si numele produselor ies cu diacriticele
+      stricate - adica tocmai ce se cauta in fisier. Verificat pe fisierul descarcat:
+      primii trei octeti sunt EF BB BF.
+- [x] **C10.** Starile fara date spun CE SA FACA, si sfatul depinde de ce a ales omul: cu un
+      canal filtrat, „scoate filtrul"; pe o fereastra scurta, „incearca 30 de zile"; altfel,
+      „distribuie magazinul". Un magazin care vinde bine, dar are pus filtrul pe Trendyol, nu
+      trebuie indemnat sa-si distribuie magazinul.
+      Harta are sub ea acelasi lucru in tabel, cu `<caption>` pentru cititoarele de ecran.
+- [x] **C11.** Concluzii scrise cu vorbe, cel mult trei, deterministe: reguli cu praguri de
+      volum scrise in cod (`statistici-concluzii.ts`), nu text generat. Fiecare are un prag
+      sub care TACE: cu 12 vizite si nicio comanda nu se poate spune nimic despre un canal,
+      dar propozitia ar fi sunat la fel de sigur ca una scoasa din o mie de vizite.
 
 ## Hotarari luate pe drum
 

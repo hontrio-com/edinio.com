@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils/cn";
 import { Bani } from "@/components/dashboard/Bani";
+import type { Palnie, RandSursa } from "@/lib/statistici";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════
@@ -17,22 +18,6 @@ import { Bani } from "@/components/dashboard/Bani";
   cumparare; numarata la ambele, suma surselor ar fi depasit vanzarile.
 */
 
-export type RandSursa = {
-  sursa: string;
-  dispozitiv: string;
-  sesiuni: number;
-  sesiuni_cu_comanda: number;
-  vanzari: number;
-};
-
-export type Palnie = {
-  sesiuni: number;
-  cu_produs: number;
-  cu_cos: number;
-  cu_checkout: number;
-  cu_comanda: number;
-};
-
 const NUME_SURSA: Record<string, string> = {
   direct: "Direct", google: "Google", facebook: "Facebook",
   instagram: "Instagram", tiktok: "TikTok", other: "Alta sursa",
@@ -47,10 +32,11 @@ function procent(parte: number, intreg: number): string {
   return `${((parte / intreg) * 100).toLocaleString("ro-RO", { maximumFractionDigits: 2 })}%`;
 }
 
-export function StatisticiTrafic({ surse, palnie, perioadaScrisa }: {
+export function StatisticiTrafic({ surse, palnie, perioadaScrisa, sfatGol }: {
   surse: RandSursa[];
   palnie: Palnie | null;
   perioadaScrisa: string;
+  sfatGol: string;
 }) {
   /* Aceleasi randuri, strânse o data pe sursa si o data pe dispozitiv. */
   const peSursa = aduna(surse, (r) => NUME_SURSA[r.sursa] ?? r.sursa);
@@ -59,10 +45,10 @@ export function StatisticiTrafic({ surse, palnie, perioadaScrisa }: {
 
   if (totalSesiuni === 0) {
     return (
-      <p className="rounded-xl bg-card px-5 py-12 text-center text-sm text-muted-foreground ring-1 ring-foreground/10">
-        Nu exista inca trafic masurat in perioada asta. Distribuie magazinul ca sa incepi sa
-        aduni date, sau alege o perioada mai lunga.
-      </p>
+      <div className="rounded-xl bg-card px-5 py-12 text-center ring-1 ring-foreground/10">
+        <p className="text-sm text-foreground">Nu exista inca trafic masurat in perioada asta.</p>
+        <p className="mt-1 text-xs text-muted-foreground">{sfatGol}</p>
+      </div>
     );
   }
 

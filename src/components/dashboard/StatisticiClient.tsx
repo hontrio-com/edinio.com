@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { BarChart2, Eye, Package, Receipt, ShoppingCart, Target, UserPlus, Users, UserCheck, Wallet, XCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { csvStatistici, numeFisierCsv } from "@/lib/statistici-csv";
+import { concluzii } from "@/lib/statistici-concluzii";
 import { cn } from "@/lib/utils/cn";
 import { formatPrice } from "@/lib/utils/format";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
@@ -10,16 +12,17 @@ import { GraficVanzari } from "@/components/dashboard/GraficVanzari";
 import { HartaJudete } from "@/components/dashboard/HartaJudete";
 import { StatisticiFiltre } from "@/components/dashboard/StatisticiFiltre";
 import { StatisticiLive } from "@/components/dashboard/StatisticiLive";
-import { StatisticiTrafic, type Palnie, type RandSursa } from "@/components/dashboard/StatisticiTrafic";
+import { StatisticiTrafic } from "@/components/dashboard/StatisticiTrafic";
 import { StatisticiVanzari } from "@/components/dashboard/StatisticiVanzari";
 import {
-  citesteDateVanzari, crestere, intervalScris, valoareTotal, type DateVanzari,
+  citesteDateVanzari, crestere, intervalScris, MASURI, numeCanal, valoareTotal,
+  type DateVanzari, type Granulatie, type Masura,
 } from "@/lib/vanzari";
 import {
   citesteCarduriSecundare, citesteDetaliuVanzari, DETALIU_GOL, paginiPeSesiune,
-  rataAnulare, rataConversieSesiuni, citesteDateTrafic,
+  rataAnulare, rataConversieSesiuni, citesteDateTrafic, sfatFaraDate,
   type DateTrafic, type DetaliuVanzari, type FelPerioadaStatistici,
-  type PerechiCarduri, type RandJudet,
+  type Palnie, type PerechiCarduri, type RandJudet, type RandSursa,
 } from "@/lib/statistici";
 
 /*
@@ -37,6 +40,13 @@ import {
 */
 
 type Fila = "prezentare" | "vanzari" | "trafic" | "live";
+
+/** Cum se citeste granulatia aleasa de baza, in cuvintele comerciantului. */
+const PE_BUCATA: Record<Granulatie, string> = {
+  zi: "pe zile",
+  saptamana: "pe saptamani",
+  luna: "pe luni",
+};
 
 const FILE: { fila: Fila; eticheta: string }[] = [
   { fila: "prezentare", eticheta: "Prezentare" },
@@ -59,6 +69,7 @@ export function StatisticiClient({
   const [panaLa, setPanaLa] = useState("");
   const [canal, setCanal] = useState("");
   const [comparatie, setComparatie] = useState(true);
+  const [masura, setMasura] = useState<Masura>("vanzari");
 
   /*
     ⚠ DATELE ISI POARTA CU ELE FILTRELE PENTRU CARE AU FOST CERUTE.
@@ -135,6 +146,24 @@ export function StatisticiClient({
     if (care === "deLa") setDeLa(v); else setPanaLa(v);
   }
 
+  /*
+    ⚠ BOM-ul („﻿") NU E DE PRISOS. Fara el, Excel pe Windows citeste
+    fisierul ca ANSI, iar „Pled din lana merinos Carpati" iese cu diacriticele
+    stricate - adica exact numele produselor, care sunt tot rostul fisierului.
+  */
+  function descarcaCsv() {
+    if (!vanzari) return;
+    const text = csvStatistici({ vanzari, trafic, detaliu, judete, perioadaScrisa, canal });
+    const url = URL.createObjectURL(
+      new Blob(["﻿", text], { type: "text/csv;charset=utf-8" }),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = numeFisierCsv("statistici", vanzari.interval.de_la, vanzari.interval.pana_la);
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   /* ── Cifrele ────────────────────────────────────────────────────────────── */
   const totalV = vanzari?.total ?? { vanzari: 0, comenzi: 0 };
   const totalVant = vanzari?.total_anterior ?? { vanzari: 0, comenzi: 0 };
@@ -147,6 +176,18 @@ export function StatisticiClient({
 
   const anulare = secundare ? rataAnulare(secundare.acum) : null;
   const anulareAnt = secundare ? rataAnulare(secundare.inainte) : null;
+
+  /*
+    ⚠ Se socotesc la fiecare randare, si asta e in regula: sunt cateva `if`-uri
+    peste date deja aduse. Puse intr-o stare, ar fi fost inca un lucru care
+    poate ramane in urma cifrelor de deasupra lor.
+  */
+  const sfaturi = concluzii({
+    vanzari, detaliu, secundare: secundare?.acum ?? null, surse,
+    palnie: palnie ? { sesiuni: palnie.sesiuni, cu_cos: palnie.cu_cos, cu_comanda: palnie.cu_comanda } : null,
+  });
+
+  const sfatGol = sfatFaraDate({ canal, perioada, numeCanal });
 
   const perioadaScrisa = vanzari ? intervalScris(vanzari.interval) : "";
   const anterioaraScrisa = vanzari ? intervalScris(vanzari.interval_anterior) : "";
@@ -165,6 +206,7 @@ export function StatisticiClient({
           deLa={deLa} panaLa={panaLa} setCapete={setCapete}
           canal={canal} setCanal={setCanal} canale={canale}
           comparatie={comparatie} setComparatie={setComparatie}
+          descarca={descarcaCsv} poateDescarca={!seIncarca && vanzari !== null}
         />
       </header>
 
@@ -194,6 +236,31 @@ export function StatisticiClient({
         <>
           {fila === "prezentare" && (
             <>
+              {!seIncarca && sfaturi.length > 0 && (
+                <ul className="space-y-2">
+                  {sfaturi.map((c) => (
+                    <li
+                      key={c.cheie}
+                      className={cn(
+                        "flex gap-2.5 rounded-xl px-4 py-3 text-sm ring-1",
+                        c.ton === "rau" ? "bg-destructive/5 text-foreground ring-destructive/20"
+                          : c.ton === "bun" ? "bg-primary/5 text-foreground ring-primary/20"
+                          : "bg-muted/50 text-foreground ring-foreground/10",
+                      )}
+                    >
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full",
+                          c.ton === "rau" ? "bg-destructive" : c.ton === "bun" ? "bg-primary" : "bg-muted-foreground/50",
+                        )}
+                      />
+                      {c.text}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <CardStatistica
                   label="Vanzari"
@@ -326,25 +393,55 @@ export function StatisticiClient({
 
               <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
                 <div className="border-b border-border px-5 py-4">
-                  <h2 className="font-semibold text-foreground">Vanzari pe zile</h2>
+                  <h2 className="font-semibold text-foreground">
+                    {MASURI.find((m) => m.masura === masura)?.eticheta ?? "Vanzari"}
+                  </h2>
+                  {/*
+                    ⚠ SCRIE PE CE SE GRUPEAZA, fiindca nu e mereu pe zile. Titlul
+                    era „Vanzari pe zile" oricat de lunga era perioada, dar baza
+                    trece la saptamani peste 92 de zile si la luni peste 400: pe
+                    „Anul acesta", fiecare punct aduna o saptamana intreaga, si
+                    scria dedesubt ca ar fi o zi.
+                  */}
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    {perioadaScrisa}{comparatie && anterioaraScrisa && ` · comparat cu ${anterioaraScrisa}`}
+                    {perioadaScrisa}
+                    {vanzari && ` · ${PE_BUCATA[vanzari.granulatie]}`}
+                    {comparatie && anterioaraScrisa && ` · comparat cu ${anterioaraScrisa}`}
                   </p>
+                  <div className="mt-3 flex gap-0.5 rounded-xl bg-muted p-1">
+                    {MASURI.map((m) => (
+                      <button
+                        key={m.masura}
+                        type="button"
+                        onClick={() => setMasura(m.masura)}
+                        className={cn(
+                          "flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                          masura === m.masura
+                            ? "bg-card text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {m.eticheta}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="px-5 py-5">
                   {seIncarca || !vanzari ? (
                     <div className="h-56 animate-pulse rounded-xl bg-muted" />
                   ) : vanzari.total.comenzi === 0 ? (
-                    <p className="flex h-56 items-center justify-center text-center text-sm text-muted-foreground">
-                      Nu ai primit comenzi in perioada asta.
-                    </p>
+                    <div className="flex h-56 flex-col items-center justify-center gap-1 px-4 text-center">
+                      <p className="text-sm text-foreground">Nu ai primit comenzi in perioada asta.</p>
+                      <p className="text-xs text-muted-foreground">{sfatGol}</p>
+                    </div>
                   ) : (
-                    <GraficVanzari date={vanzari} masura="vanzari" comparatie={comparatie} />
+                    <GraficVanzari date={vanzari} masura={masura} comparatie={comparatie} />
                   )}
                 </div>
               </div>
 
               <HartaJudete
+                sfatGol={sfatGol}
                 judete={judete}
                 svgContent={svgContent}
                 primaryColor={primaryColor}
@@ -356,13 +453,13 @@ export function StatisticiClient({
           {fila === "vanzari" && (
             seIncarca && !date
               ? <div className="h-64 animate-pulse rounded-xl bg-muted" />
-              : <StatisticiVanzari date={detaliu} perioadaScrisa={perioadaScrisa} />
+              : <StatisticiVanzari date={detaliu} perioadaScrisa={perioadaScrisa} sfatGol={sfatGol} />
           )}
 
           {fila === "trafic" && (
             seIncarca && surse.length === 0
               ? <div className="h-64 animate-pulse rounded-xl bg-muted" />
-              : <StatisticiTrafic surse={surse} palnie={palnie} perioadaScrisa={perioadaScrisa} />
+              : <StatisticiTrafic surse={surse} palnie={palnie} perioadaScrisa={perioadaScrisa} sfatGol={sfatGol} />
           )}
         </>
       )}

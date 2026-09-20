@@ -23,12 +23,13 @@ import { MASURI_HARTA, type MasuraHarta, type RandJudet } from "@/lib/statistici
 */
 
 export function HartaJudete({
-  judete, svgContent, primaryColor, perioadaScrisa,
+  judete, svgContent, primaryColor, perioadaScrisa, sfatGol,
 }: {
   judete: RandJudet[];
   svgContent: string;
   primaryColor: string;
   perioadaScrisa: string;
+  sfatGol: string;
 }) {
   const [masura, setMasura] = useState<MasuraHarta>("comenzi");
   const info = MASURI_HARTA.find((m) => m.masura === masura) ?? MASURI_HARTA[0];
@@ -72,9 +73,12 @@ export function HartaJudete({
       </div>
 
       {judete.length === 0 ? (
-        <p className="px-5 py-12 text-center text-sm text-muted-foreground">
-          Nu ai primit comenzi in perioada asta, deci harta n-are ce colora.
-        </p>
+        <div className="px-5 py-12 text-center">
+          <p className="text-sm text-foreground">
+            Nu ai primit comenzi in perioada asta, deci harta n-are ce colora.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{sfatGol}</p>
+        </div>
       ) : (
         <>
           <div className="p-4">

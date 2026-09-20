@@ -58,7 +58,13 @@ export default function AuthLayout({
       <BannerConsimtamant />
       <div className="w-full max-w-md px-4 py-8">
         <div className="mb-6 sm:mb-8 flex justify-center">
-          <Logo size="lg" iconSize={64} showText={false} eager />
+          {/* ⚠ SIGLA INTREAGA, nu semnul singur. Pana la rebranding, cuvantul
+              „Edinio.com" era text scris in componenta, iar aici se cerea doar
+              semnul fiindca textul ar fi dublat titlul paginii. Acum cuvantul e
+              in sigla, deci `showText={false}` lasa pagina de autentificare cu
+              un semn fara nume - singurul loc din aplicatie unde omul nu vede
+              inca unde a intrat. */}
+          <Logo size="lg" inaltime={44} eager />
         </div>
         <div className="bg-white rounded-xl border border-border p-6 sm:p-8 shadow-md">
           {children}

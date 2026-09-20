@@ -55,8 +55,14 @@ interface LogoProps {
    * 16.3.3. Documentatia recomanda chiar `loading="eager"` in locul lor.
    */
   eager?: boolean;
-  /** Inaltimea semnului patrat, cand `showText` e stins. */
-  iconSize?: number;
+  /**
+   * Inaltimea siglei, in pixeli, cand cele trei marimi nu se potrivesc.
+   *
+   * ⚠ Se aplica si siglei intregi, si semnului: inainte se numea `iconSize` si
+   * lucra DOAR cu `showText={false}`, deci o inaltime ceruta pe sigla intreaga
+   * era inghitita in tacere.
+   */
+  inaltime?: number;
   href?: string;
   className?: string;
   /** `false` inseamna doar semnul, fara cuvant. */
@@ -71,13 +77,13 @@ interface LogoProps {
 export function Logo({
   size = "md",
   eager = false,
-  iconSize,
+  inaltime: inaltimeCeruta,
   href = "/",
   className,
   showText = true,
   peFundalInchis = false,
 }: LogoProps) {
-  const inaltime = showText ? INALTIMI[size] : (iconSize ?? INALTIMI[size]);
+  const inaltime = inaltimeCeruta ?? INALTIMI[size];
   const incarcare = eager ? "eager" : "lazy";
 
   const semn = (

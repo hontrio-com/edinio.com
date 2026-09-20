@@ -13,10 +13,24 @@ export type ArticleData = {
   published_at?: string | null;
 };
 
-function Blocks({ blocks }: { blocks: AnnouncementBlock[] }) {
+/**
+ * Blocurile anuntului, fara imaginea care repeta coperta.
+ *
+ * ⚠ ACEEASI POZA DE DOUA ORI, la un centimetru distanta.
+ * In panoul de administrare, coperta se incarca separat de continut, iar
+ * punerea aceleiasi imagini si ca prim bloc e miscarea cea mai fireasca din
+ * lume: asa au iesit doua din cele sase anunturi de proba, fara ca nimeni sa
+ * fi vrut asta. Repetarea nu spune nimic in plus, deci se taie la afisare, nu
+ * i se cere omului sa tina minte.
+ */
+function Blocks({ blocks, coperta }: { blocks: AnnouncementBlock[]; coperta?: string | null }) {
+  const deAratat = coperta
+    ? blocks.filter((b) => !(b.type === "image" && b.url === coperta))
+    : blocks;
+
   return (
     <div className="space-y-4">
-      {blocks.map((b, i) => {
+      {deAratat.map((b, i) => {
         switch (b.type) {
           case "heading":
             return <h3 key={i} className="text-lg font-bold text-foreground mt-2">{b.text}</h3>;
@@ -65,27 +79,57 @@ function Blocks({ blocks }: { blocks: AnnouncementBlock[] }) {
   );
 }
 
-export function AnnouncementArticle({ data, dateLabel }: { data: ArticleData; dateLabel?: string }) {
+export function AnnouncementArticle({
+  data, dateLabel, faraRama = false,
+}: {
+  data: ArticleData;
+  dateLabel?: string;
+  /*
+    Desfasurat intr-un rand din lista de noutati, articolul nu-si mai poarta
+    propria rama: ar fi fost o cutie in cutie, si si-ar fi repetat titlul, care
+    e deja scris pe randul de deasupra.
+  */
+  faraRama?: boolean;
+}) {
   return (
-    <article className="bg-surface border border-border rounded-2xl overflow-hidden">
+    <article className={faraRama ? "" : "bg-card ring-1 ring-foreground/10 rounded-2xl overflow-hidden"}>
       {data.cover_url && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={data.cover_url} alt="" className="w-full aspect-[16/9] object-cover" />
+        <img
+          src={data.cover_url}
+          alt=""
+          /* ⚠ Deschisa dintr-un rand, coperta se vede INTREAGA si isi tine forma.
+             Taiata la 16/9 („object-cover"), din ea lipsea tocmai ce voia omul
+             sa vada cand a apasat sageata. Intinsa pe toata latimea, ramanea
+             intreaga, dar cu doua benzi albe in laturi. Aici cutia urmeaza chiar
+             imaginea: se micsoreaza cat sa incapa in latime si in ecran, si
+             atat. */
+          className={faraRama
+            ? "mx-auto mb-3 block h-auto max-h-[70vh] w-auto max-w-full rounded-lg"
+            : "w-full aspect-[16/9] object-cover"}
+        />
       )}
-      <div className="p-5 sm:p-6 space-y-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          {data.is_pinned && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-warning bg-warning/10 border border-warning/20 px-2 py-0.5 rounded-full">
-              <Pin className="h-3 w-3" /> Important
-            </span>
-          )}
-          {(dateLabel || data.published_at) && (
-            <span className="text-xs text-muted-foreground">{dateLabel ?? formatDate(data.published_at!)}</span>
-          )}
-        </div>
-        <h2 className="text-xl font-bold text-foreground break-words">{data.title || "Titlu anunt"}</h2>
-        {data.excerpt && <p className="text-sm text-muted-foreground">{data.excerpt}</p>}
-        <Blocks blocks={Array.isArray(data.blocks) ? data.blocks : []} />
+      <div className={faraRama ? "space-y-3" : "p-5 sm:p-6 space-y-3"}>
+        {/* In lista de noutati, randul de deasupra poarta deja si „Important",
+            si data, si titlul, si rezumatul: repetate aici, ar fi fost acelasi
+            lucru scris de doua ori, la doi centimetri distanta. */}
+        {!faraRama && (
+          <>
+            <div className="flex items-center gap-2 flex-wrap">
+              {data.is_pinned && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-warning bg-warning/10 border border-warning/20 px-2 py-0.5 rounded-full">
+                  <Pin className="h-3 w-3" /> Important
+                </span>
+              )}
+              {(dateLabel || data.published_at) && (
+                <span className="text-xs text-muted-foreground">{dateLabel ?? formatDate(data.published_at!)}</span>
+              )}
+            </div>
+            <h2 className="text-xl font-bold text-foreground break-words">{data.title || "Titlu anunt"}</h2>
+            {data.excerpt && <p className="text-sm text-muted-foreground">{data.excerpt}</p>}
+          </>
+        )}
+        <Blocks blocks={Array.isArray(data.blocks) ? data.blocks : []} coperta={data.cover_url} />
       </div>
     </article>
   );

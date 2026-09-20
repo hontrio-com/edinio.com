@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -54,7 +55,7 @@ export function GoogleMerchantClient({ businessId, status, products, categories,
   }, []);
 
   if (!status) {
-    return <div className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
+    return <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
   }
 
   // Not yet live for the public (OAuth verification pending), or platform
@@ -125,7 +126,7 @@ export function GoogleMerchantClient({ businessId, status, products, categories,
 
 function EmptyState({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-8 text-center">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-8 text-center">
       <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Icon className="h-6 w-6" /></div>
       <h2 className="mb-2 text-lg font-bold text-foreground">{title}</h2>
       <div className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">{children}</div>
@@ -302,19 +303,20 @@ function ProgramePanel({ businessId, faraDestinatie }: { businessId: string; far
   return (
     <div className="space-y-3">
       {avertisment}
-      <div className="rounded-2xl border border-border bg-card p-5">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
         <h3 className="mb-3 text-sm font-semibold text-foreground">Unde pot apărea produsele</h3>
         <ul className="space-y-3">
           {rez.programs.map((p) => {
-            const eticheta = p.state === "ENABLED" ? { text: "Pornit", cls: "bg-success/10 text-success" }
-              : p.state === "ELIGIBLE" ? { text: "Oprit", cls: "bg-warning/10 text-warning" }
-              : p.state === "NOT_ELIGIBLE" ? { text: "Cerințe neîndeplinite", cls: "bg-destructive/10 text-destructive" }
-              : { text: "Necunoscut", cls: "bg-muted text-muted-foreground" };
+            const eticheta: { text: string; ton: TonEticheta } =
+              p.state === "ENABLED" ? { text: "Pornit", ton: "bun" }
+              : p.state === "ELIGIBLE" ? { text: "Oprit", ton: "asteptare" }
+              : p.state === "NOT_ELIGIBLE" ? { text: "Cerințe neîndeplinite", ton: "rau" }
+              : { text: "Necunoscut", ton: "neutru" };
             return (
               <li key={p.id} className="text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-foreground">{NUME_PROGRAM[p.id] ?? p.id}</span>
-                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", eticheta.cls)}>{eticheta.text}</span>
+                  <EtichetaStare ton={eticheta.ton} marime="mic">{eticheta.text}</EtichetaStare>
                   {p.documentationUri && (
                     <a href={p.documentationUri} target="_blank" rel="noreferrer" className="text-xs text-primary underline">despre program</a>
                   )}
@@ -391,7 +393,7 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
     <div className="space-y-6">
       <AccountIssuesBanner businessId={businessId} />
       {/* Connection banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success"><CircleCheck className="h-5 w-5" /></span>
           <div className="min-w-0">
@@ -465,7 +467,7 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
 
       {/* Settings */}
       {showSettings && (
-        <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
+        <div className="space-y-4 rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
           <h3 className="text-sm font-semibold text-foreground">Setări feed</h3>
           <div className="grid gap-3 sm:grid-cols-3">
             <SettingField label="Feed label"><Input value={feedLabel} onChange={(e) => setFeedLabel(e.target.value)} /></SettingField>
@@ -516,7 +518,7 @@ function ConnectedDashboard({ businessId, status, products, categories }: {
       <CategoryMapping businessId={businessId} categories={categories} initialMap={status.categoryMap} />
 
       {/* Product status table */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="overflow-hidden rounded-2xl ring-1 ring-foreground/10 bg-card">
         <div className="flex items-center gap-2 border-b border-border px-5 py-4">
           <ShoppingBag className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold text-foreground">Produse în Google</h3>
@@ -607,7 +609,7 @@ function Kpi({ label, value, tone, icon: Icon }: { label: string; value: number;
     : tone === "danger" ? "bg-destructive/10 text-destructive"
     : "bg-muted text-muted-foreground";
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
       <div className="mb-2 flex items-center gap-2">
         <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", toneCls)}>
           {Icon ? <Icon className="h-4 w-4" /> : <ShoppingBag className="h-4 w-4" />}
@@ -620,22 +622,26 @@ function Kpi({ label, value, tone, icon: Icon }: { label: string; value: number;
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string; icon: React.ElementType }> = {
-    active: { label: "Aprobat", cls: "bg-success/10 text-success", icon: CircleCheck },
-    pending: { label: "În așteptare", cls: "bg-warning/10 text-warning", icon: Clock },
-    disapproved: { label: "Respins", cls: "bg-destructive/10 text-destructive", icon: CircleX },
-    error: { label: "Eroare", cls: "bg-destructive/10 text-destructive", icon: AlertTriangle },
+  const map: Record<string, { label: string; ton: TonEticheta }> = {
+    active: { label: "Aprobat", ton: "bun" },
+    pending: { label: "În așteptare", ton: "asteptare" },
+    disapproved: { label: "Respins", ton: "rau" },
+    error: { label: "Eroare", ton: "rau" },
     /* ⚠ Retras de NOI, nu de Google: pretul din catalog nu e cel platit pe pagina. Fara randul
        asta, produsul ar fi purtat eticheta implicita „In asteptare" — adica exact minciuna
        inversa: comerciantul ar fi asteptat o aprobare care nu vine niciodata. */
-    exclus: { label: "Retras", cls: "bg-warning/10 text-warning", icon: AlertTriangle },
+    exclus: { label: "Retras", ton: "asteptare" },
     /* ⚠ Google nu mai are oferta: au trecut 30 de zile de la ultima trimitere, sau a fost scoasa
        din Merchant Center. Fara randul asta ar fi purtat eticheta implicita „In asteptare". */
-    expirat: { label: "Expirat la Google", cls: "bg-destructive/10 text-destructive", icon: AlertTriangle },
+    expirat: { label: "Expirat la Google", ton: "rau" },
   };
   const s = map[status] ?? map.pending;
-  const Icon = s.icon;
-  return <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold", s.cls)}><Icon className="h-3 w-3" /> {s.label}</span>;
+  /*
+    ⚠ ICONITA A IESIT, punctul colorat spune acelasi lucru. Etichetele pline de
+    culoare, cu iconita in ele, faceau lista sa arate ca un semafor: cand fiecare
+    rand striga, nu se mai vede niciunul.
+  */
+  return <EtichetaStare ton={s.ton} marime="mic">{s.label}</EtichetaStare>;
 }
 
 /* ⚠ Problemele trec prin `problemeDeAfisat`: Google trimite aceeasi problema o data pe fiecare suprafata,
@@ -678,7 +684,7 @@ function CategoryMapping({ businessId, categories, initialMap }: {
   const mapped = categories.filter((c) => map[c]).length;
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
+    <div className="space-y-4 rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
       <div>
         <h3 className="text-sm font-semibold text-foreground">Mapare categorii</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">Asociază categoriile tale cu cele Google pentru o listare corectă ({mapped}/{categories.length} mapate).</p>

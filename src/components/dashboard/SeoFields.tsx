@@ -14,7 +14,7 @@ export function GooglePreview({ title, description, url }: { title: string; desc
   const display = url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
   const host = display.split("/")[0];
   return (
-    <div className="rounded-xl border border-border bg-white p-4">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-4">
       <div className="flex items-center gap-2 mb-1.5">
         <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
           <Globe className="h-3.5 w-3.5 text-muted-foreground" />

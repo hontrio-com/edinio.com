@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 import { ChevronDown, ChevronRight, Loader2, RefreshCw, ScrollText } from "lucide-react";
 import { toast } from "sonner";
 import { jurnalCereriEmag, type RandJurnalEcran } from "@/lib/actions/emag.actions";
@@ -58,7 +59,7 @@ export function EmagJurnal({ businessId }: { businessId: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card">
       <button
         type="button"
         onClick={comutaDeschis}
@@ -172,21 +173,24 @@ export function EmagJurnal({ businessId }: { businessId: string }) {
   );
 }
 
-const CULOARE_VERDICT: Record<string, string> = {
-  reusit: "bg-primary/10 text-primary",
-  reusit_cu_observatii: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  refuz: "bg-destructive/10 text-destructive",
-  trecatoare: "bg-muted text-muted-foreground",
-  chei: "bg-destructive/10 text-destructive",
+/* ⚠ TONURI, NU CLASE: la fel ca peste tot in panou, cum se deseneaza eticheta
+   hotaraste `EtichetaStare`, intr-un singur loc. */
+const TON_VERDICT: Record<string, TonEticheta> = {
+  reusit: "bun",
+  reusit_cu_observatii: "asteptare",
+  refuz: "rau",
+  /* „Trecatoare" = o cadere de retea care se reia singura: nu e o alarma. */
+  trecatoare: "neutru",
+  chei: "rau",
 };
 
 function RandJurnal({ rand, laFir }: { rand: RandJurnalEcran; laFir: (fir: string) => void }) {
   return (
     <li className="py-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`rounded-full px-2 py-0.5 text-xs ${CULOARE_VERDICT[rand.verdict] ?? "bg-muted"}`}>
+        <EtichetaStare ton={TON_VERDICT[rand.verdict] ?? "neutru"} marime="mic">
           {rand.verdictEticheta}
-        </span>
+        </EtichetaStare>
         <span className="font-mono text-xs">{rand.metoda} {rand.cale}</span>
         {/* ⚠ `0` înseamnă „n-am ajuns la ei", nu „au răspuns cu zero". Arătat ca un cod
             HTTP obișnuit, ar fi trimis pe cineva să caute ce înseamnă „HTTP 0". */}

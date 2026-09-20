@@ -109,7 +109,7 @@ export function FacebookFeeduriClient({
         alt brand, sau o selectie de campanie.
       </Callout>
 
-      <div className="rounded-2xl border border-border bg-card">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card">
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div className="flex items-center gap-2">
             <Layers className="h-4 w-4 text-muted-foreground" />

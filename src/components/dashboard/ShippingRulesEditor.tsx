@@ -119,7 +119,7 @@ function ChipMultiSelect({ options, selected, onChange, placeholder }: {
           className="flex-1 min-w-[70px] text-sm bg-transparent focus:outline-none text-foreground placeholder:text-muted-foreground" />
       </div>
       {open && rect && createPortal(
-        <div ref={dropdownRef} className="fixed z-50 max-h-60 overflow-auto bg-surface border border-border rounded-lg shadow-lg"
+        <div ref={dropdownRef} className="fixed z-50 max-h-60 overflow-auto bg-card ring-1 ring-foreground/10 rounded-lg shadow-lg"
           style={{ top: rect.top, left: rect.left, width: rect.width }}>
           {filtered.length === 0 ? (
             <p className="p-2 text-xs text-muted-foreground">Niciun rezultat</p>
@@ -270,7 +270,7 @@ export function ShippingRulesEditor({
   return (
     <div className="space-y-5">
       {/* ── Clase de transport ── */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
           <p className="text-sm font-semibold text-foreground flex items-center gap-2">
             <Layers className="h-4 w-4 text-muted-foreground" /> Clase de transport
@@ -304,7 +304,7 @@ export function ShippingRulesEditor({
       </div>
 
       {/* ── Reguli condiționale ── */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
           <p className="text-sm font-semibold text-foreground flex items-center gap-2">
             <Tag className="h-4 w-4 text-muted-foreground" /> Reguli de transport

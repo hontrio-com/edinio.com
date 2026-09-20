@@ -20,7 +20,7 @@ export function FacebookCatalogClient({ feedUrl, hasCustomDomain, productCount, 
   return (
     <div className="space-y-6">
       {/* Intro */}
-      <div className="rounded-2xl border border-border bg-card p-5">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"><ShoppingBag className="h-5 w-5" /></span>
           <div>
@@ -38,7 +38,7 @@ export function FacebookCatalogClient({ feedUrl, hasCustomDomain, productCount, 
       )}
 
       {/* Feed URL */}
-      <div className="space-y-2 rounded-2xl border border-border bg-card p-5">
+      <div className="space-y-2 rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
         <p className="text-sm font-semibold text-foreground">Adresa feed-ului tau</p>
         <p className="text-xs text-muted-foreground">{productCount} {productCount === 1 ? "produs activ" : "produse active"} in magazin. Feed-ul se actualizeaza automat.</p>
         <LasateAfara />
@@ -49,7 +49,7 @@ export function FacebookCatalogClient({ feedUrl, hasCustomDomain, productCount, 
       </div>
 
       {/* Steps */}
-      <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
+      <div className="space-y-4 rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
         <p className="text-sm font-semibold text-foreground">Cum conectezi (o singura data)</p>
         <ol className="space-y-3 text-xs text-muted-foreground">
           <li><span className="font-semibold text-foreground">1.</span> Deschide <a href="https://business.facebook.com/commerce" target="_blank" rel="noreferrer" className="text-primary underline">Meta Commerce Manager</a> si creeaza un catalog de tip <span className="font-medium text-foreground">E-commerce</span>.</li>

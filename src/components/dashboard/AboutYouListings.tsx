@@ -12,20 +12,25 @@ import {
 } from "@/lib/actions/aboutyou.actions";
 import { formatDate } from "@/lib/utils/format";
 import { AboutYouListingEditor, type AboutYouPricing } from "@/components/dashboard/AboutYouListingEditor";
+import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 
 interface ProductLite { id: string; name: string; category: string | null; is_active: boolean }
 
-const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
-  active: { text: "Activ pe About You", cls: "bg-green-100 text-green-700" },
-  pending: { text: "În așteptare", cls: "bg-amber-100 text-amber-700" },
-  pending_approval: { text: "În aprobare", cls: "bg-amber-100 text-amber-700" },
+/*
+  ⚠ TONURI, NU CLASE: aceeasi stare arata la fel peste tot in panou, iar cum se
+  deseneaza hotaraste `EtichetaStare`, intr-un singur loc.
+*/
+const STATUS_LABEL: Record<string, { text: string; ton: TonEticheta }> = {
+  active: { text: "Activ pe About You", ton: "bun" },
+  pending: { text: "În așteptare", ton: "asteptare" },
+  pending_approval: { text: "În aprobare", ton: "asteptare" },
   /*
    * ⚠ „Am cerut ciorna si asteptam confirmarea lor". About You nu accepta modificari cat produsul
    * e in aprobare, deci il retragem intai — dar `PUT /products/status` e asincron, si pana se
    * aseaza lotul produsul e INCA in aprobare la ei. Starea asta e chiar fereastra aia.
    */
-  draft_pending: { text: "Se retrage în ciornă", cls: "bg-blue-100 text-blue-700" },
-  pending_active: { text: "Se activează", cls: "bg-amber-100 text-amber-700" },
+  draft_pending: { text: "Se retrage în ciornă", ton: "lucru" },
+  pending_active: { text: "Se activează", ton: "asteptare" },
   /*
    * DOUA stari care aratau identic si inseamna lucruri opuse.
    *
@@ -34,12 +39,12 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
    * amandoua se numeau `draft`, „Publică toate" incerca sa publice si produse
    * care nu ajunsesera niciodata la About You.
    */
-  local: { text: "Salvat local", cls: "bg-muted text-muted-foreground" },
-  draft: { text: "Ciornă pe About You", cls: "bg-blue-100 text-blue-700" },
-  inactive: { text: "Inactiv", cls: "bg-muted text-muted-foreground" },
-  rejected: { text: "Respins", cls: "bg-red-100 text-red-700" },
-  problem: { text: "Problemă", cls: "bg-red-100 text-red-700" },
-  error: { text: "Eroare", cls: "bg-red-100 text-red-700" },
+  local: { text: "Salvat local", ton: "neutru" },
+  draft: { text: "Ciornă pe About You", ton: "lucru" },
+  inactive: { text: "Inactiv", ton: "neutru" },
+  rejected: { text: "Respins", ton: "rau" },
+  problem: { text: "Problemă", ton: "rau" },
+  error: { text: "Eroare", ton: "rau" },
 };
 
 /*
@@ -336,14 +341,14 @@ export function AboutYouListings({
 
   if (products.length === 0 && !cautare) {
     return (
-      <div className="rounded-xl border border-border bg-surface p-5 text-sm text-muted-foreground">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5 text-sm text-muted-foreground">
         Nu ai produse de listat încă.
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="flex items-start justify-between gap-3 mb-1">
         <h2 className="text-base font-semibold text-foreground">Produse</h2>
         <div className="flex gap-2 flex-shrink-0">
@@ -386,7 +391,7 @@ export function AboutYouListings({
       <div className="divide-y divide-border">
         {products.map((p) => {
           const listing = byProduct.get(p.id);
-          const status = listing ? (STATUS_LABEL[listing.status] ?? { text: listing.status, cls: "bg-muted text-muted-foreground" }) : null;
+          const status = listing ? (STATUS_LABEL[listing.status] ?? { text: listing.status, ton: "neutru" }) : null;
           const isOpen = openId === p.id;
           return (
             <div key={p.id} className="py-3">
@@ -403,7 +408,7 @@ export function AboutYouListings({
                 </button>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {status ? (
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${status.cls}`}>{status.text}</span>
+                    <EtichetaStare ton={status.ton} marime="mic">{status.text}</EtichetaStare>
                   ) : (
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Nelistat</span>
                   )}

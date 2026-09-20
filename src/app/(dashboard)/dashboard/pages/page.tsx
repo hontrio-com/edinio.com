@@ -91,7 +91,7 @@ async function ListaPagini({ business }: { business: BusinessPagini }) {
   // dar numai designul PUBLICAT spune daca sunt pagini adevarate sau raman pe
   // pagina principala, respectiv panouri peste magazin.
   const design = parseStoreDesign(ss?.storefront_design, {
-    primaryColor: "#1AB554",
+    primaryColor: "#07c527",
     pageContent: (ss?.page_content as Record<string, unknown>) ?? {},
     features: {},
   });

@@ -12,7 +12,7 @@ import type { DesignContext } from "./types";
  */
 
 const ctx: DesignContext = {
-  primaryColor: "#1AB554",
+  primaryColor: "#07c527",
   pageContent: {},
   features: {},
   coverUrl: null,
@@ -37,8 +37,9 @@ const contrastul = (primary: string) =>
   styleToCssVars(resolveStyle({ colors: { primary } }, ctx))["--st-primary-contrast"];
 
 test("verdele platformei primeste text inchis, nu alb", () => {
-  // Albul pe #1AB554 da 2,7:1 — sub pragul AA. Cazul care a pornit reparatia.
-  assert.equal(contrastul("#1AB554"), "#111827");
+  // Albul pe verdele implicit al platformei da 2,33:1 — sub pragul AA. Cazul care
+  // a pornit reparatia, pe vremea cand implicitul era #1AB554 si dadea 2,7:1.
+  assert.equal(contrastul("#07c527"), "#111827");
 });
 
 test("un albastru inchis primeste text deschis", () => {
@@ -49,7 +50,7 @@ test("orice culoare aleasa da un text peste pragul AA", () => {
   // Culorile de mijloc sunt cele periculoase: nici negrul de tema, nici albul
   // nu le acopera, iar magazinul ramanea cu text ilizibil.
   const culori = [
-    "#1AB554", "#1E3A8A", "#FFFFFF", "#000000",
+    "#07c527", "#1E3A8A", "#FFFFFF", "#000000",
     "#808080", "#C0A000", "#00A0A0", "#B07030", "#7A7AC0", "#D06070",
     "#4A9E4A", "#9E4A9E", "#E0C000", "#00B0B0",
   ];

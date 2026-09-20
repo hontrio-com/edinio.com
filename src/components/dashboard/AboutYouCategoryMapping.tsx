@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useCautareIntarziata } from "@/lib/hooks/cautare-intarziata";
@@ -42,7 +43,7 @@ export function AboutYouCategoryMapping({
 
   if (edinioCategories.length === 0) {
     return (
-      <div className="rounded-xl border border-border bg-surface p-5 text-sm text-muted-foreground">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5 text-sm text-muted-foreground">
         Adaugă categorii produselor tale ca să le poți mapa la categoriile About You.
       </div>
     );
@@ -156,7 +157,7 @@ export function AboutYouCategoryMapping({
   };
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
         <h2 className="text-base font-semibold text-foreground">Mapare categorii</h2>
         <div className="flex items-center gap-2">
@@ -236,13 +237,13 @@ export function AboutYouCategoryMapping({
                           <span className="block text-xs text-foreground truncate">{caleCitibila(o.label)}</span>
                           <span className="block text-[10px] text-muted-foreground">{o.motiv}</span>
                         </span>
-                        <span
-                          className={`flex-shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                            i === 0 && s?.sigura ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                          }`}
+                        <EtichetaStare
+                          ton={i === 0 && s?.sigura ? "bun" : "asteptare"}
+                          marime="mic"
+                          className="flex-shrink-0"
                         >
                           {Math.round(o.scor * 100)}%
-                        </span>
+                        </EtichetaStare>
                       </button>
                     ))}
                   </div>

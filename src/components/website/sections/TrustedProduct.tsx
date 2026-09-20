@@ -18,10 +18,10 @@ import { VERDE_CITIBIL } from "@/lib/website/linii";
  *    8px etichete) nu sunt greșeli: ilustrația trebuie RECUNOSCUTĂ ca pagină de
  *    produs dintr-o privire, nu citită. Dacă se mărește textul, nu mai încape
  *    nimic și dispare tocmai ce o face credibilă — densitatea.
- * 2. **Verdele prețului NU e verdele de marcă.** #1AB554 are pe alb un contrast
- *    de 2,70:1, adică sub prag pentru text — la 14px iese un preț pe care nu-l
- *    citești. Se folosește `--primary` (#008236), care are 4,95:1. Butonul verde
- *    e tot el: 2,70:1 e sub prag și în celălalt sens, deci nici text alb pe
+ * 2. **Verdele prețului NU e verdele de marcă.** #07c527 are pe alb un contrast
+ *    de 2,33:1, adică sub prag pentru text — la 14px iese un preț pe care nu-l
+ *    citești. Se folosește `--primary` (#008215), care are 5,00:1. Butonul verde
+ *    e tot el: 2,33:1 e sub prag și în celălalt sens, deci nici text alb pe
  *    verdele de marcă nu se citește.
  * 3. **Fără „În stoc".** Era în macheta de la care am pornit; clientul a cerut-o
  *    scoasă, mai curat așa.
@@ -35,9 +35,9 @@ import { VERDE_CITIBIL } from "@/lib/website/linii";
 /* Verdele pentru TEXT, luat din `lib/website/linii.ts`.
 
    Era declarat aici, si in inca patru fisiere, cu acelasi comentariu copiat
-   langa fiecare: `#12874A`, ales fiindca verdele de marca (#1AB554) are pe alb
-   2,70:1, sub prag. Alegerea era buna, dar `--primary` era deja acolo si are
-   4,95:1. Doctrina celor doi verzi ramasi e in capul lui `globals.css`. */
+   langa fiecare: `#12874A`, ales fiindca verdele de marca (azi #07c527) are pe
+   alb 2,33:1, sub prag. Alegerea era buna, dar `--primary` era deja acolo si are
+   5,00:1. Doctrina celor doi verzi ramasi e in capul lui `stil-comun.css`. */
 const GREEN_TEXT = VERDE_CITIBIL;
 
 export function TrustedProduct() {

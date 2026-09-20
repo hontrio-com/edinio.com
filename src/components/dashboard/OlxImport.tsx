@@ -97,7 +97,7 @@ export function OlxImport({ businessId, onImportat }: { businessId: string; onIm
   const scoate = (advertId: number) => setRanduri((v) => v.filter((x) => x.advertId !== advertId));
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-5">
+    <section className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-bold text-foreground">Anunțuri existente pe OLX</h3>

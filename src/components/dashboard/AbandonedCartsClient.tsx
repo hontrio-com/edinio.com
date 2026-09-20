@@ -34,7 +34,7 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
 
   if (!data) {
     return (
-      <div className="rounded-2xl border border-border bg-card p-10 text-center text-muted-foreground">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-10 text-center text-muted-foreground">
         Nu am putut incarca datele. Reincarca pagina.
       </div>
     );
@@ -59,7 +59,7 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
             { icon: Send, title: "Recuperează rapid", desc: "Trimite mail sau SMS dintr-un click" },
             { icon: ShieldCheck, title: "Activat doar de tine", desc: "Oprit implicit, pornești când vrei" },
           ].map((b) => (
-            <div key={b.title} className="rounded-xl border border-border bg-card p-4 text-left">
+            <div key={b.title} className="rounded-xl ring-1 ring-foreground/10 bg-card p-4 text-left">
               <b.icon className="h-5 w-5 mb-2 text-primary" />
               <p className="text-sm font-semibold text-foreground">{b.title}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{b.desc}</p>
@@ -124,7 +124,7 @@ function KpiCard({ icon: Icon, label, value, sub, accent }: {
   const isPrimary = accent === "primary";
   const isHex = !!accent && accent !== "primary";
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
       <div className="flex items-center gap-2 mb-2">
         <span
           className={`w-8 h-8 rounded-lg flex items-center justify-center ${isPrimary ? "bg-primary/10 text-primary" : isHex ? "" : "bg-muted text-muted-foreground"}`}
@@ -289,7 +289,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Abandoned products */}
-        <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
           <div className="flex items-center gap-2 mb-4">
             <Package className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold text-foreground">Cele mai abandonate produse</h2>
@@ -317,7 +317,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
         </div>
 
         {/* Timeline */}
-        <div className="rounded-2xl border border-border bg-card p-5">
+        <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
           <div className="flex items-center gap-2 mb-4">
             <Clock className="h-4 w-4 text-muted-foreground" />
             <h2 className="text-sm font-semibold text-foreground">Activitate recentă</h2>
@@ -342,7 +342,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
       </div>
 
       {/* Table */}
-      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center gap-2">
           <ShoppingBag className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-semibold text-foreground">Coșuri abandonate</h2>
@@ -422,7 +422,7 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
       {recover && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => !sending && setRecover(null)} />
-          <div className="relative bg-card rounded-2xl border border-border shadow-2xl w-full max-w-md p-5">
+          <div className="relative bg-card rounded-2xl ring-1 ring-foreground/10 shadow-2xl w-full max-w-md p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
                 {recover.channel === "email" ? <Mail className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}

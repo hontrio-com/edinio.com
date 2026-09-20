@@ -91,7 +91,7 @@ function Schelet() {
 function Neconectat({ motiv }: { motiv?: string }) {
   const seePoate = googleAnalyticsConfigured();
   return (
-    <div className="bg-surface border border-border rounded-2xl p-8 text-center max-w-lg mx-auto">
+    <div className="bg-card ring-1 ring-foreground/10 rounded-2xl p-8 text-center max-w-lg mx-auto">
       <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
         <LineChart className="h-6 w-6 text-primary" />
       </div>
@@ -145,7 +145,7 @@ async function Continut({ perioada }: { perioada: NumePerioada }) {
 
   if ("eroare" in date) {
     return (
-      <div className="bg-surface border border-border rounded-2xl p-6">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-2xl p-6">
         <div className="flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
           <div>

@@ -48,7 +48,7 @@ export function getAnnualSavings(plan: string): number {
 
 export const PLAN_COLORS: Record<string, string> = {
   free: "#a1a1aa",
-  trial: "#1AB554",
+  trial: "#07c527",
   basic: "#3b82f6",
   premium: "#8b5cf6",
   ultra: "#f59e0b",

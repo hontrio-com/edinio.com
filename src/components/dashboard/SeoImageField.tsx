@@ -36,7 +36,7 @@ export function SeoImageField({
         <div className="relative rounded-lg overflow-hidden border border-border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={value} alt="" className="w-full max-h-32 object-cover" />
-          <button type="button" onClick={() => onChange(null)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-white/90 border border-border flex items-center justify-center"><X className="h-3 w-3" /></button>
+          <button type="button" onClick={() => onChange(null)} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-card/90 ring-1 ring-foreground/10 flex items-center justify-center"><X className="h-3 w-3" /></button>
         </div>
       ) : (
         <label className="border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-1 py-4 cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors">

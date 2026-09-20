@@ -52,7 +52,7 @@ export function AboutYouReturns({ businessId }: { businessId: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-4">
       <div className="flex items-center justify-between gap-3 mb-3">
         <h3 className="text-sm font-semibold text-foreground inline-flex items-center gap-2">
           <RotateCcw className="h-4 w-4" /> Retururi About You

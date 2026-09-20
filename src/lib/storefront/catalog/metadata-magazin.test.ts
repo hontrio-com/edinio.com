@@ -395,7 +395,7 @@ describe("categoriile caian: textul lor, niciodata descrierea paginii principale
       business: m as never,
       pageContent: s.page_content ?? null,
       faraTva: preturiFaraTva(s as { vat_enabled?: boolean | null; prices_include_vat?: boolean | null }),
-      setari: citesteSetariMagazin(parseStoreDesign(s.storefront_design ?? null, { primaryColor: "#1AB554", pageContent: {}, features: {} })),
+      setari: citesteSetariMagazin(parseStoreDesign(s.storefront_design ?? null, { primaryColor: "#07c527", pageContent: {}, features: {} })),
       sp,
       filtre: citesteFiltreDinAdresa(sp, []),
       numeCategorie,

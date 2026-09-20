@@ -128,7 +128,7 @@ export const BackgroundBeams = React.memo(({ className }: { className?: string }
               {/* Green stripes (light theme) - saturated so they read on white */}
               <stop stopColor="#15803d" stopOpacity="0"></stop>
               <stop stopColor="#15803d"></stop>
-              <stop offset="32.5%" stopColor="#1AB554"></stop>
+              <stop offset="32.5%" stopColor="#07c527"></stop>
               <stop offset="100%" stopColor="#16a34a" stopOpacity="0"></stop>
             </motion.linearGradient>
           ))}

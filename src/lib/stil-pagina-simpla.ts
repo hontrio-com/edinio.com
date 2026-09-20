@@ -34,8 +34,8 @@ import type { CSSProperties } from "react";
   `foi-de-stil.test.ts` cade dacă apare un import de CSS acolo.
 */
 
-/** Verdele de la `--primary` (#008236), scris de mână fiindcă aici nu există variabile. */
-const VERDE = "#008236";
+/** Verdele de la `--primary` (#008215), scris de mână fiindcă aici nu există variabile. */
+const VERDE = "#008215";
 const VERDE_APASAT = "#026b2d";
 
 export const STIL_PAGINA_SIMPLA = {

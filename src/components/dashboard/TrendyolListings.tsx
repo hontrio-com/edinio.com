@@ -11,19 +11,24 @@ import {
 } from "@/lib/actions/trendyol.actions";
 import { TrendyolListingEditor } from "@/components/dashboard/TrendyolListingEditor";
 import type { TrendyolStoreFront } from "@/lib/trendyol/types";
+import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 
-const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
-  approved: { text: "Aprobat", cls: "bg-green-100 text-green-700" },
-  active: { text: "Activ", cls: "bg-green-100 text-green-700" },
-  pending: { text: "Trimis", cls: "bg-amber-100 text-amber-700" },
-  created: { text: "În aprobare", cls: "bg-amber-100 text-amber-700" },
-  draft: { text: "Ciornă", cls: "bg-muted text-muted-foreground" },
-  inactive: { text: "Inactiv", cls: "bg-muted text-muted-foreground" },
+/*
+  ⚠ TONURI, NU CLASE. Aceeasi stare arata acum la fel peste tot in panou; cum se
+  deseneaza hotaraste `EtichetaStare`, intr-un singur loc.
+*/
+const STATUS_LABEL: Record<string, { text: string; ton: TonEticheta }> = {
+  approved: { text: "Aprobat", ton: "bun" },
+  active: { text: "Activ", ton: "bun" },
+  pending: { text: "Trimis", ton: "asteptare" },
+  created: { text: "În aprobare", ton: "asteptare" },
+  draft: { text: "Ciornă", ton: "neutru" },
+  inactive: { text: "Inactiv", ton: "neutru" },
   // „Revizuire necesară" e chiar cuvantul din panoul Trendyol: produsul e la ei,
-  // dar nu se vinde pana nu repari ce-ti cer. Nu e o respingere definitiva —
-  // odata reparat, reintra singur in aprobare.
-  rejected: { text: "Revizuire necesară", cls: "bg-amber-100 text-amber-800" },
-  error: { text: "Eroare", cls: "bg-red-100 text-red-700" },
+  // dar nu se vinde pana nu repari ce-ti cer. Nu e o respingere definitiva -
+  // odata reparat, reintra singur in aprobare, deci NU primeste tonul „rau".
+  rejected: { text: "Revizuire necesară", ton: "asteptare" },
+  error: { text: "Eroare", ton: "rau" },
 };
 
 const FILTRE: { value: TrendyolProductStatusFilter; label: string }[] = [
@@ -281,7 +286,7 @@ export function TrendyolListings({
   const totalPagini = date?.totalPages ?? 1;
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <h2 className="text-base font-semibold text-foreground mb-1">Produse</h2>
       <p className="text-sm text-muted-foreground mb-4">Completează detaliile de listare pentru fiecare produs, apoi trimite-l pe Trendyol.</p>
 
@@ -392,7 +397,7 @@ export function TrendyolListings({
 
       <div className={`divide-y divide-border ${incarca ? "opacity-60" : ""}`}>
         {(datePagina?.items ?? []).map((p) => {
-          const status = p.status ? (STATUS_LABEL[p.status] ?? { text: p.status, cls: "bg-muted text-muted-foreground" }) : null;
+          const status = p.status ? (STATUS_LABEL[p.status] ?? { text: p.status, ton: "neutru" as TonEticheta }) : null;
           const isOpen = openId === p.id;
           return (
             <div key={p.id} className="py-3">
@@ -408,7 +413,7 @@ export function TrendyolListings({
                 </button>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {status ? (
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${status.cls}`}>{status.text}</span>
+                    <EtichetaStare ton={status.ton} marime="mic">{status.text}</EtichetaStare>
                   ) : (
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Nelistat</span>
                   )}
@@ -431,19 +436,16 @@ export function TrendyolListings({
                     `null` cand produsul apare aprobat, in ACEEASI trecere de cron.
                   */}
                   {p.probleme.length > 0 && (
-                    <span
-                      className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-                      title={p.probleme.join(" · ")}
-                    >
+                    <EtichetaStare ton="asteptare" marime="mic" title={p.probleme.join(" · ")}>
                       Nu se mai trimite
-                    </span>
+                    </EtichetaStare>
                   )}
                   {p.adoptata && (
                     <>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700"
+                      <EtichetaStare ton="info" marime="mic"
                         title="Produsul exista deja pe Trendyol, listat pe alta cale. Edinio l-a legat, dar nu-i schimba stocul si pretul.">
                         Preluat
-                      </span>
+                      </EtichetaStare>
                       <button onClick={() => impingeStocul(p.id)} disabled={pending}
                         className="text-xs text-primary hover:underline disabled:opacity-60"
                         title="Trimite acum stocul si pretul din Edinio catre Trendyol, pentru acest produs.">

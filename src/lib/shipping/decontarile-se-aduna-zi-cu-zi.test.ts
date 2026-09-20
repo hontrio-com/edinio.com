@@ -71,11 +71,15 @@ function sursa(relativ: string): string {
 }
 
 const CRON = "src/app/api/cron/fancourier-settlements/route.ts";
-/** ⚠ DOUA copii ale meniului, si nu sunt identice. Vezi proba de mai jos. */
-const MENIURI = [
-  "src/components/dashboard/Sidebar.tsx",
-  "src/components/dashboard/DashboardTopbar.tsx",
-];
+/**
+ * ⚠ MENIUL E UNUL SINGUR DIN 20.09.2026.
+ *
+ * Erau doua copii (`Sidebar.tsx` si `DashboardTopbar.tsx`) care divergisera; acum amandoua
+ * citesc modulul de mai jos, iar `navigatia-nu-divergeaza.test.ts` apara faptul ca nu se
+ * intoarce nimeni la doua liste. Proba de aici ramane fiindca intreaba altceva: ca PAGINA
+ * DE DECONTARI chiar are un drum in meniu.
+ */
+const MENIURI = ["src/lib/navigatie-panou.ts"];
 
 test("⚠⚠ cursorul se muta DOAR dupa o zi consumata intreaga", () => {
   /*
@@ -151,12 +155,11 @@ test("⚠ cronul isi verifica secretul si e INREGISTRAT", () => {
     "cronul decontarilor nu e in `vercel.json`: nu-l cheama nimeni");
 });
 
-test("⚠⚠ pagina e in AMANDOUA copiile meniului, nu doar in una", () => {
+test("⚠⚠ pagina de Decontari are un drum in meniu", () => {
   /*
-   * ⚠ A TREIA OARA IN ACEEASI ZI CAND UN LUCRU TRAIESTE IN DOUA COPII care nu se cunosc intre
-   * ele: doua checkout-uri care compun incarcatura, doua scrieri in `shipping_address`, si acum
-   * `Sidebar` (desktop) plus `DashboardTopbar` (mobil). Pusa intr-una singura, pagina ar fi
-   * existat doar pe jumatate din ecrane, si nimic n-ar fi semnalat-o.
+   * ⚠ ISTORIA: intrarea traise intr-o singura copie a meniului, deci pagina exista doar pe
+   * jumatate din ecrane, si nimic n-o semnala. De pe 20.09.2026 meniul e unul singur, deci
+   * aici ramane doar intrebarea care conteaza mai departe: pagina chiar se poate ajunge?
    */
   for (const fisier of MENIURI) {
     const s = sursa(fisier);

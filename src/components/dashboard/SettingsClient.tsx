@@ -1158,7 +1158,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           {activeSection === "general" && (
             <div className="space-y-4">
               {/* Card 1: Cont */}
-              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-border">
                   <p className="text-sm font-semibold text-foreground">Contul tau</p>
                 </div>
@@ -1191,7 +1191,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Card 2: Datele magazinului */}
-              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-border">
                   <p className="text-sm font-semibold text-foreground">Datele magazinului</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Apar pe documente, facturi si in footer-ul magazinului.</p>
@@ -1298,7 +1298,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Card 3: Formatul comenzilor */}
-              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-border">
                   <p className="text-sm font-semibold text-foreground">Formatul numarului de comanda</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Alege cum vor fi numerotate comenzile in magazinul tau.</p>
@@ -1366,7 +1366,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           {/* ── Tip magazin (One Product Store) ── */}
           {activeSection === "tip-magazin" && (
             <div className="space-y-4">
-              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-border">
                   <p className="text-sm font-semibold text-foreground">One Product Store</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -1436,7 +1436,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           {activeSection === "plan" && (
             <div className="space-y-5">
               {/* Plan curent */}
-              <div className="bg-surface border border-border rounded-xl px-5 py-4 flex items-center justify-between gap-4">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl px-5 py-4 flex items-center justify-between gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground font-medium mb-0.5">Plan activ</p>
                   <p className="text-base font-bold text-foreground">
@@ -1497,7 +1497,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   return (
                     <div
                       key={plan.id}
-                      className={`relative flex flex-col bg-surface border rounded-xl p-5 transition-all ${
+                      className={`relative flex flex-col bg-card ring-1 ring-foreground/10 rounded-xl p-5 transition-all ${
                         isExactCurrent
                           ? "border-primary ring-2 ring-primary/20"
                           : isIntervalSwitch
@@ -1606,7 +1606,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               )}
 
               {/* Global toggle */}
-              <div className="flex items-center justify-between gap-4 p-4 rounded-xl border border-border bg-surface">
+              <div className="flex items-center justify-between gap-4 p-4 rounded-xl ring-1 ring-foreground/10 bg-card">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground">Livrare activata</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Permite clientilor sa aleaga o metoda de livrare la comanda</p>
@@ -1750,7 +1750,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Free shipping threshold */}
-              <div className="p-4 rounded-xl border border-border bg-surface space-y-3">
+              <div className="p-4 rounded-xl ring-1 ring-foreground/10 bg-card space-y-3">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Transport gratuit de la</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Clientii nu vor plati livrarea daca comanda depaseste aceasta valoare. Lasa gol pentru a dezactiva.</p>
@@ -1778,7 +1778,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 * de magazin, ca setare de AFISARE, deci cine nu voia casuta pe
                 * pagina n-avea cum sa declare un termen catre Google.
                 */}
-              <div className="p-4 rounded-xl border border-border bg-surface space-y-3">
+              <div className="p-4 rounded-xl ring-1 ring-foreground/10 bg-card space-y-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="text-sm font-semibold text-foreground">Timp de livrare</p>
@@ -1822,7 +1822,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Minimum order value */}
-              <div className="p-4 rounded-xl border border-border bg-surface space-y-3">
+              <div className="p-4 rounded-xl ring-1 ring-foreground/10 bg-card space-y-3">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Comanda minima</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Valoarea minima a produselor pentru a putea plasa o comanda. Clientii nu vor putea finaliza comanda sub aceasta suma. Lasa gol pentru a dezactiva.</p>
@@ -1873,7 +1873,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               )}
 
               {/* Toggle platitor TVA */}
-              <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-5">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-foreground">Platitor de TVA</p>
@@ -1979,7 +1979,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
 
               {/* Previzualizare */}
               {vat.vat_enabled && (
-                <div className="bg-surface border border-border rounded-xl p-5 space-y-2">
+                <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-2">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Previzualizare cos cumparaturi</p>
                   {(() => {
                     const exPrice = 100;
@@ -2029,7 +2029,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               )}
 
               {/* Activare banner */}
-              <div className="bg-surface border border-border rounded-xl p-5">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-foreground">Afiseaza bannerul de cookie-uri</p>
@@ -2046,7 +2046,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               )}
 
               {/* Pozitionare */}
-              <div className={`bg-surface border border-border rounded-xl p-5 space-y-4 ${cookieCfg.enabled ? "" : "opacity-50 pointer-events-none"}`}>
+              <div className={`bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-4 ${cookieCfg.enabled ? "" : "opacity-50 pointer-events-none"}`}>
                 <div>
                   <p className="text-sm font-semibold text-foreground">Pozitionare</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Unde apare bannerul pe magazin.</p>
@@ -2073,7 +2073,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Categorii detectate automat */}
-              <div className="bg-surface border border-border rounded-xl p-5 space-y-3">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-3">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Categorii afisate in banner</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Se adapteaza automat la integrarile active. Nu trebuie sa configurezi nimic aici.</p>
@@ -2110,7 +2110,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           )}
           {activeSection === "plati" && (
             <div className="space-y-4">
-              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-border">
                   <p className="text-sm font-semibold text-foreground">Metode de plata</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -2158,7 +2158,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Discount la plata cu cardul */}
-              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-foreground">Discount la plata cu cardul</p>
@@ -2211,7 +2211,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Discount la plata ramburs */}
-              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-foreground">Discount la plata ramburs</p>
@@ -2264,7 +2264,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Taxa la plata ramburs */}
-              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-foreground">Taxa la plata ramburs</p>
@@ -2409,7 +2409,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 </Callout>
               )}
 
-              <div className="bg-surface border border-border rounded-xl p-5 space-y-5">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-5">
                 {/* Titlu meta */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
@@ -2467,7 +2467,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Imagine la distribuire */}
-              <div className="bg-surface border border-border rounded-xl p-5 space-y-2">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-2">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Imagine la distribuire</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Apare cand cineva distribuie magazinul pe Facebook, WhatsApp etc. Daca lipseste, folosim coperta magazinului. Ideal 1200×630px.</p>
@@ -2476,7 +2476,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Avansat: noindex */}
-              <div className="bg-surface border border-border rounded-xl p-5">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5">
                 <label className="flex items-start gap-3 cursor-pointer select-none">
                   <input type="checkbox" checked={!!seo.noindex} disabled={!businessId} onChange={(e) => setSeo(s => ({ ...s, noindex: e.target.checked }))} className="w-4 h-4 mt-0.5 rounded accent-green-600" />
                   <span>
@@ -2487,7 +2487,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Paginile de politici in Google */}
-              <div className="bg-surface border border-border rounded-xl p-5 space-y-3">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-3">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Paginile de politici in Google</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -2545,7 +2545,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                 (`ajutor-categorii/setari.ts`, „cum-conectezi-magazinul-la-google-search-console").
                 Se schimba impreuna.
               */}
-              <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-4">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Google Search Console</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -2634,7 +2634,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               )}
 
               {/* Email destinatie */}
-              <div className="bg-surface border border-border rounded-xl p-5 space-y-4">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-4">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Adresa de email pentru notificari</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Toate notificarile vor fi trimise pe aceasta adresa</p>
@@ -2650,7 +2650,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Evenimente */}
-              <div className="bg-surface border border-border rounded-xl p-5 space-y-0 divide-y divide-border">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-0 divide-y divide-border">
                 <p className="text-sm font-semibold text-foreground pb-4">Evenimente</p>
 
                 {/* Comanda noua */}
@@ -2665,7 +2665,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* Test email */}
-              <div className="bg-surface border border-border rounded-xl p-5 space-y-3">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-5 space-y-3">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Testeaza notificarile</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
@@ -2720,7 +2720,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
                   const entry = policies[key] ?? { content: "", enabled: true };
                   const isEnabled = entry.enabled;
                   return (
-                    <div key={key} className="bg-surface border border-border rounded-xl overflow-hidden">
+                    <div key={key} className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
                       {/* Card header with toggle */}
                       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -2777,7 +2777,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
           {activeSection === "securitate" && (
             <div className="space-y-4">
               {/* Schimba parola */}
-              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-border">
                   <p className="text-sm font-semibold text-foreground">Schimba parola</p>
                 </div>
@@ -2820,7 +2820,7 @@ export function SettingsClient({ profile, email, businessId, businessData, store
               </div>
 
               {/* 2FA */}
-              <div className="bg-surface border border-border rounded-xl overflow-hidden">
+              <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
                 <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold text-foreground">Autentificare in doi pasi (2FA)</p>

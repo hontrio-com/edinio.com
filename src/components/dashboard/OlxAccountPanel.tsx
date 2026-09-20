@@ -92,7 +92,7 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
   const activeAdverts = adverts.filter((a) => a.olx_advert_id && ["active", "limited"].includes(a.status));
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+    <div className="overflow-hidden rounded-2xl ring-1 ring-foreground/10 bg-card">
       <button onClick={toggle} className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left">
         <span className="flex items-center gap-2">
           <Wallet className="h-4 w-4 text-muted-foreground" />

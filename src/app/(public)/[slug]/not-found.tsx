@@ -22,7 +22,7 @@ import { isPlatformHost } from "@/lib/seo";
 export default async function StoreNotFound() {
   const gazda = (await headers()).get("host")?.split(":")[0].toLowerCase() ?? "";
   let nume: string | null = null;
-  let culoare = "#1AB554";
+  let culoare = "#07c527";
 
   if (gazda && !isPlatformHost(gazda)) {
     const fara = gazda.startsWith("www.") ? gazda.slice(4) : gazda;

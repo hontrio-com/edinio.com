@@ -77,7 +77,7 @@ export function BillingSection({ plan, planExpiresAt, interval = "monthly", paym
     <div className="space-y-5">
       {/* Active subscription card */}
       {plan !== "free" && plan !== "trial" ? (
-        <div className={`bg-surface border rounded-xl overflow-hidden ${isPastDue ? "border-destructive/40" : "border-border"}`}>
+        <div className={`bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden ${isPastDue ? "border-destructive/40" : "border-border"}`}>
           <div className="px-5 py-4 border-b border-border">
             <p className="text-sm font-semibold text-foreground">Abonamentul tau</p>
           </div>
@@ -148,7 +148,7 @@ export function BillingSection({ plan, planExpiresAt, interval = "monthly", paym
           </div>
         </div>
       ) : plan === "trial" ? (
-        <div className="bg-surface border border-border rounded-xl px-5 py-5 flex items-start gap-3">
+        <div className="bg-card ring-1 ring-foreground/10 rounded-xl px-5 py-5 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-foreground mb-0.5">Testare gratuita</p>
@@ -179,7 +179,7 @@ export function BillingSection({ plan, planExpiresAt, interval = "monthly", paym
           </div>
         </div>
       ) : (
-        <div className="bg-surface border border-border rounded-xl px-5 py-5 flex items-start gap-3">
+        <div className="bg-card ring-1 ring-foreground/10 rounded-xl px-5 py-5 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-foreground mb-0.5">Niciun abonament activ</p>
@@ -202,7 +202,7 @@ export function BillingSection({ plan, planExpiresAt, interval = "monthly", paym
       )}
 
       {/* Invoice history */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
           <p className="text-sm font-semibold text-foreground">Istoricul facturilor</p>
           <p className="text-xs text-muted-foreground mt-0.5">

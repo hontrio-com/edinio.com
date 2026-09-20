@@ -52,7 +52,7 @@ export default function OlxConflicte({
   return (
     <div className="mt-4 space-y-4">
       {conflicte.map((c) => (
-        <div key={c.offerId} className="rounded-xl border border-border bg-card p-3">
+        <div key={c.offerId} className="rounded-xl ring-1 ring-foreground/10 bg-card p-3">
           <p className="text-sm font-semibold text-foreground">
             {c.productName ?? "Produs șters"}
           </p>

@@ -44,7 +44,7 @@ type SetariCitite = {
 };
 
 /** Contextul minim al designului, ca in metadata: `shop.page` nu depinde de culori sau de bannere. */
-const CONTEXT_DESIGN = { primaryColor: "#1AB554", pageContent: {}, features: {} };
+const CONTEXT_DESIGN = { primaryColor: "#07c527", pageContent: {}, features: {} };
 
 /**
  * Textul automat al paginii unei categorii, pentru placeholderul editorului din panou.

@@ -8,7 +8,7 @@
  * Măsurat contrastul fiecăreia pe fond alb (pragul pentru un text mic e 4,5):
  *
  *   Shopify   #95BF46  2,14  ✗      OpenCart  #1FBBEB  2,24  ✗
- *   Magento   #EC6737  3,20  ✗      Edinio    #1AB554  2,70  ✗
+ *   Magento   #EC6737  3,20  ✗      Edinio    #07c527  2,33  ✗
  *   WooCommerce #873EFF 5,04 ✓      Cartum    #1C1C1C 17,04 ✓
  *   Wix       #000000 21,00  ✓
  *
@@ -37,9 +37,9 @@ export interface MarcaVersus {
 }
 
 export const CULORI_MARCI = {
-  /* A noastră. ⚠ Verdele mărcii (#1AB554) dă 2,70 pe alb — nici el nu trece, deci
+  /* A noastră. ⚠ Verdele mărcii (#07c527) dă 2,33 pe alb — nici el nu trece, deci
      e întunecat la fel ca ale lor. Aceeași măsură pentru toți. */
-  edinio: { nume: "Edinio", culoare: "#14883F", deFirma: "#1AB554", contrast: 4.54 },
+  edinio: { nume: "Edinio", culoare: "#058a1b", deFirma: "#07c527", contrast: 4.51 },
 
   shopify: { nume: "Shopify", culoare: "#63802C", deFirma: "#95BF46", contrast: 4.51 },
   /* Cartum și Wix scriu deja în negru: trec fără să fie atinse. */

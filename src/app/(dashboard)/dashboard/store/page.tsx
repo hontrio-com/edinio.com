@@ -25,7 +25,7 @@ export default async function StoreEditorPage() {
         <p className="text-sm text-muted-foreground mt-0.5">Personalizeaza aspectul si setarile magazinului tau</p>
       </div>
 
-      <div className="bg-surface border border-border rounded-xl p-8 text-center">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-8 text-center">
         <Pencil className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
         <p className="text-sm font-medium text-foreground mb-1">Editorul de magazin</p>
         <p className="text-xs text-muted-foreground">

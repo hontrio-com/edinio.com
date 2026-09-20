@@ -27,9 +27,9 @@ import { VERDE_CITIBIL } from "@/lib/website/linii";
 /* Verdele pentru TEXT, luat din `lib/website/linii.ts`.
 
    Era declarat aici, si in inca patru fisiere, cu acelasi comentariu copiat
-   langa fiecare: `#12874A`, ales fiindca verdele de marca (#1AB554) are pe alb
-   2,70:1, sub prag. Alegerea era buna, dar `--primary` era deja acolo si are
-   4,95:1. Doctrina celor doi verzi ramasi e in capul lui `globals.css`. */
+   langa fiecare: `#12874A`, ales fiindca verdele de marca (azi #07c527) are pe
+   alb 2,33:1, sub prag. Alegerea era buna, dar `--primary` era deja acolo si are
+   5,00:1. Doctrina celor doi verzi ramasi e in capul lui `stil-comun.css`. */
 const GREEN_TEXT = VERDE_CITIBIL;
 
 /*

@@ -297,7 +297,7 @@ export function ProductPageDetailed({
   const refOferte = useAfisariOferte(business.id, productOffers.map((o) => o.id), !demo);
 
   const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;
-  const color = business.primary_color ?? "#1AB554";
+  const color = business.primary_color ?? "#07c527";
 
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
   const freeShippingThreshold = pragTransportGratuit(storeSettings?.free_shipping_threshold);

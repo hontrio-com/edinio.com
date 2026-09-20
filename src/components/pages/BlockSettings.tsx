@@ -18,7 +18,7 @@ import { ProductPicker } from "./ProductPicker";
 import type { FormDef } from "@/lib/pages/forms.types";
 
 const inputCls = "w-full px-3 py-2 text-sm border border-border rounded-lg bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30";
-const COLORS = ["#1AB554", "#1E3A5F", "#8B1A1A", "#374151", "#D97706", "#6D28D9", "#E11D48", "#0891B2", "#000000", "#ffffff"];
+const COLORS = ["#07c527", "#1E3A5F", "#8B1A1A", "#374151", "#D97706", "#6D28D9", "#E11D48", "#0891B2", "#000000", "#ffffff"];
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

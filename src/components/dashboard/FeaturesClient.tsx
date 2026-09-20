@@ -130,7 +130,7 @@ export function FeaturesClient({ business }: { business: Business }) {
           {COMING_SOON.map((f) => {
             const Icon = f.icon;
             return (
-              <div key={f.title} className="flex items-start gap-3 p-4 rounded-xl border border-dashed border-border bg-surface opacity-65">
+              <div key={f.title} className="flex items-start gap-3 p-4 rounded-xl ring-1 ring-foreground/10 border-dashed border-border bg-card opacity-65">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-muted text-muted-foreground">
                   <Icon className="h-4 w-4" />
                 </div>

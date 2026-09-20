@@ -117,7 +117,7 @@ export function OffersClient({ businessId, offers }: { businessId: string; offer
       </div>
 
       {offers.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card py-16 text-center px-4">
+        <div className="rounded-2xl ring-1 ring-foreground/10 border-dashed border-border bg-card py-16 text-center px-4">
           <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
             <Sparkles className="h-6 w-6" />
           </div>
@@ -139,11 +139,11 @@ export function OffersClient({ businessId, offers }: { businessId: string; offer
           </div>
 
           {filtered.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border bg-card py-12 text-center px-4">
+            <div className="rounded-2xl ring-1 ring-foreground/10 border-dashed border-border bg-card py-12 text-center px-4">
               <p className="text-sm text-muted-foreground">Nicio oferta pentru cautarea ta.</p>
             </div>
           ) : (
-            <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
+            <div className="rounded-2xl ring-1 ring-foreground/10 bg-card divide-y divide-border overflow-hidden">
               {filtered.map((o) => {
                 const Icon = TYPE_ICON[o.type] ?? Sparkles;
                 return (

@@ -12,7 +12,7 @@ import type { DesignContext } from "./types";
  * Rulare: `npm test`.
  */
 
-const ctx: DesignContext = { primaryColor: "#1AB554", pageContent: {}, features: {} };
+const ctx: DesignContext = { primaryColor: "#07c527", pageContent: {}, features: {} };
 
 const publicat = buildClassicDesign(ctx);
 /** O ciorna reala: acelasi design, cu un header schimbat. */

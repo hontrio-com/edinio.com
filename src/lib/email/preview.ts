@@ -50,7 +50,7 @@ export function buildEditableEmail(
   values: EditableValues,
   editable: boolean,
 ): { subject: string; html: string } {
-  const color = /^#[0-9a-fA-F]{3,8}$/.test(branding.color) ? branding.color : "#1AB554";
+  const color = /^#[0-9a-fA-F]{3,8}$/.test(branding.color) ? branding.color : "#07c527";
   const subject = (values.subject || "").trim() || "(fara subiect)";
 
   const headingText = values.heading !== undefined ? values.heading : DEFAULT_HEADING[kind];

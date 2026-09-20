@@ -37,7 +37,7 @@ export default async function ReturPage({ params, searchParams }: Props) {
     .eq("business_id", business.id)
     .single();
 
-  const color = business.primary_color ?? "#1AB554";
+  const color = business.primary_color ?? "#07c527";
   const storeName = business.store_name ?? business.business_name;
 
   // Custom-domain aware base path (proxy rewrites customdomain.ro/x -> /slug/x).

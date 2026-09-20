@@ -45,7 +45,7 @@ const PRAG_MINUTE = 15;
 
 function Cifra({ eticheta, valoare, rau }: { eticheta: string; valoare: string; rau?: boolean }) {
   return (
-    <div className="rounded-xl border border-border bg-card px-3 py-2">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card px-3 py-2">
       <p className="text-[11px] text-muted-foreground">{eticheta}</p>
       <p className={`text-sm font-semibold tabular-nums ${rau ? "text-destructive" : "text-foreground"}`}>
         {valoare}

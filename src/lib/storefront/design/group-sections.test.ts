@@ -12,7 +12,7 @@ import type { DesignContext, SectionInstance } from "./types";
  * care le poate produce editorul raman netestate acolo.
  */
 
-const ctx: DesignContext = { primaryColor: "#1AB554", pageContent: {}, features: {} };
+const ctx: DesignContext = { primaryColor: "#07c527", pageContent: {}, features: {} };
 
 const forma = (sections: SectionInstance[]) =>
   groupSections(sections).map((b) =>

@@ -19,11 +19,20 @@ import {
   type TrendyolMapSuggestion,
 } from "@/lib/actions/trendyol.actions";
 import type { Incredere } from "@/lib/trendyol/category-match";
+import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 
-const INCREDERE: Record<Incredere, { text: string; cls: string }> = {
-  sigura: { text: "Sigură", cls: "bg-green-100 text-green-700" },
-  probabila: { text: "Probabilă", cls: "bg-amber-100 text-amber-700" },
-  slaba: { text: "Nesigură", cls: "bg-red-100 text-red-700" },
+/*
+  ⚠ TONURI, NU CLASE, ca peste tot in panou.
+
+  Aici nu e o stare, ci cata incredere are potrivirea automata. „Nesigura"
+  primeste totusi tonul de alarma: nu e o eroare a noastra, dar o potrivire
+  gresita trimite produsul intr-o categorie straina la Trendyol, si atunci nu se
+  vinde. E exact randul pe care omul trebuie sa se uite cu ochii lui.
+*/
+const INCREDERE: Record<Incredere, { text: string; ton: TonEticheta }> = {
+  sigura: { text: "Sigură", ton: "bun" },
+  probabila: { text: "Probabilă", ton: "asteptare" },
+  slaba: { text: "Nesigură", ton: "rau" },
 };
 
 interface Alegere {
@@ -112,7 +121,7 @@ export function TrendyolAutoMap({
 
   if (faza === "inchis") {
     return (
-      <div className="rounded-xl border border-border bg-surface p-5">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-foreground mb-1 flex items-center gap-2">
@@ -179,9 +188,9 @@ export function TrendyolAutoMap({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-medium text-foreground truncate">{s.edinioCategory}</p>
-                  {badge && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${badge.cls}`}>{badge.text}</span>}
+                  {badge && <EtichetaStare ton={badge.ton} marime="mic">{badge.text}</EtichetaStare>}
                   {s.existent && (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Deja mapată</span>
+                    <EtichetaStare ton="neutru" marime="mic">Deja mapată</EtichetaStare>
                   )}
                 </div>
 

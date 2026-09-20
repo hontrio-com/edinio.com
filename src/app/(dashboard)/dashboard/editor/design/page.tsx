@@ -30,7 +30,7 @@ export default async function DesignEditorPage() {
 
   const settings = Array.isArray(business.store_settings) ? business.store_settings[0] : business.store_settings;
   const ctx: DesignContext = {
-    primaryColor: business.primary_color ?? "#1AB554",
+    primaryColor: business.primary_color ?? "#07c527",
     pageContent: (settings?.page_content as Record<string, unknown>) ?? {},
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: business.cover_url,

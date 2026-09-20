@@ -195,7 +195,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
       )}
 
       {/* Name */}
-      <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
         <div>
           <label className="block text-sm font-medium text-foreground mb-1.5">Nume ofertă (intern)</label>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ex: Accesorii recomandate" className={inputCls} />
@@ -208,7 +208,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
       </div>
 
       {/* CÂND APARE — trigger */}
-      <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Tag className="h-4 w-4 text-primary" /> Când apare</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -255,7 +255,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
       </div>
 
       {/* CE OFER — products */}
-      <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Package className="h-4 w-4 text-primary" /> Ce ofer</h2>
           <p className="text-xs text-muted-foreground mt-0.5">{meta.offersLabel}</p>
@@ -278,7 +278,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
 
       {/* CÂT REDUC — discount (hidden for cross_sell) */}
       {meta.hasDiscount && (
-        <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+        <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
           <div>
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-primary" /> Cât reduc</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -319,7 +319,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
       )}
 
       {/* Active */}
-      <div className="rounded-2xl border border-border bg-card p-5">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
         <div className="flex items-center justify-between">
           <span className="text-sm text-foreground">Activă (vizibilă în magazin)</span>
           <Switch checked={isActive} onCheckedChange={setIsActive} />
@@ -363,7 +363,7 @@ function ProductPicker({ products, selectedIds, byId, onAdd, onRemove, single, p
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} className={`${inputCls} pl-9`} />
         {q.trim() && (
-          <div className="absolute z-10 mt-1 w-full rounded-xl border border-border bg-card shadow-lg max-h-64 overflow-y-auto">
+          <div className="absolute z-10 mt-1 w-full rounded-xl ring-1 ring-foreground/10 bg-card shadow-lg max-h-64 overflow-y-auto">
             {results.length === 0 ? (
               <p className="px-3 py-3 text-sm text-muted-foreground">Niciun produs găsit.</p>
             ) : results.map((p) => (

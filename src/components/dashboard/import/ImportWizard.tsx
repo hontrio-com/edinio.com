@@ -356,7 +356,7 @@ function UploadStep({ dragging, uploading, fileInputRef, onDragOver, onDragLeave
 
 function SourceCard({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
   return (
-    <div className="border border-border rounded-xl p-4 bg-surface">
+    <div className="ring-1 ring-foreground/10 rounded-xl p-4 bg-card">
       <div className="h-8 flex items-center mb-3">{icon}</div>
       <p className="text-sm font-semibold text-foreground">{title}</p>
       <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
@@ -401,7 +401,7 @@ function MappingStep({ headers, mapping, onChange, onBack, onNext }: {
   const missingRequired = OUR_FIELDS.filter((f) => f.required && !mapping[f.key]);
   return (
     <div className="space-y-4">
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border bg-muted/50">
           <p className="text-sm font-medium text-foreground">Potriveste coloanele din fisierul tau cu campurile Edinio</p>
         </div>
@@ -486,7 +486,7 @@ function ReviewStep({ source, fileName, options, onOption, summary, sample, load
       </div>
 
       {/* Options */}
-      <div className="bg-surface border border-border rounded-xl p-4 space-y-1">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-4 space-y-1">
         <Toggle checked={options.default_active} onChange={(v) => onOption("default_active", v)} label="Seteaza produsele ca active (vizibile in magazin)" />
         <Toggle checked={options.import_images} onChange={(v) => onOption("import_images", v)} label="Descarca si gazduieste imaginile pe Edinio" hint="Recomandat. Altfel pastram linkurile externe." />
         <Toggle checked={options.collapse_variants} onChange={(v) => onOption("collapse_variants", v)} label="Grupeaza variantele (marime, culoare) intr-un singur produs" />
@@ -507,7 +507,7 @@ function ReviewStep({ source, fileName, options, onOption, summary, sample, load
       )}
 
       {/* Sample preview */}
-      <div className="bg-surface border border-border rounded-xl overflow-hidden">
+      <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
         <div className="px-4 py-2.5 border-b border-border bg-muted/50 flex items-center justify-between">
           <p className="text-sm font-medium text-foreground">Previzualizare</p>
           {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
@@ -560,7 +560,7 @@ function ReviewStep({ source, fileName, options, onOption, summary, sample, load
 
 function Stat({ label, value, tone }: { label: string; value: number | string; tone?: "green" | "red" }) {
   return (
-    <div className="bg-surface border border-border rounded-xl p-3 text-center">
+    <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-3 text-center">
       <p className={cn("text-2xl font-semibold", tone === "green" ? "text-success" : tone === "red" ? "text-destructive" : "text-foreground")}>{value}</p>
       <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
     </div>
@@ -596,7 +596,7 @@ function ProgressStep({ status, totals, onCancel }: { status: ImportStatus; tota
     : totals.total > 0 ? Math.round((committed / totals.total) * 100) : 0;
 
   return (
-    <div className="bg-surface border border-border rounded-2xl p-8 text-center">
+    <div className="bg-card ring-1 ring-foreground/10 rounded-2xl p-8 text-center">
       <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-4" />
       <p className="text-sm font-semibold text-foreground mb-1">
         {isImages ? "Se descarca imaginile..." : "Se importa produsele..."}
@@ -626,7 +626,7 @@ function DoneStep({ totals, status, importId, onViewProducts }: { totals: Import
   const hasIssues = totals.failed > 0 || totals.skipped > 0;
   const imported = totals.created + totals.updated;
   return (
-    <div className="bg-surface border border-border rounded-2xl p-8 text-center">
+    <div className="bg-card ring-1 ring-foreground/10 rounded-2xl p-8 text-center">
       <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4", hasIssues ? "bg-warning/10" : "bg-success/10")}>
         {hasIssues ? <AlertTriangle className="h-7 w-7 text-warning" /> : <CheckCircle2 className="h-7 w-7 text-success" />}
       </div>

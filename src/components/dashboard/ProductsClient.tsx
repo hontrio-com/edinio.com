@@ -707,7 +707,7 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
           </div>
 
           {/* Desktop: table */}
-          <div className="hidden sm:block bg-surface border border-border rounded-xl overflow-hidden">
+          <div className="hidden sm:block bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
           <table className="w-full text-sm table-fixed">
             <thead>
               <tr className="border-b border-border bg-muted/50">
@@ -836,7 +836,7 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
           </div>
 
           {totalPages > 1 && (
-            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2 px-3 sm:px-5 py-3 mt-3 bg-surface border border-border rounded-xl">
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2 px-3 sm:px-5 py-3 mt-3 bg-card ring-1 ring-foreground/10 rounded-xl">
               <p className="text-xs text-muted-foreground">
                 {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, totalFiltrate)} din {totalFiltrate} produse
               </p>
@@ -868,7 +868,7 @@ export function ProductsClient({ products, businessId, filtre, totalFiltrate, ca
           )}
         </>
       ) : (
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
           <div className="py-16 text-center px-4">
             <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
               {searchQuery.trim() ? <Search className="h-6 w-6 text-muted-foreground" /> : <Package className="h-6 w-6 text-muted-foreground" />}

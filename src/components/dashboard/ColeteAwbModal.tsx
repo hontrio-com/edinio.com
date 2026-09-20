@@ -263,7 +263,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
         aria-modal="true"
         aria-label="Generare AWB Colete Online"
         tabIndex={-1}
-        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-surface rounded-2xl shadow-2xl border border-border focus:outline-none">
+        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-card rounded-2xl shadow-2xl ring-1 ring-foreground/10 focus:outline-none">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-border sticky top-0 bg-surface z-10">
           <div className="flex items-center gap-3">

@@ -29,6 +29,7 @@ import { WootAwbModal } from "@/components/dashboard/WootAwbModal";
 import { ColeteAwbModal } from "@/components/dashboard/ColeteAwbModal";
 import { Button } from "@/components/ui/button";
 import { ORDER_STATUS, orderStatus, type OrderStatus } from "@/lib/orders/status";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { ORDERS_PAGE_SIZE } from "@/lib/orders/pagination";
 import { readBillingCompany } from "@/lib/billing/company";
 import type { Database } from "@/types/database.types";
@@ -670,7 +671,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
               <button
                 type="button"
                 onClick={() => setFanPickupOpen(true)}
-                className="px-3 py-1.5 text-xs font-semibold rounded-full border border-border bg-surface text-foreground hover:bg-muted transition-colors"
+                className="px-3 py-1.5 text-xs font-semibold rounded-full ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors"
               >
                 Cheama curierul FAN
               </button>
@@ -679,7 +680,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
               <button
                 type="button"
                 onClick={() => setDpdPickupOpen(true)}
-                className="px-3 py-1.5 text-xs font-semibold rounded-full border border-border bg-surface text-foreground hover:bg-muted transition-colors"
+                className="px-3 py-1.5 text-xs font-semibold rounded-full ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors"
               >
                 Cheama curierul DPD
               </button>
@@ -688,7 +689,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
               <button
                 type="button"
                 onClick={() => setCargusPickupOpen(true)}
-                className="px-3 py-1.5 text-xs font-semibold rounded-full border border-border bg-surface text-foreground hover:bg-muted transition-colors"
+                className="px-3 py-1.5 text-xs font-semibold rounded-full ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors"
               >
                 Cheama curierul Cargus
               </button>
@@ -816,7 +817,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                 onChange={(e) => setBulkStatus(e.target.value)}
                 disabled={bulkBusy}
                 aria-label="Schimbă statusul"
-                className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-border bg-surface text-foreground disabled:opacity-50"
+                className="px-2.5 py-1.5 text-xs font-medium rounded-lg ring-1 ring-foreground/10 bg-card text-foreground disabled:opacity-50"
               >
                 <option value="">Schimbă status…</option>
                 {STATUS_TABS.filter((t) => t.key !== "all").map((t) => (
@@ -827,7 +828,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                 type="button"
                 onClick={runBulkStatus}
                 disabled={bulkBusy || !bulkStatus}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-surface text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
               >
                 Aplică
               </button>
@@ -842,7 +843,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     onChange={(e) => setInvoiceProvider(e.target.value as InvoiceProvider)}
                     disabled={bulkBusy}
                     aria-label="Furnizor factură"
-                    className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-border bg-surface text-foreground disabled:opacity-50"
+                    className="px-2.5 py-1.5 text-xs font-medium rounded-lg ring-1 ring-foreground/10 bg-card text-foreground disabled:opacity-50"
                   >
                     <option value="auto">Factură: automat</option>
                     {invoiceProviders.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
@@ -852,7 +853,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                   type="button"
                   onClick={runBulkInvoices}
                   disabled={bulkBusy}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-surface text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                 >
                   <FileCheck className="h-3.5 w-3.5" /> Generează facturi
                 </button>
@@ -868,7 +869,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                     onChange={(e) => setAwbCourier(e.target.value as BulkCourier)}
                     disabled={bulkBusy}
                     aria-label="Curier AWB"
-                    className="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-border bg-surface text-foreground disabled:opacity-50"
+                    className="px-2.5 py-1.5 text-xs font-medium rounded-lg ring-1 ring-foreground/10 bg-card text-foreground disabled:opacity-50"
                   >
                     <option value="auto">AWB: după client</option>
                     {awbCouriers.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
@@ -878,7 +879,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                   type="button"
                   onClick={runBulkAwbs}
                   disabled={bulkBusy}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-surface text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                 >
                   <Package className="h-3.5 w-3.5" /> Generează AWB{awbCouriers.length === 1 ? ` ${awbCouriers[0].label}` : "-uri"}
                 </button>
@@ -1094,9 +1095,7 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                           {moneda ? `${Number(order.total).toFixed(2)} ${moneda}` : formatPrice(Number(order.total))}
                         </td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
-                          <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap", status.className)}>
-                            {status.label}
-                          </span>
+                          <EtichetaStare ton={status.ton}>{status.label}</EtichetaStare>
                         </td>
                         {arataSursa && (
                           <td className="px-5 py-3.5 hidden sm:table-cell">

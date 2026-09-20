@@ -547,7 +547,7 @@ function VariantImagePicker({ images, selected, onSelect }: { images: string[]; 
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-14 z-20 bg-surface border border-border rounded-xl shadow-lg p-2 grid grid-cols-4 gap-1.5 w-52">
+          <div className="absolute left-0 top-14 z-20 bg-card ring-1 ring-foreground/10 rounded-xl shadow-lg p-2 grid grid-cols-4 gap-1.5 w-52">
             {selected && (
               <button type="button" onClick={() => { onSelect(""); setOpen(false); }}
                 className="col-span-4 text-[11px] text-muted-foreground hover:text-destructive text-left px-1 mb-1">
@@ -1416,7 +1416,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                   <p><strong className="text-foreground">Optiune</strong> = o caracteristica a produsului. Ex: Marime, Culoare, Material.</p>
                   <p><strong className="text-foreground">Valoare</strong> = optiunile concrete ale unei caracteristici. Ex: la Marime &rarr; S, M, L; la Culoare &rarr; Rosu, Albastru.</p>
                   <p><strong className="text-foreground">Varianta</strong> = combinatia rezultata din optiuni, fiecare cu pretul, codul (SKU) si stocul ei. Ex: &laquo;M / Rosu&raquo;.</p>
-                  <div className="rounded-lg bg-surface border border-border p-2.5 mt-1">
+                  <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-2.5 mt-1">
                     <p className="font-medium text-foreground mb-1">Exemplu</p>
                     <p>Un tricou cu Marime (S, M, L) si Culoare (Rosu, Albastru) genereaza 6 variante: S/Rosu, S/Albastru, M/Rosu, M/Albastru, L/Rosu, L/Albastru. Clientul alege marimea si culoarea, iar tu poti pune pret si stoc diferit pentru fiecare combinatie.</p>
                   </div>
@@ -1617,7 +1617,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                     <li><strong className="text-foreground">Imagine</strong> &rarr; clientul incarca un fisier (ex: un logo de printat).</li>
                   </ul>
                   <p>Poti marca un camp drept obligatoriu. Ce completeaza clientul apare la tine in detaliile comenzii.</p>
-                  <div className="rounded-lg bg-surface border border-border p-2.5 mt-1">
+                  <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-2.5 mt-1">
                     <p className="font-medium text-foreground mb-1">Exemplu</p>
                     <p>Cana personalizata: un camp Text &laquo;Numele de gravat&raquo; (obligatoriu) si un camp Imagine &laquo;Incarca logo&raquo;.</p>
                   </div>
@@ -1729,7 +1729,7 @@ export function ProductForm({ businessId, product, categories, backHref = "/dash
                 <HelpCard>
                   <p>Oferi un pret mai bun cand clientul cumpara 2 sau 3 bucati deodata, ca sa-l incurajezi sa comande mai mult.</p>
                   <p>Fiecare treapta e un <span className="font-medium text-foreground">pachet</span>: la <span className="font-medium text-foreground">Suma fixa</span> scrii cat costa pachetul <span className="font-medium text-foreground">intreg</span>, nu cat costa o bucata din el. La <span className="font-medium text-foreground">Procent</span> scrii cat la suta scade pretul, iar totalul pachetului se calculeaza singur. Poti adauga si o eticheta (ex: &laquo;Cel mai bun pret&raquo;).</p>
-                  <div className="rounded-lg bg-surface border border-border p-2.5 mt-1">
+                  <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-2.5 mt-1">
                     <p className="font-medium text-foreground mb-1">Exemplu</p>
                     <p>Pret normal 50 lei bucata. Pachetul de 2 bucati &rarr; scrii <span className="font-medium text-foreground">90</span> (adica 45 lei/bucata). Pachetul de 3 bucati &rarr; scrii <span className="font-medium text-foreground">120</span> (adica 40 lei/bucata).</p>
                   </div>

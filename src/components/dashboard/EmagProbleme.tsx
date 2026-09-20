@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { centrulProblemelorEmag, type CentruProblemeEcran } from "@/lib/actions/emag.actions";
@@ -51,7 +52,7 @@ export function EmagProbleme({ businessId }: { businessId: string }) {
   const total = centru.grupuri.reduce((s, g) => s + g.cate, 0);
 
   return (
-    <div className="rounded-xl border border-border bg-card p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-semibold">
@@ -77,16 +78,16 @@ export function EmagProbleme({ businessId }: { businessId: string }) {
         {centru.grupuri.map((g) => (
           <li key={g.cheie} className="py-3">
             <div className="flex flex-wrap items-start gap-2">
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
-                g.sursa === "emag" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
-                  : g.sursa === "edinio" ? "bg-destructive/10 text-destructive"
-                    : "bg-muted text-muted-foreground"
-              }`}>
-                {/* ⚠ Se spune UNDE se repară, nu doar că e stricat. „eMAG a refuzat" și
-                    „n-am putut trimite" se repară în locuri complet diferite; fără
-                    eticheta asta, omul ar fi căutat în panoul greșit. */}
+              {/* ⚠ Se spune UNDE se repară, nu doar că e stricat. „eMAG a refuzat" și
+                  „n-am putut trimite" se repară în locuri complet diferite; fără
+                  eticheta asta, omul ar fi căutat în panoul greșit. */}
+              <EtichetaStare
+                ton={g.sursa === "emag" ? "asteptare" : g.sursa === "edinio" ? "rau" : "neutru"}
+                marime="mic"
+                className="shrink-0"
+              >
                 {g.sursa === "emag" ? "La eMAG" : g.sursa === "edinio" ? "La tine" : "Legătura"}
-              </span>
+              </EtichetaStare>
               <span className="min-w-0 flex-1 text-sm">{g.titlu}</span>
               <span className="shrink-0 text-sm font-semibold tabular-nums">
                 {g.cate}

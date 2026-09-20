@@ -12,10 +12,17 @@ function adminDb(): SupabaseClient {
   return createAdminClient() as unknown as SupabaseClient;
 }
 
-// Only one announcement is shown to users at a time: publishing one unpublishes the rest.
-async function unpublishOthers(exceptId: string) {
-  await adminDb().from("announcements").update({ is_published: false }).neq("id", exceptId).eq("is_published", true);
-}
+/*
+  ⚠ PUBLICAREA UNUI ANUNT NU-L MAI STINGE PE CELELALTE.
+
+  Exista aici o functie, `unpublishOthers`, care la fiecare publicare stingea tot
+  restul. Avea un singur motiv: panoul arata UN anunt, deci „publicat" insemna de
+  fapt „cel de acum". Din 20.09 panoul arata ultimele cinci, deci regula aceea ar
+  fi facut lista sa aiba mereu un singur rand.
+
+  `is_published` inseamna de acum ce scrie: anuntul se vede sau nu. Butonul
+  „Retrage" din panoul de administrare ramane singura cale de a-l ascunde.
+*/
 
 export type AnnouncementInput = {
   title: string;
@@ -63,7 +70,6 @@ export async function createAnnouncement(data: AnnouncementInput) {
 
   if (error) return { error: "Eroare la salvare. Incearca din nou." };
   const newId = (row as { id: string }).id;
-  if (data.is_published) await unpublishOthers(newId);
   revalidate();
   return { success: true as const, id: newId };
 }
@@ -91,7 +97,6 @@ export async function updateAnnouncement(id: string, data: AnnouncementInput) {
   }).eq("id", id);
 
   if (error) return { error: "Eroare la salvare. Incearca din nou." };
-  if (willPublish) await unpublishOthers(id);
   revalidate();
   return { success: true as const };
 }
@@ -117,7 +122,6 @@ export async function togglePublishAnnouncement(id: string, publish: boolean) {
     updated_at: new Date().toISOString(),
   }).eq("id", id);
   if (error) return { error: "Eroare la actualizare." };
-  if (publish) await unpublishOthers(id);
   revalidate();
   return { success: true as const };
 }
@@ -155,6 +159,25 @@ export async function getLatestAnnouncement(): Promise<Announcement | null> {
     .limit(1)
     .maybeSingle();
   return (data ?? null) as Announcement | null;
+}
+
+/**
+ * Ultimele anunturi publicate, pentru lista din panou.
+ *
+ * ⚠ Cele fixate („Important") vin primele, apoi restul dupa data publicarii:
+ * un anunt fixat isi pierde rostul daca il impinge in jos orice noutate mai
+ * proaspata.
+ */
+export async function getLatestAnnouncements(limita = 5): Promise<Announcement[]> {
+  const supabase = (await createClient()) as unknown as SupabaseClient;
+  const { data } = await supabase
+    .from("announcements")
+    .select("*")
+    .eq("is_published", true)
+    .order("is_pinned", { ascending: false })
+    .order("published_at", { ascending: false })
+    .limit(Math.min(Math.max(limita, 1), 20));
+  return (data ?? []) as Announcement[];
 }
 
 export async function markAnnouncementsSeen() {

@@ -103,7 +103,7 @@ export function AboutYouCarrierMapping({
   };
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
       <h2 className="text-base font-semibold text-foreground mb-1">Mapare curieri</h2>
       <p className="text-sm text-muted-foreground mb-4">
         Leagă fiecare curier Edinio de un carrier About You. Când generezi AWB-ul pentru o comandă About You, tracking-ul se trimite automat cu carrier-ul mapat.

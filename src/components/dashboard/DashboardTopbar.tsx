@@ -2,17 +2,18 @@
 
 import { useState, useRef, useEffect, useTransition, useOptimistic } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
-  Search, Bell, LogOut, ChevronDown, X, Menu,
-  LayoutDashboard, Pencil, Package, ShoppingCart, Settings,
-  BarChart2, Zap, Ticket, Megaphone, FileText, Users,
-  ShoppingBag, LifeBuoy, ShieldCheck, MessageSquare,
+  Bell, LogOut, ChevronDown, X, Menu, ShoppingCart, Settings,
+  CreditCard, Megaphone, LifeBuoy, ShieldCheck, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { markNotificationsRead, markOrderNotificationsSeen } from "@/lib/actions/notification.actions";
 import { Logo } from "@/components/ui/Logo";
 import { BusinessCard } from "@/components/dashboard/Sidebar";
+import { CautareGlobala } from "@/components/dashboard/CautareGlobala";
+import { ButonAdauga } from "@/components/dashboard/ButonAdauga";
+import { intrareActiva, meniuPentru } from "@/lib/navigatie-panou";
 import { formatPrice } from "@/lib/utils/format";
 import { PLAN_LABELS as PLAN_NAMES } from "@/lib/plans";
 import type { Database } from "@/types/database.types";
@@ -35,55 +36,12 @@ type PlatformNotif = {
   created_at: string;
 };
 
-type MobileNavItem = {
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  children?: { href: string; label: string }[];
-};
-
-// Mirrors the desktop Sidebar (same sections + submenus).
-const NAV_ITEMS: MobileNavItem[] = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Panou principal" },
-  {
-    href: "/dashboard/editor", icon: Pencil, label: "Editeaza magazinul",
-    children: [
-      { href: "/dashboard/editor", label: "Design magazin" },
-      { href: "/dashboard/editor/media", label: "Biblioteca Media" },
-    ],
-  },
-  {
-    href: "/dashboard/pages", icon: FileText, label: "Pagini",
-    children: [
-      { href: "/dashboard/pages", label: "Toate paginile" },
-      { href: "/dashboard/pages/forms", label: "Formulare" },
-      { href: "/dashboard/pages/messages", label: "Mesaje" },
-    ],
-  },
-  { href: "/dashboard/features", icon: Zap, label: "Integrari" },
-  {
-    href: "/dashboard/products", icon: Package, label: "Produse",
-    children: [
-      { href: "/dashboard/products", label: "Toate produsele" },
-      { href: "/dashboard/products/categories", label: "Categorii" },
-      { href: "/dashboard/products/bundles", label: "Pachete" },
-    ],
-  },
-  {
-    href: "/dashboard/orders", icon: ShoppingCart, label: "Comenzi",
-    /* ⚠ Si in `Sidebar`, care tine cealalta copie a meniului. Vezi nota de acolo.
-       Retururile lipseau de aici: cine lucreaza de pe telefon n-avea cum sa ajunga la ele. */
-    children: [
-      { href: "/dashboard/orders", label: "Toate comenzile" },
-      { href: "/dashboard/returns", label: "Retururi" },
-      { href: "/dashboard/settlements", label: "Decontari" },
-    ],
-  },
-  { href: "/dashboard/customers", icon: Users, label: "Clienti" },
-  { href: "/dashboard/abandoned", icon: ShoppingBag, label: "Cosuri abandonate" },
-  { href: "/dashboard/discounts", icon: Ticket, label: "Discounturi" },
-  { href: "/dashboard/analytics", icon: BarChart2, label: "Statistici" },
-];
+/*
+  ⚠ MENIUL NU MAI E SCRIS AICI. Fisierul asta tinea a DOUA lista, despre care
+  spunea ca o oglindeste pe cea din `Sidebar` - si nu o oglindea: „Oferte" si
+  „SMS Marketing" lipseau cu totul, deci nu existau pentru cine lucreaza de pe
+  telefon. Acum amandoua meniurile citesc `@/lib/navigatie-panou`.
+*/
 
 const PLAN_BADGE_STYLES: Record<string, string> = {
   free:    "bg-muted text-muted-foreground",
@@ -98,6 +56,8 @@ const FARA_CITIRI_LOCALE: ReadonlySet<string> = new Set<string>();
 
 interface Props {
   userFullName: string;
+  /** Chipul utilizatorului, desenat pe server din id-ul lui (vezi `@/lib/avatar-blob`). */
+  avatarSvg: string;
   plan: string;
   recentOrders: OrderNotif[];
   notifications: PlatformNotif[];
@@ -108,15 +68,13 @@ interface Props {
   isAdmin?: boolean;
 }
 
-export function DashboardTopbar({ userFullName, plan, recentOrders, notifications, ordersSeenAt = null, currentBusiness, smsoEnabled = false, unreadSupportCount = 0, isAdmin = false }: Props) {
+export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, notifications, ordersSeenAt = null, currentBusiness, smsoEnabled = false, unreadSupportCount = 0, isAdmin = false }: Props) {
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [navOverride, setNavOverride] = useState<string | null>(null);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
-  const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [readOrderIds, setReadOrderIds] = useState<Set<string>>(new Set());
   const [notifTab, setNotifTab] = useState<"all" | "orders" | "platform">("all");
   const [, startMarkRead] = useTransition();
@@ -136,7 +94,10 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
 
   const planLabel = PLAN_NAMES[plan] ?? plan;
   const planCls = PLAN_BADGE_STYLES[plan] ?? PLAN_BADGE_STYLES.free;
-  const initials = userFullName?.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase() || "U";
+  /* ⚠ Doar PRENUMELE in bara: „Iordachescu Robert-Andrei" taia jumatate din
+     latimea barii si se termina oricum in trei puncte. Numele intreg ramane in
+     capul meniului care se deschide. */
+  const prenume = userFullName?.trim().split(/\s+/)[0] || "Contul meu";
 
   // Load read order IDs from localStorage
   useEffect(() => {
@@ -171,16 +132,9 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
   // trigger cascading renders. "__none__" = user collapsed everything.
   /* Un grup e cel curent si cand pagina sta sub unul din COPII: Retururile si Decontarile
      traiesc in afara lui `/dashboard/orders`, deci pe ele meniul nu s-ar fi deschis. */
-  const activeParentHref = NAV_ITEMS.find(
-    (it) => it.children && (pathname.startsWith(it.href) || it.children.some((c) => pathname.startsWith(c.href))),
-  )?.href ?? null;
+  const meniu = meniuPentru({ smsoEnabled });
+  const activeParentHref = meniu.find((it) => it.children && intrareActiva(it, pathname))?.href ?? null;
   const expandedHref = navOverride ?? activeParentHref;
-
-  // Sync search input with URL param
-  useEffect(() => {
-    const urlSearch = searchParams.get("search") ?? "";
-    setSearch(urlSearch);
-  }, [searchParams]);
 
   // An order notification is read when the server watermark covers it (durable,
   // syncs across devices) OR it was just dismissed locally (instant per-item feedback).
@@ -268,13 +222,6 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
     return `${Math.floor(h / 24)}z`;
   }
 
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    if (search.trim()) {
-      router.push(`/dashboard/products?search=${encodeURIComponent(search.trim())}`);
-    }
-  }
-
   return (
     <>
       <header className="sticky top-0 z-30 h-14 bg-background/95 backdrop-blur-sm border-b border-border flex items-center gap-3 px-4 lg:px-5">
@@ -289,20 +236,12 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
           <Menu className="h-5 w-5 text-foreground" />
         </button>
 
-        {/* Search bar — always visible */}
-        <form onSubmit={handleSearch} className="flex flex-1 max-w-sm lg:max-w-sm relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <input
-            type="search"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Cauta produse, comenzi..."
-            className="w-full pl-9 pr-4 py-2 text-sm border border-border rounded-lg bg-muted/40 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-colors"
-          />
-        </form>
+        {/* Cautare in tot panoul: produse, comenzi, clienti (vezi `CautareGlobala`) */}
+        <CautareGlobala businessId={currentBusiness?.id ?? null} />
 
-        {/* Right side: bell + user */}
-        <div className="flex items-center gap-1 ml-auto">
+        {/* Dreapta: adauga + clopotel + cont */}
+        <div className="ml-auto flex items-center gap-1.5">
+          <ButonAdauga />
 
         {/* Notification bell */}
         <div className="relative" ref={notifRef}>
@@ -449,10 +388,13 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
             onClick={() => { setUserOpen(v => !v); setNotifOpen(false); }}
             className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg hover:bg-accent transition-colors"
           >
-            <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
-              {initials}
-            </div>
-            <span className="hidden lg:block text-sm font-medium text-foreground truncate max-w-[120px]">{userFullName || "Contul meu"}</span>
+            {/* ⚠ SVG venit de pe server, desenat din id-ul utilizatorului. Nu trece
+                prin el niciun text scris de om: vezi `@/lib/avatar-blob`. */}
+            <span
+              className="h-7 w-7 flex-shrink-0 overflow-hidden rounded-full ring-1 ring-foreground/10 [&>svg]:h-full [&>svg]:w-full"
+              dangerouslySetInnerHTML={{ __html: avatarSvg }}
+            />
+            <span className="hidden max-w-[120px] truncate text-sm font-medium text-foreground lg:block">{prenume}</span>
             <ChevronDown className={cn("hidden lg:block h-3.5 w-3.5 text-muted-foreground transition-transform", userOpen && "rotate-180")} />
           </button>
 
@@ -465,9 +407,14 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
                 </span>
               </div>
               <Link href="/dashboard/settings" onClick={() => setUserOpen(false)}
-                className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+                className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
                 <Settings className="h-4 w-4" />
                 Setari cont
+              </Link>
+              <Link href="/dashboard/settings#abonament" onClick={() => setUserOpen(false)}
+                className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                <CreditCard className="h-4 w-4" />
+                Facturare si abonament
               </Link>
               <div className="border-t border-border">
                 <form action="/api/auth/iesire" method="post">
@@ -512,7 +459,7 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
 
         {/* Navigation */}
         <nav className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {NAV_ITEMS.map((item) => {
+          {meniu.map((item) => {
             const Icon = item.icon;
             const subCopil = item.children?.some((c) => pathname.startsWith(c.href)) ?? false;
             const active = item.href === "/dashboard"
@@ -570,17 +517,6 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
               </Link>
             );
           })}
-
-          {smsoEnabled && (
-            <Link href="/dashboard/sms" onClick={() => setMobileOpen(false)}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                pathname.startsWith("/dashboard/sms") ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )}>
-              <MessageSquare className="h-4 w-4 flex-shrink-0" />
-              SMS Marketing
-            </Link>
-          )}
 
           <div className="my-2 border-t border-sidebar-border" />
 
@@ -647,9 +583,10 @@ export function DashboardTopbar({ userFullName, plan, recentOrders, notification
         <div className="px-3 py-3 border-t border-sidebar-border">
           <div className="flex items-center justify-between px-2 py-2">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
-                {initials}
-              </div>
+              <span
+                className="h-7 w-7 flex-shrink-0 overflow-hidden rounded-full ring-1 ring-foreground/10 [&>svg]:h-full [&>svg]:w-full"
+                dangerouslySetInnerHTML={{ __html: avatarSvg }}
+              />
               <span className="text-xs font-medium text-foreground truncate">{userFullName || "Contul meu"}</span>
             </div>
             <form action="/api/auth/iesire" method="post">

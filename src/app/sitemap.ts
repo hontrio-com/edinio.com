@@ -70,7 +70,7 @@ const SITEMAP_URL_LIMIT = 50000;
 function designPublicat(storeSettings: unknown) {
   const ss = storeSettings as { storefront_design?: unknown } | { storefront_design?: unknown }[] | null;
   const brut = ss ? (Array.isArray(ss) ? ss[0] : ss)?.storefront_design : null;
-  return parseStoreDesign(brut, { primaryColor: "#1AB554", pageContent: {}, features: {} });
+  return parseStoreDesign(brut, { primaryColor: "#07c527", pageContent: {}, features: {} });
 }
 
 function pcDinRand(row: { store_settings?: unknown }): unknown {

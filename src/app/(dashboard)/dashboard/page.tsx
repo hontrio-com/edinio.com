@@ -2,20 +2,19 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
-import {
-  ShoppingCart, Wallet, Package, Clock, AlertCircle, Megaphone,
-  type LucideIcon,
-} from "lucide-react";
+import { ShoppingCart, Wallet, Receipt, Target } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
-import { getLatestAnnouncement } from "@/lib/actions/announcement.actions";
-import { formatPrice } from "@/lib/utils/format";
-import { cn } from "@/lib/utils/cn";
-import { Callout } from "@/components/ui/callout";
+import { getLatestAnnouncements } from "@/lib/actions/announcement.actions";
+import { acumCatTimp, formatPrice } from "@/lib/utils/format";
+import { StocScazutRand } from "@/components/dashboard/StocScazutRand";
+import { PRAG_STOC_SCAZUT } from "@/lib/stoc-prag";
 import { orderStatus } from "@/lib/orders/status";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
+import { deriveOrigin } from "@/lib/orders/origin";
 import { sanitizeHtml } from "@/lib/utils/sanitize-html";
-import { AnnouncementArticle } from "@/components/dashboard/AnnouncementArticle";
-import type { Announcement } from "@/lib/announcements";
+import { ListaNoutati, type RandNoutate } from "@/components/dashboard/ListaNoutati";
+import { rezumatScurt, type Announcement } from "@/lib/announcements";
 
 // Sanitize text-block HTML before it reaches the client renderer.
 function announcementToArticle(a: Announcement) {
@@ -31,97 +30,13 @@ function announcementToArticle(a: Announcement) {
   };
 }
 import { SiteStatusBar } from "@/components/dashboard/SiteStatusBar";
-import { RevenueChart } from "@/components/dashboard/RevenueChart";
-import type { ChartDay } from "@/components/dashboard/RevenueChart";
+import { PanouVanzari } from "@/components/dashboard/PanouVanzari";
+import { citesteDateVanzari, crestere, intervalScris } from "@/lib/vanzari";
+import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import {
+  citesteDateCarduri, cresterePosibila, rataConversie, valoareMedie, zileScurt,
+} from "@/lib/panou-carduri";
 import { ActivationChecklist, type ChecklistStep } from "@/components/dashboard/ActivationChecklist";
-
-type StatCardProps = {
-  label: string;
-  value: string | number;
-  unit?: string;
-  delta?: string;
-  deltaDir?: "up" | "down";
-  deltaCaption?: string;
-  href: string;
-  icon: LucideIcon;
-  empty?: boolean;
-};
-
-function StatCard({
-  label,
-  value,
-  unit,
-  delta,
-  deltaDir = "up",
-  deltaCaption = "vs. ieri",
-  href,
-  icon: Icon,
-  empty = false,
-}: StatCardProps) {
-  return (
-    <Link
-      href={href}
-      className={[
-        "group relative flex flex-col overflow-hidden rounded-xl bg-surface",
-        "shadow-[0_1px_2px_rgba(15,23,20,0.04)]",
-        "border border-border transition-all duration-200",
-        "hover:-translate-y-0.5",
-        "hover:shadow-[0_1px_2px_rgba(15,23,20,0.04),0_18px_32px_-20px_rgba(15,23,20,0.12)]",
-        "min-h-[168px] no-underline",
-      ].join(" ")}
-    >
-      {/* top — label + icon */}
-      <div className="flex items-center justify-between border-b border-dashed border-border px-[18px] py-[14px]">
-        <span className="text-[12px] font-medium text-muted-foreground tracking-[0.01em]">
-          {label}
-        </span>
-        <span className="grid h-7 w-7 place-items-center text-muted-foreground">
-          <Icon strokeWidth={1.4} className="h-[15px] w-[15px]" />
-        </span>
-      </div>
-
-      {/* bottom — value + footer */}
-      <div className="flex flex-1 flex-col justify-between px-[18px] pt-4 pb-[18px]">
-        <div
-          className={cn(
-            "text-[44px] leading-none font-medium tracking-[-0.03em] tabular-nums",
-            empty ? "text-muted-foreground/30" : "text-foreground"
-          )}
-        >
-          {value}
-          {unit && (
-            <span className="ml-1 text-[20px] font-normal text-muted-foreground">
-              {unit}
-            </span>
-          )}
-        </div>
-
-        <div className="mt-[14px] flex items-center gap-2 text-[12px] text-muted-foreground">
-          {!empty && delta ? (
-            <>
-              <span className={cn(
-                "font-medium tabular-nums",
-                deltaDir === "down" ? "text-destructive" : "text-primary"
-              )}>
-                {deltaDir === "up" ? "↑" : "↓"} {delta}
-              </span>
-              <span>{deltaCaption}</span>
-            </>
-          ) : (
-            <span>Actualizat acum</span>
-          )}
-
-          <span className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground transition-colors group-hover:text-foreground">
-            Vezi detalii
-            <span className="inline-block transition-transform duration-200 group-hover:translate-x-[3px]">
-              →
-            </span>
-          </span>
-        </div>
-      </div>
-    </Link>
-  );
-}
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -198,56 +113,65 @@ async function ContinutPanou({
   business, userId, publicUrl,
 }: { business: BusinessPanou; userId: string; publicUrl: string }) {
   const supabase = await createClient();
-  const now = new Date();
-  const today     = now.toISOString().split("T")[0];
-  const yesterday = new Date(now.getTime() - 86400000).toISOString().split("T")[0];
 
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0];
-  const lastMonthEnd   = thisMonthStart;
+  /*
+    ⚠ MARGINILE ZILELOR NU SE MAI CALCULEAZA AICI, ci in `panou_carduri`.
 
-  const sevenDaysAgo = new Date(now.getTime() - 6 * 86400000).toISOString().split("T")[0];
+    Erau scrise `new Date(...).toISOString().split("T")[0]`, si asta a costat o
+    luna intreaga de cifre gresite: `new Date(an, luna, 1)` inseamna miezul
+    noptii LOCAL, care in Romania e ziua precedenta la 21:00 UTC, deci
+    `toISOString()` da ULTIMA ZI A LUNII TRECUTE. Masurat pe baza demo:
+    „Vanzari luna aceasta" arata 29.190,41 lei in loc de 28.215,56, fiindca
+    inghitea si cele trei comenzi din 31 august (974,85 lei).
 
-
-  // Vanzarile nu includ comenzile anulate/rambursate — aceeasi regula ca in
-  // Analytics (VALID_STATUSES) si paginile de admin. Lista "Comenzi recente"
-  // ramane nefiltrata (e un jurnal, nu o metrica).
-  const NOT_SALES = "(cancelled,refunded)";
-
+    Acum ziua e cea romaneasca si se taie in SQL, o singura data, pentru toate
+    cele patru carduri.
+  */
   const [
-    { count: ordersToday },
-    { count: ordersYesterday },
-    { data: monthRevenueRpc },
-    { data: lastMonthRevenueRpc },
-    { count: activeProducts },
-    { count: pendingOrders },
+    { data: carduriRpc },
     { data: recentOrders },
-    { data: last7DaysRevenue },
-    { data: lowStockProducts },
+    { data: vanzariRpc },
+    { data: canaleVanzare },
+    { data: numaratoareStoc },
     { count: productsTotal },
     { count: ordersTotal },
     { data: dashProfile },
   ] = await Promise.all([
-    supabase.from("orders").select("*", { count: "exact", head: true })
-      .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", today),
-    supabase.from("orders").select("*", { count: "exact", head: true })
-      .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", yesterday).lt("created_at", today),
-    // Sumele de venit se calculeaza in SQL (nu din randuri aduse in JS):
-    // PostgREST trunchiaza orice raspuns la 1000 de randuri, deci reduce-ul
-    // in JS subestima veniturile la magazinele cu volum mare.
-    supabase.rpc("orders_revenue_sum", { bid: business.id, t_from: thisMonthStart }),
-    supabase.rpc("orders_revenue_sum", { bid: business.id, t_from: lastMonthStart, t_to: lastMonthEnd }),
-    supabase.from("products").select("*", { count: "exact", head: true })
-      .eq("business_id", business.id).eq("is_active", true),
-    supabase.from("orders").select("*", { count: "exact", head: true })
-      .eq("business_id", business.id).eq("status", "pending"),
-    supabase.from("orders").select("id, order_number, customer_name, total, status, created_at")
+    /*
+      Cele patru carduri din cap, dintr-o singura cerere: comenzi azi, vanzari
+      luna aceasta, valoare medie comanda, rata de conversie, fiecare cu
+      perioada dinainte.
+
+      ⚠ Impreuna, fiindca doua dintre ele sunt impartiri intre celelalte (media
+      = vanzari / comenzi, conversia = comenzi / vizite). Aduse din interogari
+      separate, cifrele puteau fi ale unor ferestre usor diferite, iar
+      impartirile ar fi iesit gresite fara sa dea nimeni eroare.
+
+      ⚠ Sumele se fac in SQL, nu din randuri aduse in JS: PostgREST trunchiaza
+      orice raspuns la 1000 de randuri, deci un `reduce` ar subestima veniturile
+      la magazinele cu volum.
+    */
+    supabase.rpc("panou_carduri", { p_business: business.id }),
+    supabase.from("orders").select("id, order_number, customer_name, total, status, created_at, order_source")
       .eq("business_id", business.id).order("created_at", { ascending: false }).limit(5),
-    supabase.rpc("orders_daily_revenue", { bid: business.id, t_from: sevenDaysAgo }),
-    supabase.from("products").select("id, name, stock_quantity")
-      .eq("business_id", business.id).eq("is_active", true)
-      .eq("track_inventory", true).lte("stock_quantity", 5)
-      .order("stock_quantity", { ascending: true }).limit(5),
+    /*
+      Prima fereastra a graficului de vanzari (ultimele 7 zile, toate canalele),
+      adusa de pe server ca panoul sa nu porneasca gol. Restul perioadelor le
+      cere componenta, din browser.
+
+      ⚠ Ziua e cea ROMANEASCA, taiata in SQL. Graficul de pana acum folosea
+      `orders_daily_revenue`, care grupeaza pe ziua UTC: vara, o comanda de la
+      01:30 se vedea in ziua precedenta.
+    */
+    supabase.rpc("vanzari_panou", { p_business: business.id, p_fel: "7z" }),
+    supabase.rpc("canale_vanzare", { p_business: business.id }),
+    /*
+      Cate produse sunt sub prag si cate s-au oprit din vanzare. Numaratoarea se
+      face IN BAZA, fiindca trebuie sa se uite si in variante: un produs cu 17
+      bucati in total poate avea o varianta pe zero (vezi `produse_sub_prag`).
+      Un filtru pe `stock_quantity` ar fi sarit exact peste acelea.
+    */
+    supabase.rpc("numar_produse_sub_prag", { p_business: business.id, p_prag: PRAG_STOC_SCAZUT }),
     // ── Semnale pentru checklist-ul de activare ──
     supabase.from("products").select("*", { count: "exact", head: true })
       .eq("business_id", business.id),
@@ -257,34 +181,52 @@ async function ContinutPanou({
   ]);
 
   const fmt = (n: number) => new Intl.NumberFormat("ro-RO").format(n);
-  const fmtDelta = (pct: number) => `${Math.abs(pct)}%`;
+  const fmtDelta = (pct: number) =>
+    `${Math.abs(pct).toLocaleString("ro-RO", { maximumFractionDigits: 1 })}%`;
 
-  const monthRevenue     = Number(monthRevenueRpc ?? 0);
-  const lastMonthRevenue = Number(lastMonthRevenueRpc ?? 0);
-  const revenuePct = lastMonthRevenue > 0
-    ? Math.round(((monthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
-    : null;
+  /*
+    Daca functia nu raspunde, cardurile arata zerouri in loc sa cada pagina.
+    Fereastra ramane goala, deci nu exista nici crestere de aratat.
+  */
+  const carduri = citesteDateCarduri(carduriRpc) ?? {
+    azi: { comenzi: 0 },
+    ieri_pana_acum: { comenzi: 0, ora: "" },
+    luna: { vanzari: 0, comenzi: 0, vizite: 0, de_la: "", pana_la: "" },
+    luna_trecuta: { vanzari: 0, comenzi: 0, vizite: 0, de_la: "", pana_la: "" },
+  };
 
-  const ordersTodayCount     = ordersToday ?? 0;
-  const ordersYesterdayCount = ordersYesterday ?? 0;
-  const ordersPct = ordersYesterdayCount > 0
-    ? Math.round(((ordersTodayCount - ordersYesterdayCount) / ordersYesterdayCount) * 100)
-    : null;
+  const medieLuna = valoareMedie(carduri.luna);
+  const medieLunaTrecuta = valoareMedie(carduri.luna_trecuta);
+  const conversieLuna = rataConversie(carduri.luna);
+  const conversieLunaTrecuta = rataConversie(carduri.luna_trecuta);
 
-  // Build 7-day chart data (bucketed per-day in SQL, UTC — same as toISOString)
-  const revenueByDay = new Map((last7DaysRevenue ?? []).map(r => [r.day, r]));
-  const chartData: ChartDay[] = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(now.getTime() - (6 - i) * 86400000);
-    const dateStr = d.toISOString().split("T")[0];
-    const dayRow = revenueByDay.get(dateStr);
-    return {
-      label: d.toLocaleDateString("ro-RO", { weekday: "short", day: "numeric" }),
-      revenue: Number(dayRow?.revenue ?? 0),
-      orders: Number(dayRow?.order_count ?? 0),
-    };
+  const pctComenziAzi = crestere(carduri.azi.comenzi, carduri.ieri_pana_acum.comenzi);
+  const pctVanzari = crestere(carduri.luna.vanzari, carduri.luna_trecuta.vanzari);
+  const pctMedie = cresterePosibila(medieLuna, medieLunaTrecuta);
+  const pctConversie = cresterePosibila(conversieLuna, conversieLunaTrecuta);
+
+  /* Aceleasi zile din luna trecuta: scurt sub cifra, intreg in explicatie. */
+  const zileleLuniiTrecute = intervalScris({
+    de_la: carduri.luna_trecuta.de_la,
+    pana_la: carduri.luna_trecuta.pana_la,
   });
+  const subCifra = `vs. ${zileScurt(carduri.luna_trecuta.de_la, carduri.luna_trecuta.pana_la)}`;
 
-  const latestAnnouncement = await getLatestAnnouncement().catch(() => null);
+  const dateVanzari = citesteDateVanzari(vanzariRpc);
+
+  /*
+    Ultimele cinci noutati, cate un rand fiecare. HTML-ul din blocurile de text
+    se curata AICI, pe server, inainte sa ajunga la componenta care il pune in
+    pagina (vezi `announcementToArticle`).
+  */
+  const noutati: RandNoutate[] = (await getLatestAnnouncements(5).catch(() => [])).map((a) => ({
+    id: a.id,
+    titlu: a.title,
+    rezumat: rezumatScurt(a),
+    data: a.published_at,
+    fixat: a.is_pinned,
+    articol: announcementToArticle(a),
+  }));
 
   // ── Checklist de activare: semnale calculate server-side ──
   // Pasul "customize" e bifat de logo (semnal server) SAU de vizitarea paginii de
@@ -306,88 +248,88 @@ async function ContinutPanou({
         publicUrl={publicUrl}
       />
 
-      {/* Low stock alert */}
-      {(lowStockProducts ?? []).length > 0 && (
-        <Callout
-          variant="danger"
-          icon={AlertCircle}
-          title="Stoc scazut"
-          className="mt-4"
-          action={
-            <Link href="/dashboard/products" className="text-xs font-semibold text-destructive hover:underline">
-              Gestioneaza
-            </Link>
-          }
-        >
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-            {(lowStockProducts ?? []).map(p => (
-              <span key={p.id} className="text-xs">
-                {p.name} - <strong>{p.stock_quantity ?? 0} buc</strong>
-              </span>
-            ))}
-          </div>
-        </Callout>
-      )}
+      <StocScazutRand
+        businessId={business.id}
+        epuizate={numaratoareStoc?.[0]?.epuizate ?? 0}
+        subPrag={numaratoareStoc?.[0]?.sub_prag ?? 0}
+      />
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-4">
-        <StatCard
+        <CardStatistica
           label="Comenzi azi"
-          value={fmt(ordersTodayCount)}
-          delta={ordersPct !== null ? fmtDelta(ordersPct) : undefined}
-          deltaDir={ordersPct !== null && ordersPct >= 0 ? "up" : "down"}
-          deltaCaption="vs. ieri"
+          value={fmt(carduri.azi.comenzi)}
+          delta={pctComenziAzi !== null ? fmtDelta(pctComenziAzi) : undefined}
+          deltaDir={pctComenziAzi !== null && pctComenziAzi >= 0 ? "up" : "down"}
+          deltaCaption={`vs. ieri, ${carduri.ieri_pana_acum.ora}`}
           href="/dashboard/orders"
           icon={ShoppingCart}
-          empty={ordersTodayCount === 0}
+          empty={carduri.azi.comenzi === 0}
         />
-        <StatCard
+        <CardStatistica
           label="Vanzari luna aceasta"
-          value={fmt(monthRevenue)}
+          value={fmt(carduri.luna.vanzari)}
           unit="lei"
-          delta={revenuePct !== null ? fmtDelta(revenuePct) : undefined}
-          deltaDir={revenuePct !== null && revenuePct >= 0 ? "up" : "down"}
-          deltaCaption="vs. luna trecuta"
+          delta={pctVanzari !== null ? fmtDelta(pctVanzari) : undefined}
+          deltaDir={pctVanzari !== null && pctVanzari >= 0 ? "up" : "down"}
+          deltaCaption={subCifra}
           href="/dashboard/orders"
           icon={Wallet}
-          empty={monthRevenue === 0}
+          empty={carduri.luna.vanzari === 0}
         />
-        <StatCard
-          label="Produse active"
-          value={fmt(activeProducts ?? 0)}
-          href="/dashboard/products"
-          icon={Package}
-          empty={(activeProducts ?? 0) === 0}
+        <CardStatistica
+          label="Valoare medie comanda"
+          value={medieLuna === null ? "-" : fmt(Math.round(medieLuna * 100) / 100)}
+          unit={medieLuna === null ? undefined : "lei"}
+          delta={pctMedie !== null ? fmtDelta(pctMedie) : undefined}
+          deltaDir={pctMedie !== null && pctMedie >= 0 ? "up" : "down"}
+          deltaCaption={subCifra}
+          href="/dashboard/orders"
+          icon={Receipt}
+          empty={medieLuna === null}
         />
-        <StatCard
-          label="In asteptare"
-          value={fmt(pendingOrders ?? 0)}
-          href="/dashboard/orders?status=pending"
-          icon={Clock}
-          empty={(pendingOrders ?? 0) === 0}
+        <CardStatistica
+          label="Rata de conversie"
+          value={conversieLuna === null ? "-" : conversieLuna.toLocaleString("ro-RO", { maximumFractionDigits: 1 })}
+          unit={conversieLuna === null ? undefined : "%"}
+          delta={pctConversie !== null ? fmtDelta(pctConversie) : undefined}
+          deltaDir={pctConversie !== null && pctConversie >= 0 ? "up" : "down"}
+          deltaCaption={subCifra}
+          href="/dashboard/analytics"
+          icon={Target}
+          empty={conversieLuna === null}
+          explicatie={
+            ["Comenzi / Vizite x 100",
+             `${fmt(carduri.luna.comenzi)} / ${fmt(carduri.luna.vizite)} x 100 = `
+               + `${conversieLuna === null ? "-" : conversieLuna.toLocaleString("ro-RO", { maximumFractionDigits: 1 })}%`,
+             "",
+            ].join("\n")
+            + "Luna aceasta, de pe 1 pana azi. O vizita e o deschidere a paginii magazinului, nu un om: "
+            + "acelasi client care revine de trei ori inseamna trei vizite. "
+            + `Procentul de dedesubt compara cu aceleasi zile din luna trecuta (${zileleLuniiTrecute}).`
+          }
         />
       </div>
 
       {/* Chart + recent orders */}
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Revenue chart */}
-        <div className="lg:col-span-2 bg-surface border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold text-foreground">Vanzari - ultimele 7 zile</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">{formatPrice(chartData.reduce((s, d) => s + d.revenue, 0))} total</p>
-            </div>
-            <span className="text-xs text-muted-foreground">
-              {chartData.reduce((s, d) => s + d.orders, 0)} comenzi
-            </span>
+        {/* Graficul de vanzari: perioade, canale, comparatie (vezi PanouVanzari) */}
+        {dateVanzari ? (
+          <PanouVanzari
+            businessId={business.id}
+            initial={dateVanzari}
+            canale={(canaleVanzare ?? []).map((c) => ({ canal: c.canal, comenzi: Number(c.comenzi) }))}
+          />
+        ) : (
+          /* Functia din baza n-a raspuns. Panoul nu cade pentru atat: locul
+             graficului ramane, cu un rand care spune ce s-a intamplat. */
+          <div className="lg:col-span-2 flex items-center justify-center rounded-xl bg-card px-5 py-16 text-sm text-muted-foreground ring-1 ring-foreground/10">
+            Graficul de vanzari nu a putut fi incarcat.
           </div>
-          <div className="px-5 py-5">
-            <RevenueChart data={chartData} />
-          </div>
-        </div>
+        )}
 
         {/* Recent orders */}
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
+        <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
             <h2 className="font-semibold text-foreground">Comenzi recente</h2>
             <Link href="/dashboard/orders" className="text-xs text-primary hover:underline font-medium">
@@ -402,17 +344,25 @@ async function ContinutPanou({
                   <Link
                     key={order.id}
                     href={`/dashboard/orders/${order.id}`}
-                    className="flex items-center justify-between px-5 py-3 hover:bg-accent transition-colors"
+                    className="flex items-start justify-between gap-3 px-5 py-3 transition-colors hover:bg-accent"
                   >
                     <div className="min-w-0">
-                      <div className="text-sm font-medium text-foreground font-mono">{order.order_number}</div>
-                      <div className="text-xs text-muted-foreground truncate">{order.customer_name}</div>
+                      <div className="font-mono text-sm font-medium text-foreground">{order.order_number}</div>
+                      <div className="truncate text-xs text-muted-foreground">{order.customer_name}</div>
+                      {/*
+                        Cand a venit si de unde. `deriveOrigin` citeste
+                        `order_source`: pentru marketplace da numele lor, pentru
+                        magazinul propriu da sursa vizitei (Google, Facebook,
+                        Direct). Comenzile vechi, fara `order_source`, dau
+                        „Magazin online", deci randul nu ramane niciodata gol.
+                      */}
+                      <div className="mt-1 truncate text-[11px] text-muted-foreground/80">
+                        {acumCatTimp(order.created_at)} · {deriveOrigin(order.order_source).label}
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0 ml-3">
+                    <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
                       <span className="text-sm font-semibold text-foreground">{formatPrice(Number(order.total))}</span>
-                      <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold", status.className)}>
-                        {status.label}
-                      </span>
+                      <EtichetaStare ton={status.ton} marime="mic">{status.label}</EtichetaStare>
                     </div>
                   </Link>
                 );
@@ -427,13 +377,10 @@ async function ContinutPanou({
         </div>
       </div>
 
-      {latestAnnouncement && (
+      {noutati.length > 0 && (
         <div className="mt-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Megaphone className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">Noutati</h2>
-          </div>
-          <AnnouncementArticle data={announcementToArticle(latestAnnouncement)} />
+          <h2 className="mb-3 text-sm font-semibold text-foreground">Noutati</h2>
+          <ListaNoutati noutati={noutati} />
         </div>
       )}
     </>

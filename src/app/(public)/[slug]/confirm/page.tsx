@@ -48,7 +48,7 @@ export default async function ConfirmPage({ params, searchParams }: Props) {
     .single();
   if (!business) notFound();
 
-  const color = business.primary_color ?? "#1AB554";
+  const color = business.primary_color ?? "#07c527";
 
   // Detect custom domain access
   const headersList = await headers();

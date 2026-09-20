@@ -15,7 +15,7 @@ import type { DesignContext, SectionInstance, StoreDesign } from "./types";
  * Rulare: `npm test`.
  */
 
-const ctx: DesignContext = { primaryColor: "#1AB554", pageContent: {}, features: {} };
+const ctx: DesignContext = { primaryColor: "#07c527", pageContent: {}, features: {} };
 
 const byId = (list: SectionInstance[], id: string) => list.find((s) => s.id === id);
 
@@ -208,7 +208,7 @@ test("numarul de sectiuni e plafonat", () => {
 
 test("implicitele reproduc aspectul de dinaintea sistemului de design", () => {
   const style = resolveStyle({}, ctx);
-  assert.equal(style.colors.primary, "#1AB554");
+  assert.equal(style.colors.primary, "#07c527");
   assert.equal(style.colors.background, "var(--color-background)");
   assert.equal(style.cardStyle, "bordered");
 
@@ -222,7 +222,7 @@ test("implicitele reproduc aspectul de dinaintea sistemului de design", () => {
 });
 
 test("textul de pe fundal colorat e cel cu contrastul mai mare", () => {
-  // Verdele platformei da 2,7:1 cu alb si 6,6:1 cu inchis. Alegerea se face
+  // Verdele platformei da 2,33:1 cu alb si 7,62:1 cu inchis. Alegerea se face
   // comparand cele doua rapoarte, nu taind luminanta la un prag fix: pragul
   // returna alb, adica exact varianta care nu trece pragul AA.
   assert.equal(styleToCssVars(resolveStyle({}, ctx))["--st-primary-contrast"], "#111827");

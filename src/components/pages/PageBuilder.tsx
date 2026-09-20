@@ -75,7 +75,7 @@ export function PageBuilder({
   const [dirty, setDirty] = useState(false);
   const [isSaving, startSave] = useTransition();
 
-  const color = business.primary_color ?? "#1AB554";
+  const color = business.primary_color ?? "#07c527";
   const publicBase = business.custom_domain ? `https://${business.custom_domain}` : `https://edinio.com/${business.slug}`;
 
   const ctx: BlockRendererCtx = {

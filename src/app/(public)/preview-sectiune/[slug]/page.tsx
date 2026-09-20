@@ -105,7 +105,7 @@ export default async function SectionPreviewPage({ params, searchParams }: Props
   // Designul se deriva din configuratia REALA: ce sectiuni are magazinul aprinse
   // si ce varianta foloseste nu trebuie sa depinda de continutul demonstrativ.
   const resolved = resolveDesign(designDeCitit, {
-    primaryColor: business.primary_color ?? "#1AB554",
+    primaryColor: business.primary_color ?? "#07c527",
     pageContent: realPageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: business.cover_url,

@@ -5059,6 +5059,11 @@ export type Database = {
           },
         ]
       }
+      /* ⚠ `session_id`, `visitor_id`, `path` si `product_id` sunt adaugate de
+         `migrations/2026-09-20-analitice-sesiuni.sql` si scrise aici de mana, pana la
+         urmatoarea regenerare a tipurilor. Nota sta AFARA din blocul `Row`: inauntru,
+         ea rupe cititorul din `coloanele-scrise-exista.test.ts`, care cere randuri de
+         coloane fara intrerupere. */
       site_analytics: {
         Row: {
           business_id: string
@@ -5070,6 +5075,11 @@ export type Database = {
           metadata: Json
           referrer: string | null
           source: string | null
+          session_id: string | null
+          visitor_id: string | null
+          path: string | null
+          product_id: string | null
+          valoare: number | null
         }
         Insert: {
           business_id: string
@@ -5081,6 +5091,11 @@ export type Database = {
           metadata?: Json
           referrer?: string | null
           source?: string | null
+          session_id?: string | null
+          visitor_id?: string | null
+          path?: string | null
+          product_id?: string | null
+          valoare?: number | null
         }
         Update: {
           business_id?: string
@@ -6480,6 +6495,49 @@ export type Database = {
       }
       jsonb_merge_config: { Args: { p_business_id: string; p_column: string; p_patch: Json }; Returns: undefined }
       numar_produse_si_comenzi: { Args: Record<PropertyKey, never>; Returns: Json }
+      numar_produse_sub_prag: { Args: { p_business: string; p_prag?: number }; Returns: { sub_prag: number; epuizate: number }[] }
+      produse_sub_prag: { Args: { p_business: string; p_prag?: number }; Returns: { id: string; nume: string; imagine: string | null; stoc: number; variante: Json }[] }
+      /* Graficul de vanzari. `vanzari_panou` intoarce un singur JSON cu ambele
+         serii, totalurile si intervalele; forma lui e citita de
+         `citesteDateVanzari` din `@/lib/vanzari`. */
+      fereastra_vanzari: {
+        Args: { p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null }
+        Returns: { de_la: string; pana_la: string; de_la_ant: string; pana_la_ant: string; granulatie: string }[]
+      }
+      canale_vanzare: { Args: { p_business: string }; Returns: { canal: string; comenzi: number }[] }
+      /* Cele patru carduri din capul panoului, intr-un singur JSON; forma lui e
+         citita de `citesteDateCarduri` din `@/lib/panou-carduri`. */
+      panou_carduri: { Args: { p_business: string }; Returns: Json }
+      trafic_panou: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null }
+        Returns: Json
+      }
+      trafic_pe_sursa: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null }
+        Returns: { sursa: string; dispozitiv: string; sesiuni: number; sesiuni_cu_comanda: number; vanzari: number }[]
+      }
+      palnia_panou: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null }
+        Returns: { sesiuni: number; cu_produs: number; cu_cos: number; cu_checkout: number; cu_comanda: number }[]
+      }
+      comenzi_pe_judet: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null; p_canal?: string | null }
+        Returns: { judet: string; comenzi: number; vanzari: number; medie: number }[]
+      }
+      vanzari_panou: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null; p_canal?: string | null }
+        Returns: Json
+      }
+      vanzari_detaliu: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null; p_canal?: string | null }
+        Returns: Json
+      }
+      carduri_secundare: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null; p_canal?: string | null }
+        Returns: Json
+      }
+      stoc_combinatie: { Args: { p_combinatie: Json }; Returns: number }
+      combinatie_aprinsa: { Args: { p_combinatie: Json }; Returns: boolean }
       orders_venit_zilnic: { Args: { bid: string; p_zile: number; p_deplasare?: number }; Returns: unknown }
       proba_stoc: { Args: Record<PropertyKey, never>; Returns: Json }
       ajusteaza_stoc_comanda_marketplace: { Args: { p_order_id: string; p_business_id: string | null; p_produse: Json; p_variante: Json }; Returns: Json }

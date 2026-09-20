@@ -322,7 +322,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                 <select
                   value={addressId}
                   onChange={(e) => setAddressId(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  className="w-full rounded-lg ring-1 ring-foreground/10 bg-card px-3 py-2 text-sm text-foreground"
                 >
                   <option value="">Alege curierul de livrare la adresa</option>
                   {curieri.map((c) => (
@@ -334,7 +334,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
                   value={addressId}
                   onChange={(e) => setAddressId(e.target.value)}
                   placeholder="Id punct Packeta sau id curier"
-                  className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                  className="w-full rounded-lg ring-1 ring-foreground/10 bg-card px-3 py-2 text-sm text-foreground"
                 />
               )}
               <p className="mt-1 text-[11px] text-muted-foreground">
@@ -356,7 +356,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               <input
                 type="number" min={0} step="0.1" value={weight}
                 onChange={(e) => setWeight(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                className="w-full rounded-lg ring-1 ring-foreground/10 bg-card px-3 py-2 text-sm text-foreground"
               />
               {nota && <p className="mt-1 text-[11px] text-muted-foreground">{nota}</p>}
             </div>
@@ -366,7 +366,7 @@ function Formular({ onClose, order, businessId, onSuccess }: Props) {
               <input
                 value={nota_} onChange={(e) => setNota(e.target.value)}
                 placeholder="Optional"
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground"
+                className="w-full rounded-lg ring-1 ring-foreground/10 bg-card px-3 py-2 text-sm text-foreground"
               />
             </div>
 

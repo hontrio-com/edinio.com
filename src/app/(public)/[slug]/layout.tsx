@@ -191,7 +191,7 @@ export default async function StoreLayout({ children, params }: Props) {
 
   const cookieConfig = parseCookieBannerConfig(cookieRaw);
   const consentCategories = detectConsentCategories(mc, gaMeasurementId);
-  const color = (business?.primary_color as string | null) ?? "#1AB554";
+  const color = (business?.primary_color as string | null) ?? "#07c527";
   const storeName = (business?.store_name as string | null) ?? (business?.business_name as string | null) ?? "magazin";
 
   // Policy link must honour custom domains (proxy rewrites customdomain.ro/x → /slug/x).

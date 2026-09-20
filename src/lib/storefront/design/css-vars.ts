@@ -51,8 +51,8 @@ const TEXT_ALB = "#FFFFFF";
  * Textul care se citeste pe un fundal colorat. Doar pentru culori hex.
  *
  * Se compara rapoartele de contrast, nu luminanta cu un prag fix: cu pragul de
- * 0.5 verdele implicit al platformei (#1AB554) primea alb — 2,7:1, sub minimul
- * AA de 4,5:1 — desi pe inchis da 6,6:1.
+ * 0.5 verdele implicit al platformei (#07c527) primea alb — 2,33:1, sub minimul
+ * AA de 4,5:1 — desi pe inchis da 7,62:1.
  *
  * Dar „cel mai bun din doua" nu inseamna „destul de bun": exista culori pe care
  * ambele variante cad sub prag, iar magazinul respectiv ramanea cu text pe care

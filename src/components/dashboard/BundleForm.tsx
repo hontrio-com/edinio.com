@@ -216,7 +216,7 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
       </div>
 
       {/* Basic info */}
-      <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
         <div>
           <label className="block text-sm font-medium text-foreground mb-1.5">Nume pachet</label>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ex: Pachet Îngrijire Completă" className={inputCls} />
@@ -266,7 +266,7 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
       </div>
 
       {/* Components */}
-      <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Produse în pachet</h2>
           <p className="text-xs text-muted-foreground mt-0.5">Adaugă cel puțin 2 produse. Stocul pachetului e derivat din ele.</p>
@@ -277,7 +277,7 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Caută un produs..." className={`${inputCls} pl-9`} />
           {search.trim() && (
-            <div className="absolute z-10 mt-1 w-full rounded-xl border border-border bg-card shadow-lg max-h-64 overflow-y-auto">
+            <div className="absolute z-10 mt-1 w-full rounded-xl ring-1 ring-foreground/10 bg-card shadow-lg max-h-64 overflow-y-auto">
               {searchResults.length === 0 ? (
                 <p className="px-3 py-3 text-sm text-muted-foreground">Niciun produs găsit.</p>
               ) : searchResults.map((p) => (
@@ -332,7 +332,7 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
       </div>
 
       {/* Pricing */}
-      <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
         <h2 className="text-sm font-semibold text-foreground">Preț pachet</h2>
         <div className="grid sm:grid-cols-3 gap-2">
           {([
@@ -385,7 +385,7 @@ export function BundleForm({ businessId, eligibleProducts, categories, bundle, b
       </div>
 
       {/* Toggles + save */}
-      <div className="rounded-2xl border border-border bg-card p-5 space-y-3">
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm text-foreground">Activ (vizibil în magazin)</span>
           <Switch checked={isActive} onCheckedChange={setIsActive} />

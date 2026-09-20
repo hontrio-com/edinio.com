@@ -51,7 +51,7 @@ function Variatie({ procent }: { procent: number | null }) {
 
 function Card({ titlu, valoare, subsol }: { titlu: string; valoare: string; subsol?: React.ReactNode }) {
   return (
-    <div className="bg-surface border border-border rounded-2xl p-5">
+    <div className="bg-card ring-1 ring-foreground/10 rounded-2xl p-5">
       <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{titlu}</p>
       <p className="mt-2 text-2xl font-bold text-foreground tabular-nums">{valoare}</p>
       {subsol && <div className="mt-1.5">{subsol}</div>}
@@ -112,7 +112,7 @@ function Tabel({
 }) {
   const total = linii.reduce((s, l) => s + l.a, 0);
   return (
-    <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+    <div className="bg-card ring-1 ring-foreground/10 rounded-2xl overflow-hidden">
       <div className="px-5 py-3.5 border-b border-border">
         <h3 className="text-sm font-semibold text-foreground">{titlu}</h3>
       </div>
@@ -180,7 +180,7 @@ export function AdminAnalyticsClient({
           <div className="mt-1"><ButonDeconectareGa4 email={proprietate.email} /></div>
         </div>
 
-        <div className="flex items-center gap-1 bg-surface border border-border rounded-xl p-1">
+        <div className="flex items-center gap-1 bg-card ring-1 ring-foreground/10 rounded-xl p-1">
           {(Object.keys(PERIOADE) as NumePerioada[]).map((p) => (
             <Link
               key={p}
@@ -202,7 +202,7 @@ export function AdminAnalyticsClient({
         timpul real nu.
       */}
       {acum.length > 0 && (
-        <div className="bg-surface border border-border rounded-2xl p-4">
+        <div className="bg-card ring-1 ring-foreground/10 rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-2.5">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
@@ -283,7 +283,7 @@ export function AdminAnalyticsClient({
         {date.grupuriPagini
           ? <Tabel titlu="Pe grupuri de pagini" linii={date.grupuriPagini} coloana="Vizualizari" gol="Nimic inca." dimensiune="personalizata" />
           : (
-            <div className="bg-surface border border-border border-dashed rounded-2xl p-5 flex flex-col justify-center">
+            <div className="bg-card ring-1 ring-foreground/10 border-dashed rounded-2xl p-5 flex flex-col justify-center">
               <h3 className="text-sm font-semibold text-foreground">Pe grupuri de pagini</h3>
               <p className="mt-1.5 text-sm text-muted-foreground">
                 Cere dimensiunea personalizata <code className="text-xs">page_group</code> in GA4.

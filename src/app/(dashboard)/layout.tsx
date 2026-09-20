@@ -1,4 +1,5 @@
 import "../globals.css";
+import { fontAplicatie } from "../fonturi";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
@@ -7,6 +8,8 @@ import { Sidebar } from "@/components/dashboard/Sidebar";
 import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
 import { BottomNav } from "@/components/dashboard/BottomNav";
 import { GracePeriodBanner } from "@/components/dashboard/GracePeriodBanner";
+import { zileRamase } from "@/lib/abonament-timp";
+import { avatarUtilizator } from "@/lib/avatar-blob";
 import { TrialBanner } from "@/components/dashboard/TrialBanner";
 import { PaymentPastDueBanner } from "@/components/dashboard/PaymentPastDueBanner";
 import { getInactiveReason } from "@/lib/subscription";
@@ -123,7 +126,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const showPastDueBanner = isPaidPlan && !suspendedBusiness && !!profile.payment_failed_at;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className={`${fontAplicatie.variable} zona-aplicatie min-h-screen bg-background`}>
       <ScrollToTop />
       {esteImpersonare && <ImpersonationBanner />}
       {/*
@@ -181,14 +184,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
       />
       <div className="lg:pl-[var(--sidebar-width)]">
         {profile.plan === "free" && profile.plan_expires_at && (
-          <TrialBanner planExpiresAt={profile.plan_expires_at} />
+          <TrialBanner planExpiresAt={profile.plan_expires_at} zileRamase={zileRamase(profile.plan_expires_at)} />
         )}
         {suspendedBusiness?.suspended_until && (
-          <GracePeriodBanner suspendedUntil={suspendedBusiness.suspended_until} />
+          <GracePeriodBanner zileRamase={zileRamase(suspendedBusiness.suspended_until)} />
         )}
         {showPastDueBanner && <PaymentPastDueBanner />}
         <DashboardTopbar
           userFullName={profile.full_name}
+          /* ⚠ Desenat pe server din id-ul utilizatorului: acelasi id da mereu
+             acelasi chip, deci si conturile de azi il capata pe al lor, fara
+             nicio schimbare in baza. Biblioteca nu ajunge in pachetul
+             browserului. */
+          avatarSvg={avatarUtilizator(user.id, 28)}
           plan={profile.plan}
           recentOrders={recentOrders}
           notifications={notifications}

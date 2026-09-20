@@ -116,7 +116,7 @@ export function GoogleAnalyticsClient({ businessId, status, available = true, in
   }, []);
 
   if (!status) {
-    return <div className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
+    return <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-8 text-center text-muted-foreground">Nu am putut încărca starea. Reîncarcă pagina.</div>;
   }
 
   // OAuth (account connect + in-app reports) is gated while Google verifies the
@@ -268,7 +268,7 @@ function ServerTrackingCard({ businessId, hasApiSecret, verificat, poateVerifica
   const [value, setValue] = useState("");
   const [saving, startSaving] = useTransition();
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">Măsurare server-side (opțional)</p>
@@ -368,7 +368,7 @@ function ManualConnected({ businessId, status, oauthAvailable }: {
   return (
     <div className="space-y-6">
       {/* Connection banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success"><CircleCheck className="h-5 w-5" /></span>
           <div className="min-w-0">
@@ -384,7 +384,7 @@ function ManualConnected({ businessId, status, oauthAvailable }: {
       </div>
 
       {/* Tracking toggle */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">Măsurare pe magazin</p>
           <p className="text-xs text-muted-foreground">
@@ -436,7 +436,7 @@ function ManualConnected({ businessId, status, oauthAvailable }: {
       </Callout>
 
       {oauthAvailable && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">Adu rapoartele în Edinio</p>
             <p className="text-xs text-muted-foreground">Conectează contul Google pentru statistici și vizitatori în timp real, direct aici.</p>
@@ -501,7 +501,7 @@ function ManualConnected({ businessId, status, oauthAvailable }: {
 
 function EmptyState({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-8 text-center">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-8 text-center">
       <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Icon className="h-6 w-6" /></div>
       <h2 className="mb-2 text-lg font-bold text-foreground">{title}</h2>
       <div className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">{children}</div>
@@ -645,7 +645,7 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
   return (
     <div className="space-y-6">
       {/* Connection banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success"><CircleCheck className="h-5 w-5" /></span>
           <div className="min-w-0">
@@ -667,7 +667,7 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
 
       {/* Tracking status */}
       {status.measurementId ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">Măsurare pe magazin</p>
             <p className="text-xs text-muted-foreground">
@@ -768,7 +768,7 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
       </div>
 
       {!dash ? (
-        <div className="rounded-2xl border border-border bg-card p-10 text-center">
+        <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-10 text-center">
           {loadingDash ? (
             <Loader2 className="mx-auto h-6 w-6 animate-spin text-muted-foreground" />
           ) : (
@@ -847,7 +847,7 @@ function ConnectedDashboard({ businessId, status, initialDashboard, initialRealt
 
 function RealtimeCard({ realtime }: { realtime: GaRealtimeData | null }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
       <div className="flex items-center gap-3">
         <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-success/10 text-success">
           <Radio className="h-5 w-5" />
@@ -889,7 +889,7 @@ function KpiGrid({ totals, prev }: { totals: GaTotals; prev: GaTotals }) {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {cards.map((c) => (
-        <div key={c.label} className="rounded-2xl border border-border bg-card p-4">
+        <div key={c.label} className="rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
           <div className="mb-2 flex items-center justify-between gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><c.icon className="h-4 w-4" /></span>
             {c.trend !== null && (
@@ -912,12 +912,12 @@ function KpiGrid({ totals, prev }: { totals: GaTotals; prev: GaTotals }) {
 
 /* ─── Timeseries chart ────────────────────────────────────────────────────── */
 
-const USERS_COLOR = "#1AB554";
+const USERS_COLOR = "#07c527";
 const SESSIONS_COLOR = "#F9AB00";
 
 function TimeseriesChart({ data }: { data: GaDashboardData["timeseries"] }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-5">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-foreground">Utilizatori și sesiuni</h3>
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -956,7 +956,7 @@ function SeriesTooltip({ active, payload, label }: {
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl border border-border bg-surface px-3 py-2 text-sm shadow-lg">
+    <div className="rounded-xl ring-1 ring-foreground/10 bg-card px-3 py-2 text-sm shadow-lg">
       <p className="mb-1 font-semibold text-foreground">{label}</p>
       {payload.map((p) => (
         <p key={p.name} className="text-muted-foreground">
@@ -974,7 +974,7 @@ function BreakdownCard({ icon: Icon, title, rows, unit, mono }: {
 }) {
   const total = rows.reduce((s, r) => s + r.value, 0);
   return (
-    <div className="rounded-2xl border border-border bg-card p-5">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="mb-4 flex items-center gap-2">
         <Icon className="h-4 w-4 text-muted-foreground" />
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
@@ -1002,7 +1002,7 @@ function BreakdownCard({ icon: Icon, title, rows, unit, mono }: {
 function DevicesCard({ devices }: { devices: { name: string; sessions: number }[] }) {
   const total = devices.reduce((s, d) => s + d.sessions, 0);
   return (
-    <div className="rounded-2xl border border-border bg-card p-5">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="mb-4 flex items-center gap-2">
         <Monitor className="h-4 w-4 text-muted-foreground" />
         <h3 className="text-sm font-semibold text-foreground">Dispozitive</h3>
@@ -1035,7 +1035,7 @@ function DevicesCard({ devices }: { devices: { name: string; sessions: number }[
 
 function ProductsCard({ products }: { products: { name: string; quantity: number; revenue: number }[] }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-5">
+    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
       <div className="mb-4 flex items-center gap-2">
         <Package className="h-4 w-4 text-muted-foreground" />
         <h3 className="text-sm font-semibold text-foreground">Top produse (după venit)</h3>

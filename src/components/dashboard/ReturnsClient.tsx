@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Undo2, Trash2, MailOpen, Mail, User, Phone, Mail as MailIcon } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { updateReturnStatus, toggleReturnRead, deleteReturnRequest } from "@/lib/actions/return.actions";
+import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 
 interface ReturnItem { product_id: string; name: string; quantity: number; price: number }
 interface ReturnRow {
@@ -24,11 +25,17 @@ interface ReturnRow {
   createdAt: string;
 }
 
-const STATUS_META: Record<string, { label: string; cls: string }> = {
-  nou:       { label: "Nou",       cls: "bg-amber-50 text-amber-700 border-amber-200" },
-  aprobat:   { label: "Aprobat",   cls: "bg-blue-50 text-blue-700 border-blue-200" },
-  respins:   { label: "Respins",   cls: "bg-red-50 text-red-700 border-red-200" },
-  rambursat: { label: "Rambursat", cls: "bg-green-50 text-green-700 border-green-200" },
+/*
+  ⚠ TONURI, NU CLASE. Pana acum, fiecare ecran isi scria propriile culori de
+  eticheta, asa ca aceeasi stare arata altfel de la o pagina la alta, iar patru
+  pastile pline de culoare faceau lista sa arate ca un semafor. Cum se deseneaza
+  hotaraste `EtichetaStare`, intr-un singur loc.
+*/
+const STATUS_META: Record<string, { label: string; ton: TonEticheta }> = {
+  nou:       { label: "Nou",       ton: "asteptare" },
+  aprobat:   { label: "Aprobat",   ton: "info" },
+  respins:   { label: "Respins",   ton: "rau" },
+  rambursat: { label: "Rambursat", ton: "bun" },
 };
 const STATUS_ORDER = ["nou", "aprobat", "respins", "rambursat"];
 const REFUND_LABELS: Record<string, string> = {
@@ -160,7 +167,7 @@ export function ReturnsClient({ returns }: { returns: ReturnRow[] }) {
                   <div className="flex items-center gap-2 min-w-0">
                     {!r.isRead && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
                     <span className="text-sm font-semibold text-foreground truncate">Comanda {r.orderNumber}</span>
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full border ${meta.cls}`}>{meta.label}</span>
+                    <EtichetaStare ton={meta.ton} marime="mic">{meta.label}</EtichetaStare>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button type="button" onClick={() => toggleRead(r)} disabled={isPending} title={r.isRead ? "Marcheaza necitit" : "Marcheaza citit"}

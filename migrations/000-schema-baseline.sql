@@ -915,6 +915,58 @@ begin
    group by 1, 2, 3, 4, 5;
 
   get diagnostics v_scrise = row_count;
+
+  delete from public.analitice_zilnic where zi >= v_de_la;
+
+  insert into public.analitice_zilnic (
+    business_id, zi, vizitatori, sesiuni, afisari, sesiuni_cu_comanda,
+    sesiuni_cu_produs, sesiuni_cu_cos, sesiuni_cu_checkout)
+  select a.business_id,
+         (a.created_at at time zone 'Europe/Bucharest')::date as zi,
+         count(distinct a.visitor_id),
+         count(distinct a.session_id),
+         count(*) filter (where a.event_type = 'visit'),
+         count(distinct a.session_id) filter (where a.event_type = 'purchase'),
+         count(distinct a.session_id) filter (where a.event_type = 'product_view'),
+         count(distinct a.session_id) filter (where a.event_type = 'add_to_cart'),
+         count(distinct a.session_id) filter (where a.event_type = 'begin_checkout')
+    from public.site_analytics a
+   where (a.created_at at time zone 'Europe/Bucharest')::date >= v_de_la
+     and a.session_id is not null
+     and exists (select 1 from public.businesses b where b.id = a.business_id)
+   group by 1, 2;
+
+  delete from public.analitice_zilnic_sursa where zi >= v_de_la;
+
+  insert into public.analitice_zilnic_sursa (business_id, zi, source, device, sesiuni, sesiuni_cu_comanda, vanzari)
+  with prima as (
+    select distinct on (a.business_id, a.session_id)
+           a.business_id, a.session_id,
+           (a.created_at at time zone 'Europe/Bucharest')::date as zi,
+           coalesce(a.source, '') as source,
+           coalesce(a.device, '') as device
+      from public.site_analytics a
+     where (a.created_at at time zone 'Europe/Bucharest')::date >= v_de_la
+       and a.session_id is not null
+       and exists (select 1 from public.businesses b where b.id = a.business_id)
+     order by a.business_id, a.session_id, a.created_at
+  ),
+  cumparaturi as (
+    select business_id, session_id, sum(coalesce(valoare, 0)) as valoare, count(*) as cate
+      from public.site_analytics
+     where event_type = 'purchase'
+       and (created_at at time zone 'Europe/Bucharest')::date >= v_de_la
+       and session_id is not null
+     group by 1, 2
+  )
+  select p.business_id, p.zi, p.source, p.device,
+         count(*),
+         count(*) filter (where c.session_id is not null),
+         round(coalesce(sum(c.valoare), 0), 2)
+    from prima p
+    left join cumparaturi c on c.business_id = p.business_id and c.session_id = p.session_id
+   group by 1, 2, 3, 4;
+
   return v_scrise;
 end;
 $function$
@@ -1036,6 +1088,28 @@ begin
     'consumat', coalesce(v_luat->'consumat','{}'::jsonb),
     'eliberat', jsonb_build_object('produse', v_elib_p, 'variante', v_elib_v),
     'lipsa', coalesce(v_luat->'lipsa','[]'::jsonb));
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.analitice_sarea_zilei()
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_zi date := (now() at time zone 'Europe/Bucharest')::date;
+  v_sare text;
+begin
+  insert into public.analitice_sare (zi) values (v_zi)
+  on conflict (zi) do nothing;
+
+  select sare into v_sare from public.analitice_sare where zi = v_zi;
+
+  delete from public.analitice_sare where zi < v_zi - 7;
+
+  return v_sare;
 end;
 $function$
 ;
@@ -2022,6 +2096,100 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.canale_vanzare(p_business uuid)
+ RETURNS TABLE(canal text, comenzi bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  select coalesce(o.order_source ->> 'marketplace', 'magazin') as canal,
+         count(*)::bigint
+    from public.orders o
+   where o.business_id = p_business
+     and o.status not in ('cancelled', 'refunded')
+   group by 1
+   order by 2 desc
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.carduri_secundare(p_business uuid, p_fel text DEFAULT '30z'::text, p_de_la date DEFAULT NULL::date, p_pana_la date DEFAULT NULL::date, p_canal text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with f as (select * from public.fereastra_vanzari(p_fel, p_de_la, p_pana_la)),
+  toate as (
+    select o.id, o.status, o.total, o.items,
+           lower(nullif(btrim(coalesce(o.customer_email, '')), '')) as client,
+           case when (o.created_at at time zone 'Europe/Bucharest')::date
+                     between (select de_la from f) and (select pana_la from f)
+                then 'acum' else 'inainte' end as fereastra
+      from f, public.orders o
+     where o.business_id = p_business
+       and o.created_at >= ((least(f.de_la, f.de_la_ant))::timestamp at time zone 'Europe/Bucharest')
+       and o.created_at <  (((f.pana_la + 1))::timestamp at time zone 'Europe/Bucharest')
+       and ((o.created_at at time zone 'Europe/Bucharest')::date between f.de_la and f.pana_la
+         or (o.created_at at time zone 'Europe/Bucharest')::date between f.de_la_ant and f.pana_la_ant)
+       and (
+         p_canal is null
+         or (p_canal = 'magazin' and o.order_source ->> 'marketplace' is null)
+         or (p_canal <> 'magazin' and o.order_source ->> 'marketplace' = p_canal)
+       )
+  ),
+  prima as (
+    select lower(btrim(o.customer_email)) as client,
+           min((o.created_at at time zone 'Europe/Bucharest')::date) as intaia
+      from public.orders o
+     where o.business_id = p_business
+       and o.status not in ('cancelled', 'refunded')
+       and nullif(btrim(coalesce(o.customer_email, '')), '') is not null
+     group by 1
+  ),
+  clienti as (
+    select distinct t.fereastra, t.client,
+           (select intaia from prima where prima.client = t.client) as intaia
+      from toate t
+     where t.status not in ('cancelled', 'refunded') and t.client is not null
+  ),
+  pe_fereastra as (
+    select c.fereastra,
+           count(*) filter (
+             where c.intaia between
+               (case when c.fereastra = 'acum' then (select de_la from f) else (select de_la_ant from f) end)
+               and
+               (case when c.fereastra = 'acum' then (select pana_la from f) else (select pana_la_ant from f) end)
+           )::int as noi,
+           count(*) filter (
+             where c.intaia < (case when c.fereastra = 'acum' then (select de_la from f) else (select de_la_ant from f) end)
+           )::int as recurenti
+      from clienti c group by 1
+  ),
+  restul as (
+    select t.fereastra,
+           coalesce(sum((
+             select coalesce(sum(coalesce((it ->> 'quantity')::numeric, 0)), 0)
+               from jsonb_array_elements(coalesce(t.items, '[]'::jsonb)) it
+           )) filter (where t.status not in ('cancelled', 'refunded')), 0) as bucati,
+           count(*) filter (where t.status = 'cancelled')::int as anulate,
+           count(*)::int as toate_nr
+      from toate t group by 1
+  ),
+  imbinat as (
+    select w.fereastra,
+           coalesce(p.noi, 0) as clienti_noi,
+           coalesce(p.recurenti, 0) as clienti_recurenti,
+           coalesce(r.bucati, 0) as bucati,
+           coalesce(r.anulate, 0) as anulate,
+           coalesce(r.toate_nr, 0) as comenzi_toate
+      from (values ('acum'), ('inainte')) w(fereastra)
+      left join pe_fereastra p on p.fereastra = w.fereastra
+      left join restul r on r.fereastra = w.fereastra
+  )
+  select jsonb_object_agg(fereastra, to_jsonb(imbinat) - 'fereastra') from imbinat
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.catalog_aplica_proiectii(p_randuri jsonb)
  RETURNS integer
  LANGUAGE plpgsql
@@ -2605,6 +2773,41 @@ BEGIN
   GET DIAGNOSTICS v_claimed = ROW_COUNT;
   RETURN v_claimed > 0;
 END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.combinatie_aprinsa(p_combinatie jsonb)
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'pg_catalog', 'pg_temp'
+AS $function$
+  select coalesce(nullif(p_combinatie ->> 'enabled', '') <> 'false', true)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.comenzi_pe_judet(p_business uuid, p_fel text DEFAULT '30z'::text, p_de_la date DEFAULT NULL::date, p_pana_la date DEFAULT NULL::date, p_canal text DEFAULT NULL::text)
+ RETURNS TABLE(judet text, comenzi integer, vanzari numeric, medie numeric)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with f as (select * from public.fereastra_vanzari(p_fel, p_de_la, p_pana_la))
+  select coalesce(nullif(btrim(o.shipping_address ->> 'county'), ''), 'Necunoscut') as judet,
+         count(*)::int,
+         round(coalesce(sum(o.total), 0), 2),
+         round(coalesce(sum(o.total), 0) / nullif(count(*), 0), 2)
+    from public.orders o, f
+   where o.business_id = p_business
+     and o.status not in ('cancelled', 'refunded')
+     and (o.created_at at time zone 'Europe/Bucharest')::date between f.de_la and f.pana_la
+     and (
+       p_canal is null
+       or (p_canal = 'magazin' and o.order_source ->> 'marketplace' is null)
+       or (p_canal <> 'magazin' and o.order_source ->> 'marketplace' = p_canal)
+     )
+   group by 1
+   order by 2 desc
 $function$
 ;
 
@@ -3583,6 +3786,55 @@ CREATE OR REPLACE FUNCTION public.fara_diacritice(t text)
 AS $function$ select unaccent('public.unaccent', t) $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.fereastra_vanzari(p_fel text DEFAULT '7z'::text, p_de_la date DEFAULT NULL::date, p_pana_la date DEFAULT NULL::date)
+ RETURNS TABLE(de_la date, pana_la date, de_la_ant date, pana_la_ant date, granulatie text)
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO 'pg_catalog', 'pg_temp'
+AS $function$
+declare
+  azi date := (now() at time zone 'Europe/Bucharest')::date;
+  s date; e date; sa date; ea date; zile integer; g text;
+begin
+  case coalesce(p_fel, '7z')
+    when 'azi'  then s := azi;      e := azi;
+    when 'ieri' then s := azi - 1;  e := azi - 1;
+    when '30z'  then s := azi - 29; e := azi;
+    when '90z'  then s := azi - 89; e := azi;
+    when 'luna' then s := date_trunc('month', azi)::date; e := azi;
+    when 'an'   then s := date_trunc('year',  azi)::date; e := azi;
+    when 'custom' then
+      s := coalesce(p_de_la, azi - 6);
+      e := coalesce(p_pana_la, azi);
+      if e < s then
+        declare t date := s; begin s := e; e := t; end;
+      end if;
+      if e - s > 730 then s := e - 730; end if;
+      if e > azi then e := azi; end if;
+      if s > e then s := e; end if;
+    else s := azi - 6; e := azi;
+  end case;
+
+  zile := (e - s) + 1;
+
+  if coalesce(p_fel, '7z') = 'luna' then
+    sa := (s - interval '1 month')::date;
+    ea := (e - interval '1 month')::date;
+  elsif coalesce(p_fel, '7z') = 'an' then
+    sa := (s - interval '1 year')::date;
+    ea := (e - interval '1 year')::date;
+  else
+    ea := s - 1;
+    sa := ea - (zile - 1);
+  end if;
+
+  g := case when zile <= 92 then 'zi' when zile <= 400 then 'saptamana' else 'luna' end;
+
+  return query select s, e, sa, ea, g;
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.genereaza_schema_baseline()
  RETURNS text
  LANGUAGE plpgsql
@@ -4215,6 +4467,36 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.numar_produse_sub_prag(p_business uuid, p_prag integer DEFAULT 5)
+ RETURNS TABLE(sub_prag integer, epuizate integer)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with aprinse as (
+    select p.stock_quantity,
+           coalesce(
+             (select jsonb_agg(jsonb_build_object('stoc', public.stoc_combinatie(c)))
+                from jsonb_array_elements(coalesce(p.page_sections -> 'variants' -> 'combinations', '[]'::jsonb)) c
+               where public.combinatie_aprinsa(c) and nullif(c ->> 'id', '') is not null),
+             '[]'::jsonb) as combos
+      from public.products p
+     where p.business_id = p_business and p.is_active and p.track_inventory
+  ),
+  clasificate as (
+    select ((jsonb_array_length(a.combos) = 0 and coalesce(a.stock_quantity, 0) <= p_prag)
+             or exists (select 1 from jsonb_array_elements(a.combos) v where (v ->> 'stoc')::numeric <= p_prag)) as e_sub_prag,
+           ((jsonb_array_length(a.combos) = 0 and coalesce(a.stock_quantity, 0) <= 0)
+             or (jsonb_array_length(a.combos) > 0
+                 and not exists (select 1 from jsonb_array_elements(a.combos) v where (v ->> 'stoc')::numeric > 0))) as e_epuizat
+      from aprinse a
+  )
+  select count(*) filter (where e_sub_prag)::integer,
+         count(*) filter (where e_sub_prag and e_epuizat)::integer
+    from clasificate
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.numara_ofertele_emag(p_business_id uuid)
  RETURNS jsonb
  LANGUAGE sql
@@ -4412,6 +4694,100 @@ AS $function$
     public.inceput_fereastra_ro(p_zile, coalesce(p_deplasare, 0)),
     case when coalesce(p_deplasare, 0) = 0 then null
          else public.inceput_fereastra_ro(p_zile, coalesce(p_deplasare, 0) - 1) end
+  )
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.palnia_panou(p_business uuid, p_fel text DEFAULT '30z'::text, p_de_la date DEFAULT NULL::date, p_pana_la date DEFAULT NULL::date)
+ RETURNS TABLE(sesiuni integer, cu_produs integer, cu_cos integer, cu_checkout integer, cu_comanda integer)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with f as (select * from public.fereastra_vanzari(p_fel, p_de_la, p_pana_la))
+  select coalesce(sum(z.sesiuni), 0)::int,
+         coalesce(sum(z.sesiuni_cu_produs), 0)::int,
+         coalesce(sum(z.sesiuni_cu_cos), 0)::int,
+         coalesce(sum(z.sesiuni_cu_checkout), 0)::int,
+         coalesce(sum(z.sesiuni_cu_comanda), 0)::int
+    from public.analitice_zilnic z, f
+   where z.business_id = p_business
+     and z.zi between f.de_la and f.pana_la
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.panou_carduri(p_business uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with f as (
+    select
+      (now() at time zone 'Europe/Bucharest')                as acum_ro,
+      (now() at time zone 'Europe/Bucharest')::date          as azi,
+      ((now() at time zone 'Europe/Bucharest')::date - 1)    as ieri,
+      date_trunc('month', (now() at time zone 'Europe/Bucharest'))::date as luna_de_la,
+      (date_trunc('month', (now() at time zone 'Europe/Bucharest')) - interval '1 month')::date as luna_ant_de_la
+  ),
+  g as (
+    select f.*,
+           least(
+             (f.luna_ant_de_la + (f.azi - f.luna_de_la))::date,
+             (f.luna_de_la - 1)
+           ) as luna_ant_pana_la
+      from f
+  ),
+  c as (
+    select
+      count(*) filter (where zi_ro = g.azi)                                          as comenzi_azi,
+      count(*) filter (where zi_ro = g.ieri and ora_ro <= g.acum_ro::time)           as comenzi_ieri,
+      count(*) filter (where zi_ro between g.luna_de_la and g.azi)                   as comenzi_luna,
+      coalesce(sum(o.total) filter (where zi_ro between g.luna_de_la and g.azi), 0)  as vanzari_luna,
+      count(*) filter (where zi_ro between g.luna_ant_de_la and g.luna_ant_pana_la)  as comenzi_luna_ant,
+      coalesce(sum(o.total) filter (where zi_ro between g.luna_ant_de_la and g.luna_ant_pana_la), 0) as vanzari_luna_ant
+      from g
+      left join lateral (
+        select o.total,
+               (o.created_at at time zone 'Europe/Bucharest')::date as zi_ro,
+               (o.created_at at time zone 'Europe/Bucharest')::time as ora_ro
+          from public.orders o
+         where o.business_id = p_business
+           and o.status not in ('cancelled', 'refunded')
+           and o.created_at >= ((g.luna_ant_de_la)::timestamp at time zone 'Europe/Bucharest')
+      ) o on true
+     group by g.azi, g.ieri, g.luna_de_la, g.luna_ant_de_la, g.luna_ant_pana_la, g.acum_ro
+  ),
+  v as (
+    select
+      (select coalesce(sum(s.nr), 0) from public.business_daily_stats s, g
+        where s.business_id = p_business and s.event_type = 'visit'
+          and s.zi >= g.luna_de_la and s.zi < g.azi)
+      + (select count(*) from public.site_analytics a, g
+          where a.business_id = p_business and a.event_type = 'visit'
+            and (a.created_at at time zone 'Europe/Bucharest')::date = g.azi) as vizite_luna,
+      (select coalesce(sum(s.nr), 0) from public.business_daily_stats s, g
+        where s.business_id = p_business and s.event_type = 'visit'
+          and s.zi >= g.luna_ant_de_la and s.zi <= g.luna_ant_pana_la)        as vizite_luna_ant
+  )
+  select jsonb_build_object(
+    'azi', jsonb_build_object(
+      'comenzi', (select comenzi_azi from c)),
+    'ieri_pana_acum', jsonb_build_object(
+      'comenzi', (select comenzi_ieri from c),
+      'ora', to_char((select acum_ro from g), 'HH24:MI')),
+    'luna', jsonb_build_object(
+      'vanzari', round((select vanzari_luna from c), 2),
+      'comenzi', (select comenzi_luna from c),
+      'vizite',  (select vizite_luna from v),
+      'de_la',   (select luna_de_la from g),
+      'pana_la', (select azi from g)),
+    'luna_trecuta', jsonb_build_object(
+      'vanzari', round((select vanzari_luna_ant from c), 2),
+      'comenzi', (select comenzi_luna_ant from c),
+      'vizite',  (select vizite_luna_ant from v),
+      'de_la',   (select luna_ant_de_la from g),
+      'pana_la', (select luna_ant_pana_la from g))
   )
 $function$
 ;
@@ -4624,6 +5000,40 @@ AS $function$
         where q.business_id = p_business_id and q.product_id = p.id)
    order by p.id
    limit greatest(1, least(coalesce(p_limita, 50), 500));
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.produse_sub_prag(p_business uuid, p_prag integer DEFAULT 5)
+ RETURNS TABLE(id uuid, nume text, imagine text, stoc integer, variante jsonb)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with aprinse as (
+    select p.id, p.name, p.images, p.stock_quantity,
+           coalesce(
+             (select jsonb_agg(
+                       jsonb_build_object(
+                         'id',   c ->> 'id',
+                         'sku',  nullif(c ->> 'sku', ''),
+                         'stoc', public.stoc_combinatie(c),
+                         'eticheta', coalesce(nullif(c ->> 'label', ''), nullif(c ->> 'title', ''),
+                                              nullif(c ->> 'name', ''), c ->> 'id'))
+                       order by public.stoc_combinatie(c))
+                from jsonb_array_elements(coalesce(p.page_sections -> 'variants' -> 'combinations', '[]'::jsonb)) c
+               where public.combinatie_aprinsa(c) and nullif(c ->> 'id', '') is not null),
+             '[]'::jsonb) as combos
+      from public.products p
+     where p.business_id = p_business and p.is_active and p.track_inventory
+  )
+  select a.id, a.name,
+         (case when jsonb_typeof(a.images) = 'array' then a.images ->> 0 end),
+         coalesce(a.stock_quantity, 0), a.combos
+    from aprinse a
+   where (jsonb_array_length(a.combos) = 0 and coalesce(a.stock_quantity, 0) <= p_prag)
+      or exists (select 1 from jsonb_array_elements(a.combos) v where (v ->> 'stoc')::numeric <= p_prag)
+   order by coalesce(a.stock_quantity, 0), a.name
+   limit 200
 $function$
 ;
 
@@ -5545,6 +5955,17 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.stoc_combinatie(p_combinatie jsonb)
+ RETURNS numeric
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'pg_catalog', 'pg_temp'
+AS $function$
+  select case when p_combinatie ->> 'stock_quantity' ~ '^-?[0-9]+(\.[0-9]+)?$'
+                then (p_combinatie ->> 'stock_quantity')::numeric else 0 end
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.sync_product_stock_from_variants()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -5604,6 +6025,85 @@ begin
   new.updated_at = now();
   return new;
 end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.trafic_panou(p_business uuid, p_fel text DEFAULT '30z'::text, p_de_la date DEFAULT NULL::date, p_pana_la date DEFAULT NULL::date)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with f as (select * from public.fereastra_vanzari(p_fel, p_de_la, p_pana_la)),
+  azi as (select (now() at time zone 'Europe/Bucharest')::date as zi),
+  strans as (
+    select z.zi, z.vizitatori, z.sesiuni, z.afisari, z.sesiuni_cu_comanda
+      from public.analitice_zilnic z, azi
+     where z.business_id = p_business and z.zi < azi.zi
+  ),
+  bruta as (
+    select azi.zi,
+           count(distinct a.visitor_id)::int as vizitatori,
+           count(distinct a.session_id)::int as sesiuni,
+           count(*) filter (where a.event_type = 'visit')::int as afisari,
+           count(distinct a.session_id) filter (where a.event_type = 'purchase')::int as sesiuni_cu_comanda
+      from azi
+      left join public.site_analytics a
+        on a.business_id = p_business
+       and a.session_id is not null
+       and (a.created_at at time zone 'Europe/Bucharest')::date = azi.zi
+     group by azi.zi
+  ),
+  toate as (
+    select * from strans
+    union all
+    select * from bruta where sesiuni > 0
+  ),
+  acum as (
+    select coalesce(sum(vizitatori), 0)::int as vizitatori,
+           coalesce(sum(sesiuni), 0)::int as sesiuni,
+           coalesce(sum(afisari), 0)::int as afisari,
+           coalesce(sum(sesiuni_cu_comanda), 0)::int as sesiuni_cu_comanda
+      from toate, f where zi between f.de_la and f.pana_la
+  ),
+  inainte as (
+    select coalesce(sum(vizitatori), 0)::int as vizitatori,
+           coalesce(sum(sesiuni), 0)::int as sesiuni,
+           coalesce(sum(afisari), 0)::int as afisari,
+           coalesce(sum(sesiuni_cu_comanda), 0)::int as sesiuni_cu_comanda
+      from toate, f where zi between f.de_la_ant and f.pana_la_ant
+  )
+  select jsonb_build_object(
+    'interval', jsonb_build_object('de_la', (select de_la from f), 'pana_la', (select pana_la from f)),
+    'interval_anterior', jsonb_build_object('de_la', (select de_la_ant from f), 'pana_la', (select pana_la_ant from f)),
+    'total', (select to_jsonb(acum) from acum),
+    'total_anterior', (select to_jsonb(inainte) from inainte),
+    'serie', (select coalesce(jsonb_agg(jsonb_build_object(
+                       'bucata', t.zi, 'sesiuni', t.sesiuni, 'vizitatori', t.vizitatori,
+                       'afisari', t.afisari, 'sesiuni_cu_comanda', t.sesiuni_cu_comanda)
+                     order by t.zi), '[]'::jsonb)
+                from toate t, f where t.zi between f.de_la and f.pana_la)
+  )
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.trafic_pe_sursa(p_business uuid, p_fel text DEFAULT '30z'::text, p_de_la date DEFAULT NULL::date, p_pana_la date DEFAULT NULL::date)
+ RETURNS TABLE(sursa text, dispozitiv text, sesiuni integer, sesiuni_cu_comanda integer, vanzari numeric)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with f as (select * from public.fereastra_vanzari(p_fel, p_de_la, p_pana_la))
+  select coalesce(nullif(s.source, ''), 'direct') as sursa,
+         coalesce(nullif(s.device, ''), 'necunoscut') as dispozitiv,
+         sum(s.sesiuni)::int,
+         sum(s.sesiuni_cu_comanda)::int,
+         round(sum(s.vanzari), 2)
+    from public.analitice_zilnic_sursa s, f
+   where s.business_id = p_business
+     and s.zi between f.de_la and f.pana_la
+   group by 1, 2
+   order by 3 desc
 $function$
 ;
 
@@ -5997,6 +6497,167 @@ END;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.vanzari_detaliu(p_business uuid, p_fel text DEFAULT '30z'::text, p_de_la date DEFAULT NULL::date, p_pana_la date DEFAULT NULL::date, p_canal text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with f as (select * from public.fereastra_vanzari(p_fel, p_de_la, p_pana_la)),
+  toate as (
+    select o.id, o.status, o.total, o.subtotal, o.shipping_cost, o.vat_amount,
+           o.items,
+           coalesce(o.discount_amount, 0) + coalesce(o.card_discount_amount, 0)
+             + coalesce(o.cod_discount_amount, 0) + coalesce(o.offer_discount_amount, 0) as reduceri,
+           coalesce(o.cod_fee_amount, 0) as taxa_ramburs,
+           coalesce(o.order_source ->> 'marketplace', 'magazin') as canal
+      from f, public.orders o
+     where o.business_id = p_business
+       and o.created_at >= ((f.de_la)::timestamp at time zone 'Europe/Bucharest')
+       and o.created_at <  (((f.pana_la + 1))::timestamp at time zone 'Europe/Bucharest')
+       and (
+         p_canal is null
+         or (p_canal = 'magazin' and o.order_source ->> 'marketplace' is null)
+         or (p_canal <> 'magazin' and o.order_source ->> 'marketplace' = p_canal)
+       )
+  ),
+  bune as (select * from toate where status not in ('cancelled', 'refunded')),
+  linii as (
+    select b.id,
+           it ->> 'product_id' as product_id,
+           coalesce(nullif(p.name, ''), nullif(it ->> 'name', ''), 'Produs sters') as nume,
+           coalesce(nullif(p.category, ''), 'Fara categorie') as categorie,
+           coalesce((it ->> 'quantity')::numeric, 0) as bucati,
+           coalesce((it ->> 'price')::numeric, 0) * coalesce((it ->> 'quantity')::numeric, 0) as valoare
+      from bune b
+      cross join lateral jsonb_array_elements(coalesce(b.items, '[]'::jsonb)) it
+      left join public.products p
+        on p.business_id = p_business
+       and p.id::text = (it ->> 'product_id')
+  )
+  select jsonb_build_object(
+    'sumar', (
+      select jsonb_build_object(
+        'comenzi',      (select count(*) from bune),
+        'vanzari',      round(coalesce((select sum(total) from bune), 0), 2),
+        'produse',      round(coalesce((select sum(subtotal) from bune), 0), 2),
+        'transport',    round(coalesce((select sum(shipping_cost) from bune), 0), 2),
+        'reduceri',     round(coalesce((select sum(reduceri) from bune), 0), 2),
+        'taxa_ramburs', round(coalesce((select sum(taxa_ramburs) from bune), 0), 2),
+        'tva',          round(coalesce((select sum(vat_amount) from bune), 0), 2),
+        'bucati',       coalesce((select sum(bucati) from linii), 0),
+        'anulate',      (select count(*) from toate where status = 'cancelled'),
+        'rambursate',   (select count(*) from toate where status = 'refunded'),
+        'pierdute',     round(coalesce((select sum(total) from toate where status in ('cancelled', 'refunded')), 0), 2)
+      )
+    ),
+    'produse', (
+      select coalesce(jsonb_agg(x order by x.vanzari desc), '[]'::jsonb) from (
+        select product_id, nume,
+               sum(bucati)::numeric as bucati,
+               round(sum(valoare), 2) as vanzari,
+               count(distinct id)::int as comenzi
+          from linii group by 1, 2 order by 4 desc limit 15
+      ) x
+    ),
+    'categorii', (
+      select coalesce(jsonb_agg(x order by x.vanzari desc), '[]'::jsonb) from (
+        select categorie,
+               sum(bucati)::numeric as bucati,
+               round(sum(valoare), 2) as vanzari,
+               count(distinct id)::int as comenzi
+          from linii group by 1 order by 3 desc limit 15
+      ) x
+    ),
+    'canale', (
+      select coalesce(jsonb_agg(x order by x.vanzari desc), '[]'::jsonb) from (
+        select canal, count(*)::int as comenzi, round(sum(total), 2) as vanzari
+          from bune group by 1
+      ) x
+    ),
+    'statusuri', (
+      select coalesce(jsonb_agg(x order by x.comenzi desc), '[]'::jsonb) from (
+        select status, count(*)::int as comenzi, round(sum(total), 2) as vanzari
+          from toate group by 1
+      ) x
+    )
+  )
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.vanzari_panou(p_business uuid, p_fel text DEFAULT '7z'::text, p_de_la date DEFAULT NULL::date, p_pana_la date DEFAULT NULL::date, p_canal text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+  with f0 as (select * from public.fereastra_vanzari(p_fel, p_de_la, p_pana_la)),
+  f as (
+    select de_la, pana_la, de_la_ant, pana_la_ant, granulatie,
+           case granulatie when 'zi' then 'day' when 'saptamana' then 'week' else 'month' end as gpg,
+           case granulatie when 'zi' then interval '1 day'
+                           when 'saptamana' then interval '1 week'
+                           else interval '1 month' end as pas
+      from f0
+  ),
+  comenzi as (
+    select
+      case when (o.created_at at time zone 'Europe/Bucharest')::date >= f.de_la then 'acum' else 'inainte' end as fereastra,
+      date_trunc(f.gpg, (o.created_at at time zone 'Europe/Bucharest'))::date as bucata,
+      o.total
+      from f
+      join public.orders o on o.business_id = p_business
+       and o.status not in ('cancelled', 'refunded')
+       and o.created_at >= ((least(f.de_la, f.de_la_ant))::timestamp at time zone 'Europe/Bucharest')
+       and o.created_at <  (((f.pana_la + 1))::timestamp at time zone 'Europe/Bucharest')
+       and (
+         p_canal is null
+         or (p_canal = 'magazin' and o.order_source ->> 'marketplace' is null)
+         or (p_canal <> 'magazin' and o.order_source ->> 'marketplace' = p_canal)
+       )
+       and ((o.created_at at time zone 'Europe/Bucharest')::date between f.de_la and f.pana_la
+         or (o.created_at at time zone 'Europe/Bucharest')::date between f.de_la_ant and f.pana_la_ant)
+  ),
+  adunate as (
+    select fereastra, bucata, round(coalesce(sum(total), 0), 2) as vanzari, count(*)::int as nr
+      from comenzi group by 1, 2
+  ),
+  bucati_acum as (
+    select generate_series(
+             date_trunc((select gpg from f), (select de_la from f)::timestamp),
+             (select pana_la from f)::timestamp,
+             (select pas from f))::date as bucata
+  ),
+  bucati_inainte as (
+    select generate_series(
+             date_trunc((select gpg from f), (select de_la_ant from f)::timestamp),
+             (select pana_la_ant from f)::timestamp,
+             (select pas from f))::date as bucata
+  )
+  select jsonb_build_object(
+    'granulatie', (select granulatie from f),
+    'interval', jsonb_build_object('de_la', (select de_la from f), 'pana_la', (select pana_la from f)),
+    'interval_anterior', jsonb_build_object('de_la', (select de_la_ant from f), 'pana_la', (select pana_la_ant from f)),
+    'serie', (select coalesce(jsonb_agg(jsonb_build_object(
+                       'bucata', b.bucata,
+                       'vanzari', coalesce(a.vanzari, 0),
+                       'comenzi', coalesce(a.nr, 0)) order by b.bucata), '[]'::jsonb)
+                from bucati_acum b
+                left join adunate a on a.bucata = b.bucata and a.fereastra = 'acum'),
+    'serie_anterioara', (select coalesce(jsonb_agg(jsonb_build_object(
+                       'bucata', b.bucata,
+                       'vanzari', coalesce(a.vanzari, 0),
+                       'comenzi', coalesce(a.nr, 0)) order by b.bucata), '[]'::jsonb)
+                from bucati_inainte b
+                left join adunate a on a.bucata = b.bucata and a.fereastra = 'inainte'),
+    'total', (select jsonb_build_object('vanzari', coalesce(sum(vanzari), 0), 'comenzi', coalesce(sum(nr), 0))
+                from adunate where fereastra = 'acum'),
+    'total_anterior', (select jsonb_build_object('vanzari', coalesce(sum(vanzari), 0), 'comenzi', coalesce(sum(nr), 0))
+                from adunate where fereastra = 'inainte')
+  )
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.vezi_ritm_extern(p_cheie text, p_fereastra_ms integer DEFAULT 1000)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -6347,6 +7008,31 @@ create table if not exists public.admin_audit_log (
   details jsonb default '{}'::jsonb,
   created_at timestamp with time zone default now() not null);
 
+create table if not exists public.analitice_sare (
+  zi date not null,
+  sare text default encode(extensions.gen_random_bytes(32), 'hex'::text) not null,
+  creat_la timestamp with time zone default now() not null);
+
+create table if not exists public.analitice_zilnic (
+  business_id uuid not null,
+  zi date not null,
+  vizitatori integer default 0 not null,
+  sesiuni integer default 0 not null,
+  afisari integer default 0 not null,
+  sesiuni_cu_comanda integer default 0 not null,
+  sesiuni_cu_produs integer default 0 not null,
+  sesiuni_cu_cos integer default 0 not null,
+  sesiuni_cu_checkout integer default 0 not null);
+
+create table if not exists public.analitice_zilnic_sursa (
+  business_id uuid not null,
+  zi date not null,
+  source text default ''::text not null,
+  device text default ''::text not null,
+  sesiuni integer default 0 not null,
+  sesiuni_cu_comanda integer default 0 not null,
+  vanzari numeric default 0 not null);
+
 create table if not exists public.announcements (
   id uuid default gen_random_uuid() not null,
   title text not null,
@@ -6491,7 +7177,7 @@ create table if not exists public.businesses (
   lng numeric(11,8),
   logo_url text,
   cover_url text,
-  primary_color text default '#1AB554'::text not null,
+  primary_color text default '#07c527'::text not null,
   is_published boolean default false not null,
   custom_domain text,
   created_at timestamp with time zone default now() not null,
@@ -7509,7 +8195,12 @@ create table if not exists public.site_analytics (
   referrer text,
   country text,
   metadata jsonb default '{}'::jsonb not null,
-  created_at timestamp with time zone default now() not null);
+  created_at timestamp with time zone default now() not null,
+  session_id text,
+  visitor_id text,
+  path text,
+  product_id uuid,
+  valoare numeric);
 
 create table if not exists public.sms_campaigns (
   id uuid default gen_random_uuid() not null,
@@ -7846,6 +8537,9 @@ alter table public.aboutyou_variants add constraint aboutyou_variants_pkey PRIMA
 alter table public.aboutyou_veghe add constraint aboutyou_veghe_pkey PRIMARY KEY (id);
 alter table public.aboutyou_webhook_inbox add constraint aboutyou_webhook_inbox_pkey PRIMARY KEY (id);
 alter table public.admin_audit_log add constraint admin_audit_log_pkey PRIMARY KEY (id);
+alter table public.analitice_sare add constraint analitice_sare_pkey PRIMARY KEY (zi);
+alter table public.analitice_zilnic add constraint analitice_zilnic_pkey PRIMARY KEY (business_id, zi);
+alter table public.analitice_zilnic_sursa add constraint analitice_zilnic_sursa_pkey PRIMARY KEY (business_id, zi, source, device);
 alter table public.announcements add constraint announcements_pkey PRIMARY KEY (id);
 alter table public.blog_authors add constraint blog_authors_pkey PRIMARY KEY (id);
 alter table public.blog_categories add constraint blog_categories_pkey PRIMARY KEY (id);
@@ -8503,6 +9197,8 @@ CREATE INDEX return_requests_business_created_idx ON public.return_requests USIN
 CREATE INDEX return_requests_business_unread_idx ON public.return_requests USING btree (business_id, is_read);
 CREATE INDEX return_requests_order_id_idx ON public.return_requests USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX return_requests_order_idx ON public.return_requests USING btree (order_id);
+CREATE INDEX site_analytics_sesiune ON public.site_analytics USING btree (business_id, session_id) WHERE (session_id IS NOT NULL);
+CREATE INDEX site_analytics_vizitator ON public.site_analytics USING btree (business_id, visitor_id, created_at DESC) WHERE (visitor_id IS NOT NULL);
 CREATE INDEX sms_optout_cautare_idx ON public.sms_optout USING btree (business_id, phone);
 CREATE INDEX stock_feed_sources_business_idx ON public.stock_feed_sources USING btree (business_id);
 CREATE INDEX stock_feed_sources_due_idx ON public.stock_feed_sources USING btree (enabled, last_run_at NULLS FIRST);
@@ -8667,6 +9363,9 @@ alter table public.aboutyou_variants enable row level security;
 alter table public.aboutyou_veghe enable row level security;
 alter table public.aboutyou_webhook_inbox enable row level security;
 alter table public.admin_audit_log enable row level security;
+alter table public.analitice_sare enable row level security;
+alter table public.analitice_zilnic enable row level security;
+alter table public.analitice_zilnic_sursa enable row level security;
 alter table public.announcements enable row level security;
 alter table public.blog_authors enable row level security;
 alter table public.blog_categories enable row level security;
@@ -8819,6 +9518,12 @@ create policy owner_select_aboutyou_veghe on public.aboutyou_veghe as PERMISSIVE
 create policy owner_select_aboutyou_webhook_inbox on public.aboutyou_webhook_inbox as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = ( SELECT auth.uid() AS uid)))));
+create policy "Proprietarii isi vad sesiunile stranse" on public.analitice_zilnic as PERMISSIVE for SELECT to public using ((EXISTS ( SELECT 1
+   FROM businesses b
+  WHERE ((b.id = analitice_zilnic.business_id) AND (b.user_id = auth.uid())))));
+create policy "Proprietarii isi vad sursele stranse" on public.analitice_zilnic_sursa as PERMISSIVE for SELECT to public using ((EXISTS ( SELECT 1
+   FROM businesses b
+  WHERE ((b.id = analitice_zilnic_sursa.business_id) AND (b.user_id = auth.uid())))));
 create policy "Admins manage announcements" on public.announcements as PERMISSIVE for ALL to authenticated using (is_admin()) with check (is_admin());
 create policy "Read published announcements" on public.announcements as PERMISSIVE for SELECT to authenticated using (((is_published = true) OR is_admin()));
 create policy blog_authors_public_read on public.blog_authors as PERMISSIVE for SELECT to anon, authenticated using ((EXISTS ( SELECT 1
@@ -8847,6 +9552,9 @@ create policy blog_tags_public_read on public.blog_tags as PERMISSIVE for SELECT
 create policy "Owners read own brevo suppressions" on public.brevo_suppressions as PERMISSIVE for SELECT to public using ((EXISTS ( SELECT 1
    FROM businesses b
   WHERE ((b.id = brevo_suppressions.business_id) AND (b.user_id = auth.uid())))));
+create policy "Proprietarii isi vad statisticile stranse" on public.business_daily_stats as PERMISSIVE for SELECT to public using ((EXISTS ( SELECT 1
+   FROM businesses b
+  WHERE ((b.id = business_daily_stats.business_id) AND (b.user_id = auth.uid())))));
 create policy "Owners can manage own businesses" on public.businesses as PERMISSIVE for ALL to public using ((auth.uid() = user_id));
 create policy "Public can view published businesses" on public.businesses as PERMISSIVE for SELECT to public using ((is_published = true));
 create policy "Public read categories of published businesses" on public.categories as PERMISSIVE for SELECT to public using ((EXISTS ( SELECT 1
@@ -9415,6 +10123,69 @@ grant SELECT on table public.admin_audit_log to service_role;
 grant TRIGGER on table public.admin_audit_log to service_role;
 grant TRUNCATE on table public.admin_audit_log to service_role;
 grant UPDATE on table public.admin_audit_log to service_role;
+grant DELETE on table public.analitice_sare to anon;
+grant INSERT on table public.analitice_sare to anon;
+grant REFERENCES on table public.analitice_sare to anon;
+grant SELECT on table public.analitice_sare to anon;
+grant TRIGGER on table public.analitice_sare to anon;
+grant TRUNCATE on table public.analitice_sare to anon;
+grant UPDATE on table public.analitice_sare to anon;
+grant DELETE on table public.analitice_sare to authenticated;
+grant INSERT on table public.analitice_sare to authenticated;
+grant REFERENCES on table public.analitice_sare to authenticated;
+grant SELECT on table public.analitice_sare to authenticated;
+grant TRIGGER on table public.analitice_sare to authenticated;
+grant TRUNCATE on table public.analitice_sare to authenticated;
+grant UPDATE on table public.analitice_sare to authenticated;
+grant DELETE on table public.analitice_sare to service_role;
+grant INSERT on table public.analitice_sare to service_role;
+grant REFERENCES on table public.analitice_sare to service_role;
+grant SELECT on table public.analitice_sare to service_role;
+grant TRIGGER on table public.analitice_sare to service_role;
+grant TRUNCATE on table public.analitice_sare to service_role;
+grant UPDATE on table public.analitice_sare to service_role;
+grant DELETE on table public.analitice_zilnic to anon;
+grant INSERT on table public.analitice_zilnic to anon;
+grant REFERENCES on table public.analitice_zilnic to anon;
+grant SELECT on table public.analitice_zilnic to anon;
+grant TRIGGER on table public.analitice_zilnic to anon;
+grant TRUNCATE on table public.analitice_zilnic to anon;
+grant UPDATE on table public.analitice_zilnic to anon;
+grant DELETE on table public.analitice_zilnic to authenticated;
+grant INSERT on table public.analitice_zilnic to authenticated;
+grant REFERENCES on table public.analitice_zilnic to authenticated;
+grant SELECT on table public.analitice_zilnic to authenticated;
+grant TRIGGER on table public.analitice_zilnic to authenticated;
+grant TRUNCATE on table public.analitice_zilnic to authenticated;
+grant UPDATE on table public.analitice_zilnic to authenticated;
+grant DELETE on table public.analitice_zilnic to service_role;
+grant INSERT on table public.analitice_zilnic to service_role;
+grant REFERENCES on table public.analitice_zilnic to service_role;
+grant SELECT on table public.analitice_zilnic to service_role;
+grant TRIGGER on table public.analitice_zilnic to service_role;
+grant TRUNCATE on table public.analitice_zilnic to service_role;
+grant UPDATE on table public.analitice_zilnic to service_role;
+grant DELETE on table public.analitice_zilnic_sursa to anon;
+grant INSERT on table public.analitice_zilnic_sursa to anon;
+grant REFERENCES on table public.analitice_zilnic_sursa to anon;
+grant SELECT on table public.analitice_zilnic_sursa to anon;
+grant TRIGGER on table public.analitice_zilnic_sursa to anon;
+grant TRUNCATE on table public.analitice_zilnic_sursa to anon;
+grant UPDATE on table public.analitice_zilnic_sursa to anon;
+grant DELETE on table public.analitice_zilnic_sursa to authenticated;
+grant INSERT on table public.analitice_zilnic_sursa to authenticated;
+grant REFERENCES on table public.analitice_zilnic_sursa to authenticated;
+grant SELECT on table public.analitice_zilnic_sursa to authenticated;
+grant TRIGGER on table public.analitice_zilnic_sursa to authenticated;
+grant TRUNCATE on table public.analitice_zilnic_sursa to authenticated;
+grant UPDATE on table public.analitice_zilnic_sursa to authenticated;
+grant DELETE on table public.analitice_zilnic_sursa to service_role;
+grant INSERT on table public.analitice_zilnic_sursa to service_role;
+grant REFERENCES on table public.analitice_zilnic_sursa to service_role;
+grant SELECT on table public.analitice_zilnic_sursa to service_role;
+grant TRIGGER on table public.analitice_zilnic_sursa to service_role;
+grant TRUNCATE on table public.analitice_zilnic_sursa to service_role;
+grant UPDATE on table public.analitice_zilnic_sursa to service_role;
 grant DELETE on table public.announcements to anon;
 grant INSERT on table public.announcements to anon;
 grant REFERENCES on table public.announcements to anon;
@@ -11342,6 +12113,7 @@ grant execute on function public.aboutyou_salveaza_variante(p_business_id uuid, 
 grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.agregeaza_analitice(p_zile integer) to service_role;
 grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
+grant execute on function public.analitice_sarea_zilei() to service_role;
 grant execute on function public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text, p_business_id uuid, p_elibereaza_stoc boolean) to service_role;
 grant execute on function public.blocheaza_domeniu_platforma() to anon;
 grant execute on function public.blocheaza_domeniu_platforma() to authenticated;
@@ -11379,6 +12151,10 @@ grant execute on function public.blog_sterge_taxonomia(p_fel text, p_id uuid) to
 grant execute on function public.blog_subiectele_autorului(p_autor uuid) to anon;
 grant execute on function public.blog_subiectele_autorului(p_autor uuid) to authenticated;
 grant execute on function public.blog_subiectele_autorului(p_autor uuid) to service_role;
+grant execute on function public.canale_vanzare(p_business uuid) to authenticated;
+grant execute on function public.canale_vanzare(p_business uuid) to service_role;
+grant execute on function public.carduri_secundare(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to authenticated;
+grant execute on function public.carduri_secundare(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to service_role;
 grant execute on function public.catalog_aplica_proiectii(p_randuri jsonb) to service_role;
 grant execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) to service_role;
 grant execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) to anon;
@@ -11397,6 +12173,10 @@ grant execute on function public.catalog_verifica(p_esantion integer) to service
 grant execute on function public.categorii_ascunse(p_business uuid) to service_role;
 grant execute on function public.ceasul_bazei() to service_role;
 grant execute on function public.claim_discount_use(p_discount_id uuid) to service_role;
+grant execute on function public.combinatie_aprinsa(p_combinatie jsonb) to authenticated;
+grant execute on function public.combinatie_aprinsa(p_combinatie jsonb) to service_role;
+grant execute on function public.comenzi_pe_judet(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to authenticated;
+grant execute on function public.comenzi_pe_judet(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to service_role;
 grant execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer, p_cost integer) to service_role;
 grant execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) to service_role;
@@ -11432,6 +12212,8 @@ grant execute on function public.email_marketing_pune_la_coada() to service_role
 grant execute on function public.email_marketing_revendica(limita integer) to service_role;
 grant execute on function public.fara_diacritice(t text) to authenticated;
 grant execute on function public.fara_diacritice(t text) to service_role;
+grant execute on function public.fereastra_vanzari(p_fel text, p_de_la date, p_pana_la date) to authenticated;
+grant execute on function public.fereastra_vanzari(p_fel text, p_de_la date, p_pana_la date) to service_role;
 grant execute on function public.genereaza_schema_baseline() to service_role;
 grant execute on function public.handle_new_user() to service_role;
 grant execute on function public.handle_support_message_insert() to service_role;
@@ -11459,6 +12241,8 @@ grant execute on function public.normalize_phone(raw text) to anon;
 grant execute on function public.normalize_phone(raw text) to authenticated;
 grant execute on function public.normalize_phone(raw text) to service_role;
 grant execute on function public.numar_produse_si_comenzi() to service_role;
+grant execute on function public.numar_produse_sub_prag(p_business uuid, p_prag integer) to authenticated;
+grant execute on function public.numar_produse_sub_prag(p_business uuid, p_prag integer) to service_role;
 grant execute on function public.numara_ofertele_emag(p_business_id uuid) to service_role;
 grant execute on function public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb) to service_role;
 grant execute on function public.olx_seteaza_categoria(p_business_id uuid, p_categorie text, p_intrare jsonb) to service_role;
@@ -11480,10 +12264,16 @@ grant execute on function public.orders_status_counts(bid uuid) to service_role;
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to anon;
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to authenticated;
 grant execute on function public.orders_venit_zilnic(bid uuid, p_zile integer, p_deplasare integer) to service_role;
+grant execute on function public.palnia_panou(p_business uuid, p_fel text, p_de_la date, p_pana_la date) to authenticated;
+grant execute on function public.palnia_panou(p_business uuid, p_fel text, p_de_la date, p_pana_la date) to service_role;
+grant execute on function public.panou_carduri(p_business uuid) to authenticated;
+grant execute on function public.panou_carduri(p_business uuid) to service_role;
 grant execute on function public.pepita_stampileaza_listarea() to service_role;
 grant execute on function public.posta_aloca_cod(p_business_id uuid) to service_role;
 grant execute on function public.proba_stoc() to service_role;
 grant execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) to service_role;
+grant execute on function public.produse_sub_prag(p_business uuid, p_prag integer) to authenticated;
+grant execute on function public.produse_sub_prag(p_business uuid, p_prag integer) to service_role;
 grant execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) to service_role;
 grant execute on function public.reclaim_order_discount(p_order_id uuid) to service_role;
 grant execute on function public.redactorii_blogului() to service_role;
@@ -11514,6 +12304,8 @@ grant execute on function public.site_analytics_breakdown_zile(bid uuid, p_zile 
 grant execute on function public.site_analytics_breakdown_zile(bid uuid, p_zile integer) to authenticated;
 grant execute on function public.site_analytics_breakdown_zile(bid uuid, p_zile integer) to service_role;
 grant execute on function public.sterge_comanda(p_order_id uuid, p_business_id uuid) to service_role;
+grant execute on function public.stoc_combinatie(p_combinatie jsonb) to authenticated;
+grant execute on function public.stoc_combinatie(p_combinatie jsonb) to service_role;
 grant execute on function public.sync_product_stock_from_variants() to anon;
 grant execute on function public.sync_product_stock_from_variants() to authenticated;
 grant execute on function public.sync_product_stock_from_variants() to service_role;
@@ -11523,6 +12315,10 @@ grant execute on function public.touch_customers() to service_role;
 grant execute on function public.touch_stock_feed_sources() to anon;
 grant execute on function public.touch_stock_feed_sources() to authenticated;
 grant execute on function public.touch_stock_feed_sources() to service_role;
+grant execute on function public.trafic_panou(p_business uuid, p_fel text, p_de_la date, p_pana_la date) to authenticated;
+grant execute on function public.trafic_panou(p_business uuid, p_fel text, p_de_la date, p_pana_la date) to service_role;
+grant execute on function public.trafic_pe_sursa(p_business uuid, p_fel text, p_de_la date, p_pana_la date) to authenticated;
+grant execute on function public.trafic_pe_sursa(p_business uuid, p_fel text, p_de_la date, p_pana_la date) to service_role;
 grant execute on function public.trendyol_comenzi_de_facturat(p_business_id uuid, p_limita integer, p_de_la integer) to service_role;
 grant execute on function public.trendyol_magazine_cu_loturi_deschise() to service_role;
 grant execute on function public.trendyol_magazine_de_reconciliat() to service_role;
@@ -11535,8 +12331,8 @@ grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
 grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(regdictionary, text) to anon;
-grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(regdictionary, text) to authenticated;
+grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(text) to service_role;
 grant execute on function public.unaccent(regdictionary, text) to service_role;
 grant execute on function public.unaccent_init(internal) to anon;
@@ -11555,6 +12351,10 @@ grant execute on function public.update_tool_avg_rating() to service_role;
 grant execute on function public.update_updated_at_column() to anon;
 grant execute on function public.update_updated_at_column() to authenticated;
 grant execute on function public.update_updated_at_column() to service_role;
+grant execute on function public.vanzari_detaliu(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to authenticated;
+grant execute on function public.vanzari_detaliu(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to service_role;
+grant execute on function public.vanzari_panou(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to authenticated;
+grant execute on function public.vanzari_panou(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to service_role;
 grant execute on function public.vezi_ritm_extern(p_cheie text, p_fereastra_ms integer) to service_role;
 
 -- ── REVOCARI DE LA PUBLIC ─────────────────────────────────
@@ -11581,6 +12381,7 @@ revoke execute on function public.aboutyou_salveaza_variante(p_business_id uuid,
 revoke execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.agregeaza_analitice(p_zile integer) from public;
 revoke execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
+revoke execute on function public.analitice_sarea_zilei() from public;
 revoke execute on function public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text, p_business_id uuid, p_elibereaza_stoc boolean) from public;
 revoke execute on function public.blocheaza_escaladare_users_profile() from public;
 revoke execute on function public.blog_actualizeaza_taxonomia(p_fel text, p_id uuid, p_rand jsonb) from public;
@@ -11601,6 +12402,8 @@ revoke execute on function public.blog_salveaza_articol(p_id uuid, p_rand jsonb,
 revoke execute on function public.blog_sterge_articol(p_id uuid) from public;
 revoke execute on function public.blog_sterge_eticheta(p_id uuid) from public;
 revoke execute on function public.blog_sterge_taxonomia(p_fel text, p_id uuid) from public;
+revoke execute on function public.canale_vanzare(p_business uuid) from public;
+revoke execute on function public.carduri_secundare(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) from public;
 revoke execute on function public.catalog_aplica_proiectii(p_randuri jsonb) from public;
 revoke execute on function public.catalog_candidati(p_business uuid, p_cuvinte text[], p_filtre jsonb) from public;
 revoke execute on function public.catalog_cauta(p_business uuid, p_cuvinte text[], p_filtre jsonb, p_plafon integer) from public;
@@ -11613,6 +12416,8 @@ revoke execute on function public.catalog_verifica(p_esantion integer) from publ
 revoke execute on function public.categorii_ascunse(p_business uuid) from public;
 revoke execute on function public.ceasul_bazei() from public;
 revoke execute on function public.claim_discount_use(p_discount_id uuid) from public;
+revoke execute on function public.combinatie_aprinsa(p_combinatie jsonb) from public;
+revoke execute on function public.comenzi_pe_judet(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) from public;
 revoke execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer, p_cost integer) from public;
 revoke execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) from public;
@@ -11638,6 +12443,7 @@ revoke execute on function public.emag_stinge_propagarea(p_business_id uuid, p_c
 revoke execute on function public.email_marketing_pune_la_coada() from public;
 revoke execute on function public.email_marketing_revendica(limita integer) from public;
 revoke execute on function public.fara_diacritice(t text) from public;
+revoke execute on function public.fereastra_vanzari(p_fel text, p_de_la date, p_pana_la date) from public;
 revoke execute on function public.genereaza_schema_baseline() from public;
 revoke execute on function public.handle_new_user() from public;
 revoke execute on function public.handle_support_message_insert() from public;
@@ -11653,13 +12459,17 @@ revoke execute on function public.marcheaza_operatie_anulata(p_business_id uuid,
 revoke execute on function public.mark_payout_complete(p_user_id uuid, p_amount integer) from public;
 revoke execute on function public.next_order_number(p_business_id uuid) from public;
 revoke execute on function public.numar_produse_si_comenzi() from public;
+revoke execute on function public.numar_produse_sub_prag(p_business uuid, p_prag integer) from public;
 revoke execute on function public.numara_ofertele_emag(p_business_id uuid) from public;
 revoke execute on function public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb) from public;
 revoke execute on function public.olx_seteaza_categoria(p_business_id uuid, p_categorie text, p_intrare jsonb) from public;
+revoke execute on function public.palnia_panou(p_business uuid, p_fel text, p_de_la date, p_pana_la date) from public;
+revoke execute on function public.panou_carduri(p_business uuid) from public;
 revoke execute on function public.pepita_stampileaza_listarea() from public;
 revoke execute on function public.posta_aloca_cod(p_business_id uuid) from public;
 revoke execute on function public.proba_stoc() from public;
 revoke execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) from public;
+revoke execute on function public.produse_sub_prag(p_business uuid, p_prag integer) from public;
 revoke execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) from public;
 revoke execute on function public.reclaim_order_discount(p_order_id uuid) from public;
 revoke execute on function public.redactorii_blogului() from public;
@@ -11678,6 +12488,9 @@ revoke execute on function public.scade_din_rezervat(p_rez jsonb, p_produse_minu
 revoke execute on function public.scade_variante_raportat(p_items jsonb) from public;
 revoke execute on function public.scrie_variante_daca_neschimbat(p_business uuid, p_product uuid, p_asteptat jsonb, p_nou jsonb) from public;
 revoke execute on function public.sterge_comanda(p_order_id uuid, p_business_id uuid) from public;
+revoke execute on function public.stoc_combinatie(p_combinatie jsonb) from public;
+revoke execute on function public.trafic_panou(p_business uuid, p_fel text, p_de_la date, p_pana_la date) from public;
+revoke execute on function public.trafic_pe_sursa(p_business uuid, p_fel text, p_de_la date, p_pana_la date) from public;
 revoke execute on function public.trendyol_comenzi_de_facturat(p_business_id uuid, p_limita integer, p_de_la integer) from public;
 revoke execute on function public.trendyol_magazine_cu_loturi_deschise() from public;
 revoke execute on function public.trendyol_magazine_de_reconciliat() from public;
@@ -11689,6 +12502,8 @@ revoke execute on function public.trg_categorii_rezumat_murdar() from public;
 revoke execute on function public.trg_generatia_cozii() from public;
 revoke execute on function public.trg_repretuieste_pachetele() from public;
 revoke execute on function public.update_support_ticket_updated_at() from public;
+revoke execute on function public.vanzari_detaliu(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) from public;
+revoke execute on function public.vanzari_panou(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) from public;
 revoke execute on function public.vezi_ritm_extern(p_cheie text, p_fereastra_ms integer) from public;
 
 notify pgrst, 'reload schema';

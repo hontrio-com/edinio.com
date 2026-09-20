@@ -195,11 +195,11 @@ export const DESIGN_SI_PAGINI: CategorieAjutor = {
             "Coboară la „Culoare principală”.",
             "Apasă unul dintre cele opt cercuri colorate.",
             "Sau apasă pătratul de culoare și alege orice nuanță din selectorul sistemului.",
-            "Sau scrie codul hex în câmpul alăturat, de exemplu #1AB554.",
+            "Sau scrie codul hex în câmpul alăturat, de exemplu #07c527.",
             "Apasă „Salvează”.",
           ],
           detalii: [
-            { titlu: "Cele opt presetări", text: "Culorile propuse sunt #1AB554, #1E3A5F, #8B1A1A, #374151, #D97706, #6D28D9, #E11D48 și #0891B2." },
+            { titlu: "Cele opt presetări", text: "Culorile propuse sunt #07c527, #1E3A5F, #8B1A1A, #374151, #D97706, #6D28D9, #E11D48 și #0891B2." },
             { titlu: "Cum se comportă câmpul hex", text: "Câmpul acceptă maximum 7 caractere și aplică valoarea doar dacă ai scris un cod complet de forma #RRGGBB. Un cod parțial nu schimbă nimic până nu îl termini." },
             { titlu: "Unde se mai folosește culoarea", text: "Culoarea principală este și fundalul propus pentru bannerul de anunț din „Pagina produs” și este folosită în miniaturile care arată efectul butonului „Comandă acum”." },
           ],

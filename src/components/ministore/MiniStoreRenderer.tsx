@@ -585,7 +585,7 @@ function StoreContent({ business, products, storeSettings, basePath: basePathPro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const color = business.primary_color ?? "#1AB554";
+  const color = business.primary_color ?? "#07c527";
   const shippingCost = Number(storeSettings?.default_shipping_cost ?? 20);
   // Citit cu `!= null`, ca pe server: un prag salvat ca 0 inseamna „gratuit de la
   // zero lei", nu „fara prag". Vezi `prag-transport-gratuit.ts`.

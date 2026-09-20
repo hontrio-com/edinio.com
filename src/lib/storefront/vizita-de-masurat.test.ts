@@ -63,11 +63,18 @@ test("⚠ AMBELE locuri care scriu vizite trec prin aceeasi regula, cu user-agen
    */
   for (const cale of ["src/lib/storefront/catalog/pagina-magazin.tsx", "src/app/(public)/[slug]/page.tsx"]) {
     const c = cod(cale);
-    assert.equal([...c.matchAll(/\.from\("site_analytics"\)\.insert\(/g)].length, 1, `${cale}: un singur loc scrie vizita`);
+    /*
+     * ⚠ SCRIEREA S-A MUTAT (20.09.2026) in `@/lib/analitice/scrie`, fiindca cele doua
+     * locuri repetau acelasi `insert` cu aceleasi comentarii, iar campurile noi (sesiune,
+     * vizitator) ar fi trebuit adaugate in amandoua. Proba intreaba acum acelasi lucru pe
+     * forma noua: fiecare pagina trece prin regula comuna si cheama scriitorul comun.
+     */
+    assert.equal([...c.matchAll(/scrieEvenimentAnalitic\(/g)].length, 1, `${cale}: un singur loc scrie vizita`);
+    assert.doesNotMatch(c, /\.from\("site_analytics"\)/, `${cale}: scrie de-a dreptul in tabela, pe langa scriitorul comun`);
     const unde = c.indexOf("if (seMasoaraVizita(");
     assert.ok(unde >= 0, `${cale}: vizita se scrie fara regula comuna`);
     assert.match(c.slice(unde), /^if \(seMasoaraVizita\(\{ esteProprietar: isOwner, host, userAgent: ua \}\)\)/, `${cale}: regula trebuie sa primeasca proprietarul, gazda si user-agentul`);
-    assert.match(corpulLui(c, unde), /\.from\("site_analytics"\)\.insert\(/, `${cale}: scrierea e in afara regulii`);
+    assert.match(corpulLui(c, unde), /scrieEvenimentAnalitic\(/, `${cale}: scrierea e in afara regulii`);
     assert.match(c, /const ua = \w+\.get\("user-agent"\) \?\? "";/, `${cale}: user-agentul trebuie sa fie al cererii`);
     assert.doesNotMatch(c, /isNonProductionHost\(/, `${cale}: o conditie scrisa de mana s-ar desparti de regula`);
   }

@@ -11,7 +11,7 @@ const esc = escapeHtml;
  */
 export function storeEmailShell(branding: EmailBranding, content: string, opts?: { editable?: boolean }): string {
   const name = esc(branding.storeName);
-  const color = /^#[0-9a-fA-F]{3,8}$/.test(branding.color) ? branding.color : "#1AB554";
+  const color = /^#[0-9a-fA-F]{3,8}$/.test(branding.color) ? branding.color : "#07c527";
   const url = esc(branding.storeUrl);
   const host = esc(branding.storeUrl.replace(/^https?:\/\//, ""));
   const editable = !!opts?.editable;

@@ -97,7 +97,7 @@ export function BundlesClient({ businessId, bundles, initialPage = 1 }: { busine
       </div>
 
       {bundles.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card py-16 text-center px-4">
+        <div className="rounded-2xl ring-1 ring-foreground/10 border-dashed border-border bg-card py-16 text-center px-4">
           <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
             <Layers className="h-6 w-6" />
           </div>
@@ -136,12 +136,12 @@ export function BundlesClient({ businessId, bundles, initialPage = 1 }: { busine
           </div>
 
           {filtered.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border bg-card py-12 text-center px-4">
+            <div className="rounded-2xl ring-1 ring-foreground/10 border-dashed border-border bg-card py-12 text-center px-4">
               <p className="text-sm text-muted-foreground">Niciun pachet pentru filtrele selectate.</p>
             </div>
           ) : (
             <>
-              <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
+              <div className="rounded-2xl ring-1 ring-foreground/10 bg-card divide-y divide-border overflow-hidden">
                 {pageItems.map((b) => (
                   <div key={b.id} className="flex items-center gap-4 px-4 py-3">
                     <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-muted border border-border shrink-0">

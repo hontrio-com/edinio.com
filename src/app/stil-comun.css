@@ -3,41 +3,47 @@
 
 /* ─── ⚠ CELE DOUA VERZI ALE SITE-ULUI, SI CARE PE CE ────────────────────────
 
-   Auditul de design din 23.08 a gasit PATRU verzi in folosinta, dintre care doi
-   faceau exact acelasi lucru:
+   ⚠ REBRANDING 20.09.2026: verdele marcii e acum #07c527. Regula de mai jos NU
+   s-a schimbat, doar nuanta; si tocmai de-aia e nevoie in continuare de DOI
+   verzi, nu de unul.
 
-     --primary        #008236   4,95:1 pe alb
-     #12874A          scris de mana in sase fisiere, 4,57:1 pe alb
-     --color-brand    #1AB554   2,70:1 pe alb
-     oklch(0.572 …)   #0C9043   varianta de tema inchisa a lui --primary
+   Auditul de design din 23.08 gasise PATRU verzi in folosinta, dintre care doi
+   faceau exact acelasi lucru. Din el a iesit impartirea pe ROLURI, care se
+   pastreaza:
 
-   #12874A aparuse fiindca `--color-brand` e prea deschis pentru text, si e o
-   observatie corecta: 2,70:1 e sub prag in ambele sensuri. Dar `--primary` era
-   deja acolo, si e chiar mai citibil. Doua verzi inchise la 0,4 diferenta de
-   contrast, pe aceeasi pagina, nu sunt o decizie — sunt doua persoane care au
-   rezolvat aceeasi problema in doua saptamani diferite.
-
-   Deci raman DOI verzi, cu roluri care nu se ating:
-
-     --primary  #008236  TOT CE SE CITESTE. Umplerea butoanelor, textul verde,
+     --primary  #008215  TOT CE SE CITESTE. Umplerea butoanelor, textul verde,
                          bifele, cifrele scoase in evidenta, chenarele care
-                         inseamna ceva. Are 4,95:1 pe alb si suporta text alb pe
+                         inseamna ceva. Are 5,00:1 pe alb si suporta text alb pe
                          el, deci merge in amandoua sensurile.
 
-     --color-brand #1AB554  NUMAI LUMINA. Halouri, fascicule, umpleri din
+     --color-brand #07c527  NUMAI LUMINA. Halouri, fascicule, umpleri din
                          ilustratii, fundaluri stinse. ⚠ NU poarta niciodata text
-                         alb pe el si nu e niciodata folosit CA text: 2,70:1
+                         alb pe el si nu e niciodata folosit CA text: 2,33:1
                          inseamna ca la 10px, cat avea eticheta din panoul de
                          rezultate Google, cuvintele aproape se pierd.
+
+   ⚠ DE CE NU E #07c527 PESTE TOT, desi el e culoarea marcii: masurat, are
+   2,33:1 pe alb, adica un buton umplut cu el si scris alb pe el sta sub pragul
+   de 4,5:1. Verdele marcii e mai DESCHIS decat cel vechi (2,33 fata de 2,70),
+   deci problema s-a adancit, nu s-a rezolvat.
+
+   ⚠ #008215 NU E O A DOUA CULOARE, ci acelasi verde inchis: aceeasi nuanta
+   (oklch H=143,725, exact a lui #07c527), doar coborata in luminozitate pana
+   trece pragul. Si e coborata EXACT cat era verdele vechi (L=0,528 fata de
+   0,530, 5,00:1 fata de 4,95:1), ca judecatile de lizibilitate facute pe tot
+   panoul sa ramana valabile fara sa fie refacute.
+
+   Toata scara (brand-light, -mid, -dark) iese la fel: aceeasi nuanta, alta
+   luminozitate, cromatica taiata pana intra in sRGB.
 
    Cine adauga verde alege un rol, nu o nuanta. */
 
 :root {
   /* Brand */
-  --color-brand: #1AB554;
-  --color-brand-light: #E8F9EE;
-  --color-brand-mid: #4fc87a;
-  --color-brand-dark: #158f43;
+  --color-brand: #07c527;
+  --color-brand-light: #ddffdc;
+  --color-brand-mid: #4dcb50;
+  --color-brand-dark: #009119;
 
   /* Backgrounds */
   --color-background: #F9FAFB;
@@ -58,44 +64,51 @@
   --color-destructive-light: #FEF2F2;
   --color-warning: #F59E0B;
   --color-warning-light: #FFFBEB;
-  --color-success: #1AB554;
-  --color-success-light: #E8F9EE;
+  --color-success: #07c527;
+  --color-success-light: #ddffdc;
   --color-info: #3B82F6;
   --color-info-light: #EFF6FF;
 
   /* shadcn compat */
+  /*
+    ⚠ ASTA E CULOAREA VITRINELOR, NU A PANOULUI. Masurat pe productie
+    (`edinio.com/itp-blk`, 20.09.2026): fundalul unui magazin E chiar `--background`,
+    sectiunile lui fiind transparente. Deci o schimbare aici se vede, instant, pe
+    magazinele celor peste 130 de comercianti. Panoul isi pune albul lui in
+    `.zona-aplicatie`, mai jos.
+  */
   --background: oklch(0.984 0.003 247.858);
   --foreground: oklch(0.141 0.005 285.823);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.141 0.005 285.823);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.527 0.154 150.069);
+  --primary: oklch(0.528 0.173 143.725);
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.141 0.005 285.823);
   --muted: oklch(0.967 0.001 286.375);
   --muted-foreground: oklch(0.552 0.013 285.938);
-  --accent: oklch(0.945 0.025 150.069);
+  --accent: oklch(0.945 0.025 143.725);
   --accent-foreground: oklch(0.141 0.005 285.823);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.919 0.006 286.029);
   --input: oklch(0.919 0.006 286.029);
-  --ring: oklch(0.527 0.154 150.069);
-  --chart-1: oklch(0.527 0.154 150.069);
-  --chart-2: oklch(0.648 0.140 150.069);
-  --chart-3: oklch(0.748 0.110 150.069);
-  --chart-4: oklch(0.848 0.070 150.069);
-  --chart-5: oklch(0.928 0.040 150.069);
+  --ring: oklch(0.528 0.173 143.725);
+  --chart-1: oklch(0.528 0.173 143.725);
+  --chart-2: oklch(0.648 0.140 143.725);
+  --chart-3: oklch(0.748 0.110 143.725);
+  --chart-4: oklch(0.848 0.070 143.725);
+  --chart-5: oklch(0.928 0.040 143.725);
   --radius: 0.625rem;
   --sidebar: oklch(0.984 0.003 247.858);
   --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.527 0.154 150.069);
+  --sidebar-primary: oklch(0.528 0.173 143.725);
   --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.945 0.025 150.069);
+  --sidebar-accent: oklch(0.945 0.025 143.725);
   --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
   --sidebar-border: oklch(0.919 0.006 286.029);
-  --sidebar-ring: oklch(0.527 0.154 150.069);
+  --sidebar-ring: oklch(0.528 0.173 143.725);
 
   /* Typography scale */
   --text-xs: 0.75rem;
@@ -1457,7 +1470,7 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.2 0.005 285.823);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.572 0.154 150.069);
+  --primary: oklch(0.573 0.187 143.725);
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.269 0.005 285.823);
   --secondary-foreground: oklch(0.985 0 0);
@@ -1468,15 +1481,15 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.572 0.154 150.069);
+  --ring: oklch(0.573 0.187 143.725);
   --sidebar: oklch(0.2 0.005 285.823);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.572 0.154 150.069);
+  --sidebar-primary: oklch(0.573 0.187 143.725);
   --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-accent: oklch(0.269 0.005 285.823);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.572 0.154 150.069);
+  --sidebar-ring: oklch(0.573 0.187 143.725);
 }
 
 /* ─── Tailwind theme bridge ──────────────────────────────────────────────── */
@@ -1498,7 +1511,7 @@
      text-success` — the same pattern shadcn already uses for `destructive`.
      This replaces the hardcoded green/amber/blue palette spread across the
      dashboard (bg-green-50, text-amber-700, bg-blue-100, …). */
-  --color-success: #0F8A43;
+  --color-success: #008215;
   --color-success-foreground: #FFFFFF;
   --color-warning: #B45309;
   --color-warning-foreground: #FFFFFF;
@@ -1523,9 +1536,24 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  /*
+    ⚠ DE CE PRIN `--font-app`, cu rezerva (20.09.2026).
+
+    In Tailwind v4, `@theme inline` INLOCUIESTE valoarea in fiecare utilitar:
+    `.font-sans` iese scris `font-family: var(--font-geist-sans)`, nu
+    `var(--font-sans)`. Deci rescrierea lui `--font-sans` pe un invelis NU
+    schimba nimic pentru `font-sans`, `font-heading` si regula de titluri:
+    masurat pe 20.09, titlurile ramaneau pe Geist cat timp doar `--font-sans`
+    era rescris, desi textul obisnuit trecuse pe Inter.
+
+    Cu rezerva de mai jos, utilitarele ies `var(--font-app, var(--font-geist-sans))`,
+    deci raspund la `--font-app` oriunde in arbore. Implicit, `--font-app` nu
+    exista, deci totul ramane pe Geist: vitrinele comerciantilor nu se schimba.
+    Panoul si adminul il declara prin clasa `.font-aplicatie`.
+  */
+  --font-sans: var(--font-app, var(--font-geist-sans));
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  --font-heading: var(--font-app, var(--font-geist-sans));
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -1562,6 +1590,28 @@
 }
 
 /* ─── Base styles ────────────────────────────────────────────────────────── */
+
+/* ─── Zona aplicatiei: panoul si adminul ─────────────────────────────────── */
+/*
+  Tot ce e DOAR al panoului sta aici, nu in `:root`, fiindca `:root` e impartit cu
+  vitrinele celor peste 130 de comercianti:
+    - fontul: Inter in loc de Geist (vezi `src/app/fonturi.ts`);
+    - suprafetele: alb curat in loc de gri.
+
+  Variabilele se mostenesc in jos, iar utilitarele Tailwind (`bg-background`,
+  `bg-sidebar`, `font-sans`) sunt scrise ca `var(--…)`, deci le prind. Clasa se
+  pune pe invelisul din `(dashboard)/layout.tsx` si din `(admin)/layout.tsx`.
+
+  ⚠ Pe fundal alb, cardurile albe nu se mai vad prin culoare, ci prin BORDURA.
+  Cine adauga un card ii pune `border border-border`.
+*/
+.zona-aplicatie {
+  --font-app: var(--font-inter);
+  --background: oklch(1 0 0);
+  --sidebar: oklch(1 0 0);
+  font-family: var(--font-app), system-ui, sans-serif;
+  background-color: var(--background);
+}
 
 @layer base {
   * {

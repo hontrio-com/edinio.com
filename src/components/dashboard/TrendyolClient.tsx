@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useOptimistic, useState, useTransition } from "react";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckCircle, AlertTriangle, Info } from "lucide-react";
@@ -110,7 +111,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
 
   if (!status.globallyEnabled) {
     return (
-      <div className="rounded-xl border border-border bg-surface p-5 text-sm text-muted-foreground">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5 text-sm text-muted-foreground">
         Integrarea Trendyol este momentan indisponibilă. Revino în curând.
       </div>
     );
@@ -290,7 +291,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
 
       {!status.connected ? (
         /* ── Connect form ── */
-        <div className="rounded-xl border border-border bg-surface p-5">
+        <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
           <h2 className="text-base font-semibold text-foreground mb-1">Conectează contul Trendyol</h2>
           <p className="text-sm text-muted-foreground mb-4">
             În panoul Trendyol mergi la <span className="font-medium text-foreground">Informații cont &gt; Detalii integrare</span> (vizibil
@@ -352,7 +353,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
       ) : (
         /* ── Connected ── */
         <>
-          <div className="rounded-xl border border-border bg-surface p-5">
+          <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
@@ -409,7 +410,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
           </div>
 
           {/* Settings */}
-          <div className="rounded-xl border border-border bg-surface p-5">
+          <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
             <h2 className="text-base font-semibold text-foreground mb-4">Setări</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
@@ -635,7 +636,7 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
           </div>
 
           {/* Comenzi & webhook */}
-          <div className="rounded-xl border border-border bg-surface p-5">
+          <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold text-foreground mb-1">Comenzi Trendyol</h2>
@@ -647,9 +648,9 @@ export function TrendyolClient({ businessId, status }: { businessId: string; sta
                   {status.ordersSyncedAt ? ` · ultima sincronizare ${new Date(status.ordersSyncedAt).toLocaleString("ro-RO")}` : ""}
                 </p>
               </div>
-              <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded flex-shrink-0 ${webhookActiv ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+              <EtichetaStare ton={webhookActiv ? "bun" : "neutru"} marime="mic" className="flex-shrink-0">
                 {webhookActiv ? "Webhook activ" : "Webhook inactiv"}
-              </span>
+              </EtichetaStare>
             </div>
             <div className="mt-3">
               {webhookActiv ? (

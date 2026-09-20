@@ -83,7 +83,7 @@ export default async function CosPage({ params, searchParams }: Props) {
 
   const pageContent = (storeSettings?.page_content ?? {}) as StorePageContent;
   const resolved = resolveDesign(storeSettings?.storefront_design, {
-    primaryColor: business.primary_color ?? "#1AB554",
+    primaryColor: business.primary_color ?? "#07c527",
     pageContent: pageContent as Record<string, unknown>,
     features: (business.features as Record<string, unknown>) ?? {},
     coverUrl: business.cover_url,
@@ -140,7 +140,7 @@ export default async function CosPage({ params, searchParams }: Props) {
           <CartPageClient
             variant={resolved.design.commerce.cartDrawer.variant}
             settings={resolved.design.commerce.cartDrawer.settings}
-            color={business.primary_color ?? "#1AB554"}
+            color={business.primary_color ?? "#07c527"}
             basePath={basePath}
             businessId={business.id}
             shippingCost={Number(storeSettings?.default_shipping_cost ?? 20)}

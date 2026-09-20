@@ -35,7 +35,7 @@ export function EmagFulfillmentPanel({
 
   return (
     <>
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="rounded-xl ring-1 ring-foreground/10 bg-card overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
           <Truck className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold text-foreground">Expediere prin eMAG</span>

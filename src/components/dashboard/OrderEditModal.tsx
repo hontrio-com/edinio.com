@@ -141,7 +141,7 @@ const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2
 const pasCls = "w-9 h-9 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
 
 /** Culoarea de brand, ceruta de `VariantPicker` ca hex (isi compune singur alfa). */
-const CULOARE_BRAND = "#1AB554";
+const CULOARE_BRAND = "#07c527";
 
 const round2 = (n: number): number => Math.round((Number(n) || 0) * 100) / 100;
 

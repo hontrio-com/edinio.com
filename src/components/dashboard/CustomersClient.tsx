@@ -13,6 +13,7 @@ import type { Customer, CustomerOrder, CustomersSummary } from "@/lib/customers"
 import { getCustomerOrders } from "@/lib/actions/customer.actions";
 import { CUSTOMERS_PAGE_SIZE } from "@/lib/orders/pagination";
 import { orderStatus } from "@/lib/orders/status";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { CustomerImportModal } from "./CustomerImportModal";
 
 type SortKey = "recent" | "spent" | "orders" | "name";
@@ -28,7 +29,7 @@ function StatCard({ icon: Icon, label, value, tint }: {
   icon: typeof Users; label: string; value: string; tint: string;
 }) {
   return (
-    <div className="bg-surface border border-border rounded-xl p-4">
+    <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-4">
       <div className="flex items-center gap-2 mb-1.5">
         <span className={cn("w-7 h-7 rounded-lg flex items-center justify-center", tint)}>
           <Icon className="h-4 w-4" />
@@ -110,7 +111,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         </div>
         <button
           onClick={() => setImporting(true)}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-xl border border-border bg-surface text-foreground hover:bg-muted transition-colors flex-shrink-0"
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-xl ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors flex-shrink-0"
         >
           <Upload className="h-4 w-4" /> <span className="hidden sm:inline">Importa clienti</span>
         </button>
@@ -416,8 +417,13 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-foreground truncate">#{o.order_number}</p>
-                          <span className={cn("text-[10px] font-semibold rounded-full px-1.5 py-0.5", st.className)}>{st.label}</span>
+                          {/* ⚠ Fara „#" pus de noi: numarul comenzii il poarta deja
+                              („#1355"), iar al doilea ajungea pe ecran ca „##1355".
+                              Comenzile de marketplace n-au niciun „#" (Trendyol
+                              trimite „7016"), deci nici nu se poate adauga de-a
+                              valma: se scrie asa cum vine. */}
+                          <p className="text-sm font-semibold text-foreground truncate">{o.order_number}</p>
+                          <EtichetaStare ton={st.ton} marime="mic">{st.label}</EtichetaStare>
                         </div>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
                           {formatDate(o.created_at)} · {o.item_count} {o.item_count === 1 ? "produs" : "produse"}

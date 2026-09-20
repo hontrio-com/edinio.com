@@ -64,7 +64,14 @@
   --color-info-light: #EFF6FF;
 
   /* shadcn compat */
-  --background: oklch(0.984 0.003 247.858);
+  /*
+    ⚠ FUNDALUL E ALB CURAT din 20.09.2026 (cerut de proprietar). Inainte era
+    oklch(0.984 0.003 247.858), adica #F8FAFC, un gri rece: pe el, cardurile albe
+    se vedeau singure. Acum card = pagina, deci ce desparte suprafetele e
+    BORDURA (`--border`), nu diferenta de culoare. Cine adauga un card nou ii pune
+    `border border-border`; fara ea nu se mai vede nimic.
+  */
+  --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.141 0.005 285.823);
@@ -88,7 +95,8 @@
   --chart-4: oklch(0.848 0.070 150.069);
   --chart-5: oklch(0.928 0.040 150.069);
   --radius: 0.625rem;
-  --sidebar: oklch(0.984 0.003 247.858);
+  /* Bara laterala: tot alba, ca pagina. O desparte `--sidebar-border`. */
+  --sidebar: oklch(1 0 0);
   --sidebar-foreground: oklch(0.141 0.005 285.823);
   --sidebar-primary: oklch(0.527 0.154 150.069);
   --sidebar-primary-foreground: oklch(1 0 0);
@@ -1562,6 +1570,19 @@
 }
 
 /* ─── Base styles ────────────────────────────────────────────────────────── */
+
+/* ─── Fontul aplicatiei: Inter, numai in panou si in admin ───────────────── */
+/*
+  De ce o clasa si nu `:root`: `--font-sans` din radacina duce la Geist, care e
+  fontul implicit al tuturor vitrinelor (vezi `src/app/fonturi.ts`). Clasa se pune
+  pe invelisul panoului si pe cel al adminului; variabilele se mostenesc in jos,
+  deci si utilitarele `font-sans` de pe elementele dinauntru ajung la Inter.
+*/
+.font-aplicatie {
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-inter);
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
 
 @layer base {
   * {

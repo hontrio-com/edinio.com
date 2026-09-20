@@ -1,4 +1,5 @@
 import "../globals.css";
+import { fontAplicatie } from "../fonturi";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
@@ -123,7 +124,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const showPastDueBanner = isPaidPlan && !suspendedBusiness && !!profile.payment_failed_at;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className={`${fontAplicatie.variable} font-aplicatie min-h-screen bg-background`}>
       <ScrollToTop />
       {esteImpersonare && <ImpersonationBanner />}
       {/*

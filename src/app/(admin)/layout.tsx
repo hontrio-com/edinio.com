@@ -1,4 +1,5 @@
 import "../globals.css";
+import { fontAplicatie } from "../fonturi";
 import { requireBlogEditor } from "@/lib/admin-guard";
 import { NotificariToast } from "@/components/ui/NotificariToast";
 
@@ -16,10 +17,15 @@ export default async function AdminRootLayout({ children }: { children: React.Re
     asta. Largirea lui atunci le-ar fi deschis pe toate deodata.
   */
   await requireBlogEditor();
+  /*
+    `display: contents` (clasa `contents`): invelisul exista doar ca sa poarte
+    fontul si variabila lui, nu ca sa adauge o cutie. Paginile de admin isi tin
+    asezarea lor, neatinsa, iar variabilele CSS se mostenesc oricum in jos.
+  */
   return (
-    <>
+    <div className={`contents ${fontAplicatie.variable} font-aplicatie`}>
       {children}
       <NotificariToast />
-    </>
+    </div>
   );
 }

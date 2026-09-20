@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  Check, ChevronDown, ChevronUp, Rocket, Copy, ArrowRight, PartyPopper, Zap,
+  Check, ChevronDown, ChevronUp, Rocket, Copy, ArrowRight, PartyPopper,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { BandaCont, clasaButonBanda } from "@/components/dashboard/BandaCont";
@@ -111,7 +111,6 @@ export function ActivationChecklist({ steps, plan, planExpiresAt, publicUrl }: P
             : <>Alege un plan ca sa deblochezi tot potentialul magazinului. Anulezi oricand, pretul ramane fix pe viata.</>}
           actiune={
             <Link href="/dashboard/settings#abonament" className={clasaButonBanda("reusita")}>
-              <Zap className="h-3.5 w-3.5" />
               Alege un plan
             </Link>
           }

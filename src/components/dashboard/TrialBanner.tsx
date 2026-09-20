@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, Clock, Zap } from "lucide-react";
+import { AlertTriangle, Clock } from "lucide-react";
 import { BandaCont, clasaButonBanda, type TonBanda } from "@/components/dashboard/BandaCont";
 import { formatDate } from "@/lib/utils/format";
 
@@ -44,7 +44,6 @@ export function TrialBanner({ planExpiresAt, zileRamase }: Props) {
       detaliu={detaliu}
       actiune={
         <Link href="/dashboard/settings#abonament" className={clasaButonBanda(ton)}>
-          <Zap className="h-3.5 w-3.5" />
           Alege un plan
         </Link>
       }

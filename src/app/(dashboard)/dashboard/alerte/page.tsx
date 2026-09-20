@@ -108,8 +108,15 @@ function Proba({ titlu, cand, children }: { titlu: string; cand: string; childre
     <div>
       <p className="text-sm font-medium text-foreground">{titlu}</p>
       <p className="mt-0.5 mb-2 text-xs text-muted-foreground">{cand}</p>
-      {/* Benzile se intind cat tot randul, ca in panou; cutia doar le margineste. */}
-      <div className="overflow-hidden rounded-xl ring-1 ring-foreground/10">{children}</div>
+      {/*
+        ⚠ FARA RAMA IN JURUL LOR.
+
+        Prima forma a paginii punea fiecare exemplu intr-o cutie cu contur, iar
+        banda are deja un chenar JOS (acolo o desparte de bara de sus). Cele doua
+        linii cadeau una peste alta si se vedea o denivelare pe marginea de jos,
+        care nu exista in panou. Aici benzile se arata exact cum sunt.
+      */}
+      <div className="overflow-hidden rounded-xl">{children}</div>
     </div>
   );
 }

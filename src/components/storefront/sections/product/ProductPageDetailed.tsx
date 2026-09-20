@@ -525,8 +525,6 @@ export function ProductPageDetailed({
     setActiveSlide(0);
   }
   const [modalOpen, setModalOpen] = useState(false);
-  /* Cantitatea ceruta din tabelul de reduceri. `undefined` = cea implicita. */
-  const [cantitateDinTabel, setCantitateDinTabel] = useState<number | undefined>(undefined);
   const [cantitate, setCantitate] = useState(1);
   /*
    * Cantitatea coboara singura cand treci pe o marime cu mai putine bucati.
@@ -1008,12 +1006,11 @@ export function ProductPageDetailed({
               {!editare.activ && (
                 <TabelPraguri
                   randuri={randuriDePraguri}
-                  laAlegere={(cantitate) => {
-                    if (!pers.verifica()) return;
-                    setFbtOffer(undefined);
-                    setCantitateDinTabel(cantitate);
-                    setModalOpen(true);
-                  }}
+                  /* ⚠ Se misca selectorul PAGINII, nu se deschide o fereastra
+                     cu alta cantitate. Macheta asta are deja „- 1 +" deasupra
+                     butonului: o cantitate paralela, nevazuta, ar fi facut
+                     pagina sa arate 1 si comanda sa plece cu 10. */
+                  laAlegere={(cantitateCeruta) => setCantitate(cantitateCeruta)}
                 />
               )}
               {/* ⚠ Anularea, la fel de la indemana ca salvarea — vezi nota din `ProductPageClassic`. */}

@@ -173,7 +173,14 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // se vinde exact cum apare pe card (ancora la pret de baza, 1 buc + companion cu
   // discount FBT), fara ca discountul de cantitate sa se cumuleze peste cel de set.
   const tiers = trepte?.pachete;
-  const hasTiers = !!tiers && tiers.length > 0 && !fbtOffer;
+  /*
+    ⚠ MAI MULT DE UN RAND, nu „macar unul". `pachete` poarta mereu bucata
+    simpla (`qty: 1`), deci `length > 0` e adevarat si cand produsul are DOAR
+    praguri de cantitate. Atunci fereastra arata o lista de ales cu o singura
+    optiune, „1 bucata" - iar clientul care voia 10 nu mai avea de unde sa le
+    ceara. Prins pe viu, apasand „+" pe randul de 10 bucati.
+  */
+  const hasTiers = !!tiers && tiers.length > 1 && !fbtOffer;
   const hasCustomization = !!personalizare?.definitie;
   /*
    * ⚠ SE TRIMIT VALORILE BRUTE, nu `{ type, label, value }`.
@@ -214,7 +221,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // `pretPeTrepte`). Cat timp a avut, butonul de treapta scria cantitatea iar
   // bifa citea starea, deci apasarea pe „2 bucati" nu misca nimic pe ecran, iar
   // comanda pleca cu pretul treptei ramase in stare — cea de o bucata.
-  const [quantity, setQuantity] = useState(1);
+  /*
+    ⚠ PORNESTE DE LA CANTITATEA CERUTA, cand vine una. Butonul „+" din tabelul
+    de reduceri deschide fereastra ca sa se comande CHIAR atata; lasata pe 1,
+    apasarea n-ar fi facut nimic vizibil, iar omul ar fi crezut ca butonul e
+    stricat.
+  */
+  const [quantity, setQuantity] = useState(Math.max(1, Math.floor(Number(initialQuantity) || 1)));
   const [form, setForm] = useState({ name: "", phone: "", email: "", county: "", city: "", address: "", country: "RO", postCode: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
 

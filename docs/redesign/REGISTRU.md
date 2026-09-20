@@ -44,9 +44,14 @@ push si aplicarea migratiei, la toti comerciantii.
 | 3b | `migrations/2026-09-20-panou-carduri.sql`, functia | `panou_carduri` (cele patru carduri din cap) | DA | **NU. De aplicat la final.** |
 | 4 | `migrations/2026-09-20-analitice-sesiuni.sql` | sesiuni si vizitatori in `site_analytics` (coloane + indexuri), tabela `analitice_sare` si functia `analitice_sarea_zilei` | DA | **NU. De aplicat la final.** ⚠ Prima migratie care schimba o TABELA, nu doar adauga functii: patru coloane noi, toate optionale. |
 
-⚠ Toate sunt **numai citire**: functii noi si o politica de SELECT, niciun `alter table`, niciun
-rand atins. Nu strica nimic din ce ruleaza acum, dar pana nu sunt aplicate, codul care le cheama
-nu are ce primi.
+⚠ Migratiile 1-3 sunt **numai citire**: functii noi si o politica de SELECT, niciun `alter table`,
+niciun rand atins.
+
+⚠ **Migratia 4 e prima care schimba o tabela**: adauga patru coloane la `site_analytics`, toate
+optionale, plus doua indexuri si o tabela noua (`analitice_sare`). Nu atinge niciun rand existent
+si nu strica scrierile de azi - codul vechi care insereaza fara coloanele noi ramane valid.
+Indexurile se construiesc pe o tabela care creste cu fiecare vizita, deci la aplicare se face pe
+rand, nu in acelasi minut cu push-ul.
 
 ### ⚠⚠ Migratia 3 repara si un defect care e ACUM in productie
 

@@ -159,6 +159,14 @@ Lista e ca sa se stie **ce se uita la** dupa push, nu ca sa inlocuiasca istoricu
 
 ---
 
+## E2. ⚠ DE STERS INAINTE DE UNIRE
+
+- `src/app/(dashboard)/dashboard/alerte-proba/page.tsx` - pagina de proba cu toate
+  alertele de cont puse cap la cap (proba de trial, plata esuata, gratie, suspendare,
+  pasii de pornire). Facuta ca sa se poata vedea toate deodata, fiindca fiecare apare in
+  alta imprejurare. **Nu e legata din niciun meniu, dar e accesibila prin adresa oricui
+  are cont**, deci nu are ce cauta in productie.
+
 ## F. Datorii cunoscute, de hotarat inainte de final
 
 - `RAPORT-POPULARE.json`: 39 de defecte de cod si 61 de lipsuri de ecran gasite la popularea

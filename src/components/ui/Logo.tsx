@@ -2,13 +2,42 @@ import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils/cn";
 
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  SIGLA EDINIO
+  ═══════════════════════════════════════════════════════════════════════════
+
+  ⚠ CUVANTUL E IN IMAGINE, NU IN COD. Pana la rebrandingul din 20.09.2026,
+  „Edinio.com" era text scris aici, cu „.com" colorat verde, si numai semnul era
+  imagine. Sigla noua vine cu literele desenate de el, cu chenarele si spatiile
+  lui; scrise cu fontul paginii, ar fi fost alta sigla, care doar seamana.
+
+  ⚠ DOUA FORME, NU DOUA MARCI:
+    - sigla intreaga (semn + „edinio") pe ecrane, unde e loc;
+    - semnul singur in pictograme, care sunt PATRATE si coboara la 16 px.
+      Cuvantul la 16 px nu e text, e o dunga gri.
+
+  ⚠ SVG, NU PNG: se deseneaza din nou la fiecare marime, deci nu mai e nevoie de
+  un fisier separat pentru ecranele retina si nu mai exista intrebarea „la ce
+  latime il taiem". Sigla intreaga are 4,4 kB, mai putin decat avea PNG-ul de
+  128 px de dinainte. Incarcatorul nostru de imagini intoarce caile locale
+  neatinse, deci fisierul pleaca asa cum e.
+
+  ⚠ ALBUL NU E UN FILTRU, e alt fisier. „e"-ul ramane verde si pe fundal inchis;
+  numai cuvantul trece pe alb. Un `filter: invert()` ar fi facut si semnul alb,
+  adica ar fi stins marca exact acolo unde trebuie sa se vada.
+*/
+
 type LogoSize = "sm" | "md" | "lg";
 
-const SIZES: Record<LogoSize, { icon: number; text: string }> = {
-  sm: { icon: 24, text: "text-base" },
-  md: { icon: 28, text: "text-lg" },
-  lg: { icon: 32, text: "text-xl" },
+/** Inaltimea siglei. Latimea vine din desen (raportul e 4:1). */
+const INALTIMI: Record<LogoSize, number> = {
+  sm: 24,
+  md: 28,
+  lg: 32,
 };
+
+const RAPORT = 3000 / 750.2;
 
 interface LogoProps {
   size?: LogoSize;
@@ -21,21 +50,22 @@ interface LogoProps {
    * preincarcare si se cere abia dupa ce CSS-ul blocant a ajuns, s-a parsat si
    * s-a facut asezarea — masurat pe productie, cam 100-150 ms mai tarziu.
    *
-   * ⚠ NU SE ECONOMISESTE NICIUN OCTET. Cei 6.792 se cer oricum; se cer doar mai
-   * devreme. De asta e o imbunatatire mica, nu una de raportat.
-   *
    * ⚠ NU `priority` SI NU `preload`: `priority` e DEPRECAT in Next 16 (vezi
    * `docs/.../image.md:293`) si nici nu mai pune `fetchPriority="high"` in
-   * 16.3.3; `preload` ar baga un `<link rel=preload>` in `<head>` pentru un
-   * patrat de 32 px care nu poate fi element LCP. Documentatia recomanda chiar
-   * `loading="eager"` in locul lor.
+   * 16.3.3. Documentatia recomanda chiar `loading="eager"` in locul lor.
    */
   eager?: boolean;
+  /** Inaltimea semnului patrat, cand `showText` e stins. */
   iconSize?: number;
   href?: string;
   className?: string;
+  /** `false` inseamna doar semnul, fara cuvant. */
   showText?: boolean;
-  textClassName?: string;
+  /**
+   * Suprafata pe care sta sigla e inchisa INTOTDEAUNA, nu doar in tema
+   * intunecata. Bara laterala de admin e asa: e neagra si pe tema deschisa.
+   */
+  peFundalInchis?: boolean;
 }
 
 export function Logo({
@@ -45,69 +75,72 @@ export function Logo({
   href = "/",
   className,
   showText = true,
-  textClassName,
+  peFundalInchis = false,
 }: LogoProps) {
-  const { icon, text } = SIZES[size];
-  const finalIcon = iconSize ?? icon;
+  const inaltime = showText ? INALTIMI[size] : (iconSize ?? INALTIMI[size]);
+  const incarcare = eager ? "eager" : "lazy";
 
-  const content = (
+  const semn = (
+    <Image
+      src={peFundalInchis ? "/semn-alb.svg" : "/semn.svg"}
+      alt="Edinio"
+      width={inaltime}
+      height={inaltime}
+      className="flex-shrink-0"
+      loading={incarcare}
+      unoptimized
+    />
+  );
+
+  /*
+    ⚠ Amandoua siglele sunt in pagina, iar tema o alege pe a ei din CSS.
+    Alegerea in JavaScript, dupa tema citita la randare, ar fi dat o nepotrivire
+    intre ce trimite serverul si ce deseneaza browserul: sigla ar fi clipit din
+    neagra in alba la fiecare incarcare.
+  */
+  const lockup = peFundalInchis ? (
+    <Image
+      src="/logo-alb.svg"
+      alt="Edinio"
+      width={Math.round(inaltime * RAPORT)}
+      height={inaltime}
+      className="flex-shrink-0"
+      loading={incarcare}
+      unoptimized
+    />
+  ) : (
     <>
       <Image
-        /*
-          ⚠ FIȘIER PROPRIU, MIC — nu `/logo.png`. Măsurat pe 31.08.2026:
-          originalul avea 96.469 octeți (284×289) și se afișa la 24–32 px, în
-          bară ȘI în subsol, pe fiecare pagină publică. 94 kB pentru un pătrat
-          de 32 px, adică 43% din tot JavaScriptul paginii de start.
-
-          ⚠ DE CE NU S-A MICȘORAT ORIGINALUL: `/logo.png` mai e folosit în trei
-          locuri unde 128 px ar strica ceva tăcut — sigla `Organization` din
-          datele structurate (Google cere minimum 112 px) și antetul
-          e-mailurilor, la 44 px, adică 88 la 2x. El a rămas 284×289; s-a
-          recodat doar, 96.469 → 21.588 octeți, fără pierdere vizibilă.
-
-          ⚠ 128, NU 64: `(auth)/layout.tsx` cere `iconSize={64}`, deci 64 ar fi
-          fost neclar pe ecrane retina chiar acolo. La 128 acoperă orice folosire
-          din depozit la 2x, și tot costă 6.792 octeți.
-
-          ⚠ LOADERUL NU REDIMENSIONEAZĂ FIȘIERELE LOCALE. `supabase-image-loader`
-          întoarce adresa neatinsă pentru orice nu e cheie R2, deci `width={32}`
-          NU produce o variantă mică — de asta era nevoie de un fișier separat,
-          nu doar de un atribut.
-        */
-        src="/logo-128.png"
+        src="/logo.svg"
         alt="Edinio"
-        width={finalIcon}
-        height={finalIcon}
-        className="flex-shrink-0"
-        /* Aceeasi forma ca la siglele integrarilor,
-           `sections/integrations/Logo.tsx:74`. */
-        loading={eager ? "eager" : "lazy"}
+        width={Math.round(inaltime * RAPORT)}
+        height={inaltime}
+        className="flex-shrink-0 dark:hidden"
+        loading={incarcare}
+        unoptimized
       />
-      {showText && (
-        <span
-          className={cn(
-            "font-bold tracking-tight",
-            text,
-            textClassName,
-          )}
-        >
-          Edinio<span className="text-primary">.com</span>
-        </span>
-      )}
+      <Image
+        src="/logo-alb.svg"
+        alt=""
+        aria-hidden
+        width={Math.round(inaltime * RAPORT)}
+        height={inaltime}
+        className="hidden flex-shrink-0 dark:block"
+        loading={incarcare}
+        unoptimized
+      />
     </>
   );
 
+  const continut = showText ? lockup : semn;
+
   if (href) {
     return (
-      <Link href={href} className={cn("flex items-center gap-2", className)}>
-        {content}
+      <Link href={href} className={cn("flex items-center", className)}>
+        {continut}
       </Link>
     );
   }
 
-  return (
-    <div className={cn("flex items-center gap-2", className)}>
-      {content}
-    </div>
-  );
+  return <div className={cn("flex items-center", className)}>{continut}</div>;
 }

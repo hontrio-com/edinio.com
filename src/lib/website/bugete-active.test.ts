@@ -142,16 +142,51 @@ test("martor: bugetul chiar respinge un fișier prea mare", () => {
   ăsta apără ALEGEREA lui. Fără el, cineva poate întoarce `Logo` la `/logo.png`
   — care e în buget, dar e de trei ori mai greu — și nimic n-ar cădea.
 */
-test("bara și subsolul folosesc sigla mică, nu pe cea de e-mail", () => {
+/*
+  ⚠ PROBA ASTA S-A REFĂCUT LA REBRANDING (20.09.2026), fiindcă mecanismul ei
+  murise, nu regula.
+
+  Cerea, pe nume, `logo-128.png`. Sigla nouă e SVG, deci proba ar fi căzut pe un
+  fișier care nu mai e cerut de nimeni — iar „reparată" prin schimbarea numelui,
+  ar fi apărat tot o cablare.
+
+  Acum măsoară CE CERE componenta: se citesc toate căile din `Logo.tsx`, se caută
+  fișierele pe disc și se cântăresc. Aceeași regulă („bara nu trage sigla de
+  e-mail"), dar apărată prin octeți, nu prin nume — și prinde și un fișier nou,
+  pus mâine, pe care nimeni nu l-ar fi trecut într-o listă.
+*/
+const BUGET_SIGLA_DIN_BARA = 6_000;
+
+test("bara și subsolul cer numai sigle ușoare, nu pe cea de e-mail", () => {
   const sursa = readFileSync(join(process.cwd(), "src/components/ui/Logo.tsx"), "utf8")
     .replace(/\r\n/g, "\n")
     .replace(/\/\*[\s\S]*?\*\//g, "");
 
-  assert.match(sursa, /src="\/logo-128\.png"/, "componenta `Logo` nu mai cere sigla mică");
+  /*
+    ⚠ SE CAUTA ORICE CALE DE FISIER, nu doar `src="…"`. Prima scriere a probei
+    se uita dupa `src="…"` si sarea peste caile dintr-un ternar
+    (`src={inchis ? "/semn-alb.svg" : "/semn.svg"}`) - adica peste exact
+    jumatate din siglele componentei. Prinsa punand `og-image.png` in ternar:
+    proba a trecut linistita.
+  */
+  const cerute = [...sursa.matchAll(/"(\/[\w./-]+\.(?:svg|png|jpe?g|webp|avif))"/g)].map((m) => m[1]);
+  assert.ok(cerute.length >= 2, "componenta `Logo` nu mai cere imaginile asteptate");
+
+  for (const cale of cerute) {
+    const peDisc = join(RADACINA, cale.slice(1));
+    assert.ok(existsSync(peDisc), `\`Logo\` cere ${cale}, care nu există în public/`);
+    const octeti = statSync(peDisc).size;
+    assert.ok(
+      octeti <= BUGET_SIGLA_DIN_BARA,
+      `${cale} are ${octeti} octeți, peste bugetul de ${BUGET_SIGLA_DIN_BARA} pentru bară. `
+        + "Sigla din bară se vede la 24-32 px pe fiecare pagină publică.",
+    );
+  }
+
   assert.doesNotMatch(
     sursa,
     /src="\/logo\.png"/,
-    "componenta `Logo` cere sigla mare (21 kB) pentru un pătrat de 32 px",
+    "componenta `Logo` cere sigla de e-mail (14 kB) pentru un semn de 32 px",
   );
 });
 

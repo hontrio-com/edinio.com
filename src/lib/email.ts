@@ -10,6 +10,19 @@ import type { BillingCompany } from "@/lib/billing/company";
 // construiesc INTR-UN SINGUR LOC, pentru amandoua emailurile. Vezi acolo de ce.
 import { randuriDeBani, type BaniComanda } from "@/lib/email/order-totals";
 
+/*
+  ⚠ FUSUL SE SCRIE, NU SE PRESUPUNE.
+
+  Emailurile pleaca de pe server, iar pe Vercel procesul ruleaza pe UTC (nu
+  exista variabila `TZ` in proiect). Fara randul asta, ora scrisa in email era
+  cu trei ore in urma fata de ceasul de pe perete, iar o cerere trimisa la
+  01:00 noaptea aparea datata cu ziua dinainte.
+
+  Conteaza cel mai mult la confirmarea de retragere din contract (OUG 18): acolo
+  ora e o dovada pe suport durabil, nu o informatie de politete.
+*/
+const FUS_RO = "Europe/Bucharest";
+
 let _resend: Resend | null = null;
 function getResend(): Resend {
   if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
@@ -1158,7 +1171,7 @@ export async function sendAdminNewUserNotification(data: {
   createdAt: string;
 }) {
   if (!process.env.RESEND_API_KEY) return;
-  const date = new Date(data.createdAt).toLocaleString("ro-RO", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const date = new Date(data.createdAt).toLocaleString("ro-RO", { timeZone: FUS_RO, day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const content = `
     <h2 style="margin:0 0 4px 0;font-size:20px;font-weight:700;color:#18181b;">Cont nou creat</h2>
     <p style="margin:0 0 20px 0;font-size:14px;color:#71717a;">Un utilizator nou s-a inregistrat pe Edinio.</p>
@@ -1503,7 +1516,7 @@ export async function sendSubscriptionActivatedEmail(
   if (!process.env.RESEND_API_KEY) return;
 
   const formattedDate = new Date(data.expiresAt).toLocaleDateString("ro-RO", {
-    day: "numeric", month: "long", year: "numeric",
+    timeZone: FUS_RO, day: "numeric", month: "long", year: "numeric",
   });
 
   const content = `
@@ -1549,7 +1562,7 @@ export async function sendPaymentRecoveredEmail(
   if (!process.env.RESEND_API_KEY) return;
 
   const formattedDate = new Date(data.expiresAt).toLocaleDateString("ro-RO", {
-    day: "numeric", month: "long", year: "numeric",
+    timeZone: FUS_RO, day: "numeric", month: "long", year: "numeric",
   });
 
   const content = `
@@ -1621,7 +1634,7 @@ export async function sendStoreSuspendedEmail(
   if (!process.env.RESEND_API_KEY) return;
 
   const formattedDate = new Date(data.graceUntil).toLocaleDateString("ro-RO", {
-    day: "numeric", month: "long", year: "numeric",
+    timeZone: FUS_RO, day: "numeric", month: "long", year: "numeric",
   });
 
   const content = `
@@ -1691,7 +1704,7 @@ export async function sendReturnConfirmationToCustomer(
 ) {
   const first = data.customer_name?.trim().split(/\s+/)[0];
   const when = new Date(data.receivedAt).toLocaleString("ro-RO", {
-    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+    timeZone: FUS_RO, day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
 
   const content = `
@@ -1735,7 +1748,7 @@ export async function sendReturnRequestToMerchant(
   const infoRow = (label: string, value: string) =>
     `<tr><td style="padding:3px 0;font-size:14px;color:#71717a;width:140px;vertical-align:top;">${label}</td><td style="padding:3px 0;font-size:14px;color:#18181b;font-weight:500;vertical-align:top;">${value}</td></tr>`;
   const when = new Date(data.receivedAt).toLocaleString("ro-RO", {
-    day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+    timeZone: FUS_RO, day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
   const refundLabel = data.refund_method ? REFUND_METHOD_LABELS[data.refund_method] ?? esc(data.refund_method) : "";
 

@@ -102,8 +102,20 @@ oricarui magazin.
 
 ## D. Variabile de mediu noi
 
-Niciuna pana acum. (Sentry a fost pus separat, in `main`, pe 18.09, cu `SENTRY_AUTH_TOKEN` deja
-in Vercel.)
+Niciuna **ceruta** de cod. (Sentry a fost pus separat, in `main`, pe 18.09, cu `SENTRY_AUTH_TOKEN`
+deja in Vercel.)
+
+### Una propusa, de hotarat: `TZ = Europe/Bucharest`
+
+Verificat pe 20.09: proiectul **nu are nicio variabila `TZ`**, deci procesul Node de pe Vercel
+ruleaza pe **UTC**, in timp ce baza e tot pe UTC dar toate socotelile noastre convertesc explicit
+la ora Romaniei. Codul care scrie date a fost reparat sa nu mai depinda de ceasul masinii
+(`formatDate`/`formatDateShort`/`formatDateTime` si cele sase locuri din `email.ts`), deci
+variabila **nu mai e necesara**.
+
+Ramane de pus doar ca plasa pentru ce se scrie de acum incolo: cu ea, orice `toLocaleString`
+scris fara sa se gandeasca cineva la fus da tot ora Romaniei. Nu schimba nimic din ce e deja
+reparat, si nu atinge cronurile (Vercel le socoteste tot in UTC, oricum ar fi pusa).
 
 ---
 
@@ -121,6 +133,7 @@ Lista e ca sa se stie **ce se uita la** dupa push, nu ca sa inlocuiasca istoricu
 | Cele patru carduri | `src/lib/panou-carduri.ts` (+ probe), `src/components/dashboard/ExplicatieCard.tsx`, pagina panoului | Comenzi azi, Vanzari luna aceasta, Valoare medie comanda, Rata de conversie, fiecare cu diferenta procentuala; tooltip cu formula doar la conversie. Depinde de migratia **3**. ⚠ Se verifica si pagina **Statistici**: vizitele de acolo trebuie sa creasca dupa aplicarea politicii. |
 | Etichete de stare | `src/components/ui/eticheta-stare.tsx` (nou), `src/lib/orders/status.ts`, `OrdersClient`, `OrderDetailClient`, `CustomersClient`, pagina panoului | Un singur fel de eticheta: punct colorat pe fundal neutru (varianta aleasa de el, 20.09). ⚠ **Acoperite doar STARILE DE COMANDA.** Raman scrise de mana, pentru trecerea urmatoare: sursa comenzii, statusurile de curier, integrarile, abonamentul si platile (~15 fisiere). Cerut asa de el: „toate, dar pe rand". |
 | Comenzi recente | pagina panoului, `src/lib/utils/format.ts` (`acumCatTimp`) | Fiecare rand spune cand a venit comanda („acum 12 minute") si de unde (eMAG, Google Ads, Direct). |
+| Fusul orar | `src/lib/utils/format.ts`, `src/lib/email.ts` (+ probe care pornesc un Node pe `TZ=UTC`) | Datele scrise de server erau pe UTC: o comanda de la 01:30 aparea „19 septembrie, 22:30". Acum toate trec prin ceasul romanesc. ⚠ RAMAS: componentele de client (tabele din panou, zona de admin) scriu pe ceasul VIZITATORULUI; pentru un comerciant din alt fus, orele difera de facturi. De facut in aceeasi trecere cu etichetele. |
 | Tipuri | `src/types/database.types.ts` | ⚠ Intrarile pentru functiile noi sunt **scrise de mana** (regenerarea completa rescrie `store_settings` din tabela in vedere si rupe zeci de locuri). Dupa aplicarea migratiilor, ele descriu in sfarsit ceva ce exista si in productie. |
 
 ---

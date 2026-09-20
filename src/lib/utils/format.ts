@@ -1,19 +1,53 @@
 import { format as dateFnsFormat } from "date-fns";
 import { ro } from "date-fns/locale";
 
-export function formatDate(date: Date | string): string {
+/*
+  ⚠ ORA ROMANIEI, ORICE CEAS AR AVEA MASINA CARE SCRIE.
+
+  `date-fns` formateaza dupa fusul PROCESULUI. Pe Vercel procesul e pe UTC (nu
+  exista nicio variabila `TZ` in proiect, verificat), deci o comanda plasata la
+  01:30 noaptea se scria „19 septembrie, 22:30" — cu trei ore si o zi in urma.
+  Local nu se vedea niciodata: calculatorul lui e pe Europe/Bucharest, deci
+  aceleasi functii dadeau raspunsul bun.
+
+  In browser era invers: ora era a VIZITATORULUI. Un comerciant care isi vede
+  magazinul din alt fus primea alte ore decat scrie in facturi si decat arata
+  baza, iar textul scris pe server (UTC) nu se mai potrivea cu cel randat in
+  browser, adica exact ce reclama React la hidratare.
+
+  Aici clipa se muta o singura data pe ceasul romanesc, iar `date-fns` scrie
+  mai departe exact aceleasi cuvinte ca pana acum („20 septembrie 2026").
+  Trecerea la ora de vara nu trebuie socotita de nimeni: o stie `Intl`.
+*/
+function ceasRomanesc(date: Date | string): Date | null {
   const d = typeof date === "string" ? new Date(date) : date;
-  return dateFnsFormat(d, "d MMMM yyyy", { locale: ro });
+  if (Number.isNaN(d.getTime())) return null;
+
+  const parti = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Bucharest",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+
+  const ia = (tip: string) => Number(parti.find((p) => p.type === tip)?.value ?? 0);
+  /* ⚠ `hour` poate veni „24" la miezul noptii in en-GB; `% 24` il face 0. */
+  return new Date(ia("year"), ia("month") - 1, ia("day"), ia("hour") % 24, ia("minute"), ia("second"));
+}
+
+export function formatDate(date: Date | string): string {
+  const d = ceasRomanesc(date);
+  return d ? dateFnsFormat(d, "d MMMM yyyy", { locale: ro }) : "";
 }
 
 export function formatDateShort(date: Date | string): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  return dateFnsFormat(d, "d MMM yyyy", { locale: ro });
+  const d = ceasRomanesc(date);
+  return d ? dateFnsFormat(d, "d MMM yyyy", { locale: ro }) : "";
 }
 
 export function formatDateTime(date: Date | string): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  return dateFnsFormat(d, "d MMMM yyyy, HH:mm", { locale: ro });
+  const d = ceasRomanesc(date);
+  return d ? dateFnsFormat(d, "d MMMM yyyy, HH:mm", { locale: ro }) : "";
 }
 
 // Pretul ca numar formatat, fara sufixul " lei" (pentru capetele unui interval).

@@ -46,15 +46,18 @@ const PUNCT: Record<TonEticheta, string> = {
 };
 
 export function EtichetaStare({
-  ton, children, marime = "normal", className,
+  ton, children, marime = "normal", className, title,
 }: {
   ton: TonEticheta;
   children: React.ReactNode;
   marime?: "mic" | "normal";
   className?: string;
+  /** Indrumare la trecerea cu mausul, acolo unde eticheta singura nu spune tot. */
+  title?: string;
 }) {
   return (
     <span
+      title={title}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md bg-muted/60 font-medium whitespace-nowrap text-foreground/80 ring-1 ring-foreground/8",
         marime === "mic" ? "px-1.5 py-0.5 text-[11px]" : "px-2 py-1 text-xs",

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Paginatie } from "./Paginatie";
+import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 import {
   AlertTriangle, ExternalLink, Loader2, PauseCircle, RefreshCw, Search, Send,
 } from "lucide-react";
@@ -259,18 +260,24 @@ export function EmagListings({ businessId }: { businessId: string }) {
  *
  * Acum culoarea se ia din aceeași sursă ca textul, deci nu se mai pot bate cap în cap.
  */
-const CULOARE_VERDICT: Record<string, string> = {
-  "Se vinde pe eMAG": "bg-primary/10 text-primary",
-  "Respins de eMAG": "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-200",
-  "Preț neacceptat de eMAG": "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-200",
-  "Stare necunoscută la eMAG": "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-200",
+/*
+  ⚠ TONURI, NU CLASE. Culorile scrise de mana aici nu mai aveau cum sa ramana
+  la fel cu cele din restul panoului; acum spun ce FEL de stare e, iar cum se
+  deseneaza hotaraste `EtichetaStare`, intr-un singur loc. Judecata de mai sus
+  ramane neatinsa: se ia tot dupa verdictul lor, ca si textul.
+*/
+const TON_VERDICT: Record<string, TonEticheta> = {
+  "Se vinde pe eMAG": "bun",
+  "Respins de eMAG": "rau",
+  "Preț neacceptat de eMAG": "rau",
+  "Stare necunoscută la eMAG": "rau",
   /* ⚠ Chihlimbariu, nu rosu: nu e stricat, dar CERE o apasare de-a lui in panoul eMAG. */
-  "Scoasă din vânzare la eMAG": "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
-  "Oprită la eMAG": "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
-  "Fără stoc la eMAG": "bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+  "Scoasă din vânzare la eMAG": "asteptare",
+  "Oprită la eMAG": "asteptare",
+  "Fără stoc la eMAG": "asteptare",
+  "În validare la eMAG": "lucru",
   /* ⚠ Fara culoare: chiar n-are nimic de facut, si o culoare l-ar chema degeaba. */
-  "În validare la eMAG": "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200",
-  "Încă necitit de la eMAG": "bg-muted text-muted-foreground",
+  "Încă necitit de la eMAG": "neutru",
 };
 
 function RandOferta({
@@ -422,15 +429,16 @@ function RandOferta({
                 {rand.variantTitle}
               </span>
             )}
-            <span
-              /* ⚠ Dupa VERDICTUL lor, ca si textul de alaturi. Vezi `CULOARE_VERDICT`. */
-              className={`rounded-full px-2 py-0.5 text-xs ${CULOARE_VERDICT[rand.stareEticheta] ?? "bg-muted"}`}
+            {/* ⚠ Dupa VERDICTUL lor, ca si textul de alaturi. Vezi `TON_VERDICT`. */}
+            <EtichetaStare
+              ton={TON_VERDICT[rand.stareEticheta] ?? "neutru"}
+              marime="mic"
               /* ⚠ Îndrumarea stă în `title`, nu pe rând: e utilă când o cauți, dar pusă pe
                  fiecare din cele câteva mii de rânduri ar fi făcut lista de necitit. */
               title={rand.indrumare || undefined}
             >
               {rand.stareEticheta}
-            </span>
+            </EtichetaStare>
             {!rand.autoSync && (
               <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                 Nu se trimite automat

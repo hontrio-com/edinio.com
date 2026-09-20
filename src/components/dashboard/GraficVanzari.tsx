@@ -14,6 +14,22 @@ import {
   cifrele gata alese si le pune pe hartie. Starea e in `PanouVanzari`.
 */
 
+/**
+ * Capatul de sus al axei: o cifra rotunda, putin peste cel mai mare punct.
+ *
+ * ⚠ `maxim * 1.2` aducea in varful axei chiar cifra masurata, inmultita: „5.744"
+ * scris deasupra unor trepte de 1.500 in 1.500. Treptele se citesc dintr-o
+ * privire doar daca toate sunt rotunde, deci si capatul trebuie sa fie.
+ */
+function plafon(maxim: number): number {
+  const brut = maxim * 1.15;
+  const ordin = 10 ** Math.floor(Math.log10(brut));
+  for (const pas of [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 8]) {
+    if (ordin * pas >= brut) return ordin * pas;
+  }
+  return ordin * 10;
+}
+
 function scrie(v: number, bani: boolean): string {
   return bani ? formatPrice(v) : new Intl.NumberFormat("ro-RO").format(v);
 }
@@ -64,7 +80,8 @@ export function GraficVanzari({
     ...puncte.map((r) => Math.max(r.acum ?? 0, r.inainte ?? 0)),
   );
 
-  const scurt = maxim >= 10000;
+  const sus = plafon(maxim);
+  const scurt = sus >= 10000;
 
   /* Cam sapte etichete pe axa, oricate bucati ar fi: la 90 de zile, scrise toate,
      s-ar suprapune intr-o dunga neagra. */
@@ -94,7 +111,7 @@ export function GraficVanzari({
             axisLine={false}
             tickLine={false}
             width={44}
-            domain={[0, Math.ceil(maxim * 1.2)]}
+            domain={[0, sus]}
             /* ⚠ Scurtarea in „k" se hotaraste O SINGURA DATA, din cel mai mare
                punct, nu de la o treapta la alta: judecata pe fiecare valoare,
                aceeasi axa scria „800", „1k", „2k" — trei feluri de a scrie

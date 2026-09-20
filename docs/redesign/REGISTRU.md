@@ -50,6 +50,8 @@ push si aplicarea migratiei, la toti comerciantii.
 | 9 | `migrations/2026-09-20-vanzari-detaliu.sql` | `vanzari_detaliu` (sumarul, produsele, categoriile, canalele si starile filei Vanzari) si `carduri_secundare` (clienti noi, clienti care revin, bucati, anulari - cu fereastra precedenta) | DA | **NU. De aplicat la final.** Numai functii noi; nu atinge nicio tabela. Se aplica DUPA migratia 2 (foloseste `fereastra_vanzari`). |
 | 10 | `migrations/2026-09-20-verde-rebranding.sql` | Implicitul lui `businesses.primary_color` trece de la `#1AB554` la `#07c527` | DA | **NU. De aplicat la final.** Doar `set default`, deci atinge numai magazinele FACUTE DE ACUM INAINTE. ⚠ Cele existente NU se ating, si e o hotarare: `primary_color` e culoarea comerciantului, nu a noastra, iar un `update` peste randurile ramase pe vechiul implicit ar repicta intr-o noapte vitrine care nu ne-au cerut nimic. |
 
+| 11 | `migrations/2026-09-21-suprimare-contacte.sql` | `recovery_optout` capata `phone` si `motiv`; `email` devine optional; o restrictie care cere macar un contact; index unic pe (magazin, telefon) | DA | **DA, 21.09.2026**, cu acordul lui. Verificat pe amandoua bazele: coloanele exista si `email` e `nullable`. |
+
 ⚠ Migratiile 1-3 sunt **numai citire**: functii noi si o politica de SELECT, niciun `alter table`,
 niciun rand atins.
 
@@ -58,6 +60,20 @@ optionale, plus doua indexuri si o tabela noua (`analitice_sare`). Nu atinge nic
 si nu strica scrierile de azi - codul vechi care insereaza fara coloanele noi ramane valid.
 Indexurile se construiesc pe o tabela care creste cu fiecare vizita, deci la aplicare se face pe
 rand, nu in acelasi minut cu push-ul.
+
+### ⚠⚠ Migratia 11 a plecat INAINTE de final, si de ce
+
+Regula e ca productia nu se atinge pana la unire. Aici s-a facut o exceptie, hotarata cu el:
+`recovery_optout` avea numai `email`, deci **dezabonarea de la SMS nu se putea nici macar
+exprima**, cu atat mai putin respecta. Iar trimiterea de mana din panou nu citea lista deloc.
+
+⚠ Pe productie plecasera deja **34 de emailuri si 21 de SMS-uri** catre clienti adevarati, deci
+gaura nu era teoretica. Un mesaj trimis cuiva care a cerut sa nu mai fie contactat nu se ia
+inapoi, si nici banii pe SMS.
+
+Migratia nu sterge nimic si nu atinge niciun rand: adauga doua coloane, slabeste un `not null`
+si pune o restrictie care cere macar un contact. Codul vechi, care scria doar `email`, ramane
+valid - `motiv` are implicit `'dezabonare'`.
 
 ### ⚠⚠ Migratia 3 repara si un defect care e ACUM in productie
 
@@ -211,6 +227,7 @@ Lista e ca sa se stie **ce se uita la** dupa push, nu ca sa inlocuiasca istoricu
 | Bara de sus | `CautareGlobala`, `ButonAdauga` (noi), `src/lib/actions/cautare-globala.actions.ts`, `src/lib/cautare-termen.ts`, `src/lib/avatar-blob.ts`, `DiscountsClient` | Cautare in produse, comenzi si clienti, cu rezultate sub camp. Buton Adauga (produs, discount, oferta). Chip de utilizator desenat din id. Doar prenumele. Facturare si abonament in meniul contului. |
 | Sigla si starea magazinului | `src/lib/stare-magazin.ts` (nou, + probe), `Sidebar` | Sigla in locul initialei; bulina: verde publicat si domeniu bun, galben nepublicat, rosu domeniu cazut. |
 | Tipuri | `src/types/database.types.ts` | ⚠ Intrarile pentru functiile noi sunt **scrise de mana** (regenerarea completa rescrie `store_settings` din tabela in vedere si rupe zeci de locuri). Dupa aplicarea migratiilor, ele descriu in sfarsit ceva ce exista si in productie. |
+| Cosuri abandonate | `src/lib/abandoned/suprimare.ts` si `src/lib/abandoned/sms-segmente.ts` (noi, + probe), `src/lib/actions/abandoned-cart.actions.ts`, `src/app/api/cron/abandoned-recovery/route.ts`, `src/components/dashboard/AbandonedCartsClient.tsx` | Trimiterea de MANA respecta acum dezabonarea (pe email SI pe telefon, normalizat) si refuza cosurile deja finalizate - pana acum numai cronul verifica, panoul nu atingea lista. Se verifica: un rand in `recovery_optout` opreste si emailul, si SMS-ul, din panou. ⚠ Socoteala SMS de sub casuta arata acum ce se plateste: masurat pe un mesaj romanesc adevarat, vechiul rand scria „1 SMS" pentru ceva ce pleaca in **3**. Depinde de migratia **11**. |
 | Rebranding (culoare + sigla) | `src/app/stil-comun.css`, `src/components/ui/Logo.tsx`, `scripts/brand/genereaza-sigle.mjs` (nou), `public/` (13 fisiere de sigla), `public/site.webmanifest`, plus 79 de locuri unde verdele era scris in cod | Verdele marcii e `#07c527`, verdele purtator `#008215` (5,00:1, aceeasi nuanta coborata pana trece pragul). Se verifica: panoul, site-ul de prezentare, o vitrina reala, un e-mail trimis, fila din browser si pictograma pe telefon. ⚠ Magazinele existente isi pastreaza culoarea lor, deci o vitrina care arata tot verde vechi NU e un defect. ⚠ Bannerul de share (`og-image.png`) e acum doar sigla pe fundalul marcii: cel vechi avea titlu scris cu fontul marcii si o fotografie, iar fontul vine din Google Fonts la build si nu exista ca fisier in depozit. De cerut designerului daca se vrea inapoi varianta cu titlu. |
 
 ---

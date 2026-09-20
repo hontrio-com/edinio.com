@@ -76,9 +76,21 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
       „ai uitat ceva in cos" cuiva care tocmai cumparase.
 - [ ] **A4.** Stergerea cere confirmare; se adauga „Ignora" (pastreaza cifrele, nu mai
       contacteaza) langa stergerea definitiva.
-- [ ] **A5.** Numararea SMS: diacriticele romanesti trec mesajul pe Unicode, unde un segment
-      are 70 de caractere, nu 160; iar linkul se adauga DUPA ce omul a scris textul si nu intra
-      in socoteala aratata. Se arata: caractere cu tot cu link, codarea, segmentele, costul.
+- [x] **A5.** Numararea SMS spune acum ce se plateste. Vechiul rand (`length` / 160) minte de
+      trei ori deodata, si masurat pe un mesaj adevarat scris pentru VetDepo minte de TREI ORI:
+      scria „1 SMS", pleaca 3.
+      ⚠ 160 e limita GSM-7, iar diacriticele romanesti NU sunt in alfabetul ala: un singur „ă"
+      muta tot mesajul pe Unicode, unde un segment are 70 de locuri, iar in lant 67.
+      ⚠ Linkul statea in paranteza, nedeclarat - si are 78 de semne, adica singur cat jumatate
+      dintr-un segment GSM-7 si peste un segment Unicode intreg.
+      ⚠ `{nume}` si `{magazin}` se inlocuiesc la trimitere: se numara textul CARE PLEACA, prin
+      chiar `interpolateRecoveryMessage` si `buildRecoverUrl` pe care le cheama si serverul.
+      ⚠ Cand casuta e goala pleaca `defaultRecoverySms`, care poarta deja linkul in el, deci nu
+      se mai adauga o data.
+      ⚠ Se numara si semnele care costa dublu chiar in GSM-7 (`{` `}` din sabloane) si unitatile
+      UTF-16 (un emoji = doua locuri, desi omul vede un semn).
+      Regula sta in `lib/abandoned/sms-segmente.ts`, cu o proba care cade daca ecranul nu o mai
+      cheama - altfel modulul ramane scris frumos si nechemat, cu `/160` mai departe pe ecran.
 
 ### Etapa B - cifre care se pot dovedi
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -14,7 +14,10 @@ import { AbandonedAutomationsTab } from "./AbandonedAutomationsTab";
 import {
   setAbandonedCartEnabled, sendAbandonedCartEmail, sendAbandonedCartSms, deleteAbandonedCart,
 } from "@/lib/actions/abandoned-cart.actions";
-import { standardRecoveryTemplate, interpolateRecoveryMessage } from "@/lib/abandoned-cart";
+import {
+  standardRecoveryTemplate, interpolateRecoveryMessage, buildRecoverUrl, defaultRecoverySms,
+} from "@/lib/abandoned-cart";
+import { avertismentSms, scrieSocoteala, socotesteSms } from "@/lib/abandoned/sms-segmente";
 import type { AbandonedCartsData, AbandonedCartRow } from "@/lib/abandoned-cart";
 
 function timeAgo(iso: string): string {
@@ -147,6 +150,42 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
   const [recover, setRecover] = useState<{ cart: AbandonedCartRow; channel: "email" | "sms" } | null>(null);
   const [message, setMessage] = useState("");
   const [discountCode, setDiscountCode] = useState("");
+
+  /*
+    ⚠ SOCOTEALA SE FACE PE TEXTUL CARE PLEACA, NU PE CEL DIN CASUTA.
+
+    Pana pe 21.09.2026 scria „`message.length` / 160 SMS (+ linkul de
+    recuperare)" - gresit de trei ori deodata:
+      · 160 e limita GSM-7, iar diacriticele romanesti nu sunt in el: un „ă"
+        muta tot mesajul pe Unicode, unde un segment are 70 de locuri;
+      · linkul statea in paranteza, nedeclarat - tocmai partea care poate
+        impinge mesajul peste inca un prag, si care e mereu lunga;
+      · `{nume}` si `{magazin}` se inlocuiesc la trimitere, deci sablonul
+        numarat nu era textul platit.
+
+    Aici se construieste EXACT ce construieste `sendAbandonedCartSms`: acelasi
+    `interpolateRecoveryMessage`, acelasi `buildRecoverUrl`, acelasi
+    `defaultRecoverySms` cand casuta e goala (textul standard poarta linkul in
+    el, deci nu se mai adauga o data).
+  */
+  const socotealaSms = useMemo(() => {
+    if (!recover || recover.channel !== "sms") return null;
+    const cod = discountCode.trim() || null;
+    const link = buildRecoverUrl(data.storeUrl, recover.cart.id, cod);
+    const scris = message.trim();
+    if (!scris) {
+      const standard = defaultRecoverySms({
+        name: recover.cart.customer_name, storeName: data.storeName, url: link, code: cod,
+      });
+      const s = socotesteSms(standard);
+      return { rand: scrieSocoteala(s, true), avertisment: avertismentSms(s) };
+    }
+    const text = interpolateRecoveryMessage(scris, {
+      name: recover.cart.customer_name, store: data.storeName,
+    });
+    const s = socotesteSms(text, ` ${link}`);
+    return { rand: scrieSocoteala(s, true), avertisment: avertismentSms(s) };
+  }, [data.storeUrl, data.storeName, recover, message, discountCode]);
   const [sending, startSend] = useTransition();
   const [togglingOff, startToggleOff] = useTransition();
 
@@ -447,8 +486,13 @@ function ActiveDashboard({ businessId, data }: { businessId: string; data: Aband
                 : "Mesajul SMS..."}
               className="w-full px-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors resize-none"
             />
-            {recover.channel === "sms" && (
-              <p className="text-[11px] text-muted-foreground mt-1">{message.length} caractere · {Math.max(1, Math.ceil(message.length / 160))} SMS (+ linkul de recuperare)</p>
+            {socotealaSms && (
+              <>
+                <p className="text-[11px] text-muted-foreground mt-1">{socotealaSms.rand}</p>
+                {socotealaSms.avertisment && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-1">{socotealaSms.avertisment}</p>
+                )}
+              </>
             )}
 
             <div className="mt-3">

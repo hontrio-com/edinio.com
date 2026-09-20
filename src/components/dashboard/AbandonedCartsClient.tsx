@@ -31,6 +31,8 @@ import {
   standardRecoveryTemplate, interpolateRecoveryMessage, buildRecoverUrl, defaultRecoverySms,
 } from "@/lib/abandoned-cart";
 import { avertismentSms, scrieSocoteala, socotesteSms } from "@/lib/abandoned/sms-segmente";
+import { ABANDON_MINUTES } from "@/lib/abandoned-cart";
+import { LUNI_PE_COMANDA } from "@/app/api/cron/curata-fisiere/reguli";
 import type { AbandonedCartsData, AbandonedCartRow } from "@/lib/abandoned-cart";
 
 /*
@@ -94,15 +96,29 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
         </div>
         <h1 className="text-2xl font-bold text-foreground mb-2">Recuperează coșurile abandonate</h1>
         <p className="text-muted-foreground max-w-md mb-8">
-          Clienții care încep o comandă dar nu o finalizează sunt vânzări pierdute. Activează funcția
-          și începem să salvăm aceste coșuri ca să le poți recupera prin mail sau SMS.
+          Clienții care încep o comandă dar nu o finalizează sunt vânzări pierdute. Dacă activezi,
+          începem să salvăm aceste coșuri ca să le poți recupera prin email sau SMS.
         </p>
 
-        <div className="grid sm:grid-cols-3 gap-3 max-w-2xl w-full mb-8">
+        {/*
+          ⚠ ECRANUL DE ACTIVARE SPUNE SI CE **NU** SE INTAMPLA.
+
+          Cel vechi spunea doar ce castiga omul. Cine apasa un buton verde pe
+          care scrie „ACTIVEAZĂ FUNCȚIA" se poate astepta la orice - inclusiv
+          ca din clipa aceea pleaca mesaje catre clientii lui. Nu pleaca:
+          activarea doar incepe sa SALVEZE cosurile. Recuperarea ramane
+          manuala pana cand omul porneste o automatizare, si aia e alta
+          apasare, in alta fila.
+
+          ⚠ SI CE DATE SE PASTREAZA, CAT TIMP. Se salveaza datele de contact
+          ale unor oameni care NU au terminat comanda: cine apasa aici ia o
+          hotarare despre datele altora, si trebuie sa stie ce hotaraste.
+        */}
+        <div className="grid sm:grid-cols-3 gap-3 max-w-2xl w-full mb-6">
           {[
-            { icon: TrendingDown, title: "Vezi ce pierzi", desc: "KPI-uri și valoarea coșurilor abandonate" },
-            { icon: Send, title: "Recuperează rapid", desc: "Trimite mail sau SMS dintr-un click" },
-            { icon: ShieldCheck, title: "Activat doar de tine", desc: "Oprit implicit, pornești când vrei" },
+            { icon: TrendingDown, title: "Vezi ce pierzi", desc: "Câte coșuri rămân neterminate și cât valorează" },
+            { icon: Send, title: "Recuperează când vrei tu", desc: "Trimiți email sau SMS dintr-un click, manual" },
+            { icon: ShieldCheck, title: "Activat doar de tine", desc: "Oprit implicit, poți opri oricând" },
           ].map((b) => (
             <div key={b.title} className="rounded-xl ring-1 ring-foreground/10 bg-card p-4 text-left">
               <b.icon className="h-5 w-5 mb-2 text-primary" />
@@ -110,6 +126,34 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
               <p className="text-xs text-muted-foreground mt-0.5">{b.desc}</p>
             </div>
           ))}
+        </div>
+
+        <div className="mb-8 w-full max-w-2xl rounded-xl border border-border bg-muted/40 p-4 text-left">
+          <p className="mb-2 text-xs font-semibold text-foreground">Ce se întâmplă dacă activezi</p>
+          <ul className="space-y-1.5 text-xs text-muted-foreground">
+            <li>
+              <span className="font-medium text-foreground">Nu pleacă niciun mesaj.</span> Activarea doar
+              începe să salveze coșurile. Mesajele le trimiți tu, unul câte unul, sau pornești o
+              automatizare din fila <span className="font-medium text-foreground">Automatizări</span> — e o
+              alegere separată.
+            </li>
+            <li>
+              Un coș e socotit abandonat după{" "}
+              <span className="font-medium text-foreground">{ABANDON_MINUTES} de minute</span> fără nicio
+              mișcare din partea clientului.
+            </li>
+            <li>
+              Se salvează produsele din coș și datele de contact pe care clientul{" "}
+              <span className="font-medium text-foreground">le-a completat el</span> în finalizare. Dacă nu a
+              lăsat nici email, nici telefon, coșul nu se salvează deloc.
+            </li>
+            <li>
+              Un coș mai poate fi recuperat{" "}
+              <span className="font-medium text-foreground">{LUNI_PE_COMANDA} luni</span>. După aceea
+              fișierele și prețurile lui expiră și linkul nu mai duce nicăieri.
+            </li>
+            <li>Poți opri funcția oricând, și poți șterge un coș anume din listă.</li>
+          </ul>
         </div>
 
         <button
@@ -136,8 +180,8 @@ export function AbandonedCartsClient({ businessId, data }: { businessId: string;
         >
           {activating ? <><Loader2 className="h-5 w-5 animate-spin" /> Se activează...</> : <><Sparkles className="h-5 w-5" /> ACTIVEAZĂ FUNCȚIA</>}
         </button>
-        <p className="text-xs text-muted-foreground mt-4 max-w-sm">
-          Salvăm datele de contact doar pentru clienții care le completează în finalizare, pentru a-i putea contacta.
+        <p className="mt-4 max-w-sm text-xs text-muted-foreground">
+          După activare, primele coșuri apar pe măsură ce clienții le lasă neterminate.
         </p>
       </div>
     );
@@ -835,7 +879,7 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
                       disabled={!c.email || !!c.ignorat_la}
                       className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      <Mail className="h-3.5 w-3.5" /> Mail
+                      <Mail className="h-3.5 w-3.5" /> Email
                     </button>
                     {data.smsEnabled && (
                       <button

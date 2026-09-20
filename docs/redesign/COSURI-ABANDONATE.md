@@ -302,9 +302,28 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
 
 ### Etapa E - restul
 
-- [ ] **E1.** Ecranul de activare spune limpede: dupa cat timp devine un cos abandonat, ce date
-      se pastreaza, cat, si ca **activarea NU trimite mesaje** - recuperarea ramane manuala pana
-      se porneste o automatizare.
-- [ ] **E2.** Terminologie: „Email" peste tot, „Automatizari" cu diacritice, „Rata de abandon la
-      finalizare", „Venit recuperat" numai unde atribuirea e sigura.
-- [ ] **E3.** P2 din lista lui: A/B, coduri individuale, WhatsApp, cost SMS vs. venit recuperat.
+- [x] **E1.** Ecranul de activare spune si ce **NU** se intampla.
+      ⚠ Cel vechi spunea doar ce castiga omul. Cine apasa un buton verde pe care scrie
+      „ACTIVEAZĂ FUNCȚIA" se poate astepta la orice, inclusiv ca din clipa aceea pleaca mesaje
+      catre clientii lui. Nu pleaca: activarea doar incepe sa SALVEZE cosurile, iar pornirea
+      unei automatizari e alta apasare, in alta fila. Scrie asta primul.
+      ⚠ Si ce date se pastreaza, cat timp: se salveaza datele de contact ale unor oameni care
+      NU au terminat comanda, deci cine apasa ia o hotarare despre datele altora.
+      ⚠ Cele doua praguri (60 de minute, 6 luni) se citesc din cod, nu sunt scrise de mana: un
+      numar scris in text ramane in urma cand se schimba regula, si atunci ecranul minte fara
+      sa cada nimic. Exista proba.
+      Vazut in browser, stingand comutatorul pe magazinul demo si aprinzandu-l la loc.
+- [x] **E2.** Terminologie: „Email" peste tot (nu „Mail"), „Automatizări" cu diacritice, „Rată
+      de abandon la finalizare", iar „Recuperare atribuită" numai acolo unde se poate dovedi.
+      ⚠ Proba se uita la TEXTUL aratat, nu la cod: `Mail` e si numele iconitei din lucide, si
+      acela are voie sa ramana.
+- [ ] **E3.** P2 din lista lui, **NEFACUTE dinadins**: A/B pe mesaje, coduri de reducere
+      individuale, WhatsApp, si costul SMS pus fata in fata cu venitul recuperat.
+      ⚠ Le-a pus el la P2, si asa raman. Trei dintre ele n-au azi pe ce sa se sprijine:
+      **A/B** cere destule trimiteri ca sa insemne ceva, iar pe productie au plecat 34 de
+      emailuri si 21 de SMS-uri in total - o impartire in doua ar da doua cifre fara nicio
+      putere, care par masuratori. **Costul SMS fata in fata cu venitul recuperat** cere ca
+      venitul recuperat sa fie demonstrabil; abia de azi incepe sa fie (B1), si inca nu exista
+      nicio recuperare atribuita, deci raportul ar fi „cost / 0". **Codurile individuale** cer
+      generare, expirare si curatare, adica o bucata de sistem, nu un camp.
+      De reluat cand exista trafic pe drumul asta si cateva recuperari dovedite.

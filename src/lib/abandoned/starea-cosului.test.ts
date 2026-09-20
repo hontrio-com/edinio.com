@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
@@ -120,5 +121,50 @@ test("un magazin fara niciun cos nu imparte la zero", () => {
   for (const treapta of t) {
     assert.equal(treapta.numar, 0);
     assert.ok(Number.isFinite(treapta.latime));
+  }
+});
+
+test("⚠ ECRANUL DE ACTIVARE SPUNE SI CE NU SE INTAMPLA", () => {
+  /*
+    ⚠ Cel vechi spunea doar ce castiga omul. Cine apasa un buton verde pe care
+    scrie „ACTIVEAZĂ FUNCȚIA" se poate astepta la orice - inclusiv ca din clipa
+    aceea pleaca mesaje catre clientii lui. Nu pleaca: activarea doar incepe sa
+    SALVEZE cosurile.
+
+    ⚠ Si ce date se pastreaza, cat timp: se salveaza datele de contact ale unor
+    oameni care NU au terminat comanda, deci cine apasa ia o hotarare despre
+    datele altora si trebuie sa stie ce hotaraste.
+
+    Cele doua praguri se citesc din cod (`ABANDON_MINUTES`, `LUNI_PE_COMANDA`),
+    nu sunt scrise de mana: un numar scris in text ramane in urma cand se
+    schimba regula, si atunci ecranul minte fara sa cada nimic.
+  */
+  const ecran = readFileSync(
+    new URL("../../components/dashboard/AbandonedCartsClient.tsx", import.meta.url), "utf8",
+  );
+  const activare = ecran.slice(ecran.indexOf("if (!data.enabled)"), ecran.indexOf("function KpiCard"));
+  assert.ok(activare.length > 0, "nu s-a gasit ecranul de activare");
+
+  assert.match(activare, /Nu pleacă niciun mesaj/, "nu spune ca activarea NU trimite nimic");
+  assert.match(activare, /\{ABANDON_MINUTES\}/, "pragul de abandon e scris de mana");
+  assert.match(activare, /\{LUNI_PE_COMANDA\}/, "fereastra de retentie e scrisa de mana");
+  assert.match(activare, /le-a completat el/, "nu spune ce date se pastreaza");
+  assert.match(activare, /Automatiz/, "nu trimite omul unde se pornesc automatizarile");
+});
+
+test("⚠ „Email”, NU „Mail”, peste tot pe ecran", () => {
+  /*
+    Doua nume pentru acelasi lucru il fac pe om sa se intrebe daca sunt doua
+    lucruri. Se masoara pe TEXTUL aratat, nu pe cod: `Mail` e si numele
+    iconitei din lucide, si acela are voie sa ramana.
+  */
+  for (const fisier of [
+    "../../components/dashboard/AbandonedCartsClient.tsx",
+    "../../components/dashboard/cosuri/SertarCos.tsx",
+  ]) {
+    const sursa = readFileSync(new URL(fisier, import.meta.url), "utf8");
+    const textAratat = sursa.replace(/<Mail\b[^>]*\/>/g, "").replace(/\bMail,/g, "");
+    assert.doesNotMatch(textAratat, /> Mail\b/, `${fisier}: a ramas „Mail" pe ecran`);
+    assert.doesNotMatch(textAratat, /"Mail"/, `${fisier}: a ramas „Mail" ca eticheta`);
   }
 });

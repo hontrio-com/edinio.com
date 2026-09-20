@@ -211,8 +211,39 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
       s-ar putea contrazice, si trecand de la Prezentare la Coșuri perioada s-ar pierde - omul
       ar alege „7 zile" sus si ar citi o lista de 30 dedesubt. Verificat in browser ca trece
       dintr-o fila in alta.
-- [ ] **D2.** Prezentare: cardurile cerute, grafic abandonate vs. recuperate cu comparatie,
-      palnie, tabel de produse cu rata de abandon si de recuperare.
+- [x] **D2.** Prezentare: carduri, grafic, palnie, produse cu rata lor. Trei functii noi in
+      baza (`..._grafic`, `..._palnie`, `..._produse`), din acelasi motiv ca sumarul: stranse in
+      memorie, ar depinde de cate randuri incap intr-o citire.
+      ⚠ **Graficul e cu BARE ALATURATE, nu cu linii si nu suprapuse.** Suprapuse, ochiul le
+      aduna - iar cele doua NU se aduna: un cos recuperat azi a fost abandonat saptamana
+      trecuta, deci aceeasi zi numara lucruri venite din zile diferite. Scrie asta sub grafic.
+      ⚠ Prima scriere folosea linii, si pe date adevarate (unu-doua cosuri pe zi, cu goluri
+      intre ele) iesea o linie lipita de zero din care nu se vedea nimic. Vazut in browser, nu
+      in cod. O curba intre doua zile goale mai si inventeaza o panta care n-a existat.
+      ⚠ Ziua e cea ROMANEASCA: grupata pe UTC, o comanda de la 01:30 ar cadea in ziua
+      precedenta - chiar defectul lui `orders_daily_revenue` de la panoul principal.
+      ⚠ Recuperarile se trec in ziua COMENZII, abandonarile in ziua cosului. Grupate pe
+      abandon, ziua de azi n-ar avea niciodata recuperari, fiindca ele vin mai tarziu.
+      ⚠⚠ **Palnia: „a ramas neterminat" NU e „abandonat acum".** Prima scriere punea toate
+      conversiile la abandonate si iesea „28 salvate → 28 abandonate": doua trepte egale, care
+      nu spun nimic. Se poate spune ADEVARAT despre un cos convertit daca a stat parasit -
+      `markCartConverted` nu atinge `last_activity_at`, deci distanta pana la comanda e chiar
+      cat a stat uitat. Masurat pe demo: 12 din 13 conversii au stat parasite peste prag, si
+      una are ceasurile pe dos (durata negativa, deci pica singura in afara).
+      ⚠ Palnia asta NU e palnia magazinului: aia (vizitatori → cos → comanda) sta la Statistici.
+      Asta incepe de la cosurile SALVATE, adica de la cine si-a lasat datele de contact.
+      Amestecate, ar fi parut ca pagina stie cati vizitatori are magazinul.
+      ⚠ Procentul fiecarei trepte e fata de cea DINAINTE, nu fata de prima: omul vrea sa afle
+      UNDE pierde. Socoteala e scoasa din randare si probata, fiindca una scrisa in JSX nu se
+      poate masura decat cu ochiul.
+      ⚠ Produsele au acum NUMITOR: „3 din 3 cosuri · 100% abandon", nu doar suma. Un produs care
+      apare in o suta de cosuri din care nouazeci se finalizeaza nu e o problema; unul care
+      apare in zece si se abandoneaza in noua este, chiar daca in bani pare mai mic. Asezate
+      dupa bani, lista arata produsele SCUMPE, nu pe cele care pierd vanzari.
+      ⚠ Un produs se numara O SINGURA DATA pe cos, chiar daca apare pe doua linii (marimi
+      diferite): altfel „in cate cosuri apare" ar fi putut depasi numarul cosurilor, si rata ar
+      fi trecut de 100%. Verificat pe demo ca niciun produs nu trece.
+      Palnia si sumarul verificate fata de controale scrise separat, pe datele demo.
 - [x] **D3.** Tabel adevarat pe desktop, cartonase pe telefon, filtre, o singura stare, sertar.
       ⚠ **O singura stare in loc de doua etichete.** Randul purta „Mail trimis" si „SMS trimis"
       deodata (si de pe 21.09 si „Ignorat"), si niciuna nu spunea ce conteaza: ce s-a intamplat

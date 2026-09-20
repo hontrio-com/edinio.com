@@ -15,6 +15,8 @@ import { AbandonedAutomationsTab } from "./AbandonedAutomationsTab";
 import { ExplicatieCard } from "./ExplicatieCard";
 import { EticheraStare } from "./cosuri/EticheteStare";
 import { SertarCos } from "./cosuri/SertarCos";
+import { GraficRecuperare } from "./cosuri/GraficRecuperare";
+import { PalniaRecuperarii } from "./cosuri/PalniaRecuperarii";
 import { FILTRE, cateInCos, trece, type FiltruStare } from "@/lib/abandoned/starea-cosului";
 import { NUMELE_RECUPERARII } from "@/lib/abandoned/atribuire";
 import {
@@ -552,6 +554,39 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
         ))}
       </div>
 
+      {/*
+        ⚠ GRAFICUL SI PALNIA STAU IMPREUNA: unul spune CAND se pierd cosurile,
+        cealalta UNDE se pierd. Separate, fiecare raspunde la jumatate de
+        intrebare.
+      */}
+      <div className="grid gap-6 lg:grid-cols-5">
+        <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 lg:col-span-3">
+          <div className="mb-4 flex items-center gap-2">
+            <TrendingDown className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">Abandonate și recuperate</h2>
+            <span className="ml-auto text-xs text-muted-foreground">{ETICHETE[data.perioada].toLowerCase()}</span>
+          </div>
+          <GraficRecuperare zile={data.grafic} />
+          {/*
+            ⚠ SE SPUNE DE CE CELE DOUA LINII NU SE ADUNA. Un cos recuperat azi a
+            fost abandonat saptamana trecuta, deci aceeasi zi numara lucruri
+            venite din zile diferite.
+          */}
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Recuperările se trec în ziua comenzii, abandonările în ziua coșului: cele două linii
+            nu se adună și nu se scad una din alta.
+          </p>
+        </div>
+
+        <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2">
+            <Percent className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">Unde se pierd coșurile</h2>
+          </div>
+          <PalniaRecuperarii palnie={data.palnie} />
+        </div>
+      </div>
+
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Abandoned products */}
         <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
@@ -563,20 +598,35 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
             <p className="text-sm text-muted-foreground py-6 text-center">Niciun produs abandonat încă.</p>
           ) : (
             <div className="space-y-3">
-              {data.abandonedProducts.map((p, i) => (
-                <div key={`${p.name}-${i}`} className="flex items-center gap-3">
-                  <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-muted border border-border shrink-0">
-                    {p.image_url
-                      ? <Image src={p.image_url} alt={p.name} fill sizes="40px" className="object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center"><Package className="h-4 w-4 text-muted-foreground" /></div>}
+              {data.abandonedProducts.map((p, i) => {
+                /*
+                  ⚠ RATA, NU DOAR SUMA. Un produs care apare in o suta de cosuri
+                  din care nouazeci se finalizeaza nu e o problema; unul care
+                  apare in zece si se abandoneaza in noua este, chiar daca in
+                  bani pare mai mic. Lista veche le aseza dupa bani, deci arata
+                  produsele SCUMPE, nu pe cele care pierd vanzari.
+                */
+                const rata = p.cosuriTotal > 0 ? Math.round((p.cosuriAbandonate / p.cosuriTotal) * 100) : 0;
+                return (
+                  <div key={`${p.name}-${i}`} className="flex items-center gap-3">
+                    <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-muted border border-border shrink-0">
+                      {p.image_url
+                        ? <Image src={p.image_url} alt={p.name} fill sizes="40px" className="object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center"><Package className="h-4 w-4 text-muted-foreground" /></div>}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">{p.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {p.cosuriAbandonate} din {p.cosuriTotal} {p.cosuriTotal === 1 ? "coș" : "coșuri"}
+                        {" · "}
+                        <span className={rata >= 80 ? "font-medium text-destructive" : ""}>{rata}% abandon</span>
+                        {p.recuperate > 0 && <span className="text-success"> · {p.recuperate} recuperate</span>}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatPrice(p.value)}</span>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
-                    <p className="text-xs text-muted-foreground">{p.quantity} buc · {p.carts} {p.carts === 1 ? "coș" : "coșuri"}</p>
-                  </div>
-                  <span className="text-sm font-semibold text-foreground tabular-nums shrink-0">{formatPrice(p.value)}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

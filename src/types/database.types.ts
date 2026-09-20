@@ -6835,6 +6835,58 @@ export type Database = {
         Returns: undefined
       }
       reseteaza_limita: { Args: { p_cheie: string }; Returns: undefined }
+      cosuri_abandonate_grafic: {
+        Args: {
+          p_business: string
+          p_de_la: string
+          p_pana: string
+          p_minute?: number
+          p_zile?: number
+        }
+        Returns: {
+          ziua: string
+          abandonate: number
+          valoare_abandonata: number
+          recuperate: number
+          valoare_recuperata: number
+        }[]
+      }
+      cosuri_abandonate_palnie: {
+        Args: {
+          p_business: string
+          p_de_la: string
+          p_pana: string
+          p_minute?: number
+          p_zile?: number
+        }
+        Returns: {
+          salvate: number
+          neterminate: number
+          contactate: number
+          deschise: number
+          recuperate: number
+        }[]
+      }
+      cosuri_abandonate_produse: {
+        Args: {
+          p_business: string
+          p_de_la: string
+          p_pana: string
+          p_minute?: number
+          p_zile?: number
+          p_limita?: number
+        }
+        Returns: {
+          produs_id: string
+          nume: string
+          poza: string | null
+          cosuri: number
+          cosuri_abandonate: number
+          bucati_abandonate: number
+          valoare_abandonata: number
+          recuperate: number
+        }[]
+      }
       cosuri_abandonate_sumar: {
         Args: {
           p_business: string

@@ -357,14 +357,15 @@ export async function getAbandonedCartsData(
     eroare: vor scadea in tacere si vor arata ca merge mai bine.
   */
   const pragAbandon = new Date(Date.now() - ABANDON_MINUTES * 60_000).toISOString();
-  const [sumarRes, listaRes, produseRes] = await Promise.all([
-    supabase.rpc("cosuri_abandonate_sumar", {
-      p_business: businessId,
-      p_de_la: perioada.deLa.toISOString(),
-      p_pana: perioada.panaLa.toISOString(),
-      p_minute: ABANDON_MINUTES,
-      p_zile: ZILE_ATRIBUIRE,
-    }),
+  const ferestruica = {
+    p_business: businessId,
+    p_de_la: perioada.deLa.toISOString(),
+    p_pana: perioada.panaLa.toISOString(),
+    p_minute: ABANDON_MINUTES,
+    p_zile: ZILE_ATRIBUIRE,
+  };
+  const [sumarRes, listaRes, produseRes, graficRes, palnieRes] = await Promise.all([
+    supabase.rpc("cosuri_abandonate_sumar", ferestruica),
     /*
       ⚠ PAGINA CERE SI NUMARUL ADEVARAT (`count: "exact"`). Pana acum antetul
       scria „(100)" fiindca atatea randuri trimitea serverul, langa un card
@@ -386,20 +387,13 @@ export async function getAbandonedCartsData(
       .order("last_activity_at", { ascending: false })
       .range(de, la),
     /*
-      ⚠ Produsele se strang peste TOATA fereastra, nu peste pagina aratata:
-      „ce se abandoneaza cel mai des" n-are nicio legatura cu ce randuri s-a
-      nimerit sa fie pe ecran. Citirea ramane marginita, si se spune mai jos.
+      ⚠ PRODUSELE SE STRANG IN BAZA, nu din `items` citite in memorie. Adunate
+      aici, ar fi depins de cate randuri incap intr-o citire - si tocmai
+      magazinul care are nevoie de lista asta e cel care depaseste pragul.
     */
-    supabase
-      .from("abandoned_carts")
-      .select("items")
-      .eq("business_id", businessId)
-      .eq("status", "open")
-      .lt("last_activity_at", pragAbandon)
-      .gte("created_at", perioada.deLa.toISOString())
-      .lt("created_at", perioada.panaLa.toISOString())
-      .order("last_activity_at", { ascending: false })
-      .limit(1000),
+    supabase.rpc("cosuri_abandonate_produse", { ...ferestruica, p_limita: 8 }),
+    supabase.rpc("cosuri_abandonate_grafic", ferestruica),
+    supabase.rpc("cosuri_abandonate_palnie", ferestruica),
   ]);
 
   const sumar = (sumarRes.data ?? [])[0] as SumarCosuri | undefined;
@@ -430,23 +424,38 @@ export async function getAbandonedCartsData(
 
   const nr = (v: unknown) => Math.round((Number(v) || 0) * 100) / 100;
 
-  // Aggregate items across abandoned carts -> top abandoned products.
-  const prodMap = new Map<string, { name: string; quantity: number; value: number; carts: number; image_url: string | null }>();
-  for (const r of (produseRes.data ?? [])) {
-    const items = (Array.isArray(r.items) ? r.items : []) as unknown as AbandonedCartItem[];
-    const seen = new Set<string>();
-    for (const it of items) {
-      const key = it.product_id || it.name;
-      if (!key) continue;
-      const cur = prodMap.get(key) ?? { name: it.name || "Produs", quantity: 0, value: 0, carts: 0, image_url: it.image_url ?? null };
-      cur.quantity += Number(it.quantity) || 0;
-      cur.value = round2(cur.value + (Number(it.price) || 0) * (Number(it.quantity) || 0));
-      if (!seen.has(key)) { cur.carts += 1; seen.add(key); }
-      if (!cur.image_url && it.image_url) cur.image_url = it.image_url;
-      prodMap.set(key, cur);
-    }
-  }
-  const abandonedProducts = [...prodMap.values()].sort((a, b) => b.value - a.value).slice(0, 8);
+  /*
+    Produsele vin gata strânse din baza. Fiecare stie si in CATE cosuri a
+    intrat cu totul, nu doar in cate s-a abandonat: fara numitor, lista ar
+    arata produsele populare, nu pe cele care pierd vanzari.
+  */
+  const abandonedProducts = (produseRes.data ?? []).map((p) => ({
+    name: p.nume || "Produs",
+    quantity: Number(p.bucati_abandonate) || 0,
+    value: nr(p.valoare_abandonata),
+    carts: p.cosuri_abandonate,
+    image_url: p.poza,
+    cosuriTotal: p.cosuri,
+    cosuriAbandonate: p.cosuri_abandonate,
+    recuperate: p.recuperate,
+  }));
+
+  const palnieRand = (palnieRes.data ?? [])[0];
+  const palnie = {
+    salvate: palnieRand?.salvate ?? 0,
+    neterminate: palnieRand?.neterminate ?? 0,
+    contactate: palnieRand?.contactate ?? 0,
+    deschise: palnieRand?.deschise ?? 0,
+    recuperate: palnieRand?.recuperate ?? 0,
+  };
+
+  const grafic = (graficRes.data ?? []).map((z) => ({
+    ziua: z.ziua,
+    abandonate: z.abandonate,
+    valoareAbandonata: nr(z.valoare_abandonata),
+    recuperate: z.recuperate,
+    valoareRecuperata: nr(z.valoare_recuperata),
+  }));
 
   return {
     enabled,
@@ -472,6 +481,8 @@ export async function getAbandonedCartsData(
     pagina,
     pePagina,
     totalCosuri,
+    grafic,
+    palnie,
     potentialRevenueThisMonth: nr(sumar?.valoare_abandonata),
     abandonedProducts,
     carts: randuri.map((r) => ({

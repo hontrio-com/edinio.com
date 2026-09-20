@@ -1,7 +1,9 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { FILTRE, NUMELE_STARII, cateInCos, stareaCosului, trece } from "./starea-cosului";
+import {
+  FILTRE, NUMELE_STARII, cateInCos, stareaCosului, trece, trepteleePalniei,
+} from "./starea-cosului";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -89,4 +91,34 @@ test("⚠ `item_count` E SUMA CANTITATILOR, NU NUMARUL DE PRODUSE", () => {
     `item_count` nenul: nu are voie sa spuna „3 produse" peste o lista goala.
   */
   assert.equal(cateInCos([], 3), "0 produse");
+});
+
+test("⚠ PROCENTUL PALNIEI E FATA DE TREAPTA DINAINTE, nu fata de prima", () => {
+  /*
+    ⚠ Socotit fata de prima, „26%" de la Contactate ar fi devenit „25% din
+    cosurile salvate" - o cifra adevarata care raspunde la alta intrebare.
+    Omul se uita la palnie ca sa afle UNDE pierde, nu cat a mai ramas.
+  */
+  const t = trepteleePalniei({ salvate: 100, neterminate: 50, contactate: 10, deschise: 5, recuperate: 1 });
+  assert.equal(t[0].dinPasulAnterior, null, "prima treapta n-are fata de ce");
+  assert.equal(t[1].dinPasulAnterior, 50, "50 din 100");
+  assert.equal(t[2].dinPasulAnterior, 20, "10 din 50, NU 10 din 100");
+  assert.equal(t[3].dinPasulAnterior, 50, "5 din 10");
+  assert.equal(t[4].dinPasulAnterior, 20, "1 din 5");
+});
+
+test("o treapta goala nu rupe socoteala si nu dispare de pe ecran", () => {
+  const t = trepteleePalniei({ salvate: 10, neterminate: 4, contactate: 0, deschise: 0, recuperate: 0 });
+  assert.equal(t[2].dinPasulAnterior, 0, "0 din 4 e zero la suta, nu «nu se stie»");
+  assert.equal(t[3].dinPasulAnterior, null, "cand treapta dinainte e 0, procentul n-are inteles");
+  for (const treapta of t) assert.ok(treapta.latime >= 2, "o treapta de zero tot trebuie sa se vada");
+});
+
+test("un magazin fara niciun cos nu imparte la zero", () => {
+  const t = trepteleePalniei({ salvate: 0, neterminate: 0, contactate: 0, deschise: 0, recuperate: 0 });
+  assert.equal(t.length, 5);
+  for (const treapta of t) {
+    assert.equal(treapta.numar, 0);
+    assert.ok(Number.isFinite(treapta.latime));
+  }
 });

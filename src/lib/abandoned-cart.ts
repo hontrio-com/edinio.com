@@ -44,6 +44,33 @@ export interface AbandonedProduct {
   value: number;
   carts: number;
   image_url: string | null;
+  /**
+   * In cate cosuri a intrat cu totul, si cate dintre ele au ramas neterminate.
+   *
+   * ⚠ FARA NUMITOR, LISTA ARATA PRODUSELE POPULARE, nu pe cele care pierd
+   * vanzari. Un produs care apare in o suta de cosuri din care nouazeci se
+   * finalizeaza nu e o problema; unul care apare in zece si se abandoneaza in
+   * noua este, chiar daca in bani pare mai mic.
+   */
+  cosuriTotal: number;
+  cosuriAbandonate: number;
+  recuperate: number;
+}
+
+export interface ZiRecuperare {
+  ziua: string;
+  abandonate: number;
+  valoareAbandonata: number;
+  recuperate: number;
+  valoareRecuperata: number;
+}
+
+export interface PalnieRecuperare {
+  salvate: number;
+  neterminate: number;
+  contactate: number;
+  deschise: number;
+  recuperate: number;
 }
 
 export interface AbandonedCartRow {
@@ -110,6 +137,10 @@ export interface AbandonedCartsData {
   pePagina: CatePePagina;
   /** ⚠ Cate cosuri sunt CU TOTUL, nu cate s-au trimis pe pagina asta. */
   totalCosuri: number;
+  /** Graficul: cate s-au abandonat si cate s-au recuperat, zi cu zi. */
+  grafic: ZiRecuperare[];
+  /** Palnia recuperarii, treapta cu treapta. */
+  palnie: PalnieRecuperare;
   potentialRevenueThisMonth: number;
   abandonedProducts: AbandonedProduct[];
   carts: AbandonedCartRow[];

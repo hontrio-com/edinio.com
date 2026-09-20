@@ -100,3 +100,49 @@ export function cateInCos(items: { quantity?: number }[], itemCount: number): st
   const p = produse === 1 ? "1 produs" : `${produse} produse`;
   return bucati > produse ? `${p} · ${bucati} buc` : p;
 }
+
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  TREPTELE PALNIEI
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Scoase din componenta ca sa se poata proba: socoteala din randare nu se
+  poate masura decat cu ochiul, si tocmai procentele se citesc gresit.
+*/
+
+export interface PalnieCifre {
+  salvate: number; neterminate: number; contactate: number; deschise: number; recuperate: number;
+}
+
+export interface TreaptaPalnie {
+  cheie: keyof PalnieCifre;
+  numar: number;
+  /** Cat la suta din treapta DINAINTE. `null` pe prima si cand cea dinainte e 0. */
+  dinPasulAnterior: number | null;
+  /** Cat de lata se deseneaza, fata de prima treapta. */
+  latime: number;
+}
+
+export const CHEILE_PALNIEI: (keyof PalnieCifre)[] = [
+  "salvate", "neterminate", "contactate", "deschise", "recuperate",
+];
+
+export function trepteleePalniei(p: PalnieCifre): TreaptaPalnie[] {
+  const sus = Math.max(1, p.salvate);
+  return CHEILE_PALNIEI.map((cheie, i) => {
+    const numar = p[cheie];
+    const inainte = i === 0 ? null : p[CHEILE_PALNIEI[i - 1]];
+    return {
+      cheie,
+      numar,
+      /*
+        ⚠ FATA DE TREAPTA DINAINTE, NU FATA DE PRIMA. Omul vrea sa stie UNDE
+        pierde; „4% din cosurile salvate" nu spune daca pierderea e la
+        contactare sau la deschidere.
+      */
+      dinPasulAnterior: inainte && inainte > 0 ? Math.round((numar / inainte) * 100) : null,
+      /* ⚠ Minimum 2%, ca o treapta de zero sa se vada totusi ca exista. */
+      latime: Math.max(2, Math.round((numar / sus) * 100)),
+    };
+  });
+}

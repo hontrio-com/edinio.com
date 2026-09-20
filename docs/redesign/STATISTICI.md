@@ -72,10 +72,11 @@ scadea la zero in a noua zi - exact felul de defect care se vede abia peste doua
 
 ### Etapa C - pagina
 
-- [ ] **C1.** Antet si filtre comune: perioada (azi, ieri, 7, 30, 90, luna, an, personalizat),
+- [x] **C1.** Antet si filtre comune: perioada (azi, ieri, 7, 30, 90, luna, an, personalizat),
       canal de vanzare, comparatie, export.
-- [ ] **C2.** Patru file: Prezentare, Vanzari, Trafic, Live.
-- [ ] **C3.** Toate cardurile cu aceeasi forma: valoare, crestere, valoarea perioadei
+- [~] **C2.** File: Prezentare (gata), Trafic (in lucru), Live (gata). „Vanzari" se adauga
+      odata cu tabelele ei; pana atunci n-ar fi decat un titlu gol.
+- [x] **C3.** Toate cardurile cu aceeasi forma: valoare, crestere, valoarea perioadei
       precedente, explicatie in tooltip.
       ⚠ **Exact cardul de pe panoul principal** (cerere din 20.09.2026): se scoate `StatCard`
       din pagina panoului intr-o componenta comuna si se foloseste si aici. Doua carduri
@@ -85,7 +86,10 @@ scadea la zero in a noua zi - exact felul de defect care se vede abia peste doua
 - [ ] **C5.** Grafic cu masura la alegere si granulatie dupa lungimea perioadei.
 - [ ] **C6.** Fila Vanzari: produse, categorii, canale, statusuri, vanzari brute/nete.
 - [ ] **C7.** Fila Trafic: surse cu venit, dispozitive cu conversie, palnie.
-- [ ] **C8.** Fila Live, cu flux de activitate citibil si „12 evenimente", nu „12 eventi".
+- [x] **C8.** Fila Live: „vizitatori activi" numara acum OAMENI distincti, nu afisari; s-au
+      adaugat cosuri, checkout-uri si comenzi din ultima jumatate de ora; fluxul spune ce s-a
+      intamplat („Un produs a fost adaugat in cos"), nu doar „Vizita via Facebook"; harta a
+      plecat de aici in Prezentare, unde filtrul chiar o misca; scrie „12 evenimente".
 - [ ] **C9.** Export CSV.
 - [ ] **C10.** Stari fara date scrise pe intelesul omului; harta folosibila cu degetul si cu
       tastatura.

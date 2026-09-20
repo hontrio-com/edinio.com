@@ -2,15 +2,11 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
-import {
-  ShoppingCart, Wallet, Receipt, Target,
-  type LucideIcon,
-} from "lucide-react";
+import { ShoppingCart, Wallet, Receipt, Target } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
 import { getLatestAnnouncements } from "@/lib/actions/announcement.actions";
 import { acumCatTimp, formatPrice } from "@/lib/utils/format";
-import { cn } from "@/lib/utils/cn";
 import { StocScazutRand } from "@/components/dashboard/StocScazutRand";
 import { PRAG_STOC_SCAZUT } from "@/lib/stoc-prag";
 import { orderStatus } from "@/lib/orders/status";
@@ -36,126 +32,11 @@ function announcementToArticle(a: Announcement) {
 import { SiteStatusBar } from "@/components/dashboard/SiteStatusBar";
 import { PanouVanzari } from "@/components/dashboard/PanouVanzari";
 import { citesteDateVanzari, crestere, intervalScris } from "@/lib/vanzari";
-import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
+import { CardStatistica } from "@/components/dashboard/CardStatistica";
 import {
   citesteDateCarduri, cresterePosibila, rataConversie, valoareMedie, zileScurt,
 } from "@/lib/panou-carduri";
 import { ActivationChecklist, type ChecklistStep } from "@/components/dashboard/ActivationChecklist";
-
-type StatCardProps = {
-  label: string;
-  value: string | number;
-  unit?: string;
-  delta?: string;
-  deltaDir?: "up" | "down";
-  deltaCaption?: string;
-  href: string;
-  icon: LucideIcon;
-  empty?: boolean;
-  /** Cum se calculeaza cifra, pe intelesul comerciantului. Vezi `ExplicatieCard`. */
-  explicatie?: string;
-};
-
-function StatCard({
-  label,
-  value,
-  unit,
-  delta,
-  deltaDir = "up",
-  deltaCaption = "vs. ieri",
-  href,
-  icon: Icon,
-  empty = false,
-  explicatie,
-}: StatCardProps) {
-  return (
-    /*
-      ⚠ CARDUL NU MAI E O LEGATURA, ci o cutie cu o legatura intinsa peste ea.
-
-      Semnul de intrebare e un `<button>`; inauntrul unui `<a>` ar fi fost si
-      cuibarire nevalida de HTML, si o capcana: orice apasare pe el ar fi dus
-      omul la pagina de detalii in loc sa-i arate explicatia. Asa, legatura
-      acopera cardul (`absolute inset-0`), iar butonul sta deasupra ei.
-    */
-    <div
-      className={[
-        "group relative flex flex-col overflow-hidden rounded-xl bg-surface",
-        "shadow-[0_1px_2px_rgba(15,23,20,0.04)]",
-        "border border-border transition-all duration-200",
-        "hover:-translate-y-0.5",
-        "hover:shadow-[0_1px_2px_rgba(15,23,20,0.04),0_18px_32px_-20px_rgba(15,23,20,0.12)]",
-        "min-h-[168px]",
-      ].join(" ")}
-    >
-      <Link
-        href={href}
-        aria-label={`${label}: vezi detalii`}
-        className="absolute inset-0 z-10 no-underline"
-      />
-
-      {/* top — label + icon */}
-      <div className="flex items-center justify-between border-b border-dashed border-border px-[18px] py-[14px]">
-        <span className="text-[12px] font-medium text-muted-foreground tracking-[0.01em]">
-          {label}
-        </span>
-        <span className="flex items-center gap-0.5">
-          {explicatie && <ExplicatieCard text={explicatie} eticheta={label} />}
-          <span className="grid h-7 w-7 place-items-center text-muted-foreground">
-            <Icon strokeWidth={1.4} className="h-[15px] w-[15px]" />
-          </span>
-        </span>
-      </div>
-
-      {/* bottom — value + footer */}
-      <div className="flex flex-1 flex-col justify-between px-[18px] pt-4 pb-[18px]">
-        <div
-          className={cn(
-            "text-[44px] leading-none font-medium tracking-[-0.03em] tabular-nums",
-            empty ? "text-muted-foreground/30" : "text-foreground"
-          )}
-        >
-          {value}
-          {unit && (
-            <span className="ml-1 text-[20px] font-normal text-muted-foreground">
-              {unit}
-            </span>
-          )}
-        </div>
-
-        {/*
-          ⚠ Cresterea si „Vezi detalii" stau pe RANDURI DIFERITE.
-          Pe acelasi rand, un card cu crestere de doua cifre si o perioada scrisa
-          („19,5% vs. 1 - 20 aug.") impingea „Vezi detalii" in trei bucati
-          suprapuse. Randul de jos e mereu scurt, deci nu se mai poate rupe.
-        */}
-        <div className="mt-[14px] flex flex-col gap-1 text-[12px] text-muted-foreground">
-          <div className="flex items-center gap-2">
-            {!empty && delta ? (
-              <>
-                <span className={cn(
-                  "font-medium tabular-nums",
-                  deltaDir === "down" ? "text-destructive" : "text-primary"
-                )}>
-                  {deltaDir === "up" ? "↑" : "↓"} {delta}
-                </span>
-                <span>{deltaCaption}</span>
-              </>
-            ) : (
-              <span>Actualizat acum</span>
-            )}
-          </div>
-
-          <span className="inline-flex items-center gap-1.5 self-end text-[12px] font-medium text-muted-foreground transition-colors group-hover:text-foreground">
-            Vezi detalii
-            <span className="inline-block transition-transform duration-200 group-hover:translate-x-[3px]">
-              →
-            </span>
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -375,7 +256,7 @@ async function ContinutPanou({
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-4">
-        <StatCard
+        <CardStatistica
           label="Comenzi azi"
           value={fmt(carduri.azi.comenzi)}
           delta={pctComenziAzi !== null ? fmtDelta(pctComenziAzi) : undefined}
@@ -385,7 +266,7 @@ async function ContinutPanou({
           icon={ShoppingCart}
           empty={carduri.azi.comenzi === 0}
         />
-        <StatCard
+        <CardStatistica
           label="Vanzari luna aceasta"
           value={fmt(carduri.luna.vanzari)}
           unit="lei"
@@ -396,7 +277,7 @@ async function ContinutPanou({
           icon={Wallet}
           empty={carduri.luna.vanzari === 0}
         />
-        <StatCard
+        <CardStatistica
           label="Valoare medie comanda"
           value={medieLuna === null ? "-" : fmt(Math.round(medieLuna * 100) / 100)}
           unit={medieLuna === null ? undefined : "lei"}
@@ -407,7 +288,7 @@ async function ContinutPanou({
           icon={Receipt}
           empty={medieLuna === null}
         />
-        <StatCard
+        <CardStatistica
           label="Rata de conversie"
           value={conversieLuna === null ? "-" : conversieLuna.toLocaleString("ro-RO", { maximumFractionDigits: 1 })}
           unit={conversieLuna === null ? undefined : "%"}

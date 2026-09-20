@@ -6506,6 +6506,18 @@ export type Database = {
       /* Cele patru carduri din capul panoului, intr-un singur JSON; forma lui e
          citita de `citesteDateCarduri` din `@/lib/panou-carduri`. */
       panou_carduri: { Args: { p_business: string }; Returns: Json }
+      trafic_panou: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null }
+        Returns: Json
+      }
+      trafic_pe_sursa: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null }
+        Returns: { sursa: string; dispozitiv: string; sesiuni: number; sesiuni_cu_comanda: number }[]
+      }
+      comenzi_pe_judet: {
+        Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null; p_canal?: string | null }
+        Returns: { judet: string; comenzi: number; vanzari: number; medie: number }[]
+      }
       vanzari_panou: {
         Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null; p_canal?: string | null }
         Returns: Json

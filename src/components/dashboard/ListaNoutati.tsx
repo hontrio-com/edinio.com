@@ -54,9 +54,15 @@ export function ListaNoutati({ noutati }: { noutati: RandNoutate[] }) {
                   )}
                   <span className="truncate text-sm font-medium text-foreground">{n.titlu}</span>
                 </div>
-                {/* Rezumatul si data stau pe acelasi rand: lista trebuie sa ramana
-                    de cinci randuri, nu de zece. */}
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {/*
+                  Rezumatul si data stau impreuna, si se opresc la doua randuri.
+
+                  ⚠ Taiat la UN rand, pe telefon nu mai ramaneau decat vreo cinci
+                  cuvinte: masurat pe o fereastra de 390px, din rezumat se
+                  ascundeau 253 de pixeli din 300. Doua randuri incap si acolo, iar
+                  pe ecran lat tot un rand ies.
+                */}
+                <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
                   {n.data && <span className="text-muted-foreground/80">{acumCatTimp(n.data)} · </span>}
                   {n.rezumat}
                 </p>

@@ -106,48 +106,67 @@ export function StocScazutRand({
 
   return (
     <>
-      <div className="mt-4 flex items-center gap-3 rounded-xl bg-card px-4 py-3 ring-1 ring-foreground/10">
-        <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
-          {urgent && (
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive/60" />
-          )}
-          <span
-            className={`relative inline-flex h-2.5 w-2.5 rounded-full ${urgent ? "bg-destructive" : "bg-warning"}`}
-          />
-        </span>
+      {/*
+        ⚠ BANDA SE ASEAZA DUPA LOCUL PE CARE IL ARE, nu dupa latimea ecranului.
 
-        <p className="min-w-0 flex-1 text-sm text-foreground">
-          <span className="font-semibold">
-            {subPrag} {subPrag === 1 ? "produs" : "produse"}
-          </span>{" "}
-          sub pragul de stoc
-          {epuizate > 0 && (
-            <>
-              , dintre care{" "}
-              <span className="font-semibold text-destructive">
-                {epuizate} {epuizate === 1 ? "epuizat" : "epuizate"}
-              </span>
-            </>
-          )}
-          .
-        </p>
+        Pe telefon, textul si butonul stateau pe acelasi rand, iar butonul avea
+        `flex-shrink-0`: tot ce se strangea era textul, care ajungea rupt cate un
+        cuvant pe rand. Acum randul se poate INFASURA: cat timp incap amandoua,
+        stau unul langa altul; cand nu mai incap, butonul coboara singur dedesubt.
+
+        Infasurarea NU se face dupa latimea ferestrei, ci dupa locul ramas: banda
+        poate sta si intr-o coloana ingusta pe un ecran lat, iar un prag masurat
+        pe fereastra n-ar fi stiut asta. Singurul prag (`sm:w-auto`) e cosmetic:
+        pe telefon butonul coborat se intinde pe toata latimea, ca sa arate a
+        buton, nu a bucata ratacita de text.
+      */}
+      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-card px-4 py-3 ring-1 ring-foreground/10">
+        {/* Punctul si textul raman impreuna: punctul n-are ce cauta singur pe un rand. */}
+        <div className="flex min-w-[15rem] flex-1 items-center gap-3">
+          <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+            {urgent && (
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive/60" />
+            )}
+            <span
+              className={`relative inline-flex h-2.5 w-2.5 rounded-full ${urgent ? "bg-destructive" : "bg-warning"}`}
+            />
+          </span>
+
+          <p className="min-w-0 flex-1 text-sm text-foreground">
+            <span className="font-semibold">
+              {subPrag} {subPrag === 1 ? "produs" : "produse"}
+            </span>{" "}
+            sub pragul de stoc
+            {epuizate > 0 && (
+              <>
+                , dintre care{" "}
+                <span className="font-semibold text-destructive">
+                  {epuizate} {epuizate === 1 ? "epuizat" : "epuizate"}
+                </span>
+              </>
+            )}
+            .
+          </p>
+
+          {/* „Ignora" sta langa text, nu langa buton: altfel, cand butonul coboara,
+              ar cobori cu el si ar lasa randul de sus fara nicio iesire. */}
+          <button
+            type="button"
+            onClick={ignora}
+            title="Ignora. Banda reapare daca mai scade un produs sub prag."
+            aria-label="Ignora avertizarea de stoc"
+            className="ml-auto flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
 
         <button
           type="button"
           onClick={() => setCerere(citesteProduseSubPrag(businessId))}
-          className="flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted"
+          className="w-full flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted sm:w-auto"
         >
           Vezi produsele sub pragul de stoc
-        </button>
-
-        <button
-          type="button"
-          onClick={ignora}
-          title="Ignora. Banda reapare daca mai scade un produs sub prag."
-          aria-label="Ignora avertizarea de stoc"
-          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
         </button>
       </div>
 

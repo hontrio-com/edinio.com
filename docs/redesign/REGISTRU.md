@@ -40,7 +40,8 @@ push si aplicarea migratiei, la toti comerciantii.
 |---|--------|----------|------------------|------------------------|
 | 1 | `migrations/2026-09-20-produse-sub-prag.sql` | `stoc_combinatie`, `combinatie_aprinsa`, `produse_sub_prag`, `numar_produse_sub_prag` (stoc scazut vazut si pe variante) | DA | **DA, 20.09.2026** (aplicata inainte de regula de mai sus; schema de referinta a fost regenerata atunci) |
 | 2 | `migrations/2026-09-20-vanzari-panou.sql` | `fereastra_vanzari`, `canale_vanzare`, `vanzari_panou` (graficul de vanzari: perioade, canale, comparatie) | DA | **NU. De aplicat la final.** |
-| 3 | `migrations/2026-09-20-panou-carduri.sql` | `panou_carduri` (cele patru carduri din cap) **si politica RLS lipsa de pe `business_daily_stats`** | DA | **NU. De aplicat la final.** |
+| 3a | `migrations/2026-09-20-panou-carduri.sql`, partea de jos | politica RLS lipsa de pe `business_daily_stats` | DA | **DA, 20.09.2026**, cu acordul lui: repara un defect care lovea cei 71 de comercianti cu statistici. ⚠ La final NU se mai aplica a doua oara (ar da `42710: policy already exists`): se sare peste ultima parte a fisierului. |
+| 3b | `migrations/2026-09-20-panou-carduri.sql`, functia | `panou_carduri` (cele patru carduri din cap) | DA | **NU. De aplicat la final.** |
 
 ⚠ Toate sunt **numai citire**: functii noi si o politica de SELECT, niciun `alter table`, niciun
 rand atins. Nu strica nimic din ce ruleaza acum, dar pana nu sunt aplicate, codul care le cheama
@@ -56,10 +57,23 @@ Masurat pe baza demo, prin panoul real: pagina **Statistici** arata „Rata de c
 38 vizite" pentru 30 de zile, cand luna avea 5.701 de vizite. Dupa politica: 5.701, iar rata
 intra la loc sub 100%. Cardul nou de conversie a dat defectul de gol (arata 173,7%).
 
-Deci, cat timp migratia 3 nu e aplicata, **fiecare comerciant vede pe Statistici un trafic mult
-mai mic decat cel real si o rata de conversie umflata**. Nu s-a aplicat in productie fiindca
-regula din 20.09 e ca nimic nu se atinge pana la final; daca se hotaraste altfel, politica
-singura (ultima bucata din fisier) se poate aplica separat, fara restul migratiei.
+**Rezolvat in productie pe 20.09.2026**, cu acordul lui („rezolva asta daca e rapid si fara sa
+strici nimic"), fiindca lovea zilnic cei 71 de comercianti care au statistici: 3.054 de randuri,
+niciunul citibil de proprietarul lui.
+
+Verificat dupa aplicare, chiar in productie, cu RLS pornit si dandu-ne drept comerciantul cu
+cele mai multe zile (totul intr-o tranzactie inchisa cu `rollback`, fara nicio scriere):
+isi vede toate cele 249 de zile ale lui, **zero** randuri de la alte magazine, iar `anon` vede
+in continuare zero. Functia `panou_carduri` a ramas neaplicata: ea tine de redesign.
+
+⚠ **RAMAS DE FACUT, si nu se poate din sesiunea asta:** schema de referinta din Git nu mai
+cuprinde politica noua, fiindca regenerarea cere o legatura la baza, pe care mediul mi-a
+refuzat-o („Modify Shared Resources"). Se ruleaza, de catre el sau cu permisiunea lui:
+
+    bash scripts/schema-baseline.sh          # rescrie migrations/000-schema-baseline.sql
+    bash scripts/schema-baseline.sh --check  # trebuie sa spuna ca Git = productia
+
+Pana atunci, `--check` va semnala o diferenta: e chiar politica de mai sus, nu o surpriza.
 
 ---
 

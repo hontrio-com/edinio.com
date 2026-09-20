@@ -40,9 +40,26 @@ push si aplicarea migratiei, la toti comerciantii.
 |---|--------|----------|------------------|------------------------|
 | 1 | `migrations/2026-09-20-produse-sub-prag.sql` | `stoc_combinatie`, `combinatie_aprinsa`, `produse_sub_prag`, `numar_produse_sub_prag` (stoc scazut vazut si pe variante) | DA | **DA, 20.09.2026** (aplicata inainte de regula de mai sus; schema de referinta a fost regenerata atunci) |
 | 2 | `migrations/2026-09-20-vanzari-panou.sql` | `fereastra_vanzari`, `canale_vanzare`, `vanzari_panou` (graficul de vanzari: perioade, canale, comparatie) | DA | **NU. De aplicat la final.** |
+| 3 | `migrations/2026-09-20-panou-carduri.sql` | `panou_carduri` (cele patru carduri din cap) **si politica RLS lipsa de pe `business_daily_stats`** | DA | **NU. De aplicat la final.** |
 
-⚠ Toate sunt **numai citire**: functii noi, niciun `alter table`, niciun rand atins. Nu strica
-nimic din ce ruleaza acum, dar pana nu sunt aplicate, codul care le cheama nu are ce primi.
+⚠ Toate sunt **numai citire**: functii noi si o politica de SELECT, niciun `alter table`, niciun
+rand atins. Nu strica nimic din ce ruleaza acum, dar pana nu sunt aplicate, codul care le cheama
+nu are ce primi.
+
+### ⚠⚠ Migratia 3 repara si un defect care e ACUM in productie
+
+`business_daily_stats` are RLS pornit si **zero politici**: in afara de `service_role`, nimeni
+nu poate citi din ea. Toate functiile de statistici sunt `security invoker`, deci comerciantul
+primeste doar vizitele de AZI (cele brute din `site_analytics`), niciodata zilele stranse.
+
+Masurat pe baza demo, prin panoul real: pagina **Statistici** arata „Rata de conversie 250.0%,
+38 vizite" pentru 30 de zile, cand luna avea 5.701 de vizite. Dupa politica: 5.701, iar rata
+intra la loc sub 100%. Cardul nou de conversie a dat defectul de gol (arata 173,7%).
+
+Deci, cat timp migratia 3 nu e aplicata, **fiecare comerciant vede pe Statistici un trafic mult
+mai mic decat cel real si o rata de conversie umflata**. Nu s-a aplicat in productie fiindca
+regula din 20.09 e ca nimic nu se atinge pana la final; daca se hotaraste altfel, politica
+singura (ultima bucata din fisier) se poate aplica separat, fara restul migratiei.
 
 ---
 
@@ -55,7 +72,8 @@ select p.proname,
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
  where n.nspname = 'public'
    and p.proname in ('produse_sub_prag','numar_produse_sub_prag','stoc_combinatie',
-                     'combinatie_aprinsa','fereastra_vanzari','canale_vanzare','vanzari_panou');
+                     'combinatie_aprinsa','fereastra_vanzari','canale_vanzare','vanzari_panou',
+                     'panou_carduri');
 ```
 
 Se asteapta `anon_poate = false` peste tot si `auth_poate = true`.
@@ -86,6 +104,7 @@ Lista e ca sa se stie **ce se uita la** dupa push, nu ca sa inlocuiasca istoricu
 | Suprafete | `src/components/ui/panel.tsx` | Cardurile au `ring-1 ring-foreground/10`, nu chenar. |
 | Stoc scazut | `src/lib/stoc-prag.ts`, `src/lib/actions/stoc-scazut.actions.ts`, `src/components/dashboard/StocScazutRand.tsx`, `src/components/dashboard/ModalStocScazut.tsx`, pagina panoului | Banda arata numarul corect; modalul deschide lista; „Ignora" tine intre reincarcari. Depinde de migratia **1**. |
 | Grafic de vanzari | `src/lib/vanzari.ts` (+ probe), `src/components/dashboard/PanouVanzari.tsx`, `src/components/dashboard/GraficVanzari.tsx`, pagina panoului; **sters**: `src/components/dashboard/RevenueChart.tsx` | Perioadele, canalele si comparatia. Depinde de migratia **2**. |
+| Cele patru carduri | `src/lib/panou-carduri.ts` (+ probe), `src/components/dashboard/ExplicatieCard.tsx`, pagina panoului | Comenzi azi, Vanzari luna aceasta, Valoare medie comanda, Rata de conversie, fiecare cu diferenta procentuala; tooltip cu formula doar la conversie. Depinde de migratia **3**. ⚠ Se verifica si pagina **Statistici**: vizitele de acolo trebuie sa creasca dupa aplicarea politicii. |
 | Tipuri | `src/types/database.types.ts` | ⚠ Intrarile pentru functiile noi sunt **scrise de mana** (regenerarea completa rescrie `store_settings` din tabela in vedere si rupe zeci de locuri). Dupa aplicarea migratiilor, ele descriu in sfarsit ceva ce exista si in productie. |
 
 ---

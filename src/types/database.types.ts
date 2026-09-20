@@ -6490,6 +6490,9 @@ export type Database = {
         Returns: { de_la: string; pana_la: string; de_la_ant: string; pana_la_ant: string; granulatie: string }[]
       }
       canale_vanzare: { Args: { p_business: string }; Returns: { canal: string; comenzi: number }[] }
+      /* Cele patru carduri din capul panoului, intr-un singur JSON; forma lui e
+         citita de `citesteDateCarduri` din `@/lib/panou-carduri`. */
+      panou_carduri: { Args: { p_business: string }; Returns: Json }
       vanzari_panou: {
         Args: { p_business: string; p_fel?: string; p_de_la?: string | null; p_pana_la?: string | null; p_canal?: string | null }
         Returns: Json

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import {
-  ShoppingCart, Wallet, Package, Clock, Megaphone,
+  ShoppingCart, Wallet, Receipt, Target, Megaphone,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -33,7 +33,11 @@ function announcementToArticle(a: Announcement) {
 }
 import { SiteStatusBar } from "@/components/dashboard/SiteStatusBar";
 import { PanouVanzari } from "@/components/dashboard/PanouVanzari";
-import { citesteDateVanzari } from "@/lib/vanzari";
+import { citesteDateVanzari, crestere, intervalScris } from "@/lib/vanzari";
+import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
+import {
+  citesteDateCarduri, cresterePosibila, rataConversie, valoareMedie, zileScurt,
+} from "@/lib/panou-carduri";
 import { ActivationChecklist, type ChecklistStep } from "@/components/dashboard/ActivationChecklist";
 
 type StatCardProps = {
@@ -46,6 +50,8 @@ type StatCardProps = {
   href: string;
   icon: LucideIcon;
   empty?: boolean;
+  /** Cum se calculeaza cifra, pe intelesul comerciantului. Vezi `ExplicatieCard`. */
+  explicatie?: string;
 };
 
 function StatCard({
@@ -58,26 +64,43 @@ function StatCard({
   href,
   icon: Icon,
   empty = false,
+  explicatie,
 }: StatCardProps) {
   return (
-    <Link
-      href={href}
+    /*
+      ⚠ CARDUL NU MAI E O LEGATURA, ci o cutie cu o legatura intinsa peste ea.
+
+      Semnul de intrebare e un `<button>`; inauntrul unui `<a>` ar fi fost si
+      cuibarire nevalida de HTML, si o capcana: orice apasare pe el ar fi dus
+      omul la pagina de detalii in loc sa-i arate explicatia. Asa, legatura
+      acopera cardul (`absolute inset-0`), iar butonul sta deasupra ei.
+    */
+    <div
       className={[
         "group relative flex flex-col overflow-hidden rounded-xl bg-surface",
         "shadow-[0_1px_2px_rgba(15,23,20,0.04)]",
         "border border-border transition-all duration-200",
         "hover:-translate-y-0.5",
         "hover:shadow-[0_1px_2px_rgba(15,23,20,0.04),0_18px_32px_-20px_rgba(15,23,20,0.12)]",
-        "min-h-[168px] no-underline",
+        "min-h-[168px]",
       ].join(" ")}
     >
+      <Link
+        href={href}
+        aria-label={`${label}: vezi detalii`}
+        className="absolute inset-0 z-10 no-underline"
+      />
+
       {/* top — label + icon */}
       <div className="flex items-center justify-between border-b border-dashed border-border px-[18px] py-[14px]">
         <span className="text-[12px] font-medium text-muted-foreground tracking-[0.01em]">
           {label}
         </span>
-        <span className="grid h-7 w-7 place-items-center text-muted-foreground">
-          <Icon strokeWidth={1.4} className="h-[15px] w-[15px]" />
+        <span className="flex items-center gap-0.5">
+          {explicatie && <ExplicatieCard text={explicatie} eticheta={label} />}
+          <span className="grid h-7 w-7 place-items-center text-muted-foreground">
+            <Icon strokeWidth={1.4} className="h-[15px] w-[15px]" />
+          </span>
         </span>
       </div>
 
@@ -97,22 +120,30 @@ function StatCard({
           )}
         </div>
 
-        <div className="mt-[14px] flex items-center gap-2 text-[12px] text-muted-foreground">
-          {!empty && delta ? (
-            <>
-              <span className={cn(
-                "font-medium tabular-nums",
-                deltaDir === "down" ? "text-destructive" : "text-primary"
-              )}>
-                {deltaDir === "up" ? "↑" : "↓"} {delta}
-              </span>
-              <span>{deltaCaption}</span>
-            </>
-          ) : (
-            <span>Actualizat acum</span>
-          )}
+        {/*
+          ⚠ Cresterea si „Vezi detalii" stau pe RANDURI DIFERITE.
+          Pe acelasi rand, un card cu crestere de doua cifre si o perioada scrisa
+          („19,5% vs. 1 - 20 aug.") impingea „Vezi detalii" in trei bucati
+          suprapuse. Randul de jos e mereu scurt, deci nu se mai poate rupe.
+        */}
+        <div className="mt-[14px] flex flex-col gap-1 text-[12px] text-muted-foreground">
+          <div className="flex items-center gap-2">
+            {!empty && delta ? (
+              <>
+                <span className={cn(
+                  "font-medium tabular-nums",
+                  deltaDir === "down" ? "text-destructive" : "text-primary"
+                )}>
+                  {deltaDir === "up" ? "↑" : "↓"} {delta}
+                </span>
+                <span>{deltaCaption}</span>
+              </>
+            ) : (
+              <span>Actualizat acum</span>
+            )}
+          </div>
 
-          <span className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+          <span className="inline-flex items-center gap-1.5 self-end text-[12px] font-medium text-muted-foreground transition-colors group-hover:text-foreground">
             Vezi detalii
             <span className="inline-block transition-transform duration-200 group-hover:translate-x-[3px]">
               →
@@ -120,7 +151,7 @@ function StatCard({
           </span>
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
 
@@ -199,28 +230,22 @@ async function ContinutPanou({
   business, userId, publicUrl,
 }: { business: BusinessPanou; userId: string; publicUrl: string }) {
   const supabase = await createClient();
-  const now = new Date();
-  const today     = now.toISOString().split("T")[0];
-  const yesterday = new Date(now.getTime() - 86400000).toISOString().split("T")[0];
 
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-  const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0];
-  const lastMonthEnd   = thisMonthStart;
+  /*
+    ⚠ MARGINILE ZILELOR NU SE MAI CALCULEAZA AICI, ci in `panou_carduri`.
 
+    Erau scrise `new Date(...).toISOString().split("T")[0]`, si asta a costat o
+    luna intreaga de cifre gresite: `new Date(an, luna, 1)` inseamna miezul
+    noptii LOCAL, care in Romania e ziua precedenta la 21:00 UTC, deci
+    `toISOString()` da ULTIMA ZI A LUNII TRECUTE. Masurat pe baza demo:
+    „Vanzari luna aceasta" arata 29.190,41 lei in loc de 28.215,56, fiindca
+    inghitea si cele trei comenzi din 31 august (974,85 lei).
 
-
-  // Vanzarile nu includ comenzile anulate/rambursate — aceeasi regula ca in
-  // Analytics (VALID_STATUSES) si paginile de admin. Lista "Comenzi recente"
-  // ramane nefiltrata (e un jurnal, nu o metrica).
-  const NOT_SALES = "(cancelled,refunded)";
-
+    Acum ziua e cea romaneasca si se taie in SQL, o singura data, pentru toate
+    cele patru carduri.
+  */
   const [
-    { count: ordersToday },
-    { count: ordersYesterday },
-    { data: monthRevenueRpc },
-    { data: lastMonthRevenueRpc },
-    { count: activeProducts },
-    { count: pendingOrders },
+    { data: carduriRpc },
     { data: recentOrders },
     { data: vanzariRpc },
     { data: canaleVanzare },
@@ -229,19 +254,21 @@ async function ContinutPanou({
     { count: ordersTotal },
     { data: dashProfile },
   ] = await Promise.all([
-    supabase.from("orders").select("*", { count: "exact", head: true })
-      .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", today),
-    supabase.from("orders").select("*", { count: "exact", head: true })
-      .eq("business_id", business.id).not("status", "in", NOT_SALES).gte("created_at", yesterday).lt("created_at", today),
-    // Sumele de venit se calculeaza in SQL (nu din randuri aduse in JS):
-    // PostgREST trunchiaza orice raspuns la 1000 de randuri, deci reduce-ul
-    // in JS subestima veniturile la magazinele cu volum mare.
-    supabase.rpc("orders_revenue_sum", { bid: business.id, t_from: thisMonthStart }),
-    supabase.rpc("orders_revenue_sum", { bid: business.id, t_from: lastMonthStart, t_to: lastMonthEnd }),
-    supabase.from("products").select("*", { count: "exact", head: true })
-      .eq("business_id", business.id).eq("is_active", true),
-    supabase.from("orders").select("*", { count: "exact", head: true })
-      .eq("business_id", business.id).eq("status", "pending"),
+    /*
+      Cele patru carduri din cap, dintr-o singura cerere: comenzi azi, vanzari
+      luna aceasta, valoare medie comanda, rata de conversie, fiecare cu
+      perioada dinainte.
+
+      ⚠ Impreuna, fiindca doua dintre ele sunt impartiri intre celelalte (media
+      = vanzari / comenzi, conversia = comenzi / vizite). Aduse din interogari
+      separate, cifrele puteau fi ale unor ferestre usor diferite, iar
+      impartirile ar fi iesit gresite fara sa dea nimeni eroare.
+
+      ⚠ Sumele se fac in SQL, nu din randuri aduse in JS: PostgREST trunchiaza
+      orice raspuns la 1000 de randuri, deci un `reduce` ar subestima veniturile
+      la magazinele cu volum.
+    */
+    supabase.rpc("panou_carduri", { p_business: business.id }),
     supabase.from("orders").select("id, order_number, customer_name, total, status, created_at")
       .eq("business_id", business.id).order("created_at", { ascending: false }).limit(5),
     /*
@@ -271,19 +298,36 @@ async function ContinutPanou({
   ]);
 
   const fmt = (n: number) => new Intl.NumberFormat("ro-RO").format(n);
-  const fmtDelta = (pct: number) => `${Math.abs(pct)}%`;
+  const fmtDelta = (pct: number) =>
+    `${Math.abs(pct).toLocaleString("ro-RO", { maximumFractionDigits: 1 })}%`;
 
-  const monthRevenue     = Number(monthRevenueRpc ?? 0);
-  const lastMonthRevenue = Number(lastMonthRevenueRpc ?? 0);
-  const revenuePct = lastMonthRevenue > 0
-    ? Math.round(((monthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
-    : null;
+  /*
+    Daca functia nu raspunde, cardurile arata zerouri in loc sa cada pagina.
+    Fereastra ramane goala, deci nu exista nici crestere de aratat.
+  */
+  const carduri = citesteDateCarduri(carduriRpc) ?? {
+    azi: { comenzi: 0 },
+    ieri_pana_acum: { comenzi: 0, ora: "" },
+    luna: { vanzari: 0, comenzi: 0, vizite: 0, de_la: "", pana_la: "" },
+    luna_trecuta: { vanzari: 0, comenzi: 0, vizite: 0, de_la: "", pana_la: "" },
+  };
 
-  const ordersTodayCount     = ordersToday ?? 0;
-  const ordersYesterdayCount = ordersYesterday ?? 0;
-  const ordersPct = ordersYesterdayCount > 0
-    ? Math.round(((ordersTodayCount - ordersYesterdayCount) / ordersYesterdayCount) * 100)
-    : null;
+  const medieLuna = valoareMedie(carduri.luna);
+  const medieLunaTrecuta = valoareMedie(carduri.luna_trecuta);
+  const conversieLuna = rataConversie(carduri.luna);
+  const conversieLunaTrecuta = rataConversie(carduri.luna_trecuta);
+
+  const pctComenziAzi = crestere(carduri.azi.comenzi, carduri.ieri_pana_acum.comenzi);
+  const pctVanzari = crestere(carduri.luna.vanzari, carduri.luna_trecuta.vanzari);
+  const pctMedie = cresterePosibila(medieLuna, medieLunaTrecuta);
+  const pctConversie = cresterePosibila(conversieLuna, conversieLunaTrecuta);
+
+  /* Aceleasi zile din luna trecuta: scurt sub cifra, intreg in explicatie. */
+  const zileleLuniiTrecute = intervalScris({
+    de_la: carduri.luna_trecuta.de_la,
+    pana_la: carduri.luna_trecuta.pana_la,
+  });
+  const subCifra = `vs. ${zileScurt(carduri.luna_trecuta.de_la, carduri.luna_trecuta.pana_la)}`;
 
   const dateVanzari = citesteDateVanzari(vanzariRpc);
 
@@ -319,38 +363,56 @@ async function ContinutPanou({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-4">
         <StatCard
           label="Comenzi azi"
-          value={fmt(ordersTodayCount)}
-          delta={ordersPct !== null ? fmtDelta(ordersPct) : undefined}
-          deltaDir={ordersPct !== null && ordersPct >= 0 ? "up" : "down"}
-          deltaCaption="vs. ieri"
+          value={fmt(carduri.azi.comenzi)}
+          delta={pctComenziAzi !== null ? fmtDelta(pctComenziAzi) : undefined}
+          deltaDir={pctComenziAzi !== null && pctComenziAzi >= 0 ? "up" : "down"}
+          deltaCaption={`vs. ieri, ${carduri.ieri_pana_acum.ora}`}
           href="/dashboard/orders"
           icon={ShoppingCart}
-          empty={ordersTodayCount === 0}
+          empty={carduri.azi.comenzi === 0}
         />
         <StatCard
           label="Vanzari luna aceasta"
-          value={fmt(monthRevenue)}
+          value={fmt(carduri.luna.vanzari)}
           unit="lei"
-          delta={revenuePct !== null ? fmtDelta(revenuePct) : undefined}
-          deltaDir={revenuePct !== null && revenuePct >= 0 ? "up" : "down"}
-          deltaCaption="vs. luna trecuta"
+          delta={pctVanzari !== null ? fmtDelta(pctVanzari) : undefined}
+          deltaDir={pctVanzari !== null && pctVanzari >= 0 ? "up" : "down"}
+          deltaCaption={subCifra}
           href="/dashboard/orders"
           icon={Wallet}
-          empty={monthRevenue === 0}
+          empty={carduri.luna.vanzari === 0}
         />
         <StatCard
-          label="Produse active"
-          value={fmt(activeProducts ?? 0)}
-          href="/dashboard/products"
-          icon={Package}
-          empty={(activeProducts ?? 0) === 0}
+          label="Valoare medie comanda"
+          value={medieLuna === null ? "-" : fmt(Math.round(medieLuna * 100) / 100)}
+          unit={medieLuna === null ? undefined : "lei"}
+          delta={pctMedie !== null ? fmtDelta(pctMedie) : undefined}
+          deltaDir={pctMedie !== null && pctMedie >= 0 ? "up" : "down"}
+          deltaCaption={subCifra}
+          href="/dashboard/orders"
+          icon={Receipt}
+          empty={medieLuna === null}
         />
         <StatCard
-          label="In asteptare"
-          value={fmt(pendingOrders ?? 0)}
-          href="/dashboard/orders?status=pending"
-          icon={Clock}
-          empty={(pendingOrders ?? 0) === 0}
+          label="Rata de conversie"
+          value={conversieLuna === null ? "-" : conversieLuna.toLocaleString("ro-RO", { maximumFractionDigits: 1 })}
+          unit={conversieLuna === null ? undefined : "%"}
+          delta={pctConversie !== null ? fmtDelta(pctConversie) : undefined}
+          deltaDir={pctConversie !== null && pctConversie >= 0 ? "up" : "down"}
+          deltaCaption={subCifra}
+          href="/dashboard/analytics"
+          icon={Target}
+          empty={conversieLuna === null}
+          explicatie={
+            ["Comenzi / Vizite x 100",
+             `${fmt(carduri.luna.comenzi)} / ${fmt(carduri.luna.vizite)} x 100 = `
+               + `${conversieLuna === null ? "-" : conversieLuna.toLocaleString("ro-RO", { maximumFractionDigits: 1 })}%`,
+             "",
+            ].join("\n")
+            + "Luna aceasta, de pe 1 pana azi. O vizita e o deschidere a paginii magazinului, nu un om: "
+            + "acelasi client care revine de trei ori inseamna trei vizite. "
+            + `Procentul de dedesubt compara cu aceleasi zile din luna trecuta (${zileleLuniiTrecute}).`
+          }
         />
       </div>
 

@@ -15,6 +15,7 @@ import { CUSTOMERS_PAGE_SIZE } from "@/lib/orders/pagination";
 import { orderStatus } from "@/lib/orders/status";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import { EticheteClient } from "@/components/dashboard/clienti/EticheteClient";
 import { CustomerImportModal } from "./CustomerImportModal";
 
 type SortKey = "recent" | "spent" | "orders" | "name";
@@ -226,26 +227,13 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
                   {/*
-                    ⚠ „RECURENT", NU „FIDEL". Badge-ul apare la a doua comandă, iar
-                    două comenzi nu înseamnă fidelitate. „Recurent" spune exact ce
-                    măsoară. „VIP" rămâne pentru când va avea reguli proprii (minim de
-                    comenzi, minim cheltuit, comandă recentă).
+                    ⚠ Cele șase etichete (Nou, Recurent, VIP, Inactiv, Importat,
+                    Risc de retur) au regulile în `lib/customers/etichete.ts`, cu
+                    măsurătorile care le-au hotărât. Aici erau două, scrise de mână.
                   */}
-                  {c.validOrderCount > 1 && (
-                    <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold text-info bg-info/10 border border-info/20 rounded-full px-1.5 py-0.5">
-                      <Repeat className="h-2.5 w-2.5" /> Recurent
-                    </span>
-                  )}
-                  {/*
-                    Contactele aduse dintr-un fișier se văd ca atare: altfel „0 lei"
-                    lângă un nume arată a client pierdut, când de fapt n-a fost niciodată
-                    cumpărător.
-                  */}
-                  {c.orderCount === 0 && (
-                    <span className="hidden sm:inline-flex items-center text-[10px] font-semibold text-muted-foreground bg-muted border border-border rounded-full px-1.5 py-0.5">
-                      Importat
-                    </span>
-                  )}
+                  <span className="hidden sm:contents">
+                    <EticheteClient client={c} cheie={c.key} />
+                  </span>
                 </div>
                 <p className="text-xs text-muted-foreground truncate">
                   {c.phone}{c.email ? ` · ${c.email}` : ""}
@@ -401,16 +389,7 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-foreground truncate">{customer.name}</h2>
-              {customer.validOrderCount > 1 && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-info bg-info/10 border border-info/20 rounded-full px-1.5 py-0.5 flex-shrink-0">
-                  <Repeat className="h-2.5 w-2.5" /> Recurent
-                </span>
-              )}
-              {customer.orderCount === 0 && (
-                <span className="inline-flex items-center text-[10px] font-semibold text-muted-foreground bg-muted border border-border rounded-full px-1.5 py-0.5 flex-shrink-0">
-                  Importat
-                </span>
-              )}
+              <EticheteClient client={customer} cheie={customer.key} marime="normal" />
             </div>
             <div className="mt-1 space-y-0.5">
               {customer.phone && (

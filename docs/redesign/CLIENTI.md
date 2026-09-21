@@ -72,14 +72,14 @@ le masoara. Se repara inaintea oricarei frumuseti.
       **Total contacte**. In lista raman impreuna, cu badge si filtru.
       ⚠ Azi importatii sunt ZERO pe productie; se construieste pe date demo si se spune asta.
 
-- [ ] **A5. Badge-uri pe client**, in locul unuia singur: Nou, Recurent, VIP, Inactiv,
+- [x] **A5. Badge-uri pe client**, in locul unuia singur: Nou, Recurent, VIP, Inactiv,
       Importat, Risc ridicat de retur.
       ⚠ Fiecare are nevoie de o REGULA scrisa si de date pe care sa stea. „Risc ridicat de
       retur" cere retururi numarate pe client; daca nu exista, badge-ul nu se pune. Un badge
       care nu se poate aprinde niciodata e mai rau decat lipsa lui.
       ⚠ VIP e configurabil (min. comenzi, min. cheltuit, comanda in ultimele 90 de zile).
 
-- [ ] **A6. Capcana identitatii, scrisa si tinuta cu o proba** care cade daca apar chei
+- [x] **A6. Capcana identitatii, scrisa si tinuta cu o proba** care cade daca apar chei
       `order:<id>` — semnul ca s-au ivit comenzi fara telefon SI fara email.
 
 ## Etapa B - cifrele din cap

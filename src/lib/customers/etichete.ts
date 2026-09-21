@@ -1,0 +1,191 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ETICHETELE UNUI CLIENT                                        (21.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Pana acum exista UNA singura, „Fidel", care se aprindea la a doua comanda.
+ * Proprietarul a cerut sase: Nou, Recurent, VIP, Inactiv, Importat si Risc
+ * ridicat de retur.
+ *
+ * ⚠ REGULA DE FOND: o eticheta trebuie sa aiba pe ce sta. Una care nu se poate
+ * aprinde niciodata e mai rea decat lipsa ei — ocupa loc, pare o functie, si
+ * cine o cauta crede ca s-a stricat ceva.
+ *
+ * ═══ ⚠ CE S-A MASURAT INAINTE SA FIE SCRISE (productie, 21.09.2026) ═══
+ *
+ * Pe cei 493 de clienti ai platformei:
+ *
+ *     Noi (comanda in ultimele 30 de zile) ....... 249
+ *     Recurenti (peste o comanda valida) .......... 6
+ *     Inactivi (nimic de peste 90 de zile) ....... 10
+ *     Cu macar un retur .......................... 20
+ *     Cu cel putin 3 comenzi valide ............... 2
+ *     Care au cheltuit peste 1.000 lei ............ 0
+ *
+ * ⚠⚠ NIMENI N-A CHELTUIT PESTE 1.000 DE LEI. Cel mai mare client al platformei
+ * are 968,99 lei in tot istoricul, iar pragul de 95% e 256,52. Un prag de VIP
+ * ales de noi, fix, s-ar aprinde pentru ZERO oameni — si ar ramane asa pana cand
+ * cineva s-ar intreba de ce nu merge. De aceea pragurile sunt ale
+ * COMERCIANTULUI: un magazin de hrana pentru animale si unul de mobila nu pot
+ * imparti aceeasi cifra.
+ *
+ * ⚠⚠ SI DE CE „RISC RIDICAT DE RETUR" CERE TREI COMENZI. Toti cei 20 de oameni
+ * cu retur au o SINGURA comanda — chiar cea returnata. Cu regula „macar un
+ * retur", toti ar fi fost etichetati drept risc, pe baza unui singur fapt, care
+ * poate fi un produs gresit trimis de magazin. O rata are nevoie de un numitor.
+ * Cu trei comenzi, eticheta se aprinde azi pentru nimeni, si asta e raspunsul
+ * CORECT, nu un defect.
+ */
+
+export type FelEticheta = "nou" | "recurent" | "vip" | "inactiv" | "importat" | "risc-retur";
+
+export interface PraguriEtichete {
+  /** Cate zile inseamna „client nou". */
+  zileNou: number;
+  /** Dupa cate zile fara comanda devine „inactiv". */
+  zileInactiv: number;
+  /** VIP: cate comenzi valide, sau cati lei. Oricare dintre ele ajunge. */
+  vipComenzi: number;
+  vipLei: number;
+  /** Risc de retur: de la cate comenzi incolo are sens o rata, si de la ce rata. */
+  riscMinimComenzi: number;
+  riscRata: number;
+}
+
+/**
+ * Pragurile din start.
+ *
+ * ⚠ SUNT UN PUNCT DE PLECARE, NU UN ADEVAR. `vipLei` e 1.000 fiindca e cifra
+ * ceruta de proprietar; masurat, ea nu se aprinde azi pentru nimeni pe platforma.
+ * De-aia exista si `vipComenzi`, care se aprinde pentru doi oameni — ca eticheta
+ * sa nu fie moarta din prima zi in fiecare magazin.
+ */
+export const PRAGURI_IMPLICITE: PraguriEtichete = {
+  zileNou: 30,
+  zileInactiv: 90,
+  vipComenzi: 3,
+  vipLei: 1000,
+  riscMinimComenzi: 3,
+  riscRata: 0.5,
+};
+
+export interface ClientDeEtichetat {
+  orderCount: number;
+  validOrderCount: number;
+  refundedCount: number;
+  ordersValue: number;
+  firstOrderAt: string | null;
+  lastOrderAt: string | null;
+}
+
+function zileDe(iso: string | null, acum: number): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return null;
+  return (acum - t) / 86_400_000;
+}
+
+/**
+ * Etichetele unui client, in ordinea in care se arata.
+ *
+ * ⚠ ORDINEA NU E INTAMPLATOARE: intai ce e omul (importat / nou / recurent /
+ * VIP), apoi ce s-a intamplat cu el (inactiv, risc). Un client poate purta mai
+ * multe — „Recurent" si „Inactiv" impreuna spun ceva ce niciuna nu spune singura:
+ * a cumparat de mai multe ori si a incetat.
+ */
+export function eticheteleClientului(
+  c: ClientDeEtichetat,
+  praguri: PraguriEtichete = PRAGURI_IMPLICITE,
+  acum: number = Date.now(),
+): FelEticheta[] {
+  const out: FelEticheta[] = [];
+
+  /* Fara nicio comanda: adus dintr-un fisier sau scris de mana. Atat se poate spune. */
+  if (c.orderCount === 0) return ["importat"];
+
+  const deLaPrima = zileDe(c.firstOrderAt, acum);
+  const deLaUltima = zileDe(c.lastOrderAt, acum);
+
+  /*
+   * ⚠ „NOU" SE JUDECA DUPA PRIMA COMANDA, nu dupa ultima, si numai cat timp n-a
+   * comandat a doua oara. Altfel un client de trei ani care tocmai a cumparat ar
+   * fi „nou" — iar cuvantul ar inceta sa mai insemne ceva.
+   */
+  if (c.validOrderCount <= 1 && deLaPrima !== null && deLaPrima <= praguri.zileNou) {
+    out.push("nou");
+  }
+
+  if (c.validOrderCount > 1) out.push("recurent");
+
+  if (c.validOrderCount >= praguri.vipComenzi || c.ordersValue >= praguri.vipLei) {
+    out.push("vip");
+  }
+
+  /*
+   * ⚠ Inactiv se masoara de la ULTIMA comanda, si numai daca a existat vreuna.
+   * Un contact importat n-a fost niciodata activ, deci nu poate fi „inactiv" —
+   * iese mai sus, cu „importat".
+   */
+  if (deLaUltima !== null && deLaUltima > praguri.zileInactiv) out.push("inactiv");
+
+  /*
+   * ⚠ RATA CERE UN NUMITOR. Sub `riscMinimComenzi`, un retur nu spune nimic
+   * despre om: poate fi un produs gresit trimis de magazin. Vezi masuratoarea din
+   * capul fisierului — toti cei 20 de oameni cu retur au o singura comanda.
+   */
+  if (c.orderCount >= praguri.riscMinimComenzi
+      && c.refundedCount / c.orderCount >= praguri.riscRata) {
+    out.push("risc-retur");
+  }
+
+  return out;
+}
+
+/** Cum se scrie fiecare pe ecran, si ce inseamna. */
+export const DESPRE_ETICHETA: Record<FelEticheta, { text: string; explicatie: string }> = {
+  nou: {
+    text: "Nou",
+    explicatie: "Prima comandă în ultimele 30 de zile, și încă n-a comandat a doua oară.",
+  },
+  recurent: {
+    text: "Recurent",
+    explicatie: "Are mai mult de o comandă validă. ⚠ Nu înseamnă „fidel”: două comenzi sunt două comenzi.",
+  },
+  vip: {
+    text: "VIP",
+    explicatie: "A trecut de pragul tău de comenzi sau de valoare. Pragurile se schimbă pe magazin.",
+  },
+  inactiv: {
+    text: "Inactiv",
+    explicatie: "A comandat, dar nu în ultimele 90 de zile.",
+  },
+  importat: {
+    text: "Importat",
+    explicatie: "Adus dintr-un fișier sau scris de mână. N-a comandat niciodată.",
+  },
+  "risc-retur": {
+    text: "Risc de retur",
+    explicatie:
+      "Cel puțin jumătate din comenzile lui s-au întors, din minimum trei. "
+      + "Sub trei comenzi eticheta nu se pune: un singur retur poate fi vina magazinului, nu a omului.",
+  },
+};
+
+/**
+ * Clientul asta n-are nicio identitate in afara unei singure comenzi?
+ *
+ * ⚠ CHEIA DE GRUPARE E IN CASCADA: telefon normalizat → `email:<adresa>` →
+ * `order:<id>`. Ultima treapta inseamna o comanda FARA telefon SI FARA email:
+ * atunci fiecare comanda devine un „client" al ei, iar doua comenzi ale
+ * aceluiasi om nu se vor uni niciodata.
+ *
+ * ⚠ MASURAT PE PRODUCTIE (21.09.2026): ZERO comenzi cad acolo. E o capcana care
+ * doarme. Dar cand se va trezi — un canal nou care nu cere contact, un import
+ * partial — nu va da nicio eroare: va umfla incet numarul de clienti cu oameni
+ * care nu exista.
+ *
+ * De-aia nu se tine cu un comentariu, ci se ARATA pe ecran cand se intampla.
+ */
+export function faraIdentitate(cheie: string): boolean {
+  return cheie.startsWith("order:");
+}

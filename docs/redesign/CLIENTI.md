@@ -72,12 +72,28 @@ le masoara. Se repara inaintea oricarei frumuseti.
       **Total contacte**. In lista raman impreuna, cu badge si filtru.
       ⚠ Azi importatii sunt ZERO pe productie; se construieste pe date demo si se spune asta.
 
-- [x] **A5. Badge-uri pe client**, in locul unuia singur: Nou, Recurent, VIP, Inactiv,
-      Importat, Risc ridicat de retur.
+- [x] **A5. Badge-uri pe client**, in locul unuia singur: Nou, Recurent, VIP, Importat,
+      Adaugat manual, Risc ridicat de retur.
+      ⚠ **„Inactiv" a fost SCOASA ca eticheta**, la cererea lui (21.09.2026). Dar pragul de
+      90 de zile RAMANE, fiindca il folosesc segmentele „Inactivi de 30 / 90 / 180 de zile",
+      care sunt filtre. Scos si pragul, comerciantul n-ar mai fi avut cum sa-si gaseasca
+      clientii adormiti — adica tocmai lucrul pentru care exista sectiunea.
       ⚠ Fiecare are nevoie de o REGULA scrisa si de date pe care sa stea. „Risc ridicat de
       retur" cere retururi numarate pe client; daca nu exista, badge-ul nu se pune. Un badge
       care nu se poate aprinde niciodata e mai rau decat lipsa lui.
-      ⚠ VIP e configurabil (min. comenzi, min. cheltuit, comanda in ultimele 90 de zile).
+      ⚠⚠ **VIP se judeca NUMAI pe valoare, de la 10.000 lei** (cerut de el, 21.09.2026:
+      „doar daca a comandat de peste 10.000 lei"). Numarul de comenzi a IESIT din regula, nu
+      i s-a urcat doar pragul: pana atunci era „3 comenzi SAU 1.000 lei", si masurat, aproape
+      toti VIP-ii ajungeau acolo prin numarul de comenzi — cinci comenzi de cincizeci de lei
+      faceau un VIP.
+      ⚠ **Ce inseamna cifra, masurat inainte de schimbare**: pe PRODUCTIE sunt 494 de clienti
+      si cel mai mare a cumparat vreodata de **699 lei**; pe DEMO 358, cel mai mare 3.294,29.
+      Peste 10.000: ZERO in amandoua. Deci eticheta si segmentul „Clienți VIP" vor da zero
+      pana cand cineva cumpara de zece mii. E hotararea lui, scrisa cu cifrele la vedere ca sa
+      nu para mai tarziu un defect.
+      ⚠ Schimbat in AMANDOUA locurile odata: eticheta (`etichete.ts`) si segmentul din filtre
+      (`customer_in_segment`). Schimbata doar una, placa ar fi numarat oameni pe care lista
+      nu i-ar mai fi aratat.
 
 - [x] **A6. Capcana identitatii, scrisa si tinuta cu o proba** care cade daca apar chei
       `order:<id>` — semnul ca s-au ivit comenzi fara telefon SI fara email.

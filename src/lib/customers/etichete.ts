@@ -37,15 +37,26 @@
  * CORECT, nu un defect.
  */
 
-export type FelEticheta = "nou" | "recurent" | "vip" | "inactiv" | "importat" | "adaugat-manual" | "risc-retur";
+export type FelEticheta = "nou" | "recurent" | "vip" | "importat" | "adaugat-manual" | "risc-retur";
 
 export interface PraguriEtichete {
   /** Cate zile inseamna „client nou". */
   zileNou: number;
-  /** Dupa cate zile fara comanda devine „inactiv". */
+  /**
+   * Dupa cate zile fara comanda intra in segmentul „inactivi".
+   *
+   * ⚠ NU mai e o eticheta — scoasa la cererea lui pe 21.09.2026. Pragul ramane
+   * fiindca il folosesc FILTRELE („Inactivi de 30 / 90 / 180 de zile").
+   */
   zileInactiv: number;
-  /** VIP: cate comenzi valide, sau cati lei. Oricare dintre ele ajunge. */
-  vipComenzi: number;
+  /**
+   * VIP: de la cati lei in sus.
+   *
+   * ⚠⚠ NUMAI VALOAREA, de la 21.09.2026. Pana atunci era „3 comenzi SAU 1.000
+   * lei", si ajungea oricare dintre ele. El a cerut: „eticheta VIP sa se puna
+   * doar daca a comandat de peste 10.000 lei". Deci numarul de comenzi a iesit
+   * cu totul din regula — nu mai e un al doilea drum catre VIP.
+   */
   vipLei: number;
   /** Risc de retur: de la cate comenzi incolo are sens o rata, si de la ce rata. */
   riscMinimComenzi: number;
@@ -55,16 +66,26 @@ export interface PraguriEtichete {
 /**
  * Pragurile din start.
  *
- * ⚠ SUNT UN PUNCT DE PLECARE, NU UN ADEVAR. `vipLei` e 1.000 fiindca e cifra
- * ceruta de proprietar; masurat, ea nu se aprinde azi pentru nimeni pe platforma.
- * De-aia exista si `vipComenzi`, care se aprinde pentru doi oameni — ca eticheta
- * sa nu fie moarta din prima zi in fiecare magazin.
+ * ⚠⚠ `vipLei` E 10.000, CERUT DE EL PE 21.09.2026 — si e bine de stiut ce
+ * inseamna asta, fiindca s-a masurat inainte de schimbare:
+ *
+ *     PRODUCTIE   494 de clienti, cel mai mare a cumparat vreodata de 699 lei.
+ *                 Peste 1.000 lei: ZERO. Peste 10.000: ZERO.
+ *     DEMO        358 de clienti, cel mai mare 3.294,29 lei.
+ *                 Peste 1.000: 21. Peste 10.000: ZERO.
+ *
+ * Adica eticheta NU se va aprinde pentru nimeni, nicaieri, pana cand cineva
+ * cumpara de zece mii de lei. E hotararea lui, scrisa aici cu cifrele la vedere
+ * ca sa nu para mai tarziu un defect: cand cineva intreaba „de ce nu vad niciun
+ * VIP?", raspunsul e aici, nu in cod stricat.
+ *
+ * ⚠ Pana atunci se aprindea pentru 25 de oameni pe demo si 2 pe productie — dar
+ * aproape toti prin numarul de comenzi, nu prin valoare.
  */
 export const PRAGURI_IMPLICITE: PraguriEtichete = {
   zileNou: 30,
   zileInactiv: 90,
-  vipComenzi: 3,
-  vipLei: 1000,
+  vipLei: 10_000,
   riscMinimComenzi: 3,
   riscRata: 0.5,
 };
@@ -141,16 +162,29 @@ export function eticheteleClientului(
 
   if (c.validOrderCount > 1) out.push("recurent");
 
-  if (c.validOrderCount >= praguri.vipComenzi || c.ordersValue >= praguri.vipLei) {
-    out.push("vip");
-  }
+  /*
+   * ⚠⚠ NUMAI VALOAREA. Pana la 21.09.2026 era `validOrderCount >= 3 || ordersValue
+   * >= 1000`, deci ajungea oricare dintre ele — si masurat, aproape toti VIP-ii
+   * ajungeau acolo prin NUMARUL de comenzi, nu prin bani. Cinci comenzi de
+   * cincizeci de lei faceau un VIP.
+   *
+   * El a cerut limpede: „doar daca a comandat de peste 10.000 lei". Deci numarul
+   * de comenzi a iesit cu totul din regula, nu i s-a urcat doar pragul.
+   */
+  if (c.ordersValue >= praguri.vipLei) out.push("vip");
 
   /*
-   * ⚠ Inactiv se masoara de la ULTIMA comanda, si numai daca a existat vreuna.
-   * Un contact importat n-a fost niciodata activ, deci nu poate fi „inactiv" —
-   * iese mai sus, cu „importat".
+   * ⚠⚠ ETICHETA „INACTIV" A FOST SCOASA, la cererea lui, pe 21.09.2026.
+   *
+   * ⚠ DAR REGULA A RAMAS, si asta e important: `zileInactiv` se foloseste mai
+   * departe de SEGMENTELE „Inactivi de 30 / 90 / 180 de zile", care sunt filtre,
+   * nu etichete. Comerciantul poate cauta oricand cine n-a mai comandat; doar nu
+   * i se mai lipeste omului un semn pe rand, in lista.
+   *
+   * Scoasa cu totul, s-ar fi pierdut si filtrul — si atunci n-ar mai fi avut cum
+   * sa-si gaseasca clientii adormiti, care e chiar lucrul pentru care exista
+   * sectiunea asta.
    */
-  if (deLaUltima !== null && deLaUltima > praguri.zileInactiv) out.push("inactiv");
 
   /*
    * ⚠ RATA CERE UN NUMITOR. Sub `riscMinimComenzi`, un retur nu spune nimic
@@ -178,10 +212,6 @@ export const DESPRE_ETICHETA: Record<FelEticheta, { text: string; explicatie: st
   vip: {
     text: "VIP",
     explicatie: "A trecut de pragul tău de comenzi sau de valoare. Pragurile se schimbă pe magazin.",
-  },
-  inactiv: {
-    text: "Inactiv",
-    explicatie: "A comandat, dar nu în ultimele 90 de zile.",
   },
   importat: {
     text: "Importat",

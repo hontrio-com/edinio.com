@@ -6941,13 +6941,19 @@ export type Database = {
           orders_value: number
           first_order_at: string | null
           last_order_at: string | null
-          vip_comenzi?: number
           vip_lei?: number
         }
         Returns: boolean
       }
+      customer_segment_sizes: {
+        Args: { bid: string }
+        Returns: {
+          segment_id: string
+          cati: number
+        }[]
+      }
       customer_segment_counts: {
-        Args: { bid: string; p_vip_comenzi?: number; p_vip_lei?: number }
+        Args: { bid: string; p_vip_lei?: number }
         Returns: {
           segment: string
           cati: number
@@ -6997,7 +7003,6 @@ export type Database = {
           p_segment?: string
           p_valoare_max?: number
           p_valoare_min?: number
-          p_vip_comenzi?: number
           p_vip_lei?: number
           p_judet?: string
           p_canal?: string

@@ -5,6 +5,7 @@ import {
   DESPRE_ETICHETA, PRAGURI_IMPLICITE, eticheteleClientului, faraIdentitate,
   type ClientDeEtichetat,
 } from "./etichete";
+import { SEGMENTE } from "./filtre";
 
 const ACUM = new Date("2026-09-21T12:00:00Z").getTime();
 const zileInUrma = (z: number) => new Date(ACUM - z * 86_400_000).toISOString();
@@ -74,44 +75,85 @@ test("recurent inseamna mai mult de o comanda VALIDA", () => {
 
 /* ── VIP ────────────────────────────────────────────────────────────────── */
 
-test("VIP se aprinde si pe comenzi, si pe valoare", () => {
-  assert.ok(eticheteleClientului(client({ orderCount: 3, validOrderCount: 3, ordersValue: 100 }), PRAGURI_IMPLICITE, ACUM).includes("vip"));
-  assert.ok(eticheteleClientului(client({ ordersValue: 1500 }), PRAGURI_IMPLICITE, ACUM).includes("vip"));
-});
-
-test("⚠⚠ pragul de lei ales de NOI nu s-ar aprinde pentru nimeni", () => {
+test("⚠⚠ VIP se aprinde NUMAI pe valoare, nu pe numarul de comenzi", () => {
   /*
-   * Masurat pe productie: cel mai mare client al platformei are 968,99 lei in tot
-   * istoricul, iar pragul de 95% e 256,52. Un VIP legat numai de 1.000 de lei ar fi
-   * o eticheta moarta in fiecare magazin, pana cand cineva s-ar intreba de ce nu
-   * merge. De-aia exista SI pragul pe comenzi, si de-aia amandoua se pot schimba.
+   * Pana la 21.09.2026 regula era `3 comenzi SAU 1.000 lei`, si ajungea oricare
+   * dintre ele. Masurat atunci: aproape toti VIP-ii ajungeau acolo prin NUMARUL
+   * de comenzi — cinci comenzi de cincizeci de lei faceau un VIP.
+   *
+   * El a cerut limpede: „doar daca a comandat de peste 10.000 lei". Deci numarul
+   * de comenzi a iesit cu totul din regula, nu i s-a urcat doar pragul.
    */
-  const celMaiMareClientAlPlatformei = client({ orderCount: 1, validOrderCount: 1, ordersValue: 968.99 });
-  assert.ok(!eticheteleClientului(celMaiMareClientAlPlatformei, PRAGURI_IMPLICITE, ACUM).includes("vip"));
+  const multeComenziPutiniBani = client({ orderCount: 30, validOrderCount: 30, ordersValue: 900 });
+  assert.ok(
+    !eticheteleClientului(multeComenziPutiniBani, PRAGURI_IMPLICITE, ACUM).includes("vip"),
+    "treizeci de comenzi mici fac iar un VIP",
+  );
 
-  /* Cu pragul magazinului, acelasi om e VIP. */
+  const putineComenziMultiBani = client({ orderCount: 1, validOrderCount: 1, ordersValue: 10_000 });
+  assert.ok(eticheteleClientului(putineComenziMultiBani, PRAGURI_IMPLICITE, ACUM).includes("vip"));
+});
+
+test("⚠ pragul e „PESTE 10.000”, deci exact 10.000 intra", () => {
+  /* `>=`, ca peste tot in sectiune. Un om cu fix zece mii e VIP. */
+  assert.equal(PRAGURI_IMPLICITE.vipLei, 10_000);
+  assert.ok(eticheteleClientului(client({ orderCount: 1, validOrderCount: 1, ordersValue: 10_000 }), PRAGURI_IMPLICITE, ACUM).includes("vip"));
+  assert.ok(!eticheteleClientului(client({ orderCount: 1, validOrderCount: 1, ordersValue: 9_999.99 }), PRAGURI_IMPLICITE, ACUM).includes("vip"));
+});
+
+test("⚠⚠ pragul cerut de el NU se aprinde azi pentru nimeni, si asta se stie", () => {
+  /*
+   * Masurat inainte de schimbare:
+   *   PRODUCTIE  494 de clienti, cel mai mare a cumparat vreodata de 699 lei.
+   *   DEMO       358 de clienti, cel mai mare 3.294,29 lei.
+   * Peste 10.000 lei: ZERO, in amandoua.
+   *
+   * ⚠ Proba asta NU spune ca e gresit — e hotararea lui, luata cu cifrele la
+   * vedere. Spune doar ca eticheta e moarta pana cand cineva cumpara de zece mii,
+   * ca sa nu para mai tarziu un defect. Si arata cum se repara: pragul se poate
+   * cobori pe magazin.
+   */
+  const celMaiMareDePeProductie = client({ orderCount: 2, validOrderCount: 2, ordersValue: 699 });
+  assert.ok(!eticheteleClientului(celMaiMareDePeProductie, PRAGURI_IMPLICITE, ACUM).includes("vip"));
+
+  const celMaiMareDePeDemo = client({ orderCount: 4, validOrderCount: 4, ordersValue: 3_294.29 });
+  assert.ok(!eticheteleClientului(celMaiMareDePeDemo, PRAGURI_IMPLICITE, ACUM).includes("vip"));
+
+  /* Cu pragul coborat pe magazin, amandoi sunt VIP. */
   const aleLui = { ...PRAGURI_IMPLICITE, vipLei: 500 };
-  assert.ok(eticheteleClientului(celMaiMareClientAlPlatformei, aleLui, ACUM).includes("vip"));
+  assert.ok(eticheteleClientului(celMaiMareDePeProductie, aleLui, ACUM).includes("vip"));
 });
 
-/* ── Inactiv ────────────────────────────────────────────────────────────── */
+/* ── Inactiv: SCOASA ca eticheta, PASTRATA ca filtru ────────────────────── */
 
-test("inactiv se masoara de la ultima comanda", () => {
-  const e = eticheteleClientului(
-    client({ orderCount: 2, validOrderCount: 2, firstOrderAt: zileInUrma(400), lastOrderAt: zileInUrma(120) }),
-    PRAGURI_IMPLICITE, ACUM,
-  );
-  assert.ok(e.includes("inactiv"));
-  assert.ok(e.includes("recurent"), "poate purta amandoua, si asta spune ceva");
+test("⚠⚠ nu se mai lipeste nicio eticheta „Inactiv” pe rand", () => {
+  /*
+   * Scoasa la cererea lui, pe 21.09.2026. Un om care n-a mai comandat de patru
+   * luni ramane in lista cu „Recurent" si atat — nu i se mai pune un semn.
+   *
+   * ⚠ Proba asta apara SCOATEREA, nu regula: daca cineva o pune la loc fara sa
+   * ceara nimeni, pica aici.
+   */
+  const deMult = client({
+    orderCount: 2, validOrderCount: 2,
+    firstOrderAt: zileInUrma(400), lastOrderAt: zileInUrma(120),
+  });
+  const e = eticheteleClientului(deMult, PRAGURI_IMPLICITE, ACUM);
+  assert.deepEqual(e, ["recurent"], `a aparut ceva in plus: ${e.join(", ")}`);
+  assert.ok(!(e as string[]).includes("inactiv"));
 });
 
-test("⚠ un contact importat NU e „inactiv”", () => {
-  /* N-a fost niciodata activ. Vezi proba de sus: iese doar cu „importat". */
-  const e = eticheteleClientului(
-    client({ orderCount: 0, validOrderCount: 0, firstOrderAt: null, lastOrderAt: null }),
-    PRAGURI_IMPLICITE, ACUM,
-  );
-  assert.ok(!e.includes("inactiv"));
+test("⚠⚠ dar PRAGUL de inactivitate ramane, fiindca il folosesc FILTRELE", () => {
+  /*
+   * „Inactivi de 30 / 90 / 180 de zile" sunt segmente din bara de filtre, nu
+   * etichete. Sters si pragul odata cu eticheta, comerciantul n-ar mai fi avut
+   * cum sa-si gaseasca clientii adormiti — adica tocmai lucrul pentru care
+   * exista sectiunea. Vezi `SEGMENTE` din `filtre.ts` si `customer_in_segment`.
+   */
+  assert.equal(PRAGURI_IMPLICITE.zileInactiv, 90);
+  assert.ok(SEGMENTE.includes("inactivi-30"));
+  assert.ok(SEGMENTE.includes("inactivi-90"));
+  assert.ok(SEGMENTE.includes("inactivi-180"));
 });
 
 /* ── Risc de retur ──────────────────────────────────────────────────────── */
@@ -154,12 +196,16 @@ test("⚠ fiecare eticheta are un text si o explicatie care spune REGULA", () =>
    * adauga o eticheta e OBLIGAT sa treaca pe aici si sa-i scrie explicatia.
    * Derivat, proba ar fi trecut peste orice eticheta noua, tacuta.
    *
-   * Erau sase. De la 21.09.2026 sunt sapte: „Importat" s-a despartit in
+   * Erau sase. Tot pe 21.09.2026 au ajuns sapte („Importat" s-a despartit in
    * „Importat" si „Adaugat manual", fiindca adaugarea de mana a facut prima
-   * eticheta sa minta despre oamenii luati la telefon.
+   * eticheta sa minta despre oamenii luati la telefon), si apoi iar sase:
+   * „Inactiv" a fost scoasa la cererea lui.
+   *
+   * ⚠ Proba a picat la amandoua schimbarile, si asa trebuie: mutarea multimii de
+   * etichete nu are voie sa treaca pe tacute.
    */
   const feluri = Object.keys(DESPRE_ETICHETA);
-  assert.equal(feluri.length, 7);
+  assert.equal(feluri.length, 6);
   for (const [fel, d] of Object.entries(DESPRE_ETICHETA)) {
     assert.ok(d.text.length >= 3, fel);
     assert.ok(d.explicatie.length > 30, `${fel}: explicatia e prea scurta ca sa spuna regula`);

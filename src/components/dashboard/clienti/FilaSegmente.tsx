@@ -42,16 +42,24 @@ export async function FilaSegmente({ businessId }: { businessId: string }) {
       .eq("business_id", businessId)
       .order("creat_la", { ascending: false }),
     /*
-      ⚠ Cați oameni are fiecare LISTĂ. Se aduc cheile și se numără aici, nu cu
-      un `count` pe fiecare segment: cincizeci de segmente ar fi însemnat
-      cincizeci de interogări la fiecare deschidere a filei.
+      ⚠⚠ NUMĂRAREA SE FACE ÎN BAZĂ, un rând pe segment.
+
+      Prima scriere aducea CHEILE (`select("segment_id").limit(10000)`) și le
+      număra aici. Plafoanele îngăduie 50 de segmente × 500 de oameni = 25.000
+      de rânduri, deci tăia la 10.000 — TĂCUT. Comerciantul ar fi văzut
+      „312 clienți" la o listă care are 500, fără să aibă de unde să bănuiască:
+      cifra arată a cifră. Iar peste asta, PostgREST are plafonul LUI, pe care
+      platforma l-a mai lovit o dată, la 1.000.
+
+      Socotită în bază nu mai e niciun plafon de trecut, și nici nu se mai cară
+      rânduri degeaba prin rețea.
     */
-    supabase.from("customer_segment_members").select("segment_id").limit(10000),
+    supabase.rpc("customer_segment_sizes", { bid: businessId }),
   ]);
 
   const cateAreLista = new Map<string, number>();
   for (const m of membriBruti ?? []) {
-    cateAreLista.set(m.segment_id, (cateAreLista.get(m.segment_id) ?? 0) + 1);
+    cateAreLista.set(m.segment_id, Number(m.cati));
   }
 
   const cifre = numarate ? numarate.map((r) => ({ segment: r.segment, cati: Number(r.cati) })) : null;

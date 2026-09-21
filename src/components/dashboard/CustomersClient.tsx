@@ -7,7 +7,7 @@ import {
   Users, Search, Phone, Mail, MapPin, ShoppingBag, TrendingUp, Repeat,
   X, ChevronLeft, ChevronRight, Calendar, ExternalLink, ArrowUpDown, Loader2, Upload,
 } from "lucide-react";
-import { formatPrice, formatDate } from "@/lib/utils/format";
+import { formatPrice, formatDate, formatPhoneDisplay } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import type { Customer, CustomerOrder, CustomersSummary } from "@/lib/customers";
 import { getCustomerOrders } from "@/lib/actions/customer.actions";
@@ -271,7 +271,13 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground truncate">
-                  {c.phone}{c.email ? ` · ${c.email}` : ""}
+                  {/*
+                    ⚠ Trecut prin `formatPhoneDisplay`. Până acum rândurile arătau
+                    numărul exact cum a fost scris la checkout, deci în listă stăteau
+                    unul sub altul `0753639611`, `+40755588107` și `+359884123309`.
+                    Funcția exista de mult și n-o chema nimeni.
+                  */}
+                  {formatPhoneDisplay(c.phone)}{c.email ? ` · ${c.email}` : ""}
                 </p>
               </div>
               {/* Un client importat n-a comandat inca: nu are nici numar, nici data. */}
@@ -291,7 +297,20 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                         <span className="text-muted-foreground/70"> din {c.orderCount}</span>
                       )}
                     </p>
-                    <p className="text-[11px] text-muted-foreground/70">{formatDate(c.lastOrderAt)}</p>
+                    {/*
+                      ⚠ STAREA ULTIMEI COMENZI, CU ETICHETA PANOULUI. Era un text gri
+                      („achitat") sub sumă, care nu semăna cu nimic din restul panoului
+                      și nu se putea deosebi dintr-o privire. Acum e același punct
+                      colorat ca la Comenzi.
+                    */}
+                    <p className="flex items-center justify-end gap-1.5 text-[11px] text-muted-foreground/70">
+                      {formatDate(c.lastOrderAt)}
+                      {c.lastStatus && (
+                        <EtichetaStare ton={orderStatus(c.lastStatus).ton} marime="mic">
+                          {orderStatus(c.lastStatus).label}
+                        </EtichetaStare>
+                      )}
+                    </p>
                   </>
                 ) : (
                   <p className="text-xs text-muted-foreground/70">Fără comenzi</p>
@@ -427,9 +446,15 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
               <EticheteClient client={customer} cheie={customer.key} marime="normal" />
             </div>
             <div className="mt-1 space-y-0.5">
+              {/*
+                ⚠ `tel:` PRIMESTE NUMARUL BRUT, nu pe cel frumos. Spatiile puse de noi
+                pentru citit n-au ce cauta intr-o adresa de apel; telefonul le ignora
+                de obicei, dar „de obicei" nu e o garantie cand butonul trebuie sa sune
+                un client.
+              */}
               {customer.phone && (
                 <a href={`tel:${customer.phone}`} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors">
-                  <Phone className="h-3 w-3" /> {customer.phone}
+                  <Phone className="h-3 w-3" /> {formatPhoneDisplay(customer.phone)}
                 </a>
               )}
               {customer.email && (

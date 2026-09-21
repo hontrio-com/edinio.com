@@ -112,10 +112,10 @@ le masoara. Se repara inaintea oricarei frumuseti.
       exista peste tot; „accepta marketing" cere consimtamant inregistrat. Ce n-are pe ce sta,
       nu se ofera.
 
-- [ ] **C3. Telefonul intr-o singura forma.** Masurat in lista de azi: `0753 639 611`,
+- [x] **C3. Telefonul intr-o singura forma.** Masurat in lista de azi: `0753 639 611`,
       `+40 755 588 107` si `+359 88 412 3309`, unul sub altul.
 
-- [ ] **C4. Starea ultimei comenzi cu `EtichetaStare`**, nu text gri.
+- [x] **C4. Starea ultimei comenzi cu `EtichetaStare`**, nu text gri.
 
 ## Etapa D - fisa clientului
 

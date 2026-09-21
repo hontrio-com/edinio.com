@@ -108,15 +108,37 @@ export function formatPriceRange(min: number, max: number, lowestOnly = false): 
   return `De la ${formatPriceValue(min)} – ${formatPrice(max)}`;
 }
 
+/**
+ * Un numar de telefon, scris la fel peste tot.
+ *
+ * ⚠ FUNCTIA ASTA A FOST SCRISA SI N-A CHEMAT-O NIMENI. Masurat pe 21.09.2026:
+ * zero apelanti in tot depozitul, si nicio proba. Intre timp, in lista de clienti
+ * stateau unul sub altul `0753 639 611`, `+40 755 588 107` si `+359 88 412 3309`
+ * — adica exact neajunsul pentru care fusese scrisa.
+ *
+ * ⚠ SI AVEA UN DEFECT, pe care nu-l vazuse nimeni tocmai fiindca n-o chema
+ * nimeni: pentru `+40755588107` scotea `+4 0755 588 107`. Prefixul Romaniei e
+ * `+40`, nu `+4`.
+ *
+ * ⚠ CE NU ATINGE. Numerele straine raman cum au venit. Masurat pe productie:
+ * exista un numar german si unul bulgaresc, iar o regula romaneasca aplicata
+ * peste ele le-ar fi rupt. Si `***` (zece comenzi cu telefonul anonimizat) trece
+ * neatins: n-are nicio cifra.
+ */
 export function formatPhoneDisplay(phone: string): string {
-  const cleaned = phone.replace(/\D/g, "");
-  if (cleaned.startsWith("40") && cleaned.length === 11) {
-    return `+4 0${cleaned.slice(2, 5)} ${cleaned.slice(5, 8)} ${cleaned.slice(8)}`;
+  const brut = (phone ?? "").trim();
+  let cifre = brut.replace(/\D/g, "");
+
+  /* `0040 7…` e aceeasi scriere ca `+40 7…`. */
+  if (cifre.startsWith("0040")) cifre = cifre.slice(2);
+
+  if (cifre.startsWith("40") && cifre.length === 11) {
+    return `+40 ${cifre.slice(2, 5)} ${cifre.slice(5, 8)} ${cifre.slice(8)}`;
   }
-  if (cleaned.length === 10 && cleaned.startsWith("0")) {
-    return `${cleaned.slice(0, 4)} ${cleaned.slice(4, 7)} ${cleaned.slice(7)}`;
+  if (cifre.length === 10 && cifre.startsWith("0")) {
+    return `${cifre.slice(0, 4)} ${cifre.slice(4, 7)} ${cifre.slice(7)}`;
   }
-  return phone;
+  return brut;
 }
 
 export function whatsappLink(phone: string): string {

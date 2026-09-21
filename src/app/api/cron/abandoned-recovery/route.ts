@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { motivulSuprimarii, type RandSuprimare } from "@/lib/abandoned/suprimare";
 import { furnizorulAles, furnizoriSms } from "@/lib/abandoned/furnizori-sms";
+import { fapteleCosului, fapteleMagazinului, nevoiDeIstoric } from "@/lib/abandoned/dosar";
+import { refuzulRegulilor } from "@/lib/abandoned/reguli";
 import { logError } from "@/lib/error-logger";
 import { pragulComenzilor } from "@/app/api/cron/curata-fisiere/reguli";
 import { verificaCron } from "@/lib/cron-auth";
@@ -240,6 +242,15 @@ export async function GET(req: NextRequest) {
     const smsoReady = !!(store.smso?.enabled && store.smso.api_key && store.smso.sender_id);
     const noticeReady = !!(store.notice?.enabled && store.notice.api_token && store.notice.abandoned?.enabled);
 
+    /*
+     * ⚠ O DATA PE MAGAZIN, nu o data pe cos. Cinci dintre fapte sunt despre
+     * intregul magazin (cate SMS-uri luna asta, cate mesaje azi, cate
+     * dezabonari), iar bucla de mai jos trece prin sute de cosuri: citite pe
+     * fiecare, ar fi fost sute de interogari identice, si cifra s-ar fi
+     * schimbat pe parcursul aceleiasi rulari.
+     */
+    const fapte = await fapteleMagazinului(admin, store.businessId, now);
+
     const { data: carts, error: eCarts } = await admin
       .from("abandoned_carts")
       .select("id, customer_name, email, phone, items, subtotal, created_at, automation_step, recovery_count, last_recovery_at")
@@ -330,7 +341,38 @@ export async function GET(req: NextRequest) {
        * ⚠ COSTA O INTEROGARE IN PLUS pentru cosurile care oricum n-ar fi trecut pragul. Se plateste
        * dinadins: singura alternativa ieftina era sa credem browserul.
        */
-      if (store.automation.min_cart_value && proaspat.total < store.automation.min_cart_value) continue;
+      /*
+       * ⚠⚠ TOATE REGULILE INTR-O SINGURA HOTARARE. Aici statea doar pragul de
+       * valoare; de pe 21.09.2026 sunt vreo doisprezece (cine primeste, cand,
+       * si pana la ce plafon), iar imprastiate prin `if`-uri pe fiecare drum
+       * ar fi ajuns sa nu se mai potriveasca intre ele: un cos oprit de cron ar
+       * fi putut pleca din panou, si nimeni n-ar fi stiut de ce.
+       *
+       * ⚠ VALOAREA E `proaspat.total`, REPRETUITA DIN CATALOG, nu `subtotal`-ul
+       * salvat de browser. Vezi mai sus de ce - e chiar suma pe care omul ar
+       * plati-o daca s-ar intoarce.
+       */
+      const dosar = await fapteleCosului(
+        admin,
+        store.businessId,
+        { ...cart, subtotal: proaspat.total, items: cart.items },
+        canal.fel === "email" ? "email" : "sms",
+        fapte,
+        nevoiDeIstoric(store.automation),
+        now,
+      );
+      const refuz = refuzulRegulilor(store.automation, dosar);
+      if (refuz) {
+        /*
+         * ⚠ SE SPUNE DE CE, chiar si in loguri: un cron care sare tacut sute de
+         * cosuri arata identic cu unul care merge. La plafoane si la pragul de
+         * dezabonare se si opreste tot magazinul, deci trebuie sa se vada.
+         */
+        if (refuz.cheie === "plafon-sms" || refuz.cheie === "plafon-zilnic" || refuz.cheie === "prag-dezabonare") {
+          console.warn(`[abandoned-recovery] ${store.businessId}: ${refuz.motiv}`);
+        }
+        continue;
+      }
 
       // Pasul se ia INAINTE de trimitere. Daca alt lucrator l-a luat deja, se sare:
       // asa nu poate pleca acelasi mesaj de doua ori.

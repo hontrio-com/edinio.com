@@ -2,6 +2,7 @@ import { ABANDON_MINUTES } from "@/lib/abandoned-cart";
 import { LUNI_PE_COMANDA } from "@/app/api/cron/curata-fisiere/reguli";
 
 import { socotesteSms } from "./sms-segmente";
+import type { ReguliAutomatizare } from "./reguli";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════
@@ -30,11 +31,15 @@ export interface PasAutomatizare {
   discount_code?: string;
 }
 
-export interface ConfigAutomatizare {
+/*
+  ⚠ ACELASI TIP DE REGULI ca in `reguli.ts`, nu o a doua lista de campuri: doua
+  liste care trebuie sa se potriveasca se departeaza una de alta la primul camp
+  adaugat doar intr-una, si atunci capcanele ar verifica o configuratie care nu
+  mai e cea salvata.
+*/
+export interface ConfigAutomatizare extends ReguliAutomatizare {
   enabled: boolean;
   steps: PasAutomatizare[];
-  min_cart_value?: number | null;
-  quiet_hours?: { start: number; end: number } | null;
 }
 
 export interface ImprejurimiAutomatizare {

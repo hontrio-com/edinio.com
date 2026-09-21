@@ -25,6 +25,8 @@ import { ZILE_ATRIBUIRE } from "@/lib/abandoned/atribuire";
 import {
   ceiGata, furnizorulAles, furnizoriSms, type FurnizorSms,
 } from "@/lib/abandoned/furnizori-sms";
+import { refuzulLaMana } from "@/lib/abandoned/reguli";
+import { fapteleCosului, fapteleMagazinului, nevoiDeIstoric } from "@/lib/abandoned/dosar";
 import {
   fereastra, fereastraPrecedenta, marginile, type CatePePagina, type NumePerioada,
 } from "@/lib/abandoned/perioade";
@@ -375,7 +377,7 @@ export async function getAbandonedCartsData(
     alta - si atunci „+12%" ar fi comparat doua lucruri masurate altfel.
   */
   const inainte = fereastraPrecedenta(perioada);
-  const [sumarRes, listaRes, produseRes, graficRes, palnieRes, sumarInainteRes] = await Promise.all([
+  const [sumarRes, listaRes, produseRes, graficRes, palnieRes, surseRes, sumarInainteRes] = await Promise.all([
     supabase.rpc("cosuri_abandonate_sumar", ferestruica),
     /*
       ⚠ PAGINA CERE SI NUMARUL ADEVARAT (`count: "exact"`). Pana acum antetul
@@ -405,6 +407,14 @@ export async function getAbandonedCartsData(
     supabase.rpc("cosuri_abandonate_produse", { ...ferestruica, p_limita: 8 }),
     supabase.rpc("cosuri_abandonate_grafic", ferestruica),
     supabase.rpc("cosuri_abandonate_palnie", ferestruica),
+    /*
+      ⚠ Drumurile pe care au venit CHIAR cosurile magazinului. Se citesc, nu se
+      scriu in cod: masurat pe 21.09.2026, in productie sunt „buy_now" si
+      „cart", iar pe demo apare si „checkout". O lista fixa ar fi oferit
+      optiuni care nu prind nimic, si ar fi ascuns-o pe cea adevarata.
+    */
+    supabase.from("abandoned_carts").select("source")
+      .eq("business_id", businessId).not("source", "is", null).limit(1000),
     /* „De cand exista magazinul" n-are perioada precedenta: vezi `fereastraPrecedenta`. */
     inainte
       ? supabase.rpc("cosuri_abandonate_sumar", {
@@ -483,6 +493,7 @@ export async function getAbandonedCartsData(
     smsEnabled,
     /* ⚠ Cine poate trimite ACUM. Ecranul intreaba doar cand sunt mai multi. */
     furnizoriSms: furnizoriGata,
+    surseCosuri: [...new Set((surseRes.data ?? []).map((r) => r.source).filter((x): x is string => !!x))].sort(),
     storeUrl,
     storeName: biz.store_name ?? biz.business_name,
     primaryColor,
@@ -723,7 +734,15 @@ const COS_NERECUPERABIL =
 async function poateTrimiteCatre(
   admin: ReturnType<typeof createAdminClient>,
   businessId: string,
-  cart: { status?: string | null; email?: string | null; phone?: string | null; ignorat_la?: string | null },
+  cart: {
+    status?: string | null; email?: string | null; phone?: string | null; ignorat_la?: string | null;
+    subtotal?: number | null; source?: string | null; items?: unknown;
+  },
+  /*
+   * ⚠ Canalul e nevoie ca sa se stie CE plafon se verifica: cel de SMS
+   * priveste numai SMS-urile, iar orele de liniste sunt si ele pe canal.
+   */
+  canal?: "email" | "sms",
 ): Promise<string | null> {
   if (cart.status === "converted") {
     return "Cosul a fost deja finalizat: clientul a comandat. Nu i se mai trimite mesaj de recuperare.";
@@ -758,7 +777,23 @@ async function poateTrimiteCatre(
   if (error) return "Lista de dezabonari nu a putut fi citita, deci nu s-a trimis nimic. Incearca din nou.";
 
   const motiv = motivulSuprimarii((data ?? []) as RandSuprimare[], cart);
-  return motiv ? mesajContactSuprimat(motiv) : null;
+  if (motiv) return mesajContactSuprimat(motiv);
+
+  /*
+   * ⚠ PLAFOANELE SI LINISTEA PRIVESC SI MANA OMULUI, tintirea nu. Vezi
+   * `refuzulLaMana`: un mesaj apasat de mana e deja tintit, dar un SMS la 3
+   * noaptea deranjeaza la fel, iar plafonul lunar e pus tocmai ca sa nu se
+   * depaseasca din graba.
+   */
+  if (!canal) return null;
+  const { data: setari } = await admin
+    .from("store_settings").select("abandoned_cart_automation").eq("business_id", businessId).single();
+  const reguli = readAutomationConfig(setari?.abandoned_cart_automation);
+  const fapte = await fapteleMagazinului(admin, businessId);
+  const dosar = await fapteleCosului(
+    admin, businessId, cart, canal, fapte, nevoiDeIstoric(reguli),
+  );
+  return refuzulLaMana(reguli, dosar)?.motiv ?? null;
 }
 
 export async function sendAbandonedCartEmail(
@@ -791,7 +826,7 @@ export async function sendAbandonedCartEmail(
   if (!cart) return { error: "Cosul nu a fost gasit." };
   if (!cart.email) return { error: "Clientul nu a lasat un email." };
 
-  const opreste = await poateTrimiteCatre(createAdminClient(), businessId, cart);
+  const opreste = await poateTrimiteCatre(createAdminClient(), businessId, cart, "email");
   if (opreste) return { error: opreste };
   /*
    * ⚠ ACEEASI VARSTA CA LA LINK, si pana acum lipsea tocmai aici.
@@ -923,7 +958,7 @@ export async function sendAbandonedCartSms(
   if (!cart) return { error: "Cosul nu a fost gasit." };
   if (!cart.phone) return { error: "Clientul nu a lasat un numar de telefon." };
 
-  const opresteSms = await poateTrimiteCatre(admin, businessId, cart);
+  const opresteSms = await poateTrimiteCatre(admin, businessId, cart, "sms");
   if (opresteSms) return { error: opresteSms };
   /*
    * ⚠ SI AICI VARSTA, INAINTE DE ORICE. La SMS conteaza mai mult decat la email: mesajul e PLATIT

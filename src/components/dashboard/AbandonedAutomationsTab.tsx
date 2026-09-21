@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Plus, Trash2, Mail, MessageSquare, Loader2, Save, Send, Clock, Sparkles, Zap, AlertTriangle, Lock, Tag } from "lucide-react";
+import { Plus, Trash2, Mail, MessageSquare, Loader2, Save, Send, Clock, Sparkles, Zap, AlertTriangle, Lock, Tag, ShieldCheck } from "lucide-react";
 import {
   saveAbandonedCartAutomation, trimiteProbaAutomatizare,
 } from "@/lib/actions/abandoned-cart.actions";
@@ -16,6 +16,7 @@ import { scrieSocoteala, socotesteSms } from "@/lib/abandoned/sms-segmente";
 import type { AbandonedCartsData, AbandonedAutomationStep, RecoveryChannel } from "@/lib/abandoned-cart";
 import { capcaneleAutomatizarii, opresteTrimiterea } from "@/lib/abandoned/capcane-automatizare";
 import { CRONOLOGIE, PORNIRI } from "@/lib/abandoned/porniri-automatizare";
+import { numeleSursei, type FelClienti } from "@/lib/abandoned/reguli";
 
 function discountLabel(d: { type: string; value: number }): string {
   if (d.type === "percent") return ` (${d.value}%)`;
@@ -62,6 +63,32 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
   const [quietStart, setQuietStart] = useState(String(a.quiet_hours?.start ?? 22));
   const [quietEnd, setQuietEnd] = useState(String(a.quiet_hours?.end ?? 8));
   const [steps, setSteps] = useState<AbandonedAutomationStep[]>(a.steps);
+
+  /*
+    ⚠ CAMPURILE DE NUMAR SE TIN CA TEXT, nu ca numere. Un `number` gol devine
+    `NaN`, iar `NaN` scris in configuratie inseamna „regula pusa la o valoare
+    imposibila" - adica exact regula pe care omul credea ca a sters-o. Ca text,
+    gol inseamna gol, si se transforma in numar o singura data, la salvare.
+  */
+  const nrText = (v: number | null | undefined) => (v != null ? String(v) : "");
+  const [maxCart, setMaxCart] = useState(nrText(a.max_cart_value));
+  const [clienti, setClienti] = useState<FelClienti>(a.clienti ?? "toti");
+  const [surse, setSurse] = useState<string[]>(a.surse ?? []);
+  const [quietEmailOn, setQuietEmailOn] = useState(!!a.quiet_hours_email);
+  const [quietEmailStart, setQuietEmailStart] = useState(String(a.quiet_hours_email?.start ?? 0));
+  const [quietEmailEnd, setQuietEmailEnd] = useState(String(a.quiet_hours_email?.end ?? 7));
+  const [zileOprite, setZileOprite] = useState<number[]>(a.zile_oprite ?? []);
+  const [maxPeClient, setMaxPeClient] = useState(nrText(a.max_mesaje_pe_client));
+  const [pauzaZile, setPauzaZile] = useState(nrText(a.pauza_zile));
+  const [plafonSms, setPlafonSms] = useState(nrText(a.plafon_sms_lunar));
+  const [plafonZilnic, setPlafonZilnic] = useState(nrText(a.plafon_zilnic));
+  const [pragDezabonare, setPragDezabonare] = useState(nrText(a.prag_dezabonare));
+
+  /** Textul unui camp de numar, ca valoare de configuratie. Gol inseamna „fara regula". */
+  const caNumar = (v: string): number | null => {
+    const n = Number(v.trim());
+    return v.trim() && Number.isFinite(n) && n > 0 ? n : null;
+  };
 
   function addStep(seed?: Omit<AbandonedAutomationStep, "id">) {
     const channel = seed?.channel ?? "email";
@@ -136,8 +163,12 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
     {
       enabled,
       steps: steps.map((s) => ({ ...s, delay_hours: Number(s.delay_hours) || 0 })),
-      min_cart_value: minCart.trim() ? Number(minCart) : null,
+      min_cart_value: caNumar(minCart),
+      max_cart_value: caNumar(maxCart),
       quiet_hours: quietOn ? { start: Number(quietStart) || 0, end: Number(quietEnd) || 0 } : null,
+      quiet_hours_email: quietEmailOn
+        ? { start: Number(quietEmailStart) || 0, end: Number(quietEmailEnd) || 0 }
+        : null,
     },
     { smsPornit: data.smsEnabled, coduriActive: data.discounts.map((d) => d.code) },
   );
@@ -148,8 +179,20 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
       try {
         res = await saveAbandonedCartAutomation(businessId, {
           enabled,
-          min_cart_value: minCart.trim() ? Number(minCart) : null,
+          min_cart_value: caNumar(minCart),
+          max_cart_value: caNumar(maxCart),
+          clienti,
+          surse,
           quiet_hours: quietOn ? { start: Number(quietStart) || 0, end: Number(quietEnd) || 0 } : null,
+          quiet_hours_email: quietEmailOn
+            ? { start: Number(quietEmailStart) || 0, end: Number(quietEmailEnd) || 0 }
+            : null,
+          zile_oprite: zileOprite,
+          max_mesaje_pe_client: caNumar(maxPeClient),
+          pauza_zile: caNumar(pauzaZile),
+          plafon_sms_lunar: caNumar(plafonSms),
+          plafon_zilnic: caNumar(plafonZilnic),
+          prag_dezabonare: caNumar(pragDezabonare),
           steps: steps.map((s) => ({
             id: s.id,
             delay_hours: Number(s.delay_hours) || 0,
@@ -424,33 +467,228 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
         </div>
       </div>
 
-      {/* Rules */}
-      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Reguli</h3>
+      {/*
+        ⚠ REGULILE SUNT IMPARTITE IN TREI GRUPE, si asta nu e cosmetica: ele
+        raspund la intrebari diferite. „Cine" alege pe cine cauta
+        automatizarea; „cand" alege momentul; „cat" apara de greseli facute in
+        graba. Puse toate intr-o lista lunga, omul le-ar fi citit ca pe un
+        formular de bifat, nu ca pe niste hotarari.
 
+        ⚠ SE SPUNE SI CARE DINTRE ELE PRIVESC TRIMITEREA DE MANA. Cele de
+        tintire nu: un mesaj apasat cu mana e deja tintit.
+      */}
+
+      {/* ── Cine primeste ────────────────────────────────────────────── */}
+      <div className="space-y-4 rounded-2xl bg-card p-5 ring-1 ring-foreground/10">
         <div>
-          <label className="block text-sm text-foreground mb-1.5">Valoare minimă coș (opțional)</label>
-          <div className="flex items-center gap-2">
-            <input type="number" min="0" step="1" value={minCart} onChange={(e) => setMinCart(e.target.value)} placeholder="ex: 50" className={`${inputCls} w-40`} />
-            <span className="text-sm text-muted-foreground">lei</span>
+          <h3 className="text-sm font-semibold text-foreground">Cine primește</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Regulile astea aleg pe cine caută automatizarea. Nu opresc mesajele pe care le trimiți
+            tu cu mâna din listă.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-sm text-foreground">Valoare coș, de la</label>
+            <div className="flex items-center gap-2">
+              <input type="number" min="0" step="1" value={minCart} onChange={(e) => setMinCart(e.target.value)}
+                placeholder="oricare" className={`${inputCls} w-32`} />
+              <span className="text-sm text-muted-foreground">lei</span>
+            </div>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1">Nu trimite pentru coșuri sub această valoare (economisești credit SMS).</p>
+          <div>
+            <label className="mb-1.5 block text-sm text-foreground">până la</label>
+            <div className="flex items-center gap-2">
+              <input type="number" min="0" step="1" value={maxCart} onChange={(e) => setMaxCart(e.target.value)}
+                placeholder="oricare" className={`${inputCls} w-32`} />
+              <span className="text-sm text-muted-foreground">lei</span>
+            </div>
+            {/*
+              ⚠ Maximul pare ciudat pana il explici: un cos de zece mii e de
+              obicei un test sau o comanda pentru firma, iar un memento automat
+              acolo arata prost.
+            */}
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Peste o anumită sumă, coșurile sunt de obicei teste sau comenzi de firmă.
+            </p>
+          </div>
         </div>
 
         <div>
-          <label className="flex items-center gap-2 cursor-pointer mb-2">
-            <input type="checkbox" checked={quietOn} onChange={(e) => setQuietOn(e.target.checked)} className="w-4 h-4 accent-[var(--primary)]" />
-            <span className="text-sm text-foreground flex items-center gap-1.5"><Clock className="h-4 w-4" /> Ore liniștite (fără SMS)</span>
-          </label>
-          {quietOn && (
-            <div className="flex items-center gap-2 pl-6">
-              <span className="text-sm text-muted-foreground">de la</span>
-              <input type="number" min="0" max="23" value={quietStart} onChange={(e) => setQuietStart(e.target.value)} className={`${inputCls} w-20`} />
-              <span className="text-sm text-muted-foreground">până la</span>
-              <input type="number" min="0" max="23" value={quietEnd} onChange={(e) => setQuietEnd(e.target.value)} className={`${inputCls} w-20`} />
-              <span className="text-sm text-muted-foreground">(ora României)</span>
+          <label className="mb-1.5 block text-sm text-foreground">Ce fel de clienți</label>
+          <div className="inline-flex overflow-hidden rounded-lg border border-border">
+            {([
+              ["toti", "Toți"],
+              ["noi", "Doar clienți noi"],
+              ["revin", "Doar cine a mai comandat"],
+            ] as const).map(([v, nume]) => (
+              <button
+                key={v}
+                onClick={() => setClienti(v)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  clienti === v ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {nume}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {data.surseCosuri.length > 1 && (
+          <div>
+            <label className="mb-1.5 block text-sm text-foreground">De unde a pornit coșul</label>
+            <div className="flex flex-wrap gap-2">
+              {data.surseCosuri.map((sv) => (
+                <label key={sv} className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5">
+                  <input
+                    type="checkbox"
+                    checked={surse.includes(sv)}
+                    onChange={(e) => setSurse((p) => e.target.checked ? [...p, sv] : p.filter((x) => x !== sv))}
+                    className="h-3.5 w-3.5 accent-[var(--primary)]"
+                  />
+                  <span className="text-xs text-foreground">{numeleSursei(sv)}</span>
+                </label>
+              ))}
             </div>
-          )}
+            {/* ⚠ Nimic bifat = toate. Altfel omul ar trebui sa le bifeze pe toate ca sa nu filtreze. */}
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Nimic bifat înseamnă toate.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Cand se trimite ──────────────────────────────────────────── */}
+      <div className="space-y-4 rounded-2xl bg-card p-5 ring-1 ring-foreground/10">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Clock className="h-4 w-4" /> Când se trimite
+          </h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Regulile astea opresc și mesajele trimise cu mâna: un SMS la 3 noaptea deranjează la fel,
+            oricine ar apăsa butonul.
+          </p>
+        </div>
+
+        {/*
+          ⚠ LINISTEA E PE CANAL. Un email la 23:00 nu trezeste pe nimeni; un SMS
+          da. Cu o singura fereastra, cine voia sa opreasca SMS-urile noaptea isi
+          oprea si emailurile - adica tocmai canalul gratuit.
+        */}
+        {([
+          ["sms", "Fără SMS între", quietOn, setQuietOn, quietStart, setQuietStart, quietEnd, setQuietEnd],
+          ["email", "Fără email între", quietEmailOn, setQuietEmailOn, quietEmailStart, setQuietEmailStart, quietEmailEnd, setQuietEmailEnd],
+        ] as const).map(([cheieC, eticheta, pornit, setPornit, de1, setDe1, la1, setLa1]) => (
+          <div key={cheieC}>
+            <label className="mb-2 flex cursor-pointer items-center gap-2">
+              <input type="checkbox" checked={pornit} onChange={(e) => setPornit(e.target.checked)}
+                className="h-4 w-4 accent-[var(--primary)]" />
+              <span className="text-sm text-foreground">{eticheta}</span>
+            </label>
+            {pornit && (
+              <div className="flex flex-wrap items-center gap-2 pl-6">
+                <input type="number" min="0" max="23" value={de1} onChange={(e) => setDe1(e.target.value)}
+                  className={`${inputCls} w-20`} />
+                <span className="text-sm text-muted-foreground">și</span>
+                <input type="number" min="0" max="23" value={la1} onChange={(e) => setLa1(e.target.value)}
+                  className={`${inputCls} w-20`} />
+                <span className="text-sm text-muted-foreground">(ora României)</span>
+              </div>
+            )}
+          </div>
+        ))}
+
+        <div>
+          <label className="mb-1.5 block text-sm text-foreground">Zile în care nu se trimite</label>
+          <div className="flex flex-wrap gap-1.5">
+            {["D", "L", "Ma", "Mi", "J", "V", "S"].map((z, i) => (
+              <button
+                key={i}
+                onClick={() => setZileOprite((p) => p.includes(i) ? p.filter((x) => x !== i) : [...p, i])}
+                className={`h-8 w-9 rounded-lg text-xs font-medium transition-colors ${
+                  zileOprite.includes(i)
+                    ? "bg-destructive/10 text-destructive ring-1 ring-destructive/40"
+                    : "border border-border text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {z}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-sm text-foreground">Cel mult, pe client</label>
+            <div className="flex items-center gap-2">
+              <input type="number" min="0" step="1" value={maxPeClient} onChange={(e) => setMaxPeClient(e.target.value)}
+                placeholder="fără limită" className={`${inputCls} w-32`} />
+              <span className="text-sm text-muted-foreground">mesaje / 30 zile</span>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm text-foreground">Pauză între mesaje</label>
+            <div className="flex items-center gap-2">
+              <input type="number" min="0" step="1" value={pauzaZile} onChange={(e) => setPauzaZile(e.target.value)}
+                placeholder="fără" className={`${inputCls} w-32`} />
+              <span className="text-sm text-muted-foreground">zile</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Limite si plafoane ───────────────────────────────────────── */}
+      <div className="space-y-4 rounded-2xl bg-card p-5 ring-1 ring-foreground/10">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <ShieldCheck className="h-4 w-4" /> Limite și plafoane
+          </h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Plase de siguranță. Când se ating, nu se mai trimite nimic și ți se spune de ce.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-sm text-foreground">Cel mult, pe lună</label>
+            <div className="flex items-center gap-2">
+              <input type="number" min="0" step="1" value={plafonSms} onChange={(e) => setPlafonSms(e.target.value)}
+                placeholder="fără plafon" className={`${inputCls} w-32`} />
+              <span className="text-sm text-muted-foreground">SMS-uri</span>
+            </div>
+            {/* ⚠ Numai SMS-urile: emailul nu costa, si oprit odata cu ele ar fi pe dos. */}
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Doar SMS-urile, fiindcă doar ele costă. Emailurile merg mai departe.
+            </p>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm text-foreground">Cel mult, pe zi</label>
+            <div className="flex items-center gap-2">
+              <input type="number" min="0" step="1" value={plafonZilnic} onChange={(e) => setPlafonZilnic(e.target.value)}
+                placeholder="fără plafon" className={`${inputCls} w-32`} />
+              <span className="text-sm text-muted-foreground">mesaje</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label className="mb-1.5 block text-sm text-foreground">Oprire automată la dezabonări</label>
+          <div className="flex items-center gap-2">
+            <input type="number" min="0" max="100" step="1" value={pragDezabonare}
+              onChange={(e) => setPragDezabonare(e.target.value)}
+              placeholder="fără" className={`${inputCls} w-32`} />
+            <span className="text-sm text-muted-foreground">% din mesajele ultimelor 30 de zile</span>
+          </div>
+          {/*
+            ⚠ Se spune si ca procentul are nevoie de un minim de mesaje: altfel
+            omul pune 5%, vede o dezabonare din trei mesaje si crede ca e stricat.
+          */}
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Se socotește abia de la 20 de mesaje încolo — sub atâtea, un procent nu înseamnă nimic.
+            Peste prag, automatizarea tace până te uiți tu la ea.
+          </p>
         </div>
       </div>
 

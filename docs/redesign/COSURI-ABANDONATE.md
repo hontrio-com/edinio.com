@@ -370,3 +370,40 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
       setare a magazinului; cand nu se poate citi, se cade pe primul gata.
       ⚠ Campul se CITESTE INAPOI la incarcarea configuratiei. Scris si necitit, ar fi disparut
       la prima resalvare: alegi SMSO, salvezi, reincarci si vezi iar celalalt, fara nicio eroare.
+- [x] **F4a.** Reguli: cine primeste, cand, si pana la ce plafon. Douasprezece, toate intr-o
+      SINGURA hotarare (`refuzulRegulilor`) chemata si de cron, si de trimiterea de mana.
+      Imprastiate prin `if`-uri pe fiecare drum, ar fi ajuns sa nu se mai potriveasca: un cos
+      oprit de cron ar fi putut pleca din panou, si nimeni n-ar fi stiut de ce.
+      ⚠⚠ **Tintirea NU opreste o trimitere facuta cu mana**, plafoanele si linistea da. Un mesaj
+      apasat de mana e DEJA tintit: omul s-a uitat la cosul ala. Oprit fiindca „ai pus minimul
+      la 300 de lei", panoul ar refuza tocmai ce i-a cerut comerciantul. Dar un SMS la 3 noaptea
+      deranjeaza la fel, iar plafonul lunar e pus tocmai impotriva grabei.
+      ⚠ Un cos care incalca SI tintirea, SI un plafon tot e oprit: verificarea se reia fara
+      regulile de tintire, nu se abandoneaza la primul refuz. Altfel plafonul ar fi fost sarit.
+      ⚠ **Orele de liniste trec peste miezul noptii** (22 → 8). Scrise ca `start <= ora < end`,
+      n-ar fi prins NICIODATA nicio ora: niciuna nu e in acelasi timp peste 22 si sub 8.
+      Formularul ar fi aratat linistea pusa, si mesajele ar fi plecat la trei dimineata.
+      ⚠ Linistea e PE CANAL: un email la 23:00 nu trezeste pe nimeni, un SMS da. Cu o singura
+      fereastra, cine voia sa opreasca SMS-urile noaptea isi oprea si canalul gratuit.
+      ⚠ La fel, plafonul lunar priveste doar SMS-urile - doar ele costa.
+      ⚠ **Cand nu se stie daca e client nou, NU se trimite.** Ghicit gresit, omul primeste un
+      mesaj scris pentru altcineva („bine ai revenit" catre cineva care n-a cumparat niciodata).
+      ⚠ Pragul de dezabonare cere minimum 20 de mesaje: o dezabonare din trei e 33%, si oprita
+      acolo automatizarea s-ar fi stins a doua zi, iar omul ar fi crezut ca e stricata.
+      ⚠ **ZERO inseamna „fara regula", nu „zero lei".** Campul gol din formular ajunge la server
+      tot ca 0; pastrat asa, o regula pe care omul credea ca a sters-o ar fi devenit cea mai
+      dura dintre toate - zero SMS-uri pe luna. De-aia campurile se tin ca TEXT in ecran: un
+      `number` gol devine `NaN`, iar `NaN` salvat e tot o regula imposibila.
+      ⚠ Toate regulile se CITESC INAPOI, cu proba: un camp scris si necitit dispare la prima
+      resalvare, fara nicio eroare.
+      ⚠ Sursele nu sunt scrise in cod, ci citite din datele magazinului: in productie sunt
+      „buy_now" (278) si „cart" (111), pe demo apare si „checkout". O lista fixa ar fi oferit
+      optiuni care nu prind nimic si ar fi ascuns-o pe cea adevarata.
+      ⚠ Faptele despre magazin (cate SMS-uri luna asta, cate mesaje azi, cate dezabonari) se
+      strang O DATA PE MAGAZIN, nu o data pe cos: cronul trece prin sute, si citite pe fiecare
+      ar fi fost sute de interogari identice, cu cifra schimbandu-se in timpul aceleiasi rulari.
+      ⚠ Cele doua interogari de istoric nu se fac deloc daca nicio regula nu le cere.
+      ⚠⚠ Plasa mai veche a pragului de valoare a cazut si a fost rescrisa: afirmatia ei (valoarea
+      se judeca REPRETUITA, si regulile nu revendica pasul) a ramas, forma s-a schimbat.
+      A treia oara intr-o zi cand o ancora a prins alt loc din fisier - aici, unul dintre cele
+      TREI `revendicaPasul` din bucla, doua dintre ele facand dinadins pe dos.

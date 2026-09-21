@@ -128,19 +128,32 @@ test("⚠ pragul comerciantului se masoara DUPA repretuire, si pe totalul repret
    * Deci nu ajunge sa se cheme `proaspat.total`; el trebuie sa fie DUPA `cosRecuperabil`, altfel
    * n-ar exista inca.
    */
+  /*
+   * ⚠⚠ AFIRMATIA A RAMAS, FORMA S-A SCHIMBAT. Pana pe 21.09.2026 pragul era
+   * un `if` scris pe loc; acum e una dintre cele vreo doisprezece reguli ale
+   * comerciantului, si toate trec printr-o singura hotarare
+   * (`refuzulRegulilor`). Proba masoara acelasi lucru: valoarea judecata e cea
+   * REPRETUITA, si se judeca DUPA drumul la catalog.
+   */
   const cod = sursa(CRON);
   const bucla = cod.slice(cod.indexOf("for (const cart of carts ?? [])"));
 
   const repretuire = bucla.indexOf("const proaspat = await cosRecuperabil(");
-  const prag = bucla.indexOf("min_cart_value");
+  const reguli = bucla.indexOf("refuzulRegulilor(");
   assert.ok(repretuire > 0, "repretuirea din cron si-a schimbat forma");
-  assert.ok(prag > 0, "pragul comerciantului a disparut din cron");
-  assert.ok(prag > repretuire, "pragul se judeca INAINTE de repretuire, deci pe numarul din browser");
+  assert.ok(reguli > 0, "regulile comerciantului au disparut din cron");
+  assert.ok(reguli > repretuire, "regulile se judeca INAINTE de repretuire, deci pe numarul din browser");
 
-  const randul = bucla.slice(prag - 60, prag + 160);
-  assert.match(randul, /proaspat\.total < store\.automation\.min_cart_value/,
-    "pragul nu se masoara pe valoarea repretuita");
-  assert.doesNotMatch(bucla.slice(0, prag + 200), /Number\(cart\.subtotal \|\| 0\) < store\.automation\.min_cart_value/,
+  /*
+   * ⚠ Si ce VALOARE intra in ele: `proaspat.total`, pus peste `subtotal`-ul
+   * salvat de browser. Fara linia asta, dosarul ar fi purtat numarul declarat
+   * de o actiune publica - tocmai ce s-a reparat.
+   */
+  const dosar = bucla.slice(bucla.indexOf("fapteleCosului("), reguli);
+  assert.match(dosar, /subtotal: proaspat\.total/,
+    "dosarul poarta subtotalul din browser, nu valoarea repretuita");
+
+  assert.doesNotMatch(bucla, /Number\(cart\.subtotal \|\| 0\) < store\.automation\.min_cart_value/,
     "pragul se masoara iar pe subtotalul trimis de browser");
 });
 
@@ -152,11 +165,29 @@ test("⚠ pragul NU revendica pasul: cosul ramane de reincercat", () => {
    */
   const cod = sursa(CRON);
   const bucla = cod.slice(cod.indexOf("for (const cart of carts ?? [])"));
-  /* ⚠ Doar RANDUL pragului, nu o fereastra in jurul lui: cel de dedesubt chiar revendica pasul. */
-  const randul = bucla.split("\n").find((l) => l.includes("min_cart_value"));
-  assert.ok(randul, "pragul comerciantului a disparut din cron");
-  assert.match(randul, /continue;/, "pragul nu mai sare cosul");
-  assert.doesNotMatch(randul, /revendicaPasul/, "pragul revendica pasul, deci consuma secventa degeaba");
+
+  /*
+   * ⚠ Se masoara ORDINEA, nu un rand anume: refuzul regulilor trebuie sa fie
+   * INAINTEA revendicarii pasului. Invers, un cos sub prag ar consuma un pas
+   * din secventa fara sa i se trimita nimic - si maine, cand comerciantul
+   * coboara pragul, secventa lui ar fi deja pe jumatate consumata.
+   */
+  const refuz = bucla.indexOf("const refuz = refuzulRegulilor(");
+  /*
+    ⚠ REVENDICAREA CARE PAZESTE TRIMITEREA, nu oricare. In bucla sunt trei
+    chemari ale lui `revendicaPasul`, si doua dintre ele fac pe dos: avanseaza
+    pasul DINADINS pentru cosurile care n-au ce primi (fara canal, fara linii
+    recuperabile), ca sa nu fie incercate la nesfarsit. Prinsa de prima, proba
+    a cazut desi ordinea din cod era buna.
+  */
+  const revendicare = bucla.indexOf("if (!(await revendicaPasul(");
+  assert.ok(refuz > 0, "regulile comerciantului au disparut din cron");
+  assert.ok(revendicare > 0, "revendicarea pasului si-a schimbat forma");
+  assert.ok(refuz < revendicare, "regulile se judeca DUPA revendicarea pasului, deci consuma secventa degeaba");
+
+  /* Si ca refuzul chiar sare cosul, in loc sa-l lase sa curga mai departe. */
+  const bucata = bucla.slice(refuz, revendicare);
+  assert.match(bucata, /continue;/, "refuzul nu mai sare cosul");
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════

@@ -5,6 +5,7 @@
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import { mesajulCareAAdus } from "@/lib/abandoned/atribuire";
 import type { FurnizorSms } from "@/lib/abandoned/furnizori-sms";
+import type { ReguliAutomatizare } from "@/lib/abandoned/reguli";
 import type { CatePePagina, NumePerioada } from "@/lib/abandoned/perioade";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
@@ -121,6 +122,14 @@ export interface AbandonedCartsData {
    * alegea codul, si alegea mereu la fel.
    */
   furnizoriSms: { cheie: FurnizorSms; nume: string }[];
+  /**
+   * Drumurile pe care au venit CHIAR cosurile magazinului asta.
+   *
+   * ⚠ Citite din date, nu scrise in cod: masurat pe 21.09.2026, in productie
+   * sunt „buy_now" si „cart", iar pe demo apare si „checkout". O lista fixa ar
+   * fi oferit optiuni care nu prind nimic, si ar fi ascuns-o pe cea adevarata.
+   */
+  surseCosuri: string[];
   storeUrl: string;
   storeName: string;
   primaryColor: string;
@@ -661,7 +670,14 @@ export interface AbandonedAutomationStep {
   discount_code?: string;
 }
 
-export interface AbandonedAutomationConfig {
+/**
+ * Tot ce a hotarat comerciantul despre automatizare.
+ *
+ * ⚠ REGULILE STAU IN `ReguliAutomatizare`, nu scrise inca o data aici: ele
+ * se verifica in `refuzulRegulilor`, si doua liste de campuri care trebuie sa
+ * se potriveasca se departeaza una de alta la primul camp adaugat doar intr-una.
+ */
+export interface AbandonedAutomationConfig extends ReguliAutomatizare {
   enabled: boolean;
   min_cart_value: number | null;
   quiet_hours: { start: number; end: number } | null; // hours 0-23
@@ -673,11 +689,36 @@ export function readAutomationConfig(raw: unknown): AbandonedAutomationConfig {
   const c = (raw ?? {}) as Partial<AbandonedAutomationConfig>;
   const steps = Array.isArray(c.steps) ? c.steps : [];
   const qh = c.quiet_hours;
+  /*
+    ⚠ FIECARE REGULA SE CITESTE INAPOI. Un camp salvat si necitit dispare la
+    prima resalvare, fara nicio eroare: omul pune plafonul de SMS, salveaza,
+    reincarca pagina si campul e gol - iar mesajele pleaca mai departe.
+  */
+  const qhEmail = c.quiet_hours_email;
   return {
     enabled: c.enabled === true,
-    min_cart_value: typeof c.min_cart_value === "number" && c.min_cart_value > 0 ? c.min_cart_value : null,
+    min_cart_value: pozitiv(c.min_cart_value),
+    max_cart_value: pozitiv(c.max_cart_value),
+    clienti: c.clienti === "noi" || c.clienti === "revin" ? c.clienti : "toti",
+    produse: siruri(c.produse),
+    surse: siruri(c.surse),
     quiet_hours: qh && typeof qh.start === "number" && typeof qh.end === "number"
       ? { start: clampHour(qh.start), end: clampHour(qh.end) } : null,
+    quiet_hours_email: qhEmail && typeof qhEmail.start === "number" && typeof qhEmail.end === "number"
+      ? { start: clampHour(qhEmail.start), end: clampHour(qhEmail.end) } : null,
+    /* ⚠ Zilele se aduc in 0-6 si se scot dublurile: „luni, luni" ar fi aratat prost si in text. */
+    zile_oprite: [...new Set(
+      (Array.isArray(c.zile_oprite) ? c.zile_oprite : [])
+        .map((z) => Math.floor(Number(z)))
+        .filter((z) => Number.isFinite(z) && z >= 0 && z <= 6),
+    )].sort(),
+    max_mesaje_pe_client: pozitiv(c.max_mesaje_pe_client),
+    pauza_zile: pozitiv(c.pauza_zile),
+    plafon_sms_lunar: pozitiv(c.plafon_sms_lunar),
+    plafon_zilnic: pozitiv(c.plafon_zilnic),
+    /* ⚠ Un prag de 0% ar opri automatizarea din prima dezabonare: se cere peste 0. */
+    prag_dezabonare: typeof c.prag_dezabonare === "number" && c.prag_dezabonare > 0 && c.prag_dezabonare <= 100
+      ? c.prag_dezabonare : null,
     steps: steps
       .filter((s): s is AbandonedAutomationStep => !!s && (s.channel === "email" || s.channel === "sms"))
       .map((s) => ({
@@ -698,6 +739,23 @@ export function readAutomationConfig(raw: unknown): AbandonedAutomationConfig {
 
 function clampHour(h: number): number {
   return Math.min(23, Math.max(0, Math.floor(h)));
+}
+
+/**
+ * Un numar pozitiv, sau nimic.
+ *
+ * ⚠ ZERO INSEAMNA „FARA REGULA", nu „zero lei". Un plafon de 0 SMS-uri ar
+ * opri totul, iar campul gol din formular ajunge aici tot ca 0 - deci o regula
+ * pe care omul crede ca a sters-o ar fi devenit cea mai dura dintre toate.
+ */
+function pozitiv(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/** O lista de siruri curate, fara goluri si fara dubluri. */
+function siruri(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return [...new Set(v.map((x) => String(x ?? "").trim()).filter(Boolean))];
 }
 
 // Is `hour` within quiet hours? Handles ranges that wrap past midnight.

@@ -6791,6 +6791,17 @@ export type Database = {
         }[]
       }
       curata_limite: { Args: never; Returns: number }
+      customer_activity: {
+        Args: { bid: string; cust_key: string; page_limit?: number }
+        Returns: {
+          cand: string
+          detaliu: string
+          fel: string
+          legatura_id: string
+          suma: number
+          titlu: string
+        }[]
+      }
       customer_orders: {
         Args: {
           bid: string

@@ -42,3 +42,49 @@ export async function getCustomerOrders(
     total: data?.length ? Number(data[0].total_count) : 0,
   };
 }
+
+/** Un rand din cronologia clientului, asa cum il da `customer_activity`. */
+export interface ActivitateClient {
+  fel: string;
+  cand: string;
+  titlu: string | null;
+  detaliu: string | null;
+  suma: number | null;
+  legaturaId: string | null;
+}
+
+/**
+ * Cronologia unui client: comenzi, cosuri abandonate, SMS-uri, mesaje de recuperare.
+ *
+ * ⚠ SE CERE LA DESCHIDEREA FILEI, nu odata cu lista. Patru izvoare unite si
+ * sortate pentru fiecare client din pagina ar fi insemnat cincizeci de cronologii
+ * aduse degeaba — omul deschide una.
+ *
+ * ⚠ Legarea de client se face pe aceeasi cheie ca restul paginii (telefon
+ * normalizat, apoi email). Vezi `migrations/2026-09-21-clienti-activitate.sql`.
+ */
+export async function getCustomerActivity(
+  businessId: string,
+  customerKey: string,
+): Promise<{ activitate: ActivitateClient[] } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Trebuie sa fii autentificat." };
+
+  const { data, error } = await supabase.rpc("customer_activity", {
+    bid: businessId,
+    cust_key: customerKey,
+  });
+  if (error) return { error: "Nu am putut incarca activitatea clientului." };
+
+  return {
+    activitate: (data ?? []).map((r) => ({
+      fel: r.fel,
+      cand: r.cand,
+      titlu: r.titlu ?? null,
+      detaliu: r.detaliu ?? null,
+      suma: r.suma == null ? null : Number(r.suma),
+      legaturaId: r.legatura_id ?? null,
+    })),
+  };
+}

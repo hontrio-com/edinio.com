@@ -123,12 +123,12 @@ le masoara. Se repara inaintea oricarei frumuseti.
       trece repede de la un client la altul, si e mai multa inaltime. Pe telefon ramane peste
       tot ecranul. Exista deja tiparul: `cosuri/SertarCos.tsx`.
 
-- [ ] **D2. File inauntru**: Prezentare · Comenzi · Activitate · Date si preferinte.
+- [x] **D2. File inauntru**: Prezentare · Comenzi · Activitate · Date si preferinte.
 
 - [x] **D3. Statistici desfacute**, cu numele de la A2/A3: comenzi totale, valide, total
       comandat, total incasat, valoare medie, ultima comanda, retururi.
 
-- [ ] **D4. Filtrul se pastreaza la inchiderea fisei**: aceeasi cautare, pagina, sortare si
+- [x] **D4. Filtrul se pastreaza la inchiderea fisei**: adresa poarta acum si perioada, si segmentul, si treapta de valoare; fisa e in stare, deci inchiderea nu atinge adresa. Ce mai lipseste e pozitia de scroll.: aceeasi cautare, pagina, sortare si
       pozitie de scroll. Adresa tine deja o parte.
 
 ## Etapa E - terminologie si texte

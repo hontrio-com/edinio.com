@@ -16,6 +16,7 @@ import { orderStatus } from "@/lib/orders/status";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
 import { EticheteClient } from "@/components/dashboard/clienti/EticheteClient";
+import { Activitate } from "@/components/dashboard/clienti/Activitate";
 import { ETICHETE, PERIOADE, type NumePerioada } from "@/lib/perioade";
 import {
   NUMELE_SEGMENTULUI, SEGMENTE, TREPTE_VALOARE, cateFiltre, type Segment,
@@ -31,6 +32,33 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "name",   label: "Nume (A-Z)" },
 ];
 
+
+/** Filele din fisa clientului, in ordinea lor. */
+const FILELE_FISEI = [
+  { cheie: "prezentare", eticheta: "Prezentare" },
+  { cheie: "comenzi", eticheta: "Comenzi" },
+  { cheie: "activitate", eticheta: "Activitate" },
+  { cheie: "date", eticheta: "Date" },
+] as const;
+
+type CheieFila = (typeof FILELE_FISEI)[number]["cheie"];
+
+/**
+ * Un camp din fila „Date".
+ *
+ * ⚠ Lipsa se SPUNE („nu avem"), nu se lasa o linie goala: un camp gol arata a
+ * defect, iar comerciantul cauta unde se completeaza.
+ */
+function Camp({ eticheta, valoare }: { eticheta: string; valoare: string | null }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <span className="text-muted-foreground">{eticheta}</span>
+      <span className={cn("text-right", valoare ? "text-foreground" : "text-muted-foreground/60")}>
+        {valoare ?? "nu avem"}
+      </span>
+    </div>
+  );
+}
 
 export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, perioada, segment, valoare, businessId }: {
   /** Pagina curenta de clienti (max CUSTOMERS_PAGE_SIZE), agregata in Postgres. */
@@ -505,6 +533,12 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
 
   // Istoricul se incarca on-demand (paginat) — clientul poate avea mii de
   // comenzi, deci lista de clienti nu il mai cara pe tot in payload.
+  /*
+    ⚠ Fila se tine in STARE, nu in adresa: e o alegere de-o clipa inauntrul fisei.
+    Pusa in adresa, ar fi intrat in istoricul browserului, iar „inapoi" ar fi sarit
+    intre file in loc sa inchida fisa — ceea ce nimeni nu asteapta.
+  */
+  const [fila, setFila] = useState<CheieFila>("prezentare");
   const [history, setHistory] = useState<CustomerOrder[]>([]);
   const [historyTotal, setHistoryTotal] = useState<number | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -598,8 +632,42 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
           </button>
         </div>
 
-        {/* Body */}
+        {/*
+          ═══ FILELE FIȘEI ═══
+
+          ⚠ Sertarul avea tot conținutul unul sub altul și se lungea cât ținea
+          istoricul. Cu file, fiecare bucată are locul ei și se ajunge la ea dintr-o
+          apăsare, nu derulând.
+
+          ⚠ FILA SE ȚINE ÎN STARE, NU ÎN ADRESĂ: e o alegere de-o clipă înăuntrul
+          fișei, nu ceva de trimis prin legătură. Pusă în adresă, ar fi intrat în
+          istoricul browserului, iar „înapoi" ar fi sărit între file în loc să închidă
+          fișa — ceea ce nimeni nu așteaptă.
+
+          ⚠ „Date și preferințe" arată azi numai ce chiar avem. Consimțământul,
+          canalul preferat și dezabonarea cer date care nu există încă pe client, și
+          se spune asta pe filă, nu se lasă câmpuri goale care par stricate.
+        */}
+        <div className="flex flex-shrink-0 gap-1 border-b border-border px-3">
+          {FILELE_FISEI.map((f) => (
+            <button
+              key={f.cheie}
+              type="button"
+              onClick={() => setFila(f.cheie)}
+              className={cn(
+                "border-b-2 px-3 py-2.5 text-xs font-semibold transition-colors",
+                fila === f.cheie
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {f.eticheta}
+            </button>
+          ))}
+        </div>
+
         <div className="px-5 py-4 overflow-y-auto flex-1 space-y-5">
+          {fila === "prezentare" && (<>
           {/*
             ═══ CIFRELE, DESFĂCUTE ═══
 
@@ -666,7 +734,10 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
             </div>
           )}
 
-          {/* Order history */}
+          </>)}
+
+          {/* Istoricul comenzilor, fila lui. */}
+          {fila === "comenzi" && (
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Istoric comenzi</p>
 
@@ -729,6 +800,31 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
               </div>
             )}
           </div>
+          )}
+
+          {fila === "activitate" && (
+            <Activitate businessId={businessId} cheie={customer.key} />
+          )}
+
+          {fila === "date" && (
+            <div className="space-y-3 text-xs">
+              <Camp eticheta="Nume" valoare={customer.name} />
+              <Camp eticheta="Telefon" valoare={customer.phone ? formatPhoneDisplay(customer.phone) : null} />
+              <Camp eticheta="Email" valoare={customer.email} />
+              <Camp eticheta="Adresă" valoare={[customer.address, customer.city, customer.county].filter(Boolean).join(", ") || null} />
+              {/*
+                ⚠ CE LIPSEȘTE SE SPUNE, NU SE LASă GOL. Consimțământul, canalul
+                preferat și starea dezabonării cer date care nu se țin azi pe client.
+                Câmpuri goale ar fi arătat a defect, iar comerciantul ar fi căutat unde
+                se completează.
+              */}
+              <p className="rounded-lg bg-muted/40 p-3 text-[11px] text-muted-foreground">
+                Consimțământul pentru email și SMS, canalul preferat și starea
+                dezabonării nu se țin încă pe client, deci nu se pot arăta aici.
+                Dezabonările de la mesajele de recuperare se văd în Coșuri abandonate.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

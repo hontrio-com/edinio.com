@@ -6,7 +6,7 @@ import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tier
 import { mesajulCareAAdus } from "@/lib/abandoned/atribuire";
 import type { FurnizorSms } from "@/lib/abandoned/furnizori-sms";
 import type { ReguliAutomatizare } from "@/lib/abandoned/reguli";
-import type { CatePePagina, NumePerioada } from "@/lib/abandoned/perioade";
+import type { CatePePagina, NumePerioada } from "@/lib/perioade";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { hasVariants, cerePersonalizare, parseVariants, findCombo, comboUnitPrice } from "@/lib/storefront/variants";

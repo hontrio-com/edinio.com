@@ -3,6 +3,13 @@
   O SINGURA PERIOADA PENTRU TOATA PAGINA
   ═══════════════════════════════════════════════════════════════════════════
 
+  ⚠ MUTAT DIN `lib/abandoned/` IN `lib/`, 21.09.2026. Nimic din el n-a fost
+  vreodata despre cosuri: e fereastra de timp a panoului. Cand pagina Clienti a
+  avut nevoie de aceleasi perioade, singurele iesiri erau sa importe dintr-un
+  dosar care spune „abandoned" — deci sa-l zapaceasca pe urmatorul cititor — sau
+  sa scrie a doua copie, care s-ar fi despartit de prima. Mutarea e curata:
+  `tsc` a numarat cei trei apelanti.
+
   ⚠ CE ERA. Trei cifre una langa alta despre trei rastimpuri diferite:
   „Cosuri abandonate" era pe tot ce incapea intr-o citire de 90 de zile,
   „Rata de abandon" pe luna curenta, „Recuperate" tot pe luna curenta. Nimic

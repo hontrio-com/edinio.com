@@ -84,11 +84,11 @@ le masoara. Se repara inaintea oricarei frumuseti.
 
 ## Etapa B - cifrele din cap
 
-- [ ] **B1. Selector de perioada** (30 de zile, 90, anul acesta, tot istoricul, personalizat),
+- [x] **B1. Selector de perioada** (30 de zile, 90, anul acesta, tot istoricul, personalizat),
       aceeasi forma ca la Statistici si Cosuri. Lista ramane pe tot istoricul; **sumarul spune
       apasat pe ce perioada e**.
 
-- [ ] **B2. Alte KPI-uri.** „Venit total" si „Valoare medie comanda" exista deja la Statistici;
+- [x] **B2. Alte KPI-uri.** „Venit total" si „Valoare medie comanda" exista deja la Statistici;
       aici sunt mai utile marimile despre RELATIA cu oamenii:
       **Cumparatori · Clienti recurenti · Rata de revenire · Valoare medie per client.**
       ⚠ Cardul **„Clienti" ramane numarul total** (hotararea lui).
@@ -133,7 +133,7 @@ le masoara. Se repara inaintea oricarei frumuseti.
 
 ## Etapa E - terminologie si texte
 
-- [ ] **E1. Diacritice peste tot**: „Clienți", „Clienți recurenți", „Valoare medie comandă",
+- [x] **E1. Diacritice peste tot**: „Clienți", „Clienți recurenți", „Valoare medie comandă",
       „Activitate recentă", „Caută după nume, telefon sau email".
 
 - [x] **E2. Descrierea paginii**, azi prea tehnica („grupați automat după numărul de telefon").

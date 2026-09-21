@@ -29,7 +29,7 @@ import { NUMELE_RECUPERARII } from "@/lib/abandoned/atribuire";
 import {
   ETICHETE, PERIOADE, PE_PAGINA, catePagini,
   type CatePePagina, type NumePerioada,
-} from "@/lib/abandoned/perioade";
+} from "@/lib/perioade";
 import {
   setAbandonedCartEnabled, sendAbandonedCartEmail, sendAbandonedCartSms, deleteAbandonedCart,
   ignoraCosAbandonat, cereCosuriAbandonate, inMasaCosuri,

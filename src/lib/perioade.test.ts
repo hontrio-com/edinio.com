@@ -97,8 +97,17 @@ test("⚠ NICIO ETICHETA DE PE ECRAN NU-SI SPUNE SINGURA PERIOADA", () => {
 
     Proba cere ca orice pomenire de perioada de pe ecran sa vina din `data.perioada`.
   */
+  /*
+    ⚠ Proba asta e despre ECRANUL Cosurilor, nu despre modulul de perioade. A ramas
+    aici la mutarea din 21.09.2026 fiindca de ea atarna intelesul etichetelor. Daca
+    mai vine un al doilea ecran cu perioade, ea se muta langa Cosuri si fiecare ecran
+    isi capata proba lui.
+
+    ⚠ Calea s-a schimbat odata cu mutarea (`lib/abandoned/` → `lib/`), si asta a si
+    cazut imediat: fisierul negasit face `readFileSync` sa arunce.
+  */
   const ecran = readFileSync(
-    new URL("../../components/dashboard/AbandonedCartsClient.tsx", import.meta.url), "utf8",
+    new URL("../components/dashboard/AbandonedCartsClient.tsx", import.meta.url), "utf8",
   );
   /*
     Se sar comentariile (acolo se POVESTESTE despre defect) si trupul lui

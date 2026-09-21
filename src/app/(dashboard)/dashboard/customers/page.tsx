@@ -6,6 +6,7 @@ import { CustomersClient } from "@/components/dashboard/CustomersClient";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CUSTOMERS_PAGE_SIZE, escapeLike, firstParam, pageParam } from "@/lib/orders/pagination";
 import type { Customer, CustomersSummary } from "@/lib/customers";
+import { PERIOADE, fereastra, type NumePerioada } from "@/lib/perioade";
 
 const SORT_KEYS = new Set(["recent", "spent", "orders", "name"]);
 
@@ -32,6 +33,17 @@ export default async function CustomersPage({
   const sortRaw = firstParam(sp.sort) ?? "recent";
   const sort = SORT_KEYS.has(sortRaw) ? sortRaw : "recent";
   const page = pageParam(sp.page);
+  /*
+    ⚠ PERIOADA IMPLICITA E „TOT ISTORICUL", spre deosebire de Statistici si de
+    Cosuri, unde e o fereastra scurta. Aici cifrele sunt despre RELATIA cu oamenii,
+    iar relatiile se vad pe rastimpuri lungi: masurat pe demo, „clienti recurenti"
+    pe 30 de zile da 2, iar pe tot istoricul da 22. Pornita pe 30 de zile, pagina ar
+    fi aratat ca un magazin fara clienti care revin.
+  */
+  const perioadaRaw = firstParam(sp.perioada) ?? "tot";
+  const perioada: NumePerioada = (PERIOADE as string[]).includes(perioadaRaw)
+    ? (perioadaRaw as NumePerioada)
+    : "tot";
 
   const { data: bizRow } = await supabase
     .from("businesses")
@@ -46,7 +58,7 @@ export default async function CustomersPage({
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <Suspense fallback={<ScheletClienti />}>
-        <ListaClienti businessId={bizRow.id} q={q} sort={sort} page={page} />
+        <ListaClienti businessId={bizRow.id} q={q} sort={sort} page={page} perioada={perioada} />
       </Suspense>
     </div>
   );
@@ -80,13 +92,16 @@ async function ListaClienti({
   q,
   sort,
   page,
+  perioada,
 }: {
   businessId: string;
   q: string;
   sort: string;
   page: number;
+  perioada: NumePerioada;
 }) {
   const supabase = await createClient();
+  const f = fereastra(perioada);
 
   // Clientii sunt agregati, cautati si paginati in Postgres (functiile
   // customers_aggregate / customers_summary, sub RLS) — corect la orice numar
@@ -99,7 +114,17 @@ async function ListaClienti({
       page_limit: CUSTOMERS_PAGE_SIZE,
       page_offset: (page - 1) * CUSTOMERS_PAGE_SIZE,
     }),
-    supabase.rpc("customers_summary", { bid: businessId }),
+    /*
+      ⚠ LISTA RAMANE PE TOT ISTORICUL, numai sumarul se taie pe perioada — cum a
+      cerut el. Un client care n-a comandat luna asta nu dispare din lista: e tot
+      clientul magazinului, iar o lista care se goleste la schimbarea perioadei ar
+      parea stricata.
+    */
+    supabase.rpc("customers_summary", {
+      bid: businessId,
+      p_de_la: f.nume === "tot" ? undefined : f.deLa.toISOString(),
+      p_pana: f.nume === "tot" ? undefined : f.panaLa.toISOString(),
+    }),
   ]);
 
   const customers: Customer[] = (custRows ?? []).map((r) => ({
@@ -143,6 +168,7 @@ async function ListaClienti({
       page={page}
       searchQuery={q}
       sort={sort}
+      perioada={perioada}
       businessId={businessId}
     />
   );

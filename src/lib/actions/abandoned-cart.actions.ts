@@ -29,7 +29,7 @@ import { refuzulLaMana } from "@/lib/abandoned/reguli";
 import { fapteleCosului, fapteleMagazinului, nevoiDeIstoric } from "@/lib/abandoned/dosar";
 import {
   fereastra, fereastraPrecedenta, marginile, type CatePePagina, type NumePerioada,
-} from "@/lib/abandoned/perioade";
+} from "@/lib/perioade";
 import { isPremiumPlan } from "@/lib/plans";
 import { ABANDON_MINUTES, COS_PREA_VECHI, cosulMaiPoateFiRecuperat, cuPreturileDinCatalog, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, standardRecoveryTemplate, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type MesajCos, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
 import type { Database } from "@/types/database.types";

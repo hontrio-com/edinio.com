@@ -16,6 +16,7 @@ import { orderStatus } from "@/lib/orders/status";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
 import { EticheteClient } from "@/components/dashboard/clienti/EticheteClient";
+import { ETICHETE, PERIOADE, type NumePerioada } from "@/lib/perioade";
 import { CustomerImportModal } from "./CustomerImportModal";
 
 type SortKey = "recent" | "spent" | "orders" | "name";
@@ -28,7 +29,7 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 ];
 
 
-export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, businessId }: {
+export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, perioada, businessId }: {
   /** Pagina curenta de clienti (max CUSTOMERS_PAGE_SIZE), agregata in Postgres. */
   customers: Customer[];
   summary: CustomersSummary;
@@ -37,6 +38,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   page: number;
   searchQuery: string;
   sort: string;
+  perioada: NumePerioada;
   businessId: string;
 }) {
   const router = useRouter();
@@ -52,17 +54,20 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   const totalPages = Math.max(1, Math.ceil(totalCount / CUSTOMERS_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
 
-  const buildUrl = useCallback((next: { q?: string; sort?: string; page?: number }) => {
+  const buildUrl = useCallback((next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada }) => {
     const params = new URLSearchParams();
     const nq = next.q ?? searchQuery;
     const nsort = next.sort ?? sort;
     const npage = next.page ?? page;
     if (nq) params.set("q", nq);
     if (nsort !== "recent") params.set("sort", nsort);
+    /* ⚠ „tot" nu se scrie in adresa: e implicitul, iar o adresa curata se poate trimite. */
+    const nperioada = next.perioada ?? perioada;
+    if (nperioada !== "tot") params.set("perioada", nperioada);
     if (npage > 1) params.set("page", String(npage));
     const qs = params.toString();
     return qs ? `${pathname}?${qs}` : pathname;
-  }, [pathname, searchQuery, sort, page]);
+  }, [pathname, searchQuery, sort, page, perioada]);
 
   // Navigare externa (back/forward, link cu ?q=) → resincronizeaza inputul.
   useEffect(() => {
@@ -82,7 +87,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
     return () => clearTimeout(t);
   }, [searchInput, searchQuery, buildUrl, router]);
 
-  function goTo(next: { q?: string; sort?: string; page?: number }) {
+  function goTo(next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada }) {
     startNavTransition(() => router.push(buildUrl(next), { scroll: false }));
   }
 
@@ -102,12 +107,30 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             Gestionează cumpărătorii, istoricul comenzilor și segmentele magazinului.
           </p>
         </div>
+        {/*
+          ⚠ PERIOADA STA LANGA CIFRE, nu langa lista: ea taie numai sumarul.
+          Lista ramane pe tot istoricul — un client care n-a comandat luna asta e
+          tot clientul magazinului, iar o lista care se goleste la schimbarea
+          perioadei ar parea stricata.
+        */}
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <select
+            value={perioada}
+            onChange={(e) => goTo({ perioada: e.target.value as NumePerioada, page: 1 })}
+            aria-label="Perioada cifrelor de mai jos"
+            className="rounded-xl bg-card px-2.5 py-2 text-sm font-medium text-foreground ring-1 ring-foreground/10"
+          >
+            {PERIOADE.map((p) => (
+              <option key={p} value={p}>{ETICHETE[p]}</option>
+            ))}
+          </select>
         <button
           onClick={() => setImporting(true)}
           className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-xl ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors flex-shrink-0"
         >
           <Upload className="h-4 w-4" /> <span className="hidden sm:inline">Importă clienți</span>
         </button>
+        </div>
       </div>
 
       {importing && <CustomerImportModal onClose={() => setImporting(false)} />}
@@ -130,11 +153,19 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
           label="Clienți"
           value={String(summary.totalContacts)}
           explicatie={
-            `${summary.buyers} ${summary.buyers === 1 ? "cumpărător" : "cumpărători"} `
-            + `și ${summary.importedContacts} `
-            + `${summary.importedContacts === 1 ? "contact importat" : "contacte importate"}. `
-            + "Un cumpărător are cel puțin o comandă; un contact importat n-a comandat încă. "
-            + "Îi identificăm după numărul de telefon, iar când lipsește, după email."
+            /*
+              ⚠ CELE TREI CIFRE NU SE ADUNĂ, și de-aia se spun toate. Măsurat pe
+              demo: 358 de contacte = 338 care au comandat vreodată + 20 importate,
+              dar dintre cele 338 numai 292 au măcar o comandă validă — restul au
+              comandat și totul le-a fost anulat sau rambursat. Un ecran care scrie
+              „292 cumpărători și 20 importate" lângă „358" se contrazice singur, iar
+              cine observă nu mai crede niciuna dintre cifre.
+            */
+            `${summary.totalContacts - summary.importedContacts} au comandat vreodată, `
+            + `${summary.importedContacts} ${summary.importedContacts === 1 ? "e contact importat" : "sunt contacte importate"}, `
+            + `iar ${summary.buyers} au cel puțin o comandă validă în perioada aleasă. `
+            + "Îi identificăm după numărul de telefon, iar când lipsește, după email. "
+            + "Numărul de sus e pe tot istoricul, nu pe perioadă."
           }
         />
         <CardStatistica
@@ -142,7 +173,9 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
           label="Clienți recurenți"
           value={String(summary.returningCustomers)}
           explicatie={
-            "Cumpărători cu mai mult de o comandă validă (necontată și nerambursată)."
+            "Cumpărători cu mai mult de o comandă validă (neanulată și nerambursată) "
+            + "în perioada aleasă. ⚠ Pe o fereastră scurtă cifra e mică din fire: "
+            + "oamenii rareori cumpără de două ori într-o lună."
           }
         />
         <CardStatistica
@@ -157,7 +190,8 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
               însemne ceva.
             */
             `${summary.returningCustomers} din ${summary.buyers} `
-            + `${summary.buyers === 1 ? "cumpărător a comandat" : "cumpărători au comandat"} din nou. `
+            + `${summary.buyers === 1 ? "cumpărător a comandat" : "cumpărători au comandat"} din nou, `
+            + "în perioada aleasă. "
             + "Contactele importate nu intră la numitor: n-aveau cum să revină."
           }
         />
@@ -166,8 +200,9 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
           label="Valoare medie per client"
           value={formatPrice(summary.valuePerCustomer)}
           explicatie={
-            "Valoarea comenzilor valide împărțită la numărul de cumpărători. "
-            + "Media pe COMANDĂ stă la Statistici; aici interesează cât aduce un om."
+            "Valoarea comenzilor valide din perioada aleasă, împărțită la cumpărătorii "
+            + "din aceeași perioadă. Media pe COMANDĂ stă la Statistici; aici interesează "
+            + "cât aduce un om."
           }
         />
       </div>

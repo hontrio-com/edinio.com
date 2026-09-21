@@ -32,6 +32,15 @@ să nu se schimbe peste noapte.
 **Adresa piaței de bază rămâne fără segment de țară**, fiindcă e cea deja trimisă la Pepita;
 piețele noi primesc `/produse/<cheie>/<țară>.xml`.
 
+**Verificarea din panou se uită la toate piețele pornite, nu doar la una.** Un preț bun în lei
+poate ieși zero în euro: 0,02 lei × 0,2 e zero curat, iar Pepita refuză zero **fără să spună de
+ce**. Până acum panoul verifica numai piața pentru care se construia feedul, deci comerciantul ar
+fi văzut „totul e în regulă" despre un catalog din care Germania arunca produse. Acum apare, lângă
+produs, „Prețul ajunge 0 pentru Germania (EUR)…". ⚠ Socoteala se face cu **aceeași funcție ca
+feedul** (`preturilePentruFeed`), nu cu o înmulțire scrisă în panou: a doua socoteală s-ar fi
+depărtat de prima, și panoul ar fi spus „e în regulă" despre un produs pe care feedul îl aruncă.
+⚠ Se trece **o singură dată** prin catalog, nu o dată pe piață.
+
 ---
 
 

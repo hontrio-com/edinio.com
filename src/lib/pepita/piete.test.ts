@@ -5,6 +5,8 @@ import { test } from "node:test";
 import { ORDINEA_PIETELOR, PIETE, type PiataPepita } from "./types";
 import { aceeasiMoneda, opreste, pretulPietei, scrieCursul, zecimale } from "./piete";
 import { citesteConfig } from "./config";
+import { articolelePentruProdus } from "./articole";
+import { CONFIG_IMPLICIT } from "./types";
 import { preturilePentruFeed } from "./pret";
 
 /*
@@ -320,4 +322,74 @@ test("⚠ CURSUL SE VERIFICA PE SERVER, nu doar in formular", () => {
   /* ⚠ Un `0` sau un `-3` ajuns in baza ar fi trecut drept „curs scris". */
   const sursa = readFileSync(new URL("../actions/pepita.actions.ts", import.meta.url), "utf8");
   assert.match(sursa, /Number\.isFinite\(curs\) && curs > 0/);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRODUSUL CARE IESE ZERO PE O ALTA PIATA
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const CTX_BAZA = {
+  business: { slug: "m", custom_domain: null, store_name: "M", business_name: "M" },
+  config: {
+    ...CONFIG_IMPLICIT, activ: true, piata: "ro" as const,
+    strategie_pret: { fel: "identic" as const, valoare: 0 },
+  },
+  magazin: { vat_enabled: false, vat_rate: 0, prices_include_vat: true },
+  caleCategorie: () => [],
+  baza: "https://m.ro",
+};
+
+const produs = (pret: number) => ({
+  id: "p1", name: "Produs", slug: "produs", price: pret,
+  is_active: true, stock: 5, images: ["https://m.ro/a.jpg"],
+  description: "Descriere lunga pentru feed, ca sa treaca validarea.",
+} as never);
+
+test("⚠⚠ UN PRET BUN IN LEI POATE FI ZERO IN ALTA MONEDA", () => {
+  /*
+    ⚠ Un produs de 0,02 lei e in regula pentru Romania, dar la cursul catre euro
+    ajunge la zero curat - iar Pepita refuza zero FARA sa spuna de ce. Pana pe
+    21.09.2026 panoul verifica doar piata feedului, deci comerciantul ar fi
+    vazut „totul e in regula" despre un catalog din care Germania arunca produse.
+  */
+  const fara = articolelePentruProdus(produs(0.02), CTX_BAZA as never);
+  assert.ok(!fara.probleme.some((p) => p.cod === "pret-zero"), "in lei pretul e bun");
+  assert.ok(
+    !fara.probleme.some((p) => p.cod === "pret-zero-piata"),
+    "fara piete de verificat, nu se raporteaza nimic",
+  );
+
+  const cu = articolelePentruProdus(produs(0.02), {
+    ...CTX_BAZA,
+    pieteDeVerificat: [{ eticheta: "Germania", moneda: "EUR", curs: 0.2 }],
+  } as never);
+  const rea = cu.probleme.find((p) => p.cod === "pret-zero-piata");
+  assert.ok(rea, "produsul care iese zero in euro nu e semnalat");
+  assert.match(rea!.mesaj, /Germania/);
+  assert.match(rea!.mesaj, /EUR/);
+  assert.equal(rea!.nivel, "eroare");
+});
+
+test("un pret care ramane pozitiv peste tot nu se plange", () => {
+  const r = articolelePentruProdus(produs(100), {
+    ...CTX_BAZA,
+    pieteDeVerificat: [
+      { eticheta: "Germania", moneda: "EUR", curs: 0.2 },
+      { eticheta: "Ungaria", moneda: "HUF", curs: 79 },
+    ],
+  } as never);
+  assert.equal(r.probleme.filter((p) => p.cod === "pret-zero-piata").length, 0);
+});
+
+test("⚠ O PIATA FARA CURS NU SE VERIFICA, nu se raporteaza ca zero", () => {
+  /*
+    ⚠ `curs: null` inseamna „aceeasi moneda ca magazinul", iar aceea a fost deja
+    verificata mai sus. Socotita cu zero, fiecare produs ar fi fost raportat ca
+    zero pe ea - adica o alarma pe tot catalogul, pentru nimic.
+  */
+  const r = articolelePentruProdus(produs(0.02), {
+    ...CTX_BAZA,
+    pieteDeVerificat: [{ eticheta: "România", moneda: "RON", curs: null }],
+  } as never);
+  assert.equal(r.probleme.filter((p) => p.cod === "pret-zero-piata").length, 0);
 });

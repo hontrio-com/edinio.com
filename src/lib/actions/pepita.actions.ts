@@ -684,6 +684,25 @@ export async function verificaProdusePepita(
     const pre = await pregateste(admin, businessId);
     if (!pre) return { error: "Integrarea nu este pornită." };
 
+    /*
+     * ⚠ CELELALTE PIETE PORNITE, ca verificarea sa nu spuna „totul e in regula"
+     * despre un catalog din care Ungaria arunca produse. Se strang o data, nu
+     * la fiecare produs, si nu costa nicio citire in plus: cursurile sunt deja
+     * in configurare.
+     *
+     * ⚠ Se sare piata pentru care s-a pregatit feedul (cea de baza): preturile
+     * ei sunt chiar cele verificate mai sus, si ar fi raportata de doua ori.
+     */
+    const monedaMag = await monedaMagazinului(businessId);
+    const pieteDeVerificat = ORDINEA_PIETELOR
+      .filter((pi) => pi !== pre.config.piata && pre.config.piete[pi]?.activa)
+      .filter((pi) => !opreste(pi, pre.config.piete[pi], monedaMag))
+      .map((pi) => ({
+        eticheta: PIETE[pi].eticheta,
+        moneda: PIETE[pi].moneda,
+        curs: aceeasiMoneda(pi, monedaMag) ? null : (pre.config.piete[pi]?.curs ?? null),
+      }));
+
     let active = 0, incluse = 0, cuErori = 0, articole = 0, faraEan = 0;
     let partial = false;
     const produse: ProdusInPanou[] = [];
@@ -724,7 +743,7 @@ export async function verificaProdusePepita(
 
         const r = articolelePentruProdus(
           { ...p, price: rand?.pret_override ?? p.price },
-          { ...pre.ctx, safetyStock: rand?.safety_stock ?? pre.config.safety_stock },
+          { ...pre.ctx, safetyStock: rand?.safety_stock ?? pre.config.safety_stock, pieteDeVerificat },
         );
         articole += r.articole.length;
         for (const a of r.articole) deAcum.add(a.id);

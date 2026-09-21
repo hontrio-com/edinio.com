@@ -121,6 +121,23 @@ export interface ContextArticole {
    * ar fi calatorit si in amprenta, si in mesaje, unde n-are ce cauta.
    */
   curs?: number | null;
+  /**
+   * Celelalte piete pornite, pentru verificarea din panou.
+   *
+   * ⚠ EXISTA FIINDCA UN PRET POATE FI BUN IN LEI SI ZERO IN EURO. Un produs de
+   * 0,30 lei ajunge 0,06 EUR - inca trece - dar unul de 0,02 lei ajunge la zero
+   * curat, iar Pepita refuza zero FARA sa spuna de ce. Pana acum panoul
+   * verifica numai piata pentru care se construia feedul, deci comerciantul ar
+   * fi vazut „totul e in regula" despre un catalog din care Ungaria arunca
+   * produse.
+   *
+   * ⚠ Se verifica INTR-O SINGURA TRECERE peste catalog, nu una pe piata: 3.351
+   * de produse x sapte piete ar fi insemnat sapte plimbari prin baza, pentru o
+   * socoteala care e o inmultire.
+   *
+   * Gol la generarea feedului: acolo conteaza o singura piata, cea ceruta.
+   */
+  pieteDeVerificat?: { eticheta: string; moneda: string; curs: number | null }[];
   magazin: RegimTvaMagazin;
   /** Calea categoriei, de la parinte la copil. O da apelantul, care are arborele. */
   caleCategorie: (nume: string | null) => CategoriePepita[];
@@ -218,6 +235,26 @@ export function dimensiuniPepita(p: ProdusPepita): ArticolPepita["dimensiuni"] |
 /* ═══════════════════════════════════════════════════════════════════════════
    HOTARAREA
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Pietele pe care pretul asta ar iesi zero.
+ *
+ * ⚠ SE FOLOSESTE ACEEASI FUNCTIE CA FEEDUL (`preturilePentruFeed`), nu o
+ * inmultire scrisa aici: o a doua socoteala s-ar fi departat de prima, si
+ * panoul ar fi spus „e in regula" despre un produs pe care feedul il arunca.
+ */
+function pieteCuPretZero(
+  ctx: ContextArticole, pret: number, pretTaiat: number | null,
+): { eticheta: string; moneda: string }[] {
+  const rele: { eticheta: string; moneda: string }[] = [];
+  for (const pi of ctx.pieteDeVerificat ?? []) {
+    /* Piata cu moneda magazinului n-are curs si a fost deja verificata mai sus. */
+    if (pi.curs == null) continue;
+    const p = preturilePentruFeed(pret, pretTaiat, ctx.config.strategie_pret, ctx.magazin, pi.curs);
+    if (p.pret <= 0) rele.push({ eticheta: pi.eticheta, moneda: pi.moneda });
+  }
+  return rele;
+}
 
 function eroare(cod: string, mesaj: string, combinatie?: string): ProblemaPepita {
   return { nivel: "eroare", cod, mesaj, combinatie };
@@ -334,6 +371,15 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
     const preturi = preturilePentruFeed(pretDeBaza, numarPozitiv(p.compare_at_price) ?? null, ctx.config.strategie_pret, ctx.magazin, ctx.curs);
     if (preturi.pret <= 0) {
       probleme.push(eroare("pret-zero", "Prețul pentru Pepita este 0. Pepita nu acceptă produse cu preț zero."));
+    } else {
+      /* ⚠ Bun aici, dar poate fi zero in alta moneda: vezi `pieteDeVerificat`. */
+      for (const rea of pieteCuPretZero(ctx, pretDeBaza, numarPozitiv(p.compare_at_price) ?? null)) {
+        probleme.push(eroare(
+          "pret-zero-piata",
+          `Prețul ajunge 0 pentru ${rea.eticheta} (${rea.moneda}), la cursul pe care l-ai scris. `
+          + "Pepita refuză produsele cu preț zero, deci acolo produsul nu va fi publicat.",
+        ));
+      }
     }
     if (!gtinProdus) {
       probleme.push(avertisment(
@@ -409,6 +455,13 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
     if (preturi.pret <= 0) {
       probleme.push(eroare("pret-zero", `Varianta „${titlu}” ajunge la prețul 0 pentru Pepita.`, titlu));
       continue;
+    }
+    for (const rea of pieteCuPretZero(ctx, pretUnitar, pretTaiat)) {
+      probleme.push(eroare(
+        "pret-zero-piata",
+        `Varianta „${titlu}” ajunge la prețul 0 pentru ${rea.eticheta} (${rea.moneda}).`,
+        titlu,
+      ));
     }
 
     const gtinCombo = codBun(combo.gtin, probleme, titlu) ?? gtinProdus;

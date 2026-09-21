@@ -3032,6 +3032,204 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.cosuri_abandonate_grafic(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer DEFAULT 60, p_zile integer DEFAULT 7)
+ RETURNS TABLE(ziua date, abandonate integer, valoare_abandonata numeric, recuperate integer, valoare_recuperata numeric)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public'
+AS $function$
+  with zile as (
+    select generate_series(
+      (p_de_la at time zone 'Europe/Bucharest')::date,
+      (least(p_pana, now()) at time zone 'Europe/Bucharest')::date,
+      interval '1 day'
+    )::date as ziua
+  ),
+  abandonate_r as (
+    select (c.created_at at time zone 'Europe/Bucharest')::date as ziua,
+           count(*)::integer as n, coalesce(sum(c.subtotal), 0)::numeric as v
+    from public.abandoned_carts c
+    where c.business_id = p_business
+      and c.created_at >= p_de_la and c.created_at < p_pana
+      and c.status = 'open'
+      and c.last_activity_at < now() - make_interval(mins => p_minute)
+    group by 1
+  ),
+  recuperate_r as (
+    select (c.converted_at at time zone 'Europe/Bucharest')::date as ziua,
+           count(*)::integer as n, coalesce(sum(c.subtotal), 0)::numeric as v
+    from public.abandoned_carts c
+    where c.business_id = p_business
+      and c.converted_at >= p_de_la and c.converted_at < p_pana
+      and c.status = 'converted'
+      and exists (
+        select 1 from public.recovery_sends s
+        where s.cart_id = c.id and s.deschis_la is not null
+          and c.converted_at >= s.deschis_la
+          and c.converted_at <= s.deschis_la + make_interval(days => p_zile)
+      )
+    group by 1
+  )
+  select z.ziua,
+         coalesce(a.n, 0)::integer, coalesce(a.v, 0)::numeric,
+         coalesce(r.n, 0)::integer, coalesce(r.v, 0)::numeric
+  from zile z
+  left join abandonate_r a on a.ziua = z.ziua
+  left join recuperate_r r on r.ziua = z.ziua
+  order by z.ziua;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.cosuri_abandonate_palnie(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer DEFAULT 60, p_zile integer DEFAULT 7)
+ RETURNS TABLE(salvate integer, neterminate integer, contactate integer, deschise integer, recuperate integer)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public'
+AS $function$
+  with f as (
+    select c.* from public.abandoned_carts c
+    where c.business_id = p_business
+      and c.created_at >= p_de_la and c.created_at < p_pana
+  ),
+  ab as (
+    select * from f
+    where (status = 'open' and last_activity_at < now() - make_interval(mins => p_minute))
+       or (status = 'converted' and converted_at - last_activity_at > make_interval(mins => p_minute))
+  )
+  select
+    (select count(*) from f)::integer,
+    (select count(*) from ab)::integer,
+    (select count(*) from ab where
+        exists (select 1 from public.recovery_sends s where s.cart_id = ab.id)
+        or ab.recovery_email_sent_at is not null or ab.recovery_sms_sent_at is not null)::integer,
+    (select count(*) from ab where
+        exists (select 1 from public.recovery_sends s where s.cart_id = ab.id and s.deschis_la is not null))::integer,
+    (select count(*) from ab where ab.status = 'converted' and exists (
+        select 1 from public.recovery_sends s
+        where s.cart_id = ab.id and s.deschis_la is not null
+          and ab.converted_at >= s.deschis_la
+          and ab.converted_at <= s.deschis_la + make_interval(days => p_zile)
+      ))::integer;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.cosuri_abandonate_produse(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer DEFAULT 60, p_zile integer DEFAULT 7, p_limita integer DEFAULT 10)
+ RETURNS TABLE(produs_id text, nume text, poza text, cosuri integer, cosuri_abandonate integer, bucati_abandonate numeric, valoare_abandonata numeric, recuperate integer)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public'
+AS $function$
+  with f as (
+    select c.id, c.status, c.converted_at, c.last_activity_at, c.items
+    from public.abandoned_carts c
+    where c.business_id = p_business
+      and c.created_at >= p_de_la and c.created_at < p_pana
+  ),
+  linii as (
+    select
+      f.id as cart_id,
+      f.status,
+      ((f.status = 'open' and f.last_activity_at < now() - make_interval(mins => p_minute))
+       or (f.status = 'converted' and f.converted_at - f.last_activity_at > make_interval(mins => p_minute))) as e_abandonat,
+      (f.status = 'converted' and exists (
+        select 1 from public.recovery_sends s
+        where s.cart_id = f.id and s.deschis_la is not null
+          and f.converted_at >= s.deschis_la
+          and f.converted_at <= s.deschis_la + make_interval(days => p_zile)
+      )) as e_recuperat,
+      coalesce(i->>'product_id', i->>'name') as produs_id,
+      i->>'name' as nume,
+      i->>'image_url' as poza,
+      coalesce((i->>'quantity')::numeric, 0) as cantitate,
+      coalesce((i->>'price')::numeric, 0) as pret
+    from f, lateral jsonb_array_elements(
+      case when jsonb_typeof(f.items) = 'array' then f.items else '[]'::jsonb end
+    ) as i
+    where coalesce(i->>'product_id', i->>'name') is not null
+  ),
+  pe_cos as (
+    select produs_id,
+           max(nume) as nume,
+           max(poza) as poza,
+           cart_id,
+           bool_or(e_abandonat) as e_abandonat,
+           bool_or(e_recuperat) as e_recuperat,
+           sum(cantitate) as cantitate,
+           sum(cantitate * pret) as valoare
+    from linii group by produs_id, cart_id
+  )
+  select
+    produs_id,
+    max(nume),
+    max(poza),
+    count(*)::integer,
+    count(*) filter (where e_abandonat)::integer,
+    coalesce(sum(cantitate) filter (where e_abandonat), 0)::numeric,
+    coalesce(sum(valoare) filter (where e_abandonat), 0)::numeric,
+    count(*) filter (where e_recuperat)::integer
+  from pe_cos
+  group by produs_id
+  order by coalesce(sum(valoare) filter (where e_abandonat), 0) desc
+  limit p_limita;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.cosuri_abandonate_sumar(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer DEFAULT 60, p_zile integer DEFAULT 7)
+ RETURNS TABLE(abandonate integer, valoare_abandonata numeric, valoare_medie numeric, convertite integer, rata_abandon integer, atribuite integer, valoare_atribuita numeric, asistate integer, valoare_asistata numeric, organice integer, valoare_organica numeric)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public'
+AS $function$
+  with fereastra as (
+    select
+      c.id, c.subtotal, c.status, c.converted_at, c.last_activity_at,
+      c.recovery_email_sent_at, c.recovery_sms_sent_at
+    from public.abandoned_carts c
+    where c.business_id = p_business
+      and c.created_at >= p_de_la
+      and c.created_at < p_pana
+  ),
+  abandonate_r as (select * from fereastra where status = 'open' and last_activity_at < now() - make_interval(mins => p_minute)),
+  convertite_r as (select * from fereastra where status = 'converted'),
+  atribuire as (
+    select
+      cv.id,
+      cv.subtotal,
+      exists (
+        select 1 from public.recovery_sends s
+        where s.cart_id = cv.id
+          and s.deschis_la is not null
+          and cv.converted_at >= s.deschis_la
+          and cv.converted_at <= s.deschis_la + make_interval(days => p_zile)
+      ) as prin_link,
+      (
+        exists (select 1 from public.recovery_sends s where s.cart_id = cv.id)
+        or cv.recovery_email_sent_at is not null
+        or cv.recovery_sms_sent_at is not null
+      ) as a_primit
+    from convertite_r cv
+  )
+  select
+    (select count(*) from abandonate_r)::integer,
+    coalesce((select sum(subtotal) from abandonate_r), 0)::numeric,
+    coalesce((select avg(subtotal) from abandonate_r), 0)::numeric,
+    (select count(*) from convertite_r)::integer,
+    case
+      when (select count(*) from abandonate_r) + (select count(*) from convertite_r) = 0 then 0
+      else round(
+        100.0 * (select count(*) from abandonate_r)
+        / ((select count(*) from abandonate_r) + (select count(*) from convertite_r))
+      )::integer
+    end,
+    (select count(*) from atribuire where prin_link)::integer,
+    coalesce((select sum(subtotal) from atribuire where prin_link), 0)::numeric,
+    (select count(*) from atribuire where not prin_link and a_primit)::integer,
+    coalesce((select sum(subtotal) from atribuire where not prin_link and a_primit), 0)::numeric,
+    (select count(*) from atribuire where not prin_link and not a_primit)::integer,
+    coalesce((select sum(subtotal) from atribuire where not prin_link and not a_primit), 0)::numeric;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.curata_analitice_brute(p_pastreaza_zile integer DEFAULT 8, p_max integer DEFAULT 5000)
  RETURNS integer
  LANGUAGE plpgsql
@@ -6865,7 +7063,8 @@ create table if not exists public.abandoned_carts (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null,
   automation_step integer default 0 not null,
-  last_recovery_at timestamp with time zone);
+  last_recovery_at timestamp with time zone,
+  ignorat_la timestamp with time zone);
 
 create table if not exists public.aboutyou_batches (
   id uuid default gen_random_uuid() not null,
@@ -8239,6 +8438,19 @@ create table if not exists public.recovery_optout (
   phone text,
   motiv text default 'dezabonare'::text not null);
 
+create table if not exists public.recovery_sends (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  cart_id uuid not null,
+  canal text not null,
+  sursa text not null,
+  cheie text not null,
+  pas integer,
+  trimis_la timestamp with time zone default now() not null,
+  confirmat boolean default false not null,
+  deschis_la timestamp with time zone,
+  comanda_id uuid);
+
 create table if not exists public.return_requests (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -8715,6 +8927,7 @@ alter table public.product_imports add constraint product_imports_pkey PRIMARY K
 alter table public.products add constraint products_pkey PRIMARY KEY (id);
 alter table public.rate_limits add constraint rate_limits_pkey PRIMARY KEY (cheie);
 alter table public.recovery_optout add constraint recovery_optout_pkey PRIMARY KEY (id);
+alter table public.recovery_sends add constraint recovery_sends_pkey PRIMARY KEY (id);
 alter table public.return_requests add constraint return_requests_pkey PRIMARY KEY (id);
 alter table public.site_analytics add constraint site_analytics_pkey PRIMARY KEY (id);
 alter table public.sms_campaigns add constraint sms_campaigns_pkey PRIMARY KEY (id);
@@ -8826,6 +9039,8 @@ alter table public.posta_plaja add constraint posta_plaja_cifre_check CHECK (((c
 alter table public.posta_plaja add constraint posta_plaja_interval_check CHECK ((de_la <= pana_la));
 alter table public.posta_plaja add constraint posta_plaja_urmator_check CHECK ((urmator >= de_la));
 alter table public.recovery_optout add constraint recovery_optout_are_un_contact CHECK (((email IS NOT NULL) OR (phone IS NOT NULL)));
+alter table public.recovery_sends add constraint recovery_sends_canal_check CHECK ((canal = ANY (ARRAY['email'::text, 'sms'::text])));
+alter table public.recovery_sends add constraint recovery_sends_sursa_check CHECK ((sursa = ANY (ARRAY['manual'::text, 'automatizare'::text])));
 alter table public.site_analytics add constraint site_analytics_device_check CHECK ((device = ANY (ARRAY['mobile'::text, 'tablet'::text, 'desktop'::text])));
 alter table public.sms_campaigns add constraint sms_campaigns_status_check CHECK ((status = ANY (ARRAY['in_curs'::text, 'sent'::text, 'partial'::text, 'failed'::text])));
 alter table public.stock_feed_sources add constraint stock_feed_sources_frequency_check CHECK ((frequency = ANY (ARRAY['hourly'::text, 'daily'::text])));
@@ -8958,6 +9173,9 @@ alter table public.product_imports add constraint product_imports_business_id_fk
 alter table public.product_imports add constraint product_imports_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
 alter table public.products add constraint products_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.recovery_optout add constraint recovery_optout_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.recovery_sends add constraint recovery_sends_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.recovery_sends add constraint recovery_sends_cart_id_fkey FOREIGN KEY (cart_id) REFERENCES abandoned_carts(id) ON DELETE CASCADE;
+alter table public.recovery_sends add constraint recovery_sends_comanda_id_fkey FOREIGN KEY (comanda_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.return_requests add constraint return_requests_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.return_requests add constraint return_requests_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.site_analytics add constraint site_analytics_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
@@ -9056,6 +9274,7 @@ CREATE INDEX abandoned_carts_business_email_idx ON public.abandoned_carts USING 
 CREATE INDEX abandoned_carts_business_phone_idx ON public.abandoned_carts USING btree (business_id, phone);
 CREATE UNIQUE INDEX abandoned_carts_business_session_uidx ON public.abandoned_carts USING btree (business_id, session_id);
 CREATE INDEX abandoned_carts_business_status_activity_idx ON public.abandoned_carts USING btree (business_id, status, last_activity_at DESC);
+CREATE INDEX abandoned_carts_neignorate_idx ON public.abandoned_carts USING btree (business_id, status, last_activity_at DESC) WHERE (ignorat_la IS NULL);
 CREATE INDEX abandoned_carts_order_id_idx ON public.abandoned_carts USING btree (order_id) WHERE (order_id IS NOT NULL);
 CREATE INDEX aboutyou_batches_deschise_idx ON public.aboutyou_batches USING btree (business_id, submitted_at) WHERE (status = ANY (ARRAY['pending'::text, 'processing'::text, 'retry'::text]));
 CREATE INDEX aboutyou_batches_generatie_idx ON public.aboutyou_batches USING btree (business_id, kind, generatie) WHERE (generatie IS NOT NULL);
@@ -9298,6 +9517,10 @@ CREATE UNIQUE INDEX products_source_external_uidx ON public.products USING btree
 CREATE INDEX rate_limits_curatare_idx ON public.rate_limits USING btree (actualizat_la);
 CREATE UNIQUE INDEX recovery_optout_business_email_uidx ON public.recovery_optout USING btree (business_id, lower(email));
 CREATE UNIQUE INDEX recovery_optout_business_phone_uidx ON public.recovery_optout USING btree (business_id, phone) WHERE (phone IS NOT NULL);
+CREATE INDEX recovery_sends_business_trimis_idx ON public.recovery_sends USING btree (business_id, trimis_la DESC);
+CREATE UNIQUE INDEX recovery_sends_cheie_uidx ON public.recovery_sends USING btree (cart_id, canal, cheie);
+CREATE INDEX recovery_sends_comanda_idx ON public.recovery_sends USING btree (comanda_id);
+CREATE INDEX recovery_sends_deschise_idx ON public.recovery_sends USING btree (cart_id, deschis_la DESC) WHERE (deschis_la IS NOT NULL);
 CREATE INDEX return_requests_business_created_idx ON public.return_requests USING btree (business_id, created_at DESC);
 CREATE INDEX return_requests_business_unread_idx ON public.return_requests USING btree (business_id, is_read);
 CREATE INDEX return_requests_order_id_idx ON public.return_requests USING btree (order_id) WHERE (order_id IS NOT NULL);
@@ -9543,6 +9766,7 @@ alter table public.product_imports enable row level security;
 alter table public.products enable row level security;
 alter table public.rate_limits enable row level security;
 alter table public.recovery_optout enable row level security;
+alter table public.recovery_sends enable row level security;
 alter table public.return_requests enable row level security;
 alter table public.site_analytics enable row level security;
 alter table public.sms_campaigns enable row level security;
@@ -9811,6 +10035,9 @@ create policy "Public can view active products of published businesses" on publi
    FROM businesses b
   WHERE ((b.id = products.business_id) AND (b.is_published = true))))));
 create policy owner_select_recovery_optout on public.recovery_optout as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = auth.uid()))));
+create policy owner_select_recovery_sends on public.recovery_sends as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
 create policy owner_delete_return_requests on public.return_requests as PERMISSIVE for DELETE to public using ((business_id IN ( SELECT businesses.id
@@ -11545,6 +11772,26 @@ grant SELECT on table public.recovery_optout to service_role;
 grant TRIGGER on table public.recovery_optout to service_role;
 grant TRUNCATE on table public.recovery_optout to service_role;
 grant UPDATE on table public.recovery_optout to service_role;
+grant DELETE on table public.recovery_sends to anon;
+grant INSERT on table public.recovery_sends to anon;
+grant REFERENCES on table public.recovery_sends to anon;
+grant TRIGGER on table public.recovery_sends to anon;
+grant TRUNCATE on table public.recovery_sends to anon;
+grant UPDATE on table public.recovery_sends to anon;
+grant DELETE on table public.recovery_sends to authenticated;
+grant INSERT on table public.recovery_sends to authenticated;
+grant REFERENCES on table public.recovery_sends to authenticated;
+grant SELECT on table public.recovery_sends to authenticated;
+grant TRIGGER on table public.recovery_sends to authenticated;
+grant TRUNCATE on table public.recovery_sends to authenticated;
+grant UPDATE on table public.recovery_sends to authenticated;
+grant DELETE on table public.recovery_sends to service_role;
+grant INSERT on table public.recovery_sends to service_role;
+grant REFERENCES on table public.recovery_sends to service_role;
+grant SELECT on table public.recovery_sends to service_role;
+grant TRIGGER on table public.recovery_sends to service_role;
+grant TRUNCATE on table public.recovery_sends to service_role;
+grant UPDATE on table public.recovery_sends to service_role;
 grant DELETE on table public.return_requests to anon;
 grant INSERT on table public.return_requests to anon;
 grant REFERENCES on table public.return_requests to anon;
@@ -12228,6 +12475,14 @@ grant execute on function public.consuma_limita(p_cheie text, p_limita integer, 
 grant execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.cont_dupa_email(p_email text) to service_role;
+grant execute on function public.cosuri_abandonate_grafic(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer, p_zile integer) to authenticated;
+grant execute on function public.cosuri_abandonate_grafic(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer, p_zile integer) to service_role;
+grant execute on function public.cosuri_abandonate_palnie(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer, p_zile integer) to authenticated;
+grant execute on function public.cosuri_abandonate_palnie(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer, p_zile integer) to service_role;
+grant execute on function public.cosuri_abandonate_produse(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer, p_zile integer, p_limita integer) to authenticated;
+grant execute on function public.cosuri_abandonate_produse(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer, p_zile integer, p_limita integer) to service_role;
+grant execute on function public.cosuri_abandonate_sumar(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer, p_zile integer) to authenticated;
+grant execute on function public.cosuri_abandonate_sumar(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer, p_zile integer) to service_role;
 grant execute on function public.curata_analitice_brute(p_pastreaza_zile integer, p_max integer) to service_role;
 grant execute on function public.curata_limite() to service_role;
 grant execute on function public.curata_ritm_extern() to service_role;
@@ -12470,6 +12725,10 @@ revoke execute on function public.consuma_limita(p_cheie text, p_limita integer,
 revoke execute on function public.consuma_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.consuma_stoc_marketplace(p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.cont_dupa_email(p_email text) from public;
+revoke execute on function public.cosuri_abandonate_grafic(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer, p_zile integer) from public;
+revoke execute on function public.cosuri_abandonate_palnie(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer, p_zile integer) from public;
+revoke execute on function public.cosuri_abandonate_produse(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer, p_zile integer, p_limita integer) from public;
+revoke execute on function public.cosuri_abandonate_sumar(p_business uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone, p_minute integer, p_zile integer) from public;
 revoke execute on function public.curata_analitice_brute(p_pastreaza_zile integer, p_max integer) from public;
 revoke execute on function public.curata_limite() from public;
 revoke execute on function public.curata_ritm_extern() from public;

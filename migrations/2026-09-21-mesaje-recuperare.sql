@@ -43,6 +43,23 @@ create index if not exists recovery_sends_business_trimis_idx
 
 alter table public.recovery_sends enable row level security;
 
+-- ⚠⚠ SI DREPTUL DE SELECT SE IA DE LA `anon`, NU DOAR RLS-UL.
+--
+-- Supabase da implicit TOATE drepturile lui `anon` pe o tabela noua din `public`.
+-- RLS chiar apara randurile (singura politica e a proprietarului, iar `anon` n-are
+-- `auth.uid()`), dar asta e UN singur strat, si toate tabelele surori au doua:
+-- `abandoned_carts`, `orders` si `recovery_optout` au toate `anon` FARA select.
+--
+-- ⚠ Lipsa asta a fost gasita pe 21.09.2026, la aplicarea in productie, comparand
+-- tabela noua cu surorile ei. Nu curgea nimic - dar o a doua politica permisiva
+-- adaugata candva peste ar fi deschis-o, si nimeni n-ar mai fi cautat aici.
+-- Aceeasi lectie ca la copiile de siguranta din 20.09, unde `create table as`
+-- n-a mostenit nici RLS, nici granturile.
+--
+-- ⚠ Se ia de la `anon`, nu de la `public`: dreptul e dat DIRECT rolului (verificat
+-- in `role_table_grants`), deci un `revoke from public` n-ar fi atins nimic.
+revoke select on public.recovery_sends from anon;
+
 -- Numai citire pentru comerciant: scrierile vin prin clientul de serviciu, ca
 -- la `abandoned_carts`.
 drop policy if exists "owner_select_recovery_sends" on public.recovery_sends;

@@ -23,13 +23,13 @@ push si aplicarea migratiei, la toti comerciantii.
 
 1. **Intai migratiile** din tabelul B, in productie (`rtefdpioqmowkdiybwrr`), in ordinea din
    tabel.
-   ⚠⚠ **DIN CELE SAISPREZECE, DOAR 12-16 AU MAI RAMAS.** Migratiile 1-11 sunt toate in
-   productie: 1-10 de la unirea din 20.09, iar 11 aplicata separat pe 21.09 cu acordul lui.
-   Verificat obiect cu obiect pe 21.09.2026, nu presupus. Reaplicate, dau `42P07` in mijlocul
-   sirului, iar migratia 5 ar sterge tabele care au deja date.
-   ⚠ **Ordinea dintre cele noi conteaza**: 12 (tabela `recovery_sends`) inaintea lui 14
-   (coloanele ei de atribuire), si amandoua inaintea lui 15 si 16, care le citesc. 13 e
-   independenta.
+   ⚠⚠ **NU MAI E NICIUNA DE APLICAT. TOATE SAISPREZECE SUNT IN PRODUCTIE.** 1-10 de la
+   unirea din 20.09; 11 separat pe 21.09; 3b era deja acolo, desi tabelul spunea altceva;
+   12-16 pe 21.09, dupa ce s-a vazut ca fila era RUPTA in productie (nota de sub tabel).
+   Verificat obiect cu obiect, nu presupus, si schema de referinta regenerata dupa.
+   ⚠ **Pasul asta a ramas aici ca sa se stie ca NU mai e nimic de facut la el.** Reaplicate,
+   migratiile dau `42P07` in mijlocul sirului, iar migratia 5 ar sterge tabele care au azi
+   date adunate zi de zi. Deci in ziua unirii: **nu se atinge niciuna**, se trece la pasul 3.
 2. **Verificarea drepturilor** dupa fiecare migratie: `anon` NU trebuie sa poata chema
    functiile noi (vezi nota din C).
 3. **Regenerarea schemei de referinta**: `bash scripts/schema-baseline.sh`, apoi
@@ -68,7 +68,7 @@ probat, nu cod vazut lucrand pe oameni.
 | 1 | `migrations/2026-09-20-produse-sub-prag.sql` | `stoc_combinatie`, `combinatie_aprinsa`, `produse_sub_prag`, `numar_produse_sub_prag` (stoc scazut vazut si pe variante) | DA | **DA, 20.09.2026** (aplicata inainte de regula de mai sus; schema de referinta a fost regenerata atunci) |
 | 2 | `migrations/2026-09-20-vanzari-panou.sql` | `fereastra_vanzari`, `canale_vanzare`, `vanzari_panou` (graficul de vanzari: perioade, canale, comparatie) | DA | **DA, 20.09.2026** (la unirea de atunci). ⚠ NU se mai aplica o data. |
 | 3a | `migrations/2026-09-20-panou-carduri.sql`, partea de jos | politica RLS lipsa de pe `business_daily_stats` | DA | **DA, 20.09.2026**, cu acordul lui: repara un defect care lovea cei 71 de comercianti cu statistici. ⚠ La final NU se mai aplica a doua oara (ar da `42710: policy already exists`): se sare peste ultima parte a fisierului. |
-| 3b | `migrations/2026-09-20-panou-carduri.sql`, functia | `panou_carduri` (cele patru carduri din cap) | DA | **NU. De aplicat la final.** |
+| 3b | `migrations/2026-09-20-panou-carduri.sql`, functia | `panou_carduri` (cele patru carduri din cap) | DA | **DA.** ⚠ Registrul spunea „de aplicat la final”; verificat pe 21.09.2026 direct in productie, functia EXISTA. A plecat odata cu unirea din 20.09. |
 | 4 | `migrations/2026-09-20-analitice-sesiuni.sql` | sesiuni si vizitatori in `site_analytics` (coloane + indexuri), tabela `analitice_sare` si functia `analitice_sarea_zilei` | DA | **DA, 20.09.2026** (la unirea de atunci). ⚠ NU se mai aplica o data. ⚠ Prima migratie care schimba o TABELA, nu doar adauga functii: patru coloane noi, toate optionale. |
 | 5 | `migrations/2026-09-20-analitice-agregat-sesiuni.sql` | tabelele `analitice_zilnic` si `analitice_zilnic_sursa` (+ politici) si `agregeaza_analitice` care le umple | DA | **DA, 20.09.2026** (la unirea de atunci). ⚠ NU se mai aplica o data. ⚠ Dupa aplicare, primele zile de sesiuni se strang la urmatoarea rulare a cronului `discount-release`; istoricul NU se poate reconstrui, fiindca randurile brute mai vechi de 8 zile nu mai exista. |
 | 6 | `migrations/2026-09-20-trafic-si-harta.sql` | `trafic_panou`, `trafic_pe_sursa`, `comenzi_pe_judet` | DA | **DA, 20.09.2026** (la unirea de atunci). ⚠ NU se mai aplica o data. |
@@ -79,15 +79,15 @@ probat, nu cod vazut lucrand pe oameni.
 
 | 11 | `migrations/2026-09-21-suprimare-contacte.sql` | `recovery_optout` capata `phone` si `motiv`; `email` devine optional; o restrictie care cere macar un contact; index unic pe (magazin, telefon) | DA | **DA, 21.09.2026**, cu acordul lui. Verificat pe amandoua bazele: coloanele exista si `email` e `nullable`. |
 
-| 12 | `migrations/2026-09-21-mesaje-recuperare.sql` | Tabela `recovery_sends` (jurnalul mesajelor de recuperare) cu index unic pe `(cos, canal, cheie)`, doua indexuri si politica de citire pentru comerciant | DA | **NU. De aplicat la final.** Tabela noua, nu atinge nimic existent. Verificat pe demo ca indexul unic musca si ca `anon` nu vede si nu scrie. |
+| 12 | `migrations/2026-09-21-mesaje-recuperare.sql` | Tabela `recovery_sends` (jurnalul mesajelor de recuperare) cu index unic pe `(cos, canal, cheie)`, doua indexuri si politica de citire pentru comerciant | DA | **DA, 21.09.2026**, cu acordul lui, fiindca ecranul cerea obiectul asta si era RUPT in productie (vezi nota de sub tabel). ⚠ La aplicare s-a gasit ca Supabase daduse lui `anon` SELECT la nivel de TABELA, spre deosebire de toate tabelele surori. Revocat pe amandoua bazele, si adaugat in fisierul de migratie. |
 
-| 13 | `migrations/2026-09-21-cosuri-ignorate.sql` | `abandoned_carts.ignorat_la` (un cos ramane in cifre, dar nu mai primeste mesaje) si index partial pe cosurile care pot fi contactate | DA | **NU. De aplicat la final.** O coloana optionala si un index; niciun rand atins. |
+| 13 | `migrations/2026-09-21-cosuri-ignorate.sql` | `abandoned_carts.ignorat_la` (un cos ramane in cifre, dar nu mai primeste mesaje) si index partial pe cosurile care pot fi contactate | DA | **DA, 21.09.2026**, cu acordul lui, fiindca ecranul cerea obiectul asta si era RUPT in productie (vezi nota de sub tabel). ⚠ Coloana ASTA rupea si cronul: el filtreaza pe ea, iar o coloana lipsa rupe toata interogarea. |
 
-| 14 | `migrations/2026-09-21-atribuire-recuperare.sql` | `recovery_sends.deschis_la` si `.comanda_id` (+ index partial): linkul de recuperare lasa urma, si comanda se leaga de mesajul care a adus-o | DA | **NU. De aplicat la final.** Doua coloane optionale pe tabela adaugata de migratia 12, deci se aplica DUPA ea. |
+| 14 | `migrations/2026-09-21-atribuire-recuperare.sql` | `recovery_sends.deschis_la` si `.comanda_id` (+ index partial): linkul de recuperare lasa urma, si comanda se leaga de mesajul care a adus-o | DA | **DA, 21.09.2026**, cu acordul lui, fiindca ecranul cerea obiectul asta si era RUPT in productie (vezi nota de sub tabel). Aplicata DUPA 12. |
 
-| 15 | `migrations/2026-09-21-cosuri-sumar.sql` | `cosuri_abandonate_sumar`: toate cifrele filei, socotite in baza pe o fereastra data (inclusiv cele trei feluri de recuperare) | DA | **NU. De aplicat la final.** Numai o functie noua; nu atinge nicio tabela. Se aplica DUPA migratiile 12 si 14 (citeste `recovery_sends.deschis_la`). ⚠ Verificat ca `anon` NU are EXECUTE. |
+| 15 | `migrations/2026-09-21-cosuri-sumar.sql` | `cosuri_abandonate_sumar`: toate cifrele filei, socotite in baza pe o fereastra data (inclusiv cele trei feluri de recuperare) | DA | **DA, 21.09.2026**, cu acordul lui, fiindca ecranul cerea obiectul asta si era RUPT in productie (vezi nota de sub tabel). Aplicata DUPA 12 si 14. ⚠ Verificat in productie ca `anon` NU are EXECUTE si `authenticated` are. |
 
-| 16 | `migrations/2026-09-21-cosuri-grafic-si-produse.sql` | `cosuri_abandonate_grafic`, `cosuri_abandonate_palnie` si `cosuri_abandonate_produse` (graficul, palnia si tabelul de produse al filei Prezentare) | DA | **NU. De aplicat la final.** Numai functii noi. Se aplica DUPA migratiile 12 si 14. ⚠ Verificat ca `anon` NU are EXECUTE pe niciuna. ⚠ Palnia a fost `drop`-uita si refacuta o data pe demo (s-a schimbat o coloana de iesire): la aplicarea pe productie se ia fisierul asa cum e, ca e prima oara. |
+| 16 | `migrations/2026-09-21-cosuri-grafic-si-produse.sql` | `cosuri_abandonate_grafic`, `cosuri_abandonate_palnie` si `cosuri_abandonate_produse` (graficul, palnia si tabelul de produse al filei Prezentare) | DA | **DA, 21.09.2026**, cu acordul lui, fiindca ecranul cerea obiectul asta si era RUPT in productie (vezi nota de sub tabel). Aplicata DUPA 12 si 14. ⚠ Verificat in productie ca `anon` NU are EXECUTE pe niciuna. ⚠ Probate pe date adevarate: palnia da 321 → 51 → 41 → 0 → 0 si NU creste nicaieri. |
 
 ⚠ Migratiile 1-3 sunt **numai citire**: functii noi si o politica de SELECT, niciun `alter table`,
 niciun rand atins.
@@ -97,6 +97,30 @@ optionale, plus doua indexuri si o tabela noua (`analitice_sare`). Nu atinge nic
 si nu strica scrierile de azi - codul vechi care insereaza fara coloanele noi ramane valid.
 Indexurile se construiesc pe o tabela care creste cu fiecare vizita, deci la aplicare se face pe
 rand, nu in acelasi minut cu push-ul.
+
+### ⚠⚠ CODUL SI MIGRATIILE LUI S-AU DESPARTIT (21.09.2026)
+
+**Ce s-a intamplat.** Codul filei Cosuri abandonate a plecat pe `main` in dimineata de
+21.09 (deployul de la 10:42), iar `main` **E** productia. Migratiile 12-16 erau insa lasate
+pentru „ziua unirii”, dupa regula de sus. Deci trei ore fila a fost RUPTA in productie
+pentru 21 de magazine, si recuperarea automata n-a mai trimis nimic pentru magazinul care o
+are pornita.
+
+**Cum s-a vazut.** Nu dintr-o alarma: gasita citind chiar tabelul asta, la o verificare de
+rutina. Nicio eroare n-a ajuns la nimeni, fiindca nimeni nu deschisese fila intre timp.
+
+**Ce a mers bine, si merita spus.** Caderea a fost in directia SIGURA:
+
+- apararea impotriva mesajelor duble nu e randul din `recovery_sends`, ci
+  compare-and-swap-ul pe `automation_step`, care exista. **Niciun mesaj dublu, niciun ban
+  cheltuit degeaba pe SMS.**
+- cronul sare magazinul si scrie `critical`, in loc sa trimita orbeste.
+
+**⚠ REGULA CARE LIPSEA, si care ramane:** cat timp se lucreaza direct pe `main`, o
+migratie NU poate fi amanata pentru „final” daca un cod care o cere pleaca mai devreme.
+Fie pleaca amandoua, fie niciuna. Regula de sus („productia nu se atinge pana la unire”)
+a fost scrisa cand lucrul statea pe o ramura; pe `main` ea nu se mai poate tine, si a se
+purta ca si cum s-ar putea e felul in care se ajunge exact aici.
 
 ### ⚠⚠ Migratia 11 a plecat INAINTE de final, si de ce
 

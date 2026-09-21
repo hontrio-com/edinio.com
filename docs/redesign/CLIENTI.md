@@ -101,7 +101,7 @@ le masoara. Se repara inaintea oricarei frumuseti.
 
 ## Etapa C - lista
 
-- [ ] **C1. Tabel compact pe desktop**, card/lista pe telefon:
+- [x] **C1. Tabel compact pe desktop**, card/lista pe telefon:
       `Client · Segment · Comenzi · Ultima comanda · Total · Status`.
 
 - [x] **C2. Filtre.** (activitate + valoare; judet, canal, „accepta marketing” si tag raman la etapele lor) Dupa activitate (toti, noi, recurenti, VIP, fara comenzi, inactivi
@@ -119,13 +119,13 @@ le masoara. Se repara inaintea oricarei frumuseti.
 
 ## Etapa D - fisa clientului
 
-- [ ] **D1. Sertar lateral pe desktop**, nu fereastra in mijloc: lista ramane vizibila, se
+- [x] **D1. Sertar lateral pe desktop**, nu fereastra in mijloc: lista ramane vizibila, se
       trece repede de la un client la altul, si e mai multa inaltime. Pe telefon ramane peste
       tot ecranul. Exista deja tiparul: `cosuri/SertarCos.tsx`.
 
 - [ ] **D2. File inauntru**: Prezentare · Comenzi · Activitate · Date si preferinte.
 
-- [ ] **D3. Statistici desfacute**, cu numele de la A2/A3: comenzi totale, valide, total
+- [x] **D3. Statistici desfacute**, cu numele de la A2/A3: comenzi totale, valide, total
       comandat, total incasat, valoare medie, ultima comanda, retururi.
 
 - [ ] **D4. Filtrul se pastreaza la inchiderea fisei**: aceeasi cautare, pagina, sortare si

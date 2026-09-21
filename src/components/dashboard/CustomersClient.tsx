@@ -7,7 +7,7 @@ import {
   Users, Search, Phone, Mail, MapPin, ShoppingBag, TrendingUp, Repeat,
   X, ChevronLeft, ChevronRight, Calendar, ExternalLink, ArrowUpDown, Loader2, Upload,
 } from "lucide-react";
-import { formatPrice, formatDate, formatPhoneDisplay } from "@/lib/utils/format";
+import { formatPrice, formatDate, formatDateShort, formatPhoneDisplay } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import type { Customer, CustomerOrder, CustomersSummary } from "@/lib/customers";
 import { getCustomerOrders } from "@/lib/actions/customer.actions";
@@ -307,16 +307,45 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             <Users className="h-6 w-6 text-muted-foreground" />
           </div>
           <p className="font-medium text-foreground mb-1">
-            {searchQuery ? "Niciun client gasit" : "Niciun client inca"}
+            {searchQuery || cateFiltre({ segment, valoare }) > 0
+              ? "Niciun client pentru ce ai ales"
+              : "Niciun client încă"}
           </p>
+          {/*
+            ⚠ GOLUL SPUNE DE CE E GOL. „Niciun client găsit" după un filtru arată
+            exact ca o pagină stricată. Acum se spune care e pricina — căutarea sau
+            filtrul — și ce se poate face cu ea.
+          */}
           <p className="text-sm text-muted-foreground">
-            {searchQuery
-              ? "Incearca alta cautare."
-              : "Clientii apar aici dupa prima comanda din magazin, sau ii poti aduce acum prin import."}
+            {cateFiltre({ segment, valoare }) > 0
+              ? "Sterge filtrele sau alege altele."
+              : searchQuery
+                ? "Încearcă altă căutare."
+                : "Clienții apar aici după prima comandă din magazin, sau Îi poți aduce acum prin import."}
           </p>
         </div>
       ) : (
         <div className={cn("bg-surface border border-border rounded-xl overflow-hidden divide-y divide-border transition-opacity", isPending && "opacity-60")}>
+          {/*
+            ═══ CAPUL DE TABEL, NUMAI PE DESKTOP ═══
+
+            ⚠ O SINGURĂ BUCATĂ DE MARKUP pentru amândouă formele, nu două. Pe
+            desktop rândul se așază în coloane care se aliniază sub cap; pe telefon
+            aceeași copii curg unul lângă altul, ca până acum. Două markup-uri ar fi
+            divergat la prima retușare, și cineva ar fi reparat numai unul.
+
+            ⚠ Lățimile coloanelor sunt FIXE pe desktop: altfel fiecare rând și-ar
+            așeza singur coloanele după cât text are, și nimic nu s-ar alinia — adică
+            exact ce făcea lista până acum.
+          */}
+          <div className="hidden lg:flex items-center gap-3 bg-muted/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="w-9 flex-shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1">Client</span>
+            <span className="w-52 flex-shrink-0">Segment</span>
+            <span className="w-48 flex-shrink-0 text-right">Comenzi</span>
+            <span className="w-28 flex-shrink-0 text-right">Valoare</span>
+            <span className="w-4 flex-shrink-0" aria-hidden="true" />
+          </div>
           {customers.map((c) => (
             <button
               key={c.key}
@@ -335,7 +364,8 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                     Risc de retur) au regulile în `lib/customers/etichete.ts`, cu
                     măsurătorile care le-au hotărât. Aici erau două, scrise de mână.
                   */}
-                  <span className="hidden sm:contents">
+                  {/* Pe telefon stau langa nume; pe desktop au coloana lor, mai jos. */}
+                  <span className="contents lg:hidden">
                     <EticheteClient client={c} cheie={c.key} />
                   </span>
                 </div>
@@ -349,8 +379,13 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                   {formatPhoneDisplay(c.phone)}{c.email ? ` · ${c.email}` : ""}
                 </p>
               </div>
+              {/* Coloana „Segment", numai pe desktop: pe telefon etichetele stau langa nume. */}
+              <div className="hidden lg:flex w-52 flex-shrink-0 flex-wrap items-center gap-1">
+                <EticheteClient client={c} cheie={c.key} />
+              </div>
+
               {/* Un client importat n-a comandat inca: nu are nici numar, nici data. */}
-              <div className="hidden sm:block text-right flex-shrink-0">
+              <div className="hidden sm:block w-auto lg:w-48 flex-shrink-0 text-right">
                 {c.lastOrderAt ? (
                   <>
                     {/*
@@ -372,8 +407,14 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                       și nu se putea deosebi dintr-o privire. Acum e același punct
                       colorat ca la Comenzi.
                     */}
+                    {/*
+                      ⚠ Data SCURTĂ („16 sept. 2026"), nu cea lungă: într-un tabel,
+                      „16 septembrie 2026" rupe coloana pe două rânduri și strică
+                      alinierea pe care tocmai am făcut-o. În fișa clientului, unde e
+                      loc, rămâne cea lungă.
+                    */}
                     <p className="flex items-center justify-end gap-1.5 text-[11px] text-muted-foreground/70">
-                      {formatDate(c.lastOrderAt)}
+                      {formatDateShort(c.lastOrderAt)}
                       {c.lastStatus && (
                         <EtichetaStare ton={orderStatus(c.lastStatus).ton} marime="mic">
                           {orderStatus(c.lastStatus).label}
@@ -385,7 +426,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                   <p className="text-xs text-muted-foreground/70">Fără comenzi</p>
                 )}
               </div>
-              <div className="text-right flex-shrink-0 w-24">
+              <div className="w-24 lg:w-28 flex-shrink-0 text-right">
                 {/*
                   ⚠ „VALOAREA COMENZILOR", nu „cheltuit". Suma cuprinde și comenzi
                   neachitate încă (ramburs pe drum, plată în așteptare), deci „cheltuit"
@@ -499,9 +540,23 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
   }, [fetchHistory]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+    /*
+      ═══ ⚠ SERTAR LATERAL PE DESKTOP, NU FEREASTRĂ ÎN MIJLOC ═══
+
+      Ce câștigă, și de ce a cerut-o el:
+        - lista rămâne vizibilă, deci se trece repede de la un client la altul;
+        - e mai multă înălțime pentru istoric, care e partea lungă a fișei;
+        - seamănă cu un CRM, nu cu o alertă.
+
+      ⚠ PE TELEFON RĂMÂNE PESTE TOT ECRANUL. Un sertar de 28rem pe un ecran de
+      390px n-ar fi un sertar, ar fi o fereastră cu o dungă inutilă pe margine.
+
+      ⚠ Fundalul se închide la clic, ca până acum; sertarul oprește clicul, ca să
+      nu se închidă când omul dă în el.
+    */
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-end bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="w-full sm:max-w-lg bg-background border border-border sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92dvh]"
+        className="flex w-full max-h-[92dvh] flex-col overflow-hidden rounded-t-2xl border border-border bg-background shadow-2xl sm:h-full sm:max-h-none sm:w-[34rem] sm:rounded-none sm:rounded-l-2xl sm:border-y-0 sm:border-r-0"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

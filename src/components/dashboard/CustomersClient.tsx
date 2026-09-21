@@ -22,6 +22,7 @@ import {
   NUMELE_SEGMENTULUI, SEGMENTE, TREPTE_VALOARE, cateFiltre, type Segment,
 } from "@/lib/customers/filtre";
 import { CustomerImportModal } from "./CustomerImportModal";
+import { SalveazaSegment } from "@/components/dashboard/clienti/SalveazaSegment";
 
 type SortKey = "recent" | "spent" | "orders" | "name";
 
@@ -44,9 +45,9 @@ const FILELE_FISEI = [
 type CheieFila = (typeof FILELE_FISEI)[number]["cheie"];
 
 /**
- * Un camp din fila „Date".
+ * Un camp din fila „Date”.
  *
- * ⚠ Lipsa se SPUNE („nu avem"), nu se lasa o linie goala: un camp gol arata a
+ * ⚠ Lipsa se SPUNE („nu avem”), nu se lasa o linie goala: un camp gol arata a
  * defect, iar comerciantul cauta unde se completeaza.
  */
 function Camp({ eticheta, valoare }: { eticheta: string; valoare: string | null }) {
@@ -94,12 +95,12 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
     const npage = next.page ?? page;
     if (nq) params.set("q", nq);
     if (nsort !== "recent") params.set("sort", nsort);
-    /* ⚠ „tot" nu se scrie in adresa: e implicitul, iar o adresa curata se poate trimite. */
+    /* ⚠ „tot” nu se scrie in adresa: e implicitul, iar o adresa curata se poate trimite. */
     const nperioada = next.perioada ?? perioada;
     if (nperioada !== "tot") params.set("perioada", nperioada);
     const nsegment = next.segment ?? segment;
     if (nsegment !== "toti") params.set("segment", nsegment);
-    /* `next.valoare === null` inseamna „sterge filtrul", deci nu se poate folosi `??`. */
+    /* `next.valoare === null` inseamna „sterge filtrul”, deci nu se poate folosi `??`. */
     const nvaloare = next.valoare === undefined ? valoare : next.valoare;
     if (nvaloare) params.set("valoare", nvaloare);
     if (npage > 1) params.set("page", String(npage));
@@ -131,44 +132,33 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Clienți</h1>
-          {/*
-            ⚠ DESCRIEREA NU MAI E DESPRE MECANICĂ. Scria „grupați automat după
-            numărul de telefon" — adevărat, dar e răspunsul la o întrebare pe care
-            comerciantul n-a pus-o încă. Cum îi identificăm stă acum lângă cardul
-            de contacte, unde chiar contează.
-          */}
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Gestionează cumpărătorii, istoricul comenzilor și segmentele magazinului.
-          </p>
-        </div>
-        {/*
-          ⚠ PERIOADA STA LANGA CIFRE, nu langa lista: ea taie numai sumarul.
-          Lista ramane pe tot istoricul — un client care n-a comandat luna asta e
-          tot clientul magazinului, iar o lista care se goleste la schimbarea
-          perioadei ar parea stricata.
-        */}
-        <div className="flex flex-shrink-0 items-center gap-2">
-          <select
-            value={perioada}
-            onChange={(e) => goTo({ perioada: e.target.value as NumePerioada, page: 1 })}
-            aria-label="Perioada cifrelor de mai jos"
-            className="rounded-xl bg-card px-2.5 py-2 text-sm font-medium text-foreground ring-1 ring-foreground/10"
-          >
-            {PERIOADE.map((p) => (
-              <option key={p} value={p}>{ETICHETE[p]}</option>
-            ))}
-          </select>
+      {/*
+        ⚠ TITLUL SI DESCRIEREA S-AU MUTAT IN PAGINA, deasupra filelor: sunt ale
+        paginii intregi, nu ale listei. Lasate aici, „Segmente” si „Importuri”
+        si-ar fi desenat fiecare alt antet, sau niciunul.
+
+        ⚠ PERIOADA STA LANGA CIFRE, nu langa lista: ea taie numai sumarul. Lista
+        ramane pe tot istoricul — un client care n-a comandat luna asta e tot
+        clientul magazinului, iar o lista care se goleste la schimbarea perioadei
+        ar parea stricata.
+      */}
+      <div className="mb-4 flex items-center justify-end gap-2">
+        <select
+          value={perioada}
+          onChange={(e) => goTo({ perioada: e.target.value as NumePerioada, page: 1 })}
+          aria-label="Perioada cifrelor de mai jos"
+          className="rounded-xl bg-card px-2.5 py-2 text-sm font-medium text-foreground ring-1 ring-foreground/10"
+        >
+          {PERIOADE.map((p) => (
+            <option key={p} value={p}>{ETICHETE[p]}</option>
+          ))}
+        </select>
         <button
           onClick={() => setImporting(true)}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-xl ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors flex-shrink-0"
+          className="inline-flex flex-shrink-0 items-center gap-2 rounded-xl bg-card px-3 py-2 text-sm font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted"
         >
           <Upload className="h-4 w-4" /> <span className="hidden sm:inline">Importă clienți</span>
         </button>
-        </div>
       </div>
 
       {importing && <CustomerImportModal onClose={() => setImporting(false)} />}
@@ -181,7 +171,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         paginii avea altă înălțime, altă mărime a cifrei și nicio explicație, iar
         două carduri care seamănă diverg la prima retușare.
 
-        ⚠ „Venit total" și „Valoare medie comandă" AU IEȘIT de aici: amândouă există
+        ⚠ „Venit total” și „Valoare medie comandă” AU IEȘIT de aici: amândouă există
         deja la Statistici. În pagina Clienți sunt utile mărimile despre RELAȚIA cu
         oamenii, nu cele despre vânzări.
       */}
@@ -196,7 +186,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
               demo: 358 de contacte = 338 care au comandat vreodată + 20 importate,
               dar dintre cele 338 numai 292 au măcar o comandă validă — restul au
               comandat și totul le-a fost anulat sau rambursat. Un ecran care scrie
-              „292 cumpărători și 20 importate" lângă „358" se contrazice singur, iar
+              „292 cumpărători și 20 importate” lângă „358” se contrazice singur, iar
               cine observă nu mai crede niciuna dintre cifre.
             */
             `${summary.totalContacts - summary.importedContacts} au comandat vreodată, `
@@ -276,8 +266,8 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         trebuie să fie ale mulțimii filtrate. Vezi `customers_aggregate`.
 
         ⚠ NICIUN FILTRU FĂRĂ DATE PE CARE SĂ CADă. Lipsesc dinadins „acceptă
-        marketing" (n-avem consimțământ pe client), „tag" (nu există etichete scrise
-        de comerciant) și „adăugat manual" (nu există adăugarea manuală). Toate trei
+        marketing" (n-avem consimțământ pe client), „tag” (nu există etichete scrise
+        de comerciant) și „adăugat manual” (nu există adăugarea manuală). Toate trei
         sunt în plan, la etapele lor. Vezi `lib/customers/filtre.ts`.
       */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -305,7 +295,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         </select>
 
         {/*
-          ⚠ „Șterge filtrele" apare DOAR când există ce șterge. Un buton mereu acolo,
+          ⚠ „Șterge filtrele” apare DOAR când există ce șterge. Un buton mereu acolo,
           de cele mai multe ori fără efect, îl învață pe om să-l ignore — și atunci nu-l
           mai vede nici când chiar are nevoie de el.
         */}
@@ -320,8 +310,21 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         )}
 
         {/*
+          ⚠ „Salvează segmentul” apare DOAR când există un filtru de salvat, din
+          același motiv ca ștergerea de mai sus. Și fiindcă un segment fără niciun
+          filtru e tot magazinul sub un nume care promite altceva — server-ul îl
+          refuză oricum, dar un buton care refuză mereu e o promisiune goală.
+        */}
+        {cateFiltre({ segment, valoare }) > 0 && (
+          <SalveazaSegment
+            businessId={businessId}
+            criterii={{ segment, valoare, q: searchQuery }}
+          />
+        )}
+
+        {/*
           ⚠ CÂȚI AU IEȘIT, lângă filtre. Fără cifra asta, un filtru care nu găsește pe
-          nimeni arată exact ca o pagină stricată. Cu ea, „0 clienți" e un răspuns.
+          nimeni arată exact ca o pagină stricată. Cu ea, „0 clienți” e un răspuns.
         */}
         <span className="ml-auto text-xs text-muted-foreground">
           {totalCount} {totalCount === 1 ? "client" : "clienți"}
@@ -340,7 +343,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
               : "Niciun client încă"}
           </p>
           {/*
-            ⚠ GOLUL SPUNE DE CE E GOL. „Niciun client găsit" după un filtru arată
+            ⚠ GOLUL SPUNE DE CE E GOL. „Niciun client găsit” după un filtru arată
             exact ca o pagină stricată. Acum se spune care e pricina — căutarea sau
             filtrul — și ce se poate face cu ea.
           */}
@@ -407,7 +410,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                   {formatPhoneDisplay(c.phone)}{c.email ? ` · ${c.email}` : ""}
                 </p>
               </div>
-              {/* Coloana „Segment", numai pe desktop: pe telefon etichetele stau langa nume. */}
+              {/* Coloana „Segment”, numai pe desktop: pe telefon etichetele stau langa nume. */}
               <div className="hidden lg:flex w-52 flex-shrink-0 flex-wrap items-center gap-1">
                 <EticheteClient client={c} cheie={c.key} />
               </div>
@@ -418,7 +421,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                   <>
                     {/*
                       ⚠ NUMĂRUL ȘI SUMA VORBEAU DESPRE MULȚIMI DIFERITE. Scria
-                      „5 comenzi · 1.240 lei cheltuit", dar cele cinci puteau cuprinde
+                      „5 comenzi · 1.240 lei cheltuit”, dar cele cinci puteau cuprinde
                       două anulate, pe când suma le scotea. Acum se arată câte sunt
                       valide, iar totalul doar când diferă — altfel ar fi zgomot pe
                       fiecare rând.
@@ -431,13 +434,13 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                     </p>
                     {/*
                       ⚠ STAREA ULTIMEI COMENZI, CU ETICHETA PANOULUI. Era un text gri
-                      („achitat") sub sumă, care nu semăna cu nimic din restul panoului
+                      („achitat”) sub sumă, care nu semăna cu nimic din restul panoului
                       și nu se putea deosebi dintr-o privire. Acum e același punct
                       colorat ca la Comenzi.
                     */}
                     {/*
-                      ⚠ Data SCURTĂ („16 sept. 2026"), nu cea lungă: într-un tabel,
-                      „16 septembrie 2026" rupe coloana pe două rânduri și strică
+                      ⚠ Data SCURTĂ („16 sept. 2026”), nu cea lungă: într-un tabel,
+                      „16 septembrie 2026” rupe coloana pe două rânduri și strică
                       alinierea pe care tocmai am făcut-o. În fișa clientului, unde e
                       loc, rămâne cea lungă.
                     */}
@@ -456,10 +459,10 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
               </div>
               <div className="w-24 lg:w-28 flex-shrink-0 text-right">
                 {/*
-                  ⚠ „VALOAREA COMENZILOR", nu „cheltuit". Suma cuprinde și comenzi
-                  neachitate încă (ramburs pe drum, plată în așteptare), deci „cheltuit"
+                  ⚠ „VALOAREA COMENZILOR”, nu „cheltuit”. Suma cuprinde și comenzi
+                  neachitate încă (ramburs pe drum, plată în așteptare), deci „cheltuit”
                   promitea bani intrați. Banii chiar intrați se văd în fișa clientului,
-                  sub „Total încasat".
+                  sub „Total încasat”.
                 */}
                 <p className="text-sm font-bold text-foreground tabular-nums">{formatPrice(c.ordersValue)}</p>
                 <p className="text-[11px] text-muted-foreground">valoare comenzi</p>
@@ -535,7 +538,7 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
   // comenzi, deci lista de clienti nu il mai cara pe tot in payload.
   /*
     ⚠ Fila se tine in STARE, nu in adresa: e o alegere de-o clipa inauntrul fisei.
-    Pusa in adresa, ar fi intrat in istoricul browserului, iar „inapoi" ar fi sarit
+    Pusa in adresa, ar fi intrat in istoricul browserului, iar „inapoi” ar fi sarit
     intre file in loc sa inchida fisa — ceea ce nimeni nu asteapta.
   */
   const [fila, setFila] = useState<CheieFila>("prezentare");
@@ -607,7 +610,7 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
               {/*
                 ⚠ `tel:` PRIMESTE NUMARUL BRUT, nu pe cel frumos. Spatiile puse de noi
                 pentru citit n-au ce cauta intr-o adresa de apel; telefonul le ignora
-                de obicei, dar „de obicei" nu e o garantie cand butonul trebuie sa sune
+                de obicei, dar „de obicei” nu e o garantie cand butonul trebuie sa sune
                 un client.
               */}
               {customer.phone && (
@@ -641,10 +644,10 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
 
           ⚠ FILA SE ȚINE ÎN STARE, NU ÎN ADRESĂ: e o alegere de-o clipă înăuntrul
           fișei, nu ceva de trimis prin legătură. Pusă în adresă, ar fi intrat în
-          istoricul browserului, iar „înapoi" ar fi sărit între file în loc să închidă
+          istoricul browserului, iar „înapoi” ar fi sărit între file în loc să închidă
           fișa — ceea ce nimeni nu așteaptă.
 
-          ⚠ „Date și preferințe" arată azi numai ce chiar avem. Consimțământul,
+          ⚠ „Date și preferințe” arată azi numai ce chiar avem. Consimțământul,
           canalul preferat și dezabonarea cer date care nu există încă pe client, și
           se spune asta pe filă, nu se lasă câmpuri goale care par stricate.
         */}
@@ -671,8 +674,8 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
           {/*
             ═══ CIFRELE, DESFĂCUTE ═══
 
-            ⚠ ERAU TREI ȘI SPUNEAU MAI PUȚIN DECÂT PĂREAU. „Comenzi" număra și
-            anulările, „Total cheltuit" le scotea, iar niciuna nu spunea câți bani au
+            ⚠ ERAU TREI ȘI SPUNEAU MAI PUȚIN DECÂT PĂREAU. „Comenzi” număra și
+            anulările, „Total cheltuit” le scotea, iar niciuna nu spunea câți bani au
             intrat cu adevărat. Acum:
 
               Comenzi          valide, și totalul dedesubt când diferă
@@ -704,7 +707,7 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
 
           {/*
             Anulările și rambursările se spun pe nume, și numai când există: pe un
-            client curat, un rând cu „0 anulate" ar fi zgomot.
+            client curat, un rând cu „0 anulate” ar fi zgomot.
           */}
           {(customer.cancelledCount > 0 || customer.refundedCount > 0) && (
             <p className="text-xs text-muted-foreground">
@@ -768,10 +771,10 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          {/* ⚠ Fara „#" pus de noi: numarul comenzii il poarta deja
-                              („#1355"), iar al doilea ajungea pe ecran ca „##1355".
-                              Comenzile de marketplace n-au niciun „#" (Trendyol
-                              trimite „7016"), deci nici nu se poate adauga de-a
+                          {/* ⚠ Fara „#” pus de noi: numarul comenzii il poarta deja
+                              („#1355”), iar al doilea ajungea pe ecran ca „##1355”.
+                              Comenzile de marketplace n-au niciun „#” (Trendyol
+                              trimite „7016”), deci nici nu se poate adauga de-a
                               valma: se scrie asa cum vine. */}
                           <p className="text-sm font-semibold text-foreground truncate">{o.order_number}</p>
                           <EtichetaStare ton={st.ton} marime="mic">{st.label}</EtichetaStare>

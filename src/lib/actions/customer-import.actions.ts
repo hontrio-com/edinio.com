@@ -53,7 +53,7 @@ async function getOwnedBusinessId(supabase: ServerClient, userId: string): Promi
 
 type Owner =
   | { ok: false; error: string }
-  | { ok: true; admin: ReturnType<typeof createAdminClient>; businessId: string };
+  | { ok: true; admin: ReturnType<typeof createAdminClient>; businessId: string; userId: string };
 
 async function requireOwner(): Promise<Owner> {
   const supabase = await createClient();
@@ -63,7 +63,13 @@ async function requireOwner(): Promise<Owner> {
   const businessId = await getOwnedBusinessId(supabase, user.id);
   if (!businessId) return { ok: false, error: "Magazin negasit" };
 
-  return { ok: true, admin: createAdminClient(), businessId };
+  return { ok: true, admin: createAdminClient(), businessId, userId: user.id };
+}
+
+/** Numele fisierului trimis, taiat la lungimea coloanei. */
+function numeleFisierului(formData: FormData): string | null {
+  const f = formData.get("file");
+  return f instanceof File ? f.name.slice(0, 200) : null;
 }
 
 type ReadFileResult = { error: string } | { parsed: ParsedCsv; fileName: string };
@@ -299,8 +305,39 @@ export async function commitCustomerImport(
       if (!error) enriched++;
     }
 
+    const skipped = plan.issues.filter((i) => i.problem === "no_key").length;
+
+    /*
+      ⚠ IMPORTUL LASA ACUM O URMA. Pana azi se termina cu un mesaj pe ecran, iar
+      peste o saptamana nimeni nu mai stia cand s-a facut, din ce fisier si cati
+      au intrat — nici macar cand cineva intreba „de unde e clientul asta?".
+
+      ⚠ Scrierea urmei NU are voie sa strice importul: clientii sunt deja in baza,
+      iar o eroare aici i-ar face pe om sa creada ca n-a mers si sa reimporte.
+      De-aia e prinsa si doar jurnalizata.
+    */
+    try {
+      const { error: eUrma } = await admin.from("customer_imports").insert({
+        business_id: businessId,
+        /* Numele vine de pe FISIERUL trimis, nu dintr-un camp separat: formularul
+           n-are asa ceva, iar un camp inventat ar fi lasat coloana mereu goala. */
+        fisier: numeleFisierului(formData),
+        adaugati: inserted,
+        completati: enriched,
+        sarite: skipped,
+        creat_de: owner.userId,
+      });
+      if (eUrma) throw new Error(eUrma.message);
+    } catch (e) {
+      logError({
+        action: "commitCustomerImport.urma",
+        message: `importul a reusit, dar urma lui nu s-a scris: ${e instanceof Error ? e.message : "necunoscut"}`,
+        businessId, severity: "warning",
+      });
+    }
+
     revalidatePath("/dashboard/customers");
-    return { inserted, enriched, skipped: plan.issues.filter((i) => i.problem === "no_key").length };
+    return { inserted, enriched, skipped };
   } catch (e) {
     logError({ action: "commitCustomerImport", message: e instanceof Error ? e.message : "commit failed", businessId });
     return { error: "Eroare la scrierea clientilor" };

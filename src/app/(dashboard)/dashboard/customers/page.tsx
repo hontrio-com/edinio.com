@@ -8,6 +8,9 @@ import { CUSTOMERS_PAGE_SIZE, escapeLike, firstParam, pageParam } from "@/lib/or
 import type { Customer, CustomersSummary } from "@/lib/customers";
 import { PERIOADE, fereastra, type NumePerioada } from "@/lib/perioade";
 import { segmentValid, treaptaValoare, type Segment } from "@/lib/customers/filtre";
+import { FilelePaginii, filaValida } from "@/components/dashboard/clienti/FilelePaginii";
+import { FilaSegmente } from "@/components/dashboard/clienti/FilaSegmente";
+import { FilaImporturi } from "@/components/dashboard/clienti/FilaImporturi";
 
 const SORT_KEYS = new Set(["recent", "spent", "orders", "name"]);
 
@@ -30,14 +33,20 @@ export default async function CustomersPage({
   if (!user) redirect("/login");
 
   const sp = await searchParams;
+  /*
+    ⚠ FILA SE CITESTE INAINTE DE ORICE ALTCEVA, fiindca ea hotaraste CE se aduce.
+    Adusa lista de clienti si pentru „Importuri”, fiecare deschidere a filei
+    aceleia ar fi parcurs tot istoricul de comenzi ca sa nu arate nimic din el.
+  */
+  const fila = filaValida(firstParam(sp.fila));
   const q = (firstParam(sp.q) ?? "").trim().slice(0, 80);
   const sortRaw = firstParam(sp.sort) ?? "recent";
   const sort = SORT_KEYS.has(sortRaw) ? sortRaw : "recent";
   const page = pageParam(sp.page);
   /*
-    ⚠ PERIOADA IMPLICITA E „TOT ISTORICUL", spre deosebire de Statistici si de
+    ⚠ PERIOADA IMPLICITA E „TOT ISTORICUL”, spre deosebire de Statistici si de
     Cosuri, unde e o fereastra scurta. Aici cifrele sunt despre RELATIA cu oamenii,
-    iar relatiile se vad pe rastimpuri lungi: masurat pe demo, „clienti recurenti"
+    iar relatiile se vad pe rastimpuri lungi: masurat pe demo, „clienti recurenti”
     pe 30 de zile da 2, iar pe tot istoricul da 22. Pornita pe 30 de zile, pagina ar
     fi aratat ca un magazin fara clienti care revin.
   */
@@ -48,7 +57,7 @@ export default async function CustomersPage({
 
   /*
     ⚠ SEGMENTUL SI TREAPTA DE VALOARE VIN DIN ADRESA, ca si cautarea si sortarea:
-    un filtru pus se poate trimite prin legatura, iar „inapoi" din browser se
+    un filtru pus se poate trimite prin legatura, iar „inapoi” din browser se
     intoarce la ce vedeai. Tinute doar in stare, s-ar fi pierdut la fiecare
     reincarcare si la fiecare deschidere de fisa.
   */
@@ -67,10 +76,49 @@ export default async function CustomersPage({
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <Suspense fallback={<ScheletClienti />}>
-        <ListaClienti businessId={bizRow.id} q={q} sort={sort} page={page} perioada={perioada}
-          segment={segment} valoare={firstParam(sp.valoare) ?? null} />
-      </Suspense>
+      {/*
+        ⚠ ANTETUL SI FILELE SUNT ALE PAGINII, nu ale listei: raman pe loc la
+        trecerea dintr-o fila in alta, si pleaca odata cu cadrul, inaintea
+        oricarei agregari. Puse inauntrul listei, ar fi aparut abia dupa ce
+        Postgres termina de numarat, iar trecerea intre file ar fi clipit.
+      */}
+      <div className="mb-5">
+        <h1 className="text-xl font-bold text-foreground">Clienți</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Gestionează cumpărătorii, istoricul comenzilor și segmentele magazinului.
+        </p>
+      </div>
+
+      <FilelePaginii activa={fila} />
+
+      {fila === "segmente" && (
+        <Suspense fallback={<ScheletFila />}>
+          <FilaSegmente businessId={bizRow.id} />
+        </Suspense>
+      )}
+
+      {fila === "importuri" && (
+        <Suspense fallback={<ScheletFila />}>
+          <FilaImporturi businessId={bizRow.id} />
+        </Suspense>
+      )}
+
+      {fila === "clienti" && (
+        <Suspense fallback={<ScheletClienti />}>
+          <ListaClienti businessId={bizRow.id} q={q} sort={sort} page={page} perioada={perioada}
+            segment={segment} valoare={firstParam(sp.valoare) ?? null} />
+        </Suspense>
+      )}
+    </div>
+  );
+}
+
+function ScheletFila() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton key={i} className="h-20 rounded-xl" />
+      ))}
     </div>
   );
 }
@@ -78,10 +126,6 @@ export default async function CustomersPage({
 function ScheletClienti() {
   return (
     <>
-      <div className="space-y-2 mb-5">
-        <Skeleton className="h-6 w-32" />
-        <Skeleton className="h-4 w-48" />
-      </div>
       {/* cele patru casete de sumar, apoi cautarea, apoi tabelul */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -132,7 +176,7 @@ async function ListaClienti({
       /*
         ⚠ FILTRAREA SE FACE IN BAZA, nu peste pagina adusa: `total_count` si
         paginarea trebuie sa fie ale multimii FILTRATE. Filtrat in JavaScript,
-        comerciantul ar fi vazut „50 de clienti" dintr-un magazin cu trei sute, iar
+        comerciantul ar fi vazut „50 de clienti” dintr-un magazin cu trei sute, iar
         paginile de dupa ar fi fost goale.
       */
       p_segment: segment,

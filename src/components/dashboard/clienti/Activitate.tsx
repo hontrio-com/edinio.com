@@ -106,7 +106,7 @@ export function Activitate({ businessId, cheie }: { businessId: string; cheie: s
                 {cand(a.cand)}
                 {/*
                   ⚠ Starea comenzii se scrie cu vocabularul panoului, nu cu cheia din
-                  bază: „delivered" nu înseamnă nimic pentru comerciant.
+                  bază: „delivered” nu înseamnă nimic pentru comerciant.
                 */}
                 {a.fel === "comanda" && a.detaliu && ` · ${orderStatus(a.detaliu).label}`}
                 {a.fel !== "comanda" && a.detaliu && ` · ${a.detaliu}`}

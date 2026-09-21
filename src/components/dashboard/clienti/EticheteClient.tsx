@@ -15,7 +15,7 @@ import {
 
   ⚠ FIECARE ISI POARTA EXPLICATIA in `title`: un badge pe care comerciantul nu-l
   intelege il pune sa ghiceasca, si sa ia hotarari despre un om pe baza unei
-  ghiciri. „Risc de retur" mai ales.
+  ghiciri. „Risc de retur” mai ales.
 
   ⚠ CULORILE VIN DIN JETOANELE TEMEI, nu scrise de mana. Singura care iese din
   neutru e cea de risc, si iese DINADINS: e singura care spune ceva rau despre
@@ -70,7 +70,7 @@ export function EticheteClient({
 
       {/*
         ⚠ CAND SE TREZESTE CAPCANA, SE VEDE. O comanda fara telefon SI fara email
-        devine un „client" al ei, iar doua comenzi ale aceluiasi om nu se vor uni
+        devine un „client” al ei, iar doua comenzi ale aceluiasi om nu se vor uni
         niciodata. Masurat pe productie la 21.09.2026: zero cazuri. Fara semnul asta,
         numarul de clienti s-ar umfla incet cu oameni care nu exista, si nimic n-ar
         da vreo eroare.

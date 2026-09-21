@@ -1906,6 +1906,82 @@ export type Database = {
           },
         ]
       }
+      customer_imports: {
+        Row: {
+          adaugati: number
+          business_id: string
+          completati: number
+          creat_de: string | null
+          creat_la: string
+          fisier: string | null
+          id: string
+          sarite: number
+        }
+        Insert: {
+          adaugati?: number
+          business_id: string
+          completati?: number
+          creat_de?: string | null
+          creat_la?: string
+          fisier?: string | null
+          id?: string
+          sarite?: number
+        }
+        Update: {
+          adaugati?: number
+          business_id?: string
+          completati?: number
+          creat_de?: string | null
+          creat_la?: string
+          fisier?: string | null
+          id?: string
+          sarite?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_imports_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_segments: {
+        Row: {
+          business_id: string
+          creat_de: string | null
+          creat_la: string
+          criterii: Json
+          id: string
+          nume: string
+        }
+        Insert: {
+          business_id: string
+          creat_de?: string | null
+          creat_la?: string
+          criterii?: Json
+          id?: string
+          nume: string
+        }
+        Update: {
+          business_id?: string
+          creat_de?: string | null
+          creat_la?: string
+          criterii?: Json
+          id?: string
+          nume?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_segments_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           address: string | null
@@ -6791,6 +6867,28 @@ export type Database = {
         }[]
       }
       curata_limite: { Args: never; Returns: number }
+      customer_in_segment: {
+        Args: {
+          seg: string
+          order_count: number
+          valid_order_count: number
+          cancelled_count: number
+          refunded_count: number
+          orders_value: number
+          first_order_at: string | null
+          last_order_at: string | null
+          vip_comenzi?: number
+          vip_lei?: number
+        }
+        Returns: boolean
+      }
+      customer_segment_counts: {
+        Args: { bid: string; p_vip_comenzi?: number; p_vip_lei?: number }
+        Returns: {
+          segment: string
+          cati: number
+        }[]
+      }
       customer_activity: {
         Args: { bid: string; cust_key: string; page_limit?: number }
         Returns: {

@@ -142,10 +142,43 @@ le masoara. Se repara inaintea oricarei frumuseti.
 
 ## Etapa F - segmente (valoarea comerciala cea mai mare, dupa el)
 
-- [ ] **F1. Trei file in pagina**: Toti clientii · Segmente · Importuri. **Fara** intrare noua
-      in meniu.
-- [ ] **F2. Segmente implicite** si segmente proprii, salvate din filtrele alese.
-- [ ] **F3. Legarea lor** de discount, email, SMS, automatizari, audiente.
+- [x] **F1. Trei file in pagina**: Toti clientii · Segmente · Importuri. **Fara** intrare noua
+      in meniu. Fila sta in ADRESA (se poate trimite prin legatura), spre deosebire de filele
+      din fisa clientului, care stau in stare.
+
+- [x] **F2. Segmente implicite** (cele noua, fiecare cu numarul lui) **si segmente proprii**,
+      salvate din filtrele alese, cu numele si criteriile la vedere.
+      ⚠⚠ **Un segment pastreaza CRITERIILE, nu oamenii.** Salvat ca lista, ar fi inghetat in
+      ziua salvarii, iar comerciantul ar fi trimis campanii unei liste moarte.
+      ⚠⚠ **Regula „cine intra in segment" a fost MUTATA intr-un singur loc**
+      (`customer_in_segment`), fiindca numarul de pe placa si lista de sub ea trebuie sa fie
+      socotite la fel. Verificat pe demo: aceleasi zece cifre inainte si dupa mutare.
+      ⚠ **Numarul se da numai segmentelor salvate care sunt CHIAR un segment**, fara alte
+      filtre: al celorlalte ar fi cerut cate o trecere prin tot istoricul, la fiecare
+      deschidere. Mai bine fara cifra decat cu una scumpa.
+      ⚠ **Unicitatea numelui se apara in INDEX, nu in cod.** Prima scriere se bizuia pe
+      curatarea din TypeScript; probat pe demo, „  vip DE valoare Medie  " intra pe langa
+      „VIP de valoare medie".
+
+- [ ] **F3. Legarea lor** de discount, email, SMS, automatizari, audiente. **NEFACUTA, si nu
+      din lipsa de timp.** Campaniile SMS au vocabularul LOR de filtre (`SmsFilters`: fereastra
+      de comenzi, suma minima), care nu se suprapune peste criteriile unui segment. O potrivire
+      pe jumatate — una care scapa tacut treapta de valoare, de pilda — ar trimite o campanie
+      **platita** altei liste de oameni decat cea de pe ecran. Legarea isi are locul la **G5**,
+      impreuna cu consimtamantul, dezabonarea si lista de suprimare.
+
+### F4 (nu era in plan, a iesit pe drum) - istoricul importurilor
+
+- [x] Pana azi importul **nu lasa nicio urma**: se termina cu un mesaj pe ecran, iar peste o
+      saptamana nimeni nu mai stia cand s-a facut, din ce fisier si cati au intrat. Acum se
+      scrie un rand, iar fila „Importuri" il arata.
+      ⚠ **Scrierea urmei nu are voie sa strice importul**: clientii sunt deja in baza, iar o
+      eroare aici l-ar face pe om sa creada ca n-a mers si sa reimporte. E prinsa si jurnalizata.
+      ⚠ **Istoricul incepe de AZI**, si fila o spune: importurile de dinainte n-au lasat nimic
+      si nu se pot naste acum din nimic.
+      ⚠ **Carduri pe telefon, tabel pe desktop.** Masurat: tabelul celor cinci coloane cere
+      600px intr-o cutie cu `overflow-hidden`, deci pe un telefon de 390px ultimele doua
+      coloane erau pur si simplu de neajuns.
 
 ## Etapa G - gestionarea clientilor
 

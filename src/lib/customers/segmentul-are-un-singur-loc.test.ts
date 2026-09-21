@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { SEGMENTE } from "./filtre";
 import {
   CRITERII_GOALE, adresaSegmentului, catiIn, criteriiGoale, criteriiValide,
-  descrieCriteriile, numeValid,
+  descrieCriteriile, numeValid, type CriteriiSegment,
 } from "./segmente";
 
 /*
@@ -180,16 +180,16 @@ test("cautarea se taie la 80 de semne, ca in adresa", () => {
 test("⚠ criterii goale inseamna tot magazinul, si se poate spune asta", () => {
   /* Un segment fara niciun filtru e o capcana: arata ca un segment si nu e unul. */
   assert.equal(criteriiGoale(CRITERII_GOALE), true);
-  assert.equal(criteriiGoale({ segment: "vip", valoare: null, q: "" }), false);
-  assert.equal(criteriiGoale({ segment: "toti", valoare: "200-500", q: "" }), false);
-  assert.equal(criteriiGoale({ segment: "toti", valoare: null, q: "ana" }), false);
+  assert.equal(criteriiGoale({ ...CRITERII_GOALE, segment: "vip", valoare: null, q: "" }), false);
+  assert.equal(criteriiGoale({ ...CRITERII_GOALE, segment: "toti", valoare: "200-500", q: "" }), false);
+  assert.equal(criteriiGoale({ ...CRITERII_GOALE, segment: "toti", valoare: null, q: "ana" }), false);
 });
 
 /* ── Cum se citeste si unde duce ────────────────────────────────────────── */
 
 test("⚠ descrierea spune CE filtreaza, nu cate filtre are", () => {
   assert.equal(
-    descrieCriteriile({ segment: "vip", valoare: "200-500", q: "ana" }),
+    descrieCriteriile({ ...CRITERII_GOALE, segment: "vip", valoare: "200-500", q: "ana" }),
     "Clienți VIP · 200 – 500 lei · caută „ana”",
   );
   assert.equal(descrieCriteriile(CRITERII_GOALE), "Toți clienții");
@@ -202,13 +202,13 @@ test("⚠ adresa segmentului nu poarta filtre care nu-s puse", () => {
    */
   assert.equal(adresaSegmentului(CRITERII_GOALE), "/dashboard/customers");
   assert.equal(
-    adresaSegmentului({ segment: "recurenti", valoare: null, q: "" }),
+    adresaSegmentului({ ...CRITERII_GOALE, segment: "recurenti", valoare: null, q: "" }),
     "/dashboard/customers?segment=recurenti",
   );
 });
 
 test("⚠ cautarea se codeaza in adresa, cu diacritice cu tot", () => {
-  const a = adresaSegmentului({ segment: "toti", valoare: null, q: "Ioană Popescu" });
+  const a = adresaSegmentului({ ...CRITERII_GOALE, segment: "toti", valoare: null, q: "Ioană Popescu" });
   assert.ok(!a.includes(" "), `adresa are spatiu in ea: ${a}`);
   assert.equal(new URL(a, "https://x.ro").searchParams.get("q"), "Ioană Popescu");
 });
@@ -265,4 +265,64 @@ test("⚠⚠ baza normalizeaza numele LA FEL ca `numeValid`, nu se bizuie pe el"
   /* Si partea de TypeScript face chiar cele doua lucruri. */
   const n = numeValid("  Doua   Cuvinte  ");
   assert.deepEqual(n, { nume: "Doua Cuvinte" });
+});
+
+/* ── Criteriile poarta TOATE filtrele ───────────────────────────────────── */
+
+test("⚠⚠ un filtru nou nu se poate pierde tacut la salvarea segmentului", () => {
+  /*
+   * ⚠ ASTA E DEFECTUL DE CARE MA TEM CEL MAI TARE LA SEGMENTE, si e chiar cel
+   * pentru care n-am legat segmentele de campaniile SMS: un criteriu care pleaca
+   * pe jumatate.
+   *
+   * Un segment salvat cat timp criteriile nu stiu de judet ar pastra numai
+   * jumatate din filtru. Deschis a doua zi, ar arata TOATA tara sub un nume care
+   * spune „Clientii mei din Cluj" — si nimeni n-ar avea de unde sa banuiasca,
+   * fiindca lista chiar are clienti in ea. Daca de pe el pleaca si o campanie,
+   * mesajul ajunge la oameni carora nu le era destinat.
+   *
+   * Proba cere ca FIECARE camp al criteriilor sa ajunga si in descriere, si in
+   * adresa. Un camp adaugat fara sa fie dus mai departe pica aici.
+   */
+  const pline: CriteriiSegment = {
+    segment: "vip", valoare: "200-500", q: "ana", judet: "Cluj", canal: "emag",
+  };
+
+  /* Fiecare camp e un criteriu, si toate trebuie sa se vada undeva. */
+  const campuri = Object.keys(pline) as (keyof CriteriiSegment)[];
+  assert.equal(campuri.length, 5, "s-a adaugat un criteriu: du-l si in descriere, si in adresa");
+
+  const descriere = descrieCriteriile(pline);
+  const adresa = new URL(adresaSegmentului(pline), "https://x.ro");
+
+  assert.match(descriere, /Clienți VIP/);
+  assert.match(descriere, /200 – 500 lei/);
+  assert.match(descriere, /Cluj/);
+  assert.match(descriere, /eMAG/, "canalul se scrie cu numele lui, nu cu slug-ul");
+  assert.match(descriere, /ana/);
+
+  assert.equal(adresa.searchParams.get("segment"), "vip");
+  assert.equal(adresa.searchParams.get("valoare"), "200-500");
+  assert.equal(adresa.searchParams.get("judet"), "Cluj");
+  assert.equal(adresa.searchParams.get("canal"), "emag");
+  assert.equal(adresa.searchParams.get("q"), "ana");
+});
+
+test("⚠ un segment cu DOAR judet nu e „gol”", () => {
+  /*
+   * `criteriiGoale` opreste salvarea unui segment fara filtre. Nemodificata
+   * odata cu criteriile, ar fi refuzat „Clientii mei din Cluj" spunand ca n-are
+   * niciun filtru — un refuz de neinteles peste un filtru care se vede pe ecran.
+   */
+  assert.equal(criteriiGoale({ ...CRITERII_GOALE, judet: "Cluj" }), false);
+  assert.equal(criteriiGoale({ ...CRITERII_GOALE, canal: "emag" }), false);
+  assert.equal(criteriiGoale(CRITERII_GOALE), true);
+});
+
+test("⚠ judetul si canalul se curata cand vin din `jsonb`", () => {
+  assert.equal(criteriiValide({ judet: "  Cluj  " }).judet, "Cluj");
+  assert.equal(criteriiValide({ judet: "   " }).judet, null);
+  assert.equal(criteriiValide({ judet: 7 }).judet, null);
+  assert.equal(criteriiValide({ canal: "emag" }).canal, "emag");
+  assert.equal(criteriiValide({}).canal, null);
 });

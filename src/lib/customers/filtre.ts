@@ -85,3 +85,60 @@ export function treaptaValoare(v: string | null | undefined) {
 export function cateFiltre(f: { segment: Segment; valoare: string | null }): number {
   return (f.segment !== "toti" ? 1 : 0) + (f.valoare ? 1 : 0);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   JUDETUL SI CANALUL                                            (21.09.2026)
+   ═══════════════════════════════════════════════════════════════════════════
+
+   ⚠⚠ OPTIUNILE VIN DIN BAZA, nu din lista asta. Cele 42 de judete ale tarii
+   oferite unui magazin care livreaza in douasprezece inseamna treizeci de
+   optiuni care dau „niciun client" — adica exact filtrul pe care planul spune
+   ca nu-l oferim. Vezi `customer_filter_options`.
+
+   Aici sta numai cum se CITESC canalele: in baza sunt slug-uri (`emag`,
+   `aboutyou`), iar pe ecran trebuie sa scrie cum le stie omul.
+*/
+
+/** O optiune de filtru, asa cum o da `customer_filter_options`. */
+export interface OptiuneFiltru {
+  valoare: string;
+  cati: number;
+}
+
+/**
+ * Numele canalelor, cum se scriu ele.
+ *
+ * ⚠ Un canal NECUNOSCUT nu se ascunde si nu se preface in altceva: i se arata
+ * slug-ul, cu prima litera mare. Ascuns, clientii veniti pe el ar fi disparut
+ * dintr-un filtru care pretinde ca le arata pe toate; iar noi adaugam cate un
+ * marketplace nou la cateva luni.
+ */
+const NUMELE_CANALELOR: Record<string, string> = {
+  magazin: "Magazinul meu",
+  emag: "eMAG",
+  trendyol: "Trendyol",
+  aboutyou: "About You",
+  pepita: "Pepita",
+  olx: "OLX",
+};
+
+export function numeleCanalului(slug: string): string {
+  return NUMELE_CANALELOR[slug] ?? (slug.charAt(0).toUpperCase() + slug.slice(1));
+}
+
+/**
+ * Cate filtre sunt puse acum.
+ *
+ * ⚠ SE NUMARA TOATE, si asta nu e o formalitate: cifra din „Șterge filtrele (3)"
+ * si butonul care le sterge trebuie sa vorbeasca despre aceeasi multime. Un
+ * filtru nenumarat ar fi ramas pus dupa ce omul apasa „sterge tot", iar lista
+ * ar fi ramas scurta fara niciun semn de ce.
+ */
+export function cateFiltreTot(f: {
+  segment: Segment;
+  valoare: string | null;
+  judet: string | null;
+  canal: string | null;
+}): number {
+  return cateFiltre(f) + (f.judet ? 1 : 0) + (f.canal ? 1 : 0);
+}

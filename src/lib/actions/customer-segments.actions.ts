@@ -72,7 +72,10 @@ export async function salveazaSegment(
     .insert({
       business_id: businessId,
       nume: n.nume,
-      criterii: { segment: criterii.segment, valoare: criterii.valoare, q: criterii.q },
+      criterii: {
+        segment: criterii.segment, valoare: criterii.valoare, q: criterii.q,
+        judet: criterii.judet, canal: criterii.canal,
+      },
       creat_de: user.id,
     })
     .select("id, nume, criterii, creat_la")

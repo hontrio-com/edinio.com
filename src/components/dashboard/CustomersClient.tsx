@@ -19,7 +19,8 @@ import { EticheteClient } from "@/components/dashboard/clienti/EticheteClient";
 import { Activitate } from "@/components/dashboard/clienti/Activitate";
 import { ETICHETE, PERIOADE, type NumePerioada } from "@/lib/perioade";
 import {
-  NUMELE_SEGMENTULUI, SEGMENTE, TREPTE_VALOARE, cateFiltre, type Segment,
+  NUMELE_SEGMENTULUI, SEGMENTE, TREPTE_VALOARE, cateFiltreTot, numeleCanalului,
+  type OptiuneFiltru, type Segment,
 } from "@/lib/customers/filtre";
 import { CustomerImportModal } from "./CustomerImportModal";
 import { SalveazaSegment } from "@/components/dashboard/clienti/SalveazaSegment";
@@ -63,7 +64,7 @@ function Camp({ eticheta, valoare }: { eticheta: string; valoare: string | null 
   );
 }
 
-export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, perioada, segment, valoare, businessId }: {
+export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, perioada, segment, valoare, judet, canal, judete, canale, businessId }: {
   /** Pagina curenta de clienti (max CUSTOMERS_PAGE_SIZE), agregata in Postgres. */
   customers: Customer[];
   summary: CustomersSummary;
@@ -75,6 +76,11 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   perioada: NumePerioada;
   segment: Segment;
   valoare: string | null;
+  judet: string | null;
+  canal: string | null;
+  /** Numai judetele si canalele care EXISTA in magazin, cu cati clienti are fiecare. */
+  judete: OptiuneFiltru[];
+  canale: OptiuneFiltru[];
   businessId: string;
 }) {
   const router = useRouter();
@@ -90,7 +96,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   const totalPages = Math.max(1, Math.ceil(totalCount / CUSTOMERS_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
 
-  const buildUrl = useCallback((next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada; segment?: Segment; valoare?: string | null }) => {
+  const buildUrl = useCallback((next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada; segment?: Segment; valoare?: string | null; judet?: string | null; canal?: string | null }) => {
     const params = new URLSearchParams();
     const nq = next.q ?? searchQuery;
     const nsort = next.sort ?? sort;
@@ -105,10 +111,15 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
     /* `next.valoare === null` inseamna „sterge filtrul”, deci nu se poate folosi `??`. */
     const nvaloare = next.valoare === undefined ? valoare : next.valoare;
     if (nvaloare) params.set("valoare", nvaloare);
+    /* Aceeasi regula ca la valoare: `null` inseamna „sterge", nu „lasa cum era". */
+    const njudet = next.judet === undefined ? judet : next.judet;
+    if (njudet) params.set("judet", njudet);
+    const ncanal = next.canal === undefined ? canal : next.canal;
+    if (ncanal) params.set("canal", ncanal);
     if (npage > 1) params.set("page", String(npage));
     const qs = params.toString();
     return qs ? `${pathname}?${qs}` : pathname;
-  }, [pathname, searchQuery, sort, page, perioada, segment, valoare]);
+  }, [pathname, searchQuery, sort, page, perioada, segment, valoare, judet, canal]);
 
   // Navigare externa (back/forward, link cu ?q=) → resincronizeaza inputul.
   useEffect(() => {
@@ -128,7 +139,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
     return () => clearTimeout(t);
   }, [searchInput, searchQuery, buildUrl, router]);
 
-  function goTo(next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada; segment?: Segment; valoare?: string | null }) {
+  function goTo(next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada; segment?: Segment; valoare?: string | null; judet?: string | null; canal?: string | null }) {
     startNavTransition(() => router.push(buildUrl(next), { scroll: false }));
   }
 
@@ -303,17 +314,55 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         </select>
 
         {/*
+          ⚠⚠ JUDEȚUL ȘI CANALUL APAR DOAR DACĂ MAGAZINUL ARE MAI MULT DE UNUL.
+          Un meniu cu o singură opțiune nu filtrează nimic: îl pune pe comerciant
+          să-l deschidă ca să afle asta. Și un magazin care vinde doar pe site-ul
+          lui n-are ce alege la „canal".
+
+          ⚠ Opțiunile vin din bază, nu dintr-o listă scrisă în cod: cele 42 de
+          județe ale țării, la un magazin care livrează în douăsprezece, ar fi
+          însemnat treizeci de alegeri care nu găsesc pe nimeni.
+        */}
+        {judete.length > 1 && (
+          <select
+            value={judet ?? ""}
+            onChange={(e) => goTo({ judet: e.target.value || null, page: 1 })}
+            aria-label="Județ"
+            className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+          >
+            <option value="">Orice județ</option>
+            {judete.map((j) => (
+              <option key={j.valoare} value={j.valoare}>{j.valoare} ({j.cati})</option>
+            ))}
+          </select>
+        )}
+
+        {canale.length > 1 && (
+          <select
+            value={canal ?? ""}
+            onChange={(e) => goTo({ canal: e.target.value || null, page: 1 })}
+            aria-label="Canal"
+            className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+          >
+            <option value="">Orice canal</option>
+            {canale.map((c) => (
+              <option key={c.valoare} value={c.valoare}>{numeleCanalului(c.valoare)} ({c.cati})</option>
+            ))}
+          </select>
+        )}
+
+        {/*
           ⚠ „Șterge filtrele” apare DOAR când există ce șterge. Un buton mereu acolo,
           de cele mai multe ori fără efect, îl învață pe om să-l ignore — și atunci nu-l
           mai vede nici când chiar are nevoie de el.
         */}
-        {cateFiltre({ segment, valoare }) > 0 && (
+        {cateFiltreTot({ segment, valoare, judet, canal }) > 0 && (
           <button
             type="button"
-            onClick={() => goTo({ segment: "toti", valoare: null, page: 1 })}
+            onClick={() => goTo({ segment: "toti", valoare: null, judet: null, canal: null, page: 1 })}
             className="rounded-xl px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            Șterge filtrele ({cateFiltre({ segment, valoare })})
+            Șterge filtrele ({cateFiltreTot({ segment, valoare, judet, canal })})
           </button>
         )}
 
@@ -323,10 +372,10 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
           filtru e tot magazinul sub un nume care promite altceva — server-ul îl
           refuză oricum, dar un buton care refuză mereu e o promisiune goală.
         */}
-        {cateFiltre({ segment, valoare }) > 0 && (
+        {cateFiltreTot({ segment, valoare, judet, canal }) > 0 && (
           <SalveazaSegment
             businessId={businessId}
-            criterii={{ segment, valoare, q: searchQuery }}
+            criterii={{ segment, valoare, q: searchQuery, judet, canal }}
           />
         )}
 
@@ -346,7 +395,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             <Users className="h-6 w-6 text-muted-foreground" />
           </div>
           <p className="font-medium text-foreground mb-1">
-            {searchQuery || cateFiltre({ segment, valoare }) > 0
+            {searchQuery || cateFiltreTot({ segment, valoare, judet, canal }) > 0
               ? "Niciun client pentru ce ai ales"
               : "Niciun client încă"}
           </p>
@@ -356,7 +405,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             filtrul — și ce se poate face cu ea.
           */}
           <p className="text-sm text-muted-foreground">
-            {cateFiltre({ segment, valoare }) > 0
+            {cateFiltreTot({ segment, valoare, judet, canal }) > 0
               ? "Sterge filtrele sau alege altele."
               : searchQuery
                 ? "Încearcă altă căutare."

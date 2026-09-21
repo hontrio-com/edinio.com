@@ -62,7 +62,14 @@ export default async function CustomersPage({
     reincarcare si la fiecare deschidere de fisa.
   */
   const segment: Segment = segmentValid(firstParam(sp.segment));
-  const valoare = treaptaValoare(firstParam(sp.valoare));
+  /*
+    ⚠ JUDETUL SI CANALUL NU SE VALIDEAZA AICI dintr-o lista scrisa in cod: lista
+    lor e chiar ce exista in magazin, si se cere de la baza (`customer_filter_options`).
+    O valoare care nu se potriveste cu nimic da o lista goala — raspuns adevarat,
+    si acelasi pe care il da un judet in care chiar n-ai niciun client.
+  */
+  const judet = (firstParam(sp.judet) ?? "").trim().slice(0, 80) || null;
+  const canal = (firstParam(sp.canal) ?? "").trim().slice(0, 40) || null;
 
   const { data: bizRow } = await supabase
     .from("businesses")
@@ -106,7 +113,8 @@ export default async function CustomersPage({
       {fila === "clienti" && (
         <Suspense fallback={<ScheletClienti />}>
           <ListaClienti businessId={bizRow.id} q={q} sort={sort} page={page} perioada={perioada}
-            segment={segment} valoare={firstParam(sp.valoare) ?? null} />
+            segment={segment} valoare={firstParam(sp.valoare) ?? null}
+            judet={judet} canal={canal} />
         </Suspense>
       )}
     </div>
@@ -150,6 +158,8 @@ async function ListaClienti({
   perioada,
   segment,
   valoare,
+  judet,
+  canal,
 }: {
   businessId: string;
   q: string;
@@ -158,6 +168,8 @@ async function ListaClienti({
   perioada: NumePerioada;
   segment: Segment;
   valoare: string | null;
+  judet: string | null;
+  canal: string | null;
 }) {
   const supabase = await createClient();
   const f = fereastra(perioada);
@@ -166,7 +178,7 @@ async function ListaClienti({
   // Clientii sunt agregati, cautati si paginati in Postgres (functiile
   // customers_aggregate / customers_summary, sub RLS) — corect la orice numar
   // de comenzi; pagina primeste doar cei CUSTOMERS_PAGE_SIZE clienti afisati.
-  const [{ data: custRows }, { data: summaryRows }] = await Promise.all([
+  const [{ data: custRows }, { data: summaryRows }, { data: optiuniRows }] = await Promise.all([
     supabase.rpc("customers_aggregate", {
       bid: businessId,
       search: q ? escapeLike(q) : undefined,
@@ -182,6 +194,8 @@ async function ListaClienti({
       p_segment: segment,
       p_valoare_min: treapta?.min ?? undefined,
       p_valoare_max: treapta?.max ?? undefined,
+      p_judet: judet ?? undefined,
+      p_canal: canal ?? undefined,
     }),
     /*
       ⚠ LISTA RAMANE PE TOT ISTORICUL, numai sumarul se taie pe perioada — cum a
@@ -194,7 +208,20 @@ async function ListaClienti({
       p_de_la: f.nume === "tot" ? undefined : f.deLa.toISOString(),
       p_pana: f.nume === "tot" ? undefined : f.panaLa.toISOString(),
     }),
+    /*
+      ⚠ MENIURILE SE FAC DIN DATE. Judetele tarii scrise in cod ar fi dat unui
+      magazin care livreaza in douasprezece inca treizeci de optiuni care nu
+      gasesc pe nimeni. A treia interogare merge in PARALEL cu celelalte doua,
+      deci nu adauga nimic la asteptare.
+    */
+    supabase.rpc("customer_filter_options", { bid: businessId }),
   ]);
+
+  const optiuni = optiuniRows ?? [];
+  const judete = optiuni.filter((o) => o.fel === "judet")
+    .map((o) => ({ valoare: o.valoare, cati: Number(o.cati) }));
+  const canale = optiuni.filter((o) => o.fel === "canal")
+    .map((o) => ({ valoare: o.valoare, cati: Number(o.cati) }));
 
   const customers: Customer[] = (custRows ?? []).map((r) => ({
     key: r.key,
@@ -215,6 +242,7 @@ async function ListaClienti({
     lastOrderAt: r.last_order_at,
     lastStatus: r.last_status,
     source: r.source ?? null,
+    canal: r.canal ?? null,
   }));
   const totalCount = custRows?.length ? Number(custRows[0].total_count) : 0;
 
@@ -241,6 +269,10 @@ async function ListaClienti({
       perioada={perioada}
       segment={segment}
       valoare={valoare}
+      judet={judet}
+      canal={canal}
+      judete={judete}
+      canale={canale}
       businessId={businessId}
     />
   );

@@ -4,7 +4,7 @@ import { ArrowRight, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { NUMELE_SEGMENTULUI } from "@/lib/customers/filtre";
 import {
-  SEGMENTE_IMPLICITE, adresaSegmentului, catiIn, criteriiGoale, criteriiValide,
+  CRITERII_GOALE, SEGMENTE_IMPLICITE, adresaSegmentului, catiIn, criteriiGoale, criteriiValide,
 } from "@/lib/customers/segmente";
 import type { SegmentSalvat } from "@/lib/actions/customer-segments.actions";
 import { SegmenteSalvate } from "./SegmenteSalvate";
@@ -65,7 +65,7 @@ export async function FilaSegmente({ businessId }: { businessId: string }) {
             return (
               <Link
                 key={seg}
-                href={adresaSegmentului({ segment: seg, valoare: null, q: "" })}
+                href={adresaSegmentului({ ...CRITERII_GOALE, segment: seg, valoare: null, q: "" })}
                 className="group rounded-xl bg-card p-4 ring-1 ring-foreground/10 transition-colors hover:bg-muted"
               >
                 <div className="flex items-start justify-between gap-2">

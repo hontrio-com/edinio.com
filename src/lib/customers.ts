@@ -86,6 +86,14 @@ export interface Customer {
    * peste comenzile lui. Nu inseamna „nu stim".
    */
   source: string | null;
+  /**
+   * Canalul ultimei comenzi (`magazin`, `emag`, `trendyol`, …).
+   *
+   * ⚠ `null` inseamna ca omul N-A COMANDAT niciodata, nu „magazin". Un contact
+   * importat n-are canal, si a-l trece drept vanzare proprie ar fi o minciuna
+   * care se aduna apoi in filtre.
+   */
+  canal: string | null;
 }
 
 /** Has this customer ever ordered? Imported-only contacts have not. */

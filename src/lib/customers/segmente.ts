@@ -1,4 +1,4 @@
-import { NUMELE_SEGMENTULUI, SEGMENTE, TREPTE_VALOARE, segmentValid, treaptaValoare, type Segment } from "./filtre";
+import { NUMELE_SEGMENTULUI, SEGMENTE, TREPTE_VALOARE, numeleCanalului, segmentValid, treaptaValoare, type Segment } from "./filtre";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -26,9 +26,20 @@ export interface CriteriiSegment {
   valoare: string | null;
   /** Cautarea, cand segmentul a fost salvat cu una. */
   q: string;
+  /**
+   * Judetul si canalul, cand au fost alese.
+   *
+   * ⚠⚠ ADAUGATE ODATA CU FILTRELE, nu dupa. Un segment salvat cat timp criteriile
+   * nu stiau de ele ar fi pastrat numai jumatate din filtru: deschis a doua zi,
+   * ar fi aratat TOATA tara sub un nume care spune „Clientii mei din Cluj" — si
+   * chiar asta e defectul din pricina caruia n-am legat inca segmentele de
+   * campaniile SMS. Nu se face nici aici.
+   */
+  judet: string | null;
+  canal: string | null;
 }
 
-export const CRITERII_GOALE: CriteriiSegment = { segment: "toti", valoare: null, q: "" };
+export const CRITERII_GOALE: CriteriiSegment = { segment: "toti", valoare: null, q: "", judet: null, canal: null };
 
 /** Cat de lung poate fi numele unui segment. Acelasi numar si in baza. */
 export const NUME_MAXIM = 60;
@@ -51,12 +62,19 @@ export function criteriiValide(x: unknown): CriteriiSegment {
        ca `p_valoare_min` nedefinit si ar fi dat tacut toti clientii. */
     valoare: treaptaValoare(valoareBruta) ? valoareBruta : null,
     q: typeof o.q === "string" ? o.q.trim().slice(0, 80) : "",
+    /*
+      ⚠ Judetul si canalul NU se verifica dintr-o lista: lista lor e chiar ce
+      exista azi in magazin, si se schimba singura. Un judet in care nu mai are
+      niciun client da o lista goala — raspuns adevarat, nu defect.
+    */
+    judet: typeof o.judet === "string" && o.judet.trim() ? o.judet.trim().slice(0, 80) : null,
+    canal: typeof o.canal === "string" && o.canal.trim() ? o.canal.trim().slice(0, 40) : null,
   };
 }
 
 /** Sunt criteriile astea macar un filtru, sau e tot magazinul? */
 export function criteriiGoale(c: CriteriiSegment): boolean {
-  return c.segment === "toti" && !c.valoare && c.q === "";
+  return c.segment === "toti" && !c.valoare && c.q === "" && !c.judet && !c.canal;
 }
 
 /**
@@ -70,6 +88,8 @@ export function descrieCriteriile(c: CriteriiSegment): string {
   const parti: string[] = [NUMELE_SEGMENTULUI[c.segment]];
   const t = treaptaValoare(c.valoare);
   if (t) parti.push(t.eticheta);
+  if (c.judet) parti.push(c.judet);
+  if (c.canal) parti.push(numeleCanalului(c.canal));
   if (c.q) parti.push(`caută „${c.q}”`);
   return parti.join(" · ");
 }
@@ -79,6 +99,8 @@ export function adresaSegmentului(c: CriteriiSegment): string {
   const p = new URLSearchParams();
   if (c.segment !== "toti") p.set("segment", c.segment);
   if (c.valoare) p.set("valoare", c.valoare);
+  if (c.judet) p.set("judet", c.judet);
+  if (c.canal) p.set("canal", c.canal);
   if (c.q) p.set("q", c.q);
   const s = p.toString();
   return s ? `/dashboard/customers?${s}` : "/dashboard/customers";

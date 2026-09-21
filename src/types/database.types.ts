@@ -6887,6 +6887,14 @@ export type Database = {
         Args: { bid: string; p_key: string }
         Returns: number
       }
+      customer_filter_options: {
+        Args: { bid: string }
+        Returns: {
+          fel: string
+          valoare: string
+          cati: number
+        }[]
+      }
       customer_in_segment: {
         Args: {
           seg: string
@@ -6955,6 +6963,8 @@ export type Database = {
           p_valoare_min?: number
           p_vip_comenzi?: number
           p_vip_lei?: number
+          p_judet?: string
+          p_canal?: string
           page_limit?: number
           page_offset?: number
           search?: string
@@ -6973,6 +6983,7 @@ export type Database = {
           last_order_at: string
           last_status: string
           source: string
+          canal: string
           name: string
           order_count: number
           orders_value: number

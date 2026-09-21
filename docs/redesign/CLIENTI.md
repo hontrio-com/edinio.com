@@ -104,10 +104,23 @@ le masoara. Se repara inaintea oricarei frumuseti.
 - [x] **C1. Tabel compact pe desktop**, card/lista pe telefon:
       `Client · Segment · Comenzi · Ultima comanda · Total · Status`.
 
-- [x] **C2. Filtre.** (activitate + valoare; judet, canal, „accepta marketing” si tag raman la etapele lor) Dupa activitate (toti, noi, recurenti, VIP, fara comenzi, inactivi
-      30/90/180 de zile), dupa valoare (praguri + interval propriu), dupa comenzi (1, 2-5,
-      peste 5, cu retururi, cu anulari), plus judet, sursa, canal, importat/manual/checkout,
-      accepta marketing, are email, are telefon.
+- [x] **C2. Filtre**: activitate, valoare, **judet** si **canal**.
+      ⚠⚠ **Meniurile de judet si canal se fac DIN DATE**, nu dintr-o lista scrisa in cod
+      (`customer_filter_options`). Cele 42 de judete ale tarii, la un magazin care livreaza in
+      douasprezece, ar fi insemnat treizeci de alegeri care nu gasesc pe nimeni — adica exact
+      filtrul pe care regula de mai jos spune sa nu-l oferim. Fiecare optiune vine cu numarul
+      ei: „Cluj (18)".
+      ⚠ **Meniul nu apare deloc daca magazinul are o singura valoare**: un meniu cu o
+      optiune nu filtreaza nimic, doar il pune pe om sa-l deschida ca sa afle asta.
+      ⚠⚠ **Canalul NU e `order_source`**: campul acela are 465 de valori deosebite din 537
+      de comenzi (poarta si numarul comenzii de la marketplace, si identificatorul coletului).
+      Canalul adevarat sta in cheia `marketplace` dinauntru, iar lipsa ei inseamna „magazin".
+      ⚠ **Judetul si canalul intra si in criteriile segmentelor salvate**, odata cu filtrele.
+      Adaugate dupa, un segment salvat intre timp ar fi pastrat jumatate de filtru si ar fi
+      aratat toata tara sub un nume care spune „Clientii mei din Cluj".
+      ⚠ Raman nefacute, fiindca n-au pe ce sta: „accepta marketing" (nu exista consimtamant
+      pe client), „tag" (nu exista etichete scrise de comerciant) si filtrul „adaugat manual"
+      (exista de azi, dar pe productie are zero randuri — vezi `lib/customers/filtre.ts`).
       ⚠ **Niciun filtru fara date pe care sa cada.** Judetul vine din ultima comanda si nu
       exista peste tot; „accepta marketing" cere consimtamant inregistrat. Ce n-are pe ce sta,
       nu se ofera.
@@ -128,8 +141,13 @@ le masoara. Se repara inaintea oricarei frumuseti.
 - [x] **D3. Statistici desfacute**, cu numele de la A2/A3: comenzi totale, valide, total
       comandat, total incasat, valoare medie, ultima comanda, retururi.
 
-- [x] **D4. Filtrul se pastreaza la inchiderea fisei**: adresa poarta acum si perioada, si segmentul, si treapta de valoare; fisa e in stare, deci inchiderea nu atinge adresa. Ce mai lipseste e pozitia de scroll.: aceeasi cautare, pagina, sortare si
-      pozitie de scroll. Adresa tine deja o parte.
+- [x] **D4. Filtrul si pozitia se pastreaza la inchiderea fisei.** Adresa poarta cautarea,
+      pagina, sortarea, perioada, segmentul, treapta de valoare, judetul si canalul; fisa e in
+      stare, deci deschiderea si inchiderea ei nu ating adresa.
+      ⚠ **Si pozitia de derulare se pastreaza** — masurat, nu presupus: 800px inainte de
+      deschidere, 800 cu fisa deschisa, 800 dupa inchidere, iar `body` nu primeste blocare de
+      derulare. A rezolvat-o **D1**: sertarul lateral nu navigheaza nicaieri, deci n-are ce
+      sa piarda. Fereastra din mijloc, care era inainte, ar fi cerut o reparatie anume.
 
 ## Etapa E - terminologie si texte
 
@@ -230,9 +248,35 @@ ei" a picat in clipa in care au devenit sapte.
       ⚠ Plus o reconciliere periodica, pentru diferentele care apar oricum.
 - [ ] **H2. Paginare pe cursor** in locul celei pe pozitie, cand se ajunge la zeci de mii.
 
-⚠ **H nu e urgenta AZI**: cel mai mare magazin are 271 de comenzi. Dar e singura care nu se
-poate adauga peste, ci cere mutat din temelie — deci se hotaraste inainte sa se scrie filtrele
-si segmentele, care s-ar sprijini pe ea.
+### ⚠ Ce s-a schimbat la H pe parcurs, si de ce NU se face acum
+
+Scria aici ca H „se hotaraste inainte sa se scrie filtrele si segmentele, care s-ar sprijini pe
+ea". **Nu s-a adeverit, si e bine ca nu s-a adeverit.**
+
+Mutand regula segmentului intr-un singur loc (etapa F), toata pagina a ajuns sa citeasca printr-o
+**singura usa**: `customers_merged(bid)`. Lista, numaratoarea pe segmente, filtrele de judet si
+canal, meniurile — toate trec pe acolo. H1 inseamna acum sa se schimbe CORPUL acelei functii,
+ca sa citeasca dintr-un tabel de profiluri in loc sa parcurga comenzile. Nimic de deasupra nu
+se atinge. Din „cere mutat din temelie" a devenit un singur fisier.
+
+**Cat costa azi, masurat pe demo (393 de comenzi → 359 de clienti):**
+
+| | |
+|---|---|
+| `customers_aggregate`, o pagina de 50 | **28 ms**, 1.504 pagini de buffer |
+| `customer_segment_counts`, toate zece | **71 ms**, 1.330 pagini de buffer |
+
+Adica vreo **3,8 pagini de buffer pe comanda**, si creste liniar: la 100.000 de comenzi ar
+insemna sute de mii de pagini citite la fiecare deschidere, deci secunde, nu milisecunde.
+
+⚠ **Dar cel mai mare magazin de pe platforma are 271 de comenzi.** Un tabel de profiluri cere
+declansatoare la comanda, la schimbarea de status, la anulare, la rambursare si la import, plus
+o reconciliere periodica pentru diferentele care apar oricum — adica cinci drumuri noi care pot
+sa se desincronizeze, pentru un castig care azi nu se vede. Se face cand cifrele o cer, si atunci
+se va sti exact unde: in corpul lui `customers_merged`.
+
+⚠ **H2 (paginare pe cursor) nu are inteles fara H1**: parcurgerea intregului istoric se face
+oricum, indiferent cum se taie pagina.
 
 ---
 

@@ -7,7 +7,7 @@ import {
   Users, Search, Phone, Mail, MapPin, ShoppingBag, TrendingUp, Repeat,
   X, ChevronLeft, ChevronRight, Calendar, ExternalLink, ArrowUpDown, Loader2, Upload,
 } from "lucide-react";
-import { formatPrice, formatDate, formatDateShort, formatPhoneDisplay } from "@/lib/utils/format";
+import { formatPrice, formatPriceValue, formatDate, formatDateShort, formatPhoneDisplay } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 import type { Customer, CustomerOrder, CustomersSummary } from "@/lib/customers";
 import { getCustomerOrders } from "@/lib/actions/customer.actions";
@@ -15,6 +15,7 @@ import { CUSTOMERS_PAGE_SIZE } from "@/lib/orders/pagination";
 import { orderStatus } from "@/lib/orders/status";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import { EticheteClient } from "@/components/dashboard/clienti/EticheteClient";
 import { Activitate } from "@/components/dashboard/clienti/Activitate";
 import { ETICHETE, PERIOADE, type NumePerioada } from "@/lib/perioade";
@@ -176,6 +177,13 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
     startNavTransition(() => router.push(buildUrl(next), { scroll: false }));
   }
 
+  const marimeCifre = marimeaRandului([
+    String(summary.totalContacts),
+    String(summary.returningCustomers),
+    { valoare: String(summary.returnRate), unitate: "%" },
+    { valoare: formatPriceValue(summary.valuePerCustomer), unitate: "lei" },
+  ]);
+
   return (
     <div>
       {/*
@@ -253,8 +261,14 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         Nu era de reglat mărimea fontului: la 360px nici 28px nu încăpeau pentru
         un magazin cu sume de patru cifre.
       */}
+      {/*
+        ⚠⚠ O SINGURA MARIME PENTRU TOT RANDUL, data de cea mai lunga cifra.
+        Lasata pe seama fiecarui card, „358" ramanea la 44px langa „407,11 lei"
+        la 28px, si cele patru cutii nu mai aratau ca un set. Cerut de el.
+        ⚠ `unit` („%") se numara si el: e scris in card, langa cifra.
+      */}
       <div className="grid grid-cols-1 gap-3 mb-5 sm:grid-cols-2 lg:grid-cols-4">
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           icon={Users}
           label="Clienți"
           value={String(summary.totalContacts)}
@@ -274,7 +288,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             + "Numărul de sus e pe tot istoricul, nu pe perioadă."
           }
         />
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           icon={Repeat}
           label="Clienți recurenți"
           value={String(summary.returningCustomers)}
@@ -284,7 +298,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             + "oamenii rareori cumpără de două ori într-o lună."
           }
         />
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           icon={TrendingUp}
           label="Rată de revenire"
           value={String(summary.returnRate)}
@@ -301,10 +315,11 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             + "Contactele importate nu intră la numitor: n-aveau cum să revină."
           }
         />
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           icon={ShoppingBag}
           label="Valoare medie per client"
-          value={formatPrice(summary.valuePerCustomer)}
+          value={formatPriceValue(summary.valuePerCustomer)}
+          unit="lei"
           explicatie={
             "Valoarea comenzilor valide din perioada aleasă, împărțită la cumpărătorii "
             + "din aceeași perioadă. Media pe COMANDĂ stă la Statistici; aici interesează "

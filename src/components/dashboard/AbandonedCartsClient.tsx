@@ -14,6 +14,7 @@ import { formatPrice } from "@/lib/utils/format";
 import { AbandonedAutomationsTab } from "./AbandonedAutomationsTab";
 import { ExplicatieCard } from "./ExplicatieCard";
 import { CardStatistica } from "./CardStatistica";
+import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import type { FurnizorSms } from "@/lib/abandoned/furnizori-sms";
 import { crestere } from "@/lib/vanzari";
 import { EticheraStare } from "./cosuri/EticheteStare";
@@ -618,6 +619,19 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
     });
   }
 
+  /*
+   * ⚠ Unitatea se da SEPARAT, nu lipita de cifra: cardul o scrie la 20px, orice
+   * marime ar avea cifra. Numarata ca un semn de-al ei, „lei" ar fi costat cat
+   * trei cifre uriase si ar fi impins totul in jos degeaba.
+   */
+  const marimeCifre = marimeaRandului([
+    new Intl.NumberFormat("ro-RO").format(kpis.abandonedCount),
+    { valoare: new Intl.NumberFormat("ro-RO").format(Math.round(kpis.abandonedValue)), unitate: "lei" },
+    { valoare: String(kpis.abandonRate), unitate: "%" },
+    new Intl.NumberFormat("ro-RO").format(kpis.recoveredCount),
+    { valoare: new Intl.NumberFormat("ro-RO").format(Math.round(kpis.avgCartValue)), unitate: "lei" },
+  ]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -726,8 +740,14 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
         e o veste proasta, iar sageata si culoarea spun lucruri diferite -
         sageata incotro s-a miscat, culoarea daca e bine.
       */}
+      {/*
+        ⚠⚠ O SINGURA MARIME PENTRU TOT RANDUL, data de cea mai lunga cifra.
+        Lasata pe seama fiecarui card, cutiile nu mai aratau ca un set: una cu
+        trei semne ramanea uriasa langa una cu douasprezece. Cerut de el.
+        ⚠ `unit` („lei", „%") se numara si el: e scris in card, langa cifra.
+      */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           icon={ShoppingBag} label="Coșuri abandonate"
           value={new Intl.NumberFormat("ro-RO").format(kpis.abandonedCount)}
           empty={kpis.abandonedCount === 0}
@@ -735,7 +755,7 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
           {...comparat(kpis.abandonedCount, data.inainte?.abandonedCount)}
           explicatie={`Coșuri care au rămas neterminate în perioada aleasă și pe care nimeni nu le-a mai atins de ${ABANDON_MINUTES} de minute.`}
         />
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           icon={Banknote} label="Valoare abandonată"
           value={new Intl.NumberFormat("ro-RO").format(Math.round(kpis.abandonedValue))}
           unit="lei"
@@ -744,7 +764,7 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
           {...comparat(kpis.abandonedValue, data.inainte?.abandonedValue, formatPrice)}
           explicatie="Cât valorează coșurile abandonate, la prețurile de la momentul abandonului."
         />
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           icon={Percent} label="Rată de abandon la finalizare"
           value={kpis.abandonRate} unit="%"
           empty={kpis.abandonRate === 0}
@@ -752,14 +772,14 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
           {...comparat(kpis.abandonRate, data.inainte?.abandonRate, (v) => `${v}%`)}
           explicatie={EXPLICATIA_RATEI}
         />
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           icon={RotateCcw} label={NUMELE_RECUPERARII.atribuita.titlu}
           value={new Intl.NumberFormat("ro-RO").format(kpis.recoveredCount)}
           empty={kpis.recoveredCount === 0}
           {...comparat(kpis.recoveredCount, data.inainte?.recoveredCount)}
           explicatie={NUMELE_RECUPERARII.atribuita.explicatie}
         />
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           icon={TrendingDown} label="Valoare medie coș"
           value={new Intl.NumberFormat("ro-RO").format(Math.round(kpis.avgCartValue))}
           unit="lei"

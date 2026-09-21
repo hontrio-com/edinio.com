@@ -33,6 +33,7 @@ import { SiteStatusBar } from "@/components/dashboard/SiteStatusBar";
 import { PanouVanzari } from "@/components/dashboard/PanouVanzari";
 import { citesteDateVanzari, crestere, intervalScris } from "@/lib/vanzari";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import {
   citesteDateCarduri, cresterePosibila, rataConversie, valoareMedie, zileScurt,
 } from "@/lib/panou-carduri";
@@ -238,6 +239,13 @@ async function ContinutPanou({
     { id: "order", title: "Primeste prima comanda", description: "Distribuie link-ul pe WhatsApp si retele sociale.", done: (ordersTotal ?? 0) > 0, share: true, cta: "Distribuie" },
   ];
 
+  const marimeCifre = marimeaRandului([
+    fmt(carduri.azi.comenzi),
+    { valoare: fmt(carduri.luna.vanzari), unitate: "lei" },
+    medieLuna === null ? "-" : { valoare: fmt(Math.round(medieLuna * 100) / 100), unitate: "lei" },
+    conversieLuna === null ? "-" : { valoare: conversieLuna.toLocaleString("ro-RO", { maximumFractionDigits: 1 }), unitate: "%" },
+  ]);
+
   return (
     <>
 
@@ -254,9 +262,16 @@ async function ContinutPanou({
         subPrag={numaratoareStoc?.[0]?.sub_prag ?? 0}
       />
 
-      {/* Stat cards */}
+      {/*
+        Stat cards
+
+        ⚠⚠ O SINGURA MARIME PENTRU TOT RANDUL, data de cea mai lunga cifra.
+        Lasata pe seama fiecarui card, „1.234.567 lei" ar fi scazut singur langa
+        „12" ramas urias, si cele patru cutii n-ar mai fi aratat ca un set.
+        Cerut de el pe 21.09.2026. ⚠ Unitatile intra si ele: se scriu langa cifra.
+      */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-4">
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           label="Comenzi azi"
           value={fmt(carduri.azi.comenzi)}
           delta={pctComenziAzi !== null ? fmtDelta(pctComenziAzi) : undefined}
@@ -266,7 +281,7 @@ async function ContinutPanou({
           icon={ShoppingCart}
           empty={carduri.azi.comenzi === 0}
         />
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           label="Vanzari luna aceasta"
           value={fmt(carduri.luna.vanzari)}
           unit="lei"
@@ -277,7 +292,7 @@ async function ContinutPanou({
           icon={Wallet}
           empty={carduri.luna.vanzari === 0}
         />
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           label="Valoare medie comanda"
           value={medieLuna === null ? "-" : fmt(Math.round(medieLuna * 100) / 100)}
           unit={medieLuna === null ? undefined : "lei"}
@@ -288,7 +303,7 @@ async function ContinutPanou({
           icon={Receipt}
           empty={medieLuna === null}
         />
-        <CardStatistica
+        <CardStatistica marime={marimeCifre}
           label="Rata de conversie"
           value={conversieLuna === null ? "-" : conversieLuna.toLocaleString("ro-RO", { maximumFractionDigits: 1 })}
           unit={conversieLuna === null ? undefined : "%"}

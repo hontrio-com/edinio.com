@@ -8,6 +8,7 @@ import { concluzii } from "@/lib/statistici-concluzii";
 import { cn } from "@/lib/utils/cn";
 import { formatPrice } from "@/lib/utils/format";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import { GraficVanzari } from "@/components/dashboard/GraficVanzari";
 import { HartaJudete } from "@/components/dashboard/HartaJudete";
 import { StatisticiFiltre } from "@/components/dashboard/StatisticiFiltre";
@@ -192,6 +193,35 @@ export function StatisticiClient({
   const perioadaScrisa = vanzari ? intervalScris(vanzari.interval) : "";
   const anterioaraScrisa = vanzari ? intervalScris(vanzari.interval_anterior) : "";
 
+  const vVanzari = new Intl.NumberFormat("ro-RO").format(totalV.vanzari);
+  const vComenzi = new Intl.NumberFormat("ro-RO").format(totalV.comenzi);
+  const vMedie = totalV.comenzi === 0 ? "-" : new Intl.NumberFormat("ro-RO", { maximumFractionDigits: 2 }).format(medie);
+  const vConversie = conversie === null ? "-" : `${conversie.toLocaleString("ro-RO", { maximumFractionDigits: 2 })}`;
+  const vVizitatori = new Intl.NumberFormat("ro-RO").format(trafic?.total.vizitatori ?? 0);
+  const vSesiuni = new Intl.NumberFormat("ro-RO").format(trafic?.total.sesiuni ?? 0);
+  const vPagini = pagini === null ? "-" : pagini.toLocaleString("ro-RO", { maximumFractionDigits: 1 });
+  const vAfisari = new Intl.NumberFormat("ro-RO").format(trafic?.total.afisari ?? 0);
+  const vNoi = new Intl.NumberFormat("ro-RO").format(secundare?.acum.clienti_noi ?? 0);
+  const vRecurenti = new Intl.NumberFormat("ro-RO").format(secundare?.acum.clienti_recurenti ?? 0);
+  const vBucati = new Intl.NumberFormat("ro-RO").format(secundare?.acum.bucati ?? 0);
+  const vAnulare = anulare === null ? "-" : anulare.toLocaleString("ro-RO", { maximumFractionDigits: 2 });
+
+  /*
+   * ⚠⚠ O SINGURA MARIME PENTRU TOATE CARDURILE PAGINII, data de cea mai lunga
+   * cifra. Lasata pe seama fiecarui card, „1.234.567 lei" ar fi scazut singur
+   * langa „12" ramas urias, si cutiile n-ar mai fi aratat ca un set — vezi
+   * `marimeaRandului`. Cele trei grile de aici au aceleasi coloane si stau una
+   * sub alta, deci o singura marime le tine pe toate.
+   *
+   * ⚠ Unitatile intra si ele in socoteala: se scriu langa cifra, deci tin latime.
+   */
+  const marimeCifre = marimeaRandului([
+    { valoare: vVanzari, unitate: "lei" }, vComenzi,
+    { valoare: vMedie, unitate: "lei" }, { valoare: vConversie, unitate: "%" },
+    vVizitatori, vSesiuni, vPagini, vAfisari,
+    vNoi, vRecurenti, { valoare: vBucati, unitate: "buc." }, vAnulare,
+  ]);
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -262,38 +292,38 @@ export function StatisticiClient({
               )}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <CardStatistica
+                <CardStatistica marime={marimeCifre}
                   label="Vanzari"
                   /* ⚠ Cifra si unitatea SEPARAT, ca pe panou: trecute impreuna,
                      „34.864,17 lei" nu incape pe un rand la 44 de pixeli si se
                      rupe, cu „lei" cazut pe randul urmator. */
-                  value={new Intl.NumberFormat("ro-RO").format(totalV.vanzari)}
+                  value={vVanzari}
                   unit="lei"
                   icon={Wallet}
                   empty={totalV.vanzari === 0}
                   {...deltaProps(crestere(totalV.vanzari, totalVant.vanzari), comparatie, formatPrice(totalVant.vanzari))}
                   explicatie={`Cat au platit clientii pentru comenzile din perioada aleasa, cu TVA si transport incluse. Nu intra comenzile anulate sau rambursate.${comparatie ? ` Se compara cu ${anterioaraScrisa}.` : ""}`}
                 />
-                <CardStatistica
+                <CardStatistica marime={marimeCifre}
                   label="Comenzi"
-                  value={new Intl.NumberFormat("ro-RO").format(totalV.comenzi)}
+                  value={vComenzi}
                   icon={ShoppingCart}
                   empty={totalV.comenzi === 0}
                   {...deltaProps(crestere(totalV.comenzi, totalVant.comenzi), comparatie, String(totalVant.comenzi))}
                   explicatie="Cate comenzi au intrat in perioada aleasa, fara cele anulate sau rambursate."
                 />
-                <CardStatistica
+                <CardStatistica marime={marimeCifre}
                   label="Valoare medie comanda"
-                  value={totalV.comenzi === 0 ? "-" : new Intl.NumberFormat("ro-RO", { maximumFractionDigits: 2 }).format(medie)}
+                  value={vMedie}
                   unit={totalV.comenzi === 0 ? undefined : "lei"}
                   icon={Receipt}
                   empty={totalV.comenzi === 0}
                   {...deltaProps(crestere(medie, medieAnt), comparatie, formatPrice(medieAnt))}
                   explicatie="Vanzarile perioadei impartite la numarul de comenzi. Se imparte suma la numar, nu se face media mediilor pe zile."
                 />
-                <CardStatistica
+                <CardStatistica marime={marimeCifre}
                   label="Rata de conversie"
-                  value={conversie === null ? "-" : `${conversie.toLocaleString("ro-RO", { maximumFractionDigits: 2 })}`}
+                  value={vConversie}
                   unit={conversie === null ? undefined : "%"}
                   icon={Target}
                   empty={conversie === null}
@@ -309,34 +339,34 @@ export function StatisticiClient({
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <CardStatistica
+                <CardStatistica marime={marimeCifre}
                   label="Vizitatori"
-                  value={new Intl.NumberFormat("ro-RO").format(trafic?.total.vizitatori ?? 0)}
+                  value={vVizitatori}
                   icon={Users}
                   empty={(trafic?.total.vizitatori ?? 0) === 0}
                   {...deltaProps(crestere(trafic?.total.vizitatori ?? 0, trafic?.total_anterior.vizitatori ?? 0), comparatie, String(trafic?.total_anterior.vizitatori ?? 0))}
                   explicatie={"Oameni distincti, numarati PE ZI si insumati: cine revine in alta zi se numara din nou. "
                     + "Asa masuram fara sa punem niciun cookie in browserul vizitatorului."}
                 />
-                <CardStatistica
+                <CardStatistica marime={marimeCifre}
                   label="Sesiuni"
-                  value={new Intl.NumberFormat("ro-RO").format(trafic?.total.sesiuni ?? 0)}
+                  value={vSesiuni}
                   icon={Eye}
                   empty={(trafic?.total.sesiuni ?? 0) === 0}
                   {...deltaProps(crestere(trafic?.total.sesiuni ?? 0, trafic?.total_anterior.sesiuni ?? 0), comparatie, String(trafic?.total_anterior.sesiuni ?? 0))}
                   explicatie="O vizita, cu tot ce face omul in ea. Se incheie dupa 30 de minute fara nicio miscare."
                 />
-                <CardStatistica
+                <CardStatistica marime={marimeCifre}
                   label="Pagini pe sesiune"
-                  value={pagini === null ? "-" : pagini.toLocaleString("ro-RO", { maximumFractionDigits: 1 })}
+                  value={vPagini}
                   icon={BarChart2}
                   empty={pagini === null}
                   {...deltaProps(pagini !== null && paginiAnt !== null ? crestere(pagini, paginiAnt) : null, comparatie, paginiAnt === null ? "-" : paginiAnt.toLocaleString("ro-RO", { maximumFractionDigits: 1 }))}
                   explicatie="Cate pagini deschide, in medie, o vizita. Cifra mica inseamna ca oamenii nu gasesc ce cauta."
                 />
-                <CardStatistica
+                <CardStatistica marime={marimeCifre}
                   label="Afisari de pagina"
-                  value={new Intl.NumberFormat("ro-RO").format(trafic?.total.afisari ?? 0)}
+                  value={vAfisari}
                   icon={Eye}
                   empty={(trafic?.total.afisari ?? 0) === 0}
                   {...deltaProps(crestere(trafic?.total.afisari ?? 0, trafic?.total_anterior.afisari ?? 0), comparatie, String(trafic?.total_anterior.afisari ?? 0))}
@@ -345,9 +375,9 @@ export function StatisticiClient({
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <CardStatistica
+                <CardStatistica marime={marimeCifre}
                   label="Clienti noi"
-                  value={new Intl.NumberFormat("ro-RO").format(secundare?.acum.clienti_noi ?? 0)}
+                  value={vNoi}
                   icon={UserPlus}
                   empty={(secundare?.acum.clienti_noi ?? 0) === 0}
                   {...deltaProps(crestere(secundare?.acum.clienti_noi ?? 0, secundare?.inainte.clienti_noi ?? 0), comparatie, String(secundare?.inainte.clienti_noi ?? 0))}
@@ -355,26 +385,26 @@ export function StatisticiClient({
                     + "Se judeca pe toata istoria, nu pe fereastra: altfel, cu cat alegeai o perioada mai scurta, "
                     + "cu atat ti-ar fi aratat mai multi „clienti noi”."}
                 />
-                <CardStatistica
+                <CardStatistica marime={marimeCifre}
                   label="Clienti care revin"
-                  value={new Intl.NumberFormat("ro-RO").format(secundare?.acum.clienti_recurenti ?? 0)}
+                  value={vRecurenti}
                   icon={UserCheck}
                   empty={(secundare?.acum.clienti_recurenti ?? 0) === 0}
                   {...deltaProps(crestere(secundare?.acum.clienti_recurenti ?? 0, secundare?.inainte.clienti_recurenti ?? 0), comparatie, String(secundare?.inainte.clienti_recurenti ?? 0))}
                   explicatie="Cumparatori care mai comandasera si inainte de perioada asta. Clientul e adresa de email: comenzile fara email nu se numara la niciuna dintre cele doua cifre."
                 />
-                <CardStatistica
+                <CardStatistica marime={marimeCifre}
                   label="Produse vandute"
-                  value={new Intl.NumberFormat("ro-RO").format(secundare?.acum.bucati ?? 0)}
+                  value={vBucati}
                   unit="buc."
                   icon={Package}
                   empty={(secundare?.acum.bucati ?? 0) === 0}
                   {...deltaProps(crestere(secundare?.acum.bucati ?? 0, secundare?.inainte.bucati ?? 0), comparatie, String(secundare?.inainte.bucati ?? 0))}
                   explicatie="Cate bucati au plecat, adunate din liniile comenzilor. O comanda cu trei perne se numara ca trei."
                 />
-                <CardStatistica
+                <CardStatistica marime={marimeCifre}
                   label="Rata de anulare"
-                  value={anulare === null ? "-" : anulare.toLocaleString("ro-RO", { maximumFractionDigits: 2 })}
+                  value={vAnulare}
                   unit={anulare === null ? undefined : "%"}
                   icon={XCircle}
                   empty={anulare === null}

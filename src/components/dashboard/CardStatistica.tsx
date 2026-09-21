@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { ExplicatieCard } from "@/components/dashboard/ExplicatieCard";
+import { marimeaCifrei } from "@/lib/dashboard/cifra-pe-un-rand";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════
@@ -40,6 +41,17 @@ export type CardStatisticaProps = {
   empty?: boolean;
   /** Cum se calculeaza cifra, pe intelesul comerciantului. Vezi `ExplicatieCard`. */
   explicatie?: string;
+  /**
+   * ⚠⚠ MARIMEA CIFREI, HOTARATA DE RANDUL INTREG.
+   *
+   * Lasata pe seama cardului, fiecare cutie si-o alegea dupa cifra ei: „6" la
+   * 44px langa „15.831,80 lei" la 22px, adica patru cutii care nu mai arata ca
+   * un set. Pagina o socoteste o data, cu `marimeaRandului`, din toate cifrele
+   * pe care le arata.
+   *
+   * Lipsa ei cade pe cifra proprie — ca sa nu se rupa un card folosit singur.
+   */
+  marime?: string;
 };
 
 export function CardStatistica({
@@ -54,6 +66,7 @@ export function CardStatistica({
   icon: Icon,
   empty = false,
   explicatie,
+  marime,
 }: CardStatisticaProps) {
   return (
     /*
@@ -104,9 +117,26 @@ export function CardStatistica({
 
       {/* bottom — value + footer */}
       <div className="flex flex-1 flex-col justify-between px-[18px] pt-3 pb-[14px] sm:pt-4 sm:pb-[18px]">
+        {/*
+          ⚠⚠ MARIMEA SE IA DIN LUNGIMEA CIFREI, si NU e una fixa.
+          Era `text-[44px]`, iar `15.831,80 lei` la 44px cere vreo 310px — un
+          card dintr-o grila de patru are sub 200px, deci suma trecea pe randul
+          urmator. Semnalat de el de doua ori: intai pe telefon la Clienti
+          (atunci s-a reparat grila), apoi pe desktop la Discounturi.
+          Vezi `src/lib/dashboard/cifra-pe-un-rand.ts`.
+
+          ⚠ Si `whitespace-nowrap`, fiindca o marime mai mica doar AMANA
+          ruperea: la o suma si mai lunga s-ar fi rupt din nou.
+        */}
         <div
           className={cn(
-            "text-[44px] leading-none font-medium tracking-[-0.03em] tabular-nums",
+            /*
+              ⚠ SI UNITATEA SE NUMARA. Ea se scrie langa cifra, in cardul asta
+              („34.864" + „lei"), deci tine latime. Masurata doar cifra, un card
+              cu unitate ar fi iesit din cutie taman cand e mai plin.
+            */
+            marime ?? marimeaCifrei(value, unit),
+            "whitespace-nowrap leading-none font-medium tracking-[-0.03em] tabular-nums",
             empty ? "text-muted-foreground/30" : "text-foreground"
           )}
         >

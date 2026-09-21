@@ -6810,6 +6810,14 @@ export type Database = {
           total_count: number
         }[]
       }
+      comanda_incasata: {
+        Args: {
+          p_payment_method: string
+          p_payment_status: string
+          p_status: string
+        }
+        Returns: boolean
+      }
       customers_aggregate: {
         Args: {
           bid: string
@@ -6821,7 +6829,9 @@ export type Database = {
         Returns: {
           address: string
           aov: number
+          cancelled_count: number
           city: string
+          collected_total: number
           county: string
           email: string
           first_order_at: string
@@ -6830,19 +6840,24 @@ export type Database = {
           last_status: string
           name: string
           order_count: number
-          paid_order_count: number
+          orders_value: number
           phone: string
+          refunded_count: number
           total_count: number
-          total_spent: number
+          valid_order_count: number
         }[]
       }
       customers_summary: {
         Args: { bid: string }
         Returns: {
-          average_order_value: number
+          buyers: number
+          collected_total: number
+          imported_contacts: number
+          orders_value: number
+          return_rate: number
           returning_customers: number
-          total_customers: number
-          total_revenue: number
+          total_contacts: number
+          value_per_customer: number
         }[]
       }
       decrement_stock: {

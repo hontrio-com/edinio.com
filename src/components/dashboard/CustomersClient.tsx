@@ -14,6 +14,7 @@ import { getCustomerOrders } from "@/lib/actions/customer.actions";
 import { CUSTOMERS_PAGE_SIZE } from "@/lib/orders/pagination";
 import { orderStatus } from "@/lib/orders/status";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
+import { CardStatistica } from "@/components/dashboard/CardStatistica";
 import { CustomerImportModal } from "./CustomerImportModal";
 
 type SortKey = "recent" | "spent" | "orders" | "name";
@@ -25,21 +26,6 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "name",   label: "Nume (A-Z)" },
 ];
 
-function StatCard({ icon: Icon, label, value, tint }: {
-  icon: typeof Users; label: string; value: string; tint: string;
-}) {
-  return (
-    <div className="bg-card ring-1 ring-foreground/10 rounded-xl p-4">
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className={cn("w-7 h-7 rounded-lg flex items-center justify-center", tint)}>
-          <Icon className="h-4 w-4" />
-        </span>
-        <span className="text-xs text-muted-foreground font-medium">{label}</span>
-      </div>
-      <p className="text-xl font-bold text-foreground tabular-nums">{value}</p>
-    </div>
-  );
-}
 
 export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, businessId }: {
   /** Pagina curenta de clienti (max CUSTOMERS_PAGE_SIZE), agregata in Postgres. */
@@ -104,27 +90,85 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
       {/* Header */}
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Clienti</h1>
+          <h1 className="text-xl font-bold text-foreground">Clienți</h1>
+          {/*
+            ⚠ DESCRIEREA NU MAI E DESPRE MECANICĂ. Scria „grupați automat după
+            numărul de telefon" — adevărat, dar e răspunsul la o întrebare pe care
+            comerciantul n-a pus-o încă. Cum îi identificăm stă acum lângă cardul
+            de contacte, unde chiar contează.
+          */}
           <p className="text-sm text-muted-foreground mt-0.5">
-            Clientii care au comandat, plus cei adusi prin import, grupati automat dupa numarul de telefon.
+            Gestionează cumpărătorii, istoricul comenzilor și segmentele magazinului.
           </p>
         </div>
         <button
           onClick={() => setImporting(true)}
           className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-xl ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors flex-shrink-0"
         >
-          <Upload className="h-4 w-4" /> <span className="hidden sm:inline">Importa clienti</span>
+          <Upload className="h-4 w-4" /> <span className="hidden sm:inline">Importă clienți</span>
         </button>
       </div>
 
       {importing && <CustomerImportModal onClose={() => setImporting(false)} />}
 
-      {/* Summary */}
+      {/*
+        ═══ CELE PATRU CIFRE ═══
+
+        ⚠ SUNT CHIAR `CardStatistica`, cel de la Statistici și de la Coșuri
+        abandonate — nu unul local care semăna cu el. Cardul scris în fișierul
+        paginii avea altă înălțime, altă mărime a cifrei și nicio explicație, iar
+        două carduri care seamănă diverg la prima retușare.
+
+        ⚠ „Venit total" și „Valoare medie comandă" AU IEȘIT de aici: amândouă există
+        deja la Statistici. În pagina Clienți sunt utile mărimile despre RELAȚIA cu
+        oamenii, nu cele despre vânzări.
+      */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        <StatCard icon={Users} label="Clienti" value={String(summary.totalCustomers)} tint="bg-primary/10 text-primary" />
-        <StatCard icon={Repeat} label="Clienti fideli" value={String(summary.returningCustomers)} tint="bg-info/10 text-info" />
-        <StatCard icon={ShoppingBag} label="Venit total" value={formatPrice(summary.totalRevenue)} tint="bg-success/10 text-success" />
-        <StatCard icon={TrendingUp} label="Valoare medie comanda" value={formatPrice(summary.averageOrderValue)} tint="bg-warning/10 text-warning" />
+        <CardStatistica
+          icon={Users}
+          label="Clienți"
+          value={String(summary.totalContacts)}
+          explicatie={
+            `${summary.buyers} ${summary.buyers === 1 ? "cumpărător" : "cumpărători"} `
+            + `și ${summary.importedContacts} `
+            + `${summary.importedContacts === 1 ? "contact importat" : "contacte importate"}. `
+            + "Un cumpărător are cel puțin o comandă; un contact importat n-a comandat încă. "
+            + "Îi identificăm după numărul de telefon, iar când lipsește, după email."
+          }
+        />
+        <CardStatistica
+          icon={Repeat}
+          label="Clienți recurenți"
+          value={String(summary.returningCustomers)}
+          explicatie={
+            "Cumpărători cu mai mult de o comandă validă (necontată și nerambursată)."
+          }
+        />
+        <CardStatistica
+          icon={TrendingUp}
+          label="Rată de revenire"
+          value={String(summary.returnRate)}
+          unit="%"
+          explicatie={
+            /*
+              ⚠ NUMITORUL SE SPUNE. O rată singură nu se poate verifica; cu „86 din
+              358" se poate. Și se vede imediat când stă pe prea puțini oameni ca să
+              însemne ceva.
+            */
+            `${summary.returningCustomers} din ${summary.buyers} `
+            + `${summary.buyers === 1 ? "cumpărător a comandat" : "cumpărători au comandat"} din nou. `
+            + "Contactele importate nu intră la numitor: n-aveau cum să revină."
+          }
+        />
+        <CardStatistica
+          icon={ShoppingBag}
+          label="Valoare medie per client"
+          value={formatPrice(summary.valuePerCustomer)}
+          explicatie={
+            "Valoarea comenzilor valide împărțită la numărul de cumpărători. "
+            + "Media pe COMANDĂ stă la Statistici; aici interesează cât aduce un om."
+          }
+        />
       </div>
 
       {/* Toolbar */}
@@ -181,9 +225,25 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
-                  {c.paidOrderCount > 1 && (
+                  {/*
+                    ⚠ „RECURENT", NU „FIDEL". Badge-ul apare la a doua comandă, iar
+                    două comenzi nu înseamnă fidelitate. „Recurent" spune exact ce
+                    măsoară. „VIP" rămâne pentru când va avea reguli proprii (minim de
+                    comenzi, minim cheltuit, comandă recentă).
+                  */}
+                  {c.validOrderCount > 1 && (
                     <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold text-info bg-info/10 border border-info/20 rounded-full px-1.5 py-0.5">
-                      <Repeat className="h-2.5 w-2.5" /> Fidel
+                      <Repeat className="h-2.5 w-2.5" /> Recurent
+                    </span>
+                  )}
+                  {/*
+                    Contactele aduse dintr-un fișier se văd ca atare: altfel „0 lei"
+                    lângă un nume arată a client pierdut, când de fapt n-a fost niciodată
+                    cumpărător.
+                  */}
+                  {c.orderCount === 0 && (
+                    <span className="hidden sm:inline-flex items-center text-[10px] font-semibold text-muted-foreground bg-muted border border-border rounded-full px-1.5 py-0.5">
+                      Importat
                     </span>
                   )}
                 </div>
@@ -195,16 +255,34 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
               <div className="hidden sm:block text-right flex-shrink-0">
                 {c.lastOrderAt ? (
                   <>
-                    <p className="text-xs text-muted-foreground">{c.orderCount} {c.orderCount === 1 ? "comanda" : "comenzi"}</p>
+                    {/*
+                      ⚠ NUMĂRUL ȘI SUMA VORBEAU DESPRE MULȚIMI DIFERITE. Scria
+                      „5 comenzi · 1.240 lei cheltuit", dar cele cinci puteau cuprinde
+                      două anulate, pe când suma le scotea. Acum se arată câte sunt
+                      valide, iar totalul doar când diferă — altfel ar fi zgomot pe
+                      fiecare rând.
+                    */}
+                    <p className="text-xs text-muted-foreground">
+                      {c.validOrderCount} {c.validOrderCount === 1 ? "comandă validă" : "comenzi valide"}
+                      {c.orderCount !== c.validOrderCount && (
+                        <span className="text-muted-foreground/70"> din {c.orderCount}</span>
+                      )}
+                    </p>
                     <p className="text-[11px] text-muted-foreground/70">{formatDate(c.lastOrderAt)}</p>
                   </>
                 ) : (
-                  <p className="text-xs text-muted-foreground/70">Fara comenzi</p>
+                  <p className="text-xs text-muted-foreground/70">Fără comenzi</p>
                 )}
               </div>
               <div className="text-right flex-shrink-0 w-24">
-                <p className="text-sm font-bold text-foreground tabular-nums">{formatPrice(c.totalSpent)}</p>
-                <p className="text-[11px] text-muted-foreground">cheltuit</p>
+                {/*
+                  ⚠ „VALOAREA COMENZILOR", nu „cheltuit". Suma cuprinde și comenzi
+                  neachitate încă (ramburs pe drum, plată în așteptare), deci „cheltuit"
+                  promitea bani intrați. Banii chiar intrați se văd în fișa clientului,
+                  sub „Total încasat".
+                */}
+                <p className="text-sm font-bold text-foreground tabular-nums">{formatPrice(c.ordersValue)}</p>
+                <p className="text-[11px] text-muted-foreground">valoare comenzi</p>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             </button>
@@ -323,9 +401,14 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold text-foreground truncate">{customer.name}</h2>
-              {customer.paidOrderCount > 1 && (
+              {customer.validOrderCount > 1 && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-info bg-info/10 border border-info/20 rounded-full px-1.5 py-0.5 flex-shrink-0">
-                  <Repeat className="h-2.5 w-2.5" /> Fidel
+                  <Repeat className="h-2.5 w-2.5" /> Recurent
+                </span>
+              )}
+              {customer.orderCount === 0 && (
+                <span className="inline-flex items-center text-[10px] font-semibold text-muted-foreground bg-muted border border-border rounded-full px-1.5 py-0.5 flex-shrink-0">
+                  Importat
                 </span>
               )}
             </div>
@@ -354,21 +437,55 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
 
         {/* Body */}
         <div className="px-5 py-4 overflow-y-auto flex-1 space-y-5">
-          {/* Stats */}
+          {/*
+            ═══ CIFRELE, DESFĂCUTE ═══
+
+            ⚠ ERAU TREI ȘI SPUNEAU MAI PUȚIN DECÂT PĂREAU. „Comenzi" număra și
+            anulările, „Total cheltuit" le scotea, iar niciuna nu spunea câți bani au
+            intrat cu adevărat. Acum:
+
+              Comenzi          valide, și totalul dedesubt când diferă
+              Valoare comenzi   ce a cerut omul de la magazin (fără anulate/rambursate)
+              Total încasat     ce a ajuns chiar la comerciant
+
+            ⚠ Cele două sume NU sunt același lucru și n-au voie să fie confundate: la
+            ramburs, o comandă expediată e valoare, dar nu e încă încasare. Vezi
+            `lib/customers/bani.ts`.
+          */}
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-muted/40 rounded-xl p-3 text-center">
-              <p className="text-lg font-bold text-foreground tabular-nums">{customer.orderCount}</p>
-              <p className="text-[11px] text-muted-foreground">Comenzi</p>
+              <p className="text-lg font-bold text-foreground tabular-nums">{customer.validOrderCount}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {customer.orderCount === customer.validOrderCount
+                  ? "Comenzi"
+                  : `Comenzi valide, din ${customer.orderCount}`}
+              </p>
             </div>
             <div className="bg-muted/40 rounded-xl p-3 text-center">
-              <p className="text-lg font-bold text-foreground tabular-nums">{formatPrice(customer.totalSpent)}</p>
-              <p className="text-[11px] text-muted-foreground">Total cheltuit</p>
+              <p className="text-lg font-bold text-foreground tabular-nums">{formatPrice(customer.ordersValue)}</p>
+              <p className="text-[11px] text-muted-foreground">Valoare comenzi</p>
             </div>
             <div className="bg-muted/40 rounded-xl p-3 text-center">
-              <p className="text-lg font-bold text-foreground tabular-nums">{formatPrice(customer.aov)}</p>
-              <p className="text-[11px] text-muted-foreground">Valoare medie</p>
+              <p className="text-lg font-bold text-foreground tabular-nums">{formatPrice(customer.collectedTotal)}</p>
+              <p className="text-[11px] text-muted-foreground">Total încasat</p>
             </div>
           </div>
+
+          {/*
+            Anulările și rambursările se spun pe nume, și numai când există: pe un
+            client curat, un rând cu „0 anulate" ar fi zgomot.
+          */}
+          {(customer.cancelledCount > 0 || customer.refundedCount > 0) && (
+            <p className="text-xs text-muted-foreground">
+              {customer.cancelledCount > 0 && (
+                <>{customer.cancelledCount} {customer.cancelledCount === 1 ? "comandă anulată" : "comenzi anulate"}</>
+              )}
+              {customer.cancelledCount > 0 && customer.refundedCount > 0 && " · "}
+              {customer.refundedCount > 0 && (
+                <>{customer.refundedCount} {customer.refundedCount === 1 ? "rambursată" : "rambursate"}</>
+              )}
+            </p>
+          )}
 
           {/* Datele de comanda exista doar daca a comandat. Un client adus dintr-un
               import apare pana atunci cu contactul si adresa lui, si atat. */}

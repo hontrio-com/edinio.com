@@ -111,8 +111,11 @@ async function ListaClienti({
     county: r.county ?? null,
     address: r.address ?? null,
     orderCount: Number(r.order_count),
-    paidOrderCount: Number(r.paid_order_count),
-    totalSpent: Number(r.total_spent),
+    validOrderCount: Number(r.valid_order_count),
+    cancelledCount: Number(r.cancelled_count),
+    refundedCount: Number(r.refunded_count),
+    ordersValue: Number(r.orders_value),
+    collectedTotal: Number(r.collected_total),
     aov: Number(r.aov),
     firstOrderAt: r.first_order_at,
     lastOrderAt: r.last_order_at,
@@ -122,10 +125,14 @@ async function ListaClienti({
 
   const s = summaryRows?.[0];
   const summary: CustomersSummary = {
-    totalCustomers: Number(s?.total_customers ?? 0),
+    totalContacts: Number(s?.total_contacts ?? 0),
+    buyers: Number(s?.buyers ?? 0),
+    importedContacts: Number(s?.imported_contacts ?? 0),
     returningCustomers: Number(s?.returning_customers ?? 0),
-    totalRevenue: Number(s?.total_revenue ?? 0),
-    averageOrderValue: Number(s?.average_order_value ?? 0),
+    returnRate: Number(s?.return_rate ?? 0),
+    ordersValue: Number(s?.orders_value ?? 0),
+    collectedTotal: Number(s?.collected_total ?? 0),
+    valuePerCustomer: Number(s?.value_per_customer ?? 0),
   };
 
   return (

@@ -44,13 +44,34 @@ export interface Customer {
   city: string | null;
   county: string | null;
   address: string | null;
-  /** All orders, incl. cancelled/refunded. */
+  /** Toate comenzile, inclusiv anulate si rambursate. */
   orderCount: number;
-  /** Orders that count as revenue (excl. cancelled/refunded). */
-  paidOrderCount: number;
-  /** Sum of totals over revenue orders. */
-  totalSpent: number;
-  /** totalSpent / paidOrderCount (0 if none). */
+  /**
+   * Comenzile care n-au cazut (nici anulate, nici rambursate).
+   *
+   * ⚠ SE CHEMA `paidOrderCount`, SI NUMELE MINTEA. Regula scotea doar
+   * anulatele si rambursatele, deci inauntru ramaneau comenzile in asteptare,
+   * neplatite, in procesare si refuzate-dar-neanulate. Cine citea „paid"
+   * intelegea „bani intrati". Numarul e acelasi; numele spune acum ce masoara.
+   */
+  validOrderCount: number;
+  /** Cate din ele au fost anulate, si cate rambursate. Vezi `desfaComenzile`. */
+  cancelledCount: number;
+  refundedCount: number;
+  /**
+   * Valoarea comenzilor valide. Marimea COMERCIALA: cat a cerut omul de la magazin.
+   *
+   * ⚠ Se chema `totalSpent` („Total cheltuit"), care suna a bani intrati.
+   */
+  ordersValue: number;
+  /**
+   * Banii care au ajuns chiar la comerciant. Marimea FINANCIARA.
+   *
+   * ⚠ NU e `payment_status = 'paid'`: la ramburs, curierul incaseaza la usa si
+   * nimeni nu intoarce campul dupa livrare. Vezi `lib/customers/bani.ts`.
+   */
+  collectedTotal: number;
+  /** `ordersValue / validOrderCount` (0 daca nu e niciuna). */
   aov: number;
   /** `null` for an imported customer who has not ordered yet. */
   firstOrderAt: string | null;
@@ -66,10 +87,40 @@ export function hasOrders(c: Customer): boolean {
 }
 
 export interface CustomersSummary {
-  totalCustomers: number;
+  /** Cumparatori + contacte importate. Cifra din cardul „Clienti". */
+  totalContacts: number;
+  /** Cine are macar o comanda. */
+  buyers: number;
+  /**
+   * Cine n-a comandat niciodata: adus dintr-un fisier sau scris de mana.
+   *
+   * ⚠ DE CE SE DESPART. Puse la un loc, „2.000 de clienti" putea insemna 250 de
+   * cumparatori si 1.750 de contacte dintr-un import. Cardul ramane pe TOTAL
+   * (hotararea proprietarului), dar acum se poate spune din ce e facut.
+   */
+  importedContacts: number;
+  /** Cumparatori cu mai mult de o comanda valida. */
   returningCustomers: number;
-  totalRevenue: number;
-  averageOrderValue: number;
+  /**
+   * Cati la suta dintre CUMPARATORI au comandat din nou.
+   *
+   * ⚠ Numitorul e numarul de cumparatori, nu totalul contactelor: un contact
+   * importat n-avea cum sa „revina", iar pus la numitor ar trage rata in jos cu
+   * cat importa comerciantul mai mult. Un magazin ar parea ca merge mai prost
+   * fiindca si-a urcat lista de contacte.
+   */
+  returnRate: number;
+  /** Valoarea comenzilor valide, pe tot magazinul. */
+  ordersValue: number;
+  /** Banii chiar intrati, pe tot magazinul. */
+  collectedTotal: number;
+  /**
+   * `ordersValue / buyers`.
+   *
+   * ⚠ Per CLIENT, nu per comanda: media pe comenzi sta deja la Statistici, iar
+   * o pagina care repeta o cifra din alta pagina nu adauga nimic.
+   */
+  valuePerCustomer: number;
 }
 
 /**

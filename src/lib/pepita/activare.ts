@@ -33,6 +33,12 @@ export interface AdreseDeTrimis {
 
 export function sablonMesajPepita(a: AdreseDeTrimis, piata: PiataPepita = PIATA_IMPLICITA): string {
   const p = PIETE[piata];
+  /*
+    ⚠ UN MESAJ PE FIECARE TARA, nu unul cu toate. Ei au cerut „fluxuri
+    specifice fiecarei tari", iar activarea se face de oameni, pe conturi de
+    tara: un mesaj care insira sapte perechi de adrese ar fi pus pe cineva sa
+    aleaga, si cineva ar fi ales gresit.
+  */
   return [
     "Bună ziua,",
     "",

@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { ORDINEA_PIETELOR, PIETE, type PiataPepita } from "./types";
@@ -279,4 +280,44 @@ test("un curs nevalid nu se aplica, in loc sa strice pretul", () => {
     assert.equal(p.pret, 500, `cursul ${rau} n-ar fi trebuit aplicat`);
     assert.ok(Number.isFinite(p.pret));
   }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SALVAREA UNEI PIETE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠⚠ SALVAREA SCRIE HARTA INTREAGA, nu doar piata atinsa", () => {
+  /*
+    ⚠ MASURAT PE BAZA DEMO, nu presupus: `jsonb_merge_config` imbina la nivelul
+    de SUS. Un petic `{piete: {de: ...}}` a INLOCUIT toata harta - `ro` si `hu`
+    au disparut, fara nicio eroare.
+
+    Pe productie asta ar fi insemnat ca pornirea unei piete noi omoara feedurile
+    celorlalte: ele ar fi dat 404 la Pepita, iar comerciantul n-ar fi vazut
+    nimic la el. Exact felul de tacere care ne-a costat in septembrie.
+  */
+  const sursa = readFileSync(new URL("../actions/pepita.actions.ts", import.meta.url), "utf8");
+  const corp = sursa.slice(
+    sursa.indexOf("export async function salveazaPiataPepita"),
+    sursa.indexOf("export interface SetariPepita"),
+  );
+  assert.ok(corp.length > 0, "nu s-a gasit actiunea de salvare a pietei");
+  assert.match(corp, /\{ \.\.\.config\.piete, \[piata\]:/, "peticul nu poarta harta intreaga");
+  assert.match(corp, /scrieConfigul\(businessId, \{ piete \}\)/);
+});
+
+test("⚠ PIATA CU ACEEASI MONEDA NU PASTREAZA NICIUN CURS", () => {
+  /*
+    ⚠ Salvat, ar fi stat acolo nefolosit pana in ziua in care magazinul isi
+    schimba moneda - si atunci ar fi inceput sa inmulteasca preturile cu un
+    numar scris cu luni in urma, pentru alta pereche de monede.
+  */
+  const sursa = readFileSync(new URL("../actions/pepita.actions.ts", import.meta.url), "utf8");
+  assert.match(sursa, /aceeasiMoneda\(piata, moneda\) \? null : curs/);
+});
+
+test("⚠ CURSUL SE VERIFICA PE SERVER, nu doar in formular", () => {
+  /* ⚠ Un `0` sau un `-3` ajuns in baza ar fi trecut drept „curs scris". */
+  const sursa = readFileSync(new URL("../actions/pepita.actions.ts", import.meta.url), "utf8");
+  assert.match(sursa, /Number\.isFinite\(curs\) && curs > 0/);
 });

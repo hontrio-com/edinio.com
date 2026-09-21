@@ -17,11 +17,12 @@ import {
   includeToateProdusePepita, listaProdusePepita, marcheazaTrimis, reproceseazaComandaPepita,
   rotestePepita,
   salveazaSetariPepita, setareProdusePepita, verificaProdusePepita,
-  type AdresePepita, type ComandaProblema, type RandProdusPepita, type RezumatProduse,
+  type AdresePepita, type AdresePiata, type ComandaProblema, type RandProdusPepita, type RezumatProduse,
   type SetariPepita, type StarePepita,
 } from "@/lib/actions/pepita.actions";
 import { CITIRI_PANOU, TIPURI_GARANTIE, type TipGarantie } from "@/lib/pepita/types";
 import { sablonMesajPepita } from "@/lib/pepita/activare";
+import { PietelePepita } from "./pepita/PietelePepita";
 
 /**
  * Panoul integrarii Pepita.
@@ -95,6 +96,26 @@ export function PepitaClient({ businessId, stare }: { businessId: string; stare:
             roteste={(fel) => cu(`rotire-${fel}`, () => rotestePepita(businessId, fel))}
             marcheaza={(v) => cu("trimis", () => marcheazaTrimis(businessId, v))}
           />
+          {/*
+            ⚠ TARILE STAU INAINTEA SETARILOR SI A PRODUSELOR, fiindca ele
+            hotarasc CE feeduri exista. Puse la urma, omul ar fi ales strategia
+            de pret si produsele fara sa stie catre cate tari pleaca.
+          */}
+          <Panel title="Țările către care trimiți">
+            <p className="text-xs text-muted-foreground">
+              Pepita cere un feed separat pentru fiecare țară. Prețurile tale sunt în{" "}
+              <span className="font-medium text-foreground">{stare.monedaMagazinului}</span>; pentru
+              o țară cu altă monedă scrii tu cursul, iar fără el feedul acelei țări nu pleacă deloc.
+            </p>
+            <PietelePepita
+              businessId={businessId}
+              piete={config.piete}
+              monedaMagazinului={stare.monedaMagazinului}
+              piataDeBaza={config.piata}
+              strategie={config.strategie_pret}
+            />
+          </Panel>
+
           <Setari businessId={businessId} config={config} />
           <Produse businessId={businessId} modImplicit={config.mod_includere} />
           <Catalog businessId={businessId} />
@@ -228,6 +249,7 @@ function Adrese({ businessId, trimisLa, lucrez, roteste, marcheaza }: {
   marcheaza: (v: boolean) => void;
 }) {
   const [adrese, setAdrese] = useState<AdresePepita | null>(null);
+  const [pietele, setPietele] = useState<AdresePiata[]>([]);
   const [incarc, setIncarc] = useState(false);
 
   const arata = async () => {
@@ -235,7 +257,7 @@ function Adrese({ businessId, trimisLa, lucrez, roteste, marcheaza }: {
     try {
       const r = await dezvaluieAdresele(businessId);
       if ("error" in r) toast.error(r.error);
-      else setAdrese(r.adrese);
+      else { setAdrese(r.adrese); setPietele(r.piete); }
     } catch {
       toast.error("Cererea nu a ajuns. Încearcă din nou.");
     } finally {
@@ -263,9 +285,56 @@ function Adrese({ businessId, trimisLa, lucrez, roteste, marcheaza }: {
         </Button>
       ) : (
         <div className="space-y-3">
-          <Rand eticheta="Feed produse" valoare={adrese.feedProduse} onCopy={copiaza} />
-          <Rand eticheta="Feed stoc" valoare={adrese.feedStoc} onCopy={copiaza} />
-          <Rand eticheta="Adresă comenzi (API)" valoare={adrese.comenzi} onCopy={copiaza} />
+          {/*
+            ⚠ O PERECHE DE ADRESE PE FIECARE TARA, cu mesajul ei. Pepita cere
+            fluxuri separate pe tara, iar activarea se face de oameni, pe conturi
+            de tara: un singur mesaj care insira sapte perechi ar fi pus pe cineva
+            sa aleaga, si cineva ar fi ales gresit.
+          */}
+          {pietele.map((pi) => (
+            <div key={pi.piata} className="rounded-xl border border-border p-3">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-foreground">{pi.eticheta}</span>
+                <span className="text-xs text-muted-foreground">{pi.adresaLor} · {pi.moneda}</span>
+                {pi.curs != null && (
+                  <span className="text-xs text-muted-foreground">curs {pi.curs}</span>
+                )}
+                <Button
+                  variant="ghost" size="sm" className="ml-auto"
+                  onClick={() => copiaza(sablonMesajPepita(
+                    { feedProduse: pi.feedProduse, feedStoc: pi.feedStoc, comenzi: adrese.comenzi },
+                    pi.piata,
+                  ))}
+                >
+                  <Mail className="h-4 w-4" /> Mesajul pentru {pi.eticheta}
+                </Button>
+              </div>
+              {pi.opritPentru ? (
+                /*
+                  ⚠ ADRESELE UNEI PIETE OPRITE NU SE ARATA DELOC. Aratate, omul
+                  le-ar fi trimis la Pepita, iar ei ar fi primit 404 de la prima
+                  citire - adica o integrare nascuta moarta, si o discutie cu
+                  suportul lor despre o adresa care „nu merge".
+                */
+                <p className="text-[11px] text-destructive">{pi.opritPentru}</p>
+              ) : (
+                <div className="space-y-2">
+                  <Rand eticheta="Feed produse" valoare={pi.feedProduse} onCopy={copiaza} />
+                  <Rand eticheta="Feed stoc" valoare={pi.feedStoc} onCopy={copiaza} />
+                </div>
+              )}
+            </div>
+          ))}
+
+          {pietele.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Nu ai nicio țară pornită. Alege cel puțin una mai sus, la „Țările către care trimiți”.
+            </p>
+          )}
+
+          {/* ⚠ Adresa de comenzi e UNA SINGURA: comenzile din toate tarile vin pe ea,
+              si fiecare isi poarta moneda. Vezi `comanda-forma.ts`. */}
+          <Rand eticheta="Adresă comenzi (API), pentru toate țările" valoare={adrese.comenzi} onCopy={copiaza} />
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <Button
@@ -273,6 +342,7 @@ function Adrese({ businessId, trimisLa, lucrez, roteste, marcheaza }: {
               onClick={() => {
                 if (!confirm("Cheia veche a feedurilor se oprește imediat. Va trebui să trimiți noile adrese la Pepita, altfel feedul lor se oprește. Continui?")) return;
                 setAdrese(null);
+                setPietele([]);
                 roteste("feed");
               }}
             >
@@ -284,17 +354,12 @@ function Adrese({ businessId, trimisLa, lucrez, roteste, marcheaza }: {
               onClick={() => {
                 if (!confirm("Adresa veche de comenzi se oprește imediat. Până când Pepita primește adresa nouă, comenzile lor vor fi refuzate. Continui?")) return;
                 setAdrese(null);
+                setPietele([]);
                 roteste("comenzi");
               }}
             >
               {lucrez === "rotire-comenzi" ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Schimbă cheia de comenzi
-            </Button>
-            <Button
-              variant="ghost" size="sm"
-              onClick={() => copiaza(sablonMesajPepita(adrese))}
-            >
-              <Mail className="h-4 w-4" /> Copiază mesajul pentru Pepita
             </Button>
           </div>
         </div>

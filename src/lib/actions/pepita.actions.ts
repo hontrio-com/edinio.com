@@ -27,7 +27,8 @@ import { articolelePentruProdus, type ProblemaPepita, type ProdusPepita } from "
 import { adresaComenzi, adresaFeedProduse, adresaFeedStoc, cheieNoua, amprentaCheii, revocaToate, stingeCheileVechi } from "@/lib/pepita/chei";
 import { citesteConfig, configFaraChei, peticDePornire } from "@/lib/pepita/config";
 import { COLOANE_PRODUS, pregateste } from "@/lib/pepita/feed";
-import type { PepitaConfig } from "@/lib/pepita/types";
+import { ORDINEA_PIETELOR, PIETE, type PepitaConfig, type PiataPepita } from "@/lib/pepita/types";
+import { aceeasiMoneda, opreste } from "@/lib/pepita/piete";
 import { CITIRI_PANOU, TIPURI_GARANTIE, type TipGarantie } from "@/lib/pepita/types";
 
 const CALE = "/dashboard/features/pepita";
@@ -58,6 +59,20 @@ async function poarta(businessId: string): Promise<{ supabase: ServerClient; biz
 /* ═══════════════════════════════════════════════════════════════════════════
    CONFIGURARE
    ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Moneda in care sunt preturile magazinului.
+ *
+ * ⚠ NU SE PRESUPUNE „RON". Platforma are si magazine pe alta moneda, iar de ea
+ * atarna cine are nevoie de curs si cine nu: pentru un magazin in euro, piata
+ * Germania nu cere niciunul, iar Romania da.
+ */
+async function monedaMagazinului(businessId: string): Promise<string> {
+  const { data } = await createAdminClient()
+    .from("store_settings").select("currency").eq("business_id", businessId).maybeSingle();
+  const m = (data as { currency?: string | null } | null)?.currency;
+  return String(m ?? "RON").trim() || "RON";
+}
 
 async function citesteConfigul(businessId: string): Promise<PepitaConfig> {
   const { data, error } = await createAdminClient()
@@ -96,6 +111,57 @@ async function scrieConfigul(businessId: string, petic: Record<string, unknown>)
     p_patch: petic as never,
   });
   if (error) throw error;
+}
+
+/**
+ * Porneste sau opreste o piata, si ii scrie cursul.
+ *
+ * ⚠ SE SCRIE INTREAGA HARTA `piete`, nu doar piata atinsa. `jsonb_merge_config`
+ * imbina la nivelul de sus: un petic `{piete: {hu: ...}}` ar fi INLOCUIT toata
+ * harta cu una de un singur rand, si celelalte piete ar fi disparut in tacere -
+ * adica feedurile lor ar fi murit la Pepita, fara nicio eroare la noi.
+ *
+ * ⚠ CURSUL SE VERIFICA AICI, NU DOAR PE ECRAN. Ecranul e o inlesnire; un
+ * `0` sau un `-3` ajuns in baza ar fi trecut drept „curs scris" si feedul ar fi
+ * plecat cu preturi de nimic. `null` inseamna „sters".
+ */
+export async function salveazaPiataPepita(
+  businessId: string,
+  piata: PiataPepita,
+  setari: { activa: boolean; curs: number | null },
+): Promise<{ ok: true } | { error: string }> {
+  const g = await poarta(businessId);
+  if ("error" in g) return { error: g.error };
+  if (!(piata in PIETE)) return { error: "Piață necunoscută." };
+
+  try {
+    const config = await citesteConfigul(businessId);
+    const moneda = await monedaMagazinului(businessId);
+
+    const curs = setari.curs == null ? null : Number(setari.curs);
+    if (curs != null && !(Number.isFinite(curs) && curs > 0)) {
+      return { error: "Cursul trebuie să fie un număr mai mare ca zero." };
+    }
+
+    /*
+     * ⚠ PIATA CU ACEEASI MONEDA NU PASTREAZA NICIUN CURS. Salvat, ar fi stat
+     * acolo nefolosit pana in ziua in care magazinul isi schimba moneda - si
+     * atunci ar fi inceput sa inmulteasca preturile cu un numar scris cu luni
+     * in urma, pentru alta pereche de monede.
+     */
+    const cursDePastrat = aceeasiMoneda(piata, moneda) ? null : curs;
+
+    const piete = { ...config.piete, [piata]: { activa: setari.activa, curs: cursDePastrat } };
+    await scrieConfigul(businessId, { piete });
+  } catch (e) {
+    await logError({
+      action: "pepita/piata", message: e instanceof Error ? e.message : String(e),
+      details: { piata }, businessId, severity: "error",
+    });
+    return { error: "Piața nu s-a putut salva." };
+  }
+  revalidatePath(CALE);
+  return { ok: true as const };
 }
 
 export interface SetariPepita {
@@ -307,13 +373,29 @@ export interface AdresePepita {
   comenzi: string;
 }
 
+/** Adresele unei piete pornite, plus cum sta cu cursul. */
+export interface AdresePiata {
+  piata: PiataPepita;
+  eticheta: string;
+  moneda: string;
+  adresaLor: string;
+  feedProduse: string;
+  feedStoc: string;
+  /** Cursul scris de comerciant, sau `null` cand piata are moneda magazinului. */
+  curs: number | null;
+  /** De ce nu trimite piata asta. `null` inseamna ca trimite. */
+  opritPentru: string | null;
+}
+
 /**
  * Adresele complete, cu chei. Se cer explicit, la apasare.
  *
  * ⚠ SINGURUL LOC DIN APLICATIE DE UNDE IES CHEILE. Daca vreodata mai apare unul,
  * regula „cheia nu coboara odata cu pagina” se pierde fara ca nimic sa dea eroare.
  */
-export async function dezvaluieAdresele(businessId: string): Promise<{ adrese: AdresePepita } | { error: string }> {
+export async function dezvaluieAdresele(
+  businessId: string,
+): Promise<{ adrese: AdresePepita; piete: AdresePiata[]; monedaMagazinului: string } | { error: string }> {
   const g = await poarta(businessId);
   if ("error" in g) return { error: g.error };
   try {
@@ -321,12 +403,38 @@ export async function dezvaluieAdresele(businessId: string): Promise<{ adrese: A
     if (!config.feed_token || !config.order_key) {
       return { error: "Integrarea nu are încă adrese. Pornește-o mai întâi." };
     }
+    /*
+     * ⚠ ADRESA PIETEI DE BAZA SE SCRIE FARA SEGMENT DE TARA, fiindca aia e
+     * adresa pe care comerciantul a trimis-o deja la Pepita. Scrisa cu segment,
+     * el ar fi trimis-o a doua oara pe cea noua, iar cea veche ar fi ramas si ea
+     * vie - doua adrese pentru aceeasi tara, citite amandoua.
+     */
+    const moneda = await monedaMagazinului(businessId);
+    const piete: AdresePiata[] = ORDINEA_PIETELOR
+      .filter((p) => config.piete[p]?.activa)
+      .map((p) => {
+        const deBaza = p === config.piata;
+        const stop = opreste(p, config.piete[p], moneda);
+        return {
+          piata: p,
+          eticheta: PIETE[p].eticheta,
+          moneda: PIETE[p].moneda,
+          adresaLor: PIETE[p].adresa,
+          feedProduse: adresaFeedProduse(config.feed_token!, deBaza ? null : p),
+          feedStoc: adresaFeedStoc(config.feed_token!, deBaza ? null : p),
+          curs: aceeasiMoneda(p, moneda) ? null : (config.piete[p]?.curs ?? null),
+          opritPentru: stop?.text ?? null,
+        };
+      });
+
     return {
       adrese: {
         feedProduse: adresaFeedProduse(config.feed_token),
         feedStoc: adresaFeedStoc(config.feed_token),
         comenzi: adresaComenzi(config.order_key),
       },
+      piete,
+      monedaMagazinului: moneda,
     };
   } catch (e) {
     await logError({
@@ -356,6 +464,14 @@ export async function marcheazaTrimis(businessId: string, trimis: boolean) {
 
 export interface StarePepita {
   config: ReturnType<typeof configFaraChei>;
+  /**
+   * Moneda in care sunt preturile magazinului.
+   *
+   * ⚠ Ecranul are nevoie de ea ca sa stie CINE cere curs: pentru un magazin in
+   * euro, Germania nu cere niciunul, iar Romania da. Presupusa „RON" pe ecran,
+   * ar fi cerut curs acolo unde nu trebuie si l-ar fi ascuns unde trebuie.
+   */
+  monedaMagazinului: string;
   /**
    * Cand a citit Pepita ultima oara un feed. `null` = niciodata SAU nu s-a putut citi:
    * cele doua se deosebesc dupa `citiriPicate`.
@@ -463,6 +579,7 @@ export async function getStarePepita(businessId: string): Promise<StarePepita | 
 
     return {
       config: configFaraChei(config),
+      monedaMagazinului: await monedaMagazinului(businessId),
       ultimaCitire: (chei.data?.[0] as { ultima_folosire: string | null } | undefined)?.ultima_folosire ?? null,
       comenziTotal: total.error ? null : total.count ?? 0,
       comenziCarantina: carantina.error ? null : carantina.count ?? 0,

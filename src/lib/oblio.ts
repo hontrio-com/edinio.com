@@ -264,8 +264,44 @@ export async function getOblioToken(clientId: string, clientSecret: string): Pro
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { statusMessage?: string };
-    throw new Error(err.statusMessage ?? `Autentificare Oblio esuata (HTTP ${res.status})`);
+    /*
+     * ⚠⚠ RASPUNSUL DE EROARE AL AUTENTIFICARII ARE ALTA FORMA decat restul API-ului.
+     *
+     * Peste tot la Oblio erorile vin ca `{ statusMessage }`. La `/api/authorize/token`
+     * NU: masurat pe capatul lor adevarat, la 21.09.2026, cu date false —
+     * raspunsul e `400` cu `{"error":"invalid_client","error_description":"The
+     * client credentials are invalid"}`. Cautand doar `statusMessage`, cadeam pe
+     * ramura de rezerva si ii spuneam comerciantului „HTTP 400" — adica un numar,
+     * in timp ce raspunsul lor continea chiar explicatia.
+     *
+     * S-a si intamplat: un magazin a incercat sa conecteze Oblio si a primit
+     * „Autentificarea a esuat HTTP 400", fara sa aiba cum sa afle ca pusese in
+     * campul de secret ALTCEVA decat tokenul din contul lui.
+     *
+     * ⚠ Masurat tot atunci: forma cererii NU e cauza. `application/json` si
+     * `application/x-www-form-urlencoded` primesc AMANDOUA acelasi raspuns, cu
+     * si fara `grant_type`. Documentatia lor si modulul lor de WooCommerce
+     * trimit form-urlencoded; nu conteaza, si de-aia nu se schimba aici nimic.
+     */
+    const err = await res.json().catch(() => ({})) as {
+      statusMessage?: string;
+      error?: string;
+      error_description?: string;
+    };
+
+    if (err.error === "invalid_client") {
+      throw new Error(
+        "Oblio nu recunoaste datele de conectare. Emailul trebuie sa fie cel al contului Oblio, "
+        + "iar in campul de secret merge TOKENUL din Oblio > Setari > Date cont (un sir lung), "
+        + "nu parola contului.",
+      );
+    }
+
+    throw new Error(
+      err.statusMessage
+      ?? err.error_description
+      ?? `Autentificare Oblio esuata (HTTP ${res.status})`,
+    );
   }
 
   const data = await res.json() as {

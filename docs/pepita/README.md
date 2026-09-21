@@ -1,5 +1,40 @@
 # Documentația oficială Pepita, păstrată în repo
 
+## ⚠⚠ CELE ȘAPTE ȚĂRI (21.09.2026): documentația lor NU acoperă mai multe piețe
+
+`sellercenter.pepita.com/en/feed-and-api-connections/` e scrisă **numai pentru Ungaria**. Nu
+spune nicăieri că feedurile trebuie să fie separate pe țară, nu spune ce monedă are fiecare
+piață și nu descrie nicio deosebire între ele. Cerința de „fluxuri specifice fiecărei țări" o
+știm **din emailul lor** către un comerciant, nu din documente — la fel ca a patra întrebare de
+activare (țara), în septembrie.
+
+**Adresele au fost verificate cerându-le, nu presupuse.** Două dintre cele „evidente" nu sunt
+Pepita, și amândouă răspund `200` cu „Pepita" în titlu:
+
+| Adresă | Ce răspunde de fapt |
+|---|---|
+| `pepita.pl` | „Pepita - Torebki skórzane, galanteria damska" — **un magazin polonez de genți de piele**, altă firmă |
+| `pepita.sk` | „Registrácia domén, hosting a servery :: Websupport.sk" — **domeniu parcat** |
+| `pepita.ro` | nu răspunde deloc (defectul din 09.09.2026) |
+
+Marketplace-ul stă pe `pepita.hu` și pe `pepita.com/{țară}`, și atât.
+
+**Monedele sunt cele declarate de ei**, citite de pe fiecare piață: HU `HUF`, RO `RON`,
+PL `PLN`, iar SK, DE, BG și HR pe `EUR`. ⚠ Bulgaria și Croația dau **EUR**, nu BGN și HRK: o
+listă scrisă din memorie ar fi rămas în urmă.
+
+**Prețurile nu se convertesc de la sine.** Cursul îl scrie comerciantul, pentru fiecare piață,
+iar fără el feedul acelei piețe **nu pleacă deloc** — `404`, nu catalog gol. Aceeași hotărâre ca
+la AboutYou (26.08.2026): „un curs, o dată de referință și o rotunjire sunt trei lucruri pe care
+nu le luăm în locul comerciantului". Cursul nu se mișcă singur, ca prețurile de pe marketplace
+să nu se schimbe peste noapte.
+
+**Adresa piaței de bază rămâne fără segment de țară**, fiindcă e cea deja trimisă la Pepita;
+piețele noi primesc `/produse/<cheie>/<țară>.xml`.
+
+---
+
+
 ## ⚠ CITEȘTE ÎNTÂI: fișierul din care s-a pornit era VECHI, și eu am construit un argument pe el
 
 Pe 08.09.2026 un audit extern a susținut că API-ul Pepita are `package_label` (eticheta PDF în

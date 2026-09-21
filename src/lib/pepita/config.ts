@@ -5,12 +5,57 @@
  * panou. Nimic din el nu atinge baza si nimic nu e `server-only`.
  */
 
-import { CONFIG_IMPLICIT, PIATA_IMPLICITA, PIETE, TIPURI_GARANTIE, type PepitaConfig, type TipGarantie } from "./types";
+import {
+  CONFIG_IMPLICIT, PIATA_IMPLICITA, PIETE, TIPURI_GARANTIE,
+  type PepitaConfig, type PiataPepita, type SetariPiete, type TipGarantie,
+} from "./types";
 import { citesteStrategia } from "./pret";
 
 function intreg(v: unknown, implicit: number): number {
   const n = Number(v);
   return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : implicit;
+}
+
+/**
+ * Setarile pe piata, cu MOSTENIRE pentru configurarile de dinainte de 21.09.2026.
+ *
+ * ⚠⚠ UN MAGAZIN DE AZI N-ARE `piete` DELOC. Citit ca „niciuna", feedul lui ar
+ * tacea din clipa in care se desfasoara codul asta - si ar tacea la fel de
+ * frumos ca in septembrie: 200, XML valid, panou verde, catalog gol. Trei
+ * magazine au patit-o deja o data, si atunci n-a aflat nimeni pana cand n-a
+ * scris Pepita.
+ *
+ * Deci lipsa lui `piete` NU inseamna „nimic pornit", ci „ce era pornit pana
+ * acum": piata de baza, activa, fara curs (ea are moneda magazinului).
+ *
+ * ⚠ Se mosteneste DOAR cand `piete` lipseste cu totul. Un obiect gol scris
+ * anume - omul a stins toate pietele - ramane gol.
+ */
+function citestePiete(brut: unknown, deBaza: PiataPepita): SetariPiete {
+  if (brut === null || brut === undefined) {
+    return { [deBaza]: { activa: true, curs: null } };
+  }
+  if (typeof brut !== "object") return {};
+
+  const intrat = brut as Record<string, unknown>;
+  const iesit: SetariPiete = {};
+  for (const cheie of Object.keys(PIETE) as PiataPepita[]) {
+    const v = intrat[cheie];
+    if (!v || typeof v !== "object") continue;
+    const o = v as { activa?: unknown; curs?: unknown };
+    /*
+      ⚠ Cursul se curata aici, nu la trimitere: un `0`, un `-3` sau un `"abc"`
+      ajuns in configurare ar fi trecut drept curs scris, iar `opreste` l-ar fi
+      respins abia la feed - adica omul ar fi vazut campul plin si feedul mut.
+      Pastrat ca `null`, ecranul arata limpede ca nu e scris.
+    */
+    const curs = Number(o.curs);
+    iesit[cheie] = {
+      activa: o.activa === true,
+      curs: Number.isFinite(curs) && curs > 0 ? curs : null,
+    };
+  }
+  return iesit;
 }
 
 function numarSauNul(v: unknown): number | null {
@@ -36,6 +81,7 @@ export function citesteConfig(brut: unknown): PepitaConfig {
   return {
     activ: c.activ === true,
     piata,
+    piete: citestePiete(c.piete, piata),
     strategie_pret: citesteStrategia(c.strategie_pret),
     safety_stock: intreg(c.safety_stock, CONFIG_IMPLICIT.safety_stock),
     shipping_delay: c.shipping_delay == null || c.shipping_delay === "" ? null : intreg(c.shipping_delay, 0),

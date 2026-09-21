@@ -106,6 +106,17 @@ export function preturilePentruFeed(
   pretTaiat: number | null,
   strategie: StrategiePret,
   magazin: RegimTvaMagazin,
+  /*
+   * ⚠ Cursul catre moneda pietei. `null` sau lipsa inseamna „piata are chiar
+   * moneda magazinului", deci nu se inmulteste nimic.
+   *
+   * ⚠ SE APLICA ULTIMUL, dupa strategie si dupa TVA, si asta nu e o alegere de
+   * stil: strategia comerciantului („+10%") si cota de TVA sunt procente, iar
+   * procentele se aplica la fel inainte sau dupa o inmultire. Rotunjirea nu.
+   * Convertit mai devreme, fiecare pas ar rotunji in moneda tintă si s-ar aduna
+   * banuti straini la fiecare produs; asa se rotunjeste o singura data, la capat.
+   */
+  curs?: number | null,
 ): PreturiPepita {
   const tva = cotaTva(magazin);
   const vanzare = pretBrut(aplicaStrategia(pretVitrina, strategie), magazin);
@@ -113,8 +124,16 @@ export function preturilePentruFeed(
     ? pretBrut(aplicaStrategia(Number(pretTaiat), strategie), magazin)
     : null;
 
-  if (taiat != null && taiat > vanzare) return { pret: taiat, pretRedus: vanzare, tva };
-  return { pret: vanzare, pretRedus: null, tva };
+  const c = Number(curs);
+  const converteste = (v: number) => (Number.isFinite(c) && c > 0 ? rotunjeste2(v * c) : v);
+
+  const vanzareFinala = converteste(vanzare);
+  const taiatFinal = taiat != null ? converteste(taiat) : null;
+
+  if (taiatFinal != null && taiatFinal > vanzareFinala) {
+    return { pret: taiatFinal, pretRedus: vanzareFinala, tva };
+  }
+  return { pret: vanzareFinala, pretRedus: null, tva };
 }
 
 /** Strategia salvata, adusa la o forma pe care socoteala o poate folosi. */

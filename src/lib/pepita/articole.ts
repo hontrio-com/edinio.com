@@ -111,7 +111,16 @@ export interface ProdusPepita {
 
 export interface ContextArticole {
   business: { slug: string; custom_domain: string | null; store_name: string | null; business_name: string };
+  /** ⚠ Configul PIETEI pentru care se scrie feedul asta, nu cel de baza al magazinului. */
   config: PepitaConfig;
+  /**
+   * Cursul catre moneda pietei, sau `null` cand piata are chiar moneda magazinului.
+   *
+   * ⚠ STA AICI, NU IN CONFIG, fiindca e o socoteala a feedului: configul spune ce
+   * a hotarat comerciantul, contextul spune cu ce se lucreaza acum. Pus in config,
+   * ar fi calatorit si in amprenta, si in mesaje, unde n-are ce cauta.
+   */
+  curs?: number | null;
   magazin: RegimTvaMagazin;
   /** Calea categoriei, de la parinte la copil. O da apelantul, care are arborele. */
   caleCategorie: (nume: string | null) => CategoriePepita[];
@@ -322,7 +331,7 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
   const gtinProdus = codBun(g.gtin, probleme);
 
   if (!variante || combinatii.length === 0) {
-    const preturi = preturilePentruFeed(pretDeBaza, numarPozitiv(p.compare_at_price) ?? null, ctx.config.strategie_pret, ctx.magazin);
+    const preturi = preturilePentruFeed(pretDeBaza, numarPozitiv(p.compare_at_price) ?? null, ctx.config.strategie_pret, ctx.magazin, ctx.curs);
     if (preturi.pret <= 0) {
       probleme.push(eroare("pret-zero", "Prețul pentru Pepita este 0. Pepita nu acceptă produse cu preț zero."));
     }
@@ -396,7 +405,7 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
 
     const pretUnitar = comboUnitPrice(combo, pretDeBaza);
     const pretTaiat = comboCompareAtPrice(combo, pretTaiatBaza);
-    const preturi = preturilePentruFeed(pretUnitar, pretTaiat, ctx.config.strategie_pret, ctx.magazin);
+    const preturi = preturilePentruFeed(pretUnitar, pretTaiat, ctx.config.strategie_pret, ctx.magazin, ctx.curs);
     if (preturi.pret <= 0) {
       probleme.push(eroare("pret-zero", `Varianta „${titlu}” ajunge la prețul 0 pentru Pepita.`, titlu));
       continue;

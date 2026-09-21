@@ -3,6 +3,7 @@ import { randomBytes, createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { PLATFORM_ORIGIN } from "@/lib/seo";
+import type { PiataPepita } from "./types";
 
 /**
  * Cheile integrarii Pepita: cea din adresele de feed si cea din adresa de comenzi.
@@ -75,12 +76,29 @@ export function amprentaCheii(cheie: string): string {
  * Adresa de comenzi accepta si forma `?apikey=`, fiindca asa arata exemplul lor
  * si e cu putinta sa o ceara asa.
  */
-export function adresaFeedProduse(cheie: string): string {
-  return `${PLATFORM_ORIGIN}/api/pepita/produse/${cheie}.xml`;
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  ⚠ ADRESA PIETEI DE BAZA RAMANE EXACT CUM ERA
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Pepita citeste adresele pe care i le-a dat comerciantul prin email, si nu are
+  de unde afla ca s-au schimbat. O adresa care moare nu da nicio eroare la noi:
+  ea moare la EI, iar urmarea se vede peste zile, cand catalogul nu se mai
+  improspateaza. In septembrie am invatat cat de greu se vede asta.
+
+  De aceea piata pe care magazinul o are deja pastreaza adresa FARA segment de
+  tara, iar pietele noi primesc una cu segment. Adresele deja trimise raman
+  valabile pentru totdeauna.
+
+  ⚠ `.xml` STA LA SFARSIT, dupa tara: `.../produse/<cheie>/hu.xml`. Pus pe
+  cheie (`<cheie>.xml/hu`), unele unelte ar fi taiat calea la extensie.
+*/
+export function adresaFeedProduse(cheie: string, piata?: PiataPepita | null): string {
+  return `${PLATFORM_ORIGIN}/api/pepita/produse/${cheie}${piata ? `/${piata}` : ""}.xml`;
 }
 
-export function adresaFeedStoc(cheie: string): string {
-  return `${PLATFORM_ORIGIN}/api/pepita/stoc/${cheie}.xml`;
+export function adresaFeedStoc(cheie: string, piata?: PiataPepita | null): string {
+  return `${PLATFORM_ORIGIN}/api/pepita/stoc/${cheie}${piata ? `/${piata}` : ""}.xml`;
 }
 
 export function adresaComenzi(cheie: string): string {

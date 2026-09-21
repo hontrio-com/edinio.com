@@ -89,6 +89,15 @@ export const PIETE: Record<PiataPepita, DescrierePiata> = {
 /** Ordinea in care se arata pe ecran. Romania prima: de acolo am pornit. */
 export const ORDINEA_PIETELOR: PiataPepita[] = ["ro", "hu", "sk", "de", "pl", "bg", "hr"];
 
+/** Ce a hotarat comerciantul pentru o piata. Forma sta in `piete.ts`. */
+export interface SetariPiata {
+  activa: boolean;
+  /** Cate unitati din moneda pietei face una din moneda magazinului. `null` = nescris. */
+  curs: number | null;
+}
+
+export type SetariPiete = Partial<Record<PiataPepita, SetariPiata>>;
+
 export const PIATA_IMPLICITA: PiataPepita = "ro";
 
 /**
@@ -124,7 +133,24 @@ export type TipGarantie = (typeof TIPURI_GARANTIE)[number];
 export interface PepitaConfig {
   /** Comerciantul a pornit integrarea. Oprita, feedurile nu mai raspund cu date. */
   activ: boolean;
+  /**
+   * Piata de la care a pornit magazinul.
+   *
+   * ⚠ RAMANE, DESI ACUM SUNT MAI MULTE. E piata „de baza": cea catre care merge
+   * perechea veche de chei, si cea pe care o mosteneste un magazin configurat
+   * inainte de 21.09.2026. Scoasa, fiecare magazin de azi ar fi ramas fara nicio
+   * piata pana cand cineva ar fi intrat sa bifeze una - adica feedul lor ar fi
+   * tacut, exact cum a tacut in septembrie.
+   */
   piata: PiataPepita;
+  /**
+   * Ce a hotarat comerciantul pentru fiecare piata: daca trimite, si cu ce curs.
+   *
+   * ⚠ Pepita cere feeduri SEPARATE pe fiecare tara („avem nevoie de fluxuri
+   * specifice fiecarei tari", din emailul lor). Deci nu e un feed cu mai multe
+   * monede, ci mai multe feeduri.
+   */
+  piete: SetariPiete;
   strategie_pret: StrategiePret;
   /**
    * Cate bucati se tin deoparte si NU se anunta la Pepita.
@@ -171,6 +197,13 @@ export interface PepitaConfig {
 export const CONFIG_IMPLICIT: PepitaConfig = {
   activ: false,
   piata: PIATA_IMPLICITA,
+  /*
+    ⚠ GOL, nu „Romania pornita". Implicitul asta e pentru un magazin care n-a
+    atins niciodata integrarea; mostenirea celor vechi se face in `citesteConfig`,
+    unde se STIE ca era ceva pornit. Pusa aici, ar fi aprins Romania si pentru
+    cine tocmai a apasat „Opreste".
+  */
+  piete: {},
   strategie_pret: { fel: "identic", valoare: 0 },
   safety_stock: 0,
   shipping_delay: null,

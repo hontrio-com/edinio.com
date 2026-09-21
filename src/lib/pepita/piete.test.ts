@@ -3,6 +3,8 @@ import { test } from "node:test";
 
 import { ORDINEA_PIETELOR, PIETE, type PiataPepita } from "./types";
 import { aceeasiMoneda, opreste, pretulPietei, scrieCursul, zecimale } from "./piete";
+import { citesteConfig } from "./config";
+import { preturilePentruFeed } from "./pret";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -19,8 +21,6 @@ import { aceeasiMoneda, opreste, pretulPietei, scrieCursul, zecimale } from "./p
   Acelasi defect a existat la AboutYou (26.08.2026), unde 20 EUR se citea ca
   20 PLN in Polonia.
 */
-
-const RO_ACTIV = { activa: true, curs: null };
 
 test("⚠ FARA CURS SCRIS, PIATA CU ALTA MONEDA NU TRIMITE NIMIC", () => {
   /*
@@ -147,4 +147,136 @@ test("cursul se scrie pe intelesul omului", () => {
   assert.equal(scrieCursul("hu", 79, "RON"), "1 RON = 79 HUF");
   assert.equal(scrieCursul("hu", null, "RON"), "1 RON = ? HUF");
   assert.match(scrieCursul("ro", null, "RON"), /Aceeași monedă/);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CITIREA CONFIGURARII: ce pateste un magazin care merge AZI
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠⚠ UN MAGAZIN DE AZI NU RAMANE FARA NICIO PIATA", () => {
+  /*
+    ⚠ Configurarile scrise inainte de 21.09.2026 n-au `piete` deloc. Citite ca
+    „niciuna pornita", feedul lor ar tacea din clipa desfasurarii - si ar tacea
+    la fel de frumos ca in septembrie: 200, XML valid, panou verde, catalog gol.
+    Trei magazine au patit-o deja o data, si n-a aflat nimeni pana n-a scris
+    Pepita.
+  */
+  const vechi = citesteConfig({ activ: true, piata: "ro", mod_includere: "toate" });
+  assert.deepEqual(vechi.piete, { ro: { activa: true, curs: null } });
+  assert.equal(opreste("ro", vechi.piete.ro, "RON"), null, "piata de baza trebuie sa trimita");
+});
+
+test("mostenirea ia piata DE BAZA, nu Romania de-a gata", () => {
+  /* Un magazin configurat pe Ungaria isi pastreaza Ungaria, nu primeste Romania. */
+  const hu = citesteConfig({ activ: true, piata: "hu" });
+  assert.deepEqual(hu.piete, { hu: { activa: true, curs: null } });
+});
+
+test("⚠ UN OBIECT GOL SCRIS ANUME RAMANE GOL", () => {
+  /*
+    ⚠ Deosebirea dintre „n-a existat campul" si „omul a stins tot". Prima cere
+    mostenire, a doua trebuie respectata: altfel cine tocmai a oprit toate
+    pietele le-ar vedea aprinse la reincarcare.
+  */
+  assert.deepEqual(citesteConfig({ activ: true, piata: "ro", piete: {} }).piete, {});
+});
+
+test("⚠ UN CURS PROST DIN CONFIGURARE SE CURATA LA CITIRE", () => {
+  /*
+    ⚠ Un `0`, un `-3` sau un `"abc"` ajuns in configurare ar fi trecut drept
+    „curs scris", iar oprirea l-ar fi respins abia la feed: omul ar fi vazut
+    campul plin si feedul mut. Adus la `null`, ecranul arata limpede ca nu e scris.
+  */
+  const c = citesteConfig({
+    activ: true, piata: "ro",
+    piete: {
+      hu: { activa: true, curs: 0 },
+      pl: { activa: true, curs: -3 },
+      de: { activa: true, curs: "abc" },
+      sk: { activa: true, curs: "1.5" },
+      bg: { activa: true, curs: 1.96 },
+    },
+  });
+  assert.equal(c.piete.hu?.curs, null);
+  assert.equal(c.piete.pl?.curs, null);
+  assert.equal(c.piete.de?.curs, null);
+  assert.equal(c.piete.sk?.curs, 1.5, "un numar scris ca text se citeste");
+  assert.equal(c.piete.bg?.curs, 1.96);
+});
+
+test("o piata inventata in configurare nu intra in cod", () => {
+  /* ⚠ Altfel `PIETE[piata]` ar fi `undefined` si feedul ar cadea la mijloc. */
+  const c = citesteConfig({ activ: true, piata: "ro", piete: { xx: { activa: true, curs: 2 } } });
+  assert.deepEqual(Object.keys(c.piete), []);
+});
+
+test("citirea nu arunca niciodata, oricat de stricata ar fi configurarea", () => {
+  /* ⚠ O exceptie aici cade in mijlocul unui feed, nu intr-un formular. */
+  for (const rau of [null, undefined, 0, "", [], "text", { piete: 7 }, { piete: [1, 2] }]) {
+    assert.doesNotThrow(() => citesteConfig(rau));
+  }
+  assert.deepEqual(citesteConfig({ piete: 7 }).piete, {});
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRETUL DIN FEED, CU CURS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const FARA_TVA = { vat_enabled: false, vat_rate: 0, prices_include_vat: true };
+const IDENTIC = { fel: "identic" as const, valoare: 0 };
+
+test("⚠⚠ FARA CURS, PRETUL RAMANE NECONVERTIT — de-aia feedul nu pleaca deloc", () => {
+  /*
+    ⚠ Socoteala nu stie de tara: cheamata fara curs, ea intoarce cinstit numarul
+    din catalog. Aia NU e o scapare, ci impartirea muncii — oprirea se face mai
+    sus, in `pregateste`, unde piata fara curs da 404.
+
+    Proba sta aici ca sa se vada limpede CE s-ar fi trimis daca oprirea ar lipsi:
+    500, cu `HUF` scris langa el.
+  */
+  assert.equal(preturilePentruFeed(500, null, IDENTIC, FARA_TVA).pret, 500);
+  assert.equal(preturilePentruFeed(500, null, IDENTIC, FARA_TVA, null).pret, 500);
+  /* Si ca oprirea chiar exista, pentru aceeasi piata. */
+  assert.ok(opreste("hu", { activa: true, curs: null }, "RON"));
+});
+
+test("cu curs, pretul pleaca in moneda pietei", () => {
+  assert.equal(preturilePentruFeed(500, null, IDENTIC, FARA_TVA, 79).pret, 39500);
+  assert.equal(preturilePentruFeed(100, null, IDENTIC, FARA_TVA, 0.2).pret, 20);
+});
+
+test("⚠ CURSUL SE APLICA ULTIMUL, dupa strategie si dupa TVA", () => {
+  /*
+    ⚠ Strategia si TVA-ul sunt PROCENTE, iar un procent da acelasi rezultat
+    inainte sau dupa o inmultire. Rotunjirea nu: convertit mai devreme, fiecare
+    pas ar rotunji in moneda tinta si s-ar aduna banuti straini la fiecare
+    produs. Asa se rotunjeste o singura data, la capat.
+  */
+  const cuAdaos = { fel: "procent" as const, valoare: 10 };
+  const cuTva = { vat_enabled: true, vat_rate: 21, prices_include_vat: true };
+
+  const inLei = preturilePentruFeed(100, null, cuAdaos, cuTva).pret;
+  const inForinti = preturilePentruFeed(100, null, cuAdaos, cuTva, 79).pret;
+  assert.equal(inForinti, Math.round(inLei * 79 * 100) / 100,
+    "cursul nu s-a aplicat peste rezultatul intreg");
+});
+
+test("⚠ PRETUL TAIAT SE CONVERTESTE SI EL, si ramane mai mare decat cel de vanzare", () => {
+  /*
+    ⚠ Convertit doar unul dintre ele, reducerea ar fi iesit uriasa sau inversa:
+    „de la 500 HUF la 39.500 HUF" - o „reducere" care ridica pretul.
+  */
+  const p = preturilePentruFeed(100, 150, IDENTIC, FARA_TVA, 79);
+  assert.equal(p.pret, 11850, "pretul taiat nu s-a convertit");
+  assert.equal(p.pretRedus, 7900, "pretul de vanzare nu s-a convertit");
+  assert.ok(p.pret > (p.pretRedus ?? 0), "taiatul trebuie sa ramana mai mare");
+});
+
+test("un curs nevalid nu se aplica, in loc sa strice pretul", () => {
+  /* ⚠ `NaN` inmultit ar fi dat `NaN`, iar `<Price>NaN</Price>` e XML valid si otravit. */
+  for (const rau of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, undefined, null]) {
+    const p = preturilePentruFeed(500, null, IDENTIC, FARA_TVA, rau as never);
+    assert.equal(p.pret, 500, `cursul ${rau} n-ar fi trebuit aplicat`);
+    assert.ok(Number.isFinite(p.pret));
+  }
 });

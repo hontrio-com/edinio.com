@@ -27,6 +27,12 @@ function text(corp: string, status: number): Response {
 
 export async function raspundeCuFeed(
   req: Request, cheieBruta: string, fel: "produse" | "stoc",
+  /*
+   * ⚠ Tara ceruta in cale. Lipsa ei inseamna „piata de baza a magazinului",
+   * fiindca asa arata adresele trimise la Pepita inainte de 21.09.2026 si ele
+   * trebuie sa raspunda pentru totdeauna la fel.
+   */
+  piataBruta?: string,
 ): Promise<Response> {
   const cheie = cheieDinCale(cheieBruta);
 
@@ -75,7 +81,13 @@ export async function raspundeCuFeed(
 
   let pregatire: Awaited<ReturnType<typeof pregateste>>;
   try {
-    pregatire = await pregateste(admin, magazin.businessId);
+    /*
+     * ⚠ TARA SE CITESTE DIN CALE SI SE CURATA AICI, nu inauntru: `.xml` sta la
+     * sfarsitul ei (`/hu.xml`), iar o valoare inventata („/xx.xml") trebuie sa
+     * dea acelasi 404 ca o cheie gresita, nu o exceptie in mijlocul feedului.
+     */
+    const piata = piataBruta ? cheieDinCale(piataBruta).toLowerCase() : null;
+    pregatire = await pregateste(admin, magazin.businessId, piata as never);
   } catch (e) {
     await logError({
       action: "pepita/feed",

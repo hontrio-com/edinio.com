@@ -6,6 +6,8 @@ import { disponibilitatePachet, readBundleConfig } from "@/lib/bundles";
 import { storeBaseUrl } from "@/lib/seo";
 import { logError } from "@/lib/error-logger";
 import { articolelePentruProdus, type ContextArticole, type ProdusPepita } from "./articole";
+import { PIETE, type PiataPepita } from "./types";
+import { aceeasiMoneda, opreste } from "./piete";
 import { caleaCategoriilor, type RandCategorie } from "./categorii";
 import { citesteConfig } from "./config";
 import { produsXml, stocDisparutXml, stocXml } from "./serializare";
@@ -72,7 +74,15 @@ export interface PregatireFeed {
  * Dupa ce primul octet a plecat, codul de stare e deja trimis si nu se mai poate lua
  * inapoi.
  */
-export async function pregateste(admin: Db, businessId: string): Promise<PregatireFeed | null> {
+export async function pregateste(
+  admin: Db, businessId: string,
+  /*
+   * ⚠ Tara ceruta in adresa. Lipsa ei inseamna „piata de baza a magazinului":
+   * asa arata adresele trimise la Pepita inainte de 21.09.2026, si ele trebuie
+   * sa raspunda la fel pentru totdeauna.
+   */
+  piataCeruta?: PiataPepita | null,
+): Promise<PregatireFeed | null> {
   const { data: biz, error: eBiz } = await admin
     .from("businesses")
     .select("id, slug, custom_domain, store_name, business_name, is_published, updated_at")
@@ -101,6 +111,40 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
    * de sursa, care se vede si se repara.
    */
   if (!config.activ) return null;
+
+  /*
+   * ═══ ⚠⚠ PIATA CERUTA, SI DACA ARE VOIE SA TRIMITA ═══
+   *
+   * Configul citit mai sus poarta piata DE BAZA. De aici incolo, tot codul (si
+   * mai ales `<Currency>` din `articole.ts`) trebuie sa vada piata CERUTA, nu
+   * pe cea de baza - altfel feedul unguresc ar pleca cu lei si cu `RON` pe el.
+   *
+   * ⚠ O PIATA CARE NU POATE TRIMITE DA 404, NU FEED GOL. Acelasi motiv ca la
+   * integrarea oprita, scris mai sus: un `<Catalog>` gol le spune „nu mai am
+   * niciun produs", si ei scot tot de la vanzare. 404 le spune „adresa asta nu
+   * raspunde", si atunci pastreaza ce au si raporteaza o eroare de sursa.
+   *
+   * ⚠ Se intampla si cand comerciantul STERGE cursul unei piete care mergea.
+   * E abrupt, si e raspunsul bun: mai bine Pepita nu mai citeste, decat sa
+   * citeasca preturi in moneda gresita. Panoul o spune apasat.
+   */
+  const piata = piataCeruta ?? config.piata;
+  if (!(piata in PIETE)) return null;
+
+  const monedaMagazinului = String(
+    (setari as { currency?: string | null } | null)?.currency ?? "RON",
+  ).trim() || "RON";
+  const setariPietei = config.piete[piata];
+  if (opreste(piata, setariPietei, monedaMagazinului)) return null;
+
+  /*
+   * ⚠ Configul merge mai departe CU PIATA CERUTA pusa peste cea de baza.
+   * Asa, tot ce citeste `config.piata` - moneda din XML, mesajele, amprenta -
+   * vede tara feedului pe care il construieste acum, fara ca fiecare loc sa
+   * fie invatat separat despre mai multe piete.
+   */
+  const configPiata: PepitaConfig = { ...config, piata };
+  const cursPiata = aceeasiMoneda(piata, monedaMagazinului) ? null : (setariPietei?.curs ?? null);
 
   /*
    * ⚠ PAGINAT, ca `pepita_listari` de mai jos. PostgREST intoarce cel mult 1000 de randuri, iar
@@ -178,7 +222,7 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
     const t = v ? new Date(v).getTime() : NaN;
     return Number.isFinite(t) ? Math.floor(t / 1000) : 0;
   };
-  const stampilaSetari = await stampilaConfigurarii(admin, businessId, s, config);
+  const stampilaSetari = await stampilaConfigurarii(admin, businessId, s, configPiata);
   const pragMagazin = Math.max(
     clipa(business.updated_at),
     clipa(stampilaSetari),
@@ -187,7 +231,14 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
   );
   const ctx: ContextArticole = {
     business,
-    config,
+    /* ⚠ Configul PIETEI CERUTE: de aici isi ia `articole.ts` moneda din `<Currency>`. */
+    config: configPiata,
+    /*
+      ⚠ Cursul calatoreste langa config, nu inauntrul lui: e o socoteala a
+      feedului, nu o setare a integrarii. `null` inseamna „nu se converteste",
+      fiindca piata are chiar moneda magazinului.
+    */
+    curs: cursPiata,
     magazin: {
       vat_enabled: s.vat_enabled ?? false,
       vat_rate: Number(s.vat_rate ?? 0),
@@ -200,7 +251,7 @@ export async function pregateste(admin: Db, businessId: string): Promise<Pregati
     pragMagazin,
   };
 
-  return { ctx, config, listari };
+  return { ctx, config: configPiata, listari };
 }
 
 /**
@@ -228,6 +279,12 @@ async function stampilaConfigurarii(
     setari.prices_include_vat !== false,
     /* ⚠ `store_settings.currency` NU intra: in XML pleaca moneda PIETEI Pepita, nu a magazinului. */
     config.piata,
+    /*
+     * ⚠ SI CURSUL. Fara el, un comerciant care schimba cursul ar fi pastrat
+     * stampila veche: Pepita ar fi vazut „feedul nu s-a schimbat" peste un feed
+     * cu alte preturi, si ar fi putut sari citirea.
+     */
+    config.piete[config.piata]?.curs ?? null,
     config.strategie_pret,
     config.safety_stock,
     config.shipping_delay,

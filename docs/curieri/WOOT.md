@@ -38,6 +38,61 @@ nu pe cotatie live (`auto_price` e pornit la trei perechi magazin-curier in toat
 
 ---
 
+## ⚠⚠ AWB-URI IN MASA (21.09.2026): de ce Woot are fereastra lui
+
+Cerut prin suport de magazinul care face între 4 și 18 AWB-uri pe zi, singurul cu trafic
+real pe Woot (267 din cele 273 de expedieri ale platformei).
+
+**Woot nu intră în „Generează AWB-uri".** Acolo sunt paisprezece curieri care își deduc
+serviciul din greutate și adresă, pe server. Woot e **broker**: serviciul vine dintr-o
+cotație live (`POST /orders/prices`) și nu se poate ghici. La fel Colete Online; eColet în
+plus fiindcă emiterea lui e asincronă.
+
+### Trei drumuri închise, fiecare măsurat, nu presupus
+
+| Ce s-ar fi putut face | De ce nu merge |
+|---|---|
+| Serviciul ales de client la checkout (`shipping_address.woot_service_id`) | **Zero din 267** de comenzi îl poartă. Ar fi sărit absolut toate comenzile lui |
+| Serviciul de data trecută, după `woot_service_name` | E un **text**, și s-a schimbat deja sub noi: 216 comenzi scriu „DPD — locatie - adresa" cu emdash, 48 scriu „DPD · locatie - adresa". Același serviciu. Potrivirea pe nume ar fi început să rateze în ziua în care s-a scos emdash-ul, fără ca nimeni să lege cele două |
+| Cel mai ieftin serviciu de pe fiecare rută | Curierul s-ar schimba de la o comandă la alta, iar cele cu predare la punct tot ar rămâne pe dinafară |
+
+**Hotărârea comerciantului:** se întreabă **o dată, la apăsare**, pentru tot lotul.
+
+### Cum merge
+
+1. `pregatesteLotWoot` citește comenzile, le clasifică, și cere cotația pe **prima comandă
+   bună**. Întoarce serviciile, creditul contului, cine intră și cine nu (cu motiv).
+2. Omul alege serviciul. Dacă acela cere **predare la punct**, alege și punctul, o singură
+   dată: expeditorul e același la toate comenzile.
+3. `emiteLotWoot` **reclasifică pe server** (o filă lăsată deschisă peste noapte n-are voie
+   să emită pe comenzi schimbate între timp), apoi, pentru fiecare comandă: cotație pe ruta
+   **ei**, regăsirea serviciului ales, emitere.
+
+⚠ **Serviciile care livrează la punct nu se oferă deloc.** Punctul de livrare e altul
+pentru fiecare cumpărător, în localitatea lui; o alegere făcută o dată pentru tot lotul ar
+fi trimis coletele a zece oameni la același locker, pe adresa altcuiva. Predarea la punct
+rămâne îngăduită, și e chiar cazul lui: **264 din 267** sunt „DPD - locatie - adresa".
+
+⚠ **Nu se rescrie nimic din Woot.** Lotul cheamă chiar `getWootPrices` și `createWootAwb`,
+funcțiile pe care le apasă fereastra. Ele poartă deja registrul de operații care oprește al
+doilea AWB plătit, poarta de AWB propriu, asigurarea, expeditorul și creditul.
+
+⚠ **Destinatarul se compune pe server** cu aceleași două potriviri ca fereastra
+(`potrivesteJudetulWoot`, `potrivesteLocalitateaWoot`), fiindcă ele știu ce s-a învățat din
+comenzi adevărate: „Municipiul Bucuresti" (cum scrie chiar checkoutul nostru) și „Sector 5",
+care nu e prefixul lui „Sectorul 5". O adresă care nu se potrivește **nu se acoperă cu o
+rezervă**: comanda se sare și se spune de ce. O localitate ghicită ar trimite coletul în alt
+oraș, iar la un lot nimeni nu se uită la fiecare rând.
+
+**Cod:** `src/lib/woot/lot.ts` (regulile), `src/lib/woot/destinatar.ts` (adresa),
+`src/lib/actions/woot-lot.actions.ts` (cei doi pași), `src/components/dashboard/WootBulkModal.tsx`.
+
+### Ce NU e probat încă
+
+Emiterea reală. Fiecare AWB costă bani pe contul comerciantului, deci nu se poate proba din
+afară: **prima rulare o face el, pe două comenzi.** Regulile sunt probate separat, iar
+drumurile Woot folosite sunt cele care emit deja de 267 de ori.
+
 ## Ce foloseste platforma din API-ul lor
 
 | Calea lor | Metoda | Folosim | Unde |

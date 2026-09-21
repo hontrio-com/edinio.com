@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Download, Package, CheckSquare } from "lucide-react";
+import { WootBulkModal } from "./WootBulkModal";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
@@ -167,6 +168,15 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const [eticheteFormat, setEticheteFormat] = useState<"A4" | "A6">("A4");
   const [eticheteSarite, setEticheteSarite] = useState<{ comanda: string; motiv: string }[]>([]);
   const [eticheteInPlus, setEticheteInPlus] = useState(0);
+  /*
+    ⚠ Lotul Woot are fereastra LUI, nu intra in „Generează AWB-uri".
+
+    Woot e broker: serviciul vine dintr-o cotatie live si nu se poate deduce din
+    comanda. Bagat in acelasi buton, ar fi cerut o intrebare in mijlocul unui lot
+    care pana acum n-a intrebat nimic — sau, mai rau, ar fi ghicit. Vezi
+    `@/lib/woot/lot.ts`.
+  */
+  const [lotWootDeschis, setLotWootDeschis] = useState(false);
   const [bulkStatus, setBulkStatus] = useState("");
   const [, startStatusTransition] = useTransition();
 
@@ -653,6 +663,20 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
 
   return (
     <>
+      {lotWootDeschis && businessId && (
+        <WootBulkModal
+          open={lotWootDeschis}
+          onClose={() => setLotWootDeschis(false)}
+          businessId={businessId}
+          /*
+            ⚠ Selectia se citeste LA DESCHIDERE si ramane fixa cat sta fereastra:
+            altfel o schimbare in tabel ar muta lotul sub ochii omului, intre ce a
+            vazut in lista celor sarite si ce apasa pe buton.
+          */
+          orderIds={[...selected]}
+          onDone={() => router.refresh()}
+        />
+      )}
       {wootModalOrder && businessId && (
         <WootAwbModal
           open={!!wootModalOrder}
@@ -984,6 +1008,23 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
                   <Package className="h-3.5 w-3.5" /> Generează AWB{awbCouriers.length === 1 ? ` ${awbCouriers[0].label}` : "-uri"}
                 </button>
               </div>
+            )}
+
+            {/*
+              Lotul Woot, separat fiindca cere o alegere.
+
+              ⚠ Apare doar cand Woot e pornit pe magazin: un buton care deschide o
+              fereastra ce raspunde „Woot nu este configurat" e mai rau decat lipsa lui.
+            */}
+            {wootEnabled && businessId && (
+              <button
+                type="button"
+                onClick={() => setLotWootDeschis(true)}
+                disabled={bulkBusy}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                <Package className="h-3.5 w-3.5" /> AWB-uri Woot
+              </button>
             )}
 
             {/*

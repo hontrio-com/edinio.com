@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import {
   ShoppingBag, TrendingDown, Percent, RotateCcw, Mail, MessageSquare,
   Clock, Package, Trash2, X, Sparkles, Send, Banknote, ShieldCheck, Bell, Loader2, Lock,
-  BellOff, AlertTriangle, ChevronLeft, ChevronRight,
+  BellOff, AlertTriangle, ChevronLeft, ChevronRight, Search, Download, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import { AbandonedAutomationsTab } from "./AbandonedAutomationsTab";
@@ -21,6 +21,10 @@ import { SertarCos } from "./cosuri/SertarCos";
 import { GraficRecuperare } from "./cosuri/GraficRecuperare";
 import { PalniaRecuperarii } from "./cosuri/PalniaRecuperarii";
 import { FILTRE, cateInCos, trece, type FiltruStare } from "@/lib/abandoned/starea-cosului";
+import {
+  SORTARI, asezate, csvulCosurilor, numeleFisierului, rezumatSelectie, sePotriveste,
+  type CheieSortare,
+} from "@/lib/abandoned/lista";
 import { NUMELE_RECUPERARII } from "@/lib/abandoned/atribuire";
 import {
   ETICHETE, PERIOADE, PE_PAGINA, catePagini,
@@ -28,7 +32,7 @@ import {
 } from "@/lib/abandoned/perioade";
 import {
   setAbandonedCartEnabled, sendAbandonedCartEmail, sendAbandonedCartSms, deleteAbandonedCart,
-  ignoraCosAbandonat, cereCosuriAbandonate,
+  ignoraCosAbandonat, cereCosuriAbandonate, inMasaCosuri,
 } from "@/lib/actions/abandoned-cart.actions";
 import {
   standardRecoveryTemplate, interpolateRecoveryMessage, buildRecoverUrl, defaultRecoverySms,
@@ -266,6 +270,102 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
   */
   function reincarca() { cere({}); }
 
+  /*
+    ⚠ SE EXPORTA CE SE VEDE, nu tot magazinul, si butonul spune numarul. Un
+    export care aduce altceva decat ce ai pe ecran e o capcana: omul filtreaza,
+    exporta, si deschide un fisier cu randuri pe care le scosese dinadins.
+  */
+  function descarcaCsv() {
+    try {
+      const fisier = new Blob([csvulCosurilor(aratate)], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(fisier);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = numeleFisierului();
+      a.click();
+      /* ⚠ Fara `revokeObjectURL`, fiecare export tine fisierul in memoria filei pana la reincarcare. */
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Nu am putut pregati fisierul. Incearca din nou.");
+    }
+  }
+
+  function comutaTot() {
+    /* ⚠ Bifa din antet priveste RANDURILE ARATATE, nu tot magazinul. */
+    setAlese((p) => {
+      const toateBifate = aratate.length > 0 && aratate.every((c) => p.has(c.id));
+      const noua = new Set(p);
+      for (const c of aratate) { if (toateBifate) noua.delete(c.id); else noua.add(c.id); }
+      return noua;
+    });
+  }
+
+  function faInMasa(ce: "ignora" | "scoate-din-ignorate" | "sterge") {
+    const ids = aleseAcum.map((c) => c.id);
+    if (ids.length === 0) return;
+    startMasa(async () => {
+      let res: Awaited<ReturnType<typeof inMasaCosuri>>;
+      try {
+        res = await inMasaCosuri(businessId, ids, ce);
+      } catch {
+        toast.error("Nu am primit raspuns de la server. Lista se reincarca: uita-te la ea inainte sa incerci din nou.");
+        setAlese(new Set());
+        reincarca();
+        return;
+      }
+      if ("error" in res) { toast.error(res.error); return; }
+      setAlese(new Set());
+      toast.success(
+        ce === "sterge" ? `${res.cate} ${res.cate === 1 ? "coș șters" : "coșuri șterse"}.`
+          : ce === "ignora" ? `${res.cate} ${res.cate === 1 ? "coș ignorat" : "coșuri ignorate"}.`
+            : `${res.cate} ${res.cate === 1 ? "coș scos" : "coșuri scoase"} din ignorate.`,
+      );
+      reincarca();
+    });
+  }
+
+  /*
+    ⚠ TRIMITEREA IN MASA MERGE UNUL CATE UNUL, prin aceeasi poarta ca una
+    singura. Fiecare mesaj are de trecut prin suprimare, prin reguli, prin
+    plafoane si prin cheia de o-singura-data; o scurtatura „pentru viteza" ar
+    fi ocolit tocmai portile care apara oamenii - de douazeci de ori deodata.
+
+    ⚠ SI SE SPUNE CATE AU PLECAT SI CATE NU, cu motivul primului refuz: „am
+    trimis 12 din 20" fara sa spui de ce e mai rau decat nimic.
+  */
+  function trimiteInMasa(canal: "email" | "sms") {
+    const tinte = aleseAcum.filter((c) => !c.ignorat_la && (canal === "email" ? c.email : c.phone));
+    if (tinte.length === 0) return;
+    startMasa(async () => {
+      let plecate = 0;
+      let primulRefuz: string | null = null;
+      for (const c of tinte) {
+        try {
+          const res = canal === "email"
+            ? await sendAbandonedCartEmail(businessId, c.id, undefined, undefined, crypto.randomUUID())
+            : await sendAbandonedCartSms(
+                businessId, c.id, undefined, undefined, crypto.randomUUID(),
+                furnizorulTinutMinte() ?? data.furnizoriSms[0]?.cheie,
+              );
+          if ("error" in res) { primulRefuz ??= res.error; } else { plecate++; }
+        } catch {
+          primulRefuz ??= "Nu am primit raspuns de la server pentru unul dintre cosuri.";
+        }
+      }
+      setAlese(new Set());
+      if (plecate > 0) toast.success(`${plecate} din ${tinte.length} au plecat.`);
+      if (primulRefuz) {
+        toast.error(
+          plecate > 0
+            ? `${tinte.length - plecate} nu au plecat. Primul motiv: ${primulRefuz}`
+            : primulRefuz,
+          { duration: 12000 },
+        );
+      }
+      reincarca();
+    });
+  }
+
   function dezactiveaza() {
     startToggleOff(async () => {
       let res: Awaited<ReturnType<typeof setAbandonedCartEnabled>>;
@@ -325,6 +425,18 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
     doua ar fi parut ca magazinul n-a contactat pe nimeni.
   */
   const [filtru, setFiltru] = useState<FiltruStare>("toate");
+  const [cautat, setCautat] = useState("");
+  const [sortare, setSortare] = useState<CheieSortare>("activitate");
+  const [crescator, setCrescator] = useState(false);
+  /*
+    ⚠ SELECTIA SE TINE PE ID, nu pe rand. Randurile se reincarca la fiecare
+    schimbare de pagina sau de perioada; tinute ca obiecte, ar fi ramas niste
+    copii vechi, iar „sterge cele 5 alese" ar fi sters dupa o lista care nu mai
+    exista.
+  */
+  const [alese, setAlese] = useState<Set<string>>(new Set());
+  const [inMasa, startMasa] = useTransition();
+  const [deStersInMasa, setDeStersInMasa] = useState(false);
 
   /*
     ⚠ SOCOTEALA SE FACE PE TEXTUL CARE PLEACA, NU PE CEL DIN CASUTA.
@@ -371,8 +483,16 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
     (stare: AbandonedCartRow[], id: string) => stare.filter((c) => c.id !== id),
   );
 
-  /* Filtrul lucreaza pe pagina ADUSA, deci dupa randurile optimiste, nu inaintea lor. */
-  const aratate = cosuri.filter((c) => trece(c, filtru));
+  /*
+    Filtrul, cautarea si sortarea lucreaza pe pagina ADUSA, deci dupa randurile
+    optimiste, nu inaintea lor.
+  */
+  const aratate = asezate(
+    cosuri.filter((c) => trece(c, filtru) && sePotriveste(c, cautat)),
+    sortare, crescator,
+  );
+  const aleseAcum = aratate.filter((c) => alese.has(c.id));
+  const rezumat = rezumatSelectie(aleseAcum);
 
   /** Ultima alegere, daca mai e valabila azi. */
   function furnizorulTinutMinte(): FurnizorSms | null {
@@ -837,6 +957,102 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
           )}
         </div>
 
+        {/*
+          ⚠ CAUTAREA SI SORTAREA LUCREAZA PE PAGINA ADUSA, si scrie asta sub
+          camp. O cautare care pare sa caute peste tot si gaseste doar in cele
+          25 de randuri de fata e mai rea decat niciuna: omul cauta un client,
+          nu-l gaseste, si crede ca nu exista.
+        */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-2.5">
+          <div className="relative min-w-[12rem] flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={cautat}
+              onChange={(e) => setCautat(e.target.value)}
+              placeholder={`Caută în cele ${cosuri.length} de pe pagina asta...`}
+              className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+
+          <select
+            value={sortare}
+            onChange={(e) => setSortare(e.target.value as CheieSortare)}
+            aria-label="După ce se așază"
+            className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-muted-foreground"
+          >
+            {SORTARI.map((x) => <option key={x.cheie} value={x.cheie}>{x.nume}</option>)}
+          </select>
+          <button
+            onClick={() => setCrescator((p) => !p)}
+            title={crescator ? "Crescător" : "Descrescător"}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-muted"
+          >
+            {crescator ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
+          </button>
+
+          <button
+            onClick={descarcaCsv}
+            disabled={aratate.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
+          >
+            <Download className="h-3.5 w-3.5" /> Export ({aratate.length})
+          </button>
+        </div>
+
+        {/*
+          ⚠ BARA DE SELECTIE APARE NUMAI CAND E CEVA BIFAT, si spune CATE
+          dintre cele bifate pot primi fiecare fel de mesaj. „Trimite email (3)"
+          cu un coș ignorat printre ele ar fi trimis două, iar omul n-ar fi
+          înțeles de ce.
+        */}
+        {rezumat.cate > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-5 py-2.5">
+            <span className="text-xs font-medium text-foreground">
+              {rezumat.cate} {rezumat.cate === 1 ? "coș ales" : "coșuri alese"}
+              <span className="font-normal text-muted-foreground"> · {rezumat.valoare}</span>
+            </span>
+
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              <button
+                onClick={() => trimiteInMasa("email")}
+                disabled={inMasa || rezumat.cuEmail === 0}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-40"
+              >
+                <Mail className="h-3.5 w-3.5" /> Email ({rezumat.cuEmail})
+              </button>
+              {data.smsEnabled && (
+                <button
+                  onClick={() => trimiteInMasa("sms")}
+                  disabled={inMasa || rezumat.cuTelefon === 0}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-medium text-white transition-all hover:opacity-90 disabled:opacity-40"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" /> SMS ({rezumat.cuTelefon})
+                </button>
+              )}
+              <button
+                onClick={() => faInMasa("ignora")}
+                disabled={inMasa}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
+              >
+                <BellOff className="h-3.5 w-3.5" /> Ignoră
+              </button>
+              <button
+                onClick={() => setDeStersInMasa(true)}
+                disabled={inMasa}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-2.5 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-40"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Șterge
+              </button>
+              <button
+                onClick={() => setAlese(new Set())}
+                className="px-1.5 text-xs text-muted-foreground underline-offset-2 hover:underline"
+              >
+                Renunță
+              </button>
+            </div>
+          </div>
+        )}
+
         {cosuri.length > 0 && aratate.length === 0 ? (
           <div className="px-5 py-12 text-center">
             <p className="text-sm text-muted-foreground">
@@ -869,7 +1085,16 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                    <th className="px-5 py-2.5 font-medium">Client</th>
+                    <th className="w-9 pl-5">
+                      <input
+                        type="checkbox"
+                        checked={aratate.length > 0 && aratate.every((c) => alese.has(c.id))}
+                        onChange={comutaTot}
+                        aria-label="Alege tot ce se vede"
+                        className="h-3.5 w-3.5 accent-[var(--primary)]"
+                      />
+                    </th>
+                    <th className="px-3 py-2.5 font-medium">Client</th>
                     <th className="px-3 py-2.5 font-medium">Coș</th>
                     <th className="px-3 py-2.5 text-right font-medium">Valoare</th>
                     <th className="px-3 py-2.5 font-medium">Ultima activitate</th>
@@ -879,8 +1104,21 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
                 </thead>
                 <tbody className="divide-y divide-border">
                   {aratate.map((c) => (
-                    <tr key={c.id} className="hover:bg-muted/40 transition-colors">
-                      <td className="px-5 py-3">
+                    <tr key={c.id} className={`transition-colors ${alese.has(c.id) ? "bg-primary/5" : "hover:bg-muted/40"}`}>
+                      <td className="pl-5">
+                        <input
+                          type="checkbox"
+                          checked={alese.has(c.id)}
+                          onChange={() => setAlese((p) => {
+                            const n = new Set(p);
+                            if (n.has(c.id)) n.delete(c.id); else n.add(c.id);
+                            return n;
+                          })}
+                          aria-label={`Alege coșul lui ${c.customer_name || "client anonim"}`}
+                          className="h-3.5 w-3.5 accent-[var(--primary)]"
+                        />
+                      </td>
+                      <td className="px-3 py-3">
                         <button onClick={() => setSertar(c)} className="text-left">
                           <span className="block truncate font-medium text-foreground hover:underline">
                             {c.customer_name || "Client anonim"}
@@ -1079,6 +1317,51 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
                 {togglingOff
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Se oprește...</>
                   : "Oprește funcția"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/*
+        ⚠ STERGEREA IN MASA CERE CONFIRMARE, ca si cea a unui singur cos - si
+        cu atat mai mult: aici dispar zeci de randuri deodata, cu tot cu
+        cifrele lor. Fereastra spune si ca „Ignoră" ar fi pastrat cifrele.
+      */}
+      {deStersInMasa && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !inMasa && setDeStersInMasa(false)} />
+          <div className="relative w-full max-w-md rounded-2xl bg-card p-5 shadow-2xl ring-1 ring-foreground/10">
+            <div className="mb-4 flex items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10 text-destructive">
+                <Trash2 className="h-4.5 w-4.5" />
+              </span>
+              <div>
+                <h3 className="text-base font-semibold text-foreground">
+                  Ștergi {rezumat.cate} {rezumat.cate === 1 ? "coș" : "coșuri"}?
+                </h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">{rezumat.valoare} în total</p>
+              </div>
+            </div>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Ștergerea e definitivă și le scoate și din cifre: rata de abandon și venitul potențial
+              se schimbă în urmă. Dacă vrei doar să nu-i mai contactezi, folosește{" "}
+              <span className="font-medium text-foreground">Ignoră</span> — rămân în statistici.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setDeStersInMasa(false)}
+                disabled={inMasa}
+                className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-60"
+              >
+                Renunță
+              </button>
+              <button
+                onClick={() => { setDeStersInMasa(false); faInMasa("sterge"); }}
+                disabled={inMasa}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-destructive/40 px-4 py-2.5 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-60"
+              >
+                {inMasa ? <><Loader2 className="h-4 w-4 animate-spin" /> Se șterg...</> : "Șterge definitiv"}
               </button>
             </div>
           </div>

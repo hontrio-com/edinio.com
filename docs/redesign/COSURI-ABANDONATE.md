@@ -407,3 +407,36 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
       se judeca REPRETUITA, si regulile nu revendica pasul) a ramas, forma s-a schimbat.
       A treia oara intr-o zi cand o ancora a prins alt loc din fisier - aici, unul dintre cele
       TREI `revendicaPasul` din bucla, doua dintre ele facand dinadins pe dos.
+- [x] **F4b.** Actiuni pe lista: selectie, trimitere/ignorare/stergere in masa, cautare,
+      sortare si export CSV.
+      ⚠⚠ **Trimiterea in masa merge UNUL CATE UNUL**, prin aceeasi poarta ca una singura.
+      Fiecare mesaj are de trecut prin suprimare, prin reguli, prin plafoane si prin cheia de
+      o-singura-data; o scurtatura „pentru viteza" ar fi ocolit tocmai portile care apara
+      oamenii - si ar fi facut-o de douazeci de ori deodata. Se spune si cate au plecat si cate
+      nu, cu motivul primului refuz: „am trimis 12 din 20" fara sa spui de ce e mai rau decat
+      nimic.
+      ⚠ Bara de selectie spune cate dintre cele bifate pot primi fiecare fel de mesaj.
+      „Trimite email (3)" cu un cos ignorat printre ele ar fi trimis doua, iar omul n-ar fi
+      inteles de ce - sau ar fi crezut ca a plecat si catre cel scos dinadins.
+      ⚠ Selectia se tine pe ID, nu pe rand: randurile se reincarca la fiecare schimbare de
+      pagina, iar tinute ca obiecte ar fi ramas copii vechi.
+      ⚠ Stergerea in masa cere confirmare, ca si cea a unui singur cos - si cu atat mai mult:
+      dispar zeci de randuri deodata, cu tot cu cifrele lor.
+      ⚠ `.in()` intra in ADRESA cererii catre PostgREST, iar adresele au lungime marginita: cu
+      mii de chei, cererea ar fi fost taiata si s-ar fi sters ALTCEVA decat s-a cerut, fara
+      nicio eroare. De-aia cel mult 200 pe o apasare.
+      ⚠ **Cautarea nu se impiedica de diacritice**: cine scrie „gheorghita" trebuie sa-l
+      gaseasca pe „Gheorghiță", altfel pare stricata tocmai pe numele romanesti. Cauta si in
+      numele produselor - „cine a lasat covorul in cos" e o intrebare buna.
+      ⚠ Sortarea nu schimba numarul de randuri, si nu modifica lista primita. Cosurile fara nume
+      stau la coada oricum ai sorta: nu sunt „primele alfabetic".
+      ⚠ **CSV-ul se deschide in Excelul romanesc.** Trei lucruri, si fiecare singur il strica:
+      separatorul `;` (cu virgula, tot randul intra intr-o celula), BOM-ul (fara el,
+      „Gheorghiță" se deschide „GheorghiÈ›Ä") si CRLF. Telefonul se scrie cu apostrof in fata,
+      altfel Excel taie zeroul si lasa un numar la care nu suna nimeni. Suma are virgula
+      zecimala.
+      ⚠ Se exporta CE SE VEDE, si butonul spune numarul: un export care aduce altceva decat ce
+      ai pe ecran e o capcana.
+      ⚠ Prinse de propriile probe: fabrica de cosuri din teste folosea `??`, care sare peste
+      `null` - asa ca „cosul fara email" avea email si „cel fara nume" se chema Ion Popescu.
+      Doua probe au cazut aratand ca un defect in cod, cand fabrica de probe era cea care mintea.

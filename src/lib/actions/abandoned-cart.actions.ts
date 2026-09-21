@@ -941,7 +941,6 @@ export async function sendAbandonedCartSms(
     .from("store_settings").select("smso_config, notice_config").eq("business_id", businessId).single();
   const smso = settings?.smso_config as SmsoConfig | null;
   const notice = settings?.notice_config as NoticeConfig | null;
-  const smsoReady = !!(smso?.enabled && smso.api_key && smso.sender_id);
   /*
    * ⚠ CINE TRIMITE SE HOTARASTE INTR-UN SINGUR LOC. Pana pe 21.09.2026 aici
    * era `if (noticeReady) ... else ... smso`, deci cu amandoi pornite notice.ro
@@ -1072,6 +1071,64 @@ export async function ignoraCosAbandonat(
 
   revalidatePath("/dashboard/abandoned");
   return { success: true };
+}
+
+/**
+ * Ignora sau sterge mai multe cosuri deodata.
+ *
+ * ⚠ NU SE TRIMIT MESAJE IN MASA DIN ACEEASI POARTA. Trimiterea in masa trece
+ * tot prin `sendAbandonedCartEmail` / `sendAbandonedCartSms`, unul cate unul,
+ * fiindca fiecare are de trecut prin suprimare, prin reguli, prin plafoane si
+ * prin cheia de o-singura-data. O scurtatura „pentru viteza" ar fi ocolit
+ * tocmai portile care apara oamenii - si ar fi facut-o de douazeci de ori
+ * deodata.
+ *
+ * Aici sunt doar cele doua care NU trimit nimic nimanui.
+ */
+export async function inMasaCosuri(
+  businessId: string,
+  cartIds: string[],
+  ce: "ignora" | "scoate-din-ignorate" | "sterge",
+): Promise<{ success: true; cate: number } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+
+  const { data: biz } = await supabase
+    .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
+  if (!biz) return { error: "Neautorizat" };
+
+  const ids = [...new Set(cartIds.filter(Boolean))];
+  if (ids.length === 0) return { error: "Nu ai ales niciun coș." };
+  /*
+   * ⚠ PLAFON PE O SINGURA APASARE. `.in()` intra in ADRESA cererii catre
+   * PostgREST, iar adresele au o lungime marginita: cu mii de chei, cererea ar
+   * fi fost taiata si s-ar fi sters ALTCEVA decat s-a cerut, fara nicio eroare.
+   * 200 e mult peste cate randuri incap pe o pagina.
+   */
+  if (ids.length > 200) return { error: "Prea multe coșuri deodată. Alege cel mult 200." };
+
+  const q = supabase.from("abandoned_carts").select("id").eq("business_id", businessId).in("id", ids);
+
+  if (ce === "sterge") {
+    const { data, error } = await supabase
+      .from("abandoned_carts").delete().eq("business_id", businessId).in("id", ids).select("id");
+    if (error) return { error: "Nu am putut șterge coșurile alese." };
+    revalidatePath("/dashboard/abandoned");
+    return { success: true, cate: (data ?? []).length };
+  }
+
+  const { data, error } = await supabase
+    .from("abandoned_carts")
+    .update({
+      ignorat_la: ce === "ignora" ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq("business_id", businessId).in("id", ids).select("id");
+  if (error) return { error: "Nu am putut schimba coșurile alese." };
+  void q;
+  revalidatePath("/dashboard/abandoned");
+  return { success: true, cate: (data ?? []).length };
 }
 
 // ── Delete (owner) ─────────────────────────────────────────────────────────────

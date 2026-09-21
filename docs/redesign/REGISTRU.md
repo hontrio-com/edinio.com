@@ -142,6 +142,38 @@ Pana atunci, `--check` va semnala o diferenta: e chiar politica de mai sus, nu o
 
 ---
 
+## B1. ⚠⚠ O GAURA GASITA IN PRODUCTIE PE 21.09.2026, si inchisa pe loc
+
+`migrations/2026-09-21-copii-de-siguranta-inchise.sql` - **aplicata in productie**, cu aceeasi
+judecata ca migratia 11: era deschisa, si nu se putea astepta pana la unire.
+
+Trei tabele de siguranta facute pe 20.09 aveau `row level security` OPRIT si drepturi catre
+`anon`, adica erau de citit SI de scris de oricine are cheia publica a unui magazin - cheia aia
+sta in bundle-ul fiecarei vitrine:
+
+| Tabela | Randuri |
+|---|---|
+| `zz_backup_anunturi_stinse_20260920` | 6 |
+| `zz_backup_esafe_page_sections_20260920` | **3.351** (continut de pagina al unui comerciant) |
+| `zz_backup_feed_vetdepo_20260920` | 1 |
+
+⚠ **NU era o gaura de cod, ci una de MANA.** Tabelele s-au nascut dintr-un `create table ... as
+select` scris in consola, iar `create table as` nu mosteneste nici RLS-ul, nici granturile
+tabelei din care copiaza. Cine salveaza ceva „doar pentru cinci minute" nu se gandeste la Data
+API.
+
+⚠ **Cum a iesit la iveala**, fiindca merita tinut minte: NU cautand-o. Schema de referinta din
+Git era in urma, iar cand a fost regenerata, plasa `rls-tabele.test.ts` a vazut in sfarsit
+tabele pe care inainte nu le avea in fisier. Plasa era buna de luni de zile; ii lipsea hrana.
+De-aia „schema din Git = schema din productie" nu e o curatenie, ci o conditie ca probele sa
+poata vedea.
+
+S-au inchis toate cele douasprezece, nu doar cele trei: celelalte noua aveau RLS pornit (deci
+citirea intorcea gol), dar tot aveau granturi catre `anon` - o politica adaugata din greseala
+peste ele le-ar fi deschis dintr-o data.
+
+---
+
 ## B2. Starea tipurilor fata de productie, pe 21.09.2026
 
 Verificat cu `node scripts/verifica-tipuri-db.mjs`, dupa ce schema de referinta a fost

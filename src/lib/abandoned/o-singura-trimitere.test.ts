@@ -75,10 +75,17 @@ test("⚠ CHEIA SE FACE LA DESCHIDEREA FERESTREI, nu la fiecare apasare", () => 
 
   const trimite = sursa.slice(sursa.indexOf("function send("));
   assert.doesNotMatch(trimite, /randomUUID/, "cheia se reface la fiecare apasare: nu mai opreste nimic");
-  assert.equal(
-    (trimite.match(/cheieCerere\)/g) ?? []).length, 2,
-    "cheia trebuie dusa la AMANDOUA canalele",
-  );
+  /*
+    ⚠ Se masoara CHEMARILE, nu un sir care se nimereste la capatul lor. Prima
+    scriere numara „cheieCerere)" - si a cazut cand apelul de SMS a capatat inca
+    un argument dupa cheie (furnizorul), desi cheia ajungea tot la amandoua.
+  */
+  for (const chemare of ["sendAbandonedCartEmail(", "sendAbandonedCartSms("]) {
+    const de = trimite.indexOf(chemare);
+    assert.ok(de > 0, `${chemare} nu se cheama din ecran`);
+    const argumente = trimite.slice(de, trimite.indexOf(")", trimite.indexOf("cheieCerere", de)));
+    assert.match(argumente, /cheieCerere/, `${chemare} nu primeste cheia apasarii`);
+  }
 });
 
 test("⚠ DREPTUL SE IA INAINTE DE TRIMITERE, pe amandoua canalele", () => {

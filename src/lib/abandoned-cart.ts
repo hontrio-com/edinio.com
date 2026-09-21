@@ -4,6 +4,7 @@
 
 import { construiesteTrepte, pretPeTrepte } from "@/lib/storefront/quantity-tiers";
 import { mesajulCareAAdus } from "@/lib/abandoned/atribuire";
+import type { FurnizorSms } from "@/lib/abandoned/furnizori-sms";
 import type { CatePePagina, NumePerioada } from "@/lib/abandoned/perioade";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
@@ -113,6 +114,13 @@ export interface AbandonedCartsData {
   smsoEnabled: boolean;
   // SMS recovery is available if EITHER SMSO or notice.ro (abandoned-cart) is configured.
   smsEnabled: boolean;
+  /**
+   * Furnizorii de SMS care pot trimite acum.
+   *
+   * ⚠ Cand sunt doi, ecranul INTREABA pe care pleaca. Pana pe 21.09.2026
+   * alegea codul, si alegea mereu la fel.
+   */
+  furnizoriSms: { cheie: FurnizorSms; nume: string }[];
   storeUrl: string;
   storeName: string;
   primaryColor: string;
@@ -131,6 +139,20 @@ export interface AbandonedCartsData {
     organiceCount: number;
     organiceValue: number;
   };
+  /**
+   * Aceleasi cifre, pe perioada dinaintea celei alese.
+   *
+   * ⚠ `null` la „de cand exista magazinul": inaintea inceputului nu exista
+   * nimic, iar o comparatie cu zero ar da mereu „+100%".
+   */
+  inainte: {
+    abandonedCount: number;
+    abandonedValue: number;
+    avgCartValue: number;
+    abandonRate: number;
+    recoveredCount: number;
+    recoveredValue: number;
+  } | null;
   /** Fereastra la care raspund TOATE cifrele de mai sus. */
   perioada: NumePerioada;
   pagina: number;
@@ -624,6 +646,14 @@ export function defaultRecoverySms(opts: { name?: string | null; storeName: stri
 export type RecoveryChannel = "email" | "sms";
 
 export interface AbandonedAutomationStep {
+  /**
+   * Pe ce furnizor pleaca SMS-ul acestui pas.
+   *
+   * ⚠ Lipsa lui inseamna „primul gata", ca sa mearga mai departe
+   * automatizarile scrise inainte de 21.09.2026. Ecranul întreabă doar când
+   * sunt doi furnizori gata.
+   */
+  furnizor?: FurnizorSms;
   id: string;
   delay_hours: number;
   channel: RecoveryChannel;
@@ -656,6 +686,12 @@ export function readAutomationConfig(raw: unknown): AbandonedAutomationConfig {
         channel: s.channel,
         message: typeof s.message === "string" && s.message.trim() ? s.message.trim() : undefined,
         discount_code: typeof s.discount_code === "string" && s.discount_code.trim() ? s.discount_code.trim() : undefined,
+        /*
+          ⚠ CITIT INAPOI, nu doar scris. Un camp salvat si necitit la incarcare
+          dispare la prima resalvare: omul alege SMSO, salveaza, reincarca
+          pagina si vede iar notice.ro - fara nicio eroare.
+        */
+        furnizor: s.furnizor === "smso" || s.furnizor === "notice" ? s.furnizor : undefined,
       })),
   };
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { motivulSuprimarii, type RandSuprimare } from "@/lib/abandoned/suprimare";
+import { furnizorulAles, furnizoriSms } from "@/lib/abandoned/furnizori-sms";
 import { logError } from "@/lib/error-logger";
 import { pragulComenzilor } from "@/app/api/cron/curata-fisiere/reguli";
 import { verificaCron } from "@/lib/cron-auth";
@@ -377,7 +378,21 @@ export async function GET(req: NextRequest) {
           : defaultRecoverySms({ name: cart.customer_name, storeName, url: recoverUrl, code: step.discount_code ?? null });
         // Prefer notice.ro when enabled for abandoned carts, else SMSO.
         let smsOk = false;
-        if (noticeReady) {
+        /*
+         * ⚠ PE FURNIZORUL ALES IN PAS, nu pe primul dintr-un `if`. Pana pe
+         * 21.09.2026 scria `if (noticeReady)`, deci cu amandoi pornite notice.ro
+         * castiga mereu - si comerciantul care alesese SMSO n-avea de unde afla.
+         *
+         * ⚠ Cand alegerea nu mai e gata (chei expirate), pasul se SARE si se
+         * spune in loguri; nu se trece tacit pe celalalt, unde ar plati la alt
+         * furnizor si ar aparea alt expeditor in telefonul clientului.
+         */
+        const cine = furnizorulAles(furnizoriSms(store.smso, store.notice), step.furnizor);
+        if ("eroare" in cine) {
+          console.error("[abandoned-recovery] furnizor SMS indisponibil:", store.businessId, cine.eroare);
+          continue;
+        }
+        if (cine.furnizor === "notice") {
           const r = await sendNoticeAbandonedSms(admin, store.notice, { businessId: store.businessId, phone: canal.phone, body });
           smsOk = r.success;
         } else {

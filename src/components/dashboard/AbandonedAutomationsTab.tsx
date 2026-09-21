@@ -99,6 +99,8 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
           channel: pasul.channel,
           message: pasul.message,
           discount_code: pasul.discount_code,
+          /* ⚠ Pe acelasi furnizor ca pasul, altfel proba n-ar fi o proba. */
+          furnizor: pasul.furnizor,
         });
       } catch {
         toast.error("Nu am primit raspuns de la server, deci nu stim daca proba a plecat.");
@@ -154,6 +156,7 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
             channel: s.channel,
             message: s.message?.trim() || undefined,
             discount_code: s.discount_code?.trim() || undefined,
+            furnizor: s.furnizor,
           })),
         });
       } catch {
@@ -324,6 +327,31 @@ export function AbandonedAutomationsTab({ businessId, data }: { businessId: stri
                     </button>
                   </div>
                 </div>
+
+                {/*
+                  ⚠ Pe fiecare pas, nu o data pe automatizare: un magazin poate
+                  vrea mementoul ieftin pe un furnizor si ultimul mesaj pe altul.
+                */}
+                {s.channel === "sms" && data.furnizoriSms.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Trimite prin</span>
+                    <div className="inline-flex overflow-hidden rounded-lg border border-border">
+                      {data.furnizoriSms.map((f) => (
+                        <button
+                          key={f.cheie}
+                          onClick={() => updateStep(s.id, { furnizor: f.cheie })}
+                          className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                            (s.furnizor ?? data.furnizoriSms[0].cheie) === f.cheie
+                              ? "bg-foreground text-background"
+                              : "text-muted-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {f.nume}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {s.channel === "sms" && !data.smsEnabled && (
                   <p className="text-[11px] text-warning flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> SMS-ul nu e activat — activează SMSO sau notice.ro (coș abandonat) ca să se trimită acest pas.</p>

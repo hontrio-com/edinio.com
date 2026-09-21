@@ -89,3 +89,24 @@ export function marginile(pagina: number, pePagina: number): { de: number; la: n
 export function catePagini(total: number, pePagina: number): number {
   return Math.max(1, Math.ceil(total / pePagina));
 }
+
+/**
+ * Fereastra dinaintea celei alese, de aceeasi lungime.
+ *
+ * ⚠ SE LIPESTE DE EA, nu lasa nicio zi intre. O gaura ar face ca „+12% fata de
+ * perioada trecuta" sa compare cu ceva ce nu e chiar perioada trecuta.
+ *
+ * ⚠ „De cand exista magazinul" NU ARE PERIOADA PRECEDENTA, si asta nu e o
+ * scapare: inaintea inceputului nu exista nimic, iar o comparatie cu zero ar
+ * da mereu „+100%" - o cifra care pare o crestere si e doar un inceput.
+ */
+export function fereastraPrecedenta(p: Perioada): Perioada | null {
+  if (p.nume === "tot") return null;
+  const lungime = p.panaLa.getTime() - p.deLa.getTime();
+  return {
+    nume: p.nume,
+    eticheta: `perioada precedentă (${p.eticheta.toLowerCase()})`,
+    deLa: new Date(p.deLa.getTime() - lungime),
+    panaLa: new Date(p.deLa.getTime()),
+  };
+}

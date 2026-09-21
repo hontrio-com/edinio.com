@@ -13,6 +13,9 @@ import {
 import { formatPrice } from "@/lib/utils/format";
 import { AbandonedAutomationsTab } from "./AbandonedAutomationsTab";
 import { ExplicatieCard } from "./ExplicatieCard";
+import { CardStatistica } from "./CardStatistica";
+import type { FurnizorSms } from "@/lib/abandoned/furnizori-sms";
+import { crestere } from "@/lib/vanzari";
 import { EticheraStare } from "./cosuri/EticheteStare";
 import { SertarCos } from "./cosuri/SertarCos";
 import { GraficRecuperare } from "./cosuri/GraficRecuperare";
@@ -63,6 +66,27 @@ function rastimpul(p: NumePerioada): string {
     case "luna": return "luna aceasta";
     case "tot": return "de când există magazinul";
   }
+}
+
+/**
+ * Sageata de pe card, cand exista cu ce compara.
+ *
+ * ⚠ FARA PERIOADA PRECEDENTA NU SE ARATA NIMIC, si cardul scrie „Actualizat
+ * acum". „De cand exista magazinul" n-are un inainte, iar o comparatie cu zero
+ * ar da mereu „+100%" - o cifra care pare o crestere si e doar un inceput.
+ *
+ * ⚠ Si cand cifra dinainte e 0, `crestere` intoarce `null`: „de la 0 la 3" nu
+ * e o crestere procentuala, e o aparitie.
+ */
+function comparat(acum: number, inainte: number | undefined, scrie?: (v: number) => string) {
+  if (inainte === undefined) return {};
+  const pct = crestere(acum, inainte);
+  if (pct === null) return {};
+  return {
+    delta: `${Math.abs(pct).toLocaleString("ro-RO", { maximumFractionDigits: 1 })}%`,
+    deltaDir: (pct >= 0 ? "up" : "down") as "up" | "down",
+    deltaCaption: `față de ${scrie ? scrie(inainte) : new Intl.NumberFormat("ro-RO").format(inainte)}`,
+  };
 }
 
 function timeAgo(iso: string): string {
@@ -203,32 +227,6 @@ const FILE = [
 
 type Fila = (typeof FILE)[number]["cheie"];
 
-function KpiCard({ icon: Icon, label, value, sub, accent, explicatie }: {
-  icon: React.ElementType; label: string; value: string; sub?: string;
-  accent?: string; // hex for semantic colors, "primary" for the platform accent, omit for neutral
-  /* ⚠ Cifrele care se pot citi gresit isi spun singure ce masoara. */
-  explicatie?: string;
-}) {
-  const isPrimary = accent === "primary";
-  const isHex = !!accent && accent !== "primary";
-  return (
-    <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <span
-          className={`w-8 h-8 rounded-lg flex items-center justify-center ${isPrimary ? "bg-primary/10 text-primary" : isHex ? "" : "bg-muted text-muted-foreground"}`}
-          style={isHex ? { backgroundColor: `${accent}1a`, color: accent } : undefined}
-        >
-          <Icon className="h-4 w-4" />
-        </span>
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        {explicatie && <span className="ml-auto -mr-1"><ExplicatieCard text={explicatie} eticheta={label} /></span>}
-      </div>
-      <p className="text-2xl font-bold text-foreground tabular-nums">{value}</p>
-      {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
-    </div>
-  );
-}
-
 function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: string; data: AbandonedCartsData }) {
   /*
     ⚠ Datele stau in stare fiindca perioada si pagina le schimba pe TOATE
@@ -268,6 +266,29 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
   */
   function reincarca() { cere({}); }
 
+  function dezactiveaza() {
+    startToggleOff(async () => {
+      let res: Awaited<ReturnType<typeof setAbandonedCartEnabled>>;
+      try {
+        res = await setAbandonedCartEnabled(businessId, false);
+      } catch {
+        /* ⚠ Scrie la noi: doar comutatorul functiei. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci nu stim daca functia s-a dezactivat. "
+          + "Pagina se reincarca: uita-te la ecran inainte sa apesi din nou.",
+          { duration: 12000 },
+        );
+        setDeDezactivat(false);
+        reincarca();
+        return;
+      }
+      if ("error" in res) { toast.error(res.error); return; }
+      setDeDezactivat(false);
+      toast.success("Funcția a fost dezactivată. Coșurile de până acum rămân în listă.");
+      reincarca();
+    });
+  }
+
   const pagini = catePagini(data.totalCosuri, data.pePagina);
 
   const [recover, setRecover] = useState<{ cart: AbandonedCartRow; channel: "email" | "sms" } | null>(null);
@@ -289,6 +310,14 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
   */
   const [deHotarat, setDeHotarat] = useState<AbandonedCartRow | null>(null);
   const [fila, setFila] = useState<Fila>("prezentare");
+  const [deDezactivat, setDeDezactivat] = useState(false);
+  /*
+    ⚠ Se tine minte ultima alegere, dar numai pe calculatorul asta
+    (`localStorage`): e o inlesnire, nu o setare a magazinului. Cand nu se
+    poate citi - fereastra privata, date sterse - se cade pe primul gata, si
+    nimic nu se rupe.
+  */
+  const [furnizor, setFurnizor] = useState<FurnizorSms | null>(null);
   const [sertar, setSertar] = useState<AbandonedCartRow | null>(null);
   /*
     ⚠ FILTRUL LUCREAZA PE PAGINA ADUSA, NU PE TOATA FEREASTRA, si de-aia
@@ -345,10 +374,27 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
   /* Filtrul lucreaza pe pagina ADUSA, deci dupa randurile optimiste, nu inaintea lor. */
   const aratate = cosuri.filter((c) => trece(c, filtru));
 
+  /** Ultima alegere, daca mai e valabila azi. */
+  function furnizorulTinutMinte(): FurnizorSms | null {
+    try {
+      const salvat = localStorage.getItem("edinio:furnizor-sms") as FurnizorSms | null;
+      /* ⚠ Un furnizor care intre timp s-a oprit nu se mai propune. */
+      return data.furnizoriSms.some((f) => f.cheie === salvat) ? salvat : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function alegeFurnizor(f: FurnizorSms) {
+    setFurnizor(f);
+    try { localStorage.setItem("edinio:furnizor-sms", f); } catch { /* vezi mai sus */ }
+  }
+
   function openRecover(cart: AbandonedCartRow, channel: "email" | "sms") {
     setRecover({ cart, channel });
     setDiscountCode("");
     setCheieCerere(crypto.randomUUID());
+    setFurnizor(channel === "sms" ? (furnizorulTinutMinte() ?? data.furnizoriSms[0]?.cheie ?? null) : null);
     // Pre-fill the actual standard message so the merchant sees exactly what's sent
     // (the restore link is appended by the server).
     setMessage(interpolateRecoveryMessage(standardRecoveryTemplate(channel), { name: cart.customer_name, store: data.storeName }));
@@ -365,7 +411,9 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
       try {
         res = channel === "email"
           ? await sendAbandonedCartEmail(businessId, cart.id, message.trim() || undefined, code, cheieCerere)
-          : await sendAbandonedCartSms(businessId, cart.id, message.trim() || undefined, code, cheieCerere);
+          : await sendAbandonedCartSms(
+              businessId, cart.id, message.trim() || undefined, code, cheieCerere, furnizor ?? undefined,
+            );
       } catch {
         /*
          * ⚠ Cererea a picat pe retea, deci nu stim daca serverul apucase sa trimita.
@@ -458,27 +506,17 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
           <h1 className="text-2xl font-bold text-foreground">Coșuri abandonate</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Recuperează vânzările pierdute prin mail și SMS.</p>
         </div>
+        {/*
+          ⚠ NU SE DEZACTIVEAZA DIN PRIMA APASARE. Butonul sta langa titlu, e
+          scris marunt si arata ca o legatura - iar ce face nu se poate lua
+          inapoi cu adevarat: din clipa aceea nu se mai SALVEAZA coșuri, si
+          coșurile pe care clienții le lasă cât timp funcția e oprită nu se mai
+          pot recupera niciodată, fiindcă n-au fost scrise nicăieri.
+        */}
         <button
-          onClick={() => startToggleOff(async () => {
-            let res: Awaited<ReturnType<typeof setAbandonedCartEnabled>>;
-            try {
-              res = await setAbandonedCartEnabled(businessId, false);
-            } catch {
-              /* ⚠ Scrie la noi: doar comutatorul functiei. */
-              toast.error(
-                "Nu am primit raspuns de la server, deci nu stim daca functia s-a dezactivat. "
-                + "Pagina se reincarca: uita-te la ecran inainte sa apesi din nou.",
-                { duration: 12000 },
-              );
-              reincarca();
-              return;
-            }
-            if ("error" in res) { toast.error(res.error); return; }
-            toast.success("Functia a fost dezactivata.");
-            reincarca();
-          })}
+          onClick={() => setDeDezactivat(true)}
           disabled={togglingOff}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline disabled:opacity-50 shrink-0"
+          className="shrink-0 text-xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:opacity-50"
         >
           Dezactivează
         </button>
@@ -556,23 +594,66 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
       </div>
 
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <KpiCard icon={ShoppingBag} label="Coșuri abandonate" value={String(kpis.abandonedCount)} accent="primary" />
-        <KpiCard icon={Banknote} label="Valoare abandonată" value={formatPrice(kpis.abandonedValue)} accent="#ef4444" />
-        <KpiCard
-          icon={Percent} label="Rată de abandon la finalizare" value={`${kpis.abandonRate}%`}
-          /* ⚠ Subtitlul urmeaza selectorul. Scris „luna aceasta" de-a gata, spunea alta
-             perioada decat cifra de deasupra lui. */
-          sub={ETICHETE[data.perioada].toLowerCase()} accent="#f59e0b"
+      {/*
+        ⚠ CHIAR CARDURILE DE LA STATISTICI, nu unele care seamana cu ele.
+        Pana pe 21.09.2026 pagina asta avea un `KpiCard` al ei, desenat separat:
+        alta inaltime, alta marime a cifrei, fara sageti de comparatie. Doua
+        carduri desenate separat diverg la prima retusare - exact ce s-a
+        intamplat cu cele doua meniuri, unde de pe telefon lipseau sectiuni
+        intregi fara ca nimeni sa afle.
+
+        ⚠ `susEBine={false}` la primele trei: o CRESTERE a cosurilor abandonate
+        e o veste proasta, iar sageata si culoarea spun lucruri diferite -
+        sageata incotro s-a miscat, culoarea daca e bine.
+      */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <CardStatistica
+          icon={ShoppingBag} label="Coșuri abandonate"
+          value={new Intl.NumberFormat("ro-RO").format(kpis.abandonedCount)}
+          empty={kpis.abandonedCount === 0}
+          susEBine={false}
+          {...comparat(kpis.abandonedCount, data.inainte?.abandonedCount)}
+          explicatie={`Coșuri care au rămas neterminate în perioada aleasă și pe care nimeni nu le-a mai atins de ${ABANDON_MINUTES} de minute.`}
+        />
+        <CardStatistica
+          icon={Banknote} label="Valoare abandonată"
+          value={new Intl.NumberFormat("ro-RO").format(Math.round(kpis.abandonedValue))}
+          unit="lei"
+          empty={kpis.abandonedValue === 0}
+          susEBine={false}
+          {...comparat(kpis.abandonedValue, data.inainte?.abandonedValue, formatPrice)}
+          explicatie="Cât valorează coșurile abandonate, la prețurile de la momentul abandonului."
+        />
+        <CardStatistica
+          icon={Percent} label="Rată de abandon la finalizare"
+          value={kpis.abandonRate} unit="%"
+          empty={kpis.abandonRate === 0}
+          susEBine={false}
+          {...comparat(kpis.abandonRate, data.inainte?.abandonRate, (v) => `${v}%`)}
           explicatie={EXPLICATIA_RATEI}
         />
-        <KpiCard
-          icon={RotateCcw} label={NUMELE_RECUPERARII.atribuita.titlu} value={String(kpis.recoveredCount)}
-          sub={formatPrice(kpis.recoveredValue)} accent="#16a34a"
+        <CardStatistica
+          icon={RotateCcw} label={NUMELE_RECUPERARII.atribuita.titlu}
+          value={new Intl.NumberFormat("ro-RO").format(kpis.recoveredCount)}
+          empty={kpis.recoveredCount === 0}
+          {...comparat(kpis.recoveredCount, data.inainte?.recoveredCount)}
           explicatie={NUMELE_RECUPERARII.atribuita.explicatie}
         />
-        <KpiCard icon={TrendingDown} label="Valoare medie coș" value={formatPrice(kpis.avgCartValue)} />
+        <CardStatistica
+          icon={TrendingDown} label="Valoare medie coș"
+          value={new Intl.NumberFormat("ro-RO").format(Math.round(kpis.avgCartValue))}
+          unit="lei"
+          empty={kpis.avgCartValue === 0}
+          /*
+            ⚠ SI AICI O CRESTERE E O VESTE PROASTA, desi „valoare medie" suna a
+            bine. E media cosurilor ABANDONATE: cand urca, se pierd cosuri mai
+            mari. Scris verde, cardul ar fi felicitat magazinul pentru pierderi
+            mai scumpe - aceeasi capcana ca la „rata de anulare".
+          */
+          susEBine={false}
+          {...comparat(kpis.avgCartValue, data.inainte?.avgCartValue, formatPrice)}
+          explicatie="Valoarea abandonată împărțită la numărul de coșuri abandonate."
+        />
       </div>
 
       {/*
@@ -945,6 +1026,65 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
         </>
       )}
 
+      {/*
+        ⚠ Fereastra spune trei lucruri, in ordinea in care conteaza: ce se
+        opreste, ce NU se pierde, si ce nu se mai poate recupera niciodata.
+        „Esti sigur?" n-ar fi spus niciunul dintre ele.
+      */}
+      {deDezactivat && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !togglingOff && setDeDezactivat(false)} />
+          <div className="relative w-full max-w-md rounded-2xl bg-card p-5 shadow-2xl ring-1 ring-foreground/10">
+            <div className="mb-4 flex items-start gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning">
+                <AlertTriangle className="h-4.5 w-4.5" />
+              </span>
+              <h3 className="text-base font-semibold text-foreground">
+                Oprești recuperarea coșurilor abandonate?
+              </h3>
+            </div>
+
+            <ul className="mb-4 space-y-2 text-sm text-muted-foreground">
+              <li>
+                <span className="font-medium text-foreground">Nu se mai salvează coșuri noi.</span> Coșurile
+                pe care clienții le lasă cât timp funcția e oprită nu se mai pot recupera niciodată:
+                nu se scriu nicăieri.
+              </li>
+              <li>
+                <span className="font-medium text-foreground">Cele {data.totalCosuri} de acum rămân</span> în
+                listă, cu tot cu cifre, și le poți recupera manual mai departe.
+              </li>
+              {data.automation.enabled && data.automation.steps.length > 0 && (
+                <li className="text-destructive">
+                  Automatizarea ta cu {data.automation.steps.length}{" "}
+                  {data.automation.steps.length === 1 ? "mesaj" : "mesaje"} nu va mai trimite nimic.
+                </li>
+              )}
+              <li>Poți reactiva oricând, iar salvarea reîncepe din acel moment.</li>
+            </ul>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setDeDezactivat(false)}
+                disabled={togglingOff}
+                className="flex-1 rounded-lg border border-border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-60"
+              >
+                Păstrează activă
+              </button>
+              <button
+                onClick={dezactiveaza}
+                disabled={togglingOff}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-destructive/40 px-4 py-2.5 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-60"
+              >
+                {togglingOff
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Se oprește...</>
+                  : "Oprește funcția"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {sertar && (
         <SertarCos
           cos={sertar}
@@ -1056,6 +1196,34 @@ function ActiveDashboard({ businessId, data: dateInitiale }: { businessId: strin
                   <p className="text-[11px] text-amber-600 dark:text-amber-500 mt-1">{socotealaSms.avertisment}</p>
                 )}
               </>
+            )}
+
+            {/*
+              ⚠ SE INTREABA DOAR CAND SUNT DOI. Cu unul singur, un selector cu o
+              optiune e zgomot; cu doi, tacerea inseamna ca alege codul in locul
+              omului - si pana pe 21.09.2026 alegea mereu la fel, fara sa spuna.
+            */}
+            {recover.channel === "sms" && data.furnizoriSms.length > 1 && (
+              <div className="mt-3">
+                <label className="mb-1 block text-xs font-medium text-foreground">Trimite prin</label>
+                <div className="inline-flex overflow-hidden rounded-lg border border-border">
+                  {data.furnizoriSms.map((f) => (
+                    <button
+                      key={f.cheie}
+                      onClick={() => alegeFurnizor(f.cheie)}
+                      disabled={sending}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-60 ${
+                        furnizor === f.cheie ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {f.nume}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Ai două servicii de SMS pornite. Mesajul pleacă și se plătește pe cel ales aici.
+                </p>
+              </div>
             )}
 
             <div className="mt-3">

@@ -327,3 +327,46 @@ se poate lua inapoi, si nici al doilea SMS platit degeaba. Deci intai se inchid 
       nicio recuperare atribuita, deci raportul ar fi „cost / 0". **Codurile individuale** cer
       generare, expirare si curatare, adica o bucata de sistem, nu un camp.
       De reluat cand exista trafic pe drumul asta si cateva recuperari dovedite.
+
+
+---
+
+## Etapa F - ce a cerut el dupa ce a vazut pagina (21.09.2026)
+
+- [x] **F1.** Cele cinci carduri sunt acum CHIAR cele de la Statistici
+      (`CardStatistica`), nu unele care semanau cu ele: alta inaltime, alta marime a cifrei si
+      fara sageti de comparatie. Mutate, nu copiate - doua carduri desenate separat diverg la
+      prima retusare.
+      ⚠ Au capatat si comparatia cu perioada precedenta, care lipsea. Ea vine din ACEEASI
+      functie din baza, chemata pe alta fereastra: o a doua socoteala s-ar fi departat de prima,
+      si atunci „+12%" ar fi comparat doua lucruri masurate altfel.
+      ⚠ Fereastra precedenta se lipeste de cea aleasa, fara gol intre ele. Iar „de cand exista
+      magazinul" NU are una: inaintea inceputului nu e nimic, si o comparatie cu zero ar da
+      mereu „+100%" - o cifra care pare o crestere si e doar un inceput.
+      ⚠⚠ **Patru din cinci carduri masoara PIERDERI**, deci o crestere e o veste proasta si se
+      scrie cu rosu. Cel care pacaleste e „Valoare medie coș": suna a bine, dar e media
+      cosurilor ABANDONATE - cand urca, se pierd cosuri mai mari. Prima scriere il lasase verde,
+      adica felicita magazinul pentru pierderi mai scumpe. Exista proba.
+- [x] **F2.** Dezactivarea cere confirmare. Butonul sta langa titlu, e scris marunt si arata ca
+      o legatura - iar ce face nu se poate lua inapoi: din clipa aceea nu se mai SALVEAZA
+      cosuri, si cele pe care clientii le lasa cat timp functia e oprita nu se mai pot recupera
+      niciodata, fiindca n-au fost scrise nicaieri.
+      ⚠ Fereastra spune trei lucruri in ordinea in care conteaza: ce se opreste, ce NU se pierde
+      (cosurile de pana acum raman, cu tot cu cifre), si cate mesaje automate nu vor mai pleca -
+      citit din automatizarea lui adevarata, nu scris de-a gata.
+- [x] **F3.** Furnizorul de SMS se alege, nu se ghiceste.
+      ⚠⚠ Codul scria `if (noticeReady) ... else ... smso`, deci cu amandoi pornite notice.ro
+      castiga MEREU si nimic nu spunea asta nicaieri: comerciantul care isi incarcase credit la
+      SMSO vedea banii stand pe loc si factura crescand in alta parte. Nu era o hotarare, era
+      ordinea in care se nimerisera scrise cele doua ramuri.
+      ⚠ Se intreaba DOAR cand sunt doi gata: cu unul singur, un selector cu o optiune e zgomot.
+      ⚠ Alegerea sta pe FIECARE PAS de automatizare, nu o data pe automatizare: un magazin poate
+      vrea mementoul ieftin pe unul si ultimul mesaj pe celalalt. Proba pleaca pe acelasi
+      furnizor ca pasul, altfel n-ar fi o proba.
+      ⚠ O alegere care nu mai e gata (chei expirate) NU se inlocuieste tacit: s-ar plati la alt
+      furnizor decat crede omul, si in telefonul clientului ar aparea alt expeditor. Se spune
+      motivul si hotaraste el; cronul sare pasul si scrie in loguri.
+      ⚠ Ultima alegere se tine minte in `localStorage` - e o inlesnire pe calculatorul lui, nu o
+      setare a magazinului; cand nu se poate citi, se cade pe primul gata.
+      ⚠ Campul se CITESTE INAPOI la incarcarea configuratiei. Scris si necitit, ar fi disparut
+      la prima resalvare: alegi SMSO, salvezi, reincarci si vezi iar celalalt, fara nicio eroare.

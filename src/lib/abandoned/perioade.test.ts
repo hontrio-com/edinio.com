@@ -2,7 +2,9 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { PE_PAGINA, catePagini, fereastra, marginile } from "./perioade";
+import {
+  PE_PAGINA, catePagini, fereastra, fereastraPrecedenta, marginile,
+} from "./perioade";
 
 /*
   ═══════════════════════════════════════════════════════════════════════════════
@@ -121,4 +123,33 @@ test("⚠ NICIO ETICHETA DE PE ECRAN NU-SI SPUNE SINGURA PERIOADA", () => {
   /* Si ca amandoua locurile chiar citesc perioada aleasa. */
   assert.match(faraComentarii, /ETICHETE\[data\.perioada\]/, "eticheta nu vine din perioada aleasa");
   assert.match(faraComentarii, /rastimpul\(data\.perioada\)/, "fraza nu vine din perioada aleasa");
+});
+
+test("⚠ PERIOADA PRECEDENTA SE LIPESTE DE CEA ALEASA, fara gauri", () => {
+  /*
+    ⚠ O zi lasata intre ele ar face ca „+12% fata de perioada trecuta" sa
+    compare cu ceva ce nu e chiar perioada trecuta - o cifra plauzibila si
+    gresita, care nu cade niciodata.
+  */
+  const acum = new Date("2026-09-21T12:00:00Z");
+  const f = fereastra("7z", acum);
+  const inainte = fereastraPrecedenta(f)!;
+
+  assert.equal(inainte.panaLa.getTime(), f.deLa.getTime(), "e un gol intre cele doua ferestre");
+  assert.equal(
+    inainte.panaLa.getTime() - inainte.deLa.getTime(),
+    f.panaLa.getTime() - f.deLa.getTime(),
+    "cele doua ferestre nu au aceeasi lungime",
+  );
+});
+
+test("⚠ „DE CAND EXISTA MAGAZINUL” N-ARE PERIOADA PRECEDENTA", () => {
+  /*
+    ⚠ Inaintea inceputului nu exista nimic. O comparatie cu zero ar da mereu
+    „+100%" - o cifra care pare o crestere si e doar un inceput.
+  */
+  assert.equal(fereastraPrecedenta(fereastra("tot")), null);
+  for (const n of ["7z", "30z", "90z", "luna"] as const) {
+    assert.ok(fereastraPrecedenta(fereastra(n)), `${n} ar trebui sa aiba perioada precedenta`);
+  }
 });

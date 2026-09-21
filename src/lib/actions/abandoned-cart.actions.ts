@@ -23,7 +23,10 @@ import { getStoreEmailSender } from "@/lib/email/sender";
 import { storeBaseUrl } from "@/lib/seo";
 import { ZILE_ATRIBUIRE } from "@/lib/abandoned/atribuire";
 import {
-  fereastra, marginile, type CatePePagina, type NumePerioada,
+  ceiGata, furnizorulAles, furnizoriSms, type FurnizorSms,
+} from "@/lib/abandoned/furnizori-sms";
+import {
+  fereastra, fereastraPrecedenta, marginile, type CatePePagina, type NumePerioada,
 } from "@/lib/abandoned/perioade";
 import { isPremiumPlan } from "@/lib/plans";
 import { ABANDON_MINUTES, COS_PREA_VECHI, cosulMaiPoateFiRecuperat, cuPreturileDinCatalog, defaultRecoverySms, buildRecoverUrl, readAutomationConfig, interpolateRecoveryMessage, standardRecoveryTemplate, cosRecuperabil, type AbandonedCartItem, type AbandonedCartsData, type MesajCos, type AbandonedAutomationConfig } from "@/lib/abandoned-cart";
@@ -339,7 +342,9 @@ export async function getAbandonedCartsData(
   const smso = settings?.smso_config as SmsoConfig | null;
   const smsoEnabled = !!(smso?.enabled && smso?.api_key && smso?.sender_id);
   const notice = settings?.notice_config as NoticeConfig | null;
-  const smsEnabled = smsoEnabled || !!(notice?.enabled && notice.api_token && notice.abandoned?.enabled);
+  const furnizori = furnizoriSms(smso, notice);
+  const furnizoriGata = ceiGata(furnizori).map((f) => ({ cheie: f.cheie, nume: f.nume }));
+  const smsEnabled = furnizoriGata.length > 0;
 
   const storeUrl = storeBaseUrl({ slug: biz.slug, custom_domain: biz.custom_domain });
   const primaryColor = biz.primary_color ?? "#07c527";
@@ -364,7 +369,13 @@ export async function getAbandonedCartsData(
     p_minute: ABANDON_MINUTES,
     p_zile: ZILE_ATRIBUIRE,
   };
-  const [sumarRes, listaRes, produseRes, graficRes, palnieRes] = await Promise.all([
+  /*
+    ⚠ CIFRELE PERIOADEI PRECEDENTE VIN DIN ACEEASI FUNCTIE, chemata pe alta
+    fereastra. Scrise ca o a doua socoteala, cele doua s-ar fi departat una de
+    alta - si atunci „+12%" ar fi comparat doua lucruri masurate altfel.
+  */
+  const inainte = fereastraPrecedenta(perioada);
+  const [sumarRes, listaRes, produseRes, graficRes, palnieRes, sumarInainteRes] = await Promise.all([
     supabase.rpc("cosuri_abandonate_sumar", ferestruica),
     /*
       ⚠ PAGINA CERE SI NUMARUL ADEVARAT (`count: "exact"`). Pana acum antetul
@@ -394,9 +405,18 @@ export async function getAbandonedCartsData(
     supabase.rpc("cosuri_abandonate_produse", { ...ferestruica, p_limita: 8 }),
     supabase.rpc("cosuri_abandonate_grafic", ferestruica),
     supabase.rpc("cosuri_abandonate_palnie", ferestruica),
+    /* „De cand exista magazinul" n-are perioada precedenta: vezi `fereastraPrecedenta`. */
+    inainte
+      ? supabase.rpc("cosuri_abandonate_sumar", {
+          ...ferestruica,
+          p_de_la: inainte.deLa.toISOString(),
+          p_pana: inainte.panaLa.toISOString(),
+        })
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   const sumar = (sumarRes.data ?? [])[0] as SumarCosuri | undefined;
+  const sumarInainte = (sumarInainteRes.data ?? [])[0] as SumarCosuri | undefined;
   const randuri = (listaRes.data ?? []) as unknown as CartRow[];
   const totalCosuri = listaRes.count ?? randuri.length;
 
@@ -461,6 +481,8 @@ export async function getAbandonedCartsData(
     enabled,
     smsoEnabled,
     smsEnabled,
+    /* ⚠ Cine poate trimite ACUM. Ecranul intreaba doar cand sunt mai multi. */
+    furnizoriSms: furnizoriGata,
     storeUrl,
     storeName: biz.store_name ?? biz.business_name,
     primaryColor,
@@ -477,6 +499,21 @@ export async function getAbandonedCartsData(
       organiceCount: sumar?.organice ?? 0,
       organiceValue: nr(sumar?.valoare_organica),
     },
+    /*
+      ⚠ Cifrele perioadei precedente, pentru sagetile de pe carduri. `null`
+      cand nu exista perioada precedenta - si atunci cardurile NU arata nicio
+      sageata, in loc sa arate „+100%" fata de zero.
+    */
+    inainte: sumarInainte
+      ? {
+          abandonedCount: sumarInainte.abandonate,
+          abandonedValue: nr(sumarInainte.valoare_abandonata),
+          avgCartValue: nr(sumarInainte.valoare_medie),
+          abandonRate: sumarInainte.rata_abandon,
+          recoveredCount: sumarInainte.atribuite,
+          recoveredValue: nr(sumarInainte.valoare_atribuita),
+        }
+      : null,
     perioada: perioada.nume,
     pagina,
     pePagina,
@@ -527,7 +564,7 @@ export async function getAbandonedCartsData(
  */
 export async function trimiteProbaAutomatizare(
   businessId: string,
-  pas: { channel: "email" | "sms"; message?: string; discount_code?: string },
+  pas: { channel: "email" | "sms"; message?: string; discount_code?: string; furnizor?: FurnizorSms },
 ): Promise<{ success: true; catre: string } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -595,12 +632,12 @@ export async function trimiteProbaAutomatizare(
     .from("store_settings").select("smso_config, notice_config").eq("business_id", businessId).single();
   const smso = settings?.smso_config as SmsoConfig | null;
   const notice = settings?.notice_config as NoticeConfig | null;
-  const noticeReady = !!(notice?.enabled && notice.api_token && notice.abandoned?.enabled);
-  const smsoReady = !!(smso?.enabled && smso.api_key && smso.sender_id);
-  if (!noticeReady && !smsoReady) return { error: "Nu ai niciun serviciu de SMS pornit." };
+  /* ⚠ Proba pleaca pe FURNIZORUL ALES pentru pasul asta, altfel n-ar fi o proba. */
+  const cine = furnizorulAles(furnizoriSms(smso, notice), pas.furnizor);
+  if ("eroare" in cine) return { error: cine.eroare };
 
   const body = `${text} ${storeUrl}`;
-  if (noticeReady) {
+  if (cine.furnizor === "notice") {
     const r = await sendNoticeAbandonedSms(admin, notice!, { businessId, phone: catre, body });
     if (!r.success) return { error: r.error ?? "SMS-ul de probă nu a putut fi trimis." };
   } else {
@@ -845,6 +882,11 @@ export async function sendAbandonedCartSms(
    * nimic. O apasare noua e o intentie noua si trece.
    */
   cheieCerere?: string,
+  /*
+   * ⚠ Pe cine pleaca. Lipsa lui inseamna „primul gata", pentru cererile vechi
+   * si pentru cron - dar ecranul intreaba mereu cand sunt doi.
+   */
+  furnizor?: FurnizorSms,
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -865,8 +907,14 @@ export async function sendAbandonedCartSms(
   const smso = settings?.smso_config as SmsoConfig | null;
   const notice = settings?.notice_config as NoticeConfig | null;
   const smsoReady = !!(smso?.enabled && smso.api_key && smso.sender_id);
-  const noticeReady = !!(notice?.enabled && notice.api_token && notice.abandoned?.enabled);
-  if (!smsoReady && !noticeReady) return { error: "Activeaza SMSO sau notice.ro (cos abandonat) ca sa trimiti SMS." };
+  /*
+   * ⚠ CINE TRIMITE SE HOTARASTE INTR-UN SINGUR LOC. Pana pe 21.09.2026 aici
+   * era `if (noticeReady) ... else ... smso`, deci cu amandoi pornite notice.ro
+   * castiga MEREU - si nimic nu spunea asta. Comerciantul care isi incarcase
+   * credit la SMSO vedea banii stand pe loc si factura crescand in alta parte.
+   */
+  const cine = furnizorulAles(furnizoriSms(smso, notice), furnizor);
+  if ("eroare" in cine) return { error: cine.eroare };
 
   const { data: cart } = await supabase
     .from("abandoned_carts")
@@ -934,7 +982,7 @@ export async function sendAbandonedCartSms(
       });
 
   // Prefer notice.ro when the merchant enabled it for abandoned carts, else SMSO.
-  if (noticeReady) {
+  if (cine.furnizor === "notice") {
     const r = await sendNoticeAbandonedSms(supabase, notice, { businessId, phone: cart.phone, body });
     if (!r.success) return { error: r.error ?? "SMS-ul nu a putut fi trimis." };
   } else {

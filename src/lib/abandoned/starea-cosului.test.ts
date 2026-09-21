@@ -168,3 +168,34 @@ test("⚠ „Email”, NU „Mail”, peste tot pe ecran", () => {
     assert.doesNotMatch(textAratat, /"Mail"/, `${fisier}: a ramas „Mail" ca eticheta`);
   }
 });
+
+test("⚠ CIFRELE UNDE CRESTEREA E RAU NU SE SCRIU CU VERDE", () => {
+  /*
+    ⚠ Sageata arata INCOTRO s-a miscat cifra, culoarea arata DACA E BINE. Pe
+    pagina asta patru din cinci carduri masoara pierderi: cosuri abandonate,
+    valoarea lor, rata de abandon si valoarea medie a unui cos abandonat. O
+    crestere la oricare e o veste proasta.
+
+    ⚠ „Valoare medie coș" e cea care pacaleste: suna a bine, dar e media
+    cosurilor ABANDONATE - cand urca, se pierd cosuri mai mari. Prima scriere
+    o lasase verde.
+
+    Singura unde cresterea chiar e buna e „Recuperare atribuită".
+  */
+  const ecran = readFileSync(
+    new URL("../../components/dashboard/AbandonedCartsClient.tsx", import.meta.url), "utf8",
+  );
+  /* Randul de carduri mari: de la primul `CardStatistica` pana la cele doua mici. */
+  const randul = ecran.slice(ecran.indexOf("<CardStatistica"), ecran.indexOf("asistateCount"));
+  const carduri = randul.split("<CardStatistica").slice(1);
+  assert.equal(carduri.length, 5, "nu mai sunt cinci carduri");
+
+  for (const c of carduri) {
+    const masoaraPierderi = /Coșuri abandonate|Valoare abandonată|Rată de abandon|Valoare medie coș/.test(c);
+    const eVerdeLaCrestere = !/susEBine=\{false\}/.test(c);
+    assert.equal(
+      masoaraPierderi, !eVerdeLaCrestere,
+      `cardul ${(c.match(/label="([^"]+)"/) ?? c.match(/label=\{([^}]+)\}/) ?? [])[1]} are culoarea pe dos`,
+    );
+  }
+});

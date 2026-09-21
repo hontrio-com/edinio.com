@@ -231,13 +231,66 @@ ghiceste ea. Eticheta s-a despartit in „Importat" si „Adaugat manual".
 ⚠ Plasa veche a facut exact ce trebuia: proba care cerea „sase etichete, fiecare cu explicatia
 ei" a picat in clipa in care au devenit sapte.
 
+- [x] **G3. Anonimizare.** Cerut apoi anume: „trebuie sa avem posibilitatea de stergere a
+      utilizatorului". Intrebat ce inseamna pentru cineva care ARE comenzi, a ales
+      **anonimizarea**, nu stergerea.
+      ⚠⚠ **Listele de dezabonare NU se ating.** Omul care cere sa fie sters e, de cele mai
+      multe ori, chiar cel care ceruse sa nu mai primeasca mesaje. Sters si randul acela,
+      prima campanie de a doua zi l-ar gasi din nou — adica „stergerea" ar avea ca urmare
+      exact lucrul de care fugea. `recovery_optout` si `sms_optout` raman.
+      ⚠⚠ **Adresa se curata cu LISTA ALBA, sursa cu LISTA NEAGRA**, si asta nu e o
+      nepotrivire: in `shipping_address` partea personala creste singura (fiecare curier isi
+      scrie cheile lui), pe cand in `order_source` partea personala e scrisa de codul nostru
+      si e inchisa, iar cheile de BANI se inmultesc cu fiecare marketplace. Partea care creste
+      fara stirea noastra nu are voie sa fie cea pe care o ghicim.
+      ⚠⚠ **Emailul anonim e un uuid, nu un hash**: un hash de telefon se sparge in zece
+      cifre. Si trebuie sa EXISTE, acelasi pe toate comenzile omului — lasate goale, cheia ar
+      fi cazut pe `order:<id>` si fiecare comanda ar fi devenit un „client" al ei, deci
+      numarul de clienti ar fi CRESCUT dupa o stergere.
+      ⚠ **Masurat pe demo, cu rollback**, pe un om cu 3 comenzi: venitul NESCHIMBAT
+      (118.875,72 inainte si dupa), toate cele 393 de comenzi raman, 358 de clienti inainte si
+      358 dupa — un singur rand „Client șters", nu trei. Zero date personale ramase in adresa,
+      zero identificatori de urmarire.
+      ⚠ Butonul din fisa face **doua lucruri dupa cum e omul**: un contact fara comenzi se
+      sterge de tot, un cumparator se anonimizeaza.
+
 - [ ] **G2. Arhivare**, fara sa atinga comenzile. **Nefacuta.** Cere un loc unde sa stea
-      steagul si pentru un CUMPARATOR, care n-are rand in `customers`.
-- [ ] **G3. Anonimizare**, pastrand ce trebuie pastrat comercial. **Nefacuta**, si e cea mai
-      grea: atinge `orders`, deci si facturile plecate la SmartBill si la client.
+      steagul si pentru un CUMPARATOR, care n-are rand in `customers`. Dupa anonimizare e si
+      mai putin urgenta: cine trebuie scos din lista se poate scoate de-a binelea.
 - [ ] **G5. Actiuni rapide** din fisa, fiecare respectand consimtamantul, dezabonarea si lista
       de suprimare — la fel ca trimiterea de mana din Cosuri abandonate. **Nefacuta**: nu
       exista azi un trimitator catre un singur client, iar consimtamantul nu se tine pe om.
+
+## Etapa I - selectie in masa (ceruta pe 21.09.2026, dupa prima livrare)
+
+> „Trebuie sa avem posibilitatea de selectare in masa si de a face anumite actiuni in masa."
+
+- [x] **I1. Bife pe randuri**, cu una in cap care le ia pe toate de pe pagina.
+      ⚠⚠ **Bifele se tin pe CHEIE, nu pe pozitie.** Pe pozitie, o sortare schimbata sau un
+      client nou intrat ar muta bifele pe ALTI oameni — iar butonul de sub ele sterge date
+      fara intoarcere. Nimeni n-ar vedea nimic: lista arata la fel.
+      ⚠ **Se golesc la orice navigare**, si ce pleaca la actiune se taie pe pagina de acum.
+      Altfel bara ar fi aratat „63 selectați" intr-o lista de cincizeci.
+      ⚠ Bifa sta IN AFARA butonului de rand: un `<input>` intr-un `<button>` e HTML nevalid,
+      iar apasarea pe ea ar fi deschis fisa in loc s-o bifeze.
+
+- [x] **I2. Sterge / anonimizeaza in masa**, cu aceeasi regula ca la unul singur.
+      ⚠ Bara spune CE AMESTECI inainte sa apesi: „1 contact se șterge de tot · 2 cumpărători
+      își pierd datele, dar comenzile rămân". „Ștergi 12 clienți" ar fi fost fals pentru zece.
+
+- [x] **I3. Descarcarea celor bifati (CSV).**
+      ⚠⚠ A scos la iveala o **gaura de securitate in cod deja livrat**: exportul de cosuri
+      abandonate nu oprea formulele Excel. Un cumparator care isi scrie la checkout numele
+      `=HYPERLINK("http://site-rau","Factura")` se EXECUTA in fisierul pe care il deschide
+      comerciantul. Regulile de CSV s-au mutat in `lib/csv.ts` si acum apara amandoua
+      exporturile.
+      ⚠ Butonul de Export GENERAL ramane scos, cum a cerut; se descarca doar cei bifati.
+
+- [x] **I4. Al doilea fel de segment: cu LISTA FIXA.**
+      ⚠⚠ I-am spus cand a ales ca nu se potriveste cu felul in care sunt facute segmentele.
+      A ales-o oricum, deci se face — dar deosebirea e scrisa pe ecran de doua ori: inainte de
+      salvare, si sub numele fiecarei liste, cu data ei. Un segment cu lista NU se mai schimba
+      singur: cine cumpara maine nu intra, iar cine se dezaboneaza ramane.
 
 ## Etapa H - performanta (problema tehnica de fond)
 

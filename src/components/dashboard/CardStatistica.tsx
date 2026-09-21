@@ -71,7 +71,14 @@ export function CardStatistica({
         "border border-border transition-all duration-200",
         "hover:-translate-y-0.5",
         "hover:shadow-[0_1px_2px_rgba(15,23,20,0.04),0_18px_32px_-20px_rgba(15,23,20,0.12)]",
-        "min-h-[168px]",
+        /*
+          ⚠ MAI SCUND PE TELEFON. La o coloană (cum sunt toate cele patru pagini
+          care folosesc cardul), 168px pentru un singur număr înseamnă un card
+          aproape gol și trei carduri care umplu ecranul înainte să ajungi la ce
+          ai venit să vezi. De la `sm` rămâne cum era, fiindcă acolo stau două
+          sau patru pe rând și înălțimea le ține aliniate.
+        */
+        "min-h-[116px] sm:min-h-[168px]",
       ].join(" ")}
     >
       {href && (
@@ -96,7 +103,7 @@ export function CardStatistica({
       </div>
 
       {/* bottom — value + footer */}
-      <div className="flex flex-1 flex-col justify-between px-[18px] pt-4 pb-[18px]">
+      <div className="flex flex-1 flex-col justify-between px-[18px] pt-3 pb-[14px] sm:pt-4 sm:pb-[18px]">
         <div
           className={cn(
             "text-[44px] leading-none font-medium tracking-[-0.03em] tabular-nums",

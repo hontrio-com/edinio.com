@@ -33,9 +33,15 @@ export function AdaugaClient({ businessId }: { businessId: string }) {
       <button
         type="button"
         onClick={() => setDeschis(true)}
-        className="inline-flex flex-shrink-0 items-center gap-2 rounded-xl bg-card px-3 py-2 text-sm font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-card px-3 py-2 text-sm font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted sm:w-auto"
       >
-        <UserPlus className="h-4 w-4" /> <span className="hidden sm:inline">Adaugă client</span>
+        {/*
+          ⚠ Textul se vede SI PE TELEFON. Era ascuns sub `sm`, deci pe telefon
+          butonul era o iconiță singură, lângă altă iconiță singură: măsurat,
+          „Adaugă client" cere ~130px, iar jumătate de rând de 390px are 165.
+          Nu era loc lipsă, era o presupunere.
+        */}
+        <UserPlus className="h-4 w-4" /> Adaugă client
       </button>
       {deschis && <Formular businessId={businessId} onClose={() => setDeschis(false)} />}
     </>

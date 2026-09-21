@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/error-logger";
 import { stareAdaugareValida, type ClientNou, type StareAdaugare } from "@/lib/customers/gestionare";
+import { CATI_DEODATA, citesteUrma, type UrmaAnonimizarii } from "@/lib/customers/anonimizare";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -102,4 +103,62 @@ export async function stergeContact(
 
   revalidatePath("/dashboard/customers");
   return { ok: true };
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ANONIMIZAREA (G3)                                             (21.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠⚠ NU SE POATE LUA INAPOI, si atinge randuri din cinci tabele. Toata
+ * judecata e in `customer_anonymize`, intr-o singura tranzactie: pe jumatate
+ * facuta, ar fi lasat numele sters din comenzi dar telefonul intreg in cosuri.
+ *
+ * ⚠ Plafon pe cati deodata. Nu din prudenta abstracta: functia parcurge cinci
+ * tabele pe fiecare cheie, iar o selectie de cinci sute ar tine tranzactia
+ * deschisa peste limita de timp a rutei si s-ar da inapoi dupa un minut de
+ * asteptare, fara ca omul sa stie daca s-a facut ceva sau nu.
+ */
+
+export async function anonimizeazaClienti(
+  businessId: string,
+  chei: string[],
+): Promise<{ urma: UrmaAnonimizarii } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Trebuie să fii autentificat." };
+
+  /* ⚠ Se curata si aici: vin din browser, deci sunt date straine. */
+  const curate = [...new Set(chei.filter((c) => typeof c === "string" && c.trim() !== ""))];
+  if (curate.length === 0) return { error: "N-ai ales niciun client." };
+  if (curate.length > CATI_DEODATA) {
+    return { error: `Maximum ${CATI_DEODATA} de clienți deodată. Ai ales ${curate.length}.` };
+  }
+
+  const { data, error } = await supabase.rpc("customer_anonymize", {
+    bid: businessId,
+    p_keys: curate,
+  });
+
+  if (error) {
+    logError({ action: "anonimizeazaClienti", message: error.message, businessId });
+    /*
+      ⚠ „A eșuat" ar fi o minciuna periculoasa aici. Functia e o tranzactie, deci
+      ori s-a facut tot, ori nimic — dar daca a cazut legatura DUPA commit, noi
+      n-avem de unde sti. Se spune sa se uite, nu se spune ca n-a mers.
+      Aceeasi regula ca la emiterea AWB-urilor in lot.
+    */
+    return {
+      error:
+        "N-am primit confirmarea de la bază. Reîncarcă pagina și uită-te la client "
+        + "înainte să reiei: se poate să fi mers.",
+    };
+  }
+
+  const urma = citesteUrma(data?.[0]);
+  /* ⚠ Numai daca s-a atins ceva: altfel se reface pagina degeaba. */
+  if (urma.comenzi + urma.contacte + urma.cosuri + urma.retururi + urma.mesaje > 0) {
+    revalidatePath("/dashboard/customers");
+  }
+  return { urma };
 }

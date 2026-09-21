@@ -1,4 +1,5 @@
 import { formatPrice } from "@/lib/utils/format";
+import { caText, camp, foaie, suma } from "@/lib/csv";
 
 import { stareaCosului, NUMELE_STARII } from "./starea-cosului";
 import { numeleSursei } from "./reguli";
@@ -86,23 +87,20 @@ export function asezate(
   dupa separatorul de lista al sistemului, care la noi e `;`. Cu virgula, tot
   randul intra intr-o singura celula - si omul crede ca exportul e stricat.
 */
-const SEP = ";";
-
-/** Un camp de CSV, cu ghilimelele dinauntru dublate. */
-function camp(v: string | number | null | undefined): string {
-  const t = String(v ?? "");
-  return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-}
-
 export const COLOANE_CSV = [
   "Client", "Email", "Telefon", "Produse", "Bucăți", "Valoare",
   "Stare", "Sursă", "Ultima activitate", "Mesaje trimise",
 ];
 
 export function csvulCosurilor(randuri: AbandonedCartRow[]): string {
-  const linii = [COLOANE_CSV.join(SEP)];
-  for (const c of randuri) {
-    linii.push([
+  /*
+    ⚠ REGULILE DE CSV S-AU MUTAT IN `lib/csv.ts`, nu se mai scriu aici. Cand a
+    aparut al doilea export (clientii selectati), doua scrieri ale aceleiasi
+    reguli s-ar fi despartit — si atunci s-a si gasit ca `camp` de aici NU oprea
+    formulele Excel: un cumparator care isi scrie numele `=HYPERLINK(...)` la
+    checkout se EXECUTA in fisierul pe care il deschide comerciantul.
+  */
+  const randuriCsv = randuri.map((c) => [
       camp(c.customer_name ?? ""),
       camp(c.email ?? ""),
       /*
@@ -110,26 +108,19 @@ export function csvulCosurilor(randuri: AbandonedCartRow[]): string {
         „0722184305" ca pe un numar, taie zeroul din fata si transforma coloana
         in „722184305" - un numar la care nu suna nimeni.
       */
-      camp(c.phone ? `'${c.phone}` : ""),
+      caText(c.phone),
       camp(c.items.length),
       camp(c.item_count),
       /* ⚠ Virgula zecimala romaneasca, si ea ceruta de Excel-ul lor. */
-      camp(Number(c.subtotal).toFixed(2).replace(".", ",")),
+      suma(c.subtotal),
       camp(NUMELE_STARII[stareaCosului(c)].titlu),
       camp(numeleSursei(c.source)),
       camp(new Date(c.last_activity_at).toLocaleString("ro-RO", { timeZone: "Europe/Bucharest" })),
       camp(c.mesaje.length),
-    ].join(SEP));
-  }
-  /*
-    ⚠ CRLF si BOM: fara BOM, Excel deschide fisierul ca Latin-1 si toate
-    diacriticele ies „Ionescu Gheorghiţă" → „Ionescu GheorghiÈ›Ä". Nu e o
-    frumusete, e diferenta dintre un export folosibil si unul aruncat.
-  */
-  return `﻿${linii.join("\r\n")}\r\n`;
+  ]);
+  return foaie(COLOANE_CSV, randuriCsv);
 }
 
-/** Cum se cheama fisierul descarcat. */
 export function numeleFisierului(acum: Date = new Date()): string {
   const z = new Date(acum.toLocaleString("en-US", { timeZone: "Europe/Bucharest" }));
   const p = (n: number) => String(n).padStart(2, "0");

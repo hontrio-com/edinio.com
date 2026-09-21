@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { adresaSegmentului, descrieCriteriile } from "@/lib/customers/segmente";
+import { adresaListei, adresaSegmentului, avertismentulListei, descrieCriteriile } from "@/lib/customers/segmente";
 import { stergeSegment, type SegmentSalvat } from "@/lib/actions/customer-segments.actions";
 
 /*
@@ -31,8 +31,9 @@ export function SegmenteSalvate({
   function cere(s: SegmentSalvat) {
     if (!window.confirm(
       `Ștergi segmentul „${s.nume}”?\n\n`
-      + "Se șterge doar filtrul salvat. Clienții rămân toți în magazin, "
-      + "împreună cu comenzile lor.",
+      + (s.fel === "lista"
+        ? "Se șterge doar lista salvată. Clienții rămân toți în magazin, împreună cu comenzile lor."
+        : "Se șterge doar filtrul salvat. Clienții rămân toți în magazin, împreună cu comenzile lor."),
     )) return;
 
     setCareSeSterge(s.id);
@@ -64,8 +65,15 @@ export function SegmenteSalvate({
           >
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-foreground">{s.nume}</p>
+              {/*
+                ⚠⚠ UN SEGMENT CU LISTĂ ÎȘI SPUNE PE FAȚĂ CĂ E ÎNGHEȚAT, și din ce
+                zi. E chiar capcana de care se fereau segmentele cu criterii:
+                cine cumpără de mâine nu intră, iar cine se dezabonează rămâne.
+                Aflată peste o lună, dintr-o campanie plecată greșit, ar fi prea
+                târziu — deci scrie aici, sub nume, de fiecare dată.
+              */}
               <p className="truncate text-xs text-muted-foreground">
-                {descrieCriteriile(s.criterii)}
+                {s.fel === "lista" ? avertismentulListei(s.creatLa) : descrieCriteriile(s.criterii)}
               </p>
             </div>
 
@@ -79,7 +87,7 @@ export function SegmenteSalvate({
             )}
 
             <Link
-              href={adresaSegmentului(s.criterii)}
+              href={s.fel === "lista" ? adresaListei(s.id) : adresaSegmentului(s.criterii)}
               className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted"
             >
               Vezi <ArrowRight className="h-3.5 w-3.5" />

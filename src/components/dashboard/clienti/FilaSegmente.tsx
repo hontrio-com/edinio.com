@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NUMELE_SEGMENTULUI } from "@/lib/customers/filtre";
 import {
   CRITERII_GOALE, SEGMENTE_IMPLICITE, adresaSegmentului, catiIn, criteriiGoale, criteriiValide,
+  felValid,
 } from "@/lib/customers/segmente";
 import type { SegmentSalvat } from "@/lib/actions/customer-segments.actions";
 import { SegmenteSalvate } from "./SegmenteSalvate";
@@ -33,22 +34,35 @@ import { SegmenteSalvate } from "./SegmenteSalvate";
 export async function FilaSegmente({ businessId }: { businessId: string }) {
   const supabase = await createClient();
 
-  const [{ data: numarate }, { data: salvateBrute }] = await Promise.all([
+  const [{ data: numarate }, { data: salvateBrute }, { data: membriBruti }] = await Promise.all([
     supabase.rpc("customer_segment_counts", { bid: businessId }),
     supabase
       .from("customer_segments")
-      .select("id, nume, criterii, creat_la")
+      .select("id, nume, fel, criterii, creat_la")
       .eq("business_id", businessId)
       .order("creat_la", { ascending: false }),
+    /*
+      ⚠ Cați oameni are fiecare LISTĂ. Se aduc cheile și se numără aici, nu cu
+      un `count` pe fiecare segment: cincizeci de segmente ar fi însemnat
+      cincizeci de interogări la fiecare deschidere a filei.
+    */
+    supabase.from("customer_segment_members").select("segment_id").limit(10000),
   ]);
+
+  const cateAreLista = new Map<string, number>();
+  for (const m of membriBruti ?? []) {
+    cateAreLista.set(m.segment_id, (cateAreLista.get(m.segment_id) ?? 0) + 1);
+  }
 
   const cifre = numarate ? numarate.map((r) => ({ segment: r.segment, cati: Number(r.cati) })) : null;
 
   const salvate: SegmentSalvat[] = (salvateBrute ?? []).map((r) => ({
     id: r.id,
     nume: r.nume,
+    fel: felValid(r.fel),
     criterii: criteriiValide(r.criterii),
     creatLa: r.creat_la,
+    cati: felValid(r.fel) === "lista" ? (cateAreLista.get(r.id) ?? 0) : undefined,
   }));
 
   return (
@@ -93,8 +107,9 @@ export async function FilaSegmente({ businessId }: { businessId: string }) {
       <section>
         <h2 className="text-sm font-semibold text-foreground">Segmentele tale</h2>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Se salvează din filtrele puse în „Toți clienții”. Păstrează întrebarea, nu lista de
-          oameni, deci rămân la zi singure.
+          Se salvează din filtrele puse în „Toți clienții” — și atunci păstrează întrebarea,
+          deci rămân la zi singure. Cele făcute din clienți bifați păstrează lista de oameni
+          din ziua aceea și nu se mai schimbă.
         </p>
 
         {salvate.length === 0 ? (
@@ -121,10 +136,13 @@ export async function FilaSegmente({ businessId }: { businessId: string }) {
             */
             cifre={salvate.map((s) => ({
               id: s.id,
+              /* O listă își știe numărul exact; un segment cu criterii doar când e „curat". */
               cati:
-                !s.criterii.valoare && !s.criterii.q && !criteriiGoale(s.criterii)
-                  ? catiIn(cifre, s.criterii.segment)
-                  : null,
+                s.fel === "lista"
+                  ? (s.cati ?? 0)
+                  : !s.criterii.valoare && !s.criterii.q && !criteriiGoale(s.criterii)
+                    ? catiIn(cifre, s.criterii.segment)
+                    : null,
             }))}
           />
         )}

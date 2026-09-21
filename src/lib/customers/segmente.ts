@@ -94,6 +94,32 @@ export function descrieCriteriile(c: CriteriiSegment): string {
   return parti.join(" · ");
 }
 
+/**
+ * Cele doua feluri de segment.
+ *
+ * ⚠⚠ `criterii` pastreaza INTREBAREA si se recalculeaza singur; `lista`
+ * pastreaza OAMENII din clipa bifarii si nu se mai schimba niciodata. Al doilea
+ * e chiar capcana de care ne fereau primele: cine cumpara maine NU intra, iar
+ * cine s-a dezabonat RAMANE. Cerut anume de proprietar, care a fost intrebat.
+ */
+export const FELURI_DE_SEGMENT = ["criterii", "lista"] as const;
+export type FelSegment = (typeof FELURI_DE_SEGMENT)[number];
+
+export function felValid(v: unknown): FelSegment {
+  return v === "lista" ? "lista" : "criterii";
+}
+
+/** Ce scrie pe ecran langa un segment cu lista, ca nimeni sa n-o afle tarziu. */
+export function avertismentulListei(creatLa: string): string {
+  const cand = new Date(creatLa).toLocaleDateString("ro-RO", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+  return (
+    `Listă fixă, din ${cand}. Nu se mai schimbă singură: cine cumpără de acum `
+    + "înainte nu intră, iar cine se dezabonează rămâne."
+  );
+}
+
 /** Adresa care deschide lista filtrata exact asa. */
 export function adresaSegmentului(c: CriteriiSegment): string {
   const p = new URLSearchParams();
@@ -104,6 +130,11 @@ export function adresaSegmentului(c: CriteriiSegment): string {
   if (c.q) p.set("q", c.q);
   const s = p.toString();
   return s ? `/dashboard/customers?${s}` : "/dashboard/customers";
+}
+
+/** Adresa care deschide un segment cu lista fixa. */
+export function adresaListei(id: string): string {
+  return `/dashboard/customers?segment_id=${encodeURIComponent(id)}`;
 }
 
 /**

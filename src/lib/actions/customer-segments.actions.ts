@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/error-logger";
-import { criteriiGoale, criteriiValide, numeValid, type CriteriiSegment } from "@/lib/customers/segmente";
+import {
+  criteriiGoale, criteriiValide, felValid, numeValid,
+  type CriteriiSegment, type FelSegment,
+} from "@/lib/customers/segmente";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -28,8 +31,11 @@ const CATE_INCAP = 50;
 export interface SegmentSalvat {
   id: string;
   nume: string;
+  fel: FelSegment;
   criterii: CriteriiSegment;
   creatLa: string;
+  /** Cati oameni are lista, pentru segmentele cu `fel = "lista"`. */
+  cati?: number;
 }
 
 export async function salveazaSegment(
@@ -72,13 +78,14 @@ export async function salveazaSegment(
     .insert({
       business_id: businessId,
       nume: n.nume,
+      fel: "criterii",
       criterii: {
         segment: criterii.segment, valoare: criterii.valoare, q: criterii.q,
         judet: criterii.judet, canal: criterii.canal,
       },
       creat_de: user.id,
     })
-    .select("id, nume, criterii, creat_la")
+    .select("id, nume, fel, criterii, creat_la")
     .single();
 
   if (error) {
@@ -99,6 +106,7 @@ export async function salveazaSegment(
     segment: {
       id: data.id,
       nume: data.nume,
+      fel: felValid(data.fel),
       criterii: criteriiValide(data.criterii),
       creatLa: data.creat_la,
     },
@@ -132,4 +140,97 @@ export async function stergeSegment(
   */
   revalidatePath("/dashboard/customers");
   return { ok: true };
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * SEGMENTUL CU LISTA FIXA                                       (21.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Al doilea fel de segment, cerut ca acțiune în masă: „adaugă într-un segment".
+ *
+ * ⚠⚠ ȘI E CHIAR CAPCANA DE CARE SE FEREAU PRIMELE. Un segment cu criterii se
+ * recalculează singur; unul cu listă rămâne cum a fost în clipa bifării: cine
+ * cumpără mâine NU intră, iar cine s-a dezabonat RĂMÂNE. Proprietarul a fost
+ * întrebat și a ales-o oricum, deci se face — dar deosebirea se scrie pe ecran,
+ * lângă fiecare astfel de segment, cu data listei.
+ */
+
+/** Cati oameni incap intr-o lista. Acelasi plafon ca la anonimizare. */
+const CATI_INCAP_IN_LISTA = 500;
+
+export async function salveazaListaDeClienti(
+  businessId: string,
+  numeBrut: string,
+  chei: string[],
+): Promise<{ segment: SegmentSalvat } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Trebuie să fii autentificat." };
+
+  const n = numeValid(numeBrut);
+  if ("eroare" in n) return { error: n.eroare };
+
+  /* ⚠ Vin din browser: se curata, se scot dubletele, se plafoneaza. */
+  const curate = [...new Set(chei.filter((c) => typeof c === "string" && c.trim() !== ""))];
+  if (curate.length === 0) return { error: "N-ai bifat niciun client." };
+  if (curate.length > CATI_INCAP_IN_LISTA) {
+    return { error: `Maximum ${CATI_INCAP_IN_LISTA} de clienți într-o listă.` };
+  }
+
+  const { count } = await supabase
+    .from("customer_segments")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", businessId);
+  if ((count ?? 0) >= CATE_INCAP) {
+    return { error: `Ai deja ${CATE_INCAP} de segmente salvate. Șterge unul înainte să adaugi altul.` };
+  }
+
+  const { data, error } = await supabase
+    .from("customer_segments")
+    .insert({
+      business_id: businessId,
+      nume: n.nume,
+      fel: "lista",
+      /* ⚠ Criteriile raman goale: lista NU e o intrebare, e un raspuns inghetat. */
+      criterii: {},
+      creat_de: user.id,
+    })
+    .select("id, nume, fel, criterii, creat_la")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") return { error: `Ai deja un segment cu numele „${n.nume}”.` };
+    logError({ action: "salveazaListaDeClienti", message: error.message, businessId });
+    return { error: "Nu am putut salva lista." };
+  }
+
+  /*
+    ⚠ OAMENII SE SCRIU DUPA SEGMENT, si o cadere aici lasa un segment GOL, nu
+    unul pe jumatate. Gol se vede pe ecran („0 clienți") si se poate sterge; pe
+    jumatate ar fi trecut neobservat si ar fi plecat o campanie catre o parte din
+    cine trebuia.
+  */
+  const { error: eMembri } = await supabase
+    .from("customer_segment_members")
+    .insert(curate.map((cheie) => ({ segment_id: data.id, cheie })));
+
+  if (eMembri) {
+    logError({ action: "salveazaListaDeClienti.membri", message: eMembri.message, businessId });
+    /* Se sterge segmentul gol, ca sa nu ramana o promisiune fara continut. */
+    await supabase.from("customer_segments").delete().eq("id", data.id).eq("business_id", businessId);
+    return { error: "Nu am putut scrie lista de clienți. Nu s-a salvat nimic." };
+  }
+
+  revalidatePath("/dashboard/customers");
+  return {
+    segment: {
+      id: data.id,
+      nume: data.nume,
+      fel: "lista",
+      criterii: criteriiValide(data.criterii),
+      creatLa: data.creat_la,
+      cati: curate.length,
+    },
+  };
 }

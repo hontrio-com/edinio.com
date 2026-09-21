@@ -70,6 +70,11 @@ export default async function CustomersPage({
   */
   const judet = (firstParam(sp.judet) ?? "").trim().slice(0, 80) || null;
   const canal = (firstParam(sp.canal) ?? "").trim().slice(0, 40) || null;
+  /*
+    ⚠ Un segment cu LISTA FIXA se deschide prin id-ul lui, nu prin criterii: el
+    n-are criterii, are oameni. Cheile se afla pe server, mai jos.
+  */
+  const segmentId = (firstParam(sp.segment_id) ?? "").trim().slice(0, 40) || null;
 
   const { data: bizRow } = await supabase
     .from("businesses")
@@ -114,7 +119,7 @@ export default async function CustomersPage({
         <Suspense fallback={<ScheletClienti />}>
           <ListaClienti businessId={bizRow.id} q={q} sort={sort} page={page} perioada={perioada}
             segment={segment} valoare={firstParam(sp.valoare) ?? null}
-            judet={judet} canal={canal} />
+            judet={judet} canal={canal} segmentId={segmentId} />
         </Suspense>
       )}
     </div>
@@ -160,6 +165,7 @@ async function ListaClienti({
   valoare,
   judet,
   canal,
+  segmentId,
 }: {
   businessId: string;
   q: string;
@@ -170,8 +176,29 @@ async function ListaClienti({
   valoare: string | null;
   judet: string | null;
   canal: string | null;
+  segmentId: string | null;
 }) {
   const supabase = await createClient();
+
+  /*
+    ⚠⚠ CHEILE UNUI SEGMENT CU LISTA SE CITESC INAINTE de agregare, si RLS le
+    margineste la magazinul celui logat (politica trece prin segment, apoi prin
+    `businesses`). Un id ghicit al altui magazin intoarce zero randuri.
+
+    ⚠ `null` inseamna „fara filtru pe chei"; `[]` inseamna „niciun om". Cele doua
+    NU se pot confunda: un segment sters intre timp trebuie sa dea lista goala,
+    nu tot magazinul sub numele lui.
+  */
+  let chei: string[] | null = null;
+  let segmentLipsa = false;
+  if (segmentId) {
+    const { data: membri } = await supabase
+      .from("customer_segment_members")
+      .select("cheie")
+      .eq("segment_id", segmentId);
+    chei = (membri ?? []).map((m) => m.cheie);
+    segmentLipsa = chei.length === 0;
+  }
   const f = fereastra(perioada);
   const treapta = treaptaValoare(valoare);
 
@@ -196,6 +223,7 @@ async function ListaClienti({
       p_valoare_max: treapta?.max ?? undefined,
       p_judet: judet ?? undefined,
       p_canal: canal ?? undefined,
+      p_chei: chei ?? undefined,
     }),
     /*
       ⚠ LISTA RAMANE PE TOT ISTORICUL, numai sumarul se taie pe perioada — cum a
@@ -271,6 +299,8 @@ async function ListaClienti({
       valoare={valoare}
       judet={judet}
       canal={canal}
+      segmentId={segmentId}
+      segmentLipsa={segmentLipsa}
       judete={judete}
       canale={canale}
       businessId={businessId}

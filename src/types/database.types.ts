@@ -1947,12 +1947,36 @@ export type Database = {
           },
         ]
       }
+      customer_segment_members: {
+        Row: {
+          segment_id: string
+          cheie: string
+        }
+        Insert: {
+          segment_id: string
+          cheie: string
+        }
+        Update: {
+          segment_id?: string
+          cheie?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_segment_members_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "customer_segments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customer_segments: {
         Row: {
           business_id: string
           creat_de: string | null
           creat_la: string
           criterii: Json
+          fel: string
           id: string
           nume: string
         }
@@ -1961,6 +1985,7 @@ export type Database = {
           creat_de?: string | null
           creat_la?: string
           criterii?: Json
+          fel?: string
           id?: string
           nume: string
         }
@@ -1969,6 +1994,7 @@ export type Database = {
           creat_de?: string | null
           creat_la?: string
           criterii?: Json
+          fel?: string
           id?: string
           nume?: string
         }
@@ -6867,6 +6893,16 @@ export type Database = {
         }[]
       }
       curata_limite: { Args: never; Returns: number }
+      customer_anonymize: {
+        Args: { bid: string; p_keys: string[] }
+        Returns: {
+          comenzi: number
+          contacte: number
+          cosuri: number
+          retururi: number
+          mesaje: number
+        }[]
+      }
       customer_add_manual: {
         Args: {
           bid: string
@@ -6965,6 +7001,7 @@ export type Database = {
           p_vip_lei?: number
           p_judet?: string
           p_canal?: string
+          p_chei?: string[]
           page_limit?: number
           page_offset?: number
           search?: string

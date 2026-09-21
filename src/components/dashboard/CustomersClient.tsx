@@ -25,6 +25,8 @@ import {
 import { CustomerImportModal } from "./CustomerImportModal";
 import { SalveazaSegment } from "@/components/dashboard/clienti/SalveazaSegment";
 import { AdaugaClient } from "@/components/dashboard/clienti/AdaugaClient";
+import { BaraSelectie } from "@/components/dashboard/clienti/BaraSelectie";
+import { comuta } from "@/lib/customers/selectie";
 import { StergeContact } from "@/components/dashboard/clienti/StergeContact";
 
 type SortKey = "recent" | "spent" | "orders" | "name";
@@ -64,7 +66,7 @@ function Camp({ eticheta, valoare }: { eticheta: string; valoare: string | null 
   );
 }
 
-export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, perioada, segment, valoare, judet, canal, judete, canale, businessId }: {
+export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, perioada, segment, valoare, judet, canal, judete, canale, segmentId, segmentLipsa, businessId }: {
   /** Pagina curenta de clienti (max CUSTOMERS_PAGE_SIZE), agregata in Postgres. */
   customers: Customer[];
   summary: CustomersSummary;
@@ -81,6 +83,10 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   /** Numai judetele si canalele care EXISTA in magazin, cu cati clienti are fiecare. */
   judete: OptiuneFiltru[];
   canale: OptiuneFiltru[];
+  /** Segmentul cu lista fixa deschis acum, daca e vreunul. */
+  segmentId: string | null;
+  /** Segmentul cerut prin adresa n-are niciun om (sters, sau gol). */
+  segmentLipsa: boolean;
   businessId: string;
 }) {
   const router = useRouter();
@@ -90,6 +96,27 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   const lastNavQ = useRef(searchQuery);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [importing, setImporting] = useState(false);
+
+  /*
+    ⚠⚠ BIFELE SE TIN PE CHEIE, nu pe pozitie in lista. Tinute pe pozitie, o
+    sortare schimbata sau un client nou intrat intre timp ar muta bifele pe ALTI
+    oameni — iar butonul de sub ele sterge date fara intoarcere. Vezi
+    `selectia-e-pe-cheie-nu-pe-pozitie.test.ts`.
+  */
+  const [alese, setAlese] = useState<Set<string>>(new Set());
+
+  /*
+    ⚠⚠ SI CE PLEACA LA ACTIUNE SE TAIE PE PAGINA DE ACUM, la fiecare randare.
+    Fara asta, bifele de pe pagina 1 ar fi plecat impreuna cu cele de pe pagina 2,
+    iar bara ar fi aratat „63 selectați" intr-o lista de cincizeci.
+
+    ⚠ Taierea se face AICI, la citire, nu intr-un `useEffect` care sa scrie
+    starea: un efect care cheama `setState` naste o a doua randare la fiecare
+    schimbare de pagina, si React o si semnaleaza. Golirea propriu-zisa se face
+    la navigare (`goTo`), care e un eveniment.
+  */
+  const alesi = customers.filter((c) => alese.has(c.key));
+  const toateBifate = customers.length > 0 && alesi.length === customers.length;
 
   // Datele vin gata agregate/cautate/paginate din SQL; interactiunile devin
   // parametri de URL (q, sort, page), deci functioneaza la orice volum.
@@ -140,6 +167,12 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   }, [searchInput, searchQuery, buildUrl, router]);
 
   function goTo(next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada; segment?: Segment; valoare?: string | null; judet?: string | null; canal?: string | null }) {
+    /*
+      ⚠ BIFELE SE GOLESC LA ORICE NAVIGARE. Altfel, un om care bifeaza zece
+      clienti, pune un filtru si apasa „Șterge datele" ar sterge oameni pe care
+      nu-i mai are pe ecran — si n-ar avea de unde sa afle.
+    */
+    setAlese(new Set());
     startNavTransition(() => router.push(buildUrl(next), { scroll: false }));
   }
 
@@ -155,29 +188,44 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         clientul magazinului, iar o lista care se goleste la schimbarea perioadei
         ar parea stricata.
       */}
-      <div className="mb-4 flex items-center justify-end gap-2">
+      {/*
+        ⚠ PE TELEFON SE AȘAZĂ PE DOUĂ RÂNDURI: perioada sus, pe toată lățimea
+        (are cel mai lung text dintre toate, „De când există magazinul"), iar
+        cele două butoane dedesubt, împărțind rândul în două părți egale.
+
+        Pe un singur rând, cele trei se strângeau până când selectorul rămânea
+        un ciot, iar butoanele își pierdeau textul și rămâneau două iconițe
+        despre care nimeni nu știa ce fac.
+      */}
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
         <select
           value={perioada}
           onChange={(e) => goTo({ perioada: e.target.value as NumePerioada, page: 1 })}
           aria-label="Perioada cifrelor de mai jos"
-          className="rounded-xl bg-card px-2.5 py-2 text-sm font-medium text-foreground ring-1 ring-foreground/10"
+          className="w-full rounded-xl bg-card px-2.5 py-2 text-sm font-medium text-foreground ring-1 ring-foreground/10 sm:w-auto"
         >
           {PERIOADE.map((p) => (
             <option key={p} value={p}>{ETICHETE[p]}</option>
           ))}
         </select>
-        <button
-          onClick={() => setImporting(true)}
-          className="inline-flex flex-shrink-0 items-center gap-2 rounded-xl bg-card px-3 py-2 text-sm font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted"
-        >
-          <Upload className="h-4 w-4" /> <span className="hidden sm:inline">Importă clienți</span>
-        </button>
         {/*
           ⚠ ADĂUGAREA DE MÂNĂ stă lângă import, nu în „+ Adaugă" din bara de sus:
           acolo se adaugă lucruri de vânzare (produs, comandă), iar un client
           între ele ar fi al patrulea fel de obiect într-un meniu despre catalog.
+
+          ⚠ Pe telefon butoanele își ȚIN textul și împart rândul în două: două
+          iconițe fără cuvinte, într-un panou pe care comerciantul îl deschide o
+          dată pe săptămână, înseamnă două ghicitori.
         */}
-        <AdaugaClient businessId={businessId} />
+        <div className="flex gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
+          <button
+            onClick={() => setImporting(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-card px-3 py-2 text-sm font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted"
+          >
+            <Upload className="h-4 w-4" /> Importă clienți
+          </button>
+          <AdaugaClient businessId={businessId} />
+        </div>
       </div>
 
       {importing && <CustomerImportModal onClose={() => setImporting(false)} />}
@@ -194,7 +242,18 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         deja la Statistici. În pagina Clienți sunt utile mărimile despre RELAȚIA cu
         oamenii, nu cele despre vânzări.
       */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      {/*
+        ⚠⚠ O COLOANĂ PE TELEFON, două de la `sm`. Pornea de la două coloane, și
+        era singura pagină din panou care o făcea: Statistici și Coșuri
+        abandonate foloseau de mult `grid-cols-1 sm:grid-cols-2`.
+
+        Măsurat pe telefon de 390px: cardul rămânea cu 129px pentru cifră, iar
+        „407,11 lei" cere 165px la mărimea ei — deci trecea pe rândul următor.
+        Și eticheta „Valoare medie per client" cere 136px, cu 94 disponibili.
+        Nu era de reglat mărimea fontului: la 360px nici 28px nu încăpeau pentru
+        un magazin cu sume de patru cifre.
+      */}
+      <div className="grid grid-cols-1 gap-3 mb-5 sm:grid-cols-2 lg:grid-cols-4">
         <CardStatistica
           icon={Users}
           label="Clienți"
@@ -289,12 +348,22 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         de comerciant) și „adăugat manual” (nu există adăugarea manuală). Toate trei
         sunt în plan, la etapele lor. Vezi `lib/customers/filtre.ts`.
       */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      {/*
+        ⚠ PE TELEFON MENIURILE STAU ÎNTR-O GRILĂ DE DOUĂ COLOANE, toate de
+        aceeași lățime. Într-un `flex-wrap`, fiecare ieșea cât textul ei: „Toți
+        clienții" scurt, „Municipiul Bucuresti (112)" lat, iar rândurile se
+        rupeau la întâmplare — câte două pe un rând, unul pe altul, după cât
+        magazin ai. Grila le face egale și previzibile, indiferent ce scrie în ele.
+
+        ⚠ Și meniurile își iau lățimea containerului (`w-full`), altfel un
+        `<select>` se întinde după cea mai lungă opțiune a lui, nu după celulă.
+      */}
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
         <select
           value={segment}
           onChange={(e) => goTo({ segment: e.target.value as Segment, page: 1 })}
           aria-label="Segment"
-          className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+          className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none sm:w-auto"
         >
           {SEGMENTE.map((sg) => (
             <option key={sg} value={sg}>{NUMELE_SEGMENTULUI[sg]}</option>
@@ -305,7 +374,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
           value={valoare ?? ""}
           onChange={(e) => goTo({ valoare: e.target.value || null, page: 1 })}
           aria-label="Valoarea comenzilor"
-          className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+          className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none sm:w-auto"
         >
           <option value="">Orice valoare</option>
           {TREPTE_VALOARE.map((t) => (
@@ -328,7 +397,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             value={judet ?? ""}
             onChange={(e) => goTo({ judet: e.target.value || null, page: 1 })}
             aria-label="Județ"
-            className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+            className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none sm:w-auto"
           >
             <option value="">Orice județ</option>
             {judete.map((j) => (
@@ -342,7 +411,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             value={canal ?? ""}
             onChange={(e) => goTo({ canal: e.target.value || null, page: 1 })}
             aria-label="Canal"
-            className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+            className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none sm:w-auto"
           >
             <option value="">Orice canal</option>
             {canale.map((c) => (
@@ -360,7 +429,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
           <button
             type="button"
             onClick={() => goTo({ segment: "toti", valoare: null, judet: null, canal: null, page: 1 })}
-            className="rounded-xl px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            className="col-span-2 rounded-xl px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground sm:col-span-1"
           >
             Șterge filtrele ({cateFiltreTot({ segment, valoare, judet, canal })})
           </button>
@@ -373,20 +442,57 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
           refuză oricum, dar un buton care refuză mereu e o promisiune goală.
         */}
         {cateFiltreTot({ segment, valoare, judet, canal }) > 0 && (
-          <SalveazaSegment
-            businessId={businessId}
-            criterii={{ segment, valoare, q: searchQuery, judet, canal }}
-          />
+          <div className="col-span-2 sm:col-span-1">
+            <SalveazaSegment
+              businessId={businessId}
+              criterii={{ segment, valoare, q: searchQuery, judet, canal }}
+            />
+          </div>
         )}
 
         {/*
           ⚠ CÂȚI AU IEȘIT, lângă filtre. Fără cifra asta, un filtru care nu găsește pe
           nimeni arată exact ca o pagină stricată. Cu ea, „0 clienți” e un răspuns.
         */}
-        <span className="ml-auto text-xs text-muted-foreground">
+        {/* Pe telefon numărul trece pe rândul lui, aliniat la dreapta ca pe desktop. */}
+        <span className="col-span-2 text-right text-xs text-muted-foreground sm:col-span-1 sm:ml-auto">
           {totalCount} {totalCount === 1 ? "client" : "clienți"}
         </span>
       </div>
+
+      {/*
+        ⚠ BARA APARE DOAR CÂND E CEVA BIFAT. Mereu acolo, goală, ar fi ocupat un
+        rând din ecran ca să spună „0 selectați" — și l-ar fi învățat pe om s-o
+        ignore tocmai când chiar are ceva în ea.
+      */}
+      {/*
+        ⚠ CÂND E DESCHIS UN SEGMENT CU LISTĂ FIXĂ, se spune pe față. Altfel, lista
+        scurtă ar fi arătat ca un filtru obișnuit, iar omul ar fi crezut că
+        magazinul lui a rămas cu atâția clienți.
+
+        ⚠ Și un segment care nu mai are pe nimeni NU se dă drept „tot magazinul":
+        e chiar cazul în care s-ar fi trimis o campanie greșită.
+      */}
+      {segmentId && (
+        <div className="mb-3 rounded-xl border border-border bg-muted/40 px-3.5 py-2.5 text-xs text-muted-foreground">
+          {segmentLipsa
+            ? "Segmentul ăsta n-are niciun client — ori a fost șters, ori lista lui e goală."
+            : "Vezi un segment cu listă fixă: oamenii din el au fost aleși o dată și nu se mai schimbă."}{" "}
+          <Link href="/dashboard/customers" className="font-semibold text-foreground hover:underline">
+            Vezi toți clienții
+          </Link>
+        </div>
+      )}
+
+      {alesi.length > 0 && (
+        <BaraSelectie
+          businessId={businessId}
+          alesi={alesi}
+          segment={segment}
+          onGata={() => setAlese(new Set())}
+          onAnuleaza={() => setAlese(new Set())}
+        />
+      )}
 
       {/* List */}
       {customers.length === 0 ? (
@@ -427,6 +533,20 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             exact ce făcea lista până acum.
           */}
           <div className="hidden lg:flex items-center gap-3 bg-muted/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="flex w-9 flex-shrink-0 items-center">
+              {/*
+                ⚠ BIFEAZĂ CE E PE PAGINA ASTA, nu toți cei {totalCount}. Bara de
+                deasupra o spune pe litere. Un „bifează tot" care ar pretinde că
+                a luat tot magazinul ar fi o minciună cu urmări.
+              */}
+              <input
+                type="checkbox"
+                checked={toateBifate}
+                onChange={() => setAlese(toateBifate ? new Set() : new Set(customers.map((c) => c.key)))}
+                aria-label="Bifează toți clienții de pe pagina asta"
+                className="h-4 w-4 cursor-pointer accent-primary"
+              />
+            </span>
             <span className="w-9 flex-shrink-0" aria-hidden="true" />
             <span className="min-w-0 flex-1">Client</span>
             <span className="w-52 flex-shrink-0">Segment</span>
@@ -435,28 +555,35 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             <span className="w-4 flex-shrink-0" aria-hidden="true" />
           </div>
           {customers.map((c) => (
-            <button
+            /*
+              ⚠ BIFA STĂ ÎN AFARA BUTONULUI, nu înăuntrul lui. Un `<input>` într-un
+              `<button>` e HTML nevalid, iar apăsarea pe bifă ar fi deschis fișa în
+              loc s-o bifeze — adică exact pe dos față de ce voia omul.
+            */
+            <div
               key={c.key}
+              className={cn(
+                "flex w-full items-center gap-3 px-4 transition-colors",
+                alese.has(c.key) ? "bg-primary/5" : "hover:bg-muted/40",
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={alese.has(c.key)}
+                onChange={() => setAlese((v) => comuta(v, c.key))}
+                aria-label={`Bifează ${c.name}`}
+                className="h-4 w-4 flex-shrink-0 cursor-pointer accent-primary"
+              />
+            <button
               type="button"
               onClick={() => setSelected(c)}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors text-left"
+              className="flex min-w-0 flex-1 items-center gap-3 py-3 text-left"
             >
               <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm flex-shrink-0">
                 {c.name[0]?.toUpperCase() ?? "C"}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-foreground truncate">{c.name}</p>
-                  {/*
-                    ⚠ Cele șase etichete (Nou, Recurent, VIP, Inactiv, Importat,
-                    Risc de retur) au regulile în `lib/customers/etichete.ts`, cu
-                    măsurătorile care le-au hotărât. Aici erau două, scrise de mână.
-                  */}
-                  {/* Pe telefon stau langa nume; pe desktop au coloana lor, mai jos. */}
-                  <span className="contents lg:hidden">
-                    <EticheteClient client={c} cheie={c.key} />
-                  </span>
-                </div>
+                <p className="truncate text-sm font-semibold text-foreground">{c.name}</p>
                 <p className="text-xs text-muted-foreground truncate">
                   {/*
                     ⚠ Trecut prin `formatPhoneDisplay`. Până acum rândurile arătau
@@ -464,8 +591,37 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
                     unul sub altul `0753639611`, `+40755588107` și `+359884123309`.
                     Funcția exista de mult și n-o chema nimeni.
                   */}
-                  {formatPhoneDisplay(c.phone)}{c.email ? ` · ${c.email}` : ""}
+                  {/*
+                    ⚠ PE TELEFON NUMAI TELEFONUL, pe desktop și emailul. Măsurat la
+                    390px: rândul are 114px, iar „0753 493 208 · alina.avram@exemplu.test"
+                    se tăia la „0753 493 208 · ali…". Trei litere dintr-un email nu ajută
+                    pe nimeni să recunoască pe cineva, dar strică un număr de telefon
+                    care altfel se citea întreg. Când omul n-are telefon, emailul ia locul.
+                  */}
+                  <span className="sm:hidden">
+                    {c.phone ? formatPhoneDisplay(c.phone) : (c.email ?? "")}
+                  </span>
+                  <span className="hidden sm:inline">
+                    {formatPhoneDisplay(c.phone)}{c.email ? ` · ${c.email}` : ""}
+                  </span>
                 </p>
+
+                {/*
+                  ⚠⚠ PE TELEFON ETICHETELE STAU PE RÂNDUL LOR, sub nume, nu lângă el.
+                  Lângă nume, ele nu se strâng — sunt cutii cu text scurt — iar
+                  `truncate` de pe nume mânca tot ce mai rămânea. Măsurat pe un
+                  telefon de 390px: „Simona Dinu" cu „Recurent" și „VIP" lângă ea
+                  DISPĂREA cu totul, iar „Radu Ene" se scria „Radu ...".
+
+                  Adică tocmai numele omului, singurul lucru după care îl recunoști,
+                  era primul sacrificat. Pe desktop au mai departe coloana lor.
+
+                  ⚠ Cele șapte etichete au regulile în `lib/customers/etichete.ts`,
+                  cu măsurătorile care le-au hotărât.
+                */}
+                <div className="mt-1 flex flex-wrap items-center gap-1 lg:hidden">
+                  <EticheteClient client={c} cheie={c.key} />
+                </div>
               </div>
               {/* Coloana „Segment”, numai pe desktop: pe telefon etichetele stau langa nume. */}
               <div className="hidden lg:flex w-52 flex-shrink-0 flex-wrap items-center gap-1">
@@ -526,6 +682,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
             </button>
+            </div>
           ))}
 
           {/* Pagination */}
@@ -889,9 +1046,9 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
                 e o acțiune fără întoarcere, și nu una la care ajungi din greșeală
                 în timp ce te uiți la comenzile omului.
 
-                ⚠ Se arată la TOȚI, nu doar la contactele fără comenzi — dar stinsă,
-                cu motivul scris. Ascunsă cu totul, un comerciant care caută unde se
-                șterge un client ar fi căutat prin toate filele, apoi prin Setări.
+                ⚠ Butonul face DOUĂ lucruri, după cum e omul: un contact fără
+                comenzi se șterge de tot, un cumpărător se anonimizează. Vezi
+                `clienti/StergeContact.tsx` — acolo e scris de ce.
               */}
               <StergeContact
                 businessId={businessId}

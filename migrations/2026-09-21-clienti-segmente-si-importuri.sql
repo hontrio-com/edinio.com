@@ -58,7 +58,7 @@ alter table public.customer_segments enable row level security;
   (`abandoned_carts`, `orders`, `recovery_optout`) au `anon` FARA select. Lectia
   de azi, de la `recovery_sends`.
 */
-revoke select on public.customer_segments from anon;
+revoke all on public.customer_segments from anon;
 
 drop policy if exists "owner_all_customer_segments" on public.customer_segments;
 create policy "owner_all_customer_segments" on public.customer_segments
@@ -94,7 +94,7 @@ create index if not exists customer_imports_creat_de_idx
   on public.customer_imports (creat_de);
 
 alter table public.customer_imports enable row level security;
-revoke select on public.customer_imports from anon;
+revoke all on public.customer_imports from anon;
 
 drop policy if exists "owner_select_customer_imports" on public.customer_imports;
 create policy "owner_select_customer_imports" on public.customer_imports

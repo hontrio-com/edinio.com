@@ -2844,6 +2844,23 @@ END;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.comanda_incasata(p_status text, p_payment_status text, p_payment_method text)
+ RETURNS boolean
+ LANGUAGE sql
+ IMMUTABLE PARALLEL SAFE
+ SET search_path TO ''
+AS $function$
+  select case
+    when p_status in ('cancelled', 'refunded') then false
+    when p_payment_status = 'refunded' then false
+    when p_payment_status = 'paid' then true
+    when p_payment_method in ('cash_on_delivery', 'cod', 'ramburs')
+      then p_status = 'delivered'
+    else false
+  end
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.combinatie_aprinsa(p_combinatie jsonb)
  RETURNS boolean
  LANGUAGE sql
@@ -3281,6 +3298,298 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.customer_activity(bid uuid, cust_key text, page_limit integer DEFAULT 60)
+ RETURNS TABLE(fel text, cand timestamp with time zone, titlu text, detaliu text, suma numeric, legatura_id uuid)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  with comenzi as (
+    select
+      'comanda'::text as fel,
+      o.created_at as cand,
+      o.order_number as titlu,
+      o.status as detaliu,
+      o.total as suma,
+      o.id as legatura_id
+    from public.orders o
+    where o.business_id = bid
+      and public.order_customer_key(o.customer_phone, o.customer_email, o.id) = cust_key
+  ),
+  cosuri as (
+    select
+      'cos'::text,
+      c.created_at,
+      null::text,
+      c.status,
+      c.subtotal,
+      c.id
+    from public.abandoned_carts c
+    where c.business_id = bid
+      and (
+        public.normalize_phone(c.phone) = cust_key
+        or ('email:' || lower(trim(c.email))) = cust_key
+      )
+      and coalesce(nullif(public.normalize_phone(c.phone), ''), nullif(lower(trim(c.email)), '')) is not null
+  ),
+  mesaje as (
+    select
+      'sms'::text,
+      s.created_at,
+      s.trigger_key,
+      case when s.success then coalesce(s.delivery_status, 'trimis') else coalesce(s.error, 'esuat') end,
+      null::numeric,
+      s.order_id
+    from public.notice_sms_log s
+    where s.business_id = bid
+      and public.normalize_phone(s.phone) = cust_key
+      and nullif(public.normalize_phone(s.phone), '') is not null
+  ),
+  recuperari as (
+    select
+      case when r.deschis_la is not null then 'recuperare-deschisa' else 'recuperare' end::text,
+      coalesce(r.deschis_la, r.trimis_la),
+      r.canal,
+      r.sursa,
+      null::numeric,
+      r.cart_id
+    from public.recovery_sends r
+    join public.abandoned_carts c on c.id = r.cart_id
+    where r.business_id = bid
+      and (
+        public.normalize_phone(c.phone) = cust_key
+        or ('email:' || lower(trim(c.email))) = cust_key
+      )
+  )
+  select * from (
+    select * from comenzi
+    union all select * from cosuri
+    union all select * from mesaje
+    union all select * from recuperari
+  ) t
+  order by t.cand desc
+  limit page_limit
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.customer_add_manual(bid uuid, p_name text, p_email text DEFAULT NULL::text, p_phone text DEFAULT NULL::text, p_address text DEFAULT NULL::text, p_city text DEFAULT NULL::text, p_county text DEFAULT NULL::text, p_postcode text DEFAULT NULL::text)
+ RETURNS TABLE(stare text, cheie text)
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+declare
+  v_email text := nullif(lower(btrim(coalesce(p_email, ''))), '');
+  v_phone text := nullif(btrim(coalesce(p_phone, '')), '');
+  v_key   text;
+begin
+  v_key := coalesce(
+    nullif(public.normalize_phone(v_phone), ''),
+    case when v_email is not null then 'email:' || v_email else null end
+  );
+
+  if v_key is null then
+    return query select 'fara-contact'::text, null::text;
+    return;
+  end if;
+
+  if exists (select 1 from public.customers c
+             where c.business_id = bid and c.key = v_key) then
+    return query select 'exista'::text, v_key;
+    return;
+  end if;
+
+  if exists (select 1 from public.orders o
+             where o.business_id = bid
+               and public.order_customer_key(o.customer_phone, o.customer_email, o.id) = v_key) then
+    return query select 'are-comenzi'::text, v_key;
+    return;
+  end if;
+
+  insert into public.customers
+    (business_id, name, email, phone, address, city, county, postcode, source)
+  values
+    (bid, coalesce(nullif(btrim(p_name), ''), 'Client'), v_email, v_phone,
+     nullif(btrim(coalesce(p_address, '')), ''),
+     nullif(btrim(coalesce(p_city, '')), ''),
+     nullif(btrim(coalesce(p_county, '')), ''),
+     nullif(btrim(coalesce(p_postcode, '')), ''),
+     'manual');
+
+  return query select 'adaugat'::text, v_key;
+end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.customer_anonymize(bid uuid, p_keys text[])
+ RETURNS TABLE(comenzi integer, contacte integer, cosuri integer, retururi integer, mesaje integer)
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+declare
+  v_comenzi integer := 0;
+  v_contacte integer := 0;
+  v_cosuri integer := 0;
+  v_retururi integer := 0;
+  v_mesaje integer := 0;
+  v_chei text[] := coalesce(p_keys, '{}');
+  v_ids uuid[];
+  v_telefoane text[];
+begin
+  if array_length(v_chei, 1) is null then
+    return query select 0, 0, 0, 0, 0;
+    return;
+  end if;
+
+  select array_agg(o.id), array_agg(distinct public.normalize_phone(o.customer_phone))
+    filter (where nullif(public.normalize_phone(o.customer_phone), '') is not null)
+  into v_ids, v_telefoane
+  from public.orders o
+  where o.business_id = bid
+    and public.order_customer_key(o.customer_phone, o.customer_email, o.id) = any(v_chei);
+
+  select array_cat(coalesce(v_telefoane, '{}'), coalesce(array_agg(distinct public.normalize_phone(c.phone))
+           filter (where nullif(public.normalize_phone(c.phone), '') is not null), '{}'))
+  into v_telefoane
+  from public.customers c
+  where c.business_id = bid and c.key = any(v_chei);
+
+  with sterse as (
+    update public.abandoned_carts c
+    set customer_name = null, phone = null, email = null
+    where c.business_id = bid
+      and (
+        public.normalize_phone(c.phone) = any(v_chei)
+        or ('email:' || lower(trim(c.email))) = any(v_chei)
+      )
+      and coalesce(nullif(public.normalize_phone(c.phone), ''), nullif(lower(trim(c.email)), '')) is not null
+    returning 1
+  )
+  select count(*)::integer into v_cosuri from sterse;
+
+  if array_length(v_telefoane, 1) is not null then
+    with sterse as (
+      update public.notice_sms_log s
+      set phone = ''
+      where s.business_id = bid
+        and public.normalize_phone(s.phone) = any(v_telefoane)
+      returning 1
+    )
+    select count(*)::integer into v_mesaje from sterse;
+  end if;
+
+  if array_length(v_ids, 1) is not null then
+    with sterse as (
+      update public.return_requests r
+      set customer_name = 'Client șters', customer_phone = null, customer_email = null
+      where r.order_id = any(v_ids)
+      returning 1
+    )
+    select count(*)::integer into v_retururi from sterse;
+  end if;
+
+  if array_length(v_ids, 1) is not null then
+    with anonim as (select 'sters-' || gen_random_uuid()::text || '@anonim.invalid' as adresa),
+    sterse as (
+      update public.orders o
+      set customer_name = 'Client șters',
+          customer_phone = '',
+          customer_email = (select adresa from anonim),
+          shipping_address = case
+            when o.shipping_address is null or jsonb_typeof(o.shipping_address) <> 'object' then o.shipping_address
+            else coalesce(
+              (select jsonb_object_agg(k, o.shipping_address -> k)
+               from jsonb_object_keys(o.shipping_address) k
+               where k in ('county', 'countyName')),
+              '{}'::jsonb)
+          end,
+          notes = null,
+          internal_notes = null,
+          order_source = case
+            when o.order_source is null or jsonb_typeof(o.order_source) <> 'object' then o.order_source
+            else o.order_source - 'ga_client_id' - 'fbp' - 'fbclid' - 'gclid' - 'ttclid'
+                 - 'mc_cid' - 'user_agent' - 'referrer' - 'landing' - 'msclkid' - 'ip'
+          end
+      where o.id = any(v_ids)
+      returning 1
+    )
+    select count(*)::integer into v_comenzi from sterse;
+  end if;
+
+  with sterse as (
+    delete from public.customers c
+    where c.business_id = bid and c.key = any(v_chei)
+    returning 1
+  )
+  select count(*)::integer into v_contacte from sterse;
+
+  return query select v_comenzi, v_contacte, v_cosuri, v_retururi, v_mesaje;
+end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.customer_delete_contact(bid uuid, p_key text)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+declare
+  v_cate integer;
+begin
+  delete from public.customers c
+  where c.business_id = bid
+    and c.key = p_key
+    and not exists (
+      select 1 from public.orders o
+      where o.business_id = bid
+        and public.order_customer_key(o.customer_phone, o.customer_email, o.id) = c.key
+    );
+
+  get diagnostics v_cate = row_count;
+  return v_cate;
+end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.customer_filter_options(bid uuid)
+ RETURNS TABLE(fel text, valoare text, cati bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  with m as (select * from public.customers_merged(bid))
+  select 'judet'::text, m.county, count(*)
+  from m where nullif(trim(m.county), '') is not null
+  group by m.county
+  union all
+  select 'canal'::text, m.canal, count(*)
+  from m where m.canal is not null
+  group by m.canal
+  order by 1, 3 desc, 2
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.customer_in_segment(seg text, order_count bigint, valid_order_count bigint, cancelled_count bigint, refunded_count bigint, orders_value numeric, first_order_at timestamp with time zone, last_order_at timestamp with time zone, vip_lei numeric DEFAULT 10000)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select case coalesce(seg, 'toti')
+    when 'toti' then true
+    when 'noi' then valid_order_count <= 1 and first_order_at >= now() - interval '30 days'
+    when 'recurenti' then valid_order_count > 1
+    when 'vip' then orders_value >= vip_lei
+    when 'fara-comenzi' then order_count = 0
+    when 'inactivi-30' then last_order_at is not null and last_order_at < now() - interval '30 days'
+    when 'inactivi-90' then last_order_at is not null and last_order_at < now() - interval '90 days'
+    when 'inactivi-180' then last_order_at is not null and last_order_at < now() - interval '180 days'
+    when 'cu-retururi' then refunded_count > 0
+    when 'cu-anulari' then cancelled_count > 0
+    else true
+  end
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.customer_orders(bid uuid, cust_key text, page_limit integer DEFAULT 50, page_offset integer DEFAULT 0)
  RETURNS TABLE(id uuid, order_number text, total numeric, status text, payment_method text, payment_status text, created_at timestamp with time zone, item_count integer, total_count bigint)
  LANGUAGE sql
@@ -3311,8 +3620,86 @@ AS $function$
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.customers_aggregate(bid uuid, search text DEFAULT NULL::text, sort_key text DEFAULT 'recent'::text, page_limit integer DEFAULT 50, page_offset integer DEFAULT 0)
- RETURNS TABLE(key text, name text, phone text, email text, city text, county text, address text, order_count bigint, paid_order_count bigint, total_spent numeric, aov numeric, first_order_at timestamp with time zone, last_order_at timestamp with time zone, last_status text, total_count bigint)
+CREATE OR REPLACE FUNCTION public.customer_segment_counts(bid uuid, p_vip_lei numeric DEFAULT 10000)
+ RETURNS TABLE(segment text, cati bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select s.seg, count(*) filter (
+    where public.customer_in_segment(
+      s.seg, m.order_count, m.valid_order_count, m.cancelled_count, m.refunded_count,
+      m.orders_value, m.first_order_at, m.last_order_at, p_vip_lei)
+  )
+  from unnest(array[
+    'toti', 'noi', 'recurenti', 'vip', 'fara-comenzi',
+    'inactivi-30', 'inactivi-90', 'inactivi-180', 'cu-retururi', 'cu-anulari'
+  ]) with ordinality as s(seg, rang)
+  cross join public.customers_merged(bid) m
+  group by s.seg, s.rang
+  order by s.rang
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.customer_segment_sizes(bid uuid)
+ RETURNS TABLE(segment_id uuid, cati bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select m.segment_id, count(*)
+  from public.customer_segment_members m
+  join public.customer_segments s on s.id = m.segment_id
+  where s.business_id = bid
+  group by m.segment_id
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.customers_aggregate(bid uuid, search text DEFAULT NULL::text, sort_key text DEFAULT 'recent'::text, page_limit integer DEFAULT 50, page_offset integer DEFAULT 0, p_segment text DEFAULT 'toti'::text, p_valoare_min numeric DEFAULT NULL::numeric, p_valoare_max numeric DEFAULT NULL::numeric, p_vip_lei numeric DEFAULT 10000, p_judet text DEFAULT NULL::text, p_canal text DEFAULT NULL::text, p_chei text[] DEFAULT NULL::text[])
+ RETURNS TABLE(key text, name text, phone text, email text, city text, county text, address text, order_count bigint, valid_order_count bigint, cancelled_count bigint, refunded_count bigint, orders_value numeric, collected_total numeric, aov numeric, first_order_at timestamp with time zone, last_order_at timestamp with time zone, last_status text, source text, canal text, total_count bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  with filtered as (
+    select m.*,
+      case when m.valid_order_count > 0
+           then round(m.orders_value / m.valid_order_count, 2) else 0 end as aov
+    from public.customers_merged(bid) m
+    where (coalesce(search, '') = ''
+       or m.name ilike '%' || search || '%' escape '\'
+       or coalesce(m.email, '') ilike '%' || search || '%' escape '\'
+       or (length(public.normalize_phone(search)) >= 3
+           and public.normalize_phone(m.phone) like '%' || public.normalize_phone(search) || '%'))
+      and public.customer_in_segment(
+            coalesce(p_segment, 'toti'),
+            m.order_count, m.valid_order_count, m.cancelled_count, m.refunded_count,
+            m.orders_value, m.first_order_at, m.last_order_at,
+            p_vip_lei)
+      and (p_valoare_min is null or m.orders_value >= p_valoare_min)
+      and (p_valoare_max is null or m.orders_value < p_valoare_max)
+      and (p_judet is null or m.county = p_judet)
+      and (p_canal is null or m.canal = p_canal)
+      and (p_chei is null or m.key = any(p_chei))
+  )
+  select f.key, f.name, f.phone, f.email, f.city, f.county, f.address,
+         f.order_count, f.valid_order_count, f.cancelled_count, f.refunded_count,
+         f.orders_value, f.collected_total, f.aov,
+         f.first_order_at, f.last_order_at, f.last_status,
+         f.source, f.canal,
+         count(*) over () as total_count
+  from filtered f
+  order by
+    case when sort_key = 'spent' then f.orders_value end desc nulls last,
+    case when sort_key = 'orders' then f.order_count end desc nulls last,
+    case when sort_key = 'name' then f.name end asc nulls last,
+    f.last_order_at desc nulls last
+  limit page_limit offset page_offset
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.customers_merged(bid uuid)
+ RETURNS TABLE(key text, name text, phone text, email text, city text, county text, address text, order_count bigint, valid_order_count bigint, cancelled_count bigint, refunded_count bigint, orders_value numeric, collected_total numeric, first_order_at timestamp with time zone, last_order_at timestamp with time zone, last_status text, source text, canal text)
  LANGUAGE sql
  STABLE
  SET search_path TO ''
@@ -3332,9 +3719,16 @@ AS $function$
         filter (where nullif(trim(o.shipping_address->>'county'), '') is not null))[1] as county,
       (array_agg(nullif(trim(o.shipping_address->>'address'), '') order by o.created_at desc)
         filter (where nullif(trim(o.shipping_address->>'address'), '') is not null))[1] as address,
+      (array_agg(coalesce(nullif(trim(o.order_source->>'marketplace'), ''), 'magazin')
+        order by o.created_at desc))[1] as canal,
       count(*) as order_count,
-      count(*) filter (where o.status not in ('cancelled', 'refunded')) as paid_order_count,
-      round(coalesce(sum(o.total) filter (where o.status not in ('cancelled', 'refunded')), 0), 2) as total_spent,
+      count(*) filter (where o.status not in ('cancelled', 'refunded')) as valid_order_count,
+      count(*) filter (where o.status = 'cancelled') as cancelled_count,
+      count(*) filter (where o.status = 'refunded') as refunded_count,
+      round(coalesce(sum(o.total) filter (where o.status not in ('cancelled', 'refunded')), 0), 2) as orders_value,
+      round(coalesce(sum(o.total) filter (
+        where public.comanda_incasata(o.status, o.payment_status, o.payment_method)
+      ), 0), 2) as collected_total,
       min(o.created_at) as first_order_at,
       max(o.created_at) as last_order_at,
       (array_agg(o.status order by o.created_at desc))[1] as last_status
@@ -3350,55 +3744,35 @@ AS $function$
       nullif(lower(trim(c.email)), '') as email,
       nullif(trim(c.city), '') as city,
       nullif(trim(c.county), '') as county,
-      nullif(trim(c.address), '') as address
+      nullif(trim(c.address), '') as address,
+      c.source
     from public.customers c
     where c.business_id = bid
-  ),
-  merged as (
-    select
-      coalesce(o.key, i.key) as key,
-      coalesce(o.name, i.name, 'Client') as name,
-      coalesce(o.phone, i.phone, '') as phone,
-      coalesce(o.email, i.email) as email,
-      coalesce(o.city, i.city) as city,
-      coalesce(o.county, i.county) as county,
-      coalesce(o.address, i.address) as address,
-      coalesce(o.order_count, 0) as order_count,
-      coalesce(o.paid_order_count, 0) as paid_order_count,
-      coalesce(o.total_spent, 0::numeric) as total_spent,
-      o.first_order_at,
-      o.last_order_at,
-      o.last_status
-    from ord o
-    full outer join imp i on i.key = o.key
-  ),
-  filtered as (
-    select m.*,
-      case when m.paid_order_count > 0
-           then round(m.total_spent / m.paid_order_count, 2) else 0 end as aov
-    from merged m
-    where coalesce(search, '') = ''
-       or m.name ilike '%' || search || '%' escape '\'
-       or coalesce(m.email, '') ilike '%' || search || '%' escape '\'
-       or (length(public.normalize_phone(search)) >= 3
-           and public.normalize_phone(m.phone) like '%' || public.normalize_phone(search) || '%')
   )
-  select f.key, f.name, f.phone, f.email, f.city, f.county, f.address,
-         f.order_count, f.paid_order_count, f.total_spent, f.aov,
-         f.first_order_at, f.last_order_at, f.last_status,
-         count(*) over () as total_count
-  from filtered f
-  order by
-    case when sort_key = 'spent' then f.total_spent end desc nulls last,
-    case when sort_key = 'orders' then f.order_count end desc nulls last,
-    case when sort_key = 'name' then f.name end asc nulls last,
-    f.last_order_at desc nulls last
-  limit page_limit offset page_offset
+  select
+    coalesce(o.key, i.key),
+    coalesce(o.name, i.name, 'Client'),
+    coalesce(o.phone, i.phone, ''),
+    coalesce(o.email, i.email),
+    coalesce(o.city, i.city),
+    coalesce(o.county, i.county),
+    coalesce(o.address, i.address),
+    coalesce(o.order_count, 0),
+    coalesce(o.valid_order_count, 0),
+    coalesce(o.cancelled_count, 0),
+    coalesce(o.refunded_count, 0),
+    coalesce(o.orders_value, 0::numeric),
+    coalesce(o.collected_total, 0::numeric),
+    o.first_order_at, o.last_order_at, o.last_status,
+    i.source,
+    o.canal
+  from ord o
+  full outer join imp i on i.key = o.key
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.customers_summary(bid uuid)
- RETURNS TABLE(total_customers bigint, returning_customers bigint, total_revenue numeric, average_order_value numeric)
+CREATE OR REPLACE FUNCTION public.customers_summary(bid uuid, p_de_la timestamp with time zone DEFAULT NULL::timestamp with time zone, p_pana timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS TABLE(total_contacts bigint, buyers bigint, imported_contacts bigint, returning_customers bigint, return_rate integer, orders_value numeric, collected_total numeric, value_per_customer numeric)
  LANGUAGE sql
  STABLE
  SET search_path TO ''
@@ -3406,26 +3780,47 @@ AS $function$
   with ord as (
     select
       public.order_customer_key(o.customer_phone, o.customer_email, o.id) as key,
-      count(*) filter (where o.status not in ('cancelled', 'refunded')) as paid_cnt,
-      coalesce(sum(o.total) filter (where o.status not in ('cancelled', 'refunded')), 0) as spent
+      count(*) filter (
+        where o.status not in ('cancelled', 'refunded')
+          and (p_de_la is null or o.created_at >= p_de_la)
+          and (p_pana is null or o.created_at < p_pana)
+      ) as valid_cnt,
+      coalesce(sum(o.total) filter (
+        where o.status not in ('cancelled', 'refunded')
+          and (p_de_la is null or o.created_at >= p_de_la)
+          and (p_pana is null or o.created_at < p_pana)
+      ), 0) as value,
+      coalesce(sum(o.total) filter (
+        where public.comanda_incasata(o.status, o.payment_status, o.payment_method)
+          and (p_de_la is null or o.created_at >= p_de_la)
+          and (p_pana is null or o.created_at < p_pana)
+      ), 0) as collected
     from public.orders o
     where o.business_id = bid
     group by 1
   ),
   toti as (
-    select o.key, o.paid_cnt, o.spent from ord o
+    select o.key, o.valid_cnt, o.value, o.collected, true as cumparator from ord o
     union all
-    select c.key, 0::bigint, 0::numeric
+    select c.key, 0::bigint, 0::numeric, 0::numeric, false
     from public.customers c
     where c.business_id = bid
       and not exists (select 1 from ord o2 where o2.key = c.key)
   )
   select
     count(*)::bigint,
-    (count(*) filter (where paid_cnt > 1))::bigint,
-    round(coalesce(sum(spent), 0), 2),
-    case when coalesce(sum(paid_cnt), 0) > 0
-         then round(coalesce(sum(spent), 0) / sum(paid_cnt), 2) else 0 end
+    (count(*) filter (where cumparator and valid_cnt > 0))::bigint,
+    (count(*) filter (where not cumparator))::bigint,
+    (count(*) filter (where valid_cnt > 1))::bigint,
+    case when count(*) filter (where cumparator and valid_cnt > 0) > 0
+         then round(100.0 * count(*) filter (where valid_cnt > 1)
+                    / count(*) filter (where cumparator and valid_cnt > 0))::integer
+         else 0 end,
+    round(coalesce(sum(value), 0), 2),
+    round(coalesce(sum(collected), 0), 2),
+    case when count(*) filter (where cumparator and valid_cnt > 0) > 0
+         then round(coalesce(sum(value), 0) / count(*) filter (where cumparator and valid_cnt > 0), 2)
+         else 0 end
   from toti
 $function$
 ;
@@ -7567,6 +7962,29 @@ create table if not exists public.custom_pages (
   created_at timestamp with time zone default now() not null,
   updated_at timestamp with time zone default now() not null);
 
+create table if not exists public.customer_imports (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  fisier text,
+  adaugati integer default 0 not null,
+  completati integer default 0 not null,
+  sarite integer default 0 not null,
+  creat_la timestamp with time zone default now() not null,
+  creat_de uuid);
+
+create table if not exists public.customer_segment_members (
+  segment_id uuid not null,
+  cheie text not null);
+
+create table if not exists public.customer_segments (
+  id uuid default gen_random_uuid() not null,
+  business_id uuid not null,
+  nume text not null,
+  criterii jsonb default '{}'::jsonb not null,
+  creat_la timestamp with time zone default now() not null,
+  creat_de uuid,
+  fel text default 'criterii'::text not null);
+
 create table if not exists public.customers (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -8878,6 +9296,9 @@ alter table public.catalog_rezumat_murdar add constraint catalog_rezumat_murdar_
 alter table public.categories add constraint categories_pkey PRIMARY KEY (id);
 alter table public.courier_settlements add constraint courier_settlements_pkey PRIMARY KEY (id);
 alter table public.custom_pages add constraint custom_pages_pkey PRIMARY KEY (id);
+alter table public.customer_imports add constraint customer_imports_pkey PRIMARY KEY (id);
+alter table public.customer_segment_members add constraint customer_segment_members_pkey PRIMARY KEY (segment_id, cheie);
+alter table public.customer_segments add constraint customer_segments_pkey PRIMARY KEY (id);
 alter table public.customers add constraint customers_pkey PRIMARY KEY (id);
 alter table public.dhl_etichete add constraint dhl_etichete_pkey PRIMARY KEY (order_id);
 alter table public.discounts add constraint discounts_pkey PRIMARY KEY (id);
@@ -9014,6 +9435,7 @@ alter table public.blog_tags add constraint blog_tags_slug_form CHECK ((slug ~ '
 alter table public.businesses add constraint businesses_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text));
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
 alter table public.categories add constraint categories_seo_description_lungime CHECK ((char_length(seo_description) <= 1000));
+alter table public.customer_segments add constraint customer_segments_fel_check CHECK ((fel = ANY (ARRAY['criterii'::text, 'lista'::text])));
 alter table public.discounts add constraint discounts_type_check CHECK ((type = ANY (ARRAY['percent'::text, 'fixed'::text, 'free_shipping'::text])));
 alter table public.domain_orders add constraint domain_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'cancelled'::text, 'refunded'::text])));
 alter table public.edinio_conversion_outbox add constraint edinio_conversion_outbox_destinatie_check CHECK ((destinatie = ANY (ARRAY['meta'::text, 'tiktok'::text])));
@@ -9099,6 +9521,11 @@ alter table public.categories add constraint categories_parent_id_fkey FOREIGN K
 alter table public.courier_settlements add constraint courier_settlements_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.courier_settlements add constraint courier_settlements_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.custom_pages add constraint custom_pages_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.customer_imports add constraint customer_imports_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.customer_imports add constraint customer_imports_creat_de_fkey FOREIGN KEY (creat_de) REFERENCES auth.users(id) ON DELETE SET NULL;
+alter table public.customer_segment_members add constraint customer_segment_members_segment_id_fkey FOREIGN KEY (segment_id) REFERENCES customer_segments(id) ON DELETE CASCADE;
+alter table public.customer_segments add constraint customer_segments_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.customer_segments add constraint customer_segments_creat_de_fkey FOREIGN KEY (creat_de) REFERENCES auth.users(id) ON DELETE SET NULL;
 alter table public.customers add constraint customers_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.dhl_etichete add constraint dhl_etichete_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.dhl_etichete add constraint dhl_etichete_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
@@ -9330,6 +9757,12 @@ CREATE INDEX cp_ord ON public.catalog_produs USING btree (business_id, is_featur
 CREATE INDEX cp_pret ON public.catalog_produs USING btree (business_id, price_min, product_id);
 CREATE INDEX cp_trgm ON public.catalog_produs USING gin (cauta_norm extensions.gin_trgm_ops);
 CREATE INDEX custom_pages_business_published_idx ON public.custom_pages USING btree (business_id, is_published);
+CREATE INDEX customer_imports_business_idx ON public.customer_imports USING btree (business_id, creat_la DESC);
+CREATE INDEX customer_imports_creat_de_idx ON public.customer_imports USING btree (creat_de);
+CREATE INDEX customer_segment_members_segment_idx ON public.customer_segment_members USING btree (segment_id);
+CREATE INDEX customer_segments_business_idx ON public.customer_segments USING btree (business_id, creat_la DESC);
+CREATE INDEX customer_segments_creat_de_idx ON public.customer_segments USING btree (creat_de);
+CREATE UNIQUE INDEX customer_segments_nume_uidx ON public.customer_segments USING btree (business_id, lower(btrim(regexp_replace(nume, '\s+'::text, ' '::text, 'g'::text))));
 CREATE INDEX cw_semn ON public.catalog_cuvant USING btree (business_id, semnatura);
 CREATE INDEX cw_trgm ON public.catalog_cuvant USING gin (cuvant extensions.gin_trgm_ops);
 CREATE INDEX dhl_etichete_business_idx ON public.dhl_etichete USING btree (business_id, creat_la DESC);
@@ -9717,6 +10150,9 @@ alter table public.catalog_rezumat_murdar enable row level security;
 alter table public.categories enable row level security;
 alter table public.courier_settlements enable row level security;
 alter table public.custom_pages enable row level security;
+alter table public.customer_imports enable row level security;
+alter table public.customer_segment_members enable row level security;
+alter table public.customer_segments enable row level security;
 alter table public.customers enable row level security;
 alter table public.dhl_etichete enable row level security;
 alter table public.discounts enable row level security;
@@ -9907,6 +10343,21 @@ create policy "Owners can manage own pages" on public.custom_pages as PERMISSIVE
 create policy "Public can view published pages of published businesses" on public.custom_pages as PERMISSIVE for SELECT to public using (((is_published = true) AND (EXISTS ( SELECT 1
    FROM businesses b
   WHERE ((b.id = custom_pages.business_id) AND (b.is_published = true))))));
+create policy owner_select_customer_imports on public.customer_imports as PERMISSIVE for SELECT to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = auth.uid()))));
+create policy owner_all_customer_segment_members on public.customer_segment_members as PERMISSIVE for ALL to public using ((segment_id IN ( SELECT s.id
+   FROM (customer_segments s
+     JOIN businesses b ON ((b.id = s.business_id)))
+  WHERE (b.user_id = auth.uid())))) with check ((segment_id IN ( SELECT s.id
+   FROM (customer_segments s
+     JOIN businesses b ON ((b.id = s.business_id)))
+  WHERE (b.user_id = auth.uid()))));
+create policy owner_all_customer_segments on public.customer_segments as PERMISSIVE for ALL to public using ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = auth.uid())))) with check ((business_id IN ( SELECT businesses.id
+   FROM businesses
+  WHERE (businesses.user_id = auth.uid()))));
 create policy customers_delete_own on public.customers as PERMISSIVE for DELETE to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
@@ -10885,6 +11336,48 @@ grant SELECT on table public.custom_pages to service_role;
 grant TRIGGER on table public.custom_pages to service_role;
 grant TRUNCATE on table public.custom_pages to service_role;
 grant UPDATE on table public.custom_pages to service_role;
+grant DELETE on table public.customer_imports to authenticated;
+grant INSERT on table public.customer_imports to authenticated;
+grant REFERENCES on table public.customer_imports to authenticated;
+grant SELECT on table public.customer_imports to authenticated;
+grant TRIGGER on table public.customer_imports to authenticated;
+grant TRUNCATE on table public.customer_imports to authenticated;
+grant UPDATE on table public.customer_imports to authenticated;
+grant DELETE on table public.customer_imports to service_role;
+grant INSERT on table public.customer_imports to service_role;
+grant REFERENCES on table public.customer_imports to service_role;
+grant SELECT on table public.customer_imports to service_role;
+grant TRIGGER on table public.customer_imports to service_role;
+grant TRUNCATE on table public.customer_imports to service_role;
+grant UPDATE on table public.customer_imports to service_role;
+grant DELETE on table public.customer_segment_members to authenticated;
+grant INSERT on table public.customer_segment_members to authenticated;
+grant REFERENCES on table public.customer_segment_members to authenticated;
+grant SELECT on table public.customer_segment_members to authenticated;
+grant TRIGGER on table public.customer_segment_members to authenticated;
+grant TRUNCATE on table public.customer_segment_members to authenticated;
+grant UPDATE on table public.customer_segment_members to authenticated;
+grant DELETE on table public.customer_segment_members to service_role;
+grant INSERT on table public.customer_segment_members to service_role;
+grant REFERENCES on table public.customer_segment_members to service_role;
+grant SELECT on table public.customer_segment_members to service_role;
+grant TRIGGER on table public.customer_segment_members to service_role;
+grant TRUNCATE on table public.customer_segment_members to service_role;
+grant UPDATE on table public.customer_segment_members to service_role;
+grant DELETE on table public.customer_segments to authenticated;
+grant INSERT on table public.customer_segments to authenticated;
+grant REFERENCES on table public.customer_segments to authenticated;
+grant SELECT on table public.customer_segments to authenticated;
+grant TRIGGER on table public.customer_segments to authenticated;
+grant TRUNCATE on table public.customer_segments to authenticated;
+grant UPDATE on table public.customer_segments to authenticated;
+grant DELETE on table public.customer_segments to service_role;
+grant INSERT on table public.customer_segments to service_role;
+grant REFERENCES on table public.customer_segments to service_role;
+grant SELECT on table public.customer_segments to service_role;
+grant TRIGGER on table public.customer_segments to service_role;
+grant TRUNCATE on table public.customer_segments to service_role;
+grant UPDATE on table public.customer_segments to service_role;
 grant DELETE on table public.customers to anon;
 grant INSERT on table public.customers to anon;
 grant REFERENCES on table public.customers to anon;
@@ -12467,6 +12960,9 @@ grant execute on function public.catalog_verifica(p_esantion integer) to service
 grant execute on function public.categorii_ascunse(p_business uuid) to service_role;
 grant execute on function public.ceasul_bazei() to service_role;
 grant execute on function public.claim_discount_use(p_discount_id uuid) to service_role;
+grant execute on function public.comanda_incasata(p_status text, p_payment_status text, p_payment_method text) to anon;
+grant execute on function public.comanda_incasata(p_status text, p_payment_status text, p_payment_method text) to authenticated;
+grant execute on function public.comanda_incasata(p_status text, p_payment_status text, p_payment_method text) to service_role;
 grant execute on function public.combinatie_aprinsa(p_combinatie jsonb) to authenticated;
 grant execute on function public.combinatie_aprinsa(p_combinatie jsonb) to service_role;
 grant execute on function public.comenzi_pe_judet(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) to authenticated;
@@ -12486,15 +12982,31 @@ grant execute on function public.cosuri_abandonate_sumar(p_business uuid, p_de_l
 grant execute on function public.curata_analitice_brute(p_pastreaza_zile integer, p_max integer) to service_role;
 grant execute on function public.curata_limite() to service_role;
 grant execute on function public.curata_ritm_extern() to service_role;
+grant execute on function public.customer_activity(bid uuid, cust_key text, page_limit integer) to authenticated;
+grant execute on function public.customer_activity(bid uuid, cust_key text, page_limit integer) to service_role;
+grant execute on function public.customer_add_manual(bid uuid, p_name text, p_email text, p_phone text, p_address text, p_city text, p_county text, p_postcode text) to authenticated;
+grant execute on function public.customer_add_manual(bid uuid, p_name text, p_email text, p_phone text, p_address text, p_city text, p_county text, p_postcode text) to service_role;
+grant execute on function public.customer_anonymize(bid uuid, p_keys text[]) to authenticated;
+grant execute on function public.customer_anonymize(bid uuid, p_keys text[]) to service_role;
+grant execute on function public.customer_delete_contact(bid uuid, p_key text) to authenticated;
+grant execute on function public.customer_delete_contact(bid uuid, p_key text) to service_role;
+grant execute on function public.customer_filter_options(bid uuid) to authenticated;
+grant execute on function public.customer_filter_options(bid uuid) to service_role;
+grant execute on function public.customer_in_segment(seg text, order_count bigint, valid_order_count bigint, cancelled_count bigint, refunded_count bigint, orders_value numeric, first_order_at timestamp with time zone, last_order_at timestamp with time zone, vip_lei numeric) to authenticated;
+grant execute on function public.customer_in_segment(seg text, order_count bigint, valid_order_count bigint, cancelled_count bigint, refunded_count bigint, orders_value numeric, first_order_at timestamp with time zone, last_order_at timestamp with time zone, vip_lei numeric) to service_role;
 grant execute on function public.customer_orders(bid uuid, cust_key text, page_limit integer, page_offset integer) to anon;
 grant execute on function public.customer_orders(bid uuid, cust_key text, page_limit integer, page_offset integer) to authenticated;
 grant execute on function public.customer_orders(bid uuid, cust_key text, page_limit integer, page_offset integer) to service_role;
-grant execute on function public.customers_aggregate(bid uuid, search text, sort_key text, page_limit integer, page_offset integer) to anon;
-grant execute on function public.customers_aggregate(bid uuid, search text, sort_key text, page_limit integer, page_offset integer) to authenticated;
-grant execute on function public.customers_aggregate(bid uuid, search text, sort_key text, page_limit integer, page_offset integer) to service_role;
-grant execute on function public.customers_summary(bid uuid) to anon;
-grant execute on function public.customers_summary(bid uuid) to authenticated;
-grant execute on function public.customers_summary(bid uuid) to service_role;
+grant execute on function public.customer_segment_counts(bid uuid, p_vip_lei numeric) to authenticated;
+grant execute on function public.customer_segment_counts(bid uuid, p_vip_lei numeric) to service_role;
+grant execute on function public.customer_segment_sizes(bid uuid) to authenticated;
+grant execute on function public.customer_segment_sizes(bid uuid) to service_role;
+grant execute on function public.customers_aggregate(bid uuid, search text, sort_key text, page_limit integer, page_offset integer, p_segment text, p_valoare_min numeric, p_valoare_max numeric, p_vip_lei numeric, p_judet text, p_canal text, p_chei text[]) to authenticated;
+grant execute on function public.customers_aggregate(bid uuid, search text, sort_key text, page_limit integer, page_offset integer, p_segment text, p_valoare_min numeric, p_valoare_max numeric, p_vip_lei numeric, p_judet text, p_canal text, p_chei text[]) to service_role;
+grant execute on function public.customers_merged(bid uuid) to authenticated;
+grant execute on function public.customers_merged(bid uuid) to service_role;
+grant execute on function public.customers_summary(bid uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone) to authenticated;
+grant execute on function public.customers_summary(bid uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone) to service_role;
 grant execute on function public.decrement_stock(p_product_id uuid, p_quantity integer) to service_role;
 grant execute on function public.decrement_stock_batch(p_items jsonb) to service_role;
 grant execute on function public.decrement_variant_stock_batch(p_items jsonb) to service_role;
@@ -12633,8 +13145,8 @@ grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
 grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(regdictionary, text) to anon;
-grant execute on function public.unaccent(regdictionary, text) to authenticated;
 grant execute on function public.unaccent(text) to authenticated;
+grant execute on function public.unaccent(regdictionary, text) to authenticated;
 grant execute on function public.unaccent(text) to service_role;
 grant execute on function public.unaccent(regdictionary, text) to service_role;
 grant execute on function public.unaccent_init(internal) to anon;
@@ -12732,6 +13244,17 @@ revoke execute on function public.cosuri_abandonate_sumar(p_business uuid, p_de_
 revoke execute on function public.curata_analitice_brute(p_pastreaza_zile integer, p_max integer) from public;
 revoke execute on function public.curata_limite() from public;
 revoke execute on function public.curata_ritm_extern() from public;
+revoke execute on function public.customer_activity(bid uuid, cust_key text, page_limit integer) from public;
+revoke execute on function public.customer_add_manual(bid uuid, p_name text, p_email text, p_phone text, p_address text, p_city text, p_county text, p_postcode text) from public;
+revoke execute on function public.customer_anonymize(bid uuid, p_keys text[]) from public;
+revoke execute on function public.customer_delete_contact(bid uuid, p_key text) from public;
+revoke execute on function public.customer_filter_options(bid uuid) from public;
+revoke execute on function public.customer_in_segment(seg text, order_count bigint, valid_order_count bigint, cancelled_count bigint, refunded_count bigint, orders_value numeric, first_order_at timestamp with time zone, last_order_at timestamp with time zone, vip_lei numeric) from public;
+revoke execute on function public.customer_segment_counts(bid uuid, p_vip_lei numeric) from public;
+revoke execute on function public.customer_segment_sizes(bid uuid) from public;
+revoke execute on function public.customers_aggregate(bid uuid, search text, sort_key text, page_limit integer, page_offset integer, p_segment text, p_valoare_min numeric, p_valoare_max numeric, p_vip_lei numeric, p_judet text, p_canal text, p_chei text[]) from public;
+revoke execute on function public.customers_merged(bid uuid) from public;
+revoke execute on function public.customers_summary(bid uuid, p_de_la timestamp with time zone, p_pana timestamp with time zone) from public;
 revoke execute on function public.decrement_stock(p_product_id uuid, p_quantity integer) from public;
 revoke execute on function public.decrement_stock_batch(p_items jsonb) from public;
 revoke execute on function public.decrement_variant_stock_batch(p_items jsonb) from public;

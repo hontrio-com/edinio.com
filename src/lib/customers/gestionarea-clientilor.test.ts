@@ -25,9 +25,19 @@ import {
  * Proba asta le tine pe amandoua.
  */
 
+/*
+  ⚠⚠ `000-schema-baseline.sql` NU E O MIGRATIE, e o FOTOGRAFIE generata din
+  productie cu `pg_dump`. Citita ca migratie, probele de aici ar fi masurat textul
+  masinii in loc de textul scris de om — si, fiind prima alfabetic, ar fi fost si
+  cea gasita prima.
+
+  S-a intamplat chiar asa, pe 21.09.2026: dupa regenerarea liniei de baza, doua
+  probe au picat deodata, spunand „bucata gasita are 0 semne". Nu se stricase
+  nimic: se schimbase ce citeau ele.
+*/
 const DOSAR = "migrations";
 const MIGRATII = readdirSync(DOSAR)
-  .filter((f) => f.endsWith(".sql")).sort()
+  .filter((f) => f.endsWith(".sql") && !f.startsWith("000-")).sort()
   .map((f) => ({ f, text: readFileSync(join(DOSAR, f), "utf8") }));
 
 const M = MIGRATII.find((m) => m.text.includes("create or replace function public.customer_delete_contact"));

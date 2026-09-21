@@ -5,26 +5,24 @@ Tot ce urmeaza e **masurat**, nu citit.
 
 ---
 
-## ⚠⚠ CE OPRESTE PUSH-UL
+## ⚠⚠ CE OPREA PUSH-UL — REZOLVAT
 
-`main` **e** productia (vezi capul lui `REGISTRU.md`). Codul de Clienti cheama treisprezece
-functii si trei tabele. Citit **direct din productie** (`rtefdpioqmowkdiybwrr`), acolo exista:
+`main` **e** productia. Codul de Clienti cheama treisprezece functii si trei tabele, iar
+productia avea `customers_aggregate` cu **5 argumente**, `customers_summary` cu **1**, si nimic
+altceva. Impins asa, pagina ar fi cazut pentru toate cele 131 de magazine — exact ce s-a
+intamplat dimineata cu Cosurile abandonate.
 
-| Obiect | In productie |
-|---|---|
-| `customers_aggregate` | **da, dar cu 5 argumente** (`bid, search, sort_key, page_limit, page_offset`) |
-| `customers_summary` | **da, dar cu 1 argument** (`bid`) |
-| `customers_merged`, `customer_in_segment`, `customer_segment_counts`, `customer_filter_options`, `customer_segment_sizes` | **NU** |
-| `customer_add_manual`, `customer_delete_contact`, `customer_anonymize`, `customer_activity` | **NU** |
-| `comanda_incasata` | **NU** |
-| tabelele `customer_segments`, `customer_segment_members`, `customer_imports` | **NU** |
+**Migratiile 17-29 au intrat in productie pe 21.09.2026, cu acordul lui**, inainte de push.
+Cum si cu ce dovada, in `REGISTRU.md`. Pe scurt:
 
-Codul le cheama cu **12 si 3** argumente. Impins asa, pagina Clienti ar cadea pentru toate cele
-21 de magazine — exact ce s-a intamplat dimineata cu Cosurile abandonate, dar mai mare.
-
-**Deci nu se impinge pana nu intra migratiile 17-29 in productie**, in ordine, cu acordul lui.
-
----
+- aplicate ca **stare finala** in cinci pasi, nu ca treisprezece fisiere pe rand;
+- dovada e o **comparatie de amprente** (`md5(pg_get_functiondef)`) intre demo si productie:
+  toate cele **14 functii identice**, cate o singura versiune, fara semnaturi vechi ramase;
+- **nicio tabela cu date nu e atinsa**: toate scrierile sunt in corpul unor functii, iar
+  `alter table` numai pe cele trei tabele noi, goale;
+- dupa aplicare: 538 de comenzi, 1.592 de randuri, 35.156,76 lei — **neschimbate**;
+- probat ca un comerciant adevarat: 269 de clienti, sumar corect, zece segmente numarate,
+  cronologie cu 8 evenimente; datele altui magazin: **zero**.
 
 ## Securitate
 
@@ -136,8 +134,12 @@ si nici randuri carate degeaba prin retea.
 
 ## Ce ramane deschis
 
-- **Migratiile 17-29 nu sunt in productie.** Asta blocheaza push-ul.
-- `customers`, `notice_sms_log`, `return_requests`, `sms_optout`: a doua incuietoare lipsa pe
-  `anon` (nu curge nimic azi).
+- ⚠⚠ **TRUNCATE pentru `anon` pe tabelele mai vechi.** Gasit la audit pe cele trei tabele noi
+  si inchis acolo (`revoke all`), dar `customers`, `orders` si celelalte il au mai departe.
+  E singurul drept pe care **RLS nu-l filtreaza**: nu se uita la randuri, goleste tabela. Azi
+  nu e ajuns de nicaieri (PostgREST n-are verb de TRUNCATE), deci e o incuietoare descuiata,
+  nu o usa deschisa — dar cere o trecere a lor.
+- `customers`, `notice_sms_log`, `return_requests`, `sms_optout`: si SELECT pentru `anon` la
+  nivel de tabela (nu curge nimic azi, politicile cer `auth.uid()`).
 - Etapa H (profil persistent), G2 (arhivare), G5 (actiuni rapide), F3 (segmente → campanii):
   fiecare cu motivul ei scris in `CLIENTI.md`.

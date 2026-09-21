@@ -107,8 +107,26 @@ $$;
 -- Si a doua incuietoare conteaza tocmai fiindca RLS de pe platforma asta s-a mai
 -- slabit o data: vezi lectia `recovery_sends`, de azi-dimineata.
 
-revoke insert, update, delete on public.customer_segments from anon;
-revoke insert, update, delete on public.customer_segment_members from anon;
-revoke insert, update, delete on public.customer_imports from anon;
+/*
+  ⚠⚠ `revoke all`, NU o lista de drepturi. Prima scriere revoca
+  `select, insert, update, delete` — si a lasat in urma REFERENCES, TRIGGER si,
+  mai ales, **TRUNCATE**.
+
+  TRUNCATE e singurul drept pe care RLS NU-l filtreaza: nu se uita la randuri, ci
+  goleste tabela. Toata paza sectiunii se sprijina pe „RLS e granita"; la TRUNCATE
+  granita aceea nu exista. Un `anon` cu TRUNCATE ar fi putut sterge segmentele
+  TUTUROR comerciantilor deodata.
+
+  ⚠ Azi nu e ajuns de nicaieri (PostgREST n-are verb de TRUNCATE), deci nu era o
+  gaura deschisa — era o incuietoare lasata descuiata. Gasita masurand drepturile
+  ramase dupa revocare, nu citind.
+
+  ⚠ Acelasi lucru e adevarat pentru TOATE tabelele mai vechi ale platformei
+  (`customers` are si azi TRUNCATE pentru `anon`). Aici s-au inchis cele trei
+  tabele noi; restul cer o trecere a lor.
+*/
+revoke all on public.customer_segments from anon;
+revoke all on public.customer_segment_members from anon;
+revoke all on public.customer_imports from anon;
 
 notify pgrst, 'reload schema';

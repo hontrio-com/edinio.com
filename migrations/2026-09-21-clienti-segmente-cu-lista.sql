@@ -60,7 +60,7 @@ create index if not exists customer_segment_members_segment_idx
 alter table public.customer_segment_members enable row level security;
 
 /* ⚠ Supabase da implicit toate drepturile pe o tabela noua din `public`. */
-revoke select on public.customer_segment_members from anon;
+revoke all on public.customer_segment_members from anon;
 
 /*
   ⚠ Politica trece prin segment, care trece prin magazin. Scrisa pe `segment_id`

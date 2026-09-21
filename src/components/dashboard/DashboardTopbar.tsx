@@ -13,6 +13,7 @@ import { Logo } from "@/components/ui/Logo";
 import { BusinessCard } from "@/components/dashboard/Sidebar";
 import { CautareGlobala } from "@/components/dashboard/CautareGlobala";
 import { ButonAdauga } from "@/components/dashboard/ButonAdauga";
+import { ButonScapaDeStoc } from "@/components/dashboard/ScapaDeStoc";
 import { intrareActiva, meniuPentru } from "@/lib/navigatie-panou";
 import { formatPrice } from "@/lib/utils/format";
 import { PLAN_LABELS as PLAN_NAMES } from "@/lib/plans";
@@ -239,8 +240,14 @@ export function DashboardTopbar({ userFullName, avatarSvg, plan, recentOrders, n
         {/* Cautare in tot panoul: produse, comenzi, clienti (vezi `CautareGlobala`) */}
         <CautareGlobala businessId={currentBusiness?.id ?? null} />
 
-        {/* Dreapta: adauga + clopotel + cont */}
+        {/* Dreapta: partener + adauga + clopotel + cont */}
         <div className="ml-auto flex items-center gap-1.5">
+          {/*
+            ⚠ INAINTEA lui „Adauga", nu dupa: „Adauga" e actiunea proprie a
+            comerciantului si ramane cea mai la indemana, langa clopotel si cont.
+            Un buton de partener nu are ce cauta inaintea ei in ordinea apasarii.
+          */}
+          <ButonScapaDeStoc />
           <ButonAdauga />
 
         {/* Notification bell */}

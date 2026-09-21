@@ -6821,6 +6821,11 @@ export type Database = {
       customers_aggregate: {
         Args: {
           bid: string
+          p_segment?: string
+          p_valoare_max?: number
+          p_valoare_min?: number
+          p_vip_comenzi?: number
+          p_vip_lei?: number
           page_limit?: number
           page_offset?: number
           search?: string
@@ -6848,7 +6853,7 @@ export type Database = {
         }[]
       }
       customers_summary: {
-        Args: { bid: string }
+        Args: { bid: string; p_de_la?: string; p_pana?: string }
         Returns: {
           buyers: number
           collected_total: number

@@ -104,7 +104,7 @@ le masoara. Se repara inaintea oricarei frumuseti.
 - [ ] **C1. Tabel compact pe desktop**, card/lista pe telefon:
       `Client · Segment · Comenzi · Ultima comanda · Total · Status`.
 
-- [ ] **C2. Filtre.** Dupa activitate (toti, noi, recurenti, VIP, fara comenzi, inactivi
+- [x] **C2. Filtre.** (activitate + valoare; judet, canal, „accepta marketing” si tag raman la etapele lor) Dupa activitate (toti, noi, recurenti, VIP, fara comenzi, inactivi
       30/90/180 de zile), dupa valoare (praguri + interval propriu), dupa comenzi (1, 2-5,
       peste 5, cu retururi, cu anulari), plus judet, sursa, canal, importat/manual/checkout,
       accepta marketing, are email, are telefon.

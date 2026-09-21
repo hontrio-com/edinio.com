@@ -17,6 +17,9 @@ import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
 import { EticheteClient } from "@/components/dashboard/clienti/EticheteClient";
 import { ETICHETE, PERIOADE, type NumePerioada } from "@/lib/perioade";
+import {
+  NUMELE_SEGMENTULUI, SEGMENTE, TREPTE_VALOARE, cateFiltre, type Segment,
+} from "@/lib/customers/filtre";
 import { CustomerImportModal } from "./CustomerImportModal";
 
 type SortKey = "recent" | "spent" | "orders" | "name";
@@ -29,7 +32,7 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 ];
 
 
-export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, perioada, businessId }: {
+export function CustomersClient({ customers, summary, totalCount, page, searchQuery, sort, perioada, segment, valoare, businessId }: {
   /** Pagina curenta de clienti (max CUSTOMERS_PAGE_SIZE), agregata in Postgres. */
   customers: Customer[];
   summary: CustomersSummary;
@@ -39,6 +42,8 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   searchQuery: string;
   sort: string;
   perioada: NumePerioada;
+  segment: Segment;
+  valoare: string | null;
   businessId: string;
 }) {
   const router = useRouter();
@@ -54,7 +59,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
   const totalPages = Math.max(1, Math.ceil(totalCount / CUSTOMERS_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
 
-  const buildUrl = useCallback((next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada }) => {
+  const buildUrl = useCallback((next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada; segment?: Segment; valoare?: string | null }) => {
     const params = new URLSearchParams();
     const nq = next.q ?? searchQuery;
     const nsort = next.sort ?? sort;
@@ -64,10 +69,15 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
     /* ⚠ „tot" nu se scrie in adresa: e implicitul, iar o adresa curata se poate trimite. */
     const nperioada = next.perioada ?? perioada;
     if (nperioada !== "tot") params.set("perioada", nperioada);
+    const nsegment = next.segment ?? segment;
+    if (nsegment !== "toti") params.set("segment", nsegment);
+    /* `next.valoare === null` inseamna „sterge filtrul", deci nu se poate folosi `??`. */
+    const nvaloare = next.valoare === undefined ? valoare : next.valoare;
+    if (nvaloare) params.set("valoare", nvaloare);
     if (npage > 1) params.set("page", String(npage));
     const qs = params.toString();
     return qs ? `${pathname}?${qs}` : pathname;
-  }, [pathname, searchQuery, sort, page, perioada]);
+  }, [pathname, searchQuery, sort, page, perioada, segment, valoare]);
 
   // Navigare externa (back/forward, link cu ?q=) → resincronizeaza inputul.
   useEffect(() => {
@@ -87,7 +97,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
     return () => clearTimeout(t);
   }, [searchInput, searchQuery, buildUrl, router]);
 
-  function goTo(next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada }) {
+  function goTo(next: { q?: string; sort?: string; page?: number; perioada?: NumePerioada; segment?: Segment; valoare?: string | null }) {
     startNavTransition(() => router.push(buildUrl(next), { scroll: false }));
   }
 
@@ -215,7 +225,7 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Cauta dupa nume, telefon sau email..."
+            placeholder="Caută după nume, telefon sau email…"
             className="w-full pl-10 pr-3 py-2.5 text-sm border border-border rounded-xl bg-surface text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors"
           />
         </div>
@@ -229,6 +239,65 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
             {SORT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
           </select>
         </div>
+      </div>
+
+      {/*
+        ═══ FILTRELE ═══
+
+        ⚠ SE FILTREAZĂ ÎN BAZĂ, nu peste pagina adusă: numărul total și paginarea
+        trebuie să fie ale mulțimii filtrate. Vezi `customers_aggregate`.
+
+        ⚠ NICIUN FILTRU FĂRĂ DATE PE CARE SĂ CADă. Lipsesc dinadins „acceptă
+        marketing" (n-avem consimțământ pe client), „tag" (nu există etichete scrise
+        de comerciant) și „adăugat manual" (nu există adăugarea manuală). Toate trei
+        sunt în plan, la etapele lor. Vezi `lib/customers/filtre.ts`.
+      */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <select
+          value={segment}
+          onChange={(e) => goTo({ segment: e.target.value as Segment, page: 1 })}
+          aria-label="Segment"
+          className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+        >
+          {SEGMENTE.map((sg) => (
+            <option key={sg} value={sg}>{NUMELE_SEGMENTULUI[sg]}</option>
+          ))}
+        </select>
+
+        <select
+          value={valoare ?? ""}
+          onChange={(e) => goTo({ valoare: e.target.value || null, page: 1 })}
+          aria-label="Valoarea comenzilor"
+          className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+        >
+          <option value="">Orice valoare</option>
+          {TREPTE_VALOARE.map((t) => (
+            <option key={t.cheie} value={t.cheie}>{t.eticheta}</option>
+          ))}
+        </select>
+
+        {/*
+          ⚠ „Șterge filtrele" apare DOAR când există ce șterge. Un buton mereu acolo,
+          de cele mai multe ori fără efect, îl învață pe om să-l ignore — și atunci nu-l
+          mai vede nici când chiar are nevoie de el.
+        */}
+        {cateFiltre({ segment, valoare }) > 0 && (
+          <button
+            type="button"
+            onClick={() => goTo({ segment: "toti", valoare: null, page: 1 })}
+            className="rounded-xl px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Șterge filtrele ({cateFiltre({ segment, valoare })})
+          </button>
+        )}
+
+        {/*
+          ⚠ CÂȚI AU IEȘIT, lângă filtre. Fără cifra asta, un filtru care nu găsește pe
+          nimeni arată exact ca o pagină stricată. Cu ea, „0 clienți" e un răspuns.
+        */}
+        <span className="ml-auto text-xs text-muted-foreground">
+          {totalCount} {totalCount === 1 ? "client" : "clienți"}
+        </span>
       </div>
 
       {/* List */}

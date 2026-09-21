@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CUSTOMERS_PAGE_SIZE, escapeLike, firstParam, pageParam } from "@/lib/orders/pagination";
 import type { Customer, CustomersSummary } from "@/lib/customers";
 import { PERIOADE, fereastra, type NumePerioada } from "@/lib/perioade";
+import { segmentValid, treaptaValoare, type Segment } from "@/lib/customers/filtre";
 
 const SORT_KEYS = new Set(["recent", "spent", "orders", "name"]);
 
@@ -45,6 +46,15 @@ export default async function CustomersPage({
     ? (perioadaRaw as NumePerioada)
     : "tot";
 
+  /*
+    ⚠ SEGMENTUL SI TREAPTA DE VALOARE VIN DIN ADRESA, ca si cautarea si sortarea:
+    un filtru pus se poate trimite prin legatura, iar „inapoi" din browser se
+    intoarce la ce vedeai. Tinute doar in stare, s-ar fi pierdut la fiecare
+    reincarcare si la fiecare deschidere de fisa.
+  */
+  const segment: Segment = segmentValid(firstParam(sp.segment));
+  const valoare = treaptaValoare(firstParam(sp.valoare));
+
   const { data: bizRow } = await supabase
     .from("businesses")
     .select("id")
@@ -58,7 +68,8 @@ export default async function CustomersPage({
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <Suspense fallback={<ScheletClienti />}>
-        <ListaClienti businessId={bizRow.id} q={q} sort={sort} page={page} perioada={perioada} />
+        <ListaClienti businessId={bizRow.id} q={q} sort={sort} page={page} perioada={perioada}
+          segment={segment} valoare={firstParam(sp.valoare) ?? null} />
       </Suspense>
     </div>
   );
@@ -93,15 +104,20 @@ async function ListaClienti({
   sort,
   page,
   perioada,
+  segment,
+  valoare,
 }: {
   businessId: string;
   q: string;
   sort: string;
   page: number;
   perioada: NumePerioada;
+  segment: Segment;
+  valoare: string | null;
 }) {
   const supabase = await createClient();
   const f = fereastra(perioada);
+  const treapta = treaptaValoare(valoare);
 
   // Clientii sunt agregati, cautati si paginati in Postgres (functiile
   // customers_aggregate / customers_summary, sub RLS) — corect la orice numar
@@ -113,6 +129,15 @@ async function ListaClienti({
       sort_key: sort,
       page_limit: CUSTOMERS_PAGE_SIZE,
       page_offset: (page - 1) * CUSTOMERS_PAGE_SIZE,
+      /*
+        ⚠ FILTRAREA SE FACE IN BAZA, nu peste pagina adusa: `total_count` si
+        paginarea trebuie sa fie ale multimii FILTRATE. Filtrat in JavaScript,
+        comerciantul ar fi vazut „50 de clienti" dintr-un magazin cu trei sute, iar
+        paginile de dupa ar fi fost goale.
+      */
+      p_segment: segment,
+      p_valoare_min: treapta?.min ?? undefined,
+      p_valoare_max: treapta?.max ?? undefined,
     }),
     /*
       ⚠ LISTA RAMANE PE TOT ISTORICUL, numai sumarul se taie pe perioada — cum a
@@ -169,6 +194,8 @@ async function ListaClienti({
       searchQuery={q}
       sort={sort}
       perioada={perioada}
+      segment={segment}
+      valoare={valoare}
       businessId={businessId}
     />
   );

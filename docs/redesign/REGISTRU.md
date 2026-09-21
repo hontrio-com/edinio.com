@@ -23,8 +23,10 @@ push si aplicarea migratiei, la toti comerciantii.
 
 1. **Intai migratiile** din tabelul B, in productie (`rtefdpioqmowkdiybwrr`), in ordinea din
    tabel.
-   ⚠ **Migratiile 11 si 3a sunt DEJA in productie** (aplicate cu acordul lui, fiecare pentru
-   un defect care lovea oameni adevarati). Nu se aplica a doua oara.
+   ⚠⚠ **DIN CELE SAISPREZECE, DOAR 12-16 AU MAI RAMAS.** Migratiile 1-11 sunt toate in
+   productie: 1-10 de la unirea din 20.09, iar 11 aplicata separat pe 21.09 cu acordul lui.
+   Verificat obiect cu obiect pe 21.09.2026, nu presupus. Reaplicate, dau `42P07` in mijlocul
+   sirului, iar migratia 5 ar sterge tabele care au deja date.
    ⚠ **Ordinea dintre cele noi conteaza**: 12 (tabela `recovery_sends`) inaintea lui 14
    (coloanele ei de atribuire), si amandoua inaintea lui 15 si 16, care le citesc. 13 e
    independenta.
@@ -47,19 +49,33 @@ probat, nu cod vazut lucrand pe oameni.
 
 ## B. Migratii de baza de date
 
+> ⚠⚠ **CORECTAT PE 21.09.2026, DUPA O VERIFICARE PE PRODUCTIE.** Tabelul spunea
+> despre opt migratii (2, 4-10) ca sunt „de aplicat la final". Toate erau DEJA
+> aplicate, de la unirea din 20.09 - se vede si din commitul „Schema de
+> referinta, regenerata dupa aplicarea migratiilor in productie".
+>
+> Nu era o greseala de scris, ci o capcana: in ziua unirii, cine urma lista ar
+> fi incercat sa le aplice a doua oara si ar fi primit `42P07: relation already
+> exists` la mijlocul unui sir de migratii - adica exact in clipa in care nu stii
+> daca ai stricat ceva. Iar migratia 5 ar fi STERS si recreat tabele care au azi
+> date adunate zi de zi.
+>
+> Starea de mai jos e citita din productie, obiect cu obiect, nu presupusa.
+
+
 | # | Fisier | Ce aduce | Aplicata in DEMO | Aplicata in PRODUCTIE |
 |---|--------|----------|------------------|------------------------|
 | 1 | `migrations/2026-09-20-produse-sub-prag.sql` | `stoc_combinatie`, `combinatie_aprinsa`, `produse_sub_prag`, `numar_produse_sub_prag` (stoc scazut vazut si pe variante) | DA | **DA, 20.09.2026** (aplicata inainte de regula de mai sus; schema de referinta a fost regenerata atunci) |
-| 2 | `migrations/2026-09-20-vanzari-panou.sql` | `fereastra_vanzari`, `canale_vanzare`, `vanzari_panou` (graficul de vanzari: perioade, canale, comparatie) | DA | **NU. De aplicat la final.** |
+| 2 | `migrations/2026-09-20-vanzari-panou.sql` | `fereastra_vanzari`, `canale_vanzare`, `vanzari_panou` (graficul de vanzari: perioade, canale, comparatie) | DA | **DA, 20.09.2026** (la unirea de atunci). ⚠ NU se mai aplica o data. |
 | 3a | `migrations/2026-09-20-panou-carduri.sql`, partea de jos | politica RLS lipsa de pe `business_daily_stats` | DA | **DA, 20.09.2026**, cu acordul lui: repara un defect care lovea cei 71 de comercianti cu statistici. ⚠ La final NU se mai aplica a doua oara (ar da `42710: policy already exists`): se sare peste ultima parte a fisierului. |
 | 3b | `migrations/2026-09-20-panou-carduri.sql`, functia | `panou_carduri` (cele patru carduri din cap) | DA | **NU. De aplicat la final.** |
-| 4 | `migrations/2026-09-20-analitice-sesiuni.sql` | sesiuni si vizitatori in `site_analytics` (coloane + indexuri), tabela `analitice_sare` si functia `analitice_sarea_zilei` | DA | **NU. De aplicat la final.** ⚠ Prima migratie care schimba o TABELA, nu doar adauga functii: patru coloane noi, toate optionale. |
-| 5 | `migrations/2026-09-20-analitice-agregat-sesiuni.sql` | tabelele `analitice_zilnic` si `analitice_zilnic_sursa` (+ politici) si `agregeaza_analitice` care le umple | DA | **NU. De aplicat la final.** ⚠ Dupa aplicare, primele zile de sesiuni se strang la urmatoarea rulare a cronului `discount-release`; istoricul NU se poate reconstrui, fiindca randurile brute mai vechi de 8 zile nu mai exista. |
-| 6 | `migrations/2026-09-20-trafic-si-harta.sql` | `trafic_panou`, `trafic_pe_sursa`, `comenzi_pe_judet` | DA | **NU. De aplicat la final.** |
-| 7 | `migrations/2026-09-20-fereastra-azi-ieri.sql` | `fereastra_vanzari` capata „azi" si „ieri" | DA | **NU. De aplicat la final.** ⚠ Inlocuieste functia din migratia 2, deci se aplica DUPA ea. |
-| 8 | `migrations/2026-09-20-palnie-si-venit-pe-sursa.sql` | `site_analytics.valoare`; `analitice_zilnic.sesiuni_cu_produs/_cu_cos/_cu_checkout`; `analitice_zilnic_sursa.vanzari`; `agregeaza_analitice` rescrisa ca sa le umple; `palnia_panou`; `trafic_pe_sursa` refacuta cu venit | DA | **NU. De aplicat la final.** ⚠ Atinge o TABELA cu trafic real (`site_analytics`) si cele doua tabele de agregat; toate coloanele sunt optionale sau cu implicit. Se aplica DUPA migratiile 4 si 5. ⚠ `trafic_pe_sursa` se sterge si se recreeaza (semnatura de intoarcere se schimba), deci ordinea fata de migratia 6 conteaza. |
-| 9 | `migrations/2026-09-20-vanzari-detaliu.sql` | `vanzari_detaliu` (sumarul, produsele, categoriile, canalele si starile filei Vanzari) si `carduri_secundare` (clienti noi, clienti care revin, bucati, anulari - cu fereastra precedenta) | DA | **NU. De aplicat la final.** Numai functii noi; nu atinge nicio tabela. Se aplica DUPA migratia 2 (foloseste `fereastra_vanzari`). |
-| 10 | `migrations/2026-09-20-verde-rebranding.sql` | Implicitul lui `businesses.primary_color` trece de la `#1AB554` la `#07c527` | DA | **NU. De aplicat la final.** Doar `set default`, deci atinge numai magazinele FACUTE DE ACUM INAINTE. ⚠ Cele existente NU se ating, si e o hotarare: `primary_color` e culoarea comerciantului, nu a noastra, iar un `update` peste randurile ramase pe vechiul implicit ar repicta intr-o noapte vitrine care nu ne-au cerut nimic. |
+| 4 | `migrations/2026-09-20-analitice-sesiuni.sql` | sesiuni si vizitatori in `site_analytics` (coloane + indexuri), tabela `analitice_sare` si functia `analitice_sarea_zilei` | DA | **DA, 20.09.2026** (la unirea de atunci). ⚠ NU se mai aplica o data. ⚠ Prima migratie care schimba o TABELA, nu doar adauga functii: patru coloane noi, toate optionale. |
+| 5 | `migrations/2026-09-20-analitice-agregat-sesiuni.sql` | tabelele `analitice_zilnic` si `analitice_zilnic_sursa` (+ politici) si `agregeaza_analitice` care le umple | DA | **DA, 20.09.2026** (la unirea de atunci). ⚠ NU se mai aplica o data. ⚠ Dupa aplicare, primele zile de sesiuni se strang la urmatoarea rulare a cronului `discount-release`; istoricul NU se poate reconstrui, fiindca randurile brute mai vechi de 8 zile nu mai exista. |
+| 6 | `migrations/2026-09-20-trafic-si-harta.sql` | `trafic_panou`, `trafic_pe_sursa`, `comenzi_pe_judet` | DA | **DA, 20.09.2026** (la unirea de atunci). ⚠ NU se mai aplica o data. |
+| 7 | `migrations/2026-09-20-fereastra-azi-ieri.sql` | `fereastra_vanzari` capata „azi" si „ieri" | DA | **DA, 20.09.2026** (la unirea de atunci). ⚠ NU se mai aplica o data. ⚠ Inlocuieste functia din migratia 2, deci se aplica DUPA ea. |
+| 8 | `migrations/2026-09-20-palnie-si-venit-pe-sursa.sql` | `site_analytics.valoare`; `analitice_zilnic.sesiuni_cu_produs/_cu_cos/_cu_checkout`; `analitice_zilnic_sursa.vanzari`; `agregeaza_analitice` rescrisa ca sa le umple; `palnia_panou`; `trafic_pe_sursa` refacuta cu venit | DA | **DA, 20.09.2026** (la unirea de atunci). ⚠ NU se mai aplica o data. ⚠ Atinge o TABELA cu trafic real (`site_analytics`) si cele doua tabele de agregat; toate coloanele sunt optionale sau cu implicit. Se aplica DUPA migratiile 4 si 5. ⚠ `trafic_pe_sursa` se sterge si se recreeaza (semnatura de intoarcere se schimba), deci ordinea fata de migratia 6 conteaza. |
+| 9 | `migrations/2026-09-20-vanzari-detaliu.sql` | `vanzari_detaliu` (sumarul, produsele, categoriile, canalele si starile filei Vanzari) si `carduri_secundare` (clienti noi, clienti care revin, bucati, anulari - cu fereastra precedenta) | DA | **DA, 20.09.2026** (la unirea de atunci). ⚠ NU se mai aplica o data. Numai functii noi; nu atinge nicio tabela. Se aplica DUPA migratia 2 (foloseste `fereastra_vanzari`). |
+| 10 | `migrations/2026-09-20-verde-rebranding.sql` | Implicitul lui `businesses.primary_color` trece de la `#1AB554` la `#07c527` | DA | **DA, 20.09.2026** (la unirea de atunci). ⚠ NU se mai aplica o data. Doar `set default`, deci atinge numai magazinele FACUTE DE ACUM INAINTE. ⚠ Cele existente NU se ating, si e o hotarare: `primary_color` e culoarea comerciantului, nu a noastra, iar un `update` peste randurile ramase pe vechiul implicit ar repicta intr-o noapte vitrine care nu ne-au cerut nimic. |
 
 | 11 | `migrations/2026-09-21-suprimare-contacte.sql` | `recovery_optout` capata `phone` si `motiv`; `email` devine optional; o restrictie care cere macar un contact; index unic pe (magazin, telefon) | DA | **DA, 21.09.2026**, cu acordul lui. Verificat pe amandoua bazele: coloanele exista si `email` e `nullable`. |
 
@@ -123,6 +139,26 @@ refuzat-o („Modify Shared Resources"). Se ruleaza, de catre el sau cu permisiu
     bash scripts/schema-baseline.sh --check  # trebuie sa spuna ca Git = productia
 
 Pana atunci, `--check` va semnala o diferenta: e chiar politica de mai sus, nu o surpriza.
+
+---
+
+## B2. Starea tipurilor fata de productie, pe 21.09.2026
+
+Verificat cu `node scripts/verifica-tipuri-db.mjs`, dupa ce schema de referinta a fost
+regenerata din productie.
+
+| Ce | Stare |
+|---|---|
+| Tabele lipsa din tipuri | **0** (cele trei `analitice_*` au fost adaugate acum: erau in productie de pe 20.09 si lipseau din tipuri) |
+| Coloane lipsa din tipuri | **0** |
+| `recovery_sends` | in tipuri, **nu** in productie - migratia **12**, se aplica la final |
+| `abandoned_carts.ignorat_la` | in tipuri, **nu** in productie - migratia **13**, se aplica la final |
+| `store_settings` | apare ca „fantoma" fiindca in productie e **VEDERE**, nu tabela. Asta e dinadins: vederea decripteaza credentialele. Nu e nimic de facut. |
+
+⚠ **Schema de referinta era in urma cu doua lucruri care sunt in productie**: coloanele
+`recovery_optout.phone` si `.motiv` (migratia 11, aplicata pe 21.09) si functia
+`aplica_praguri_oferta`. Regenerata acum, deci „schema din Git = schema din productie" e din
+nou adevarat - in afara celor doua obiecte de mai sus, care asteapta ziua unirii.
 
 ---
 

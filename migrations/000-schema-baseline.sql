@@ -1114,6 +1114,74 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.aplica_praguri_oferta(p_business uuid, p_oferta uuid, p_scope text, p_produse uuid[] DEFAULT '{}'::uuid[], p_categorii text[] DEFAULT '{}'::text[], p_praguri jsonb DEFAULT '[]'::jsonb, p_activa boolean DEFAULT true)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare
+  v_scrie   boolean := p_activa and jsonb_array_length(coalesce(p_praguri, '[]'::jsonb)) > 0;
+  v_valoare jsonb := jsonb_build_object(
+                       'enabled', true, 'mode', 'percent',
+                       'praguri', p_praguri, 'dinOferta', p_oferta::text);
+  v_scrise  int := 0;
+  v_sarite  int := 0;
+  v_retrase int := 0;
+begin
+  create temporary table if not exists _tinte (id uuid primary key) on commit drop;
+  -- ⚠ `where true`: plasa `safeupdate` refuza orice delete fara where, si nu
+  -- face deosebirea intre o tabela temporara si una adevarata.
+  delete from _tinte where true;
+
+  if v_scrie then
+    insert into _tinte (id)
+    select p.id from public.products p
+     where p.business_id = p_business
+       and (
+         p_scope = 'all'
+         or (p_scope = 'products'   and p.id = any(coalesce(p_produse, '{}')))
+         or (p_scope = 'categories' and p.category = any(coalesce(p_categorii, '{}')))
+       );
+  end if;
+
+  select count(*) into v_sarite
+    from public.products p join _tinte t on t.id = p.id
+   where coalesce((p.page_sections -> 'quantity_tiers' ->> 'enabled')::boolean, false)
+     and p.page_sections -> 'quantity_tiers' ->> 'dinOferta' is null;
+
+  with de_scris as (
+    select p.id from public.products p join _tinte t on t.id = p.id
+     where not (
+       coalesce((p.page_sections -> 'quantity_tiers' ->> 'enabled')::boolean, false)
+       and p.page_sections -> 'quantity_tiers' ->> 'dinOferta' is null
+     )
+       and coalesce(p.page_sections -> 'quantity_tiers', 'null'::jsonb) is distinct from v_valoare
+  ), scrise as (
+    update public.products p
+       set page_sections = jsonb_set(coalesce(p.page_sections, '{}'::jsonb), '{quantity_tiers}', v_valoare, true),
+           updated_at = now()
+      from de_scris d
+     where p.id = d.id and p.business_id = p_business
+    returning 1
+  )
+  select count(*) into v_scrise from scrise;
+
+  with retrase as (
+    update public.products p
+       set page_sections = p.page_sections - 'quantity_tiers',
+           updated_at = now()
+     where p.business_id = p_business
+       and p.page_sections -> 'quantity_tiers' ->> 'dinOferta' = p_oferta::text
+       and not exists (select 1 from _tinte t where t.id = p.id)
+    returning 1
+  )
+  select count(*) into v_retrase from retrase;
+
+  return jsonb_build_object('scrise', v_scrise, 'sarite', v_sarite, 'retrase', v_retrase);
+end;
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text DEFAULT NULL::text, p_business_id uuid DEFAULT NULL::uuid, p_elibereaza_stoc boolean DEFAULT NULL::boolean)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -8166,8 +8234,10 @@ create table if not exists public.rate_limits (
 create table if not exists public.recovery_optout (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
-  email text not null,
-  created_at timestamp with time zone default now() not null);
+  email text,
+  created_at timestamp with time zone default now() not null,
+  phone text,
+  motiv text default 'dezabonare'::text not null);
 
 create table if not exists public.return_requests (
   id uuid default gen_random_uuid() not null,
@@ -8445,6 +8515,13 @@ create table if not exists public.users_profile (
   mfa_confirmat_la timestamp with time zone,
   mfa_sesiuni_confirmate jsonb default '[]'::jsonb not null);
 
+create table if not exists public.zz_backup_anunturi_stinse_20260920 (
+  id uuid,
+  title text,
+  is_published boolean,
+  published_at timestamp with time zone,
+  salvat_la timestamp with time zone);
+
 create table if not exists public.zz_backup_categorii_okxi_20260812 (
   id uuid,
   category text,
@@ -8461,9 +8538,35 @@ create table if not exists public.zz_backup_emag_autosync_20260826 (
   nume_produs text,
   facut_la timestamp with time zone);
 
+create table if not exists public.zz_backup_esafe_page_sections_20260920 (
+  id uuid,
+  page_sections jsonb,
+  salvat_la timestamp with time zone);
+
 create table if not exists public.zz_backup_facebook_feeds_20260814 (
   business_id uuid,
   facebook_feeds jsonb,
+  salvat_la timestamp with time zone);
+
+create table if not exists public.zz_backup_feed_vetdepo_20260920 (
+  id uuid,
+  business_id uuid,
+  user_id uuid,
+  name text,
+  url text,
+  mapping jsonb,
+  options jsonb,
+  enabled boolean,
+  frequency text,
+  run_hour smallint,
+  last_run_at timestamp with time zone,
+  last_status text,
+  last_error text,
+  last_totals jsonb,
+  last_import_id uuid,
+  consecutive_failures integer,
+  created_at timestamp with time zone,
+  updated_at timestamp with time zone,
   salvat_la timestamp with time zone);
 
 create table if not exists public.zz_backup_preturi_bricosmart_20260804 (
@@ -8722,6 +8825,7 @@ alter table public.pepita_listari add constraint pepita_listari_safety_stock_che
 alter table public.posta_plaja add constraint posta_plaja_cifre_check CHECK (((cifre >= 1) AND (cifre <= 28)));
 alter table public.posta_plaja add constraint posta_plaja_interval_check CHECK ((de_la <= pana_la));
 alter table public.posta_plaja add constraint posta_plaja_urmator_check CHECK ((urmator >= de_la));
+alter table public.recovery_optout add constraint recovery_optout_are_un_contact CHECK (((email IS NOT NULL) OR (phone IS NOT NULL)));
 alter table public.site_analytics add constraint site_analytics_device_check CHECK ((device = ANY (ARRAY['mobile'::text, 'tablet'::text, 'desktop'::text])));
 alter table public.sms_campaigns add constraint sms_campaigns_status_check CHECK ((status = ANY (ARRAY['in_curs'::text, 'sent'::text, 'partial'::text, 'failed'::text])));
 alter table public.stock_feed_sources add constraint stock_feed_sources_frequency_check CHECK ((frequency = ANY (ARRAY['hourly'::text, 'daily'::text])));
@@ -9193,6 +9297,7 @@ CREATE UNIQUE INDEX products_import_row_uidx ON public.products USING btree (imp
 CREATE UNIQUE INDEX products_source_external_uidx ON public.products USING btree (business_id, source, external_id) WHERE ((source IS NOT NULL) AND (external_id IS NOT NULL));
 CREATE INDEX rate_limits_curatare_idx ON public.rate_limits USING btree (actualizat_la);
 CREATE UNIQUE INDEX recovery_optout_business_email_uidx ON public.recovery_optout USING btree (business_id, lower(email));
+CREATE UNIQUE INDEX recovery_optout_business_phone_uidx ON public.recovery_optout USING btree (business_id, phone) WHERE (phone IS NOT NULL);
 CREATE INDEX return_requests_business_created_idx ON public.return_requests USING btree (business_id, created_at DESC);
 CREATE INDEX return_requests_business_unread_idx ON public.return_requests USING btree (business_id, is_read);
 CREATE INDEX return_requests_order_id_idx ON public.return_requests USING btree (order_id) WHERE (order_id IS NOT NULL);
@@ -11831,6 +11936,27 @@ grant SELECT on table public.users_profile to service_role;
 grant TRIGGER on table public.users_profile to service_role;
 grant TRUNCATE on table public.users_profile to service_role;
 grant UPDATE on table public.users_profile to service_role;
+grant DELETE on table public.zz_backup_anunturi_stinse_20260920 to anon;
+grant INSERT on table public.zz_backup_anunturi_stinse_20260920 to anon;
+grant REFERENCES on table public.zz_backup_anunturi_stinse_20260920 to anon;
+grant SELECT on table public.zz_backup_anunturi_stinse_20260920 to anon;
+grant TRIGGER on table public.zz_backup_anunturi_stinse_20260920 to anon;
+grant TRUNCATE on table public.zz_backup_anunturi_stinse_20260920 to anon;
+grant UPDATE on table public.zz_backup_anunturi_stinse_20260920 to anon;
+grant DELETE on table public.zz_backup_anunturi_stinse_20260920 to authenticated;
+grant INSERT on table public.zz_backup_anunturi_stinse_20260920 to authenticated;
+grant REFERENCES on table public.zz_backup_anunturi_stinse_20260920 to authenticated;
+grant SELECT on table public.zz_backup_anunturi_stinse_20260920 to authenticated;
+grant TRIGGER on table public.zz_backup_anunturi_stinse_20260920 to authenticated;
+grant TRUNCATE on table public.zz_backup_anunturi_stinse_20260920 to authenticated;
+grant UPDATE on table public.zz_backup_anunturi_stinse_20260920 to authenticated;
+grant DELETE on table public.zz_backup_anunturi_stinse_20260920 to service_role;
+grant INSERT on table public.zz_backup_anunturi_stinse_20260920 to service_role;
+grant REFERENCES on table public.zz_backup_anunturi_stinse_20260920 to service_role;
+grant SELECT on table public.zz_backup_anunturi_stinse_20260920 to service_role;
+grant TRIGGER on table public.zz_backup_anunturi_stinse_20260920 to service_role;
+grant TRUNCATE on table public.zz_backup_anunturi_stinse_20260920 to service_role;
+grant UPDATE on table public.zz_backup_anunturi_stinse_20260920 to service_role;
 grant DELETE on table public.zz_backup_categorii_okxi_20260812 to anon;
 grant INSERT on table public.zz_backup_categorii_okxi_20260812 to anon;
 grant REFERENCES on table public.zz_backup_categorii_okxi_20260812 to anon;
@@ -11859,6 +11985,27 @@ grant SELECT on table public.zz_backup_emag_autosync_20260826 to service_role;
 grant TRIGGER on table public.zz_backup_emag_autosync_20260826 to service_role;
 grant TRUNCATE on table public.zz_backup_emag_autosync_20260826 to service_role;
 grant UPDATE on table public.zz_backup_emag_autosync_20260826 to service_role;
+grant DELETE on table public.zz_backup_esafe_page_sections_20260920 to anon;
+grant INSERT on table public.zz_backup_esafe_page_sections_20260920 to anon;
+grant REFERENCES on table public.zz_backup_esafe_page_sections_20260920 to anon;
+grant SELECT on table public.zz_backup_esafe_page_sections_20260920 to anon;
+grant TRIGGER on table public.zz_backup_esafe_page_sections_20260920 to anon;
+grant TRUNCATE on table public.zz_backup_esafe_page_sections_20260920 to anon;
+grant UPDATE on table public.zz_backup_esafe_page_sections_20260920 to anon;
+grant DELETE on table public.zz_backup_esafe_page_sections_20260920 to authenticated;
+grant INSERT on table public.zz_backup_esafe_page_sections_20260920 to authenticated;
+grant REFERENCES on table public.zz_backup_esafe_page_sections_20260920 to authenticated;
+grant SELECT on table public.zz_backup_esafe_page_sections_20260920 to authenticated;
+grant TRIGGER on table public.zz_backup_esafe_page_sections_20260920 to authenticated;
+grant TRUNCATE on table public.zz_backup_esafe_page_sections_20260920 to authenticated;
+grant UPDATE on table public.zz_backup_esafe_page_sections_20260920 to authenticated;
+grant DELETE on table public.zz_backup_esafe_page_sections_20260920 to service_role;
+grant INSERT on table public.zz_backup_esafe_page_sections_20260920 to service_role;
+grant REFERENCES on table public.zz_backup_esafe_page_sections_20260920 to service_role;
+grant SELECT on table public.zz_backup_esafe_page_sections_20260920 to service_role;
+grant TRIGGER on table public.zz_backup_esafe_page_sections_20260920 to service_role;
+grant TRUNCATE on table public.zz_backup_esafe_page_sections_20260920 to service_role;
+grant UPDATE on table public.zz_backup_esafe_page_sections_20260920 to service_role;
 grant DELETE on table public.zz_backup_facebook_feeds_20260814 to anon;
 grant INSERT on table public.zz_backup_facebook_feeds_20260814 to anon;
 grant REFERENCES on table public.zz_backup_facebook_feeds_20260814 to anon;
@@ -11880,6 +12027,27 @@ grant SELECT on table public.zz_backup_facebook_feeds_20260814 to service_role;
 grant TRIGGER on table public.zz_backup_facebook_feeds_20260814 to service_role;
 grant TRUNCATE on table public.zz_backup_facebook_feeds_20260814 to service_role;
 grant UPDATE on table public.zz_backup_facebook_feeds_20260814 to service_role;
+grant DELETE on table public.zz_backup_feed_vetdepo_20260920 to anon;
+grant INSERT on table public.zz_backup_feed_vetdepo_20260920 to anon;
+grant REFERENCES on table public.zz_backup_feed_vetdepo_20260920 to anon;
+grant SELECT on table public.zz_backup_feed_vetdepo_20260920 to anon;
+grant TRIGGER on table public.zz_backup_feed_vetdepo_20260920 to anon;
+grant TRUNCATE on table public.zz_backup_feed_vetdepo_20260920 to anon;
+grant UPDATE on table public.zz_backup_feed_vetdepo_20260920 to anon;
+grant DELETE on table public.zz_backup_feed_vetdepo_20260920 to authenticated;
+grant INSERT on table public.zz_backup_feed_vetdepo_20260920 to authenticated;
+grant REFERENCES on table public.zz_backup_feed_vetdepo_20260920 to authenticated;
+grant SELECT on table public.zz_backup_feed_vetdepo_20260920 to authenticated;
+grant TRIGGER on table public.zz_backup_feed_vetdepo_20260920 to authenticated;
+grant TRUNCATE on table public.zz_backup_feed_vetdepo_20260920 to authenticated;
+grant UPDATE on table public.zz_backup_feed_vetdepo_20260920 to authenticated;
+grant DELETE on table public.zz_backup_feed_vetdepo_20260920 to service_role;
+grant INSERT on table public.zz_backup_feed_vetdepo_20260920 to service_role;
+grant REFERENCES on table public.zz_backup_feed_vetdepo_20260920 to service_role;
+grant SELECT on table public.zz_backup_feed_vetdepo_20260920 to service_role;
+grant TRIGGER on table public.zz_backup_feed_vetdepo_20260920 to service_role;
+grant TRUNCATE on table public.zz_backup_feed_vetdepo_20260920 to service_role;
+grant UPDATE on table public.zz_backup_feed_vetdepo_20260920 to service_role;
 grant DELETE on table public.zz_backup_preturi_bricosmart_20260804 to anon;
 grant INSERT on table public.zz_backup_preturi_bricosmart_20260804 to anon;
 grant REFERENCES on table public.zz_backup_preturi_bricosmart_20260804 to anon;
@@ -12114,6 +12282,8 @@ grant execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produse
 grant execute on function public.agregeaza_analitice(p_zile integer) to service_role;
 grant execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) to service_role;
 grant execute on function public.analitice_sarea_zilei() to service_role;
+grant execute on function public.aplica_praguri_oferta(p_business uuid, p_oferta uuid, p_scope text, p_produse uuid[], p_categorii text[], p_praguri jsonb, p_activa boolean) to authenticated;
+grant execute on function public.aplica_praguri_oferta(p_business uuid, p_oferta uuid, p_scope text, p_produse uuid[], p_categorii text[], p_praguri jsonb, p_activa boolean) to service_role;
 grant execute on function public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text, p_business_id uuid, p_elibereaza_stoc boolean) to service_role;
 grant execute on function public.blocheaza_domeniu_platforma() to anon;
 grant execute on function public.blocheaza_domeniu_platforma() to authenticated;
@@ -12382,6 +12552,7 @@ revoke execute on function public.adauga_stoc_rezervat(p_order_id uuid, p_produs
 revoke execute on function public.agregeaza_analitice(p_zile integer) from public;
 revoke execute on function public.ajusteaza_stoc_comanda_marketplace(p_order_id uuid, p_business_id uuid, p_produse jsonb, p_variante jsonb) from public;
 revoke execute on function public.analitice_sarea_zilei() from public;
+revoke execute on function public.aplica_praguri_oferta(p_business uuid, p_oferta uuid, p_scope text, p_produse uuid[], p_categorii text[], p_praguri jsonb, p_activa boolean) from public;
 revoke execute on function public.aplica_tranzitia_comenzii(p_order_id uuid, p_status text, p_payment_status text, p_business_id uuid, p_elibereaza_stoc boolean) from public;
 revoke execute on function public.blocheaza_escaladare_users_profile() from public;
 revoke execute on function public.blog_actualizeaza_taxonomia(p_fel text, p_id uuid, p_rand jsonb) from public;

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { cuVersiune } from "@/lib/brand/versiunea-siglei";
 // ⚠ FĂRĂ import de CSS AICI — vezi nota din `website.css`. Fiecare grup de rute
 // își importă foaia lui: prezentarea pe `website.css`, restul pe `globals.css`.
 // Un import aici ar aduce toate utilitarele înapoi peste tot.
@@ -109,15 +110,23 @@ export const metadata: Metadata = {
   // se declara in acelasi timp noindex. Toate paginile de prezentare isi pun
   // fiecare canonical-ul ei, deci nu pierd nimic; restul rutelor raman pe
   // propria adresa, ceea ce e si raspunsul corect.
+  /*
+    ⚠ PICTOGRAMELE POARTA O VERSIUNE IN ADRESA. Vezi `versiunea-siglei.ts`:
+    Vercel serveste ce e in `public/` cu `max-age=31536000, immutable`, deci
+    browserul care a intrat pe site inainte de rebranding NU mai cere niciodata
+    pictograma - o are pe cea veche in cache pana anul viitor. Fisierele de pe
+    server sunt cele noi; fara `?v=`, omul tot pe cea veche s-ar uita.
+  */
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
-      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: cuVersiune("/favicon.ico"), sizes: "any" },
+      { url: cuVersiune("/favicon-16x16.png"), sizes: "16x16", type: "image/png" },
+      { url: cuVersiune("/favicon-32x32.png"), sizes: "32x32", type: "image/png" },
     ],
-    apple: "/apple-touch-icon.png",
+    apple: cuVersiune("/apple-touch-icon.png"),
   },
-  manifest: "/site.webmanifest",
+  /* ⚠ Si manifestul: si el e prins in acelasi cache de un an, cu tot cu pictogramele lui. */
+  manifest: cuVersiune("/site.webmanifest"),
 };
 
 export default function RootLayout({

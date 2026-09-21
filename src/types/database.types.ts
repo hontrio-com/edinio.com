@@ -848,6 +848,106 @@ export type Database = {
         }
         Relationships: []
       }
+      analitice_sare: {
+        Row: {
+          creat_la: string
+          sare: string
+          zi: string
+        }
+        Insert: {
+          creat_la?: string
+          sare?: string
+          zi: string
+        }
+        Update: {
+          creat_la?: string
+          sare?: string
+          zi?: string
+        }
+        Relationships: []
+      }
+      analitice_zilnic: {
+        Row: {
+          afisari: number
+          business_id: string
+          sesiuni: number
+          sesiuni_cu_checkout: number
+          sesiuni_cu_comanda: number
+          sesiuni_cu_cos: number
+          sesiuni_cu_produs: number
+          vizitatori: number
+          zi: string
+        }
+        Insert: {
+          afisari?: number
+          business_id: string
+          sesiuni?: number
+          sesiuni_cu_checkout?: number
+          sesiuni_cu_comanda?: number
+          sesiuni_cu_cos?: number
+          sesiuni_cu_produs?: number
+          vizitatori?: number
+          zi: string
+        }
+        Update: {
+          afisari?: number
+          business_id?: string
+          sesiuni?: number
+          sesiuni_cu_checkout?: number
+          sesiuni_cu_comanda?: number
+          sesiuni_cu_cos?: number
+          sesiuni_cu_produs?: number
+          vizitatori?: number
+          zi?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analitice_zilnic_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analitice_zilnic_sursa: {
+        Row: {
+          business_id: string
+          device: string
+          sesiuni: number
+          sesiuni_cu_comanda: number
+          source: string
+          vanzari: number
+          zi: string
+        }
+        Insert: {
+          business_id: string
+          device?: string
+          sesiuni?: number
+          sesiuni_cu_comanda?: number
+          source?: string
+          vanzari?: number
+          zi: string
+        }
+        Update: {
+          business_id?: string
+          device?: string
+          sesiuni?: number
+          sesiuni_cu_comanda?: number
+          source?: string
+          vanzari?: number
+          zi?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analitice_zilnic_sursa_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       announcements: {
         Row: {
           blocks: Json

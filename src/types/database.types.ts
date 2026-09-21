@@ -2101,16 +2101,62 @@ export type Database = {
         }
         Relationships: []
       }
+      discount_customer_uses: {
+        Row: {
+          business_id: string
+          created_at: string
+          customer_key: string | null
+          discount_id: string
+          id: string
+          ordinal: number
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          customer_key?: string | null
+          discount_id: string
+          id?: string
+          ordinal: number
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          customer_key?: string | null
+          discount_id?: string
+          id?: string
+          ordinal?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discount_customer_uses_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "discount_customer_uses_discount_id_fkey"
+            columns: ["discount_id"]
+            isOneToOne: false
+            referencedRelation: "discounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       discounts: {
         Row: {
           business_id: string
           code: string
           created_at: string
+          doar_prima_comanda: boolean
           expires_at: string | null
           id: string
           is_active: boolean
           max_uses: number | null
           min_order_amount: number | null
+          per_customer_limit: number | null
+          restrangere: Json
+          starts_at: string | null
           type: string
           updated_at: string
           uses_count: number
@@ -2120,11 +2166,15 @@ export type Database = {
           business_id: string
           code: string
           created_at?: string
+          doar_prima_comanda?: boolean
           expires_at?: string | null
           id?: string
           is_active?: boolean
           max_uses?: number | null
           min_order_amount?: number | null
+          per_customer_limit?: number | null
+          restrangere?: Json
+          starts_at?: string | null
           type: string
           updated_at?: string
           uses_count?: number
@@ -2134,11 +2184,15 @@ export type Database = {
           business_id?: string
           code?: string
           created_at?: string
+          doar_prima_comanda?: boolean
           expires_at?: string | null
           id?: string
           is_active?: boolean
           max_uses?: number | null
           min_order_amount?: number | null
+          per_customer_limit?: number | null
+          restrangere?: Json
+          starts_at?: string | null
           type?: string
           updated_at?: string
           uses_count?: number
@@ -3959,6 +4013,8 @@ export type Database = {
           discount_code: string | null
           discount_id: string | null
           discount_released_at: string | null
+          discount_base: Json | null
+          discount_use_id: string | null
           dpd_awb_at: string | null
           dpd_awb_number: string | null
           dpd_shipment_id: number | null
@@ -4184,6 +4240,8 @@ export type Database = {
           discount_code?: string | null
           discount_id?: string | null
           discount_released_at?: string | null
+          discount_base?: Json | null
+          discount_use_id?: string | null
           dpd_awb_at?: string | null
           dpd_awb_number?: string | null
           dpd_shipment_id?: number | null
@@ -4409,6 +4467,8 @@ export type Database = {
           discount_code?: string | null
           discount_id?: string | null
           discount_released_at?: string | null
+          discount_base?: Json | null
+          discount_use_id?: string | null
           dpd_awb_at?: string | null
           dpd_awb_number?: string | null
           dpd_shipment_id?: number | null
@@ -6878,7 +6938,10 @@ export type Database = {
       scrie_variante_daca_neschimbat: { Args: { p_business: string; p_product: string; p_asteptat: Json; p_nou: Json }; Returns: string }
       site_analytics_breakdown_zile: { Args: { bid: string; p_zile: number }; Returns: unknown }
       sterge_comanda: { Args: { p_order_id: string; p_business_id?: string }; Returns: Json }
-      claim_discount_use: { Args: { p_discount_id: string }; Returns: boolean }
+      claim_discount_use: {
+        Args: { p_discount_id: string; p_customer_phone: string | null; p_customer_email: string | null }
+        Returns: string | null
+      }
       consuma_limita: {
         Args: {
           p_blocare_sec?: number
@@ -6957,6 +7020,81 @@ export type Database = {
         Returns: {
           segment: string
           cati: number
+        }[]
+      }
+      discount_stats: {
+        Args: { bid: string }
+        Returns: {
+          discount_id: string
+          comenzi_total: number
+          comenzi_valide: number
+          comenzi_cazute: number
+          bani_dati: number
+          vanzari: number
+          comenzi_cu_transport_oferit: number
+        }[]
+      }
+      discount_orders_fara_legatura: {
+        Args: { bid: string }
+        Returns: number
+      }
+      discount_state: {
+        Args: {
+          p_is_active: boolean
+          p_starts_at: string | null
+          p_expires_at: string | null
+          p_max_uses: number | null
+          p_uses_count: number
+        }
+        Returns: string
+      }
+      discounts_page: {
+        Args: {
+          bid: string
+          search?: string | null
+          p_stare?: string
+          sort_key?: string
+          page_limit?: number
+          page_offset?: number
+        }
+        Returns: {
+          id: string
+          code: string
+          type: string
+          value: number
+          min_order_amount: number | null
+          max_uses: number | null
+          uses_count: number
+          is_active: boolean
+          starts_at: string | null
+          expires_at: string | null
+          per_customer_limit: number | null
+          doar_prima_comanda: boolean
+          restrangere: Json
+          created_at: string
+          updated_at: string
+          stare: string
+          comenzi_total: number
+          comenzi_valide: number
+          comenzi_cazute: number
+          bani_dati: number
+          vanzari: number
+          comenzi_cu_transport_oferit: number
+          total_count: number
+        }[]
+      }
+      discount_state_counts: {
+        Args: { bid: string; search?: string | null }
+        Returns: { stare: string; cate: number }[]
+      }
+      discount_totaluri: {
+        Args: { bid: string }
+        Returns: {
+          coduri: number
+          coduri_folosibile: number
+          comenzi: number
+          bani_dati: number
+          vanzari: number
         }[]
       }
       customer_activity: {
@@ -7057,10 +7195,6 @@ export type Database = {
         Args: { p_items: Json }
         Returns: undefined
       }
-      increment_discount_uses: {
-        Args: { p_discount_id: string }
-        Returns: undefined
-      }
       increment_offer_stats: {
         Args: {
           p_conversions?: number
@@ -7082,6 +7216,10 @@ export type Database = {
       }
       next_order_number: { Args: { p_business_id: string }; Returns: number }
       normalize_phone: { Args: { raw: string }; Returns: string }
+      discount_customer_key: {
+        Args: { customer_phone: string | null; customer_email: string | null }
+        Returns: string | null
+      }
       order_customer_key: {
         Args: {
           customer_email: string
@@ -7124,9 +7262,10 @@ export type Database = {
         Args: { p_business_id: string }
         Returns: string | null
       }
-      release_discount_use: {
-        Args: { p_discount_id: string }
-        Returns: undefined
+      release_discount_claim: { Args: { p_use_id: string }; Returns: boolean }
+      reserve_discount_for_customer: {
+        Args: { p_discount_id: string; p_customer_key: string | null }
+        Returns: string | null
       }
       release_order_discount: { Args: { p_order_id: string }; Returns: boolean }
       repretuieste_pachetele_cu: {

@@ -3,6 +3,7 @@ import { motivulSuprimarii, type RandSuprimare } from "@/lib/abandoned/suprimare
 import { furnizorulAles, furnizoriSms } from "@/lib/abandoned/furnizori-sms";
 import { fapteleCosului, fapteleMagazinului, nevoiDeIstoric } from "@/lib/abandoned/dosar";
 import { refuzulRegulilor } from "@/lib/abandoned/reguli";
+import { COLOANELE_STARII, doarFolosibile } from "@/lib/discounts/stare";
 import { logError } from "@/lib/error-logger";
 import { pragulComenzilor } from "@/app/api/cron/curata-fisiere/reguli";
 import { verificaCron } from "@/lib/cron-auth";
@@ -251,6 +252,30 @@ export async function GET(req: NextRequest) {
      */
     const fapte = await fapteleMagazinului(admin, store.businessId, now);
 
+    /*
+     * ⚠⚠ CODUL SE RECITESTE LA TRIMITERE, nu se crede pasul.
+     *
+     * `step.discount_code` e un SIR salvat in configuratia automatizarii, in
+     * ziua in care comerciantul a asezat pasul. De atunci codul poate sa fi
+     * expirat, sa fi fost stins, sa-si fi atins plafonul — sau, de azi, sa fie
+     * inca PROGRAMAT pentru o data viitoare. Pana acum nimic nu se uita inapoi:
+     * sirul pleca in email oricum.
+     *
+     * Ce se intampla apoi e tacut de doua ori: cumparatorul da clic pe linkul
+     * de recuperare, auto-aplicarea din vitrina cheama `validateDiscount`,
+     * primeste `ESEC_CUPON` si pune cuponul pe `null` FARA sa arate vreun
+     * mesaj. Omul plateste intreg dupa ce i s-a promis o reducere in scris.
+     *
+     * ⚠ O interogare pe magazin, nu pe cos: cel mai mare magazin masurat are
+     * cinci coduri.
+     */
+    const { data: coduriMagazin } = await admin
+      .from("discounts")
+      .select(`code, ${COLOANELE_STARII}`)
+      .eq("business_id", store.businessId)
+      .eq("is_active", true);
+    const coduriBune = new Set(doarFolosibile(coduriMagazin).map((d) => d.code.toUpperCase()));
+
     const { data: carts, error: eCarts } = await admin
       .from("abandoned_carts")
       .select("id, customer_name, email, phone, items, subtotal, created_at, automation_step, recovery_count, last_recovery_at")
@@ -385,7 +410,24 @@ export async function GET(req: NextRequest) {
        * face AICI, si se duce in amandoua locurile.
        */
       const mesajId = crypto.randomUUID();
-      const recoverUrl = buildRecoverUrl(storeUrl, cart.id, step.discount_code ?? null, mesajId);
+
+      /*
+       * ⚠ UN COD CARE NU MERGE NU PLEACA, DAR MESAJUL PLEACA.
+       *
+       * Oprita toata trimiterea, un cod expirat ar fi taiat in tacere
+       * recuperarea intregului magazin. Asa, cumparatorul primeste emailul lui
+       * si linkul catre cos, doar fara promisiunea care n-ar fi fost tinuta.
+       *
+       * ⚠ SE SPUNE IN JURNAL, altfel comerciantul ar fi crezut ca trimite
+       * reduceri saptamani la rand, fara sa le trimita.
+       */
+      const codulPasului = step.discount_code?.trim() || null;
+      const codDeTrimis = codulPasului && coduriBune.has(codulPasului.toUpperCase()) ? codulPasului : null;
+      if (codulPasului && !codDeTrimis) {
+        console.warn(`[abandoned-recovery] ${store.businessId}: codul „${codulPasului}” nu se poate folosi acum (oprit, expirat, epuizat sau inca programat) — mesajul pleaca fara el`);
+      }
+
+      const recoverUrl = buildRecoverUrl(storeUrl, cart.id, codDeTrimis, mesajId);
 
       if (canal.fel === "email") {
         try {
@@ -400,7 +442,7 @@ export async function GET(req: NextRequest) {
             preturiSigure: proaspat.sigur,
             color: biz.primary_color ?? "#07c527",
             message: step.message ? interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName }) : undefined,
-            discountCode: step.discount_code ?? undefined,
+            discountCode: codDeTrimis ?? undefined,
             unsubscribeUrl: urlDezabonare(PLATFORM_ORIGIN, store.businessId, canal.email),
           }, emailSender);
           await marcheazaTrimis(admin, cart.id, cart, now, "email", { businessId: store.businessId, pas: cart.automation_step, mesajId });
@@ -417,7 +459,7 @@ export async function GET(req: NextRequest) {
       } else {
         const body = step.message
           ? `${interpolateRecoveryMessage(step.message, { name: cart.customer_name, store: storeName })} ${recoverUrl}`
-          : defaultRecoverySms({ name: cart.customer_name, storeName, url: recoverUrl, code: step.discount_code ?? null });
+          : defaultRecoverySms({ name: cart.customer_name, storeName, url: recoverUrl, code: codDeTrimis });
         // Prefer notice.ro when enabled for abandoned carts, else SMSO.
         let smsOk = false;
         /*

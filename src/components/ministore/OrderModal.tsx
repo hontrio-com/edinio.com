@@ -33,6 +33,7 @@ import { getCheckoutBumps } from "@/lib/actions/offer.actions";
 import { fbtInCos } from "@/lib/offers/fbt-in-cos";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 import type { CampPersonalizare } from "@/lib/customization/definitie";
+import { ESEC_CUPON } from "@/lib/discounts/mesaj";
 
 
 export type { QuantityTier };
@@ -446,13 +447,43 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   };
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
 
+  /*
+   * ⚠⚠ LINIILE PENTRU CUPON, si AMPRENTA lor — geamanul celor din
+   * `checkout-core.ts`. Aici intra si PRODUSUL formularului, care pe drumul
+   * asta e chiar inima comenzii: un cod restrans la el, folosit de pe pagina
+   * lui, trebuie sa-l gaseasca.
+   *
+   * ⚠ Browserul spune doar CE produse si CAT fac. Categoriile le afla serverul
+   * din catalog — vezi `validateDiscount`.
+   */
+  const liniiPentruCupon = [
+    { productId: product.id, categorie: null, valoare: Math.round(productSubtotal * 100) / 100 },
+    ...cart.map((l) => ({ productId: l.productId, categorie: null, valoare: Math.round(l.price * l.quantity * 100) / 100 })),
+    ...acceptedBumpOffers.map((o) => ({ productId: o.products[0]!.id, categorie: null, valoare: Math.round(o.pricing!.price * 100) / 100 })),
+    ...fbt.companioniNoi.map((i) => ({ productId: i.product_id, categorie: null, valoare: Math.round(i.price * i.quantity * 100) / 100 })),
+  ].filter((l) => l.valoare > 0);
+
+  /*
+   * ⚠⚠ CONTINUTUL, NU TOTALUL. Cumparatorul scoate produsul potrivit si pune
+   * altul, nepotrivit, la acelasi pret: totalul nu se schimba, efectul n-ar
+   * porni, iar ecranul ar pastra reducerea pe un cos care nu mai indeplineste
+   * restrangerea.
+   */
+  const amprentaCosului = liniiPentruCupon.map((l) => `${l.productId}:${l.valoare}`).join("|");
+
   // Apply discount to subtotal
   const discountAmount = appliedDiscount ? appliedDiscount.discountAmount : 0;
   const discountedSubtotal = subtotal - discountAmount;
 
   // Shipping: courier price > flat rate fallback; free_shipping discount overrides
   const baseShippingCost = courierSelection ? courierSelection.price : shippingCost;
-  const isFreeShipping = appliedDiscount?.type === "free_shipping";
+  /*
+   * ⚠⚠ STEAGUL DE LA SERVER, NU TIPUL CUPONULUI. Un cod de transport gratuit
+   * poate fi marginit la anumite produse: citit din `type`, ecranul ar fi scris
+   * „Gratuit" pe un cos care nu-l indeplineste, iar serverul ar fi incasat
+   * transportul.
+   */
+  const isFreeShipping = appliedDiscount?.transportGratuit === true;
   const shipping = isFreeShipping
     ? 0
     : freeShippingThreshold && subtotal >= freeShippingThreshold
@@ -702,7 +733,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       // If subtotal changed and discount was fixed/percent, re-derive discountAmount
       // Re-validate silently — if it fails, remove the discount
       (async () => {
-        const result = await validateDiscount(appliedDiscount.code, business.id, subtotal);
+        const result = await validateDiscount(appliedDiscount.code, business.id, subtotal, liniiPentruCupon);
         if (!result.valid) {
           setAppliedDiscount(null);
           setDiscountError(result.error);
@@ -713,13 +744,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
       })();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subtotal]);
+  }, [subtotal, amprentaCosului]);
 
   async function handleApplyDiscount() {
     if (!discountInput.trim()) return;
     setIsValidating(true);
     setDiscountError("");
-    const result = await validateDiscount(discountInput.trim(), business.id, subtotal);
+    const result = await validateDiscount(discountInput.trim(), business.id, subtotal, liniiPentruCupon);
     setIsValidating(false);
     if (!result.valid) {
       setDiscountError(result.error);
@@ -1002,7 +1033,25 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
           setErrors({ _: "Nu am primit raspuns de la server si nu stim daca s-a inregistrat comanda. Verifica-ti emailul sau scrie-ne inainte sa trimiti din nou." });
           return;
         }
-        if (result.error || !result.orderId) { setErrors({ _: result.error ?? "Eroare la plasarea comenzii." }); return; }
+        if (result.error || !result.orderId) {
+          /*
+            ⚠⚠ ACEEASI REGULA CA PE DRUMUL CU COS (`checkout-core.ts`), si
+            scrisa a doua oara fiindca ecranul asta e a doua copie a aceluiasi
+            formular, cu starea lui.
+
+            Serverul re-valideaza cuponul la plasare si OPRESTE comanda daca nu
+            mai e bun — dinadins. Dar pana azi omul ramanea blocat: mesajul se
+            arata, cuponul ramanea aplicat, si orice noua apasare pe „Trimite"
+            dadea acelasi raspuns. Vechiul text ii spunea macar sa reincarce
+            pagina; acum textul e cel unic, care nu are voie sa spuna de ce.
+          */
+          if (result.error === ESEC_CUPON) {
+            handleRemoveDiscount();
+            setShowDiscountField(true);
+          }
+          setErrors({ _: result.error ?? "Eroare la plasarea comenzii." });
+          return;
+        }
         orderId = result.orderId;
         placedRef.current = { payloadKey, orderId };
       }
@@ -1547,8 +1596,13 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold font-mono" style={{ color }}>{appliedDiscount.code}</p>
                       <p className="text-xs text-muted-foreground">
+                        {/* ⚠⚠ CE S-A APLICAT, nu ce scrie pe cupon — vezi geamanul din CheckoutForm. */}
                         {appliedDiscount.type === "percent" && `${appliedDiscount.value}% reducere`}
                         {appliedDiscount.type === "fixed" && `${formatPrice(appliedDiscount.value)} reducere`}
+                        {appliedDiscount.type !== "free_shipping"
+                          && appliedDiscount.baza > 0
+                          && appliedDiscount.baza < subtotal
+                          && ` · socotită pe ${formatPrice(appliedDiscount.baza)} din coș`}
                         {appliedDiscount.type === "free_shipping" && "Transport gratuit aplicat"}
                       </p>
                     </div>

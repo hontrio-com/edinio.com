@@ -19,6 +19,7 @@ import { useCart } from "@/components/storefront/cart/CartProvider";
 import type { StorePageContent } from "@/lib/storefront/store-content.types";
 import { useCompanyBilling } from "@/components/ministore/CompanyFields";
 import { type CheckoutPreview } from "./checkout-preview";
+import { ESEC_CUPON } from "@/lib/discounts/mesaj";
 
 /**
  * Motorul finalizarii comenzii: toata starea, toate apelurile catre server si
@@ -169,10 +170,41 @@ export function useCheckoutOrder({
    * pretul ei de baza, deci sumele sunt la fel de gresite. Vezi `pretulNesigur`.
    */
   const liniiNevalidate = items.filter(linePretNesigur);
+
+  /*
+   * ⚠⚠ AMPRENTA CONTINUTULUI COSULUI, nu doar totalul lui.
+   *
+   * Re-validarea tacuta a cuponului asculta de lista asta. Pana azi asculta de
+   * `goodsTotal`, si era de ajuns cat timp singura regula legata de cos era
+   * pragul minim. De cand un cod poate fi MARGINIT la anumite produse, nu mai e:
+   * cumparatorul scoate produsul potrivit si pune altul, nepotrivit, la acelasi
+   * pret; totalul nu se schimba, efectul nu porneste, iar ecranul pastreaza
+   * reducerea pe un cos care nu mai indeplineste restrangerea. La plasare
+   * serverul socoteste alt numar, si omul plateste altceva decat a vazut.
+   */
+  const amprentaCosului = items.map((i) => `${i.productId}:${i.quantity}`).join("|");
+
+  /*
+   * ⚠ Ce trimite browserul catre `validateDiscount`: doar CE produse si CAT fac.
+   * Categoriile le afla serverul din catalog — vezi `validateDiscount`.
+   */
+  const liniiPentruCupon = items.map((i) => ({
+    productId: i.productId,
+    categorie: null,
+    valoare: Math.round(lineUnit(i) * i.quantity * 100) / 100,
+  }));
   const extrasTotal = extras.filter(e => selectedExtras[e.id]).reduce((s, e) => s + e.price, 0);
   const baseShippingCost = courierSelection ? courierSelection.price : shippingCost;
   const discountAmount = appliedDiscount ? Math.min(appliedDiscount.discountAmount, goodsTotal) : 0;
-  const isFreeShippingDiscount = appliedDiscount?.type === "free_shipping";
+  /*
+   * ⚠⚠ STEAGUL DE LA SERVER, NU TIPUL CUPONULUI.
+   *
+   * Un cod de transport gratuit poate fi MARGINIT la anumite produse. Citit din
+   * `type`, ecranul ar fi scris „Gratuit" pe un cos care nu indeplineste
+   * restrangerea, iar serverul ar fi incasat transportul: exact tiparul „ecranul
+   * scria 350, curierul incasa 500".
+   */
+  const isFreeShippingDiscount = appliedDiscount?.transportGratuit === true;
   const shipping = (isFreeShippingDiscount || (freeShippingThreshold && goodsTotal >= freeShippingThreshold)) ? 0 : baseShippingCost;
 
   // Card-payment discount (mirrors the server): only for online card methods, on
@@ -261,11 +293,16 @@ export function useCheckoutOrder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview, open, hydrated, initialDiscountCode, businessId]);
 
-  // Re-validate silently when the cart total changes (min_order_amount may no longer be met).
+  /*
+   * Re-validare tacuta cand se schimba cosul: pragul minim poate sa nu mai fie
+   * atins, iar un cod restrans poate sa nu mai prinda nicio linie.
+   *
+   * ⚠⚠ DEPINDE DE CONTINUT, NU DE TOTAL. Vezi `amprentaCosului`.
+   */
   useEffect(() => {
     if (preview || !appliedDiscount) return;
     (async () => {
-      const result = await validateDiscount(appliedDiscount.code, businessId, goodsTotal);
+      const result = await validateDiscount(appliedDiscount.code, businessId, goodsTotal, liniiPentruCupon);
       if (!result.valid) {
         setAppliedDiscount(null);
         setDiscountError(result.error);
@@ -278,13 +315,13 @@ export function useCheckoutOrder({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [goodsTotal]);
+  }, [goodsTotal, amprentaCosului]);
 
   async function handleApplyDiscount() {
     if (!discountInput.trim()) return;
     setIsValidatingDiscount(true);
     setDiscountError("");
-    const result = await validateDiscount(discountInput.trim(), businessId, goodsTotal);
+    const result = await validateDiscount(discountInput.trim(), businessId, goodsTotal, liniiPentruCupon);
     setIsValidatingDiscount(false);
     if (!result.valid) {
       setDiscountError(result.error);
@@ -674,7 +711,34 @@ export function useCheckoutOrder({
           ...continutTikTokDinCos(items.map((i) => ({ productId: i.productId, name: i.name, variantTitle: i.variantTitle, quantity: i.quantity, pret: lineUnit(i) }))),
         });
         const result = await placeCartOrder(payload);
-        if ("error" in result) { setErrors({ _: result.error as string }); return; }
+        if ("error" in result) {
+          /*
+            ⚠⚠ CUPONUL SE SCOATE DIN COS CAND CHIAR EL A OPRIT COMANDA.
+
+            Serverul re-valideaza cuponul la plasare si, daca nu mai e bun,
+            OPRESTE comanda — dinadins: fara ramura aia, un cupon devenit
+            invalid intre completarea formularului si trimitere ar fi lasat
+            comanda sa intre cu totalul intreg, si ecranul scria 350 iar
+            curierul incasa 500.
+
+            Dar pana azi omul ramanea blocat: mesajul se arata, cuponul ramanea
+            aplicat pe ecran, si orice noua apasare pe „Trimite" dadea exact
+            acelasi raspuns. Vechiul text ii spunea macar sa reincarce pagina;
+            acum textul e cel unic, care nu mai are voie sa spuna de ce.
+
+            Asa, cuponul iese singur, totalul se reasaza la adevar, campul se
+            deschide, si omul poate trimite comanda mai departe.
+          */
+          if (result.error === ESEC_CUPON) {
+            /* ⚠ Se cheama scoaterea care exista deja, nu se scrie a doua oara:
+               ea stie sa stearga si cuponul, si ce era scris in camp, si
+               mesajul vechi de eroare. */
+            handleRemoveDiscount();
+            setShowDiscountField(true);
+          }
+          setErrors({ _: result.error as string });
+          return;
+        }
         orderId = (result as { orderId: string }).orderId;
         placedRef.current = { payloadKey, orderId };
       }

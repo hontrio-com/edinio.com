@@ -26,6 +26,7 @@ import {
   ceiGata, furnizorulAles, furnizoriSms, type FurnizorSms,
 } from "@/lib/abandoned/furnizori-sms";
 import { refuzulLaMana } from "@/lib/abandoned/reguli";
+import { COLOANELE_STARII, doarFolosibile } from "@/lib/discounts/stare";
 import { fapteleCosului, fapteleMagazinului, nevoiDeIstoric } from "@/lib/abandoned/dosar";
 import {
   fereastra, fereastraPrecedenta, marginile, type CatePePagina, type NumePerioada,
@@ -332,12 +333,18 @@ export async function getAbandonedCartsData(
 
   const [{ data: profile }, { data: discountRows }] = await Promise.all([
     supabase.from("users_profile").select("plan").eq("id", user.id).single(),
-    supabase.from("discounts").select("code, type, value, expires_at").eq("business_id", businessId).eq("is_active", true).order("code"),
+    /*
+      ⚠⚠ REGULA SE INTREABA, NU SE MAI SCRIE AICI.
+      Filtrul de pe loc se uita NUMAI la `expires_at` si lasa deoparte `max_uses`
+      si, de azi, `starts_at`. Un cod programat pentru Black Friday e `is_active
+      = true` de pe acum: ar fi intrat in lista si ar fi plecat intr-un email de
+      azi, iar cumparatorul ar fi primit un cod care nu merge. Vezi
+      `COLOANELE_STARII` in `src/lib/discounts/stare.ts`.
+    */
+    supabase.from("discounts").select(`code, type, value, ${COLOANELE_STARII}`).eq("business_id", businessId).eq("is_active", true).order("code"),
   ]);
   const isPremium = isPremiumPlan(profile?.plan);
-  const nowMs = Date.now();
-  const discounts = (discountRows ?? [])
-    .filter((d) => !d.expires_at || new Date(d.expires_at).getTime() > nowMs)
+  const discounts = doarFolosibile(discountRows)
     .map((d) => ({ code: d.code, type: d.type, value: Number(d.value) || 0 }));
 
   const enabled = settings?.abandoned_cart_enabled ?? false;

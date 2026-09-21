@@ -2824,23 +2824,60 @@ CREATE OR REPLACE FUNCTION public.ceasul_bazei()
 AS $function$ select now() $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.claim_discount_use(p_discount_id uuid)
- RETURNS boolean
+CREATE OR REPLACE FUNCTION public.claim_discount_use(p_discount_id uuid, p_customer_phone text, p_customer_email text)
+ RETURNS uuid
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-DECLARE
-  v_claimed integer;
-BEGIN
-  UPDATE public.discounts
-  SET uses_count = uses_count + 1, updated_at = now()
-  WHERE id = p_discount_id
-    AND (max_uses IS NULL OR uses_count < max_uses);
+declare
+  v_key   text;
+  v_lim   integer;
+  v_prima boolean;
+  v_biz   uuid;
+  v_id    uuid;
+begin
+  select per_customer_limit, doar_prima_comanda, business_id
+    into v_lim, v_prima, v_biz
+  from public.discounts where id = p_discount_id;
 
-  GET DIAGNOSTICS v_claimed = ROW_COUNT;
-  RETURN v_claimed > 0;
-END;
+  v_key := public.discount_customer_key(p_customer_phone, p_customer_email);
+
+  if (v_lim is not null or v_prima) and v_key is null then
+    return null;
+  end if;
+
+  if v_prima and exists (
+    select 1 from public.orders o
+    where o.business_id = v_biz
+      and public.order_customer_key(o.customer_phone, o.customer_email, o.id) = v_key
+  ) then
+    return null;
+  end if;
+
+  begin
+    v_id := public.reserve_discount_for_customer(p_discount_id, v_key);
+    if v_id is null then return null; end if;
+
+    update public.discounts
+    set uses_count = uses_count + 1, updated_at = now()
+    where id = p_discount_id
+      and (max_uses is null or uses_count < max_uses)
+      and is_active
+      and (starts_at is null or starts_at <= now())
+      and (expires_at is null or expires_at >= now());
+
+    if not found then
+      raise exception 'campania refuza' using errcode = 'P0001';
+    end if;
+
+    return v_id;
+
+  exception
+    when sqlstate 'P0001' then
+      return null;
+  end;
+end;
 $function$
 ;
 
@@ -3922,6 +3959,161 @@ end;
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.discount_customer_key(customer_phone text, customer_email text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE PARALLEL SAFE
+AS $function$
+  select coalesce(
+    nullif(public.normalize_phone(customer_phone), ''),
+    case when nullif(lower(trim(coalesce(customer_email, ''))), '') is not null
+         then 'email:' || lower(trim(customer_email)) end
+  )
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.discount_orders_fara_legatura(bid uuid)
+ RETURNS bigint
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select count(*)
+  from public.orders o
+  where o.business_id = bid
+    and nullif(btrim(o.discount_code), '') is not null
+    and o.discount_id is null
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.discount_state(p_is_active boolean, p_starts_at timestamp with time zone, p_expires_at timestamp with time zone, p_max_uses integer, p_uses_count integer)
+ RETURNS text
+ LANGUAGE sql
+ STABLE PARALLEL SAFE
+ SET search_path TO ''
+AS $function$
+  select case
+    when not p_is_active then 'oprit'
+    when p_expires_at is not null and p_expires_at < now() then 'expirat'
+    when p_max_uses is not null and p_uses_count >= p_max_uses then 'epuizat'
+    when p_starts_at is not null and p_starts_at > now() then 'programat'
+    else 'activ'
+  end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.discount_state_counts(bid uuid, search text DEFAULT NULL::text)
+ RETURNS TABLE(stare text, cate bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  with cautat as (
+    select replace(replace(replace(coalesce(search, ''), '\', '\\'), '%', '\%'), '_', '\_') as q
+  )
+  select public.discount_state(d.is_active, d.starts_at, d.expires_at, d.max_uses, d.uses_count) as stare,
+         count(*) as cate
+  from public.discounts d cross join cautat c
+  where d.business_id = bid and (c.q = '' or d.code ilike '%' || c.q || '%' escape '\')
+  group by 1
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.discount_stats(bid uuid)
+ RETURNS TABLE(discount_id uuid, comenzi_total bigint, comenzi_valide bigint, comenzi_cazute bigint, bani_dati numeric, vanzari numeric, comenzi_cu_transport_oferit bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select
+    d.id,
+    count(o.id),
+    count(o.id) filter (where o.status not in ('cancelled', 'refunded')),
+    count(o.id) filter (where o.status in ('cancelled', 'refunded')),
+    round(coalesce(sum(o.discount_amount) filter (
+      where o.status not in ('cancelled', 'refunded')), 0), 2),
+    round(coalesce(sum(o.total) filter (
+      where o.status not in ('cancelled', 'refunded')), 0), 2),
+    -- ⚠⚠ NUMAI la codurile de transport gratuit: numarata fara `d.type`, cifra
+    -- prindea ORICE comanda cu transport zero (prag de magazin, ridicare
+    -- personala) — masurat pe demo, 26 din 31 erau ale altor feluri de coduri.
+    count(o.id) filter (
+      where o.status not in ('cancelled', 'refunded')
+        and d.type = 'free_shipping'
+        and coalesce(o.shipping_cost, 0) = 0)
+  from public.discounts d
+  left join public.orders o
+    on o.discount_id = d.id and o.business_id = d.business_id
+  where d.business_id = bid
+  group by d.id
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.discount_totaluri(bid uuid)
+ RETURNS TABLE(coduri bigint, coduri_folosibile bigint, comenzi bigint, bani_dati numeric, vanzari numeric)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select count(*),
+    count(*) filter (where public.discount_state(d.is_active, d.starts_at, d.expires_at, d.max_uses, d.uses_count) = 'activ'),
+    coalesce(sum(coalesce(s.comenzi_valide, 0)), 0),
+    round(coalesce(sum(coalesce(s.bani_dati, 0)), 0), 2),
+    round(coalesce(sum(coalesce(s.vanzari, 0)), 0), 2)
+  from public.discounts d
+  left join public.discount_stats(bid) s on s.discount_id = d.id
+  where d.business_id = bid
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.discounts_page(bid uuid, search text DEFAULT NULL::text, p_stare text DEFAULT 'toate'::text, sort_key text DEFAULT 'noi'::text, page_limit integer DEFAULT 25, page_offset integer DEFAULT 0)
+ RETURNS TABLE(id uuid, code text, type text, value numeric, min_order_amount numeric, max_uses integer, uses_count integer, is_active boolean, starts_at timestamp with time zone, expires_at timestamp with time zone, per_customer_limit integer, doar_prima_comanda boolean, restrangere jsonb, created_at timestamp with time zone, updated_at timestamp with time zone, stare text, comenzi_total bigint, comenzi_valide bigint, comenzi_cazute bigint, bani_dati numeric, vanzari numeric, comenzi_cu_transport_oferit bigint, total_count bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  with cautat as (
+    -- ⚠ `%` si `_` sunt metacaractere in `like`: fara escapare, cine scrie `%`
+    -- primeste toate codurile, iar cautarea minte tocmai cand pare ca merge.
+    select replace(replace(replace(coalesce(search, ''), '\', '\\'), '%', '\%'), '_', '\_') as q
+  ),
+  randuri as (
+    select d.*,
+      public.discount_state(d.is_active, d.starts_at, d.expires_at, d.max_uses, d.uses_count) as stare,
+      coalesce(s.comenzi_total, 0) as st_total,
+      coalesce(s.comenzi_valide, 0) as st_valide,
+      coalesce(s.comenzi_cazute, 0) as st_cazute,
+      coalesce(s.bani_dati, 0) as st_bani,
+      coalesce(s.vanzari, 0) as st_vanzari,
+      coalesce(s.comenzi_cu_transport_oferit, 0) as st_transport
+    from public.discounts d
+    left join public.discount_stats(bid) s on s.discount_id = d.id
+    cross join cautat c
+    where d.business_id = bid
+      and (c.q = '' or d.code ilike '%' || c.q || '%' escape '\')
+  ),
+  filtrate as (
+    select r.* from randuri r
+    where coalesce(p_stare, 'toate') = 'toate' or r.stare = p_stare
+  )
+  select f.id, f.code, f.type, f.value, f.min_order_amount, f.max_uses, f.uses_count,
+    f.is_active, f.starts_at, f.expires_at,
+    f.per_customer_limit, f.doar_prima_comanda, f.restrangere,
+    f.created_at, f.updated_at, f.stare,
+    f.st_total, f.st_valide, f.st_cazute, f.st_bani, f.st_vanzari, f.st_transport,
+    count(*) over () as total_count
+  from filtrate f
+  order by
+    -- ⚠ Asezarea ROMANEASCA a casei, cu numere: „VARA2" inaintea lui „VARA10".
+    case when sort_key = 'alfabetic' then f.code collate public.ro_numeric end asc nulls last,
+    case when sort_key = 'folosite' then f.st_valide end desc nulls last,
+    case when sort_key = 'costisitoare' then f.st_bani end desc nulls last,
+    f.created_at desc
+  limit greatest(1, least(coalesce(page_limit, 25), 100))
+  offset greatest(0, coalesce(page_offset, 0))
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.edinio_revendica_conversii(limita integer)
  RETURNS TABLE(id uuid, destinatie text, nume_eveniment text, event_id text, sarcina jsonb, incercari integer, next_retry_at timestamp with time zone, trimis_la timestamp with time zone, ultima_eroare text, abandonat_la timestamp with time zone, creat_la timestamp with time zone, vizitator text)
  LANGUAGE sql
@@ -4872,20 +5064,6 @@ end;
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.increment_discount_uses(p_discount_id uuid)
- RETURNS void
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO 'public'
-AS $function$
-BEGIN
-  UPDATE public.discounts
-  SET uses_count = uses_count + 1, updated_at = now()
-  WHERE id = p_discount_id;
-END;
-$function$
-;
-
 CREATE OR REPLACE FUNCTION public.increment_offer_stats(p_offer_id uuid, p_impressions integer DEFAULT 0, p_conversions integer DEFAULT 0, p_revenue numeric DEFAULT 0)
  RETURNS void
  LANGUAGE sql
@@ -5097,7 +5275,7 @@ CREATE OR REPLACE FUNCTION public.normalize_phone(raw text)
  LANGUAGE sql
  IMMUTABLE PARALLEL SAFE
 AS $function$
-  select case when s2 like '0%' then substr(s2, 2) else s2 end
+  select regexp_replace(s2, '^0+', '')
   from (
     select case
       when s like '0040%' then substr(s, 5)
@@ -5273,9 +5451,7 @@ CREATE OR REPLACE FUNCTION public.order_customer_key(customer_phone text, custom
  IMMUTABLE PARALLEL SAFE
 AS $function$
   select coalesce(
-    nullif(public.normalize_phone(customer_phone), ''),
-    case when nullif(lower(trim(coalesce(customer_email, ''))), '') is not null
-         then 'email:' || lower(trim(customer_email)) end,
+    public.discount_customer_key(customer_phone, customer_email),
     'order:' || order_id::text
   )
 $function$
@@ -5734,34 +5910,57 @@ CREATE OR REPLACE FUNCTION public.reclaim_order_discount(p_order_id uuid)
 AS $function$
 declare
   v_discount_id uuid;
-  v_randuri     integer;
+  v_phone       text;
+  v_email       text;
+  v_key         text;
+  v_lim         integer;
+  v_use_id      uuid;
 begin
-  select discount_id into v_discount_id
-  from public.orders
-  where id = p_order_id
-    and discount_id is not null
-    and discount_released_at is not null
+  select o.discount_id, o.customer_phone, o.customer_email
+    into v_discount_id, v_phone, v_email
+  from public.orders o
+  where o.id = p_order_id
+    and o.discount_id is not null
+    and o.discount_released_at is not null
   for update;
 
   if v_discount_id is null then
     return 'nimic';
   end if;
 
-  update public.discounts
-  set uses_count = uses_count + 1, updated_at = now()
-  where id = v_discount_id
-    and (max_uses is null or uses_count < max_uses);
+  select per_customer_limit into v_lim from public.discounts where id = v_discount_id;
+  v_key := public.discount_customer_key(v_phone, v_email);
 
-  get diagnostics v_randuri = row_count;
-  if v_randuri = 0 then
-    return 'plin';
-  end if;
+  begin
+    if v_lim is not null and v_key is null then
+      return 'plin';
+    end if;
 
-  update public.orders
-  set discount_released_at = null
-  where id = p_order_id;
+    v_use_id := public.reserve_discount_for_customer(v_discount_id, v_key);
+    if v_use_id is null then
+      return 'plin';
+    end if;
 
-  return 'reluat';
+    update public.discounts
+    set uses_count = uses_count + 1, updated_at = now()
+    where id = v_discount_id
+      and (max_uses is null or uses_count < max_uses);
+
+    if not found then
+      raise exception 'campania e plina' using errcode = 'P0001';
+    end if;
+
+    update public.orders
+    set discount_released_at = null,
+        discount_use_id = v_use_id
+    where id = p_order_id;
+
+    return 'reluat';
+
+  exception
+    when sqlstate 'P0001' then
+      return 'plin';
+  end;
 end;
 $function$
 ;
@@ -5780,17 +5979,29 @@ AS $function$
 $function$
 ;
 
-CREATE OR REPLACE FUNCTION public.release_discount_use(p_discount_id uuid)
- RETURNS void
+CREATE OR REPLACE FUNCTION public.release_discount_claim(p_use_id uuid)
+ RETURNS boolean
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO 'public'
 AS $function$
-BEGIN
-  UPDATE public.discounts
-  SET uses_count = GREATEST(uses_count - 1, 0), updated_at = now()
-  WHERE id = p_discount_id;
-END;
+declare
+  v_discount_id uuid;
+begin
+  if p_use_id is null then return false; end if;
+
+  delete from public.discount_customer_uses
+  where id = p_use_id
+  returning discount_id into v_discount_id;
+
+  if v_discount_id is null then return false; end if;
+
+  update public.discounts
+  set uses_count = greatest(uses_count - 1, 0), updated_at = now()
+  where id = v_discount_id;
+
+  return true;
+end;
 $function$
 ;
 
@@ -5802,21 +6013,27 @@ CREATE OR REPLACE FUNCTION public.release_order_discount(p_order_id uuid)
 AS $function$
 declare
   v_discount_id uuid;
+  v_use_id      uuid;
 begin
   update public.orders
   set discount_released_at = now()
   where id = p_order_id
     and discount_id is not null
     and discount_released_at is null
-  returning discount_id into v_discount_id;
+  returning discount_id, discount_use_id into v_discount_id, v_use_id;
 
   if v_discount_id is null then
     return false;
   end if;
 
-  update public.discounts
-  set uses_count = greatest(uses_count - 1, 0), updated_at = now()
-  where id = v_discount_id;
+  if v_use_id is not null then
+    perform public.release_discount_claim(v_use_id);
+    update public.orders set discount_use_id = null where id = p_order_id;
+  else
+    update public.discounts
+    set uses_count = greatest(uses_count - 1, 0), updated_at = now()
+    where id = v_discount_id;
+  end if;
 
   return true;
 end;
@@ -5883,6 +6100,50 @@ begin
       on conflict (business_id, offer_id, op) do nothing;
     end if;
   end loop;
+end;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.reserve_discount_for_customer(p_discount_id uuid, p_customer_key text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_id uuid;
+begin
+  for i in 1..5 loop
+    begin
+      insert into public.discount_customer_uses (discount_id, business_id, customer_key, ordinal)
+      select p_discount_id, d.business_id, p_customer_key,
+             1 + coalesce((
+               select max(u.ordinal) from public.discount_customer_uses u
+               where u.discount_id = p_discount_id
+                 and u.customer_key is not distinct from p_customer_key
+             ), 0)
+      from public.discounts d
+      where d.id = p_discount_id
+        and (
+          coalesce(d.per_customer_limit, case when d.doar_prima_comanda then 1 end) is null
+          or p_customer_key is null
+          or (
+            select count(*) from public.discount_customer_uses u
+            where u.discount_id = p_discount_id and u.customer_key = p_customer_key
+          ) < coalesce(d.per_customer_limit, case when d.doar_prima_comanda then 1 end)
+        )
+      returning id into v_id;
+
+      return v_id;
+
+    exception
+      when unique_violation then
+        v_id := null;
+        continue;
+    end;
+  end loop;
+
+  return null;
 end;
 $function$
 ;
@@ -8016,6 +8277,14 @@ create table if not exists public.dhl_etichete (
   document_transport text,
   creat_la timestamp with time zone default now() not null);
 
+create table if not exists public.discount_customer_uses (
+  id uuid default gen_random_uuid() not null,
+  discount_id uuid not null,
+  business_id uuid not null,
+  customer_key text,
+  ordinal integer not null,
+  created_at timestamp with time zone default now() not null);
+
 create table if not exists public.discounts (
   id uuid default gen_random_uuid() not null,
   business_id uuid not null,
@@ -8028,7 +8297,11 @@ create table if not exists public.discounts (
   is_active boolean default true not null,
   expires_at timestamp with time zone,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  starts_at timestamp with time zone,
+  per_customer_limit integer,
+  doar_prima_comanda boolean default false not null,
+  restrangere jsonb default '{"fel": "tot", "produse": [], "categorii": []}'::jsonb not null);
 
 create table if not exists public.domain_orders (
   id uuid default gen_random_uuid() not null,
@@ -8712,7 +8985,9 @@ create table if not exists public.orders (
   colete_status_label text,
   colete_status_at timestamp with time zone,
   colete_status_checked_at timestamp with time zone,
-  posta_evenimente_semnalate jsonb);
+  posta_evenimente_semnalate jsonb,
+  discount_use_id uuid,
+  discount_base jsonb);
 
 create table if not exists public.page_form_submissions (
   id uuid default gen_random_uuid() not null,
@@ -9301,6 +9576,7 @@ alter table public.customer_segment_members add constraint customer_segment_memb
 alter table public.customer_segments add constraint customer_segments_pkey PRIMARY KEY (id);
 alter table public.customers add constraint customers_pkey PRIMARY KEY (id);
 alter table public.dhl_etichete add constraint dhl_etichete_pkey PRIMARY KEY (order_id);
+alter table public.discount_customer_uses add constraint discount_customer_uses_pkey PRIMARY KEY (id);
 alter table public.discounts add constraint discounts_pkey PRIMARY KEY (id);
 alter table public.domain_orders add constraint domain_orders_pkey PRIMARY KEY (id);
 alter table public.domains add constraint domains_pkey PRIMARY KEY (id);
@@ -9390,6 +9666,7 @@ alter table public.categories add constraint categories_business_id_parent_id_na
 alter table public.courier_settlements add constraint courier_settlements_business_id_courier_awb_number_transfer_key UNIQUE (business_id, courier, awb_number, transfer_date);
 alter table public.custom_pages add constraint custom_pages_business_id_slug_key UNIQUE (business_id, slug);
 alter table public.customers add constraint customers_business_key_unique UNIQUE (business_id, key);
+alter table public.discount_customer_uses add constraint discount_customer_uses_discount_id_customer_key_ordinal_key UNIQUE (discount_id, customer_key, ordinal);
 alter table public.discounts add constraint discounts_business_id_code_key UNIQUE (business_id, code);
 alter table public.emag_awb add constraint emag_awb_business_emag_key UNIQUE (business_id, emag_id);
 alter table public.emag_offers add constraint emag_offers_business_emag_key UNIQUE (business_id, emag_id);
@@ -9436,6 +9713,7 @@ alter table public.businesses add constraint businesses_slug_format CHECK ((slug
 alter table public.businesses add constraint businesses_type_check CHECK ((type = ANY (ARRAY['minisite'::text, 'ministore'::text])));
 alter table public.categories add constraint categories_seo_description_lungime CHECK ((char_length(seo_description) <= 1000));
 alter table public.customer_segments add constraint customer_segments_fel_check CHECK ((fel = ANY (ARRAY['criterii'::text, 'lista'::text])));
+alter table public.discounts add constraint discounts_per_customer_limit_pozitiv CHECK (((per_customer_limit IS NULL) OR (per_customer_limit >= 1)));
 alter table public.discounts add constraint discounts_type_check CHECK ((type = ANY (ARRAY['percent'::text, 'fixed'::text, 'free_shipping'::text])));
 alter table public.domain_orders add constraint domain_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'completed'::text, 'cancelled'::text, 'refunded'::text])));
 alter table public.edinio_conversion_outbox add constraint edinio_conversion_outbox_destinatie_check CHECK ((destinatie = ANY (ARRAY['meta'::text, 'tiktok'::text])));
@@ -9529,6 +9807,8 @@ alter table public.customer_segments add constraint customer_segments_creat_de_f
 alter table public.customers add constraint customers_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.dhl_etichete add constraint dhl_etichete_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.dhl_etichete add constraint dhl_etichete_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE;
+alter table public.discount_customer_uses add constraint discount_customer_uses_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
+alter table public.discount_customer_uses add constraint discount_customer_uses_discount_id_fkey FOREIGN KEY (discount_id) REFERENCES discounts(id) ON DELETE CASCADE;
 alter table public.discounts add constraint discounts_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.domain_orders add constraint domain_orders_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.domain_orders add constraint domain_orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
@@ -9581,6 +9861,7 @@ alter table public.operatii_externe add constraint operatii_externe_business_id_
 alter table public.operatii_externe add constraint operatii_externe_order_id_fkey FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL;
 alter table public.orders add constraint orders_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.orders add constraint orders_discount_id_fkey FOREIGN KEY (discount_id) REFERENCES discounts(id) ON DELETE SET NULL;
+alter table public.orders add constraint orders_discount_use_id_fkey FOREIGN KEY (discount_use_id) REFERENCES discount_customer_uses(id) ON DELETE SET NULL;
 alter table public.page_form_submissions add constraint page_form_submissions_business_id_fkey FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE;
 alter table public.page_form_submissions add constraint page_form_submissions_form_id_fkey FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE SET NULL;
 alter table public.page_form_submissions add constraint page_form_submissions_page_id_fkey FOREIGN KEY (page_id) REFERENCES custom_pages(id) ON DELETE SET NULL;
@@ -9829,6 +10110,8 @@ CREATE INDEX idx_audit_log_created_at ON public.admin_audit_log USING btree (cre
 CREATE INDEX idx_audit_log_target ON public.admin_audit_log USING btree (target_type, target_id);
 CREATE INDEX idx_businesses_type ON public.businesses USING btree (type);
 CREATE INDEX idx_businesses_user_id ON public.businesses USING btree (user_id);
+CREATE INDEX idx_discount_customer_uses_cod_om ON public.discount_customer_uses USING btree (discount_id, customer_key);
+CREATE INDEX idx_discounts_business_created ON public.discounts USING btree (business_id, created_at DESC);
 CREATE INDEX idx_domain_orders_business_id ON public.domain_orders USING btree (business_id);
 CREATE INDEX idx_domain_orders_status ON public.domain_orders USING btree (status);
 CREATE INDEX idx_domain_orders_user_id ON public.domain_orders USING btree (user_id);
@@ -9848,6 +10131,7 @@ CREATE INDEX idx_olx_adverts_valid_to ON public.olx_adverts USING btree (valid_t
 CREATE INDEX idx_olx_queue_created ON public.olx_sync_queue USING btree (created_at);
 CREATE INDEX idx_olx_queue_revendicat ON public.olx_sync_queue USING btree (revendicat_pana, created_at);
 CREATE INDEX idx_orders_business_created ON public.orders USING btree (business_id, created_at DESC);
+CREATE INDEX idx_orders_business_customer_key ON public.orders USING btree (business_id, order_customer_key(customer_phone, customer_email, id));
 CREATE INDEX idx_orders_business_id ON public.orders USING btree (business_id);
 CREATE INDEX idx_orders_business_normphone ON public.orders USING btree (business_id, normalize_phone(customer_phone));
 CREATE INDEX idx_orders_business_status ON public.orders USING btree (business_id, status);
@@ -10155,6 +10439,7 @@ alter table public.customer_segment_members enable row level security;
 alter table public.customer_segments enable row level security;
 alter table public.customers enable row level security;
 alter table public.dhl_etichete enable row level security;
+alter table public.discount_customer_uses enable row level security;
 alter table public.discounts enable row level security;
 alter table public.domain_orders enable row level security;
 alter table public.domains enable row level security;
@@ -10370,6 +10655,9 @@ create policy customers_select_own on public.customers as PERMISSIVE for SELECT 
 create policy customers_update_own on public.customers as PERMISSIVE for UPDATE to public using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid()))));
+create policy discount_customer_uses_ale_magazinului on public.discount_customer_uses as PERMISSIVE for SELECT to authenticated using ((EXISTS ( SELECT 1
+   FROM businesses b
+  WHERE ((b.id = discount_customer_uses.business_id) AND (b.user_id = ( SELECT auth.uid() AS uid))))));
 create policy discounts_owner_all on public.discounts as PERMISSIVE for ALL to authenticated using ((business_id IN ( SELECT businesses.id
    FROM businesses
   WHERE (businesses.user_id = auth.uid())))) with check ((business_id IN ( SELECT businesses.id
@@ -11406,6 +11694,14 @@ grant SELECT on table public.dhl_etichete to service_role;
 grant TRIGGER on table public.dhl_etichete to service_role;
 grant TRUNCATE on table public.dhl_etichete to service_role;
 grant UPDATE on table public.dhl_etichete to service_role;
+grant SELECT on table public.discount_customer_uses to authenticated;
+grant DELETE on table public.discount_customer_uses to service_role;
+grant INSERT on table public.discount_customer_uses to service_role;
+grant REFERENCES on table public.discount_customer_uses to service_role;
+grant SELECT on table public.discount_customer_uses to service_role;
+grant TRIGGER on table public.discount_customer_uses to service_role;
+grant TRUNCATE on table public.discount_customer_uses to service_role;
+grant UPDATE on table public.discount_customer_uses to service_role;
 grant DELETE on table public.discounts to anon;
 grant INSERT on table public.discounts to anon;
 grant REFERENCES on table public.discounts to anon;
@@ -12959,7 +13255,7 @@ grant execute on function public.catalog_scrie_rezumat(p_randuri jsonb) to servi
 grant execute on function public.catalog_verifica(p_esantion integer) to service_role;
 grant execute on function public.categorii_ascunse(p_business uuid) to service_role;
 grant execute on function public.ceasul_bazei() to service_role;
-grant execute on function public.claim_discount_use(p_discount_id uuid) to service_role;
+grant execute on function public.claim_discount_use(p_discount_id uuid, p_customer_phone text, p_customer_email text) to service_role;
 grant execute on function public.comanda_incasata(p_status text, p_payment_status text, p_payment_method text) to anon;
 grant execute on function public.comanda_incasata(p_status text, p_payment_status text, p_payment_method text) to authenticated;
 grant execute on function public.comanda_incasata(p_status text, p_payment_status text, p_payment_method text) to service_role;
@@ -13010,6 +13306,22 @@ grant execute on function public.customers_summary(bid uuid, p_de_la timestamp w
 grant execute on function public.decrement_stock(p_product_id uuid, p_quantity integer) to service_role;
 grant execute on function public.decrement_stock_batch(p_items jsonb) to service_role;
 grant execute on function public.decrement_variant_stock_batch(p_items jsonb) to service_role;
+grant execute on function public.discount_customer_key(customer_phone text, customer_email text) to anon;
+grant execute on function public.discount_customer_key(customer_phone text, customer_email text) to authenticated;
+grant execute on function public.discount_customer_key(customer_phone text, customer_email text) to service_role;
+grant execute on function public.discount_orders_fara_legatura(bid uuid) to authenticated;
+grant execute on function public.discount_orders_fara_legatura(bid uuid) to service_role;
+grant execute on function public.discount_state(p_is_active boolean, p_starts_at timestamp with time zone, p_expires_at timestamp with time zone, p_max_uses integer, p_uses_count integer) to anon;
+grant execute on function public.discount_state(p_is_active boolean, p_starts_at timestamp with time zone, p_expires_at timestamp with time zone, p_max_uses integer, p_uses_count integer) to authenticated;
+grant execute on function public.discount_state(p_is_active boolean, p_starts_at timestamp with time zone, p_expires_at timestamp with time zone, p_max_uses integer, p_uses_count integer) to service_role;
+grant execute on function public.discount_state_counts(bid uuid, search text) to authenticated;
+grant execute on function public.discount_state_counts(bid uuid, search text) to service_role;
+grant execute on function public.discount_stats(bid uuid) to authenticated;
+grant execute on function public.discount_stats(bid uuid) to service_role;
+grant execute on function public.discount_totaluri(bid uuid) to authenticated;
+grant execute on function public.discount_totaluri(bid uuid) to service_role;
+grant execute on function public.discounts_page(bid uuid, search text, p_stare text, sort_key text, page_limit integer, page_offset integer) to authenticated;
+grant execute on function public.discounts_page(bid uuid, search text, p_stare text, sort_key text, page_limit integer, page_offset integer) to service_role;
 grant execute on function public.edinio_revendica_conversii(limita integer) to service_role;
 grant execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb, p_status_asteptat text, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) to service_role;
 grant execute on function public.elibereaza_stoc_batch(p_items jsonb) to service_role;
@@ -13039,7 +13351,6 @@ grant execute on function public.inceput_fereastra_ro(p_zile integer, p_deplasar
 grant execute on function public.inceput_fereastra_ro(p_zile integer, p_deplasare integer) to authenticated;
 grant execute on function public.inceput_fereastra_ro(p_zile integer, p_deplasare integer) to service_role;
 grant execute on function public.incheie_operatie_externa(p_id uuid, p_business_id uuid, p_stare text, p_referinta_externa text, p_detalii jsonb, p_eroare text) to service_role;
-grant execute on function public.increment_discount_uses(p_discount_id uuid) to service_role;
 grant execute on function public.increment_offer_stats(p_offer_id uuid, p_impressions integer, p_conversions integer, p_revenue numeric) to service_role;
 grant execute on function public.increment_referral_balance(p_user_id uuid, p_amount integer) to service_role;
 grant execute on function public.increment_tool_views(tool_id uuid) to service_role;
@@ -13091,9 +13402,10 @@ grant execute on function public.produse_sub_prag(p_business uuid, p_prag intege
 grant execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) to service_role;
 grant execute on function public.reclaim_order_discount(p_order_id uuid) to service_role;
 grant execute on function public.redactorii_blogului() to service_role;
-grant execute on function public.release_discount_use(p_discount_id uuid) to service_role;
+grant execute on function public.release_discount_claim(p_use_id uuid) to service_role;
 grant execute on function public.release_order_discount(p_order_id uuid) to service_role;
 grant execute on function public.repretuieste_pachetele_cu(p_component_id uuid) to service_role;
+grant execute on function public.reserve_discount_for_customer(p_discount_id uuid, p_customer_key text) to service_role;
 grant execute on function public.reserve_payout_balance(p_user_id uuid, p_amount integer) to service_role;
 grant execute on function public.reseteaza_limita(p_cheie text) to service_role;
 grant execute on function public.restaureaza_variante_batch(p_items jsonb) to service_role;
@@ -13145,10 +13457,10 @@ grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
 grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(regdictionary, text) to anon;
-grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(regdictionary, text) to authenticated;
-grant execute on function public.unaccent(text) to service_role;
+grant execute on function public.unaccent(text) to authenticated;
 grant execute on function public.unaccent(regdictionary, text) to service_role;
+grant execute on function public.unaccent(text) to service_role;
 grant execute on function public.unaccent_init(internal) to anon;
 grant execute on function public.unaccent_init(internal) to authenticated;
 grant execute on function public.unaccent_init(internal) to service_role;
@@ -13230,7 +13542,7 @@ revoke execute on function public.catalog_scrie_rezumat(p_randuri jsonb) from pu
 revoke execute on function public.catalog_verifica(p_esantion integer) from public;
 revoke execute on function public.categorii_ascunse(p_business uuid) from public;
 revoke execute on function public.ceasul_bazei() from public;
-revoke execute on function public.claim_discount_use(p_discount_id uuid) from public;
+revoke execute on function public.claim_discount_use(p_discount_id uuid, p_customer_phone text, p_customer_email text) from public;
 revoke execute on function public.combinatie_aprinsa(p_combinatie jsonb) from public;
 revoke execute on function public.comenzi_pe_judet(p_business uuid, p_fel text, p_de_la date, p_pana_la date, p_canal text) from public;
 revoke execute on function public.consuma_limita(p_cheie text, p_limita integer, p_fereastra_sec integer, p_blocare_sec integer, p_cost integer) from public;
@@ -13258,6 +13570,12 @@ revoke execute on function public.customers_summary(bid uuid, p_de_la timestamp 
 revoke execute on function public.decrement_stock(p_product_id uuid, p_quantity integer) from public;
 revoke execute on function public.decrement_stock_batch(p_items jsonb) from public;
 revoke execute on function public.decrement_variant_stock_batch(p_items jsonb) from public;
+revoke execute on function public.discount_orders_fara_legatura(bid uuid) from public;
+revoke execute on function public.discount_state(p_is_active boolean, p_starts_at timestamp with time zone, p_expires_at timestamp with time zone, p_max_uses integer, p_uses_count integer) from public;
+revoke execute on function public.discount_state_counts(bid uuid, search text) from public;
+revoke execute on function public.discount_stats(bid uuid) from public;
+revoke execute on function public.discount_totaluri(bid uuid) from public;
+revoke execute on function public.discounts_page(bid uuid, search text, p_stare text, sort_key text, page_limit integer, page_offset integer) from public;
 revoke execute on function public.edinio_revendica_conversii(limita integer) from public;
 revoke execute on function public.editeaza_comanda_atomic(p_order_id uuid, p_business_id uuid, p_patch jsonb, p_produse jsonb, p_variante jsonb, p_status_asteptat text, p_produse_minus jsonb, p_variante_minus jsonb, p_produse_necesar jsonb, p_variante_necesar jsonb) from public;
 revoke execute on function public.elibereaza_stoc_batch(p_items jsonb) from public;
@@ -13279,7 +13597,6 @@ revoke execute on function public.handle_new_user() from public;
 revoke execute on function public.handle_support_message_insert() from public;
 revoke execute on function public.ia_jeton_extern(p_cheie text, p_limita integer, p_fereastra_ms integer) from public;
 revoke execute on function public.incheie_operatie_externa(p_id uuid, p_business_id uuid, p_stare text, p_referinta_externa text, p_detalii jsonb, p_eroare text) from public;
-revoke execute on function public.increment_discount_uses(p_discount_id uuid) from public;
 revoke execute on function public.increment_offer_stats(p_offer_id uuid, p_impressions integer, p_conversions integer, p_revenue numeric) from public;
 revoke execute on function public.increment_referral_balance(p_user_id uuid, p_amount integer) from public;
 revoke execute on function public.increment_tool_views(tool_id uuid) from public;
@@ -13303,9 +13620,10 @@ revoke execute on function public.produse_sub_prag(p_business uuid, p_prag integ
 revoke execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) from public;
 revoke execute on function public.reclaim_order_discount(p_order_id uuid) from public;
 revoke execute on function public.redactorii_blogului() from public;
-revoke execute on function public.release_discount_use(p_discount_id uuid) from public;
+revoke execute on function public.release_discount_claim(p_use_id uuid) from public;
 revoke execute on function public.release_order_discount(p_order_id uuid) from public;
 revoke execute on function public.repretuieste_pachetele_cu(p_component_id uuid) from public;
+revoke execute on function public.reserve_discount_for_customer(p_discount_id uuid, p_customer_key text) from public;
 revoke execute on function public.reserve_payout_balance(p_user_id uuid, p_amount integer) from public;
 revoke execute on function public.reseteaza_limita(p_cheie text) from public;
 revoke execute on function public.restaureaza_variante_batch(p_items jsonb) from public;

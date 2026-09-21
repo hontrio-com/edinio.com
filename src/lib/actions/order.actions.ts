@@ -17,6 +17,8 @@ import type { Database } from "@/types/database.types";
 import { parseNotificationsConfig, sendNewOrderEmail, sendOrderConfirmationToCustomer, sendOrderStatusToCustomer, sendCustomerMessage } from "@/lib/email";
 import { getStoreEmailSender } from "@/lib/email/sender";
 import { logError } from "@/lib/error-logger";
+import { ESEC_CUPON } from "@/lib/discounts/mesaj";
+import type { LinieDeCupon } from "@/lib/discounts/restrangere";
 import { linieFaraPersonalizare, pretulCuPersonalizare, verificaPersonalizarea, type PersonalizareComanda } from "@/lib/customization/comanda";
 import { cerePersonalizarea } from "@/lib/customization/definitie";
 import { validateDiscount } from "@/lib/actions/discount.actions";
@@ -804,7 +806,7 @@ async function pesteRafalaMagazinului(
  * scade: ori rezerva tot, ori nu atinge nimic si spune care produs a picat. Se
  * cheama INAINTE de inserarea comenzii, iar la esecul insertului stocul se da
  * inapoi cu `elibereazaStocul` — acelasi model ca la cupoane
- * (`claim_discount_use` / `release_discount_use`).
+ * (`claim_discount_use` / `release_discount_claim`).
  *
  * `expandBundleStock` ramane inaintea ei si nu se scoate: ea desface pachetele in
  * componente si formuleaza mesajele omenesti („scoate pachetul din cos"), pe care
@@ -879,6 +881,45 @@ async function revendicaStocul(
 }
 
 /**
+ * Liniile comenzii, asa cum le vede un cod RESTRANS pe produse sau categorii.
+ *
+ * ⚠⚠ SE CONSTRUIESTE ANUME, NU SE IMPRUMUTA `cartItems`. Pe calea comenzii
+ * directe, `cartItems` sunt DOAR liniile aduse din cos: produsul principal al
+ * formularului nu e in ea. Un cod restrans chiar la produsul acela, folosit de
+ * pe CHIAR pagina lui si fara nimic altceva in cos, n-ar fi gasit nicio linie
+ * potrivita — si comanda s-ar fi oprit taman pe drumul pentru care campania a
+ * fost facuta. (Pe calea cosului nu exista produs principal, deci `principal` e
+ * `null` si lista e doar cosul.)
+ *
+ * ⚠ Preturile sunt cele REPRETUITE de oferte, fiindca se cheama dupa
+ * `applyOfferPricing`. Deci un procent restrans se socoteste pe pretul de
+ * oferta, nu pe cel de catalog — aceeasi purtare ca reducerea nerestransa, care
+ * se socoteste de mult pe subtotalul de dupa oferte.
+ *
+ * ⚠⚠ CATEGORIA NU SE COMPLETEAZA AICI: o afla `validateDiscount` din catalog,
+ * pentru amandoua drumurile deodata. Asa nu exista nicio cale prin care liniile
+ * serverului si cele ale browserului sa primeasca raspunsuri deosebite la „in ce
+ * categorie e produsul asta".
+ *
+ * ⚠ `cota` ramane `null` pe drumul vitrinei: liniile ei nu poarta cota proprie
+ * (masurat pe productie, 21.09.2026 — zero comenzi din 541 au `vat_rate` pe
+ * linie), deci toata comanda sta pe cota documentului si nu e nimic de impartit.
+ */
+function liniiPentruCupon(
+  principal: { productId: string; valoare: number } | null,
+  cos: readonly { product_id: string; price: number; quantity: number }[],
+): LinieDeCupon[] {
+  const out: LinieDeCupon[] = [];
+  if (principal && principal.valoare > 0) {
+    out.push({ productId: principal.productId, categorie: null, valoare: round2(principal.valoare), cota: null });
+  }
+  for (const i of cos) {
+    out.push({ productId: i.product_id, categorie: null, valoare: round2(i.price * i.quantity), cota: null });
+  }
+  return out;
+}
+
+/**
  * Da inapoi utilizarea cuponului cand comanda nu mai intra.
  *
  * Perechea lui `claim_discount_use`, ca `elibereazaStocul` pentru stoc. Exista ca
@@ -891,22 +932,36 @@ async function revendicaStocul(
  */
 async function elibereazaCuponul(
   admin: SupabaseClient<Database>,
-  discountId: string | null | undefined,
+  marcaUtilizarii: string | null | undefined,
 ): Promise<void> {
-  if (!discountId) return;
-  const { error } = await admin.rpc("release_discount_use", { p_discount_id: discountId });
+  /*
+   * ⚠⚠ PRIMESTE MARCA REVENDICARII, NU ID-UL CUPONULUI (schimbat 21.09.2026).
+   *
+   * Pana azi primea `discountId` si chema `release_discount_use`, care scadea
+   * doar contorul CAMPANIEI. De cand exista si o socoteala pe OM
+   * (`per_customer_limit`), atat nu mai ajunge: randul lui din registru ar fi
+   * ramas pe loc, iar cumparatorul caruia i-a picat insertul sau stocul si-ar fi
+   * ars definitiv singura folosire — primind pe veci acelasi mesaj unic, care nu
+   * are voie sa-i spuna de ce. Fara nicio urma, nici pentru el, nici pentru
+   * comerciant.
+   *
+   * Marca e si legatura catre cupon, deci nu mai exista nici sansa ca cele doua
+   * argumente sa nu se potriveasca intre ele.
+   */
+  if (!marcaUtilizarii) return;
+  const { error } = await admin.rpc("release_discount_claim", { p_use_id: marcaUtilizarii });
   if (error) {
     await logError({
-      action: "releaseDiscountUse",
+      action: "releaseDiscountClaim",
       message: `utilizarea cuponului NU s-a putut da inapoi: ${error.message}`,
-      details: { discountId, code: error.code }, severity: "critical",
+      details: { marcaUtilizarii, code: error.code }, severity: "critical",
     });
   }
 }
 
 /**
  * Da inapoi stocul revendicat cand comanda nu mai intra. Perechea lui
- * `revendicaStocul`, ca `release_discount_use` pentru cupon.
+ * `revendicaStocul`, ca `release_discount_claim` pentru cupon.
  *
  * DA INAPOI SI VARIANTELE. De cand revendicarea le ia inainte de insert, o
  * eliberare doar pe produse ar lasa marimea consumata pentru o comanda care nu
@@ -1496,9 +1551,24 @@ export async function placeOrder(data: {
   // Re-validate the discount server-side against the authoritative subtotal.
   let discountAmount = 0;
   let validDiscountId: string | undefined;
+  /* ⚠ Marca rezervarii din `discount_customer_uses`, intoarsa de `claim_discount_use`.
+     Se scrie pe comanda (`discount_use_id`) si e singurul lucru cu care se poate da
+     utilizarea inapoi OMULUI, nu doar campaniei. Vezi `elibereazaCuponul`. */
+  let marcaUtilizarii: string | null = null;
   let isFreeShipping = false;
+  /* ⚠ Pe ce s-a socotit reducerea, pastrat pe comanda. Vezi `discount_base`. */
+  let bazaCuponului: { baza: number; peCote: { cota: number; valoare: number }[] } | null = null;
   if (data.discount_code) {
-    const dres = await validateDiscount(data.discount_code, data.business_id, subtotal);
+    /*
+     * ⚠⚠ LINIILE SERVERULUI, si construite ANUME ca sa cuprinda si produsul
+     * principal al formularului: `cartItems` sunt doar cele aduse din cos. Vezi
+     * `liniiPentruCupon`.
+     */
+    const liniiCupon = liniiPentruCupon(
+      { productId: data.product_id, valoare: subtotalLinie },
+      cartItems,
+    );
+    const dres = await validateDiscount(data.discount_code, data.business_id, subtotal, liniiCupon);
     /*
      * Cuponul respins OPRESTE comanda, nu se scoate in tacere.
      *
@@ -1511,7 +1581,14 @@ export async function placeOrder(data: {
     if (!dres.valid) return { error: dres.error };
       discountAmount = Math.min(dres.discount.discountAmount, subtotal);
       validDiscountId = dres.discount.id;
-      isFreeShipping = dres.discount.type === "free_shipping";
+      /*
+       * ⚠⚠ STEAGUL, NU TIPUL. Un cod de transport gratuit restrans la o
+       * categorie e tot `free_shipping`, dar nu are voie sa duca transportul pe
+       * zero pe un cos care nu-l indeplineste. Citit din `type`, ecranul ar fi
+       * scris „Gratuit" iar serverul ar fi incasat transportul.
+       */
+      isFreeShipping = dres.discount.transportGratuit;
+      bazaCuponului = { baza: dres.discount.baza, peCote: dres.discount.peCote };
   }
 
   // Card-payment discount: applies only to online card methods, on the goods
@@ -1883,13 +1960,49 @@ export async function placeOrder(data: {
      * pentru cateva secunde e o suparare; o campanie de 100 care serveste 130 e o
      * paguba, si una pe care o afli abia la socoteala.
      */
-    const { data: revendicat, error: eCupon } = await admin.rpc("claim_discount_use", { p_discount_id: validDiscountId });
+    /*
+     * ⚠⚠ SI CINE E OMUL, nu doar care e codul (21.09.2026).
+     *
+     * Cheia de client se socoteste IN SQL, din telefon si email, nu aici: in
+     * TypeScript exista DOUA functii `normalizePhone` care dau raspunsuri
+     * deosebite (`lib/customers.ts` si `lib/utils/phone.ts`), iar adevarul e cel
+     * din baza, unde stau si celelalte chei. Trimise gata normalizate de aici,
+     * limita pe client ar fi numarat alti oameni decat pagina Clienti.
+     *
+     * ⚠ Intoarce MARCA rezervarii (un uuid), nu `true`. `null` inseamna refuz —
+     * si acopera toate motivele deodata, dinadins.
+     */
+    const { data: marca, error: eCupon } = await admin.rpc("claim_discount_use", {
+      p_discount_id: validDiscountId,
+      p_customer_phone: data.customer_phone ?? null,
+      p_customer_email: data.customer_email ?? null,
+    });
     if (eCupon) {
       await logError({ action: "claimDiscountUse", message: eCupon.message, details: { code: eCupon.code, discountId: validDiscountId }, severity: "critical" });
       return { error: "Nu putem valida codul de reducere chiar acum. Reincearca peste cateva momente." };
     }
-    if (revendicat !== true) {
-      return { error: "Codul a atins limita maxima de utilizari. Reincarca pagina si incearca fara el." };
+    marcaUtilizarii = marca ?? null;
+    if (!marca) {
+      /*
+       * ⚠⚠ ACELASI MESAJ UNIC, nu unul al lui.
+       *
+       * Textul de dinainte vorbea despre „limita maxima de utilizari” — si
+       * era doua lucruri deodata: NEADEVARAT, fiindca revendicarea refuza acum
+       * si un cod stins intre timp, unul expirat sau unul inca programat; si un
+       * ORACOL, fiindca deosebea „codul exista si e epuizat” de „codul nu
+       * exista", care se intoarce cu `ESEC_CUPON` cateva sute de linii mai sus.
+       *
+       * Motivul adevarat nu se pierde: sta in `error_logs`, unde il vede
+       * comerciantul, nu cumparatorul.
+       */
+      await logError({
+        action: "claimDiscountUse.refuzat",
+        message: "Revendicarea cuponului a fost refuzata la plasare (epuizat, oprit, expirat sau inca programat)",
+        details: { discountId: validDiscountId },
+        businessId: data.business_id,
+        severity: "warning",
+      });
+      return { error: ESEC_CUPON };
     }
   }
 
@@ -1907,7 +2020,7 @@ export async function placeOrder(data: {
    * dau cuponul inapoi; doar textul difera.
    */
   if (stoc.fel !== "revendicat") {
-    await elibereazaCuponul(admin, validDiscountId);
+    await elibereazaCuponul(admin, marcaUtilizarii);
     return { error: stoc.error };
   }
 
@@ -2109,6 +2222,28 @@ export async function placeOrder(data: {
      * dar inca nu si in tipurile generate.
      */
     discount_id: (validDiscountId ?? null) as never,
+    /*
+     * ⚠⚠ MARCA SE SCRIE IN CHIAR INSERTUL COMENZII, nu printr-o a doua scriere
+     * de dupa. O actualizare separata poate sa pice, si atunci utilizarea omului
+     * ar fi ramas agatata in aer: randul exista in registru, dar nicio comanda
+     * nu stie de el, deci nimeni n-ar mai avea cum sa i-o dea inapoi.
+     */
+    discount_use_id: marcaUtilizarii,
+    /*
+     * ⚠⚠ PE CE S-A SOCOTIT CUPONUL, pastrat ACUM fiindca nu se mai poate afla
+     * dupa aceea: preturile din catalog se schimba, categoriile se redenumesc,
+     * produsele se sterg. Null la codurile nerestranse — acolo baza e tot cosul.
+     *
+     * ⚠ E pregatit pentru FACTURA. Acolo, o suma fara cota proprie se imparte
+     * PROPORTIONAL peste toate cotele comenzii (`imparteProportional`), fiindca
+     * o reducere obisnuita micsoreaza baza FIECAREI cote. La un cod restrans
+     * presupunerea nu mai tine. ⚠⚠ DAR FACTURAREA INCA NU CITESTE COLOANA ASTA,
+     * si e o datorie scrisa, nu o scapare: masurat pe productie la 21.09.2026,
+     * ZERO comenzi din 541 poarta cote pe linie, deci `amestecate` e mereu fals
+     * si impartirea proportionala nu ruleaza niciodata. Cand va rula, adevarul
+     * va fi deja aici. Vezi `docs/redesign/DISCOUNTURI.md`.
+     */
+    discount_base: bazaCuponului && bazaCuponului.baza !== subtotal ? bazaCuponului : null,
     /* Ce s-a rezervat, ca sa se poata da inapoi intocmai la anulare. `as never`
      * ca la `discount_id`: coloana e noua si tipurile generate n-o stiu inca. */
     stoc_rezervat: stocRezervat(stockExp.decrements, liniiCuVarianta) as never,
@@ -2118,7 +2253,7 @@ export async function placeOrder(data: {
     // Comanda n-a intrat, deci utilizarea revendicata si stocul rezervat se dau
     // inapoi. Fara a doua linie, marfa ramanea scazuta pentru o comanda care nu
     // exista nicaieri — adica exact pe dos fata de cursa pe care o repara.
-    await elibereazaCuponul(admin, validDiscountId);
+    await elibereazaCuponul(admin, marcaUtilizarii);
     if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCuVarianta);
     await logError({ action: "placeOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };
@@ -4496,9 +4631,17 @@ export async function placeCartOrder(data: {
   // Re-validate discount server-side (guard even though cart has no discount UI today).
   let discountAmount = 0;
   let validDiscountId: string | undefined;
+  /* ⚠ Marca rezervarii din `discount_customer_uses`, intoarsa de `claim_discount_use`.
+     Se scrie pe comanda (`discount_use_id`) si e singurul lucru cu care se poate da
+     utilizarea inapoi OMULUI, nu doar campaniei. Vezi `elibereazaCuponul`. */
+  let marcaUtilizarii: string | null = null;
   let isFreeShipping = false;
+  /* ⚠ Pe ce s-a socotit reducerea, pastrat pe comanda. Vezi `discount_base`. */
+  let bazaCuponului: { baza: number; peCote: { cota: number; valoare: number }[] } | null = null;
   if (data.discount_code) {
-    const dres = await validateDiscount(data.discount_code, data.business_id, subtotal);
+    /* ⚠ Aici nu exista produs principal: cosul e toata comanda. */
+    const liniiCupon = liniiPentruCupon(null, validatedItems);
+    const dres = await validateDiscount(data.discount_code, data.business_id, subtotal, liniiCupon);
     /*
      * Cuponul respins OPRESTE comanda, nu se scoate in tacere.
      *
@@ -4511,7 +4654,14 @@ export async function placeCartOrder(data: {
     if (!dres.valid) return { error: dres.error };
       discountAmount = Math.min(dres.discount.discountAmount, subtotal);
       validDiscountId = dres.discount.id;
-      isFreeShipping = dres.discount.type === "free_shipping";
+      /*
+       * ⚠⚠ STEAGUL, NU TIPUL. Un cod de transport gratuit restrans la o
+       * categorie e tot `free_shipping`, dar nu are voie sa duca transportul pe
+       * zero pe un cos care nu-l indeplineste. Citit din `type`, ecranul ar fi
+       * scris „Gratuit" iar serverul ar fi incasat transportul.
+       */
+      isFreeShipping = dres.discount.transportGratuit;
+      bazaCuponului = { baza: dres.discount.baza, peCote: dres.discount.peCote };
   }
 
   // Recompute VAT from store config (mirrors MiniStoreRenderer) so it cannot be forged.
@@ -4807,13 +4957,49 @@ export async function placeCartOrder(data: {
      * pentru cateva secunde e o suparare; o campanie de 100 care serveste 130 e o
      * paguba, si una pe care o afli abia la socoteala.
      */
-    const { data: revendicat, error: eCupon } = await admin.rpc("claim_discount_use", { p_discount_id: validDiscountId });
+    /*
+     * ⚠⚠ SI CINE E OMUL, nu doar care e codul (21.09.2026).
+     *
+     * Cheia de client se socoteste IN SQL, din telefon si email, nu aici: in
+     * TypeScript exista DOUA functii `normalizePhone` care dau raspunsuri
+     * deosebite (`lib/customers.ts` si `lib/utils/phone.ts`), iar adevarul e cel
+     * din baza, unde stau si celelalte chei. Trimise gata normalizate de aici,
+     * limita pe client ar fi numarat alti oameni decat pagina Clienti.
+     *
+     * ⚠ Intoarce MARCA rezervarii (un uuid), nu `true`. `null` inseamna refuz —
+     * si acopera toate motivele deodata, dinadins.
+     */
+    const { data: marca, error: eCupon } = await admin.rpc("claim_discount_use", {
+      p_discount_id: validDiscountId,
+      p_customer_phone: data.customer_phone ?? null,
+      p_customer_email: data.customer_email ?? null,
+    });
     if (eCupon) {
       await logError({ action: "claimDiscountUse", message: eCupon.message, details: { code: eCupon.code, discountId: validDiscountId }, severity: "critical" });
       return { error: "Nu putem valida codul de reducere chiar acum. Reincearca peste cateva momente." };
     }
-    if (revendicat !== true) {
-      return { error: "Codul a atins limita maxima de utilizari. Reincarca pagina si incearca fara el." };
+    marcaUtilizarii = marca ?? null;
+    if (!marca) {
+      /*
+       * ⚠⚠ ACELASI MESAJ UNIC, nu unul al lui.
+       *
+       * Textul de dinainte vorbea despre „limita maxima de utilizari” — si
+       * era doua lucruri deodata: NEADEVARAT, fiindca revendicarea refuza acum
+       * si un cod stins intre timp, unul expirat sau unul inca programat; si un
+       * ORACOL, fiindca deosebea „codul exista si e epuizat” de „codul nu
+       * exista", care se intoarce cu `ESEC_CUPON` cateva sute de linii mai sus.
+       *
+       * Motivul adevarat nu se pierde: sta in `error_logs`, unde il vede
+       * comerciantul, nu cumparatorul.
+       */
+      await logError({
+        action: "claimDiscountUse.refuzat",
+        message: "Revendicarea cuponului a fost refuzata la plasare (epuizat, oprit, expirat sau inca programat)",
+        details: { discountId: validDiscountId },
+        businessId: data.business_id,
+        severity: "warning",
+      });
+      return { error: ESEC_CUPON };
     }
   }
 
@@ -4829,7 +5015,7 @@ export async function placeCartOrder(data: {
    * dau cuponul inapoi; doar textul difera.
    */
   if (stoc.fel !== "revendicat") {
-    await elibereazaCuponul(admin, validDiscountId);
+    await elibereazaCuponul(admin, marcaUtilizarii);
     return { error: stoc.error };
   }
 
@@ -5021,6 +5207,28 @@ export async function placeCartOrder(data: {
      * inapoi cand comanda nu se mai face. `as never` din acelasi motiv. */
     discount_id: (validDiscountId ?? null) as never,
     /*
+     * ⚠⚠ MARCA SE SCRIE IN CHIAR INSERTUL COMENZII, nu printr-o a doua scriere
+     * de dupa. O actualizare separata poate sa pice, si atunci utilizarea omului
+     * ar fi ramas agatata in aer: randul exista in registru, dar nicio comanda
+     * nu stie de el, deci nimeni n-ar mai avea cum sa i-o dea inapoi.
+     */
+    discount_use_id: marcaUtilizarii,
+    /*
+     * ⚠⚠ PE CE S-A SOCOTIT CUPONUL, pastrat ACUM fiindca nu se mai poate afla
+     * dupa aceea: preturile din catalog se schimba, categoriile se redenumesc,
+     * produsele se sterg. Null la codurile nerestranse — acolo baza e tot cosul.
+     *
+     * ⚠ E pregatit pentru FACTURA. Acolo, o suma fara cota proprie se imparte
+     * PROPORTIONAL peste toate cotele comenzii (`imparteProportional`), fiindca
+     * o reducere obisnuita micsoreaza baza FIECAREI cote. La un cod restrans
+     * presupunerea nu mai tine. ⚠⚠ DAR FACTURAREA INCA NU CITESTE COLOANA ASTA,
+     * si e o datorie scrisa, nu o scapare: masurat pe productie la 21.09.2026,
+     * ZERO comenzi din 541 poarta cote pe linie, deci `amestecate` e mereu fals
+     * si impartirea proportionala nu ruleaza niciodata. Cand va rula, adevarul
+     * va fi deja aici. Vezi `docs/redesign/DISCOUNTURI.md`.
+     */
+    discount_base: bazaCuponului && bazaCuponului.baza !== subtotal ? bazaCuponului : null,
+    /*
      * CU `variante` — si aici a stat o gaura, din chiar ziua reparatiei.
      *
      * Comentariul de dinainte spunea „fara variante: calea asta scade doar stocul
@@ -5040,7 +5248,7 @@ export async function placeCartOrder(data: {
   if (error) {
     // Comanda n-a intrat: se dau inapoi si utilizarea cuponului, si stocul
     // rezervat. Vezi `placeOrder`.
-    await elibereazaCuponul(admin, validDiscountId);
+    await elibereazaCuponul(admin, marcaUtilizarii);
     if (stoc.fel === "revendicat") await elibereazaStocul(admin, stockExp.decrements, liniiCerute);
     await logError({ action: "placeCartOrder", message: error.message, details: { code: error.code, hint: error.hint, businessId: data.business_id, itemCount: data.items.length }, severity: "critical" });
     return { error: "Eroare la plasarea comenzii. Incearca din nou." };

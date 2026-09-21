@@ -151,12 +151,23 @@ export function capcaneleAutomatizarii(
       });
     }
 
-    /* 8. Cod de reducere care nu mai exista sau nu mai e activ. */
+    /*
+      8. ⚠ Cod de reducere care NU SE POATE FOLOSI ACUM.
+      ⚠⚠ REDENUMITA DIN `cod-inexistent` pe 21.09.2026, fiindca si-a schimbat
+      intelesul. Lista de coduri din care se alege aici trece de azi prin
+      `sePoateFolosi` (vezi `COLOANELE_STARII`), deci lipseste din ea si un cod
+      inca PROGRAMAT, si unul epuizat — nu doar unul sters sau stins. Lasata cu
+      textul vechi („nu mai e activ"), capcana ar fi mintit tocmai in cazul nou:
+      un cod de Black Friday e activ, doar ca inca nu a pornit.
+      ⚠ Si urmarea s-a schimbat: cronul nu mai trimite codul (vezi
+      `abandoned-recovery/route.ts`), deci mesajul pleaca FARA reducere, nu cu o
+      promisiune goala.
+    */
     const cod = p.discount_code?.trim();
     if (cod && !codActive.has(cod.toUpperCase())) {
       g.push({
-        cheie: "cod-inexistent", treapta: "opreste", pasId: p.id,
-        text: `Codul „${cod}” nu mai e activ. Mesajul va pleca promițând o reducere care nu se aplică.`,
+        cheie: "cod-nefolosibil", treapta: "opreste", pasId: p.id,
+        text: `Codul „${cod}” nu se poate folosi acum: e șters, oprit, expirat, epuizat sau încă programat pentru mai târziu. Mesajul va pleca fără reducere.`,
       });
     }
 

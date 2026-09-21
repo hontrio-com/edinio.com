@@ -107,13 +107,13 @@ test("pas pe SMS fara niciun serviciu de SMS pornit", () => {
 
 test("⚠ UN COD CARE NU MAI E ACTIV PROMITE O REDUCERE CARE NU SE APLICA", () => {
   const c = config({ steps: [pas({ discount_code: "EXPIRAT" })] });
-  const x = capcaneleAutomatizarii(c, IMP).find((y) => y.cheie === "cod-inexistent");
+  const x = capcaneleAutomatizarii(c, IMP).find((y) => y.cheie === "cod-nefolosibil");
   assert.ok(x);
   assert.match(x!.text, /EXPIRAT/);
 
   /* ⚠ Se compara fara sa conteze literele mari: „revino10" e acelasi cod. */
-  assert.ok(!cheile(config({ steps: [pas({ discount_code: "revino10" })] })).includes("cod-inexistent"));
-  assert.ok(!cheile(config({ steps: [pas({ discount_code: "  REVINO10 " })] })).includes("cod-inexistent"));
+  assert.ok(!cheile(config({ steps: [pas({ discount_code: "revino10" })] })).includes("cod-nefolosibil"));
+  assert.ok(!cheile(config({ steps: [pas({ discount_code: "  REVINO10 " })] })).includes("cod-nefolosibil"));
 });
 
 test("⚠ UN SMS LUNG SE PLATESTE LA FIECARE CLIENT", () => {

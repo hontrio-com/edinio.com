@@ -401,8 +401,19 @@ export function CheckoutForm({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold font-mono" style={{ color }}>{appliedDiscount.code}</p>
                   <p className="text-xs text-muted-foreground">
+                    {/*
+                      ⚠⚠ CE S-A APLICAT, nu ce scrie pe cupon.
+                      Un cod poate fi MARGINIT la anumite produse: atunci „20%"
+                      e adevarat despre cupon si fals despre cos, iar randul de
+                      totaluri de dedesubt arata o suma socotita pe o parte din
+                      el. Cumparatorul are in fata doua numere care nu se leaga.
+                    */}
                     {appliedDiscount.type === "percent" && `${appliedDiscount.value}% reducere`}
                     {appliedDiscount.type === "fixed" && `${formatPrice(appliedDiscount.value)} reducere`}
+                    {appliedDiscount.type !== "free_shipping"
+                      && appliedDiscount.baza > 0
+                      && appliedDiscount.baza < goodsTotal
+                      && ` · socotită pe ${formatPrice(appliedDiscount.baza)} din coș`}
                     {appliedDiscount.type === "free_shipping" && "Transport gratuit aplicat"}
                   </p>
                 </div>

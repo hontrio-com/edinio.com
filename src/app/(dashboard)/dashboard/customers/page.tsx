@@ -214,6 +214,7 @@ async function ListaClienti({
     firstOrderAt: r.first_order_at,
     lastOrderAt: r.last_order_at,
     lastStatus: r.last_status,
+    source: r.source ?? null,
   }));
   const totalCount = custRows?.length ? Number(custRows[0].total_count) : 0;
 

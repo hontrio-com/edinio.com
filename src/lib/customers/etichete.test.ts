@@ -149,8 +149,17 @@ test("⚠ fiecare eticheta are un text si o explicatie care spune REGULA", () =>
    * Un badge fara explicatie il pune pe comerciant sa ghiceasca de ce e acolo — si
    * sa ia hotarari despre un om pe baza unei ghiciri.
    */
+  /*
+   * ⚠ Numarul e scris de mana DINADINS, nu luat din `FelEticheta`: asa, cine
+   * adauga o eticheta e OBLIGAT sa treaca pe aici si sa-i scrie explicatia.
+   * Derivat, proba ar fi trecut peste orice eticheta noua, tacuta.
+   *
+   * Erau sase. De la 21.09.2026 sunt sapte: „Importat" s-a despartit in
+   * „Importat" si „Adaugat manual", fiindca adaugarea de mana a facut prima
+   * eticheta sa minta despre oamenii luati la telefon.
+   */
   const feluri = Object.keys(DESPRE_ETICHETA);
-  assert.equal(feluri.length, 6);
+  assert.equal(feluri.length, 7);
   for (const [fel, d] of Object.entries(DESPRE_ETICHETA)) {
     assert.ok(d.text.length >= 3, fel);
     assert.ok(d.explicatie.length > 30, `${fel}: explicatia e prea scurta ca sa spuna regula`);
@@ -183,4 +192,68 @@ test("⚠⚠ o comanda fara telefon SI fara email se vede", () => {
   assert.equal(faraIdentitate("order:8f1c-..."), true);
   assert.equal(faraIdentitate("email:ion@mail.ro"), false);
   assert.equal(faraIdentitate("722111222"), false);
+});
+
+/* ── De unde vine contactul ─────────────────────────────────────────────── */
+
+test("⚠⚠ un client ADAUGAT DE MANA nu se mai cheama „Importat”", () => {
+  /*
+   * ⚠ DEFECT ADEVARAT, vazut pe ecran pe 21.09.2026, in chiar ziua in care s-a
+   * scris adaugarea de mana. Eticheta se punea dupa `orderCount === 0`, iar asta
+   * era adevarat exact cat timp importul era singurul drum catre un contact fara
+   * comenzi. Un om luat la telefon aparea in lista scris „Importat": nicio
+   * eroare, nicio proba cazuta, doar o propozitie falsa despre el.
+   *
+   * ⚠ Proba asta apara FELUL defectului, nu doar cazul: o insusire dedusa din
+   * alta e adevarata pana cand cineva adauga a doua cale, si nimeni nu te
+   * anunta cand o face.
+   */
+  const fara = {
+    orderCount: 0, validOrderCount: 0, refundedCount: 0, ordersValue: 0,
+    firstOrderAt: null, lastOrderAt: null,
+  };
+  assert.deepEqual(eticheteleClientului({ ...fara, source: "manual" }), ["adaugat-manual"]);
+  assert.deepEqual(eticheteleClientului({ ...fara, source: "import" }), ["importat"]);
+});
+
+test("⚠ fara `source`, se cade pe „Importat” — ce erau toti pana azi", () => {
+  /*
+   * Apelantii mai vechi nu trimit campul. Cazuti pe „Adaugat manual", ar fi
+   * mintit in cealalta directie, si inca despre toata lista deodata.
+   */
+  const fara = {
+    orderCount: 0, validOrderCount: 0, refundedCount: 0, ordersValue: 0,
+    firstOrderAt: null, lastOrderAt: null,
+  };
+  assert.deepEqual(eticheteleClientului(fara), ["importat"]);
+  assert.deepEqual(eticheteleClientului({ ...fara, source: null }), ["importat"]);
+});
+
+test("⚠ `source` NU schimba nimic pentru cine are comenzi", () => {
+  /*
+   * Un cumparator are `source = null` (n-are rand in `customers`), dar si unul
+   * importat care apoi a comandat pastreaza `import`. Niciunul nu e „contact":
+   * amandoi au cumparat, si asta e ce conteaza.
+   */
+  const acum = Date.UTC(2026, 8, 21);
+  const cumparator = {
+    orderCount: 3, validOrderCount: 3, refundedCount: 0, ordersValue: 900,
+    firstOrderAt: new Date(acum - 40 * 86_400_000).toISOString(),
+    lastOrderAt: new Date(acum - 5 * 86_400_000).toISOString(),
+  };
+  const a = eticheteleClientului({ ...cumparator, source: null }, PRAGURI_IMPLICITE, acum);
+  const b = eticheteleClientului({ ...cumparator, source: "import" }, PRAGURI_IMPLICITE, acum);
+  const c = eticheteleClientului({ ...cumparator, source: "manual" }, PRAGURI_IMPLICITE, acum);
+  assert.deepEqual(a, b);
+  assert.deepEqual(a, c);
+  assert.ok(!a.includes("importat") && !a.includes("adaugat-manual"));
+});
+
+test("⚠ fiecare eticheta are si text, si explicatie — inclusiv cea noua", () => {
+  for (const f of ["importat", "adaugat-manual"] as const) {
+    assert.ok(DESPRE_ETICHETA[f].text.length > 2, `${f}: fara text`);
+    assert.ok(DESPRE_ETICHETA[f].explicatie.length > 25, `${f}: fara explicatie`);
+  }
+  /* Si cele doua nu spun acelasi lucru. */
+  assert.notEqual(DESPRE_ETICHETA["importat"].explicatie, DESPRE_ETICHETA["adaugat-manual"].explicatie);
 });

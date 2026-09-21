@@ -23,6 +23,8 @@ import {
 } from "@/lib/customers/filtre";
 import { CustomerImportModal } from "./CustomerImportModal";
 import { SalveazaSegment } from "@/components/dashboard/clienti/SalveazaSegment";
+import { AdaugaClient } from "@/components/dashboard/clienti/AdaugaClient";
+import { StergeContact } from "@/components/dashboard/clienti/StergeContact";
 
 type SortKey = "recent" | "spent" | "orders" | "name";
 
@@ -159,6 +161,12 @@ export function CustomersClient({ customers, summary, totalCount, page, searchQu
         >
           <Upload className="h-4 w-4" /> <span className="hidden sm:inline">Importă clienți</span>
         </button>
+        {/*
+          ⚠ ADĂUGAREA DE MÂNĂ stă lângă import, nu în „+ Adaugă" din bara de sus:
+          acolo se adaugă lucruri de vânzare (produs, comandă), iar un client
+          între ele ar fi al patrulea fel de obiect într-un meniu despre catalog.
+        */}
+        <AdaugaClient businessId={businessId} />
       </div>
 
       {importing && <CustomerImportModal onClose={() => setImporting(false)} />}
@@ -826,6 +834,24 @@ function CustomerDetail({ customer, businessId, onClose }: { customer: Customer;
                 dezabonării nu se țin încă pe client, deci nu se pot arăta aici.
                 Dezabonările de la mesajele de recuperare se văd în Coșuri abandonate.
               </p>
+
+              {/*
+                ⚠⚠ ȘTERGEREA STĂ AICI, în fila „Date", nu la vedere în capul fișei:
+                e o acțiune fără întoarcere, și nu una la care ajungi din greșeală
+                în timp ce te uiți la comenzile omului.
+
+                ⚠ Se arată la TOȚI, nu doar la contactele fără comenzi — dar stinsă,
+                cu motivul scris. Ascunsă cu totul, un comerciant care caută unde se
+                șterge un client ar fi căutat prin toate filele, apoi prin Setări.
+              */}
+              <StergeContact
+                businessId={businessId}
+                cheie={customer.key}
+                nume={customer.name}
+                orderCount={customer.orderCount}
+                /* Inchide fisa; reincarcarea listei o face componenta, dupa raspuns. */
+                onSters={onClose}
+              />
             </div>
           )}
         </div>

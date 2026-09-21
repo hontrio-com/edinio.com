@@ -182,13 +182,44 @@ le masoara. Se repara inaintea oricarei frumuseti.
 
 ## Etapa G - gestionarea clientilor
 
-- [ ] **G1. Adaugare manuala de client** (comenzi telefonice, magazin fizic, lead-uri).
-- [ ] **G2. Arhivare**, fara sa atinga comenzile.
-- [ ] **G3. Anonimizare**, pastrand ce trebuie pastrat comercial.
-- [ ] **G4. Stergerea unui contact importat**, doar pentru cei fara comenzi.
-      ⚠ **NU se sterge un cumparator impreuna cu comenzile, facturile si documentele lui.**
+- [x] **G1. Adaugare manuala de client** (comenzi telefonice, magazin fizic, lead-uri).
+      ⚠ **Judecata e in baza** (`customer_add_manual`), fiindca acolo se naste cheia
+      clientului. Facuta in TypeScript, ar fi cerut a treia copie a lui `normalize_phone`.
+      ⚠ **Trei feluri de „nu", cu trei mesaje**: fara contact / exista deja un contact /
+      **omul are deja comenzi**. Ultimele doua nu sunt acelasi lucru: la al doilea,
+      comerciantul se uita la un cumparator, care n-are rand in `customers` si nu se sterge.
+      ⚠ **Numai „adaugat" inchide fereastra.** Inchisa oricum, omul ar fi ramas cu impresia
+      ca s-a scris ceva.
+
+- [x] **G4. Stergerea unui contact**, doar pentru cei fara comenzi.
+      ⚠⚠ **Paza e in CHIAR instructiunea care sterge** (`delete ... where not exists`), nu
+      intr-o citire de dinainte: intre cele doua incape chiar comanda omului, plasata in
+      secunda aceea. `gestionarea-clientilor.test.ts` cade daca paza se muta afara (probat).
+      ⚠ **Zero randuri nu e izbanda**: „gata, l-am sters" peste zero randuri l-ar lasa pe
+      comerciant sa creada ca a facut curat.
+      ⚠ Butonul se arata si cand nu se poate, dar **stins, cu motivul scris**. Ascuns, omul
+      l-ar fi cautat prin toate filele si apoi prin Setari.
+
+### ⚠⚠ Ce a iesit la iveala in aceeasi zi: o eticheta care a inceput sa minta
+
+Badge-ul **„Importat"** se punea dupa `orderCount === 0` — adevarat exact cat timp importul
+era singurul drum catre un contact fara comenzi. In chiar ziua in care s-a scris adaugarea de
+mana, un om luat la telefon a aparut in lista scris **„Importat"**: nicio eroare, nicio proba
+cazuta, doar o propozitie falsa despre el.
+
+Reparat citind **chiar insusirea** (`customers.source`, dus pana la ecran), nu una din care se
+ghiceste ea. Eticheta s-a despartit in „Importat" si „Adaugat manual".
+
+⚠ Plasa veche a facut exact ce trebuia: proba care cerea „sase etichete, fiecare cu explicatia
+ei" a picat in clipa in care au devenit sapte.
+
+- [ ] **G2. Arhivare**, fara sa atinga comenzile. **Nefacuta.** Cere un loc unde sa stea
+      steagul si pentru un CUMPARATOR, care n-are rand in `customers`.
+- [ ] **G3. Anonimizare**, pastrand ce trebuie pastrat comercial. **Nefacuta**, si e cea mai
+      grea: atinge `orders`, deci si facturile plecate la SmartBill si la client.
 - [ ] **G5. Actiuni rapide** din fisa, fiecare respectand consimtamantul, dezabonarea si lista
-      de suprimare — la fel ca trimiterea de mana din Cosuri abandonate.
+      de suprimare — la fel ca trimiterea de mana din Cosuri abandonate. **Nefacuta**: nu
+      exista azi un trimitator catre un singur client, iar consimtamantul nu se tine pe om.
 
 ## Etapa H - performanta (problema tehnica de fond)
 

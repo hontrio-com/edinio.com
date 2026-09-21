@@ -79,6 +79,13 @@ export interface Customer {
   lastOrderAt: string | null;
   /** `null` for an imported customer who has not ordered yet. */
   lastStatus: string | null;
+  /**
+   * De unde vine contactul: `import`, `manual`, `checkout`, sau `null`.
+   *
+   * ⚠ `null` inseamna CUMPARATOR: el n-are rand in `customers`, e o grupare
+   * peste comenzile lui. Nu inseamna „nu stim".
+   */
+  source: string | null;
 }
 
 /** Has this customer ever ordered? Imported-only contacts have not. */

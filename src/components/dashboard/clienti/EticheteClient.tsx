@@ -1,4 +1,4 @@
-import { AlertTriangle, Moon, Repeat, Sparkles, Upload, UserPlus } from "lucide-react";
+import { AlertTriangle, Moon, Repeat, Sparkles, Upload, UserPlus, UserRoundPen } from "lucide-react";
 
 import {
   DESPRE_ETICHETA, eticheteleClientului, faraIdentitate,
@@ -28,6 +28,9 @@ const CUM_ARATA: Record<FelEticheta, { icon: typeof Repeat; clase: string }> = {
   vip: { icon: Sparkles, clase: "text-primary bg-primary/10 border-primary/20" },
   inactiv: { icon: Moon, clase: "text-muted-foreground bg-muted border-border" },
   importat: { icon: Upload, clase: "text-muted-foreground bg-muted border-border" },
+  /* ⚠ Altă iconiță, ca cele două să se deosebească dintr-o privire, nu citind.
+     Tonul rămâne același: amândouă spun „încă n-a cumpărat", nu ceva rău. */
+  "adaugat-manual": { icon: UserRoundPen, clase: "text-muted-foreground bg-muted border-border" },
   "risc-retur": { icon: AlertTriangle, clase: "text-destructive bg-destructive/10 border-destructive/20" },
 };
 

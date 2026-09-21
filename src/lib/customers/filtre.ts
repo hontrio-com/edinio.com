@@ -24,7 +24,11 @@
  * ⚠ CE NU SE OFERA, SI DE CE:
  *   - „accepta marketing" cere consimtamant inregistrat pe client; nu exista;
  *   - „tag" cere etichete scrise de comerciant; nu exista inca;
- *   - „manual" (client adaugat de mana) cere adaugarea manuala, care nu exista.
+ *   - „manual" (client adaugat de mana): adaugarea EXISTA de la 21.09.2026, si
+ *     `source` ajunge acum pana la ecran, unde se vede ca eticheta. Filtrul insa ar
+ *     cere inca un argument la `customer_in_segment`, deci stergerea si recrearea ei,
+ *     a listei si a numaratorii — pentru ceva ce pe productie are azi ZERO randuri.
+ *     Se face cand se aduna oameni adaugati de mana, nu inainte.
  *   Toate trei sunt in plan, la etapele lor. Pana atunci, nu se ofera.
  */
 

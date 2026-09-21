@@ -6867,6 +6867,26 @@ export type Database = {
         }[]
       }
       curata_limite: { Args: never; Returns: number }
+      customer_add_manual: {
+        Args: {
+          bid: string
+          p_name: string
+          p_email?: string
+          p_phone?: string
+          p_address?: string
+          p_city?: string
+          p_county?: string
+          p_postcode?: string
+        }
+        Returns: {
+          stare: string
+          cheie: string
+        }[]
+      }
+      customer_delete_contact: {
+        Args: { bid: string; p_key: string }
+        Returns: number
+      }
       customer_in_segment: {
         Args: {
           seg: string
@@ -6952,6 +6972,7 @@ export type Database = {
           key: string
           last_order_at: string
           last_status: string
+          source: string
           name: string
           order_count: number
           orders_value: number

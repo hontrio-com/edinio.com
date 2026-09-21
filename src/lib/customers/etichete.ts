@@ -37,7 +37,7 @@
  * CORECT, nu un defect.
  */
 
-export type FelEticheta = "nou" | "recurent" | "vip" | "inactiv" | "importat" | "risc-retur";
+export type FelEticheta = "nou" | "recurent" | "vip" | "inactiv" | "importat" | "adaugat-manual" | "risc-retur";
 
 export interface PraguriEtichete {
   /** Cate zile inseamna „client nou". */
@@ -76,6 +76,14 @@ export interface ClientDeEtichetat {
   ordersValue: number;
   firstOrderAt: string | null;
   lastOrderAt: string | null;
+  /**
+   * De unde vine contactul: `import`, `manual`, `checkout` — sau `null` pentru
+   * un cumparator, care n-are rand in `customers`, ci e o grupare peste comenzi.
+   *
+   * ⚠ Optional dinadins: apelantii mai vechi nu se ating, iar lipsa lui cade pe
+   * „Importat", adica pe ce erau toti pana la 21.09.2026.
+   */
+  source?: string | null;
 }
 
 function zileDe(iso: string | null, acum: number): number | null {
@@ -100,8 +108,24 @@ export function eticheteleClientului(
 ): FelEticheta[] {
   const out: FelEticheta[] = [];
 
-  /* Fara nicio comanda: adus dintr-un fisier sau scris de mana. Atat se poate spune. */
-  if (c.orderCount === 0) return ["importat"];
+  /*
+    Fara nicio comanda.
+
+    ⚠⚠ PANA LA 21.09.2026 AICI SCRIA MEREU „Importat", si era adevarat: tot ce
+    n-avea comenzi venea dintr-un import, fiindca nu exista alta cale. In ziua in
+    care s-a scris adaugarea de mana, propozitia a devenit falsa — si s-a vazut
+    imediat pe ecran, un om luat la telefon aparand ca „Importat".
+
+    ⚠ De-aia acum se citeste CHIAR de unde vine (`source`), nu se mai ghiceste
+    dintr-o alta insusire. O insusire dedusa din alta e adevarata exact cat timp
+    nimeni nu adauga a doua cale — si nimeni nu te anunta cand o face.
+
+    ⚠ `source` lipseste la clientii adusi de pe drumuri mai vechi; atunci ramane
+    „Importat", care e ce erau cu totii pana azi.
+  */
+  if (c.orderCount === 0) {
+    return [c.source === "manual" ? "adaugat-manual" : "importat"];
+  }
 
   const deLaPrima = zileDe(c.firstOrderAt, acum);
   const deLaUltima = zileDe(c.lastOrderAt, acum);
@@ -161,7 +185,11 @@ export const DESPRE_ETICHETA: Record<FelEticheta, { text: string; explicatie: st
   },
   importat: {
     text: "Importat",
-    explicatie: "Adus dintr-un fișier sau scris de mână. N-a comandat niciodată.",
+    explicatie: "Adus dintr-un fișier de import. N-a comandat niciodată.",
+  },
+  "adaugat-manual": {
+    text: "Adăugat manual",
+    explicatie: "L-ai adăugat tu, din panou. N-a comandat niciodată.",
   },
   "risc-retur": {
     text: "Risc de retur",

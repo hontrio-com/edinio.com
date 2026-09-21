@@ -133,6 +133,18 @@ test("⚠ si bara de sus chiar are `backdrop-blur`, altfel proba de mai sus n-ar
   );
 });
 
+test("⚠ butonul isi spune numele si cand eticheta e ascunsa, pe telefon", () => {
+  /*
+   * ⚠ Sub `lg` eticheta e `display:none`, iar ce e ascuns asa NU intra in numele
+   * accesibil. Fara `aria-label`, numele ar fi venit din `title` — toata descrierea
+   * de o suta cincizeci de semne, citita la fiecare trecere. Si ar fi disparut cu
+   * totul in ziua in care cineva scoate `title`-ul.
+   */
+  const sursa = readFileSync("src/components/dashboard/ScapaDeStoc.tsx", "utf8");
+  assert.match(sursa, /aria-label=\{NUMELE_LOR\}/, "butonul din bara n-are nume scris explicit");
+  assert.match(sursa, /hidden lg:inline/, "eticheta nu mai e ascunsa pe ecrane mici");
+});
+
 test("culoarea marcii lor e cea data de ei", () => {
   assert.equal(VERDELE_LOR, "#3FA88A");
 });

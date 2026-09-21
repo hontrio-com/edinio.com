@@ -64,12 +64,22 @@ export function ButonScapaDeStoc() {
         type="button"
         onClick={() => setDeschis(true)}
         title={CE_FACE}
+        /*
+          ⚠ NUMELE SE SCRIE EXPLICIT, nu se lasa pe seama etichetei de langa.
+          Sub `lg` eticheta e `display:none`, iar ce e ascuns asa NU intra in
+          numele accesibil. Ar fi ramas numele din `title` — adica toata descrierea
+          de o suta cincizeci de semne, citita cu glas tare la fiecare trecere, si
+          numai atata vreme cat cineva nu scoate `title`-ul ca „nu se vede pe
+          telefon oricum".
+        */
+        aria-label={NUMELE_LOR}
         className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-foreground ring-1 ring-foreground/10 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
         <Marca className="h-3.5 w-4.5" />
         {/*
           Ascuns pe ecrane mici, ca la „Adauga": in bara de sus a unui telefon nu
-          incap doua etichete, iar marca singura ramane recunoscuta.
+          incap doua etichete, iar marca singura ramane recunoscuta. Masurat pe un
+          ecran de 374 px: bara nu da pe dinafara, butonul incape intreg.
         */}
         <span className="hidden lg:inline">{NUMELE_LOR}</span>
       </button>

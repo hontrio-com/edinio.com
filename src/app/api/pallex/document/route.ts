@@ -1,10 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { getFromR2, uploadToR2 } from "@/lib/r2";
-import { cheieDocument, numeFisier } from "@/lib/pallex/documente";
-import { documentPartidei, pallexGata, type FelDocument, type PallExConfig } from "@/lib/pallex/client";
-import { logError } from "@/lib/error-logger";
+import { numeFisier } from "@/lib/pallex/documente";
+import { documentPallex } from "@/lib/pallex/eticheta-sursa";
+import { type FelDocument } from "@/lib/pallex/client";
+import { poartaEtichetei } from "@/lib/orders/poarta-eticheta";
 
 /**
  * Documentele de transport Pall-Ex: eticheta (`label`) si avizul (`note`).
@@ -73,6 +72,18 @@ export async function GET(req: NextRequest) {
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return NextResponse.json({ error: "Acces interzis" }, { status: 403 });
 
+  /*
+   * ⚠ SI STAREA CONTULUI, dupa dovedirea proprietatii. Vezi `poarta-eticheta.ts`.
+   *
+   * ⚠ LIPSEA DE CAND EXISTA RUTA, si n-a vazut-o nimeni fiindca plasa din
+   * `poarta-eticheta.test.ts` cauta doar `<furnizor>/awb/route.ts`, iar asta se
+   * cheama `pallex/document`. Adica exact defectul pe care plasa fusese pusa sa-l
+   * prinda, scapat printr-un nume de dosar. Gasita pe 21.09.2026, cand plasa a fost
+   * largita pentru ruta lotului de etichete.
+   */
+  const oprit = await poartaEtichetei(businessId);
+  if (oprit) return oprit;
+
   /* Comanda trebuie sa fie a magazinului SI sa aiba partida — altfel n-are documente. */
   const { data: order } = await supabase
     .from("orders").select("id, order_number, pallex_awb_number, pallex_consignment_id")
@@ -82,9 +93,7 @@ export async function GET(req: NextRequest) {
   const consignmentId = Number(order?.pallex_consignment_id);
   if (!awb) return NextResponse.json({ error: "Comanda nu are partida Pall-Ex" }, { status: 404 });
 
-  const cheie = cheieDocument(businessId, orderId, fel);
-  let pdf = await getFromR2(cheie);
-
+  const pdf = await documentPallex(businessId, orderId, consignmentId, fel);
   if (!pdf) {
     if (!Number.isInteger(consignmentId) || consignmentId <= 0) {
       return NextResponse.json(
@@ -92,79 +101,23 @@ export async function GET(req: NextRequest) {
         { status: 404 },
       );
     }
-
-    pdf = await dinPallEx(businessId, consignmentId, fel, orderId);
-    if (!pdf) {
-      return NextResponse.json(
-        {
-          error:
-            fel === "label"
-              ? `Eticheta pentru partida ${awb} nu e inca disponibila. Pall-Ex o pregateste dupa validarea borderoului.`
-              : `Avizul pentru partida ${awb} nu e inca disponibil. Pall-Ex il pregateste dupa validarea borderoului.`,
-        },
-        { status: 404 },
-      );
-    }
-    /*
-     * Se pune in CDN, ca urmatoarea descarcare sa nu mai treaca pe la Pall-Ex.
-     * Esecul NU opreste raspunsul: omul are deja PDF-ul in mana, si l-am trimite
-     * degeaba inapoi cu o eroare despre o copie de rezerva.
-     */
-    try {
-      /* ⚠ `private, no-store` EXPLICIT. Implicitul lui `uploadToR2` e
-         `public, max-age=31536000, immutable`, bun pentru o poza de produs si gresit aici:
-         documentul poarta numele, adresa si telefonul cumparatorului, iar ruta de mai jos se
-         straduieste sa-l serveasca `private, no-store`. Depozitat public, antetul acela nu
-         mai apara nimic. Aceeasi forma ca la GLS. */
-      await uploadToR2(pdf, cheie, "application/pdf", "private, no-store");
-    } catch {
-      /* Ramane doar mai lent data viitoare. */
-    }
+    return NextResponse.json(
+      {
+        error:
+          fel === "label"
+            ? `Eticheta pentru partida ${awb} nu e inca disponibila. Pall-Ex o pregateste dupa validarea borderoului.`
+            : `Avizul pentru partida ${awb} nu e inca disponibil. Pall-Ex il pregateste dupa validarea borderoului.`,
+      },
+      { status: 404 },
+    );
   }
 
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${numeFisier(fel, awb)}"`,
+      /* ⚠ Documentul poarta numele, adresa si telefonul cumparatorului. */
       "Cache-Control": "private, no-store",
     },
   });
-}
-
-/**
- * Documentul cerut de la Pall-Ex, cand copia din CDN lipseste.
- *
- * ⚠ Configul se citeste cu SERVICE ROLE: vederea `store_settings` nu decripteaza
- * pentru `authenticated`, deci pe clientul utilizatorului parola ar veni
- * `enc.v1.…` si Pall-Ex ar raspunde „autentificare esuata". Proprietatea
- * magazinului s-a verificat deja, cu clientul utilizatorului, inainte de a se
- * ajunge aici.
- *
- * Intoarce `null` la orice esec, dinadins: apelantul are deja mesajul lui, si e
- * unul mult mai bun — „documentul apare dupa validarea borderoului".
- */
-async function dinPallEx(
-  businessId: string,
-  consignmentId: number,
-  fel: FelDocument,
-  orderId: string,
-): Promise<Buffer | null> {
-  try {
-    const { data: settings } = await createAdminClient()
-      .from("store_settings").select("pallex_config").eq("business_id", businessId).single();
-
-    const config = settings?.pallex_config as PallExConfig | null;
-    if (!pallexGata(config)) return null;
-
-    return await documentPartidei(config, consignmentId, fel);
-  } catch (e) {
-    await logError({
-      action: "pallex.document",
-      message: `Documentul „${fel}" nu s-a putut lua de la Pall-Ex: ${(e as Error).message}`,
-      details: { orderId, businessId, consignmentId, fel },
-      businessId,
-      severity: "warning",
-    });
-    return null;
-  }
 }

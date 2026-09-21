@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Package, CheckSquare } from "lucide-react";
+import { Search, X, ShoppingCart, ChevronRight, ChevronLeft, FileText, FileCheck, XCircle, Loader2, Download, Package, CheckSquare } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatPrice } from "@/lib/utils/format";
@@ -74,6 +74,19 @@ const STATUS_TABS = [
   { key: "refunded",   label: "Rambursate" },
 ];
 
+/**
+ * Numele sub care serverul a trimis fisierul.
+ *
+ * ⚠ Se ia din antet, nu se compune in browser: serverul stie cate etichete au intrat
+ * cu adevarat in document, iar browserul stie doar cate au fost cerute. Compus aici,
+ * numele ar fi spus „etichete-18" despre un fisier cu cincisprezece pagini.
+ */
+function numeDinAntet(raspuns: Response): string | null {
+  const brut = raspuns.headers.get("Content-Disposition") ?? "";
+  const m = /filename="([^"]+)"/.exec(brut);
+  return m ? m[1] : null;
+}
+
 export function OrdersClient({ orders, totalCount, statusCounts, page, searchQuery, statusFilter, sourceFilter, sourceCounts, pendingCount, smartbillEnabled, wootEnabled, coleteEnabled, oblioEnabled, fgoEnabled, cargusEnabled, dpdEnabled, glsEnabled, pallexEnabled, pallexZile, ecoletEnabled, postaEnabled, packetaEnabled, smartshipEnabled, shipoEnabled, fedexEnabled, upsEnabled, dhlEnabled, innoshipEnabled, fanCourierEnabled, samedayEnabled, businessId, fanPickup }: {
   /** Pagina curenta de comenzi (max ORDERS_PAGE_SIZE), gata filtrata pe server. */
   orders: Order[];
@@ -143,6 +156,17 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
   const [bulkResult, setBulkResult] = useState<{ title: string; result: BulkResult } | null>(null);
   const [invoiceProvider, setInvoiceProvider] = useState<InvoiceProvider>("auto");
   const [awbCourier, setAwbCourier] = useState<BulkCourier>("auto");
+  /*
+   * ⚠ Descarcarea etichetelor isi tine starea ei, separat de `bulkBusy`.
+   *
+   * Cele doua nu sunt acelasi fel de lucru: emiterea SCHIMBA la curier si costa bani,
+   * descarcarea e o citire. Pe acelasi steag, un lot de AWB-uri pornit ar fi blocat si
+   * descarcarea etichetelor deja emise — tocmai lucrul pe care omul il vrea imediat dupa.
+   */
+  const [eticheteBusy, setEticheteBusy] = useState(false);
+  const [eticheteFormat, setEticheteFormat] = useState<"A4" | "A6">("A4");
+  const [eticheteSarite, setEticheteSarite] = useState<{ comanda: string; motiv: string }[]>([]);
+  const [eticheteInPlus, setEticheteInPlus] = useState(0);
   const [bulkStatus, setBulkStatus] = useState("");
   const [, startStatusTransition] = useTransition();
 
@@ -277,6 +301,82 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
     } else if (res.failed > 0) toast.error(`${title}: ${parts.join(", ")}`);
     else toast.success(`${title}: ${parts.join(", ")}`);
     router.refresh();
+  }
+
+  /**
+   * Etichetele comenzilor alese, intr-un singur PDF.
+   *
+   * ⚠ NU TRECE PRIN `runBulk`. Acela asteapta un `BulkResult` de la o actiune de
+   * server; aici raspunsul e un FISIER, iar ce s-a sarit vine intr-un antet. Fortata
+   * in aceeasi forma, descarcarea ar fi trebuit sa intoarca octetii printr-o actiune
+   * de server, adica un corp base64 peste pragul de 4,5 MB al Vercel la optsprezece
+   * etichete. Vezi nota din `api/etichete/route.ts`.
+   *
+   * ⚠ E o CITIRE: nu creeaza nimic la curier si nu cheltuie nimic, deci nu cere
+   * confirmare si se poate relua oricand. Fix pe dos fata de butonul de alaturi.
+   */
+  async function descarcaEtichetele() {
+    const ids = [...selected];
+    setEticheteBusy(true);
+    let raspuns: Response;
+    try {
+      raspuns = await fetch("/api/etichete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ businessId, orderIds: ids, format: eticheteFormat }),
+      });
+    } catch {
+      setEticheteBusy(false);
+      toast.error("Nu am primit răspuns de la server. Încearcă din nou.");
+      return;
+    }
+    setEticheteBusy(false);
+
+    if (!raspuns.ok) {
+      /* Raspunsul de refuz e JSON si poarta si motivele, cand le are. */
+      const date = await raspuns.json().catch(() => null) as
+        { error?: string; sarite?: { comanda: string; motiv: string }[]; inPlus?: number } | null;
+      toast.error(date?.error ?? "Etichetele nu au putut fi descărcate.", { duration: 12000 });
+      if (date?.sarite?.length) { setEticheteSarite(date.sarite); setEticheteInPlus(date.inPlus ?? 0); }
+      return;
+    }
+
+    /*
+     * ⚠ Antetul se citeste INAINTE de a atinge corpul: dupa `blob()` raspunsul e
+     * consumat, iar o ordine gresita ar fi pierdut tacut lista celor sarite.
+     */
+    let rezumat: { incluse?: number; sarite?: { comanda: string; motiv: string }[]; inPlus?: number; oprit?: boolean } = {};
+    try {
+      const brut = raspuns.headers.get("X-Etichete");
+      if (brut) rezumat = JSON.parse(decodeURIComponent(brut));
+    } catch { /* Fisierul e bun si fara rezumat; nu se opreste descarcarea pentru el. */ }
+
+    const blob = await raspuns.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = numeDinAntet(raspuns) ?? "etichete.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    /* ⚠ Se elibereaza, altfel fiecare lot lasa in memorie un PDF pana la reincarcare. */
+    URL.revokeObjectURL(url);
+
+    setEticheteSarite(rezumat.sarite ?? []);
+    setEticheteInPlus(rezumat.inPlus ?? 0);
+    const cate = rezumat.incluse ?? 0;
+    if (rezumat.oprit) {
+      toast.warning(
+        `${cate} etichete descărcate. Lotul s-a oprit la timp, restul nu au fost cerute: `
+        + "selectează-le din nou și reia. E o citire, nu se întâmplă nimic de două ori.",
+        { duration: 12000 },
+      );
+    } else if ((rezumat.sarite?.length ?? 0) > 0) {
+      const sarite = (rezumat.sarite?.length ?? 0) + (rezumat.inPlus ?? 0);
+      toast.warning(`${cate} etichete în document, ${sarite} sărite.`, { duration: 10000 });
+    } else {
+      toast.success(`${cate} ${cate === 1 ? "etichetă descărcată" : "etichete descărcate"}.`);
+    }
   }
 
   function runBulkInvoices() {
@@ -886,8 +986,78 @@ export function OrdersClient({ orders, totalCount, statusCounts, page, searchQue
               </div>
             )}
 
+            {/*
+              Descarcarea etichetelor deja emise.
+
+              ⚠ Nu cere confirmare, spre deosebire de butonul de alaturi: e o CITIRE
+              la curier, nu creeaza nimic si nu costa nimic. Se poate relua oricand.
+            */}
+            {businessId && (
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={eticheteFormat}
+                  onChange={(e) => setEticheteFormat(e.target.value as "A4" | "A6")}
+                  disabled={eticheteBusy}
+                  aria-label="Formatul etichetelor"
+                  className="px-2.5 py-1.5 text-xs font-medium rounded-lg ring-1 ring-foreground/10 bg-card text-foreground disabled:opacity-50"
+                >
+                  <option value="A4">A4</option>
+                  <option value="A6">Etichetă mică</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void descarcaEtichetele()}
+                  disabled={eticheteBusy}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg ring-1 ring-foreground/10 bg-card text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  {eticheteBusy
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <Download className="h-3.5 w-3.5" />}
+                  Descarcă etichetele
+                </button>
+              </div>
+            )}
+
             {bulkBusy && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
           </div>
+
+          {/*
+            ⚠ CE S-A SARIT SE VEDE PE ECRAN, nu doar intr-un mesaj care trece.
+            Fisierul se descarca singur, deci fara lista asta comerciantul ar fi
+            ramas cu un document de cincisprezece pagini dintr-o selectie de
+            optsprezece si fara nicio cale sa afle care trei lipsesc.
+          */}
+          {eticheteSarite.length > 0 && (
+            <div className="border-t border-border px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-foreground">
+                  Etichete nedescărcate: {eticheteSarite.length + eticheteInPlus}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setEticheteSarite([]); setEticheteInPlus(0); }}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Închide
+                </button>
+              </div>
+              <ul className="mt-1.5 space-y-1">
+                {eticheteSarite.map((x) => (
+                  <li key={x.comanda} className="text-[11px] text-muted-foreground">
+                    <span className="font-medium text-foreground">{x.comanda}</span>: {x.motiv}
+                  </li>
+                ))}
+                {eticheteInPlus > 0 && (
+                  /* ⚠ Se SPUNE ca lista e taiata: altfel numarul de sus si randurile de
+                     jos s-ar contrazice, si omul ar crede ca ecranul se inseala. */
+                  <li className="text-[11px] text-muted-foreground">
+                    și încă {eticheteInPlus} {eticheteInPlus === 1 ? "comandă" : "comenzi"}.
+                    Descarcă-le pe rând, din tabel.
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
 
           {/* Results (esp. failures) */}
           {bulkResult && (

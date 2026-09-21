@@ -1,10 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { getFromR2, uploadToR2 } from "@/lib/r2";
-import { cheieEticheta, felulEtichetei, numeFisier } from "@/lib/ecolet/documente";
-import { citesteExpedierea, ecoletGata, eticheta, type EcoletConfig } from "@/lib/ecolet/client";
-import { logError } from "@/lib/error-logger";
+import { numeFisier } from "@/lib/ecolet/documente";
+import { etichetaEcolet } from "@/lib/ecolet/eticheta-sursa";
 import { poartaEtichetei } from "@/lib/orders/poarta-eticheta";
 
 /**
@@ -78,71 +75,20 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const admin = createAdminClient();
-  const { data: settings } = await admin
-    .from("store_settings").select("ecolet_config").eq("business_id", businessId).single();
-  const config = settings?.ecolet_config as EcoletConfig | null;
-  if (!ecoletGata(config)) {
-    return NextResponse.json({ error: "eColet nu mai e configurat pentru acest magazin." }, { status: 404 });
+  const gasita = await etichetaEcolet(businessId, orderId, orderIdEcolet);
+  if (!gasita) {
+    return NextResponse.json(
+      { error: `Eticheta pentru AWB ${awb} nu a putut fi obtinuta. O gasesti si in panel.ecolet.ro.` },
+      { status: 404 },
+    );
   }
-
-  /*
-   * ⚠ Felul etichetei se afla INAINTE de a cauta in CDN: extensia face parte din
-   * cheie, deci cautand-o pe cea gresita am fi ratat mereu copia salvata si am fi
-   * intrebat eColet de fiecare data.
-   *
-   * Citirea asta e ieftina si nu creeaza nimic; daca pica, se presupune PDF —
-   * cazul obisnuit — si cel mai rau lucru care se intampla e o descarcare in plus.
-   */
-  let extensie = "pdf";
-  try {
-    const expediere = await citesteExpedierea(config, orderIdEcolet);
-    extensie = felulEtichetei(expediere?.waybill_extension).ext;
-  } catch {
-    /* Ramane pdf. */
-  }
-
-  const { ext, tip } = felulEtichetei(extensie);
-  const cheie = cheieEticheta(businessId, orderId, ext);
-  let octeti = await getFromR2(cheie);
-
-  if (!octeti) {
-    try {
-      const raspuns = await eticheta(config, orderIdEcolet);
-      octeti = raspuns?.octeti ?? null;
-    } catch (e) {
-      await logError({
-        action: "ecolet.eticheta",
-        message: `Eticheta eColet nu s-a putut lua: ${(e as Error).message}`,
-        details: { orderId, businessId, orderIdEcolet },
-        businessId, severity: "warning",
-      });
-      octeti = null;
-    }
-
-    if (!octeti) {
-      return NextResponse.json(
-        { error: `Eticheta pentru AWB ${awb} nu a putut fi obtinuta. O gasesti si in panel.ecolet.ro.` },
-        { status: 404 },
-      );
-    }
-
-    /* Se pune in CDN. Esecul nu opreste raspunsul: omul are deja fisierul. */
-    try {
-      /* ⚠ `private, no-store` EXPLICIT. Implicitul lui `uploadToR2` e
-         `public, max-age=31536000, immutable`, iar eticheta poarta numele, adresa si
-         telefonul cumparatorului. Randul 142 de mai jos o serveste deja `private, no-store`:
-         depozitata public, contradictia facea antetul acela degeaba. */
-      await uploadToR2(octeti, cheie, tip, "private, no-store");
-    } catch {
-      /* Ramane doar mai lent data viitoare. */
-    }
-  }
+  const { octeti, ext, tip } = gasita;
 
   return new NextResponse(new Uint8Array(octeti), {
     headers: {
       "Content-Type": tip,
       "Content-Disposition": `attachment; filename="${numeFisier(awb, ext)}"`,
+      /* ⚠ Eticheta poarta numele, adresa si telefonul cumparatorului. */
       "Cache-Control": "private, no-store",
     },
   });

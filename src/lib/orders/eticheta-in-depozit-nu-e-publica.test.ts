@@ -44,6 +44,24 @@ function fisiereCuEtichete(): string[] {
    * in galeata publica: proba ar fi cerut `private, no-store` pentru o poza de produs si ar
    * fi cazut pe cod perfect corect. O plasa care prinde si pestele bun nu e o plasa.
    */
+  /*
+   * ⚠ SI FISIERELE DE BIBLIOTECA CARE TIN DRUMUL ETICHETEI.
+   *
+   * Pe 21.09.2026 drumurile GLS, eColet si Pall-Ex (din CDN, altfel de la furnizor,
+   * apoi pus la loc in CDN) s-au mutat din rute in `src/lib/<curier>/eticheta-sursa.ts`,
+   * fiindca de atunci sunt chemate si din lotul de etichete. Odata cu ele s-au mutat si
+   * incarcarile in R2 — adica TOATE, in afara de una.
+   *
+   * ⚠ Plasa a iesit atunci verde peste o singura incarcare si a cazut singura, pe pragul
+   * de mai jos. Fara pragul acela ar fi trecut tacut peste mutare, si prima incarcare
+   * publica de dupa n-ar mai fi fost prinsa de nimeni. De-aia se numara.
+   */
+  for (const curier of readdirSync("src/lib", { withFileTypes: true })) {
+    if (!curier.isDirectory()) continue;
+    const cale = `src/lib/${curier.name}/eticheta-sursa.ts`;
+    try { readFileSync(cale); gasite.push(cale); } catch { /* nu exista */ }
+  }
+
   const dirAct = "src/lib/actions";
   for (const f of readdirSync(dirAct)) {
     if (!/\.actions\.ts$/.test(f)) continue;

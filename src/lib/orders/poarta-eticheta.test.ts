@@ -18,21 +18,40 @@ import { readFileSync, readdirSync } from "node:fs";
 
 const RADACINA = "src/app/api";
 
-/** Toate rutele `…/awb/route.ts` de sub `src/app/api`, pe furnizor. */
+/**
+ * Rutele care servesc etichete.
+ *
+ * ⚠ SI CELE CARE NU SE CHEAMA „awb". Pana pe 21.09.2026 lista era doar
+ * `<furnizor>/awb/route.ts`, iar in ziua aia s-au adaugat doua rute de eticheta care
+ * nu se potrivesc tiparului: `pallex/document` (eticheta SI avizul) si `etichete`
+ * (lotul, toate comenzile alese intr-un singur PDF). Amandoua cheama API-ul
+ * curierului cu credentialele comerciantului, exact ca celelalte, deci amandoua au
+ * nevoie de aceeasi poarta — si niciuna n-ar fi fost vazuta de plasa asta.
+ *
+ * ⚠ Cele din afara tiparului se scriu pe nume, DINADINS: o cautare mai larga (orice
+ * ruta care importa `raspunsEticheta`) ar fi tacut tocmai cand cineva scrie una fara
+ * niciunul dintre semnele cautate.
+ */
+const IN_AFARA_TIPARULUI = ["pallex/document", "etichete"];
+
 function ruteDeEticheta(): { furnizor: string; cale: string }[] {
-  return readdirSync(RADACINA, { withFileTypes: true })
+  const dinTipar = readdirSync(RADACINA, { withFileTypes: true })
     .filter((x) => x.isDirectory())
-    .map((x) => ({ furnizor: x.name, cale: `${RADACINA}/${x.name}/awb/route.ts` }))
-    .filter((r) => {
-      try { readFileSync(r.cale, "utf8"); return true; } catch { return false; }
-    });
+    .map((x) => ({ furnizor: x.name, cale: `${RADACINA}/${x.name}/awb/route.ts` }));
+
+  return [
+    ...dinTipar,
+    ...IN_AFARA_TIPARULUI.map((p) => ({ furnizor: p, cale: `${RADACINA}/${p}/route.ts` })),
+  ].filter((r) => {
+    try { readFileSync(r.cale, "utf8"); return true; } catch { return false; }
+  });
 }
 
 test("⚠ fiecare ruta de eticheta cheama poarta de abonament", () => {
   const rute = ruteDeEticheta();
 
   assert.ok(
-    rute.length >= 8,
+    rute.length >= 10,
     `gasite doar ${rute.length} rute de eticheta: plasa n-are pe cine cadea`,
   );
 

@@ -26,11 +26,10 @@ export const PEPITA = "pepita" as const;
 /**
  * Piata pe care merge integrarea.
  *
- * Pepita are magazine in HU, RO, SK, DE, PL, BG, HR. Edinio porneste pe Romania,
- * dar moneda si piata stau AICI, intr-un singur loc, nu imprastiate prin cod: o
- * a doua piata cere un rand in tabelul de mai jos, nu o rescriere.
+ * ⚠ CELE SAPTE AU FOST VERIFICATE PE 21.09.2026, cerand fiecare adresa si citind
+ * ce raspunde. Nu e o formalitate: vezi mai jos ce am gasit.
  */
-export type PiataPepita = "ro";
+export type PiataPepita = "hu" | "ro" | "sk" | "de" | "pl" | "bg" | "hr";
 
 export interface DescrierePiata {
   eticheta: string;
@@ -50,9 +49,45 @@ export interface DescrierePiata {
   adresa: string;
 }
 
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  ⚠⚠ DOUA DINTRE ADRESELE „EVIDENTE" NU SUNT PEPITA
+  ═══════════════════════════════════════════════════════════════════════════
+
+  Verificat pe 21.09.2026, cerand fiecare adresa si citind titlul paginii:
+
+    pepita.hu        → „A család webáruháza 9 930 612 termék | Pepita.hu"  ✓
+    pepita.com/{cc}  → magazinul lor, in limba tarii                       ✓
+    pepita.ro        → NU RASPUNDE DELOC (defectul din 09.09.2026)
+    pepita.pl        → „Pepita - Torebki skórzane, galanteria damska"
+                       un magazin POLONEZ DE GENTI DE PIELE, alta firma
+    pepita.sk        → „Registrácia domén, hosting a servery :: Websupport.sk"
+                       un domeniu PARCAT la un hosting slovac
+
+  ⚠ Ultimele doua raspund **200**, cu titlu care contine „Pepita". Un om care
+  verifica „merge adresa?" le-ar fi trecut pe amandoua. Comerciantul trimis
+  acolo ar fi scris marketplace-ului gresit - sau nimanui.
+
+  De-aia piata romaneasca sta pe o CALE (`pepita.com/ro`), si la fel toate in
+  afara de Ungaria, care isi are domeniul ei adevarat.
+
+  ⚠ MONEDELE SUNT CELE DECLARATE DE EI, citite din `currency="..."` de pe
+  fiecare piata, nu din ce stiu eu despre tara. Bulgaria da EUR, nu BGN, si
+  Croatia la fel - amandoua au trecut la euro, iar o lista scrisa din memorie
+  ar fi ramas in urma.
+*/
 export const PIETE: Record<PiataPepita, DescrierePiata> = {
+  hu: { eticheta: "Ungaria", moneda: "HUF", adresa: "pepita.hu" },
   ro: { eticheta: "România", moneda: "RON", adresa: "pepita.com/ro" },
+  sk: { eticheta: "Slovacia", moneda: "EUR", adresa: "pepita.com/sk" },
+  de: { eticheta: "Germania", moneda: "EUR", adresa: "pepita.com/de" },
+  pl: { eticheta: "Polonia", moneda: "PLN", adresa: "pepita.com/pl" },
+  bg: { eticheta: "Bulgaria", moneda: "EUR", adresa: "pepita.com/bg" },
+  hr: { eticheta: "Croația", moneda: "EUR", adresa: "pepita.com/hr" },
 };
+
+/** Ordinea in care se arata pe ecran. Romania prima: de acolo am pornit. */
+export const ORDINEA_PIETELOR: PiataPepita[] = ["ro", "hu", "sk", "de", "pl", "bg", "hr"];
 
 export const PIATA_IMPLICITA: PiataPepita = "ro";
 

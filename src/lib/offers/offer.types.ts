@@ -97,6 +97,22 @@ export interface DespreTipulOfertei {
   sePoateAsezaLangaPret?: boolean;
   /** Se poate cere o CANTITATE pentru fiecare produs din set. */
   cuCantitatiPeProdus?: boolean;
+  /**
+   * Produsele OFERITE trebuie sa poata fi adaugate DINTR-O APASARE.
+   *
+   * ⚠⚠ Adica fara variante si fara personalizare (`needsChoice` in vitrina): o
+   * ofertă care se ia cu o bifă n-are unde să întrebe ce mărime. Vitrina le
+   * arunca oricum (`resolveCartOffers`, `resolveProductOffers`), deci alese in
+   * formular ar fi fost o promisiune care nu se vede nicaieri.
+   *
+   * ⚠ FALS la recomandari, si asta conteaza: cardul de recomandare DUCE pe pagina
+   * produsului, deci un produs cu marimi e perfect bun acolo. Pus adevarat peste
+   * tot, am fi taiat din recomandari tocmai magazinele de haine.
+   *
+   * ⚠ NU se aplica niciodata declansatorului („Cand apare"): acolo produsul spune
+   * doar PE CE PAGINA se vede oferta, iar `triggerMatchesProduct` compara id-uri.
+   */
+  cereProduseGataDeAdaugat?: boolean;
   /** Oferta SCHIMBA produsul din cos cu cel oferit (upgrade). */
   cuSchimb?: boolean;
   /** „Cumperi X bucati, primesti Y bucati" — cele doua numere ale lui BOGO. */
@@ -121,7 +137,7 @@ export const DESPRE_TIPUL_OFERTEI: Record<OfferType, DespreTipulOfertei> = {
     numeleProduselorOferite: "Produse în set (pe lângă cel de pe pagină)",
     sePoateFace: true, seVedeInVitrina: true,
     areReducere: true, reducereImplicita: "percent", sePoateAsezaLangaPret: true,
-    cuCantitatiPeProdus: true,
+    cuCantitatiPeProdus: true, cereProduseGataDeAdaugat: true,
   },
   cross_sell: {
     eticheta: "Recomandări",
@@ -136,6 +152,7 @@ export const DESPRE_TIPUL_OFERTEI: Record<OfferType, DespreTipulOfertei> = {
     numeleProduselorOferite: "Produsul oferit",
     sePoateFace: true, seVedeInVitrina: true,
     areReducere: true, reducereImplicita: "percent", unProdus: true,
+    cereProduseGataDeAdaugat: true,
   },
   upgrade: {
     eticheta: "Upgrade produs",
@@ -143,6 +160,7 @@ export const DESPRE_TIPUL_OFERTEI: Record<OfferType, DespreTipulOfertei> = {
     numeleProduselorOferite: "Produsul în schimb",
     sePoateFace: true, seVedeInVitrina: true,
     areReducere: true, reducereImplicita: "fixed_price", unProdus: true, cuSchimb: true,
+    cereProduseGataDeAdaugat: true,
   },
   volume: {
     eticheta: "Reducere cantitate",
@@ -170,7 +188,7 @@ export const DESPRE_TIPUL_OFERTEI: Record<OfferType, DespreTipulOfertei> = {
     numeleProduselorOferite: "Produsul primit",
     sePoateFace: true, seVedeInVitrina: true,
     areReducere: true, reducereImplicita: "fixed_price", unProdus: true,
-    cuBucatiXY: true, cuGratuit: true,
+    cuBucatiXY: true, cuGratuit: true, cereProduseGataDeAdaugat: true,
   },
   gift: {
     eticheta: "Cadou la comandă",
@@ -178,7 +196,7 @@ export const DESPRE_TIPUL_OFERTEI: Record<OfferType, DespreTipulOfertei> = {
     numeleProduselorOferite: "Cadoul (sau cadourile dintre care alege)",
     sePoateFace: true, seVedeInVitrina: true,
     areReducere: true, reducereImplicita: "fixed_price",
-    cuCadouLaAlegere: true, cuGratuit: true,
+    cuCadouLaAlegere: true, cuGratuit: true, cereProduseGataDeAdaugat: true,
   },
   spend_reward: {
     eticheta: "Cheltuie și economisește",

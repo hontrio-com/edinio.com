@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
-import { getBundleEligibleProducts } from "@/lib/actions/bundle.actions";
+import { produsePentruOferte } from "@/lib/offers/produse-pentru-formular";
 import { OfferForm } from "@/components/dashboard/OfferForm";
 
 export default async function NewOfferPage() {
@@ -13,7 +13,7 @@ export default async function NewOfferPage() {
     .from("businesses").select("id, categories(id, name)").eq("user_id", user.id).eq("type", "ministore").limit(1).single();
   if (!biz) redirect("/dashboard");
 
-  const products = await getBundleEligibleProducts(biz.id);
+  const products = await produsePentruOferte(biz.id);
   const categories = Array.isArray(biz.categories) ? biz.categories.map((c) => ({ id: c.id, name: c.name })) : [];
 
   return (

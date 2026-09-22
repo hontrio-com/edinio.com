@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCachedUser } from "@/lib/supabase/cached-queries";
-import { getBundleEligibleProducts } from "@/lib/actions/bundle.actions";
+import { produsePentruOferte } from "@/lib/offers/produse-pentru-formular";
 import { getOffer } from "@/lib/actions/offer.actions";
 import { OfferForm } from "@/components/dashboard/OfferForm";
 
@@ -18,7 +18,7 @@ export default async function EditOfferPage({ params }: { params: Promise<{ offe
   const offer = await getOffer(offerId, biz.id);
   if (!offer) notFound();
 
-  const products = await getBundleEligibleProducts(biz.id);
+  const products = await produsePentruOferte(biz.id);
   const categories = Array.isArray(biz.categories) ? biz.categories.map((c) => ({ id: c.id, name: c.name })) : [];
 
   return (

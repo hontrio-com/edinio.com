@@ -524,10 +524,25 @@ produsul pe care tocmai il avea.
 pana acum pretul fix zero, deci cadourile sunt primele linii gratuite care pot ajunge la o
 casa de facturare. `docs/facturare/SMARTBILL.md` o spune limpede: din 241 de documente,
 **zero reduceri promotionale**. Nu stim daca SmartBill accepta `price: 0` pe o linie de
-produs. ⚠ Ce se intampla daca NU: facturarea automata e „fire-and-forget", pornita pe
-schimbarea de stare, NU pe drumul comenzii (`order.actions.ts`, rd. ~2810). Deci comanda
-intra oricum; ce cade e emiterea facturii, si se vede prin lipsa numarului. De probat cu o
-proforma inainte de a porni un cadou intr-un magazin care factureaza automat.
+produs, si nu se poate afla fara sa trimitem un document adevarat.
+
+⚠ CE SE INTAMPLA DACA NU — verificat in cod, nu presupus:
+* Facturarea automata e „fire-and-forget", pornita pe schimbarea de STARE, nu pe drumul
+  comenzii (`order.actions.ts`, rd. ~2810). Deci **comanda intra oricum**; ce cade e
+  emiterea.
+* Esecul NU e mut: emiterea trece prin `emiteFacturaSubRegistru`, adica prin registrul de
+  operatii externe, unde `esuat` e altceva decat `necunoscut`. Masurat pe 16.09.2026: din
+  240 de facturi, un esec chiar e inregistrat acolo („Autentificare esuata"). Iar un refuz
+  de reconciliere se scrie in `error_logs` cu `severity: "critical"`.
+
+Deci cel mai rau caz e o factura neemisa, VAZUTA in registru, pe o comanda care a intrat
+normal. ⚠ Tot merita o proforma de proba inainte ca cineva sa porneasca un cadou intr-un
+magazin care factureaza automat.
+
+⚠ SmartBill are si linii de REDUCERE (`discountValue` negativ, cu `numberOfItems`
+obligatoriu — vezi `docs/facturare/SMARTBILL.md`). Daca pretul zero chiar e refuzat, acolo e
+drumul: cadoul ar merge ca linie la pret intreg plus o linie de reducere egala. N-am facut-o,
+fiindca ar fi o schimbare pe calea facturarii pentru un defect nedovedit.
 
 ⚠ **Liniile pentru CUPON si cele pentru PIXELI folosesc tot `lineUnit`** (pretul dinainte de
 trepte). E purtarea de dinainte si n-am atins-o: sunt alte cai de bani, fiecare cu auditul

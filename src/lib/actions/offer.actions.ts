@@ -79,13 +79,13 @@ function sanitizeWrite(data: OfferFormData): {
 
 // Faza 1: an offer must offer at least one product (or auto-pick by category for cross_sell).
 function validateOffer(data: OfferFormData): string | null {
-  if (!isOfferType(data.type)) return "Tip de oferta invalid.";
+  if (!isOfferType(data.type)) return "Tip de ofertă invalid.";
   if (!data.name.trim()) return "Oferta are nevoie de un nume.";
   if (PHASE1_OFFER_TYPES.includes(data.type)) {
     const cfg = parseOfferConfig(data.config);
     const hasProducts = cfg.productIds.length > 0;
     const autoCat = data.type === "cross_sell" && cfg.autoByCategory;
-    if (!hasProducts && !autoCat) return "Alege cel putin un produs pentru aceasta oferta.";
+    if (!hasProducts && !autoCat) return "Alege cel puțin un produs pentru această ofertă.";
   }
   /*
     ⚠ Oferta de cantitate nu OFERA produse, ci ieftineste ce e deja in cos.
@@ -95,11 +95,11 @@ function validateOffer(data: OfferFormData): string | null {
   if (data.type === "volume") {
     const cfg = parseOfferConfig(data.config);
     if (!cfg.praguri || cfg.praguri.length === 0) {
-      return "Adauga cel putin un prag: de la cate bucati si cat la suta reducere.";
+      return "Adaugă cel puțin un prag: de la câte bucăți și cât la sută reducere.";
     }
     const tr = parseOfferTrigger(data.trigger);
-    if (tr.scope === "products" && tr.productIds.length === 0) return "Alege produsele pentru care se aplica.";
-    if (tr.scope === "categories" && tr.categories.length === 0) return "Alege categoriile pentru care se aplica.";
+    if (tr.scope === "products" && tr.productIds.length === 0) return "Alege produsele pentru care se aplică.";
+    if (tr.scope === "categories" && tr.categories.length === 0) return "Alege categoriile pentru care se aplică.";
   }
   return null;
 }
@@ -204,7 +204,7 @@ export async function createOffer(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
-  if (!(await ownsBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+  if (!(await ownsBusiness(supabase, businessId, user.id))) return { error: "Magazin negăsit" };
   const invalid = validateOffer(data);
   if (invalid) return { error: invalid };
 
@@ -235,7 +235,7 @@ export async function createOffer(
     .single();
   if (error) {
     logError({ action: "createOffer", message: error.message, details: { code: error.code, businessId }, userId: user.id });
-    return { error: "Eroare la salvarea ofertei. Incearca din nou." };
+    return { error: "Eroare la salvarea ofertei. Încearcă din nou." };
   }
   const idNou = (created as { id: string }).id;
   await duPraguriLaProduse(supabase, businessId, idNou, data.type, data, user.id, w.is_active);
@@ -249,7 +249,7 @@ export async function updateOffer(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
-  if (!(await ownsBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+  if (!(await ownsBusiness(supabase, businessId, user.id))) return { error: "Magazin negăsit" };
   const invalid = validateOffer(data);
   if (invalid) return { error: invalid };
 
@@ -280,7 +280,7 @@ export async function updateOffer(
     .eq("business_id", businessId);
   if (error) {
     logError({ action: "updateOffer", message: error.message, details: { code: error.code, offerId, businessId }, userId: user.id });
-    return { error: "Eroare la salvarea ofertei. Incearca din nou." };
+    return { error: "Eroare la salvarea ofertei. Încearcă din nou." };
   }
   await duPraguriLaProduse(supabase, businessId, offerId, data.type, data, user.id, w.is_active);
   revalidatePath("/dashboard/offers");
@@ -294,7 +294,7 @@ export async function toggleOffer(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
-  if (!(await ownsBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+  if (!(await ownsBusiness(supabase, businessId, user.id))) return { error: "Magazin negăsit" };
   const { error } = await supabase
     .from("offers")
     .update({ is_active: isActive, updated_at: new Date().toISOString() })
@@ -322,7 +322,7 @@ export async function deleteOffer(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
-  if (!(await ownsBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+  if (!(await ownsBusiness(supabase, businessId, user.id))) return { error: "Magazin negăsit" };
 
   /* ⚠ Se retrag INAINTE de stergere. Dupa ce randul dispare nu se mai stie ce
      tip a fost, iar pragurile ar fi ramas pe produse fara nimeni care sa le
@@ -340,7 +340,7 @@ export async function deleteOffer(
     .from("offers").delete().eq("id", offerId).eq("business_id", businessId);
   if (error) {
     logError({ action: "deleteOffer", message: error.message, details: { code: error.code, offerId, businessId }, userId: user.id });
-    return { error: "Eroare la stergerea ofertei." };
+    return { error: "Eroare la ștergerea ofertei." };
   }
   revalidatePath("/dashboard/offers");
   return { success: true };
@@ -488,7 +488,7 @@ export async function getOfferTargets(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
-  if (!(await ownsBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+  if (!(await ownsBusiness(supabase, businessId, user.id))) return { error: "Magazin negăsit" };
 
   const { data: o } = await supabase
     .from("offers").select("trigger, config").eq("id", offerId).eq("business_id", businessId).single();

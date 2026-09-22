@@ -18,8 +18,11 @@ import { descriePerioada, perioadaOfertei, ziuaClipei } from "@/lib/zi-romaneasc
 import { TIPURI_DE_ALES, metaTip, type MetaTip } from "@/components/dashboard/oferte/tipuri-ui";
 import { DESPRE_PORTI } from "@/lib/offers/porti";
 import { AMPLASARI, DESPRE_AMPLASARE, type AmplasareSet } from "@/lib/offers/amplasare";
+import type { ProdusPentruOferta } from "@/lib/offers/produse-pentru-formular";
 
-interface PickerProduct { id: string; name: string; price: number; image_url: string | null; }
+/* ⚠ Chiar forma intoarsa de `produsePentruOferte`. Scrisa camp cu camp aici, s-ar
+   fi putut desincroniza tacut de cea adevarata. */
+type PickerProduct = ProdusPentruOferta;
 
 const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
@@ -214,6 +217,24 @@ export function OfferForm({ businessId, products, categories, offer }: {
     if (!m.automatDinCategorie) setMetoda("manual");
   }
 
+  /*
+    ⚠⚠ DE CE NU POATE FI OFERIT PRODUSUL ASTA. `null` inseamna ca poate.
+
+    Tipurile care se iau DINTR-O APASARE (setul, bump-ul, upgrade-ul, „cumperi X
+    primesti Y", cadoul) n-au unde sa intrebe ce marime sau ce text de gravat, iar
+    vitrina le arunca oricum (`needsChoice`). Alese aici, ar fi fost o promisiune
+    care nu se vede nicaieri in magazin.
+
+    ⚠ La RECOMANDARI intoarce mereu `null`: cardul duce pe pagina produsului, deci
+    un produs cu marimi e perfect bun acolo. Si declansatorul („Cand apare") nu
+    cheama functia asta deloc — acolo produsul spune doar PE CE PAGINA se vede
+    oferta.
+  */
+  function motivPentruProdusulOferit(p: PickerProduct): string | null {
+    if (!meta.cereProduseGataDeAdaugat || !p.cereAlegere) return null;
+    return "Are variante sau cere personalizare — nu poate fi adăugat dintr-o apăsare.";
+  }
+
   function addOffered(id: string) {
     setOfferedIds((prev) => (meta.unProdus ? [id] : prev.includes(id) ? prev : [...prev, id]));
   }
@@ -255,15 +276,15 @@ export function OfferForm({ businessId, products, categories, offer }: {
 
   function save() {
     if (!name.trim()) { toast.error("Oferta are nevoie de un nume."); return; }
-    if (scope === "products" && triggerIds.length === 0) { toast.error("Alege cel putin un produs pe care sa apara oferta."); return; }
-    if (scope === "categories" && triggerCats.length === 0) { toast.error("Alege cel putin o categorie."); return; }
+    if (scope === "products" && triggerIds.length === 0) { toast.error("Alege cel puțin un produs pe care să apară oferta."); return; }
+    if (scope === "categories" && triggerCats.length === 0) { toast.error("Alege cel puțin o categorie."); return; }
     /* ⚠ Oferta de cantitate nu OFERA produse: sare peste verificarea de mai
        jos, altfel n-ar putea fi salvata niciodata. In schimb ii cere praguri. */
     if (meta.cuPraguri) {
       if (problemaPraguri) { toast.error(problemaPraguri); return; }
     } else {
       const usesAuto = meta.automatDinCategorie && autoByCategory;
-      if (!usesAuto && offeredIds.length === 0) { toast.error("Alege cel putin un produs de oferit."); return; }
+      if (!usesAuto && offeredIds.length === 0) { toast.error("Alege cel puțin un produs de oferit."); return; }
     }
     /*
       ⚠ ZERO E UN PREȚ VALID la ofertele care pot da gratuit. „Gratuit" se scrie
@@ -273,7 +294,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
     */
     if (meta.areReducere && discountMode === "fixed_price"
         && !(meta.cuGratuit ? Number(fixedPrice) >= 0 : Number(fixedPrice) > 0)) {
-      toast.error("Seteaza un pret fix valid."); return;
+      toast.error("Setează un preț fix valid."); return;
     }
     if (meta.cuBucatiXY) {
       const x = Math.floor(Number(cumperiBucati) || 0);
@@ -396,7 +417,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
         return;
       }
       if ("error" in res) { toast.error(res.error); return; }
-      toast.success(offer ? "Oferta actualizata." : "Oferta creata.");
+      toast.success(offer ? "Ofertă actualizată." : "Ofertă creată.");
       router.push("/dashboard/offers");
       router.refresh();
     });
@@ -630,7 +651,8 @@ export function OfferForm({ businessId, products, categories, offer }: {
             onRemove={(id) => setOfferedIds((p) => p.filter((x) => x !== id))}
             placeholder={meta.unProdus ? "Caută produsul oferit..." : "Caută produse de oferit..."}
             cantitati={arataCantitati ? cantitati : undefined}
-            onCantitate={arataCantitati ? (id, n) => setCantitati((c) => ({ ...c, [id]: n })) : undefined} />
+            onCantitate={arataCantitati ? (id, n) => setCantitati((c) => ({ ...c, [id]: n })) : undefined}
+            motivNepotrivit={motivPentruProdusulOferit} />
         )}
       </div>
       )}
@@ -951,7 +973,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
 
 /* ─── Reusable product search + selected chips ────────────────────────────── */
 
-function ProductPicker({ products, selectedIds, byId, onAdd, onRemove, single, placeholder, cantitati, onCantitate }: {
+function ProductPicker({ products, selectedIds, byId, onAdd, onRemove, single, placeholder, cantitati, onCantitate, motivNepotrivit }: {
   products: PickerProduct[];
   selectedIds: string[];
   byId: Map<string, PickerProduct>;
@@ -959,6 +981,17 @@ function ProductPicker({ products, selectedIds, byId, onAdd, onRemove, single, p
   onRemove: (id: string) => void;
   single?: boolean;
   placeholder: string;
+  /**
+   * De ce NU poate fi ales produsul asta, sau `null` daca poate.
+   *
+   * ⚠⚠ SE ARATA, NU SE ASCUNDE. Pana azi lista venea din filtrul de PACHETE, care
+   * scotea tacut produsele cu variante, pe cele cu personalizare si pe cele
+   * inactive. Masurat pe productie: patru magazine nu puteau alege NICIUN produs,
+   * iar eSAFE avea 3.047 din 3.351 invizibile — comerciantul isi cauta produsul,
+   * nu-l gasea, si nimic nu-i spunea de ce. Ce nu poate aparea in lista e taiat
+   * pentru totdeauna, tacut; asa macar afla.
+   */
+  motivNepotrivit?: (p: PickerProduct) => string | null;
   /**
    * Cate bucati din fiecare produs. Lipsa lui inseamna ca tipul asta de oferta
    * nu cere cantitati, si atunci nu se deseneaza niciun buton in plus.
@@ -985,17 +1018,28 @@ function ProductPicker({ products, selectedIds, byId, onAdd, onRemove, single, p
           <div className="absolute z-10 mt-1 w-full rounded-xl ring-1 ring-foreground/10 bg-card shadow-lg max-h-64 overflow-y-auto">
             {results.length === 0 ? (
               <p className="px-3 py-3 text-sm text-muted-foreground">Niciun produs găsit.</p>
-            ) : results.map((p) => (
-              <button key={p.id} type="button" onClick={() => { onAdd(p.id); setQ(""); }}
-                className="flex items-center gap-3 w-full px-3 py-2 hover:bg-muted transition-colors text-left">
+            ) : results.map((p) => {
+              const motiv = motivNepotrivit?.(p) ?? null;
+              return (
+              <button key={p.id} type="button" disabled={!!motiv}
+                onClick={() => { if (!motiv) { onAdd(p.id); setQ(""); } }}
+                title={motiv ?? undefined}
+                className={`flex items-center gap-3 w-full px-3 py-2 text-left transition-colors ${
+                  motiv ? "cursor-not-allowed opacity-60" : "hover:bg-muted"}`}>
                 <div className="relative w-9 h-9 rounded-lg overflow-hidden bg-muted border border-border shrink-0">
                   {p.image_url ? <Image src={p.image_url} alt={p.name} fill sizes="36px" className="object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Package className="h-4 w-4 text-muted-foreground" /></div>}
                 </div>
-                <span className="text-sm text-foreground flex-1 truncate">{p.name}</span>
-                <span className="text-xs text-muted-foreground">{formatPrice(p.price)}</span>
-                <Plus className="h-4 w-4 text-primary" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-foreground">{p.name}</span>
+                  {/* ⚠ MOTIVUL, nu doar stingerea randului: „de ce nu pot alege produsul asta" e
+                      chiar intrebarea pe care si-o pune omul in clipa aia. */}
+                  {motiv && <span className="block truncate text-[11px] text-muted-foreground">{motiv}</span>}
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground">{formatPrice(p.price)}</span>
+                {!motiv && <Plus className="h-4 w-4 shrink-0 text-primary" />}
               </button>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

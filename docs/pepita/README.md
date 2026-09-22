@@ -1,5 +1,46 @@
 # Documentația oficială Pepita, păstrată în repo
 
+## ⚠⚠ PREȚURI ȘI ÎN FEEDUL DE STOC (24.09.2026): cerut de ei, NU e în document
+
+Tabelul lor pentru feedul de stoc (`xml-format-2026-09-08.txt`, secțiunea „Készlet átadása")
+cere **doar** `<Id>` și `<Availability>` — și exact asta trimiteam. Apoi, după ce VetDepo le-a
+dat adresele, au răspuns:
+
+> „aș dori să le rog dezvoltatorilor noștri să adauge prețuri în fluxul de stocuri, deoarece
+> acest parametru este necesar și în noul nostru procesor de fluxuri."
+
+**Deci cererea e mai nouă decât documentul de pe disc.** Documentul rămâne așa cum e, ca urmă a
+ce scria atunci; abaterea e scrisă în cod, la `stocXml`, ca următorul om să nu creadă că a
+adăugat cineva elemente la întâmplare.
+
+Feedul de stoc duce acum **exact trei** lucruri: `<Id>`, `<Prices>` și `<Availability>`. Blocul
+de prețuri e scris **o singură dată** (`preturiXml`) și îl folosesc amândouă feedurile — altfel
+același `<Id>` ar fi putut spune două prețuri, o dată pe zi unul și o dată pe oră altul, iar ei
+ar fi păstrat ultimul citit.
+
+⚠ **Pietrele de mormânt NU capătă preț.** Regula lor generală spune „prețurile sunt obligatorii
+în orice caz, iar un preț 0 nu e acceptat de sistemul nostru". Un articol dispărut din catalog
+nu mai **are** preț, iar un zero pus acolo ca să fie câmpul plin ar fi chiar valoarea pe care ei
+o refuză. Tabelul lor de stoc nu cere prețuri, deci lipsa e îngăduită.
+
+⚠ **Zero nu se poate întâmpla la celelalte:** articolele cu preț zero nu ajung niciodată în feed
+— `articolelePentruProdus` le oprește cu „preț-zero" și le arată comerciantului lângă produs.
+
+### Și un defect găsit cu ocazia asta: `<ShippingPrice>` nu se convertea
+
+Conversia în moneda pieței era o închidere locală înăuntrul lui `preturilePentruFeed`, deci
+`<ShippingPrice>` — singura sumă din feed care nu trece pe acolo — rămânea în moneda
+magazinului. La cursul de 80,5 al pieței maghiare, produsul pleca la 38.796,98 HUF și
+transportul la 19,99 HUF, adică vreo douăzeci și cinci de bani. Documentația lor cere expres ca
+sumele să fie „a `<Currency>` tag-ben megadott pénznemben".
+
+⚠ **Expunerea era ZERO**: `shipping_price` nu e scris la niciunul dintre cele trei magazine cu
+Pepita (`yvelle`, `itp-blk`, `okxi`), deci `<ShippingPrice>` nu pleacă azi nicăieri. S-a
+reparat fiindcă `okxi` are **șapte piețe cu cursuri scrise**: prima zi în care cineva scrie un
+transport pe bucată ar fi fost și prima zi cu pagubă. Conversia e acum o funcție singură
+(`inMonedaPietei`), prin care trec toate sumele.
+
+
 ## ⚠⚠ CELE ȘAPTE ȚĂRI (21.09.2026): documentația lor NU acoperă mai multe piețe
 
 `sellercenter.pepita.com/en/feed-and-api-connections/` e scrisă **numai pentru Ungaria**. Nu

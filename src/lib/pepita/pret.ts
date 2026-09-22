@@ -80,6 +80,28 @@ export function pretBrut(pretMagazin: number, magazin: RegimTvaMagazin): number 
   return rotunjeste2(p * (1 + cotaTva(magazin) / 100));
 }
 
+/**
+ * O suma dusa in moneda pietei.
+ *
+ * ⚠ O SINGURA REGULA DE CONVERSIE, si de-aia e functie. Era scrisa inauntrul lui
+ * `preturilePentruFeed`, deci `<ShippingPrice>` — singura suma care se scrie in
+ * feed pe langa preturi — NU trecea prin ea: la un curs de 80,5, produsul pleca
+ * la 38.796,98 HUF si transportul la 19,99 HUF, adica vreo 25 de bani. Pepita
+ * cere expres ca toate sumele sa fie „in moneda data in tagul <Currency>".
+ *
+ * ⚠ Masurat pe productie la 24.09.2026: `shipping_price` e NESCRIS la toate cele
+ * trei magazine cu Pepita (`yvelle`, `itp-blk`, `okxi`), deci `<ShippingPrice>`
+ * nu pleaca azi nicaieri si nimeni n-a fost pagubit. Se repara fiindca e vadit
+ * gresit si fiindca `okxi` are SAPTE piete cu cursuri scrise: prima zi in care
+ * cineva scrie un transport pe bucata ar fi si prima zi cu paguba.
+ *
+ * `null` sau curs lipsa inseamna „piata are chiar moneda magazinului".
+ */
+export function inMonedaPietei(valoare: number, curs?: number | null): number {
+  const c = Number(curs);
+  return Number.isFinite(c) && c > 0 ? rotunjeste2(valoare * c) : valoare;
+}
+
 export interface PreturiPepita {
   /** `<Price>`: pretul normal, brut. */
   pret: number;
@@ -124,11 +146,10 @@ export function preturilePentruFeed(
     ? pretBrut(aplicaStrategia(Number(pretTaiat), strategie), magazin)
     : null;
 
-  const c = Number(curs);
-  const converteste = (v: number) => (Number.isFinite(c) && c > 0 ? rotunjeste2(v * c) : v);
-
-  const vanzareFinala = converteste(vanzare);
-  const taiatFinal = taiat != null ? converteste(taiat) : null;
+  /* ⚠ ACEEASI functie care duce si transportul in moneda pietei. Scrisa aici ca
+     inchidere locala, `<ShippingPrice>` a ramas ani in moneda magazinului. */
+  const vanzareFinala = inMonedaPietei(vanzare, curs);
+  const taiatFinal = taiat != null ? inMonedaPietei(taiat, curs) : null;
 
   if (taiatFinal != null && taiatFinal > vanzareFinala) {
     return { pret: taiatFinal, pretRedus: vanzareFinala, tva };

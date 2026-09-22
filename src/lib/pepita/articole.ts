@@ -23,7 +23,7 @@ import {
 } from "@/lib/storefront/variants";
 import type { CategoriePepita } from "./categorii";
 import { idArticol } from "./identitate";
-import { preturilePentruFeed, type RegimTvaMagazin } from "./pret";
+import { inMonedaPietei, preturilePentruFeed, type RegimTvaMagazin } from "./pret";
 import { disponibilitate } from "./stoc";
 import { PIETE, type PepitaConfig, type TipGarantie } from "./types";
 
@@ -358,7 +358,12 @@ export function articolelePentruProdus(p: ProdusPepita, ctx: ContextArticole): R
     mpn: (g.mpn ?? "").trim() || undefined,
     categorii,
     url,
-    transportBucata: ctx.config.shipping_price,
+    /* ⚠ DUS IN MONEDA PIETEI, ca si preturile. Pepita cere expres ca sumele sa fie
+       „in moneda data in tagul <Currency>"; nescris asa, la un curs de 80,5 produsul
+       pleca la 38.796,98 HUF si transportul la 19,99 HUF. Vezi `inMonedaPietei`. */
+    transportBucata: ctx.config.shipping_price != null
+      ? inMonedaPietei(ctx.config.shipping_price, ctx.curs)
+      : null,
     termenZile: ctx.config.shipping_delay,
     garantie: ctx.config.garantie ? { tip: ctx.config.garantie.tip, durata: ctx.config.garantie.durata } : undefined,
     dimensiuni,

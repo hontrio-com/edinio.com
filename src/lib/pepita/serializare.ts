@@ -22,14 +22,7 @@ export function produsXml(a: ArticolPepita): string {
     el("Manufacturer", a.producator),
   ].join(""));
 
-  const preturi = grup("Prices", [
-    el("Currency", a.moneda),
-    el("Price", numar(a.pret)),
-    el("VatPercent", numar(a.tva, 2)),
-    /* `DiscountedPrice` numai cand chiar exista o reducere; vezi `preturilePentruFeed`. */
-    a.pretRedus != null ? el("DiscountedPrice", numar(a.pretRedus)) : "",
-    a.transportBucata != null ? el("ShippingPrice", numar(a.transportBucata)) : "",
-  ].join(""));
+  const preturi = preturiXml(a);
 
   const garantie = a.garantie
     ? grup("Warranty", el("Type", a.garantie.tip) + el("Duration", String(a.garantie.durata)))
@@ -77,14 +70,57 @@ export function produsXml(a: ArticolPepita): string {
 }
 
 /**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * BLOCUL DE PRETURI, SCRIS O SINGURA DATA                       (24.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠⚠ IL FOLOSESC AMANDOUA FEEDURILE, si tocmai de-aia exista ca functie. De cand
+ * Pepita cere preturi si in feedul de STOC, acelasi articol isi spune pretul pe
+ * doua cai: o data pe zi in feedul de produse si o data pe ora in cel de stoc.
+ * Scrise separat, cele doua s-ar fi despartit la prima retusare — iar atunci
+ * marketplace-ul ar fi avut doua preturi pentru acelasi `<Id>` si ar fi pastrat
+ * pe ultimul citit, adica pe cel din feedul de stoc, fara ca nimeni sa afle.
+ *
+ * ⚠ Ordinea elementelor e a exemplului lor: Currency, Price, VatPercent, apoi
+ * cele optionale.
+ */
+function preturiXml(a: ArticolPepita): string {
+  return grup("Prices", [
+    el("Currency", a.moneda),
+    el("Price", numar(a.pret)),
+    el("VatPercent", numar(a.tva, 2)),
+    /* `DiscountedPrice` numai cand chiar exista o reducere; vezi `preturilePentruFeed`. */
+    a.pretRedus != null ? el("DiscountedPrice", numar(a.pretRedus)) : "",
+    a.transportBucata != null ? el("ShippingPrice", numar(a.transportBucata)) : "",
+  ].join(""));
+}
+
+/**
  * `<Product>` scurt, pentru feedul de stoc.
  *
- * ⚠ Tabelul lor pentru feedul de stoc are DOAR `Available` si `Quantity`. Termenul
- * de pregatire nu apare acolo, deci nu se trimite: un element in plus intr-un feed
- * citit de douazeci si patru de ori mai des e cost fara folos.
+ * ═══ ⚠⚠ PRETURILE AU INTRAT AICI PE 24.09.2026, LA CEREREA LOR ═══
+ *
+ * Tabelul din documentatia lor pentru feedul de stoc (`docs/pepita/xml-format-2026-09-08.txt`,
+ * sectiunea „Keszlet atadasa") cere DOAR `<Id>` si `<Availability>` — si exact asta trimiteam. Dar
+ * ne-au scris, dupa ce VetDepo le-a dat adresele: „as dori sa le rog dezvoltatorilor nostri sa
+ * adauge preturi in fluxul de stocuri, deoarece acest parametru este necesar si in noul nostru
+ * procesor de fluxuri".
+ *
+ * Deci cererea e mai NOUA decat documentul de pe disc. Documentul ramane acolo asa cum e, iar
+ * abaterea e scrisa aici, ca urmatorul om sa nu creada ca cineva a adaugat elemente la
+ * intamplare.
+ *
+ * ⚠⚠ ZEROUL NU SE POATE INTAMPLA, si asta conteaza fiindca regula lor generala spune
+ * „preturile sunt obligatorii in orice caz, iar un pret 0 nu e acceptat de sistemul nostru".
+ * Articolele cu pret zero nu ajung niciodata pana aici: `articolelePentruProdus` le opreste cu
+ * „pret-zero" si le arata comerciantului pe ecran, langa produs.
+ *
+ * ⚠ Termenul de pregatire tot nu se trimite: nu e in tabelul lor de stoc, iar un element in
+ * plus intr-un feed citit de douazeci si patru de ori mai des e cost fara folos. Preturile sunt
+ * altceva — ele au fost CERUTE.
  */
 export function stocXml(a: ArticolPepita): string {
-  return grup("Product", el("Id", a.id) + disponibilitateXml(a, false)) + "\n";
+  return grup("Product", el("Id", a.id) + preturiXml(a) + disponibilitateXml(a, false)) + "\n";
 }
 
 /**

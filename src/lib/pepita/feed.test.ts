@@ -470,13 +470,20 @@ test("un produs nevalid nu darama feedul celorlalte", async () => {
   assert.equal((xml.match(/<Product>/g) ?? []).length, 1);
 });
 
-test("feedul de stoc are aceleasi produse, dar numai disponibilitatea", async () => {
+test("feedul de stoc are aceleasi produse, cu pretul si disponibilitatea", async () => {
+  /*
+   * ⚠⚠ PRETURILE AU INTRAT PE 24.09.2026, LA CEREREA LOR („noul procesor de fluxuri" are
+   * nevoie de pret si in feedul de stoc). Plasa cerea pana azi sa NU fie acolo — vezi nota
+   * lunga de la `stocXml`. Ce ramane pe dinafara e partea GREA: descrieri, categorii, poze.
+   */
   const db = faceBaza({ config: { mod_includere: "toate" } });
   const stoc = await feed(db, "stoc");
   assert.equal(XMLValidator.validate(stoc), true);
   assert.equal((stoc.match(/<Product>/g) ?? []).length, 2);
-  assert.ok(!stoc.includes("<Prices>"));
+  assert.equal((stoc.match(/<Prices>/g) ?? []).length, 2, "fiecare produs isi duce pretul");
   assert.ok(!stoc.includes("<Descriptions>"));
+  assert.ok(!stoc.includes("<Categories>"));
+  assert.ok(!stoc.includes("<Photos>"));
 });
 
 test("un magazin FARA PRODUSE da un feed valid si gol, nu o cadere", async () => {

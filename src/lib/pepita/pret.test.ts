@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { aplicaStrategia, citesteStrategia, cotaTva, preturilePentruFeed, pretBrut, rotunjeste2 } from "./pret";
+import { aplicaStrategia, citesteStrategia, cotaTva, inMonedaPietei, preturilePentruFeed, pretBrut, rotunjeste2 } from "./pret";
 
 const CU_TVA = { vat_enabled: true, vat_rate: 21, prices_include_vat: true };
 const FARA_TVA_IN_PRET = { vat_enabled: true, vat_rate: 21, prices_include_vat: false };
@@ -90,4 +90,38 @@ test("strategia salvata stramb nu darama socoteala", () => {
   assert.deepEqual(citesteStrategia(null), { fel: "identic", valoare: 0 });
   assert.deepEqual(citesteStrategia({ fel: "aiurea", valoare: "x" }), { fel: "identic", valoare: 0 });
   assert.deepEqual(citesteStrategia({ fel: "procent", valoare: "10" }), { fel: "procent", valoare: 10 });
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONVERSIA IN MONEDA PIETEI: O SINGURA REGULA, PENTRU TOATE SUMELE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test("⚠⚠ TOATE sumele din feed trec prin aceeasi conversie, nu doar preturile", () => {
+  /*
+   * ═══ DEFECT ADEVARAT, gasit pe 24.09.2026 ═══
+   *
+   * Conversia era o inchidere locala inauntrul lui `preturilePentruFeed`, deci `<ShippingPrice>`
+   * — singura suma din feed care nu trece pe acolo — ramanea in moneda MAGAZINULUI. La cursul
+   * de 80,5 al pietei maghiare, produsul pleca la 38.796,98 HUF si transportul la 19,99 HUF,
+   * adica vreo douazeci si cinci de bani. Vazut in feedul adevarat, pe ruta adevarata.
+   *
+   * Documentatia lor cere expres ca sumele sa fie „a <Currency> tag-ben megadott pénznemben".
+   *
+   * ⚠ Expunerea era ZERO: `shipping_price` nu e scris la niciunul dintre cele trei magazine cu
+   * Pepita. Dar `okxi` are SAPTE piete cu cursuri, deci prima zi in care cineva scrie un
+   * transport pe bucata ar fi fost si prima zi cu paguba.
+   */
+  const curs = 80.5;
+  const preturi = preturilePentruFeed(100, null, IDENTIC, CU_TVA, curs);
+  assert.equal(preturi.pret, inMonedaPietei(100, curs), "pretul si transportul se convertesc la fel");
+  assert.equal(inMonedaPietei(19.99, curs), 1609.2);
+});
+
+test("fara curs, suma ramane neatinsa — piata are chiar moneda magazinului", () => {
+  assert.equal(inMonedaPietei(19.99, null), 19.99);
+  assert.equal(inMonedaPietei(19.99, undefined), 19.99);
+  /* ⚠ Un curs stricat sau zero NU inmulteste cu zero: ar face transportul gratis. */
+  assert.equal(inMonedaPietei(19.99, 0), 19.99);
+  assert.equal(inMonedaPietei(19.99, -3), 19.99);
+  assert.equal(inMonedaPietei(19.99, Number.NaN), 19.99);
 });

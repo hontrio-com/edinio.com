@@ -16,6 +16,7 @@ import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import { Paginatie } from "@/components/dashboard/Paginatie";
 import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import {
   activeazaPepita, deconecteazaPepita, dezvaluieAdresele, getComenziProblemaPepita,
@@ -722,9 +723,17 @@ const ETICHETE_GARANTIE: Record<TipGarantie, string> = {
  */
 function Produse({ businessId, modImplicit }: { businessId: string; modImplicit: "toate" | "selectate" }) {
   const [cauta, setCauta] = useState("");
-  const [pagina, setPagina] = useState(0);
+  /**
+   * Ce a spus SERVERUL despre pagina adusa: a cata e, cate sunt, cate randuri are
+   * cautarea in total.
+   *
+   * ⚠ PAGINA NU SE TINE MINTE DIN APASARE. Serverul o strange la cate pagini exista
+   * cu adevarat, iar ecranul trebuie sa arate unde a ajuns, nu ce s-a cerut: altfel,
+   * dupa ce cineva scoate produse, bara ar ramane aratand pagina 9 peste randurile
+   * paginii 3.
+   */
+  const [pag, setPag] = useState<{ pagina: number; pagini: number; total: number; pePagina: number } | null>(null);
   const [lista, setLista] = useState<RandProdusPepita[] | null>(null);
-  const [maiSunt, setMaiSunt] = useState(false);
   const [incarc, setIncarc] = useState(false);
   const [lucrez, setLucrez] = useState(false);
   /* Cat s-a facut pana acum in trecerea curenta, ca butonul sa nu para inghetat. */
@@ -735,14 +744,13 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
   */
   const [ramas, setRamas] = useState<{ facut: number; dinCate: number | null } | null>(null);
 
-  const incarca = async (p = pagina, termen = cauta) => {
+  const incarca = async (p = pag?.pagina ?? 1, termen = cauta) => {
     setIncarc(true);
     try {
       const r = await listaProdusePepita(businessId, termen, p);
       if ("error" in r) { toast.error(r.error); return; }
       setLista(r.produse);
-      setMaiSunt(r.maiSunt);
-      setPagina(p);
+      setPag({ pagina: r.pagina, pagini: r.pagini, total: r.total, pePagina: r.pePagina });
     } catch {
       toast.error("Cererea nu a ajuns. Încearcă din nou.");
     } finally {
@@ -781,10 +789,10 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
           placeholder="Caută după nume"
           value={cauta}
           onChange={(e) => setCauta(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") void incarca(0, cauta); }}
+          onKeyDown={(e) => { if (e.key === "Enter") void incarca(1, cauta); }}
           className="min-w-0 flex-1"
         />
-        <Button variant="outline" size="sm" onClick={() => void incarca(0, cauta)} disabled={incarc}>
+        <Button variant="outline" size="sm" onClick={() => void incarca(1, cauta)} disabled={incarc}>
           {incarc ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Caută
         </Button>
         <Button
@@ -824,7 +832,7 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
                 if (!r.incomplet) { toast.success(`${facut} produse incluse.`); break; }
                 cursor = r.dupa;
               }
-              void incarca(pagina, cauta);
+              void incarca();
             } catch {
               toast.error(`Cererea nu a ajuns. S-au inclus ${facut} produse până aici.`);
               setRamas({ facut, dinCate });
@@ -876,15 +884,21 @@ function Produse({ businessId, modImplicit }: { businessId: string; modImplicit:
               </li>
             ))}
           </ul>
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" disabled={pagina === 0 || incarc} onClick={() => void incarca(pagina - 1, cauta)}>
-              Înapoi
-            </Button>
-            <span className="text-[11px] text-muted-foreground">Pagina {pagina + 1}</span>
-            <Button variant="ghost" size="sm" disabled={!maiSunt || incarc} onClick={() => void incarca(pagina + 1, cauta)}>
-              Înainte
-            </Button>
-          </div>
+          {/*
+            ⚠ BARA CASEI, CU NUMERE, nu doua sageti. Un magazin cu 3.351 de produse
+            active are 68 de pagini aici, iar cu „Înapoi/Înainte” singura cale spre
+            pagina 60 era sa apesi de 59 de ori. Bara spune si unde esti, lucru pe
+            care „Pagina 3” singur nu-l spunea: 3 din cate?
+          */}
+          {pag && (
+            <Paginatie
+              pagina={pag.pagina}
+              pagini={pag.pagini}
+              laSchimbare={(p) => void incarca(p, cauta)}
+              seIncarca={incarc}
+              rezumat={`${(pag.pagina - 1) * pag.pePagina + 1}–${Math.min(pag.pagina * pag.pePagina, pag.total)} din ${pag.total.toLocaleString("ro-RO")}`}
+            />
+          )}
         </>
       )}
     </Panel>
@@ -1059,6 +1073,18 @@ function Catalog({ businessId }: { businessId: string }) {
             </ul>
           )}
 
+          {/*
+            ⚠ LISTA TAIATA O SPUNE. Se opresc la o suta de produse cu probleme, si pana
+            pe 22.09.2026 nu se scria nicaieri: un magazin cu patru sute le repara pe cele
+            o suta si credea ca a terminat, fiindca nimic nu mai aparea dedesubt.
+          */}
+          {r.cuProbleme > r.produse.length && (
+            <p className="text-[11px] text-muted-foreground">
+              Se arată primele {r.produse.length} produse cu probleme, din {r.cuProbleme}.
+              Repară-le și verifică din nou, ca să le vezi pe următoarele.
+            </p>
+          )}
+
           {r.cuErori === 0 && r.produse.length === 0 && r.incluse > 0 && (
             <Callout variant="success" icon={CheckCircle2}>
               Toate produsele incluse pot pleca la Pepita.
@@ -1144,16 +1170,18 @@ function RandDeComutator({
 
 function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita }) {
   const [lista, setLista] = useState<ComandaProblema[] | null>(null);
+  /** Pagina adusa, asa cum a intors-o serverul. Vezi nota de la lista de produse. */
+  const [pag, setPag] = useState<{ pagina: number; pagini: number; total: number; pePagina: number } | null>(null);
   const [incarc, setIncarc] = useState(false);
   /** Comanda pe care o reincercam acum. Butonul se blocheaza doar pe randul ei. */
   const [reincerc, setReincerc] = useState<string | null>(null);
 
-  const incarca = async () => {
+  const incarca = async (p = pag?.pagina ?? 1) => {
     setIncarc(true);
     try {
-      const r = await getComenziProblemaPepita(businessId);
+      const r = await getComenziProblemaPepita(businessId, p);
       if ("error" in r) toast.error(r.error);
-      else setLista(r);
+      else { setLista(r.randuri); setPag({ pagina: r.pagina, pagini: r.pagini, total: r.total, pePagina: r.pePagina }); }
     } catch {
       toast.error("Cererea nu a ajuns. Încearcă din nou.");
     } finally {
@@ -1199,7 +1227,9 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
               : `${stare.comenziCarantina} comenzi Pepita au nevoie de verificare înainte de expediere.`}
           </Callout>
           {!lista ? (
-            <Button variant="outline" size="sm" onClick={incarca} disabled={incarc}>
+            /* ⚠ Chemata cu `() =>`, nu direct: altfel `onClick` ii trece evenimentul de
+               click drept numar de pagina, iar el nu trece prin actiunea de server. */
+            <Button variant="outline" size="sm" onClick={() => void incarca(1)} disabled={incarc}>
               {incarc ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Vezi care sunt
             </Button>
           ) : (
@@ -1257,6 +1287,21 @@ function Comenzi({ businessId, stare }: { businessId: string; stare: StarePepita
                 </li>
               ))}
             </ul>
+          )}
+          {/*
+            ⚠ SI AICI CU NUMERE. Lista se taia la 50 fara sa spuna nimic, iar cardul de
+            sus numara toate comenzile in verificare: la 73, ecranul arata 50 si tacea,
+            iar la celelalte nu se putea ajunge deloc. O comanda din carantina nu se
+            expediaza pana n-o vede cineva.
+          */}
+          {pag && (
+            <Paginatie
+              pagina={pag.pagina}
+              pagini={pag.pagini}
+              laSchimbare={(p) => void incarca(p)}
+              seIncarca={incarc}
+              rezumat={`${(pag.pagina - 1) * pag.pePagina + 1}–${Math.min(pag.pagina * pag.pePagina, pag.total)} din ${pag.total.toLocaleString("ro-RO")}`}
+            />
           )}
         </div>
       )}

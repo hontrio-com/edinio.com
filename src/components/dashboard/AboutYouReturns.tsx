@@ -4,8 +4,9 @@ import { useEffect, useState, useTransition } from "react";
 import { Loader2, PackageCheck, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import {
-  repuneInStocAboutYou, retururiAboutYou, type RandReturAboutYou,
+  repuneInStocAboutYou, retururiAboutYou, type PaginaRetururiAboutYou,
 } from "@/lib/actions/aboutyou-retururi.actions";
+import { Paginatie } from "@/components/dashboard/Paginatie";
 
 /**
  * Retururile About You.
@@ -25,15 +26,22 @@ import {
  * primita e buna de pus la loc.
  */
 export function AboutYouReturns({ businessId }: { businessId: string }) {
-  const [retururi, setRetururi] = useState<RandReturAboutYou[] | null>(null);
+  /*
+   * ⚠ SE ADUCE O SINGURA PAGINA (22.09.2026). Inainte veneau toate, taiate tacut la 100 de
+   * server. La ei o linie de comanda inseamna o BUCATA (n-au camp de cantitate), deci randurile
+   * se aduna mai repede decat comenzile — iar marfa de dincolo de suta n-ar mai fi ajuns
+   * niciodata inapoi in stoc, adica exact paguba pe care ecranul asta o repara.
+   */
+  const [pagina, setPagina] = useState<PaginaRetururiAboutYou | null>(null);
   const [doarNerezolvate, setDoarNerezolvate] = useState(true);
   const [seIncarca, incepe] = useTransition();
+  const retururi = pagina?.retururi ?? null;
 
-  function incarca(doar = doarNerezolvate) {
+  function incarca(doar = doarNerezolvate, p = 1) {
     incepe(async () => {
-      const r = await retururiAboutYou(businessId, doar);
+      const r = await retururiAboutYou(businessId, doar, p);
       if ("error" in r) { toast.error(r.error); return; }
-      setRetururi(r.retururi);
+      setPagina(r);
     });
   }
 
@@ -47,7 +55,9 @@ export function AboutYouReturns({ businessId }: { businessId: string }) {
       const r = await repuneInStocAboutYou(businessId, id);
       if ("error" in r) { toast.error(r.error); return; }
       toast.success(r.pus > 0 ? `${r.pus} buc. au intrat înapoi în stoc.` : "Era deja pusă înapoi.");
-      incarca();
+      /* Se aduce din nou CHIAR pagina pe care sta omul, nu prima. Cu filtrul „doar cele nepuse
+         înapoi" randul tocmai rezolvat iese din multime, iar fereastra se strânge pe server. */
+      incarca(doarNerezolvate, pagina?.pagina ?? 1);
     });
   }
 
@@ -110,6 +120,18 @@ export function AboutYouReturns({ businessId }: { businessId: string }) {
           </li>
         ))}
       </ul>
+
+      {/* ⚠ Numere, nu doua sageti: retururile se aduna bucata cu bucata, deci lista asta ajunge
+          la zeci de pagini inaintea celei de comenzi. */}
+      {pagina && pagina.pagini > 1 && (
+        <Paginatie
+          pagina={pagina.pagina}
+          pagini={pagina.pagini}
+          laSchimbare={(p) => incarca(doarNerezolvate, p)}
+          seIncarca={seIncarca}
+          rezumat={`${(pagina.pagina - 1) * pagina.pePagina + 1}–${Math.min(pagina.pagina * pagina.pePagina, pagina.total)} din ${pagina.total}`}
+        />
+      )}
     </div>
   );
 }

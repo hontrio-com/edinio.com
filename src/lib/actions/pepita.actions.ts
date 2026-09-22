@@ -23,6 +23,7 @@ import { logError } from "@/lib/error-logger";
 import { includeToateActive } from "@/lib/pepita/includere-in-masa";
 import { reproceseaza } from "@/lib/pepita/ingest";
 import { randuriCitite } from "@/lib/supabase/rand-citit";
+import { fereastraPaginii } from "@/lib/paginare";
 import { articolelePentruProdus, type ProblemaPepita, type ProdusPepita } from "@/lib/pepita/articole";
 import { adresaComenzi, adresaFeedProduse, adresaFeedStoc, cheieNoua, amprentaCheii, revocaToate, stingeCheileVechi } from "@/lib/pepita/chei";
 import { citesteConfig, configFaraChei, peticDePornire } from "@/lib/pepita/config";
@@ -659,6 +660,16 @@ export interface RezumatProduse {
   orfane: number | null;
   exempleOrfane: string[];
   produse: ProdusInPanou[];
+  /**
+   * Cate produse incluse au cel putin o problema, eroare sau atentionare.
+   *
+   * ⚠ EXISTA CA SA SE VADA CA LISTA E TAIATA. `produse` se opreste la `plafonListate`
+   * (100 acum), iar pana pe 22.09.2026 nu se spunea nicaieri: un magazin cu 400 de
+   * produse cu probleme vedea 100 de randuri si le repara pe toate, crezand ca a
+   * terminat. Cifra nu e `cuErori`: acolo se numara doar erorile care OPRESC produsul
+   * din feed, aici si atentionarile, fiindca amandoua ajung in lista.
+   */
+  cuProbleme: number;
 }
 
 /** Cate produse se verifica cel mult intr-o trecere. */
@@ -703,7 +714,7 @@ export async function verificaProdusePepita(
         curs: aceeasiMoneda(pi, monedaMag) ? null : (pre.config.piete[pi]?.curs ?? null),
       }));
 
-    let active = 0, incluse = 0, cuErori = 0, articole = 0, faraEan = 0;
+    let active = 0, incluse = 0, cuErori = 0, articole = 0, faraEan = 0, cuProbleme = 0;
     let partial = false;
     const produse: ProdusInPanou[] = [];
     /* Id-urile pe care feedul le-ar trimite ACUM. Se compara cu ce s-a trimis vreodata. */
@@ -756,8 +767,14 @@ export async function verificaProdusePepita(
          * ⚠ In lista se aduna intai produsele cu probleme: comerciantul deschide
          * ecranul ca sa afle ce nu merge, nu ca sa se uite la ce merge.
          */
-        if (r.probleme.length > 0 && produse.length < plafonListate) {
-          produse.push({ id: p.id, nume: p.name, inclus: true, articole: r.articole.length, probleme: r.probleme });
+        if (r.probleme.length > 0) {
+          /* ⚠ SE NUMARA TOATE, si abia apoi se pun in lista primele. Numarate doar cat
+             incape lista, cifra ar fi spus mereu „100 din 100”, adica tocmai minciuna
+             pe care e pusa sa o dea in vileag. */
+          cuProbleme++;
+          if (produse.length < plafonListate) {
+            produse.push({ id: p.id, nume: p.name, inclus: true, articole: r.articole.length, probleme: r.probleme });
+          }
         }
       }
 
@@ -834,7 +851,7 @@ export async function verificaProdusePepita(
       }
     }
 
-    return { active, incluse, cuErori, faraEan, articole, partial, orfane, exempleOrfane, produse };
+    return { active, incluse, cuErori, faraEan, articole, partial, orfane, exempleOrfane, produse, cuProbleme };
   } catch (e) {
     await logError({
       action: "pepita/verificare", message: e instanceof Error ? e.message : String(e),
@@ -851,6 +868,9 @@ export interface RandProdusPepita {
   inclus: boolean;
 }
 
+/** Cate produse se arata pe o pagina in alegerea produselor. */
+const PRODUSE_PE_PAGINA = 50;
+
 /**
  * Produsele active ale magazinului, cu bifa „pleaca pe Pepita”.
  *
@@ -858,28 +878,53 @@ export interface RandProdusPepita {
  * zece mii de produse ar fi o pagina care nu se mai deschide de pe telefon, si
  * niciun comerciant nu bifeaza zece mii de randuri cu mana. Pentru „toate” exista
  * comutatorul din setari.
+ *
+ * ═══ ⚠ DE CE SE NUMARA INTAI, SI DE CE PAGINA E 1-BAZATA ═══
+ *
+ * Pana pe 22.09.2026 se cerea o felie de 51 de randuri si se spunea doar „mai sunt”:
+ * ecranul avea „Înapoi/Înainte” si „Pagina 3”, fara sa stie NICIODATA cate pagini
+ * exista. Pe un catalog de 3.351 de produse active, adica 68 de pagini, singura cale
+ * spre pagina 60 era sa apesi „Înainte” de 59 de ori. Cu numaratoarea exacta, ecranul
+ * poate arata bara casei, cu numere.
+ *
+ * ⚠ SE NUMARA INAINTE SA SE CEARA FELIA, si pagina se STRANGE la cate exista. Peste
+ * capatul randurilor, PostgREST raspunde 416, iar `postgrest-js` arunca atunci chiar
+ * numarul pe care serverul tocmai i-l trimisese. Vezi `fereastraPaginii`.
  */
 export async function listaProdusePepita(
-  businessId: string, cauta = "", pagina = 0,
-): Promise<{ produse: RandProdusPepita[]; maiSunt: boolean } | { error: string }> {
+  businessId: string, cauta = "", pagina = 1,
+): Promise<
+  { produse: RandProdusPepita[]; pagina: number; pagini: number; total: number; pePagina: number }
+  | { error: string }
+> {
   const g = await poarta(businessId);
   if ("error" in g) return { error: g.error };
   const admin = createAdminClient();
-  const PE_PAGINA = 50;
 
   try {
-    let q = admin.from("products").select("id, name, sku")
-      .eq("business_id", businessId).eq("is_active", true);
     const termen = cauta.trim();
     /* ⚠ Termenul se curata de `%`, `_` si virgula: primele doua sunt joker in `ilike`, iar
        virgula desparte filtrele in PostgREST si ar rupe cererea. */
-    if (termen) q = q.ilike("name", `%${termen.replace(/[%_,]/g, " ")}%`);
+    const cautare = `%${termen.replace(/[%_,]/g, " ")}%`;
 
-    const { data, error } = await q.order("name").range(pagina * PE_PAGINA, pagina * PE_PAGINA + PE_PAGINA);
+    let qNumar = admin.from("products").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId).eq("is_active", true);
+    if (termen) qNumar = qNumar.ilike("name", cautare);
+    const { count, error: eNumar } = await qNumar;
+    if (eNumar) throw eNumar;
+
+    const total = count ?? 0;
+    const f = fereastraPaginii(pagina, total, PRODUSE_PE_PAGINA);
+
+    let q = admin.from("products").select("id, name, sku")
+      .eq("business_id", businessId).eq("is_active", true);
+    if (termen) q = q.ilike("name", cautare);
+
+    /* ⚠ SI DUPA `id`, nu doar dupa nume. Doua produse cu acelasi nume se pot aseza altfel
+       la fiecare cerere, iar atunci unul apare pe doua pagini si altul pe niciuna. */
+    const { data, error } = await q.order("name").order("id").range(f.deLa, f.panaLa);
     if (error) throw error;
-    const randuri = (data ?? []) as { id: string; name: string; sku: string | null }[];
-    const maiSunt = randuri.length > PE_PAGINA;
-    const felie = maiSunt ? randuri.slice(0, PE_PAGINA) : randuri;
+    const felie = (data ?? []) as { id: string; name: string; sku: string | null }[];
 
     const config = await citesteConfigul(businessId);
     const listari = new Map<string, boolean>();
@@ -897,7 +942,10 @@ export async function listaProdusePepita(
           ? listari.get(p.id)!
           : config.mod_includere === "toate",
       })),
-      maiSunt,
+      pagina: f.pagina,
+      pagini: f.pagini,
+      total,
+      pePagina: PRODUSE_PE_PAGINA,
     };
   } catch (e) {
     await logError({
@@ -1028,19 +1076,54 @@ export interface ComandaProblema {
   orderId: string | null;
 }
 
-export async function getComenziProblemaPepita(businessId: string): Promise<ComandaProblema[] | { error: string }> {
+/** Cate comenzi in verificare se arata pe o pagina. */
+const COMENZI_PE_PAGINA = 20;
+
+/**
+ * Comenzile Pepita care au nevoie de verificare.
+ *
+ * ⚠ SE PAGINEAZA, NU SE TAIE LA 50. Lista se cerea cu `.limit(50)` si atat: peste
+ * cincizeci, cardul de sus spunea „73 de comenzi au nevoie de verificare” iar lista
+ * de dedesubt arata 50, fara sa spuna nimic, si la restul nu se putea ajunge in
+ * niciun fel. O comanda din carantina e o comanda care nu se expediaza: cele
+ * nevazute stau pe loc pana le vede cineva.
+ */
+export async function getComenziProblemaPepita(
+  businessId: string, pagina = 1,
+): Promise<
+  { randuri: ComandaProblema[]; pagina: number; pagini: number; total: number; pePagina: number }
+  | { error: string }
+> {
   const g = await poarta(businessId);
   if ("error" in g) return { error: g.error };
+  const admin = createAdminClient();
   try {
-    const { data, error } = await createAdminClient()
+    /* ⚠ Acelasi filtru ca la cifra „Cu probleme” din panou: doua filtre diferite ar da doua
+       numere diferite pe acelasi ecran. Vezi `getStarePepita`. */
+    const { count, error: eNumar } = await admin
+      .from("pepita_comenzi").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId).neq("stare", "importata");
+    if (eNumar) throw eNumar;
+
+    const total = count ?? 0;
+    const f = fereastraPaginii(pagina, total, COMENZI_PE_PAGINA);
+
+    const { data, error } = await admin
       .from("pepita_comenzi").select("external_order_id, primit_la, stare, motiv, order_id")
       .eq("business_id", businessId).neq("stare", "importata")
-      .order("primit_la", { ascending: false }).limit(50);
+      .order("primit_la", { ascending: false }).order("external_order_id")
+      .range(f.deLa, f.panaLa);
     if (error) throw error;
-    return (data ?? []).map((r) => {
-      const x = r as { external_order_id: string; primit_la: string; stare: string; motiv: string | null; order_id: string | null };
-      return { externalId: x.external_order_id, primitLa: x.primit_la, stare: x.stare, motiv: x.motiv, orderId: x.order_id };
-    });
+    return {
+      randuri: (data ?? []).map((r) => {
+        const x = r as { external_order_id: string; primit_la: string; stare: string; motiv: string | null; order_id: string | null };
+        return { externalId: x.external_order_id, primitLa: x.primit_la, stare: x.stare, motiv: x.motiv, orderId: x.order_id };
+      }),
+      pagina: f.pagina,
+      pagini: f.pagini,
+      total,
+      pePagina: COMENZI_PE_PAGINA,
+    };
   } catch (e) {
     await logError({
       action: "pepita/comenzi-problema", message: e instanceof Error ? e.message : String(e),

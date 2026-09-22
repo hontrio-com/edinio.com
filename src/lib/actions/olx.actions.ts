@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { patchOlxConfig, setOlxCategoryMapEntry } from "@/lib/olx/config";
 import { invieScrisorileMoarteOlx, enqueueOlxDezactivareMany } from "@/lib/olx/queue";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
+import { fereastraPaginii } from "@/lib/paginare";
 import { logError } from "@/lib/error-logger";
 import {
   buildAuthUrl, ensureMerchantToken, olxConfigured, signState,
@@ -1183,6 +1184,20 @@ export interface OlxAdvertRow {
   stat_urmaritori: number | null;
 }
 
+/** Cate anunturi intra pe o pagina de tabel. Aceeasi cifra ca la ofertele eMAG. */
+const ANUNTURI_PE_PAGINA = 50;
+
+/** O pagina din tabelul de anunturi, cu numarul adevarat de randuri langa ea. */
+export interface OlxPaginaAnunturi {
+  adverts: OlxAdvertRow[];
+  /** Cate anunturi are magazinul in total, numarate in baza. */
+  total: number;
+  pagina: number;
+  pagini: number;
+  /** Indicele primului rand al paginii, numarat de la 0. Din el se scrie rezumatul. */
+  deLa: number;
+}
+
 /**
  * ⚠ ZEROUL E O AFIRMATIE (02.09.2026)
  *
@@ -1192,19 +1207,47 @@ export interface OlxAdvertRow {
  *
  * ⚠ Si de aici pornesc hotarari: cine vede zero apasa „Publica tot". Aceeasi lectie ca la veghea
  * care arata zero — un zero nu se raporteaza pana nu s-a confruntat cu sursa.
+ *
+ * ═══ ⚠ SI DOUA SUTE ERAU TOT O AFIRMATIE (22.09.2026) ═══
+ *
+ * Citirea se oprea la `.limit(200)` si nu spunea nimic despre oprire. Cardul „Anunțuri" de
+ * deasupra tabelului se numara in baza, deci pe un cont cu mii de anunturi ecranul scria mia
+ * sus si arata doua sute jos, iar catre al 201-lea nu ducea niciun drum: nici buton, nici
+ * filtru, nici adresa. Comerciantul citea tabelul ca pe tot catalogul lui de pe OLX.
+ *
+ * ⚠ ORDINEA ARE UN AL DOILEA CAMP dinadins. `updated_at` singur nu e o ordine totala: doua
+ * randuri scrise in aceeasi clipa isi pot schimba locul intre doua cereri, iar atunci acelasi
+ * anunt apare pe doua pagini si altul pe niciuna. `offer_id` e unic pe magazin, deci rupe
+ * egalitatea o data pentru totdeauna.
+ *
+ * ⚠ SE NUMARA INTAI, apoi se cere fereastra. O pagina cerută dincolo de capat scoate de la
+ * PostgREST un 416, iar `postgrest-js` citeste `count` numai din raspunsurile bune, deci
+ * arunca exact numarul din care s-ar fi putut afla unde e capatul. Vezi `fereastraPaginii`.
  */
 export async function getOlxAdverts(
   businessId: string,
-): Promise<{ adverts: OlxAdvertRow[] } | { error: string }> {
+  pagina = 1,
+): Promise<OlxPaginaAnunturi | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
   const { supabase } = g;
+
+  const { count, error: eNumar } = await supabase
+    .from("olx_adverts")
+    .select("offer_id", { count: "exact", head: true })
+    .eq("business_id", businessId);
+  if (eNumar) return { error: "Nu am putut citi anunțurile OLX. Reîncarcă pagina peste câteva momente." };
+
+  const total = count ?? 0;
+  const fereastra = fereastraPaginii(pagina, total, ANUNTURI_PE_PAGINA);
+
   const { data, error } = await supabase
     .from("olx_adverts")
     .select("product_id, offer_id, status, olx_advert_id, olx_url, valid_to, error, last_synced_at, moderation_text, stat_vizualizari, stat_telefon, stat_urmaritori, products(name)")
     .eq("business_id", businessId)
     .order("updated_at", { ascending: false })
-    .limit(200);
+    .order("offer_id", { ascending: true })
+    .range(fereastra.deLa, fereastra.panaLa);
   if (error) return { error: "Nu am putut citi anunțurile OLX. Reîncarcă pagina peste câteva momente." };
 
   const adverts = (data ?? []).map((r) => {
@@ -1226,7 +1269,71 @@ export async function getOlxAdverts(
       stat_urmaritori: r.stat_urmaritori,
     };
   });
-  return { adverts };
+  return { adverts, total, pagina: fereastra.pagina, pagini: fereastra.pagini, deLa: fereastra.deLa };
+}
+
+/** Un anunt ajuns la OLX, cat sa-l poti alege dintr-o lista: id-ul lor, numele si starea. */
+export interface OlxAnuntViu {
+  /** `offer_id` de la noi, adica produsul. Cheia randurilor din ecran. */
+  offerId: string;
+  /** Id-ul anuntului LA EI. Cu el se cumpara promovarile. */
+  advertId: number;
+  nume: string;
+  status: string;
+}
+
+/**
+ * Anunturile care au ajuns la OLX, slabe de tot: id, nume, stare.
+ *
+ * ═══ ⚠ DE CE NU SE IMPRUMUTA PAGINA TABELULUI (22.09.2026) ═══
+ *
+ * Panoul de cont si mesageria primeau chiar lista tabelului de anunturi. Cat timp aceea aducea
+ * doua sute de randuri deodata, mergea; de cand tabelul aduce o pagina de cincizeci, un anunt
+ * de pe pagina a doua n-ar mai fi fost de gasit in „Promovează un anunț", iar mesajele lui ar
+ * fi aratat „Anunț 123456" in loc de numele produsului. Filtrul unei liste nu se imprumuta la
+ * vecin: aici intrebarea e alta, deci si citirea e alta.
+ *
+ * ⚠ Citire COMPLETA sau niciuna. PostgREST taie tacut la o mie de randuri, iar un magazin cu
+ * trei mii de anunturi ar fi capatat o lista scurtata fara niciun semn, adica exact defectul
+ * de la care a pornit runda asta, mutat cu un ecran mai incolo.
+ */
+export async function getOlxAnunturiVii(
+  businessId: string,
+): Promise<{ anunturi: OlxAnuntViu[] } | { error: string }> {
+  const g = await guard(businessId);
+  if ("error" in g) return g;
+  const { supabase } = g;
+
+  /*
+   * ⚠ `products` sta ca `unknown` si se citeste cu o conversie, ca la `getOlxAdverts`: forma pe
+   * care o scoate `supabase-js` pentru o legatura imbricata difera intre „unul" si „mai multi",
+   * iar aici nu ne trebuie decat numele.
+   */
+  let randuri: { offer_id: string; olx_advert_id: number | null; status: string; products: unknown }[];
+  try {
+    randuri = await fetchAllRowsStrict("olx.anunturiVii", (from, to) =>
+      supabase
+        .from("olx_adverts")
+        .select("offer_id, olx_advert_id, status, products(name)")
+        .eq("business_id", businessId)
+        .not("olx_advert_id", "is", null)
+        .order("updated_at", { ascending: false })
+        .order("offer_id", { ascending: true })
+        .range(from, to),
+    );
+  } catch {
+    return { error: "Nu am putut citi lista de anunțuri. Încearcă din nou peste câteva momente." };
+  }
+
+  const anunturi: OlxAnuntViu[] = [];
+  for (const r of randuri) {
+    /* `.not("olx_advert_id", "is", null)` o spune deja, dar tipul nu o stie. */
+    if (r.olx_advert_id == null) continue;
+    const prod = r.products as { name?: string } | { name?: string }[] | null;
+    const nume = Array.isArray(prod) ? prod[0]?.name : prod?.name;
+    anunturi.push({ offerId: r.offer_id, advertId: r.olx_advert_id, nume: nume ?? "Produs", status: r.status });
+  }
+  return { anunturi };
 }
 
 // ── Monetization: balance, packets, paid features ──────────────────────────────────

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   emiteAwbReturEmag, listaRetururiEmag, schimbaReturEmag, type RandReturEcran,
 } from "@/lib/actions/emag.actions";
+import { Paginatie } from "./Paginatie";
 
 /**
  * Retururile de pe eMAG.
@@ -28,34 +29,42 @@ import {
  * nu se mai poate vinde — iar al doilea cumpărător ar primi marfă stricată.
  *
  * Se spune limpede pe ecran, ca nimeni să nu aștepte altceva.
+ *
+ * ═══ ⚠ SE RĂSFOIEȘTE (22.09.2026) ═══
+ *
+ * Ecranul aducea cele mai noi 100 de retururi și, când erau mai multe, spunea „pe cele
+ * vechi le vezi în panoul eMAG". Adică trimitea omul afară din Edinio tocmai din locul
+ * în care are butoanele de confirmare și de chemat curierul. Retururile cresc cu
+ * comenzile, deci lista are acum numere de pagină și un total numărat în bază.
  */
 
 export function EmagReturns({ businessId }: { businessId: string }) {
   const [randuri, setRanduri] = useState<RandReturEcran[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [pagina, setPagina] = useState(1);
+  const [pePagina, setPePagina] = useState(50);
   const [seIncarca, incepe] = useTransition();
 
-  function incarca() {
+  function incarca(p = pagina) {
     incepe(async () => {
-      const r = await listaRetururiEmag(businessId);
+      const r = await listaRetururiEmag(businessId, { pagina: p });
       if ("error" in r) {
         toast.error(r.error);
         setRanduri([]);
         return;
       }
       setRanduri(r.randuri);
-      /* ⚠ Trunchierea SE SPUNE. Un retur nevazut inseamna marfa care se intoarce fara ca
-         cineva sa stie, si un client care asteapta banii. */
-      if (r.atinsPlafonul) {
-        toast.warning(
-          `S-au adus cele mai noi ${r.atinsPlafonul} retururi. Ai mai multe; pe cele vechi ` +
-          "le vezi în panoul eMAG.",
-        );
-      }
+      setTotal(r.total);
+      /* ⚠ Pagina vine de la server, nu din ce am cerut: el o strânge la ultima care
+         există cu adevărat. Ținută din ecran, bara ar fi arătat „pagina 7" pe o listă
+         care între timp a rămas cu trei. */
+      setPagina(r.pagina);
+      setPePagina(r.pePagina);
     });
   }
 
   useEffect(() => {
-    incarca();
+    incarca(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId]);
 
@@ -70,7 +79,7 @@ export function EmagReturns({ businessId }: { businessId: string }) {
   }
 
   /* Un magazin fără retururi n-are nevoie de o carte goală pe ecran. */
-  if (randuri.length === 0) return null;
+  if (total === 0) return null;
 
   return (
     <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
@@ -80,13 +89,16 @@ export function EmagReturns({ businessId }: { businessId: string }) {
             <PackageOpen className="h-4 w-4" /> Retururi eMAG
           </h3>
           <p className="mt-1 max-w-prose text-xs text-muted-foreground">
-            Marfa întoarsă <strong>nu intră singură înapoi în stoc</strong>. O adaugi tu,
-            după ce te uiți la ea.
+            {total} {total === 1 ? "retur" : "retururi"}. Marfa întoarsă{" "}
+            <strong>nu intră singură înapoi în stoc</strong>. O adaugi tu, după ce te uiți
+            la ea.
           </p>
         </div>
+        {/* ⚠ `() => incarca()`, nu `incarca`: legat direct, `onClick` i-ar fi dat
+            evenimentul de clic drept număr de pagină. */}
         <button
           type="button"
-          onClick={incarca}
+          onClick={() => incarca()}
           disabled={seIncarca}
           className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-60"
         >
@@ -97,9 +109,22 @@ export function EmagReturns({ businessId }: { businessId: string }) {
 
       <ul className="mt-4 divide-y divide-border">
         {randuri.map((r) => (
-          <RandRetur key={r.emagRmaId} businessId={businessId} rand={r} laSchimbare={incarca} />
+          <RandRetur
+            key={r.emagRmaId}
+            businessId={businessId}
+            rand={r}
+            laSchimbare={() => incarca()}
+          />
         ))}
       </ul>
+
+      <Paginatie
+        pagina={pagina}
+        pagini={Math.max(1, Math.ceil(total / Math.max(1, pePagina)))}
+        laSchimbare={(p) => incarca(p)}
+        seIncarca={seIncarca}
+        rezumat={`${(pagina - 1) * pePagina + 1}–${Math.min(pagina * pePagina, total)} din ${total}`}
+      />
     </div>
   );
 }

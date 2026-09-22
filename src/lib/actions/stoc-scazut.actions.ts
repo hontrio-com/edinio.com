@@ -83,14 +83,30 @@ function combinatii(pageSections: unknown): Combinatie[] {
 }
 
 /**
- * Toate produsele sub prag ale magazinului, cu variantele lor.
+ * Produsele sub prag ale magazinului, cu variantele lor.
  *
- * Panoul principal arata doar primele cinci; modalul le arata pe toate, de aceea
+ * Panoul principal arata doar primele cinci; modalul deschide lista, de aceea
  * citirea e separata si se face abia la deschidere.
+ *
+ * ⚠⚠ NU SUNT TOATE, SI ASTA SE SPUNE PE ECRAN (23.09.2026).
+ *
+ * Aici scria „modalul le arata pe toate”. Nu le arata: `produse_sub_prag` se
+ * incheie cu `limit 200`, iar modalul desena ce primea si atat. La un catalog de
+ * 3.351 de produse cu urmarirea stocului pornita, „sub cinci bucati” trece de
+ * doua sute fara nicio greutate, iar comerciantul completa doua sute de randuri
+ * crezand ca a terminat.
+ *
+ * Un comentariu care spune altceva decat face codul e mai rau decat niciunul: e
+ * chiar motivul pentru care nimeni nu s-a uitat la corpul functiei din baza.
+ *
+ * De aceea se cere si numarul ADEVARAT, cu a doua functie (`numar_produse_sub_prag`,
+ * care nu are plafon), si taierea se spune deschis in modal. Restul nu se pierde:
+ * dupa ce se completeaza stocurile, randurile ies de sub prag si lista urmatoare
+ * aduce ce era dedesubt.
  */
 export async function citesteProduseSubPrag(
   businessId: string,
-): Promise<{ produse: ProdusSubPrag[] } | { error: string }> {
+): Promise<{ produse: ProdusSubPrag[]; cateSunt: number } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Neautorizat" };
@@ -99,10 +115,16 @@ export async function citesteProduseSubPrag(
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
   if (!biz) return { error: "Magazin negasit" };
 
-  const { data, error } = await supabase.rpc("produse_sub_prag", {
-    p_business: businessId,
-    p_prag: PRAG_STOC_SCAZUT,
-  });
+  const [{ data, error }, { data: numarate }] = await Promise.all([
+    supabase.rpc("produse_sub_prag", {
+      p_business: businessId,
+      p_prag: PRAG_STOC_SCAZUT,
+    }),
+    supabase.rpc("numar_produse_sub_prag", {
+      p_business: businessId,
+      p_prag: PRAG_STOC_SCAZUT,
+    }),
+  ]);
 
   if (error) return { error: "Nu am putut citi produsele. Incearca din nou." };
 
@@ -133,7 +155,14 @@ export async function citesteProduseSubPrag(
     }).filter(v => v.id !== ""),
   }));
 
-  return { produse };
+  /*
+    ⚠ Daca numaratoarea cade, NU se pune `produse.length` in locul ei: ar fi exact
+    minciuna reparata aici, scrisa cu alte cuvinte („200 sub prag”, cand sunt 340).
+    Zero inseamna „nu stim”, si modalul nu spune nimic despre total.
+  */
+  const cateSunt = Number(numarate?.[0]?.sub_prag ?? 0);
+
+  return { produse, cateSunt };
 }
 
 export type Modificare =

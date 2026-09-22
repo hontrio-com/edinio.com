@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,21 +22,42 @@ import { getOlxConflicts, rezolvaConflictOlx, type OlxConflict } from "@/lib/act
   că îmbrăcată în sugestie.
 */
 
+/*
+  ⚠ CITIREA ADUCE CEL MULT CINCIZECI, SI ASTA SE VEDE (22.09.2026)
+
+  `getOlxConflicts` are `.limit(50)`. Cat timp lista se golea numai in ecran, cu un filtru local,
+  un comerciant cu saizeci de conflicte rezolva cincizeci si citea dedesubt „Nu mai e niciun
+  conflict", peste bulina rosie care ii spunea, cu doua randuri mai sus, ca mai are zece. Doua
+  afirmatii contrare in acelasi ecran, iar cea linistitoare era cea falsa.
+
+  ⚠ Acum lista se RECITESTE dupa fiecare alegere, deci urmatoarele cincizeci urca singure. Si cat
+  timp mai sunt, se scrie cate se arata din cate sunt: numarul intreg il stie deja parintele, din
+  aceeasi interogare care aprinde bulina.
+*/
 export default function OlxConflicte({
-  businessId, onRezolvat,
-}: { businessId: string; onRezolvat: () => void }) {
+  businessId, total, onRezolvat,
+}: {
+  businessId: string;
+  /** Cate conflicte are magazinul in total, numarate in baza de `getOlxStatus`. */
+  total: number;
+  onRezolvat: () => void;
+}) {
   const [conflicte, setConflicte] = useState<OlxConflict[] | null>(null);
   const [lucreaza, startLucru] = useTransition();
 
-  useEffect(() => {
-    let anulat = false;
+  /* Panoul se poate inchide inainte sa raspunda citirea, si atunci n-are cine primi raspunsul. */
+  const viu = useRef(true);
+  useEffect(() => { viu.current = true; return () => { viu.current = false; }; }, []);
+
+  const incarca = useCallback(() => {
     void getOlxConflicts(businessId).then((r) => {
-      if (anulat) return;
+      if (!viu.current) return;
       setConflicte("error" in r ? [] : r.conflicte);
       if ("error" in r) toast.error(r.error);
     });
-    return () => { anulat = true; };
   }, [businessId]);
+
+  useEffect(incarca, [incarca]);
 
   if (conflicte === null) {
     return (
@@ -51,6 +72,11 @@ export default function OlxConflicte({
 
   return (
     <div className="mt-4 space-y-4">
+      {total > conflicte.length && (
+        <p className="text-xs text-muted-foreground">
+          Se arată {conflicte.length} din {total}. Rezolvă-le pe acestea și urcă singure următoarele.
+        </p>
+      )}
       {conflicte.map((c) => (
         <div key={c.offerId} className="rounded-xl ring-1 ring-foreground/10 bg-card p-3">
           <p className="text-sm font-semibold text-foreground">
@@ -90,7 +116,9 @@ export default function OlxConflicte({
                     }
                     if ("error" in r) { toast.error(r.error); return; }
                     toast.success(`Se păstrează anunțul ${id}. Restul se retrag.`);
-                    setConflicte((v) => (v ?? []).filter((x) => x.offerId !== c.offerId));
+                    /* ⚠ Se RECITESTE, nu se taie randul din ecran: altfel al cincizeci si unulea
+                       n-ar fi urcat niciodata. Vezi nota de la începutul fișierului. */
+                    incarca();
                     onRezolvat();
                   })}
                 >

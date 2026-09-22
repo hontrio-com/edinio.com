@@ -12,7 +12,7 @@ import { AboutYouPreVerificare } from "@/components/dashboard/AboutYouPreVerific
 import { AboutYouOrders } from "@/components/dashboard/AboutYouOrders";
 import {
   getAboutYouOrders, getAboutYouPreVerificare, getAboutYouProductPage, getAboutYouStatus,
-  type AboutYouProductPage, type PreVerificareAboutYou, type RandComandaAboutYou,
+  type AboutYouProductPage, type PaginaComenziAboutYou, type PreVerificareAboutYou,
 } from "@/lib/actions/aboutyou.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -74,7 +74,7 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
   let categories: string[] = [];
   let paginaProduse: AboutYouProductPage | null = null;
   let preVerificare: PreVerificareAboutYou | null = null;
-  let comenzi: RandComandaAboutYou[] = [];
+  let paginaComenzi: PaginaComenziAboutYou | null = null;
   if (connected) {
     // Distinct product categories, windowed past the 1000-row PostgREST cap.
     const catRows: { category: string | null }[] = [];
@@ -92,7 +92,8 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
 
     const pv = await getAboutYouPreVerificare(businessId);
     preVerificare = "error" in pv ? null : pv;
-    comenzi = await getAboutYouOrders(businessId);
+    /* Doar PRIMA pagina de comenzi: restul le cere ecranul, cu bara de paginare. */
+    paginaComenzi = await getAboutYouOrders(businessId, 1, false);
   }
 
   const st = "error" in status ? null : status;
@@ -114,7 +115,7 @@ async function ContinutAboutYou({ businessId }: { businessId: string }) {
               pricing={{ mode: st.priceMode, rate: st.fxRate, marginPct: st.fxMarginPct }}
             />
           )}
-          <AboutYouOrders businessId={businessId} comenzi={comenzi} />
+          {paginaComenzi && <AboutYouOrders businessId={businessId} pagina={paginaComenzi} />}
           {/*
             ⚠ SUB COMENZI, si nu intamplator: un retur se citeste dupa comanda din care vine.
             Ecranul exista fiindca repunerea automata in stoc s-a oprit — taiata fara el, marfa

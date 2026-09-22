@@ -8,6 +8,7 @@ import { ArrowLeft, Undo2, Trash2, MailOpen, Mail, User, Phone, Mail as MailIcon
 import { formatPrice } from "@/lib/utils/format";
 import { updateReturnStatus, toggleReturnRead, deleteReturnRequest } from "@/lib/actions/return.actions";
 import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
+import { Paginatie } from "@/components/dashboard/Paginatie";
 
 interface ReturnItem { product_id: string; name: string; quantity: number; price: number }
 interface ReturnRow {
@@ -50,9 +51,30 @@ type ActiuneOptimista =
   | { tip: "citit"; id: string; isRead: boolean }
   | { tip: "sterge"; id: string };
 
-export function ReturnsClient({ returns }: { returns: ReturnRow[] }) {
+export function ReturnsClient({ returns, pagina, pagini, rezumat }: {
+  /** DOAR pagina cerută, gata feliată în bază. Vezi nota din `returns/page.tsx`. */
+  returns: ReturnRow[];
+  pagina: number;
+  pagini: number;
+  /** „1–25 din 137 de cereri”, socotit pe TOT, nu pe pagina adusă. */
+  rezumat: string;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  /*
+   * ⚠ A DOUA TRANZIȚIE, nu cea de deasupra. `isPending` de sus stinge butoanele
+   * unui rând cât se scrie în bază; răsfoirea n-are nicio treabă cu el, iar
+   * împărțită, o ștergere în curs ar fi stins și bara de pagini.
+   */
+  const [seRasfoieste, startRasfoire] = useTransition();
+
+  function duLaPagina(p: number) {
+    startRasfoire(() => {
+      /* Pagina stă în adresă, ca la Comenzi: „înapoi” din browser merge, și o
+         pagină anume se poate trimite prin legătură. */
+      router.push(p > 1 ? `/dashboard/returns?page=${p}` : "/dashboard/returns", { scroll: true });
+    });
+  }
 
   // Statusul, marcajul citit/necitit si stergerea au rezultat previzibil: se vad
   // pe loc, iar daca serverul refuza React readuce singur starea de la el.
@@ -221,6 +243,16 @@ export function ReturnsClient({ returns }: { returns: ReturnRow[] }) {
               </div>
             );
           })}
+
+          {/* ⚠ Numere, nu două săgeți: vezi nota din `Paginatie`. Sub două pagini
+              se ascunde singură, deci magazinul cu opt cereri nu vede nimic. */}
+          <Paginatie
+            pagina={pagina}
+            pagini={pagini}
+            laSchimbare={duLaPagina}
+            seIncarca={seRasfoieste}
+            rezumat={rezumat}
+          />
         </div>
       )}
     </div>

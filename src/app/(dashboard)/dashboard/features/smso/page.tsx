@@ -26,7 +26,12 @@ export default async function SmsoPage() {
    * drum pornit din browser daca poate fi calculata o data, aici.
    */
   const adresa = await getSmsoWebhookUrl(business.id);
-  const dezabonati = await getSmsDezabonati(business.id);
+  /*
+   * ⚠ SI CATI SUNT, nu doar randurile aduse. Lista e plafonata la doua sute, iar
+   * antetul scria pana azi `dezabonati.length`: la 340 de dezabonari spunea 200.
+   * Vezi nota din `getSmsDezabonati`.
+   */
+  const { randuri: dezabonati, cateSunt: dezabonatiTotal } = await getSmsDezabonati(business.id);
 
   return (
     <SmsoConfigClient
@@ -34,6 +39,7 @@ export default async function SmsoPage() {
       initialConfig={smsoConfig}
       webhookUrl={"url" in adresa ? adresa.url : null}
       dezabonati={dezabonati}
+      dezabonatiTotal={dezabonatiTotal}
     />
   );
 }

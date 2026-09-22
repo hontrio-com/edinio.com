@@ -33,6 +33,9 @@ import {
   caracteristiciLipsa, caracteristiciObligatorii, sugereazaCategorie,
 } from "@/lib/emag/taxonomy";
 import { fetchAllRowsStrict } from "@/lib/supabase/fetch-all";
+/* ⚠ Strangerea paginii cerute la cate pagini exista cu adevarat. Fara ea, un `range`
+   peste capatul listei intoarce 416, nu o lista goala. Vezi `fereastraPaginii`. */
+import { fereastraPaginii } from "@/lib/paginare";
 import { bucatiDeIduri } from "@/lib/supabase/id-chunks";
 import { LIMITE_EMAG } from "@/lib/emag/limite";
 import { cuMemorie, uitaAmintirile } from "@/lib/emag/memorie";
@@ -1977,8 +1980,17 @@ export interface FiltruOferteEcran {
 
 const OFERTE_PE_PAGINA = 50;
 
-/** ⚠ Cate retururi aduce ecranul. Trunchierea SE SPUNE — vezi `retururileEmag`. */
-const RETURURI_PE_ECRAN = 100;
+/**
+ * Cate retururi aduce o pagina de ecran.
+ *
+ * ⚠ ERA UN PLAFON DE 100, NU O PAGINA (indreptat 22.09.2026). Se aduceau cele mai noi
+ * o suta, iar restul nu se puteau ajunge de nicaieri: ecranul spunea printr-un mesaj
+ * „pe cele vechi le vezi in panoul eMAG", adica trimitea omul din Edinio afara, chiar
+ * din locul in care are butoanele de confirmare si de chemat curierul.
+ *
+ * Retururile cresc cu comenzile. Acum se rasfoieste, iar `total` e numarat in baza.
+ */
+const RETURURI_PE_PAGINA = 50;
 
 /**
  * Ofertele magazinului, pentru ecran.
@@ -2616,11 +2628,14 @@ export interface RandReturEcran {
  */
 export async function listaRetururiEmag(
   businessId: string,
+  filtru: { pagina?: number } = {},
 ): Promise<
   | {
       randuri: RandReturEcran[];
-      /** S-au adus primele N si atat, fiindca sunt mai multe. ⚠ Se ARATA. */
-      atinsPlafonul?: number;
+      /** Cate retururi are magazinul cu totul, numarate in baza. */
+      total: number;
+      pagina: number;
+      pePagina: number;
     }
   | { error: string }
 > {
@@ -2628,11 +2643,28 @@ export async function listaRetururiEmag(
   if ("error" in g) return { error: g.error };
 
   const admin = createAdminClient();
+
+  /*
+   * ⚠ SE NUMARA INTAI, apoi se cere fereastra. Un `range` peste capatul listei nu
+   * intoarce zero randuri, ci 416 cu `PGRST103` — iar `postgrest-js` citeste `count`
+   * DOAR cand raspunsul e bun, deci s-ar fi pierdut chiar numarul din `Content-Range`.
+   * Ecranul ar fi ramas gol si fara bara de paginare, adica fara drum inapoi. Aceeasi
+   * cadere ca la lista de abonati; de-aia strangerea sta in `fereastraPaginii`, unde o
+   * probeaza cineva.
+   */
+  const numarate = await admin.from("emag_rma")
+    .select("emag_rma_id", { count: "exact", head: true })
+    .eq("business_id", businessId);
+  if (numarate.error) return { error: numarate.error.message };
+
+  const total = numarate.count ?? 0;
+  const fereastra = fereastraPaginii(filtru.pagina ?? 1, total, RETURURI_PE_PAGINA);
+
   const { data, error } = await admin.from("emag_rma")
     .select("emag_rma_id, emag_order_id, order_id, request_status, return_reason, return_type, products, awbs, raw, updated_at")
     .eq("business_id", businessId)
     .order("updated_at", { ascending: false })
-    .limit(RETURURI_PE_ECRAN);
+    .range(fereastra.deLa, fereastra.panaLa);
 
   if (error) return { error: error.message };
 
@@ -2728,13 +2760,15 @@ export async function listaRetururiEmag(
   }));
 
   /*
-   * ⚠ TRUNCHIEREA SE SPUNE, ca peste tot in casa.
+   * ⚠ NU SE MAI TRUNCHIAZA DELOC, SI DE-AIA NU MAI E NIMIC DE SPUS.
    *
-   * Ecranul aduce cele mai noi 100 de retururi. Un magazin cu mai multe nu le vedea pe
-   * cele vechi si nimic nu-l anunta — iar un retur nevazut inseamna marfa care se
-   * intoarce fara ca cineva sa stie, si un client care asteapta banii.
+   * Pana pe 22.09.2026 se aduceau cele mai noi 100 de retururi, iar trunchierea se
+   * anunta printr-un mesaj. Anuntul era bun, dar nu tinea loc de drum: un retur nevazut
+   * inseamna marfa care se intoarce fara ca cineva sa stie, si un client care asteapta
+   * banii. Acum lista se rasfoieste cu numere, iar `total` e numarat in baza, nu
+   * ghicit din lungimea paginii.
    */
-  return { randuri, atinsPlafonul: randuri.length >= RETURURI_PE_ECRAN ? RETURURI_PE_ECRAN : undefined };
+  return { randuri, total, pagina: fereastra.pagina, pePagina: RETURURI_PE_PAGINA };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

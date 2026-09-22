@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FileText, RotateCcw, Truck, XCircle } from "lucide-react";
 import {
-  anuleazaComandaAboutYou, getAboutYouOrderDocument, reincearcaExpediereaAboutYou,
-  returneazaComandaAboutYou, type RandComandaAboutYou,
+  anuleazaComandaAboutYou, getAboutYouOrderDocument, getAboutYouOrders,
+  reincearcaExpediereaAboutYou, returneazaComandaAboutYou, type PaginaComenziAboutYou,
 } from "@/lib/actions/aboutyou.actions";
+import { Paginatie } from "@/components/dashboard/Paginatie";
 import { formatDate } from "@/lib/utils/format";
 
 /*
@@ -50,7 +51,7 @@ const NECONFIRMATE = new Set(["ship_necunoscut", "cancel_necunoscut", "return_ne
 
 const DE_RELUAT = new Set(["ship_failed"]);
 
-export function AboutYouOrders({ businessId, comenzi }: { businessId: string; comenzi: RandComandaAboutYou[] }) {
+export function AboutYouOrders({ businessId, pagina }: { businessId: string; pagina: PaginaComenziAboutYou }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [doarProbleme, setDoarProbleme] = useState(false);
@@ -58,10 +59,39 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
   const [deschis, setDeschis] = useState<{ orderId: string; fel: "anulare" | "retur" } | null>(null);
   const [awb, setAwb] = useState("");
 
-  const vizibile = doarProbleme
-    ? comenzi.filter((c) => c.status.endsWith("_failed"))
-    : comenzi;
-  const cuProbleme = comenzi.filter((c) => c.status.endsWith("_failed")).length;
+  /*
+   * ⚠ PAGINAREA SI CERNEREA SE FAC PE SERVER (22.09.2026).
+   *
+   * Pana azi toate comenzile veneau deodata (taiate tacut la 100), iar „Arata doar problemele"
+   * le cernea in browser. Asta insemna ca o expediere respinsa de la comanda a 130-a nu se vedea
+   * NICIODATA, nici cu filtrul pornit — tocmai butonul pus ca sa gaseasca problemele le ascundea.
+   *
+   * Prima pagina vine de pe server; de aici incolo componenta isi tine singura starea si si-o
+   * reimprospateaza dupa fiecare actiune. O sincronizare din prop ar arunca pagina curenta si
+   * filtrul la fiecare `router.refresh()`.
+   */
+  const [stare, setStare] = useState<PaginaComenziAboutYou>(pagina);
+  const [seIncarca, setSeIncarca] = useState(false);
+
+  const incarca = useCallback(async (p: number, doar: boolean) => {
+    setSeIncarca(true);
+    try {
+      setStare(await getAboutYouOrders(businessId, p, doar));
+      setDeschis(null);
+    } catch {
+      /* O actiune de server poate cadea si din retea. Fara asta, indicatorul de incarcare
+         ramanea aprins pentru totdeauna. */
+      toast.error("Nu am putut încărca lista de comenzi.");
+    } finally {
+      setSeIncarca(false);
+    }
+  }, [businessId]);
+
+  /* Dupa o fapta dusa la capat: se aduce din nou CHIAR pagina pe care sta omul. */
+  const reimprospateaza = () => { void incarca(stare.pagina, doarProbleme); };
+
+  const vizibile = stare.randuri;
+  const cuProbleme = stare.cuProbleme;
 
   const descarca = (orderId: string, fel: "invoices" | "delivery-document") => startTransition(async () => {
     let res: Awaited<ReturnType<typeof getAboutYouOrderDocument>>;
@@ -106,6 +136,7 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
     }
     if ("error" in res) { toast.error(res.error); return; }
     toast.success("Expedierea a fost repusă la coadă.");
+    reimprospateaza();
     router.refresh();
   });
 
@@ -135,6 +166,7 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
     if ("error" in res) { toast.error(res.error); return; }
     setDeschis(null);
     toast.success("Anularea a plecat la About You. Se confirmă în câteva minute.");
+    reimprospateaza();
     router.refresh();
   });
 
@@ -155,6 +187,7 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
     setDeschis(null);
     setAwb("");
     toast.success("Returul a plecat la About You. Se confirmă în câteva minute.");
+    reimprospateaza();
     router.refresh();
   });
 
@@ -163,9 +196,12 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
       <div className="flex items-center justify-between gap-3 mb-1">
         <h2 className="text-base font-semibold text-foreground">Comenzi About You</h2>
         {cuProbleme > 0 && (
+          /* ⚠ Cernerea pleaca la server, si de la PRIMA pagina: pastrata pagina veche, omul ar fi
+             cazut in gol cand multimea filtrata are mai putine pagini decat cea intreaga. */
           <button
-            onClick={() => setDoarProbleme((v) => !v)}
-            className="text-xs font-medium text-primary hover:underline"
+            onClick={() => { const v = !doarProbleme; setDoarProbleme(v); void incarca(1, v); }}
+            disabled={seIncarca}
+            className="text-xs font-medium text-primary hover:underline disabled:opacity-60"
           >
             {doarProbleme ? "Arată toate" : `Arată doar problemele (${cuProbleme})`}
           </button>
@@ -178,7 +214,7 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
 
       {vizibile.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {comenzi.length === 0 ? "Nicio comandă About You încă." : "Nicio comandă cu probleme."}
+          {doarProbleme ? "Nicio comandă cu probleme." : "Nicio comandă About You încă."}
         </p>
       ) : (
         <div className="divide-y divide-border">
@@ -307,6 +343,24 @@ export function AboutYouOrders({ businessId, comenzi }: { businessId: string; co
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/*
+        ⚠ NUMERE, NU DOUA SAGETI. Comenzile cresc cu magazinul si nu se opresc niciodata din
+        crescut: la eMAG un singur comerciant are 4.678 de oferte si 131 de comenzi doar in
+        tabelul de marketplace. O lista de comenzi e chiar felul de lista care ajunge la zeci
+        de pagini, iar acolo „Înainte" nu e o cale, e o plimbare.
+      */}
+      {stare.pagini > 1 && (
+        <div className="pt-1 mt-3 border-t border-border">
+          <Paginatie
+            pagina={stare.pagina}
+            pagini={stare.pagini}
+            laSchimbare={(p) => void incarca(p, doarProbleme)}
+            seIncarca={seIncarca}
+            rezumat={`${(stare.pagina - 1) * stare.pePagina + 1}–${Math.min(stare.pagina * stare.pePagina, stare.total)} din ${stare.total} comenzi`}
+          />
         </div>
       )}
     </div>

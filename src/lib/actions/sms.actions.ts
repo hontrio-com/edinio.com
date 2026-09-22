@@ -356,19 +356,39 @@ export async function getSmsoWebhookUrl(
  *
  * ⚠ Exista ca sa se poata VEDEA. O lista de oameni pe care nu-i mai suni, ascunsa, e o lista in care
  * nimeni nu are incredere: comerciantul ar crede ca mesajele lui nu pleaca fara sa stie de ce.
+ *
+ * ⚠⚠ SE INTOARCE SI CATI SUNT, NU DOAR RANDURILE (23.09.2026).
+ *
+ * `.limit(200)` era singur, iar panoul scria in antet „Dezabonati de la marketing
+ * ({dezabonati.length})". Adica la 340 de dezabonari antetul spunea 200: nu o lista
+ * scurtata, ci o CIFRA GRESITA, de felul celor in care comerciantul are incredere
+ * tocmai fiindca arata ca o numaratoare. Lista creste cu audienta, nu cu munca din
+ * panou, deci doua sute se ating la primul magazin care trimite catre cateva mii.
+ *
+ * Randurile raman doua sute (cele mai noi sunt cele care se cauta); numarul e acum
+ * cel adevarat, si panoul spune ca arata numai o parte.
+ *
+ * ⚠ Plafonul NU se exporta de aici: fisierul e `"use server"`, unde fiecare export
+ * devine un endpoint si o constanta nici nu se poate exporta. Panoul socoteste
+ * taierea din ce a primit (`randuri.length` fata de `cateSunt`), deci n-are nevoie
+ * de cifra, si nici nu se poate desparti de ea.
  */
 export async function getSmsDezabonati(
   businessId: string,
-): Promise<{ phone: string; sursa: string; creat_la: string }[]> {
+): Promise<{ randuri: { phone: string; sursa: string; creat_la: string }[]; cateSunt: number }> {
+  const gol = { randuri: [], cateSunt: 0 };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  if (!user) return gol;
   const { data: biz } = await supabase
     .from("businesses").select("id").eq("id", businessId).eq("user_id", user.id).single();
-  if (!biz) return [];
+  if (!biz) return gol;
 
-  const { data } = await supabase
-    .from("sms_optout").select("phone, sursa, creat_la")
+  const { data, count } = await supabase
+    .from("sms_optout").select("phone, sursa, creat_la", { count: "exact" })
     .eq("business_id", businessId).order("creat_la", { ascending: false }).limit(200);
-  return (data ?? []) as { phone: string; sursa: string; creat_la: string }[];
+  const randuri = (data ?? []) as { phone: string; sursa: string; creat_la: string }[];
+  /* Fara numaratoare ramane cat s-a adus: e tot ce se stie atunci, si nu se
+     inventeaza un numar mai mare decat randurile pe care le putem arata. */
+  return { randuri, cateSunt: count ?? randuri.length };
 }

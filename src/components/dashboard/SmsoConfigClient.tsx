@@ -18,13 +18,16 @@ import { Switch } from "@/components/ui/switch";
 import { Panel, PanelHeader, PanelTitle } from "@/components/ui/panel";
 
 export function SmsoConfigClient({
-  businessId, initialConfig, webhookUrl, dezabonati,
+  businessId, initialConfig, webhookUrl, dezabonati, dezabonatiTotal,
 }: {
   businessId: string;
   initialConfig: SmsoConfig;
   /** Adresa de raportare, compusa pe server. `null` cand lipseste secretul de semnare din mediu. */
   webhookUrl: string | null;
+  /** Cei mai noi, cel mult doua sute. NU sunt neaparat toti: vezi `dezabonatiTotal`. */
   dezabonati: { phone: string; sursa: string; creat_la: string }[];
+  /** ⚠ Cati sunt CU ADEVARAT. Antetul scria `dezabonati.length`, adica plafonul. */
+  dezabonatiTotal: number;
 }) {
   const router = useRouter();
   const [smso, setSmso] = useState<SmsoConfig>(initialConfig);
@@ -290,7 +293,7 @@ export function SmsoConfigClient({
             <div className="flex items-center gap-2">
               <BellOff className="h-4 w-4 text-muted-foreground" />
               <p className="text-sm font-semibold text-foreground">
-                Dezabonati de la marketing ({dezabonati.length})
+                Dezabonati de la marketing ({dezabonatiTotal})
               </p>
             </div>
             <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
@@ -298,6 +301,14 @@ export function SmsoConfigClient({
               primesc campanii si nici mesaje de cos abandonat. Mesajele despre comenzile lor pleaca
               in continuare: le-au platit, au dreptul sa le afle starea.
             </p>
+            {dezabonatiTotal > dezabonati.length && (
+              /* ⚠ Cifra din antet e a tuturor; lista de dedesubt e doar inceputul ei. Spus
+                 pe fata, fiindca o lista scurtata in tacere il face pe comerciant sa creada
+                 ca i-a numarat pe toti. */
+              <p className="mt-2 text-xs text-muted-foreground">
+                Mai jos sunt cele mai noi {dezabonati.length} numere din {dezabonatiTotal}.
+              </p>
+            )}
             {dezabonati.length > 0 && (
               <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto">
                 {dezabonati.map(d => (

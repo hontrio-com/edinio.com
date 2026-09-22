@@ -10,7 +10,7 @@ import { puneOlxLogoFirma, puneOlxBannerFirma, getOlxImaginiFirma, stergeOlxImag
   type OlxImaginiCont, type OlxLinieFacturare, type OlxProfilFirma, type OlxProfilFirmaInput,
   type OlxPromovareActiva,
 } from "@/lib/actions/olx-cont.actions";
-import type { OlxAdvertRow } from "@/lib/actions/olx.actions";
+import type { OlxAnuntViu } from "@/lib/actions/olx.actions";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -32,12 +32,28 @@ function sumaScrisa(l: OlxLinieFacturare): string {
   return l.moneda ? `${n} ${l.moneda}` : n;
 }
 
+/*
+  ⚠ CATE MISCARI SE CER DE LA OLX, scrise o data si folosite si la cerere, si la text.
+
+  `getOlxFacturare` cere PRIMA pagina de la ei, iar ei nu ne dau niciun total. Deci o pagina exact
+  plina arata pe ecran identic cu un istoric care chiar se termina acolo — si tocmai asta scria
+  deasupra: „Istoric de facturare", adica tot. Un cont cu doua sute de miscari ar fi aratat
+  treizeci si ar fi tacut despre restul. Cat timp nu le putem pagina, se SPUNE ca sunt ultimele.
+*/
+const MISCARI_CERUTE = 30;
+
 function ziScrisa(iso: string | null): string {
   if (!iso) return "dată necunoscută";
   return new Date(iso).toLocaleDateString("ro-RO", { day: "numeric", month: "short", year: "numeric" });
 }
 
-export function OlxCont({ businessId, adverts }: { businessId: string; adverts: OlxAdvertRow[] }) {
+export function OlxCont({ businessId, adverts, eroareAnunturi }: {
+  businessId: string;
+  /** Anunțurile vii, citite ÎNTREG de panoul părinte. Vezi nota din `OlxAccountPanel`. */
+  adverts: OlxAnuntViu[];
+  /** Lista n-a putut fi citită. Golul ei NU înseamnă „n-ai niciun anunț". */
+  eroareAnunturi?: string;
+}) {
   const [incarca, setIncarca] = useState(true);
   const [esteFirma, setEsteFirma] = useState(false);
   const [profil, setProfil] = useState<OlxProfilFirma | null>(null);
@@ -52,7 +68,9 @@ export function OlxCont({ businessId, adverts }: { businessId: string; adverts: 
      */
     let viu = true;
     void (async () => {
-      const [p, f] = await Promise.all([getOlxProfilFirma(businessId), getOlxFacturare(businessId, 30)]);
+      const [p, f] = await Promise.all([
+        getOlxProfilFirma(businessId), getOlxFacturare(businessId, MISCARI_CERUTE),
+      ]);
       if (!viu) return;
       if ("error" in p) setEroareProfil(p.error);
       else { setEsteFirma(p.esteFirma); setProfil(p.profil); }
@@ -82,6 +100,13 @@ export function OlxCont({ businessId, adverts }: { businessId: string; adverts: 
             <span className="text-xs">Nu sunt mișcări pe contul OLX.</span>
           </Callout>
         ) : (
+          <>
+          {/* ⚠ O pagina exact plina nu se arata ca un istoric intreg. Vezi `MISCARI_CERUTE`. */}
+          {linii.length >= MISCARI_CERUTE && (
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              Se arată ultimele {MISCARI_CERUTE} mișcări. Istoricul întreg îl vezi în contul tău de pe olx.ro.
+            </p>
+          )}
           <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
             {linii.map((l) => (
               <div key={l.cheie} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
@@ -95,6 +120,7 @@ export function OlxCont({ businessId, adverts }: { businessId: string; adverts: 
               </div>
             ))}
           </div>
+          </>
         )}
       </div>
 
@@ -109,7 +135,7 @@ export function OlxCont({ businessId, adverts }: { businessId: string; adverts: 
       )}
 
       {/* Promovarile pe care anuntul le are DEJA */}
-      <PromovariAnunt businessId={businessId} adverts={adverts} />
+      <PromovariAnunt businessId={businessId} adverts={adverts} eroareAnunturi={eroareAnunturi} />
     </div>
   );
 }
@@ -235,8 +261,21 @@ function FormularProfil({ businessId, initial, onSalvat }: {
   );
 }
 
-function PromovariAnunt({ businessId, adverts }: { businessId: string; adverts: OlxAdvertRow[] }) {
+function PromovariAnunt({ businessId, adverts, eroareAnunturi }: {
+  businessId: string; adverts: OlxAnuntViu[]; eroareAnunturi?: string;
+}) {
   const [advertId, setAdvertId] = useState<string>("");
+  /* ⚠ O citire picată nu se arată ca „n-ai niciun anunț": secțiunea ar dispărea fără un cuvânt. */
+  if (eroareAnunturi) {
+    return (
+      <div>
+        <Titlu icon={Sparkles}>Promovări active pe un anunț</Titlu>
+        <Callout variant="warning" icon={AlertTriangle}>
+          <span className="text-xs">Nu am putut citi lista de anunțuri: {eroareAnunturi}</span>
+        </Callout>
+      </div>
+    );
+  }
   if (adverts.length === 0) return null;
 
   return (
@@ -252,7 +291,7 @@ function PromovariAnunt({ businessId, adverts }: { businessId: string; adverts: 
       </p>
       <select aria-label="Anunț" value={advertId} onChange={(e) => setAdvertId(e.target.value)} className={selectCls}>
         <option value="">Alege anunțul</option>
-        {adverts.map((a) => <option key={a.offer_id} value={String(a.olx_advert_id)}>{a.name}</option>)}
+        {adverts.map((a) => <option key={a.offerId} value={String(a.advertId)}>{a.nume}</option>)}
       </select>
 
       {/*

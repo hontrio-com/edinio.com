@@ -53,7 +53,10 @@ type SmsTemplate = {
 interface Props {
   businessId: string;
   smsoConfig: SmsoConfig;
+  /** Cele mai noi cincizeci. NU sunt neaparat toate: vezi `totalCampanii`. */
   initialCampaigns: Campaign[];
+  /** ⚠ Cate campanii are magazinul CU ADEVARAT, ca istoricul sa poata spune ca e taiat. */
+  totalCampanii: number;
   initialTemplates: SmsTemplate[];
 }
 
@@ -85,8 +88,11 @@ function StatusBadge({ status }: { status: Campaign["status"] }) {
   return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-destructive/10 text-destructive"><XCircle className="h-3 w-3" />Esuat</span>;
 }
 
-export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, initialTemplates }: Props) {
+export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, totalCampanii, initialTemplates }: Props) {
   const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
+  /* ⚠ Creste odata cu randul adaugat mai jos, la trimitere. Lasat pe cifra venita de
+     la server, textul ar fi spus „50 din 137” si dupa a 138-a campanie. */
+  const [cateCampanii, setCateCampanii] = useState(totalCampanii);
 
   // Filters state
   const [filtersOpen, setFiltersOpen] = useState(true);
@@ -260,6 +266,7 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
         status: result.failed === 0 ? "sent" : result.sent === 0 ? "failed" : "partial",
         created_at: new Date().toISOString(),
       }, ...prev]);
+      setCateCampanii(n => n + 1);
     });
   }
 
@@ -453,7 +460,8 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
                       <p className="text-sm font-bold text-foreground">{preview.uniqueCount} clienti unici</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {preview.totalCount} comenzi totale
-                        {preview.duplicatesRemoved > 0 && ` — ${preview.duplicatesRemoved} duplicate eliminate`}
+                        {/* ⚠ Punct median intre bucatile de date, nu semn lung: regula casei. */}
+                        {preview.duplicatesRemoved > 0 && ` · ${preview.duplicatesRemoved} duplicate eliminate`}
                       </p>
                     </div>
                   </div>
@@ -695,6 +703,13 @@ export function SMSMarketingClient({ businessId, smsoConfig, initialCampaigns, i
       <div className="bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
           <p className="text-sm font-semibold text-foreground">Istoric campanii</p>
+          {cateCampanii > campaigns.length && (
+            /* ⚠ Se spune cat lipseste. Cincizeci de randuri fara nicio vorba despre
+               rest il lasa pe comerciant sa creada ca atatea campanii a trimis. */
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Cele mai noi {campaigns.length} din {cateCampanii} campanii.
+            </p>
+          )}
         </div>
         {campaigns.length === 0 ? (
           <div className="px-5 py-12 text-center">

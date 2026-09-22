@@ -19,6 +19,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logError } from "@/lib/error-logger";
 import { patchTrendyolConfig } from "@/lib/trendyol/config";
 import { fetchAllRows } from "@/lib/supabase/fetch-all";
+import { fereastraPaginii } from "@/lib/paginare";
 import { trendyolGloballyEnabled, maskSecret, trendyolWebhookUrl } from "@/lib/trendyol/auth";
 import { createWebhook, deleteWebhook, getWebhooks, isTrendyolError, testConnection, type TrendyolAuth } from "@/lib/trendyol/client";
 import { TRENDYOL_WEBHOOK_EVENTS } from "@/lib/trendyol/webhooks";
@@ -1385,16 +1386,41 @@ export async function getTrendyolProductPage(
 
   // ── Fără filtru de stare: numărătoarea o face baza, exact ──────────────────
   if (status === "toate") {
-    const de_la = (page - 1) * pageSize;
-    let qb = supabase.from("products").select("id, name, category, is_active", { count: "exact" })
+    /*
+     * ═══ ⚠ SE NUMARA INTAI, SI ABIA APOI SE CERE FEREASTRA (22.09.2026) ═══
+     *
+     * Ceruta direct, `range(de_la, ...)` peste numarul de randuri primeste 416 cu `PGRST103`,
+     * iar `postgrest-js` citeste `count` DOAR cand raspunsul e bun: arunca taman numarul pe
+     * care serverul tocmai i-l trimisese in `Content-Range`. Ieseau `total: 0` si `items: []`,
+     * deci ecranul scria „Nu ai produse de listat încă" cu baza perfect sanatoasa, iar bara de
+     * paginare disparea odata cu el, adica omul ramanea acolo fara drum inapoi.
+     *
+     * ⚠ DE AZI SE POATE NIMERI MAI USOR: bara are numere, deci se sare dintr-un gest pe ultima
+     * pagina. Daca intre incarcare si apasare catalogul s-a micsorat (un import, alta fila),
+     * pagina ceruta nu mai exista. `fereastraPaginii` o stramteaza la ultima care exista.
+     *
+     * ⚠ ACELEASI FILTRE IN AMANDOUA INTEROGARILE. Scrise o data si copiate, se despart la prima
+     * indreptare care le atinge pe rand, iar atunci numaratoarea ar fi a altei liste decat
+     * randurile aratate, si nimic n-ar parea gresit pe ecran.
+     */
+    let qNumar = supabase.from("products").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId);
+    if (tipar) qNumar = qNumar.ilike("name", tipar);
+    if (categorie) qNumar = qNumar.eq("category", categorie);
+    const { count } = await qNumar;
+
+    const total = count ?? 0;
+    const fereastra = fereastraPaginii(page, total, pageSize);
+
+    let qb = supabase.from("products").select("id, name, category, is_active")
       .eq("business_id", businessId);
     if (tipar) qb = qb.ilike("name", tipar);
     if (categorie) qb = qb.eq("category", categorie);
-    const { data, count } = await qb.order("name").order("id").range(de_la, de_la + pageSize - 1);
-    const total = count ?? 0;
+    const { data } = await qb.order("name").order("id").range(fereastra.deLa, fereastra.panaLa);
+
     return {
       items: randuri((data ?? []) as ProdusBrut[]),
-      total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)), truncat: false,
+      total, page: fereastra.pagina, pageSize, totalPages: fereastra.pagini, truncat: false,
     };
   }
 
@@ -1418,11 +1444,13 @@ export async function getTrendyolProductPage(
       gasite.push(...((data ?? []) as ProdusBrut[]));
     }
     gasite.sort((a, b) => a.name.localeCompare(b.name, "ro"));
-    const de_la = (page - 1) * pageSize;
+    /* ⚠ Aceeasi stramtorare ca mai sus, si din acelasi motiv: o pagina care nu mai exista se
+       intoarce ca ultima care exista, nu ca o lista goala peste o bara care arata 40 de pagini. */
+    const fereastra = fereastraPaginii(page, gasite.length, pageSize);
     return {
-      items: randuri(gasite.slice(de_la, de_la + pageSize)),
-      total: gasite.length, page, pageSize,
-      totalPages: Math.max(1, Math.ceil(gasite.length / pageSize)), truncat: false,
+      items: randuri(gasite.slice(fereastra.deLa, fereastra.deLa + pageSize)),
+      total: gasite.length, page: fereastra.pagina, pageSize,
+      totalPages: fereastra.pagini, truncat: false,
     };
   }
 
@@ -1440,11 +1468,12 @@ export async function getTrendyolProductPage(
     if (lot.length < 1000) break;
     if (from + 1000 >= MAX_PARCURGERE) truncat = true;
   }
-  const de_la = (page - 1) * pageSize;
+  /* ⚠ Si aici: pagina ceruta se stramteaza la ultima care exista. */
+  const fereastra = fereastraPaginii(page, nelistate.length, pageSize);
   return {
-    items: randuri(nelistate.slice(de_la, de_la + pageSize)),
-    total: nelistate.length, page, pageSize,
-    totalPages: Math.max(1, Math.ceil(nelistate.length / pageSize)), truncat,
+    items: randuri(nelistate.slice(fereastra.deLa, fereastra.deLa + pageSize)),
+    total: nelistate.length, page: fereastra.pagina, pageSize,
+    totalPages: fereastra.pagini, truncat,
   };
 }
 

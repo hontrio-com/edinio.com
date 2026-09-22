@@ -10,7 +10,7 @@ import { Archive,
   MapPin, Image as ImageIcon,
 } from "lucide-react";
 import { suggestOlxCityFromShop, suggestOlxLocationByCoords, reincearcaOlxOprite,
-  startOlxOAuth, disconnectOlx, saveOlxSettings, publishAllOlx,
+  startOlxOAuth, disconnectOlx, saveOlxSettings, publishAllOlx, getOlxAdverts,
   publishOlxProduct, deactivateOlxProduct, activateOlxProduct, deleteOlxAdvert, finishOlxAdvert,
   buyOlxAdvertPacket, searchCities, getCityDistricts,
   type OlxStatus, type OlxAdvertRow,
@@ -32,6 +32,7 @@ import { Panel } from "@/components/ui/panel";
 import { Switch } from "@/components/ui/switch";
 import { ButonDeconectare } from "@/components/dashboard/ButonDeconectare";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import { Paginatie } from "@/components/dashboard/Paginatie";
 import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
 import OlxConflicte from "./OlxConflicte";
 import OlxSanatatePanel from "./OlxSanatate";
@@ -64,10 +65,18 @@ const CE_PRIMESTI: { titlu: string; text: string }[] = [
   },
 ];
 
-export function OlxClient({ businessId, status, adverts, advertsError, categories }: {
+export function OlxClient({
+  businessId, status, adverts, advertsTotal, advertsPagini, advertsDeLa, advertsError, categories,
+}: {
   businessId: string;
   status: OlxStatus | null;
+  /** PRIMA pagină a tabelului, randată pe server. Restul le cere `AdvertTable`. */
   adverts: OlxAdvertRow[];
+  /** Câte anunțuri are magazinul în total, numărate în bază. */
+  advertsTotal: number;
+  advertsPagini: number;
+  /** Indicele primului rând al paginii, numărat de la 0. Din el se scrie rezumatul barei. */
+  advertsDeLa: number;
   /** Lista n-a putut fi citita. Se spune, in loc sa se arate un tabel gol linistitor. */
   advertsError?: string | null;
   categories: string[];
@@ -166,7 +175,13 @@ export function OlxClient({ businessId, status, adverts, advertsError, categorie
     );
   }
 
-  return <ConnectedDashboard businessId={businessId} status={status} adverts={adverts} advertsError={advertsError} categories={categories} />;
+  return (
+    <ConnectedDashboard
+      businessId={businessId} status={status} adverts={adverts}
+      advertsTotal={advertsTotal} advertsPagini={advertsPagini} advertsDeLa={advertsDeLa}
+      advertsError={advertsError} categories={categories}
+    />
+  );
 }
 
 function EmptyState({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
@@ -179,8 +194,12 @@ function EmptyState({ icon: Icon, title, children }: { icon: React.ElementType; 
   );
 }
 
-function ConnectedDashboard({ businessId, status, adverts, advertsError, categories }: {
-  businessId: string; status: OlxStatus; adverts: OlxAdvertRow[]; advertsError?: string | null; categories: string[];
+function ConnectedDashboard({
+  businessId, status, adverts, advertsTotal, advertsPagini, advertsDeLa, advertsError, categories,
+}: {
+  businessId: string; status: OlxStatus; adverts: OlxAdvertRow[];
+  advertsTotal: number; advertsPagini: number; advertsDeLa: number;
+  advertsError?: string | null; categories: string[];
 }) {
   const router = useRouter();
   const [syncing, startSync] = useTransition();
@@ -433,7 +452,9 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
               {showConflicte ? "Ascunde" : "Alege"}
             </Button>
           </div>
-          {showConflicte && <OlxConflicte businessId={businessId} onRezolvat={() => router.refresh()} />}
+          {showConflicte && (
+            <OlxConflicte businessId={businessId} total={c.conflicte} onRezolvat={() => router.refresh()} />
+          )}
         </Callout>
       )}
       {c.oprite > 0 && (
@@ -480,11 +501,18 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
       {/* Category mapping */}
       <OlxCategoryMapper businessId={businessId} categories={categories} initialMap={status.categoryMap} />
 
-      {/* Account / monetization */}
-      <OlxAccountPanel businessId={businessId} adverts={adverts} />
+      {/*
+        Account / monetization.
+
+        ⚠ NU MAI PRIMESTE LISTA TABELULUI. Tabelul aduce de azi o pagina de cincizeci, iar
+        „Promovează un anunț" are nevoie de TOATE anunturile ajunse la OLX, nu de pagina care se
+        intampla sa fie deschisa. Panoul si-o cere singur, la deschiderea acordeonului. Vezi
+        `getOlxAnunturiVii`.
+      */}
+      <OlxAccountPanel businessId={businessId} />
 
       {/* Buyer messages (OLX-style messenger) */}
-      <OlxMessenger businessId={businessId} adverts={adverts} />
+      <OlxMessenger businessId={businessId} />
 
       {/*
         ⚠ ANUNȚURILE DE DINAINTE DE EDINIO (etapa 16).
@@ -505,7 +533,11 @@ function ConnectedDashboard({ businessId, status, adverts, advertsError, categor
           {advertsError} Tabelul de mai jos e gol fiindcă n-am putut citi, nu fiindcă n-ai anunțuri.
         </Callout>
       )}
-      <AdvertTable businessId={businessId} adverts={adverts} ready={status.ready} />
+      <AdvertTable
+        businessId={businessId} anunturiInitiale={adverts} totalInitial={advertsTotal}
+        paginiInitiale={advertsPagini} deLaInitial={advertsDeLa} inCoada={c.queued}
+        ready={status.ready}
+      />
     </div>
   );
 }
@@ -755,7 +787,32 @@ function OlxSettings({ businessId, status, onSaved }: { businessId: string; stat
   );
 }
 
-function AdvertTable({ businessId, adverts, ready }: { businessId: string; adverts: OlxAdvertRow[]; ready: boolean }) {
+/**
+ * Tabelul de anunțuri, o pagină o dată.
+ *
+ * ═══ ⚠ DE CE ARE BARĂ CU NUMERE (22.09.2026) ═══
+ *
+ * Citirea se oprea la 200 de rânduri și nu spunea nimic despre oprire, iar cardul „Anunțuri" de
+ * deasupra se numără în bază. Pe un cont cu mii de anunțuri ecranul scria mia sus și arăta două
+ * sute jos, fără niciun drum către al 201-lea. Comerciantul citea tabelul ca pe tot catalogul lui.
+ *
+ * ⚠ Prima pagină vine RANDATĂ DE PE SERVER, ca ecranul să nu se nască gol și să nu mai coste o
+ * cerere. Celelalte se cer de aici, cu `getOlxAdverts(businessId, p)`.
+ *
+ * ⚠ Pagina se RECITEȘTE după fiecare acțiune de pe un rând, nu doar `router.refresh()`. Rândurile
+ * trăiesc de azi în starea componentei, iar `router.refresh()` reîmprospătează numai componentele
+ * de server: fără recitire, un anunț șters ar fi rămas pe ecran cu toate butoanele lui vii.
+ */
+function AdvertTable({ businessId, anunturiInitiale, totalInitial, paginiInitiale, deLaInitial, inCoada, ready }: {
+  businessId: string;
+  anunturiInitiale: OlxAdvertRow[];
+  totalInitial: number;
+  paginiInitiale: number;
+  deLaInitial: number;
+  /** Câte lucrări se golesc acum din coadă. Cât timp e peste zero, rândurile se recitesc singure. */
+  inCoada: number;
+  ready: boolean;
+}) {
   /*
     ⚠ RUTELE DE LOGO PE ANUNȚ EXISTAU ÎN CLIENT ȘI NU AJUNGEAU LA NIMENI. `getAdvertLogos`,
     `addAdvertLogo` și `deleteAdvertLogo` erau scrise, ba chiar probate pe fir, dar nicio acțiune
@@ -766,13 +823,64 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  const [adverts, setAdverts] = useState(anunturiInitiale);
+  const [total, setTotal] = useState(totalInitial);
+  const [pagina, setPagina] = useState(1);
+  const [pagini, setPagini] = useState(paginiInitiale);
+  const [deLa, setDeLa] = useState(deLaInitial);
+  const [seIncarca, startIncarcare] = useTransition();
+
+  /*
+    ⚠ PAGINA CERUTĂ SE POATE STRÂNGE, și de aceea se citește din răspuns, nu din ce s-a cerut.
+    Cineva care șterge ultimele anunțuri de pe pagina 8 rămâne pe o pagină care nu mai există;
+    serverul o strânge la ultima adevărată și o spune înapoi. Vezi `fereastraPaginii`.
+  */
+  const incarcaPagina = useCallback((p: number) => {
+    startIncarcare(async () => {
+      let r: Awaited<ReturnType<typeof getOlxAdverts>>;
+      try {
+        r = await getOlxAdverts(businessId, p);
+      } catch {
+        /* ⚠ O CITIRE: aduce o pagină de anunțuri și atât. Nu scrie nimic, deci reîncercarea e sigură. */
+        toast.error(
+          "Nu am primit raspuns de la server, deci pagina de anunturi nu s-a putut citi. "
+          + "Nu s-a schimbat nimic, deci poti incerca din nou linistit.",
+          { duration: 12000 },
+        );
+        return;
+      }
+      if ("error" in r) { toast.error(r.error); return; }
+      setAdverts(r.adverts);
+      setTotal(r.total);
+      setPagina(r.pagina);
+      setPagini(r.pagini);
+      setDeLa(r.deLa);
+    });
+  }, [businessId]);
+
+  /*
+    ⚠ CÂT TIMP COADA SE GOLEȘTE, SE RECITESC ȘI RÂNDURILE (22.09.2026).
+
+    Până azi rândurile veneau de pe server, deci bătaia de cinci secunde a panoului de deasupra
+    (`router.refresh()`, cât timp `c.queued > 0`) le aducea la zi odată cu cifrele. Acum ele
+    trăiesc aici, iar `router.refresh()` nu atinge starea unei componente de client: cifrele de
+    sus s-ar fi mișcat, iar tabelul ar fi rămas pe „În coadă" până la o reîncărcare cu mâna.
+  */
+  useEffect(() => {
+    if (inCoada <= 0) return;
+    const t = setInterval(() => incarcaPagina(pagina), 5000);
+    return () => clearInterval(t);
+  }, [inCoada, pagina, incarcaPagina]);
+
   function act(offerId: string, fn: () => Promise<{ success: true } | { error: string }>, okMsg: string) {
     setBusyId(offerId);
     fn().then((res) => {
       setBusyId(null);
       if ("error" in res) { toast.error(res.error); return; }
       toast.success(okMsg);
+      /* Cifrele de sus stau în componente de server; rândurile de aici, în starea asta. */
       router.refresh();
+      incarcaPagina(pagina);
     });
   }
 
@@ -781,7 +889,9 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
       <div className="flex items-center gap-2 border-b border-border px-5 py-4">
         <Tag className="h-4 w-4 text-muted-foreground" />
         <h3 className="text-sm font-semibold text-foreground">Anunțuri pe OLX</h3>
-        <span className="text-xs text-muted-foreground">({adverts.length})</span>
+        {/* ⚠ Numărul din bază, nu lungimea paginii: „(50)" peste trei mii de anunțuri ar fi o minte. */}
+        <span className="text-xs text-muted-foreground">({total})</span>
+        {seIncarca && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
       </div>
       {adverts.length === 0 ? (
         <div className="px-4 py-12 text-center">
@@ -899,6 +1009,22 @@ function AdvertTable({ businessId, adverts, ready }: { businessId: string; adver
               </div>
             );
           })}
+        </div>
+      )}
+      {/*
+        ⚠ NUMERE, NU DOUĂ SĂGEȚI. La 3.351 de produse ies 68 de pagini, iar cu „înainte" singur
+        drumul până la ultima e de 67 de apăsări. Bara se ascunde singură sub două pagini, deci pe
+        conturile mici nu se vede nimic în plus. Vezi `Paginatie`.
+      */}
+      {adverts.length > 0 && (
+        <div className="border-t border-border px-5 py-3">
+          <Paginatie
+            pagina={pagina}
+            pagini={pagini}
+            laSchimbare={(p) => incarcaPagina(p)}
+            seIncarca={seIncarca}
+            rezumat={`${deLa + 1}–${deLa + adverts.length} din ${total}`}
+          />
         </div>
       )}
       {logoPentru && (

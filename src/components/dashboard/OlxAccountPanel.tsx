@@ -10,9 +10,9 @@ import {
   AlertTriangle, Wallet, Loader2, ChevronDown, Package, Megaphone, ShoppingCart,
 } from "lucide-react";
 import {
-  getOlxAccountInfo, getOlxPackets, buyOlxCategoryPacket,
+  getOlxAccountInfo, getOlxPackets, buyOlxCategoryPacket, getOlxAnunturiVii,
   getOlxPaidFeatures, buyOlxPaidFeature,
-  type OlxAdvertRow, type OlxAccountInfo, type OlxPacketGroup, type OlxPacketsResult,
+  type OlxAnuntViu, type OlxAccountInfo, type OlxPacketGroup, type OlxPacketsResult,
 } from "@/lib/actions/olx.actions";
 import type { OlxPaidFeature, OlxPaymentMethod } from "@/lib/olx/types";
 import { OlxCont } from "./OlxCont";
@@ -50,12 +50,24 @@ function money(value: number | null | undefined, currency: string | null | undef
   return `${new Intl.NumberFormat("ro-RO", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n)} ${currency || "RON"}`;
 }
 
-export function OlxAccountPanel({ businessId, adverts }: { businessId: string; adverts: OlxAdvertRow[] }) {
+/**
+ * ⚠ LISTA DE ANUNȚURI NU SE MAI ÎMPRUMUTĂ DE LA TABEL (22.09.2026)
+ *
+ * Panoul primea chiar rândurile tabelului de anunțuri. Cât timp acela aducea două sute deodată,
+ * mergea; de când aduce o pagină de cincizeci, un anunț de pe pagina a doua n-ar mai fi fost de
+ * găsit în „Promovează un anunț", iar omul ar fi crezut că nu se poate promova. O listă
+ * împrumutată poartă filtrul vecinului, nu pe al tău.
+ *
+ * ⚠ Se cere O DATĂ, la deschiderea acordeonului, în aceeași așteptare cu soldul: panoul e închis
+ * pe un ecran care are deja opt panouri, și n-are de ce să coste o citire pe cine nu-l deschide.
+ */
+export function OlxAccountPanel({ businessId }: { businessId: string }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [account, setAccount] = useState<OlxAccountInfo | null>(null);
   const [packets, setPackets] = useState<OlxPacketsResult | null>(null);
   const [features, setFeatures] = useState<OlxPaidFeature[] | null>(null);
+  const [anunturi, setAnunturi] = useState<OlxAnuntViu[]>([]);
 
   /*
     ⚠ O CITIRE PICATĂ NU E UN „N-AI NIMIC" (02.09.2026)
@@ -68,17 +80,20 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
     ⚠ Amândouă sunt același zero care liniștește: omul pleacă convins că OLX nu-i oferă nimic, când
     de fapt noi n-am putut întreba.
   */
-  const [erori, setErori] = useState<{ sold?: string; pachete?: string; promovari?: string }>({});
+  const [erori, setErori] = useState<{ sold?: string; pachete?: string; promovari?: string; anunturi?: string }>({});
 
   async function loadAll() {
     setLoading(true);
-    const [acc, pk, ft] = await Promise.all([
+    const [acc, pk, ft, an] = await Promise.all([
       getOlxAccountInfo(businessId), getOlxPackets(businessId), getOlxPaidFeatures(businessId),
+      getOlxAnunturiVii(businessId),
     ]);
-    const rele: { sold?: string; pachete?: string; promovari?: string } = {};
+    const rele: { sold?: string; pachete?: string; promovari?: string; anunturi?: string } = {};
     if ("error" in acc) rele.sold = acc.error; else setAccount(acc);
     if ("error" in pk) rele.pachete = pk.error; else setPackets(pk);
     if ("error" in ft) rele.promovari = ft.error; else setFeatures(ft.features);
+    /* ⚠ O citire picată nu se arată ca „n-ai niciun anunț de promovat": vezi nota de la `loadAll`. */
+    if ("error" in an) rele.anunturi = an.error; else setAnunturi(an.anunturi);
     setErori(rele);
     if (rele.sold) toast.error(rele.sold);
     setLoading(false);
@@ -91,7 +106,7 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
   }
 
   const methods = account?.paymentMethods ?? [];
-  const activeAdverts = adverts.filter((a) => a.olx_advert_id && ["active", "limited"].includes(a.status));
+  const activeAdverts = anunturi.filter((a) => ["active", "limited"].includes(a.status));
 
   return (
     <Panel className="overflow-hidden">
@@ -174,10 +189,10 @@ export function OlxAccountPanel({ businessId, adverts }: { businessId: string; a
               />
 
               {/* Promote advert */}
-              <PromoteAdvert businessId={businessId} adverts={activeAdverts} features={features ?? []} methods={methods} eroare={erori.promovari} onCumparat={loadAll} />
+              <PromoteAdvert businessId={businessId} adverts={activeAdverts} features={features ?? []} methods={methods} eroare={erori.promovari} eroareAnunturi={erori.anunturi} onCumparat={loadAll} />
 
               {/* Facturare, profil de firma si promovarile pe care anuntul le are deja */}
-              <OlxCont businessId={businessId} adverts={activeAdverts} />
+              <OlxCont businessId={businessId} adverts={activeAdverts} eroareAnunturi={erori.anunturi} />
             </>
           )}
         </div>
@@ -358,10 +373,12 @@ function BuyPacket({ businessId, groups, hasMappedCategories, methods, defaultMe
   );
 }
 
-function PromoteAdvert({ businessId, adverts, features, methods, eroare, onCumparat }: {
-  businessId: string; adverts: OlxAdvertRow[]; features: OlxPaidFeature[]; methods: OlxPaymentMethod[];
+function PromoteAdvert({ businessId, adverts, features, methods, eroare, eroareAnunturi, onCumparat }: {
+  businessId: string; adverts: OlxAnuntViu[]; features: OlxPaidFeature[]; methods: OlxPaymentMethod[];
   /** Lista n-a putut fi citita: se spune, nu se ascunde sectiunea. */
   eroare?: string;
+  /** Lista de anunțuri n-a putut fi citită. Golul ei NU înseamnă „n-ai ce promova". */
+  eroareAnunturi?: string;
   /** Soldul si promovarile se recitesc dupa cumparare. Vezi nota de la `BuyPacket`. */
   onCumparat?: () => void | Promise<void>;
 }) {
@@ -386,6 +403,20 @@ function PromoteAdvert({ businessId, adverts, features, methods, eroare, onCumpa
       </div>
     );
   }
+  /* ⚠ Același zero care liniștește, de partea cealaltă: lista de anunțuri n-a putut fi citită. */
+  if (eroareAnunturi) {
+    return (
+      <div>
+        <SectionLabel icon={Megaphone}>Promovează un anunț</SectionLabel>
+        <Callout variant="danger" icon={AlertTriangle}>
+          <span className="text-xs">
+            Nu am putut citi lista de anunțuri: {eroareAnunturi} Secțiunea e goală fiindcă n-am
+            putut citi, nu fiindcă n-ai anunțuri de promovat.
+          </span>
+        </Callout>
+      </div>
+    );
+  }
   if (adverts.length === 0 || features.length === 0) return null;
 
   return (
@@ -394,7 +425,7 @@ function PromoteAdvert({ businessId, adverts, features, methods, eroare, onCumpa
       <div className="flex flex-col gap-2">
         <select aria-label="Anunț" value={advertId} onChange={(e) => setAdvertId(e.target.value)} className={selectCls}>
           <option value="">Alege anunțul</option>
-          {adverts.map((a) => <option key={a.offer_id} value={String(a.olx_advert_id)}>{a.name}</option>)}
+          {adverts.map((a) => <option key={a.offerId} value={String(a.advertId)}>{a.nume}</option>)}
         </select>
         <div className="flex flex-col gap-2 sm:flex-row">
           <select aria-label="Promovare" value={code} onChange={(e) => setCode(e.target.value)} className={cn(selectCls, "flex-1")}>
@@ -409,7 +440,7 @@ function PromoteAdvert({ businessId, adverts, features, methods, eroare, onCumpa
           <Button
             disabled={saving || !advertId || !code}
             onClick={() => {
-              const numeAnunt = adverts.find((a) => String(a.olx_advert_id) === advertId)?.name ?? "anunțul ales";
+              const numeAnunt = adverts.find((a) => String(a.advertId) === advertId)?.nume ?? "anunțul ales";
               const numeProm = features.find((f) => f.code === code)?.name ?? code;
               if (!confirmaPlata(`Cumperi promovarea „${numeProm}" pe „${numeAnunt}"?`, null)) return;
               startSave(async () => {

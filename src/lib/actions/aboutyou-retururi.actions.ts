@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { randuriCitite } from "@/lib/supabase/rand-citit";
+import { fereastraPaginii } from "@/lib/paginare";
 import { logError } from "@/lib/error-logger";
 
 /**
@@ -51,22 +52,52 @@ export interface RandReturAboutYou {
   repusInStoc: boolean;
 }
 
+/*
+ * ⚠ SE ADUCE O SINGURA PAGINA (22.09.2026).
+ *
+ * Pana azi: `.limit(100)`, fara nimic care sa spuna ca s-a taiat. O linie intoarsa inseamna o
+ * BUCATA la About You (n-au camp de cantitate), deci retururile se aduna mai repede decat
+ * comenzile — iar marfa de dincolo de suta n-ar mai fi ajuns niciodata inapoi in stoc, exact
+ * paguba pe care ecranul asta o repara.
+ */
+const RETURURI_PE_PAGINA = 50;
+
+export interface PaginaRetururiAboutYou {
+  retururi: RandReturAboutYou[];
+  total: number;
+  pagina: number;
+  pagini: number;
+  pePagina: number;
+}
+
 /** Liniile intoarse ale magazinului, cele mai noi intai. */
 export async function retururiAboutYou(
-  businessId: string, doarNerezolvate = true,
-): Promise<{ retururi: RandReturAboutYou[] } | { error: string }> {
+  businessId: string, doarNerezolvate = true, pagina = 1,
+): Promise<PaginaRetururiAboutYou | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
 
   const admin = createAdminClient();
+
+  let contor = admin.from("aboutyou_retururi")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", businessId);
+  if (doarNerezolvate) contor = contor.is("repus_in_stoc_la", null);
+  const { count, error: eContor } = await contor;
+  if (eContor) return { error: "Retururile nu s-au putut citi. Reîncarcă pagina." };
+
+  /*
+   * ⚠ Fereastra se STRANGE la cate pagini exista cu adevarat: ceruta dincolo de capat, PostgREST
+   * raspunde 416, iar atunci `postgrest-js` arunca chiar numaratoarea pe care tocmai o primise.
+   */
+  const f = fereastraPaginii(pagina, count ?? 0, RETURURI_PE_PAGINA);
+
   let q = admin.from("aboutyou_retururi")
     .select("id, aboutyou_order_number, sku, nume_produs, variant_title, quantity, repus_in_stoc_la")
-    .eq("business_id", businessId)
-    .order("created_at", { ascending: false })
-    .limit(100);
+    .eq("business_id", businessId);
   if (doarNerezolvate) q = q.is("repus_in_stoc_la", null);
 
-  const { data, error } = await q;
+  const { data, error } = await q.order("created_at", { ascending: false }).range(f.deLa, f.panaLa);
   if (error) return { error: "Retururile nu s-au putut citi. Reîncarcă pagina." };
 
   type Rand = {
@@ -83,6 +114,10 @@ export async function retururiAboutYou(
       cantitate: r.quantity,
       repusInStoc: !!r.repus_in_stoc_la,
     })),
+    total: count ?? 0,
+    pagina: f.pagina,
+    pagini: f.pagini,
+    pePagina: RETURURI_PE_PAGINA,
   };
 }
 

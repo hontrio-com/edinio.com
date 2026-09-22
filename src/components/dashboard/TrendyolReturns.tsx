@@ -6,8 +6,9 @@ import { toast } from "sonner";
 import { dovadaCeruta, MOTIV_BLOCAT_24H } from "@/lib/trendyol/retur-forma";
 import {
   hotarasteReturTrendyol, motiveRespingereTrendyol, repuneInStocTrendyol, retururiTrendyol,
-  respingeReturTrendyolCuDovezi, type RandRetur,
+  respingeReturTrendyolCuDovezi, type PaginaRetururi,
 } from "@/lib/actions/trendyol-retururi.actions";
+import { Paginatie } from "@/components/dashboard/Paginatie";
 
 /**
  * Retururile Trendyol.
@@ -39,7 +40,18 @@ const STARI: Record<string, string> = {
 };
 
 export function TrendyolReturns({ businessId }: { businessId: string }) {
-  const [retururi, setRetururi] = useState<RandRetur[] | null>(null);
+  /*
+   * ⚠ O PAGINA, NU TOATA LISTA (22.09.2026).
+   *
+   * Pana azi ecranul cerea retururile fara pagina, iar serverul le taia la 100 fara sa spuna
+   * nimic: un magazin cu vechime isi vedea ultimele o suta de cereri si n-avea nicio cale spre
+   * a o suta una. Retururile cresc cu comenzile, deci lista creste cu magazinul.
+   *
+   * Se tine chiar raspunsul serverului, nu doar randurile: numarul total si pagina INTOARSA
+   * vin de acolo. Pagina ceruta poate fi mai mare decat cate sunt, iar serverul o stramteaza.
+   */
+  const [pag, setPag] = useState<PaginaRetururi | null>(null);
+  const retururi = pag?.retururi ?? null;
   const [motive, setMotive] = useState<{ id: number; nume: string }[]>([]);
   const [doarDeHotarat, setDoarDeHotarat] = useState(true);
   /*
@@ -86,11 +98,14 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
   }
   const [seIncarca, incepe] = useTransition();
 
-  function incarca(doar = doarDeHotarat) {
+  /* ⚠ Pagina pleaca la server, nu se taie in browser: altfel ar veni toate cererile prin retea
+     ca sa se arate douazeci si cinci. Dupa o hotarare se reincarca CHIAR pagina de pe ecran,
+     ca omul sa nu fie aruncat inapoi la prima. */
+  function incarca(doar = doarDeHotarat, p = pag?.pagina ?? 1) {
     incepe(async () => {
-      const r = await retururiTrendyol(businessId, doar);
+      const r = await retururiTrendyol(businessId, doar, p);
       if ("error" in r) { toast.error(r.error); return; }
-      setRetururi(r.retururi);
+      setPag(r);
     });
   }
 
@@ -192,7 +207,9 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
           <input
             type="checkbox"
             checked={doarDeHotarat}
-            onChange={(e) => { setDoarDeHotarat(e.target.checked); incarca(e.target.checked); }}
+            /* ⚠ Se porneste de la prima pagina: filtrul schimbat schimba si cate pagini sunt,
+               iar ramas pe a saptea omul ar fi vazut un ecran gol fara sa priceapa de ce. */
+            onChange={(e) => { setDoarDeHotarat(e.target.checked); incarca(e.target.checked, 1); }}
           />
           Doar cele care așteaptă
         </label>
@@ -479,6 +496,20 @@ export function TrendyolReturns({ businessId }: { businessId: string }) {
           </div>
         ))}
       </div>
+
+      {/* ⚠ NUMERE, nu doua sageti: vezi `Paginatie`. Si un rezumat care spune cate sunt cu
+          totul, fiindca pana azi numarul asta nu se vedea nicaieri. */}
+      {pag && pag.pagini > 1 && (
+        <div className="mt-3 border-t border-border pt-3">
+          <Paginatie
+            pagina={pag.pagina}
+            pagini={pag.pagini}
+            laSchimbare={(p) => incarca(doarDeHotarat, p)}
+            seIncarca={seIncarca}
+            rezumat={`${(pag.pagina - 1) * pag.pePagina + 1}–${Math.min(pag.pagina * pag.pePagina, pag.total)} din ${pag.total}`}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Search, Send, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Search, Send, X } from "lucide-react";
 import {
   bulkPublishTrendyol, getTrendyolProductIds, getTrendyolProductPage, pushTrendyolInventory,
   removeTrendyolListing, syncTrendyolProduct,
   type TrendyolProductPage, type TrendyolProductStatusFilter,
 } from "@/lib/actions/trendyol.actions";
 import { TrendyolListingEditor } from "@/components/dashboard/TrendyolListingEditor";
+import { Paginatie } from "@/components/dashboard/Paginatie";
 import type { TrendyolStoreFront } from "@/lib/trendyol/types";
 import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 
@@ -74,7 +75,14 @@ export function TrendyolListings({
 
   const aplicaRezultatul = useCallback((res: TrendyolProductPage | { error: string }) => {
     if ("error" in res) { setEroare(res.error); setDate(null); }
-    else { setEroare(null); setDate(res); }
+    else {
+      setEroare(null);
+      setDate(res);
+      /* ⚠ Numarul paginii vine INAPOI de la server, nu ramane cel cerut. Serverul stramteaza
+         pagina la ultima care exista, iar daca ecranul si-ar tine numarul lui, rezumatul ar
+         spune „1.001-1.025 din 300" pe randuri care sunt de fapt ale ultimei pagini. */
+      setPagina(res.page);
+    }
     setIncarca(false);
   }, []);
 
@@ -284,6 +292,9 @@ export function TrendyolListings({
   const areFiltre = cautare !== "" || categorie !== "" || status !== "toate";
   const total = date?.total ?? 0;
   const totalPagini = date?.totalPages ?? 1;
+  /* Cate incap pe o pagina o hotaraste serverul; ecranul doar il citeste, ca rezumatul
+     („26-50 din 1.315") sa nu poata minti daca acolo se schimba numarul. */
+  const pePagina = date?.pageSize ?? 0;
 
   return (
     <div className="rounded-xl ring-1 ring-foreground/10 bg-card p-5">
@@ -496,17 +507,25 @@ export function TrendyolListings({
         })}
       </div>
 
+      {/*
+        ═══ ⚠ NUMERE, NU DOUA SAGETI (22.09.2026) ═══
+
+        Aici erau „Înapoi", „Pagina x din y" si „Înainte". Masurat pe productie: 1.315 listari
+        Trendyol, 438 in medie pe magazin, iar serverul da 25 pe pagina, adica 53 de pagini la
+        cel mare. Singura cale spre pagina 40 era sa apesi „Înainte" de treizeci si noua de ori.
+
+        ⚠ Aceeasi bara ca la ofertele eMAG, din acelasi fisier: doua copii ale aceleiasi bare se
+        despart la prima schimbare, iar despartirea nu se vede. Vezi `Paginatie`.
+      */}
       {totalPagini > 1 && (
-        <div className="flex items-center justify-between gap-3 pt-4 mt-2 border-t border-border">
-          <button onClick={() => { setIncarca(true); setPagina((p) => Math.max(1, p - 1)); }} disabled={pagina <= 1 || incarca}
-            className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed">
-            <ChevronLeft className="h-3.5 w-3.5" /> Înapoi
-          </button>
-          <span className="text-xs text-muted-foreground">Pagina {pagina} din {totalPagini}</span>
-          <button onClick={() => { setIncarca(true); setPagina((p) => Math.min(totalPagini, p + 1)); }} disabled={pagina >= totalPagini || incarca}
-            className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed">
-            Înainte <ChevronRight className="h-3.5 w-3.5" />
-          </button>
+        <div className="pt-4 mt-2 border-t border-border">
+          <Paginatie
+            pagina={pagina}
+            pagini={totalPagini}
+            laSchimbare={(p) => { setIncarca(true); setPagina(p); }}
+            seIncarca={incarca}
+            rezumat={`${(pagina - 1) * pePagina + 1}–${Math.min(pagina * pePagina, total)} din ${total}`}
+          />
         </div>
       )}
     </div>

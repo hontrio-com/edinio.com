@@ -5,6 +5,7 @@ import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare"
 import { ChevronDown, ChevronRight, Loader2, RefreshCw, ScrollText } from "lucide-react";
 import { toast } from "sonner";
 import { jurnalCereriEmag, type RandJurnalEcran } from "@/lib/actions/emag.actions";
+import { Paginatie } from "./Paginatie";
 
 /**
  * Ce a plecat spre eMAG și ce au răspuns (§65, §66).
@@ -24,22 +25,41 @@ import { jurnalCereriEmag, type RandJurnalEcran } from "@/lib/actions/emag.actio
  *
  * ⚠ Se încarcă abia la deschidere. Un `useEffect` la montare ar fi cerut baza de date
  * la fiecare intrare pe pagină, pentru un panou pe care nimeni nu-l deschide.
+ *
+ * ═══ ⚠ SE RĂSFOIEȘTE, NU SE ARATĂ O FELIE ȘI ATÂT (22.09.2026) ═══
+ *
+ * `jurnalCereriEmag` cerea de la bun început o pagină anume, cu `total` numărat exact
+ * peste tot jurnalul. Ecranul nu cerea niciodată pagina a doua: scria „Se arată 50 din
+ * 11.020" și se oprea acolo. Adică tocmai ecranul pe care omul îl deschide ca să afle
+ * ce s-a întâmplat cu o cerere de acum două zile îi dădea numai ultima oră, iar restul
+ * nu se putea ajunge în niciun fel. Unealta era scrisă, doar că nu o chema nimeni.
  */
 
 export function EmagJurnal({ businessId }: { businessId: string }) {
   const [deschis, setDeschis] = useState(false);
   const [randuri, setRanduri] = useState<RandJurnalEcran[] | null>(null);
   const [total, setTotal] = useState(0);
+  const [pagina, setPagina] = useState(1);
+  const [pePagina, setPePagina] = useState(50);
   const [doarProbleme, setDoarProbleme] = useState(false);
   const [fir, setFir] = useState<string | null>(null);
   const [seIncarca, incepe] = useTransition();
 
-  function incarca(optiuni: { doarProbleme?: boolean; fir?: string | null } = {}) {
+  /*
+   * ⚠ Pagina se ÎNTOARCE LA 1 când nu e cerută anume, iar asta e dinadins: orice
+   * schimbare de filtru face altă listă, mai scurtă. Rămasă pe pagina 40, cererea ar
+   * fi trecut de capătul noii liste, iar PostgREST răspunde atunci cu 416 și niciun
+   * rând. Omul ar fi văzut o listă goală după ce a apăsat „Doar ce n-a mers" pe un
+   * jurnal plin de refuzuri. Numai „Reîmprospătează" cere anume pagina de acum.
+   */
+  function incarca(optiuni: { doarProbleme?: boolean; fir?: string | null; pagina?: number } = {}) {
     const probleme = optiuni.doarProbleme ?? doarProbleme;
     const firul = optiuni.fir !== undefined ? optiuni.fir : fir;
+    const p = optiuni.pagina ?? 1;
     incepe(async () => {
       const r = await jurnalCereriEmag(businessId, {
         doarProbleme: probleme,
+        pagina: p,
         ...(firul ? { fir: firul } : {}),
       });
       if ("error" in r) {
@@ -49,6 +69,8 @@ export function EmagJurnal({ businessId }: { businessId: string }) {
       }
       setRanduri(r.randuri);
       setTotal(r.total);
+      setPagina(r.pagina);
+      setPePagina(r.pePagina);
     });
   }
 
@@ -110,7 +132,7 @@ export function EmagJurnal({ businessId }: { businessId: string }) {
 
             <button
               type="button"
-              onClick={() => incarca()}
+              onClick={() => incarca({ pagina })}
               disabled={seIncarca}
               className="ml-auto inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
             >
@@ -140,11 +162,13 @@ export function EmagJurnal({ businessId }: { businessId: string }) {
                   />
                 ))}
               </ul>
-              {total > randuri.length && (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Se arată {randuri.length} din {total}.
-                </p>
-              )}
+              <Paginatie
+                pagina={pagina}
+                pagini={Math.max(1, Math.ceil(total / Math.max(1, pePagina)))}
+                laSchimbare={(p) => incarca({ pagina: p })}
+                seIncarca={seIncarca}
+                rezumat={`${(pagina - 1) * pePagina + 1}–${Math.min(pagina * pePagina, total)} din ${total}`}
+              />
             </>
           )}
 

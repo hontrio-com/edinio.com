@@ -63,12 +63,22 @@ function ScheletOlx() {
 async function ContinutOlx({ businessId }: { businessId: string }) {
   const supabase = await createClient();
   const status = await getOlxStatus(businessId);
-  const rAdverts = "error" in status ? { adverts: [] } : await getOlxAdverts(businessId);
+  /*
+    ⚠ PRIMA PAGINĂ, NU TOT TABELUL (22.09.2026). Citirea aducea 200 de anunțuri și tăcea despre
+    restul. Acum vine o pagină de 50, cu numărul adevărat lângă ea, iar `AdvertTable` cere singur
+    paginile următoare. Prima rămâne randată pe server, ca ecranul să nu se nască gol.
+  */
+  const rAdverts = "error" in status
+    ? { adverts: [], total: 0, pagini: 1, deLa: 0 }
+    : await getOlxAdverts(businessId, 1);
   /*
     ⚠ Lista nu se poate citi: se arată goală, dar cu spusa alături. Un tabel gol fără explicație e
     tocmai zeroul care liniștește — iar de aici omul apasă „Publică tot".
   */
   const adverts = "error" in rAdverts ? [] : rAdverts.adverts;
+  const advertsTotal = "error" in rAdverts ? 0 : rAdverts.total;
+  const advertsPagini = "error" in rAdverts ? 1 : rAdverts.pagini;
+  const advertsDeLa = "error" in rAdverts ? 0 : rAdverts.deLa;
   const advertsError = "error" in rAdverts ? rAdverts.error : null;
 
   // Distinct product categories, windowed past the 1000-row PostgREST cap.
@@ -87,6 +97,9 @@ async function ContinutOlx({ businessId }: { businessId: string }) {
       businessId={businessId}
       status={"error" in status ? null : status}
       adverts={adverts}
+      advertsTotal={advertsTotal}
+      advertsPagini={advertsPagini}
+      advertsDeLa={advertsDeLa}
       advertsError={advertsError}
       categories={categories}
     />

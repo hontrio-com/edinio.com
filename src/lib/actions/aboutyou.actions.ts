@@ -23,6 +23,7 @@ import {
 import { ABOUTYOU_WEBHOOK_EVENTS, EVENIMENTE_ESENTIALE } from "@/lib/aboutyou/webhooks";
 import { cancelOrderNow, returnOrderNow } from "@/lib/aboutyou/orders";
 import { randCitit, randuriCitite } from "@/lib/supabase/rand-citit";
+import { fereastraPaginii } from "@/lib/paginare";
 import {
   getAllCategoriesCached, getAttributeGroupsCached, getBrandsCached, getCarriersCached,
   cereMarime, getCategoryChildrenCached, getCerintaMaterial, getCountriesCached, searchCategories,
@@ -1789,6 +1790,15 @@ export interface AboutYouProductPage {
   total: number;
   page: number;
   pages: number;
+  /*
+   * ⚠ Cate randuri incap pe o pagina, TRIMIS catre ecran, nu ghicit acolo.
+   *
+   * Bara de paginare scrie „51-100 din 3.351", iar numerele alea se socotesc din marimea
+   * paginii. Constanta nu se poate exporta dintr-un fisier „use server", iar o a doua copie
+   * scrisa in ecran s-ar fi despartit tacut de asta la prima schimbare: rezumatul ar fi
+   * numarat alte randuri decat cele afisate.
+   */
+  pePagina: number;
 }
 
 export async function getAboutYouProductPage(
@@ -1825,7 +1835,11 @@ export async function getAboutYouProductPage(
     listings = (ls ?? []).map(randListare);
   }
 
-  return { products, listings, total, page: pagina, pages: Math.max(1, Math.ceil(total / ABOUTYOU_PAGE_SIZE)) };
+  return {
+    products, listings, total, page: pagina,
+    pages: Math.max(1, Math.ceil(total / ABOUTYOU_PAGE_SIZE)),
+    pePagina: ABOUTYOU_PAGE_SIZE,
+  };
 }
 
 function randListare(r: {
@@ -1935,25 +1949,82 @@ export interface RandComandaAboutYou {
   sePoateReturna: boolean;
 }
 
-export async function getAboutYouOrders(businessId: string, doarProbleme = false): Promise<RandComandaAboutYou[]> {
+/*
+ * ⚠ SE ADUCE O SINGURA PAGINA, NU TOT DOSARUL DE COMENZI (22.09.2026).
+ *
+ * Pana azi: `.limit(100)`, fara nimic care sa spuna ca s-a taiat. Comerciantul cu 300 de comenzi
+ * About You vedea o suta si nu avea de unde sti ca exista restul — o taiere tacuta, cel mai rau
+ * fel, fiindca lista ARATA completa.
+ *
+ * ⚠ SI CERNEREA A TRECUT PE SERVER ODATA CU EA. „Arata doar problemele" filtra in browser CHIAR
+ * acele o suta de randuri, deci o expediere respinsa la comanda a 130-a nu apărea niciodata,
+ * nici cu filtrul pornit — adica tocmai butonul pus ca sa gaseasca problemele le ascundea.
+ */
+const ABOUTYOU_ORDERS_PER_PAGE = 50;
+
+/** Starile in care About You a respins o cerere de-a noastra. */
+const COMENZI_CU_PROBLEME = ["ship_failed", "cancel_failed", "return_failed"];
+
+export interface PaginaComenziAboutYou {
+  randuri: RandComandaAboutYou[];
+  total: number;
+  pagina: number;
+  pagini: number;
+  pePagina: number;
+  /** ⚠ Numarate pe TOT magazinul, nu pe pagina: altfel pastila ar fi spus alt numar pe fiecare pagină. */
+  cuProbleme: number;
+}
+
+export async function getAboutYouOrders(
+  businessId: string, pagina = 1, doarProbleme = false,
+): Promise<PaginaComenziAboutYou> {
+  const goala: PaginaComenziAboutYou = {
+    randuri: [], total: 0, pagina: 1, pagini: 1, pePagina: ABOUTYOU_ORDERS_PER_PAGE, cuProbleme: 0,
+  };
   const g = await guard(businessId);
-  if ("error" in g) return [];
+  if ("error" in g) return goala;
+
+  const contor = (doar: boolean) => {
+    const c = g.supabase
+      .from("aboutyou_orders").select("order_id", { count: "exact", head: true })
+      .eq("business_id", businessId);
+    return doar ? c.in("status", COMENZI_CU_PROBLEME) : c;
+  };
+  const [rTot, rProbleme] = await Promise.all([contor(false), contor(true)]);
+  /* ⚠ Eroarea se citeste: inghitita, un hop al bazei ar fi aratat „nicio comanda About You". */
+  if (rTot.error || rProbleme.error) {
+    logError({
+      action: "aboutyou.getOrders",
+      message: `numarul comenzilor nu s-a putut citi: ${(rTot.error ?? rProbleme.error)?.message}`,
+      details: { businessId }, businessId,
+    });
+    return goala;
+  }
+  const cuProbleme = rProbleme.count ?? 0;
+  const total = doarProbleme ? cuProbleme : (rTot.count ?? 0);
+
+  /*
+   * ⚠ Fereastra se STRANGE la cate pagini exista cu adevarat. Ceruta dincolo de capat, PostgREST
+   * raspunde 416, iar `postgrest-js` citeste `count` doar cand raspunsul e bun: am fi aruncat
+   * chiar numarul pe care tocmai ni-l trimisese, si lista ar fi aratat goala fara drum inapoi.
+   */
+  const f = fereastraPaginii(pagina, total, ABOUTYOU_ORDERS_PER_PAGE);
+
   let q = g.supabase
     .from("aboutyou_orders")
     .select("order_id, aboutyou_order_number, status, shop_country, fulfillment_type, items, last_synced_at, created_at, orders(order_number)")
     .eq("business_id", businessId);
-  if (doarProbleme) q = q.in("status", ["ship_failed", "cancel_failed", "return_failed"]);
-  /* ⚠ Eroarea se citeste: inghitita, un hop al bazei ar fi aratat „nicio comanda About You". */
-  const { data, error } = await q.order("created_at", { ascending: false }).limit(100);
+  if (doarProbleme) q = q.in("status", COMENZI_CU_PROBLEME);
+  const { data, error } = await q.order("created_at", { ascending: false }).range(f.deLa, f.panaLa);
   if (error) {
     logError({
       action: "aboutyou.getOrders", message: `lista comenzilor nu s-a putut citi: ${error.message}`,
-      details: { businessId }, businessId,
+      details: { businessId, pagina: f.pagina }, businessId,
     });
-    return [];
+    return { ...goala, cuProbleme };
   }
 
-  return (data ?? []).map((r) => {
+  const randuri = (data ?? []).map((r) => {
     const o = r.orders as { order_number?: string } | { order_number?: string }[] | null;
     const numarEdinio = Array.isArray(o) ? o[0]?.order_number : o?.order_number;
     /*
@@ -1975,6 +2046,8 @@ export async function getAboutYouOrders(businessId: string, doarProbleme = false
       sePoateReturna: !aleLor && linii.some((l) => l.status === "shipped"),
     };
   });
+
+  return { randuri, total, pagina: f.pagina, pagini: f.pagini, pePagina: ABOUTYOU_ORDERS_PER_PAGE, cuProbleme };
 }
 
 /** Repune la coada expedierea unei comenzi About You care a eșuat. */

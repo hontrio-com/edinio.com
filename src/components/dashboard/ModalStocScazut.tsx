@@ -32,7 +32,7 @@ import { PRAG_STOC_SCAZUT } from "@/lib/stoc-prag";
   Cifrele arata cum e ACUM, nu cum era la deschidere: dupa scriere lista se
   reincarca, iar produsele care au iesit de sub prag dispar din ea.
 */
-export type CerereProduse = Promise<{ produse: ProdusSubPrag[] } | { error: string }>;
+export type CerereProduse = Promise<{ produse: ProdusSubPrag[]; cateSunt: number } | { error: string }>;
 
 export function ModalStocScazut({
   businessId,
@@ -61,6 +61,13 @@ export function ModalStocScazut({
   const rezultat = use(cerere);
   const produse = "error" in rezultat ? null : rezultat.produse;
   const eroare = "error" in rezultat ? rezultat.error : null;
+  /*
+    ⚠ CATE SUNT CU ADEVARAT, din a doua functie a bazei. `produse_sub_prag` se
+    incheie cu `limit 200`, deci lista de mai jos poate fi doar inceputul, iar
+    pana azi nimic n-o spunea. Vezi nota din `citesteProduseSubPrag`.
+  */
+  const cateSunt = "error" in rezultat ? 0 : rezultat.cateSunt;
+  const taiata = produse !== null && cateSunt > produse.length;
 
   const [alese, setAlese] = useState<Set<string>>(new Set());
   const [desfacute, setDesfacute] = useState<Set<string>>(
@@ -183,6 +190,23 @@ export function ModalStocScazut({
           <div className="px-5 py-10 text-center text-sm text-muted-foreground">
             Niciun produs sub prag. Stocurile stau bine.
           </div>
+        )}
+
+        {taiata && produse && (
+          /*
+            ⚠ SE SPUNE, NU SE ASCUNDE. Randurile completate ies de sub prag, deci
+            urmatoarea deschidere aduce ce era dedesubt: taierea nu pierde nimic
+            atata vreme cat omul stie ca mai are de unde lua.
+
+            ⚠ Cifra din stanga e `produse.length`, nu plafonul scris de mana in cod.
+            Plafonul sta in CORPUL functiei din baza (`limit 200`), deci o cifra
+            copiata aici s-ar desparti de el la prima migratie care il schimba, si
+            textul ar minti din nou. Cate randuri au sosit se stie fara sa se creada.
+          */
+          <p className="border-b border-border bg-amber-500/10 px-5 py-2 text-xs text-foreground">
+            Se arată primele {produse.length} produse din {cateSunt}. După ce completezi stocurile
+            de aici, deschide lista din nou pentru restul.
+          </p>
         )}
 
         {produse && produse.length > 0 && (

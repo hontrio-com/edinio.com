@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { facturileEmag, type FacturiLorEcran } from "@/lib/actions/emag.actions";
+import { Paginatie } from "./Paginatie";
 
 /**
  * Ce ți-a facturat eMAG (§89).
@@ -21,15 +22,31 @@ import { facturileEmag, type FacturiLorEcran } from "@/lib/actions/emag.actions"
  * Nu e marja. Marja cere prețul de achiziție, iar catalogul n-are unde să-l țină.
  * „Încasări minus comision" arătat drept marjă l-ar fi pus pe comerciant să hotărască
  * prețuri pe un număr care nu înseamnă ce scrie pe el.
+ *
+ * ═══ ⚠ LISTA SE RĂSFOIEȘTE, TOTALURILE NU (22.09.2026) ═══
+ *
+ * Se aduc toate facturile perioadei, până la zece mii: altfel totalul ar fi fost fals,
+ * iar asta e chiar greșeala reparată pe 24.08. Dar desenate toate deodată, „Ultimul an"
+ * al unui magazin cu multe comisioane punea mii de rânduri în pagină la o singură
+ * apăsare. Deci numai lista de dedesubt are pagini; sumele de deasupra rămân socotite
+ * din TOT ce s-a adus.
  */
+
+/** Câte facturi se desenează pe o pagină. Socoteala de deasupra le folosește pe toate. */
+const FACTURI_PE_PAGINA = 50;
 
 export function EmagFacturiLor({ businessId }: { businessId: string }) {
   const [deschis, setDeschis] = useState(false);
   const [date, setDate] = useState<FacturiLorEcran | null>(null);
   const [luni, setLuni] = useState("3");
+  const [pagina, setPagina] = useState(1);
   const [seIncarca, incepe] = useTransition();
 
   function incarca(peLuni = luni) {
+    /* ⚠ Se începe de la prima pagină: altă perioadă înseamnă altă listă, de obicei mai
+       scurtă. Rămasă pe pagina 7, lista ar fi ieșit goală pe o perioadă cu 40 de
+       facturi, iar omul ar fi crezut că eMAG nu i-a facturat nimic. */
+    setPagina(1);
     incepe(async () => {
       const r = await facturileEmag(businessId, Number(peLuni));
       if ("error" in r) {
@@ -46,6 +63,14 @@ export function EmagFacturiLor({ businessId }: { businessId: string }) {
     setDeschis(nou);
     if (nou && date === null) incarca();
   }
+
+  const toateFacturile = date?.facturi ?? [];
+  const paginiFacturi = Math.max(1, Math.ceil(toateFacturile.length / FACTURI_PE_PAGINA));
+  /* ⚠ Se strânge la câte pagini există. Fără strângere, o listă care s-a scurtat între
+     timp ar fi lăsat ecranul pe o pagină goală, fără drum înapoi. */
+  const paginaAcum = Math.min(Math.max(1, pagina), paginiFacturi);
+  const deLa = (paginaAcum - 1) * FACTURI_PE_PAGINA;
+  const facturiDeAratat = toateFacturile.slice(deLa, deLa + FACTURI_PE_PAGINA);
 
   return (
     <div className="rounded-xl ring-1 ring-foreground/10 bg-card">
@@ -147,7 +172,7 @@ export function EmagFacturiLor({ businessId }: { businessId: string }) {
                   Vezi facturile ({date.facturi.length})
                 </summary>
                 <ul className="mt-2 divide-y divide-border">
-                  {date.facturi.map((f) => (
+                  {facturiDeAratat.map((f) => (
                     <li key={`${f.numar}-${f.data}`} className="py-2">
                       <div className="flex flex-wrap items-baseline gap-2">
                         <span className="font-mono text-xs">{f.numar}</span>
@@ -178,6 +203,17 @@ export function EmagFacturiLor({ businessId }: { businessId: string }) {
                     </li>
                   ))}
                 </ul>
+
+                {/* ⚠ Numai lista se răsfoiește. Totalurile de mai sus rămân socotite din
+                    toate facturile perioadei: socotite pe pagină, costul ar fi scăzut la
+                    fiecare apăsare de „înainte". */}
+                <Paginatie
+                  pagina={paginaAcum}
+                  pagini={paginiFacturi}
+                  laSchimbare={(p) => setPagina(p)}
+                  seIncarca={seIncarca}
+                  rezumat={`${deLa + 1}–${Math.min(deLa + FACTURI_PE_PAGINA, toateFacturile.length)} din ${toateFacturile.length}`}
+                />
               </details>
             </>
           )}

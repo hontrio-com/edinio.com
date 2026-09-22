@@ -7,7 +7,7 @@ import {
   MessageSquare, Loader2, X, Send, ArrowLeft, User as UserIcon, ExternalLink, Tag,
   Star, Search, Paperclip, ChevronDown,
 } from "lucide-react";
-import { replyOlxThread, type OlxAdvertRow } from "@/lib/actions/olx.actions";
+import { replyOlxThread, getOlxAnunturiVii, type OlxAnuntViu } from "@/lib/actions/olx.actions";
 import {
   deschideOlxConversatia, getOlxAtasamente, getOlxThreadsPage, setOlxThreadFavorit,
   type OlxAtasament, type OlxConversatie,
@@ -17,13 +17,40 @@ import { cn } from "@/lib/utils/cn";
 import { Button } from "@/components/ui/button";
 import { MediaPicker } from "@/components/media/MediaPicker";
 
-export function OlxMessenger({ businessId, adverts }: { businessId: string; adverts: OlxAdvertRow[] }) {
+export function OlxMessenger({ businessId }: { businessId: string }) {
   const [threads, setThreads] = useState<OlxThread[] | null>(null);
+  const [adverts, setAdverts] = useState<OlxAnuntViu[]>([]);
   const [offset, setOffset] = useState(0);
   const [areMaiMulte, setAreMaiMulte] = useState(false);
   const [eroare, setEroare] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [seIncarca, startIncarcare] = useTransition();
+
+  /*
+   * ⚠ NUMELE ANUNȚURILOR NU SE MAI ÎMPRUMUTĂ DE LA TABEL (22.09.2026)
+   *
+   * Lista venea din tabelul de anunțuri, care de azi aduce o pagină de cincizeci. Un fir deschis
+   * pe un anunț de pe pagina a doua ar fi purtat eticheta „Anunț 123456" în loc de numele
+   * produsului, și tocmai pe conturile mari, unde lista de conversații e greu de citit oricum.
+   *
+   * ⚠ SE CERE LA PRIMA DESCHIDERE, nu la încărcarea paginii. Numele se văd numai înăuntru, iar
+   * pe un magazin cu mii de anunțuri citirea merge pe ferestre de câte o mie: n-are de ce să
+   * coste ceva pe cine trece pe pagină fără să deschidă mesajele. Cerută o singură dată.
+   *
+   * ⚠ O citire picată nu se spune aici: eticheta cade oricum pe numărul anunțului, care e o
+   * lipsă vizibilă, nu o minciună. Vezi nota de mai jos despre threads.
+   */
+  const anunturiCerute = useRef(false);
+  useEffect(() => {
+    if (!open || anunturiCerute.current) return;
+    anunturiCerute.current = true;
+    let cancelled = false;
+    void getOlxAnunturiVii(businessId).then((r) => {
+      if (cancelled || "error" in r) return;
+      setAdverts(r.anunturi);
+    });
+    return () => { cancelled = true; };
+  }, [open, businessId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,7 +159,7 @@ function MessengerModal({
 }: {
   businessId: string;
   threads: OlxThread[];
-  adverts: OlxAdvertRow[];
+  adverts: OlxAnuntViu[];
   eroare: string | null;
   areMaiMulte: boolean;
   seIncarca: boolean;
@@ -163,7 +190,7 @@ function MessengerModal({
   // Map advert id -> product name for friendly list labels.
   const advertName = useMemo(() => {
     const m = new Map<number, string>();
-    for (const a of adverts) if (a.olx_advert_id) m.set(a.olx_advert_id, a.name);
+    for (const a of adverts) m.set(a.advertId, a.nume);
     return m;
   }, [adverts]);
 

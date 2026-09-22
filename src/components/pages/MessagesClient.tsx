@@ -6,13 +6,35 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowLeft, Inbox, Trash2, MailOpen, Mail } from "lucide-react";
 import { deleteSubmission, toggleSubmissionRead } from "@/lib/actions/form.actions";
+import { Paginatie } from "@/components/dashboard/Paginatie";
 
 interface SubField { label: string; value: string }
 interface Submission { id: string; createdAt: string; isRead: boolean; fields: SubField[] }
 
-export function MessagesClient({ submissions }: { submissions: Submission[] }) {
+export function MessagesClient({ submissions, pagina, pagini, rezumat }: {
+  /** DOAR pagina cerută, gata feliată în bază. Vezi nota din `pages/messages/page.tsx`. */
+  submissions: Submission[];
+  pagina: number;
+  pagini: number;
+  /** „1–25 din 412 de mesaje”, socotit pe TOT, nu pe pagina adusă. */
+  rezumat: string;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  /*
+   * ⚠ A DOUA TRANZIȚIE, nu cea de deasupra: `isPending` stinge butoanele unui
+   * rând cât se scrie în bază. Împărțită cu răsfoirea, o ștergere în curs ar fi
+   * stins și bara de pagini.
+   */
+  const [seRasfoieste, startRasfoire] = useTransition();
+
+  function duLaPagina(p: number) {
+    startRasfoire(() => {
+      /* Pagina stă în adresă: „înapoi” din browser merge, și o pagină anume se
+         poate trimite prin legătură. */
+      router.push(p > 1 ? `/dashboard/pages/messages?page=${p}` : "/dashboard/pages/messages", { scroll: true });
+    });
+  }
 
   function handleDelete(s: Submission) {
     if (!confirm("Stergi acest mesaj definitiv?")) return;
@@ -103,6 +125,16 @@ export function MessagesClient({ submissions }: { submissions: Submission[] }) {
               </div>
             </div>
           ))}
+
+          {/* ⚠ Numere, nu două săgeți: vezi nota din `Paginatie`. Sub două pagini
+              se ascunde singură, deci cutia cu șapte mesaje rămâne cum era. */}
+          <Paginatie
+            pagina={pagina}
+            pagini={pagini}
+            laSchimbare={duLaPagina}
+            seIncarca={seRasfoieste}
+            rezumat={rezumat}
+          />
         </div>
       )}
     </div>

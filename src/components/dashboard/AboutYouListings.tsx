@@ -11,6 +11,7 @@ import {
   type AboutYouListingRow, type AboutYouProductPage,
 } from "@/lib/actions/aboutyou.actions";
 import { formatDate } from "@/lib/utils/format";
+import { Paginatie } from "@/components/dashboard/Paginatie";
 import { AboutYouListingEditor, type AboutYouPricing } from "@/components/dashboard/AboutYouListingEditor";
 import { EtichetaStare, type TonEticheta } from "@/components/ui/eticheta-stare";
 
@@ -483,27 +484,21 @@ export function AboutYouListings({
         })}
       </div>
 
+      {/*
+        ⚠ NUMERE, NU DOUA SAGETI (22.09.2026). Catalogul cel mai mare masurat pe productie are
+        3.351 de produse active, adica 68 de pagini de cate 50. Cu „Înainte" ca singura cale,
+        pagina 60 era la cincizeci si noua de apasari. Aceeasi bara ca la ofertele eMAG, din
+        acelasi motiv si dintr-un singur fisier.
+      */}
       {stare.pages > 1 && (
-        <div className="flex items-center justify-between gap-3 pt-4 mt-1 border-t border-border">
-          <span className="text-xs text-muted-foreground">
-            {stare.total} produse · pagina {stare.page} din {stare.pages}
-          </span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => void incarca(stare.page - 1, cautare)}
-              disabled={seIncarca || stare.page <= 1}
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-40"
-            >
-              Înapoi
-            </button>
-            <button
-              onClick={() => void incarca(stare.page + 1, cautare)}
-              disabled={seIncarca || stare.page >= stare.pages}
-              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-40"
-            >
-              Înainte
-            </button>
-          </div>
+        <div className="pt-1 mt-1 border-t border-border">
+          <Paginatie
+            pagina={stare.page}
+            pagini={stare.pages}
+            laSchimbare={(p) => void incarca(p, cautare)}
+            seIncarca={seIncarca}
+            rezumat={`${(stare.page - 1) * stare.pePagina + 1}–${Math.min(stare.page * stare.pePagina, stare.total)} din ${stare.total} produse`}
+          />
         </div>
       )}
     </div>

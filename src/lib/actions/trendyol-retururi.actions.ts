@@ -7,6 +7,7 @@ import { getClaimIssueReasons, isTrendyolError } from "@/lib/trendyol/client";
 import { loadTrendyolContext } from "@/lib/trendyol/sync";
 import { hotarasteRetur, repuneInStoc } from "@/lib/trendyol/retururi";
 import { MOTIVE_RETUR_RO } from "@/lib/trendyol/types";
+import { fereastraPaginii } from "@/lib/paginare";
 import {
   deCeNuSeRepune, sePoateHotari, sePoateRepune, STARI_DE_HOTARAT,
   type MotivFaraRepunere,
@@ -100,19 +101,43 @@ export interface RandRetur {
   }[];
 }
 
-/** Retururile magazinului, cele mai noi intai. */
+/** Câte cereri de retur intră pe o pagină de ecran. */
+const RETURURI_PE_PAGINA = 25;
+
+/** O pagină de retururi, plus ce trebuie ca să se poată ajunge la celelalte. */
+export interface PaginaRetururi {
+  retururi: RandRetur[];
+  /** Câte cereri se potrivesc filtrului, numărate în bază, nu din pagina din mână. */
+  total: number;
+  /** Pagina chiar întoarsă, care poate fi mai mică decât cea cerută. Vezi `fereastraPaginii`. */
+  pagina: number;
+  pePagina: number;
+  pagini: number;
+}
+
+/**
+ * Retururile magazinului, cele mai noi intai, PE PAGINI.
+ *
+ * ═══ ⚠ ERAU TAIATE IN TACERE LA 100 (22.09.2026) ═══
+ *
+ * Citirea se oprea la `.limit(100)`, fara numaratoare si fara vreo cale spre randul 101.
+ * Un magazin cu vechime isi vedea ultimele o suta de cereri si nu afla niciodata ca mai
+ * sunt: nu scria nicaieri „primele 100", iar bifa „doar cele care asteapta" era stinsa
+ * tocmai cand omul voia sa se uite peste tot. Retururile cresc cu comenzile, deci lista
+ * asta creste cu magazinul.
+ *
+ * ⚠ SE NUMARA INTAI, si abia apoi se cere fereastra. Cerand direct `range(de_la, ...)`
+ * peste numarul de randuri, PostgREST raspunde 416 cu `PGRST103`, iar `postgrest-js`
+ * citeste `count` DOAR cand raspunsul e bun, deci arunca taman numarul din `Content-Range`.
+ * Ecranul ar fi ramas gol, fara paginatie, adica fara drum inapoi. Vezi `fereastraPaginii`.
+ */
 export async function retururiTrendyol(
-  businessId: string, doarDeHotarat = false,
-): Promise<{ retururi: RandRetur[] } | { error: string }> {
+  businessId: string, doarDeHotarat = false, paginaCeruta = 1,
+): Promise<PaginaRetururi | { error: string }> {
   const g = await guard(businessId);
   if ("error" in g) return g;
 
   const admin = createAdminClient();
-  let q = admin.from("trendyol_claims")
-    .select("claim_id, order_number, claim_status, claim_date, dont_ship_back, colet_respins, colet_inlocuire, trendyol_claim_items(claim_item_id, claim_item_status, barcode, product_name, quantity, reason, customer_note, decizie, hotarare_ceruta_la, repus_in_stoc_la)")
-    .eq("business_id", businessId)
-    .order("claim_date", { ascending: false })
-    .limit(100);
 
   /*
    * ⚠ Cele care asteapta o hotarare se pot cere separat: ele sunt singurele la care
@@ -138,11 +163,39 @@ export async function retururiTrendyol(
    * ⚠ DIRECTIA SIGURA E INVERSA: mai bine aratat un retur la care omul n-are ce face, decat
    * ascuns unul care cere o apasare si expira netratat. Necunoscutul se arata.
    */
-  if (doarDeHotarat) {
-    q = q.or(`claim_status.is.null,claim_status.in.(${STARI_DE_HOTARAT.join(",")})`);
-  }
+  /*
+   * ⚠ SCRIS O DATA, folosit de amandoua interogarile. Numaratoarea si pagina trebuie sa
+   * intrebe exact acelasi lucru; doua copii ale conditiei se despart la prima indreptare
+   * care le atinge pe rand, iar atunci bara de paginare numara alte randuri decat cele
+   * aratate, si nimeni n-are de unde sa vada asta.
+   */
+  const filtruDeHotarat = `claim_status.is.null,claim_status.in.(${STARI_DE_HOTARAT.join(",")})`;
 
-  const { data, error } = await q;
+  let qNumar = admin.from("trendyol_claims")
+    .select("claim_id", { count: "exact", head: true })
+    .eq("business_id", businessId);
+  if (doarDeHotarat) qNumar = qNumar.or(filtruDeHotarat);
+
+  const { count, error: eNumar } = await qNumar;
+  /* ⚠ O numaratoare picata NU se citeste ca „niciun retur": ecranul ar fi spus linistit ca
+     nu e nimic de rezolvat, taman cand cereri adevarate asteapta o apasare. */
+  if (eNumar) return { error: "Retururile nu s-au putut citi. Reîncarcă pagina." };
+
+  const total = count ?? 0;
+  const fereastra = fereastraPaginii(paginaCeruta, total, RETURURI_PE_PAGINA);
+
+  let q = admin.from("trendyol_claims")
+    .select("claim_id, order_number, claim_status, claim_date, dont_ship_back, colet_respins, colet_inlocuire, trendyol_claim_items(claim_item_id, claim_item_status, barcode, product_name, quantity, reason, customer_note, decizie, hotarare_ceruta_la, repus_in_stoc_la)")
+    .eq("business_id", businessId);
+  if (doarDeHotarat) q = q.or(filtruDeHotarat);
+
+  /* ⚠ `claim_id` departajeaza: `claim_date` se repeta si poate fi gol, iar doua randuri egale
+     la ordonare isi schimba locul de la o pagina la alta. Atunci o cerere apare de doua ori si
+     alta nu apare deloc, fara nicio eroare. */
+  const { data, error } = await q
+    .order("claim_date", { ascending: false })
+    .order("claim_id")
+    .range(fereastra.deLa, fereastra.panaLa);
   if (error) return { error: "Retururile nu s-au putut citi. Reîncarcă pagina." };
 
   type Rand = {
@@ -237,6 +290,10 @@ export async function retururiTrendyol(
         stareNecunoscuta: !l.claim_item_status,
       })),
     })),
+    total,
+    pagina: fereastra.pagina,
+    pePagina: RETURURI_PE_PAGINA,
+    pagini: fereastra.pagini,
   };
 }
 

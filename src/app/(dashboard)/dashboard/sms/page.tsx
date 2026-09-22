@@ -44,13 +44,30 @@ export default async function SmsMarketingPage() {
 
   if (!smsoConfig?.enabled) redirect("/dashboard/settings");
 
-  const [{ data: campaigns }, initialTemplates] = await Promise.all([
+  /*
+   * ⚠ ISTORICUL SE OPRESTE LA CINCIZECI, SI DE AZI O SPUNE (23.09.2026).
+   *
+   * `.limit(50)` era singur: „Istoric campanii” desena cincizeci de randuri si nu
+   * pomenea niciunde ca ar mai fi ceva sub ele. Un magazin care trimite saptamanal
+   * trece de cincizeci intr-un an, iar campania de anul trecut, cu care se compara
+   * rezultatele, disparea fara urma.
+   *
+   * ⚠ Nu primeste bara de pagini: istoricul se citeste de sus, iar randurile noi se
+   * adauga in capul listei DIN BROWSER, dupa fiecare trimitere. O pagina a treia s-ar
+   * fi certat cu adaugarea aia la prima campanie trimisa. Ce lipsea era adevarul
+   * despre cate sunt, nu o a doua pagina.
+   */
+  const [{ data: campaigns }, { count: cateCampanii }, initialTemplates] = await Promise.all([
     supabase
       .from("sms_campaigns")
       .select("*")
       .eq("business_id", bizRow.id)
       .order("created_at", { ascending: false })
       .limit(50),
+    supabase
+      .from("sms_campaigns")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", bizRow.id),
     getSmsTemplates(bizRow.id),
   ]);
 
@@ -59,6 +76,7 @@ export default async function SmsMarketingPage() {
       businessId={bizRow.id}
       smsoConfig={smsoConfig}
       initialCampaigns={(campaigns ?? []).map(c => ({ ...c, status: c.status as "in_curs" | "sent" | "partial" | "failed" }))}
+      totalCampanii={cateCampanii ?? (campaigns ?? []).length}
       initialTemplates={initialTemplates}
     />
   );

@@ -1,4 +1,4 @@
-import { aplicaBumpPeOBucata, type BumpItem } from "./bump-pricing";
+import { aplicaPretPeBucati, type BumpItem } from "./bump-pricing";
 
 function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
@@ -8,6 +8,11 @@ function round2(n: number): number {
 export interface CompanionFbt {
   product_id: string;
   price: number;
+  /**
+   * Cate bucati cere setul din companionul asta. Absent = 1, adica exact
+   * purtarea de pana azi.
+   */
+  quantity?: number;
 }
 
 export interface RezultatFbtInCos<T> {
@@ -64,6 +69,7 @@ export function fbtInCos<T extends CompanionFbt>(
     // Acelasi criteriu ca serverul: prima linie NEATINSA, cu macar o bucata, a
     // produsului cerut. Fara `atinse`, doi companioni ai aceluiasi produs ar
     // reduce de doua ori aceeasi linie.
+    const cerute = Math.max(1, Math.floor(Number(c.quantity) || 1));
     const idx = lucru.findIndex((l, k) => !atinse.has(k) && l.quantity >= 1 && l.product_id === c.product_id);
     if (idx < 0) {
       companioniNoi.push(c);
@@ -71,7 +77,22 @@ export function fbtInCos<T extends CompanionFbt>(
     }
     atinse.add(idx);
     const inainte = lucru.length;
-    economiePeLinie[idx] = aplicaBumpPeOBucata(lucru, lucru[idx], c.price);
+    /*
+      ⚠ Se ieftinesc CATE BUCATI CERE SETUL, nu una. Cand linia din cos are mai
+      putine decat cere setul, se ieftinesc cele care sunt; restul setului intra
+      prin `companioniNoi`, deci comanda ramane intreaga.
+    */
+    /* ⚠ CITIT INAINTE de aplicare: `aplicaPretPeBucati` scrie peste `quantity`. */
+    const aveaBucati = lucru[idx].quantity;
+    economiePeLinie[idx] = aplicaPretPeBucati(lucru, lucru[idx], c.price, cerute);
+    if (aveaBucati < cerute) {
+      /*
+        Linia din coș n-a avut destule bucăți cât cere setul. Cele care erau s-au
+        ieftinit; câte lipsesc intră ca linie nouă, la același preț de set — așa
+        setul pleacă ÎNTREG, iar serverul n-are de ce să refuze cu „set_incomplet”.
+      */
+      companioniNoi.push({ ...c, quantity: cerute - aveaBucati });
+    }
     // Bucata desprinsa e tot o linie a aceluiasi produs: nemarcata, un companion
     // urmator ar fi gasit-o si ar fi redus-o a doua oara.
     if (lucru.length > inainte) atinse.add(lucru.length - 1);

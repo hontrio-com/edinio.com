@@ -1,7 +1,15 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * DE CÂND PÂNĂ CÂND ȚINE UN COD                                 (21.09.2026)
+ * ZIUA PE CARE O SCRIE COMERCIANTUL ESTE O ZI ROMÂNEASCĂ        (21.09.2026)
  * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠ MUTAT DIN `lib/discounts/` ÎN `lib/`, 22.09.2026. Nimic din el n-a fost
+ * vreodată despre cupoane: e prefacerea unei zile scrise de om în clipa exactă
+ * la care se judecă. Când Ofertele au avut nevoie de aceeași prefacere pentru
+ * `starts_at` și `ends_at`, singurele ieșiri erau să importe dintr-un dosar care
+ * spune „discounts” — deci să-l zăpăcească pe următorul cititor — sau să scrie a
+ * doua copie, care s-ar fi despărțit de prima. Aceeași mutare ca la
+ * `lib/perioade.ts`, și din același motiv.
  *
  * ⚠⚠ ZIUA PE CARE O SCRIE COMERCIANTUL E O ZI ROMÂNEASCĂ, nu una UTC.
  *
@@ -167,11 +175,17 @@ function zileleRo(zi: string): string {
  * greșeală de tastare — și, scrisă așa, ar fi dat un cod pe care ecranul îl
  * arată „Programat” și care nu pornește niciodată. Mai bine o oprire în
  * formular decât un cod mort pe care comerciantul îl caută o săptămână.
+ *
+ * ⚠⚠ FĂRĂ NUMELE COLOANELOR, dinadins. Codurile își țin capătul de sus în
+ * `discounts.expires_at`, ofertele în `offers.ends_at`. Legată de un nume, a
+ * doua secțiune care are nevoie de o perioadă ar fi scris a doua conversie —
+ * și una dintre ele ar fi uitat ziua românească, adică exact defectul închis
+ * aici. Cine cheamă pune numele coloanei lui peste `de` și `pana`.
  */
-export function perioadaCodului(
+export function perioadaRomaneasca(
   deCand: string | null | undefined,
   panaCand: string | null | undefined,
-): { starts_at: string | null; expires_at: string | null } | { error: string } {
+): { de: string | null; pana: string | null } | { error: string } {
   const de = inceputulZilei(deCand);
   const pana = sfarsitulZilei(panaCand);
 
@@ -182,5 +196,23 @@ export function perioadaCodului(
     return { error: "Data de început e după cea de sfârșit. Schimbă-le între ele." };
   }
 
-  return { starts_at: de, expires_at: pana };
+  return { de, pana };
+}
+
+/** Perioada unui cod de reducere, cu numele coloanelor din `discounts`. */
+export function perioadaCodului(
+  deCand: string | null | undefined,
+  panaCand: string | null | undefined,
+): { starts_at: string | null; expires_at: string | null } | { error: string } {
+  const p = perioadaRomaneasca(deCand, panaCand);
+  return "error" in p ? p : { starts_at: p.de, expires_at: p.pana };
+}
+
+/** Perioada unei oferte, cu numele coloanelor din `offers`. */
+export function perioadaOfertei(
+  deCand: string | null | undefined,
+  panaCand: string | null | undefined,
+): { starts_at: string | null; ends_at: string | null } | { error: string } {
+  const p = perioadaRomaneasca(deCand, panaCand);
+  return "error" in p ? p : { starts_at: p.de, ends_at: p.pana };
 }

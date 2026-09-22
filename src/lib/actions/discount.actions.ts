@@ -8,7 +8,7 @@ import { rateLimit, clientIpFromHeaders } from "@/lib/utils/rate-limit";
 import { consumaLimita } from "@/lib/utils/limita-durabila";
 import { logError } from "@/lib/error-logger";
 import { ESEC_CUPON, PREA_MULTE_INCERCARI } from "@/lib/discounts/mesaj";
-import { perioadaCodului } from "@/lib/discounts/perioada";
+import { perioadaCodului } from "@/lib/zi-romaneasca";
 import { limitaValida } from "@/lib/discounts/per-client";
 import {
   areRestrangere, cereArborele, extindeCategoriileCodului, parseRestrangere,

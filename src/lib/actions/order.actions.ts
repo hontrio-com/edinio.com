@@ -1525,6 +1525,8 @@ export async function placeOrder(data: {
       // iar cardul din pagina o imparte folosind pretul AFISAT. Nerotunjit, cele
       // doua ar da preturi diferite pe aceiasi companioni.
       unitPrice: round2(mainSubtotal / cantitate),
+      // Numai pentru PORTI: cate bucati are linia principala. Vezi `ContextOferte`.
+      bucati: cantitate,
     },
     // Liniile cu varianta aleasa vin sigur din cos, nu de la o oferta: ofertele
     // adauga produsul dintr-o apasare, deci nu pot alege o marime.

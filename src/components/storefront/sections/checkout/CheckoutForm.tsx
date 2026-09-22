@@ -347,7 +347,7 @@ export function CheckoutForm({
           ))}
 
           {/* Order bumps — a real discounted product added with one tap */}
-          <OrderBump bumps={bumps} color={color} acceptedIds={acceptedBumps} onToggle={toggleBump} />
+          <OrderBump businessId={businessId} bumps={bumps} color={color} acceptedIds={acceptedBumps} onToggle={toggleBump} />
 
           {/* Extras */}
           {extras.length > 0 && (

@@ -394,7 +394,17 @@ export function useCheckoutOrder({
     // Pe esec lista se GOLESTE, nu ramane cea veche: serverul re-evalueaza acum
     // ofertele la plasarea comenzii, iar un bump bifat dintr-o lista invechita
     // i-ar opri comanda din cauza unei erori de retea.
-    getCheckoutBumps(businessId, items.map((i) => i.productId))
+    /*
+      ⚠ SI COSUL, pentru PORTILE ofertei. Se trimite ce vede omul; serverul NU-l
+      crede pe cuvant, ci doar hotaraste din el ce se ARATA — la plasarea
+      comenzii aceeasi poarta se pune din nou, pe liniile adevarate.
+      Vezi `lib/offers/porti.ts`.
+    */
+    getCheckoutBumps(
+      businessId,
+      items.map((i) => i.productId),
+      items.map((i) => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.price })),
+    )
       .then((b) => { if (!cancelled) setBumps(b ?? []); })
       .catch(() => { if (!cancelled) setBumps([]); });
     return () => { cancelled = true; };

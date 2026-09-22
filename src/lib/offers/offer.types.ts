@@ -1,4 +1,6 @@
-import { imparteEconomiaCompanionilor } from "./fbt-pricing";
+import { imparteEconomiaCompanionilor, type LinieDeSet } from "./fbt-pricing";
+import type { PortileOfertei } from "./porti";
+import { parseAmplasare, type AmplasareSet } from "./amplasare";
 // Shared (non-"use server") types + parsing for the Offers hub.
 //
 // An "offer" is one row in the `offers` table with four layers:
@@ -23,23 +25,131 @@ export type OfferType =
   | "gift"              // free gift at a spend threshold — Faza 3
   | "spend_reward";     // spend & save ladder — Faza 3
 
-export const OFFER_TYPES: OfferType[] = [
-  "frequently_bought", "cross_sell", "order_bump",
-  "post_purchase", "volume", "bogo", "gift", "spend_reward",
-];
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * CE ȘTIE PROGRAMUL DESPRE FIECARE TIP DE OFERTĂ                (22.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠⚠ ERAU PATRU LISTE, ȘI UNA DINTRE ELE NU ERA CITITĂ DE NIMENI.
+ *
+ * `OFFER_TYPES` (8), `PHASE1_OFFER_TYPES` (3), `OFFER_TYPES_IMPLEMENTATE` (4, cu
+ * ZERO cititori, verificat cu grep) și `PHASE1` scrisă a patra oară înăuntrul
+ * lui `OfferForm.tsx`, cu etichete și descrieri. Plus `TYPE_LABEL` din ecranul
+ * de listă, a cincea. Un tip nou trebuia adăugat în toate cinci, și nimic n-ar
+ * fi spus care a rămas în urmă.
+ *
+ * Acum e un singur tabel, iar listele se DERIVĂ din el.
+ *
+ * ⚠ Iconițele NU stau aici, dinadins: ar fi adus `lucide-react` într-un fișier
+ * pe care îl încarcă și serverul, la fiecare rezolvare de ofertă din vitrină.
+ * Ele sunt în panou, și o probă cere ca tabelul lor de iconițe să aibă exact
+ * aceleași chei ca ăsta.
+ */
+export interface DespreTipulOfertei {
+  /** Cum îi spune comerciantului. */
+  eticheta: string;
+  /** Ce face, într-un rând, în fereastra de alegere a tipului. */
+  explicatie: string;
+  /** Cum se cheamă produsele pe care le OFERĂ. Gol la tipurile care nu oferă. */
+  numeleProduselorOferite: string;
+  /** Se poate face azi din formular? */
+  sePoateFace: boolean;
+  /** Se rezolvă în vitrină (`loadActiveOffers` îl aduce)? */
+  seVedeInVitrina: boolean;
+  /** Are reducere proprie, sau e doar o recomandare? */
+  areReducere: boolean;
+  reducereImplicita: OfferDiscountMode;
+  /** Oferă UN singur produs (bump). */
+  unProdus?: boolean;
+  /** Poate alege singur produse din aceeași categorie. */
+  automatDinCategorie?: boolean;
+  /** Nu oferă produse, ci ieftinește ce e deja în coș, pe trepte de cantitate. */
+  cuPraguri?: boolean;
+  /** Setul lui se poate aseza si in coloana de cumparare, langa pret. */
+  sePoateAsezaLangaPret?: boolean;
+  /** Se poate cere o CANTITATE pentru fiecare produs din set. */
+  cuCantitatiPeProdus?: boolean;
+}
 
-// Types that are actually resolved + rendered in Faza 1. The rest are valid to
-// store (schema is future-proof) but not yet evaluated by the storefront.
-export const PHASE1_OFFER_TYPES: OfferType[] = ["frequently_bought", "cross_sell", "order_bump"];
+export const DESPRE_TIPUL_OFERTEI: Record<OfferType, DespreTipulOfertei> = {
+  frequently_bought: {
+    eticheta: "Cumpărate împreună",
+    explicatie: "Produsul de pe pagină + altele care merg cu el, la un preț combinat (stil Amazon).",
+    numeleProduselorOferite: "Produse în set (pe lângă cel de pe pagină)",
+    sePoateFace: true, seVedeInVitrina: true,
+    areReducere: true, reducereImplicita: "percent", sePoateAsezaLangaPret: true,
+    cuCantitatiPeProdus: true,
+  },
+  cross_sell: {
+    eticheta: "Recomandări",
+    explicatie: "Sugerează produse pe pagina produsului și în coș. Recomandare, fără reducere.",
+    numeleProduselorOferite: "Produse recomandate",
+    sePoateFace: true, seVedeInVitrina: true,
+    areReducere: false, reducereImplicita: "none", automatDinCategorie: true,
+  },
+  order_bump: {
+    eticheta: "Ofertă la checkout",
+    explicatie: "Un produs la preț special, adăugat cu o bifă în formularul de comandă.",
+    numeleProduselorOferite: "Produsul oferit",
+    sePoateFace: true, seVedeInVitrina: true,
+    areReducere: true, reducereImplicita: "percent", unProdus: true,
+  },
+  volume: {
+    eticheta: "Reducere cantitate",
+    explicatie: "De la o cantitate în sus, prețul scade cu un procent. Se vede ca tabel pe pagina produsului.",
+    numeleProduselorOferite: "",
+    /*
+      ⚠ SE POATE FACE, DAR NU SE „VEDE ÎN VITRINĂ" în înțelesul de aici: nu se
+      randează nimic la afișare, ci se scriu praguri pe produse
+      (`duPraguriLaProduse`). De-aia cele două steaguri sunt deosebite — erau
+      două liste tocmai din pricina asta.
+    */
+    sePoateFace: true, seVedeInVitrina: false,
+    areReducere: false, reducereImplicita: "none", cuPraguri: true,
+  },
+  post_purchase: {
+    eticheta: "După cumpărare",
+    explicatie: "Un produs oferit pe pagina de confirmare, adăugat cu o apăsare. Încă nefăcut.",
+    numeleProduselorOferite: "Produsul oferit",
+    sePoateFace: false, seVedeInVitrina: false,
+    areReducere: true, reducereImplicita: "percent", unProdus: true,
+  },
+  bogo: {
+    eticheta: "Cumpără X, primești Y",
+    explicatie: "La cumpărarea unui produs, altul vine gratuit sau redus. Încă nefăcut.",
+    numeleProduselorOferite: "Produsul primit",
+    sePoateFace: false, seVedeInVitrina: false,
+    areReducere: true, reducereImplicita: "percent",
+  },
+  gift: {
+    eticheta: "Cadou",
+    explicatie: "Peste o valoare a coșului, un produs intră gratuit. Încă nefăcut.",
+    numeleProduselorOferite: "Cadoul",
+    sePoateFace: false, seVedeInVitrina: false,
+    areReducere: true, reducereImplicita: "fixed_price", unProdus: true,
+  },
+  spend_reward: {
+    eticheta: "Cheltuie și economisește",
+    explicatie: "Trepte de reducere după cât e coșul. Încă nefăcut.",
+    numeleProduselorOferite: "",
+    sePoateFace: false, seVedeInVitrina: false,
+    areReducere: false, reducereImplicita: "none",
+  },
+};
+
+/** Toate tipurile din schemă, în ordinea din tabel. */
+export const OFFER_TYPES = Object.keys(DESPRE_TIPUL_OFERTEI) as OfferType[];
 
 /**
- * Tipurile care chiar se aplica azi.
+ * Tipurile pe care `loadActiveOffers` le aduce din bază pentru vitrină.
  *
- * `volume` s-a adaugat pe 20.09.2026 si NU se rezolva ca celelalte: nu se
- * randeaza nimic la afisare, ci se scriu praguri pe produse. De-aia sta
- * separat de `PHASE1_OFFER_TYPES`, care inseamna „se rezolva in vitrina".
+ * ⚠ NU cuprinde `volume`: acela nu se rezolvă la afișare, ci scrie praguri pe
+ * produse. Adus aici, ar fi fost cerut pe fiecare pagină de produs degeaba.
  */
-export const OFFER_TYPES_IMPLEMENTATE: OfferType[] = [...PHASE1_OFFER_TYPES, "volume"];
+export const PHASE1_OFFER_TYPES: OfferType[] = OFFER_TYPES.filter((t) => DESPRE_TIPUL_OFERTEI[t].seVedeInVitrina);
+
+/** Tipurile pe care comerciantul chiar le poate face azi din formular. */
+export const TIPURI_CARE_SE_POT_FACE: OfferType[] = OFFER_TYPES.filter((t) => DESPRE_TIPUL_OFERTEI[t].sePoateFace);
 
 export function isOfferType(v: unknown): v is OfferType {
   return typeof v === "string" && (OFFER_TYPES as string[]).includes(v);
@@ -49,12 +159,46 @@ export function isOfferType(v: unknown): v is OfferType {
 
 export type OfferScope = "products" | "categories" | "all";
 
-// Rule-only extra gates (Faza 3). Kept optional so the schema is stable now.
-export interface OfferConditions {
-  minQty?: number;
-  minValue?: number;
-  requiredProductIds?: string[];
-}
+/**
+ * De unde se aleg produsele unei recomandari.
+ *
+ * ⚠ `categorie_noi` e purtarea care exista de mult sub numele `autoByCategory`:
+ * `fetchCategoryProducts` sorteaza `created_at desc`. Numele ii spune acum pe
+ * fata ce face, ca sa se poata pune langa el o a doua metoda.
+ */
+export const METODE_RECOMANDARE = ["manual", "categorie_noi", "categorie_vandute"] as const;
+export type MetodaRecomandare = (typeof METODE_RECOMANDARE)[number];
+
+export const DESPRE_METODA: Record<MetodaRecomandare, { eticheta: string; explicatie: string }> = {
+  manual: {
+    eticheta: "Produsele alese de mine",
+    explicatie: "Alegi tu lista, in ordinea in care vrei sa se vada.",
+  },
+  categorie_noi: {
+    eticheta: "Cele mai noi din categorie",
+    explicatie: "Se aleg singure, cele mai recent adaugate din categoria pe care ai ales-o. Bun cand adaugi des produse.",
+  },
+  categorie_vandute: {
+    eticheta: "Cele mai vandute din categorie",
+    explicatie: "Se aleg singure, dupa cate bucati s-au vandut in ultimele 90 de zile. ⚠ Intr-un magazin fara vanzari inca, cade inapoi pe cele mai noi, ca raftul sa nu ramana gol.",
+  },
+};
+
+/**
+ * Porțile ofertei: „se arată DOAR dacă…”. Regula care le judecă stă în
+ * `lib/offers/porti.ts`, într-un singur loc, fiindcă o întreabă și afișarea, și
+ * plasarea comenzii.
+ *
+ * ⚠⚠ CELE TREI NUME VECHI SE PĂSTREAZĂ, deși sunt englezești și restul
+ * vocabularului nou e românesc. Erau deja în schemă și deja parsate aici (scrise
+ * pentru „Faza 3”, cu ZERO cititori), iar redenumite, un rând care le-ar fi avut
+ * pus de mână ar fi rămas cu porți pe care nimeni nu le mai citește. Măsurat pe
+ * producție la 22.09.2026: zero din 13 oferte au `conditions`, deci nimeni nu
+ * pățește nimic — dar regula „nu orfaniza o formă care e deja în bază” rămâne.
+ *
+ * ⚠ `excludedProductIds` e singurul nume nou, scris la fel ca perechea lui.
+ */
+export type OfferConditions = PortileOfertei;
 
 export interface OfferTrigger {
   scope: OfferScope;
@@ -95,6 +239,41 @@ export interface OfferConfig {
    * oferta e doar cine l-a scris. Vezi `aplicaPraguriCantitate`.
    */
   praguri?: { min_qty: number; percent: number }[];
+  /**
+   * `frequently_bought`: cate bucati din fiecare produs intra in set.
+   *
+   * ⚠⚠ LIPSA CAMPULUI, SAU LIPSA UNEI CHEI, INSEAMNA O BUCATA. Asa cele 13
+   * oferte de pe productie — intre care singurul set, cu un companion — dau
+   * exact aceleasi preturi ca pana azi, la banut.
+   *
+   * ⚠ Se citeste NUMAI prin `cantitateaCeruta`, care intreaba intai TIPUL:
+   * `parseOfferConfig` nu primeste tipul, deci o cheie ratacita pe un
+   * `cross_sell` ar fi altfel citita si ar schimba un pret care n-are set.
+   */
+  cantitati?: Record<string, number>;
+  /**
+   * `cross_sell`: DE UNDE se aleg produsele recomandate.
+   *
+   * ⚠⚠ LIPSA CAMPULUI SE DERIVA DIN `autoByCategory`, care exista de mult:
+   * fals inseamna `manual`, adevarat inseamna `categorie_noi`. Asa cele cinci
+   * recomandari de pe productie (toate cu `autoByCategory: false`) se poarta
+   * litera cu litera la fel. Vezi `metodaRecomandarii`.
+   *
+   * ⚠ Si la SCRIERE se tin amandoua in pas (`autoByCategory` se pune din
+   * metoda): orice cod care inca il citeste pe cel vechi primeste acelasi
+   * raspuns. Scris numai unul, o cale ramasa in urma ar fi ales alt bazin.
+   */
+  metodaRecomandare?: MetodaRecomandare;
+  /**
+   * Nu arata produsele fara stoc.
+   *
+   * ⚠⚠ LIPSA LUI INSEAMNA PURTAREA DE AZI, care e DEOSEBITA pe cele doua
+   * suprafete: pe pagina de produs recomandarea epuizata SE ARATA, cu eticheta
+   * „Epuizat" si butonul stins; in cos se ARUNCA. Uniformizata in tacere, una
+   * din cele doua s-ar fi schimbat pentru toate cele cinci recomandari care
+   * ruleaza. Bifa il lasa pe comerciant sa aleaga, si scrie pe ecran ce face.
+   */
+  excludeFaraStoc?: boolean;
 }
 
 /* ─── Display (surfaces + style) ──────────────────────────────────────────── */
@@ -104,12 +283,22 @@ export type OfferSurface = "product_page" | "cart" | "checkout" | "confirmation"
 export interface OfferDisplay {
   surfaces: OfferSurface[];
   style: "card" | "list" | "inline";
+  /** Unde se vede setul in pagina de produs. Vezi `lib/offers/amplasare.ts`. */
+  amplasare: AmplasareSet;
 }
 
 /* ─── Limits + per-type defaults ──────────────────────────────────────────── */
 
 export const OFFER_MAX_PRODUCTS = 12;
 export const OFFER_DEFAULT_MAX_PRODUCTS = 4;
+/**
+ * Cate bucati poate cere un set dintr-un singur produs.
+ *
+ * ⚠ Plafon impotriva unei greseli de tastare, nu o regula de vanzare: „200"
+ * scris in loc de „2" ar fi cerut doua sute de bucati din stoc si ar fi facut
+ * setul necumparabil, fara ca nimic sa spuna de ce.
+ */
+export const OFFER_MAX_CANTITATE = 20;
 
 // Default surfaces per type — where each offer naturally belongs. The merchant can
 // override in `display.surfaces`, but these keep zero-config offers sensible.
@@ -166,6 +355,8 @@ export function parseOfferTrigger(raw: unknown): OfferTrigger {
     if (Number.isFinite(Number(c.minValue))) conditions.minValue = Math.max(0, Number(c.minValue));
     const req = toStringArray(c.requiredProductIds);
     if (req.length) conditions.requiredProductIds = req;
+    const excl = toStringArray(c.excludedProductIds);
+    if (excl.length) conditions.excludedProductIds = excl;
     if (Object.keys(conditions).length) trigger.conditions = conditions;
   }
   return trigger;
@@ -206,7 +397,66 @@ export function parseOfferConfig(raw: unknown): OfferConfig {
       .sort((a, b) => a.min_qty - b.min_qty);
     if (praguri.length > 0) cfg.praguri = praguri;
   }
+
+  /*
+    ⚠⚠ SE SCRIE DOAR CE E MAI MARE DECAT UNU. Un set in care toate produsele
+    intra cu o bucata produce un jsonb IDENTIC cu cel de azi — nicio oferta
+    existenta nu capata un camp la prima salvare, si nicio comparatie de randuri
+    nu se schimba.
+
+    ⚠ Si numai pentru produsele care chiar sunt in `productIds`: o cheie ramasa
+    de la un produs scos din set ar fi carat mai departe o cantitate pe care
+    n-o mai cere nimeni.
+  */
+  if (typeof r.metodaRecomandare === "string"
+      && (METODE_RECOMANDARE as readonly string[]).includes(r.metodaRecomandare)) {
+    cfg.metodaRecomandare = r.metodaRecomandare as MetodaRecomandare;
+  }
+  /* ⚠ Se scrie doar cand e ADEVARAT: `false` ar fi un camp in plus pe fiecare
+     rand, care nu spune nimic peste lipsa lui. */
+  if (r.excludeFaraStoc === true) cfg.excludeFaraStoc = true;
+
+  if (r.cantitati && typeof r.cantitati === "object" && !Array.isArray(r.cantitati)) {
+    const brute = r.cantitati as Record<string, unknown>;
+    const cantitati: Record<string, number> = {};
+    for (const id of cfg.productIds) {
+      const n = Math.floor(Number(brute[id]));
+      if (Number.isFinite(n) && n > 1) cantitati[id] = Math.min(n, OFFER_MAX_CANTITATE);
+    }
+    if (Object.keys(cantitati).length > 0) cfg.cantitati = cantitati;
+  }
   return cfg;
+}
+
+/**
+ * Cate bucati cere setul din produsul asta.
+ *
+ * ⚠⚠ SINGURUL DRUM catre `config.cantitati`, si intreaba INTAI tipul.
+ * `parseOfferConfig` nu primeste tipul, deci o cheie ratacita pe un
+ * `cross_sell` sau pe un `order_bump` ar fi fost altfel citita — iar acolo
+ * „doua bucati" n-are niciun inteles si ar fi schimbat un pret.
+ *
+ * ⚠ Intoarce MEREU cel putin 1: o cantitate zero ar fi scos produsul din set
+ * fara sa-l scoata din lista, deci pretul si continutul s-ar fi despartit.
+ */
+/**
+ * Metoda unei recomandari, derivata cand campul lipseste.
+ *
+ * ⚠⚠ SINGURUL DRUM catre `config.metodaRecomandare`, ca derivarea sa fie scrisa
+ * o singura data. Un rand vechi n-are campul, dar are `autoByCategory` — si
+ * exact acelasi bazin trebuie sa iasa si maine.
+ */
+export function metodaRecomandarii(config: OfferConfig): MetodaRecomandare {
+  const m = config.metodaRecomandare;
+  if (m && (METODE_RECOMANDARE as readonly string[]).includes(m)) return m;
+  return config.autoByCategory ? "categorie_noi" : "manual";
+}
+
+export function cantitateaCeruta(type: OfferType, config: OfferConfig, productId: string): number {
+  if (!DESPRE_TIPUL_OFERTEI[type]?.cuCantitatiPeProdus) return 1;
+  const n = config.cantitati?.[productId];
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(Math.max(1, Math.floor(n as number)), OFFER_MAX_CANTITATE);
 }
 
 export function parseOfferDisplay(raw: unknown, type: OfferType): OfferDisplay {
@@ -218,6 +468,14 @@ export function parseOfferDisplay(raw: unknown, type: OfferType): OfferDisplay {
   return {
     surfaces: surfaces.length ? surfaces : defaultSurfacesFor(type),
     style,
+    /*
+      Puterea se da ca boolean, nu se cauta in tabel inauntrul lui
+      `parseAmplasare`: o scriere de forma `TABEL[type].ceva` ar fi ARUNCAT pe
+      un tip nerecunoscut, iar functia asta e chemata pe drumul fiecarei
+      incarcari de pagina de produs. `?.` si `?? false` inchid si cazul in
+      care tipul nu e in tabel.
+    */
+    amplasare: parseAmplasare(r.amplasare, DESPRE_TIPUL_OFERTEI[type]?.sePoateAsezaLangaPret ?? false),
   };
 }
 
@@ -241,6 +499,20 @@ export interface OfferProduct {
    * aceeasi categorie: un produs fara nicio varianta putea avea steagul ridicat.
    */
   needsChoice?: boolean;
+  /**
+   * Cate bucati intra in set. Se pune DOAR pe produsele unui set
+   * `frequently_bought`; la recomandari si la bump ramane absent, deci
+   * cardurile si bump-ul nu se schimba deloc. Absent = 1.
+   */
+  cantitate?: number;
+  /**
+   * Cate bucati mai sunt. `null` = nelimitat (stocul nu se urmareste).
+   *
+   * ⚠ Nu e un camp din baza: se socoteste din `track_inventory` si
+   * `stock_quantity`, care se citeau deja. Trebuie doar la seturile cu
+   * cantitati, ca sa nu se arate un set pe care stocul nu-l poate da.
+   */
+  stocDisponibil?: number | null;
 }
 
 // One offer, resolved with real product data + computed pricing, ready to render.
@@ -250,6 +522,8 @@ export interface ResolvedOffer {
   title: string;
   buttonLabel?: string;
   style: OfferDisplay["style"];
+  /** Unde se deseneaza setul. Browserul nu vede `display`, vede doar asta. */
+  amplasare: AmplasareSet;
   products: OfferProduct[];
   /** Combined pricing for FBT / order_bump (absent for pure cross_sell). */
   pricing?: { price: number; compareAt: number; savings: number };
@@ -262,10 +536,10 @@ export interface ResolvedOffer {
  * The anchor stays at full price; companions never go below 0.
  */
 export function distributeFbtSavings(
-  companionPrices: number[],
+  companioni: LinieDeSet[],
   savings: number,
-  /** Pretul ancorei: economia se imparte pe cota companionilor din set. */
-  anchorPrice: number,
+  /** Ancora: economia se imparte pe cota companionilor din set, pe VALOARE. */
+  anchor: LinieDeSet,
 ): number[] {
-  return imparteEconomiaCompanionilor(anchorPrice, companionPrices, savings);
+  return imparteEconomiaCompanionilor(anchor, companioni, savings);
 }

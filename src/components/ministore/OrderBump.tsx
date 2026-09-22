@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { Package, Check } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
+import { useAfisariOferte } from "@/lib/offers/use-afisari-oferte";
 import type { ResolvedOffer } from "@/lib/offers/offer.types";
 
 /**
@@ -12,18 +13,31 @@ import type { ResolvedOffer } from "@/lib/offers/offer.types";
  * order path re-prices the line — the client price is only a preview.
  *
  * Renders nothing when there are no applicable bumps, so checkout is unchanged.
+ *
+ * ⚠⚠ AICI SE NUMĂRĂ ȘI AFIȘAREA BUMP-URILOR, și e singurul loc din care se putea:
+ * componenta asta e desenată de amândouă formularele de comandă (`OrderModal` și
+ * `CheckoutForm`), și tot ea ține filtrul `valid` — adică știe exact ce ajunge pe
+ * ecran. Numărate la citire (`getCheckoutBumps`), s-ar fi numărat și bump-urile
+ * pe care filtrul le aruncă, și de câteva ori pe aceeași deschidere.
+ *
+ * Până azi `order_bump` avea pe producție 0 afișări și 29 de conversii: baliza
+ * exista, dar era legată doar la pagina de produs.
  */
-export function OrderBump({ bumps, color, acceptedIds, onToggle }: {
+export function OrderBump({ businessId, bumps, color, acceptedIds, onToggle }: {
+  businessId: string;
   bumps: ResolvedOffer[];
   color: string;
   acceptedIds: Set<string>;
   onToggle: (offer: ResolvedOffer, checked: boolean) => void;
 }) {
   const valid = bumps.filter((o) => o.type === "order_bump" && o.products.length > 0 && o.pricing);
+  // ⚠ ÎNAINTE de ieșirea pe `null`: un hook chemat după o ieșire scurtă e chemat
+  // de un număr diferit de ori de la o randare la alta, și React cade.
+  const gazda = useAfisariOferte(businessId, valid.map((o) => o.id), true);
   if (valid.length === 0) return null;
 
   return (
-    <div className="space-y-2">
+    <div ref={gazda} className="space-y-2">
       {valid.map((o) => {
         const p = o.products[0];
         const checked = acceptedIds.has(o.id);

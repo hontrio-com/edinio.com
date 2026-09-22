@@ -3668,6 +3668,7 @@ export type Database = {
           is_active: boolean
           name: string
           priority: number
+          fara_stoc_anuntat_la: string | null
           revenue_added: number
           starts_at: string | null
           trigger: Json
@@ -3685,6 +3686,7 @@ export type Database = {
           impressions?: number
           is_active?: boolean
           name: string
+          fara_stoc_anuntat_la?: string | null
           priority?: number
           revenue_added?: number
           starts_at?: string | null
@@ -3703,6 +3705,7 @@ export type Database = {
           impressions?: number
           is_active?: boolean
           name?: string
+          fara_stoc_anuntat_la?: string | null
           priority?: number
           revenue_added?: number
           starts_at?: string | null
@@ -7032,6 +7035,88 @@ export type Database = {
           bani_dati: number
           vanzari: number
           comenzi_cu_transport_oferit: number
+        }[]
+      }
+      offer_stoc: {
+        Args: { bid: string }
+        Returns: { offer_id: string; cerute: number; ramase: number }[]
+      }
+      oferte_de_anuntat_fara_stoc: {
+        Args: { plafon?: number }
+        Returns: {
+          offer_id: string
+          business_id: string
+          user_id: string
+          nume: string
+          cerute: number
+          ramase: number
+        }[]
+      }
+      produse_vandute: {
+        Args: {
+          bid: string
+          categorii: string[]
+          exclude_ids?: string[]
+          p_limit?: number
+          zile?: number
+        }
+        Returns: { product_id: string; bucati: number }[]
+      }
+      offer_state: {
+        Args: {
+          p_is_active: boolean
+          p_starts_at: string | null
+          p_ends_at: string | null
+        }
+        Returns: string
+      }
+      offers_page: {
+        Args: {
+          bid: string
+          search?: string | null
+          p_stare?: string
+          sort_key?: string
+          page_limit?: number
+          page_offset?: number
+        }
+        Returns: {
+          id: string
+          type: string
+          name: string
+          is_active: boolean
+          priority: number
+          trigger: Json
+          config: Json
+          display: Json
+          starts_at: string | null
+          ends_at: string | null
+          impressions: number
+          conversions: number
+          revenue_added: number
+          created_at: string
+          updated_at: string
+          stare: string
+          produse_cerute: number
+          produse_ramase: number
+          total_count: number
+        }[]
+      }
+      offer_state_counts: {
+        Args: { bid: string; search?: string | null }
+        Returns: { stare: string; cate: number }[]
+      }
+      offer_totaluri: {
+        Args: { bid: string }
+        Returns: {
+          oferte: number
+          oferte_active: number
+          afisari: number
+          acceptari: number
+          venit: number
+          comenzi_cazute: number
+          bani_dati_cazuti: number
+          oferte_ciuntite: number
+          oferte_moarte: number
         }[]
       }
       discount_orders_fara_legatura: {

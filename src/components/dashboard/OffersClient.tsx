@@ -1,81 +1,148 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Sparkles, Plus, Pencil, Trash2, Search, Layers, Package, ShoppingCart, Eye, MousePointerClick, FlaskConical } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
-import { toggleOffer, deleteOffer, type OfferRow } from "@/lib/actions/offer.actions";
-import type { OfferType } from "@/lib/offers/offer.types";
+import {
+  Banknote, Eye, MousePointerClick, Pencil, Plus, Search, Sparkles, ToggleLeft, ToggleRight, Trash2,
+} from "lucide-react";
 
-const TYPE_LABEL: Record<OfferType, string> = {
-  frequently_bought: "Cumparate impreuna",
-  cross_sell: "Recomandari",
-  order_bump: "Oferta la checkout",
-  post_purchase: "Dupa cumparare",
-  volume: "Reducere cantitate",
-  bogo: "Cumpara X, primesti Y",
-  gift: "Cadou",
-  spend_reward: "Spend & save",
-};
+import { cn } from "@/lib/utils/cn";
+import { formatDate, formatPrice, formatPriceValue } from "@/lib/utils/format";
+import { buttonVariants } from "@/components/ui/button";
+import { EtichetaStare } from "@/components/ui/eticheta-stare";
+import { CardStatistica } from "@/components/dashboard/CardStatistica";
+import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
+import { catePagini, rezumatulPaginii } from "@/lib/dashboard/paginare";
+import { toggleOffer, deleteOffer } from "@/lib/actions/offer.actions";
+import { DESPRE_STAREA_OFERTEI, TONUL_STARII_OFERTA, toateMotiveleOfertei } from "@/lib/offers/stare";
+import {
+  CUVINTELE_OFERTELOR, NUMELE_FILTRULUI, NUMELE_SORTARII, OFERTE_PE_PAGINA, SORTARI,
+  cateLaFiltru, filtreCuRost, type FiltruStare, type Sortare,
+} from "@/lib/offers/filtre";
+import {
+  ceOfera, rataDeAcceptare, scrieCifra, scrieRata, undeApare,
+  DESPRE_STAREA_STOCULUI, stareaStocului,
+  type OfertaDinLista, type TotalurileOfertelor,
+} from "@/lib/offers/lista";
+import { metaTip } from "@/components/dashboard/oferte/tipuri-ui";
+import { SertarOferta } from "@/components/dashboard/oferte/SertarOferta";
 
-const TYPE_ICON: Record<string, typeof Layers> = {
-  frequently_bought: Layers,
-  cross_sell: Package,
-  order_bump: ShoppingCart,
-};
-
-// Short "where it shows / what it offers" summary for the list row.
-function summarize(o: OfferRow): string {
-  /*
-    ⚠ Oferta de cantitate nu OFERA produse, le ieftineste. Randul comun scria
-    „ofera 0 produse", adica exact pe dos fata de ce face.
-  */
-  if (o.type === "volume") {
-    const unde = o.trigger.scope === "all"
-      ? "toate produsele"
-      : o.trigger.scope === "categories"
-        ? `${o.trigger.categories.length} categorii`
-        : `${o.trigger.productIds.length} produse`;
-    const praguri = o.config.praguri ?? [];
-    if (praguri.length === 0) return `Apare la ${unde} · niciun prag`;
-    return `Apare la ${unde} · ${praguri.map((p) => `de la ${p.min_qty} buc -${p.percent}%`).join(", ")}`;
-  }
-
-  const scope = o.trigger.scope === "all"
-    ? "toate produsele"
-    : o.trigger.scope === "categories"
-      ? `${o.trigger.categories.length} categorii`
-      : `${o.trigger.productIds.length} produse`;
-  const offered = o.config.autoByCategory
-    ? "auto din categorie"
-    : `${o.config.productIds.length} ${o.config.productIds.length === 1 ? "produs" : "produse"}`;
-  return `Apare la ${scope} · ofera ${offered}`;
-}
-
-export function OffersClient({ businessId, offers }: { businessId: string; offers: OfferRow[] }) {
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * OFERTE                                                        (22.09.2026)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠⚠ ACEEAȘI LINIE DE DESIGN ca la Clienți, Coșuri abandonate și Discounturi,
+ * cerută de el anume: „păstrăm peste tot aceeași linie de design”. Deci
+ * `CardStatistica` sus, `EtichetaStare` pe rânduri, tabel pe desktop și carduri
+ * pe telefon, filtre care apar doar când au pe ce cădea, sertar lateral cu fișa,
+ * și răsfoire.
+ *
+ * ⚠⚠ ȘI CIFRELE S-AU SCHIMBAT, nu doar cutiile. Ecranul arăta înainte `👁 405 ·
+ * 🖱 29` pe rând, și numai când vreuna nu era zero — două numere fără nume,
+ * lângă o singură etichetă cenușie „Inactiv”. O ofertă a cărei perioadă trecuse
+ * arăta exact ca una care merge.
+ *
+ * ⚠⚠ AFIȘĂRILE ERAU PE JUMĂTATE, și codul susținea contrariul. Baliza din
+ * browser era legată doar la pagina de produs, deși comentariul ei spunea că
+ * „tot așa se numără și pe celelalte două suprafețe”. Măsurat pe producție la
+ * 22.09.2026: `cross_sell` 405 afișări / 0 acceptări, `order_bump` 0 afișări /
+ * 29 de acceptări. Un ecran redesenat care ar fi arătat mai departe „0 afișări ·
+ * 29 acceptate” ar fi fost doar mai frumos, nu mai adevărat — deci baliza s-a
+ * legat întâi (vezi `lib/offers/use-afisari-oferte.ts`).
+ *
+ * ⚠ BANDA „FUNCȚIE ÎN BETA” A IEȘIT. Eticheta Beta fusese deja scoasă din meniu
+ * în redesignul ăsta, la cererea lui; o bandă galbenă cât un card, deasupra
+ * fiecărei liste de oferte, spunea altceva decât meniul. Ce era adevărat în ea
+ * — „verifică ce fac cifrele” — s-a mutat acolo unde se poate face ceva cu el:
+ * în explicația fiecărui card și în fișa fiecărei oferte.
+ */
+export function OffersClient({
+  businessId, oferte, cateSunt, pagina, catePeStare, totaluri,
+  cautare: cautareDinAdresa, stare, sortare,
+}: {
+  businessId: string;
+  /** ⚠⚠ O PAGINĂ, deja filtrată și sortată în bază. Nu tot magazinul. */
+  oferte: OfertaDinLista[];
+  /** Câte oferte are mulțimea FILTRATĂ, nu pagina. Din `count(*) over ()`. */
+  cateSunt: number;
+  pagina: number;
+  /** Câte oferte are fiecare stare, numărate PESTE CĂUTARE, în bază. */
+  catePeStare: Record<string, number>;
+  /** Cifrele din cap, socotite pe TOT magazinul — nu pe pagina adusă. */
+  totaluri: TotalurileOfertelor;
+  cautare: string;
+  stare: FiltruStare;
+  sortare: Sortare;
+}) {
   const router = useRouter();
+  const parametriAdresa = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const [deschisa, setDeschisa] = useState<OfertaDinLista | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return offers;
-    return offers.filter((o) => o.name.toLowerCase().includes(q) || TYPE_LABEL[o.type].toLowerCase().includes(q));
-  }, [offers, search]);
+  /*
+   * ⚠⚠ CĂUTAREA STĂ ÎN ADRESĂ, dar câmpul își ține propria stare cât se scrie.
+   * Scrisă direct în adresă la fiecare literă, pagina s-ar fi re-adus de șase
+   * ori pentru „Recomandări” — șase drumuri la bază și șase randări, iar
+   * cursorul ar fi sărit.
+   */
+  const [cautare, setCautare] = useState(cautareDinAdresa);
 
-  function toggle(o: OfferRow) {
+  const duLa = useCallback((schimbari: Record<string, string>) => {
+    const p = new URLSearchParams(parametriAdresa.toString());
+    for (const [k, v] of Object.entries(schimbari)) {
+      if (v === "" || (k === "stare" && v === "toate") || (k === "sort" && v === "noi") || (k === "page" && v === "1")) {
+        /* ⚠ Implicitele NU se scriu în adresă: altfel fiecare legătură ar fi
+           purtat trei parametri care nu spun nimic. */
+        p.delete(k);
+      } else {
+        p.set(k, v);
+      }
+    }
+    const sir = p.toString();
+    router.replace(sir ? `?${sir}` : "?", { scroll: false });
+  }, [parametriAdresa, router]);
+
+  const asteaptaTastarea = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrieCautarea = useCallback((v: string) => {
+    setCautare(v);
+    if (asteaptaTastarea.current) clearTimeout(asteaptaTastarea.current);
+    asteaptaTastarea.current = setTimeout(() => duLa({ q: v.trim(), page: "1" }), 300);
+  }, [duLa]);
+
+  const filtreleCuRost = filtreCuRost(catePeStare as Partial<Record<FiltruStare, number>>, stare);
+  const pagini = catePagini(cateSunt, OFERTE_PE_PAGINA);
+  const rezumat = rezumatulPaginii(cateSunt, pagina, OFERTE_PE_PAGINA, CUVINTELE_OFERTELOR);
+
+  /*
+   * ⚠⚠ O SINGURĂ MĂRIME PENTRU TOT RÂNDUL, dată de cea mai lungă cifră. Lăsată
+   * pe seama fiecărui card, „5” rămânea la 44px lângă „30.666,70 lei” la 22px,
+   * și cele patru cutii nu mai arătau ca un set. Cerut de el pe 21.09.2026.
+   * ⚠ Se dau CHIAR șirurile care ajung pe ecran, nu numerele: `formatPriceValue`
+   * adaugă separatori, adică jumătate din lungime.
+   */
+  const marimeCifre = marimeaRandului([
+    scrieCifra(totaluri.active),
+    scrieCifra(totaluri.afisari),
+    scrieCifra(totaluri.acceptari),
+    { valoare: formatPriceValue(totaluri.venit), unitate: "lei" },
+  ]);
+
+  const rataPeTot = rataDeAcceptare(totaluri.afisari, totaluri.acceptari);
+
+  function comuta(o: OfertaDinLista) {
     startTransition(async () => {
       let res: Awaited<ReturnType<typeof toggleOffer>>;
       try {
         res = await toggleOffer(o.id, businessId, !o.is_active);
       } catch {
-        /* ⚠ Nu se schimba nimic local: randul se aseaza din datele venite de la server. */
+        /* ⚠ Nu se schimbă nimic local: rândul se așază din datele venite de la server. */
         toast.error(
-          "Nu am primit raspuns de la server, deci nu stim daca oferta si-a schimbat starea. "
-          + "Pagina se reincarca si arata starea adevarata.",
+          "Nu am primit răspuns de la server, deci nu știm dacă oferta și-a schimbat starea. "
+          + "Pagina se reîncarcă și arată starea adevărată.",
           { duration: 12000 },
         );
         router.refresh();
@@ -86,127 +153,530 @@ export function OffersClient({ businessId, offers }: { businessId: string; offer
     });
   }
 
-  function remove(id: string) {
+  function sterge(id: string) {
     startTransition(async () => {
       let res: Awaited<ReturnType<typeof deleteOffer>>;
       try {
         res = await deleteOffer(id, businessId);
       } catch {
-        /* ⚠ `setConfirmId(null)` sta dupa `try`, deci fereastra de confirmare ramane deschisa. */
+        /* ⚠ `setConfirmId(null)` stă după `try`, deci confirmarea rămâne pe ecran. */
         toast.error(
-          "Nu am primit raspuns de la server, deci nu stim daca oferta s-a sters. Lista se reincarca: daca mai apare, nu s-a sters.",
+          "Nu am primit răspuns de la server, deci nu știm dacă oferta s-a șters. "
+          + "Lista se reîncarcă: dacă mai apare, nu s-a șters.",
           { duration: 12000 },
         );
         router.refresh();
         return;
       }
       if ("error" in res) { toast.error(res.error); return; }
-      toast.success("Oferta stearsa.");
+      toast.success("Ofertă ștearsă.");
       setConfirmId(null);
+      setDeschisa(null);
       router.refresh();
     });
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex items-start justify-between gap-4">
+    <>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2"><Sparkles className="h-6 w-6" /> Oferte</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Upsell, cross-sell si &quot;cumparate impreuna&quot; ca sa cresti valoarea comenzii.</p>
+          <h1 className="text-xl font-semibold text-foreground">Oferte</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Crește valoarea comenzii și vezi ce au adus</p>
         </div>
-        <Link href="/dashboard/offers/new"
-          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg transition-all hover:opacity-90 shrink-0">
-          <Plus className="h-4 w-4" /> Oferta noua
+        {/* ⚠ LEGĂTURĂ, nu buton: „deschide în filă nouă” trebuie să meargă. */}
+        <Link href="/dashboard/offers/new" className={buttonVariants()}>
+          <Plus />
+          <span className="hidden xs:inline sm:inline">Ofertă nouă</span>
+          <span className="xs:hidden sm:hidden">Nouă</span>
         </Link>
       </div>
 
-      {/* BETA notice — merchant-facing only */}
-      <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3">
-        <FlaskConical className="h-4 w-4 text-warning shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-foreground">Functie in BETA</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Sistemul de oferte este nou si il testam activ, asa ca pot aparea erori. Verifica comenzile care folosesc oferte inainte sa te bazezi complet pe ele si spune-ne daca intampini ceva.
-          </p>
-        </div>
-      </div>
-
-      {offers.length === 0 ? (
-        <div className="rounded-2xl ring-1 ring-foreground/10 border-dashed border-border bg-card py-16 text-center px-4">
-          <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
-            <Sparkles className="h-6 w-6" />
+      {/*
+        ⚠⚠ GOL DIN DOUĂ PRICINI DEOSEBITE, și se spun altfel.
+        `totaluri.oferte === 0` înseamnă că magazinul n-are NICIO ofertă — atunci
+        se arată invitația de a face prima. `cateSunt === 0` cu oferte în magazin
+        înseamnă că doar CĂUTAREA sau FILTRUL n-au găsit nimic, și atunci bara de
+        filtre trebuie să rămână pe ecran ca omul să se poată întoarce.
+      */}
+      {totaluri.oferte === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+            <Sparkles className="h-7 w-7 text-primary" />
           </div>
-          <p className="text-sm font-medium text-foreground mb-1">Nicio oferta inca</p>
-          <p className="text-xs text-muted-foreground max-w-sm mx-auto mb-5">
-            Sugereaza produse care merg impreuna, adauga un produs la checkout sau grupeaza-le &quot;cumparate frecvent impreuna&quot;. Cresti valoarea medie a comenzii fara reclame in plus.
+          <h2 className="text-base font-semibold text-foreground mb-1">Nicio ofertă încă</h2>
+          <p className="text-sm text-muted-foreground max-w-xs mb-4">
+            Sugerează produse care merg împreună, adaugă unul la checkout sau lasă prețul să scadă
+            la cantitate. Crește valoarea comenzii fără reclame în plus.
           </p>
-          <Link href="/dashboard/offers/new"
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-primary rounded-lg hover:opacity-90 transition-all">
-            <Plus className="h-4 w-4" /> Creeaza prima oferta
-          </Link>
+          <Link href="/dashboard/offers/new" className={buttonVariants()}><Plus /> Fă prima ofertă</Link>
         </div>
       ) : (
         <>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cauta o oferta..."
-              className="w-full pl-9 pr-3 py-2.5 text-sm border border-border rounded-lg bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors" />
+          {/*
+            ═══ CIFRELE DIN CAP ═══
+
+            ⚠ SUNT CHIAR `CardStatistica`, cel de la Panou, Clienți, Statistici,
+            Coșuri abandonate și Discounturi — nu patru cutii locale care seamănă
+            cu el.
+
+            ⚠⚠ „Afișări" și „Acceptate" sunt CONTOARE care doar cresc: nu scad
+            când o comandă se anulează, fiindcă `orders` nu păstrează nicio
+            legătură către oferta folosită. Scrisă în explicația fiecărui card,
+            nu ascunsă.
+          */}
+          <div className="grid grid-cols-1 gap-3 mb-4 sm:grid-cols-2 lg:grid-cols-4">
+            <CardStatistica marime={marimeCifre}
+              icon={Sparkles}
+              label="Oferte care merg acum"
+              value={scrieCifra(totaluri.active)}
+              explicatie="Ofertele pe care un cumpărător le poate vedea chiar în clipa asta: pornite, neexpirate și ajunse la data de pornire."
+              empty={totaluri.active === 0}
+            />
+            <CardStatistica marime={marimeCifre}
+              icon={Eye}
+              label="Afișări"
+              value={scrieCifra(totaluri.afisari)}
+              explicatie="De câte ori o ofertă a ajuns pe un ecran, o dată pe vizită. ⚠ Afișările de la checkout și din coș se numără de pe 22.09.2026; înainte se numărau doar cele de pe pagina produsului, deci pe ofertele mai vechi cifra e mai mică decât a fost în realitate."
+              empty={totaluri.afisari === 0}
+            />
+            <CardStatistica marime={marimeCifre}
+              icon={MousePointerClick}
+              label="Acceptate"
+              value={scrieCifra(totaluri.acceptari)}
+              subsol={rataPeTot === null ? undefined : `${scrieRata(rataPeTot)} din afișări`}
+              explicatie="De câte ori un cumpărător a luat ce i-a propus oferta. Se numără în clipa comenzii. ⚠ NU scade dacă acea comandă se anulează mai târziu: nicăieri nu se păstrează care ofertă a fost pe care comandă."
+              empty={totaluri.acceptari === 0}
+            />
+            <CardStatistica marime={marimeCifre}
+              icon={Banknote}
+              label="Vânzări în plus"
+              value={formatPriceValue(totaluri.venit)}
+              unit="lei"
+              explicatie="Valoarea produselor luate din oferte. Se adună în clipa comenzii, la fel ca acceptările, și ⚠ NU scade dacă acea comandă se anulează."
+              empty={totaluri.venit === 0}
+            />
           </div>
 
-          {filtered.length === 0 ? (
-            <div className="rounded-2xl ring-1 ring-foreground/10 border-dashed border-border bg-card py-12 text-center px-4">
-              <p className="text-sm text-muted-foreground">Nicio oferta pentru cautarea ta.</p>
+          {/*
+            ⚠⚠ OFERTELE CARE NU MAI POT VINDE, sus, înaintea listei. Un
+            comerciant cu treizeci de oferte n-ar fi găsit rândul ciuntit
+            derulând; iar una moartă nu se mai vede DELOC cumpărătorilor, ceea ce
+            pe ecran arăta exact ca una care merge.
+
+            ⚠ Două propoziții deosebite, fiindcă cer lucruri deosebite: una e
+            „mișcă-te acum”, cealaltă „când ai timp”.
+          */}
+          {(totaluri.oferteMoarte > 0 || totaluri.oferteCiuntite > 0) && (
+            <p className="mb-4 rounded-xl bg-warning/10 p-3 text-xs text-foreground">
+              {totaluri.oferteMoarte > 0 && (
+                <>
+                  <span className="font-semibold">Nu se mai văd:</span>{" "}
+                  {totaluri.oferteMoarte === 1
+                    ? "o ofertă pornită n-are niciun produs pe stoc"
+                    : `${totaluri.oferteMoarte} oferte pornite n-au niciun produs pe stoc`}.
+                </>
+              )}
+              {totaluri.oferteMoarte > 0 && totaluri.oferteCiuntite > 0 ? " " : null}
+              {totaluri.oferteCiuntite > 0 && (
+                /*
+                  ⚠ „ÎNCĂ una" are sens numai DUPĂ prima propoziție. Fără
+                  ramura asta, un magazin fără oferte moarte citea „Încă o
+                  ofertă a pierdut produse" ca și cum i-ar fi scăpat ceva mai
+                  sus. Văzut pe ecran.
+                */
+                <>
+                  {totaluri.oferteMoarte > 0
+                    ? (totaluri.oferteCiuntite === 1
+                        ? "Încă o ofertă a pierdut produse"
+                        : `Alte ${totaluri.oferteCiuntite} oferte au pierdut produse`)
+                    : (totaluri.oferteCiuntite === 1
+                        ? "O ofertă a pierdut produse"
+                        : `${totaluri.oferteCiuntite} oferte au pierdut produse`)}
+                  , dar încă se arată.
+                </>
+              )}
+            </p>
+          )}
+
+          {/*
+            ⚠⚠ O CIFRĂ CARE TREBUIE SĂ SE VADĂ CÂND NU E ZERO — perechea lui
+            „comenzi fără legătură" de la Discounturi. Contoarele de mai sus nu
+            scad la anulare; rândul ăsta spune CÂT de mult nu scad, cu cifre din
+            comenzi. Când nu s-a anulat nicio comandă cu ofertă, nu apare deloc.
+          */}
+          {totaluri.comenziCazute > 0 && (
+            <p className="mb-4 rounded-xl bg-warning/10 p-3 text-xs text-foreground">
+              <span className="font-semibold">De știut:</span> {totaluri.comenziCazute}{" "}
+              {totaluri.comenziCazute === 1 ? "comandă cu reducere din ofertă a fost anulată" : "de comenzi cu reducere din ofertă au fost anulate"}
+              {" "}({formatPrice(totaluri.baniDatiCazuti)} reducere). „Acceptate” și „Vânzări în plus” nu scad
+              cu ele: nicăieri nu se păstrează care ofertă a fost pe care comandă.
+            </p>
+          )}
+
+          {/*
+            ═══ CĂUTAREA, FILTRELE ȘI SORTAREA ═══
+
+            ⚠ APAR NUMAI CÂND E CE FILTRA. Sub patru oferte, o bară de filtre
+            deasupra unei liste de trei rânduri e mai mult de citit decât lista
+            însăși. Măsurat: media pe producție e 3,25 oferte pe magazin.
+          */}
+          {totaluri.oferte >= 4 && (
+            <div className="mb-4 space-y-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={cautare}
+                  onChange={(e) => scrieCautarea(e.target.value)}
+                  placeholder="Caută după nume…"
+                  aria-label="Caută după nume"
+                  className="w-full rounded-xl border border-border bg-surface py-2 pl-9 pr-3 text-sm text-foreground focus:border-primary focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                <select
+                  value={stare}
+                  onChange={(e) => duLa({ stare: e.target.value, page: "1" })}
+                  aria-label="Starea ofertelor"
+                  className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none sm:w-auto"
+                >
+                  {/*
+                    ⚠ Cifra de lângă fiecare filtru se numără PESTE CĂUTARE. Altfel
+                    omul caută „Vara", vede „Oprite (2)", apasă — și lista iese
+                    goală, fiindcă cele două oprite erau alte oferte.
+                  */}
+                  {filtreleCuRost.map((f) => (
+                    <option key={f} value={f}>{NUMELE_FILTRULUI[f]} ({cateLaFiltru(catePeStare, f)})</option>
+                  ))}
+                </select>
+
+                <select
+                  value={sortare}
+                  onChange={(e) => duLa({ sort: e.target.value, page: "1" })}
+                  aria-label="Ordinea ofertelor"
+                  className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none sm:w-auto"
+                >
+                  {SORTARI.map((o) => (
+                    <option key={o} value={o}>{NUMELE_SORTARII[o]}</option>
+                  ))}
+                </select>
+
+                <span className="col-span-2 text-right text-xs text-muted-foreground sm:col-span-1 sm:ml-auto">
+                  {rezumat}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/*
+            ⚠ GOLUL SPUNE DE CE E GOL. „Nicio ofertă" după un filtru arată exact
+            ca o pagină stricată; aici se spune care e pricina.
+          */}
+          {oferte.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border py-16 text-center">
+              <p className="font-medium text-foreground">Nicio ofertă pentru ce ai ales</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {cautare ? "Încearcă altă căutare" : "Alege altă stare"}
+                {cautare && stare !== "toate" ? " sau altă stare." : "."}
+              </p>
             </div>
           ) : (
-            <div className="rounded-2xl ring-1 ring-foreground/10 bg-card divide-y divide-border overflow-hidden">
-              {filtered.map((o) => {
-                const Icon = TYPE_ICON[o.type] ?? Sparkles;
-                return (
-                  <div key={o.id} className="flex items-center gap-4 px-4 py-3">
-                    <div className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                      <Icon className="h-5 w-5" />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold text-foreground truncate">{o.name}</p>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">{TYPE_LABEL[o.type]}</span>
-                        {!o.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium">Inactiv</span>}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{summarize(o)}</p>
-                      {(o.impressions > 0 || o.conversions > 0) && (
-                        <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
-                          <span className="inline-flex items-center gap-1"><Eye className="h-3 w-3" /> {o.impressions}</span>
-                          <span className="inline-flex items-center gap-1"><MousePointerClick className="h-3 w-3" /> {o.conversions}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Switch checked={o.is_active} onCheckedChange={() => toggle(o)} disabled={pending} />
-                      <Link href={`/dashboard/offers/${o.id}/edit`}
-                        className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Link>
-                      {confirmId === o.id ? (
-                        <button onClick={() => remove(o.id)} disabled={pending}
-                          className="px-2.5 h-9 rounded-lg bg-destructive text-white text-xs font-semibold hover:opacity-90 disabled:opacity-60">
-                          Confirma
-                        </button>
-                      ) : (
-                        <button onClick={() => setConfirmId(o.id)}
-                          className="w-9 h-9 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+          <>
+          {/* Tabel */}
+          <div className="hidden bg-card ring-1 ring-foreground/10 rounded-xl overflow-hidden sm:block">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ofertă</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tip</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Văzută</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Acceptată</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Până când</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stare</th>
+                    <th className="px-5 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {oferte.map((o) => {
+                    const meta = metaTip(o.type);
+                    const Icon = meta.icon;
+                    const rata = rataDeAcceptare(o.impressions, o.conversions);
+                    /*
+                      ⚠⚠ DATA TRECUTĂ SE SCRIE ROȘU CHIAR ȘI CÂND ETICHETA SPUNE
+                      ALTCEVA. Legat de `stare`, roșul s-ar fi stins în clipa în
+                      care comerciantul oprea oferta — fiindcă „oprit” bate
+                      „expirat” pe rând — iar „31 august 2026” ar fi stat scris
+                      negru, ca o dată oarecare. Văzut pe ecran la proba din
+                      browser. Eticheta spune ce ai de făcut ÎNTÂI; coloana asta
+                      spune un FAPT, și faptul nu se schimbă de la un comutator.
+                    */
+                    const aTrecutData = toateMotiveleOfertei(o).includes("expirat");
+                    /* ⚠ Semnul de stoc stă LÂNGĂ starea ofertei, nu în locul ei:
+                       sunt două lucruri deosebite. O ofertă poate fi „Activă” și
+                       totuși fără stoc — chiar ăsta e cazul care se ascundea. */
+                    const stoc = stareaStocului(o);
+                    return (
+                      <tr key={o.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-5 py-3.5">
+                          {/*
+                            ⚠ APĂSAREA PE NUME DESCHIDE FIȘA. Până acum rândul nu
+                            ducea nicăieri: singurul drum către o ofertă era
+                            creionul de editare, care arată regulile dar nu și ce
+                            a făcut — și nici măcar CARE produse, doar câte.
+                          */}
+                          <button
+                            type="button"
+                            onClick={() => setDeschisa(o)}
+                            className="text-left font-semibold text-foreground hover:underline"
+                          >
+                            {o.name}
+                          </button>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Apare la {undeApare(o.trigger)}
+                            {o.type === "volume" ? ` · ${ceOfera(o)}` : ` · oferă ${ceOfera(o)}`}
+                          </p>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className="inline-flex items-center gap-1.5 whitespace-nowrap px-2 py-1 rounded-lg border border-border text-xs font-medium text-foreground">
+                            <Icon className="h-3 w-3" />
+                            {meta.eticheta}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 hidden md:table-cell tabular-nums">
+                          {scrieCifra(o.impressions)}
+                        </td>
+                        <td className="px-5 py-3.5 hidden whitespace-nowrap md:table-cell tabular-nums">
+                          {scrieCifra(o.conversions)}
+                          {/*
+                            ⚠ Procentul apare NUMAI când oferta chiar a fost
+                            văzută. Cu zero afișări, „0%" ar fi însemnat „au
+                            văzut-o și n-au vrut-o”.
+                          */}
+                          {rata !== null && (
+                            <span className="ml-1.5 text-xs text-muted-foreground">· {scrieRata(rata)}</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 hidden whitespace-nowrap lg:table-cell">
+                          {o.ends_at ? (
+                            <span className={cn("text-sm", aTrecutData ? "text-destructive" : "text-foreground")}>
+                              {formatDate(new Date(o.ends_at))}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Fără capăt</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {/*
+                            ⚠ Comutatorul rămâne alături de etichetă: eticheta
+                            spune ce e, butonul schimbă ce se poate schimba.
+                          */}
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => comuta(o)}
+                              disabled={pending}
+                              aria-label={o.is_active ? `Oprește oferta ${o.name}` : `Pornește oferta ${o.name}`}
+                              className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+                            >
+                              {o.is_active
+                                ? <ToggleRight className="h-5 w-5 text-primary" />
+                                : <ToggleLeft className="h-5 w-5" />}
+                            </button>
+                            <EtichetaStare ton={TONUL_STARII_OFERTA[o.stare]} marime="mic" title={DESPRE_STAREA_OFERTEI[o.stare].explicatie}>
+                              {DESPRE_STAREA_OFERTEI[o.stare].text}
+                            </EtichetaStare>
+                            {(stoc === "moarta" || stoc === "ciuntita") && (
+                              <EtichetaStare ton={stoc === "moarta" ? "rau" : "asteptare"} marime="mic"
+                                title={DESPRE_STAREA_STOCULUI[stoc].explicatie}>
+                                {DESPRE_STAREA_STOCULUI[stoc].text}
+                              </EtichetaStare>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-1 justify-end">
+                            <Link
+                              href={`/dashboard/offers/${o.id}/edit`}
+                              aria-label={`Editează oferta ${o.name}`}
+                              className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Link>
+                            {confirmId === o.id ? (
+                              <button
+                                type="button"
+                                onClick={() => sterge(o.id)}
+                                disabled={pending}
+                                className="px-2.5 py-1.5 rounded-lg bg-destructive text-white text-xs font-semibold hover:opacity-90 disabled:opacity-60"
+                              >
+                                Confirmă
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmId(o.id)}
+                                aria-label={`Șterge oferta ${o.name}`}
+                                className="p-1.5 rounded-lg hover:bg-destructive/5 transition-colors text-muted-foreground hover:text-destructive"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
+          </div>
+
+          {/*
+            ═══ ACELEAȘI OFERTE, PE TELEFON ═══
+
+            ⚠ CARDURI SUB `sm`, TABEL DE LA `sm` ÎN SUS — același tipar ca la
+            Clienți, Importuri și Discounturi. Un tabel de șapte coloane pe un
+            telefon de 390px își pierde jumătate din ele, iar cele ascunse
+            (`hidden md:table-cell`) nu se pot ajunge în niciun fel: aici ar fi
+            fost tocmai Văzută, Acceptată și Până când.
+          */}
+          <ul className="space-y-2 sm:hidden">
+            {oferte.map((o) => {
+              const meta = metaTip(o.type);
+              const Icon = meta.icon;
+              const rata = rataDeAcceptare(o.impressions, o.conversions);
+              const aTrecutData = toateMotiveleOfertei(o).includes("expirat");
+              const stoc = stareaStocului(o);
+              return (
+                <li key={o.id} className="rounded-xl bg-card p-3.5 ring-1 ring-foreground/10">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => setDeschisa(o)}
+                        className="truncate text-left font-semibold text-foreground hover:underline"
+                      >
+                        {o.name}
+                      </button>
+                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Icon className="h-3 w-3 shrink-0" />
+                        {meta.eticheta}
+                      </p>
+                    </div>
+                    <span className="flex shrink-0 flex-col items-end gap-1">
+                      <EtichetaStare ton={TONUL_STARII_OFERTA[o.stare]} marime="mic" title={DESPRE_STAREA_OFERTEI[o.stare].explicatie}>
+                        {DESPRE_STAREA_OFERTEI[o.stare].text}
+                      </EtichetaStare>
+                      {(stoc === "moarta" || stoc === "ciuntita") && (
+                        <EtichetaStare ton={stoc === "moarta" ? "rau" : "asteptare"} marime="mic"
+                          title={DESPRE_STAREA_STOCULUI[stoc].explicatie}>
+                          {DESPRE_STAREA_STOCULUI[stoc].text}
+                        </EtichetaStare>
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span>
+                      <span className="font-semibold text-foreground">{scrieCifra(o.impressions)}</span> afișări
+                    </span>
+                    <span>
+                      <span className="font-semibold text-foreground">{scrieCifra(o.conversions)}</span> acceptate
+                      {rata !== null ? ` · ${scrieRata(rata)}` : ""}
+                    </span>
+                    {o.revenue_added > 0 && <span>{formatPrice(o.revenue_added)} în plus</span>}
+                    {o.ends_at && (
+                      <span className={aTrecutData ? "text-destructive" : undefined}>până la {formatDate(new Date(o.ends_at))}</span>
+                    )}
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-1 border-t border-border pt-2">
+                    <button
+                      type="button"
+                      onClick={() => comuta(o)}
+                      disabled={pending}
+                      aria-label={o.is_active ? `Oprește oferta ${o.name}` : `Pornește oferta ${o.name}`}
+                      className="p-1.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+                    >
+                      {o.is_active ? <ToggleRight className="h-5 w-5 text-primary" /> : <ToggleLeft className="h-5 w-5" />}
+                    </button>
+                    <Link
+                      href={`/dashboard/offers/${o.id}/edit`}
+                      aria-label={`Editează oferta ${o.name}`}
+                      className="ml-auto p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Link>
+                    {confirmId === o.id ? (
+                      <button
+                        type="button"
+                        onClick={() => sterge(o.id)}
+                        disabled={pending}
+                        className="rounded-lg bg-destructive px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        Confirmă
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmId(o.id)}
+                        aria-label={`Șterge oferta ${o.name}`}
+                        className="p-1.5 text-muted-foreground transition-colors hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/*
+            ═══ RĂSFOIREA ═══
+
+            ⚠ APARE NUMAI CÂND CHIAR SUNT MAI MULTE PAGINI. Două butoane stinse
+            sub o listă de unsprezece rânduri sunt o promisiune goală.
+          */}
+          {pagini > 1 && (
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">{rezumat}</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => duLa({ page: String(pagina - 1) })}
+                  disabled={pagina <= 1}
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Înapoi
+                </button>
+                <span className="text-xs text-muted-foreground">{pagina} / {pagini}</span>
+                <button
+                  type="button"
+                  onClick={() => duLa({ page: String(pagina + 1) })}
+                  disabled={pagina >= pagini}
+                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Înainte
+                </button>
+              </div>
+            </div>
+          )}
+          </>
           )}
         </>
       )}
-    </div>
+
+      {deschisa && (
+        <SertarOferta
+          oferta={deschisa}
+          businessId={businessId}
+          onEditeaza={() => router.push(`/dashboard/offers/${deschisa.id}/edit`)}
+          onClose={() => setDeschisa(null)}
+        />
+      )}
+    </>
   );
 }

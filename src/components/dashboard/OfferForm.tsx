@@ -10,53 +10,31 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { createOffer, updateOffer, type OfferFormData, type OfferRow } from "@/lib/actions/offer.actions";
 import {
-  OFFER_DEFAULT_MAX_PRODUCTS, type OfferType, type OfferScope, type OfferDiscountMode,
+  OFFER_DEFAULT_MAX_PRODUCTS, OFFER_MAX_CANTITATE, OFFER_MAX_PRODUCTS,
+  METODE_RECOMANDARE, DESPRE_METODA, metodaRecomandarii,
+  type OfferType, type OfferScope, type OfferDiscountMode, type MetodaRecomandare,
 } from "@/lib/offers/offer.types";
+import { descriePerioada, perioadaOfertei, ziuaClipei } from "@/lib/zi-romaneasca";
+import { TIPURI_DE_ALES, metaTip, type MetaTip } from "@/components/dashboard/oferte/tipuri-ui";
+import { DESPRE_PORTI } from "@/lib/offers/porti";
+import { AMPLASARI, DESPRE_AMPLASARE, type AmplasareSet } from "@/lib/offers/amplasare";
 
 interface PickerProduct { id: string; name: string; price: number; image_url: string | null; }
 
 const inputCls = "w-full rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
-// The three offer types available in Faza 1. Each drives which sections show.
-const PHASE1 = [
-  {
-    type: "frequently_bought" as const, icon: Layers,
-    label: "Cumparate impreuna",
-    desc: "Produsul de pe pagina + altele care merg cu el, la un pret combinat (stil Amazon).",
-    offersLabel: "Produse in set (pe langa cel de pe pagina)",
-    defaultDiscount: "percent" as OfferDiscountMode, hasDiscount: true,
-  },
-  {
-    type: "cross_sell" as const, icon: Package,
-    label: "Recomandari",
-    desc: "Sugereaza produse pe pagina produsului si in cos. Recomandare, fara reducere.",
-    offersLabel: "Produse recomandate",
-    defaultDiscount: "none" as OfferDiscountMode, hasDiscount: false, allowAuto: true,
-  },
-  {
-    type: "order_bump" as const, icon: ShoppingCart,
-    label: "Oferta la checkout",
-    desc: "Un produs la pret special, adaugat cu o bifa in formularul de comanda.",
-    offersLabel: "Produsul oferit",
-    defaultDiscount: "percent" as OfferDiscountMode, hasDiscount: true, single: true,
-  },
-  {
-    /*
-      ⚠ TIPUL ASTA NU OFERA PRODUSE, ci ieftineste ce e deja in cos. De-aia are
-      `praguri: true`: formularul ii ascunde sectiunea de produse oferite si de
-      reducere, si arata in loc lista de praguri.
-    */
-    type: "volume" as const, icon: Layers,
-    label: "Reducere cantitate",
-    desc: "De la o cantitate in sus, pretul scade cu un procent. Se vede ca tabel pe pagina produsului.",
-    offersLabel: "",
-    defaultDiscount: "none" as OfferDiscountMode, hasDiscount: false, praguri: true,
-  },
-];
-type Phase1Meta = (typeof PHASE1)[number];
-
-function metaFor(type: OfferType): Phase1Meta {
-  return PHASE1.find((p) => p.type === type) ?? PHASE1[1];
+/**
+ * ⚠⚠ TIPURILE NU MAI SUNT SCRISE AICI. Erau patru, cu etichete, descrieri si
+ * steaguri — a patra copie a aceleiasi liste, pe langa `OFFER_TYPES`,
+ * `PHASE1_OFFER_TYPES` si `OFFER_TYPES_IMPLEMENTATE` (care n-avea niciun
+ * cititor). Acum vin din tabelul comun, prin `tipuri-ui.ts`, care adauga doar
+ * iconita.
+ *
+ * ⚠ `metaFor` cade pe `cross_sell` cand tipul nu e de ales: un rand vechi cu un
+ * tip inca nefacut trebuie sa se poata deschide, nu sa rupa formularul.
+ */
+function metaFor(type: OfferType): MetaTip {
+  return TIPURI_DE_ALES.find((p) => p.type === type) ?? metaTip("cross_sell");
 }
 
 export function OfferForm({ businessId, products, categories, offer }: {
@@ -78,7 +56,20 @@ export function OfferForm({ businessId, products, categories, offer }: {
   const [triggerCats, setTriggerCats] = useState<string[]>(offer?.trigger.categories ?? []);
 
   const [offeredIds, setOfferedIds] = useState<string[]>(offer?.config.productIds ?? []);
-  const [autoByCategory, setAutoByCategory] = useState(offer?.config.autoByCategory ?? false);
+  /*
+    ⚠⚠ METODA SE DERIVA din ce exista, nu se citeste crud: un rand vechi n-are
+    campul, dar are `autoByCategory`. Vezi `metodaRecomandarii` — scrisa
+    o singura data, chemata si de formular, si de vitrina.
+
+    ⚠ `autoByCategory` RAMANE si se scrie din metoda: orice cod care inca il
+    citeste primeste acelasi raspuns.
+  */
+  const [metoda, setMetoda] = useState<MetodaRecomandare>(
+    offer ? metodaRecomandarii(offer.config) : "manual",
+  );
+  const autoByCategory = metoda !== "manual";
+  const [excludeFaraStoc, setExcludeFaraStoc] = useState(offer?.config.excludeFaraStoc === true);
+  const [maxProduse, setMaxProduse] = useState(offer?.config.maxProducts ?? OFFER_DEFAULT_MAX_PRODUCTS);
 
   const [discountMode, setDiscountMode] = useState<OfferDiscountMode>(
     offer?.config.discountMode ?? (offer ? "none" : "percent"),
@@ -97,6 +88,24 @@ export function OfferForm({ businessId, products, categories, offer }: {
   const [title, setTitle] = useState(offer?.config.title ?? "");
   const [isActive, setIsActive] = useState(offer?.is_active ?? true);
 
+  /*
+    ⚠⚠ PERIOADA LIPSEA CU TOTUL. Coloanele `starts_at` si `ends_at` existau in
+    baza de la inceput, iar `loadActiveOffers` chiar le citea — dar formularul
+    trimitea `starts_at: null, ends_at: null` scrise in cod. Deci nicio oferta
+    nu se putea programa, si orice perioada pusa de mana in baza era stearsa la
+    prima salvare din panou. Masurat pe productie la 22.09.2026: zero din 13
+    oferte aveau perioada — nu fiindca nimeni n-ar fi vrut, ci fiindca nu se
+    putea.
+
+    ⚠ `ziuaClipei`, NU `slice(0, 10)` — aceeasi capcana ca la coduri: o oferta
+    care porneste pe 1 octombrie se tine ca `2026-09-30T21:00:00Z`, iar taiata
+    cu `slice` ar fi aratat „30 septembrie” si s-ar fi mutat cu o zi inapoi la
+    FIECARE deschidere a editarii.
+  */
+  const [incepeIn, setIncepeIn] = useState<string | null>(ziuaClipei(offer?.starts_at));
+  const [seIncheieIn, setSeIncheieIn] = useState<string | null>(ziuaClipei(offer?.ends_at));
+  const [eroarePerioada, setEroarePerioada] = useState<string | null>(null);
+
   const byId = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
   /*
@@ -105,7 +114,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
     comerciantul trebuie sa vada DE CE, nu doar ca „n-a mers".
   */
   const problemaPraguri = useMemo(() => {
-    if (!metaFor(type).praguri) return null;
+    if (!metaFor(type).cuPraguri) return null;
     const curate = praguri
       .map((x) => ({ q: Math.floor(Number(x.min_qty) || 0), p: Number(x.percent) || 0 }))
       .filter((x) => x.q > 0 || x.p > 0);
@@ -128,21 +137,62 @@ export function OfferForm({ businessId, products, categories, offer }: {
     return null;
   }, [type, praguri]);
 
+  /*
+    ═══ PORȚILE OFERTEI ═══
+
+    „Se arată DOAR dacă…”. Patru, toate opționale, și nimic bifat înseamnă „se
+    arată mereu” — adică exact ce fac azi cele 13 oferte de pe producție
+    (măsurat: ZERO au porți puse).
+
+    ⚠ Se țin ca `null` / listă goală, nu ca zero: „coșul trece de 0 lei” ar fi o
+    poartă care trece mereu, dar TOT o poartă. Lipsa cheii e singurul fel de a
+    spune „nu se cere nimic”. Vezi `lib/offers/porti.ts`.
+  */
+  const conditiiInitiale = offer?.trigger.conditions;
+  const [poartaLei, setPoartaLei] = useState<number | null>(conditiiInitiale?.minValue ?? null);
+  const [poartaBucati, setPoartaBucati] = useState<number | null>(conditiiInitiale?.minQty ?? null);
+  const [poartaContine, setPoartaContine] = useState<string[]>(conditiiInitiale?.requiredProductIds ?? []);
+  const [poartaNuContine, setPoartaNuContine] = useState<string[]>(conditiiInitiale?.excludedProductIds ?? []);
+  /*
+    ⚠ Secțiunea se arată doar la oferta de checkout, unde a cerut-o el. Regula
+    din `porti.ts` se judecă însă pentru ORICE tip — un rând care ar avea porți
+    puse de mână trebuie să le și primească, nu să le vadă ignorate în tăcere.
+  */
+  const arataPorti = type === "order_bump";
+
+  /*
+    ⚠ ASEZAREA SETULUI, ceruta de el. Implicita ramane cea de azi
+    („sub_produs”), deci oferta care exista pe productie nu se muta de unde e.
+    Se arata doar la tipurile care chiar pot sta langa pret — aceeasi regula
+    o tine si parserul, ca un rand scris de mana sa nu bage o grila de carduri
+    in caseta de cumparare.
+  */
+  const [amplasare, setAmplasare] = useState<AmplasareSet>(offer?.display.amplasare ?? "sub_produs");
+  const arataAmplasarea = !!meta.sePoateAsezaLangaPret;
+
+  /*
+    ⚠ CANTITATILE DIN SET. Se tin doar pentru produsele care chiar sunt in set,
+    si numai ce e mai mare decat unu pleaca la server: un set cu toate produsele
+    intr-o bucata trimite acelasi jsonb ca pana azi.
+  */
+  const [cantitati, setCantitati] = useState<Record<string, number>>(offer?.config.cantitati ?? {});
+  const arataCantitati = !!meta.cuCantitatiPeProdus;
+
   // Switch type (create mode only): reset the discount to the new type's default.
   function chooseType(t: OfferType) {
     setType(t);
-    setDiscountMode(metaFor(t).defaultDiscount);
-    if (metaFor(t).single) setOfferedIds((prev) => prev.slice(0, 1));
-    if (!metaFor(t).allowAuto) setAutoByCategory(false);
+    setDiscountMode(metaFor(t).reducereImplicita);
+    if (metaFor(t).unProdus) setOfferedIds((prev) => prev.slice(0, 1));
+    if (!metaFor(t).automatDinCategorie) setMetoda("manual");
   }
 
   function addOffered(id: string) {
-    setOfferedIds((prev) => (meta.single ? [id] : prev.includes(id) ? prev : [...prev, id]));
+    setOfferedIds((prev) => (meta.unProdus ? [id] : prev.includes(id) ? prev : [...prev, id]));
   }
 
   // Order-bump preview: exact special price for the single offered product.
   const bumpPreview = useMemo(() => {
-    if (!meta.single) return null;
+    if (!meta.unProdus) return null;
     const p = offeredIds[0] ? byId.get(offeredIds[0]) : null;
     if (!p) return null;
     let price = p.price;
@@ -150,7 +200,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
     else if (discountMode === "amount") price = p.price - (Number(discountAmount) || 0);
     else if (discountMode === "fixed_price") price = Number(fixedPrice) || 0;
     return { was: p.price, now: Math.max(0, Math.round(price * 100) / 100) };
-  }, [meta.single, offeredIds, byId, discountMode, discountPercent, discountAmount, fixedPrice]);
+  }, [meta.unProdus, offeredIds, byId, discountMode, discountPercent, discountAmount, fixedPrice]);
 
   function save() {
     if (!name.trim()) { toast.error("Oferta are nevoie de un nume."); return; }
@@ -158,13 +208,22 @@ export function OfferForm({ businessId, products, categories, offer }: {
     if (scope === "categories" && triggerCats.length === 0) { toast.error("Alege cel putin o categorie."); return; }
     /* ⚠ Oferta de cantitate nu OFERA produse: sare peste verificarea de mai
        jos, altfel n-ar putea fi salvata niciodata. In schimb ii cere praguri. */
-    if (meta.praguri) {
+    if (meta.cuPraguri) {
       if (problemaPraguri) { toast.error(problemaPraguri); return; }
     } else {
-      const usesAuto = meta.allowAuto && autoByCategory;
+      const usesAuto = meta.automatDinCategorie && autoByCategory;
       if (!usesAuto && offeredIds.length === 0) { toast.error("Alege cel putin un produs de oferit."); return; }
     }
-    if (meta.hasDiscount && discountMode === "fixed_price" && !(Number(fixedPrice) > 0)) { toast.error("Seteaza un pret fix valid."); return; }
+    if (meta.areReducere && discountMode === "fixed_price" && !(Number(fixedPrice) > 0)) { toast.error("Seteaza un pret fix valid."); return; }
+
+    /*
+      ⚠ ACEEASI REGULA CA PE SERVER, chemata — nu scrisa a doua oara. Serverul
+      refuza oricum o perioada intoarsa; aici se spune INAINTE, ca omul sa vada
+      greseala langa campul in care a facut-o.
+    */
+    const perioada = perioadaOfertei(incepeIn, seIncheieIn);
+    if ("error" in perioada) { setEroarePerioada(perioada.error); toast.error(perioada.error); return; }
+    setEroarePerioada(null);
 
     const payload: OfferFormData = {
       type,
@@ -175,25 +234,51 @@ export function OfferForm({ businessId, products, categories, offer }: {
         scope,
         productIds: scope === "products" ? triggerIds : [],
         categories: scope === "categories" ? triggerCats : [],
+        /*
+          ⚠⚠ PORȚILE. Ce nu e bifat NU SE TRIMITE DELOC, nu se trimite ca zero:
+          `minValue: 0` ar fi o poartă care trece mereu, dar tot o poartă — iar
+          `arePorti` ar spune „da” și ecranul ar scrie că oferta are condiții.
+          Lipsa cheii e singurul fel de a spune „nu se cere nimic”.
+        */
+        conditions: arataPorti
+          ? {
+              ...(poartaLei !== null ? { minValue: poartaLei } : {}),
+              ...(poartaBucati !== null ? { minQty: poartaBucati } : {}),
+              ...(poartaContine.length ? { requiredProductIds: poartaContine } : {}),
+              ...(poartaNuContine.length ? { excludedProductIds: poartaNuContine } : {}),
+            }
+          : undefined,
       },
       config: {
-        productIds: meta.allowAuto && autoByCategory ? [] : offeredIds,
-        autoByCategory: meta.allowAuto && autoByCategory,
-        maxProducts: OFFER_DEFAULT_MAX_PRODUCTS,
-        discountMode: meta.hasDiscount ? discountMode : "none",
-        discountPercent: meta.hasDiscount && discountMode === "percent" ? Number(discountPercent) || 0 : undefined,
-        discountAmount: meta.hasDiscount && discountMode === "amount" ? Number(discountAmount) || 0 : undefined,
-        fixedPrice: meta.hasDiscount && discountMode === "fixed_price" ? Number(fixedPrice) || 0 : undefined,
+        productIds: meta.automatDinCategorie && autoByCategory ? [] : offeredIds,
+        /* ⚠ Se scrie din METODA, ca sa nu se poata desparti de ea. */
+        autoByCategory: meta.automatDinCategorie && autoByCategory,
+        metodaRecomandare: meta.automatDinCategorie ? metoda : undefined,
+        excludeFaraStoc: meta.automatDinCategorie ? excludeFaraStoc : undefined,
+        /* ⚠ Era CABLAT la 4, desi campul exista si era respectat de vitrina.
+           Comerciantul il poate scrie acum. */
+        maxProducts: maxProduse,
+        discountMode: meta.areReducere ? discountMode : "none",
+        discountPercent: meta.areReducere && discountMode === "percent" ? Number(discountPercent) || 0 : undefined,
+        discountAmount: meta.areReducere && discountMode === "amount" ? Number(discountAmount) || 0 : undefined,
+        fixedPrice: meta.areReducere && discountMode === "fixed_price" ? Number(fixedPrice) || 0 : undefined,
         title: title.trim() || undefined,
-        praguri: meta.praguri
+        /* ⚠ Numai ce trece de o bucata, si numai pentru produsele din set. */
+        cantitati: arataCantitati
+          ? Object.fromEntries(offeredIds.map((id) => [id, cantitati[id] ?? 1]).filter(([, n]) => (n as number) > 1))
+          : undefined,
+        praguri: meta.cuPraguri
           ? praguri
               .map((x) => ({ min_qty: Math.floor(Number(x.min_qty) || 0), percent: Number(x.percent) || 0 }))
               .filter((x) => x.min_qty >= 2 && x.percent > 0 && x.percent < 100)
           : undefined,
       },
-      display: {},
-      starts_at: null,
-      ends_at: null,
+      /* ⚠ `display` nu mai pleaca gol: poarta asezarea. Restul campurilor lui
+         (suprafete, stil) se completeaza tot pe server, ca pana acum. */
+      display: { amplasare: arataAmplasarea ? amplasare : "sub_produs" },
+      /* Zile romanesti; serverul le preface in clipe, intr-un singur loc. */
+      incepe_in: incepeIn,
+      se_incheie_in: seIncheieIn,
     };
 
     startSave(async () => {
@@ -228,13 +313,13 @@ export function OfferForm({ businessId, products, categories, offer }: {
           <ChevronLeft className="h-4 w-4" />
         </button>
         <h1 className="text-xl font-bold text-foreground">{isEdit ? "Editeaza oferta" : "Oferta noua"}</h1>
-        {isEdit && <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">{meta.label}</span>}
+        {isEdit && <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">{meta.eticheta}</span>}
       </div>
 
       {/* Type picker (create only) */}
       {!isEdit && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {PHASE1.map((t) => {
+          {TIPURI_DE_ALES.map((t) => {
             const Icon = t.icon;
             const active = type === t.type;
             return (
@@ -243,8 +328,8 @@ export function OfferForm({ businessId, products, categories, offer }: {
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-2 ${active ? "bg-primary text-white" : "bg-primary/10 text-primary"}`}>
                   <Icon className="h-5 w-5" />
                 </div>
-                <p className="text-sm font-semibold text-foreground">{t.label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{t.desc}</p>
+                <p className="text-sm font-semibold text-foreground">{t.eticheta}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{t.explicatie}</p>
               </button>
             );
           })}
@@ -260,7 +345,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
         </div>
         <div>
           <label className="block text-sm font-medium text-foreground mb-1.5">Titlu afișat clienților (opțional)</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={meta.label} className={inputCls} />
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={meta.eticheta} className={inputCls} />
         </div>
       </div>
 
@@ -269,7 +354,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
         <div>
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Tag className="h-4 w-4 text-primary" /> Când apare</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {meta.single ? "Oferta apare la checkout când coșul conține:" : "Oferta apare pe pagina produsului pentru:"}
+            {meta.unProdus ? "Oferta apare la checkout când coșul conține:" : "Oferta apare pe pagina produsului pentru:"}
           </p>
         </div>
         <div className="grid sm:grid-cols-3 gap-2">
@@ -312,7 +397,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
       </div>
 
       {/* PRAGURILE — doar la „Reducere cantitate" */}
-      {meta.praguri && (
+      {meta.cuPraguri && (
         <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
           <div>
             <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
@@ -377,43 +462,83 @@ export function OfferForm({ businessId, products, categories, offer }: {
       )}
 
       {/* CE OFER — products */}
-      {!meta.praguri && (
+      {!meta.cuPraguri && (
       <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Package className="h-4 w-4 text-primary" /> Ce ofer</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">{meta.offersLabel}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{meta.numeleProduselorOferite}</p>
         </div>
 
-        {meta.allowAuto && (
-          <label className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
-            <span className="text-sm text-foreground">Alege automat produse din aceeași categorie</span>
-            <Switch checked={autoByCategory} onCheckedChange={setAutoByCategory} />
-          </label>
+        {meta.automatDinCategorie && (
+          <>
+            {/*
+              ⚠ TREI CARTONASE, nu un comutator: alegerea nu mai e „automat sau
+              nu", ci DE UNDE se iau produsele. Sub fiecare scrie ce face.
+            */}
+            <div className="grid gap-2 sm:grid-cols-3">
+              {METODE_RECOMANDARE.map((m) => (
+                <button key={m} type="button" onClick={() => setMetoda(m)} aria-pressed={metoda === m}
+                  className={`rounded-xl border p-3 text-left transition-colors ${
+                    metoda === m ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                  }`}>
+                  <p className="text-sm font-semibold text-foreground">{DESPRE_METODA[m].eticheta}</p>
+                  <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{DESPRE_METODA[m].explicatie}</p>
+                </button>
+              ))}
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                <span className="min-w-0">
+                  <span className="block text-sm text-foreground">Arată cel mult</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                    Câte produse intră în raft. Pe telefon încap patru pe ecran.
+                  </span>
+                </span>
+                <input type="number" min={1} max={OFFER_MAX_PRODUCTS} value={maxProduse}
+                  onChange={(e) => setMaxProduse(Math.min(OFFER_MAX_PRODUCTS, Math.max(1, Math.floor(Number(e.target.value) || 1))))}
+                  className="w-20 shrink-0 rounded-lg border border-input bg-transparent px-2 py-1.5 text-sm text-foreground outline-none focus-visible:border-ring" />
+              </label>
+
+              <label className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+                <span className="min-w-0">
+                  <span className="block text-sm text-foreground">Nu arăta produsele fără stoc</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
+                    ⚠ Nebifat, pe pagina produsului se văd cu eticheta „Epuizat”, iar în coș sunt oricum
+                    ascunse. Așa se poartă azi.
+                  </span>
+                </span>
+                <Switch checked={excludeFaraStoc} onCheckedChange={setExcludeFaraStoc} />
+              </label>
+            </div>
+          </>
         )}
 
-        {!(meta.allowAuto && autoByCategory) && (
-          <ProductPicker products={products} selectedIds={offeredIds} byId={byId} single={meta.single}
+        {!(meta.automatDinCategorie && autoByCategory) && (
+          <ProductPicker products={products} selectedIds={offeredIds} byId={byId} single={meta.unProdus}
             onAdd={addOffered}
             onRemove={(id) => setOfferedIds((p) => p.filter((x) => x !== id))}
-            placeholder={meta.single ? "Caută produsul oferit..." : "Caută produse de oferit..."} />
+            placeholder={meta.unProdus ? "Caută produsul oferit..." : "Caută produse de oferit..."}
+            cantitati={arataCantitati ? cantitati : undefined}
+            onCantitate={arataCantitati ? (id, n) => setCantitati((c) => ({ ...c, [id]: n })) : undefined} />
         )}
       </div>
       )}
 
       {/* CÂT REDUC — discount (hidden for cross_sell) */}
-      {meta.hasDiscount && (
+      {meta.areReducere && (
         <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-4">
           <div>
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-primary" /> Cât reduc</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {meta.single ? "Reducerea aplicată produsului oferit." : "Reducerea aplicată setului cumpărat împreună."}
+              {meta.unProdus ? "Reducerea aplicată produsului oferit." : "Reducerea aplicată setului cumpărat împreună."}
             </p>
           </div>
           <div className="grid sm:grid-cols-3 gap-2">
             {([
               { mode: "percent", label: "Reducere %" },
               { mode: "amount", label: "Reducere sumă" },
-              { mode: "fixed_price", label: meta.single ? "Preț fix" : "Preț fix set" },
+              { mode: "fixed_price", label: meta.unProdus ? "Preț fix" : "Preț fix set" },
             ] as const).map((o) => (
               <button key={o.mode} type="button" onClick={() => setDiscountMode(o.mode)}
                 className={`px-3 py-2.5 text-sm font-medium rounded-lg border transition-colors ${discountMode === o.mode ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:bg-muted"}`}>
@@ -442,6 +567,136 @@ export function OfferForm({ businessId, products, categories, offer }: {
         </div>
       )}
 
+      {/*
+        ═══ PORȚILE ═══
+
+        ⚠⚠ PROPOZIȚII, NU NUME DE CÂMPURI. „Coșul trece de 200 lei” se citește;
+        „Valoare minimă coș: 200” trebuie tălmăcit. De-aia eticheta e o bucată de
+        frază, iar unitatea stă după câmp.
+
+        ⚠ Fiecare poartă se APRINDE cu o bifă. Fără bifă, câmpul nici nu se vede
+        și cheia nu pleacă la server — „coșul trece de 0 lei” ar fi o poartă care
+        trece mereu, dar tot o poartă.
+
+        ⚠⚠ Sub ele se spune ce NU pot: ce vine din browser hotărăște doar ce se
+        ARATĂ, iar la trimiterea comenzii poarta se pune din nou, pe prețurile
+        chiar plătite. Nescris, comerciantul ar fi crezut că poarta e o pază de
+        bani, când ea e și o pază, și o alegere de afișare.
+      */}
+      {/*
+        ⚠ DOUA CARTONASE, nu un meniu: alegerea se vede toata dintr-o privire,
+        iar sub fiecare scrie ce castigi si ce pierzi. Intr-un `<select>`,
+        explicatia n-ar fi incaput nicaieri.
+      */}
+      {arataAmplasarea && (
+        <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Unde se vede setul</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {AMPLASARI.map((a) => (
+              <button key={a} type="button" onClick={() => setAmplasare(a)}
+                aria-pressed={amplasare === a}
+                className={`rounded-xl border p-3 text-left transition-colors ${
+                  amplasare === a ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                }`}>
+                <p className="text-sm font-semibold text-foreground">{DESPRE_AMPLASARE[a].eticheta}</p>
+                <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{DESPRE_AMPLASARE[a].explicatie}</p>
+              </button>
+            ))}
+          </div>
+          {amplasare === "langa_pret" && (
+            <p className="text-[11px] text-muted-foreground border-t border-border pt-2">
+              ⚠ Cifra „Afișări” urcă după mutare, fiindcă setul se vede fără să mai deruleze nimeni.
+              Nu e o creștere de interes: e altă definiție a lui „văzut”.
+            </p>
+          )}
+        </div>
+      )}
+
+      {arataPorti && (
+        <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Se arată doar dacă… (opțional)
+          </p>
+
+          <PoartaCuNumar
+            id="poarta-lei"
+            eticheta={DESPRE_PORTI.minValue.eticheta}
+            unitate={DESPRE_PORTI.minValue.unitate}
+            explicatie={DESPRE_PORTI.minValue.explicatie}
+            valoare={poartaLei}
+            implicit={200}
+            pas="0.01"
+            onChange={setPoartaLei}
+          />
+          <PoartaCuNumar
+            id="poarta-bucati"
+            eticheta={DESPRE_PORTI.minQty.eticheta}
+            unitate={DESPRE_PORTI.minQty.unitate}
+            explicatie={DESPRE_PORTI.minQty.explicatie}
+            valoare={poartaBucati}
+            implicit={2}
+            pas="1"
+            onChange={setPoartaBucati}
+          />
+          <PoartaCuProduse
+            eticheta={DESPRE_PORTI.requiredProductIds.eticheta}
+            explicatie={DESPRE_PORTI.requiredProductIds.explicatie}
+            products={products}
+            byId={byId}
+            ids={poartaContine}
+            onChange={setPoartaContine}
+            placeholder="Caută produsul care aprinde oferta..."
+          />
+          <PoartaCuProduse
+            eticheta={DESPRE_PORTI.excludedProductIds.eticheta}
+            explicatie={DESPRE_PORTI.excludedProductIds.explicatie}
+            products={products}
+            byId={byId}
+            ids={poartaNuContine}
+            onChange={setPoartaNuContine}
+            placeholder="Caută produsul care oprește oferta..."
+          />
+
+          {(poartaLei !== null || poartaBucati !== null) && (
+            <p className="text-[11px] text-muted-foreground border-t border-border pt-2">
+              ⚠ Suma și bucățile se socotesc și la trimiterea comenzii, pe prețurile chiar plătite.
+              Dacă atunci coșul nu mai trece, comanda e oprită și cumpărătorul e rugat să scoată oferta.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/*
+        ⚠⚠ O PERIOADA, NU DOUA CAMPURI RAZLETE — aceeasi asezare ca la coduri,
+        fiindca acelasi comerciant vede amandoua ecranele. Sub ele se scrie in
+        cuvinte ce inseamna, fiindca „de la 1 octombrie” nu spune de la ce ORA.
+      */}
+      <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5 space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Cât ține oferta (opțional)</p>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label htmlFor="oferta-de-cand" className="block text-[11px] text-muted-foreground mb-1">De când</label>
+            <input id="oferta-de-cand" type="date" lang="ro" value={incepeIn ?? ""}
+              onChange={(e) => { setIncepeIn(e.target.value || null); setEroarePerioada(null); }}
+              className={`${inputCls}${eroarePerioada ? " border-destructive" : ""}`} />
+          </div>
+          <div>
+            <label htmlFor="oferta-pana-cand" className="block text-[11px] text-muted-foreground mb-1">Până când</label>
+            {/*
+              ⚠ `min` doar pe capatul de sus. Pus si pe „De când”, ar fi oprit
+              editarea unei campanii deja pornite: comerciantul ar fi deschis
+              formularul ca sa schimbe procentul si n-ar fi putut salva.
+            */}
+            <input id="oferta-pana-cand" type="date" lang="ro" value={seIncheieIn ?? ""} min={incepeIn ?? undefined}
+              onChange={(e) => { setSeIncheieIn(e.target.value || null); setEroarePerioada(null); }}
+              className={`${inputCls}${eroarePerioada ? " border-destructive" : ""}`} />
+          </div>
+        </div>
+        {eroarePerioada
+          ? <p className="text-xs text-destructive">{eroarePerioada}</p>
+          : <p className="text-[11px] text-muted-foreground">{descriePerioada(incepeIn, seIncheieIn)}</p>}
+      </div>
+
       {/* Active */}
       <div className="rounded-2xl ring-1 ring-foreground/10 bg-card p-5">
         <div className="flex items-center justify-between">
@@ -462,7 +717,7 @@ export function OfferForm({ businessId, products, categories, offer }: {
 
 /* ─── Reusable product search + selected chips ────────────────────────────── */
 
-function ProductPicker({ products, selectedIds, byId, onAdd, onRemove, single, placeholder }: {
+function ProductPicker({ products, selectedIds, byId, onAdd, onRemove, single, placeholder, cantitati, onCantitate }: {
   products: PickerProduct[];
   selectedIds: string[];
   byId: Map<string, PickerProduct>;
@@ -470,6 +725,12 @@ function ProductPicker({ products, selectedIds, byId, onAdd, onRemove, single, p
   onRemove: (id: string) => void;
   single?: boolean;
   placeholder: string;
+  /**
+   * Cate bucati din fiecare produs. Lipsa lui inseamna ca tipul asta de oferta
+   * nu cere cantitati, si atunci nu se deseneaza niciun buton in plus.
+   */
+  cantitati?: Record<string, number>;
+  onCantitate?: (id: string, n: number) => void;
 }) {
   const [q, setQ] = useState("");
   const results = useMemo(() => {
@@ -517,11 +778,142 @@ function ProductPicker({ products, selectedIds, byId, onAdd, onRemove, single, p
                 {p.image_url ? <Image src={p.image_url} alt={p.name} fill sizes="28px" className="object-cover" /> : <span className="w-full h-full flex items-center justify-center"><Package className="h-3.5 w-3.5 text-muted-foreground" /></span>}
               </span>
               <span className="text-xs font-medium text-foreground max-w-[160px] truncate">{p.name}</span>
+              {onCantitate && (
+                /*
+                  ⚠ Cantitatea sta PE ETICHETA produsului, nu intr-o coloana
+                  alaturi: asa „2 x bec" se citeste ca un lucru, iar un set cu
+                  patru produse nu devine un tabel.
+                */
+                <span className="inline-flex items-center gap-0.5 rounded-md border border-border bg-background">
+                  <button type="button" aria-label={`Mai putine ${p.name}`}
+                    onClick={() => onCantitate(p.id, Math.max(1, (cantitati?.[p.id] ?? 1) - 1))}
+                    className="px-1.5 text-muted-foreground hover:text-foreground">−</button>
+                  <span className="min-w-[1.25rem] text-center text-xs font-semibold tabular-nums text-foreground">
+                    {cantitati?.[p.id] ?? 1}
+                  </span>
+                  <button type="button" aria-label={`Mai multe ${p.name}`}
+                    onClick={() => onCantitate(p.id, Math.min(OFFER_MAX_CANTITATE, (cantitati?.[p.id] ?? 1) + 1))}
+                    className="px-1.5 text-muted-foreground hover:text-foreground">+</button>
+                </span>
+              )}
               <button type="button" onClick={() => onRemove(p.id)} className="text-muted-foreground hover:text-destructive">
                 <X className="h-3.5 w-3.5" />
               </button>
             </span>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * O poarta cu numar: bifa care o aprinde, campul, si unitatea dupa el.
+ *
+ * ⚠ BIFA SI VALOAREA SUNT ACELASI LUCRU, nu doua stari. `null` inseamna
+ * „nebifat"; bifarea pune implicitul. Tinute separat, o poarta bifata cu campul
+ * golit ar fi trimis `minValue: 0` — o poarta care trece mereu, dar tot o
+ * poarta, si ecranul ar fi scris ca oferta are conditii.
+ */
+function PoartaCuNumar({
+  id, eticheta, unitate, explicatie, valoare, implicit, pas, onChange,
+}: {
+  id: string;
+  eticheta: string;
+  unitate: string;
+  explicatie: string;
+  valoare: number | null;
+  implicit: number;
+  pas: string;
+  onChange: (v: number | null) => void;
+}) {
+  const bifat = valoare !== null;
+  return (
+    <div className="rounded-xl border border-border p-3">
+      <label className="flex items-start gap-2.5 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={bifat}
+          onChange={(e) => onChange(e.target.checked ? implicit : null)}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+            {eticheta}
+            {bifat && (
+              <>
+                <input
+                  id={id}
+                  type="number"
+                  min={0}
+                  step={pas}
+                  value={valoare}
+                  onChange={(e) => {
+                    /* ⚠ Campul golit NU stinge bifa: omul sterge ca sa scrie
+                       altceva. Ramane zero pana scrie, si bifa e cea care spune
+                       daca poarta exista. */
+                    const n = Number(e.target.value);
+                    onChange(Number.isFinite(n) ? Math.max(0, n) : 0);
+                  }}
+                  onClick={(e) => e.preventDefault()}
+                  className="w-24 rounded-lg border border-input bg-transparent px-2 py-1 text-sm text-foreground outline-none focus-visible:border-ring"
+                />
+                {unitate && <span className="text-sm text-muted-foreground">{unitate}</span>}
+              </>
+            )}
+          </span>
+          <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{explicatie}</span>
+        </span>
+      </label>
+    </div>
+  );
+}
+
+/**
+ * O poarta cu produse: bifa, apoi cautarea si etichetele alese.
+ *
+ * ⚠ Lista goala inseamna „nebifat", din acelasi motiv ca `null` la cea cu numar:
+ * o lista goala trimisa ca `requiredProductIds: []` ar fi o cerinta care nu cere
+ * nimic, si parserul oricum n-o scrie. Aici se hotaraste o data.
+ */
+function PoartaCuProduse({
+  eticheta, explicatie, products, byId, ids, onChange, placeholder,
+}: {
+  eticheta: string;
+  explicatie: string;
+  products: PickerProduct[];
+  byId: Map<string, PickerProduct>;
+  ids: string[];
+  onChange: (ids: string[]) => void;
+  placeholder: string;
+}) {
+  const bifat = ids.length > 0;
+  const [deschis, setDeschis] = useState(false);
+  const arata = bifat || deschis;
+  return (
+    <div className="rounded-xl border border-border p-3">
+      <label className="flex items-start gap-2.5 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={arata}
+          onChange={(e) => { setDeschis(e.target.checked); if (!e.target.checked) onChange([]); }}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm text-foreground">{eticheta}</span>
+          <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{explicatie}</span>
+        </span>
+      </label>
+      {arata && (
+        <div className="mt-2.5">
+          <ProductPicker
+            products={products}
+            selectedIds={ids}
+            byId={byId}
+            onAdd={(id) => onChange(ids.includes(id) ? ids : [...ids, id])}
+            onRemove={(id) => onChange(ids.filter((x) => x !== id))}
+            placeholder={placeholder}
+          />
         </div>
       )}
     </div>

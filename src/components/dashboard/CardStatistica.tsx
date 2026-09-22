@@ -42,6 +42,15 @@ export type CardStatisticaProps = {
   /** Cum se calculeaza cifra, pe intelesul comerciantului. Vezi `ExplicatieCard`. */
   explicatie?: string;
   /**
+   * Un rand scurt in subsolul cardului, in locul lui „Actualizat acum”.
+   *
+   * ⚠ NU e `delta`, si de-aia are camp separat: `delta` se deseneaza cu sageata
+   * si cu verde/rosu, adica „s-a miscat incolo fata de perioada trecuta”. Ce
+   * scrie aici e o insotitoare a cifrei („28% din afisari”), nu o schimbare in
+   * timp — pusa in `delta`, ar fi capatat o sageata care nu inseamna nimic.
+   */
+  subsol?: string;
+  /**
    * ⚠⚠ MARIMEA CIFREI, HOTARATA DE RANDUL INTREG.
    *
    * Lasata pe seama cardului, fiecare cutie si-o alegea dupa cifra ei: „6" la
@@ -66,6 +75,7 @@ export function CardStatistica({
   icon: Icon,
   empty = false,
   explicatie,
+  subsol,
   marime,
 }: CardStatisticaProps) {
   return (
@@ -167,7 +177,7 @@ export function CardStatistica({
                 <span>{deltaCaption}</span>
               </>
             ) : (
-              <span>Actualizat acum</span>
+              <span>{subsol ?? "Actualizat acum"}</span>
             )}
           </div>
 

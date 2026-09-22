@@ -12,7 +12,8 @@ import type { Database } from "@/types/database.types";
 import { esteUuid } from "@/lib/supabase/ids";
 import { hasVariants, cerePersonalizare } from "@/lib/storefront/variants";
 import { type BumpItem } from "@/lib/offers/bump-pricing";
-import { pretulSetului } from "@/lib/offers/fbt-pricing";
+import { pretulSetului, type LinieDeSet } from "@/lib/offers/fbt-pricing";
+import { cosulDinLinii, poartaTrece, type CosulDeJudecat } from "@/lib/offers/porti";
 import {
   cereArboreleDeCategorii, expandarePeOferta, normalizeazaIds,
   opresteComanda, pretuiesteOfertele,
@@ -21,7 +22,7 @@ import {
   type MotivRefuz, type OfertaCuReguli,
 } from "@/lib/offers/offer-pricing";
 import {
-  parseOfferTrigger, parseOfferConfig, parseOfferDisplay,
+  parseOfferTrigger, parseOfferConfig, parseOfferDisplay, cantitateaCeruta, metodaRecomandarii,
   defaultTitleFor, isOfferType, PHASE1_OFFER_TYPES,
   type OfferType, type OfferConfig, type OfferTrigger, type OfferDisplay,
   type OfferProduct, type ResolvedOffer,
@@ -105,6 +106,12 @@ function toOfferProduct(p: {
     compareAtPrice: p.compare_at_price != null ? Number(p.compare_at_price) : null,
     imageUrl: firstImage(p.images),
     outOfStock: p.track_inventory && p.stock_quantity !== null && p.stock_quantity <= 0,
+    /*
+      ⚠ Cate bucati se pot lua. `null` inseamna NELIMITAT (stocul nu se
+      urmareste), nu zero: scris ca zero, orice produs fara urmarire de stoc ar
+      fi iesit din orice set de doua bucati.
+    */
+    stocDisponibil: p.track_inventory && p.stock_quantity !== null ? p.stock_quantity : null,
     needsChoice: hasVariants(p.page_sections) || cerePersonalizare(p.page_sections),
   };
 }
@@ -136,30 +143,89 @@ async function fetchOfferProducts(
 }
 
 // Auto cross-sell: products from the anchor's category (active, non-bundle), newest first.
+/**
+ * Bazinul unei recomandari automate.
+ *
+ * ⚠⚠ SE CERE MAI MULT DECAT SE ARATA, si de-aia: taierea se face in BAZA
+ * (`.limit(...)`), deci un filtru pus in JavaScript peste randurile sosite n-are
+ * din ce sa completeze raftul. Se cer `limit + excluse + rezerva`, si abia apoi
+ * se arunca ce nu se potriveste. Gasit de adversar, la proiectare.
+ */
 async function fetchCategoryProducts(
   admin: Client, businessId: string, categorii: Set<string>, excludeIds: Set<string>, limit: number,
+  faraStoc = false,
 ): Promise<OfferProduct[]> {
   if (categorii.size === 0) return [];
+  /* ⚠ Rezerva de care e nevoie cand se arunca si cele epuizate. Fara ea, un raft
+     de patru s-ar fi golit la primul produs fara stoc. */
+  const rezerva = faraStoc ? limit * 3 : 0;
   const { data } = await admin
     .from("products").select(OFFER_PRODUCT_COLS)
     .eq("business_id", businessId).in("category", [...categorii])
     .eq("is_active", true).eq("is_bundle", false)
     .order("created_at", { ascending: false })
-    .limit(limit + excludeIds.size);
+    .limit(limit + excludeIds.size + rezerva);
   const out: OfferProduct[] = [];
   for (const p of data ?? []) {
     if (excludeIds.has(p.id)) continue;
-    out.push(toOfferProduct(p));
+    const produs = toOfferProduct(p);
+    if (faraStoc && produs.outOfStock) continue;
+    out.push(produs);
     if (out.length >= limit) break;
   }
+  return out;
+}
+
+/**
+ * Bazinul unei recomandari „cele mai vandute din categorie".
+ *
+ * ⚠⚠ CADE INAPOI PE CELE MAI NOI cand n-a vandut nimic inca. Un magazin nou, sau
+ * o categorie noua, n-are vanzari — iar o lista goala ar fi facut recomandarea sa
+ * dispara cu totul, fara ca nimeni sa afle de ce.
+ *
+ * ⚠ Nicio memorie intre cereri, dinadins: un tabel de agregat n-ar fi putut
+ * deosebi „zero vanzari" de „inca n-am socotit pentru magazinul asta". Unde se
+ * rupe e scris in migratie — masurat, cel mai mare magazin are 276 de comenzi.
+ */
+async function fetchBestSellers(
+  admin: Client, businessId: string, categorii: Set<string>, excludeIds: Set<string>, limit: number,
+  faraStoc = false,
+): Promise<OfferProduct[]> {
+  if (categorii.size === 0) return [];
+  const rezerva = faraStoc ? limit * 3 : 0;
+  const { data: vandute } = await admin.rpc("produse_vandute", {
+    bid: businessId,
+    categorii: [...categorii],
+    exclude_ids: [...excludeIds],
+    p_limit: limit + rezerva,
+  });
+  const ids = (vandute ?? []).map((v) => v.product_id);
+  if (ids.length === 0) return fetchCategoryProducts(admin, businessId, categorii, excludeIds, limit, faraStoc);
+
+  const { data } = await admin
+    .from("products").select(OFFER_PRODUCT_COLS)
+    .eq("business_id", businessId).in("id", ids);
+  /* ⚠ ORDINEA E A VANZARILOR, nu a bazei: `.in()` intoarce randurile cum vrea ea. */
+  const dupaId = new Map((data ?? []).map((p) => [p.id, p]));
+  const out: OfferProduct[] = [];
+  for (const id of ids) {
+    const rand = dupaId.get(id);
+    if (!rand) continue;
+    const produs = toOfferProduct(rand);
+    if (faraStoc && produs.outOfStock) continue;
+    out.push(produs);
+    if (out.length >= limit) break;
+  }
+  /* Prea putine vandute cat sa umple raftul: se completeaza cu cele mai noi. */
+  if (out.length === 0) return fetchCategoryProducts(admin, businessId, categorii, excludeIds, limit, faraStoc);
   return out;
 }
 
 // Combined price for a set of products (FBT anchor + companions, or a single bump).
 // Formula sta in `fbt-pricing.ts`, ca afisarea si incasarea sa nu poata apuca pe
 // drumuri diferite.
-function computeSetPricing(prices: number[], config: OfferConfig): ResolvedOffer["pricing"] {
-  return pretulSetului(prices, config);
+function computeSetPricing(linii: LinieDeSet[], config: OfferConfig): ResolvedOffer["pricing"] {
+  return pretulSetului(linii, config);
 }
 
 /**
@@ -196,9 +262,28 @@ export async function resolveProductOffers(
      * subarborele ales; la „toate" sau pe produse ramane categoria produsului.
      */
     const bazin = extinsele(o) ?? new Set(anchor.category ? [anchor.category] : []);
-    const products = o.type === "cross_sell" && o.config.autoByCategory
-      ? await fetchCategoryProducts(admin, businessId, bazin, exclude, o.config.maxProducts)
-      : (await fetchOfferProducts(admin, businessId, o.config.productIds, exclude)).slice(0, o.config.maxProducts);
+    /*
+      ⚠⚠ METODA SE DERIVA, nu se citeste crud: un rand vechi n-are campul, dar are
+      `autoByCategory`, iar bazinul trebuie sa iasa acelasi si maine. Vezi
+      `metodaRecomandarii`.
+
+      ⚠ Poarta pe TIP ramane: numai recomandarile aleg singure. La set si la bump,
+      lista din configuratie e chiar lista.
+    */
+    const metoda = o.type === "cross_sell" ? metodaRecomandarii(o.config) : "manual";
+    const faraStoc = o.type === "cross_sell" && o.config.excludeFaraStoc === true;
+    const products = metoda === "categorie_vandute"
+      ? await fetchBestSellers(admin, businessId, bazin, exclude, o.config.maxProducts, faraStoc)
+      : metoda === "categorie_noi"
+        ? await fetchCategoryProducts(admin, businessId, bazin, exclude, o.config.maxProducts, faraStoc)
+        : (await fetchOfferProducts(admin, businessId, o.config.productIds, exclude))
+            /*
+              ⚠ Aruncarea celor epuizate se face INAINTE de taiere, ca numarul cerut
+              sa insemne cate se VAD. Dupa taiere, un raft de patru cu un produs
+              epuizat ar fi aratat trei.
+            */
+            .filter((p) => !(faraStoc && p.outOfStock))
+            .slice(0, o.config.maxProducts);
     if (products.length === 0) continue;
 
     const base: ResolvedOffer = {
@@ -207,6 +292,8 @@ export async function resolveProductOffers(
       title: o.config.title || defaultTitleFor(o.type),
       buttonLabel: o.config.buttonLabel,
       style: o.display.style,
+      /* Browserul nu vede `display`: asezarea calatoreste pe `ResolvedOffer`. */
+      amplasare: o.display.amplasare,
       products,
     };
     // FBT: combined price over the anchor + all in-stock companions (an FBT you
@@ -215,10 +302,32 @@ export async function resolveProductOffers(
     // n-are unde sa intrebe ce marime, iar fara alegere ar intra in comanda la
     // pretul de baza si serverul ar respinge-o.
     if (o.type === "frequently_bought") {
-      const buyable = products.filter((p) => !p.outOfStock && !p.needsChoice);
+      /*
+        ⚠⚠ SI STOCUL SA AJUNGA PENTRU CATE CERE SETUL. Un set care cere 2 becuri
+        pe un stoc de 1 nu se poate cumpara: aratat, butonul ar fi dus la o
+        comanda pe care rezervarea de stoc o refuza la ultimul pas, dupa ce omul
+        si-a scris toate datele.
+
+        ⚠ `stocDisponibil === null` inseamna nelimitat, deci trece mereu.
+      */
+      const buyable = products.filter((p) => {
+        if (p.outOfStock || p.needsChoice) return false;
+        const cerute = cantitateaCeruta(o.type, o.config, p.id);
+        /* ⚠ `undefined` (camp neumplut) se poarta ca `null`: nelimitat. Un produs
+           venit pe alt drum n-are voie sa cada din set dintr-o lipsa de camp. */
+        return p.stocDisponibil == null || p.stocDisponibil >= cerute;
+      });
       if (buyable.length === 0) continue;
-      base.products = buyable;
-      base.pricing = computeSetPricing([anchor.price, ...buyable.map((p) => p.price)], o.config);
+      /*
+        ⚠⚠ CANTITATEA SE PUNE AICI, PE SERVER, din `config.cantitati`. Browserul
+        n-o trimite niciodata inapoi si nici n-ar fi crezut: setul se revendica
+        doar cu id-ul ofertei, iar comanda reconstituie cantitatile tot din
+        configuratie (`setulOfertei`). Asa cardul si casa de marcat citesc
+        acelasi numar.
+      */
+      base.products = buyable.map((x) => ({ ...x, cantitate: cantitateaCeruta(o.type, o.config, x.id) }));
+      base.pricing = computeSetPricing(
+        [{ pret: anchor.price }, ...base.products.map((p) => ({ pret: p.price, bucati: p.cantitate }))], o.config);
     }
     resolved.push(base);
   }
@@ -232,6 +341,16 @@ export async function resolveProductOffers(
  */
 export async function resolveCartOffers(
   admin: Client, businessId: string, cartProductIds: string[], surface: "cart" | "checkout",
+  /**
+   * Coșul spus de BROWSER, pentru porți. Lipsa lui înseamnă „nu știu”, și atunci
+   * porțile pe lei și pe bucăți nu se pot judeca la afișare.
+   *
+   * ⚠⚠ NU SE CREDE PE CUVÂNT, și nici nu trebuie: a ARĂTA o ofertă nu costă
+   * niciun ban. Un client care minte vede bump-ul, iar la plasare aceeași poartă
+   * se pune din nou, pe liniile adevărate (`refuzaOferta`), și comanda e
+   * refuzată. Prețul nu se ia de aici NICIODATĂ.
+   */
+  cosSpusDeBrowser?: CosulDeJudecat,
 ): Promise<ResolvedOffer[]> {
   if (cartProductIds.length === 0) return [];
   const offers = await loadActiveOffers(admin, businessId);
@@ -248,8 +367,22 @@ export async function resolveCartOffers(
   );
 
   const wantType: OfferType = surface === "checkout" ? "order_bump" : "cross_sell";
+  /*
+    ⚠⚠ PORȚILE SE JUDECĂ CU ACEEAȘI FUNCȚIE ca la plasarea comenzii
+    (`refuzaOferta` din `offer-pricing.ts`), nu cu o copie scrisă aici. Două
+    copii se despart, iar atunci ori clientul vede un bump pe care serverul îl
+    refuză, ori ia unul la care n-avea dreptul.
+
+    ⚠ Când browserul n-a spus coșul, coșul e GOL — deci o poartă pe lei sau pe
+    bucăți nu trece, și oferta nu se arată. Asta e partea strâmtă a alegerii:
+    mai bine o ofertă nearătată decât una arătată și refuzată la plasare. Toate
+    suprafețele care chiar trimit bump-uri spun coșul; vezi `getCheckoutBumps`.
+  */
+  const cosDePoarta = cosSpusDeBrowser ?? cosulDinLinii([]);
   const applicable = offers.filter(
-    (o) => o.type === wantType && o.display.surfaces.includes(surface) && triggerMatchesCart(o.trigger, cartProducts, extinsele(o)),
+    (o) => o.type === wantType && o.display.surfaces.includes(surface)
+      && triggerMatchesCart(o.trigger, cartProducts, extinsele(o))
+      && poartaTrece(o.trigger.conditions, cosDePoarta, o.config.productIds),
   );
   if (applicable.length === 0) return [];
 
@@ -265,9 +398,28 @@ export async function resolveCartOffers(
     // singur produs pe categorie nu putea recomanda niciodata nimic.
     const declansator = cartProducts.find((p) => triggerMatchesProduct(o.trigger, p, extinsele(o)) && p.category);
     const bazin = extinsele(o) ?? new Set(declansator?.category ? [declansator.category] : []);
-    const products = o.type === "cross_sell" && o.config.autoByCategory
-      ? await fetchCategoryProducts(admin, businessId, bazin, exclude, o.config.maxProducts)
-      : (await fetchOfferProducts(admin, businessId, o.config.productIds, exclude)).slice(0, o.config.maxProducts);
+    /*
+      ⚠⚠ METODA SE DERIVA, nu se citeste crud: un rand vechi n-are campul, dar are
+      `autoByCategory`, iar bazinul trebuie sa iasa acelasi si maine. Vezi
+      `metodaRecomandarii`.
+
+      ⚠ Poarta pe TIP ramane: numai recomandarile aleg singure. La set si la bump,
+      lista din configuratie e chiar lista.
+    */
+    const metoda = o.type === "cross_sell" ? metodaRecomandarii(o.config) : "manual";
+    const faraStoc = o.type === "cross_sell" && o.config.excludeFaraStoc === true;
+    const products = metoda === "categorie_vandute"
+      ? await fetchBestSellers(admin, businessId, bazin, exclude, o.config.maxProducts, faraStoc)
+      : metoda === "categorie_noi"
+        ? await fetchCategoryProducts(admin, businessId, bazin, exclude, o.config.maxProducts, faraStoc)
+        : (await fetchOfferProducts(admin, businessId, o.config.productIds, exclude))
+            /*
+              ⚠ Aruncarea celor epuizate se face INAINTE de taiere, ca numarul cerut
+              sa insemne cate se VAD. Dupa taiere, un raft de patru cu un produs
+              epuizat ar fi aratat trei.
+            */
+            .filter((p) => !(faraStoc && p.outOfStock))
+            .slice(0, o.config.maxProducts);
     if (products.length === 0) continue;
 
     const base: ResolvedOffer = {
@@ -276,6 +428,8 @@ export async function resolveCartOffers(
       title: o.config.title || defaultTitleFor(o.type),
       buttonLabel: o.config.buttonLabel,
       style: o.display.style,
+      /* Browserul nu vede `display`: asezarea calatoreste pe `ResolvedOffer`. */
+      amplasare: o.display.amplasare,
       products,
     };
     // Order bump: a single product with its own discounted price.
@@ -289,7 +443,7 @@ export async function resolveCartOffers(
       const p = products.find((x) => !x.outOfStock && !x.needsChoice);
       if (!p) continue;
       base.products = [p];
-      base.pricing = computeSetPricing([p.price], o.config);
+      base.pricing = computeSetPricing([{ pret: p.price }], o.config);
     }
     resolved.push(base);
   }
@@ -323,7 +477,17 @@ export interface ContextOferte {
    * economia aratata pe card, si cel unitar chiar platit (varianta aleasa), dupa
    * care se imparte economia. `null` pe calea cosului, care n-are ancora.
    */
-  anchor: { productId: string; basePrice: number; unitPrice: number } | null;
+  anchor: {
+    productId: string;
+    basePrice: number;
+    unitPrice: number;
+    /**
+     * Câte bucăți din produsul principal. ⚠ Nu e folosit la prețul setului (acela
+     * lucrează pe unitate), ci NUMAI la porți: „în coș sunt cel puțin N bucăți”
+     * trebuie să le numere și pe ale ancorei, care nu e linie în `items`.
+     */
+    bucati: number;
+  } | null;
   /** Produsele comenzii pentru care clientul a ales o varianta — vin sigur din cos. */
   cuVariantaAleasa?: Set<string>;
 }
@@ -440,6 +604,26 @@ export async function applyOfferPricing(
 
   const cuCategorie = (id: string) => ({ id, category: categoriaLui.get(id) ?? null });
   const out = items.map((i) => ({ ...i }));
+
+  /*
+    ⚠⚠ COȘUL PE CARE SE JUDECĂ PORȚILE, făcut din LINIILE comenzii plus ancora.
+    Prețurile sunt cele chiar plătite (`i.price` e prețul liniei, `ctx.anchor.lei`
+    e subtotalul liniei principale), nu cele de catalog: o variantă aleasă
+    schimbă prețul, iar poarta „coșul trece de X lei” trebuie să numere ce
+    încasează magazinul.
+
+    ⚠ ANCORA INTRĂ SEPARAT fiindcă pe calea comenzii directe ea NU e în `items`:
+    `items` sunt doar liniile purtate din coș (`additional_items`), iar produsul
+    din formular se dă alături, ca `anchor`. Uitată, poarta ar fi numărat un coș
+    fără chiar produsul de pe care se comandă.
+  */
+  const cos = cosulDinLinii([
+    ...(ctx.anchor
+      ? [{ productId: ctx.anchor.productId, quantity: ctx.anchor.bucati, unitPrice: ctx.anchor.unitPrice }]
+      : []),
+    ...items.map((i) => ({ productId: i.product_id, quantity: i.quantity, unitPrice: i.price })),
+  ]);
+
   const rez = pretuiesteOfertele({
     oferte,
     linii: out,
@@ -448,6 +632,7 @@ export async function applyOfferPricing(
       produse: [...new Set([...(ctx.anchor ? [ctx.anchor.productId] : []), ...items.map((i) => i.product_id)])]
         .map(cuCategorie),
       cuVariantaAleasa: ctx.cuVariantaAleasa,
+      cos,
     },
     oferibile,
     ancora: { basePrice: ctx.anchor?.basePrice ?? 0, unitPrice: ctx.anchor?.unitPrice ?? 0 },

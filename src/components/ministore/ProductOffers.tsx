@@ -6,6 +6,7 @@ import { Package, ArrowRight, Plus, Check } from "lucide-react";
 import { formatPrice } from "@/lib/utils/format";
 import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
+import { esteCrossSellDesenabil, esteFbtDesenabil } from "@/lib/offers/amplasare";
 
 /**
  * Storefront offers on the product page:
@@ -33,8 +34,14 @@ export function ProductOffers({ offers, basePath, color, anchor, ancoraIndisponi
   onBuyTogether?: (offer: ResolvedOffer) => void;
   onAddToCart?: (p: OfferProduct) => void;
 }) {
-  const fbt = offers.filter((o) => o.type === "frequently_bought" && o.products.length > 0 && o.pricing);
-  const crossSell = offers.filter((o) => o.type === "cross_sell" && o.products.length > 0);
+  /*
+    ⚠⚠ ACELAȘI PREDICAT ca cel care împarte ofertele între cele două bucăți de
+    ecran (`lib/offers/amplasare.ts`). Erau două filtre scrise de mână; cu setul
+    mutat lângă preț, al doilea ar fi numărat o afișare pentru o ofertă pe care
+    primul o arunca.
+  */
+  const fbt = offers.filter(esteFbtDesenabil);
+  const crossSell = offers.filter(esteCrossSellDesenabil);
   if (fbt.length === 0 && crossSell.length === 0) return null;
 
   return (
@@ -62,62 +69,129 @@ export function ProductOffers({ offers, basePath, color, anchor, ancoraIndisponi
 
 /* ─── Frequently bought together ──────────────────────────────────────────── */
 
-function SetThumb({ name, imageUrl }: { name: string; imageUrl: string | null }) {
+function SetThumb({ name, imageUrl, ingust }: { name: string; imageUrl: string | null; ingust?: boolean }) {
   return (
-    <div className="relative w-16 h-16 md:w-20 md:h-20 rounded-xl overflow-hidden border border-border bg-muted/40 shrink-0">
+    <div className={ingust
+      ? "relative w-12 h-12 rounded-lg overflow-hidden border border-border bg-muted/40 shrink-0"
+      : "relative w-16 h-16 md:w-20 md:h-20 rounded-xl overflow-hidden border border-border bg-muted/40 shrink-0"}>
       {imageUrl
-        ? <Image src={imageUrl} alt={name} fill sizes="80px" className="object-contain p-1.5" />
-        : <div className="w-full h-full flex items-center justify-center"><Package className="h-6 w-6 text-muted-foreground/40" /></div>}
+        ? <Image src={imageUrl} alt={name} fill sizes={ingust ? "48px" : "80px"} className="object-contain p-1.5" />
+        : <div className="w-full h-full flex items-center justify-center"><Package className={ingust ? "h-4 w-4 text-muted-foreground/40" : "h-6 w-6 text-muted-foreground/40"} /></div>}
     </div>
   );
 }
 
-function FbtCard({ offer, anchor, color, onBuyTogether, indisponibil }: {
+/**
+ * ⚠⚠ `ingust` COMUTĂ NUMAI ȘIRURI DE CLASE, niciodată socoteala.
+ *
+ * Prețul setului se face mai jos, o singură dată, cu aceeași funcție pentru
+ * amândouă așezările. Scris pe ramuri, cardul lat și cel îngust ar fi putut
+ * ajunge la două prețuri — iar pe unul dintre ele scrie butonul de cumpărat.
+ *
+ * ⚠ Îngust NU trece niciodată pe rând (`lg:flex-row`): coloana de cumpărare are
+ * sub 400px, iar imaginile plus prețul plus butonul nu încap alături.
+ */
+function FbtCard({ offer, anchor, color, onBuyTogether, indisponibil, ingust }: {
   offer: ResolvedOffer;
   anchor: { name: string; price: number; imageUrl: string | null };
   color: string;
   onBuyTogether: (offer: ResolvedOffer) => void;
   indisponibil: { motiv: string } | null;
+  ingust?: boolean;
 }) {
   const round2 = (n: number) => Math.round(n * 100) / 100;
-  const compPrices = offer.products.map((p) => p.price);
+  /* ⚠ Cantitatile vin pe produs, de la server. Absente = o bucata. */
+  const liniiComp = offer.products.map((p) => ({ pret: p.price, bucati: p.cantitate }));
+  const compPrices = offer.products.map((p) => p.price * (p.cantitate ?? 1));
   // Set price = current anchor price (variant-aware) + companions after their FBT share,
   // computed exactly like the checkout modal — so card, modal and charge always agree.
-  const distributed = distributeFbtSavings(compPrices, offer.pricing!.savings, anchor.price);
-  const setPrice = round2(anchor.price + distributed.reduce((s, p) => s + p, 0));
+  const distributed = distributeFbtSavings(liniiComp, offer.pricing!.savings, { pret: anchor.price });
+  /*
+    ⚠⚠ SE ÎNMULȚEȘTE CU BUCĂȚILE. `distributeFbtSavings` întoarce prețuri
+    UNITARE, fiindcă numărul ăla se scrie pe linia de comandă, iar linia își are
+    deja cantitatea ei. Adunate ca atare, un set cu „2 lumânări” ar fi scris pe
+    card un preț mai mic decât cel încasat — adică exact despărțirea de care se
+    apără tot fișierul ăsta.
+  */
+  const setPrice = round2(
+    anchor.price + distributed.reduce((s, p, i) => s + p * (liniiComp[i].bucati ?? 1), 0),
+  );
   const setCompareAt = round2(anchor.price + compPrices.reduce((s, p) => s + p, 0));
   const setSavings = round2(setCompareAt - setPrice);
   const hasSaving = setSavings > 0 && setCompareAt > setPrice;
 
   return (
     <div>
-      <h2 className="text-xl md:text-2xl font-bold text-foreground tracking-tight mb-5">{offer.title}</h2>
-      <div className="rounded-2xl border border-border bg-surface p-4 md:p-6 flex flex-col lg:flex-row lg:items-center gap-5">
-        <div className="flex items-center gap-2 md:gap-3 flex-wrap flex-1">
-          <SetThumb name={anchor.name} imageUrl={anchor.imageUrl} />
+      <h2 className={ingust
+        ? "text-sm font-semibold text-foreground mb-2"
+        : "text-xl md:text-2xl font-bold text-foreground tracking-tight mb-5"}>{offer.title}</h2>
+      <div className={ingust
+        ? "rounded-xl border border-border bg-surface p-3 flex flex-col gap-3"
+        : "rounded-2xl border border-border bg-surface p-4 md:p-6 flex flex-col lg:flex-row lg:items-center gap-5"}>
+        <div className={ingust
+          ? "flex items-center gap-1.5 flex-wrap"
+          : "flex items-center gap-2 md:gap-3 flex-wrap flex-1"}>
+          <SetThumb name={anchor.name} imageUrl={anchor.imageUrl} ingust={ingust} />
           {offer.products.map((p) => (
             <Fragment key={p.id}>
-              <Plus className="h-4 w-4 text-muted-foreground shrink-0" />
-              <SetThumb name={p.name} imageUrl={p.imageUrl} />
+              <Plus className={ingust ? "h-3 w-3 text-muted-foreground shrink-0" : "h-4 w-4 text-muted-foreground shrink-0"} />
+              <SetThumb name={p.name} imageUrl={p.imageUrl} ingust={ingust} />
             </Fragment>
           ))}
         </div>
 
-        <div className="shrink-0 lg:text-right lg:min-w-[220px]">
-          <div className="flex items-baseline gap-2 lg:justify-end mb-1">
-            <span className="text-2xl font-bold text-foreground">{formatPrice(setPrice)}</span>
+        <div className={ingust ? "" : "shrink-0 lg:text-right lg:min-w-[220px]"}>
+          <div className={ingust ? "flex items-baseline gap-2 mb-1" : "flex items-baseline gap-2 lg:justify-end mb-1"}>
+            <span className={ingust ? "text-lg font-bold text-foreground" : "text-2xl font-bold text-foreground"}>{formatPrice(setPrice)}</span>
             {hasSaving && <span className="text-sm text-muted-foreground line-through">{formatPrice(setCompareAt)}</span>}
           </div>
           {hasSaving && (
-            <p className="text-xs font-semibold mb-3" style={{ color }}>Economisesti {formatPrice(setSavings)}</p>
+            <p className={ingust ? "text-xs font-semibold mb-2" : "text-xs font-semibold mb-3"} style={{ color }}>
+              Economisesti {formatPrice(setSavings)}
+            </p>
           )}
           <button type="button" onClick={() => onBuyTogether(offer)} disabled={!!indisponibil}
-            className="w-full lg:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}>
+            className={ingust
+              ? "w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+              : "w-full lg:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"}
+            /* ⚠ Fără umbră colorată la varianta îngustă: lângă butonul de
+               „Adaugă în coș”, două umbre în aceeași culoare fac zona de
+               cumpărare să pară un teanc de butoane. */
+            style={ingust ? { backgroundColor: color } : { backgroundColor: color, boxShadow: `0px 2px 12px ${color}55` }}>
             {indisponibil ? indisponibil.motiv : (offer.buttonLabel || "Cumpara impreuna")}
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Setul, desenat în COLOANA DE CUMPĂRARE, sub butoane.
+ *
+ * ⚠ Stă în același fișier ca `ProductOffers`, nu într-unul nou, fiindcă
+ * desenează CHIAR `FbtCard` — mutat alături, cardul ar fi trebuit exportat, și
+ * atunci ar fi apărut tentația unei a doua socoteli de preț lângă el.
+ *
+ * ⚠⚠ NU-ȘI PUNE PROPRIA POARTĂ. Lista primită e deja cea împărțită de
+ * `imparteOferteleDupaAmplasare`, adică exact ce se desenează. O a treia poartă
+ * aici ar fi putut arunca o ofertă pentru care baliza de deasupra deja număra o
+ * afișare — o afișare fantomă.
+ */
+export function SetulDeLangaPret({ oferte, anchor, color, onBuyTogether, indisponibil }: {
+  oferte: ResolvedOffer[];
+  anchor: { name: string; price: number; imageUrl: string | null };
+  color: string;
+  onBuyTogether: (offer: ResolvedOffer) => void;
+  indisponibil?: { motiv: string } | null;
+}) {
+  if (oferte.length === 0) return null;
+  return (
+    <div className="space-y-3 pt-1">
+      {oferte.map((o) => (
+        <FbtCard key={o.id} offer={o} anchor={anchor} color={color}
+          onBuyTogether={onBuyTogether} indisponibil={indisponibil ?? null} ingust />
+      ))}
     </div>
   );
 }

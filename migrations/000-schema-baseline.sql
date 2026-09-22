@@ -5363,6 +5363,162 @@ AS $function$
 $function$
 ;
 
+CREATE OR REPLACE FUNCTION public.oferte_de_anuntat_fara_stoc(plafon integer DEFAULT 500)
+ RETURNS TABLE(offer_id uuid, business_id uuid, user_id uuid, nume text, cerute integer, ramase integer)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select o.id, o.business_id, b.user_id, o.name, s.cerute, s.ramase
+  from public.offers o
+  join public.businesses b on b.id = o.business_id
+  join lateral public.offer_stoc(o.business_id) s on s.offer_id = o.id
+  where public.offer_state(o.is_active, o.starts_at, o.ends_at) = 'activ'
+    and s.cerute > 0 and s.ramase = 0
+    and o.fara_stoc_anuntat_la is null
+  order by o.updated_at desc
+  limit greatest(1, least(coalesce(plafon, 500), 5000))
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.offer_state(p_is_active boolean, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone)
+ RETURNS text
+ LANGUAGE sql
+ STABLE PARALLEL SAFE
+ SET search_path TO ''
+AS $function$
+  select case
+    when not p_is_active then 'oprit'
+    when p_ends_at is not null and p_ends_at < now() then 'expirat'
+    when p_starts_at is not null and p_starts_at > now() then 'programat'
+    else 'activ'
+  end
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.offer_state_counts(bid uuid, search text DEFAULT NULL::text)
+ RETURNS TABLE(stare text, cate bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  with cautat as (
+    select replace(replace(replace(coalesce(search, ''), '\', '\\'), '%', '\%'), '_', '\_') as q
+  )
+  select
+    public.offer_state(o.is_active, o.starts_at, o.ends_at) as stare,
+    count(*) as cate
+  from public.offers o
+  cross join cautat c
+  where o.business_id = bid
+    and (c.q = '' or o.name ilike '%' || c.q || '%' escape '\'
+                  or o.type ilike '%' || c.q || '%' escape '\')
+  group by 1
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.offer_stoc(bid uuid)
+ RETURNS TABLE(offer_id uuid, cerute integer, ramase integer)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  with baza as (
+    select o.id, o.type,
+      coalesce((o.config->>'autoByCategory')::boolean, false) as automat,
+      coalesce(o.config->'productIds', '[]'::jsonb) as ids,
+      coalesce(o.config->'cantitati', '{}'::jsonb) as cant
+    from public.offers o
+    where o.business_id = bid
+      and o.type in ('frequently_bought', 'cross_sell', 'order_bump')
+  ),
+  linii as (
+    select b.id as offer_id, e.pid,
+      greatest(1, coalesce((b.cant->>e.pid)::integer, 1)) as cerute
+    from baza b
+    cross join lateral jsonb_array_elements_text(b.ids) as e(pid)
+    where not b.automat
+      and e.pid ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+  )
+  select l.offer_id, count(*)::integer,
+    count(*) filter (
+      where p.id is not null and p.is_active and not p.is_bundle
+        and (not p.track_inventory or p.stock_quantity is null or p.stock_quantity >= l.cerute)
+    )::integer
+  from linii l
+  left join public.products p on p.id = l.pid::uuid and p.business_id = bid
+  group by l.offer_id
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.offer_totaluri(bid uuid)
+ RETURNS TABLE(oferte bigint, oferte_active bigint, afisari bigint, acceptari bigint, venit numeric, comenzi_cazute bigint, bani_dati_cazuti numeric, oferte_ciuntite bigint, oferte_moarte bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select
+    (select count(*) from public.offers o where o.business_id = bid),
+    (select count(*) from public.offers o where o.business_id = bid
+       and public.offer_state(o.is_active, o.starts_at, o.ends_at) = 'activ'),
+    (select coalesce(sum(o.impressions), 0) from public.offers o where o.business_id = bid),
+    (select coalesce(sum(o.conversions), 0) from public.offers o where o.business_id = bid),
+    (select round(coalesce(sum(o.revenue_added), 0), 2) from public.offers o where o.business_id = bid),
+    (select count(*) from public.orders r where r.business_id = bid
+       and coalesce(r.offer_discount_amount, 0) > 0 and r.status in ('cancelled','refunded')),
+    (select round(coalesce(sum(r.offer_discount_amount), 0), 2) from public.orders r
+       where r.business_id = bid and coalesce(r.offer_discount_amount, 0) > 0
+         and r.status in ('cancelled','refunded')),
+    (select count(*) from public.offers o join public.offer_stoc(bid) s on s.offer_id = o.id
+       where o.business_id = bid
+         and public.offer_state(o.is_active, o.starts_at, o.ends_at) = 'activ'
+         and s.ramase > 0 and s.ramase < s.cerute),
+    (select count(*) from public.offers o join public.offer_stoc(bid) s on s.offer_id = o.id
+       where o.business_id = bid
+         and public.offer_state(o.is_active, o.starts_at, o.ends_at) = 'activ'
+         and s.cerute > 0 and s.ramase = 0)
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.offers_page(bid uuid, search text DEFAULT NULL::text, p_stare text DEFAULT 'toate'::text, sort_key text DEFAULT 'noi'::text, page_limit integer DEFAULT 25, page_offset integer DEFAULT 0)
+ RETURNS TABLE(id uuid, type text, name text, is_active boolean, priority integer, trigger jsonb, config jsonb, display jsonb, starts_at timestamp with time zone, ends_at timestamp with time zone, impressions bigint, conversions bigint, revenue_added numeric, created_at timestamp with time zone, updated_at timestamp with time zone, stare text, produse_cerute integer, produse_ramase integer, total_count bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  with cautat as (
+    select replace(replace(replace(coalesce(search, ''), '\', '\\'), '%', '\%'), '_', '\_') as q
+  ),
+  randuri as (
+    select o.*, public.offer_state(o.is_active, o.starts_at, o.ends_at) as st,
+      s.cerute as st_cerute, s.ramase as st_ramase
+    from public.offers o
+    cross join cautat c
+    left join public.offer_stoc(bid) s on s.offer_id = o.id
+    where o.business_id = bid
+      and (c.q = '' or o.name ilike '%' || c.q || '%' escape '\'
+                    or o.type ilike '%' || c.q || '%' escape '\')
+  ),
+  filtrate as (
+    select r.* from randuri r
+    where coalesce(p_stare, 'toate') = 'toate' or r.st = p_stare
+  )
+  select f.id, f.type, f.name, f.is_active, f.priority,
+    f.trigger, f.config, f.display, f.starts_at, f.ends_at,
+    f.impressions, f.conversions, f.revenue_added, f.created_at, f.updated_at,
+    f.st, f.st_cerute, f.st_ramase, count(*) over ()
+  from filtrate f
+  order by
+    case when sort_key = 'alfabetic' then f.name collate public.ro_numeric end asc nulls last,
+    case when sort_key = 'vazute' then f.impressions end desc nulls last,
+    case when sort_key = 'acceptate' then f.conversions end desc nulls last,
+    case when sort_key = 'venit' then f.revenue_added end desc nulls last,
+    f.created_at desc
+  limit greatest(1, least(coalesce(page_limit, 25), 100))
+  offset greatest(0, coalesce(page_offset, 0))
+$function$
+;
+
 CREATE OR REPLACE FUNCTION public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb)
  RETURNS boolean
  LANGUAGE plpgsql
@@ -5871,6 +6027,28 @@ AS $function$
       or exists (select 1 from jsonb_array_elements(a.combos) v where (v ->> 'stoc')::numeric <= p_prag)
    order by coalesce(a.stock_quantity, 0), a.name
    limit 200
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.produse_vandute(bid uuid, categorii text[], exclude_ids uuid[] DEFAULT '{}'::uuid[], p_limit integer DEFAULT 4, zile integer DEFAULT 90)
+ RETURNS TABLE(product_id uuid, bucati bigint)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select p.id, sum(greatest(0, coalesce((l.item->>'quantity')::integer, 0)))::bigint as bucati
+  from public.orders o
+  cross join lateral jsonb_array_elements(coalesce(o.items, '[]'::jsonb)) as l(item)
+  join public.products p on p.id::text = (l.item->>'product_id') and p.business_id = bid
+  where o.business_id = bid
+    and o.created_at >= now() - make_interval(days => greatest(1, least(coalesce(zile, 90), 730)))
+    and o.status not in ('cancelled', 'refunded')
+    and p.is_active and not p.is_bundle
+    and p.category = any (categorii)
+    and not (p.id = any (coalesce(exclude_ids, '{}')))
+  group by p.id
+  order by bucati desc, p.id
+  limit greatest(1, least(coalesce(p_limit, 4), 24))
 $function$
 ;
 
@@ -8691,7 +8869,8 @@ create table if not exists public.offers (
   conversions bigint default 0 not null,
   revenue_added numeric default 0 not null,
   created_at timestamp with time zone default now() not null,
-  updated_at timestamp with time zone default now() not null);
+  updated_at timestamp with time zone default now() not null,
+  fara_stoc_anuntat_la timestamp with time zone);
 
 create table if not exists public.olx_adverts (
   id uuid default gen_random_uuid() not null,
@@ -10125,12 +10304,14 @@ CREATE INDEX idx_gmc_queue_revendicat ON public.gmc_sync_queue USING btree (reve
 CREATE INDEX idx_invoices_user_id ON public.invoices USING btree (user_id);
 CREATE INDEX idx_notifications_user_id ON public.notifications USING btree (user_id);
 CREATE INDEX idx_notifications_user_unread ON public.notifications USING btree (user_id, is_read) WHERE (is_read = false);
+CREATE INDEX idx_offers_business_created ON public.offers USING btree (business_id, created_at DESC);
 CREATE INDEX idx_olx_adverts_business_status ON public.olx_adverts USING btree (business_id, status);
 CREATE INDEX idx_olx_adverts_stale_status ON public.olx_adverts USING btree (last_status_at NULLS FIRST);
 CREATE INDEX idx_olx_adverts_valid_to ON public.olx_adverts USING btree (valid_to);
 CREATE INDEX idx_olx_queue_created ON public.olx_sync_queue USING btree (created_at);
 CREATE INDEX idx_olx_queue_revendicat ON public.olx_sync_queue USING btree (revendicat_pana, created_at);
 CREATE INDEX idx_orders_business_created ON public.orders USING btree (business_id, created_at DESC);
+CREATE INDEX idx_orders_business_created_status ON public.orders USING btree (business_id, created_at DESC) WHERE (status <> ALL (ARRAY['cancelled'::text, 'refunded'::text]));
 CREATE INDEX idx_orders_business_customer_key ON public.orders USING btree (business_id, order_customer_key(customer_phone, customer_email, id));
 CREATE INDEX idx_orders_business_id ON public.orders USING btree (business_id);
 CREATE INDEX idx_orders_business_normphone ON public.orders USING btree (business_id, normalize_phone(customer_phone));
@@ -13369,6 +13550,18 @@ grant execute on function public.numar_produse_si_comenzi() to service_role;
 grant execute on function public.numar_produse_sub_prag(p_business uuid, p_prag integer) to authenticated;
 grant execute on function public.numar_produse_sub_prag(p_business uuid, p_prag integer) to service_role;
 grant execute on function public.numara_ofertele_emag(p_business_id uuid) to service_role;
+grant execute on function public.oferte_de_anuntat_fara_stoc(plafon integer) to service_role;
+grant execute on function public.offer_state(p_is_active boolean, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone) to anon;
+grant execute on function public.offer_state(p_is_active boolean, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone) to authenticated;
+grant execute on function public.offer_state(p_is_active boolean, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone) to service_role;
+grant execute on function public.offer_state_counts(bid uuid, search text) to authenticated;
+grant execute on function public.offer_state_counts(bid uuid, search text) to service_role;
+grant execute on function public.offer_stoc(bid uuid) to authenticated;
+grant execute on function public.offer_stoc(bid uuid) to service_role;
+grant execute on function public.offer_totaluri(bid uuid) to authenticated;
+grant execute on function public.offer_totaluri(bid uuid) to service_role;
+grant execute on function public.offers_page(bid uuid, search text, p_stare text, sort_key text, page_limit integer, page_offset integer) to authenticated;
+grant execute on function public.offers_page(bid uuid, search text, p_stare text, sort_key text, page_limit integer, page_offset integer) to service_role;
 grant execute on function public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb) to service_role;
 grant execute on function public.olx_seteaza_categoria(p_business_id uuid, p_categorie text, p_intrare jsonb) to service_role;
 grant execute on function public.order_customer_key(customer_phone text, customer_email text, order_id uuid) to anon;
@@ -13399,6 +13592,8 @@ grant execute on function public.proba_stoc() to service_role;
 grant execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) to service_role;
 grant execute on function public.produse_sub_prag(p_business uuid, p_prag integer) to authenticated;
 grant execute on function public.produse_sub_prag(p_business uuid, p_prag integer) to service_role;
+grant execute on function public.produse_vandute(bid uuid, categorii text[], exclude_ids uuid[], p_limit integer, zile integer) to authenticated;
+grant execute on function public.produse_vandute(bid uuid, categorii text[], exclude_ids uuid[], p_limit integer, zile integer) to service_role;
 grant execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) to service_role;
 grant execute on function public.reclaim_order_discount(p_order_id uuid) to service_role;
 grant execute on function public.redactorii_blogului() to service_role;
@@ -13457,8 +13652,8 @@ grant execute on function public.trg_generatia_cozii() to service_role;
 grant execute on function public.trg_repretuieste_pachetele() to service_role;
 grant execute on function public.unaccent(text) to anon;
 grant execute on function public.unaccent(regdictionary, text) to anon;
-grant execute on function public.unaccent(regdictionary, text) to authenticated;
 grant execute on function public.unaccent(text) to authenticated;
+grant execute on function public.unaccent(regdictionary, text) to authenticated;
 grant execute on function public.unaccent(regdictionary, text) to service_role;
 grant execute on function public.unaccent(text) to service_role;
 grant execute on function public.unaccent_init(internal) to anon;
@@ -13608,6 +13803,12 @@ revoke execute on function public.next_order_number(p_business_id uuid) from pub
 revoke execute on function public.numar_produse_si_comenzi() from public;
 revoke execute on function public.numar_produse_sub_prag(p_business uuid, p_prag integer) from public;
 revoke execute on function public.numara_ofertele_emag(p_business_id uuid) from public;
+revoke execute on function public.oferte_de_anuntat_fara_stoc(plafon integer) from public;
+revoke execute on function public.offer_state(p_is_active boolean, p_starts_at timestamp with time zone, p_ends_at timestamp with time zone) from public;
+revoke execute on function public.offer_state_counts(bid uuid, search text) from public;
+revoke execute on function public.offer_stoc(bid uuid) from public;
+revoke execute on function public.offer_totaluri(bid uuid) from public;
+revoke execute on function public.offers_page(bid uuid, search text, p_stare text, sort_key text, page_limit integer, page_offset integer) from public;
 revoke execute on function public.olx_roteste_tokenul(p_business_id uuid, p_vazut timestamp with time zone, p_patch jsonb) from public;
 revoke execute on function public.olx_seteaza_categoria(p_business_id uuid, p_categorie text, p_intrare jsonb) from public;
 revoke execute on function public.palnia_panou(p_business uuid, p_fel text, p_de_la date, p_pana_la date) from public;
@@ -13617,6 +13818,7 @@ revoke execute on function public.posta_aloca_cod(p_business_id uuid) from publi
 revoke execute on function public.proba_stoc() from public;
 revoke execute on function public.produse_nesincronizate_emag(p_business_id uuid, p_rabdare interval, p_limita integer, p_amprente jsonb) from public;
 revoke execute on function public.produse_sub_prag(p_business uuid, p_prag integer) from public;
+revoke execute on function public.produse_vandute(bid uuid, categorii text[], exclude_ids uuid[], p_limit integer, zile integer) from public;
 revoke execute on function public.pune_pauza_ritm_extern(p_cheie text, p_ms integer) from public;
 revoke execute on function public.reclaim_order_discount(p_order_id uuid) from public;
 revoke execute on function public.redactorii_blogului() from public;

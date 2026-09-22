@@ -9,6 +9,7 @@ import {
 import { parseOfferConfig, parseOfferDisplay, parseOfferTrigger, type OfferProduct } from "./offer.types";
 import { fbtCompanionPrices, imparteEconomiaCompanionilor, pretulSetului } from "./fbt-pricing";
 import type { BumpItem } from "./bump-pricing";
+import { cosulDinLinii } from "./porti";
 
 /**
  * Ofertele la PLASAREA comenzii: acelasi drum ca la afisare.
@@ -72,6 +73,11 @@ function ruleaza(
       produse: [...(ancora ? [ancora.id] : []), ...linii.map((l) => l.product_id)]
         .map((id) => ({ id, category: null })),
       cuVariantaAleasa: new Set(cuVariantaAleasa),
+      // Cosul de PORTI: liniile plus ancora, cu preturile chiar platite.
+      cos: cosulDinLinii([
+        ...(ancora ? [{ productId: ancora.id, quantity: 1, unitPrice: ancora.unitPrice }] : []),
+        ...linii.map((l) => ({ productId: l.product_id, quantity: l.quantity, unitPrice: l.price })),
+      ]),
     },
     oferibile: new Map(oferibile.map((p) => [p.id, p])),
     ancora: { basePrice: ancora?.basePrice ?? ancora?.unitPrice ?? 0, unitPrice: ancora?.unitPrice ?? 0 },
@@ -279,7 +285,7 @@ test("FBT: un produs nevandabil purtat din cos NU blocheaza comanda", () => {
   assert.deepEqual(rez.applied, ["fbt"]);
   assert.equal(rez.opreste, false);
   assert.equal(linii[1].price, 30, "linia purtata din cos ramane la pretul ei");
-  assert.equal(linii[0].price, fbtCompanionPrices(100, [50], o.config)[0]);
+  assert.equal(linii[0].price, fbtCompanionPrices({ pret: 100 }, [{ pret: 50 }], o.config)[0]);
 });
 
 test("FBT: acelasi produs, dar FARA varianta aleasa, inseamna set schimbat", () => {
@@ -308,7 +314,7 @@ test("FBT: ancora cu varianta — economia e a setului de pe card, impartirea e 
 
   // Exact aritmetica de pe card: economia setului de catalog (100+50-120 = 30),
   // impartita pe cota companionilor din setul chiar platit (250+50).
-  const deiPeCard = imparteEconomiaCompanionilor(250, [50], pretulSetului([100, 50], o.config).savings);
+  const deiPeCard = imparteEconomiaCompanionilor({ pret: 250 }, [{ pret: 50 }], pretulSetului([{ pret: 100 }, { pret: 50 }], o.config).savings);
   assert.equal(linii[0].price, deiPeCard[0]);
 });
 
@@ -328,7 +334,7 @@ test("FBT pe o linie de mai multe bucati: tot o singura bucata", () => {
   const linii = [linie("comp", 50, 3)];
   const rez = ruleaza([o], linii, [produs("comp", 50)], { id: "ancora", unitPrice: 100 });
 
-  const asteptat = fbtCompanionPrices(100, [50], o.config)[0];
+  const asteptat = fbtCompanionPrices({ pret: 100 }, [{ pret: 50 }], o.config)[0];
   assert.deepEqual(rez.applied, ["fbt"]);
   assert.deepEqual(linii.map((l) => [l.price, l.quantity]), [[50, 2], [asteptat, 1]]);
 });
@@ -372,7 +378,7 @@ test("acelasi produs trecut de doua ori in oferta se reduce o singura data", () 
   const linii = [linie("comp", 50, 2)];
   const rez = ruleaza([o], linii, [produs("comp", 50)], { id: "ancora", unitPrice: 100 });
 
-  const asteptat = fbtCompanionPrices(100, [50], o.config)[0];
+  const asteptat = fbtCompanionPrices({ pret: 100 }, [{ pret: 50 }], o.config)[0];
   assert.deepEqual(rez.applied, ["fbt"]);
   assert.deepEqual(linii.map((l) => [l.price, l.quantity]), [[50, 1], [asteptat, 1]]);
 });
@@ -409,7 +415,7 @@ test("ancora se pretuieste cu varianta aleasa, ca pe card", () => {
   const linii = [linie("comp", 50)];
   ruleaza([o], linii, [produs("comp", 50)], { id: "ancora", unitPrice: 250 });
 
-  assert.equal(linii[0].price, fbtCompanionPrices(250, [50], o.config)[0]);
+  assert.equal(linii[0].price, fbtCompanionPrices({ pret: 250 }, [{ pret: 50 }], o.config)[0]);
 });
 
 test("bump fara produsul lui in comanda: fara reducere, dar si fara refuz", () => {
@@ -449,6 +455,7 @@ test("expandarea unei oferte nu se amesteca cu a alteia", () => {
   const ctx = {
     ancora: { id: "pantof", category: "Pantofi" },
     produse: [{ id: "pantof", category: "Pantofi" }],
+    cos: cosulDinLinii([{ productId: "pantof", quantity: 1, unitPrice: 100 }]),
   };
   // Chiar ajutorul folosit si de magazin, si de comanda.
   const extinsele = expandarePeOferta(arbore);
@@ -557,7 +564,7 @@ test("venitul unui set FBT e suma companionilor la pretul lor redus", () => {
   assert.deepEqual(rez.applied, ["fbt"]);
   // Ancora ramane intreaga: venitul ofertei e ce au adus companionii, cu aceleasi
   // preturi pe care le-a scris pe linii.
-  const reduse = fbtCompanionPrices(100, [50, 30], o.config);
+  const reduse = fbtCompanionPrices({ pret: 100 }, [{ pret: 50 }, { pret: 30 }], o.config);
   assert.deepEqual(rez.venitPeOferta, { fbt: Math.round((reduse[0] + reduse[1]) * 100) / 100 });
   assert.equal(linii[0].price, reduse[0]);
   assert.equal(linii[1].price, reduse[1]);

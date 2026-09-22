@@ -1,4 +1,12 @@
 import type { CifreleCodului } from "./stare";
+import {
+  catePagini,
+  rezumatulPaginii as rezumatulPaginiiComun,
+  type CuvinteleListei,
+} from "@/lib/dashboard/paginare";
+
+/* ⚠ Se trece mai departe ca s-o poată aduce cine aduce lista, dintr-un loc. */
+export { catePagini };
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -47,28 +55,14 @@ export interface TotalurileCodurilor {
 }
 
 /**
- * Câte pagini are mulțimea filtrată.
- *
- * ⚠ Zero rânduri înseamnă O pagină, nu zero: altfel „pagina 1 din 0” ar fi scris
- * pe ecran, iar butoanele de răsfoire s-ar fi purtat ciudat pe un magazin fără
- * niciun cod.
+ * ⚠ RĂSFOIREA E CEA COMUNĂ, din `lib/dashboard/paginare.ts`. `catePagini` era
+ * scrisă aici a doua oară, pe lângă cea din `lib/perioade.ts`, cu corpuri
+ * deosebite. Aici rămân doar CUVINTELE codurilor.
  */
-export function catePagini(cateSunt: number, pePagina: number): number {
-  return Math.max(1, Math.ceil(Math.max(0, cateSunt) / Math.max(1, pePagina)));
-}
+const CUVINTELE_CODURILOR: CuvinteleListei = {
+  niciunul: "Niciun cod", unul: "cod", putine: "coduri", multe: "de coduri",
+};
 
-/**
- * Ce scrie sub listă: „1–25 din 137 de coduri”.
- *
- * ⚠ SE SPUNE ȘI CÂT E TOTALUL, nu doar pagina. O listă care arată douăzeci și
- * cinci de rânduri fără să spună câte sunt îl lasă pe comerciant să creadă că
- * atâtea are — exact felul de tăcere pe care îl vânez peste tot.
- */
 export function rezumatulPaginii(cateSunt: number, pagina: number, pePagina: number): string {
-  if (cateSunt === 0) return "Niciun cod";
-  const de = (pagina - 1) * pePagina + 1;
-  const la = Math.min(cateSunt, pagina * pePagina);
-  const cuvant = cateSunt === 1 ? "cod" : cateSunt < 20 ? "coduri" : "de coduri";
-  if (cateSunt <= pePagina) return `${cateSunt} ${cuvant}`;
-  return `${de}–${la} din ${cateSunt} ${cuvant}`;
+  return rezumatulPaginiiComun(cateSunt, pagina, pePagina, CUVINTELE_CODURILOR);
 }

@@ -27,6 +27,27 @@ function modBundle(mode: string): BundlePricingMode | null {
 }
 
 /**
+ * O linie de set: un pret si cate bucati intra din el.
+ *
+ * ⚠⚠ ERA UN SIMPLU `number[]`, si asta tinea cat timp orice set insemna „cate o
+ * bucata din fiecare". De cand comerciantul poate cere „2 becuri + 1 lustra",
+ * fiecare din cele trei socoteli de aici trebuie sa stie CATE.
+ *
+ * ⚠ `bucati` lipsa inseamna 1, ca apelantii care n-au cantitati sa nu trebuiasca
+ * sa scrie `bucati: 1` peste tot — si ca sa iasa, la bit, numerele de ieri.
+ */
+export interface LinieDeSet {
+  pret: number;
+  bucati?: number;
+}
+
+/** Bucatile unei linii, curatate. Zero si negativ n-au inteles intr-un set. */
+function bucatile(l: LinieDeSet): number {
+  const n = Math.floor(Number(l.bucati));
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/**
  * Distribuie economia setului pe preturile COMPANIONILOR — ancora ramane la
  * pretul intreg, fiindca ea e produsul comandat din caseta de cumparare.
  * Deterministic, si folosit deopotriva de previzualizarea din magazin si de
@@ -44,12 +65,12 @@ function modBundle(mode: string): BundlePricingMode | null {
  * scumpa ar fi ancora. Plafonul la valoarea lor ramane centura de siguranta.
  */
 export function fbtCompanionPrices(
-  anchorPrice: number,
-  companionPrices: number[],
+  anchor: LinieDeSet,
+  companioni: LinieDeSet[],
   config: ConfigReducereSet,
 ): number[] {
-  const pricing = pretulSetului([anchorPrice, ...companionPrices], config);
-  return imparteEconomiaCompanionilor(anchorPrice, companionPrices, pricing.savings);
+  const pricing = pretulSetului([anchor, ...companioni], config);
+  return imparteEconomiaCompanionilor(anchor, companioni, pricing.savings);
 }
 
 /**
@@ -61,14 +82,19 @@ export function fbtCompanionPrices(
  * un set „cumparate frecvent impreuna".
  */
 export function pretulSetului(
-  preturi: number[],
+  preturi: LinieDeSet[],
   config: ConfigReducereSet,
 ): { price: number; compareAt: number; savings: number } {
   const mode = modBundle(config.discountMode);
-  const compareAt = round2(preturi.reduce((s, p) => s + p, 0));
+  /*
+    ⚠ `compareAt` se socotește pe VALOAREA liniei (preț × bucăți), nu pe preț.
+    Cu toate cantitățile 1 iese numărul de dinainte, la bit — deci nicio ofertă
+    care există azi nu-și schimbă prețul.
+  */
+  const compareAt = round2(preturi.reduce((s, l) => s + l.pret * bucatile(l), 0));
   if (!mode) return { price: compareAt, compareAt, savings: 0 };
   return computeBundlePricing(
-    preturi.map((p) => ({ price: p, quantity: 1 })),
+    preturi.map((l) => ({ price: l.pret, quantity: bucatile(l) })),
     mode,
     { fixedPrice: config.fixedPrice, discountPercent: config.discountPercent, discountAmount: config.discountAmount },
   );
@@ -84,15 +110,42 @@ export function pretulSetului(
  * formula le-ar fi despartit, si pe ecran ar fi scris alt pret decat cel incasat.
  */
 export function imparteEconomiaCompanionilor(
-  anchorPrice: number,
-  companionPrices: number[],
+  anchor: LinieDeSet,
+  companioni: LinieDeSet[],
   economiaSetului: number,
 ): number[] {
-  const compTotal = round2(companionPrices.reduce((s, p) => s + p, 0));
-  if (compTotal <= 0) return companionPrices.map((p) => round2(p));
-  const setTotal = round2(Math.max(0, anchorPrice) + compTotal);
+  /*
+    ⚠⚠ COTELE SE FAC PE VALOAREA LINIEI (preț × bucăți), dar REZULTATUL RĂMÂNE UN
+    PREȚ UNITAR. Amândouă contează:
+
+    Pe valoare, fiindcă un companion luat în două bucăți trage de două ori mai
+    mult din economia setului decât unul luat într-una — altfel „10% pe set” ar
+    fi căzut cu totul pe produsul luat o dată.
+
+    Unitar, fiindcă numărul ăsta se scrie pe LINIA de comandă, iar linia își are
+    deja cantitatea ei. Întors ca valoare de linie, s-ar fi înmulțit a doua oară.
+
+    ⚠ Cu toate cantitățile 1, `compTotal`, `setTotal` și `p` ies numere identice
+    cu cele de ieri, deci ieșirea e aceeași la bit.
+  */
+  const valoarea = (l: LinieDeSet) => l.pret * bucatile(l);
+  const compTotal = round2(companioni.reduce((s, l) => s + valoarea(l), 0));
+  if (compTotal <= 0) return companioni.map((l) => round2(l.pret));
+  const setTotal = round2(Math.max(0, valoarea(anchor)) + compTotal);
   const cotaCompanioni = setTotal > 0 ? compTotal / setTotal : 0;
   const savings = Math.min(economiaSetului * cotaCompanioni, compTotal);
-  if (savings <= 0) return companionPrices.map((p) => round2(p));
-  return companionPrices.map((p) => round2(Math.max(0, p - savings * (p / compTotal))));
+  if (savings <= 0) return companioni.map((l) => round2(l.pret));
+  /*
+    ⚠⚠ EXPRESIA NU SE REscrie în forma algebric echivalentă
+    `p * (1 - savings / compTotal)`: cele două diferă la ultimul bit în virgulă
+    mobilă, iar pe un preț la limită ar cădea pe alt ban.
+
+    `savings * (valoare / compTotal)` e partea de economie a LINIEI; împărțită
+    la bucăți, dă cât scade fiecare bucată.
+  */
+  return companioni.map((l) => {
+    const b = bucatile(l);
+    const scadereaLiniei = savings * (valoarea(l) / compTotal);
+    return round2(Math.max(0, l.pret - scadereaLiniei / b));
+  });
 }

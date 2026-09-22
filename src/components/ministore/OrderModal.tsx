@@ -715,17 +715,35 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
   // si ar fi oprit comanda. Lista reincarcata il scoate singura, fiindca
   // `acceptedBumpOffers` se filtreaza pe ofertele inca aplicabile.
   const idProduseComanda = [product.id, ...cart.map((c) => c.productId)].join(",");
+  /*
+    ⚠⚠ SI COSUL, pentru PORTILE ofertei („se arata doar daca trece de 200 de
+    lei"). Se trimite CE VEDE OMUL: produsul din formular, cu cantitatea si
+    pretul lui de acum, plus liniile purtate din cos.
+
+    ⚠ Serverul NU-l crede pe cuvant si nici nu trebuie: a arata o oferta nu
+    costa niciun ban, iar la trimiterea comenzii aceeasi poarta se pune din nou,
+    pe liniile adevarate. Vezi `lib/offers/porti.ts`.
+
+    ⚠ E cheie de efect, ca si lista de produse: un tablou nou la fiecare randare
+    ar fi recerut bump-urile la fiecare apasare de tasta din formular.
+  */
+  const cosulPentruPorti = JSON.stringify([
+    /* ⚠ `productSubtotal` e totalul liniei principale, cu trepte cu tot, deci
+       impartit la cantitate da chiar pretul pe bucata care se incaseaza. */
+    { productId: product.id, quantity, unitPrice: productSubtotal / Math.max(1, quantity) },
+    ...cart.map((c) => ({ productId: c.productId, quantity: c.quantity, unitPrice: totalLinieCos(c) / Math.max(1, c.quantity) })),
+  ]);
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     // Pe esec lista se GOLESTE, nu ramane cea veche: `acceptedBumpOffers` se
     // filtreaza prin ea, deci o lista invechita ar trimite la server un bump pe
     // care el il refuza acum, si comanda s-ar opri din cauza unei erori de retea.
-    getCheckoutBumps(business.id, idProduseComanda.split(","))
+    getCheckoutBumps(business.id, idProduseComanda.split(","), JSON.parse(cosulPentruPorti))
       .then((b) => { if (!cancelled) setBumps(b ?? []); })
       .catch(() => { if (!cancelled) setBumps([]); });
     return () => { cancelled = true; };
-  }, [open, business.id, idProduseComanda]);
+  }, [open, business.id, idProduseComanda, cosulPentruPorti]);
 
   // Re-validate discount when quantity/tier changes (min_order_amount may no longer be met)
   useEffect(() => {
@@ -1201,7 +1219,23 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
                   </div>
                   {/* In fluxul FBT cantitatea e fixa la 1 buc (setul afisat pe card); steperul apare doar in comanda simpla. */}
                   {fbtOffer ? (
-                    <span className="text-xs font-semibold text-muted-foreground shrink-0">1 buc</span>
+                    /*
+                      ⚠⚠ SE SPUNE CA S-A PIERDUT CANTITATEA DE PE PAGINA, nu se tace.
+                      In fluxul „cumpara impreuna" ancora intra cu O bucata,
+                      dinadins (vezi `setQuantity(fbtOffer ? 1 : cerute)`) — dar
+                      pana azi butonul setului statea cu vreo 1200px mai jos decat
+                      selectorul de cantitate, deci nimeni nu tinea minte ce pusese
+                      acolo. De cand setul poate sta CHIAR LANGA el, tacerea devine
+                      o minciuna vizibila.
+                    */
+                    <span className="shrink-0 text-right">
+                      <span className="block text-xs font-semibold text-muted-foreground">1 buc</span>
+                      {Math.max(1, Math.floor(Number(initialQuantity) || 1)) > 1 && (
+                        <span className="mt-0.5 block text-[10px] leading-tight text-muted-foreground">
+                          setul merge cu o bucată
+                        </span>
+                      )}
+                    </span>
                   ) : (
                     <div className="flex items-center gap-2 shrink-0">
                       <button type="button" onClick={() => setQuantity(q => Math.max(1, q - 1))}
@@ -1542,7 +1576,7 @@ export function OrderModal({ open, onClose, product, business, shippingCost, fre
               ))}
 
               {/* Order bumps — a real discounted product added with one tap */}
-              <OrderBump bumps={visibleBumps} color={color} acceptedIds={acceptedBumps} onToggle={toggleBump} />
+              <OrderBump businessId={business.id} bumps={visibleBumps} color={color} acceptedIds={acceptedBumps} onToggle={toggleBump} />
 
               {/* Extras */}
               {extras.length > 0 && (

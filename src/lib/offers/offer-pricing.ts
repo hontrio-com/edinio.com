@@ -14,9 +14,11 @@
 // aici nu atinge Supabase, ca sa poata fi verificat de teste — apelantul
 // (`applyOfferPricing`) doar incarca randurile si le paseaza incoace.
 
-import { aplicaBumpPeOBucata, type BumpItem } from "./bump-pricing";
-import { imparteEconomiaCompanionilor, pretulSetului } from "./fbt-pricing";
+import { aplicaPretPeBucati, type BumpItem } from "./bump-pricing";
+import { imparteEconomiaCompanionilor, pretulSetului, type LinieDeSet } from "./fbt-pricing";
+import { deCeNuTrece, type CosulDeJudecat } from "./porti";
 import { esteUuid } from "@/lib/supabase/ids";
+import { cantitateaCeruta } from "./offer.types";
 import type { OfferConfig, OfferDisplay, OfferProduct, OfferTrigger, OfferType } from "./offer.types";
 
 function round2(n: number): number {
@@ -54,6 +56,7 @@ export type MotivRefuz =
   | "set_incomplet"      // setul cumparat nu e setul aratat
   | "prea_multe"         // mai multe oferte decat poate arata magazinul
   | "fara_ancora"        // FBT revendicat pe o cale fara produs-ancora (cosul)
+  | "poarta"             // portile ofertei nu trec pe cosul asta — vezi `porti.ts`
   | "lipsa_din_comanda"; // produsul oferit nu e in comanda — nu s-a promis nimic
 
 /**
@@ -98,6 +101,19 @@ export interface ContextComanda {
   cuVariantaAleasa?: Set<string>;
   /** Categoriile alese de oferte, cu tot subarborele — vezi `extindeCategorii`. */
   categoriiExtinse?: Set<string>;
+  /**
+   * Coșul pe care se judecă PORȚILE ofertei (vezi `lib/offers/porti.ts`).
+   *
+   * ⚠⚠ OBLIGATORIU, nu opțional, și asta e o hotărâre de siguranță. Lăsat
+   * opțional, un apelant care uită să-l dea ar fi trecut TOATE porțile în tăcere
+   * (dacă lipsa înseamnă „da”) sau ar fi oprit toate comenzile cu bump (dacă
+   * înseamnă „nu”). Așa, `tsc` arată fiecare loc care construiește contextul.
+   *
+   * ⚠ Prețurile de aici sunt cele CHIAR PLĂTITE, nu cele de catalog: o variantă
+   * aleasă schimbă prețul, iar poarta „coșul trece de X lei” trebuie să numere
+   * ce încasează magazinul, nu ce scrie în catalog.
+   */
+  cos: CosulDeJudecat;
 }
 
 /* ─── Reguli comune magazinului si comenzii ───────────────────────────────── */
@@ -202,6 +218,25 @@ export function triggerMatchesCart(
 export function refuzaOferta(o: OfertaCuReguli, ctx: ContextComanda, nowMs: number): MotivRefuz | null {
   if (!TIPURI_CU_PRET.includes(o.type)) return "tip";
   if (!withinWindow(o.startsAt, o.endsAt, nowMs)) return "fereastra";
+
+  /*
+    ⚠⚠ PORȚILE SE JUDECĂ AICI, adică în CHIAR funcția pe care o cheamă plasarea
+    comenzii, și cu aceeași regulă pe care o cheamă și afișarea
+    (`resolveCartOffers`). Scrise în două locuri, s-ar fi despărțit — și atunci
+    ori clientul vede un bump pe care serverul îl refuză și comanda cade fără să
+    înțeleagă de ce, ori ia unul la care n-avea dreptul, și ăla e bani.
+
+    ⚠ ÎNAINTEA declanșatorului și a suprafeței, dinadins: „coșul n-a trecut de
+    200 de lei” e ceva ce cumpărătorul poate schimba, pe când „oferta nu se
+    potrivește produsului” nu. Când cad amândouă, motivul scris în jurnal trebuie
+    să fie cel care spune ce se putea face.
+
+    ⚠ Se judecă pentru ORICE tip, nu doar pentru bump: regula e una singură, iar
+    un rând care ar avea porți puse de mână pe alt tip trebuie să le și
+    primească. Formularul le arată azi doar la oferta de checkout.
+  */
+  if (deCeNuTrece(o.trigger.conditions, ctx.cos, o.config.productIds) !== null) return "poarta";
+
   if (o.type === "order_bump") {
     // Bump-ul se cere cu suprafata „checkout" pe AMBELE cai: si formularul de pe
     // pagina de produs, si pagina de finalizare trec prin `getCheckoutBumps`.
@@ -249,7 +284,12 @@ export function setulOfertei(
 ): { set: OfferProduct[] } | { motiv: MotivRefuz } {
   if (o.type === "frequently_bought") {
     const aratate = candidati.filter((p) => p.id !== ancoraId).slice(0, o.config.maxProducts);
-    const set = aratate.filter(vandabil);
+    /*
+      ⚠ Cantitatile se pun din CONFIGURATIE, aceeasi sursa ca la afisare, ca
+      pretul reconstituit aici sa fie cel scris pe card. Vezi `cantitateaCeruta`.
+    */
+    const set = aratate.filter(vandabil)
+      .map((p) => ({ ...p, cantitate: cantitateaCeruta(o.type, o.config, p.id) }));
     if (set.length === 0) return { motiv: "set_gol" };
     /*
      * Un companion care nu se mai poate vinde, dar e totusi pe comanda, inseamna
@@ -327,7 +367,8 @@ export function aplicaOfertaPeLinii(
       if (!atinse.has(l) && l.quantity >= 1 && produse.has(l.product_id)) { linie = l; break; }
     }
     if (!linie) return { motiv: "lipsa_din_comanda" };
-    const pret = pretulSetului([produse.get(linie.product_id)!.price], o.config).price;
+    /* ⚠ Bump-ul ramane o bucata: cantitatile sunt doar la set. */
+    const pret = pretulSetului([{ pret: produse.get(linie.product_id)!.price }], o.config).price;
     // Si cand bump-ul nu ieftineste nimic, bucata lui e in comanda si se
     // incaseaza: venitul e pretul chiar platit, nu zero.
     if (pret >= linie.price) return { savings: 0, venit: round2(linie.price) };
@@ -347,19 +388,39 @@ export function aplicaOfertaPeLinii(
   if (liniiSet.length !== set.length) {
     return { motiv: liniiSet.length === 0 ? "lipsa_din_comanda" : "set_incomplet" };
   }
+  /*
+    ⚠⚠ CANTITATILE VIN DIN `set`, adica din ce a reconstituit `setulOfertei` din
+    CONFIGURATIA ofertei — niciodata din ce a trimis browserul. `p.cantitate`
+    lipsa inseamna o bucata, deci un set fara cantitati da numerele de ieri.
+
+    ⚠ Ancora intra cu o bucata: cantitatea ei e a LINIEI din comanda, iar setul
+    se vinde „unul din fiecare cate scrie in oferta" peste produsul de pe pagina.
+  */
+  const companioni: LinieDeSet[] = set.map((p) => ({ pret: p.price, bucati: p.cantitate }));
   const reduse = imparteEconomiaCompanionilor(
-    ancora.unitPrice,
-    set.map((p) => p.price),
-    pretulSetului([ancora.basePrice, ...set.map((p) => p.price)], o.config).savings,
+    { pret: ancora.unitPrice },
+    companioni,
+    pretulSetului([{ pret: ancora.basePrice }, ...companioni], o.config).savings,
   );
   let savings = 0;
   let venit = 0;
   liniiSet.forEach((l, idx) => {
-    // Pretul chiar incasat pe bucata companionului, CITIT INAINTE de aplicare:
-    // `aplicaSiMarcheaza` scrie peste `l.price` cand linia are o singura bucata.
+    /*
+      ⚠⚠ VENITUL SE SOCOTESTE PE BUCATI, nu pe o bucata. Ramas unitar, aceeasi
+      comanda ar fi scris doua numere care se contrazic: `offer_discount_amount`
+      socotit pe doua bucati si `offers.revenue_added` pe una.
+
+      ⚠ Se ia MINIMUL dintre cerut si cat are linia: reconstituirea setului a
+      hotarat deja ca oferta se aplica, iar aici nu se refuza nimic.
+
+      ⚠ Pretul chiar incasat pe bucata, CITIT INAINTE de aplicare:
+      `aplicaSiMarcheaza` scrie peste `l.price` cand linia se consuma intreaga.
+    */
+    const cerute = Math.max(1, Math.floor(Number(set[idx]?.cantitate) || 1));
+    const luate = Math.min(cerute, l.quantity);
     const platit = Math.min(reduse[idx], l.price);
-    venit = round2(venit + platit);
-    if (reduse[idx] < l.price) savings = round2(savings + aplicaSiMarcheaza(linii, l, reduse[idx], atinse));
+    venit = round2(venit + platit * luate);
+    if (reduse[idx] < l.price) savings = round2(savings + aplicaSiMarcheaza(linii, l, reduse[idx], atinse, cerute));
   });
   return { savings, venit };
 }
@@ -369,10 +430,10 @@ export function aplicaOfertaPeLinii(
  * din ea) se insemneaza, ca o a doua oferta sa n-o mai poata reduce.
  */
 function aplicaSiMarcheaza(
-  linii: BumpItem[], linie: BumpItem, pretRedus: number, atinse: Set<BumpItem>,
+  linii: BumpItem[], linie: BumpItem, pretRedus: number, atinse: Set<BumpItem>, bucati = 1,
 ): number {
   const inainte = linii.length;
-  const economie = aplicaBumpPeOBucata(linii, linie, pretRedus);
+  const economie = aplicaPretPeBucati(linii, linie, pretRedus, bucati);
   atinse.add(linie);
   if (linii.length > inainte) atinse.add(linii[linii.length - 1]);
   return economie;

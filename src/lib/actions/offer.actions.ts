@@ -12,7 +12,9 @@ import {
   type OfferType, type OfferTrigger, type OfferConfig, type OfferDisplay, type ResolvedOffer,
 } from "@/lib/offers/offer.types";
 import { resolveCartOffers } from "@/lib/offers/offers";
+import { cosulDinLinii } from "@/lib/offers/porti";
 import { idsDeAfisare, scrieStatisticiOferte } from "@/lib/offers/statistici";
+import { perioadaOfertei } from "@/lib/zi-romaneasca";
 
 type ServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -30,8 +32,15 @@ export interface OfferFormData {
   trigger: unknown; // sanitized server-side before storage
   config: unknown;
   display: unknown;
-  starts_at?: string | null;
-  ends_at?: string | null;
+  /*
+    ⚠⚠ ZILE, NU CLIPE — „2026-10-01”, nu un ISO cu ora. Formularul trimitea
+    pana azi `starts_at`/`ends_at` de-a dreptul, si serverul le scria asa cum
+    veneau: browserul hotara ce inseamna „1 octombrie”, adica miezul noptii
+    din fusul LUI. Ziua se preface in clipa romaneasca pe server, intr-un
+    singur loc (`perioadaOfertei`), exact ca la coduri.
+  */
+  incepe_in?: string | null;
+  se_incheie_in?: string | null;
 }
 
 // A fully-parsed offer, ready for the dashboard UI.
@@ -57,7 +66,6 @@ export interface OfferRow {
 function sanitizeWrite(data: OfferFormData): {
   name: string; is_active: boolean; priority: number;
   trigger: OfferTrigger; config: OfferConfig; display: OfferDisplay;
-  starts_at: string | null; ends_at: string | null;
 } {
   return {
     name: data.name.trim(),
@@ -66,8 +74,6 @@ function sanitizeWrite(data: OfferFormData): {
     trigger: parseOfferTrigger(data.trigger),
     config: parseOfferConfig(data.config),
     display: parseOfferDisplay(data.display, data.type),
-    starts_at: data.starts_at || null,
-    ends_at: data.ends_at || null,
   };
 }
 
@@ -125,18 +131,19 @@ function toOfferRow(o: {
   };
 }
 
-export async function listOffers(businessId: string): Promise<OfferRow[]> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-  if (!(await ownsBusiness(supabase, businessId, user.id))) return [];
-  const { data } = await supabase
-    .from("offers").select("*")
-    .eq("business_id", businessId)
-    .order("priority", { ascending: false })
-    .order("created_at", { ascending: false });
-  return (data ?? []).map(toOfferRow);
-}
+/*
+  ⚠⚠ `listOffers` A FOST STEARSA (22.09.2026), si nu ca sa fie codul mai scurt.
+
+  Aducea TOATE ofertele magazinului, fara `limit` si fara `range`, si era
+  chemata dintr-un singur loc: pagina de Oferte. De cand pagina cere
+  `offers_page`, n-a mai ramas niciun apelant — verificat cu grep in tot `src/`.
+
+  Fisierul e `"use server"`, deci FIECARE export al lui e un capat pe care
+  browserul il poate chema. Lasata, ar fi fost o usa care aduce lista intreaga,
+  fara plafon, pe langa cea paginata — adica exact drumul pe care il inchidem.
+  (Paza de proprietar era la locul ei, deci nu era o gaura de date; era o cale
+  nemarginita.) `getOffer`, de dedesubt, ramane: o cheama formularul de editare.
+*/
 
 export async function getOffer(offerId: string, businessId: string): Promise<OfferRow | null> {
   const supabase = await createClient();
@@ -201,6 +208,14 @@ export async function createOffer(
   const invalid = validateOffer(data);
   if (invalid) return { error: invalid };
 
+  /*
+    ⚠ ZIUA SE PREFACE IN CLIPA AICI, pe server, si perioada intoarsa („de pe 10,
+    pana pe 3”) se refuza. Lasata pe seama formularului, o oferta salvata de pe
+    un ceas pus pe alt fus ar fi pornit sau s-ar fi stins cu o zi alaturi.
+  */
+  const perioada = perioadaOfertei(data.incepe_in, data.se_incheie_in);
+  if ("error" in perioada) return { error: perioada.error };
+
   const w = sanitizeWrite(data);
   const { data: created, error } = await supabase
     .from("offers")
@@ -213,8 +228,8 @@ export async function createOffer(
       trigger: w.trigger as never,
       config: w.config as never,
       display: w.display as never,
-      starts_at: w.starts_at,
-      ends_at: w.ends_at,
+      starts_at: perioada.starts_at,
+      ends_at: perioada.ends_at,
     })
     .select("id")
     .single();
@@ -238,6 +253,14 @@ export async function updateOffer(
   const invalid = validateOffer(data);
   if (invalid) return { error: invalid };
 
+  /*
+    ⚠ ZIUA SE PREFACE IN CLIPA AICI, pe server, si perioada intoarsa („de pe 10,
+    pana pe 3”) se refuza. Lasata pe seama formularului, o oferta salvata de pe
+    un ceas pus pe alt fus ar fi pornit sau s-ar fi stins cu o zi alaturi.
+  */
+  const perioada = perioadaOfertei(data.incepe_in, data.se_incheie_in);
+  if ("error" in perioada) return { error: perioada.error };
+
   const w = sanitizeWrite(data);
   const { error } = await supabase
     .from("offers")
@@ -249,8 +272,8 @@ export async function updateOffer(
       trigger: w.trigger as never,
       config: w.config as never,
       display: w.display as never,
-      starts_at: w.starts_at,
-      ends_at: w.ends_at,
+      starts_at: perioada.starts_at,
+      ends_at: perioada.ends_at,
       updated_at: new Date().toISOString(),
     })
     .eq("id", offerId)
@@ -371,7 +394,22 @@ export async function recordOfferImpressions(businessId: string, offerIds: strin
  * modals. Public (anonymous customers) — reads via the admin client since offers are
  * owner-only. Returns only display data (products + special price), all public info.
  */
-export async function getCheckoutBumps(businessId: string, cartProductIds: string[]): Promise<ResolvedOffer[]> {
+export async function getCheckoutBumps(
+  businessId: string,
+  cartProductIds: string[],
+  /**
+   * Coșul, ca să se poată judeca PORȚILE ofertei („se arată doar dacă trece de
+   * 200 de lei”). Lipsa lui înseamnă „nu știu”, iar atunci o ofertă cu porți pe
+   * lei sau pe bucăți NU se arată.
+   *
+   * ⚠⚠ VINE DIN BROWSER ȘI NU SE CREDE PE CUVÂNT. Se folosește NUMAI ca să se
+   * hotărască ce se ARATĂ, iar a arăta nu costă niciun ban: prețul se ia mereu
+   * din bază, iar la plasarea comenzii aceeași poartă se pune din nou, pe
+   * liniile adevărate (`refuzaOferta`). Un client care umflă suma vede bump-ul
+   * și i se refuză comanda.
+   */
+  liniiSpuseDeBrowser?: { productId: string; quantity: number; unitPrice: number }[],
+): Promise<ResolvedOffer[]> {
   if (!businessId || !Array.isArray(cartProductIds)) return [];
   const ids = cartProductIds.filter((x): x is string => typeof x === "string" && x.length > 0);
   if (ids.length === 0) return [];
@@ -388,7 +426,25 @@ export async function getCheckoutBumps(businessId: string, cartProductIds: strin
    * cateva ori mai mica decat cea adevarata. Balizele browserului le numara pe
    * toate trei la fel.
    */
-  return resolveCartOffers(admin, businessId, ids, "checkout");
+  /*
+    ⚠ Se curăță aici, nu mai departe: `cosulDinLinii` primește deja numere, iar
+    un „-5” trimis de mână ar fi scăzut din numărul de bucăți și ar fi deschis o
+    poartă închisă. Plafonul de 500 de linii e împotriva unui tablou umflat, nu
+    o regulă de coș: cel mai lung coș măsurat pe producție are sub zece linii.
+  */
+  const cos = Array.isArray(liniiSpuseDeBrowser)
+    ? cosulDinLinii(
+        liniiSpuseDeBrowser
+          .filter((l) => l && typeof l.productId === "string" && l.productId.length > 0)
+          .slice(0, 500)
+          .map((l) => ({
+            productId: l.productId,
+            quantity: Math.max(0, Math.min(10_000, Math.floor(Number(l.quantity) || 0))),
+            unitPrice: Math.max(0, Math.min(1_000_000, Number(l.unitPrice) || 0)),
+          })),
+      )
+    : undefined;
+  return resolveCartOffers(admin, businessId, ids, "checkout", cos);
 }
 
 /**
@@ -408,3 +464,58 @@ export async function getCartCrossSell(businessId: string, cartProductIds: strin
   return resolveCartOffers(admin, businessId, ids, "cart");
 }
 
+
+/**
+ * Numele produselor si categoriilor unei oferte, pentru fisa din sertar.
+ *
+ * ⚠ PANA AZI SINGURUL DRUM CATRE ELE ERA FORMULARUL DE EDITARE. Lista scria
+ * „Apare la 3 produse" si atat, deci ca sa afli CARE trei trebuia sa deschizi
+ * editarea — adica sa intri intr-un ecran de scris ca sa citesti ceva.
+ *
+ * ⚠ Se citeste prin clientul CELUI LOGAT, nu prin cel de admin, si se verifica
+ * intai ca magazinul e al lui: RLS ramane granita, ca peste tot in panou.
+ *
+ * ⚠ Categoriile stau pe NUME in `trigger.categories` (asa e si la coduri:
+ * `products.category` e un nume, si nu exista tabela de legatura), deci ele nu
+ * se mai cauta nicaieri — se intorc ca atare.
+ */
+export async function getOfferTargets(
+  businessId: string, offerId: string,
+): Promise<
+  | { produseDeclansare: string[]; produseOferite: string[]; categorii: string[] }
+  | { error: string }
+> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Neautorizat" };
+  if (!(await ownsBusiness(supabase, businessId, user.id))) return { error: "Magazin negasit" };
+
+  const { data: o } = await supabase
+    .from("offers").select("trigger, config").eq("id", offerId).eq("business_id", businessId).single();
+  if (!o) return { error: "Oferta negasita" };
+
+  const trigger = parseOfferTrigger(o.trigger);
+  const config = parseOfferConfig(o.config);
+  const toate = [...new Set([...trigger.productIds, ...config.productIds])];
+  if (toate.length === 0) {
+    return { produseDeclansare: [], produseOferite: [], categorii: trigger.categories };
+  }
+
+  /*
+    ⚠ Plafon de 200: o oferta cu lista de produse are azi cel mult cateva zeci,
+    dar `.in()` intra in ADRESA cererii, iar o lista uriasa ar fi taiata de
+    server fara nicio eroare. Mai bine o taiere stiuta aici decat una tacuta
+    acolo.
+  */
+  const { data: produse } = await supabase
+    .from("products").select("id, name").eq("business_id", businessId).in("id", toate.slice(0, 200));
+  const nume = new Map((produse ?? []).map((p) => [p.id, p.name]));
+  /* ⚠ Un produs sters lasa id-ul in oferta. Se spune, nu se sare peste. */
+  const numele = (ids: string[]) => ids.map((id) => nume.get(id) ?? "(produs sters)");
+
+  return {
+    produseDeclansare: numele(trigger.productIds),
+    produseOferite: numele(config.productIds),
+    categorii: trigger.categories,
+  };
+}

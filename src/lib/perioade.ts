@@ -92,10 +92,13 @@ export function marginile(pagina: number, pePagina: number): { de: number; la: n
   return { de, la: de + pePagina - 1 };
 }
 
-/** Cate pagini ies din `total` randuri. Zero randuri inseamna tot o pagina. */
-export function catePagini(total: number, pePagina: number): number {
-  return Math.max(1, Math.ceil(total / pePagina));
-}
+/*
+ * ⚠⚠ ERA SCRISA AICI, si era varianta NEAPARATA: `catePagini(-5, 0)` intorcea
+ * `Infinity`, iar `lib/discounts/lista.ts` avea o a doua copie, cu alt corp.
+ * Acum amandoua cheama `lib/dashboard/paginare.ts`. Se trece mai departe de
+ * aici ca sa nu se atinga niciun apelant.
+ */
+export { catePagini } from "@/lib/dashboard/paginare";
 
 /**
  * Fereastra dinaintea celei alese, de aceeasi lungime.

@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 
 import {
   inceputulZilei, perioadaCodului, sfarsitulZilei, ziValida, ziuaClipei, ziuaDeAzi,
-} from "./perioada";
+} from "./zi-romaneasca";
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════
@@ -155,7 +155,7 @@ function peFusul(tz: string, cod: string): string {
   return execFileSync(
     process.execPath,
     ["--import", "./scripts/tests/register.mjs", "--input-type=module", "--eval",
-      `const p = await import("./src/lib/discounts/perioada.ts"); process.stdout.write(String(${cod}));`],
+      `const p = await import("./src/lib/zi-romaneasca.ts"); process.stdout.write(String(${cod}));`],
     { env: { ...process.env, TZ: tz }, cwd: process.cwd(), encoding: "utf8" },
   ).trim();
 }

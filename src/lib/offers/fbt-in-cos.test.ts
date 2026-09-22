@@ -79,10 +79,11 @@ test("totalul din formular e chiar cel pe care il aseaza serverul", () => {
   const set = [produs("comp1", 34.28), produs("comp2", 32.25)];
 
   // Ce afiseaza cardul din pagina de produs, si de acolo formularul.
+  const liniiComp = set.map((p) => ({ pret: p.price }));
   const preturiSet = imparteEconomiaCompanionilor(
-    ancora,
-    set.map((p) => p.price),
-    pretulSetului([ancora, ...set.map((p) => p.price)], config).savings,
+    { pret: ancora },
+    liniiComp,
+    pretulSetului([{ pret: ancora }, ...liniiComp], config).savings,
   );
 
   // Clientul are 3 bucati din primul companion in cos; al doilea nu e in cos.

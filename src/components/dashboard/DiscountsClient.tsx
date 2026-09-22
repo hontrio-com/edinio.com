@@ -19,7 +19,7 @@ import type { Database } from "@/types/database.types";
 import { EtichetaStare } from "@/components/ui/eticheta-stare";
 import { CardStatistica } from "@/components/dashboard/CardStatistica";
 import { marimeaRandului } from "@/lib/dashboard/cifra-pe-un-rand";
-import { descriePerioada, perioadaCodului, ziuaClipei } from "@/lib/discounts/perioada";
+import { descriePerioada, perioadaCodului, ziuaClipei } from "@/lib/zi-romaneasca";
 import { CE_NU_OPRESTE_LIMITA, LIMITA_NUMARA_DE_ACUM, despreLimita, limitaValida } from "@/lib/discounts/per-client";
 import { SertarCod } from "@/components/dashboard/discounturi/SertarCod";
 import { AlegePeCeMerge } from "@/components/dashboard/discounturi/AlegePeCeMerge";
@@ -30,7 +30,7 @@ import {
 } from "@/lib/discounts/filtre";
 import { catePagini, rezumatulPaginii, type CodDinLista, type TotalurileCodurilor } from "@/lib/discounts/lista";
 import {
-  DESPRE_STARE, DE_CE_DOUA_CIFRE, TONUL_STARII, sePoateFolosi, stareaCodului, utilizarile,
+  DESPRE_STARE, DE_CE_DOUA_CIFRE, TONUL_STARII, sePoateFolosi, stareaCodului, toateMotivele, utilizarile,
   type CifreleCodului,
 } from "@/lib/discounts/stare";
 
@@ -896,6 +896,16 @@ export function DiscountsClient({
                     */
                     const stare = stareaCodului(d);
                     const u = utilizarile(d, d.cifre.comenziTotal);
+                    /*
+                      ⚠⚠ DATA TRECUTĂ SE SCRIE ROȘU CHIAR ȘI CÂND ETICHETA SPUNE
+                      ALTCEVA. Legat de `stare`, roșul se stingea în clipa în care
+                      comerciantul oprea codul — fiindcă „oprit” bate „expirat” pe
+                      rând — iar data trecută rămânea scrisă negru, ca una
+                      oarecare. Găsit la Oferte, pe ecran, și reparat în amândouă:
+                      eticheta spune ce ai de făcut ÎNTÂI, coloana asta spune un
+                      FAPT, iar faptul nu se schimbă de la un comutator.
+                    */
+                    const aTrecutData = toateMotivele(d).includes("expirat");
 
                     return (
                       <tr key={d.id} className="hover:bg-muted/30 transition-colors">
@@ -967,7 +977,7 @@ export function DiscountsClient({
                             </span>
                           )}
                         </td>
-                        <td className="px-5 py-3.5 hidden lg:table-cell">
+                        <td className="px-5 py-3.5 hidden whitespace-nowrap lg:table-cell">
                           {d.expires_at ? (
                             /*
                               ⚠ SE ARATĂ DATA, și când a trecut. Scria „Expirăt" în
@@ -976,7 +986,7 @@ export function DiscountsClient({
                               spus: CÂND. Un cod expirat acum trei luni și unul
                               expirat ieri cer lucruri diferite.
                             */
-                            <span className={cn("text-sm", stare === "expirat" ? "text-destructive" : "text-foreground")}>
+                            <span className={cn("text-sm", aTrecutData ? "text-destructive" : "text-foreground")}>
                               {formatDate(new Date(d.expires_at))}
                             </span>
                           ) : (
@@ -1052,6 +1062,7 @@ export function DiscountsClient({
               const stare = stareaCodului(d);
               const u = utilizarile(d, d.cifre.comenziTotal);
               const c = d.cifre;
+              const aTrecutData = toateMotivele(d).includes("expirat");
               return (
                 <li key={d.id} className="rounded-xl bg-card p-3.5 ring-1 ring-foreground/10">
                   <div className="flex items-start justify-between gap-2">
@@ -1081,7 +1092,9 @@ export function DiscountsClient({
                       {u.langa ? ` · ${u.langa}` : ""} folosite
                     </span>
                     {c && c.baniDati > 0 && <span>{formatPrice(c.baniDati)} dați</span>}
-                    {d.expires_at && <span>până la {formatDate(new Date(d.expires_at))}</span>}
+                    {d.expires_at && (
+                      <span className={aTrecutData ? "text-destructive" : undefined}>până la {formatDate(new Date(d.expires_at))}</span>
+                    )}
                   </div>
 
                   <div className="mt-2 flex items-center gap-1 border-t border-border pt-2">

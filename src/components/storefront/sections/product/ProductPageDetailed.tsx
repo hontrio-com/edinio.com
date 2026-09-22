@@ -22,10 +22,11 @@ import { OrderModal } from "@/components/ministore/OrderModal";
 import type { QuantityTier } from "@/components/ministore/OrderModal";
 import { construiesteTrepte, randuriPraguri } from "@/lib/storefront/quantity-tiers";
 import { TabelPraguri } from "@/components/storefront/sections/product/_shared/TabelPraguri";
-import { ProductOffers } from "@/components/ministore/ProductOffers";
+import { ProductOffers, SetulDeLangaPret } from "@/components/ministore/ProductOffers";
 import type { ResolvedOffer, OfferProduct } from "@/lib/offers/offer.types";
 import { distributeFbtSavings } from "@/lib/offers/offer.types";
 import { useAfisariOferte } from "@/lib/offers/use-afisari-oferte";
+import { imparteOferteleDupaAmplasare } from "@/lib/offers/amplasare";
 import { useCartOptional } from "@/components/storefront/cart/CartProvider";
 import { useEditareLinie } from "./_shared/useEditareLinie";
 import { optiunileDinAdresa, abonareCautare, citesteCautarea } from "@/lib/storefront/varianta-din-adresa";
@@ -295,7 +296,25 @@ export function ProductPageDetailed({
 
   // Afisarea ofertelor, in contorul lor — aceeasi judecata ca in
   // `ProductPageClassic`, scrisa o singura data in `useAfisariOferte`.
-  const refOferte = useAfisariOferte(business.id, productOffers.map((o) => o.id), !demo);
+  const aseza = useMemo(() => imparteOferteleDupaAmplasare(productOffers), [productOffers]);
+  /*
+    DOUA BALIZE, fiindca de azi sunt DOUA bucati de ecran: setul poate sta langa
+    pret, iar recomandarile raman jos. O singura baliza pe toata lista ar fi
+    numarat o afisare pentru setul de sus in clipa in care omul derula pana la
+    recomandari - sau invers.
+
+    ⚠⚠ SI LISTELE SUNT EXACT CE SE DESENEAZA. `imparteOferteleDupaAmplasare`
+    arunca ce nu e desenabil, cu ACELASI predicat pe care il foloseste
+    `ProductOffers`. Un inveliz cu `ref` care nu deseneaza nimic e un `<div>` de
+    zero pixeli pe care observatorul il poate socoti intrat in ecran - adica o
+    afisare fantoma, exact defectul inchis azi in contor.
+
+    ⚠ Si asezarea SCHIMBA INTELESUL cifrei, nu doar locul cardului: jos, „vazut”
+    inseamna „a derulat pana acolo”; langa pret inseamna aproape „a deschis
+    pagina”. Scris pe ecranul de Oferte, in explicatia cardului de afisari.
+  */
+  const refSetSus = useAfisariOferte(business.id, aseza.langaPret.map((o) => o.id), !demo);
+  const refOferteJos = useAfisariOferte(business.id, aseza.subProdus.map((o) => o.id), !demo);
 
   const imgAlt = (src: string, i: number) => altMap[src] || `${product.name} ${i + 1}`;
   const color = business.primary_color ?? "#07c527";
@@ -466,6 +485,12 @@ export function ProductPageDetailed({
   // Nu doar „titlul e complet", ci si „combinatia exista si e activa": altfel
   // linia intra in cos cu pretul de baza, iar serverul o respinge la comanda.
   const needsVariant = !!variantsData && !selectedCombo;
+  /*
+    ⚠ SCOASA DINTR-UN PROP INTR-O CONSTANTA, fiindca de azi o cer DOUA locuri:
+    setul de langa pret si banda de jos. Scrisa de doua ori, butonul de sus ar fi
+    putut ramane aprins cand cel de jos era stins.
+  */
+  const ancoraIndisponibila = isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null;
   const combinatieIndisponibila = !!variantsData && !!selectedComboTitle && !selectedCombo;
   /*
    * Cate bucati mai sunt: din varianta aleasa daca ea isi tine socoteala,
@@ -656,7 +681,10 @@ export function ProductPageDetailed({
     if (editare.activ && editare.cheie) {
       cos.replaceItem(editare.cheie, linieNoua, cantitate);
       editare.incheieEditarea();
-      window.location.href = inapoiLaCos;
+      /* ⚠ `assign`, nu `location.href = …`: acelasi lucru la purtare, dar
+         analiza de hooks il vede ca APEL, nu ca scriere peste o variabila
+         din afara componentei. Vezi poarta de lint cu prag. */
+      window.location.assign(inapoiLaCos);
       return;
     }
 
@@ -700,11 +728,13 @@ export function ProductPageDetailed({
 
   function handleBuyTogether(offer: ResolvedOffer) {
     if (!offer.pricing) return;
-    const distributed = distributeFbtSavings(offer.products.map((p) => p.price), offer.pricing.savings, displayPrice);
+    const distributed = distributeFbtSavings(
+      offer.products.map((p) => ({ pret: p.price, bucati: p.cantitate })), offer.pricing.savings, { pret: displayPrice });
     setFbtOffer({
       id: offer.id,
       items: offer.products.map((p, idx) => ({
-        product_id: p.id, name: p.name, imageUrl: p.imageUrl, price: distributed[idx], quantity: 1,
+        /* ⚠ CATE BUCATI CERE SETUL, nu una. Absenta = o bucata, ca pana azi. */
+        product_id: p.id, name: p.name, imageUrl: p.imageUrl, price: distributed[idx], quantity: p.cantitate ?? 1,
       })),
     });
     setModalOpen(true);
@@ -1021,6 +1051,18 @@ export function ProductPageDetailed({
                 </a>
               )}
               <p aria-live="polite" className="sr-only">{adaugat ? "Produsul a fost adaugat in cos" : ""}</p>
+              {/*
+                SETUL, LANGA PRET. Se vede doar daca oferta chiar cere asezarea asta;
+                implicita ramane banda lata de mai jos, deci ofertele care exista nu se muta.
+              */}
+              {!demo && aseza.langaPret.length > 0 && (
+                <div ref={refSetSus}>
+                  <SetulDeLangaPret oferte={aseza.langaPret} color={color}
+                    anchor={{ name: product.name, price: displayPrice, imageUrl: images[0] ?? null }}
+                    indisponibil={ancoraIndisponibila}
+                    onBuyTogether={handleBuyTogether} />
+                </div>
+              )}
             </div>
 
             {/* Trepte de cantitate: existau in date, dar se vedeau abia in
@@ -1237,10 +1279,10 @@ export function ProductPageDetailed({
           {/* Invelisul nestilizat e doar tinta observatorului de afisari; fratii
               lui sunt tot blocuri, deci asezarea ramane neschimbata. */}
           {productOffers.length > 0 && (
-            <div ref={refOferte}>
-              <ProductOffers offers={productOffers} basePath={basePath} color={color}
+            <div ref={refOferteJos}>
+              <ProductOffers offers={aseza.subProdus} basePath={basePath} color={color}
                 anchor={{ name: product.name, price: displayPrice, imageUrl: slides[0] ?? null }}
-                ancoraIndisponibila={isOutOfStock ? { motiv: "Stoc epuizat" } : needsVariant ? { motiv: "Selecteaza optiunile" } : null}
+                ancoraIndisponibila={ancoraIndisponibila}
                 onBuyTogether={handleBuyTogether} onAddToCart={addOfferProductToCart} />
             </div>
           )}
